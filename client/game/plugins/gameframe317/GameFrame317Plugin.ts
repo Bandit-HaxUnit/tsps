@@ -86,8 +86,8 @@ export class GameFrame317Plugin implements ClientPlugin {
                 { group: 162, type: 5, hide: true },
                 { contentType: 1339, hide: this.fixed },
             ],
-            // Keep the orb/XP container backgrounds (root-interface children 22 and 7).
-            keepChrome: () => [(161 << 16) | 22, (161 << 16) | 7],
+            // Resizable keeps the OSRS minimap frame; fixed draws the 317 mapback.
+            keepChrome: () => [(161 << 16) | 32],
             drawGameFrame: (context) => this.fixed ? this.drawFixed(context) : this.drawResizable(context),
         };
         void this.loadAssets();

@@ -1487,7 +1487,7 @@ export function encodeGameframeFlags(root: number = 161): Buffer[] {
 
 export function encodeGameframeBootstrap(playerName: string, root: number = 161): Buffer[] {
   const mounts = [
-    [96, 162], [9, 163], [22, 160], [7, 122], [6, 651, 5929],
+    [96, 162], [9, 163], [33, 160], [7, 122], [6, 651, 5929],
     [76, 593], [77, 320], [78, 629], [79, MAIN_INVENTORY_GROUP_ID], [80, 387], [81, 541],
     [82, 218], [83, 7], [84, 109], [85, 429], [86, 182], [87, 116],
     [88, 216], [89, 239],

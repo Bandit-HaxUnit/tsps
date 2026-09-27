@@ -11,6 +11,7 @@ import { Cs2Vm } from "../rs/cs2/Cs2Vm";
 import { Opcodes } from "../rs/cs2/Opcodes";
 import { Script } from "../rs/cs2/Script";
 import { loadCache, loadCacheInfos, loadCacheList } from "../scripts/cache/load-util";
+import { encodeGameframeBootstrap, ServerPacket } from "../../server/src/main/typescript/elvarg/net/protocol/ClientProtocol";
 
 const cacheInfo = loadCacheList(loadCacheInfos()).latest;
 const cache = CacheSystem.fromFiles(cacheInfo, loadCache(cacheInfo).files);
@@ -32,6 +33,7 @@ assert.equal(fixed.get(96), 11, "chatbox");
 assert.equal(fixed.get(61), 66, "quest tab icon");
 assert.equal(fixed.get(7), -1, "components without a fixed slot map to -1");
 assert.equal(fixed.has(22), false, "components absent from the fixed pane are unmapped");
+assert.equal(fixed.get(33), 25, "fixed minimap orbs use their own overlay container");
 
 const classic = loadGameframePaneRedirect(enumLoader, 164);
 assert.ok(classic, "classic layout has a redirect");
@@ -39,8 +41,20 @@ assert.equal(classic.get(16), 16, "modal");
 assert.equal(classic.get(96), 93, "chatbox");
 assert.equal(classic.get(61), 54, "quest tab icon");
 assert.equal(classic.get(89), 86, "music side panel");
+assert.equal(classic.get(33), 33, "classic minimap orbs retain a valid mount");
 
 assert.equal(loadGameframePaneRedirect(enumLoader, 601), undefined, "unknown roots have no redirect");
+
+// Server mounts must address panes present in the cache's layout redirects.
+for (const [root, expectedChild] of [[161, 33], [164, 33], [548, 25]]) {
+    const orbs = encodeGameframeBootstrap("Headless", root).find(packet =>
+        packet[0] === ServerPacket.WIDGET_OPEN_SUB && packet.readUInt16BE(7) === 160);
+    assert.ok(orbs, "Every gameframe boot includes the minimap orbs");
+    const targetUid = orbs.readInt32BE(3);
+    assert.equal(targetUid >>> 16, 161, "Mounts use the standard server address");
+    assert.equal(loadGameframePaneRedirect(enumLoader, root)!.get(targetUid & 0xffff), expectedChild,
+        "The orbs must survive translation to classic/fixed panes");
+}
 
 // Exercise the real cache's settings getter and the extended enum through CS2.
 const scripts = new ClientScriptLoader({ getCacheSystem: () => cache });
@@ -167,6 +181,7 @@ frameWidgets.rootInterface = 161;
 vars.setVarp(VARP_GAMEFRAME_317, 1);
 assert.equal(plugin.gameFrame.isGameFrameActive(), true);
 assert.equal(plugin.gameFrame.widgetRules!().find(rule => rule.contentType === 1339)?.hide, false);
+assert.ok(plugin.gameFrame.keepChrome!().includes((161 << 16) | 32), "Resizable 317 retains the minimap frame sprite");
 draws.length = hits.length = 0;
 plugin.gameFrame.drawGameFrame({ ...context, anchors: {
     tabContent: { x: 900, y: 300, width: 190, height: 261 },
