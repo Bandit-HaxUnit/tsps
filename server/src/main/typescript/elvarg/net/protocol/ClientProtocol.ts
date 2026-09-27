@@ -1427,6 +1427,23 @@ export const MAIN_INVENTORY_GROUP_ID = 149;
 export const MAIN_INVENTORY_WIDGET_UID = MAIN_INVENTORY_GROUP_ID << 16;
 export const MAIN_INVENTORY_SLOT_FLAGS = 0x1207fe;
 
+// "Game client layout" dropdown on the settings side panel (116:40). Its option
+// rows are CC_CREATE'd at runtime, so the client needs op1 transmit flags for
+// that child range to send the selection back (mirrors OpenRune's ifSetEvents
+// on the settings dropdown buttons).
+export const DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID = (116 << 16) | 40;
+const DISPLAY_SETTINGS_DROPDOWN_OPTION_SLOTS = 5;
+const FIRST_OPTION_FLAG = 1 << 1;
+
+// Quest tab icon child per gameframe root, from the cache pane redirect enums
+// (1129 fixed / 1130 stretch / 1131 classic). Not a mount - this is a flag on a
+// static root component, so it has to address the active root's child.
+const QUEST_TAB_ICON_CHILD_BY_ROOT: Record<number, number> = {
+  161: 61,
+  548: 66,
+  164: 54,
+};
+
 // Side journal (quest tab) content mount, mirrored from client/common/ui/sideJournal.ts.
 // The [78, 629] mount below only opens the side_journal *shell* into the root
 // interface; nothing then mounts default content into the shell's own inner
@@ -1455,8 +1472,20 @@ const ACCOUNT_SUMMARY_COMBAT_TASKS_ROW = 5; // op1-4 Overview/Bosses/Tasks/Rewar
 const ACCOUNT_SUMMARY_COLLECTION_LOG_ROW = 6; // op1 "Collection Log", op2 "Collection Overview"
 const ACCOUNT_SUMMARY_PLAYTIME_ROW = 7; // op1 "Reveal"
 
-export function encodeGameframeBootstrap(playerName: string): Buffer[] {
-  const root = 161;
+export function encodeGameframeFlags(root: number = 161): Buffer[] {
+  const questTabChild = QUEST_TAB_ICON_CHILD_BY_ROOT[root] ?? QUEST_TAB_ICON_CHILD_ID;
+  return [
+    encodeWidgetSetFlagsRange(MAIN_INVENTORY_WIDGET_UID, 0, 27, MAIN_INVENTORY_SLOT_FLAGS),
+    encodeWidgetSetFlags((root << 16) | questTabChild, QUEST_TAB_ICON_FLAGS),
+    encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_QUESTS_ROW, ACCOUNT_SUMMARY_ACHIEVEMENTS_ROW, 1 << 1),
+    encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_COMBAT_TASKS_ROW, ACCOUNT_SUMMARY_COMBAT_TASKS_ROW, (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)),
+    encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_COLLECTION_LOG_ROW, ACCOUNT_SUMMARY_COLLECTION_LOG_ROW, (1 << 1) | (1 << 2)),
+    encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_PLAYTIME_ROW, ACCOUNT_SUMMARY_PLAYTIME_ROW, 1 << 1),
+    encodeWidgetSetFlagsRange(DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID, 0, DISPLAY_SETTINGS_DROPDOWN_OPTION_SLOTS, FIRST_OPTION_FLAG),
+  ];
+}
+
+export function encodeGameframeBootstrap(playerName: string, root: number = 161): Buffer[] {
   const mounts = [
     [96, 162], [9, 163], [22, 160], [7, 122], [6, 651, 5929],
     [76, 593], [77, 320], [78, 629], [79, MAIN_INVENTORY_GROUP_ID], [80, 387], [81, 541],
@@ -1472,14 +1501,11 @@ export function encodeGameframeBootstrap(playerName: string): Buffer[] {
   return [
     packet(ServerPacket.RUN_CLIENT_SCRIPT, cameraScript, 2),
     packet(ServerPacket.WIDGET_SET_ROOT, rootPayload, 0),
-    ...mounts.map(([child, group, postScript]) => encodeOpenSub(root, child, group, postScript)),
-    encodeWidgetSetFlagsRange(MAIN_INVENTORY_WIDGET_UID, 0, 27, MAIN_INVENTORY_SLOT_FLAGS),
+    // Mounts are addressed by the OSRS-stretch (161) child for every layout;
+    // the client maps them onto the active root's components (pane redirects).
+    ...mounts.map(([child, group, postScript]) => encodeOpenSub(161, child, group, postScript)),
     encodeOpenSub(SIDE_JOURNAL_GROUP_ID, SIDE_JOURNAL_TAB_CONTAINER_CHILD_ID, INTERFACE_CHARACTER_SUMMARY_ID),
-    encodeWidgetSetFlags((root << 16) | QUEST_TAB_ICON_CHILD_ID, QUEST_TAB_ICON_FLAGS),
-    encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_QUESTS_ROW, ACCOUNT_SUMMARY_ACHIEVEMENTS_ROW, 1 << 1),
-    encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_COMBAT_TASKS_ROW, ACCOUNT_SUMMARY_COMBAT_TASKS_ROW, (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)),
-    encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_COLLECTION_LOG_ROW, ACCOUNT_SUMMARY_COLLECTION_LOG_ROW, (1 << 1) | (1 << 2)),
-    encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_PLAYTIME_ROW, ACCOUNT_SUMMARY_PLAYTIME_ROW, 1 << 1),
+    ...encodeGameframeFlags(root),
     packet(ServerPacket.WIDGET_RUN_SCRIPT, loginScript, 2),
   ];
 }

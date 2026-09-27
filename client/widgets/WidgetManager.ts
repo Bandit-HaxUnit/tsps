@@ -1401,16 +1401,19 @@ export class WidgetManager {
                 widgetsByFileId.set(node.fileId | 0, node);
             }
 
-            // Track special widgets by contentType (like OSRS client does in alignWidgetSize)
+            // Track special widgets by contentType (like OSRS client does in alignWidgetSize).
+            // Only the active root may own them - a sub-interface or a group cached from
+            // another gameframe must not clobber the scene viewport reference.
+            const isRootGroup = (groupId | 0) === (this.rootInterface | 0);
             const contentType = typeof node.contentType === "number" ? node.contentType : 0;
-            if (contentType === ContentType.VIEWPORT) {
+            if (isRootGroup && contentType === ContentType.VIEWPORT) {
                 console.log(
                     `[WidgetManager] Found Viewport Widget: ${node.uid} (Group ${groupId})`,
                 );
                 this.viewportWidget = node;
-            } else if (contentType === ContentType.MINIMAP) {
+            } else if (isRootGroup && contentType === ContentType.MINIMAP) {
                 this.minimapWidget = node;
-            } else if (contentType === ContentType.COMPASS) {
+            } else if (isRootGroup && contentType === ContentType.COMPASS) {
                 this.compassWidget = node;
             }
 
@@ -1500,6 +1503,12 @@ export class WidgetManager {
             return undefined;
         }
 
+        // Already-cached groups skip the load-time indexing, so always re-find
+        // the root's scene viewport/minimap/compass. Without it a layout switch
+        // to a cached toplevel leaves viewportWidget null and the renderer
+        // falls back to the whole canvas (fixed mode then fills the screen).
+        this.discoverContentTypeWidgets(instance);
+
         if (this.canvasWidth > 0 && this.canvasHeight > 0) {
             this.initializeRoot(instance);
         } else {
@@ -1507,6 +1516,57 @@ export class WidgetManager {
         }
 
         return instance;
+    }
+
+    /** Root-group scan for the widgets the renderer attaches to. */
+    private discoverContentTypeWidgets(instance: WidgetGroupInstance): void {
+        let viewportWidget: WidgetNode | null = null;
+        let minimapWidget: WidgetNode | null = null;
+        let compassWidget: WidgetNode | null = null;
+        for (const node of instance.widgetsByUid.values()) {
+            const contentType = node.contentType;
+            if (contentType === ContentType.VIEWPORT) {
+                viewportWidget = node;
+            } else if (contentType === ContentType.MINIMAP) {
+                minimapWidget = node;
+            } else if (contentType === ContentType.COMPASS) {
+                compassWidget = node;
+            }
+        }
+        this.viewportWidget = viewportWidget;
+        this.minimapWidget = minimapWidget;
+        this.compassWidget = compassWidget;
+    }
+
+    /**
+     * The current root's scene viewport widget. The cached reference is
+     * revalidated against the active root on every call and re-derived from the
+     * root group when stale, so the scene can never be projected full-window off
+     * another gameframe's viewport (e.g. the stretch viewport after switching to
+     * fixed mode).
+     */
+    getSceneViewportWidget(): WidgetNode | null {
+        const root = this.rootInterface;
+        if (root < 0) {
+            return null;
+        }
+        const current = this.viewportWidget;
+        if (current && (((current.uid >>> 16) & 0xffff) === (root | 0))) {
+            return current;
+        }
+        const instance = this.groups.get(root) ?? this.getGroup(root);
+        if (!instance) {
+            return null;
+        }
+        let viewport: WidgetNode | null = null;
+        for (const node of instance.widgetsByUid.values()) {
+            if (node.contentType === ContentType.VIEWPORT) {
+                viewport = node;
+                break;
+            }
+        }
+        this.viewportWidget = viewport;
+        return viewport;
     }
 
     private initializeRoot(instance: WidgetGroupInstance): void {

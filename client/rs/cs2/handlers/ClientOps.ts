@@ -15,6 +15,8 @@ import { Opcodes } from "../Opcodes";
 import type { HandlerMap } from "./HandlerTypes";
 
 const DEVICE_OPTION_INTERFACE_SCALING = 27;
+// Fixed layout toplevel (OSRS fixed mode).
+const FIXED_GAMEFRAME_ROOT = 548;
 const UIZOOM_DEFAULT_DESKTOP_PERCENT = 100;
 const UIZOOM_DEFAULT_MOBILE_PERCENT = 175;
 const UIZOOM_MAX_PERCENT = 400;
@@ -415,6 +417,13 @@ export function registerClientOps(handlers: HandlerMap): void {
     });
 
     handlers.set(Opcodes.GETWINDOWMODE, (ctx) => {
+        // Fixed mode is a property of the active gameframe, so the root wins over
+        // the local preference (the settings layout dropdown reads this back).
+        const root = (ctx.widgetManager as any)?.rootInterface;
+        if (root === FIXED_GAMEFRAME_ROOT) {
+            ctx.pushInt(1);
+            return;
+        }
         const mode = ctx.windowMode ?? 2;
         ctx.pushInt(mode);
     });

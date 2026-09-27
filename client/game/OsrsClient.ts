@@ -312,6 +312,10 @@ import type { PlayerSpotAnimationEvent } from "./sync/PlayerSyncTypes";
 import { resolveTradeActionQuantity } from "./trade/TradeActionQuantity";
 import { clampPlane } from "./utils/PlaneUtil";
 import { VarcPersistence } from "./vars/VarcPersistence";
+import {
+    STANDARD_GAMEFRAME_ROOT,
+    loadGameframePaneRedirect,
+} from "./widgets/gameframePanes";
 import { NotificationDisplay } from "./widgets/NotificationDisplay";
 import { PlayerDesignController } from "./widgets/PlayerDesignController";
 import { SpellSelectionController } from "./widgets/SpellSelectionController";
@@ -924,6 +928,16 @@ export class OsrsClient {
     private unsubscribeWidgetEvents?: () => void;
     private pendingInterfaceUpdates = new PendingInterfaceUpdates();
     private pendingInterfaceOpens = new Map<number, { groupId: number }>();
+    /**
+     * Server sub-interfaces keyed by their standard (161) target uid. OSRS
+     * moves these onto the new gameframe's components when the layout changes;
+     * keeping the list lets a set_root rebuild the whole frame.
+     */
+    private readonly serverSubInterfaces = new Map<number, { payload: any }>();
+    private readonly gameframePaneRedirects = new Map<
+        number,
+        Map<number, number> | undefined
+    >();
     private handleWidgetPayload?: (payload: any) => void;
     private unsubscribeNpcInfo?: () => void;
     private unsubscribeCombat?: () => void;
@@ -1291,9 +1305,46 @@ export class OsrsClient {
         });
     }
 
+    /** Cache pane-redirect table for a gameframe root, loaded once per root. */
+    private getGameframePaneRedirect(root: number): Map<number, number> | undefined {
+        if (!this.gameframePaneRedirects.has(root)) {
+            this.gameframePaneRedirects.set(
+                root,
+                loadGameframePaneRedirect(this.loaderFactory.getEnumTypeLoader(), root),
+            );
+        }
+        return this.gameframePaneRedirects.get(root);
+    }
+
+    /**
+     * Server mounts target standard (161) children. Translate onto the active
+     * gameframe root; -1 means the component has no equivalent in this layout
+     * (e.g. the buff bar in fixed mode) and the mount is dropped.
+     */
+    private mapGameframeTargetUid(uid: number): number {
+        const root = this.widgetManager?.rootInterface ?? STANDARD_GAMEFRAME_ROOT;
+        if (root === STANDARD_GAMEFRAME_ROOT) return uid;
+        if (((uid >>> 16) & 0xffff) !== STANDARD_GAMEFRAME_ROOT) return uid;
+        const redirect = this.getGameframePaneRedirect(root);
+        if (!redirect) return uid;
+        const mapped = redirect.get(uid & 0xffff);
+        if (mapped === undefined || mapped < 0) return -1;
+        return ((root << 16) | (mapped & 0xffff)) | 0;
+    }
+
     /** Mounts a sub-interface and runs everything the open packet asked for. */
     private mountSubInterface(payload: any): void {
         if (!this.widgetManager) {
+            return;
+        }
+        const standardTargetUid = Number(payload.targetUid) | 0;
+        // Keep the server address even when this layout has no corresponding pane.
+        this.serverSubInterfaces.set(standardTargetUid, { payload: { ...payload } });
+        const targetUid = this.mapGameframeTargetUid(standardTargetUid);
+        if (targetUid < 0) {
+            console.log(
+                `[OsrsClient] group ${payload.groupId} has no target in gameframe ${this.widgetManager.rootInterface}; skipped`,
+            );
             return;
         }
         if (!this.widgetManager.getGroup(payload.groupId | 0)) {
@@ -1302,7 +1353,7 @@ export class OsrsClient {
             );
             return;
         }
-        this.widgetManager.openSubInterface(payload.targetUid, payload.groupId, payload.type);
+        this.widgetManager.openSubInterface(targetUid, payload.groupId, payload.type);
         this.cs2Vm.clearHandlerCaches();
         markWidgetsLoaded();
         // PlayerDesign (679) starts each open from the live appearance, so an abandoned or
@@ -1312,7 +1363,7 @@ export class OsrsClient {
             for (const ps of payload.postScripts) {
                 const scriptId = ps?.scriptId | 0;
                 const args = ps?.args || [];
-                this.runWidgetScopedClientScript(payload.targetUid, scriptId, args, "post");
+                this.runWidgetScopedClientScript(targetUid, scriptId, args, "post");
             }
         }
         this.triggerInitialVarTransmitForGroup(payload.groupId);
@@ -2397,6 +2448,7 @@ export class OsrsClient {
             } else if (payload?.action === "set_root") {
                 console.log("[OsrsClient] Server setting root interface", payload.groupId);
                 if (this.widgetManager) {
+                    const previousMounts = [...this.serverSubInterfaces];
                     // Set varc 170 (display mode) based on the root interface
                     // Enum 185 maps: 0->1137 (161 widgets), 1->1101, 2->1067, 3->1175, 4->1293
                     // For interface 161/165, use mode 0 since Enum 1137 has interface 161 tab widgets
@@ -2431,6 +2483,15 @@ export class OsrsClient {
                     // PERF: Clear CS2 handler caches when switching root interfaces
                     // This prevents memory leaks from stale cached widget references
                     this.cs2Vm.clearHandlerCaches();
+                    // OSRS keeps server-mounted interfaces across a layout change by
+                    // moving them onto the new gameframe's components; set_root drops
+                    // them, so put each one back at its translated target.
+                    for (const [standardTargetUid, entry] of previousMounts) {
+                        this.mountSubInterface({
+                            ...entry.payload,
+                            targetUid: standardTargetUid,
+                        });
+                    }
                     // Trigger initial onVarTransmit for root interface widgets
                     this.triggerInitialVarTransmitForGroup(payload.groupId);
                     // Mark widgets loaded for transmit processing optimization
@@ -2514,25 +2575,29 @@ export class OsrsClient {
                     }
                 }
             } else if (payload?.action === "close_sub") {
-                const targetUid = Number(payload.targetUid) | 0;
-                this.cancelPendingInterfaceOpen(targetUid);
-                console.log(
-                    `[OsrsClient] Server closing sub-interface at widget ${targetUid} (ESC or close button)`,
-                );
+                const standardTargetUid = Number(payload.targetUid) | 0;
+                this.cancelPendingInterfaceOpen(standardTargetUid);
+                this.serverSubInterfaces.delete(standardTargetUid);
+                const targetUid = this.mapGameframeTargetUid(standardTargetUid);
+                if (targetUid >= 0) {
+                    console.log(
+                        `[OsrsClient] Server closing sub-interface at widget ${targetUid} (ESC or close button)`,
+                    );
 
-                const closingParent = this.widgetManager?.getSubInterface(targetUid);
-                const closingGroupId = closingParent?.group ?? -1;
+                    const closingParent = this.widgetManager?.getSubInterface(targetUid);
+                    const closingGroupId = closingParent?.group ?? -1;
 
-                console.log(`[OsrsClient] Closing group ID: ${closingGroupId}`);
+                    console.log(`[OsrsClient] Closing group ID: ${closingGroupId}`);
 
-                if (this.widgetManager) {
-                    this.widgetManager.closeSubInterface(targetUid);
-                    this.cs2Vm.clearHandlerCaches();
-                    if (this.widgetManager.meslayerContinueWidget) {
-                        this.widgetManager.invalidateWidgetRender(
-                            this.widgetManager.meslayerContinueWidget,
-                        );
-                        this.widgetManager.meslayerContinueWidget = null;
+                    if (this.widgetManager) {
+                        this.widgetManager.closeSubInterface(targetUid);
+                        this.cs2Vm.clearHandlerCaches();
+                        if (this.widgetManager.meslayerContinueWidget) {
+                            this.widgetManager.invalidateWidgetRender(
+                                this.widgetManager.meslayerContinueWidget,
+                            );
+                            this.widgetManager.meslayerContinueWidget = null;
+                        }
                     }
                 }
             } else if (payload?.action === "set_text") {
@@ -7866,6 +7931,7 @@ export class OsrsClient {
         } catch (err) {
             console.warn("[OsrsClient] WidgetManager clear error:", err);
         }
+        this.serverSubInterfaces.clear();
 
         // Clear ground items
         try {

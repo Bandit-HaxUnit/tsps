@@ -16,7 +16,11 @@ function showWelcomeScreen(player) {
 }
 
 function showGameframe(player) {
-  for (const packet of encodeGameframeBootstrap(player.getUsername())) {
+  // 548/164/161 - the layout the "Game client layout" dropdown saved; the
+  // client maps the standard mounts onto the chosen layout.
+  const savedRoot = Number(player.getAttribute("clientLayoutRoot"));
+  const layoutRoot = [548, 164, 161].includes(savedRoot) ? savedRoot : 161;
+  for (const packet of encodeGameframeBootstrap(player.getUsername(), layoutRoot)) {
     player.getSession().sendClientPacket(packet);
   }
 }

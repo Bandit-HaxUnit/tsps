@@ -1,6 +1,6 @@
 import type { ClientPlugin, GameFrameDrawContext, GameFrameProvider } from "../ClientPluginManager";
 import type { GLRenderer } from "../../../widgets/gl/renderer";
-import { chatHistory } from "../../../rs/cs2/ChatHistory";
+import { GAMEFRAME_LAYOUT_DROPDOWN, GAMEFRAME_317_OPTION, VARP_GAMEFRAME_317 } from "../../../common/ui/gameframeLayout";
 
 /**
  * Classic 317 gameframe sidebar + chatbox, drawn over the live OSRS UI.
@@ -53,7 +53,10 @@ type Texture = ReturnType<GLRenderer["createTextureFromCanvas"]>;
 
 export class GameFrame317Plugin implements ClientPlugin {
     public readonly gameFrame: GameFrameProvider;
-    private enabled = false;
+    private get enabled(): boolean {
+        return this.osrsClient.widgetManager?.rootInterface === 161 &&
+            this.osrsClient.varManager?.getVarp(VARP_GAMEFRAME_317) === 1;
+    }
     private ready = false;
     private renderScale = 0;
     private renderOffsetX = 0;
@@ -81,34 +84,14 @@ export class GameFrame317Plugin implements ClientPlugin {
 
     handleClientCommand(command: string): boolean {
         const name = command.trim().toLowerCase();
-        if (name === "317") {
-            this.activate();
-            return true;
-        }
-        if (name === "osrs") {
-            this.disable();
-            return true;
-        }
-        return false;
-    }
-
-    private activate(): void {
-        if (this.enabled) return;
-        this.enabled = true;
-        this.notify("317 gameframe on (resizable).");
-    }
-
-    private disable(): void {
-        if (!this.enabled) return;
-        this.enabled = false;
-        this.notify("Switched back to the OSRS gameframe.");
-    }
-
-    private notify(message: string): void {
-        try {
-            chatHistory.addMessage("game", message);
-        } catch {}
-        console.info(`[gameframe317] ${this.enabled ? "enabled" : "disabled"} (ready=${this.ready})`);
+        if (name !== "317" && name !== "osrs") return false;
+        this.osrsClient.handleWidgetAction({
+            widget: this.osrsClient.widgetManager.getWidgetByUid(GAMEFRAME_LAYOUT_DROPDOWN),
+            option: "Select",
+            source: "primary",
+            slot: name === "317" ? GAMEFRAME_317_OPTION + 1 : 3,
+        });
+        return true;
     }
 
     private async loadAssets(): Promise<void> {
