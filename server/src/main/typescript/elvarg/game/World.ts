@@ -1009,7 +1009,9 @@ export class World {
                 if (existingPlayer) {
                     existingPlayer.requestLogout();
                 }
-                World.players.add(player);
+                // Bots must not be dropped by a host-imposed human player cap: they
+                // share the list but never take a human slot.
+                World.players.add(player, player.isPlayerBot?.() === true);
                 if (
                     player.isPlayerBot?.() !== true &&
                     World.isPlayerSessionConnected(player)

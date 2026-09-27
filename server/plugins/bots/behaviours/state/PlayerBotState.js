@@ -132,7 +132,6 @@ function createPvpBehaviorState() {
     lastFoodAt: 0,
     f2pFoodPending: false,
     f2pFoodPendingHp: null,
-    retreatFoodCharges: null,
     lastBrewAt: 0,
     lastComboEatAt: 0,
     lastVengeanceAt: 0,
@@ -212,7 +211,6 @@ function clearPvpBehaviorState(state) {
   state.pvp.lastFoodAt = 0;
   state.pvp.f2pFoodPending = false;
   state.pvp.f2pFoodPendingHp = null;
-  state.pvp.retreatFoodCharges = null;
   state.pvp.lastBrewAt = 0;
   state.pvp.lastComboEatAt = 0;
   state.pvp.lastVengeanceAt = 0;
@@ -714,7 +712,6 @@ function setModePvp(
   state.pvp.targetPlayer = targetPlayer;
   state.pvp.startCombatPotionsReady = false;
   state.pvp.startCombatPotionNames = [];
-  state.pvp.retreatFoodCharges = null;
   state.pvp.endsAt = nowMs + durationMs;
   state.pvp.nextActionAt = nowMs;
   if (player.getRunEnergy?.() > 0) {

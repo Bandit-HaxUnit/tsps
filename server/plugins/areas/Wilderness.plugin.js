@@ -117,14 +117,16 @@ function isWildernessLocation(location) {
 }
 
 /**
- * Combat level range shared by two players, i.e. the largest level difference that still
- * allows an attack. 0 means the pair isn't subject to the rule - one of them is outside
- * the levelled Wilderness, and whether they may fight at all is decided elsewhere.
- * PvP worlds add 15 to the shared Wilderness level, including outside the Wilderness.
+ * Combat level range for an attack, i.e. the largest level difference that still allows
+ * it. 0 means the pair isn't subject to the rule - one of them is outside the levelled
+ * Wilderness, and whether they may fight at all is decided elsewhere. The range follows
+ * the attacker's own Wilderness level: standing at level 0 (or on unlevelled PvP ground,
+ * such as a PvP world's Edgeville) always permits +/-15 on a PvP world, and the target's
+ * shallower level never shrinks it.
  */
-function wildernessAttackRange(attacker, target) {
+function wildernessAttackRange(attacker, _target) {
   const base = hasGlobalWorldTag("pvp") ? PVP_WORLD_ATTACK_RANGE : 0;
-  return base + Math.min(wildernessLevelOf(attacker), wildernessLevelOf(target));
+  return base + wildernessLevelOf(attacker);
 }
 
 /**
