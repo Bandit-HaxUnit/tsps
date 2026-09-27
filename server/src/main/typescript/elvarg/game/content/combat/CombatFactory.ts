@@ -756,9 +756,12 @@ export class CombatFactory {
             hitSkills.includes(Skill.MAGIC.getIndex()) &&
             hitSkills.includes(Skill.DEFENCE.getIndex());
 
-        // Hit XP is expressed relative to one melee style, which OSRS pays at
-        // 4/damage. Everything below is that ratio: magic 2/damage is /2,
-        // hitpoints 1.33/damage is /3, defensive-cast defence 1/damage is /4.
+        // OSRS pays 4 XP per damage to a melee or ranged style, and the other
+        // hit skills are fixed fractions of that same 4 XP: magic 2 (4/2),
+        // hitpoints 1.33 (4/3), defensive-autocast magic 1.33 (4/3) and
+        // defensive-autocast defence 1 (4/4). Multiply by the base before
+        // dividing so low hits are not floored away.
+        const OSRS_DAMAGE_XP = 4;
         // Add magic exp, even if total damage is 0.
         // Since spells have a base exp reward
         if (hit.getCombatType() === CombatType.MAGIC) {
@@ -767,7 +770,7 @@ export class CombatFactory {
                     if (!defensiveMagicSplit) {
                         player.getSkillManager().addExperience(
                             Skill.MAGIC,
-                            Math.floor(hitDamage / 2)/* + player.getCombat().getPreviousCast().baseExperience() */,
+                            Math.floor((hitDamage * OSRS_DAMAGE_XP) / 2)/* + player.getCombat().getPreviousCast().baseExperience() */,
                             true
                         );
                     }
@@ -783,8 +786,8 @@ export class CombatFactory {
             return;
         }
 
-        // Add hp xp
-        player.getSkillManager().addExperience(Skill.HITPOINTS, Math.floor(hitDamage / 3), true);
+        // Add hp xp (1.33/damage)
+        player.getSkillManager().addExperience(Skill.HITPOINTS, Math.floor((hitDamage * OSRS_DAMAGE_XP) / 3), true);
 
         // Magic xp was already added
         if (hit.getCombatType() === CombatType.MAGIC) {
@@ -792,19 +795,19 @@ export class CombatFactory {
                 return;
             }
             // Defensive casting is not an even split: 1.33 magic / 1.0 defence.
-            player.getSkillManager().addExperience(Skill.MAGIC, Math.floor(hitDamage / 3), true);
-            player.getSkillManager().addExperience(Skill.DEFENCE, Math.floor(hitDamage / 4), true);
+            player.getSkillManager().addExperience(Skill.MAGIC, Math.floor((hitDamage * OSRS_DAMAGE_XP) / 3), true);
+            player.getSkillManager().addExperience(Skill.DEFENCE, hitDamage, true);
             return;
         }
 
-        // Add all other skills xp
+        // Add all other skills xp (4/damage, split across the styles)
         let exp = hitSkills;
         for (let i of exp) {
             let skill = Skill.values()[i];
             if (!skill) {
                 continue;
             }
-            player.getSkillManager().addExperience(skill, Math.floor(hitDamage / exp.length), true);
+            player.getSkillManager().addExperience(skill, Math.floor((hitDamage * OSRS_DAMAGE_XP) / exp.length), true);
         }
     }
 
