@@ -145,6 +145,20 @@ export class GameFrame317Plugin implements ClientPlugin {
             mask.getContext("2d")!.drawImage(mapback, 0, 0);
             this.canvases.set("compass_mask", mask);
         }
+        const chat = this.canvases.get("chat_section");
+        if (chat) {
+            const source = chat.getContext("2d")!.getImageData(0, 0, chat.width, chat.height).data;
+            for (const state of ["selected", "hover", "selected_hover"] as const) {
+                const canvas = document.createElement("canvas");
+                canvas.width = chat.width;
+                canvas.height = chat.height;
+                const ctx = canvas.getContext("2d")!;
+                const variant = ctx.createImageData(chat.width, chat.height);
+                variant.data.set(createChatStoneVariant(source, chat.width, state));
+                ctx.putImageData(variant, 0, 0);
+                this.canvases.set(`chat_${state}`, canvas);
+            }
+        }
         this.ready = true;
         console.info(`[gameframe317] assets loaded (${this.canvases.size})`);
     }
@@ -215,8 +229,15 @@ export class GameFrame317Plugin implements ClientPlugin {
         renderer.drawTextureQuads(chat, new Float32Array([
             x0, y0, 0, 0, x1, y0, 1, 0, x1, y1, 1, split, x0, y1, 0, split,
         ]), 1);
+        // Cache scripts 175/4482 own selection and hover; keep their clicks and menus.
+        const selected = this.osrsClient.varManager.getVarcInt(41);
+        const hovered = this.osrsClient.varManager.getVarcInt(42);
         for (let i = 0; i < 8; i++) {
-            const texture = chat;
+            const isSelected = i < 7 && selected === i;
+            const isHovered = i < 7 ? hovered === i
+                : this.osrsClient.widgetManager.getWidgetByUid((162 << 16) | 32)?.spriteId === 3058;
+            const state = isSelected ? (isHovered ? "selected_hover" : "selected") : isHovered ? "hover" : "section";
+            const texture = this.textures.get(`chat_${state}`) ?? chat;
             const u0 = CHAT_COLUMNS[i] / 519;
             const u1 = CHAT_COLUMNS[i + 1] / 519;
             const left = x0 + width * scale * u0;
@@ -385,6 +406,34 @@ export class GameFrame317Plugin implements ClientPlugin {
             onClick: () => context.switchTab(tab),
         });
     }
+}
+
+/** Reverse the bevel lighting for pressed stones; retain the original silhouettes. */
+export function createChatStoneVariant(source: Uint8ClampedArray, width: number, state: "selected" | "hover" | "selected_hover"): Uint8ClampedArray {
+    const pixels = new Uint8ClampedArray(source);
+    const face = new Float32Array(source.length / 4);
+    for (let i = 0; i < face.length; i++) {
+        const p = i * 4;
+        face[i] = Math.max(0, Math.min(1, (Math.max(source[p], source[p + 1], source[p + 2]) - 56) / 40));
+    }
+    const pressed = state !== "hover";
+    const gain = pressed ? (state === "selected_hover" ? 0.58 : 0.52) : 1.25;
+    const edge = Math.max(1, Math.round(width / 519));
+    const offset = edge * (width + 1);
+    for (let i = 0; i < face.length; i++) {
+        const x = i % width;
+        // An inset catches light on its bottom/right lip, with shadow on top/left.
+        const upper = x >= edge ? face[i - offset] ?? 0 : 0;
+        const lower = x < width - edge ? face[i + offset] ?? 0 : 0;
+        // Keep the lower lip narrow and subdued: the sprite already has a lit rim.
+        const slope = upper - lower;
+        const bevel = pressed ? slope * (slope > 0 ? 12 : 48) : 0;
+        for (let channel = 0; channel < 3; channel++) {
+            const p = i * 4 + channel;
+            pixels[p] = source[p] + (source[p] * (gain - 1) + bevel) * face[i];
+        }
+    }
+    return pixels;
 }
 
 /** Loads a PNG and strips the classic magenta (255,0,255) colour key. */

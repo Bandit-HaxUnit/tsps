@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { loadGameframePaneRedirect } from "../game/widgets/gameframePanes";
 import { ClientScriptLoader } from "../game/cs2/ClientScriptLoader";
 import { GAMEFRAME_LAYOUT_ENUM, GAMEFRAME_317_LABEL, GAMEFRAME_317_FIXED_LABEL, VARP_GAMEFRAME_317 } from "../common/ui/gameframeLayout";
-import { GameFrame317Plugin } from "../game/plugins/gameframe317/GameFrame317Plugin";
+import { GameFrame317Plugin, createChatStoneVariant } from "../game/plugins/gameframe317/GameFrame317Plugin";
 import { CacheSystem } from "../rs/cache/CacheSystem";
 import { Dat2CacheLoaderFactory } from "../rs/cache/loader/Dat2CacheLoaderFactory";
 import { VarManager } from "../rs/config/vartype/VarManager";
@@ -138,7 +138,7 @@ assert.equal(chatDraws.length, 9, "Draw parchment and eight individually styled 
 assert.deepEqual(Array.from(chatDraws[0][1]).filter((_, i) => i % 4 < 2), [
     10, 696, 1048, 696, 1048, 970, 10, 970,
 ], "Fixed parchment keeps its original bounds at DPR 2");
-assert.deepEqual(chatDraws.slice(1).map(([t]) => t.name), Array(8).fill("chat_section"));
+assert.deepEqual(chatDraws.slice(1).map(([t]) => t.name), ["chat_selected", ...Array(7).fill("chat_section")]);
 assert.equal(chatDraws[1][1][0], 10);
 assert.equal(chatDraws[8][1][8], 1048);
 for (const [, quad, count] of chatDraws.slice(1)) {
@@ -179,5 +179,50 @@ assert.equal(hits.length, 14);
 assert.equal(plugin.handleClientCommand("317"), true);
 assert.equal(plugin.handleClientCommand("osrs"), true);
 assert.deepEqual(actions.map(action => action.slot), [4, 3]);
+
+// Both modes follow native chat state without adding click targets or replacing stone art.
+for (const root of [548, 161]) {
+    frameWidgets.rootInterface = root;
+    for (const [selected, hovered, reportSprite, expected] of [
+        [2, 3, 3057, ["section", "section", "selected", "hover", "section", "section", "section", "section"]],
+        [2, 2, 3057, ["section", "section", "selected_hover", "section", "section", "section", "section", "section"]],
+        [-1, -1, 3058, ["section", "section", "section", "section", "section", "section", "section", "hover"]],
+        [-1, -1, 3057, Array(8).fill("section")],
+    ] as const) {
+        vars.setVarcInt(41, selected);
+        vars.setVarcInt(42, hovered);
+        reportStone.spriteId = reportSprite;
+        draws.length = 0;
+        internals.drawChat(context.renderer, 0, 338, 519, 165, 2);
+        assert.deepEqual(draws.slice(1).map(([t]) => t.name), expected.map(state => `chat_${state}`));
+        assert.equal(draws[0][0].name, "chat_section", "Never tint the parchment");
+    }
+}
+
+// A flat stone face makes the reversed bevel and modest hover measurable.
+const stone = new Uint8ClampedArray(9 * 9 * 4);
+for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) {
+    const p = (y * 9 + x) * 4;
+    const value = x >= 2 && x <= 6 && y >= 2 && y <= 6 ? 120 : 40;
+    stone.set([value, value, value, 240], p);
+}
+const pressedStone = createChatStoneVariant(stone, 9, "selected");
+const hoverStone = createChatStoneVariant(stone, 9, "hover");
+const pressedHoverStone = createChatStoneVariant(stone, 9, "selected_hover");
+const pixel = (pixels: Uint8ClampedArray, x: number, y: number) => pixels[(y * 9 + x) * 4];
+assert.ok(pixel(pressedStone, 4, 2) < pixel(pressedStone, 4, 4), "Inset top edge is shadowed");
+assert.ok(pixel(pressedStone, 2, 4) < pixel(pressedStone, 4, 4), "Inset left edge is shadowed");
+assert.ok(pixel(pressedStone, 4, 6) > pixel(pressedStone, 4, 4), "Inset bottom lip catches light");
+assert.ok(pixel(pressedStone, 6, 4) > pixel(pressedStone, 4, 4), "Inset right lip catches light");
+assert.equal(pixel(hoverStone, 4, 4), 150, "Hover is 25% brighter, between the previous extremes");
+assert.equal(pixel(pressedStone, 4, 4), 62, "The pressed face is darker");
+assert.ok(pixel(pressedStone, 4, 6) - pixel(pressedStone, 4, 4) <= 12,
+    "The lower bevel must not produce a bright strip over the sprite's existing rim");
+assert.ok(pixel(pressedHoverStone, 4, 4) > pixel(pressedStone, 4, 4));
+assert.ok(pixel(pressedHoverStone, 4, 4) < pixel(stone, 4, 4), "Selected-hover remains pressed");
+for (const variant of [pressedStone, hoverStone, pressedHoverStone]) {
+    assert.equal(pixel(variant, 0, 0), 40, "Do not shade the gaps around stones");
+    assert.ok(variant.every((value, i) => i % 4 !== 3 || value === stone[i]), "Preserve the stone silhouette alpha");
+}
 
 console.log("gameframe pane and layout dropdown tests passed");
