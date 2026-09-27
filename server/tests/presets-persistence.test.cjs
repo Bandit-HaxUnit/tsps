@@ -83,6 +83,44 @@ test("custom presets rehydrate from their persisted attribute", () => {
   assert.deepEqual(messages, ["Preset items cannot be banked."]);
 });
 
+test("custom presets survive the player save round trip", () => {
+  const { PlayerSave } = require("../dist/game/entity/impl/player/persistence/PlayerSave");
+  const { SkillManager } = require("../dist/game/content/skill/SkillManager");
+  const { Item } = require("../dist/game/model/Item");
+  const jsonPersistence = require("../plugins/persistence/JsonPlayerPersistence.plugin");
+  jsonPersistence.register({
+    getSkillManager: () => SkillManager,
+    setPlayerPersistence: () => {},
+    log: () => {},
+  });
+
+  // Register the attribute through the same api the plugin uses.
+  presets.register({
+    getPrayerHandler: () => ({}),
+    getCombatFactory: () => ({}),
+    getSkillManager: () => SkillManager,
+    persistAttribute: (key) => PlayerSave.persistAttribute(key),
+    registerCustomInterface() {},
+    onCanBankItem() {},
+    onInterfaceActionButton() {},
+  });
+  assert.equal(PlayerSave.persistentAttributeKeys.has("pvp:customPresets"), true);
+
+  const records = [{
+    name: "Saved Build",
+    inventory: [{ id: 1135, amount: 1, meta: { [Item.PRESET_META]: true } }],
+    equipment: [],
+    stats: [99, 99, 99, 99, 99, 99, 99],
+    spellbookId: 1151,
+    autocastSpellId: -1,
+  }];
+  const save = new PlayerSave();
+  save.attributes = { "pvp:customPresets": records };
+
+  const restored = new jsonPersistence.JsonPlayerPersistence().hydratePlayerSave(JSON.parse(JSON.stringify(save)));
+  assert.deepEqual(restored.attributes["pvp:customPresets"], records);
+});
+
 test("server-owned items inherit gameplay and deliver external models before definitions", async () => {
   const fs = require("node:fs");
   const { inflateSync } = require("node:zlib");
@@ -137,7 +175,7 @@ test("server-owned items inherit gameplay and deliver external models before def
   assert.equal(CacheDefinitions.getItem(custom.id).id, custom.id, "invalid registration preserves live definitions");
 });
 
-test("preset-spawned items carry the untradeable and unbankable metadata", () => {
+test("preset-spawned items carry the untradeable, unbankable and preset metadata", () => {
   const { Item } = require("../dist/game/model/Item");
   const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
   const item = presets._test.spawnPresetItem(
@@ -147,9 +185,75 @@ test("preset-spawned items carry the untradeable and unbankable metadata", () =>
 
   assert.equal(item.getMetaValue(Item.UNTRADEABLE_META), true);
   assert.equal(item.getMetaValue(Item.UNBANKABLE_META), true);
+  assert.equal(item.getMetaValue(Item.PRESET_META), true);
   assert.equal(item.isTradeable(), false);
   assert.equal(item.isLostOnDeath(), true);
   assert.equal(item.isUnbankable(), true);
+  assert.equal(item.isPresetItem(), true);
+});
+
+test("loading a preset banks carried items but leaves preset items behind", () => {
+  const { Item } = require("../dist/game/model/Item");
+  const { Bank } = require("../dist/game/model/container/impl/Bank");
+  const banked = [];
+  const bank = { add: (item) => banked.push(item.getId()) };
+  const player = {
+    getInventory: () => ({ getCopiedItems: () => [new Item(1135, 1)] }),
+    getEquipment: () => ({
+      getCopiedItems: () => [new Item(1163, 1), new Item(4151, 1, { [Item.PRESET_META]: true })],
+    }),
+    getBank: () => bank,
+  };
+  const original = Bank.getTabForItem;
+  Bank.getTabForItem = () => 0;
+  try {
+    assert.equal(presets._test.bankCarriedItems(player), true);
+    assert.deepEqual(banked, [1135, 1163], "real items go to the bank, preset items do not");
+  } finally {
+    Bank.getTabForItem = original;
+  }
+});
+
+test("dropping a preset item destroys it without the confirmation interface", () => {
+  const destroy = require("../plugins/interface/DestroyItem.plugin");
+  let onDrop;
+  destroy.register({
+    registerCustomInterface() {},
+    onItemDropPolicy(handler) { onDrop = handler; },
+    onInterfaceActionButton() {},
+  });
+
+  const deleted = [];
+  const presetEvent = {
+    player: { getInventory: () => ({ deleteAtSlot: (slot, amount) => deleted.push([slot, amount]) }) },
+    item: { isPresetItem: () => true, isDropable: () => false, getAmount: () => 3 },
+    slot: 4,
+    handled: false,
+  };
+  onDrop(presetEvent);
+  assert.equal(presetEvent.handled, true, "preset drops are handled");
+  assert.deepEqual(deleted, [[4, 3]], "the preset item is destroyed in place");
+
+  const realEvent = {
+    player: {
+      getInventory: () => ({ deleteAtSlot: () => assert.fail("real untradeables keep the prompt") }),
+      setDestroyItem: () => {},
+      getPacketSender: () => {
+        const sender = {
+          sendChatboxInterface: () => sender,
+          sendItemOnInterface: () => sender,
+          sendString: () => sender,
+        };
+        return sender;
+      },
+    },
+    item: { isPresetItem: () => false, isDropable: () => false, getId: () => 1, getAmount: () => 1, getDefinition: () => ({ getName: () => "Thing" }) },
+    slot: 0,
+    handled: false,
+  };
+  onDrop(realEvent);
+  assert.equal(realEvent.handled, true, "an untradeable still opens the destroy prompt");
+  assert.equal(deleted.length, 1);
 });
 
 test("deposit booth slot actions reach Bank.deposit", () => {
