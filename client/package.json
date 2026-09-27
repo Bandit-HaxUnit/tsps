@@ -52,6 +52,7 @@
     "test:webrtc-world-list": "tsx tests/webrtc-world-list.test.ts",
     "test:content-api": "tsx tests/content-api.test.ts",
     "test:hd": "tsx tests/hd-plugin.test.ts",
+    "test:scene-viewport": "node tests/scene-viewport-clipping.browser.cjs",
     "test:editor-objects": "tsx tests/edit-mode-object-spawns.test.ts && tsx tests/edit-mode-settings.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "export-textures": "tsx scripts/cache/export-textures.ts",

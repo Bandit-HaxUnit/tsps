@@ -190,6 +190,11 @@ import { KNOWN_WATER_TEXTURE_IDS } from "../water/WaterTextureIds";
 import type { WebGLOsrsRendererHost } from "./hostInterface";
 import { RENDER_CONSTANTS, BrowserQualityProfile, DESKTOP_QUALITY_PROFILE, IOS_SAFARI_QUALITY_PROFILE, MOBILE_TOUCH_QUALITY_PROFILE } from "./constants";
 
+/** OSRS fixed-mode toplevel; its gameframe renders at a fixed 765x503. */
+const FIXED_GAMEFRAME_ROOT = 548;
+/** Cache 548:26 - fixed mode's 3D viewport (4,4 512x334 inside the gameframe). */
+const FIXED_SCENE_VIEWPORT = { x: 4, y: 4, width: 512, height: 334 };
+
 export function getUiSurfaceCssSize(host: WebGLOsrsRendererHost, 
         safeBufW: number,
         safeBufH: number,
@@ -260,7 +265,10 @@ export function computeUiRenderMetrics(host: WebGLOsrsRendererHost,
 
         if (!isLoginLikeState) {
             if (!isMobileGameplayRoot) {
-                const desktopUiScale = getUiScale(cssW, cssH);
+                // Fixed mode (548) is a fixed-size gameframe: interface scaling must
+                // not blow it up to the window, it renders at its exact size.
+                const isFixedGameframe = rootInterface === FIXED_GAMEFRAME_ROOT;
+                const desktopUiScale = isFixedGameframe ? 1 : getUiScale(cssW, cssH);
                 // RuneLite stretched mode reduces the logical resizable game size by the
                 // configured factor, then stretches that real size back to the window.
                 // The DPR component of the render scale is snapped to an integer so
@@ -272,14 +280,15 @@ export function computeUiRenderMetrics(host: WebGLOsrsRendererHost,
                 // drift fractional (which made glyph widths uneven by 1px).
                 const dprComponent = Math.max(1, Math.round(safeBufW / Math.max(1, cssW)));
                 const renderScale = dprComponent * desktopUiScale;
-                const layoutW = Math.max(1, Math.ceil(safeBufW / renderScale));
-                const layoutH = Math.max(1, Math.ceil(safeBufH / renderScale));
+                const layoutW = isFixedGameframe ? 765 : Math.max(1, Math.ceil(safeBufW / renderScale));
+                const layoutH = isFixedGameframe ? 503 : Math.max(1, Math.ceil(safeBufH / renderScale));
                 return {
                     layoutW,
                     layoutH,
                     renderScaleX: renderScale,
                     renderScaleY: renderScale,
-                    renderOffsetX: 0,
+                    renderOffsetX: isFixedGameframe
+                        ? Math.max(0, Math.floor((safeBufW - layoutW * renderScale) / 2)) : 0,
                     renderOffsetY: 0,
                 };
             }
@@ -481,12 +490,25 @@ export function getSceneViewportWidgetRect(host: WebGLOsrsRendererHost, ): { x: 
         const widgetManager = host.osrsClient.widgetManager;
         const fallbackWidth = (host.app.width || host.canvas.width || 1) | 0;
         const fallbackHeight = (host.app.height || host.canvas.height || 1) | 0;
+        const rootInterface = widgetManager?.rootInterface ?? -1;
+        // Fixed mode's viewport is static cache geometry; never trust a cached
+        // widget reference (or a layout's own 100%-sized viewport) for it.
+        if (rootInterface === FIXED_GAMEFRAME_ROOT) {
+            const metrics = host.computeUiRenderMetrics(fallbackWidth, fallbackHeight);
+            return {
+                x: FIXED_SCENE_VIEWPORT.x * metrics.renderScaleX + metrics.renderOffsetX,
+                y: FIXED_SCENE_VIEWPORT.y * metrics.renderScaleY + metrics.renderOffsetY,
+                width: FIXED_SCENE_VIEWPORT.width * metrics.renderScaleX,
+                height: FIXED_SCENE_VIEWPORT.height * metrics.renderScaleY,
+            };
+        }
+        const viewport = widgetManager?.getSceneViewportWidget() as SceneViewportInput["viewport"];
         return computeSceneViewportRect({
             fallbackWidth,
             fallbackHeight,
             layoutWidth: (widgetManager?.canvasWidth || fallbackWidth) | 0,
             layoutHeight: (widgetManager?.canvasHeight || fallbackHeight) | 0,
-            viewport: widgetManager?.viewportWidget as SceneViewportInput["viewport"],
+            viewport,
         });
     
 }
