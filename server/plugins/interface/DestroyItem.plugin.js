@@ -205,6 +205,13 @@ module.exports = {
     api.registerCustomInterface(INTERFACE_DEFINITION);
 
     api.onItemDropPolicy((event) => {
+      // Preset items are disposable by design; dropping one destroys it without the
+      // confirmation untradeable gear gets, so PvP loadouts are not a click-through.
+      if (event.item.isPresetItem?.()) {
+        event.player.getInventory().deleteAtSlot(event.slot, event.item.getAmount());
+        event.handled = true;
+        return;
+      }
       if (event.item.isDropable()) return;
       open(event.player, event.item, event.slot);
       event.handled = true;
