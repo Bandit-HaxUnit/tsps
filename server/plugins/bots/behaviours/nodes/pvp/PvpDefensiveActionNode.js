@@ -1,20 +1,22 @@
 "use strict";
 
 const { Location } = require("../../../../../src/main/typescript/elvarg/game/model/Location");
+const { Skill } = require("../../../../../src/main/typescript/elvarg/game/model/Skill");
 const { hasGlobalWorldTag } = require("../../../../../src/main/typescript/elvarg/game/definition/WorldDefinition");
 const { TeleportHandler } = require("../../../../../src/main/typescript/elvarg/game/model/teleportation/TeleportHandler");
 const { TeleportType } = require("../../../../../src/main/typescript/elvarg/game/model/teleportation/TeleportType");
 const { TimerKey } = require("../../../../../src/main/typescript/elvarg/util/timers/TimerKey");
 const { Wilderness } = require("../../../../../src/main/typescript/elvarg/game/content/wilderness/Wilderness");
 const { CanAttackResponse } = require("../../../../../src/main/typescript/elvarg/game/content/combat/CombatFactory");
-const { queueRouteAndFlagAppearance, clearMovementRequest, peekMovementRequest, randomInRange } = require("../../navigation/BotNavigation");
+const { queueRouteAndFlagAppearance, clearMovementRequest, peekMovementRequest } = require("../../navigation/BotNavigation");
 const { applyGeneratedPvpLoadout } = require("../../policies/PvpLoadoutPolicy");
 const { getEnabledWildernessHotspots, createHotspotAnchorLocation } = require("../../pvp/WildernessHotspotRegistry");
 
 const RETREAT_STEP_TILES = 12;
-const RETREAT_FOOD_CHARGES_MIN = 1;
-const RETREAT_FOOD_CHARGES_MAX = 4;
 const RETREAT_TELEPORT_LEVEL = 20;
+// A retreating bot runs before it teleports. The grace window is what gives the player
+// who has nearly killed it a chance to land the kill instead of it vanishing mid-fight.
+const RETREAT_RUN_GRACE_MS = 5000;
 
 class PvpDefensiveActionNode {
   constructor(options = {}) {
@@ -36,12 +38,12 @@ class PvpDefensiveActionNode {
     if (currentHp <= 0 || player.isDyingReturn()) {
       return { handled: true, status: "failure" };
     }
-    const foodCharges = state.virtualFoodChargesRemaining ?? this.getProfile(state).foodCharges;
-    if (!Number.isInteger(pvp.retreatFoodCharges)) {
-      pvp.retreatFoodCharges = randomInRange(RETREAT_FOOD_CHARGES_MIN, RETREAT_FOOD_CHARGES_MAX);
-    }
-    if (!pvp.retreat && foodCharges <= pvp.retreatFoodCharges) {
-      pvp.retreat = { autoRetaliate: player.autoRetaliateReturn(), teleportStarted: false };
+    if (!pvp.retreat && this.shouldRetreat(player, state)) {
+      pvp.retreat = {
+        autoRetaliate: player.autoRetaliateReturn(),
+        teleportStarted: false,
+        runUntilMs: Number(nowMs ?? 0) + RETREAT_RUN_GRACE_MS,
+      };
       player.setAutoRetaliate(false);
       clearMovementRequest(player);
       player.getMovementQueue().reset();
@@ -57,6 +59,27 @@ class PvpDefensiveActionNode {
     }
 
     return { handled: false, status: "running" };
+  }
+
+  // Retreat is a last resort: it only fires once the bot has no food left *and* is at
+  // or below its retreat HP ratio. Running the food down to a random early threshold
+  // made bots bolt while they still had the supplies to win.
+  shouldRetreat(player, state) {
+    const foodCharges = state.virtualFoodChargesRemaining ?? this.getProfile(state).foodCharges;
+    if (!(Number(foodCharges) <= 0)) {
+      return false;
+    }
+    const currentHp = Number(player.getHitpoints?.() ?? 0);
+    const maxHp = Number(
+      player.getSkillManager?.()?.getMaxLevel?.(Skill.HITPOINTS) ?? currentHp
+    );
+    if (!(maxHp > 0)) {
+      return false;
+    }
+    const threshold = Number(
+      state?.pvp?.escapeThreshold ?? this.getProfile(state)?.retreatHpRatio ?? 0.24
+    );
+    return currentHp / maxHp <= threshold;
   }
 
   retreat(player, state, nowMs, target) {
@@ -93,7 +116,8 @@ class PvpDefensiveActionNode {
     const level = !hasGlobalWorldTag("pvp") && Wilderness.isIn(player)
       ? Wilderness.levelAt(location.getX(), location.getY()) : 0;
     const teleblocked = !combat.getTeleblockTimer().finished();
-    if (level < RETREAT_TELEPORT_LEVEL && !teleblocked) {
+    const runGraceElapsed = Number(nowMs ?? 0) >= Number(retreat.runUntilMs ?? 0);
+    if (level < RETREAT_TELEPORT_LEVEL && !teleblocked && runGraceElapsed) {
       if (!retreat.destination) {
         const hotspots = getEnabledWildernessHotspots().filter((hotspot) =>
           location.getDistance(createHotspotAnchorLocation(hotspot)) > RETREAT_STEP_TILES

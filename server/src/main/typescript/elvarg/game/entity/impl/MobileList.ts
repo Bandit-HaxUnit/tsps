@@ -68,12 +68,17 @@ export class MobileList<E extends Mobile> implements Iterable<E> {
         }
     }
 
-    public add(e: E): boolean {
+    /**
+     * `bypassFullCheck` is for entities that must not consume a capped slot - player
+     * bots on a browser host whose `isFull()` is overridden to cap humans. The slot
+     * queue still bounds the list to its real capacity, so this cannot overflow it.
+     */
+    public add(e: E, bypassFullCheck = false): boolean {
         if (e === null) {
             return false;
         }
 
-        if (this.isFull()) {
+        if (!bypassFullCheck && this.isFull()) {
             return false;
         }
 
