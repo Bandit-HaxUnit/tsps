@@ -620,6 +620,7 @@ export async function initShaders(host: WebGLOsrsRendererHost, ): Promise<Progra
                     // Keep CS2 IF_GETCANVASSIZE / widget manager dimensions aligned with the active
                     // widget layout space.
                     manager?.resize(layoutW, layoutH);
+                    host.osrsClient.gameFrame317Plugin.updateWidgetLayout();
 
                     // Get the current root interface (set by server via IF_OPENTOPLEVEL)
                     // OSRS interfaces can have multiple root widgets (parentUid=-1)

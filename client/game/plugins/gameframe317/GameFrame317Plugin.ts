@@ -3,11 +3,7 @@ import type { GLRenderer } from "../../../widgets/gl/renderer";
 import { GAMEFRAME_LAYOUT_DROPDOWN, GAMEFRAME_317_OPTION, VARP_GAMEFRAME_317 } from "../../../common/ui/gameframeLayout";
 
 /**
- * Classic 317 gameframe sidebar + chatbox, drawn over the live OSRS UI.
- *
- * The frame chrome is drawn through the WebGL widget pass (not a DOM canvas) so
- * it shares the surface with the widget overlay, and hugs the live OSRS anchor
- * rects (sidebar content / chat) instead of a fixed layout table.
+ * Classic 317 chrome, drawn behind live OSRS widgets in fixed or resizable mode.
  */
 
 // Hand-cut resizable sidebar sprite (public/gameframe317/sidebar_inv.png).
@@ -19,6 +15,17 @@ const SIDEBAR_SPRITE = { width: 237, height: 338, panelLeft: 22, panelTop: 39, p
 // logical cutout grid - the sprite is stretched to the chat rect at draw time,
 // so the PNG just needs enough resolution (currently a 2x/Retina export).
 const CHAT_SPRITE = { width: 2169, height: 725, backLeft: 30, backTop: 28, backW: 2115, backH: 553 };
+// Column boundaries fall in the gaps between the eight chat stones.
+const CHAT_COLUMNS = [0, 64, 126, 188, 250, 312, 374, 435, 519];
+// LostCity's 765x503 frame; the scene remains at (4,4), 512x334.
+const FIXED_BACKGROUND: [string, number, number][] = [
+    ["backtop1", 0, 0], ["backleft1", 0, 4], ["backleft2", 0, 357],
+    ["backright1", 722, 4], ["backright2", 743, 205],
+    ["backvmid1", 516, 4], ["backvmid2", 516, 205], ["backvmid3", 496, 357],
+    ["backhmid2", 0, 338], ["backhmid1", 516, 160],
+    ["backbase2", 496, 466], ["backbase1", 0, 453],
+    ["invback", 553, 205], ["mapback", 550, 4],
+];
 
 const TOP_ICON_POS: [number, number][] = [
     [545, 173], [569, 171], [598, 171], [631, 172], [669, 173], [696, 171], [724, 173],
@@ -53,8 +60,11 @@ type Texture = ReturnType<GLRenderer["createTextureFromCanvas"]>;
 
 export class GameFrame317Plugin implements ClientPlugin {
     public readonly gameFrame: GameFrameProvider;
+    private get fixed(): boolean {
+        return this.osrsClient.widgetManager?.rootInterface === 548;
+    }
     private get enabled(): boolean {
-        return this.osrsClient.widgetManager?.rootInterface === 161 &&
+        return (this.fixed || this.osrsClient.widgetManager?.rootInterface === 161) &&
             this.osrsClient.varManager?.getVarp(VARP_GAMEFRAME_317) === 1;
     }
     private ready = false;
@@ -74,10 +84,11 @@ export class GameFrame317Plugin implements ClientPlugin {
                 // chat text/messages are type 4 and still render over our section.
                 { group: 162, type: 3, hide: true },
                 { group: 162, type: 5, hide: true },
+                { contentType: 1339, hide: this.fixed },
             ],
             // Keep the orb/XP container backgrounds (root-interface children 22 and 7).
             keepChrome: () => [(161 << 16) | 22, (161 << 16) | 7],
-            drawGameFrame: (context) => this.drawResizable(context),
+            drawGameFrame: (context) => this.fixed ? this.drawFixed(context) : this.drawResizable(context),
         };
         void this.loadAssets();
     }
@@ -94,23 +105,70 @@ export class GameFrame317Plugin implements ClientPlugin {
         return true;
     }
 
+    /** Align mounted widgets before layout; restore stock coordinates when disabled. */
+    updateWidgetLayout(): void {
+        if (!this.fixed) return;
+        const manager = this.osrsClient.widgetManager;
+        for (const [child, property, stock, fixed] of [
+            [17, "rawX", 547, 553],
+            [9, "rawX", 516, 521],
+        ] as const) {
+            const widget = manager.getWidgetByUid((548 << 16) | child);
+            const value = this.enabled ? fixed : stock;
+            if (widget && widget[property] !== value) {
+                widget[property] = value;
+                manager.invalidateWidget(widget);
+            }
+        }
+    }
+
     private async loadAssets(): Promise<void> {
-        const base = process.env.PUBLIC_URL || "/";
+        const base = (process.env.PUBLIC_URL || "").replace(/\/$/, "");
         const names = [
             "sideicons", "redstone1", "redstone2", "redstone3",
             // OSRS bottom-row icons for the two slots the 317 set gets wrong
             // (account = tab 8, friends/ignore = tab 9).
             "osrs_account", "osrs_friends", "osrs_clan", "sidebar_inv", "chat_section",
+            ...FIXED_BACKGROUND.map(([name]) => name), "compass",
         ];
         await Promise.all(names.map(async (name) => {
             try {
-                this.canvases.set(name, await loadSprite(`${base}gameframe317/${name}.png`));
+                this.canvases.set(name, await loadSprite(`${base}/gameframe317/${name}.png`));
             } catch (error) {
                 console.warn(`[gameframe317] missing ${name}.png:`, (error as Error).message);
             }
         }));
+        const mapback = this.canvases.get("mapback");
+        if (mapback) {
+            const mask = document.createElement("canvas");
+            mask.width = mask.height = 33;
+            mask.getContext("2d")!.drawImage(mapback, 0, 0);
+            this.canvases.set("compass_mask", mask);
+        }
         this.ready = true;
         console.info(`[gameframe317] assets loaded (${this.canvases.size})`);
+    }
+
+    private drawFixed(context: GameFrameDrawContext): void {
+        if (!this.prepare(context)) return;
+        const renderer = context.renderer;
+        const scale = this.renderScale;
+        for (const [name, x, y] of FIXED_BACKGROUND) {
+            this.drawNamed(renderer, name, x, y, scale, false, false);
+        }
+        // The chat sprite is translucent; hide the old parchment baked into the borders.
+        renderer.drawRect(this.renderOffsetX, this.renderOffsetY + 338 * scale, 519 * scale, 165 * scale, [0, 0, 0, 1]);
+        this.drawChat(renderer, 0, 338, 519, 165, scale);
+        const compass = this.textures.get("compass");
+        const mask = this.textures.get("compass_mask");
+        if (compass && mask) {
+            renderer.drawTextureRotatedMasked(
+                compass, mask, this.renderOffsetX + 550 * scale, this.renderOffsetY + 4 * scale,
+                33 * scale, 33 * scale, -this.osrsClient.camera.yaw, 2048,
+                9 / 51, 9 / 51, 42 / 51, 42 / 51,
+            );
+        }
+        this.drawTabs(context, renderer, scale, (x) => x, (y) => y);
     }
 
     /**
@@ -133,15 +191,41 @@ export class GameFrame317Plugin implements ClientPlugin {
     private drawChatSection(renderer: GLRenderer, chat: { x: number; y: number; width: number; height: number } | undefined, scale: number): void {
         if (!chat) return;
         const s = chat.width / CHAT_SPRITE.backW;
-        this.drawStretched(
+        this.drawChat(
             renderer,
-            "chat_section",
             chat.x - CHAT_SPRITE.backLeft * s,
             chat.y - CHAT_SPRITE.backTop * s,
             CHAT_SPRITE.width * s,
             CHAT_SPRITE.height * s,
             scale,
         );
+    }
+
+    private drawChat(renderer: GLRenderer, x: number, y: number, width: number, height: number, scale: number): void {
+        const chat = this.textures.get("chat_section");
+        if (!chat?.tex) return;
+        const x0 = this.renderOffsetX + x * scale;
+        const x1 = x0 + width * scale;
+        const y0 = this.renderOffsetY + y * scale;
+        const split = 600 / CHAT_SPRITE.height;
+        // Fixed reserves 28px for the stones and omits unused bottom padding.
+        const y1 = y0 + (this.fixed ? height - 28 : height * split) * scale;
+        const y2 = y0 + height * scale;
+        const bottom = this.fixed ? 705 / CHAT_SPRITE.height : 1;
+        renderer.drawTextureQuads(chat, new Float32Array([
+            x0, y0, 0, 0, x1, y0, 1, 0, x1, y1, 1, split, x0, y1, 0, split,
+        ]), 1);
+        for (let i = 0; i < 8; i++) {
+            const texture = chat;
+            const u0 = CHAT_COLUMNS[i] / 519;
+            const u1 = CHAT_COLUMNS[i + 1] / 519;
+            const left = x0 + width * scale * u0;
+            const right = x0 + width * scale * u1;
+            renderer.drawTextureQuads(texture, new Float32Array([
+                left, y1, u0, split, right, y1, u1, split,
+                right, y2, u1, bottom, left, y2, u0, bottom,
+            ]), 1);
+        }
     }
 
     /**
@@ -168,6 +252,10 @@ export class GameFrame317Plugin implements ClientPlugin {
             scale,
         );
 
+        this.drawTabs(context, renderer, scale, X, Y);
+    }
+
+    private drawTabs(context: GameFrameDrawContext, renderer: GLRenderer, scale: number, X: (x: number) => number, Y: (y: number) => number): void {
         // The 317 redstone marks the selected tab only.
         const activeTab = this.osrsClient?.varManager?.getVarcInt?.(171) ?? 0;
         if (activeTab >= 0 && activeTab < 7) {

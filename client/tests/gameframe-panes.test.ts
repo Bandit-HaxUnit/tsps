@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { loadGameframePaneRedirect } from "../game/widgets/gameframePanes";
 import { ClientScriptLoader } from "../game/cs2/ClientScriptLoader";
 import { GAMEFRAME_LAYOUT_ENUM, GAMEFRAME_317_LABEL, GAMEFRAME_317_FIXED_LABEL, VARP_GAMEFRAME_317 } from "../common/ui/gameframeLayout";
+import { GameFrame317Plugin } from "../game/plugins/gameframe317/GameFrame317Plugin";
 import { CacheSystem } from "../rs/cache/CacheSystem";
 import { Dat2CacheLoaderFactory } from "../rs/cache/loader/Dat2CacheLoaderFactory";
 import { VarManager } from "../rs/config/vartype/VarManager";
@@ -88,5 +89,95 @@ vars.setVarp(VARP_GAMEFRAME_317, 1);
 vars.setVarp(1107, 42);
 run([[Opcodes.ICONST, 55], [Opcodes.INVOKE, 3962]]);
 assert.equal(vm.intStack[0], 42, "Other settings still use the cache getter with 317 enabled");
+
+// Render calls and tab hits share the widget transform, without needing WebGL.
+(GameFrame317Plugin.prototype as any).loadAssets = async () => {};
+const fixedWidgets = new Map([
+    [17, { rawX: 547 }], [9, { rawX: 516 }], [11, { rawWidth: 519 }],
+]);
+const actions: any[] = [];
+const reportStone = { spriteId: 3057 };
+const frameWidgets = {
+    ...widgets,
+    rootInterface: 548,
+    getWidgetByUid: (uid: number) => uid === ((162 << 16) | 32) ? reportStone : fixedWidgets.get(uid & 0xffff),
+    invalidateWidget() {},
+};
+const plugin = new GameFrame317Plugin({
+    widgetManager: frameWidgets, varManager: vars, camera: { yaw: 0 },
+    handleWidgetAction: (action: any) => actions.push(action),
+});
+const internals = plugin as any;
+internals.ready = true;
+for (const name of ["backtop1", "invback", "mapback", "chat_section", "chat_selected", "chat_hover", "chat_selected_hover", "redstone3", "osrs_clan", "osrs_account", "osrs_friends"]) {
+    internals.textures.set(name, { name, tex: {}, w: 30, h: 30 });
+}
+const draws: any[] = [];
+const hits: any[] = [];
+const tabs: number[] = [];
+const context = {
+    renderer: {
+        drawTexture: (...args: any[]) => draws.push(args),
+        drawTextureQuads: (...args: any[]) => draws.push(args),
+        drawRect: (...args: any[]) => draws.push([{ name: "chatBacking" }, ...args]),
+    },
+    renderScaleX: 2, renderScaleY: 2, renderOffsetX: 10, renderOffsetY: 20,
+    anchors: {}, clicks: { register: (hit: any) => hits.push(hit) },
+    switchTab: (tab: number) => tabs.push(tab),
+};
+vars.setVarcInt(171, 3);
+vars.setVarcInt(41, 0);
+vars.setVarcInt(42, -1);
+assert.equal(plugin.gameFrame.isGameFrameActive(), true);
+plugin.updateWidgetLayout();
+assert.deepEqual([...fixedWidgets.values()], [{ rawX: 553 }, { rawX: 521 }, { rawWidth: 519 }]);
+plugin.gameFrame.drawGameFrame(context as any);
+assert.deepEqual(draws.find(([t]) => t.name === "invback").slice(1, 3), [1116, 430]);
+const chatDraws = draws.filter(([t]) => t.name.startsWith("chat_"));
+assert.equal(chatDraws.length, 9, "Draw parchment and eight individually styled stones");
+assert.deepEqual(Array.from(chatDraws[0][1]).filter((_, i) => i % 4 < 2), [
+    10, 696, 1048, 696, 1048, 970, 10, 970,
+], "Fixed parchment keeps its original bounds at DPR 2");
+assert.deepEqual(chatDraws.slice(1).map(([t]) => t.name), Array(8).fill("chat_section"));
+assert.equal(chatDraws[1][1][0], 10);
+assert.equal(chatDraws[8][1][8], 1048);
+for (const [, quad, count] of chatDraws.slice(1)) {
+    assert.equal(count, 1);
+    assert.equal(quad[1], 970);
+    assert.equal(quad[9], 1026, "Stones retain their 28px height and fixed bottom edge");
+    assert.ok(Math.abs(quad[3] - 600 / 725) < 0.000001);
+    assert.ok(Math.abs(quad[11] - 705 / 725) < 0.000001, "Trim blank padding below the stones");
+}
+const backingIndex = draws.findIndex(([t]) => t.name === "chatBacking");
+assert.deepEqual(draws[backingIndex].slice(1), [10, 696, 1038, 330, [0, 0, 0, 1]],
+    "Opaque backing prevents old chat borders bleeding through the translucent PNG");
+assert.equal(draws[backingIndex + 1][0].name, "chat_section");
+assert.deepEqual(draws.find(([t]) => t.name === "redstone3").slice(1, 3), [1262, 356]);
+assert.equal(draws.filter(([t]) => t.name.startsWith("osrs_")).length, 3);
+assert.equal(hits.length, 14);
+assert.deepEqual(hits[0].rect, { x: 1096, y: 362, w: 68, h: 68 });
+for (const hit of hits) hit.onClick();
+assert.deepEqual(tabs, Array.from({ length: 14 }, (_, i) => i));
+assert.equal(plugin.gameFrame.widgetRules!().find(rule => rule.contentType === 1339)?.hide, true);
+vars.setVarp(VARP_GAMEFRAME_317, 0);
+plugin.updateWidgetLayout();
+assert.deepEqual([...fixedWidgets.values()], [{ rawX: 547 }, { rawX: 516 }, { rawWidth: 519 }]);
+assert.equal(plugin.gameFrame.isGameFrameActive(), false);
+frameWidgets.rootInterface = 161;
+vars.setVarp(VARP_GAMEFRAME_317, 1);
+assert.equal(plugin.gameFrame.isGameFrameActive(), true);
+assert.equal(plugin.gameFrame.widgetRules!().find(rule => rule.contentType === 1339)?.hide, false);
+draws.length = hits.length = 0;
+plugin.gameFrame.drawGameFrame({ ...context, anchors: {
+    tabContent: { x: 900, y: 300, width: 190, height: 261 },
+    chat: { x: 0, y: 500, width: 519, height: 130 },
+} } as any);
+assert.equal(draws.some(([t]) => t.name === "backtop1"), false, "Resizable keeps its composite frame");
+assert.equal(draws.some(([t]) => t.name === "chatBacking"), false, "Resizable keeps its existing transparency");
+assert.deepEqual(draws.find(([t]) => t.name === "redstone3").slice(1, 3), [1956, 546]);
+assert.equal(hits.length, 14);
+assert.equal(plugin.handleClientCommand("317"), true);
+assert.equal(plugin.handleClientCommand("osrs"), true);
+assert.deepEqual(actions.map(action => action.slot), [4, 3]);
 
 console.log("gameframe pane and layout dropdown tests passed");
