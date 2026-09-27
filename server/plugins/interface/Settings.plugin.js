@@ -8,6 +8,7 @@ const {
   encodeGameframeFlags,
   DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID,
 } = require("../../src/main/typescript/elvarg/net/protocol/ClientProtocol");
+const { getWorldDefinition } = require("../../src/main/typescript/elvarg/game/definition/WorldDefinition");
 
 const ROOT_INTERFACE = 161;
 const MAIN_MODAL_UID = (ROOT_INTERFACE << 16) | 16;
@@ -24,6 +25,13 @@ const GAMEFRAME_317_FIXED_OPTION = 4;
 const GAMEFRAME_317_VARP = 7997; // mirrors client/common/ui/gameframeLayout.ts
 const CLIENT_LAYOUT_317_ATTRIBUTE = "clientLayout317";
 const DEFAULT_GAMEFRAME_ROOT = 161;
+// world.json "gameframe" -> the dropdown option (enum 3509 index) it forces on login.
+const WORLD_GAMEFRAME_OPTIONS = {
+  "modern-fixed": 0,
+  "modern-resizable": 2,
+  "317-resizable": GAMEFRAME_317_OPTION,
+  "317-fixed": GAMEFRAME_317_FIXED_OPTION,
+};
 // Cache script 3962 reads this to pick the selected dropdown row; 4607 is only
 // a display mirror of the layout (no rendering effect in this revision).
 const GAMEFRAME_STONE_VARBIT = 4607;
@@ -151,13 +159,18 @@ function syncGameframeVarbit(player) {
 // Switches the client's gameframe to `root` (548 fixed / 164 classic / 161
 // modern). The client moves every server-mounted sub-interface onto the new
 // layout's components; flags have to be re-sent because set_root clears them.
-function applyGameframeLayout({ player, slot }) {
-  if (!Number.isInteger(slot)) return false;
-  const option = slot - 1;
+function selectGameframeOption(player, option) {
   const root = GAMEFRAME_LAYOUT_ROOTS[option];
-  if (root === undefined) return false;
+  if (root === undefined) return undefined;
   player.setAttribute(CLIENT_LAYOUT_ATTRIBUTE, root);
   player.setAttribute(CLIENT_LAYOUT_317_ATTRIBUTE, option === GAMEFRAME_317_OPTION || option === GAMEFRAME_317_FIXED_OPTION);
+  return root;
+}
+
+function applyGameframeLayout({ player, slot }) {
+  if (!Number.isInteger(slot)) return false;
+  const root = selectGameframeOption(player, slot - 1);
+  if (root === undefined) return false;
   const sender = player.getPacketSender();
   syncGameframeVarbit(player);
   sender.sendRootInterface(root);
@@ -276,8 +289,14 @@ module.exports = {
     api.persistAttribute(CLIENT_LAYOUT_ATTRIBUTE);
     api.persistAttribute(CLIENT_LAYOUT_317_ATTRIBUTE);
 
+    // A world.json "gameframe" overrides the player's saved layout. Login hooks run before
+    // NetworkBuilder sends the gameframe bootstrap (and WelcomeScreen re-sends it), both of
+    // which boot the root from this attribute, so the client opens straight into the forced
+    // layout with no switch after login.
+    const worldGameframeOption = WORLD_GAMEFRAME_OPTIONS[getWorldDefinition().gameframe];
     api.onPlayerLogin(({ player }) => {
       syncPlayerKeybindings(player);
+      if (worldGameframeOption !== undefined) selectGameframeOption(player, worldGameframeOption);
       syncGameframeVarbit(player);
     });
 
