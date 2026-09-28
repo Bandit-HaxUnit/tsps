@@ -138,6 +138,18 @@ export class SceneBuilder {
         this.locOverrides.clear();
     }
 
+    private getLocOverride(x: number, y: number, level: number, id: number, type: LocModelType, rotation: number) {
+        for (const oldId of [id, -1]) {
+            const override = this.locOverrides.get(`${x},${y},${level},${oldId}`);
+            if (override &&
+                (override.matchType === undefined || override.matchType === type) &&
+                (override.matchRotation === undefined || (override.matchRotation & 3) === (rotation & 3))) {
+                return override;
+            }
+        }
+        return undefined;
+    }
+
     setLocSpawn(
         x: number,
         y: number,
@@ -585,29 +597,7 @@ export class SceneBuilder {
                         let collisionMap: CollisionMap | undefined = scene.collisionMaps[level];
 
                         // Check for dynamic loc override
-                        const overrideKey = `${sceneX},${sceneY},${level},${id}`;
-                        const wildcardOverrideKey = `${sceneX},${sceneY},${level},-1`;
-                        let override = this.locOverrides.get(overrideKey);
-                        if (
-                            override &&
-                            ((override.matchType !== undefined && override.matchType !== type) ||
-                                (override.matchRotation !== undefined &&
-                                    (override.matchRotation & 3) !== (rotation & 3)))
-                        ) {
-                            override = undefined;
-                        }
-                        if (!override) {
-                            const wildcardOverride = this.locOverrides.get(wildcardOverrideKey);
-                            if (
-                                wildcardOverride &&
-                                (wildcardOverride.matchType === undefined ||
-                                    wildcardOverride.matchType === type) &&
-                                (wildcardOverride.matchRotation === undefined ||
-                                    (wildcardOverride.matchRotation & 0x3) === (rotation & 0x3))
-                            ) {
-                                override = wildcardOverride;
-                            }
-                        }
+                        const override = this.getLocOverride(sceneX, sceneY, level, id, type, rotation);
                         const finalId = override
                             ? (override.newId | 0) >= 0
                                 ? override.newId
@@ -1999,8 +1989,19 @@ export class SceneBuilder {
                         sceneX < scene.sizeX - 1 &&
                         sceneY < scene.sizeY - 1
                     ) {
+                        // Overrides use destination tiles and orientation, after chunk rotation.
+                        // A server-spawned loc suppresses the template hotspot at that tile.
+                        const finalRotation = (orientation + rotation) & 3;
+                        const override = this.getLocOverride(sceneX, sceneY, targetPlane, id, type, finalRotation);
+                        const finalId = override && override.newId >= 0 ? override.newId : id;
+                        if (finalId <= 0) continue;
+                        const moved = Number.isFinite(override?.moveToX) && Number.isFinite(override?.moveToY);
+                        const targetX = moved ? override!.moveToX! | 0 : sceneX;
+                        const targetY = moved ? override!.moveToY! | 0 : sceneY;
+                        if (targetX <= 0 || targetY <= 0 || targetX >= scene.sizeX - 1 || targetY >= scene.sizeY - 1) continue;
+
                         let collisionLevel = targetPlane;
-                        if ((scene.tileRenderFlags[1]?.[sceneX]?.[sceneY] & 0x2) === 0x2) {
+                        if ((scene.tileRenderFlags[1]?.[targetX]?.[targetY] & 0x2) === 0x2) {
                             collisionLevel = targetPlane - 1;
                         }
 
@@ -2010,13 +2011,15 @@ export class SceneBuilder {
                         this.addLoc(
                             scene,
                             targetPlane,
-                            sceneX,
-                            sceneY,
-                            id,
+                            targetX,
+                            targetY,
+                            finalId,
                             type,
-                            (orientation + rotation) & 3,
+                            override?.newRotation ?? finalRotation,
                             collisionMap,
                             locLoadType,
+                            override?.seqId,
+                            override?.seqRandomStart,
                         );
                     }
                 }

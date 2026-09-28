@@ -11,6 +11,7 @@ import { LocModelLoader } from "../rs/config/loctype/LocModelLoader";
 import { LocModelType } from "../rs/config/loctype/LocModelType";
 import { LocType } from "../rs/config/loctype/LocType";
 import { ModelData } from "../rs/model/ModelData";
+import { SceneBuilder, LocLoadType } from "../rs/scene/SceneBuilder";
 import { getEditModeSceneLoadingStatus } from "../game/plugins/editmode/editModeLoadingScreen";
 import { isMapProfileEnabled } from "../render/render/mapLoadProfile";
 
@@ -159,6 +160,51 @@ function duplicateLocReplayIsIgnored(): void {
     onLocAddChange(host, 411, { x: 2431, y: 3076 }, 1, 10, 0);
     assert.equal(refreshes, 3);
 }
+
+function instanceFurnitureReplacesOnlyItsHotspot(): void {
+    const builder = new SceneBuilder({ game: "oldschool", revision: 237 } as any,
+        {} as any, {} as any, {} as any,
+        { load: () => ({ sizeX: 1, sizeY: 1 }) } as any, {} as any, new Map());
+    const scene = { sizeX: 104, sizeY: 104, levels: 4, tileRenderFlags: [], collisionMaps: [] } as any;
+    // Two identical template hotspots (id 100, shape 10, orientation 1), at (2,3) and (3,3).
+    const data = Int8Array.from([101, 128, 132, 41, 65, 41, 0, 0]);
+    const placements: number[][] = [];
+    builder.addLoc = (_scene, plane, x, y, id, shape, rotation) => { placements.push([plane, x, y, id, shape, rotation]); };
+    const destinations = [[18, 27], [19, 29], [21, 28], [20, 26]];
+    for (let rotation = 0; rotation < 4; rotation++) {
+        const [x, y] = destinations[rotation];
+        const decode = () => {
+            placements.length = 0;
+            (builder as any).decodeInstanceLocs(scene, data, 1, 16, 24, 0, 0, 0, rotation, LocLoadType.NO_MODELS);
+        };
+        builder.clearLocOverrides();
+        decode();
+        assert.equal(placements.length, 2);
+        assert.deepEqual(placements[0], [1, x, y, 100, 10, (1 + rotation) & 3]);
+        const neighbor = placements[1];
+        const host = { addedLocs: new Map(), locOverrides: new Map(), instanceActive: true, scheduleInstanceLocRebuild() {} } as any;
+        onLocAddChange(host, 6752, { x: 6400 + x, y: 6400 + y }, 1, 10, 0);
+        const override = host.locOverrides.get(`${6400 + x},${6400 + y},1,-1`);
+        builder.setLocOverride(x, y, 1, -1, override.newId, undefined, undefined, undefined, undefined, undefined, override.matchType);
+        decode();
+        assert.deepEqual(placements, [neighbor], "building must hide only the occupied hotspot, including rotated rooms");
+
+        builder.clearLocOverrides(); // Removing furniture rebuilds the saved house without its spawn.
+        decode();
+        assert.equal(placements.length, 2, "removing furniture must restore its template hotspot");
+        builder.setLocOverride(x, y, 0, -1, 0);
+        builder.setLocOverride(x, y, 1, -1, 0, undefined, undefined, undefined, undefined, undefined, 0);
+        decode();
+        assert.equal(placements.length, 2, "other planes and object shapes must remain independent");
+    }
+    builder.clearLocOverrides();
+    builder.setLocOverride(2, 3, 0, -1, 0, undefined, undefined, undefined, undefined, undefined, 10);
+    placements.length = 0;
+    builder.decodeLocs(scene, data, 0, 0, LocLoadType.NO_MODELS);
+    assert.deepEqual(placements, [[0, 3, 3, 100, 10, 1]], "normal maps must retain the same replacement behavior");
+}
+
+instanceFurnitureReplacesOnlyItsHotspot();
 
 function locUpdateBeforeInitialMapDoesNotStartADuplicateMapTask(): void {
     const mapX = 48;
