@@ -48,6 +48,8 @@
     "test:webrtc": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/webrtc-loopback-smoke.ts",
     "test:pathfinding": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/pathfinding-smoke.ts",
     "test:combat-pathing": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/combat-pathing-smoke.ts",
+    "test:quest-list": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/quest-list-smoke.ts",
+    "test:quest-runtime": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/quest-runtime-smoke.ts",
     "test:route-core": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2022\"}' ts-node ./scripts/rsmod-route-core-smoke.ts",
     "test:projectile-origin": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/projectile-origin-smoke.ts",
     "test:weapon-profiles": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/weapon-profiles-smoke.ts",

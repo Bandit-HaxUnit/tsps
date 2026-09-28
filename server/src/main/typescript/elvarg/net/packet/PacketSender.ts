@@ -46,8 +46,10 @@ import {
   encodeWidgetSetModel,
   encodeWidgetSetNpcHead,
   encodeWidgetSetPlayerHead,
+  encodeWidgetSetQuestList,
   encodeWidgetSetRoot,
   encodeWidgetSetText,
+  type QuestListGroup,
   type ScriptInventorySnapshot,
   MAIN_INVENTORY_GROUP_ID,
   MAIN_INVENTORY_SLOT_FLAGS,
@@ -224,6 +226,12 @@ export class PacketSender {
 
   sendToggle(id: number, state: number): this {
     return this.sendConfig(id, state);
+  }
+
+  /** Populates the quest list (side journal); the client renders opcode 116. */
+  sendQuestList(groups: QuestListGroup[]): this {
+    this.player.getSession().sendClientPacket(encodeWidgetSetQuestList(groups));
+    return this;
   }
 
   sendChatOptions(

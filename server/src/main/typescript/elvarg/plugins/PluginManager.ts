@@ -36,6 +36,8 @@ import {
   PluginNpcAggressionToleranceEvent,
   PluginNpcInteractionEvent,
   PluginNpcInteractionDefinition,
+  PluginNpcDialogueContext,
+  PluginNpcDialogueConditionEvent,
   PluginObjectRouteEvent,
   PluginObjectInteractionEvent,
   PluginPlayerDefeatedEvent,
@@ -157,6 +159,20 @@ export class PluginManager {
   private static objectHooksByName = new Map<string, ObjectInteractionHook[]>();
   private static nextObjectHookOrder = 0;
   private static npcInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
+  /**
+   * `onAnyNpcInteraction` hooks. Kept apart from the id/name hooks so a generic
+   * transcript handler (e.g. NpcDialogues) never outruns a specific plugin that
+   * owns that NPC, regardless of plugin load order.
+   */
+  private static npcAnyInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
+  private static npcDialogueVariantHooks: Array<{
+    pluginName: string;
+    handler: (event: PluginNpcDialogueContext) => string | { page?: string; variant: string } | null | undefined;
+  }> = [];
+  private static npcDialogueConditionHooks: Array<{
+    pluginName: string;
+    handler: (event: PluginNpcDialogueConditionEvent) => boolean | null | undefined;
+  }> = [];
   private static npcDeathHooks: PluginHook<PluginNpcDeathEvent>[] = [];
   private static npcBeforeDeathHooks: PluginHook<PluginNpcBeforeDeathEvent>[] = [];
   private static canAttackHooks: PluginHook<PluginCanAttackEvent>[] = [];
@@ -704,13 +720,49 @@ export class PluginManager {
 
     event.definition ??= event.npc.getCurrentDefinition?.(event.player);
 
-    for (const hook of PluginManager.npcInteractionHooks) {
-      if (event.handled) {
-        break;
+    for (const hooks of [PluginManager.npcInteractionHooks, PluginManager.npcAnyInteractionHooks]) {
+      for (const hook of hooks) {
+        if (event.handled) {
+          break;
+        }
+        PluginManager.executeHook(hook, event, "npc_interaction", "npc_interaction");
       }
-      PluginManager.executeHook(hook, event, "npc_interaction", "npc_interaction");
     }
     return event.handled === true;
+  }
+
+  /** Asks dialogue plugins which transcript variant to play (first answer wins). */
+  public static emitNpcDialogueVariant(
+    event: PluginNpcDialogueContext
+  ): string | { page?: string; variant: string } | null {
+    for (const hook of PluginManager.npcDialogueVariantHooks) {
+      try {
+        const result = hook.handler(event);
+        if (result) {
+          return result;
+        }
+      } catch (error) {
+        console.warn(`[plugins] npc dialogue variant hook threw (${hook.pluginName})`, error);
+      }
+    }
+    return null;
+  }
+
+  /** Asks dialogue plugins to answer a wiki prose condition (first boolean wins). */
+  public static emitNpcDialogueCondition(
+    event: PluginNpcDialogueConditionEvent
+  ): boolean | null {
+    for (const hook of PluginManager.npcDialogueConditionHooks) {
+      try {
+        const result = hook.handler(event);
+        if (typeof result === "boolean") {
+          return result;
+        }
+      } catch (error) {
+        console.warn(`[plugins] npc dialogue condition hook threw (${hook.pluginName})`, error);
+      }
+    }
+    return null;
   }
 
   public static emitNpcDeath(event: PluginNpcDeathEvent): void {
@@ -1871,7 +1923,11 @@ export class PluginManager {
       actions: Record<string, (event: PluginNpcInteractionEvent) => void | boolean>
     ): void => {
       const handlers = new Map(Object.entries(actions ?? {}).filter(([, action]) => typeof action === "function"));
-      PluginManager.npcInteractionHooks.push({ pluginName, handler: (event) => {
+      // Name-specific actions are "specific" and run before the generic any-NPC hooks.
+      const hookList = name === null
+        ? PluginManager.npcAnyInteractionHooks
+        : PluginManager.npcInteractionHooks;
+      hookList.push({ pluginName, handler: (event) => {
         if (event.handled || !Number.isInteger(event.clickType) || event.clickType < 1 || event.clickType > 5) return;
         const definition = event.definition;
         if (!definition || (name !== null && definition.getName() !== name)) return;
@@ -2128,6 +2184,18 @@ export class PluginManager {
         }
       },
       onAnyNpcInteraction: (actions) => registerNpcActions(null, actions),
+      onNpcDialogueVariant: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.npcDialogueVariantHooks.push({ pluginName, handler });
+      },
+      onNpcDialogueCondition: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.npcDialogueConditionHooks.push({ pluginName, handler });
+      },
       registerNpcInteraction: registerNpcInteractionDefinition,
       onNpcDeath: (handler) => {
         if (typeof handler !== "function") {
