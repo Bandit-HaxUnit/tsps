@@ -83,6 +83,47 @@ test("custom presets rehydrate from their persisted attribute", () => {
   assert.deepEqual(messages, ["Preset items cannot be banked."]);
 });
 
+test('Construction and Hunter retain saved indices but send OSRS skill IDs', () => {
+  const { Skill } = require('../dist/game/model/Skill');
+  const { SkillManager } = require('../dist/game/content/skill/SkillManager');
+  const { PacketSender } = require('../dist/net/packet/PacketSender');
+  const { encodeSkillsDelta, encodeSkillsSnapshot } = require('../dist/net/protocol/ClientProtocol');
+  const frames = [], drops = [];
+  const player = {
+    getSession: () => ({ sendClientPacket(frame) { frames.push(frame); return true; }, write(packet) { drops.push(packet.getBuffer()); } }),
+    getSkillManager: () => manager, getPacketSender: () => sender,
+    experienceLockedReturn: () => false, getSkill: () => null,
+    setSkill() {}, setCreationMenu() {}, performGraphic() {}, sendMessage() {},
+    getUpdateFlag: () => ({ flag() {} }),
+  };
+  const manager = new SkillManager(player), sender = new PacketSender(player);
+  for (const method of ['sendInterfaceRemoval', 'sendString', 'sendChatboxInterface']) sender[method] = () => sender;
+  manager.addExperience(Skill.CONSTRUCTION, 100, false);
+  manager.addExperience(Skill.HUNTER, 10, false);
+  assert.equal(manager.getMaxLevel(Skill.CONSTRUCTION), 2);
+  assert.equal(manager.getMaxLevel(Skill.HUNTER), 1);
+  assert.deepEqual(drops.map(drop => drop[0]), [22, 21], 'XP drops use client IDs');
+  const saved = JSON.parse(JSON.stringify(manager.getSkills()));
+  assert.equal(saved.experience[21], 100, 'preserve existing Construction save data');
+  assert.equal(saved.experience[22], 10, 'preserve existing Hunter save data');
+  manager.setSkills(saved);
+  sender.sendSkillsSnapshot();
+  for (const encode of [encodeSkillsDelta, encodeSkillsSnapshot]) {
+    const opcode = encode([], 0, 0)[0];
+    const skills = new Map();
+    for (const frame of frames.filter(frame => frame[0] === opcode)) {
+      for (let i = 0; i < frame[2]; i++) {
+        const offset = 3 + i * 9;
+        skills.set(frame[offset], [frame.readInt32BE(offset + 1), frame[offset + 5]]);
+      }
+    }
+    assert.deepEqual(skills.get(22), [100, 2], 'Construction XP and level reach Construction');
+    assert.deepEqual(skills.get(21), [10, 1], 'Hunter XP and level reach Hunter');
+    if (encode === encodeSkillsSnapshot) assert.equal(skills.size, Skill.values().length);
+  }
+  for (const skill of Skill.values().slice(0, 21)) assert.equal(skill.getClientId(), skill.getIndex());
+});
+
 // Construction uses real instance, inventory and social state; only network output is stubbed.
 function constructionPlayer(name, index) {
   const { Location } = require('../dist/game/model/Location');

@@ -1011,7 +1011,7 @@ export class PacketSender {
     const baseLevel = manager.getMaxLevel(skill);
     const currentLevel = manager.getCurrentLevel(skill);
     return {
-      id: skill.getIndex(),
+      id: skill.getClientId(),
       xp: manager.getExperience(skill),
       baseLevel,
       virtualLevel: baseLevel,
@@ -1130,7 +1130,7 @@ export class PacketSender {
       return this;
     }
     const out = new PacketBuilder(116);
-    out.put(skill.getIndex());
+    out.put(skill.getClientId());
     out.putInt(exp);
     this.player.getSession().write(out);
     return this;
