@@ -1,4 +1,6 @@
-import assert from "node:assert/strict";
+import { strict as assert } from "node:assert";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { MapManager } from "../game/MapManager";
 import { decodeServerPacket } from "../network/packet/ServerBinaryDecoder";
@@ -14,6 +16,9 @@ import { ModelData } from "../rs/model/ModelData";
 import { SceneBuilder, LocLoadType } from "../rs/scene/SceneBuilder";
 import { getEditModeSceneLoadingStatus } from "../game/plugins/editmode/editModeLoadingScreen";
 import { isMapProfileEnabled } from "../render/render/mapLoadProfile";
+import { CONSTRUCTION_ROOMS, HOUSE_TEMPLATE_CHUNKS } from "../../server/src/main/typescript/elvarg/game/plugin/impl/construction/ConstructionData";
+import { CachePipeline } from "../../server/src/main/typescript/elvarg/game/cache/CachePipeline";
+import { CacheMaps } from "../../server/src/main/typescript/elvarg/game/cache/CacheMaps";
 
 function mapProfilingRequiresExplicitFlag(): void {
     const original = Object.getOwnPropertyDescriptor(globalThis, "location");
@@ -234,7 +239,7 @@ function locReplayInvalidatesCompletedMapsWaitingToRender(): void {
         locReloadVersions: new Map(),
         mapManager: { getMap: () => undefined },
         pendingStreamMapsByGeneration: new Map([[1, new Map([[mapId, {}]])]]),
-        queueLoadMap: (x, y) => {
+        queueLoadMap: (x: number, y: number) => {
             assert.deepEqual([x, y], [48, 154]);
             reloads++;
         },
@@ -325,3 +330,43 @@ session.addedLocs.set("3199,3200,0,0", { locId: 778, x: 3199, y: 3200, level: 0,
 clearSessionCaches(session);
 assert.equal(session.locOverrides.size, 0);
 assert.equal(session.addedLocs.size, 0, "reconnect must remove the previous session's open door");
+
+// Check the server's room coordinates against the same native maps the client decodes.
+// This integration check requires the project's installed cache and never downloads one.
+async function constructionTemplatesUseProjectCache(): Promise<void> {
+    const root = resolve(__dirname, '../../server');
+    const target = readFileSync(resolve(root, 'target.txt'), 'utf8').trim();
+    for (const file of ['main_file_cache.dat2', 'main_file_cache.idx255', 'info.json', 'keys.json']) {
+        assert.ok(existsSync(resolve(root, 'caches', target, file)), 'Run server ensure-cache before this integration check');
+    }
+    await CachePipeline.initialize(root);
+    try {
+        const builder = new SceneBuilder({ game: 'oldschool', revision: CachePipeline.getActive().revision } as any,
+            {} as any, {} as any, {} as any,
+            { load: () => ({ sizeX: 1, sizeY: 1 }) } as any, {} as any, new Map());
+        const scene = { sizeX: 64, sizeY: 64, levels: 4, tileRenderFlags: [], collisionMaps: [] } as any;
+        const templates = [...CONSTRUCTION_ROOMS, ...Object.values(HOUSE_TEMPLATE_CHUNKS)];
+        const regions = new Set(templates.map(room => ((room.sourceChunkX >> 3) << 8) | (room.sourceChunkY >> 3)));
+        const placements: number[][] = [];
+        for (const region of regions) {
+            const data = CacheMaps.getRegion(region);
+            assert.ok(data?.terrainData.length && data.objectData?.length, 'Every house template must exist in the project cache');
+            builder.addLoc = (_scene, plane, x, y, id, shape, rotation) => {
+                if (plane === 0) placements.push([(region >> 8) * 64 + x, (region & 255) * 64 + y, id, shape, rotation]);
+            };
+            builder.decodeLocs(scene, new Int8Array(data.objectData!), 0, 0, LocLoadType.NO_MODELS);
+        }
+        for (const room of CONSTRUCTION_ROOMS) {
+            assert.ok(placements.some(([x, y]) => (x >> 3) === room.sourceChunkX && (y >> 3) === room.sourceChunkY), room.key);
+        }
+        const parlour = CONSTRUCTION_ROOMS.find(room => room.key === 'PARLOUR')!;
+        const chairs = placements.filter(([x, y, id]) => (x >> 3) === parlour.sourceChunkX &&
+            (y >> 3) === parlour.sourceChunkY && id >= 4515 && id <= 4517);
+        assert.deepEqual(chairs.map(([x, y, id, shape, rotation]) => [x & 7, y & 7, id, shape, rotation]),
+            [[2, 4, 4515, 11, 2], [5, 4, 4516, 11, 1], [4, 3, 4517, 10, 2]]);
+        console.log('Native construction templates: all rooms and chair placements passed');
+    } finally {
+        CachePipeline.getStore().close();
+    }
+}
+constructionTemplatesUseProjectCache().catch(error => { console.error(error); process.exitCode = 1; });

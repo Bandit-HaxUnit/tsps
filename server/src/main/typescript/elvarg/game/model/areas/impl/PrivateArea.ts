@@ -84,6 +84,11 @@ export abstract class PrivateArea extends Area {
         return objects;
     }
 
+    /** Allows an instance to validate client-only dynamic locs on demand. */
+    public resolveObject(_id: number, _location: Location): GameObject | null {
+        return null;
+    }
+
     private clipKey(location: Location): string {
         return `${location.getX()},${location.getY()},${location.getZ()}`;
     }
