@@ -123,10 +123,11 @@ function constructionHooks() {
   const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
   const hooks = new Map(), named = new Map(), prompts = [], events = new Map();
   const click = n => (ids, handler) => { for (const id of Array.isArray(ids) ? ids : [ids]) hooks.set(`${id}:${n}`, [...(hooks.get(`${id}:${n}`) ?? []), handler]); };
-  let generic, process, logout, command, interfaceAction;
+  let generic, process, logout, command, interfaceAction, route;
   ConstructionPlugin.register(new Proxy({
     onObjectFirstClick: click(1), onObjectSecondClick: click(2), onObjectThirdClick: click(3), onObjectFourthClick: click(4), onObjectFifthClick: click(5),
     onObjectInteraction(name, handler) { if (typeof name === 'function') generic = name; else named.set(name, handler); },
+    onObjectRoute(handler) { route = handler; },
     onPlayerProcess(handler) { process = handler; }, onPlayerLogout(handler) { logout = handler; },
     registerCommand(name, handler) { if (name === 'house') command = handler; },
     onInterfaceActionClick(handler) { interfaceAction = handler; },
@@ -137,7 +138,7 @@ function constructionHooks() {
       return true;
     },
   }, { get: (target, key) => target[key] ?? (() => {}) }));
-  return { named, prompts, events, interfaceAction, process: player => process({ player }), logout: player => logout({ player }), command: player => command({ player }),
+  return { named, prompts, events, interfaceAction, route, furnitureAction: generic, process: player => process({ player }), logout: player => logout({ player }), command: player => command({ player }),
     selectFurniture(player, action) { interfaceAction({ player, groupId: 458, childId: 2, action }); },
     boardAction(player, childId) { interfaceAction({ player, groupId: 52, childId, action: 1 }); },
     click(player, id, type, location = { x: 0, y: 0, z: 0 }, actions = []) {
@@ -872,6 +873,118 @@ test('pool upgrades use the build interface, consume real potions and reject sta
   } finally { hooks.logout(player); }
 });
 
+
+test('house chairs route before sitting and restore players after movement or removal', async t => {
+  const { World } = require('../dist/game/World');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { ObjectActionPacketListener } = require('../dist/net/packet/impl/ObjectActionPacketListener');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { PlayerHouseInstance } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
+  const { BUILDABLE_BY_KEY } = require('../dist/game/plugin/impl/construction/ConstructionData');
+  const { Animation } = require('../dist/game/model/Animation');
+  const { Flag } = require('../dist/game/model/Flag');
+  await CachePipeline.initialize(); ObjectDefinition.init();
+  const hooks = constructionHooks(), owner = constructionPlayer('Seated owner', 325), guest = constructionPlayer('Seated guest', 326);
+  const flags = [];
+  let cycle = 0;
+  t.mock.method(World, 'getProcessCycle', () => cycle);
+  const settle = player => {
+    const front = player.getLocation().clone();
+    hooks.process(player);
+    assert.equal(player.getSkillAnimation(), 0, 'positioning must keep the standing/walking animations');
+    cycle++; player.animation = null; hooks.process(player);
+    assert.ok(player.getLocation().equals(front), 'turn in front of the chair before moving onto it');
+    assert.equal(player.getSkillAnimation(), 0, 'allow the half-turn to finish');
+    cycle++; hooks.process(player);
+  };
+  let pending;
+  for (const player of [owner, guest]) {
+    player.getHitpoints = () => 99; player.busy = () => false;
+    player.getSkillAnimation = () => player.idle ?? 0;
+    player.setSkillAnimation = value => { player.idle = value; };
+    player.getAnimation = () => player.animation;
+    player.performAnimation = value => { player.animation = value; };
+    player.getUpdateFlag = () => ({ flag: value => flags.push(value) });
+    player.setPositionToFace = value => { player.facing = value; };
+    player.getMovementQueue = () => ({ reset() {}, walkToReset() {},
+      walkToTile(destination, action) { player.destination = destination; pending = action; },
+      walkToObject() { assert.fail('chairs must route to their front tile'); },
+    });
+  }
+  t.mock.method(PluginManager, 'emitObjectRoute', hooks.route);
+  t.mock.method(PluginManager, 'emitObjectInteraction', event => { hooks.furnitureAction(event); return event.handled; });
+  hooks.click(owner, 15478, 2);
+  const house = owner.getPrivateArea(), room = { x: 4, y: 5, plane: 1 };
+  house.enterHouse(guest, false);
+  const listener = new ObjectActionPacketListener();
+  const click = (player, object) => listener.executeAction(player, object.getId(), object.getLocation().x, object.getLocation().y, 1);
+  const arrive = (player, object) => { click(player, object); player.moveTo(player.destination); pending(); };
+  try {
+    for (const hotspotId of [4515, 4517]) for (let rotation = 0; rotation < 4; rotation++) {
+      const hotspot = PlayerHouseInstance.getTemplateObjects().find(o => o.id === hotspotId && o.sourceChunkX === 232 && o.sourceChunkY === 887);
+      house.rotateRoom(room, rotation);
+      house.setFurniture({ position: room, hotspotKey: hotspotId === 4515 ? 'CHAIR_1' : 'CHAIR_3', sourceObjectId: hotspotId,
+        localX: hotspot.localX, localY: hotspot.localY, type: hotspot.type, face: hotspot.face }, BUILDABLE_BY_KEY.get('CRUDE_WOODEN_CHAIR'));
+      house.redrawFurniture();
+      const chair = house.getObjects().find(o => o.getId() === 6752 && o.getType() === hotspot.type);
+      owner.moveTo(house.getEntryLocation()); owner.animation = null;
+      click(owner, chair);
+      assert.equal(owner.getSkillAnimation(), 0, 'clicking must route without seating remotely');
+      pending();
+      assert.equal(owner.getSkillAnimation(), 0, 'a distant callback cannot teleport onto the seat');
+      const [dx, dy] = (hotspot.type === 11 ? [[-1, -1], [-1, 1], [1, 1], [1, -1]]
+        : [[0, -1], [-1, 0], [0, 1], [1, 0]])[chair.getFace()];
+      assert.ok(owner.destination.equals(chair.getLocation().transform(dx, dy)), 'approach the front for every rotation');
+      arrive(owner, chair);
+      assert.ok(owner.getLocation().equals(owner.destination), 'stay in front while turning');
+      assert.ok(owner.facing.equals(owner.destination.transform(dx, dy)), 'turn away from the backrest');
+      assert.equal(owner.getAnimation().getId(), 65535, 'do not send a sitting animation with the movement');
+      settle(owner);
+      assert.ok(owner.getLocation().equals(chair.getLocation()), 'place on the chair with the sit animation');
+      assert.equal(owner.getSkillAnimation(), 4073, 'diagonal facing must not also select a body-rotating idle pose');
+      assert.equal(owner.getAnimation().getId(), 4103, 'use a sit transition without a second diagonal body turn');
+      assert.ok(owner.facing.equals(chair.getLocation().transform(dx, dy)), 'face outward with the chair rotation');
+      owner.animation = null;
+      for (let tick = 0; tick < 10; tick++) {
+        cycle++; hooks.process(owner);
+        assert.equal(owner.getSkillAnimation(), 4073, 'keep the unrotated idle after the entry animation ends');
+        assert.ok(owner.facing.equals(chair.getLocation().transform(dx, dy)), 'seated facing must remain aligned');
+      }
+      arrive(guest, chair);
+      assert.equal(guest.getSkillAnimation(), 0);
+      assert.match(guest.getMessages().at(-1), /already sitting/);
+      owner.moveTo(chair.getLocation().transform(1, 0)); hooks.process(owner);
+      assert.equal(owner.getSkillAnimation(), 0, 'walking restores the normal appearance');
+      click(guest, chair); pending();
+      settle(guest);
+      assert.notEqual(guest.getSkillAnimation(), 0, 'guests can use a released chair');
+      guest.performAnimation(new Animation(879)); hooks.process(guest);
+      assert.equal(guest.getSkillAnimation(), 0);
+      assert.equal(guest.getAnimation().getId(), 879, 'standing must not erase a new action animation');
+      arrive(owner, chair);
+      settle(owner);
+      house.removeFurniture(chair.getLocation(), chair.getId(), chair.getType()); house.redrawFurniture(); hooks.process(owner);
+      assert.equal(owner.getSkillAnimation(), 0, 'removing a chair clears its sitting pose');
+    }
+    assert.ok(flags.includes(Flag.APPEARANCE), 'pose changes must invalidate the appearance cache');
+    house.setFurniture({ position: room, hotspotKey: 'CHAIR_3', sourceObjectId: 4517,
+      localX: 4, localY: 3, type: 10, face: 2 }, BUILDABLE_BY_KEY.get('CRUDE_WOODEN_CHAIR'));
+    house.redrawFurniture();
+    const chair = house.getObjects().find(o => o.getId() === 6752);
+    arrive(owner, chair);
+    owner.moveTo(chair.getLocation().transform(3, 0)); cycle += 3; hooks.process(owner);
+    assert.equal(owner.getSkillAnimation(), 0, 'walking away while positioning cancels the pending sit');
+    arrive(owner, chair);
+    settle(owner);
+    hooks.click(owner, 4525, 1);
+    assert.equal(owner.getSkillAnimation(), 0, 'leaving the house clears the seated appearance immediately');
+    arrive(guest, chair);
+    settle(guest);
+    hooks.logout(guest);
+    assert.equal(guest.getSkillAnimation(), 0, 'logout cannot retain a seated appearance');
+  } finally { hooks.logout(guest); hooks.logout(owner); }
+});
 
 test('house windows replace layout markers with styled windows or adjoining walls', async () => {
   const { CachePipeline } = require('../dist/game/cache/CachePipeline');

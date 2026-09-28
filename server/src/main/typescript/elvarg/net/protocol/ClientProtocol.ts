@@ -83,6 +83,7 @@ export type PlayerView = Tile & ActorUpdateView & {
   index: number;
   appearance: Buffer;
   movementType?: 1 | 2;
+  resetPath?: boolean;
   appearanceDirty?: boolean;
   faceDirection?: number;
   forcedMovement?: ForcedMovementView;
@@ -1810,6 +1811,7 @@ const PLAYER_MASK = {
   FACE_ENTITY: 0x40,
   FORCE_MOVEMENT: 0x400,
   MOVEMENT_TYPE: 0x1000,
+  MOVEMENT_FLAG: 0x2000,
   SPOT_ANIM: 0x10000,
 } as const;
 
@@ -1914,6 +1916,7 @@ function playerUpdateMask(
     (writeInteraction ? PLAYER_MASK.FACE_ENTITY : 0) |
     (view.forcedMovement ? PLAYER_MASK.FORCE_MOVEMENT : 0) |
     (writeMovementType ? PLAYER_MASK.MOVEMENT_TYPE : 0) |
+    (view.resetPath ? PLAYER_MASK.MOVEMENT_FLAG : 0) |
     (view.graphic ? PLAYER_MASK.SPOT_ANIM : 0);
 }
 
@@ -1962,6 +1965,7 @@ function writePlayerUpdateBlock(
     shortBE(bytes, movement.endCycleOffset);
     shortLEA(bytes, movement.direction & 2047);
   }
+  if (view.resetPath) byteS(bytes, 127);
   if (view.graphic) {
     byteA(bytes, 1);
     bytes.push(0);

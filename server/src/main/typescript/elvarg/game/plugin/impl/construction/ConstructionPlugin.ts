@@ -1,9 +1,11 @@
-import type { PluginApi, PluginInterfaceActionClickEvent, PluginItemOnObjectEvent, PluginObjectInteractionEvent } from "../../../../plugins/PluginTypes";
+import type { PluginApi, PluginInterfaceActionClickEvent, PluginItemOnObjectEvent, PluginObjectInteractionEvent, PluginObjectRouteEvent } from "../../../../plugins/PluginTypes";
+import type { GameObject } from "../../../entity/impl/object/GameObject";
 import { openHouseStorage, storeItemOnFurniture } from "./ConstructionStorage";
 import { useHousePortal } from "./ConstructionPortals";
 import { lightHouseBurner, offerHouseBones, expireHouseBurners } from "./ConstructionAltars";
 import { World } from "../../../World";
 import { Animation } from "../../../model/Animation";
+import { Flag } from "../../../model/Flag";
 import { Location } from "../../../model/Location";
 import { Skill } from "../../../model/Skill";
 import { PrivateChatStatus } from "../../../model/PlayerRelations";
@@ -386,6 +388,7 @@ function toggleHouseLock(event: PluginObjectInteractionEvent): boolean {
 function exitHouse(player: ConstructionPlayer): boolean {
   const house = houseFor(player);
   if (!house) return false;
+  standFromChair(player);
   pendingFurnitureMenus.delete(player);
   houseViewers.delete(player);
   pendingRoomMenus.delete(player);
@@ -769,6 +772,7 @@ function handleFurnitureAction(api: PluginApi, event: PluginObjectInteractionEve
   const house = houseFor(event.player);
   if (!house) return;
   const action = event.definition?.getInteractions()?.[event.clickType - 1]?.toLowerCase();
+  if (action === "sit-on" && sitOnChair(event)) { event.handled = true; return; }
   if (action === "remove") { if (tryRemoveFurniture(api, event)) event.handled = true; return; }
   if (action === "upgrade") {
     if (!isBuildingMode(event.player)) { event.player.sendMessage("Only the owner can upgrade furniture in building mode."); event.handled = true; return; }
@@ -780,6 +784,100 @@ function handleFurnitureAction(api: PluginApi, event: PluginObjectInteractionEve
   if (useHousePortal(api, event)
     || (["light", "re-light"].includes(action ?? "") && lightHouseBurner(event))
     || (["open", "search", "view"].includes(action ?? "") && openHouseStorage(api, event))) event.handled = true;
+}
+
+// Cache-native ready poses for the seven parlour chairs, in furniture-menu order.
+const CHAIR_READY_ANIMATIONS = [4073, 4075, 4077, 4081, 4083, 4085, 4087];
+const CHAIR_SIT_ANIMATION = 4103;
+// A half-turn takes 32 client cycles; allow two server ticks before sitting.
+const CHAIR_TURN_TICKS = 2;
+const seatedPlayers = new WeakMap<ConstructionPlayer, {
+  house: PlayerHouseInstance; location: Location; objectId: number; type: number;
+  furniture: NonNullable<ReturnType<PlayerHouseInstance["getFurnitureAt"]>>;
+  ready: number; previousAnimation: number; sitCycle: number; front: Location; sitting: boolean;
+}>();
+
+function chairFront(object: GameObject): Location {
+  const [dx, dy] = (object.getType() === 11
+    ? [[-1, -1], [-1, 1], [1, 1], [1, -1]]
+    : [[0, -1], [-1, 0], [0, 1], [1, 0]])[object.getFace() & 3];
+  return object.getLocation().transform(dx, dy);
+}
+
+function routeHouseChair(event: PluginObjectRouteEvent): void {
+  standFromChair(event.player);
+  if (event.definition?.getInteractions()?.[event.clickType - 1]?.toLowerCase() !== "sit-on") return;
+  const furniture = houseFor(event.player)?.getFurnitureAt(event.object.getLocation(), event.objectId, event.object.getType());
+  if (furniture && FURNITURE_GROUPS.PARLOUR_CHAIRS.includes(furniture.buildableKey)) event.destination = chairFront(event.object);
+}
+
+function standFromChair(player: ConstructionPlayer): void {
+  const seat = seatedPlayers.get(player);
+  if (!seat) return;
+  seatedPlayers.delete(player);
+  const character = player as Player;
+  if (character.getSkillAnimation() === seat.ready) {
+    character.setSkillAnimation(seat.previousAnimation);
+    character.getUpdateFlag().flag(Flag.APPEARANCE);
+  }
+  const animation = character.getAnimation()?.getId();
+  if (animation === CHAIR_SIT_ANIMATION || animation === seat.ready) character.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
+}
+
+function sitOnChair({ player, object, objectId, location }: PluginObjectInteractionEvent): boolean {
+  const house = houseFor(player);
+  const type = object.getType();
+  const furniture = house?.getFurnitureAt(location, objectId, type);
+  const index = furniture ? FURNITURE_GROUPS.PARLOUR_CHAIRS.indexOf(furniture.buildableKey) : -1;
+  if (!house || !furniture || index < 0) return false;
+  const seatLocation = new Location(location.x, location.y, location.z);
+  const front = chairFront(object);
+  // ObjectActionPacketListener routes first; never seat a distant or stale click.
+  if (!player.getLocation().equals(front)) return true;
+  if (seatedPlayers.get(player)?.furniture === furniture) return true;
+  if (house.getPlayers().some(other => {
+    const seat = seatedPlayers.get(other);
+    return other !== player && seat?.furniture === furniture
+      && other.getLocation().equals(seat.sitting ? seat.location : seat.front);
+  })) {
+    player.sendMessage("Someone is already sitting there.");
+    return true;
+  }
+  standFromChair(player);
+  // chairFront already rotates the player for diagonal chairs. Their alternate
+  // idle sequences contain another body turn, so keep the unrotated pose.
+  const ready = CHAIR_READY_ANIMATIONS[index];
+  seatedPlayers.set(player, { house, location: seatLocation, objectId, type, furniture, ready, front,
+    sitCycle: World.getProcessCycle() + CHAIR_TURN_TICKS, sitting: false,
+    previousAnimation: player.getSkillAnimation() ?? 0 });
+  player.setPositionToFace(front.transform(front.x - seatLocation.x, front.y - seatLocation.y));
+  player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
+  return true;
+}
+
+function processChair(player: Player): void {
+  const seat = seatedPlayers.get(player);
+  if (!seat) return;
+  const animation = player.getAnimation()?.getId();
+  if (player.getPrivateArea() !== seat.house || seat.house.isDestroyed()
+    || !player.getLocation().equals(seat.sitting ? seat.location : seat.front)
+    || seat.house.getFurnitureAt(seat.location, seat.objectId, seat.type) !== seat.furniture
+    || (animation != null && animation !== CHAIR_SIT_ANIMATION && animation !== seat.ready
+      && (seat.sitting || animation !== Animation.DEFAULT_RESET_ANIMATION.getId()))) {
+    standFromChair(player);
+    return;
+  }
+  if (!seat.sitting && World.getProcessCycle() >= seat.sitCycle) {
+    seat.sitting = true;
+    player.moveTo(seat.location);
+    player.setPositionToFace(seat.front);
+    player.getUpdateFlag().flag(Flag.FACE_POSITION);
+    player.setSkillAnimation(seat.ready);
+    player.getUpdateFlag().flag(Flag.APPEARANCE);
+    // Facing already includes shape 11's 45-degree turn. The diagonal entry
+    // sequence turns the body again, so use the forward-facing sit transition.
+    player.performAnimation(new Animation(CHAIR_SIT_ANIMATION));
+  }
 }
 
 function openHouseDoor(event: PluginObjectInteractionEvent): void {
@@ -811,8 +909,9 @@ function loginHouse({ player }: { player: Player }): void {
     player.sendMessage("Returned from your house after the instance closed.");
   }
 }
-function logoutHouse({ player }: { player: Player }): void { releaseHouse(player, true); }
+function logoutHouse({ player }: { player: Player }): void { standFromChair(player); releaseHouse(player, true); }
 function processHouse({ player }: { player: Player }): void {
+  processChair(player);
   const house = houseFor(player);
   syncKickOption(player);
   if (house) expireHouseBurners(house);
@@ -845,6 +944,7 @@ export const ConstructionPlugin = {
     api.onObjectSecondClick(hotspotIds, onObject);
     api.onObjectFifthClick(hotspotIds, onObject);
     api.onObjectInteraction(handleFurnitureAction.bind(null, api));
+    api.onObjectRoute(routeHouseChair);
     api.onItemOnObject(handleHouseItem, { noted: false });
     api.onInterfaceActionClick(handleHouseInterface.bind(null, api));
     api.onCustomEvent("player:option-route", kickGuest);

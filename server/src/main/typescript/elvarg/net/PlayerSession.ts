@@ -445,6 +445,7 @@ export class PlayerSession {
       y: location.getY(),
       level: location.getZ(),
       appearance: payload,
+      resetPath: player.isNeedsPlacement(),
       movementType: player.getRunningDirection().getId() >= 0
         ? 2
         : player.getWalkingDirection().getId() >= 0 ? 1 : undefined,
