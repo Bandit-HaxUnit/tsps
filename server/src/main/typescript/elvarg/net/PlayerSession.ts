@@ -14,6 +14,7 @@ import {
   encodeNpcSync,
   encodePlaySong,
   encodePlayerSync,
+  encodeRebuildNormal,
   encodeTick,
   NpcSyncState,
   PlayerSyncState,
@@ -26,6 +27,8 @@ import { ServerPerf } from "../util/ServerPerf";
 import { ObjectManager } from "../game/entity/impl/object/ObjectManager";
 import { MapRegionReplacementManager } from "../game/collision/MapRegionReplacementManager";
 import { CacheDefinitions } from "../game/cache/CacheDefinitions";
+import { CachePipeline } from "../game/cache/CachePipeline";
+import type { PrivateArea } from "../game/model/areas/impl/PrivateArea";
 
 type SessionChannel = {
   binaryTransport?: boolean;
@@ -61,7 +64,7 @@ export class PlayerSession {
   private replayedSceneBaseX = -1;
   private replayedSceneBaseY = -1;
   private replayedSceneLevel = -1;
-  private replayedPrivateArea: unknown;
+  private replayedPrivateArea: PrivateArea | null = null;
   private hasReplayedScene = false;
   private playerSyncState?: PlayerSyncState;
   private npcSyncState: NpcSyncState = createNpcSyncState();
@@ -107,6 +110,28 @@ export class PlayerSession {
       && level === this.replayedSceneLevel
       && x >= this.replayedSceneBaseX && x < this.replayedSceneBaseX + 104
       && y >= this.replayedSceneBaseY && y < this.replayedSceneBaseY + 104;
+  }
+
+  private sendRebuildNormal(
+    centerChunkX: number,
+    centerChunkY: number,
+    forceReload: boolean,
+  ): boolean {
+    const xteaKeys: number[][] = [];
+    const minMapX = Math.trunc((centerChunkX - 6) / 8);
+    const maxMapX = Math.trunc((centerChunkX + 6) / 8);
+    const minMapY = Math.trunc((centerChunkY - 6) / 8);
+    const maxMapY = Math.trunc((centerChunkY + 6) / 8);
+
+    for (let mapX = minMapX; mapX <= maxMapX; mapX++) {
+      for (let mapY = minMapY; mapY <= maxMapY; mapY++) {
+        xteaKeys.push(CachePipeline.getXtea((mapX << 8) | mapY));
+      }
+    }
+
+    return this.sendClientPacket(
+      encodeRebuildNormal(centerChunkX, centerChunkY, forceReload, xteaKeys),
+    );
   }
 
   public sendClientPacket(frame: Buffer): boolean {
@@ -206,6 +231,19 @@ export class PlayerSession {
       || this.replayedSceneBaseY !== this.sceneBaseY
       || this.replayedSceneLevel !== current.level
       || this.replayedPrivateArea !== privateArea;
+    const normalRebuildNeeded = privateArea == null && (
+      !this.hasReplayedScene
+      || this.replayedSceneBaseX !== this.sceneBaseX
+      || this.replayedSceneBaseY !== this.sceneBaseY
+      || this.replayedPrivateArea !== privateArea
+    );
+    if (normalRebuildNeeded && !this.sendRebuildNormal(
+      current.x >> 3,
+      current.y >> 3,
+      this.replayedPrivateArea != null,
+    )) {
+      return;
+    }
     const replacementWindowChanged = !this.hasReplayedScene
       || this.replayedSceneBaseX !== this.sceneBaseX
       || this.replayedSceneBaseY !== this.sceneBaseY;

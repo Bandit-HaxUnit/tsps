@@ -197,6 +197,10 @@ export async function loadInstanceScene(host: WebGLOsrsRendererHost,
 
         if (!host.osrsClient.loadedCache) return;
 
+        host.addedLocs.clear();
+        host.locOverrides.clear();
+        host.locSpawns.clear();
+
         // Suppress normal map streaming while the instance is active
         host.instanceActive = true;
         host.instanceTemplateChunks = templateChunks;
@@ -212,8 +216,8 @@ export async function loadInstanceScene(host: WebGLOsrsRendererHost,
             `[WebGLOsrsRenderer] Loading instance scene at map (${playerMapX}, ${playerMapY}) from region (${regionX}, ${regionY})...`,
         );
 
-        // Clear existing maps so the instance scene is the only one rendered
-        host.mapManager.clearMaps();
+        // Clear existing maps so the instance scene is the only one rendered.
+        host.clearMaps();
 
         await host.doInstanceSceneBuild(templateChunks, regionX, regionY, playerMapX, playerMapY);
 
@@ -341,7 +345,10 @@ export function clearInstance(host: WebGLOsrsRendererHost, ): void {
             clearTimeout(host.instanceLocRebuildTimer);
             host.instanceLocRebuildTimer = null;
         }
-        host.mapManager.clearMaps();
+        host.addedLocs.clear();
+        host.locOverrides.clear();
+        host.locSpawns.clear();
+        host.clearMaps();
         console.log("[WebGLOsrsRenderer] Instance cleared, normal map streaming resumed");
     
 }
