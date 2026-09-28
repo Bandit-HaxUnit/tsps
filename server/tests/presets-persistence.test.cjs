@@ -88,10 +88,16 @@ function constructionPlayer(name, index) {
   const { Location } = require('../dist/game/model/Location');
   const { Inventory } = require('../dist/game/model/container/impl/Inventory');
   const { PlayerRelations } = require('../dist/game/model/PlayerRelations');
-  let area = null, location = new Location(2954, 3224, 0), input;
-  const attributes = new Map(), messages = [], experience = [], vars = new Map();
+  let area = null, location = new Location(2954, 3224, 0), input, interfaceId = -1;
+  const attributes = new Map(), messages = [], experience = [], vars = new Map(), packets = [];
   const levels = new Map();
-  const sender = new Proxy({}, { get: (_, key) => key === 'sendVarbit' ? (id, value) => { vars.set(id, value); return sender; } : () => sender });
+  const sender = new Proxy({}, { get: (_, key) => (...args) => {
+    packets.push([key, ...args]);
+    if (key === 'sendVarbit') vars.set(args[0], args[1]);
+    if (key === 'sendInterface') interfaceId = args[0];
+    if (key === 'sendInterfaceRemoval') { interfaceId = -1; input = null; }
+    return sender;
+  } });
   const player = {
     getUsername: () => name, getLongUsername: () => BigInt(index), getIndex: () => index,
     isPlayer: () => true, isNpc: () => false, getAsPlayer: () => player,
@@ -103,7 +109,8 @@ function constructionPlayer(name, index) {
     getClickDelay: () => ({ elapsedTime: () => true, reset() {} }),
     getSkillManager: () => ({ getCurrentLevel: skill => levels.get(skill) ?? 99, getMaxLevel: skill => levels.get(skill) ?? 99, addExperiences: (skill, xp) => experience.push([skill, xp]) }),
     setEnteredSyntaxAction: action => { input = action; }, getEnteredSyntaxAction: () => input,
-    getMessages: () => messages, levels, experience, vars,
+    getInterfaceId: () => interfaceId,
+    getMessages: () => messages, levels, experience, vars, packets,
   };
   const inventory = new Inventory(player), relations = new PlayerRelations(player);
   player.getInventory = () => inventory;
@@ -113,6 +120,7 @@ function constructionPlayer(name, index) {
 
 function constructionHooks() {
   const { ConstructionPlugin } = require('../dist/game/plugin/impl/construction/ConstructionPlugin');
+  const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
   const hooks = new Map(), named = new Map(), prompts = [];
   const click = n => (ids, handler) => { for (const id of Array.isArray(ids) ? ids : [ids]) hooks.set(`${id}:${n}`, [...(hooks.get(`${id}:${n}`) ?? []), handler]); };
   let generic, process, logout, command, interfaceAction;
@@ -122,18 +130,99 @@ function constructionHooks() {
     onPlayerProcess(handler) { process = handler; }, onPlayerLogout(handler) { logout = handler; },
     registerCommand(name, handler) { if (name === 'house') command = handler; },
     onInterfaceActionClick(handler) { interfaceAction = handler; },
-    sendMultiChatboxPrompt(player, title, ...options) { prompts.push({ player, title, options }); },
+    sendMultiChatboxPrompt(player, title, ...options) {
+      assert.equal(MultiChatboxPrompt.showPrompt('Construction', player, title, options), true, title);
+      prompts.push({ player, title, options });
+      return true;
+    },
   }, { get: (target, key) => target[key] ?? (() => {}) }));
   return { named, prompts, process: player => process({ player }), logout: player => logout({ player }), command: player => command({ player }),
     selectFurniture(player, action) { interfaceAction({ player, groupId: 458, childId: 2, action }); },
+    boardAction(player, childId) { interfaceAction({ player, groupId: 52, childId, action: 1 }); },
     click(player, id, type, location = { x: 0, y: 0, z: 0 }, actions = []) {
       const event = { player, objectId: id, clickType: type, location, object: { getType: () => 10 }, definition: { getInteractions: () => actions }, handled: false };
       for (const handler of hooks.get(`${id}:${type}`) ?? []) if (handler(event) === true) return;
       generic(event);
     },
-    choose(label) { const prompt = prompts.at(-1); const i = prompt.options.indexOf(label); assert.ok(i >= 0, label); prompt.options[i + 1](); },
   };
 }
+
+test('single-choice chatbox prompts render a working Cancel option', () => {
+  const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
+  const packets = [], selections = [];
+  const sender = new Proxy({}, { get: (_, method) => (...args) => { packets.push([method, ...args]); return sender; } });
+  const player = { getPacketSender: () => sender };
+  const pairs = ['Item', (...args) => selections.push(args)];
+  const show = () => MultiChatboxPrompt.showPrompt('Construction', player, 'Withdraw an item', pairs);
+  const click = slot => MultiChatboxPrompt.handleInterfaceActionClick({ player, buttonId: (219 << 16) | 1, slot });
+
+  assert.equal(show(), true);
+  assert.ok(packets.some(packet => packet[0] === 'sendChatboxInterface' && packet[1] === 219));
+  assert.deepEqual(packets.find(packet => packet[0] === 'sendClientScript'), ['sendClientScript', 58, 'Withdraw an item', 'Item|Cancel']);
+  assert.deepEqual(packets.find(packet => packet[0] === 'sendInterfaceFlagsRange'), ['sendInterfaceFlagsRange', (219 << 16) | 1, 1, 2, 1]);
+  assert.equal(pairs.length, 2, 'the caller options are not mutated');
+  assert.equal(click(3), false, 'out-of-range choices are rejected');
+  assert.equal(click(2), true);
+  assert.deepEqual(selections, [], 'Cancel does not select the item');
+  assert.deepEqual(packets.at(-1), ['sendInterfaceRemoval']);
+  assert.equal(click(1), false, 'Cancel clears the pending prompt');
+  assert.equal(show(), true);
+  assert.equal(click(1), true);
+  assert.deepEqual(selections, [[player, 0, 'Item']]);
+});
+
+test('native house board refreshes facilities and rejects stale or unlisted host submissions', async () => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { World } = require('../dist/game/World');
+  await CachePipeline.initialize();
+  const owner = constructionPlayer('Board host', 311), other = constructionPlayer('Other host', 312), guest = constructionPlayer('Board visitor', 313);
+  const hooks = constructionHooks(), board = hooks.named.get('House Advertisement'), lookup = World.getPlayerByName;
+  const rows = () => guest.packets.filter(packet => packet[0] === 'sendClientScript' && packet[1] === 3110);
+  World.getPlayerByName = name => [owner, other].find(player => player.getUsername().toLowerCase() === name.toLowerCase());
+  try {
+    board['Add-House']({ player: owner });
+    board['Add-House']({ player: other });
+    const room = owner.getPrivateArea().save.rooms[1][4][4];
+    room.furniture = { ...room.furniture, ALTAR: 'GILDED_ALTAR', POOL_SPACE: 'ORNATE_REJUVENATION_POOL', SPELLBOOK_ALTAR: 'OCCULT_ALTAR_FROM_ANCIENT', REPAIR_SPACE: 'ARMOUR_STAND', JEWELLERY_BOX: 'FANCY_JEWELLERY_BOX' };
+    room.furnitureByLocation = { '3:3:10': { buildableKey: 'GILDED_PORTAL_NEXUS' } };
+    board.View({ player: guest });
+    assert.deepEqual(rows(), [
+      ['sendClientScript', 3110, 0, 1, 'Board host|1|99|Y|2|2|5|O|Y'],
+      ['sendClientScript', 3110, 1, 1, 'Other host|1|99|-|-|-|-|-|-'],
+      ['sendClientScript', 3110, 200, 1, ''],
+    ]);
+    const closedSelection = guest.getEnteredSyntaxAction();
+    guest.getPacketSender().sendInterfaceRemoval();
+    closedSelection.execute('Board host');
+    assert.equal(guest.getPrivateArea(), null, 'closed boards cannot enter a house');
+
+    board.View({ player: guest });
+    guest.getEnteredSyntaxAction().execute('Unlisted host');
+    assert.equal(guest.getPrivateArea(), null, 'names must belong to the displayed list');
+    board.View({ player: guest });
+    owner.getRelations().setStatus(2, false);
+    guest.getEnteredSyntaxAction().execute('Board host');
+    assert.equal(guest.getPrivateArea(), null, 'privacy changes apply after the board opens');
+    owner.getRelations().setStatus(0, false);
+
+    board.View({ player: guest });
+    board.View({ player: owner });
+    hooks.boardAction(owner, 23);
+    guest.getEnteredSyntaxAction().execute('Board host');
+    assert.equal(guest.getPrivateArea(), null, 'removed advertisements cannot be visited');
+    board.View({ player: guest });
+    guest.packets.length = 0;
+    hooks.boardAction(guest, 30);
+    assert.equal(rows().length, 2, 'refresh removes the old row and retains the other host');
+    assert.equal(rows()[0][4], 'Other host|1|99|-|-|-|-|-|-');
+    hooks.boardAction(owner, 23);
+    guest.packets.length = 0;
+    hooks.boardAction(guest, 30);
+    assert.equal(rows().length, 3, 'Add/Remove House can advertise again');
+    guest.getEnteredSyntaxAction().execute('bOaRd HoSt');
+    assert.equal(guest.getPrivateArea(), owner.getPrivateArea());
+  } finally { World.getPlayerByName = lookup; hooks.logout(owner); hooks.logout(other); hooks.logout(guest); }
+});
 
 test('construction guests, private settings, locks, advertisements and owner lifecycle', async () => {
   const { CachePipeline } = require('../dist/game/cache/CachePipeline');
@@ -160,13 +249,25 @@ test('construction guests, private settings, locks, advertisements and owner lif
     owner.getRelations().hasIgnore = () => false;
     owner.getRelations().setStatus(0, false);
     hooks.named.get('House Advertisement')['Add-House']({ player: owner });
+    guest.packets.length = 0;
     hooks.named.get('House Advertisement').View({ player: guest });
+    assert.equal(guest.getInterfaceId(), 52, 'View opens the native OSRS board');
+    assert.equal(guest.vars.get(9449), 1);
+    assert.deepEqual(guest.packets.filter(packet => packet[0] === 'sendClientScript'), [
+      ['sendClientScript', 3110, 0, 1, 'Host|1|99|-|-|-|-|-|-'],
+      ['sendClientScript', 3110, 200, 1, ''],
+    ]);
+    assert.equal(hooks.prompts.length, 0, 'the board must not use a chatbox menu');
     hooks.click(owner, 4525, 2);
-    hooks.choose('Host');
+    guest.getEnteredSyntaxAction().execute('Host');
     assert.equal(guest.getPrivateArea(), null, 'an already-open advertisement must recheck the lock');
     hooks.click(owner, 4525, 2);
+    guest.packets.length = 0;
     hooks.named.get('House Advertisement').View({ player: guest });
-    hooks.choose('Host');
+    assert.deepEqual(guest.packets.filter(packet => packet[0] === 'sendClientScript'), [['sendClientScript', 3110, 200, 1, '']], 'empty lists finish loading in the native interface');
+    hooks.named.get('House Advertisement')['Add-House']({ player: owner });
+    hooks.boardAction(guest, 30);
+    guest.getEnteredSyntaxAction().execute('Host');
     assert.equal(guest.getPrivateArea(), house);
     assert.equal(guest.vars.get(2176), 0, 'guests see no build hotspots');
     hooks.click(guest, 4525, 2);
@@ -182,8 +283,9 @@ test('construction guests, private settings, locks, advertisements and owner lif
     hooks.logout(owner);
     assert.equal(guest.getPrivateArea(), null, 'logout closes the hosted house safely');
     assert.equal(house.isDestroyed(), true);
+    guest.packets.length = 0;
     hooks.named.get('House Advertisement').View({ player: guest });
-    assert.match(guest.getMessages().at(-1), /No available houses/);
+    assert.deepEqual(guest.packets.filter(packet => packet[0] === 'sendClientScript'), [['sendClientScript', 3110, 200, 1, '']]);
   } finally { World.getPlayerByName = lookup; hooks.logout(owner); hooks.logout(guest); }
 });
 

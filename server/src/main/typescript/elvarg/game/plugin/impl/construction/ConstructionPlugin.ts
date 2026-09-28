@@ -42,6 +42,11 @@ const HOUSE_ATTRIBUTE = "construction:house";
 const RIMMINGTON_PORTAL_EXIT = new Location(2954, 3224, 0);
 const FURNITURE_BUILD_INTERFACE = 458;
 const FURNITURE_BUILD_LIST_UID = (FURNITURE_BUILD_INTERFACE << 16) | 2;
+const HOUSE_BOARD_INTERFACE = 52;
+const HOUSE_BOARD_ROW_SCRIPT = 3110;
+const HOUSE_BOARD_LAST_ROW = 200;
+const HOUSE_BOARD_LOCATION_VARBIT = 9449;
+const RIMMINGTON_HOUSE_LOCATION = 1;
 
 // Expand the named furniture groups used by parlour hotspot menus.
 const FURNITURE_GROUPS: Readonly<Record<string, readonly string[]>> = {
@@ -211,17 +216,64 @@ function removeAdvertisement({ player }: PluginObjectInteractionEvent): boolean 
   return true;
 }
 
-function viewAdvertisements(api: PluginApi, player: Player, page = 0): void {
-  for (const house of advertisedHouses) if (house.isDestroyed()) advertisedHouses.delete(house);
-  const houses = [...advertisedHouses].filter(house => canVisitHouse(player, house));
-  const choices: Array<string | (() => void)> = [];
-  for (const house of houses.slice(page * 4, page * 4 + 4)) {
-    const owner = house.owner!;
-    choices.push(owner.getUsername(), () => visitHouse(player, owner.getUsername()));
+function advertisementRow(house: PlayerHouseInstance): string {
+  const furniture = new Set<string>();
+  for (const plane of house.save.rooms) for (const column of plane) for (const room of column) {
+    if (!room) continue;
+    for (const key of Object.values(room.furniture)) furniture.add(key);
+    for (const saved of Object.values(room.furnitureByLocation ?? {})) furniture.add(saved.buildableKey);
   }
-  if ((page + 1) * 4 < houses.length) choices.push("More houses", () => viewAdvertisements(api, player, page + 1));
-  if (!choices.length) { player.sendMessage("No available houses are advertised."); return; }
-  api.sendMultiChatboxPrompt(player, "Visit an advertised house", ...choices);
+  const tier = (keys: string[]): string => {
+    for (let i = keys.length - 1; i >= 0; i--) if (furniture.has(keys[i])) return String(i + 1);
+    return "-";
+  };
+  return [house.owner!.getUsername(), RIMMINGTON_HOUSE_LOCATION,
+    house.owner!.getSkillManager().getMaxLevel(Skill.CONSTRUCTION),
+    furniture.has("GILDED_ALTAR") ? "Y" : "-",
+    tier(["MARBLE_PORTAL_NEXUS", "GILDED_PORTAL_NEXUS", "CRYSTALLINE_PORTAL_NEXUS"]),
+    tier(["BASIC_JEWELLERY_BOX", "FANCY_JEWELLERY_BOX", "ORNATE_JEWELLERY_BOX"]),
+    tier(["RESTORATION_POOL", "REVITALISATION_POOL", "REJUVENATION_POOL", "FANCY_REJUVENATION_POOL", "ORNATE_REJUVENATION_POOL"]),
+    [...furniture].some(key => key.startsWith("OCCULT_ALTAR")) ? "O" :
+      furniture.has("DARK_ALTAR") ? "D" : furniture.has("LUNAR_ALTAR") ? "L" : furniture.has("ANCIENT_ALTAR") ? "A" : "-",
+    furniture.has("ARMOUR_STAND") ? "Y" : "-"].join("|");
+}
+
+function viewAdvertisements(player: Player): void {
+  for (const house of advertisedHouses) if (house.isDestroyed()) advertisedHouses.delete(house);
+  const houses = [...advertisedHouses].filter(house => canVisitHouse(player, house)).slice(0, HOUSE_BOARD_LAST_ROW);
+  const sender = player.getPacketSender();
+  sender.sendInterfaceRemoval();
+  sender.sendVarbit(HOUSE_BOARD_LOCATION_VARBIT, RIMMINGTON_HOUSE_LOCATION);
+  sender.sendInterface(HOUSE_BOARD_INTERFACE);
+  houses.forEach((house, index) => sender.sendClientScript(HOUSE_BOARD_ROW_SCRIPT, index, RIMMINGTON_HOUSE_LOCATION, advertisementRow(house)));
+  // The cache preallocates rows 0..200; the final empty row completes loading and sorts the list.
+  sender.sendClientScript(HOUSE_BOARD_ROW_SCRIPT, HOUSE_BOARD_LAST_ROW, RIMMINGTON_HOUSE_LOCATION, "");
+  sender.sendInterfaceFlags((HOUSE_BOARD_INTERFACE << 16) | 23, 1 << 1);
+  sender.sendInterfaceFlags((HOUSE_BOARD_INTERFACE << 16) | 30, 1 << 1);
+  // Native scripts 3111/3125 submit the chosen name through RESUME_NAMEDIALOG.
+  player.setEnteredSyntaxAction({ execute: (name: string) => {
+    if (player.getInterfaceId() !== HOUSE_BOARD_INTERFACE) return;
+    const house = houses.find(candidate => candidate.owner?.getUsername().toLowerCase() === name.toLowerCase());
+    sender.sendInterfaceRemoval();
+    if (!house || !advertisedHouses.has(house) || !canVisitHouse(player, house)) {
+      player.sendMessage("That house is no longer advertised or is not accepting guests.");
+      return;
+    }
+    visitHouse(player, house.owner!.getUsername());
+  } });
+}
+
+function handleAdvertisementInterface(event: PluginInterfaceActionClickEvent): boolean {
+  if (event.groupId !== HOUSE_BOARD_INTERFACE || event.player.getInterfaceId() !== HOUSE_BOARD_INTERFACE) return false;
+  if (event.action !== 1) return false;
+  if (event.childId === 23) {
+    const house = activeHouses.get(event.player);
+    if (house && advertisedHouses.has(house)) { removeAdvertisement({ player: event.player } as PluginObjectInteractionEvent); viewAdvertisements(event.player); }
+    else { event.player.getPacketSender().sendInterfaceRemoval(); addAdvertisement({ player: event.player } as PluginObjectInteractionEvent); }
+    return true;
+  }
+  if (event.childId === 30) { viewAdvertisements(event.player); return true; }
+  return false;
 }
 
 function constructionLevel(player: ConstructionPlayer): number {
@@ -501,7 +553,7 @@ function enterDefaultHouse({ player }: PluginObjectInteractionEvent): boolean { 
 function enterNormalHouse({ player }: PluginObjectInteractionEvent): boolean { return enterHouse(player, false); }
 function enterBuildingHouse({ player }: PluginObjectInteractionEvent): boolean { return enterHouse(player, true); }
 function leaveHouse({ player }: PluginObjectInteractionEvent): boolean { return exitHouse(player); }
-function showAdvertisements(api: PluginApi, { player }: PluginObjectInteractionEvent): boolean { viewAdvertisements(api, player); return true; }
+function showAdvertisements({ player }: PluginObjectInteractionEvent): boolean { viewAdvertisements(player); return true; }
 function visitLastHouse({ player }: PluginObjectInteractionEvent): boolean {
   const name = lastVisited.get(player);
   if (name) visitHouse(player, name);
@@ -510,7 +562,7 @@ function visitLastHouse({ player }: PluginObjectInteractionEvent): boolean {
 }
 function houseCommand(api: PluginApi, { player }: { player: ConstructionPlayer }): void { openHouseSettings(api, player); }
 function handleHouseItem(event: PluginItemOnObjectEvent): void { if (onItemOnObject(event)) event.handled = true; }
-function handleHouseInterface(event: PluginInterfaceActionClickEvent): void { if (selectFurnitureFromInterface(event)) event.handled = true; }
+function handleHouseInterface(event: PluginInterfaceActionClickEvent): void { if (selectFurnitureFromInterface(event) || handleAdvertisementInterface(event)) event.handled = true; }
 function loginHouse({ player }: { player: Player }): void {
   if (PlayerHouseInstance.isAllocationLocation(player.getLocation())) {
     player.moveTo(RIMMINGTON_PORTAL_EXIT.clone());
@@ -536,7 +588,7 @@ export const ConstructionPlugin = {
     api.onObjectSecondClick(RIMMINGTON_HOUSE_PORTAL_ID, enterNormalHouse);
     api.onObjectThirdClick(RIMMINGTON_HOUSE_PORTAL_ID, enterBuildingHouse);
     api.onObjectFourthClick(RIMMINGTON_HOUSE_PORTAL_ID, promptVisit);
-    api.onObjectInteraction("House Advertisement", { View: showAdvertisements.bind(null, api), "Add-House": addAdvertisement, "Visit-Last": visitLastHouse });
+    api.onObjectInteraction("House Advertisement", { View: showAdvertisements, "Add-House": addAdvertisement, "Visit-Last": visitLastHouse });
     api.onObjectFirstClick(EXIT_PORTAL_ID, leaveHouse);
     api.onObjectSecondClick(EXIT_PORTAL_ID, toggleHouseLock);
     api.onObjectThirdClick(EXIT_PORTAL_ID, removeAdvertisement);

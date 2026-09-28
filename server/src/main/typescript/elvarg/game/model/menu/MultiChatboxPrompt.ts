@@ -40,7 +40,7 @@ export class MultiChatboxPrompt {
 
     if (
       !Array.isArray(optionCallbackPairs) ||
-      optionCallbackPairs.length < 4 ||
+      optionCallbackPairs.length < 2 ||
       optionCallbackPairs.length % 2 !== 0
     ) {
       console.warn(
@@ -71,6 +71,11 @@ export class MultiChatboxPrompt {
         `[plugins] ${pluginName} attempted unsupported sendMultiChatboxPrompt option count=${options.length}`
       );
       return false;
+    }
+
+    // Cache script 58 always renders at least two options.
+    if (options.length === 1) {
+      options.push({ text: "Cancel", callback: () => {} });
     }
 
     const sender = player.getPacketSender();

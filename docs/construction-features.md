@@ -10,14 +10,14 @@ This pass adds usable facilities and regression tests to the existing house buil
 4. **Altars:** prayer restoration, Ancient/Lunar/Dark spellbook toggles, occult upgrades, and bone offerings. Clean marrentill and a tinderbox light incense burners at 30 Firemaking. Each active burner in the same chapel adds 50 percentage points to the altar's Prayer multiplier. Burners expire and their appearance updates for occupants.
 5. **Pools:** successive tiers restore special attack; then run energy; then Prayer; then lowered stats excluding Hitpoints; then Hitpoints and poison/venom. Boosts remain intact. Upgrades require the previous pool and actual potion/rune item IDs.
 6. **Storage:** all six costume storage categories use native set/member/alternative enums. Use an item on furniture to deposit it, or open/search it to deposit eligible inventory items and withdraw individual items. Capacity and treasure tiers apply. Guests can view only. Upgrades preserve contents; occupied storage and rooms cannot be removed.
-7. **Advertisements:** House Advertisement offers Add-House, View and Visit-Last. Entry permissions are checked again when selecting a host. Advertisements disappear when the house closes, the owner leaves, the portal locks or building mode starts.
+7. **Advertisements:** House Advertisement offers Add-House, View and Visit-Last. View opens the native cache interface (52), with sortable host rows, Construction levels, facility columns, Refresh Data and Add/Remove House. The cache scripts handle sorting, filtering and the Enter House action; the server supplies the rows and rechecks entry permissions when selecting a host. Advertisements disappear when the house closes, the owner leaves, the portal locks or building mode starts.
 
 Guest rules follow the [player-owned house reference](https://oldschool.runescape.wiki/w/Player-owned_house). Teleport costs and capacities follow [portal chambers](https://oldschool.runescape.wiki/w/Portal_chamber) and [portal nexus](https://oldschool.runescape.wiki/w/Portal_nexus). Storage rules follow the [costume room reference](https://oldschool.runescape.wiki/w/Costume_room); burner timing follows [incense burners](https://oldschool.runescape.wiki/w/Incense_burner_%28Marble%29).
 
 ## Current boundaries
 
 - Teleports reuse the server's existing 38 spell destinations. Diary alternatives and destinations absent from that spell system are not added here.
-- Management uses paginated chatbox menus. Native nexus/storage/advertisement interfaces, scrying and mounted amulets are not part of this pass.
+- Nexus and storage management use paginated chatbox menus; their native interfaces, scrying and mounted amulets are not part of this pass. The advertisement board uses its native interface and its 200-house capacity. Houses currently use the Rimmington entrance.
 - Offer bones individually by using them on the altar; automatic repeated offerings are not added.
 - The server has no account-mode, quest-completion or bank-PIN subsystem to enforce the corresponding OSRS restrictions. This pass does not create those systems.
 
