@@ -577,7 +577,8 @@ export class PlayerHouseInstance extends PrivateArea {
   private drawDoor(door: PlayerHouseInstance["visibleDoors"][number]): void {
     const offsets = [[-1, 0], [0, 1], [1, 0], [0, -1]];
     const [dx, dy] = door.open ? offsets[door.face] : [0, 0];
-    const face = door.open ? (door.face + (door.side ? 1 : 3)) & 3 : door.face;
+    // Turn away from the pair's centre so each leaf stays on its outer hinge.
+    const face = door.open ? (door.face + (door.side ? 3 : 1)) & 3 : door.face;
     door.object = new GameObject(HOUSE_DOORS[door.style][door.side + (door.open ? 2 : 0)],
       door.origin.transform(dx, dy), 0, face, this);
     RegionManager.addObjectClipping(door.object);

@@ -1025,6 +1025,7 @@ test('native house viewer moves, rotates, builds and protects occupied rooms', a
 test('house door preferences change models and collision for every occupant', async () => {
   const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
   await CachePipeline.initialize();
   require('../dist/game/definition/ObjectDefinition').ObjectDefinition.init();
   const owner = constructionPlayer('Door host', 324), hooks = constructionHooks();
@@ -1052,5 +1053,52 @@ test('house door preferences change models and collision for every occupant', as
     option(5); assert.equal(house.visibleDoors.length, 0, 'building mode uses door hotspots');
     option(6); assert.ok(house.visibleDoors.length > 0);
     assert.equal(JSON.parse(JSON.stringify(owner.getAttribute('construction:house'))).doorMode, 0);
+
+    // Shape-0 walls occupy a tile edge; an opening leaf must retain the jamb
+    // endpoint of its closed edge, not the endpoint where the two leaves meet.
+    const edge = object => {
+      const { x, y } = object.getLocation();
+      return [[[x, y], [x, y + 1]], [[x, y + 1], [x + 1, y + 1]],
+        [[x + 1, y], [x + 1, y + 1]], [[x, y], [x + 1, y]]][object.getFace()].map(point => point.join(','));
+    };
+    const faces = new Set();
+    for (let rotation = 0; rotation < 4; rotation++) {
+      house.rotateRoom({ x: 4, y: 5, plane: 1 }, rotation);
+      option(14);
+      const closedDoors = house.visibleDoors.map(door => door.object);
+      const checkHinges = () => {
+        for (const [index, closedDoor] of closedDoors.entries()) {
+          const door = house.visibleDoors[index];
+          faces.add(closedDoor.getFace());
+          const closedEdge = edge(closedDoor);
+          const partner = closedDoors.find(other => other !== closedDoor
+            && other.getFace() === closedDoor.getFace() && edge(other).some(point => closedEdge.includes(point)));
+          assert.ok(partner, 'each leaf must have its neighbouring leaf');
+          const hinge = closedEdge.find(point => !edge(partner).includes(point));
+          assert.ok(edge(door.object).includes(hinge), 'open leaf must remain attached to its outer jamb');
+          assert.equal(MapObjects.get(door.object.getId(), door.object.getLocation(), house), door.object,
+            'the displayed open leaf must remain clickable');
+          const { x, y, z } = closedDoor.getLocation();
+          assert.equal(RegionManager.getClipping(x, y, z, house) & [128, 2, 8, 32][closedDoor.getFace()], 0,
+            'opening must clear the doorway collision');
+          const openLocation = door.object.getLocation();
+          assert.notEqual(RegionManager.getClipping(openLocation.x, openLocation.y, openLocation.z, house)
+            & [128, 2, 8, 32][door.object.getFace()], 0, 'collision must follow the opened leaf');
+        }
+      };
+      for (const door of house.visibleDoors) {
+        if (!door.open) assert.equal(house.toggleDoor(door.object.getId(), door.object.getLocation()), true);
+      }
+      checkHinges();
+      for (const [index, door] of house.visibleDoors.entries()) {
+        if (door.open) assert.equal(house.toggleDoor(door.object.getId(), door.object.getLocation()), true);
+        assert.deepEqual(edge(door.object), edge(closedDoors[index]), 'closing restores the original edge');
+        assert.equal(door.object.getId(), closedDoors[index].getId());
+      }
+      // Preference-driven spawning uses the same geometry as clicking Open.
+      option(16);
+      checkHinges();
+    }
+    assert.equal(faces.size, 4, 'cover every doorway orientation');
   } finally { hooks.logout(owner); }
 });
