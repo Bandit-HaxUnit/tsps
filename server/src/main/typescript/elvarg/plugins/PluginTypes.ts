@@ -116,6 +116,24 @@ export interface PluginNpcInteractionEvent {
   handled: boolean;
 }
 
+/** Context handed to dialogue plugins when a Talk-to transcript is about to play. */
+export interface PluginNpcDialogueContext {
+  player: any;
+  npc: any;
+  npcId: number;
+  definition?: NpcDefinition;
+  /** Transcript pages registered for this NPC id, with the variant names each page offers. */
+  pages: Array<{ page: string; variants: string[] }>;
+}
+
+/** A wiki prose condition the dialogue runtime needs a plugin to answer. */
+export interface PluginNpcDialogueConditionEvent extends PluginNpcDialogueContext {
+  /** The wiki prose, e.g. "If the player already has the necessary items:". */
+  text: string;
+  /** Anchor id of the condition step, when the export provides one. */
+  stepId?: string;
+}
+
 export interface PluginNpcInteractionTeleportLocation {
   x: number;
   y: number;
@@ -564,6 +582,20 @@ export interface PluginApi {
   /** Exact, case-sensitive option matching for any NPC name. Return false to fall through. */
   onAnyNpcInteraction(
     actions: Record<string, (event: PluginNpcInteractionEvent) => void | boolean>
+  ): void;
+  /**
+   * Pick which transcript variant a Talk-to should play, e.g. by quest stage.
+   * Return a variant name (or `{ page, variant }`); null/undefined falls through.
+   */
+  onNpcDialogueVariant(
+    handler: (event: PluginNpcDialogueContext) => string | { page?: string; variant: string } | null | undefined
+  ): void;
+  /**
+   * Answer a wiki prose condition step. Return true/false to choose the branch,
+   * or null/undefined to fall through (the runtime then defaults to the first branch).
+   */
+  onNpcDialogueCondition(
+    handler: (event: PluginNpcDialogueConditionEvent) => boolean | null | undefined
   ): void;
   registerNpcInteraction(
     npcIds: number | number[],

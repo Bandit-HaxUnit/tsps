@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
-const { pickVariant, aliasKeys, flatten } = require('../plugins/npcs/NpcDialogues.plugin');
+const { pickVariant, aliasKeys, flatten, startDialogue } = require('../plugins/npcs/NpcDialogues.plugin');
 
 const data = JSON.parse(fs.readFileSync(path.join(__dirname, '../data/definitions/npc-dialogues.json'), 'utf8'));
 const aliases = aliasKeys(data);
@@ -66,6 +66,85 @@ test('a condition branch that continues reaches the next sibling check', () => {
   ]);
   // The detour keeps its prompt, then falls through to the first following check.
   assert.deepEqual(steps.map((step) => step.npc).filter(Boolean), ['very strong', 'assigned']);
+});
+
+test('a nested "jump above" reaches an unselected sibling instead of looping', () => {
+  // The nested option's jump is written "above"; its target is the sibling of the
+  // same text on the outer menu, which has not been selected yet.
+  const tree = [
+    { npc: 'I need help.' },
+    {
+      type: 'choice', prompt: 'Q1', options: [
+        {
+          text: 'Outer', steps: [
+            { npc: 'nested' },
+            {
+              type: 'choice', prompt: 'Q2', options: [
+                { text: "What's wrong?", steps: [{ type: 'jump', reference: 'above' }] },
+                { text: 'Nothing', steps: [{ type: 'end' }] },
+              ],
+            },
+          ],
+        },
+        {
+          text: "What's wrong?", steps: [
+            { npc: 'detail' },
+            {
+              type: 'choice', prompt: 'Q3', options: [
+                { text: 'Start?', steps: [{ npc: 'starting' }] },
+                { text: 'No', steps: [{ type: 'end' }] },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ];
+
+  const script = ['Outer', "What's wrong?", 'No'];
+  const prompts = [];
+  const player = {
+    getDialogueManager: () => ({
+      reset() {},
+      startDialogues(chain) {
+        for (const entry of [...chain.getDialogues().values()].sort((a, b) => a.getIndex() - b.getIndex())) {
+          try { entry.send(player); } catch { /* unwired dialogue entries are fine here */ }
+        }
+      },
+    }),
+    getPacketSender: () => ({ sendInterfaceRemoval() {} }),
+    sendMessage() {},
+  };
+  const definition = { getName: () => 'Cook', getId: () => 4626 };
+  const api = {
+    emitCustomEvent() {},
+    sendMultiChatboxPrompt(_player, title, ...pairs) {
+      assert.ok(prompts.length < 10, 'dialogue looped');
+      const options = [];
+      for (let i = 0; i < pairs.length; i += 2) options.push({ text: pairs[i], cb: pairs[i + 1] });
+      prompts.push(title);
+      const pick = options.find((option) => option.text === script[prompts.length - 1]) ?? options[0];
+      pick.cb();
+      return true;
+    },
+  };
+  const event = { player, npc: { getId: () => 4626 }, npcId: 4626, definition };
+  startDialogue(api, event, tree, {}, { player, npc: event.npc, npcId: 4626, definition, pages: [] });
+
+  assert.deepEqual(prompts, ['Q1', 'Q2', 'Q3']);
+});
+
+test('an unreplayable menu jump ends the branch instead of leaking the next step', () => {
+  const steps = flatten([
+    {
+      type: 'condition', text: 'If A:', steps: [
+        { npc: 'thanks' },
+        { type: 'jump', reference: 'other', id: 'x' },
+      ],
+    },
+    { type: 'unavailable' },
+  ], { resolveJump: (step) => (/^other/i.test(step.reference) ? 'end' : null) });
+  assert.deepEqual(steps.map((step) => step.npc ?? step.type), ['thanks', 'end']);
 });
 
 test('a slayer master assigns from a slugged action, not literal prose', () => {
