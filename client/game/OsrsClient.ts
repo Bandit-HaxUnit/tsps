@@ -1388,18 +1388,7 @@ export class OsrsClient {
             handleWidgetAction: (event) => this.handleWidgetAction(event),
             handleTradeWidgetAction: (widget, event, groupId, childId) =>
                 this.handleTradeWidgetAction(widget, event, groupId, childId),
-            handleInventorySlotMove: (
-                from,
-                to,
-                localPredictionApplied,
-                previousSnapshotSignature,
-            ) =>
-                this.handleInventorySlotMove(
-                    from,
-                    to,
-                    localPredictionApplied,
-                    previousSnapshotSignature,
-                ),
+            handleInventorySlotMove: (from, to) => this.handleInventorySlotMove(from, to),
             buildWidgetActionPayload: (event) =>
                 this.widgetActionRouter.buildWidgetActionPayload(event) ?? null,
             resolveTransmitFlagWidget: (eventWidget, payload) =>
@@ -7418,83 +7407,22 @@ export class OsrsClient {
         this.npcInstances.notifyRendererReady();
     }
 
-    handleInventorySlotMove(
-        fromSlot: number,
-        toSlot: number,
-        localPredictionApplied: boolean = false,
-        previousSnapshotSignature?: string,
-    ): void {
+    handleInventorySlotMove(fromSlot: number, toSlot: number): void {
         const src = Math.max(0, Math.min(Inventory.SLOT_COUNT - 1, fromSlot | 0));
         const dst = Math.max(0, Math.min(Inventory.SLOT_COUNT - 1, toSlot | 0));
         if (src === dst) return;
+        const sourceEntry = this.inventory.getSlot(src);
+        if (!sourceEntry || sourceEntry.itemId <= 0) return;
 
-        let before = previousSnapshotSignature;
-        if (!localPredictionApplied) {
-            const sourceEntry = this.inventory.getSlot(src);
-            if (!sourceEntry || sourceEntry.itemId <= 0) return;
-            before = this.inventory.snapshotSignature();
-            this.inventory.swapSlots(src, dst);
-        }
-
-        const predictedSource = this.inventory.getSlot(src);
-        const predictedDestination = this.inventory.getSlot(dst);
-
-        try {
-            console.log("[inventory] move slot", {
-                from: src,
-                to: dst,
-                predictedSourceItem: predictedSource?.itemId ?? -1,
-                predictedDestinationItem: predictedDestination?.itemId ?? -1,
-            });
-        } catch {}
-
-        // Publish the already-mutated model into the actual WebGL widget state before
-        // onDragComplete or clearDragWidgetVisualState can render another frame.
-        this.publishInventorySlotPrediction(src, dst);
-        const after = this.inventory.snapshotSignature();
-        this.pendingInventoryMovePredictions.push({
-            before: before ?? after,
-            after,
-        });
+        const before = this.inventory.snapshotSignature();
+        this.inventory.swapSlots(src, dst);
+        this.pendingInventoryMovePredictions.push({ before, after: this.inventory.snapshotSignature() });
         sendInventoryMove(src, dst);
 
-        // Dispatch through the inventory UI's CS2 state bridge. This client renders its
-        // inventory through WidgetNode/WebGL rather than a React inventory component.
+        // Refresh the entire slot through its cache script: item, actions, drag
+        // listeners, visibility and transparency must describe the same item.
         markInvTransmit(93);
-    }
-
-    private publishInventorySlotPrediction(...slotIndexes: number[]): void {
-        const slots = new Set(
-            slotIndexes
-                .map((slot) => slot | 0)
-                .filter((slot) => slot >= 0 && slot < Inventory.SLOT_COUNT),
-        );
-        if (slots.size === 0) return;
-
-        const updatedWidgets = new Set<any>();
-        const updateWidget = (widget: any, slot: number): void => {
-            if (!widget || updatedWidgets.has(widget)) return;
-            if (((widget.groupId ?? -1) | 0) !== 149) return;
-            if (((widget.childIndex ?? -1) | 0) !== slot) return;
-            if (((widget.type ?? -1) | 0) !== 5) return;
-
-            const entry = this.inventory.getSlot(slot);
-            const itemId = entry && entry.itemId > 0 ? entry.itemId | 0 : -1;
-            const quantity = itemId > 0 ? Math.max(0, entry?.quantity ?? 0) | 0 : 0;
-            widget.itemId = itemId;
-            widget.itemQuantity = quantity;
-            widget.itemAmount = quantity;
-            markWidgetInteractionDirty(widget);
-            this.widgetManager.invalidateWidgetRender(widget, "inventory-move-prediction");
-            updatedWidgets.add(widget);
-        };
-
-        for (const parent of this.widgetManager.getWidgetsForGroup(149)) {
-            if (!Array.isArray(parent.children)) continue;
-            for (const slot of slots) {
-                updateWidget(parent.children[slot], slot);
-            }
-        }
+        this.triggerInvTransmitForGroup(149);
     }
 
     handleInventorySlotTap(slotIndex: number): void {

@@ -12,6 +12,7 @@ import { GroundItemRespawnTask } from '../../../task/impl/GroundItemRespawnTask'
 import { Item } from "../../../model/Item"
 import { PrivateArea } from "../../../model/areas/impl/PrivateArea"
 import { Misc } from "../../../../util/Misc"
+import { PathFinder } from "../../../model/movement/path/PathFinder";
 
 export class ItemOnGroundManager {
     // OSRS/Lost City floor-item behavior is owner-only for 100 ticks, then public,
@@ -155,10 +156,7 @@ export class ItemOnGroundManager {
         const x = position.getX();
         const y = position.getY();
 
-        if (!privateAreaPickup && (
-            Math.abs(player.getLocation().getX() - x) > 25 ||
-            Math.abs(player.getLocation().getY() - y) > 25
-        )) {
+        if (player.getLocation().getZ() !== position.getZ() || !PathFinder.reachedObj(player, position)) {
             player.getMovementQueue().reset();
             return;
         }

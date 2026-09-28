@@ -304,6 +304,89 @@ test("house portal actions and shared-door room selection preserve the last exit
 });
 
 
+test('house pickups route before collecting and revalidate reach', async (t) => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { PlayerHouseInstance, createDefaultHouseSave } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
+  const { PickupItemPacketListener } = require('../dist/net/packet/impl/PickupItemPacketListener');
+  const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+  const { ItemOnGround, State } = require('../dist/game/entity/impl/grounditem/ItemOnGround');
+  const { MovementQueue } = require('../dist/game/model/movement/MovementQueue');
+  const { Location } = require('../dist/game/model/Location');
+  const { Item } = require('../dist/game/model/Item');
+  const { World } = require('../dist/game/World');
+  const { TaskManager } = require('../dist/game/task/TaskManager');
+  await CachePipeline.initialize();
+  const house = new PlayerHouseInstance(createDefaultHouseSave());
+  const destination = new Location(house.allocation.baseX + 54, house.allocation.baseY + 50, 1);
+  const item = new ItemOnGround(State.SEEN_BY_PLAYER, 'pickup test', destination, new Item(960, 1), false, -1, house);
+  World.getItems().push(item);
+  let location = destination.transform(-4, 0);
+  let area = house, busy = false, cooldownReady = true;
+  const inventory = [];
+  const tasks = [];
+  t.mock.method(TaskManager, 'submit', task => tasks.push(task));
+  const player = {
+    getUsername: () => 'pickup test', getIndex: () => -987,
+    getLocation: () => location, getPrivateArea: () => area, getSize: () => 1,
+    isPlayer: () => true, isNpc: () => false, isPlayerBot: () => true,
+    getAsPlayer: () => player, getMovementQueue: () => queue,
+    busy: () => busy,
+    getLastItemPickup: () => ({ elapsedTime: () => cooldownReady, reset() {} }),
+    getCombat: () => ({ setCastSpell() {}, reset() {} }),
+    getSkillManager: () => ({ stopSkillable() {} }),
+    setCombatFollowing() {}, setFollowing() {}, setPositionToFace() {},
+    getInventory: () => ({ getFreeSlots: () => 28, getAmount: () => 0, addItem: value => inventory.push(value) }),
+  };
+  const queue = new MovementQueue(player);
+  t.mock.method(queue, 'getMobility', () => ({ canMove: () => true }));
+  t.mock.method(queue, 'syncDestinationFlagToRoute', () => {});
+  const click = () => PickupItemPacketListener.pickup(player, 960, destination.x, destination.y, -1);
+  try {
+    busy = true;
+    click();
+    busy = false;
+    cooldownReady = false;
+    click();
+    cooldownReady = true;
+    area = {};
+    click();
+    area = house;
+    assert.equal(tasks.length, 0, 'busy, cooldown and another instance must reject the pickup');
+
+    // Force the real routefinder to detour around instance collision.
+    for (let dy = -1; dy <= 1; dy++) house.setClip(destination.transform(-2, dy), 0x200000);
+    click();
+    assert.equal(inventory.length, 0, 'clicking a distant item must not collect it');
+    assert.equal(tasks.length, 1);
+    assert.equal(queue.hasRoute(), true);
+    assert.ok(queue.pointsReturn().length > 1, 'the route must detour around blocked instance tiles');
+    tasks[0].execute();
+    assert.equal(inventory.length, 0, 'the walk callback must wait for arrival');
+    ItemOnGroundManager.pickup(player, item);
+    assert.equal(inventory.length, 0, 'direct pickup must also reject a distant item');
+
+    location = new Location(destination.x, destination.y, destination.z + 1);
+    ItemOnGroundManager.pickup(player, item);
+    location = destination.clone();
+    area = {};
+    ItemOnGroundManager.pickup(player, item);
+    area = house;
+    item.setPendingRemoval(true);
+    ItemOnGroundManager.pickup(player, item);
+    assert.equal(inventory.length, 0, 'changed plane, instance and removed items must be rejected');
+    item.setPendingRemoval(false);
+    tasks[0].execute();
+    tasks[0].execute();
+    assert.equal(inventory.length, 1, 'the item is collected only after arrival');
+    assert.equal(item.isPendingRemoval(), true);
+    ItemOnGroundManager.pickup(player, item);
+    assert.equal(inventory.length, 1, 'a stale callback cannot collect the item twice');
+  } finally {
+    World.getItems().splice(World.getItems().indexOf(item), 1);
+    house.destroy();
+  }
+});
+
 test('house normal entry removes template hotspots before replaying furniture', async () => {
   const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { PlayerHouseInstance, createDefaultHouseSave } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');

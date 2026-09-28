@@ -52,6 +52,7 @@ export class WidgetInputController {
         const input = this.deps.getInputManager();
         const widgetManager = this.deps.getWidgetManager();
         const widgetInteraction = this.deps.getWidgetInteraction();
+        widgetInteraction.clearStaleWidgetInteractionState();
 
         const frame = buildWidgetInputFrame(
             this.deps,

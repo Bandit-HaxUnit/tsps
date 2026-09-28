@@ -56,6 +56,14 @@ export function processWidgetReleaseInput(
     const { mx, my } = frame;
     // Release
     if (widgetInteraction.clickedWidget && !isHolding) {
+        // A short drag can be released before the drag delay expires. Never
+        // reinterpret a displaced release as the item's primary action (Drop).
+        if (!widgetInteraction.isDraggingWidget && widgetInteraction.isWidgetDraggable(widgetInteraction.clickedWidget)
+            && Math.max(Math.abs(mx - widgetInteraction.dragClickX), Math.abs(my - widgetInteraction.dragClickY))
+                > (widgetInteraction.clickedWidget.dragZoneSize ?? 0)) {
+            widgetInteraction.clearWidgetInteractionState();
+            return;
+        }
         // Drag complete
         if (widgetInteraction.isDraggingWidget) {
             const w = widgetInteraction.clickedWidget;
@@ -120,29 +128,12 @@ export function processWidgetReleaseInput(
                     ? resolveInventoryDropTargetSlot(widgetManager, dragTarget, mx, my)
                     : undefined;
 
-            // Predict against the canonical client inventory before any drag-complete
-            // listener can invalidate or redraw the widget tree. The action bridge is
-            // told that the model mutation is already complete so it can publish the
-            // new slot contents to the render widgets without swapping the model twice.
-            if (inventoryTargetSlot !== undefined && inventoryTargetSlot !== sourceSlot) {
-                const itemCache = deps.getInventory();
-                const sourceEntry = itemCache.getSlot(sourceSlot);
-                if (sourceEntry && sourceEntry.itemId > 0) {
-                    const previousSnapshotSignature = itemCache.snapshotSignature();
-                    itemCache.swapSlots(sourceSlot, inventoryTargetSlot);
-                    deps.handleInventorySlotMove(
-                        sourceSlot,
-                        inventoryTargetSlot,
-                        true,
-                        previousSnapshotSignature,
-                    );
-                }
-            }
+            deps.getCs2Vm().invokeEventHandler(w, "onDragComplete", dragCompleteCtx);
 
-            if (w.eventHandlers?.onDragComplete) {
-                deps.getCs2Vm().invokeEventHandler(w, "onDragComplete", dragCompleteCtx);
-            } else if (w.onDragComplete) {
-                deps.executeScriptListener(w, w.onDragComplete, dragCompleteCtx);
+            // Native drag-complete scripts read and swap the original widget
+            // contents. Publish the predicted inventory only after they finish.
+            if (inventoryTargetSlot !== undefined && inventoryTargetSlot !== sourceSlot) {
+                deps.handleInventorySlotMove(sourceSlot, inventoryTargetSlot);
             }
 
             // End the visual drag after the optimistic state mutation. This invalidates
@@ -245,20 +236,8 @@ export function processWidgetReleaseInput(
             }
         }
 
-        widgetInteraction.clickedWidget = null;
-        widgetInteraction.clickedWidgetParent = null;
-        widgetInteraction.clickedWidgetHandled = false;
-        widgetInteraction.widgetDragDuration = 0;
-
-        // Process deferred widget action on mouse release (if no drag occurred)
-        if (widgetInteraction.deferredWidgetAction && !widgetInteraction.isDraggingWidget) {
-            const deferredEvent = widgetInteraction.deferredWidgetAction;
-            widgetInteraction.deferredWidgetAction = null;
-            // Re-call handleWidgetAction - mouse is now released so it will process
-            deps.handleWidgetAction(deferredEvent);
-        } else {
-            // Clear deferred action if drag occurred
-            widgetInteraction.deferredWidgetAction = null;
-        }
+        // The release above already dispatched a click or a drag. Do not replay
+        // an earlier deferred action, and always clear held-item visuals.
+        widgetInteraction.clearWidgetInteractionState();
     }
 }
