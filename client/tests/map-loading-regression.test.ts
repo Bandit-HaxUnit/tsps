@@ -187,12 +187,41 @@ function instanceFurnitureReplacesOnlyItsHotspot(): void {
         assert.equal(placements.length, 2);
         assert.deepEqual(placements[0], [1, x, y, 100, 10, (1 + rotation) & 3]);
         const neighbor = placements[1];
-        const host = { addedLocs: new Map(), locOverrides: new Map(), instanceActive: true, scheduleInstanceLocRebuild() {} } as any;
+        // A floor decoration and chair can occupy the same tile. Both removals
+        // must survive the renderer-to-scene override transfer independently.
+        const overlapping = { addedLocs: new Map(), locOverrides: new Map(), instanceActive: true,
+            scheduleInstanceLocRebuild() {} } as any;
+        onLocDel(overlapping, { x, y }, 1, 22, 0);
+        onLocDel(overlapping, { x, y }, 1, 10, (1 + rotation) & 3);
+        onLocAddChange(overlapping, 6752, { x, y }, 1, 10, 0);
+        assert.equal(overlapping.locOverrides.size, 2);
+        for (const [key, value] of overlapping.locOverrides) {
+            const [tileX, tileY, plane, oldId] = key.split(",").map(Number);
+            builder.setLocOverride(tileX, tileY, plane, oldId, value.newId,
+                undefined, undefined, undefined, undefined, undefined, value.matchType);
+        }
+        assert.equal((builder as any).getLocOverride(x, y, 1, 999, 22, 0)?.newId, 0,
+            "the floor hotspot removal must survive the chair override");
+        decode();
+        assert.deepEqual(placements, [neighbor], "overlapping hotspot removals must not overwrite each other");
+        builder.clearLocOverrides();
+        let instanceRebuilds = 0;
+        const host = { addedLocs: new Map(), locOverrides: new Map(), instanceActive: true,
+            scheduleInstanceLocRebuild() { instanceRebuilds++; } } as any;
         onLocAddChange(host, 6752, { x: 6400 + x, y: 6400 + y }, 1, 10, 0);
         const override = host.locOverrides.get(`${6400 + x},${6400 + y},1,-1`);
         builder.setLocOverride(x, y, 1, -1, override.newId, undefined, undefined, undefined, undefined, undefined, override.matchType);
         decode();
         assert.deepEqual(placements, [neighbor], "building must hide only the occupied hotspot, including rotated rooms");
+
+        const rebuildsBeforeRemoval = instanceRebuilds;
+        onLocDel(host, { x: 6400 + x, y: 6400 + y }, 1, 10, (1 + rotation) & 3);
+        assert.equal(instanceRebuilds, rebuildsBeforeRemoval + 1, "hotspot removal must rebuild the instance, not load a world map");
+        assert.equal(host.addedLocs.size, 0);
+        const removal = host.locOverrides.get(`${6400 + x},${6400 + y},1,-1`);
+        builder.setLocOverride(x, y, 1, -1, removal.newId, undefined, undefined, undefined, undefined, undefined, removal.matchType);
+        decode();
+        assert.deepEqual(placements, [neighbor], "normal entry hides the empty hotspot after its furniture is removed");
 
         builder.clearLocOverrides(); // Removing furniture rebuilds the saved house without its spawn.
         decode();

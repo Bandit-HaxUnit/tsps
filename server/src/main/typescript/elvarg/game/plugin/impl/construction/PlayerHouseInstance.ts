@@ -3,9 +3,10 @@ import { PrivateArea } from "../../../model/areas/impl/PrivateArea";
 import { Location } from "../../../model/Location";
 import { CachePipeline } from "../../../cache/CachePipeline";
 import { CacheMaps } from "../../../cache/CacheMaps";
+import { CacheDefinitions } from "../../../cache/CacheDefinitions";
 import { ByteBuffer } from "../../../cache/codec/rs/io/ByteBuffer";
 import { GameObject } from "../../../entity/impl/object/GameObject";
-import { encodeRebuildRegion } from "../../../../net/protocol/ClientProtocol";
+import { encodeLocDel, encodeRebuildRegion } from "../../../../net/protocol/ClientProtocol";
 import type { Player } from "../../../entity/impl/player/Player";
 import { BUILDABLE_BY_KEY, CONSTRUCTION_ROOMS, HOTSPOT_BY_OBJECT_ID, HOUSE_TEMPLATE_CHUNKS, ROOM_BY_KEY, type ConstructionBuildable, type ConstructionRoom } from "./ConstructionData";
 import { emptyHousePalette, HOUSE_PLANES, HOUSE_SCENE_CHUNKS, packTemplateChunk, rotateHotspot } from "./HousePaletteCompiler";
@@ -51,6 +52,7 @@ const HOUSE_ALLOCATION_COLUMNS = 16;
 const HOUSE_ALLOCATION_COUNT = HOUSE_ALLOCATION_COLUMNS * HOUSE_ALLOCATION_COLUMNS;
 const ROOM_DOOR_HOTSPOT_MIN = 15305;
 const ROOM_DOOR_HOTSPOT_MAX = 15322;
+const HOUSE_BUILDING_MODE_VARBIT = 2176;
 
 type TemplateObject = Readonly<{
   id: number;
@@ -349,6 +351,7 @@ export class PlayerHouseInstance extends PrivateArea {
   /** Replays the current saved layout after a room edit. */
   public rebuild(player: Player, buildingMode: boolean): boolean {
     this.clearFurniture();
+    player.getPacketSender().sendVarbit(HOUSE_BUILDING_MODE_VARBIT, buildingMode ? 1 : 0);
     const center = this.getSceneCenter();
     const palette = this.buildPalette(buildingMode);
     const seenRegions = new Set<number>();
@@ -368,7 +371,7 @@ export class PlayerHouseInstance extends PrivateArea {
       }
     }
     const sent = player.getSession().sendClientPacket(encodeRebuildRegion(center.x, center.y, true, palette, xteas));
-    this.refreshRoomDoors(buildingMode);
+    this.refreshHotspots(player, buildingMode);
     this.refreshFurniture(player);
     return sent;
   }
@@ -403,12 +406,11 @@ export class PlayerHouseInstance extends PrivateArea {
     return new Location(this.allocation.baseX + 52, this.allocation.baseY + 52, 1);
   }
 
-  private refreshRoomDoors(buildingMode: boolean): void {
+  private refreshHotspots(player: Player, buildingMode: boolean): void {
     for (const door of this.roomDoors.splice(0)) {
       this.detach(door);
     }
     this.doorTargets.clear();
-    if (!buildingMode) return;
 
     const gridOffset = Math.floor((HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
     for (let plane = 0; plane < 3; plane++) {
@@ -417,19 +419,33 @@ export class PlayerHouseInstance extends PrivateArea {
           const room = this.save.rooms[plane][x][y];
           const template = room ? ROOM_BY_KEY.get(room.roomKey) : null;
           if (!room || !template) continue;
-          for (const door of PlayerHouseInstance.getTemplateObjects()) {
-            if (door.id < ROOM_DOOR_HOTSPOT_MIN || door.id > ROOM_DOOR_HOTSPOT_MAX) continue;
-            if (door.sourceChunkX !== template.sourceChunkX || door.sourceChunkY !== template.sourceChunkY) continue;
-            const local = rotateHotspot(door.localX, door.localY, room.rotation);
+          for (const hotspot of PlayerHouseInstance.getTemplateObjects()) {
+            if (hotspot.sourceChunkX !== template.sourceChunkX || hotspot.sourceChunkY !== template.sourceChunkY) continue;
+            const definition = CacheDefinitions.getObject(hotspot.id);
+            const width = (hotspot.face & 1) ? definition.sizeY : definition.sizeX;
+            const height = (hotspot.face & 1) ? definition.sizeX : definition.sizeY;
+            const origin = rotateHotspot(hotspot.localX, hotspot.localY, room.rotation);
+            const opposite = rotateHotspot(hotspot.localX + width - 1, hotspot.localY + height - 1, room.rotation);
+            // The client anchors rotated objects at the minimum corner of their footprint.
+            const local = { x: Math.min(origin.x, opposite.x), y: Math.min(origin.y, opposite.y) };
+            const worldX = this.allocation.baseX + (gridOffset + x) * 8 + local.x;
+            const worldY = this.allocation.baseY + (gridOffset + y) * 8 + local.y;
+            if (!buildingMode) {
+              // Templates contain ghosts even when the building-mode varbit is off.
+              // Remove them before replaying built furniture at the same tiles.
+              player.getSession().sendClientPacket(encodeLocDel(worldX, worldY, plane, hotspot.type, (hotspot.face + room.rotation) & 3));
+              continue;
+            }
+            if (hotspot.id < ROOM_DOOR_HOTSPOT_MIN || hotspot.id > ROOM_DOOR_HOTSPOT_MAX) continue;
             const target = this.getDoorTargetFromEdge(x, y, plane, local.x, local.y);
             if (!target) continue;
             const location = new Location(
-              this.allocation.baseX + (gridOffset + x) * 8 + local.x,
-              this.allocation.baseY + (gridOffset + y) * 8 + local.y,
+              worldX,
+              worldY,
               plane,
             );
             this.doorTargets.set(`${location.getX()}:${location.getY()}:${location.getZ()}`, target);
-            this.roomDoors.push(new GameObject(door.id, location, door.type, (door.face + room.rotation) & 3, this));
+            this.roomDoors.push(new GameObject(hotspot.id, location, hotspot.type, (hotspot.face + room.rotation) & 3, this));
           }
         }
       }
@@ -567,7 +583,9 @@ export class PlayerHouseInstance extends PrivateArea {
           packedLocation += locationDelta - 1;
           const info = buffer.readUnsignedByte();
           if ((packedLocation >> 12) !== 0) continue;
-          if ((objectId < ROOM_DOOR_HOTSPOT_MIN || objectId > ROOM_DOOR_HOTSPOT_MAX) && !HOTSPOT_BY_OBJECT_ID.has(objectId)) continue;
+          if ((objectId < ROOM_DOOR_HOTSPOT_MIN || objectId > ROOM_DOOR_HOTSPOT_MAX)
+            && !HOTSPOT_BY_OBJECT_ID.has(objectId)
+            && !CacheDefinitions.getObject(objectId).actions?.includes("Build")) continue;
           const localX = (packedLocation >> 6) & 0x3f;
           const localY = packedLocation & 0x3f;
           objects.push({

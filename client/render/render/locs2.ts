@@ -198,8 +198,12 @@ export function onLocDel(host: WebGLOsrsRendererHost, tile: { x: number; y: numb
             // Suppress the base cache-baked loc at this tile so a deregistered
             // object (e.g. a chopped tree) actually disappears - buildScene has
             // no other way to know a cache loc was removed.
-            const overrideKey = `${tile.x | 0},${tile.y | 0},${level | 0},-1`;
-            const existingOverride = host.locOverrides.get(overrideKey);
+            let overrideKey = `${tile.x | 0},${tile.y | 0},${level | 0},-1`;
+            let existingOverride = host.locOverrides.get(overrideKey);
+            if (typeof existingOverride?.matchType === "number" && existingOverride.matchType !== shape) {
+                overrideKey += `,${shape}`;
+                existingOverride = host.locOverrides.get(overrideKey);
+            }
             if (
                 existingOverride?.newId !== 0 ||
                 typeof existingOverride.matchType !== "number" ||
@@ -209,6 +213,11 @@ export function onLocDel(host: WebGLOsrsRendererHost, tile: { x: number; y: numb
                     newId: 0,
                     matchType: shape as LocModelType,
                 });
+            }
+
+            if (host.instanceActive) {
+                host.scheduleInstanceLocRebuild();
+                return;
             }
 
             const mapX = Math.floor(tile.x / 64);

@@ -112,7 +112,7 @@ export class SceneBuilder {
         matchType?: LocModelType,
         matchRotation?: number,
     ): void {
-        const key = `${x},${y},${level},${oldId}`;
+        const key = `${x},${y},${level},${oldId}${matchType === undefined ? "" : `,${matchType}`}`;
         this.locOverrides.set(key, {
             newId,
             newRotation,
@@ -140,11 +140,14 @@ export class SceneBuilder {
 
     private getLocOverride(x: number, y: number, level: number, id: number, type: LocModelType, rotation: number) {
         for (const oldId of [id, -1]) {
-            const override = this.locOverrides.get(`${x},${y},${level},${oldId}`);
-            if (override &&
-                (override.matchType === undefined || override.matchType === type) &&
-                (override.matchRotation === undefined || (override.matchRotation & 3) === (rotation & 3))) {
-                return override;
+            const key = `${x},${y},${level},${oldId}`;
+            for (const candidate of [`${key},${type}`, key]) {
+                const override = this.locOverrides.get(candidate);
+                if (override &&
+                    (override.matchType === undefined || override.matchType === type) &&
+                    (override.matchRotation === undefined || (override.matchRotation & 3) === (rotation & 3))) {
+                    return override;
+                }
             }
         }
         return undefined;
