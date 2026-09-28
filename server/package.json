@@ -38,6 +38,7 @@
     "test:developer-rights": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/developer-rights-smoke.ts",
     "test:plugin-config": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/plugin-config-smoke.ts",
     "test:experience-rates": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/experience-rates-smoke.ts",
+    "test:combat-xp": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/combat-xp-smoke.ts",
     "test:spellbook": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/spellbook-login-smoke.ts",
     "test:arceuus-spellbook": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/arceuus-spellbook-smoke.ts",
     "test:spell-cooldown": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/spell-cooldown-smoke.ts",
