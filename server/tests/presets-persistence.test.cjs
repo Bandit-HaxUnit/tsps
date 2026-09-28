@@ -83,6 +83,215 @@ test("custom presets rehydrate from their persisted attribute", () => {
   assert.deepEqual(messages, ["Preset items cannot be banked."]);
 });
 
+// Construction uses real instance, inventory and social state; only network output is stubbed.
+function constructionPlayer(name, index) {
+  const { Location } = require('../dist/game/model/Location');
+  const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+  const { PlayerRelations } = require('../dist/game/model/PlayerRelations');
+  let area = null, location = new Location(2954, 3224, 0), input;
+  const attributes = new Map(), messages = [], experience = [], vars = new Map();
+  const levels = new Map();
+  const sender = new Proxy({}, { get: (_, key) => key === 'sendVarbit' ? (id, value) => { vars.set(id, value); return sender; } : () => sender });
+  const player = {
+    getUsername: () => name, getLongUsername: () => BigInt(index), getIndex: () => index,
+    isPlayer: () => true, isNpc: () => false, getAsPlayer: () => player,
+    getArea: () => area, getPrivateArea: () => area, setArea: value => { area = value; },
+    getLocation: () => location, setLocation: value => { location = value; }, moveTo: value => { location = value; },
+    getPacketSender: () => sender, getSession: () => ({ sendClientPacket: () => true }),
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    sendMessage: value => messages.push(value), performAnimation() {},
+    getClickDelay: () => ({ elapsedTime: () => true, reset() {} }),
+    getSkillManager: () => ({ getCurrentLevel: skill => levels.get(skill) ?? 99, getMaxLevel: skill => levels.get(skill) ?? 99, addExperiences: (skill, xp) => experience.push([skill, xp]) }),
+    setEnteredSyntaxAction: action => { input = action; }, getEnteredSyntaxAction: () => input,
+    getMessages: () => messages, levels, experience, vars,
+  };
+  const inventory = new Inventory(player), relations = new PlayerRelations(player);
+  player.getInventory = () => inventory;
+  player.getRelations = () => relations;
+  return player;
+}
+
+function constructionHooks() {
+  const { ConstructionPlugin } = require('../dist/game/plugin/impl/construction/ConstructionPlugin');
+  const hooks = new Map(), named = new Map(), prompts = [];
+  const click = n => (ids, handler) => { for (const id of Array.isArray(ids) ? ids : [ids]) hooks.set(`${id}:${n}`, [...(hooks.get(`${id}:${n}`) ?? []), handler]); };
+  let generic, process, logout, command, interfaceAction;
+  ConstructionPlugin.register(new Proxy({
+    onObjectFirstClick: click(1), onObjectSecondClick: click(2), onObjectThirdClick: click(3), onObjectFourthClick: click(4), onObjectFifthClick: click(5),
+    onObjectInteraction(name, handler) { if (typeof name === 'function') generic = name; else named.set(name, handler); },
+    onPlayerProcess(handler) { process = handler; }, onPlayerLogout(handler) { logout = handler; },
+    registerCommand(name, handler) { if (name === 'house') command = handler; },
+    onInterfaceActionClick(handler) { interfaceAction = handler; },
+    sendMultiChatboxPrompt(player, title, ...options) { prompts.push({ player, title, options }); },
+  }, { get: (target, key) => target[key] ?? (() => {}) }));
+  return { named, prompts, process: player => process({ player }), logout: player => logout({ player }), command: player => command({ player }),
+    selectFurniture(player, action) { interfaceAction({ player, groupId: 458, childId: 2, action }); },
+    click(player, id, type, location = { x: 0, y: 0, z: 0 }, actions = []) {
+      const event = { player, objectId: id, clickType: type, location, object: { getType: () => 10 }, definition: { getInteractions: () => actions }, handled: false };
+      for (const handler of hooks.get(`${id}:${type}`) ?? []) if (handler(event) === true) return;
+      generic(event);
+    },
+    choose(label) { const prompt = prompts.at(-1); const i = prompt.options.indexOf(label); assert.ok(i >= 0, label); prompt.options[i + 1](); },
+  };
+}
+
+test('construction guests, private settings, locks, advertisements and owner lifecycle', async () => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { World } = require('../dist/game/World');
+  const { canVisitHouse } = require('../dist/game/plugin/impl/construction/ConstructionPlugin');
+  await CachePipeline.initialize();
+  const owner = constructionPlayer('Host', 301), guest = constructionPlayer('Visitor', 302);
+  const hooks = constructionHooks(), lookup = World.getPlayerByName;
+  World.getPlayerByName = name => name.toLowerCase() === 'host' ? owner : undefined;
+  try {
+    hooks.click(owner, 15478, 3);
+    let house = owner.getPrivateArea();
+    assert.equal(canVisitHouse(guest, house), false, 'build mode rejects guests');
+    hooks.click(owner, 15478, 2);
+    assert.equal(canVisitHouse(guest, house), true);
+    owner.getRelations().setStatus(2, false);
+    assert.equal(canVisitHouse(guest, house), false);
+    owner.getRelations().setStatus(1, false);
+    assert.equal(canVisitHouse(guest, house), false);
+    owner.getRelations().hasFriend = () => true;
+    assert.equal(canVisitHouse(guest, house), true);
+    owner.getRelations().hasIgnore = () => true;
+    assert.equal(canVisitHouse(guest, house), false);
+    owner.getRelations().hasIgnore = () => false;
+    owner.getRelations().setStatus(0, false);
+    hooks.named.get('House Advertisement')['Add-House']({ player: owner });
+    hooks.named.get('House Advertisement').View({ player: guest });
+    hooks.click(owner, 4525, 2);
+    hooks.choose('Host');
+    assert.equal(guest.getPrivateArea(), null, 'an already-open advertisement must recheck the lock');
+    hooks.click(owner, 4525, 2);
+    hooks.named.get('House Advertisement').View({ player: guest });
+    hooks.choose('Host');
+    assert.equal(guest.getPrivateArea(), house);
+    assert.equal(guest.vars.get(2176), 0, 'guests see no build hotspots');
+    hooks.click(guest, 4525, 2);
+    assert.equal(house.save.locked, false, 'guests cannot lock the host out');
+    hooks.click(owner, 4525, 2);
+    assert.equal(canVisitHouse(guest, house), false);
+    assert.equal(guest.vars.get(2183), 1);
+    hooks.click(owner, 15478, 3);
+    assert.equal(house.buildingMode, false, 'cannot enable build mode with guests');
+    hooks.click(owner, 4525, 1);
+    assert.equal(house.isDestroyed(), false, 'owner leaving preserves guests and instance');
+    assert.equal(guest.getPrivateArea(), house);
+    hooks.logout(owner);
+    assert.equal(guest.getPrivateArea(), null, 'logout closes the hosted house safely');
+    assert.equal(house.isDestroyed(), true);
+    hooks.named.get('House Advertisement').View({ player: guest });
+    assert.match(guest.getMessages().at(-1), /No available houses/);
+  } finally { World.getPlayerByName = lookup; hooks.logout(owner); hooks.logout(guest); }
+});
+
+test('native nexus recipes, paid destinations, upgrades and saved costume storage', async () => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { PlayerHouseInstance, createDefaultHouseSave } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
+  const { BUILDABLE_BY_KEY, ROOM_BY_KEY } = require('../dist/game/plugin/impl/construction/ConstructionData');
+  const { configureHouseDestination, houseDestinations } = require('../dist/game/plugin/impl/construction/ConstructionPortals');
+  const { depositHouseItem, withdrawHouseItem, storageItems } = require('../dist/game/plugin/impl/construction/ConstructionStorage');
+  const { Item } = require('../dist/game/model/Item');
+  await CachePipeline.initialize();
+  const owner = constructionPlayer('Storage owner', 303), guest = constructionPlayer('Storage guest', 304);
+  const house = new PlayerHouseInstance(createDefaultHouseSave());
+  house.owner = owner; owner.setArea(house); guest.setArea(house);
+  const room = { x: 5, y: 4, plane: 1 };
+  house.placeRoom(room, ROOM_BY_KEY.get('PORTAL_NEXUS'));
+  const target = { position: room, hotspotKey: 'PORTAL_NEXUS', sourceObjectId: 33346, localX: 3, localY: 3, type: 10, face: 0 };
+  house.setFurniture(target, BUILDABLE_BY_KEY.get('MARBLE_PORTAL_NEXUS'));
+  let nexus = house.getFurnitureAtTarget(target);
+  const inventory = owner.getInventory();
+  try {
+    assert.match(house.canPlaceRoom(ROOM_BY_KEY.get('PORTAL_NEXUS'), { x: 6, y: 4, plane: 1 }, 99), /only have one/);
+    assert.equal(configureHouseDestination(owner, house, nexus, 'varrock teleport'), false);
+    inventory.addItem(new Item(556, 50000)); inventory.addItem(new Item(563, 50000)); inventory.addItem(new Item(554, 50000)); inventory.addItem(new Item(557, 50000)); inventory.addItem(new Item(555, 50000));
+    assert.equal(configureHouseDestination(guest, house, nexus, 'varrock teleport'), false);
+    for (const name of ['varrock teleport', 'lumbridge teleport', 'falador teleport', 'camelot teleport']) assert.equal(configureHouseDestination(owner, house, nexus, name), true, name);
+    const before = inventory.getAmount(563);
+    assert.equal(configureHouseDestination(owner, house, nexus, 'ardougne teleport'), false, 'marble holds four');
+    assert.equal(inventory.getAmount(563), before);
+    house.setFurniture(target, BUILDABLE_BY_KEY.get('GILDED_PORTAL_NEXUS'));
+    nexus = house.getFurnitureAtTarget(target);
+    assert.equal(nexus.destinations.length, 4);
+    assert.equal(configureHouseDestination(owner, house, nexus, 'ardougne teleport'), true);
+    assert.equal(inventory.getAmount(563), before - 2000);
+    assert.ok(houseDestinations().find(d => d.name === 'barrows teleport'));
+    house.placeRoom(room, ROOM_BY_KEY.get('PORTAL_CHAMBER'));
+    const portalTarget = { ...target, hotspotKey: 'PORTAL_1', sourceObjectId: 15406 };
+    house.setFurniture(portalTarget, BUILDABLE_BY_KEY.get('TEAK_PORTAL_FRAME'));
+    const portal = house.getFurnitureAtTarget(portalTarget);
+    assert.equal(configureHouseDestination(owner, house, portal, 'varrock teleport'), false, 'a chamber requires its focus');
+    house.setFurniture({ ...target, hotspotKey: 'TELEPORT_FOCUS', sourceObjectId: 15409, localX: 4 }, BUILDABLE_BY_KEY.get('TELEPORT_FOCUS'));
+    const chamberRunes = inventory.getAmount(563);
+    assert.equal(configureHouseDestination(owner, house, portal, 'varrock teleport'), true);
+    assert.equal(inventory.getAmount(563), chamberRunes - 100, 'chambers cost 100 casts, not 1000');
+    assert.equal(portal.displayObjectId, 33092, 'directed portal replaces the empty frame');
+    assert.equal(configureHouseDestination(owner, house, portal, 'varrock teleport'), false);
+    assert.equal(inventory.getAmount(563), chamberRunes - 100, 'duplicate configuration never charges');
+    assert.ok(BUILDABLE_BY_KEY.get('RESTORATION_POOL').materials.every(m => m.itemId != null));
+    assert.ok(BUILDABLE_BY_KEY.get('ORNATE_REJUVENATION_POOL').materials.some(m => m.itemId === 12905 && m.amount === 10));
+    house.placeRoom(room, ROOM_BY_KEY.get('COSTUME_ROOM'));
+    const storageTarget = { ...target, hotspotKey: 'MAGIC_WARDROBE', sourceObjectId: 18811 };
+    house.setFurniture(storageTarget, BUILDABLE_BY_KEY.get('OAK_MAGIC_WARDROBE'));
+    let wardrobe = house.getFurnitureAtTarget(storageTarget);
+    assert.equal(storageItems(wardrobe).get(4091), 4089, 'all robe pieces share their native set');
+    inventory.addItem(new Item(4091, 1));
+    const slot = inventory.getItems().findIndex(item => item.getId() === 4091);
+    assert.equal(depositHouseItem(guest, house, wardrobe, slot), false);
+    assert.equal(depositHouseItem(owner, house, wardrobe, slot), true);
+    assert.equal(inventory.getAmount(4091), 0);
+    assert.match(house.canRemoveRoom(room), /Empty the storage/);
+    house.setFurniture(storageTarget, BUILDABLE_BY_KEY.get('CARVED_OAK_MAGIC_WARDROBE'));
+    wardrobe = house.getFurnitureAtTarget(storageTarget);
+    assert.equal(wardrobe.storage[4091], 1, 'upgrade keeps stored items');
+    const saved = JSON.parse(JSON.stringify(house.save));
+    assert.equal(saved.rooms[1][5][4].furnitureByLocation['3:3:10'].storage[4091], 1);
+    assert.equal(withdrawHouseItem(guest, house, wardrobe, 4091), false);
+    for (let i = inventory.getFreeSlots(); i > 0; i--) inventory.addItem(new Item(960, 1));
+    assert.equal(withdrawHouseItem(owner, house, wardrobe, 4091), false);
+    assert.equal(wardrobe.storage[4091], 1, 'full inventory must not lose stored items');
+    inventory.delete(960, 1);
+    assert.equal(withdrawHouseItem(owner, house, wardrobe, 4091), true);
+    assert.equal(withdrawHouseItem(owner, house, wardrobe, 4091), false, 'repeated withdrawal cannot duplicate');
+    assert.equal(house.canRemoveRoom(room), null);
+  } finally { house.destroy(); }
+});
+
+test('house altar burners are shared, expire and affect only their chapel', async () => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { PlayerHouseInstance, createDefaultHouseSave } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
+  const { offerHouseBones, lightHouseBurner, expireHouseBurners } = require('../dist/game/plugin/impl/construction/ConstructionAltars');
+  const { Item } = require('../dist/game/model/Item');
+  const { Skill } = require('../dist/game/model/Skill');
+  await CachePipeline.initialize();
+  const house = new PlayerHouseInstance(createDefaultHouseSave()), player = constructionPlayer('Prayer guest', 305);
+  const altar = { buildableKey: 'GILDED_ALTAR' }, burner1 = { buildableKey: 'INCENSE_BURNER' }, burner2 = { buildableKey: 'MARBLE_BURNER' };
+  const room = house.save.rooms[1][4][5]; room.furnitureByLocation = { altar, burner1, burner2 };
+  player.setArea(house);
+  house.redrawFurniture = () => {};
+  house.getFurnitureAt = (_, id) => id === 13197 ? altar : id === 13208 ? burner1 : burner2;
+  const event = { player, objectId: 13197, object: { getType: () => 10 }, location: { x: house.allocation.baseX + 50, y: house.allocation.baseY + 58, z: 1 }, itemId: 536, itemSlot: 0 };
+  player.getInventory().addItem(new Item(536, 3)); player.getInventory().addItem(new Item(2347, 1));
+  try {
+    assert.equal(offerHouseBones(event), true);
+    assert.deepEqual(player.experience.at(-1), [Skill.PRAYER, 180]);
+    player.getInventory().addItem(new Item(590, 1)); player.getInventory().addItem(new Item(251, 2));
+    lightHouseBurner({ ...event, objectId: 13208 }); lightHouseBurner({ ...event, objectId: 13212 });
+    assert.equal(house.litBurners.size, 2);
+    event.itemSlot = player.getInventory().getItems().findIndex(item => item.getId() === 536);
+    offerHouseBones(event);
+    assert.deepEqual(player.experience.at(-1), [Skill.PRAYER, 252]);
+    expireHouseBurners(house, Date.now() + 300000);
+    assert.equal(house.litBurners.size, 0);
+    event.itemSlot = player.getInventory().getItems().findIndex(item => item.getId() === 536);
+    offerHouseBones(event);
+    assert.deepEqual(player.experience.at(-1), [Skill.PRAYER, 180]);
+  } finally { house.destroy(); }
+});
+
 test("server-owned items inherit gameplay and deliver external models before definitions", async () => {
   const fs = require("node:fs");
   const { inflateSync } = require("node:zlib");
@@ -245,6 +454,9 @@ test("house portal actions and shared-door room selection preserve the last exit
     sendMessage: message => messages.push(message),
     setAttribute() {},
   };
+  house.owner = player;
+  house.buildingMode = true;
+  house.getPlayers = () => [player];
   const register = click => (ids, handler) => {
     for (const id of Array.isArray(ids) ? ids : [ids]) {
       const key = id + ':' + click;
@@ -444,4 +656,111 @@ test('house normal entry removes template hotspots before replaying furniture', 
   } finally {
     house.destroy();
   }
+});
+
+
+test('pool tiers restore only their documented effects and spellbook altars toggle', () => {
+  const { Skill } = require('../dist/game/model/Skill');
+  const { CombatSpecial } = require('../dist/game/content/combat/CombatSpecial');
+  const { Sounds } = require('../dist/game/Sounds');
+  const updateBar = CombatSpecial.updateBar, sound = Sounds.sendSound;
+  CombatSpecial.updateBar = () => {}; Sounds.sendSound = () => {};
+  const handlers = new Map();
+  require('../plugins/objects/RejuvinationPool.plugin.js').register({ getTaskManager: () => ({ cancelTasks() {} }), onObjectInteraction: (name, actions) => handlers.set(name, actions.Drink) });
+  try {
+    const names = ['Pool of Restoration', 'Pool of Revitalisation', 'Pool of Rejuvenation', 'Fancy pool of Rejuvenation', 'Ornate pool of Rejuvenation'];
+    names.forEach((name, tier) => {
+      const values = new Map(Skill.values().map(skill => [skill, 50]));
+      values.set(Skill.STRENGTH, 110);
+      let hp = 50, run = 10, special = 0, poison = 6, venom = true;
+      const player = {
+        getSkillManager: () => ({ getCurrentLevel: skill => values.get(skill), getMaxLevel: () => 99, setCurrentLevels: (skill, value) => values.set(skill, value) }),
+        getHitpoints: () => hp, setHitpoints: value => { hp = value; },
+        setSpecialPercentage: value => { special = value; }, setRunEnergy: value => { run = value; },
+        setPoisonDamage: value => { poison = value; }, setVenomed: value => { venom = value; }, sendMessage() {},
+      };
+      handlers.get(name)({ player });
+      assert.equal(special, 100, name);
+      assert.equal(run, tier >= 1 ? 100 : 10, name);
+      assert.equal(values.get(Skill.PRAYER), tier >= 2 ? 99 : 50, name);
+      assert.equal(values.get(Skill.ATTACK), tier >= 3 ? 99 : 50, name);
+      assert.equal(values.get(Skill.STRENGTH), 110, 'boosts must survive');
+      assert.equal(hp, tier >= 4 ? 99 : 50, name);
+      assert.equal(poison, tier >= 4 ? 0 : 6, name);
+      assert.equal(venom, tier < 4, name);
+    });
+  } finally { CombatSpecial.updateBar = updateBar; Sounds.sendSound = sound; }
+  const altarActions = new Map();
+  require('../plugins/objects/Altars.plugin.js').register({ onObjectInteraction: (name, actions) => altarActions.set(name, actions) });
+  const change = MagicSpellbook.changeSpellbook;
+  let book = MagicSpellbook.NORMAL;
+  MagicSpellbook.changeSpellbook = (_, value) => { book = value; };
+  Sounds.sendSound = () => {};
+  try {
+    const player = { getSpellbook: () => book, performAnimation() {} };
+    for (const [name, expected] of [['Ancient Altar', MagicSpellbook.ANCIENT], ['Lunar Altar', MagicSpellbook.LUNAR], ['Dark Altar', MagicSpellbook.ARCEUUS]]) {
+      altarActions.get(name).Venerate({ player }); assert.equal(book, expected);
+      altarActions.get(name).Venerate({ player }); assert.equal(book, MagicSpellbook.NORMAL);
+    }
+    altarActions.get('Altar of the Occult').Arceuus({ player }); assert.equal(book, MagicSpellbook.ARCEUUS);
+  } finally { MagicSpellbook.changeSpellbook = change; Sounds.sendSound = sound; }
+});
+
+test('rotated nexus hotspots, built models and interactions share the same footprint', async () => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { PlayerHouseInstance, createDefaultHouseSave } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
+  const { BUILDABLE_BY_KEY, ROOM_BY_KEY } = require('../dist/game/plugin/impl/construction/ConstructionData');
+  await CachePipeline.initialize();
+  const house = new PlayerHouseInstance(createDefaultHouseSave());
+  const position = { x: 5, y: 4, plane: 1 }, placed = [];
+  const player = constructionPlayer('Nexus builder', 306);
+  player.getPacketSender = () => ({ sendVarbit() {}, sendObject: object => placed.push(object) });
+  try {
+    for (let rotation = 0; rotation < 4; rotation++) {
+      house.placeRoom(position, ROOM_BY_KEY.get('PORTAL_NEXUS'), rotation);
+      const location = { x: house.allocation.baseX + 59, y: house.allocation.baseY + 51, z: 1 };
+      const target = house.getFurnitureTarget(location, 33346);
+      assert.ok(target, '2x2 centered nexus must be buildable at rotation ' + rotation);
+      house.setFurniture(target, BUILDABLE_BY_KEY.get('MARBLE_PORTAL_NEXUS'));
+      house.rebuild(player, false);
+      const object = placed.findLast(value => value.getId() === 33408);
+      assert.equal(object.getLocation().getX(), location.x);
+      assert.equal(object.getLocation().getY(), location.y);
+      assert.equal(house.getFurnitureAt(location, 33408, 10).buildableKey, 'MARBLE_PORTAL_NEXUS');
+      assert.equal(house.removeFurniture(location, 33408, 10).buildableKey, 'MARBLE_PORTAL_NEXUS');
+      assert.equal(house.getFurnitureAt(location, 33408, 10), null);
+    }
+  } finally { house.destroy(); }
+});
+
+
+test('pool upgrades use the build interface, consume real potions and reject stale menus', async () => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { PlayerHouseInstance } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
+  const { BUILDABLE_BY_KEY, ROOM_BY_KEY, CONSTRUCTION_HOTSPOTS } = require('../dist/game/plugin/impl/construction/ConstructionData');
+  const { Item } = require('../dist/game/model/Item');
+  await CachePipeline.initialize();
+  const player = constructionPlayer('Pool builder', 307), hooks = constructionHooks();
+  hooks.click(player, 15478, 3);
+  const house = player.getPrivateArea(), room = { x: 5, y: 4, plane: 1 };
+  try {
+    house.placeRoom(room, ROOM_BY_KEY.get('SUPERIOR_GARDEN'));
+    const template = PlayerHouseInstance.getTemplateObjects().find(object => object.id === 29122 && object.sourceChunkX === 237 && object.sourceChunkY === 880);
+    const location = { x: house.allocation.baseX + 56 + template.localX, y: house.allocation.baseY + 48 + template.localY, z: 1 };
+    const target = house.getFurnitureTarget(location, 29122);
+    assert.ok(target);
+    house.setFurniture(target, BUILDABLE_BY_KEY.get('RESTORATION_POOL'));
+    player.getInventory().addItem(new Item(2347, 1)); player.getInventory().addItem(new Item(8794, 1)); player.getInventory().addItem(new Item(12625, 10));
+    hooks.click(player, 29237, 4, location, ['Drink', null, null, 'Upgrade', 'Remove']);
+    hooks.selectFurniture(player, 2);
+    assert.equal(house.getFurnitureAtTarget(target).buildableKey, 'REVITALISATION_POOL');
+    assert.equal(player.getInventory().getAmount(12625), 0);
+    player.getInventory().addItem(new Item(2434, 10));
+    hooks.click(player, 29238, 4, location, ['Drink', null, null, 'Upgrade', 'Remove']);
+    hooks.click(player, 4525, 1);
+    hooks.selectFurniture(player, 3);
+    assert.equal(player.getInventory().getAmount(2434), 10);
+    assert.equal(house.getFurnitureAtTarget(target).buildableKey, 'REVITALISATION_POOL');
+    assert.ok(CONSTRUCTION_HOTSPOTS.find(h => h.key === 'SPELLBOOK_ALTAR').buildables.includes('OCCULT_ALTAR_FROM_ANCIENT'));
+  } finally { hooks.logout(player); }
 });

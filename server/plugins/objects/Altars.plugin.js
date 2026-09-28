@@ -59,6 +59,14 @@ function ancientAltar({ player }) {
   return handleAncientAltar(player);
 }
 
+function lunarAltar({ player }) {
+  return handleOccultAltar(player, player.getSpellbook() === MagicSpellbook.LUNAR ? MagicSpellbook.NORMAL : MagicSpellbook.LUNAR);
+}
+
+function darkAltar({ player }) {
+  return handleOccultAltar(player, player.getSpellbook() === MagicSpellbook.ARCEUUS ? MagicSpellbook.NORMAL : MagicSpellbook.ARCEUUS);
+}
+
 function prayerAltar({ player }) {
   return handlePrayerAltar(player);
 }
@@ -88,6 +96,8 @@ module.exports = {
   name: "Altars",
   register: (api) => {
     api.onObjectInteraction("Ancient Altar", { Venerate: ancientAltar });
+    api.onObjectInteraction("Lunar Altar", { Venerate: lunarAltar });
+    api.onObjectInteraction("Dark Altar", { Venerate: darkAltar });
     api.onObjectInteraction("Altar", { "Pray-at": prayerAltar, Pray: prayerAltar });
     api.onObjectInteraction("Altar of the Occult", {
       Venerate: venerateOccultAltar,

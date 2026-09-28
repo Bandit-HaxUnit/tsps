@@ -88,6 +88,10 @@ export class LunarSpells {
         ["tele group ice plateau", teleport(90, 99, [rune(9075, 16), rune(555, 3), rune(563, 3)], 2974, 3873)],
     ]);
 
+    public static getTeleportDestinations() {
+        return Array.from(this.TELEPORTS, ([name, spell]) => ({ name, ...spell.teleport }));
+    }
+
     public static handleSelf(player: Player, name: string | undefined): boolean {
         const key = name?.trim().toLowerCase() ?? "";
         const teleport = this.TELEPORTS.get(key);

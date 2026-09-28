@@ -16,7 +16,7 @@ type TeleportData = {
 };
 
 class TeleportSpell extends Spell {
-    constructor(private readonly data: TeleportData) { super(); }
+    constructor(readonly data: TeleportData) { super(); }
 
     spellId(): number { return 0; }
     levelRequired(): number { return this.data.level; }
@@ -68,6 +68,10 @@ export class SpellTeleports {
         ["annakarl teleport", teleport(MagicSpellbook.ANCIENT, 90, 100, [rune(563, 2), rune(565, 2)], 3288, 3886)],
         ["ghorrock teleport", teleport(MagicSpellbook.ANCIENT, 96, 106, [rune(563, 2), rune(555, 8)], 2977, 3873)],
     ]);
+
+    public static getTeleportDestinations() {
+        return Array.from(this.SPELLS, ([name, spell]) => ({ name, ...spell.data }));
+    }
 
     static handleSelf(player: Player, name: string | undefined): boolean {
         const spell = this.SPELLS.get(name?.trim().toLowerCase() ?? "");
