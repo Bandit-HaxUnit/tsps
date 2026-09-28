@@ -1005,31 +1005,24 @@ export class OsrsClient {
         document.addEventListener(
             "keydown",
             (event) => {
-                const shortcut = this.resolveKeyShortcut(event);
-                const functionKeyEvent =
-                    event.code.startsWith("F") ||
-                    event.key.startsWith("F") ||
-                    event.key.startsWith("Brightness") ||
-                    event.key.startsWith("Audio");
-                if (functionKeyEvent) {
-                    console.info("[OsrsClient] function keydown", {
-                        key: event.key,
-                        code: event.code,
-                        repeat: event.repeat,
-                        loggedIn: this.isLoggedIn(),
-                        hasVarManager: !!this.varManager,
-                    });
+                // Capture build-menu chat before tab shortcuts, plugin handlers,
+                // or focus on a non-input component can swallow the event.
+                const constructionOpen = this.widgetManager?.rootInterface === 458 ||
+                    [...(this.widgetManager?.interfaceParents.values() ?? [])]
+                        .some((parent) => parent.group === 458);
+                if (this.isLoggedIn() && constructionOpen &&
+                    (event.key.length === 1 || ["Enter", "Backspace", "Escape", "Tab", "PageUp", "PageDown"].includes(event.key))) {
+                    this.inputManager.onKeyDown(event, true);
+                    this.widgetInputController.handleConstructionKeyboardInput();
+                    event.stopImmediatePropagation();
+                    return;
                 }
+                const shortcut = this.resolveKeyShortcut(event);
                 if (!this.isLoggedIn() || event.repeat || shortcut === undefined) {
                     return;
                 }
 
                 this.switchToTab(shortcut);
-                console.info("[OsrsClient] switched game tab from function key", {
-                    key: event.key,
-                    tab: shortcut,
-                    activeTab: this.varManager?.getVarcInt(VARC_ACTIVE_TAB),
-                });
                 event.preventDefault();
                 if (event.key !== "Escape") event.stopImmediatePropagation();
             },
@@ -2233,6 +2226,7 @@ export class OsrsClient {
 
         // Clean up click targets when interfaces close to prevent stale/ghost click regions
         this.widgetManager.onInterfaceClose = (groupId) => {
+            this.widgetInputController.onInterfaceClosed(groupId);
             this.customInterfaces.onInterfaceClosed(groupId);
             // The click registry is on the WidgetsOverlay's GL canvas, not the main game canvas
             const glCanvas = (this.renderer as any)?.getWidgetsGLCanvas?.();
@@ -2792,70 +2786,18 @@ export class OsrsClient {
                             );
                         }
                     }
-                    const script = this.cs2Vm.context.loadScript(scriptId);
-                    if (script) {
-                        // Separate int and string args
-                        const intArgs: number[] = [];
-                        const stringArgs: string[] = [];
-                        for (const arg of args) {
-                            if (typeof arg === "number") {
-                                intArgs.push(arg | 0);
-                            } else if (typeof arg === "string") {
-                                stringArgs.push(arg);
-                            }
+                    const intArgs: number[] = [];
+                    const stringArgs: string[] = [];
+                    for (const arg of args) {
+                        if (typeof arg === "number") {
+                            intArgs.push(arg | 0);
+                        } else if (typeof arg === "string") {
+                            stringArgs.push(arg);
                         }
-
-                        try {
-                            // Optional CS2 trace: only if already enabled by the user.
-                            const traceCfg: any = (globalThis as any).__cs2Trace;
-                            const shouldTrace = !!traceCfg?.enabled;
-                            let prevTraceEnabled: boolean | undefined;
-                            let prevTraceScripts: any;
-                            let prevTraceLines: any;
-                            let prevTraceMaxLines: any;
-                            if (shouldTrace) {
-                                prevTraceEnabled = traceCfg.enabled;
-                                prevTraceScripts = traceCfg.scripts;
-                                prevTraceLines = traceCfg.lines;
-                                prevTraceMaxLines = traceCfg.maxLines;
-                                traceCfg.scripts = traceCfg.scripts ?? null;
-                                traceCfg.lines = 0;
-                                traceCfg.maxLines = traceCfg.maxLines ?? 2000;
-                                (globalThis as any).__cs2Trace = traceCfg;
-                            }
-                            // RUNCLIENTSCRIPT has no event component context. Do not inherit
-                            // active/dot widgets left by previous UI event scripts; mounted
-                            // interface coordinate helpers depend on the current script group.
-                            this.cs2Vm.activeWidget = null;
-                            this.cs2Vm.dotWidget = null;
-                            try {
-                                this.cs2Vm.run(script, intArgs, stringArgs);
-                            } finally {
-                                this.cs2Vm.activeWidget = null;
-                                this.cs2Vm.dotWidget = null;
-                            }
-                            if (shouldTrace && traceCfg) {
-                                traceCfg.enabled = prevTraceEnabled;
-                                traceCfg.scripts = prevTraceScripts;
-                                traceCfg.lines = prevTraceLines;
-                                traceCfg.maxLines = prevTraceMaxLines;
-                                (globalThis as any).__cs2Trace = traceCfg;
-                            }
-                            // CRITICAL: Invalidate widgets after script runs so changes are rendered.
-                            // CS2 scripts modify widget properties (text, hidden, position, etc.)
-                            // but without invalidation the render system won't repaint.
-                            if (this.widgetManager) {
-                                this.widgetManager.invalidateAll();
-                            }
-                        } catch (err) {
-                            console.error(
-                                `[OsrsClient] run_script error for script ${scriptId}:`,
-                                err,
-                            );
-                        }
-                    } else {
-                        console.warn(`[OsrsClient] run_script: script ${scriptId} not found`);
                     }
+
+                    const script = this.cs2Vm.context.loadScript(scriptId);
+                    if (script) this.cs2Vm.run(script, intArgs, stringArgs);
                 }
             } else if ((payload as any)?.action === "set_varbits") {
                 // Server-initiated varbit sync without running a script
@@ -3437,9 +3379,11 @@ export class OsrsClient {
                         console.log(
                             `[OsrsClient] REBUILD_NORMAL received: regionX=${payload.regionX} regionY=${payload.regionY} regions=${payload.mapRegions.length}`,
                         );
+                        const wasInInstance = ClientState.inInstance;
                         ClientState.inInstance = false;
                         ClientState.instanceTemplateChunks = null;
-                        if (this.renderer && "clearInstance" in this.renderer) {
+                        const rendererWasInInstance = (this.renderer as any)?.instanceActive === true;
+                        if ((wasInInstance || rendererWasInInstance) && this.renderer && "clearInstance" in this.renderer) {
                             (this.renderer as any).clearInstance();
                         }
                     } catch (err) {
