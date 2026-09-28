@@ -10,7 +10,7 @@ import { PrivateChatStatus } from "../../../model/PlayerRelations";
 import type { Player } from "../../../entity/impl/player/Player";
 import type { PacketSender } from "../../../../net/packet/PacketSender";
 import { ItemIdentifiers } from "../../../../util/ItemIdentifiers";
-import { BUILDABLE_BY_KEY, CONSTRUCTION_BUILDABLES, CONSTRUCTION_ROOMS, HOTSPOT_BY_OBJECT_ID, type ConstructionBuildable, type ConstructionRoom } from "./ConstructionData";
+import { BUILDABLE_BY_KEY, CONSTRUCTION_BUILDABLES, CONSTRUCTION_ROOMS, CONSTRUCTION_VIEWER_FURNITURE, ROOM_BY_KEY, HOTSPOT_BY_OBJECT_ID, type ConstructionBuildable, type ConstructionRoom } from "./ConstructionData";
 import { PlayerHouseInstance, createDefaultHouseSave, type HouseFurnitureTarget, type HouseRoomPosition, type PlayerHouseSave } from "./PlayerHouseInstance";
 
 type ConstructionPlayer = {
@@ -57,7 +57,13 @@ const FURNITURE_GROUPS: Readonly<Record<string, readonly string[]>> = {
   CURTAIN: ["TORN_CURTAINS", "CURTAINS", "OPULENT_CURTAINS"],
 };
 
-type PersistedHouse = PlayerHouseSave & { defaultBuildingMode: boolean };
+type PersistedHouse = PlayerHouseSave & { defaultBuildingMode: boolean; teleportOutside?: boolean };
+
+const HOUSE_OPTIONS_INTERFACE = 370;
+const SETTINGS_TARGET_UID = (161 << 16) | 87;
+const HOUSE_KICK_OPTION = 7;
+const houseOptionsOpen = new WeakSet<ConstructionPlayer>();
+const kickOptionVisible = new WeakSet<ConstructionPlayer>();
 
 const activeHouses = new WeakMap<ConstructionPlayer, PlayerHouseInstance>();
 const advertisedHouses = new Set<PlayerHouseInstance>();
@@ -127,6 +133,10 @@ function enterHouse(player: ConstructionPlayer, buildingMode: boolean): boolean 
     player.sendMessage("Expel your guests before entering building mode.");
     return true;
   }
+  player.getPacketSender().sendInterfaceRemoval();
+  houseViewers.delete(player);
+  pendingRoomMenus.delete(player);
+  pendingFurnitureMenus.delete(player);
   if (houseFor(player) && houseFor(player) !== house) exitHouse(player);
   if (!house) {
     house = new PlayerHouseInstance(houseStateFor(player));
@@ -140,6 +150,8 @@ function enterHouse(player: ConstructionPlayer, buildingMode: boolean): boolean 
     return false;
   }
   player.getPacketSender().sendVarbit(HOUSE_LOCKED_VARBIT, house.save.locked ? 1 : 0);
+  syncHouseOptions(player);
+  syncKickOption(player);
   player.sendMessage(buildingMode ? "You enter your house in building mode." : "You enter your house.");
   return true;
 }
@@ -174,24 +186,11 @@ function promptVisit({ player }: PluginObjectInteractionEvent): boolean {
 
 function expelGuests(player: ConstructionPlayer): void {
   const house = activeHouses.get(player);
-  if (!house) return;
+  if (!house || houseFor(player) !== house || house.owner !== player) return;
   for (const guest of house.getPlayers().slice()) if (guest !== player) {
     exitHouse(guest);
     guest.sendMessage("The house owner has expelled you.");
   }
-}
-
-function chooseGuest(api: PluginApi, player: ConstructionPlayer, page = 0): void {
-  const house = activeHouses.get(player);
-  if (!house || house.owner !== player) return;
-  const guests = house.getPlayers().filter(guest => guest !== player);
-  if (!guests.length) { player.sendMessage("There are no guests in your house."); return; }
-  const options: Array<string | (() => void)> = [];
-  for (const guest of guests.slice(page * 4, page * 4 + 4)) options.push(guest.getUsername(), () => {
-    if (house.owner === player && guest.getPrivateArea() === house) { exitHouse(guest); guest.sendMessage("The house owner has expelled you."); }
-  });
-  if ((page + 1) * 4 < guests.length) options.push("More guests", () => chooseGuest(api, player, page + 1));
-  api.sendMultiChatboxPrompt(player, "Kick a guest", ...options);
 }
 
 function addAdvertisement({ player }: PluginObjectInteractionEvent): boolean {
@@ -282,17 +281,34 @@ function constructionLevel(player: ConstructionPlayer): number {
 
 function rebuildHouse(player: ConstructionPlayer, house: PlayerHouseInstance): void {
   player.setAttribute(HOUSE_ATTRIBUTE, house.save);
+  const position = house.getRoomPositionAt(player.getLocation());
+  if (!position || !house.getRoom(position)) player.moveTo(house.getEntryLocation());
   if (!house.rebuild(player as Player, true)) player.sendMessage("Unable to rebuild your house.");
+  syncHouseOptions(player);
 }
 
-function chooseRoom(api: PluginApi, player: ConstructionPlayer, house: PlayerHouseInstance, target: HouseRoomPosition, page = 0): void {
-  const rooms = CONSTRUCTION_ROOMS.filter((room) => house.canPlaceRoom(room, target, constructionLevel(player)) == null);
-  const choices = rooms.slice(page * 4, page * 4 + 4);
-  if (choices.length === 0) return player.sendMessage("You cannot build any rooms at this door with your current Construction level.");
-  const options: Array<string | (() => void)> = [];
-  for (const room of choices) options.push(`${room.name} - ${room.cost.toLocaleString()} coins`, () => buildRoom(player, house, target, room));
-  if ((page + 1) * 4 < rooms.length) options.push("More rooms", () => chooseRoom(api, player, house, target, page + 1));
-  api.sendMultiChatboxPrompt(player, "Choose a room to build", ...options);
+const ROOM_CREATION_INTERFACE = 212;
+const pendingRoomMenus = new WeakMap<ConstructionPlayer, { house: PlayerHouseInstance; target: HouseRoomPosition; viewer: boolean }>();
+
+function chooseRoom(player: Player, house: PlayerHouseInstance, target: HouseRoomPosition): void {
+  if (houseFor(player) !== house || !isBuildingMode(player)) return;
+  pendingRoomMenus.set(player, { house, target, viewer: player.getInterfaceId() === HOUSE_VIEWER_INTERFACE });
+  player.getPacketSender().sendInterface(ROOM_CREATION_INTERFACE)
+    .sendInterfaceFlagsRange((ROOM_CREATION_INTERFACE << 16) | 4, 1, 29, 1);
+}
+
+function selectRoomFromInterface(event: PluginInterfaceActionClickEvent): boolean {
+  if (event.groupId !== ROOM_CREATION_INTERFACE || event.childId !== 4) return false;
+  const pending = pendingRoomMenus.get(event.player);
+  if (!pending || event.player.getInterfaceId() !== ROOM_CREATION_INTERFACE || houseFor(event.player) !== pending.house || !isBuildingMode(event.player)) return true;
+  const id = pending.target.plane === 2 && (event.action === 7 || event.action === 9) ? event.action + 1 : event.action;
+  const room = CONSTRUCTION_ROOMS.find(candidate => candidate.id === id);
+  if (!room) { event.player.sendMessage("That room is not available yet."); return true; }
+  pendingRoomMenus.delete(event.player);
+  event.player.getPacketSender().sendInterfaceRemoval();
+  buildRoom(event.player, pending.house, pending.target, room);
+  if (pending.viewer) openHouseViewer(event.player);
+  return true;
 }
 
 function buildRoom(player: ConstructionPlayer, house: PlayerHouseInstance, target: HouseRoomPosition, room: ConstructionRoom): void {
@@ -335,7 +351,7 @@ function openRoomDoor(api: PluginApi, event: PluginObjectInteractionEvent): bool
   const target = house.getDoorTarget(event.location);
   if (!target) return false;
   if (!house.getRoom(target)) {
-    chooseRoom(api, player, house, target);
+    chooseRoom(player as Player, house, target);
     return true;
   }
   const doorRoom = house.getRoomPositionAt(event.location);
@@ -371,18 +387,235 @@ function exitHouse(player: ConstructionPlayer): boolean {
   const house = houseFor(player);
   if (!house) return false;
   pendingFurnitureMenus.delete(player);
+  houseViewers.delete(player);
+  pendingRoomMenus.delete(player);
   if (house.owner === player) advertisedHouses.delete(house);
+  player.getPacketSender().sendInterfaceRemoval();
   house.exitHouse(player as Player, RIMMINGTON_PORTAL_EXIT.clone());
+  syncHouseOptions(player);
+  syncKickOption(player);
   return true;
 }
 
-function openHouseSettings(api: PluginApi, player: ConstructionPlayer): void {
-  const house = houseStateFor(player);
-  api.sendMultiChatboxPrompt(player, "House settings", `${house.defaultBuildingMode ? "Disable" : "Enable"} default building mode`, () => {
-    house.defaultBuildingMode = !house.defaultBuildingMode;
-    player.setAttribute(HOUSE_ATTRIBUTE, house);
-    player.sendMessage(`Default building mode: ${house.defaultBuildingMode ? "on" : "off"}.`);
-  }, "Kick a guest", () => chooseGuest(api, player), "Expel guests", () => expelGuests(player), "Leave house", () => { exitHouse(player); }, "Cancel", () => {});
+function syncKickOption(player: ConstructionPlayer): void {
+  const house = houseFor(player);
+  const visible = !!house && house.owner === player && !house.isDestroyed();
+  if (visible === kickOptionVisible.has(player)) return;
+  player.getPacketSender().sendPlayerOption(HOUSE_KICK_OPTION, visible ? "Kick" : "", false);
+  if (visible) kickOptionVisible.add(player);
+  else kickOptionVisible.delete(player);
+}
+
+function kickGuest(event: { player: Player; target: Player; option: number; handled: boolean }): void {
+  if (event.option !== HOUSE_KICK_OPTION) return;
+  event.handled = true;
+  const house = houseFor(event.player);
+  if (!house || house.isDestroyed() || house.owner !== event.player || event.target === event.player
+    || houseFor(event.target) !== house || !house.getPlayers().includes(event.target)) return;
+  exitHouse(event.target);
+  event.target.sendMessage("The house owner has expelled you.");
+}
+
+function syncHouseOptions(player: ConstructionPlayer): void {
+  const saved = houseStateFor(player);
+  const house = houseFor(player);
+  const sender = player.getPacketSender();
+  sender.sendVarbit(2176, house?.buildingMode ? 1 : 0);
+  sender.sendVarbit(4744, saved.teleportOutside ? 1 : 0);
+  sender.sendVarbit(14670, saved.defaultBuildingMode ? 1 : 0);
+  sender.sendVarbit(6269, saved.doorMode ?? 0);
+  if (houseOptionsOpen.has(player)) sender.sendString("Rooms: " + (house?.getRoomCount() ?? saved.rooms.flat(2).filter(Boolean).length),
+    (HOUSE_OPTIONS_INTERFACE << 16) | 23);
+}
+
+function openHouseSettings(player: ConstructionPlayer): void {
+  houseOptionsOpen.add(player);
+  const sender = player.getPacketSender();
+  sender.sendSubInterface(SETTINGS_TARGET_UID, HOUSE_OPTIONS_INTERFACE, 1);
+  for (const child of [1, 5, 6, 8, 9, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22]) {
+    sender.sendInterfaceFlags((HOUSE_OPTIONS_INTERFACE << 16) | child, 1 << 1);
+  }
+  syncHouseOptions(player);
+}
+
+function closeHouseSettings(event: { player: Player; handled: boolean }): void {
+  if (!houseOptionsOpen.has(event.player) || event.player.getInterfaceId() >= 0
+    || event.player.getPacketSender().hasInterruptibleInterface() === true) return;
+  houseOptionsOpen.delete(event.player);
+  event.player.getPacketSender().sendSubInterface(SETTINGS_TARGET_UID, 116, 1);
+  event.handled = true;
+}
+
+function handleHouseOptions(event: PluginInterfaceActionClickEvent): boolean {
+  const { player, groupId, childId, action } = event;
+  if (action !== 1) return false;
+  if (groupId === 116 && childId === 31) { openHouseSettings(player); return true; }
+  if (groupId !== HOUSE_OPTIONS_INTERFACE || !houseOptionsOpen.has(player)) return false;
+  if (childId === 24) {
+    houseOptionsOpen.delete(player);
+    player.getPacketSender().sendSubInterface(SETTINGS_TARGET_UID, 116, 1);
+    return true;
+  }
+  const saved = houseStateFor(player);
+  const house = houseFor(player);
+  if (childId === 8 || childId === 9) saved.teleportOutside = childId === 9;
+  else if (childId === 11 || childId === 12) saved.defaultBuildingMode = childId === 11;
+  else if (childId >= 14 && childId <= 19) {
+    saved.doorMode = childId <= 15 ? 0 : childId <= 17 ? 1 : 2;
+    if (house?.owner === player && !house.buildingMode) house.refreshDoors();
+  } else if (childId === 21) {
+    if (!exitHouse(player)) player.sendMessage("You are not in a house.");
+  } else if (childId === 22) player.sendMessage("You do not have a servant.");
+  else if (!house || house.owner !== player) player.sendMessage("You must be inside your own house to do that.");
+  else if (childId === 5 || childId === 6) {
+    if (house.buildingMode !== (childId === 5)) enterHouse(player, childId === 5);
+  } else if (childId === 20) expelGuests(player);
+  else if (childId === 1) openHouseViewer(player);
+  player.setAttribute(HOUSE_ATTRIBUTE, saved);
+  // Also restores the teleport preference after this cache's Default Off listener changes it locally.
+  syncHouseOptions(player);
+  return true;
+}
+
+function houseTeleportArrival({ player, name }: { player: Player; name: string }): void {
+  if (name !== "teleport to house") return;
+  const saved = houseStateFor(player);
+  if (!saved.teleportOutside) enterHouse(player, saved.defaultBuildingMode);
+}
+
+const HOUSE_VIEWER_INTERFACE = 422;
+type HouseViewer = {
+  house: PlayerHouseInstance;
+  rooms: HouseRoomPosition[];
+  selected?: HouseRoomPosition;
+  destination?: HouseRoomPosition;
+  rotation: number;
+  mode?: "move" | "rotate";
+};
+const houseViewers = new WeakMap<ConstructionPlayer, HouseViewer>();
+
+function openHouseViewer(player: Player): void {
+  const house = houseFor(player);
+  if (!house || house.owner !== player || !house.buildingMode) {
+    player.sendMessage("The house viewer is only available in building mode.");
+    return;
+  }
+  player.getPacketSender().sendInterface(HOUSE_VIEWER_INTERFACE);
+  const viewer: HouseViewer = { house, rooms: [], rotation: 0 };
+  houseViewers.set(player, viewer);
+  refreshHouseViewer(player, viewer);
+}
+
+function refreshHouseViewer(player: Player, viewer: HouseViewer): void {
+  const sender = player.getPacketSender();
+  viewer.rooms = [];
+  for (let plane = 0; plane < 3; plane++) for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) {
+    const position = { x, y, plane }, room = viewer.house.getRoom(position);
+    if (!room) continue;
+    viewer.rooms.push(position);
+    const index = viewer.rooms.length;
+    const roomId = ROOM_BY_KEY.get(room.roomKey)!.id;
+    let packed = BigInt(x | (y << 3) | (plane << 6) | (room.rotation << 8) | (roomId << 10));
+    const placed = Object.values(room.furnitureByLocation ?? {});
+    const keys = [...placed.map(f => f.buildableKey), ...Object.entries(room.furniture)
+      .filter(([hotspot]) => !placed.some(f => f.hotspotKey === hotspot)).map(([, key]) => key)];
+    const rows = keys.map(key => BUILDABLE_BY_KEY.get(key)?.menuRowId);
+    (CONSTRUCTION_VIEWER_FURNITURE[roomId] ?? []).forEach((choices, slot) => {
+      const index = rows.findIndex(row => row != null && choices.includes(row));
+      if (index < 0) return;
+      const value = choices.indexOf(rows[index]!) + 1;
+      rows.splice(index, 1);
+      packed |= BigInt(value) << BigInt(15 + slot * 5);
+    });
+    // Script 1376 carries bit 31 of the first word in bit 30 of the second word.
+    sender.sendClientScript(1376, index, 4165 + roomId, 0, Number(packed & 0x7fffffffn),
+      Number((packed >> 32n) | (((packed >> 31n) & 1n) << 30n)), 0);
+    sender.sendInterfaceFlags((HOUSE_VIEWER_INTERFACE << 16) | (index + 5), 1 << 1);
+  }
+  // The cache uses a 9x9 click grid on each of three floors and hides unused room slots itself.
+  sender.sendClientScript(1382, viewer.rooms.length, 0, (2 << 28) | (7 << 14) | 7, player.getLocation().getZ());
+  sender.sendInterfaceFlagsRange((HOUSE_VIEWER_INTERFACE << 16) | 5, 0, 242, (1 << 1) | (1 << 6));
+  for (const child of [63, 64, 65, 66, 67, 68, 69]) sender.sendInterfaceFlags((HOUSE_VIEWER_INTERFACE << 16) | child, 1 << 1);
+  sender.sendInterfaceFlags((HOUSE_VIEWER_INTERFACE << 16) | 46, 1 << 2);
+  syncViewerSelection(player, viewer);
+}
+
+function syncViewerSelection(player: Player, viewer: HouseViewer): void {
+  const room = viewer.selected && viewer.house.getRoom(viewer.selected);
+  const sender = player.getPacketSender();
+  sender.sendVarbit(5329, viewer.selected ? viewer.rooms.findIndex(p => p.x === viewer.selected!.x && p.y === viewer.selected!.y && p.plane === viewer.selected!.plane) + 1 : 0);
+  sender.sendVarbit(5333, room ? ROOM_BY_KEY.get(room.roomKey)!.id : 0);
+  sender.sendVarbit(5331, viewer.rotation);
+  sender.sendVarbit(5332, viewer.mode === "rotate" ? 1 : 0);
+  const destination = viewer.destination;
+  sender.sendVarbit(5330, destination ? destination.plane * 81 + destination.y * 9 + destination.x + 1 : viewer.mode === "move" ? 244 : 0);
+  sender.sendVarbit(5334, room ? viewer.house.getRoomDoorMask(viewer.selected!) : 0);
+  sender.sendVarbit(5335, destination ? viewer.house.getAdjacentDoorMask(destination) : viewer.selected ? viewer.house.getAdjacentDoorMask(viewer.selected) : 0);
+  if (destination && room) {
+    sender.sendClientScript(1376, -1, 0, 0, destination.x | (destination.y << 3) | (destination.plane << 6)
+      | (viewer.rotation << 8) | (ROOM_BY_KEY.get(room.roomKey)!.id << 10), 0, 0);
+  }
+}
+
+function handleHouseViewer(api: PluginApi, event: PluginInterfaceActionClickEvent): boolean {
+  const { player, groupId, childId, action } = event;
+  if (groupId !== HOUSE_VIEWER_INTERFACE) return false;
+  const viewer = houseViewers.get(player);
+  if (!viewer || player.getInterfaceId() !== HOUSE_VIEWER_INTERFACE || houseFor(player) !== viewer.house || !isBuildingMode(player)) return true;
+  if (childId === 46 && action === 2) {
+    player.getPacketSender().sendInterfaceRemoval();
+    player.moveTo(viewer.house.getEntryLocation());
+    houseViewers.delete(player);
+    return true;
+  }
+  if (childId === 5 && Number.isInteger(event.slot) && event.slot! >= 0 && event.slot! < 243) {
+    const slot = event.slot!;
+    const target = { x: slot % 9, y: Math.floor(slot / 9) % 9, plane: Math.floor(slot / 81) };
+    if (target.x >= 8 || target.y >= 8) return true;
+    if (action === 6 && !viewer.mode) {
+      chooseRoom(player, viewer.house, target);
+    } else if (action === 1 && viewer.mode === "move" && viewer.selected) {
+      const problem = viewer.house.canMoveRoom(viewer.selected, target);
+      if (problem) player.sendMessage(problem);
+      else { viewer.destination = target; viewer.mode = "rotate"; syncViewerSelection(player, viewer); }
+    }
+    return true;
+  }
+  if (action !== 1 || childId == null) return true;
+  if (childId >= 6 && childId <= 43 && !viewer.mode) {
+    const selected = viewer.rooms[childId - 6];
+    if (selected) { viewer.selected = selected; viewer.rotation = viewer.house.getRoom(selected)!.rotation; }
+  } else if (viewer.selected && viewer.house.getRoom(viewer.selected)) {
+    if (childId === 63 && !viewer.mode) viewer.mode = "move";
+    else if (childId === 64 && !viewer.mode) viewer.mode = "rotate";
+    else if (childId === 65 && viewer.mode === "rotate") viewer.rotation = (viewer.rotation + 1) & 3;
+    else if (childId === 66 && viewer.mode === "rotate") viewer.rotation = (viewer.rotation + 3) & 3;
+    else if (childId === 68) { viewer.mode = undefined; viewer.destination = undefined; viewer.rotation = viewer.house.getRoom(viewer.selected)!.rotation; }
+    else if (childId === 69 && viewer.mode === "rotate") {
+      if (viewer.destination) {
+        const problem = viewer.house.canMoveRoom(viewer.selected, viewer.destination);
+        if (problem) { player.sendMessage(problem); syncViewerSelection(player, viewer); return true; }
+        viewer.house.moveRoom(viewer.selected, viewer.destination, viewer.rotation);
+      } else viewer.house.rotateRoom(viewer.selected, viewer.rotation);
+      rebuildHouse(player, viewer.house);
+      openHouseViewer(player);
+      return true;
+    } else if (childId === 67 && !viewer.mode) {
+      const selected = viewer.selected, room = viewer.house.getRoom(selected);
+      const problem = viewer.house.canRemoveRoom(selected);
+      if (problem) player.sendMessage(problem);
+      else api.sendMultiChatboxPrompt(player, "Delete this room and its furniture?", "Yes, delete it", () => {
+        if (houseFor(player) !== viewer.house || !isBuildingMode(player) || viewer.house.getRoom(selected) !== room) return;
+        const currentProblem = viewer.house.canRemoveRoom(selected);
+        if (currentProblem) { player.sendMessage(currentProblem); return; }
+        viewer.house.removeRoom(selected);
+        rebuildHouse(player, viewer.house);
+        openHouseViewer(player);
+      }, "No", () => openHouseViewer(player));
+    }
+  }
+  syncViewerSelection(player, viewer);
+  return true;
 }
 
 function formatBuildable(buildable: { key: string }): string {
@@ -549,6 +782,11 @@ function handleFurnitureAction(api: PluginApi, event: PluginObjectInteractionEve
     || (["open", "search", "view"].includes(action ?? "") && openHouseStorage(api, event))) event.handled = true;
 }
 
+function openHouseDoor(event: PluginObjectInteractionEvent): void {
+  const { player, objectId, location } = event;
+  if (houseFor(player)?.toggleDoor(objectId, new Location(location.x, location.y, location.z))) event.handled = true;
+}
+
 function enterDefaultHouse({ player }: PluginObjectInteractionEvent): boolean { return enterHouse(player, houseStateFor(player).defaultBuildingMode); }
 function enterNormalHouse({ player }: PluginObjectInteractionEvent): boolean { return enterHouse(player, false); }
 function enterBuildingHouse({ player }: PluginObjectInteractionEvent): boolean { return enterHouse(player, true); }
@@ -560,10 +798,14 @@ function visitLastHouse({ player }: PluginObjectInteractionEvent): boolean {
   else player.sendMessage("You have not visited a house yet.");
   return true;
 }
-function houseCommand(api: PluginApi, { player }: { player: ConstructionPlayer }): void { openHouseSettings(api, player); }
+function houseCommand({ player }: { player: ConstructionPlayer }): void { openHouseSettings(player); }
 function handleHouseItem(event: PluginItemOnObjectEvent): void { if (onItemOnObject(event)) event.handled = true; }
-function handleHouseInterface(event: PluginInterfaceActionClickEvent): void { if (selectFurnitureFromInterface(event) || handleAdvertisementInterface(event)) event.handled = true; }
+function handleHouseInterface(api: PluginApi, event: PluginInterfaceActionClickEvent): void { if (selectFurnitureFromInterface(event) || selectRoomFromInterface(event) || handleAdvertisementInterface(event) || handleHouseOptions(event) || handleHouseViewer(api, event)) event.handled = true; }
 function loginHouse({ player }: { player: Player }): void {
+  houseOptionsOpen.delete(player);
+  kickOptionVisible.delete(player);
+  player.getPacketSender().sendPlayerOption(HOUSE_KICK_OPTION, "", false);
+  syncHouseOptions(player);
   if (PlayerHouseInstance.isAllocationLocation(player.getLocation())) {
     player.moveTo(RIMMINGTON_PORTAL_EXIT.clone());
     player.sendMessage("Returned from your house after the instance closed.");
@@ -572,6 +814,7 @@ function loginHouse({ player }: { player: Player }): void {
 function logoutHouse({ player }: { player: Player }): void { releaseHouse(player, true); }
 function processHouse({ player }: { player: Player }): void {
   const house = houseFor(player);
+  syncKickOption(player);
   if (house) expireHouseBurners(house);
   const owned = activeHouses.get(player);
   if (owned && (owned.isDestroyed() || house !== owned)) advertisedHouses.delete(owned);
@@ -592,7 +835,7 @@ export const ConstructionPlugin = {
     api.onObjectFirstClick(EXIT_PORTAL_ID, leaveHouse);
     api.onObjectSecondClick(EXIT_PORTAL_ID, toggleHouseLock);
     api.onObjectThirdClick(EXIT_PORTAL_ID, removeAdvertisement);
-    api.registerCommand("house", houseCommand.bind(null, api));
+    api.registerCommand("house", houseCommand);
     api.onObjectFirstClick(ROOM_DOOR_HOTSPOT_IDS, openRoomDoor.bind(null, api));
     api.onObjectFifthClick(ROOM_DOOR_HOTSPOT_IDS, openRoomDoor.bind(null, api));
     api.onObjectFirstClick(furnitureObjectIds, tryRemoveFurniture.bind(null, api));
@@ -603,7 +846,11 @@ export const ConstructionPlugin = {
     api.onObjectFifthClick(hotspotIds, onObject);
     api.onObjectInteraction(handleFurnitureAction.bind(null, api));
     api.onItemOnObject(handleHouseItem, { noted: false });
-    api.onInterfaceActionClick(handleHouseInterface);
+    api.onInterfaceActionClick(handleHouseInterface.bind(null, api));
+    api.onCustomEvent("player:option-route", kickGuest);
+    api.onCustomEvent("door:toggle", openHouseDoor);
+    api.onCustomEvent("interface:close", closeHouseSettings);
+    api.onCustomEvent("spell:teleport-arrival", houseTeleportArrival);
     api.onPlayerLogin(loginHouse);
     api.onPlayerProcess(processHouse);
     api.onPlayerDisconnect(logoutHouse);

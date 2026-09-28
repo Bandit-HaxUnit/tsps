@@ -598,6 +598,9 @@ class ClientConnection {
           continue;
         case "interface_close":
           if (this.player) {
+            const close = { player: this.player, handled: false };
+            PluginManager.emitCustomEvent("interface:close", close);
+            if (close.handled) continue;
             const closeOverlayId = this.player.getAttribute?.(CLOSE_ON_INTERFACE_CLOSE_ATTRIBUTE);
             if (typeof closeOverlayId === "number" && Number.isInteger(closeOverlayId)) {
               this.player.setAttribute(CLOSE_ON_INTERFACE_CLOSE_ATTRIBUTE, null);

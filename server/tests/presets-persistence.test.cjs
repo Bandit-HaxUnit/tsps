@@ -121,7 +121,7 @@ function constructionPlayer(name, index) {
 function constructionHooks() {
   const { ConstructionPlugin } = require('../dist/game/plugin/impl/construction/ConstructionPlugin');
   const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
-  const hooks = new Map(), named = new Map(), prompts = [];
+  const hooks = new Map(), named = new Map(), prompts = [], events = new Map();
   const click = n => (ids, handler) => { for (const id of Array.isArray(ids) ? ids : [ids]) hooks.set(`${id}:${n}`, [...(hooks.get(`${id}:${n}`) ?? []), handler]); };
   let generic, process, logout, command, interfaceAction;
   ConstructionPlugin.register(new Proxy({
@@ -130,13 +130,14 @@ function constructionHooks() {
     onPlayerProcess(handler) { process = handler; }, onPlayerLogout(handler) { logout = handler; },
     registerCommand(name, handler) { if (name === 'house') command = handler; },
     onInterfaceActionClick(handler) { interfaceAction = handler; },
+    onCustomEvent(name, handler) { events.set(name, handler); },
     sendMultiChatboxPrompt(player, title, ...options) {
       assert.equal(MultiChatboxPrompt.showPrompt('Construction', player, title, options), true, title);
       prompts.push({ player, title, options });
       return true;
     },
   }, { get: (target, key) => target[key] ?? (() => {}) }));
-  return { named, prompts, process: player => process({ player }), logout: player => logout({ player }), command: player => command({ player }),
+  return { named, prompts, events, interfaceAction, process: player => process({ player }), logout: player => logout({ player }), command: player => command({ player }),
     selectFurniture(player, action) { interfaceAction({ player, groupId: 458, childId: 2, action }); },
     boardAction(player, childId) { interfaceAction({ player, groupId: 52, childId, action: 1 }); },
     click(player, id, type, location = { x: 0, y: 0, z: 0 }, actions = []) {
@@ -548,10 +549,14 @@ test("house portal actions and shared-door room selection preserve the last exit
   let locked = 0;
   const sender = {
     getVarbit(id) { assert.equal(id, 2183); return locked; },
-    sendVarbit(id, value) { assert.equal(id, 2183); locked = value; },
+    sendVarbit(id, value) { if (id === 2183) locked = value; },
+    sendInterfaceRemoval() {}, sendPlayerOption() {},
   };
   const player = {
     getPrivateArea: () => house,
+    getAttribute: () => house.save,
+    getLocation: () => ({ x: 6458, y: 6451, z: 1 }),
+    moveTo() {},
     getPacketSender: () => sender,
     sendMessage: message => messages.push(message),
     setAttribute() {},
@@ -865,4 +870,145 @@ test('pool upgrades use the build interface, consume real potions and reject sta
     assert.equal(house.getFurnitureAtTarget(target).buildableKey, 'REVITALISATION_POOL');
     assert.ok(CONSTRUCTION_HOTSPOTS.find(h => h.key === 'SPELLBOOK_ALTAR').buildables.includes('OCCULT_ALTAR_FROM_ANCIENT'));
   } finally { hooks.logout(player); }
+});
+
+
+test('native house options enforce ownership, instant kick and persistent preferences', async t => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { World } = require('../dist/game/World');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { PlayerOptionPacketListener } = require('../dist/net/packet/impl/PlayerOptionPacketListener');
+  await CachePipeline.initialize();
+  const owner = constructionPlayer('Options host', 320), guest = constructionPlayer('Options guest', 321), other = constructionPlayer('Other home', 322);
+  const hooks = constructionHooks();
+  const click = (player, childId) => hooks.interfaceAction({ player, groupId: 370, childId, action: 1 });
+  t.mock.method(World, 'getPlayerByName', name => [owner, guest, other].find(p => p.getUsername() === name));
+  t.mock.method(World, 'getPlayers', () => ({ get: index => [owner, guest, other].find(p => p.getIndex() === index) }));
+  t.mock.method(PluginManager, 'emitCustomEvent', (name, payload) => hooks.events.get(name)?.(payload));
+  for (const p of [owner, guest, other]) { p.busy = () => false; p.getHitpoints = () => 99; p.getMovementQueue = () => { throw new Error('Kick must not pathfind'); }; }
+  const visit = () => { hooks.click(guest, 15478, 4); guest.getEnteredSyntaxAction().execute(owner.getUsername()); };
+  try {
+    hooks.interfaceAction({ player: owner, groupId: 116, childId: 31, action: 1 });
+    assert.ok(owner.packets.some(p => p[0] === 'sendSubInterface' && p[1] === ((161 << 16) | 87) && p[2] === 370));
+    click(owner, 5);
+    assert.equal(owner.getPrivateArea(), null, 'building mode requires being inside your own house');
+    click(owner, 9); click(owner, 11); click(owner, 12);
+    assert.equal(owner.vars.get(4744), 1, 'Default Off must not alter the teleport preference');
+    assert.equal(owner.getAttribute('construction:house').defaultBuildingMode, false);
+    hooks.click(owner, 15478, 2);
+    const house = owner.getPrivateArea();
+    assert.deepEqual(owner.packets.findLast(p => p[0] === 'sendPlayerOption'), ['sendPlayerOption', 7, 'Kick', false]);
+    visit();
+    hooks.command(guest); click(guest, 20); click(guest, 5);
+    assert.equal(guest.getPrivateArea(), house, 'guests cannot expel or enable building mode');
+    click(owner, 5);
+    assert.equal(house.buildingMode, false, 'guests prevent building mode');
+    hooks.click(other, 15478, 2);
+    PlayerOptionPacketListener.executeClientOption(other, guest.getIndex(), 7);
+    PlayerOptionPacketListener.executeClientOption(guest, owner.getIndex(), 7);
+    assert.equal(guest.getPrivateArea(), house, 'a different owner and a guest cannot kick');
+    PlayerOptionPacketListener.executeClientOption(owner, guest.getIndex(), 7);
+    assert.equal(guest.getPrivateArea(), null);
+    assert.equal(guest.getLocation().getX(), 2954);
+    visit();
+    assert.equal(guest.getPrivateArea(), house, 'Kick does not ban re-entry');
+    click(owner, 20);
+    assert.equal(guest.getPrivateArea(), null);
+    click(owner, 5); assert.equal(house.buildingMode, true);
+    click(owner, 6); assert.equal(house.buildingMode, false);
+    click(owner, 21);
+    assert.equal(owner.getPrivateArea(), null);
+    assert.deepEqual(owner.packets.findLast(p => p[0] === 'sendPlayerOption'), ['sendPlayerOption', 7, '', false]);
+    const close = { player: owner, handled: false };
+    hooks.events.get('interface:close')(close);
+    assert.equal(close.handled, true);
+    assert.deepEqual(owner.packets.at(-1), ['sendSubInterface', (161 << 16) | 87, 116, 1]);
+    hooks.events.get('spell:teleport-arrival')({ player: owner, name: 'teleport to house' });
+    assert.equal(owner.getPrivateArea(), null, 'outside preference must keep the player outside');
+    hooks.command(owner); click(owner, 8); click(owner, 11);
+    hooks.events.get('spell:teleport-arrival')({ player: owner, name: 'teleport to house' });
+    assert.equal(owner.getPrivateArea().buildingMode, true);
+    assert.equal(JSON.parse(JSON.stringify(owner.getAttribute('construction:house'))).defaultBuildingMode, true);
+  } finally { [owner, guest, other].forEach(p => hooks.logout(p)); }
+});
+
+test('native house viewer moves, rotates, builds and protects occupied rooms', async () => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { ROOM_BY_KEY } = require('../dist/game/plugin/impl/construction/ConstructionData');
+  const { Item } = require('../dist/game/model/Item');
+  await CachePipeline.initialize();
+  const owner = constructionPlayer('Viewer host', 323), hooks = constructionHooks();
+  const options = childId => hooks.interfaceAction({ player: owner, groupId: 370, childId, action: 1 });
+  const viewer = (childId, action = 1, slot) => hooks.interfaceAction({ player: owner, groupId: 422, childId, action, slot });
+  hooks.command(owner);
+  hooks.click(owner, 15478, 2); options(1);
+  assert.notEqual(owner.getInterfaceId(), 422, 'normal mode must reject the viewer');
+  options(5); options(1);
+  const house = owner.getPrivateArea();
+  try {
+    assert.equal(owner.getInterfaceId(), 422);
+    assert.equal(house.getMaxRooms(1), 24);
+    assert.equal(house.getMaxRooms(50), 29);
+    assert.equal(house.getMaxRooms(99), 38);
+    assert.match(house.canPlaceRoom(ROOM_BY_KEY.get('PARLOUR'), { plane: 1, x: 0, y: 0 }, 1), /dimensions/);
+    assert.ok(owner.packets.some(p => p[0] === 'sendClientScript' && p[1] === 1382));
+    viewer(6); viewer(67);
+    assert.match(owner.getMessages().at(-1), /at least one exit portal/);
+    const room = house.save.rooms[1][4][5];
+    room.furnitureByLocation = { stored: { buildableKey: 'OAK_TOY_BOX', hotspotKey: 'TOY_BOX', sourceObjectId: 18812,
+      localX: 2, localY: 2, type: 10, face: 0, storage: { 1038: 1 } } };
+    viewer(7); viewer(67);
+    assert.match(owner.getMessages().at(-1), /Empty the storage/);
+    viewer(63); viewer(5, 1, 81 + 5 * 9 + 5); viewer(65); viewer(69);
+    assert.equal(house.getRoom({ plane: 1, x: 4, y: 5 }), null);
+    const moved = house.getRoom({ plane: 1, x: 5, y: 5 });
+    assert.equal(moved.rotation, 1);
+    assert.equal(moved.furnitureByLocation.stored.storage[1038], 1);
+    viewer(7); viewer(64); viewer(66); viewer(68);
+    assert.equal(house.getRoom({ plane: 1, x: 5, y: 5 }).rotation, 1, 'Cancel must discard orientation changes');
+    house.placeRoom({ plane: 2, x: 5, y: 5 }, ROOM_BY_KEY.get('PARLOUR'));
+    assert.match(house.canMoveRoom({ plane: 1, x: 5, y: 5 }, { plane: 1, x: 6, y: 5 }), /supports/);
+    house.removeRoom({ plane: 2, x: 5, y: 5 });
+    owner.getInventory().addItem(new Item(995, 1000));
+    viewer(5, 6, 81 + 4 * 9 + 5);
+    assert.equal(owner.getInterfaceId(), 212, 'Add room must use the native room creation interface');
+    hooks.interfaceAction({ player: owner, groupId: 212, childId: 4, action: 1 });
+    assert.equal(house.getRoom({ plane: 1, x: 5, y: 4 }).roomKey, 'PARLOUR');
+    assert.equal(owner.getInventory().getAmount(995), 0);
+    options(21); viewer(6); viewer(64); viewer(65); viewer(69);
+    assert.equal(house.getRoom({ plane: 1, x: 5, y: 5 }).rotation, 1, 'stale viewer actions after exit must not edit the house');
+  } finally { hooks.logout(owner); }
+});
+
+test('house door preferences change models and collision for every occupant', async () => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  await CachePipeline.initialize();
+  require('../dist/game/definition/ObjectDefinition').ObjectDefinition.init();
+  const owner = constructionPlayer('Door host', 324), hooks = constructionHooks();
+  hooks.click(owner, 15478, 2); hooks.command(owner);
+  const house = owner.getPrivateArea();
+  const option = childId => hooks.interfaceAction({ player: owner, groupId: 370, childId, action: 1 });
+  try {
+    const first = house.visibleDoors[0];
+    assert.ok(first);
+    const closed = first.object;
+    assert.notEqual(RegionManager.getClipping(closed.getLocation().x, closed.getLocation().y, closed.getLocation().z, house), 0);
+    const actions = new Map();
+    require('../plugins/objects/Doors.plugin.js').register(new Proxy({
+      onObjectInteraction: (name, handlers) => actions.set(name, handlers),
+      emitCustomEvent: (name, event) => hooks.events.get(name)?.(event),
+    }, { get: (target, key) => target[key] ?? (() => {}) }));
+    assert.equal(actions.get(closed.getDefinition().getName()).Open({ player: owner, object: closed,
+      objectId: closed.getId(), location: closed.getLocation() }), true);
+    assert.equal(first.open, true);
+    option(18);
+    assert.equal(house.visibleDoors.length, 0);
+    assert.equal(RegionManager.getClipping(closed.getLocation().x, closed.getLocation().y, closed.getLocation().z, house), 0);
+    option(16); assert.ok(house.visibleDoors.every(d => d.open));
+    option(14); assert.ok(house.visibleDoors.every(d => !d.open));
+    option(5); assert.equal(house.visibleDoors.length, 0, 'building mode uses door hotspots');
+    option(6); assert.ok(house.visibleDoors.length > 0);
+    assert.equal(JSON.parse(JSON.stringify(owner.getAttribute('construction:house'))).doorMode, 0);
+  } finally { hooks.logout(owner); }
 });

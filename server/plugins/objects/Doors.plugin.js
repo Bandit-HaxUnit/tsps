@@ -798,22 +798,22 @@ function handleDoubleDoor(player, object, objectId, location) {
   return true;
 }
 
+function toggleDoor(api, { player, object, objectId, location }) {
+  if (!player || !object || !location) return false;
+  const request = { player, object, objectId, location, handled: false };
+  api.emitCustomEvent("door:toggle", request);
+  if (request.handled) return true;
+  if (handleDoubleDoor(player, object, objectId, location)) return true;
+  return handleMappedDoor(player, object, objectId, location);
+}
+
 module.exports = {
   name: "Doors",
   register: (api) => {
     ObjectManager = api.getObjectManager();
     TaskManager = api.getTaskManager();
-    const toggleDoor = ({ player, object, objectId, location }) => {
-      if (!player || !object || !location) {
-        return false;
-      }
-      if (handleDoubleDoor(player, object, objectId, location)) {
-        return true;
-      }
-      return handleMappedDoor(player, object, objectId, location);
-    };
     for (const name of DOOR_NAMES) {
-      api.onObjectInteraction(name, { Open: toggleDoor, Close: toggleDoor });
+      api.onObjectInteraction(name, { Open: toggleDoor.bind(null, api), Close: toggleDoor.bind(null, api) });
     }
     api.onRegionLoaded(({ regionId }) => {
       if (!Number.isInteger(regionId)) {

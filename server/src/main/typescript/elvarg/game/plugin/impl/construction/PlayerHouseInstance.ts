@@ -1,5 +1,7 @@
+import { RegionManager } from "../../../collision/RegionManager";
 import { Boundary } from "../../../model/Boundary";
 import { PrivateArea } from "../../../model/areas/impl/PrivateArea";
+import { Skill } from "../../../model/Skill";
 import { Location } from "../../../model/Location";
 import { CachePipeline } from "../../../cache/CachePipeline";
 import { CacheMaps } from "../../../cache/CacheMaps";
@@ -36,6 +38,8 @@ export type SavedHouseFurniture = {
 export type PlayerHouseSave = {
   rooms: Array<Array<Array<SavedHouseRoom | null>>>;
   locked?: boolean;
+  /** 0 closed, 1 open, 2 no doors (native House Options varbit 6269). */
+  doorMode?: number;
 };
 
 export type HouseAllocation = Readonly<{ baseX: number; baseY: number }>;
@@ -57,6 +61,10 @@ const HOUSE_ALLOCATION_COUNT = HOUSE_ALLOCATION_COLUMNS * HOUSE_ALLOCATION_COLUM
 const ROOM_DOOR_HOTSPOT_MIN = 15305;
 const ROOM_DOOR_HOTSPOT_MAX = 15322;
 const HOUSE_BUILDING_MODE_VARBIT = 2176;
+// Native template door styles: Brimhaven, Lumbridge, Pollnivneach, Rellekka, Rimmington, Yanille.
+const HOUSE_DOORS = [[13100, 13101, 13102, 13103], [13094, 13096, 13095, 13097],
+  [13007, 13006, 13009, 13008], [13109, 13107, 13110, 13108],
+  [13016, 13015, 13018, 13017], [13119, 13118, 13121, 13120]];
 
 type TemplateObject = Readonly<{
   id: number;
@@ -109,6 +117,7 @@ export class PlayerHouseInstance extends PrivateArea {
   public readonly litBurners = new Map<SavedHouseFurniture, number>();
   private static templateObjects?: readonly TemplateObject[];
   private readonly roomDoors: GameObject[] = [];
+  private readonly visibleDoors: Array<{ object: GameObject; origin: Location; face: number; style: number; side: number; open: boolean }> = [];
   private readonly furnitureObjects: GameObject[] = [];
   private readonly doorTargets = new Map<string, HouseRoomPosition>();
   public readonly allocation: HouseAllocation;
@@ -311,6 +320,7 @@ export class PlayerHouseInstance extends PrivateArea {
   public canPlaceRoom(room: ConstructionRoom, position: HouseRoomPosition, constructionLevel: number): string | null {
     if (!this.isRoomPosition(position)) return "That room location is outside your house.";
     if (this.getRoom(position)) return "There is already a room there.";
+    if (!this.fitsHouseDimensions(position, constructionLevel)) return "That exceeds the house dimensions for your Construction level.";
     if (constructionLevel < room.level) return `You need Construction level ${room.level} to build a ${room.name}.`;
     if (this.getRoomCount() >= this.getMaxRooms(constructionLevel)) return "You already have the maximum number of rooms for your Construction level.";
     if (room.basement && position.plane !== 0) return "This room can only be created in the basement.";
@@ -331,12 +341,63 @@ export class PlayerHouseInstance extends PrivateArea {
     this.save.rooms[position.plane][position.x][position.y] = { roomKey: room.key, rotation: rotation & 3, furniture: {} };
   }
 
-  public rotateRoom(position: HouseRoomPosition): SavedHouseRoom | null {
+  public rotateRoom(position: HouseRoomPosition, rotation?: number): SavedHouseRoom | null {
     const room = this.getRoom(position);
     if (!room) return null;
-    const rotated = { ...room, rotation: (room.rotation + 1) & 3 };
+    const rotated = { ...room, rotation: (rotation ?? room.rotation + 1) & 3 };
     this.save.rooms[position.plane][position.x][position.y] = rotated;
     return rotated;
+  }
+
+  public getRoomDoorMask(position: HouseRoomPosition): number {
+    const room = this.getRoom(position), template = room && ROOM_BY_KEY.get(room.roomKey);
+    if (!room || !template) return 0;
+    if (template.outdoors) return 15;
+    let mask = 0;
+    for (const object of PlayerHouseInstance.getTemplateObjects()) {
+      if (object.id < ROOM_DOOR_HOTSPOT_MIN || object.id > ROOM_DOOR_HOTSPOT_MAX
+        || object.sourceChunkX !== template.sourceChunkX || object.sourceChunkY !== template.sourceChunkY) continue;
+      const edge = object.localX === 0 ? 3 : object.localY === 7 ? 0 : object.localX === 7 ? 1 : 2;
+      mask |= 1 << edge;
+    }
+    return mask;
+  }
+
+  public getAdjacentDoorMask(position: HouseRoomPosition): number {
+    const offsets = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+    return offsets.reduce((mask, [dx, dy], edge) => {
+      const adjacent = { x: position.x + dx, y: position.y + dy, plane: position.plane };
+      const room = this.getRoom(adjacent);
+      const doors = this.getRoomDoorMask(adjacent);
+      const rotated = room ? ((doors << room.rotation) | (doors >> (4 - room.rotation))) & 15 : 0;
+      return mask | ((rotated & (1 << ((edge + 2) & 3))) ? 1 << edge : 0);
+    }, 0);
+  }
+
+  public canMoveRoom(from: HouseRoomPosition, to: HouseRoomPosition): string | null {
+    const room = this.getRoom(from);
+    if (!room) return "There is no room there.";
+    if (!this.isRoomPosition(to)) return "That room location is outside your house.";
+    if (this.getRoom(to)) return "There is already a room there.";
+    if (!this.fitsHouseDimensions(to, this.owner?.getSkillManager().getMaxLevel(Skill.CONSTRUCTION) ?? 99, from)) return "That exceeds the house dimensions for your Construction level.";
+    if (from.plane === 1 && this.getRoom({ ...from, plane: 2 })) return "That room supports a room above it.";
+    const definition = ROOM_BY_KEY.get(room.roomKey)!;
+    if (definition.basement && to.plane !== 0) return "This room belongs in the basement.";
+    if (definition.outdoors && to.plane !== 1) return "This room belongs on the surface.";
+    if (to.plane === 2) {
+      const below = this.getRoom({ ...to, plane: 1 });
+      if (!below || ROOM_BY_KEY.get(below.roomKey)?.outdoors
+        || (from.plane === 1 && from.x === to.x && from.y === to.y)) return "This room needs a room below to support it.";
+    }
+    return null;
+  }
+
+  public moveRoom(from: HouseRoomPosition, to: HouseRoomPosition, rotation: number): boolean {
+    if (this.canMoveRoom(from, to)) return false;
+    const room = this.getRoom(from)!;
+    this.save.rooms[to.plane][to.x][to.y] = { ...room, rotation: rotation & 3 };
+    this.removeRoom(from);
+    return true;
   }
 
   public canRemoveRoom(position: HouseRoomPosition): string | null {
@@ -361,12 +422,15 @@ export class PlayerHouseInstance extends PrivateArea {
     const previousArea = player.getArea();
     if (previousArea && previousArea !== this) previousArea.leave(player, false);
     this.enter(player);
-    player.setLocation(this.getEntryLocation());
+    player.moveTo(this.getEntryLocation());
     return this.rebuild(player, buildingMode);
   }
 
   /** Replays the current saved layout after a room edit. */
   public rebuild(player: Player, buildingMode: boolean): boolean {
+    this.buildingMode = buildingMode;
+    // Remove old solid doors before the new scene installs its construction hotspots.
+    if (buildingMode) this.refreshDoors();
     this.clearFurniture();
     player.getPacketSender().sendVarbit(HOUSE_BUILDING_MODE_VARBIT, buildingMode ? 1 : 0);
     const center = this.getSceneCenter();
@@ -390,13 +454,14 @@ export class PlayerHouseInstance extends PrivateArea {
     const sent = player.getSession().sendClientPacket(encodeRebuildRegion(center.x, center.y, true, palette, xteas));
     this.refreshHotspots(player, buildingMode);
     this.refreshFurniture(player);
+    if (!buildingMode) this.refreshDoors();
     return sent;
   }
 
   /** Leaving clears the private area; PlayerSession emits REBUILD_NORMAL next tick. */
   public exitHouse(player: Player, destination: Location): void {
     this.leave(player, false);
-    player.setLocation(destination);
+    player.moveTo(destination);
   }
 
   public destroy(): void {
@@ -409,7 +474,7 @@ export class PlayerHouseInstance extends PrivateArea {
     return { x: (this.allocation.baseX + 52) >> 3, y: (this.allocation.baseY + 52) >> 3 };
   }
 
-  private getEntryLocation(): Location {
+  public getEntryLocation(): Location {
     const gridOffset = Math.floor((HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
     for (let x = 0; x < this.gridSize; x++) {
       for (let y = 0; y < this.gridSize; y++) {
@@ -463,6 +528,63 @@ export class PlayerHouseInstance extends PrivateArea {
     }
   }
 
+  public refreshDoors(): void {
+    for (const door of this.visibleDoors.splice(0)) {
+      RegionManager.removeObjectClipping(door.object);
+      this.detach(door.object);
+      for (const player of this.getPlayers()) player.getPacketSender().sendObjectRemoval(door.object);
+    }
+    if (this.buildingMode || this.save.doorMode === 2) return;
+    const offset = Math.floor((HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+    for (let plane = 0; plane < 3; plane++) for (let x = 0; x < this.gridSize; x++) for (let y = 0; y < this.gridSize; y++) {
+      const room = this.getRoom({ x, y, plane });
+      const template = room && ROOM_BY_KEY.get(room.roomKey);
+      if (!room || !template || template.outdoors) continue;
+      for (const hotspot of PlayerHouseInstance.getTemplateObjects()) {
+        if (hotspot.id < 15305 || hotspot.id > 15316 || hotspot.sourceChunkX !== template.sourceChunkX || hotspot.sourceChunkY !== template.sourceChunkY) continue;
+        const local = rotateHotspot(hotspot.localX, hotspot.localY, room.rotation);
+        const neighbor = this.getDoorTargetFromEdge(x, y, plane, local.x, local.y);
+        const other = neighbor && this.getRoom(neighbor);
+        // Two adjacent room templates describe the same doorway. Keep one pair.
+        if (other && !ROOM_BY_KEY.get(other.roomKey)?.outdoors && (neighbor!.x < x || neighbor!.y < y)) continue;
+        const origin = new Location(this.allocation.baseX + (offset + x) * 8 + local.x,
+          this.allocation.baseY + (offset + y) * 8 + local.y, plane);
+        const style = Math.floor((hotspot.id - 15305) / 2), side = (hotspot.id - 15305) & 1;
+        const face = (hotspot.face + room.rotation) & 3;
+        const door = { origin, face, style, side, open: this.save.doorMode === 1,
+          object: null as unknown as GameObject };
+        this.visibleDoors.push(door);
+        this.drawDoor(door);
+      }
+    }
+  }
+
+  private drawDoor(door: PlayerHouseInstance["visibleDoors"][number]): void {
+    const offsets = [[-1, 0], [0, 1], [1, 0], [0, -1]];
+    const [dx, dy] = door.open ? offsets[door.face] : [0, 0];
+    const face = door.open ? (door.face + (door.side ? 1 : 3)) & 3 : door.face;
+    door.object = new GameObject(HOUSE_DOORS[door.style][door.side + (door.open ? 2 : 0)],
+      door.origin.transform(dx, dy), 0, face, this);
+    RegionManager.addObjectClipping(door.object);
+    for (const player of this.getPlayers()) player.getPacketSender().sendObject(door.object);
+  }
+
+  public toggleDoor(id: number, location: Location): boolean {
+    const clicked = this.visibleDoors.find(door => door.object.getId() === id && door.object.getLocation().equals(location));
+    if (!clicked) return false;
+    const pair = this.visibleDoors.filter(door => door.face === clicked.face && door.style === clicked.style
+      && door.origin.getZ() === clicked.origin.getZ()
+      && Math.abs(door.origin.getX() - clicked.origin.getX()) + Math.abs(door.origin.getY() - clicked.origin.getY()) <= 1);
+    const open = !clicked.open;
+    for (const door of pair) {
+      RegionManager.removeObjectClipping(door.object);
+      this.detach(door.object);
+      for (const player of this.getPlayers()) player.getPacketSender().sendObjectRemoval(door.object);
+    }
+    for (const door of pair) { door.open = open; this.drawDoor(door); }
+    return true;
+  }
+
   private refreshFurniture(player: Player): void {
     if (this.furnitureObjects.length) {
       for (const object of this.furnitureObjects) player.getPacketSender().sendObject(object);
@@ -508,19 +630,31 @@ export class PlayerHouseInstance extends PrivateArea {
   }
 
   private isRoomPosition(position: HouseRoomPosition): boolean {
-    return position.plane >= 0 && position.plane < 3
+    return Number.isInteger(position.x) && Number.isInteger(position.y) && Number.isInteger(position.plane)
+      && position.plane >= 0 && position.plane < 3
       && position.x >= 0 && position.x < this.gridSize
       && position.y >= 0 && position.y < this.gridSize;
   }
 
-  private getRoomCount(): number {
+  public getRoomCount(): number {
     return this.save.rooms.flat(2).filter((room) => room != null).length;
   }
 
-  private getMaxRooms(level: number): number {
-    if (level === 99) return 33;
-    if (level >= 96) return 32;
-    return level >= 50 ? 24 + Math.floor((level - 50) / 6) : 23;
+  public getMaxRooms(level: number): number {
+    if (level >= 99) return 38;
+    if (level >= 96) return 37;
+    return level >= 26 ? 25 + Math.floor((level - 26) / 6) : 24;
+  }
+
+  private fitsHouseDimensions(target: HouseRoomPosition, level: number, moving?: HouseRoomPosition): boolean {
+    let minX = target.x, maxX = target.x, minY = target.y, maxY = target.y;
+    for (let plane = 0; plane < 3; plane++) for (let x = 0; x < this.gridSize; x++) for (let y = 0; y < this.gridSize; y++) {
+      if (!this.getRoom({ x, y, plane }) || (moving?.x === x && moving.y === y && moving.plane === plane)) continue;
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+    }
+    const size = Math.min(7, 3 + Math.floor(level / 15));
+    return maxX - minX < size && maxY - minY < size;
   }
 
   private hasRoom(key: string): boolean {
