@@ -742,7 +742,7 @@ test('house normal entry removes template hotspots before replaying furniture', 
           assert.ok(house.doorTargets.size > 0);
         } else {
           assert.equal(house.doorTargets.size, 0);
-          for (const hotspot of templates.filter(object => object.sourceChunkX === 232 && object.sourceChunkY === 887)) {
+          for (const hotspot of templates.filter(object => object.sourceChunkX === 232 && object.sourceChunkY === 887 && object.id !== 13830)) {
             const definition = CacheDefinitions.getObject(hotspot.id);
             const width = (hotspot.face & 1) ? definition.sizeY : definition.sizeX;
             const height = (hotspot.face & 1) ? definition.sizeX : definition.sizeY;
@@ -872,6 +872,48 @@ test('pool upgrades use the build interface, consume real potions and reject sta
   } finally { hooks.logout(player); }
 });
 
+
+test('house windows replace layout markers with styled windows or adjoining walls', async () => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const { PlayerHouseInstance, createDefaultHouseSave } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
+  const { CONSTRUCTION_ROOMS } = require('../dist/game/plugin/impl/construction/ConstructionData');
+  const { encodeLocAddChange } = require('../dist/net/protocol/ClientProtocol');
+  await CachePipeline.initialize();
+  assert.deepEqual(CacheDefinitions.getObject(13099).models, [[13264]], 'use the native village window model');
+  const house = new PlayerHouseInstance(createDefaultHouseSave());
+  const frames = [];
+  const viewer = () => ({
+    getSession: () => ({ sendClientPacket(frame) { frames.push(frame); return true; } }),
+    getPacketSender: () => ({ sendVarbit() {}, sendObject() {} }),
+  });
+  const owner = viewer(), guest = viewer();
+  try {
+    for (const room of CONSTRUCTION_ROOMS) {
+      const windows = PlayerHouseInstance.getTemplateObjects().filter(object => object.id === 13830
+        && object.sourceChunkX === room.sourceChunkX && object.sourceChunkY === room.sourceChunkY);
+      if (!windows.length) continue;
+      for (let rotation = 0; rotation < 4; rotation++) {
+        house.placeRoom({ x: 4, y: 5, plane: 1 }, room, rotation);
+        for (const neighbour of [null, 'KITCHEN', 'GARDEN', null]) {
+          house.save.rooms[1][3][5] = neighbour ? { roomKey: neighbour, rotation: 0, furniture: {} } : null;
+          for (const [player, building] of [[owner, true], [owner, false], [guest, false]]) {
+            frames.length = 0;
+            house.rebuild(player, building);
+            for (const window of windows) {
+              const [x, y] = [[window.localX, window.localY], [window.localY, 7 - window.localX],
+                [7 - window.localX, 7 - window.localY], [7 - window.localY, window.localX]][rotation];
+              const id = x === 0 && neighbour === 'KITCHEN' ? 13098 : 13099;
+              const expected = encodeLocAddChange(id, house.allocation.baseX + 48 + x,
+                house.allocation.baseY + 56 + y, 1, window.type, (window.face + rotation) & 3);
+              assert.ok(frames.some(frame => frame.equals(expected)), `${room.key}: window must match the style and adjacent room`);
+            }
+          }
+        }
+      }
+    }
+  } finally { house.destroy(); }
+});
 
 test('native house options enforce ownership, instant kick and persistent preferences', async t => {
   const { CachePipeline } = require('../dist/game/cache/CachePipeline');

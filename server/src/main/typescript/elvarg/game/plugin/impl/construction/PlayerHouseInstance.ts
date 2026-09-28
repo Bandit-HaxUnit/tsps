@@ -8,7 +8,7 @@ import { CacheMaps } from "../../../cache/CacheMaps";
 import { CacheDefinitions } from "../../../cache/CacheDefinitions";
 import { ByteBuffer } from "../../../cache/codec/rs/io/ByteBuffer";
 import { GameObject } from "../../../entity/impl/object/GameObject";
-import { encodeLocDel, encodeRebuildRegion } from "../../../../net/protocol/ClientProtocol";
+import { encodeLocAddChange, encodeLocDel, encodeRebuildRegion } from "../../../../net/protocol/ClientProtocol";
 import type { Player } from "../../../entity/impl/player/Player";
 import { BUILDABLE_BY_KEY, CONSTRUCTION_ROOMS, HOTSPOT_BY_OBJECT_ID, HOUSE_TEMPLATE_CHUNKS, ROOM_BY_KEY, type ConstructionBuildable, type ConstructionRoom } from "./ConstructionData";
 import { emptyHousePalette, HOUSE_PLANES, HOUSE_SCENE_CHUNKS, packTemplateChunk, rotateHotspot } from "./HousePaletteCompiler";
@@ -61,6 +61,10 @@ const HOUSE_ALLOCATION_COUNT = HOUSE_ALLOCATION_COLUMNS * HOUSE_ALLOCATION_COLUM
 const ROOM_DOOR_HOTSPOT_MIN = 15305;
 const ROOM_DOOR_HOTSPOT_MAX = 15322;
 const HOUSE_BUILDING_MODE_VARBIT = 2176;
+const HOUSE_DYNAMIC_WINDOW = 13830;
+// All current room chunks use the native village wall style.
+const HOUSE_TEMPLATE_WALL = 13098;
+const HOUSE_TEMPLATE_WINDOW = 13099;
 // Native template door styles: Brimhaven, Lumbridge, Pollnivneach, Rellekka, Rimmington, Yanille.
 const HOUSE_DOORS = [[13100, 13101, 13102, 13103], [13094, 13096, 13095, 13097],
   [13007, 13006, 13009, 13008], [13109, 13107, 13110, 13108],
@@ -506,6 +510,17 @@ export class PlayerHouseInstance extends PrivateArea {
             const local = this.rotatedFootprint(hotspot.localX, hotspot.localY, hotspot.id, hotspot.face, room.rotation);
             const worldX = this.allocation.baseX + (gridOffset + x) * 8 + local.x;
             const worldY = this.allocation.baseY + (gridOffset + y) * 8 + local.y;
+            if (hotspot.id === HOUSE_DYNAMIC_WINDOW) {
+              // Dynamic windows are layout markers, not furniture/building-mode ghosts.
+              const adjacent = this.getDoorTargetFromEdge(x, y, plane, local.x, local.y);
+              const neighbour = adjacent && this.getRoom(adjacent);
+              const indoors = neighbour && !ROOM_BY_KEY.get(neighbour.roomKey)?.outdoors;
+              player.getSession().sendClientPacket(encodeLocAddChange(
+                indoors ? HOUSE_TEMPLATE_WALL : HOUSE_TEMPLATE_WINDOW,
+                worldX, worldY, plane, hotspot.type, (hotspot.face + room.rotation) & 3,
+              ));
+              continue;
+            }
             if (!buildingMode) {
               // Templates contain ghosts even when the building-mode varbit is off.
               // Remove them before replaying built furniture at the same tiles.
@@ -744,6 +759,7 @@ export class PlayerHouseInstance extends PrivateArea {
           const info = buffer.readUnsignedByte();
           if ((packedLocation >> 12) !== 0) continue;
           if ((objectId < ROOM_DOOR_HOTSPOT_MIN || objectId > ROOM_DOOR_HOTSPOT_MAX)
+            && objectId !== HOUSE_DYNAMIC_WINDOW
             && !HOTSPOT_BY_OBJECT_ID.has(objectId)
             && !CacheDefinitions.getObject(objectId).actions?.includes("Build")) continue;
           const localX = (packedLocation >> 6) & 0x3f;
