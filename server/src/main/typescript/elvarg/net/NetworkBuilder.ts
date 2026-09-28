@@ -919,8 +919,8 @@ class ClientConnection {
     if (option === "examine") {
       const definition = ItemDefinition.forId(packet.itemId);
       player.sendMessage(definition.getExamine() || definition.getName());
-    } else if (option === "take" || packet.optionIndex === 3 || packet.optionIndex == null) {
-      PickupItemPacketListener.pickup(player, packet.itemId, packet.x, packet.y);
+    } else if (player.getPrivateArea() || option === "take" || packet.optionIndex === 3 || packet.optionIndex == null) {
+      PickupItemPacketListener.pickup(player, packet.itemId, packet.x, packet.y, packet.stackId);
     } else {
       SecondGroundItemOptionPacketListener.interact(
         player, packet.itemId, packet.x, packet.y, packet.optionIndex ?? 2
