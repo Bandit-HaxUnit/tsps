@@ -1,8 +1,11 @@
 const assert = require("node:assert/strict");
-const { test } = require("node:test");
+const { test, before } = require("node:test");
 
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
+
+const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+before(() => CachePipeline.initialize());
 
 const { MagicSpellbook } = require("../dist/game/model/MagicSpellbook");
 const { GROUP_ID, GLOBAL_ROW_COUNT, PRESET_ROW_START, uid } = require("../plugins/modes/pvp/presetsWidget");
@@ -131,9 +134,11 @@ function constructionPlayer(name, index) {
   const { PlayerRelations } = require('../dist/game/model/PlayerRelations');
   let area = null, location = new Location(2954, 3224, 0), input, interfaceId = -1;
   const attributes = new Map(), messages = [], experience = [], vars = new Map(), packets = [];
+  attributes.set('construction:house', require('../dist/game/plugin/impl/construction/PlayerHouseInstance').createDefaultHouseSave());
   const levels = new Map();
   const sender = new Proxy({}, { get: (_, key) => (...args) => {
     packets.push([key, ...args]);
+    if (key === 'getVarbit') return vars.get(args[0]) ?? 0;
     if (key === 'sendVarbit') vars.set(args[0], args[1]);
     if (key === 'sendInterface') interfaceId = args[0];
     if (key === 'sendInterfaceRemoval') { interfaceId = -1; input = null; }
@@ -150,7 +155,7 @@ function constructionPlayer(name, index) {
     getClickDelay: () => ({ elapsedTime: () => true, reset() {} }),
     getSkillManager: () => ({ getCurrentLevel: skill => levels.get(skill) ?? 99, getMaxLevel: skill => levels.get(skill) ?? 99, addExperiences: (skill, xp) => experience.push([skill, xp]) }),
     setEnteredSyntaxAction: action => { input = action; }, getEnteredSyntaxAction: () => input,
-    getInterfaceId: () => interfaceId,
+    getInterfaceId: () => interfaceId, getBanks: () => [],
     getMessages: () => messages, levels, experience, vars, packets,
   };
   const inventory = new Inventory(player), relations = new PlayerRelations(player);
@@ -190,6 +195,188 @@ function constructionHooks() {
   };
 }
 
+function estateHooks(player) {
+  const { EstateAgentPlugin } = require('../dist/game/plugin/impl/construction/EstateAgentPlugin');
+  const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
+  const named = new Map();
+  let interfaceAction, dialogue;
+  player.getDialogueManager = () => ({ startDialogues: builder => { dialogue = builder; } });
+  EstateAgentPlugin.register(new Proxy({
+    onNpcInteraction: (name, actions) => named.set(name, actions),
+    onInterfaceActionClick: handler => { interfaceAction = handler; },
+    sendMultiChatboxPrompt: (player, title, ...pairs) => MultiChatboxPrompt.showPrompt('EstateAgents', player, title, pairs),
+  }, { get: (target, key) => target[key] ?? (() => {}) }));
+  const location = player.getLocation().clone();
+  const event = { player, npcId: 3097, npc: { getLocation: () => location } };
+  return {
+    named,
+    action: name => named.get('Estate agent')[name](event),
+    continue: () => dialogue.getDialogues().get(1).send(player),
+    choose: slot => MultiChatboxPrompt.handleInterfaceActionClick({ player, buttonId: (219 << 16) | 1, slot }),
+    select: action => { const event = { player, groupId: 187, childId: 3, action, handled: false }; interfaceAction(event); return event; },
+  };
+}
+
+test('Estate Agents purchase houses, validate transactions and retain blueprint entitlements', async () => {
+  const { houseStateFor } = require('../dist/game/plugin/impl/construction/ConstructionPlugin');
+  const { Skill } = require('../dist/game/model/Skill');
+  const player = constructionPlayer('Estate buyer', 381), hooks = estateHooks(player), construction = constructionHooks();
+  assert.equal(hooks.select(0).handled, false, 'unrelated native menus are left to their own handlers');
+  player.setAttribute('construction:house', undefined);
+  construction.click(player, 15478, 2);
+  assert.equal(player.getPrivateArea(), null, 'entry cannot grant a free house');
+  hooks.action('Relocate'); hooks.continue(); hooks.choose(1);
+  assert.equal(houseStateFor(player).owned, false, 'purchase requires coins');
+  player.getInventory().adds(995, 100000);
+  hooks.action('Relocate'); hooks.continue(); hooks.choose(1); hooks.continue();
+  assert.equal(houseStateFor(player).owned, true);
+  assert.equal(player.getInventory().getAmount(995), 99000);
+  assert.equal(player.getInventory().getAmount(8463), 1);
+  const rooms = JSON.stringify(houseStateFor(player).rooms);
+  hooks.action('Redecorate');
+  assert.ok(player.packets.some(p => p[0] === 'sendClientScript' && p[1] === 217));
+  hooks.select(999); assert.equal(player.getInterfaceId(), 187);
+  player.levels.set(Skill.CONSTRUCTION, 1);
+  hooks.select(5); hooks.choose(1);
+  assert.equal(houseStateFor(player).style, 0, 'unboosted level requirement applies');
+  assert.equal(player.getInventory().getAmount(995), 99000);
+  player.levels.set(Skill.CONSTRUCTION, 99);
+  hooks.action('Redecorate'); hooks.select(5); hooks.choose(1);
+  assert.equal(houseStateFor(player).style, 5);
+  assert.equal(player.getInventory().getAmount(995), 74000);
+  hooks.choose(1);
+  assert.equal(player.getInventory().getAmount(995), 74000, 'confirmation cannot be replayed');
+  assert.equal(JSON.stringify(houseStateFor(player).rooms), rooms, 'style changes retain rooms and furniture');
+  hooks.action('Redecorate'); hooks.select(7); hooks.choose(1);
+  assert.equal(houseStateFor(player).style, 5, 'Twisted requires a physical blueprint');
+  player.getInventory().adds(24463, 1);
+  hooks.action('Redecorate'); hooks.select(7); hooks.choose(1);
+  assert.equal(houseStateFor(player).style, 7);
+  assert.equal(player.getInventory().getAmount(24463), 0);
+  assert.equal(player.getInventory().getAmount(995), 74000, 'Twisted redecoration is free');
+  player.getInventory().adds(24885, 1);
+  hooks.action('Redecorate'); hooks.select(8); hooks.choose(1);
+  assert.equal(player.getInventory().getAmount(24463), 1, 'Twisted blueprints are returned');
+  assert.equal(player.getInventory().getAmount(24885), 0);
+  hooks.action('Redecorate'); hooks.select(0); hooks.choose(1);
+  hooks.action('Redecorate'); hooks.select(8); hooks.choose(1);
+  assert.equal(houseStateFor(player).style, 8, 'Hosidius is permanently unlocked');
+  assert.equal(player.getInventory().getAmount(24885), 0, 'Hosidius blueprints are not returned');
+  hooks.action('Redecorate'); hooks.select(6); hooks.choose(1);
+  assert.equal(houseStateFor(player).style, 8, 'holiday entitlement is required');
+  assert.ok(hooks.named.has('Estate Agent') && hooks.named.has('Alwyn'));
+});
+
+test('Estate relocation changes portal entry, guest exits, advertisements and persisted location', async () => {
+  const { houseStateFor } = require('../dist/game/plugin/impl/construction/ConstructionPlugin');
+  const { houseExit, HOUSE_LOCATIONS } = require('../dist/game/plugin/impl/construction/HouseEstateData');
+  const { World } = require('../dist/game/World');
+  const owner = constructionPlayer('Moving host', 382), guest = constructionPlayer('Moving guest', 383);
+  const estate = estateHooks(owner), construction = constructionHooks(), inventory = owner.getInventory();
+  const lookup = World.getPlayerByName;
+  World.getPlayerByName = name => name.toLowerCase() === owner.getUsername().toLowerCase() ? owner : undefined;
+  inventory.adds(995, 500000);
+  try {
+    estate.action('Relocate'); estate.select(3); estate.choose(1);
+    assert.equal(houseStateFor(owner).location, undefined, 'Hosidius requires visiting Kourend');
+    estate.action('Relocate'); estate.select(8); estate.choose(1);
+    assert.equal(houseStateFor(owner).location, undefined, 'Prifddinas requires Song of the Elves');
+    estate.action('Relocate'); estate.select(1); estate.choose(1);
+    assert.equal(houseStateFor(owner).location, 2);
+    construction.click(owner, 15478, 2);
+    assert.equal(owner.getPrivateArea(), null, 'old portal no longer enters the house');
+    owner.moveTo(houseExit(houseStateFor(owner)));
+    construction.click(owner, 15477, 2);
+    assert.ok(owner.getPrivateArea());
+    const board = construction.named.get('House Advertisement');
+    board['Add-House']({ player: owner });
+    board.View({ player: guest, objectId: 29091 });
+    assert.equal(guest.packets.filter(p => p[0] === 'sendClientScript' && p[1] === 3110).at(-1)[2], 200);
+    guest.packets.length = 0;
+    board.View({ player: guest, objectId: 37384 });
+    assert.ok(guest.packets.some(p => p[0] === 'sendClientScript' && p[1] === 3110 && p[4].startsWith('Moving host|2|')));
+    guest.getEnteredSyntaxAction().execute('Moving host');
+    assert.equal(guest.getPrivateArea(), owner.getPrivateArea());
+    construction.click(guest, 4525, 1);
+    assert.ok(guest.getLocation().equals(houseExit(houseStateFor(owner))), 'guests exit at the host portal');
+    construction.click(owner, 4525, 1);
+    for (const destination of HOUSE_LOCATIONS) {
+      houseStateFor(owner).location = destination.id;
+      owner.moveTo(houseExit(houseStateFor(owner)));
+      construction.click(owner, destination.portal, 2);
+      assert.ok(owner.getPrivateArea(), destination.name);
+      construction.click(owner, 4525, 1);
+      assert.ok(owner.getLocation().equals(houseExit(houseStateFor(owner))), destination.name);
+    }
+    const restored = JSON.parse(JSON.stringify(houseStateFor(owner)));
+    assert.equal(restored.location, 9);
+  } finally { World.getPlayerByName = lookup; construction.logout(owner); construction.logout(guest); }
+});
+
+test('Estate cape sales and blueprint returns cannot lose items in a full inventory', async () => {
+  const { Skill } = require('../dist/game/model/Skill');
+  const { houseStateFor } = require('../dist/game/plugin/impl/construction/ConstructionPlugin');
+  const player = constructionPlayer('Cape buyer', 384), hooks = estateHooks(player), inventory = player.getInventory();
+  for (const skill of Skill.values()) player.levels.set(skill, skill === Skill.CONSTRUCTION ? 99 : 1);
+  inventory.adds(995, 99000);
+  hooks.action('Talk-to'); hooks.continue(); hooks.choose(5); hooks.choose(1);
+  assert.equal(inventory.getAmount(9789), 1);
+  assert.equal(inventory.getAmount(9791), 1);
+  assert.equal(inventory.getAmount(995), 0);
+  player.levels.set(Skill.ATTACK, 99);
+  inventory.adds(995, 100000);
+  inventory.adds(960, inventory.getFreeSlots());
+  hooks.action('Talk-to'); hooks.continue(); hooks.choose(5); hooks.choose(1);
+  assert.equal(inventory.getAmount(995), 100000, 'no charge when cape and hood cannot fit');
+  houseStateFor(player).style = 7;
+  hooks.action('Redecorate'); hooks.select(0); hooks.choose(1);
+  assert.equal(houseStateFor(player).style, 7);
+  assert.equal(inventory.getAmount(995), 100000, 'no charge when returned blueprint cannot fit');
+  inventory.delete(960, 2);
+  hooks.action('Talk-to'); hooks.continue(); hooks.choose(5); hooks.choose(1);
+  assert.equal(inventory.getAmount(9790), 1, 'multiple level 99 skills receive a trimmed cape');
+  assert.equal(inventory.getAmount(9791), 2);
+});
+
+test('native house styles select their own map planes, hotspots, windows and door pairs', async () => {
+  const { PlayerHouseInstance, createDefaultHouseSave } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
+  const { HOUSE_STYLES } = require('../dist/game/plugin/impl/construction/HouseEstateData');
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const { HOTSPOT_BY_OBJECT_ID, BUILDABLE_BY_KEY } = require('../dist/game/plugin/impl/construction/ConstructionData');
+  const originalWindow = PlayerHouseInstance.getTemplateObjects().find(o => o.sourceChunkX === 234 && o.sourceChunkY === 885 && o.id === 13730);
+  for (let style = 0; style < HOUSE_STYLES.length; style++) {
+    const save = { ...createDefaultHouseSave(), style }, house = new PlayerHouseInstance(save);
+    try {
+      const chunk = house.buildPalette(false)[1][6][7];
+      assert.equal((chunk >>> 24) & 3, style % 4, HOUSE_STYLES[style].name);
+      assert.equal((chunk >>> 14) & 1023, 232 + Math.floor(style / 4) * 8);
+      const templates = PlayerHouseInstance.getTemplateObjects(style).filter(o => o.sourceChunkX === 232 && o.sourceChunkY === 887);
+      assert.equal(templates.filter(o => [4515, 4516, 4517].includes(o.id)).length, 3);
+      assert.equal(templates.filter(o => HOUSE_STYLES[style].doorHotspots.includes(o.id)).length, 6);
+      assert.ok(CacheDefinitions.getObject(HOUSE_STYLES[style].window).models?.length);
+      house.refreshDoors();
+      assert.equal(house.visibleDoors.length, 6);
+      assert.ok(house.visibleDoors.every(d => HOUSE_STYLES[style].doors.includes(d.object.getId())));
+      const first = house.visibleDoors[0];
+      house.toggleDoor(first.object.getId(), first.object.getLocation());
+      assert.equal(house.visibleDoors.filter(d => d.open).length, 2);
+      assert.notEqual(house.getRoomDoorMask({ x: 4, y: 5, plane: 1 }), 0, 'the viewer sees themed door hotspots');
+      save.rooms[1][3][3] = { roomKey: 'CHAPEL', rotation: 1, furniture: {}, furnitureByLocation: {
+        window: { ...originalWindow, sourceObjectId: originalWindow.id, hotspotKey: 'WINDOW', buildableKey: 'SHUTTERED_WINDOWS' },
+      } };
+      const redecorated = new PlayerHouseInstance(JSON.parse(JSON.stringify(save)));
+      try {
+        const window = Object.values(redecorated.save.rooms[1][3][3].furnitureByLocation)[0];
+        const template = PlayerHouseInstance.getTemplateObjects(style).find(o => o.sourceChunkX === 234 && o.sourceChunkY === 885
+          && o.localX === originalWindow.localX && o.localY === originalWindow.localY && HOTSPOT_BY_OBJECT_ID.get(o.id)?.key === 'WINDOW');
+        assert.equal(window.sourceObjectId, template.id, 'saved chapel windows follow the new theme');
+        const variant = HOTSPOT_BY_OBJECT_ID.get(window.sourceObjectId).objectIds.indexOf(window.sourceObjectId);
+        assert.equal(CacheDefinitions.getObject(BUILDABLE_BY_KEY.get(window.buildableKey).objectIds[variant]).name, 'Shuttered window');
+      } finally { redecorated.destroy(); }
+    } finally { house.destroy(); }
+  }
+});
+
 test('single-choice chatbox prompts render a working Cancel option', () => {
   const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
   const packets = [], selections = [];
@@ -215,9 +402,7 @@ test('single-choice chatbox prompts render a working Cancel option', () => {
 });
 
 test('native house board refreshes facilities and rejects stale or unlisted host submissions', async () => {
-  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { World } = require('../dist/game/World');
-  await CachePipeline.initialize();
   const owner = constructionPlayer('Board host', 311), other = constructionPlayer('Other host', 312), guest = constructionPlayer('Board visitor', 313);
   const hooks = constructionHooks(), board = hooks.named.get('House Advertisement'), lookup = World.getPlayerByName;
   const rows = () => guest.packets.filter(packet => packet[0] === 'sendClientScript' && packet[1] === 3110);
@@ -268,10 +453,8 @@ test('native house board refreshes facilities and rejects stale or unlisted host
 });
 
 test('construction guests, private settings, locks, advertisements and owner lifecycle', async () => {
-  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { World } = require('../dist/game/World');
   const { canVisitHouse } = require('../dist/game/plugin/impl/construction/ConstructionPlugin');
-  await CachePipeline.initialize();
   const owner = constructionPlayer('Host', 301), guest = constructionPlayer('Visitor', 302);
   const hooks = constructionHooks(), lookup = World.getPlayerByName;
   World.getPlayerByName = name => name.toLowerCase() === 'host' ? owner : undefined;
@@ -333,13 +516,11 @@ test('construction guests, private settings, locks, advertisements and owner lif
 });
 
 test('native nexus recipes, paid destinations, upgrades and saved costume storage', async () => {
-  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { PlayerHouseInstance, createDefaultHouseSave } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
   const { BUILDABLE_BY_KEY, ROOM_BY_KEY } = require('../dist/game/plugin/impl/construction/ConstructionData');
   const { configureHouseDestination, houseDestinations } = require('../dist/game/plugin/impl/construction/ConstructionPortals');
   const { depositHouseItem, withdrawHouseItem, storageItems } = require('../dist/game/plugin/impl/construction/ConstructionStorage');
   const { Item } = require('../dist/game/model/Item');
-  await CachePipeline.initialize();
   const owner = constructionPlayer('Storage owner', 303), guest = constructionPlayer('Storage guest', 304);
   const house = new PlayerHouseInstance(createDefaultHouseSave());
   house.owner = owner; owner.setArea(house); guest.setArea(house);
@@ -406,12 +587,10 @@ test('native nexus recipes, paid destinations, upgrades and saved costume storag
 });
 
 test('house altar burners are shared, expire and affect only their chapel', async () => {
-  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { PlayerHouseInstance, createDefaultHouseSave } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
   const { offerHouseBones, lightHouseBurner, expireHouseBurners } = require('../dist/game/plugin/impl/construction/ConstructionAltars');
   const { Item } = require('../dist/game/model/Item');
   const { Skill } = require('../dist/game/model/Skill');
-  await CachePipeline.initialize();
   const house = new PlayerHouseInstance(createDefaultHouseSave()), player = constructionPlayer('Prayer guest', 305);
   const altar = { buildableKey: 'GILDED_ALTAR' }, burner1 = { buildableKey: 'INCENSE_BURNER' }, burner2 = { buildableKey: 'MARBLE_BURNER' };
   const room = house.save.rooms[1][4][5]; room.furnitureByLocation = { altar, burner1, burner2 };
@@ -444,8 +623,6 @@ test("server-owned items inherit gameplay and deliver external models before def
   const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
   const { ContentApi } = require("../dist/net/http/ContentApi");
   const { encodeContentData } = require("../dist/net/protocol/ClientProtocol");
-  const { CachePipeline } = require("../dist/game/cache/CachePipeline");
-  await CachePipeline.initialize();
   let onLogin;
   require("../plugins/items/ItemDefinitionLoader.plugin").register({
     log() {},
@@ -666,7 +843,6 @@ test("house portal actions and shared-door room selection preserve the last exit
 
 
 test('house pickups route before collecting and revalidate reach', async (t) => {
-  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { PlayerHouseInstance, createDefaultHouseSave } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
   const { PickupItemPacketListener } = require('../dist/net/packet/impl/PickupItemPacketListener');
   const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
@@ -676,7 +852,6 @@ test('house pickups route before collecting and revalidate reach', async (t) => 
   const { Item } = require('../dist/game/model/Item');
   const { World } = require('../dist/game/World');
   const { TaskManager } = require('../dist/game/task/TaskManager');
-  await CachePipeline.initialize();
   const house = new PlayerHouseInstance(createDefaultHouseSave());
   const destination = new Location(house.allocation.baseX + 54, house.allocation.baseY + 50, 1);
   const item = new ItemOnGround(State.SEEN_BY_PLAYER, 'pickup test', destination, new Item(960, 1), false, -1, house);
@@ -749,12 +924,10 @@ test('house pickups route before collecting and revalidate reach', async (t) => 
 });
 
 test('house normal entry removes template hotspots before replaying furniture', async () => {
-  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { PlayerHouseInstance, createDefaultHouseSave } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
   const { encodeLocDel } = require('../dist/net/protocol/ClientProtocol');
   const locDelOpcode = encodeLocDel(0, 0, 0, 0, 0)[0];
   const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
-  await CachePipeline.initialize();
   const save = createDefaultHouseSave();
   save.rooms[1][4][5].furnitureByLocation = {
     '2:4:11': { buildableKey: 'CRUDE_WOODEN_CHAIR', hotspotKey: 'CHAIR_1',
@@ -856,10 +1029,8 @@ test('pool tiers restore only their documented effects and spellbook altars togg
 });
 
 test('rotated nexus hotspots, built models and interactions share the same footprint', async () => {
-  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { PlayerHouseInstance, createDefaultHouseSave } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
   const { BUILDABLE_BY_KEY, ROOM_BY_KEY } = require('../dist/game/plugin/impl/construction/ConstructionData');
-  await CachePipeline.initialize();
   const house = new PlayerHouseInstance(createDefaultHouseSave());
   const position = { x: 5, y: 4, plane: 1 }, placed = [];
   const player = constructionPlayer('Nexus builder', 306);
@@ -884,11 +1055,9 @@ test('rotated nexus hotspots, built models and interactions share the same footp
 
 
 test('pool upgrades use the build interface, consume real potions and reject stale menus', async () => {
-  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { PlayerHouseInstance } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
   const { BUILDABLE_BY_KEY, ROOM_BY_KEY, CONSTRUCTION_HOTSPOTS } = require('../dist/game/plugin/impl/construction/ConstructionData');
   const { Item } = require('../dist/game/model/Item');
-  await CachePipeline.initialize();
   const player = constructionPlayer('Pool builder', 307), hooks = constructionHooks();
   hooks.click(player, 15478, 3);
   const house = player.getPrivateArea(), room = { x: 5, y: 4, plane: 1 };
@@ -917,7 +1086,6 @@ test('pool upgrades use the build interface, consume real potions and reject sta
 
 test('house chairs route before sitting and restore players after movement or removal', async t => {
   const { World } = require('../dist/game/World');
-  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
   const { ObjectActionPacketListener } = require('../dist/net/packet/impl/ObjectActionPacketListener');
   const { PluginManager } = require('../dist/plugins/PluginManager');
@@ -925,7 +1093,7 @@ test('house chairs route before sitting and restore players after movement or re
   const { BUILDABLE_BY_KEY } = require('../dist/game/plugin/impl/construction/ConstructionData');
   const { Animation } = require('../dist/game/model/Animation');
   const { Flag } = require('../dist/game/model/Flag');
-  await CachePipeline.initialize(); ObjectDefinition.init();
+  ObjectDefinition.init();
   const hooks = constructionHooks(), owner = constructionPlayer('Seated owner', 325), guest = constructionPlayer('Seated guest', 326);
   const flags = [];
   let cycle = 0;
@@ -1028,12 +1196,10 @@ test('house chairs route before sitting and restore players after movement or re
 });
 
 test('house windows replace layout markers with styled windows or adjoining walls', async () => {
-  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
   const { PlayerHouseInstance, createDefaultHouseSave } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
   const { CONSTRUCTION_ROOMS } = require('../dist/game/plugin/impl/construction/ConstructionData');
   const { encodeLocAddChange } = require('../dist/net/protocol/ClientProtocol');
-  await CachePipeline.initialize();
   assert.deepEqual(CacheDefinitions.getObject(13099).models, [[13264]], 'use the native village window model');
   const house = new PlayerHouseInstance(createDefaultHouseSave());
   const frames = [];
@@ -1070,11 +1236,9 @@ test('house windows replace layout markers with styled windows or adjoining wall
 });
 
 test('native house options enforce ownership, instant kick and persistent preferences', async t => {
-  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { World } = require('../dist/game/World');
   const { PluginManager } = require('../dist/plugins/PluginManager');
   const { PlayerOptionPacketListener } = require('../dist/net/packet/impl/PlayerOptionPacketListener');
-  await CachePipeline.initialize();
   const owner = constructionPlayer('Options host', 320), guest = constructionPlayer('Options guest', 321), other = constructionPlayer('Other home', 322);
   const hooks = constructionHooks();
   const click = (player, childId) => hooks.interfaceAction({ player, groupId: 370, childId, action: 1 });
@@ -1129,10 +1293,8 @@ test('native house options enforce ownership, instant kick and persistent prefer
 });
 
 test('native house viewer moves, rotates, builds and protects occupied rooms', async () => {
-  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { ROOM_BY_KEY } = require('../dist/game/plugin/impl/construction/ConstructionData');
   const { Item } = require('../dist/game/model/Item');
-  await CachePipeline.initialize();
   const owner = constructionPlayer('Viewer host', 323), hooks = constructionHooks();
   const options = childId => hooks.interfaceAction({ player: owner, groupId: 370, childId, action: 1 });
   const viewer = (childId, action = 1, slot) => hooks.interfaceAction({ player: owner, groupId: 422, childId, action, slot });
@@ -1177,10 +1339,8 @@ test('native house viewer moves, rotates, builds and protects occupied rooms', a
 });
 
 test('house door preferences change models and collision for every occupant', async () => {
-  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { RegionManager } = require('../dist/game/collision/RegionManager');
   const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
-  await CachePipeline.initialize();
   require('../dist/game/definition/ObjectDefinition').ObjectDefinition.init();
   const owner = constructionPlayer('Door host', 324), hooks = constructionHooks();
   hooks.click(owner, 15478, 2); hooks.command(owner);

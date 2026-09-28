@@ -1,3 +1,4 @@
+import { HOUSE_STYLES, houseStyleIndex } from "./HouseEstateData";
 import { RegionManager } from "../../../collision/RegionManager";
 import { Boundary } from "../../../model/Boundary";
 import { PrivateArea } from "../../../model/areas/impl/PrivateArea";
@@ -38,6 +39,13 @@ export type SavedHouseFurniture = {
 export type PlayerHouseSave = {
   rooms: Array<Array<Array<SavedHouseRoom | null>>>;
   locked?: boolean;
+  /** Missing ownership on legacy saves means an already-owned house. */
+  owned?: boolean;
+  location?: number;
+  style?: number;
+  unlockedStyles?: number[];
+  visitedKourend?: boolean;
+  visitedVarlamore?: boolean;
   /** 0 closed, 1 open, 2 no doors (native House Options varbit 6269). */
   doorMode?: number;
 };
@@ -62,13 +70,6 @@ const ROOM_DOOR_HOTSPOT_MIN = 15305;
 const ROOM_DOOR_HOTSPOT_MAX = 15322;
 const HOUSE_BUILDING_MODE_VARBIT = 2176;
 const HOUSE_DYNAMIC_WINDOW = 13830;
-// All current room chunks use the native village wall style.
-const HOUSE_TEMPLATE_WALL = 13098;
-const HOUSE_TEMPLATE_WINDOW = 13099;
-// Native template door styles: Brimhaven, Lumbridge, Pollnivneach, Rellekka, Rimmington, Yanille.
-const HOUSE_DOORS = [[13100, 13101, 13102, 13103], [13094, 13096, 13095, 13097],
-  [13007, 13006, 13009, 13008], [13109, 13107, 13110, 13108],
-  [13016, 13015, 13018, 13017], [13119, 13118, 13121, 13120]];
 
 type TemplateObject = Readonly<{
   id: number;
@@ -119,7 +120,7 @@ export class PlayerHouseInstance extends PrivateArea {
   public owner: Player | null = null;
   public buildingMode = false;
   public readonly litBurners = new Map<SavedHouseFurniture, number>();
-  private static templateObjects?: readonly TemplateObject[];
+  private static readonly templateObjects = new Map<number, readonly TemplateObject[]>();
   private readonly roomDoors: GameObject[] = [];
   private readonly visibleDoors: Array<{ object: GameObject; origin: Location; face: number; style: number; side: number; open: boolean }> = [];
   private readonly furnitureObjects: GameObject[] = [];
@@ -153,7 +154,7 @@ export class PlayerHouseInstance extends PrivateArea {
           const furnitureByLocation: Record<string, SavedHouseFurniture> = {};
           for (const saved of Object.values(room.furnitureByLocation)) {
             const template = this.getTemplateHotspot(room.roomKey, saved.sourceObjectId, saved.localX, saved.localY);
-            const furniture = template ? { ...saved, type: template.type, face: template.face } : saved;
+            const furniture = template ? { ...saved, sourceObjectId: template.id, type: template.type, face: template.face } : saved;
             furnitureByLocation[this.furnitureKey(furniture.localX, furniture.localY, furniture.type)] = furniture;
           }
           column[y] = { ...room, furnitureByLocation };
@@ -186,9 +187,9 @@ export class PlayerHouseInstance extends PrivateArea {
           }
           if (!template) continue;
           palette[plane][x + gridOffset][y + gridOffset] = packTemplateChunk({
-            sourceChunkX: template.sourceChunkX,
+            sourceChunkX: template.sourceChunkX + Math.floor(houseStyleIndex(this.save) / 4) * 8,
             sourceChunkY: template.sourceChunkY,
-            sourcePlane: 0,
+            sourcePlane: houseStyleIndex(this.save) % 4,
             rotation: room?.rotation ?? 0,
           });
         }
@@ -215,7 +216,7 @@ export class PlayerHouseInstance extends PrivateArea {
     const template = room ? ROOM_BY_KEY.get(room.roomKey) : null;
     if (!hotspot || !position || !room || !template || !template.hotspots.includes(hotspot.key)) return null;
 
-    const placement = PlayerHouseInstance.getTemplateObjects().find(object => {
+    const placement = PlayerHouseInstance.getTemplateObjects(houseStyleIndex(this.save)).find(object => {
       if (object.id !== sourceObjectId || object.sourceChunkX !== template.sourceChunkX || object.sourceChunkY !== template.sourceChunkY) return false;
       const local = this.rotatedFootprint(object.localX, object.localY, object.id, object.face, room.rotation);
       return local.x === ((location.x - this.allocation.baseX) & 7) && local.y === ((location.y - this.allocation.baseY) & 7);
@@ -302,7 +303,8 @@ export class PlayerHouseInstance extends PrivateArea {
   }
 
   public override resolveObject(id: number, location: Location): GameObject | null {
-    if (id >= ROOM_DOOR_HOTSPOT_MIN && id <= ROOM_DOOR_HOTSPOT_MAX) {
+    if ((id >= ROOM_DOOR_HOTSPOT_MIN && id <= ROOM_DOOR_HOTSPOT_MAX)
+      || HOUSE_STYLES[houseStyleIndex(this.save)].doorHotspots.includes(id)) {
       const target = this.getDoorTarget({ x: location.getX(), y: location.getY(), z: location.getZ() }) ?? this.getDoorTargetAtLocation(location);
       if (!target) return null;
       this.doorTargets.set(`${location.getX()}:${location.getY()}:${location.getZ()}`, target);
@@ -358,8 +360,9 @@ export class PlayerHouseInstance extends PrivateArea {
     if (!room || !template) return 0;
     if (template.outdoors) return 15;
     let mask = 0;
-    for (const object of PlayerHouseInstance.getTemplateObjects()) {
-      if (object.id < ROOM_DOOR_HOTSPOT_MIN || object.id > ROOM_DOOR_HOTSPOT_MAX
+    for (const object of PlayerHouseInstance.getTemplateObjects(houseStyleIndex(this.save))) {
+      if (((object.id < ROOM_DOOR_HOTSPOT_MIN || object.id > ROOM_DOOR_HOTSPOT_MAX)
+        && !HOUSE_STYLES[houseStyleIndex(this.save)].doorHotspots.includes(object.id))
         || object.sourceChunkX !== template.sourceChunkX || object.sourceChunkY !== template.sourceChunkY) continue;
       const edge = object.localX === 0 ? 3 : object.localY === 7 ? 0 : object.localX === 7 ? 1 : 2;
       mask |= 1 << edge;
@@ -422,7 +425,7 @@ export class PlayerHouseInstance extends PrivateArea {
   /** Moves a player into this allocation and immediately streams its dynamic scene. */
   public enterHouse(player: Player, buildingMode: boolean): boolean {
     this.buildingMode = buildingMode;
-    PlayerHouseInstance.getTemplateObjects();
+    PlayerHouseInstance.getTemplateObjects(houseStyleIndex(this.save));
     const previousArea = player.getArea();
     if (previousArea && previousArea !== this) previousArea.leave(player, false);
     this.enter(player);
@@ -505,7 +508,7 @@ export class PlayerHouseInstance extends PrivateArea {
           const room = this.save.rooms[plane][x][y];
           const template = room ? ROOM_BY_KEY.get(room.roomKey) : null;
           if (!room || !template) continue;
-          for (const hotspot of PlayerHouseInstance.getTemplateObjects()) {
+          for (const hotspot of PlayerHouseInstance.getTemplateObjects(houseStyleIndex(this.save))) {
             if (hotspot.sourceChunkX !== template.sourceChunkX || hotspot.sourceChunkY !== template.sourceChunkY) continue;
             const local = this.rotatedFootprint(hotspot.localX, hotspot.localY, hotspot.id, hotspot.face, room.rotation);
             const worldX = this.allocation.baseX + (gridOffset + x) * 8 + local.x;
@@ -516,7 +519,7 @@ export class PlayerHouseInstance extends PrivateArea {
               const neighbour = adjacent && this.getRoom(adjacent);
               const indoors = neighbour && !ROOM_BY_KEY.get(neighbour.roomKey)?.outdoors;
               player.getSession().sendClientPacket(encodeLocAddChange(
-                indoors ? HOUSE_TEMPLATE_WALL : HOUSE_TEMPLATE_WINDOW,
+                indoors ? HOUSE_STYLES[houseStyleIndex(this.save)].wall : HOUSE_STYLES[houseStyleIndex(this.save)].window,
                 worldX, worldY, plane, hotspot.type, (hotspot.face + room.rotation) & 3,
               ));
               continue;
@@ -527,7 +530,8 @@ export class PlayerHouseInstance extends PrivateArea {
               player.getSession().sendClientPacket(encodeLocDel(worldX, worldY, plane, hotspot.type, (hotspot.face + room.rotation) & 3));
               continue;
             }
-            if (hotspot.id < ROOM_DOOR_HOTSPOT_MIN || hotspot.id > ROOM_DOOR_HOTSPOT_MAX) continue;
+            if ((hotspot.id < ROOM_DOOR_HOTSPOT_MIN || hotspot.id > ROOM_DOOR_HOTSPOT_MAX)
+              && !HOUSE_STYLES[houseStyleIndex(this.save)].doorHotspots.includes(hotspot.id)) continue;
             const target = this.getDoorTargetFromEdge(x, y, plane, local.x, local.y);
             if (!target) continue;
             const location = new Location(
@@ -555,8 +559,8 @@ export class PlayerHouseInstance extends PrivateArea {
       const room = this.getRoom({ x, y, plane });
       const template = room && ROOM_BY_KEY.get(room.roomKey);
       if (!room || !template || template.outdoors) continue;
-      for (const hotspot of PlayerHouseInstance.getTemplateObjects()) {
-        if (hotspot.id < 15305 || hotspot.id > 15316 || hotspot.sourceChunkX !== template.sourceChunkX || hotspot.sourceChunkY !== template.sourceChunkY) continue;
+      for (const hotspot of PlayerHouseInstance.getTemplateObjects(houseStyleIndex(this.save))) {
+        if (!HOUSE_STYLES[houseStyleIndex(this.save)].doorHotspots.includes(hotspot.id) || hotspot.sourceChunkX !== template.sourceChunkX || hotspot.sourceChunkY !== template.sourceChunkY) continue;
         const local = rotateHotspot(hotspot.localX, hotspot.localY, room.rotation);
         const neighbor = this.getDoorTargetFromEdge(x, y, plane, local.x, local.y);
         const other = neighbor && this.getRoom(neighbor);
@@ -564,7 +568,7 @@ export class PlayerHouseInstance extends PrivateArea {
         if (other && !ROOM_BY_KEY.get(other.roomKey)?.outdoors && (neighbor!.x < x || neighbor!.y < y)) continue;
         const origin = new Location(this.allocation.baseX + (offset + x) * 8 + local.x,
           this.allocation.baseY + (offset + y) * 8 + local.y, plane);
-        const style = Math.floor((hotspot.id - 15305) / 2), side = (hotspot.id - 15305) & 1;
+        const style = houseStyleIndex(this.save), side = HOUSE_STYLES[style].doorHotspots.indexOf(hotspot.id);
         const face = (hotspot.face + room.rotation) & 3;
         const door = { origin, face, style, side, open: this.save.doorMode === 1,
           object: null as unknown as GameObject };
@@ -579,7 +583,7 @@ export class PlayerHouseInstance extends PrivateArea {
     const [dx, dy] = door.open ? offsets[door.face] : [0, 0];
     // Turn away from the pair's centre so each leaf stays on its outer hinge.
     const face = door.open ? (door.face + (door.side ? 3 : 1)) & 3 : door.face;
-    door.object = new GameObject(HOUSE_DOORS[door.style][door.side + (door.open ? 2 : 0)],
+    door.object = new GameObject(HOUSE_STYLES[door.style].doors[door.side + (door.open ? 2 : 0)],
       door.origin.transform(dx, dy), 0, face, this);
     RegionManager.addObjectClipping(door.object);
     for (const player of this.getPlayers()) player.getPacketSender().sendObject(door.object);
@@ -733,16 +737,19 @@ export class PlayerHouseInstance extends PrivateArea {
 
   private getTemplateHotspot(roomKey: string, id: number, localX: number, localY: number): TemplateObject | undefined {
     const room = ROOM_BY_KEY.get(roomKey);
-    return room && PlayerHouseInstance.getTemplateObjects().find((object) =>
-      object.id === id && object.localX === localX && object.localY === localY
+    return room && PlayerHouseInstance.getTemplateObjects(houseStyleIndex(this.save)).find((object) =>
+      (object.id === id || (HOTSPOT_BY_OBJECT_ID.has(id) && HOTSPOT_BY_OBJECT_ID.get(object.id)?.key === HOTSPOT_BY_OBJECT_ID.get(id)?.key))
+      && object.localX === localX && object.localY === localY
       && object.sourceChunkX === room.sourceChunkX && object.sourceChunkY === room.sourceChunkY);
   }
 
-  private static getTemplateObjects(): readonly TemplateObject[] {
-    if (this.templateObjects) return this.templateObjects;
+  private static getTemplateObjects(style = 0): readonly TemplateObject[] {
+    const cached = this.templateObjects.get(style);
+    if (cached) return cached;
+    const chunkOffset = Math.floor(style / 4) * 8;
     const objects: TemplateObject[] = [];
     const regions = new Set([...CONSTRUCTION_ROOMS, ...Object.values(HOUSE_TEMPLATE_CHUNKS)]
-      .map(({ sourceChunkX, sourceChunkY }) => ((sourceChunkX >> 3) << 8) | (sourceChunkY >> 3)));
+      .map(({ sourceChunkX, sourceChunkY }) => (((sourceChunkX + chunkOffset) >> 3) << 8) | (sourceChunkY >> 3)));
     for (const regionId of regions) {
       const data = CacheMaps.getRegion(regionId)?.objectData;
       if (!data) throw new Error(`Construction template region ${regionId} is missing from the active cache.`);
@@ -758,8 +765,9 @@ export class PlayerHouseInstance extends PrivateArea {
           if (locationDelta === 0) break;
           packedLocation += locationDelta - 1;
           const info = buffer.readUnsignedByte();
-          if ((packedLocation >> 12) !== 0) continue;
+          if ((packedLocation >> 12) !== style % 4) continue;
           if ((objectId < ROOM_DOOR_HOTSPOT_MIN || objectId > ROOM_DOOR_HOTSPOT_MAX)
+            && !HOUSE_STYLES[style].doorHotspots.includes(objectId)
             && objectId !== HOUSE_DYNAMIC_WINDOW
             && !HOTSPOT_BY_OBJECT_ID.has(objectId)
             && !CacheDefinitions.getObject(objectId).actions?.includes("Build")) continue;
@@ -767,7 +775,7 @@ export class PlayerHouseInstance extends PrivateArea {
           const localY = packedLocation & 0x3f;
           objects.push({
             id: objectId,
-            sourceChunkX: (regionId >> 8) * 8 + (localX >> 3),
+            sourceChunkX: (regionId >> 8) * 8 + (localX >> 3) - chunkOffset,
             sourceChunkY: (regionId & 0xff) * 8 + (localY >> 3),
             localX: localX & 7,
             localY: localY & 7,
@@ -777,7 +785,7 @@ export class PlayerHouseInstance extends PrivateArea {
         }
       }
     }
-    this.templateObjects = objects;
+    this.templateObjects.set(style, objects);
     return objects;
   }
 }

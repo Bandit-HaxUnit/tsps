@@ -1,3 +1,5 @@
+import { EstateAgentPlugin } from "./EstateAgentPlugin";
+import { HOUSE_LOCATIONS, HOUSE_STYLES, houseLocation, houseExit, houseStyleIndex } from "./HouseEstateData";
 import type { PluginApi, PluginInterfaceActionClickEvent, PluginItemOnObjectEvent, PluginObjectInteractionEvent, PluginObjectRouteEvent } from "../../../../plugins/PluginTypes";
 import type { GameObject } from "../../../entity/impl/object/GameObject";
 import { openHouseStorage, storeItemOnFurniture } from "./ConstructionStorage";
@@ -34,21 +36,19 @@ const TINDERBOX_ID = ItemIdentifiers.TINDERBOX;
 const NAIL_IDS = [ItemIdentifiers.BRONZE_NAILS, ItemIdentifiers.IRON_NAILS, ItemIdentifiers.STEEL_NAILS,
   ItemIdentifiers.BLACK_NAILS, ItemIdentifiers.MITHRIL_NAILS, ItemIdentifiers.ADAMANTITE_NAILS,
   ItemIdentifiers.RUNE_NAILS, ItemIdentifiers.DRAGON_NAILS];
-const RIMMINGTON_HOUSE_PORTAL_ID = 15478;
+const HOUSE_PORTAL_IDS = [...HOUSE_LOCATIONS.map(location => location.portal), 30172];
 const EXIT_PORTAL_ID = 4525;
 const HOUSE_LOCKED_VARBIT = 2183;
 const GARDEN_CENTERPIECE_HOTSPOT_ID = 15361;
-const ROOM_DOOR_HOTSPOT_IDS = Array.from({ length: 18 }, (_, index) => 15305 + index);
+const ROOM_DOOR_HOTSPOT_IDS = [...new Set([...Array.from({ length: 18 }, (_, index) => 15305 + index), ...HOUSE_STYLES.flatMap(style => style.doorHotspots)])];
 const COINS_ID = 995;
 const HOUSE_ATTRIBUTE = "construction:house";
-const RIMMINGTON_PORTAL_EXIT = new Location(2954, 3224, 0);
 const FURNITURE_BUILD_INTERFACE = 458;
 const FURNITURE_BUILD_LIST_UID = (FURNITURE_BUILD_INTERFACE << 16) | 2;
 const HOUSE_BOARD_INTERFACE = 52;
 const HOUSE_BOARD_ROW_SCRIPT = 3110;
 const HOUSE_BOARD_LAST_ROW = 200;
 const HOUSE_BOARD_LOCATION_VARBIT = 9449;
-const RIMMINGTON_HOUSE_LOCATION = 1;
 
 // Expand the named furniture groups used by parlour hotspot menus.
 const FURNITURE_GROUPS: Readonly<Record<string, readonly string[]>> = {
@@ -76,7 +76,7 @@ const pendingFurnitureMenus = new WeakMap<ConstructionPlayer, {
   choices: readonly ConstructionBuildable[];
 }>();
 
-function houseStateFor(player: ConstructionPlayer): PersistedHouse {
+export function houseStateFor(player: ConstructionPlayer): PersistedHouse {
   const saved = player.getAttribute(HOUSE_ATTRIBUTE);
   if (saved && typeof saved === "object" && Array.isArray((saved as PlayerHouseSave).rooms)) {
     const house = saved as PersistedHouse;
@@ -87,7 +87,7 @@ function houseStateFor(player: ConstructionPlayer): PersistedHouse {
     return house;
   }
 
-  const house: PersistedHouse = { ...createDefaultHouseSave(), defaultBuildingMode: false };
+  const house: PersistedHouse = { ...createDefaultHouseSave(), owned: false, defaultBuildingMode: false };
   player.setAttribute(HOUSE_ATTRIBUTE, house);
   return house;
 }
@@ -115,7 +115,7 @@ function isBuildingMode(player: ConstructionPlayer): boolean {
   return house?.owner === player && house.buildingMode;
 }
 
-function releaseHouse(player: ConstructionPlayer, restoreLocation: boolean): void {
+export function releaseHouse(player: ConstructionPlayer, restoreLocation: boolean): void {
   const owned = activeHouses.get(player);
   if (houseFor(player)) exitHouse(player);
   if (owned) {
@@ -125,10 +125,14 @@ function releaseHouse(player: ConstructionPlayer, restoreLocation: boolean): voi
     activeHouses.delete(player);
   }
   pendingFurnitureMenus.delete(player);
-  if (restoreLocation && PlayerHouseInstance.isAllocationLocation(player.getLocation())) player.moveTo(RIMMINGTON_PORTAL_EXIT.clone());
+  if (restoreLocation && PlayerHouseInstance.isAllocationLocation(player.getLocation())) player.moveTo(houseExit(houseStateFor(player)));
 }
 
 function enterHouse(player: ConstructionPlayer, buildingMode: boolean): boolean {
+  if (houseStateFor(player).owned === false) {
+    player.sendMessage("You do not own a house. Speak to an Estate agent to buy one.");
+    return false;
+  }
   let house = activeHouses.get(player);
   if (house?.isDestroyed()) house = undefined;
   if (buildingMode && house?.getPlayers().some(guest => guest !== player)) {
@@ -164,11 +168,11 @@ export function canVisitHouse(player: Player, house: PlayerHouseInstance): boole
     && owner.getRelations().canReceivePrivateMessageFrom(player);
 }
 
-function visitHouse(player: Player, name: string): void {
+function visitHouse(player: Player, name: string, location = nearbyHouseLocation(player)): void {
   const owner = World.getPlayerByName(name.trim().replace(/_/g, " "));
   const house = owner && activeHouses.get(owner);
-  if (owner === player) { enterHouse(player, false); return; }
-  if (!house || !canVisitHouse(player, house)) {
+  if (owner === player) { enterAtPortal(player, false, location); return; }
+  if (!house || houseLocation(house.save).id !== location || !canVisitHouse(player, house)) {
     player.sendMessage("That house is unavailable or its owner is not accepting guests.");
     return;
   }
@@ -180,8 +184,9 @@ function visitHouse(player: Player, name: string): void {
   player.sendMessage("Welcome to " + owner!.getUsername() + "'s house.");
 }
 
-function promptVisit({ player }: PluginObjectInteractionEvent): boolean {
-  player.setEnteredSyntaxAction({ execute: (name: string) => visitHouse(player, name) });
+function promptVisit({ player, objectId }: PluginObjectInteractionEvent): boolean {
+  const location = nearbyHouseLocation(player, objectId);
+  player.setEnteredSyntaxAction({ execute: (name: string) => visitHouse(player, name, location) });
   player.getPacketSender().sendEnterInputPrompt("Whose house would you like to visit?");
   return true;
 }
@@ -195,7 +200,12 @@ function expelGuests(player: ConstructionPlayer): void {
   }
 }
 
-function addAdvertisement({ player }: PluginObjectInteractionEvent): boolean {
+function addAdvertisement({ player, objectId }: PluginObjectInteractionEvent): boolean {
+  const location = nearbyHouseLocation(player, objectId);
+  if (houseLocation(houseStateFor(player)).id !== location) {
+    player.sendMessage("Your house is not located here.");
+    return true;
+  }
   let house = activeHouses.get(player);
   if (!house || house.isDestroyed() || houseFor(player) !== house) {
     if (!enterHouse(player, false)) return true;
@@ -228,7 +238,7 @@ function advertisementRow(house: PlayerHouseInstance): string {
     for (let i = keys.length - 1; i >= 0; i--) if (furniture.has(keys[i])) return String(i + 1);
     return "-";
   };
-  return [house.owner!.getUsername(), RIMMINGTON_HOUSE_LOCATION,
+  return [house.owner!.getUsername(), houseLocation(house.save).id,
     house.owner!.getSkillManager().getMaxLevel(Skill.CONSTRUCTION),
     furniture.has("GILDED_ALTAR") ? "Y" : "-",
     tier(["MARBLE_PORTAL_NEXUS", "GILDED_PORTAL_NEXUS", "CRYSTALLINE_PORTAL_NEXUS"]),
@@ -239,16 +249,19 @@ function advertisementRow(house: PlayerHouseInstance): string {
     furniture.has("ARMOUR_STAND") ? "Y" : "-"].join("|");
 }
 
-function viewAdvertisements(player: Player): void {
+const boardLocations = new WeakMap<Player, number>();
+
+function viewAdvertisements(player: Player, location = boardLocations.get(player) ?? nearbyHouseLocation(player)): void {
+  boardLocations.set(player, location);
   for (const house of advertisedHouses) if (house.isDestroyed()) advertisedHouses.delete(house);
-  const houses = [...advertisedHouses].filter(house => canVisitHouse(player, house)).slice(0, HOUSE_BOARD_LAST_ROW);
+  const houses = [...advertisedHouses].filter(house => houseLocation(house.save).id === location && canVisitHouse(player, house)).slice(0, HOUSE_BOARD_LAST_ROW);
   const sender = player.getPacketSender();
   sender.sendInterfaceRemoval();
-  sender.sendVarbit(HOUSE_BOARD_LOCATION_VARBIT, RIMMINGTON_HOUSE_LOCATION);
+  sender.sendVarbit(HOUSE_BOARD_LOCATION_VARBIT, location);
   sender.sendInterface(HOUSE_BOARD_INTERFACE);
-  houses.forEach((house, index) => sender.sendClientScript(HOUSE_BOARD_ROW_SCRIPT, index, RIMMINGTON_HOUSE_LOCATION, advertisementRow(house)));
+  houses.forEach((house, index) => sender.sendClientScript(HOUSE_BOARD_ROW_SCRIPT, index, location, advertisementRow(house)));
   // The cache preallocates rows 0..200; the final empty row completes loading and sorts the list.
-  sender.sendClientScript(HOUSE_BOARD_ROW_SCRIPT, HOUSE_BOARD_LAST_ROW, RIMMINGTON_HOUSE_LOCATION, "");
+  sender.sendClientScript(HOUSE_BOARD_ROW_SCRIPT, HOUSE_BOARD_LAST_ROW, location, "");
   sender.sendInterfaceFlags((HOUSE_BOARD_INTERFACE << 16) | 23, 1 << 1);
   sender.sendInterfaceFlags((HOUSE_BOARD_INTERFACE << 16) | 30, 1 << 1);
   // Native scripts 3111/3125 submit the chosen name through RESUME_NAMEDIALOG.
@@ -260,7 +273,7 @@ function viewAdvertisements(player: Player): void {
       player.sendMessage("That house is no longer advertised or is not accepting guests.");
       return;
     }
-    visitHouse(player, house.owner!.getUsername());
+    visitHouse(player, house.owner!.getUsername(), location);
   } });
 }
 
@@ -394,7 +407,7 @@ function exitHouse(player: ConstructionPlayer): boolean {
   pendingRoomMenus.delete(player);
   if (house.owner === player) advertisedHouses.delete(house);
   player.getPacketSender().sendInterfaceRemoval();
-  house.exitHouse(player as Player, RIMMINGTON_PORTAL_EXIT.clone());
+  house.exitHouse(player as Player, houseExit(house.save));
   syncHouseOptions(player);
   syncKickOption(player);
   return true;
@@ -419,10 +432,12 @@ function kickGuest(event: { player: Player; target: Player; option: number; hand
   event.target.sendMessage("The house owner has expelled you.");
 }
 
-function syncHouseOptions(player: ConstructionPlayer): void {
+export function syncHouseOptions(player: ConstructionPlayer): void {
   const saved = houseStateFor(player);
   const house = houseFor(player);
   const sender = player.getPacketSender();
+  sender.sendVarbit(2187, saved.owned === false ? 0 : houseLocation(saved).id);
+  sender.sendVarbit(2188, houseStyleIndex(saved));
   sender.sendVarbit(2176, house?.buildingMode ? 1 : 0);
   sender.sendVarbit(4744, saved.teleportOutside ? 1 : 0);
   sender.sendVarbit(14670, saved.defaultBuildingMode ? 1 : 0);
@@ -483,7 +498,8 @@ function handleHouseOptions(event: PluginInterfaceActionClickEvent): boolean {
 function houseTeleportArrival({ player, name }: { player: Player; name: string }): void {
   if (name !== "teleport to house") return;
   const saved = houseStateFor(player);
-  if (!saved.teleportOutside) enterHouse(player, saved.defaultBuildingMode);
+  if (saved.teleportOutside) player.moveTo(houseExit(saved));
+  else enterHouse(player, saved.defaultBuildingMode);
 }
 
 const HOUSE_VIEWER_INTERFACE = 422;
@@ -885,11 +901,38 @@ function openHouseDoor(event: PluginObjectInteractionEvent): void {
   if (houseFor(player)?.toggleDoor(objectId, new Location(location.x, location.y, location.z))) event.handled = true;
 }
 
-function enterDefaultHouse({ player }: PluginObjectInteractionEvent): boolean { return enterHouse(player, houseStateFor(player).defaultBuildingMode); }
-function enterNormalHouse({ player }: PluginObjectInteractionEvent): boolean { return enterHouse(player, false); }
-function enterBuildingHouse({ player }: PluginObjectInteractionEvent): boolean { return enterHouse(player, true); }
+function nearbyHouseLocation(player: ConstructionPlayer, objectId?: number): number {
+  const direct = HOUSE_LOCATIONS.find(location => location.portal === objectId || location.board === objectId);
+  if (direct) return direct.id;
+  if (objectId === 30172) return 6; // Yanille's diary-transformed portal.
+  const house = houseFor(player);
+  if (house) return houseLocation(house.save).id;
+  const position = player.getLocation();
+  return HOUSE_LOCATIONS.reduce((nearest, location) =>
+    Math.hypot(location.x - position.getX(), location.y - position.getY())
+      < Math.hypot(nearest.x - position.getX(), nearest.y - position.getY()) ? location : nearest).id;
+}
+
+function enterAtPortal(player: ConstructionPlayer, buildingMode: boolean, location: number): boolean {
+  if (houseLocation(houseStateFor(player)).id !== location) {
+    player.sendMessage("Your house is not located here.");
+    return true;
+  }
+  enterHouse(player, buildingMode);
+  return true;
+}
+
+function enterDefaultHouse({ player, objectId }: PluginObjectInteractionEvent): boolean {
+  return enterAtPortal(player, houseStateFor(player).defaultBuildingMode, nearbyHouseLocation(player, objectId));
+}
+function enterNormalHouse({ player, objectId }: PluginObjectInteractionEvent): boolean {
+  return enterAtPortal(player, false, nearbyHouseLocation(player, objectId));
+}
+function enterBuildingHouse({ player, objectId }: PluginObjectInteractionEvent): boolean {
+  return enterAtPortal(player, true, nearbyHouseLocation(player, objectId));
+}
 function leaveHouse({ player }: PluginObjectInteractionEvent): boolean { return exitHouse(player); }
-function showAdvertisements({ player }: PluginObjectInteractionEvent): boolean { viewAdvertisements(player); return true; }
+function showAdvertisements({ player, objectId }: PluginObjectInteractionEvent): boolean { viewAdvertisements(player, nearbyHouseLocation(player, objectId)); return true; }
 function visitLastHouse({ player }: PluginObjectInteractionEvent): boolean {
   const name = lastVisited.get(player);
   if (name) visitHouse(player, name);
@@ -905,13 +948,24 @@ function loginHouse({ player }: { player: Player }): void {
   player.getPacketSender().sendPlayerOption(HOUSE_KICK_OPTION, "", false);
   syncHouseOptions(player);
   if (PlayerHouseInstance.isAllocationLocation(player.getLocation())) {
-    player.moveTo(RIMMINGTON_PORTAL_EXIT.clone());
+    player.moveTo(houseExit(houseStateFor(player)));
     player.sendMessage("Returned from your house after the instance closed.");
   }
 }
 function logoutHouse({ player }: { player: Player }): void { standFromChair(player); releaseHouse(player, true); }
 function processHouse({ player }: { player: Player }): void {
   processChair(player);
+  const position = player.getLocation();
+  if (!player.getPrivateArea() && position.getX() >= 1024 && position.getX() < 2048) {
+    const saved = houseStateFor(player);
+    if (position.getY() >= 3200 && position.getY() < 4096 && !saved.visitedKourend) {
+      saved.visitedKourend = true;
+      player.setAttribute(HOUSE_ATTRIBUTE, saved);
+    } else if (position.getY() >= 2816 && position.getY() < 3200 && !saved.visitedVarlamore) {
+      saved.visitedVarlamore = true;
+      player.setAttribute(HOUSE_ATTRIBUTE, saved);
+    }
+  }
   const house = houseFor(player);
   syncKickOption(player);
   if (house) expireHouseBurners(house);
@@ -925,11 +979,12 @@ const furnitureObjectIds = [...new Set(CONSTRUCTION_BUILDABLES.flatMap(buildable
 export const ConstructionPlugin = {
   name: "Construction",
   register(api: PluginApi): void {
+    EstateAgentPlugin.register(api);
     api.persistAttribute(HOUSE_ATTRIBUTE);
-    api.onObjectFirstClick(RIMMINGTON_HOUSE_PORTAL_ID, enterDefaultHouse);
-    api.onObjectSecondClick(RIMMINGTON_HOUSE_PORTAL_ID, enterNormalHouse);
-    api.onObjectThirdClick(RIMMINGTON_HOUSE_PORTAL_ID, enterBuildingHouse);
-    api.onObjectFourthClick(RIMMINGTON_HOUSE_PORTAL_ID, promptVisit);
+    api.onObjectFirstClick(HOUSE_PORTAL_IDS, enterDefaultHouse);
+    api.onObjectSecondClick(HOUSE_PORTAL_IDS, enterNormalHouse);
+    api.onObjectThirdClick(HOUSE_PORTAL_IDS, enterBuildingHouse);
+    api.onObjectFourthClick(HOUSE_PORTAL_IDS, promptVisit);
     api.onObjectInteraction("House Advertisement", { View: showAdvertisements, "Add-House": addAdvertisement, "Visit-Last": visitLastHouse });
     api.onObjectFirstClick(EXIT_PORTAL_ID, leaveHouse);
     api.onObjectSecondClick(EXIT_PORTAL_ID, toggleHouseLock);
