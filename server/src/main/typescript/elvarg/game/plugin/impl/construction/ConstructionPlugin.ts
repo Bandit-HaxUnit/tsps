@@ -29,6 +29,7 @@ const NAIL_IDS = [ItemIdentifiers.BRONZE_NAILS, ItemIdentifiers.IRON_NAILS, Item
   ItemIdentifiers.RUNE_NAILS, ItemIdentifiers.DRAGON_NAILS];
 const RIMMINGTON_HOUSE_PORTAL_ID = 15478;
 const EXIT_PORTAL_ID = 4525;
+const HOUSE_LOCKED_VARBIT = 2183;
 const GARDEN_CENTERPIECE_HOTSPOT_ID = 15361;
 const ROOM_DOOR_HOTSPOT_IDS = Array.from({ length: 18 }, (_, index) => 15305 + index);
 const COINS_ID = 995;
@@ -177,8 +178,33 @@ function openRoomDoor(api: PluginApi, event: PluginObjectInteractionEvent): bool
   if (!house || !isBuildingMode(player)) return false;
   const target = house.getDoorTarget(event.location);
   if (!target) return false;
-  if (house.getRoom(target)) manageRoom(api, player, house, target);
-  else chooseRoom(api, player, house, target);
+  if (!house.getRoom(target)) {
+    chooseRoom(api, player, house, target);
+    return true;
+  }
+  const doorRoom = house.getRoomPositionAt(event.location);
+  if (doorRoom && house.getRoom(doorRoom)) {
+    // A shared doorway belongs to two rooms. Do not silently select the
+    // adjoining room when the player intends to remove the room they are in.
+    const playerRoom = house.getRoomPositionAt(event.sourceLocation ?? event.location);
+    const onTargetSide = playerRoom?.x === target.x && playerRoom.y === target.y && playerRoom.plane === target.plane;
+    const current = onTargetSide ? target : doorRoom;
+    const adjoining = onTargetSide ? doorRoom : target;
+    api.sendMultiChatboxPrompt(player, "Which room do you want to manage?",
+      "Room on this side", () => manageRoom(api, player, house, current),
+      "Room on the other side", () => manageRoom(api, player, house, adjoining),
+      "Cancel", () => {});
+  } else manageRoom(api, player, house, target);
+  return true;
+}
+
+function toggleHouseLock(event: PluginObjectInteractionEvent): boolean {
+  const player = event.player as ConstructionPlayer;
+  if (!houseFor(player)) return false;
+  const sender = player.getPacketSender();
+  const locked = sender.getVarbit(HOUSE_LOCKED_VARBIT) === 0;
+  sender.sendVarbit(HOUSE_LOCKED_VARBIT, locked ? 1 : 0);
+  player.sendMessage(locked ? "You lock the house portal." : "You unlock the house portal.");
   return true;
 }
 
@@ -309,6 +335,7 @@ function openBuildMenu(event: PluginObjectInteractionEvent): boolean {
 }
 
 function tryRemoveFurniture(api: PluginApi, event: PluginObjectInteractionEvent): boolean {
+  if (event.definition?.getInteractions()?.[event.clickType - 1]?.toLowerCase() !== "remove") return false;
   const player = event.player as ConstructionPlayer;
   const house = houseFor(player);
   const type = event.object?.getType?.() ?? 10;
@@ -353,7 +380,8 @@ export const ConstructionPlugin = {
       return true;
     });
     api.onObjectThirdClick(RIMMINGTON_HOUSE_PORTAL_ID, (event) => enterHouse(event.player as ConstructionPlayer, true));
-    api.onObjectFirstClick(EXIT_PORTAL_ID, (event) => tryRemoveFurniture(api, event) || exitHouse(event.player as ConstructionPlayer));
+    api.onObjectFirstClick(EXIT_PORTAL_ID, (event) => exitHouse(event.player as ConstructionPlayer));
+    api.onObjectSecondClick(EXIT_PORTAL_ID, toggleHouseLock);
     api.onObjectFirstClick(ROOM_DOOR_HOTSPOT_IDS, (event) => openRoomDoor(api, event));
     api.onObjectFifthClick(ROOM_DOOR_HOTSPOT_IDS, (event) => openRoomDoor(api, event));
     api.onObjectFirstClick(furnitureObjectIds, (event) => tryRemoveFurniture(api, event));

@@ -521,7 +521,7 @@ export class PlayerHouseInstance extends PrivateArea {
     return this.getDoorTargetFromEdge(x, y, plane, relativeX & 7, relativeY & 7);
   }
 
-  private getRoomPositionAt(location: { x: number; y: number; z: number }): HouseRoomPosition | null {
+  public getRoomPositionAt(location: { x: number; y: number; z: number }): HouseRoomPosition | null {
     const gridOffset = Math.floor((HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
     const position = {
       x: Math.floor((location.x - this.allocation.baseX) / 8) - gridOffset,

@@ -210,3 +210,95 @@ test("a player preset bot announces its suppressed drops once", () => {
 
   assert.deepEqual(messages, ["This bot was using a player preset and therefore has not dropped its items. Regular bots will still drop items"]);
 });
+
+
+test("house portal actions and shared-door room selection preserve the last exit", () => {
+  const { ConstructionPlugin } = require('../dist/game/plugin/impl/construction/ConstructionPlugin');
+  const { PlayerHouseInstance, createDefaultHouseSave } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
+  const hooks = new Map();
+  const prompts = [];
+  const messages = [];
+  const house = Object.create(PlayerHouseInstance.prototype);
+  house.save = createDefaultHouseSave();
+  house.gridSize = 8;
+  house.allocation = { baseX: 6400, baseY: 6400 };
+  const original = { x: 4, y: 4, plane: 1 };
+  const second = { x: 5, y: 4, plane: 1 };
+  const garden = { roomKey: 'GARDEN', rotation: 0, furniture: {} };
+  house.save.rooms[1][5][4] = garden;
+  // West doorway of the second garden points at the original garden.
+  const door = { x: 6456, y: 6451, z: 1 };
+  house.doorTargets = new Map([['6456:6451:1', original]]);
+  house.rebuild = () => true;
+  house.destroy = () => {};
+  let exits = 0;
+  house.exitHouse = () => exits++;
+  house.getFurnitureAt = () => ({ buildableKey: 'EXIT_PORTAL' });
+  let locked = 0;
+  const sender = {
+    getVarbit(id) { assert.equal(id, 2183); return locked; },
+    sendVarbit(id, value) { assert.equal(id, 2183); locked = value; },
+  };
+  const player = {
+    getPrivateArea: () => house,
+    getPacketSender: () => sender,
+    sendMessage: message => messages.push(message),
+    setAttribute() {},
+  };
+  const register = click => (ids, handler) => {
+    for (const id of Array.isArray(ids) ? ids : [ids]) {
+      const key = id + ':' + click;
+      hooks.set(key, [...(hooks.get(key) ?? []), handler]);
+    }
+  };
+  ConstructionPlugin.register(new Proxy({
+    onObjectFirstClick: register(1), onObjectSecondClick: register(2),
+    onObjectThirdClick: register(3), onObjectFifthClick: register(5),
+    sendMultiChatboxPrompt(_player, title, ...options) { prompts.push({ title, options }); },
+  }, { get: (target, key) => target[key] ?? (() => {}) }));
+  const dispatch = (id, click, location, actions, sourceLocation = location) => {
+    const event = { player, objectId: id, clickType: click, location, sourceLocation,
+      object: { getType: () => 10 }, definition: { getInteractions: () => actions } };
+    return (hooks.get(id + ':' + click) ?? []).some(handler => handler(event) !== false);
+  };
+  const choose = label => {
+    const { options } = prompts.at(-1);
+    const index = options.indexOf(label);
+    assert.ok(index >= 0, label);
+    options[index + 1]();
+  };
+  const portalActions = ['Enter', 'Lock', 'Remove board advert', null, 'Remove'];
+  dispatch(4525, 2, door, portalActions);
+  assert.equal(locked, 1);
+  dispatch(4525, 2, door, portalActions);
+  assert.equal(locked, 0);
+  assert.equal(prompts.length, 0, 'locking must not open a removal prompt');
+  dispatch(4525, 1, door, portalActions);
+  assert.equal(exits, 1, 'Enter must leave even in building mode with only one portal');
+  assert.ok(!messages.some(message => message.includes('at least one exit')));
+  dispatch(4525, 5, door, portalActions);
+  assert.match(messages.at(-1), /at least one exit portal/);
+  assert.equal(prompts.length, 0, 'removing the last portal remains prohibited');
+
+  const doorActions = [null, null, null, null, 'Build'];
+  dispatch(15305, 5, door, doorActions, { x: 6458, y: 6451, z: 1 });
+  choose('Room on this side');
+  choose('Remove room');
+  choose('Yes, remove it');
+  assert.equal(house.getRoom(second), null);
+  assert.equal(house.getRoom(original).furniture.CENTERPIECE, 'EXIT_PORTAL');
+
+  // The same shared door must also expose the second garden from the other side.
+  house.save.rooms[1][5][4] = garden;
+  dispatch(15305, 5, door, doorActions, { x: 6454, y: 6451, z: 1 });
+  choose('Room on the other side');
+  choose('Remove room');
+  choose('Yes, remove it');
+  assert.equal(house.getRoom(second), null);
+  assert.match(house.canRemoveRoom(original), /at least one exit portal/);
+
+  // With another actual portal saved, removing either portal room is permitted.
+  house.save.rooms[1][5][4] = { ...garden, furniture: { CENTERPIECE: 'EXIT_PORTAL' } };
+  assert.equal(house.canRemoveRoom(original), null);
+  assert.equal(house.canRemoveRoom(second), null);
+});
