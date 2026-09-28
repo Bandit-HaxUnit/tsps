@@ -1004,12 +1004,14 @@ export class InputManager {
 
     // === Keyboard handlers - OSRS GameApplet.keyPressed/keyReleased ===
 
-    private onKeyDown = (event: KeyboardEvent) => {
+    onKeyDown = (event: KeyboardEvent, prioritizeChat = false) => {
         event.preventDefault();
         this.idleTime = 0;
         this.lastInputTimeMs = this.nowMs();
 
-        for (const handler of this.keyHandlers) if (handler.onKeyDown?.(event)) return;
+        if (!prioritizeChat) {
+            for (const handler of this.keyHandlers) if (handler.onKeyDown?.(event)) return;
+        }
 
         const keyCode = event.keyCode;
         const charCode =
