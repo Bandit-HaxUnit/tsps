@@ -302,3 +302,63 @@ test("house portal actions and shared-door room selection preserve the last exit
   assert.equal(house.canRemoveRoom(original), null);
   assert.equal(house.canRemoveRoom(second), null);
 });
+
+
+test('house normal entry removes template hotspots before replaying furniture', async () => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { PlayerHouseInstance, createDefaultHouseSave } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
+  const { encodeLocDel } = require('../dist/net/protocol/ClientProtocol');
+  const locDelOpcode = encodeLocDel(0, 0, 0, 0, 0)[0];
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  await CachePipeline.initialize();
+  const save = createDefaultHouseSave();
+  save.rooms[1][4][5].furnitureByLocation = {
+    '2:4:11': { buildableKey: 'CRUDE_WOODEN_CHAIR', hotspotKey: 'CHAIR_1',
+      sourceObjectId: 4515, localX: 2, localY: 4, type: 11, face: 2 },
+  };
+  const house = new PlayerHouseInstance(save);
+  const events = [];
+  const player = {
+    getSession: () => ({ sendClientPacket(frame) { events.push(frame); return true; } }),
+    getPacketSender: () => ({
+      sendVarbit(id, value) { assert.equal(id, 2176); events.push({ mode: value }); },
+      sendObject(object) { events.push({ furniture: object }); },
+    }),
+  };
+  try {
+    const templates = PlayerHouseInstance.getTemplateObjects();
+    assert.ok(templates.some(object => object.id === 37620), 'new cache Build hotspots must also be included');
+    for (let rotation = 0; rotation < 4; rotation++) {
+      save.rooms[1][4][5].rotation = rotation;
+      for (const building of [false, true, false]) {
+        events.length = 0;
+        assert.equal(house.rebuild(player, building), true);
+        assert.deepEqual(events[0], { mode: building ? 1 : 0 });
+        const removals = events.filter(event => Buffer.isBuffer(event) && event[0] === locDelOpcode);
+        if (building) {
+          assert.equal(removals.length, 0, 'build mode must restore empty hotspots');
+          assert.ok(house.doorTargets.size > 0);
+        } else {
+          assert.equal(house.doorTargets.size, 0);
+          for (const hotspot of templates.filter(object => object.sourceChunkX === 232 && object.sourceChunkY === 887)) {
+            const definition = CacheDefinitions.getObject(hotspot.id);
+            const width = (hotspot.face & 1) ? definition.sizeY : definition.sizeX;
+            const height = (hotspot.face & 1) ? definition.sizeX : definition.sizeY;
+            const x = hotspot.localX, y = hotspot.localY;
+            const [localX, localY] = [[x, y], [y, 8 - x - width],
+              [8 - x - width, 8 - y - height], [8 - y - height, x]][rotation];
+            const expected = encodeLocDel(house.allocation.baseX + 48 + localX,
+              house.allocation.baseY + 56 + localY, 1, hotspot.type, (hotspot.face + rotation) & 3);
+            assert.ok(removals.some(frame => frame.equals(expected)), 'normal entry must remove hotspot ' + hotspot.id);
+          }
+        }
+        const placed = events.at(-1).furniture;
+        assert.ok(placed, 'built furniture must be replayed after hotspot removal');
+        assert.equal(placed.getId(), 6752);
+        assert.equal(placed.getFace(), (2 + rotation) & 3);
+      }
+    }
+  } finally {
+    house.destroy();
+  }
+});

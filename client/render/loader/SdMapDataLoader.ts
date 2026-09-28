@@ -1348,7 +1348,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
                         : undefined;
                 if (mapProfileEnabled) console.log(`[SdMapDataLoader] Processing override: ${key} -> ${newId}`);
                 const parts = key.split(",");
-                if (parts.length === 4) {
+                if (parts.length === 4 || parts.length === 5) {
                     const worldX = parseInt(parts[0]);
                     const worldY = parseInt(parts[1]);
                     const level = parseInt(parts[2]);
