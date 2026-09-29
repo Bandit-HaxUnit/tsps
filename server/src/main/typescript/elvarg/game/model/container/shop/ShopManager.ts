@@ -519,8 +519,7 @@ export class ShopManager {
         if (quantity <= 0) {
             return;
         }
-        const stock = shop.stock.get(itemId) ?? 0;
-        const available = Math.max(0, stock - (this.deletesItems(shop) ? 0 : 1));
+        const available = shop.stock.get(itemId) ?? 0;
         if (available <= 0) {
             player.sendMessage(
                 "This item is currently out of stock. Come back later."
@@ -711,11 +710,7 @@ export class ShopManager {
     private static removeStock(shop: RuntimeShop, itemId: number, amount: number): number {
         const quantity = this.normalizeAmount(amount);
         const current = shop.stock.get(itemId) ?? 0;
-        const removable = Math.max(
-            0,
-            current - (this.deletesItems(shop) ? 0 : 1)
-        );
-        const removed = Math.min(removable, quantity);
+        const removed = Math.min(current, quantity);
         if (removed <= 0) {
             return 0;
         }
