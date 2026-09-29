@@ -4,7 +4,6 @@ import { LocModelLoader } from "../../rs/config/loctype/LocModelLoader";
 import { LocModelType } from "../../rs/config/loctype/LocModelType";
 import type { NpcType } from "../../rs/config/npctype/NpcType";
 import type { LocType } from "../../rs/config/loctype/LocType";
-import { getMapIndexFromTile, getMapSquareId } from "../../rs/map/MapFileIndex";
 import type { Model } from "../../rs/model/Model";
 import { Scene } from "../../rs/scene/Scene";
 import { MapManager } from "../MapManager";
@@ -147,7 +146,7 @@ export class SceneRaycaster {
                 }
             }
         }
-        return this.mapManager.getMap(getMapIndexFromTile(tileX), getMapIndexFromTile(tileY)) as
+        return this.mapManager.getMapForWorldTile(tileX, tileY) as
             | WebGLMapSquare
             | undefined;
     }
@@ -710,15 +709,12 @@ export class SceneRaycaster {
             const worldViewId = pe.getWorldViewId(i) | 0;
             const mapId =
                 worldViewId >= 0
-                    ? (this.osrsClient.worldViewManager.getWorldView(worldViewId)?.overlayMapId ??
-                          getMapSquareId(
-                              getMapIndexFromTile((pe.getX(i) | 0) >> 7),
-                              getMapIndexFromTile((pe.getY(i) | 0) >> 7),
-                          )) | 0
-                    : getMapSquareId(
-                          getMapIndexFromTile((pe.getX(i) | 0) >> 7),
-                          getMapIndexFromTile((pe.getY(i) | 0) >> 7),
-                      );
+                    ? this.osrsClient.worldViewManager.getWorldView(worldViewId)?.overlayMapId
+                    : this.mapManager.getMapForWorldTile(
+                          (pe.getX(i) | 0) >> 7,
+                          (pe.getY(i) | 0) >> 7,
+                      )?.id;
+            if (mapId === undefined) continue;
             let list = byMap.get(mapId);
             if (!list) {
                 list = [];
