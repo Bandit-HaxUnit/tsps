@@ -595,7 +595,7 @@ class ClientConnection {
           }
           continue;
         case "widget_drag":
-          if (this.player) SwitchItemSlotPacketListener.move(
+          if (this.player && !Bank.handleDrag(this.player, packet)) SwitchItemSlotPacketListener.move(
             this.player, packet.sourceWidgetId, packet.sourceSlot, packet.targetSlot
           );
           continue;
