@@ -762,14 +762,22 @@ export class SceneRaycaster {
                 const pid = playerIndices[indexInMap] | 0;
                 const px = pe.getX(pid) | 0;
                 const py = pe.getY(pid) | 0;
-                const worldX = px / 128.0;
-                const worldZ = py / 128.0;
                 const interactId = PLAYER_INTERACT_BASE + (indexInMap & 0x7fff);
                 const playerPlane = pe.getLevel(pid) | 0;
                 if (typeof basePlane === "number" && (playerPlane | 0) !== (basePlane | 0)) {
                     continue;
                 }
-                const groundY = this.sampleHeightAt(worldX, worldZ, playerPlane | 0);
+                // The deck scene gives the height; the box goes where the deck is drawn.
+                const groundY = this.sampleHeightAt(px / 128.0, py / 128.0, playerPlane | 0);
+                let worldX = px / 128.0;
+                let worldZ = py / 128.0;
+                const worldViewId = pe.getWorldViewId(pid) | 0;
+                if (worldViewId >= 0) {
+                    const projected = this.deckToWorldProvider?.(worldViewId, px, py);
+                    if (!projected) continue;
+                    worldX = projected.x / 128.0;
+                    worldZ = projected.y / 128.0;
+                }
                 const topY = groundY - Math.max(0.5, pe.getDefaultHeightTiles(pid) ?? 1.8);
                 const minY = Math.min(groundY, topY);
                 const maxY = Math.max(groundY, topY);
