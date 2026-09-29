@@ -118,7 +118,6 @@ Headless tests like `trade.test.cjs` and `bank.test.cjs`, one per lifecycle row:
 
 - Death at sea: does the boat sink, or return to its last dock?
 - Recovery fee once boats take damage and have facilities (the wiki gives only the base fee).
-- Junior Jim's spawn tile: placed next to the dock's landing tile (3068, 2989); not checked against live OSRS.
 - The game messages for boarding, disembarking and Escape, and the Escape confirmation prompt, are placeholders; the live wording is unconfirmed.
 - Logging out at sea when the boat last left from an island mooring point rather than a port (a Dec 2025 fix changed this; unclear if it differs).
 
