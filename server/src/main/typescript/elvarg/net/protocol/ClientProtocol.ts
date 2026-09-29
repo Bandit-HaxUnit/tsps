@@ -102,6 +102,8 @@ export type PlayerSyncState = {
   lastTiles: Map<number, Tile>;
   movementTypes: Map<number, 1 | 2>;
   interactionIndices: Map<number, number>;
+  /** The world view (boat entity index, or -1) each known player was last sent with. */
+  worldViews: Map<number, number>;
   viewPositions: Int16Array;
   movementChanged: Uint8Array;
   movementDx: Int16Array;
@@ -1907,6 +1909,7 @@ export function createPlayerSyncState(
     lastTiles: new Map([[localIndex, { ...tile }]]),
     movementTypes: new Map([[localIndex, 1]]),
     interactionIndices: new Map(),
+    worldViews: new Map(),
     viewPositions: new Int16Array(2048).fill(-1),
     movementChanged: new Uint8Array(2048),
     movementDx: new Int16Array(2048),
@@ -2211,6 +2214,12 @@ export function encodePlayerSync(
   for (let position = 0; position < views.length; position++) {
     const index = views[position].index;
     if (index > 0 && index < 2048 && viewPositions[index] < 0) {
+      // Movement can't carry a world view: a known player boarding or leaving a boat is
+      // removed this frame and added back with their new world view the next.
+      if (index !== localIndex && state.lastTiles.has(index) &&
+        (state.worldViews.get(index) ?? -1) !== (views[position].worldView ?? -1)) {
+        continue;
+      }
       viewPositions[index] = position;
     }
   }
@@ -2400,6 +2409,7 @@ export function encodePlayerSync(
     state.lastTiles.delete(index);
     state.movementTypes.delete(index);
     state.interactionIndices.delete(index);
+    state.worldViews.delete(index);
   }
 
   state.activeCount = 0;
@@ -2425,6 +2435,7 @@ export function encodePlayerSync(
     }
     if (nextType !== 0) state.movementTypes.set(index, nextType);
     state.interactionIndices.set(index, view.interactionIndex ?? -1);
+    state.worldViews.set(index, view.worldView ?? -1);
   }
 
   updateBlocks.unshift(writer.toBuffer());
