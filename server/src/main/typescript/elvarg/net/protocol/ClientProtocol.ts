@@ -88,6 +88,8 @@ export type PlayerView = Tile & ActorUpdateView & {
   faceDirection?: number;
   forcedMovement?: ForcedMovementView;
   forcedMovementEnd?: Tile;
+  /** The world entity (boat) whose deck the player stands on; the coordinates are deck coordinates. */
+  worldView?: number;
 };
 
 export type PlayerSyncState = {
@@ -2338,7 +2340,8 @@ export function encodePlayerSync(
     }
     writer.writeBits(13, view.x & 0x1fff);
     writer.writeBits(13, view.y & 0x1fff);
-    writer.writeBits(1, 0); // no world view
+    writer.writeBits(1, view.worldView != null ? 1 : 0);
+    if (view.worldView != null) writer.writeBits(16, view.worldView);
     writer.writeBits(1, 1); // appearance follows
     appendUpdateBlock(index, true);
   };

@@ -371,3 +371,44 @@ test("the boat a player is on is always sent, and a disposed boat is removed", (
   sailor.area = null;
   assert.deepEqual(decodeWorldEntityInfo(WorldEntitySync.flush(sailor)[0]).updates, [{ updateType: 0 }]);
 });
+
+// --- Player sync and visibility across the deck boundary.
+
+const { encodePlayerSync, createPlayerSyncState } = require("../dist/net/protocol/ClientProtocol");
+
+function bitsOf(buffer) {
+  return [...buffer].map((byte) => byte.toString(2).padStart(8, "0")).join("");
+}
+
+test("adding a player on a deck writes their boat as the world view", () => {
+  const syncBits = (worldView) => {
+    const self = { index: 1, x: 3200, y: 3200, level: 0, appearance: Buffer.alloc(1) };
+    const sailor = { index: 2, x: 9624, y: 9636, level: 0, appearance: Buffer.alloc(1), worldView };
+    const packet = encodePlayerSync(1, 3152, 3152, 1, [self, sailor], createPlayerSyncState(1, self));
+    return bitsOf(packet.subarray(3 + 12)); // opcode + length, then the 12-byte header
+  };
+  const ashore = syncBits(undefined);
+  const aboard = syncBits(3000);
+  let at = 0;
+  while (ashore[at] === aboard[at]) at++;
+  assert.equal(ashore[at], "0", "the no-world-view bit");
+  assert.equal(aboard.slice(at, at + 17), "1" + (3000).toString(2).padStart(16, "0"));
+  assert.equal(aboard.slice(at + 17), ashore.slice(at + 1), "nothing else changes");
+});
+
+test("people aboard count as being in the main world, where the boat is", () => {
+  const boat = BoatManager.spawn(1, RAFT, { ...AT_SEA, angle: SOUTH });
+  try {
+    const sailor = aboard(boat, 3, 4);
+    sailor.getPrivateArea = () => BoatManager.getDeck(boat);
+    assert.equal(BoatManager.syncArea(sailor), null);
+    const house = { getObjects: () => [] };
+    assert.equal(BoatManager.syncArea({ getPrivateArea: () => house }), house, "other private areas are unchanged");
+    // A viewer 10 tiles from the boat sees the sailor; one 20 tiles away does not.
+    const root = BoatManager.rootLocation(sailor);
+    assert.ok(root.isViewableFromWithin(new Location(110, 101, 0), 15));
+    assert.ok(!root.isViewableFromWithin(new Location(121, 101, 0), 15));
+  } finally {
+    BoatManager.dispose(boat);
+  }
+});

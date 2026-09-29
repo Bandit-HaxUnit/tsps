@@ -1,6 +1,7 @@
 import { RegionManager } from "../../collision/RegionManager";
 import type { Mobile } from "../../entity/impl/Mobile";
 import { Location } from "../../model/Location";
+import type { PrivateArea } from "../../model/areas/impl/PrivateArea";
 import { Boat } from "./Boat";
 import { BoatDeckArea } from "./BoatDeckArea";
 import { tickBoat } from "./BoatMovement";
@@ -99,6 +100,15 @@ export class BoatManager {
         if (!boat) return location;
         const tile = boat.deckTileToWorld(location.getX(), location.getY());
         return new Location(tile.x, tile.y, boat.level);
+    }
+
+    /**
+     * The private area an actor counts as being in for who-sees-whom: a deck counts as the
+     * main world, so people aboard and people ashore see each other.
+     */
+    public static syncArea(mobile: Mobile): PrivateArea | null {
+        const area = mobile.getPrivateArea();
+        return area instanceof BoatDeckArea ? null : area;
     }
 
     /** Registers content that reacts to the helm setting a new heading (such as raising sail). */

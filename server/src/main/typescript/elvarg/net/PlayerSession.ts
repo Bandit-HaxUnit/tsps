@@ -1,4 +1,5 @@
 import { MAX_GAME_MESSAGE_BYTES } from "./BinaryChannel";
+import { BoatManager } from "../game/content/sailing/BoatManager";
 import { WorldEntitySync } from "../game/content/sailing/WorldEntitySync";
 import { Packet } from "./packet/Packet";
 import { PacketBuilder } from "./packet/PacketBuilder";
@@ -449,6 +450,7 @@ export class PlayerSession {
       y: location.getY(),
       level: location.getZ(),
       appearance: payload,
+      worldView: BoatManager.getBoatAboard(player)?.entityIndex,
       resetPath: player.isNeedsPlacement(),
       movementType: player.getRunningDirection().getId() >= 0
         ? 2
