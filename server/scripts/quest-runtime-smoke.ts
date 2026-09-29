@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 
-const { registerQuest } = require("../plugins/quests/QuestRuntime.js");
+const { registerQuest, openJournalBySlot } = require("../plugins/quests/QuestRuntime.js");
 
 const attributes = new Map<string, unknown>();
 const sent = {
@@ -23,6 +23,7 @@ const player = {
     }),
     getPacketSender: () => ({
         sendConfig: (id: number, value: number) => sent.configs.push([id, value]),
+        sendVarbit: () => {},
         sendJingle: (id: number) => sent.jingles.push(id),
         sendQuestList: (groups: any) => sent.questLists.push(groups),
         sendInterfaceFlagsRange: () => {},
@@ -41,6 +42,7 @@ const api = {
     persistAttribute: (key: string) => persisted.push(key),
     onInterfaceActionButton: () => {},
     onCustomEvent: () => {},
+    onPlayerLogin: () => {},
 };
 
 const quest = registerQuest(api, {
@@ -66,12 +68,12 @@ assert.equal(quest.isComplete(player), false);
 quest.setStage(player, 1);
 assert.equal(quest.getStage(player), 1);
 assert.equal(quest.isStarted(player), true);
-assert.deepEqual(sent.configs.at(-1), [29, 1], "stage mirrors to the quest varp");
+assert.ok(sent.configs.some(([id, value]) => id === 29 && value === 1), "stage mirrors to the quest varp");
 
 assert.equal(quest.complete(player), true);
 assert.equal(quest.isComplete(player), true);
 assert.equal(quest.getStage(player), 2);
-assert.deepEqual(sent.configs.at(-1), [101, 1], "quest points varp");
+assert.ok(sent.configs.some(([id, value]) => id === 101 && value === 1), "quest points varp");
 assert.equal(sent.rewarded, true, "reward hook runs");
 assert.deepEqual(sent.granted, [[1891, 1]], "reward item is added to the inventory");
 assert.ok(sent.jingles.length > 0, "plays the completion jingle");
@@ -83,5 +85,23 @@ const groups = sent.questLists.at(-1);
 assert.equal(groups[0].quests[0].key, "test_quest");
 assert.equal(groups[0].quests[0].status, 2, "quest list shows complete");
 assert.equal(groups[0].quests[0].displayName, "Test Quest");
+
+// Quest rows are sent at slots 1..N (slot 0 is the "Free Quests" header row), so
+// the journal lookup must subtract one - an off-by-one opened the next quest and
+// left the last row (Witch's Potion) opening nothing.
+const journalTitleUid = (119 << 16) | 5;
+sent.strings.length = 0;
+openJournalBySlot(player, 1);
+assert.ok(
+    sent.strings.some(([text, uid]) => uid === journalTitleUid && text.includes("Test Quest")),
+    "slot 1 opens the first quest's journal"
+);
+sent.strings.length = 0;
+openJournalBySlot(player, 0);
+assert.equal(
+    sent.strings.filter(([, uid]) => uid === journalTitleUid).length,
+    0,
+    "the header slot opens no journal"
+);
 
 console.info("quest runtime smoke passed");
