@@ -11,6 +11,7 @@ const { Item } = require("../dist/game/model/Item");
 const { PlayerStatus } = require("../dist/game/model/PlayerStatus");
 const { Inventory } = require("../dist/game/model/container/impl/Inventory");
 const { ShopManager } = require("../dist/game/model/container/shop/ShopManager");
+const { PlayerSave } = require("../dist/game/entity/impl/player/persistence/PlayerSave");
 
 const COINS = 995;
 const BRONZE_AXE = 1351;
@@ -53,17 +54,26 @@ function loadShops() {
       { id: BRONZE_AXE, amount: 3, restockTicks: null, price: null },
     ], 1, 1, 1, "test"),
   ]);
-  ShopManager.reload();
+  ShopManager.initialize();
 }
 
 function createPlayer() {
-  // Every packet-sender call is a chainable no-op.
-  const sender = new Proxy({}, { get: () => () => sender });
+  // Every packet-sender call is a chainable no-op; varbits are recorded.
+  const varbits = new Map();
+  const sender = new Proxy({}, {
+    get: (_target, key) => key === "sendVarbit"
+      ? (id, value) => { varbits.set(id, value); return sender; }
+      : () => sender,
+  });
   const messages = [];
+  const attributes = new Map();
   let status = PlayerStatus.NONE;
   let interfaceId = -1;
   const player = {
     messages,
+    varbits,
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
     getUsername: () => "alice",
     sendMessage: (message) => messages.push(message),
     getPacketSender: () => sender,
@@ -181,4 +191,21 @@ test("every general store buys items it doesn't stock and restocks its own", () 
 
   for (let tick = 0; tick < 3; tick++) ShopManager.restockAll();
   assert.equal(stockOf(GENERAL_STORE)[0][1], 3);
+});
+
+test("the quantity buttons set what an item's left-click buys, and the choice is saved", () => {
+  const player = openShop();
+  const clickButton = (childId) => ShopManager.handleWidgetAction(player, {
+    groupId: ShopManager.MAIN_INTERFACE_ID, childId, buttonNum: 1, option: undefined,
+  });
+
+  clickButton(10); // Buy-5
+  assert.equal(player.varbits.get(6348), 2);
+  assert.equal(player.getAttribute("shop:quantityMode"), 2);
+  assert.ok(PlayerSave.persistentAttributeKeys.has("shop:quantityMode"));
+
+  ShopManager.handleWidgetAction(player, {
+    groupId: ShopManager.MAIN_INTERFACE_ID, childId: 16, buttonNum: 1, slot: 1, itemId: BRONZE_AXE,
+  });
+  assert.equal(player.getInventory().getAmount(BRONZE_AXE), 2, "buys up to 5, capped at the 2 in stock");
 });

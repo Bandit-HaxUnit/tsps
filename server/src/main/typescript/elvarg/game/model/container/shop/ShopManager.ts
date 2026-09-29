@@ -11,6 +11,7 @@ import { ItemIdentifiers } from "../../../../util/ItemIdentifiers";
 import { Misc } from "../../../../util/Misc";
 import { ShopIdentifiers } from "../../../../util/ShopIdentifiers";
 import { encodeShopClose, encodeShopOpen } from "../../../../net/protocol/ClientProtocol";
+import { PlayerSave } from "../../../entity/impl/player/persistence/PlayerSave";
 
 export interface ShopItemContainerAction {
     kind: "value" | "buy_sell" | "x";
@@ -70,6 +71,14 @@ export class ShopManager {
     private static readonly MAX_ACTION_AMOUNT = 5000;
     private static readonly SALES_TAX = 0.85;
     private static readonly BLOOD_MONEY_SHOP_IDS = [13, 14, 27];
+    /**
+     * The quantity row (Value, Buy-1/5/10/50) sets varbit 6348, which the
+     * cache scripts read to make an item's left-click "Value" or "Buy N".
+     */
+    private static readonly QUANTITY_VARBIT = 6348;
+    private static readonly QUANTITY_MODE_BY_BUTTON = new Map([[5, 0], [8, 1], [10, 2], [12, 3], [14, 4]]);
+    private static readonly QUANTITY_BY_MODE = [0, 1, 5, 10, 50];
+    private static readonly QUANTITY_MODE_ATTRIBUTE = "shop:quantityMode";
     private static readonly shopsById = new Map<number, RuntimeShop>();
     private static readonly activeShopByPlayer = new WeakMap<object, number>();
     private static readonly activeTargetByPlayer = new WeakMap<object, number>();
@@ -112,6 +121,7 @@ export class ShopManager {
     }
 
     public static initialize(): void {
+        PlayerSave.persistAttribute(this.QUANTITY_MODE_ATTRIBUTE);
         this.reload();
     }
 
@@ -258,9 +268,17 @@ export class ShopManager {
         slot?: number;
         itemId?: number;
     }): boolean {
-        if (!this.isOpen(player) || packet.slot == null) return false;
+        if (!this.isOpen(player)) return false;
+        const mode = this.QUANTITY_MODE_BY_BUTTON.get(packet.childId);
+        if (packet.groupId === this.MAIN_INTERFACE_ID && mode !== undefined) {
+            this.setQuantityMode(player, mode);
+            return true;
+        }
+        if (packet.slot == null) return false;
         const option = packet.option?.trim().toLowerCase() ?? "";
-        const amount = this.actionAmount(packet.buttonNum, option);
+        const selected = this.QUANTITY_BY_MODE[this.quantityMode(player)];
+        const amount = this.actionAmount(packet.buttonNum, option) ??
+            (packet.groupId === this.MAIN_INTERFACE_ID && packet.buttonNum === 1 && !option && selected > 0 ? selected : null);
         const examine = packet.buttonNum === 10 || option === "examine";
 
         if (packet.groupId === this.MAIN_INTERFACE_ID && packet.childId === 16) {
@@ -303,6 +321,20 @@ export class ShopManager {
             return true;
         }
         return false;
+    }
+
+    private static quantityMode(player: any): number {
+        const mode = Number(player.getAttribute?.(this.QUANTITY_MODE_ATTRIBUTE) ?? 0);
+        return Number.isInteger(mode) && mode >= 0 && mode < this.QUANTITY_BY_MODE.length ? mode : 0;
+    }
+
+    private static setQuantityMode(player: any, mode: number): void {
+        player.setAttribute?.(this.QUANTITY_MODE_ATTRIBUTE, mode);
+        const shop = this.currentShop(player);
+        if (shop) {
+            // Reopening rebuilds the stock, and with it each item's left-click op.
+            this.openInterface(player, shop, false, this.activeTargetByPlayer.get(player) ?? ((161 << 16) | 16));
+        }
     }
 
     public static actionAmount(button: number, option?: string): number | null {
@@ -409,6 +441,7 @@ export class ShopManager {
         });
         player.setInterfaceId(this.MAIN_INTERFACE_ID);
         player.setStatus(PlayerStatus.SHOPPING);
+        sender.sendVarbit(this.QUANTITY_VARBIT, this.quantityMode(player));
         sender.sendSubInterface(targetUid, this.MAIN_INTERFACE_ID, 0)
             .sendSubInterface((161 << 16) | 79, this.SIDE_INTERFACE_ID, 1)
             .sendInterfaceScript(1074, [516, shop.definition.getName(), this.currencyItemId(shop.definition.getCurrency()), 0, 1])
