@@ -724,3 +724,18 @@ test("a boat's deck locs exist on the deck level people stand on, so clicks reso
     BoatManager.dispose(boat);
   }
 });
+
+test("::raft gives a raft moored at The Pandemonium; ::boatinfo lists boats", () => {
+  const commands = {};
+  require("../plugins/skills/sailing/SailingCommands.plugin").register({
+    registerCommand: (name, handler) => { commands[name] = handler; },
+  });
+  const player = sailor();
+  commands.raft({ player, parts: ["raft"] });
+  assert.deepEqual(Sailing.activeBoat(player).location, { kind: "docked", dock: "the_pandemonium" });
+  commands.boatinfo({ player, parts: ["boatinfo"] });
+  assert.deepEqual(player.messages, [
+    "A raft is moored for you at The Pandemonium (slot 0).",
+    'Slot 0: raft "Raft", docked at the_pandemonium (active)',
+  ]);
+});
