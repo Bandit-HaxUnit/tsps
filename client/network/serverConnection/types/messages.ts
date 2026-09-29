@@ -191,7 +191,7 @@ export type TradeServerPayload =
 
 export type TradeActionClientPayload =
     | { action: "offer"; slot: number; quantity: number; itemId?: number }
-    | { action: "remove"; slot: number; quantity: number }
+    | { action: "remove"; slot: number; quantity: number; itemId?: number }
     | { action: "accept" }
     | { action: "decline" }
     | { action: "confirm_accept" }

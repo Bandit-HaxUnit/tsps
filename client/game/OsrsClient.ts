@@ -2198,7 +2198,7 @@ export class OsrsClient {
                     if (tradeQuantity.action === "offer") {
                         sendTradeOffer(tradeQuantity.slot, tradeQuantity.itemId, quantity);
                     } else {
-                        sendTradeRemove(tradeQuantity.slot, quantity);
+                        sendTradeRemove(tradeQuantity.slot, tradeQuantity.itemId, quantity);
                     }
                     return;
                 }
