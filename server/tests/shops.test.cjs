@@ -15,12 +15,14 @@ const { ShopManager } = require("../dist/game/model/container/shop/ShopManager")
 const COINS = 995;
 const BRONZE_AXE = 1351;
 const STEEL_AXE = 1353;
+const STEEL_AXE_NOTE = 1354;
 
 // Item definitions normally come from the cache; stub the few this test uses.
 const DEFINITIONS = {
   [COINS]: { name: "Coins", stackable: true, value: 1 },
   [BRONZE_AXE]: { name: "Bronze axe", value: 16 },
   [STEEL_AXE]: { name: "Steel axe", value: 200 },
+  [STEEL_AXE_NOTE]: { name: "Steel axe", stackable: true, value: 200, noteOf: STEEL_AXE },
 };
 ItemDefinition.forId = (id) => {
   const def = DEFINITIONS[id] ?? { name: "null", value: 0 };
@@ -138,4 +140,15 @@ test("Sell N sells unstackable items from every slot, skipping ones that can't b
   assert.equal(player.getInventory().getAmount(STEEL_AXE), 1);
   assert.equal(player.getInventory().getItems()[1].isUntradeable(), true);
   assert.deepEqual(stockOf(), [[BRONZE_AXE, 2], [STEEL_AXE, 3]]);
+});
+
+test("notes sell as the item they stand for", () => {
+  const player = openShop(0);
+  player.getInventory().add(new Item(STEEL_AXE_NOTE, 3), false);
+
+  sell(player, 0, "Sell 5");
+
+  assert.equal(player.getInventory().getAmount(STEEL_AXE_NOTE), 0);
+  assert.equal(player.getInventory().getAmount(COINS), 3 * Math.floor(200 * 0.85));
+  assert.deepEqual(stockOf(), [[BRONZE_AXE, 2], [STEEL_AXE, 4]]);
 });

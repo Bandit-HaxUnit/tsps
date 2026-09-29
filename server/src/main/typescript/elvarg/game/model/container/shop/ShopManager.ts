@@ -475,6 +475,10 @@ export class ShopManager {
         fromShop: boolean,
         item?: any
     ): void {
+        if (!fromShop) {
+            // A note sells as the item it stands for.
+            itemId = ItemDefinition.forId(itemId).unNote();
+        }
         if (!fromShop && shop.definition.getCurrency() === "COINS" && this.isBloodMoneyShopItem(itemId)) {
             player.sendMessage("PK shop items cannot be sold for coins.");
             return;
@@ -583,17 +587,19 @@ export class ShopManager {
         if (!Number.isInteger(itemId)) {
             return;
         }
-        if (shop.definition.getCurrency() === "COINS" && this.isBloodMoneyShopItem(itemId)) {
+        // A note sells as the item it stands for.
+        const stockId = ItemDefinition.forId(itemId).unNote();
+        if (shop.definition.getCurrency() === "COINS" && this.isBloodMoneyShopItem(stockId)) {
             player.sendMessage("PK shop items cannot be sold for coins.");
             return;
         }
-        if (!this.buysItem(shop, itemId)) {
+        if (!this.buysItem(shop, stockId)) {
             player.sendMessage(
                 "You cannot sell this item to this shop."
             );
             return;
         }
-        const definition = ItemDefinition.forId(itemId);
+        const definition = ItemDefinition.forId(stockId);
         if (!item.isSellable()) {
             player.sendMessage("This item cannot be sold.");
             return;
@@ -606,7 +612,7 @@ export class ShopManager {
         }
         // A stack sells from its own slot; unstackable items (one per slot)
         // start at the clicked slot and continue through the others.
-        const slots = definition.isStackable()
+        const slots = item.getDefinition().isStackable()
             ? [slot]
             : [slot, ...inventory.getItems().map((_, index) => index).filter((index) => index !== slot)];
         const sellable = slots.filter((index) => {
@@ -626,7 +632,7 @@ export class ShopManager {
             player.sendMessage("This item has no value.");
             return;
         }
-        if ((shop.stock.get(itemId) ?? 0) <= 0 && shop.order.length >= this.MAX_SHOP_ITEMS) {
+        if ((shop.stock.get(stockId) ?? 0) <= 0 && shop.order.length >= this.MAX_SHOP_ITEMS) {
             player.sendMessage("The shop is currently full.");
             return;
         }
@@ -644,7 +650,7 @@ export class ShopManager {
             shop.definition.getCurrency(),
             quantity * price
         );
-        this.addStock(shop, itemId, quantity);
+        this.addStock(shop, stockId, quantity);
         Sounds.sendSound(player, Sound.DROP_ITEM);
         this.refresh(shop.definition.getId());
         this.ensureRestockTask();
