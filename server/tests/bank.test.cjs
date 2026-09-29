@@ -58,3 +58,16 @@ test("depositing a note banks the item it notes, not the item before it", () => 
   assert.equal(player.getBank().getAmount(MYSTIC_LAVA_STAFF), 0);
   assert.equal(player.getBank().getAmount(LAVA_BATTLESTAFF_NOTE), 0);
 });
+
+test("depositing everything banks notes as the item they note", () => {
+  const player = createPlayer();
+  player.getInventory().add(new Item(LAVA_BATTLESTAFF_NOTE, 3), false);
+  const item = player.getInventory().getValidItems()[0];
+
+  // What Deposit inventory does for each inventory item.
+  player.getInventory().switchItems(player.getBank(), item.clone(), false, false);
+
+  assert.equal(player.getBank().getAmount(LAVA_BATTLESTAFF), 3);
+  assert.equal(player.getBank().getAmount(LAVA_BATTLESTAFF_NOTE), 0);
+  assert.equal(player.getInventory().getAmount(LAVA_BATTLESTAFF_NOTE), 0);
+});

@@ -383,6 +383,11 @@ export abstract class ItemContainer {
 
     this.deleteBoolean(item, refresh);
 
+    // Noted items should not be in bank.
+    if (to instanceof Bank) {
+      item.setId(getItemDefinition().forId(item.getId()).unNote());
+    }
+
     to.add(item, refresh);
 
     if (sort && this.getAmount(item.getId()) <= 0) {
