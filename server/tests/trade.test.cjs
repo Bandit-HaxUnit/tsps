@@ -171,3 +171,79 @@ test("the offer screen shows who you trade with, both offers' values and accepta
   assert.equal(text(30), "Other player has accepted.");
   assert.equal(bob.texts.get((335 << 16) | 30), "Waiting for other player...");
 });
+
+const TRIDENT = 11907;
+DEFINITIONS[TRIDENT] = { name: "Trident of the seas", stackable: false, value: 0 };
+
+function addWithMeta(player, itemId, amount, meta) {
+  player.getInventory().add(new Item(itemId, amount, meta), false);
+}
+
+function offerFromSlot(player, slot, amount) {
+  const inventory = player.getInventory();
+  const itemId = inventory.getItems()[slot].getId();
+  player.getTrading().handleItem(itemId, amount, slot, inventory, player.getTrading().getContainer());
+}
+
+function startEmptyTrade() {
+  const alice = createPlayer("alice", 1);
+  const bob = createPlayer("bob", 2);
+  alice.getTrading().requestTrade(bob);
+  bob.getTrading().requestTrade(alice);
+  return { alice, bob };
+}
+
+test("offered items keep their metadata through offer, remove and completion", () => {
+  const { alice, bob } = startEmptyTrade();
+  addWithMeta(alice, TRIDENT, 1, { charges: 1200 });
+  addWithMeta(alice, TRIDENT, 1, { charges: 5 });
+
+  offerFromSlot(alice, 0, 2);
+  const offered = alice.getTrading().getContainer().getValidItems().map((item) => item.getMeta());
+  assert.deepEqual(offered, [{ charges: 1200 }, { charges: 5 }]);
+
+  const container = alice.getTrading().getContainer();
+  alice.getTrading().handleItem(TRIDENT, 1, 1, container, alice.getInventory());
+  assert.deepEqual(alice.getInventory().getValidItems().map((item) => item.getMeta()), [{ charges: 5 }]);
+
+  alice.getTrading().acceptTrade();
+  bob.getTrading().acceptTrade();
+  alice.getTrading().getButtonDelay().stop();
+  bob.getTrading().getButtonDelay().stop();
+  alice.getTrading().acceptTrade();
+  bob.getTrading().acceptTrade();
+  assert.deepEqual(bob.getInventory().getValidItems().map((item) => item.getMeta()), [{ charges: 1200 }]);
+});
+
+test("declining returns items with their metadata", () => {
+  const { alice } = startEmptyTrade();
+  addWithMeta(alice, TRIDENT, 1, { charges: 1200 });
+  offerFromSlot(alice, 0, 1);
+
+  alice.getTrading().closeTrade();
+
+  assert.deepEqual(alice.getInventory().getValidItems().map((item) => item.getMeta()), [{ charges: 1200 }]);
+});
+
+test("offering several of an item skips copies tagged untradeable", () => {
+  const { alice } = startEmptyTrade();
+  addWithMeta(alice, LOBSTER, 1, { [Item.UNTRADEABLE_META]: true });
+  addWithMeta(alice, LOBSTER, 1, null);
+  addWithMeta(alice, LOBSTER, 1, null);
+
+  offerFromSlot(alice, 1, 3);
+
+  assert.equal(alice.getTrading().getContainer().getAmount(LOBSTER), 2);
+  assert.equal(alice.getInventory().getItems()[0].isUntradeable(), true);
+});
+
+test("offering from one stack never takes more than that stack holds", () => {
+  const { alice } = startEmptyTrade();
+  addWithMeta(alice, COINS, 100, { [Item.UNTRADEABLE_META]: true });
+  addWithMeta(alice, COINS, 50, null);
+
+  offerFromSlot(alice, 1, 150);
+
+  assert.equal(alice.getTrading().getContainer().getAmount(COINS), 50);
+  assert.equal(alice.getInventory().getAmount(COINS), 100);
+});

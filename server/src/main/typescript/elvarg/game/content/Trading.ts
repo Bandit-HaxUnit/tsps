@@ -1,6 +1,5 @@
 import { ItemDefinition } from "../definition/ItemDefinition";
 import { Player } from "../entity/impl/player/Player";
-import { Item } from "../model/Item";
 import { PlayerStatus } from "../model/PlayerStatus";
 import { SecondsTimer } from "../model/SecondsTimer";
 import { ItemContainer } from "../model/container/ItemContainer";
@@ -201,9 +200,11 @@ export class Trading {
 
     private abort(message: string) {
         this.player.getSession().sendClientPacket(encodeTradeClose(message));
-        for (let t of this.container.getValidItems()) {
-            this.container.switchItems(this.player.getInventory(), t.clone(), false, false);
-        }
+        this.container.getItems().forEach((item, slot) => {
+            if (item != null && item.getId() > 0 && item.getAmount() > 0) {
+                this.container.switchItem(this.player.getInventory(), item.clone(), false, slot, false);
+            }
+        });
         this.player.getInventory().refreshItems();
         this.resetAttributes();
         this.player.sendMessage(message);
@@ -346,14 +347,7 @@ export class Trading {
                         return;
                     }
 
-                    const item = new Item(id, amount);
-
-                    // Do the switch!
-                    if (item.getAmount() === 1) {
-                        from.switchItem(to, item,  false, slot, true);
-                    } else {
-                        from.switchItems(to, item, false, true);
-                    }
+                    Trading.moveItems(from, to, slot, amount);
 
                     if (this.interact.isPlayerBot && this.interact.isPlayerBot()) {
                         // Automatically accept the trade whenever an item is added by the player
@@ -364,6 +358,33 @@ export class Trading {
                 this.player.getPacketSender().sendInterfaceRemoval();
             }
         }
+    }
+
+    /**
+     * Moves up to `amount` of the item in `slot`, slot by slot, so each item
+     * keeps its own metadata (charges, contents). A stack moves only from the
+     * clicked slot; unstackable items start there and continue through the
+     * other tradeable slots holding the same item.
+     */
+    private static moveItems(from: ItemContainer, to: ItemContainer, slot: number, amount: number): void {
+        const clicked = from.getItems()[slot];
+        const id = clicked.getId();
+        if (clicked.getDefinition().isStackable()) {
+            const moving = clicked.clone().setAmount(Math.min(amount, clicked.getAmount()));
+            from.switchItem(to, moving, false, slot, false);
+        } else {
+            const slots = [slot, ...from.getItems().map((_, index) => index).filter((index) => index !== slot)];
+            let moved = 0;
+            for (const index of slots) {
+                if (moved >= amount || to.getFreeSlots() <= 0) break;
+                const item = from.getItems()[index];
+                if (item.getId() !== id || !item.isTradeable()) continue;
+                from.switchItem(to, item.clone(), false, index, false);
+                moved++;
+            }
+        }
+        from.refreshItems();
+        to.refreshItems();
     }
 
     resetAttributes() {
