@@ -9,7 +9,7 @@ import { ItemContainer } from "../model/container/ItemContainer";
 import { StackType } from "../model/container/StackType";
 import { Inventory } from "../model/container/impl/Inventory";
 import { Misc } from "../../util/Misc";
-import { encodeTradeClose, encodeTradeOpen, encodeTradeRequest, encodeTradeUpdate, TradePartyView } from "../../net/protocol/ClientProtocol";
+import { encodeChatMessage, encodeTradeClose, encodeTradeOpen, encodeTradeRequest, encodeTradeUpdate, TradePartyView } from "../../net/protocol/ClientProtocol";
 
 const ATTR_SKIP_PERSISTENCE = "botSkipPersistence";
 
@@ -42,6 +42,7 @@ export class Trading {
     private static readonly OFFER_INTERFACE = 335;
     private static readonly CONFIRM_INTERFACE = 334;
     private static readonly INVENTORY_INTERFACE = 336;
+    private static readonly TRADE_REQUEST_CHAT_TYPE = 101;
 
     // Text components the cache trade scripts leave to the server.
     private static readonly OFFER_FREE_SLOTS = (Trading.OFFER_INTERFACE << 16) | 9;
@@ -153,7 +154,11 @@ export class Trading {
                 t_.getTrading().initiateTrade();
             } else {
                 this.player.sendMessage("You've sent a trade request to " + t_.getUsername() + ".");
-                t_.sendMessage(this.player.getUsername() + ":tradereq:");
+                // The client shows "<name> wishes to trade with you." and makes it clickable.
+                t_.getSession().sendClientPacket(encodeChatMessage(
+                    "trade", "wishes to trade with you.", this.player.getUsername(), "",
+                    this.player.getIndex(), Trading.TRADE_REQUEST_CHAT_TYPE,
+                ));
                 t_.getSession().sendClientPacket(encodeTradeRequest(this.player.getIndex(), this.player.getUsername()));
                 if (t_.isPlayerBot && t_.isPlayerBot()) {
                     // Player Bots: Automatically accept any trade request

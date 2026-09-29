@@ -37,6 +37,7 @@ ItemDefinition.forId = (id) => {
 function createPlayer(name, index) {
   const messages = [];
   const texts = new Map();
+  const packets = [];
   let status = PlayerStatus.NONE;
   let interfaceId = -1;
   // Every packet-sender call is a chainable no-op, except closing interfaces,
@@ -54,9 +55,10 @@ function createPlayer(name, index) {
   const player = {
     messages,
     texts,
+    packets,
     getUsername: () => name,
     getIndex: () => index,
-    getSession: () => ({ sendClientPacket: () => true }),
+    getSession: () => ({ sendClientPacket: (packet) => packets.push(packet) > 0 }),
     getPacketSender: () => sender,
     sendMessage: (message) => messages.push(message),
     getStatus: () => status,
@@ -289,4 +291,15 @@ test("offered items that no longer fit in the inventory are dropped, not lost", 
   assert.deepEqual(dropped, [["alice", LOBSTER, 1], ["alice", LOBSTER, 1], ["alice", LOBSTER, 1]]);
   assert.equal(alice.getTrading().getContainer().getValidItems().length, 0);
   assert.ok(alice.messages.includes("Your inventory is full, so some of your offered items were dropped on the floor."));
+});
+
+test("a trade request reaches the other player as a trade-request chat line", () => {
+  const alice = createPlayer("alice", 1);
+  const bob = createPlayer("bob", 2);
+
+  alice.getTrading().requestTrade(bob);
+
+  assert.ok(!bob.messages.some((message) => message.includes(":tradereq:")));
+  assert.ok(bob.packets.some((packet) =>
+    packet.includes("wishes to trade with you.") && packet.includes("alice")));
 });
