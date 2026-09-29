@@ -672,7 +672,7 @@ export class ShopManager {
             const original = shop.originalAmounts.get(itemId) ?? 0;
             const current = shop.stock.get(itemId) ?? 0;
             const decrease = current > original;
-            const increase = current < original && !this.isGeneralStore(shop);
+            const increase = current < original;
             if (!decrease && !increase) {
                 shop.changeTimers.delete(itemId);
                 continue;
@@ -778,8 +778,10 @@ export class ShopManager {
         return this.isGeneralStore(shop);
     }
 
+    /** General stores buy any item; the shop data only marks them by name. */
     private static isGeneralStore(shop: RuntimeShop): boolean {
-        return shop.definition.getId() === ShopIdentifiers.GENERAL_STORE;
+        return shop.definition.getId() === ShopIdentifiers.GENERAL_STORE ||
+            /general store/i.test(shop.definition.getName());
     }
 
     private static itemPrice(shop: RuntimeShop, definition: ItemDefinition): number {

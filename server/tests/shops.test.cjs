@@ -41,6 +41,7 @@ ItemDefinition.forId = (id) => {
 };
 
 const AXE_SHOP = 900;
+const GENERAL_STORE = 901;
 
 function loadShops() {
   ShopDefinition.replace([
@@ -48,6 +49,9 @@ function loadShops() {
       { id: BRONZE_AXE, amount: 2, restockTicks: null, price: null },
       { id: STEEL_AXE, amount: 1, restockTicks: null, price: null },
     ], 100, 100, 100, "test"),
+    new ShopDefinition(GENERAL_STORE, "Lumbridge General Store", "COINS", [
+      { id: BRONZE_AXE, amount: 3, restockTicks: null, price: null },
+    ], 1, 1, 1, "test"),
   ]);
   ShopManager.reload();
 }
@@ -76,11 +80,11 @@ function createPlayer() {
   return player;
 }
 
-function openShop(coins = 10000) {
+function openShop(coins = 10000, shopId = AXE_SHOP) {
   loadShops();
   const player = createPlayer();
   if (coins > 0) player.getInventory().add(new Item(COINS, coins), false);
-  ShopManager.open(player, AXE_SHOP);
+  ShopManager.open(player, shopId);
   return player;
 }
 
@@ -98,8 +102,8 @@ test("a specialist shop sells its last item", () => {
   assert.equal(player.getInventory().getAmount(STEEL_AXE), 1);
 });
 
-function stockOf() {
-  const shop = ShopManager.shopsById.get(AXE_SHOP);
+function stockOf(shopId = AXE_SHOP) {
+  const shop = ShopManager.shopsById.get(shopId);
   return ShopManager.displayEntries(shop).map(({ itemId, amount }) => [itemId, amount]);
 }
 
@@ -165,4 +169,16 @@ test("a sale whose payment wouldn't fit is refused, unless selling frees the slo
   sell(player, 0, "Sell 5");
   assert.equal(player.getInventory().getAmount(STEEL_AXE_NOTE), 0);
   assert.equal(player.getInventory().getAmount(COINS), 5 * Math.floor(200 * 0.85));
+});
+
+test("every general store buys items it doesn't stock and restocks its own", () => {
+  const player = openShop(10000, GENERAL_STORE);
+  player.getInventory().add(new Item(STEEL_AXE, 1), false);
+
+  sell(player, 1);
+  buy(player, 0, BRONZE_AXE, "Buy 5");
+  assert.deepEqual(stockOf(GENERAL_STORE), [[BRONZE_AXE, 0], [STEEL_AXE, 1]]);
+
+  for (let tick = 0; tick < 3; tick++) ShopManager.restockAll();
+  assert.equal(stockOf(GENERAL_STORE)[0][1], 3);
 });
