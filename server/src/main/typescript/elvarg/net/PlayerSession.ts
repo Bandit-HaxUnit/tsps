@@ -199,8 +199,12 @@ export class PlayerSession {
       y: location.getY(),
       level: location.getZ(),
     };
+    // The main-world map follows the tile under a player on a boat deck, so the sea streams
+    // in as the boat moves; the deck itself arrives as a world entity.
+    const sceneLocation = BoatManager.rootLocation(player);
+    const sceneTile = { x: sceneLocation.getX(), y: sceneLocation.getY(), level: sceneLocation.getZ() };
     ServerPerf.measurePhase("network.flush.region_updates", () => {
-      const musicRegion = ((current.x >> 6) << 8) | (current.y >> 6);
+      const musicRegion = ((sceneTile.x >> 6) << 8) | (sceneTile.y >> 6);
       if (musicRegion !== this.lastGroundItemRegion) {
         this.lastGroundItemRegion = musicRegion;
         require("../game/entity/impl/grounditem/ItemOnGroundManager")
@@ -219,19 +223,19 @@ export class PlayerSession {
 
     const initialSync = !this.playerSyncState;
     if (initialSync) {
-      this.sceneBaseX = Math.max(0, (current.x - 48) & ~7);
-      this.sceneBaseY = Math.max(0, (current.y - 48) & ~7);
+      this.sceneBaseX = Math.max(0, (sceneTile.x - 48) & ~7);
+      this.sceneBaseY = Math.max(0, (sceneTile.y - 48) & ~7);
     } else {
-      const localX = current.x - this.sceneBaseX;
-      const localY = current.y - this.sceneBaseY;
-      if (localX < 16 || localX >= 88) this.sceneBaseX = Math.max(0, (current.x - 48) & ~7);
-      if (localY < 16 || localY >= 88) this.sceneBaseY = Math.max(0, (current.y - 48) & ~7);
+      const localX = sceneTile.x - this.sceneBaseX;
+      const localY = sceneTile.y - this.sceneBaseY;
+      if (localX < 16 || localX >= 88) this.sceneBaseX = Math.max(0, (sceneTile.x - 48) & ~7);
+      if (localY < 16 || localY >= 88) this.sceneBaseY = Math.max(0, (sceneTile.y - 48) & ~7);
     }
-    const privateArea = player.getPrivateArea();
+    const privateArea = BoatManager.syncArea(player);
     const sceneChanged = !this.hasReplayedScene
       || this.replayedSceneBaseX !== this.sceneBaseX
       || this.replayedSceneBaseY !== this.sceneBaseY
-      || this.replayedSceneLevel !== current.level
+      || this.replayedSceneLevel !== sceneTile.level
       || this.replayedPrivateArea !== privateArea;
     const normalRebuildNeeded = privateArea == null && (
       !this.hasReplayedScene
@@ -240,8 +244,8 @@ export class PlayerSession {
       || this.replayedPrivateArea !== privateArea
     );
     if (normalRebuildNeeded && !this.sendRebuildNormal(
-      current.x >> 3,
-      current.y >> 3,
+      sceneTile.x >> 3,
+      sceneTile.y >> 3,
       this.replayedPrivateArea != null,
     )) {
       return;
@@ -264,7 +268,7 @@ export class PlayerSession {
     // xrsps replays the initial scene during login; later scene replays follow
     // the authoritative player-sync base below.
     if (initialSync && sceneChanged) {
-      ObjectManager.onRegionChange(player, this.sceneBaseX, this.sceneBaseY, current.level);
+      ObjectManager.onRegionChange(player, this.sceneBaseX, this.sceneBaseY, sceneTile.level);
       if (!this.isBinaryChannelOpen()) return;
     }
 
@@ -352,13 +356,13 @@ export class PlayerSession {
     if (!syncSent) return;
 
     if (!initialSync && sceneChanged) {
-      ObjectManager.onRegionChange(player, this.sceneBaseX, this.sceneBaseY, current.level);
+      ObjectManager.onRegionChange(player, this.sceneBaseX, this.sceneBaseY, sceneTile.level);
       if (!this.isBinaryChannelOpen()) return;
     }
     if (sceneChanged) {
       this.replayedSceneBaseX = this.sceneBaseX;
       this.replayedSceneBaseY = this.sceneBaseY;
-      this.replayedSceneLevel = current.level;
+      this.replayedSceneLevel = sceneTile.level;
       this.replayedPrivateArea = privateArea;
       this.hasReplayedScene = true;
     }

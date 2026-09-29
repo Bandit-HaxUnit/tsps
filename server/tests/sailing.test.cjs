@@ -402,7 +402,8 @@ test("people aboard count as being in the main world, where the boat is", () => 
     const sailor = aboard(boat, 3, 4);
     sailor.getPrivateArea = () => BoatManager.getDeck(boat);
     assert.equal(BoatManager.syncArea(sailor), null);
-    const house = { getObjects: () => [] };
+    const { PrivateArea } = require("../dist/game/model/areas/impl/PrivateArea");
+    const house = new (class House extends PrivateArea {})();
     assert.equal(BoatManager.syncArea({ getPrivateArea: () => house }), house, "other private areas are unchanged");
     // A viewer 10 tiles from the boat sees the sailor; one 20 tiles away does not.
     const root = BoatManager.rootLocation(sailor);
@@ -422,4 +423,16 @@ test("NPC_INFO carries the tile new NPCs are placed from (the root tile when abo
   assert.equal(packet.readUInt16BE(8), 3074);
   assert.equal(packet.readUInt16BE(10), 2987);
   assert.equal(packet.readUInt16BE(12), packet.length - 14);
+});
+
+test("a boat deck counts as the main world; other private areas don't", () => {
+  const { PrivateArea } = require("../dist/game/model/areas/impl/PrivateArea");
+  class House extends PrivateArea {}
+  assert.equal(new House().countsAsMainWorld(), false);
+  const boat = BoatManager.spawn(1, RAFT, AT_SEA);
+  try {
+    assert.equal(BoatManager.getDeck(boat).countsAsMainWorld(), true);
+  } finally {
+    BoatManager.dispose(boat);
+  }
 });

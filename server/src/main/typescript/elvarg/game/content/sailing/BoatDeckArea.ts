@@ -29,6 +29,10 @@ export class BoatDeckArea extends PrivateArea {
         }
     }
 
+    public countsAsMainWorld(): boolean {
+        return true;
+    }
+
     public hasClip(location: Location): boolean {
         return this.boat.containsDeckTile(location.getX(), location.getY()) || super.hasClip(location);
     }

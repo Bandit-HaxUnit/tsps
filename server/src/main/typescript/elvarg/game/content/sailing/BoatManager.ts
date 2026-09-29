@@ -108,7 +108,7 @@ export class BoatManager {
      */
     public static syncArea(mobile: Mobile): PrivateArea | null {
         const area = mobile.getPrivateArea();
-        return area instanceof BoatDeckArea ? null : area;
+        return area?.countsAsMainWorld() ? null : area;
     }
 
     /** Registers content that reacts to the helm setting a new heading (such as raising sail). */
