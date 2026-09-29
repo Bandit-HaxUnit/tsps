@@ -705,6 +705,7 @@ function registerPlugin(file) {
     onNpcInteraction: (name, actions) => { hooks.npcs[name] = actions; },
     onCustomEvent: (name, handler) => { hooks.events[name] = handler; },
     onInterfaceActionClick: (handler) => hooks.interfaceClicks.push(handler),
+    sendMultiChatboxPrompt: (_player, title, ...pairs) => { hooks.prompt = { title, pairs }; },
   });
   return hooks;
 }
@@ -717,6 +718,22 @@ test("the sailing plugins register their hooks and load the boat and dock data",
   assert.deepEqual(Object.keys(registerPlugin("Sailing.plugin").events).sort(), ["sailing:boarded", "sailing:left"]);
   assert.deepEqual(Object.keys(registerPlugin("Shipwright.plugin").npcs), ["Junior Jim"]);
   assert.ok(Sailing.getDock("the_pandemonium"));
+});
+
+test("the helm's Escape asks first and only sinks the boat on yes", () => {
+  const helm = registerPlugin("Helm.plugin");
+  const player = sailor();
+  Sailing.giveBoat(player, "raft", DOCK.id);
+  Sailing.board(player, DOCK.id);
+
+  helm.objects.Helm.Escape({ player });
+  const [yes, onYes, no, onNo] = helm.prompt.pairs;
+  assert.deepEqual([yes, no], ["Yes, abandon ship.", "No."]);
+  onNo();
+  assert.ok(Sailing.instanceAboard(player));
+  onYes();
+  assert.equal(Sailing.instanceAboard(player), undefined);
+  assert.equal(Sailing.activeBoat(player).location.kind, "sunk");
 });
 
 test("Junior Jim recovers a sunk raft at The Pandemonium for 250 coins", () => {

@@ -163,10 +163,21 @@ function toggleHelm({ player }) {
   else if (boat.helmPlayerId === undefined) takeHelm(player, boat);
 }
 
-function escapeBoat({ player }) {
+/** Escape sinks the boat, so it asks first; the choice is checked again in case they left. */
+function escapeBoat(api, { player }) {
   if (!Sailing.instanceAboard(player)) return;
-  Sailing.escape(player);
-  player.sendMessage("Your boat sinks, and you make it back to shore.");
+  api.sendMultiChatboxPrompt(
+    player,
+    "Escape? Your boat will sink until a shipwright recovers it.",
+    "Yes, abandon ship.",
+    () => {
+      if (!Sailing.instanceAboard(player)) return;
+      Sailing.escape(player);
+      player.sendMessage("Your boat sinks, and you make it back to shore.");
+    },
+    "No.",
+    () => {},
+  );
 }
 
 function clickSailButton(event) {
@@ -193,7 +204,7 @@ module.exports = {
     api.onObjectInteraction("Helm", {
       Navigate: toggleHelm,
       "Stop-navigating": toggleHelm,
-      Escape: escapeBoat,
+      Escape: (event) => escapeBoat(api, event),
     });
     api.onInterfaceActionClick(clickSailButton);
     BoatManager.onHeadingSet(raiseSailForHeading);

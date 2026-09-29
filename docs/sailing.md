@@ -102,7 +102,7 @@ tsps has no world views, but it has `PrivateArea` (used by Construction's house)
 
 - boat types (`data/definitions/boats.json`): template zone, size, hull bounds, deck centre, walkable deck tiles, deck locs. Raft only in PR 1.
 - gangplanks: Board / Disembark, routed to the lifecycle
-- helm: Navigate / Stop-navigating, the sail buttons (move mode from varbit 19175), clicking to set a heading; Escape
+- helm: Navigate / Stop-navigating, the sail buttons (move mode from varbit 19175), clicking to set a heading; Escape, after a yes/no confirmation
 - shipwright: Junior Jim at The Pandemonium retrieves a sunk raft for 250 gp (PR 1 needs this, or a sunk raft is stuck forever)
 - a developer command (`::raft`) gives a raft docked at The Pandemonium, where xrsps's raft docks (gangplank 59836 at 3070, 2987); the Pandemonium quest and buying boats come later
 
@@ -119,7 +119,7 @@ Headless tests like `trade.test.cjs` and `bank.test.cjs`, one per lifecycle row:
 - Death at sea: does the boat sink, or return to its last dock?
 - Recovery fee once boats take damage and have facilities (the wiki gives only the base fee).
 - Junior Jim's spawn tile: placed next to the dock's landing tile (3068, 2989); not checked against live OSRS.
-- The game messages for boarding, disembarking and Escape are placeholders; the live wording is unconfirmed.
+- The game messages for boarding, disembarking and Escape, and the Escape confirmation prompt, are placeholders; the live wording is unconfirmed.
 - Logging out at sea when the boat last left from an island mooring point rather than a port (a Dec 2025 fix changed this; unclear if it differs).
 
 ## Sources
