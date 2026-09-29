@@ -18,6 +18,7 @@ import { PluginManager } from '../plugins/PluginManager';
 import { ServerPerf } from '../util/ServerPerf';
 import { ActiveRegionIndex, ActiveRegionSnapshot } from './ActiveRegionIndex';
 import { ShopManager } from './model/container/shop/ShopManager';
+import { BoatManager } from "./content/sailing/BoatManager";
 import { HitQueue } from './content/combat/hit/HitQueue';
 
 const ATTR_SKIP_PERSISTENCE = "botSkipPersistence";
@@ -1146,6 +1147,9 @@ export class World {
                 }
             }
         });
+
+        // Boats move after their passengers, before sync sees anyone's position.
+        timed("move_boats", () => BoatManager.tick());
 
         // Owners that did not take a turn this cycle (bot stride) still need their
         // walk-to interactions ticked, or the interaction hangs until they do.

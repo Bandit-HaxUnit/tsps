@@ -2,6 +2,9 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 
+const { Server } = require("../dist/Server");
+Server.installProductionPathResolver();
+
 const { Boat, BoatMoveMode } = require("../dist/game/content/sailing/Boat");
 const { canOccupy, hullTiles } = require("../dist/game/content/sailing/BoatCollision");
 const { tickBoat } = require("../dist/game/content/sailing/BoatMovement");
@@ -12,6 +15,9 @@ const {
   reverseAngle,
   turnAngleDelta,
 } = require("../dist/game/content/sailing/HeadingUtils");
+const { BoatManager } = require("../dist/game/content/sailing/BoatManager");
+const { RegionManager } = require("../dist/game/collision/RegionManager");
+const { Location } = require("../dist/game/model/Location");
 
 const SOUTH = 0;
 const WEST = 512;
@@ -147,4 +153,74 @@ test("helm headings snap to the 16 directions", () => {
   // north of that point stays north instead of drifting a step.
   boat.fineX = 100 * 128 + 115;
   assert.equal(boat.helmHeadingToward(100, 103), NORTH);
+});
+
+// A raft spec with the values ported from xrsps `boats.ts`.
+const RAFT = {
+  type: "raft",
+  configId: 1,
+  templateChunkX: 480,
+  templateChunkY: 807,
+  sizeX: 8,
+  sizeZ: 8,
+  hull: { offsetX: 0, offsetY: 0, width: 128, length: 384 },
+  deckCentreX: 448,
+  deckCentreY: 448,
+  deckLevel: 1,
+  walkableDeck: [{ x: 3, y: 2 }, { x: 3, y: 3 }, { x: 3, y: 4 }],
+  boardingTile: { x: 3, y: 4 },
+  locs: [],
+};
+
+const AT_SEA = { fineX: 100 * 128 + 64, fineY: 100 * 128 + 64, level: 0, angle: NORTH };
+
+function aboard(boat, dx, dy) {
+  const deck = BoatManager.getDeck(boat);
+  return { getArea: () => deck, getLocation: () => new Location(boat.deckBaseX + dx, boat.deckBaseY + dy, 0) };
+}
+
+test("only the boat type's walkable tiles are open on the deck", () => {
+  const boat = BoatManager.spawn(1, RAFT, AT_SEA);
+  try {
+    const deck = BoatManager.getDeck(boat);
+    const clip = (dx, dy, z = 0) => RegionManager.getClipping(boat.deckBaseX + dx, boat.deckBaseY + dy, z, deck);
+    assert.equal(clip(3, 2), 0);
+    assert.equal(clip(3, 4), 0);
+    assert.equal(clip(2, 3), RegionManager.BLOCKED_TILE);
+    assert.equal(clip(3, 5), RegionManager.BLOCKED_TILE);
+    assert.equal(clip(3, 3, 1), RegionManager.BLOCKED_TILE, "everyone aboard stands on level 0");
+    assert.ok(BoatManager.isDeckTile(boat.deckBaseX, boat.deckBaseY));
+  } finally {
+    BoatManager.dispose(boat);
+  }
+});
+
+test("each boat gets its own deck scene and entity index, freed on dispose", () => {
+  const first = BoatManager.spawn(1, RAFT, AT_SEA);
+  const second = BoatManager.spawn(2, RAFT, AT_SEA);
+  assert.notEqual(first.entityIndex, second.entityIndex);
+  assert.notEqual(first.deckBaseX, second.deckBaseX);
+  BoatManager.dispose(first);
+  assert.equal(BoatManager.getBoat(first.entityIndex), undefined);
+  const third = BoatManager.spawn(3, RAFT, AT_SEA);
+  assert.equal(third.entityIndex, first.entityIndex, "the freed slot is reused");
+  BoatManager.dispose(second);
+  BoatManager.dispose(third);
+});
+
+test("an actor on a deck is aboard that boat, and their root tile is the world tile under them", () => {
+  const boat = BoatManager.spawn(1, RAFT, { ...AT_SEA, angle: SOUTH });
+  try {
+    const sailor = aboard(boat, 3, 4);
+    assert.equal(BoatManager.getBoatAboard(sailor), boat);
+    const root = BoatManager.rootLocation(sailor);
+    assert.deepEqual([root.getX(), root.getY(), root.getZ()], [100, 101, 0]);
+
+    const onLand = { getArea: () => null, getLocation: () => new Location(3200, 3200, 0) };
+    assert.equal(BoatManager.getBoatAboard(onLand), undefined);
+    assert.equal(BoatManager.rootLocation(onLand).getX(), 3200);
+  } finally {
+    BoatManager.dispose(boat);
+  }
+  assert.equal(BoatManager.getBoatAboard(aboard(boat, 3, 4)), undefined, "a disposed boat has no one aboard");
 });
