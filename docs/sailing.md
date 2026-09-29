@@ -1,0 +1,126 @@
+# Sailing
+
+Design for Sailing in tsps: player-owned boats that sail the main world as world entities. It follows live OSRS as closely as possible; where the OSRS Wiki is silent, behaviour was checked in live OSRS and is marked **(live-checked)**.
+
+**Status:** design draft. Nothing here is implemented yet.
+
+## Scope
+
+The first PR delivers a playable raft end to end:
+
+- the engine: world views, boat instances, movement and collision, and world-entity sync to **every nearby player**, not just the owner
+- raft content: boarding at a gangplank, the helm and sails, disembarking at a dock
+- saving: owned boats, where each boat is, and the rules for leaving a boat (disembark, teleport, Escape, death, logout)
+
+Later PRs: the cargo hold, skiff and sloop, shipbuilding facilities and hull upgrades, boat hitpoints and capsizing, port tasks. Other players **boarding** your boat is out of scope for now; they can see it and you on it.
+
+## OSRS rules
+
+| Topic | Rule | Source |
+| --- | --- | --- |
+| Boat types | Raft (1x3, 1 facility slot), skiff (2x5, 7 slots), sloop (3x10, 9-11 slots); bought from shipwrights | Wiki: Sailing, Boat |
+| Boats owned | 1 at level 1, 2 at 15, 3 at 50, 4 at 78, 5 at 91 | Wiki: Boat |
+| Location | A boat is at a single port (or mooring point) at a time. Disembarking there sets it | Wiki: Boat, Mooring point |
+| Hitpoints | From hull and keel; no natural regeneration. Repaired by upgrades, a shipwright (50 coins per HP) or repair kits | Wiki: Boat |
+| Logging out at sea | You log back in on your boat, at sea | live-checked |
+| Teleporting from the boat | The boat disappears (is **sunk**). No gangplank can board it until a shipwright recovers it | live-checked |
+| Escape | A helm option for a stuck boat with no teleport. The boat sinks, same as teleporting | live-checked |
+| Death at sea | Gravestone at the last gangplank you set sail from; some cargo is lost | Wiki: Sailing |
+| Capsizing (0 HP) | You are moved to the last gangplank you set sail from and keep your inventory; some cargo is lost | Wiki: Sailing |
+| Return point | Disembarking at a gangplank or mooring point, or clicking a buoy, sets where you are sent after Escape or capsizing | Wiki: Mooring point, Buoy |
+| Shipwright | At large ports: buy, destroy, customise, and retrieve a sunk boat or one at another port. Port Sarim's is Shipwright Sam | Wiki: Shipwright |
+| Recovery fee | Raft 250 gp, skiff 4,125 gp, sloop 50,000 gp; more with damage and built facilities | Wiki: Shipwright |
+
+Cargo lost on death, capsizing and teleporting (courier crates, bounty items, salvage, trawling fish, fish crates) matters once the cargo hold exists; PR 1 has no cargo.
+
+## Concepts
+
+- **Owned boat**: a saved record in the player's save: its type, name, hitpoints, facilities and location. A player owns 1-5.
+- **Boat instance**: an owned boat that is out at sea, live in the world. At most one per player. It exists only while its owner is aboard (or logged out aboard, see below).
+- **World view**: a separate coordinate space with its own map, collision and entities. The main world is world view -1; each boat instance is a world view keyed by its world-entity index. Players and NPCs belong to exactly one world view.
+- **Deck frame vs world frame**: a boat's deck is a 13x13-zone scene placed far outside the real map (tiles 9600+), with the boat's cache template zone copied into its centre. People aboard stand in deck coordinates. The boat itself has a world-frame position (1/128-tile precision) and angle, and is drawn there. Converting a deck tile to the world tile under it uses the boat's position and angle.
+- **Root tile**: for anything measured in the main world (sync range, main-world locs like gangplanks), a player aboard counts as standing on the world tile under their deck tile.
+
+## Data model
+
+A new `sailing` block in `PlayerSave`, owned by core (not a plugin attribute), because the engine's exit rules read and write it:
+
+```ts
+sailing: {
+  boats: Array<{
+    slot: number;             // 0-4
+    type: "raft" | "skiff" | "sloop";
+    name: string;
+    hitpoints: number;        // PR 1: stored, not yet used
+    facilities: number[];     // PR 1: empty
+    location:
+      | { kind: "docked"; dock: string }                                // at a port or mooring point
+      | { kind: "at_sea"; fineX: number; fineY: number; angle: number } // owner logged out aboard
+      | { kind: "sunk" };                                               // needs a shipwright
+  }>;
+  activeBoatSlot: number | null; // the boat the player is aboard or last set sail in
+  returnPoint: { x: number; y: number; level: number } | null; // last gangplank, mooring point or buoy
+}
+```
+
+Docks are data (`data/definitions/sailing-docks.json`): an id, the gangplank loc, where the boat is placed when fetched, and where the player lands on disembarking.
+
+## Lifecycle
+
+One state machine in core owns every transition, so no path can leave a boat half-alive (the trade and bank bugs came from exits that forgot to clean up).
+
+| From | Event | To | Effects |
+| --- | --- | --- | --- |
+| docked at A | board at A's gangplank | at sea (aboard) | spawn the instance at A; send the deck scene; move the player onto the deck; set `returnPoint` |
+| docked elsewhere / sunk | board at A's gangplank | - | refused; the shipwright message |
+| at sea | disembark at dock B | docked at B | move the player to B's landing tile; dispose the instance; set `returnPoint` |
+| at sea | teleport (any source) | sunk | dispose the instance; the teleport proceeds |
+| at sea | Escape (helm) | sunk | dispose the instance; move the player to `returnPoint` |
+| at sea | death | sunk (to confirm) | dispose the instance; gravestone at `returnPoint` |
+| at sea | logout / disconnect | at sea (saved) | save the boat's position and angle; dispose the instance |
+| at sea (saved) | login | at sea (aboard) | respawn the instance at the saved position; board the player |
+| sunk | shipwright retrieve at port P | docked at P | fee: raft 250 gp (PR 1 has no damage or facilities) |
+
+Teleports are caught in one core hook that every teleport passes through, not in each spell or item.
+
+## Engine (core, TypeScript)
+
+tsps has no world views, but it has `PrivateArea` (used by Construction's house): collision, pathfinding, object lookup and entity visibility are already scoped by the area an actor is in. A boat's deck is a `PrivateArea` at the deck coordinates, so walking and deck objects work without threading a world-view id through the engine.
+
+- **Deck area** (`BoatDeckArea extends PrivateArea`): every tile of its scene is blocked except the boat type's walkable deck tiles; deck objects that block add their flags. Deck coordinates have no cache region, so without this they would read as walkable.
+- **BoatManager**: allocates world-entity indices (3000-3999) and deck regions, builds deck collision from the template zone, ticks movement, and disposes instances. Ported from xrsps.
+- **Movement and collision**: full sail 64 fine units a tick, half 32, turning 128 units of angle a tick; reverse at half speed. A tile is sailable when its level-0 overlay is water (decoded from the cache map) and it has no solid object; only tiles the hull newly covers are checked. Ported from xrsps (`BoatMovement`, `BoatCollision`, `WaterMap`).
+- **Sync**:
+  - `REBUILD_WORLDENTITY` sends a boat's deck scene (template chunks) to each client that sees it.
+  - `WORLDENTITY_INFO` is per viewer: each tick, boats whose world tile is in a viewer's range are added, moved or removed, like NPC sync.
+  - Player and NPC sync measure range from root tiles, and a deck area counts as the main world for who-sees-whom. When a player or NPC on a deck enters a viewer's list, the encoder writes its world-view id (both encoders currently write "no world view"). The client already reads this and places them on the boat.
+  - `NPC_INFO` gains the viewer's root tile in its header (server and client), so a player on a deck sees main-world NPCs where they are.
+  - While a player is on a deck, the normal map keeps following their root tile, so the sea streams as the boat moves.
+- **Deck locs** (helm, sails) are sent per viewer as loc spawns in the deck scene.
+
+## Content (plugins)
+
+- boat types (`data/definitions/boats.json`): template zone, size, hull bounds, deck centre, walkable deck tiles, deck locs. Raft only in PR 1.
+- gangplanks: Board / Disembark, routed to the lifecycle
+- helm: Navigate / Stop-navigating, the sail buttons (move mode from varbit 19175), clicking to set a heading; Escape
+- shipwright: Shipwright Sam at Port Sarim retrieves a sunk raft for 250 gp (PR 1 needs this, or a sunk raft is stuck forever)
+- a developer command (`::raft`) gives a raft docked at Port Sarim; the Pandemonium quest and buying boats come later
+
+## Client
+
+The tsps client already decodes `REBUILD_WORLDENTITY`, `WORLDENTITY_INFO` and world-view ids in player and NPC sync. Ported from xrsps: `worldEntityMotion` (placing the deck scene at the boat's position), the `WorldEntityAnimator` fix, `HelmSteering` (click-to-heading on the sea surface), and the picking, camera and minimap changes that follow the player's root tile.
+
+## Testing
+
+Headless tests like `trade.test.cjs` and `bank.test.cjs`, one per lifecycle row: every exit path leaves exactly one consistent saved state and no live instance. Plus movement and collision, and sync range (a viewer gets the boat when it comes into range and loses it when it leaves).
+
+## Open questions
+
+- Death at sea: does the boat sink, or return to its last dock?
+- Recovery fee once boats take damage and have facilities (the wiki gives only the base fee).
+- Logging out at sea when the boat last left from an island mooring point rather than a port (a Dec 2025 fix changed this; unclear if it differs).
+
+## Sources
+
+- [Sailing](https://oldschool.runescape.wiki/w/Sailing), [Boat](https://oldschool.runescape.wiki/w/Boat), [Mooring point](https://oldschool.runescape.wiki/w/Mooring_point), [Buoy](https://oldschool.runescape.wiki/w/Buoy_(Sailing)), [Shipwright](https://oldschool.runescape.wiki/w/Shipwright) — OSRS Wiki
+- xrsps (`bank-overhaul` branch) `docs/internals/sailing.md` and its engine code, the starting point for the engine and client work
