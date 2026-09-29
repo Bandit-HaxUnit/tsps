@@ -10,11 +10,10 @@
  *
  * Stage is the dialogue branch selector: `quest.getStage(player)` decides which
  * conversation a quest starts, and `quest.complete(player)` marks it finished.
+ *
+ * The dialogue entry classes come from `api.core` (no core source-path imports),
+ * so quest plugins load in a plain `node dist/Server.js` process too.
  */
-const { DialogueChainBuilder } = require("../../src/main/typescript/elvarg/game/model/dialogues/builders/DialogueChainBuilder");
-const { NpcDialogue } = require("../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/NpcDialogue");
-const { PlayerDialogue } = require("../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/PlayerDialogue");
-const { ActionDialogue } = require("../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/ActionDialogue");
 
 // Side journal quest list (client/common/ui/sideJournal.ts + questList.ts).
 const QUEST_LIST_GROUP = 399;
@@ -26,7 +25,6 @@ const QUESTS_COMPLETED_VARBIT = 6347; // "Completed: <n>/<total>"
 const QUESTS_TOTAL_VARBIT = 11877;
 const QUEST_LIST_ENTRY_FLAGS = 0x7e;
 const QUEST_LIST_ENTRY_MAX_SLOT = 199;
-const FREE_QUESTS_GROUP = "Free Quests";
 
 // Quest journal overlay (xrsps client/common/ui constants).
 const JOURNAL_GROUP = 119;
@@ -71,27 +69,82 @@ function orderedQuests() {
   return quests.slice().sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * OSRS sorts the quest list alphabetically with a leading "The" ignored, and
+ * renders a single-letter header ("A", "B", ...) before each group.
+ */
+function questSortName(quest) {
+  return String(quest.name).replace(/^the\s+/i, "");
+}
+
+function questGroups() {
+  const sorted = quests
+    .slice()
+    .sort((a, b) => questSortName(a).localeCompare(questSortName(b)));
+  const groups = [];
+  for (const quest of sorted) {
+    const letter = questSortName(quest).charAt(0).toUpperCase();
+    const title = letter >= "A" && letter <= "Z" ? letter : "#";
+    const last = groups[groups.length - 1];
+    if (last && last.title === title) {
+      last.quests.push(quest);
+    } else {
+      groups.push({ title, quests: [quest] });
+    }
+  }
+  return groups;
+}
+
 // ============================================================================
 // Quest list / journal / completion widgets
 // ============================================================================
 
-function sendQuestList(player) {
-  // Slot 0 is the group header row; the client draws the title at
-  // (firstQuestSlot - 1), so quests start at slot 1.
-  const entries = orderedQuests().map((quest, index) => ({
-    slot: index + 1,
-    status: questStatus(quest, player),
-    key: quest.key,
-    displayName: quest.name,
-  }));
-  const packet = player.getPacketSender();
-  packet.sendQuestList([{ title: FREE_QUESTS_GROUP, quests: entries }]);
-
-  const lastSlot = Math.min(entries.length, QUEST_LIST_ENTRY_MAX_SLOT);
-  if (entries.length > 0) {
-    packet.sendInterfaceFlagsRange(QUEST_LIST_ENTRY_UID, 1, lastSlot, QUEST_LIST_ENTRY_FLAGS);
+/**
+ * Assigns list slots: each group's title occupies the row before its quests
+ * (the client draws the title at firstQuestSlot - 1). Returns the groups for the
+ * packet, the slot -> quest map for journal clicks, and the quest-slot ranges
+ * that carry the "Read journal:" flags.
+ */
+function questRows(player) {
+  const groups = [];
+  const slotQuests = [];
+  const ranges = [];
+  let slot = 0;
+  for (const group of questGroups()) {
+    slotQuests[slot] = null; // header row
+    slot++;
+    const start = slot;
+    const entries = group.quests.map((quest) => {
+      const row = {
+        slot,
+        status: questStatus(quest, player),
+        key: quest.key,
+        displayName: quest.name,
+      };
+      slotQuests[slot] = quest;
+      slot++;
+      return row;
+    });
+    groups.push({ title: group.title, quests: entries });
+    ranges.push([start, slot - 1]);
   }
+  return { groups, slotQuests, ranges };
+}
 
+function sendQuestList(player) {
+  const { groups, ranges } = questRows(player);
+  const packet = player.getPacketSender();
+  packet.sendQuestList(groups);
+  for (const [start, end] of ranges) {
+    if (end >= start) {
+      packet.sendInterfaceFlagsRange(
+        QUEST_LIST_ENTRY_UID,
+        start,
+        Math.min(end, QUEST_LIST_ENTRY_MAX_SLOT),
+        QUEST_LIST_ENTRY_FLAGS
+      );
+    }
+  }
   sendQuestHeaderStats(player);
 }
 
@@ -125,8 +178,8 @@ function journalLines(quest, player) {
 }
 
 function openJournalBySlot(player, slot) {
-  // Quest rows are sent at slots 1..N (slot 0 is the group header row).
-  const quest = orderedQuests()[(slot | 0) - 1];
+  // Quest rows sit in the same slots questRows() sent, after each letter header.
+  const quest = questRows(player).slotQuests[slot | 0];
   if (quest) openJournal(player, quest);
 }
 
@@ -276,7 +329,8 @@ function registerQuest(api, def) {
 // branch converges on the remaining sequence.
 // ============================================================================
 
-function speak(player, npcId, speaker, lines, onDone) {
+function speak(api, player, npcId, speaker, lines, onDone) {
+  const { DialogueChainBuilder, NpcDialogue, PlayerDialogue, ActionDialogue } = api.core;
   const builder = new DialogueChainBuilder();
   lines.forEach((line, index) => {
     builder.add(
@@ -316,7 +370,7 @@ function runSteps(api, player, context, steps) {
   }
   const speaker = step.npc ? "npc" : "player";
   const lines = step.npc || step.player || [];
-  speak(player, context.npcId, speaker, lines, () => runSteps(api, player, context, rest));
+  speak(api, player, context.npcId, speaker, lines, () => runSteps(api, player, context, rest));
 }
 
 /** Starts a conversation. `context` needs `npcId`. */
@@ -324,12 +378,68 @@ function startDialogue(api, player, context, steps) {
   runSteps(api, player, context, steps);
 }
 
+// ============================================================================
+// Transcript replay
+//
+// Quest NPCs that npc-dialogue-index.json does not index (Drezel, the monks,
+// quest-only spawn ids) can still play their wiki variant: look it up in
+// npc-dialogues.json and hand it to the NpcDialogues runtime so conditions,
+// hooks and hand-in events keep working.
+// ============================================================================
+
+let transcriptCache = null;
+
+function loadTranscripts(api) {
+  if (transcriptCache) return transcriptCache;
+  const fs = require("fs");
+  const path = require("path");
+  const file = path.join(api.core.GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json");
+  transcriptCache = JSON.parse(fs.readFileSync(file, "utf8"));
+  return transcriptCache;
+}
+
+/** Wiki multi-speaker lines -> generic NPC lines so one chathead renders them. */
+function flattenSpeakers(steps) {
+  if (!Array.isArray(steps)) return [];
+  return steps.map((step) => {
+    const copy = { ...step };
+    if (copy.type === "line" && typeof copy.speaker === "string") {
+      copy.npc = copy.text;
+      delete copy.speaker;
+    }
+    if (Array.isArray(copy.steps)) copy.steps = flattenSpeakers(copy.steps);
+    if (Array.isArray(copy.options)) {
+      copy.options = copy.options.map((option) => ({ ...option, steps: flattenSpeakers(option.steps) }));
+    }
+    return copy;
+  });
+}
+
+/**
+ * Plays one variant of a transcript page for `player`. Returns false when the
+ * page/variant is missing. `npcId` drives the chathead and the emitted events.
+ */
+function startTranscript(api, player, npcId, page, variant) {
+  const data = loadTranscripts(api);
+  const record = data?.[page];
+  const raw = record?.variants?.[variant];
+  if (!Array.isArray(raw)) return false;
+  const { startDialogue: playDialogue } = require("../npcs/NpcDialogues.plugin.js");
+  const definition = api.core.NpcDefinition.forId(npcId);
+  const event = { player, npcId, npc: null, definition };
+  const context = { player, npc: null, npcId, definition, pages: [{ page, variants: [variant] }] };
+  playDialogue(api, event, flattenSpeakers(raw), record.branches, context);
+  return true;
+}
+
 module.exports = {
   QUEST_POINTS_VARP,
   QUEST_COMPLETE_JINGLE,
   registerQuest,
+  getRegisteredQuests: () => quests.slice(),
   refreshQuestList,
   openJournal,
   openJournalBySlot,
   startDialogue,
+  startTranscript,
 };

@@ -982,10 +982,24 @@ export interface PluginCoreApi {
   Task: any;
   TaskManager: any;
   ItemIdentifiers: any;
+  NpcIdentifiers: any;
+  ObjectIdentifiers: any;
+  ShopIdentifiers: any;
   Misc: any;
   TimerKey: any;
   Sound: any;
   Sounds: any;
+  Location: any;
+  World: any;
+  GameObject: any;
+  ObjectManager: any;
+  NpcDefinition: any;
+  GameConstants: any;
+  TeleportHandler: any;
+  DialogueChainBuilder: any;
+  NpcDialogue: any;
+  PlayerDialogue: any;
+  ActionDialogue: any;
 }
 
 export interface PluginModule {

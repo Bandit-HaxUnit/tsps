@@ -15,10 +15,12 @@ function playerWith(...itemIds) {
 }
 
 function registerCooksAssistant() {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
   const customEvents = {};
   let conditionHandler;
   const noop = () => {};
   const api = {
+    core: PluginManager.getCoreApi(),
     onNpcDialogueVariant: noop,
     onNpcDialogueCondition: (h) => { conditionHandler = h; },
     onCustomEvent: (name, h) => { (customEvents[name] ??= []).push(h); },
@@ -26,7 +28,7 @@ function registerCooksAssistant() {
     onInterfaceActionButton: noop,
     persistAttribute: noop,
   };
-  require('../plugins/quests/CooksAssistant.plugin').register(api);
+  require('../plugins/quests/quests/CooksAssistant.Quest')(api);
   return { conditionHandler, customEvents };
 }
 
