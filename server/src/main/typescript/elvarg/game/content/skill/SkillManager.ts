@@ -461,11 +461,9 @@ export class SkillManager {
         const raw = Number(this.skills.maxLevel[idx]);
         const fromArray = Number.isFinite(raw) ? Math.max(1, Math.floor(raw)) : 1;
         const fromExp = Math.max(1, SkillManager.getLevelForExperience(this.getExperience(skill)));
-        const resolved = Math.max(fromArray, fromExp);
-        if (this.skills.maxLevel[idx] !== resolved) {
-            this.skills.maxLevel[idx] = resolved;
-        }
-        return resolved;
+        // Don't write this back: mid-way through setMaxLevel(...).setExperience(...) the old
+        // experience would pin the max level at its old value (issue #101).
+        return Math.max(fromArray, fromExp);
     }
 
     /**

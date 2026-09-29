@@ -39,6 +39,7 @@
     "test:plugin-config": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/plugin-config-smoke.ts",
     "test:experience-rates": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/experience-rates-smoke.ts",
     "test:combat-xp": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/combat-xp-smoke.ts",
+    "test:weapon-special-traits": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/weapon-special-traits-smoke.ts",
     "test:spellbook": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/spellbook-login-smoke.ts",
     "test:arceuus-spellbook": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/arceuus-spellbook-smoke.ts",
     "test:spell-cooldown": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/spell-cooldown-smoke.ts",
@@ -102,6 +103,8 @@
     "test:mobile-list-hooks": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2022\"}' ts-node ./scripts/mobile-list-hooks-smoke.ts",
     "dump:cs2": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/dump-cs2.ts",
     "dump:enum": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/dump-enum.ts",
+    "dump:seq": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/dump-seq.ts",
+    "dump:spotanim": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/dump-spotanim.ts",
     "dump:widget": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/dump-widget.ts",
     "fetch:prices": "node ./scripts/fetch-prices.mjs"
   },

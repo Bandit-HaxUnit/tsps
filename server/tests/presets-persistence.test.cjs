@@ -614,6 +614,8 @@ test('house altar burners are shared, expire and affect only their chapel', asyn
     offerHouseBones(event);
     assert.deepEqual(player.experience.at(-1), [Skill.PRAYER, 180]);
   } finally { house.destroy(); }
+});
+
 test("custom presets survive the player save round trip", () => {
   const { PlayerSave } = require("../dist/game/entity/impl/player/persistence/PlayerSave");
   const { SkillManager } = require("../dist/game/content/skill/SkillManager");
