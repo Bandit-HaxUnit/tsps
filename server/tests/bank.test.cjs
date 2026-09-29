@@ -50,7 +50,8 @@ function createPlayer() {
     sendMessage: (message) => messages.push(message),
     isSearchingBank: () => false,
     getPacketSender: () => sender,
-    getStatus: () => PlayerStatus.BANKING,
+    getStatus: () => (player.closed ? PlayerStatus.NONE : PlayerStatus.BANKING),
+    insertModeReturn: () => player.insertMode === true,
     getInterfaceId: () => Bank.MAIN_INTERFACE_ID,
     getCurrentBankTab: () => currentTab,
     setCurrentBankTab: (tab) => { currentTab = tab; },
@@ -249,4 +250,83 @@ test("removing placeholders from a tab leaves other tabs' placeholders", () => {
   clickTab(player, 1, 7, "Remove placeholders");
 
   assert.deepEqual(tabsOf(player), [[1, TRIDENT, 1], [0, MYSTIC_LAVA_STAFF, 0]]);
+});
+
+const BANK_ITEMS = (Bank.MAIN_INTERFACE_ID << 16) | Bank.ITEMS_CHILD;
+const BANK_TABS = (Bank.MAIN_INTERFACE_ID << 16) | Bank.TABS_CHILD;
+const SIDE_ITEMS = (Bank.SIDE_INTERFACE_ID << 16) | Bank.SIDE_ITEMS_CHILD;
+const A = MYSTIC_LAVA_STAFF, B = LAVA_BATTLESTAFF, C = TRIDENT;
+
+function drag(player, sourceWidgetId, sourceSlot, sourceItemId, targetWidgetId, targetSlot) {
+  return Bank.handleDrag(player, { sourceWidgetId, sourceSlot, sourceItemId, targetWidgetId, targetSlot });
+}
+
+function bankOf(player, ...tabs) {
+  tabs.forEach((ids, tab) => ids.forEach((id) => player.getBank(tab).add(new Item(id, 1), false)));
+}
+
+test("dragging a bank item onto another swaps them, or inserts in insert mode", () => {
+  const swapping = createPlayer();
+  bankOf(swapping, [A, B, C]);
+  drag(swapping, BANK_ITEMS, 0, A, BANK_ITEMS, 2);
+  assert.deepEqual(tabsOf(swapping).map(([, id]) => id), [C, B, A]);
+
+  const inserting = createPlayer();
+  inserting.insertMode = true;
+  bankOf(inserting, [A, B, C]);
+  drag(inserting, BANK_ITEMS, 0, A, BANK_ITEMS, 2);
+  assert.deepEqual(tabsOf(inserting).map(([, id]) => id), [B, C, A]);
+});
+
+test("dragging a bank item onto a tab button moves it there, creating at most one new tab", () => {
+  const player = createPlayer();
+  bankOf(player, [A, B]);
+
+  drag(player, BANK_ITEMS, 0, A, BANK_TABS, Bank.TAB_BUTTON_SLOT_OFFSET + 5);
+  assert.deepEqual(tabsOf(player), [[1, A, 1], [0, B, 1]]);
+
+  drag(player, BANK_ITEMS, 0, A, BANK_TABS, Bank.TAB_BUTTON_SLOT_OFFSET);
+  assert.deepEqual(tabsOf(player), [[0, B, 1], [0, A, 1]]);
+});
+
+test("dragging a bank item onto another tab's item joins that tab", () => {
+  const player = createPlayer();
+  player.insertMode = true;
+  bankOf(player, [C], [A, B]);
+
+  drag(player, BANK_ITEMS, 2, C, BANK_ITEMS, 0);
+
+  assert.deepEqual(tabsOf(player), [[1, C, 1], [1, A, 1], [1, B, 1]]);
+});
+
+test("dragging an inventory item onto a tab deposits it there, or onto its existing stack", () => {
+  const player = createPlayer();
+  bankOf(player, [A]);
+  player.getInventory().add(new Item(B, 1), false);
+  player.getInventory().add(new Item(A, 1), false);
+
+  drag(player, SIDE_ITEMS, 0, B, BANK_TABS, Bank.TAB_BUTTON_SLOT_OFFSET + 1);
+  drag(player, SIDE_ITEMS, 1, A, BANK_TABS, Bank.TAB_BUTTON_SLOT_OFFSET + 1);
+
+  assert.deepEqual(tabsOf(player), [[1, B, 1], [0, A, 2]]);
+  assert.equal(player.getInventory().getValidItems().length, 0);
+});
+
+test("dragging within the bank's inventory panel swaps inventory slots", () => {
+  const player = createPlayer();
+  player.getInventory().add(new Item(A, 1), false);
+  player.getInventory().add(new Item(B, 1), false);
+
+  drag(player, SIDE_ITEMS, 0, A, SIDE_ITEMS, 1);
+
+  assert.deepEqual(player.getInventory().getValidItems().map((item) => item.getId()), [B, A]);
+});
+
+test("bank drags are ignored while the bank is closed", () => {
+  const player = createPlayer();
+  bankOf(player, [A, B]);
+  player.closed = true;
+
+  assert.equal(drag(player, BANK_ITEMS, 0, A, BANK_ITEMS, 1), false);
+  assert.deepEqual(tabsOf(player).map(([, id]) => id), [A, B]);
 });

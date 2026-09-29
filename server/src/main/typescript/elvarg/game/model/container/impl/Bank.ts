@@ -30,6 +30,10 @@ export class Bank extends ItemContainer {
     /** The tab buttons: slot 10 is "all items", slots 11-19 are tabs 1-9. */
     public static readonly TABS_CHILD = 10;
     public static readonly TAB_BUTTON_SLOT_OFFSET = 10;
+    public static readonly ITEMS_CHILD = 12;
+    public static readonly SIDE_ITEMS_CHILD = 3;
+    /** Drops on the separator above tab N report item-grid slot 1428 + N. */
+    public static readonly TAB_SEPARATOR_SLOT_OFFSET = 1410 + 9 * 2;
 
     constructor(public player: Player) {
         super(player);
@@ -337,6 +341,122 @@ export class Bank extends ItemContainer {
             }
         }
         player.getBank(0).refreshItems();
+    }
+
+    /**
+     * Handles a drag (IF_BUTTOND) within the bank or its inventory panel.
+     * Returns false for drags the bank doesn't own.
+     */
+    public static handleDrag(player: Player, drag: {
+        sourceWidgetId: number; sourceSlot: number; sourceItemId: number;
+        targetWidgetId: number; targetSlot: number;
+    }): boolean {
+        const sourceGroup = drag.sourceWidgetId >>> 16, sourceChild = drag.sourceWidgetId & 0xffff;
+        const targetGroup = drag.targetWidgetId >>> 16, targetChild = drag.targetWidgetId & 0xffff;
+        const fromBank = sourceGroup === Bank.MAIN_INTERFACE_ID && sourceChild === Bank.ITEMS_CHILD;
+        const fromInventory = sourceGroup === Bank.SIDE_INTERFACE_ID && sourceChild === Bank.SIDE_ITEMS_CHILD;
+        if (!(fromBank || fromInventory) || !Bank.isOpen(player)) return false;
+
+        let tab: number | undefined;
+        if (targetGroup === Bank.MAIN_INTERFACE_ID && targetChild === Bank.TABS_CHILD) {
+            tab = drag.targetSlot - Bank.TAB_BUTTON_SLOT_OFFSET;
+        } else if (targetGroup === Bank.MAIN_INTERFACE_ID && targetChild === Bank.ITEMS_CHILD
+            && drag.targetSlot >= Bank.TAB_SEPARATOR_SLOT_OFFSET) {
+            tab = drag.targetSlot - Bank.TAB_SEPARATOR_SLOT_OFFSET;
+        }
+        if (tab !== undefined && (tab < 0 || tab > 9)) return true;
+
+        if (fromInventory && targetGroup === Bank.SIDE_INTERFACE_ID && targetChild === Bank.SIDE_ITEMS_CHILD) {
+            player.getInventory().swap(drag.sourceSlot, drag.targetSlot).refreshItems();
+        } else if (fromInventory && targetGroup === Bank.MAIN_INTERFACE_ID) {
+            Bank.depositDragged(player, drag.sourceSlot, drag.sourceItemId, tab);
+        } else if (fromBank && tab !== undefined) {
+            Bank.moveToTab(player, drag.sourceSlot, drag.sourceItemId, tab);
+        } else if (fromBank && targetGroup === Bank.MAIN_INTERFACE_ID && targetChild === Bank.ITEMS_CHILD) {
+            Bank.moveItem(player, drag.sourceSlot, drag.sourceItemId, drag.targetSlot);
+        }
+        return true;
+    }
+
+    /** The slot after `bank`'s last item, where a moved item joins the tab; -1 if full. */
+    private static endSlot(bank: Bank): number {
+        const items = bank.getItems();
+        let last = -1;
+        items.forEach((item, slot) => {
+            if (item != null && item.getId() > 0) last = slot;
+        });
+        return last + 1 < bank.capacity() ? last + 1 : bank.getEmptySlot();
+    }
+
+    /** The tab a drop onto `tab` goes to: an existing tab, or one new tab after the last. */
+    private static dropTab(player: Player, tab: number): number {
+        return Math.min(tab, Bank.getTabCount(player) + 1);
+    }
+
+    /**
+     * Deposits an inventory stack dropped on the bank. An item already in
+     * the bank joins its stack; otherwise it goes to the tab it was dropped
+     * on, or where a click would deposit it.
+     */
+    private static depositDragged(player: Player, slot: number, itemId: number, tab: number | undefined) {
+        const item = player.getInventory().getItems()[slot];
+        if (!item || item.getId() <= 0 || item.getId() !== itemId) return;
+        if (getPluginManager().emitCanBankItem(player, item) === false) return;
+        const unnoted = item.getDefinition().unNote();
+        let target = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].find((index) => player.getBank(index).contains(unnoted));
+        if (target === undefined) {
+            target = tab === undefined ? Bank.getTabForItem(player, itemId) : Bank.dropTab(player, tab);
+        }
+        Bank.depositFromSlots(player, player.getBank(target), slot, item.getDefinition().isStackable() ? item.getAmount() : 1);
+        player.getBank(target).refreshItems();
+        player.getInventory().refreshItems();
+    }
+
+    /** Moves the bank item at `clientSlot` to the end of `tab`, creating the tab if it's new. */
+    private static moveToTab(player: Player, clientSlot: number, itemId: number, tab: number) {
+        const entry = Bank.resolveDisplaySlot(player, clientSlot);
+        if (!entry || Bank.displayItemId(entry.item) !== itemId) return;
+        tab = Bank.dropTab(player, tab);
+        if (tab === entry.tab) return;
+        const target = player.getBank(tab);
+        const slot = Bank.endSlot(target);
+        if (slot < 0) {
+            target.full();
+            return;
+        }
+        target.setItem(slot, entry.item.clone());
+        entry.item.setId(-1);
+        entry.item.setMeta(null);
+        entry.item.setAmount(0);
+        player.getBank(entry.tab).refreshItems();
+    }
+
+    /**
+     * Moves the bank item at `fromClientSlot` onto the item at
+     * `toClientSlot`, swapping or inserting by the player's setting. Onto
+     * another tab's item, it joins that tab there.
+     */
+    private static moveItem(player: Player, fromClientSlot: number, itemId: number, toClientSlot: number) {
+        const from = Bank.resolveDisplaySlot(player, fromClientSlot);
+        const to = Bank.resolveDisplaySlot(player, toClientSlot);
+        if (!from || !to || Bank.displayItemId(from.item) !== itemId || fromClientSlot === toClientSlot) return;
+        const bank = player.getBank(to.tab);
+        let fromSlot = from.slot;
+        if (from.tab !== to.tab) {
+            fromSlot = Bank.endSlot(bank);
+            if (fromSlot < 0) {
+                bank.full();
+                return;
+            }
+            bank.setItem(fromSlot, from.item.clone());
+            from.item.setId(-1);
+            from.item.setMeta(null);
+            from.item.setAmount(0);
+        }
+        Bank.rearrange(player, bank, fromSlot, to.slot);
+        if (from.tab !== to.tab) {
+            player.getBank(from.tab).refreshItems();
+        }
     }
 
     public static resolveDisplaySlot(player: Player, clientSlot: number): { tab: number; slot: number; item: Item } | null {
