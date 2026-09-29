@@ -279,6 +279,22 @@ export class Bank extends ItemContainer {
         return entries;
     }
 
+    /** The item the client shows: a placeholder shows its faded cache placeholder. */
+    public static displayItemId(item: Item): number {
+        if (item.getAmount() > 0) return item.getId();
+        const placeholderId = item.getDefinition().getPlaceholderId();
+        return placeholderId >= 0 ? placeholderId : item.getId();
+    }
+
+    /** Removes the placeholder in `slot` of `tab`. */
+    public static releasePlaceholder(player: Player, tab: number, slot: number): void {
+        const item = player.getBank(tab).getItems()[slot];
+        if (!item || item.getId() <= 0 || item.getAmount() !== 0) return;
+        item.setId(-1);
+        item.setMeta(null);
+        player.getBank(tab).refreshItems();
+    }
+
     public static resolveDisplaySlot(player: Player, clientSlot: number): { tab: number; slot: number; item: Item } | null {
         if (!Number.isInteger(clientSlot) || clientSlot < 0) return null;
         return Bank.layout(player)[clientSlot] ?? null;
@@ -324,7 +340,13 @@ export class Bank extends ItemContainer {
 
         if (packet.groupId === Bank.MAIN_INTERFACE_ID && packet.childId === 12 && packet.slot != null) {
             const entry = Bank.resolveDisplaySlot(player, packet.slot);
-            if (!entry || (packet.itemId != null && packet.itemId !== entry.item.getId())) return true;
+            if (!entry || (packet.itemId != null && packet.itemId !== Bank.displayItemId(entry.item))) return true;
+            if (entry.item.getAmount() === 0) {
+                if (packet.buttonNum === 8 || packet.option?.trim().toLowerCase() === "release") {
+                    Bank.releasePlaceholder(player, entry.tab, entry.slot);
+                }
+                return true;
+            }
             const amount = Bank.actionAmount(
                 "withdraw", packet.buttonNum, packet.option, entry.item.getAmount(),
                 player.getBankCustomQuantity(), player.getBankQuantityMode(),

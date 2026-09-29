@@ -16,11 +16,12 @@ const LAVA_BATTLESTAFF = 3053;
 const MYSTIC_LAVA_STAFF = 3054;
 // In the cache this note belongs to 3053, not to 3054 (its id minus one).
 const LAVA_BATTLESTAFF_NOTE = 3055;
+const LAVA_BATTLESTAFF_PLACEHOLDER = 90053;
 
 // Item definitions normally come from the cache; stub the few this test uses.
 const DEFINITIONS = {
   [TRIDENT]: { name: "Trident of the seas" },
-  [LAVA_BATTLESTAFF]: { name: "Lava battlestaff" },
+  [LAVA_BATTLESTAFF]: { name: "Lava battlestaff", placeholder: LAVA_BATTLESTAFF_PLACEHOLDER },
   [MYSTIC_LAVA_STAFF]: { name: "Mystic lava staff" },
   [LAVA_BATTLESTAFF_NOTE]: { name: "Lava battlestaff", stackable: true, noteOf: LAVA_BATTLESTAFF },
 };
@@ -33,6 +34,7 @@ ItemDefinition.forId = (id) => {
     isNoted: () => def.noteOf != null,
     unNote: () => def.noteOf ?? id,
     getNoteId: () => -1,
+    getPlaceholderId: () => def.placeholder ?? -1,
     isTradeable: () => true,
   };
 };
@@ -53,7 +55,7 @@ function createPlayer() {
     getCurrentBankTab: () => currentTab,
     setCurrentBankTab: (tab) => { currentTab = tab; },
     withdrawAsNote: () => false,
-    isPlaceholders: () => false,
+    isPlaceholders: () => player.placeholders === true,
     isPlayerBot: () => false,
     getBankCustomQuantity: () => 0,
     getBankQuantityMode: () => 0,
@@ -166,4 +168,40 @@ test("the client layout lists tabs 1-9 before the main tab", () => {
     [[1, MYSTIC_LAVA_STAFF], [2, TRIDENT], [0, LAVA_BATTLESTAFF]],
   );
   assert.equal(Bank.resolveDisplaySlot(player, 2).item.getId(), LAVA_BATTLESTAFF);
+});
+
+test("withdrawing everything leaves the item's faded cache placeholder", () => {
+  const player = createPlayer();
+  player.placeholders = true;
+  player.getBank(0).add(new Item(LAVA_BATTLESTAFF, 1), false);
+
+  Bank.withdraw(player, LAVA_BATTLESTAFF, 0, 1, 0);
+
+  const [entry] = Bank.layout(player);
+  assert.equal(entry.item.getAmount(), 0);
+  assert.equal(Bank.displayItemId(entry.item), LAVA_BATTLESTAFF_PLACEHOLDER);
+});
+
+test("an item without a cache placeholder leaves none", () => {
+  const player = createPlayer();
+  player.placeholders = true;
+  player.getBank(0).add(new Item(TRIDENT, 1), false);
+
+  Bank.withdraw(player, TRIDENT, 0, 1, 0);
+
+  assert.deepEqual(Bank.layout(player), []);
+});
+
+test("clicking Release on a placeholder removes it; other options leave it", () => {
+  const player = createPlayer();
+  player.getBank(0).add(new Item(LAVA_BATTLESTAFF, 0), false);
+  const click = (option, buttonNum) => Bank.handleWidgetAction(player, {
+    groupId: Bank.MAIN_INTERFACE_ID, childId: 12, buttonNum, option, slot: 0, itemId: LAVA_BATTLESTAFF_PLACEHOLDER,
+  });
+
+  click("Withdraw-1", 1);
+  assert.equal(Bank.layout(player).length, 1);
+
+  click("Release", 8);
+  assert.deepEqual(Bank.layout(player), []);
 });

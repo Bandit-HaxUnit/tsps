@@ -604,7 +604,7 @@ export class PacketSender {
       "../../game/model/container/impl/Bank"
     ) as typeof import("../../game/model/container/impl/Bank");
     const slots: BankSlotView[] = Bank.layout(this.player).map(({ tab, item }, slot) => ({
-      slot, itemId: item.getId(), quantity: item.getAmount(), tab,
+      slot, itemId: Bank.displayItemId(item), quantity: item.getAmount(), tab,
     }));
     this.player.getSession().sendClientPacket(encodeBankSnapshot(1410, slots));
     return this;

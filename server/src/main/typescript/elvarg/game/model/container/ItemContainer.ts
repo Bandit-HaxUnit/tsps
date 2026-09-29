@@ -627,10 +627,12 @@ export abstract class ItemContainer {
     ) {
       return this;
     }
+    // Only items with a cache placeholder leave one.
     let leavePlaceHolder =
       toContainer instanceof Inventory &&
       this instanceof Bank &&
-      this.getPlayer().isPlaceholders();
+      this.getPlayer().isPlaceholders() &&
+      getItemDefinition().forId(item.getId()).getPlaceholderId() >= 0;
     if (item.getAmount() > this.getAmount(item.getId())) {
       item.setAmount(this.getAmount(item.getId()));
     }
