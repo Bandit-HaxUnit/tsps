@@ -83,6 +83,7 @@ export type PlayerView = Tile & ActorUpdateView & {
   index: number;
   appearance: Buffer;
   movementType?: 1 | 2;
+  resetPath?: boolean;
   appearanceDirty?: boolean;
   faceDirection?: number;
   forcedMovement?: ForcedMovementView;
@@ -214,7 +215,7 @@ export type ClientMessage =
   | { type: "inventory_move"; from: number; to: number; widgetId?: number }
   | { type: "bank_deposit_inventory" | "bank_deposit_equipment" }
   | { type: "bank_move"; from: number; to: number; mode: "swap" | "insert"; tab?: number }
-  | { type: "ground_item_action"; itemId: number; x: number; y: number; option?: string; optionIndex?: number }
+  | { type: "ground_item_action"; itemId: number; x: number; y: number; stackId?: number; option?: string; optionIndex?: number }
   | { type: "item_on_ground"; itemId: number; slot: number; widgetId: number; groundItemId: number; x: number; y: number }
   | { type: "spell_on_ground"; spellWidget: number; spellChild: number; spellItemId: number; groundItemId: number; x: number; y: number }
   | { type: "examine_npc"; id: number }
@@ -738,13 +739,13 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
       return { type: "bank_move", from, to, mode, tab: reader.byte() || undefined };
     }
     case HighClientPacket.GROUND_ITEM_ACTION: {
-      reader.int();
+      const stackId = reader.int();
       const x = reader.short(), y = reader.short();
       reader.byte();
       const itemId = reader.short();
       reader.int();
       const option = reader.string() || undefined;
-      return { type: "ground_item_action", itemId, x, y, option, optionIndex: reader.byte() || undefined };
+      return { type: "ground_item_action", itemId, x, y, stackId, option, optionIndex: reader.byte() || undefined };
     }
     case HighClientPacket.WIDGET: {
       const action = reader.byte() === 0 ? "open" : "close";
@@ -1067,6 +1068,46 @@ export function encodeRebuildNormal(regionX: number, regionY: number, forceReloa
   payload.writeUInt16BE(xteaKeys.length, 5);
   xteaKeys.forEach((key, i) => key.slice(0, 4).forEach((value, j) => payload.writeInt32BE(value | 0, 7 + i * 16 + j * 4)));
   return encodeServerPacket(ServerPacketId.REBUILD_NORMAL, payload);
+}
+
+/** Encodes the 4 x 13 x 13 dynamic scene palette consumed by REBUILD_REGION. */
+export function encodeRebuildRegion(
+  regionX: number,
+  regionY: number,
+  forceReload: boolean,
+  templateChunks: number[][][],
+  xteaKeys: number[][],
+): Buffer {
+  const chunkCount = 4 * 13 * 13;
+  const bitBytes = Math.ceil((chunkCount + templateChunks.flat(2).filter((chunk) => chunk !== -1).length * 26) / 8);
+  const payload = Buffer.alloc(7 + bitBytes + xteaKeys.length * 16);
+  payload.writeUInt16BE(regionY & 0xffff, 0);
+  payload[2] = forceReload ? 1 : 0;
+  payload.writeUInt16BE(regionX & 0xffff, 3);
+  payload.writeUInt16BE(xteaKeys.length, 5);
+
+  let bitOffset = 56;
+  const writeBits = (value: number, count: number): void => {
+    for (let bit = count - 1; bit >= 0; bit--) {
+      if (((value >>> bit) & 1) !== 0) payload[bitOffset >> 3] |= 1 << (7 - (bitOffset & 7));
+      bitOffset++;
+    }
+  };
+  for (let plane = 0; plane < 4; plane++) {
+    for (let x = 0; x < 13; x++) {
+      for (let y = 0; y < 13; y++) {
+        const chunk = templateChunks[plane]?.[x]?.[y] ?? -1;
+        writeBits(chunk === -1 ? 0 : 1, 1);
+        if (chunk !== -1) writeBits(chunk, 26);
+      }
+    }
+  }
+  let offset = 7 + bitBytes;
+  for (const key of xteaKeys) {
+    for (let index = 0; index < 4; index++) payload.writeInt32BE(key[index] | 0, offset + index * 4);
+    offset += 16;
+  }
+  return encodeServerPacket(ServerPacketId.REBUILD_REGION, payload);
 }
 
 export function encodeRegionReplacement(
@@ -1831,6 +1872,7 @@ const PLAYER_MASK = {
   FACE_ENTITY: 0x40,
   FORCE_MOVEMENT: 0x400,
   MOVEMENT_TYPE: 0x1000,
+  MOVEMENT_FLAG: 0x2000,
   SPOT_ANIM: 0x10000,
 } as const;
 
@@ -1935,6 +1977,7 @@ function playerUpdateMask(
     (writeInteraction ? PLAYER_MASK.FACE_ENTITY : 0) |
     (view.forcedMovement ? PLAYER_MASK.FORCE_MOVEMENT : 0) |
     (writeMovementType ? PLAYER_MASK.MOVEMENT_TYPE : 0) |
+    (view.resetPath ? PLAYER_MASK.MOVEMENT_FLAG : 0) |
     (view.graphic ? PLAYER_MASK.SPOT_ANIM : 0);
 }
 
@@ -1983,6 +2026,7 @@ function writePlayerUpdateBlock(
     shortBE(bytes, movement.endCycleOffset);
     shortLEA(bytes, movement.direction & 2047);
   }
+  if (view.resetPath) byteS(bytes, 127);
   if (view.graphic) {
     byteA(bytes, 1);
     bytes.push(0);

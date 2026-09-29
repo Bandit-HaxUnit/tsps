@@ -93,3 +93,31 @@ assert.equal(frame.movements[0]?.directions, undefined);
 assert.deepEqual(frame.movements[0]?.tile, { x: 3080, y: 3507, level: 0 });
 
 console.log("player run path reconstruction check passed");
+
+// A one-tile moveTo (for example, placement onto a chair) must not be decoded
+// as a walking step while its animation has already started.
+for (const index of [1, 2]) {
+    const state = createPlayerSyncState(1, start);
+    const ctx = new PlayerSyncContext();
+    ctx.setBase(3040, 3472);
+    ctx.setLocalIndex(1);
+    ctx.activate(1, start);
+    for (const empty of ctx.emptyIndices) ctx.flags[empty] = 1;
+    const views = [1, 2].map(id => ({ index: id, ...start, appearance: Buffer.alloc(0) }));
+    const decode = (tick: number) => {
+        const data = encodePlayerSync(tick, 3040, 3472, 1, views, state).subarray(3);
+        const length = data.readUInt16BE(10);
+        return new PlayerUpdateDecoder().decode(data.subarray(12, 12 + length), ctx,
+            { packetSize: length, loopCycle: tick });
+    };
+    decode(1);
+    Object.assign(views[index - 1], { y: start.y + 1, resetPath: true,
+        animation: { id: 4103, delay: 0 }, faceDirection: 256 });
+    const placed = decode(2);
+    const move = placed.movements.find(event => event.index === index);
+    assert.equal(move?.mode, "teleport", "placement must snap for both self and observers");
+    assert.equal(move?.snap, true);
+    assert.deepEqual(move?.tile, { ...start, y: start.y + 1 });
+    assert.equal(placed.updateBlocks.get(index)?.faceDir, 256);
+}
+console.log("player placement reset checks passed");

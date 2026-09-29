@@ -601,6 +601,9 @@ class ClientConnection {
           continue;
         case "interface_close":
           if (this.player) {
+            const close = { player: this.player, handled: false };
+            PluginManager.emitCustomEvent("interface:close", close);
+            if (close.handled) continue;
             const closeOverlayId = this.player.getAttribute?.(CLOSE_ON_INTERFACE_CLOSE_ATTRIBUTE);
             if (typeof closeOverlayId === "number" && Number.isInteger(closeOverlayId)) {
               this.player.setAttribute(CLOSE_ON_INTERFACE_CLOSE_ATTRIBUTE, null);
@@ -926,8 +929,8 @@ class ClientConnection {
     if (option === "examine") {
       const definition = ItemDefinition.forId(packet.itemId);
       player.sendMessage(definition.getExamine() || definition.getName());
-    } else if (option === "take" || packet.optionIndex === 3 || packet.optionIndex == null) {
-      PickupItemPacketListener.pickup(player, packet.itemId, packet.x, packet.y);
+    } else if (player.getPrivateArea() || option === "take" || packet.optionIndex === 3 || packet.optionIndex == null) {
+      PickupItemPacketListener.pickup(player, packet.itemId, packet.x, packet.y, packet.stackId);
     } else {
       SecondGroundItemOptionPacketListener.interact(
         player, packet.itemId, packet.x, packet.y, packet.optionIndex ?? 2

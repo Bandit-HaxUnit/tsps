@@ -47,7 +47,7 @@ class ArceuusSelfSpell extends Spell {
 }
 
 class ArceuusTeleportSpell extends Spell {
-    constructor(private readonly data: TeleportSpell) {
+    constructor(readonly data: TeleportSpell) {
         super();
     }
 
@@ -158,6 +158,10 @@ export class ArceuusSpells {
         ["barrows teleport", teleport(83, 90, [rune(4695, 2), rune(565), rune(563, 2)], 3565, 3315)],
         ["ape atoll teleport", teleport(90, 100, [rune(4695, 2), rune(565, 2), rune(563, 2)], 2770, 9100)],
     ]);
+
+    public static getTeleportDestinations() {
+        return Array.from(this.TELEPORTS, ([name, spell]) => ({ name, ...spell.data }));
+    }
 
     public static handleSpell(player: Player, name: string | undefined): boolean {
         const key = name?.trim().toLowerCase() ?? "";

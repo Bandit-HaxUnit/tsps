@@ -24,7 +24,7 @@ const { ShopDefinition } = require("../../src/main/typescript/elvarg/game/defini
 const { ShopManager } = require("../../src/main/typescript/elvarg/game/model/container/shop/ShopManager");
 
 // These NPCs have executable plugin conversations, not an imported prose transcript.
-const SPECIAL_NPC_DIALOGUES = new Set(["Skully"]);
+const SPECIAL_NPC_DIALOGUES = new Set(["Skully", "Estate agent", "Estate Agent", "Alwyn"]);
 
 /**
  * Most records list several variants and name no default, which used to leave the

@@ -228,7 +228,7 @@ export class MagicOnItemPacketListener {
   }
 
   private findVisibleGroundItem(player: any, groundItemId: number, position: Location): any | null {
-    const exact = ItemOnGroundManager.getGroundItem(player.getUsername(), groundItemId, position);
+    const exact = ItemOnGroundManager.getGroundItem(player.getUsername(), groundItemId, position, player.getPrivateArea());
     if (exact) {
       return exact;
     }

@@ -19,6 +19,9 @@ export class MapObjects {
             object = [...candidates, ...shared].find((entry) => entry.getLocation().equals(location)
                 && ObjectDefinition.forPlayer(entry.getId(), player)?.id === id) ?? null;
         }
+        if (!object) {
+            object = player.getPrivateArea()?.resolveObject(id, location) ?? null;
+        }
         if (object && !ObjectDefinition.forPlayer(object.getId(), player)) return null;
 
         if (object == null && player.getRights() == PlayerRights.DEVELOPER) {

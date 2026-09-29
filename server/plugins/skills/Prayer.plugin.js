@@ -3,30 +3,11 @@ const { Animation } = require("../../src/main/typescript/elvarg/game/model/Anima
 const { ItemDefinition } = require("../../src/main/typescript/elvarg/game/definition/ItemDefinition");
 const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
 const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
-const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
+const { BONE_XP: BONES } = require("../../src/main/typescript/elvarg/game/content/combat/magic/ArceuusOfferings");
 
 const BURY_ANIMATION = new Animation(827);
 const BURY_DELAY_MS = 1000;
 
-const BONES = new Map([
-  [ItemIds.BONES, 5],
-  [ItemIds.BAT_BONES, 6],
-  [ItemIds.WOLF_BONES, 6],
-  [ItemIds.BIG_BONES, 15],
-  [ItemIds.BABYDRAGON_BONES, 30],
-  [ItemIds.JOGRE_BONES, 15],
-  [ItemIds.ZOGRE_BONES, 23],
-  [ItemIds.LONG_BONE, 15],
-  [ItemIds.CURVED_BONE, 15],
-  [ItemIds.SHAIKAHAN_BONES, 25],
-  [ItemIds.DRAGON_BONES, 72],
-  [ItemIds.FAYRG_BONES, 84],
-  [ItemIds.RAURG_BONES, 96],
-  [ItemIds.OURG_BONES, 140],
-  [ItemIds.DAGANNOTH_BONES, 125],
-  [ItemIds.WYVERN_BONES_2, 72],
-  [ItemIds.LAVA_DRAGON_BONES, 85],
-]);
 
 module.exports = {
   name: "Prayer",

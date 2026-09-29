@@ -1019,31 +1019,24 @@ export class OsrsClient {
         document.addEventListener(
             "keydown",
             (event) => {
-                const shortcut = this.resolveKeyShortcut(event);
-                const functionKeyEvent =
-                    event.code.startsWith("F") ||
-                    event.key.startsWith("F") ||
-                    event.key.startsWith("Brightness") ||
-                    event.key.startsWith("Audio");
-                if (functionKeyEvent) {
-                    console.info("[OsrsClient] function keydown", {
-                        key: event.key,
-                        code: event.code,
-                        repeat: event.repeat,
-                        loggedIn: this.isLoggedIn(),
-                        hasVarManager: !!this.varManager,
-                    });
+                // Capture build-menu chat before tab shortcuts, plugin handlers,
+                // or focus on a non-input component can swallow the event.
+                const constructionOpen = this.widgetManager?.rootInterface === 458 ||
+                    [...(this.widgetManager?.interfaceParents.values() ?? [])]
+                        .some((parent) => parent.group === 458);
+                if (this.isLoggedIn() && constructionOpen &&
+                    (event.key.length === 1 || ["Enter", "Backspace", "Escape", "Tab", "PageUp", "PageDown"].includes(event.key))) {
+                    this.inputManager.onKeyDown(event, true);
+                    this.widgetInputController.handleConstructionKeyboardInput();
+                    event.stopImmediatePropagation();
+                    return;
                 }
+                const shortcut = this.resolveKeyShortcut(event);
                 if (!this.isLoggedIn() || event.repeat || shortcut === undefined) {
                     return;
                 }
 
                 this.switchToTab(shortcut);
-                console.info("[OsrsClient] switched game tab from function key", {
-                    key: event.key,
-                    tab: shortcut,
-                    activeTab: this.varManager?.getVarcInt(VARC_ACTIVE_TAB),
-                });
                 event.preventDefault();
                 if (event.key !== "Escape") event.stopImmediatePropagation();
             },
@@ -1446,18 +1439,7 @@ export class OsrsClient {
             handleWidgetAction: (event) => this.handleWidgetAction(event),
             handleTradeWidgetAction: (widget, event, groupId, childId) =>
                 this.handleTradeWidgetAction(widget, event, groupId, childId),
-            handleInventorySlotMove: (
-                from,
-                to,
-                localPredictionApplied,
-                previousSnapshotSignature,
-            ) =>
-                this.handleInventorySlotMove(
-                    from,
-                    to,
-                    localPredictionApplied,
-                    previousSnapshotSignature,
-                ),
+            handleInventorySlotMove: (from, to) => this.handleInventorySlotMove(from, to),
             buildWidgetActionPayload: (event) =>
                 this.widgetActionRouter.buildWidgetActionPayload(event) ?? null,
             resolveTransmitFlagWidget: (eventWidget, payload) =>
@@ -2284,6 +2266,7 @@ export class OsrsClient {
 
         // Clean up click targets when interfaces close to prevent stale/ghost click regions
         this.widgetManager.onInterfaceClose = (groupId) => {
+            this.widgetInputController.onInterfaceClosed(groupId);
             this.customInterfaces.onInterfaceClosed(groupId);
             // The click registry is on the WidgetsOverlay's GL canvas, not the main game canvas
             const glCanvas = (this.renderer as any)?.getWidgetsGLCanvas?.();
@@ -2857,70 +2840,18 @@ export class OsrsClient {
                             );
                         }
                     }
-                    const script = this.cs2Vm.context.loadScript(scriptId);
-                    if (script) {
-                        // Separate int and string args
-                        const intArgs: number[] = [];
-                        const stringArgs: string[] = [];
-                        for (const arg of args) {
-                            if (typeof arg === "number") {
-                                intArgs.push(arg | 0);
-                            } else if (typeof arg === "string") {
-                                stringArgs.push(arg);
-                            }
+                    const intArgs: number[] = [];
+                    const stringArgs: string[] = [];
+                    for (const arg of args) {
+                        if (typeof arg === "number") {
+                            intArgs.push(arg | 0);
+                        } else if (typeof arg === "string") {
+                            stringArgs.push(arg);
                         }
-
-                        try {
-                            // Optional CS2 trace: only if already enabled by the user.
-                            const traceCfg: any = (globalThis as any).__cs2Trace;
-                            const shouldTrace = !!traceCfg?.enabled;
-                            let prevTraceEnabled: boolean | undefined;
-                            let prevTraceScripts: any;
-                            let prevTraceLines: any;
-                            let prevTraceMaxLines: any;
-                            if (shouldTrace) {
-                                prevTraceEnabled = traceCfg.enabled;
-                                prevTraceScripts = traceCfg.scripts;
-                                prevTraceLines = traceCfg.lines;
-                                prevTraceMaxLines = traceCfg.maxLines;
-                                traceCfg.scripts = traceCfg.scripts ?? null;
-                                traceCfg.lines = 0;
-                                traceCfg.maxLines = traceCfg.maxLines ?? 2000;
-                                (globalThis as any).__cs2Trace = traceCfg;
-                            }
-                            // RUNCLIENTSCRIPT has no event component context. Do not inherit
-                            // active/dot widgets left by previous UI event scripts; mounted
-                            // interface coordinate helpers depend on the current script group.
-                            this.cs2Vm.activeWidget = null;
-                            this.cs2Vm.dotWidget = null;
-                            try {
-                                this.cs2Vm.run(script, intArgs, stringArgs);
-                            } finally {
-                                this.cs2Vm.activeWidget = null;
-                                this.cs2Vm.dotWidget = null;
-                            }
-                            if (shouldTrace && traceCfg) {
-                                traceCfg.enabled = prevTraceEnabled;
-                                traceCfg.scripts = prevTraceScripts;
-                                traceCfg.lines = prevTraceLines;
-                                traceCfg.maxLines = prevTraceMaxLines;
-                                (globalThis as any).__cs2Trace = traceCfg;
-                            }
-                            // CRITICAL: Invalidate widgets after script runs so changes are rendered.
-                            // CS2 scripts modify widget properties (text, hidden, position, etc.)
-                            // but without invalidation the render system won't repaint.
-                            if (this.widgetManager) {
-                                this.widgetManager.invalidateAll();
-                            }
-                        } catch (err) {
-                            console.error(
-                                `[OsrsClient] run_script error for script ${scriptId}:`,
-                                err,
-                            );
-                        }
-                    } else {
-                        console.warn(`[OsrsClient] run_script: script ${scriptId} not found`);
                     }
+
+                    const script = this.cs2Vm.context.loadScript(scriptId);
+                    if (script) this.cs2Vm.run(script, intArgs, stringArgs);
                 }
             } else if ((payload as any)?.action === "set_varbits") {
                 // Server-initiated varbit sync without running a script
@@ -3502,9 +3433,11 @@ export class OsrsClient {
                         console.log(
                             `[OsrsClient] REBUILD_NORMAL received: regionX=${payload.regionX} regionY=${payload.regionY} regions=${payload.mapRegions.length}`,
                         );
+                        const wasInInstance = ClientState.inInstance;
                         ClientState.inInstance = false;
                         ClientState.instanceTemplateChunks = null;
-                        if (this.renderer && "clearInstance" in this.renderer) {
+                        const rendererWasInInstance = (this.renderer as any)?.instanceActive === true;
+                        if ((wasInInstance || rendererWasInInstance) && this.renderer && "clearInstance" in this.renderer) {
                             (this.renderer as any).clearInstance();
                         }
                     } catch (err) {
@@ -7539,83 +7472,22 @@ export class OsrsClient {
         this.npcInstances.notifyRendererReady();
     }
 
-    handleInventorySlotMove(
-        fromSlot: number,
-        toSlot: number,
-        localPredictionApplied: boolean = false,
-        previousSnapshotSignature?: string,
-    ): void {
+    handleInventorySlotMove(fromSlot: number, toSlot: number): void {
         const src = Math.max(0, Math.min(Inventory.SLOT_COUNT - 1, fromSlot | 0));
         const dst = Math.max(0, Math.min(Inventory.SLOT_COUNT - 1, toSlot | 0));
         if (src === dst) return;
+        const sourceEntry = this.inventory.getSlot(src);
+        if (!sourceEntry || sourceEntry.itemId <= 0) return;
 
-        let before = previousSnapshotSignature;
-        if (!localPredictionApplied) {
-            const sourceEntry = this.inventory.getSlot(src);
-            if (!sourceEntry || sourceEntry.itemId <= 0) return;
-            before = this.inventory.snapshotSignature();
-            this.inventory.swapSlots(src, dst);
-        }
-
-        const predictedSource = this.inventory.getSlot(src);
-        const predictedDestination = this.inventory.getSlot(dst);
-
-        try {
-            console.log("[inventory] move slot", {
-                from: src,
-                to: dst,
-                predictedSourceItem: predictedSource?.itemId ?? -1,
-                predictedDestinationItem: predictedDestination?.itemId ?? -1,
-            });
-        } catch {}
-
-        // Publish the already-mutated model into the actual WebGL widget state before
-        // onDragComplete or clearDragWidgetVisualState can render another frame.
-        this.publishInventorySlotPrediction(src, dst);
-        const after = this.inventory.snapshotSignature();
-        this.pendingInventoryMovePredictions.push({
-            before: before ?? after,
-            after,
-        });
+        const before = this.inventory.snapshotSignature();
+        this.inventory.swapSlots(src, dst);
+        this.pendingInventoryMovePredictions.push({ before, after: this.inventory.snapshotSignature() });
         sendInventoryMove(src, dst);
 
-        // Dispatch through the inventory UI's CS2 state bridge. This client renders its
-        // inventory through WidgetNode/WebGL rather than a React inventory component.
+        // Refresh the entire slot through its cache script: item, actions, drag
+        // listeners, visibility and transparency must describe the same item.
         markInvTransmit(93);
-    }
-
-    private publishInventorySlotPrediction(...slotIndexes: number[]): void {
-        const slots = new Set(
-            slotIndexes
-                .map((slot) => slot | 0)
-                .filter((slot) => slot >= 0 && slot < Inventory.SLOT_COUNT),
-        );
-        if (slots.size === 0) return;
-
-        const updatedWidgets = new Set<any>();
-        const updateWidget = (widget: any, slot: number): void => {
-            if (!widget || updatedWidgets.has(widget)) return;
-            if (((widget.groupId ?? -1) | 0) !== 149) return;
-            if (((widget.childIndex ?? -1) | 0) !== slot) return;
-            if (((widget.type ?? -1) | 0) !== 5) return;
-
-            const entry = this.inventory.getSlot(slot);
-            const itemId = entry && entry.itemId > 0 ? entry.itemId | 0 : -1;
-            const quantity = itemId > 0 ? Math.max(0, entry?.quantity ?? 0) | 0 : 0;
-            widget.itemId = itemId;
-            widget.itemQuantity = quantity;
-            widget.itemAmount = quantity;
-            markWidgetInteractionDirty(widget);
-            this.widgetManager.invalidateWidgetRender(widget, "inventory-move-prediction");
-            updatedWidgets.add(widget);
-        };
-
-        for (const parent of this.widgetManager.getWidgetsForGroup(149)) {
-            if (!Array.isArray(parent.children)) continue;
-            for (const slot of slots) {
-                updateWidget(parent.children[slot], slot);
-            }
-        }
+        this.triggerInvTransmitForGroup(149);
     }
 
     handleInventorySlotTap(slotIndex: number): void {

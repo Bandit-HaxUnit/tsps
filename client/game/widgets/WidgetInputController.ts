@@ -1,6 +1,3 @@
-import type { WidgetManager } from "../../widgets/WidgetManager";
-import type { InputManager } from "../InputManager";
-import type { WidgetInteractionController } from "./WidgetInteractionController";
 import {
     isQuestListScrollbarWidget,
     processQuestListScrollbarInput,
@@ -17,7 +14,7 @@ import {
     type WidgetInputState,
     createWidgetInputState,
 } from "./input/widgetInputTypes";
-import { processWidgetKeyboardInput } from "./input/widgetKeyboardInput";
+import { processConstructionKeyboardInput, processWidgetKeyboardInput } from "./input/widgetKeyboardInput";
 import { processWidgetMenuWheelInput } from "./input/widgetMenuWheelInput";
 import { processWidgetMinimapWheelInput } from "./input/widgetMinimapWheelInput";
 import { createPrimaryWidgetActionResolver } from "./input/widgetPrimaryAction";
@@ -32,10 +29,30 @@ export class WidgetInputController {
 
     constructor(private readonly deps: WidgetInputControllerDeps) {}
 
+    onInterfaceClosed(groupId: number): void {
+        if (groupId !== 458) return;
+        // Cache script 2157 removes chat's onKey listener. Restore it when
+        // leaving the build menu, including menus opened by older servers.
+        this.deps.getVarManager().setVarcInt(11, 0);
+        const chat = this.deps.getWidgetManager().findWidget(162, 0);
+        if (chat) {
+            this.deps.executeScriptListener(chat, [927, 1]);
+            this.deps.executeScriptListener(chat, [223]);
+        }
+    }
+
+    handleConstructionKeyboardInput(): void {
+        const input = this.deps.getInputManager();
+        if (processConstructionKeyboardInput(this.deps, input, this.deps.getWidgetManager())) {
+            input.keyEvents.length = 0;
+        }
+    }
+
     handleUiInput(): void {
         const input = this.deps.getInputManager();
         const widgetManager = this.deps.getWidgetManager();
         const widgetInteraction = this.deps.getWidgetInteraction();
+        widgetInteraction.clearStaleWidgetInteractionState();
 
         const frame = buildWidgetInputFrame(
             this.deps,
@@ -45,6 +62,8 @@ export class WidgetInputController {
             widgetInteraction,
         );
         if (!frame) return;
+
+        processWidgetKeyboardInput(this.deps, frame, widgetManager);
 
         const transmitCycles = this.deps.getTransmitCycles();
         const hoverCycle = transmitCycles.cycleCntr | 0;
@@ -103,6 +122,5 @@ export class WidgetInputController {
             getPrimaryWidgetAction,
             isHolding,
         );
-        processWidgetKeyboardInput(this.deps, frame, widgetManager);
     }
 }

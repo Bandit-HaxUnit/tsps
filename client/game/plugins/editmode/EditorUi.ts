@@ -6,6 +6,7 @@ import {
 } from "./hostProtocol/regionPackMessage";
 import { browserHostOrigin, browserHostWindow } from "./hostProtocol/origin";
 import type { EditModePlugin } from "./EditModePlugin";
+import type { WebGLOsrsRenderer } from "../../../render/WebGLOsrsRenderer";
 import { EditorPalette, type PaletteMode } from "./EditorPalette";
 import {
     createCameraIcon,
@@ -1084,7 +1085,8 @@ class EditorChrome {
     }
 
     private itemIcon(id: number, amount: number): HTMLCanvasElement | undefined {
-        return window.osrsClient?.renderer?.itemIconRenderer?.renderToCanvas(id, amount, {
+        const renderer = window.osrsClient?.renderer as WebGLOsrsRenderer | undefined;
+        return renderer?.itemIconRenderer?.renderToCanvas(id, amount, {
             outline: 1,
             quantityMode: 2,
         });
