@@ -170,6 +170,32 @@ export interface PluginNpcBeforeDeathEvent {
   preventDeath: boolean;
 }
 
+/** Rectangular player zone for onZoneEnter/onZoneExit; omit `levels` for all planes. */
+export interface PluginZone {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  levels?: number[];
+}
+
+export interface PluginZoneEvent {
+  player: any;
+  zone: PluginZone;
+}
+
+export interface PluginNpcSpawnDefinition {
+  id: number;
+  x: number;
+  y: number;
+  z?: number;
+  wanderRadius?: number;
+  face?: number;
+  owner?: any;
+  /** Hide the NPC from everyone except `owner` (quest instances). */
+  ownerOnly?: boolean;
+}
+
 export interface PluginCanAttackEvent {
   attacker: any;
   target: any;
@@ -556,6 +582,16 @@ export interface PluginApi {
   onFriendAdd(handler: (event: PluginFriendEvent) => void): void;
   onFriendRemove(handler: (event: PluginFriendEvent) => void): void;
   onPlayerProcess(handler: (event: PluginPlayerProcessEvent) => void): void;
+  /** Fires when a player enters a rectangular zone (levels omitted = all planes). */
+  onZoneEnter(zone: PluginZone, handler: (event: PluginZoneEvent) => void): void;
+  /** Fires when a player leaves a rectangular zone. */
+  onZoneExit(zone: PluginZone, handler: (event: PluginZoneEvent) => void): void;
+  /**
+   * Spawns an NPC from a plugin. `ownerOnly` keeps it visible (and aggressive)
+   * only for `owner`, for instanced/quest spawns. Returns the NPC or null.
+   */
+  spawnNpc(definition: PluginNpcSpawnDefinition): any;
+  removeNpc(npc: any): void;
   onPlayerLevelUp(handler: (event: PluginPlayerLevelUpEvent) => void): void;
   /** Subscribes to an exact namespaced plugin event, such as `mining:success`. */
   onCustomEvent(

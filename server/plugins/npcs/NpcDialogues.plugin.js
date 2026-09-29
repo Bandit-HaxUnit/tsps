@@ -41,6 +41,19 @@ function pickVariant(npc) {
   return Array.isArray(variants[key]) ? variants[key] : undefined;
 }
 
+/** Transcript page name -> an NPC id that speaks it, so cutscene/paired speakers
+ * get their own chathead instead of borrowing the NPC being talked to. */
+function speakerIdIndex(index) {
+  const byName = new Map();
+  for (const [id, pages] of Object.entries(index ?? {})) {
+    for (const entry of pages ?? []) {
+      const name = String(entry.page ?? "").replace(/^Transcript:/, "");
+      if (name && !byName.has(name)) byName.set(name, Number(id));
+    }
+  }
+  return byName;
+}
+
 /**
  * Transcripts are keyed by wiki page title while NPC names come from the cache,
  * so "Hops" has to reach "Hops (Biohazard)". First usable disambiguated key wins.
@@ -70,17 +83,156 @@ function continues(steps) {
   return false;
 }
 
+/** True when a branch is only a navigation jump (no dialogue of its own). */
+function jumpOnly(steps) {
+  return !Array.isArray(steps) || steps.length === 0 || steps.every((step) => step.type === "jump");
+}
+
+/** A step body that actually says something (usable as a jump target). */
+function realBody(steps) {
+  return Array.isArray(steps) && steps.length > 0 && !jumpOnly(steps) ? steps : undefined;
+}
+
+/** Normalize option text so punctuation/prefix drift still matches ("Well," == "Well"). */
+function normText(value) {
+  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+/** Significant words of an option, for similarity matching. */
+function words(value) {
+  return new Set(
+    String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").split(" ").filter((w) => w.length > 2)
+  );
+}
+
+/** Jaccard word overlap, 0..1. */
+function similarity(a, b) {
+  let inter = 0;
+  for (const word of a) if (b.has(word)) inter++;
+  const union = a.size + b.size - inter;
+  return union ? inter / union : 0;
+}
+
+/** Option text -> steps across every variant of a transcript page; real bodies win. */
+function collectPageOptions(record) {
+  const byText = new Map();
+  const list = [];
+  const walk = (steps) => (steps || []).forEach((step) => {
+    for (const option of step.options ?? []) {
+      const key = normText(option.text);
+      const body = Array.isArray(option.steps) ? option.steps : [];
+      if (key) {
+        list.push({ key, words: words(option.text), steps: body });
+        if (!byText.has(key) || (jumpOnly(byText.get(key)) && !jumpOnly(body))) byText.set(key, body);
+      }
+      walk(option.steps);
+    }
+    walk(step.steps);
+  });
+  if (record) {
+    if (record.steps) walk(record.steps);
+    for (const variant of Object.values(record.variants ?? {})) walk(variant);
+  }
+  return { byText, list };
+}
+
+/** Normalized line text -> the steps that follow it, across a page's variants. */
+function collectPageLines(record) {
+  const lines = new Map();
+  const walk = (steps) => {
+    if (!Array.isArray(steps)) return;
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      const text = typeof step.player === "string" ? step.player
+        : typeof step.npc === "string" ? step.npc
+        : step.type === "line" && typeof step.text === "string" ? step.text
+        : undefined;
+      if (text) {
+        const key = normText(text);
+        if (key && !lines.has(key)) lines.set(key, steps.slice(i));
+      }
+      walk(step.steps);
+      for (const option of step.options ?? []) walk(option.steps);
+    }
+  };
+  if (record) {
+    if (record.steps) walk(record.steps);
+    for (const variant of Object.values(record.variants ?? {})) walk(variant);
+  }
+  return lines;
+}
+
+/** The first top-level menu of a variant, if it has one. */
+function topLevelMenu(steps) {
+  return (steps || []).find((step) => step.type === "choice" && step.options?.length);
+}
+
+/**
+ * The menu "above" the given variant on its page: the nearest earlier variant with
+ * a top-level menu. The wiki writes "same as above" tails ({{tact|above}}) that
+ * continue into the previous variant's menu, which is not linked in the dump.
+ */
+function collectMenuBefore(record, variantName) {
+  const variants = record?.variants ?? {};
+  const keys = Object.keys(variants);
+  const family = variantName ? String(variantName).split("-")[0] : "";
+  const index = variantName ? keys.indexOf(variantName) : -1;
+  const upto = index === -1 ? keys.length : index;
+  let menu;
+  for (let i = 0; i < upto; i++) {
+    // Stay within the same variant family ("sir-prysin-*"), or a page shared by
+    // several NPCs would continue into an unrelated NPC's menu.
+    if (family && keys[i].split("-")[0] !== family) continue;
+    const found = topLevelMenu(variants[keys[i]]);
+    if (found) menu = { step: found, rest: [], record: undefined };
+  }
+  return menu;
+}
+
+/**
+ * The wiki marks a conditional with `{{tcond|If X:}}` and puts the guarded text
+ * after it. The parser sometimes emits that guard as an empty condition followed
+ * by the text as a sibling, so attach the following run of non-condition steps to
+ * the empty condition. Without this the text plays unconditionally.
+ */
+function nestOrphanConditions(steps) {
+  if (!Array.isArray(steps)) return [];
+  const flat = [];
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    if (step.type === "condition" && !(step.steps && step.steps.length)) {
+      const branch = [];
+      let j = i + 1;
+      while (j < steps.length && steps[j].type !== "condition") branch.push(steps[j++]);
+      if (branch.length) {
+        flat.push({ ...step, steps: branch });
+        i = j - 1;
+        continue;
+      }
+    }
+    flat.push(step);
+  }
+  return flat.map((step) => {
+    if (step.options?.length) {
+      return { ...step, options: step.options.map((option) => ({ ...option, steps: nestOrphanConditions(option.steps || []) })) };
+    }
+    if (step.steps?.length) return { ...step, steps: nestOrphanConditions(step.steps) };
+    return step;
+  });
+}
+
 /**
  * Flatten a transcript into a linear play queue.
  *
  * Conditions are resolved through `opts.resolveCondition` (true/false/null). For a
- * run of sibling conditions the first true one wins, else the first the resolver
- * could not answer (so behaviour is unchanged when no plugin resolves them), else
- * the first. Jumps resolve through `opts.resolveJump`; unresolved jumps fall
- * through. `opts.wrapBranch` can splice bookkeeping steps in front of a chosen
- * branch.
+ * run of sibling conditions the first true one wins; if none is true the first the
+ * resolver could not answer wins, so behaviour is unchanged when no plugin resolves
+ * them. If every condition is explicitly false the guarded content is skipped.
+ * Jumps resolve through `opts.resolveJump`; unresolved jumps fall through.
+ * `opts.wrapBranch` can splice bookkeeping steps in front of a chosen branch.
  */
 function flatten(steps, opts = {}) {
+  steps = nestOrphanConditions(steps);
   const resolveCondition = typeof opts.resolveCondition === "function" ? opts.resolveCondition : () => null;
   const resolveJump = typeof opts.resolveJump === "function" ? opts.resolveJump : () => null;
   const wrapBranch = typeof opts.wrapBranch === "function" ? opts.wrapBranch : (_chosen, branch) => branch;
@@ -91,12 +243,16 @@ function flatten(steps, opts = {}) {
     const step = steps[position];
     if (step.type === "jump") {
       const target = resolveJump(step);
-      // "end": a menu jump we cannot replay (shows other/previous options).
-      // Stop rather than leak into whatever step follows the condition.
+      // "end": a jump we cannot replay. Stop rather than leak into the next step.
       if (target === "end") {
         out.push({ type: "end" });
         opts.stopped = true;
         break;
+      }
+      // { menu }: "shows other/previous/initial options" - replay a menu already seen.
+      if (target && typeof target === "object" && target.menu) {
+        out.push({ type: "gomenu", menu: target.menu });
+        continue;
       }
       if (Array.isArray(target)) out.push(...flatten(target, opts));
       continue;
@@ -110,8 +266,12 @@ function flatten(steps, opts = {}) {
     const run = steps.slice(runStart, position + 1);
     const answers = run.map((condition) => resolveCondition(condition));
     let chosen = answers.findIndex((answer) => answer === true);
-    if (chosen === -1) chosen = answers.findIndex((answer) => answer === null);
-    if (chosen === -1) chosen = 0;
+    if (chosen === -1) {
+      const unknown = answers.findIndex((answer) => answer === null);
+      // Every condition answered false: the guarded content does not apply.
+      if (unknown === -1) continue;
+      chosen = unknown;
+    }
     const step_ = run[chosen];
     out.push(...wrapBranch(step_, flatten(step_.steps || [], opts)));
     if (opts.stopped) break;
@@ -129,10 +289,17 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
   const npcId = event.npcId;
   const definition = event.definition;
   const close = () => player.getPacketSender().sendInterfaceRemoval();
+  // Only warn when a conversation had nothing to show; a terminal wiki
+  // "unavailable" marker after real dialogue is just the end of the branch.
+  let playedAny = false;
   const unavailable = () => {
     close();
-    player.sendMessage("That conversation isn't available right now.");
+    if (!playedAny) player.sendMessage("That conversation isn't available right now.");
   };
+
+  // Menus seen so far, for the wiki "shows other/previous/initial options" jumps.
+  context.currentMenu = undefined;
+  context.menuHistory = [];
 
   // Ordered option records power the wiki "jump above" shortcut (repeated menus).
   const records = [];
@@ -144,8 +311,9 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     record = { id: records.length, text: String(option.text ?? ""), steps: Array.isArray(option.steps) ? option.steps : [] };
     optionRecords.set(option, record);
     records.push(record);
-    const list = recordsByText.get(record.text);
-    if (list) list.push(record); else recordsByText.set(record.text, [record]);
+    const key = normText(record.text);
+    const list = recordsByText.get(key);
+    if (list) list.push(record); else recordsByText.set(key, [record]);
     return record;
   };
 
@@ -155,25 +323,80 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
       text: step.text, stepId: step.id,
     });
 
+  // "shows other/previous/initial options" ({{tact|other}} etc.) replays a menu
+  // that has already been shown. "previous2/3" walk further back, "initial" is
+  // the first menu of the conversation.
+  const resolveMenuJump = (reference) => {
+    const current = context.currentMenu;
+    const history = context.menuHistory;
+    if (/^other/i.test(reference)) return current ? { menu: current } : "end";
+    if (/^initial/i.test(reference)) return history[0] ? { menu: history[0] } : "end";
+    const match = /^previous(\d*)/i.exec(reference);
+    const back = match && match[1] ? Number(match[1]) : 1;
+    const index = current ? history.indexOf(current) : history.length - 1;
+    const target = index - back >= 0 ? history[index - back] : undefined;
+    return target ? { menu: target } : "end";
+  };
+
   // "jump above" targets the same option's earlier occurrence, else the option
   // defined just before this one. Wiki jump ids lost their targets in the dump.
-  // "shows other/previous/initial options" jumps ({{tact|other}} etc.) would need
-  // a menu stack to replay; end cleanly instead of falling into the next step.
   const resolveJump = (step) => {
     const reference = String(step.reference ?? "");
-    if (/^(other|previous\d*|initial)/i.test(reference)) return "end";
-    if (!/^above/i.test(reference)) return null;
+    if (/^(other|previous\d*|initial)/i.test(reference)) return resolveMenuJump(reference);
     const current = context.currentRecord;
-    if (!current) return records.length ? records[records.length - 1].steps : "end";
-    const sameText = (recordsByText.get(current.text) ?? []).find((record) => record.steps !== current.steps);
-    const target = sameText ?? (current.id > 0 ? records[current.id - 1] : undefined);
-    return target ? target.steps : "end";
+    const key = current ? normText(current.text) : "";
+    // The same option text (normalized) shown earlier, anywhere on the page.
+    const sameText = current ? (recordsByText.get(key) ?? []).find((record) => record.steps !== current.steps) : undefined;
+    const fromPage = key ? context.pageOptions?.get(key) : undefined;
+    // Near text: a page option whose normalized text contains (or is contained by)
+    // this one, e.g. "Aris said..." vs "Fortune-teller Aris said...".
+    const near = key.length >= 8
+      ? (context.pageOptionList ?? [])
+          .filter((option) => option.key.length >= 8 && option.key !== key && (option.key.includes(key) || key.includes(option.key)))
+          .sort((a, b) => Math.abs(a.key.length - key.length) - Math.abs(b.key.length - key.length))
+          .map((option) => realBody(option.steps))
+          .find(Boolean)
+      : undefined;
+    // Same question reworded ("...Count Draynor?" vs "...this vampyre?"): best
+    // word overlap on the page, above a confidence floor.
+    let similar;
+    if (key.length >= 8) {
+      const target = words(current ? current.text : "");
+      const best = (context.pageOptionList ?? [])
+        .map((option) => ({ steps: realBody(option.steps), score: option.words ? similarity(target, option.words) : 0 }))
+        .filter((candidate) => candidate.steps)
+        .sort((a, b) => b.score - a.score)[0];
+      if (best && best.score >= 0.5) similar = best.steps;
+    }
+    // "Same as above" can point at an inline line rather than an option (e.g. a
+    // repeat option for dialogue the player already spoke in this branch).
+    const fromLine = key.length >= 8 ? realBody(context.pageLines?.get(key)) : undefined;
+    if (/^below/i.test(reference)) {
+      const next = current ? records[current.id + 1] : records[0];
+      const pick = [realBody(sameText?.steps), realBody(fromPage), near, similar, fromLine, realBody(next?.steps)].find(Boolean);
+      if (pick) return pick;
+      if (!current && context.pageMenuBefore) return { menu: context.pageMenuBefore };
+      const last = records[records.length - 1];
+      return realBody(last?.steps) ?? "end";
+    }
+    if (!/^above/i.test(reference)) return null;
+    if (!current) {
+      // "same as above" outside a menu continues into the menu above on the page.
+      if (context.pageMenuBefore) return { menu: context.pageMenuBefore };
+      const last = records[records.length - 1];
+      return realBody(last?.steps) ?? "end";
+    }
+    const prev = current.id > 0 ? records[current.id - 1] : undefined;
+    return [realBody(sameText?.steps), realBody(fromPage), near, similar, fromLine, realBody(prev?.steps)].find(Boolean) ?? "end";
   };
 
   const flattenOptions = () => ({ resolveCondition, resolveJump,
     wrapBranch: (chosen, branch) => [{ type: "condition_chosen", id: chosen.id, text: chosen.text }, ...branch] });
 
-  function choices(step, rest, record, offset = 0) {
+  function presentMenu(menu, offset = 0) {
+    const { step, rest, record } = menu;
+    context.currentMenu = menu;
+    if (!context.menuHistory.includes(menu)) context.menuHistory.push(menu);
     const options = step.options || [];
     const more = options.length - offset > 5;
     const visible = options.slice(offset, offset + (more ? 4 : 5));
@@ -187,11 +410,15 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         api.emitCustomEvent("npc-dialogue:hook", { player, npc: event.npc, npcId, definition, hook: option.hook, quest: option.quest, option: option.text });
       }
       api.emitCustomEvent("npc-dialogue:choice", { player, npc: event.npc, npcId, definition, option: option.text, stepId: option.id });
+      context.currentMenu = menu;
       run([...(option.steps || []), ...rest], recordOption(option));
     }]);
-    if (more) pairs.push("More...", () => choices(step, rest, record, offset + 4));
+    if (more) pairs.push("More...", () => presentMenu(menu, offset + 4));
     if (visible.length === 1) pairs.push("Goodbye.", close);
-    if (!pairs.length) return close();
+    // A parsed menu with no options is a wiki-export gap; continue the branch
+    // instead of silently closing the chat.
+    if (!pairs.length) return run(rest, record);
+    playedAny = true;
     manager.reset();
     if (!api.sendMultiChatboxPrompt(player, step.prompt || "Select an Option", ...pairs)) {
       unavailable();
@@ -216,10 +443,18 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         manager.startDialogues(chain);
         return;
       }
-      const namedNpc = step.type === "line" && step.speaker === definition.getName();
-      if (!step.hook && (typeof step.npc === "string" || typeof step.player === "string" || namedNpc)) {
+      // "shows other/previous options": replay a menu already shown.
+      if (step.type === "gomenu" && step.menu) {
+        chain.add(new ActionDialogue(index++, { execute: () => presentMenu(step.menu) }));
+        manager.startDialogues(chain);
+        return;
+      }
+      // Typed lines carry a speaker; render any of them (cutscene actors included)
+      // rather than aborting when the speaker is not the NPC being talked to.
+      const typedLine = step.type === "line" && typeof step.text === "string";
+      if (!step.hook && (typeof step.npc === "string" || typeof step.player === "string" || typedLine)) {
         const isPlayer = typeof step.player === "string";
-        const speech = isPlayer ? step.player : namedNpc ? step.text : step.npc;
+        const speech = isPlayer ? step.player : typedLine ? step.text : step.npc;
         // Let a plugin skip a line through the mutable payload (as slayer:assignment),
         // e.g. a hand-over line for an item the player is no longer carrying.
         const request = { player, npc: event.npc, npcId, definition, step, text: speech, skip: false };
@@ -232,11 +467,17 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           continue;
         }
         const lines = Misc.wrapText(speech, 53);
+        playedAny = true;
+        // A typed line spoken by someone other than the NPC being talked to (a
+        // paired NPC talking to them, a cutscene actor) gets that speaker's head.
+        const speakerId = !isPlayer && typedLine && step.speaker && step.speaker !== definition.getName()
+          ? (context.speakerIdByName?.get(step.speaker) ?? definition.getId())
+          : definition.getId();
         for (let start = 0; start < lines.length; start += 4) {
           const text = lines.slice(start, start + 4).join(" ");
           chain.add(isPlayer
             ? new PlayerDialogue(index++, text)
-            : new NpcDialogue(index++, definition.getId(), text));
+            : new NpcDialogue(index++, speakerId, text));
         }
         if (step.steps?.length) {
           chain.add(new ActionDialogue(index++, { execute: () => run(rest, currentRecord) }));
@@ -251,9 +492,25 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           api.emitCustomEvent("npc-dialogue:hook", { player, npc: event.npc, npcId, definition, hook: step.hook, quest: step.quest, action: step.action });
           return run(rest, currentRecord);
         }
+        // Quest actions ("Quest complete!", "receive", ...) let a plugin drive
+        // state through the mutable payload, then the branch continues.
+        const action = {
+          player, npc: event.npc, npcId, definition, step,
+          text: step.text, action: step.action, target: step.target, stepId: step.id, handled: false,
+        };
+        api.emitCustomEvent("npc-dialogue:action", action);
+        if (action.handled) return action.end ? close() : run(rest, currentRecord);
         if (step.type === "end") return close();
         if (step.type === "message") {
-          player.sendMessage(String(step.text ?? ""));
+          // Item hand-outs are also `message` steps; let quests hook their id.
+          const message = {
+            player, npc: event.npc, npcId, definition, step,
+            text: step.text, target: step.target, stepId: step.id, kind: "message", handled: false,
+          };
+          api.emitCustomEvent("npc-dialogue:action", message);
+          if (message.end) return close();
+          playedAny = true;
+          if (!message.handled) player.sendMessage(String(step.text ?? ""));
           return run(rest, currentRecord);
         }
         // Wiki markers for content this server does not implement.
@@ -261,8 +518,11 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         if (step.type === "call" && Object.hasOwn(branches, step.branch) && Array.isArray(branches[step.branch])) {
           return run([...branches[step.branch], ...rest], currentRecord);
         }
-        if (step.type === "choice") return choices(step, rest, currentRecord);
-        if (step.type === "random" && step.options?.length) {
+        if (step.type === "choice") return presentMenu({ step, rest, record: currentRecord });
+        if (step.type === "random") {
+          // A parsed-but-empty random (the export dropped its alternatives) is not
+          // a dead end; continue with whatever follows.
+          if (!step.options?.length) return run(rest, currentRecord);
           const option = step.options[Math.floor(Math.random() * step.options.length)];
           if (option.hook) return unavailable();
           return run([...(option.steps || []), ...rest], currentRecord);
@@ -285,7 +545,12 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           api.emitCustomEvent("slayer:task-tip", request);
           if (request.line) return run([{ npc: request.line }, ...rest], currentRecord);
         }
-        // ponytail: prose effects have no executable contract. Stop safely.
+        if (step.type === "action") {
+          // Unhandled prose stage directions ("The player lights a tinderbox.")
+          // have no executable contract; continue the branch rather than abort.
+          return run(rest, currentRecord);
+        }
+        // ponytail: unknown step type with no executable contract. Stop safely.
         unavailable();
       } }));
       manager.startDialogues(chain);
@@ -330,7 +595,7 @@ module.exports = {
       } catch {
         index = {};
       }
-      loaded = { data, aliases: aliasKeys(data), index };
+      loaded = { data, aliases: aliasKeys(data), index, speakerIdByName: speakerIdIndex(index) };
       return loaded;
     };
 
@@ -339,32 +604,55 @@ module.exports = {
      * selector), cache name second.
      */
     const resolveTranscript = (event) => {
-      const { data, aliases, index } = load();
+      const { data, aliases, index, speakerIdByName } = load();
       const npcId = event.npcId;
       const pages = (Array.isArray(index[String(npcId)]) ? index[String(npcId)] : [])
         .map((entry) => ({ page: String(entry.page ?? "").replace(/^Transcript:/, ""), variants: Array.isArray(entry.variants) ? entry.variants : [] }))
         .filter((entry) => Object.hasOwn(data, entry.page));
-      const context = { player: event.player, npc: event.npc, npcId, definition: event.definition, pages };
+      const context = { player: event.player, npc: event.npc, npcId, definition: event.definition, pages, speakerIdByName };
+
+      // "Same as above" option bodies ({{tact|above}}) reference an option defined
+      // earlier on the page, which may live in another variant. Index this page's
+      // option texts so resolveJump can reach a real answer without replaying it.
+      const withOptions = (page, result) => {
+        if (page && data[page]) {
+          const pageOptions = collectPageOptions(data[page]);
+          result.context.pageOptions = pageOptions.byText;
+          result.context.pageOptionList = pageOptions.list;
+          result.context.pageLines = collectPageLines(data[page]);
+          // Only a known variant has a well-defined "menu above"; otherwise a
+          // page shared by several NPCs could replay an unrelated menu.
+          result.context.pageMenuBefore = result.variant ? collectMenuBefore(data[page], result.variant) : undefined;
+        }
+        return result;
+      };
 
       if (pages.length) {
         const choice = PluginManager.emitNpcDialogueVariant(context);
         const wanted = typeof choice === "string" ? choice : choice?.variant;
-        if (wanted) {
-          const page = typeof choice === "object" && choice.page
-            ? pages.find((entry) => entry.page === choice.page)
-            : pages.find((entry) => entry.variants.includes(wanted));
-          const steps = page ? data[page.page]?.variants?.[wanted] : undefined;
-          if (Array.isArray(steps)) return { steps, branches: data[page.page]?.branches, context };
+        const wantedPage = typeof choice === "object" ? choice?.page : undefined;
+        if (wanted || wantedPage) {
+          const page = wantedPage
+            ? pages.find((entry) => entry.page === wantedPage)
+            // The id index sometimes slugifies a variant differently from the dump
+            // (drops words), so fall back to whichever page actually has it.
+            : pages.find((entry) => entry.variants.includes(wanted)) ?? pages.find((entry) => Object.hasOwn(data[entry.page]?.variants ?? {}, wanted));
+          if (page) {
+            const record = data[page.page];
+            // Flat pages hold `steps` directly (no variants); use their default.
+            const steps = wanted && record?.variants ? record.variants[wanted] : pickVariant(record);
+            if (Array.isArray(steps)) return withOptions(page.page, { steps, branches: record?.branches, context, variant: wanted });
+          }
         }
         const first = pages.find((entry) => pickVariant(data[entry.page]));
-        if (first) return { steps: pickVariant(data[first.page]), branches: data[first.page]?.branches, context };
+        if (first) return withOptions(first.page, { steps: pickVariant(data[first.page]), branches: data[first.page]?.branches, context });
       }
 
       const name = event.definition.getName();
       let record = Object.hasOwn(data, name) ? data[name] : undefined;
       if (!pickVariant(record) && aliases.has(name)) record = data[aliases.get(name)];
       const steps = pickVariant(record);
-      return steps ? { steps, branches: record?.branches, context } : null;
+      return steps ? withOptions(record === data[name] ? name : undefined, { steps, branches: record?.branches, context }) : null;
     };
 
     api.onAnyNpcInteraction({

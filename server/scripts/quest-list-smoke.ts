@@ -3,12 +3,14 @@ import { encodeWidgetSetQuestList } from "../src/main/typescript/elvarg/net/prot
 import { ServerPacketId } from "../src/main/typescript/elvarg/net/protocol/ServerPackets";
 
 // Shape mirrors the client's ServerBinaryDecoder WIDGET_SET_QUEST_LIST branch.
+// Slot 0 is reserved for the group header row (the client draws the title at
+// firstQuestSlot - 1), so quest rows begin at slot 1.
 const groups = [
     {
         title: "Free Quests",
         quests: [
-            { slot: 0, status: 2, key: "cooks_assistant", displayName: "Cook's Assistant" },
-            { slot: 1, status: 1, key: "sheep_shearer", displayName: "Sheep Shearer" },
+            { slot: 1, status: 2, key: "cooks_assistant", displayName: "Cook's Assistant" },
+            { slot: 2, status: 1, key: "sheep_shearer", displayName: "Sheep Shearer" },
         ],
     },
 ];

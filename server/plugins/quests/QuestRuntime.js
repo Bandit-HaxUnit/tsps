@@ -19,8 +19,11 @@ const { ActionDialogue } = require("../../src/main/typescript/elvarg/game/model/
 // Side journal quest list (client/common/ui/sideJournal.ts + questList.ts).
 const QUEST_LIST_GROUP = 399;
 const QUEST_LIST_ENTRY_UID = (QUEST_LIST_GROUP << 16) | 7;
-const QUEST_LIST_POINTS_UID = (QUEST_LIST_GROUP << 16) | 9;
-const QUEST_LIST_COMPLETED_UID = (QUEST_LIST_GROUP << 16) | 10;
+// The "Quest Points"/"Completed" header lines are rendered by cache CS2 scripts
+// (1356/5995) from these varps, not from interface text.
+const QUEST_POINTS_TOTAL_VARBIT = 1782; // "Quest Points: X/<total>"
+const QUESTS_COMPLETED_VARBIT = 6347; // "Completed: <n>/<total>"
+const QUESTS_TOTAL_VARBIT = 11877;
 const QUEST_LIST_ENTRY_FLAGS = 0x7e;
 const QUEST_LIST_ENTRY_MAX_SLOT = 199;
 const FREE_QUESTS_GROUP = "Free Quests";
@@ -73,8 +76,10 @@ function orderedQuests() {
 // ============================================================================
 
 function sendQuestList(player) {
-  const entries = orderedQuests().map((quest, slot) => ({
-    slot,
+  // Slot 0 is the group header row; the client draws the title at
+  // (firstQuestSlot - 1), so quests start at slot 1.
+  const entries = orderedQuests().map((quest, index) => ({
+    slot: index + 1,
     status: questStatus(quest, player),
     key: quest.key,
     displayName: quest.name,
@@ -82,17 +87,26 @@ function sendQuestList(player) {
   const packet = player.getPacketSender();
   packet.sendQuestList([{ title: FREE_QUESTS_GROUP, quests: entries }]);
 
-  const maxSlot = Math.min(entries.length - 1, QUEST_LIST_ENTRY_MAX_SLOT);
-  if (maxSlot >= 0) {
-    packet.sendInterfaceFlagsRange(QUEST_LIST_ENTRY_UID, 0, maxSlot, QUEST_LIST_ENTRY_FLAGS);
+  const lastSlot = Math.min(entries.length, QUEST_LIST_ENTRY_MAX_SLOT);
+  if (entries.length > 0) {
+    packet.sendInterfaceFlagsRange(QUEST_LIST_ENTRY_UID, 1, lastSlot, QUEST_LIST_ENTRY_FLAGS);
   }
 
-  const completed = entries.filter((entry) => entry.status === STATUS_COMPLETE).length;
-  const total = entries.length;
-  const maxPoints = quests.reduce((sum, quest) => sum + (quest.questPoints || 0), 0);
-  const points = Number(player.getAttribute(QUEST_POINTS_ATTRIBUTE)) || 0;
-  packet.sendString(`Quest Points: ${points}/${maxPoints}`, QUEST_LIST_POINTS_UID);
-  packet.sendString(`Completed: ${completed}/${total}`, QUEST_LIST_COMPLETED_UID);
+  sendQuestHeaderStats(player);
+}
+
+/**
+ * The "Quest Points: X/Y" and "Completed: X/Y" header lines on both the quest
+ * list (399) and character summary (712) are rendered by cache CS2 scripts
+ * (1356/5995/3310) from these varps; interface text writes are overwritten.
+ */
+function sendQuestHeaderStats(player) {
+  const list = orderedQuests();
+  const packet = player.getPacketSender();
+  packet.sendConfig(QUEST_POINTS_VARP, Number(player.getAttribute(QUEST_POINTS_ATTRIBUTE)) || 0);
+  packet.sendVarbit(QUEST_POINTS_TOTAL_VARBIT, list.reduce((sum, quest) => sum + (quest.questPoints || 0), 0));
+  packet.sendVarbit(QUESTS_COMPLETED_VARBIT, list.filter((quest) => questStatus(quest, player) === STATUS_COMPLETE).length);
+  packet.sendVarbit(QUESTS_TOTAL_VARBIT, list.length);
 }
 
 /** Sends the quest list and its row flags; call when the quest tab (re)mounts. */
@@ -111,7 +125,8 @@ function journalLines(quest, player) {
 }
 
 function openJournalBySlot(player, slot) {
-  const quest = orderedQuests()[slot];
+  // Quest rows are sent at slots 1..N (slot 0 is the group header row).
+  const quest = orderedQuests()[(slot | 0) - 1];
   if (quest) openJournal(player, quest);
 }
 
@@ -159,8 +174,9 @@ function openCompletedScroll(player, quest, questPoints) {
   packet.sendInterfaceFlagsRange((COMPLETED_GROUP << 16) | COMPLETED_CLOSE_CHILD, -1, -1, 1 << 1);
   setText((COMPLETED_GROUP << 16) | COMPLETED_TITLE_CHILD, "Congratulations!");
   setText((COMPLETED_GROUP << 16) | COMPLETED_NAME_CHILD, `You have completed ${quest.name}!`);
-  if (quest.rewardItemId !== undefined) {
-    packet.sendItemOnInterfaces((COMPLETED_GROUP << 16) | COMPLETED_REWARD_ITEM_CHILD, quest.rewardItemId, 1);
+  const scrollItemId = quest.scrollItemId ?? quest.rewardItemId;
+  if (scrollItemId !== undefined) {
+    packet.sendItemOnInterfaces((COMPLETED_GROUP << 16) | COMPLETED_REWARD_ITEM_CHILD, scrollItemId, 1);
   }
   setText((COMPLETED_GROUP << 16) | COMPLETED_POINTS_CHILD, `Quest points: ${questPoints}`);
   const lines = rewardLines(quest);
@@ -188,6 +204,8 @@ function registerQuestWidgets(api) {
   );
   // SideJournalDefaults asks for the list when it mounts the quest tab.
   api.onCustomEvent("quest:list-refresh", ({ player }) => refreshQuestList(player));
+  // The character summary shows the same header stats without opening the list.
+  api.onPlayerLogin(({ player }) => sendQuestHeaderStats(player));
 }
 
 // ============================================================================
@@ -312,5 +330,6 @@ module.exports = {
   registerQuest,
   refreshQuestList,
   openJournal,
+  openJournalBySlot,
   startDialogue,
 };

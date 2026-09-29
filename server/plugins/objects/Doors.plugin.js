@@ -45,11 +45,28 @@ function buildDoorCatalog() {
     if (!partner || partner.name !== def.name) {
       continue;
     }
-    if (hasAction(partner.actions, "open") || !hasAction(partner.actions, "close")) {
+    if (hasAction(partner.actions, "close")) {
+      // The open variant only closes back (the classic closed id N, open id N+1).
+      if (!hasAction(partner.actions, "open")) {
+        closedToOpen.set(id, id + 1);
+        openToClosed.set(id + 1, id);
+      }
       continue;
     }
-    closedToOpen.set(id, id + 1);
-    openToClosed.set(id + 1, id);
+    // Some cache exports list both variants with only "Open" (the open door shares
+    // the same model and only differs by rotation). Pair consecutive same-model
+    // doors so they still open; see e.g. Varrock Palace door 32464/32465.
+    // Skip double-door leaves and already-paired ids so chains don't form.
+    if (
+      hasAction(partner.actions, "open") &&
+      JSON.stringify(partner.models) === JSON.stringify(def.models) &&
+      !DOUBLE_DOOR_ID_FAMILIES.some((family) => family.includes(id) || family.includes(id + 1)) &&
+      !openToClosed.has(id) &&
+      !closedToOpen.has(id + 1)
+    ) {
+      closedToOpen.set(id, id + 1);
+      openToClosed.set(id + 1, id);
+    }
   }
   return { closedToOpen, openToClosed };
 }

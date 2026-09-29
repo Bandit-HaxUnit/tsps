@@ -9,7 +9,7 @@ const QUEST_LIST_CONTENT_UID = (QUEST_LIST_GROUP_ID << 16) | 7;
 
 const SCROLLBAR_WIDTH = 16;
 const ARROW_HEIGHT = 16;
-const WHEEL_STEP = 45;
+const WHEEL_STEP = 16;
 
 function clampScrollY(value: number, maximum: number): number {
     return Math.min(Math.max(0, value | 0), maximum);
@@ -84,30 +84,49 @@ export function processQuestListScrollbarInput(
 
     const scrollbar = widgetManager.getWidgetByUid(QUEST_LIST_SCROLLBAR_UID);
     const content = widgetManager.getWidgetByUid(QUEST_LIST_CONTENT_UID);
-    if (!scrollbar || !content || scrollbar.hidden || scrollbar.isHidden) return;
-
-    widgetManager.ensureLayout(scrollbar);
+    if (!content) return;
     widgetManager.ensureLayout(content);
+    if (scrollbar) widgetManager.ensureLayout(scrollbar);
 
     const viewportHeight = Math.max(0, content.height | 0);
     const contentHeight = Math.max(viewportHeight, content.scrollHeight | 0);
     const maxScrollY = Math.max(0, contentHeight - viewportHeight);
     if (maxScrollY <= 0) return;
 
-    const scrollbarX = (scrollbar._absX ?? scrollbar.x ?? 0) | 0;
-    const scrollbarY = (scrollbar._absY ?? scrollbar.y ?? 0) | 0;
-    const scrollbarHeight = Math.max(0, scrollbar.height | 0);
-    if (scrollbarHeight <= ARROW_HEIGHT * 2) return;
+    const { input, mx, my, hits } = frame;
 
-    const { input, mx, my } = frame;
+    const contentAbsX = (content._absX ?? content.x ?? 0) | 0;
+    const contentAbsY = (content._absY ?? content.y ?? 0) | 0;
+    const scrollbarX = (scrollbar?._absX ?? scrollbar?.x ?? 0) | 0;
+    const scrollbarY = (scrollbar?._absY ?? scrollbar?.y ?? 0) | 0;
+    const scrollbarHeight = Math.max(0, (scrollbar?.height ?? 0) | 0);
+    const scrollbarVisible = !!scrollbar && !scrollbar.hidden && !scrollbar.isHidden;
+
+    // Hit-testing is more reliable than absolute coordinates (which can be stale
+    // before the first render or while a tab is remounting).
+    const hitIncludes = (uid: number): boolean => {
+        for (const hit of hits ?? []) {
+            let current: { uid?: number; parentUid?: number } | undefined = hit;
+            for (let depth = 0; current && depth < 16; depth++) {
+                if ((current.uid ?? -1) === uid) return true;
+                const parentUid = current.parentUid;
+                if (typeof parentUid !== "number" || parentUid < 0) break;
+                current = widgetManager.getWidgetByUid(parentUid);
+            }
+        }
+        return false;
+    };
+
     const isOverContent =
-        mx >= ((content._absX ?? content.x ?? 0) | 0) &&
-        mx < ((content._absX ?? content.x ?? 0) | 0) + (content.width | 0) &&
-        my >= ((content._absY ?? content.y ?? 0) | 0) &&
-        my < ((content._absY ?? content.y ?? 0) | 0) + viewportHeight;
+        hitIncludes(content.uid) ||
+        (mx >= contentAbsX &&
+            mx < contentAbsX + (content.width | 0) &&
+            my >= contentAbsY &&
+            my < contentAbsY + viewportHeight);
     const isOverScrollbar =
+        scrollbarVisible &&
         mx >= scrollbarX &&
-        mx < scrollbarX + Math.max(SCROLLBAR_WIDTH, scrollbar.width | 0) &&
+        mx < scrollbarX + Math.max(SCROLLBAR_WIDTH, scrollbar?.width | 0) &&
         my >= scrollbarY &&
         my < scrollbarY + scrollbarHeight;
 
@@ -116,22 +135,29 @@ export function processQuestListScrollbarInput(
         if ((content.scrollY | 0) === next) return;
         content.scrollY = next;
         widgetManager.invalidateScroll(content);
-        syncScrollbarThumb(
-            widgetManager,
-            scrollbar,
-            viewportHeight,
-            contentHeight,
-            next,
-            scrollbarHeight,
-        );
-        widgetManager.invalidateWidget(scrollbar, "quest-list-scroll");
+        if (scrollbarVisible && scrollbar) {
+            syncScrollbarThumb(
+                widgetManager,
+                scrollbar,
+                viewportHeight,
+                contentHeight,
+                next,
+                scrollbarHeight,
+            );
+            widgetManager.invalidateWidget(scrollbar, "quest-list-scroll");
+        }
     };
 
+    // Wheel scrolling over the rows works even if the scrollbar widget is
+    // missing or hidden, and uses one fixed step per notch regardless of the
+    // browser's deltaY magnitude.
     if (input.wheelDeltaY !== 0 && (isOverContent || isOverScrollbar)) {
-        setScrollY((content.scrollY | 0) + input.wheelDeltaY * WHEEL_STEP);
+        setScrollY((content.scrollY | 0) + (input.wheelDeltaY > 0 ? WHEEL_STEP : -WHEEL_STEP));
         input.wheelDeltaY = 0;
     }
 
+    if (!scrollbarVisible || !scrollbar) return;
+    if (scrollbarHeight <= ARROW_HEIGHT * 2) return;
     if (input.clickMode2 !== ClickMode.LEFT || !isOverScrollbar) return;
 
     if (my < scrollbarY + ARROW_HEIGHT) {
