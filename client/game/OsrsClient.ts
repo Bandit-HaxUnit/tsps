@@ -3452,10 +3452,11 @@ export class OsrsClient {
                         console.log(
                             `[OsrsClient] REBUILD_WORLDENTITY received: entity=${payload.entityIndex} config=${payload.configId} size=${payload.sizeX}x${payload.sizeZ} regionX=${payload.regionX} regionY=${payload.regionY} regions=${payload.mapRegions.length}`,
                         );
-                        // World entity scene anchor: entityCoord + sizeChunks * 4 (tile precision).
-                        // entityCoord=3050, sizeChunks=8, fineBase=8*64=512fine=4tiles → anchor=3054.
-                        const entityWorldX = 3054;
-                        const entityWorldY = 3193;
+                        // The deck scene keeps its own coordinates: 13x13 chunks centred on
+                        // the region, so this anchor puts the scene base at (region - 6) * 8.
+                        // Where the deck is drawn in the world comes from WORLDENTITY_INFO.
+                        const entityWorldX = payload.regionX * 8 + 4;
+                        const entityWorldY = payload.regionY * 8 + 4;
 
                         // Collect extra locs from addedLocs that fall in source region
                         const extraLocs: Array<{
@@ -7721,7 +7722,7 @@ export class OsrsClient {
             if (entity) {
                 entity.drawMode = spawn.drawMode;
                 if (spawn.position) {
-                    entity.queuePosition(spawn.position);
+                    entity.setPosition(spawn.position);
                 }
                 if (spawn.mask) {
                     this.applyWorldEntityMask(spawn.entityIndex, entity, spawn.mask);

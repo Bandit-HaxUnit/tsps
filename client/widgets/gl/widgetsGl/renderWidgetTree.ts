@@ -2402,9 +2402,35 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                     let playerFineX: number;
                     let playerFineY: number;
 
+                    let onBoat = false;
                     if (playerIdx !== undefined && playerIdx >= 0) {
                         playerFineX = playerEcs.getX(playerIdx) | 0;
                         playerFineY = playerEcs.getY(playerIdx) | 0;
+                        // On a boat the player stands in deck coordinates; centre the
+                        // minimap on where the deck is in the world.
+                        const worldViewId = playerEcs.getWorldViewId(playerIdx) | 0;
+                        const boatProjector = osrsClient.renderer as
+                            | {
+                                  projectDeckToWorld?: (
+                                      entityIndex: number,
+                                      fineX: number,
+                                      fineY: number,
+                                  ) => { x: number; y: number } | undefined;
+                              }
+                            | undefined;
+                        const projected =
+                            worldViewId >= 0
+                                ? boatProjector?.projectDeckToWorld?.(
+                                      worldViewId,
+                                      playerFineX,
+                                      playerFineY,
+                                  )
+                                : undefined;
+                        if (projected) {
+                            playerFineX = Math.round(projected.x);
+                            playerFineY = Math.round(projected.y);
+                            onBoat = true;
+                        }
                     } else {
                         const rawSubX = (playerState.subX ?? 64) | 0;
                         const rawSubY = (playerState.subY ?? 64) | 0;
@@ -2420,7 +2446,9 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                     const subY = playerFineY & 127;
                     const worldX = playerTileX + (subX - 64) / 128;
                     const worldY = playerTileY + (subY - 64) / 128;
-                    const playerLevel = Math.max(0, Math.min(3, playerState.level | 0));
+                    const playerLevel = onBoat
+                        ? 0
+                        : Math.max(0, Math.min(3, playerState.level | 0));
 
                     const cameraYaw = osrsClient.camera.yaw ?? 0;
                     const minimapZoom = osrsClient.minimapZoom ?? 4;

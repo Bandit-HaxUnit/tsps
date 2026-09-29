@@ -625,6 +625,9 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
             }
         } catch {}
 
+        // Boat transforms live in view space, so rebuild them for this camera.
+        host.worldEntityAnimator?.compose(camera.viewMatrix as Float32Array);
+
         // Update hovered tile using latest camera matrices
         profiler.startPhase("hover");
         host.updateHoveredTile();
@@ -648,14 +651,17 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                 (Math.floor(previewTileZ / 8) * 8 - SCENE_PREVIEW_HALF_TILES) | 0,
             );
         }
+        // Aboard a boat, stream around the boat's projected position (playerPosUni) rather
+        // than the server's scene base.
+        const streamAroundPlayer = host.getControlledPlayerWorldViewId() >= 0;
         host.mapManager.update(
             host.playerPosUni[0],
             host.playerPosUni[1],
             camera,
             frameCount,
             host.osrsClient.mapRadius,
-            ClientState.baseX | 0,
-            ClientState.baseY | 0,
+            streamAroundPlayer ? -1 : ClientState.baseX | 0,
+            streamAroundPlayer ? -1 : ClientState.baseY | 0,
             host.osrsClient.expandedMapLoading | 0,
         );
         host.syncStreamGenerationFromMapManager();
@@ -843,6 +849,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                 sceneViewport.width,
                 sceneViewport.height,
             );
+            host.worldEntityAnimator?.compose(camera.viewMatrix as Float32Array);
         }
 
         // Update overlays and draw pre-present overlays (e.g., hitsplats) into frame texture.

@@ -781,6 +781,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         this.sceneRaycaster = new SceneRaycaster(this.mapManager, osrsClient);
         this.sceneRaycaster.worldEntityTransformProvider = (map) =>
             this.getWorldEntityTransformForMap(map);
+        this.sceneRaycaster.deckToWorldProvider = (entityIndex, fineX, fineY) =>
+            this.projectDeckToWorld(entityIndex, fineX, fineY);
         const previousOnMapRemoved = this.mapManager.onMapRemoved;
         this.mapManager.onMapRemoved = (mapX: number, mapY: number) => {
             this.clearMinimapIconsForMap(mapX | 0, mapY | 0);
@@ -1548,6 +1550,15 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
 
     public getNpcModelYOffset(deckHeight: number = 0): number {
         return render.getNpcModelYOffset(this, deckHeight);
+    }
+
+    /** World fine position of a point on a boat's deck; see worldEntityMotion. */
+    projectDeckToWorld(
+        entityIndex: number,
+        fineX: number,
+        fineY: number,
+    ): { x: number; y: number } | undefined {
+        return render.projectDeckToWorld(this, entityIndex, fineX, fineY);
     }
 
     getWorldEntityTransformForTile(tileX: number, tileY: number): Float32Array {

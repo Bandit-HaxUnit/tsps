@@ -19,11 +19,13 @@ export class WorldViewManager {
         sizeX: number,
         sizeY: number,
         opts: ConstructorParameters<typeof WorldView>[3] = {},
+        /** Reuse an entity from a scene being rebuilt, keeping its synced position. */
+        existingEntity?: WorldEntity,
     ): WorldView {
         const view = new WorldView(id, sizeX, sizeY, opts);
         this.worldViews.set(id, view);
 
-        const entity = new WorldEntity(id);
+        const entity = existingEntity ?? new WorldEntity(id);
         entity.ownerWorldViewId = -1;
         entity.configId = opts.configId ?? -1;
         this.worldEntities.set(id, entity);
