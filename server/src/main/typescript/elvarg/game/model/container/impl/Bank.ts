@@ -40,16 +40,9 @@ export class Bank extends ItemContainer {
     public static withdraw(player: Player, item: number, slot: number, amount: number, fromBankTab: number) {
         if (Bank.isOpen(player)) {
 
-            // The item's real tab
-            const itemTab = Bank.getTabForItem(player, item);
-
-            // Check if we're withdrawing the item from the proper tab, but only if we
-            // aren't bank searching.
-            if (itemTab !== fromBankTab) {
-                if (!player.isSearchingBank()) {
-                    return;
-                }
-            }
+            // The client names the exact tab and slot; a search result can come
+            // from any tab.
+            const itemTab = player.isSearchingBank() ? Bank.getTabForItem(player, item) : fromBankTab;
 
             // Make sure we're only withdrawing what we have.
             let maxAmount = player.getBank(itemTab).getAmount(item);
@@ -84,15 +77,15 @@ export class Bank extends ItemContainer {
 
             } else {
 
-                // Withdrawing an item which belongs in another tab from the main tab.
-                if (player.getCurrentBankTab() === 0 && fromBankTab !== 0) {
-                    slot = player.getBank(itemTab).getSlotForItemId(item);
-                }
-
                 // Make sure the item is in the slot we've found.
-                if (player.getBank(itemTab).getItems()[slot].getId() !== item) {
+                const stack = player.getBank(itemTab).getItems()[slot];
+                if (!stack || stack.getId() !== item) {
                     return;
                 }
+
+                // Another stack of the same item (different metadata) may share
+                // the tab, so take no more than this one holds.
+                amount = Math.min(amount, stack.getAmount());
 
                 // Delete placeholder.
                 if (amount <= 0) {
@@ -276,7 +269,7 @@ export class Bank extends ItemContainer {
             const bank = player.getBank(tab);
             for (const item of bank.getValidItems()) {
                 if (current++ === clientSlot) {
-                    return { tab, slot: bank.getSlotForItemId(item.getId()), item };
+                    return { tab, slot: bank.getItems().indexOf(item), item };
                 }
             }
         }

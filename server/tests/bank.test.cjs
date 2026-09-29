@@ -55,6 +55,8 @@ function createPlayer() {
     withdrawAsNote: () => false,
     isPlaceholders: () => false,
     isPlayerBot: () => false,
+    getBankCustomQuantity: () => 0,
+    getBankQuantityMode: () => 0,
   };
   player.inventory = new Inventory(player);
   player.inventory.resetItems();
@@ -124,4 +126,31 @@ test("a full bank tab refuses the item instead of throwing", () => {
 
   assert.ok(player.messages.includes("Not enough space in bank."));
   assert.equal(player.getInventory().getAmount(TRIDENT), 1);
+});
+
+function bankTwoTridents(player) {
+  player.getBank(0).add(new Item(TRIDENT, 1, { charges: 5 }), false);
+  player.getBank(0).add(new Item(TRIDENT, 1, { charges: 1200 }), false);
+}
+
+test("withdrawing takes the stack that was clicked, not the first with that item", () => {
+  const player = createPlayer();
+  bankTwoTridents(player);
+
+  Bank.handleWidgetAction(player, {
+    groupId: Bank.MAIN_INTERFACE_ID, childId: 12, buttonNum: 1, option: "Withdraw-1", slot: 1, itemId: TRIDENT,
+  });
+
+  assert.deepEqual(metas(player.getInventory()), [[1, { charges: 1200 }]]);
+  assert.deepEqual(metas(player.getBank(0)), [[1, { charges: 5 }]]);
+});
+
+test("withdrawing never takes more than the clicked stack holds", () => {
+  const player = createPlayer();
+  bankTwoTridents(player);
+
+  Bank.withdraw(player, TRIDENT, 0, 2, 0);
+
+  assert.deepEqual(metas(player.getInventory()), [[1, { charges: 5 }]]);
+  assert.deepEqual(metas(player.getBank(0)), [[1, { charges: 1200 }]]);
 });
