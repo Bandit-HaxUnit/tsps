@@ -156,6 +156,15 @@ function leaveHelm(player, boat) {
   player.getPacketSender().sendInterfaceScript(SCRIPT_HELM_UPDATE, ["", 0, "", 1]);
 }
 
+/** The helm doesn't block walking: whoever navigates stands on its tile, so walk there first. */
+function routeToHelm(event) {
+  const option = event.definition?.getInteractions()?.[event.clickType - 1];
+  if (event.definition?.getName() !== "Helm" || option !== "Navigate") return;
+  if (!Sailing.instanceAboard(event.player)) return;
+  const helm = event.object.getLocation();
+  event.destination = { x: helm.getX(), y: helm.getY(), z: helm.getZ() };
+}
+
 function toggleHelm({ player }) {
   const boat = Sailing.instanceAboard(player);
   if (!boat) return;
@@ -206,6 +215,7 @@ module.exports = {
       "Stop-navigating": toggleHelm,
       Escape: (event) => escapeBoat(api, event),
     });
+    api.onObjectRoute(routeToHelm);
     api.onInterfaceActionClick(clickSailButton);
     BoatManager.onHeadingSet(raiseSailForHeading);
   },

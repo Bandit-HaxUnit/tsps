@@ -705,6 +705,7 @@ function registerPlugin(file) {
     onNpcInteraction: (name, actions) => { hooks.npcs[name] = actions; },
     onCustomEvent: (name, handler) => { hooks.events[name] = handler; },
     onInterfaceActionClick: (handler) => hooks.interfaceClicks.push(handler),
+    onObjectRoute: (handler) => { hooks.route = handler; },
     sendMultiChatboxPrompt: (_player, title, ...pairs) => { hooks.prompt = { title, pairs }; },
   });
   return hooks;
@@ -718,6 +719,32 @@ test("the sailing plugins register their hooks and load the boat and dock data",
   assert.deepEqual(Object.keys(registerPlugin("Sailing.plugin").events).sort(), ["sailing:boarded", "sailing:left"]);
   assert.deepEqual(Object.keys(registerPlugin("Shipwright.plugin").npcs), ["Junior Jim"]);
   assert.ok(Sailing.getDock("the_pandemonium"));
+});
+
+test("Navigate walks the player onto the helm's tile first", () => {
+  const { route } = registerPlugin("Helm.plugin");
+  const player = sailor();
+  Sailing.giveBoat(player, "raft", DOCK.id);
+  Sailing.board(player, DOCK.id);
+  const helm = new Location(9603, 9604, 0);
+  const click = (name, clickType) => {
+    const event = {
+      player,
+      object: { getLocation: () => helm },
+      definition: { getName: () => name, getInteractions: () => ["Navigate", null, null, "Escape", null] },
+      clickType,
+      destination: null,
+    };
+    route(event);
+    return event.destination;
+  };
+  try {
+    assert.deepEqual(click("Helm", 1), { x: 9603, y: 9604, z: 0 });
+    assert.equal(click("Helm", 4), null, "Escape keeps the normal reach");
+    assert.equal(click("Sails", 1), null);
+  } finally {
+    Sailing.disembark(player, DOCK.id);
+  }
 });
 
 test("the helm's Escape asks first and only sinks the boat on yes", () => {
