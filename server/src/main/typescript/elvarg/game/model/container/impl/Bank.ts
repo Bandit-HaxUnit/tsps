@@ -71,7 +71,7 @@ export class Bank extends ItemContainer {
 
                 player.getBank(itemTab).switchsItem(
                     player.getInventory(),
-                    new Item(item, amount),
+                    player.getBank(itemTab).getItems()[slot].clone().setAmount(amount),
                     slot,
                     false,
                     false
@@ -105,7 +105,7 @@ export class Bank extends ItemContainer {
                 // Perform the switch.
                 player.getBank(itemTab).switchsItem(
                     player.getInventory(),
-                    new Item(item, amount),
+                    player.getBank(itemTab).getItems()[slot].clone().setAmount(amount),
                     slot,
                     false,
                     false
@@ -165,7 +165,10 @@ export class Bank extends ItemContainer {
                 player.setCurrentBankTab(tab);
             }
 
-            player.getInventory().switchItem(player.getBank(tab), new Item(item, amount),false , slot, !player.isSearchingBank());
+            Bank.depositFromSlots(player, player.getBank(tab), slot, amount);
+            if (!player.isSearchingBank()) {
+                player.getBank(tab).refreshItems();
+            }
             if (player.isSearchingBank()) {
                 player.getBank(this.BANK_SEARCH_TAB_INDEX).refreshItems();
             }
@@ -174,6 +177,31 @@ export class Bank extends ItemContainer {
 
             // Refresh inventory
             player.getInventory().refreshItems();
+        }
+    }
+
+    /**
+     * Moves up to `amount` of the inventory item in `slot` into `bank`, each
+     * item as itself so it keeps its metadata (charges, contents). A stack
+     * moves from the clicked slot only; unstackable items start there and
+     * continue through the other bankable slots holding the same item.
+     */
+    private static depositFromSlots(player: Player, bank: Bank, slot: number, amount: number) {
+        const inventory = player.getInventory();
+        const clicked = inventory.getItems()[slot];
+        if (clicked.getDefinition().isStackable()) {
+            inventory.switchItem(bank, clicked.clone().setAmount(Math.min(amount, clicked.getAmount())), false, slot, false);
+            return;
+        }
+        const id = clicked.getId();
+        const slots = [slot, ...inventory.getItems().map((_, index) => index).filter((index) => index !== slot)];
+        let moved = 0;
+        for (const index of slots) {
+            if (moved >= amount) break;
+            const item = inventory.getItems()[index];
+            if (item.getId() !== id || getPluginManager().emitCanBankItem(player, item) === false) continue;
+            inventory.switchItem(bank, item.clone(), false, index, false);
+            moved++;
         }
     }
 
