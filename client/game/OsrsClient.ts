@@ -3497,19 +3497,9 @@ export class OsrsClient {
                             );
                         }
 
-                        // Set local player's worldViewId to this entity
-                        if (this.controlledPlayerServerId >= 0) {
-                            const localEcsIdx = this.playerEcs.getIndexForServerId(
-                                this.controlledPlayerServerId,
-                            );
-                            if (localEcsIdx !== undefined) {
-                                this.playerEcs.setWorldViewId(localEcsIdx, payload.entityIndex);
-                                this.worldViewManager.addPlayerToWorldView(
-                                    payload.entityIndex,
-                                    localEcsIdx,
-                                );
-                            }
-                        }
+                        // Boats of other players are built too; the local player is only on
+                        // this one if they stand in its deck scene.
+                        this.syncLocalWorldView();
                     } catch (err) {
                         console.warn("[OsrsClient] rebuild_worldentity error", err);
                     }
@@ -3528,6 +3518,7 @@ export class OsrsClient {
                         ? frame.localIndex | 0
                         : this.lastPlayerSyncLocalIndex;
                     this.playerSyncManager.handleFrame(frame);
+                    this.syncLocalWorldView();
                 } catch (err) {
                     console.warn("[OsrsClient] player_sync frame error", err);
                 }
@@ -7770,11 +7761,31 @@ export class OsrsClient {
         }
         if (this.controlledPlayerServerId >= 0) {
             const localEcsIdx = this.playerEcs.getIndexForServerId(this.controlledPlayerServerId);
-            if (localEcsIdx !== undefined) {
+            // Only a boat the local player is on takes them off it; other boats come and go.
+            if (localEcsIdx !== undefined && this.playerEcs.getWorldViewId(localEcsIdx) === entityIndex) {
                 this.playerEcs.setWorldViewId(localEcsIdx, -1);
                 this.worldViewManager.removePlayerFromWorldView(entityIndex, localEcsIdx);
             }
         }
+    }
+
+    /**
+     * Puts the local player in the world view of the boat whose deck scene they stand in, or
+     * the main world (-1). The server sends every nearby boat's scene, so being sent a boat
+     * doesn't mean being on it; where the player stands decides.
+     */
+    private syncLocalWorldView(): void {
+        if (this.controlledPlayerServerId < 0) return;
+        const localEcsIdx = this.playerEcs.getIndexForServerId(this.controlledPlayerServerId);
+        const tile = this.playerSyncManager.getServerTile(this.controlledPlayerServerId);
+        if (localEcsIdx === undefined || !tile) return;
+        const view = this.worldViewManager.findWorldViewAt(tile.tileX, tile.tileY);
+        const next = view && view.id !== -1 ? view.id : -1;
+        const current = this.playerEcs.getWorldViewId(localEcsIdx);
+        if (next === current) return;
+        if (current >= 0) this.worldViewManager.removePlayerFromWorldView(current, localEcsIdx);
+        this.playerEcs.setWorldViewId(localEcsIdx, next);
+        if (next >= 0) this.worldViewManager.addPlayerToWorldView(next, localEcsIdx);
     }
 
     /**

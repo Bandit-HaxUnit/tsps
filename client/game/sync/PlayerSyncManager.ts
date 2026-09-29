@@ -727,6 +727,11 @@ export class PlayerSyncManager {
         }
     }
 
+    /** The tile the server last placed a player on (not the interpolated draw position). */
+    getServerTile(serverId: number): { tileX: number; tileY: number } | undefined {
+        return this.resolveBaseTile(serverId);
+    }
+
     private resolveBaseTile(
         serverId: number,
         movement?: MovementUpdate,
