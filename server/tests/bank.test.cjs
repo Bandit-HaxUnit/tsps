@@ -205,3 +205,48 @@ test("clicking Release on a placeholder removes it; other options leave it", () 
   click("Release", 8);
   assert.deepEqual(Bank.layout(player), []);
 });
+
+function clickTab(player, tab, buttonNum, option) {
+  Bank.handleWidgetAction(player, {
+    groupId: Bank.MAIN_INTERFACE_ID, childId: Bank.TABS_CHILD, buttonNum, option, slot: Bank.TAB_BUTTON_SLOT_OFFSET + tab,
+  });
+}
+
+function tabsOf(player) {
+  return Bank.layout(player).map(({ tab, item }) => [tab, item.getId(), item.getAmount()]);
+}
+
+test("clicking a tab views it; clicking the empty slot after the last tab explains how to make one", () => {
+  const player = createPlayer();
+  player.getBank(1).add(new Item(TRIDENT, 1), false);
+
+  clickTab(player, 1, 1, "View tab");
+  assert.equal(player.getCurrentBankTab(), 1);
+
+  clickTab(player, 2, 1, "View tab");
+  assert.equal(player.getCurrentBankTab(), 1);
+  assert.ok(player.messages.includes("To create a new tab, drag an item here."));
+});
+
+test("collapsing a tab moves its items and placeholders into the main tab and shifts later tabs down", () => {
+  const player = createPlayer();
+  player.getBank(1).add(new Item(TRIDENT, 1, { charges: 1200 }), false);
+  player.getBank(1).add(new Item(LAVA_BATTLESTAFF, 0), false);
+  player.getBank(2).add(new Item(MYSTIC_LAVA_STAFF, 3), false);
+
+  clickTab(player, 1, 6, "Collapse tab");
+
+  assert.deepEqual(tabsOf(player), [[1, MYSTIC_LAVA_STAFF, 3], [0, TRIDENT, 1], [0, LAVA_BATTLESTAFF, 0]]);
+  assert.deepEqual(player.getBank(0).getValidItems()[0].getMeta(), { charges: 1200 });
+});
+
+test("removing placeholders from a tab leaves other tabs' placeholders", () => {
+  const player = createPlayer();
+  player.getBank(1).add(new Item(LAVA_BATTLESTAFF, 0), false);
+  player.getBank(1).add(new Item(TRIDENT, 1), false);
+  player.getBank(0).add(new Item(MYSTIC_LAVA_STAFF, 0), false);
+
+  clickTab(player, 1, 7, "Remove placeholders");
+
+  assert.deepEqual(tabsOf(player), [[1, TRIDENT, 1], [0, MYSTIC_LAVA_STAFF, 0]]);
+});

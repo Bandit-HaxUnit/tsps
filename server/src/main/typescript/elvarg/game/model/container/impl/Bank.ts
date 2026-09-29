@@ -27,6 +27,9 @@ export class Bank extends ItemContainer {
     public static readonly INVENTORY_INTERFACE_ID = 5064;
     public static readonly MAIN_INTERFACE_ID = 12;
     public static readonly SIDE_INTERFACE_ID = 15;
+    /** The tab buttons: slot 10 is "all items", slots 11-19 are tabs 1-9. */
+    public static readonly TABS_CHILD = 10;
+    public static readonly TAB_BUTTON_SLOT_OFFSET = 10;
 
     constructor(public player: Player) {
         super(player);
@@ -295,6 +298,47 @@ export class Bank extends ItemContainer {
         player.getBank(tab).refreshItems();
     }
 
+    public static viewTab(player: Player, tab: number): void {
+        if (tab > Bank.getTabCount(player)) {
+            player.sendMessage("To create a new tab, drag an item here.");
+            return;
+        }
+        player.setCurrentBankTab(tab);
+        player.getBank(tab).refreshItems();
+    }
+
+    /** Moves every item in `tab` (placeholders included) into the main tab. */
+    public static collapseTab(player: Player, tab: number): void {
+        if (tab <= 0 || tab > Bank.getTabCount(player)) return;
+        const items = player.getBank(tab).getValidItems();
+        if (player.getBank(0).getFreeSlots() < items.length) {
+            player.sendMessage("You don't have enough free slots in your main tab to do that.");
+            return;
+        }
+        for (const item of items) {
+            player.getBank(0).add(item.clone(), false);
+        }
+        player.getBank(tab).resetItems();
+        if (player.getCurrentBankTab() === tab) {
+            player.setCurrentBankTab(0);
+        }
+        player.getBank(0).refreshItems();
+    }
+
+    /** Removes the placeholders in `tab`, or in every tab for "all items" (0). */
+    public static releasePlaceholders(player: Player, tab: number): void {
+        const tabs = tab === 0 ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] : [tab];
+        for (const index of tabs) {
+            for (const item of player.getBank(index).getItems()) {
+                if (item != null && item.getId() > 0 && item.getAmount() === 0) {
+                    item.setId(-1);
+                    item.setMeta(null);
+                }
+            }
+        }
+        player.getBank(0).refreshItems();
+    }
+
     public static resolveDisplaySlot(player: Player, clientSlot: number): { tab: number; slot: number; item: Item } | null {
         if (!Number.isInteger(clientSlot) || clientSlot < 0) return null;
         return Bank.layout(player)[clientSlot] ?? null;
@@ -364,6 +408,16 @@ export class Bank extends ItemContainer {
                 player.getBankCustomQuantity(), player.getBankQuantityMode(),
             );
             if (amount > 0) Bank.deposits(player, item.getId(), packet.slot, amount);
+            return true;
+        }
+
+        if (packet.groupId === Bank.MAIN_INTERFACE_ID && packet.childId === Bank.TABS_CHILD && packet.slot != null) {
+            const tab = packet.slot - Bank.TAB_BUTTON_SLOT_OFFSET;
+            if (tab < 0 || tab > 9) return true;
+            const option = packet.option?.trim().toLowerCase() ?? "";
+            if (packet.buttonNum === 6 || option.includes("collapse")) Bank.collapseTab(player, tab);
+            else if (packet.buttonNum === 7 || option.includes("placeholder")) Bank.releasePlaceholders(player, tab);
+            else Bank.viewTab(player, tab);
             return true;
         }
 
