@@ -17,15 +17,16 @@ const COINS = 995;
 
 // Item definitions normally come from the cache; stub the few this test uses.
 const DEFINITIONS = {
-  [LOBSTER]: { name: "Lobster", stackable: false },
-  [COINS]: { name: "Coins", stackable: true },
+  [LOBSTER]: { name: "Lobster", stackable: false, value: 150 },
+  [COINS]: { name: "Coins", stackable: true, value: 1 },
 };
 ItemDefinition.forId = (id) => {
-  const def = DEFINITIONS[id] ?? { name: "null", stackable: false };
+  const def = DEFINITIONS[id] ?? { name: "null", stackable: false, value: 0 };
   return {
     getId: () => id,
     getName: () => def.name,
     isStackable: () => def.stackable,
+    getValue: () => def.value,
     isTradeable: () => true,
     isNoted: () => false,
   };
@@ -33,17 +34,24 @@ ItemDefinition.forId = (id) => {
 
 function createPlayer(name, index) {
   const messages = [];
+  const texts = new Map();
   let status = PlayerStatus.NONE;
   let interfaceId = -1;
   // Every packet-sender call is a chainable no-op, except closing interfaces,
-  // which resets the status and interface like the real sender does.
+  // which resets the status and interface like the real sender does, and
+  // widget text, which is recorded.
   const sender = new Proxy({}, {
-    get: (_target, key) => key === "sendInterfaceRemoval"
-      ? () => { status = PlayerStatus.NONE; interfaceId = -1; return sender; }
-      : () => sender,
+    get: (_target, key) => {
+      if (key === "sendInterfaceRemoval") {
+        return () => { status = PlayerStatus.NONE; interfaceId = -1; return sender; };
+      }
+      if (key === "sendString") return (text, uid) => { texts.set(uid, text); return sender; };
+      return () => sender;
+    },
   });
   const player = {
     messages,
+    texts,
     getUsername: () => name,
     getIndex: () => index,
     getSession: () => ({ sendClientPacket: () => true }),
@@ -54,6 +62,7 @@ function createPlayer(name, index) {
     getInterfaceId: () => interfaceId,
     setInterfaceId: (next) => { interfaceId = next; },
     isPlayerBot: () => false,
+    getFrameUpdater: () => ({ clear() {} }),
   };
   player.inventory = new Inventory(player);
   player.inventory.resetItems();
@@ -147,4 +156,18 @@ test("noted items take the tradeable flag from the item they note", () => {
   noted.genCert(template, shark);
 
   assert.equal(noted.isTradable, true);
+});
+
+test("the offer screen shows who you trade with, both offers' values and acceptance", () => {
+  const { alice, bob } = startTrade();
+  const text = (component) => alice.texts.get((335 << 16) | component);
+
+  assert.equal(text(31), "Trading with: bob");
+  assert.equal(text(24), "You offer:<br>(Value: <col=ffffff>450</col> coins)");
+  assert.equal(text(27), "bob offers:<br>(Value: <col=ffffff>200</col> coins)");
+  assert.equal(text(9), "bob has 27 free inventory slots.");
+
+  bob.getTrading().acceptTrade();
+  assert.equal(text(30), "Other player has accepted.");
+  assert.equal(bob.texts.get((335 << 16) | 30), "Waiting for other player...");
 });

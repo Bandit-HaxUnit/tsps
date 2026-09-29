@@ -39,6 +39,17 @@ export class Trading {
     private static readonly CONFIRM_INTERFACE = 334;
     private static readonly INVENTORY_INTERFACE = 336;
 
+    // Text components the cache trade scripts leave to the server.
+    private static readonly OFFER_FREE_SLOTS = (Trading.OFFER_INTERFACE << 16) | 9;
+    private static readonly OFFER_OWN_HEADING = (Trading.OFFER_INTERFACE << 16) | 24;
+    private static readonly OFFER_OTHER_HEADING = (Trading.OFFER_INTERFACE << 16) | 27;
+    private static readonly OFFER_STATUS = (Trading.OFFER_INTERFACE << 16) | 30;
+    private static readonly OFFER_TITLE = (Trading.OFFER_INTERFACE << 16) | 31;
+    private static readonly CONFIRM_TITLE = (Trading.CONFIRM_INTERFACE << 16) | 4;
+    private static readonly CONFIRM_OWN_HEADING = (Trading.CONFIRM_INTERFACE << 16) | 23;
+    private static readonly CONFIRM_OTHER_HEADING = (Trading.CONFIRM_INTERFACE << 16) | 24;
+    private static readonly CONFIRM_STATUS = (Trading.CONFIRM_INTERFACE << 16) | 30;
+
     // Nonstatic
     private player: Player;
     private container: ItemContainer;
@@ -166,6 +177,7 @@ export class Trading {
             .sendInterfaceFlagsRange((Trading.OFFER_INTERFACE << 16) | 28, 0, 27, 1 << 10)
             .sendItemContainer(this.player.getInventory(), Trading.INVENTORY_CONTAINER_INTERFACE);
         this.sendState(true);
+        this.sendText(true);
         if (this.player.isPlayerBot && this.player.isPlayerBot()) {
             (this.player as any).getTradingInteraction?.().addItemsToTrade?.(this.container, this.interact);
         }
@@ -283,6 +295,7 @@ export class Trading {
         this.player.getPacketSender()
             .sendSubInterface((161 << 16) | 16, Trading.CONFIRM_INTERFACE, 0)
             .sendSubInterface((161 << 16) | 79, 149, 1);
+        this.sendText(true);
 
     }
 
@@ -413,6 +426,63 @@ export class Trading {
         this.player.getSession().sendClientPacket((open ? encodeTradeOpen : encodeTradeUpdate)(
             sessionId, stage, this.party(this.player), this.party(this.interact)
         ));
+        if (!open) {
+            this.sendText(false);
+        }
+    }
+
+    /**
+     * Sends the headings, values and status line. `opened` forgets the text
+     * sent to the last trade window, which the client has reset.
+     */
+    private sendText(opened: boolean): void {
+        const other = this.interact;
+        if (!other) return;
+        const name = other.getUsername();
+        const otherState = other.getTrading().getState();
+        const texts: Array<[number, string]> = this.state >= TradeState.CONFIRM_SCREEN
+            ? [
+                [Trading.CONFIRM_TITLE, `Trading with: ${name}`],
+                [Trading.CONFIRM_OWN_HEADING, `You are about to give:<br>${Trading.formatValue(this.container)}`],
+                [Trading.CONFIRM_OTHER_HEADING, `In return you will receive:<br>${Trading.formatValue(other.getTrading().getContainer())}`],
+                [Trading.CONFIRM_STATUS, Trading.statusText(
+                    this.state === TradeState.ACCEPTED_CONFIRM_SCREEN,
+                    otherState === TradeState.ACCEPTED_CONFIRM_SCREEN,
+                    "Are you sure you want to make this trade?",
+                )],
+            ]
+            : [
+                [Trading.OFFER_TITLE, `Trading with: ${name}`],
+                [Trading.OFFER_OWN_HEADING, `You offer:<br>${Trading.formatValue(this.container)}`],
+                [Trading.OFFER_OTHER_HEADING, `${name} offers:<br>${Trading.formatValue(other.getTrading().getContainer())}`],
+                [Trading.OFFER_FREE_SLOTS, Trading.freeSlotsText(name, other.getInventory().getFreeSlots())],
+                [Trading.OFFER_STATUS, Trading.statusText(
+                    this.state === TradeState.ACCEPTED_TRADE_SCREEN,
+                    otherState === TradeState.ACCEPTED_TRADE_SCREEN,
+                    "",
+                )],
+            ];
+        const sender = this.player.getPacketSender();
+        for (const [uid, text] of texts) {
+            if (opened) this.player.getFrameUpdater().clear(uid);
+            sender.sendString(text, uid);
+        }
+    }
+
+    private static formatValue(items: ItemContainer): string {
+        const value = items.getValidItems()
+            .reduce((total, item) => total + item.getDefinition().getValue() * item.getAmount(), 0);
+        return `(Value: <col=ffffff>${Misc.format(value)}</col> coins)`;
+    }
+
+    private static freeSlotsText(name: string, freeSlots: number): string {
+        return `${name} has ${freeSlots} free inventory slot${freeSlots === 1 ? "" : "s"}.`;
+    }
+
+    private static statusText(accepted: boolean, otherAccepted: boolean, idle: string): string {
+        if (accepted && !otherAccepted) return "Waiting for other player...";
+        if (!accepted && otherAccepted) return "Other player has accepted.";
+        return idle;
     }
 }
 
