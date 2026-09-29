@@ -10,6 +10,7 @@ const { Item } = require("../dist/game/model/Item");
 const { PlayerStatus } = require("../dist/game/model/PlayerStatus");
 const { Inventory } = require("../dist/game/model/container/impl/Inventory");
 const { Trading } = require("../dist/game/content/Trading");
+const { ObjType } = require("../dist/game/cache/codec/rs/config/objtype/ObjType");
 
 const LOBSTER = 379;
 const COINS = 995;
@@ -133,4 +134,17 @@ test("closing a trade after the other player's interface was closed still return
 
   assert.equal(count(bob, COINS), 500);
   assert.equal(bob.getTrading().getInteract(), null);
+});
+
+test("noted items take the tradeable flag from the item they note", () => {
+  const cacheInfo = { game: "oldschool", revision: 237 };
+  const shark = new ObjType(385, cacheInfo);
+  shark.name = "Shark";
+  shark.isTradable = true;
+  const template = new ObjType(799, cacheInfo);
+
+  const noted = new ObjType(386, cacheInfo);
+  noted.genCert(template, shark);
+
+  assert.equal(noted.isTradable, true);
 });
