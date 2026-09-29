@@ -2533,10 +2533,14 @@ export function encodeNpcSync(
     }
   }
   const sync = Buffer.concat([writer.toBuffer(), ...updateBlocks]);
-  const header = Buffer.alloc(7);
+  // The client places new main-world NPCs relative to this tile (the tile under a player on
+  // a boat deck, otherwise their own).
+  const header = Buffer.alloc(11);
   header.writeInt32BE(loopCycle | 0, 0);
   header[4] = large ? 1 : 0;
-  header.writeUInt16BE(sync.length, 5);
+  header.writeUInt16BE(local.x & 0xffff, 5);
+  header.writeUInt16BE(local.y & 0xffff, 7);
+  header.writeUInt16BE(sync.length, 9);
   return packet(ServerPacket.NPC_INFO, Buffer.concat([header, sync]), 2);
 }
 

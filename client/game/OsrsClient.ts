@@ -7057,6 +7057,8 @@ export class OsrsClient {
             clientCycle: getClientCycle() | 0,
             localTileX: decodeBase.tileX | 0,
             localTileY: decodeBase.tileY | 0,
+            rootTileX: payload.rootTileX | 0,
+            rootTileY: payload.rootTileY | 0,
             level: decodeBase.level | 0,
         });
 

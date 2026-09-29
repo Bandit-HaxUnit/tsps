@@ -412,3 +412,14 @@ test("people aboard count as being in the main world, where the boat is", () => 
     BoatManager.dispose(boat);
   }
 });
+
+test("NPC_INFO carries the tile new NPCs are placed from (the root tile when aboard)", () => {
+  const { encodeNpcSync, createNpcSyncState } = require("../dist/net/protocol/ClientProtocol");
+  const packet = encodeNpcSync(7, { x: 3074, y: 2987, level: 0 }, [], createNpcSyncState());
+  assert.equal(packet[0], 21);
+  // opcode, u16 length, then loop cycle (4), large (1), root tile x and y, sync length.
+  assert.equal(packet.readInt32BE(3), 7);
+  assert.equal(packet.readUInt16BE(8), 3074);
+  assert.equal(packet.readUInt16BE(10), 2987);
+  assert.equal(packet.readUInt16BE(12), packet.length - 14);
+});

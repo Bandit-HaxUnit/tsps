@@ -315,7 +315,12 @@ export class PlayerSession {
       })
     );
     const localForceMovement = player.getForceMovement();
-    const npcLocal = localForceMovement
+    const boatAboard = BoatManager.getBoatAboard(player);
+    const rootTile = boatAboard ? BoatManager.rootLocation(player) : undefined;
+    // NPCs are in the main world, so a player on a deck sees them from the tile under them.
+    const npcLocal = rootTile
+      ? { x: rootTile.getX(), y: rootTile.getY(), level: rootTile.getZ() }
+      : localForceMovement
       ? {
           x: localForceMovement.getStart().getX() + localForceMovement.getEnd().getX(),
           y: localForceMovement.getStart().getY() + localForceMovement.getEnd().getY(),
