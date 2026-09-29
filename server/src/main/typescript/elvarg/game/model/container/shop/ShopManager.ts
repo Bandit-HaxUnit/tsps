@@ -264,7 +264,9 @@ export class ShopManager {
             const slot = packet.slot - 1;
             const shop = this.currentShop(player);
             const item = shop ? this.itemAtDisplaySlot(shop, slot) : null;
-            if (!item) return true;
+            // The stock can shift (sold-in items leave), so the clicked slot
+            // must still hold the item the client showed there.
+            if (!item || (packet.itemId != null && packet.itemId > 0 && packet.itemId !== item.itemId)) return true;
             if (examine) {
                 const definition = ItemDefinition.forId(item.itemId);
                 player.sendMessage(definition.getExamine() || definition.getName());
@@ -442,11 +444,15 @@ export class ShopManager {
         }
     }
 
+    /**
+     * The stock in slot order. An item the shop stocks keeps its slot at 0
+     * when sold out, as in OSRS; items players sold in leave when gone.
+     */
     private static displayEntries(shop: RuntimeShop): DisplayEntry[] {
         const entries: DisplayEntry[] = [];
         for (const itemId of shop.order) {
             const amount = shop.stock.get(itemId) ?? 0;
-            if (amount > 0) {
+            if (amount > 0 || shop.originalAmounts.has(itemId)) {
                 entries.push({ itemId, amount });
             }
         }

@@ -95,3 +95,28 @@ test("a specialist shop sells its last item", () => {
 
   assert.equal(player.getInventory().getAmount(STEEL_AXE), 1);
 });
+
+function stockOf() {
+  const shop = ShopManager.shopsById.get(AXE_SHOP);
+  return ShopManager.displayEntries(shop).map(({ itemId, amount }) => [itemId, amount]);
+}
+
+test("a sold-out item keeps its slot with 0 stock", () => {
+  const player = openShop();
+
+  buy(player, 0, BRONZE_AXE, "Buy 5");
+
+  assert.equal(player.getInventory().getAmount(BRONZE_AXE), 2);
+  assert.deepEqual(stockOf(), [[BRONZE_AXE, 0], [STEEL_AXE, 1]]);
+  buy(player, 1, STEEL_AXE);
+  assert.equal(player.getInventory().getAmount(STEEL_AXE), 1);
+});
+
+test("a click whose item no longer matches the slot buys nothing", () => {
+  const player = openShop();
+
+  buy(player, 1, BRONZE_AXE);
+
+  assert.equal(player.getInventory().getAmount(BRONZE_AXE), 0);
+  assert.equal(player.getInventory().getAmount(STEEL_AXE), 0);
+});
