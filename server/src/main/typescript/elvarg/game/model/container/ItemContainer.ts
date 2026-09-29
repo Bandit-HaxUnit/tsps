@@ -330,13 +330,10 @@ export abstract class ItemContainer {
 
     this.deleteItemContainer(item, slot, refresh, to);
 
-    // Noted items should not be in bank. Un-note if it's noted..
-    if (
-      to instanceof Bank &&
-      getItemDefinition().forId(item.getId()).isNoted() &&
-      !getItemDefinition().forId(item.getId() - 1).isNoted()
-    ) {
-      item.setId(item.getId() - 1);
+    // Noted items should not be in bank. Un-note if it's noted. The unnoted
+    // id comes from the cache: it is not always the noted id minus one.
+    if (to instanceof Bank) {
+      item.setId(getItemDefinition().forId(item.getId()).unNote());
     }
 
     to.add(item, refresh);
