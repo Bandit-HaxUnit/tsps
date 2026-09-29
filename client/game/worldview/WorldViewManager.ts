@@ -66,6 +66,14 @@ export class WorldViewManager {
         return this.primaryWorldView ?? undefined;
     }
 
+    /** Whether a tile lies in a world entity's own scene (such as a boat deck). */
+    isWorldEntityTile(tileX: number, tileY: number): boolean {
+        for (const [id, view] of this.worldViews) {
+            if (id !== -1 && view.containsTile(tileX, tileY)) return true;
+        }
+        return false;
+    }
+
     getOverlayMapSquare<T extends MapSquare>(
         entityIndex: number,
         mapManager: MapManager<T>,

@@ -1019,6 +1019,8 @@ export class OsrsClient {
         rendererType: OsrsRendererType,
         cache?: LoadedCache,
     ) {
+        ClientState.isWorldEntityTile = (tileX, tileY) =>
+            this.worldViewManager.isWorldEntityTile(tileX, tileY);
         document.addEventListener(
             "keydown",
             (event) => {
