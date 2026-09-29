@@ -76,15 +76,26 @@ test("a stopped boat stays put", () => {
   assert.deepEqual(tickBoat(boat, openSea), { moved: false, turned: false, blocked: false });
 });
 
-test("full sail moves 64 fine units a tick, half sail 32", () => {
+test("full sail moves 1.5 tiles a tick, half sail 0.75", () => {
   const boat = makeRaft(NORTH);
   boat.moveMode = BoatMoveMode.Full;
   const startY = boat.fineY;
   tickBoat(boat, openSea);
-  assert.equal(boat.fineY - startY, 64);
+  assert.equal(boat.fineY - startY, 192);
   boat.moveMode = BoatMoveMode.Half;
   tickBoat(boat, openSea);
-  assert.equal(boat.fineY - startY, 96);
+  assert.equal(boat.fineY - startY, 288);
+});
+
+test("a fast boat stops at a one-tile strip of land instead of hopping it", () => {
+  const strip = (_x, y) => y !== 102;
+  const boat = makeRaft(NORTH);
+  boat.fineY = 100 * 128 + 64 - 128; // hull covers rows 98..100
+  boat.moveMode = BoatMoveMode.Full;
+  for (let i = 0; i < 10; i++) tickBoat(boat, strip);
+  for (const tile of hullTiles(boat, boat.fineX, boat.fineY, boat.angle)) {
+    assert.ok(tile % 0x8000 < 102, "hull never crosses the strip");
+  }
 });
 
 test("reverse keeps the bow on the heading and backs up at half speed", () => {
@@ -93,7 +104,7 @@ test("reverse keeps the bow on the heading and backs up at half speed", () => {
   const startY = boat.fineY;
   tickBoat(boat, openSea);
   assert.equal(boat.angle, NORTH);
-  assert.equal(boat.fineY - startY, -32);
+  assert.equal(boat.fineY - startY, -96);
 });
 
 test("a quarter turn takes 4 ticks at 128 units a tick", () => {
@@ -106,6 +117,16 @@ test("a quarter turn takes 4 ticks at 128 units a tick", () => {
     ticks++;
   }
   assert.equal(ticks, 4);
+});
+
+test("a turning boat keeps sailing at its sail speed", () => {
+  const boat = makeRaft(SOUTH);
+  boat.moveMode = BoatMoveMode.Full;
+  boat.heading = WEST;
+  const startX = boat.fineX;
+  const startY = boat.fineY;
+  assert.ok(tickBoat(boat, openSea).turned);
+  assert.ok(Math.abs(Math.hypot(boat.fineX - startX, boat.fineY - startY) - 192) <= 1);
 });
 
 test("the 1x3 raft hull covers 3 tiles facing north or east", () => {
@@ -605,7 +626,7 @@ test("the boat's position is recorded every tick, so a save at sea restores it",
   }
   assert.deepEqual(Sailing.activeBoat(player).location,
     { kind: "at_sea", fineX: boat.fineX, fineY: boat.fineY, level: 0, angle: boat.angle });
-  assert.equal(boat.fineY, DOCK.mooring.fineY + 64);
+  assert.equal(boat.fineY, DOCK.mooring.fineY + 192);
   Sailing.disembark(player, DOCK.id);
 });
 

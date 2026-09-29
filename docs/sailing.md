@@ -89,7 +89,7 @@ tsps has no world views, but it has `PrivateArea` (used by Construction's house)
 
 - **Deck area** (`BoatDeckArea extends PrivateArea`): every tile of its scene is blocked except the boat type's walkable deck tiles; deck objects that block add their flags. Deck coordinates have no cache region, so without this they would read as walkable.
 - **BoatManager**: allocates world-entity indices (3000-3999) and deck regions, builds deck collision from the template zone, ticks movement, and disposes instances. Ported from xrsps.
-- **Movement and collision**: full sail 64 fine units a tick, half 32, turning 128 units of angle a tick; reverse at half speed. A tile is sailable when its level-0 overlay is water (decoded from the cache map) and it has no solid object; only tiles the hull newly covers are checked. Ported from xrsps (`BoatMovement`, `BoatCollision`, `WaterMap`).
+- **Movement and collision**: full sail 192 fine units (1.5 tiles) a tick, the wiki's base speed for a wooden hull; half and reverse 96; turning 128 units of angle a tick without losing speed. A move is checked in half-tile steps, so the boat can't hop over a thin strip of land. A tile is sailable when its level-0 overlay is water (decoded from the cache map) and it has no solid object; only tiles the hull newly covers are checked. Ported from xrsps (`BoatMovement`, `BoatCollision`, `WaterMap`).
 - **Sync**:
   - `REBUILD_WORLDENTITY` sends a boat's deck scene (template chunks) to each client that sees it.
   - `WORLDENTITY_INFO` is per viewer: each tick, boats whose world tile is in a viewer's range are added, moved or removed, like NPC sync.

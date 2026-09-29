@@ -3,17 +3,19 @@ import { type SailableTileCheck, canOccupy } from "./BoatCollision";
 import { angleToFineDelta, normalizeAngle, reverseAngle, turnAngleDelta } from "./HeadingUtils";
 
 /*
- * Per-tick boat movement. Rates come from rsmod's `BoatMovement.kt` and its live traces
- * (https://github.com/rsmod/rsmod, ISC license): full sail moves 64 fine units a tick (a tile
- * every 2 ticks), half sail 32, and turning rotates 128 angle units a tick while sliding 64.
+ * Per-tick boat movement. Full sail moves the wiki's base speed for a wooden hull (the raft's),
+ * 1.5 tiles a tick; half sail moves half that, turning or not. The turn rate comes from rsmod's
+ * `BoatMovement.kt` and its live traces (https://github.com/rsmod/rsmod, ISC license): 128
+ * angle units a tick.
  *
  * Unlike rsmod, reverse keeps the bow on the helm heading and backs up at half speed instead
  * of turning the boat around.
  */
 export const TURN_RATE = 128;
-export const FULL_SAIL_SPEED = 64;
-export const HALF_SAIL_SPEED = 32;
-export const TURN_SLIDE_SPEED = 64;
+export const FULL_SAIL_SPEED = 192;
+export const HALF_SAIL_SPEED = 96;
+/** A move is checked in steps of at most half a tile, so a fast boat can't hop over land. */
+const MOVE_STEP = 64;
 
 export interface BoatStep {
     moved: boolean;
@@ -26,33 +28,31 @@ export function tickBoat(boat: Boat, isSailable: SailableTileCheck): BoatStep {
     const step: BoatStep = { moved: false, turned: false, blocked: false };
     if (boat.moveMode === BoatMoveMode.Stopped) return step;
 
-    const multiplier = Math.max(1, boat.speedMultiplier);
+    // Turning doesn't cost speed: the boat swings towards its heading, then sails on at its
+    // sail speed along the new facing.
     const delta = turnAngleDelta(boat.angle, boat.heading);
     if (delta !== 0) {
         const angle = normalizeAngle(boat.angle + Math.max(-TURN_RATE, Math.min(TURN_RATE, delta)));
-        const slide = angleToFineDelta(travelAngle(boat, angle), TURN_SLIDE_SPEED * multiplier);
-        const x = boat.fineX + slide.dx;
-        const y = boat.fineY + slide.dy;
-        if (canOccupy(boat, x, y, angle, isSailable)) {
-            applyPosition(boat, x, y, step);
-        } else if (!canOccupy(boat, boat.fineX, boat.fineY, angle, isSailable)) {
-            step.blocked = true;
-            return step;
+        if (canOccupy(boat, boat.fineX, boat.fineY, angle, isSailable)) {
+            boat.angle = angle;
+            step.turned = true;
         }
-        boat.angle = angle;
-        step.turned = true;
-        return step;
     }
 
-    const speed =
-        boat.moveMode === BoatMoveMode.Full ? FULL_SAIL_SPEED : HALF_SAIL_SPEED;
-    const move = angleToFineDelta(travelAngle(boat, boat.angle), speed * multiplier);
-    const x = boat.fineX + move.dx;
-    const y = boat.fineY + move.dy;
-    if (canOccupy(boat, x, y, boat.angle, isSailable)) {
+    const speed = boat.moveMode === BoatMoveMode.Full ? FULL_SAIL_SPEED : HALF_SAIL_SPEED;
+    const distance = speed * Math.max(1, boat.speedMultiplier);
+    const startX = boat.fineX;
+    const startY = boat.fineY;
+    for (let travelled = 0; travelled < distance; ) {
+        travelled = Math.min(distance, travelled + MOVE_STEP);
+        const partial = angleToFineDelta(travelAngle(boat, boat.angle), travelled);
+        const x = startX + partial.dx;
+        const y = startY + partial.dy;
+        if (!canOccupy(boat, x, y, boat.angle, isSailable)) {
+            step.blocked = true;
+            break;
+        }
         applyPosition(boat, x, y, step);
-    } else {
-        step.blocked = true;
     }
     return step;
 }
