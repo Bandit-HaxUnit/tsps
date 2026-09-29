@@ -739,3 +739,11 @@ test("::raft gives a raft moored at The Pandemonium; ::boatinfo lists boats", ()
     'Slot 0: raft "Raft", docked at the_pandemonium (active)',
   ]);
 });
+
+test("leaving the boat by logging out sends nothing to the (closed) client", () => {
+  const { events } = registerPlugin("Sailing.plugin");
+  let sent = 0;
+  const player = { getPacketSender: () => { sent++; throw new Error("the socket is closed"); } };
+  assert.doesNotThrow(() => events["sailing:left"]({ player, reason: "logout" }));
+  assert.equal(sent, 0);
+});

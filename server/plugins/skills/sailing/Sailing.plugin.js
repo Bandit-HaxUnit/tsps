@@ -82,7 +82,9 @@ function onBoarded({ player, boat, owned }) {
   })());
 }
 
-function onLeft({ player }) {
+function onLeft({ player, reason }) {
+  // A player logging out has no client left to update.
+  if (reason === "logout") return;
   for (const id of LEFT_VARBITS) setVarbit(player, id, 0);
   player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
   player.getPacketSender().sendTabInterface(0, 0);
