@@ -49,6 +49,7 @@ export class ItemDefinition {
     private lowAlch: number;
     private dropValue: number;
     private noteId: number = -1;
+    private placeholderId: number = -1;
     private blockAnim: number = 424;
     private standAnim: number = 808;
     private walkAnim: number = 819;
@@ -86,6 +87,9 @@ export class ItemDefinition {
         this.dropable = cached.inventoryActions[4]?.toLowerCase() === "drop";
         this.noted = cached.noteTemplate !== -1;
         this.noteId = cached.note;
+        // Placeholders have their own cache entry; items without one (such as
+        // charged variants) leave no placeholder.
+        this.placeholderId = cached.placeholderTemplate === -1 ? cached.placeholder : -1;
         this.value = cached.price;
         this.weight = cached.weight;
         if (this.equipmentType.getSlot() === -1 && EQUIPMENT_SLOTS.has(cached.wearPos)) {
@@ -144,6 +148,11 @@ export class ItemDefinition {
 
     public isNoted(): boolean {
         return this.noted;
+    }
+
+    /** The faded bank placeholder for this item, or -1 if it has none. */
+    public getPlaceholderId(): number {
+        return this.placeholderId;
     }
 
     public getNoteId(): number {

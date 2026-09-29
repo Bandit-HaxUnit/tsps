@@ -600,22 +600,12 @@ export class PacketSender {
   }
 
   sendBankSnapshot(): this {
-    const slots: BankSlotView[] = [];
-    let slot = 0;
-    const banks = this.player.getBanks?.() ?? this.player.getBankTabs?.();
-    if (Array.isArray(banks)) {
-      banks.slice(0, 10).forEach((bank: any, tab: number) => {
-        for (const item of bank?.getValidItems?.() ?? []) {
-          slots.push({ slot: slot++, itemId: item.getId(), quantity: item.getAmount(), tab });
-        }
-      });
-    } else {
-      for (let tab = 0; tab < 10; tab++) {
-        for (const item of this.player.getBank?.(tab)?.getValidItems?.() ?? []) {
-          slots.push({ slot: slot++, itemId: item.getId(), quantity: item.getAmount(), tab });
-        }
-      }
-    }
+    const { Bank } = require(
+      "../../game/model/container/impl/Bank"
+    ) as typeof import("../../game/model/container/impl/Bank");
+    const slots: BankSlotView[] = Bank.layout(this.player).map(({ tab, item }, slot) => ({
+      slot, itemId: Bank.displayItemId(item), quantity: item.getAmount(), tab,
+    }));
     this.player.getSession().sendClientPacket(encodeBankSnapshot(1410, slots));
     return this;
   }

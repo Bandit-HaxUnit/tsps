@@ -128,6 +128,11 @@ export function processWidgetReleaseInput(
                     ? resolveInventoryDropTargetSlot(widgetManager, dragTarget, mx, my)
                     : undefined;
 
+            // The drag-complete script may swap the two widgets' items on screen
+            // (the bank does), so read what was dragged onto what beforehand.
+            const sourceItemId = (w as any).itemId ?? -1;
+            const targetItemId = (dragTarget as any)?.itemId ?? -1;
+
             deps.getCs2Vm().invokeEventHandler(w, "onDragComplete", dragCompleteCtx);
 
             // Native drag-complete scripts read and swap the original widget
@@ -164,8 +169,6 @@ export function processWidgetReleaseInput(
                         : dragTarget.uid;
 
                 const targetSlot = (dragTarget as any).childIndex ?? -1;
-                const sourceItemId = (w as any).itemId ?? -1;
-                const targetItemId = (dragTarget as any).itemId ?? -1;
 
                 // Send IF_BUTTOND packet for widget drag operations (bank, etc.)
                 sendWidgetDrag(
