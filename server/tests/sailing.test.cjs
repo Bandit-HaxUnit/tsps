@@ -753,10 +753,13 @@ test("the combat tab's View button shows the sailing sidepanel aboard, and Comba
   const [switchTab] = registerPlugin("Sailing.plugin").interfaceClicks;
   const player = sailor();
   const mounted = [];
+  const events = [];
   const sender = new Proxy({}, {
     get: (_t, key) => key === "sendSubInterface"
       ? (uid, group) => { mounted.push([uid >>> 16, uid & 0xffff, group]); return sender; }
-      : () => sender,
+      : key === "sendInterfaceFlagsRange"
+        ? (uid, from, to, flags) => { events.push([uid >>> 16, uid & 0xffff, from, to, flags]); return sender; }
+        : () => sender,
   });
   player.getPacketSender = () => sender;
 
@@ -772,12 +775,13 @@ test("the combat tab's View button shows the sailing sidepanel aboard, and Comba
   Sailing.board(player, "the_pandemonium");
   click(593, 46);
   assert.deepEqual(mounted, [[161, 76, 937]]);
+  assert.deepEqual(events, [[937, 1, 0, 0, 2]], "the runtime-built View Combat Options button can be clicked");
 
   const assign = WeaponInterfaceManager.assign;
   let restored = 0;
   WeaponInterfaceManager.assign = () => { restored++; };
   try {
-    assert.equal(click(937, 33), true);
+    assert.equal(click(937, 1), true);
   } finally {
     WeaponInterfaceManager.assign = assign;
   }

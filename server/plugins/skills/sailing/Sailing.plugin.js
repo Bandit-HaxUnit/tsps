@@ -45,7 +45,12 @@ function boardedVarbits(type) {
 
 const COMBAT_OPTIONS_GROUP = 593;
 const VIEW_SAILING_OPTIONS_CHILD = 46;
-const VIEW_COMBAT_OPTIONS_CHILD = 33;
+/**
+ * The sidepanel's "View Combat Options" is built at runtime (script 8715, from the panel's
+ * onLoad 8710 via 8712) as child 0 of 937:1, so its op needs events enabled to reach us.
+ */
+const VIEW_COMBAT_OPTIONS_CHILD = 1;
+const IF_EVENT_OP1 = 1 << 1;
 
 /** Everything reset when leaving a boat, whatever set it. */
 const LEFT_VARBITS = [
@@ -75,6 +80,7 @@ function applyBoarded(player, owned) {
     varbits,
     varps: { [VARP_SIDEPANEL_BOAT_TYPE]: type.sidepanelBoatType },
   });
+  sender.sendInterfaceFlagsRange((SIDEPANEL_GROUP << 16) | VIEW_COMBAT_OPTIONS_CHILD, 0, 0, IF_EVENT_OP1);
 }
 
 /** A tick after boarding, once the deck scene (or, on login, the gameframe) is in place. */
