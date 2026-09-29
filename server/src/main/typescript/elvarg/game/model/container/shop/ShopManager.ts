@@ -25,6 +25,8 @@ export interface ShopCurrencyHandler {
     add(player: any, amount: number): void;
     remove(player: any, amount: number): void;
     name: string;
+    /** The inventory item the currency is paid in, if it is one. */
+    itemId?: number;
 }
 
 interface RuntimeShop {
@@ -95,6 +97,7 @@ export class ShopManager {
             `Item ${itemId}`;
         const handler: ShopCurrencyHandler = {
             name,
+            itemId,
             amount: (player) =>
                 Number(player?.getInventory?.()?.getAmount?.(itemId) ?? 0),
             add: (player, amount) => player?.getInventory?.()?.adds?.(itemId, amount),
@@ -637,6 +640,11 @@ export class ShopManager {
             return;
         }
 
+        if (!this.canReceivePayment(player, shop.definition.getCurrency(), sellable, quantity)) {
+            player.sendMessage("You don't have enough inventory space.");
+            return;
+        }
+
         let remaining = quantity;
         for (const index of sellable) {
             if (remaining <= 0) break;
@@ -842,6 +850,19 @@ export class ShopManager {
         if (itemId > 0) {
             player.getInventory().deleteNumber(itemId, quantity);
         }
+    }
+
+    /**
+     * Whether a sale's payment fits: the currency is not an inventory item,
+     * the player already holds some, a slot is free, or selling `quantity`
+     * from `slots` (in order) empties one.
+     */
+    private static canReceivePayment(player: any, currency: ShopCurrency, slots: number[], quantity: number): boolean {
+        const itemId = this.currencyHandlers.get(currency)?.itemId ?? this.currencyItemId(currency);
+        if (!(itemId > 0)) return true;
+        const inventory = player.getInventory();
+        if (inventory.containsNumber(itemId) || inventory.getFreeSlots() > 0) return true;
+        return slots.length > 0 && inventory.getItems()[slots[0]].getAmount() <= quantity;
     }
 
     private static currencyItemId(currency: ShopCurrency): number {

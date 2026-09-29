@@ -152,3 +152,17 @@ test("notes sell as the item they stand for", () => {
   assert.equal(player.getInventory().getAmount(COINS), 3 * Math.floor(200 * 0.85));
   assert.deepEqual(stockOf(), [[BRONZE_AXE, 2], [STEEL_AXE, 4]]);
 });
+
+test("a sale whose payment wouldn't fit is refused, unless selling frees the slot", () => {
+  const player = openShop(0);
+  player.getInventory().add(new Item(STEEL_AXE_NOTE, 5), false);
+  for (let slot = 1; slot < 28; slot++) player.getInventory().add(new Item(20000 + slot, 1), false);
+
+  sell(player, 0, "Sell 1");
+  assert.equal(player.getInventory().getAmount(STEEL_AXE_NOTE), 5);
+  assert.ok(player.messages.includes("You don't have enough inventory space."));
+
+  sell(player, 0, "Sell 5");
+  assert.equal(player.getInventory().getAmount(STEEL_AXE_NOTE), 0);
+  assert.equal(player.getInventory().getAmount(COINS), 5 * Math.floor(200 * 0.85));
+});
