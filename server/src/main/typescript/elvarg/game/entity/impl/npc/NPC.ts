@@ -99,6 +99,7 @@ export class NPC extends Mobile {
     private headIcon = -1;
     private isDying: boolean;
     private owner: Player;
+    private ownerOnly: boolean = false;
     private visible: boolean = true;
     private face: FacingDirection = FacingDirection.SOUTH;
     private pet: boolean;
@@ -124,7 +125,7 @@ export class NPC extends Mobile {
      * @return
      */
     public static create(id: number, location: Location) {
-        let implementationClass = NPC.NPC_IMPLEMENTATION_MAP.get(id);
+        let implementationClass = NPC.NPC_IMPLEMENTATION_MAP?.get(id);
         if (implementationClass != null) {
             // If this NPC has been implemented by its own class, instantiate that first
             try {
@@ -413,6 +414,16 @@ export class NPC extends Mobile {
 
     public setOwner(owner: Player): NPC {
         this.owner = owner;
+        return this;
+    }
+
+    /** Owner-scoped spawns (quest instances) are only visible to their owner. */
+    public isOwnerOnly(): boolean {
+        return this.ownerOnly;
+    }
+
+    public setOwnerOnly(ownerOnly: boolean): NPC {
+        this.ownerOnly = ownerOnly;
         return this;
     }
 

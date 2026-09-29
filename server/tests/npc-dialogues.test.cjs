@@ -147,6 +147,15 @@ test('an unreplayable menu jump ends the branch instead of leaking the next step
   assert.deepEqual(steps.map((step) => step.npc ?? step.type), ['thanks', 'end']);
 });
 
+test('menu navigation jumps become replayable gomenu steps', () => {
+  const steps = flatten([{ type: 'jump', reference: 'other' }], {
+    resolveJump: (step) => (step.reference === 'other' ? { menu: { marker: true } } : null),
+  });
+  assert.equal(steps.length, 1);
+  assert.equal(steps[0].type, 'gomenu');
+  assert.deepEqual(steps[0].menu, { marker: true });
+});
+
 test('a slayer master assigns from a slugged action, not literal prose', () => {
   const steps = talk('Krystilia');
   const found = { action: false, tip: false, spoken: false };

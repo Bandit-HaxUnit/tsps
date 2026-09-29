@@ -38,6 +38,9 @@ import {
   PluginNpcInteractionDefinition,
   PluginNpcDialogueContext,
   PluginNpcDialogueConditionEvent,
+  PluginZone,
+  PluginZoneEvent,
+  PluginNpcSpawnDefinition,
   PluginObjectRouteEvent,
   PluginObjectInteractionEvent,
   PluginPlayerDefeatedEvent,
@@ -175,6 +178,13 @@ export class PluginManager {
   }> = [];
   private static npcDeathHooks: PluginHook<PluginNpcDeathEvent>[] = [];
   private static npcBeforeDeathHooks: PluginHook<PluginNpcBeforeDeathEvent>[] = [];
+  private static zoneHooks: Array<{
+    pluginName: string;
+    zone: PluginZone;
+    onEnter?: (event: PluginZoneEvent) => void;
+    onExit?: (event: PluginZoneEvent) => void;
+  }> = [];
+  private static activeZonesByPlayer = new WeakMap<any, Set<number>>();
   private static canAttackHooks: PluginHook<PluginCanAttackEvent>[] = [];
   private static canTeleportHooks: PluginHook<PluginCanTeleportEvent>[] = [];
   private static canEatHooks: PluginHook<PluginCanEatEvent>[] = [];
@@ -593,11 +603,117 @@ export class PluginManager {
   }
 
   public static emitPlayerProcess(event: PluginPlayerProcessEvent): void {
+    PluginManager.updatePlayerZones(event?.player);
     if (PluginManager.playerProcessHooks.length === 0) {
       return;
     }
     for (const hook of PluginManager.playerProcessHooks) {
       PluginManager.executeHook(hook, event, "player_process", "player_process");
+    }
+  }
+
+  /** Drives onZoneEnter/onZoneExit for a player from their current location. */
+  public static updatePlayerZones(player: any): void {
+    if (!player || PluginManager.zoneHooks.length === 0) {
+      return;
+    }
+    const location = player.getLocation?.();
+    if (!location) {
+      return;
+    }
+    let active = PluginManager.activeZonesByPlayer.get(player);
+    if (!active) {
+      active = new Set<number>();
+      PluginManager.activeZonesByPlayer.set(player, active);
+    }
+    for (let index = 0; index < PluginManager.zoneHooks.length; index++) {
+      const hook = PluginManager.zoneHooks[index];
+      const inside = PluginManager.isInsideZone(hook.zone, location);
+      if (inside === active.has(index)) {
+        continue;
+      }
+      if (inside) {
+        active.add(index);
+        if (hook.onEnter) {
+          try {
+            hook.onEnter({ player, zone: hook.zone });
+          } catch (error) {
+            console.warn(`[plugins] zone enter hook threw (${hook.pluginName})`, error);
+          }
+        }
+      } else {
+        active.delete(index);
+        if (hook.onExit) {
+          try {
+            hook.onExit({ player, zone: hook.zone });
+          } catch (error) {
+            console.warn(`[plugins] zone exit hook threw (${hook.pluginName})`, error);
+          }
+        }
+      }
+    }
+  }
+
+  private static isInsideZone(zone: PluginZone, location: any): boolean {
+    if (!zone) {
+      return false;
+    }
+    const x = location.getX?.() ?? location.x ?? 0;
+    const y = location.getY?.() ?? location.y ?? 0;
+    const z = location.getZ?.() ?? location.z ?? 0;
+    if (!(x >= zone.minX && x <= zone.maxX && y >= zone.minY && y <= zone.maxY)) {
+      return false;
+    }
+    return !zone.levels || zone.levels.includes(z);
+  }
+
+  /** Spawns a plugin NPC (optionally owner-only) and returns it, or null. */
+  public static spawnNpc(definition: PluginNpcSpawnDefinition): any {
+    const id = Math.trunc(Number(definition?.id));
+    if (!Number.isFinite(id) || id < 0) {
+      return null;
+    }
+    const { NPC } = require("../game/entity/impl/npc/NPC");
+    const { Location } = require("../game/model/Location");
+    const { World } = require("../game/World");
+    const npc = NPC.create(
+      id,
+      new Location(Number(definition.x) | 0, Number(definition.y) | 0, Number(definition.z ?? 0) | 0)
+    );
+    if (!npc) {
+      return null;
+    }
+    if (Number.isFinite(definition.wanderRadius)) {
+      npc.getMovementCoordinator().setRadius(Math.max(0, Math.trunc(definition.wanderRadius as number)));
+    }
+    if (Number.isFinite(definition.face)) {
+      npc.setFace(Number(definition.face));
+    }
+    if (definition.owner) {
+      npc.setOwner(definition.owner);
+    }
+    if (definition.ownerOnly) {
+      npc.setOwnerOnly(true);
+    }
+    if (!World.getNpcs().add(npc)) {
+      World.getAddNPCQueue().push(npc);
+    }
+    return npc;
+  }
+
+  /** Removes a plugin NPC, whether registered or still queued for addition. */
+  public static removeNpc(npc: any): void {
+    if (!npc) {
+      return;
+    }
+    const { World } = require("../game/World");
+    const addQueue = World.getAddNPCQueue();
+    const queued = addQueue.indexOf(npc);
+    if (queued !== -1) {
+      addQueue.splice(queued, 1);
+    }
+    if (typeof npc.isRegistered === "function" && npc.isRegistered()) {
+      World.getNpcs().remove(npc);
     }
   }
 
@@ -2047,6 +2163,20 @@ export class PluginManager {
           },
         });
       },
+      onZoneEnter: (zone, handler) => {
+        if (typeof handler !== "function" || !zone) {
+          return;
+        }
+        PluginManager.zoneHooks.push({ pluginName, zone, onEnter: handler });
+      },
+      onZoneExit: (zone, handler) => {
+        if (typeof handler !== "function" || !zone) {
+          return;
+        }
+        PluginManager.zoneHooks.push({ pluginName, zone, onExit: handler });
+      },
+      spawnNpc: (definition) => PluginManager.spawnNpc(definition),
+      removeNpc: (npc) => PluginManager.removeNpc(npc),
       onPlayerLevelUp: (handler) => {
         if (typeof handler !== "function") {
           return;

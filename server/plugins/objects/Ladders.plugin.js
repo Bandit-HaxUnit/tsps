@@ -1,6 +1,9 @@
 const { Animation } = require("../../src/main/typescript/elvarg/game/model/Animation");
 const { Location } = require("../../src/main/typescript/elvarg/game/model/Location");
 const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
+const { RegionManager } = require("../../src/main/typescript/elvarg/game/collision/RegionManager");
+const { MapObjects } = require("../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
+const { ObjectDefinition } = require("../../src/main/typescript/elvarg/game/definition/ObjectDefinition");
 
 const CLIMB_UP = new Animation(828);
 const CLIMB_DOWN = new Animation(827);
@@ -8,6 +11,46 @@ const CLIMB_DOWN = new Animation(827);
 const CLIMB_UP_TICKS = 3;
 const CLIMB_DOWN_TICKS = 2;
 let TaskManager;
+
+/**
+ * True when an object named `name` sits on the plane `delta` away (within the
+ * 3x3 tiles around `location`). A ladder/staircase only climbs if the matching
+ * object exists on the destination floor; dungeons have no upper floor, and the
+ * old fallback teleported the player a level up into thin air. Area plugins wire
+ * those one-way shafts explicitly through the ladders:climbUp custom event.
+ */
+function hasObjectOnFloor(location, name, delta) {
+  if (!location || !name) return false;
+  const z = (location.z ?? 0) + delta;
+  if (z < 0 || z > 3) return false;
+  RegionManager.loadMapFiles(location.x, location.y);
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      const hash = MapObjects.getHash(location.x + dx, location.y + dy, z);
+      const objects = MapObjects.mapObjects.get(hash) ?? [];
+      if (objects.some((object) => ObjectDefinition.forId(object.getId())?.getName() === name)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function hasObjectAbove(location, name) {
+  return hasObjectOnFloor(location, name, 1);
+}
+
+function hasObjectBelow(location, name) {
+  return hasObjectOnFloor(location, name, -1);
+}
+
+/** Name of the interacted object, so a climb requires the same object on the
+ * destination floor (Ladder above/below a Ladder, Staircase above/below one). */
+function interactObjectName(event) {
+  return event.definition?.getName?.()
+    ?? event.object?.getDefinition?.()?.getName?.()
+    ?? null;
+}
 
 function climb({ player, destination }, animation, ticks) {
   const start = player.getLocation().clone();
@@ -45,12 +88,27 @@ function resolveDestination(event, delta) {
 function climbUp(event) {
   const destination = resolveDestination(event, 1);
   if (!destination) return false;
+  // Explicit destinations (ladders:climbUp custom event) are trusted; the generic
+  // interaction only climbs when the same object exists on the floor above.
+  if (!event.destination) {
+    const name = interactObjectName(event);
+    if (!hasObjectAbove(event.location, name)) {
+      return false;
+    }
+  }
   climb({ player: event.player, destination }, CLIMB_UP, CLIMB_UP_TICKS);
 }
 
 function climbDown(event) {
   const destination = resolveDestination(event, -1);
   if (!destination) return false;
+  // Mirror of climbUp: only descend when the same object exists below.
+  if (!event.destination) {
+    const name = interactObjectName(event);
+    if (!hasObjectBelow(event.location, name)) {
+      return false;
+    }
+  }
   climb({ player: event.player, destination }, CLIMB_DOWN, CLIMB_DOWN_TICKS);
 }
 
@@ -61,5 +119,6 @@ module.exports = {
     api.onCustomEvent("ladders:climbUp", climbUp);
     api.onCustomEvent("ladders:climbDown", climbDown);
     api.onObjectInteraction("Ladder", { "Climb-up": climbUp, "Climb-down": climbDown });
+    api.onObjectInteraction("Staircase", { "Climb-up": climbUp, "Climb-down": climbDown });
   },
 };

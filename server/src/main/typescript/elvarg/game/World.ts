@@ -671,7 +671,8 @@ export class World {
                 npc.isVisible() &&
                 player.getLocation().isViewableFrom(npc.getLocation()) &&
                 !npc.isNeedsPlacement() &&
-                npc.getPrivateArea() === player.getPrivateArea()
+                npc.getPrivateArea() === player.getPrivateArea() &&
+                (!npc.isOwnerOnly?.() || npc.getOwner?.() === player)
             ) {
                 index++;
             } else {
@@ -702,6 +703,7 @@ export class World {
             if (localNpcs.length >= World.MAX_LOCAL_NPCS) break;
             if (npc == null || localIndexes.has(npc.getIndex()) || !npc.isVisible() || npc.isNeedsPlacement()) continue;
             if (npc.getPrivateArea() !== player.getPrivateArea()) continue;
+            if (npc.isOwnerOnly?.() && npc.getOwner?.() !== player) continue;
             if (!npc.getLocation().isViewableFrom(player.getLocation())) continue;
             localNpcs.push(npc);
             localIndexes.add(npc.getIndex());
