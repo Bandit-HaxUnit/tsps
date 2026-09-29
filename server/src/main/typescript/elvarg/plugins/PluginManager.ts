@@ -10,6 +10,7 @@ import { MapRegionReplacementManager } from "../game/collision/MapRegionReplacem
 import { DefinitionLoader } from "../game/definition/loader/DefinitionLoader";
 import { ShopManager } from "../game/model/container/shop/ShopManager";
 import { WeaponProfiles } from "../game/content/combat/WeaponProfile";
+import { CombatSpecial } from "../game/content/combat/CombatSpecial";
 import { NpcInteractionDefinitionLoader } from "../game/definition/loader/impl/NpcInteractionDefinitionLoader";
 import { NpcInteractionManager } from "../game/entity/impl/npc/NpcInteractionManager";
 import { MultiChatboxPrompt } from "../game/model/menu/MultiChatboxPrompt";
@@ -78,6 +79,8 @@ import {
   PluginCombatDamageProvider,
   PluginCombatEngine,
   PluginCombatMethodResolver,
+  PluginCombatSpecialDefinition,
+  PluginCoreApi,
   PluginItemDropEvent,
   PluginButtonClickEvent,
   PluginInterfaceActionClickEvent,
@@ -247,6 +250,7 @@ export class PluginManager {
   private static npcCombatMethodProviders: PluginNpcCombatMethodProviderEntry[] = [];
   private static pluginPerfEnabled = false;
   private static pluginPerfStats = new Map<string, PluginPerfStat>();
+  private static pluginCoreApi: PluginCoreApi | null = null;
 
   private static executeHook<T>(
     hook: PluginHook<T>,
@@ -1705,6 +1709,57 @@ export class PluginManager {
     }
   }
 
+  /**
+   * Core classes/helpers shared by every plugin as `api.core`. Built lazily from
+   * require() so import cycles (CombatFactory <-> PluginManager) are already settled
+   * by the time plugins load. One shared object for the whole process.
+   */
+  private static getCoreApi(): PluginCoreApi {
+    if (PluginManager.pluginCoreApi) {
+      return PluginManager.pluginCoreApi;
+    }
+    const combat = "../game/content/combat";
+    const model = "../game/model";
+    PluginManager.pluginCoreApi = Object.freeze({
+      MeleeCombatMethod: require(`${combat}/method/impl/MeleeCombatMethod`).MeleeCombatMethod,
+      RangedCombatMethod: require(`${combat}/method/impl/RangedCombatMethod`).RangedCombatMethod,
+      CombatMethod: require(`${combat}/method/CombatMethod`).CombatMethod,
+      CombatSpecial: require(`${combat}/CombatSpecial`).CombatSpecial,
+      CombatFactory: require(`${combat}/CombatFactory`).CombatFactory,
+      CombatType: require(`${combat}/CombatType`).CombatType,
+      CombatConstants: require(`${combat}/CombatConstants`).CombatConstants,
+      DamageFormulas: require(`${combat}/formula/DamageFormulas`).DamageFormulas,
+      PendingHit: require(`${combat}/hit/PendingHit`).PendingHit,
+      HitDamage: require(`${combat}/hit/HitDamage`).HitDamage,
+      HitMask: require(`${combat}/hit/HitMask`).HitMask,
+      RangedWeapon: require(`${combat}/ranged/RangedData`).RangedWeapon,
+      Ammunition: require(`${combat}/ranged/RangedData`).Ammunition,
+      WeaponProfiles: require(`${combat}/WeaponProfile`).WeaponProfiles,
+      WeaponInterfaceManager: require(`${combat}/WeaponInterfaceManager`).WeaponInterfaceManager,
+      PrayerHandler: require("../game/content/PrayerHandler").PrayerHandler,
+      DuelRule: require("../game/content/Duelling").DuelRule,
+      RegionManager: require("../game/collision/RegionManager").RegionManager,
+      Animation: require(`${model}/Animation`).Animation,
+      Graphic: require(`${model}/Graphic`).Graphic,
+      GraphicHeight: require(`${model}/GraphicHeight`).GraphicHeight,
+      Priority: require(`${model}/Priority`).Priority,
+      Projectile: require(`${model}/Projectile`).Projectile,
+      Skill: require(`${model}/Skill`).Skill,
+      Item: require(`${model}/Item`).Item,
+      Flag: require(`${model}/Flag`).Flag,
+      Direction: require(`${model}/Direction`).Direction,
+      Equipment: require(`${model}/container/impl/Equipment`).Equipment,
+      Task: require("../game/task/Task").Task,
+      TaskManager: require("../game/task/TaskManager").TaskManager,
+      ItemIdentifiers: require("../util/ItemIdentifiers").ItemIdentifiers,
+      Misc: require("../util/Misc").Misc,
+      TimerKey: require("../util/timers/TimerKey").TimerKey,
+      Sound: require("../game/Sound").Sound,
+      Sounds: require("../game/Sounds").Sounds,
+    });
+    return PluginManager.pluginCoreApi;
+  }
+
   private static createApi(pluginName: string): PluginApi {
     const npcInteractionDefinitions: Array<
       PluginNpcInteractionDefinition & { npcId: number }
@@ -2053,6 +2108,7 @@ export class PluginManager {
     };
 
     return {
+      core: PluginManager.getCoreApi(),
       onPlayerLogin: (handler) => {
         if (typeof handler !== "function") {
           return;
@@ -3435,6 +3491,29 @@ export class PluginManager {
           return;
         }
         WeaponProfiles.register(profile);
+      },
+      registerCombatSpecial: (definition) => {
+        if (
+          !definition ||
+          typeof definition.id !== "string" ||
+          !definition.id.trim().length ||
+          !Array.isArray(definition.itemIds) ||
+          definition.itemIds.length === 0 ||
+          definition.itemIds.some((id) => !Number.isInteger(id) || id <= 0) ||
+          !definition.combatMethod ||
+          typeof definition.combatMethod.type !== "function"
+        ) {
+          console.warn(
+            `[plugins] ${pluginName} attempted invalid combat special registration`
+          );
+          return;
+        }
+        const registered = CombatSpecial.register(definition as PluginCombatSpecialDefinition);
+        if (!registered) {
+          console.warn(
+            `[plugins] ${pluginName} failed to register combat special ${definition.id}`
+          );
+        }
       },
       registerCombatMethodResolver: (resolver) => {
         if (!resolver || typeof resolver.resolve !== "function") {

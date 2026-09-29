@@ -376,7 +376,8 @@ class ToxicBlowpipeCombatMethod extends RangedCombatMethod {
     Sounds.sendSound(character, Sound.THROW_DART);
 
     if (this.special) {
-      CombatSpecial.drain(player, CombatSpecial.TOXIC_BLOWPIPE.getDrainAmount());
+      const drainAmount = player.getCombatSpecial?.()?.getDrainAmount?.() ?? 50;
+      CombatSpecial.drain(player, drainAmount);
     }
 
     const dartsDepleted = maybeConsumeLoadedDart(player, blowpipeItem);
@@ -505,7 +506,7 @@ module.exports = {
         if (!blowpipeItem || blowpipeItem.getId() !== TOXIC_BLOWPIPE_ID) {
           return null;
         }
-        if (player.isSpecialActivated?.() === true && player.getCombatSpecial?.() === CombatSpecial.TOXIC_BLOWPIPE) {
+        if (player.isSpecialActivated?.() === true && player.getCombatSpecial?.()?.getId?.() === "toxic_blowpipe") {
           return SPECIAL_COMBAT_METHOD;
         }
         return REGULAR_COMBAT_METHOD;
