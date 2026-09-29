@@ -22,4 +22,13 @@ export class FrameUpdater {
         }
         return true;
     }
+
+    /**
+     * Forget cached text for a widget so the next write is always sent.
+     * Needed when an interface is remounted (the client's side resets to blank
+     * but this per-player cache still holds the last value).
+     */
+    clear(id: number): void {
+        this.interfaceTextMap.delete(id);
+    }
 }

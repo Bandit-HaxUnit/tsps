@@ -210,11 +210,10 @@ export function applyQuestListWidgetGroups(
     list.scrollY = Math.min(list.scrollY | 0, Math.max(0, contentHeight - viewportHeight));
 
     if (textContainer) {
-        textContainer.scrollHeight = list.scrollHeight;
-        textContainer.scrollY = Math.min(
-            textContainer.scrollY | 0,
-            Math.max(0, textContainer.scrollHeight - (textContainer.height | 0)),
-        );
+        // The row list owns the scroll. Keep the enclosing pane from drawing a
+        // second scrollbar of its own.
+        textContainer.scrollHeight = Math.max(0, textContainer.height | 0);
+        textContainer.scrollY = 0;
         widgetManager.invalidateWidget(textContainer, "quest-list");
     }
 

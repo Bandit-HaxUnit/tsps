@@ -338,6 +338,7 @@ export function parseEditModeWorldDefinition(value: unknown): EditModeWorldDefin
         zones,
         disabledPlugins: (raw.disabledPlugins ?? []).map((name) => (name as string).trim()),
         experienceMultiplier: raw.experienceMultiplier === undefined ? 1 : raw.experienceMultiplier,
+        ...(typeof raw.gameframe === "string" && { gameframe: raw.gameframe }),
     };
 }
 

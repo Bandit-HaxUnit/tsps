@@ -83,6 +83,8 @@ export interface EditModeWorldDefinition {
     zones: EditModeWorldZone[];
     disabledPlugins: string[];
     experienceMultiplier: number;
+    /** Opaque to the editor; kept so saving world.json does not drop the forced layout. */
+    gameframe?: string;
 }
 
 export interface EditModeTile {

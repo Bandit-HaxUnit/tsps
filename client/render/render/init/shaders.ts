@@ -378,7 +378,7 @@ export async function initShaders(host: WebGLOsrsRendererHost, ): Promise<Progra
         try {
             if (host.overlayManager && host.sceneUniformBuffer) {
                 host.loginOverlay = new LoginOverlay(host.osrsClient);
-                host.overlayManager.add(host.loginOverlay);
+                host.overlayManager.add(host.loginOverlay, false);
                 host.loginOverlay.init({ app: host.app, sceneUniforms: host.sceneUniformBuffer });
             }
         } catch (e) {
@@ -392,7 +392,7 @@ export async function initShaders(host: WebGLOsrsRendererHost, ): Promise<Progra
                 host.loadingMessageOverlay = new LoadingMessageOverlay(
                     host.osrsClient.stateMachine,
                 );
-                host.overlayManager.add(host.loadingMessageOverlay);
+                host.overlayManager.add(host.loadingMessageOverlay, false);
                 host.loadingMessageOverlay.init({
                     app: host.app,
                     sceneUniforms: host.sceneUniformBuffer,
@@ -620,6 +620,7 @@ export async function initShaders(host: WebGLOsrsRendererHost, ): Promise<Progra
                     // Keep CS2 IF_GETCANVASSIZE / widget manager dimensions aligned with the active
                     // widget layout space.
                     manager?.resize(layoutW, layoutH);
+                    host.osrsClient.gameFrame317Plugin.updateWidgetLayout();
 
                     // Get the current root interface (set by server via IF_OPENTOPLEVEL)
                     // OSRS interfaces can have multiple root widgets (parentUid=-1)
@@ -1009,7 +1010,7 @@ export async function initShaders(host: WebGLOsrsRendererHost, ): Promise<Progra
                         },
                 });
                 host.widgetsOverlay = widgets;
-                host.overlayManager.add(widgets);
+                host.overlayManager.add(widgets, false);
                 // Init may fail if cache not ready - will be reinitialized in initOverlays()
                 try {
                     widgets.init({ app: host.app, sceneUniforms: host.sceneUniformBuffer });

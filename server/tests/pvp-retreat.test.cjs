@@ -14,9 +14,11 @@ const { Wilderness } = require('../dist/game/content/wilderness/Wilderness');
 const filename = path.resolve(__dirname, '../plugins/bots/behaviours/nodes/pvp/PvpDefensiveActionNode.js');
 const localRequire = createRequire(filename);
 
-test('PvP retreat respects depth, teleblock, freezes and replenishes only after arrival', () => {
+test('PvP retreat waits for no food and low HP, runs first, then respects depth/teleblock/freeze', () => {
+  const RETREAT_RUN_GRACE_MS = 5000;
   let routes = [], teleports = [], loads = 0, blocked = false, frozen = false;
   let allowed = true, hp = 10, teleporting = false, retaliate = true, globalPvp = false;
+  let nowMs = 1000;
   let location = new Location(3100, 3600, 0), target = {}, attacker = { getLocation: () => new Location(3100, 3601, 0) };
   const originalCheck = TeleportHandler.checkReqs;
   const originalTeleport = TeleportHandler.teleport;
@@ -60,7 +62,7 @@ test('PvP retreat respects depth, teleblock, freezes and replenishes only after 
     getProfile: () => ({ id: profile, foodCharges: 10 }), stopPvp: () => {},
     api: { getCombatFactory: () => ({ canAttackPermission: () => undefined, getMethod: () => null }) },
   });
-  const tick = () => node.tick({ player, state, nowMs: 1000, target: null });
+  const tick = () => node.tick({ player, state, nowMs, target: null });
   try {
     Wilderness.isIn = () => true;
     TeleportHandler.checkReqs = () => allowed;
@@ -69,10 +71,24 @@ test('PvP retreat respects depth, teleblock, freezes and replenishes only after 
     state.virtualFoodChargesRemaining = 3;
     assert.equal(tick().handled, false, 'low HP alone never triggers retreat with food remaining');
     assert.equal(retaliate, true);
-    state.virtualFoodChargesRemaining = 2;
-    tick();
-    assert.equal(teleports.length, 1, 'two charges triggers escape');
+
+    // No food left, but still healthy: keep fighting.
+    state.virtualFoodChargesRemaining = 0;
+    hp = 80;
+    assert.equal(tick().handled, false, 'no food with healthy HP does not retreat');
+    assert.equal(retaliate, true);
+
+    // No food and low HP: the only trigger. Run first, do not teleport immediately.
+    hp = 10;
+    assert.equal(tick().handled, true, 'no food at low HP starts a retreat');
     assert.equal(retaliate, false);
+    assert.equal(teleports.length, 0, 'retreat runs before teleporting');
+    nowMs += 1000;
+    tick();
+    assert.equal(teleports.length, 0, 'still running inside the grace window');
+    nowMs += RETREAT_RUN_GRACE_MS;
+    tick();
+    assert.equal(teleports.length, 1, 'teleports once the run grace elapses');
     assert.equal(loads, 0);
     const { getEnabledWildernessHotspots } = require('../plugins/bots/behaviours/pvp/WildernessHotspotRegistry');
     assert.ok(getEnabledWildernessHotspots().some(({ anchor }) =>
@@ -87,7 +103,8 @@ test('PvP retreat respects depth, teleblock, freezes and replenishes only after 
     assert.equal(retaliate, true);
     assert.equal(hp, 99);
 
-    state.virtualFoodChargesRemaining = 1;
+    // Deep Wilderness cannot teleport even once the grace has elapsed; it runs south.
+    state.virtualFoodChargesRemaining = 0; hp = 10;
     attacker = null; location = new Location(3100, 3680, 0);
     tick();
     assert.equal(teleports.length, 1, 'level 21 cannot teleport even when combat ends');
@@ -95,6 +112,9 @@ test('PvP retreat respects depth, teleblock, freezes and replenishes only after 
     location = new Location(3100, 3672, 0);
     tick();
     assert.equal(teleports.length, 1, 'level 20 also runs below 20');
+
+    // In teleport range now: teleblock/freeze/veto still gate the escape.
+    nowMs += RETREAT_RUN_GRACE_MS;
     location = new Location(3100, 3671, 0); blocked = true;
     attacker = { getLocation: () => new Location(3100, 3672, 0) };
     tick();
@@ -111,31 +131,43 @@ test('PvP retreat respects depth, teleblock, freezes and replenishes only after 
 
     teleporting = false; state.pvp.retreat = null; frozen = false; retaliate = true;
     profile = 'novice'; location = new Location(3100, 3600, 0);
+    state.virtualFoodChargesRemaining = 0; hp = 10;
+    tick();
+    assert.equal(teleports.length, 2, 'novice runs first too');
+    nowMs += RETREAT_RUN_GRACE_MS;
     tick();
     assert.equal(teleports.length, 3, 'novice also teleports while under attack');
     location = teleports.at(-1); teleporting = false;
     tick();
     assert.equal(loads, 2);
 
-    state.virtualFoodChargesRemaining = 0;
+    state.virtualFoodChargesRemaining = 0; hp = 10;
     globalPvp = true; location = new Location(3100, 3900, 0);
     attacker = { getLocation: () => new Location(3100, 3901, 0) };
     blocked = true;
     tick();
     assert.equal(teleports.length, 3, 'global PvP still respects teleblock');
     blocked = false;
+    nowMs += RETREAT_RUN_GRACE_MS;
     tick();
     assert.equal(teleports.length, 4, 'global PvP ignores depth even above level 20');
     teleporting = false; state.pvp.retreat = null;
     location = new Location(3200, 3200, 0);
+    state.virtualFoodChargesRemaining = 0; hp = 10;
+    tick();
+    nowMs += RETREAT_RUN_GRACE_MS;
     tick();
     assert.equal(teleports.length, 5, 'global PvP permits escape at non-Wilderness coordinates');
     teleporting = false; state.pvp.retreat = null; globalPvp = false;
     location = new Location(3100, 3525, 0);
+    state.virtualFoodChargesRemaining = 0; hp = 10;
+    tick();
+    nowMs += RETREAT_RUN_GRACE_MS;
     tick();
     assert.equal(teleports.length, 6, 'level 1 can also teleport');
 
-    teleporting = false; state.pvp.retreat = null;
+    teleporting = false; state.pvp.retreat = null; hp = 10;
+    state.virtualFoodChargesRemaining = 0;
     blocked = true; attacker = null; retaliate = true; location = new Location(3100, 3600, 0);
     tick();
     assert.deepEqual(routes.at(-1), { x: state.home.x, y: state.home.y }, 'walk home after combat while teleblocked');
@@ -225,4 +257,9 @@ test('PvP worlds add 15 to the shared Wilderness level for players and bots', ()
   assert.equal(wildernessAttackRange(player(80, 3520), player(97, 3528)), 16);
   assert.equal(canAttackByWildernessLevel(player(80, 3520), player(97, 3528)), false);
   assert.equal(wildernessAttackRange(player(80, 3200), player(96, 3528)), 15);
+  // The attacker's own depth sets the range; a shallower target must not shrink it,
+  // or leaving the levelled strip would silently re-tighten the bracket.
+  assert.equal(wildernessAttackRange(player(80, 3528), player(80, 3200)), 17);
+  assert.equal(canAttackByWildernessLevel(player(80, 3528), player(97, 3200)), true);
+  assert.equal(canAttackByWildernessLevel(player(80, 3528), player(98, 3200)), false);
 });

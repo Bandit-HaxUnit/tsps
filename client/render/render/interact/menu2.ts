@@ -226,6 +226,10 @@ export function toCssEvent(host: WebGLOsrsRendererHost,
 
 export function isMouseInUIRegion(host: WebGLOsrsRendererHost, mx: number, my: number): boolean {
 
+        // Fixed chrome surrounds the scene; window-edge resizable regions no longer apply.
+        if (host.osrsClient.widgetManager.rootInterface === 548) {
+            return !host.osrsClient.camera.containsScreenPoint(mx, my);
+        }
         return checkMouseInUIRegion(mx, my, host.canvas.width, host.canvas.height);
     
 }

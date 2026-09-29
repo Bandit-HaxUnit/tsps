@@ -197,6 +197,7 @@ function spawnPresetItem(item, preset) {
   if (next && (PLAYER_PRESETS.list.includes(preset) || (!preset.getIsGlobal?.() && isSpawnable(next.getId())))) {
     next.setMetaValue(Item.UNTRADEABLE_META, true);
     next.setMetaValue(Item.UNBANKABLE_META, true);
+    next.setMetaValue(Item.PRESET_META, true);
   }
   return next;
 }
@@ -210,6 +211,23 @@ function isSpawnable(itemId) {
     return allowed.includes(itemId);
   }
   return false;
+}
+
+/** Banks everything the player carries except the preset's own spawned items. */
+function bankCarriedItems(player) {
+  let moved = false;
+  const carriedItems = [
+    ...player.getInventory().getCopiedItems(),
+    ...player.getEquipment().getCopiedItems(),
+  ];
+  for (const item of carriedItems) {
+    if (!isValidItem(item) || item.isPresetItem?.()) {
+      continue;
+    }
+    player.getBank(Bank.getTabForItem(player, item.getId())).add(item, false);
+    moved = true;
+  }
+  return moved;
 }
 
 function itemRecord(item) {
@@ -483,29 +501,10 @@ function applyPreset(player, preset) {
     sender.sendMessage("You can't load a preset in the wilderness!");
     return false;
   }
-  let movedToBank = false;
-  const carriedItems = [
-    ...player.getInventory().getCopiedItems(),
-    ...player.getEquipment().getCopiedItems(),
-  ];
-  for (const item of carriedItems) {
-    if (!isValidItem(item) || isSpawnable(item.getId())) {
-      continue;
-    }
-    player.getBank(Bank.getTabForItem(player, item.getId())).add(item, false);
-    movedToBank = true;
-  }
-  if (movedToBank) {
-    sender.sendMessage(
-      "The non-spawnable items you had on you have been sent to your bank."
-    );
-  }
-
-  player.getInventory().resetItems().refreshItems();
-  player.getEquipment().resetItems().refreshItems();
-
+  // Validate a custom preset's real-item requirements up front, before anything is
+  // banked or cleared, so a preset you cannot yet afford is a no-op instead of a wipe.
+  const nonSpawnableRequirements = [];
   if (!preset.getIsGlobal()) {
-    const nonSpawnableRequirements = [];
     for (const item of [...(preset.getInventory() ?? []), ...(preset.getEquipment() ?? [])]) {
       if (!isValidItem(item) || isSpawnable(item.getId())) {
         continue;
@@ -527,7 +526,16 @@ function applyPreset(player, preset) {
         return false;
       }
     }
+  }
 
+  if (bankCarriedItems(player)) {
+    sender.sendMessage("The items you had on you have been sent to your bank.");
+  }
+
+  player.getInventory().resetItems().refreshItems();
+  player.getEquipment().resetItems().refreshItems();
+
+  if (nonSpawnableRequirements.length > 0) {
     for (const item of nonSpawnableRequirements) {
       if (player.getInventory().containsItem(item)) {
         player.getInventory().deletes(item);
@@ -739,7 +747,7 @@ module.exports = {
   isEnabled: () => presetsEnabled,
   openPresetInterface,
   shouldOpenOnDeath,
-  _test: { spawnPresetItem },
+  _test: { spawnPresetItem, bankCarriedItems },
   register(api) {
     presetsEnabled = true;
     setPresetShopPricesEnabled(true);

@@ -36,6 +36,11 @@ import {
   PluginNpcAggressionToleranceEvent,
   PluginNpcInteractionEvent,
   PluginNpcInteractionDefinition,
+  PluginNpcDialogueContext,
+  PluginNpcDialogueConditionEvent,
+  PluginZone,
+  PluginZoneEvent,
+  PluginNpcSpawnDefinition,
   PluginObjectRouteEvent,
   PluginObjectInteractionEvent,
   PluginPlayerDefeatedEvent,
@@ -157,8 +162,29 @@ export class PluginManager {
   private static objectHooksByName = new Map<string, ObjectInteractionHook[]>();
   private static nextObjectHookOrder = 0;
   private static npcInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
+  /**
+   * `onAnyNpcInteraction` hooks. Kept apart from the id/name hooks so a generic
+   * transcript handler (e.g. NpcDialogues) never outruns a specific plugin that
+   * owns that NPC, regardless of plugin load order.
+   */
+  private static npcAnyInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
+  private static npcDialogueVariantHooks: Array<{
+    pluginName: string;
+    handler: (event: PluginNpcDialogueContext) => string | { page?: string; variant: string } | null | undefined;
+  }> = [];
+  private static npcDialogueConditionHooks: Array<{
+    pluginName: string;
+    handler: (event: PluginNpcDialogueConditionEvent) => boolean | null | undefined;
+  }> = [];
   private static npcDeathHooks: PluginHook<PluginNpcDeathEvent>[] = [];
   private static npcBeforeDeathHooks: PluginHook<PluginNpcBeforeDeathEvent>[] = [];
+  private static zoneHooks: Array<{
+    pluginName: string;
+    zone: PluginZone;
+    onEnter?: (event: PluginZoneEvent) => void;
+    onExit?: (event: PluginZoneEvent) => void;
+  }> = [];
+  private static activeZonesByPlayer = new WeakMap<any, Set<number>>();
   private static canAttackHooks: PluginHook<PluginCanAttackEvent>[] = [];
   private static canTeleportHooks: PluginHook<PluginCanTeleportEvent>[] = [];
   private static canEatHooks: PluginHook<PluginCanEatEvent>[] = [];
@@ -577,11 +603,117 @@ export class PluginManager {
   }
 
   public static emitPlayerProcess(event: PluginPlayerProcessEvent): void {
+    PluginManager.updatePlayerZones(event?.player);
     if (PluginManager.playerProcessHooks.length === 0) {
       return;
     }
     for (const hook of PluginManager.playerProcessHooks) {
       PluginManager.executeHook(hook, event, "player_process", "player_process");
+    }
+  }
+
+  /** Drives onZoneEnter/onZoneExit for a player from their current location. */
+  public static updatePlayerZones(player: any): void {
+    if (!player || PluginManager.zoneHooks.length === 0) {
+      return;
+    }
+    const location = player.getLocation?.();
+    if (!location) {
+      return;
+    }
+    let active = PluginManager.activeZonesByPlayer.get(player);
+    if (!active) {
+      active = new Set<number>();
+      PluginManager.activeZonesByPlayer.set(player, active);
+    }
+    for (let index = 0; index < PluginManager.zoneHooks.length; index++) {
+      const hook = PluginManager.zoneHooks[index];
+      const inside = PluginManager.isInsideZone(hook.zone, location);
+      if (inside === active.has(index)) {
+        continue;
+      }
+      if (inside) {
+        active.add(index);
+        if (hook.onEnter) {
+          try {
+            hook.onEnter({ player, zone: hook.zone });
+          } catch (error) {
+            console.warn(`[plugins] zone enter hook threw (${hook.pluginName})`, error);
+          }
+        }
+      } else {
+        active.delete(index);
+        if (hook.onExit) {
+          try {
+            hook.onExit({ player, zone: hook.zone });
+          } catch (error) {
+            console.warn(`[plugins] zone exit hook threw (${hook.pluginName})`, error);
+          }
+        }
+      }
+    }
+  }
+
+  private static isInsideZone(zone: PluginZone, location: any): boolean {
+    if (!zone) {
+      return false;
+    }
+    const x = location.getX?.() ?? location.x ?? 0;
+    const y = location.getY?.() ?? location.y ?? 0;
+    const z = location.getZ?.() ?? location.z ?? 0;
+    if (!(x >= zone.minX && x <= zone.maxX && y >= zone.minY && y <= zone.maxY)) {
+      return false;
+    }
+    return !zone.levels || zone.levels.includes(z);
+  }
+
+  /** Spawns a plugin NPC (optionally owner-only) and returns it, or null. */
+  public static spawnNpc(definition: PluginNpcSpawnDefinition): any {
+    const id = Math.trunc(Number(definition?.id));
+    if (!Number.isFinite(id) || id < 0) {
+      return null;
+    }
+    const { NPC } = require("../game/entity/impl/npc/NPC");
+    const { Location } = require("../game/model/Location");
+    const { World } = require("../game/World");
+    const npc = NPC.create(
+      id,
+      new Location(Number(definition.x) | 0, Number(definition.y) | 0, Number(definition.z ?? 0) | 0)
+    );
+    if (!npc) {
+      return null;
+    }
+    if (Number.isFinite(definition.wanderRadius)) {
+      npc.getMovementCoordinator().setRadius(Math.max(0, Math.trunc(definition.wanderRadius as number)));
+    }
+    if (Number.isFinite(definition.face)) {
+      npc.setFace(Number(definition.face));
+    }
+    if (definition.owner) {
+      npc.setOwner(definition.owner);
+    }
+    if (definition.ownerOnly) {
+      npc.setOwnerOnly(true);
+    }
+    if (!World.getNpcs().add(npc)) {
+      World.getAddNPCQueue().push(npc);
+    }
+    return npc;
+  }
+
+  /** Removes a plugin NPC, whether registered or still queued for addition. */
+  public static removeNpc(npc: any): void {
+    if (!npc) {
+      return;
+    }
+    const { World } = require("../game/World");
+    const addQueue = World.getAddNPCQueue();
+    const queued = addQueue.indexOf(npc);
+    if (queued !== -1) {
+      addQueue.splice(queued, 1);
+    }
+    if (typeof npc.isRegistered === "function" && npc.isRegistered()) {
+      World.getNpcs().remove(npc);
     }
   }
 
@@ -704,13 +836,49 @@ export class PluginManager {
 
     event.definition ??= event.npc.getCurrentDefinition?.(event.player);
 
-    for (const hook of PluginManager.npcInteractionHooks) {
-      if (event.handled) {
-        break;
+    for (const hooks of [PluginManager.npcInteractionHooks, PluginManager.npcAnyInteractionHooks]) {
+      for (const hook of hooks) {
+        if (event.handled) {
+          break;
+        }
+        PluginManager.executeHook(hook, event, "npc_interaction", "npc_interaction");
       }
-      PluginManager.executeHook(hook, event, "npc_interaction", "npc_interaction");
     }
     return event.handled === true;
+  }
+
+  /** Asks dialogue plugins which transcript variant to play (first answer wins). */
+  public static emitNpcDialogueVariant(
+    event: PluginNpcDialogueContext
+  ): string | { page?: string; variant: string } | null {
+    for (const hook of PluginManager.npcDialogueVariantHooks) {
+      try {
+        const result = hook.handler(event);
+        if (result) {
+          return result;
+        }
+      } catch (error) {
+        console.warn(`[plugins] npc dialogue variant hook threw (${hook.pluginName})`, error);
+      }
+    }
+    return null;
+  }
+
+  /** Asks dialogue plugins to answer a wiki prose condition (first boolean wins). */
+  public static emitNpcDialogueCondition(
+    event: PluginNpcDialogueConditionEvent
+  ): boolean | null {
+    for (const hook of PluginManager.npcDialogueConditionHooks) {
+      try {
+        const result = hook.handler(event);
+        if (typeof result === "boolean") {
+          return result;
+        }
+      } catch (error) {
+        console.warn(`[plugins] npc dialogue condition hook threw (${hook.pluginName})`, error);
+      }
+    }
+    return null;
   }
 
   public static emitNpcDeath(event: PluginNpcDeathEvent): void {
@@ -1871,7 +2039,11 @@ export class PluginManager {
       actions: Record<string, (event: PluginNpcInteractionEvent) => void | boolean>
     ): void => {
       const handlers = new Map(Object.entries(actions ?? {}).filter(([, action]) => typeof action === "function"));
-      PluginManager.npcInteractionHooks.push({ pluginName, handler: (event) => {
+      // Name-specific actions are "specific" and run before the generic any-NPC hooks.
+      const hookList = name === null
+        ? PluginManager.npcAnyInteractionHooks
+        : PluginManager.npcInteractionHooks;
+      hookList.push({ pluginName, handler: (event) => {
         if (event.handled || !Number.isInteger(event.clickType) || event.clickType < 1 || event.clickType > 5) return;
         const definition = event.definition;
         if (!definition || (name !== null && definition.getName() !== name)) return;
@@ -1991,6 +2163,20 @@ export class PluginManager {
           },
         });
       },
+      onZoneEnter: (zone, handler) => {
+        if (typeof handler !== "function" || !zone) {
+          return;
+        }
+        PluginManager.zoneHooks.push({ pluginName, zone, onEnter: handler });
+      },
+      onZoneExit: (zone, handler) => {
+        if (typeof handler !== "function" || !zone) {
+          return;
+        }
+        PluginManager.zoneHooks.push({ pluginName, zone, onExit: handler });
+      },
+      spawnNpc: (definition) => PluginManager.spawnNpc(definition),
+      removeNpc: (npc) => PluginManager.removeNpc(npc),
       onPlayerLevelUp: (handler) => {
         if (typeof handler !== "function") {
           return;
@@ -2128,6 +2314,18 @@ export class PluginManager {
         }
       },
       onAnyNpcInteraction: (actions) => registerNpcActions(null, actions),
+      onNpcDialogueVariant: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.npcDialogueVariantHooks.push({ pluginName, handler });
+      },
+      onNpcDialogueCondition: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.npcDialogueConditionHooks.push({ pluginName, handler });
+      },
       registerNpcInteraction: registerNpcInteractionDefinition,
       onNpcDeath: (handler) => {
         if (typeof handler !== "function") {

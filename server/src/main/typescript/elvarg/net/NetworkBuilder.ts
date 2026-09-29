@@ -76,6 +76,9 @@ const OBJECT_ACTIONS = new ObjectActionPacketListener();
 const NPC_ACTIONS = new NPCOptionPacketListener();
 const MAGIC_ITEMS = new MagicOnItemPacketListener();
 const CLOSE_ON_INTERFACE_CLOSE_ATTRIBUTE = "interface:close-on-interface-close";
+// Gameframe roots the "Game client layout" dropdown can pick (548 fixed, 164
+// classic resizable, 161 modern resizable).
+const CLIENT_LAYOUT_ROOTS = new Set([548, 164, 161]);
 const WORLD_INTERACTIONS = new Set([
   "move",
   "teleport",
@@ -842,7 +845,11 @@ class ClientConnection {
       )
     );
     this.send(encodeDefaultAnimations());
-    for (const packet of encodeGameframeBootstrap(player.getUsername())) this.send(packet);
+    // 548/164/161 - what the "Game client layout" dropdown (Settings.plugin.js)
+    // stores; the client maps the standard mounts onto the chosen layout.
+    const savedLayoutRoot = Number(player.getAttribute("clientLayoutRoot"));
+    const layoutRoot = CLIENT_LAYOUT_ROOTS.has(savedLayoutRoot) ? savedLayoutRoot : 161;
+    for (const packet of encodeGameframeBootstrap(player.getUsername(), layoutRoot)) this.send(packet);
     player.getPacketSender()
       // The bootstrap mounts the magic tab (161:82 -> 218) directly, which does not send
       // varbit 4070, so the cache scripts would draw the standard book for everyone.

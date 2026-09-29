@@ -202,7 +202,13 @@ export class OverheadTextOverlay implements Overlay {
         this.screenSize[1] = this.app.height;
         this.app.enable(PicoGL.BLEND);
         this.app.disable(PicoGL.DEPTH_TEST);
-        this.app.disable(PicoGL.SCISSOR_TEST);
+        // Text effects narrow the scene clip, never replace it.
+        const clipped = this.app.gl.isEnabled(PicoGL.SCISSOR_TEST);
+        const clip: number[] | Int32Array = clipped
+            ? this.app.gl.getParameter(PicoGL.SCISSOR_BOX)
+            : [0, 0, this.app.width, this.app.height];
+        this.app.enable(PicoGL.SCISSOR_TEST);
+        this.app.scissor(clip[0], clip[1], clip[2], clip[3]);
 
         const stacks = args.state.actor2dStacks;
         this.ensureFont();
@@ -304,7 +310,11 @@ export class OverheadTextOverlay implements Overlay {
                 const scBottom = Math.round(this.app.height - (scTop + scHeight));
                 if (scWidth > 0 && scHeight > 0) {
                     this.app.enable(PicoGL.SCISSOR_TEST);
-                    this.app.scissor(scLeft, scBottom, scWidth, scHeight);
+                    const x = Math.max(scLeft, clip[0]);
+                    const y = Math.max(scBottom, clip[1]);
+                    this.app.scissor(x, y,
+                        Math.max(0, Math.min(scLeft + scWidth, clip[0] + clip[2]) - x),
+                        Math.max(0, Math.min(scBottom + scHeight, clip[1] + clip[3]) - y));
                 }
             } else if ((entry.effect | 0) === 5) {
                 const scLeft = Math.round(left);
@@ -314,7 +324,11 @@ export class OverheadTextOverlay implements Overlay {
                 const scBottom = Math.round(this.app.height - (scTop + scHeight));
                 if (scWidth > 0 && scHeight > 0) {
                     this.app.enable(PicoGL.SCISSOR_TEST);
-                    this.app.scissor(scLeft, scBottom, scWidth, scHeight);
+                    const x = Math.max(scLeft, clip[0]);
+                    const y = Math.max(scBottom, clip[1]);
+                    this.app.scissor(x, y,
+                        Math.max(0, Math.min(scLeft + scWidth, clip[0] + clip[2]) - x),
+                        Math.max(0, Math.min(scBottom + scHeight, clip[1] + clip[3]) - y));
                 }
             }
 
@@ -346,7 +360,7 @@ export class OverheadTextOverlay implements Overlay {
                 .draw();
 
             if ((entry.effect | 0) === 4 || (entry.effect | 0) === 5) {
-                this.app.disable(PicoGL.SCISSOR_TEST);
+                this.app.scissor(clip[0], clip[1], clip[2], clip[3]);
             }
 
             if (tex.disposable) {
@@ -355,6 +369,7 @@ export class OverheadTextOverlay implements Overlay {
                 } catch {}
             }
         }
+        if (!clipped) this.app.disable(PicoGL.SCISSOR_TEST);
     }
 
     dispose(): void {

@@ -733,6 +733,14 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
 
         profiler.startPhase("roof");
         host.roofPlaneLimit = host.computeFrameRoofPlaneLimit();
+        // The camera transform positions the scene within the full-window GL viewport;
+        // scissoring also clips geometry that projects beyond the gameframe viewport.
+        host.app.enable(PicoGL.SCISSOR_TEST).scissor(
+            sceneFramebufferViewport.x,
+            host.sceneRenderHeight - (sceneFramebufferViewport.y + sceneFramebufferViewport.height),
+            sceneFramebufferViewport.width,
+            sceneFramebufferViewport.height,
+        );
         host.osrsClient.clientPlugins.beforeSceneRender(host, () => {
             host.renderOpaqueActorPass(playerDataTextureIndex, playerDataTexture);
             host.renderTransparentNpcPass(npcDataTextureIndex, npcDataTexture);
@@ -797,6 +805,8 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         try {
             host.drawSceneTileOverlays(time, deltaTime);
         } catch {}
+
+        host.app.disable(PicoGL.SCISSOR_TEST);
 
         // Can't sample from the scene renderbuffer, so only blit when the scene pass
         // didn't already render directly into the texture framebuffer.
@@ -1385,7 +1395,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                     },
                     helpers: host.getOverlayHelpers(),
                 });
-                host.overlayManager?.draw(RenderPhase.ToFrameTexture);
+                host.overlayManager?.draw(RenderPhase.ToFrameTexture, sceneViewport);
             }
         } catch {}
         profiler.endPhase();
@@ -1609,7 +1619,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
             }
             if (!host.uiHidden) {
                 host.overlayManager?.update(args);
-                host.overlayManager?.draw(RenderPhase.PostPresent);
+                host.overlayManager?.draw(RenderPhase.PostPresent, sceneViewport);
                 if (host.loginOverlay) {
                     host.loginOverlay.setGameState(host.osrsClient.gameState);
                     host.loginOverlay.update(args);

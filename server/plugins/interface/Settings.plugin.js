@@ -1,9 +1,43 @@
-// Settings: "All Settings" browser (134) and the keybindings panel (121).
+// Settings: "All Settings" browser (134), the keybindings panel (121) and the
+// side panel's "Game client layout" dropdown (116:40).
 // Component ids, varbits and the settings catalog order below are verified
 // against cache rev 237 and cross-checked with RuneLite (InterfaceID.Settings,
-// VarbitID) and OpenRune-Server (AllSettingsScript/SettingConfigs).
+// VarbitID) and OpenRune-Server (AllSettingsScript/SettingConfigs,
+// DisplaySettingsScript).
+const {
+  encodeGameframeFlags,
+  DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID,
+} = require("../../src/main/typescript/elvarg/net/protocol/ClientProtocol");
+const { getWorldDefinition } = require("../../src/main/typescript/elvarg/game/definition/WorldDefinition");
+
 const ROOT_INTERFACE = 161;
 const MAIN_MODAL_UID = (ROOT_INTERFACE << 16) | 16;
+
+// Settings > Display: "Game client layout" dropdown. The row label is built by
+// cache script 7992 from entry enum 3509 and its option rows are dynamic
+// children of 116:40, so clicks only reach us when that range has op1 flags
+// (encodeGameframeFlags sends them).
+const DISPLAY_LAYOUT_DROPDOWN = DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID;
+// Enum 3509 order: Fixed, Resizable Classic, Resizable Modern, Resizable 317, Fixed 317.
+const GAMEFRAME_LAYOUT_ROOTS = [548, 164, 161, 161, 548];
+const GAMEFRAME_317_OPTION = 3;
+const GAMEFRAME_317_FIXED_OPTION = 4;
+const GAMEFRAME_317_VARP = 7997; // mirrors client/common/ui/gameframeLayout.ts
+const CLIENT_LAYOUT_317_ATTRIBUTE = "clientLayout317";
+const DEFAULT_GAMEFRAME_ROOT = 161;
+// world.json "gameframe" -> the dropdown option (enum 3509 index) it forces on login.
+const WORLD_GAMEFRAME_OPTIONS = {
+  "modern-fixed": 0,
+  "modern-resizable": 2,
+  "317-resizable": GAMEFRAME_317_OPTION,
+  "317-fixed": GAMEFRAME_317_FIXED_OPTION,
+};
+// Cache script 3962 reads this to pick the selected dropdown row; 4607 is only
+// a display mirror of the layout (no rendering effect in this revision).
+const GAMEFRAME_STONE_VARBIT = 4607;
+// Opaque player attribute; NetworkBuilder/WelcomeScreen read it to boot the
+// saved gameframe.
+const CLIENT_LAYOUT_ATTRIBUTE = "clientLayoutRoot";
 
 const ALL_SETTINGS_INTERFACE_ID = 134;
 const ALL_SETTINGS_SIDE_BUTTON = (116 << 16) | 32;
@@ -107,6 +141,45 @@ function syncPlayerKeybindings(player) {
   setKeybind(player, ESC_CLOSES_VARBIT, typeof esc === "number" ? esc : 1);
 }
 
+function getGameframeRoot(player) {
+  const saved = Number(player.getAttribute(CLIENT_LAYOUT_ATTRIBUTE));
+  return GAMEFRAME_LAYOUT_ROOTS.includes(saved) ? saved : DEFAULT_GAMEFRAME_ROOT;
+}
+
+// Cache script 3962 picks the dropdown row from this and getwindowmode; the
+// value has no rendering effect (3995 only uses it to toggle a side-panel
+// hotkey), so it can always mirror the booted layout.
+function syncGameframeVarbit(player) {
+  const root = getGameframeRoot(player);
+  player.getPacketSender()
+    .sendConfig(GAMEFRAME_317_VARP, (root === 161 || root === 548) && player.getAttribute(CLIENT_LAYOUT_317_ATTRIBUTE) === true ? 1 : 0)
+    .sendVarbit(GAMEFRAME_STONE_VARBIT, root === 164 ? 0 : 1);
+}
+
+// Switches the client's gameframe to `root` (548 fixed / 164 classic / 161
+// modern). The client moves every server-mounted sub-interface onto the new
+// layout's components; flags have to be re-sent because set_root clears them.
+function selectGameframeOption(player, option) {
+  const root = GAMEFRAME_LAYOUT_ROOTS[option];
+  if (root === undefined) return undefined;
+  player.setAttribute(CLIENT_LAYOUT_ATTRIBUTE, root);
+  player.setAttribute(CLIENT_LAYOUT_317_ATTRIBUTE, option === GAMEFRAME_317_OPTION || option === GAMEFRAME_317_FIXED_OPTION);
+  return root;
+}
+
+function applyGameframeLayout({ player, slot }) {
+  if (!Number.isInteger(slot)) return false;
+  const root = selectGameframeOption(player, slot - 1);
+  if (root === undefined) return false;
+  const sender = player.getPacketSender();
+  syncGameframeVarbit(player);
+  sender.sendRootInterface(root);
+  for (const packet of encodeGameframeFlags(root)) {
+    player.getSession().sendClientPacket(packet);
+  }
+  return true;
+}
+
 function openAllSettings(player) {
   player.setInterfaceId(ALL_SETTINGS_INTERFACE_ID);
   const sender = player.getPacketSender();
@@ -178,6 +251,11 @@ module.exports = {
       return applyKeybind(player, varbit, option);
     });
 
+    // Settings > Display: "Game client layout" dropdown. Its rows are the
+    // dropdown panel's dynamic children, one per option (the row at child 0 is
+    // the highlight rectangle), so the option index is slot - 1.
+    api.onInterfaceActionButton(DISPLAY_LAYOUT_DROPDOWN, applyGameframeLayout);
+
     // Keybindings panel (121): remember which dropdown was clicked, then let the
     // cache's CS2 script (985) open the key popup.
     api.onInterfaceActionButton([...BUTTON_TO_SLOT.keys()], ({ player, buttonId }) => {
@@ -208,7 +286,19 @@ module.exports = {
       return true;
     });
 
-    api.onPlayerLogin(({ player }) => syncPlayerKeybindings(player));
+    api.persistAttribute(CLIENT_LAYOUT_ATTRIBUTE);
+    api.persistAttribute(CLIENT_LAYOUT_317_ATTRIBUTE);
+
+    // A world.json "gameframe" overrides the player's saved layout. Login hooks run before
+    // NetworkBuilder sends the gameframe bootstrap (and WelcomeScreen re-sends it), both of
+    // which boot the root from this attribute, so the client opens straight into the forced
+    // layout with no switch after login.
+    const worldGameframeOption = WORLD_GAMEFRAME_OPTIONS[getWorldDefinition().gameframe];
+    api.onPlayerLogin(({ player }) => {
+      syncPlayerKeybindings(player);
+      if (worldGameframeOption !== undefined) selectGameframeOption(player, worldGameframeOption);
+      syncGameframeVarbit(player);
+    });
 
     api.registerCommand("keybinds", ({ player }) => openKeybindings(player));
     api.registerCommand("settings", ({ player }) => openAllSettings(player));

@@ -13864,6 +13864,11 @@
     "currency": "COINS",
     "originalStock": [
       {
+        "id": 1944,
+        "amount": 10,
+        "restockTicks": 50
+      },
+      {
         "id": 1931,
         "amount": 5,
         "restockTicks": 10

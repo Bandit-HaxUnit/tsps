@@ -611,7 +611,10 @@ export class MovementQueue {
         }
         const diffX = this.character.getLocation().getX() - this.character.getLastKnownRegion().getRegionX() * 8;
         const diffY = this.character.getLocation().getY() - this.character.getLastKnownRegion().getRegionY() * 8;
-        let regionChanged = false;
+        // A plane change keeps the same x/y region, but it swaps the whole set of
+        // NPCs/objects visible to the player, so it must refresh the active regions
+        // too (otherwise the new floor's NPCs are never sent until a relog).
+        let regionChanged = this.character.getLocation().getZ() !== this.character.getLastKnownRegion().getZ();
         if (diffX < 16)
             regionChanged = true;
         else if (diffX >= 88)

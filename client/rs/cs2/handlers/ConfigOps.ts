@@ -16,7 +16,24 @@ import {
 } from "../../../common/gamemode/GamemodeContentStore";
 import { isNpcSearch, isNpcSearchResult, setNpcSearchResults } from "../spawnSearch";
 import { Opcodes } from "../Opcodes";
-import type { HandlerMap } from "./HandlerTypes";
+import type { HandlerContext, HandlerMap } from "./HandlerTypes";
+import { GAMEFRAME_LAYOUT_ENUM, GAMEFRAME_317_OPTION, GAMEFRAME_317_LABEL, GAMEFRAME_317_FIXED_OPTION, GAMEFRAME_317_FIXED_LABEL } from "../../../common/ui/gameframeLayout";
+
+function loadEnum(ctx: HandlerContext, enumId: number) {
+    const type = ctx.enumTypeLoader?.load(enumId);
+    if (enumId === GAMEFRAME_LAYOUT_ENUM && type?.stringValues) {
+        for (const [key, label] of [
+            [GAMEFRAME_317_OPTION, GAMEFRAME_317_LABEL],
+            [GAMEFRAME_317_FIXED_OPTION, GAMEFRAME_317_FIXED_LABEL],
+        ] as const) {
+            if (type.keys.includes(key)) continue;
+            type.keys.push(key);
+            type.stringValues.push(label);
+        }
+        type.outputCount = type.keys.length;
+    }
+    return type;
+}
 
 export function registerConfigOps(handlers: HandlerMap): void {
     // === ObjType (Item) ===
@@ -358,7 +375,7 @@ export function registerConfigOps(handlers: HandlerMap): void {
             return;
         }
 
-        const enumType = ctx.enumTypeLoader?.load(enumId);
+        const enumType = loadEnum(ctx, enumId);
         const baseCount = enumType?.outputCount ?? 0;
 
         // Check for custom content enum override
@@ -423,7 +440,7 @@ export function registerConfigOps(handlers: HandlerMap): void {
             return;
         }
 
-        const enumType = ctx.enumTypeLoader?.load(enumId);
+        const enumType = loadEnum(ctx, enumId);
         if (enumType && enumType.stringValues) {
             const idx = enumType.keys?.indexOf(key) ?? -1;
             ctx.pushString(
@@ -443,7 +460,7 @@ export function registerConfigOps(handlers: HandlerMap): void {
             return;
         }
 
-        const enumType = ctx.enumTypeLoader?.load(enumId);
+        const enumType = loadEnum(ctx, enumId);
         const baseCount = enumType?.outputCount ?? 0;
         // Add custom content count from centralized registry
         const customCount = getCustomEnumCountOverride(enumId);

@@ -5,6 +5,7 @@ export class Item {
 
     public static readonly UNTRADEABLE_META = "untradeable";
     public static readonly UNBANKABLE_META = "unbankable";
+    public static readonly PRESET_META = "preset";
 
     public id: number;
     public amount: number;
@@ -179,6 +180,14 @@ export class Item {
 
     public isUnbankable(): boolean {
         return this.getMetaValue(Item.UNBANKABLE_META) === true;
+    }
+
+    /**
+     * An item spawned by a preset. Distinct from untradeable/unbankable: only these
+     * auto-destroy on drop and are spared when a new preset banks carried items.
+     */
+    public isPresetItem(): boolean {
+        return this.getMetaValue(Item.PRESET_META) === true;
     }
 
     public isLostOnDeath(): boolean {

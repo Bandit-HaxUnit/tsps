@@ -20,11 +20,17 @@ export interface WorldZone {
     tags: WorldZoneTag[];
 }
 
+/** Layouts world.json can force on every login (Settings > Display > Game client layout). */
+export const WORLD_GAMEFRAMES = ["modern-resizable", "modern-fixed", "317-resizable", "317-fixed"] as const;
+export type WorldGameframe = (typeof WORLD_GAMEFRAMES)[number];
+
 export interface WorldDefinitionData {
     spawn: WorldPosition;
     zones: WorldZone[];
     disabledPlugins: string[];
     experienceMultiplier: number;
+    /** Optional: when set, players are switched to this layout on login. */
+    gameframe?: WorldGameframe;
 }
 
 export class WorldDefinitionValidationError extends Error {}
@@ -129,6 +135,9 @@ export function parseWorldDefinition(value: unknown): WorldDefinitionData {
     const experienceMultiplier = world.experienceMultiplier === undefined
         ? 1
         : positiveNumber(world, "experienceMultiplier", "world.json");
+    if (world.gameframe !== undefined && !WORLD_GAMEFRAMES.includes(world.gameframe as WorldGameframe)) {
+        throw new WorldDefinitionValidationError(`world.json gameframe must be one of ${WORLD_GAMEFRAMES.join(", ")}`);
+    }
     return {
         spawn: parseWorldPosition(world.spawn, "world.json spawn"),
         zones: world.zones.map((zone, index) =>
@@ -136,6 +145,7 @@ export function parseWorldDefinition(value: unknown): WorldDefinitionData {
         ),
         disabledPlugins: world.disabledPlugins.map((pluginName) => pluginName.trim()),
         experienceMultiplier,
+        ...(world.gameframe !== undefined && { gameframe: world.gameframe as WorldGameframe }),
     };
 }
 
@@ -179,6 +189,7 @@ function copyWorldDefinition(): WorldDefinitionData {
         zones: definition.zones.map((zone) => ({ ...zone, tags: [...zone.tags] })),
         disabledPlugins: [...definition.disabledPlugins],
         experienceMultiplier: definition.experienceMultiplier,
+        ...(definition.gameframe !== undefined && { gameframe: definition.gameframe }),
     };
 }
 

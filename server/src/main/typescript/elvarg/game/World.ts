@@ -671,7 +671,8 @@ export class World {
                 npc.isVisible() &&
                 player.getLocation().isViewableFrom(npc.getLocation()) &&
                 !npc.isNeedsPlacement() &&
-                npc.getPrivateArea() === player.getPrivateArea()
+                npc.getPrivateArea() === player.getPrivateArea() &&
+                (!npc.isOwnerOnly?.() || npc.getOwner?.() === player)
             ) {
                 index++;
             } else {
@@ -702,6 +703,7 @@ export class World {
             if (localNpcs.length >= World.MAX_LOCAL_NPCS) break;
             if (npc == null || localIndexes.has(npc.getIndex()) || !npc.isVisible() || npc.isNeedsPlacement()) continue;
             if (npc.getPrivateArea() !== player.getPrivateArea()) continue;
+            if (npc.isOwnerOnly?.() && npc.getOwner?.() !== player) continue;
             if (!npc.getLocation().isViewableFrom(player.getLocation())) continue;
             localNpcs.push(npc);
             localIndexes.add(npc.getIndex());
@@ -1009,7 +1011,9 @@ export class World {
                 if (existingPlayer) {
                     existingPlayer.requestLogout();
                 }
-                World.players.add(player);
+                // Bots must not be dropped by a host-imposed human player cap: they
+                // share the list but never take a human slot.
+                World.players.add(player, player.isPlayerBot?.() === true);
                 if (
                     player.isPlayerBot?.() !== true &&
                     World.isPlayerSessionConnected(player)
