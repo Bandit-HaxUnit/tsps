@@ -747,3 +747,41 @@ test("leaving the boat by logging out sends nothing to the (closed) client", () 
   assert.doesNotThrow(() => events["sailing:left"]({ player, reason: "logout" }));
   assert.equal(sent, 0);
 });
+
+test("the combat tab's View button shows the sailing sidepanel aboard, and Combat Options switches back", () => {
+  const { WeaponInterfaceManager } = require("../dist/game/content/combat/WeaponInterfaceManager");
+  const [switchTab] = registerPlugin("Sailing.plugin").interfaceClicks;
+  const player = sailor();
+  const mounted = [];
+  const sender = new Proxy({}, {
+    get: (_t, key) => key === "sendSubInterface"
+      ? (uid, group) => { mounted.push([uid >>> 16, uid & 0xffff, group]); return sender; }
+      : () => sender,
+  });
+  player.getPacketSender = () => sender;
+
+  const click = (groupId, childId) => {
+    const event = { player, groupId, childId, handled: false };
+    switchTab(event);
+    return event.handled;
+  };
+  assert.equal(click(593, 46), true);
+  assert.deepEqual(mounted, [], "not aboard: nothing to show");
+
+  Sailing.giveBoat(player, "raft", "the_pandemonium");
+  Sailing.board(player, "the_pandemonium");
+  click(593, 46);
+  assert.deepEqual(mounted, [[161, 76, 937]]);
+
+  const assign = WeaponInterfaceManager.assign;
+  let restored = 0;
+  WeaponInterfaceManager.assign = () => { restored++; };
+  try {
+    assert.equal(click(937, 33), true);
+  } finally {
+    WeaponInterfaceManager.assign = assign;
+  }
+  assert.equal(restored, 1);
+  assert.equal(click(593, 12), false, "other combat buttons are left alone");
+  Sailing.disembark(player, "the_pandemonium");
+});

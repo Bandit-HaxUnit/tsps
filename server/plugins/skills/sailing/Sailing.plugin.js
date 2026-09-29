@@ -5,6 +5,8 @@
 const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/TaskManager");
 const { Animation } = require("../../../src/main/typescript/elvarg/game/model/Animation");
+const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sailing/Sailing");
+const { WeaponInterfaceManager } = require("../../../src/main/typescript/elvarg/game/content/combat/WeaponInterfaceManager");
 const {
   VARBIT,
   VARP_SIDEPANEL_BOAT_TYPE,
@@ -40,6 +42,10 @@ function boardedVarbits(type) {
     [VARBIT.SIDEPANEL_BOAT_MOVE_MODE]: MOVE_MODE.MOORED,
   };
 }
+
+const COMBAT_OPTIONS_GROUP = 593;
+const VIEW_SAILING_OPTIONS_CHILD = 46;
+const VIEW_COMBAT_OPTIONS_CHILD = 33;
 
 /** Everything reset when leaving a boat, whatever set it. */
 const LEFT_VARBITS = [
@@ -90,11 +96,29 @@ function onLeft({ player, reason }) {
   player.getPacketSender().sendTabInterface(0, 0);
 }
 
+/**
+ * The combat tab's "View" button (593:46) and the sidepanel's "Combat Options" (937:33) swap
+ * the combat tab between the combat options and the sailing sidepanel while aboard; the
+ * client only plays a click (script 489), the server remounts the tab.
+ */
+function switchCombatTab(event) {
+  const { player } = event;
+  if (event.groupId === COMBAT_OPTIONS_GROUP && event.childId === VIEW_SAILING_OPTIONS_CHILD) {
+    event.handled = true;
+    const owned = Sailing.instanceAboard(player) && Sailing.activeBoat(player);
+    if (owned) applyBoarded(player, owned);
+  } else if (event.groupId === SIDEPANEL_GROUP && event.childId === VIEW_COMBAT_OPTIONS_CHILD) {
+    event.handled = true;
+    WeaponInterfaceManager.assign(player);
+  }
+}
+
 module.exports = {
   name: "Sailing",
   register(api) {
     content();
     api.onCustomEvent("sailing:boarded", onBoarded);
     api.onCustomEvent("sailing:left", onLeft);
+    api.onInterfaceActionClick(switchCombatTab);
   },
 };
