@@ -4,6 +4,7 @@ const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sa
 const { BoatMoveMode } = require("../../../src/main/typescript/elvarg/game/content/sailing/Boat");
 const { packedHeadingToAngle } = require("../../../src/main/typescript/elvarg/game/content/sailing/HeadingUtils");
 const { PlayerRights } = require("../../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
+const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
 const { content } = require("./sailingContent");
 
 const RAFT_DOCK = "the_pandemonium";
@@ -19,6 +20,12 @@ function giveRaft({ player }) {
   player.sendMessage(boat
     ? `A raft is moored for you at ${Sailing.getDock(RAFT_DOCK).name} (slot ${boat.slot}).`
     : "You can't own another boat.");
+}
+
+/** Teleports to The Pandemonium's gangplank. Like any teleport, it sinks a boat you're on. */
+function toPandemonium({ player }) {
+  const { landing } = Sailing.getDock(RAFT_DOCK);
+  player.moveTo(new Location(landing.x, landing.y, landing.z));
 }
 
 function describe(boat) {
@@ -66,6 +73,7 @@ module.exports = {
   register(api) {
     content();
     api.registerCommand("raft", giveRaft, PlayerRights.DEVELOPER);
+    api.registerCommand("pandemonium", toPandemonium, PlayerRights.DEVELOPER);
     api.registerCommand("boatinfo", boatInfo, PlayerRights.DEVELOPER);
     api.registerCommand("sailmode", sailMode, PlayerRights.DEVELOPER);
     api.registerCommand("heading", heading, PlayerRights.DEVELOPER);

@@ -104,7 +104,7 @@ tsps has no world views, but it has `PrivateArea` (used by Construction's house)
 - gangplanks: Board / Disembark, routed to the lifecycle
 - helm: Navigate / Stop-navigating, the sail buttons (move mode from varbit 19175), clicking to set a heading; Escape, after a yes/no confirmation
 - shipwright: Junior Jim at The Pandemonium retrieves a sunk raft for 250 gp (PR 1 needs this, or a sunk raft is stuck forever)
-- a developer command (`::raft`) gives a raft docked at The Pandemonium, where xrsps's raft docks (gangplank 59836 at 3070, 2987); the Pandemonium quest and buying boats come later
+- developer commands: `::raft` gives a raft docked at The Pandemonium and `::pandemonium` teleports to its gangplank. The dock is where xrsps's raft docks (gangplank 59836 at 3070, 2987); the Pandemonium quest and buying boats come later
 
 ## Client
 

@@ -778,6 +778,24 @@ test("::raft gives a raft moored at The Pandemonium; ::boatinfo lists boats", ()
   ]);
 });
 
+test("::pandemonium is a developer command that teleports to the dock, sinking a boat you're on", () => {
+  const { PlayerRights } = require("../dist/game/model/rights/PlayerRights");
+  const commands = {};
+  const rights = {};
+  require("../plugins/skills/sailing/SailingCommands.plugin").register({
+    registerCommand: (name, handler, minimum) => { commands[name] = handler; rights[name] = minimum; },
+  });
+  assert.equal(rights.pandemonium, PlayerRights.DEVELOPER);
+
+  const player = sailor();
+  Sailing.giveBoat(player, "raft", DOCK.id);
+  Sailing.board(player, DOCK.id);
+  commands.pandemonium({ player, parts: ["pandemonium"] });
+  const at = player.getLocation();
+  assert.deepEqual([at.x, at.y, at.z], [DOCK.landing.x, DOCK.landing.y, DOCK.landing.z]);
+  assert.equal(Sailing.activeBoat(player).location.kind, "sunk");
+});
+
 test("leaving the boat by logging out sends nothing to the (closed) client", () => {
   const { events } = registerPlugin("Sailing.plugin");
   let sent = 0;
