@@ -1,4 +1,5 @@
 import { MAX_GAME_MESSAGE_BYTES } from "./BinaryChannel";
+import { WorldEntitySync } from "../game/content/sailing/WorldEntitySync";
 import { Packet } from "./packet/Packet";
 import { PacketBuilder } from "./packet/PacketBuilder";
 import { NetworkConstants } from "./NetworkConstants";
@@ -327,7 +328,10 @@ export class PlayerSession {
 
     const syncSent = ServerPerf.measurePhase("network.flush.socket_send", () => {
       const tickFrame = encodeTick(tick, Date.now());
+      // Boats first, so a player on a deck refers to a boat the client already has.
+      const worldEntities = WorldEntitySync.flush(player);
       if (!this.sendClientPacket(tickFrame)
+        || !worldEntities.every((packet) => this.sendClientPacket(packet))
         || !this.sendClientPacket(playerSync)
         || !this.sendClientPacket(npcSync)) {
         return false;

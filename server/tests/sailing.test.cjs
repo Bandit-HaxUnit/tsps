@@ -224,3 +224,150 @@ test("an actor on a deck is aboard that boat, and their root tile is the world t
   }
   assert.equal(BoatManager.getBoatAboard(aboard(boat, 3, 4)), undefined, "a disposed boat has no one aboard");
 });
+
+// --- World-entity packets, read the way client/network/packet/ServerBinaryDecoder.ts reads them.
+
+const {
+  encodeRebuildWorldEntity,
+  encodeWorldEntityInfo,
+} = require("../dist/net/protocol/ClientProtocol");
+const { WorldEntitySync } = require("../dist/game/content/sailing/WorldEntitySync");
+
+function reader(buffer, offset) {
+  let at = offset;
+  return {
+    u8: () => buffer[at++],
+    i8: () => buffer.readInt8(at++),
+    u16: () => { const v = buffer.readUInt16BE(at); at += 2; return v; },
+    i16: () => { const v = buffer.readInt16BE(at); at += 2; return v; },
+    i32: () => { const v = buffer.readInt32BE(at); at += 4; return v; },
+    done: () => at >= buffer.length,
+    at: () => at,
+  };
+}
+
+function readPosition(r) {
+  const flags = r.u8();
+  const typed = (shift) => {
+    const width = (flags >> shift) & 3;
+    return width === 3 ? r.i32() : width === 2 ? r.i16() : width === 1 ? r.i8() : 0;
+  };
+  return { x: typed(0), y: typed(2), z: typed(4), orientation: typed(6) };
+}
+
+/** Decodes WORLDENTITY_INFO (opcode, u8 length, payload). */
+function decodeWorldEntityInfo(packet) {
+  assert.equal(packet[0], 143);
+  const r = reader(packet, 2);
+  const count = r.u8();
+  const updates = [];
+  for (let i = 0; i < count; i++) {
+    const updateType = r.u8();
+    const update = { updateType };
+    if (updateType >= 2) update.delta = readPosition(r);
+    if (updateType !== 0) assert.equal(r.u8(), 0, "no mask");
+    updates.push(update);
+  }
+  const spawns = [];
+  while (!r.done()) {
+    const spawn = { entityIndex: r.u16(), sizeX: r.u8(), sizeZ: r.u8(), configId: r.u16() };
+    spawn.position = readPosition(r);
+    spawn.drawMode = r.u8();
+    assert.equal(r.u8(), 0, "no mask");
+    spawns.push(spawn);
+  }
+  return { updates, spawns };
+}
+
+test("WORLDENTITY_INFO packs updates and spawns the way the client reads them", () => {
+  const packet = encodeWorldEntityInfo(
+    [{ updateType: 2, delta: { x: 64, y: 0, z: -300, orientation: 128 } }, { updateType: 1 }, { updateType: 0 }],
+    [{ entityIndex: 3000, sizeX: 8, sizeZ: 8, configId: 1, drawMode: 0, position: { x: 393472, y: 0, z: 382400, orientation: 1024 } }],
+  );
+  assert.equal(packet[1], packet.length - 2, "u8 length");
+  assert.deepEqual(decodeWorldEntityInfo(packet), {
+    updates: [
+      { updateType: 2, delta: { x: 64, y: 0, z: -300, orientation: 128 } },
+      { updateType: 1 },
+      { updateType: 0 },
+    ],
+    spawns: [{ entityIndex: 3000, sizeX: 8, sizeZ: 8, configId: 1, drawMode: 0, position: { x: 393472, y: 0, z: 382400, orientation: 1024 } }],
+  });
+});
+
+test("REBUILD_WORLDENTITY carries the deck scene the way the client reads it", () => {
+  const chunks = Array.from({ length: 4 }, () => Array.from({ length: 13 }, () => new Array(13).fill(-1)));
+  chunks[1][6][6] = 0x1234567;
+  const packet = encodeRebuildWorldEntity(3000, 1, 8, 8, 1200, 1216, chunks, [[1, 2, 3, 4]]);
+  assert.equal(packet[0], 142);
+  assert.equal(packet.readUInt16BE(1), packet.length - 3, "u16 length");
+  const r = reader(packet, 3);
+  assert.deepEqual(
+    [r.u16(), r.u16(), r.u8(), r.u8(), r.u16(), r.u16(), r.u16(), r.u8(), r.u16(), r.u16(), r.u8()],
+    [3000, 1, 8, 8, 1200, 1216, 1216, 0, 1200, 1, 0],
+    "entity, config, size, zone, regionY, force reload, regionX, xtea count, build areas",
+  );
+  // 4 x 13 x 13 presence bits, plus 26 bits for the one chunk, MSB first.
+  let bit = r.at() * 8;
+  const readBits = (count) => {
+    let value = 0;
+    for (let i = 0; i < count; i++, bit++) value = (value << 1) | ((packet[bit >> 3] >> (7 - (bit & 7))) & 1);
+    return value;
+  };
+  const found = [];
+  for (let plane = 0; plane < 4; plane++) {
+    for (let x = 0; x < 13; x++) {
+      for (let y = 0; y < 13; y++) {
+        if (readBits(1)) found.push([plane, x, y, readBits(26)]);
+      }
+    }
+  }
+  assert.deepEqual(found, [[1, 6, 6, 0x1234567]]);
+  const keys = reader(packet, Math.ceil(bit / 8));
+  assert.deepEqual([keys.i32(), keys.i32(), keys.i32(), keys.i32()], [1, 2, 3, 4]);
+  assert.ok(keys.done());
+});
+
+function viewer(x, y) {
+  const player = { location: new Location(x, y, 0) };
+  player.getLocation = () => player.location;
+  player.getArea = () => player.area ?? null;
+  return player;
+}
+
+test("a viewer is sent a boat in range, its moves, and its removal once out of range", () => {
+  const boat = BoatManager.spawn(1, { ...RAFT, locs: [{ id: 59554, x: 3, y: 4, level: 1, shape: 10, rotation: 0 }] }, AT_SEA);
+  try {
+    const watcher = viewer(boat.tileX + 10, boat.tileY);
+
+    const first = WorldEntitySync.flush(watcher);
+    assert.deepEqual(first.map((packet) => packet[0]), [142, 143, 134], "deck scene, spawn, then the deck loc (LOC_ADD_CHANGE)");
+    const spawned = decodeWorldEntityInfo(first[1]);
+    assert.deepEqual(spawned.updates, []);
+    assert.equal(spawned.spawns[0].entityIndex, boat.entityIndex);
+    assert.deepEqual(spawned.spawns[0].position, { x: boat.fineX, y: 0, z: boat.fineY, orientation: boat.angle });
+
+    assert.deepEqual(WorldEntitySync.flush(watcher), [], "nothing to send while the boat is still");
+
+    boat.fineY += 64;
+    assert.deepEqual(decodeWorldEntityInfo(WorldEntitySync.flush(watcher)[0]).updates,
+      [{ updateType: 2, delta: { x: 0, y: 0, z: 64, orientation: 0 } }]);
+
+    watcher.location = new Location(boat.tileX + 40, boat.tileY, 0);
+    assert.deepEqual(decodeWorldEntityInfo(WorldEntitySync.flush(watcher)[0]).updates, [{ updateType: 0 }]);
+    assert.deepEqual(WorldEntitySync.flush(watcher), []);
+  } finally {
+    BoatManager.dispose(boat);
+  }
+});
+
+test("the boat a player is on is always sent, and a disposed boat is removed", () => {
+  const boat = BoatManager.spawn(1, RAFT, AT_SEA);
+  const sailor = viewer(0, 0);
+  sailor.area = BoatManager.getDeck(boat);
+  sailor.location = new Location(boat.deckBaseX + 3, boat.deckBaseY + 4, 0);
+  assert.equal(decodeWorldEntityInfo(WorldEntitySync.flush(sailor)[1]).spawns[0].entityIndex, boat.entityIndex);
+  BoatManager.dispose(boat);
+  sailor.area = null;
+  assert.deepEqual(decodeWorldEntityInfo(WorldEntitySync.flush(sailor)[0]).updates, [{ updateType: 0 }]);
+});

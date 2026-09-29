@@ -1110,6 +1110,138 @@ export function encodeRebuildRegion(
   return encodeServerPacket(ServerPacketId.REBUILD_REGION, payload);
 }
 
+/** A world entity's position: fine units (1/128 tile) on x and z, and an angle out of 2048. */
+export interface WorldEntityPosition {
+  x: number;
+  y: number;
+  z: number;
+  orientation: number;
+}
+
+/** 0 = despawn, 1 = unchanged, 2 = move smoothly by `delta`, 3 = snap by `delta`. */
+export interface WorldEntityUpdate {
+  updateType: 0 | 1 | 2 | 3;
+  delta?: WorldEntityPosition;
+}
+
+export interface WorldEntitySpawn {
+  entityIndex: number;
+  sizeX: number;
+  sizeZ: number;
+  configId: number;
+  drawMode: number;
+  position: WorldEntityPosition;
+}
+
+/** A growable big-endian byte writer for the variable world-entity payloads. */
+class ByteWriter {
+  private readonly bytes: number[] = [];
+
+  u8(value: number): this {
+    this.bytes.push(value & 0xff);
+    return this;
+  }
+
+  u16(value: number): this {
+    return this.u8(value >> 8).u8(value);
+  }
+
+  i32(value: number): this {
+    return this.u16(value >>> 16).u16(value);
+  }
+
+  raw(buffer: Buffer): this {
+    for (const byte of buffer) this.bytes.push(byte);
+    return this;
+  }
+
+  toBuffer(): Buffer {
+    return Buffer.from(this.bytes);
+  }
+}
+
+/**
+ * Four values, each stored in the fewest bytes it fits (0 = zero and not sent, 1 = byte,
+ * 2 = short, 3 = int), led by a byte of 2-bit widths in x, y, z, orientation order.
+ */
+function writeWorldEntityPosition(out: ByteWriter, position: WorldEntityPosition): void {
+  const values = [position.x | 0, position.y | 0, position.z | 0, position.orientation | 0];
+  const width = (value: number) =>
+    value === 0 ? 0 : value >= -128 && value <= 127 ? 1 : value >= -32768 && value <= 32767 ? 2 : 3;
+  let flags = 0;
+  values.forEach((value, index) => { flags |= width(value) << (index * 2); });
+  out.u8(flags);
+  for (const value of values) {
+    const size = width(value);
+    if (size === 1) out.u8(value);
+    else if (size === 2) out.u16(value);
+    else if (size === 3) out.i32(value);
+  }
+}
+
+/**
+ * Builds a world entity's own scene (a boat deck) on the client from cache template chunks,
+ * like REBUILD_REGION does for the main map.
+ */
+export function encodeRebuildWorldEntity(
+  entityIndex: number,
+  configId: number,
+  sizeX: number,
+  sizeZ: number,
+  regionX: number,
+  regionY: number,
+  templateChunks: number[][][],
+  xteaKeys: number[][],
+): Buffer {
+  const out = new ByteWriter()
+    .u16(entityIndex)
+    .u16(configId)
+    .u8(sizeX)
+    .u8(sizeZ)
+    .u16(regionX) // zone x
+    .u16(regionY) // zone z
+    .u16(regionY)
+    .u8(0) // force reload
+    .u16(regionX)
+    .u16(xteaKeys.length)
+    .u8(0); // build areas
+  const bits = new BitWriter();
+  for (let plane = 0; plane < 4; plane++) {
+    for (let x = 0; x < 13; x++) {
+      for (let y = 0; y < 13; y++) {
+        const chunk = templateChunks[plane]?.[x]?.[y] ?? -1;
+        bits.writeBits(1, chunk === -1 ? 0 : 1);
+        if (chunk !== -1) bits.writeBits(26, chunk);
+      }
+    }
+  }
+  bits.alignToByte();
+  out.raw(bits.toBuffer());
+  for (const key of xteaKeys) {
+    for (let index = 0; index < 4; index++) out.i32(key[index] | 0);
+  }
+  return encodeServerPacket(ServerPacketId.REBUILD_WORLDENTITY, out.toBuffer());
+}
+
+/**
+ * Per-tick world entity list for one viewer: an update for each entity the client already
+ * has (in the client's order), then the new ones.
+ */
+export function encodeWorldEntityInfo(updates: WorldEntityUpdate[], spawns: WorldEntitySpawn[]): Buffer {
+  const out = new ByteWriter().u8(updates.length);
+  for (const update of updates) {
+    out.u8(update.updateType);
+    if (update.updateType >= 2) writeWorldEntityPosition(out, update.delta ?? { x: 0, y: 0, z: 0, orientation: 0 });
+    if (update.updateType !== 0) out.u8(0); // no animation or action mask
+  }
+  for (const spawn of spawns) {
+    out.u16(spawn.entityIndex).u8(spawn.sizeX).u8(spawn.sizeZ).u16(spawn.configId);
+    writeWorldEntityPosition(out, spawn.position);
+    out.u8(spawn.drawMode).u8(0);
+  }
+  return encodeServerPacket(ServerPacketId.WORLDENTITY_INFO, out.toBuffer());
+}
+
 export function encodeRegionReplacement(
   regionId: number,
   allowReload: boolean,
