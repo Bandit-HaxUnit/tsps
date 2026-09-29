@@ -42,11 +42,11 @@ import { RandomGen } from "../../../util/RandomGen";
 import { TimerKey } from "../../../util/timers/TimerKey";
 import { CombatType } from "./CombatType";
 import { CombatSpecial } from "./CombatSpecial";
+import { resolveSpecialAttackType } from "./WeaponSpecialTraits";
 import { CombatPoisonData } from "../../task/impl/CombatPoisonEffect";
 import { PoisonType } from "../../task/impl/CombatPoisonEffect";
 import { CombatConstants } from "./CombatConstants";
 import { Wilderness } from "../wilderness/Wilderness";
-import { ZaryteCrossbowCombatMethod } from "./method/impl/specials/ZaryteCrossbowCombatMethod";
 import { PluginManager } from "../../../plugins/PluginManager";
 import { ServerPerf } from "../../../util/ServerPerf";
 import { World } from "../../World";
@@ -59,6 +59,15 @@ import {
     isEmptyCrystalBow,
 } from "./ranged/CrystalBow";
 
+export type SpecialDamageBounds = {
+    minimumMultiplier?: number;
+    maximumMultiplier?: number;
+    minimumBonus?: number;
+    maximumBonus?: number;
+    cap?: number;
+    reduction?: number;
+};
+
 const getPlayerCombatSpecial = (player: Player): CombatSpecial | null => {
     const accessor = (player as any)?.getCombatSpecial;
     if (typeof accessor === "function") {
@@ -70,7 +79,8 @@ const getPlayerCombatSpecial = (player: Player): CombatSpecial | null => {
     return ((player as any)?.combatSpecial ?? null) as CombatSpecial | null;
 };
 
-const isDeveloperGraniteMaulSpec = (entity: Mobile): entity is Player => {
+/** Developer debug: a queued-attack special (granite maul) forced to hit 50. */
+const isDeveloperQueuedAttackSpec = (entity: Mobile): entity is Player => {
     if (!entity.isPlayer()) {
         return false;
     }
@@ -79,7 +89,7 @@ const isDeveloperGraniteMaulSpec = (entity: Mobile): entity is Player => {
     return (
         player.getRights?.() === PlayerRights.DEVELOPER &&
         player.isSpecialActivated() &&
-        getPlayerCombatSpecial(player) === CombatSpecial.GRANITE_MAUL
+        getPlayerCombatSpecial(player)?.getTraits()?.queuedAttack === true
     );
 };
 
@@ -155,14 +165,19 @@ export class CombatFactory {
         return CombatFactory.MELEE_COMBAT;
     }
 
-    static getHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false) {
+    static getHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds) {
+        const specialTraits = CombatSpecial.activeTraitsFor(entity);
+        if (specialTraits?.ignoreProtectionPrayer) {
+            bypassProtectionPrayer = true;
+        }
+        const prayerType = resolveSpecialAttackType(specialTraits?.damageType) ?? type;
         let damage = 0;
         if (type == CombatType.MELEE) {
-            damage = Misc.randomInclusive(0, DamageFormulas.calculateMaxMeleeHit(entity));
+            damage = CombatFactory.rollSpecialDamage(entity, DamageFormulas.sourceMaxHit(entity, CombatType.MELEE), boundsOverride);
         } else if (type == CombatType.RANGED) {
-            let maxHit = DamageFormulas.calculateMaxRangedHit(entity);
+            let maxHit = DamageFormulas.sourceMaxHit(entity, CombatType.RANGED);
             maxHit = PluginManager.modifyRangedMaxHit(entity, victim, maxHit);
-            damage = Misc.randomInclusive(0, maxHit);
+            damage = CombatFactory.rollSpecialDamage(entity, maxHit, boundsOverride);
 
             // Do ranged effects with the calculated damage..
             if (entity.isPlayer()) {
@@ -176,13 +191,13 @@ export class CombatFactory {
                 if (damageRange) {
                     damage = Math.max(damageRange.minimum, Math.min(damageRange.maximum, damage));
                 }
-                if (profile?.boltEffects && Misc.getRandom(10) == 1) {
+                if (profile?.boltEffects && CombatFactory.boltEffectTriggered(entity)) {
                     let multiplier = RangedData.getSpecialEffectsMultiplier(player, victim, damage);
                     damage *= multiplier;
                 }
             }
         } else if (type == CombatType.MAGIC) {
-            damage = Misc.randomInclusive(0, DamageFormulas.getMagicMaxhit(entity));
+            damage = CombatFactory.rollSpecialDamage(entity, DamageFormulas.sourceMaxHit(entity, CombatType.MAGIC), boundsOverride);
         }
 
         if (entity.isNpc() && victim.isPlayer() && ArceuusSpells.hasWard(victim)) {
@@ -202,7 +217,7 @@ export class CombatFactory {
         if (!bypassProtectionPrayer) {
 
             // Check if victim is is using correct protection prayer
-            if (PrayerHandler.isActivated(victim, PrayerHandler.getProtectingPrayer(type))) {
+            if (PrayerHandler.isActivated(victim, PrayerHandler.getProtectingPrayer(prayerType))) {
 
                 // Apply the damage reduction mod
                 if (entity.isNpc()) {
@@ -219,11 +234,93 @@ export class CombatFactory {
             }
         }
 
-        if (type == CombatType.MELEE && isDeveloperGraniteMaulSpec(entity)) {
+        if (type == CombatType.MELEE && isDeveloperQueuedAttackSpec(entity)) {
             hitDamage = new HitDamage(50, HitMask.RED);
         }
 
         return hitDamage;
+    }
+
+    /**
+     * Rolls one hit's damage. With no active special traits this is the ordinary
+     * 0..maxHit roll; with traits it honours per-hit min/max multipliers, flat
+     * bonuses and a maximum cap.
+     */
+    private static rollSpecialDamage(entity: Mobile, maxHit: number, boundsOverride?: SpecialDamageBounds): number {
+        const traits = CombatSpecial.activeTraitsFor(entity);
+        if (!traits && !boundsOverride) {
+            return Misc.randomInclusive(0, maxHit);
+        }
+        let minimum = Math.floor(
+            maxHit * (boundsOverride?.minimumMultiplier ?? traits?.minimumDamageMultiplier ?? 0)
+        );
+        let maximum = Math.floor(
+            maxHit * (boundsOverride?.maximumMultiplier ?? traits?.maximumDamageMultiplier ?? 1)
+        );
+        minimum += Math.trunc(boundsOverride?.minimumBonus ?? traits?.minimumDamageBonus ?? 0);
+        maximum += Math.trunc(boundsOverride?.maximumBonus ?? traits?.maximumDamageBonus ?? 0);
+        const cap = boundsOverride?.cap ?? traits?.maximumDamageCap;
+        if (cap !== undefined) {
+            maximum = Math.min(maximum, Math.trunc(cap));
+            minimum = Math.min(minimum, maximum);
+        }
+        const reduction = boundsOverride?.reduction ?? 0;
+        if (reduction > 0) {
+            maximum = Math.max(0, maximum - Math.trunc(reduction));
+            minimum = Math.min(minimum, maximum);
+        }
+        if (maximum < minimum) {
+            const swap = minimum;
+            minimum = maximum;
+            maximum = swap;
+        }
+        return Misc.randomInclusive(Math.max(0, minimum), Math.max(0, maximum));
+    }
+
+    /**
+     * Applies a resolved hit's damage. When the hit carries per-hitsplat reveal
+     * delays (special `hitDelayTicks`), each later hitsplat is queued on its own
+     * tick instead of landing all at once.
+     */
+    private static applyResolvedHitDamage(target: Mobile, resolvedHit: PendingHit): void {
+        const hits = resolvedHit.getHits();
+        const delays = resolvedHit.getHitDelays();
+        if (!delays || delays.length <= 1 || delays.length !== hits.length) {
+            target.getCombat().getHitQueue().addPendingDamage(hits);
+            return;
+        }
+        const base = Math.min(...delays);
+        for (let i = 0; i < hits.length; i++) {
+            const extra = Math.max(0, delays[i] - base);
+            if (extra <= 0) {
+                target.getCombat().getHitQueue().addPendingDamage([hits[i]]);
+                continue;
+            }
+            TaskManager.submit(new (class extends Task {
+                constructor() {
+                    super(extra);
+                }
+                execute(): void {
+                    if (target.isRegistered() && target.getHitpoints() > 0) {
+                        target.getCombat().getHitQueue().addPendingDamage([hits[i]]);
+                    }
+                    this.stop();
+                }
+            })());
+        }
+    }
+
+    /** Enchanted-bolt activation, honouring special traits that scale/guarantee it. */
+    private static boltEffectTriggered(entity: Mobile): boolean {
+        const traits = CombatSpecial.activeTraitsFor(entity);
+        if (traits?.guaranteedEnchantedBoltEffect === true) {
+            return true;
+        }
+        const multiplier = traits?.enchantedBoltEffectChanceMultiplier;
+        if (multiplier !== undefined && multiplier > 0) {
+            return Misc.getRandom(Math.max(1, Math.round(10 / multiplier))) === 1;
+        }
+        return Misc.getRandom(10) === 1;
     }
 
     static applyExtraHitRolls(attacker: Mobile, target: Mobile, combatType: CombatType, damage: HitDamage, accurate: boolean, method: CombatMethod) {
@@ -235,15 +332,12 @@ export class CombatFactory {
             return;
         }
 
-        const guaranteedCrossbowEffect =
-            combatType == CombatType.RANGED &&
-            accurate &&
-            method instanceof ZaryteCrossbowCombatMethod;
-
+        // Bolt activation is data-driven: a special that guarantees the effect
+        // declares `guaranteedEnchantedBoltEffect` (see boltEffectTriggered).
         if (combatType == CombatType.RANGED
             && attacker.isPlayer()
             && WeaponProfiles.get(attacker.getAsPlayer())?.boltEffects
-            && (guaranteedCrossbowEffect || Misc.getRandom(10) == 1)) {
+            && CombatFactory.boltEffectTriggered(attacker)) {
             const multiplier = RangedData.getSpecialEffectsMultiplier(attacker.getAsPlayer(), target, damage.getDamage());
             if (multiplier !== 1.0) {
                 damage.setDamage(Math.floor(damage.getDamage() * multiplier));
@@ -462,8 +556,14 @@ export class CombatFactory {
             const player = attacker.getAsPlayer();
             const special = getPlayerCombatSpecial(player);
             if (player.isSpecialActivated() && special != null) {
-                if (special !== CombatSpecial.GRANITE_MAUL || !player.getCombat().isGraniteMaulSpecialQueued()) {
-                    if (player.getSpecialPercentage() < special.getDrainAmount()) {
+                const queuedAttackInFlight =
+                    special.getTraits()?.queuedAttack === true &&
+                    player.getCombat().isSpecialAttackQueued();
+                if (!queuedAttackInFlight) {
+                    const drainAmount = special.getDrainAmountForWeaponId(
+                        player.getEquipment().get(Equipment.WEAPON_SLOT).getId()
+                    );
+                    if (player.getSpecialPercentage() < drainAmount) {
                         return CanAttackResponse.NOT_ENOUGH_SPECIAL_ENERGY;
                     }
                 }
@@ -658,7 +758,7 @@ export class CombatFactory {
         // Don't apply magic splash damage from player casts.
         const magicSplash = combatType == CombatType.MAGIC && !resolvedHit.isAccurate();
         if (!(magicSplash && attacker.isPlayer())) {
-            target.getCombat().getHitQueue().addPendingDamage(resolvedHit.getHits());
+            CombatFactory.applyResolvedHitDamage(target, resolvedHit);
         }
 
         // Make sure to let the combat method know we finished the attack.
@@ -1186,6 +1286,15 @@ export class CombatFactory {
         }
 
         if (PluginManager.decrementRangedAmmo(player, pos, amount)) {
+            return;
+        }
+
+        if (
+            rangedWeapon === RangedWeapon.WEBWEAVER_BOW ||
+            rangedWeapon === RangedWeapon.CRAWS_BOW ||
+            rangedWeapon === RangedWeapon.TONALZTICS_OF_RALOS
+        ) {
+            // TODO: consume a revenant ether / charge; charge storage is not modelled yet.
             return;
         }
 

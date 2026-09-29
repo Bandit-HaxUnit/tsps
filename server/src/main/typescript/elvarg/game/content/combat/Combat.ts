@@ -12,10 +12,10 @@ import { CombatConstants } from "./CombatConstants";
 import { CombatFactory, CanAttackResponse } from "./CombatFactory";
 import { CombatRange } from "./CombatRange";
 import { CombatSpecial } from "./CombatSpecial";
+import { SpecialAttackTargetingResolver } from "./SpecialAttackTargeting";
 import { CombatType } from "./CombatType";
 import type { CombatSpell } from "./magic/CombatSpell";
 import type { CombatMethod } from "./method/CombatMethod";
-import { GraniteMaulCombatMethod } from "./method/impl/specials/GraniteMaulCombatMethod";
 import { Ammunition, RangedData, RangedWeapon } from "./ranged/RangedData";
 import { Animation } from "../../model/Animation";
 import { PathFinder } from "../../model/movement/path/PathFinder";
@@ -53,7 +53,7 @@ export class Combat {
     private target: Mobile | null = null;
     private autoRetaliating = false;
     private attacker: Mobile | null = null;
-    private graniteMaulSpecialQueued = false;
+    private specialAttackQueued = false;
     private method: CombatMethod | null = null;
     private castSpell: CombatSpell | null = null;
     private autoCastSpell: CombatSpell | null = null;
@@ -396,12 +396,12 @@ export class Combat {
         this.character.setMobileInteraction(null);
         this.character.setPositionToFace(null);
         if (this.character.isPlayer()) this.character.getAsPlayer().getPacketSender().sendConfig(COMBAT_TARGET_PLAYER_VARP, -1);
-        this.graniteMaulSpecialQueued = false;
+        this.specialAttackQueued = false;
         if (this.character.isNpc()) World.markNpcCombatActive(this.character.getAsNpc(), this.attacker != null);
     }
 
-    public isGraniteMaulSpecialQueued(): boolean { return this.graniteMaulSpecialQueued; }
-    public setGraniteMaulSpecialQueued(queued: boolean): void { this.graniteMaulSpecialQueued = queued; }
+    public isSpecialAttackQueued(): boolean { return this.specialAttackQueued; }
+    public setSpecialAttackQueued(queued: boolean): void { this.specialAttackQueued = queued; }
 
     public addDamage(entity: Mobile, amount: number): void {
         if (amount <= 0 || entity.isNpc()) return;
@@ -521,7 +521,11 @@ export class Combat {
         renew: boolean
     ): boolean {
         const cycle = World.getProcessCycle();
-        if (!bypassDelay && cycle < this.nextAttackCycle) {
+        const specialTraits = this.character && this.character.isPlayer()
+            ? CombatSpecial.activeTraitsFor(this.character)
+            : null;
+        const bypass = bypassDelay || specialTraits?.bypassAttackDelay === true;
+        if (!bypass && cycle < this.nextAttackCycle) {
             if (renew) this.renewInteraction(target, generation);
             return false;
         }
@@ -537,8 +541,9 @@ export class Combat {
         if (target.getCombat().getAttacker() == null) {
             CombatFactory.getMethod(target).onCombatBegan(target, this.character);
         }
-        if (!bypassDelay) {
-            this.nextAttackCycle = cycle + Math.max(1, method.attackSpeed(this.character) | 0);
+        if (!bypass) {
+            const speed = specialTraits?.attackSpeedTicks ?? method.attackSpeed(this.character);
+            this.nextAttackCycle = cycle + Math.max(1, speed | 0);
         }
 
         method.start(this.character, target);
@@ -552,9 +557,26 @@ export class Combat {
             target.performAnimation(new Animation(target.getBlockAnim()));
         }
         for (const hit of hits) CombatFactory.addPendingHit(hit);
+
+        // Area/footprint specials strike additional targets with the same method.
+        const targeting = CombatSpecial.activeTargetingFor(this.character);
+        if (targeting) {
+            const resolved = SpecialAttackTargetingResolver.resolve(this.character, target, targeting);
+            if (resolved.largeTargetExtraHit) {
+                // TODO: reduced (0.75) accuracy for the large-target second hit.
+                const extra = method.hits(this.character, target);
+                if (extra) for (const hit of extra) CombatFactory.addPendingHit(hit);
+            } else {
+                for (const secondary of resolved.secondaryTargets) {
+                    const secondaryHits = method.hits(this.character, secondary);
+                    if (secondaryHits) for (const hit of secondaryHits) CombatFactory.addPendingHit(hit);
+                }
+            }
+        }
+
         method.finished(this.character, target);
 
-        this.graniteMaulSpecialQueued = false;
+        this.specialAttackQueued = false;
         if (this.character.isSpecialActivated()) {
             this.character.setSpecialActivated(false);
             if (this.character.isPlayer()) CombatSpecial.updateBar(this.character.getAsPlayer());

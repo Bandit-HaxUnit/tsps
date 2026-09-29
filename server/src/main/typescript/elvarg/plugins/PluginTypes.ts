@@ -520,6 +520,22 @@ export interface PluginCombatMethodResolver {
   resolve(attacker: any): any | null;
 }
 
+export interface PluginCombatSpecialDefinition {
+  id: string;
+  itemIds: number[];
+  drainAmount: number;
+  strengthMultiplier: number;
+  accuracyMultiplier: number;
+  combatMethod: any;
+  weaponInterface?: any;
+  /** Open, plugin-owned data; core never interprets it. */
+  metadata?: Record<string, unknown>;
+  /** Roll overrides applied by core while this special is active. */
+  traits?: Record<string, unknown>;
+  /** Per-variant energy cost override, keyed by item id. */
+  drainAmountByItemId?: Record<number, number>;
+}
+
 export interface PluginNpcCombatMethodProvider {
   provide(npc: any): any | null;
 }
@@ -840,6 +856,8 @@ export interface PluginApi {
    * fix, not a capability change - see PluginApi doc comment for the
    * narrower-API follow-up.
    */
+  /** Shared core classes/helpers so content plugins avoid core relative requires. */
+  core: PluginCoreApi;
   getWorld(): any;
   getTaskManager(): any;
   getRegionManager(): any;
@@ -908,6 +926,11 @@ export interface PluginApi {
   registerRangedAmmoHandler(handler: PluginRangedAmmoHandler): void;
   registerRangedCombatModifier(modifier: PluginRangedCombatModifier): void;
   registerWeaponProfile(profile: WeaponCombatProfile): void;
+  /**
+   * Registers a weapon special attack. `id` is a stable plugin-chosen key (used by
+   * core for the granite maul queued-attack path and by cross-plugin lookups).
+   */
+  registerCombatSpecial(definition: PluginCombatSpecialDefinition): void;
   registerCombatMethodResolver(resolver: PluginCombatMethodResolver): void;
   /**
    * Registers a combat method provider for one or more NPC IDs.
@@ -920,6 +943,49 @@ export interface PluginApi {
     methodCtor: new () => any,
     options?: { singleton?: boolean }
   ): void;
+}
+
+/**
+ * Core classes and static helpers exposed to plugins as a shared singleton
+ * (`api.core`), so content plugins never need `src/main/typescript/elvarg` paths.
+ * Typed as `any` on purpose: this is a deliberately thin, evolving surface.
+ */
+export interface PluginCoreApi {
+  MeleeCombatMethod: any;
+  RangedCombatMethod: any;
+  CombatMethod: any;
+  CombatSpecial: any;
+  CombatFactory: any;
+  CombatType: any;
+  CombatConstants: any;
+  DamageFormulas: any;
+  PendingHit: any;
+  HitDamage: any;
+  HitMask: any;
+  RangedWeapon: any;
+  Ammunition: any;
+  WeaponProfiles: any;
+  WeaponInterfaceManager: any;
+  PrayerHandler: any;
+  DuelRule: any;
+  RegionManager: any;
+  Animation: any;
+  Graphic: any;
+  GraphicHeight: any;
+  Priority: any;
+  Projectile: any;
+  Skill: any;
+  Item: any;
+  Flag: any;
+  Direction: any;
+  Equipment: any;
+  Task: any;
+  TaskManager: any;
+  ItemIdentifiers: any;
+  Misc: any;
+  TimerKey: any;
+  Sound: any;
+  Sounds: any;
 }
 
 export interface PluginModule {
