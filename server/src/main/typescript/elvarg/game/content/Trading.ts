@@ -171,26 +171,31 @@ export class Trading {
         }
     }
 
+    /**
+     * Ends the trade for both players, returning each one's offered items.
+     * Used for declines, closing the interface and logging out.
+     */
     public closeTrade() {
-        if (this.state != TradeState.NONE) {
-            let interact_ = this.interact;
-            this.player.getSession().sendClientPacket(encodeTradeClose("Trade declined."));
-            for (let t of this.container.getValidItems()) {
-                this.container.switchItems(this.player.getInventory(), t.clone(), false, false);
-            }
-            this.player.getInventory().refreshItems();
-            this.resetAttributes();
-            this.player.sendMessage("Trade declined.");
-            this.player.getPacketSender().sendInterfaceRemoval();
-            if (interact_ != null) {
-                if (interact_.getStatus() == PlayerStatus.TRADING) {
-                    if (interact_.getTrading().getInteract() != null && interact_.getTrading().getInteract() == this.player) {
-                        interact_.getSession().sendClientPacket(encodeTradeClose("Trade declined."));
-                        interact_.getPacketSender().sendInterfaceRemoval();
-                    }
-                }
-            }
+        if (this.state == TradeState.NONE) {
+            return;
         }
+        const partner = this.interact;
+        this.abort("Trade declined.");
+        if (partner != null && partner.getTrading().getInteract() == this.player
+            && partner.getTrading().getState() >= TradeState.TRADE_SCREEN) {
+            partner.getTrading().abort("Other player declined trade.");
+        }
+    }
+
+    private abort(message: string) {
+        this.player.getSession().sendClientPacket(encodeTradeClose(message));
+        for (let t of this.container.getValidItems()) {
+            this.container.switchItems(this.player.getInventory(), t.clone(), false, false);
+        }
+        this.player.getInventory().refreshItems();
+        this.resetAttributes();
+        this.player.sendMessage(message);
+        this.player.getPacketSender().sendInterfaceRemoval();
     }
 
     public acceptTrade() {

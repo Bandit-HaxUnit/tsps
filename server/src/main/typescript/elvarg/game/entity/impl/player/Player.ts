@@ -578,6 +578,8 @@ export class Player extends Mobile {
             console.log("[World] Deregistering player - [username, host] : [" + this.getUsername() + ", " + this.getHostAddress() + "]");
         }
 
+        // Return offered items to both players before this player is saved.
+        this.getTrading().closeTrade();
         this.getPacketSender().sendInterfaceRemoval();
 
         // Leave area
