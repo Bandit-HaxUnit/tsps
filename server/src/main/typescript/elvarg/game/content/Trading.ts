@@ -1,6 +1,8 @@
 import { GameConstants } from "../GameConstants";
 import { ItemDefinition } from "../definition/ItemDefinition";
+import { ItemOnGroundManager } from "../entity/impl/grounditem/ItemOnGroundManager";
 import { Player } from "../entity/impl/player/Player";
+import { Item } from "../model/Item";
 import { PlayerStatus } from "../model/PlayerStatus";
 import { SecondsTimer } from "../model/SecondsTimer";
 import { ItemContainer } from "../model/container/ItemContainer";
@@ -203,14 +205,24 @@ export class Trading {
 
     private abort(message: string) {
         this.player.getSession().sendClientPacket(encodeTradeClose(message));
+        const inventory = this.player.getInventory();
+        let dropped = false;
         this.container.getItems().forEach((item, slot) => {
-            if (item != null && item.getId() > 0 && item.getAmount() > 0) {
-                this.container.switchItem(this.player.getInventory(), item.clone(), false, slot, false);
+            if (item == null || item.getId() <= 0 || item.getAmount() <= 0) return;
+            if (Trading.canHold(inventory, item)) {
+                this.container.switchItem(inventory, item.clone(), false, slot, false);
+            } else {
+                // resetAttributes clears the container below.
+                ItemOnGroundManager.registers(this.player, item.clone());
+                dropped = true;
             }
         });
-        this.player.getInventory().refreshItems();
+        inventory.refreshItems();
         this.resetAttributes();
         this.player.sendMessage(message);
+        if (dropped) {
+            this.player.sendMessage("Your inventory is full, so some of your offered items were dropped on the floor.");
+        }
         this.player.getPacketSender().sendInterfaceRemoval();
     }
 
@@ -392,6 +404,15 @@ export class Trading {
         }
         from.refreshItems();
         to.refreshItems();
+    }
+
+    /** Whether `item` fits: a free slot, or a stack of the same item and metadata. */
+    private static canHold(container: ItemContainer, item: Item): boolean {
+        if (container.getFreeSlots() > 0) return true;
+        if (!item.getDefinition().isStackable()) return false;
+        const meta = JSON.stringify(item.getMeta() ?? null);
+        return container.getItems().some((held) => held != null && held.getId() === item.getId()
+            && JSON.stringify(held.getMeta() ?? null) === meta);
     }
 
     private static save(player: Player): void {

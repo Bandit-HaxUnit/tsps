@@ -12,6 +12,7 @@ const { Inventory } = require("../dist/game/model/container/impl/Inventory");
 const { Trading } = require("../dist/game/content/Trading");
 const { ObjType } = require("../dist/game/cache/codec/rs/config/objtype/ObjType");
 const { GameConstants } = require("../dist/game/GameConstants");
+const { ItemOnGroundManager } = require("../dist/game/entity/impl/grounditem/ItemOnGroundManager");
 
 const LOBSTER = 379;
 const COINS = 995;
@@ -270,4 +271,22 @@ test("completing a trade saves both players with the items already exchanged", (
   }
 
   assert.deepEqual(saves.sort(), [["alice", 0, 200], ["bob", 3, 300]]);
+});
+
+test("offered items that no longer fit in the inventory are dropped, not lost", () => {
+  const { alice } = startTrade();
+  // Fill the slots the lobsters left, as spawning items mid-trade would.
+  alice.getInventory().adds(TRIDENT, 28);
+  const dropped = [];
+  const previous = ItemOnGroundManager.registers;
+  ItemOnGroundManager.registers = (player, item) => dropped.push([player.getUsername(), item.getId(), item.getAmount()]);
+  try {
+    alice.getTrading().closeTrade();
+  } finally {
+    ItemOnGroundManager.registers = previous;
+  }
+
+  assert.deepEqual(dropped, [["alice", LOBSTER, 1], ["alice", LOBSTER, 1], ["alice", LOBSTER, 1]]);
+  assert.equal(alice.getTrading().getContainer().getValidItems().length, 0);
+  assert.ok(alice.messages.includes("Your inventory is full, so some of your offered items were dropped on the floor."));
 });
