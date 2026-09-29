@@ -1,4 +1,6 @@
 import { HOUSE_STYLES, houseStyleIndex } from "./HouseEstateData";
+import { enterServantHouse, leaveServantHouse, type SavedServant } from "./ConstructionServants";
+import type { Mobile } from "../../../entity/impl/Mobile";
 import { RegionManager } from "../../../collision/RegionManager";
 import { Boundary } from "../../../model/Boundary";
 import { PrivateArea } from "../../../model/areas/impl/PrivateArea";
@@ -46,6 +48,8 @@ export type PlayerHouseSave = {
   unlockedStyles?: number[];
   visitedKourend?: boolean;
   visitedVarlamore?: boolean;
+  servant?: SavedServant;
+  servantMoney?: number;
   /** 0 closed, 1 open, 2 no doors (native House Options varbit 6269). */
   doorMode?: number;
 };
@@ -430,7 +434,15 @@ export class PlayerHouseInstance extends PrivateArea {
     if (previousArea && previousArea !== this) previousArea.leave(player, false);
     this.enter(player);
     player.moveTo(this.getEntryLocation());
-    return this.rebuild(player, buildingMode);
+    const sent = this.rebuild(player, buildingMode);
+    if (sent) enterServantHouse(player, this);
+    return sent;
+  }
+
+  public postLeave(mobile: Mobile, logout: boolean): void {
+    if (mobile.isNpc()) { this.remove(mobile); return; }
+    if (mobile.isPlayer()) leaveServantHouse(mobile.getAsPlayer(), this);
+    super.postLeave(mobile, logout);
   }
 
   /** Replays the current saved layout after a room edit. */
@@ -473,6 +485,7 @@ export class PlayerHouseInstance extends PrivateArea {
 
   public destroy(): void {
     if (this.isDestroyed()) return;
+    if (this.owner && this.save.servant) leaveServantHouse(this.owner, this);
     releaseHouse(this.allocation);
     super.destroy();
   }

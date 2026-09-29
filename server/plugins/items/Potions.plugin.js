@@ -8,6 +8,7 @@ const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { HitDamage } = require("../../src/main/typescript/elvarg/game/content/combat/hit/HitDamage");
 const { HitMask } = require("../../src/main/typescript/elvarg/game/content/combat/hit/HitMask");
 const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
+const { ItemIdentifiers: Items } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
 const {
   DragonfireProtectionTier,
   processDragonfireProtection,
@@ -313,6 +314,24 @@ function registerPotion(definition) {
   if (normalized.entries.length > 0) {
     REGISTERED_POTIONS.push(normalized);
   }
+}
+
+// POH refreshments use the same consumption, cooldown and stat-boost rules as potions.
+for (const [id, cup, boost] of [[Items.CUP_OF_TEA_9, Items.EMPTY_CUP_3, 1],
+  [Items.CUP_OF_TEA_11, Items.PORCELAIN_CUP_2, 2], [Items.CUP_OF_TEA_13, Items.PORCELAIN_CUP_3, 3]]) {
+  registerPotion({ name: "Cup of tea", chains: [[id], [id + 1]], emptyItemId: cup,
+    requiresFoodPermission: true, effect: player => boostSkill(player, Skill.CONSTRUCTION, boost, 0) });
+}
+for (const [id, effect] of [
+  [Items.BEER_3, player => { boostSkill(player, Skill.STRENGTH, 1, 0.02); lowerSkillByCurrent(player, Skill.ATTACK, 1, 0.06); }],
+  [Items.CIDER_3, player => { boostSkill(player, Skill.FARMING, 1, 0); lowerSkillByCurrent(player, Skill.ATTACK, 2, 0); lowerSkillByCurrent(player, Skill.STRENGTH, 2, 0); }],
+  [Items.ASGARNIAN_ALE_3, player => { boostSkill(player, Skill.STRENGTH, 2, 0); lowerSkillByCurrent(player, Skill.ATTACK, 2, 0.05); }],
+  [Items.GREENMANS_ALE_3, player => { boostSkill(player, Skill.HERBLORE, 1, 0); for (const skill of [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE]) lowerSkillByCurrent(player, skill, 3, 0); }],
+  [Items.DRAGON_BITTER_3, player => { boostSkill(player, Skill.STRENGTH, 2, 0); lowerSkillByCurrent(player, Skill.ATTACK, 2, 0.05); }],
+  [Items.CHEFS_DELIGHT_3, player => { boostSkill(player, Skill.COOKING, 1, 0.05); lowerSkillByCurrent(player, Skill.ATTACK, 2, 0.05); lowerSkillByCurrent(player, Skill.STRENGTH, 2, 0.05); }],
+]) {
+  registerPotion({ name: "House ale", chains: [[id]], emptyItemId: Items.BEER_GLASS_4,
+    requiresFoodPermission: true, effect: player => { heal(player, 1); effect(player); } });
 }
 
 // Core combat/stat potions.

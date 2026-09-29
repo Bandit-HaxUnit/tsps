@@ -195,6 +195,364 @@ function constructionHooks() {
   };
 }
 
+function servantHouse(name = 'servant-owner', id = 229) {
+  const { Bank } = require('../dist/game/model/container/impl/Bank');
+  const { PlayerHouseInstance, createDefaultHouseSave } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
+  const servants = require('../dist/game/plugin/impl/construction/ConstructionServants');
+  const player = constructionPlayer(name, 71);
+  const banks = Array.from({ length: Bank.TOTAL_BANK_TABS }, () => new Bank(player));
+  player.getBanks = () => banks;
+  player.getBank = index => banks[index];
+  player.getCurrentBankTab = () => 0;
+  const save = createDefaultHouseSave();
+  save.servant = { id, uses: 0 };
+  save.rooms[1][3][4] = { roomKey: 'BEDROOM', rotation: 0, furniture: { BED: 'WOODEN_BED', BEDROOM_CORNER: 'SERVANTS_MONEYBAG' } };
+  save.rooms[1][3][5] = { roomKey: 'BEDROOM', rotation: 0, furniture: { BED: 'OAK_BED' } };
+  save.rooms[1][4][3] = { roomKey: 'DINING_ROOM', rotation: 0, furniture: { BELL_PULL: 'ROPE_BELL_PULL', DINING_TABLE: 'WOOD_DINING_TABLE' } };
+  player.setAttribute('construction:house', save);
+  const house = new PlayerHouseInstance(save);
+  house.owner = player;
+  house.enter(player);
+  player.moveTo(house.getEntryLocation());
+  servants.enterServantHouse(player, house);
+  return { player, save, house, servants, close() { house.exitHouse(player, new (require('../dist/game/model/Location').Location)(2954, 3224)); } };
+}
+
+test('servants enforce hiring, native guild visibility, bedrooms and ownership', () => {
+  const { player, save, house, servants, close } = servantHouse();
+  const { Skill } = require('../dist/game/model/Skill');
+  const { Location } = require('../dist/game/model/Location');
+  let talk, options;
+  servants.ConstructionServants.register(new Proxy({
+    onNpcFirstClick: (_ids, handler) => { talk = handler; },
+    sendMultiChatboxPrompt: (_player, _title, ...values) => { options = values; },
+  }, { get: (target, key) => target[key] ?? (() => {}) }));
+  player.getDialogueManager = () => ({ startDialogues() {} });
+  assert.equal(servants.hasServantBeds(save), true);
+  close();
+  servants.fireServant(player);
+  player.moveTo(new Location(2667, 3332));
+  const npc = { getPrivateArea: () => null, getLocation: () => player.getLocation() };
+  const hire = () => { talk({ player, npc, npcId: 230 }); options[1](); };
+  player.getInventory().adds(995, 20000);
+  player.levels.set(Skill.CONSTRUCTION, 49);
+  hire();
+  assert.equal(save.servant, undefined);
+  assert.equal(player.getInventory().getAmount(995), 20000);
+  player.levels.set(Skill.CONSTRUCTION, 50);
+  hire();
+  assert.equal(save.servant.id, 229);
+  assert.equal(player.vars.get(2190), 8, 'native guild morph hides the hired demon');
+  hire();
+  assert.equal(player.getInventory().getAmount(995), 10000, 'repeated confirmation cannot charge twice');
+  servants.fireServant(player);
+  assert.equal(player.vars.get(2190), 0);
+  delete save.rooms[1][3][4].furniture.BED;
+  hire();
+  assert.equal(save.servant, undefined, 'two furnished bedrooms are required');
+  assert.equal(house.isDestroyed(), true);
+});
+
+test('servant trips cap quantities, wait exact ticks, charge wages and safely hold overflow', () => {
+  const f = servantHouse(), { player, save, house, servants } = f;
+  const { World } = require('../dist/game/World');
+  const original = World.getProcessCycle;
+  let tick = 10;
+  World.getProcessCycle = () => tick;
+  try {
+    player.getBank(2).add(new (require('../dist/game/model/Item').Item)(960, 100), false);
+    assert.equal(servants.startServantTask(player, { kind: 'fetch', itemId: 960, amount: 100 }), true);
+    assert.equal(player.getBank(2).getAmount(960), 74);
+    assert.equal(house.getNpcs().length, 0);
+    assert.equal(servants.startServantTask(player, { kind: 'fetch', itemId: 960, amount: 1 }), false);
+    tick = 21; servants.processServant(player);
+    assert.equal(player.getInventory().getAmount(960), 0);
+    tick = 22; servants.processServant(player);
+    assert.equal(player.getInventory().getAmount(960), 26);
+    assert.equal(house.getNpcs().length, 1);
+    save.servant.uses = 7;
+    player.getInventory().resetItems();
+    player.getInventory().adds(2347, 28);
+    servants.startServantTask(player, { kind: 'fetch', itemId: 960, amount: 10 });
+    tick += 12; servants.processServant(player);
+    assert.equal(save.servant.cargo.amount, 10);
+    assert.equal(servants.payServant(player), false);
+    player.getInventory().resetItems();
+    player.getInventory().adds(995, 30001);
+    assert.equal(servants.changeServantMoney(player, 10199), true);
+    assert.equal(save.servantMoney, 10100, 'deposits use increments of 100');
+    assert.equal(servants.payServant(player, true), true);
+    assert.equal(save.servantMoney, 100);
+    assert.equal(save.servant.uses, 0);
+    assert.equal(servants.payServant(player, true), true);
+    assert.equal(save.servantMoney, 100, 'payment is idempotent');
+    f.close();
+    assert.equal(player.getBank(2).getAmount(960), 74, 'unclaimed supplies are banked on exit');
+    assert.equal(save.servant.cargo, undefined);
+  } finally { World.getProcessCycle = original; if (!house.isDestroyed()) f.close(); }
+});
+
+test('servants unnote, convert all seven logs, reject bones, and preserve recovery cargo in a full bank', () => {
+  const f = servantHouse(), { player, save, servants, house } = f;
+  const { World } = require('../dist/game/World');
+  const { Item } = require('../dist/game/model/Item');
+  const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
+  const { Bank } = require('../dist/game/model/container/impl/Bank');
+  const original = World.getProcessCycle;
+  let tick = 0;
+  World.getProcessCycle = () => tick;
+  try {
+    const noted = ItemDefinition.forId(960).getNoteId();
+    player.getInventory().adds(noted, 27);
+    assert.equal(servants.startServantTask(player, { kind: 'unnote', itemId: noted, amount: -1 }), false);
+    assert.equal(servants.startServantTask(player, { kind: 'unnote', itemId: noted, amount: 100 }), true);
+    tick += 12; servants.processServant(player);
+    assert.equal(player.getInventory().getAmount(960), 26);
+    assert.equal(player.getInventory().getAmount(noted), 1);
+    player.getInventory().resetItems();
+    player.getInventory().adds(526, 1);
+    assert.equal(servants.startServantTask(player, { kind: 'bank', itemId: 526, amount: 1 }), false);
+    player.getInventory().resetItems();
+    player.getInventory().addItem(new Item(960, 1, { unbankable: true }));
+    assert.equal(servants.startServantTask(player, { kind: 'bank', itemId: 960, amount: 1 }), false);
+    save.servantMoney = 3000000;
+    for (const [log, plank, fee] of [[1511,960,100],[1521,8778,250],[6333,8780,500],[6332,8782,1500],[32904,31432,2500],[32907,31435,5000],[32910,31438,7500]]) {
+      player.getInventory().resetItems();
+      player.getInventory().adds(log, 2);
+      player.getInventory().adds(995, fee * 2);
+      assert.equal(servants.startServantTask(player, { kind: 'sawmill', itemId: log, amount: 2 }), true, String(log));
+      tick += 12; servants.processServant(player);
+      assert.equal(player.getInventory().getAmount(plank), 2);
+      assert.equal(player.getInventory().getAmount(995), 0);
+      assert.equal(save.servant.lastTask.itemId, log);
+    }
+    player.getInventory().resetItems();
+    player.getInventory().adds(961, 10);
+    servants.startServantTask(player, { kind: 'unnote', itemId: 961, amount: 10 });
+    for (let i = 0; i < Bank.BANK_SEARCH_TAB_INDEX; i++) for (let slot = 0; slot < player.getBank(i).capacity(); slot++) player.getBank(i).setItem(slot, new Item(995, 1));
+    f.close();
+    assert.equal(save.servant.cargo.amount, 10, 'full-bank recovery remains persisted, never dropped');
+    assert.equal(servants.fireServant(player), false);
+    player.getBank(0).setItem(0, new Item(-1, 0));
+    assert.equal(servants.fireServant(player), true);
+    assert.equal(player.getBank(0).getAmount(960), 10);
+    assert.equal(save.servant, undefined);
+  } finally { World.getProcessCycle = original; if (!house.isDestroyed()) f.close(); }
+});
+
+test('removed servant beds require re-entry and guests cannot summon or spend the owners coins', () => {
+  const f = servantHouse(), { player, save, house, servants } = f;
+  try {
+    const guest = constructionPlayer('servant-guest', 72);
+    house.enter(guest);
+    guest.moveTo(player.getLocation().clone());
+    guest.getInventory().adds(995, 1000);
+    assert.equal(servants.changeServantMoney(guest, 1000), false);
+    assert.equal(servants.startServantTask(guest, { kind: 'fetch', itemId: 960, amount: 1 }), false);
+    servants.callServant(guest);
+    assert.equal(house.getNpcs().length, 1);
+    delete save.rooms[1][3][4].furniture.BED;
+    servants.processServant(player);
+    assert.equal(house.getNpcs().length, 0);
+    save.rooms[1][3][4].furniture.BED = 'WOODEN_BED';
+    servants.callServant(player);
+    assert.equal(house.getNpcs().length, 0);
+    house.exitHouse(guest, new (require('../dist/game/model/Location').Location)(2954, 3224));
+  } finally { f.close(); }
+});
+
+test('every servant uses its own capacity and trip delay; bells cannot interrupt a trip', () => {
+  const { SERVANTS } = require('../dist/game/plugin/impl/construction/ConstructionServants');
+  const { World } = require('../dist/game/World');
+  const { Item } = require('../dist/game/model/Item');
+  const original = World.getProcessCycle;
+  let cycle = 0;
+  World.getProcessCycle = () => cycle;
+  try {
+    for (const def of SERVANTS) {
+      const f = servantHouse('servant-tier', def.id);
+      try {
+        f.player.getBank(0).add(new Item(960, 100), false);
+        f.servants.startServantTask(f.player, { kind: 'fetch', itemId: 960, amount: 100 });
+        assert.equal(f.save.servant.cargo.amount, def.capacity);
+        f.servants.callServant(f.player);
+        assert.equal(f.house.getNpcs().length, 0, 'summoning cannot skip travel');
+        cycle += def.ticks - 1;
+        f.servants.processServant(f.player);
+        assert.equal(f.player.getInventory().getAmount(960), 0);
+        cycle++;
+        f.servants.processServant(f.player);
+        assert.equal(f.player.getInventory().getAmount(960), def.capacity);
+        f.player.getInventory().adds(1511, 1);
+        f.player.getInventory().adds(995, 100);
+        assert.equal(f.servants.startServantTask(f.player, { kind: 'sawmill', itemId: 1511, amount: 1 }), def.level >= 30);
+      } finally { f.close(); }
+    }
+  } finally { World.getProcessCycle = original; }
+});
+
+test('servant tea needs kitchen furniture, uses shelf tier and milk, and cannot leave the house', () => {
+  const f = servantHouse(), { player, save, servants, house } = f;
+  const { World } = require('../dist/game/World');
+  const original = World.getProcessCycle;
+  let cycle = 0, talk, options;
+  World.getProcessCycle = () => cycle;
+  servants.ConstructionServants.register(new Proxy({
+    onNpcFirstClick: (_ids, handler) => { talk = handler; },
+    sendMultiChatboxPrompt: (_player, _title, ...values) => { options = values; },
+  }, { get: (target, key) => target[key] ?? (() => {}) }));
+  const choose = name => { const i = options.indexOf(name); assert.notEqual(i, -1, name); options[i + 1](); };
+  const tea = () => {
+    talk({ player, npc: house.getNpcs()[0], npcId: 229 });
+    choose('Serve...'); choose('Tea'); choose('Yes, please');
+  };
+  try {
+    tea();
+    assert.equal(save.servant.uses, 0, 'a missing kitchen does not charge for a failed order');
+    save.rooms[1][5][4] = { roomKey: 'KITCHEN', rotation: 0, furniture: { LARDER: 'WOODEN_LARDER', SHELVES: 'TEAK_SHELVES_2', STOVE: 'FIREPIT_WITH_HOOK', SINK: 'PUMP_AND_DRAIN' } };
+    tea();
+    assert.equal(save.servant.uses, 1);
+    cycle = 11; servants.processServant(player);
+    assert.equal(player.getInventory().getAmount(7737), 0);
+    cycle = 12; servants.processServant(player);
+    assert.equal(player.getInventory().getAmount(7737), 1, 'trimmed milky tea');
+    servants.processServant(player);
+    assert.equal(player.getInventory().getAmount(7737), 1, 'no repeated free deliveries');
+    assert.equal(servants.startServantTask(player, { kind: 'bank', itemId: 7737, amount: 1 }), false, 'house refreshments cannot be smuggled into the bank');
+    f.close();
+    assert.equal(player.getInventory().getAmount(7737), 0);
+  } finally { World.getProcessCycle = original; if (!house.isDestroyed()) f.close(); }
+});
+
+test('served tea and ales are drinkable, capped, and return the correct house cups', () => {
+  const potions = require('../plugins/items/Potions.plugin.js');
+  const food = require('../plugins/items/Food.plugin.js');
+  const { Skill } = require('../dist/game/model/Skill');
+  const { Item } = require('../dist/game/model/Item');
+  const player = constructionPlayer('Tea drinker', 79);
+  let drink;
+  potions.register(new Proxy({ onItemFirstAction: handler => { drink = handler; } }, { get: (target, key) => target[key] ?? (() => {}) }));
+  const current = new Map();
+  const manager = { getMaxLevel: () => 50, getCurrentLevel: skill => current.get(skill) ?? 50,
+    increaseCurrentLevel: (skill, amount, cap) => current.set(skill, Math.min(cap ?? Infinity, manager.getCurrentLevel(skill) + amount)),
+    decreaseCurrentLevel: (skill, amount, min) => current.set(skill, Math.max(min ?? 0, manager.getCurrentLevel(skill) - amount)),
+  };
+  player.getSkillManager = () => manager;
+  player.getTimers = () => ({ has: () => false, extendOrRegister() {} });
+  player.getCombat = () => ({ reset() {} });
+  player.isPlayerBot = () => false;
+  player.setHitpoints = hp => current.set(Skill.HITPOINTS, hp);
+  const consume = id => { player.getInventory().setItem(0, new Item(id)); assert.equal(drink({ player, itemId: id, slot: 0 }), true); };
+  for (const [id, boost, empty] of [[7730,1,7728],[7731,1,7728],[7733,2,7732],[7734,2,7732],[7736,3,7735],[7737,3,7735]]) {
+    current.clear(); consume(id);
+    assert.equal(manager.getCurrentLevel(Skill.CONSTRUCTION), 50 + boost);
+    assert.equal(player.getInventory().getItems()[0].getId(), empty);
+    consume(id);
+    assert.equal(manager.getCurrentLevel(Skill.CONSTRUCTION), 50 + boost, 'tea boosts do not stack');
+  }
+  for (const id of [7740,7744,7746,7748,7752,7754]) { current.clear(); consume(id); assert.equal(player.getInventory().getItems()[0].getId(), 7742); }
+  assert.equal(food.FOOD.get(2003).heal, 11);
+  assert.equal(food.FOOD.get(2011).heal, 19);
+});
+
+test('servants preserve item metadata and return in-flight cargo when the instance is destroyed', () => {
+  const f = servantHouse(), { player, house, servants, save } = f;
+  const { Item } = require('../dist/game/model/Item');
+  player.getInventory().addItem(new Item(4151, 1, { charges: 20 }));
+  player.getInventory().addItem(new Item(4151, 1, { charges: 50 }));
+  assert.equal(servants.startServantTask(player, { kind: 'bank', itemId: 4151, amount: 26, meta: { charges: 20 } }), true);
+  assert.equal(player.getInventory().getAmount(4151), 1);
+  assert.deepEqual(player.getInventory().getValidItems()[0].getMeta(), { charges: 50 });
+  assert.deepEqual(save.servant.cargo.meta, { charges: 20 });
+  house.destroy();
+  assert.equal(save.servant.cargo, undefined);
+  assert.deepEqual(player.getBank(0).getValidItems()[0].getMeta(), { charges: 20 });
+  assert.equal(house.getNpcs().length, 0);
+});
+
+test('servants greet guests and escort them using walking before exiting', t => {
+  const f = servantHouse(), { player, house, servants, save } = f;
+  const { PathFinder } = require('../dist/game/model/movement/path/PathFinder');
+  const { World } = require('../dist/game/World');
+  const guest = constructionPlayer('Servant visitor', 73);
+  let following, talk, options, route, greeted = '';
+  guest.setFollowing = value => { following = value; };
+  guest.getFollowing = () => following;
+  servants.ConstructionServants.register(new Proxy({
+    onNpcFirstClick: (_ids, handler) => { talk = handler; },
+    sendMultiChatboxPrompt: (_player, _title, ...values) => { options = values; },
+  }, { get: (target, key) => target[key] ?? (() => {}) }));
+  t.mock.method(World, 'getProcessCycle', () => 2);
+  t.mock.method(PathFinder, 'calculateWalkRoute', (npc, x, y) => { route = { npc, x, y }; return true; });
+  const npc = house.getNpcs()[0];
+  t.mock.method(npc, 'forceChat', text => { greeted = text; return npc; });
+  try {
+    save.servant.greet = true;
+    house.enter(guest);
+    servants.enterServantHouse(guest, house);
+    assert.match(greeted, /Servant visitor|Welcome/);
+    npc.moveTo(house.getEntryLocation().transform(5, 0));
+    guest.moveTo(npc.getLocation().clone());
+    talk({ player: guest, npc, npcId: 229 });
+    options[options.indexOf('Show me the way out') + 1]();
+    servants.processServant(player);
+    assert.equal(route.npc, npc);
+    assert.equal(following, npc);
+    assert.equal(guest.getPrivateArea(), house, 'asking for an escort must not teleport a guest');
+    npc.moveTo(house.getEntryLocation());
+    guest.moveTo(npc.getLocation().clone());
+    servants.processServant(player);
+    assert.equal(guest.getPrivateArea(), null);
+    assert.equal(following, null);
+  } finally { if (guest.getPrivateArea() === house) house.leave(guest, false); f.close(); }
+});
+
+test('servant dinners are delivered only after sitting on a native dining bench', t => {
+  const f = servantHouse(), { player, house, save, servants } = f;
+  const { World } = require('../dist/game/World');
+  const { PlayerHouseInstance } = require('../dist/game/plugin/impl/construction/PlayerHouseInstance');
+  const { BUILDABLE_BY_KEY } = require('../dist/game/plugin/impl/construction/ConstructionData');
+  const { isSeatedForDinner } = require('../dist/game/plugin/impl/construction/ConstructionPlugin');
+  let cycle = 0, talk, options;
+  t.mock.method(World, 'getProcessCycle', () => cycle);
+  const hooks = constructionHooks();
+  player.getSkillAnimation = () => player.idle ?? 0;
+  player.setSkillAnimation = value => { player.idle = value; };
+  player.getAnimation = () => player.animation;
+  player.performAnimation = value => { player.animation = value; };
+  player.getUpdateFlag = () => ({ flag() {} });
+  player.setPositionToFace = () => {};
+  player.getMovementQueue = () => ({ reset() {} });
+  servants.ConstructionServants.register(new Proxy({
+    onNpcFirstClick: (_ids, handler) => { talk = handler; },
+    sendMultiChatboxPrompt: (_player, _title, ...values) => { options = values; },
+  }, { get: (target, key) => target[key] ?? (() => {}) }));
+  const choose = text => { const i = options.indexOf(text); assert.notEqual(i, -1, text); options[i + 1](); };
+  try {
+    save.rooms[1][5][4] = { roomKey: 'KITCHEN', rotation: 0, furniture: { LARDER: 'TEAK_LARDER', SHELVES: 'TEAK_SHELVES_2', STOVE: 'FANCY_RANGE' } };
+    const hotspot = PlayerHouseInstance.getTemplateObjects().find(o => o.id === 15299 && o.sourceChunkX === 236 && o.sourceChunkY === 887);
+    house.setFurniture({ position: { x: 4, y: 3, plane: 1 }, hotspotKey: 'SEATING_SPACE_1', sourceObjectId: 15299,
+      localX: hotspot.localX, localY: hotspot.localY, type: hotspot.type, face: hotspot.face }, BUILDABLE_BY_KEY.get('WOODEN_BENCH'));
+    house.redrawFurniture();
+    talk({ player, npc: house.getNpcs()[0], npcId: 229 }); choose('Serve...'); choose('Dinner');
+    cycle = 12; servants.processServant(player);
+    assert.equal(player.getInventory().getAmount(2011), 0, 'standing players cannot receive dinner');
+    const object = house.getObjects().find(o => o.getId() === 13300);
+    const event = { player, object, objectId: 13300, clickType: 1, definition: { getInteractions: () => ['Sit-on'] }, location: object.getLocation() };
+    const route = { ...event, destination: null };
+    hooks.route(route);
+    player.moveTo(route.destination);
+    hooks.furnitureAction(event);
+    assert.equal(isSeatedForDinner(player), false);
+    cycle += 2; player.animation = null; hooks.process(player);
+    assert.equal(isSeatedForDinner(player), true);
+    assert.equal(player.getSkillAnimation(), 4089);
+    assert.equal(player.getInventory().getAmount(2011), 1);
+    hooks.process(player);
+    assert.equal(player.getInventory().getAmount(2011), 1);
+  } finally { f.close(); }
+});
+
 function estateHooks(player) {
   const { EstateAgentPlugin } = require('../dist/game/plugin/impl/construction/EstateAgentPlugin');
   const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');

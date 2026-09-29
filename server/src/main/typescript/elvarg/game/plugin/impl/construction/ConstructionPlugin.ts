@@ -1,4 +1,5 @@
 import { EstateAgentPlugin } from "./EstateAgentPlugin";
+import { ConstructionServants, callServant, processServant, useServantFurniture } from "./ConstructionServants";
 import { HOUSE_LOCATIONS, HOUSE_STYLES, houseLocation, houseExit, houseStyleIndex } from "./HouseEstateData";
 import type { PluginApi, PluginInterfaceActionClickEvent, PluginItemOnObjectEvent, PluginObjectInteractionEvent, PluginObjectRouteEvent } from "../../../../plugins/PluginTypes";
 import type { GameObject } from "../../../entity/impl/object/GameObject";
@@ -483,7 +484,7 @@ function handleHouseOptions(event: PluginInterfaceActionClickEvent): boolean {
     if (house?.owner === player && !house.buildingMode) house.refreshDoors();
   } else if (childId === 21) {
     if (!exitHouse(player)) player.sendMessage("You are not in a house.");
-  } else if (childId === 22) player.sendMessage("You do not have a servant.");
+  } else if (childId === 22) callServant(player);
   else if (!house || house.owner !== player) player.sendMessage("You must be inside your own house to do that.");
   else if (childId === 5 || childId === 6) {
     if (house.buildingMode !== (childId === 5)) enterHouse(player, childId === 5);
@@ -797,13 +798,14 @@ function handleFurnitureAction(api: PluginApi, event: PluginObjectInteractionEve
     if (saved && position) { chooseFurniture(event.player, house, { ...saved, position }); event.handled = true; }
     return;
   }
-  if (useHousePortal(api, event)
+  if (useServantFurniture(api, event) || useHousePortal(api, event)
     || (["light", "re-light"].includes(action ?? "") && lightHouseBurner(event))
     || (["open", "search", "view"].includes(action ?? "") && openHouseStorage(api, event))) event.handled = true;
 }
 
 // Cache-native ready poses for the seven parlour chairs, in furniture-menu order.
 const CHAIR_READY_ANIMATIONS = [4073, 4075, 4077, 4081, 4083, 4085, 4087];
+const DINING_BENCHES = ["WOODEN_BENCH", "OAK_BENCH", "CARVED_OAK_BENCH", "TEAK_BENCH", "CARVED_TEAK_BENCH", "MAHOGANY_BENCH", "GILDED_BENCH"];
 const CHAIR_SIT_ANIMATION = 4103;
 // A half-turn takes 32 client cycles; allow two server ticks before sitting.
 const CHAIR_TURN_TICKS = 2;
@@ -812,6 +814,12 @@ const seatedPlayers = new WeakMap<ConstructionPlayer, {
   furniture: NonNullable<ReturnType<PlayerHouseInstance["getFurnitureAt"]>>;
   ready: number; previousAnimation: number; sitCycle: number; front: Location; sitting: boolean;
 }>();
+
+export function isSeatedForDinner(player: Player): boolean {
+  const seat = seatedPlayers.get(player);
+  return !!seat?.sitting && DINING_BENCHES.includes(seat.furniture.buildableKey)
+    && player.getPrivateArea() === seat.house && player.getLocation().equals(seat.location);
+}
 
 function chairFront(object: GameObject): Location {
   const [dx, dy] = (object.getType() === 11
@@ -824,7 +832,7 @@ function routeHouseChair(event: PluginObjectRouteEvent): void {
   standFromChair(event.player);
   if (event.definition?.getInteractions()?.[event.clickType - 1]?.toLowerCase() !== "sit-on") return;
   const furniture = houseFor(event.player)?.getFurnitureAt(event.object.getLocation(), event.objectId, event.object.getType());
-  if (furniture && FURNITURE_GROUPS.PARLOUR_CHAIRS.includes(furniture.buildableKey)) event.destination = chairFront(event.object);
+  if (furniture && (FURNITURE_GROUPS.PARLOUR_CHAIRS.includes(furniture.buildableKey) || DINING_BENCHES.includes(furniture.buildableKey))) event.destination = chairFront(event.object);
 }
 
 function standFromChair(player: ConstructionPlayer): void {
@@ -845,7 +853,8 @@ function sitOnChair({ player, object, objectId, location }: PluginObjectInteract
   const type = object.getType();
   const furniture = house?.getFurnitureAt(location, objectId, type);
   const index = furniture ? FURNITURE_GROUPS.PARLOUR_CHAIRS.indexOf(furniture.buildableKey) : -1;
-  if (!house || !furniture || index < 0) return false;
+  const bench = furniture ? DINING_BENCHES.indexOf(furniture.buildableKey) : -1;
+  if (!house || !furniture || (index < 0 && bench < 0)) return false;
   const seatLocation = new Location(location.x, location.y, location.z);
   const front = chairFront(object);
   // ObjectActionPacketListener routes first; never seat a distant or stale click.
@@ -862,7 +871,7 @@ function sitOnChair({ player, object, objectId, location }: PluginObjectInteract
   standFromChair(player);
   // chairFront already rotates the player for diagonal chairs. Their alternate
   // idle sequences contain another body turn, so keep the unrotated pose.
-  const ready = CHAIR_READY_ANIMATIONS[index];
+  const ready = bench >= 0 ? 4089 + bench * 2 : CHAIR_READY_ANIMATIONS[index];
   seatedPlayers.set(player, { house, location: seatLocation, objectId, type, furniture, ready, front,
     sitCycle: World.getProcessCycle() + CHAIR_TURN_TICKS, sitting: false,
     previousAnimation: player.getSkillAnimation() ?? 0 });
@@ -955,6 +964,7 @@ function loginHouse({ player }: { player: Player }): void {
 function logoutHouse({ player }: { player: Player }): void { standFromChair(player); releaseHouse(player, true); }
 function processHouse({ player }: { player: Player }): void {
   processChair(player);
+  processServant(player);
   const position = player.getLocation();
   if (!player.getPrivateArea() && position.getX() >= 1024 && position.getX() < 2048) {
     const saved = houseStateFor(player);
@@ -980,6 +990,7 @@ export const ConstructionPlugin = {
   name: "Construction",
   register(api: PluginApi): void {
     EstateAgentPlugin.register(api);
+    ConstructionServants.register(api);
     api.persistAttribute(HOUSE_ATTRIBUTE);
     api.onObjectFirstClick(HOUSE_PORTAL_IDS, enterDefaultHouse);
     api.onObjectSecondClick(HOUSE_PORTAL_IDS, enterNormalHouse);
