@@ -11,6 +11,7 @@ const { PlayerStatus } = require("../dist/game/model/PlayerStatus");
 const { Inventory } = require("../dist/game/model/container/impl/Inventory");
 const { Trading } = require("../dist/game/content/Trading");
 const { ObjType } = require("../dist/game/cache/codec/rs/config/objtype/ObjType");
+const { GameConstants } = require("../dist/game/GameConstants");
 
 const LOBSTER = 379;
 const COINS = 995;
@@ -63,6 +64,7 @@ function createPlayer(name, index) {
     setInterfaceId: (next) => { interfaceId = next; },
     isPlayerBot: () => false,
     getFrameUpdater: () => ({ clear() {} }),
+    getAttribute: () => undefined,
   };
   player.inventory = new Inventory(player);
   player.inventory.resetItems();
@@ -246,4 +248,26 @@ test("offering from one stack never takes more than that stack holds", () => {
 
   assert.equal(alice.getTrading().getContainer().getAmount(COINS), 50);
   assert.equal(alice.getInventory().getAmount(COINS), 100);
+});
+
+test("completing a trade saves both players with the items already exchanged", () => {
+  const { alice, bob } = startTrade();
+  const saves = [];
+  const previous = GameConstants.PLAYER_PERSISTENCE;
+  GameConstants.PLAYER_PERSISTENCE = {
+    save: (player) => saves.push([player.getUsername(), count(player, LOBSTER), count(player, COINS)]),
+  };
+  try {
+    alice.getTrading().acceptTrade();
+    bob.getTrading().acceptTrade();
+    alice.getTrading().getButtonDelay().stop();
+    bob.getTrading().getButtonDelay().stop();
+    alice.getTrading().acceptTrade();
+    assert.deepEqual(saves, [], "nothing is saved until both accept the confirm screen");
+    bob.getTrading().acceptTrade();
+  } finally {
+    GameConstants.PLAYER_PERSISTENCE = previous;
+  }
+
+  assert.deepEqual(saves.sort(), [["alice", 0, 200], ["bob", 3, 300]]);
 });

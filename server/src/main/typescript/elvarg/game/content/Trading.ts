@@ -1,3 +1,4 @@
+import { GameConstants } from "../GameConstants";
 import { ItemDefinition } from "../definition/ItemDefinition";
 import { Player } from "../entity/impl/player/Player";
 import { PlayerStatus } from "../model/PlayerStatus";
@@ -7,6 +8,8 @@ import { StackType } from "../model/container/StackType";
 import { Inventory } from "../model/container/impl/Inventory";
 import { Misc } from "../../util/Misc";
 import { encodeTradeClose, encodeTradeOpen, encodeTradeRequest, encodeTradeUpdate, TradePartyView } from "../../net/protocol/ClientProtocol";
+
+const ATTR_SKIP_PERSISTENCE = "botSkipPersistence";
 
 class PlayerItemContainer extends ItemContainer {
     constructor(player, private readonly execFunc: Function) {
@@ -264,6 +267,10 @@ export class Trading {
                 for (const item of givingItems) {
                     interact_.getInventory().addItem(item);
                 }
+                // Save both at once, so a crash can't leave one save from
+                // before the trade and the other from after it.
+                Trading.save(this.player);
+                Trading.save(interact_);
                 if (this.player.isPlayerBot && this.player.isPlayerBot() && receivingItems.length > 0) {
                     (this.player as any).getTradingInteraction?.().receivedItems?.(receivingItems, interact_);
                 }
@@ -385,6 +392,15 @@ export class Trading {
         }
         from.refreshItems();
         to.refreshItems();
+    }
+
+    private static save(player: Player): void {
+        if (player.getAttribute?.(ATTR_SKIP_PERSISTENCE) === true) return;
+        try {
+            GameConstants.PLAYER_PERSISTENCE.save(player);
+        } catch (err) {
+            console.error(`[trade] Failed to save ${player.getUsername()} after a trade`, err);
+        }
     }
 
     resetAttributes() {
