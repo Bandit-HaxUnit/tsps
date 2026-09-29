@@ -330,3 +330,14 @@ test("bank drags are ignored while the bank is closed", () => {
   assert.equal(drag(player, BANK_ITEMS, 0, A, BANK_ITEMS, 1), false);
   assert.deepEqual(tabsOf(player).map(([, id]) => id), [A, B]);
 });
+
+test("depositing keeps the tab being viewed", () => {
+  const player = createPlayer();
+  bankOf(player, [A], [B]);
+  player.getInventory().add(new Item(B, 1), false);
+
+  Bank.deposit(player, B, 0, 1, true);
+
+  assert.equal(player.getCurrentBankTab(), 0);
+  assert.equal(player.getBank(1).getAmount(B), 2);
+});

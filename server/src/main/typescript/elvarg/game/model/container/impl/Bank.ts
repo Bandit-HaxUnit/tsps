@@ -160,9 +160,6 @@ export class Bank extends ItemContainer {
             }
 
             const tab = Bank.getTabForItem(player, item);
-            if (!player.isSearchingBank()) {
-                player.setCurrentBankTab(tab);
-            }
 
             Bank.depositFromSlots(player, player.getBank(tab), slot, amount);
             if (!player.isSearchingBank()) {
