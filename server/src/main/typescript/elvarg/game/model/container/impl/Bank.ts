@@ -262,18 +262,26 @@ export class Bank extends ItemContainer {
         }
     }
 
+    /**
+     * The bank in the order the client lays it out: tabs 1-9, then the main
+     * tab. The cache scripts find each tab's range from the tab-size varbits
+     * (4171-4179), so this order must match them. Placeholders are included.
+     */
+    public static layout(player: Player): Array<{ tab: number; slot: number; item: Item }> {
+        const entries: Array<{ tab: number; slot: number; item: Item }> = [];
+        for (const tab of [1, 2, 3, 4, 5, 6, 7, 8, 9, 0]) {
+            player.getBank(tab).getItems().forEach((item, slot) => {
+                if (item != null && item.getId() > 0 && item.getAmount() >= 0) {
+                    entries.push({ tab, slot, item });
+                }
+            });
+        }
+        return entries;
+    }
+
     public static resolveDisplaySlot(player: Player, clientSlot: number): { tab: number; slot: number; item: Item } | null {
         if (!Number.isInteger(clientSlot) || clientSlot < 0) return null;
-        let current = 0;
-        for (let tab = 0; tab < 10; tab++) {
-            const bank = player.getBank(tab);
-            for (const item of bank.getValidItems()) {
-                if (current++ === clientSlot) {
-                    return { tab, slot: bank.getItems().indexOf(item), item };
-                }
-            }
-        }
-        return null;
+        return Bank.layout(player)[clientSlot] ?? null;
     }
 
     public static actionAmount(

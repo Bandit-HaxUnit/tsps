@@ -154,3 +154,16 @@ test("withdrawing never takes more than the clicked stack holds", () => {
   assert.deepEqual(metas(player.getInventory()), [[1, { charges: 5 }]]);
   assert.deepEqual(metas(player.getBank(0)), [[1, { charges: 1200 }]]);
 });
+
+test("the client layout lists tabs 1-9 before the main tab", () => {
+  const player = createPlayer();
+  player.getBank(0).add(new Item(LAVA_BATTLESTAFF, 1), false);
+  player.getBank(2).add(new Item(TRIDENT, 1), false);
+  player.getBank(1).add(new Item(MYSTIC_LAVA_STAFF, 1), false);
+
+  assert.deepEqual(
+    Bank.layout(player).map(({ tab, item }) => [tab, item.getId()]),
+    [[1, MYSTIC_LAVA_STAFF], [2, TRIDENT], [0, LAVA_BATTLESTAFF]],
+  );
+  assert.equal(Bank.resolveDisplaySlot(player, 2).item.getId(), LAVA_BATTLESTAFF);
+});
