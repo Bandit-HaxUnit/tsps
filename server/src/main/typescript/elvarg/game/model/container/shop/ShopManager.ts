@@ -604,7 +604,17 @@ export class ShopManager {
         if (slot < 0) {
             return;
         }
-        let quantity = Math.min(this.normalizeAmount(amount), this.MAX_ACTION_AMOUNT, item.getAmount());
+        // A stack sells from its own slot; unstackable items (one per slot)
+        // start at the clicked slot and continue through the others.
+        const slots = definition.isStackable()
+            ? [slot]
+            : [slot, ...inventory.getItems().map((_, index) => index).filter((index) => index !== slot)];
+        const sellable = slots.filter((index) => {
+            const held = inventory.getItems()[index];
+            return held?.getId() === itemId && held.isSellable();
+        });
+        const held = sellable.reduce((total, index) => total + inventory.getItems()[index].getAmount(), 0);
+        let quantity = Math.min(this.normalizeAmount(amount), this.MAX_ACTION_AMOUNT, held);
         if (quantity <= 0) {
             return;
         }
@@ -621,7 +631,14 @@ export class ShopManager {
             return;
         }
 
-        inventory.deleteAtSlot(slot, quantity);
+        let remaining = quantity;
+        for (const index of sellable) {
+            if (remaining <= 0) break;
+            const taken = Math.min(remaining, inventory.getItems()[index].getAmount());
+            inventory.deleteAtSlot(index, taken, false);
+            remaining -= taken;
+        }
+        inventory.refreshItems();
         this.addCurrency(
             player,
             shop.definition.getCurrency(),

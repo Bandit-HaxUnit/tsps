@@ -120,3 +120,22 @@ test("a click whose item no longer matches the slot buys nothing", () => {
   assert.equal(player.getInventory().getAmount(BRONZE_AXE), 0);
   assert.equal(player.getInventory().getAmount(STEEL_AXE), 0);
 });
+
+function sell(player, slot, option = "Sell 1") {
+  ShopManager.handleWidgetAction(player, {
+    groupId: ShopManager.SIDE_INTERFACE_ID, childId: 0, buttonNum: 0, option, slot,
+  });
+}
+
+test("Sell N sells unstackable items from every slot, skipping ones that can't be sold", () => {
+  const player = openShop(0);
+  player.getInventory().add(new Item(STEEL_AXE, 1), false);
+  player.getInventory().add(new Item(STEEL_AXE, 1, { [Item.UNTRADEABLE_META]: true }), false);
+  player.getInventory().add(new Item(STEEL_AXE, 1), false);
+
+  sell(player, 2, "Sell 5");
+
+  assert.equal(player.getInventory().getAmount(STEEL_AXE), 1);
+  assert.equal(player.getInventory().getItems()[1].isUntradeable(), true);
+  assert.deepEqual(stockOf(), [[BRONZE_AXE, 2], [STEEL_AXE, 3]]);
+});
