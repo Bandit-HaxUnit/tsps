@@ -558,9 +558,9 @@ test("teleporting off the boat sinks it; a shipwright recovers it for 250 coins"
   assert.deepEqual(tileOf(player), [3222, 3218, 0], "the teleport itself still happens");
   assert.equal(Sailing.board(player, DOCK.id), "Your boat has sunk. A shipwright can recover it for you.");
 
-  assert.equal(Sailing.recover(player, DOCK.id, 250), "You need 250 coins to recover your boat.");
+  assert.equal(Sailing.recover(player, DOCK.id, () => 250), "You need 250 coins to recover your boat.");
   player.getInventory().add(new Item(995, 300), false);
-  assert.equal(Sailing.recover(player, DOCK.id, 250), "Your boat has been recovered and is moored here.");
+  assert.equal(Sailing.recover(player, DOCK.id, () => 250), "Your boat has been recovered and is moored here.");
   assert.equal(player.getInventory().getAmount(995), 50);
   assert.deepEqual(Sailing.activeBoat(player).location, { kind: "docked", dock: DOCK.id });
   assert.equal(Sailing.board(player, DOCK.id), null);
@@ -659,4 +659,68 @@ test("saved sailing state drops anything malformed", () => {
     activeBoatSlot: null,
     returnPoint: null,
   });
+});
+
+// --- Content plugins.
+
+test("the sail buttons follow their labels for each move mode", () => {
+  const { sailButtonTransition } = require("../plugins/skills/sailing/Helm.plugin");
+  // mode: 0 stopped, 1 slow, 2 fast, 3 reversing, 4 moored
+  const table = [0, 1, 2, 3, 4].map((mode) => [0, 1, 2].map((slot) => sailButtonTransition(slot, mode) ?? "-"));
+  assert.deepEqual(table, [
+    ["full", "reverse", "half"],
+    ["stop", "stop", "full"],
+    ["stop", "half", "-"],
+    ["stop", "-", "stop"],
+    ["full", "reverse", "half"],
+  ]);
+  assert.equal(sailButtonTransition(3, 0), undefined);
+});
+
+function registerPlugin(file) {
+  const hooks = { objects: {}, npcs: {}, events: {}, interfaceClicks: [] };
+  require(`../plugins/skills/sailing/${file}`).register({
+    onObjectInteraction: (name, actions) => { hooks.objects[name] = actions; },
+    onNpcInteraction: (name, actions) => { hooks.npcs[name] = actions; },
+    onCustomEvent: (name, handler) => { hooks.events[name] = handler; },
+    onInterfaceActionClick: (handler) => hooks.interfaceClicks.push(handler),
+  });
+  return hooks;
+}
+
+test("the sailing plugins register their hooks and load the boat and dock data", () => {
+  assert.deepEqual(Object.keys(registerPlugin("Gangplank.plugin").objects.Gangplank), ["Board", "Disembark"]);
+  const helm = registerPlugin("Helm.plugin");
+  assert.deepEqual(Object.keys(helm.objects.Helm), ["Navigate", "Stop-navigating", "Escape"]);
+  assert.equal(helm.interfaceClicks.length, 1);
+  assert.deepEqual(Object.keys(registerPlugin("Sailing.plugin").events).sort(), ["sailing:boarded", "sailing:left"]);
+  assert.deepEqual(Object.keys(registerPlugin("Shipwright.plugin").npcs), ["Junior Jim"]);
+  assert.ok(Sailing.getDock("the_pandemonium"));
+});
+
+test("Junior Jim recovers a sunk raft at The Pandemonium for 250 coins", () => {
+  const shipwright = registerPlugin("Shipwright.plugin").npcs["Junior Jim"]["Recover-boat"];
+  const player = sailor();
+  Sailing.giveBoat(player, "raft", "the_pandemonium");
+  Sailing.activeBoat(player).location = { kind: "sunk" };
+  player.getInventory().add(new Item(995, 1000), false);
+
+  shipwright({ player, npc: { getDefinition: () => ({ getName: () => "Junior Jim" }) } });
+
+  assert.deepEqual(Sailing.activeBoat(player).location, { kind: "docked", dock: "the_pandemonium" });
+  assert.equal(player.getInventory().getAmount(995), 750);
+  assert.deepEqual(player.messages, ["Your boat has been recovered and is moored here."]);
+});
+
+test("a boat's deck locs exist on the deck level people stand on, so clicks resolve", () => {
+  const boat = BoatManager.spawn(1, { ...RAFT, locs: [{ id: 59554, x: 3, y: 4, level: 1, shape: 10, rotation: 0 }] }, AT_SEA);
+  try {
+    const [helm] = BoatManager.getDeck(boat).getObjects();
+    assert.equal(helm.getId(), 59554);
+    assert.deepEqual([helm.getLocation().getX(), helm.getLocation().getY(), helm.getLocation().getZ()],
+      [boat.deckBaseX + 3, boat.deckBaseY + 4, 0]);
+    assert.equal(helm.getPrivateArea(), BoatManager.getDeck(boat));
+  } finally {
+    BoatManager.dispose(boat);
+  }
 });

@@ -1,6 +1,7 @@
 import { Boundary } from "../../model/Boundary";
 import { Location } from "../../model/Location";
 import { PrivateArea } from "../../model/areas/impl/PrivateArea";
+import { GameObject } from "../../entity/impl/object/GameObject";
 import { RegionManager } from "../../collision/RegionManager";
 import type { Boat } from "./Boat";
 import type { BoatSpec } from "./BoatSpec";
@@ -26,6 +27,9 @@ export class BoatDeckArea extends PrivateArea {
         }
         for (const loc of spec.locs) {
             if (loc.blocks) this.solid.add(BoatDeckArea.key(boat.deckBaseX + loc.x, boat.deckBaseY + loc.y));
+            // Clicks resolve against the level people aboard stand on (0); the client draws
+            // the loc on the template's deck plane (loc.level).
+            new GameObject(loc.id, new Location(boat.deckBaseX + loc.x, boat.deckBaseY + loc.y, 0), loc.shape, loc.rotation, this);
         }
     }
 

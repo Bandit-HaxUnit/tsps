@@ -1,0 +1,39 @@
+[
+  {
+    "type": "raft",
+    "name": "Raft",
+    "configId": 1,
+    "templateChunkX": 480,
+    "templateChunkY": 807,
+    "sizeX": 8,
+    "sizeZ": 8,
+    "hull": { "offsetX": 0, "offsetY": 0, "width": 128, "length": 384 },
+    "deckCentreX": 448,
+    "deckCentreY": 448,
+    "deckLevel": 1,
+    "walkableDeck": [{ "x": 3, "y": 2 }, { "x": 3, "y": 3 }, { "x": 3, "y": 4 }],
+    "boardingTile": { "x": 3, "y": 4 },
+    "hitpoints": 20,
+    "recoveryFee": 250,
+    "sidepanelBoatType": 8110,
+    "facilityHotspot": 15,
+    "repairKits": 10,
+    "locs": [
+      { "id": 60245, "x": 3, "y": 2, "level": 1, "shape": 10, "rotation": 0 },
+      { "id": 59530, "x": 3, "y": 3, "level": 1, "shape": 10, "rotation": 0, "sail": true },
+      { "id": 59554, "x": 3, "y": 4, "level": 1, "shape": 10, "rotation": 0, "helm": true },
+      { "id": 32545, "x": 2, "y": 2, "level": 1, "shape": 22, "rotation": 0 },
+      { "id": 32545, "x": 2, "y": 3, "level": 1, "shape": 22, "rotation": 0 },
+      { "id": 32545, "x": 2, "y": 4, "level": 1, "shape": 22, "rotation": 0 },
+      { "id": 32545, "x": 3, "y": 2, "level": 1, "shape": 22, "rotation": 0 },
+      { "id": 32545, "x": 3, "y": 3, "level": 1, "shape": 22, "rotation": 0 },
+      { "id": 32545, "x": 3, "y": 4, "level": 1, "shape": 22, "rotation": 0 },
+      { "id": 32545, "x": 4, "y": 2, "level": 1, "shape": 22, "rotation": 0 },
+      { "id": 32545, "x": 4, "y": 3, "level": 1, "shape": 22, "rotation": 0 },
+      { "id": 32545, "x": 4, "y": 4, "level": 1, "shape": 22, "rotation": 0 },
+      { "id": 58526, "x": 3, "y": 2, "level": 1, "shape": 22, "rotation": 0 },
+      { "id": 58569, "x": 4, "y": 3, "level": 1, "shape": 22, "rotation": 0 },
+      { "id": 58568, "x": 4, "y": 4, "level": 1, "shape": 22, "rotation": 0 }
+    ]
+  }
+]

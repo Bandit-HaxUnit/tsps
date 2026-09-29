@@ -20,6 +20,15 @@ export interface SailingDock {
     landing: { x: number; y: number; z: number };
 }
 
+/** Why a player left their boat, sent with the `sailing:left` event. */
+export type LeaveReason = "disembark" | "sunk" | "logout";
+
+/** Lets content (the sidepanel, varbits) follow boarding and leaving without core knowing it. */
+function emit(event: "sailing:boarded" | "sailing:left", payload: object): void {
+    (require("../../../plugins/PluginManager") as typeof import("../../../plugins/PluginManager"))
+        .PluginManager.emitCustomEvent(event, payload);
+}
+
 interface ActiveInstance {
     player: Player;
     slot: number;
@@ -115,7 +124,7 @@ export class Sailing {
         if (!dock || !instance || !boat) return "You can't disembark here.";
         boat.location = { kind: "docked", dock: dockId };
         player.getSailing().returnPoint = { ...dock.landing };
-        Sailing.leave(player, instance);
+        Sailing.leave(player, instance, "disembark");
         Sailing.moveExpected(player, new Location(dock.landing.x, dock.landing.y, dock.landing.z));
         return null;
     }
@@ -129,15 +138,16 @@ export class Sailing {
     }
 
     /**
-     * A shipwright recovers the player's sunk boat to `dockId` for `fee` coins. Returns the
-     * message to show.
+     * A shipwright recovers the player's sunk boat to `dockId` for its fee in coins (by boat
+     * type). Returns the message to show.
      */
-    public static recover(player: Player, dockId: string, fee: number): string {
+    public static recover(player: Player, dockId: string, feeFor: (boat: OwnedBoat) => number): string {
         const state = player.getSailing();
         const sunk = [Sailing.activeBoat(player), ...state.boats]
             .find((boat) => boat?.location.kind === "sunk");
         if (!sunk) return "You don't have a boat that needs recovering.";
         if (!Sailing.docks.has(dockId)) return "I can't bring a boat here.";
+        const fee = feeFor(sunk);
         const inventory = player.getInventory();
         if (inventory.getAmount(COINS) < fee) return `You need ${fee} coins to recover your boat.`;
         inventory.delete(COINS, fee);
@@ -162,7 +172,7 @@ export class Sailing {
         if (!instance) return;
         const boat = Sailing.activeBoat(player);
         if (boat) boat.location = Sailing.atSea(instance);
-        Sailing.leave(player, instance);
+        Sailing.leave(player, instance, "logout");
         player.setLocation(Sailing.returnLocation(player));
     }
 
@@ -191,21 +201,23 @@ export class Sailing {
         BoatManager.getDeck(instance)!.enter(player);
         Sailing.moveExpected(player, new Location(
             instance.deckBaseX + spec.boardingTile.x, instance.deckBaseY + spec.boardingTile.y, 0));
+        emit("sailing:boarded", { player, boat: instance, owned: boat });
         return true;
     }
 
     private static sink(player: Player, instance: Boat): void {
         const boat = Sailing.activeBoat(player);
         if (boat) boat.location = { kind: "sunk" };
-        Sailing.leave(player, instance);
+        Sailing.leave(player, instance, "sunk");
     }
 
     /** Takes the player off the deck and removes the boat from the sea. */
-    private static leave(player: Player, instance: Boat): void {
+    private static leave(player: Player, instance: Boat, reason: LeaveReason): void {
         Sailing.instances.delete(instance);
         if (instance.helmPlayerId === player.getIndex()) instance.helmPlayerId = undefined;
         BoatManager.getDeck(instance)?.leave(player, false);
         BoatManager.dispose(instance);
+        emit("sailing:left", { player, boat: instance, reason });
     }
 
     private static onTeleport(mobile: Mobile, target: Location): void {

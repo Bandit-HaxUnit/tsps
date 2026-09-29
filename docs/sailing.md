@@ -28,7 +28,7 @@ Later PRs: the cargo hold, skiff and sloop, shipbuilding facilities and hull upg
 | Death at sea | Gravestone at the last gangplank you set sail from; some cargo is lost | Wiki: Sailing |
 | Capsizing (0 HP) | You are moved to the last gangplank you set sail from and keep your inventory; some cargo is lost | Wiki: Sailing |
 | Return point | Disembarking at a gangplank or mooring point, or clicking a buoy, sets where you are sent after Escape or capsizing | Wiki: Mooring point, Buoy |
-| Shipwright | At large ports: buy, destroy, customise, and retrieve a sunk boat or one at another port. Port Sarim's is Shipwright Sam | Wiki: Shipwright |
+| Shipwright | At large ports: buy, destroy, customise, and retrieve a sunk boat or one at another port. The Pandemonium's is Junior Jim | Wiki: Shipwright |
 | Recovery fee | Raft 250 gp, skiff 4,125 gp, sloop 50,000 gp; more with damage and built facilities | Wiki: Shipwright |
 
 Cargo lost on death, capsizing and teleporting (courier crates, bounty items, salvage, trawling fish, fish crates) matters once the cargo hold exists; PR 1 has no cargo.
@@ -103,8 +103,8 @@ tsps has no world views, but it has `PrivateArea` (used by Construction's house)
 - boat types (`data/definitions/boats.json`): template zone, size, hull bounds, deck centre, walkable deck tiles, deck locs. Raft only in PR 1.
 - gangplanks: Board / Disembark, routed to the lifecycle
 - helm: Navigate / Stop-navigating, the sail buttons (move mode from varbit 19175), clicking to set a heading; Escape
-- shipwright: Shipwright Sam at Port Sarim retrieves a sunk raft for 250 gp (PR 1 needs this, or a sunk raft is stuck forever)
-- a developer command (`::raft`) gives a raft docked at Port Sarim; the Pandemonium quest and buying boats come later
+- shipwright: Junior Jim at The Pandemonium retrieves a sunk raft for 250 gp (PR 1 needs this, or a sunk raft is stuck forever)
+- a developer command (`::raft`) gives a raft docked at The Pandemonium, where xrsps's raft docks (gangplank 59836 at 3070, 2987); the Pandemonium quest and buying boats come later
 
 ## Client
 
@@ -118,6 +118,8 @@ Headless tests like `trade.test.cjs` and `bank.test.cjs`, one per lifecycle row:
 
 - Death at sea: does the boat sink, or return to its last dock?
 - Recovery fee once boats take damage and have facilities (the wiki gives only the base fee).
+- Junior Jim's spawn tile: placed next to the dock's landing tile (3068, 2989); not checked against live OSRS.
+- The game messages for boarding, disembarking and Escape are placeholders; the live wording is unconfirmed.
 - Logging out at sea when the boat last left from an island mooring point rather than a port (a Dec 2025 fix changed this; unclear if it differs).
 
 ## Sources
