@@ -460,3 +460,203 @@ test("only the player at the helm steers, by heading or by clicking", () => {
     BoatManager.dispose(boat);
   }
 });
+
+// --- Lifecycle: every way on and off a boat.
+
+const { Sailing } = require("../dist/game/content/sailing/Sailing");
+const { Mobile } = require("../dist/game/entity/impl/Mobile");
+const { Inventory } = require("../dist/game/model/container/impl/Inventory");
+const { Item } = require("../dist/game/model/Item");
+const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
+const { emptySailingState, normalizeSailingState } = require("../dist/game/content/sailing/SailingState");
+
+ItemDefinition.forId = (id) => ({ getId: () => id, getName: () => "Coins", isStackable: () => id === 995, isNoted: () => false });
+
+const DOCK = { id: "port_sarim", mooring: { fineX: 3074 * 128 + 64, fineY: 2987 * 128 + 64, level: 0, angle: NORTH }, landing: { x: 3069, y: 2987, z: 0 } };
+Sailing.initialize();
+Sailing.registerBoatType(RAFT);
+Sailing.registerDock(DOCK);
+
+let nextIndex = 100;
+/** A player built on the real Mobile prototype, so teleports run through moveTo's listeners. */
+function sailor(sailing = emptySailingState()) {
+  const player = Object.create(Mobile.prototype);
+  const index = nextIndex++;
+  const messages = [];
+  let location = new Location(3069, 2987, 0);
+  Object.assign(player, {
+    messages,
+    getIndex: () => index,
+    isPlayer: () => true,
+    isNpc: () => false,
+    getAsPlayer: () => player,
+    getUsername: () => "alice",
+    sendMessage: (message) => messages.push(message),
+    getLocation: () => location,
+    setLocation: (next) => { location = next; return player; },
+    getMovementQueue: () => ({ reset() {}, handleRegionChange() {} }),
+    setNeedsPlacement() {},
+    setResetMovementQueue() {},
+    setMobileInteraction() {},
+    getSailing: () => sailing,
+    setSailing: (next) => { sailing = next; },
+    getPacketSender: () => new Proxy({}, { get: (_t, _k, proxy) => () => proxy }),
+  });
+  player.inventory = new Inventory(player);
+  player.inventory.resetItems();
+  player.getInventory = () => player.inventory;
+  return player;
+}
+
+function tileOf(player) {
+  const location = player.getLocation();
+  return [location.getX(), location.getY(), location.getZ()];
+}
+
+test("boarding at the dock puts the player on the deck of their boat, at sea", () => {
+  const player = sailor();
+  Sailing.giveBoat(player, "raft", DOCK.id, "Lady Luck");
+  assert.equal(Sailing.board(player, DOCK.id), null);
+  const boat = BoatManager.getBoatAboard(player);
+  assert.ok(boat);
+  assert.deepEqual(tileOf(player), [boat.deckBaseX + 3, boat.deckBaseY + 4, 0]);
+  assert.equal(Sailing.activeBoat(player).location.kind, "at_sea");
+  assert.deepEqual(player.getSailing().returnPoint, DOCK.landing);
+  assert.equal(Sailing.board(player, DOCK.id), "You're already on a boat.");
+  Sailing.disembark(player, DOCK.id);
+});
+
+test("boarding is refused with no boat here", () => {
+  assert.equal(Sailing.board(sailor(), DOCK.id), "You don't have a boat moored here.");
+});
+
+test("disembarking moors the boat at the dock and removes it from the sea", () => {
+  const player = sailor();
+  Sailing.giveBoat(player, "raft", DOCK.id);
+  Sailing.board(player, DOCK.id);
+  const boat = BoatManager.getBoatAboard(player);
+
+  assert.equal(Sailing.disembark(player, DOCK.id), null);
+
+  assert.deepEqual(Sailing.activeBoat(player).location, { kind: "docked", dock: DOCK.id });
+  assert.deepEqual(tileOf(player), [3069, 2987, 0]);
+  assert.equal(BoatManager.getBoatAboard(player), undefined);
+  assert.equal(BoatManager.getBoat(boat.entityIndex), undefined);
+  assert.equal(player.getArea(), null);
+});
+
+test("teleporting off the boat sinks it; a shipwright recovers it for 250 coins", () => {
+  const player = sailor();
+  Sailing.giveBoat(player, "raft", DOCK.id);
+  Sailing.board(player, DOCK.id);
+  const boat = BoatManager.getBoatAboard(player);
+
+  player.moveTo(new Location(3222, 3218, 0)); // any teleport: spell, tablet, command, death
+
+  assert.deepEqual(Sailing.activeBoat(player).location, { kind: "sunk" });
+  assert.equal(BoatManager.getBoat(boat.entityIndex), undefined);
+  assert.deepEqual(tileOf(player), [3222, 3218, 0], "the teleport itself still happens");
+  assert.equal(Sailing.board(player, DOCK.id), "Your boat has sunk. A shipwright can recover it for you.");
+
+  assert.equal(Sailing.recover(player, DOCK.id, 250), "You need 250 coins to recover your boat.");
+  player.getInventory().add(new Item(995, 300), false);
+  assert.equal(Sailing.recover(player, DOCK.id, 250), "Your boat has been recovered and is moored here.");
+  assert.equal(player.getInventory().getAmount(995), 50);
+  assert.deepEqual(Sailing.activeBoat(player).location, { kind: "docked", dock: DOCK.id });
+  assert.equal(Sailing.board(player, DOCK.id), null);
+  Sailing.disembark(player, DOCK.id);
+});
+
+test("moving about on the deck is not a teleport off the boat", () => {
+  const player = sailor();
+  Sailing.giveBoat(player, "raft", DOCK.id);
+  Sailing.board(player, DOCK.id);
+  const boat = BoatManager.getBoatAboard(player);
+  player.moveTo(new Location(boat.deckBaseX + 3, boat.deckBaseY + 2, 0));
+  assert.equal(Sailing.activeBoat(player).location.kind, "at_sea");
+  assert.equal(BoatManager.getBoatAboard(player), boat);
+  Sailing.disembark(player, DOCK.id);
+});
+
+test("Escape sinks the boat and returns the player to their last dock", () => {
+  const player = sailor();
+  Sailing.giveBoat(player, "raft", DOCK.id);
+  Sailing.board(player, DOCK.id);
+
+  Sailing.escape(player);
+
+  assert.deepEqual(Sailing.activeBoat(player).location, { kind: "sunk" });
+  assert.deepEqual(tileOf(player), [3069, 2987, 0]);
+  assert.equal(BoatManager.getBoatAboard(player), undefined);
+});
+
+test("the boat's position is recorded every tick, so a save at sea restores it", () => {
+  const player = sailor();
+  Sailing.giveBoat(player, "raft", DOCK.id);
+  Sailing.board(player, DOCK.id);
+  const boat = BoatManager.getBoatAboard(player);
+  boat.moveMode = BoatMoveMode.Full;
+  const sailable = BoatManager.isSailable;
+  BoatManager.isSailable = () => true;
+  try {
+    BoatManager.tick();
+  } finally {
+    BoatManager.isSailable = sailable;
+  }
+  assert.deepEqual(Sailing.activeBoat(player).location,
+    { kind: "at_sea", fineX: boat.fineX, fineY: boat.fineY, level: 0, angle: boat.angle });
+  assert.equal(boat.fineY, DOCK.mooring.fineY + 64);
+  Sailing.disembark(player, DOCK.id);
+});
+
+test("logging out at sea keeps the boat at sea, and logging in puts the player back aboard", () => {
+  const player = sailor();
+  Sailing.giveBoat(player, "raft", DOCK.id);
+  Sailing.board(player, DOCK.id);
+  const boat = BoatManager.getBoatAboard(player);
+  boat.fineX += 640;
+  boat.angle = EAST;
+
+  Sailing.onLogout(player);
+
+  const saved = normalizeSailingState(JSON.parse(JSON.stringify(player.getSailing())));
+  assert.deepEqual(saved.boats[0].location, { kind: "at_sea", fineX: boat.fineX, fineY: boat.fineY, level: 0, angle: EAST });
+  assert.deepEqual(tileOf(player), [3069, 2987, 0], "saved ashore in case the boat can't be restored");
+  assert.equal(BoatManager.getBoat(boat.entityIndex), undefined, "disposed after the state is recorded");
+
+  const returning = sailor(saved);
+  Sailing.onLogin(returning);
+  const restored = BoatManager.getBoatAboard(returning);
+  assert.ok(restored);
+  assert.deepEqual([restored.fineX, restored.fineY, restored.angle], [boat.fineX, boat.fineY, EAST]);
+  assert.deepEqual(tileOf(returning), [restored.deckBaseX + 3, restored.deckBaseY + 4, 0]);
+  Sailing.disembark(returning, DOCK.id);
+});
+
+test("a save on a deck with no boat to return to lands the player ashore", () => {
+  const player = sailor({ boats: [], activeBoatSlot: null, returnPoint: { x: 3069, y: 2987, z: 0 } });
+  player.setLocation(new Location(9627, 9636, 0));
+  Sailing.onLogin(player);
+  assert.deepEqual(tileOf(player), [3069, 2987, 0]);
+});
+
+test("saved sailing state drops anything malformed", () => {
+  assert.deepEqual(normalizeSailingState(undefined), emptySailingState());
+  assert.deepEqual(normalizeSailingState({
+    boats: [
+      { slot: 0, type: "raft", name: "A", location: { kind: "docked", dock: "port_sarim" } },
+      { slot: 0, type: "raft", location: { kind: "docked", dock: "x" } },
+      { slot: 1, type: "raft", location: { kind: "at_sea", fineX: "no" } },
+      { type: "raft" },
+    ],
+    activeBoatSlot: 9,
+    returnPoint: { x: 1 },
+  }), {
+    boats: [
+      { slot: 0, type: "raft", name: "A", hitpoints: 0, facilities: [], location: { kind: "docked", dock: "port_sarim" } },
+      { slot: 1, type: "raft", name: "", hitpoints: 0, facilities: [], location: { kind: "sunk" } },
+    ],
+    activeBoatSlot: null,
+    returnPoint: null,
+  });
+});

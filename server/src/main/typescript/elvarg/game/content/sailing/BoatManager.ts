@@ -32,6 +32,7 @@ interface ActiveBoat {
 export class BoatManager {
     private static readonly boats = new Map<number, ActiveBoat>();
     private static readonly headingListeners: HeadingListener[] = [];
+    private static readonly afterTickListeners: Array<() => void> = [];
 
     /** Whether a tile is in the coordinate space reserved for boat decks. */
     public static isDeckTile(x: number, y: number): boolean {
@@ -144,10 +145,16 @@ export class BoatManager {
         return (RegionManager.getClipping(x, y, 0, null) & SOLID_OBJECT) === 0;
     }
 
+    /** Runs after every boat has moved each tick. */
+    public static onAfterTick(listener: () => void): void {
+        BoatManager.afterTickListeners.push(listener);
+    }
+
     public static tick(): void {
         for (const { boat } of BoatManager.boats.values()) {
             tickBoat(boat, BoatManager.isSailable);
         }
+        for (const listener of BoatManager.afterTickListeners) listener();
     }
 
     private static applyHelmHeading(player: Mobile, boat: Boat, heading: number): void {

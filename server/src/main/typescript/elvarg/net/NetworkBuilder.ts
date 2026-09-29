@@ -55,6 +55,7 @@ import { PickupItemPacketListener } from "./packet/impl/PickupItemPacketListener
 import { SecondGroundItemOptionPacketListener } from "./packet/impl/SecondGroundItemOptionPacketListener";
 import { ItemDefinition } from "../game/definition/ItemDefinition";
 import { BoatManager } from "../game/content/sailing/BoatManager";
+import { Sailing } from "../game/content/sailing/Sailing";
 import { Bank } from "../game/model/container/impl/Bank";
 import { InterfaceActionClickOpcode } from "./packet/impl/InterfaceActionClickOpcode";
 import { ChangeAppearancePacketListener } from "./packet/impl/ChangeAppearancePacketListener";
@@ -833,6 +834,8 @@ class ClientConnection {
     }
     this.player = player;
     this.releasePendingName();
+    // Back aboard a boat they logged out on at sea.
+    Sailing.onLogin(player);
     World.refreshActiveRegions();
     PluginManager.emitPlayerLogin({
       player,

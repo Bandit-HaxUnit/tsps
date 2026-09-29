@@ -124,12 +124,27 @@ export abstract class Mobile extends Entity {
     }
 
     /**
+     * Called before any teleport (moveTo, smartMove, smartMoves) moves an actor, so systems
+     * such as sailing can react to every teleport source in one place.
+     */
+    private static readonly teleportListeners: Array<(mobile: Mobile, target: Location) => void> = [];
+
+    public static onBeforeTeleport(listener: (mobile: Mobile, target: Location) => void): void {
+        Mobile.teleportListeners.push(listener);
+    }
+
+    private notifyTeleport(target: Location): void {
+        for (const listener of Mobile.teleportListeners) listener(this, target);
+    }
+
+    /**
      * Teleports the character to a target location
      *
      * @param teleportTarget
      * @return
      */
     public moveTo(teleportTarget: Location): Mobile {
+        this.notifyTeleport(teleportTarget);
         this.getMovementQueue().reset();
         this.setLocation(teleportTarget.clone());
         this.setNeedsPlacement(true);
@@ -158,6 +173,7 @@ export abstract class Mobile extends Entity {
             }
         }
 
+        this.notifyTeleport(chosen);
         this.getMovementQueue().reset();
         this.setLocation(chosen.clone());
         this.setNeedsPlacement(true);
@@ -182,6 +198,7 @@ export abstract class Mobile extends Entity {
                 break;
             }
         }
+        this.notifyTeleport(chosen);
         this.getMovementQueue().reset();
         this.setLocation(chosen.clone());
         this.setNeedsPlacement(true);
