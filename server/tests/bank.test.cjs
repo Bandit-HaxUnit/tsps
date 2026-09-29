@@ -341,3 +341,21 @@ test("depositing keeps the tab being viewed", () => {
   assert.equal(player.getCurrentBankTab(), 0);
   assert.equal(player.getBank(1).getAmount(B), 2);
 });
+
+test("in swap mode, dragging onto another tab's item trades their places and tabs", () => {
+  const player = createPlayer();
+  bankOf(player, [C], [A, B]);
+
+  drag(player, BANK_ITEMS, 2, C, BANK_ITEMS, 0);
+
+  assert.deepEqual(tabsOf(player), [[1, C, 1], [1, B, 1], [0, A, 1]]);
+});
+
+test("dragging onto the empty space after a tab's items moves the item to the end of that tab", () => {
+  const player = createPlayer();
+  bankOf(player, [C], [A, B]);
+
+  drag(player, BANK_ITEMS, 2, C, BANK_ITEMS, Bank.TAB_DROP_SLOT_OFFSET + 1);
+
+  assert.deepEqual(tabsOf(player), [[1, A, 1], [1, B, 1], [1, C, 1]]);
+});

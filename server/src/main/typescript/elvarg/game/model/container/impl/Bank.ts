@@ -32,8 +32,8 @@ export class Bank extends ItemContainer {
     public static readonly TAB_BUTTON_SLOT_OFFSET = 10;
     public static readonly ITEMS_CHILD = 12;
     public static readonly SIDE_ITEMS_CHILD = 3;
-    /** Drops on the separator above tab N report item-grid slot 1428 + N. */
-    public static readonly TAB_SEPARATOR_SLOT_OFFSET = 1410 + 9 * 2;
+    /** Drops on the empty space after tab N's items report item-grid slot 1428 + N. */
+    public static readonly TAB_DROP_SLOT_OFFSET = 1410 + 9 * 2;
 
     constructor(public player: Player) {
         super(player);
@@ -358,8 +358,8 @@ export class Bank extends ItemContainer {
         if (targetGroup === Bank.MAIN_INTERFACE_ID && targetChild === Bank.TABS_CHILD) {
             tab = drag.targetSlot - Bank.TAB_BUTTON_SLOT_OFFSET;
         } else if (targetGroup === Bank.MAIN_INTERFACE_ID && targetChild === Bank.ITEMS_CHILD
-            && drag.targetSlot >= Bank.TAB_SEPARATOR_SLOT_OFFSET) {
-            tab = drag.targetSlot - Bank.TAB_SEPARATOR_SLOT_OFFSET;
+            && drag.targetSlot >= Bank.TAB_DROP_SLOT_OFFSET) {
+            tab = drag.targetSlot - Bank.TAB_DROP_SLOT_OFFSET;
         }
         if (tab !== undefined && (tab < 0 || tab > 9)) return true;
 
@@ -430,14 +430,21 @@ export class Bank extends ItemContainer {
 
     /**
      * Moves the bank item at `fromClientSlot` onto the item at
-     * `toClientSlot`, swapping or inserting by the player's setting. Onto
-     * another tab's item, it joins that tab there.
+     * `toClientSlot`, swapping or inserting by the player's setting. Across
+     * tabs, a swap trades the two items' places (each takes the other's tab)
+     * and an insert puts the dragged item into the other tab there.
      */
     private static moveItem(player: Player, fromClientSlot: number, itemId: number, toClientSlot: number) {
         const from = Bank.resolveDisplaySlot(player, fromClientSlot);
         const to = Bank.resolveDisplaySlot(player, toClientSlot);
         if (!from || !to || Bank.displayItemId(from.item) !== itemId || fromClientSlot === toClientSlot) return;
         const bank = player.getBank(to.tab);
+        if (from.tab !== to.tab && !player.insertModeReturn()) {
+            player.getBank(from.tab).setItem(from.slot, to.item);
+            bank.setItem(to.slot, from.item);
+            bank.refreshItems();
+            return;
+        }
         let fromSlot = from.slot;
         if (from.tab !== to.tab) {
             fromSlot = Bank.endSlot(bank);
@@ -892,6 +899,9 @@ export class Bank extends ItemContainer {
             .sendSubInterface((161 << 16) | 16, Bank.MAIN_INTERFACE_ID, 0, { varps, varbits })
             .sendSubInterface((161 << 16) | 74, Bank.SIDE_INTERFACE_ID, 3, { varps, varbits })
             .sendInterfaceFlagsRange((Bank.MAIN_INTERFACE_ID << 16) | 12, 0, 1409, 3409919)
+            // The empty space after each tab's items is a drop target (one per tab).
+            .sendInterfaceFlagsRange((Bank.MAIN_INTERFACE_ID << 16) | Bank.ITEMS_CHILD,
+                Bank.TAB_DROP_SLOT_OFFSET, Bank.TAB_DROP_SLOT_OFFSET + 9, 1 << 20)
             .sendInterfaceFlagsRange((Bank.SIDE_INTERFACE_ID << 16) | 3, 0, 27, 3278846)
             .sendVarbit(12393, 1)
             .sendString(`Bank of ${GameConstants.NAME}`, (Bank.MAIN_INTERFACE_ID << 16) | 3);
