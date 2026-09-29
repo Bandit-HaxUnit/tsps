@@ -7,6 +7,30 @@
  * - Batched sprite rendering for dots
  */
 import { createProgram } from "./gl-utils";
+import type { WebGLOsrsRenderer } from "../../render/WebGLOsrsRenderer";
+
+/** Image and icon coordinates share the same scene bounds. */
+export function getMinimapMaps(
+    renderer: Pick<WebGLOsrsRenderer, "instanceActive" | "mapManager"> | undefined,
+    tileX: number,
+    tileY: number,
+): Array<{ mapX: number; mapY: number; baseX: number; baseY: number; size: number }> {
+    if (renderer?.instanceActive) {
+        const map = renderer.mapManager.getMapForWorldTile(tileX, tileY);
+        return map ? [{
+            mapX: map.mapX, mapY: map.mapY,
+            baseX: map.getRenderBaseTileX(), baseY: map.getRenderBaseTileY(),
+            size: map.getLocalTileSpan(),
+        }] : [];
+    }
+    const maps = [];
+    for (let x = (tileX >> 6) - 1; x <= (tileX >> 6) + 1; x++) {
+        for (let y = (tileY >> 6) - 1; y <= (tileY >> 6) + 1; y++) {
+            maps.push({ mapX: x, mapY: y, baseX: x * 64, baseY: y * 64, size: 64 });
+        }
+    }
+    return maps;
+}
 
 // Vertex shader for minimap tiles and sprites
 // Applies rotation around the minimap center

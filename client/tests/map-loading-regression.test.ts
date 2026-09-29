@@ -19,6 +19,60 @@ import { isMapProfileEnabled } from "../render/render/mapLoadProfile";
 import { CONSTRUCTION_ROOMS, HOUSE_TEMPLATE_CHUNKS } from "../../server/src/main/typescript/elvarg/game/plugin/impl/construction/ConstructionData";
 import { CachePipeline } from "../../server/src/main/typescript/elvarg/game/cache/CachePipeline";
 import { CacheMaps } from "../../server/src/main/typescript/elvarg/game/cache/CacheMaps";
+import { getMinimapMaps } from "../widgets/gl/MinimapRenderer";
+import { registerMinimapData } from "../render/render/minimap";
+import { clearInstance } from "../render/render/instance";
+
+function houseMinimapUsesFullScene(): void {
+    const maps = new MapManager<any>(4, () => {});
+    const map = {
+        mapX: 102, mapY: 104,
+        getRenderBaseTileX: () => 6496,
+        getRenderBaseTileY: () => 6648,
+        getLocalTileSpan: () => 104,
+    };
+    maps.mapSquares.set(getMapSquareId(map.mapX, map.mapY), map);
+    const renderer = { instanceActive: true, mapManager: maps } as any;
+    const expected = [{ mapX: 102, mapY: 104, baseX: 6496, baseY: 6648, size: 104 }];
+    for (const x of [6496, 6527, 6528, 6559, 6560, 6599]) {
+        for (const y of [6648, 6655, 6656, 6719, 6720, 6751]) {
+            assert.deepEqual(getMinimapMaps(renderer, x, y), expected,
+                "crossing map squares must retain the same full-size house image and icon origin");
+        }
+    }
+    const urls: string[] = [];
+    const registered: number[][] = [];
+    const host = {
+        ...renderer,
+        minimapIcons: new Map(),
+        instanceTemplateChunks: [], instanceLocRebuildTimer: null,
+        addedLocs: new Map(), locOverrides: new Map(), locSpawns: new Map(),
+        clearMaps: () => maps.mapSquares.clear(),
+        osrsClient: {
+            setMinimapImageUrl(x: number, y: number, url: string, level: number) {
+                registered.push([x, y, level]);
+                urls.push(url);
+            },
+            clearMinimapImageUrls() {
+                for (const url of urls.splice(0)) URL.revokeObjectURL(url);
+            },
+        },
+    } as any;
+    registerMinimapData(host, { mapX: 102, mapY: 104,
+        minimapBlobs: Array.from({ length: 4 }, () => new Blob(["minimap"])),
+        minimapIcons: [[], [{ localX: 90, localY: 85, spriteId: 1 }], [], []],
+    } as any);
+    assert.deepEqual(registered, [[102, 104, 0], [102, 104, 1], [102, 104, 2], [102, 104, 3]]);
+    clearInstance(host);
+    assert.equal(urls.length, 0, "leaving a house releases its minimap images");
+    assert.deepEqual(getMinimapMaps(renderer, 6540, 6680), [], "loading an instance must not use overworld images");
+    renderer.instanceActive = false;
+    const normal = getMinimapMaps(renderer, 3200, 3200);
+    assert.equal(normal.length, 9);
+    assert.deepEqual(normal[4], { mapX: 50, mapY: 50, baseX: 3200, baseY: 3200, size: 64 });
+}
+
+houseMinimapUsesFullScene();
 
 function mapProfilingRequiresExplicitFlag(): void {
     const original = Object.getOwnPropertyDescriptor(globalThis, "location");

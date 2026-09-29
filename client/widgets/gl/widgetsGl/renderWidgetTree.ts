@@ -16,7 +16,7 @@ import {
     findBlockingWidgetInHits as UI_findBlockingWidgetInHits,
     hasContextMenuOption as UI_hasContextMenuOption,
 } from "../../../widgets/menu/utils";
-import { MinimapRenderer } from "../MinimapRenderer";
+import { MinimapRenderer, getMinimapMaps } from "../MinimapRenderer";
 import { drawChooseOptionMenu } from "../choose-option";
 import { GLRenderer } from "../renderer";
 import {
@@ -2426,13 +2426,6 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                     const minimapZoom = osrsClient.minimapZoom ?? 4;
                     const zoomScale = minimapZoom / 4.0;
 
-                    const cameraMapX = playerTileX >> 6;
-                    const cameraMapY = playerTileY >> 6;
-                    const localTileX = playerTileX & 63;
-                    const localTileY = playerTileY & 63;
-                    const subTileX = worldX - playerTileX;
-                    const subTileY = worldY - playerTileY;
-
                     const maskW = Math.max(1, Math.round(minimapMask.width * rootScaleX));
                     const maskH = Math.max(1, Math.round(minimapMask.height * rootScaleY));
                     const maskX = x + Math.round((width - maskW) / 2);
@@ -2465,31 +2458,20 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                         height: maskH,
                     });
 
-                    // Draw 3x3 grid of map tiles
-                    // Each tile is 64 tiles = 256 minimap pixels at 4px/tile
-                    const TILE_SIZE = 256;
-                    const playerOffsetX = (localTileX + subTileX) * 4;
-                    const playerOffsetY = (localTileY + subTileY) * 4;
+                    // Instances have one combined image, located at the scene origin.
+                    const minimapMaps = getMinimapMaps(osrsClient.renderer, playerTileX, playerTileY);
+                    for (const { mapX, mapY, baseX, baseY, size } of minimapMaps) {
+                        const url = osrsClient.getMinimapImageUrl?.(mapX, mapY, playerLevel);
+                        if (!url) continue;
 
-                    for (let mx = 0; mx < 3; mx++) {
-                        for (let my = 0; my < 3; my++) {
-                            const mapX = cameraMapX - 1 + mx;
-                            const mapY = cameraMapY - 1 + my;
-                            const url = osrsClient.getMinimapImageUrl?.(mapX, mapY, playerLevel);
-                            if (!url) continue;
+                        // Get or trigger load of minimap tile texture
+                        const tileTex = tc.getTextureFromUrl(url);
+                        if (!tileTex) continue;
 
-                            // Get or trigger load of minimap tile texture
-                            const tileTex = tc.getTextureFromUrl(url);
-                            if (!tileTex) continue;
+                        const relX = (baseX - worldX) * 4;
+                        const relY = (worldY - baseY - size) * 4;
 
-                            // Position relative to player (in minimap pixels)
-                            // mx=0 is west, mx=2 is east; my=0 is south, my=2 is north
-                            // Formula derived from original: tileY = 512 - my*256 + offsetY - ROTATION_CENTER
-                            const relX = (mx - 1) * TILE_SIZE - playerOffsetX;
-                            const relY = -my * TILE_SIZE + playerOffsetY;
-
-                            minimapRenderer.drawTile(tileTex, relX, relY, TILE_SIZE);
-                        }
+                        minimapRenderer.drawTile(tileTex, relX, relY, size * 4);
                     }
 
                     const minimapIconProvider = osrsClient.renderer as
@@ -2501,35 +2483,31 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                               ) => Array<{ localX: number; localY: number; spriteId: number }>;
                           }
                         | undefined;
-                    for (let mx = 0; mx < 3; mx++) {
-                        for (let my = 0; my < 3; my++) {
-                            const mapX = cameraMapX - 1 + mx;
-                            const mapY = cameraMapY - 1 + my;
-                            const icons = minimapIconProvider?.getMinimapIcons?.(
-                                mapX,
-                                mapY,
-                                playerLevel,
+                    for (const { mapX, mapY, baseX, baseY } of minimapMaps) {
+                        const icons = minimapIconProvider?.getMinimapIcons?.(
+                            mapX,
+                            mapY,
+                            playerLevel,
+                        );
+                        if (!icons || icons.length === 0) continue;
+
+                        for (const icon of icons) {
+                            const iconTex = tc.getBySpriteId(icon.spriteId | 0);
+                            if (!iconTex) continue;
+
+                            const iconWorldX = baseX + (icon.localX | 0) + 0.5;
+                            const iconWorldY = baseY + (icon.localY | 0) + 0.5;
+                            const iconScreen = minimapRenderer.relativeToScreen(
+                                (iconWorldX - worldX) * 4,
+                                (worldY - iconWorldY) * 4,
                             );
-                            if (!icons || icons.length === 0) continue;
-
-                            for (const icon of icons) {
-                                const iconTex = tc.getBySpriteId(icon.spriteId | 0);
-                                if (!iconTex) continue;
-
-                                const iconWorldX = mapX * 64 + (icon.localX | 0) + 0.5;
-                                const iconWorldY = mapY * 64 + (icon.localY | 0) + 0.5;
-                                const iconScreen = minimapRenderer.relativeToScreen(
-                                    (iconWorldX - worldX) * 4,
-                                    (worldY - iconWorldY) * 4,
-                                );
-                                minimapRenderer.drawOverlay(
-                                    iconTex,
-                                    iconScreen.x,
-                                    iconScreen.y,
-                                    iconTex.w * minimapRenderScale,
-                                    iconTex.h * minimapRenderScale,
-                                );
-                            }
+                            minimapRenderer.drawOverlay(
+                                iconTex,
+                                iconScreen.x,
+                                iconScreen.y,
+                                iconTex.w * minimapRenderScale,
+                                iconTex.h * minimapRenderScale,
+                            );
                         }
                     }
 

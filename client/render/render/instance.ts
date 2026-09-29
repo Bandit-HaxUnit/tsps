@@ -217,6 +217,7 @@ export async function loadInstanceScene(host: WebGLOsrsRendererHost,
         );
 
         // Clear existing maps so the instance scene is the only one rendered.
+        host.osrsClient.clearMinimapImageUrls();
         host.clearMaps();
 
         await host.doInstanceSceneBuild(templateChunks, regionX, regionY, playerMapX, playerMapY);
@@ -340,6 +341,7 @@ export function scheduleInstanceLocRebuild(host: WebGLOsrsRendererHost, ): void 
 export function clearInstance(host: WebGLOsrsRendererHost, ): void {
 
         host.instanceActive = false;
+        host.osrsClient.clearMinimapImageUrls();
         host.instanceTemplateChunks = null;
         if (host.instanceLocRebuildTimer !== null) {
             clearTimeout(host.instanceLocRebuildTimer);

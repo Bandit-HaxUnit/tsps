@@ -6029,7 +6029,9 @@ export class OsrsClient {
     }
 
     getMinimapImageUrl(mapX: number, mapY: number, level: number = 0): string | undefined {
-        if (mapX < 0 || mapY < 0 || mapX >= MapManager.MAX_MAP_X || mapY >= MapManager.MAX_MAP_Y) {
+        // Instance allocations can lie beyond the cache's overworld bounds.
+        // Each coordinate occupies one byte in the minimap image key.
+        if (mapX < 0 || mapY < 0 || mapX > 0xff || mapY > 0xff) {
             return undefined;
         }
         const mapId = this.getMinimapImageKey(mapX, mapY, level);
