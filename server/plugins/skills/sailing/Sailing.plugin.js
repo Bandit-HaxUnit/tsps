@@ -46,10 +46,13 @@ function boardedVarbits(type) {
 const COMBAT_OPTIONS_GROUP = 593;
 const VIEW_SAILING_OPTIONS_CHILD = 46;
 /**
- * The sidepanel's "View Combat Options" is built at runtime (script 8715, from the panel's
- * onLoad 8710 via 8712) as child 0 of 937:1, so its op needs events enabled to reach us.
+ * The sidepanel's "View Combat Options" is built at runtime inside 937:1 (script 8715, from
+ * the panel's onLoad 8710 via 8712). 8748 draws it from several pieces and the op goes on the
+ * last one, so its child index isn't fixed: enable op 1 across 937:1's children. Children
+ * without an op still show no menu entry.
  */
 const VIEW_COMBAT_OPTIONS_CHILD = 1;
+const VIEW_COMBAT_OPTIONS_MAX_SLOT = 31;
 const IF_EVENT_OP1 = 1 << 1;
 
 /** Everything reset when leaving a boat, whatever set it. */
@@ -80,7 +83,8 @@ function applyBoarded(player, owned) {
     varbits,
     varps: { [VARP_SIDEPANEL_BOAT_TYPE]: type.sidepanelBoatType },
   });
-  sender.sendInterfaceFlagsRange((SIDEPANEL_GROUP << 16) | VIEW_COMBAT_OPTIONS_CHILD, 0, 0, IF_EVENT_OP1);
+  sender.sendInterfaceFlagsRange(
+    (SIDEPANEL_GROUP << 16) | VIEW_COMBAT_OPTIONS_CHILD, 0, VIEW_COMBAT_OPTIONS_MAX_SLOT, IF_EVENT_OP1);
 }
 
 /** A tick after boarding, once the deck scene (or, on login, the gameframe) is in place. */

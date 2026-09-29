@@ -775,7 +775,7 @@ test("the combat tab's View button shows the sailing sidepanel aboard, and Comba
   Sailing.board(player, "the_pandemonium");
   click(593, 46);
   assert.deepEqual(mounted, [[161, 76, 937]]);
-  assert.deepEqual(events, [[937, 1, 0, 0, 2]], "the runtime-built View Combat Options button can be clicked");
+  assert.deepEqual(events, [[937, 1, 0, 31, 2]], "the runtime-built View Combat Options button can be clicked");
 
   const assign = WeaponInterfaceManager.assign;
   let restored = 0;
