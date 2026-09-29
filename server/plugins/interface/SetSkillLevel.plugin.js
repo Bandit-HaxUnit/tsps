@@ -5,15 +5,31 @@ const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/ri
 const Presets = require("../modes/pvp/Presets");
 
 const SKILLS_TAB_GROUP_ID = 320;
-// Combat skills, keyed by their component in the Skills tab (interface 320).
-const COMBAT_SKILLS = new Map([
+// Skills keyed by their component in the Skills tab (interface 320).
+const SKILLS = new Map([
   [1, Skill.ATTACK],
   [2, Skill.STRENGTH],
   [3, Skill.DEFENCE],
   [4, Skill.RANGED],
   [5, Skill.PRAYER],
   [6, Skill.MAGIC],
+  [7, Skill.RUNECRAFTING],
+  [8, Skill.CONSTRUCTION],
   [9, Skill.HITPOINTS],
+  [10, Skill.AGILITY],
+  [11, Skill.HERBLORE],
+  [12, Skill.THIEVING],
+  [13, Skill.CRAFTING],
+  [14, Skill.FLETCHING],
+  [15, Skill.SLAYER],
+  [16, Skill.HUNTER],
+  [17, Skill.MINING],
+  [18, Skill.SMITHING],
+  [19, Skill.FISHING],
+  [20, Skill.COOKING],
+  [21, Skill.FIREMAKING],
+  [22, Skill.WOODCUTTING],
+  [23, Skill.FARMING],
 ]);
 
 function isDeveloper(player) {
@@ -21,7 +37,10 @@ function isDeveloper(player) {
 }
 
 /** Why this player cannot set stats here, or null when they can. */
-function blockReason(player) {
+function blockReason(player, skill) {
+  if (isDeveloper(player)) return null;
+  if (!skill.canSetLevel()) return "Only Developers can set non-combat skill levels.";
+  if (!Presets.isEnabled()) return "Setting skill levels requires enabled presets.";
   if (player.getEquipment().getItems().some((item) => (item?.getId?.() ?? 0) > 0)) {
     return "You must remove all of your gear to set stats.";
   }
@@ -36,6 +55,11 @@ function promptForLevel(player, skill) {
   player.getPacketSender().sendInterfaceRemoval();
   player.setEnteredAmountAction({
     execute: (amount) => {
+      const reason = blockReason(player, skill);
+      if (reason) {
+        player.sendMessage(reason);
+        return;
+      }
       const level = Number(amount);
       if (!Number.isInteger(level) || level < minimum || level > 99) {
         player.sendMessage(`Invalid level. Please enter a level from ${minimum} to 99.`);
@@ -51,21 +75,15 @@ function handleSkillClick(event) {
   const { player, groupId, childId } = event;
   const skill =
     Number(groupId) === SKILLS_TAB_GROUP_ID
-      ? COMBAT_SKILLS.get(Number(childId))
+      ? SKILLS.get(Number(childId))
       : undefined;
-  if (!skill) return;
+  if (!skill || (!skill.canSetLevel() && !isDeveloper(player))) return;
   event.handled = true;
 
-  if (!isDeveloper(player)) {
-    if (!Presets.isEnabled()) {
-      player.sendMessage("Setting skill levels requires enabled presets.");
-      return;
-    }
-    const reason = blockReason(player);
-    if (reason) {
-      player.sendMessage(reason);
-      return;
-    }
+  const reason = blockReason(player, skill);
+  if (reason) {
+    player.sendMessage(reason);
+    return;
   }
   promptForLevel(player, skill);
 }
