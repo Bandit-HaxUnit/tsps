@@ -64,3 +64,31 @@ export function projectDeckToWorld(
     vec3.transformMat4(scratchPoint, scratchPoint, m);
     return { x: scratchPoint[0] * FINE_UNITS_PER_TILE, y: scratchPoint[2] * FINE_UNITS_PER_TILE };
 }
+
+/**
+ * Where a screen position points on the sea around a boat, in world fine units. Intersects
+ * the mouse ray with the water surface at the boat's position, so it doesn't depend on
+ * picking tiles in the boat's deck scene.
+ */
+export function pickSeaPoint(
+    host: WebGLOsrsRendererHost,
+    entityIndex: number,
+    mouseX: number,
+    mouseY: number,
+): { x: number; y: number } | undefined {
+    const entity = host.osrsClient.worldViewManager.getWorldEntity(entityIndex);
+    if (!entity?.hasPosition) return undefined;
+    const ray = host.screenToRay(mouseX, mouseY);
+    if (!ray) return undefined;
+    const boatX = entity.position.x / FINE_UNITS_PER_TILE;
+    const boatZ = entity.position.z / FINE_UNITS_PER_TILE;
+    const seaHeight = host.sampleHeightAtExactPlane(boatX, boatZ, 0);
+    const dy = ray.direction[1];
+    if (Math.abs(dy) < 1e-6) return undefined;
+    const t = (seaHeight - ray.origin[1]) / dy;
+    if (!(t > 0)) return undefined;
+    return {
+        x: (ray.origin[0] + ray.direction[0] * t) * FINE_UNITS_PER_TILE,
+        y: (ray.origin[2] + ray.direction[2] * t) * FINE_UNITS_PER_TILE,
+    };
+}

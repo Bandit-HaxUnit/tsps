@@ -54,6 +54,7 @@ import { SwitchItemSlotPacketListener } from "./packet/impl/SwitchItemSlotPacket
 import { PickupItemPacketListener } from "./packet/impl/PickupItemPacketListener";
 import { SecondGroundItemOptionPacketListener } from "./packet/impl/SecondGroundItemOptionPacketListener";
 import { ItemDefinition } from "../game/definition/ItemDefinition";
+import { BoatManager } from "../game/content/sailing/BoatManager";
 import { Bank } from "../game/model/container/impl/Bank";
 import { InterfaceActionClickOpcode } from "./packet/impl/InterfaceActionClickOpcode";
 import { ChangeAppearancePacketListener } from "./packet/impl/ChangeAppearancePacketListener";
@@ -222,6 +223,9 @@ class ClientConnection {
       switch (packet.type) {
         case "move":
           this.walk(packet.worldX, packet.worldY, packet.modifierFlags);
+          continue;
+        case "set_heading":
+          if (this.player) BoatManager.setHelmHeading(this.player, packet.heading);
           continue;
         case "npc_option":
           if (this.player) NPC_ACTIONS.executeOption(this.player, packet.index, packet.clickType);
@@ -864,6 +868,8 @@ class ClientConnection {
   private walk(x: number, y: number, modifierFlags: number): void {
     const player = this.player;
     if (!player) return;
+    // At a boat's helm a click sets the heading (the client normally sends SET_HEADING).
+    if (BoatManager.steerToward(player, x, y)) return;
     player.getCombat().reset();
     const run = modifierFlags === 2 ||
       ((modifierFlags & 1) !== 0 ? !player.isRunningReturn() : player.isRunningReturn());

@@ -436,3 +436,27 @@ test("a boat deck counts as the main world; other private areas don't", () => {
     BoatManager.dispose(boat);
   }
 });
+
+test("SET_HEADING decodes to one of the 16 helm headings", () => {
+  const { decodeClientPackets } = require("../dist/net/protocol/ClientProtocol");
+  assert.deepEqual(decodeClientPackets(Buffer.from([214, 9])), [{ type: "set_heading", heading: 9 }]);
+  assert.deepEqual(decodeClientPackets(Buffer.from([214, 0xff])), [{ type: "set_heading", heading: 15 }]);
+});
+
+test("only the player at the helm steers, by heading or by clicking", () => {
+  const boat = BoatManager.spawn(1, RAFT, AT_SEA);
+  try {
+    const sailor = { ...aboard(boat, 3, 4), getIndex: () => 7 };
+    BoatManager.setHelmHeading(sailor, 4);
+    assert.equal(boat.heading, NORTH, "not at the helm");
+    assert.equal(BoatManager.steerToward(sailor, 110, 100), false);
+
+    boat.helmPlayerId = 7;
+    BoatManager.setHelmHeading(sailor, 4);
+    assert.equal(boat.heading, WEST);
+    assert.equal(BoatManager.steerToward(sailor, boat.tileX + 10, boat.tileY), true);
+    assert.equal(boat.heading, EAST, "a click east of the boat");
+  } finally {
+    BoatManager.dispose(boat);
+  }
+});

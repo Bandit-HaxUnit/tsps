@@ -203,6 +203,7 @@ export type ClientMessage =
   | { type: "widget"; action: "open" | "close"; groupId: number; modal?: boolean }
   | { type: "widget_target"; targetWidgetId: number; targetSlot: number; targetItemId: number; sourceWidgetId: number; sourceSlot: number; sourceItemId: number }
   | { type: "widget_drag"; targetItemId: number; targetWidgetId: number; sourceItemId: number; sourceSlot: number; sourceWidgetId: number; targetSlot: number }
+  | { type: "set_heading"; heading: number }
   | { type: "interface_close" }
   | { type: "local_trigger"; widgetId: number; childIndex: number; itemId: number; opcodeParam: number; argsData: Buffer }
   | { type: "player_option"; index: number; option: number }
@@ -576,6 +577,8 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
         itemId: itemId >= 0 ? itemId : undefined,
       };
     }
+    case NativeClientPacket.SET_HEADING:
+      return { type: "set_heading", heading: reader.byte() & 15 };
     case NativeClientPacket.IF_BUTTOND: {
       return {
         type: "widget_drag", targetItemId: reader.shortLE(), targetWidgetId: reader.intLE(),

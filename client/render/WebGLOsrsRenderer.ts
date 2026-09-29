@@ -1561,6 +1561,15 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render.projectDeckToWorld(this, entityIndex, fineX, fineY);
     }
 
+    /** World fine point on the sea under a screen position, around a boat. */
+    pickSeaPointAt(
+        entityIndex: number,
+        mouseX: number,
+        mouseY: number,
+    ): { x: number; y: number } | undefined {
+        return render.pickSeaPoint(this, entityIndex, mouseX, mouseY);
+    }
+
     getWorldEntityTransformForTile(tileX: number, tileY: number): Float32Array {
         return render.getWorldEntityTransformForTile(this, tileX, tileY);
     }

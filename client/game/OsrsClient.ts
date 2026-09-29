@@ -100,6 +100,7 @@ import {
     subscribeWorldEntityInfo,
 } from "../network/ServerConnection";
 import type { WorldEntityInfoPayload } from "../network/ServerConnection";
+import { sendSetHeading } from "../network/serverConnection/outgoing/movement";
 import type {
     CollectionLogServerPayload,
     HitsplatServerPayload,
@@ -183,6 +184,7 @@ import { TextureLoader } from "../rs/texture/TextureLoader";
 import { faceAngleRs } from "../rs/utils/rotation";
 import { getOsrsInterfaceScalingPercent, setOsrsInterfaceScalingPercent } from "../ui/UiScale";
 import {
+    setHelmSteeringHandler,
     setNpcExamineIdResolver,
     setSpellSelectionClearHandler,
     setSpellSelectionResolver,
@@ -276,6 +278,7 @@ import { createBrowserRememberLoginPluginPersistence } from "./plugins/rememberl
 import { RememberLoginPlugin } from "./plugins/rememberlogin/RememberLoginPlugin";
 import { createBrowserTileMarkersPluginPersistence } from "./plugins/tilemarkers/BrowserTileMarkersPluginPersistence";
 import { TileMarkersPlugin } from "./plugins/tilemarkers/TileMarkersPlugin";
+import { createHelmSteeringDeps, steerFromHelm } from "./sailing/HelmSteering";
 import { createBrowserVengeanceTimerPluginPersistence } from "./plugins/vengeancetimer/BrowserVengeanceTimerPluginPersistence";
 import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlugin";
 import { createBrowserStatusTimerPluginPersistence } from "./plugins/statustimer/BrowserStatusTimerPluginPersistence";
@@ -1073,6 +1076,8 @@ export class OsrsClient {
             ),
         );
         setNpcExamineIdResolver((serverId) => this.resolveNpcExamineTypeId(serverId));
+        const helmSteering = createHelmSteeringDeps(this, sendSetHeading);
+        setHelmSteeringHandler((worldX, worldY) => steerFromHelm(helmSteering, worldX, worldY));
         const globalState = globalThis as typeof globalThis & {
             DEBUG_PROJECTILES?: boolean;
             DEBUG_PROJECTILES_VERBOSE?: boolean;
