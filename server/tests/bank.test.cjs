@@ -41,9 +41,11 @@ function createPlayer() {
   // Every packet-sender call is a chainable no-op.
   const sender = new Proxy({}, { get: () => () => sender });
   let currentTab = 0;
+  const messages = [];
   const player = {
+    messages,
     getUsername: () => "alice",
-    sendMessage: () => {},
+    sendMessage: (message) => messages.push(message),
     isSearchingBank: () => false,
     getPacketSender: () => sender,
     getStatus: () => PlayerStatus.BANKING,
@@ -110,4 +112,16 @@ test("withdrawing an item keeps its metadata", () => {
 
   assert.deepEqual(metas(player.getInventory()), [[1, { charges: 1200 }]]);
   assert.equal(player.getBank(0).getAmount(TRIDENT), 0);
+});
+
+test("a full bank tab refuses the item instead of throwing", () => {
+  const player = createPlayer();
+  const bank = player.getBank(0);
+  for (let slot = 0; slot < bank.capacity(); slot++) bank.add(new Item(20000 + slot, 1), false);
+  player.getInventory().add(new Item(TRIDENT, 1), false);
+
+  assert.doesNotThrow(() => player.getInventory().switchItem(bank, new Item(TRIDENT, 1), false, 0, false));
+
+  assert.ok(player.messages.includes("Not enough space in bank."));
+  assert.equal(player.getInventory().getAmount(TRIDENT), 1);
 });

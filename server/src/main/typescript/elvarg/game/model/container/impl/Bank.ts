@@ -17,10 +17,9 @@ const getPluginManager = () =>
     require("../../../../plugins/PluginManager").PluginManager as typeof import("../../../../plugins/PluginManager").PluginManager;
 
 export class Bank extends ItemContainer {
-    full(): ItemContainer;
-    full(itemId: number): boolean;
-    full(itemId?: unknown): boolean | ItemContainer {
-        throw new Error("Method not implemented.");
+    full(): ItemContainer {
+        this.getPlayer().sendMessage("Not enough space in bank.");
+        return this;
     }
     public static readonly TOTAL_BANK_TABS = 11;
     public static readonly CONTAINER_START = 50300;
@@ -721,11 +720,6 @@ export class Bank extends ItemContainer {
         }
         sender.sendBankSnapshot().sendItemContainer(this.getPlayer().getInventory(), Bank.INVENTORY_INTERFACE_ID);
 
-        return this;
-    }
-
-    public fulls(): ItemContainer | boolean {
-        this.getPlayer().sendMessage("Not enough space in bank.");
         return this;
     }
 
