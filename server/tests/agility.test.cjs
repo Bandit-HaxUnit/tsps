@@ -8,6 +8,7 @@ Server.installProductionPathResolver();
 const { Location } = require("../dist/game/model/Location");
 const { Skill } = require("../dist/game/model/Skill");
 const { ObjectIdentifiers } = require("../dist/util/ObjectIdentifiers");
+const { ObjectIds } = require("../dist/util/IdEnums");
 
 /** Runs submitted tasks on demand instead of on the game loop. */
 const tasks = [];
@@ -82,6 +83,7 @@ function createPlayer(x, y, z, level = 99) {
     }),
     getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: () => { state.hits++; } }) }),
     getInventory: () => ({ isFull: () => false, addItem() {} }),
+    getEquipment: () => ({ getItems: () => new Array(14).fill(null) }),
     isRegistered: () => true,
     getHitpoints: () => 99,
   };
@@ -188,6 +190,32 @@ for (const course of COURSES) {
     assert.equal(player.state.blocked, false, "movement unblocked after the lap");
   });
 }
+
+test("every shortcut plays out from either side without leaving the player locked", () => {
+  const random = Math.random;
+  Math.random = () => 0.5;
+  try {
+    for (const shortcut of SHORTCUTS) {
+      const objectId = Array.isArray(shortcut.object) ? shortcut.object[0] : shortcut.object;
+      const [x, y, z] = shortcut.at ?? [3000, 3000, 0];
+      for (const [dx, dy] of [[-2, -2], [2, 2]]) {
+        const player = createPlayer(x + dx, y + dy, z);
+        operate(player, objectId, [x, y, z]);
+        assert.equal(player.getAttribute("agility.obstacle") ?? null, null);
+        assert.equal(player.state.blocked, false);
+      }
+    }
+  } finally {
+    Math.random = random;
+  }
+});
+
+test("shortcuts sharing an object id are told apart by their tile", () => {
+  const dropTile = [3033, 3390, 1];
+  const player = createPlayer(3033, 3389, 1);
+  operate(player, ObjectIds.WALL_60, dropTile);
+  assert.deepEqual(tileOf(player), [3033, 3390, 0]);
+});
 
 test("skipping an obstacle does not count a lap", () => {
   const course = COURSES.find((entry) => entry.key === "draynor");

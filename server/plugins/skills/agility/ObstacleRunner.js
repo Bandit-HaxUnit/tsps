@@ -1,6 +1,7 @@
 const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
 const { Animation } = require("../../../src/main/typescript/elvarg/game/model/Animation");
+const { Graphic } = require("../../../src/main/typescript/elvarg/game/model/Graphic");
 const { Direction } = require("../../../src/main/typescript/elvarg/game/model/Direction");
 const { Flag } = require("../../../src/main/typescript/elvarg/game/model/Flag");
 const { ForceMovement } = require("../../../src/main/typescript/elvarg/game/model/ForceMovement");
@@ -20,13 +21,15 @@ const { HitMask } = require("../../../src/main/typescript/elvarg/game/content/co
  *   { render: id | null }             walk/stand animation override, null restores it
  *   { walk: [[x, y], ...] }           forced walk, one tile per tick, ignoring clipping
  *   { move: [x, y, z?], anim?, speed?, dir?, ticks? }
- *                                     exact-move to a tile, landing after `ticks` ticks
+ *                                     exact-move to a tile, landing after `ticks` ticks;
+ *                                     `ticks: 0` starts the move and leaves landing to a `tele`
  *   { tele: [x, y, z?] }              place the player on a tile (plane changes)
  *   { wait: ticks }                   continue after this many ticks
  *   { face: [x, y] } | { faceDir: "north" | ... }
  *   { hit: n | [min, max] }           damage the player
  *   { msg: text } | { say: text }     game message / overhead text
  *   { sound: id }                     sound effect
+ *   { gfx: id }                       play a graphic on the player
  *   { objAnim: id }                   animate the obstacle object
  *   { run: (ctx) => void }            escape hatch for one-off behaviour
  *
@@ -119,8 +122,10 @@ function expandSteps(steps) {
     if (step == null) continue;
     if (step.move) {
       expanded.push({ moveStart: step });
-      expanded.push({ wait: step.ticks ?? DEFAULT_MOVE_TICKS });
-      expanded.push({ land: step.move });
+      if (step.ticks !== 0) {
+        expanded.push({ wait: step.ticks ?? DEFAULT_MOVE_TICKS });
+        expanded.push({ land: step.move });
+      }
     } else {
       expanded.push(step);
     }
@@ -209,6 +214,8 @@ class ObstacleTask extends Task {
       player.forceChat(step.say);
     } else if (step.sound != null) {
       player.getPacketSender().sendSound(step.sound, 1, 0);
+    } else if (step.gfx != null) {
+      player.performGraphic(new Graphic(step.gfx));
     } else if (step.objAnim != null) {
       if (this.context.object) {
         player.getPacketSender().sendObjectAnimation(this.context.object, new Animation(step.objAnim));

@@ -88,14 +88,14 @@ function agilityLevel(player) {
  * Linear success chance: `base`% at the requirement, rising to certain success at
  * `never`. Obstacles without a `fail` block never fail.
  */
-function rollSuccess(player, obstacle) {
+function rollSuccess(player, obstacle, requirement) {
   const fail = obstacle.fail;
   if (!fail) return true;
   const level = agilityLevel(player);
-  const never = fail.neverFailLevel ?? obstacle.level + 20;
+  const never = fail.neverFailLevel ?? requirement + 20;
   if (level >= never) return true;
   const base = fail.baseChance ?? 75;
-  const from = fail.fromLevel ?? obstacle.level;
+  const from = fail.fromLevel ?? requirement;
   const chance = base + (Math.max(0, level - from) * (100 - base)) / Math.max(1, never - from);
   return Math.random() * 100 < chance;
 }
@@ -113,7 +113,6 @@ function completeLap(player, course) {
     player.getSkillManager().addExperiences(Skill.AGILITY, course.lapBonus);
   }
   player.sendMessage(`Your ${course.name} lap count is: <col=ff0000>${laps[course.key]}</col>.`);
-  course.onLap?.(player, pluginApi);
   pluginApi.emitCustomEvent("agility:lap", { player, course: course.key, laps: laps[course.key] });
 }
 
@@ -184,8 +183,9 @@ function skipAhead(player, obstacle, context) {
 
 function attemptObstacle(player, object, obstacle) {
   const context = objectContext(player, object);
-  if (agilityLevel(player) < obstacle.level) {
-    player.sendMessage(`You need an Agility level of at least ${obstacle.level} to attempt this.`);
+  const level = resolve(obstacle.level, context);
+  if (agilityLevel(player) < level) {
+    player.sendMessage(`You need an Agility level of at least ${level} to attempt this.`);
     return;
   }
   const blocked = obstacle.precondition?.(context);
@@ -193,7 +193,7 @@ function attemptObstacle(player, object, obstacle) {
     player.sendMessage(blocked);
     return;
   }
-  const success = rollSuccess(player, obstacle);
+  const success = rollSuccess(player, obstacle, level);
   const steps = resolve(success ? obstacle.steps : obstacle.fail.steps, context);
   if (!steps) return;
   const startMessage = success ? obstacle.start : obstacle.fail?.start ?? obstacle.start;
