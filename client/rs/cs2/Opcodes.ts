@@ -909,6 +909,8 @@ export enum Opcodes {
     ARRAY_LENGTH = 8003,
     ARRAY_COUNT_MATCHES = 8007,
     ARRAY_MAX_VALUE = 8009,
+    // Unnamed upstream; name and signature inferred from the cargo hold's grid (script 8872).
+    ARRAY_FILL_SEQUENCE = 8011,
     ARRAY_JOIN = 8019,
     ENUM_TO_ARRAY = 8020,
     ARRAY_NEW = 8022,
