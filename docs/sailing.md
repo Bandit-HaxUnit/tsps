@@ -57,11 +57,15 @@ sailing: {
       | { kind: "docked"; dock: string }                                // at a port or mooring point
       | { kind: "at_sea"; fineX: number; fineY: number; angle: number } // owner logged out aboard
       | { kind: "sunk" };                                               // needs a shipwright
+    cargo: ({ id: number; amount: number } | null)[]; // the cargo hold, by slot
   }>;
   activeBoatSlot: number | null; // the boat the player is aboard or last set sail in
   returnPoint: { x: number; y: number; level: number } | null; // last gangplank, mooring point or buoy
+  tools: number[]; // tools compartment slots holding their tool, shared by all boats
 }
 ```
+
+What a cargo hold accepts is data (`data/definitions/sailing-cargo.json`): the tools by item id, and every other storable item by exact name or name prefix, grouped by category. `lostOnRecovery` marks the categories a shipwright's recovery loses.
 
 Docks are data (`data/definitions/sailing-docks.json`): an id, the gangplank loc, where the boat is placed when fetched, and where the player lands on disembarking.
 
@@ -104,7 +108,7 @@ tsps has no world views, but it has `PrivateArea` (used by Construction's house)
 - gangplanks: Board / Disembark, routed to the lifecycle
 - helm: Navigate (walking onto the helm tile first) / Stop-navigating, the sail buttons (move mode from varbit 19175), clicking to set a heading; Escape, after a yes/no confirmation
 - shipwright: Junior Jim at The Pandemonium retrieves a sunk raft for 250 gp (PR 1 needs this, or a sunk raft is stuck forever)
-- developer commands: `::raft` gives a raft docked at The Pandemonium and `::pandemonium` teleports to its gangplank. The dock is where xrsps's raft docks (gangplank 59836 at 3070, 2987); the Pandemonium quest and buying boats come later
+- developer commands: `::raft` gives a raft docked at The Pandemonium, `::pandemonium` teleports to its gangplank, and `::sailingtools` shows every tool in the cargo hold's tools compartment (their quests don't exist yet). The dock is where xrsps's raft docks (gangplank 59836 at 3070, 2987); the Pandemonium quest and buying boats come later
 
 ## Client
 

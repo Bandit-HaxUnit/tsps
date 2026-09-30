@@ -6,6 +6,7 @@ const { packedHeadingToAngle } = require("../../../src/main/typescript/elvarg/ga
 const { PlayerRights } = require("../../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
 const { content } = require("./sailingContent");
+const { TOOLS_UNLOCKED_ATTRIBUTE, sendToolUnlocks } = require("./cargo");
 
 const RAFT_DOCK = "the_pandemonium";
 const MOVE_MODES = {
@@ -26,6 +27,13 @@ function giveRaft({ player }) {
 function toPandemonium({ player }) {
   const { landing } = Sailing.getDock(RAFT_DOCK);
   player.moveTo(new Location(landing.x, landing.y, landing.z));
+}
+
+/** Shows every tool in the cargo hold's tools compartment, as if their quests were done. */
+function unlockSailingTools({ player }) {
+  player.setAttribute(TOOLS_UNLOCKED_ATTRIBUTE, true);
+  sendToolUnlocks(player);
+  player.sendMessage("Every tool now shows in your cargo hold's tools compartment.");
 }
 
 function describe(boat) {
@@ -73,7 +81,9 @@ module.exports = {
   register(api) {
     content();
     api.registerCommand("raft", giveRaft, PlayerRights.DEVELOPER);
+    api.persistAttribute(TOOLS_UNLOCKED_ATTRIBUTE);
     api.registerCommand("pandemonium", toPandemonium, PlayerRights.DEVELOPER);
+    api.registerCommand("sailingtools", unlockSailingTools, PlayerRights.DEVELOPER);
     api.registerCommand("boatinfo", boatInfo, PlayerRights.DEVELOPER);
     api.registerCommand("sailmode", sailMode, PlayerRights.DEVELOPER);
     api.registerCommand("heading", heading, PlayerRights.DEVELOPER);

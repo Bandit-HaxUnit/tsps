@@ -19,7 +19,7 @@
     "sidepanelBoatType": 8110,
     "facilityHotspot": 15,
     "sidepanelFacilitySlots": 16,
-    "repairKits": 10,
+    "cargoCapacity": 20,
     "stats": {
       "baseSpeed": 192,
       "speedCap": 320,

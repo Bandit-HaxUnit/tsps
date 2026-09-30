@@ -77,6 +77,7 @@ export class Sailing {
         const boat: OwnedBoat = {
             slot, type, name, hitpoints: 0, facilities: [],
             location: { kind: "docked", dock: dockId },
+            cargo: [],
         };
         state.boats.push(boat);
         state.boats.sort((a, b) => a.slot - b.slot);

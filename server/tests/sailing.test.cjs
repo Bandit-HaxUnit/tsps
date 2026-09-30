@@ -490,8 +490,21 @@ const { Inventory } = require("../dist/game/model/container/impl/Inventory");
 const { Item } = require("../dist/game/model/Item");
 const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
 const { emptySailingState, normalizeSailingState } = require("../dist/game/content/sailing/SailingState");
+const cargo = require("../plugins/skills/sailing/cargo");
 
-ItemDefinition.forId = (id) => ({ getId: () => id, getName: () => "Coins", isStackable: () => id === 995, isNoted: () => false });
+const ITEM_NAMES = {
+  995: "Coins", 2: "Steel cannonball", 385: "Shark", 8794: "Saw", 31964: "Repair kit",
+  31986: "Captain's log", 7534: "Fishbowl helmet", 7535: "Diving apparatus",
+  32435: "Crate of adamantite ore",
+};
+const STACKABLE = new Set([995, 2]);
+ItemDefinition.forId = (id) => ({
+  getId: () => id,
+  getName: () => ITEM_NAMES[id] ?? "Coins",
+  isStackable: () => STACKABLE.has(id),
+  isNoted: () => false,
+  getExamine: () => `It's a ${ITEM_NAMES[id]}.`,
+});
 
 const DOCK = { id: "port_sarim", mooring: { fineX: 3074 * 128 + 64, fineY: 2987 * 128 + 64, level: 0, angle: NORTH }, landing: { x: 3069, y: 2987, z: 0 } };
 Sailing.initialize();
@@ -665,20 +678,24 @@ test("saved sailing state drops anything malformed", () => {
   assert.deepEqual(normalizeSailingState(undefined), emptySailingState());
   assert.deepEqual(normalizeSailingState({
     boats: [
-      { slot: 0, type: "raft", name: "A", location: { kind: "docked", dock: "port_sarim" } },
+      { slot: 0, type: "raft", name: "A", location: { kind: "docked", dock: "port_sarim" },
+        cargo: [{ id: 31964, amount: 2 }, null, { id: "kit", amount: 1 }, { id: 385, amount: 0 }] },
       { slot: 0, type: "raft", location: { kind: "docked", dock: "x" } },
       { slot: 1, type: "raft", location: { kind: "at_sea", fineX: "no" } },
       { type: "raft" },
     ],
     activeBoatSlot: 9,
     returnPoint: { x: 1 },
+    tools: [0, 4, 4, "log"],
   }), {
     boats: [
-      { slot: 0, type: "raft", name: "A", hitpoints: 0, facilities: [], location: { kind: "docked", dock: "port_sarim" } },
-      { slot: 1, type: "raft", name: "", hitpoints: 0, facilities: [], location: { kind: "sunk" } },
+      { slot: 0, type: "raft", name: "A", hitpoints: 0, facilities: [], location: { kind: "docked", dock: "port_sarim" },
+        cargo: [{ id: 31964, amount: 2 }, null, null, null] },
+      { slot: 1, type: "raft", name: "", hitpoints: 0, facilities: [], location: { kind: "sunk" }, cargo: [] },
     ],
     activeBoatSlot: null,
     returnPoint: null,
+    tools: [0, 4],
   });
 });
 
@@ -706,6 +723,7 @@ function registerPlugin(file) {
     onCustomEvent: (name, handler) => { hooks.events[name] = handler; },
     onInterfaceActionClick: (handler) => hooks.interfaceClicks.push(handler),
     onObjectRoute: (handler) => { hooks.route = handler; },
+    persistAttribute: () => {},
     sendMultiChatboxPrompt: (_player, title, ...pairs) => { hooks.prompt = { title, pairs }; },
   });
   return hooks;
@@ -794,6 +812,7 @@ test("::raft gives a raft moored at The Pandemonium; ::boatinfo lists boats", ()
   const commands = {};
   require("../plugins/skills/sailing/SailingCommands.plugin").register({
     registerCommand: (name, handler) => { commands[name] = handler; },
+    persistAttribute: () => {},
   });
   const player = sailor();
   commands.raft({ player, parts: ["raft"] });
@@ -811,6 +830,7 @@ test("::pandemonium is a developer command that teleports to the dock, sinking a
   const rights = {};
   require("../plugins/skills/sailing/SailingCommands.plugin").register({
     registerCommand: (name, handler, minimum) => { commands[name] = handler; rights[name] = minimum; },
+    persistAttribute: () => {},
   });
   assert.equal(rights.pandemonium, PlayerRights.DEVELOPER);
 
@@ -906,4 +926,213 @@ test("the combat tab's View button shows the sailing sidepanel aboard, and Comba
   assert.equal(restored, 1);
   assert.equal(click(593, 12), false, "other combat buttons are left alone");
   Sailing.disembark(player, "the_pandemonium");
+});
+
+// --- Cargo hold.
+
+function holdHarness() {
+  const hold = registerPlugin("CargoHold.plugin");
+  const player = sailor();
+  player.attributes = new Map();
+  let interfaceId = -1;
+  let amountAction = null;
+  player.getInterfaceId = () => interfaceId;
+  player.setInterfaceId = (id) => { interfaceId = id; return player; };
+  player.setEnteredAmountAction = (action) => { amountAction = action; };
+  const sent = { inventories: [], varps: new Map(), varbits: new Map(), sounds: [], scripts: [], prompt: null };
+  const record = {
+    sendInventory: (id, capacity, items) => sent.inventories.push({ id, capacity, items: items.map((slot) => slot && { ...slot }) }),
+    sendConfig: (id, value) => sent.varps.set(id, value),
+    sendVarbit: (id, value) => sent.varbits.set(id, value),
+    sendSoundEffect: (id) => sent.sounds.push(id),
+    sendInterfaceScript: (id, args) => sent.scripts.push([id, ...(args ?? [])]),
+    sendEnterAmountPrompt: (title) => { sent.prompt = title; },
+  };
+  const sender = new Proxy({}, { get: (_t, key) => (...args) => { record[key]?.(...args); return sender; } });
+  player.getPacketSender = () => sender;
+  Sailing.giveBoat(player, "raft", DOCK.id, "Extreme Pride");
+  Sailing.board(player, DOCK.id);
+  const click = (groupId, childId, action, slot, itemId) => {
+    const event = { player, groupId, childId, action, slot, itemId, handled: false };
+    hold.interfaceClicks[0](event);
+    return event.handled;
+  };
+  const slotOf = (id) => player.getInventory().getItems().findIndex((item) => item?.getId() === id);
+  const give = (id, amount = 1) => player.getInventory().add(new Item(id, amount), false);
+  return {
+    hold, player, sent, click, slotOf, give,
+    boat: () => Sailing.activeBoat(player),
+    open: () => hold.objects["Basic cargo hold"].Open({ player }),
+    answer: (amount) => amountAction.execute(amount),
+    done: () => Sailing.disembark(player, DOCK.id),
+  };
+}
+
+test("opening the cargo hold sends the boat's hold and opens 943 and 944 as live OSRS does", () => {
+  const h = holdHarness();
+  try {
+    h.give(31964);
+    h.give(8794);
+    h.open();
+    assert.equal(h.player.getInterfaceId(), 943);
+    assert.equal(h.sent.varps.get(5204), 963, "the raft in slot 0 uses inventory 963");
+    assert.deepEqual(h.sent.inventories.at(-1), { id: 963 + 32768, capacity: 20, items: [] },
+      "sent as the scripts' \"other\" inventory, as live OSRS does");
+    assert.equal(h.sent.varps.get(5205), 1, "only the repair kit's slot can be deposited");
+    assert.ok(h.sent.sounds.includes(10907));
+    assert.ok(h.sent.scripts.some(([id, frame, title]) => id === 227 && frame === ((943 << 16) | 1) && title === "Cargo Hold: Extreme Pride"));
+  } finally {
+    h.done();
+  }
+});
+
+test("depositing and withdrawing follow the selected quantity and the op", () => {
+  const h = holdHarness();
+  try {
+    for (let i = 0; i < 3; i++) h.give(31964);
+    h.open();
+    assert.equal(h.click(944, 1, 1, h.slotOf(31964), 31964), true);
+    assert.equal(cargo.countIn(h.boat(), 31964), 1, "op 1 with quantity 1 deposits one");
+    assert.equal(h.sent.varbits.get(19210), 5, "the sidepanel counts 5 uses per kit in the hold");
+
+    h.click(943, 21, 1);
+    assert.equal(h.sent.varbits.get(4430), 1, "the 5 button sets depositbox_mode 1");
+    h.click(944, 1, 1, h.slotOf(31964), 31964);
+    assert.equal(cargo.countIn(h.boat(), 31964), 3, "op 1 with quantity 5 deposits the other two");
+    assert.equal(h.player.getInventory().getAmount(31964), 0);
+
+    h.click(943, 10, 2, 0, 31964);
+    assert.equal(h.player.getInventory().getAmount(31964), 1, "op 2 is always 1");
+    h.click(943, 10, 6, 1, 31964);
+    assert.equal(h.player.getInventory().getAmount(31964), 3, "op 6 is All, across the kit's slots");
+    assert.equal(h.sent.varbits.get(19210), 0);
+  } finally {
+    h.done();
+  }
+});
+
+test("X prompts for an amount, and the hold refuses what it can't store", () => {
+  const h = holdHarness();
+  try {
+    for (let i = 0; i < 3; i++) h.give(31964);
+    h.give(8794);
+    h.open();
+    h.click(944, 1, 5, h.slotOf(31964), 31964);
+    assert.equal(h.sent.prompt, "Enter amount:");
+    h.answer(2);
+    assert.equal(cargo.countIn(h.boat(), 31964), 2);
+
+    h.click(944, 1, 1, h.slotOf(8794), 8794);
+    assert.deepEqual(h.player.messages.slice(-1), ["The cargo hold cannot store that item."]);
+    assert.equal(h.player.getInventory().getAmount(8794), 1);
+  } finally {
+    h.done();
+  }
+});
+
+test("a stack takes one slot, and a full hold says so", () => {
+  const h = holdHarness();
+  try {
+    h.give(2, 500);
+    for (let i = 0; i < 26; i++) h.give(31964);
+    h.open();
+    h.click(943, 24, 1);
+    h.click(944, 1, 1, h.slotOf(2), 2);
+    assert.deepEqual(h.boat().cargo[0], { id: 2, amount: 500 });
+    h.click(944, 1, 1, h.slotOf(31964), 31964);
+    assert.equal(cargo.countIn(h.boat(), 31964), 19, "the raft's 20 slots, one used by the cannonballs");
+    assert.equal(h.player.getInventory().getAmount(31964), 7);
+    assert.deepEqual(h.player.messages.slice(-1), ["Your cargo hold is full."]);
+  } finally {
+    h.done();
+  }
+});
+
+test("tools go to the tools compartment and come back out, without using space", () => {
+  const h = holdHarness();
+  try {
+    h.give(31986);
+    h.give(7534);
+    h.give(7535);
+    h.open();
+    h.click(943, 15, 1);
+    assert.deepEqual(h.player.getSailing().tools.sort(), [0, 4]);
+    assert.equal(h.player.getInventory().getValidItems().length, 0);
+    assert.deepEqual(h.boat().cargo, [], "tools take no hold space");
+    assert.ok(h.sent.sounds.includes(10905));
+
+    h.click(943, 18, 1, 4);
+    assert.equal(h.player.getInventory().getAmount(7534) + h.player.getInventory().getAmount(7535), 2);
+    assert.deepEqual(h.player.messages.slice(-1), ["You collect some diving gear from the tools compartment."]);
+    assert.deepEqual(h.player.getSailing().tools, [0]);
+    assert.ok(h.sent.sounds.includes(2582));
+  } finally {
+    h.done();
+  }
+});
+
+test("Deposit Cargo and Deposit Salvage only take their own items", () => {
+  const h = holdHarness();
+  try {
+    h.give(31964);
+    h.open();
+    h.click(943, 13, 1);
+    assert.deepEqual(h.player.messages.slice(-1), ["You have no cargo to deposit."]);
+    h.click(943, 14, 1);
+    assert.deepEqual(h.player.messages.slice(-1), ["You have no salvage to deposit."]);
+    assert.ok(h.sent.sounds.includes(2277));
+    h.give(32435);
+    h.click(943, 13, 1);
+    assert.equal(cargo.countIn(h.boat(), 32435), 1);
+    assert.equal(cargo.countIn(h.boat(), 31964), 0, "the repair kit isn't cargo");
+  } finally {
+    h.done();
+  }
+});
+
+test("a shipwright's recovery loses courier crates, salvage and fish, and keeps supplies", () => {
+  const shipwright = registerPlugin("Shipwright.plugin").npcs["Junior Jim"]["Recover-boat"];
+  const player = sailor();
+  Sailing.giveBoat(player, "raft", "the_pandemonium");
+  const boat = Sailing.activeBoat(player);
+  boat.location = { kind: "sunk" };
+  boat.cargo = [{ id: 32435, amount: 1 }, { id: 31964, amount: 1 }, { id: 385, amount: 1 }];
+  player.getInventory().add(new Item(995, 1000), false);
+  shipwright({ player, npc: { getDefinition: () => ({ getName: () => "Junior Jim" }) } });
+  assert.equal(boat.location.kind, "docked");
+  assert.deepEqual(boat.cargo, [null, { id: 31964, amount: 1 }, null]);
+});
+
+test("the hold's item ops map to amounts as cache scripts 8873 and 8896 label them", () => {
+  const { opAmount } = require("../plugins/skills/sailing/CargoHold.plugin");
+  const player = { getAttribute: () => 4 };
+  assert.equal(opAmount(player, 1), 10, "op 1 is the selected quantity (mode 4 = 10)");
+  assert.deepEqual([2, 3, 4, 6].map((op) => opAmount(player, op)), [1, 5, 10, Number.MAX_SAFE_INTEGER]);
+  assert.equal(opAmount(player, 5), undefined, "X prompts");
+});
+
+test("::sailingtools shows every tool, and the hold keeps sending it after a relog", () => {
+  const { PlayerRights } = require("../dist/game/model/rights/PlayerRights");
+  const commands = {};
+  const rights = {};
+  const persisted = [];
+  require("../plugins/skills/sailing/SailingCommands.plugin").register({
+    registerCommand: (name, handler, minimum) => { commands[name] = handler; rights[name] = minimum; },
+    persistAttribute: (key) => persisted.push(key),
+  });
+  assert.equal(rights.sailingtools, PlayerRights.DEVELOPER);
+  assert.ok(persisted.includes("sailing:toolsUnlocked"));
+
+  const h = holdHarness();
+  try {
+    h.open();
+    assert.equal(h.sent.varbits.has(18314), false, "not unlocked: only the captain's log shows");
+    commands.sailingtools({ player: h.player, parts: ["sailingtools"] });
+    assert.deepEqual([18314, 18282, 18317, 1895].map((id) => h.sent.varbits.get(id)), [50, 40, 20, 40]);
+    h.sent.varbits.clear();
+    h.open();
+    assert.equal(h.sent.varbits.get(18314), 50, "opening the hold sends them again");
+  } finally {
+    h.done();
+  }
 });

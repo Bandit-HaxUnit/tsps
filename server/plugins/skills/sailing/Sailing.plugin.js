@@ -25,6 +25,7 @@ const {
   animateDeckLocs,
   isSail,
 } = require("./sailingContent");
+const { repairKitUses } = require("./cargo");
 
 const SEQ_SAIL_DOWN = 13367;
 
@@ -48,7 +49,7 @@ function boardedVarbits(type, owned) {
     [VARBIT.SIDEPANEL_BOAT_HP_MAX]: type.hitpoints,
     [VARBIT.SIDEPANEL_BOAT_HP]: type.hitpoints,
     [VARBIT.SIDEPANEL_HELM_STATUS]: HELM_STATUS.FREE,
-    [VARBIT.SIDEPANEL_REPAIRKITS]: type.repairKits,
+    [VARBIT.SIDEPANEL_REPAIRKITS]: repairKitUses(owned),
     [VARBIT.SIDEPANEL_VISIBLE]: 1,
     [VARBIT.SIDEPANEL_VISIBLE_FROM_COMBAT_TAB]: 1,
     [VARBIT.SIDEPANEL_BOAT_MOVE_MODE]: MOVE_MODE.MOORED,

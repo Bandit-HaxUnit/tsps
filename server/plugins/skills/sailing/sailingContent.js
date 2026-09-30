@@ -29,7 +29,7 @@ const VARBIT = {
   SIDEPANEL_BOAT_HP_MAX: 19177,
   SIDEPANEL_BOAT_HP: 19181,
   SIDEPANEL_PLAYER_AT_HELM: 19205,
-  SIDEPANEL_REPAIRKITS: 19210,
+  SIDEPANEL_REPAIRKITS: 19210, // repair kit uses in the cargo hold: 5 per kit
   SIDEPANEL_PLAYER_ROLE: 19233,
   SIDEPANEL_PLAYERS_ON_BOARD_TOTAL: 19235,
   SIDEPANEL_BOAT_BASESPEED: 19250,
@@ -68,15 +68,16 @@ const SCRIPT_SIDEBUTTON_SWITCH = 915;
 
 let loaded = null;
 
-/** Loads boats.json and sailing-docks.json into Sailing once, for every plugin. */
+/** Loads boats.json and sailing-docks.json into Sailing (and sailing-cargo.json) once, for every plugin. */
 function content() {
   if (loaded) return loaded;
   const read = (file) => JSON.parse(fs.readFileSync(path.resolve(process.cwd(), GameConstants.DEFINITIONS_DIRECTORY, file), "utf8"));
   const boats = read("boats.json");
   const docks = read("sailing-docks.json");
+  const cargo = read("sailing-cargo.json");
   for (const boat of boats) Sailing.registerBoatType(boat);
   for (const dock of docks) Sailing.registerDock(dock);
-  loaded = { boats, docks };
+  loaded = { boats, docks, cargo };
   return loaded;
 }
 

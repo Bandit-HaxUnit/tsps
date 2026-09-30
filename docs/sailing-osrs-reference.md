@@ -174,20 +174,67 @@ One interface serves the gangplank and Junior Jim. Varbit 18553 sets the mode, a
   - boat 2: hull 19305, trim 19322, stored HP 19459, stored max HP 19464;
   - port: boat 1 19260, boat 3 19336 (boat 2's wasn't captured).
 
-## Cargo hold (raft)
+## Cargo hold
 
-- **The op:** "Open" is op 1 on the cargo hold (60245). The player walks next to it and faces it.
-- **Inventory:** varp 5204 (`sailing_boat_cargohold_inv`) is set to the boat's inventory: 963 for slot 1, up to 967 for slot 5. The inventory is sent in full.
-- **Sound:** 10907.
-- **Main modal: interface 943.**
-  - Item grid 943:10: slots 0-239, ops 1-6 and 10.
-  - Tools 943:18: slots 0-4, op 1.
-  - Capacity text 943:5: "20" on the raft.
-  - Title via script 227: "Cargo Hold: <boat name>".
-- **Side modal: interface 944.** Item grid 944:1: slots 0-27, ops 1-6 and 10, plus drag.
-- **The `busy` varbit** (12393) is 1 while it's open.
+**The loc** is a multiloc (60245 on the raft), chosen by varbit 19134:
+- 0 gives "Basic cargo hold" (60577) with Open / Deposit-all / Modify;
+- 1 gives 60581, whose first op is Deposit-held (when carrying cargo).
 
-Depositing, withdrawing and the tools haven't been captured yet.
+**What it holds** (OSRS Wiki, Cargo hold):
+- **Capacity:** by boat and hold tier. A basic hold has 20 slots on the raft, 30 on the skiff and 40 on the sloop; a rosewood hold has 120, 180 and 240.
+- **Slots:** every item takes a slot, except that a stackable item's whole stack takes one.
+- **Which items:** only the wiki's "Storable items": sailing capes and tools, salvage, courier crates, bounty items, repair kits, cannonballs, ship drinks, fish, fish offcuts and crates, and fishing gear. Noted items aren't accepted.
+- **Recovery losses:** courier crates, bounty items, salvage, fish and full fish crates are lost when a shipwright recovers the boat.
+
+**Opening it:**
+1. Op 1 "Open". You walk next to the hold and face it.
+2. Varp 5204 (`sailing_boat_cargohold_inv`) is set to the boat's inventory: 963 for slot 1, up to 967 for slot 5. That inventory is sent in full.
+3. Sound 10907, then script 917 `[-1, -1]`.
+4. Interface 943 opens as the main modal and 944 as the side modal.
+5. Events:
+   - 943:10 slots 0-239, ops 1-6 and 10;
+   - 944:1 slots 0-27, ops 1-6 and 10, plus drag;
+   - 943:18 slots 0-4, op 1.
+6. Text and title: 943:5 shows the capacity ("20"), and script 227 sets the title to "Cargo Hold: <boat name>".
+7. The `busy` varbit (12393) is 1 while it's open.
+
+**Closing:** varp 5205 and `busy` go back to 0, and 944 then 943 close.
+
+**Items:**
+- **Withdraw** is an op on 943:10 at the hold slot. **Deposit** is an op on 944:1 at the inventory slot, and the item goes to the hold's first free slot.
+- **Quantity:** the 1 / 5 / 10 / X / All buttons (943:20-24) set `depositbox_mode` (varbit 4430) to 0, 1, 4, 3 and 2.
+  - **Op 1 is the selected quantity.** Ops 2-6 are 1, 5, 10, X and All, with the selected one moved to op 1 (cache scripts 8873 and 8896). Op 10 is Examine.
+  - **X** runs script 108 "Enter amount:" and reads the typed count.
+  - Asking for more than there is moves what's there. Withdrawing 5 unstackable items takes them from several slots.
+- **Whitelist:** varp 5205 is a bitmask of the inventory slots that can be deposited. It's rebuilt after every inventory change while the hold is open.
+- **Repair kits:** the sidepanel's repair kit count (varbit 19210) is 5 uses per repair kit in the hold, and follows every change.
+- **Refused:** "The cargo hold cannot store that item." (game message).
+- **Deposit buttons** (943:13 Cargo, 14 Salvage, 15 Inventory):
+  - Deposit Inventory moves everything storable, with sound 10905.
+  - With nothing to move: "You have no cargo to deposit." / "You have no salvage to deposit.", with sound 2277.
+- **Item stacking:** the "Item stacking" toggle (varbit 19592) sends nothing to the server. It only changes how the client draws the hold.
+- **Warning:** "Dismiss" (944:8) sets varbit 19123 and hides the warning on the side panel.
+
+**The tools compartment:** shared by all your boats, and taking no space. Taking a tool is op 1 on 943:18, with sound 2582.
+
+| Slot | Tool | Item(s) | Message |
+| --- | --- | --- | --- |
+| 0 | Captain's log | 31986 | You collect your captain's log from the tools compartment. |
+| 1 | Spyglass | 31803 | You collect a spyglass from the tools compartment. |
+| 2 | Current duck | 31805 | not captured |
+| 3 | Crowbar | 31807 | not captured |
+| 4 | Diving gear | 7534 + 7535 | You collect some diving gear from the tools compartment. |
+
+Depositing a tool, by Deposit Inventory or singly, puts it back in the compartment.
+
+**Tool unlocks:** script 9138 shows a tool only once its quest progress is reached. The captain's log always shows.
+
+| Tools row | Shown when |
+| --- | --- |
+| 8010 | varbit 18314 ≥ 50 (The Pandemonium, which also switches the log between 31985 and 31986 at 46) |
+| 8011 | 18314 ≥ 50 and 18282 ≥ 40 |
+| 8012 | 18314 ≥ 50 and 18317 ≥ 20 |
+| 8013 | 18314 ≥ 50 and 1895 ≥ 40 |
 
 ## Messages
 
@@ -198,6 +245,9 @@ Depositing, withdrawing and the tools haven't been captured yet.
 | Recovery | npc say (Port Wizard) | Another recovery? This won't take long... |
 | Recovery | dialogue (Junior Jim) | All done! The boat is now docked here at the Pandemonium. |
 | Hull upgrade | message box | With the help of some workers, you swap out the hull of your boat. |
+| Cargo hold | game | The cargo hold cannot store that item. |
+| Cargo hold | game | You have no cargo to deposit. / You have no salvage to deposit. |
+| Tools compartment | game | You collect your captain's log / a spyglass / some diving gear from the tools compartment. |
 
 ## Where tsps differs
 
@@ -206,11 +256,20 @@ Depositing, withdrawing and the tools haven't been captured yet.
 - **The boat's name varbits** (19149, 19150) aren't sent: their encoding is unknown.
 - **The linen sail** isn't placed, because its live id is a fairy ring in revision 237.
 - **The skiff and sloop spawn tile** (3075, 2987) is one tile east of the raft's. tsps only has the raft so far.
+- **Cargo hold:**
+  - `busy` isn't set while it's open, because plugins get no close hook to clear it.
+  - Varbit 19134 isn't driven, so the loc's first op stays Open (no Deposit-held).
+  - Guessed rather than captured:
+    - the loc's "Deposit-all" (taken to mean everything storable);
+    - the full-hold message ("Your cargo hold is full.");
+    - a tool you haven't stored (nothing happens);
+    - diving gear needing both parts to be stored.
+  - The wiki's bounty items aren't listed, since no item name matched.
+  - None of the tool quests exist yet, so only the captain's log shows. The developer command `::sailingtools` sets the unlock varbits for your own client. The server doesn't check unlocks, so a hidden tool can still be deposited.
 
 ## Wanted captures
 
 - Taking the helm, setting and trimming sails, steering and stopping.
 - Teleporting from sea, Escape, and logging out and back in at sea.
 - Disembarking at a dock gangplank.
-- Depositing and withdrawing in the cargo hold, and its tools.
 - Buying a boat (Junior Jim's Buy-boat).
