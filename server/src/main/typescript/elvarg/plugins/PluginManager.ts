@@ -43,6 +43,7 @@ import {
   PluginZoneEvent,
   PluginNpcSpawnDefinition,
   PluginObjectRouteEvent,
+  PluginNpcRouteEvent,
   PluginObjectInteractionEvent,
   PluginPlayerDefeatedEvent,
   PluginPathBlockedEvent,
@@ -160,6 +161,7 @@ export class PluginManager {
   private static activeRegionsHooks: PluginHook<PluginActiveRegionsEvent>[] = [];
   private static pathBlockedHooks: PluginHook<PluginPathBlockedEvent>[] = [];
   private static objectRouteHooks: PluginHook<PluginObjectRouteEvent>[] = [];
+  private static npcRouteHooks: PluginHook<PluginNpcRouteEvent>[] = [];
   private static objectInteractionHooks: ObjectInteractionHook[] = [];
   private static objectHooksById = new Map<string, ObjectInteractionHook[]>();
   private static objectHooksByName = new Map<string, ObjectInteractionHook[]>();
@@ -829,6 +831,14 @@ export class PluginManager {
         return;
       }
     }
+  }
+
+  public static emitNpcRoute(event: PluginNpcRouteEvent): void {
+    if (!event?.player || !event.npc) return;
+    for (const hook of PluginManager.npcRouteHooks) {
+      PluginManager.executeHook(hook, event, "npc_route", "npc_route");
+    }
+    event.range = Number.isInteger(event.range) ? Math.max(1, Math.min(24, event.range)) : 1;
   }
 
   // NOTE FOR MAINTAINERS:
@@ -1781,6 +1791,7 @@ export class PluginManager {
       Flag: require(`${model}/Flag`).Flag,
       Direction: require(`${model}/Direction`).Direction,
       Equipment: require(`${model}/container/impl/Equipment`).Equipment,
+      Bank: require(`${model}/container/impl/Bank`).Bank,
       Task: require("../game/task/Task").Task,
       TaskManager: require("../game/task/TaskManager").TaskManager,
       ItemIdentifiers: require("../util/ItemIdentifiers").ItemIdentifiers,
@@ -1795,6 +1806,11 @@ export class PluginManager {
       World: require("../game/World").World,
       GameObject: require("../game/entity/impl/object/GameObject").GameObject,
       ObjectManager: require("../game/entity/impl/object/ObjectManager").ObjectManager,
+      MapObjects: require("../game/entity/impl/object/MapObjects").MapObjects,
+      ItemOnGroundManager: require("../game/entity/impl/grounditem/ItemOnGroundManager").ItemOnGroundManager,
+      ItemDefinition: require("../game/definition/ItemDefinition").ItemDefinition,
+      CacheDefinitions: require("../game/cache/CacheDefinitions").CacheDefinitions,
+      PathFinder: require(`${model}/movement/path/PathFinder`).PathFinder,
       NpcDefinition: require("../game/definition/NpcDefinition").NpcDefinition,
       GameConstants: require("../game/GameConstants").GameConstants,
       TeleportHandler: require(`${model}/teleportation/TeleportHandler`).TeleportHandler,
@@ -2407,6 +2423,9 @@ export class PluginManager {
           return;
         }
         PluginManager.objectRouteHooks.push({ pluginName, handler });
+      },
+      onNpcRoute: (handler) => {
+        if (typeof handler === "function") PluginManager.npcRouteHooks.push({ pluginName, handler });
       },
       onNpcInteraction: (
         handler: string | ((event: PluginNpcInteractionEvent) => void),

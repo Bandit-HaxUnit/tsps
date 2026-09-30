@@ -1093,7 +1093,7 @@ export class MovementQueue {
         };
     }
 
-    public walkToEntity(entity: Mobile, runnable?: () => void) {
+    public walkToEntity(entity: Mobile, runnable?: () => void, range = 1) {
         let mobility = this.getMobility();
         if (!mobility.canMove()) {
             mobility.sendMessage(this.player);
@@ -1110,7 +1110,10 @@ export class MovementQueue {
 
         this.walkToReset();
 
-        if (PathFinder.reachedEntity(this.player, entity)) {
+        const reached = () => range <= 1 ? PathFinder.reachedEntity(this.player, entity) :
+            this.isInteractionTargetValid(entity) && this.player.getLocation().isWithinDistance(entity.getLocation(), range)
+            && RegionManager.canProjectileAttack(this.player, this.player.getLocation(), entity.getLocation());
+        if (reached()) {
             this.player.setMobileInteraction(entity);
             runnable?.();
             return;
@@ -1134,7 +1137,7 @@ export class MovementQueue {
             }
             this.player.setMobileInteraction(entity);
 
-            if (PathFinder.reachedEntity(this.player, entity)) {
+            if (reached()) {
                 this.player.getMovementQueue().reset();
                 runnable?.();
                 task.stop();

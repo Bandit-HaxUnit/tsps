@@ -213,9 +213,9 @@ export class ItemOnGroundManager {
         return this.registerLocation(player, item, player.getLocation().clone());
     }
 
-    public static registerLocation(player: Player, item: Item, position: Location): ItemOnGround {
+    public static registerLocation(player: Player, item: Item, position: Location, privateArea = player.getPrivateArea()): ItemOnGround {
         let i = new ItemOnGround(State.SEEN_BY_PLAYER, player.getUsername(), position, item, true,
-            -1, player.getPrivateArea());
+            -1, privateArea);
         this.register(i);
         return i;
     }
