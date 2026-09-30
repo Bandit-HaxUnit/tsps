@@ -341,6 +341,17 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                 },
             };
 
+        case ServerPacketId.HINT_ARROW:
+            return {
+                type: "hint_arrow",
+                payload: {
+                    arrowType: reader.readByte(),
+                    a: reader.readShort(),
+                    b: reader.readShort(),
+                    c: reader.readByte(),
+                },
+            };
+
         case ServerPacketId.REBUILD_REGION: {
             const rebuildRegionY = reader.readShort();
             const rebuildForceReload = reader.readByte() === 1;

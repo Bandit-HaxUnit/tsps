@@ -251,6 +251,7 @@ export class PluginManager {
   private static pluginPerfEnabled = false;
   private static pluginPerfStats = new Map<string, PluginPerfStat>();
   private static pluginCoreApi: PluginCoreApi | null = null;
+  private static pluginConfigCache: Record<string, unknown> | null = null;
 
   private static executeHook<T>(
     hook: PluginHook<T>,
@@ -1552,6 +1553,37 @@ export class PluginManager {
     return new Set(config.disabledPlugins.map(normalizePluginName));
   }
 
+  /** Reads the world.json `pluginConfig` map once (empty when unset or malformed). */
+  private static loadPluginConfig(): Record<string, unknown> {
+    if (PluginManager.pluginConfigCache) {
+      return PluginManager.pluginConfigCache;
+    }
+    let parsed: unknown;
+    try {
+      const configPath = path.join(process.cwd(), "data", "definitions", "world.json");
+      parsed = (JSON.parse(fs.readFileSync(configPath, "utf8")) as { pluginConfig?: unknown })
+        .pluginConfig;
+    } catch {
+      parsed = undefined;
+    }
+    PluginManager.pluginConfigCache =
+      parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+    return PluginManager.pluginConfigCache;
+  }
+
+  /** Value of world.json `pluginConfig[key]`, or `defaultValue` when the key is unset. */
+  public static getPluginConfig<T = unknown>(key: string, defaultValue?: T): T {
+    if (typeof key !== "string" || key.length === 0) {
+      return defaultValue as T;
+    }
+    const config = PluginManager.loadPluginConfig();
+    return Object.prototype.hasOwnProperty.call(config, key)
+      ? (config[key] as T)
+      : (defaultValue as T);
+  }
+
   private static collectPluginLoadCandidates(
     pluginPaths: string[]
   ): PluginLoadCandidate[] {
@@ -1770,6 +1802,9 @@ export class PluginManager {
       NpcDialogue: require(`${model}/dialogues/entries/impl/NpcDialogue`).NpcDialogue,
       PlayerDialogue: require(`${model}/dialogues/entries/impl/PlayerDialogue`).PlayerDialogue,
       ActionDialogue: require(`${model}/dialogues/entries/impl/ActionDialogue`).ActionDialogue,
+      PlayerRights: require("../game/model/rights/PlayerRights").PlayerRights,
+      Server: require("../Server").Server,
+      PluginManager: require("./PluginManager").PluginManager,
     });
     return PluginManager.pluginCoreApi;
   }
@@ -3084,6 +3119,8 @@ export class PluginManager {
           optionCallbackPairs
         );
       },
+      getPluginConfig: <T>(key: string, defaultValue?: T) =>
+        PluginManager.getPluginConfig<T>(key, defaultValue),
       onButton: (buttonIds, handler) => {
         registerButtonHook(buttonIds, handler, "button");
       },

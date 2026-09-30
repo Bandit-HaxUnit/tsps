@@ -353,7 +353,8 @@ export function handleInboundWorld(msg: any): boolean {
             const g: any = (typeof window !== "undefined" ? window : globalThis) as any;
             const mv = g?.__osrsClient;
             const payload = msg.payload as { scriptId: number; args: (number | string)[] };
-            const script = mv?.cs2Vm?.context?.loadScript?.(payload.scriptId | 0);
+            const scriptId = payload.scriptId | 0;
+            const script = mv?.cs2Vm?.context?.loadScript?.(scriptId);
             if (script) {
                 const intArgs: number[] = [];
                 const stringArgs: string[] = [];

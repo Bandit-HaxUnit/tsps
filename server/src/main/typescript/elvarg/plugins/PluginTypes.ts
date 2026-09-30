@@ -754,6 +754,12 @@ export interface PluginApi {
       string | ((player: any, optionIndex: number, optionText: string) => void)
     >
   ): boolean;
+  /**
+   * Reads an entry from world.json `pluginConfig` by key, e.g.
+   * `getPluginConfig("TutorialIsland:allowSkip", true)`. Returns `defaultValue`
+   * when the key is not set.
+   */
+  getPluginConfig<T = unknown>(key: string, defaultValue?: T): T;
   onButton(
     buttonIds: number | number[],
     handler: (event: PluginButtonClickEvent) => void | boolean
@@ -1000,6 +1006,9 @@ export interface PluginCoreApi {
   NpcDialogue: any;
   PlayerDialogue: any;
   ActionDialogue: any;
+  PlayerRights: any;
+  Server: any;
+  PluginManager: any;
 }
 
 export interface PluginModule {

@@ -65,7 +65,7 @@ function replaceObject(object, newId, player) {
 function openManhole(event) {
   const { player, object, objectId } = event;
   const openId = resolveOpenId(objectId);
-  if (openId === null || openId === objectId) return;
+  if (openId === null || openId === objectId) return false;
   replaceObject(object, openId, player);
   player.performAnimation(CLIMB_DOWN_ANIMATION);
   event.handled = true;
@@ -73,14 +73,14 @@ function openManhole(event) {
 
 function closeManhole(event) {
   const { player, object, objectId, location } = event;
-  if (objectId !== ObjectIdentifiers.MANHOLE_2 || !isAt(location, MANHOLE_POSITION)) return;
+  if (objectId !== ObjectIdentifiers.MANHOLE_2 || !isAt(location, MANHOLE_POSITION)) return false;
   replaceObject(object, ObjectIdentifiers.MANHOLE, player);
   event.handled = true;
 }
 
 function climbDownManhole(event) {
   const { player, location } = event;
-  if (!isAt(location, MANHOLE_POSITION)) return;
+  if (!isAt(location, MANHOLE_POSITION)) return false;
   pluginApi.emitCustomEvent("ladders:climbDown", {
     player,
     destination: SEWER_LADDER_POSITION.clone(),
@@ -90,7 +90,7 @@ function climbDownManhole(event) {
 
 function climbUpToManhole(event) {
   const { player, location } = event;
-  if (!isAt(location, SEWER_LADDER_POSITION)) return;
+  if (!isAt(location, SEWER_LADDER_POSITION)) return false;
   pluginApi.emitCustomEvent("ladders:climbUp", {
     player,
     destination: MANHOLE_POSITION.clone(),

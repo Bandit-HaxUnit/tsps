@@ -10,6 +10,7 @@ const CLIMB_DOWN = new Animation(827);
 // Cache animations last 1260ms up and 1160ms down, rounded up to 600ms ticks.
 const CLIMB_UP_TICKS = 3;
 const CLIMB_DOWN_TICKS = 2;
+let pluginApi;
 let TaskManager;
 
 /**
@@ -112,13 +113,37 @@ function climbDown(event) {
   climb({ player: event.player, destination }, CLIMB_DOWN, CLIMB_DOWN_TICKS);
 }
 
+/**
+ * Ambiguous "Climb" option (the mill's first-floor ladder offers it as the
+ * left-click). Ask which way instead of guessing, then hand off to the normal
+ * named handlers; the up/down options only fire if the player hasn't moved.
+ */
+function promptClimb(event) {
+  const { player } = event;
+  const start = player.getLocation().clone();
+  const sourceLocation = { x: start.getX(), y: start.getY(), z: start.getZ() };
+  return pluginApi.sendMultiChatboxPrompt(
+    player,
+    "Which way would you like to climb?",
+    "Climb up",
+    () => {
+      if (player.getLocation().equals(start)) climbUp({ ...event, destination: undefined, sourceLocation });
+    },
+    "Climb down",
+    () => {
+      if (player.getLocation().equals(start)) climbDown({ ...event, destination: undefined, sourceLocation });
+    }
+  );
+}
+
 module.exports = {
   name: "Ladders",
   register(api) {
+    pluginApi = api;
     TaskManager = api.getTaskManager();
     api.onCustomEvent("ladders:climbUp", climbUp);
     api.onCustomEvent("ladders:climbDown", climbDown);
-    api.onObjectInteraction("Ladder", { "Climb-up": climbUp, "Climb-down": climbDown });
-    api.onObjectInteraction("Staircase", { "Climb-up": climbUp, "Climb-down": climbDown });
+    api.onObjectInteraction("Ladder", { "Climb": promptClimb, "Climb-up": climbUp, "Climb-down": climbDown });
+    api.onObjectInteraction("Staircase", { "Climb": promptClimb, "Climb-up": climbUp, "Climb-down": climbDown });
   },
 };

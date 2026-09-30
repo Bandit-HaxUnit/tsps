@@ -63,6 +63,7 @@ import { LoadingMessageOverlay } from "../../../ui/devoverlay/LoadingMessageOver
 import { LoginOverlay } from "../../../ui/devoverlay/LoginOverlay";
 import { OverheadPrayerOverlay } from "../../../ui/devoverlay/OverheadPrayerOverlay";
 import { OverheadTextOverlay } from "../../../ui/devoverlay/OverheadTextOverlay";
+import { TutorialHintOverlay } from "../../../ui/devoverlay/TutorialHintOverlay";
 import {
     HealthBarEntry,
     HitsplatEntry,
@@ -352,6 +353,23 @@ export async function initShaders(host: WebGLOsrsRendererHost, ): Promise<Progra
                 // Init may fail if cache not ready - will be reinitialized in initOverlays()
                 try {
                     oh.init({ app: host.app, sceneUniforms: host.sceneUniformBuffer });
+                } catch {}
+            }
+        } catch {}
+
+        // Register the native Tutorial Island hint arrow overlay.
+        try {
+            if (host.overlayManager && host.hitsplatProgram && host.sceneUniformBuffer) {
+                const hint = new TutorialHintOverlay(host.hitsplatProgram, {
+                    getCacheSystem: () => host.osrsClient.cacheSystem,
+                    getClient: () => host.osrsClient,
+                    resolveNpcOverlayAnchor: (ecsId, x, z, typeId) =>
+                        host.resolveNpcOverlayAnchor(ecsId, x, z, typeId),
+                });
+                host.tutorialHintOverlay = hint;
+                host.overlayManager.add(hint);
+                try {
+                    hint.init({ app: host.app, sceneUniforms: host.sceneUniformBuffer });
                 } catch {}
             }
         } catch {}

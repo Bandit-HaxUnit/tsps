@@ -112,7 +112,10 @@ function loadItemDefinitions() {
       mismatched++;
       continue;
     }
-    def.equipmentType = hydrateEquipmentType(rawDef.equipmentType);
+    // "NONE" is the export's default, not a claim; keep the cache wearPos slot
+    // (e.g. Bronze sword 1277 is exported as NONE but wearPos 3).
+    const equipmentType = hydrateEquipmentType(rawDef.equipmentType);
+    if (equipmentType.getSlot() !== -1) def.equipmentType = equipmentType;
     def.weaponInterface = hydrateWeaponInterface(rawDef.weaponInterface);
     for (const property of [
       "doubleHanded", "sellable", "bloodMoneyValue", "highAlch",

@@ -32,6 +32,12 @@ const DOOR_NAMES = new Set([
 ]);
 let DOOR_CATALOG = null;
 
+// Doors with no open variant in the cache: OSRS opens them by rotating the same loc
+// (open id === closed id). Their consecutive ids are unrelated doors with the same
+// model, so the same-model pairing below must not pair them. Tutorial Island:
+// start house, chef entry/exit, quest guide, and the bank/prayer area doors.
+const SELF_OPENING_DOOR_IDS = new Set([9398, 9709, 9710, 9716, 9721, 9722, 9723, 9724]);
+
 function buildDoorCatalog() {
   const closedToOpen = new Map();
   const openToClosed = new Map();
@@ -39,6 +45,10 @@ function buildDoorCatalog() {
   for (let id = 0; id < total; id++) {
     const def = CacheDefinitions.getObject(id);
     if (!def || !DOOR_NAMES.has(def.name) || !hasAction(def.actions, "open")) {
+      continue;
+    }
+    if (SELF_OPENING_DOOR_IDS.has(id)) {
+      closedToOpen.set(id, id);
       continue;
     }
     const partner = CacheDefinitions.getObject(id + 1);
@@ -59,6 +69,7 @@ function buildDoorCatalog() {
     // Skip double-door leaves and already-paired ids so chains don't form.
     if (
       hasAction(partner.actions, "open") &&
+      !SELF_OPENING_DOOR_IDS.has(id + 1) &&
       JSON.stringify(partner.models) === JSON.stringify(def.models) &&
       !DOUBLE_DOOR_ID_FAMILIES.some((family) => family.includes(id) || family.includes(id + 1)) &&
       !openToClosed.has(id) &&
@@ -94,8 +105,12 @@ const DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
   Object.freeze([1596, 1597, 1598]),
   Object.freeze([4423, 4424, 4425]),
   Object.freeze([2039, 2041, 1571, 1572]),
+  // Tutorial Island mining exit: same metal gate as 1727/1728 (9717 is the left leaf).
+  Object.freeze([9717, 9718, 1571, 1572]),
+  // Tutorial Island rat cage: same metal gate, face 0 (9719 is the left/south leaf).
+  Object.freeze([9719, 9720, 1571, 1572]),
 ]);
-const SPECIAL_DOUBLE_DOOR_LEFT_IDS = new Set([1568, 1571, 1727, 14751, 14753, 2039]);
+const SPECIAL_DOUBLE_DOOR_LEFT_IDS = new Set([1568, 1571, 1727, 14751, 14753, 2039, 9717, 9719]);
 const SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map([
   [1568, [1569]],
   [1569, [1568]],
@@ -109,6 +124,10 @@ const SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map([
   [14754, [14751, 14753]],
   [2039, [2041]],
   [2041, [2039]],
+  [9717, [9718]],
+  [9718, [9717]],
+  [9719, [9720]],
+  [9720, [9719]],
 ]);
 const SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
   [1568, 1571],
@@ -119,6 +138,10 @@ const SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
   [14752, 14754],
   [2039, 1571],
   [2041, 1572],
+  [9717, 1571],
+  [9718, 1572],
+  [9719, 1571],
+  [9720, 1572],
 ]);
 const DOUBLE_DOOR_FAMILY_IDS_BY_ID = new Map(
   DOUBLE_DOOR_ID_FAMILIES.flatMap((familyIds) =>
@@ -349,8 +372,12 @@ function handleMappedDoor(player, object, objectId, location) {
     ? objectFromSnapshot(existingState.current[0], player?.getPrivateArea?.() ?? null)
     : object;
   const activeLocation = activeObject.getLocation?.() ?? location;
-  const open = (activeObject.getId?.() ?? objectId) !== closedId;
-  const nextId = open ? closedId : closedId + 1;
+  const openId = getDoorCatalog().closedToOpen.get(closedId);
+  // A self-opening door keeps its id, so only the tracked state says it is open.
+  const open = openId === closedId
+    ? existingState != null
+    : (activeObject.getId?.() ?? objectId) !== closedId;
+  const nextId = open ? closedId : openId;
   const type = Number(activeObject.getType?.() ?? activeObject.type ?? 0);
   const rotation = Number(activeObject.getFace?.() ?? activeObject.face ?? 0) & 0x3;
   const nextRotation = open ? ((rotation + 1) & 0x3) : rotation;

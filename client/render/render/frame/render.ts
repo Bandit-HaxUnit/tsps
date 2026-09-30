@@ -210,6 +210,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                 if (host.overheadTextOverlay) host.overheadTextOverlay.scale = overlayScale;
                 if (host.hitsplatOverlay) host.hitsplatOverlay.scale = overlayScale;
                 if (host.overheadPrayerOverlay) host.overheadPrayerOverlay.scale = overlayScale;
+                if (host.tutorialHintOverlay) host.tutorialHintOverlay.scale = overlayScale;
                 if (host.healthBarOverlay) {
                     host.healthBarOverlay.scale =
                         overlayScale * RENDER_CONSTANTS.HEALTH_BAR_VISUAL_SCALE;
@@ -237,6 +238,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                 if (host.overheadTextOverlay) host.overheadTextOverlay.scale = overlayScale;
                 if (host.hitsplatOverlay) host.hitsplatOverlay.scale = overlayScale;
                 if (host.overheadPrayerOverlay) host.overheadPrayerOverlay.scale = overlayScale;
+                if (host.tutorialHintOverlay) host.tutorialHintOverlay.scale = overlayScale;
                 if (host.healthBarOverlay) {
                     host.healthBarOverlay.scale =
                         overlayScale * RENDER_CONSTANTS.HEALTH_BAR_VISUAL_SCALE;

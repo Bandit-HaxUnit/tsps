@@ -91,6 +91,9 @@ for (const npcId of FISH_SPOT_ROD_BAIT_IDS) {
   addSpotTool(npcId, 2, TOOLS.FISHING_ROD);
 }
 
+// Tutorial Island's shrimp pond only offers "Net".
+addSpotTool(NpcIds.FISHING_SPOT_43, 1, TOOLS.NET);
+
 const FISH_SPOT_CAGE_HARPOON_IDS = [NpcIds.FISHING_SPOT_11, NpcIds.FISHING_SPOT_10];
 for (const npcId of FISH_SPOT_CAGE_HARPOON_IDS) {
   addSpotTool(npcId, 1, TOOLS.LOBSTER_POT);
