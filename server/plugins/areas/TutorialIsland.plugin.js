@@ -20,11 +20,8 @@
  *  - The "Tutorial Island Progress" overlay (cache interface 649) is shown
  *    while the tutorial is active and driven by varp 2687.
  *
- * Enable/disable with world.json "tutorialIslandEnabled" (default on), or
- * disable the plugin entirely through world.json "disabledPlugins".
+ * Enable/disable the plugin through world.json "disabledPlugins".
  */
-const fs = require("fs");
-const path = require("path");
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { Server } = require("../../src/main/typescript/elvarg/Server");
 const { PluginManager } = require("../../src/main/typescript/elvarg/plugins/PluginManager");
@@ -512,21 +509,8 @@ module.exports = {
       Objects.LADDER_90, // 9728 surface down
     ]);
 
-    let enabled = null;
     const overlayShown = new WeakSet();
     const openTabs = new WeakMap();
-
-    function isEnabled() {
-      if (enabled !== null) return enabled;
-      try {
-        const file = path.join(core.GameConstants.DEFINITIONS_DIRECTORY, "world.json");
-        const config = JSON.parse(fs.readFileSync(file, "utf8"));
-        enabled = config.tutorialIslandEnabled !== false;
-      } catch {
-        enabled = true;
-      }
-      return enabled;
-    }
 
     function stage(player) {
       const value = Number(player.getAttribute(STAGE_ATTR));
@@ -1431,7 +1415,6 @@ module.exports = {
     function handleLogin(event) {
       const player = event.player;
       if (!player || player.isPlayerBot?.() === true) return;
-      if (!isEnabled()) return;
 
       if (event.isNewAccount) {
         setStage(player, STAGE.GIELINOR_TALK);
