@@ -26,6 +26,11 @@ When behaviour is unclear, resolve in this order:
 If a source conflicts with the cache in `server/caches`, the cache wins - it is what the
 client actually loads. If sources conflict on behaviour, prefer the Wiki.
 
+Packet captures from live OSRS (for example with rsprox) are first-hand evidence for what the
+server sends: packet order, varps/varbits, interface events, exact messages. Record the facts a
+feature relies on in its docs page, not the raw logs (they carry account details), and check
+every captured id against the cache - live may be a newer revision than `server/caches`.
+
 Do not cite another private server as justification. If a behaviour can only be found in
 RSPS code, say so explicitly in the PR so it can be checked.
 
