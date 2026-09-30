@@ -1,7 +1,7 @@
 .rl-sidebar-root {
     --sidebar-panel-width: min(320px, calc(100vw - 28px));
     --sidebar-toggle-width: 24px;
-    --sidebar-toggle-height: 118px;
+    --sidebar-toggle-height: 59px;
     --sidebar-close-size: 44px;
     --sidebar-edge-gap: 14px;
     --sidebar-shell-gap: 12px;
@@ -507,7 +507,7 @@
         --sidebar-edge-gap: 10px;
         --sidebar-shell-gap: 8px;
         --sidebar-toggle-width: 22px;
-        --sidebar-toggle-height: 102px;
+        --sidebar-toggle-height: 51px;
         --sidebar-close-size: 42px;
     }
 
