@@ -755,9 +755,9 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         }
 
         if (!parent.children) parent.children = [];
-        if (childIndex > 0 && !parent.children[childIndex - 1]) {
-            throw new Error("RuntimeException");
-        }
+        // The live client allows a gap: the boat selection interface (script 8628) creates its
+        // first row on 934:19 at the child count 5295 returned for 934:18. Skipped indices
+        // stay empty.
         while (parent.children.length <= childIndex) parent.children.push(null);
 
         // IMPORTANT: Dynamic widgets must have a unique runtime UID in our client.
