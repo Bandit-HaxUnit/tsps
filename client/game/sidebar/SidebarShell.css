@@ -476,6 +476,17 @@
     font-size: 12px;
 }
 
+/* Mobile: the edge toggle only needs to fit the chevron plus a little padding,
+   and sits level with the minimap/orb cluster instead of the desktop 30%. */
+.game-viewport-mobile .rl-sidebar-root {
+    --sidebar-toggle-width: 16px;
+    --sidebar-toggle-height: 30px;
+}
+
+.game-viewport-mobile .rl-sidebar-toggle {
+    top: 20%;
+}
+
 @media (max-width: 960px) {
     .rl-sidebar-root {
         --sidebar-panel-width: min(292px, calc(100vw - 24px));
