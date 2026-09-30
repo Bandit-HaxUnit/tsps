@@ -831,6 +831,40 @@ test("leaving the boat by logging out sends nothing to the (closed) client", () 
   assert.equal(sent, 0);
 });
 
+test("boarding sends the raft's varbits and stats as live OSRS does", () => {
+  const [switchTab] = registerPlugin("Sailing.plugin").interfaceClicks;
+  const player = sailor();
+  const varbits = new Map();
+  const varps = new Map();
+  const sender = new Proxy({}, {
+    get: (_t, key) => key === "sendVarbit"
+      ? (id, value) => { varbits.set(id, value); return sender; }
+      : key === "sendConfig"
+        ? (id, value) => { varps.set(id, value); return sender; }
+        : () => sender,
+  });
+  player.getPacketSender = () => sender;
+  Sailing.giveBoat(player, "raft", "the_pandemonium");
+  Sailing.board(player, "the_pandemonium");
+  try {
+    switchTab({ player, groupId: 593, childId: 46, handled: false });
+    // Boat slot (from 1) and type (raft 0).
+    for (const [id, value] of [[19121, 1], [18554, 1], [19130, 1], [19137, 0], [19143, 0]]) {
+      assert.equal(varbits.get(id), value, `varbit ${id}`);
+    }
+    // Speed stats: base 192 (1.5 tiles a tick), cap 320, boost 20, acceleration 64.
+    for (const [id, value] of [[19250, 192], [19251, 320], [19256, 20], [19257, 64]]) {
+      assert.equal(varbits.get(id), value, `varbit ${id}`);
+    }
+    assert.equal(varbits.has(19145), false, "OSRS doesn't set the last-dock varbit on boarding");
+    for (const [id, value] of [[5117, 8110], [5147, 1], [5159, 24], [5160, 11], [5161, 6], [5162, 9], [5163, 4], [5164, 13], [5165, 26]]) {
+      assert.equal(varps.get(id), value, `varp ${id}`);
+    }
+  } finally {
+    Sailing.disembark(player, "the_pandemonium");
+  }
+});
+
 test("the combat tab's View button shows the sailing sidepanel aboard, and Combat Options switches back", () => {
   const { WeaponInterfaceManager } = require("../dist/game/content/combat/WeaponInterfaceManager");
   const [switchTab] = registerPlugin("Sailing.plugin").interfaceClicks;
@@ -858,7 +892,8 @@ test("the combat tab's View button shows the sailing sidepanel aboard, and Comba
   Sailing.board(player, "the_pandemonium");
   click(593, 46);
   assert.deepEqual(mounted, [[161, 76, 937]]);
-  assert.deepEqual(events, [[937, 1, 0, 31, 2]], "the runtime-built View Combat Options button can be clicked");
+  assert.deepEqual(events, [[937, 1, 0, 12, 2], [937, 25, 0, 16, 30]],
+    "View Combat Options and the raft's facility buttons get OSRS's event ranges");
 
   const assign = WeaponInterfaceManager.assign;
   let restored = 0;

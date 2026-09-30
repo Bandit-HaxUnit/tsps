@@ -5,15 +5,21 @@ const fs = require("fs");
 const path = require("path");
 const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sailing/Sailing");
 const { GameConstants } = require("../../../src/main/typescript/elvarg/game/GameConstants");
+const { BoatManager } = require("../../../src/main/typescript/elvarg/game/content/sailing/BoatManager");
+const { Animation } = require("../../../src/main/typescript/elvarg/game/model/Animation");
+const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
 
 const VARBIT = {
+  LAST_PERSONAL_BOAT_BOARDED: 18554, // boat slot, from 1
   PLAYER_IS_ON_PLAYER_BOAT: 19104, // gangplank: Board / Disembark
   FACILITY_LOCKEDIN: 19105, // helm: Navigate / Stop-navigating (3)
   PRELOADED_ANIMS: 19118,
-  BOAT_SPAWNED: 19121,
+  BOAT_SPAWNED: 19121, // boat slot, from 1
   BOARDED_BOAT_WORLD: 19122,
+  PREVIOUS_BOAT_DATA_SLOT: 19130, // boat slot, from 1
   BOARDED_BOAT: 19136,
-  BOARDED_BOAT_LAST_DOCK: 19145,
+  BOARDED_BOAT_TYPE: 19137, // raft 0, skiff 1, sloop 2
+  PREVIOUS_BOAT_TYPE_ID: 19143,
   SIDEPANEL_VISIBLE: 19151,
   SIDEPANEL_VISIBLE_FROM_COMBAT_TAB: 19153,
   SIDEPANEL_FACILITY_HOTSPOT0: 19156,
@@ -26,9 +32,24 @@ const VARBIT = {
   SIDEPANEL_REPAIRKITS: 19210,
   SIDEPANEL_PLAYER_ROLE: 19233,
   SIDEPANEL_PLAYERS_ON_BOARD_TOTAL: 19235,
+  SIDEPANEL_BOAT_BASESPEED: 19250,
+  SIDEPANEL_BOAT_SPEEDCAP: 19251,
+  SIDEPANEL_BOAT_SPEEDBOOST_DURATION: 19256,
+  SIDEPANEL_BOAT_ACCELERATION: 19257,
   MINIMAP_STATE: 6719,
 };
 const VARP_SIDEPANEL_BOAT_TYPE = 5117;
+/** The sidepanel's boat defence stats, by `stats` field in boats.json. */
+const VARP_SIDEPANEL_DEFENCE = {
+  defence: 5147,
+  stabDefence: 5159,
+  slashDefence: 5160,
+  crushDefence: 5161,
+  magicDefence: 5162,
+  heavyRangedDefence: 5163,
+  standardRangedDefence: 5164,
+  lightRangedDefence: 5165,
+};
 
 const MOVE_MODE = { STOPPED: 0, HALF: 1, FULL: 2, REVERSE: 3, MOORED: 4 };
 const HELM_STATUS = { FREE: 1, NAVIGATING: 2 };
@@ -81,6 +102,30 @@ function playSound(player, soundId) {
   player.getPacketSender().sendSoundEffect(soundId, 1, 0, 10);
 }
 
+/** Plays a loc animation on the boat's deck for the player and everyone who sees them. */
+function animateDeckLocs(player, boat, isLoc, animId) {
+  const type = boatType(BoatManager.getSpec(boat)?.type);
+  const viewers = [player, ...player.getLocalPlayers().filter((other) => other.getLocalPlayers().includes(player))];
+  for (const loc of type?.locs ?? []) {
+    if (!isLoc(loc)) continue;
+    const drawn = {
+      getId: () => loc.id,
+      getLocation: () => new Location(boat.deckBaseX + loc.x, boat.deckBaseY + loc.y, loc.level),
+      getType: () => loc.shape,
+      getFace: () => loc.rotation,
+    };
+    for (const viewer of viewers) viewer.getPacketSender().sendObjectAnimation(drawn, new Animation(animId));
+  }
+}
+
+function isHelm(loc) {
+  return loc.helm === true;
+}
+
+function isSail(loc) {
+  return loc.sail === true;
+}
+
 /** Fades the screen out (or back in) with interface 174 and `fade_overlay` (script 948). */
 function fade(player, out) {
   const args = out ? [0, 255, 0, 0, FADE_CYCLES] : [0, 0, 0, 255, FADE_CYCLES];
@@ -93,6 +138,7 @@ function fade(player, out) {
 module.exports = {
   VARBIT,
   VARP_SIDEPANEL_BOAT_TYPE,
+  VARP_SIDEPANEL_DEFENCE,
   MOVE_MODE,
   HELM_STATUS,
   ROLE_CAPTAIN,
@@ -109,4 +155,7 @@ module.exports = {
   getVarbit,
   playSound,
   fade,
+  animateDeckLocs,
+  isHelm,
+  isSail,
 };

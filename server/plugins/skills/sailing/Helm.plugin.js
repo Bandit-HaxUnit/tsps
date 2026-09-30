@@ -5,7 +5,6 @@ const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sa
 const { BoatManager } = require("../../../src/main/typescript/elvarg/game/content/sailing/BoatManager");
 const { BoatMoveMode } = require("../../../src/main/typescript/elvarg/game/content/sailing/Boat");
 const { Animation } = require("../../../src/main/typescript/elvarg/game/model/Animation");
-const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
 const {
   VARBIT,
   MOVE_MODE,
@@ -15,14 +14,15 @@ const {
   SCRIPT_HELM_UPDATE,
   SCRIPT_SIDEBUTTON_SWITCH,
   content,
-  boatType,
   setVarbit,
   getVarbit,
   playSound,
+  animateDeckLocs,
+  isHelm,
+  isSail,
 } = require("./sailingContent");
 
 const HELM_LOCKED_IN = 3;
-const IF_EVENT_OP1 = 1 << 1;
 const SEQ_HUMAN_HELM_ACTIVE = 13340;
 const SEQ_HELM_ACTIVE = 13335;
 const SEQ_HELM_INACTIVE = 13334;
@@ -74,30 +74,6 @@ function sailButtonTransition(slot, moveMode) {
   }
 }
 
-/** Plays a loc animation on the boat's deck for the helmsman and everyone who sees them. */
-function animateDeckLocs(player, boat, isLoc, animId) {
-  const type = boatType(BoatManager.getSpec(boat)?.type);
-  const viewers = [player, ...player.getLocalPlayers().filter((other) => other.getLocalPlayers().includes(player))];
-  for (const loc of type?.locs ?? []) {
-    if (!isLoc(loc)) continue;
-    const drawn = {
-      getId: () => loc.id,
-      getLocation: () => new Location(boat.deckBaseX + loc.x, boat.deckBaseY + loc.y, loc.level),
-      getType: () => loc.shape,
-      getFace: () => loc.rotation,
-    };
-    for (const viewer of viewers) viewer.getPacketSender().sendObjectAnimation(drawn, new Animation(animId));
-  }
-}
-
-function isHelm(loc) {
-  return loc.helm === true;
-}
-
-function isSail(loc) {
-  return loc.sail === true;
-}
-
 function sailLoweringSeq(moveMode) {
   if (moveMode === MOVE_MODE.FULL) return SEQ_SAIL_FULL_TO_DOWN;
   if (moveMode === MOVE_MODE.HALF) return SEQ_SAIL_HALF_TO_DOWN;
@@ -125,7 +101,6 @@ function takeHelm(player, boat) {
   boat.heading = boat.angle;
   const sender = player.getPacketSender();
   setVarbit(player, VARBIT.FACILITY_LOCKEDIN, HELM_LOCKED_IN);
-  sender.sendInterfaceFlagsRange((SIDEPANEL_GROUP << 16) | SIDEPANEL_FACILITIES_CHILD, 0, 2, IF_EVENT_OP1);
   player.performAnimation(new Animation(SEQ_HUMAN_HELM_ACTIVE));
   animateDeckLocs(player, boat, isHelm, SEQ_HELM_ACTIVE);
   sender.sendInterfaceScript(SCRIPT_SIDEBUTTON_SWITCH, [0]);
