@@ -5,7 +5,7 @@ import type { PrivateArea } from "../../model/areas/impl/PrivateArea";
 import { Boat } from "./Boat";
 import { BoatDeckArea } from "./BoatDeckArea";
 import { tickBoat } from "./BoatMovement";
-import type { BoatPlacement, BoatSpec } from "./BoatSpec";
+import type { BoatDeckLoc, BoatPlacement, BoatSpec } from "./BoatSpec";
 import { packedHeadingToAngle } from "./HeadingUtils";
 
 const FIRST_ENTITY_INDEX = 3000;
@@ -23,6 +23,8 @@ interface ActiveBoat {
     boat: Boat;
     spec: BoatSpec;
     deck: BoatDeckArea;
+    /** Deck locs changed since the boat spawned, in order; viewers catch up by index. */
+    locChanges: BoatDeckLoc[];
 }
 
 /**
@@ -57,7 +59,7 @@ export class BoatManager {
             baseSpeed: spec.stats?.baseSpeed,
             ...placement,
         });
-        BoatManager.boats.set(entityIndex, { boat, spec, deck: new BoatDeckArea(boat, spec) });
+        BoatManager.boats.set(entityIndex, { boat, spec, deck: new BoatDeckArea(boat, spec), locChanges: [] });
         return boat;
     }
 
@@ -66,6 +68,26 @@ export class BoatManager {
         if (!active || active.boat !== boat) return;
         BoatManager.boats.delete(boat.entityIndex);
         active.deck.destroy();
+    }
+
+    /**
+     * Swaps a deck loc (whatever of the same shape is on its tile and level) for another, such
+     * as a facility built or removed. Viewers get it from WorldEntitySync.
+     */
+    public static setDeckLoc(boat: Boat, loc: BoatDeckLoc): void {
+        const active = BoatManager.boats.get(boat.entityIndex);
+        if (!active || active.boat !== boat) return;
+        const replaced = (other: BoatDeckLoc) =>
+            other.x === loc.x && other.y === loc.y && other.level === loc.level && other.shape === loc.shape;
+        active.spec = { ...active.spec, locs: [...active.spec.locs.filter((other) => !replaced(other)), loc] };
+        active.deck.setLoc(loc);
+        active.locChanges.push(loc);
+    }
+
+    /** How many deck loc changes a boat has had, and those from `since` on. */
+    public static deckLocChanges(boat: Boat, since = 0): { count: number; changes: BoatDeckLoc[] } {
+        const changes = BoatManager.boats.get(boat.entityIndex)?.locChanges ?? [];
+        return { count: changes.length, changes: changes.slice(since) };
     }
 
     public static getBoat(entityIndex: number): Boat | undefined {
@@ -111,6 +133,17 @@ export class BoatManager {
     public static syncArea(mobile: Mobile): PrivateArea | null {
         const area = mobile.getPrivateArea();
         return area?.countsAsMainWorld() ? null : area;
+    }
+
+    /** Whether a viewer is shown a boat: any boat, except another player's owner-only one. */
+    public static canSeeBoat(viewer: Mobile, boat: Boat): boolean {
+        return !boat.ownerOnly || boat.ownerPlayerId === viewer.getIndex?.();
+    }
+
+    /** Whether a viewer is shown an actor: not while it stands on a boat the viewer can't see. */
+    public static canSeeAboard(viewer: Mobile, actor: Mobile): boolean {
+        const boat = BoatManager.getBoatAboard(actor);
+        return !boat || BoatManager.canSeeBoat(viewer, boat);
     }
 
     /** Registers content that reacts to the helm setting a new heading (such as raising sail). */

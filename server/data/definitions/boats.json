@@ -17,6 +17,7 @@
     "sidepanelBoatType": 8110,
     "sidepanelFacilitySlots": 16,
     "hotspots": { "0": 15 },
+    "placeholders": [59661],
     "cargoCapacity": 20,
     "stats": {
       "defence": 1,
@@ -32,7 +33,6 @@
     "locs": [
       { "id": 59554, "x": 3, "y": 4, "level": 1, "shape": 10, "rotation": 0, "helm": true, "part": "helm" },
       { "id": 59530, "x": 3, "y": 3, "level": 1, "shape": 10, "rotation": 0, "sail": true, "part": "sails" },
-      { "id": 60245, "x": 3, "y": 2, "level": 1, "shape": 10, "rotation": 0 },
       { "id": 32545, "x": 2, "y": 3, "level": 1, "shape": 22, "rotation": 0 },
       { "id": 58569, "x": 4, "y": 3, "level": 1, "shape": 22, "rotation": 0 },
       { "id": 58526, "x": 2, "y": 4, "level": 1, "shape": 22, "rotation": 0 },
@@ -61,12 +61,12 @@
     "sidepanelBoatType": 8111,
     "sidepanelFacilitySlots": 40,
     "hotspots": { "6": 1 },
+    "placeholders": [59664, 59665, 59666, 59667, 59668, 59669, 59670],
     "cargoCapacity": 30,
     "anims": { "sailDown": 13376, "helmInactive": 13345 },
     "locs": [
       { "id": 59576, "x": 4, "y": 6, "level": 1, "shape": 10, "rotation": 0, "helm": true, "part": "helm" },
       { "id": 59537, "x": 4, "y": 4, "level": 1, "shape": 10, "rotation": 0, "sail": true, "part": "sails" },
-      { "id": 60259, "x": 4, "y": 1, "level": 1, "shape": 10, "rotation": 0 },
       { "id": 59516, "x": 2, "y": 1, "level": 0, "shape": 10, "rotation": 0, "part": "keel" },
       { "id": 59624, "x": 1, "y": 1, "level": 0, "shape": 10, "rotation": 0, "part": "trim" },
       { "id": 32545, "x": 2, "y": 3, "level": 1, "shape": 22, "rotation": 0 },
@@ -97,12 +97,12 @@
     "sidepanelBoatType": 8112,
     "sidepanelFacilitySlots": 64,
     "hotspots": { "10": 1 },
+    "placeholders": [59671, 59672, 59673, 59674, 59675, 59676, 59677, 59678, 59679, 59680, 59681, 60720, 60721],
     "cargoCapacity": 40,
     "anims": { "sailDown": 13385 },
     "locs": [
       { "id": 59598, "x": 3, "y": 11, "level": 1, "shape": 10, "rotation": 0, "helm": true, "part": "helm" },
       { "id": 59544, "x": 4, "y": 10, "level": 1, "shape": 10, "rotation": 0, "sail": true, "part": "sails" },
-      { "id": 60273, "x": 4, "y": 4, "level": 1, "shape": 10, "rotation": 0 },
       { "id": 59523, "x": 1, "y": 3, "level": 0, "shape": 10, "rotation": 0, "part": "keel" },
       { "id": 59642, "x": 1, "y": 2, "level": 0, "shape": 10, "rotation": 0, "part": "trim" },
       { "id": 32545, "x": 1, "y": 7, "level": 1, "shape": 22, "rotation": 0 },

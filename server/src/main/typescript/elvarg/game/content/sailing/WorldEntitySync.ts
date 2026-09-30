@@ -11,6 +11,7 @@ import {
 } from "../../../net/protocol/ClientProtocol";
 import type { Boat } from "./Boat";
 import { BoatManager } from "./BoatManager";
+import type { BoatDeckLoc } from "./BoatSpec";
 
 /** How far from a viewer (their root tile, in tiles) a boat is shown. */
 export const BOAT_VIEW_DISTANCE = 32;
@@ -28,6 +29,8 @@ interface ViewerState {
     boats: Map<number, Boat>;
     /** The position each boat was last sent at. */
     positions: Map<number, WorldEntityPosition>;
+    /** How many of each boat's deck loc changes the client has. */
+    locChanges: Map<number, number>;
 }
 
 /**
@@ -42,7 +45,7 @@ export class WorldEntitySync {
     public static flush(player: Player): Buffer[] {
         let state = WorldEntitySync.viewers.get(player);
         if (!state) {
-            state = { order: [], boats: new Map(), positions: new Map() };
+            state = { order: [], boats: new Map(), positions: new Map(), locChanges: new Map() };
             WorldEntitySync.viewers.set(player, state);
         }
         const visible = WorldEntitySync.boatsInView(player);
@@ -50,15 +53,21 @@ export class WorldEntitySync {
 
         const updates: WorldEntityUpdate[] = [];
         const kept: number[] = [];
+        /** Deck locs changed (facilities built or removed) on boats the client already has. */
+        const changedLocs: Buffer[] = [];
         for (const entityIndex of state.order) {
             const boat = BoatManager.getBoat(entityIndex);
             if (!boat || boat !== state.boats.get(entityIndex) || !visibleIds.has(entityIndex)) {
                 updates.push({ updateType: 0 });
                 state.boats.delete(entityIndex);
                 state.positions.delete(entityIndex);
+                state.locChanges.delete(entityIndex);
                 continue;
             }
             kept.push(entityIndex);
+            const { count, changes } = BoatManager.deckLocChanges(boat, state.locChanges.get(entityIndex) ?? 0);
+            state.locChanges.set(entityIndex, count);
+            changedLocs.push(...changes.map((loc) => WorldEntitySync.encodeDeckLoc(boat, loc)));
             const position = WorldEntitySync.positionOf(boat);
             const last = state.positions.get(entityIndex)!;
             const delta = {
@@ -95,13 +104,14 @@ export class WorldEntitySync {
             });
             state.boats.set(boat.entityIndex, boat);
             state.positions.set(boat.entityIndex, position);
+            state.locChanges.set(boat.entityIndex, BoatManager.deckLocChanges(boat).count);
             locs.push(...WorldEntitySync.encodeDeckLocs(boat));
         }
 
         const changed = spawns.length > 0 || updates.some((update) => update.updateType !== 1);
         state.order = [...kept, ...spawns.map((spawn) => spawn.entityIndex)];
-        if (!changed) return packets;
-        packets.push(encodeWorldEntityInfo(updates, spawns), ...locs);
+        if (!changed) return [...packets, ...changedLocs];
+        packets.push(encodeWorldEntityInfo(updates, spawns), ...locs, ...changedLocs);
         return packets;
     }
 
@@ -113,7 +123,8 @@ export class WorldEntitySync {
             Math.max(Math.abs(boat.tileX - root.getX()), Math.abs(boat.tileY - root.getY()));
         return BoatManager.all()
             .filter((boat) => boat === aboard
-                || (boat.level === root.getZ() && distance(boat) <= BOAT_VIEW_DISTANCE))
+                || (boat.level === root.getZ() && distance(boat) <= BOAT_VIEW_DISTANCE
+                    && BoatManager.canSeeBoat(player, boat)))
             .sort((a, b) => (a === aboard ? -1 : b === aboard ? 1 : distance(a) - distance(b)))
             .slice(0, MAX_BOATS_IN_VIEW);
     }
@@ -150,7 +161,10 @@ export class WorldEntitySync {
     }
 
     private static encodeDeckLocs(boat: Boat): Buffer[] {
-        return BoatManager.getSpec(boat)!.locs.map((loc) =>
-            encodeLocAddChange(loc.id, boat.deckBaseX + loc.x, boat.deckBaseY + loc.y, loc.level, loc.shape, loc.rotation));
+        return BoatManager.getSpec(boat)!.locs.map((loc) => WorldEntitySync.encodeDeckLoc(boat, loc));
+    }
+
+    private static encodeDeckLoc(boat: Boat, loc: BoatDeckLoc): Buffer {
+        return encodeLocAddChange(loc.id, boat.deckBaseX + loc.x, boat.deckBaseY + loc.y, loc.level, loc.shape, loc.rotation);
     }
 }

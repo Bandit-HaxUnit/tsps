@@ -56,6 +56,8 @@ export class Boat {
     readonly entityIndex: number;
     readonly configId: number;
     readonly ownerPlayerId: number;
+    /** Shown only to its owner (a boat in the shipyard), with anyone aboard it. */
+    ownerOnly = false;
     readonly deckRegionX: number;
     readonly deckRegionY: number;
     readonly sizeX: number;

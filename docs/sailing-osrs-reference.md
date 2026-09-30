@@ -266,7 +266,9 @@ Everything a part is lives in db tables. tsps reads them at runtime (`CacheDefin
 | 181 | Helms | 6 loc [coord, id, rotation, shape], 9 Sailing, 10 Construction, 14 materials, 15 stats row |
 | 164 | Part stats | 0 HP, 10 armour, 21 storm resistance, 22 rapids resistance, 24 base speed, 25 speed cap, 26 extra acceleration, 27 boost duration, 30 crystal-flecked immunity |
 | 186 | Trims (cosmetic painted trims) | |
-| 176 | Facilities | |
+| 176 | Facilities (97 rows; some per boat size, such as each size's cargo holds and hooks) | 0 name, 6 loc (the first is placed), 8 preview angles row, 12 Sailing, 13 Construction, 17 materials, 22 category |
+| 175 | What a facility hotspot allows | 2 facility rows, in order |
+| 188 | Customisation preview angles | 0 `[boat size, offsetX, offsetY, xan, yan, zan, zoom]` tuples |
 | 187 | Boat name words (rows 8545-8547) | |
 
 **How a boat's stats come together:**
@@ -279,6 +281,48 @@ Everything a part is lives in db tables. tsps reads them at runtime (`CacheDefin
 These reproduce every captured boat.
 
 **Construction XP isn't in the tables.** It comes from the wiki, and the camphor skiff hull's 881 matches the capture.
+
+## Facilities (shipyard)
+
+From a capture of building and removing a range on a sloop in the shipyard.
+
+**Hotspots** are table 166 column 31, one `[coord, a, b, hotspot row]` tuple each:
+- The hotspot id is the tuple's index. The raft has 1 hotspot, the skiff 7 and the sloop 13; the sloop's 11 and 12 are its cannon spots.
+- The coord is a template tile on the base-tier template. Its deck tile is the coord minus the boat's base template chunk × 8, the same frame as the other deck locs. Sloop hotspot 2 is deck (4, 9), level 1.
+- The hotspot row (table 175) lists the facility rows it allows.
+- `a` looks like the side: 1 west, 3 east, 0 on the centre line.
+- Facing depends on the facility too. On the centre line everything faces 0 (cargo holds, the inoculation station). A salvaging hook on a west hotspot faces 1, out over the side. The range on east hotspot 2 ended at 1, facing in: OSRS sent it at 3 (`a`) and then twice at 1. So facilities that work over the side face `a` and the rest face `a` + 2. Placeholders face 1 on both sides.
+- The facilities that work over the side are taken to be those with column 23 set (cannons, salvaging hooks, trawling nets, chum stations, wind and gale catchers). That's inferred from the hook and the range.
+- `b` is unknown.
+
+**What a hotspot holds** is one varbit value: the facility's **1-based position in the hotspot's list**, or 0 for empty. That fits every login value (raft cargo hold 15; skiff mithril hook 4, inoculation station 1, cargo hold 1; sloop salvaging station 6, adamant hooks 5, cargo hold 1) and the built range (1).
+- Per boat: hotspots 0-10 at block offset +15 + n; hotspots 11 and 12 at 20207 + 4 × slot and the id after (cache script 8805).
+- On the sidepanel: 19156 + n for 0-10, and 20185 and 20186 for 11 and 12 (script 8729).
+- Building or removing sets `facilities_unaltered` (block +4) to 0, and it stays 0.
+
+**Empty hotspots** show a "Facility hotspot" loc with op 1 **Build**, but only in the shipyard; at sea an empty hotspot shows nothing. Solid facilities (clip type ≠ 0, such as the range, cargo holds, inoculation station and cannons) block their deck tile; hooks and placeholders don't. The placeholder ids are: raft 59661 (inferred, not captured), skiff 59664 + n, sloop 59671 + n for 0-10, plus 60720 and 60721. Built facilities have op 5 **Modify**.
+
+**Boarding in the shipyard:** the boat's own gangplank (59719, a multiloc on varbit 19104: 59721 Board, 59720 Disembark) teleports you straight onto the deck, level 1, at the boarding tile. There's no fade and no message; the boarded varbits and the sidepanel are set as at a dock. Disembark puts you back at (2086, 2724).
+
+**Build on a hotspot:**
+1. Sets varbit 19524 (`sailing_boat_customisation_hotspot_id`) to the hotspot, varp 5190 to the boat type row, varbit 19523 (`sailing_boat_customisation_type`) to **1**, and varbit 19525 to the boat slot + 1.
+2. Opens interface 939 the same way as for parts: script 2524, the modal, 8809, the option events, 8809. The events cover 0-8 on a cannon spot and 0-12 on the range's hotspot.
+3. Closing it resets 19523, 19524, 19525 and 5190.
+
+**Building a facility:** the Build trigger carries the facility row (8512 for the range). The server:
+1. resets the customisation varbits and closes 939;
+2. plays animation 3676 (`human_poh_build`) and sound 938;
+3. takes the materials (the range: 4 steel bars, 2 charcoal, 1 tinderbox);
+4. gives **no XP**;
+5. sets the hotspot varbits and `facilities_unaltered` 0;
+6. replaces the placeholder with the facility's loc (range 59682) on the deck.
+
+There's no message.
+
+**Modify** (op 5) opens the chat menu (219, script 58) "How would you like to modify this facility?" with "Completely remove it.", "Replace it." and "Do nothing.". "Completely remove it." asks "Really remove it?" with "Yes." and "No.". On Yes:
+- animation 3685 (`human_throw_away`) and sound 10753;
+- the hotspot varbits go back to 0 and the placeholder returns;
+- nothing is refunded.
 
 ## Cargo hold
 
@@ -393,8 +437,14 @@ Depositing a tool, by Deposit Inventory or singly, puts it back in the compartme
     - diving gear needing both parts to be stored.
   - The wiki's bounty items aren't listed, since no item name matched.
 - **Shipyard:**
-  - The shown boat is visible to anyone in the shipyard, not only its owner.
-  - Its gangplank (boarding in the shipyard), facility hotspots and "Shipwright assistance" (paying to build without the Construction level) aren't built yet.
+  - The shown boat, and the owner while aboard it, are shown only to the owner. Other players in the shipyard see neither.
+  - "Shipwright assistance" (paying to build without the Construction level) isn't built yet.
+  - Facilities are built, removed and replaced there, but only placed: none of them can be used yet (cooking on the range, firing cannons and so on). A cargo hold's tier doesn't change its capacity yet.
+  - Guessed rather than captured for facilities:
+    - "Replace it." opens the hotspot's options, and building over a facility replaces it without a refund;
+    - a hotspot's Build and a facility's Modify do nothing away from the shipyard;
+    - which facilities face out over the side (column 23; see Facilities);
+    - the raft's placeholder id (59661).
   - Guessed rather than captured:
     - the part names in the swap message ("mast and sails");
     - the level, materials and "already has that" messages.

@@ -12,8 +12,14 @@ const {
   SCRIPT_SIDEBUTTON_SWITCH,
 } = require("./sailingContent");
 const { boatStats, partTiers } = require("./boatParts");
+const { facilitiesOf } = require("./boatFacilities");
 
-const HOTSPOTS = 11;
+/** Hotspots 0-10 from 19156 (SIDEPANEL_FACILITY_HOTSPOT0); a sloop's 11 and 12 at 20185-20186. */
+const HOTSPOT_VARBITS = [
+  ...Array.from({ length: 11 }, (_, hotspot) => VARBIT.SIDEPANEL_FACILITY_HOTSPOT0 + hotspot),
+  20185,
+  20186,
+];
 /** The sidepanel's part tier varbits, by boatParts.partTiers field (helm is its steering). */
 const PART_VARBITS = {
   sail: VARBIT.SIDEPANEL_FACILITY_SAIL,
@@ -38,7 +44,7 @@ const STAT_VARBITS = {
 };
 /** Every varbit describeBoat sets, to clear when the panel goes. */
 const DESCRIPTION_VARBITS = [
-  ...Array.from({ length: HOTSPOTS }, (_, hotspot) => VARBIT.SIDEPANEL_FACILITY_HOTSPOT0 + hotspot),
+  ...HOTSPOT_VARBITS,
   ...Object.values(PART_VARBITS),
   ...Object.values(RESISTANCE_VARBITS),
   ...Object.values(STAT_VARBITS).flat(),
@@ -64,9 +70,8 @@ function statsOf(type, owned) {
 /** The varbits describing a boat: facility hotspots, part tiers, stats and resistances. */
 function describeBoat(type, owned) {
   const values = {};
-  for (let hotspot = 0; hotspot < HOTSPOTS; hotspot++) {
-    values[VARBIT.SIDEPANEL_FACILITY_HOTSPOT0 + hotspot] = type.hotspots?.[hotspot] ?? 0;
-  }
+  const facilities = facilitiesOf(owned);
+  HOTSPOT_VARBITS.forEach((varbit, hotspot) => { values[varbit] = facilities[hotspot] ?? 0; });
   const tiers = partTiers(owned);
   const stats = statsOf(type, owned);
   for (const [part, varbit] of Object.entries(PART_VARBITS)) values[varbit] = tiers[part] ?? 0;
@@ -103,4 +108,4 @@ function openSidepanel(player, type, varbits, varps) {
     (SIDEPANEL_GROUP << 16) | SIDEPANEL_FACILITIES_CHILD, 0, type.sidepanelFacilitySlots, IF_EVENT_OP1_TO_OP4);
 }
 
-module.exports = { describeBoat, boatVarps, clearBoatVarps, openSidepanel, DESCRIPTION_VARBITS };
+module.exports = { describeBoat, boatVarps, clearBoatVarps, openSidepanel, DESCRIPTION_VARBITS, HOTSPOT_VARBITS };

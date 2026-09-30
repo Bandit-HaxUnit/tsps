@@ -9,6 +9,7 @@ const { content, boatName, randomBoatName } = require("./sailingContent");
 const { sendBoatVarbits } = require("./boatVarbits");
 const { TOOLS_UNLOCKED_ATTRIBUTE, sendToolUnlocks } = require("./cargo");
 const { PARTS, partOptions, requirementsOf } = require("./boatParts");
+const { facilityNamed, facilityRequirements } = require("./boatFacilities");
 const { visitedBoat } = require("./Shipyard.plugin");
 
 /** Tier names by part, in tier order (hulls and sails by wood, keels and helms by metal). */
@@ -59,12 +60,19 @@ function unlockSailingTools({ player }) {
   player.sendMessage("Every tool now shows in your cargo hold's tools compartment.");
 }
 
+const BOATMATS_USAGE = "Usage: ::boatmats <hull|keel|sails|helm> <tier 0-6 or name> [raft|skiff|sloop], or ::boatmats facility <name>";
+
 /**
- * Spawns what building a boat part costs, from the same cache row the shipyard checks:
- * ::boatmats <hull|keel|sails|helm> <tier 0-6 or name> [raft|skiff|sloop]. The boat type
- * defaults to the boat being customised in the shipyard, then the active boat.
+ * Spawns what building a boat part or facility costs, from the same cache row the shipyard
+ * checks: ::boatmats <hull|keel|sails|helm> <tier 0-6 or name> [raft|skiff|sloop], or
+ * ::boatmats facility <name>. A part's boat type defaults to the boat being customised in the
+ * shipyard, then the active boat.
  */
 function spawnPartMaterials({ player, parts }) {
+  if (parts[1] === "facility") {
+    spawnFacilityMaterials(player, parts.slice(2).join(" "));
+    return;
+  }
   const part = parts[1];
   const tierArg = parts[2]?.toLowerCase();
   const tier = PARTS.includes(part)
@@ -73,12 +81,23 @@ function spawnPartMaterials({ player, parts }) {
   const type = parts[3] ?? visitedBoat(player)?.type ?? Sailing.activeBoat(player)?.type;
   const option = BOAT_TYPES.includes(type) && tier >= 0 ? partOptions(type, part)[tier] : undefined;
   if (option === undefined) {
-    player.sendMessage("Usage: ::boatmats <hull|keel|sails|helm> <tier 0-6 or name> [raft|skiff|sloop]");
+    player.sendMessage(BOATMATS_USAGE);
     return;
   }
   const requirements = requirementsOf(part, option);
   for (const [item, count] of requirements.materials) player.getInventory().adds(item, count);
   player.sendMessage(`Spawned the materials for a ${type}'s ${requirements.name} (Sailing ${requirements.sailing}, Construction ${requirements.construction}).`);
+}
+
+function spawnFacilityMaterials(player, name) {
+  const facility = name ? facilityNamed(name) : undefined;
+  if (facility === undefined) {
+    player.sendMessage(BOATMATS_USAGE);
+    return;
+  }
+  const requirements = facilityRequirements(facility);
+  for (const [item, count] of requirements.materials) player.getInventory().adds(item, count);
+  player.sendMessage(`Spawned the materials for a ${requirements.name} (Sailing ${requirements.sailing}, Construction ${requirements.construction}).`);
 }
 
 function describe(boat) {

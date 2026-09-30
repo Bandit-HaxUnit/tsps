@@ -3,6 +3,7 @@
 // live login capture and cache scripts 9013/9088 (docs/sailing-osrs-reference.md).
 const { boatType, dockById, setVarbit } = require("./sailingContent");
 const { boatStats, partTiers } = require("./boatParts");
+const { facilitiesOf, facilitiesUnaltered } = require("./boatFacilities");
 
 const MAX_BOATS = 5;
 /** Boat slot 0's block starts at 19258 (`sailing_boat_1_owned`); each slot is 38 ids on. */
@@ -25,7 +26,11 @@ const OFFSET = {
 const STORED_HP = 19458; // + slot
 const STORED_MAX_HP = 19463; // + slot
 const NO_PREVIOUS_PORT = 255;
-const HOTSPOTS = 11;
+/** Hotspots 0-10 are in the block; a sloop's cannon spots 11 and 12 at 20207 + 4 * slot on. */
+const BLOCK_HOTSPOTS = 11;
+const EXTRA_HOTSPOTS = 20207;
+const EXTRA_HOTSPOTS_SIZE = 4;
+const MAX_HOTSPOTS = 13;
 /**
  * Special `port` values (cache script 8997): 255 bottled, 254 capsized, 253 lost at sea. Port 0
  * is a real dock (Port Sarim), so a boat sunk by a teleport, Escape or death is "lost at sea".
@@ -34,6 +39,13 @@ const LOST_AT_SEA = 253;
 
 function blockVarbit(slot, offset) {
   return FIRST_BLOCK + BLOCK_SIZE * slot + offset;
+}
+
+/** The per-boat varbit holding what is built on a hotspot. */
+function hotspotVarbit(slot, hotspot) {
+  return hotspot < BLOCK_HOTSPOTS
+    ? blockVarbit(slot, OFFSET.hotspot + hotspot)
+    : EXTRA_HOTSPOTS + EXTRA_HOTSPOTS_SIZE * slot + hotspot - BLOCK_HOTSPOTS;
 }
 
 /** The port a boat is at, for its `port` varbit: the dock's id, "lost at sea" when sunk. */
@@ -51,11 +63,12 @@ function slotVarbits(slot, boat) {
   set(OFFSET.type, type?.typeId ?? 0);
   set(OFFSET.port, boat ? portOf(boat) : 0);
   set(OFFSET.bottlePreviousPort, boat ? NO_PREVIOUS_PORT : 0);
-  set(OFFSET.facilitiesUnaltered, boat ? 1 : 0);
+  set(OFFSET.facilitiesUnaltered, boat && facilitiesUnaltered(boat) ? 1 : 0);
   for (let word = 0; word < 3; word++) set(OFFSET.name + word, boat?.name?.[word] ?? 0);
   const tiers = boat ? partTiers(boat) : {};
   for (const part of ["keel", "hull", "sail", "steering", "trim"]) set(OFFSET[part], tiers[part] ?? 0);
-  for (let hotspot = 0; hotspot < HOTSPOTS; hotspot++) set(OFFSET.hotspot + hotspot, type?.hotspots?.[hotspot] ?? 0);
+  const facilities = boat && type ? facilitiesOf(boat) : [];
+  for (let hotspot = 0; hotspot < MAX_HOTSPOTS; hotspot++) values.set(hotspotVarbit(slot, hotspot), facilities[hotspot] ?? 0);
   const hitpoints = boat ? boatStats(boat).hitpoints : 0;
   values.set(STORED_HP + slot, hitpoints);
   values.set(STORED_MAX_HP + slot, hitpoints);
@@ -71,4 +84,4 @@ function sendBoatVarbits(player) {
   }
 }
 
-module.exports = { blockVarbit, slotVarbits, sendBoatVarbits };
+module.exports = { blockVarbit, hotspotVarbit, slotVarbits, sendBoatVarbits };

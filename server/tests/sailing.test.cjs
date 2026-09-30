@@ -374,6 +374,15 @@ test("a viewer is sent a boat in range, its moves, and its removal once out of r
 
     assert.deepEqual(WorldEntitySync.flush(watcher), [], "nothing to send while the boat is still");
 
+    // A deck loc changed (a facility built) reaches a viewer who already has the boat, once;
+    // a viewer who gets the boat later has it in the boat's locs.
+    BoatManager.setDeckLoc(boat, { id: 59682, x: 3, y: 4, level: 1, shape: 10, rotation: 1 });
+    assert.deepEqual(WorldEntitySync.flush(watcher).map((packet) => packet[0]), [134]);
+    assert.deepEqual(WorldEntitySync.flush(watcher), []);
+    const later = viewer(boat.tileX + 10, boat.tileY);
+    assert.deepEqual(WorldEntitySync.flush(later).map((packet) => packet[0]), [142, 143, 134]);
+    assert.deepEqual(WorldEntitySync.flush(later), []);
+
     boat.fineY += 64;
     assert.deepEqual(decodeWorldEntityInfo(WorldEntitySync.flush(watcher)[0]).updates,
       [{ updateType: 2, delta: { x: 0, y: 0, z: 64, orientation: 0 } }]);
@@ -381,6 +390,25 @@ test("a viewer is sent a boat in range, its moves, and its removal once out of r
     watcher.location = new Location(boat.tileX + 40, boat.tileY, 0);
     assert.deepEqual(decodeWorldEntityInfo(WorldEntitySync.flush(watcher)[0]).updates, [{ updateType: 0 }]);
     assert.deepEqual(WorldEntitySync.flush(watcher), []);
+  } finally {
+    BoatManager.dispose(boat);
+  }
+});
+
+test("an owner-only boat, and anyone aboard it, is shown only to its owner", () => {
+  const boat = BoatManager.spawn(1, RAFT, AT_SEA);
+  try {
+    boat.ownerOnly = true;
+    const owner = viewer(boat.tileX + 2, boat.tileY);
+    owner.getIndex = () => 1;
+    const other = viewer(boat.tileX + 2, boat.tileY);
+    other.getIndex = () => 2;
+    assert.equal(decodeWorldEntityInfo(WorldEntitySync.flush(owner)[1]).spawns[0].entityIndex, boat.entityIndex);
+    assert.deepEqual(WorldEntitySync.flush(other), []);
+    const aboard = { getArea: () => BoatManager.getDeck(boat) };
+    assert.equal(BoatManager.canSeeAboard(owner, aboard), true);
+    assert.equal(BoatManager.canSeeAboard(other, aboard), false);
+    assert.equal(BoatManager.canSeeAboard(other, { getArea: () => null }), true);
   } finally {
     BoatManager.dispose(boat);
   }
@@ -734,9 +762,13 @@ test("the sail buttons follow their labels for each move mode", () => {
 });
 
 function registerPlugin(file) {
-  const hooks = { objects: {}, npcs: {}, events: {}, interfaceClicks: [] };
+  const hooks = { objects: {}, objectHandlers: [], npcs: {}, events: {}, emitted: [], interfaceClicks: [] };
   require(`../plugins/skills/sailing/${file}`).register({
-    onObjectInteraction: (name, actions) => { hooks.objects[name] = actions; },
+    onObjectInteraction: (name, actions) => {
+      if (typeof name === "function") hooks.objectHandlers.push(name);
+      else hooks.objects[name] = actions;
+    },
+    emitCustomEvent: (name, payload) => hooks.emitted.push([name, payload]),
     onNpcInteraction: (name, actions) => { hooks.npcs[name] = actions; },
     onCustomEvent: (name, handler) => { hooks.events[name] = handler; },
     onInterfaceActionClick: (handler) => hooks.interfaceClicks.push(handler),
@@ -1370,7 +1402,7 @@ function shipyardHarness() {
     shipyard.interfaceClicks.forEach((handler) => handler(event));
     return event.handled;
   };
-  return { Skill, player, levels, xp, statements, varbits, chatboxes, buildRow, boat: () => player.getSailing().boats[0] };
+  return { Skill, shipyard, player, levels, xp, statements, varbits, chatboxes, buildRow, boat: () => player.getSailing().boats[0] };
 }
 
 test("building at the schematics swaps a part for the cache's materials and gives Construction XP", () => {
@@ -1428,4 +1460,145 @@ test("::boatmats spawns a part's materials from the cache, for the named or curr
     commands.boatmats({ player, parts });
     assert.match(player.messages.at(-1), /^Usage: ::boatmats/, parts.join(" "));
   }
+});
+
+// --- Facilities.
+
+const facilities = require("../plugins/skills/sailing/boatFacilities");
+const { slotVarbits, hotspotVarbit } = require("../plugins/skills/sailing/boatVarbits");
+
+test("a boat's facility hotspots, what they allow and their deck locs come from the cache", () => {
+  const sloop = facilities.hotspotsOf("sloop");
+  assert.equal(sloop.length, 13, "a sloop has 13 hotspots; 11 and 12 are its cannon spots");
+  // Hotspot 2 is where the captured range was built: deck (4, 9), level 1, facing 1.
+  assert.deepEqual([sloop[2].x, sloop[2].y, sloop[2].level, sloop[2].side], [4, 9, 1, 3], "on the east side");
+  assert.equal(sloop[2].allowed[0], 8512, "the range is first on its list");
+  assert.equal(facilities.hotspotsOf("raft").length, 1);
+  assert.equal(facilities.hotspotsOf("skiff").length, 7);
+
+  // A new boat has its type's defaults: the raft's cargo hold (position 15) on hotspot 0.
+  const raft = { type: "raft", facilities: [] };
+  assert.deepEqual(facilities.facilitiesOf(raft), [15]);
+  assert.equal(facilities.facilitiesUnaltered(raft), true);
+  assert.deepEqual(facilities.hotspotLocs(raft).map((loc) => [loc.id, loc.x, loc.y, loc.blocks]), [[60245, 3, 2, true]],
+    "a solid facility blocks its tile");
+
+  // At sea empty hotspots show nothing; in the shipyard their placeholder, which doesn't block.
+  assert.deepEqual(facilities.hotspotLocs({ type: "sloop", facilities: [] }).map((loc) => loc.hotspot), [10]);
+  const sloopLocs = facilities.hotspotLocs({ type: "sloop", facilities: [] }, true);
+  assert.equal(sloopLocs.find((loc) => loc.hotspot === 2).blocks, false);
+  assert.equal(sloopLocs.find((loc) => loc.hotspot === 2).id, 59673);
+  assert.equal(sloopLocs.find((loc) => loc.hotspot === 12).id, 60721);
+  assert.equal(sloopLocs.find((loc) => loc.hotspot === 10).id, 60273, "its cargo hold");
+
+  // Facing: a range faces in (captured at 1 on east hotspot 2), so 3 on the west side; a hook
+  // faces out (captured at 1 on the skiff's west hotspot 4); the centre line faces 0.
+  const facing = (type, hotspot, facility) => {
+    const boat = { type, facilities: [] };
+    facilities.setFacility(boat, hotspot, facility);
+    return facilities.hotspotLocs(boat, true).find((loc) => loc.hotspot === hotspot).rotation;
+  };
+  assert.equal(facing("sloop", 2, 8512), 1);
+  assert.equal(facing("sloop", 1, 8512), 3);
+  assert.equal(facing("skiff", 4, 8444), 1);
+  assert.equal(facing("skiff", 6, 8469), 0);
+  assert.equal(facing("sloop", 2, undefined), 1, "a placeholder");
+
+  assert.equal(facilities.facilityNamed("Mithril salvaging hook"), 8437);
+  assert.deepEqual(facilities.facilityRequirements(8512), {
+    name: "Range", sailing: 16, construction: 6, materials: [[2353, 4], [973, 2], [590, 1]],
+  });
+});
+
+test("the hotspot varbits hold each facility's position in its hotspot's list", () => {
+  const sloop = { slot: 2, type: "sloop", name: [0, 0, 0], facilities: [], location: { kind: "docked", dock: DOCK.id }, parts: {} };
+  facilities.setFacility(sloop, 2, 8512);
+  const values = slotVarbits(2, sloop);
+  assert.equal(values.get(19351), 1, "sailing_boat_3_hotspot_2: the range, as captured");
+  assert.equal(values.get(19359), 1, "its cargo hold stays");
+  assert.equal(values.get(19338), 0, "sailing_boat_3_facilities_unaltered");
+  assert.deepEqual([hotspotVarbit(2, 11), hotspotVarbit(2, 12)], [20215, 20216]);
+  facilities.setFacility(sloop, 2, undefined);
+  assert.equal(slotVarbits(2, sloop).get(19351), 0);
+  assert.equal(slotVarbits(2, sloop).get(19338), 0, "still altered once changed");
+});
+
+test("aboard in the shipyard, a hotspot's Build builds a facility and Modify removes it", () => {
+  const h = shipyardHarness();
+  const built = registerPlugin("ShipyardFacilities.plugin");
+  h.player.performAnimation = (animation) => { h.player.animation = animation.getId(); };
+  const boat = h.boat();
+  const shown = [...Array(1000).keys()].map((i) => BoatManager.getBoat(3000 + i)).find((candidate) => candidate?.ownerPlayerId === h.player.getIndex());
+  assert.equal(shown.ownerOnly, true, "only its owner sees the boat in the shipyard");
+  assert.ok(BoatManager.getSpec(shown).locs.some((loc) => loc.id === 59666), "its empty hotspots show");
+  const gangplank = { x: 2087, y: 2723, z: 0 };
+  h.shipyard.objects.Gangplank.Board({ player: h.player, location: gangplank });
+  assert.equal(BoatManager.getBoatAboard(h.player), shown, "on the shown boat's deck");
+  assert.deepEqual(h.shipyard.emitted.map(([name]) => name), ["sailing:boarded"]);
+
+  // The skiff's hotspot 2 allows a range (4th on its list).
+  const hotspot = facilities.hotspotsOf("skiff")[2];
+  const tile = { x: shown.deckBaseX + hotspot.x, y: shown.deckBaseY + hotspot.y, z: 0 };
+  built.objects["Facility hotspot"].Build({ player: h.player, location: tile });
+  assert.equal(h.varbits.get(19524), 2, "sailing_boat_customisation_hotspot_id");
+  assert.equal(h.varbits.get(19523), 1, "facility mode");
+  const trigger = (row) => {
+    const zigzag = (row << 1) ^ (row >> 31);
+    const bytes = [];
+    let v = zigzag >>> 0;
+    while (v > 0x7f) { bytes.push((v & 0x7f) | 0x80); v >>>= 7; }
+    bytes.push(v, 0);
+    const event = { player: h.player, groupId: 939, childId: 17, scriptTrigger: true, argsData: Buffer.from(bytes), handled: false };
+    for (const handler of [...h.shipyard.interfaceClicks, ...built.interfaceClicks]) handler(event);
+    return event.handled;
+  };
+  assert.equal(trigger(8512), true);
+  assert.match(h.player.messages.at(-1), /Sailing level of 16 and a Construction level of 6/);
+  h.levels.set(h.Skill.SAILING, 16);
+  h.levels.set(h.Skill.CONSTRUCTION, 6);
+  for (const [item, count] of [[2353, 4], [973, 2], [590, 1]]) h.player.getInventory().add(new Item(item, count), false);
+  trigger(8512);
+  assert.equal(facilities.facilityAt(boat, 2), 8512);
+  assert.deepEqual([2353, 973, 590].map((item) => h.player.getInventory().getAmount(item)), [0, 0, 0]);
+  assert.deepEqual(h.xp, [], "building a facility gives no XP");
+  assert.equal(h.player.animation, 3676);
+  assert.equal(h.varbits.get(19524), 0, "the customisation closed");
+  assert.equal(h.varbits.get(19158), 4, "the sidepanel's hotspot 2");
+  const rangeLoc = BoatManager.getSpec(shown).locs.find((loc) => loc.x === hotspot.x && loc.y === hotspot.y && loc.shape === 10);
+  assert.equal(rangeLoc.id, 59682, "the range replaces the placeholder on the deck");
+  assert.equal(rangeLoc.blocks, true, "and blocks its tile, so interacting walks beside it");
+  assert.equal(BoatManager.getDeck(shown).getClip(new Location(tile.x, tile.y, 0)), 0x100, "a solid object on a walkable deck tile");
+  assert.equal(BoatManager.deckLocChanges(shown).count, 1);
+
+  // Modify: "Completely remove it." then "Yes." puts the placeholder back, refunding nothing.
+  const modify = { player: h.player, location: tile, clickType: 5, handled: false,
+    definition: { getInteractions: () => ["Cook", null, null, null, "Modify"] } };
+  built.objectHandlers.forEach((handler) => handler(modify));
+  assert.equal(built.prompt.title, "How would you like to modify this facility?");
+  assert.deepEqual(built.prompt.pairs.filter((_, i) => i % 2 === 0), ["Completely remove it.", "Replace it.", "Do nothing."]);
+  built.prompt.pairs[1](h.player);
+  assert.equal(built.prompt.title, "Really remove it?");
+  built.prompt.pairs[1](h.player);
+  assert.equal(facilities.facilityAt(boat, 2), undefined);
+  assert.equal(h.player.animation, 3685);
+  assert.equal(BoatManager.getSpec(shown).locs.find((loc) => loc.x === hotspot.x && loc.y === hotspot.y && loc.shape === 10).id, 59666);
+  assert.equal(h.player.getInventory().getAmount(2353), 0);
+
+  h.shipyard.objects.Gangplank.Disembark({ player: h.player, location: { ...gangplank, z: 1 } });
+  assert.equal(BoatManager.getBoatAboard(h.player), undefined);
+  assert.equal(BoatManager.getBoat(shown.entityIndex), shown, "the boat stays shown in the yard");
+});
+
+test("::boatmats facility spawns a facility's materials", () => {
+  const commands = {};
+  require("../plugins/skills/sailing/SailingCommands.plugin").register({
+    registerCommand: (name, handler) => { commands[name] = handler; },
+    persistAttribute: () => {},
+  });
+  const player = sailor();
+  commands.boatmats({ player, parts: ["boatmats", "facility", "range"] });
+  assert.deepEqual([2353, 973, 590].map((item) => player.getInventory().getAmount(item)), [4, 2, 1]);
+  assert.equal(player.messages.at(-1), "Spawned the materials for a Range (Sailing 16, Construction 6).");
+  commands.boatmats({ player, parts: ["boatmats", "facility", "sofa"] });
+  assert.match(player.messages.at(-1), /^Usage: ::boatmats/);
 });

@@ -52,7 +52,7 @@ sailing: {
     type: "raft" | "skiff" | "sloop";
     name: [number, number, number]; // three words from cache db rows 8545-8547 (0 = none)
     hitpoints: number;        // PR 1: stored, not yet used
-    facilities: number[];     // PR 1: empty
+    facilities: number[];     // per hotspot, the facility's 1-based position in its list; empty = the type's defaults
     location:
       | { kind: "docked"; dock: string }                                // at a port or mooring point
       | { kind: "at_sea"; fineX: number; fineY: number; angle: number } // owner logged out aboard
@@ -108,9 +108,9 @@ tsps has no world views, but it has `PrivateArea` (used by Construction's house)
 - boat types (`data/definitions/boats.json`): template zone, size, hull bounds, deck centre, walkable deck tiles, deck locs, stats, facility hotspots, part tiers and loc animations. The raft, and the skiff and sloop with camphor hulls.
 - gangplanks: Board / Disembark, routed to the lifecycle
 - helm: Navigate (walking onto the helm tile first) / Stop-navigating, the sail buttons (move mode from varbit 19175), clicking to set a heading; Escape, after a yes/no confirmation
-- shipyard: Junior Jim's Customise-boat takes the boat to the shipyard, whose boat schematics (interface 939) swap its hull, keel, sails or helm for any tier, at the cache's levels and materials, for Construction XP; parts, stats and fees come from the cache's sailing tables at runtime
+- shipyard: Junior Jim's Customise-boat takes the boat to the shipyard, whose boat schematics (interface 939) swap its hull, keel, sails or helm for any tier, at the cache's levels and materials, for Construction XP; parts, stats and fees come from the cache's sailing tables at runtime. Aboard the boat there (its own gangplank), a facility hotspot's Build builds any facility the hotspot allows (no XP), and a facility's Modify removes or replaces it; hotspots, facilities and materials are the cache's too
 - shipwright: Junior Jim at The Pandemonium retrieves a sunk raft for 250 gp (PR 1 needs this, or a sunk raft is stuck forever)
-- developer commands: `::raft`, `::skiff` and `::sloop` give a boat docked at The Pandemonium, `::pandemonium` teleports to its gangplank, `::sailingtools` shows every tool in the cargo hold's tools compartment (their quests don't exist yet), and `::boatmats <hull|keel|sails|helm> <tier> [boat]` spawns a part's materials for the shipyard. The dock is where xrsps's raft docks (gangplank 59836 at 3070, 2987); the Pandemonium quest and buying boats come later
+- developer commands: `::raft`, `::skiff` and `::sloop` give a boat docked at The Pandemonium, `::pandemonium` teleports to its gangplank, `::sailingtools` shows every tool in the cargo hold's tools compartment (their quests don't exist yet), and `::boatmats <hull|keel|sails|helm> <tier> [boat]` or `::boatmats facility <name>` spawns a part's or facility's materials for the shipyard. The dock is where xrsps's raft docks (gangplank 59836 at 3070, 2987); the Pandemonium quest and buying boats come later
 
 ## Client
 

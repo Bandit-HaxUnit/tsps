@@ -22,6 +22,7 @@ const {
 } = require("./sailingContent");
 const { repairKitUses } = require("./cargo");
 const { specFor } = require("./boatParts");
+const { hotspotLocs } = require("./boatFacilities");
 const { describeBoat, boatVarps, openSidepanel, clearBoatVarps, DESCRIPTION_VARBITS } = require("./sidepanel");
 const { sendBoatVarbits } = require("./boatVarbits");
 
@@ -125,6 +126,12 @@ function switchCombatTab(event) {
   }
 }
 
+/** A boat as built: its parts, and on each hotspot its facility or the hotspot's placeholder. */
+function builtSpec(boat, base) {
+  const spec = specFor(boat, base);
+  return { ...spec, locs: [...spec.locs, ...hotspotLocs(boat)] };
+}
+
 /** Describes every owned boat (the per-boat varbits), as live OSRS has them at login. */
 function describeBoatsOnLogin({ player }) {
   sendBoatVarbits(player);
@@ -137,7 +144,7 @@ module.exports = {
     api.onCustomEvent("sailing:boarded", onBoarded);
     api.onCustomEvent("sailing:left", onLeft);
     api.onPlayerLogin(describeBoatsOnLogin);
-    Sailing.setSpecResolver(specFor);
+    Sailing.setSpecResolver(builtSpec);
     api.onInterfaceActionClick(switchCombatTab);
   },
 };
