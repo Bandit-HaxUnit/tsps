@@ -212,6 +212,9 @@ class ClientConnection {
       if (this.player) LunarSpells.expireSpellbookSwap(this.player);
       if (this.player && WORLD_INTERACTIONS.has(packet.type)) {
         if (this.player.getStatus() === PlayerStatus.TRADING) continue;
+        const input = { player: this.player, packet, handled: false };
+        PluginManager.emitCustomEvent("player:world-input", input);
+        if (input.handled) continue;
         if (
           (packet.type !== "move" || this.player.getMovementQueue().getMobility().canMove()) &&
           !(packet.type === "inventory_action" && EquipPacketListener.preservesInterfaceOnEquip(this.player))

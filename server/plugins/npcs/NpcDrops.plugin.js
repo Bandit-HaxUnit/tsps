@@ -364,6 +364,9 @@ function dropFor(player, npc, npcId, location) {
   }
 
   const drops = rollTable(table, player, npc);
+  const event = { player, npc, npcId, drops, handled: false };
+  pluginApi.emitCustomEvent("npc-drops:generated", event);
+  if (event.handled) return drops.length;
   for (const drop of drops) {
     if (!Number.isInteger(drop.itemId) || drop.amount <= 0) {
       continue;

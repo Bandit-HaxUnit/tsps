@@ -725,12 +725,12 @@ function interact(player, npc) {
   return true;
 }
 
-function onSkill(player, skill) {
+function onSkill(player, skill, chance) {
   for (const pet of SKILLING_PETS) {
     if (pet.skill !== skill) {
       continue;
     }
-    if (Misc.getRandom(pet.chance) !== 1) {
+    if (Number.isFinite(chance) && chance > 0 ? Math.random() >= 1 / chance : Misc.getRandom(pet.chance) !== 1) {
       continue;
     }
 
@@ -756,7 +756,7 @@ module.exports = {
     pluginApi = api;
     for (const skill of new Set(SKILLING_PETS.map((pet) => pet.skill))) {
       const eventName = `${normalizeSkillName(skill)}:success`;
-      api.onCustomEvent(eventName, ({ player }) => onSkill(player, skill));
+      api.onCustomEvent(eventName, ({ player, petChance }) => onSkill(player, skill, petChance));
     }
 
     api.onItemDropPolicy((event) => {
