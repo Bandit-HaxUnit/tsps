@@ -240,6 +240,19 @@ export interface PluginTradeRequestEvent {
   handled: boolean;
 }
 
+/**
+ * Fires once per player when a trade completes, after the offered items have
+ * changed hands and before either player is saved. `received` and `given` are
+ * the item stacks this player gained and handed over; mutating the player's
+ * containers here (e.g. converting a bond to its untradeable form) is saved.
+ */
+export interface PluginTradeCompletedEvent {
+  player: any;
+  partner: any;
+  received: any[];
+  given: any[];
+}
+
 /** Fires after a player successfully starts following another player (right-click Follow). Observer only - the follow itself already happened. */
 export interface PluginPlayerFollowEvent {
   player: any;
@@ -664,6 +677,7 @@ export interface PluginApi {
   onCanDrink(handler: (event: PluginCanDrinkEvent) => void): void;
   onCanTrade(handler: (event: PluginCanTradeEvent) => void): void;
   onTradeRequest(handler: (event: PluginTradeRequestEvent) => void): void;
+  onTradeCompleted(handler: (event: PluginTradeCompletedEvent) => void): void;
   onPlayerFollow(handler: (event: PluginPlayerFollowEvent) => void): void;
   onPlayerAttack(handler: (event: PluginPlayerAttackEvent) => void): void;
   onCanBank(handler: (event: PluginCanBankEvent) => void): void;

@@ -62,6 +62,7 @@ import {
   PluginSpellRuneBypassEvent,
   PluginCanTradeEvent,
   PluginTradeRequestEvent,
+  PluginTradeCompletedEvent,
   PluginPlayerFollowEvent,
   PluginPlayerAttackEvent,
   PluginCanBankEvent,
@@ -195,6 +196,7 @@ export class PluginManager {
   private static canDrinkHooks: PluginHook<PluginCanDrinkEvent>[] = [];
   private static canTradeHooks: PluginHook<PluginCanTradeEvent>[] = [];
   private static tradeRequestHooks: PluginHook<PluginTradeRequestEvent>[] = [];
+  private static tradeCompletedHooks: PluginHook<PluginTradeCompletedEvent>[] = [];
   private static playerFollowHooks: PluginHook<PluginPlayerFollowEvent>[] = [];
   private static playerAttackHooks: PluginHook<PluginPlayerAttackEvent>[] = [];
   private static canBankHooks: PluginHook<PluginCanBankEvent>[] = [];
@@ -1009,6 +1011,16 @@ export class PluginManager {
       PluginManager.executeHook(hook, event, "trade_request", "trade_request");
     }
     return event.handled === true;
+  }
+
+  /** Observer-only: fires once per player after a completed trade, before the post-trade save. */
+  public static emitTradeCompleted(event: PluginTradeCompletedEvent): void {
+    if (!event || !event.player || !event.partner) {
+      return;
+    }
+    for (const hook of PluginManager.tradeCompletedHooks) {
+      PluginManager.executeHook(hook, event, "trade_completed", "trade_completed");
+    }
   }
 
   public static emitPlayerFollow(event: PluginPlayerFollowEvent): void {
@@ -2559,6 +2571,20 @@ export class PluginManager {
           pluginName,
           handler: (event) => {
             if (!event || event.handled || !event.player || !event.target) {
+              return;
+            }
+            handler(event);
+          },
+        });
+      },
+      onTradeCompleted: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.tradeCompletedHooks.push({
+          pluginName,
+          handler: (event) => {
+            if (!event || !event.player || !event.partner || !Array.isArray(event.received)) {
               return;
             }
             handler(event);
