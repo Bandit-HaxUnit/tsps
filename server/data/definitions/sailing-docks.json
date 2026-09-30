@@ -1,0 +1,10 @@
+[
+  {
+    "id": "the_pandemonium",
+    "name": "The Pandemonium",
+    "gangplank": { "x": 3070, "y": 2987, "z": 0 },
+    "mooring": { "fineX": 393536, "fineY": 382400, "level": 0, "angle": 1024 },
+    "landing": { "x": 3069, "y": 2987, "z": 0 },
+    "shipwright": "Junior Jim"
+  }
+]

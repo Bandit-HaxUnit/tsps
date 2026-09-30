@@ -170237,5 +170237,14 @@
         "id": 14957,
         "direction": 4,
         "wanderRadius": 0
+    },
+    {
+        "level": 0,
+        "name": "Junior Jim",
+        "x": 3058,
+        "y": 2979,
+        "id": 14975,
+        "direction": 6,
+        "wanderRadius": 0
     }
 ]

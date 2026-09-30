@@ -215,6 +215,7 @@ export async function loadWorldEntityScene(host: WebGLOsrsRendererHost,
 
         const loadToken = host.nextWorldEntityLoadToken++;
         host.worldEntityLoadTokens.set(entityIndex, loadToken);
+        const existingEntity = host.osrsClient.worldViewManager.getWorldEntity(entityIndex);
         if (host.worldEntityOverlays.has(entityIndex)) {
             host.clearWorldEntity(entityIndex);
             host.worldEntityLoadTokens.set(entityIndex, loadToken);
@@ -265,7 +266,7 @@ export async function loadWorldEntityScene(host: WebGLOsrsRendererHost,
             sizeZEntity: sizeZ,
             extraLocs,
             extraNpcs,
-        });
+        }, existingEntity);
 
         if (configId >= 0) {
             host.ensureWorldEntityAnimator();

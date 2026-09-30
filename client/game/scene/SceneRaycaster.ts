@@ -75,6 +75,12 @@ export class SceneRaycaster {
     private resolvedLocTypeCache: Map<number, LocType> = new Map();
     private locModelMeshCache: Map<string, LocModelMesh> = new Map();
     worldEntityTransformProvider?: (map: WebGLMapSquare) => Float32Array | undefined;
+    /** Main-world fine position of a point in a boat's deck scene (see worldEntityMotion). */
+    deckToWorldProvider?: (
+        entityIndex: number,
+        fineX: number,
+        fineY: number,
+    ) => { x: number; y: number } | undefined;
 
     constructor(
         private readonly mapManager: MapManager<WebGLMapSquare>,
@@ -252,13 +258,30 @@ export class SceneRaycaster {
         let fogCutoff: number | undefined;
         let playerWorldX: number | undefined;
         let playerWorldZ: number | undefined;
+        // On a boat the player stands in deck coordinates: deck hits are measured from there,
+        // main-world hits from where the deck is drawn.
+        let deckView: { containsTile(x: number, y: number): boolean } | undefined;
+        let rootWorldX: number | undefined;
+        let rootWorldZ: number | undefined;
         try {
             const pe = this.osrsClient.playerEcs;
             const sid = this.osrsClient.controlledPlayerServerId;
             const idx = pe.getIndexForServerId(sid | 0);
             if (idx !== undefined) {
-                playerWorldX = (pe.getX(idx) | 0) / 128.0;
-                playerWorldZ = (pe.getY(idx) | 0) / 128.0;
+                const fineX = pe.getX(idx) | 0;
+                const fineY = pe.getY(idx) | 0;
+                playerWorldX = fineX / 128.0;
+                playerWorldZ = fineY / 128.0;
+                const worldViewId = pe.getWorldViewId(idx) | 0;
+                const projected =
+                    worldViewId >= 0
+                        ? this.deckToWorldProvider?.(worldViewId, fineX, fineY)
+                        : undefined;
+                if (projected) {
+                    deckView = this.osrsClient.worldViewManager.getWorldView(worldViewId);
+                    rootWorldX = projected.x / 128.0;
+                    rootWorldZ = projected.y / 128.0;
+                }
             }
         } catch {
             // Ignore - fog filtering will be disabled
@@ -338,8 +361,11 @@ export class SceneRaycaster {
                 }
                 const cx = tx + 0.5;
                 const cz = ty + 0.5;
-                const qx = Math.abs(cx - playerWorldX) - fogCutoff + rounding;
-                const qz = Math.abs(cz - playerWorldZ) - fogCutoff + rounding;
+                const fromRoot = rootWorldX !== undefined && !deckView?.containsTile(tx, ty);
+                const refX = fromRoot ? (rootWorldX as number) : playerWorldX;
+                const refZ = fromRoot ? (rootWorldZ as number) : playerWorldZ;
+                const qx = Math.abs(cx - refX) - fogCutoff + rounding;
+                const qz = Math.abs(cz - refZ) - fogCutoff + rounding;
                 const sd =
                     Math.min(Math.max(qx, qz), 0) +
                     Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) -
@@ -736,14 +762,22 @@ export class SceneRaycaster {
                 const pid = playerIndices[indexInMap] | 0;
                 const px = pe.getX(pid) | 0;
                 const py = pe.getY(pid) | 0;
-                const worldX = px / 128.0;
-                const worldZ = py / 128.0;
                 const interactId = PLAYER_INTERACT_BASE + (indexInMap & 0x7fff);
                 const playerPlane = pe.getLevel(pid) | 0;
                 if (typeof basePlane === "number" && (playerPlane | 0) !== (basePlane | 0)) {
                     continue;
                 }
-                const groundY = this.sampleHeightAt(worldX, worldZ, playerPlane | 0);
+                // The deck scene gives the height; the box goes where the deck is drawn.
+                const groundY = this.sampleHeightAt(px / 128.0, py / 128.0, playerPlane | 0);
+                let worldX = px / 128.0;
+                let worldZ = py / 128.0;
+                const worldViewId = pe.getWorldViewId(pid) | 0;
+                if (worldViewId >= 0) {
+                    const projected = this.deckToWorldProvider?.(worldViewId, px, py);
+                    if (!projected) continue;
+                    worldX = projected.x / 128.0;
+                    worldZ = projected.y / 128.0;
+                }
                 const topY = groundY - Math.max(0.5, pe.getDefaultHeightTiles(pid) ?? 1.8);
                 const minY = Math.min(groundY, topY);
                 const maxY = Math.max(groundY, topY);

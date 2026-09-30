@@ -328,3 +328,4 @@ export { onLocAnim } from "./locs2";
 export { reloadLocAnimationTile } from "./locs2";
 export { getLocAnimationDurationMs } from "./locs2";
 export { scheduleLocReload } from "./locs2";
+export { pickSeaPoint, projectDeckToWorld, updateWorldEntityMotion } from "./worldEntityMotion";

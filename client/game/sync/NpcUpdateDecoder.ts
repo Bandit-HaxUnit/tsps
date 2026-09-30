@@ -74,6 +74,9 @@ export class NpcUpdateDecoder {
             clientCycle: number;
             localTileX: number;
             localTileY: number;
+            /** Reference for main-world NPCs; the local tile unless the player is on a boat. */
+            rootTileX?: number;
+            rootTileY?: number;
             level: number;
         },
     ): NpcInfoFrame {
@@ -199,8 +202,12 @@ export class NpcUpdateDecoder {
             const rot = (typeof defaultRot === "number" ? defaultRot : 0) & 2047;
             const typeId = stream.readBits(14) | 0;
 
-            const tileX = (opts.localTileX | 0) + (dx | 0);
-            const tileY = (opts.localTileY | 0) + (dy | 0);
+            // Deck NPCs are relative to the player's deck tile, main-world NPCs to the root tile.
+            const inMainWorld = worldViewId < 0;
+            const baseX = inMainWorld ? (opts.rootTileX ?? opts.localTileX) : opts.localTileX;
+            const baseY = inMainWorld ? (opts.rootTileY ?? opts.localTileY) : opts.localTileY;
+            const tileX = (baseX | 0) + (dx | 0);
+            const tileY = (baseY | 0) + (dy | 0);
 
             spawns.push({
                 npcId,

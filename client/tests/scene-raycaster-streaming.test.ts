@@ -139,3 +139,48 @@ maps.mapSquares.set(getMapSquareId(100, 100), normal);
 assert.equal(maps.getMapForWorldTile(6463, 6463), normal);
 assert.equal(maps.getMapForWorldTile(6464, 6463), undefined);
 console.log("House camera heights and interaction scene bounds regression passed");
+
+// A player on a boat deck stands in deck coordinates (9600+); their pick box must sit where
+// the deck is drawn, or nobody can right-click them.
+{
+    const DECK_MAP_ID = 822400;
+    const players = [
+        { x: 3068, y: 2987, worldView: -1 },
+        { x: 9603, y: 9604, worldView: 3000 },
+    ];
+    const deckPicker = new SceneRaycaster(
+        {
+            visibleMapCount: 1,
+            visibleMaps: [{ id: DECK_MAP_ID }],
+            getMapForWorldTile: () => undefined,
+        },
+        {
+            playerEcs: {
+                size: () => players.length,
+                getIsHidden: () => false,
+                getLevel: () => 0,
+                getX: (i: number) => players[i].x * 128 + 64,
+                getY: (i: number) => players[i].y * 128 + 64,
+                getWorldViewId: (i: number) => players[i].worldView,
+                getDefaultHeightTiles: () => 1.8,
+            },
+            worldViewManager: {
+                getWorldView: (id: number) => (id === 3000 ? { overlayMapId: DECK_MAP_ID } : undefined),
+            },
+        },
+    );
+    deckPicker.sampleHeightAt = () => 0;
+    deckPicker.deckToWorldProvider = (entity: number, fineX: number, fineY: number) =>
+        entity === 3000
+            ? { x: fineX - (9603 - 3069) * 128, y: fineY - (9604 - 2987) * 128 }
+            : undefined;
+    const hits: any[] = [];
+    deckPicker.collectPlayerHits(
+        { origin: [3069.5, -10, 2987.5], direction: [0, 1, 0] },
+        100, hits, 0,
+    );
+    assert.equal(hits.length, 1, "the deck player is hit where their deck is drawn");
+    assert.equal(hits[0].playerEcsIndex, 1);
+    assert.deepEqual([hits[0].tileX, hits[0].tileY], [3069, 2987]);
+    console.log("Scene raycaster deck player regression passed");
+}

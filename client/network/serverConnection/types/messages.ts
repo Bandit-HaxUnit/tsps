@@ -16,7 +16,14 @@ export type BankServerUpdate =
     | { kind: "snapshot"; capacity: number; slots: BankSlotMessage[] }
     | { kind: "slot"; slot: BankSlotMessage };
 
-export type NpcInfoPayload = { loopCycle: number; large: boolean; packet: Uint8Array };
+export type NpcInfoPayload = {
+    loopCycle: number;
+    large: boolean;
+    /** Main-world tile that main-world NPC deltas are relative to (differs aboard a boat). */
+    rootTileX: number;
+    rootTileY: number;
+    packet: Uint8Array;
+};
 
 export type ShopStockEntryMessage = {
     slot: number;

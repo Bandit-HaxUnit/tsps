@@ -56,6 +56,14 @@ let spellSelectionResolver: SpellSelectionResolver = null;
 type NpcExamineIdResolver = ((serverId: number) => number | undefined) | null;
 let npcExamineIdResolver: NpcExamineIdResolver = null;
 
+/** Steers the boat instead of walking while at a helm; returns true when it handled the click. */
+type HelmSteeringHandler = ((worldX: number, worldY: number) => boolean) | null;
+let helmSteeringHandler: HelmSteeringHandler = null;
+
+export function setHelmSteeringHandler(handler: HelmSteeringHandler): void {
+    helmSteeringHandler = handler;
+}
+
 export function setSpellSelectionClearHandler(handler: (() => void) | null): void {
     clearSpellSelectionHandler = handler;
 }
@@ -708,6 +716,9 @@ export function menuAction(
         const localY = arg1 | 0;
         const worldX = (ClientState.baseX | 0) + localX;
         const worldY = (ClientState.baseY | 0) + localY;
+        if (helmSteeringHandler?.(worldX, worldY)) {
+            return;
+        }
         const modifierFlags = ctrlHeld
             ? ClientState.isShiftPressed()
                 ? MODIFIER_FLAG_CTRL_SHIFT
