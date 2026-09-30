@@ -22,7 +22,7 @@ export class WeaponInterfaces {
         428,
         7,
         [FightType.MAUL_POUND,
-        FightType.MAUL_PUMMEL, FightType.MAUL_BLOCK],
+        FightType.MAUL_PUMMEL, FightType.MAUL_SMASH],
         7474,
         7486
     )
@@ -378,8 +378,8 @@ export class WeaponInterfaces {
         4705,
         4708,
         4,
-        [FightType.ABYSSAL_BLUDGEON_CHOP, FightType.ABYSSAL_BLUDGEON_SLASH,
-        FightType.ABYSSAL_BLUDGEON_SMASH, FightType.ABYSSAL_BLUDGEON_BLOCK],
+        [FightType.ABYSSAL_BLUDGEON_POUND, FightType.ABYSSAL_BLUDGEON_PUMMEL,
+        FightType.ABYSSAL_BLUDGEON_SMASH],
         7699,
         7711
     )
@@ -434,7 +434,7 @@ export class WeaponInterfaces {
         [WeaponInterfaces.THROWNAXE, 19], [WeaponInterfaces.DART, 19],
         [WeaponInterfaces.JAVELIN, 19], [WeaponInterfaces.BLOWPIPE, 19],
         [WeaponInterfaces.WHIP, 20],
-        [WeaponInterfaces.MAUL, 27], [WeaponInterfaces.ELDER_MAUL, 27],
+        [WeaponInterfaces.MAUL, 27], [WeaponInterfaces.ELDER_MAUL, 32],
         [WeaponInterfaces.ABYSSAL_BLUDGEON, 27],
     ]);
 
