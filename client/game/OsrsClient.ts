@@ -2301,7 +2301,11 @@ export class OsrsClient {
             this.resolvePlayerPlane,
             this.npcEcs,
             this.seqTypeLoader,
-            (plane: number, x: number, y: number) => this.renderer.getCollisionFlagAt(plane, x, y),
+            // A run step is rebuilt with the client's route finder. On a boat deck (its own scene,
+            // no main-world collision) the deck counts as open floor: the server has already
+            // checked the run against the deck, so only the step between two deck tiles is drawn.
+            (plane: number, x: number, y: number) =>
+                ClientState.isWorldEntityTile(x, y) ? 0 : this.renderer.getCollisionFlagAt(plane, x, y),
         );
         this.playerSyncManager = new PlayerSyncManager({
             ecs: this.playerEcs,
