@@ -2,7 +2,7 @@
 
 Design for Sailing in tsps: player-owned boats that sail the main world as world entities. It follows live OSRS as closely as possible; where the OSRS Wiki is silent, behaviour was checked in live OSRS and is marked **(live-checked)**.
 
-**Status:** design draft. Nothing here is implemented yet.
+**Status:** the first PR (engine, raft and saving) is implemented. What live OSRS sends, from wiki pages and live captures, is recorded in [the OSRS reference](sailing-osrs-reference.md).
 
 ## Scope
 
@@ -38,7 +38,7 @@ Cargo lost on death, capsizing and teleporting (courier crates, bounty items, sa
 - **Owned boat**: a saved record in the player's save: its type, name, hitpoints, facilities and location. A player owns 1-5.
 - **Boat instance**: an owned boat that is out at sea, live in the world. At most one per player. It exists only while its owner is aboard (or logged out aboard, see below).
 - **World view**: a separate coordinate space with its own map, collision and entities. The main world is world view -1; each boat instance is a world view keyed by its world-entity index. Players and NPCs belong to exactly one world view.
-- **Deck frame vs world frame**: a boat's deck is a 13x13-zone scene placed far outside the real map (tiles 9600+), with the boat's cache template zone copied into its centre. People aboard stand in deck coordinates. The boat itself has a world-frame position (1/128-tile precision) and angle, and is drawn there. Converting a deck tile to the world tile under it uses the boat's position and angle.
+- **Deck frame vs world frame**: a boat's deck is a 13x13-zone scene placed far outside the real map (tiles 9600+), with the boat's cache template zone copied into its centre. People aboard stand in deck coordinates, on level 0 (OSRS uses level 1, but the tsps client already raises actors on a boat by the deck height). The boat itself has a world-frame position (1/128-tile precision) and angle, and is drawn there. Converting a deck tile to the world tile under it uses the boat's position and angle.
 - **Root tile**: for anything measured in the main world (sync range, main-world locs like gangplanks), a player aboard counts as standing on the world tile under their deck tile.
 
 ## Data model
@@ -93,7 +93,7 @@ tsps has no world views, but it has `PrivateArea` (used by Construction's house)
 - **Sync**:
   - `REBUILD_WORLDENTITY` sends a boat's deck scene (template chunks) to each client that sees it.
   - `WORLDENTITY_INFO` is per viewer: each tick, boats whose world tile is in a viewer's range are added, moved or removed, like NPC sync.
-  - Player and NPC sync measure range from root tiles, and a deck area counts as the main world for who-sees-whom. When a player or NPC on a deck enters a viewer's list, the encoder writes its world-view id (both encoders currently write "no world view"). The client already reads this and places them on the boat.
+  - Player and NPC sync measure range from root tiles, and a deck area counts as the main world for who-sees-whom. When a player on a deck enters a viewer's list, the encoder writes its world-view id, and a player the viewer already sees who boards or leaves a boat is removed for one frame and added back with the new one. The client places them on the boat.
   - `NPC_INFO` gains the viewer's root tile in its header (server and client), so a player on a deck sees main-world NPCs where they are.
   - While a player is on a deck, the normal map keeps following their root tile, so the sea streams as the boat moves.
 - **Deck locs** (helm, sails) are sent per viewer as loc spawns in the deck scene.
@@ -118,7 +118,7 @@ Headless tests like `trade.test.cjs` and `bank.test.cjs`, one per lifecycle row:
 
 - Death at sea: does the boat sink, or return to its last dock?
 - Recovery fee once boats take damage and have facilities (the wiki gives only the base fee).
-- The game messages for boarding, disembarking and Escape, and the Escape confirmation prompt, are placeholders; the live wording is unconfirmed.
+- The game messages for disembarking and Escape, and the Escape confirmation prompt, are placeholders; the live wording is unconfirmed. "You board your boat." is confirmed by a live capture.
 - Logging out at sea when the boat last left from an island mooring point rather than a port (a Dec 2025 fix changed this; unclear if it differs).
 
 ## Sources
