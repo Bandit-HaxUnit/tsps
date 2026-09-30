@@ -43,7 +43,13 @@ assert.equal(classic.get(61), 54, "quest tab icon");
 assert.equal(classic.get(89), 86, "music side panel");
 assert.equal(classic.get(33), 33, "classic minimap orbs retain a valid mount");
 
-assert.equal(loadGameframePaneRedirect(enumLoader, 601), undefined, "unknown roots have no redirect");
+const mobile = loadGameframePaneRedirect(enumLoader, 601);
+assert.ok(mobile, "mobile layout has a redirect");
+assert.equal(mobile.get(96), 49, "mobile chatbox");
+assert.equal(mobile.get(9), 21, "mobile username");
+assert.equal(mobile.get(33), 22, "mobile minimap orbs");
+assert.equal(mobile.get(16), 27, "mobile main modal");
+assert.equal(mobile.get(76), 116, "mobile combat tab");
 
 // Server mounts must address panes present in the cache's layout redirects.
 for (const [root, expectedChild] of [[161, 33], [164, 33], [548, 25]]) {

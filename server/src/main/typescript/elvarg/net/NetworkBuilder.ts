@@ -26,6 +26,7 @@ import { MapRegionReplacementManager } from "../game/collision/MapRegionReplacem
 import {
   decodeClientPackets,
   MAIN_INVENTORY_GROUP_ID,
+  MOBILE_CLIENT_ATTRIBUTE,
   encodeDefaultAnimations,
   encodeGameframeBootstrap,
   encodeHandshake,
@@ -33,6 +34,7 @@ import {
   encodeLogoutResponse,
   encodeWelcome,
   PlayerAppearance,
+  resolveGameframeRoot,
 } from "./protocol/ClientProtocol";
 import {
   WORLD_MAP_CLOSE_WIDGET_ID,
@@ -76,9 +78,6 @@ const OBJECT_ACTIONS = new ObjectActionPacketListener();
 const NPC_ACTIONS = new NPCOptionPacketListener();
 const MAGIC_ITEMS = new MagicOnItemPacketListener();
 const CLOSE_ON_INTERFACE_CLOSE_ATTRIBUTE = "interface:close-on-interface-close";
-// Gameframe roots the "Game client layout" dropdown can pick (548 fixed, 164
-// classic resizable, 161 modern resizable).
-const CLIENT_LAYOUT_ROOTS = new Set([548, 164, 161]);
 const WORLD_INTERACTIONS = new Set([
   "move",
   "teleport",
@@ -708,7 +707,7 @@ class ClientConnection {
           await this.login(packet.username, packet.password, packet.revision);
           continue;
         case "handshake":
-          this.enterWorld();
+          this.enterWorld(packet.clientType);
           continue;
         case "logout":
           this.send(encodeLogoutResponse());
@@ -807,7 +806,7 @@ class ClientConnection {
     console.info(`[login] accepted ${username} from ${this.channel.remoteAddress}`);
   }
 
-  private enterWorld(): void {
+  private enterWorld(clientType: number = 0): void {
     if (!this.pending || this.player) return;
     const pending = this.pending;
     const session = new PlayerSession(this.channel);
@@ -816,6 +815,9 @@ class ClientConnection {
     player.setUsername(pending.username);
     player.setLongUsername(Misc.stringToLongBigInt(pending.username));
     player.setHostAddress(this.channel.remoteAddress);
+    // Transient (not persisted) so a mobile login never overwrites the layout
+    // saved from a desktop session; resolveGameframeRoot reads it at boot.
+    if (clientType === 1) player.setAttribute(MOBILE_CLIENT_ATTRIBUTE, true);
     if (pending.save) pending.save.applyToPlayer(player);
     if (isConfiguredDeveloperUsername(player.getUsername())) player.setRights(PlayerRights.DEVELOPER);
     player.setPasswordHashWithSalt(pending.passwordHash);
@@ -847,8 +849,8 @@ class ClientConnection {
     this.send(encodeDefaultAnimations());
     // 548/164/161 - what the "Game client layout" dropdown (Settings.plugin.js)
     // stores; the client maps the standard mounts onto the chosen layout.
-    const savedLayoutRoot = Number(player.getAttribute("clientLayoutRoot"));
-    const layoutRoot = CLIENT_LAYOUT_ROOTS.has(savedLayoutRoot) ? savedLayoutRoot : 161;
+    // Mobile clients resolve to the stock mobile toplevel (601) instead.
+    const layoutRoot = resolveGameframeRoot(player);
     for (const packet of encodeGameframeBootstrap(player.getUsername(), layoutRoot)) this.send(packet);
     player.getPacketSender()
       // The bootstrap mounts the magic tab (161:82 -> 218) directly, which does not send
