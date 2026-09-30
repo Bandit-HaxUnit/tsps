@@ -57,7 +57,6 @@ module.exports = function registerRuneMysteriesQuest(api) {
   const STEP_HAND_PACKAGE = "44bs50";
   const STEP_GIVE_NOTES = new Set(["INsogy", "3o9zfG", "5g64gx"]);
   const STEP_TAKE_NOTES = "3-8qg3";
-  const STEP_TELEPORT = new Set(["SvUvek", "ILlRUH"]);
 
   /** Dialogue page names. */
   const PAGE_RUNE_MYSTERIES = "Rune Mysteries";
@@ -371,17 +370,6 @@ module.exports = function registerRuneMysteriesQuest(api) {
       event.handled = true;
       event.end = true;
       return;
-    }
-
-    // Post-quest teleport offered by Sedridor and Aubury.
-    if (STEP_TELEPORT.has(stepId)) {
-      if (stage >= STAGE_COMPLETE) {
-        teleportToRuneEssence(player);
-      } else {
-        player.sendMessage("You need to complete Rune Mysteries before using this teleport.");
-      }
-      event.handled = true;
-      event.end = true;
     }
   }
 
