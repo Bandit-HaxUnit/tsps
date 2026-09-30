@@ -13,10 +13,13 @@ export interface CargoSlot {
     amount: number;
 }
 
+/** A boat's name: three word numbers (1-based, 0 = none) into cache db rows 8545-8547. */
+export type BoatName = [number, number, number];
+
 export interface OwnedBoat {
     slot: number;
     type: string;
-    name: string;
+    name: BoatName;
     hitpoints: number;
     facilities: number[];
     location: BoatLocation;
@@ -48,6 +51,12 @@ function normalizeLocation(raw: any): BoatLocation {
     return { kind: "sunk" };
 }
 
+function normalizeName(raw: unknown): BoatName {
+    const words = Array.isArray(raw) ? raw : [];
+    const word = (index: number) => Number.isInteger(words[index]) && words[index] >= 0 && words[index] <= 255 ? words[index] : 0;
+    return [word(0), word(1), word(2)];
+}
+
 function normalizeCargo(raw: unknown): (CargoSlot | null)[] {
     if (!Array.isArray(raw)) return [];
     return raw.map((slot) => Number.isInteger(slot?.id) && slot.id >= 0 && Number.isInteger(slot?.amount) && slot.amount > 0
@@ -65,7 +74,7 @@ export function normalizeSailingState(raw: any): SailingState {
         boats.push({
             slot: boat.slot,
             type: boat.type,
-            name: typeof boat.name === "string" ? boat.name : "",
+            name: normalizeName(boat.name),
             hitpoints: finite(boat.hitpoints) ? boat.hitpoints : 0,
             facilities: Array.isArray(boat.facilities) ? boat.facilities.filter(Number.isInteger) : [],
             location: normalizeLocation(boat.location),

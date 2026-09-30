@@ -50,7 +50,7 @@ sailing: {
   boats: Array<{
     slot: number;             // 0-4
     type: "raft" | "skiff" | "sloop";
-    name: string;
+    name: [number, number, number]; // three words from cache db rows 8545-8547 (0 = none)
     hitpoints: number;        // PR 1: stored, not yet used
     facilities: number[];     // PR 1: empty
     location:

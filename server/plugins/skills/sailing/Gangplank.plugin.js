@@ -5,6 +5,7 @@ const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/TaskManager");
 const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sailing/Sailing");
 const { content, dockAtGangplank, fade, playSound } = require("./sailingContent");
+const { MODE, openBoatSelection } = require("./BoatSelection.plugin");
 
 const SOUND_BOARD_BOAT = 10754;
 
@@ -18,12 +19,22 @@ function later(player, ticks, action) {
   })());
 }
 
+/** With more than one boat, Board asks which (the boat selection interface, as in OSRS). */
 function boardBoat({ player, location }) {
   const dock = dockAtGangplank(location);
   if (!dock) return false;
+  if (player.getSailing().boats.length > 1) {
+    openBoatSelection(player, MODE.BOARD, dock, (slot) => boardSlot(player, dock, slot));
+  } else {
+    boardSlot(player, dock, undefined);
+  }
+}
+
+/** Boards the boat in `slot`, or with none given the one moored here. */
+function boardSlot(player, dock, slot) {
   fade(player, true);
   later(player, 1, () => {
-    const refusal = Sailing.board(player, dock.id);
+    const refusal = Sailing.board(player, dock.id, slot);
     if (refusal) {
       fade(player, false);
       player.sendMessage(refusal);

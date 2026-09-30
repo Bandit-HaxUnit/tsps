@@ -130,19 +130,75 @@ The gangplank's Board (op 1) opens the boat selection interface when you own sev
 - script 8778 `["", 1, "", 1]` runs;
 - players on board 19235 goes to 0.
 
+## Per-boat varbits
+
+The server describes every owned boat to the client at login (live login capture) and whenever one changes. Each boat slot has a block of varbits, 38 ids apart: slot 1 starts at 19258, slot 2 at 19296, up to slot 5 at 19410.
+
+| Offset | Varbit (slot 1) | Value |
+| --- | --- | --- |
+| +0 | 19258 `owned` | 1 |
+| +1 | 19259 `type` | raft 0, skiff 1, sloop 2 |
+| +2 | 19260 `port` | the dock's port id (0 = Port Sarim, 1 = The Pandemonium); 255 bottled, 254 capsized, 253 lost at sea (cache script 8997) |
+| +3 | 19261 `bottle_previous_port` | 255 |
+| +4 | 19262 `facilities_unaltered` | 1 |
+| +5, +6, +7 | 19263-19265 `name_1`-`name_3` | the name's three words |
+| +8 to +11 | 19266-19269 keel, hull, sail, steering | part tiers (0 on a raft) |
+| +15 + n | 19273 + n `hotspot_n` | the facility at hotspot n (raft hotspot 0 = 15) |
+| +26 | 19284 `trim` | trim tier |
+
+- **HP:** stored HP is 19458 + slot and stored max HP is 19463 + slot.
+- **Also at login:**
+  - `sailing_intro` (18314): 50 once the intro (The Pandemonium) is done;
+  - the last dock, standard dock and mooring point (19145-19147);
+  - where the boat was spawned: slot, fine x/z, angle (19121, 19141, 19142, 19129);
+  - `last_personal_boat_boarded` (18554) and `previous_boat_data_slot` (19130);
+  - the cargo hold warning (19123).
+
+**Boat names** are three words (cache scripts 9085 and 9088):
+- Word *n* (1-based, 0 = none) is entry *n* − 1 of the string list in db row 8545, 8546 or 8547 (table 187, column 1). The words are joined with spaces.
+- With no words, the name is "Boat" (row 8547's column 0).
+- Row 8545's list is empty in revision 237. The raft in the capture, words 0, 32, 57, is "Extreme Pride".
+
 ## Boat selection (interface 934)
 
-One interface serves the gangplank and Junior Jim. Varbit 18553 sets the mode, and varp 5005 is the current dock (8588 = The Pandemonium):
+One interface serves the gangplank and Junior Jim. Varbit 18553 sets the mode, and varp 5005 is the current dock's db row (8588 = The Pandemonium):
 
 | Mode (18553) | Opened by |
 | --- | --- |
 | 2 | Customise-boat |
-| 3 | Board (gangplank) |
+| 3 | Board (gangplank), when you own more than one boat |
 | 5 | Recover-boat |
 
-- It opens as the main modal and runs script 8621.
-- The events are 934:5, slots 1-5, with pause button and op 1. A choice arrives as a pause-button resume on 934:5 whose slot is the boat's slot.
-- On open, the server sends the bank (95) and every cargo hold inventory (963-967). They're stopped again on close.
+**Opening:**
+1. The server sends the bank (95) and every cargo hold (963-967).
+2. Script 2524 `[-1, -3]`, then 934 opens as the main modal.
+3. Script 8621 initialises it.
+4. 934:5 gets slots 1-5, with pause button and op 1.
+5. `busy` is set to 1.
+
+**Choosing:** a choice is a pause-button resume on 934:5 whose slot is the boat's slot + 1. The mode and dock vars go back to 0 and -1, and the interface closes.
+
+**Texts in its scripts** (shown by the client for boats you can't choose):
+- "You can't choose that boat at the moment."
+- "That boat is already at the nearby dock. There's no need to recover it."
+- "That boat is already docked at …"
+- "That boat does not have anything stored in its cargo hold."
+
+## Buying a boat (Junior Jim's Buy-boat)
+
+Buy-boat opens the data-driven shop "omnishop", not a special interface:
+- **Interfaces:** 819 as the main modal and 806 as the side modal.
+- **Scripts:** 7140 `[8548, -1, -1]` and 7246 `[8548]`.
+- **Shop varps:** `omnishop_selected_id` (3869) is -1 and `omnishop_lastshop` (3874) is 8548.
+- **Shop definition:** db row 8548 (`sailing_boat_shop`, table 39): "Boat Emporium", entries 8549-8551 and the button text "Buy".
+- **Events:**
+  - list 819:38 slots 0-36, ops 1-6 and 10;
+  - side items 806:0;
+  - info 806:1;
+  - buy, examine and request-info triggers 819:4, 819:3 and 819:5 (script triggers);
+  - dropdown 819:41.
+
+Buying itself hasn't been captured yet.
 
 ## Recovery (Junior Jim)
 
@@ -153,7 +209,7 @@ One interface serves the gangplank and Junior Jim. Varbit 18553 sets the mode, a
   - sloop `sailing_boat_3_port` 19336: from 26 (another port) to 1.
 
   So 0 seems to mean lost or sunk.
-- **A Port Wizard next to Jim does the work:**
+- **A Port Wizard next to Jim does the work.** One of Perrie, Peter, Petra or Paulie (15378-15381) appears at (3059, 2981):
   - teleports in: animation 715, spot animation 1299, sound 201;
   - says (overhead) "Another recovery? This won't take long...";
   - casts: animation 725, spot animation 3546 with delay 10, sound 10900 with delay 35;
@@ -265,6 +321,14 @@ Depositing a tool, by Deposit Inventory or singly, puts it back in the compartme
     - a tool you haven't stored (nothing happens);
     - diving gear needing both parts to be stored.
   - The wiki's bounty items aren't listed, since no item name matched.
+- **Boat selection and recovery:**
+  - The bank isn't sent when interface 934 opens.
+  - The Port Wizard's line is only shown overhead, not also in the chatbox.
+  - Stored HP is always full, because boats don't take damage yet.
+  - A boat sunk by a teleport, Escape or death sends "lost at sea" (253); capsizing (254) comes with boat damage. A boat at sea with its owner sends port 0.
+  - Guessed rather than captured:
+    - falling back to coins in the inventory ("Payment has been taken from your inventory.");
+    - the message for not having enough coins.
   - None of the tool quests exist yet, so only the captain's log shows. The developer command `::sailingtools` sets the unlock varbits for your own client. The server doesn't check unlocks, so a hidden tool can still be deposited.
 
 ## Wanted captures

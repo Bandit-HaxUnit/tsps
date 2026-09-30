@@ -5,7 +5,8 @@ const { BoatMoveMode } = require("../../../src/main/typescript/elvarg/game/conte
 const { packedHeadingToAngle } = require("../../../src/main/typescript/elvarg/game/content/sailing/HeadingUtils");
 const { PlayerRights } = require("../../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
-const { content } = require("./sailingContent");
+const { content, boatName, randomBoatName } = require("./sailingContent");
+const { sendBoatVarbits } = require("./boatVarbits");
 const { TOOLS_UNLOCKED_ATTRIBUTE, sendToolUnlocks } = require("./cargo");
 
 const RAFT_DOCK = "the_pandemonium";
@@ -17,9 +18,10 @@ const MOVE_MODES = {
 };
 
 function giveRaft({ player }) {
-  const boat = Sailing.giveBoat(player, "raft", RAFT_DOCK, "Raft");
+  const boat = Sailing.giveBoat(player, "raft", RAFT_DOCK, randomBoatName());
+  if (boat) sendBoatVarbits(player);
   player.sendMessage(boat
-    ? `A raft is moored for you at ${Sailing.getDock(RAFT_DOCK).name} (slot ${boat.slot}).`
+    ? `The ${boatName(boat)}, a raft, is moored for you at ${Sailing.getDock(RAFT_DOCK).name} (slot ${boat.slot}).`
     : "You can't own another boat.");
 }
 
@@ -40,7 +42,7 @@ function describe(boat) {
   const where = boat.location.kind === "docked" ? `docked at ${boat.location.dock}`
     : boat.location.kind === "at_sea" ? `at sea (${Math.floor(boat.location.fineX / 128)}, ${Math.floor(boat.location.fineY / 128)})`
     : "sunk";
-  return `Slot ${boat.slot}: ${boat.type} "${boat.name}", ${where}`;
+  return `Slot ${boat.slot}: ${boat.type} "${boatName(boat)}", ${where}`;
 }
 
 function boatInfo({ player }) {

@@ -4,7 +4,7 @@
 const { Item } = require("../../../src/main/typescript/elvarg/game/model/Item");
 const { ItemDefinition } = require("../../../src/main/typescript/elvarg/game/definition/ItemDefinition");
 const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sailing/Sailing");
-const { VARBIT, content, setVarbit, playSound } = require("./sailingContent");
+const { VARBIT, content, setVarbit, playSound, boatName } = require("./sailingContent");
 const cargo = require("./cargo");
 
 const HOLD = 943;
@@ -93,7 +93,7 @@ function openHold({ player }) {
   sender.sendInterfaceFlagsRange(uid(SIDE, SIDE_ITEMS), 0, 27, ITEM_OPS);
   sender.sendInterfaceFlagsRange(uid(HOLD, HOLD_TOOLS), 0, 4, IF_EVENT_OP1);
   sender.sendString(String(cargo.capacityOf(boat)), HOLD_CAPACITY);
-  sender.sendInterfaceScript(SCRIPT_STEELBORDER, [HOLD_FRAME, `Cargo Hold: ${boat.name}`]);
+  sender.sendInterfaceScript(SCRIPT_STEELBORDER, [HOLD_FRAME, `Cargo Hold: ${boatName(boat)}`]);
   setVarbit(player, VARBIT_QUANTITY_MODE, quantityMode(player));
   setVarbit(player, VARBIT_WARNING_DISMISSED, player.getAttribute?.(WARNING_ATTRIBUTE) ? 1 : 0);
 }

@@ -75,14 +75,34 @@ function content() {
   const boats = read("boats.json");
   const docks = read("sailing-docks.json");
   const cargo = read("sailing-cargo.json");
+  const names = read("sailing-boat-names.json");
   for (const boat of boats) Sailing.registerBoatType(boat);
   for (const dock of docks) Sailing.registerDock(dock);
-  loaded = { boats, docks, cargo };
+  loaded = { boats, docks, cargo, names };
   return loaded;
 }
 
 function boatType(type) {
   return content().boats.find((boat) => boat.type === type);
+}
+
+function dockById(id) {
+  return content().docks.find((dock) => dock.id === id);
+}
+
+/**
+ * A boat's name from its three word numbers (1-based, 0 = none): the words from cache db rows
+ * 8545-8547 (sailing-boat-names.json), joined with spaces, or "Boat" with none.
+ */
+function boatName(boat) {
+  const { words, unnamed } = content().names;
+  const parts = (Array.isArray(boat?.name) ? boat.name : []).map((word, list) => words[list]?.[word - 1]).filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : unnamed;
+}
+
+/** A random name, as a new boat gets: a word from each list that has any. */
+function randomBoatName() {
+  return content().names.words.map((list) => list.length > 0 ? 1 + Math.floor(Math.random() * list.length) : 0);
 }
 
 /** The dock whose gangplank is at (or right by) a clicked loc. */
@@ -99,8 +119,8 @@ function getVarbit(player, id) {
   return player.getPacketSender().getVarbit(id);
 }
 
-function playSound(player, soundId) {
-  player.getPacketSender().sendSoundEffect(soundId, 1, 0, 10);
+function playSound(player, soundId, delay = 0) {
+  player.getPacketSender().sendSoundEffect(soundId, 1, delay, 10);
 }
 
 /** Plays a loc animation on the boat's deck for the player and everyone who sees them. */
@@ -151,6 +171,9 @@ module.exports = {
   SCRIPT_SIDEBUTTON_SWITCH,
   content,
   boatType,
+  dockById,
+  boatName,
+  randomBoatName,
   dockAtGangplank,
   setVarbit,
   getVarbit,

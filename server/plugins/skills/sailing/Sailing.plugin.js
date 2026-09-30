@@ -26,6 +26,7 @@ const {
   isSail,
 } = require("./sailingContent");
 const { repairKitUses } = require("./cargo");
+const { sendBoatVarbits } = require("./boatVarbits");
 
 const SEQ_SAIL_DOWN = 13367;
 
@@ -131,6 +132,8 @@ function onBoarded({ player, boat, owned }) {
 function onLeft({ player, reason }) {
   // A player logging out has no client left to update.
   if (reason === "logout") return;
+  // Disembarking docks the boat; a teleport or Escape sinks it.
+  sendBoatVarbits(player);
   for (const id of LEFT_VARBITS) setVarbit(player, id, 0);
   for (const varp of Object.values(VARP_SIDEPANEL_DEFENCE)) player.getPacketSender().sendConfig(varp, 0);
   player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
@@ -154,12 +157,18 @@ function switchCombatTab(event) {
   }
 }
 
+/** Live OSRS describes every owned boat to the client at login (the per-boat varbits). */
+function describeBoatsOnLogin({ player }) {
+  sendBoatVarbits(player);
+}
+
 module.exports = {
   name: "Sailing",
   register(api) {
     content();
     api.onCustomEvent("sailing:boarded", onBoarded);
     api.onCustomEvent("sailing:left", onLeft);
+    api.onPlayerLogin(describeBoatsOnLogin);
     api.onInterfaceActionClick(switchCombatTab);
   },
 };

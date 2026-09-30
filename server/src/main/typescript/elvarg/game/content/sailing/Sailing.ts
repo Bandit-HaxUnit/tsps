@@ -5,9 +5,8 @@ import { Location } from "../../model/Location";
 import type { Boat } from "./Boat";
 import { BoatManager } from "./BoatManager";
 import type { BoatPlacement, BoatSpec } from "./BoatSpec";
-import type { OwnedBoat } from "./SailingState";
+import type { BoatName, OwnedBoat } from "./SailingState";
 
-const COINS = 995;
 /** OSRS lets a player own up to 5 boats (more slots unlock with Sailing level). */
 const MAX_BOATS = 5;
 
@@ -68,7 +67,12 @@ export class Sailing {
     }
 
     /** Adds a boat docked at `dockId` in the player's next free slot. */
-    public static giveBoat(player: Player, type: string, dockId: string, name = ""): OwnedBoat | undefined {
+    public static giveBoat(
+        player: Player,
+        type: string,
+        dockId: string,
+        name: BoatName = [0, 0, 0],
+    ): OwnedBoat | undefined {
         const state = player.getSailing();
         const spec = Sailing.types.get(type);
         if (!spec || !Sailing.docks.has(dockId) || state.boats.length >= MAX_BOATS) return undefined;
@@ -100,13 +104,19 @@ export class Sailing {
      * Boards the player's boat moored at `dockId`. Returns a message to show when they can't
      * (no boat here, or it has sunk), otherwise null.
      */
-    public static board(player: Player, dockId: string): string | null {
+    public static board(player: Player, dockId: string, slot?: number): string | null {
         if (BoatManager.getBoatAboard(player)) return "You're already on a boat.";
         const dock = Sailing.docks.get(dockId);
         if (!dock) return "You can't board a boat here.";
         const state = player.getSailing();
         const here = (boat: OwnedBoat) => boat.location.kind === "docked" && boat.location.dock === dockId;
-        const boat = [Sailing.activeBoat(player), ...state.boats].find((candidate) => candidate && here(candidate));
+        if (slot !== undefined) {
+            const chosen = state.boats.find((boat) => boat.slot === slot);
+            if (!chosen || !here(chosen)) return "You can't choose that boat at the moment.";
+        }
+        const boat = slot !== undefined
+            ? state.boats.find((candidate) => candidate.slot === slot)
+            : [Sailing.activeBoat(player), ...state.boats].find((candidate) => candidate && here(candidate));
         if (!boat) {
             return state.boats.some((candidate) => candidate.location.kind === "sunk")
                 ? "Your boat has sunk. A shipwright can recover it for you."
@@ -139,21 +149,27 @@ export class Sailing {
     }
 
     /**
-     * A shipwright recovers the player's sunk boat to `dockId` for its fee in coins (by boat
-     * type). Returns the message to show.
+     * Why a shipwright at `dockId` can't recover the boat in `slot` (sunk, or docked at another
+     * port), or null. The texts are the boat selection interface's own (cache scripts).
      */
-    public static recover(player: Player, dockId: string, feeFor: (boat: OwnedBoat) => number): string {
-        const state = player.getSailing();
-        const sunk = [Sailing.activeBoat(player), ...state.boats]
-            .find((boat) => boat?.location.kind === "sunk");
-        if (!sunk) return "You don't have a boat that needs recovering.";
-        if (!Sailing.docks.has(dockId)) return "I can't bring a boat here.";
-        const fee = feeFor(sunk);
-        const inventory = player.getInventory();
-        if (inventory.getAmount(COINS) < fee) return `You need ${fee} coins to recover your boat.`;
-        inventory.delete(COINS, fee);
-        sunk.location = { kind: "docked", dock: dockId };
-        return "Your boat has been recovered and is moored here.";
+    public static recoverRefusal(player: Player, slot: number, dockId: string): string | null {
+        const boat = player.getSailing().boats.find((candidate) => candidate.slot === slot);
+        if (!boat || !Sailing.docks.has(dockId) || boat.location.kind === "at_sea") {
+            return "You can't choose that boat at the moment.";
+        }
+        if (boat.location.kind === "docked" && boat.location.dock === dockId) {
+            return "That boat is already at the nearby dock. There's no need to recover it.";
+        }
+        return null;
+    }
+
+    /** Brings the boat in `slot` to `dockId`; the shipwright takes the fee. */
+    public static recover(player: Player, slot: number, dockId: string): string | null {
+        const refusal = Sailing.recoverRefusal(player, slot, dockId);
+        if (refusal) return refusal;
+        const boat = player.getSailing().boats.find((candidate) => candidate.slot === slot)!;
+        boat.location = { kind: "docked", dock: dockId };
+        return null;
     }
 
     /** Keeps the saved position of each boat at sea current, so a save mid-voyage restores it. */
