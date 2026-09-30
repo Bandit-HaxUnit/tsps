@@ -9,7 +9,6 @@ The target is OpenRune's observable combat-pathing behaviour, while retaining th
 Before changing server code, read:
 
 - `server/AGENTS.md`
-- `server/CONTRIBUTING.md`
 - This file
 - The plan being implemented
 - Every current caller of each symbol the plan changes
@@ -40,7 +39,7 @@ Every implementation must obey these rules:
 1. Start from a clean understanding, not necessarily a clean worktree. Run `git status --short`, identify pre-existing changes, and do not rewrite or discard them.
 2. Add the smallest failing smoke test before changing behaviour. Extend an existing smoke when it already owns the domain; otherwise add one focused script.
 3. Reuse `RsmodRouteFinding`, `CombatRange`, `MovementQueue`, and the existing combat methods. Do not add another pathfinder, geometric attack-tile search, action scheduler, or plugin framework.
-4. Keep foundational routing and movement in core. Keep gameplay policies in plugins and `PluginManager` hooks according to `server/CONTRIBUTING.md`.
+4. Keep foundational routing and movement in core. Keep gameplay policies in plugins and `PluginManager` hooks according to `server/AGENTS.md`.
 5. Do not change client packet IDs, packet layouts, player indices, map-region loading, cache revision, rendering, or destination-click coordinates for these plans.
 6. Do not add coordinate-, object-, NPC-, weapon-, or bot-name-specific fixes.
 7. Never leave two active owners of the same decision. When the replacement path passes its tests, remove the superseded routing/follow branch and its stale cache fields in the same change.
@@ -50,7 +49,7 @@ Every implementation must obey these rules:
 
 ## Reference hierarchy for this work
 
-The requested behavioural target is OpenRune. Use its source and integration tests as the executable parity oracle. If OpenRune is ambiguous or marked with a TODO, verify against osrs-docs and the OSRS Wiki as required by `server/CONTRIBUTING.md`. Record any intentional divergence in the implementing commit; do not silently guess.
+The requested behavioural target is OpenRune. Use its source and integration tests as the executable parity oracle. If OpenRune is ambiguous or marked with a TODO, verify against osrs-docs and the OSRS Wiki as required by `server/AGENTS.md`. Record any intentional divergence in the implementing commit; do not silently guess.
 
 Do not copy Kotlin structure mechanically. Port the observable state transitions and invariants using existing TypeScript types.
 
