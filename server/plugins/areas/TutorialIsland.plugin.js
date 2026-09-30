@@ -1447,6 +1447,7 @@ module.exports = {
         const player = event.player;
         if (passedSkipOffer.delete(player)) return false;
         if (!isActive(player) || stage(player) !== STAGE.GIELINOR_TALK) return false;
+        if (api.getPluginConfig("TutorialIsland:allowSkip", true) === false) return false;
         api.sendMultiChatboxPrompt(
           player,
           "Skip tutorial island?",
