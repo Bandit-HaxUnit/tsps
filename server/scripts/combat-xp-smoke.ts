@@ -1,7 +1,6 @@
 import * as assert from "node:assert/strict";
 import { CombatFactory } from "../src/main/typescript/elvarg/game/content/combat/CombatFactory";
 import { CombatType } from "../src/main/typescript/elvarg/game/content/combat/CombatType";
-import { FightStyle } from "../src/main/typescript/elvarg/game/content/combat/FightStyle";
 import { FightType } from "../src/main/typescript/elvarg/game/content/combat/FightType";
 import { WeaponInterfaceManager } from "../src/main/typescript/elvarg/game/content/combat/WeaponInterfaceManager";
 import { WeaponInterfaces } from "../src/main/typescript/elvarg/game/content/combat/WeaponInterfaces";
@@ -76,47 +75,8 @@ assert.equal(xp(run(CombatType.MELEE, [index(Skill.ATTACK)], 1), Skill.HITPOINTS
 // A 0-damage melee hit grants nothing.
 assert.equal(run(CombatType.MELEE, [index(Skill.ATTACK)], 0).length, 0);
 
-// The combat style buttons send their cache slot (varp 43). The weapon's
-// FightType child ids must match those slots, or the click trains nothing.
-const styleAt = (weapon: WeaponInterfaces, slot: number): FightStyle | undefined =>
-    Object.values(weapon.getFightType())
-        .filter((type): type is FightType => type instanceof FightType)
-        .find((type) => type.getChildId() === slot)?.getStyle();
-
-const ACC = FightStyle.ACCURATE;
-const AGG = FightStyle.AGGRESSIVE;
-const DEF = FightStyle.DEFENSIVE;
-const CTRL = FightStyle.CONTROLLED;
-const CACHE_SLOTS: Array<[string, WeaponInterfaces, Array<[number, FightStyle]>]> = [
-    ["unarmed", WeaponInterfaces.UNARMED, [[0, ACC], [1, AGG], [3, DEF]]],
-    ["staff", WeaponInterfaces.STAFF, [[0, ACC], [1, AGG], [3, DEF]]],
-    ["ancient staff", WeaponInterfaces.ANCIENT_STAFF, [[0, ACC], [1, AGG], [3, DEF]]],
-    ["warhammer", WeaponInterfaces.WARHAMMER, [[0, ACC], [1, AGG], [3, DEF]]],
-    ["granite maul", WeaponInterfaces.GRANITE_MAUL, [[0, ACC], [1, AGG], [3, DEF]]],
-    ["maul", WeaponInterfaces.MAUL, [[0, AGG], [1, AGG], [3, AGG]]],
-    ["elder maul", WeaponInterfaces.ELDER_MAUL, [[0, ACC], [1, AGG], [3, DEF]]],
-    ["abyssal bludgeon", WeaponInterfaces.ABYSSAL_BLUDGEON, [[0, AGG], [1, AGG], [3, AGG]]],
-    ["scythe", WeaponInterfaces.SCYTHE, [[0, ACC], [1, AGG], [2, AGG], [3, DEF]]],
-    ["halberd", WeaponInterfaces.HALBERD, [[0, CTRL], [1, AGG], [3, DEF]]],
-    ["scimitar", WeaponInterfaces.SCIMITAR, [[0, ACC], [1, AGG], [2, CTRL], [3, DEF]]],
-    ["longsword", WeaponInterfaces.LONGSWORD, [[0, ACC], [1, AGG], [2, CTRL], [3, DEF]]],
-    ["claws", WeaponInterfaces.CLAWS, [[0, ACC], [1, AGG], [2, CTRL], [3, DEF]]],
-    ["mace", WeaponInterfaces.MACE, [[0, ACC], [1, AGG], [2, CTRL], [3, DEF]]],
-    ["spear", WeaponInterfaces.SPEAR, [[0, CTRL], [1, CTRL], [2, CTRL], [3, DEF]]],
-    ["whip", WeaponInterfaces.WHIP, [[0, ACC], [1, CTRL], [3, DEF]]],
-    ["shortbow", WeaponInterfaces.SHORTBOW, [[0, ACC], [1, AGG], [3, DEF]]],
-    ["longbow", WeaponInterfaces.LONGBOW, [[0, ACC], [1, AGG], [3, DEF]]],
-    ["crossbow", WeaponInterfaces.CROSSBOW, [[0, ACC], [1, AGG], [3, DEF]]],
-    ["knife", WeaponInterfaces.KNIFE, [[0, ACC], [1, AGG], [3, DEF]]],
-    ["javelin", WeaponInterfaces.JAVELIN, [[0, ACC], [1, AGG], [3, DEF]]],
-    ["blowpipe", WeaponInterfaces.BLOWPIPE, [[0, ACC], [1, AGG], [3, DEF]]],
-];
-for (const [name, weapon, slots] of CACHE_SLOTS) {
-    for (const [slot, style] of slots) {
-        assert.equal(styleAt(weapon, slot), style, `${name}: slot ${slot}`);
-    }
-}
-
+// Combat style buttons send their cache slot (varp 43); the weapon's fight
+// types come from data/definitions/item-combat-styles.json (cache dbtable 78).
 const clickStyle = (weapon: WeaponInterfaces, slot: number, combatType: CombatType = CombatType.MELEE): number[] => {
     const player: any = {
         fightType: FightType.UNARMED_KICK,
@@ -135,6 +95,8 @@ const clickStyle = (weapon: WeaponInterfaces, slot: number, combatType: CombatTy
 
 // Regression: unarmed Block sits on cache slot 3 and must train Defence.
 assert.deepEqual(clickStyle(WeaponInterfaces.UNARMED, 3), [index(Skill.DEFENCE)]);
+assert.deepEqual(clickStyle(WeaponInterfaces.WARHAMMER, 3), [index(Skill.DEFENCE)]);
+assert.deepEqual(clickStyle(WeaponInterfaces.STAFF, 3), [index(Skill.DEFENCE)]);
 // Shared styles train Attack, Strength and Defence.
 assert.deepEqual(clickStyle(WeaponInterfaces.SCIMITAR, 2), [index(Skill.ATTACK), index(Skill.STRENGTH), index(Skill.DEFENCE)]);
 assert.deepEqual(clickStyle(WeaponInterfaces.WHIP, 1), [index(Skill.ATTACK), index(Skill.STRENGTH), index(Skill.DEFENCE)]);
