@@ -2377,7 +2377,8 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         invalidateWidgetRender(ctx, w);
     });
 
-    handlers.set(Opcodes.CC_SETMODEL_PLAYERCHATHEAD, (ctx, intOp) => {
+    // Model type 8: modelId is a loc id, drawn with that loc's model (see renderModelCanvas).
+    handlers.set(Opcodes.CC_SETMODEL_LOC, (ctx, intOp) => {
         const modelId = ctx.intStack[--ctx.intStackSize];
         const w = getTargetWidget(ctx, intOp);
         if (!w) {
@@ -2388,7 +2389,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         invalidateWidgetRender(ctx, w);
     });
 
-    handlers.set(Opcodes.IF_SETMODEL_PLAYERCHATHEAD, (ctx) => {
+    handlers.set(Opcodes.IF_SETMODEL_LOC, (ctx) => {
         const w = getWidgetFromStack(ctx);
         const modelId = ctx.intStack[--ctx.intStackSize];
         if (!w) {

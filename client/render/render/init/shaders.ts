@@ -188,6 +188,7 @@ import {
 } from "../../shaders/Shaders";
 import { KNOWN_WATER_TEXTURE_IDS } from "../../water/WaterTextureIds";
 import type { WebGLOsrsRendererHost } from "../hostInterface";
+import { WIDGET_MODEL_TYPE_LOC, widgetLocModel } from "./widgetLocModel";
 import { RENDER_CONSTANTS } from "../constants";
 
 /**
@@ -998,6 +999,22 @@ export async function initShaders(host: WebGLOsrsRendererHost, ): Promise<Progra
                                         }
                                     }
                                 }
+                            }
+
+                            if (((params.widget?.modelType ?? 0) | 0) === WIDGET_MODEL_TYPE_LOC) {
+                                const locModel = widgetLocModel(
+                                    modelId,
+                                    host.osrsClient.locTypeLoader,
+                                    host.getInteractLocModelLoader(),
+                                    host.osrsClient.textureLoader,
+                                );
+                                // modelId is a loc id, never a model id.
+                                return locModel
+                                    ? host.model2DRenderer.renderModelInstanceToCanvasExtents(
+                                          locModel,
+                                          params,
+                                      )
+                                    : undefined;
                             }
 
                             const widgetAny = params.widget as any;
