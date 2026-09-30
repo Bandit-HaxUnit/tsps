@@ -5,7 +5,7 @@ import { Location } from "../../model/Location";
 import type { Boat } from "./Boat";
 import { BoatManager } from "./BoatManager";
 import type { BoatPlacement, BoatSpec } from "./BoatSpec";
-import type { BoatName, OwnedBoat } from "./SailingState";
+import { baseParts, type BoatName, type OwnedBoat } from "./SailingState";
 
 /** OSRS lets a player own up to 5 boats (more slots unlock with Sailing level). */
 const MAX_BOATS = 5;
@@ -48,6 +48,7 @@ export class Sailing {
     /** The player whose move Sailing itself is making, so it isn't taken for a teleport. */
     private static expectedMove: Mobile | null = null;
     private static initialized = false;
+    private static specResolver?: (boat: OwnedBoat, base: BoatSpec) => BoatSpec;
 
     public static initialize(): void {
         if (Sailing.initialized) return;
@@ -84,6 +85,7 @@ export class Sailing {
             slot, type, name, hitpoints: 0, facilities: [],
             location: { kind: "docked", dock: dockId },
             cargo: [],
+            parts: baseParts(),
         };
         state.boats.push(boat);
         state.boats.sort((a, b) => a.slot - b.slot);
@@ -212,8 +214,22 @@ export class Sailing {
     }
 
     /** Spawns the boat at `placement` and puts the player on its deck. */
+    /**
+     * Builds a boat's spec from its owned parts. Content registers it (boat parts live in the
+     * cache and plugin data); without one a boat is built as its type's base spec.
+     */
+    public static setSpecResolver(resolver: (boat: OwnedBoat, base: BoatSpec) => BoatSpec): void {
+        Sailing.specResolver = resolver;
+    }
+
+    /** The spec an owned boat is built from: its type's, with its own parts. */
+    public static specFor(boat: OwnedBoat): BoatSpec | undefined {
+        const base = Sailing.types.get(boat.type);
+        return base && (Sailing.specResolver ? Sailing.specResolver(boat, base) : base);
+    }
+
     private static embark(player: Player, boat: OwnedBoat, placement: BoatPlacement): boolean {
-        const spec = Sailing.types.get(boat.type);
+        const spec = Sailing.specFor(boat);
         const instance = spec && BoatManager.spawn(player.getIndex(), spec, placement);
         if (!spec || !instance) return false;
         Sailing.instances.set(instance, { player, slot: boat.slot });

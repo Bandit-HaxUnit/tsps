@@ -1,9 +1,13 @@
 // Run after `yarn build`: node --test tests/sailing.test.cjs
 const assert = require("node:assert/strict");
-const { test } = require("node:test");
+const { before, test } = require("node:test");
 
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
+
+// Boat parts, stats and fees are read from the cache's sailing tables.
+const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+before(() => CachePipeline.initialize());
 
 const { Boat, BoatMoveMode } = require("../dist/game/content/sailing/Boat");
 const { canOccupy, hullTiles } = require("../dist/game/content/sailing/BoatCollision");
@@ -498,7 +502,7 @@ const ITEM_NAMES = {
   31986: "Captain's log", 7534: "Fishbowl helmet", 7535: "Diving apparatus",
   32435: "Crate of adamantite ore",
 };
-const STACKABLE = new Set([995, 2]);
+const STACKABLE = new Set([995, 2, 32044, 4820, 1939]);
 ItemDefinition.forId = (id) => ({
   getId: () => id,
   getName: () => ITEM_NAMES[id] ?? "Coins",
@@ -691,7 +695,8 @@ test("saved sailing state drops anything malformed", () => {
   assert.deepEqual(normalizeSailingState({
     boats: [
       { slot: 0, type: "raft", name: [0, 32, 57], location: { kind: "docked", dock: "port_sarim" },
-        cargo: [{ id: 31964, amount: 2 }, null, { id: "kit", amount: 1 }, { id: 385, amount: 0 }] },
+        cargo: [{ id: 31964, amount: 2 }, null, { id: "kit", amount: 1 }, { id: 385, amount: 0 }],
+        parts: { hull: 4, keel: 9, sails: "x" } },
       { slot: 0, type: "raft", location: { kind: "docked", dock: "x" } },
       { slot: 1, type: "raft", location: { kind: "at_sea", fineX: "no" } },
       { type: "raft" },
@@ -702,8 +707,9 @@ test("saved sailing state drops anything malformed", () => {
   }), {
     boats: [
       { slot: 0, type: "raft", name: [0, 32, 57], hitpoints: 0, facilities: [], location: { kind: "docked", dock: "port_sarim" },
-        cargo: [{ id: 31964, amount: 2 }, null, null, null] },
-      { slot: 1, type: "raft", name: [0, 0, 0], hitpoints: 0, facilities: [], location: { kind: "sunk" }, cargo: [] },
+        cargo: [{ id: 31964, amount: 2 }, null, null, null], parts: { hull: 4, keel: 0, sails: 0, helm: 0 } },
+      { slot: 1, type: "raft", name: [0, 0, 0], hitpoints: 0, facilities: [], location: { kind: "sunk" }, cargo: [],
+        parts: { hull: 0, keel: 0, sails: 0, helm: 0 } },
     ],
     activeBoatSlot: null,
     returnPoint: null,
@@ -811,9 +817,11 @@ function shipwrightHarness(bankCoins) {
   player.getBank = () => bank;
   player.getCurrentBankTab = () => 0;
   const varbits = new Map();
+  const scripts = [];
   const sender = new Proxy({}, {
     get: (_t, key) => (...args) => {
       if (key === "sendVarbit") varbits.set(args[0], args[1]);
+      if (key === "sendInterfaceScript") scripts.push(args[0]);
       if (key === "sendInterfaceRemoval") interfaceId = -1;
       return sender;
     },
@@ -823,7 +831,7 @@ function shipwrightHarness(bankCoins) {
     player, npc: { getDefinition: () => ({ getName: () => "Junior Jim" }) },
   });
   const choose = (slot) => chooseBoat({ player, groupId: 934, childId: 5, action: slot + 1, handled: false });
-  return { player, bank, varbits, recover, choose, shipwright };
+  return { player, bank, varbits, scripts, recover, choose, shipwright };
 }
 
 test("Junior Jim's Recover-boat asks which boat, takes the fee from the bank and docks it here", () => {
@@ -841,6 +849,7 @@ test("Junior Jim's Recover-boat asks which boat, takes the fee from the bank and
   assert.deepEqual(h.player.messages, ["Payment has been taken from your bank."]);
   assert.equal(h.varbits.get(19260), 1, "the boat's port varbit shows The Pandemonium");
   assert.equal(h.player.getInterfaceId(), -1, "choosing closes the interface");
+  assert.ok(h.scripts.includes(2158), "and gives the chatbox its input back (chatdefault_restoreinput)");
 
   h.recover();
   h.choose(0);
@@ -1254,13 +1263,13 @@ test("boarding a new skiff sends its base-tier stats and only its cargo hold", (
   Sailing.board(player, "the_pandemonium");
   try {
     switchTab({ player, groupId: 593, childId: 46, handled: false });
-    // Wooden hull, bronze keel, wooden helm, sails and trim (OSRS Wiki, Skiff): HP 30 + 50.
+    // Wooden hull, bronze keel, wooden helm, sails and trim (the cache's part rows): HP 30 + 50.
     const expected = {
       19137: 1, // boat type: skiff
       19156: 0, 19160: 0, 19161: 0, 19162: 1, // only the basic cargo hold, in hotspot 6
       19154: 0, 19155: 0, 19167: 0, 19168: 0, 19172: 0, // every part at its base tier
       19248: 0, 19249: 0, 19252: 0, 19253: 0, // no resistances
-      19250: 192, 19251: 320, 19256: 20, 19257: 64, 19177: 80,
+      19250: 192, 19251: 384, 19256: 20, 19257: 64, 19177: 80, // speed cap from the wooden hull's row
     };
     for (const [id, value] of Object.entries(expected)) assert.equal(varbits.get(Number(id)), value, `varbit ${id}`);
     assert.equal(varps.get(5117), 8111);
@@ -1280,4 +1289,143 @@ test("::skiff and ::sloop moor new boats for testing", () => {
   commands.skiff({ player, parts: ["skiff"] });
   commands.sloop({ player, parts: ["sloop"] });
   assert.deepEqual(player.getSailing().boats.map((boat) => boat.type), ["skiff", "sloop"]);
+});
+
+// --- Boat parts and the shipyard.
+
+test("the Build trigger's argument decodes as the live capture's option row", () => {
+  const { readOptionRow } = require("../plugins/skills/sailing/Shipyard.plugin");
+  // Live OSRS sent [-90, -127, 1, 0] building a camphor skiff hull: row 8275.
+  assert.equal(readOptionRow(Buffer.from([0xa6, 0x81, 0x01, 0x00])), 8275);
+  assert.equal(readOptionRow(Buffer.alloc(0)), undefined);
+});
+
+test("a boat's parts rebuild the captured upgraded boats from the cache", () => {
+  const parts = require("../plugins/skills/sailing/boatParts");
+  const { boatType } = require("../plugins/skills/sailing/sailingContent");
+  const locIds = (spec) => Object.fromEntries(spec.locs.filter((loc) => loc.part).map((loc) => [loc.part, loc.id]));
+  // The captured skiff: camphor hull, steel keel, teak sails, oak helm.
+  const skiff = { type: "skiff", parts: { hull: 4, keel: 2, sails: 2, helm: 1 } };
+  const skiffSpec = parts.specFor(skiff, boatType("skiff"));
+  assert.equal(skiffSpec.templateChunkX, 484, "camphor is the template's fifth column");
+  assert.deepEqual(locIds(skiffSpec), { helm: 59579, sails: 59539, keel: 59518, trim: 59628 });
+  assert.deepEqual(parts.boatStats(skiff), {
+    hitpoints: 180, armour: 300, baseSpeed: 320, speedCap: 384, acceleration: 64,
+    speedBoostDuration: 24, stormResistance: 1, rapidResistance: 1, crystalFleckedResistance: 0,
+  });
+  // The captured sloop: camphor hull, adamant keel, camphor sails, mahogany helm.
+  const sloop = { type: "sloop", parts: { hull: 4, keel: 4, sails: 4, helm: 3 } };
+  assert.deepEqual(locIds(parts.specFor(sloop, boatType("sloop"))), { helm: 59607, sails: 59548, keel: 59527, trim: 59646 });
+  assert.equal(parts.boatStats(sloop).hitpoints, 260);
+  assert.equal(parts.boatStats(sloop).acceleration, 128);
+  assert.deepEqual([parts.recoveryFee({ type: "raft" }), parts.recoveryFee({ type: "skiff" }), parts.recoveryFee(sloop)], [250, 3750, 50000]);
+});
+
+const { TaskManager } = require("../dist/game/task/TaskManager");
+
+/** Drops tasks earlier tests left queued: one that throws stops the whole tick. */
+function clearTasks() {
+  while (TaskManager.pendingTasks.shift() != null);
+  TaskManager.activeTasks.length = 0;
+}
+
+function shipyardHarness() {
+  clearTasks();
+  const { Skill } = require("../dist/game/model/Skill");
+  const shipyard = registerPlugin("Shipyard.plugin");
+  registerPlugin("Sailing.plugin"); // the part-built spec resolver
+  const player = sailor();
+  const levels = new Map([[Skill.SAILING, 1], [Skill.CONSTRUCTION, 1]]);
+  const xp = [];
+  const statements = [];
+  let interfaceId = -1;
+  player.getSkillManager = () => ({
+    getMaxLevel: (skill) => levels.get(skill) ?? 1,
+    addExperience: (skill, amount) => xp.push([skill.getName(), amount]),
+  });
+  player.getDialogueManager = () => ({ startDialogues: (chain) => statements.push(chain) });
+  player.getInterfaceId = () => interfaceId;
+  player.setInterfaceId = (id) => { interfaceId = id; return player; };
+  const varbits = new Map();
+  const chatboxes = [];
+  const sender = new Proxy({}, {
+    get: (_t, key) => (...args) => {
+      if (key === "sendVarbit") varbits.set(args[0], args[1]);
+      if (key === "sendChatboxInterface") chatboxes.push(args[0]);
+      return sender;
+    },
+  });
+  player.getPacketSender = () => sender;
+  player.getAttribute = () => undefined;
+  Sailing.giveBoat(player, "skiff", "the_pandemonium");
+  const dock = Sailing.getDock("the_pandemonium");
+  require("../plugins/skills/sailing/Shipyard.plugin").beginVisit(player, dock, 0);
+  const buildRow = (row) => {
+    const zigzag = (row << 1) ^ (row >> 31);
+    const bytes = [];
+    let v = zigzag >>> 0;
+    while (v > 0x7f) { bytes.push((v & 0x7f) | 0x80); v >>>= 7; }
+    bytes.push(v, 0);
+    const event = { player, groupId: 939, childId: 17, scriptTrigger: true, argsData: Buffer.from(bytes), handled: false };
+    shipyard.interfaceClicks.forEach((handler) => handler(event));
+    return event.handled;
+  };
+  return { Skill, player, levels, xp, statements, varbits, chatboxes, buildRow, boat: () => player.getSailing().boats[0] };
+}
+
+test("building at the schematics swaps a part for the cache's materials and gives Construction XP", () => {
+  const h = shipyardHarness();
+  const OAK_HULL = 8272; // skiff: Sailing 20, Construction 8; 10 oak hull parts, 300 iron nails, 20 swamp tar
+  assert.equal(h.buildRow(OAK_HULL), true);
+  assert.match(h.player.messages.at(-1), /Sailing level of 20 and a Construction level of 8/);
+  h.levels.set(h.Skill.SAILING, 20);
+  h.levels.set(h.Skill.CONSTRUCTION, 8);
+  h.buildRow(OAK_HULL);
+  assert.equal(h.player.messages.at(-1), "You don't have the materials needed to build that.");
+  for (const [item, count] of [[32044, 10], [4820, 300], [1939, 20]]) h.player.getInventory().add(new Item(item, count), false);
+  h.buildRow(OAK_HULL);
+  assert.equal(h.boat().parts.hull, 1, "the hull is now oak");
+  assert.deepEqual([32044, 4820, 1939].map((item) => h.player.getInventory().getAmount(item)), [0, 0, 0]);
+  assert.deepEqual(h.xp, [["Construction", 238]]);
+  assert.deepEqual(h.chatboxes, [229], "the workers' message box, shown through the fade");
+  assert.equal(h.statements.length, 0, "not continuable until the fade in");
+  for (let tick = 0; tick < 4; tick++) TaskManager.process();
+  assert.equal(h.statements.length, 1, "continuable once faded back in");
+  // Back to wooden: a downgrade costs its own materials and the oak hull isn't refunded.
+  h.buildRow(8271);
+  assert.equal(h.player.messages.at(-1), "You don't have the materials needed to build that.");
+  assert.equal(h.player.getInventory().getAmount(32044), 0);
+});
+
+test("leaving the shipyard takes its boat away", () => {
+  const h = shipyardHarness();
+  const shown = [...Array(1000).keys()].map((i) => BoatManager.getBoat(3000 + i)).filter((boat) => boat?.ownerPlayerId === h.player.getIndex());
+  assert.equal(shown.length, 1, "the chosen boat is shown in the shipyard");
+  assert.equal(h.varbits.get(18314), 50, "sailing_intro, or the schematics refuse every build");
+  h.player.moveTo(new Location(3058, 2980, 0));
+  assert.equal(BoatManager.getBoat(shown[0].entityIndex), undefined);
+  assert.equal(h.varbits.get(18314), 0, "the tools stay behind ::sailingtools");
+  assert.equal(h.varbits.has(18166), false, "18166 locks Sailing in the skills tab");
+});
+
+test("::boatmats spawns a part's materials from the cache, for the named or current boat", () => {
+  const commands = {};
+  require("../plugins/skills/sailing/SailingCommands.plugin").register({
+    registerCommand: (name, handler) => { commands[name] = handler; },
+    persistAttribute: () => {},
+  });
+  const player = sailor();
+  commands.boatmats({ player, parts: ["boatmats", "hull", "oak", "skiff"] });
+  assert.deepEqual([32044, 4820, 1939].map((item) => player.getInventory().getAmount(item)), [10, 300, 20]);
+  assert.equal(player.messages.at(-1), "Spawned the materials for a skiff's Oak hull (Sailing 20, Construction 8).");
+
+  // Without a boat type, the active boat's is used; tiers can be numbers.
+  Sailing.giveBoat(player, "skiff", "the_pandemonium");
+  commands.boatmats({ player, parts: ["boatmats", "keel", "1"] });
+  assert.equal(player.messages.at(-1), "Spawned the materials for a skiff's Iron keel (Sailing 22, Construction 17).");
+
+  for (const parts of [["boatmats", "keel", "bronze", "raft"], ["boatmats", "hull", "gold"], ["boatmats"]]) {
+    commands.boatmats({ player, parts });
+    assert.match(player.messages.at(-1), /^Usage: ::boatmats/, parts.join(" "));
+  }
 });

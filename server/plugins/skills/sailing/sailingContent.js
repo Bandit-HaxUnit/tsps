@@ -10,6 +10,8 @@ const { Animation } = require("../../../src/main/typescript/elvarg/game/model/An
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
 
 const VARBIT = {
+  // The Pandemonium is done (50): the boat customisation refuses every build below it (9022).
+  SAILING_INTRO: 18314,
   LAST_PERSONAL_BOAT_BOARDED: 18554, // boat slot, from 1
   PLAYER_IS_ON_PLAYER_BOAT: 19104, // gangplank: Board / Disembark
   FACILITY_LOCKEDIN: 19105, // helm: Navigate / Stop-navigating (3)
@@ -86,9 +88,10 @@ function content() {
   const docks = read("sailing-docks.json");
   const cargo = read("sailing-cargo.json");
   const names = read("sailing-boat-names.json");
+  const parts = read("sailing-parts.json");
   for (const boat of boats) Sailing.registerBoatType(boat);
   for (const dock of docks) Sailing.registerDock(dock);
-  loaded = { boats, docks, cargo, names };
+  loaded = { boats, docks, cargo, names, parts };
   return loaded;
 }
 

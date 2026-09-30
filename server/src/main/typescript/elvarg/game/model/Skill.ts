@@ -27,6 +27,8 @@ export class Skill {
     public static RUNECRAFTING = new Skill(4267, 8672);
     public static CONSTRUCTION = new Skill(7267, 18801, 22);
     public static HUNTER = new Skill(8267, 18829, 21);
+    // No legacy level-up chatbox or skills tab button; client stat 23 as in OSRS.
+    public static SAILING = new Skill(-1, -1, 23);
 
     private static readonly VALUES: Skill[] = [
         Skill.ATTACK,
@@ -52,6 +54,7 @@ export class Skill {
         Skill.RUNECRAFTING,
         Skill.CONSTRUCTION,
         Skill.HUNTER,
+        Skill.SAILING,
     ];
     private static readonly NAMES: readonly string[] = [
         "Attack",
@@ -77,6 +80,7 @@ export class Skill {
         "Runecrafting",
         "Construction",
         "Hunter",
+        "Sailing",
     ];
 
     private static readonly ALLOWED_TO_SET_LEVELS: ReadonlySet<Skill> = new Set([

@@ -2,6 +2,7 @@
 // interface and the sidepanel read them). Live OSRS sends them at login; ids and values from a
 // live login capture and cache scripts 9013/9088 (docs/sailing-osrs-reference.md).
 const { boatType, dockById, setVarbit } = require("./sailingContent");
+const { boatStats, partTiers } = require("./boatParts");
 
 const MAX_BOATS = 5;
 /** Boat slot 0's block starts at 19258 (`sailing_boat_1_owned`); each slot is 38 ids on. */
@@ -52,10 +53,12 @@ function slotVarbits(slot, boat) {
   set(OFFSET.bottlePreviousPort, boat ? NO_PREVIOUS_PORT : 0);
   set(OFFSET.facilitiesUnaltered, boat ? 1 : 0);
   for (let word = 0; word < 3; word++) set(OFFSET.name + word, boat?.name?.[word] ?? 0);
-  for (const part of ["keel", "hull", "sail", "steering", "trim"]) set(OFFSET[part], type?.parts?.[part] ?? 0);
+  const tiers = boat ? partTiers(boat) : {};
+  for (const part of ["keel", "hull", "sail", "steering", "trim"]) set(OFFSET[part], tiers[part] ?? 0);
   for (let hotspot = 0; hotspot < HOTSPOTS; hotspot++) set(OFFSET.hotspot + hotspot, type?.hotspots?.[hotspot] ?? 0);
-  values.set(STORED_HP + slot, boat ? type?.hitpoints ?? 0 : 0);
-  values.set(STORED_MAX_HP + slot, boat ? type?.hitpoints ?? 0 : 0);
+  const hitpoints = boat ? boatStats(boat).hitpoints : 0;
+  values.set(STORED_HP + slot, hitpoints);
+  values.set(STORED_MAX_HP + slot, hitpoints);
   return values;
 }
 

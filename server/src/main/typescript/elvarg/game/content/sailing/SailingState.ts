@@ -16,6 +16,18 @@ export interface CargoSlot {
 /** A boat's name: three word numbers (1-based, 0 = none) into cache db rows 8545-8547. */
 export type BoatName = [number, number, number];
 
+/** A boat's core parts, as tiers (0 = the base tier) into its type's part lists in the cache. */
+export interface BoatParts {
+    hull: number;
+    keel: number;
+    sails: number;
+    helm: number;
+}
+
+export function baseParts(): BoatParts {
+    return { hull: 0, keel: 0, sails: 0, helm: 0 };
+}
+
 export interface OwnedBoat {
     slot: number;
     type: string;
@@ -25,6 +37,8 @@ export interface OwnedBoat {
     location: BoatLocation;
     /** The cargo hold, by slot; `null` is an empty slot. */
     cargo: (CargoSlot | null)[];
+    /** The core parts built on this boat (upgraded or downgraded at a shipyard). */
+    parts: BoatParts;
 }
 
 export interface SailingState {
@@ -57,6 +71,11 @@ function normalizeName(raw: unknown): BoatName {
     return [word(0), word(1), word(2)];
 }
 
+function normalizeParts(raw: any): BoatParts {
+    const tier = (value: unknown) => Number.isInteger(value) && (value as number) >= 0 && (value as number) <= 6 ? value as number : 0;
+    return { hull: tier(raw?.hull), keel: tier(raw?.keel), sails: tier(raw?.sails), helm: tier(raw?.helm) };
+}
+
 function normalizeCargo(raw: unknown): (CargoSlot | null)[] {
     if (!Array.isArray(raw)) return [];
     return raw.map((slot) => Number.isInteger(slot?.id) && slot.id >= 0 && Number.isInteger(slot?.amount) && slot.amount > 0
@@ -79,6 +98,7 @@ export function normalizeSailingState(raw: any): SailingState {
             facilities: Array.isArray(boat.facilities) ? boat.facilities.filter(Number.isInteger) : [],
             location: normalizeLocation(boat.location),
             cargo: normalizeCargo(boat.cargo),
+            parts: normalizeParts(boat.parts),
         });
     }
     const active = boats.some((boat) => boat.slot === raw.activeBoatSlot) ? raw.activeBoatSlot : null;

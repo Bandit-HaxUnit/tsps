@@ -8,6 +8,14 @@ const { Location } = require("../../../src/main/typescript/elvarg/game/model/Loc
 const { content, boatName, randomBoatName } = require("./sailingContent");
 const { sendBoatVarbits } = require("./boatVarbits");
 const { TOOLS_UNLOCKED_ATTRIBUTE, sendToolUnlocks } = require("./cargo");
+const { PARTS, partOptions, requirementsOf } = require("./boatParts");
+const { visitedBoat } = require("./Shipyard.plugin");
+
+/** Tier names by part, in tier order (hulls and sails by wood, keels and helms by metal). */
+const WOOD_TIERS = ["wooden", "oak", "teak", "mahogany", "camphor", "ironwood", "rosewood"];
+const METAL_TIERS = ["bronze", "iron", "steel", "mithril", "adamant", "rune", "dragon"];
+const TIER_NAMES = { hull: WOOD_TIERS, sails: WOOD_TIERS, keel: METAL_TIERS, helm: METAL_TIERS };
+const BOAT_TYPES = ["raft", "skiff", "sloop"];
 
 const BOAT_DOCK = "the_pandemonium";
 const MOVE_MODES = {
@@ -49,6 +57,28 @@ function unlockSailingTools({ player }) {
   player.setAttribute(TOOLS_UNLOCKED_ATTRIBUTE, true);
   sendToolUnlocks(player);
   player.sendMessage("Every tool now shows in your cargo hold's tools compartment.");
+}
+
+/**
+ * Spawns what building a boat part costs, from the same cache row the shipyard checks:
+ * ::boatmats <hull|keel|sails|helm> <tier 0-6 or name> [raft|skiff|sloop]. The boat type
+ * defaults to the boat being customised in the shipyard, then the active boat.
+ */
+function spawnPartMaterials({ player, parts }) {
+  const part = parts[1];
+  const tierArg = parts[2]?.toLowerCase();
+  const tier = PARTS.includes(part)
+    ? (/^\d+$/.test(tierArg ?? "") ? Number(tierArg) : TIER_NAMES[part].indexOf(tierArg))
+    : -1;
+  const type = parts[3] ?? visitedBoat(player)?.type ?? Sailing.activeBoat(player)?.type;
+  const option = BOAT_TYPES.includes(type) && tier >= 0 ? partOptions(type, part)[tier] : undefined;
+  if (option === undefined) {
+    player.sendMessage("Usage: ::boatmats <hull|keel|sails|helm> <tier 0-6 or name> [raft|skiff|sloop]");
+    return;
+  }
+  const requirements = requirementsOf(part, option);
+  for (const [item, count] of requirements.materials) player.getInventory().adds(item, count);
+  player.sendMessage(`Spawned the materials for a ${type}'s ${requirements.name} (Sailing ${requirements.sailing}, Construction ${requirements.construction}).`);
 }
 
 function describe(boat) {
@@ -101,6 +131,7 @@ module.exports = {
     api.persistAttribute(TOOLS_UNLOCKED_ATTRIBUTE);
     api.registerCommand("pandemonium", toPandemonium, PlayerRights.DEVELOPER);
     api.registerCommand("sailingtools", unlockSailingTools, PlayerRights.DEVELOPER);
+    api.registerCommand("boatmats", spawnPartMaterials, PlayerRights.DEVELOPER);
     api.registerCommand("boatinfo", boatInfo, PlayerRights.DEVELOPER);
     api.registerCommand("sailmode", sailMode, PlayerRights.DEVELOPER);
     api.registerCommand("heading", heading, PlayerRights.DEVELOPER);

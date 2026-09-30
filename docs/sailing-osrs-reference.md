@@ -155,7 +155,8 @@ The server describes every owned boat to the client at login (live login capture
 
 - **HP:** stored HP is 19458 + slot and stored max HP is 19463 + slot.
 - **Also at login:**
-  - `sailing_intro` (18314): 50 once the intro (The Pandemonium) is done;
+  - varbit 18166 stays 0. Cache scripts 607/633 read it through 8950(23), and at 1 they lock Sailing: the skills tab fades it and the customisation answers every Build with "You cannot build that at the moment." (script 8807 via 9022). Its name isn't known;
+  - `sailing_intro` (18314): 50 once the intro (The Pandemonium) is done. Script 9022 needs it at 50+ (on a members world) before the customisation allows any Build;
   - the last dock, standard dock and mooring point (19145-19147);
   - where the boat was spawned: slot, fine x/z, angle (19121, 19141, 19142, 19129);
   - `last_personal_boat_boarded` (18554) and `previous_boat_data_slot` (19130);
@@ -183,7 +184,7 @@ One interface serves the gangplank and Junior Jim. Varbit 18553 sets the mode, a
 4. 934:5 gets slots 1-5, with pause button and op 1.
 5. `busy` is set to 1.
 
-**Choosing:** a choice is a pause-button resume on 934:5 whose slot is the boat's slot + 1. The mode and dock vars go back to 0 and -1, and the interface closes.
+**Choosing:** a choice is a pause-button resume on 934:5 whose slot is the boat's slot + 1. The mode and dock vars go back to 0 and -1, script 2158 (`chatdefault_restoreinput`) gives the chatbox its input back, and the interface closes. Without 2158 you can't type in chat afterwards.
 
 **Texts in its scripts** (shown by the client for boats you can't choose):
 - "You can't choose that boat at the moment."
@@ -226,16 +227,58 @@ Buying itself hasn't been captured yet.
 
 ## Customisation (shipyard)
 
-- **Customise-boat** moves you to a shipyard instance with your boat in it:
-  - sidepanel shipyard mode 19173 = 1;
-  - the shipyard's boat angle 19519 and fine x 19520.
-- **The schematics loc** (59718) "Modify" opens interface 939, with script 8809 and events 939:17 slots 0-50 (op 1 and script trigger).
-  - Building sends a script trigger on 939:17 with a payload.
-  - The message box says "With the help of some workers, you swap out the hull of your boat."
-- **The shipyard's gangplank** (59719) boards and disembarks. The portal (59722) "Exit" returns you to the dock.
-- **Per-boat varbits:**
-  - boat 2: hull 19305, trim 19322, stored HP 19459, stored max HP 19464;
-  - port: boat 1 19260, boat 3 19336 (boat 2's wasn't captured).
+**Getting there:**
+- Junior Jim's Customise-boat opens the boat selection (mode 2).
+- Choosing a boat moves you to the shipyard, a normal map area in map square (32, 42), after a fade. You arrive at (2084, 2730).
+- Your boat is shown at (2091, 2724), with fine offset (64, 0) and angle 1536 (east).
+- The shipyard varbits are set: mode 19173 = 1, boat angle 19519 = 1536, fine-x offset 19520 = 1. The sidepanel describes the boat.
+- The Shipyard Portal (59722) "Exit" returns you to (3058, 2980) at The Pandemonium. Its own gangplank (59719) boards the boat.
+
+**Boat schematics (59718) "Modify":**
+1. Varp 5190 is set to the boat type's row (8110-8112), and varbit 19525 to the boat's slot + 1.
+2. Script 2524 `[-1, -3]`, then interface **939** opens as the main modal. Script 8809 initialises it.
+3. 939:17 gets slots 0-50 with op 1 and script triggers.
+4. Each option's preview is the part's **loc**. Script 8825 takes the loc id from the option's db row (script 9075, default 59660), its animation (9077) and its angle (9076), and passes the loc id to opcode 1214 (`cc_setmodel_loc`, model type 8). The client draws that loc's centrepiece model (shape 10) and never treats the id as a model id.
+   - The angles come from table 188: the part's angles row (column 4 of its hull/keel/… row) holds `[boat size, offsetX, offsetY, xan, yan, zan, zoom]` tuples, and 9076 picks the one for the boat type's size (table 166 column 0). The skiff's hull is (-10, 0, 130, 1950, 0, 5000).
+   - 9076 reads those tuples one value at a time: a packed db field's low 4 bits select one tuple element (1-based; 0 is the whole tuple).
+
+**Build:** script 8834 calls `if_triggeroplocal` on 939:17 with the option row as one int argument.
+- The live packet carried `A6 81 01 00`: a zigzag varint of row **8275**, the skiff's camphor hull.
+- The server:
+  1. takes the materials from the inventory;
+  2. sets the part, with no refund of the old one;
+  3. gives Construction XP;
+  4. closes 939, clears varp 5190 and varbit 19525, and opens the message box (229) "With the help of some workers, you swap out the hull of your boat." with **no** "Click here to continue", then fades out;
+  5. next tick, rebuilds the boat from its new template column;
+  6. 4 ticks after the build, fades back in and reopens the message box, now with "Click here to continue". Continuing closes it and the fade overlay.
+- The hull swap also moves the per-boat trim varbit with it (trim follows hull). Lower tiers can be built too (downgrades).
+
+### The cache's sailing tables
+
+Everything a part is lives in db tables. tsps reads them at runtime (`CacheDefinitions.getDbRow` / `getDbTableRows`).
+
+| Table | What | Columns used |
+| --- | --- | --- |
+| 166 | Boat types (rows 8110-8112, also the sidepanel boat type) | 18 recovery fee (raft 250, skiff 3,750, sloop 50,000); option lists by tier: 24 keels, 25 hulls, 26 sails, 27 helms, 29 trims; 31 facility hotspots |
+| 178 | Hulls (raft "bases" 8264-8270, skiff 8271-8277, sloop 8278-8284) | 0 name, 7 Sailing, 8 Construction, 12 materials (item, count pairs), 13 stats row |
+| 177 | Keels | 3 loc [coord, id, rotation, shape], 6 Sailing, 7 Construction, 11 materials, 12 stats row |
+| 179 | Masts and sails | 15 loc [id, coord, rotation, shape], 6 Sailing, 7 Construction, 11 materials, 16 stats row |
+| 181 | Helms | 6 loc [coord, id, rotation, shape], 9 Sailing, 10 Construction, 14 materials, 15 stats row |
+| 164 | Part stats | 0 HP, 10 armour, 21 storm resistance, 22 rapids resistance, 24 base speed, 25 speed cap, 26 extra acceleration, 27 boost duration, 30 crystal-flecked immunity |
+| 186 | Trims (cosmetic painted trims) | |
+| 176 | Facilities | |
+| 187 | Boat name words (rows 8545-8547) | |
+
+**How a boat's stats come together:**
+- HP = hull + keel.
+- Armour = the keel's.
+- Speed and speed cap = the hull's.
+- Boost duration and storm resistance = the sails'. Acceleration = 64 + the sails' extra.
+- Rapids resistance = the helm's.
+
+These reproduce every captured boat.
+
+**Construction XP isn't in the tables.** It comes from the wiki, and the camphor skiff hull's 881 matches the capture.
 
 ## Cargo hold
 
@@ -349,6 +392,14 @@ Depositing a tool, by Deposit Inventory or singly, puts it back in the compartme
     - a tool you haven't stored (nothing happens);
     - diving gear needing both parts to be stored.
   - The wiki's bounty items aren't listed, since no item name matched.
+- **Shipyard:**
+  - The shown boat is visible to anyone in the shipyard, not only its owner.
+  - Its gangplank (boarding in the shipyard), facility hotspots and "Shipwright assistance" (paying to build without the Construction level) aren't built yet.
+  - Guessed rather than captured:
+    - the part names in the swap message ("mast and sails");
+    - the level, materials and "already has that" messages.
+  - Materials come from the inventory only.
+- **Sailing** is a skill (23) now, but nothing gives Sailing XP yet; developers set the level from the skills tab.
 - **Boat selection and recovery:**
   - The bank isn't sent when interface 934 opens.
   - The Port Wizard's line is only shown overhead, not also in the chatbox.

@@ -13,6 +13,8 @@ const VARBIT_MODE = 18553;
 const VARP_CURRENT_DOCK = 5005;
 const SCRIPT_MAINMODAL_OPEN = 2524;
 const SCRIPT_INIT = 8621;
+/** `chatdefault_restoreinput`: gives the chatbox its input back after the choice, as OSRS does. */
+const SCRIPT_RESTORE_CHAT_INPUT = 2158;
 const IF_EVENT_PAUSEBUTTON_OP1 = (1 << 0) | (1 << 1);
 const MAX_BOATS = 5;
 
@@ -46,6 +48,7 @@ function closeSelection(player) {
   pending.delete(player);
   setVarbit(player, VARBIT_MODE, 0);
   player.getPacketSender().sendConfig(VARP_CURRENT_DOCK, -1);
+  player.getPacketSender().sendInterfaceScript(SCRIPT_RESTORE_CHAT_INPUT);
   player.getPacketSender().sendInterfaceRemoval();
 }
 

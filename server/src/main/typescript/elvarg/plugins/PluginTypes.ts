@@ -505,6 +505,8 @@ export interface PluginInterfaceActionClickEvent {
   sourceSlot?: number;
   sourceItemId?: number;
   argsData?: Buffer;
+  /** Sent by a cache script (if_triggeroplocal) rather than a click; its arguments are in argsData. */
+  scriptTrigger?: boolean;
   handled: boolean;
 }
 

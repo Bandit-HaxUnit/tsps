@@ -121,9 +121,13 @@ test("developer skilling levels stay within 1-99 and ignore non-skill buttons", 
   assert.deepEqual(developer.levels, []);
   developer.getEnteredAmountAction().execute(1);
   assert.deepEqual(developer.levels, [[Skill.CONSTRUCTION, 1]]);
-  for (const childId of [0, 24, 25, -1]) {
+  for (const childId of [0, 25, -1]) {
     assert.equal(click(developer, childId).handled, false);
   }
+  // Component 24 is Sailing, the skills tab's 24th skill.
+  assert.equal(click(developer, 24).handled, true);
+  developer.getEnteredAmountAction().execute(50);
+  assert.deepEqual(developer.levels.at(-1), [Skill.SAILING, 50]);
   const event = { player: developer, groupId: 321, childId: 8, handled: false };
   clickHandler(event);
   assert.equal(event.handled, false);

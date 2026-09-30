@@ -58,6 +58,7 @@ sailing: {
       | { kind: "at_sea"; fineX: number; fineY: number; angle: number } // owner logged out aboard
       | { kind: "sunk" };                                               // needs a shipwright
     cargo: ({ id: number; amount: number } | null)[]; // the cargo hold, by slot
+    parts: { hull: number; keel: number; sails: number; helm: number }; // tiers 0-6 into the cache's part lists
   }>;
   activeBoatSlot: number | null; // the boat the player is aboard or last set sail in
   returnPoint: { x: number; y: number; level: number } | null; // last gangplank, mooring point or buoy
@@ -107,8 +108,9 @@ tsps has no world views, but it has `PrivateArea` (used by Construction's house)
 - boat types (`data/definitions/boats.json`): template zone, size, hull bounds, deck centre, walkable deck tiles, deck locs, stats, facility hotspots, part tiers and loc animations. The raft, and the skiff and sloop with camphor hulls.
 - gangplanks: Board / Disembark, routed to the lifecycle
 - helm: Navigate (walking onto the helm tile first) / Stop-navigating, the sail buttons (move mode from varbit 19175), clicking to set a heading; Escape, after a yes/no confirmation
+- shipyard: Junior Jim's Customise-boat takes the boat to the shipyard, whose boat schematics (interface 939) swap its hull, keel, sails or helm for any tier, at the cache's levels and materials, for Construction XP; parts, stats and fees come from the cache's sailing tables at runtime
 - shipwright: Junior Jim at The Pandemonium retrieves a sunk raft for 250 gp (PR 1 needs this, or a sunk raft is stuck forever)
-- developer commands: `::raft`, `::skiff` and `::sloop` give a boat docked at The Pandemonium, `::pandemonium` teleports to its gangplank, and `::sailingtools` shows every tool in the cargo hold's tools compartment (their quests don't exist yet). The dock is where xrsps's raft docks (gangplank 59836 at 3070, 2987); the Pandemonium quest and buying boats come later
+- developer commands: `::raft`, `::skiff` and `::sloop` give a boat docked at The Pandemonium, `::pandemonium` teleports to its gangplank, `::sailingtools` shows every tool in the cargo hold's tools compartment (their quests don't exist yet), and `::boatmats <hull|keel|sails|helm> <tier> [boat]` spawns a part's materials for the shipyard. The dock is where xrsps's raft docks (gangplank 59836 at 3070, 2987); the Pandemonium quest and buying boats come later
 
 ## Client
 

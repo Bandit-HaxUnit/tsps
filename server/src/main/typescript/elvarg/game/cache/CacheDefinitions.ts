@@ -14,6 +14,7 @@ import {
 } from "./codec/rs/config/objtype/ObjTypeLoader";
 import { CachePipeline } from "./CachePipeline";
 import { ObjType } from "./codec/rs/config/objtype/ObjType";
+import { DbRowType } from "./codec/rs/config/dbrow/DbRowType";
 
 export interface ServerCustomItem {
     id: number;
@@ -37,6 +38,7 @@ export class CacheDefinitions {
     private static customItems = new Map<number, ServerCustomItem>();
     private static customItemTypes = new Map<number, ObjType>();
     private static customModels?: Array<{ id: number; data: string }>;
+    private static dbRows?: { byId: Map<number, DbRowType>; byTable: Map<number, DbRowType[]> };
 
     private static getState() {
         if (this.state) return this.state;
@@ -69,6 +71,35 @@ export class CacheDefinitions {
 
     static getNpc(id: number): NpcType {
         return this.getState().npcs.load(id);
+    }
+
+    /** Every cache database row, decoded once (the whole archive takes well under a second). */
+    private static getDbRows() {
+        if (this.dbRows) return this.dbRows;
+        const configs = CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore());
+        const archive = configs.getArchive(ConfigType.OSRS.dbRow);
+        const byId = new Map<number, DbRowType>();
+        const byTable = new Map<number, DbRowType[]>();
+        for (const id of configs.getFileIds(ConfigType.OSRS.dbRow) ?? []) {
+            const file = archive.getFile(id);
+            if (!file) continue;
+            const row = DbRowType.decode(id, new Int8Array(file.data));
+            byId.set(id, row);
+            if (!byTable.has(row.tableId)) byTable.set(row.tableId, []);
+            byTable.get(row.tableId)!.push(row);
+        }
+        this.dbRows = { byId, byTable };
+        return this.dbRows;
+    }
+
+    /** A cache database row by id (the rows cache scripts read with db_getfield). */
+    static getDbRow(id: number): DbRowType | undefined {
+        return this.getDbRows().byId.get(id);
+    }
+
+    /** Every row of a cache database table, in id order. */
+    static getDbTableRows(tableId: number): readonly DbRowType[] {
+        return this.getDbRows().byTable.get(tableId) ?? [];
     }
 
     static getVarbit(id: number) {

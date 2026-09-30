@@ -1,7 +1,7 @@
 // A shipwright's Recover-boat: choose a boat in the boat selection interface, pay from the bank,
 // and a Port Wizard brings it to this port. Recovers sunk boats and boats docked at other ports.
-// Fees by boat type from the OSRS Wiki (Shipwright: raft 250); the flow, texts and effects from a
-// live capture of Junior Jim (docs/sailing-osrs-reference.md).
+// Fees by boat type from the cache (raft 250, skiff 3,750, sloop 50,000); the flow, texts and
+// effects from a live capture of Junior Jim (docs/sailing-osrs-reference.md).
 const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sailing/Sailing");
 const { Bank } = require("../../../src/main/typescript/elvarg/game/model/container/impl/Bank");
 const { Animation } = require("../../../src/main/typescript/elvarg/game/model/Animation");
@@ -12,9 +12,10 @@ const { DialogueChainBuilder } = require("../../../src/main/typescript/elvarg/ga
 const { NpcDialogue } = require("../../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/NpcDialogue");
 const { PlayerDialogue } = require("../../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/PlayerDialogue");
 const { EndDialogue } = require("../../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/EndDialogue");
-const { content, boatType, playSound } = require("./sailingContent");
+const { content, playSound } = require("./sailingContent");
 const { dropLostOnRecovery } = require("./cargo");
 const { sendBoatVarbits } = require("./boatVarbits");
+const { recoveryFee } = require("./boatParts");
 const { MODE, openBoatSelection } = require("./BoatSelection.plugin");
 
 const COINS = 995;
@@ -101,7 +102,7 @@ function recoverSlot(player, dock, slot) {
     return;
   }
   const boat = player.getSailing().boats.find((candidate) => candidate.slot === slot);
-  if (!pay(player, boatType(boat.type)?.recoveryFee ?? 0)) return;
+  if (!pay(player, recoveryFee(boat))) return;
   Sailing.recover(player, slot, dock.id);
   // A recovery loses salvage, courier crates and fish from the hold (OSRS Wiki, Cargo hold).
   dropLostOnRecovery(boat);
