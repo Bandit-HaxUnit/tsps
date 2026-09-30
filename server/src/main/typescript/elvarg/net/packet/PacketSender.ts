@@ -1117,6 +1117,23 @@ export class PacketSender {
     return this;
   }
 
+  /**
+   * Sends a whole inventory by its cache id (for example a boat's cargo hold, 963), so the
+   * cache scripts reading it redraw. It rides a run-script packet with no script (id -1).
+   */
+  sendInventory(
+    inventoryId: number,
+    capacity: number,
+    items: ReadonlyArray<{ id: number; amount: number } | null>
+  ): this {
+    const slots = Array.from({ length: capacity }, (_, slot) => ({
+      slot,
+      itemId: items[slot]?.id ?? -1,
+      quantity: items[slot]?.amount ?? 0,
+    }));
+    return this.sendInterfaceScript(-1, [], undefined, undefined, { [inventoryId]: { capacity, slots } });
+  }
+
   sendClientScript(scriptId: number, ...args: (number | string)[]): this {
     this.player.getSession().sendClientPacket(encodeRunClientScript(scriptId, args));
     return this;

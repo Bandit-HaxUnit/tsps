@@ -2790,7 +2790,8 @@ export class OsrsClient {
                 // RUNCLIENTSCRIPT packet - run a CS2 script with arguments
                 const scriptId = Number(payload.scriptId) | 0;
                 const args = payload.args;
-                if (scriptId > 0 && this.cs2Vm && Array.isArray(args)) {
+                // A negative id carries only vars and inventories (see below).
+                if (scriptId !== 0 && this.cs2Vm && Array.isArray(args)) {
                     if (
                         (scriptId === SCRIPT_HIGHLIGHT_SCREEN_COMPONENT ||
                             scriptId === SCRIPT_HIGHLIGHT_TEXTBOX_DEFAULT) &&
@@ -2850,6 +2851,9 @@ export class OsrsClient {
                                 Array.isArray(snapshot.slots) ? snapshot.slots : [],
                                 { selectedSlot: null },
                             );
+                            // Interfaces listening to this inventory redraw, as for any update;
+                            // an "other" inventory (id + 32768) notifies listeners of its id.
+                            markInvTransmit(inventoryId & 0x7fff);
                         }
                     }
                     const intArgs: number[] = [];
@@ -2862,7 +2866,8 @@ export class OsrsClient {
                         }
                     }
 
-                    const script = this.cs2Vm.context.loadScript(scriptId);
+                    // A negative id carries only vars and inventories, with no script to run.
+                    const script = scriptId >= 0 ? this.cs2Vm.context.loadScript(scriptId) : null;
                     if (script) this.cs2Vm.run(script, intArgs, stringArgs);
                 }
             } else if ((payload as any)?.action === "set_varbits") {
