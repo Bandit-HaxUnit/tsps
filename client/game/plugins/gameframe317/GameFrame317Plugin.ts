@@ -288,23 +288,38 @@ export class GameFrame317Plugin implements ClientPlugin {
             this.drawNamed(renderer, name, X(bx), Y(y), scale, fh, fv);
         }
 
-        // Icons.
+        // Tab icons the server has not revealed yet have no mounted content
+        // (the gameframe's toplevel_sidebuttons_enable uses the same signal).
+        const flashTab = ((this.osrsClient?.varManager?.getVarbit?.(3756) ?? 0) | 0) - 1;
+        const flashAlpha = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(Date.now() / 180));
+        const alphaFor = (tab: number) => (tab === flashTab ? flashAlpha : 1);
+
         for (let i = 0; i < TOP_ICON_POS.length; i++) {
+            if (!this.tabVisible(i)) continue;
             const [x, y] = TOP_ICON_POS[i];
-            this.drawIcon(renderer, i, X(x), Y(y), scale);
+            this.drawIcon(renderer, i, X(x), Y(y), scale, alphaFor(i));
             this.registerTab(context, i, X(x), Y(y), scale);
         }
         const clanX = BOTTOM_ICON_POS[0][0] - 29;
         const clanY = BOTTOM_ICON_POS[0][1];
-        this.drawOsrsIcon(renderer, "osrs_clan", X(clanX), Y(clanY), scale);
-        this.registerTab(context, 7, X(clanX), Y(clanY), scale);
-        for (let i = 0; i < BOTTOM_ICON_POS.length; i++) {
-            const [x, y] = BOTTOM_ICON_POS[i];
-            if (i === 0) this.drawOsrsIcon(renderer, "osrs_account", X(x), Y(y), scale);
-            else if (i === 1) this.drawOsrsIcon(renderer, "osrs_friends", X(x), Y(y), scale);
-            else this.drawIcon(renderer, i + 7, X(x), Y(y), scale);
-            this.registerTab(context, i + 8, X(x), Y(y), scale);
+        if (this.tabVisible(7)) {
+            this.drawOsrsIcon(renderer, "osrs_clan", X(clanX), Y(clanY), scale, alphaFor(7));
+            this.registerTab(context, 7, X(clanX), Y(clanY), scale);
         }
+        for (let i = 0; i < BOTTOM_ICON_POS.length; i++) {
+            const tab = i + 8;
+            if (!this.tabVisible(tab)) continue;
+            const [x, y] = BOTTOM_ICON_POS[i];
+            if (i === 0) this.drawOsrsIcon(renderer, "osrs_account", X(x), Y(y), scale, alphaFor(tab));
+            else if (i === 1) this.drawOsrsIcon(renderer, "osrs_friends", X(x), Y(y), scale, alphaFor(tab));
+            else this.drawIcon(renderer, i + 7, X(x), Y(y), scale, alphaFor(tab));
+            this.registerTab(context, tab, X(x), Y(y), scale);
+        }
+    }
+
+    /** True when the server has mounted this tab's content (icon revealed), in any layout. */
+    private tabVisible(tab: number): boolean {
+        return this.osrsClient?.hasServerSubInterface?.((161 << 16) | (76 + tab)) ?? true;
     }
 
     /** Stretch a sprite to fill a logical rect (no tiling). */
@@ -361,7 +376,7 @@ export class GameFrame317Plugin implements ClientPlugin {
     }
 
     /** OSRS side icons are smaller than the 317 slots, so centre them; tune per icon. */
-    private drawOsrsIcon(renderer: GLRenderer, name: string, x: number, y: number, scale: number): void {
+    private drawOsrsIcon(renderer: GLRenderer, name: string, x: number, y: number, scale: number, alpha = 1): void {
         const texture = this.textures.get(name);
         if (!texture?.tex) return;
         const tune = OSRS_ICON_TUNE[name] ?? {};
@@ -376,11 +391,11 @@ export class GameFrame317Plugin implements ClientPlugin {
             this.renderOffsetY + dy * scale,
             w * scale,
             h * scale,
-            1, 1, 0, [0, 0, 0], false, false, 1,
+            1, 1, 0, [0, 0, 0], false, false, alpha,
         );
     }
 
-    private drawIcon(renderer: GLRenderer, index: number, x: number, y: number, scale: number): void {
+    private drawIcon(renderer: GLRenderer, index: number, x: number, y: number, scale: number, alpha = 1): void {
         const texture = this.iconTextures[index];
         if (!texture?.tex) return;
         renderer.drawTexture(
@@ -389,7 +404,7 @@ export class GameFrame317Plugin implements ClientPlugin {
             this.renderOffsetY + y * scale,
             texture.w * scale,
             texture.h * scale,
-            1, 1, 0, [0, 0, 0], false, false, 1,
+            1, 1, 0, [0, 0, 0], false, false, alpha,
         );
     }
 

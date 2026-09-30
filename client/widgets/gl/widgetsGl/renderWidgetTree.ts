@@ -1,4 +1,5 @@
 import { ClientState } from "../../../game/ClientState";
+import { hintArrow, isHintArrowBlinkOn } from "../../../game/HintArrow";
 import type { InputManager } from "../../../game/InputManager";
 import { profiler } from "../../../render/PerformanceProfiler";
 import { packWorldMapCoord } from "../../../rs/map/WorldMapArea";
@@ -2675,6 +2676,62 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                             markerSize,
                             [1, 1, 1, 1],
                         );
+                    }
+
+                    // Hint arrow marker (client.drawHintArrowOnMinimap -> worldToMinimap).
+                    if (hintArrow.type !== 0 && isHintArrowBlinkOn()) {
+                        let targetFineX = -1;
+                        let targetFineY = -1;
+                        if (hintArrow.type === 1) {
+                            const ecsIdx = npcEcs?.getEcsIdForServer?.(hintArrow.npcId);
+                            if (ecsIdx !== undefined && ecsIdx >= 0) {
+                                const mapId = npcEcs.getMapId(ecsIdx) | 0;
+                                targetFineX = ((mapId >> 8) << 13) + (npcEcs.getX(ecsIdx) | 0);
+                                targetFineY = ((mapId & 0xff) << 13) + (npcEcs.getY(ecsIdx) | 0);
+                            }
+                        } else if (hintArrow.type === 2) {
+                            targetFineX = (hintArrow.x << 7) + 64;
+                            targetFineY = (hintArrow.y << 7) + 64;
+                        }
+                        if (targetFineX >= 0) {
+                            // Native minimap pixels (4 per tile) after zoom, north-up.
+                            const dx = ((targetFineX - playerFineX) / 32) * zoomScale;
+                            const dy = ((targetFineY - playerFineY) / 32) * zoomScale;
+                            const screen = minimapRenderer.relativeToScreen(
+                                (targetFineX - playerFineX) / 32,
+                                (playerFineY - targetFineY) / 32,
+                            );
+                            const distSq = dx * dx + dy * dy;
+                            if (distSq > 4225 && distSq < 90000) {
+                                // Off the map: rotated edge arrow pinned inside the rim.
+                                const edgeTex = tc.getByNameToken("mapedge,0");
+                                if (edgeTex) {
+                                    const angle = Math.atan2(screen.x - centerX, centerY - screen.y);
+                                    const r = (minimapMask.width / 2 - 25) * rootScaleX;
+                                    minimapRenderer.drawOverlay(
+                                        edgeTex,
+                                        centerX + Math.sin(angle) * r,
+                                        centerY - Math.cos(angle) * r - 10 * rootScaleY,
+                                        edgeTex.w * minimapRenderScale,
+                                        edgeTex.h * minimapRenderScale,
+                                        angle,
+                                        15 * minimapRenderScale,
+                                        15 * minimapRenderScale,
+                                    );
+                                }
+                            } else if (distSq <= 4225) {
+                                const markerTex = tc.getByNameToken("mapmarker,1");
+                                if (markerTex) {
+                                    minimapRenderer.drawOverlay(
+                                        markerTex,
+                                        screen.x,
+                                        screen.y,
+                                        markerTex.w * minimapRenderScale,
+                                        markerTex.h * minimapRenderScale,
+                                    );
+                                }
+                            }
+                        }
                     }
 
                     // Draw destination flag (unrotated overlay)

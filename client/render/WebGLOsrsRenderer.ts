@@ -63,6 +63,7 @@ import { LoadingMessageOverlay } from "../ui/devoverlay/LoadingMessageOverlay";
 import { LoginOverlay } from "../ui/devoverlay/LoginOverlay";
 import { OverheadPrayerOverlay } from "../ui/devoverlay/OverheadPrayerOverlay";
 import { OverheadTextOverlay } from "../ui/devoverlay/OverheadTextOverlay";
+import { TutorialHintOverlay } from "../ui/devoverlay/TutorialHintOverlay";
 import {
     HealthBarEntry,
     HitsplatEntry,
@@ -757,6 +758,7 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     // Approximate player defaultHeight in tile units (model.height / 128)
     public playerDefaultHeightTiles: number = 200 / 128;
     public overheadTextOverlay?: OverheadTextOverlay;
+    public tutorialHintOverlay?: TutorialHintOverlay;
     public overheadPrayerOverlay?: OverheadPrayerOverlay;
     public overheadTextOutput: OverheadTextEntry[] = [];
     public overheadTextPool: OverheadTextEntry[] = [];

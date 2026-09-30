@@ -1,5 +1,6 @@
 {
   "disabledPlugins": ["SpawnMode"],
+  "tutorialIslandEnabled": true,
   "experienceMultiplier": 1,
   "spawn": {
     "x": 3089,

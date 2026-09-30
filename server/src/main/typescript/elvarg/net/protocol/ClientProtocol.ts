@@ -1237,6 +1237,20 @@ export function encodeDestination(x: number, y: number): Buffer {
   return encodeServerPacket(ServerPacketId.DESTINATION, payload);
 }
 
+/**
+ * Hint arrow (type: 0 clear, 1 npc/a=npcIndex, 2 tile/a=x,b=y,c=z). Mirrors the
+ * OSRS 6-byte hint-arrow shape so the client can render the native
+ * `headicons_hint` sprite above the target.
+ */
+export function encodeHintArrow(type: number, a: number, b: number, c: number): Buffer {
+  const payload = Buffer.alloc(6);
+  payload[0] = type & 0xff;
+  payload.writeUInt16BE(a & 0xffff, 1);
+  payload.writeUInt16BE(b & 0xffff, 3);
+  payload[5] = c & 0xff;
+  return encodeServerPacket(ServerPacketId.HINT_ARROW, payload);
+}
+
 export function encodeWidgetOpen(groupId: number, modal = true): Buffer {
   const payload = Buffer.alloc(3);
   payload.writeUInt16BE(groupId & 0xffff);

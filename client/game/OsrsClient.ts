@@ -1325,6 +1325,11 @@ export class OsrsClient {
         return ((root << 16) | (mapped & 0xffff)) | 0;
     }
 
+    /** True while the server has a sub-interface mounted at this standard (161) target. */
+    public hasServerSubInterface(standardTargetUid: number): boolean {
+        return this.serverSubInterfaces.has(standardTargetUid | 0);
+    }
+
     /** Mounts a sub-interface and runs everything the open packet asked for. */
     private mountSubInterface(payload: any): void {
         if (!this.widgetManager) {

@@ -16,6 +16,7 @@ const COOKABLES = Object.freeze([
   { raw: ItemIds.RAW_RAT_MEAT, cooked: ItemIds.COOKED_MEAT, burnt: ItemIds.BURNT_MEAT, level: 1, xp: 30, stopBurn: 34, name: "rat meat" },
   { raw: ItemIds.RAW_CHICKEN, cooked: ItemIds.COOKED_CHICKEN, burnt: ItemIds.BURNT_CHICKEN, level: 1, xp: 30, stopBurn: 34, name: "chicken" },
   { raw: ItemIds.RAW_RABBIT, cooked: ItemIds.COOKED_RABBIT, burnt: ItemIds.BURNT_RABBIT, level: 1, xp: 30, stopBurn: 37, name: "rabbit" },
+  { raw: ItemIds.BREAD_DOUGH, cooked: ItemIds.BREAD, burnt: ItemIds.BURNT_BREAD, level: 1, xp: 40, stopBurn: 38, name: "bread", rangeOnly: true },
   { raw: ItemIds.RAW_SHRIMPS, cooked: ItemIds.SHRIMPS, burnt: ItemIds.BURNT_SHRIMP, level: 1, xp: 30, stopBurn: 33, name: "shrimp" },
   { raw: ItemIds.RAW_ANCHOVIES, cooked: ItemIds.ANCHOVIES, burnt: ItemIds.BURNT_FISH, level: 1, xp: 30, stopBurn: 34, name: "anchovies" },
   { raw: ItemIds.RAW_SARDINE, cooked: ItemIds.SARDINE, burnt: ItemIds.BURNT_FISH, level: 1, xp: 40, stopBurn: 38, name: "sardine" },
@@ -165,6 +166,11 @@ class CookingTask extends Task {
         player.getInventory().addItem(new Item(session.cookable.cooked, 1));
         Sounds.sendSound(player, Sound.COOKING_FOOD);
         player.sendMessage(`You cook the ${session.cookable.name}.`);
+        pluginApi.emitCustomEvent("cooking:success", {
+          player,
+          skill: Skill.COOKING,
+          itemId: session.cookable.cooked,
+        });
         const levelBefore = player
           .getSkillManager()
           .getMaxLevel(Skill.COOKING);
@@ -189,6 +195,7 @@ class CookingTask extends Task {
 }
 
 let TaskManager;
+let pluginApi;
 
 function handleCook(activeSessions, event) {
   const definition = event.object.getDefinition();
@@ -199,7 +206,7 @@ function handleCook(activeSessions, event) {
   }
 
   const cookable = COOKABLE_BY_RAW.get(event.itemId);
-  if (!cookable) {
+  if (!cookable || (cookable.rangeOnly && definition.getName() === "Fire")) {
     return;
   }
 
@@ -236,6 +243,7 @@ function handleRangeCook(activeSessions, event) {
 module.exports = {
   name: "Cooking",
   register(api) {
+    pluginApi = api;
     TaskManager = api.getTaskManager();
     const activeSessions = new Map();
     TaskManager.submit(new CookingTask(activeSessions));

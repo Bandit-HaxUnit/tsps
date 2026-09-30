@@ -474,6 +474,7 @@ function performSmeltAction(player, recipe) {
     inventory.addItem(new Item(recipe.barId, 1));
     player.getSkillManager().addExperiences(Skill.SMITHING, recipe.xp);
     player.sendMessage("You retrieve a bar of metal.");
+    pluginApi?.emitCustomEvent("smelting:success", { player, skill: Skill.SMITHING, itemId: recipe.barId });
   } else {
     player.sendMessage("The ore is too impure and fails to become a bar.");
   }
@@ -507,6 +508,11 @@ function performSmithAction(player, smithable) {
   player.performAnimation(SMITH_ANIMATION);
   Sounds.sendSound(player, Sound.SMITHING);
   player.sendMessage("You hammer the metal and shape an item.");
+  pluginApi?.emitCustomEvent("smithing:success", {
+    player,
+    skill: Skill.SMITHING,
+    itemId: smithable.itemId,
+  });
   return true;
 }
 
@@ -818,6 +824,7 @@ function handleSmithingInterfaceAction(activeSessions, player, buttonId) {
 }
 
 let TaskManager;
+let pluginApi;
 
 function handleSmelt({ player }) {
   openSmeltingInterface(player);
@@ -860,6 +867,7 @@ module.exports = {
   startBotSmelting,
   isSmeltingActive,
   register(api) {
+    pluginApi = api;
     TaskManager = api.getTaskManager();
     TaskManager.submit(new SmithingTask(ACTIVE_SMITHING_SESSIONS));
 
@@ -873,7 +881,8 @@ module.exports = {
       stopSmithingSession(ACTIVE_SMITHING_SESSIONS, player, false);
     });
 
-    api.onObjectInteraction("Furnace", { Smelt: handleSmelt });
+    // Some furnaces (e.g. Tutorial Island 10082) only offer "Use".
+    api.onObjectInteraction("Furnace", { Smelt: handleSmelt, Use: handleSmelt });
     api.onObjectInteraction("Small furnace", { Smelt: handleSmelt });
     api.onObjectInteraction("Anvil", { Smith: handleSmith });
     api.onObjectInteraction("An experimental anvil", { Use: handleSmith });
