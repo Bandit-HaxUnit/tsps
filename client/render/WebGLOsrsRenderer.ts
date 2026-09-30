@@ -1580,6 +1580,10 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render.clearWorldEntity(this, entityIndex);
     }
 
+    clearWorldEntityLocs(entityIndex: number): void {
+        return render.clearWorldEntityLocs(this, entityIndex);
+    }
+
     clearAllWorldEntities(): void {
         return render.clearAllWorldEntities(this);
     }

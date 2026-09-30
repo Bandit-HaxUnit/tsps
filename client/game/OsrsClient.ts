@@ -7768,6 +7768,10 @@ export class OsrsClient {
 
     private despawnWorldEntity(entityIndex: number): void {
         console.log(`[OsrsClient] Despawning world entity ${entityIndex}`);
+        // Before the world view goes: its bounds say which added locs were the boat's.
+        if (this.renderer && "clearWorldEntityLocs" in this.renderer) {
+            (this.renderer as any).clearWorldEntityLocs(entityIndex);
+        }
         if (this.renderer && "clearWorldEntity" in this.renderer) {
             (this.renderer as any).clearWorldEntity(entityIndex);
         }

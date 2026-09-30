@@ -151,7 +151,7 @@ export { getWorldEntityTransformForMapOrOverlap } from "./worldEntity";
 export { getWorldEntityDeckHeight } from "./worldEntity";
 export { getNpcModelYOffset } from "./worldEntity";
 export { getWorldEntityTransformForTile } from "./worldEntity";
-export { clearWorldEntity } from "./worldEntity";
+export { clearWorldEntity, clearWorldEntityLocs } from "./worldEntity";
 export { clearAllWorldEntities } from "./worldEntity2";
 export { getWorldEntityAdjustedTerrainRay } from "./worldEntity2";
 export { resolveLocReloadBatchMap } from "./map";
