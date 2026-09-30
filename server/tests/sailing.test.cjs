@@ -1214,3 +1214,70 @@ test("::sailingtools shows every tool, and the hold keeps sending it after a rel
     h.done();
   }
 });
+
+// --- Skiff and sloop.
+
+test("the skiff and sloop moor at their own spot and board onto the captured deck tiles", () => {
+  for (const [type, boardingTile, speed] of [["skiff", [4, 4], 192], ["sloop", [3, 8], 192]]) {
+    const player = sailor();
+    Sailing.giveBoat(player, type, "the_pandemonium");
+    assert.equal(Sailing.board(player, "the_pandemonium"), null, type);
+    const boat = BoatManager.getBoatAboard(player);
+    try {
+      assert.deepEqual(tileOf(player), [boat.deckBaseX + boardingTile[0], boat.deckBaseY + boardingTile[1], 0], type);
+      assert.equal(boat.fineX, 3075 * 128 + 64, `${type} moors one tile east of the raft, as captured`);
+      assert.equal(boat.baseSpeed, speed, `${type}'s wooden hull sails 1.5 tiles a tick`);
+      boat.moveMode = BoatMoveMode.Full;
+      const startY = boat.fineY;
+      tickBoat(boat, () => true);
+      assert.equal(boat.fineY - startY, speed);
+    } finally {
+      Sailing.disembark(player, "the_pandemonium");
+    }
+  }
+});
+
+test("boarding a new skiff sends its base-tier stats and only its cargo hold", () => {
+  const [switchTab] = registerPlugin("Sailing.plugin").interfaceClicks;
+  const player = sailor();
+  const varbits = new Map();
+  const varps = new Map();
+  const sender = new Proxy({}, {
+    get: (_t, key) => (...args) => {
+      if (key === "sendVarbit") varbits.set(args[0], args[1]);
+      if (key === "sendConfig") varps.set(args[0], args[1]);
+      return sender;
+    },
+  });
+  player.getPacketSender = () => sender;
+  Sailing.giveBoat(player, "skiff", "the_pandemonium");
+  Sailing.board(player, "the_pandemonium");
+  try {
+    switchTab({ player, groupId: 593, childId: 46, handled: false });
+    // Wooden hull, bronze keel, wooden helm, sails and trim (OSRS Wiki, Skiff): HP 30 + 50.
+    const expected = {
+      19137: 1, // boat type: skiff
+      19156: 0, 19160: 0, 19161: 0, 19162: 1, // only the basic cargo hold, in hotspot 6
+      19154: 0, 19155: 0, 19167: 0, 19168: 0, 19172: 0, // every part at its base tier
+      19248: 0, 19249: 0, 19252: 0, 19253: 0, // no resistances
+      19250: 192, 19251: 320, 19256: 20, 19257: 64, 19177: 80,
+    };
+    for (const [id, value] of Object.entries(expected)) assert.equal(varbits.get(Number(id)), value, `varbit ${id}`);
+    assert.equal(varps.get(5117), 8111);
+    assert.equal(varps.get(5148), 100, "armour from the bronze keel");
+  } finally {
+    Sailing.disembark(player, "the_pandemonium");
+  }
+});
+
+test("::skiff and ::sloop moor new boats for testing", () => {
+  const commands = {};
+  require("../plugins/skills/sailing/SailingCommands.plugin").register({
+    registerCommand: (name, handler) => { commands[name] = handler; },
+    persistAttribute: () => {},
+  });
+  const player = sailor();
+  commands.skiff({ player, parts: ["skiff"] });
+  commands.sloop({ player, parts: ["sloop"] });
+  assert.deepEqual(player.getSailing().boats.map((boat) => boat.type), ["skiff", "sloop"]);
+});

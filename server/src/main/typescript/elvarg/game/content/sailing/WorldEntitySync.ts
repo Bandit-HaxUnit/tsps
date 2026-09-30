@@ -122,18 +122,25 @@ export class WorldEntitySync {
         return { x: boat.fineX, y: 0, z: boat.fineY, orientation: boat.angle };
     }
 
-    /** The deck scene: the boat's template zone copied into the centre of a 13x13 scene. */
+    /**
+     * The deck scene: the boat's template zones (8x8 tiles each, a sloop's are 1x2) copied into
+     * a 13x13 scene from its centre chunk.
+     */
     private static encodeScene(boat: Boat): Buffer {
         const spec = BoatManager.getSpec(boat)!;
         const chunks = Array.from({ length: 4 }, () =>
             Array.from({ length: 13 }, () => new Array<number>(13).fill(-1)));
         for (let plane = 0; plane < 4; plane++) {
-            chunks[plane][6][6] = packTemplateChunk({
-                sourceChunkX: spec.templateChunkX,
-                sourceChunkY: spec.templateChunkY,
-                sourcePlane: plane,
-                rotation: 0,
-            });
+            for (let zoneX = 0; zoneX < Math.ceil(spec.sizeX / 8); zoneX++) {
+                for (let zoneY = 0; zoneY < Math.ceil(spec.sizeZ / 8); zoneY++) {
+                    chunks[plane][6 + zoneX][6 + zoneY] = packTemplateChunk({
+                        sourceChunkX: spec.templateChunkX + zoneX,
+                        sourceChunkY: spec.templateChunkY + zoneY,
+                        sourcePlane: plane,
+                        rotation: 0,
+                    });
+                }
+            }
         }
         const regionId = ((spec.templateChunkX >> 3) << 8) | (spec.templateChunkY >> 3);
         return encodeRebuildWorldEntity(

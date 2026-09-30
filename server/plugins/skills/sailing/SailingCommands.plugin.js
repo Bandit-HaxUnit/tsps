@@ -1,5 +1,5 @@
 // Developer commands for testing sailing until boats can be bought (and the Pandemonium quest
-// hands out the first raft).
+// hands out the first raft): ::raft, ::skiff and ::sloop moor a new boat at The Pandemonium.
 const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sailing/Sailing");
 const { BoatMoveMode } = require("../../../src/main/typescript/elvarg/game/content/sailing/Boat");
 const { packedHeadingToAngle } = require("../../../src/main/typescript/elvarg/game/content/sailing/HeadingUtils");
@@ -9,7 +9,7 @@ const { content, boatName, randomBoatName } = require("./sailingContent");
 const { sendBoatVarbits } = require("./boatVarbits");
 const { TOOLS_UNLOCKED_ATTRIBUTE, sendToolUnlocks } = require("./cargo");
 
-const RAFT_DOCK = "the_pandemonium";
+const BOAT_DOCK = "the_pandemonium";
 const MOVE_MODES = {
   full: BoatMoveMode.Full,
   half: BoatMoveMode.Half,
@@ -17,17 +17,30 @@ const MOVE_MODES = {
   stop: BoatMoveMode.Stopped,
 };
 
-function giveRaft({ player }) {
-  const boat = Sailing.giveBoat(player, "raft", RAFT_DOCK, randomBoatName());
+/** Moors a new boat of `type` for the player at The Pandemonium, with a random name. */
+function giveBoatOfType(player, type) {
+  const boat = Sailing.giveBoat(player, type, BOAT_DOCK, randomBoatName());
   if (boat) sendBoatVarbits(player);
   player.sendMessage(boat
-    ? `The ${boatName(boat)}, a raft, is moored for you at ${Sailing.getDock(RAFT_DOCK).name} (slot ${boat.slot}).`
+    ? `The ${boatName(boat)}, a ${type}, is moored for you at ${Sailing.getDock(BOAT_DOCK).name} (slot ${boat.slot}).`
     : "You can't own another boat.");
+}
+
+function giveRaft({ player }) {
+  giveBoatOfType(player, "raft");
+}
+
+function giveSkiff({ player }) {
+  giveBoatOfType(player, "skiff");
+}
+
+function giveSloop({ player }) {
+  giveBoatOfType(player, "sloop");
 }
 
 /** Teleports to The Pandemonium's gangplank. Like any teleport, it sinks a boat you're on. */
 function toPandemonium({ player }) {
-  const { landing } = Sailing.getDock(RAFT_DOCK);
+  const { landing } = Sailing.getDock(BOAT_DOCK);
   player.moveTo(new Location(landing.x, landing.y, landing.z));
 }
 
@@ -83,6 +96,8 @@ module.exports = {
   register(api) {
     content();
     api.registerCommand("raft", giveRaft, PlayerRights.DEVELOPER);
+    api.registerCommand("skiff", giveSkiff, PlayerRights.DEVELOPER);
+    api.registerCommand("sloop", giveSloop, PlayerRights.DEVELOPER);
     api.persistAttribute(TOOLS_UNLOCKED_ATTRIBUTE);
     api.registerCommand("pandemonium", toPandemonium, PlayerRights.DEVELOPER);
     api.registerCommand("sailingtools", unlockSailingTools, PlayerRights.DEVELOPER);

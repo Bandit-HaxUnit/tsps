@@ -24,6 +24,7 @@ const OFFSET = {
 const STORED_HP = 19458; // + slot
 const STORED_MAX_HP = 19463; // + slot
 const NO_PREVIOUS_PORT = 255;
+const HOTSPOTS = 11;
 /**
  * Special `port` values (cache script 8997): 255 bottled, 254 capsized, 253 lost at sea. Port 0
  * is a real dock (Port Sarim), so a boat sunk by a teleport, Escape or death is "lost at sea".
@@ -52,7 +53,7 @@ function slotVarbits(slot, boat) {
   set(OFFSET.facilitiesUnaltered, boat ? 1 : 0);
   for (let word = 0; word < 3; word++) set(OFFSET.name + word, boat?.name?.[word] ?? 0);
   for (const part of ["keel", "hull", "sail", "steering", "trim"]) set(OFFSET[part], type?.parts?.[part] ?? 0);
-  if (type?.facilityHotspot !== undefined) set(OFFSET.hotspot, boat ? type.facilityHotspot : 0);
+  for (let hotspot = 0; hotspot < HOTSPOTS; hotspot++) set(OFFSET.hotspot + hotspot, type?.hotspots?.[hotspot] ?? 0);
   values.set(STORED_HP + slot, boat ? type?.hitpoints ?? 0 : 0);
   values.set(STORED_MAX_HP + slot, boat ? type?.hitpoints ?? 0 : 0);
   return values;

@@ -54,6 +54,7 @@ export class BoatManager {
             hull: spec.hull,
             deckCentreX: spec.deckCentreX,
             deckCentreY: spec.deckCentreY,
+            baseSpeed: spec.stats?.baseSpeed,
             ...placement,
         });
         BoatManager.boats.set(entityIndex, { boat, spec, deck: new BoatDeckArea(boat, spec) });

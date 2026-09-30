@@ -20,17 +20,12 @@ const {
   animateDeckLocs,
   isHelm,
   isSail,
+  boatAnim,
+  boatType,
 } = require("./sailingContent");
 
 const HELM_LOCKED_IN = 3;
 const SEQ_HUMAN_HELM_ACTIVE = 13340;
-const SEQ_HELM_ACTIVE = 13335;
-const SEQ_HELM_INACTIVE = 13334;
-const SEQ_SAIL_DOWN = 13367;
-const SEQ_SAIL_DOWN_TO_FULL = 13374;
-const SEQ_SAIL_DOWN_TO_HALF = 13371;
-const SEQ_SAIL_FULL_TO_DOWN = 13369;
-const SEQ_SAIL_HALF_TO_DOWN = 13368;
 const SOUND_HELM_ENTER = 10792;
 const SOUND_HELM_EXIT = 10793;
 const SOUND_SAIL_RAISE = 10831;
@@ -74,10 +69,19 @@ function sailButtonTransition(slot, moveMode) {
   }
 }
 
-function sailLoweringSeq(moveMode) {
-  if (moveMode === MOVE_MODE.FULL) return SEQ_SAIL_FULL_TO_DOWN;
-  if (moveMode === MOVE_MODE.HALF) return SEQ_SAIL_HALF_TO_DOWN;
-  return SEQ_SAIL_DOWN;
+/**
+ * Plays one of the boat type's loc animations (boats.json `anims`, per hull model) on its sails
+ * or helm; one not captured for this boat is skipped rather than guessed from another model.
+ */
+function animate(player, boat, isLoc, name) {
+  const anim = boatAnim(boat, name);
+  if (anim !== undefined) animateDeckLocs(player, boat, isLoc, anim);
+}
+
+function sailLowering(moveMode) {
+  if (moveMode === MOVE_MODE.FULL) return "sailFullToDown";
+  if (moveMode === MOVE_MODE.HALF) return "sailHalfToDown";
+  return "sailDown";
 }
 
 function setSailMode(player, boat, mode) {
@@ -86,12 +90,12 @@ function setSailMode(player, boat, mode) {
   setVarbit(player, VARBIT.SIDEPANEL_BOAT_MOVE_MODE, SAIL_MODES[mode].varbit);
   setVarbit(player, VARBIT.SIDEPANEL_SAIL_BUTTON_TOGGLED, mode === "stop" ? 0 : 1);
   if (mode === "full" || mode === "half") {
-    animateDeckLocs(player, boat, isSail, mode === "full" ? SEQ_SAIL_DOWN_TO_FULL : SEQ_SAIL_DOWN_TO_HALF);
+    animate(player, boat, isSail, mode === "full" ? "sailDownToFull" : "sailDownToHalf");
     playSound(player, SOUND_SAIL_RAISE);
   } else if (mode === "reverse") {
-    animateDeckLocs(player, boat, isSail, SEQ_SAIL_DOWN);
+    animate(player, boat, isSail, "sailDown");
   } else {
-    animateDeckLocs(player, boat, isSail, sailLoweringSeq(previous));
+    animate(player, boat, isSail, sailLowering(previous));
     playSound(player, SOUND_SAIL_LOWER);
   }
 }
@@ -102,7 +106,7 @@ function takeHelm(player, boat) {
   const sender = player.getPacketSender();
   setVarbit(player, VARBIT.FACILITY_LOCKEDIN, HELM_LOCKED_IN);
   player.performAnimation(new Animation(SEQ_HUMAN_HELM_ACTIVE));
-  animateDeckLocs(player, boat, isHelm, SEQ_HELM_ACTIVE);
+  animate(player, boat, isHelm, "helmActive");
   sender.sendInterfaceScript(SCRIPT_SIDEBUTTON_SWITCH, [0]);
   playSound(player, SOUND_HELM_ENTER);
   if (getVarbit(player, VARBIT.SIDEPANEL_BOAT_MOVE_MODE) === MOVE_MODE.STOPPED) {
@@ -120,8 +124,8 @@ function leaveHelm(player, boat) {
   boat.moveMode = BoatMoveMode.Stopped;
   boat.heading = boat.angle;
   setVarbit(player, VARBIT.FACILITY_LOCKEDIN, 0);
-  animateDeckLocs(player, boat, isHelm, SEQ_HELM_INACTIVE);
-  animateDeckLocs(player, boat, isSail, sailLoweringSeq(moveMode));
+  animate(player, boat, isHelm, "helmInactive");
+  animate(player, boat, isSail, sailLowering(moveMode));
   player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
   playSound(player, SOUND_HELM_EXIT);
   setVarbit(player, VARBIT.SIDEPANEL_BOAT_MOVE_MODE, MOVE_MODE.STOPPED);
@@ -131,12 +135,20 @@ function leaveHelm(player, boat) {
   player.getPacketSender().sendInterfaceScript(SCRIPT_HELM_UPDATE, ["", 0, "", 1]);
 }
 
-/** The helm doesn't block walking: whoever navigates stands on its tile, so walk there first. */
+/**
+ * A helm on a walkable deck tile (the raft's) is navigated from that tile, so walk there first;
+ * the skiff's and sloop's sit on the hull's edge and are used from beside them.
+ */
 function routeToHelm(event) {
   const option = event.definition?.getInteractions()?.[event.clickType - 1];
   if (event.definition?.getName() !== "Helm" || option !== "Navigate") return;
-  if (!Sailing.instanceAboard(event.player)) return;
+  const boat = Sailing.instanceAboard(event.player);
+  if (!boat) return;
   const helm = event.object.getLocation();
+  const walkable = boatType(BoatManager.getSpec(boat)?.type)?.walkableDeck ?? [];
+  const onDeck = walkable.some((tile) =>
+    boat.deckBaseX + tile.x === helm.getX() && boat.deckBaseY + tile.y === helm.getY());
+  if (!onDeck) return;
   event.destination = { x: helm.getX(), y: helm.getY(), z: helm.getZ() };
 }
 

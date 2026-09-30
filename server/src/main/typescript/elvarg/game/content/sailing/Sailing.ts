@@ -15,6 +15,8 @@ export interface SailingDock {
     id: string;
     /** Where a boat docked here sits: fine position (1/128 tile) and angle. */
     mooring: BoatPlacement;
+    /** Where a boat of a given type sits instead, when it differs (bigger hulls). */
+    moorings?: Record<string, BoatPlacement>;
     /** Where a player steps ashore when disembarking here. */
     landing: { x: number; y: number; z: number };
 }
@@ -122,7 +124,9 @@ export class Sailing {
                 ? "Your boat has sunk. A shipwright can recover it for you."
                 : "You don't have a boat moored here.";
         }
-        if (!Sailing.embark(player, boat, dock.mooring)) return "There's no room at sea right now.";
+        if (!Sailing.embark(player, boat, dock.moorings?.[boat.type] ?? dock.mooring)) {
+            return "There's no room at sea right now.";
+        }
         state.returnPoint = { ...dock.landing };
         return null;
     }

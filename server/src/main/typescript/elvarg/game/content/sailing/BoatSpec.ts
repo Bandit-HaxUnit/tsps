@@ -17,10 +17,10 @@ export interface BoatSpec {
     type: string;
     /** The worldentity type the client draws. */
     configId: number;
-    /** Source chunk of the boat template in the cache. */
+    /** Source chunk of the boat template in the cache: its south-west zone when it spans several. */
     templateChunkX: number;
     templateChunkY: number;
-    /** Deck footprint in tiles (the template zone), sent as the world entity size. */
+    /** Deck footprint in tiles (8 per template zone), sent as the world entity size. */
     sizeX: number;
     sizeZ: number;
     hull: BoatHull;
@@ -37,6 +37,8 @@ export interface BoatSpec {
     /** Where a player lands when boarding. */
     boardingTile: { x: number; y: number };
     locs: ReadonlyArray<BoatDeckLoc>;
+    /** Full sail speed in fine units a tick (the hull's base speed); 192 when absent. */
+    stats?: { baseSpeed?: number };
 }
 
 /** A boat's position in the main world: fine units (1/128 tile) and an angle out of 2048. */

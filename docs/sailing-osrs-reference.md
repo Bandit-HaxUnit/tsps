@@ -24,6 +24,13 @@ Coordinates are written as rsprox does, `level_squareX_squareY_localX_localY` (m
 | Spawn at The Pandemonium | (3074, 2987) | (3075, 2987) | (3075, 2987) |
 
 - Every boat spawns with fine offset 64, 64 and angle 1024 (north).
+- **The cache's world entity types:**
+  - basePlane is 1 for all three;
+  - base offsets are raft (−64, −64), skiff (0, −64) and sloop (−64, 0);
+  - bounds are raft 128×384, skiff 256×640, and sloop 384×1280 starting at y −256.
+
+  A boat's centre in its deck frame is size × 64 + base offset: raft (448, 448), skiff (512, 448), sloop (448, 1024). Its hull is the bounds rectangle.
+- **Walkable deck tiles:** the template's level-1 collision gives them. The raft has x 3, y 2-4. The skiff has x 3-4, y 2-5. The sloop has x 2-4, y 5-10, with a solid stern below.
 - The wiki's per-boat facts (level, cost, size, crew, hotspots) are on the [Boat](https://oldschool.runescape.wiki/w/Boat) page.
 
 ### Deck templates
@@ -59,7 +66,7 @@ Deck tile (x, y), all on level 1, rotation 0:
 
 The HP-bar NPC stands on deck tile (3, 3), level 1.
 
-### Skiff and sloop decks (as captured)
+### Skiff and sloop decks (as captured, upgraded boats)
 
 Deck tile relative to each template zone, level 1 unless noted. Part ids depend on the part's tier.
 
@@ -310,7 +317,28 @@ Depositing a tool, by Deposit Inventory or singly, puts it back in the compartme
 - **Deck level:** people aboard stand on level 0 of the deck scene, not level 1. The tsps client already raises actors on a world entity by the deck height, so level 1 would lift them twice. Matching OSRS needs a client rendering change.
 - **The HP-bar NPC** isn't placed: that needs NPC sync inside a boat's world view.
 - **The boat's name varbits** (19149, 19150) aren't sent: their encoding is unknown.
-- **The linen sail** isn't placed, because its live id is a fairy ring in revision 237.
+- **The linen sail** isn't placed, because its live id is a fairy ring in revision 237. Neither are the skiff's and sloop's canvas sails, for the same reason.
+- **New boats are base tier, with only a basic cargo hold** (OSRS Wiki, Sloop: "A newly purchased Sloop with no facilities"; the basic hold comes with every boat).
+  - The hold's hotspot and value come from the captures. The raft uses hotspot 0 with value 15. The skiff's is hotspot 6 with value 1: the shipyard shows hotspots 0-3 as empty placeholders, then the hook (4), the inoculation station (5) and the hold (6). The sloop's is hotspot 10 (its last) with value 1.
+  - The parts are a wooden hull (template column 0), bronze keel, wooden helm, wooden sails and wooden trim.
+  - The part loc ids run in tier order in the cache:
+    - keels: 59516-59522 (skiff), 59523-59529 (sloop);
+    - sails: 59530 (raft), 59537 (skiff), 59544 (sloop);
+    - helms, three ids each: 59554 (raft), 59576 (skiff), 59598 (sloop);
+    - trims: 59624 (skiff), 59642 (sloop).
+- **Base-tier stats** come from the wiki's component tables:
+  - HP is hull + keel: skiff 30 + 50 = 80, sloop 40 + 70 = 110. This checks out against the captures: teak skiff 60 + steel 60 = 120, camphor skiff 180, camphor sloop 160 + adamant 100 = 260.
+  - Armour is 100 (bronze keel).
+  - Speed 192, speed cap 320, boost 20 and acceleration 64 (0.5).
+  - No resistances.
+  - Wooden per-style defence isn't known, so it isn't sent.
+- **Skiff and sloop:**
+  - Only their sails' "down" animation (and the skiff helm's inactive one) is known, so other sail and helm animations are skipped.
+  - Their helms sit on the hull's edge, so Navigate is used from beside them rather than on their tile.
+  - Recovery fees are the wiki's base fees (4,125 and 50,000). The captured camphor sloop cost 60,000.
+- **Client:**
+  - A world view's collision isn't filled in, so a run step on a deck is drawn as if the deck were open floor. The server checks the real deck.
+  - A despawned boat's added deck locs are forgotten, since the next boat reuses its entity index and deck coordinates.
 - **The skiff and sloop spawn tile** (3075, 2987) is one tile east of the raft's. tsps only has the raft so far.
 - **Cargo hold:**
   - `busy` isn't set while it's open, because plugins get no close hook to clear it.

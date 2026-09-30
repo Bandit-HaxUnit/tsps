@@ -104,11 +104,11 @@ tsps has no world views, but it has `PrivateArea` (used by Construction's house)
 
 ## Content (plugins)
 
-- boat types (`data/definitions/boats.json`): template zone, size, hull bounds, deck centre, walkable deck tiles, deck locs. Raft only in PR 1.
+- boat types (`data/definitions/boats.json`): template zone, size, hull bounds, deck centre, walkable deck tiles, deck locs, stats, facility hotspots, part tiers and loc animations. The raft, and the skiff and sloop with camphor hulls.
 - gangplanks: Board / Disembark, routed to the lifecycle
 - helm: Navigate (walking onto the helm tile first) / Stop-navigating, the sail buttons (move mode from varbit 19175), clicking to set a heading; Escape, after a yes/no confirmation
 - shipwright: Junior Jim at The Pandemonium retrieves a sunk raft for 250 gp (PR 1 needs this, or a sunk raft is stuck forever)
-- developer commands: `::raft` gives a raft docked at The Pandemonium, `::pandemonium` teleports to its gangplank, and `::sailingtools` shows every tool in the cargo hold's tools compartment (their quests don't exist yet). The dock is where xrsps's raft docks (gangplank 59836 at 3070, 2987); the Pandemonium quest and buying boats come later
+- developer commands: `::raft`, `::skiff` and `::sloop` give a boat docked at The Pandemonium, `::pandemonium` teleports to its gangplank, and `::sailingtools` shows every tool in the cargo hold's tools compartment (their quests don't exist yet). The dock is where xrsps's raft docks (gangplank 59836 at 3070, 2987); the Pandemonium quest and buying boats come later
 
 ## Client
 

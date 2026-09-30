@@ -21,8 +21,13 @@ const VARBIT = {
   BOARDED_BOAT_TYPE: 19137, // raft 0, skiff 1, sloop 2
   PREVIOUS_BOAT_TYPE_ID: 19143,
   SIDEPANEL_VISIBLE: 19151,
+  SIDEPANEL_FACILITY_SAIL: 19154,
+  SIDEPANEL_FACILITY_HELM: 19155,
   SIDEPANEL_VISIBLE_FROM_COMBAT_TAB: 19153,
-  SIDEPANEL_FACILITY_HOTSPOT0: 19156,
+  SIDEPANEL_FACILITY_HOTSPOT0: 19156, // hotspot n: + n (0-10)
+  SIDEPANEL_FACILITY_KEEL: 19167,
+  SIDEPANEL_FACILITY_HULL: 19168,
+  SIDEPANEL_FACILITY_TRIM: 19172,
   SIDEPANEL_SAIL_BUTTON_TOGGLED: 19174,
   SIDEPANEL_BOAT_MOVE_MODE: 19175,
   SIDEPANEL_HELM_STATUS: 19176,
@@ -32,8 +37,12 @@ const VARBIT = {
   SIDEPANEL_REPAIRKITS: 19210, // repair kit uses in the cargo hold: 5 per kit
   SIDEPANEL_PLAYER_ROLE: 19233,
   SIDEPANEL_PLAYERS_ON_BOARD_TOTAL: 19235,
+  SIDEPANEL_BOAT_STORMRESISTANCE: 19248,
+  SIDEPANEL_BOAT_RAPIDRESISTANCE: 19249,
   SIDEPANEL_BOAT_BASESPEED: 19250,
   SIDEPANEL_BOAT_SPEEDCAP: 19251,
+  SIDEPANEL_BOAT_FETIDWATER_RESISTANT: 19252,
+  SIDEPANEL_BOAT_CRYSTALFLECKED_RESISTANT: 19253,
   SIDEPANEL_BOAT_SPEEDBOOST_DURATION: 19256,
   SIDEPANEL_BOAT_ACCELERATION: 19257,
   MINIMAP_STATE: 6719,
@@ -42,6 +51,7 @@ const VARP_SIDEPANEL_BOAT_TYPE = 5117;
 /** The sidepanel's boat defence stats, by `stats` field in boats.json. */
 const VARP_SIDEPANEL_DEFENCE = {
   defence: 5147,
+  armour: 5148,
   stabDefence: 5159,
   slashDefence: 5160,
   crushDefence: 5161,
@@ -84,6 +94,11 @@ function content() {
 
 function boatType(type) {
   return content().boats.find((boat) => boat.type === type);
+}
+
+/** A boat's animation by name from boats.json `anims` (sailDown, helmActive, …), if known. */
+function boatAnim(boat, name) {
+  return boatType(BoatManager.getSpec(boat)?.type)?.anims?.[name];
 }
 
 function dockById(id) {
@@ -171,6 +186,7 @@ module.exports = {
   SCRIPT_SIDEBUTTON_SWITCH,
   content,
   boatType,
+  boatAnim,
   dockById,
   boatName,
   randomBoatName,

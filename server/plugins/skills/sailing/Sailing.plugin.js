@@ -24,17 +24,46 @@ const {
   setVarbit,
   animateDeckLocs,
   isSail,
+  boatAnim,
 } = require("./sailingContent");
 const { repairKitUses } = require("./cargo");
 const { sendBoatVarbits } = require("./boatVarbits");
 
-const SEQ_SAIL_DOWN = 13367;
+
+const HOTSPOTS = 11;
+/** The sidepanel's part tier varbits, by `parts` field in boats.json (helm is its steering). */
+const PART_VARBITS = {
+  sail: VARBIT.SIDEPANEL_FACILITY_SAIL,
+  steering: VARBIT.SIDEPANEL_FACILITY_HELM,
+  keel: VARBIT.SIDEPANEL_FACILITY_KEEL,
+  hull: VARBIT.SIDEPANEL_FACILITY_HULL,
+  trim: VARBIT.SIDEPANEL_FACILITY_TRIM,
+};
+/** The sidepanel's resistance varbits, by `stats` field in boats.json. */
+const RESISTANCE_VARBITS = {
+  stormResistance: VARBIT.SIDEPANEL_BOAT_STORMRESISTANCE,
+  rapidResistance: VARBIT.SIDEPANEL_BOAT_RAPIDRESISTANCE,
+  fetidWaterResistance: VARBIT.SIDEPANEL_BOAT_FETIDWATER_RESISTANT,
+  crystalFleckedResistance: VARBIT.SIDEPANEL_BOAT_CRYSTALFLECKED_RESISTANT,
+};
+
+/** The boat type's facility hotspots, parts and resistances; 0 for any it doesn't have. */
+function facilityVarbits(type) {
+  const values = {};
+  for (let hotspot = 0; hotspot < HOTSPOTS; hotspot++) {
+    values[VARBIT.SIDEPANEL_FACILITY_HOTSPOT0 + hotspot] = type.hotspots?.[hotspot] ?? 0;
+  }
+  for (const [part, varbit] of Object.entries(PART_VARBITS)) values[varbit] = type.parts?.[part] ?? 0;
+  for (const [stat, varbit] of Object.entries(RESISTANCE_VARBITS)) values[varbit] = type.stats?.[stat] ?? 0;
+  return values;
+}
 
 /** Values from live OSRS boarding traces (docs/sailing-osrs-reference.md). */
 function boardedVarbits(type, owned) {
   const slot = owned.slot + 1;
   const stats = type.stats ?? {};
   return {
+    ...facilityVarbits(type),
     [VARBIT.BOARDED_BOAT]: 1,
     [VARBIT.BOARDED_BOAT_WORLD]: 1,
     [VARBIT.BOARDED_BOAT_TYPE]: type.typeId,
@@ -46,7 +75,6 @@ function boardedVarbits(type, owned) {
     [VARBIT.PRELOADED_ANIMS]: 1,
     [VARBIT.SIDEPANEL_PLAYER_ROLE]: ROLE_CAPTAIN,
     [VARBIT.SIDEPANEL_PLAYERS_ON_BOARD_TOTAL]: 1,
-    [VARBIT.SIDEPANEL_FACILITY_HOTSPOT0]: type.facilityHotspot,
     [VARBIT.SIDEPANEL_BOAT_HP_MAX]: type.hitpoints,
     [VARBIT.SIDEPANEL_BOAT_HP]: type.hitpoints,
     [VARBIT.SIDEPANEL_HELM_STATUS]: HELM_STATUS.FREE,
@@ -95,6 +123,9 @@ const LEFT_VARBITS = [
   VARBIT.SIDEPANEL_BOAT_SPEEDCAP,
   VARBIT.SIDEPANEL_BOAT_SPEEDBOOST_DURATION,
   VARBIT.SIDEPANEL_BOAT_ACCELERATION,
+  ...Array.from({ length: HOTSPOTS }, (_, hotspot) => VARBIT.SIDEPANEL_FACILITY_HOTSPOT0 + hotspot),
+  ...Object.values(PART_VARBITS),
+  ...Object.values(RESISTANCE_VARBITS),
 ];
 
 function applyBoarded(player, owned) {
@@ -123,7 +154,8 @@ function onBoarded({ player, boat, owned }) {
       if (player.getArea()?.boat !== boat) return this.stop();
       applyBoarded(player, owned);
       // Boarding lowers the sails to rest.
-      animateDeckLocs(player, boat, isSail, SEQ_SAIL_DOWN);
+      const sailDown = boatAnim(boat, "sailDown");
+      if (sailDown !== undefined) animateDeckLocs(player, boat, isSail, sailDown);
       this.stop();
     }
   })());

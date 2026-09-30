@@ -1,5 +1,8 @@
 import { PACKED_HEADING_SCALE, angleFromCoordDelta, normalizeAngle } from "./HeadingUtils";
 
+/** A wooden hull's base speed (the raft's), 1.5 tiles a tick: the default full sail speed. */
+const WOODEN_HULL_SPEED = 192;
+
 /** Fine units per tile: world entity positions use 1/128-tile precision. */
 export const FINE_UNITS_PER_TILE = 128;
 
@@ -36,6 +39,8 @@ export interface BoatInit {
      */
     deckCentreX: number;
     deckCentreY: number;
+    /** Full sail speed in fine units a tick. */
+    baseSpeed?: number;
     /** World position of the boat's centre in fine units. */
     fineX: number;
     fineY: number;
@@ -58,6 +63,8 @@ export class Boat {
     readonly hull: BoatHull;
     readonly deckCentreX: number;
     readonly deckCentreY: number;
+    /** Full sail speed in fine units a tick (the hull's base speed); half sail is half. */
+    readonly baseSpeed: number;
 
     fineX: number;
     fineY: number;
@@ -82,6 +89,7 @@ export class Boat {
         this.hull = init.hull;
         this.deckCentreX = init.deckCentreX;
         this.deckCentreY = init.deckCentreY;
+        this.baseSpeed = init.baseSpeed ?? WOODEN_HULL_SPEED;
         this.fineX = init.fineX;
         this.fineY = init.fineY;
         this.level = init.level;
