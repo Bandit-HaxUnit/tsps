@@ -18,6 +18,7 @@ const { ForceMovement } = require("../../src/main/typescript/elvarg/game/model/F
 const { ForceMovementTask } = require("../../src/main/typescript/elvarg/game/task/impl/ForceMovementTask");
 const { MagicCombatMethod } = require("../../src/main/typescript/elvarg/game/content/combat/method/impl/MagicCombatMethod");
 const { CombatSpells } = require("../../src/main/typescript/elvarg/game/content/combat/magic/CombatSpells");
+const { MOBILE_CLIENT_ATTRIBUTE } = require("../../src/main/typescript/elvarg/net/protocol/ClientProtocol");
 const { decodeRegionObjects, initRegionBuildingAnalysisCoreAccess } = require("../world/RegionBuildingAnalysisUtil");
 
 const REGION_ID = 14231;
@@ -713,6 +714,14 @@ module.exports = {
     api.onObjectInteraction(handleObject);
     api.onInterfaceActionClick(answerPuzzle);
     api.onInterfaceActionButton(WELCOME_PLAY_BUTTON_UID, restoreOverlayAfterWelcome);
+    // Mobile skips the welcome screen, so its gameframe is never replaced and
+    // this mount survives. Desktop keeps waiting for the Play button, which runs
+    // after WelcomeScreen re-boots the gameframe.
+    api.onPlayerLogin(({ player }) => {
+      if (player.getAttribute(MOBILE_CLIENT_ATTRIBUTE) === true) {
+        restoreOverlayAfterWelcome({ player });
+      }
+    });
     api.onNpcDeath(handleNpcDeath);
     api.onPlayerProcess(processPlayer);
     api.onPlayerDeath(playerDeath);
