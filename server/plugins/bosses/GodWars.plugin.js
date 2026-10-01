@@ -1,12 +1,15 @@
 "use strict";
 
 /**
- * God Wars Dungeon generals. Each general lives in ./godwars/ and registers its
- * own combat method; add one line per general.
+ * God Wars Dungeon: entrance access and essence gates, the private boss rooms
+ * with their generals and bodyguards, and one combat unit per general. Each
+ * unit lives in ./godwars/; add one line per unit.
  */
 module.exports = {
   name: "GodWars",
   register(api) {
+    require("./godwars/GodWarsAccess")(api);
+    require("./godwars/GodWarsEncounters")(api);
     require("./godwars/GeneralGraardor.GodWars")(api);
     require("./godwars/KreeArra.GodWars")(api);
     require("./godwars/CommanderZilyana.GodWars")(api);

@@ -1015,8 +1015,10 @@ export interface PluginCoreApi {
   Sound: any;
   Sounds: any;
   Location: any;
+  Boundary: any;
   World: any;
   GameObject: any;
+  PrivateArea: any;
   ObjectManager: any;
   MapObjects: any;
   ItemOnGroundManager: any;
