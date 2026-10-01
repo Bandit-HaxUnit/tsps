@@ -1568,6 +1568,26 @@
         "death": 512
       }
     },
+    "3118": {
+      "name": "Tz-Kek",
+      "anims": {
+        "block": 2626,
+        "death": 2627,
+        "attack": 2625,
+        "walk": 2623,
+        "idle": 2624
+      }
+    },
+    "3120": {
+      "name": "Tz-Kek",
+      "anims": {
+        "block": 2626,
+        "death": 2627,
+        "attack": 2625,
+        "walk": 2623,
+        "idle": 2624
+      }
+    },
     "3129": {
       "name": "K'ril Tsutsaroth",
       "anims": {
