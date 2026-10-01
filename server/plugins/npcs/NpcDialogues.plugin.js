@@ -23,6 +23,9 @@ const { ActionDialogue } = require("../../src/main/typescript/elvarg/game/model/
 const { ShopDefinition } = require("../../src/main/typescript/elvarg/game/definition/ShopDefinition");
 const { ShopManager } = require("../../src/main/typescript/elvarg/game/model/container/shop/ShopManager");
 
+/** Jumps followed in one conversation before it is cut off (a transcript that loops on itself). */
+const MAX_JUMPS = 100;
+
 // These NPCs have executable plugin conversations, not an imported prose transcript.
 const SPECIAL_NPC_DIALOGUES = new Set(["Skully", "Estate agent", "Estate Agent", "Alwyn"]);
 
@@ -242,7 +245,7 @@ function flatten(steps, opts = {}) {
     if (opts.stopped) break;
     const step = steps[position];
     if (step.type === "jump") {
-      const target = resolveJump(step);
+      const target = resolveJump(step, steps[position - 1]);
       // "end": a jump we cannot replay. Stop rather than leak into the next step.
       if (target === "end") {
         out.push({ type: "end" });
@@ -254,7 +257,10 @@ function flatten(steps, opts = {}) {
         out.push({ type: "gomenu", menu: target.menu });
         continue;
       }
-      if (Array.isArray(target)) out.push(...flatten(target, opts));
+      // Expanded when the conversation reaches it (startDialogue's run), so its conditions see
+      // what happened before it: Percy's unlock menu after a purchase. Expanding it here also
+      // recursed forever when a jump led back into its own branch.
+      if (Array.isArray(target)) out.push({ type: "jump_to", steps: target });
       continue;
     }
     if (step.type !== "condition") {
@@ -284,6 +290,7 @@ function flatten(steps, opts = {}) {
 }
 
 function startDialogue(api, event, steps, branches = {}, context = {}) {
+  context.jumps = 0;
   const { player } = event;
   const manager = player.getDialogueManager();
   const npcId = event.npcId;
@@ -340,9 +347,20 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
 
   // "jump above" targets the same option's earlier occurrence, else the option
   // defined just before this one. Wiki jump ids lost their targets in the dump.
-  const resolveJump = (step) => {
+  const resolveJump = (step, previous) => {
     const reference = String(step.reference ?? "");
     if (/^(other|previous\d*|initial)/i.test(reference)) return resolveMenuJump(reference);
+    // The player asks one of the page's questions again (Percy's "Is there anything else I can
+    // unlock here?" after a purchase): carry on as that question does, without saying it twice.
+    if (/^(above|below)/i.test(reference) && typeof previous?.player === "string") {
+      const question = normText(previous.player);
+      const asked = realBody(context.pageOptions?.get(question))
+        ?? realBody((recordsByText.get(question) ?? [])[0]?.steps);
+      if (asked) {
+        const repeatsLine = typeof asked[0]?.player === "string" && normText(asked[0].player) === normText(previous.player);
+        return realBody(repeatsLine ? asked.slice(1) : asked) ?? asked;
+      }
+    }
     const current = context.currentRecord;
     const key = current ? normText(current.text) : "";
     // The same option text (normalized) shown earlier, anywhere on the page.
@@ -435,6 +453,16 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     for (let position = 0; position < queue.length; position++) {
       const step = queue[position];
       const rest = [...(step.steps || []), ...queue.slice(position + 1)];
+      if (step.type === "jump_to") {
+        const after = queue.slice(position + 1);
+        chain.add(new ActionDialogue(index++, { execute: () => {
+          // Jumps that only ever lead to more jumps would never show anything.
+          if (++context.jumps > MAX_JUMPS) return close();
+          run([...step.steps, ...after], currentRecord);
+        } }));
+        manager.startDialogues(chain);
+        return;
+      }
       if (step.type === "condition_chosen") {
         chain.add(new ActionDialogue(index++, { execute: () => {
           api.emitCustomEvent("npc-dialogue:condition", { player, npc: event.npc, npcId, definition, text: step.text, stepId: step.id });
