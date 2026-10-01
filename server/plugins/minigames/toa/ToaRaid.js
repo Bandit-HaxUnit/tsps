@@ -147,6 +147,44 @@ class Room {
   /** Called when a player steps from one tile onto `to` while in this room. */
   onStep(_player, _from, _to) {}
 
+  /** Shows the boss health bar (interface 303) to everyone in the room. */
+  openBossHud(npc) {
+    this.hudNpc = npc;
+    this.hudSent = new Map();
+    for (const player of this.roomPlayers()) this.sendBossHud(player);
+  }
+
+  sendBossHud(player) {
+    const npc = this.hudNpc;
+    if (!npc) return;
+    const sender = player.getPacketSender();
+    sender.sendConfig(BOSS_HUD.NPC_VARP, npc.getId());
+    sender.sendVarbit(BOSS_HUD.CURRENT, Math.max(0, npc.getHitpoints()));
+    sender.sendVarbit(BOSS_HUD.MAXIMUM, npc.getMaxHitpoints());
+    sender.sendSubInterface(BOSS_HUD.TARGET_UID, BOSS_HUD.GROUP, 1);
+    this.hudSent?.set(player, `${npc.getHitpoints()}/${npc.getMaxHitpoints()}`);
+  }
+
+  closeBossHud() {
+    if (!this.hudNpc) return;
+    this.hudNpc = null;
+    for (const player of this.roomPlayers()) player.getPacketSender().closeSubInterface(BOSS_HUD.TARGET_UID);
+  }
+
+  /** Keeps the health bar in step with the boss, sending only what changed. */
+  updateBossHud() {
+    const npc = this.hudNpc;
+    if (!npc) return;
+    const value = `${Math.max(0, npc.getHitpoints())}/${npc.getMaxHitpoints()}`;
+    for (const player of this.roomPlayers()) {
+      if (this.hudSent.get(player) === value) continue;
+      this.hudSent.set(player, value);
+      const sender = player.getPacketSender();
+      sender.sendVarbit(BOSS_HUD.CURRENT, Math.max(0, npc.getHitpoints()));
+      sender.sendVarbit(BOSS_HUD.MAXIMUM, npc.getMaxHitpoints());
+    }
+  }
+
   /** Points per damage on an NPC in this room. */
   pointsPerDamage(npc) {
     return npc.__toaPoints ?? 1;
@@ -233,19 +271,26 @@ class Room {
 
   /**
    * A boss attack in one style: accuracy rolls as normal and damage is capped at `maxHit`
-   * (scaled for raid and path level). The matching protection prayer blocks it entirely,
-   * except that Quiet Prayers lets 10% through; `prayable: false` ignores prayer.
+   * (scaled for raid and path level). The matching protection prayer lets through
+   * `prayerMultiplier` of it (none by default), plus 10% under Quiet Prayers;
+   * `prayable: false` ignores prayer altogether.
    */
-  styledHit(npc, target, method, style, baseMaxHit, delay, { prayable = true, scale = true } = {}) {
+  styledHit(npc, target, method, style, baseMaxHit, delay, { prayable = true, scale = true, prayerMultiplier = 0 } = {}) {
     const { PendingHit, CombatFactory } = Shared.core();
     const hit = new PendingHit(npc, target, method, delay);
     CombatFactory.applyStyleDamage(hit, scale ? this.maxHit(baseMaxHit) : baseMaxHit, { bypassProtectionPrayer: true });
     if (prayable && target.isPlayer?.() && Shared.isProtected(target, style)) {
-      const through = this.settings.isActive("QUIET_PRAYERS") ? 0.1 : 0;
-      const hits = hit.getHits();
-      for (const part of hits) part.setDamage(Math.floor(part.getDamage() * through));
+      const through = Math.min(1, prayerMultiplier + (this.settings.isActive("QUIET_PRAYERS") ? 0.1 : 0));
+      for (const part of hit.getHits()) part.setDamage(Math.floor(part.getDamage() * through));
       hit.updateTotalDamage();
     }
+    return hit;
+  }
+
+  /** Queues a styled hit on any player, for attacks that hit more than the NPC's target. */
+  strike(npc, player, method, style, baseMaxHit, delay, options) {
+    const hit = this.styledHit(npc, player, method, style, baseMaxHit, delay, options);
+    player.getCombat().getHitQueue().addPendingHit(hit, Shared.cycle() + Math.max(0, delay));
     return hit;
   }
 
@@ -314,6 +359,7 @@ class Room {
 
   destroy() {
     if (this.destroyed) return;
+    this.closeBossHud();
     this.cancelTasks();
     for (const npc of [...this.npcs]) this.despawn(npc);
     this.resetObjects();
@@ -353,6 +399,7 @@ class Room {
       }
     }
     this.cancelTasks();
+    this.closeBossHud();
     this.onComplete();
     if (this.def.osmumten) this.spawnOsmumten();
     if (this.def.boss && this.def.path) raid.completePath(this.def.path);
@@ -361,6 +408,7 @@ class Room {
   reset() {
     this.stage = STAGE.IDLE;
     this.cancelTasks();
+    this.closeBossHud();
     const diet = this.settings.isActive("ON_A_DIET");
     for (const player of this.roomPlayers()) {
       if (!diet && !this.failed) this.raid.give(player, Shared.core().ItemIdentifiers.HONEY_LOCUST, Shared.random(4, 6));
@@ -448,6 +496,9 @@ class Room {
 }
 
 const OSMUMTEN_SPAWN_ANIMATION = 9795;
+
+/** Boss health HUD: interface 303 reads the NPC from varp 1683 and its health from varbits 6099/6100. */
+const BOSS_HUD = { GROUP: 303, TARGET_UID: (161 << 16) | 2, NPC_VARP: 1683, CURRENT: 6099, MAXIMUM: 6100 };
 
 /** Crosses a barrier two tiles to the far side. */
 function walkThrough(player, object) {
@@ -660,7 +711,9 @@ class Raid {
     if (now === this.lastCycle || this.over) return;
     this.lastCycle = now;
     for (const room of this.rooms.values()) {
-      if (!room.destroyed) room.tick();
+      if (room.destroyed) continue;
+      room.tick();
+      room.updateBossHud();
     }
     if (now % 2 === 0) this.refreshHudStates();
   }

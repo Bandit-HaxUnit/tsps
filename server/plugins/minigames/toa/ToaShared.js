@@ -359,9 +359,17 @@ function jingle(player, id) {
   player.getPacketSender().sendJingle(id, 0);
 }
 
-function graphicAt(viewer, id, location, height = 0) {
+/** A graphic with an explicit delay (client cycles) and height; Graphic's own overloads guess. */
+function gfx(id, { delay = 0, height = 0 } = {}) {
   const { Graphic } = core();
-  viewer.getPacketSender().sendGlobalGraphic(new Graphic(id, height), location);
+  const graphic = new Graphic(id);
+  graphic.delay = delay;
+  graphic.height = height;
+  return graphic;
+}
+
+function graphicAt(viewer, id, location, { delay = 0, height = 0 } = {}) {
+  viewer.getPacketSender().sendGlobalGraphic(gfx(id, { delay, height }), location);
 }
 
 function damage(target, amount) {
@@ -382,6 +390,36 @@ function formatTicks(ticks) {
 
 function displayName(player) {
   return player.getUsername();
+}
+
+/** Whether a tile is walkable for this raid (its own objects included). */
+function floorFree(area, tile) {
+  const { RegionManager } = core();
+  const location = tile.getX ? tile : loc(tile);
+  return !RegionManager.blocked(location, area);
+}
+
+/**
+ * A projectile between two tiles (or from/to an actor), seen only inside `area`. It leaves
+ * after `delay` client cycles and lands `duration` + `perTile` x distance cycles later.
+ * Returns the landing time in game ticks, for lining damage up with it.
+ */
+function tileProjectile(area, from, to, id, { delay = 0, duration = 30, perTile = 5, startHeight = 43, endHeight = 0 } = {}) {
+  const { Projectile } = core();
+  const start = from.getLocation ? Projectile.centreOf(from) : (from.getX ? from : loc(from));
+  const end = to.getLocation ? Projectile.centreOf(to) : (to.getX ? to : loc(to));
+  const lockon = to.getLocation ? to : null;
+  const speed = delay + duration + start.getDistance(end) * perTile;
+  new Projectile(start, end, lockon, id, delay, speed, startHeight, endHeight, area).sendProjectile();
+  return Math.ceil(speed / 30);
+}
+
+/** Throws a player `dx`,`dy` tiles over a few client cycles. */
+function knockback(player, dx, dy, { ticks = 2, speed = 30, direction = 0, animation = -1 } = {}) {
+  const { ForceMovement, ForceMovementTask, Location, TaskManager } = core();
+  if (dx === 0 && dy === 0) return;
+  TaskManager.submit(new ForceMovementTask(player, ticks,
+    new ForceMovement(player.getLocation().clone(), new Location(dx, dy), 0, speed, direction, animation)));
 }
 
 /**
@@ -456,10 +494,14 @@ module.exports = {
   fadeMove,
   sound,
   jingle,
+  gfx,
   graphicAt,
   damage,
   formatTicks,
   displayName,
   isProtected,
   onObject,
+  floorFree,
+  tileProjectile,
+  knockback,
 };

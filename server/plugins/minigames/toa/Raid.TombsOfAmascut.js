@@ -109,6 +109,11 @@ function trackDamage(event) {
   raid.addPoints(player, dealt * room.pointsPerDamage(npc));
 }
 
+/** Scripted bosses fight on their room's timers, never through ordinary aggression. */
+function blockScriptedNpcs(event) {
+  if (event.attacker?.__toaScripted) event.allow = false;
+}
+
 function blockGhostAttacks(event) {
   if (event.attacker?.isPlayer?.() && isGhost(event.attacker)) event.allow = false;
   if (event.target?.isPlayer?.() && isGhost(event.target)) event.allow = false;
@@ -182,6 +187,7 @@ module.exports = function registerTombsRaid(api) {
   api.onPlayerDeath(respawnInRaid);
   api.onPlayerDealtDamage(trackDamage);
   api.onCombatHitResolved(afterPlayerHit);
+  api.onCanAttack(blockScriptedNpcs);
   api.onCanAttack(blockGhostAttacks);
   api.onCanEat(onADiet);
   api.onCanDrink(dehydration);
