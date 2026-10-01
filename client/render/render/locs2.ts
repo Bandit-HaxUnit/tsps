@@ -261,6 +261,12 @@ export function onLocAnim(host: WebGLOsrsRendererHost,
             if ((shape | 0) < 0) return;
             const exactKey = `${tile.x | 0},${tile.y | 0},${level | 0},${locId | 0}`;
             const matchKey = `${tile.x | 0},${tile.y | 0},${level | 0},-1`;
+            // A boat deck rebuilds its whole scene for an animation, so the same animation
+            // sent again while it plays (a salvaging hook's idle, every tick) only extends it.
+            const repeating =
+                deckViewAt(host, tile) !== undefined &&
+                host.locOverrides.get(exactKey)?.seqId === (animId | 0) &&
+                host.locAnimTimers.has(exactKey);
             for (const key of [exactKey, matchKey]) {
                 const existingTimer = host.locAnimTimers.get(key);
                 if (existingTimer) {
@@ -300,7 +306,7 @@ export function onLocAnim(host: WebGLOsrsRendererHost,
                 matchType: shape as LocModelType,
                 matchRotation: rotation & 0x3,
             });
-            host.reloadLocAnimationTile(tile, locId);
+            if (!repeating) host.reloadLocAnimationTile(tile, locId);
 
             const durationMs = host.getLocAnimationDurationMs(animId);
             const timer = setTimeout(() => {
@@ -329,8 +335,20 @@ export function onLocAnim(host: WebGLOsrsRendererHost,
     
 }
 
+/** The boat (world entity) whose deck scene holds a tile, if any. */
+function deckViewAt(host: WebGLOsrsRendererHost, tile: { x: number; y: number }): number | undefined {
+    const view = host.osrsClient?.worldViewManager?.findWorldViewAt(tile.x | 0, tile.y | 0);
+    return view && host.worldEntityOverlays?.has(view.id) ? view.id : undefined;
+}
+
 export function reloadLocAnimationTile(host: WebGLOsrsRendererHost, tile: { x: number; y: number }, locId: number): void {
 
+        // A deck loc belongs to its boat's scene, which is rebuilt as a whole.
+        const deckView = deckViewAt(host, tile);
+        if (deckView !== undefined) {
+            host.scheduleWorldEntityLocRebuild(deckView);
+            return;
+        }
         const mapX = Math.floor((tile.x | 0) / 64);
         const mapY = Math.floor((tile.y | 0) / 64);
         if (host.instanceActive) {

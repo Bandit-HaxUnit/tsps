@@ -303,6 +303,14 @@ export async function loadWorldEntityScene(host: WebGLOsrsRendererHost,
             } extra NPCs`,
         );
 
+        // Loc animations (and replaced locs) on the deck, keyed by deck tile like extra locs.
+        const deckLocOverrides = new Map(
+            [...host.locOverrides].filter(([key]) => {
+                const [x, y] = key.split(",").map(Number);
+                return x >= sceneBaseX && x < sceneMaxX && y >= sceneBaseY && y < sceneMaxY;
+            }),
+        );
+
         const input: SdMapLoaderInput = {
             mapX: overlayMapX,
             mapY: overlayMapY,
@@ -315,6 +323,7 @@ export async function loadWorldEntityScene(host: WebGLOsrsRendererHost,
             overrideRenderPos: { x: entityWorldBaseX, y: entityWorldBaseY },
             extraLocs: allExtraLocs.length > 0 ? allExtraLocs : undefined,
             extraNpcs: extraNpcs && extraNpcs.length > 0 ? extraNpcs : undefined,
+            locOverrides: deckLocOverrides.size > 0 ? deckLocOverrides : undefined,
         };
 
         const mapData = await host.osrsClient.workerPool.queueLoad<
