@@ -296,6 +296,13 @@ const TREES = [
 ];
 
 const TREES_BY_NAME = new Map(TREES.flatMap((tree) => tree.objectNames.map((name) => [name, tree])));
+// Farmed sailing hardwoods use the same axe/action machinery as existing trees.
+// ponytail: these use this plugin's existing approximate axe/cycle model; exact forestry timers need a separate woodcutting update.
+const FARMED_HARDWOODS = [
+  { name: "camphor", requiredLevel: 66, xpReward: 143.5, logId: ItemIds.CAMPHOR_LOGS, cycles: 19, respawnTicks: 150, multi: true },
+  { name: "ironwood", requiredLevel: 80, xpReward: 175, logId: ItemIds.IRONWOOD_LOGS, cycles: 21, respawnTicks: 150, multi: true },
+  { name: "rosewood", requiredLevel: 92, xpReward: 212.5, logId: ItemIds.ROSEWOOD_LOGS, cycles: 23, respawnTicks: 150, multi: true },
+];
 
 
 
@@ -494,7 +501,10 @@ class TreeRespawnTask extends Task {
   }
 }
 
-function depleteTree(treeObject, tree) {
+function depleteTree(player, treeObject, tree) {
+  const event = { player, object: treeObject, respawnTicks: tree.respawnTicks, handled: false };
+  pluginApi.emitCustomEvent("woodcutting:deplete-tree", event);
+  if (event.handled) return;
   const stump = new GameObject(
     TREE_STUMP_OBJECT_ID,
     treeObject.getLocation().clone(),
@@ -508,6 +518,9 @@ function depleteTree(treeObject, tree) {
 }
 
 function startWoodcutting(player, treeObject, tree, activeSessions) {
+  const request = { player, object: treeObject, allow: true };
+  pluginApi.emitCustomEvent("woodcutting:validate-tree", request);
+  if (!request.allow) return false;
   const axe = findBestUsableAxe(player);
   if (!axe) {
     player.sendMessage("You don't have an axe which you can use.");
@@ -522,7 +535,7 @@ function startWoodcutting(player, treeObject, tree, activeSessions) {
     return false;
   }
 
-  if (player.getInventory().isFull()) {
+  if (tree.logId >= 0 && player.getInventory().isFull()) {
     player.getInventory().full();
     return false;
   }
@@ -583,6 +596,12 @@ function processWoodcuttingTick(activeSessions, currentTick) {
       stopWoodcutting(activeSessions, player);
       continue;
     }
+    const request = { player, object: activeTree, allow: true };
+    pluginApi.emitCustomEvent("woodcutting:validate-tree", request);
+    if (!request.allow) {
+      stopWoodcutting(activeSessions, player);
+      continue;
+    }
 
     if (
       !player.getLocation().isWithinInteractionDistance(activeTree.getLocation())
@@ -617,7 +636,7 @@ function processWoodcuttingTick(activeSessions, currentTick) {
 
     state.axe = axe;
 
-    if (player.getInventory().isFull()) {
+    if (state.tree.logId >= 0 && player.getInventory().isFull()) {
       player.getInventory().full();
       stopWoodcutting(activeSessions, player);
       continue;
@@ -637,15 +656,17 @@ function processWoodcuttingTick(activeSessions, currentTick) {
       continue;
     }
 
-    player.getInventory().adds(state.tree.logId, 1);
-    player.sendMessage("You get some logs.");
-    player.getSkillManager().addExperiences(Skill.WOODCUTTING, state.tree.xpReward);
-    pluginApi.emitCustomEvent("woodcutting:success", { player, skill: Skill.WOODCUTTING });
-    maybeDropBirdNest(player);
+    if (state.tree.logId >= 0) {
+      player.getInventory().adds(state.tree.logId, 1);
+      player.sendMessage("You get some logs.");
+      player.getSkillManager().addExperiences(Skill.WOODCUTTING, state.tree.xpReward);
+      pluginApi.emitCustomEvent("woodcutting:success", { player, skill: Skill.WOODCUTTING });
+      maybeDropBirdNest(player);
+    }
 
     if (shouldDepleteTree(state.tree)) {
       Sounds.sendSound(player, Sound.WOODCUTTING_TREE_DOWN);
-      depleteTree(activeTree, state.tree);
+      depleteTree(player, activeTree, state.tree);
       stopWoodcutting(activeSessions, player);
       continue;
     }
@@ -688,10 +709,17 @@ function handleChop(event) {
   event.handled = true;
 }
 
+function requestedChop(event) {
+  let tree = [...TREES, ...FARMED_HARDWOODS].find(tree => tree.logId === event.logId);
+  if (tree && event.removeOnly) tree = { ...tree, logId: -1, xpReward: 0, multi: false };
+  if (tree) event.handled = startWoodcutting(event.player, event.object, tree, activeSessionsRef);
+}
+
 module.exports = {
   name: "Woodcutting",
   register(api) {
     pluginApi = api;
+    api.onCustomEvent("woodcutting:chop", requestedChop);
     TaskManager = api.getTaskManager();
     ObjectManager = api.getObjectManager();
     ItemOnGroundManager = api.getItemOnGroundManager();

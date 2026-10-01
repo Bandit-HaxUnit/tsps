@@ -373,6 +373,9 @@ function dropFor(player, npc, npcId, location) {
   const drops = rollTable(table, player, npc);
   // Drops that depend on the killer's progress (Warriors' Guild defenders) are edited in place.
   pluginApi?.emitCustomEvent("npc-drops:roll", { player, npc, npcId, drops });
+  const event = { player, npc, npcId, drops, handled: false };
+  pluginApi.emitCustomEvent("npc-drops:generated", event);
+  if (event.handled) return drops.length;
   for (const drop of drops) {
     if (!Number.isInteger(drop.itemId) || drop.amount <= 0) {
       continue;
