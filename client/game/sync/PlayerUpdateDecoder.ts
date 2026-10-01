@@ -391,6 +391,7 @@ export class PlayerUpdateDecoder {
                 tileY: targetY,
                 directions: [],
                 movedTwoTiles: false,
+                teleport: true,
             };
         } else {
             this.applyMultiStepDelta(
@@ -596,6 +597,19 @@ export class PlayerUpdateDecoder {
                 }
                 if ((mask & PlayerUpdateMask.ForceMovement) !== 0) {
                     const fm = this.readForcedMovement(stream, clientCycle);
+                    // A teleport in the same update (such as climbing onto a roof, then a forced
+                    // move along it) still has to land first, or the level change is lost and
+                    // the player is drawn on the old plane until they next move.
+                    if (state.pendingMove?.teleport) {
+                        movements.push({
+                            index,
+                            mode: "teleport",
+                            tile: { x: state.pendingMove.tileX, y: state.pendingMove.tileY, level: state.level },
+                            subX: toSubCoord(state.pendingMove.tileX),
+                            subY: toSubCoord(state.pendingMove.tileY),
+                            snap: true,
+                        });
+                    }
                     const baseX = state.pendingMove ? state.pendingMove.tileX : state.tileX;
                     const baseY = state.pendingMove ? state.pendingMove.tileY : state.tileY;
                     fm.startTileX = (baseX + (fm.startDeltaX | 0)) | 0;
