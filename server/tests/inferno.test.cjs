@@ -417,6 +417,7 @@ test('TzKal-Zuk: the glyph shields, summons arrive on cue and his death wins the
   assert.equal(player.getMovementQueue().blocked, true);
   assert.ok(world.removedObjects.includes(30338));
   assert.equal(glyph.getHitpoints(), 600);
+  assert.ok([zuk, glyph].every((npc) => npc.hasFlag('combat:no-retaliate')), 'a hit does not stop the glyph or turn either');
   assert.equal(player.varbits.get(6719), 2, 'the minimap dims while the prison breaks');
   assert.ok([30339, 30340, 30341, 30342].every((id) => [...world.objects].some((object) => object.id === id)), 'the wall is patched');
   tick(player, 11);
@@ -694,10 +695,25 @@ test("Zuk's ranger and mager come as a set, and not again while the last set sta
   session.zuk.zuk.setHitpoints(200);
   tick(player, 2); // the Jad, then the healers
   const healer = living(Npcs.JAL_MEJJAK)[0];
+  assert.ok(healer.hasFlag('combat:no-retaliate'));
   const before = session.zuk.zuk.getHitpoints();
   tick(player, 10);
   const healed = session.zuk.zuk.getHitpoints() - before;
   assert.ok(healed > 0 && healed <= 4 * 4 * 24, 'healers heal 15-24 each, every 3 ticks (Wiki)');
   assert.ok(healer);
   run.leave(player);
+});
+
+test('Inferno NPCs block and die with their own animations, not ones guessed from what they play', () => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+  const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
+  CachePipeline.initialize();
+  new NpcDefinitionLoader().load();
+  const anims = (id) => [NpcDefinition.forId(id).getDefenceAnim(), NpcDefinition.forId(id).getDeathAnim()];
+  assert.deepEqual(anims(Npcs.COL_00FFFF_ANCESTRAL_GLYPH_COL), [-1, 7569], 'a hit on the glyph is not its collapse');
+  assert.deepEqual(anims(Npcs.TZKAL_ZUK), [7565, 7562], 'a hit on Zuk is not his breakout (7563)');
+  assert.deepEqual(anims(Npcs.JAL_MEJJAK), [2869, 2866], 'a hit on a healer is not its rising (2864)');
+  assert.deepEqual(anims(Npcs.JAL_XIL_2), [7607, 7606], 'Jal-Xil does not die with its melee swing (7604)');
+  assert.deepEqual(anims(Npcs.JAL_NIB), [7575, 7576]);
 });
