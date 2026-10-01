@@ -1048,12 +1048,16 @@ export interface PluginCoreApi {
   CacheDefinitions: any;
   PathFinder: any;
   NpcDefinition: any;
+  ObjectDefinition: any;
+  MagicSpellbook: any;
+  Spell: any;
   NPC: any;
   GameConstants: any;
   TeleportHandler: any;
   DialogueChainBuilder: any;
   NpcDialogue: any;
   PlayerDialogue: any;
+  OptionDialogue: any;
   StatementDialogue: any;
   ActionDialogue: any;
   EndDialogue: any;

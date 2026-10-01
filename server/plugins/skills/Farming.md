@@ -1,7 +1,9 @@
 # Farming plugin
 
-The loader entry is `Farming.plugin.js`; implementation is TypeScript in
-`src/main/typescript/elvarg/game/plugin/impl/farming/`.
+The loader entry is `Farming.plugin.js`; the parts are in `farming/`, one file each:
+`Patches` (every hook, patch actions), `Data` (crop and patch tables), `Model` (growth),
+`Services`, `Spells`, `Tithe`, `Guild` and `Hespori`, all `*.Farming.js`. They read
+`api.core` through `Core.Farming.js`, which the plugin fills before loading them.
 
 Implemented: player-owned patches, saved offline growth, raking, planting,
 watering, disease and cures, harvesting, regrowth, compost bins and bottomless
@@ -61,8 +63,7 @@ From `server/`:
 
 ```powershell
 npx.cmd tsc --noEmit
-node -r ts-node/register/transpile-only src/main/typescript/elvarg/game/plugin/impl/farming/FarmingModel.test.ts
-node -r ts-node/register/transpile-only src/main/typescript/elvarg/game/plugin/impl/farming/FarmingInteraction.test.ts
+node -r ts-node/register/transpile-only plugins/skills/farming/Model.Farming.test.js
 ```
 
 The second command is an isolated state-machine check, without server startup,
@@ -70,10 +71,8 @@ sockets, player login, or a smoke harness. It covers offline/save equivalence,
 disease/death, mature immunity, private stump regrowth, herb formulas, critical
 cache states, and Tithe growth/scoring. Cache-only audits also checked crop item
 resolution and growing, diseased, dead, and mature visual values.
-The third command checks the actual refresh/cure functions in isolation, with
-cache definitions and recorded packets. It does not import or start the server.
 
-To regenerate the checked-in cache export:
+To regenerate `data/definitions/farming-data.json` (one crop, patch type, patch or loc per line):
 
 ```powershell
 node -r ts-node/register/transpile-only scripts/generate-farming-data.ts ../..\runelite
@@ -86,5 +85,5 @@ Sources: [Farming](https://oldschool.runescape.wiki/w/Farming),
 [Hespori](https://oldschool.runescape.wiki/w/Hespori), and the linked crop/tool
 pages (OSRS Index's attributed wiki copies were used where direct access failed).
 RuneLite supplies timing/varbit interpretation; the local cache supplies object
-transforms and map locations. Its retained BSD notice is in
-`data/definitions/farming-cache.LICENSE`.
+transforms and map locations. The BSD-2-Clause attribution for the RuneLite-derived
+data is kept in the JSON's `source` field.

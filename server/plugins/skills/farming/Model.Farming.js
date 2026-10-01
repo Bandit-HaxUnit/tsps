@@ -1,21 +1,7 @@
-import { CACHE, COMPOSTABLE_YIELD, Crop, CROPS, Patch, patchKey } from "./FarmingData";
+const Data = require("./Data.Farming");
 
-export type PatchState = {
-    crop?: string; stage: number; weeds: number; compost: number; watered: boolean;
-    status: "growing" | "diseased" | "dead" | "grown"; checked: boolean; protected: boolean;
-    lives: number; nextAt: number; plantedAt: number; resurrected?: boolean; stump?: boolean;
-    scarecrow?: boolean; branches?: number; branchAt?: number; bin?: { count: number; super: number; tomatoes: number; tier: number; closedAt: number; open: boolean };
-    hesporiFight?: boolean; hesporiLoot?: { itemId: number; amount: number }[];
-};
-export type Farm = { offset: number; patches: Record<string, PatchState>; tools: Record<string, number>; autoWeed: boolean; boundPatch?: string; disableHesporiSeeds?: boolean;
-    deathbank?: { id: number; amount: number; meta: Record<string, unknown> | null }[]; deathbankPaid?: boolean;
-    tithe?: { points: number; score: number; autoWeedUnlocked?: boolean; bologa?: boolean };
-    contract?: { crop: string; difficulty: number; tier: number; complete: boolean }; contractsCompleted?: number; lastContract?: string; ultraFertile?: boolean;
-    hosidiusProtected?: boolean; faladorProtected?: boolean; fortisProtected?: boolean; boundStatus?: string; bountyCharges?: number; toolMeta?: Record<string, Record<string, unknown>>; vault?: Record<string, number>;
-    barbarian?: { planting: number; smashing: number; autoSmash: boolean } };
-export const MINUTE = 60_000;
-export type TithePlant = { crop: number; stage: number; watered: boolean; dead: boolean; fertilized: boolean; nextAt: number };
-export function advanceTithe(plant: TithePlant, now: number): void {
+const MINUTE = 60_000;
+function advanceTithe(plant, now) {
     while (!plant.dead && plant.stage < 3 && plant.nextAt <= now) {
         if (!plant.watered) { plant.dead = true; break; }
         plant.stage++;
@@ -23,7 +9,7 @@ export function advanceTithe(plant: TithePlant, now: number): void {
         plant.nextAt += plant.fertilized ? 30_000 : MINUTE;
     }
 }
-export function titheDeposit(score: number, amount: number, harvestXp: number): { count: number; score: number; xp: number; bonus: number; points: number } {
+function titheDeposit(score, amount, harvestXp) {
     const count = Math.min(amount, 100 - score);
     let xp = 0, bonus = 0, points = 0;
     for (let i = score + 1; i <= score + count; i++) {
@@ -35,21 +21,21 @@ export function titheDeposit(score: number, amount: number, harvestXp: number): 
     return { count, score: (score + count) % 100, xp, bonus, points };
 }
 const EPOCH = Date.UTC(2025, 5, 9); // Day 1 of the wiki's four-day growth schedule.
-export function nextGrowth(now: number, minutes: number, offset: number): number {
+function nextGrowth(now, minutes, offset) {
     const period = minutes * MINUTE;
     return EPOCH + (Math.floor((now - EPOCH + offset) / period) + 1) * period - offset;
 }
-export function emptyPatch(now: number, farm: Farm, weeds = 0): PatchState {
+function emptyPatch(now, farm, weeds = 0) {
     return { stage: 0, weeds, compost: 0, watered: false, status: "growing", checked: false,
         protected: false, lives: 0, nextAt: nextGrowth(now, 5, farm.offset), plantedAt: now };
 }
-export function startingLives(crop: Crop, compost: number): number {
-    if (COMPOSTABLE_YIELD.has(crop.type)) return 3 + compost;
+function startingLives(crop, compost) {
+    if (Data.COMPOSTABLE_YIELD.has(crop.type)) return 3 + compost;
     if (crop.type === "CORAL") return 4;
     if (crop.type === "GRAPES") return 5;
     return Math.max(1, crop.lives);
 }
-export function diseaseChance(crop: Crop, compost: number, watered: boolean, iasor: boolean): number {
+function diseaseChance(crop, compost, watered, iasor) {
     // Wiki-confirmed numerators. Other crops/watered numerators have not been published.
     // ponytail: 1/8 base risk for unpublished crops; replace with measured per-crop rates when known.
     let numerator = crop.type === "HERB" ? 26 : crop.type === "FRUIT_TREE" ? 17 : crop.type === "CORAL" ? 7 : crop.key === "MAPLE" ? 12 : crop.key === "MAGIC" ? 8 : 15;
@@ -59,13 +45,13 @@ export function diseaseChance(crop: Crop, compost: number, watered: boolean, ias
     return (numerator + 1) / 128;
 }
 
-const HERB_LOW: Record<string, number> = { GUAM: 25, MARRENTILL: 28, TARROMIN: 31, HARRALANDER: 36, GOUTWEED: 39,
+const HERB_LOW = { GUAM: 25, MARRENTILL: 28, TARROMIN: 31, HARRALANDER: 36, GOUTWEED: 39,
     RANARR: 39, TOADFLAX: 43, IRIT: 46, AVANTOE: 50, KWUARM: 54, SNAPDRAGON: 57, HUASCA: 59,
     CADANTINE: 60, LANTADYME: 64, DWARF_WEED: 67, TORSTOL: 71 };
-const CROP_LOW: Record<string, number> = { POTATO: 101, ONION: 105, CABBAGE: 107, TOMATO: 112, SWEETCORN: 88, STRAWBERRY: 103,
+const CROP_LOW = { POTATO: 101, ONION: 105, CABBAGE: 107, TOMATO: 112, SWEETCORN: 88, STRAWBERRY: 103,
     BARLEY: 103, HAMMERSTONE: 104, ASGARNIAN: 108, KRANDORIAN: 120, WILDBLOOD: 128 };
-export function saveLifeChance(crop: Crop, level: number, secateurs = false, cape = false, diary = 0, attas = false): number {
-    let low: number, high: number;
+function saveLifeChance(crop, level, secateurs = false, cape = false, diary = 0, attas = false) {
+    let low, high;
     if (crop.type === "HERB") { low = HERB_LOW[crop.key]; high = 80; }
     else if (crop.type === "SEAWEED") { low = 150; high = 210; }
     else if (crop.key === "CACTUS") { low = -76; high = 178; }
@@ -81,16 +67,16 @@ export function saveLifeChance(crop: Crop, level: number, secateurs = false, cap
             : crop.type === "BUSH" || crop.key === "POTATO_CACTUS" ? [90, 190] : [25, 80];
     }
     const items = (secateurs && ["ALLOTMENT", "HERB", "HOPS", "GRAPES", "BUSH", "CELASTRUS", "CORAL"].includes(crop.type) ? 0.10 : 0) + (cape && crop.type === "HERB" ? 0.05 : 0);
-    const boost = (value: number) => Math.floor((Math.floor(value * (1 + items)) + diary) * (attas ? 1.05 : 1));
+    const boost = (value) => Math.floor((Math.floor(value * (1 + items)) + diary) * (attas ? 1.05 : 1));
     level = Math.max(1, Math.min(99, level));
     return Math.max(0, Math.min(255 / 256, (1 + Math.floor((boost(low) * (99 - level) + boost(high) * (level - 1)) / 98 + 0.5)) / 256));
 }
-export function activeAnima(farm: Farm, at: number): string | undefined {
-    return Object.values(farm.patches).find(s => s.crop && CACHE.timing[s.crop]?.type === "ANIMA"
+function activeAnima(farm, at) {
+    return Object.values(farm.patches).find(s => s.crop && Data.CACHE.timing[s.crop]?.type === "ANIMA"
         && at >= s.plantedAt && at < s.nextAt + (8 - s.stage - 1) * 640 * MINUTE && s.status !== "dead")?.crop;
 }
-function diseaseFree(farm: Farm, patch: Patch, state: PatchState, at: number): boolean {
-    const crop = CROPS.get(state.crop);
+function diseaseFree(farm, patch, state, at) {
+    const crop = Data.CROPS.get(state.crop);
     if (state.protected || ["POISON_IVY", "HESPORI", "CRYSTAL_TREE"].includes(crop.key) || ["ANIMA", "GRAPES"].includes(crop.type)) return true;
     // Troll Stronghold and Weiss use the same herb growth states, with permanent immunity.
     if (crop.type === "HERB" && ((patch.x >= 2800 && patch.x <= 2840 && patch.y >= 3670 && patch.y <= 3710)
@@ -99,8 +85,8 @@ function diseaseFree(farm: Farm, patch: Patch, state: PatchState, at: number): b
     if (farm.faladorProtected && patch.type === "TREE" && patch.x === 3003 && patch.y === 3372) return true;
     if (farm.fortisProtected && patch.type === "HERB" && patch.x === 1581 && patch.y === 3094) return true;
     if (crop.type !== "ALLOTMENT") return false;
-    for (const flower of CACHE.patches.filter(p => p.type === "FLOWER" && p.z === patch.z && Math.abs(p.x - patch.x) < 32 && Math.abs(p.y - patch.y) < 32)) {
-        const s = farm.patches[patchKey(flower)];
+    for (const flower of Data.CACHE.patches.filter(p => p.type === "FLOWER" && p.z === patch.z && Math.abs(p.x - patch.x) < 32 && Math.abs(p.y - patch.y) < 32)) {
+        const s = farm.patches[Data.patchKey(flower)];
         if (!s || s.plantedAt > at) continue;
         if (s.scarecrow && crop.key === "SWEETCORN") return true;
         if (s.status !== "grown") continue;
@@ -111,21 +97,21 @@ function diseaseFree(farm: Farm, patch: Patch, state: PatchState, at: number): b
 }
 
 /** Process crop events in time order, so offline flower/anima protection has the same lifetime as online. */
-export function advanceFarm(farm: Farm, now: number, random = Math.random): void {
-    const kronos = new Map<string, number>();
-    const planted = CACHE.patches.map(patch => ({ patch, state: farm.patches[patchKey(patch)] }))
+function advanceFarm(farm, now, random = Math.random) {
+    const kronos = new Map();
+    const planted = Data.CACHE.patches.map(patch => ({ patch, state: farm.patches[Data.patchKey(patch)] }))
         .filter(({ state }) => state?.crop && state.status !== "dead");
     for (;;) {
-        let due: typeof planted[number] | undefined;
+        let due;
         for (const entry of planted) {
             const { state } = entry;
-            const crop = CROPS.get(state.crop);
+            const crop = Data.CROPS.get(state.crop);
             if (state.status === "dead" || (state.status === "grown" && !crop.regrow && !state.stump)) continue;
             if (state.nextAt <= now && (!due || state.nextAt < due.state.nextAt)) due = entry;
         }
         if (!due) break;
         const { patch, state } = due;
-        const crop = CROPS.get(state.crop);
+        const crop = Data.CROPS.get(state.crop);
         const at = state.nextAt;
         if (state.status === "grown") {
             if (state.stump) { state.stump = false; continue; }
@@ -152,7 +138,7 @@ export function advanceFarm(farm: Farm, now: number, random = Math.random): void
         } else if (state.stage >= crop.stages) {
             state.status = "grown";
             state.lives = startingLives(crop, state.compost);
-        } else if (CACHE.states[crop.type][crop.key].DISEASED?.[state.stage] != null
+        } else if (Data.CACHE.states[crop.type][crop.key].DISEASED?.[state.stage] != null
             && state.stage < crop.stages - (crop.type === "FRUIT_TREE" ? 1 : 0)
             && !diseaseFree(farm, patch, state, at)
             && random() < diseaseChance(crop, state.compost, state.watered, activeAnima(farm, at) === "IASOR")) {
@@ -162,8 +148,8 @@ export function advanceFarm(farm: Farm, now: number, random = Math.random): void
         state.nextAt = nextGrowth(at, state.status === "diseased" ? crop.minutes * 2
             : state.status === "grown" && crop.regrow ? crop.regrow : crop.minutes, farm.offset);
     }
-    for (const patch of CACHE.patches) {
-        const state = farm.patches[patchKey(patch)];
+    for (const patch of Data.CACHE.patches) {
+        const state = farm.patches[Data.patchKey(patch)];
         if (!state || ["GRAPES", "CORAL"].includes(patch.type)) continue;
         if (state.crop || state.scarecrow || state.bin || farm.autoWeed) continue;
         if (state.nextAt <= now) {
@@ -173,11 +159,11 @@ export function advanceFarm(farm: Farm, now: number, random = Math.random): void
     }
 }
 
-export function patchValue(patch: Patch, state: PatchState): number {
-    const states = CACHE.states[patch.type];
+function patchValue(patch, state) {
+    const states = Data.CACHE.states[patch.type];
     if (state.scarecrow) return states.SCARECROW?.GROWING?.[3] ?? 36;
     if (!state.crop) return patch.type === "GRAPES" ? (state.compost ? 1 : 0) : (states.WEEDS?.GROWING?.[state.weeds] ?? 0);
-    const crop = CROPS.get(state.crop);
+    const crop = Data.CROPS.get(state.crop);
     const visual = states[state.crop];
     if (crop.type === "HESPORI" && state.status === "grown") return state.hesporiLoot ? 8 : state.hesporiFight ? 9 : 7;
     if (crop.type === "CELASTRUS" && state.stump) return 28;
@@ -197,3 +183,5 @@ export function patchValue(patch: Patch, state: PatchState): number {
     }
     return (state.watered ? visual.WATERED?.[state.stage] : undefined) ?? visual.GROWING[state.stage];
 }
+
+Object.assign(module.exports, { MINUTE, advanceTithe, titheDeposit, nextGrowth, emptyPatch, startingLives, diseaseChance, saveLifeChance, activeAnima, advanceFarm, patchValue });

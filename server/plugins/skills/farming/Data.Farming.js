@@ -1,20 +1,12 @@
-import fs = require("fs");
-import path = require("path");
-import { GameConstants } from "../../../GameConstants";
-import { CacheDefinitions } from "../../../cache/CacheDefinitions";
+const core = require("./Core.Farming");
+const fs = require("fs");
+const path = require("path");
 
-export type Patch = { id: number; type: string; varbit: number; x: number; y: number; z: number; maxX: number; maxY: number };
-export type Timing = { name: string; type: string; minutes: number; stages: number; regrow: number; lives: number };
-export const CACHE: {
-    revision: number; timing: Record<string, Timing>;
-    states: Record<string, Record<string, Record<string, number[]>>>; patches: Patch[];
-    scenery: { id: number; x: number; y: number; z: number; shape: number; face: number }[];
-} = JSON.parse(fs.readFileSync(path.join(GameConstants.DEFINITIONS_DIRECTORY, "farming-cache.json"), "utf8"));
+const CACHE = JSON.parse(fs.readFileSync(path.join(core.GameConstants.DEFINITIONS_DIRECTORY, "farming-data.json"), "utf8"));
 
 // Gameplay tables: https://oldschool.runescape.wiki/w/Seeds and each linked crop.
 // Names resolve against this server's cache, excluding notes and placeholders.
-type Row = [key: string, seed: string, produce: string, level: number, plant: number, harvest: number, check?: number, payment?: [string, number][], seedCount?: number];
-const ROWS: Row[] = [
+const ROWS = [
     ["POTATO", "Potato seed", "Potato", 1, 8, 9, 0, [["Compost", 2]], 3],
     ["ONION", "Onion seed", "Onion", 5, 9.5, 10.5, 0, [["Potatoes(10)", 1]], 3],
     ["CABBAGE", "Cabbage seed", "Cabbage", 7, 10, 11.5, 0, [["Onions(10)", 1]], 3],
@@ -99,33 +91,29 @@ const ROWS: Row[] = [
     ["UMBRAL_CORAL", "Umbral frag", "Umbral coral", 77, 136, 159, 0, [["Pillar coral", 5]]],
 ];
 
-export type Crop = Timing & {
-    key: string; seed: number; produce: number; level: number; plant: number; harvest: number; check: number;
-    payment: [number, number][]; seedCount: number; sapling?: number; seedling?: number; wateredSeedling?: number;
-};
-export const CROPS = new Map<string, Crop>();
-export const SEEDS = new Map<number, Crop>();
-const ITEMS = new Map<string, number>();
-export function itemId(name: string): number {
+const CROPS = new Map();
+const SEEDS = new Map();
+const ITEMS = new Map();
+function itemId(name) {
     if (!name) return -1;
     const id = ITEMS.get(name.toLowerCase());
     if (id === undefined) throw new Error(`Farming: missing cache item ${name}`);
     return id;
 }
-export function initializeFarmingData(): void {
+function initializeFarmingData() {
     if (CROPS.size) return;
-    for (let id = 0; id < CacheDefinitions.getCounts().items; id++) {
-        const item = CacheDefinitions.getItem(id);
+    for (let id = 0; id < core.CacheDefinitions.getCounts().items; id++) {
+        const item = core.CacheDefinitions.getItem(id);
         if (item.noteTemplate >= 0 || item.placeholderTemplate >= 0 || !item.name || item.name === "null") continue;
         if (!ITEMS.has(item.name.toLowerCase())) ITEMS.set(item.name.toLowerCase(), id);
     }
     for (const [key, seed, produce, level, plant, harvest, check = 0, payment = [], seedCount = 1] of ROWS) {
         const timing = CACHE.timing[key];
         if (!timing) throw new Error(`Farming: missing timing ${key}`);
-        const crop: Crop = { ...timing, key, seed: itemId(seed), produce: itemId(produce), level, plant, harvest, check,
+        const crop = { ...timing, key, seed: itemId(seed), produce: itemId(produce), level, plant, harvest, check,
             payment: payment.map(([name, count]) => [itemId(name), count]), seedCount };
         if (["TREE", "FRUIT_TREE", "HARDWOOD_TREE", "CALQUAT", "SPIRIT_TREE", "CELASTRUS", "REDWOOD", "CRYSTAL_TREE"].includes(crop.type)) {
-            const prefix = ({ SPIRIT_TREE: "Spirit", CRYSTAL_TREE: "Crystal" } as Record<string, string>)[key] ?? timing.name;
+            const prefix = ({ SPIRIT_TREE: "Spirit", CRYSTAL_TREE: "Crystal" })[key] ?? timing.name;
             crop.sapling = itemId(`${prefix} sapling`);
             crop.seedling = itemId(`${prefix} seedling`);
             crop.wateredSeedling = itemId(`${prefix} seedling (w)`);
@@ -135,13 +123,13 @@ export function initializeFarmingData(): void {
     }
 }
 
-export const patchKey = (patch: Patch) => `${patch.id}:${patch.x}:${patch.y}:${patch.z}`;
-export const WATERABLE = new Set(["ALLOTMENT", "FLOWER", "HOPS"]);
-export const COMPOSTABLE_YIELD = new Set(["ALLOTMENT", "HOPS", "HERB", "SEAWEED", "CELASTRUS"]);
-export const WOOD_TREES = new Set(["TREE", "HARDWOOD_TREE", "REDWOOD"]);
+const patchKey = (patch) => `${patch.id}:${patch.x}:${patch.y}:${patch.z}`;
+const WATERABLE = new Set(["ALLOTMENT", "FLOWER", "HOPS"]);
+const COMPOSTABLE_YIELD = new Set(["ALLOTMENT", "HOPS", "HERB", "SEAWEED", "CELASTRUS"]);
+const WOOD_TREES = new Set(["TREE", "HARDWOOD_TREE", "REDWOOD"]);
 
 // https://oldschool.runescape.wiki/w/Tangleroot (base denominators, before level adjustment).
-const PET_RATES: Record<string, number> = {
+const PET_RATES = {
     HERB: 98364, CORAL: 98364, FLOWER: 281040, ALLOTMENT: 281040, FRUIT_TREE: 9000, HARDWOOD_TREE: 5000,
     SWEETCORN: 224832, STRAWBERRY: 187360, WATERMELON: 160594, SNAPE_GRASS: 173977,
     BARLEY: 112416, HAMMERSTONE: 112416, ASGARNIAN: 89933, JUTE: 89933, YANILLIAN: 74944,
@@ -151,4 +139,6 @@ const PET_RATES: Record<string, number> = {
     SEAWEED: 7500, MUSHROOM: 7500, BELLADONNA: 8000, CACTUS: 7000, POTATO_CACTUS: 160594,
     GRAPE: 385426, CALQUAT: 6000, SPIRIT_TREE: 5000, REDWOOD: 5000, CELASTRUS: 9000, CRYSTAL_TREE: 9000, HESPORI: 7000,
 };
-export const petRate = (crop: Crop): number | undefined => PET_RATES[crop.key] ?? PET_RATES[crop.type];
+const petRate = (crop) => PET_RATES[crop.key] ?? PET_RATES[crop.type];
+
+Object.assign(module.exports, { CACHE, CROPS, SEEDS, itemId, initializeFarmingData, patchKey, WATERABLE, COMPOSTABLE_YIELD, WOOD_TREES, petRate });

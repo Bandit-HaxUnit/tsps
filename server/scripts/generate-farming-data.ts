@@ -8,6 +8,30 @@ import { CacheMaps } from "../src/main/typescript/elvarg/game/cache/CacheMaps";
 import { ByteBuffer } from "../src/main/typescript/elvarg/game/cache/codec/rs/io/ByteBuffer";
 import { ObjectIdentifiers } from "../src/main/typescript/elvarg/util/ObjectIdentifiers";
 
+const SOURCE = "Crop timings and patch states from RuneLite's PatchImplementation.java and Produce.java "
+    + "(Copyright (c) 2019 Abex, BSD-2-Clause, https://github.com/runelite/runelite), adapted for this cache.";
+
+function inline(value: unknown): string {
+    if (Array.isArray(value)) return `[${value.map(inline).join(", ")}]`;
+    if (value && typeof value === "object") {
+        return `{ ${Object.entries(value).map(([key, entry]) => `${JSON.stringify(key)}: ${inline(entry)}`).join(", ")} }`;
+    }
+    return JSON.stringify(value);
+}
+
+/** Top-level keys on their own lines, then one line per crop, patch type, patch and loc. */
+function oneEntryPerLine(data: Record<string, unknown>): string {
+    const fields = Object.entries(data).map(([key, value]) => {
+        if (Array.isArray(value)) return `  ${JSON.stringify(key)}: [\n${value.map((entry) => `    ${inline(entry)}`).join(",\n")}\n  ]`;
+        if (value && typeof value === "object") {
+            const rows = Object.entries(value).map(([name, entry]) => `    ${JSON.stringify(name)}: ${inline(entry)}`);
+            return `  ${JSON.stringify(key)}: {\n${rows.join(",\n")}\n  }`;
+        }
+        return `  ${JSON.stringify(key)}: ${inline(value)}`;
+    });
+    return `{\n${fields.join(",\n")}\n}\n`;
+}
+
 async function main() {
     const root = path.resolve(__dirname, "..");
     await CachePipeline.initialize(root);
@@ -124,8 +148,8 @@ async function main() {
         if (!existing) grouped.push({ ...patch, maxX: patch.x, maxY: patch.y });
         else { existing.maxX = Math.max(existing.maxX, patch.x); existing.maxY = Math.max(existing.maxY, patch.y); }
     }
-    fs.writeFileSync(path.join(directory, "farming-cache.json"), JSON.stringify({ revision: CachePipeline.getActive().revision, timing, states, patches: grouped, scenery }, null, 2) + "\n");
-    fs.writeFileSync(path.join(directory, "farming-cache.LICENSE"), source.slice(0, source.indexOf("package net.")) + "\nRuneLite PatchImplementation.java and Produce.java; data adapted for this cache.\nhttps://github.com/runelite/runelite\n");
+    const data = { revision: CachePipeline.getActive().revision, source: SOURCE, timing, states, patches: grouped, scenery };
+    fs.writeFileSync(path.join(directory, "farming-data.json"), oneEntryPerLine(data));
     console.log(JSON.stringify({ crops: Object.keys(timing).length, patchObjects: patchObjects.size, patches: grouped.length, unreadable }));
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
