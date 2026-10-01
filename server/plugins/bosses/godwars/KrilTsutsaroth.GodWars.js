@@ -1,7 +1,5 @@
 "use strict";
 
-const { applyStyleDamage } = require("../StyleDamage");
-
 // Wiki: 46 melee, 10-30 magic, 35-49 prayer-smash special (2/27 of attacks,
 // 1 in 9 melee hits). Attack speed 6 from the definition.
 const MELEE_MAX_HIT = 46;
@@ -90,15 +88,12 @@ module.exports = function registerKrilTsutsaroth(api) {
       const delay = this.stance === CombatType.MAGIC ? Projectile.arrivalTicks(character, target) : 1;
       const hit = new PendingHit(character, target, this, delay);
       const magic = this.stance === CombatType.MAGIC;
-      applyStyleDamage(
-        CombatFactory,
-        character,
-        target,
+      CombatFactory.applyStyleDamage(
         hit,
         this.special ? SPECIAL_MAX_HIT : magic ? MAGIC_MAX_HIT : MELEE_MAX_HIT,
         {
           minHit: this.special ? SPECIAL_MIN_HIT : magic ? MAGIC_MIN_HIT : 0,
-          bypassPrayer: this.special,
+          bypassProtectionPrayer: this.special,
         }
       );
       return [hit];

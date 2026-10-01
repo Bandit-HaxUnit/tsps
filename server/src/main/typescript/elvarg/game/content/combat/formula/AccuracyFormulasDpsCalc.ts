@@ -185,11 +185,22 @@ export class AccuracyFormulasDpsCalc {
         return AccuracyFormulasDpsCalc.scaleSpecial(attRoll, multiplier);
     }
 
-    /** Resolves the attacker and target rolls for an attack, honouring special traits. */
-    public static specialRolls(entity: any, enemy: any, style: any): { attack: number; defence: number } | null {
+    /**
+     * Resolves the attacker and target rolls for an attack, honouring special traits.
+     *
+     * `defenceType` is the per-method override used by attacks that roll one
+     * style's accuracy against another style's defence (Kree'arra's ranged
+     * magic); special traits still win over it when declared.
+     */
+    public static specialRolls(
+        entity: any,
+        enemy: any,
+        style: any,
+        defenceType?: CombatType
+    ): { attack: number; defence: number } | null {
         const traits: WeaponSpecialTraits | null = CombatSpecial.activeTraitsFor(entity);
         const attackStyle = resolveSpecialAttackType(traits?.rollAttackType) ?? style;
-        const defenceStyle = resolveSpecialAttackType(traits?.defenceRollAttackType) ?? attackStyle;
+        const defenceStyle = resolveSpecialAttackType(traits?.defenceRollAttackType) ?? defenceType ?? attackStyle;
 
         let attRoll: number;
         if (attackStyle === CombatType.MELEE) {
@@ -222,8 +233,8 @@ export class AccuracyFormulasDpsCalc {
         return { attack: attRoll, defence: defRoll };
     }
 
-    public static rollAccuracy(entity: any, enemy: any, style: any) {
-        const rolls = AccuracyFormulasDpsCalc.specialRolls(entity, enemy, style);
+    public static rollAccuracy(entity: any, enemy: any, style: any, defenceType?: CombatType) {
+        const rolls = AccuracyFormulasDpsCalc.specialRolls(entity, enemy, style, defenceType);
         if (rolls == null) {
             return false;
         }
@@ -231,10 +242,10 @@ export class AccuracyFormulasDpsCalc {
     }
 
     /** Number of successful independent accuracy rolls out of `count`. */
-    public static rollAccuracyCount(entity: any, enemy: any, style: any, count: number): number {
+    public static rollAccuracyCount(entity: any, enemy: any, style: any, count: number, defenceType?: CombatType): number {
         let successful = 0;
         for (let roll = 0; roll < Math.max(0, Math.trunc(count)); roll++) {
-            if (AccuracyFormulasDpsCalc.rollAccuracy(entity, enemy, style)) {
+            if (AccuracyFormulasDpsCalc.rollAccuracy(entity, enemy, style, defenceType)) {
                 successful++;
             }
         }
@@ -245,8 +256,8 @@ export class AccuracyFormulasDpsCalc {
      * Single fixed-percentage accuracy roll used by execute-window specials:
      * the attack roll is scaled, then compared deterministically to the defence roll.
      */
-    public static rollFixedAccuracy(entity: any, enemy: any, style: any, multiplier: number): boolean {
-        const rolls = AccuracyFormulasDpsCalc.specialRolls(entity, enemy, style);
+    public static rollFixedAccuracy(entity: any, enemy: any, style: any, multiplier: number, defenceType?: CombatType): boolean {
+        const rolls = AccuracyFormulasDpsCalc.specialRolls(entity, enemy, style, defenceType);
         if (rolls == null) {
             return false;
         }

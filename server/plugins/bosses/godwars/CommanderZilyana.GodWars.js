@@ -1,7 +1,5 @@
 "use strict";
 
-const { applyStyleDamage } = require("../StyleDamage");
-
 // Wiki: 27 melee, 10-20 magic, attack speed 2 from the definition.
 const MELEE_MAX_HIT = 27;
 const MAGIC_MAX_HIT = 20;
@@ -55,7 +53,7 @@ module.exports = function registerCommanderZilyana(api) {
     hits(character, target) {
       const magic = this.stance === CombatType.MAGIC;
       const hit = new PendingHit(character, target, this, 1);
-      applyStyleDamage(CombatFactory, character, target, hit, magic ? MAGIC_MAX_HIT : MELEE_MAX_HIT, {
+      CombatFactory.applyStyleDamage(hit, magic ? MAGIC_MAX_HIT : MELEE_MAX_HIT, {
         minHit: magic ? MAGIC_MIN_HIT : 0,
       });
       return [hit];

@@ -34,6 +34,7 @@ import {
   PluginSpellOnObjectEvent,
   PluginNpcDeathEvent,
   PluginNpcBeforeDeathEvent,
+  PluginNpcHitModifyEvent,
   PluginNpcAggressionToleranceEvent,
   PluginNpcInteractionEvent,
   PluginNpcInteractionDefinition,
@@ -183,6 +184,7 @@ export class PluginManager {
   }> = [];
   private static npcDeathHooks: PluginHook<PluginNpcDeathEvent>[] = [];
   private static npcBeforeDeathHooks: PluginHook<PluginNpcBeforeDeathEvent>[] = [];
+  private static npcHitModifyHooks: PluginHook<PluginNpcHitModifyEvent>[] = [];
   private static zoneHooks: Array<{
     pluginName: string;
     zone: PluginZone;
@@ -912,14 +914,26 @@ export class PluginManager {
     return event.preventDeath === true;
   }
 
+  public static emitNpcHitModify(npc: any, hit: any): any {
+    if (PluginManager.npcHitModifyHooks.length === 0) {
+      return hit;
+    }
+    const event: PluginNpcHitModifyEvent = { npc, hit };
+    for (const hook of PluginManager.npcHitModifyHooks) {
+      PluginManager.executeHook(hook, event, "npc_hit_modify", "npc_hit_modify");
+    }
+    return event.hit;
+  }
+
   public static emitCanAttack(
     attacker: any,
-    target: any
+    target: any,
+    method?: any
   ): boolean | null {
     if (PluginManager.canAttackHooks.length === 0) {
       return null;
     }
-    const event: PluginCanAttackEvent = { attacker, target, allow: null };
+    const event: PluginCanAttackEvent = { attacker, target, method, allow: null };
     for (const hook of PluginManager.canAttackHooks) {
       PluginManager.executeHook(hook, event, "can_attack", "can_attack");
       if (event.allow !== null) {
@@ -2474,6 +2488,19 @@ export class PluginManager {
           pluginName,
           handler: (event) => {
             if (event?.npc) {
+              handler(event);
+            }
+          },
+        });
+      },
+      onNpcHitModify: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.npcHitModifyHooks.push({
+          pluginName,
+          handler: (event) => {
+            if (event?.npc && event?.hit) {
               handler(event);
             }
           },

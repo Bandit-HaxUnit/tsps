@@ -104,6 +104,7 @@ export class NPC extends Mobile {
     private face: FacingDirection = FacingDirection.SOUTH;
     private pet: boolean;
     private movementSteps = 1;
+    private scriptedMovement: boolean = false;
 
     constructor(id: number, position: Location) {
         super(position)
@@ -533,7 +534,20 @@ export class NPC extends Mobile {
     }
 
     public manipulateHit(hit: PendingHit): PendingHit {
-        return hit;
+        return PluginManager.emitNpcHitModify(this, hit);
+    }
+
+    /**
+     * While true, Combat leaves this NPC's movement queue alone (no pursuit route,
+     * no in-range reset) and does not attack. Plugins driving a scripted walk set
+     * this, path the NPC themselves, then clear it on arrival to resume combat.
+     */
+    public setScriptedMovement(scripted: boolean): void {
+        this.scriptedMovement = scripted;
+    }
+
+    public isScriptedMovement(): boolean {
+        return this.scriptedMovement;
     }
 
     /**

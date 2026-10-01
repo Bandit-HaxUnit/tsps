@@ -1,7 +1,5 @@
 "use strict";
 
-const { applyStyleDamage } = require("../StyleDamage");
-
 // Wiki: 69 ranged, 21 magic, 25 melee claw, attack speed 3 from the definition.
 const RANGED_MAX_HIT = 69;
 const MAGIC_MAX_HIT = 21;
@@ -22,13 +20,50 @@ module.exports = function registerKreeArra(api) {
     CombatFactory,
     CombatMethod,
     CombatType,
+    Equipment,
+    ItemDefinition,
     Misc,
     NpcIdentifiers,
     PendingHit,
     Projectile,
   } = api.core;
 
-  const NPC_IDS = [NpcIdentifiers.KREEARRA, NpcIdentifiers.KREEARRA_2];
+  const NPC_IDS = [
+    NpcIdentifiers.KREEARRA,
+    NpcIdentifiers.KREEARRA_2,
+    NpcIdentifiers.WINGMAN_SKREE,
+    NpcIdentifiers.FLOCKLEADER_GEERIN,
+    NpcIdentifiers.FLIGHT_KILISA,
+  ];
+  const NPC_ID_SET = new Set(NPC_IDS);
+
+  function isArmadylean(npc) {
+    return NPC_ID_SET.has(npc?.getId?.()) || NPC_ID_SET.has(npc?.getRealId?.());
+  }
+
+  // Melee is only legal with a halberd or salamander, matched by the cache's
+  // own item name so every variant is covered without an id list.
+  function wieldsReachMelee(player) {
+    const weaponId = player.getEquipment().get(Equipment.WEAPON_SLOT).getId();
+    const name = ItemDefinition.forId(weaponId)?.getName?.()?.toLowerCase?.() ?? "";
+    return name.includes("halberd") || name.includes("salamander");
+  }
+
+  function denyMelee(event) {
+    if (event.allow !== null) {
+      return;
+    }
+    const { attacker, target, method } = event;
+    if (!attacker?.isPlayer?.() || !target?.isNpc?.() || !isArmadylean(target)) {
+      return;
+    }
+    if (method?.type?.() !== CombatType.MELEE || wieldsReachMelee(attacker)) {
+      return;
+    }
+    const name = target.getCurrentDefinition?.()?.getName?.() ?? "Kree'arra";
+    attacker.sendMessage(`${name} is flying too high for you to reach with melee.`);
+    event.allow = false;
+  }
 
   class KreeArraCombatMethod extends CombatMethod {
     constructor() {
@@ -42,6 +77,11 @@ module.exports = function registerKreeArra(api) {
 
     attackDistance() {
       return 8;
+    }
+
+    // Ranged magic: the magic attack rolls Magic accuracy against Ranged defence.
+    accuracyDefenceType(type) {
+      return this.stance === CombatType.MAGIC ? CombatType.RANGED : type;
     }
 
     start(character, target) {
@@ -80,7 +120,7 @@ module.exports = function registerKreeArra(api) {
             : MELEE_MAX_HIT;
       const delay = this.stance === CombatType.MELEE ? 1 : Projectile.arrivalTicks(character, target);
       const hits = [new PendingHit(character, target, this, delay)];
-      applyStyleDamage(CombatFactory, character, target, hits[0], maxHit);
+      CombatFactory.applyStyleDamage(hits[0], maxHit);
       if (this.stance === CombatType.MELEE) {
         return hits;
       }
@@ -89,12 +129,13 @@ module.exports = function registerKreeArra(api) {
           continue;
         }
         const hit = new PendingHit(character, player, this, delay);
-        applyStyleDamage(CombatFactory, character, player, hit, maxHit);
+        CombatFactory.applyStyleDamage(hit, maxHit);
         hits.push(hit);
       }
       return hits;
     }
   }
 
+  api.onCanAttack(denyMelee);
   api.registerNpcCombatMethodProvider(NPC_IDS, KreeArraCombatMethod, { singleton: false });
 };

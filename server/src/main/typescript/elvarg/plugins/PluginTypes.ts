@@ -174,6 +174,15 @@ export interface PluginNpcBeforeDeathEvent {
   preventDeath: boolean;
 }
 
+/**
+ * Fired as an incoming hit resolves on an NPC, before damage is applied.
+ * Handlers mutate the pending hit directly (damage, hitsplats).
+ */
+export interface PluginNpcHitModifyEvent {
+  npc: any;
+  hit: any;
+}
+
 /** Rectangular player zone for onZoneEnter/onZoneExit; omit `levels` for all planes. */
 export interface PluginZone {
   minX: number;
@@ -203,6 +212,8 @@ export interface PluginNpcSpawnDefinition {
 export interface PluginCanAttackEvent {
   attacker: any;
   target: any;
+  /** The attacking combat method, so handlers can allow/deny per style. */
+  method?: any;
   allow: boolean | null;
 }
 
@@ -661,6 +672,7 @@ export interface PluginApi {
   ): void;
   onNpcDeath(handler: (event: PluginNpcDeathEvent) => void): void;
   onNpcBeforeDeath(handler: (event: PluginNpcBeforeDeathEvent) => void): void;
+  onNpcHitModify(handler: (event: PluginNpcHitModifyEvent) => void): void;
   onCanAttack(handler: (event: PluginCanAttackEvent) => void): void;
   onCanTeleport(handler: (event: PluginCanTeleportEvent) => void): void;
   onCanEat(handler: (event: PluginCanEatEvent) => void): void;

@@ -242,6 +242,42 @@ export class CombatFactory {
     }
 
     /**
+     * Applies an explicit per-style max hit to an incoming hit.
+     *
+     * NpcDefinitions carry a single max hit (the wiki's highest style), so a boss
+     * whose styles cap differently passes the cap for the style it rolled - the
+     * bounds ride as flat bonuses so the exact integer max survives
+     * rollSpecialDamage's floor, and protection prayers still reduce the result
+     * unless bypassProtectionPrayer is set. Damage is capped to the target's
+     * current hitpoints, matching the cap PendingHit rolls with.
+     */
+    public static applyStyleDamage(
+        hit: PendingHit,
+        maxHit: number,
+        options: { minHit?: number; bypassProtectionPrayer?: boolean } = {}
+    ): void {
+        if (!hit || !hit.isAccurate() || hit.getHits().length === 0) {
+            return;
+        }
+        const attacker = hit.getAttacker();
+        const target = hit.getTarget();
+        const rolled = CombatFactory.getHitDamage(
+            attacker,
+            target,
+            hit.getCombatType(),
+            options.bypassProtectionPrayer === true,
+            {
+                minimumMultiplier: 0,
+                maximumMultiplier: 0,
+                minimumBonus: Math.max(0, options.minHit ?? 0),
+                maximumBonus: Math.max(0, Math.trunc(maxHit)),
+            }
+        );
+        hit.getHits()[0].setDamage(Math.max(0, Math.min(rolled.getDamage(), target.getHitpoints())));
+        hit.updateTotalDamage();
+    }
+
+    /**
      * Rolls one hit's damage. With no active special traits this is the ordinary
      * 0..maxHit roll; with traits it honours per-hit min/max multipliers, flat
      * bonuses and a maximum cap.
@@ -539,7 +575,7 @@ export class CombatFactory {
             ? CanAttackResponse.CAN_ATTACK
             : ServerPerf.measurePhase(
                 "combat.process.can_attack.policy",
-                () => CombatFactory.canAttackByPolicy(attacker, target)
+                () => CombatFactory.canAttackByPolicy(attacker, target, method)
             );
         if (areaResponse != CanAttackResponse.CAN_ATTACK) {
             return areaResponse;
@@ -592,7 +628,7 @@ export class CombatFactory {
         return CanAttackResponse.CAN_ATTACK;
     }
 
-    public static canAttackByPolicy(attacker: Mobile, target: Mobile): CanAttackResponse {
+    public static canAttackByPolicy(attacker: Mobile, target: Mobile, method?: CombatMethod): CanAttackResponse {
         if (attacker.getPrivateArea() !== target.getPrivateArea()) {
             return CanAttackResponse.CANT_ATTACK_IN_AREA;
         }
@@ -600,7 +636,7 @@ export class CombatFactory {
             (Wilderness.isInSafeBuilding(attacker.getLocation()) || Wilderness.isInSafeBuilding(target.getLocation()))) {
             return CanAttackResponse.CANT_ATTACK_IN_AREA;
         }
-        const pluginCanAttack = PluginManager.emitCanAttack(attacker, target);
+        const pluginCanAttack = PluginManager.emitCanAttack(attacker, target, method);
         if (pluginCanAttack === true) {
             return CanAttackResponse.CAN_ATTACK;
         }

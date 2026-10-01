@@ -1,7 +1,5 @@
 "use strict";
 
-const { applyStyleDamage } = require("../StyleDamage");
-
 // Wiki: 60 melee, 35 ranged (15-35 on the slam), attack speed 6 from the definition.
 const MELEE_MAX_HIT = 60;
 const RANGED_MAX_HIT = 35;
@@ -72,14 +70,9 @@ module.exports = function registerGeneralGraardor(api) {
       const ranged = this.stance === CombatType.RANGED;
       const delay = ranged ? Projectile.arrivalTicks(character, target) : 1;
       const hits = [new PendingHit(character, target, this, delay)];
-      applyStyleDamage(
-        CombatFactory,
-        character,
-        target,
-        hits[0],
-        ranged ? RANGED_MAX_HIT : MELEE_MAX_HIT,
-        { minHit: ranged ? RANGED_MIN_HIT : 0 }
-      );
+      CombatFactory.applyStyleDamage(hits[0], ranged ? RANGED_MAX_HIT : MELEE_MAX_HIT, {
+        minHit: ranged ? RANGED_MIN_HIT : 0,
+      });
       if (!ranged) {
         return hits;
       }
@@ -88,9 +81,7 @@ module.exports = function registerGeneralGraardor(api) {
           continue;
         }
         const hit = new PendingHit(character, player, this, delay);
-        applyStyleDamage(CombatFactory, character, player, hit, RANGED_MAX_HIT, {
-          minHit: RANGED_MIN_HIT,
-        });
+        CombatFactory.applyStyleDamage(hit, RANGED_MAX_HIT, { minHit: RANGED_MIN_HIT });
         hits.push(hit);
       }
       return hits;
