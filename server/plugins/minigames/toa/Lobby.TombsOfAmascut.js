@@ -12,6 +12,7 @@ const Shared = require("./ToaShared");
 const Parties = require("./ToaParties");
 const Invocations = require("./ToaInvocations");
 const Raid = require("./ToaRaid");
+const Rewards = require("./ToaRewards");
 
 const { INTERFACE, SCRIPT, VARBIT, VARP, EVENT } = Shared;
 
@@ -79,6 +80,10 @@ function enterTombs({ player }) {
     Shared.options(player, "You are currently not in a raiding party.",
       "Form or join a party.", () => openOverview(player),
       "Cancel.", () => {});
+    return true;
+  }
+  if (Rewards.hasLoot(player)) {
+    Shared.statement(player, "You have unclaimed rewards from your last raid. Collect them from the chest first.");
     return true;
   }
   const raid = lobby.raid ?? Raid.begin(player);
