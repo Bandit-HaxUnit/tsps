@@ -68,7 +68,7 @@ sailing: {
 
 What a cargo hold accepts is data (`data/definitions/sailing-cargo.json`): the tools by item id, and every other storable item by exact name or name prefix, grouped by category. `lostOnRecovery` marks the categories a shipwright's recovery loses.
 
-Docks are data (`data/definitions/sailing-docks.json`): an id, the gangplank loc, where the boat is placed when fetched, and where the player lands on disembarking.
+Docks are every port in the cache (`data/definitions/sailing-ports.json`): its id, name, docking level, buoy, gangplank, where the player lands on disembarking, and where a boat is placed when it isn't where it was left. What only some docks have, such as a shipwright or the shipyard, is in `data/definitions/sailing-docks.json`.
 
 ## Lifecycle
 
@@ -78,7 +78,8 @@ One state machine in core owns every transition, so no path can leave a boat hal
 | --- | --- | --- | --- |
 | docked at A | board at A's gangplank | at sea (aboard) | spawn the instance at A; send the deck scene; move the player onto the deck; set `returnPoint` |
 | docked elsewhere / sunk | board at A's gangplank | - | refused; the shipwright message |
-| at sea | disembark at dock B | docked at B | move the player to B's landing tile; dispose the instance; set `returnPoint` |
+| at sea | Dock at port B's buoy | at sea, docked at B | the boat's port becomes B; set `returnPoint` |
+| at sea | disembark at port B's gangplank | docked at B, where it is | move the player to B's landing tile; dispose the instance; set `returnPoint` |
 | at sea | teleport (any source) | sunk | dispose the instance; the teleport proceeds |
 | at sea | Escape (helm) | sunk | dispose the instance; move the player to `returnPoint` |
 | at sea | death | sunk (to confirm) | dispose the instance; gravestone at `returnPoint` |

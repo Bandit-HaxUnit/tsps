@@ -603,9 +603,10 @@ test("disembarking moors the boat at the dock and removes it from the sea", () =
   Sailing.board(player, DOCK.id);
   const boat = BoatManager.getBoatAboard(player);
 
+  const at = { fineX: boat.fineX, fineY: boat.fineY, level: boat.level, angle: boat.angle };
   assert.equal(Sailing.disembark(player, DOCK.id), null);
 
-  assert.deepEqual(Sailing.activeBoat(player).location, { kind: "docked", dock: DOCK.id });
+  assert.deepEqual(Sailing.activeBoat(player).location, { kind: "docked", dock: DOCK.id, at }, "left where it was");
   assert.deepEqual(tileOf(player), [3069, 2987, 0]);
   assert.equal(BoatManager.getBoatAboard(player), undefined);
   assert.equal(BoatManager.getBoat(boat.entityIndex), undefined);
@@ -682,7 +683,8 @@ test("the boat's position is recorded every tick, so a save at sea restores it",
     BoatManager.isSailable = sailable;
   }
   assert.deepEqual(Sailing.activeBoat(player).location,
-    { kind: "at_sea", fineX: boat.fineX, fineY: boat.fineY, level: 0, angle: boat.angle });
+    { kind: "at_sea", fineX: boat.fineX, fineY: boat.fineY, level: 0, angle: boat.angle, dock: DOCK.id },
+    "with the port it last docked at");
   assert.equal(boat.fineY, DOCK.mooring.fineY + 192);
   Sailing.disembark(player, DOCK.id);
 });
@@ -698,7 +700,7 @@ test("logging out at sea keeps the boat at sea, and logging in puts the player b
   Sailing.onLogout(player);
 
   const saved = normalizeSailingState(JSON.parse(JSON.stringify(player.getSailing())));
-  assert.deepEqual(saved.boats[0].location, { kind: "at_sea", fineX: boat.fineX, fineY: boat.fineY, level: 0, angle: EAST });
+  assert.deepEqual(saved.boats[0].location, { kind: "at_sea", fineX: boat.fineX, fineY: boat.fineY, level: 0, angle: EAST, dock: DOCK.id });
   assert.deepEqual(tileOf(player), [3069, 2987, 0], "saved ashore in case the boat can't be restored");
   assert.equal(BoatManager.getBoat(boat.entityIndex), undefined, "disposed after the state is recorded");
 
@@ -742,6 +744,8 @@ test("saved sailing state drops anything malformed", () => {
     activeBoatSlot: null,
     returnPoint: null,
     tools: [0, 4],
+    lastDock: null,
+    lastStandardDock: null,
   });
 });
 
@@ -1785,4 +1789,75 @@ test("logging in unlocks every facility and part schematic", () => {
   login({ player });
   // Script 9078: the salvaging station's schematic is 19544, the ballistic attractor's 20227.
   assert.deepEqual([19544, 19553, 20227].map((id) => varbits.get(id)), [1, 1, 1]);
+});
+
+// --- Ports and docking.
+
+test("every port comes from the cache, with its buoy, gangplank, landing and mooring", () => {
+  const docks = content().docks;
+  const byId = (id) => docks.find((dock) => dock.id === id);
+  assert.equal(docks.length, 57, "table 194's 59 rows, less Red Rock and Last Light (no gangplank)");
+  // Port Sarim as captured: buoy (3048, 3186), gangplank (3051, 3193), landing one west of it.
+  const sarim = byId("port_sarim");
+  assert.deepEqual([sarim.portId, sarim.level, sarim.buoy, sarim.gangplank, sarim.landing],
+    [0, 1, { x: 3048, y: 3186, z: 0 }, { x: 3051, y: 3193, z: 0 }, { x: 3050, y: 3193, z: 0 }]);
+  // The Pandemonium's generated mooring and landing are its captured ones; Junior Jim stays.
+  const pandemonium = byId("the_pandemonium");
+  assert.deepEqual(pandemonium.mooring, { fineX: 3074 * 128 + 64, fineY: 2987 * 128 + 64, level: 0, angle: 1024 });
+  assert.deepEqual(pandemonium.landing, { x: 3069, y: 2987, z: 0 });
+  assert.equal(pandemonium.shipwright, "Junior Jim");
+  assert.equal(byId("catherby").level, 20);
+  assert.equal(byId("dognose_island").mooringPoint, true);
+});
+
+test("Dock on a port's buoy docks the boat there; Disembark at any port docks it if it wasn't", () => {
+  clearTasks();
+  const plugin = registerPlugin("Gangplank.plugin");
+  const musa = content().docks.find((dock) => dock.id === "musa_point");
+  const catherby = content().docks.find((dock) => dock.id === "catherby");
+  const player = sailor();
+  const levels = new Map([[Skill.SAILING, 10]]);
+  player.getSkillManager = () => ({ getCurrentLevel: (skill) => levels.get(skill) ?? 1 });
+  const varbits = new Map();
+  const sender = new Proxy({}, {
+    get: (_t, key) => (...args) => { if (key === "sendVarbit") varbits.set(args[0], args[1]); return sender; },
+  });
+  player.getPacketSender = () => sender;
+  Sailing.giveBoat(player, "raft", "the_pandemonium");
+  Sailing.board(player, "the_pandemonium");
+  try {
+    assert.equal(player.getSailing().lastDock, "the_pandemonium", "boarding at a port docks there");
+
+    // Catherby needs Sailing 20.
+    plugin.objects.Buoy.Dock({ player, location: catherby.buoy });
+    assert.equal(player.messages.at(-1), "You need a Sailing level of at least 20 to dock at Catherby.");
+
+    plugin.objects.Buoy.Dock({ player, location: musa.buoy });
+    assert.equal(player.messages.at(-1),
+      "You dock the boat at Musa Point. You will return here if you have to abandon your boat for any reason.");
+    assert.ok(Sailing.instanceAboard(player), "still aboard");
+    assert.equal(Sailing.activeBoat(player).location.dock, "musa_point");
+    assert.deepEqual(player.getSailing().returnPoint, musa.landing);
+    assert.deepEqual([19145, 19146, 19258 + 2].map((id) => varbits.get(id)), [3, 3, 3], "last dock, last port, boat 1's port");
+
+    // Disembarking at the Pandemonium docks the boat there instead, where it is.
+    const boat = BoatManager.getBoatAboard(player);
+    const at = { fineX: boat.fineX, fineY: boat.fineY, level: boat.level, angle: boat.angle };
+    const pandemonium = content().docks.find((dock) => dock.id === "the_pandemonium");
+    plugin.objects.Gangplank.Disembark({ player, location: pandemonium.gangplank });
+    TaskManager.process();
+    TaskManager.process();
+    assert.equal(player.messages.at(-1), "You disembark at the Pandemonium.");
+    assert.deepEqual(Sailing.activeBoat(player).location, { kind: "docked", dock: "the_pandemonium", at });
+    assert.deepEqual(tileOf(player), [3069, 2987, 0]);
+    assert.equal(player.getSailing().lastDock, "the_pandemonium");
+
+    // Boarding there again puts the boat back where it was left.
+    Sailing.board(player, "the_pandemonium");
+    const again = BoatManager.getBoatAboard(player);
+    assert.deepEqual([again.fineX, again.fineY, again.angle], [at.fineX, at.fineY, at.angle]);
+  } finally {
+    if (Sailing.instanceAboard(player)) Sailing.disembark(player, "the_pandemonium");
+    clearTasks();
+  }
 });

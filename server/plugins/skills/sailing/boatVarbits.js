@@ -36,6 +36,9 @@ const MAX_HOTSPOTS = 13;
  * is a real dock (Port Sarim), so a boat sunk by a teleport, Escape or death is "lost at sea".
  */
 const LOST_AT_SEA = 253;
+/** `sailing_boarded_boat_last_dock` and `_last_standard_dock`: port ids, as captured. */
+const VARBIT_LAST_DOCK = 19145;
+const VARBIT_LAST_STANDARD_DOCK = 19146;
 
 function blockVarbit(slot, offset) {
   return FIRST_BLOCK + BLOCK_SIZE * slot + offset;
@@ -48,10 +51,13 @@ function hotspotVarbit(slot, hotspot) {
     : EXTRA_HOTSPOTS + EXTRA_HOTSPOTS_SIZE * slot + hotspot - BLOCK_HOTSPOTS;
 }
 
-/** The port a boat is at, for its `port` varbit: the dock's id, "lost at sea" when sunk. */
+/**
+ * The port a boat is at, for its `port` varbit: the dock's id, "lost at sea" when sunk. At sea
+ * it's the port it last docked at (captured: the Pandemonium's 1 while sailing to Port Sarim).
+ */
 function portOf(boat) {
   if (boat.location.kind === "sunk") return LOST_AT_SEA;
-  return boat.location.kind === "docked" ? dockById(boat.location.dock)?.portId ?? 0 : 0;
+  return dockById(boat.location.dock)?.portId ?? 0;
 }
 
 /** The varbit values describing one boat slot (every value 0 for an empty slot). */
@@ -75,13 +81,18 @@ function slotVarbits(slot, boat) {
   return values;
 }
 
-/** Sends every boat slot's varbits, as at login and after a boat changes. */
+/**
+ * Sends every boat slot's varbits, and the player's last dock and last port (not a mooring
+ * point), as at login and after a boat changes.
+ */
 function sendBoatVarbits(player) {
-  const boats = player.getSailing().boats;
+  const state = player.getSailing();
   for (let slot = 0; slot < MAX_BOATS; slot++) {
-    const boat = boats.find((candidate) => candidate.slot === slot);
+    const boat = state.boats.find((candidate) => candidate.slot === slot);
     for (const [id, value] of slotVarbits(slot, boat)) setVarbit(player, id, value);
   }
+  setVarbit(player, VARBIT_LAST_DOCK, dockById(state.lastDock)?.portId ?? 0);
+  setVarbit(player, VARBIT_LAST_STANDARD_DOCK, dockById(state.lastStandardDock)?.portId ?? 0);
 }
 
 module.exports = { blockVarbit, hotspotVarbit, slotVarbits, sendBoatVarbits };

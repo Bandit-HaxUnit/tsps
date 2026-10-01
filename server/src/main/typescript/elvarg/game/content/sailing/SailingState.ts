@@ -1,9 +1,23 @@
+/** A boat's place in fine units (1/128 tile) and its angle. */
+export interface BoatAt {
+    fineX: number;
+    fineY: number;
+    level: number;
+    angle: number;
+}
+
 /** Where an owned boat is. */
 export type BoatLocation =
-    /** Moored at a dock (a port or mooring point). */
-    | { kind: "docked"; dock: string }
-    /** Out at sea with its owner, who logged out aboard; restored when they log in. */
-    | { kind: "at_sea"; fineX: number; fineY: number; level: number; angle: number }
+    /**
+     * Moored at a dock (a port or mooring point): where it was left when its owner disembarked
+     * there, or the dock's mooring (a new or recovered boat).
+     */
+    | { kind: "docked"; dock: string; at?: BoatAt }
+    /**
+     * Out at sea with its owner, who logged out aboard; restored when they log in. `dock` is the
+     * port it last docked at (its `port` varbit, and where it returns if abandoned).
+     */
+    | { kind: "at_sea"; fineX: number; fineY: number; level: number; angle: number; dock?: string }
     /** Lost after a teleport, Escape or death at sea; a shipwright must recover it. */
     | { kind: "sunk" };
 
@@ -49,18 +63,31 @@ export interface SailingState {
     returnPoint: { x: number; y: number; z: number } | null;
     /** Tools compartment slots holding their tool; shared by all of the player's boats. */
     tools: number[];
+    /** The dock the player last docked at, and the last that was a port (not a mooring point). */
+    lastDock: string | null;
+    lastStandardDock: string | null;
 }
 
 export function emptySailingState(): SailingState {
-    return { boats: [], activeBoatSlot: null, returnPoint: null, tools: [] };
+    return { boats: [], activeBoatSlot: null, returnPoint: null, tools: [], lastDock: null, lastStandardDock: null };
 }
 
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
+function normalizeAt(raw: any): BoatAt | undefined {
+    return finite(raw?.fineX) && finite(raw?.fineY) && finite(raw?.angle)
+        ? { fineX: raw.fineX, fineY: raw.fineY, level: finite(raw.level) ? raw.level : 0, angle: raw.angle }
+        : undefined;
+}
+
 function normalizeLocation(raw: any): BoatLocation {
-    if (raw?.kind === "docked" && typeof raw.dock === "string") return { kind: "docked", dock: raw.dock };
-    if (raw?.kind === "at_sea" && finite(raw.fineX) && finite(raw.fineY) && finite(raw.angle)) {
-        return { kind: "at_sea", fineX: raw.fineX, fineY: raw.fineY, level: finite(raw.level) ? raw.level : 0, angle: raw.angle };
+    if (raw?.kind === "docked" && typeof raw.dock === "string") {
+        const at = normalizeAt(raw.at);
+        return at ? { kind: "docked", dock: raw.dock, at } : { kind: "docked", dock: raw.dock };
+    }
+    const atSea = raw?.kind === "at_sea" ? normalizeAt(raw) : undefined;
+    if (atSea) {
+        return typeof raw.dock === "string" ? { kind: "at_sea", ...atSea, dock: raw.dock } : { kind: "at_sea", ...atSea };
     }
     return { kind: "sunk" };
 }
@@ -107,5 +134,9 @@ export function normalizeSailingState(raw: any): SailingState {
         ? { x: point.x, y: point.y, z: point.z }
         : null;
     const tools = Array.isArray(raw.tools) ? [...new Set<number>(raw.tools.filter(Number.isInteger))] : [];
-    return { boats, activeBoatSlot: active, returnPoint, tools };
+    const dockId = (value: unknown) => (typeof value === "string" ? value : null);
+    return {
+        boats, activeBoatSlot: active, returnPoint, tools,
+        lastDock: dockId(raw.lastDock), lastStandardDock: dockId(raw.lastStandardDock),
+    };
 }

@@ -85,7 +85,10 @@ function content() {
   if (loaded) return loaded;
   const read = (file) => JSON.parse(fs.readFileSync(path.resolve(process.cwd(), GameConstants.DEFINITIONS_DIRECTORY, file), "utf8"));
   const boats = read("boats.json");
-  const docks = read("sailing-docks.json");
+  // Every port and mooring point from the cache (sailing-ports.json), with what only some have
+  // (a shipwright, the shipyard) from sailing-docks.json.
+  const extras = read("sailing-docks.json");
+  const docks = read("sailing-ports.json").map((port) => ({ ...port, ...extras.find((extra) => extra.id === port.id) }));
   const cargo = read("sailing-cargo.json");
   const names = read("sailing-boat-names.json");
   const parts = read("sailing-parts.json");
@@ -128,6 +131,11 @@ function randomBoatName() {
 function dockAtGangplank(location) {
   return content().docks.find((dock) =>
     Math.max(Math.abs(dock.gangplank.x - location.x), Math.abs(dock.gangplank.y - location.y)) <= 1);
+}
+
+/** The dock whose docking buoy is at a location. */
+function dockAtBuoy(location) {
+  return content().docks.find((dock) => dock.buoy && dock.buoy.x === location.x && dock.buoy.y === location.y);
 }
 
 function setVarbit(player, id, value) {
@@ -199,6 +207,7 @@ module.exports = {
   boatName,
   randomBoatName,
   dockAtGangplank,
+  dockAtBuoy,
   setVarbit,
   getVarbit,
   playSound,

@@ -5,8 +5,11 @@ import { Location } from "../../../game/model/Location";
 import { PluginManager } from "../../../plugins/PluginManager";
 import { BoatManager } from "../../../game/content/sailing/BoatManager";
 
-/** How far from the tile under a player on a boat deck a main-world loc can be used. */
-const DECK_REACH_TILES = 4;
+/**
+ * How far from the tile under a player on a boat deck a main-world loc can be used. A dock's
+ * gangplank was used from 9 tiles away in a live capture (Port Sarim).
+ */
+const DECK_REACH_TILES = 12;
 
 export class ObjectActionPacketListener {
   public executeAction(

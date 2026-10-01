@@ -208,6 +208,36 @@ Buy-boat opens the data-driven shop "omnishop", not a special interface:
 
 Buying itself hasn't been captured yet.
 
+## Ports and docking
+
+From a capture of docking at Port Sarim's buoy and disembarking at its gangplank. The ports are the cache's, in `server/data/definitions/sailing-ports.json`.
+
+**Ports** are db table 194: port id (column 0), name (1), the name in a sentence ("the Pandemonium", 2), the Sailing level to dock there (4), and a requirement for some (5, not used yet). There are 59 rows. Ids 32 and up are islands ("mooring points"), whose gangplanks are scenery rather than jetty planks.
+
+**Every port has a docking buoy and a gangplank**, placed by the cache map:
+- the buoy is loc **59769 + port id**, "Buoy" with op "Dock";
+- the gangplank is loc **59835 + port id**, a multiloc on varbit 19104 (Board / Disembark; ports also have Board-previous and Board-friend).
+
+Red Rock and Last Light have neither, so they're left out.
+
+**The landing** is the one walkable tile beside the gangplank, on the jetty. Both captured ports land one tile west of their plank: Port Sarim (3050, 3193) and the Pandemonium (3069, 2987). Every other port has exactly one walkable neighbour, which matches the plank's rotation (3 west, 0 north, 1 east, 2 south) except at Entrana. Islands, where every neighbour is walkable, use the rotation.
+
+**The mooring** (where a boat is placed when it isn't where it was left) is the Pandemonium's captured one, applied to every port: out from the plank on the sea side, 4 tiles for a raft and 5 for a skiff or sloop, side-on (angle 1024 for an east-west plank, 512 for a north-south one).
+
+**Dock** (op 1 on a port's buoy, from the boat):
+- the boat's per-boat `port` varbit becomes the port's id;
+- `sailing_boarded_boat_last_dock` (19145) and `sailing_boarded_boat_last_standard_dock` (19146) become the port's id;
+- "You dock the boat at Port Sarim. You will return here if you have to abandon your boat for any reason.", and sound 1794.
+
+The player stays aboard and the boat stays where it is. At sea, the `port` varbit keeps the port the boat last docked at (it was 1, the Pandemonium, until the Dock).
+
+**Disembark** at a port's gangplank, from the boat, here about 9 tiles away:
+1. fade out;
+2. next tick: "You disembark at Port Sarim." (spam filter), the boarded and sidepanel varbits cleared, the player moved to the landing, and sound 10754;
+3. the tick after: fade in.
+
+The boat stays where it was docked.
+
 ## Recovery (Junior Jim)
 
 - **The fee is taken from the bank**, with the message "Payment has been taken from your bank." Recovery also brings back boats docked at other ports, not only sunk ones.
@@ -475,6 +505,12 @@ Depositing a tool, by Deposit Inventory or singly, puts it back in the compartme
     - the part names in the swap message ("mast and sails");
     - the level, materials and "already has that" messages.
   - Materials come from the inventory only.
+- **Ports**, guessed rather than captured:
+  - Disembarking at a port's gangplank docks the boat there if it wasn't (the capture docked at the buoy first). It needs the port's level unless the boat is already docked there.
+  - The too-low-level message, and that boarding a port's boat needs no level.
+  - The mooring for every port but the Pandemonium (its offsets, on each port's sea side), and the landing for islands (by the plank's rotation).
+  - Locs on the shore can be used from up to 12 tiles away while aboard (the capture used a gangplank from 9).
+  - Islands only differ in not being a "standard dock" (19146). Column 5's requirement isn't checked.
 - **Sailing** is a skill (23). Salvaging and sorting give Sailing XP; nothing else does yet.
 - **Salvaging**, guessed rather than captured:
   - the hook's reach: 8 tiles from the hook to the nearest tile of the wreck (about what it is in OSRS, as played);
@@ -498,5 +534,5 @@ Depositing a tool, by Deposit Inventory or singly, puts it back in the compartme
 
 - Taking the helm, setting and trimming sails, steering and stopping.
 - Teleporting from sea, Escape, and logging out and back in at sea.
-- Disembarking at a dock gangplank.
+- Disembarking at a port's gangplank without docking at its buoy first.
 - Buying a boat (Junior Jim's Buy-boat).
