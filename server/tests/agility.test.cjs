@@ -300,3 +300,12 @@ test("Varrock's rough wall is climbed facing it (west, across its edge)", () => 
   const steps = first.steps({ player: null, obj: wall, pos: { x: 3221, y: 3414, z: 0 } });
   assert.deepEqual(steps[0], { face: [3220, 3414] });
 });
+
+test("Falador's rough wall is climbed facing it (north, across its edge)", () => {
+  // A wall decoration (shape 5) on the north edge of the start tile (rotation 1).
+  const wall = { x: 3036, y: 3341, z: 0, face: 1, type: 5, id: ObjectIds.ROUGH_WALL_4 };
+  const falador = COURSES.find((course) => course.key === "falador");
+  const first = falador.obstacles.find((obstacle) => obstacle.index === 1);
+  const steps = first.steps({ player: null, obj: wall, pos: { x: 3036, y: 3341, z: 0 } });
+  assert.deepEqual(steps[0], { face: [3036, 3342] });
+});
