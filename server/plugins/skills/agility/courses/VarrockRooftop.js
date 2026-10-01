@@ -1,6 +1,6 @@
 const { ObjectIds } = require("../../../../src/main/typescript/elvarg/util/IdEnums");
 const { Anim } = require("../constants");
-const { leap } = require("../steps");
+const { leap, faceLoc } = require("../steps");
 
 /** Tiles the player hangs from while shimmying along the wall (obstacle 4). */
 const WALL_HOLDS = [[3190, 3414], [3190, 3413], [3190, 3412], [3190, 3411], [3190, 3410]];
@@ -44,7 +44,8 @@ module.exports = {
       index: 1,
       level: 30,
       xp: 12,
-      steps: [
+      steps: (context) => [
+        faceLoc(context.obj),
         { anim: Anim.CLIMB_UP },
         { wait: 1 },
         { tele: [3220, 3414, 3] },

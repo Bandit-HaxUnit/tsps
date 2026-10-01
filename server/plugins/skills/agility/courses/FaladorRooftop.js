@@ -1,6 +1,6 @@
 const { ObjectIds } = require("../../../../src/main/typescript/elvarg/util/IdEnums");
 const { Anim } = require("../constants");
-const { climb } = require("../steps");
+const { climb, faceLoc } = require("../steps");
 
 /** Hand holds climbed after the first hold, all on the wall's west face. */
 const HAND_HOLDS = [[3051, 3352], [3051, 3353], [3051, 3354], [3051, 3355]];
@@ -62,7 +62,7 @@ module.exports = {
       level: 50,
       xp: 10,
       route: [3036, 3341, 0],
-      steps: climb([3036, 3342, 3]),
+      steps: (context) => [faceLoc(context.obj), ...climb([3036, 3342, 3])],
     },
     tightrope(ObjectIds.TIGHTROPE_6, 2, [3039, 3343, 3], [3047, 3343], 17),
     {
