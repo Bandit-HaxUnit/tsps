@@ -3014,6 +3014,15 @@
       "sounds": {
         "death": 512
       }
+    },
+    "14779": {
+      "name": "Gemstone Crab",
+      "anims": {
+        "attack": 12483,
+        "block": -1,
+        "death": 12482,
+        "spawn": 12481
+      }
     }
   },
   "refs": {
