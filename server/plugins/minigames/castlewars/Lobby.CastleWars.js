@@ -9,6 +9,9 @@
 const FoodPlugin = require("../../items/Food.plugin");
 const { createBotPlayer } = require("../../bots/behaviours/spawn/BotPlayerFactory");
 const { ATTR_SKIP_PERSISTENCE } = require("../../bots/runtime/BotPersistenceConstants");
+const { ShopManager } = require("../../../src/main/typescript/elvarg/game/model/container/shop/ShopManager");
+
+const CASTLE_WARS_TICKET_EXCHANGE_SHOP = 1432;
 
 const FOOD_ITEM_IDS = Array.isArray(FoodPlugin.FOOD_ITEM_IDS) ? FoodPlugin.FOOD_ITEM_IDS : [];
 
@@ -119,4 +122,5 @@ module.exports = function attachCastleWarsLobby(registry, castleWars) {
   core = registry.core;
   data = castleWars.data;
   registry.onObjectInteraction(useCastleWarsPortal);
+  registry.onNpcInteraction("Lanthus", { Trade: ({ player }) => ShopManager.open(player, CASTLE_WARS_TICKET_EXCHANGE_SHOP) });
 };

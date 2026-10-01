@@ -21,6 +21,16 @@ const DOOR_AUTO_CLOSE_TICKS = 500;
 // closed variant offers "Open" and closedId+1 offers "Close" (verified live against this
 // cache: e.g. 23972 "Door" Open -> 23973 "Door" Close). A hardcoded whitelist can only ever
 // cover the handful of doors someone happened to test; this covers all of them.
+//
+// Adding a door? Dump the ids around it from the cache first (needs `yarn build`, run from server/):
+//   node -e '(async()=>{require("./dist/Server").Server.installProductionPathResolver();
+//     await require("./dist/game/cache/CachePipeline").CachePipeline.initialize(process.cwd());
+//     const {CacheDefinitions:C}=require("./dist/game/cache/CacheDefinitions");
+//     for(const id of [1516,1517,1518,1519,1520]){const d=C.getObject(id);
+//     console.log(id,d?.name,JSON.stringify(d?.actions),JSON.stringify(d?.models));}})()' 2>&1 | grep -E "^[0-9]"
+// Closed = "Open" action; its open variant is a "Close" loc with the same models (usually id+1).
+// Not id+1 -> SINGLE_DOOR_OPEN_IDS. Two leaves -> DOUBLE_DOOR_ID_FAMILIES (+ SPECIAL_* maps when
+// the open ids are not closed+1). Same trick works for NPCs/items via C.getNpc / C.getItem.
 function hasAction(actions, keyword) {
   return Array.isArray(actions) && actions.some((action) => typeof action === "string" && action.toLowerCase() === keyword);
 }
@@ -37,6 +47,9 @@ let DOOR_CATALOG = null;
 // model, so the same-model pairing below must not pair them. Tutorial Island:
 // start house, chef entry/exit, quest guide, and the bank/prayer area doors.
 const SELF_OPENING_DOOR_IDS = new Set([9398, 9709, 9710, 9716, 9721, 9722, 9723, 9724]);
+
+// Single doors whose open variant is not closedId + 1 (e.g. Large door 1517 -> 1520, same models).
+const SINGLE_DOOR_OPEN_IDS = new Map([[1517, 1520]]);
 
 // OSRS wooden gates are two locs that pivot together around the hinge post: a hinge panel
 // and an extension panel. Opening/closing moves BOTH pieces, so the "closed id + 1 = open
@@ -120,6 +133,10 @@ function buildDoorCatalog() {
       openToClosed.set(id + 1, id);
     }
   }
+  for (const [closedId, openId] of SINGLE_DOOR_OPEN_IDS) {
+    closedToOpen.set(closedId, openId);
+    openToClosed.set(openId, closedId);
+  }
   return { closedToOpen, openToClosed };
 }
 
@@ -135,7 +152,7 @@ const DOOR_RESYNC_TICKS_ATTR = "doors:resyncTicks";
 const DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
   Object.freeze([1506, 1507, 1508, 1511]),
   Object.freeze([1512, 1513, 1514]),
-  Object.freeze([1516, 1517, 1519, 1520]),
+  Object.freeze([1516, 1519]),
   Object.freeze([1727, 1728, 1571, 1572]),
   Object.freeze([14751, 14752, 14753, 14754]),
   Object.freeze([1521, 1522, 1524, 1525]),
@@ -153,8 +170,10 @@ const DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
   Object.freeze([9717, 9718, 1571, 1572]),
   // Tutorial Island rat cage: same metal gate, face 0 (9719 is the left/south leaf).
   Object.freeze([9719, 9720, 1571, 1572]),
+  // Large doors sharing model 639 with 1521/1524; they open into that family's 1522/1525.
+  Object.freeze([30387, 30388, 1522, 1525]),
 ]);
-const SPECIAL_DOUBLE_DOOR_LEFT_IDS = new Set([1568, 1571, 1727, 14751, 14753, 2039, 9717, 9719, 4423, 4425, 4428, 4430]);
+const SPECIAL_DOUBLE_DOOR_LEFT_IDS = new Set([1568, 1571, 1727, 14751, 14753, 2039, 9717, 9719, 4423, 4425, 4428, 4430, 30387, 1522]);
 const SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map([
   [1568, [1569]],
   [1569, [1568]],
@@ -180,6 +199,10 @@ const SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map([
   [4427, [4428]],
   [4430, [4429]],
   [4429, [4430]],
+  [30387, [30388]],
+  [30388, [30387]],
+  [1522, [1525]],
+  [1525, [1522]],
 ]);
 const SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
   [1568, 1571],
@@ -198,6 +221,8 @@ const SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
   [4424, 4426],
   [4428, 4430],
   [4427, 4429],
+  [30387, 1522],
+  [30388, 1525],
 ]);
 const DOUBLE_DOOR_FAMILY_IDS_BY_ID = new Map(
   DOUBLE_DOOR_ID_FAMILIES.flatMap((familyIds) =>
@@ -1004,9 +1029,6 @@ function handleDoubleDoor(player, object, objectId, location) {
   }
   if (!clickedDoor) {
     return false;
-  }
-  if (clickedDoor.currentId > 15000) {
-    return true;
   }
 
   const pair = resolveDoubleDoorPair(clickedDoor);
