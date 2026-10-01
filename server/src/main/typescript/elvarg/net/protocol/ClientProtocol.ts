@@ -1495,6 +1495,15 @@ export function encodeWidgetSetModel(uid: number, modelId: number): Buffer {
   return encodeServerPacket(ServerPacketId.WIDGET_SET_MODEL, payload);
 }
 
+/** IF_SETPOSITION: move a component within its parent, keeping its position modes. */
+export function encodeWidgetSetPosition(uid: number, x: number, y: number): Buffer {
+  const payload = Buffer.alloc(8);
+  payload.writeInt32BE(uid | 0, 0);
+  payload.writeInt16BE(x | 0, 4);
+  payload.writeInt16BE(y | 0, 6);
+  return encodeServerPacket(ServerPacketId.WIDGET_SET_POSITION, payload);
+}
+
 export function encodeWidgetSetItem(uid: number, itemId: number, quantity = 1): Buffer {
   const payload = Buffer.alloc(10);
   payload.writeInt32BE(uid | 0);

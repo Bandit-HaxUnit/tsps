@@ -51,7 +51,7 @@ function buildHarness() {
     world.set(tileKey(id, x, y, 0), object);
   };
 
-  const click = (id, x, y, face, action = 'Open') => {
+  const click = (id, x, y, face, action = 'Open', name = 'Gate') => {
     const object = new GameObject(id, new Location(x, y, 0), 0, face, null);
     const location = object.getLocation();
     const player = {
@@ -66,7 +66,7 @@ function buildHarness() {
       getPacketSender: () => ({}),
     };
     ops.length = 0;
-    handlers.get('Gate')[action]({ player, object, objectId: id, location });
+    handlers.get(name)[action]({ player, object, objectId: id, location });
     return ops.splice(0);
   };
 
@@ -202,6 +202,49 @@ test('gates with a Release action swing open (60763/60760)', () => {
       ['deregister', 60760, 400, 401, 0],
       ['register', 60761, 399, 400, 3],
       ['register', 60762, 398, 400, 3],
+    ]);
+  } finally {
+    h.restore();
+  }
+});
+
+test('Castle Wars large doors swing both leaves to the open ids and back', () => {
+  const h = buildHarness();
+  try {
+    // Saradomin: west leaf 4423 / east 4424, one row south when open.
+    h.place(4423, 2426, 3088, 3);
+    h.place(4424, 2427, 3088, 3);
+    assert.deepEqual(h.click(4423, 2426, 3088, 3, 'Open', 'Large door'), [
+      ['deregister', 4423, 2426, 3088, 3],
+      ['deregister', 4424, 2427, 3088, 3],
+      ['register', 4425, 2426, 3087, 0],
+      ['register', 4426, 2427, 3087, 2],
+    ], 'west leaf is left: it opens to face 0, the east leaf mirrors to face 2');
+    h.place(4425, 2426, 3087, 0);
+    h.place(4426, 2427, 3087, 2);
+    assert.deepEqual(h.click(4425, 2426, 3087, 0, 'Close', 'Large door'), [
+      ['deregister', 4425, 2426, 3087, 0],
+      ['deregister', 4426, 2427, 3087, 2],
+      ['register', 4423, 2426, 3088, 3],
+      ['register', 4424, 2427, 3088, 3],
+    ]);
+
+    // Zamorak: ids run east to west, so 4428 is the west/left leaf.
+    h.place(4428, 2372, 3119, 1);
+    h.place(4427, 2373, 3119, 1);
+    assert.deepEqual(h.click(4428, 2372, 3119, 1, 'Open', 'Large door'), [
+      ['deregister', 4428, 2372, 3119, 1],
+      ['deregister', 4427, 2373, 3119, 1],
+      ['register', 4430, 2372, 3120, 0],
+      ['register', 4429, 2373, 3120, 2],
+    ]);
+    h.place(4430, 2372, 3120, 0);
+    h.place(4429, 2373, 3120, 2);
+    assert.deepEqual(h.click(4430, 2372, 3120, 0, 'Close', 'Large door'), [
+      ['deregister', 4430, 2372, 3120, 0],
+      ['deregister', 4429, 2373, 3120, 2],
+      ['register', 4428, 2372, 3119, 1],
+      ['register', 4427, 2373, 3119, 1],
     ]);
   } finally {
     h.restore();

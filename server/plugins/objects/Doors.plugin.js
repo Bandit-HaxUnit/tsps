@@ -144,14 +144,17 @@ const DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
   Object.freeze([1568, 1569, 1571, 1572]),
   Object.freeze([1589, 1590, 1591]),
   Object.freeze([1596, 1597, 1598]),
-  Object.freeze([4423, 4424, 4425]),
+  // Castle Wars large doors. West leaf is left: Saradomin 4423/4424 -> 4425/4426,
+  // Zamorak 4428/4427 (ids run east to west on that wall) -> 4430/4429.
+  Object.freeze([4423, 4424, 4425, 4426]),
+  Object.freeze([4427, 4428, 4429, 4430]),
   Object.freeze([2039, 2041, 1571, 1572]),
   // Tutorial Island mining exit: same metal gate as 1727/1728 (9717 is the left leaf).
   Object.freeze([9717, 9718, 1571, 1572]),
   // Tutorial Island rat cage: same metal gate, face 0 (9719 is the left/south leaf).
   Object.freeze([9719, 9720, 1571, 1572]),
 ]);
-const SPECIAL_DOUBLE_DOOR_LEFT_IDS = new Set([1568, 1571, 1727, 14751, 14753, 2039, 9717, 9719]);
+const SPECIAL_DOUBLE_DOOR_LEFT_IDS = new Set([1568, 1571, 1727, 14751, 14753, 2039, 9717, 9719, 4423, 4425, 4428, 4430]);
 const SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map([
   [1568, [1569]],
   [1569, [1568]],
@@ -169,6 +172,14 @@ const SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map([
   [9718, [9717]],
   [9719, [9720]],
   [9720, [9719]],
+  [4423, [4424]],
+  [4424, [4423]],
+  [4425, [4426]],
+  [4426, [4425]],
+  [4428, [4427]],
+  [4427, [4428]],
+  [4430, [4429]],
+  [4429, [4430]],
 ]);
 const SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
   [1568, 1571],
@@ -183,6 +194,10 @@ const SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
   [9718, 1572],
   [9719, 1571],
   [9720, 1572],
+  [4423, 4425],
+  [4424, 4426],
+  [4428, 4430],
+  [4427, 4429],
 ]);
 const DOUBLE_DOOR_FAMILY_IDS_BY_ID = new Map(
   DOUBLE_DOOR_ID_FAMILIES.flatMap((familyIds) =>

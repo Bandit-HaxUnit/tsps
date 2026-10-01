@@ -49,6 +49,9 @@ export class AreaManager {
 
         // Handle processing..
         if (area != null) {
+            // Record the area first: process() may move the actor into another area
+            // (Pest Control), which is only detectable against what was recorded.
+            c.setArea(area);
             const processedArea = area;
             area.process(c);
             if (c.getArea() !== processedArea) {

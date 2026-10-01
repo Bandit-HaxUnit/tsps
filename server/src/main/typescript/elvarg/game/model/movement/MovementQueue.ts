@@ -1270,6 +1270,11 @@ export class MovementQueue {
                 routeSpec.reachBlockAccessFlags
             )) {
                 // Arrival is not a failed route: operate on the following cycle.
+                // No extra arriveDelay here: in OSRS that delay only applies to actions that
+                // move you. Banks, tables, shops and NPCs fire the tick after you arrive, which
+                // this already does. A global delay would make every one of those a tick slower
+                // than OSRS and break tick-based skilling. Ops that move the player get it from
+                // the shared climb (Ladders.plugin.js ladders:climbUp/climbDown) or ObstacleRunner.
                 if (this.didMoveThisCycle()) return;
                 if (objectX === this.player.getLocation().getX() && objectY === this.player.getLocation().getY()) {
                     this.player.setDirection([Direction.WEST, Direction.NORTH, Direction.EAST, Direction.SOUTH][direction]);
