@@ -501,6 +501,11 @@ export abstract class Mobile extends Entity {
             hit.setDamage(0);
             return hit;
         }
+        // A boss whose HP is a timer shows every hit but keeps its HP.
+        if (this.isNpc() && this.getAsNpc().isHitpointsLocked?.()) {
+            if (hit.getDamage() < 0) hit.setDamage(0);
+            return hit;
+        }
         const PlayerRights = getPlayerRights();
         const protectedDeveloper =
           this.isPlayer() &&
