@@ -8,8 +8,33 @@ watering, disease and cures, harvesting, regrowth, compost bins and bottomless
 buckets, saplings, gardener payments, leprechaun storage/noting, seed vault,
 seed boxes/herb sacks, contracts and rewards, anima plants, farming spells,
 amulets, barbarian Farming, Tithe Farm, and a private Hespori encounter/retrieval
-service. The generated cache data identifies 108 grouped patches and 40 Tithe
+service. The generated cache data identifies 110 grouped patches and 40 Tithe
 plots; gameplay tables contain 82 crops. XP follows the server's configured rate.
+
+## Comparison with TSPS PR #141
+
+Compared against [PR #141](https://github.com/RSPSApp/tsps/pull/141) at
+`718cb8b24202f221a335dd89148e11c245a4fda7`:
+
+- Its 58 crops are already covered. Its 48 patch locations are now covered too:
+  the exporter previously missed Port Phasmatys's flower patch and compost bin
+  because their regional models use different object IDs.
+- Patch changes now send private object removal/re-add packets after the varbit,
+  rebuilding the client's geometry for every map tile of the patch. Unchanged
+  patches stay quiet; first visits and reused transmit varbits also refresh.
+- Transformed click IDs already resolve through `MapObjects.getPrivateArea`,
+  shared by object clicks, item use, and spells. No duplicate tile-only router
+  was added.
+- Cure/prune now follows the local cache's action and respects the supplied
+  item. Wrong tools do not consume a carried cure. Lunar Cure Plant still
+  bypasses physical tools.
+- Watering cans support water pumps and house pumps/gold sinks, reject damaged
+  Trouble Brewing pumps, and report empty cans when watering patches/seedlings.
+  Herb picking and plant-pot filling use the corresponding farming animations.
+- Existing ultracompost, gardener payments, leprechauns, sacks/baskets,
+  flower/scarecrow protection, amulets, newer crops, Tithe, and Hespori remain
+  available. The reference's simplified seed counts, harvest lives, compost-bin
+  mixing, and growth rules were not substituted for our existing mechanics.
 
 ## Fidelity limits
 
@@ -37,6 +62,7 @@ From `server/`:
 ```powershell
 npx.cmd tsc --noEmit
 node -r ts-node/register/transpile-only src/main/typescript/elvarg/game/plugin/impl/farming/FarmingModel.test.ts
+node -r ts-node/register/transpile-only src/main/typescript/elvarg/game/plugin/impl/farming/FarmingInteraction.test.ts
 ```
 
 The second command is an isolated state-machine check, without server startup,
@@ -44,6 +70,8 @@ sockets, player login, or a smoke harness. It covers offline/save equivalence,
 disease/death, mature immunity, private stump regrowth, herb formulas, critical
 cache states, and Tithe growth/scoring. Cache-only audits also checked crop item
 resolution and growing, diseased, dead, and mature visual values.
+The third command checks the actual refresh/cure functions in isolation, with
+cache definitions and recorded packets. It does not import or start the server.
 
 To regenerate the checked-in cache export:
 

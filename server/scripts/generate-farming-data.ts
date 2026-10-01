@@ -55,7 +55,14 @@ async function main() {
     for (let id = 0; id < CacheDefinitions.getCounts().objects; id++) {
         const loc = CacheDefinitions.getObject(id);
         if (!loc.transforms || loc.transformVarbit < 0 || patchObjects.has(id)) continue;
-        const match = signatures.find(s => loc.transforms.length === s.transforms.length && loc.transforms.slice(4, 14).filter((value, i) => value >= 0 && value === s.transforms[i + 4]).length >= 8);
+        // Regional variants can use different models for the same farming states
+        // (notably Port Phasmatys's flower patch and compost bin).
+        const match = signatures.find(s => loc.transforms.length === s.transforms.length
+            && (loc.transforms.slice(4, 14).filter((value, i) => value >= 0 && value === s.transforms[i + 4]).length >= 8
+                || ["FLOWER", "COMPOST"].includes(s.type)
+                    && CacheDefinitions.getObject(loc.transforms[0]).name === CacheDefinitions.getObject(s.transforms[0]).name
+                    && loc.transforms.slice(4, 14).filter((value, i) => value >= 0 && s.transforms[i + 4] >= 0
+                        && CacheDefinitions.getObject(value).name === CacheDefinitions.getObject(s.transforms[i + 4]).name).length >= 8));
         if (match) patchObjects.set(id, { type: match.type, varbit: loc.transformVarbit });
         if (loc.transforms.length > 100 && CacheDefinitions.getObject(loc.transforms[0]).name === "Herb patch") {
             patchObjects.set(id, { type: "HERB", varbit: loc.transformVarbit });

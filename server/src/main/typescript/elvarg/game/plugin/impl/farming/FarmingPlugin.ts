@@ -3,6 +3,7 @@ import { PluginManager } from "../../../../plugins/PluginManager";
 import type { Player } from "../../../entity/impl/player/Player";
 import { CacheDefinitions } from "../../../cache/CacheDefinitions";
 import { ObjectDefinition } from "../../../definition/ObjectDefinition";
+import { MapObjects } from "../../../entity/impl/object/MapObjects";
 import { Item } from "../../../model/Item";
 import { Animation } from "../../../model/Animation";
 import { Skill } from "../../../model/Skill";
@@ -17,14 +18,16 @@ import { farmingSpell, farmingButton } from "./FarmingSpells";
 import { titheObject, titheItem, titheNpc, titheProcess, titheLogin, titheLogout, titheItemOnNpc } from "./FarmingTithe";
 import { guildNpc, guildItemOnNpc, rewardItem, completeContract, harvestContract, storagePair, storageAction, storeCrop, guildObject } from "./FarmingGuild";
 import { NpcIdentifiers } from "../../../../util/NpcIdentifiers";
+import { ObjectIdentifiers } from "../../../../util/ObjectIdentifiers";
 import { harvestHespori, HesporiCombat, hesporiCanAttack, hesporiHitRoll, hesporiHit, hesporiInput, hesporiProcess,
     hesporiLoot, hesporiLogout, hesporiDeathDrop, hesporiNpc, hesporiCave, hesporiPlayerDeath, hesporiDamage } from "./FarmingHespori";
 
 export const FARM_ATTRIBUTE = "farming:state";
-const ANIM = { RAKE: 2273, PLANT: 2291, SAPLING: 2272, WATER: 2293, DIG: 830, HARVEST: 2282, HERB: 2286, COMPOST: 2283, CURE: 2288, PRUNE: 2275 };
+const ANIM = { RAKE: 2273, PLANT: 2291, SAPLING: 2272, FILL_POT: 2287, WATER: 2293, DIG: 830, HARVEST: 2282, COMPOST: 2283, CURE: 2288, PRUNE: 2275 };
 type Work = { patch: Patch; action: "rake" | "harvest"; nextAt: number; position: Location };
 const WORK = new WeakMap<Player, Work>();
 const SYNC = new WeakMap<Player, { x: number; y: number; z: number; at: number }>();
+const RENDERED = new WeakMap<Player, Map<string, number>>();
 
 export function farmFor(player: Player): Farm {
     let farm = player.getAttribute(FARM_ATTRIBUTE) as Farm;
@@ -85,7 +88,23 @@ export function clearPatch(player: Player, patch: Patch): void {
 export function syncPatch(player: Player, patch: Patch): void {
     const state = stateFor(player, patch);
     const value = patch.type.includes("COMPOST") ? binValue(patch, state) : patchValue(patch, state);
-    if (value !== undefined && player.getPacketSender().getVarbit(patch.varbit) !== value) player.getPacketSender().sendVarbit(patch.varbit, value);
+    if (value === undefined) return;
+    const sender = player.getPacketSender();
+    let rendered = RENDERED.get(player);
+    if (!rendered) RENDERED.set(player, rendered = new Map());
+    if (rendered.get(patchKey(patch)) === value && sender.getVarbit(patch.varbit) === value) return;
+    sender.sendVarbit(patch.varbit, value);
+    // The client rebuilds loc geometry on object updates, not varbit updates.
+    // Use the actual map locs so multi-tile patches retain every shape/rotation.
+    for (let x = patch.x; x <= patch.maxX; x++) {
+        for (let y = patch.y; y <= patch.maxY; y++) {
+            const object = MapObjects.get(patch.id, new Location(x, y, patch.z), player.getPrivateArea());
+            if (!object) continue;
+            sender.sendObjectRemoval(object);
+            sender.sendObject(object);
+        }
+    }
+    rendered.set(patchKey(patch), value);
 }
 function findPatch(id: number, location: { x: number; y: number; z: number }): Patch | undefined {
     return CACHE.patches.find(p => p.id === id && p.z === location.z && location.x >= p.x && location.x <= p.maxX && location.y >= p.y && location.y <= p.maxY)
@@ -227,9 +246,9 @@ export function fertilize(player: Player, patch: Patch, tier: number, consume = 
     syncPatch(player, patch);
     return true;
 }
-export function cure(player: Player, patch: Patch, useItem = true): boolean {
+export function cure(player: Player, patch: Patch, useItem = true, usedId?: number): boolean {
     const state = stateFor(player, patch);
-    if (useItem && state.crop === "WILLOW" && state.status === "grown" && state.checked && !state.stump) {
+    if (useItem && usedId !== itemId("Plant cure") && state.crop === "WILLOW" && state.status === "grown" && state.checked && !state.stump) {
         if (!hasTool(player, "Secateurs") && !requireTool(player, "Magic secateurs")) return false;
         const now = Date.now();
         const elapsed = Math.floor((now - (state.branchAt ?? now)) / (5 * MINUTE));
@@ -241,8 +260,14 @@ export function cure(player: Player, patch: Patch, useItem = true): boolean {
     }
     if (state.status !== "diseased") { player.sendMessage("This plant is not diseased."); return false; }
     if (useItem) {
-        const pruning = ["TREE", "FRUIT_TREE", "BUSH", "HARDWOOD_TREE", "SPIRIT_TREE", "CALQUAT", "CELASTRUS", "REDWOOD", "CORAL"].includes(patch.type)
-            && (hasTool(player, "Secateurs") || hasTool(player, "Magic secateurs"));
+        const variant = CacheDefinitions.getObject(patch.id).transforms[patchValue(patch, state)];
+        const pruning = CacheDefinitions.getObject(variant).actions?.includes("Prune") ?? false;
+        if (pruning && (usedId === itemId("Plant cure") || !hasTool(player, "Secateurs") && !hasTool(player, "Magic secateurs"))) {
+            player.sendMessage("Use secateurs to prune the diseased leaves."); return false;
+        }
+        if (!pruning && (usedId === itemId("Secateurs") || usedId === itemId("Magic secateurs"))) {
+            player.sendMessage("This plant needs plant cure, not pruning."); return false;
+        }
         if (!pruning) {
             if (!player.getInventory().contains(itemId("Plant cure"))) { player.sendMessage("You need plant cure to cure this plant."); return false; }
             player.getInventory().deleteNumber(itemId("Plant cure"), 1);
@@ -290,7 +315,7 @@ function harvest(player: Player, patch: Patch): boolean {
     const sack = crop.type === "HERB" && player.getInventory().getItems().find(i => i.getId() === itemId("Open herb sack"));
     if (!(sack && storeCrop(player, sack, produce, amount)) && !give(player, produce, amount)) return false;
     if (blessing) player.getInventory().deleteNumber(itemId("Bologa's blessing"), 1);
-    animate(player, patch.type === "HERB" ? ANIM.HERB : ANIM.HARVEST);
+    animate(player, ANIM.HARVEST);
     award(player, crop.harvest * (["FLOWER", "BELLADONNA"].includes(crop.type) ? 1 : amount));
     const variable = COMPOSTABLE_YIELD.has(crop.type) || ["BUSH", "CACTUS", "GRAPES", "CORAL"].includes(crop.type);
     const cape = player.getEquipment().contains(itemId("Farming cape")) || player.getEquipment().contains(itemId("Farming cape(t)"));
@@ -399,8 +424,11 @@ function itemOnObject(event: PluginItemOnObjectEvent): void {
             player.getInventory().deleteAtSlot(event.itemSlot);
             player.getInventory().addItem(new Item(itemId("Hay sack"))); return;
         }
-        if (["fountain", "sink", "waterpump", "water barrel", "well"].includes(name) && /^(?:Watering can(?:\([1-8]\))?|Gricoller's can)$/.test(CacheDefinitions.getItem(id).name)) {
+        if (["fountain", "sink", "gold sink", "waterpump", "water pump", "pump and drain", "pump and tub", "water barrel", "well"].includes(name) && /^(?:Watering can(?:\([1-8]\))?|Gricoller's can)$/.test(CacheDefinitions.getItem(id).name)) {
             event.handled = true;
+            if ([ObjectIdentifiers.WATER_PUMP_2, ObjectIdentifiers.WATER_PUMP_3].includes(object.getId())) {
+                player.sendMessage("This water pump is damaged."); return;
+            }
             if (player.getInventory().forSlot(event.itemSlot)?.getId() === id) {
                 const can = player.getInventory().forSlot(event.itemSlot);
                 if (CacheDefinitions.getItem(id).name === "Gricoller's can") can.setMetaValue("farming:water", 1000);
@@ -419,8 +447,8 @@ function itemOnObject(event: PluginItemOnObjectEvent): void {
     else if (id === itemId("Rake")) startWork(player, patch, "rake");
     else if (id === itemId("Spade") && patch.type === "HESPORI" && state.status === "grown") harvestHespori(player, patch);
     else if (id === itemId("Spade")) dig(player, patch);
-    else if (id === itemId("Plant cure") || id === itemId("Secateurs") || id === itemId("Magic secateurs")) cure(player, patch);
-    else if (/^Watering can\(|^Magic watering can$|^Gricoller's can$/.test(CacheDefinitions.getItem(id).name)) waterPatch(player, patch, id);
+    else if (id === itemId("Plant cure") || id === itemId("Secateurs") || id === itemId("Magic secateurs")) cure(player, patch, true, id);
+    else if (/^Watering can(?:\([1-8]\))?$|^Magic watering can$|^Gricoller's can$/.test(CacheDefinitions.getItem(id).name)) waterPatch(player, patch, id);
     else if (CacheDefinitions.getItem(id).name === "Bottomless compost bucket") useBottomless(player, patch, id);
     else if (id === itemId("Amulet of nature")) {
         farmFor(player).boundPatch = patchKey(patch);
@@ -435,6 +463,7 @@ function itemOnObject(event: PluginItemOnObjectEvent): void {
         player.getInventory().deleteNumber(id, 1); state.scarecrow = true;
     } else if (id === itemId("Plant pot") && !state.crop && !state.weeds && requireTool(player, "Gardening trowel")) {
         player.getInventory().deleteNumber(id, 1); player.getInventory().addItem(new Item(itemId("Filled plant pot")));
+        animate(player, ANIM.FILL_POT);
     } else player.sendMessage("Nothing interesting happens.");
     syncPatch(player, patch);
 }
@@ -512,9 +541,9 @@ function playerProcess({ player }: { player: Player }): void {
 }
 function login(event: { player: Player }): void {
     for (const state of Object.values(farmFor(event.player).patches)) state.hesporiFight = false;
-    SYNC.delete(event.player); playerProcess(event);
+    SYNC.delete(event.player); RENDERED.delete(event.player); playerProcess(event);
 }
-function logout({ player }: { player: Player }): void { WORK.delete(player); SYNC.delete(player); hesporiLogout({ player }); }
+function logout({ player }: { player: Player }): void { WORK.delete(player); SYNC.delete(player); RENDERED.delete(player); hesporiLogout({ player }); }
 function cancelWork({ player }: { player: Player }): void { WORK.delete(player); }
 
 export const name = "Farming";

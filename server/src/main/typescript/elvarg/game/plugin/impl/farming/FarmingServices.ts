@@ -163,7 +163,7 @@ export function farmingItemPair(event: PluginItemOnItemEvent): void {
     const seedling = [...CROPS.values()].find(c => c.seedling === a || c.seedling === b);
     if (seedling) {
         const can = a === seedling.seedling ? b : a;
-        if (!/^Watering can\(|^Magic watering can$|^Gricoller's can$/.test(CacheDefinitions.getItem(can).name)) return;
+        if (!/^Watering can(?:\([1-8]\))?$|^Magic watering can$|^Gricoller's can$/.test(CacheDefinitions.getItem(can).name)) return;
         event.handled = true;
         if (!water(player, can)) return;
         const slot = a === seedling.seedling ? event.usedItemSlot : event.usedWithItemSlot;
