@@ -150,8 +150,8 @@ function getDoorCatalog() {
 const OPEN_OBJECT_STATES = new Map();
 const DOOR_RESYNC_TICKS_ATTR = "doors:resyncTicks";
 const DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
-  Object.freeze([1506, 1507, 1508, 1511]),
-  Object.freeze([1512, 1513, 1514]),
+  // Large doors (model 633): 1511 opens to 1512, 1513 to 1516 (1514 is an unnamed loc).
+  Object.freeze([1511, 1513, 1512, 1516]),
   Object.freeze([1516, 1519]),
   Object.freeze([1727, 1728, 1571, 1572]),
   Object.freeze([14751, 14752, 14753, 14754]),
@@ -173,7 +173,7 @@ const DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
   // Large doors sharing model 639 with 1521/1524; they open into that family's 1522/1525.
   Object.freeze([30387, 30388, 1522, 1525]),
 ]);
-const SPECIAL_DOUBLE_DOOR_LEFT_IDS = new Set([1568, 1571, 1727, 14751, 14753, 2039, 9717, 9719, 4423, 4425, 4428, 4430, 30387, 1522]);
+const SPECIAL_DOUBLE_DOOR_LEFT_IDS = new Set([1568, 1571, 1727, 14751, 14753, 2039, 9717, 9719, 4423, 4425, 4428, 4430, 30387, 1522, 1511, 1512]);
 const SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map([
   [1568, [1569]],
   [1569, [1568]],
@@ -203,6 +203,10 @@ const SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map([
   [30388, [30387]],
   [1522, [1525]],
   [1525, [1522]],
+  [1511, [1513]],
+  [1513, [1511]],
+  [1512, [1516]],
+  [1516, [1512]],
 ]);
 const SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
   [1568, 1571],
@@ -223,6 +227,8 @@ const SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
   [4427, 4429],
   [30387, 1522],
   [30388, 1525],
+  [1511, 1512],
+  [1513, 1516],
 ]);
 const DOUBLE_DOOR_FAMILY_IDS_BY_ID = new Map(
   DOUBLE_DOOR_ID_FAMILIES.flatMap((familyIds) =>
