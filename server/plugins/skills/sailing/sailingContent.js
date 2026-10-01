@@ -89,9 +89,10 @@ function content() {
   const cargo = read("sailing-cargo.json");
   const names = read("sailing-boat-names.json");
   const parts = read("sailing-parts.json");
+  const salvage = read("sailing-salvage.json");
   for (const boat of boats) Sailing.registerBoatType(boat);
   for (const dock of docks) Sailing.registerDock(dock);
-  loaded = { boats, docks, cargo, names, parts };
+  loaded = { boats, docks, cargo, names, parts, salvage };
   return loaded;
 }
 
@@ -144,17 +145,21 @@ function playSound(player, soundId, delay = 0) {
 /** Plays a loc animation on the boat's deck for the player and everyone who sees them. */
 function animateDeckLocs(player, boat, isLoc, animId) {
   const type = boatType(BoatManager.getSpec(boat)?.type);
-  const viewers = [player, ...player.getLocalPlayers().filter((other) => other.getLocalPlayers().includes(player))];
   for (const loc of type?.locs ?? []) {
-    if (!isLoc(loc)) continue;
-    const drawn = {
-      getId: () => loc.id,
-      getLocation: () => new Location(boat.deckBaseX + loc.x, boat.deckBaseY + loc.y, loc.level),
-      getType: () => loc.shape,
-      getFace: () => loc.rotation,
-    };
-    for (const viewer of viewers) viewer.getPacketSender().sendObjectAnimation(drawn, new Animation(animId));
+    if (isLoc(loc)) animateDeckLoc(player, boat, loc, animId);
   }
+}
+
+/** Plays a loc animation on one deck loc, for the player and everyone who sees them. */
+function animateDeckLoc(player, boat, loc, animId) {
+  const viewers = [player, ...player.getLocalPlayers().filter((other) => other.getLocalPlayers().includes(player))];
+  const drawn = {
+    getId: () => loc.id,
+    getLocation: () => new Location(boat.deckBaseX + loc.x, boat.deckBaseY + loc.y, loc.level),
+    getType: () => loc.shape,
+    getFace: () => loc.rotation,
+  };
+  for (const viewer of viewers) viewer.getPacketSender().sendObjectAnimation(drawn, new Animation(animId));
 }
 
 function isHelm(loc) {
@@ -199,6 +204,7 @@ module.exports = {
   playSound,
   fade,
   animateDeckLocs,
+  animateDeckLoc,
   isHelm,
   isSail,
 };

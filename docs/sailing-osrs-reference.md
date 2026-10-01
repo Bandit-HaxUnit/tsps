@@ -300,6 +300,8 @@ From a capture of building and removing a range on a sloop in the shipyard.
 - On the sidepanel: 19156 + n for 0-10, and 20185 and 20186 for 11 and 12 (script 8729).
 - Building or removing sets `facilities_unaltered` (block +4) to 0, and it stays 0.
 
+**Schematics:** some facilities and the top-tier parts show as "Unknown" in the customisation interface until their schematic is found (cache script 9078; varbit 1 or more = found). Salvaging stations 19544, gale catcher 19545, eternal braziers 19546, dragon hooks 19547, rosewood cargo holds 19548, dragon cannon 19549, top-tier hulls 19550, sails 19551, helms 19552, keels 19553, ballistic attractor 20227. Tsps sends them all as found at login, since finding schematics doesn't exist yet.
+
 **Empty hotspots** show a "Facility hotspot" loc with op 1 **Build**, but only in the shipyard; at sea an empty hotspot shows nothing. Solid facilities (clip type ≠ 0, such as the range, cargo holds, inoculation station and cannons) block their deck tile; hooks and placeholders don't. The placeholder ids are: raft 59661 (inferred, not captured), skiff 59664 + n, sloop 59671 + n for 0-10, plus 60720 and 60721. Built facilities have op 5 **Modify**.
 
 **Boarding in the shipyard:** the boat's own gangplank (59719, a multiloc on varbit 19104: 59721 Board, 59720 Disembark) teleports you straight onto the deck, level 1, at the boarding tile. There's no fade and no message; the boarded varbits and the sidepanel are set as at a dock. Disembark puts you back at (2086, 2724).
@@ -323,6 +325,29 @@ There's no message.
 - animation 3685 (`human_throw_away`) and sound 10753;
 - the hotspot varbits go back to 0 and the placeholder returns;
 - nothing is refunded.
+
+## Shipwreck salvaging
+
+From captures of salvaging a small shipwreck with a sloop's adamant hook, deploying away from any wreck, and sorting at the sloop's salvaging station. The rest is the OSRS Wiki's (Shipwreck salvaging, each shipwreck's and each salvage's page), in `server/data/definitions/sailing-salvage.json`.
+
+**Wrecks** are loc pairs: an active form with "Inspect" (60464 small, 60466 fisherman's, 60468 barracuda, 60470 large, 60472 pirate, 60474 mercenary, 60476 Fremennik, 60478 merchant) and a sunken form with no ops (the next id).
+- The cache map places every wreck sunken: 16 small spots (two groups of 8), and the other types in groups of 6 (barracuda's 43 are strung out unevenly). The small group south-east of the Pandemonium is at about (3085-3132, 2928-2989).
+- The server raises some of each group, sinks a wreck when its time is up, and raises another of the group (Wiki: "When one shipwreck sinks, another in the area immediately rises").
+- Salvaging starts a wreck's despawn timer: small 2:30, fisherman's, barracuda, large and pirate 3:00, mercenary 3:15, Fremennik 3:45, merchant 4:00. When it sinks: "You salvage all you can from the shipwreck before it is reclaimed by the sea."
+
+**Deploy** (op 1 on a salvaging hook):
+- No wreck in range: "There are no shipwrecks within range of the salvaging hook." Nothing else.
+- Otherwise: "You cast out your salvaging hook towards the shipwreck...", player animation 13576, and the hook loc plays 13573.
+- 3 ticks later varbit `sailing_sidepanel_player_at_facility_n` (19193 + hotspot; 19200 for hotspot 7) goes to 1, and from then on every tick the player replays 13577 and the hook 13574.
+- The first salvage came 10 ticks after the cast: "You reel in some salvage." (spam filter), the salvage in the inventory, and the wreck's XP (small 10).
+- Players roll every 4 ticks (Wiki), against each wreck's success chart: per hook tier a `low`/`high` out of 256, interpolated by Sailing level (the standard skilling formula; small with a bronze hook is 50-100, with a dragon hook 67-135).
+
+**Sort-salvage** (salvaging station: the boat facility 59699-59701, or a port's 60462/60463):
+- "You begin sorting through your salvage...", animation 13599, sound 10864.
+- Every 3 ticks one salvage is sorted: "You sort through the small salvage and find: 1 x Bones.", the loot in its place, sound 10860, and the salvage's XP (small 5.5; 5 and 6 alternate in the capture).
+- The animation replays with each, with sound 10864 after the first and 10866 after the rest.
+- With none left: "You have no more salvage to sort."
+- Loot: each salvage's pre-rolls first (1 in n each), then its main table by weight.
 
 ## Cargo hold
 
@@ -426,6 +451,7 @@ Depositing a tool, by Deposit Inventory or singly, puts it back in the compartme
 - **Client:**
   - A world view's collision isn't filled in, so a run step on a deck is drawn as if the deck were open floor. The server checks the real deck.
   - A despawned boat's added deck locs are forgotten, since the next boat reuses its entity index and deck coordinates.
+  - A loc animation on a deck rebuilds the boat's scene with it, so it starts a moment late. The same animation sent again while it plays (a salvaging hook's idle, every tick) only extends it.
 - **The skiff and sloop spawn tile** (3075, 2987) is one tile east of the raft's. tsps only has the raft so far.
 - **Cargo hold:**
   - `busy` isn't set while it's open, because plugins get no close hook to clear it.
@@ -449,7 +475,15 @@ Depositing a tool, by Deposit Inventory or singly, puts it back in the compartme
     - the part names in the swap message ("mast and sails");
     - the level, materials and "already has that" messages.
   - Materials come from the inventory only.
-- **Sailing** is a skill (23) now, but nothing gives Sailing XP yet; developers set the level from the skills tab.
+- **Sailing** is a skill (23). Salvaging and sorting give Sailing XP; nothing else does yet.
+- **Salvaging**, guessed rather than captured:
+  - the hook's reach: 8 tiles from the hook to the nearest tile of the wreck (about what it is in OSRS, as played);
+  - facing out over the hook's side of the boat while working it (the capture faced the hook tile, from beside it);
+  - how many wrecks a group keeps raised (two thirds, from the Wiki's "typically 4 of the 6");
+  - the first roll 6 ticks after the cast, then every 4;
+  - the messages for too low a level, a full inventory and finding nothing, and stopping without a message when you walk, leave the boat or sail out of reach;
+  - the hook animations for every boat size (the captured ones are the sloop's).
+- **Salvaging, not yet:** crewmates, salvage into the cargo hold, "Inspect" on a wreck, clue scrolls and soup from sorting, and opulent salvage's rare seed, herb and gem tables (rolled as nothing). Tsps floors XP on every gain, so 5.5 XP a sort counts as 5.
 - **Boat selection and recovery:**
   - The bank isn't sent when interface 934 opens.
   - The Port Wizard's line is only shown overhead, not also in the chatbox.

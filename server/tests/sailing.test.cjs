@@ -776,6 +776,7 @@ function registerPlugin(file) {
     persistAttribute: () => {},
     onPlayerLogin: (handler) => { hooks.login = handler; },
     onPlayerLogout: () => {},
+    onServerStartup: (handler) => { hooks.startup = handler; },
     spawnNpc: (definition) => { hooks.spawned = definition; return null; },
     removeNpc: () => {},
     sendMultiChatboxPrompt: (_player, title, ...pairs) => { hooks.prompt = { title, pairs }; },
@@ -1601,4 +1602,187 @@ test("::boatmats facility spawns a facility's materials", () => {
   assert.equal(player.messages.at(-1), "Spawned the materials for a Range (Sailing 16, Construction 6).");
   commands.boatmats({ player, parts: ["boatmats", "facility", "sofa"] });
   assert.match(player.messages.at(-1), /^Usage: ::boatmats/);
+});
+
+// --- Shipwreck salvaging.
+
+const shipwrecks = require("../plugins/skills/sailing/shipwrecks");
+const { content } = require("../plugins/skills/sailing/sailingContent");
+const { hookTierOf, successChance, rollLoot, outwardFrom } = require("../plugins/skills/sailing/Salvaging.plugin");
+
+function withRandom(value, run) {
+  const random = Math.random;
+  Math.random = () => value;
+  try {
+    return run();
+  } finally {
+    Math.random = random;
+  }
+}
+
+test("salvaging's hook tiers, success chance and loot rolls", () => {
+  assert.equal(hookTierOf("Bronze salvaging hook"), 0);
+  assert.equal(hookTierOf("Dragon salvaging hook"), 6);
+  assert.equal(hookTierOf("Range"), -1);
+  // The wiki's small shipwreck chart: bronze 50-100 of 256, dragon 67-135.
+  assert.equal(successChance(50, 100, 1), 51 / 256);
+  assert.equal(successChance(50, 100, 99), 101 / 256);
+  assert.equal(successChance(50, 100, 15), 58 / 256);
+
+  const small = content().salvage.salvage[32847];
+  assert.equal(small.name, "Small salvage");
+  // Every roll below the first pre-roll's 1/750 hits it; otherwise the main table by weight.
+  assert.deepEqual(rollLoot(small, () => 0), { item: 31989, amount: 1 }, "boat bottle (empty)");
+  const rolls = [0.5, 0.5, 0.5, 0.05, 0];
+  assert.deepEqual(rollLoot(small, () => rolls.shift()), { item: 2349, amount: 1 }, "bronze bar, first on the table");
+  // Working a hook, the player faces out over its side: the sloop's hook hotspot 7 is on the
+  // west side (deck x 2), 8 on the east (x 4).
+  const deck = { deckBaseX: 100, deckBaseY: 200 };
+  const sloop = { type: "sloop" };
+  assert.deepEqual([outwardFrom(deck, { x: 2, y: 5 }, sloop, 7).getX(), outwardFrom(deck, { x: 4, y: 5 }, sloop, 8).getX()], [101, 105]);
+  assert.equal(outwardFrom(deck, { x: 2, y: 5 }, undefined, undefined).getX(), 102, "unknown side: the hook itself");
+  const coins = small.table.find((line) => line.item === 995);
+  assert.deepEqual([coins.min, coins.max, coins.weight], [1, 200, 100]);
+});
+
+test("shipwreck sites raise their share of wrecks, and a sunk wreck raises another", () => {
+  withRandom(0, () => shipwrecks.start());
+  const all = shipwrecks.all();
+  const sites = content().salvage.sites;
+  assert.equal(all.length, sites.reduce((sum, site) => sum + site.wrecks.length, 0));
+  sites.forEach((site, index) => {
+    assert.equal(all.filter((wreck) => wreck.site === index && wreck.raised).length, Math.min(site.active, site.wrecks.length));
+  });
+  // The small wrecks south-east of the Pandemonium: 8 spots, 5 raised.
+  const pandemonium = all.filter((wreck) => wreck.type === "small" && wreck.x > 3000);
+  assert.equal(pandemonium.length, 8);
+  assert.equal(pandemonium.filter((wreck) => wreck.raised).length, 5);
+
+  const wreck = pandemonium.find((candidate) => candidate.raised);
+  const generation = wreck.generation;
+  withRandom(0, () => shipwrecks.sink(wreck));
+  assert.equal(wreck.raised, false);
+  assert.equal(wreck.generation, generation + 1);
+  assert.equal(pandemonium.filter((candidate) => candidate.raised).length, 5, "another rose");
+
+  // A small wreck is 2x1; its range is measured to its nearest tile.
+  const raised = pandemonium.find((candidate) => candidate.raised);
+  assert.equal(shipwrecks.raisedWreckNear(raised.x + 3, raised.y, raised.z, 4), raised);
+  assert.equal(shipwrecks.raisedWreckNear(raised.x + 300, raised.y + 300, raised.z, 4), undefined);
+
+  // The first salvage starts the despawn: a small wreck lasts 2:30 (250 ticks).
+  shipwrecks.startDespawn(raised);
+  for (let tick = 0; tick < 249; tick++) shipwrecks.onTick();
+  assert.equal(raised.raised, true);
+  shipwrecks.onTick();
+  assert.equal(raised.raised, false);
+});
+
+function salvager(boat) {
+  const player = sailor();
+  const levels = new Map([[Skill.SAILING, 15]]);
+  const xp = [];
+  let animation;
+  Object.assign(player, {
+    getSkillManager: () => ({
+      getCurrentLevel: (skill) => levels.get(skill) ?? 1,
+      addExperiences: (skill, amount) => xp.push([skill.getName(), amount]),
+    }),
+    performAnimation: (anim) => { animation = anim.getId(); },
+    setPositionToFace() {},
+    getMovementQueue: () => ({ size: () => 0, reset() {}, handleRegionChange() {} }),
+    isRegistered: () => true,
+    getHitpoints: () => 10,
+    getLocalPlayers: () => [],
+  });
+  if (boat) {
+    BoatManager.getDeck(boat).enter(player);
+    player.setLocation(new Location(boat.deckBaseX + 3, boat.deckBaseY + 3, 0));
+  }
+  return { player, levels, xp, animation: () => animation };
+}
+
+const { Skill } = require("../dist/game/model/Skill");
+
+test("Deploy reels salvage in from a raised wreck nearby, and nothing without one", () => {
+  clearTasks();
+  withRandom(0, () => shipwrecks.start());
+  const wreck = shipwrecks.all().find((candidate) => candidate.type === "small" && candidate.raised);
+  const salvaging = registerPlugin("Salvaging.plugin");
+  const hookLoc = { id: 60490, x: 3, y: 4, level: 1, shape: 10, rotation: 1 };
+  const boat = BoatManager.spawn(1, { ...RAFT, locs: [hookLoc] },
+    { fineX: wreck.x * 128 + 64, fineY: wreck.y * 128 + 64 - 3 * 128, level: 0, angle: NORTH });
+  try {
+    const h = salvager(boat);
+    const deploy = () => {
+      const event = { player: h.player, clickType: 1, handled: false,
+        location: { x: boat.deckBaseX + 3, y: boat.deckBaseY + 4, z: 0 },
+        definition: { getName: () => "Bronze salvaging hook", getInteractions: () => ["Deploy", null, null, null, "Modify"] } };
+      salvaging.objectHandlers.forEach((handler) => handler(event));
+      return event.handled;
+    };
+
+    h.levels.set(Skill.SAILING, 14);
+    assert.equal(deploy(), true);
+    assert.equal(h.player.messages.at(-1), "You need a Sailing level of at least 15 to salvage this shipwreck.");
+
+    h.levels.set(Skill.SAILING, 15);
+    deploy();
+    assert.equal(h.player.messages.at(-1), "You cast out your salvaging hook towards the shipwreck...");
+    assert.equal(h.animation(), 13576);
+    assert.notEqual(wreck.sinksAt, undefined, "casting starts the wreck's despawn");
+    withRandom(0, () => { for (let tick = 0; tick < 5; tick++) TaskManager.process(); });
+    assert.equal(h.player.getInventory().getAmount(32847), 0);
+    assert.equal(h.animation(), 13577, "the hook's idle");
+    withRandom(0, () => TaskManager.process());
+    assert.equal(h.player.getInventory().getAmount(32847), 1, "the first salvage, 6 ticks after the cast");
+    assert.equal(h.player.messages.at(-1), "You reel in some salvage.");
+    assert.deepEqual(h.xp, [["Sailing", 10]]);
+
+    // The wreck sinking ends it.
+    shipwrecks.sink(wreck);
+    TaskManager.process();
+    assert.equal(h.player.messages.at(-1), "You salvage all you can from the shipwreck before it is reclaimed by the sea.");
+
+    // Far from any wreck.
+    boat.fineX += 60 * 128;
+    deploy();
+    assert.equal(h.player.messages.at(-1), "There are no shipwrecks within range of the salvaging hook.");
+  } finally {
+    BoatManager.dispose(boat);
+    clearTasks();
+  }
+});
+
+test("Sort-salvage sorts every salvage in the inventory, one each 3 ticks", () => {
+  clearTasks();
+  const salvaging = registerPlugin("Salvaging.plugin");
+  const h = salvager();
+  h.player.getInventory().add(new Item(32847, 1), false);
+  h.player.getInventory().add(new Item(32847, 1), false);
+  salvaging.objects["Salvaging station"]["Sort-salvage"]({ player: h.player });
+  assert.equal(h.player.messages.at(-1), "You begin sorting through your salvage...");
+  assert.equal(h.animation(), 13599);
+  // Rolls of 0.5 miss every pre-roll and land mid-table.
+  withRandom(0.5, () => { for (let tick = 0; tick < 3; tick++) TaskManager.process(); });
+  assert.equal(h.player.getInventory().getAmount(32847), 1);
+  assert.match(h.player.messages.at(-1), /^You sort through the small salvage and find: \d+ x .+\.$/);
+  withRandom(0.5, () => { for (let tick = 0; tick < 3; tick++) TaskManager.process(); });
+  assert.equal(h.player.getInventory().getAmount(32847), 0);
+  assert.equal(h.player.messages.at(-1), "You have no more salvage to sort.");
+  assert.deepEqual(h.xp, [["Sailing", 5.5], ["Sailing", 5.5]]);
+  clearTasks();
+});
+
+test("logging in unlocks every facility and part schematic", () => {
+  const { login } = registerPlugin("Sailing.plugin");
+  const player = sailor();
+  const varbits = new Map();
+  const sender = new Proxy({}, {
+    get: (_t, key) => (...args) => { if (key === "sendVarbit") varbits.set(args[0], args[1]); return sender; },
+  });
+  player.getPacketSender = () => sender;
+  login({ player });
+  // Script 9078: the salvaging station's schematic is 19544, the ballistic attractor's 20227.
+  assert.deepEqual([19544, 19553, 20227].map((id) => varbits.get(id)), [1, 1, 1]);
 });
