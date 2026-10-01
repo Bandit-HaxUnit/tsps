@@ -291,3 +291,12 @@ test("a climb faces the loc: across a wall decoration's edge, or the loc's tile"
   const steps = first.steps({ player: null, obj: beams, pos: { x: 2673, y: 3298, z: 0 } });
   assert.deepEqual(steps[0], { face: [2673, 3299] }, "the player faces the beams (north) to climb");
 });
+
+test("Varrock's rough wall is climbed facing it (west, across its edge)", () => {
+  // A wall decoration (shape 5) on the west edge of the start tile (rotation 0).
+  const wall = { x: 3221, y: 3414, z: 0, face: 0, type: 5, id: ObjectIds.ROUGH_WALL_3 };
+  const varrock = COURSES.find((course) => course.key === "varrock");
+  const first = varrock.obstacles.find((obstacle) => obstacle.index === 1);
+  const steps = first.steps({ player: null, obj: wall, pos: { x: 3221, y: 3414, z: 0 } });
+  assert.deepEqual(steps[0], { face: [3220, 3414] });
+});
