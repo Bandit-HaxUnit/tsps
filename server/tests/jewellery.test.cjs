@@ -208,3 +208,16 @@ test("the ring of returning rubs straight to the respawn point", () => {
   assert.equal(teleports.length, 1);
   assert.ok(player.messages.includes("<col=7F00FF>Your ring of returning has 4 uses left.</col>"));
 });
+
+test("the ring of wealth's Rub submenu and worn options follow the cache's order", async () => {
+  const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+  const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
+  await CachePipeline.initialize();
+  // Params 451-456 label the ring's destinations; the client lists Rub's submenu in this order.
+  const labels = [451, 452, 453, 454].map((param) => CacheDefinitions.getItem(11980).params.get(param));
+  assert.deepEqual(labels, ["Miscellania", "Grand Exchange", "Falador", "Dondakan"]);
+  const { ACTIONS } = require("../plugins/items/RingOfWealth.plugin");
+  assert.deepEqual(ACTIONS.slice(0, 4).map((action) => action.teleport.label),
+    ["Miscellania", "Grand Exchange", "Falador Park", "Dondakan"], "sub-op 2 is the Grand Exchange");
+  assert.deepEqual(ACTIONS.slice(4).map((action) => action.type), ["boss-log", "coin-collection"]);
+});
