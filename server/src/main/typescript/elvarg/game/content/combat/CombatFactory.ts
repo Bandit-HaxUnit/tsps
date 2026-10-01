@@ -760,6 +760,7 @@ export class CombatFactory {
         // Melee blocks play when the attack is launched; projectiles block on a non-fatal impact.
         if (
             combatType !== CombatType.MELEE &&
+            target.getBlockAnim() >= 0 &&
             target.getHitpoints() >
                 target.getCombat().getHitQueue().getQueuedDamage() + damage
         ) {
