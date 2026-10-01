@@ -7213,7 +7213,8 @@ export class OsrsClient {
             return;
         }
         const size = Math.max(1, npcType?.size | 0);
-        const rotSpeed = Math.max(1, npcType?.rotationSpeed | 0);
+        // A turn speed of 0 never turns (the Inferno's Ancestral Glyph slides side to side).
+        const rotSpeed = Math.max(0, npcType?.rotationSpeed | 0);
         const localX = (localTileX * 128 + size * 64) | 0;
         const localY = (localTileY * 128 + size * 64) | 0;
 
