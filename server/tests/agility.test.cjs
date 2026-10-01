@@ -27,7 +27,7 @@ function tick() {
   }
 }
 
-const hooks = { route: [], click: new Map(), logout: [], teleport: [], events: [] };
+const hooks = { route: [], click: new Map(), logout: [], teleport: [], events: [], npcs: {} };
 const groundItems = [];
 const Agility = require("../plugins/skills/Agility.plugin");
 Agility.register({
@@ -38,6 +38,7 @@ Agility.register({
   onObjectFirstClick: (ids, handler) => ids.forEach((id) => hooks.click.set(id, handler)),
   onCanTeleport: (handler) => hooks.teleport.push(handler),
   onPlayerLogout: (handler) => hooks.logout.push(handler),
+  onNpcInteraction: (name, actions) => { hooks.npcs[name] = actions; },
   emitCustomEvent: (name, payload) => hooks.events.push({ name, payload }),
   log() {},
 });
@@ -308,6 +309,24 @@ test("Falador's rough wall is climbed facing it (north, across its edge)", () =>
   const first = falador.obstacles.find((obstacle) => obstacle.index === 1);
   const steps = first.steps({ player: null, obj: wall, pos: { x: 3036, y: 3341, z: 0 } });
   assert.deepEqual(steps[0], { face: [3036, 3342] });
+});
+
+test("Grace's Toggle Counter hides the lap count message, and laps still count", () => {
+  const draynor = COURSES.find((course) => course.key === "draynor");
+  const player = createPlayer(3103, 3279, 0);
+  const lapMessages = () => player.state.messages.filter((message) => message.includes("lap count is")).length;
+  runLap(draynor, player);
+  assert.equal(lapMessages(), 1);
+
+  hooks.npcs.Grace["Toggle Counter"]({ player });
+  assert.equal(player.state.messages.at(-1), "Your lap count will no longer be shown when you complete a lap.");
+  runLap(draynor, player);
+  assert.equal(lapMessages(), 1, "no message for the second lap");
+  assert.equal(player.getAttribute("agility.laps").draynor, 2, "but it counted");
+
+  hooks.npcs.Grace["Toggle Counter"]({ player });
+  runLap(draynor, player);
+  assert.equal(lapMessages(), 2);
 });
 
 test("Grace sells the graceful outfit the game equips (11850-11861) and amylase packs", () => {

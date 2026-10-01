@@ -10,6 +10,11 @@ const { SHORTCUTS } = require("./agility/shortcuts");
 const PROGRESS_ATTRIBUTE = "agility.progress";
 /** Persisted { [courseKey]: laps } map. */
 const LAPS_ATTRIBUTE = "agility.laps";
+/**
+ * Persisted: the lap count chat message is off (Grace's Toggle Counter). Laps are still
+ * counted (OSRS Wiki, Grace).
+ */
+const LAP_COUNTER_OFF_ATTRIBUTE = "agility.lapCounterOff";
 
 /**
  * Marks of grace appear on rooftop courses while a lap is in progress. One roll per
@@ -115,8 +120,19 @@ function completeLap(player, course) {
   if (course.lapBonus > 0) {
     player.getSkillManager().addExperiences(Skill.AGILITY, course.lapBonus);
   }
-  player.sendMessage(`Your ${course.name} lap count is: <col=ff0000>${laps[course.key]}</col>.`);
+  if (!player.getAttribute(LAP_COUNTER_OFF_ATTRIBUTE)) {
+    player.sendMessage(`Your ${course.name} lap count is: <col=ff0000>${laps[course.key]}</col>.`);
+  }
   pluginApi.emitCustomEvent("agility:lap", { player, course: course.key, laps: laps[course.key] });
+}
+
+/** Grace's Toggle Counter: turns the lap count message off or back on. Guessed messages. */
+function toggleLapCounter({ player }) {
+  const off = !player.getAttribute(LAP_COUNTER_OFF_ATTRIBUTE);
+  player.setAttribute(LAP_COUNTER_OFF_ATTRIBUTE, off);
+  player.sendMessage(off
+    ? "Your lap count will no longer be shown when you complete a lap."
+    : "Your lap count will now be shown when you complete a lap.");
 }
 
 /**
@@ -252,6 +268,8 @@ module.exports = {
     ObstacleRunner.init(api);
 
     api.persistAttribute(LAPS_ATTRIBUTE);
+    api.persistAttribute(LAP_COUNTER_OFF_ATTRIBUTE);
+    api.onNpcInteraction("Grace", { "Toggle Counter": toggleLapCounter });
     api.onObjectRoute(routeToObstacle);
     api.onObjectFirstClick([...OBSTACLES_BY_OBJECT.keys()], operateObstacle);
     api.onCanTeleport(blockTeleportMidObstacle);
