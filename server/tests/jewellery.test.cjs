@@ -1,0 +1,210 @@
+// Run after `yarn build`: node --test tests/jewellery.test.cjs
+const assert = require("node:assert/strict");
+const { test, beforeEach } = require("node:test");
+
+const { Server } = require("../dist/Server");
+Server.installProductionPathResolver();
+
+const { Item } = require("../dist/game/model/Item");
+const { ItemIds } = require("../dist/util/IdEnums");
+const { Equipment } = require("../dist/game/model/container/impl/Equipment");
+const { TeleportHandler } = require("../dist/game/model/teleportation/TeleportHandler");
+
+/** Teleports are recorded and arrive immediately; the real handler needs a live world. */
+const teleports = [];
+TeleportHandler.checkReqs = (player, target, wildernessLevel) => {
+  teleports.push({ target: [target.getX(), target.getY(), target.getZ()], wildernessLevel });
+  return true;
+};
+TeleportHandler.teleport = (player, target, type, warning, onArrival) => onArrival?.();
+
+let prompts = [];
+let itemAction;
+const Jewellery = require("../plugins/items/Jewellery.plugin");
+Jewellery.register({
+  getBonusManager: () => ({ update() {} }),
+  onItemAction: (handler) => { itemAction = handler; },
+  sendMultiChatboxPrompt: (player, title, ...pairs) => {
+    const options = [];
+    for (let i = 0; i < pairs.length; i += 2) options.push({ text: pairs[i], pick: pairs[i + 1] });
+    prompts.push({ title, options });
+    return true;
+  },
+});
+
+function container(capacity) {
+  const items = new Array(capacity).fill(null);
+  return {
+    getItems: () => items,
+    setItem: (slot, item) => { items[slot] = item; },
+    deleteAtSlot: (slot) => { items[slot] = null; },
+    refreshItems() {},
+  };
+}
+
+function createPlayer({ farming = 1 } = {}) {
+  const messages = [];
+  return {
+    messages,
+    inventory: container(28),
+    equipment: container(14),
+    getInventory() { return this.inventory; },
+    getEquipment() { return this.equipment; },
+    sendMessage: (message) => messages.push(message),
+    getUpdateFlag: () => ({ flag() {} }),
+    getSkillManager: () => ({ getMaxLevel: () => farming }),
+  };
+}
+
+function inventoryClick(player, item, option, extra = {}) {
+  const slot = player.inventory.getItems().indexOf(item);
+  const event = { player, item, itemId: item.getId(), slot, interfaceId: 149, clickType: 2, option, handled: false, ...extra };
+  itemAction(event);
+  return event;
+}
+
+function equippedClick(player, item, clickType, option) {
+  const slot = player.equipment.getItems().indexOf(item);
+  const event = { player, item, itemId: item.getId(), slot, interfaceId: Equipment.INVENTORY_INTERFACE_ID, clickType, option, handled: false };
+  itemAction(event);
+  return event;
+}
+
+function pick(text) {
+  const prompt = prompts.at(-1);
+  const option = prompt.options.find((entry) => entry.text === text);
+  assert.ok(option, `"${text}" not offered: ${prompt.options.map((entry) => entry.text).join(", ")}`);
+  option.pick();
+}
+
+beforeEach(() => {
+  teleports.length = 0;
+  prompts = [];
+});
+
+test("rubbing a glory offers its destinations and uses a charge on arrival", () => {
+  const player = createPlayer();
+  const glory = new Item(ItemIds.AMULET_OF_GLORY_4_, 1);
+  player.inventory.setItem(0, glory);
+
+  assert.equal(inventoryClick(player, glory, "Rub").handled, true);
+  assert.deepEqual(prompts[0].options.map((entry) => entry.text), ["Edgeville", "Karamja", "Draynor Village", "Al Kharid", "Nowhere"]);
+  pick("Karamja");
+
+  assert.deepEqual(teleports, [{ target: [2918, 3176, 0], wildernessLevel: 30 }]);
+  assert.equal(glory.getId(), ItemIds.AMULET_OF_GLORY_3_);
+  assert.ok(player.messages.includes("<col=7F00FF>Your amulet has 3 charges left.</col>"));
+});
+
+test("a glory's last charge leaves an uncharged amulet that can no longer teleport", () => {
+  const player = createPlayer();
+  const glory = new Item(ItemIds.AMULET_OF_GLORY_1_, 1);
+  player.inventory.setItem(0, glory);
+  inventoryClick(player, glory, "Rub");
+  pick("Edgeville");
+  assert.equal(glory.getId(), ItemIds.AMULET_OF_GLORY);
+
+  prompts = [];
+  inventoryClick(player, glory, "Rub");
+  assert.equal(prompts.length, 0);
+  assert.equal(player.messages.at(-1), "Your amulet hasn't got any charges left.");
+});
+
+test("a games necklace crumbles after its last charge", () => {
+  const player = createPlayer();
+  const necklace = new Item(ItemIds.GAMES_NECKLACE_1_, 1);
+  player.inventory.setItem(3, necklace);
+  inventoryClick(player, necklace, "Rub");
+  pick("Wintertodt Camp");
+  assert.deepEqual(teleports[0], { target: [1627, 3941, 0], wildernessLevel: 20 });
+  assert.equal(player.inventory.getItems()[3], null);
+  assert.ok(player.messages.includes("<col=7F00FF>Your games necklace crumbles to dust.</col>"));
+});
+
+test("equipped jewellery teleports straight from its worn option", () => {
+  const player = createPlayer();
+  const ring = new Item(ItemIds.RING_OF_DUELING_8_, 1);
+  player.equipment.setItem(Equipment.RING_SLOT, ring);
+  assert.equal(equippedClick(player, ring, 3, "Castle Wars").handled, true);
+  assert.deepEqual(teleports[0].target, [2440, 3090, 0]);
+  assert.equal(ring.getId(), ItemIds.RING_OF_DUELING_7_);
+});
+
+test("an older worn-option name still finds its destination", () => {
+  const player = createPlayer();
+  const ring = new Item(ItemIds.RING_OF_DUELING_2_, 1);
+  player.equipment.setItem(Equipment.RING_SLOT, ring);
+  equippedClick(player, ring, 2, "Duel Arena");
+  assert.deepEqual(teleports[0].target, [3315, 3235, 0]);
+});
+
+test("the last charge of equipped jewellery empties the slot", () => {
+  const player = createPlayer();
+  const ring = new Item(ItemIds.RING_OF_DUELING_1_, 1);
+  player.equipment.setItem(Equipment.RING_SLOT, ring);
+  equippedClick(player, ring, 4, "Ferox Enclave");
+  assert.equal(player.equipment.getItems()[Equipment.RING_SLOT].getId(), -1);
+});
+
+test("worn options that are not teleports are left to other plugins", () => {
+  const player = createPlayer();
+  const ring = new Item(ItemIds.SLAYER_RING_8_, 1);
+  player.equipment.setItem(Equipment.RING_SLOT, ring);
+  assert.equal(equippedClick(player, ring, 3, "Check").handled, false);
+  assert.equal(teleports.length, 0);
+});
+
+test("long destination lists page onto a second prompt", () => {
+  const player = createPlayer({ farming: 45 });
+  const necklace = new Item(ItemIds.SKILLS_NECKLACE_6_, 1);
+  player.inventory.setItem(0, necklace);
+  inventoryClick(player, necklace, "Rub");
+  assert.deepEqual(prompts[0].options.map((entry) => entry.text), ["Fishing Guild", "Mining Guild", "Crafting Guild", "Cooking Guild", "More..."]);
+  pick("More...");
+  pick("Farming Guild");
+  assert.deepEqual(teleports[0], { target: [1248, 3725, 0], wildernessLevel: 30 });
+});
+
+test("inventory sub-menu options teleport by position", () => {
+  const player = createPlayer();
+  const pendant = new Item(ItemIds.DIGSITE_PENDANT_5_, 1);
+  player.inventory.setItem(0, pendant);
+  inventoryClick(player, pendant, "Rub", { subOpId: 2 });
+  assert.deepEqual(teleports[0].target, [3763, 3870, 1]);
+  assert.equal(pendant.getId(), ItemIds.DIGSITE_PENDANT_4_);
+});
+
+test("the burning amulet asks before teleporting into the Wilderness", () => {
+  const player = createPlayer();
+  const amulet = new Item(ItemIds.BURNING_AMULET_5_, 1);
+  player.inventory.setItem(0, amulet);
+  inventoryClick(player, amulet, "Rub");
+  pick("Lava Maze");
+  assert.equal(teleports.length, 0);
+  assert.match(prompts.at(-1).title, /^That's in level \d+ Wilderness\.$/);
+  pick("No.");
+  assert.equal(teleports.length, 0);
+
+  inventoryClick(player, amulet, "Rub");
+  pick("Chaos Temple");
+  prompts.at(-1).options[0].pick();
+  assert.deepEqual(teleports[0].target, [3235, 3637, 0]);
+});
+
+test("eternal jewellery never loses a charge", () => {
+  const player = createPlayer();
+  const glory = new Item(ItemIds.AMULET_OF_ETERNAL_GLORY, 1);
+  player.equipment.setItem(Equipment.AMULET_SLOT, glory);
+  equippedClick(player, glory, 2, "Edgeville");
+  assert.equal(glory.getId(), ItemIds.AMULET_OF_ETERNAL_GLORY);
+});
+
+test("the ring of returning rubs straight to the respawn point", () => {
+  const player = createPlayer();
+  const ring = new Item(ItemIds.RING_OF_RETURNING_5_, 1);
+  player.inventory.setItem(0, ring);
+  inventoryClick(player, ring, "Rub");
+  assert.equal(prompts.length, 0);
+  assert.equal(teleports.length, 1);
+  assert.ok(player.messages.includes("<col=7F00FF>Your ring of returning has 4 uses left.</col>"));
+});
