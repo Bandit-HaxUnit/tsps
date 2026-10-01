@@ -36,6 +36,8 @@ export interface GameFrameProvider {
         group?: number;
         type?: number;
         contentType?: number;
+        item?: boolean;
+        colour?: number;
         hide?: boolean;
     }[];
     /** Root-interface uids whose own chrome must NOT be hidden by hideStockChrome. */

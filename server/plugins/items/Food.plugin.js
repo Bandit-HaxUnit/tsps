@@ -23,6 +23,8 @@ const FOOD = new Map([
   [ItemIds.EDIBLE_SEAWEED, { heal: 4 }],
   [ItemIds.ANCHOVIES, { heal: 1 }],
   [ItemIds.SHRIMPS, { heal: 3 }],
+  [ItemIdentifiers.COOKED_CHICKEN, { heal: 3 }],
+  [ItemIdentifiers.COOKED_MEAT, { heal: 3 }],
   [ItemIdentifiers.STEW, { heal: 11, replacementId: ItemIdentifiers.BOWL }],
   [ItemIdentifiers.CURRY, { heal: 19, replacementId: ItemIdentifiers.BOWL }],
   [ItemIds.SARDINE, { heal: 4 }],

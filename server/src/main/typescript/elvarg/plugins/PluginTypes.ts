@@ -1021,6 +1021,7 @@ export interface PluginCoreApi {
   Equipment: any;
   Bank: any;
   Task: any;
+  CountdownTask: any;
   TaskManager: any;
   ItemIdentifiers: any;
   NpcIdentifiers: any;
@@ -1032,6 +1033,8 @@ export interface PluginCoreApi {
   Sounds: any;
   Location: any;
   Boundary: any;
+  PolygonalBoundary: any;
+  Area: any;
   World: any;
   GameObject: any;
   PrivateArea: any;
