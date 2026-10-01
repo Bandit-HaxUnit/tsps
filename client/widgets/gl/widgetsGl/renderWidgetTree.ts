@@ -3349,7 +3349,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             const modelCacheId =
                 typeof w.itemId === "number" && (w.itemId | 0) >= 0
                     ? `item:${w.itemId | 0}:${(w.itemQuantity ?? 0) | 0}`
-                    : `model:${modelId}`;
+                    : `model:${(w.modelType ?? 0) | 0}:${modelId}`;
             const cacheKey =
                 isAnimated || isPlayerDesignPreview || (isPlayerModel && !appearanceKey)
                     ? null // Animated models can't be cached (frame changes)

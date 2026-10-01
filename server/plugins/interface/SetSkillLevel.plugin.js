@@ -30,6 +30,7 @@ const SKILLS = new Map([
   [21, Skill.FIREMAKING],
   [22, Skill.WOODCUTTING],
   [23, Skill.FARMING],
+  [24, Skill.SAILING],
 ]);
 
 function isDeveloper(player) {

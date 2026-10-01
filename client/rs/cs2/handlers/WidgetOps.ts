@@ -755,9 +755,9 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         }
 
         if (!parent.children) parent.children = [];
-        if (childIndex > 0 && !parent.children[childIndex - 1]) {
-            throw new Error("RuntimeException");
-        }
+        // The live client allows a gap: the boat selection interface (script 8628) creates its
+        // first row on 934:19 at the child count 5295 returned for 934:18. Skipped indices
+        // stay empty.
         while (parent.children.length <= childIndex) parent.children.push(null);
 
         // IMPORTANT: Dynamic widgets must have a unique runtime UID in our client.
@@ -2377,7 +2377,8 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         invalidateWidgetRender(ctx, w);
     });
 
-    handlers.set(Opcodes.CC_SETMODEL_PLAYERCHATHEAD, (ctx, intOp) => {
+    // Model type 8: modelId is a loc id, drawn with that loc's model (see renderModelCanvas).
+    handlers.set(Opcodes.CC_SETMODEL_LOC, (ctx, intOp) => {
         const modelId = ctx.intStack[--ctx.intStackSize];
         const w = getTargetWidget(ctx, intOp);
         if (!w) {
@@ -2388,7 +2389,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         invalidateWidgetRender(ctx, w);
     });
 
-    handlers.set(Opcodes.IF_SETMODEL_PLAYERCHATHEAD, (ctx) => {
+    handlers.set(Opcodes.IF_SETMODEL_LOC, (ctx) => {
         const w = getWidgetFromStack(ctx);
         const modelId = ctx.intStack[--ctx.intStackSize];
         if (!w) {

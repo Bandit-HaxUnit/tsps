@@ -9,34 +9,42 @@ const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sa
 const { WeaponInterfaceManager } = require("../../../src/main/typescript/elvarg/game/content/combat/WeaponInterfaceManager");
 const {
   VARBIT,
-  VARP_SIDEPANEL_BOAT_TYPE,
   MOVE_MODE,
   HELM_STATUS,
   ROLE_CAPTAIN,
   SIDEPANEL_GROUP,
-  COMBAT_TAB_UID,
-  SCRIPT_SIDEPANEL_INIT,
-  SCRIPT_SIDEBUTTON_SWITCH,
   content,
   boatType,
   setVarbit,
+  animateDeckLocs,
+  isSail,
+  boatAnim,
 } = require("./sailingContent");
+const { repairKitUses } = require("./cargo");
+const { specFor } = require("./boatParts");
+const { hotspotLocs } = require("./boatFacilities");
+const { describeBoat, boatVarps, openSidepanel, clearBoatVarps, DESCRIPTION_VARBITS } = require("./sidepanel");
+const { sendBoatVarbits } = require("./boatVarbits");
 
-function boardedVarbits(type) {
+
+/** Values from live OSRS boarding traces (docs/sailing-osrs-reference.md). */
+function boardedVarbits(type, owned) {
+  const slot = owned.slot + 1;
   return {
+    ...describeBoat(type, owned),
     [VARBIT.BOARDED_BOAT]: 1,
     [VARBIT.BOARDED_BOAT_WORLD]: 1,
+    [VARBIT.BOARDED_BOAT_TYPE]: type.typeId,
     [VARBIT.PLAYER_IS_ON_PLAYER_BOAT]: 1,
-    [VARBIT.BOAT_SPAWNED]: 1,
-    [VARBIT.BOARDED_BOAT_LAST_DOCK]: 1,
+    [VARBIT.BOAT_SPAWNED]: slot,
+    [VARBIT.LAST_PERSONAL_BOAT_BOARDED]: slot,
+    [VARBIT.PREVIOUS_BOAT_DATA_SLOT]: slot,
+    [VARBIT.PREVIOUS_BOAT_TYPE_ID]: type.typeId,
     [VARBIT.PRELOADED_ANIMS]: 1,
     [VARBIT.SIDEPANEL_PLAYER_ROLE]: ROLE_CAPTAIN,
     [VARBIT.SIDEPANEL_PLAYERS_ON_BOARD_TOTAL]: 1,
-    [VARBIT.SIDEPANEL_FACILITY_HOTSPOT0]: type.facilityHotspot,
-    [VARBIT.SIDEPANEL_BOAT_HP_MAX]: type.hitpoints,
-    [VARBIT.SIDEPANEL_BOAT_HP]: type.hitpoints,
     [VARBIT.SIDEPANEL_HELM_STATUS]: HELM_STATUS.FREE,
-    [VARBIT.SIDEPANEL_REPAIRKITS]: type.repairKits,
+    [VARBIT.SIDEPANEL_REPAIRKITS]: repairKitUses(owned),
     [VARBIT.SIDEPANEL_VISIBLE]: 1,
     [VARBIT.SIDEPANEL_VISIBLE_FROM_COMBAT_TAB]: 1,
     [VARBIT.SIDEPANEL_BOAT_MOVE_MODE]: MOVE_MODE.MOORED,
@@ -45,20 +53,14 @@ function boardedVarbits(type) {
 
 const COMBAT_OPTIONS_GROUP = 593;
 const VIEW_SAILING_OPTIONS_CHILD = 46;
-/**
- * The sidepanel's "View Combat Options" is built at runtime inside 937:1 (script 8715, from
- * the panel's onLoad 8710 via 8712). 8748 draws it from several pieces and the op goes on the
- * last one, so its child index isn't fixed: enable op 1 across 937:1's children. Children
- * without an op still show no menu entry.
- */
+/** The sidepanel's "View Combat Options" (see sidepanel.js). */
 const VIEW_COMBAT_OPTIONS_CHILD = 1;
-const VIEW_COMBAT_OPTIONS_MAX_SLOT = 31;
-const IF_EVENT_OP1 = 1 << 1;
 
 /** Everything reset when leaving a boat, whatever set it. */
 const LEFT_VARBITS = [
   VARBIT.BOARDED_BOAT,
   VARBIT.BOARDED_BOAT_WORLD,
+  VARBIT.BOARDED_BOAT_TYPE,
   VARBIT.PLAYER_IS_ON_PLAYER_BOAT,
   VARBIT.BOAT_SPAWNED,
   VARBIT.FACILITY_LOCKEDIN,
@@ -67,24 +69,18 @@ const LEFT_VARBITS = [
   VARBIT.SIDEPANEL_BOAT_MOVE_MODE,
   VARBIT.SIDEPANEL_SAIL_BUTTON_TOGGLED,
   VARBIT.SIDEPANEL_PLAYER_AT_HELM,
+  ...DESCRIPTION_VARBITS,
 ];
 
 function applyBoarded(player, owned) {
   const type = boatType(owned.type);
   if (!type) return;
-  const varbits = boardedVarbits(type);
+  const varbits = boardedVarbits(type, owned);
+  const varps = boatVarps(type, owned);
   for (const [id, value] of Object.entries(varbits)) setVarbit(player, Number(id), value);
   const sender = player.getPacketSender();
-  sender.sendConfig(VARP_SIDEPANEL_BOAT_TYPE, type.sidepanelBoatType);
-  sender.sendInterfaceScript(SCRIPT_SIDEPANEL_INIT, [player.getUsername(), 1, "", 1]);
-  sender.sendInterfaceScript(SCRIPT_SIDEBUTTON_SWITCH, [0]);
-  // Bundle the varbits with the open so the sidepanel's onLoad scripts see them.
-  sender.sendSubInterface(COMBAT_TAB_UID, SIDEPANEL_GROUP, 1, {
-    varbits,
-    varps: { [VARP_SIDEPANEL_BOAT_TYPE]: type.sidepanelBoatType },
-  });
-  sender.sendInterfaceFlagsRange(
-    (SIDEPANEL_GROUP << 16) | VIEW_COMBAT_OPTIONS_CHILD, 0, VIEW_COMBAT_OPTIONS_MAX_SLOT, IF_EVENT_OP1);
+  for (const [id, value] of Object.entries(varps)) sender.sendConfig(Number(id), value);
+  openSidepanel(player, type, varbits, varps);
 }
 
 /** A tick after boarding, once the deck scene (or, on login, the gameframe) is in place. */
@@ -92,7 +88,11 @@ function onBoarded({ player, boat, owned }) {
   TaskManager.submit(new (class extends Task {
     constructor() { super(1, player); }
     execute() {
-      if (player.getArea()?.boat === boat) applyBoarded(player, owned);
+      if (player.getArea()?.boat !== boat) return this.stop();
+      applyBoarded(player, owned);
+      // Boarding lowers the sails to rest.
+      const sailDown = boatAnim(boat, "sailDown");
+      if (sailDown !== undefined) animateDeckLocs(player, boat, isSail, sailDown);
       this.stop();
     }
   })());
@@ -101,7 +101,10 @@ function onBoarded({ player, boat, owned }) {
 function onLeft({ player, reason }) {
   // A player logging out has no client left to update.
   if (reason === "logout") return;
+  // Disembarking docks the boat; a teleport or Escape sinks it.
+  sendBoatVarbits(player);
   for (const id of LEFT_VARBITS) setVarbit(player, id, 0);
+  clearBoatVarps(player);
   player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
   player.getPacketSender().sendTabInterface(0, 0);
 }
@@ -123,12 +126,38 @@ function switchCombatTab(event) {
   }
 }
 
+/** A boat as built: its parts, and on each hotspot its facility or the hotspot's placeholder. */
+function builtSpec(boat, base) {
+  const spec = specFor(boat, base);
+  return { ...spec, locs: [...spec.locs, ...hotspotLocs(boat)] };
+}
+
+/**
+ * Facility and part schematics the customisation interface shows as "Unknown" until found
+ * (cache script 9078: one varbit each, found at 1+): salvaging stations, the gale catcher,
+ * eternal braziers, dragon hooks, rosewood cargo holds, the dragon cannon, the top-tier hulls,
+ * sails, helms and keels, and the ballistic attractor. Every schematic is unlocked here; finding
+ * them doesn't exist yet.
+ */
+const SCHEMATIC_VARBITS = [19544, 19545, 19546, 19547, 19548, 19549, 19550, 19551, 19552, 19553, 20227];
+
+/**
+ * Describes every owned boat (the per-boat varbits), as live OSRS has them at login, and
+ * unlocks every schematic.
+ */
+function describeBoatsOnLogin({ player }) {
+  for (const varbit of SCHEMATIC_VARBITS) setVarbit(player, varbit, 1);
+  sendBoatVarbits(player);
+}
+
 module.exports = {
   name: "Sailing",
   register(api) {
     content();
     api.onCustomEvent("sailing:boarded", onBoarded);
     api.onCustomEvent("sailing:left", onLeft);
+    api.onPlayerLogin(describeBoatsOnLogin);
+    Sailing.setSpecResolver(builtSpec);
     api.onInterfaceActionClick(switchCombatTab);
   },
 };

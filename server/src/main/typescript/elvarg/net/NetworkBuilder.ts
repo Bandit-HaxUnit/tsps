@@ -638,6 +638,18 @@ class ClientConnection {
               slot: packet.childIndex >= 0 ? packet.childIndex : undefined,
               argsData: packet.argsData,
             });
+          } else if (this.player) {
+            // A script trigger (if_triggeroplocal from a cache script, like the boat
+            // customisation's Build): the component, the child it was for, and the script's
+            // arguments (ints as zigzag varints, strings null-terminated).
+            InterfaceActionClickOpcode.handle(this.player, packet.widgetId, 0, {
+              groupId: packet.widgetId >>> 16,
+              childId: packet.widgetId & 0xffff,
+              slot: packet.childIndex >= 0 ? packet.childIndex : undefined,
+              itemId: packet.itemId >= 0 ? packet.itemId : undefined,
+              argsData: packet.argsData,
+              scriptTrigger: true,
+            });
           }
           continue;
         case "item_spawner_search":

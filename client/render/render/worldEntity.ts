@@ -303,6 +303,14 @@ export async function loadWorldEntityScene(host: WebGLOsrsRendererHost,
             } extra NPCs`,
         );
 
+        // Loc animations (and replaced locs) on the deck, keyed by deck tile like extra locs.
+        const deckLocOverrides = new Map(
+            [...host.locOverrides].filter(([key]) => {
+                const [x, y] = key.split(",").map(Number);
+                return x >= sceneBaseX && x < sceneMaxX && y >= sceneBaseY && y < sceneMaxY;
+            }),
+        );
+
         const input: SdMapLoaderInput = {
             mapX: overlayMapX,
             mapY: overlayMapY,
@@ -315,6 +323,7 @@ export async function loadWorldEntityScene(host: WebGLOsrsRendererHost,
             overrideRenderPos: { x: entityWorldBaseX, y: entityWorldBaseY },
             extraLocs: allExtraLocs.length > 0 ? allExtraLocs : undefined,
             extraNpcs: extraNpcs && extraNpcs.length > 0 ? extraNpcs : undefined,
+            locOverrides: deckLocOverrides.size > 0 ? deckLocOverrides : undefined,
         };
 
         const mapData = await host.osrsClient.workerPool.queueLoad<
@@ -498,6 +507,26 @@ export function getWorldEntityTransformForTile(host: WebGLOsrsRendererHost, tile
         }
         return WebGLMapSquare.IDENTITY_MAT4;
     
+}
+
+/**
+ * Forgets the locs added inside a world entity's deck scene. A despawned boat's entity index,
+ * and so its deck coordinates, is reused for the next boat, which would otherwise show the old
+ * boat's parts wherever its own don't overwrite them. Only for a despawn: a scene rebuilt in
+ * place keeps the locs sent for it.
+ */
+export function clearWorldEntityLocs(host: WebGLOsrsRendererHost, entityIndex: number): void {
+    const view = host.osrsClient.worldViewManager.getWorldView(entityIndex);
+    if (!view || view.isTopLevel()) return;
+    const inScene = (key: string): boolean => {
+        const [x, y] = key.split(",").map(Number);
+        return view.containsTile(x, y);
+    };
+    for (const locs of [host.addedLocs, host.locOverrides, host.locSpawns] as Map<string, unknown>[]) {
+        for (const key of Array.from(locs.keys())) {
+            if (inScene(key)) locs.delete(key);
+        }
+    }
 }
 
 export function clearWorldEntity(host: WebGLOsrsRendererHost, entityIndex: number): void {

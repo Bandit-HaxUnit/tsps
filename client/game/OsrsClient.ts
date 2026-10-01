@@ -2301,7 +2301,11 @@ export class OsrsClient {
             this.resolvePlayerPlane,
             this.npcEcs,
             this.seqTypeLoader,
-            (plane: number, x: number, y: number) => this.renderer.getCollisionFlagAt(plane, x, y),
+            // A run step is rebuilt with the client's route finder. On a boat deck (its own scene,
+            // no main-world collision) the deck counts as open floor: the server has already
+            // checked the run against the deck, so only the step between two deck tiles is drawn.
+            (plane: number, x: number, y: number) =>
+                ClientState.isWorldEntityTile(x, y) ? 0 : this.renderer.getCollisionFlagAt(plane, x, y),
         );
         this.playerSyncManager = new PlayerSyncManager({
             ecs: this.playerEcs,
@@ -2790,7 +2794,8 @@ export class OsrsClient {
                 // RUNCLIENTSCRIPT packet - run a CS2 script with arguments
                 const scriptId = Number(payload.scriptId) | 0;
                 const args = payload.args;
-                if (scriptId > 0 && this.cs2Vm && Array.isArray(args)) {
+                // A negative id carries only vars and inventories (see below).
+                if (scriptId !== 0 && this.cs2Vm && Array.isArray(args)) {
                     if (
                         (scriptId === SCRIPT_HIGHLIGHT_SCREEN_COMPONENT ||
                             scriptId === SCRIPT_HIGHLIGHT_TEXTBOX_DEFAULT) &&
@@ -2850,6 +2855,9 @@ export class OsrsClient {
                                 Array.isArray(snapshot.slots) ? snapshot.slots : [],
                                 { selectedSlot: null },
                             );
+                            // Interfaces listening to this inventory redraw, as for any update;
+                            // an "other" inventory (id + 32768) notifies listeners of its id.
+                            markInvTransmit(inventoryId & 0x7fff);
                         }
                     }
                     const intArgs: number[] = [];
@@ -2862,7 +2870,8 @@ export class OsrsClient {
                         }
                     }
 
-                    const script = this.cs2Vm.context.loadScript(scriptId);
+                    // A negative id carries only vars and inventories, with no script to run.
+                    const script = scriptId >= 0 ? this.cs2Vm.context.loadScript(scriptId) : null;
                     if (script) this.cs2Vm.run(script, intArgs, stringArgs);
                 }
             } else if ((payload as any)?.action === "set_varbits") {
@@ -7763,6 +7772,10 @@ export class OsrsClient {
 
     private despawnWorldEntity(entityIndex: number): void {
         console.log(`[OsrsClient] Despawning world entity ${entityIndex}`);
+        // Before the world view goes: its bounds say which added locs were the boat's.
+        if (this.renderer && "clearWorldEntityLocs" in this.renderer) {
+            (this.renderer as any).clearWorldEntityLocs(entityIndex);
+        }
         if (this.renderer && "clearWorldEntity" in this.renderer) {
             (this.renderer as any).clearWorldEntity(entityIndex);
         }

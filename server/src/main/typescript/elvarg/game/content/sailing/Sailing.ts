@@ -5,17 +5,20 @@ import { Location } from "../../model/Location";
 import type { Boat } from "./Boat";
 import { BoatManager } from "./BoatManager";
 import type { BoatPlacement, BoatSpec } from "./BoatSpec";
-import type { OwnedBoat } from "./SailingState";
+import { baseParts, type BoatName, type OwnedBoat } from "./SailingState";
 
-const COINS = 995;
 /** OSRS lets a player own up to 5 boats (more slots unlock with Sailing level). */
 const MAX_BOATS = 5;
 
 /** A place boats moor: a port gangplank or an island mooring point. */
 export interface SailingDock {
     id: string;
+    /** A mooring point (an island) rather than a port: it isn't a "standard dock". */
+    mooringPoint?: boolean;
     /** Where a boat docked here sits: fine position (1/128 tile) and angle. */
     mooring: BoatPlacement;
+    /** Where a boat of a given type sits instead, when it differs (bigger hulls). */
+    moorings?: Record<string, BoatPlacement>;
     /** Where a player steps ashore when disembarking here. */
     landing: { x: number; y: number; z: number };
 }
@@ -47,6 +50,7 @@ export class Sailing {
     /** The player whose move Sailing itself is making, so it isn't taken for a teleport. */
     private static expectedMove: Mobile | null = null;
     private static initialized = false;
+    private static specResolver?: (boat: OwnedBoat, base: BoatSpec) => BoatSpec;
 
     public static initialize(): void {
         if (Sailing.initialized) return;
@@ -68,7 +72,12 @@ export class Sailing {
     }
 
     /** Adds a boat docked at `dockId` in the player's next free slot. */
-    public static giveBoat(player: Player, type: string, dockId: string, name = ""): OwnedBoat | undefined {
+    public static giveBoat(
+        player: Player,
+        type: string,
+        dockId: string,
+        name: BoatName = [0, 0, 0],
+    ): OwnedBoat | undefined {
         const state = player.getSailing();
         const spec = Sailing.types.get(type);
         if (!spec || !Sailing.docks.has(dockId) || state.boats.length >= MAX_BOATS) return undefined;
@@ -77,6 +86,8 @@ export class Sailing {
         const boat: OwnedBoat = {
             slot, type, name, hitpoints: 0, facilities: [],
             location: { kind: "docked", dock: dockId },
+            cargo: [],
+            parts: baseParts(),
         };
         state.boats.push(boat);
         state.boats.sort((a, b) => a.slot - b.slot);
@@ -99,31 +110,58 @@ export class Sailing {
      * Boards the player's boat moored at `dockId`. Returns a message to show when they can't
      * (no boat here, or it has sunk), otherwise null.
      */
-    public static board(player: Player, dockId: string): string | null {
+    public static board(player: Player, dockId: string, slot?: number): string | null {
         if (BoatManager.getBoatAboard(player)) return "You're already on a boat.";
         const dock = Sailing.docks.get(dockId);
         if (!dock) return "You can't board a boat here.";
         const state = player.getSailing();
         const here = (boat: OwnedBoat) => boat.location.kind === "docked" && boat.location.dock === dockId;
-        const boat = [Sailing.activeBoat(player), ...state.boats].find((candidate) => candidate && here(candidate));
+        if (slot !== undefined) {
+            const chosen = state.boats.find((boat) => boat.slot === slot);
+            if (!chosen || !here(chosen)) return "You can't choose that boat at the moment.";
+        }
+        const boat = slot !== undefined
+            ? state.boats.find((candidate) => candidate.slot === slot)
+            : [Sailing.activeBoat(player), ...state.boats].find((candidate) => candidate && here(candidate));
         if (!boat) {
             return state.boats.some((candidate) => candidate.location.kind === "sunk")
                 ? "Your boat has sunk. A shipwright can recover it for you."
                 : "You don't have a boat moored here.";
         }
-        if (!Sailing.embark(player, boat, dock.mooring)) return "There's no room at sea right now.";
-        state.returnPoint = { ...dock.landing };
+        const at = boat.location.kind === "docked" ? boat.location.at : undefined;
+        if (!Sailing.embark(player, boat, at ?? dock.moorings?.[boat.type] ?? dock.mooring, dockId)) {
+            return "There's no room at sea right now.";
+        }
+        Sailing.dockedAt(player, dock);
         return null;
     }
 
-    /** Takes the player off their boat at `dockId`, mooring the boat there. */
+    /**
+     * Docks the boat the player is aboard at `dockId` (its buoy): the player stays aboard, the
+     * boat counts as this port's, and the port is where they return if they abandon it.
+     */
+    public static dock(player: Player, dockId: string): string | null {
+        const dock = Sailing.docks.get(dockId);
+        const instance = Sailing.instanceAboard(player);
+        const boat = Sailing.activeBoat(player);
+        if (!dock || !instance || !boat) return "You can't dock here.";
+        boat.location = Sailing.atSea(instance, dockId);
+        Sailing.dockedAt(player, dock);
+        return null;
+    }
+
+    /**
+     * Takes the player off their boat at `dockId`, which docks it there (if it wasn't), where it
+     * is: boarding here again puts it back in the same place.
+     */
     public static disembark(player: Player, dockId: string): string | null {
         const dock = Sailing.docks.get(dockId);
         const instance = Sailing.instanceAboard(player);
         const boat = Sailing.activeBoat(player);
         if (!dock || !instance || !boat) return "You can't disembark here.";
-        boat.location = { kind: "docked", dock: dockId };
-        player.getSailing().returnPoint = { ...dock.landing };
+        const { fineX, fineY, level, angle } = instance;
+        boat.location = { kind: "docked", dock: dockId, at: { fineX, fineY, level, angle } };
+        Sailing.dockedAt(player, dock);
         Sailing.leave(player, instance, "disembark");
         Sailing.moveExpected(player, new Location(dock.landing.x, dock.landing.y, dock.landing.z));
         return null;
@@ -138,29 +176,40 @@ export class Sailing {
     }
 
     /**
-     * A shipwright recovers the player's sunk boat to `dockId` for its fee in coins (by boat
-     * type). Returns the message to show.
+     * Why a shipwright at `dockId` can't recover the boat in `slot` (sunk, or docked at another
+     * port), or null. The texts are the boat selection interface's own (cache scripts).
      */
-    public static recover(player: Player, dockId: string, feeFor: (boat: OwnedBoat) => number): string {
-        const state = player.getSailing();
-        const sunk = [Sailing.activeBoat(player), ...state.boats]
-            .find((boat) => boat?.location.kind === "sunk");
-        if (!sunk) return "You don't have a boat that needs recovering.";
-        if (!Sailing.docks.has(dockId)) return "I can't bring a boat here.";
-        const fee = feeFor(sunk);
-        const inventory = player.getInventory();
-        if (inventory.getAmount(COINS) < fee) return `You need ${fee} coins to recover your boat.`;
-        inventory.delete(COINS, fee);
-        sunk.location = { kind: "docked", dock: dockId };
-        return "Your boat has been recovered and is moored here.";
+    public static recoverRefusal(player: Player, slot: number, dockId: string): string | null {
+        const boat = player.getSailing().boats.find((candidate) => candidate.slot === slot);
+        if (!boat || !Sailing.docks.has(dockId) || boat.location.kind === "at_sea") {
+            return "You can't choose that boat at the moment.";
+        }
+        if (boat.location.kind === "docked" && boat.location.dock === dockId) {
+            return "That boat is already at the nearby dock. There's no need to recover it.";
+        }
+        return null;
+    }
+
+    /** Brings the boat in `slot` to `dockId`; the shipwright takes the fee. */
+    public static recover(player: Player, slot: number, dockId: string): string | null {
+        const refusal = Sailing.recoverRefusal(player, slot, dockId);
+        if (refusal) return refusal;
+        const boat = player.getSailing().boats.find((candidate) => candidate.slot === slot)!;
+        boat.location = { kind: "docked", dock: dockId };
+        return null;
     }
 
     /** Keeps the saved position of each boat at sea current, so a save mid-voyage restores it. */
     private static recordPositions(): void {
         for (const [instance, { player, slot }] of Sailing.instances) {
             const boat = player.getSailing().boats.find((owned) => owned.slot === slot);
-            if (boat) boat.location = Sailing.atSea(instance);
+            if (boat) boat.location = Sailing.atSea(instance, Sailing.lastPortOf(boat));
         }
+    }
+
+    /** The port a boat last docked at, for a boat at sea or docked. */
+    public static lastPortOf(boat: OwnedBoat): string | undefined {
+        return boat.location.kind === "sunk" ? undefined : boat.location.dock;
     }
 
     /**
@@ -171,7 +220,7 @@ export class Sailing {
         const instance = Sailing.instanceAboard(player);
         if (!instance) return;
         const boat = Sailing.activeBoat(player);
-        if (boat) boat.location = Sailing.atSea(instance);
+        if (boat) boat.location = Sailing.atSea(instance, Sailing.lastPortOf(boat));
         Sailing.leave(player, instance, "logout");
         player.setLocation(Sailing.returnLocation(player));
     }
@@ -180,8 +229,8 @@ export class Sailing {
     public static onLogin(player: Player): void {
         const boat = Sailing.activeBoat(player);
         if (boat?.location.kind === "at_sea") {
-            const { fineX, fineY, level, angle } = boat.location;
-            if (Sailing.embark(player, boat, { fineX, fineY, level, angle })) return;
+            const { fineX, fineY, level, angle, dock } = boat.location;
+            if (Sailing.embark(player, boat, { fineX, fineY, level, angle }, dock)) return;
         }
         // A save from a deck with no boat to go back to (such as sailing data lost in a crash).
         const location = player.getLocation();
@@ -191,13 +240,35 @@ export class Sailing {
     }
 
     /** Spawns the boat at `placement` and puts the player on its deck. */
-    private static embark(player: Player, boat: OwnedBoat, placement: BoatPlacement): boolean {
-        const spec = Sailing.types.get(boat.type);
+    /**
+     * Builds a boat's spec from its owned parts. Content registers it (boat parts live in the
+     * cache and plugin data); without one a boat is built as its type's base spec.
+     */
+    public static setSpecResolver(resolver: (boat: OwnedBoat, base: BoatSpec) => BoatSpec): void {
+        Sailing.specResolver = resolver;
+    }
+
+    /** The spec an owned boat is built from: its type's, with its own parts. */
+    public static specFor(boat: OwnedBoat): BoatSpec | undefined {
+        const base = Sailing.types.get(boat.type);
+        return base && (Sailing.specResolver ? Sailing.specResolver(boat, base) : base);
+    }
+
+    /** Records a dock as the player's last (and return point), as boarding or docking there does. */
+    private static dockedAt(player: Player, dock: SailingDock): void {
+        const state = player.getSailing();
+        state.returnPoint = { ...dock.landing };
+        state.lastDock = dock.id;
+        if (!dock.mooringPoint) state.lastStandardDock = dock.id;
+    }
+
+    private static embark(player: Player, boat: OwnedBoat, placement: BoatPlacement, dockId?: string): boolean {
+        const spec = Sailing.specFor(boat);
         const instance = spec && BoatManager.spawn(player.getIndex(), spec, placement);
         if (!spec || !instance) return false;
         Sailing.instances.set(instance, { player, slot: boat.slot });
         player.getSailing().activeBoatSlot = boat.slot;
-        boat.location = Sailing.atSea(instance);
+        boat.location = Sailing.atSea(instance, dockId);
         BoatManager.getDeck(instance)!.enter(player);
         Sailing.moveExpected(player, new Location(
             instance.deckBaseX + spec.boardingTile.x, instance.deckBaseY + spec.boardingTile.y, 0));
@@ -243,7 +314,8 @@ export class Sailing {
         return point ? new Location(point.x, point.y, point.z) : GameConstants.DEFAULT_LOCATION.clone();
     }
 
-    private static atSea(instance: Boat): OwnedBoat["location"] {
-        return { kind: "at_sea", fineX: instance.fineX, fineY: instance.fineY, level: instance.level, angle: instance.angle };
+    private static atSea(instance: Boat, dock?: string): OwnedBoat["location"] {
+        const at = { fineX: instance.fineX, fineY: instance.fineY, level: instance.level, angle: instance.angle };
+        return dock ? { kind: "at_sea", ...at, dock } : { kind: "at_sea", ...at };
     }
 }

@@ -637,7 +637,8 @@ export class World {
                 World.getPlayers().get(local.getIndex()) != null &&
                 BoatManager.rootLocation(local).isViewableFromWithin(origin, viewDistance) &&
                 !local.isNeedsPlacement() &&
-                BoatManager.syncArea(local) === privateArea
+                BoatManager.syncArea(local) === privateArea &&
+                BoatManager.canSeeAboard(player, local)
             ) {
                 localPlayers[write++] = local;
             }
@@ -655,6 +656,7 @@ export class World {
             if (!candidate || candidate === player || seen.has(candidate.getIndex())) continue;
             if (!BoatManager.rootLocation(candidate).isViewableFromWithin(origin, viewDistance)) continue;
             if (BoatManager.syncArea(candidate) !== privateArea) continue;
+            if (!BoatManager.canSeeAboard(player, candidate)) continue;
             localPlayers.push(candidate);
             seen.add(candidate.getIndex());
             added++;
