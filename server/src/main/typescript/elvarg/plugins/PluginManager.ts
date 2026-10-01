@@ -34,6 +34,7 @@ import {
   PluginSpellOnObjectEvent,
   PluginNpcDeathEvent,
   PluginNpcBeforeDeathEvent,
+  PluginNpcHitModifyEvent,
   PluginNpcAggressionToleranceEvent,
   PluginNpcInteractionEvent,
   PluginNpcInteractionDefinition,
@@ -184,6 +185,7 @@ export class PluginManager {
   }> = [];
   private static npcDeathHooks: PluginHook<PluginNpcDeathEvent>[] = [];
   private static npcBeforeDeathHooks: PluginHook<PluginNpcBeforeDeathEvent>[] = [];
+  private static npcHitModifyHooks: PluginHook<PluginNpcHitModifyEvent>[] = [];
   private static zoneHooks: Array<{
     pluginName: string;
     zone: PluginZone;
@@ -914,14 +916,26 @@ export class PluginManager {
     return event.preventDeath === true;
   }
 
+  public static emitNpcHitModify(npc: any, hit: any): any {
+    if (PluginManager.npcHitModifyHooks.length === 0) {
+      return hit;
+    }
+    const event: PluginNpcHitModifyEvent = { npc, hit };
+    for (const hook of PluginManager.npcHitModifyHooks) {
+      PluginManager.executeHook(hook, event, "npc_hit_modify", "npc_hit_modify");
+    }
+    return event.hit;
+  }
+
   public static emitCanAttack(
     attacker: any,
-    target: any
+    target: any,
+    method?: any
   ): boolean | null {
     if (PluginManager.canAttackHooks.length === 0) {
       return null;
     }
-    const event: PluginCanAttackEvent = { attacker, target, allow: null };
+    const event: PluginCanAttackEvent = { attacker, target, method, allow: null };
     for (const hook of PluginManager.canAttackHooks) {
       PluginManager.executeHook(hook, event, "can_attack", "can_attack");
       if (event.allow !== null) {
@@ -1815,8 +1829,10 @@ export class PluginManager {
       Sound: require("../game/Sound").Sound,
       Sounds: require("../game/Sounds").Sounds,
       Location: require(`${model}/Location`).Location,
+      Boundary: require(`${model}/Boundary`).Boundary,
       World: require("../game/World").World,
       GameObject: require("../game/entity/impl/object/GameObject").GameObject,
+      PrivateArea: require(`${model}/areas/impl/PrivateArea`).PrivateArea,
       ObjectManager: require("../game/entity/impl/object/ObjectManager").ObjectManager,
       MapObjects: require("../game/entity/impl/object/MapObjects").MapObjects,
       ItemOnGroundManager: require("../game/entity/impl/grounditem/ItemOnGroundManager").ItemOnGroundManager,
@@ -1824,6 +1840,7 @@ export class PluginManager {
       CacheDefinitions: require("../game/cache/CacheDefinitions").CacheDefinitions,
       PathFinder: require(`${model}/movement/path/PathFinder`).PathFinder,
       NpcDefinition: require("../game/definition/NpcDefinition").NpcDefinition,
+      NPC: require("../game/entity/impl/npc/NPC").NPC,
       GameConstants: require("../game/GameConstants").GameConstants,
       TeleportHandler: require(`${model}/teleportation/TeleportHandler`).TeleportHandler,
       DialogueChainBuilder: require(`${model}/dialogues/builders/DialogueChainBuilder`).DialogueChainBuilder,
@@ -2485,6 +2502,19 @@ export class PluginManager {
           pluginName,
           handler: (event) => {
             if (event?.npc) {
+              handler(event);
+            }
+          },
+        });
+      },
+      onNpcHitModify: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.npcHitModifyHooks.push({
+          pluginName,
+          handler: (event) => {
+            if (event?.npc && event?.hit) {
               handler(event);
             }
           },
