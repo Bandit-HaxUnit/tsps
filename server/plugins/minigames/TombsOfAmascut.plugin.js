@@ -20,5 +20,6 @@ module.exports = {
     require("./toa/Zebak.TombsOfAmascut")(api);
     require("./toa/Apmeken.TombsOfAmascut")(api);
     require("./toa/BaBa.TombsOfAmascut")(api);
+    require("./toa/Wardens.TombsOfAmascut")(api);
   },
 };

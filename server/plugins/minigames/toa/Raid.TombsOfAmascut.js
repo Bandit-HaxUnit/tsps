@@ -69,6 +69,10 @@ function useExit(event) {
 function useTeleportCrystal(event) {
   const room = raidRoom(event.player);
   if (!room || !room.def.challenge) return false;
+  if (room.def.next === "REWARD" && room.isCompleted()) {
+    room.raid.advance(event.player, true);
+    return true;
+  }
   room.useTeleportCrystal(event.player, event.option !== "Use");
   return true;
 }
@@ -76,6 +80,8 @@ function useTeleportCrystal(event) {
 function talkToOsmumten({ player }) {
   const raid = Raid.raidOf(player);
   if (!raid) return false;
+  // The Wardens' Osmumten starts the fight instead (Wardens unit).
+  if (raid.roomFor(player)?.def.wardens) return false;
   raid.returnToNexus(player);
   return true;
 }
