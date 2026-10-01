@@ -107,6 +107,8 @@ const JEWELLERY = [
       { label: "Emir's Arena", aliases: ["Duel Arena", "PvP Arena"], tile: [3315, 3235, 0] },
       { label: "Castle Wars", tile: [2440, 3090, 0] },
       { label: "Ferox Enclave", tile: [3151, 3636, 0] },
+      // OSRS unlocks it with the Colosseum's Hero title; tsps has no Colosseum yet, so it's open.
+      { label: "Fortis Colosseum", tile: [1793, 3107, 0] },
     ],
   },
   {

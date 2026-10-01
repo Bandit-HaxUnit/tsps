@@ -242,3 +242,11 @@ test("the slayer ring's Rub submenu is its actions: Check, Teleport, then Master
   }
   assert.equal(teleports.length, before, "Master, Partner and Log don't teleport");
 });
+
+test("the ring of dueling's fourth destination is the Fortis Colosseum", () => {
+  const player = createPlayer();
+  const ring = new Item(ItemIds.RING_OF_DUELING_8_, 1);
+  player.inventory.setItem(0, ring);
+  inventoryClick(player, ring, "Rub", { subOpId: 4 });
+  assert.deepEqual(teleports.at(-1).target, [1793, 3107, 0]);
+});
