@@ -71,7 +71,10 @@ function objectContext(player, object) {
   return {
     player,
     object,
-    obj: { x: location.getX(), y: location.getY(), z: location.getZ(), face: object.getFace?.() ?? 0, id: object.getId() },
+    obj: {
+      x: location.getX(), y: location.getY(), z: location.getZ(),
+      face: object.getFace?.() ?? 0, type: object.getType?.() ?? 10, id: object.getId(),
+    },
     pos: { x: playerLocation.getX(), y: playerLocation.getY(), z: playerLocation.getZ() },
   };
 }

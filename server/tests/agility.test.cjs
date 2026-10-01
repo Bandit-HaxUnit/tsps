@@ -276,3 +276,18 @@ test("teleports are refused while crossing an obstacle", () => {
   assert.equal(busy.allow, false);
   hooks.logout.forEach((handler) => handler({ player }));
 });
+
+test("a climb faces the loc: across a wall decoration's edge, or the loc's tile", () => {
+  const { faceLoc } = require("../plugins/skills/agility/steps");
+  // Ardougne's wooden beams: a wall decoration (shape 5) on the start tile's north edge (rotation 1).
+  const beams = { x: 2673, y: 3298, z: 0, face: 1, type: 5, id: ObjectIds.WOODEN_BEAMS };
+  assert.deepEqual(faceLoc(beams), { face: [2673, 3299] });
+  assert.deepEqual(faceLoc({ ...beams, face: 0 }), { face: [2672, 3298] }, "rotation 0: west");
+  assert.deepEqual(faceLoc({ ...beams, face: 3 }), { face: [2673, 3297] }, "rotation 3: south");
+  assert.deepEqual(faceLoc({ ...beams, type: 10 }), { face: [2673, 3298] }, "a centrepiece: its own tile");
+
+  const ardougne = COURSES.find((course) => course.key === "ardougne");
+  const first = ardougne.obstacles.find((obstacle) => obstacle.index === 1);
+  const steps = first.steps({ player: null, obj: beams, pos: { x: 2673, y: 3298, z: 0 } });
+  assert.deepEqual(steps[0], { face: [2673, 3299] }, "the player faces the beams (north) to climb");
+});
