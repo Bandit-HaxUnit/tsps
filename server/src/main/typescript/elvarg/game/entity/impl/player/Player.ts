@@ -46,7 +46,6 @@ import { PlayerSession } from "../../../../net/PlayerSession"
 import { PacketSender } from "../../../../net/packet/PacketSender"
 import { FrameUpdater } from "../../../../util/FrameUpdater"
 import { Misc } from "../../../../util/Misc";
-import { NpcIdentifiers } from "../../../../util/NpcIdentifiers";
 import { Stopwatch } from "../../../../util/Stopwatch";
 import { TimerKey } from "../../../../util/timers/TimerKey";
 import { emptySailingState, type SailingState } from "../../../content/sailing/SailingState";
@@ -1485,17 +1484,6 @@ export class Player extends Mobile {
     }
 
     public manipulateHit(hit: PendingHit): PendingHit {
-        let attacker = hit.getAttacker();
-
-        if (attacker.isNpc()) {
-            let npc = attacker.getAsNpc();
-            if (npc.getId() == NpcIdentifiers.TZTOK_JAD) {
-                if (PrayerHandler.isActivated(this, PrayerHandler.getProtectingPrayer(hit.getCombatType()))) {
-                    hit.setTotalDamage(0);
-                }
-            }
-        }
-
         return hit;
     }
 
