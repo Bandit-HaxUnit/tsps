@@ -3043,6 +3043,14 @@
         "death": 12482,
         "spawn": 12481
       }
+    },
+    "7706": {
+      "name": "TzKal-Zuk",
+      "anims": {
+        "attack": 7566,
+        "block": -1,
+        "death": 7562
+      }
     }
   },
   "refs": {

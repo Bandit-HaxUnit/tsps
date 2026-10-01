@@ -14,6 +14,8 @@ let InfernoArea = null;
 const sessions = new WeakMap();
 
 const ATTR_WAVE = "inferno:wave";
+/** ::infernowave outside a run: the wave the next run starts at (not saved). */
+const ATTR_START_WAVE = "inferno:start-wave";
 const ATTR_SUPPORTS = "inferno:supports";
 const ATTR_COMPLETIONS = "inferno:completions";
 const WAVE_MESSAGE_COLOUR = "ef1020";
@@ -161,6 +163,7 @@ function startRun(player, wave, supportHitpoints) {
   sessions.set(player, session);
   player.setAttribute(ATTR_WAVE, wave);
   if (wave < JAD_WAVE) raiseSupports(session, supportHitpoints);
+  else SUPPORTS.forEach((support) => removeSupport(session, support));
   return session;
 }
 
@@ -170,7 +173,10 @@ function raiseSupports(session, saved) {
   const { GameObject, ObjectManager, NpcIdentifiers: Npcs } = core;
   for (const support of SUPPORTS) {
     const hitpoints = saved?.[support.key];
-    if (hitpoints != null && hitpoints <= 0) continue;
+    if (hitpoints != null && hitpoints <= 0) {
+      removeSupport(session, support);
+      continue;
+    }
     const object = new GameObject(support.objectId, tile(support), 10, 0, session.area);
     ObjectManager.register(object, true);
     const npc = spawn(session, Npcs.COL_00FFFF_ROCKY_SUPPORT_COL, support, { wave: false });
@@ -179,6 +185,15 @@ function raiseSupports(session, saved) {
     session.supports.push({ ...support, object, npc, stage: -1 });
   }
   session.supports.forEach((support) => drawSupport(session, support));
+}
+
+/**
+ * The map has the supports standing, so one that is down when a run starts (collapsed before
+ * a logout, or every one from the Jad waves on) is removed as a collapse removes it.
+ */
+function removeSupport(session, support) {
+  const { GameObject, ObjectManager } = core;
+  ObjectManager.deregister(new GameObject(support.objectId, tile(support), 10, 0, session.area), true);
 }
 
 // Picks the multiloc stage for the damage taken, from the loc's own transform list.
@@ -233,20 +248,22 @@ function savedSupports(session) {
   return saved;
 }
 
-// Each wave's Jal-Nib go for the next standing support in turn, then the player.
+// Each wave's Jal-Nib go for the next standing support in turn. They never go for the player,
+// and with every support down they have nothing to attack.
 function nibblerTarget(session) {
-  if (session.supports.length === 0) return session.player;
+  if (session.supports.length === 0) return null;
   return session.supports[session.nibblerTurn++ % session.supports.length].npc;
 }
 
 function tendNibblers(session) {
-  let target = null;
+  let target;
   for (const npc of session.npcs) {
     if (npc.getId() !== core.NpcIdentifiers.JAL_NIB || npc.getHitpoints() <= 0) continue;
     const current = npc.getCombat().getTarget();
-    if (current && current.getHitpoints() > 0 && current.isRegistered()) continue;
-    target ??= nibblerTarget(session);
-    npc.getCombat().attack(target);
+    if (current && !current.isPlayer?.() && current.getHitpoints() > 0 && current.isRegistered()) continue;
+    if (target === undefined) target = nibblerTarget(session);
+    if (target) npc.getCombat().attack(target);
+    else if (current) npc.getCombat().reset();
   }
 }
 
@@ -286,7 +303,8 @@ function spawnWave(session) {
   const target = nibblers > 0 ? nibblerTarget(session) : null;
   for (let count = 0; count < nibblers; count++) {
     const at = nibblerTile(nibblerTiles);
-    spawn(session, npcIds.nibbler, at, { target });
+    // Hitting a Jal-Nib doesn't turn it on the player.
+    spawn(session, npcIds.nibbler, at, { target })?.setFlag("combat:no-retaliate");
   }
   const spawns = shuffled(SPAWNS);
   [...creatures].reverse().forEach((creature, index) => {
@@ -487,12 +505,13 @@ function processRun({ player }) {
     return;
   }
   if (session.nextWaveAt === -1 && session.npcs.size === 0) {
-    const cleared = session.wave;
-    session.wave++;
+    session.wave = session.nextWave ?? session.wave + 1;
+    session.nextWave = null;
     player.setAttribute(ATTR_WAVE, session.wave);
-    if (cleared === JAD_WAVE - 1) session.supports.forEach((support) => collapse(session, support, false));
+    // The supports come down before the Jads, however the run got there.
+    if (session.wave >= JAD_WAVE) [...session.supports].forEach((support) => collapse(session, support, false));
     player.setAttribute(ATTR_SUPPORTS, savedSupports(session));
-    session.nextWaveAt = now + (cleared === TRIPLE_JAD_WAVE ? ZUK_WAVE_DELAY_TICKS : WAVE_DELAY_TICKS);
+    session.nextWaveAt = now + (session.wave === ZUK_WAVE ? ZUK_WAVE_DELAY_TICKS : WAVE_DELAY_TICKS);
   }
   if (session.nextWaveAt !== -1 && now >= session.nextWaveAt) spawnWave(session);
 }
@@ -522,6 +541,7 @@ function finishRun(player, wavesCleared, won) {
   sessions.delete(player);
   player.setAttribute(ATTR_WAVE, null);
   player.setAttribute(ATTR_SUPPORTS, null);
+  if (session?.zuk) zuk.closeHud(player);
   if (session) {
     session.area.leave(player, false);
     if (player.getArea() === session.area) player.setArea(null);
@@ -559,7 +579,9 @@ function finishRun(player, wavesCleared, won) {
 const TZHAAR_KET_KEH = 7690;
 
 function enter(player) {
-  startRun(player, 1, null);
+  const wave = Number(player.getAttribute(ATTR_START_WAVE) ?? 1);
+  player.setAttribute(ATTR_START_WAVE, null);
+  startRun(player, wave, null);
   player.sendMessage("You hit the ground in the centre of The Inferno.");
 }
 
@@ -600,6 +622,9 @@ function guardPassives(event) {
   const inRun = (mob) => mob?.isNpc?.() && mob.__infernoRun != null;
   if (inRun(attacker) && passiveIds.has(attacker.getId())) {
     event.allow = false;
+  } else if (inRun(attacker) && attacker.getId() === Npcs.JAL_NIB && target?.isPlayer?.()) {
+    // Jal-Nib only ever attack the rocky supports.
+    event.allow = false;
   } else if (attacker?.isPlayer?.() && inRun(target) && untouchableIds.has(target.getId())) {
     event.allow = false;
   }
@@ -611,8 +636,20 @@ function supportsCollapse(event) {
   if (npc?.__infernoRun && npc.getId() === core.NpcIdentifiers.COL_00FFFF_ROCKY_SUPPORT_COL) event.preventDeath = true;
 }
 
-// A logout restarts the wave it happened in, from the middle of the arena, with the supports
-// as they stood when that wave began. Anyone left inside without a run is put back outside.
+/**
+ * Logging out with a wave under way ends the run as dying does: outside, with the TokKul for the
+ * waves cleared (or the win, once TzKal-Zuk is down). Between waves the run is kept for the
+ * next login, as resumeRun picks up.
+ */
+function runLogout({ player }) {
+  const session = sessionOf(player);
+  if (!session) return;
+  if (session.exitAt !== -1) finishRun(player, FINAL_WAVE, true);
+  else if (session.nextWaveAt === -1) finishRun(player, session.wave - 1, false);
+}
+
+// A run kept over a logout between waves starts again at the next wave, from the middle of the
+// arena, with the supports as they stood. Anyone left inside without a run is put back outside.
 function resumeRun({ player }) {
   const wave = Number(player.getAttribute(ATTR_WAVE) ?? 0);
   if (wave >= 1 && wave <= FINAL_WAVE) {
@@ -622,6 +659,33 @@ function resumeRun({ player }) {
   }
 }
 
+/**
+ * ::infernowave <n> (developer): the next wave to spawn is n. In a run, a wave under way is
+ * finished first; outside, the next run starts at it.
+ */
+function setNextWave({ player, parts }) {
+  const wave = Number(parts?.[1]);
+  if (!Number.isInteger(wave) || wave < 1 || wave > FINAL_WAVE) {
+    player.sendMessage(`Usage: ::infernowave <1-${FINAL_WAVE}>`);
+    return;
+  }
+  const session = sessionOf(player);
+  if (!session) {
+    player.setAttribute(ATTR_START_WAVE, wave);
+    player.sendMessage(`Your next Inferno run starts at wave ${wave}.`);
+    return;
+  }
+  if (session.nextWaveAt !== -1) {
+    session.wave = wave;
+    player.setAttribute(ATTR_WAVE, wave);
+    if (wave >= JAD_WAVE) [...session.supports].forEach((support) => collapse(session, support, false));
+    player.sendMessage(`The next wave is wave ${wave}.`);
+    return;
+  }
+  session.nextWave = wave;
+  player.sendMessage(`Once this wave is cleared, the next is wave ${wave}.`);
+}
+
 function completions(player) {
   return Number(player.getAttribute(ATTR_COMPLETIONS) ?? 0);
 }
@@ -629,6 +693,6 @@ function completions(player) {
 module.exports = {
   ATTR_WAVE, ATTR_SUPPORTS, ATTR_COMPLETIONS, TZHAAR_KET_KEH,
   init, spawn, say, tile, cycle, addJad, sessionOf,
-  enter, leave, completions, processRun, runDeath, keepItemsInRun, noTeleportOut, guardPassives, supportsCollapse, resumeRun,
+  enter, leave, completions, setNextWave, processRun, runDeath, keepItemsInRun, noTeleportOut, guardPassives, supportsCollapse, resumeRun, runLogout,
   tryRevive, failedRunTokkul, monsterHitpoints,
 };

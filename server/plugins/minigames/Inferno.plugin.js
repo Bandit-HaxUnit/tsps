@@ -10,6 +10,7 @@ const registerInfernoMonsters = require("./inferno/InfernoMonsters");
 const run = require("./inferno/InfernoRun");
 const zuk = require("./inferno/InfernoZuk");
 const entry = require("./inferno/InfernoEntry");
+const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 
 module.exports = {
   name: "Inferno",
@@ -26,9 +27,12 @@ module.exports = {
     api.onNpcDialogueCondition(entry.answerCondition);
     api.onCustomEvent("npc-dialogue:action", entry.handOverCape);
     api.onObjectFirstClick([entry.INFERNO_ENTRANCE, Objects.THE_INFERNO, Objects.THE_INFERNO_2], entry.jumpIn);
+    api.onObjectRoute(entry.routeToChasm);
     api.onObjectFirstClick(Objects.CAVE_EXIT_22, entry.exitCave);
+    api.onObjectSecondClick(Objects.CAVE_EXIT_22, entry.quickExit);
     api.onPlayerLogin(entry.syncEntrance);
     api.onPlayerLogin(run.resumeRun);
+    api.onPlayerLogout(run.runLogout);
     api.onPlayerProcess(run.processRun);
     api.onPlayerDeath(run.runDeath);
     api.onShouldDropItemsOnDeath(run.keepItemsInRun);
@@ -36,5 +40,6 @@ module.exports = {
     api.onCanAttack(run.guardPassives);
     api.onNpcBeforeDeath(run.supportsCollapse);
     api.onCombatHitResolved(zuk.provoke);
+    api.registerCommand("infernowave", run.setNextWave, PlayerRights.DEVELOPER);
   },
 };

@@ -27,7 +27,7 @@ const SIZES = {
   [Npcs.COL_00FFFF_ROCKY_SUPPORT_COL]: 3, [Npcs.COL_00FFFF_ROCKY_SUPPORT_COL_2]: 3,
 };
 const SUPPORT_VARBIT = 9000;
-const ENTRANCE_VARBIT = 9001;
+const ENTRANCE_VARBIT = 5646;
 
 function footprint(mob) {
   const tiles = [];
@@ -52,7 +52,10 @@ class FakeMob {
       getLastAttack: () => ({ reset() {} }),
       getHitQueue: () => ({ addPendingDamage(hits) { for (const hit of hits) mob.hitpoints -= hit.damage; } }),
     };
-    this.movement = { blocked: false, reset() {}, size: () => 0, setBlockMovement(value) { this.blocked = value; } };
+    this.movement = {
+      blocked: false, reset() {}, size: () => 0, setBlockMovement(value) { this.blocked = value; },
+      addSteps(to) { mob.walkingTo = { x: to.getX(), y: to.getY() }; },
+    };
   }
 
   getLocation() { return this.location; }
@@ -77,6 +80,9 @@ class FakeNpc extends FakeMob {
   }
 
   getId() { return this.id; }
+  setScriptedMovement(value) { this.scripted = value; }
+  setFlag(flag) { (this.flags ??= new Set()).add(flag); return this; }
+  hasFlag(flag) { return this.flags?.has(flag) === true; }
   getSize() { return SIZES[this.id] ?? 1; }
   getDefinition() { return { getHitpoints: () => HITPOINTS[this.id] ?? 10 }; }
   heal(amount) { this.hitpoints = Math.min(this.getDefinition().getHitpoints(), this.hitpoints + amount); }
@@ -99,6 +105,8 @@ class FakePlayer extends FakeMob {
       sendVarbit(id, value) { player.varbits.set(id, value); return this; },
       sendRunEnergy() { return this; },
       sendObjectAnimation() { return this; },
+      sendSubInterface(target, id) { player.overlay = id; return this; },
+      closeSubInterface() { player.overlay = null; return this; },
     };
     this.inventory = {
       contains: (id) => (player.items.get(id) ?? 0) > 0,
@@ -178,7 +186,7 @@ function createWorld() {
     CacheDefinitions: {
       getObject: (id) => {
         if (id >= 30353 && id <= 30355) return { transforms: [30284, 30285, 30286, 30287, -1], transformVarbit: SUPPORT_VARBIT };
-        if (id === 30352) return { transforms: [-1, 30281, 30282, -1], transformVarbit: ENTRANCE_VARBIT };
+        if (id === 30352) return { transforms: [30281, 30281, 30282], transformVarbit: ENTRANCE_VARBIT }; // as in the cache
         return { actions: id === 30282 ? ['Jump-in'] : [null] };
       },
     },
@@ -206,8 +214,9 @@ function createWorld() {
     persistAttribute: hook('persist'),
     sendMultiChatboxPrompt: (player, title, ...pairs) => { world.prompt = { title, pairs }; return true; },
   };
-  for (const name of ['onNpcDialogueCondition', 'onCustomEvent', 'onObjectFirstClick', 'onPlayerLogin', 'onPlayerProcess',
-    'onPlayerDeath', 'onShouldDropItemsOnDeath', 'onCanTeleport', 'onCanAttack', 'onNpcBeforeDeath', 'onCombatHitResolved']) {
+  for (const name of ['onNpcDialogueCondition', 'onCustomEvent', 'onObjectFirstClick', 'onObjectSecondClick', 'onObjectRoute', 'onPlayerLogin', 'onPlayerLogout', 'onPlayerProcess',
+    'onPlayerDeath', 'onShouldDropItemsOnDeath', 'onCanTeleport', 'onCanAttack', 'onNpcBeforeDeath', 'onCombatHitResolved',
+    'registerCommand']) {
     api[name] = hook(name);
   }
   return { world, api };
@@ -408,8 +417,14 @@ test('TzKal-Zuk: the glyph shields, summons arrive on cue and his death wins the
   assert.equal(player.getMovementQueue().blocked, true);
   assert.ok(world.removedObjects.includes(30338));
   assert.equal(glyph.getHitpoints(), 600);
+  assert.equal(player.varbits.get(6719), 2, 'the minimap dims while the prison breaks');
+  assert.ok([30339, 30340, 30341, 30342].every((id) => [...world.objects].some((object) => object.id === id)), 'the wall is patched');
   tick(player, 11);
   assert.equal(player.getMovementQueue().blocked, false);
+  assert.equal(player.overlay, 596, "Zuk's health overlay");
+  assert.equal(player.varbits.get(5654), zuk.getDefinition().getHitpoints());
+  assert.equal(player.varbits.get(5653), zuk.getHitpoints());
+  assert.equal(player.varbits.get(6719), 0);
 
   glyph.moveTo(new Location(2270, 5361, 0));
   player.moveTo(new Location(2271, 5357, 0));
@@ -424,6 +439,7 @@ test('TzKal-Zuk: the glyph shields, summons arrive on cue and his death wins the
 
   zuk.setHitpoints(470);
   tick(player);
+  assert.equal(player.varbits.get(5653), 470, 'the overlay follows his hitpoints');
   const summonedJad = living(Npcs.JALTOK_JAD_2)[0];
   assert.equal(summonedJad.target, glyph);
   summonedJad.setHitpoints(170);
@@ -439,6 +455,7 @@ test('TzKal-Zuk: the glyph shields, summons arrive on cue and his death wins the
   assert.equal(living(Npcs.JAL_MEJJAK).length, 0);
   tick(player, 8);
   assert.equal(run.sessionOf(player), null);
+  assert.equal(player.overlay, null, 'the overlay closes with the run');
   assert.equal(player.items.get(Items.INFERNAL_CAPE), 1);
   assert.equal(player.items.get(Items.TOKKUL), 16440);
   assert.equal(run.completions(player), 1);
@@ -546,4 +563,141 @@ test('Jal-Xil keeps range between melee swings and reaches further on the Zuk wa
   assert.equal(method.attackDistance(ranger), 14);
   assert.equal(method.attackDistance(new FakeNpc(Npcs.JAL_XIL_2, new Location(0, 0, 0))), 30);
   if (hits.length) assert.equal(hits[0].style, CombatType.MELEE);
+});
+
+test('the chasm is jumped into from the tip of the walkway, as its pit has no walkable edge', () => {
+  const { routeToChasm } = require('../plugins/minigames/inferno/InfernoEntry');
+  const route = (x) => {
+    const event = { objectId: 30352, player: { getLocation: () => new Location(x, 5110, 0) } };
+    routeToChasm(event);
+    return event.destination;
+  };
+  assert.deepEqual(route(2496), { x: 2496, y: 5119, z: 0 });
+  assert.deepEqual(route(2499), { x: 2497, y: 5119, z: 0 }, 'the nearer of the two tip tiles');
+  const other = { objectId: 30283, player: { getLocation: () => new Location(2496, 5110, 0) } };
+  routeToChasm(other);
+  assert.equal(other.destination, undefined);
+});
+
+test('Jal-Nib never go for the player: not when hit, and not once every support is down', () => {
+  const { player, session } = startAt(1);
+  tick(player, 20);
+  const nibblers = [...session.npcs].filter((npc) => npc.id === Npcs.JAL_NIB);
+  assert.ok(nibblers.length > 0);
+  assert.ok(nibblers.every((npc) => npc.hasFlag('combat:no-retaliate')), 'hitting one does not turn it');
+  const deny = (attacker, target) => {
+    const event = { attacker, target, allow: null };
+    run.guardPassives(event);
+    return event.allow;
+  };
+  assert.equal(deny(nibblers[0], player), false);
+
+  nibblers[0].target = player;
+  tick(player);
+  assert.ok(session.supports.some((support) => support.npc === nibblers[0].target), 'back onto a support');
+
+  session.supports.length = 0;
+  nibblers[0].target = player;
+  tick(player);
+  assert.equal(nibblers[0].target, null, 'with no support left it stays idle');
+  run.leave(player);
+});
+
+test('::infernowave sets the next wave: after the one under way, or for the next run', () => {
+  const player = new FakePlayer();
+  run.setNextWave({ player, parts: ['infernowave', '70'] });
+  assert.match(player.messages.at(-1), /^Usage/);
+  run.setNextWave({ player, parts: ['infernowave', '30'] });
+  run.enter(player);
+  const session = run.sessionOf(player);
+  assert.equal(session.wave, 30, 'the run starts there');
+
+  tick(player, 20);
+  assert.equal(session.nextWaveAt, -1, 'wave 30 is under way');
+  run.setNextWave({ player, parts: ['infernowave', '67'] });
+  assert.equal(session.wave, 30, 'the wave under way is finished first');
+  for (const npc of [...session.npcs]) { npc.hitpoints = 0; session.npcs.delete(npc); }
+  tick(player);
+  assert.equal(session.wave, 67);
+  assert.equal(session.supports.length, 0, 'the supports come down before the Jads');
+  run.leave(player);
+  assert.equal(run.sessionOf(player), null);
+});
+
+test('the cave exit, a map loc, can be walked to from inside the arena, and Quick-exit leaves', () => {
+  const { MovementQueue } = require('../dist/game/model/movement/MovementQueue');
+  const { player, session } = startAt(1);
+  const at = (z, area) => ({ getLocation: () => new Location(2269, 5325, z), getPrivateArea: () => area, getId: () => 30283, getType: () => 10 });
+  const valid = (object) => MovementQueue.prototype.isInteractionObjectValid.call(
+    { player: { getLocation: () => new Location(2271, 5330, 0), getPrivateArea: () => session.area } }, object, 30283, 10);
+  assert.equal(valid(at(0, null)), true, 'shared by the arena laid over the map');
+  assert.equal(valid(at(0, session.area)), true);
+  assert.equal(valid(at(0, { other: true })), false, "another private area's loc");
+  assert.equal(valid(at(1, null)), false, 'another plane');
+
+  const entry = require('../plugins/minigames/inferno/InfernoEntry');
+  assert.equal(entry.quickExit({ player }), true);
+  assert.equal(run.sessionOf(player), null, 'out without being asked');
+});
+
+test('the supports the map has standing are removed when a run starts without them', () => {
+  world.removedObjects.length = 0;
+  const { player: jadPlayer } = startAt(67);
+  assert.deepEqual([...world.removedObjects].sort(), [30353, 30354, 30355], 'none on the Jad waves');
+  run.leave(jadPlayer);
+
+  world.removedObjects.length = 0;
+  const { player, session } = startAt(10, { [run.ATTR_SUPPORTS]: { west: 0, north: 200, south: 255 } });
+  assert.deepEqual(world.removedObjects, [30353], 'a support that collapsed before the logout stays down');
+  assert.equal(session.supports.length, 2);
+  run.leave(player);
+});
+
+test('an NPC flagged to ignore clipping steps straight on (the glyph, over the pit before Zuk)', () => {
+  const { MovementQueue } = require('../dist/game/model/movement/MovementQueue');
+  const step = (flagged) => MovementQueue.prototype.validatedStep.call(
+    { character: { hasFlag: (flag) => flagged && flag === MovementQueue.IGNORE_CLIPPING_FLAG } },
+    new Location(2270, 5361, 0), new Location(2257, 5361, 0));
+  assert.deepEqual([step(true).getX(), step(true).getY()], [2269, 5361]);
+  assert.equal(MovementQueue.IGNORE_CLIPPING_FLAG, 'movement:ignore-clipping', 'the flag the Zuk plugin sets');
+});
+
+test('logging out mid-wave ends the run as dying does; between waves the run is kept', () => {
+  const { player: waiting, session: kept } = startAt(3);
+  assert.notEqual(kept.nextWaveAt, -1, 'wave 3 has not begun');
+  run.runLogout({ player: waiting });
+  assert.equal(run.sessionOf(waiting), kept);
+  assert.equal(waiting.getAttribute(run.ATTR_WAVE), 3);
+  run.leave(waiting);
+
+  const { player, session } = startAt(3);
+  tick(player, 20);
+  assert.equal(session.nextWaveAt, -1, 'wave 3 is under way');
+  run.runLogout({ player });
+  assert.equal(run.sessionOf(player), null);
+  assert.equal(player.getAttribute(run.ATTR_WAVE), null, 'nothing to resume');
+  assert.equal(player.items.get(Items.TOKKUL), Math.floor((25 * 3) / 2), 'the TokKul for waves 1 and 2');
+  assert.deepEqual([player.getLocation().getX(), player.getLocation().getY()], [2495, 5111], 'back outside');
+});
+
+test("Zuk's ranger and mager come as a set, and not again while the last set stands", () => {
+  const { player, session } = startAt(69);
+  tick(player, 21 + 75);
+  const set = () => [...living(Npcs.JAL_XIL_2), ...living(Npcs.JAL_ZEK_2)];
+  assert.equal(set().length, 2, 'the first set, 45 seconds in');
+  tick(player, 350);
+  assert.equal(set().length, 2, 'no second set while the first is up');
+  set().forEach(kill);
+  tick(player, 350);
+  assert.equal(set().length, 2, 'the next set once the last is down');
+
+  session.zuk.zuk.setHitpoints(200);
+  tick(player, 2); // the Jad, then the healers
+  const healer = living(Npcs.JAL_MEJJAK)[0];
+  const before = session.zuk.zuk.getHitpoints();
+  tick(player, 10);
+  const healed = session.zuk.zuk.getHitpoints() - before;
+  assert.ok(healed > 0 && healed <= 4 * 4 * 24, 'healers heal 15-24 each, every 3 ticks (Wiki)');
+  assert.ok(healer);
+  run.leave(player);
 });

@@ -7,8 +7,7 @@
 // sweeps between the arena walls. A Jal-Xil and Jal-Zek pair is summoned on a timer, a JalTok-Jad
 // at 480 hitpoints and four Jal-MejJak at 240, after which Zuk attacks faster.
 //
-// The camera work of the opening cutscene and the Zuk overlay are not sent: this server has no
-// camera packets, and the overlay's interface and varbits are not checked against the cache yet.
+// The camera work of the opening cutscene is not sent: this server has no camera packets.
 const run = require("./InfernoRun");
 
 let api;
@@ -32,7 +31,21 @@ const JAD_SPAWN = { x: 2270, y: 5347 };
 const JAD_HEALER_SPOTS = [{ x: 2270, y: 5352 }, { x: 2270, y: 5353 }, { x: 2272, y: 5352 }];
 const ZUK_HEALER_SPOTS = [{ x: 2262, y: 5363 }, { x: 2266, y: 5363 }, { x: 2276, y: 5363 }, { x: 2280, y: 5363 }];
 const FALLING_ROCKS = [{ id: 30343, x: 2273, y: 5364 }, { id: 30344, x: 2268, y: 5364 }];
+// The wall beside Zuk patched up as his prison breaks (rotation 3 on the east, 1 on the west).
+const WALL_PATCHES = [
+  { id: 30339, x: 2275, y: 5364, rotation: 3 }, { id: 30340, x: 2267, y: 5364, rotation: 1 },
+  { id: 30341, x: 2275, y: 5366, rotation: 3 }, { id: 30342, x: 2267, y: 5366, rotation: 1 },
+];
+// Zuk's health overlay: interface 596, whose script 739 reads his hitpoints and maximum from
+// these varbits. It opens in the toplevel's overlay_hud as the fight starts.
+const HUD = 596;
+const OVERLAY_HUD_UID = (161 << 16) | 8;
+const VARBIT_HUD_HITPOINTS = 5653;
+const VARBIT_HUD_MAX = 5654;
+// The minimap is dimmed while the prison breaks (2), as on other cutscenes, and back after (0).
+const VARBIT_MINIMAP_STATE = 6719;
 const GLYPH_OBJECT = 30338;
+const GLYPH_OBJECT_ROTATION = 3;
 const INTRO_TICKS = 11;
 const ROCKS_FALL_TICKS = 3;
 const FIRST_ATTACK_TICKS = 15;
@@ -50,7 +63,8 @@ const JAD_AT = 480;
 const HEALERS_AT = 240;
 const HEALER_ACT_TICKS = 3;
 const HEALER_RISE_TICKS = 3;
-const HEALER_HEAL = { min: 7, max: 15 };
+// Wiki (Jal-MejJak): "heal TzKal-Zuk for 15-24 hitpoints every three ticks".
+const HEALER_HEAL = { min: 15, max: 24 };
 const HEALER_BLAST = { min: 5, max: 10 };
 const HEALER_BLASTS = 3;
 const HEALER_BLAST_SPREAD = 2;
@@ -77,17 +91,26 @@ function begin(session) {
   run.say(player, run.TZHAAR_KET_KEH, "No! TzKal-Zuk's prison is breaking down. There's nothing I can do for you now, JalYt!");
   player.moveTo(run.tile(PLAYER_START));
   player.getMovementQueue().setBlockMovement(true);
-  ObjectManager.deregister(new GameObject(GLYPH_OBJECT, run.tile(GLYPH_SPAWN), 10, 0, area), true);
+  // As the map has it: 6x3 at rotation 3.
+  ObjectManager.deregister(new GameObject(GLYPH_OBJECT, run.tile(GLYPH_SPAWN), 10, GLYPH_OBJECT_ROTATION, area), true);
   const rocks = FALLING_ROCKS.map(({ id, x, y }) => {
     const rock = new GameObject(id, run.tile({ x, y }), 10, 3, area);
     ObjectManager.register(rock, true);
     return rock;
   });
+  for (const { id, x, y, rotation } of WALL_PATCHES) {
+    ObjectManager.register(new GameObject(id, run.tile({ x, y }), 10, rotation, area), true);
+  }
+  player.getPacketSender().sendVarbit(VARBIT_MINIMAP_STATE, 2);
   const zuk = run.spawn(session, Npcs.TZKAL_ZUK, ZUK_SPAWN);
   const glyph = run.spawn(session, Npcs.COL_00FFFF_ANCESTRAL_GLYPH_COL, GLYPH_SPAWN, { wave: false });
   zuk?.performAnimation(new Animation(ZUK_SPAWN_ANIM));
   glyph?.setHitpoints(GLYPH_HITPOINTS);
-  if (glyph) core.PathFinder.calculateWalkRoute(glyph, GLYPH_REST.x, GLYPH_REST.y);
+  // The glyph moves over the pit before Zuk, which the map blocks: it walks straight, as OSRS's
+  // collision-free walk steps, and only where this plugin sends it.
+  glyph?.setScriptedMovement(true);
+  glyph?.setFlag("movement:ignore-clipping");
+  if (glyph) walkGlyph(glyph, GLYPH_REST);
   session.zuk = {
     zuk,
     glyph,
@@ -103,6 +126,8 @@ function begin(session) {
     healers: [],
     glyphWait: 0,
     glyphRested: false,
+    hudHitpoints: -1,
+    set: [],
   };
 }
 
@@ -117,7 +142,9 @@ function tend(session) {
     clearArena(session);
     return true;
   }
-  if (glyph) glyph.getCombat().getLastAttack().reset();
+  // Zuk, the glyph and the healers never attack through the combat engine, so it would count
+  // them out of combat and regenerate them (a tenth of their hitpoints a tick after 20 seconds).
+  for (const npc of [zuk, glyph, ...state.healers]) npc?.getCombat().getLastAttack().reset();
   if (state.rocksFallAt !== -1 && now >= state.rocksFallAt) {
     state.rocksFallAt = -1;
     dropRocks(session);
@@ -127,7 +154,9 @@ function tend(session) {
     state.started = true;
     state.nextAttackAt = now + FIRST_ATTACK_TICKS;
     session.player.getMovementQueue().setBlockMovement(false);
+    openHud(session.player, zuk);
   }
+  updateHud(session.player, state);
   sweepGlyph(state);
   summon(session, state);
   tendHealers(session, state);
@@ -136,6 +165,27 @@ function tend(session) {
     strike(session, state);
   }
   return false;
+}
+
+function openHud(player, zuk) {
+  const sender = player.getPacketSender();
+  sender.sendVarbit(VARBIT_MINIMAP_STATE, 0);
+  sender.sendVarbit(VARBIT_HUD_MAX, zuk.getDefinition().getHitpoints());
+  sender.sendSubInterface(OVERLAY_HUD_UID, HUD, 1);
+}
+
+function updateHud(player, state) {
+  const hitpoints = Math.max(0, state.zuk.getHitpoints());
+  if (hitpoints === state.hudHitpoints) return;
+  state.hudHitpoints = hitpoints;
+  player.getPacketSender().sendVarbit(VARBIT_HUD_HITPOINTS, hitpoints);
+}
+
+/** The run is over (won, lost or left): the overlay and the minimap go back to normal. */
+function closeHud(player) {
+  const sender = player.getPacketSender();
+  sender.sendVarbit(VARBIT_MINIMAP_STATE, 0);
+  sender.closeSubInterface?.(OVERLAY_HUD_UID);
 }
 
 function dropRocks(session) {
@@ -162,7 +212,13 @@ function sweepGlyph(state) {
   const destination = end === GLYPH_WEST ? GLYPH_EAST
     : end === GLYPH_EAST ? GLYPH_WEST
       : core.Misc.getRandom(1) === 0 ? GLYPH_WEST : GLYPH_EAST;
-  core.PathFinder.calculateWalkRoute(glyph, destination.x, destination.y);
+  walkGlyph(glyph, destination);
+}
+
+function walkGlyph(glyph, { x, y }) {
+  const movement = glyph.getMovementQueue();
+  movement.reset();
+  movement.addSteps(run.tile({ x, y }));
 }
 
 function shielded(player, glyph) {
@@ -205,8 +261,13 @@ function summon(session, state) {
   if (!held && state.setTimer > 0) state.setTimer--;
   if (state.setTimer === 0) {
     state.setTimer = NEXT_SET_TICKS;
-    summonFighter(session, state, Npcs.JAL_XIL_2, RANGER_SPAWN);
-    summonFighter(session, state, Npcs.JAL_ZEK_2, MAGER_SPAWN);
+    // No second set while any of the last one is still up: the timer just starts again.
+    if (!state.set.some(alive)) {
+      state.set = [
+        summonFighter(session, state, Npcs.JAL_XIL_2, RANGER_SPAWN),
+        summonFighter(session, state, Npcs.JAL_ZEK_2, MAGER_SPAWN),
+      ];
+    }
   }
   if (!state.jadSummoned && hitpoints <= JAD_AT) {
     state.jadSummoned = true;
@@ -297,4 +358,4 @@ function clearArena(session) {
   state.healers = [];
 }
 
-module.exports = { init, begin, tend, provoke };
+module.exports = { init, begin, tend, provoke, closeHud };

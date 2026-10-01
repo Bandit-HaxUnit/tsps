@@ -64,7 +64,9 @@ function showEntrance(player) {
   const { CacheDefinitions } = core;
   const loc = CacheDefinitions.getObject(INFERNO_ENTRANCE);
   if (!loc?.transforms || loc.transformVarbit === -1) return;
-  for (let stage = loc.transforms.length - 2; stage >= 0; stage--) {
+  // The last child is what a value past the list shows (30352: 30281, 30281, then 30282 with
+  // "Jump-in" at 2), so it counts as a stage too.
+  for (let stage = loc.transforms.length - 1; stage >= 0; stage--) {
     const child = loc.transforms[stage];
     if (child === -1 || !CacheDefinitions.getObject(child)?.actions?.some(Boolean)) continue;
     player.getPacketSender().sendVarbit(loc.transformVarbit, stage);
@@ -74,6 +76,19 @@ function showEntrance(player) {
 
 function syncEntrance({ player }) {
   showEntrance(player);
+}
+
+/**
+ * The chasm (6x6 from 2493,5124) lies in an enclosed pit: its edge can't be walked to, and the
+ * player jumps in from the tip of the walkway from TzHaar-Ket-Keh, (2496-2497, 5119). Route there
+ * instead, so the jump doesn't fail its reach check.
+ */
+const WALKWAY_TIP = { minX: 2496, maxX: 2497, y: 5119 };
+
+function routeToChasm(event) {
+  if (event.objectId !== INFERNO_ENTRANCE) return;
+  const x = Math.min(WALKWAY_TIP.maxX, Math.max(WALKWAY_TIP.minX, event.player.getLocation().getX()));
+  event.destination = { x, y: WALKWAY_TIP.y, z: 0 };
 }
 
 function jumpIn({ player }) {
@@ -95,11 +110,18 @@ function exitCave({ player }) {
   return true;
 }
 
+/** The cave exit's Quick-exit: out without being asked. */
+function quickExit({ player }) {
+  if (!run.sessionOf(player)) return false;
+  leaveNow(player);
+  return true;
+}
+
 function leaveNow(player) {
   if (run.sessionOf(player)) run.leave(player);
 }
 
 module.exports = {
   ATTR_SACRIFICED, INFERNO_ENTRANCE,
-  init, answerCondition, handOverCape, syncEntrance, jumpIn, exitCave,
+  init, answerCondition, handOverCape, syncEntrance, routeToChasm, jumpIn, exitCave, quickExit,
 };
