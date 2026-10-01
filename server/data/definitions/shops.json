@@ -27537,32 +27537,32 @@
     "currency": "MARK OF GRACE",
     "originalStock": [
       {
-        "id": 30047,
+        "id": 11850,
         "amount": 100,
         "restockTicks": 1
       },
       {
-        "id": 30053,
+        "id": 11854,
         "amount": 100,
         "restockTicks": 1
       },
       {
-        "id": 30056,
+        "id": 11856,
         "amount": 100,
         "restockTicks": 1
       },
       {
-        "id": 30059,
+        "id": 11858,
         "amount": 100,
         "restockTicks": 1
       },
       {
-        "id": 30062,
+        "id": 11860,
         "amount": 100,
         "restockTicks": 1
       },
       {
-        "id": 30050,
+        "id": 11852,
         "amount": 100,
         "restockTicks": 1
       },
@@ -28378,23 +28378,51 @@
     "currency": "GOLDEN NUGGET",
     "originalStock": [
       {
-        "id": 764,
-        "amount": 1,
-        "restockTicks": 1
-      },
-      {
-        "id": 766,
-        "amount": 1,
-        "restockTicks": 1
-      },
-      {
-        "id": 25533,
-        "amount": 1000,
-        "restockTicks": 1
-      },
-      {
-        "id": 25537,
+        "id": 12013,
         "amount": 100,
+        "price": 40,
+        "restockTicks": 1
+      },
+      {
+        "id": 12014,
+        "amount": 100,
+        "price": 60,
+        "restockTicks": 1
+      },
+      {
+        "id": 12015,
+        "amount": 100,
+        "price": 50,
+        "restockTicks": 1
+      },
+      {
+        "id": 12016,
+        "amount": 100,
+        "price": 30,
+        "restockTicks": 1
+      },
+      {
+        "id": 12019,
+        "amount": 1,
+        "price": 100,
+        "restockTicks": 1
+      },
+      {
+        "id": 12020,
+        "amount": 1,
+        "price": 100,
+        "restockTicks": 1
+      },
+      {
+        "id": 12009,
+        "amount": 1000,
+        "price": 10,
+        "restockTicks": 1
+      },
+      {
+        "id": 19473,
+        "amount": 100,
+        "price": 40,
         "restockTicks": 1
       }
     ],

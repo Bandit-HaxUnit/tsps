@@ -63,6 +63,7 @@ import { LoadingMessageOverlay } from "../ui/devoverlay/LoadingMessageOverlay";
 import { LoginOverlay } from "../ui/devoverlay/LoginOverlay";
 import { OverheadPrayerOverlay } from "../ui/devoverlay/OverheadPrayerOverlay";
 import { OverheadTextOverlay } from "../ui/devoverlay/OverheadTextOverlay";
+import { TutorialHintOverlay } from "../ui/devoverlay/TutorialHintOverlay";
 import {
     HealthBarEntry,
     HitsplatEntry,
@@ -757,6 +758,7 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     // Approximate player defaultHeight in tile units (model.height / 128)
     public playerDefaultHeightTiles: number = 200 / 128;
     public overheadTextOverlay?: OverheadTextOverlay;
+    public tutorialHintOverlay?: TutorialHintOverlay;
     public overheadPrayerOverlay?: OverheadPrayerOverlay;
     public overheadTextOutput: OverheadTextEntry[] = [];
     public overheadTextPool: OverheadTextEntry[] = [];
@@ -781,6 +783,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         this.sceneRaycaster = new SceneRaycaster(this.mapManager, osrsClient);
         this.sceneRaycaster.worldEntityTransformProvider = (map) =>
             this.getWorldEntityTransformForMap(map);
+        this.sceneRaycaster.deckToWorldProvider = (entityIndex, fineX, fineY) =>
+            this.projectDeckToWorld(entityIndex, fineX, fineY);
         const previousOnMapRemoved = this.mapManager.onMapRemoved;
         this.mapManager.onMapRemoved = (mapX: number, mapY: number) => {
             this.clearMinimapIconsForMap(mapX | 0, mapY | 0);
@@ -1550,12 +1554,34 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render.getNpcModelYOffset(this, deckHeight);
     }
 
+    /** World fine position of a point on a boat's deck; see worldEntityMotion. */
+    projectDeckToWorld(
+        entityIndex: number,
+        fineX: number,
+        fineY: number,
+    ): { x: number; y: number } | undefined {
+        return render.projectDeckToWorld(this, entityIndex, fineX, fineY);
+    }
+
+    /** World fine point on the sea under a screen position, around a boat. */
+    pickSeaPointAt(
+        entityIndex: number,
+        mouseX: number,
+        mouseY: number,
+    ): { x: number; y: number } | undefined {
+        return render.pickSeaPoint(this, entityIndex, mouseX, mouseY);
+    }
+
     getWorldEntityTransformForTile(tileX: number, tileY: number): Float32Array {
         return render.getWorldEntityTransformForTile(this, tileX, tileY);
     }
 
     clearWorldEntity(entityIndex: number): void {
         return render.clearWorldEntity(this, entityIndex);
+    }
+
+    clearWorldEntityLocs(entityIndex: number): void {
+        return render.clearWorldEntityLocs(this, entityIndex);
     }
 
     clearAllWorldEntities(): void {

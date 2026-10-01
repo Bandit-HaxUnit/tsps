@@ -31,4 +31,11 @@ export class FrameUpdater {
     clear(id: number): void {
         this.interfaceTextMap.delete(id);
     }
+
+    /** Forget every cached text of an interface group (packed `group << 16 | child` ids). */
+    clearGroup(groupId: number): void {
+        for (const id of this.interfaceTextMap.keys()) {
+            if (id >>> 16 === groupId) this.interfaceTextMap.delete(id);
+        }
+    }
 }

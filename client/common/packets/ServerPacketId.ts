@@ -58,6 +58,7 @@ export const enum ServerPacketId {
     DEBUG_PACKET = 86,
     DESTINATION = 87,
     PLAYER_OPTION = 88,
+    HINT_ARROW = 89,
 
     // ========================================
     // INTERFACES/WIDGETS (100-119)
@@ -78,6 +79,7 @@ export const enum ServerPacketId {
     WIDGET_SET_PLAYER_HEAD = 115,
     WIDGET_SET_QUEST_LIST = 116,
     WIDGET_SET_MODEL = 117,
+    WIDGET_SET_POSITION = 118,
 
     // ========================================
     // CHAT/MESSAGES (120-129)
@@ -190,6 +192,7 @@ export const SERVER_PACKET_LENGTHS: Record<ServerPacketId, number> = {
     [ServerPacketId.DEBUG_PACKET]: -2,
     [ServerPacketId.PLAYER_OPTION]: -1,
     [ServerPacketId.DESTINATION]: 4, // worldX(2) + worldY(2)
+    [ServerPacketId.HINT_ARROW]: 6, // type(1) + a(2) + b(2) + c(1)
 
     [ServerPacketId.WIDGET_OPEN]: 3, // groupId(2) + modal(1)
     [ServerPacketId.WIDGET_CLOSE]: 2, // groupId(2)
@@ -199,6 +202,7 @@ export const SERVER_PACKET_LENGTHS: Record<ServerPacketId, number> = {
     [ServerPacketId.WIDGET_CLOSE_SUB]: 4, // targetUid(4)
     [ServerPacketId.WIDGET_SET_TEXT]: -2,
     [ServerPacketId.WIDGET_SET_MODEL]: 8, // uid(4) + raw modelId(4)
+    [ServerPacketId.WIDGET_SET_POSITION]: 8, // uid(4) + x(2) + y(2)
     [ServerPacketId.WIDGET_SET_HIDDEN]: 5, // uid(4) + hidden(1)
     [ServerPacketId.WIDGET_SET_ITEM]: 10, // uid(4) + itemId(2) + quantity(4)
     [ServerPacketId.WIDGET_SET_NPC_HEAD]: 6, // uid(4) + npcId(2)
@@ -209,7 +213,7 @@ export const SERVER_PACKET_LENGTHS: Record<ServerPacketId, number> = {
     [ServerPacketId.WIDGET_SET_PLAYER_HEAD]: 4, // uid(4)
     [ServerPacketId.WIDGET_SET_QUEST_LIST]: -2,
 
-    [ServerPacketId.CHAT_MESSAGE]: -1,
+    [ServerPacketId.CHAT_MESSAGE]: -2, // var-short: tutorial/quest game messages exceed 255 bytes
     [ServerPacketId.FRIENDS_CHAT_UPDATE]: -2,
 
     [ServerPacketId.LOC_CHANGE]: -1,

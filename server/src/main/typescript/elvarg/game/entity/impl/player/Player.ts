@@ -46,9 +46,9 @@ import { PlayerSession } from "../../../../net/PlayerSession"
 import { PacketSender } from "../../../../net/packet/PacketSender"
 import { FrameUpdater } from "../../../../util/FrameUpdater"
 import { Misc } from "../../../../util/Misc";
-import { NpcIdentifiers } from "../../../../util/NpcIdentifiers";
 import { Stopwatch } from "../../../../util/Stopwatch";
 import { TimerKey } from "../../../../util/timers/TimerKey";
+import { emptySailingState, type SailingState } from "../../../content/sailing/SailingState";
 import { Trading } from "../../../content/Trading";
 import { Dueling } from "../../../content/Duelling";
 import { QuickPrayers } from "../../../content/QuickPrayers";
@@ -103,6 +103,8 @@ export class Player extends Mobile {
     public forcedLogoutTimer = new SecondsTimer();
     // Trading
     private trading = new Trading(this);
+    // Owned boats and where they are
+    private sailing: SailingState = emptySailingState();
     private dueling = new Dueling(this);
     public dialogueManager = new DialogueManager(this);
     // Presets
@@ -134,6 +136,7 @@ export class Player extends Mobile {
     public forceMovement: ForceMovement;
     private currentPet: NPC;
     private skillAnimation: number;
+    private renderAnimations: number[] | null = null;
     private drainingPrayer = false;
     private prayerPointDrain = 0;
     /**
@@ -580,6 +583,9 @@ export class Player extends Mobile {
 
         // Return offered items to both players before this player is saved.
         this.getTrading().closeTrade();
+        // Record a boat at sea (and step ashore) before this player is saved.
+        (require("../../../content/sailing/Sailing") as typeof import("../../../content/sailing/Sailing"))
+            .Sailing.onLogout(this);
         this.getPacketSender().sendInterfaceRemoval();
 
         // Leave area
@@ -934,6 +940,16 @@ export class Player extends Mobile {
         return this;
     }
 
+    /** Stand/turn/walk/turn180/turn90cw/turn90ccw/run sequences that replace the weapon's set. */
+    public getRenderAnimations(): number[] | null {
+        return this.renderAnimations;
+    }
+
+    public setRenderAnimations(animations: number[] | null): Player {
+        this.renderAnimations = animations;
+        return this;
+    }
+
     public getRunEnergy(): number {
         return this.runEnergy;
     }
@@ -1222,6 +1238,14 @@ export class Player extends Mobile {
         return this.trading;
     }
 
+    public getSailing(): SailingState {
+        return this.sailing;
+    }
+
+    public setSailing(sailing: SailingState): void {
+        this.sailing = sailing;
+    }
+
     public getQuickPrayers(): QuickPrayers {
         return this.quickPrayers;
     }
@@ -1471,17 +1495,6 @@ export class Player extends Mobile {
     }
 
     public manipulateHit(hit: PendingHit): PendingHit {
-        let attacker = hit.getAttacker();
-
-        if (attacker.isNpc()) {
-            let npc = attacker.getAsNpc();
-            if (npc.getId() == NpcIdentifiers.TZTOK_JAD) {
-                if (PrayerHandler.isActivated(this, PrayerHandler.getProtectingPrayer(hit.getCombatType()))) {
-                    hit.setTotalDamage(0);
-                }
-            }
-        }
-
         return hit;
     }
 

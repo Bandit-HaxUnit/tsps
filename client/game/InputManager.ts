@@ -625,6 +625,12 @@ export class InputManager {
         return this._cameraDragDeltaY;
     }
 
+    /** Drop this frame's camera-drag delta when a UI element claims the gesture. */
+    consumeCameraDrag(): void {
+        this._cameraDragDeltaX = 0;
+        this._cameraDragDeltaY = 0;
+    }
+
     getGamepad(): Gamepad | null {
         if (this.gamepadIndex === undefined) return null;
         const gamepads = navigator.getGamepads();

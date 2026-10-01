@@ -100,6 +100,7 @@ import {
     subscribeWorldEntityInfo,
 } from "../network/ServerConnection";
 import type { WorldEntityInfoPayload } from "../network/ServerConnection";
+import { sendSetHeading } from "../network/serverConnection/outgoing/movement";
 import type {
     CollectionLogServerPayload,
     HitsplatServerPayload,
@@ -183,6 +184,7 @@ import { TextureLoader } from "../rs/texture/TextureLoader";
 import { faceAngleRs } from "../rs/utils/rotation";
 import { getOsrsInterfaceScalingPercent, setOsrsInterfaceScalingPercent } from "../ui/UiScale";
 import {
+    setHelmSteeringHandler,
     setNpcExamineIdResolver,
     setSpellSelectionClearHandler,
     setSpellSelectionResolver,
@@ -276,6 +278,7 @@ import { createBrowserRememberLoginPluginPersistence } from "./plugins/rememberl
 import { RememberLoginPlugin } from "./plugins/rememberlogin/RememberLoginPlugin";
 import { createBrowserTileMarkersPluginPersistence } from "./plugins/tilemarkers/BrowserTileMarkersPluginPersistence";
 import { TileMarkersPlugin } from "./plugins/tilemarkers/TileMarkersPlugin";
+import { createHelmSteeringDeps, steerFromHelm } from "./sailing/HelmSteering";
 import { createBrowserVengeanceTimerPluginPersistence } from "./plugins/vengeancetimer/BrowserVengeanceTimerPluginPersistence";
 import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlugin";
 import { createBrowserStatusTimerPluginPersistence } from "./plugins/statustimer/BrowserStatusTimerPluginPersistence";
@@ -1016,6 +1019,8 @@ export class OsrsClient {
         rendererType: OsrsRendererType,
         cache?: LoadedCache,
     ) {
+        ClientState.isWorldEntityTile = (tileX, tileY) =>
+            this.worldViewManager.isWorldEntityTile(tileX, tileY);
         document.addEventListener(
             "keydown",
             (event) => {
@@ -1073,6 +1078,8 @@ export class OsrsClient {
             ),
         );
         setNpcExamineIdResolver((serverId) => this.resolveNpcExamineTypeId(serverId));
+        const helmSteering = createHelmSteeringDeps(this, sendSetHeading);
+        setHelmSteeringHandler((worldX, worldY) => steerFromHelm(helmSteering, worldX, worldY));
         const globalState = globalThis as typeof globalThis & {
             DEBUG_PROJECTILES?: boolean;
             DEBUG_PROJECTILES_VERBOSE?: boolean;
@@ -1323,6 +1330,11 @@ export class OsrsClient {
         const mapped = redirect.get(uid & 0xffff);
         if (mapped === undefined || mapped < 0) return -1;
         return ((root << 16) | (mapped & 0xffff)) | 0;
+    }
+
+    /** True while the server has a sub-interface mounted at this standard (161) target. */
+    public hasServerSubInterface(standardTargetUid: number): boolean {
+        return this.serverSubInterfaces.has(standardTargetUid | 0);
     }
 
     /** Mounts a sub-interface and runs everything the open packet asked for. */
@@ -2289,7 +2301,11 @@ export class OsrsClient {
             this.resolvePlayerPlane,
             this.npcEcs,
             this.seqTypeLoader,
-            (plane: number, x: number, y: number) => this.renderer.getCollisionFlagAt(plane, x, y),
+            // A run step is rebuilt with the client's route finder. On a boat deck (its own scene,
+            // no main-world collision) the deck counts as open floor: the server has already
+            // checked the run against the deck, so only the step between two deck tiles is drawn.
+            (plane: number, x: number, y: number) =>
+                ClientState.isWorldEntityTile(x, y) ? 0 : this.renderer.getCollisionFlagAt(plane, x, y),
         );
         this.playerSyncManager = new PlayerSyncManager({
             ecs: this.playerEcs,
@@ -2622,6 +2638,16 @@ export class OsrsClient {
                     w.itemQuantity = 0;
                     this.widgetManager.invalidateWidgetRender(w, "server-set-model");
                 }
+            } else if (payload?.action === "set_position") {
+                // IF_SETPOSITION: as the cs2 op, move within the parent and keep the modes.
+                const w = this.widgetManager?.getWidgetByUid(Number(payload.uid) | 0);
+                if (w) {
+                    w.rawX = Number(payload.x) | 0;
+                    w.rawY = Number(payload.y) | 0;
+                    if (w.xPositionMode === 0) w.x = w.rawX;
+                    if (w.yPositionMode === 0) w.y = w.rawY;
+                    this.widgetManager.invalidateWidget(w, "server-set-position");
+                }
             } else if (payload?.action === "set_item") {
                 const uid = Number(payload.uid) | 0;
                 const itemId = Number(payload.itemId) | 0;
@@ -2778,7 +2804,8 @@ export class OsrsClient {
                 // RUNCLIENTSCRIPT packet - run a CS2 script with arguments
                 const scriptId = Number(payload.scriptId) | 0;
                 const args = payload.args;
-                if (scriptId > 0 && this.cs2Vm && Array.isArray(args)) {
+                // A negative id carries only vars and inventories (see below).
+                if (scriptId !== 0 && this.cs2Vm && Array.isArray(args)) {
                     if (
                         (scriptId === SCRIPT_HIGHLIGHT_SCREEN_COMPONENT ||
                             scriptId === SCRIPT_HIGHLIGHT_TEXTBOX_DEFAULT) &&
@@ -2838,6 +2865,9 @@ export class OsrsClient {
                                 Array.isArray(snapshot.slots) ? snapshot.slots : [],
                                 { selectedSlot: null },
                             );
+                            // Interfaces listening to this inventory redraw, as for any update;
+                            // an "other" inventory (id + 32768) notifies listeners of its id.
+                            markInvTransmit(inventoryId & 0x7fff);
                         }
                     }
                     const intArgs: number[] = [];
@@ -2850,7 +2880,8 @@ export class OsrsClient {
                         }
                     }
 
-                    const script = this.cs2Vm.context.loadScript(scriptId);
+                    // A negative id carries only vars and inventories, with no script to run.
+                    const script = scriptId >= 0 ? this.cs2Vm.context.loadScript(scriptId) : null;
                     if (script) this.cs2Vm.run(script, intArgs, stringArgs);
                 }
             } else if ((payload as any)?.action === "set_varbits") {
@@ -3452,10 +3483,11 @@ export class OsrsClient {
                         console.log(
                             `[OsrsClient] REBUILD_WORLDENTITY received: entity=${payload.entityIndex} config=${payload.configId} size=${payload.sizeX}x${payload.sizeZ} regionX=${payload.regionX} regionY=${payload.regionY} regions=${payload.mapRegions.length}`,
                         );
-                        // World entity scene anchor: entityCoord + sizeChunks * 4 (tile precision).
-                        // entityCoord=3050, sizeChunks=8, fineBase=8*64=512fine=4tiles → anchor=3054.
-                        const entityWorldX = 3054;
-                        const entityWorldY = 3193;
+                        // The deck scene keeps its own coordinates: 13x13 chunks centred on
+                        // the region, so this anchor puts the scene base at (region - 6) * 8.
+                        // Where the deck is drawn in the world comes from WORLDENTITY_INFO.
+                        const entityWorldX = payload.regionX * 8 + 4;
+                        const entityWorldY = payload.regionY * 8 + 4;
 
                         // Collect extra locs from addedLocs that fall in source region
                         const extraLocs: Array<{
@@ -3491,19 +3523,9 @@ export class OsrsClient {
                             );
                         }
 
-                        // Set local player's worldViewId to this entity
-                        if (this.controlledPlayerServerId >= 0) {
-                            const localEcsIdx = this.playerEcs.getIndexForServerId(
-                                this.controlledPlayerServerId,
-                            );
-                            if (localEcsIdx !== undefined) {
-                                this.playerEcs.setWorldViewId(localEcsIdx, payload.entityIndex);
-                                this.worldViewManager.addPlayerToWorldView(
-                                    payload.entityIndex,
-                                    localEcsIdx,
-                                );
-                            }
-                        }
+                        // Boats of other players are built too; the local player is only on
+                        // this one if they stand in its deck scene.
+                        this.syncLocalWorldView();
                     } catch (err) {
                         console.warn("[OsrsClient] rebuild_worldentity error", err);
                     }
@@ -3522,6 +3544,7 @@ export class OsrsClient {
                         ? frame.localIndex | 0
                         : this.lastPlayerSyncLocalIndex;
                     this.playerSyncManager.handleFrame(frame);
+                    this.syncLocalWorldView();
                 } catch (err) {
                     console.warn("[OsrsClient] player_sync frame error", err);
                 }
@@ -7057,6 +7080,8 @@ export class OsrsClient {
             clientCycle: getClientCycle() | 0,
             localTileX: decodeBase.tileX | 0,
             localTileY: decodeBase.tileY | 0,
+            rootTileX: payload.rootTileX | 0,
+            rootTileY: payload.rootTileY | 0,
             level: decodeBase.level | 0,
         });
 
@@ -7719,7 +7744,7 @@ export class OsrsClient {
             if (entity) {
                 entity.drawMode = spawn.drawMode;
                 if (spawn.position) {
-                    entity.queuePosition(spawn.position);
+                    entity.setPosition(spawn.position);
                 }
                 if (spawn.mask) {
                     this.applyWorldEntityMask(spawn.entityIndex, entity, spawn.mask);
@@ -7757,16 +7782,40 @@ export class OsrsClient {
 
     private despawnWorldEntity(entityIndex: number): void {
         console.log(`[OsrsClient] Despawning world entity ${entityIndex}`);
+        // Before the world view goes: its bounds say which added locs were the boat's.
+        if (this.renderer && "clearWorldEntityLocs" in this.renderer) {
+            (this.renderer as any).clearWorldEntityLocs(entityIndex);
+        }
         if (this.renderer && "clearWorldEntity" in this.renderer) {
             (this.renderer as any).clearWorldEntity(entityIndex);
         }
         if (this.controlledPlayerServerId >= 0) {
             const localEcsIdx = this.playerEcs.getIndexForServerId(this.controlledPlayerServerId);
-            if (localEcsIdx !== undefined) {
+            // Only a boat the local player is on takes them off it; other boats come and go.
+            if (localEcsIdx !== undefined && this.playerEcs.getWorldViewId(localEcsIdx) === entityIndex) {
                 this.playerEcs.setWorldViewId(localEcsIdx, -1);
                 this.worldViewManager.removePlayerFromWorldView(entityIndex, localEcsIdx);
             }
         }
+    }
+
+    /**
+     * Puts the local player in the world view of the boat whose deck scene they stand in, or
+     * the main world (-1). The server sends every nearby boat's scene, so being sent a boat
+     * doesn't mean being on it; where the player stands decides.
+     */
+    private syncLocalWorldView(): void {
+        if (this.controlledPlayerServerId < 0) return;
+        const localEcsIdx = this.playerEcs.getIndexForServerId(this.controlledPlayerServerId);
+        const tile = this.playerSyncManager.getServerTile(this.controlledPlayerServerId);
+        if (localEcsIdx === undefined || !tile) return;
+        const view = this.worldViewManager.findWorldViewAt(tile.tileX, tile.tileY);
+        const next = view && view.id !== -1 ? view.id : -1;
+        const current = this.playerEcs.getWorldViewId(localEcsIdx);
+        if (next === current) return;
+        if (current >= 0) this.worldViewManager.removePlayerFromWorldView(current, localEcsIdx);
+        this.playerEcs.setWorldViewId(localEcsIdx, next);
+        if (next >= 0) this.worldViewManager.addPlayerToWorldView(next, localEcsIdx);
     }
 
     /**

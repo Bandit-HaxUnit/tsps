@@ -95274,15 +95274,15 @@
         "level": 0,
         "name": "Harrallak Menarous",
         "x": 2866,
-        "y": 3546,
-        "id": 2458
+        "y": 3547,
+        "id": 13615
     },
     {
         "level": 0,
         "name": "Ghommal",
-        "x": 2877,
-        "y": 3546,
-        "id": 2457
+        "x": 2879,
+        "y": 3547,
+        "id": 13613
     },
     {
         "level": 1,
@@ -95302,8 +95302,8 @@
         "level": 1,
         "name": "Sloane",
         "x": 2855,
-        "y": 3552,
-        "id": 2473
+        "y": 3553,
+        "id": 13616
     },
     {
         "level": 1,
@@ -169981,13 +169981,6 @@
     },
     {
         "level": 0,
-        "name": "TzTok-Jad",
-        "x": 2411,
-        "y": 5081,
-        "id": 3127
-    },
-    {
-        "level": 0,
         "name": "JalTok-Jad",
         "x": 2263,
         "y": 5346,
@@ -170236,6 +170229,15 @@
         "y": 3208,
         "id": 14957,
         "direction": 4,
+        "wanderRadius": 0
+    },
+    {
+        "level": 0,
+        "name": "Junior Jim",
+        "x": 3058,
+        "y": 2979,
+        "id": 14975,
+        "direction": 6,
         "wanderRadius": 0
     }
 ]

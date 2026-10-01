@@ -7,9 +7,7 @@ const { ObjectDefinition } = require("../../src/main/typescript/elvarg/game/defi
 
 const CLIMB_UP = new Animation(828);
 const CLIMB_DOWN = new Animation(827);
-// Cache animations last 1260ms up and 1160ms down, rounded up to 600ms ticks.
-const CLIMB_UP_TICKS = 3;
-const CLIMB_DOWN_TICKS = 2;
+let pluginApi;
 let TaskManager;
 
 /**
@@ -52,15 +50,32 @@ function interactObjectName(event) {
     ?? null;
 }
 
-function climb({ player, destination }, animation, ticks) {
+function climb({ player, destination }, animation) {
+  const movement = player.getMovementQueue();
+  if (movement.isMovementBlocked()) return false;
   const start = player.getLocation().clone();
   const target = destination.clone();
-  player.performAnimation(animation);
+  const privateArea = player.getPrivateArea();
+  let animated = false;
+  movement.setBlockMovement(true).reset();
   TaskManager.submit(new (class extends Task {
-    constructor() { super(ticks, player); }
+    // OpenRune's arriveDelay waits a cycle after movement; the climb itself
+    // changes plane one cycle after starting the animation, before it finishes.
+    constructor() { super(1, player, !movement.didMovePreviousCycle()); }
     execute() {
-      if (player.getLocation().equals(start)) player.moveTo(target);
+      if (player.getLocation().equals(start) && player.getHitpoints() > 0 && player.getPrivateArea() === privateArea) {
+        if (!animated) {
+          player.performAnimation(animation);
+          animated = true;
+          return;
+        }
+        player.moveTo(target);
+      }
       this.stop();
+    }
+    stop() {
+      movement.setBlockMovement(false);
+      super.stop();
     }
   })());
 }
@@ -68,7 +83,7 @@ function climb({ player, destination }, animation, ticks) {
 /**
  * Callers may pass an explicit `destination` (ladders:climbUp custom event), or
  * an object interaction event carrying the ladder's `location` and the tile the
- * player clicked from (`sourceLocation`).
+ * player operated from (`sourceLocation`).
  *
  * A climb must land on the tile in front of the ladder, never on the ladder's
  * own (blocked) tile - otherwise the player stands inside a clipped tile and the
@@ -96,7 +111,7 @@ function climbUp(event) {
       return false;
     }
   }
-  climb({ player: event.player, destination }, CLIMB_UP, CLIMB_UP_TICKS);
+  return climb({ player: event.player, destination }, CLIMB_UP);
 }
 
 function climbDown(event) {
@@ -109,16 +124,62 @@ function climbDown(event) {
       return false;
     }
   }
-  climb({ player: event.player, destination }, CLIMB_DOWN, CLIMB_DOWN_TICKS);
+  return climb({ player: event.player, destination }, CLIMB_DOWN);
+}
+
+/**
+ * Ambiguous "Climb" option (the mill's first-floor ladder offers it as the
+ * left-click). Ask which way instead of guessing, then hand off to the normal
+ * named handlers; the up/down options only fire if the player hasn't moved.
+ */
+function promptClimb(event) {
+  const { player } = event;
+  const start = player.getLocation().clone();
+  const sourceLocation = { x: start.getX(), y: start.getY(), z: start.getZ() };
+  return pluginApi.sendMultiChatboxPrompt(
+    player,
+    "Which way would you like to climb?",
+    "Climb up",
+    () => {
+      if (player.getLocation().equals(start)) climbUp({ ...event, destination: undefined, sourceLocation });
+    },
+    "Climb down",
+    () => {
+      if (player.getLocation().equals(start)) climbDown({ ...event, destination: undefined, sourceLocation });
+    }
+  );
+}
+
+/**
+ * Content that owns a ladder or staircase (Castle Wars) claims the click before the
+ * generic fallback below guesses a direction.
+ */
+function claimedElsewhere(event) {
+  const request = { player: event.player, object: event.object, objectId: event.objectId, clickType: event.clickType, handled: false };
+  pluginApi.emitCustomEvent("ladders:climb", request);
+  return request.handled;
+}
+
+function climbOption(event) {
+  return claimedElsewhere(event) || promptClimb(event);
+}
+
+function climbUpOption(event) {
+  return claimedElsewhere(event) || climbUp(event);
+}
+
+function climbDownOption(event) {
+  return claimedElsewhere(event) || climbDown(event);
 }
 
 module.exports = {
   name: "Ladders",
   register(api) {
+    pluginApi = api;
     TaskManager = api.getTaskManager();
     api.onCustomEvent("ladders:climbUp", climbUp);
     api.onCustomEvent("ladders:climbDown", climbDown);
-    api.onObjectInteraction("Ladder", { "Climb-up": climbUp, "Climb-down": climbDown });
-    api.onObjectInteraction("Staircase", { "Climb-up": climbUp, "Climb-down": climbDown });
+    api.onObjectInteraction("Ladder", { "Climb": climbOption, "Climb-up": climbUpOption, "Climb-down": climbDownOption });
+    api.onObjectInteraction("Staircase", { "Climb": climbOption, "Climb-up": climbUpOption, "Climb-down": climbDownOption });
   },
 };

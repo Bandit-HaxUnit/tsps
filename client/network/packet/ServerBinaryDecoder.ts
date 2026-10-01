@@ -341,6 +341,17 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                 },
             };
 
+        case ServerPacketId.HINT_ARROW:
+            return {
+                type: "hint_arrow",
+                payload: {
+                    arrowType: reader.readByte(),
+                    a: reader.readShort(),
+                    b: reader.readShort(),
+                    c: reader.readByte(),
+                },
+            };
+
         case ServerPacketId.REBUILD_REGION: {
             const rebuildRegionY = reader.readShort();
             const rebuildForceReload = reader.readByte() === 1;
@@ -657,11 +668,13 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
         case ServerPacketId.NPC_INFO: {
             const loopCycle = reader.readInt();
             const large = reader.readBoolean();
+            const rootTileX = reader.readShort();
+            const rootTileY = reader.readShort();
             const packetLen = reader.readShort();
             const packet = reader.readBytes(packetLen);
             return {
                 type: "npc_info",
-                payload: { loopCycle, large, packet },
+                payload: { loopCycle, large, rootTileX, rootTileY, packet },
             };
         }
 
@@ -871,6 +884,17 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             return {
                 type: "widget",
                 payload: { action: "set_model", uid: reader.readInt(), modelId: reader.readInt() },
+            };
+
+        case ServerPacketId.WIDGET_SET_POSITION:
+            return {
+                type: "widget",
+                payload: {
+                    action: "set_position",
+                    uid: reader.readInt(),
+                    x: reader.readSignedShort(),
+                    y: reader.readSignedShort(),
+                },
             };
 
         case ServerPacketId.WIDGET_SET_ITEM:

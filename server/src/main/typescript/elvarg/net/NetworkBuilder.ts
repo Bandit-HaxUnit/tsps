@@ -26,6 +26,7 @@ import { MapRegionReplacementManager } from "../game/collision/MapRegionReplacem
 import {
   decodeClientPackets,
   MAIN_INVENTORY_GROUP_ID,
+  MOBILE_CLIENT_ATTRIBUTE,
   encodeDefaultAnimations,
   encodeGameframeBootstrap,
   encodeHandshake,
@@ -33,6 +34,7 @@ import {
   encodeLogoutResponse,
   encodeWelcome,
   PlayerAppearance,
+  resolveGameframeRoot,
 } from "./protocol/ClientProtocol";
 import {
   WORLD_MAP_CLOSE_WIDGET_ID,
@@ -54,6 +56,8 @@ import { SwitchItemSlotPacketListener } from "./packet/impl/SwitchItemSlotPacket
 import { PickupItemPacketListener } from "./packet/impl/PickupItemPacketListener";
 import { SecondGroundItemOptionPacketListener } from "./packet/impl/SecondGroundItemOptionPacketListener";
 import { ItemDefinition } from "../game/definition/ItemDefinition";
+import { BoatManager } from "../game/content/sailing/BoatManager";
+import { Sailing } from "../game/content/sailing/Sailing";
 import { Bank } from "../game/model/container/impl/Bank";
 import { InterfaceActionClickOpcode } from "./packet/impl/InterfaceActionClickOpcode";
 import { ChangeAppearancePacketListener } from "./packet/impl/ChangeAppearancePacketListener";
@@ -76,9 +80,6 @@ const OBJECT_ACTIONS = new ObjectActionPacketListener();
 const NPC_ACTIONS = new NPCOptionPacketListener();
 const MAGIC_ITEMS = new MagicOnItemPacketListener();
 const CLOSE_ON_INTERFACE_CLOSE_ATTRIBUTE = "interface:close-on-interface-close";
-// Gameframe roots the "Game client layout" dropdown can pick (548 fixed, 164
-// classic resizable, 161 modern resizable).
-const CLIENT_LAYOUT_ROOTS = new Set([548, 164, 161]);
 const WORLD_INTERACTIONS = new Set([
   "move",
   "teleport",
@@ -225,6 +226,9 @@ class ClientConnection {
       switch (packet.type) {
         case "move":
           this.walk(packet.worldX, packet.worldY, packet.modifierFlags);
+          continue;
+        case "set_heading":
+          if (this.player) BoatManager.setHelmHeading(this.player, packet.heading);
           continue;
         case "npc_option":
           if (this.player) NPC_ACTIONS.executeOption(this.player, packet.index, packet.clickType);
@@ -637,6 +641,18 @@ class ClientConnection {
               slot: packet.childIndex >= 0 ? packet.childIndex : undefined,
               argsData: packet.argsData,
             });
+          } else if (this.player) {
+            // A script trigger (if_triggeroplocal from a cache script, like the boat
+            // customisation's Build): the component, the child it was for, and the script's
+            // arguments (ints as zigzag varints, strings null-terminated).
+            InterfaceActionClickOpcode.handle(this.player, packet.widgetId, 0, {
+              groupId: packet.widgetId >>> 16,
+              childId: packet.widgetId & 0xffff,
+              slot: packet.childIndex >= 0 ? packet.childIndex : undefined,
+              itemId: packet.itemId >= 0 ? packet.itemId : undefined,
+              argsData: packet.argsData,
+              scriptTrigger: true,
+            });
           }
           continue;
         case "item_spawner_search":
@@ -711,7 +727,7 @@ class ClientConnection {
           await this.login(packet.username, packet.password, packet.revision);
           continue;
         case "handshake":
-          this.enterWorld();
+          this.enterWorld(packet.clientType);
           continue;
         case "logout":
           this.send(encodeLogoutResponse());
@@ -810,7 +826,7 @@ class ClientConnection {
     console.info(`[login] accepted ${username} from ${this.channel.remoteAddress}`);
   }
 
-  private enterWorld(): void {
+  private enterWorld(clientType: number = 0): void {
     if (!this.pending || this.player) return;
     const pending = this.pending;
     const session = new PlayerSession(this.channel);
@@ -819,6 +835,9 @@ class ClientConnection {
     player.setUsername(pending.username);
     player.setLongUsername(Misc.stringToLongBigInt(pending.username));
     player.setHostAddress(this.channel.remoteAddress);
+    // Transient (not persisted) so a mobile login never overwrites the layout
+    // saved from a desktop session; resolveGameframeRoot reads it at boot.
+    if (clientType === 1) player.setAttribute(MOBILE_CLIENT_ATTRIBUTE, true);
     if (pending.save) pending.save.applyToPlayer(player);
     if (isConfiguredDeveloperUsername(player.getUsername())) player.setRights(PlayerRights.DEVELOPER);
     player.setPasswordHashWithSalt(pending.passwordHash);
@@ -832,6 +851,8 @@ class ClientConnection {
     }
     this.player = player;
     this.releasePendingName();
+    // Back aboard a boat they logged out on at sea.
+    Sailing.onLogin(player);
     World.refreshActiveRegions();
     PluginManager.emitPlayerLogin({
       player,
@@ -850,8 +871,8 @@ class ClientConnection {
     this.send(encodeDefaultAnimations());
     // 548/164/161 - what the "Game client layout" dropdown (Settings.plugin.js)
     // stores; the client maps the standard mounts onto the chosen layout.
-    const savedLayoutRoot = Number(player.getAttribute("clientLayoutRoot"));
-    const layoutRoot = CLIENT_LAYOUT_ROOTS.has(savedLayoutRoot) ? savedLayoutRoot : 161;
+    // Mobile clients resolve to the stock mobile toplevel (601) instead.
+    const layoutRoot = resolveGameframeRoot(player);
     for (const packet of encodeGameframeBootstrap(player.getUsername(), layoutRoot)) this.send(packet);
     player.getPacketSender()
       // The bootstrap mounts the magic tab (161:82 -> 218) directly, which does not send
@@ -867,6 +888,8 @@ class ClientConnection {
   private walk(x: number, y: number, modifierFlags: number): void {
     const player = this.player;
     if (!player) return;
+    // At a boat's helm a click sets the heading (the client normally sends SET_HEADING).
+    if (BoatManager.steerToward(player, x, y)) return;
     player.getCombat().reset();
     const run = modifierFlags === 2 ||
       ((modifierFlags & 1) !== 0 ? !player.isRunningReturn() : player.isRunningReturn());

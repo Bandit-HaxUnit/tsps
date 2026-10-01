@@ -1,5 +1,6 @@
 {
-  "disabledPlugins": ["SpawnMode"],
+  "disabledPlugins": ["SpawnMode", "TutorialIsland"],
+  "pluginConfig": {},
   "experienceMultiplier": 1,
   "spawn": {
     "x": 3089,
@@ -27,9 +28,13 @@
     { "minX": 2616, "maxX": 2691, "minY": 2556, "maxY": 2624, "z": 0, "tags": ["multi-combat"] },
     { "minX": 2667, "maxX": 2685, "minY": 3712, "maxY": 3730, "z": 0, "tags": ["multi-combat"] },
     { "minX": 2371, "maxX": 2422, "minY": 5062, "maxY": 5117, "z": 0, "tags": ["multi-combat"] },
+    { "minX": 2376, "maxX": 2422, "minY": 5129, "maxY": 5167, "z": 0, "tags": ["multi-combat"] },
     { "minX": 2896, "maxX": 2927, "minY": 3595, "maxY": 3630, "z": 0, "tags": ["multi-combat"] },
     { "minX": 2892, "maxX": 2932, "minY": 4435, "maxY": 4464, "z": 0, "tags": ["multi-combat"] },
     { "minX": 3279, "maxX": 3307, "minY": 3156, "maxY": 3179, "z": 0, "tags": ["multi-combat"] },
-    { "minX": 3456, "maxX": 3520, "minY": 9472, "maxY": 9536, "z": 0, "tags": ["multi-combat"] }
+    { "minX": 3456, "maxX": 3520, "minY": 9472, "maxY": 9536, "z": 0, "tags": ["multi-combat"] },
+    { "minX": 1258, "maxX": 1284, "minY": 3158, "maxY": 3184, "z": 0, "tags": ["multi-combat"] },
+    { "minX": 1338, "maxX": 1364, "minY": 3096, "maxY": 3124, "z": 0, "tags": ["multi-combat"] },
+    { "minX": 1224, "maxX": 1250, "minY": 3029, "maxY": 3055, "z": 0, "tags": ["multi-combat"] }
   ]
 }

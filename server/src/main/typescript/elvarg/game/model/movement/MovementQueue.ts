@@ -90,6 +90,7 @@ export class MovementQueue {
      */
     private isMoving = false;
     private movedThisCycle = false;
+    private lastMoveCycle = -2;
     private blockedByDynamicOccupancy = false;
     private routeEvaluated = false;
     private alternativeRoute = false;
@@ -290,7 +291,7 @@ export class MovementQueue {
             return Mobility.STUNNED;
         }
 
-        if (this.character.isNeedsPlacement() || this.isMovementBlocked()) {
+        if (this.character.isNeedsPlacement() || this.isMovementBlocked() || this.player?.getForceMovement() != null) {
             return Mobility.INVALID;
         }
 
@@ -390,6 +391,10 @@ export class MovementQueue {
 
     public didMoveThisCycle(): boolean {
         return this.movedThisCycle;
+    }
+
+    public didMovePreviousCycle(): boolean {
+        return this.lastMoveCycle === World.getProcessCycle() - 1;
     }
 
     public wasBlockedByDynamicOccupancy(): boolean {
@@ -511,6 +516,7 @@ export class MovementQueue {
 
         this.isMoving = moved;
         this.movedThisCycle = moved;
+        if (moved) this.lastMoveCycle = World.getProcessCycle();
 
         if (this.points.length === 0) {
             this.syncDestinationFlagToRoute();
@@ -1093,7 +1099,7 @@ export class MovementQueue {
         };
     }
 
-    public walkToEntity(entity: Mobile, runnable?: () => void) {
+    public walkToEntity(entity: Mobile, runnable?: () => void, range = 1) {
         let mobility = this.getMobility();
         if (!mobility.canMove()) {
             mobility.sendMessage(this.player);
@@ -1110,7 +1116,10 @@ export class MovementQueue {
 
         this.walkToReset();
 
-        if (PathFinder.reachedEntity(this.player, entity)) {
+        const reached = () => range <= 1 ? PathFinder.reachedEntity(this.player, entity) :
+            this.isInteractionTargetValid(entity) && this.player.getLocation().isWithinDistance(entity.getLocation(), range)
+            && RegionManager.canProjectileAttack(this.player, this.player.getLocation(), entity.getLocation());
+        if (reached()) {
             this.player.setMobileInteraction(entity);
             runnable?.();
             return;
@@ -1134,7 +1143,7 @@ export class MovementQueue {
             }
             this.player.setMobileInteraction(entity);
 
-            if (PathFinder.reachedEntity(this.player, entity)) {
+            if (reached()) {
                 this.player.getMovementQueue().reset();
                 runnable?.();
                 task.stop();
@@ -1261,6 +1270,11 @@ export class MovementQueue {
                 routeSpec.reachBlockAccessFlags
             )) {
                 // Arrival is not a failed route: operate on the following cycle.
+                // No extra arriveDelay here: in OSRS that delay only applies to actions that
+                // move you. Banks, tables, shops and NPCs fire the tick after you arrive, which
+                // this already does. A global delay would make every one of those a tick slower
+                // than OSRS and break tick-based skilling. Ops that move the player get it from
+                // the shared climb (Ladders.plugin.js ladders:climbUp/climbDown) or ObstacleRunner.
                 if (this.didMoveThisCycle()) return;
                 if (objectX === this.player.getLocation().getX() && objectY === this.player.getLocation().getY()) {
                     this.player.setDirection([Direction.WEST, Direction.NORTH, Direction.EAST, Direction.SOUTH][direction]);
@@ -1305,7 +1319,7 @@ export class MovementQueue {
             this.player.sendMessage("You can't reach that!");
             task.stop();
             TaskManager.cancelTasks(this.player.getIndex());
-        }));
+        }, false));
     }
 
     private isAtPointOfFocus(destX: number, destY: number): boolean {

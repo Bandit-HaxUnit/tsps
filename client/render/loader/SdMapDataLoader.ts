@@ -1481,6 +1481,9 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
                     sceneX < scene.sizeX - 1 &&
                     sceneY < scene.sizeY - 1
                 ) {
+                    // A LOC_ANIM on an added loc (such as a boat's salvaging hook) is an
+                    // override keyed by the loc's own tile and id.
+                    const animated = locOverrides?.get(`${loc.x},${loc.y},${loc.level},${loc.id}`);
                     state.sceneBuilder.addLoc(
                         scene,
                         loc.level,
@@ -1491,6 +1494,8 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
                         loc.rotation,
                         scene.collisionMaps[loc.level],
                         locLoadType,
+                        typeof animated?.seqId === "number" ? animated.seqId : undefined,
+                        animated?.seqRandomStart,
                     );
                 }
             }

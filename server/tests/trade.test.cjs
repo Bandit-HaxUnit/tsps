@@ -13,6 +13,7 @@ const { Trading } = require("../dist/game/content/Trading");
 const { ObjType } = require("../dist/game/cache/codec/rs/config/objtype/ObjType");
 const { GameConstants } = require("../dist/game/GameConstants");
 const { ItemOnGroundManager } = require("../dist/game/entity/impl/grounditem/ItemOnGroundManager");
+const { PluginManager } = require("../dist/plugins/PluginManager");
 
 const LOBSTER = 379;
 const COINS = 995;
@@ -273,6 +274,34 @@ test("completing a trade saves both players with the items already exchanged", (
   }
 
   assert.deepEqual(saves.sort(), [["alice", 0, 200], ["bob", 3, 300]]);
+});
+
+test("a completed trade tells plugins what each player received and gave", () => {
+  const { alice, bob } = startTrade();
+  const events = [];
+  const previous = PluginManager.emitTradeCompleted;
+  PluginManager.emitTradeCompleted = (event) => events.push(event);
+  try {
+    alice.getTrading().acceptTrade();
+    bob.getTrading().acceptTrade();
+    alice.getTrading().getButtonDelay().stop();
+    bob.getTrading().getButtonDelay().stop();
+    alice.getTrading().acceptTrade();
+    bob.getTrading().acceptTrade();
+  } finally {
+    PluginManager.emitTradeCompleted = previous;
+  }
+
+  const byPlayer = new Map(events.map((event) => [event.player, event]));
+  const summary = (items) =>
+    items.map((item) => [item.getId(), item.getAmount()]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const lobsters = [[LOBSTER, 1], [LOBSTER, 1], [LOBSTER, 1]];
+  assert.equal(byPlayer.size, 2);
+  assert.equal(byPlayer.get(alice).partner, bob);
+  assert.deepEqual(summary(byPlayer.get(alice).received), [[COINS, 200]]);
+  assert.deepEqual(summary(byPlayer.get(alice).given), lobsters);
+  assert.deepEqual(summary(byPlayer.get(bob).received), lobsters);
+  assert.deepEqual(summary(byPlayer.get(bob).given), [[COINS, 200]]);
 });
 
 test("offered items that no longer fit in the inventory are dropped, not lost", () => {

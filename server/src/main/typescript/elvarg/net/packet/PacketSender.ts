@@ -16,6 +16,7 @@ import {
   encodeChatMessage,
   encodeContentData,
   encodeDestination,
+  encodeHintArrow,
   encodeGroundItems,
   encodeGroundItemsDelta,
   encodeLocAddChange,
@@ -44,6 +45,7 @@ import {
   encodeWidgetSetHidden,
   encodeWidgetSetItem,
   encodeWidgetSetModel,
+  encodeWidgetSetPosition,
   encodeWidgetSetNpcHead,
   encodeWidgetSetPlayerHead,
   encodeWidgetSetQuestList,
@@ -343,6 +345,11 @@ export class PacketSender {
     return this;
   }
 
+  public sendInterfacePosition(uid: number, x: number, y: number): this {
+    this.player.getSession().sendClientPacket(encodeWidgetSetPosition(uid, x, y));
+    return this;
+  }
+
   public sendInterfaceModel(interfaceId: number, itemId: number, zoom: number) {
     if (this.player.getSession().sendClientPacket(encodeWidgetSetItem(interfaceId, itemId, 1))) return this;
   }
@@ -490,46 +497,42 @@ export class PacketSender {
     return this;
   }
 
-  public sendPositionalHint(position: any, tilePosition: number) {
+  /**
+   * Points the native hint arrow at a tile. `tilePosition` is kept for signature
+   * compatibility; the client always centres the 6-byte marker on the tile.
+   */
+  public sendPositionalHint(position: any, tilePosition = 2): this {
     if (
       !position ||
       typeof position.getX !== "function" ||
-      typeof position.getY !== "function" ||
-      typeof position.getZ !== "function"
+      typeof position.getY !== "function"
     ) {
       return this;
     }
-    const out = new PacketBuilder(254);
-    out.put(tilePosition);
-    out.putShort(position.getX());
-    out.putShort(position.getY());
-    out.put(position.getZ());
-    this.player.getSession().write(out);
+    const z = typeof position.getZ === "function" ? position.getZ() : 0;
+    this.player
+      .getSession()
+      .sendClientPacket(encodeHintArrow(2, position.getX(), position.getY(), z));
     return this;
   }
 
-  // public sendEntityHint(mobile: Mobile) {
-  // Use client hint-arrow packet to point at a target entity.
-  public sendEntityHint(mobile: any): PacketSender {
+  /** Points the native hint arrow at an NPC; the marker follows the actor. */
+  public sendEntityHint(mobile: any): this {
     if (!mobile || typeof mobile.getIndex !== "function") {
       return this;
     }
-    const type = mobile?.isPlayer?.() ? 10 : 1;
-    const out = new PacketBuilder(254);
-    out.put(type);
-    out.putShort(mobile.getIndex());
-    out.putTypeInt(0, ValueType.STANDARD, ByteOrder.TRIPLE_INT);
-    this.player.getSession().write(out);
+    this.player.getSession().sendClientPacket(encodeHintArrow(1, mobile.getIndex(), 0, 0));
     return this;
   }
 
-  public sendEntityHintRemoval(playerHintRemoval: boolean): PacketSender {
-    let type = playerHintRemoval ? 10 : 1;
-    let out = new PacketBuilder(254);
-    out.put(type).putShort(-1);
-    out.putTypeInt(0, ValueType.STANDARD, ByteOrder.TRIPLE_INT);
-    this.player.getSession().write(out);
+  /** Clears any active hint arrow. */
+  public clearHintArrow(): this {
+    this.player.getSession().sendClientPacket(encodeHintArrow(0, 0, 0, 0));
     return this;
+  }
+
+  public sendEntityHintRemoval(_playerHintRemoval = false): this {
+    return this.clearHintArrow();
   }
 
   public sendMultiIcon(value: number): PacketSender {
@@ -1055,6 +1058,8 @@ export class PacketSender {
       }
     }
     this.subInterfaceTargets.set(groupId, { targetUid, type });
+    // A (re)mounted group starts with its cache text, so resend everything written to it.
+    this.player.getFrameUpdater().clearGroup(groupId);
     this.player.getSession().sendClientPacket(encodeWidgetOpenSub(targetUid, groupId, type, options));
     if (groupId === MAIN_INVENTORY_GROUP_ID) {
       this.player.getSession().sendClientPacket(
@@ -1116,6 +1121,23 @@ export class PacketSender {
         encodeWidgetRunScript(scriptId, args, varps, varbits, inventories)
       );
     return this;
+  }
+
+  /**
+   * Sends a whole inventory by its cache id (for example a boat's cargo hold, 963), so the
+   * cache scripts reading it redraw. It rides a run-script packet with no script (id -1).
+   */
+  sendInventory(
+    inventoryId: number,
+    capacity: number,
+    items: ReadonlyArray<{ id: number; amount: number } | null>
+  ): this {
+    const slots = Array.from({ length: capacity }, (_, slot) => ({
+      slot,
+      itemId: items[slot]?.id ?? -1,
+      quantity: items[slot]?.amount ?? 0,
+    }));
+    return this.sendInterfaceScript(-1, [], undefined, undefined, { [inventoryId]: { capacity, slots } });
   }
 
   sendClientScript(scriptId: number, ...args: (number | string)[]): this {

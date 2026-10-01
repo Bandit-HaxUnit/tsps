@@ -57,7 +57,8 @@ export type PlayerAppearance = {
 export type Tile = { x: number; y: number; level: number };
 
 export type HitsplatView = { type: number; damage: number; delay?: number };
-export type HealthView = { current: number; max: number };
+/** An actor's headbar: its HP and, when not the default (config 0, 30 wide), which bar. */
+export type HealthView = { current: number; max: number; bar?: { id: number; width: number } };
 export type AnimationView = { id: number; delay: number };
 export type GraphicView = { id: number; height: number; delay: number };
 export type ForcedMovementView = {
@@ -88,6 +89,8 @@ export type PlayerView = Tile & ActorUpdateView & {
   faceDirection?: number;
   forcedMovement?: ForcedMovementView;
   forcedMovementEnd?: Tile;
+  /** The world entity (boat) whose deck the player stands on; the coordinates are deck coordinates. */
+  worldView?: number;
 };
 
 export type PlayerSyncState = {
@@ -100,6 +103,8 @@ export type PlayerSyncState = {
   lastTiles: Map<number, Tile>;
   movementTypes: Map<number, 1 | 2>;
   interactionIndices: Map<number, number>;
+  /** The world view (boat entity index, or -1) each known player was last sent with. */
+  worldViews: Map<number, number>;
   viewPositions: Int16Array;
   movementChanged: Uint8Array;
   movementDx: Int16Array;
@@ -201,6 +206,7 @@ export type ClientMessage =
   | { type: "widget"; action: "open" | "close"; groupId: number; modal?: boolean }
   | { type: "widget_target"; targetWidgetId: number; targetSlot: number; targetItemId: number; sourceWidgetId: number; sourceSlot: number; sourceItemId: number }
   | { type: "widget_drag"; targetItemId: number; targetWidgetId: number; sourceItemId: number; sourceSlot: number; sourceWidgetId: number; targetSlot: number }
+  | { type: "set_heading"; heading: number }
   | { type: "interface_close" }
   | { type: "local_trigger"; widgetId: number; childIndex: number; itemId: number; opcodeParam: number; argsData: Buffer }
   | { type: "player_option"; index: number; option: number }
@@ -238,7 +244,7 @@ export type ClientMessage =
   | { type: "ping" }
   | { type: "logout" }
   | { type: "login"; username: string; password: string; revision: number }
-  | { type: "handshake"; name: string };
+  | { type: "handshake"; name: string; clientType: number };
 
 class Reader {
   private offset = 0;
@@ -574,6 +580,8 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
         itemId: itemId >= 0 ? itemId : undefined,
       };
     }
+    case NativeClientPacket.SET_HEADING:
+      return { type: "set_heading", heading: reader.byte() & 15 };
     case NativeClientPacket.IF_BUTTOND: {
       return {
         type: "widget_drag", targetItemId: reader.shortLE(), targetWidgetId: reader.intLE(),
@@ -813,8 +821,9 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
         for (let i = reader.byte(); i > 0; i--) reader.short();
         for (let i = reader.byte(); i > 0; i--) reader.short();
       }
-      if (reader.remaining > 0) reader.byte();
-      return { type: "handshake", name };
+      // Trailing client mode byte: 1 = mobile, 0 = desktop (absent on old clients).
+      const clientType = reader.remaining > 0 ? reader.byte() : 0;
+      return { type: "handshake", name, clientType };
     }
     default:
       return { type: "raw", opcode, payload: frame.subarray(frame.length - length) };
@@ -1110,6 +1119,138 @@ export function encodeRebuildRegion(
   return encodeServerPacket(ServerPacketId.REBUILD_REGION, payload);
 }
 
+/** A world entity's position: fine units (1/128 tile) on x and z, and an angle out of 2048. */
+export interface WorldEntityPosition {
+  x: number;
+  y: number;
+  z: number;
+  orientation: number;
+}
+
+/** 0 = despawn, 1 = unchanged, 2 = move smoothly by `delta`, 3 = snap by `delta`. */
+export interface WorldEntityUpdate {
+  updateType: 0 | 1 | 2 | 3;
+  delta?: WorldEntityPosition;
+}
+
+export interface WorldEntitySpawn {
+  entityIndex: number;
+  sizeX: number;
+  sizeZ: number;
+  configId: number;
+  drawMode: number;
+  position: WorldEntityPosition;
+}
+
+/** A growable big-endian byte writer for the variable world-entity payloads. */
+class ByteWriter {
+  private readonly bytes: number[] = [];
+
+  u8(value: number): this {
+    this.bytes.push(value & 0xff);
+    return this;
+  }
+
+  u16(value: number): this {
+    return this.u8(value >> 8).u8(value);
+  }
+
+  i32(value: number): this {
+    return this.u16(value >>> 16).u16(value);
+  }
+
+  raw(buffer: Buffer): this {
+    for (const byte of buffer) this.bytes.push(byte);
+    return this;
+  }
+
+  toBuffer(): Buffer {
+    return Buffer.from(this.bytes);
+  }
+}
+
+/**
+ * Four values, each stored in the fewest bytes it fits (0 = zero and not sent, 1 = byte,
+ * 2 = short, 3 = int), led by a byte of 2-bit widths in x, y, z, orientation order.
+ */
+function writeWorldEntityPosition(out: ByteWriter, position: WorldEntityPosition): void {
+  const values = [position.x | 0, position.y | 0, position.z | 0, position.orientation | 0];
+  const width = (value: number) =>
+    value === 0 ? 0 : value >= -128 && value <= 127 ? 1 : value >= -32768 && value <= 32767 ? 2 : 3;
+  let flags = 0;
+  values.forEach((value, index) => { flags |= width(value) << (index * 2); });
+  out.u8(flags);
+  for (const value of values) {
+    const size = width(value);
+    if (size === 1) out.u8(value);
+    else if (size === 2) out.u16(value);
+    else if (size === 3) out.i32(value);
+  }
+}
+
+/**
+ * Builds a world entity's own scene (a boat deck) on the client from cache template chunks,
+ * like REBUILD_REGION does for the main map.
+ */
+export function encodeRebuildWorldEntity(
+  entityIndex: number,
+  configId: number,
+  sizeX: number,
+  sizeZ: number,
+  regionX: number,
+  regionY: number,
+  templateChunks: number[][][],
+  xteaKeys: number[][],
+): Buffer {
+  const out = new ByteWriter()
+    .u16(entityIndex)
+    .u16(configId)
+    .u8(sizeX)
+    .u8(sizeZ)
+    .u16(regionX) // zone x
+    .u16(regionY) // zone z
+    .u16(regionY)
+    .u8(0) // force reload
+    .u16(regionX)
+    .u16(xteaKeys.length)
+    .u8(0); // build areas
+  const bits = new BitWriter();
+  for (let plane = 0; plane < 4; plane++) {
+    for (let x = 0; x < 13; x++) {
+      for (let y = 0; y < 13; y++) {
+        const chunk = templateChunks[plane]?.[x]?.[y] ?? -1;
+        bits.writeBits(1, chunk === -1 ? 0 : 1);
+        if (chunk !== -1) bits.writeBits(26, chunk);
+      }
+    }
+  }
+  bits.alignToByte();
+  out.raw(bits.toBuffer());
+  for (const key of xteaKeys) {
+    for (let index = 0; index < 4; index++) out.i32(key[index] | 0);
+  }
+  return encodeServerPacket(ServerPacketId.REBUILD_WORLDENTITY, out.toBuffer());
+}
+
+/**
+ * Per-tick world entity list for one viewer: an update for each entity the client already
+ * has (in the client's order), then the new ones.
+ */
+export function encodeWorldEntityInfo(updates: WorldEntityUpdate[], spawns: WorldEntitySpawn[]): Buffer {
+  const out = new ByteWriter().u8(updates.length);
+  for (const update of updates) {
+    out.u8(update.updateType);
+    if (update.updateType >= 2) writeWorldEntityPosition(out, update.delta ?? { x: 0, y: 0, z: 0, orientation: 0 });
+    if (update.updateType !== 0) out.u8(0); // no animation or action mask
+  }
+  for (const spawn of spawns) {
+    out.u16(spawn.entityIndex).u8(spawn.sizeX).u8(spawn.sizeZ).u16(spawn.configId);
+    writeWorldEntityPosition(out, spawn.position);
+    out.u8(spawn.drawMode).u8(0);
+  }
+  return encodeServerPacket(ServerPacketId.WORLDENTITY_INFO, out.toBuffer());
+}
+
 export function encodeRegionReplacement(
   regionId: number,
   allowReload: boolean,
@@ -1237,6 +1378,20 @@ export function encodeDestination(x: number, y: number): Buffer {
   return encodeServerPacket(ServerPacketId.DESTINATION, payload);
 }
 
+/**
+ * Hint arrow (type: 0 clear, 1 npc/a=npcIndex, 2 tile/a=x,b=y,c=z). Mirrors the
+ * OSRS 6-byte hint-arrow shape so the client can render the native
+ * `headicons_hint` sprite above the target.
+ */
+export function encodeHintArrow(type: number, a: number, b: number, c: number): Buffer {
+  const payload = Buffer.alloc(6);
+  payload[0] = type & 0xff;
+  payload.writeUInt16BE(a & 0xffff, 1);
+  payload.writeUInt16BE(b & 0xffff, 3);
+  payload[5] = c & 0xff;
+  return encodeServerPacket(ServerPacketId.HINT_ARROW, payload);
+}
+
 export function encodeWidgetOpen(groupId: number, modal = true): Buffer {
   const payload = Buffer.alloc(3);
   payload.writeUInt16BE(groupId & 0xffff);
@@ -1339,6 +1494,15 @@ export function encodeWidgetSetModel(uid: number, modelId: number): Buffer {
   payload.writeInt32BE(uid | 0, 0);
   payload.writeInt32BE(modelId | 0, 4);
   return encodeServerPacket(ServerPacketId.WIDGET_SET_MODEL, payload);
+}
+
+/** IF_SETPOSITION: move a component within its parent, keeping its position modes. */
+export function encodeWidgetSetPosition(uid: number, x: number, y: number): Buffer {
+  const payload = Buffer.alloc(8);
+  payload.writeInt32BE(uid | 0, 0);
+  payload.writeInt16BE(x | 0, 4);
+  payload.writeInt16BE(y | 0, 6);
+  return encodeServerPacket(ServerPacketId.WIDGET_SET_POSITION, payload);
 }
 
 export function encodeWidgetSetItem(uid: number, itemId: number, quantity = 1): Buffer {
@@ -1518,6 +1682,8 @@ const QUEST_TAB_ICON_CHILD_BY_ROOT: Record<number, number> = {
   161: 61,
   548: 66,
   164: 54,
+  // Mobile toplevel_osm keeps the side journal in tab container 601:118.
+  601: 118,
 };
 
 // Side journal (quest tab) content mount, mirrored from client/common/ui/sideJournal.ts.
@@ -1561,12 +1727,35 @@ export function encodeGameframeFlags(root: number = 161): Buffer[] {
   ];
 }
 
+// Transient player attribute set from the handshake's clientType byte.
+export const MOBILE_CLIENT_ATTRIBUTE = "mobileClient";
+// Mobile clients boot the Stock mobile toplevel (toplevel_osm); the client maps
+// the standard 161 mounts onto it via cache enum 1745.
+export const MOBILE_GAMEFRAME_ROOT = 601;
+// Standard "Game client layout" roots: 548 fixed, 164 classic, 161 modern.
+const STANDARD_GAMEFRAME_ROOTS = new Set([548, 164, 161]);
+
+// Handheld screens are locked to the stock mobile frame: the fixed and 317
+// layouts (and gilomaru-style custom frames) are not usable there, so mobile
+// clients resolve to 601 even when world.json or the saved layout says
+// otherwise. Every gameframe boot path resolves the root through this.
+export function resolveGameframeRoot(
+  player: { getAttribute(key: string): unknown },
+  fallback: number = 161
+): number {
+  if (player.getAttribute(MOBILE_CLIENT_ATTRIBUTE) === true) return MOBILE_GAMEFRAME_ROOT;
+  const saved = Number(player.getAttribute("clientLayoutRoot"));
+  return STANDARD_GAMEFRAME_ROOTS.has(saved) ? saved : fallback;
+}
+
 export function encodeGameframeBootstrap(playerName: string, root: number = 161): Buffer[] {
   const mounts = [
     [96, 162], [9, 163], [33, 160], [7, 122], [6, 651, 5929],
     [76, 593], [77, 320], [78, 629], [79, MAIN_INVENTORY_GROUP_ID], [80, 387], [81, 541],
     [82, 218], [83, 7], [84, 109], [85, 429], [86, 182], [87, 116],
     [88, 216], [89, 239],
+    // The boss HP bar HUD (hpbar_hud), as OSRS opens it at login (164:2 resizable).
+    [2, 303],
   ];
   const cameraScript = Buffer.concat([Buffer.alloc(2), scriptArgs([])]);
   cameraScript.writeUInt16BE(626, 0);
@@ -1770,6 +1959,7 @@ export function createPlayerSyncState(
     lastTiles: new Map([[localIndex, { ...tile }]]),
     movementTypes: new Map([[localIndex, 1]]),
     interactionIndices: new Map(),
+    worldViews: new Map(),
     viewPositions: new Int16Array(2048).fill(-1),
     movementChanged: new Uint8Array(2048),
     movementDx: new Int16Array(2048),
@@ -1936,8 +2126,9 @@ function writeText(bytes: number[], value: string): void {
 }
 
 function scaledHealth(health: HealthView): number {
+  const width = health.bar?.width ?? 30;
   if (health.current <= 0 || health.max <= 0) return 0;
-  return Math.max(1, Math.min(30, Math.floor((health.current * 30) / health.max)));
+  return Math.max(1, Math.min(width, Math.floor((health.current * width) / health.max)));
 }
 
 function writeHits(bytes: number[], view: ActorUpdateView, npc: boolean): void {
@@ -1954,7 +2145,7 @@ function writeHits(bytes: number[], view: ActorUpdateView, npc: boolean): void {
   if (npc) byteA(bytes, count);
   else byteC(bytes, count);
   if (health) {
-    smart(bytes, 0);
+    smart(bytes, health.bar?.id ?? 0);
     smart(bytes, 0);
     smart(bytes, 0);
     const value = scaledHealth(health);
@@ -2074,6 +2265,12 @@ export function encodePlayerSync(
   for (let position = 0; position < views.length; position++) {
     const index = views[position].index;
     if (index > 0 && index < 2048 && viewPositions[index] < 0) {
+      // Movement can't carry a world view: a known player boarding or leaving a boat is
+      // removed this frame and added back with their new world view the next.
+      if (index !== localIndex && state.lastTiles.has(index) &&
+        (state.worldViews.get(index) ?? -1) !== (views[position].worldView ?? -1)) {
+        continue;
+      }
       viewPositions[index] = position;
     }
   }
@@ -2206,7 +2403,8 @@ export function encodePlayerSync(
     }
     writer.writeBits(13, view.x & 0x1fff);
     writer.writeBits(13, view.y & 0x1fff);
-    writer.writeBits(1, 0); // no world view
+    writer.writeBits(1, view.worldView != null ? 1 : 0);
+    if (view.worldView != null) writer.writeBits(16, view.worldView);
     writer.writeBits(1, 1); // appearance follows
     appendUpdateBlock(index, true);
   };
@@ -2262,6 +2460,7 @@ export function encodePlayerSync(
     state.lastTiles.delete(index);
     state.movementTypes.delete(index);
     state.interactionIndices.delete(index);
+    state.worldViews.delete(index);
   }
 
   state.activeCount = 0;
@@ -2287,6 +2486,7 @@ export function encodePlayerSync(
     }
     if (nextType !== 0) state.movementTypes.set(index, nextType);
     state.interactionIndices.set(index, view.interactionIndex ?? -1);
+    state.worldViews.set(index, view.worldView ?? -1);
   }
 
   updateBlocks.unshift(writer.toBuffer());
@@ -2398,10 +2598,14 @@ export function encodeNpcSync(
     }
   }
   const sync = Buffer.concat([writer.toBuffer(), ...updateBlocks]);
-  const header = Buffer.alloc(7);
+  // The client places new main-world NPCs relative to this tile (the tile under a player on
+  // a boat deck, otherwise their own).
+  const header = Buffer.alloc(11);
   header.writeInt32BE(loopCycle | 0, 0);
   header[4] = large ? 1 : 0;
-  header.writeUInt16BE(sync.length, 5);
+  header.writeUInt16BE(local.x & 0xffff, 5);
+  header.writeUInt16BE(local.y & 0xffff, 7);
+  header.writeUInt16BE(sync.length, 9);
   return packet(ServerPacket.NPC_INFO, Buffer.concat([header, sync]), 2);
 }
 

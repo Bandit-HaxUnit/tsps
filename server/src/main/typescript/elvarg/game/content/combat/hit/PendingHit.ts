@@ -256,9 +256,10 @@ export class PendingHit {
         rollAccuracyFlag: boolean,
         hitIndex: number
     ): { accurate: boolean; bounds?: SpecialDamageBounds } {
+        const defenceType = this.method.accuracyDefenceType(this.combatType);
         if (!traits) {
             const accurate = forceAccurate || !rollAccuracyFlag ||
-                AccuracyFormulasDpsCalc.rollAccuracy(this.attacker, this.target, this.combatType);
+                AccuracyFormulasDpsCalc.rollAccuracy(this.attacker, this.target, this.combatType, defenceType);
             return { accurate };
         }
         const guaranteed =
@@ -272,9 +273,9 @@ export class PendingHit {
         } else {
             const fixed = traits.fixedAccuracyRollMultiplierWhenTargetAtOrBelowMaximumDamage;
             if (fixed !== undefined && this.target.getHitpoints() <= DamageFormulas.sourceMaxHit(this.attacker, this.combatType)) {
-                successfulRolls = AccuracyFormulasDpsCalc.rollFixedAccuracy(this.attacker, this.target, this.combatType, fixed) ? 1 : 0;
+                successfulRolls = AccuracyFormulasDpsCalc.rollFixedAccuracy(this.attacker, this.target, this.combatType, fixed, defenceType) ? 1 : 0;
             } else {
-                successfulRolls = AccuracyFormulasDpsCalc.rollAccuracyCount(this.attacker, this.target, this.combatType, rollCount);
+                successfulRolls = AccuracyFormulasDpsCalc.rollAccuracyCount(this.attacker, this.target, this.combatType, rollCount, defenceType);
             }
         }
         const range = successfulRolls > 0 ? traits.damageRangeBySuccessfulAccuracyRolls?.[successfulRolls - 1] : undefined;
@@ -318,7 +319,12 @@ export class PendingHit {
         for (let attempt = 0; attempt < ranges.length; attempt++) {
             const range = ranges[attempt];
             const success = traits.guaranteedHit === true ||
-                AccuracyFormulasDpsCalc.rollAccuracy(this.attacker, this.target, this.combatType);
+                AccuracyFormulasDpsCalc.rollAccuracy(
+                    this.attacker,
+                    this.target,
+                    this.combatType,
+                    this.method.accuracyDefenceType(this.combatType)
+                );
             if (!success) {
                 continue;
             }

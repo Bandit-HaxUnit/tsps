@@ -116,6 +116,10 @@ export interface PluginNpcInteractionEvent {
   handled: boolean;
 }
 
+export interface PluginNpcRouteEvent extends PluginNpcInteractionEvent {
+  range: number;
+}
+
 /** Context handed to dialogue plugins when a Talk-to transcript is about to play. */
 export interface PluginNpcDialogueContext {
   player: any;
@@ -170,6 +174,15 @@ export interface PluginNpcBeforeDeathEvent {
   preventDeath: boolean;
 }
 
+/**
+ * Fired as an incoming hit resolves on an NPC, before damage is applied.
+ * Handlers mutate the pending hit directly (damage, hitsplats).
+ */
+export interface PluginNpcHitModifyEvent {
+  npc: any;
+  hit: any;
+}
+
 /** Rectangular player zone for onZoneEnter/onZoneExit; omit `levels` for all planes. */
 export interface PluginZone {
   minX: number;
@@ -199,6 +212,8 @@ export interface PluginNpcSpawnDefinition {
 export interface PluginCanAttackEvent {
   attacker: any;
   target: any;
+  /** The attacking combat method, so handlers can allow/deny per style. */
+  method?: any;
   allow: boolean | null;
 }
 
@@ -238,6 +253,19 @@ export interface PluginTradeRequestEvent {
   player: any;
   target: any;
   handled: boolean;
+}
+
+/**
+ * Fires once per player when a trade completes, after the offered items have
+ * changed hands and before either player is saved. `received` and `given` are
+ * the item stacks this player gained and handed over; mutating the player's
+ * containers here (e.g. converting a bond to its untradeable form) is saved.
+ */
+export interface PluginTradeCompletedEvent {
+  player: any;
+  partner: any;
+  received: any[];
+  given: any[];
 }
 
 /** Fires after a player successfully starts following another player (right-click Follow). Observer only - the follow itself already happened. */
@@ -505,6 +533,8 @@ export interface PluginInterfaceActionClickEvent {
   sourceSlot?: number;
   sourceItemId?: number;
   argsData?: Buffer;
+  /** Sent by a cache script (if_triggeroplocal) rather than a click; its arguments are in argsData. */
+  scriptTrigger?: boolean;
   handled: boolean;
 }
 
@@ -626,6 +656,8 @@ export interface PluginApi {
     actions: Record<string, (event: PluginObjectInteractionEvent) => void | boolean>
   ): void;
   onNpcInteraction(handler: (event: PluginNpcInteractionEvent) => void): void;
+  /** Set a non-combat NPC option's approach range before movement starts. */
+  onNpcRoute(handler: (event: PluginNpcRouteEvent) => void): void;
   /** Exact, case-sensitive NPC name and option matching. Return false to fall through. */
   onNpcInteraction(
     npcName: string,
@@ -655,6 +687,7 @@ export interface PluginApi {
   ): void;
   onNpcDeath(handler: (event: PluginNpcDeathEvent) => void): void;
   onNpcBeforeDeath(handler: (event: PluginNpcBeforeDeathEvent) => void): void;
+  onNpcHitModify(handler: (event: PluginNpcHitModifyEvent) => void): void;
   onCanAttack(handler: (event: PluginCanAttackEvent) => void): void;
   onCanTeleport(handler: (event: PluginCanTeleportEvent) => void): void;
   onCanEat(handler: (event: PluginCanEatEvent) => void): void;
@@ -664,6 +697,7 @@ export interface PluginApi {
   onCanDrink(handler: (event: PluginCanDrinkEvent) => void): void;
   onCanTrade(handler: (event: PluginCanTradeEvent) => void): void;
   onTradeRequest(handler: (event: PluginTradeRequestEvent) => void): void;
+  onTradeCompleted(handler: (event: PluginTradeCompletedEvent) => void): void;
   onPlayerFollow(handler: (event: PluginPlayerFollowEvent) => void): void;
   onPlayerAttack(handler: (event: PluginPlayerAttackEvent) => void): void;
   onCanBank(handler: (event: PluginCanBankEvent) => void): void;
@@ -754,6 +788,12 @@ export interface PluginApi {
       string | ((player: any, optionIndex: number, optionText: string) => void)
     >
   ): boolean;
+  /**
+   * Reads an entry from world.json `pluginConfig` by key, e.g.
+   * `getPluginConfig("TutorialIsland:allowSkip", true)`. Returns `defaultValue`
+   * when the key is not set.
+   */
+  getPluginConfig<T = unknown>(key: string, defaultValue?: T): T;
   onButton(
     buttonIds: number | number[],
     handler: (event: PluginButtonClickEvent) => void | boolean
@@ -965,6 +1005,7 @@ export interface PluginCoreApi {
   RangedWeapon: any;
   Ammunition: any;
   WeaponProfiles: any;
+  FightStyle: any;
   WeaponInterfaceManager: any;
   PrayerHandler: any;
   DuelRule: any;
@@ -979,13 +1020,46 @@ export interface PluginCoreApi {
   Flag: any;
   Direction: any;
   Equipment: any;
+  Bank: any;
   Task: any;
+  CountdownTask: any;
+  ForceMovement: any;
+  ForceMovementTask: any;
   TaskManager: any;
   ItemIdentifiers: any;
+  NpcIdentifiers: any;
+  ObjectIdentifiers: any;
+  ShopIdentifiers: any;
   Misc: any;
   TimerKey: any;
   Sound: any;
   Sounds: any;
+  Location: any;
+  Boundary: any;
+  PolygonalBoundary: any;
+  Area: any;
+  World: any;
+  GameObject: any;
+  PrivateArea: any;
+  ObjectManager: any;
+  MapObjects: any;
+  ItemOnGroundManager: any;
+  ItemDefinition: any;
+  CacheDefinitions: any;
+  PathFinder: any;
+  NpcDefinition: any;
+  NPC: any;
+  GameConstants: any;
+  TeleportHandler: any;
+  DialogueChainBuilder: any;
+  NpcDialogue: any;
+  PlayerDialogue: any;
+  StatementDialogue: any;
+  ActionDialogue: any;
+  EndDialogue: any;
+  PlayerRights: any;
+  Server: any;
+  PluginManager: any;
 }
 
 export interface PluginModule {

@@ -5,6 +5,7 @@ import { Location } from "../../../model/Location";
 import { GameObject } from "./GameObject";
 import { MapObjects } from "./MapObjects";
 
+import type { PrivateArea } from "../../../model/areas/impl/PrivateArea";
 export class ObjectManager {
 
     private static readonly SCENE_SIZE = 104;
@@ -27,7 +28,14 @@ export class ObjectManager {
             && base.getFace() === object.getFace();
     }
 
+    /** The area whose objects a player sees: the main world for someone on a boat deck. */
+    private static viewedArea(player: Player): PrivateArea | null {
+        const area = player.getPrivateArea();
+        return area?.countsAsMainWorld() ? null : area;
+    }
+
     public static onRegionChange(player: Player, baseX: number, baseY: number, level: number) {
+        const viewedArea = this.viewedArea(player);
         // Region sync should only target the requesting player.
         // Broadcasting every object spawn globally here causes redundant updates.
         // Apply base-map removals before additions, including replacements with a different shape.
@@ -35,7 +43,7 @@ export class ObjectManager {
             if (!object) {
                 continue;
             }
-            if (player.getPrivateArea() !== object.getPrivateArea()) {
+            if (viewedArea !== object.getPrivateArea()) {
                 continue;
             }
             const location = object.getLocation();
@@ -51,7 +59,7 @@ export class ObjectManager {
             if (!object) {
                 continue;
             }
-            if (player.getPrivateArea() !== object.getPrivateArea()) {
+            if (viewedArea !== object.getPrivateArea()) {
                 continue;
             }
             if (this.matchesBaseMapObject(object)) {
@@ -149,7 +157,7 @@ export class ObjectManager {
             case OperationType.SPAWN:
             case OperationType.DESPAWN:
                 World.forEachNetworkPlayer((player) => {
-                    if (player.getPrivateArea() != object.getPrivateArea()) {
+                    if (this.viewedArea(player) != object.getPrivateArea()) {
                         return;
                     }
                     const location = object.getLocation();

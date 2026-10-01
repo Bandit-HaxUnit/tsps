@@ -1,7 +1,4 @@
-import {
-    isQuestListScrollbarWidget,
-    processQuestListScrollbarInput,
-} from "./input/questListScrollbarInput";
+import { processQuestListTouchScroll } from "./input/questListScrollbarInput";
 import { shouldSkipWidgetClickInput } from "./input/widgetClickGuard";
 import { processWidgetClickInput } from "./input/widgetClickInput";
 import { processWidgetDragInput } from "./input/widgetDragInput";
@@ -81,7 +78,7 @@ export class WidgetInputController {
             widgetManager,
             widgetInteraction,
         );
-        processQuestListScrollbarInput(frame, widgetManager, widgetInteraction);
+        if (processQuestListTouchScroll(frame, widgetManager)) return;
         processWidgetScrollWheelInput(this.deps, frame, widgetManager, widgetInteraction);
 
         if (shouldSkipWidgetClickInput(this.deps, frame)) return;
@@ -108,11 +105,7 @@ export class WidgetInputController {
             getPrimaryWidgetAction,
             isNewClick,
         );
-        // The quest list has a dedicated scroll controller. Its cached
-        // scrollbar thumb must not become a generic draggable widget.
-        if (!isQuestListScrollbarWidget(widgetInteraction.clickedWidget, widgetManager)) {
-            processWidgetDragInput(this.deps, frame, widgetManager, widgetInteraction, isHolding);
-        }
+        processWidgetDragInput(this.deps, frame, widgetManager, widgetInteraction, isHolding);
         processWidgetHoldInput(this.deps, frame, widgetInteraction, isHolding, isNewClick);
         processWidgetReleaseInput(
             this.deps,

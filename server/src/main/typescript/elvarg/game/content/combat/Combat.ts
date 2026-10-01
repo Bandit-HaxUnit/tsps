@@ -160,6 +160,13 @@ export class Combat {
         if (this.lastPreMovementCycle === cycle) return;
         this.lastPreMovementCycle = cycle;
 
+        // A plugin scripted this NPC's walk; it owns the movement queue and the
+        // attack pauses until the walk finishes (scriptedMovement cleared).
+        if (this.character.isNpc() && this.character.getAsNpc().isScriptedMovement()) {
+            this.cycleState = null;
+            return;
+        }
+
         if (this.attacker && this.lastAttack.elapsedTime(6000)) {
             this.setUnderAttack(null);
         }
@@ -553,7 +560,8 @@ export class Combat {
             return false;
         }
         this.trace(`hits=${hits.length} dmg=[${hits.map((h: any) => h?.getTotalDamage?.()).join(",")}]`, target);
-        if (hits.length > 0 && method.type() === CombatType.MELEE) {
+        // A block animation of -1 means the target doesn't block (e.g. the Gemstone Crab).
+        if (hits.length > 0 && method.type() === CombatType.MELEE && target.getBlockAnim() >= 0) {
             target.performAnimation(new Animation(target.getBlockAnim()));
         }
         for (const hit of hits) CombatFactory.addPendingHit(hit);

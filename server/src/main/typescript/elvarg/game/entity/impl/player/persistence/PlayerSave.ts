@@ -1,4 +1,5 @@
 import { PrayerHandler, PrayerData } from "../../../../content/PrayerHandler";
+import { normalizeSailingState, type SailingState } from "../../../../content/sailing/SailingState";
 import { FightType } from "../../../../content/combat/FightType";
 import { CombatSpells } from "../../../../content/combat/magic/CombatSpells";
 import { SkillManager, Skills } from "../../../../content/skill/SkillManager";
@@ -123,6 +124,7 @@ export class PlayerSave {
     private friendsChatKickRank: number;
     private banks: Map<number, Item[]>;
     private flags: string[];
+    public sailing?: SailingState;
 
     public getPasswordHashWithSalt(): string {
         return this.passwordHashWithSalt;
@@ -704,6 +706,7 @@ export class PlayerSave {
         player.getSkillManager().setSkills(this.skills);
         player.getQuickPrayers().setPrayers(this.quickPrayers);
         player.setFlags(PlayerSave.normalizeFlags(this.flags));
+        player.setSailing(normalizeSailingState(this.sailing));
         for (const key of PlayerSave.persistentAttributeKeys) {
             if (Object.prototype.hasOwnProperty.call(this.attributes ?? {}, key)) {
                 player.setAttribute(key, PlayerSave.cloneAttribute(key, this.attributes[key]));
@@ -818,6 +821,7 @@ export class PlayerSave {
         playerSave.skills = clonedSkills;
         playerSave.quickPrayers = [...(player.getQuickPrayers().getPrayers() ?? [])];
         playerSave.flags = PlayerSave.normalizeFlags(player.getFlags());
+        playerSave.sailing = normalizeSailingState(player.getSailing());
         playerSave.attributes = Object.fromEntries(
             [...PlayerSave.persistentAttributeKeys]
                 .filter((key) => player.getAttribute(key) !== undefined)

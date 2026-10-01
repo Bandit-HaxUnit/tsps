@@ -63,6 +63,7 @@ import { LoadingMessageOverlay } from "../../../ui/devoverlay/LoadingMessageOver
 import { LoginOverlay } from "../../../ui/devoverlay/LoginOverlay";
 import { OverheadPrayerOverlay } from "../../../ui/devoverlay/OverheadPrayerOverlay";
 import { OverheadTextOverlay } from "../../../ui/devoverlay/OverheadTextOverlay";
+import { TutorialHintOverlay } from "../../../ui/devoverlay/TutorialHintOverlay";
 import {
     HealthBarEntry,
     HitsplatEntry,
@@ -187,6 +188,7 @@ import {
 } from "../../shaders/Shaders";
 import { KNOWN_WATER_TEXTURE_IDS } from "../../water/WaterTextureIds";
 import type { WebGLOsrsRendererHost } from "../hostInterface";
+import { WIDGET_MODEL_TYPE_LOC, widgetLocModel } from "./widgetLocModel";
 import { RENDER_CONSTANTS } from "../constants";
 
 /**
@@ -352,6 +354,23 @@ export async function initShaders(host: WebGLOsrsRendererHost, ): Promise<Progra
                 // Init may fail if cache not ready - will be reinitialized in initOverlays()
                 try {
                     oh.init({ app: host.app, sceneUniforms: host.sceneUniformBuffer });
+                } catch {}
+            }
+        } catch {}
+
+        // Register the native Tutorial Island hint arrow overlay.
+        try {
+            if (host.overlayManager && host.hitsplatProgram && host.sceneUniformBuffer) {
+                const hint = new TutorialHintOverlay(host.hitsplatProgram, {
+                    getCacheSystem: () => host.osrsClient.cacheSystem,
+                    getClient: () => host.osrsClient,
+                    resolveNpcOverlayAnchor: (ecsId, x, z, typeId) =>
+                        host.resolveNpcOverlayAnchor(ecsId, x, z, typeId),
+                });
+                host.tutorialHintOverlay = hint;
+                host.overlayManager.add(hint);
+                try {
+                    hint.init({ app: host.app, sceneUniforms: host.sceneUniformBuffer });
                 } catch {}
             }
         } catch {}
@@ -980,6 +999,22 @@ export async function initShaders(host: WebGLOsrsRendererHost, ): Promise<Progra
                                         }
                                     }
                                 }
+                            }
+
+                            if (((params.widget?.modelType ?? 0) | 0) === WIDGET_MODEL_TYPE_LOC) {
+                                const locModel = widgetLocModel(
+                                    modelId,
+                                    host.osrsClient.locTypeLoader,
+                                    host.getInteractLocModelLoader(),
+                                    host.osrsClient.textureLoader,
+                                );
+                                // modelId is a loc id, never a model id.
+                                return locModel
+                                    ? host.model2DRenderer.renderModelInstanceToCanvasExtents(
+                                          locModel,
+                                          params,
+                                      )
+                                    : undefined;
                             }
 
                             const widgetAny = params.widget as any;

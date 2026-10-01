@@ -21,6 +21,16 @@ const DOOR_AUTO_CLOSE_TICKS = 500;
 // closed variant offers "Open" and closedId+1 offers "Close" (verified live against this
 // cache: e.g. 23972 "Door" Open -> 23973 "Door" Close). A hardcoded whitelist can only ever
 // cover the handful of doors someone happened to test; this covers all of them.
+//
+// Adding a door? Dump the ids around it from the cache first (needs `yarn build`, run from server/):
+//   node -e '(async()=>{require("./dist/Server").Server.installProductionPathResolver();
+//     await require("./dist/game/cache/CachePipeline").CachePipeline.initialize(process.cwd());
+//     const {CacheDefinitions:C}=require("./dist/game/cache/CacheDefinitions");
+//     for(const id of [1516,1517,1518,1519,1520]){const d=C.getObject(id);
+//     console.log(id,d?.name,JSON.stringify(d?.actions),JSON.stringify(d?.models));}})()' 2>&1 | grep -E "^[0-9]"
+// Closed = "Open" action; its open variant is a "Close" loc with the same models (usually id+1).
+// Not id+1 -> SINGLE_DOOR_OPEN_IDS. Two leaves -> DOUBLE_DOOR_ID_FAMILIES (+ SPECIAL_* maps when
+// the open ids are not closed+1). Same trick works for NPCs/items via C.getNpc / C.getItem.
 function hasAction(actions, keyword) {
   return Array.isArray(actions) && actions.some((action) => typeof action === "string" && action.toLowerCase() === keyword);
 }
@@ -32,6 +42,52 @@ const DOOR_NAMES = new Set([
 ]);
 let DOOR_CATALOG = null;
 
+// Doors with no open variant in the cache: OSRS opens them by rotating the same loc
+// (open id === closed id). Their consecutive ids are unrelated doors with the same
+// model, so the same-model pairing below must not pair them. Tutorial Island:
+// start house, chef entry/exit, quest guide, and the bank/prayer area doors.
+const SELF_OPENING_DOOR_IDS = new Set([9398, 9709, 9710, 9716, 9721, 9722, 9723, 9724]);
+
+// Single doors whose open variant is not closedId + 1 (e.g. Large door 1517 -> 1520, same models).
+const SINGLE_DOOR_OPEN_IDS = new Map([[1517, 1520]]);
+
+// OSRS wooden gates are two locs that pivot together around the hinge post: a hinge panel
+// and an extension panel. Opening/closing moves BOTH pieces, so the "closed id + 1 = open
+// id" auto-pairing below cannot find them (their ids are unrelated) and the metal
+// double-door families do not apply either. List each gate explicitly.
+// Sources: the original elvarg gate catalog (doors.json "definitions.gates", hinge style)
+// for 1558/1560, 1561/1562, 8810/8811, 12986/12987, 15514/15516; the remaining pairs come
+// from the unresolved gate catalog (gates.unresolved.json closed sets, id-collision) with
+// their adjacent-id open variants. Closed hinge is always the unrotated loc (or first
+// model), closed extension the rotated/mirrored one.
+function woodenGate(hinge, extension, openHinge, openExtension) {
+  return Object.freeze({
+    closed: Object.freeze({ hinge, extension }),
+    opened: Object.freeze({ hinge: openHinge, extension: openExtension }),
+  });
+}
+
+const WOODEN_GATES = Object.freeze([
+  woodenGate(47, 48, 49, 50),
+  woodenGate(883, 23917, 23918, 23919),
+  woodenGate(1558, 1560, 1559, 1567),
+  woodenGate(1561, 1562, 1563, 1564),
+  woodenGate(4311, 4312, 4313, 4314),
+  woodenGate(8810, 8811, 8812, 8813),
+  woodenGate(12816, 12817, 12818, 12819),
+  woodenGate(12986, 12987, 12988, 12989),
+  woodenGate(15514, 15516, 15511, 15513),
+  woodenGate(44920, 44921, 44922, 44923),
+  woodenGate(60763, 60760, 60761, 60762),
+]);
+
+const WOODEN_GATE_BY_ID = new Map();
+for (const gate of WOODEN_GATES) {
+  for (const id of [gate.closed.hinge, gate.closed.extension, gate.opened.hinge, gate.opened.extension]) {
+    WOODEN_GATE_BY_ID.set(id, gate);
+  }
+}
+
 function buildDoorCatalog() {
   const closedToOpen = new Map();
   const openToClosed = new Map();
@@ -39,6 +95,14 @@ function buildDoorCatalog() {
   for (let id = 0; id < total; id++) {
     const def = CacheDefinitions.getObject(id);
     if (!def || !DOOR_NAMES.has(def.name) || !hasAction(def.actions, "open")) {
+      continue;
+    }
+    // Wooden gates are tracked by WOODEN_GATES, never by the generic pairing heuristics.
+    if (WOODEN_GATE_BY_ID.has(id)) {
+      continue;
+    }
+    if (SELF_OPENING_DOOR_IDS.has(id)) {
+      closedToOpen.set(id, id);
       continue;
     }
     const partner = CacheDefinitions.getObject(id + 1);
@@ -59,6 +123,7 @@ function buildDoorCatalog() {
     // Skip double-door leaves and already-paired ids so chains don't form.
     if (
       hasAction(partner.actions, "open") &&
+      !SELF_OPENING_DOOR_IDS.has(id + 1) &&
       JSON.stringify(partner.models) === JSON.stringify(def.models) &&
       !DOUBLE_DOOR_ID_FAMILIES.some((family) => family.includes(id) || family.includes(id + 1)) &&
       !openToClosed.has(id) &&
@@ -67,6 +132,10 @@ function buildDoorCatalog() {
       closedToOpen.set(id, id + 1);
       openToClosed.set(id + 1, id);
     }
+  }
+  for (const [closedId, openId] of SINGLE_DOOR_OPEN_IDS) {
+    closedToOpen.set(closedId, openId);
+    openToClosed.set(openId, closedId);
   }
   return { closedToOpen, openToClosed };
 }
@@ -81,9 +150,9 @@ function getDoorCatalog() {
 const OPEN_OBJECT_STATES = new Map();
 const DOOR_RESYNC_TICKS_ATTR = "doors:resyncTicks";
 const DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
-  Object.freeze([1506, 1507, 1508, 1511]),
-  Object.freeze([1512, 1513, 1514]),
-  Object.freeze([1516, 1517, 1519, 1520]),
+  // Large doors (model 633): 1511 opens to 1512, 1513 to 1516 (1514 is an unnamed loc).
+  Object.freeze([1511, 1513, 1512, 1516]),
+  Object.freeze([1516, 1519]),
   Object.freeze([1727, 1728, 1571, 1572]),
   Object.freeze([14751, 14752, 14753, 14754]),
   Object.freeze([1521, 1522, 1524, 1525]),
@@ -92,10 +161,19 @@ const DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
   Object.freeze([1568, 1569, 1571, 1572]),
   Object.freeze([1589, 1590, 1591]),
   Object.freeze([1596, 1597, 1598]),
-  Object.freeze([4423, 4424, 4425]),
+  // Castle Wars large doors. West leaf is left: Saradomin 4423/4424 -> 4425/4426,
+  // Zamorak 4428/4427 (ids run east to west on that wall) -> 4430/4429.
+  Object.freeze([4423, 4424, 4425, 4426]),
+  Object.freeze([4427, 4428, 4429, 4430]),
   Object.freeze([2039, 2041, 1571, 1572]),
+  // Tutorial Island mining exit: same metal gate as 1727/1728 (9717 is the left leaf).
+  Object.freeze([9717, 9718, 1571, 1572]),
+  // Tutorial Island rat cage: same metal gate, face 0 (9719 is the left/south leaf).
+  Object.freeze([9719, 9720, 1571, 1572]),
+  // Large doors sharing model 639 with 1521/1524; they open into that family's 1522/1525.
+  Object.freeze([30387, 30388, 1522, 1525]),
 ]);
-const SPECIAL_DOUBLE_DOOR_LEFT_IDS = new Set([1568, 1571, 1727, 14751, 14753, 2039]);
+const SPECIAL_DOUBLE_DOOR_LEFT_IDS = new Set([1568, 1571, 1727, 14751, 14753, 2039, 9717, 9719, 4423, 4425, 4428, 4430, 30387, 1522, 1511, 1512]);
 const SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map([
   [1568, [1569]],
   [1569, [1568]],
@@ -109,6 +187,26 @@ const SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map([
   [14754, [14751, 14753]],
   [2039, [2041]],
   [2041, [2039]],
+  [9717, [9718]],
+  [9718, [9717]],
+  [9719, [9720]],
+  [9720, [9719]],
+  [4423, [4424]],
+  [4424, [4423]],
+  [4425, [4426]],
+  [4426, [4425]],
+  [4428, [4427]],
+  [4427, [4428]],
+  [4430, [4429]],
+  [4429, [4430]],
+  [30387, [30388]],
+  [30388, [30387]],
+  [1522, [1525]],
+  [1525, [1522]],
+  [1511, [1513]],
+  [1513, [1511]],
+  [1512, [1516]],
+  [1516, [1512]],
 ]);
 const SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
   [1568, 1571],
@@ -119,6 +217,18 @@ const SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
   [14752, 14754],
   [2039, 1571],
   [2041, 1572],
+  [9717, 1571],
+  [9718, 1572],
+  [9719, 1571],
+  [9720, 1572],
+  [4423, 4425],
+  [4424, 4426],
+  [4428, 4430],
+  [4427, 4429],
+  [30387, 1522],
+  [30388, 1525],
+  [1511, 1512],
+  [1513, 1516],
 ]);
 const DOUBLE_DOOR_FAMILY_IDS_BY_ID = new Map(
   DOUBLE_DOOR_ID_FAMILIES.flatMap((familyIds) =>
@@ -334,6 +444,153 @@ function reapplyOpenDoorsForRegion(regionId) {
   }
 }
 
+const GATE_PARTNER_OFFSETS = Object.freeze([
+  [0, 1],
+  [0, -1],
+  [1, 0],
+  [-1, 0],
+  [-1, -1],
+  [-1, 1],
+  [1, -1],
+  [1, 1],
+]);
+
+// OSRS swings a wooden gate 90 degrees around its hinge post, so both panels land on the
+// perpendicular tile line and face the same direction. Ported 1:1 from the original elvarg
+// gate state manager (computeGateHingeOpenTransform / computeGateHingeCloseTransform).
+function gateHingeTransform(x, y, rotation, opening) {
+  switch (rotation & 0x3) {
+    case 0:
+      return opening
+        ? { hinge: [x - 1, y], extension: [x - 2, y], face: 3 }
+        : { hinge: [x, y - 1], extension: [x + 1, y - 1], face: 1 };
+    case 1:
+      return opening
+        ? { hinge: [x, y + 1], extension: [x, y + 2], face: 0 }
+        : { hinge: [x - 1, y], extension: [x - 1, y - 1], face: 2 };
+    case 2:
+      return opening
+        ? { hinge: [x + 1, y], extension: [x + 2, y], face: 1 }
+        : { hinge: [x, y + 1], extension: [x - 1, y + 1], face: 3 };
+    case 3:
+      return opening
+        ? { hinge: [x, y - 1], extension: [x, y - 2], face: 2 }
+        : { hinge: [x + 1, y], extension: [x + 1, y + 1], face: 0 };
+    default:
+      return null;
+  }
+}
+
+function findAdjacentGatePartner(objectId, x, y, z, privateArea) {
+  for (const [dx, dy] of GATE_PARTNER_OFFSETS) {
+    const partner = MapObjects.get(objectId, cloneLocation(x + dx, y + dy, z), privateArea ?? null);
+    if (partner) {
+      return partner;
+    }
+  }
+  return null;
+}
+
+// Opens/closes a wooden gate by swinging its hinge and extension panels together. Tracks
+// both pieces as one open-object state so auto-close and resync revert the whole gate.
+function handleWoodenGate(player, object, objectId, location) {
+  const gate = WOODEN_GATE_BY_ID.get(objectId);
+  if (!gate || !object || !location) {
+    return false;
+  }
+
+  const privateArea = player?.getPrivateArea?.() ?? null;
+  const isClosed = objectId === gate.closed.hinge || objectId === gate.closed.extension;
+  const isHinge = objectId === gate.closed.hinge || objectId === gate.opened.hinge;
+
+  const oldHingeId = isClosed ? gate.closed.hinge : gate.opened.hinge;
+  const oldExtensionId = isClosed ? gate.closed.extension : gate.opened.extension;
+  const newHingeId = isClosed ? gate.opened.hinge : gate.closed.hinge;
+  const newExtensionId = isClosed ? gate.opened.extension : gate.closed.extension;
+  const partnerId = isHinge ? oldExtensionId : oldHingeId;
+
+  const x = Number(location.getX?.() ?? location.x ?? 0);
+  const y = Number(location.getY?.() ?? location.y ?? 0);
+  const z = Number(location.getZ?.() ?? location.z ?? 0);
+  const rotation = Number(object.getFace?.() ?? object.face ?? 0) & 0x3;
+
+  const partner = findAdjacentGatePartner(partnerId, x, y, z, privateArea);
+  if (!partner) {
+    return false;
+  }
+
+  const clickedPart = {
+    object,
+    x,
+    y,
+    rotation,
+    type: Number(object.getType?.() ?? object.type ?? 0),
+  };
+  const partnerPart = {
+    object: partner,
+    x: Number(partner.getLocation?.().getX?.() ?? 0),
+    y: Number(partner.getLocation?.().getY?.() ?? 0),
+    rotation: Number(partner.getFace?.() ?? 0) & 0x3,
+    type: Number(partner.getType?.() ?? 0),
+  };
+  const hingeOld = isHinge ? clickedPart : partnerPart;
+  const extensionOld = isHinge ? partnerPart : clickedPart;
+
+  const transform = gateHingeTransform(hingeOld.x, hingeOld.y, hingeOld.rotation, isClosed);
+  if (!transform) {
+    return false;
+  }
+
+  const hingeNew = new GameObject(
+    newHingeId,
+    cloneLocation(transform.hinge[0], transform.hinge[1], z),
+    hingeOld.type,
+    transform.face,
+    privateArea
+  );
+  const extensionNew = new GameObject(
+    newExtensionId,
+    cloneLocation(transform.extension[0], transform.extension[1], z),
+    extensionOld.type,
+    transform.face,
+    privateArea
+  );
+
+  ObjectManager.deregister(hingeOld.object, true);
+  ObjectManager.deregister(extensionOld.object, true);
+  ObjectManager.register(hingeNew, true);
+  ObjectManager.register(extensionNew, true);
+  requestDoorResync(player);
+
+  // Anchor on the CLOSED hinge tile so open and close compute the same key for auto-close.
+  const closedHingeX = isClosed ? hingeOld.x : transform.hinge[0];
+  const closedHingeY = isClosed ? hingeOld.y : transform.hinge[1];
+  const anchorKey = `woodenGate:${gate.closed.hinge}:${closedHingeX},${closedHingeY},${z}`;
+  if (isClosed) {
+    const closedHinge = new GameObject(
+      gate.closed.hinge,
+      cloneLocation(hingeOld.x, hingeOld.y, z),
+      hingeOld.type,
+      hingeOld.rotation,
+      privateArea
+    );
+    const closedExtension = new GameObject(
+      gate.closed.extension,
+      cloneLocation(extensionOld.x, extensionOld.y, z),
+      extensionOld.type,
+      extensionOld.rotation,
+      privateArea
+    );
+    rememberOpenObjects(anchorKey, [closedHinge, closedExtension], [hingeNew, extensionNew]);
+  } else {
+    clearOpenDoor(anchorKey);
+  }
+
+  Sounds.sendSound(player, doorSound(gate.closed.hinge, isClosed));
+
+  return true;
+}
+
 function handleMappedDoor(player, object, objectId, location) {
   if (!object || !location) {
     return false;
@@ -349,8 +606,12 @@ function handleMappedDoor(player, object, objectId, location) {
     ? objectFromSnapshot(existingState.current[0], player?.getPrivateArea?.() ?? null)
     : object;
   const activeLocation = activeObject.getLocation?.() ?? location;
-  const open = (activeObject.getId?.() ?? objectId) !== closedId;
-  const nextId = open ? closedId : closedId + 1;
+  const openId = getDoorCatalog().closedToOpen.get(closedId);
+  // A self-opening door keeps its id, so only the tracked state says it is open.
+  const open = openId === closedId
+    ? existingState != null
+    : (activeObject.getId?.() ?? objectId) !== closedId;
+  const nextId = open ? closedId : openId;
   const type = Number(activeObject.getType?.() ?? activeObject.type ?? 0);
   const rotation = Number(activeObject.getFace?.() ?? activeObject.face ?? 0) & 0x3;
   const nextRotation = open ? ((rotation + 1) & 0x3) : rotation;
@@ -775,9 +1036,6 @@ function handleDoubleDoor(player, object, objectId, location) {
   if (!clickedDoor) {
     return false;
   }
-  if (clickedDoor.currentId > 15000) {
-    return true;
-  }
 
   const pair = resolveDoubleDoorPair(clickedDoor);
   if (!pair) {
@@ -820,6 +1078,7 @@ function toggleDoor(api, { player, object, objectId, location }) {
   const request = { player, object, objectId, location, handled: false };
   api.emitCustomEvent("door:toggle", request);
   if (request.handled) return true;
+  if (handleWoodenGate(player, object, objectId, location)) return true;
   if (handleDoubleDoor(player, object, objectId, location)) return true;
   return handleMappedDoor(player, object, objectId, location);
 }
@@ -829,8 +1088,13 @@ module.exports = {
   register: (api) => {
     ObjectManager = api.getObjectManager();
     TaskManager = api.getTaskManager();
+    // Warm the door catalog at startup. It scans every loc definition (~185ms for ~60k
+    // objects); building it lazily on the first door click stalled a live game tick.
+    getDoorCatalog();
+    const toggle = toggleDoor.bind(null, api);
     for (const name of DOOR_NAMES) {
-      api.onObjectInteraction(name, { Open: toggleDoor.bind(null, api), Close: toggleDoor.bind(null, api) });
+      // Some gates (e.g. 60760/60763) expose "Release" instead of "Open".
+      api.onObjectInteraction(name, { Open: toggle, Close: toggle, Release: toggle });
     }
     api.onRegionLoaded(({ regionId }) => {
       if (!Number.isInteger(regionId)) {

@@ -34,6 +34,7 @@ import {
   PluginSpellOnObjectEvent,
   PluginNpcDeathEvent,
   PluginNpcBeforeDeathEvent,
+  PluginNpcHitModifyEvent,
   PluginNpcAggressionToleranceEvent,
   PluginNpcInteractionEvent,
   PluginNpcInteractionDefinition,
@@ -43,6 +44,7 @@ import {
   PluginZoneEvent,
   PluginNpcSpawnDefinition,
   PluginObjectRouteEvent,
+  PluginNpcRouteEvent,
   PluginObjectInteractionEvent,
   PluginPlayerDefeatedEvent,
   PluginPathBlockedEvent,
@@ -62,6 +64,7 @@ import {
   PluginSpellRuneBypassEvent,
   PluginCanTradeEvent,
   PluginTradeRequestEvent,
+  PluginTradeCompletedEvent,
   PluginPlayerFollowEvent,
   PluginPlayerAttackEvent,
   PluginCanBankEvent,
@@ -160,6 +163,7 @@ export class PluginManager {
   private static activeRegionsHooks: PluginHook<PluginActiveRegionsEvent>[] = [];
   private static pathBlockedHooks: PluginHook<PluginPathBlockedEvent>[] = [];
   private static objectRouteHooks: PluginHook<PluginObjectRouteEvent>[] = [];
+  private static npcRouteHooks: PluginHook<PluginNpcRouteEvent>[] = [];
   private static objectInteractionHooks: ObjectInteractionHook[] = [];
   private static objectHooksById = new Map<string, ObjectInteractionHook[]>();
   private static objectHooksByName = new Map<string, ObjectInteractionHook[]>();
@@ -181,6 +185,7 @@ export class PluginManager {
   }> = [];
   private static npcDeathHooks: PluginHook<PluginNpcDeathEvent>[] = [];
   private static npcBeforeDeathHooks: PluginHook<PluginNpcBeforeDeathEvent>[] = [];
+  private static npcHitModifyHooks: PluginHook<PluginNpcHitModifyEvent>[] = [];
   private static zoneHooks: Array<{
     pluginName: string;
     zone: PluginZone;
@@ -195,6 +200,7 @@ export class PluginManager {
   private static canDrinkHooks: PluginHook<PluginCanDrinkEvent>[] = [];
   private static canTradeHooks: PluginHook<PluginCanTradeEvent>[] = [];
   private static tradeRequestHooks: PluginHook<PluginTradeRequestEvent>[] = [];
+  private static tradeCompletedHooks: PluginHook<PluginTradeCompletedEvent>[] = [];
   private static playerFollowHooks: PluginHook<PluginPlayerFollowEvent>[] = [];
   private static playerAttackHooks: PluginHook<PluginPlayerAttackEvent>[] = [];
   private static canBankHooks: PluginHook<PluginCanBankEvent>[] = [];
@@ -251,6 +257,7 @@ export class PluginManager {
   private static pluginPerfEnabled = false;
   private static pluginPerfStats = new Map<string, PluginPerfStat>();
   private static pluginCoreApi: PluginCoreApi | null = null;
+  private static pluginConfigCache: Record<string, unknown> | null = null;
 
   private static executeHook<T>(
     hook: PluginHook<T>,
@@ -830,6 +837,14 @@ export class PluginManager {
     }
   }
 
+  public static emitNpcRoute(event: PluginNpcRouteEvent): void {
+    if (!event?.player || !event.npc) return;
+    for (const hook of PluginManager.npcRouteHooks) {
+      PluginManager.executeHook(hook, event, "npc_route", "npc_route");
+    }
+    event.range = Number.isInteger(event.range) ? Math.max(1, Math.min(24, event.range)) : 1;
+  }
+
   // NOTE FOR MAINTAINERS:
   // Keep common event guard clauses centralized in emit* methods so plugin
   // consumers do not have to repeat the same checks in every handler.
@@ -901,14 +916,26 @@ export class PluginManager {
     return event.preventDeath === true;
   }
 
+  public static emitNpcHitModify(npc: any, hit: any): any {
+    if (PluginManager.npcHitModifyHooks.length === 0) {
+      return hit;
+    }
+    const event: PluginNpcHitModifyEvent = { npc, hit };
+    for (const hook of PluginManager.npcHitModifyHooks) {
+      PluginManager.executeHook(hook, event, "npc_hit_modify", "npc_hit_modify");
+    }
+    return event.hit;
+  }
+
   public static emitCanAttack(
     attacker: any,
-    target: any
+    target: any,
+    method?: any
   ): boolean | null {
     if (PluginManager.canAttackHooks.length === 0) {
       return null;
     }
-    const event: PluginCanAttackEvent = { attacker, target, allow: null };
+    const event: PluginCanAttackEvent = { attacker, target, method, allow: null };
     for (const hook of PluginManager.canAttackHooks) {
       PluginManager.executeHook(hook, event, "can_attack", "can_attack");
       if (event.allow !== null) {
@@ -1008,6 +1035,16 @@ export class PluginManager {
       PluginManager.executeHook(hook, event, "trade_request", "trade_request");
     }
     return event.handled === true;
+  }
+
+  /** Observer-only: fires once per player after a completed trade, before the post-trade save. */
+  public static emitTradeCompleted(event: PluginTradeCompletedEvent): void {
+    if (!event || !event.player || !event.partner) {
+      return;
+    }
+    for (const hook of PluginManager.tradeCompletedHooks) {
+      PluginManager.executeHook(hook, event, "trade_completed", "trade_completed");
+    }
   }
 
   public static emitPlayerFollow(event: PluginPlayerFollowEvent): void {
@@ -1552,6 +1589,37 @@ export class PluginManager {
     return new Set(config.disabledPlugins.map(normalizePluginName));
   }
 
+  /** Reads the world.json `pluginConfig` map once (empty when unset or malformed). */
+  private static loadPluginConfig(): Record<string, unknown> {
+    if (PluginManager.pluginConfigCache) {
+      return PluginManager.pluginConfigCache;
+    }
+    let parsed: unknown;
+    try {
+      const configPath = path.join(process.cwd(), "data", "definitions", "world.json");
+      parsed = (JSON.parse(fs.readFileSync(configPath, "utf8")) as { pluginConfig?: unknown })
+        .pluginConfig;
+    } catch {
+      parsed = undefined;
+    }
+    PluginManager.pluginConfigCache =
+      parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+    return PluginManager.pluginConfigCache;
+  }
+
+  /** Value of world.json `pluginConfig[key]`, or `defaultValue` when the key is unset. */
+  public static getPluginConfig<T = unknown>(key: string, defaultValue?: T): T {
+    if (typeof key !== "string" || key.length === 0) {
+      return defaultValue as T;
+    }
+    const config = PluginManager.loadPluginConfig();
+    return Object.prototype.hasOwnProperty.call(config, key)
+      ? (config[key] as T)
+      : (defaultValue as T);
+  }
+
   private static collectPluginLoadCandidates(
     pluginPaths: string[]
   ): PluginLoadCandidate[] {
@@ -1735,6 +1803,7 @@ export class PluginManager {
       RangedWeapon: require(`${combat}/ranged/RangedData`).RangedWeapon,
       Ammunition: require(`${combat}/ranged/RangedData`).Ammunition,
       WeaponProfiles: require(`${combat}/WeaponProfile`).WeaponProfiles,
+      FightStyle: require(`${combat}/FightStyle`).FightStyle,
       WeaponInterfaceManager: require(`${combat}/WeaponInterfaceManager`).WeaponInterfaceManager,
       PrayerHandler: require("../game/content/PrayerHandler").PrayerHandler,
       DuelRule: require("../game/content/Duelling").DuelRule,
@@ -1749,13 +1818,46 @@ export class PluginManager {
       Flag: require(`${model}/Flag`).Flag,
       Direction: require(`${model}/Direction`).Direction,
       Equipment: require(`${model}/container/impl/Equipment`).Equipment,
+      Bank: require(`${model}/container/impl/Bank`).Bank,
       Task: require("../game/task/Task").Task,
+      CountdownTask: require("../game/task/impl/CountdownTask").CountdownTask,
+      ForceMovement: require(`${model}/ForceMovement`).ForceMovement,
+      ForceMovementTask: require("../game/task/impl/ForceMovementTask").ForceMovementTask,
       TaskManager: require("../game/task/TaskManager").TaskManager,
       ItemIdentifiers: require("../util/ItemIdentifiers").ItemIdentifiers,
+      NpcIdentifiers: require("../util/NpcIdentifiers").NpcIdentifiers,
+      ObjectIdentifiers: require("../util/ObjectIdentifiers").ObjectIdentifiers,
+      ShopIdentifiers: require("../util/ShopIdentifiers").ShopIdentifiers,
       Misc: require("../util/Misc").Misc,
       TimerKey: require("../util/timers/TimerKey").TimerKey,
       Sound: require("../game/Sound").Sound,
       Sounds: require("../game/Sounds").Sounds,
+      Location: require(`${model}/Location`).Location,
+      Boundary: require(`${model}/Boundary`).Boundary,
+      PolygonalBoundary: require(`${model}/PolygonalBoundary`).PolygonalBoundary,
+      Area: require(`${model}/areas/Area`).Area,
+      World: require("../game/World").World,
+      GameObject: require("../game/entity/impl/object/GameObject").GameObject,
+      PrivateArea: require(`${model}/areas/impl/PrivateArea`).PrivateArea,
+      ObjectManager: require("../game/entity/impl/object/ObjectManager").ObjectManager,
+      MapObjects: require("../game/entity/impl/object/MapObjects").MapObjects,
+      ItemOnGroundManager: require("../game/entity/impl/grounditem/ItemOnGroundManager").ItemOnGroundManager,
+      ItemDefinition: require("../game/definition/ItemDefinition").ItemDefinition,
+      CacheDefinitions: require("../game/cache/CacheDefinitions").CacheDefinitions,
+      PathFinder: require(`${model}/movement/path/PathFinder`).PathFinder,
+      NpcDefinition: require("../game/definition/NpcDefinition").NpcDefinition,
+      NPC: require("../game/entity/impl/npc/NPC").NPC,
+      GameConstants: require("../game/GameConstants").GameConstants,
+      TeleportHandler: require(`${model}/teleportation/TeleportHandler`).TeleportHandler,
+      DialogueChainBuilder: require(`${model}/dialogues/builders/DialogueChainBuilder`).DialogueChainBuilder,
+      NpcDialogue: require(`${model}/dialogues/entries/impl/NpcDialogue`).NpcDialogue,
+      PlayerDialogue: require(`${model}/dialogues/entries/impl/PlayerDialogue`).PlayerDialogue,
+      StatementDialogue: require(`${model}/dialogues/entries/impl/StatementDialogue`).StatementDialogue,
+      ActionDialogue: require(`${model}/dialogues/entries/impl/ActionDialogue`).ActionDialogue,
+      EndDialogue: require(`${model}/dialogues/entries/impl/EndDialogue`).EndDialogue,
+      PlayerRights: require("../game/model/rights/PlayerRights").PlayerRights,
+      Server: require("../Server").Server,
+      PluginManager: require("./PluginManager").PluginManager,
     });
     return PluginManager.pluginCoreApi;
   }
@@ -2359,6 +2461,9 @@ export class PluginManager {
         }
         PluginManager.objectRouteHooks.push({ pluginName, handler });
       },
+      onNpcRoute: (handler) => {
+        if (typeof handler === "function") PluginManager.npcRouteHooks.push({ pluginName, handler });
+      },
       onNpcInteraction: (
         handler: string | ((event: PluginNpcInteractionEvent) => void),
         actions?: Record<string, (event: PluginNpcInteractionEvent) => void | boolean>
@@ -2405,6 +2510,19 @@ export class PluginManager {
           pluginName,
           handler: (event) => {
             if (event?.npc) {
+              handler(event);
+            }
+          },
+        });
+      },
+      onNpcHitModify: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.npcHitModifyHooks.push({
+          pluginName,
+          handler: (event) => {
+            if (event?.npc && event?.hit) {
               handler(event);
             }
           },
@@ -2510,6 +2628,20 @@ export class PluginManager {
           pluginName,
           handler: (event) => {
             if (!event || event.handled || !event.player || !event.target) {
+              return;
+            }
+            handler(event);
+          },
+        });
+      },
+      onTradeCompleted: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.tradeCompletedHooks.push({
+          pluginName,
+          handler: (event) => {
+            if (!event || !event.player || !event.partner || !Array.isArray(event.received)) {
               return;
             }
             handler(event);
@@ -3070,6 +3202,8 @@ export class PluginManager {
           optionCallbackPairs
         );
       },
+      getPluginConfig: <T>(key: string, defaultValue?: T) =>
+        PluginManager.getPluginConfig<T>(key, defaultValue),
       onButton: (buttonIds, handler) => {
         registerButtonHook(buttonIds, handler, "button");
       },

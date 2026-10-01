@@ -6,7 +6,7 @@ const { MapObjects } = require("../../src/main/typescript/elvarg/game/entity/imp
 const { GameObject } = require("../../src/main/typescript/elvarg/game/entity/impl/object/GameObject");
 const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
 const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
-const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
+const { ItemIds, ObjectIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 
 const DEPLETED_ROCK_ID = 2704;
 const MINING_ANIMATION_INTERVAL_TICKS = 4;
@@ -38,7 +38,15 @@ const ROCKS = [
   { objectName: "Runite rocks", objectIds: [14859, 4860, 2106, 2107, 7461], level: 85, xp: 125, oreId: ItemIds.RUNITE_ORE, cycles: 23, respawnTicks: 45 },
 ];
 
-const ROCK_BY_NAME = new Map(ROCKS.map((rock) => [rock.objectName, rock]));
+// The essence mine rocks are infinite and have no level requirement.
+const ESSENCE_ROCKS = [
+  { objectName: "Rune Essence", objectIds: [ObjectIds.RUNE_ESSENCE_3], level: 1, xp: 5, oreId: ItemIds.PURE_ESSENCE, cycles: 1, respawnTicks: 0, infinite: true, oreMessage: "You get some essence." },
+  { objectName: "Rune essence", objectIds: [ObjectIds.RUNE_ESSENCE, ObjectIds.RUNE_ESSENCE_2], level: 1, xp: 5, oreId: ItemIds.PURE_ESSENCE, cycles: 1, respawnTicks: 0, infinite: true, oreMessage: "You get some essence." },
+];
+
+const ALL_ROCKS = [...ROCKS, ...ESSENCE_ROCKS];
+
+const ROCK_BY_NAME = new Map(ALL_ROCKS.map((rock) => [rock.objectName, rock]));
 let activeSessions;
 const ACTIVE_MINERS = new Set();
 
@@ -223,9 +231,18 @@ class MiningTask extends Task {
       }
 
       player.getInventory().adds(state.rock.oreId, 1);
-      player.sendMessage("You get some ores.");
+      player.sendMessage(state.rock.oreMessage ?? "You get some ores.");
       player.getSkillManager().addExperiences(Skill.MINING, state.rock.xp);
       pluginApi.emitCustomEvent("mining:success", { player, skill: Skill.MINING });
+      if (state.rock.infinite) {
+        if (player.getInventory().isFull()) {
+          player.getInventory().full();
+          stopMining(this.activeSessions, player);
+          continue;
+        }
+        state.cyclesUntilOre = cyclesRequired(player, state.rock, pickaxe);
+        continue;
+      }
       Sounds.sendSound(player, Sound.MINING_ROCK_GONE);
       depleteRock(rockObject, state.rock);
       stopMining(this.activeSessions, player);
@@ -272,12 +289,13 @@ module.exports = {
       stopMining(activeSessions, player, false);
     });
 
-    for (const rock of ROCKS) {
+    for (const rock of ALL_ROCKS) {
       api.onObjectInteraction(rock.objectName, { Mine: handleMine });
     }
 
     api.log("registered", {
       rocks: ROCKS.length,
+      essenceRocks: ESSENCE_ROCKS.length,
       pickaxes: PICKAXES.length,
     });
   },

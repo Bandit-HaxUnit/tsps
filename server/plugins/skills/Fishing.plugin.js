@@ -7,6 +7,7 @@ const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
 const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
 const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
 const { ItemIds, NpcIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
+const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
 
 const FISHING_ACTION_INTERVAL_TICKS = 5;
 const FISHING_ANIMATION_INTERVAL_TICKS = 5;
@@ -79,23 +80,33 @@ const TOOLS = Object.freeze({
   ]),
 });
 
+// Keyed by the spot's option name, not its click slot: the cache puts the second
+// option in slot 3 (e.g. ["Cage", null, "Harpoon"]), so it arrives as clickType 3.
 const SPOT_TOOL_BY_NPC_AND_CLICK = new Map();
 
-function addSpotTool(npcId, clickType, tool) {
-  SPOT_TOOL_BY_NPC_AND_CLICK.set(`${npcId}:${clickType}`, tool);
+function addSpotTool(npcId, option, tool) {
+  SPOT_TOOL_BY_NPC_AND_CLICK.set(`${npcId}:${option.toLowerCase()}`, tool);
 }
 
-const FISH_SPOT_ROD_BAIT_IDS = [NpcIds.FISHING_SPOT_2, NpcIds.FISHING_SPOT_3];
-for (const npcId of FISH_SPOT_ROD_BAIT_IDS) {
-  addSpotTool(npcId, 1, TOOLS.NET);
-  addSpotTool(npcId, 2, TOOLS.FISHING_ROD);
+function getSpotTool(npcId, clickType) {
+  const option = CacheDefinitions.getNpc(npcId)?.actions?.[clickType - 1];
+  return option ? SPOT_TOOL_BY_NPC_AND_CLICK.get(`${npcId}:${option.toLowerCase()}`) : undefined;
 }
 
-const FISH_SPOT_CAGE_HARPOON_IDS = [NpcIds.FISHING_SPOT_11, NpcIds.FISHING_SPOT_10];
-for (const npcId of FISH_SPOT_CAGE_HARPOON_IDS) {
-  addSpotTool(npcId, 1, TOOLS.LOBSTER_POT);
-  addSpotTool(npcId, 2, TOOLS.HARPOON);
+for (const npcId of [NpcIds.FISHING_SPOT_2, NpcIds.FISHING_SPOT_3, NpcIds.FISHING_SPOT_21]) {
+  addSpotTool(npcId, "Small Net", TOOLS.NET);
+  addSpotTool(npcId, "Bait", TOOLS.FISHING_ROD);
 }
+
+// Tutorial Island's shrimp pond only offers "Net".
+addSpotTool(NpcIds.FISHING_SPOT_43, "Net", TOOLS.NET);
+
+for (const npcId of [NpcIds.FISHING_SPOT_10, NpcIds.FISHING_SPOT_22]) {
+  addSpotTool(npcId, "Cage", TOOLS.LOBSTER_POT);
+  addSpotTool(npcId, "Harpoon", TOOLS.HARPOON);
+}
+// ponytail: 1511's "Net" is a big net (mackerel/cod/bass), unmapped until a BIG_NET tool exists.
+addSpotTool(NpcIds.FISHING_SPOT_11, "Harpoon", TOOLS.HARPOON);
 const FISHING_SPOT_NPC_IDS = Object.freeze(
   Array.from(
     new Set(
@@ -162,7 +173,7 @@ function determineFish(player, tool) {
 }
 
 function startFishing(player, npc, clickType, activeSessions) {
-  const tool = SPOT_TOOL_BY_NPC_AND_CLICK.get(`${npc.getId()}:${clickType}`);
+  const tool = getSpotTool(npc.getId(), clickType);
   if (!tool) {
     return false;
   }
@@ -306,8 +317,9 @@ module.exports = {
       }
       return started;
     }
-    api.onNpcClick(FISHING_SPOT_NPC_IDS, 1, startFishingInteraction);
-    api.onNpcClick(FISHING_SPOT_NPC_IDS, 2, startFishingInteraction);
+    for (let clickType = 1; clickType <= 5; clickType++) {
+      api.onNpcClick(FISHING_SPOT_NPC_IDS, clickType, startFishingInteraction);
+    }
 
     api.log("registered", {
       fishingSpotMappings: SPOT_TOOL_BY_NPC_AND_CLICK.size,
