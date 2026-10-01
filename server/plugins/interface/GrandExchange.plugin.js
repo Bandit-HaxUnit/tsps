@@ -34,6 +34,7 @@ const offers = new WeakMap();
 const completionTimers = new WeakMap();
 const viewing = new WeakMap();
 const searching = new WeakSet();
+let pluginApi;
 
 function validItem(id) {
   if (!CacheDefinitions.hasItem(id)) return false;
@@ -221,6 +222,12 @@ function confirm(player, offer) {
     sender.sendMessage(offer.sell ? "You do not have enough of that item." : "You do not have enough coins.");
     return;
   }
+  // Plugins may veto an offer (e.g. an untradeable item that cannot be listed).
+  const confirmation = { player, itemId: offer.itemId, sell: offer.sell, accepted: true };
+  pluginApi.emitCustomEvent("ge:offer-confirmed", confirmation);
+  if (confirmation.accepted === false) {
+    return;
+  }
 
   // Use the normal container rules on a copy: failed/full trades never remove live items.
   const result = new Inventory(player);
@@ -269,6 +276,15 @@ function collect(player, action, slot = viewing.get(player)) {
   }
   destination.setItems(result.getItems());
   if (action !== 3) inventory.refreshItems();
+  // Plugins may change what the collection hands over (e.g. a bought bond
+  // arrives untradeable) before the offer is cleared and saved below.
+  pluginApi.emitCustomEvent("ge:offer-collected", {
+    player,
+    itemId: outputId,
+    amount: outputAmount,
+    destination: action === 3 ? "bank" : "inventory",
+    container: destination,
+  });
   delete completedOffers(player)[slot];
   saveOffers(player);
   const sender = player.getPacketSender();
@@ -409,6 +425,7 @@ const EXCHANGE_BUTTONS = [uid(4), uid(24), uid(26), uid(30), ...Array.from({ len
 module.exports = {
   name: "GrandExchange",
   register(api) {
+    pluginApi = api;
     api.persistAttribute("grandExchangeOffers");
     api.onPlayerLogin(({ player }) => {
       for (const offer of Object.values(completedOffers(player))) scheduleCompletion(player, offer);

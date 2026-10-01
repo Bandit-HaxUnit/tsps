@@ -9,6 +9,7 @@ import { ItemContainer } from "../model/container/ItemContainer";
 import { StackType } from "../model/container/StackType";
 import { Inventory } from "../model/container/impl/Inventory";
 import { Misc } from "../../util/Misc";
+import { PluginManager } from "../../plugins/PluginManager";
 import { encodeChatMessage, encodeTradeClose, encodeTradeOpen, encodeTradeRequest, encodeTradeUpdate, TradePartyView } from "../../net/protocol/ClientProtocol";
 
 const ATTR_SKIP_PERSISTENCE = "botSkipPersistence";
@@ -284,6 +285,21 @@ export class Trading {
                 for (const item of givingItems) {
                     interact_.getInventory().addItem(item);
                 }
+                // Let plugins react to the finished trade before the save below,
+                // so anything they change (such as converting a traded bond to
+                // its untradeable form) is persisted with the trade.
+                PluginManager.emitTradeCompleted({
+                    player: this.player,
+                    partner: interact_,
+                    received: receivingItems,
+                    given: givingItems,
+                });
+                PluginManager.emitTradeCompleted({
+                    player: interact_,
+                    partner: this.player,
+                    received: givingItems,
+                    given: receivingItems,
+                });
                 // Save both at once, so a crash can't leave one save from
                 // before the trade and the other from after it.
                 Trading.save(this.player);
