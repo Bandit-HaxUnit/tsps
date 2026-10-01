@@ -380,8 +380,11 @@ export class PlayerSession {
       const weapon = equipment[3]?.getDefinition?.();
       const npcTransformationId = player.getNpcTransformationId();
       const transformedNpc = npcTransformationId >= 0 ? CacheDefinitions.getNpc(npcTransformationId) : undefined;
+      const renderAnimations = player.getRenderAnimations();
       const animations = skillAnimation > 0
         ? new Array(7).fill(skillAnimation)
+        : renderAnimations
+          ? renderAnimations
         : transformedNpc
           ? [
               transformedNpc.idleSeqId,

@@ -1005,6 +1005,7 @@ export interface PluginCoreApi {
   RangedWeapon: any;
   Ammunition: any;
   WeaponProfiles: any;
+  FightStyle: any;
   WeaponInterfaceManager: any;
   PrayerHandler: any;
   DuelRule: any;
@@ -1022,6 +1023,8 @@ export interface PluginCoreApi {
   Bank: any;
   Task: any;
   CountdownTask: any;
+  ForceMovement: any;
+  ForceMovementTask: any;
   TaskManager: any;
   ItemIdentifiers: any;
   NpcIdentifiers: any;
@@ -1051,6 +1054,7 @@ export interface PluginCoreApi {
   DialogueChainBuilder: any;
   NpcDialogue: any;
   PlayerDialogue: any;
+  StatementDialogue: any;
   ActionDialogue: any;
   EndDialogue: any;
   PlayerRights: any;

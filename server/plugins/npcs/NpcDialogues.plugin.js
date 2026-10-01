@@ -8,7 +8,8 @@
  * ("npc-dialogue:choice" / "npc-dialogue:condition") so quests can run their own
  * game logic (set stage, hand in items) without re-authoring the words, and each
  * speech line emits "npc-dialogue:line" with a mutable `skip` so a quest can drop
- * lines that no longer apply (e.g. handing over an item the player does not have).
+ * lines that no longer apply (e.g. handing over an item the player does not have) and a
+ * mutable `text` to fill in blanks. "npc-dialogue:start" plays a named variant on demand.
  * Speech, choices, random alternatives and named shops run through existing systems.
  */
 const fs = require("fs");
@@ -21,6 +22,7 @@ const { NpcDialogue } = require("../../src/main/typescript/elvarg/game/model/dia
 const { PlayerDialogue } = require("../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/PlayerDialogue");
 const { ActionDialogue } = require("../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/ActionDialogue");
 const { ShopDefinition } = require("../../src/main/typescript/elvarg/game/definition/ShopDefinition");
+const { NpcDefinition } = require("../../src/main/typescript/elvarg/game/definition/NpcDefinition");
 const { ShopManager } = require("../../src/main/typescript/elvarg/game/model/container/shop/ShopManager");
 
 /** Jumps followed in one conversation before it is cut off (a transcript that loops on itself). */
@@ -494,7 +496,8 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           }
           continue;
         }
-        const lines = Misc.wrapText(speech, 53);
+        // `text` is mutable too, so a plugin can fill in the wiki's "[number]"-style blanks.
+        const lines = Misc.wrapText(request.text, 53);
         playedAny = true;
         // A typed line spoken by someone other than the NPC being talked to (a
         // paired NPC talking to them, a cutscene actor) gets that speaker's head.
@@ -656,7 +659,7 @@ module.exports = {
       };
 
       if (pages.length) {
-        const choice = PluginManager.emitNpcDialogueVariant(context);
+        const choice = event.variant ?? PluginManager.emitNpcDialogueVariant(context);
         const wanted = typeof choice === "string" ? choice : choice?.variant;
         const wantedPage = typeof choice === "object" ? choice?.page : undefined;
         if (wanted || wantedPage) {
@@ -679,9 +682,24 @@ module.exports = {
       const name = event.definition.getName();
       let record = Object.hasOwn(data, name) ? data[name] : undefined;
       if (!pickVariant(record) && aliases.has(name)) record = data[aliases.get(name)];
-      const steps = pickVariant(record);
+      const forced = event.variant ? record?.variants?.[event.variant] : undefined;
+      const steps = Array.isArray(forced) ? forced : pickVariant(record);
       return steps ? withOptions(record === data[name] ? name : undefined, { steps, branches: record?.branches, context }) : null;
     };
+
+    /**
+     * Plays one named variant of an NPC's transcript outside Talk-to (a door that has the
+     * guard speak, an item used on an NPC): { player, npc?, npcId, variant, handled }.
+     */
+    api.onCustomEvent("npc-dialogue:start", (request) => {
+      const definition = NpcDefinition.forId(request.npcId);
+      if (!request.player || !definition) return;
+      const event = { player: request.player, npc: request.npc, npcId: request.npcId, definition, variant: request.variant };
+      const resolved = resolveTranscript(event);
+      if (!resolved?.steps?.length) return;
+      startDialogue(api, event, resolved.steps, resolved.branches, resolved.context);
+      request.handled = true;
+    });
 
     api.onAnyNpcInteraction({
       "Talk-to": (event) => {

@@ -136,6 +136,7 @@ export class Player extends Mobile {
     public forceMovement: ForceMovement;
     private currentPet: NPC;
     private skillAnimation: number;
+    private renderAnimations: number[] | null = null;
     private drainingPrayer = false;
     private prayerPointDrain = 0;
     /**
@@ -936,6 +937,16 @@ export class Player extends Mobile {
 
     public setSkillAnimation(animation: number): Player {
         this.skillAnimation = animation;
+        return this;
+    }
+
+    /** Stand/turn/walk/turn180/turn90cw/turn90ccw/run sequences that replace the weapon's set. */
+    public getRenderAnimations(): number[] | null {
+        return this.renderAnimations;
+    }
+
+    public setRenderAnimations(animations: number[] | null): Player {
+        this.renderAnimations = animations;
         return this;
     }
 
