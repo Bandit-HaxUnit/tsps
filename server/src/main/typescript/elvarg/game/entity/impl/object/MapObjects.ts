@@ -22,6 +22,11 @@ export class MapObjects {
         if (!object) {
             object = player.getPrivateArea()?.resolveObject(id, location) ?? null;
         }
+        // Locs on bridge tiles are loaded one plane down (RegionManager), but the player
+        // standing beside them - on a castle wall, say - is still on the plane above.
+        if (!object && location.getZ() > 0) {
+            object = this.get(id, new Location(location.getX(), location.getY(), location.getZ() - 1), player.getPrivateArea());
+        }
         if (object && !ObjectDefinition.forPlayer(object.getId(), player)) return null;
 
         if (object == null && player.getRights() == PlayerRights.DEVELOPER) {

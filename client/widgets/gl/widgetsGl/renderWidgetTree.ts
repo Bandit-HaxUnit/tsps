@@ -1757,7 +1757,9 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                 (r.uid === undefined || r.uid === w.uid) &&
                 (r.group === undefined || r.group === (w.uid >>> 16)) &&
                 (r.type === undefined || r.type === w.type) &&
-                (r.contentType === undefined || r.contentType === contentType),
+                (r.contentType === undefined || r.contentType === contentType) &&
+                (r.item === undefined || r.item === ((w as any).itemId ?? -1) >= 0) &&
+                (r.colour === undefined || r.colour === ((w as any).color ?? 0)),
         );
         if (hiddenRule) return;
         if (contentType === 1339) {

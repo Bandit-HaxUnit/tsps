@@ -150,6 +150,28 @@ function promptClimb(event) {
   );
 }
 
+/**
+ * Content that owns a ladder or staircase (Castle Wars) claims the click before the
+ * generic fallback below guesses a direction.
+ */
+function claimedElsewhere(event) {
+  const request = { player: event.player, object: event.object, objectId: event.objectId, clickType: event.clickType, handled: false };
+  pluginApi.emitCustomEvent("ladders:climb", request);
+  return request.handled;
+}
+
+function climbOption(event) {
+  return claimedElsewhere(event) || promptClimb(event);
+}
+
+function climbUpOption(event) {
+  return claimedElsewhere(event) || climbUp(event);
+}
+
+function climbDownOption(event) {
+  return claimedElsewhere(event) || climbDown(event);
+}
+
 module.exports = {
   name: "Ladders",
   register(api) {
@@ -157,7 +179,7 @@ module.exports = {
     TaskManager = api.getTaskManager();
     api.onCustomEvent("ladders:climbUp", climbUp);
     api.onCustomEvent("ladders:climbDown", climbDown);
-    api.onObjectInteraction("Ladder", { "Climb": promptClimb, "Climb-up": climbUp, "Climb-down": climbDown });
-    api.onObjectInteraction("Staircase", { "Climb": promptClimb, "Climb-up": climbUp, "Climb-down": climbDown });
+    api.onObjectInteraction("Ladder", { "Climb": climbOption, "Climb-up": climbUpOption, "Climb-down": climbDownOption });
+    api.onObjectInteraction("Staircase", { "Climb": climbOption, "Climb-up": climbUpOption, "Climb-down": climbDownOption });
   },
 };

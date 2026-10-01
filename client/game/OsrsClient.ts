@@ -2638,6 +2638,16 @@ export class OsrsClient {
                     w.itemQuantity = 0;
                     this.widgetManager.invalidateWidgetRender(w, "server-set-model");
                 }
+            } else if (payload?.action === "set_position") {
+                // IF_SETPOSITION: as the cs2 op, move within the parent and keep the modes.
+                const w = this.widgetManager?.getWidgetByUid(Number(payload.uid) | 0);
+                if (w) {
+                    w.rawX = Number(payload.x) | 0;
+                    w.rawY = Number(payload.y) | 0;
+                    if (w.xPositionMode === 0) w.x = w.rawX;
+                    if (w.yPositionMode === 0) w.y = w.rawY;
+                    this.widgetManager.invalidateWidget(w, "server-set-position");
+                }
             } else if (payload?.action === "set_item") {
                 const uid = Number(payload.uid) | 0;
                 const itemId = Number(payload.itemId) | 0;
