@@ -221,3 +221,24 @@ test("the ring of wealth's Rub submenu and worn options follow the cache's order
     ["Miscellania", "Grand Exchange", "Falador Park", "Dondakan"], "sub-op 2 is the Grand Exchange");
   assert.deepEqual(ACTIONS.slice(4).map((action) => action.type), ["boss-log", "coin-collection"]);
 });
+
+test("the slayer ring's Rub submenu is its actions: Check, Teleport, then Master, Partner and Log", () => {
+  const player = createPlayer();
+  const ring = new Item(ItemIds.SLAYER_RING_8_, 1);
+  player.inventory.setItem(0, ring);
+
+  inventoryClick(player, ring, "Rub", { subOpId: 1 });
+  assert.equal(player.messages.at(-1), "Your slayer ring has 8 charges left.");
+  assert.equal(teleports.length, 0, "Check doesn't teleport");
+
+  inventoryClick(player, ring, "Rub", { subOpId: 2 });
+  pick("Stronghold Slayer Cave");
+  assert.deepEqual(teleports.at(-1).target, [2431, 3424, 0], "Teleport offers the destinations");
+
+  const before = teleports.length;
+  for (const subOpId of [3, 4, 5]) {
+    inventoryClick(player, ring, "Rub", { subOpId });
+    assert.equal(player.messages.at(-1), "Nothing interesting happens.");
+  }
+  assert.equal(teleports.length, before, "Master, Partner and Log don't teleport");
+});

@@ -188,6 +188,27 @@ function equippedDestination(piece, event) {
   return name ? null : piece.destinations[event.clickType - FIRST_WORN_OPTION_CLICK] ?? null;
 }
 
+/**
+ * A Rub submenu entry that is an action rather than a destination (the slayer ring's Check,
+ * Teleport, Master, Partner and Log). Master, Partner and Log aren't built yet.
+ */
+function subOp(player, item, entry, action) {
+  if (action === "teleport") {
+    rub(player, item);
+  } else if (action === "check") {
+    player.sendMessage(checkMessage(entry.piece, entry.charges));
+  } else {
+    player.sendMessage("Nothing interesting happens.");
+  }
+}
+
+/** How many charges a piece has now (guessed wording). */
+function checkMessage(piece, charges) {
+  const unit = piece.unit ?? "charge";
+  if (charges === Infinity) return `Your ${piece.noun} has unlimited ${unit}s.`;
+  return `Your ${piece.noun} has ${charges} ${unit}${charges === 1 ? "" : "s"} left.`;
+}
+
 function handleJewelleryAction(event) {
   const entry = JEWELLERY_BY_ITEM.get(event.itemId);
   if (!entry || !event.item) return;
@@ -201,6 +222,12 @@ function handleJewelleryAction(event) {
     event.handled = true;
     if (destination === "rub") rub(player, item);
     else confirmAndTeleport(player, item, destination);
+    return;
+  }
+
+  if (Number.isInteger(event.subOpId) && piece.subOps) {
+    event.handled = true;
+    subOp(player, item, entry, piece.subOps[event.subOpId - 1]);
     return;
   }
 

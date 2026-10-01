@@ -247,6 +247,8 @@ const JEWELLERY = [
     emptyMessage: "Your ring hasn't got any charges left.",
     lastChargeMessage: "Your slayer ring crumbles to dust.",
     teleportOptions: ["Rub", "Teleport"],
+    // Rub's submenu is actions, not destinations (item params 451-455); Teleport picks one.
+    subOps: ["check", "teleport", "master", "partner", "log"],
     destinations: [
       { label: "Slayer Tower", tile: [3429, 3538, 0] },
       { label: "Fremennik Slayer Dungeon", tile: [2807, 10002, 0] },
