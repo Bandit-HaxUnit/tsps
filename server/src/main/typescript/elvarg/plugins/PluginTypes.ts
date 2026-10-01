@@ -116,6 +116,10 @@ export interface PluginNpcInteractionEvent {
   handled: boolean;
 }
 
+export interface PluginNpcRouteEvent extends PluginNpcInteractionEvent {
+  range: number;
+}
+
 /** Context handed to dialogue plugins when a Talk-to transcript is about to play. */
 export interface PluginNpcDialogueContext {
   player: any;
@@ -628,6 +632,8 @@ export interface PluginApi {
     actions: Record<string, (event: PluginObjectInteractionEvent) => void | boolean>
   ): void;
   onNpcInteraction(handler: (event: PluginNpcInteractionEvent) => void): void;
+  /** Set a non-combat NPC option's approach range before movement starts. */
+  onNpcRoute(handler: (event: PluginNpcRouteEvent) => void): void;
   /** Exact, case-sensitive NPC name and option matching. Return false to fall through. */
   onNpcInteraction(
     npcName: string,
@@ -987,6 +993,7 @@ export interface PluginCoreApi {
   Flag: any;
   Direction: any;
   Equipment: any;
+  Bank: any;
   Task: any;
   TaskManager: any;
   ItemIdentifiers: any;
@@ -1001,6 +1008,11 @@ export interface PluginCoreApi {
   World: any;
   GameObject: any;
   ObjectManager: any;
+  MapObjects: any;
+  ItemOnGroundManager: any;
+  ItemDefinition: any;
+  CacheDefinitions: any;
+  PathFinder: any;
   NpcDefinition: any;
   GameConstants: any;
   TeleportHandler: any;

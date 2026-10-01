@@ -35,6 +35,12 @@ export class NPCOptionPacketListener {
     }
 
     player.setPositionToFace(npc.getLocation());
+    const routeEvent = {
+      player, npc, definition, npcId: npc.getId(), npcIndex: index, clickType,
+      location: { x: npc.getLocation().getX(), y: npc.getLocation().getY(), z: npc.getLocation().getZ() },
+      handled: false, range: 1,
+    };
+    PluginManager.emitNpcRoute(routeEvent);
     player.getMovementQueue().walkToEntity(npc, () => {
       player.setPositionToFace(npc.getLocation());
       npc.setMobileInteraction?.(player);
@@ -78,7 +84,7 @@ export class NPCOptionPacketListener {
       if (!handled) {
         player.sendMessage("Nothing interesting happens.");
       }
-    });
+    }, routeEvent.range);
   }
 
   public static castSpell(player: any, index: number, spellId: number): boolean {

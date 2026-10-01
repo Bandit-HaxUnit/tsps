@@ -243,7 +243,7 @@ export type ClientMessage =
   | { type: "ping" }
   | { type: "logout" }
   | { type: "login"; username: string; password: string; revision: number }
-  | { type: "handshake"; name: string };
+  | { type: "handshake"; name: string; clientType: number };
 
 class Reader {
   private offset = 0;
@@ -820,8 +820,9 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
         for (let i = reader.byte(); i > 0; i--) reader.short();
         for (let i = reader.byte(); i > 0; i--) reader.short();
       }
-      if (reader.remaining > 0) reader.byte();
-      return { type: "handshake", name };
+      // Trailing client mode byte: 1 = mobile, 0 = desktop (absent on old clients).
+      const clientType = reader.remaining > 0 ? reader.byte() : 0;
+      return { type: "handshake", name, clientType };
     }
     default:
       return { type: "raw", opcode, payload: frame.subarray(frame.length - length) };
@@ -1671,6 +1672,8 @@ const QUEST_TAB_ICON_CHILD_BY_ROOT: Record<number, number> = {
   161: 61,
   548: 66,
   164: 54,
+  // Mobile toplevel_osm keeps the side journal in tab container 601:118.
+  601: 118,
 };
 
 // Side journal (quest tab) content mount, mirrored from client/common/ui/sideJournal.ts.
@@ -1712,6 +1715,27 @@ export function encodeGameframeFlags(root: number = 161): Buffer[] {
     encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_PLAYTIME_ROW, ACCOUNT_SUMMARY_PLAYTIME_ROW, 1 << 1),
     encodeWidgetSetFlagsRange(DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID, 0, DISPLAY_SETTINGS_DROPDOWN_OPTION_SLOTS, FIRST_OPTION_FLAG),
   ];
+}
+
+// Transient player attribute set from the handshake's clientType byte.
+export const MOBILE_CLIENT_ATTRIBUTE = "mobileClient";
+// Mobile clients boot the Stock mobile toplevel (toplevel_osm); the client maps
+// the standard 161 mounts onto it via cache enum 1745.
+export const MOBILE_GAMEFRAME_ROOT = 601;
+// Standard "Game client layout" roots: 548 fixed, 164 classic, 161 modern.
+const STANDARD_GAMEFRAME_ROOTS = new Set([548, 164, 161]);
+
+// Handheld screens are locked to the stock mobile frame: the fixed and 317
+// layouts (and gilomaru-style custom frames) are not usable there, so mobile
+// clients resolve to 601 even when world.json or the saved layout says
+// otherwise. Every gameframe boot path resolves the root through this.
+export function resolveGameframeRoot(
+  player: { getAttribute(key: string): unknown },
+  fallback: number = 161
+): number {
+  if (player.getAttribute(MOBILE_CLIENT_ATTRIBUTE) === true) return MOBILE_GAMEFRAME_ROOT;
+  const saved = Number(player.getAttribute("clientLayoutRoot"));
+  return STANDARD_GAMEFRAME_ROOTS.has(saved) ? saved : fallback;
 }
 
 export function encodeGameframeBootstrap(playerName: string, root: number = 161): Buffer[] {

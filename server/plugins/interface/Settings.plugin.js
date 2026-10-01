@@ -6,6 +6,9 @@
 // DisplaySettingsScript).
 const {
   encodeGameframeFlags,
+  MOBILE_CLIENT_ATTRIBUTE,
+  MOBILE_GAMEFRAME_ROOT,
+  resolveGameframeRoot,
   DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID,
 } = require("../../src/main/typescript/elvarg/net/protocol/ClientProtocol");
 const { getWorldDefinition } = require("../../src/main/typescript/elvarg/game/definition/WorldDefinition");
@@ -142,8 +145,11 @@ function syncPlayerKeybindings(player) {
 }
 
 function getGameframeRoot(player) {
-  const saved = Number(player.getAttribute(CLIENT_LAYOUT_ATTRIBUTE));
-  return GAMEFRAME_LAYOUT_ROOTS.includes(saved) ? saved : DEFAULT_GAMEFRAME_ROOT;
+  return resolveGameframeRoot(player, DEFAULT_GAMEFRAME_ROOT);
+}
+
+function isMobileClient(player) {
+  return player.getAttribute(MOBILE_CLIENT_ATTRIBUTE) === true;
 }
 
 // Cache script 3962 picks the dropdown row from this and getwindowmode; the
@@ -152,14 +158,17 @@ function getGameframeRoot(player) {
 function syncGameframeVarbit(player) {
   const root = getGameframeRoot(player);
   player.getPacketSender()
-    .sendConfig(GAMEFRAME_317_VARP, (root === 161 || root === 548) && player.getAttribute(CLIENT_LAYOUT_317_ATTRIBUTE) === true ? 1 : 0)
+    .sendConfig(GAMEFRAME_317_VARP, !isMobileClient(player) && (root === 161 || root === 548) && player.getAttribute(CLIENT_LAYOUT_317_ATTRIBUTE) === true ? 1 : 0)
     .sendVarbit(GAMEFRAME_STONE_VARBIT, root === 164 ? 0 : 1);
 }
 
 // Switches the client's gameframe to `root` (548 fixed / 164 classic / 161
 // modern). The client moves every server-mounted sub-interface onto the new
 // layout's components; flags have to be re-sent because set_root clears them.
+// Mobile clients stay on the stock mobile toplevel (601) and never persist the
+// lock, so their desktop layout preference survives.
 function selectGameframeOption(player, option) {
+  if (isMobileClient(player)) return MOBILE_GAMEFRAME_ROOT;
   const root = GAMEFRAME_LAYOUT_ROOTS[option];
   if (root === undefined) return undefined;
   player.setAttribute(CLIENT_LAYOUT_ATTRIBUTE, root);

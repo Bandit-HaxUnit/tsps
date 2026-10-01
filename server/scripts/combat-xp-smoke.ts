@@ -1,6 +1,9 @@
 import * as assert from "node:assert/strict";
 import { CombatFactory } from "../src/main/typescript/elvarg/game/content/combat/CombatFactory";
 import { CombatType } from "../src/main/typescript/elvarg/game/content/combat/CombatType";
+import { FightType } from "../src/main/typescript/elvarg/game/content/combat/FightType";
+import { WeaponInterfaceManager } from "../src/main/typescript/elvarg/game/content/combat/WeaponInterfaceManager";
+import { WeaponInterfaces } from "../src/main/typescript/elvarg/game/content/combat/WeaponInterfaces";
 import { Skill } from "../src/main/typescript/elvarg/game/model/Skill";
 
 type Grant = { skill: any; xp: number };
@@ -71,5 +74,33 @@ assert.equal(xp(run(CombatType.MELEE, [index(Skill.ATTACK)], 1), Skill.HITPOINTS
 
 // A 0-damage melee hit grants nothing.
 assert.equal(run(CombatType.MELEE, [index(Skill.ATTACK)], 0).length, 0);
+
+// Combat style buttons send their cache slot (varp 43); the weapon's fight
+// types come from data/definitions/item-combat-styles.json (cache dbtable 78).
+const clickStyle = (weapon: WeaponInterfaces, slot: number, combatType: CombatType = CombatType.MELEE): number[] => {
+    const player: any = {
+        fightType: FightType.UNARMED_KICK,
+        getWeapon: () => weapon,
+        getFightType(): FightType {
+            return this.fightType;
+        },
+        setFightType(type: FightType): void {
+            this.fightType = type;
+        },
+        getPacketSender: () => ({ sendConfig: () => undefined }),
+    };
+    assert.equal(WeaponInterfaceManager.changeCombatStyle(player, slot), true);
+    return player.getFightType().getStyle().skill(combatType);
+};
+
+// Regression: unarmed Block sits on cache slot 3 and must train Defence.
+assert.deepEqual(clickStyle(WeaponInterfaces.UNARMED, 3), [index(Skill.DEFENCE)]);
+assert.deepEqual(clickStyle(WeaponInterfaces.WARHAMMER, 3), [index(Skill.DEFENCE)]);
+assert.deepEqual(clickStyle(WeaponInterfaces.STAFF, 3), [index(Skill.DEFENCE)]);
+// Shared styles train Attack, Strength and Defence.
+assert.deepEqual(clickStyle(WeaponInterfaces.SCIMITAR, 2), [index(Skill.ATTACK), index(Skill.STRENGTH), index(Skill.DEFENCE)]);
+assert.deepEqual(clickStyle(WeaponInterfaces.WHIP, 1), [index(Skill.ATTACK), index(Skill.STRENGTH), index(Skill.DEFENCE)]);
+// Longrange splits Ranged and Defence.
+assert.deepEqual(clickStyle(WeaponInterfaces.SHORTBOW, 3, CombatType.RANGED), [index(Skill.RANGED), index(Skill.DEFENCE)]);
 
 console.info("combat xp smoke passed");
