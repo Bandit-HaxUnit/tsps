@@ -309,3 +309,15 @@ test("Falador's rough wall is climbed facing it (north, across its edge)", () =>
   const steps = first.steps({ player: null, obj: wall, pos: { x: 3036, y: 3341, z: 0 } });
   assert.deepEqual(steps[0], { face: [3036, 3342] });
 });
+
+test("Grace sells the graceful outfit the game equips (11850-11861) and amylase packs", () => {
+  const shops = require("../data/definitions/shops.json");
+  const grace = shops.find((shop) => shop.name === "Grace's Graceful Clothing");
+  assert.equal(grace.currency, "MARK OF GRACE");
+  assert.deepEqual(grace.originalStock.map((entry) => entry.id), [11850, 11854, 11856, 11858, 11860, 11852, 12641]);
+  const gameplay = require("../data/definitions/item-gameplay.json");
+  const items = Array.isArray(gameplay) ? gameplay : Object.values(gameplay);
+  for (const id of [11850, 11854, 11856, 11858, 11860, 11852]) {
+    assert.ok(items.some((item) => item.id === id && item.weight < 0), `graceful ${id} is wearable and lightens`);
+  }
+});
