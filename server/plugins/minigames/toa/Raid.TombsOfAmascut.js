@@ -1,0 +1,191 @@
+"use strict";
+
+/**
+ * Raid-wide rules and the objects every room shares: barriers, entries, exits, teleport
+ * crystals and Osmumten's way back to the Nexus; safe deaths with team lives; points for
+ * damage; and the invocations that change eating, drinking and prayer.
+ */
+
+const Shared = require("./ToaShared");
+const Raid = require("./ToaRaid");
+
+const ABANDON_TEXT = "You are about to <col=ad2800>abandon the raid</col>. If you do this, you <col=ad2800>will not</col> be able to return to your current run.";
+
+// Restoration that Dehydration forbids (wiki: "Prevents the use of potions that restore Hitpoints").
+const DEHYDRATION_BLOCKED = ["Nectar", "Ambrosia", "Saradomin brew"];
+
+function raidRoom(player) {
+  const raid = Raid.raidOf(player);
+  if (!raid || !Shared.inTombs(player.getLocation())) return null;
+  return raid.roomFor(player);
+}
+
+function isGhost(player) {
+  const raid = Raid.raidOf(player);
+  return !!raid && raid.member(player).ghost;
+}
+
+// ------------------------------------------------------------------ objects
+
+function passBarrier(event) {
+  const room = raidRoom(event.player);
+  if (!room) return false;
+  room.passBarrier(event.player, event.object, event.option !== "Pass");
+  return true;
+}
+
+/** Puzzle-room exits into the boss, and Wardens P1 into P3. The Nexus handles its own. */
+function useEntry(event) {
+  const room = raidRoom(event.player);
+  if (!room || room.key === "MAIN_HALL") return false;
+  if (!room.def.next) return false;
+  if (room.def.bounds && !room.isCompleted() && room.key !== "WARDENS_P1") {
+    Shared.statement(event.player, "You can't proceed until the challenge is complete.");
+    return true;
+  }
+  Raid.raidOf(event.player).advance(event.player, event.option !== "Enter");
+  return true;
+}
+
+function useExit(event) {
+  const { player } = event;
+  if (!Raid.raidOf(player) || !Shared.inTombs(player.getLocation())) return false;
+  if (isGhost(player)) {
+    Shared.statement(player, "A mysterious force prevents you from doing that.");
+    return true;
+  }
+  player.sendMessage(ABANDON_TEXT.replace(/<[^>]+>/g, ""));
+  Shared.options(player, "Abandon the raid?",
+    "Yes, abandon the raid.", () => {
+      const raid = Raid.raidOf(player);
+      if (!raid) return;
+      player.sendMessage("You abandon the raid and leave the Tombs of Amascut.");
+      raid.leave(player, { teleport: true });
+    },
+    "No, I want to stay.", () => {});
+  return true;
+}
+
+function useTeleportCrystal(event) {
+  const room = raidRoom(event.player);
+  if (!room || !room.def.challenge) return false;
+  room.useTeleportCrystal(event.player, event.option !== "Use");
+  return true;
+}
+
+function talkToOsmumten({ player }) {
+  const raid = Raid.raidOf(player);
+  if (!raid) return false;
+  raid.returnToNexus(player);
+  return true;
+}
+
+// ------------------------------------------------------------------ deaths
+
+function keepItemsOnDeath(event) {
+  if (Raid.raidOf(event.player) && Shared.inTombs(event.player.getLocation())) event.shouldDrop = false;
+}
+
+function respawnInRaid(event) {
+  const raid = Raid.raidOf(event.player);
+  if (!raid || !Shared.inTombs(event.player.getLocation())) return;
+  event.handled = true;
+  raid.onPlayerDied(event.player);
+}
+
+// ------------------------------------------------------------------ combat
+
+/** Points for damage dealt to raid NPCs, and the Deadly/Quiet Prayers punishments. */
+function trackDamage(event) {
+  const { player, target, hit } = event;
+  const npc = target?.isNpc?.() ? target : null;
+  const room = npc?.__toaRoom;
+  if (!room || room.destroyed) return;
+  const raid = Raid.raidOf(player);
+  if (!raid || room.raid !== raid) return;
+  const dealt = Math.min(hit?.getTotalDamage?.() ?? 0, Math.max(0, npc.getHitpoints()));
+  if (dealt <= 0) return;
+  raid.member(player).damageDone += dealt;
+  raid.addPoints(player, dealt * room.pointsPerDamage(npc));
+}
+
+function blockGhostAttacks(event) {
+  if (event.attacker?.isPlayer?.() && isGhost(event.attacker)) event.allow = false;
+  if (event.target?.isPlayer?.() && isGhost(event.target)) event.allow = false;
+}
+
+/** Damage taken (for the scoreboard) and Deadly Prayers draining a fifth of each hit. */
+function afterPlayerHit(event) {
+  const { attacker, target, hit } = event;
+  const player = target?.isPlayer?.() ? target : null;
+  if (!player) return;
+  const raid = Raid.raidOf(player);
+  if (!raid?.roomFor(player)) return;
+  const damage = hit.getTotalDamage?.() ?? 0;
+  raid.member(player).damageTaken += damage;
+  if (damage > 0 && attacker && attacker !== player && raid.settings.isActive("DEADLY_PRAYERS")) {
+    const { Skill } = Shared.core();
+    player.getSkillManager().decreaseCurrentLevel(Skill.PRAYER, Math.floor(damage / 5), 0);
+  }
+}
+
+// ------------------------------------------------------------------ restrictions
+
+function onADiet(event) {
+  const raid = Raid.raidOf(event.player);
+  if (!raid || !Shared.inTombs(event.player.getLocation())) return;
+  if (isGhost(event.player)) {
+    event.allow = false;
+    return;
+  }
+  const { ItemIdentifiers } = Shared.core();
+  if (raid.settings.isActive("ON_A_DIET") && event.itemId !== ItemIdentifiers.HONEY_LOCUST) {
+    event.player.sendMessage("You've been prevented from consuming food within the Tombs of Amascut");
+    event.allow = false;
+  }
+}
+
+function dehydration(event) {
+  const raid = Raid.raidOf(event.player);
+  if (!raid || !Shared.inTombs(event.player.getLocation())) return;
+  if (isGhost(event.player)) {
+    event.allow = false;
+    return;
+  }
+  if (!raid.settings.isActive("DEHYDRATION")) return;
+  const name = Shared.core().ItemDefinition.forId(event.itemId)?.getName?.() ?? "";
+  if (DEHYDRATION_BLOCKED.some((prefix) => name.startsWith(prefix))) {
+    event.player.sendMessage("You've been prevented from drinking this potion within the Tombs of Amascut");
+    event.allow = false;
+  }
+}
+
+function ghostsCantTeleport(event) {
+  if (isGhost(event.player)) {
+    Shared.statement(event.player, "A mysterious force prevents you from doing that.");
+    event.allow = false;
+  }
+}
+
+function ghostsCantEquip(event) {
+  if (isGhost(event.player)) event.allow = false;
+}
+
+module.exports = function registerTombsRaid(api) {
+  Shared.bind(api);
+  Shared.onObject(api, "Barrier", passBarrier);
+  Shared.onObject(api, "Entry", useEntry);
+  Shared.onObject(api, "Exit", useExit);
+  Shared.onObject(api, "Teleport crystal", useTeleportCrystal);
+  api.onNpcInteraction("Osmumten", { "Talk-to": talkToOsmumten, Proceed: talkToOsmumten });
+  api.onShouldDropItemsOnDeath(keepItemsOnDeath);
+  api.onPlayerDeath(respawnInRaid);
+  api.onPlayerDealtDamage(trackDamage);
+  api.onCombatHitResolved(afterPlayerHit);
+  api.onCanAttack(blockGhostAttacks);
+  api.onCanEat(onADiet);
+  api.onCanDrink(dehydration);
+  api.onCanTeleport(ghostsCantTeleport);
+  api.onCanEquip(ghostsCantEquip);
+  api.onCanUnequip(ghostsCantEquip);
+};

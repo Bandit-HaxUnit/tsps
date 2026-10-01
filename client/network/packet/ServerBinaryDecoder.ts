@@ -746,16 +746,19 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             const targetType = reader.readByte();
             let playerId: number | undefined;
             let npcId: number | undefined;
+            let tile: { x: number; y: number; level: number } | undefined;
             if (targetType === 0) {
                 playerId = reader.readShort();
             } else if (targetType === 1) {
                 npcId = reader.readShort();
+            } else if (targetType === 2) {
+                tile = { x: reader.readShort(), y: reader.readShort(), level: reader.readByte() };
             }
             const height = reader.readByte();
             const delay = reader.readShort();
             return {
                 type: "spot",
-                payload: { spotId, playerId, npcId, height, delay },
+                payload: { spotId, playerId, npcId, tile, height, delay },
             };
         }
 

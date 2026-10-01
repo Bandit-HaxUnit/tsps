@@ -1036,6 +1036,10 @@ export interface PluginCoreApi {
   GameObject: any;
   PrivateArea: any;
   ObjectManager: any;
+  OperationType: any;
+  LocModelType: any;
+  ForceMovement: any;
+  ForceMovementTask: any;
   MapObjects: any;
   ItemOnGroundManager: any;
   ItemDefinition: any;
@@ -1050,6 +1054,7 @@ export interface PluginCoreApi {
   PlayerDialogue: any;
   ActionDialogue: any;
   EndDialogue: any;
+  StatementDialogue: any;
   PlayerRights: any;
   Server: any;
   PluginManager: any;

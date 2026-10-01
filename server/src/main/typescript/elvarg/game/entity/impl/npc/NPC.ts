@@ -95,6 +95,7 @@ export class NPC extends Mobile {
     private id: number;
     private movementCoordinator: NPCMovementCoordinator = new NPCMovementCoordinator(this);
     private hitpoints: number;
+    private maxHitpointsOverride = -1;
     private spawnPosition: Location;
     private headIcon = -1;
     private isDying: boolean;
@@ -252,10 +253,10 @@ export class NPC extends Mobile {
             AreaManager.process(this);
             if (this.getCombat().getLastAttack().hasElapsed(20000)
                 || this.movementCoordinator.getCoordinateState() == CoordinateState.RETREATING) {
-                if (this.getDefinition().getHitpoints() > this.hitpoints) {
-                    this.setHitpoints(this.hitpoints + (this.getDefinition().getHitpoints() * 0.1));
-                    if (this.hitpoints > this.getDefinition().getHitpoints()) {
-                        this.setHitpoints(this.getDefinition().getHitpoints());
+                if (this.getMaxHitpoints() > this.hitpoints) {
+                    this.setHitpoints(this.hitpoints + (this.getMaxHitpoints() * 0.1));
+                    if (this.hitpoints > this.getMaxHitpoints()) {
+                        this.setHitpoints(this.getMaxHitpoints());
                     }
                 }
             }
@@ -299,9 +300,20 @@ export class NPC extends Mobile {
         return this;
     }
 
+    /** Full health: the definition's hitpoints unless this NPC was scaled (raids). */
+    public getMaxHitpoints(): number {
+        return this.maxHitpointsOverride >= 0 ? this.maxHitpointsOverride : this.getDefinition().getHitpoints();
+    }
+
+    /** Scales this one NPC's full health, e.g. by raid level or party size; -1 restores the definition's. */
+    public setMaxHitpoints(maxHitpoints: number): NPC {
+        this.maxHitpointsOverride = Math.trunc(maxHitpoints);
+        return this;
+    }
+
     public heal(heal: number) {
-        if ((this.hitpoints + heal) > this.getDefinition().getHitpoints()) {
-            this.setHitpoints(this.getDefinition().getHitpoints());
+        if ((this.hitpoints + heal) > this.getMaxHitpoints()) {
+            this.setHitpoints(this.getMaxHitpoints());
             return;
         }
         this.setHitpoints(this.hitpoints + heal);

@@ -15,6 +15,10 @@ import {
 import { CachePipeline } from "./CachePipeline";
 import { ObjType } from "./codec/rs/config/objtype/ObjType";
 import { DbRowType } from "./codec/rs/config/dbrow/DbRowType";
+import { ByteBuffer } from "./codec/rs/io/ByteBuffer";
+import { Type } from "./codec/rs/config/Type";
+
+const STRUCT_PARAMS_OPCODE = 249;
 
 export interface ServerCustomItem {
     id: number;
@@ -39,6 +43,7 @@ export class CacheDefinitions {
     private static customItemTypes = new Map<number, ObjType>();
     private static customModels?: Array<{ id: number; data: string }>;
     private static dbRows?: { byId: Map<number, DbRowType>; byTable: Map<number, DbRowType[]> };
+    private static structParams = new Map<number, ReadonlyMap<number, number | string>>();
 
     private static getState() {
         if (this.state) return this.state;
@@ -100,6 +105,27 @@ export class CacheDefinitions {
     /** Every row of a cache database table, in id order. */
     static getDbTableRows(tableId: number): readonly DbRowType[] {
         return this.getDbRows().byTable.get(tableId) ?? [];
+    }
+
+    /**
+     * A cache struct's params (config archive 34), the key -> value records cache scripts read
+     * with struct_param. Empty when the struct does not exist.
+     */
+    static getStructParams(id: number): ReadonlyMap<number, number | string> {
+        const cached = this.structParams.get(id);
+        if (cached) return cached;
+        const params = new Map<number, number | string>();
+        const configs = CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore());
+        const file = configs.getArchive(ConfigType.OSRS.struct).getFile(id);
+        if (file) {
+            const buffer = new ByteBuffer(new Int8Array(file.data));
+            for (let opcode = buffer.readUnsignedByte(); opcode !== 0; opcode = buffer.readUnsignedByte()) {
+                if (opcode !== STRUCT_PARAMS_OPCODE) break; // the only struct opcode
+                Type.readParamsMap(buffer, params);
+            }
+        }
+        this.structParams.set(id, params);
+        return params;
     }
 
     static getVarbit(id: number) {

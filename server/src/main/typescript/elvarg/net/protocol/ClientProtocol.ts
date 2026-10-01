@@ -1068,6 +1068,22 @@ export function encodeLocAnim(id: number, x: number, y: number, level: number, s
   return encodeServerPacket(ServerPacketId.LOC_ANIM, payload);
 }
 
+/**
+ * Encodes a spot animation on a world tile rather than an actor: SPOT_ANIM target type 2,
+ * which the client hands to its world spot-animation renderer.
+ */
+export function encodeTileSpotAnim(spotId: number, x: number, y: number, level: number, height: number, delay: number): Buffer {
+  const payload = Buffer.alloc(11);
+  payload.writeUInt16BE(spotId & 0xffff);
+  payload[2] = 2;
+  payload.writeUInt16BE(x & 0xffff, 3);
+  payload.writeUInt16BE(y & 0xffff, 5);
+  payload[7] = level & 0xff;
+  payload[8] = height & 0xff;
+  payload.writeUInt16BE(delay & 0xffff, 9);
+  return encodeServerPacket(ServerPacketId.SPOT_ANIM, payload);
+}
+
 export function encodeRebuildNormal(regionX: number, regionY: number, forceReload: boolean, xteaKeys: number[][]): Buffer {
   const payload = Buffer.alloc(7 + xteaKeys.length * 16);
   payload.writeUInt16BE(regionX & 0xffff);
