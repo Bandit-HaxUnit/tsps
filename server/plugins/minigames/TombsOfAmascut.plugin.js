@@ -12,5 +12,13 @@ module.exports = {
     require("./toa/Raid.TombsOfAmascut")(api);
     require("./toa/Nexus.TombsOfAmascut")(api);
     require("./toa/Supplies.TombsOfAmascut")(api);
+    require("./toa/Scabaras.TombsOfAmascut")(api);
+    require("./toa/Kephri.TombsOfAmascut")(api);
+    require("./toa/Het.TombsOfAmascut")(api);
+    require("./toa/Akkha.TombsOfAmascut")(api);
+    require("./toa/Crondis.TombsOfAmascut")(api);
+    require("./toa/Zebak.TombsOfAmascut")(api);
+    require("./toa/Apmeken.TombsOfAmascut")(api);
+    require("./toa/BaBa.TombsOfAmascut")(api);
   },
 };

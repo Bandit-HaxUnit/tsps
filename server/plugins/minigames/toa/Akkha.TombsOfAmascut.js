@@ -297,7 +297,7 @@ class AkkhaRoom extends Raid.Room {
   }
 
   methodFor(style) {
-    return this.akkha.__toaMethod?.forStyle?.(style) ?? this.akkha.__toaMethod;
+    return Raid.styleMethod(style);
   }
 
   changeStyle() {
@@ -788,31 +788,7 @@ function registerAkkhaCombat(api) {
   const { CombatMethod, CombatType, NpcIdentifiers } = api.core;
   const TYPES = { melee: CombatType.MELEE, ranged: CombatType.RANGED, magic: CombatType.MAGIC };
 
-  class AkkhaStyleMethod extends CombatMethod {
-    constructor(style) {
-      super();
-      this.style = style;
-    }
-
-    type() {
-      return TYPES[this.style];
-    }
-
-    hits() {
-      return [];
-    }
-  }
-
   class AkkhaCombatMethod extends CombatMethod {
-    constructor() {
-      super();
-      this.styleMethods = Object.fromEntries(Object.keys(TYPES).map((style) => [style, new AkkhaStyleMethod(style)]));
-    }
-
-    forStyle(style) {
-      return this.styleMethods[style];
-    }
-
     type() {
       return TYPES.melee;
     }
@@ -827,7 +803,6 @@ function registerAkkhaCombat(api) {
     }
 
     start(npc, target) {
-      npc.__toaMethod = this;
       akkhaRoom(npc)?.attack(target);
     }
 

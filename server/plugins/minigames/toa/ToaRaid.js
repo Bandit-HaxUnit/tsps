@@ -289,7 +289,7 @@ class Room {
 
   /** Queues a styled hit on any player, for attacks that hit more than the NPC's target. */
   strike(npc, player, method, style, baseMaxHit, delay, options) {
-    const hit = this.styledHit(npc, player, method, style, baseMaxHit, delay, options);
+    const hit = this.styledHit(npc, player, method ?? styleMethod(style), style, baseMaxHit, delay, options);
     player.getCombat().getHitQueue().addPendingHit(hit, Shared.cycle() + Math.max(0, delay));
     return hit;
   }
@@ -1027,6 +1027,31 @@ class Raid {
   }
 }
 
+const styleMethods = new Map();
+
+/**
+ * A bare combat method of one style, for scripted attacks that build their own hits: it only
+ * tells the hit its style (protection prayers, hitsplats, XP-free damage).
+ */
+function styleMethod(style) {
+  let method = styleMethods.get(style);
+  if (!method) {
+    const { CombatMethod, CombatType } = Shared.core();
+    const type = { melee: CombatType.MELEE, ranged: CombatType.RANGED, magic: CombatType.MAGIC }[style];
+    method = new (class extends CombatMethod {
+      type() {
+        return type;
+      }
+
+      hits() {
+        return [];
+      }
+    })();
+    styleMethods.set(style, method);
+  }
+  return method;
+}
+
 function pathFactor(level) {
   return level > 0 ? 1 + 0.08 + 0.05 * (level - 1) : 1;
 }
@@ -1097,5 +1122,6 @@ module.exports = {
   killCounts,
   removeRaidItems,
   registerRaidItems,
+  styleMethod,
   walkThrough,
 };
