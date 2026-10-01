@@ -897,7 +897,9 @@ export class CombatFactory {
         // hitpoints 1.33 (4/3), defensive-autocast magic 1.33 (4/3) and
         // defensive-autocast defence 1 (4/4). Multiply by the base before
         // dividing so low hits are not floored away.
-        const OSRS_DAMAGE_XP = 4;
+        // Some NPCs give less (the Gemstone Crab 87.5%: 3.5 per damage).
+        const target = hit.getTarget?.();
+        const OSRS_DAMAGE_XP = 4 * (target?.isNpc?.() ? target.getAsNpc().getCombatXpMultiplier?.() ?? 1 : 1);
         // Add magic exp, even if total damage is 0.
         // Since spells have a base exp reward
         if (hit.getCombatType() === CombatType.MAGIC) {

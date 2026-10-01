@@ -305,7 +305,7 @@ export class PlayerSession {
         const location = npc.getLocation();
         const face = npc.getFace()?.getDirection?.();
         return {
-          ...this.createActorUpdates(npc, npc.getDefinition().getHitpoints(), false),
+          ...this.createActorUpdates(npc, npc.getMaxHitpoints(), false),
           interactionIndex: this.interactionIndex(npc.getInteractingMobile()),
           index: npc.getIndex(),
           typeId: npc.getId(),
@@ -519,7 +519,7 @@ export class PlayerSession {
           }))
         : undefined,
       health: hits.length > 0
-        ? { current: actor.getHitpoints(), max: maxHitpoints }
+        ? { current: actor.getHitpoints(), max: maxHitpoints, bar: actor.getHealthBar?.() ?? undefined }
         : undefined,
     };
   }

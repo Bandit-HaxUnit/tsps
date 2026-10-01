@@ -105,6 +105,14 @@ export class NPC extends Mobile {
     private pet: boolean;
     private movementSteps = 1;
     private scriptedMovement: boolean = false;
+    /** Hits show their damage but never lower this NPC's hitpoints (a boss whose HP is a timer). */
+    private hitpointsLocked: boolean = false;
+    /** This NPC's maximum hitpoints when it differs from its definition's. */
+    private maxHitpointsOverride: number | null = null;
+    /** The headbar (healthbar config id and its width) shown over this NPC, when not the default. */
+    private healthBarOverride: { id: number; width: number } | null = null;
+    /** Scales the combat XP players get for damaging this NPC (OSRS gives some bosses less). */
+    private combatXpMultiplier: number = 1;
 
     constructor(id: number, position: Location) {
         super(position)
@@ -250,12 +258,13 @@ export class NPC extends Mobile {
             }
 
             AreaManager.process(this);
-            if (this.getCombat().getLastAttack().hasElapsed(20000)
-                || this.movementCoordinator.getCoordinateState() == CoordinateState.RETREATING) {
-                if (this.getDefinition().getHitpoints() > this.hitpoints) {
-                    this.setHitpoints(this.hitpoints + (this.getDefinition().getHitpoints() * 0.1));
-                    if (this.hitpoints > this.getDefinition().getHitpoints()) {
-                        this.setHitpoints(this.getDefinition().getHitpoints());
+            if (!this.hitpointsLocked && (this.getCombat().getLastAttack().hasElapsed(20000)
+                || this.movementCoordinator.getCoordinateState() == CoordinateState.RETREATING)) {
+                const max = this.getMaxHitpoints();
+                if (max > this.hitpoints) {
+                    this.setHitpoints(this.hitpoints + (max * 0.1));
+                    if (this.hitpoints > max) {
+                        this.setHitpoints(max);
                     }
                 }
             }
@@ -548,6 +557,38 @@ export class NPC extends Mobile {
 
     public isScriptedMovement(): boolean {
         return this.scriptedMovement;
+    }
+
+    public setHitpointsLocked(locked: boolean): void {
+        this.hitpointsLocked = locked;
+    }
+
+    public isHitpointsLocked(): boolean {
+        return this.hitpointsLocked;
+    }
+
+    public setMaxHitpoints(max: number | null): void {
+        this.maxHitpointsOverride = max;
+    }
+
+    public getMaxHitpoints(): number {
+        return this.maxHitpointsOverride ?? this.getDefinition().getHitpoints();
+    }
+
+    public setHealthBar(bar: { id: number; width: number } | null): void {
+        this.healthBarOverride = bar;
+    }
+
+    public getHealthBar(): { id: number; width: number } | null {
+        return this.healthBarOverride;
+    }
+
+    public setCombatXpMultiplier(multiplier: number): void {
+        this.combatXpMultiplier = multiplier;
+    }
+
+    public getCombatXpMultiplier(): number {
+        return this.combatXpMultiplier;
     }
 
     /**
