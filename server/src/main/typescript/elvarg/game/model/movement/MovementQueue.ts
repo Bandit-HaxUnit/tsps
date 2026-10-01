@@ -64,6 +64,8 @@ export class MovementQueue {
          * discarded.
          */
     private static MAXIMUM_SIZE = 100;
+    /** An entity flag: steps go straight on, whatever the map's clipping. */
+    public static readonly IGNORE_CLIPPING_FLAG = "movement:ignore-clipping";
 
     /**
      * The character whose walking queue this is.
@@ -584,6 +586,11 @@ export class MovementQueue {
     private validatedStep(source: Location, destination: Location): Location | null {
         const signX = Math.sign(destination.getX() - source.getX());
         const signY = Math.sign(destination.getY() - source.getY());
+        // An NPC that moves over what the map blocks (the Inferno's Ancestral Glyph, over the
+        // pit before TzKal-Zuk) steps straight on, as OSRS's walk steps without collision.
+        if (this.character.hasFlag?.(MovementQueue.IGNORE_CLIPPING_FLAG)) {
+            return source.transform(signX, signY);
+        }
         const candidates: number[][] = [];
         if (this.character.getSize() === 1 && signX !== 0 && signY !== 0) {
             candidates.push([signX, signY]);
@@ -1192,7 +1199,10 @@ export class MovementQueue {
         if (!object) return false;
         const location = object.getLocation();
         if (!location || location.getZ() !== this.player.getLocation().getZ()) return false;
-        if (object.getPrivateArea?.() !== this.player.getPrivateArea()) return false;
+        // A map loc (no private area of its own) is shared by the private areas laid over the
+        // map, as the click lookup (MapObjects.getPrivateArea) treats it: the Inferno's exit.
+        const area = object.getPrivateArea?.() ?? null;
+        if (area !== null && area !== this.player.getPrivateArea()) return false;
         return object.getId() === id && object.getType() === type;
     }
 
