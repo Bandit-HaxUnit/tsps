@@ -1,14 +1,10 @@
 const { ObjectIds } = require("../../../../src/main/typescript/elvarg/util/IdEnums");
 const { Anim } = require("../constants");
-const { balance } = require("../steps");
+const { balance, faceLoc } = require("../steps");
 
 /** A jump that lands a tick after take-off, as the Ardougne gaps chain them. */
 function hop(destination, jump = Anim.LEAP) {
   return [{ wait: 1 }, { anim: jump, delay: 15 }, { wait: 1 }, { anim: Anim.LAND }, { tele: destination }];
-}
-
-function faceObject({ obj }) {
-  return { face: [obj.x, obj.y] };
 }
 
 module.exports = {
@@ -26,7 +22,7 @@ module.exports = {
       level: 90,
       xp: 43,
       steps: (context) => [
-        faceObject(context),
+        faceLoc(context.obj),
         { wait: 1 },
         { anim: Anim.CLIMB_WALL, delay: 15 },
         { wait: 1 },
@@ -46,7 +42,7 @@ module.exports = {
       level: 90,
       xp: 65,
       steps: (context) => [
-        faceObject(context),
+        faceLoc(context.obj),
         ...hop([2667, 3311, 1]),
         ...hop([2665, 3315, 1]),
         ...hop([2665, 3318, 3], Anim.JUMP_SHORT),
@@ -65,14 +61,14 @@ module.exports = {
       index: 4,
       level: 90,
       xp: 21,
-      steps: (context) => [faceObject(context), ...hop([2653, 3314, 3])],
+      steps: (context) => [faceLoc(context.obj), ...hop([2653, 3314, 3])],
     },
     {
       object: ObjectIds.GAP_36,
       index: 5,
       level: 90,
       xp: 28,
-      steps: (context) => [faceObject(context), ...hop([2651, 3309, 3], Anim.JUMP_ACROSS)],
+      steps: (context) => [faceLoc(context.obj), ...hop([2651, 3309, 3], Anim.JUMP_ACROSS)],
     },
     {
       object: ObjectIds.STEEP_ROOF,
@@ -81,7 +77,7 @@ module.exports = {
       xp: 57,
       precondition: ({ pos }) => (pos.x === 2654 && pos.y === 3299 ? "You can't go back from here." : null),
       steps: (context) => [
-        faceObject(context),
+        faceLoc(context.obj),
         { wait: 1 },
         { anim: Anim.LEDGE_TURN },
         { render: Anim.LEDGE_WALK },
@@ -97,7 +93,7 @@ module.exports = {
       level: 90,
       xp: 529,
       steps: (context) => [
-        faceObject(context),
+        faceLoc(context.obj),
         ...hop([2658, 3298, 1]),
         { wait: 1 },
         { walk: [[2661, 3298]] },

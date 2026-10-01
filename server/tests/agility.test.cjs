@@ -27,7 +27,7 @@ function tick() {
   }
 }
 
-const hooks = { route: [], click: new Map(), logout: [], teleport: [], events: [] };
+const hooks = { route: [], click: new Map(), logout: [], teleport: [], events: [], npcs: {} };
 const groundItems = [];
 const Agility = require("../plugins/skills/Agility.plugin");
 Agility.register({
@@ -38,6 +38,7 @@ Agility.register({
   onObjectFirstClick: (ids, handler) => ids.forEach((id) => hooks.click.set(id, handler)),
   onCanTeleport: (handler) => hooks.teleport.push(handler),
   onPlayerLogout: (handler) => hooks.logout.push(handler),
+  onNpcInteraction: (name, actions) => { hooks.npcs[name] = actions; },
   emitCustomEvent: (name, payload) => hooks.events.push({ name, payload }),
   log() {},
 });
@@ -275,4 +276,67 @@ test("teleports are refused while crossing an obstacle", () => {
   hooks.teleport.forEach((handler) => handler(busy));
   assert.equal(busy.allow, false);
   hooks.logout.forEach((handler) => handler({ player }));
+});
+
+test("a climb faces the loc: across a wall decoration's edge, or the loc's tile", () => {
+  const { faceLoc } = require("../plugins/skills/agility/steps");
+  // Ardougne's wooden beams: a wall decoration (shape 5) on the start tile's north edge (rotation 1).
+  const beams = { x: 2673, y: 3298, z: 0, face: 1, type: 5, id: ObjectIds.WOODEN_BEAMS };
+  assert.deepEqual(faceLoc(beams), { face: [2673, 3299] });
+  assert.deepEqual(faceLoc({ ...beams, face: 0 }), { face: [2672, 3298] }, "rotation 0: west");
+  assert.deepEqual(faceLoc({ ...beams, face: 3 }), { face: [2673, 3297] }, "rotation 3: south");
+  assert.deepEqual(faceLoc({ ...beams, type: 10 }), { face: [2673, 3298] }, "a centrepiece: its own tile");
+
+  const ardougne = COURSES.find((course) => course.key === "ardougne");
+  const first = ardougne.obstacles.find((obstacle) => obstacle.index === 1);
+  const steps = first.steps({ player: null, obj: beams, pos: { x: 2673, y: 3298, z: 0 } });
+  assert.deepEqual(steps[0], { face: [2673, 3299] }, "the player faces the beams (north) to climb");
+});
+
+test("Varrock's rough wall is climbed facing it (west, across its edge)", () => {
+  // A wall decoration (shape 5) on the west edge of the start tile (rotation 0).
+  const wall = { x: 3221, y: 3414, z: 0, face: 0, type: 5, id: ObjectIds.ROUGH_WALL_3 };
+  const varrock = COURSES.find((course) => course.key === "varrock");
+  const first = varrock.obstacles.find((obstacle) => obstacle.index === 1);
+  const steps = first.steps({ player: null, obj: wall, pos: { x: 3221, y: 3414, z: 0 } });
+  assert.deepEqual(steps[0], { face: [3220, 3414] });
+});
+
+test("Falador's rough wall is climbed facing it (north, across its edge)", () => {
+  // A wall decoration (shape 5) on the north edge of the start tile (rotation 1).
+  const wall = { x: 3036, y: 3341, z: 0, face: 1, type: 5, id: ObjectIds.ROUGH_WALL_4 };
+  const falador = COURSES.find((course) => course.key === "falador");
+  const first = falador.obstacles.find((obstacle) => obstacle.index === 1);
+  const steps = first.steps({ player: null, obj: wall, pos: { x: 3036, y: 3341, z: 0 } });
+  assert.deepEqual(steps[0], { face: [3036, 3342] });
+});
+
+test("Grace's Toggle Counter hides the lap count message, and laps still count", () => {
+  const draynor = COURSES.find((course) => course.key === "draynor");
+  const player = createPlayer(3103, 3279, 0);
+  const lapMessages = () => player.state.messages.filter((message) => message.includes("lap count is")).length;
+  runLap(draynor, player);
+  assert.equal(lapMessages(), 1);
+
+  hooks.npcs.Grace["Toggle Counter"]({ player });
+  assert.equal(player.state.messages.at(-1), "Your lap count will no longer be shown when you complete a lap.");
+  runLap(draynor, player);
+  assert.equal(lapMessages(), 1, "no message for the second lap");
+  assert.equal(player.getAttribute("agility.laps").draynor, 2, "but it counted");
+
+  hooks.npcs.Grace["Toggle Counter"]({ player });
+  runLap(draynor, player);
+  assert.equal(lapMessages(), 2);
+});
+
+test("Grace sells the graceful outfit the game equips (11850-11861) and amylase packs", () => {
+  const shops = require("../data/definitions/shops.json");
+  const grace = shops.find((shop) => shop.name === "Grace's Graceful Clothing");
+  assert.equal(grace.currency, "MARK OF GRACE");
+  assert.deepEqual(grace.originalStock.map((entry) => entry.id), [11850, 11854, 11856, 11858, 11860, 11852, 12641]);
+  const gameplay = require("../data/definitions/item-gameplay.json");
+  const items = Array.isArray(gameplay) ? gameplay : Object.values(gameplay);
+  for (const id of [11850, 11854, 11856, 11858, 11860, 11852]) {
+    assert.ok(items.some((item) => item.id === id && item.weight < 0), `graceful ${id} is wearable and lightens`);
+  }
 });
