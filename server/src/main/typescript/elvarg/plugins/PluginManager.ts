@@ -1812,6 +1812,7 @@ export class PluginManager {
       CacheDefinitions: require("../game/cache/CacheDefinitions").CacheDefinitions,
       PathFinder: require(`${model}/movement/path/PathFinder`).PathFinder,
       NpcDefinition: require("../game/definition/NpcDefinition").NpcDefinition,
+      NPC: require("../game/entity/impl/npc/NPC").NPC,
       GameConstants: require("../game/GameConstants").GameConstants,
       TeleportHandler: require(`${model}/teleportation/TeleportHandler`).TeleportHandler,
       DialogueChainBuilder: require(`${model}/dialogues/builders/DialogueChainBuilder`).DialogueChainBuilder,

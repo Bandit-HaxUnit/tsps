@@ -1012,6 +1012,7 @@ export interface PluginCoreApi {
   CacheDefinitions: any;
   PathFinder: any;
   NpcDefinition: any;
+  NPC: any;
   GameConstants: any;
   TeleportHandler: any;
   DialogueChainBuilder: any;
