@@ -1847,6 +1847,7 @@ export class PluginManager {
       NpcDialogue: require(`${model}/dialogues/entries/impl/NpcDialogue`).NpcDialogue,
       PlayerDialogue: require(`${model}/dialogues/entries/impl/PlayerDialogue`).PlayerDialogue,
       ActionDialogue: require(`${model}/dialogues/entries/impl/ActionDialogue`).ActionDialogue,
+      EndDialogue: require(`${model}/dialogues/entries/impl/EndDialogue`).EndDialogue,
       PlayerRights: require("../game/model/rights/PlayerRights").PlayerRights,
       Server: require("../Server").Server,
       PluginManager: require("./PluginManager").PluginManager,

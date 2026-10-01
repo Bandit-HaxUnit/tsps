@@ -28,6 +28,7 @@
     { "minX": 2616, "maxX": 2691, "minY": 2556, "maxY": 2624, "z": 0, "tags": ["multi-combat"] },
     { "minX": 2667, "maxX": 2685, "minY": 3712, "maxY": 3730, "z": 0, "tags": ["multi-combat"] },
     { "minX": 2371, "maxX": 2422, "minY": 5062, "maxY": 5117, "z": 0, "tags": ["multi-combat"] },
+    { "minX": 2376, "maxX": 2422, "minY": 5129, "maxY": 5167, "z": 0, "tags": ["multi-combat"] },
     { "minX": 2896, "maxX": 2927, "minY": 3595, "maxY": 3630, "z": 0, "tags": ["multi-combat"] },
     { "minX": 2892, "maxX": 2932, "minY": 4435, "maxY": 4464, "z": 0, "tags": ["multi-combat"] },
     { "minX": 3279, "maxX": 3307, "minY": 3156, "maxY": 3179, "z": 0, "tags": ["multi-combat"] },

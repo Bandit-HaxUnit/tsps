@@ -1049,6 +1049,7 @@ export interface PluginCoreApi {
   NpcDialogue: any;
   PlayerDialogue: any;
   ActionDialogue: any;
+  EndDialogue: any;
   PlayerRights: any;
   Server: any;
   PluginManager: any;
