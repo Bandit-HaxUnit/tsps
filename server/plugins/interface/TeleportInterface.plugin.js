@@ -93,6 +93,7 @@ const DESTINATIONS = {
     teleport("The Gauntlet", location(3032, 6127, 1), TeleportType.NORMAL),
     teleport("The Inferno", location(2495, 5111), TeleportType.NORMAL),
     teleport("Warriors' Guild", location(2876, 3546), TeleportType.NORMAL),
+    teleport("Wintertodt", location(1630, 3955), TeleportType.NORMAL),
   ],
 };
 
