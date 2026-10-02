@@ -87,6 +87,7 @@ const DIVINE = [
 // ------------------------------------------------------------------ phase three
 
 const FINAL_WARDEN_SPOT = { x: 3934, y: 5152, z: Z };
+const FACE_NORTH = 1;
 const FINAL_ARRIVAL = { x: 3937, y: 5164, z: Z };
 const FLOOR_BASE = { x: 3936, y: 5157 };
 const FLOOR_MIN = { x: 3926, y: 5157 };
@@ -1081,7 +1082,8 @@ class WardensFinalRoom extends WardenRoomBase {
     this.stage = Raid.STAGE.STARTED;
     this.startCycle = startCycle;
     this.teamSize = this.raid.original.size;
-    const warden = this.spawnFixed(wardenId, FINAL_WARDEN_SPOT, { points: WARDEN_POINTS.FINAL, pathLevel: 0, face: 6 });
+    // Faces north, over the floor the party stands on (6 was south, its back to them).
+    const warden = this.spawnFixed(wardenId, FINAL_WARDEN_SPOT, { points: WARDEN_POINTS.FINAL, pathLevel: 0, face: FACE_NORTH });
     if (!warden) return;
     warden.__toaFinalWarden = true;
     this.warden = warden;
