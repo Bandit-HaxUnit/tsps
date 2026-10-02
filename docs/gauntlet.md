@@ -2,7 +2,7 @@
 
 The Gauntlet and the Corrupted Gauntlet, ported from Near-Reality's implementation and checked against the OSRS Wiki and the cache. It is one plugin, `server/plugins/minigames/Gauntlet.plugin.js`, which delegates to one unit per area in `server/plugins/minigames/gauntlet/`.
 
-Status: the maze, the lobby and the run (entry, timer, exits, death) are done. Resources, crafting, monsters, the Hunllef and rewards are still to come.
+Status: done so far are the maze, the lobby, the run (entry, timer, exits, death) and preparing (resources, stations, the singing bowl, potions, cooking). Monsters, the Hunllef and rewards are still to come.
 
 ## Layout
 
@@ -13,6 +13,9 @@ Status: the maze, the lobby and the run (entry, timer, exits, death) are done. R
 | `GauntletRun.js` | One player's run: the starting kit, the preparation timer, the boss phase, ending a run, and stats. |
 | `Lobby.*` | The Gauntlet Portal in Prifddinas, the lobby's teleport platform, Bryn and the entrance. |
 | `Run.*` | Nodes, the exit platform, the teleport crystal, the barrier, death, teleports and login recovery. |
+| `GauntletItems.js` | Item ids per mode and the singing bowl's recipes. |
+| `GauntletResources.js` | Stocking lit rooms with resources, and gathering. |
+| `Prep.*` | The start room's stations, gathering hooks and Egniol potions. |
 | `Commands.*` | Developer commands. |
 
 ## The maze
@@ -90,6 +93,64 @@ Every exit takes everything you carry and returns you to the lobby at (3032, 612
 - The lobby's Teleport Platform (36082) channels back up.
 - `::teleports` has a Minigames entry for the lobby.
 
+## Preparing
+
+**Resources.** Gauntlet resources aren't in the room templates: they are spawned into a room when it is lit. Yields are from the Wiki; no level is needed.
+
+| Node (corrupted) | Gives | Yields | Tool |
+| --- | --- | --- | --- |
+| Crystal Deposit 36064 (35967) | crystal ore | 3 | pickaxe |
+| Phren Roots 36066 (35969) | phren bark | 3 | axe |
+| Fishing Spot 36068 (35971), 2x2 | raw paddlefish | 4 | harpoon |
+| Linum Tirinum 36072 (35975) | linum tirinum | 3 | none |
+| Grym Root 36070 (35973) | grym leaf | 1 | none |
+
+A spent node turns into its depleted version (the next id). Rooms are stocked as Near-Reality does it:
+- three rooms in four get 1-3 gathering nodes (at most 2 when monsters share the room);
+- one in five also gets a few grym roots;
+- nodes go on inner floor beside a wall or object, apart from each other and clear of the doorways;
+- demi-boss rooms hold only their demi-boss;
+- the other rooms are marked for monsters (phase 4).
+
+Gathering also follows Near-Reality, since the Wiki gives no rates: a yield every 2 ticks, 1 XP, and a 1 in 5 chance of 5-30 shards.
+
+**Nodes.** When a room is lit, the nodes on both sides of each passage to a lit neighbour turn to their lit, unclickable versions (id + 2). The symbols (36097, "Inactive Symbol") are left as they are: Near-Reality swaps them to 36096, but the cache's named "Illuminated Symbol" is 36095, and which one the game uses isn't confirmed.
+
+**Stations in the start room:**
+- Tool Storage gives back missing tools (Wiki: sceptre, axe, pickaxe, harpoon, pestle and mortar).
+- Water Pump, or a vial used on a fishing spot, fills vials.
+- Range cooks raw paddlefish for 15 XP. Paddlefish heals 20; Near-Reality's burn chance is used.
+- Singing Bowl opens the make-X menu of what you can make next.
+- Crystal Singing Recipes opens interface 640; Egniol Potions explains the recipe.
+
+**Singing bowl** (Wiki recipes, Crafting and Smithing XP each):
+
+| Product | Needs | Shards |
+| --- | --- | --- |
+| Vial | none | 10 |
+| Teleport crystal | none | 50 |
+| Escape crystal | none | 200 |
+| Crystal paddlefish | paddlefish | 10 |
+| Helm / legs | ore, bark, linum: 1 / 1 / 2 by tier | 50 / 50 / 100 |
+| Body | ore, bark, linum: 1 / 2 / 2 by tier | 50 / 100 / 100 |
+| Weapons (basic) | weapon frame | 0 |
+| Weapons (attuned) | the basic weapon | 50 |
+| Weapons (perfected) | attuned + spike / orb / bowstring | 0 |
+
+Armour totals come to 150 / 350 / 650 shards and 3 / 7 / 13 of each resource for a full set, as the Wiki's Gauntlet page states. A worn piece is upgraded where it is worn.
+
+Crystal and corrupted paddlefish heal 16 and combo-eat like karambwan (Wiki).
+
+**Egniol potion** (Wiki):
+1. Fill a vial with water.
+2. Add a grym leaf to make a grym potion (unf).
+3. Grind 10 shards into 10 dust with the pestle and mortar.
+4. Add the 10 dust to make an Egniol potion (3), for 10 Herblore XP.
+
+It restores prayer like a prayer potion, gives 40% run energy, and works as a stamina potion. The Wiki doesn't say whether a vial is left after the last dose. Guides have players make a vial per potion, so the last dose leaves nothing.
+
+**Teleport crystal** (Wiki): it doesn't work in the start room. Once the fight has begun it says: "That won't help you now. At this point in the Gauntlet, you win or you die."
+
 ## Developer commands
 
 | Command | Does |
@@ -110,4 +171,9 @@ Every exit takes everything you carry and returns you to the lobby at (3032, 612
 - lighting rooms;
 - entry checks and the starting kit;
 - the timer, the barrier and Escape;
-- death, teleports and logout.
+- death, teleports and logout;
+- stocking rooms and lit nodes;
+- gathering;
+- the singing bowl's costs and in-place upgrades;
+- the Egniol chain;
+- the teleport crystal's rules.
