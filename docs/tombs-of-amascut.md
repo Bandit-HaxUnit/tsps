@@ -117,6 +117,13 @@ The first version was written without access to the Wiki or the cache, so it fol
 - **Ghosts:** a ghost's inventory and worn equipment tabs close until it's revived (from OpenRune).
 - **Raid items:** logging in outside a raid strips raid supplies.
 - **The chest:** the unique chance and weights, the pet, the Thread of Elidinis, the four keris jewels and the elite clue now use the Wiki's rates.
+- **The sarcophagus (Wiki):**
+  - A unique turns the flames around Osmumten's sarcophagus purple, and its finder opens the sarcophagus to reveal it. Their chest has no common rolls; its tertiaries still drop.
+  - The cache drives the vault from one varbit, `TOA_VAULT_SARCOPHAGUS` (14373). It switches the sarcophagus (46220: closed 44825, or purple with Open 44826), the floor glow (46222) and the barrier (46221).
+  - Opening it plays `TOA_OSMUMTEN_CHEST_REVEAL` (9505, about 8 ticks), then shows the opened sarcophagus (44934) with `TOA_OSMUMTEN_CHEST_OPEN` (9506).
+  - How OSRS hands the item over isn't known, so the unique then joins the finder's loot in the reward interface (771). The opened sarcophagus's Search reopens it.
+  - An unopened sarcophagus's unique is kept (persisted) and comes out of the lobby chest.
+- **The vault's chests:** each party slot has its own chest (`TOA_VAULT_CHEST_LOC0`–`7`, varbits 14356–14360 and 14370–14372). A player sees their own chest as theirs (2) or emptied (4), and the others as someone else's; another player's chest won't open for them.
 - **Moving NPCs:** Zebak's waves and jugs, Akkha's unstable orbs, Ba-Ba's boulders and the moving Wardens move with collision off, as in Near-Reality. Before, the route finder couldn't move them over tiles the map blocks.
 
 **Still open:**

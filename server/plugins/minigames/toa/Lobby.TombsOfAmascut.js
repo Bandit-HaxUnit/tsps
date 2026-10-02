@@ -84,7 +84,7 @@ function enterTombs({ player }) {
       "Cancel.", () => {});
     return true;
   }
-  if (Rewards.hasLoot(player)) {
+  if (Rewards.hasRewards(player)) {
     Shared.statement(player, "You have unclaimed rewards from your last raid. Collect them from the chest first.");
     return true;
   }

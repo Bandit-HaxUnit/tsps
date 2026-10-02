@@ -98,8 +98,16 @@ test('::toaskiptoreward can force a unique and the pet to one player', () => {
   assert.equal(uniqueWinner, b);
   assert.equal(uniqueId, I.TUMEKENS_SHADOW_UNCHARGED_);
   assert.equal(petWinner, b);
+  // Wiki: the unique waits in the sarcophagus; the finder's chest has no common rolls.
   const ids = Rewards.lootOf(b).map((entry) => entry.id);
-  assert.ok(ids.includes(I.TUMEKENS_SHADOW_UNCHARGED_), 'the forced unique is in the chest');
-  assert.ok(ids.includes(I.TUMEKENS_GUARDIAN), 'so is the pet');
+  assert.equal(Rewards.sealedUnique(b), I.TUMEKENS_SHADOW_UNCHARGED_, 'the unique is sealed in the sarcophagus');
+  assert.ok(!ids.includes(I.TUMEKENS_SHADOW_UNCHARGED_), 'not in the chest');
+  assert.ok(!ids.includes(I.FOSSILISED_DUNG), 'and no fossilised dung in its place');
+  assert.ok(ids.includes(I.TUMEKENS_GUARDIAN), 'the pet is in the chest');
+  assert.ok(Rewards.hasRewards(b));
   assert.deepEqual(Rewards.lootOf(a).map((entry) => entry.id), [I.FOSSILISED_DUNG]);
+  // Opening it (or the lobby chest) moves the unique to the front of the loot.
+  assert.equal(Rewards.unsealUnique(b), I.TUMEKENS_SHADOW_UNCHARGED_);
+  assert.equal(Rewards.lootOf(b)[0].id, I.TUMEKENS_SHADOW_UNCHARGED_);
+  assert.equal(Rewards.sealedUnique(b), -1);
 });

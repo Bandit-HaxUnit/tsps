@@ -17,6 +17,8 @@ const POINTS_CAP = 64000;
 const DUNG_POINTS = 1500;
 /** Whether the player has had a Thread of Elidinis: after the first, it's 1/50 (Wiki). */
 const ATTR_THREAD = "toa:thread-obtained";
+/** The unique a player found, sealed in Osmumten's sarcophagus until they open it. */
+const ATTR_SARCOPHAGUS = "toa:sarcophagus";
 
 /** Common table: an item and its points divisor (quantity = points / divisor). NR RewardEncounter. */
 function commonTable(I) {
@@ -82,6 +84,26 @@ function setLoot(player, loot) {
 
 function hasLoot(player) {
   return lootOf(player).length > 0;
+}
+
+/** The unique waiting in the sarcophagus for this player, or -1. */
+function sealedUnique(player) {
+  const id = player.getAttribute(ATTR_SARCOPHAGUS);
+  return Number.isInteger(id) && id > 0 ? id : -1;
+}
+
+/** Moves the sarcophagus's unique to the front of the player's loot; returns its id or -1. */
+function unsealUnique(player) {
+  const id = sealedUnique(player);
+  if (id === -1) return -1;
+  player.setAttribute(ATTR_SARCOPHAGUS, null);
+  setLoot(player, [{ id, amount: 1 }, ...lootOf(player)]);
+  return id;
+}
+
+/** Anything still to collect: chest loot or an unopened sarcophagus. */
+function hasRewards(player) {
+  return hasLoot(player) || sealedUnique(player) !== -1;
 }
 
 /**
@@ -155,14 +177,17 @@ function rollRaidLoot(raid) {
   const petWinner = forced?.pet ? forced.player
     : Math.random() * 100 < petChance ? weightedPick(players, (player) => Math.max(0, pointsOf(player))) : null;
   for (const player of players) {
-    const loot = rollPlayer(raid, player, player === uniqueWinner ? uniqueId : -1);
+    // Wiki: the unique waits in Osmumten's sarcophagus, and its finder's chest has no common
+    // rolls (its tertiaries still come).
+    if (player === uniqueWinner) player.setAttribute(ATTR_SARCOPHAGUS, uniqueId);
+    const loot = rollPlayer(raid, player, player === uniqueWinner);
     if (player === petWinner) loot.push({ id: I.TUMEKENS_GUARDIAN, amount: 1 });
     setLoot(player, loot.slice(0, LOOT_SLOTS));
   }
   return { uniqueWinner, uniqueId, petWinner };
 }
 
-function rollPlayer(raid, player, uniqueId) {
+function rollPlayer(raid, player, foundUnique) {
   const I = Shared.core().ItemIdentifiers;
   const points = raid.lootPoints(player);
   const raidLevel = raid.raidLevel;
@@ -173,7 +198,7 @@ function rollPlayer(raid, player, uniqueId) {
     if (existing) existing.amount += amount;
     else loot.push({ id, amount });
   };
-  if (points < DUNG_POINTS && uniqueId === -1) {
+  if (points < DUNG_POINTS && !foundUnique) {
     add(I.FOSSILISED_DUNG);
     return loot;
   }
@@ -187,9 +212,7 @@ function rollPlayer(raid, player, uniqueId) {
     }
     if (raidLevel >= 500) add(I.CURSED_PHALANX);
   }
-  if (uniqueId !== -1) {
-    add(uniqueId);
-  } else {
+  if (!foundUnique) {
     const factor = raidLevel < 300 ? 1 : 1.15 + 0.01 * ((raidLevel - 300) / 5);
     const table = commonTable(I).filter(([, divisor]) => points >= divisor);
     for (let roll = 0; roll < 3 && table.length > 0; roll++) {
@@ -220,10 +243,14 @@ function rollPlayer(raid, player, uniqueId) {
 module.exports = {
   ATTR_LOOT,
   ATTR_THREAD,
+  ATTR_SARCOPHAGUS,
   LOOT_SLOTS,
   lootOf,
   setLoot,
   hasLoot,
+  sealedUnique,
+  unsealUnique,
+  hasRewards,
   uniqueChancePercent,
   petChancePercent,
   rollRaidLoot,
