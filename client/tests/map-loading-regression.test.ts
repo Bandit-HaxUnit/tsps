@@ -23,6 +23,7 @@ import { getMinimapMaps } from "../widgets/gl/MinimapRenderer";
 import { registerMinimapData } from "../render/render/minimap";
 import { clearInstance, doInstanceSceneBuild, loadInstanceScene, replaceSceneWithInstance } from "../render/render/instance";
 import { npcOwnerMapId } from "../render/npc/NpcRenderTemplate";
+import { npcLocalForMap } from "../render/render/draw";
 
 function houseMinimapUsesFullScene(): void {
     const maps = new MapManager<any>(4, () => {});
@@ -131,6 +132,12 @@ async function instanceRebuildKeepsTheSceneUntilTheSwap(): Promise<void> {
     assert.equal(host.rehomed, 1, "NPCs move to the instance square at the swap");
     assert.equal(npcOwnerMapId({ x: 12 * 64 + 70, y: 12 * 64 + 3, ownerMapId: (12 << 8) | 12 }), (12 << 8) | 12);
     assert.equal(npcOwnerMapId({ x: 12 * 64 + 70, y: 12 * 64 + 3 }), (13 << 8) | 12, "outside an instance: its own square");
+    // An instance is drawn from its scene base, not its square's corner: an NPC west of the
+    // corner must still land inside the scene (the draw data is unsigned, so negative wrapped).
+    const sceneBase = 12 * 64 - 40;
+    const npcWorldX = (12 * 64 - 10) * 128;
+    assert.equal(npcLocalForMap(npcWorldX, sceneBase), 30 * 128);
+    assert.equal(npcLocalForMap(npcWorldX, 12 * 64), -10 * 128, "from the corner it would be negative");
 }
 
 instanceRebuildKeepsTheSceneUntilTheSwap().catch(error => { console.error(error); process.exitCode = 1; });

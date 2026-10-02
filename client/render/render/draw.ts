@@ -244,8 +244,10 @@ export function addNpcRenderData(host: WebGLOsrsRendererHost, map: WebGLMapSquar
                     // NPC geometry ownership can lag one map refresh behind ECS ownership while an NPC
                     // crosses a 64x64 map-square boundary. Convert from world space back into the
                     // currently drawn map so the existing draw batch remains stable until refresh.
-                    npcX = ecs.getLocalXForMap(id, map.mapX);
-                    npcY = ecs.getLocalYForMap(id, map.mapY);
+                    // Relative to where the map is drawn: its corner for a normal map, the scene
+                    // base for an instance (whose NPCs can stand west or south of its corner).
+                    npcX = npcLocalForMap(ecs.getWorldX(id), renderBaseTileX);
+                    npcY = npcLocalForMap(ecs.getWorldY(id), renderBaseTileY);
                 }
                 const localTileX = clamp((npcX >> 7) | 0, 0, Math.max(0, mapTileSpan - 1));
                 const localTileY = clamp((npcY >> 7) | 0, 0, Math.max(0, mapTileSpan - 1));
@@ -332,8 +334,8 @@ export function addUnbatchedNpcRenderData(host: WebGLOsrsRendererHost): void {
             }
 
             const offset = dataOffset * 8;
-            const npcX = ecs.getLocalXForMap(ecsId, map.mapX) | 0;
-            const npcY = ecs.getLocalYForMap(ecsId, map.mapY) | 0;
+            const npcX = npcLocalForMap(ecs.getWorldX(ecsId), map.getRenderBaseTileX());
+            const npcY = npcLocalForMap(ecs.getWorldY(ecsId), map.getRenderBaseTileY());
             const mapTileSpan = map.getLocalTileSpan();
             const localTileX = clamp((npcX >> 7) | 0, 0, Math.max(0, mapTileSpan - 1));
             const localTileY = clamp((npcY >> 7) | 0, 0, Math.max(0, mapTileSpan - 1));
@@ -526,4 +528,9 @@ export function addWorldGfxRenderData(host: WebGLOsrsRendererHost, map: WebGLMap
         }
         host.actorRenderCount = required;
     
+}
+
+/** An actor's position within a drawn map, in 1/128 tiles from where the map is drawn. */
+export function npcLocalForMap(world: number, renderBaseTile: number): number {
+    return ((world | 0) - (renderBaseTile | 0) * 128) | 0;
 }
