@@ -119,6 +119,10 @@ const RunHooks = require('../plugins/minigames/gauntlet/Run.Gauntlet');
 const { ItemIdentifiers: I } = require('../dist/util/ItemIdentifiers');
 
 const hooks = { objects: {}, items: {}, death: [], drops: [], teleports: [], login: [], variants: [], prompts: [] };
+// Saves are recorded, not written.
+const saves = [];
+PluginManager.getCoreApi().GameConstants.PLAYER_PERSISTENCE = { save: (player) => saves.push(player.getUsername()) };
+
 function bindHooks() {
   const api = {
     core: PluginManager.getCoreApi(),
@@ -269,6 +273,7 @@ test('the entrance turns players away until they have spoken to Bryn, and with i
   interact('The Gauntlet', 'Enter', player, null);
   const run = Run.runOf(player);
   assert.ok(run);
+  assert.ok(saves.includes('Entrant'), 'saved before entering');
   run.end('exit', { fade: false });
 });
 

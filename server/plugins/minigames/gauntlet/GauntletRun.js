@@ -50,6 +50,14 @@ function runInside(player) {
 const NODES = { regular: [36101, 36102], corrupted: [35998, 35999] };
 const LIT_NODE_OFFSET = 2;
 
+function savePlayer(player) {
+  try {
+    Shared.core().GameConstants.PLAYER_PERSISTENCE?.save(player);
+  } catch (error) {
+    console.warn("[gauntlet] could not save", player.getUsername?.(), error);
+  }
+}
+
 function statsOf(player) {
   const saved = player.getAttribute(ATTR_STATS);
   return {
@@ -95,6 +103,8 @@ class GauntletRun {
   /** Takes the player in: fade, starting kit, the timer, and the maze varbits. */
   start() {
     const player = this.player;
+    // Saved as they step in (in the lobby, empty-handed), so nothing is lost if the server stops.
+    savePlayer(player);
     player.setAttribute(ATTR_RUN, this.mode);
     Shared.fadeMove(player, () => {
       if (this.stage === "ended") return;
@@ -264,6 +274,8 @@ class GauntletRun {
       // Leave before moving, so the scene goes straight back to the normal map.
       if (!fromArea && player.getArea?.() === this.map) this.map.leave(player, reason === "logout");
       player.moveTo(Shared.loc(Shared.LOBBY));
+      // Saved back in the lobby; a logout saves on its own right after.
+      if (reason !== "logout") savePlayer(player);
       if (reason === "death") player.sendMessage("Oh dear, you are dead!");
       else if (reason !== "logout") player.sendMessage("You leave the Gauntlet.");
     };
