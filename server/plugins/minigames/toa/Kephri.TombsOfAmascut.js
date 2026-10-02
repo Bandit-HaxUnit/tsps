@@ -258,8 +258,11 @@ class KephriRoom extends Raid.Room {
   regularAttack() {
     const { Animation } = Shared.core();
     this.kephri.performAnimation(new Animation(ANIMATION.THROW));
+    // The fireball rises and is gone as the falling one leaves, two ticks (60 client cycles)
+    // later. Near-Reality's 39 + 51 cycles kept it in the air a tick into the second, so two
+    // fireballs showed for one hit.
     Shared.tileProjectile(this.area, Shared.loc(THROW_START), Shared.loc(THROW_SECOND), PROJECTILE.THROW_FIRST,
-      { delay: 39, duration: 51, startHeight: 175, endHeight: 250 });
+      { delay: 39, duration: 21, perTile: 0, startHeight: 175, endHeight: 250 });
     this.later(2, () => this.shieldTicks <= 0 && this.bombs(true));
   }
 
