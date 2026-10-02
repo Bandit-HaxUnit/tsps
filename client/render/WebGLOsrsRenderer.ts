@@ -242,6 +242,10 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     public instanceRegionX: number = 0;
     public instanceRegionY: number = 0;
     public instanceLocRebuildTimer: ReturnType<typeof setTimeout> | null = null;
+    /** Bumped per instance scene build; only the latest build's result is applied. */
+    public instanceBuildSeq: number = 0;
+    /** A built instance scene waiting in mapsToLoad; it replaces the drawn scene when applied. */
+    public pendingInstanceScene: SdMapData | null = null;
     /** Active world entity overlays (rendered on top of normal world). */
     public worldEntityOverlays: Map<
         number,
@@ -1488,6 +1492,10 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
 
     public scheduleInstanceLocRebuild(): void {
         return render.scheduleInstanceLocRebuild(this);
+    }
+
+    public replaceSceneWithInstance(mapData: SdMapData): void {
+        return render.replaceSceneWithInstance(this, mapData);
     }
 
     clearInstance(): void {

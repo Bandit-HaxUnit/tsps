@@ -21,7 +21,7 @@ import { CachePipeline } from "../../server/src/main/typescript/elvarg/game/cach
 import { CacheMaps } from "../../server/src/main/typescript/elvarg/game/cache/CacheMaps";
 import { getMinimapMaps } from "../widgets/gl/MinimapRenderer";
 import { registerMinimapData } from "../render/render/minimap";
-import { clearInstance } from "../render/render/instance";
+import { clearInstance, doInstanceSceneBuild, loadInstanceScene, replaceSceneWithInstance } from "../render/render/instance";
 
 function houseMinimapUsesFullScene(): void {
     const maps = new MapManager<any>(4, () => {});
@@ -73,6 +73,59 @@ function houseMinimapUsesFullScene(): void {
 }
 
 houseMinimapUsesFullScene();
+
+/**
+ * Relighting a Gauntlet room or building a POH room resends the instance palette. The drawn
+ * scene must stay until the new one is ready and then be swapped in one step; a build that a
+ * newer one superseded must never be applied.
+ */
+async function instanceRebuildKeepsTheSceneUntilTheSwap(): Promise<void> {
+    const builds: Array<(data: any) => void> = [];
+    const drawn = new Set<string>(["old"]);
+    let cleared = 0;
+    const host: any = {
+        osrsClient: {
+            loadedCache: {},
+            workerPool: { queueLoad: () => new Promise((resolve) => builds.push(resolve)) },
+            clearMinimapImageUrls() {},
+        },
+        addedLocs: new Map(), locOverrides: new Map(), locSpawns: new Map(),
+        instanceActive: false, instanceTemplateChunks: null, instanceLocRebuildTimer: null,
+        instanceBuildSeq: 0, pendingInstanceScene: null,
+        mapsToLoad: { items: [] as any[], clear() { this.items.length = 0; }, push(item: any) { this.items.push(item); } },
+        pendingStreamMapsByGeneration: new Map(),
+        mapManager: { loadingMapIds: new Set<number>() },
+        maxLevel: 3, loadNpcs: false, smoothTerrain: false, hasMultiDraw: true, loadedTextureIds: new Set(),
+        getInstanceExtraLocs: () => undefined,
+        clearMaps() { cleared++; drawn.clear(); },
+        skipMapFadeIn: false,
+    };
+    host.doInstanceSceneBuild = (...args: any[]) => (doInstanceSceneBuild as any)(host, ...args);
+    host.addedLocs.set("a", { locId: 1 });
+
+    const first = loadInstanceScene(host, [[[1]]], 100, 100);
+    assert.equal(cleared, 0, "the drawn scene stays while the new one builds");
+    // A loc spawned with the rebuild schedules a loc rebuild; the first build takes it instead.
+    host.instanceLocRebuildTimer = setTimeout(() => {}, 1000);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(host.instanceLocRebuildTimer, null, "spawned locs are folded into the one build");
+    const second = loadInstanceScene(host, [[[2]]], 100, 100);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(builds.length, 2);
+    builds[1]({ mapX: 12, mapY: 12, id: "new" });
+    builds[0]({ mapX: 12, mapY: 12, id: "stale" });
+    await Promise.all([first, second]);
+    assert.deepEqual(host.mapsToLoad.items.map((map: any) => map.id), ["new"], "a superseded build is dropped");
+    assert.equal(host.pendingInstanceScene?.id, "new");
+    assert.ok(drawn.has("old") && cleared === 0, "still drawing the old scene until the new one is applied");
+
+    replaceSceneWithInstance(host, host.pendingInstanceScene);
+    assert.equal(cleared, 1);
+    assert.equal(host.skipMapFadeIn, true, "the new scene appears without the fog fade-in");
+    assert.equal(host.pendingInstanceScene, null);
+}
+
+instanceRebuildKeepsTheSceneUntilTheSwap().catch(error => { console.error(error); process.exitCode = 1; });
 
 function mapProfilingRequiresExplicitFlag(): void {
     const original = Object.getOwnPropertyDescriptor(globalThis, "location");

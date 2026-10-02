@@ -1680,6 +1680,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                     `[WebGLOsrsRenderer] mapsToLoad applying: mapX=${pendingMap.mapX} mapY=${pendingMap.mapY} verts=${pendingMap.vertices?.length}`,
                 );
                 mapApplyCount++;
+                if (pendingMap === host.pendingInstanceScene) host.replaceSceneWithInstance(pendingMap);
                 host.loadMap(
                     host.mainProgram,
                     host.mainAlphaProgram,
