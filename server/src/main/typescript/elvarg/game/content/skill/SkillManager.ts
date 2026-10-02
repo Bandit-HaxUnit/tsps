@@ -169,18 +169,14 @@ export class SkillManager {
             let skillName = skill.getName();
             this.skills.maxLevel[skill.getIndex()] += level;
             this.stopSkillable(); // Stop skilling on level up like osrs
+            // Publish the new current level and native stats before feedback hooks run.
+            this.setCurrentLevels(skill, this.skills.maxLevel[skill.getIndex()]);
             PluginManager.emitPlayerLevelUp({
                 player: this.player,
                 skill,
                 oldLevel: startingLevel,
                 newLevel: this.skills.maxLevel[skill.getIndex()],
             });
-            this.setCurrentLevels(skill, this.skills.maxLevel[skill.getIndex()]);
-            this.player.getPacketSender().sendInterfaceRemoval();
-            this.player.getPacketSender().sendString("Congratulations! You have achieved a " + skillName + " level!", 4268);
-            this.player.getPacketSender().sendString("Well done. You are now level " + newLevel + ".", 4269);
-            this.player.getPacketSender().sendString("Click here to continue.", 358);
-            this.player.getPacketSender().sendChatboxInterface(skill.getChatboxInterface());
             this.player.performGraphic(SkillManager.LEVEL_UP_GRAPHIC);
             Sounds.sendSound(this.player, Sound.LEVEL_UP);
             this.player.sendMessage("You've just advanced " + skillName + " level! You have reached level " + newLevel);
@@ -191,7 +187,7 @@ export class SkillManager {
             }
             this.player.getUpdateFlag().flag(Flag.APPEARANCE);
         }
-        this.updateSkill(skill);
+        if (newLevel <= startingLevel) this.updateSkill(skill);
         return this;
     }
 
@@ -275,14 +271,6 @@ export class SkillManager {
     }
 
     public updateSkill(skill: Skill) {
-        const maxLevel = this.getMaxLevel(skill);
-        const currentLevel = this.getCurrentLevel(skill);
-
-        // Update the Prayer tab's level text.
-        if (skill === Skill.PRAYER) {
-            this.player.getPacketSender().sendString(currentLevel + "/" + maxLevel, 687);
-        }
-
         if (skill === Skill.PRAYER || skill === Skill.DEFENCE) {
             const prayerLevel = this.getMaxLevel(Skill.PRAYER);
             const defenceLevel = this.getMaxLevel(Skill.DEFENCE);
@@ -293,17 +281,8 @@ export class SkillManager {
                 .sendVarbit(5452, prayerLevel >= PrayerData.AUGURY.requirement && defenceLevel >= 70 ? 1 : 0);
         }
 
-        // Send total level
-        this.player.getPacketSender().sendString("" + this.getTotalLevel(), 31200);
-
-        this.player.getPacketSender().sendString("" + this.getTotalLevel(), 31200);
-
-
-        // Send combat level
-        const combatLevel = "Combat level: " + this.getCombatLevel();
-        this.player.getPacketSender().sendString(combatLevel, 19000).sendString(combatLevel, 5858);
-
-        // Send the skill
+        // Native skill deltas also carry total and combat levels; legacy 317
+        // text widgets do not exist in the OSRS interfaces.
         this.player.getPacketSender().sendSkill(skill);
 
         return this;

@@ -11,18 +11,34 @@ const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const { ArceuusSpells } = require("../../src/main/typescript/elvarg/game/content/combat/magic/ArceuusSpells");
 
 const THIEVING_ANIMATION = new Animation(881);
-const NPC_ATTACK_ANIMATION = new Animation(401);
 const PICKPOCKET_COOLDOWN_MS = 1200;
 
 class PickpocketResolveTask extends Task {
-  constructor(onResolve) {
-    super(2);
+  constructor(player, onResolve) {
+    super(2, player.getIndex());
+    this.player = player;
+    this.location = player.getLocation().clone();
     this.onResolve = onResolve;
   }
 
+  canResolve() {
+    return this.player.isRegistered() && this.player.getHitpoints() > 0 &&
+      this.player.getLocation().equals(this.location) && this.player.getMovementQueue().size() === 0 &&
+      this.player.getForceMovement() == null;
+  }
+
   execute() {
-    this.onResolve();
+    if (this.canResolve()) this.onResolve();
     this.stop();
+  }
+
+  onTick() {
+    if (!this.canResolve()) this.stop();
+  }
+
+  stop() {
+    super.stop();
+    if (this.player.isRegistered()) this.player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
   }
 }
 
@@ -195,7 +211,7 @@ function pickpocket(event) {
   npc.getTimers().registers(TimerKey.ATTACK_IMMUNITY, 10);
 
   TaskManager.submit(
-    new PickpocketResolveTask(() => {
+    new PickpocketResolveTask(player, () => {
       if (!player.isRegistered() || !npc.isRegistered()) {
         return;
       }
@@ -218,7 +234,7 @@ function pickpocket(event) {
 
       npc.setPositionToFace(player.getLocation());
       npc.forceChat("What do you think you're doing?");
-      npc.performAnimation(NPC_ATTACK_ANIMATION);
+      npc.performAnimation(new Animation(npc.getAttackAnim()));
       player.sendMessage("You fail to pick the pocket.");
       Sounds.sendSound(player, Sound.THIEVING_STUNNED);
       CombatFactory.stun(player, def.stunTime, true);

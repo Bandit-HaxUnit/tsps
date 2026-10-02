@@ -8,7 +8,8 @@ const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
 const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
 const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 
-const COOK_ANIMATION = new Animation(896);
+const FIRE_COOK_ANIMATION = new Animation(896);
+const RANGE_COOK_ANIMATION = new Animation(897);
 const COOK_INTERVAL_TICKS = 4;
 
 const COOKABLES = Object.freeze([
@@ -102,14 +103,13 @@ function startCooking(player, object, cookable, activeSessions) {
   stopCooking(activeSessions, player, false);
   activeSessions.set(player, {
     cookable,
+    animation: object.getDefinition().getName() === "Fire" ? FIRE_COOK_ANIMATION : RANGE_COOK_ANIMATION,
     objectId: object.getId(),
     location: object.getLocation().clone(),
     privateArea: object.getPrivateArea(),
     nextCookTick: 0,
   });
 
-  Sounds.sendSound(player, Sound.COOKING_COOK);
-  player.performAnimation(COOK_ANIMATION);
   return true;
 }
 
@@ -159,12 +159,11 @@ class CookingTask extends Task {
       }
       session.nextCookTick = this.cycle + COOK_INTERVAL_TICKS;
       Sounds.sendSound(player, Sound.COOKING_COOK);
-      player.performAnimation(COOK_ANIMATION);
+      player.performAnimation(session.animation);
 
       player.getInventory().deleteNumber(session.cookable.raw, 1);
       if (isSuccess(player, session.cookable)) {
         player.getInventory().addItem(new Item(session.cookable.cooked, 1));
-        Sounds.sendSound(player, Sound.COOKING_FOOD);
         player.sendMessage(`You cook the ${session.cookable.name}.`);
         pluginApi.emitCustomEvent("cooking:success", {
           player,
@@ -184,7 +183,6 @@ class CookingTask extends Task {
         }
       } else {
         player.getInventory().addItem(new Item(session.cookable.burnt, 1));
-        Sounds.sendSound(player, Sound.COOKING_BURN);
         const rawName =
           ItemDefinition.forId(session.cookable.raw)?.getName?.()?.toLowerCase?.() ||
           session.cookable.name;

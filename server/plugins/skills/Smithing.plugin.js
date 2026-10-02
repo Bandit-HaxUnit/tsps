@@ -504,9 +504,9 @@ function performSmithAction(player, smithable) {
 
   inventory.deleteNumber(smithable.barId, smithable.barsRequired);
   inventory.addItem(new Item(smithable.itemId, smithable.amount));
-  player.getSkillManager().addExperiences(Skill.SMITHING, 10);
   player.performAnimation(SMITH_ANIMATION);
-  Sounds.sendSound(player, Sound.SMITHING);
+  player.getSkillManager().addExperiences(Skill.SMITHING, 10);
+
   player.sendMessage("You hammer the metal and shape an item.");
   pluginApi?.emitCustomEvent("smithing:success", {
     player,
@@ -580,7 +580,6 @@ function startSmeltingSession(activeSessions, player, recipe, amount) {
     nextActionTick: smithingTick + SMITHING_BATCH_INITIAL_DELAY_TICKS,
   });
   ACTIVE_SMELTERS.add(player);
-  Sounds.sendSound(player, Sound.SMELTING);
   player.performAnimation(SMELT_ANIMATION);
   return true;
 }
@@ -622,7 +621,7 @@ function startSmithingSession(activeSessions, player, smithable, amount) {
     nextActionTick: smithingTick + SMITHING_BATCH_INITIAL_DELAY_TICKS,
   });
   ACTIVE_SMELTERS.delete(player);
-  Sounds.sendSound(player, Sound.SMITHING);
+
   player.performAnimation(SMITH_ANIMATION);
   return true;
 }
@@ -767,7 +766,7 @@ class SmithingTask extends Task {
       }
 
       if (!progressed) {
-        stopSmithingSession(this.activeSessions, player, false);
+        stopSmithingSession(this.activeSessions, player);
         continue;
       }
 

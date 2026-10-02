@@ -45,3 +45,23 @@ test('an enchanted dragon bolt has its gem effect: ruby (e) is Blood Forfeit', (
   const weak = { ...player, getHitpoints: () => 9 };
   assert.equal(RangedData.getSpecialEffectsMultiplier(weak, target, 30), 1, "not when the player can't spare it");
 });
+
+
+test('a shot refreshes the native equipment counter immediately, including the final arrow', () => {
+  const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
+  const { Equipment } = require('../dist/game/model/container/impl/Equipment');
+  const { Item } = require('../dist/game/model/Item');
+  let ammo = new Item(Items.BRONZE_ARROW, 2);
+  const amounts = [];
+  const equipment = {
+    get: slot => slot === Equipment.AMMUNITION_SLOT ? ammo : new Item(-1, 0),
+    set: (slot, item) => { assert.equal(slot, Equipment.AMMUNITION_SLOT); ammo = item; },
+    refreshItems: () => amounts.push(ammo.getAmount()),
+  };
+  const p = { getEquipment: () => equipment, sendMessage() {},
+    getCombat: () => ({ getRangedWeapon: () => RangedWeapon.SHORTBOW, getAmmunition: () => Ammunition.BRONZE_ARROW }) };
+  CombatFactory.decrementAmmo(p, null, 1);
+  assert.equal(ammo.getAmount(), 1); assert.deepEqual(amounts, [1]);
+  CombatFactory.decrementAmmo(p, null, 1);
+  assert.equal(ammo.getId(), -1); assert.equal(amounts.length, 2);
+});

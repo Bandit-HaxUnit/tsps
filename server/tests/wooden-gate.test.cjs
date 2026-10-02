@@ -346,6 +346,7 @@ function alKharidPlayer(coins, x, y) {
     getMovementQueue: () => ({ reset: () => {}, setBlockMovement: () => {}, handleRegionChange: () => {} }),
     getForceMovement: () => null,
     setSkillAnimation: () => {},
+    performAnimation: () => {},
     getUpdateFlag: () => ({ flag: () => {} }),
     getPrivateArea: () => null,
     getSession: () => ({ isTileInScene: () => true }),

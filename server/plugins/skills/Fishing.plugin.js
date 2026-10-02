@@ -4,8 +4,6 @@ const { Animation } = require("../../src/main/typescript/elvarg/game/model/Anima
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { Chance } = require("../../src/main/typescript/elvarg/util/Chance");
 const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
-const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
-const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
 const { ItemIds, NpcIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
 
@@ -199,7 +197,7 @@ function startFishing(player, npc, clickType, activeSessions) {
   });
 
   player.sendMessage("You begin to fish..");
-  Sounds.sendSound(player, Sound.FISHING_FISH);
+
   player.performAnimation(new Animation(tool.animationId));
   return true;
 }
@@ -249,7 +247,6 @@ class FishingTask extends Task {
       }
 
       if (this.cycle >= session.nextAnimationTick) {
-        Sounds.sendSound(player, Sound.FISHING_FISH);
         player.performAnimation(new Animation(session.tool.animationId));
         session.nextAnimationTick = this.cycle + FISHING_ANIMATION_INTERVAL_TICKS;
       }
@@ -275,7 +272,8 @@ class FishingTask extends Task {
         player.getInventory().deleteNumber(session.tool.needed, 1);
       }
 
-      if (Misc.getRandom(90) === 0) {
+      if (player.getInventory().isFull() || !hasToolRequirements(player, session.tool) ||
+          Misc.getRandom(90) === 0) {
         stopFishing(this.activeSessions, player);
         continue;
       }

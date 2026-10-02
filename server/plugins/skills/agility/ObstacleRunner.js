@@ -300,6 +300,7 @@ function release(player) {
     player.setForceMovement(null);
   }
   setRender(player, null);
+  animate(player, RESET_ANIMATION);
 }
 
 /**
