@@ -8,6 +8,8 @@ import { PlayerStatus } from "../../game/model/PlayerStatus";
 import { Flag } from "../../game/model/Flag";
 import { Skill } from "../../game/model/Skill";
 import { Location } from "../../game/model/Location";
+import { Graphic } from "../../game/model/Graphic";
+import { World } from "../../game/World";
 import { DonatorRights } from "../../game/model/rights/DonatorRights";
 import { InterfaceLayoutRegistry } from "../../game/definition/InterfaceLayoutDefinition";
 import { Misc } from "../../util/Misc";
@@ -21,6 +23,7 @@ import {
   encodeGroundItemsDelta,
   encodeLocAddChange,
   encodeLocAnim,
+  encodeTileSpotAnim,
   encodeLocDel,
   encodeInventorySlot,
   encodeInventorySnapshot,
@@ -766,11 +769,23 @@ export class PacketSender {
     return this;
   }
 
-  sendGraphic(..._args: any[]): this {
+  /** Plays a graphic on a world tile for this player only. */
+  sendGraphic(graphic: Graphic, location: Location): this {
+    if (!graphic || !location) return this;
+    this.player.getSession().sendClientPacket(encodeTileSpotAnim(
+      graphic.id, location.getX(), location.getY(), location.getZ(), graphic.height ?? 0, graphic.delay ?? 0
+    ));
     return this;
   }
 
-  sendGlobalGraphic(..._args: any[]): this {
+  /** Plays a graphic on a world tile for everyone in this player's instance who can see it. */
+  sendGlobalGraphic(graphic: Graphic, location: Location): this {
+    if (!graphic || !location) return this;
+    const area = this.player.getPrivateArea();
+    World.forEachNetworkPlayer((viewer) => {
+      if (viewer.getPrivateArea() !== area || !location.isViewableFrom(viewer.getLocation())) return;
+      viewer.getPacketSender().sendGraphic(graphic, location);
+    });
     return this;
   }
 

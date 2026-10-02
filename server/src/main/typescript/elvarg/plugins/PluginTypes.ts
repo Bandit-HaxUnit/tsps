@@ -1001,6 +1001,7 @@ export interface PluginApi {
 export interface PluginCoreApi {
   MeleeCombatMethod: any;
   RangedCombatMethod: any;
+  MagicCombatMethod: any;
   CombatMethod: any;
   CombatSpecial: any;
   CombatFactory: any;
@@ -1050,6 +1051,8 @@ export interface PluginCoreApi {
   GameObject: any;
   PrivateArea: any;
   ObjectManager: any;
+  OperationType: any;
+  LocModelType: any;
   MapObjects: any;
   ItemOnGroundManager: any;
   ItemDefinition: any;
@@ -1059,6 +1062,7 @@ export interface PluginCoreApi {
   ObjectDefinition: any;
   MagicSpellbook: any;
   Spell: any;
+  CombatNormalSpell: any;
   NPC: any;
   GameConstants: any;
   TeleportHandler: any;

@@ -1264,9 +1264,10 @@ export class MovementQueue {
         //System.err.println("RequestedX=" + objectX + " requestedY=" + objectY + " givenX=" + finalDestinationX + " givenY=" + finalDestinationY);
 
         this.player.setPositionToFace(new Location(objectX, objectY));
+        const interactionArea = this.player.getPrivateArea();
         let repathAttempts = 0;
         TaskManager.submit(new MovementTask(this.player.getIndex(), (task) => {
-            if (!this.isInteractionObjectValid(object, id, type)) {
+            if (this.player.getPrivateArea() !== interactionArea || !this.isInteractionObjectValid(object, id, type)) {
                 this.reset();
                 task.stop();
                 return;

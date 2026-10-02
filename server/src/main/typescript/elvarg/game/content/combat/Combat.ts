@@ -230,8 +230,14 @@ export class Combat {
 
         if (CombatRange.canReach(this.character, method, target)) {
             this.trace("inRange", target);
-            this.character.getMovementQueue().reset();
-            return;
+            // An NPC flagged combat:close-in (ToA's Akkha) keeps walking in while it attacks
+            // from range, until it stands beside its target.
+            const closesIn = this.character.isNpc() && this.character.hasFlag?.("combat:close-in") === true
+                && !CombatRange.beside(this.character, target);
+            if (!closesIn) {
+                this.character.getMovementQueue().reset();
+                return;
+            }
         }
 
         const movement = this.character.getMovementQueue();

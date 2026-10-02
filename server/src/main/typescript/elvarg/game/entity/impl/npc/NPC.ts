@@ -95,6 +95,7 @@ export class NPC extends Mobile {
     private id: number;
     private movementCoordinator: NPCMovementCoordinator = new NPCMovementCoordinator(this);
     private hitpoints: number;
+    private maxHitpointsOverride = -1;
     private spawnPosition: Location;
     private headIcon = -1;
     private isDying: boolean;
@@ -107,8 +108,6 @@ export class NPC extends Mobile {
     private scriptedMovement: boolean = false;
     /** Hits show their damage but never lower this NPC's hitpoints (a boss whose HP is a timer). */
     private hitpointsLocked: boolean = false;
-    /** This NPC's maximum hitpoints when it differs from its definition's. */
-    private maxHitpointsOverride: number | null = null;
     /** The headbar (healthbar config id and its width) shown over this NPC, when not the default. */
     private healthBarOverride: { id: number; width: number } | null = null;
     /** Scales the combat XP players get for damaging this NPC (OSRS gives some bosses less). */
@@ -312,9 +311,20 @@ export class NPC extends Mobile {
         return this;
     }
 
+    /** Full health: the definition's hitpoints unless this NPC was scaled (raids). */
+    public getMaxHitpoints(): number {
+        return this.maxHitpointsOverride >= 0 ? this.maxHitpointsOverride : this.getDefinition().getHitpoints();
+    }
+
+    /** Scales this one NPC's full health, e.g. by raid level or party size; -1 restores the definition's. */
+    public setMaxHitpoints(maxHitpoints: number): NPC {
+        this.maxHitpointsOverride = Math.trunc(maxHitpoints);
+        return this;
+    }
+
     public heal(heal: number) {
-        if ((this.hitpoints + heal) > this.getDefinition().getHitpoints()) {
-            this.setHitpoints(this.getDefinition().getHitpoints());
+        if ((this.hitpoints + heal) > this.getMaxHitpoints()) {
+            this.setHitpoints(this.getMaxHitpoints());
             return;
         }
         this.setHitpoints(this.hitpoints + heal);
@@ -590,14 +600,6 @@ export class NPC extends Mobile {
 
     public isHitpointsLocked(): boolean {
         return this.hitpointsLocked;
-    }
-
-    public setMaxHitpoints(max: number | null): void {
-        this.maxHitpointsOverride = max;
-    }
-
-    public getMaxHitpoints(): number {
-        return this.maxHitpointsOverride ?? this.getDefinition().getHitpoints();
     }
 
     public setHealthBar(bar: { id: number; width: number } | null): void {
