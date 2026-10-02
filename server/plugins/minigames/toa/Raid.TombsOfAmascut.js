@@ -69,7 +69,10 @@ function useExit(event) {
 
 /** Raid instances are not persisted across server restarts. */
 function recoverMissingRaid({ player }) {
-  if (!Shared.inTombs(player.getLocation()) || Raid.raidOf(player)) return false;
+  if (Raid.raidOf(player)) return false;
+  // Raid supplies never leave the tombs, even when the raid ended while the player was away.
+  Raid.removeRaidItems(player);
+  if (!Shared.inTombs(player.getLocation())) return false;
   player.setAttribute(Raid.ATTR_RAID, null);
   player.getPacketSender().closeSubInterface(Shared.OVERLAY_HUD_UID);
   player.getPacketSender().sendVarbit(Shared.VARBIT.PARTY_STATUS, 0);

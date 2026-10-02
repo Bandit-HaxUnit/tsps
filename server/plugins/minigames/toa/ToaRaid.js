@@ -768,10 +768,10 @@ class Raid {
     if (!this.players.includes(player)) return;
     this.players = this.players.filter((member) => member !== player);
     if (!logout) this.original.delete(player.getUsername());
+    this.revive(player);
     this.members.delete(player);
     player.setAttribute(ATTR_RAID, null);
     this.closeHud(player);
-    this.revive(player);
     removeRaidItems(player);
     this.lobby.leave(player, false);
     if (this.leader === player && this.players.length > 0) {
@@ -859,14 +859,23 @@ class Raid {
     player.setNpcTransformationId(NpcIdentifiers.GHOST_51);
     player.setUntargetable(true);
     player.getCombat().reset();
+    // A ghost has no inventory or worn equipment tabs until it's revived (OpenRune).
+    const sender = player.getPacketSender();
+    for (const { uid } of GHOST_TABS) sender.closeSubInterface(uid);
     this.refreshHudStates();
   }
 
   revive(player) {
     const member = this.members.get(player);
+    const wasGhost = member?.ghost === true;
     if (member) member.ghost = false;
     if (player.getNpcTransformationId() !== -1) player.setNpcTransformationId(-1);
     player.setUntargetable(false);
+    if (!wasGhost) return;
+    const sender = player.getPacketSender();
+    for (const { uid, group } of GHOST_TABS) sender.sendSubInterface(uid, group, 1);
+    player.getInventory().refreshItems();
+    player.getEquipment().refreshItems();
   }
 
   /** Everyone in the fight is down: spend a team life (reset the room) or fail the raid. */
@@ -1099,6 +1108,9 @@ function stepsBetween(from, to) {
 }
 
 const ATTR_KILL_COUNTS = "toa:completions";
+
+// The gameframe's inventory (149) and worn equipment (387) tabs.
+const GHOST_TABS = [{ uid: (161 << 16) | 79, group: 149 }, { uid: (161 << 16) | 80, group: 387 }];
 
 const START_POINTS = 5000;
 const TOTAL_POINTS_CAP = 64000;
