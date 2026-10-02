@@ -654,6 +654,10 @@ export class PacketSender {
     return true;
   }
 
+  public getChatboxGroupId(): number {
+    return this.chatboxGroupId;
+  }
+
   public isChatboxInterface(groupId: number): boolean {
     return groupId === this.chatboxGroupId;
   }

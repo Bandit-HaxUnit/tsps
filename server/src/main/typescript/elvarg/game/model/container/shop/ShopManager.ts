@@ -323,6 +323,21 @@ export class ShopManager {
         return false;
     }
 
+    /** The player's open shop; `stock` is in display order, so an entry's index is its display slot. */
+    public static getOpenShop(player: any): {
+        name: string; currency: string; stock: Array<{ itemId: number; amount: number; price: number }>;
+    } | null {
+        const shop = this.currentShop(player);
+        if (!shop) return null;
+        return {
+            name: shop.definition.getName(),
+            currency: this.currencyName(shop.definition.getCurrency()),
+            stock: this.displayEntries(shop).map((entry) => ({
+                ...entry, price: this.itemPrice(shop, ItemDefinition.forId(entry.itemId)),
+            })),
+        };
+    }
+
     private static quantityMode(player: any): number {
         const mode = Number(player.getAttribute?.(this.QUANTITY_MODE_ATTRIBUTE) ?? 0);
         return Number.isInteger(mode) && mode >= 0 && mode < this.QUANTITY_BY_MODE.length ? mode : 0;
