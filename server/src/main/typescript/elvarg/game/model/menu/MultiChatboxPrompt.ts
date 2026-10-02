@@ -13,6 +13,7 @@ type MultiChatboxPromptOption = {
 
 type PendingMultiChatboxPrompt = {
   pluginName: string;
+  title: string;
   options: MultiChatboxPromptOption[];
   expiresAt: number;
 };
@@ -92,11 +93,25 @@ export class MultiChatboxPrompt {
 
     MultiChatboxPrompt.pendingPrompts.set(player, {
       pluginName,
+      title,
       options,
       expiresAt: Date.now() + MultiChatboxPrompt.PROMPT_TTL_MS,
     });
 
     return true;
+  }
+
+  /** The prompt the player has open, if any; option n is picked with a resume on OPTIONS_WIDGET_ID, childIndex n. */
+  public static describe(player: any): { title: string; options: string[]; widgetId: number } | null {
+    const pending = MultiChatboxPrompt.pendingPrompts.get(player);
+    // Closing the chatbox another way (walking off, a new dialogue) leaves the entry behind.
+    if (!pending || pending.expiresAt < Date.now()) return null;
+    if (!player.getPacketSender?.()?.isChatboxInterface?.(MultiChatboxPrompt.INTERFACE_ID)) return null;
+    return {
+      title: pending.title,
+      options: pending.options.map((option) => option.text),
+      widgetId: MultiChatboxPrompt.OPTIONS_WIDGET_ID,
+    };
   }
 
   public static handleInterfaceActionClick(

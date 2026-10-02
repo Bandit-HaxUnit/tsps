@@ -53,6 +53,7 @@ const tile = (location) => ({ x: location.getX(), y: location.getY(), z: locatio
 function buildMcpServer(core) {
   const {
     World, MapObjects, ObjectDefinition, ItemDefinition, NpcDefinition, Skill, GameConstants, TaskManager, Bank, ShopManager,
+    MultiChatboxPrompt,
   } = core;
   const messageLog = (p) => track(p, World).messages;
   const server = new McpServer({ name: "tsps-agent", version: "1.0.0" });
@@ -88,8 +89,8 @@ function buildMcpServer(core) {
     return busy;
   };
   // An open dialogue or interface needs the agent's input before anything else happens.
-  const waitingOn = (p) =>
-    p.getDialogueManager?.()?.isActive() ? "dialogue" : p.getInterfaceId?.() > 0 ? "interface" : null;
+  const waitingOn = (p) => p.getDialogueManager?.()?.isActive() || MultiChatboxPrompt?.describe(p)
+    ? "dialogue" : p.getInterfaceId?.() > 0 ? "interface" : null;
   const status = (p) => ({
     ...tile(p.getLocation()), hitpoints: p.getHitpoints(), busy: activity(p), open: waitingOn(p),
     messages: messageLog(p).splice(0),
@@ -205,7 +206,10 @@ function buildMcpServer(core) {
     return status(find(username));
   };
 
+  // Options come either from a DialogueManager OptionDialogue or a plugin's sendMultiChatboxPrompt.
   const readDialogue = (p) => {
+    const prompt = MultiChatboxPrompt?.describe(p);
+    if (prompt) return { kind: "options", title: prompt.title, options: prompt.options };
     const manager = p.getDialogueManager?.();
     if (!manager?.isActive()) return null;
     // ponytail: reads DialogueManager's and the entries' private fields; add getters if they get renamed.
@@ -436,8 +440,11 @@ function buildMcpServer(core) {
       let index = typeof option === "number" ? option - 1 : dialogue.options.findIndex((o) => o.toLowerCase() === lower);
       if (index < 0) index = dialogue.options.findIndex((o) => o.toLowerCase().includes(lower));
       if (!dialogue.options[index]) throw new Error(`No option "${option}"; options: ${dialogue.options.join(" | ")}`);
+      const prompt = MultiChatboxPrompt?.describe(p);
       const groupId = p.getPacketSender().chatboxGroupId;
-      send(p, { type: "widget_action", widgetId: groupId << 16, groupId, childId: 0, buttonNum: index + 1 });
+      send(p, prompt
+        ? { type: "dialogue_continue", widgetId: prompt.widgetId, childIndex: index + 1 }
+        : { type: "widget_action", widgetId: groupId << 16, groupId, childId: 0, buttonNum: index + 1 });
       await sleepTicks(1);
       return { chose: dialogue.options[index], dialogue: readDialogue(find(username)), ...status(find(username)) };
     }

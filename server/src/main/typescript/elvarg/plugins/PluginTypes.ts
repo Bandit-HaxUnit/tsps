@@ -1075,6 +1075,7 @@ export interface PluginCoreApi {
   Server: any;
   PluginManager: any;
   ShopManager: any;
+  MultiChatboxPrompt: any;
   dispatchClientMessages: (player: any, messages: any[]) => boolean;
 }
 

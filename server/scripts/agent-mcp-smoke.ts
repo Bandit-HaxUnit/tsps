@@ -26,6 +26,7 @@ const dialogueManager = {
     isActive() { return this.dialogues.has(this.index); },
 };
 let bankOpen = false;
+let prompt: { title: string; options: string[]; widgetId: number } | null = null;
 let movingTicks = 0;
 const player = {
     getUsername: () => "Agent1",
@@ -67,6 +68,7 @@ const core = {
     ObjectDefinition: { forPlayer: () => ({ getName: () => "Tree", getInteractions: () => ["Chop down", null] }) },
     ItemDefinition: { forId: (id: number) => ({ getName: () => `item ${id}` }) },
     NpcDefinition: { forId: () => ({ getName: () => "Man" }) },
+    MultiChatboxPrompt: { describe: () => prompt },
     Bank: {
         MAIN_INTERFACE_ID: 12,
         SIDE_INTERFACE_ID: 15,
@@ -186,6 +188,15 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     const chose = (await call(client, "dialogue_choose", { player: "agent1", option: "no" })).value;
     assert.equal(chose.chose, "No thanks.");
     assert.equal(chose.dialogue, null);
+
+    // Plugin menus (sendMultiChatboxPrompt) are answered with a resume on the options widget.
+    prompt = { title: "Select an Option", options: ["Who are you?", "Nothing."], widgetId: (219 << 16) | 1 };
+    assert.deepEqual((await call(client, "dialogue", { player: "agent1" })).value,
+        { kind: "options", title: "Select an Option", options: ["Who are you?", "Nothing."] });
+    dispatched.length = 0;
+    await call(client, "dialogue_choose", { player: "agent1", option: 2 });
+    assert.deepEqual(dispatched, [{ type: "dialogue_continue", widgetId: (219 << 16) | 1, childIndex: 2 }]);
+    prompt = null;
 
     // Use items, bank and shop by name.
     dispatched.length = 0;
