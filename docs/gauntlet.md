@@ -2,7 +2,7 @@
 
 The Gauntlet and the Corrupted Gauntlet, ported from Near-Reality's implementation and checked against the OSRS Wiki and the cache. It is one plugin, `server/plugins/minigames/Gauntlet.plugin.js`, which delegates to one unit per area in `server/plugins/minigames/gauntlet/`.
 
-Status: done so far are the maze, the lobby, the run (entry, timer, exits, death) and preparing (resources, stations, the singing bowl, potions, cooking). monsters (with their drops). The Hunllef and rewards are still to come.
+Status: done so far are the maze, the lobby, the run (entry, timer, exits, death) and preparing (resources, stations, the singing bowl, potions, cooking). monsters (with their drops), the Gauntlet weapons and the Hunllef. Rewards, the scoreboard and stats are still to come.
 
 ## Layout
 
@@ -17,6 +17,8 @@ Status: done so far are the maze, the lobby, the run (entry, timer, exits, death
 | `GauntletResources.js` | Stocking lit rooms with resources, and gathering. |
 | `Prep.*` | The start room's stations, gathering hooks and Egniol potions. |
 | `GauntletMonsters.js` | Monsters in lit rooms, demi-bosses, and the run's drop rules. |
+| `GauntletHunllef.js` | The Hunllef fight. |
+| `Weapons.*` | The halberds, bows and staffs in combat. |
 | `Commands.*` | Developer commands. |
 
 ## The maze
@@ -183,6 +185,47 @@ Each demi-boss stands alone in the middle of its room. Monsters don't respawn, a
 
 A demi-boss also drops its own component (bear: spike, dragon: orb, dark beast: bowstring) if the player doesn't own it. Otherwise it drops any component they don't own, at an equal chance; once all three are owned, none.
 
+## Weapons (Wiki)
+
+| Weapon | Speed | Range | Notes |
+| --- | --- | --- | --- |
+| Halberd | 4 (not 7) | 2 | |
+| Bow | 5 | 10 | No arrows; the strength is on the bow. Core `RangedWeapon.GAUNTLET_BOW` plus a plugin ammo handler that uses none. |
+| Staff | 4 | 10 | Powered staff with a built-in spell. Max hit 23 / 31 / 39 by tier, regardless of level. The cast is Near-Reality's: animation 1167, graphics 1719/1720/1721 (corrupted 1722/1723/1724). |
+
+## The Hunllef
+
+The Hunllef waits in the boss room from the start of a run. It fights once the boss phase begins: through the barrier, or when the timer runs out. Killing it completes the run.
+
+**Mechanics from the Wiki** (both versions share them):
+
+| | |
+| --- | --- |
+| Hitpoints | 600 / 1000 |
+| Attack speed | every 5 ticks |
+| Attack style | Ranged first; switches every 4 attacks (tornado and prayer-disabling attacks count, the stomp doesn't), with animation 8754 |
+| Protection prayer | Protects against one style (forms 9021 / 9022 / 9023: melee / ranged / magic; corrupted 9035–9037). Every 6th off-prayer hit, zeros included, switches it to that hit's style. Hits it protects against do nothing. |
+| Stomp | If you stand under it when it attacks |
+| Tornadoes | Crystalline 1 / 2 / 3, Corrupted 2 / 3 / 4, above 66% / 33–66% / below 33% HP. They chase you for 20 ticks; damage by armour tier is in the table below. |
+| Floor | Three pattern sets by those thirds. Tiles turn blue (crimson) then orange, faster each phase; orange tiles deal 10–20 a tick. Floor loc 36149 (36046), +1 blue, +2 orange. |
+
+**Max hits** by the lowest tier of a full crystal set (none / basic / attuned / perfected):
+
+| | Correct prayer | No prayer | Tornado |
+| --- | --- | --- | --- |
+| Crystalline | 12 / 10 / 8 / 6 | 51 / 42 / 36 / 26 | 10–20 / 10–16 / 7–13 / 5–10 |
+| Corrupted | 16 / 13 / 10 / 8 | 68 / 55 / 45 / 35 | 15–30 / 15–25 / 10–20 / 7–15 |
+
+The Crystalline no-prayer maxes aren't on the Wiki: they're the Corrupted ratio per tier. The stomp hits up to the unprayed, unarmoured max.
+
+**Near-Reality's values** (the Wiki gives none):
+- the ids, animations (attack 8419, tornado 8418, stomp 8420, death 8421) and projectiles (ranged 1711, magic 1707, prayer-disabling 1713; corrupted +1);
+- a tornado summon every 56 ticks;
+- a floor pattern every 30 ticks, orange for 6 ticks;
+- a 15% chance for a magic attack to disable prayers.
+
+The Hunllef and its tornadoes are scripted: no default combat, and no drops (the reward is the chest).
+
 ## Developer commands
 
 | Command | Does |
@@ -192,6 +235,7 @@ A demi-boss also drops its own component (bear: spike, dragon: orb, dark beast: 
 | `::gauntletstart [corrupted]` | Starts a run without Bryn's checks; your hands must be empty. |
 | `::gauntletboss` | Ends preparation and takes you to the Hunllef. |
 | `::gauntlettime <seconds>` | Sets the preparation time left. |
+| `::gauntletgear [basic\|attuned\|perfected]` | During a run: a Hunllef loadout of that tier (default perfected): the armour worn, the bow wielded, the staff, the halberd, 4 Egniol potions, 4 crystal paddlefish and paddlefish in the rest. |
 
 ## Tests
 
@@ -209,4 +253,6 @@ A demi-boss also drops its own component (bear: spike, dragon: orb, dark beast: 
 - the singing bowl's costs and in-place upgrades;
 - the Egniol chain;
 - the teleport crystal's rules;
-- monster animations, rooms and demi-bosses, the drop rules, and the safe start room.
+- monster animations, rooms and demi-bosses, the drop rules, and the safe start room;
+- the Hunllef: its style cycle and stomp, max hits by armour and prayer, the protection switch, tornado counts, the floor tiles, and completion;
+- the weapons and `::gauntletgear`.
