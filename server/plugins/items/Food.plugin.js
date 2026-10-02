@@ -45,6 +45,10 @@ const FOOD = new Map([
   [ItemIds.MANTA_RAY, { heal: 22 }],
   [ItemIdentifiers.MARLIN, { heal: 24 }],
   [ItemIds.COOKED_KARAMBWAN, { heal: 18, karambwan: true }],
+  // The Gauntlet: crystal and corrupted paddlefish combo-eat like karambwan (Wiki).
+  [ItemIdentifiers.PADDLEFISH, { heal: 20 }],
+  [ItemIdentifiers.CRYSTAL_PADDLEFISH, { heal: 16, karambwan: true }],
+  [ItemIdentifiers.CORRUPTED_PADDLEFISH, { heal: 16, karambwan: true }],
   [ItemIds.ANGLERFISH, { heal: 22, anglerfish: true }],
   [ItemIdentifiers.BLIGHTED_MANTA_RAY, { heal: 22 }],
   [ItemIdentifiers.BLIGHTED_ANGLERFISH, { heal: 22, anglerfish: true }],
