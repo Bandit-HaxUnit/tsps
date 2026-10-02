@@ -8,8 +8,8 @@
  * Not Just a Head adds blood barrages and blood clouds.
  * Wiki: https://oldschool.runescape.wiki/w/Zebak
  *
- * Swimming after being washed into the water is not simulated: a wave pushes you as far as
- * the floor allows.
+ * A wave that pushes someone off the edge washes them into the water. Swimmers can't attack or
+ * run, the crocodiles there bite them, and they climb back out by the rock steps.
  */
 
 const Shared = require("./ToaShared");
@@ -32,11 +32,27 @@ const BLOOD_CLOUD_TILES = [{ x: 3931, y: 5413 }, { x: 3934, y: 5401 }];
 const POISON = 45570; // 45570..45575
 const BOULDER_BLOCK = 43876;
 const BLOOD_FLOOR = 652; // 652..654
+const ROCK_STEPS = "Rock steps";
+
+// The water crocodiles' spawns (OpenRune). In the cache they're bubbles (swampbubs) with
+// attack 250 and strength 70: a max hit of 8 before scaling. They bite every 2 ticks.
+const WATER_CROC_TILES = [
+  { x: 3948, y: 5408 }, { x: 3948, y: 5408 }, { x: 3935, y: 5422 }, { x: 3934, y: 5420 },
+  { x: 3921, y: 5418 }, { x: 3937, y: 5396 }, { x: 3937, y: 5395 }, { x: 3919, y: 5403 },
+];
+const CROC_MAX_HIT = 8;
+const CROC_BITE_TICKS = 2;
+const CROC_HUNT_RANGE = 16;
+// A wave that runs out of floor throws the player this many tiles on, into the water (OpenRune).
+const WATER_JUMP = 5;
 
 const ANIMATION = {
   SHOOT: 9624, TAIL_SHOOT: 9625, MELEE: 9620, TAIL_MELEE: 9621, DEATH: 9634, TAIL_DEATH: 9635,
   SCREAM: 9628, TAIL_SCREAM: 9629, CALL_WAVE: 9630, TAIL_CALL_WAVE: 9631, PUSHED: 4177, SLIDE: 1114, JUG_MOVE: 834,
+  CROC_BITE: 9804,
 };
+// Stand, turn, walk, turn around, turn right, turn left, run: human_swim_ready / human_swim.
+const SWIM_ANIMATIONS = [773, 772, 772, 772, 772, 772, 772];
 const PROJECTILE = {
   POISON: 1555, BOULDER: 2172, JUG: 2173, POISON_BOULDER: 2194, MAGIC: 2176, MAGIC_SPLIT: 2181,
   RANGED: 2178, RANGED_SPLIT: 2187, POISON_SPREAD: 2194, JUG_SPREAD: 2193,
@@ -47,8 +63,11 @@ const GRAPHIC = {
 const SOUND = { MAGIC: 5823, RANGED: 5819, FINAL_PHASE: 3405, BARRAGE: 102, JUGS: 5908, POISON_LAND: 5909, BOULDER_LAND: 5913, PUSHED: 5888, RUMBLING: 1678, WAVE_HIT: 5868 };
 
 // Wiki: max hits 38 melee, 16 magic and ranged; a wave hits for 6-10, all scaled by raid level.
-const MAX_HIT = { BITE: 38, VOLLEY: 16, POISON: 10, BLEED: 5, SCREAM: 20, WAVE: 10, BLOOD: 7 };
+const MAX_HIT = { BITE: 38, VOLLEY: 16, POISON: 10, SCREAM: 20, WAVE: 10, BLOOD: 7 };
 const WAVE_MIN_HIT = 6;
+// A bite bleeds 1 time in 4 instead of hitting: 5-10 at once, then 1-8 each tick spent
+// moving for 10 ticks (OpenRune; the Wiki only says moving makes it worse).
+const BLEED = { CHANCE: 4, TICKS: 10, APPLY_MIN: 5, APPLY_MAX: 10, MOVING_MIN: 1, MOVING_MAX: 8 };
 const ZEBAK_POINTS = 1.5;
 
 class ZebakRoom extends Raid.Room {
@@ -77,6 +96,8 @@ class ZebakRoom extends Raid.Room {
     this.waves = new Set();
     this.clouds = new Set();
     this.bleeding = new Map();
+    this.swimmers = new Map();
+    this.crocodiles = [];
     this.zebak = this.spawn(NpcIdentifiers.ZEBAK_2, SPAWN, { points: ZEBAK_POINTS, face: 4 });
     if (this.zebak) {
       this.zebak.__toaScripted = true;
@@ -94,6 +115,7 @@ class ZebakRoom extends Raid.Room {
   onStart() {
     this.raid.scale(this.zebak, this.pathLevel());
     this.openBossHud(this.zebak);
+    this.spawnCrocodiles();
   }
 
   onComplete() {
@@ -115,6 +137,10 @@ class ZebakRoom extends Raid.Room {
     for (const boulder of this.boulders) this.removeBoulder(boulder);
     this.boulders = [];
     for (const key of [...this.poison.keys()]) this.removePoison(key);
+    for (const crocodile of this.crocodiles) this.despawn(crocodile);
+    this.crocodiles = [];
+    for (const player of [...this.swimmers.keys()]) this.stopSwimming(player);
+    this.bleeding.clear();
   }
 
   // -------------------------------------------------------------- health phases
@@ -142,6 +168,11 @@ class ZebakRoom extends Raid.Room {
   tick() {
     if (!this.isStarted() || !this.zebak || this.zebak.getHitpoints() <= 0) return;
     const players = this.challengePlayers();
+    for (const player of [...this.swimmers.keys()]) {
+      if (!players.includes(player)) this.stopSwimming(player);
+    }
+    this.tickCrocodiles(players);
+    this.tickBleeding(players);
     this.tickPoison(players);
     this.tickJugs();
     this.tickWaves(players);
@@ -172,11 +203,8 @@ class ZebakRoom extends Raid.Room {
       this.later(1, () => {
         for (const player of inReach) {
           if (player.getHitpoints() <= 0 || !this.inChallenge(player)) continue;
-          this.strike(this.zebak, player, null, "melee", MAX_HIT.BITE, 0);
-          if (Shared.random(0, 3) === 0) {
-            player.sendMessage("<col=ff3045>Zebak's fangs tear into your flesh, causing you to bleed.</col>");
-            this.bleeding.set(player, Shared.cycle() + 10);
-          }
+          if (Shared.random(1, BLEED.CHANCE) === 1) this.bleed(player);
+          else this.strike(this.zebak, player, null, "melee", MAX_HIT.BITE, 0);
         }
       });
       return;
@@ -326,15 +354,137 @@ class ZebakRoom extends Raid.Room {
 
   // -------------------------------------------------------------- bleeding
 
+  bleed(player) {
+    player.sendMessage("<col=ff3045>Zebak's fangs tear into your flesh, causing you to bleed.</col>");
+    Shared.damage(player, Shared.random(this.maxHit(BLEED.APPLY_MIN), this.maxHit(BLEED.APPLY_MAX)));
+    this.bleeding.set(player, { until: Shared.cycle() + BLEED.TICKS, moved: false });
+  }
+
   onStep(player) {
-    if ((this.bleeding.get(player) ?? 0) <= Shared.cycle()) return;
-    const base = this.maxHit(MAX_HIT.BLEED);
-    Shared.damage(player, Shared.random(base, base + 7));
+    const bleed = this.bleeding.get(player);
+    if (!bleed) return;
+    bleed.moved = true;
     const location = player.getLocation();
     const tile = { x: location.getX(), y: location.getY(), z: 0 };
     if (!this.objectAt(tile, 22)) {
       this.setObject(BLOOD_FLOOR + Shared.random(0, 2), tile, 22, 0);
       this.later(10, () => this.setObject(-1, tile, 22));
+    }
+  }
+
+  /** A bleeding player who moved this tick takes one hit, however many tiles they ran. */
+  tickBleeding(players) {
+    for (const [player, bleed] of [...this.bleeding]) {
+      if (!players.includes(player) || bleed.until <= Shared.cycle()) {
+        this.bleeding.delete(player);
+        continue;
+      }
+      if (!bleed.moved) continue;
+      bleed.moved = false;
+      Shared.damage(player, Shared.random(this.maxHit(BLEED.MOVING_MIN), this.maxHit(BLEED.MOVING_MAX)));
+    }
+  }
+
+  // -------------------------------------------------------------- water
+
+  isSwimming(player) {
+    return this.swimmers.has(player);
+  }
+
+  startSwimming(player) {
+    if (this.swimmers.has(player)) return;
+    this.swimmers.set(player, player.isRunningReturn());
+    player.getCombat().reset();
+    player.setRenderAnimations(SWIM_ANIMATIONS);
+    player.getUpdateFlag().flag(Shared.core().Flag.APPEARANCE);
+  }
+
+  stopSwimming(player) {
+    if (!this.swimmers.has(player)) return;
+    const wasRunning = this.swimmers.get(player);
+    this.swimmers.delete(player);
+    player.setRenderAnimations(null);
+    player.getUpdateFlag().flag(Shared.core().Flag.APPEARANCE);
+    if (wasRunning && !player.isRunningReturn()) {
+      player.setRunning(true);
+      player.getPacketSender().sendRunStatus();
+    }
+  }
+
+  /** Swimmers can only walk. */
+  tickPlayer(player) {
+    if (!this.swimmers.has(player) || !player.isRunningReturn()) return;
+    player.setRunning(false);
+    player.getPacketSender().sendRunStatus();
+  }
+
+  climbOut(player, rock) {
+    if (!this.isSwimming(player)) {
+      player.sendMessage("The eyes looking at you from below the surface make you reconsider going down there.");
+      return;
+    }
+    // The steps face the island: walk up them onto its first free tile.
+    const step = rock.y < MIDDLE.y ? 1 : -1;
+    let landing = Shared.loc({ x: rock.x, y: rock.y + step }, 0);
+    for (let i = 2; i <= 3 && !Shared.floorFree(this.area, landing); i++) landing = Shared.loc({ x: rock.x, y: rock.y + step * i }, 0);
+    this.stopSwimming(player);
+    player.moveTo(landing);
+    player.sendMessage("You use the steps to get yourself back onto the island.");
+  }
+
+  /** One step toward a tile, never out of the water (a route could cross the island). */
+  swimToward(crocodile, tile) {
+    const location = crocodile.getLocation();
+    const dx = Math.sign(tile.x - location.getX());
+    const dy = Math.sign(tile.y - location.getY());
+    for (const [sx, sy] of [[dx, dy], [dx, 0], [0, dy]]) {
+      if (sx === 0 && sy === 0) continue;
+      const next = location.transform(sx, sy);
+      if (!isWater(next) || !Shared.floorFree(this.area, next)) continue;
+      const movement = crocodile.getMovementQueue();
+      movement.reset();
+      movement.addSteps(next);
+      return;
+    }
+  }
+
+  spawnCrocodiles() {
+    const { NpcIdentifiers } = Shared.core();
+    for (const tile of WATER_CROC_TILES) {
+      const crocodile = this.spawn(NpcIdentifiers.CROCODILE_7, { ...tile, z: 0 }, { scale: false, points: 0 });
+      if (!crocodile) continue;
+      crocodile.__toaScripted = true;
+      crocodile.__toaCroc = { home: { ...tile }, nextBite: 0 };
+      crocodile.setUntargetable(true);
+      this.crocodiles.push(crocodile);
+    }
+  }
+
+  /** Crocodiles drift about until someone is swimming, then go for the nearest swimmer. */
+  tickCrocodiles(players) {
+    const { Animation } = Shared.core();
+    const swimmers = players.filter((player) => this.swimmers.has(player));
+    for (const crocodile of this.crocodiles) {
+      const state = crocodile.__toaCroc;
+      const location = crocodile.getLocation();
+      const prey = swimmers
+        .filter((player) => player.getLocation().getDistance(location) < CROC_HUNT_RANGE)
+        .sort((a, b) => a.getLocation().getDistance(location) - b.getLocation().getDistance(location))[0];
+      if (!prey) {
+        if (Shared.random(0, 7) === 0) {
+          this.swimToward(crocodile, { x: state.home.x + Shared.random(-4, 4), y: state.home.y + Shared.random(-4, 4) });
+        }
+        continue;
+      }
+      crocodile.setPositionToFace(prey.getLocation());
+      if (!withinReach(crocodile, prey)) {
+        this.swimToward(crocodile, { x: prey.getLocation().getX(), y: prey.getLocation().getY() });
+        continue;
+      }
+      if (state.nextBite > Shared.cycle()) continue;
+      state.nextBite = Shared.cycle() + CROC_BITE_TICKS;
+      crocodile.performAnimation(new Animation(ANIMATION.CROC_BITE));
+      this.strike(crocodile, prey, null, "melee", CROC_MAX_HIT, 1);
     }
   }
 
@@ -414,7 +564,7 @@ class ZebakRoom extends Raid.Room {
     }
     for (const player of this.challengePlayers()) {
       const location = player.getLocation();
-      if (this.sheltered(location.getX(), location.getY())) continue;
+      if (this.isSwimming(player) || this.sheltered(location.getX(), location.getY())) continue;
       this.push(player, 1, 0, 2, MAX_HIT.SCREAM);
     }
     for (const jug of this.jugs) jug.setHitpoints(Math.max(0, jug.getHitpoints() - 5));
@@ -627,7 +777,7 @@ class ZebakRoom extends Raid.Room {
       const location = wave.getLocation();
       const step = state.north ? 1 : -1;
       for (const player of players) {
-        if (player.getLocation().equals(location)) this.push(player, 0, step, 4, MAX_HIT.WAVE);
+        if (player.getLocation().equals(location) && !this.isSwimming(player)) this.push(player, 0, step, 4, MAX_HIT.WAVE);
       }
       for (const jug of this.jugs) {
         if (jug.getLocation().getX() === location.getX() && jug.getLocation().getY() === location.getY() + step * 2 && !jug.__toaJug.direction) {
@@ -653,7 +803,17 @@ class ZebakRoom extends Raid.Room {
     const location = player.getLocation();
     let moved = 0;
     while (moved < distance && Shared.floorFree(this.area, location.transform(dx * (moved + 1), dy * (moved + 1)))) moved++;
+    // A wave that runs out of floor throws the player over the edge into the water.
+    let intoWater = false;
+    if (baseDamage === MAX_HIT.WAVE && moved < distance) {
+      const water = location.transform(dx * WATER_JUMP, dy * WATER_JUMP);
+      if (isWater(water) && Shared.floorFree(this.area, water)) {
+        moved = WATER_JUMP;
+        intoWater = true;
+      }
+    }
     if (moved > 0) Shared.knockback(player, dx * moved, dy * moved, { ticks: 1, speed: 30 });
+    if (intoWater) this.startSwimming(player);
     else player.getMovementQueue().reset();
     player.performAnimation(new Animation(ANIMATION.PUSHED));
     Shared.sound(player, baseDamage === MAX_HIT.SCREAM ? SOUND.PUSHED : SOUND.WAVE_HIT);
@@ -707,6 +867,11 @@ function withinReach(npc, player) {
   const dx = target.getX() < location.getX() ? location.getX() - target.getX() : Math.max(0, target.getX() - (location.getX() + size - 1));
   const dy = target.getY() < location.getY() ? location.getY() - target.getY() : Math.max(0, target.getY() - (location.getY() + size - 1));
   return Math.max(dx, dy) <= 1 && !(dx === 1 && dy === 1);
+}
+
+/** North and south of the island's floor is the water. */
+function isWater(location) {
+  return location.getY() < GROUND_MIN.y || location.getY() > GROUND_MAX.y;
 }
 
 function zebakRoom(npc) {
@@ -764,6 +929,19 @@ function hitJug(event) {
   return true;
 }
 
+/** Swimmers can't attack. */
+function swimmerCantAttack(event) {
+  const room = event.attacker?.isPlayer?.() ? Raid.roomOf(event.attacker) : null;
+  if (room instanceof ZebakRoom && room.isSwimming(event.attacker)) event.allow = false;
+}
+
+function climbRockSteps(event) {
+  const room = Raid.roomOf(event.player);
+  if (!(room instanceof ZebakRoom) || room.destroyed) return false;
+  room.climbOut(event.player, event.location);
+  return true;
+}
+
 module.exports = function registerZebak(api) {
   Shared.bind(api);
   Raid.registerRoom("CRONDIS_BOSS", ZebakRoom);
@@ -771,4 +949,6 @@ module.exports = function registerZebak(api) {
   api.onNpcBeforeDeath(zebakDowned);
   api.onNpcHitModify(jugStruck);
   api.onNpcInteraction("<col=00ffff>Jug</col>", { Push: pushJug, Pull: pullJug, Hit: hitJug });
+  api.onCanAttack(swimmerCantAttack);
+  Shared.onObject(api, ROCK_STEPS, climbRockSteps);
 };
