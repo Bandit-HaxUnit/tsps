@@ -130,6 +130,9 @@ class AkkhaRoom extends Raid.Room {
     this.feelingSpecial = settings.isActive("FEELING_SPECIAL");
     this.memoryIterations = 4 + Math.min(2, Math.floor(this.pathLevel() / 2));
     this.akkha = this.spawn(NpcIdentifiers.AKKHA, SPAWN, { points: 1 });
+    // Wiki: "while it is a distance attack, he will always try to close the gap between him and
+    // his target", so he can be led into the quadrant of a dispelled shadow.
+    this.akkha?.setFlag("combat:close-in");
     if (this.akkha) this.akkha.__toaAkkha = true;
   }
 
