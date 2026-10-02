@@ -13,13 +13,25 @@ const item = (id: number, amount = 1) => ({
 const skill = { getName: () => "Woodcutting" };
 
 const clientMessages: string[] = [];
-const packetSender = { sendMessage: (message: string) => clientMessages.push(message) };
+const packetSender = { chatboxGroupId: 231, sendMessage: (message: string) => clientMessages.push(message) };
+// Named like the real entry classes: the plugin reads the dialogue kind from the class name.
+class NpcDialogue { constructor(public npcId: number, public text: string) {} }
+class OptionDialogue { constructor(public options: string[]) {} }
+const dialogueManager = {
+    index: -1,
+    dialogues: new Map<number, unknown>([
+        [0, new NpcDialogue(3106, "Hello there.")],
+        [1, new OptionDialogue(["Yes please.", "No thanks."])],
+    ]),
+    isActive() { return this.dialogues.has(this.index); },
+};
+let bankOpen = false;
 let movingTicks = 0;
 const player = {
     getUsername: () => "Agent1",
     getIndex: () => 1,
     getMovementQueue: () => ({ hasPendingWork: () => movingTicks-- > 0 }),
-    getDialogueManager: () => ({ isActive: () => dialogueOpen }),
+    getDialogueManager: () => dialogueManager,
     getInterfaceId: () => -1,
     performAnimation: (_animation: unknown) => {},
     getLocation: () => location(3222, 3218),
@@ -27,10 +39,9 @@ const player = {
     getRunEnergy: () => 100,
     getPacketSender: () => packetSender,
     getSkillManager: () => ({ getCurrentLevel: () => 1, getMaxLevel: () => 1, getExperience: () => 0 }),
-    getInventory: () => ({ getItems: () => [item(1351), null, item(-1)] }),
+    getInventory: () => ({ getItems: () => [item(1351), null, item(-1), item(590)] }),
     getEquipment: () => ({ getItems: () => [] }),
 };
-let dialogueOpen = false;
 const npc = {
     getIndex: () => 7,
     getId: () => 3106,
@@ -55,11 +66,29 @@ const core = {
     },
     ObjectDefinition: { forPlayer: () => ({ getName: () => "Tree", getInteractions: () => ["Chop down", null] }) },
     ItemDefinition: { forId: (id: number) => ({ getName: () => `item ${id}` }) },
+    NpcDefinition: { forId: () => ({ getName: () => "Man" }) },
+    Bank: {
+        MAIN_INTERFACE_ID: 12,
+        SIDE_INTERFACE_ID: 15,
+        isOpen: () => bankOpen,
+        layout: () => [{ tab: 0, slot: 0, item: item(995, 23) }],
+        displayItemId: (bankItem: any) => bankItem.getId(),
+    },
+    ShopManager: {
+        MAIN_INTERFACE_ID: 300,
+        SIDE_INTERFACE_ID: 301,
+        describe: () => ({ name: "General Store", currency: "Coins", items: [{ slot: 0, itemId: 1931, amount: 5, price: 1 }] }),
+    },
     Skill: { values: () => [skill] },
     GameConstants: { GAME_ENGINE_PROCESSING_CYCLE_RATE: 1 },
     dispatchClientMessages: (target: unknown, messages: unknown[]) => {
         assert.equal(target, player);
         dispatched.push(...messages);
+        // Stand in for the server: continue advances the dialogue, an option click ends it.
+        for (const message of messages as any[]) {
+            if (message.type === "dialogue_continue") dialogueManager.index++;
+            if (message.type === "widget_action" && message.groupId === 231) dialogueManager.index = -1;
+        }
         return true;
     },
 };
@@ -87,7 +116,7 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     snapshot = (await call(client, "observe", { player: "agent1" })).value;
     assert.equal(snapshot.x, 3222);
     assert.deepEqual(snapshot.skills.Woodcutting, { level: 1, max: 1, xp: 0 });
-    assert.deepEqual(snapshot.inventory, [{ slot: 0, id: 1351, name: "item 1351", amount: 1 }]);
+    assert.deepEqual(snapshot.inventory[0], { slot: 0, id: 1351, name: "item 1351", amount: 1 });
     assert.deepEqual(snapshot.npcs[0].options, ["Talk-to", "Attack", "Pickpocket"]);
     assert.deepEqual(snapshot.objects, [{ id: 1276, name: "Tree", options: ["Chop down"], x: 3220, y: 3216 }]);
     assert.equal(snapshot.groundItems[0].id, 526);
@@ -145,10 +174,46 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     assert.deepEqual((await call(client, "wait_ticks", { player: "agent1", ticks: 1 })).value.busy, ["animating"]);
 
     // An open dialogue ends the wait so the agent can answer it.
-    dialogueOpen = true;
+    dialogueManager.index = 0;
     const talked = (await call(client, "interact", { player: "agent1", target: "Man", option: "Talk-to" })).value;
     assert.equal(talked.result, "dialogue");
-    dialogueOpen = false;
+    assert.deepEqual((await call(client, "dialogue", { player: "agent1" })).value,
+        { kind: "npc", speaker: "Man", text: "Hello there." });
+    assert.ok((await call(client, "dialogue_choose", { player: "agent1", option: "Yes" })).error);
+    const next = (await call(client, "dialogue_continue", { player: "agent1" })).value;
+    assert.deepEqual(next.dialogue.options, ["Yes please.", "No thanks."]);
+    assert.ok((await call(client, "dialogue_continue", { player: "agent1" })).error);
+    const chose = (await call(client, "dialogue_choose", { player: "agent1", option: "no" })).value;
+    assert.equal(chose.chose, "No thanks.");
+    assert.equal(chose.dialogue, null);
+
+    // Use items, bank and shop by name.
+    dispatched.length = 0;
+    await call(client, "use_item", { player: "agent1", item: "item 590", targetItem: "item 1351" });
+    await call(client, "use_item", { player: "agent1", item: "item 590", target: "Tree" });
+    assert.ok((await call(client, "bank", { player: "agent1" })).error);
+    bankOpen = true;
+    assert.deepEqual((await call(client, "bank", { player: "agent1" })).value, [{ name: "item 995", amount: 23 }]);
+    await call(client, "bank_withdraw", { player: "agent1", item: "item 995", amount: 13 });
+    await call(client, "bank_deposit", { player: "agent1", item: "item 590", amount: "all" });
+    assert.equal((await call(client, "shop", { player: "agent1" })).value.items[0].name, "item 1931");
+    await call(client, "shop_buy", { player: "agent1", item: "item 1931", amount: 6 });
+    await call(client, "shop_sell", { player: "agent1", item: "item 1351", amount: "all" });
+    const bank = { type: "widget_action", widgetId: (12 << 16) | 12, groupId: 12, childId: 12, slot: 0, itemId: 995, buttonNum: 1 };
+    const buy = { type: "widget_action", widgetId: (300 << 16) | 16, groupId: 300, childId: 16, slot: 1, itemId: 1931, buttonNum: 1 };
+    assert.deepEqual(dispatched, [
+        { type: "inventory_use_on", slot: 3, itemId: 590, target: { kind: "inventory", slot: 0, itemId: 1351 } },
+        { type: "inventory_use_on", slot: 3, itemId: 590, target: { kind: "loc", id: 1276, x: 3220, y: 3216, level: 0 } },
+        { ...bank, option: "Withdraw-10" },
+        { ...bank, option: "Withdraw-1" },
+        { ...bank, option: "Withdraw-1" },
+        { ...bank, option: "Withdraw-1" },
+        { type: "widget_action", widgetId: (15 << 16) | 3, groupId: 15, childId: 3, slot: 3, itemId: 590, buttonNum: 1, option: "Deposit-All" },
+        { ...buy, option: "Buy 5" },
+        { ...buy, option: "Buy 1" },
+        { type: "widget_action", widgetId: 301 << 16, groupId: 301, childId: 0, slot: 0, itemId: 1351, buttonNum: 1, option: "Sell 1" },
+    ]);
+    assert.ok((await call(client, "bank_withdraw", { player: "agent1", item: "Shrimps" })).error);
 
     await client.close();
     console.log("agent-mcp smoke passed");

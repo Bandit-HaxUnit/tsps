@@ -323,6 +323,21 @@ export class ShopManager {
         return false;
     }
 
+    /** The open shop as the player sees it; `slot` is the display slot shop widget actions use. */
+    public static describe(player: any): {
+        name: string; currency: string; items: Array<{ slot: number; itemId: number; amount: number; price: number }>;
+    } | null {
+        const shop = this.currentShop(player);
+        if (!shop) return null;
+        return {
+            name: shop.definition.getName(),
+            currency: this.currencyName(shop.definition.getCurrency()),
+            items: this.displayEntries(shop).map((entry, slot) => ({
+                slot, ...entry, price: this.itemPrice(shop, ItemDefinition.forId(entry.itemId)),
+            })),
+        };
+    }
+
     private static quantityMode(player: any): number {
         const mode = Number(player.getAttribute?.(this.QUANTITY_MODE_ATTRIBUTE) ?? 0);
         return Number.isInteger(mode) && mode >= 0 && mode < this.QUANTITY_BY_MODE.length ? mode : 0;

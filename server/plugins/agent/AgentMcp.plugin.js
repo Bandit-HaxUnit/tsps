@@ -14,6 +14,12 @@ const MAX_MESSAGES = 100;
 const MAX_WAIT_TICKS = 50;
 // Idle this many ticks in a row (no activity, same tile) before a wait counts as finished.
 const STILL_TICKS = 2;
+// Bank and shop clicks move fixed amounts, so larger amounts are sent as several clicks.
+const MAX_CLICKS = 50;
+const DIALOGUE_KINDS = {
+  NpcDialogue: "npc", PlayerDialogue: "player", OptionDialogue: "options",
+  StatementDialogue: "statement", ItemStatementDialogue: "item",
+};
 // Skilling plugins replay their animation every 4-5 ticks, so one this recent means still at it.
 const ANIMATION_TICKS = 5;
 const tracked = new WeakMap();
@@ -45,7 +51,9 @@ function track(player, World) {
 const tile = (location) => ({ x: location.getX(), y: location.getY(), z: location.getZ() });
 
 function buildMcpServer(core) {
-  const { World, MapObjects, ObjectDefinition, ItemDefinition, Skill, GameConstants, TaskManager } = core;
+  const {
+    World, MapObjects, ObjectDefinition, ItemDefinition, NpcDefinition, Skill, GameConstants, TaskManager, Bank, ShopManager,
+  } = core;
   const messageLog = (p) => track(p, World).messages;
   const server = new McpServer({ name: "tsps-agent", version: "1.0.0" });
 
@@ -146,6 +154,92 @@ function buildMcpServer(core) {
     };
   };
 
+  // Nearest NPC/object/ground item called `target` (that has `option`, when given). Errors name
+  // what is nearby so the agent can correct itself.
+  const nearest = (p, target, option, radius) => {
+    const here = p.getLocation();
+    const { npcs, objects, groundItems } = nearby(p, radius);
+    const named = (thing) => thing.name?.toLowerCase() === target.toLowerCase();
+    const hasOption = (thing) => !option || thing.options.some((o) => o.toLowerCase() === option.toLowerCase());
+    // Ground items carry no option list, so any option is allowed on them.
+    const candidates = [
+      ...npcs.filter(named).filter(hasOption).map((thing) => ({ kind: "npc", thing })),
+      ...objects.filter(named).filter(hasOption).map((thing) => ({ kind: "object", thing })),
+      ...groundItems.filter(named).map((thing) => ({ kind: "ground item", thing })),
+    ];
+    const distance = ({ thing }) => Math.max(Math.abs(thing.x - here.getX()), Math.abs(thing.y - here.getY()));
+    const pick = candidates.sort((a, b) => distance(a) - distance(b))[0];
+    if (pick) return pick;
+    const matches = [...npcs, ...objects].filter(named);
+    if (matches.length) {
+      const options = [...new Set(matches.flatMap((thing) => thing.options))];
+      throw new Error(`No nearby "${target}" has a "${option}" option; options: ${options.join(", ")}`);
+    }
+    const names = [...new Set([...npcs, ...objects, ...groundItems].map((thing) => thing.name).filter(Boolean))];
+    throw new Error(`Nothing named "${target}" within ${radius} tiles; nearby: ${names.join(", ")}`);
+  };
+  const inventorySlot = (p, name, exceptSlot) => {
+    const inventory = items(p.getInventory());
+    const entry = inventory.find((e) => e.slot !== exceptSlot && e.name?.toLowerCase() === name.toLowerCase());
+    if (!entry) throw new Error(`No "${name}" in inventory; have: ${inventory.map((e) => e.name).join(", ") || "nothing"}`);
+    return entry.slot;
+  };
+  const carried = (p, itemId) =>
+    items(p.getInventory()).filter((e) => e.id === itemId).reduce((sum, e) => sum + e.amount, 0);
+  // Splits `amount` into the fixed click sizes an interface offers, largest first.
+  const clicks = (amount, sizes) => {
+    const out = [];
+    for (const size of sizes) while (amount >= size) { out.push(size); amount -= size; }
+    if (out.length > MAX_CLICKS) throw new Error(`That needs ${out.length} clicks; use a smaller amount or "all"`);
+    return out;
+  };
+  // One click per tick: each click can empty or shift the slot the next one resolves.
+  const clickEach = async (username, steps, message) => {
+    for (const step of steps) {
+      const p = find(username);
+      const packet = message(p, step);
+      if (!packet) break;
+      send(p, packet);
+      await sleepTicks(1);
+    }
+    return status(find(username));
+  };
+
+  const readDialogue = (p) => {
+    const manager = p.getDialogueManager?.();
+    if (!manager?.isActive()) return null;
+    // ponytail: reads DialogueManager's and the entries' private fields; add getters if they get renamed.
+    const entry = manager.dialogues.get(manager.index);
+    const kind = DIALOGUE_KINDS[entry?.constructor?.name] ?? "other";
+    return {
+      kind,
+      speaker: kind === "npc" ? NpcDefinition.forId(entry.npcId)?.getName()?.replace(/_/g, " ")
+        : kind === "player" ? p.getUsername() : undefined,
+      title: entry?.title || undefined,
+      text: entry?.text,
+      options: entry?.options,
+    };
+  };
+
+  const bankEntries = (p) => {
+    if (!Bank.isOpen(p)) throw new Error("The bank is not open; interact with a Bank booth or Banker (option Bank) first");
+    return Bank.layout(p).map(({ item }, slot) => ({
+      slot, id: item.getId(), name: ItemDefinition.forId(item.getId()).getName(), amount: item.getAmount(),
+      itemId: Bank.displayItemId(item),
+    })).filter((e) => e.amount > 0);
+  };
+  const openShop = (p) => {
+    const shop = ShopManager.describe(p);
+    if (!shop) throw new Error("No shop is open; interact with a shopkeeper (option Trade) first");
+    return { ...shop, items: shop.items.map((e) => ({ ...e, name: ItemDefinition.forId(e.itemId).getName() })) };
+  };
+  const byName = (list, name, where) => {
+    const entry = list.find((e) => e.name?.toLowerCase() === name.toLowerCase());
+    if (!entry) throw new Error(`No "${name}" in ${where}; it has: ${list.map((e) => e.name).join(", ") || "nothing"}`);
+    return entry;
+  };
+  const amountSchema = z.union([z.number().int().min(1), z.literal("all")]).default(1);
+
   const tool = (name, description, inputSchema, handler) =>
     server.registerTool(name, { description, inputSchema }, async (args) => {
       try {
@@ -206,28 +300,7 @@ function buildMcpServer(core) {
     },
     async ({ player: username, target, option, radius, maxTicks }) => {
       const p = find(username);
-      const here = p.getLocation();
-      const { npcs, objects, groundItems } = nearby(p, radius);
-      const named = (thing) => thing.name?.toLowerCase() === target.toLowerCase();
-      const hasOption = (thing) => thing.options.some((o) => o.toLowerCase() === option.toLowerCase());
-      // Ground items carry no option list, so any option is allowed on them.
-      const candidates = [
-        ...npcs.filter(named).filter(hasOption).map((thing) => ({ kind: "npc", thing })),
-        ...objects.filter(named).filter(hasOption).map((thing) => ({ kind: "object", thing })),
-        ...groundItems.filter(named).map((thing) => ({ kind: "ground item", thing })),
-      ];
-      const distance = ({ thing }) => Math.max(Math.abs(thing.x - here.getX()), Math.abs(thing.y - here.getY()));
-      const pick = candidates.sort((a, b) => distance(a) - distance(b))[0];
-      if (!pick) {
-        const matches = [...npcs, ...objects].filter(named);
-        if (matches.length) {
-          const options = [...new Set(matches.flatMap((thing) => thing.options))];
-          throw new Error(`No nearby "${target}" has a "${option}" option; options: ${options.join(", ")}`);
-        }
-        const names = [...new Set([...npcs, ...objects, ...groundItems].map((thing) => thing.name).filter(Boolean))];
-        throw new Error(`Nothing named "${target}" within ${radius} tiles; nearby: ${names.join(", ")}`);
-      }
-
+      const pick = nearest(p, target, option, radius);
       const { kind, thing } = pick;
       if (kind === "npc") send(p, npcClick(p, World.getNpcs().get(thing.index), option));
       else if (kind === "object") {
@@ -276,13 +349,7 @@ function buildMcpServer(core) {
     },
     ({ player: username, item: name, slot, option }) => {
       const p = find(username);
-      const inventory = items(p.getInventory());
-      if (name !== undefined) {
-        slot = inventory.find((entry) => entry.name?.toLowerCase() === name.toLowerCase())?.slot;
-        if (slot === undefined) {
-          throw new Error(`No "${name}" in inventory; have: ${inventory.map((entry) => entry.name).join(", ") || "nothing"}`);
-        }
-      }
+      if (name !== undefined) slot = inventorySlot(p, name);
       if (slot === undefined) throw new Error("item or slot is required");
       const item = p.getInventory().getItems()[slot];
       if (!item || item.getId() <= 0) throw new Error(`Inventory slot ${slot} is empty`);
@@ -292,31 +359,192 @@ function buildMcpServer(core) {
 
   tool(
     "use_item",
-    "Use an inventory item on something: another inventory slot, an NPC (index), an object (id + tile), a ground item (id + tile) or a player (index).",
+    "Use an inventory item on something, then wait until the player is idle or a dialogue/interface opens. By name: item \"Tinderbox\" with targetItem \"Logs\" (another inventory item) or target \"Fire\" (nearest NPC, object or ground item). Raw form: slot plus on=inventory/npc/loc/ground/player with targetSlot or id (+ x, y).",
     {
       player,
-      slot: z.number().int().min(0).max(27),
-      on: z.enum(["inventory", "npc", "loc", "ground", "player"]),
+      item: z.string().optional().describe("Inventory item name to use"),
+      slot: z.number().int().min(0).max(27).optional(),
+      targetItem: z.string().optional().describe("Another inventory item, by name"),
+      target: z.string().optional().describe("Nearest NPC, object or ground item, by name"),
+      on: z.enum(["inventory", "npc", "loc", "ground", "player"]).optional(),
       targetSlot: z.number().int().optional(),
       id: z.number().int().optional(),
       x: z.number().int().optional(),
       y: z.number().int().optional(),
+      maxTicks: z.number().int().min(1).max(MAX_WAIT_TICKS).default(20),
     },
-    ({ player: username, slot, on, targetSlot, id, x, y }) => {
+    async ({ player: username, item: name, slot, targetItem, target: targetName, on, targetSlot, id, x, y, maxTicks }) => {
       const p = find(username);
+      if (name !== undefined) slot = inventorySlot(p, name);
+      if (slot === undefined) throw new Error("item or slot is required");
       const inventory = p.getInventory().getItems();
       const item = inventory[slot];
       if (!item || item.getId() <= 0) throw new Error(`Inventory slot ${slot} is empty`);
+      const level = p.getLocation().getZ();
       let target;
-      if (on === "inventory") {
+      if (targetItem !== undefined) {
+        const other = inventorySlot(p, targetItem, slot);
+        target = { kind: "inventory", slot: other, itemId: inventory[other].getId() };
+      } else if (targetName !== undefined) {
+        const { kind, thing } = nearest(p, targetName, undefined, 15);
+        target = kind === "npc" ? { kind: "npc", id: thing.index }
+          : { kind: kind === "object" ? "loc" : "ground", id: thing.id, x: thing.x, y: thing.y, level };
+      } else if (on === "inventory") {
         const other = inventory[targetSlot];
         if (!other || other.getId() <= 0) throw new Error(`Inventory slot ${targetSlot} is empty`);
         target = { kind: "inventory", slot: targetSlot, itemId: other.getId() };
-      } else {
+      } else if (on) {
         if (id === undefined) throw new Error("id is required");
-        target = { kind: on, id, x, y, level: p.getLocation().getZ() };
+        target = { kind: on, id, x, y, level };
+      } else throw new Error("Give targetItem, target, or on");
+      send(p, { type: "inventory_use_on", slot, itemId: item.getId(), target });
+      return settle(username, maxTicks);
+    }
+  );
+
+  tool(
+    "dialogue",
+    "Read the open dialogue: kind (npc/player/statement/item/options), speaker, text, and options to pick from. Returns null when no dialogue is open.",
+    { player },
+    ({ player: username }) => readDialogue(find(username))
+  );
+
+  tool(
+    "dialogue_continue",
+    "Click to continue the open dialogue (\"Click here to continue\"), then return the next dialogue (null if it ended) and player status.",
+    { player },
+    async ({ player: username }) => {
+      const p = find(username);
+      const dialogue = readDialogue(p);
+      if (!dialogue) throw new Error("No dialogue is open");
+      if (dialogue.kind === "options") throw new Error(`Pick an option with dialogue_choose: ${dialogue.options.join(" | ")}`);
+      send(p, { type: "dialogue_continue", widgetId: p.getPacketSender().chatboxGroupId << 16, childIndex: -1 });
+      await sleepTicks(1);
+      return { dialogue: readDialogue(find(username)), ...status(find(username)) };
+    }
+  );
+
+  tool(
+    "dialogue_choose",
+    "Pick an option in the open options dialogue by its text (exact or partial, e.g. \"Yes\") or its 1-based number, then return the next dialogue and player status.",
+    { player, option: z.union([z.string().min(1), z.number().int().min(1).max(5)]) },
+    async ({ player: username, option }) => {
+      const p = find(username);
+      const dialogue = readDialogue(p);
+      if (dialogue?.kind !== "options") throw new Error(dialogue ? "This dialogue has no options; use dialogue_continue" : "No dialogue is open");
+      const lower = String(option).toLowerCase();
+      let index = typeof option === "number" ? option - 1 : dialogue.options.findIndex((o) => o.toLowerCase() === lower);
+      if (index < 0) index = dialogue.options.findIndex((o) => o.toLowerCase().includes(lower));
+      if (!dialogue.options[index]) throw new Error(`No option "${option}"; options: ${dialogue.options.join(" | ")}`);
+      const groupId = p.getPacketSender().chatboxGroupId;
+      send(p, { type: "widget_action", widgetId: groupId << 16, groupId, childId: 0, buttonNum: index + 1 });
+      await sleepTicks(1);
+      return { chose: dialogue.options[index], dialogue: readDialogue(find(username)), ...status(find(username)) };
+    }
+  );
+
+  tool(
+    "close_interface",
+    "Close the open interface or dialogue (bank, shop, ...), like pressing Esc.",
+    { player },
+    ({ player: username }) => send(find(username), { type: "interface_close" })
+  );
+
+  tool(
+    "bank",
+    "List the items in the open bank (name, amount).",
+    { player },
+    ({ player: username }) => bankEntries(find(username)).map(({ name, amount }) => ({ name, amount }))
+  );
+
+  tool(
+    "bank_withdraw",
+    "Withdraw an item from the open bank by name. amount is a number or \"all\".",
+    { player, item: z.string().min(1), amount: amountSchema },
+    async ({ player: username, item: name, amount }) => {
+      const p = find(username);
+      const entry = byName(bankEntries(p), name, "the bank");
+      const steps = amount === "all" || amount >= entry.amount ? ["All"] : clicks(amount, [10, 5, 1]);
+      return clickEach(username, steps, (p, step) => {
+        const current = bankEntries(p).find((e) => e.id === entry.id);
+        if (!current) return null;
+        return {
+          type: "widget_action", widgetId: (Bank.MAIN_INTERFACE_ID << 16) | 12, groupId: Bank.MAIN_INTERFACE_ID,
+          childId: 12, slot: current.slot, itemId: current.itemId, buttonNum: 1, option: `Withdraw-${step}`,
+        };
+      });
+    }
+  );
+
+  tool(
+    "bank_deposit",
+    "Deposit an inventory item into the open bank by name (amount is a number or \"all\"), or everything in the inventory when item is omitted.",
+    { player, item: z.string().min(1).optional(), amount: amountSchema },
+    async ({ player: username, item: name, amount }) => {
+      const p = find(username);
+      bankEntries(p);
+      const groupId = Bank.MAIN_INTERFACE_ID;
+      if (name === undefined) {
+        send(p, { type: "widget_action", widgetId: (groupId << 16) | 41, groupId, childId: 41, buttonNum: 1 });
+        await sleepTicks(1);
+        return status(find(username));
       }
-      return send(p, { type: "inventory_use_on", slot, itemId: item.getId(), target });
+      const itemId = p.getInventory().getItems()[inventorySlot(p, name)].getId();
+      const steps = amount === "all" || amount >= carried(p, itemId) ? ["All"] : clicks(amount, [10, 5, 1]);
+      return clickEach(username, steps, (p, step) => {
+        const slot = items(p.getInventory()).find((e) => e.id === itemId)?.slot;
+        if (slot === undefined) return null;
+        return {
+          type: "widget_action", widgetId: (Bank.SIDE_INTERFACE_ID << 16) | 3, groupId: Bank.SIDE_INTERFACE_ID,
+          childId: 3, slot, itemId, buttonNum: 1, option: `Deposit-${step}`,
+        };
+      });
+    }
+  );
+
+  tool(
+    "shop",
+    "List the open shop's stock: name, amount in stock and price, plus the currency it trades in.",
+    { player },
+    ({ player: username }) => {
+      const shop = openShop(find(username));
+      return { ...shop, items: shop.items.map(({ name, amount, price }) => ({ name, amount, price })) };
+    }
+  );
+
+  tool(
+    "shop_buy",
+    "Buy an item from the open shop by name.",
+    { player, item: z.string().min(1), amount: z.number().int().min(1).default(1) },
+    async ({ player: username, item: name, amount }) => {
+      const entry = byName(openShop(find(username)).items, name, "the shop");
+      const groupId = ShopManager.MAIN_INTERFACE_ID;
+      return clickEach(username, clicks(amount, [50, 10, 5, 1]), (p, step) => {
+        const current = openShop(p).items.find((e) => e.itemId === entry.itemId);
+        if (!current) return null;
+        return {
+          type: "widget_action", widgetId: (groupId << 16) | 16, groupId, childId: 16,
+          slot: current.slot + 1, itemId: current.itemId, buttonNum: 1, option: `Buy ${step}`,
+        };
+      });
+    }
+  );
+
+  tool(
+    "shop_sell",
+    "Sell an inventory item to the open shop by name. amount is a number or \"all\".",
+    { player, item: z.string().min(1), amount: amountSchema },
+    async ({ player: username, item: name, amount }) => {
+      const p = find(username);
+      openShop(p);
+      const itemId = p.getInventory().getItems()[inventorySlot(p, name)].getId();
+      const total = carried(p, itemId);
+      const groupId = ShopManager.SIDE_INTERFACE_ID;
+      return clickEach(username, clicks(amount === "all" ? total : Math.min(amount, total), [50, 10, 5, 1]), (p, step) => {
+        const slot = items(p.getInventory()).find((e) => e.id === itemId)?.slot;
+        if (slot === undefined) return null;
+        return { type: "widget_action", widgetId: groupId << 16, groupId, childId: 0, slot, itemId, buttonNum: 1, option: `Sell ${step}` };
+      });
     }
   );
 
@@ -361,7 +589,7 @@ module.exports = {
         return;
       }
       // Stateless: a fresh server per request, players are named on every tool call.
-      const server = buildMcpServer({ ...api.core, TaskManager: api.getTaskManager() });
+      const server = buildMcpServer(api.core);
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableDnsRebindingProtection: true,
