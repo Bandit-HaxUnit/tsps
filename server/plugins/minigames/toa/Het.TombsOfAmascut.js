@@ -177,6 +177,15 @@ const GRAPHIC = { ROOF: 60, SHIELD_HIT: 732, ORB_WARNING: 382, ORB_BURST: 379, S
 const ANIMATION = { SLIDE: 1114, PICK_UP: 827, PUSH: 810, TAKE: 832 };
 const SOUND = { BEAM: 6540, BEAM_HIT: 6546, ROOF: 6542, STATUE: 2655, WALLS: 6535, END: 6539, MIRROR: 6543, PICK: 2581, PUSH: 86, PLACE: 2739, WALL_MINED: 6547, SEAL_HIT: 3600 };
 const ATTR_STORED_PICKAXE = "toa:stored-pickaxe";
+const VARBIT_PICKAXE_STORED = 14440; // TOA_PICKAXE_STORED
+const BRONZE_PICKAXE = 1265;
+/** In the cavity multiloc's order (varbit value - 1), as OpenRune lists them. */
+const STORABLE_PICKAXES = [
+  1267, 1269, 12297, 1273, 1271, 1275, 23276, // iron, steel, black, mithril, adamant, rune, gilded
+  11920, 12797, 23677, 13243, 13244, 20014, // dragon, dragon (or), zalcano's, infernal (and empty), 3rd age
+  23680, 23682, 25112, 25063, 25369, 25376, // crystal (and inactive), the trailblazers
+  30345, 30346, 30351, // the trailblazer reloaded pickaxes
+];
 
 class HetPuzzleRoom extends Raid.Room {
   build() {
@@ -629,34 +638,106 @@ function sealUnattackable(event) {
   if (event.target?.__toaSeal && event.attacker?.isPlayer?.()) event.allow = false;
 }
 
-/** The stand by the entrance holds one pickaxe per player for the raid. */
+/**
+ * The wall cavities (TOA_PICKAXE_STORED's multiloc) keep one pickaxe per player, shown in the
+ * wall by varbit 14440 (OpenRune #271): its value is the pickaxe's place in STORABLE_PICKAXES
+ * plus one, 0 when empty. A bronze pickaxe isn't stored: Het provides one.
+ */
 function usePickaxeStand(event) {
   const { player, option } = event;
   if (!hetRoom(player) && !Raid.raidOf(player)) return false;
-  const stored = player.getAttribute(ATTR_STORED_PICKAXE);
-  const pickaxe = Mining.findBestPickaxe(player);
-  const { Animation } = Shared.core();
-  if (option === "Take-pickaxe") {
-    if (pickaxe) player.sendMessage("You already have a pickaxe.");
-    else if (!stored) player.sendMessage("There's no pickaxe stored here.");
-    else if (player.getInventory().getFreeSlots() < 1) player.sendMessage("You don't have any space in your inventory.");
-    else {
-      player.performAnimation(new Animation(ANIMATION.TAKE));
-      player.getInventory().adds(stored, 1);
-      player.setAttribute(ATTR_STORED_PICKAXE, null);
-      player.sendMessage("You take the pickaxe.");
-    }
-    return true;
-  }
-  if (!pickaxe || !player.getInventory().contains(pickaxe.id)) player.sendMessage("You don't have anything to deposit.");
-  else if (stored) player.sendMessage("There's already a pickaxe stored here.");
+  if (option === "Take-pickaxe") takeStoredPickaxe(player);
   else {
-    player.performAnimation(new Animation(ANIMATION.TAKE));
-    player.getInventory().delete(pickaxe.id, 1);
-    player.setAttribute(ATTR_STORED_PICKAXE, pickaxe.id);
-    player.sendMessage("You place down the pickaxe.");
+    const held = heldPickaxes(player);
+    if (held.length === 0) player.sendMessage("You don't have anything to deposit.");
+    else storePickaxe(player, held.reduce((best, next) => (storableIndex(next.id) > storableIndex(best.id) ? next : best)));
   }
   return true;
+}
+
+/** Use a pickaxe on the cavity to store that one. */
+function pickaxeOnStand(event) {
+  if (event.objectId !== PICKAXE_STAND) return;
+  const { player } = event;
+  if (!hetRoom(player) && !Raid.raidOf(player)) return;
+  event.handled = true;
+  const held = heldPickaxes(player).find((entry) => entry.id === event.itemId && entry.worn === false);
+  if (!held) {
+    player.sendMessage("Nothing interesting happens.");
+    return;
+  }
+  storePickaxe(player, held);
+}
+
+function takeStoredPickaxe(player) {
+  const stored = player.getAttribute(ATTR_STORED_PICKAXE);
+  const { Animation, ItemDefinition } = Shared.core();
+  if (!stored) return;
+  if (heldPickaxes(player).length > 0) player.sendMessage("You already have a pickaxe.");
+  else if (player.getInventory().getFreeSlots() < 1) player.sendMessage("You don't have any space in your inventory.");
+  else {
+    player.performAnimation(new Animation(ANIMATION.TAKE));
+    player.getInventory().adds(stored, 1);
+    setStoredPickaxe(player, null);
+    player.sendMessage(`You take the ${ItemDefinition.forId(stored).getName()}.`);
+  }
+}
+
+function storePickaxe(player, held) {
+  const { Animation, ItemDefinition } = Shared.core();
+  if (player.getAttribute(ATTR_STORED_PICKAXE)) {
+    player.sendMessage("There's already a pickaxe stored here.");
+    return;
+  }
+  if (storableIndex(held.id) < 0) {
+    player.sendMessage("There's no point storing a bronze pickaxe here. Het will provide.");
+    return;
+  }
+  player.performAnimation(new Animation(ANIMATION.TAKE));
+  if (held.worn) {
+    const { Flag, WeaponInterfaceManager } = Shared.core();
+    player.getEquipment().delete(held.id, 1);
+    player.getEquipment().refreshItems();
+    Shared.api().getBonusManager().update(player);
+    WeaponInterfaceManager.assign(player);
+    player.getUpdateFlag().flag(Flag.APPEARANCE);
+  } else {
+    player.getInventory().delete(held.id, 1);
+  }
+  setStoredPickaxe(player, held.id);
+  player.sendMessage(`You place down the ${ItemDefinition.forId(held.id).getName()}.`);
+}
+
+/** Pickaxes in the inventory or wielded, bronze included (it's turned away, not ignored). */
+function heldPickaxes(player) {
+  const { Equipment } = Shared.core();
+  const held = [];
+  for (const item of player.getInventory().getValidItems()) {
+    if (item.getId() === BRONZE_PICKAXE || storableIndex(item.getId()) >= 0) held.push({ id: item.getId(), worn: false });
+  }
+  const weapon = player.getEquipment().getItems()[Equipment.WEAPON_SLOT];
+  const id = weapon?.getId?.() ?? -1;
+  if (id === BRONZE_PICKAXE || storableIndex(id) >= 0) held.push({ id, worn: true });
+  return held;
+}
+
+function storableIndex(id) {
+  return STORABLE_PICKAXES.indexOf(id);
+}
+
+function setStoredPickaxe(player, id) {
+  player.setAttribute(ATTR_STORED_PICKAXE, id);
+  sendStoredPickaxe(player);
+}
+
+/** Shows the stored pickaxe in the cavities. */
+function sendStoredPickaxe(player) {
+  const stored = player.getAttribute(ATTR_STORED_PICKAXE);
+  player.getPacketSender().sendVarbit(VARBIT_PICKAXE_STORED, stored ? storableIndex(stored) + 1 : 0);
+}
+
+function sendStoredPickaxeOnLogin({ player }) {
+  if (player.getAttribute(ATTR_STORED_PICKAXE)) sendStoredPickaxe(player);
 }
 
 module.exports = function registerHetPuzzle(api) {
@@ -671,6 +752,8 @@ module.exports = function registerHetPuzzle(api) {
   api.onNpcInteraction("<col=00ffff>Het's Seal (protected)</col>", { Destroy: destroySeal });
   api.onCanAttack(sealUnattackable);
   api.persistAttribute(ATTR_STORED_PICKAXE);
+  api.onItemOnObject(pickaxeOnStand);
+  api.onPlayerLogin(sendStoredPickaxeOnLogin);
 };
 
 function useMirrorObject(event) {
