@@ -210,10 +210,10 @@ export class Server {
 
       PluginManager.loadFromDirectory(path.join(process.cwd(), "plugins"));
 
-      console.info(
-        `Initializing Name in ${
-          Server.PRODUCTION ? "production" : "non-production"
-        } mode..`
+      console.debug(
+        `[server] initializing in ${
+          Server.PRODUCTION ? "production" : "development"
+        } mode`
       );
       // Start game logic (schedules GameEngine ticks, loads definitions, etc.)
       new GameBuilder().initialize();

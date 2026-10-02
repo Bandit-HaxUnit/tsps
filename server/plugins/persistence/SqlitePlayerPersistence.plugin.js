@@ -65,7 +65,7 @@ class SqlitePlayerPersistence extends PlayerPersistence {
     if (SqlitePlayerPersistence.IMPORT_LEGACY_JSON) {
       this.importLegacySaves();
     } else {
-      console.info("[persistence] legacy JSON import is disabled");
+      console.debug("[persistence] legacy JSON import is disabled");
     }
   }
 
