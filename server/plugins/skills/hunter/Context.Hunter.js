@@ -1,7 +1,7 @@
 "use strict";
 
 const H = { api: null, core: null, data: null, tick: 0, players: new Set(), traps: new Set(), actions: new Map(), reserved: new Map(), hidden: new Map() };
-const ANIM = Object.freeze({ SET: 5208, TAKE: 5207, SMALL: 5212, NET: 6605, NOOSE: 3297, TEASE: 5236, JUMP: 3067 });
+const ANIM = Object.freeze({ SET: 5208, TAKE: 5207, SMALL: 5212, NET: 6605, OLD_NET: 6606, BUTTERFLY: 5209, HANDS: 782, FALCON: 5162, NOOSE: 5255, TEASE: 5236, JUMP: 3067, BIRDHOUSE: 7057, BIRDHOUSE_IMCANDO: 8916, KICK: 423, PICKUP: 827, HERBI_APPEAR: 7687, HERBI_STUN: 7688, HERBI_BURROW: 7690, CAT_FALL: 5234, ANTELOPE_FALL: 10928 });
 
 function level(player, skill = H.core.Skill.HUNTER) {
   return player.getSkillManager().getCurrentLevel(skill);
@@ -14,7 +14,9 @@ function requireLevel(player, required, skill = H.core.Skill.HUNTER) {
 }
 
 function hasTool(player, id) {
-  return player.getInventory().contains(id) || player.getEquipment().getItems().some(item => item?.getId() === id);
+  const I = H.core.ItemIdentifiers;
+  const ids = id === I.HAMMER ? [I.HAMMER, I.IMCANDO_HAMMER, I.IMCANDO_HAMMER_OFF_HAND_] : id === I.KNIFE ? [I.KNIFE, I.FLETCHING_KNIFE] : [id];
+  return ids.some(tool => Number.isInteger(tool) && (player.getInventory().contains(tool) || player.getEquipment().getItems().some(item => item?.getId() === tool)));
 }
 
 function distance(a, b) {
@@ -93,24 +95,35 @@ function chinchompaPetBase(npcId) {
   return undefined;
 }
 
-function xp(player, amount, method, npcId) {
+function xp(player, amount, method, npcId, extra = {}) {
   player.getSkillManager().addExperiences(H.core.Skill.HUNTER, amount);
-  H.api.emitCustomEvent("hunter:success", { player, skill: H.core.Skill.HUNTER, method, npcId, xp: amount, petBase: chinchompaPetBase(npcId) });
+  H.api.emitCustomEvent("hunter:success", { player, skill: H.core.Skill.HUNTER, method, npcId, xp: amount, petBase: chinchompaPetBase(npcId), ...extra });
 }
 
-function chance(player, creature, bonus = 0) {
+// OSRS Wiki Module:Skilling success chart: rounded interpolation on a 256-roll.
+function probability(low, high, l) {
+  return Math.max(0, Math.min(1, (Math.floor(low + (high - low) * (l - 1) / 98 + 0.5) + 1) / 256));
+}
+
+function outfit(player) {
+  const I = H.core.ItemIdentifiers;
+  return [I.GUILD_HUNTER_HEADWEAR, I.GUILD_HUNTER_TOP, I.GUILD_HUNTER_LEGS, I.GUILD_HUNTER_BOOTS]
+    .every(id => player.getEquipment().getItems().some(item => item?.getId() === id));
+}
+
+function chance(player, creature, bonus = 0, required = creature.level) {
   const l = level(player);
-  if (l < creature.level) return false;
-  const N = H.core.NpcIdentifiers;
-  let threshold;
-  if ([N.CARNIVOROUS_CHINCHOMPA, N.BLACK_CHINCHOMPA].includes(creature.npc)) {
-    threshold = Math.floor(306 * (l - 1) / 98) - 78;
-  } else {
-    // ponytail: the other catch curves interpolate known endpoints; replace
-    // individual curves when a measured OSRS formula is available.
-    threshold = creature.base + (l - creature.level) * (255 - creature.base) / (creature.never - creature.level);
-  }
-  return Math.random() * 255 < Math.max(0, Math.min(255, threshold + bonus));
+  if (l < required) return false;
+  return Math.random() < Math.min(1, probability(creature.low, creature.high, l) + bonus + (outfit(player) ? 0.025 : 0));
+}
+
+function choose(player, entries, entity = null) {
+  player.getDialogueManager().startDialogues(new H.core.DialogueChainBuilder().add(new H.core.OptionDialogue(0, {
+    executeOption(option) {
+      player.getPacketSender().sendInterfaceRemoval();
+      if (active(player) && (!entity || nearby(player, entity))) entries[Number(option)]?.[1]();
+    },
+  }, ...entries.map(([text]) => text))));
 }
 
 function cancel(player) {
@@ -143,15 +156,15 @@ function processActions() {
   }
 }
 
-function hide(npc, ticks = 10) {
+function hide(npc, ticks = 10, animationTicks = 0) {
   H.reserved.delete(npc);
   const queue = npc.getMovementQueue();
-  H.hidden.set(npc, { due: H.tick + ticks, blocked: queue.isMovementBlocked(), untargetable: npc.untargetable });
+  H.hidden.set(npc, { due: H.tick + ticks, blocked: queue.isMovementBlocked(), untargetable: npc.untargetable, hideAt: H.tick + animationTicks });
   queue.reset();
   queue.setBlockMovement(true);
   npc.getCombat().reset();
   npc.untargetable = true;
-  npc.setVisible(false);
+  if (!animationTicks) npc.setVisible(false);
 }
 
 function reveal(npc) {
@@ -165,7 +178,10 @@ function reveal(npc) {
 }
 
 function processHidden() {
-  for (const [npc, state] of H.hidden) if (H.tick >= state.due || !npc.isRegistered()) reveal(npc);
+  for (const [npc, state] of H.hidden) {
+    if (H.tick >= state.due || !npc.isRegistered()) reveal(npc);
+    else if (H.tick >= state.hideAt && npc.isVisible()) npc.setVisible(false);
+  }
 }
 
 function removeObject(object) {
@@ -177,6 +193,14 @@ function removeObject(object) {
   if (index !== -1) removed.splice(index, 1);
 }
 
+function ownsClue(player, tier) {
+  const names = [`Clue scroll (${tier.toLowerCase()})`, `Clue bottle (${tier.toLowerCase()})`,
+    `Clue nest (${tier.toLowerCase()})`, `Scroll box (${tier.toLowerCase()})`];
+  const contains = container => container?.getItems?.().some(item => item?.getAmount() > 0
+    && names.includes(H.core.ItemDefinition.forId(item.getId()).getName()));
+  return contains(player.getInventory()) || Array.from({ length: H.core.Bank.TOTAL_BANK_TABS }, (_, tab) => player.getBank(tab)).some(contains);
+}
+
 function questComplete(player, key) {
   const request = { player, key, complete: null };
   H.api.emitCustomEvent("quest:is-complete", request);
@@ -184,4 +208,4 @@ function questComplete(player, key) {
 }
 
 module.exports = { H, ANIM, level, requireLevel, hasTool, distance, nearby, active, available, roll, rewardItems,
-  exchange, drop, xp, chance, cancel, begin, processActions, hide, reveal, processHidden, removeObject, questComplete };
+  exchange, drop, xp, probability, outfit, chance, choose, cancel, begin, processActions, hide, reveal, processHidden, removeObject, questComplete, ownsClue };

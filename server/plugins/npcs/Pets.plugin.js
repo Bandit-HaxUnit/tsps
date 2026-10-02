@@ -863,11 +863,17 @@ function onSkill(player, skill, { petBase, petChance, rolls = 1, runeId, npcId }
 }
 
 function fillSkillPetVariants({ ItemIdentifiers, NpcIdentifiers: Npcs }) {
+  if (!PET_BY_NAME.has("QUETZIN")) {
+    const pet = { enumName: "QUETZIN", petId: Npcs.QUETZIN, morphId: 0, itemId: ItemIdentifiers.QUETZIN, dialogue: -1 };
+    PETS.push(pet); PET_BY_ID.set(pet.petId, pet); PET_BY_NAME.set(pet.enumName, pet); PET_BY_ITEM_ID.set(pet.itemId, pet);
+  }
   for (const pet of PETS) {
     if (!pet.enumName.endsWith("_RIFT_GUARDIAN")) continue;
     const runeId = ItemIdentifiers[pet.enumName.replace("_RIFT_GUARDIAN", "_RUNE")];
     if (Number.isInteger(runeId)) SKILL_PET_VARIANTS.set(`rune:${runeId}`, pet);
   }
+  SKILL_PET_VARIANTS.set(`npc:${Npcs.HERBIBOAR}`, PET_BY_NAME.get("HERBI"));
+  SKILL_PET_VARIANTS.set(`npc:${Npcs.QUETZIN}`, PET_BY_NAME.get("QUETZIN"));
   SKILL_PET_VARIANTS.set(`npc:${Npcs.CHINCHOMPA}`, PET_BY_NAME.get("GREY_CHINCHOMPA"));
   SKILL_PET_VARIANTS.set(`npc:${Npcs.CARNIVOROUS_CHINCHOMPA}`, PET_BY_NAME.get("RED_CHINCHOMPA"));
   SKILL_PET_VARIANTS.set(`npc:${Npcs.BLACK_CHINCHOMPA}`, PET_BY_NAME.get("BLACK_CHINCHOMPA"));

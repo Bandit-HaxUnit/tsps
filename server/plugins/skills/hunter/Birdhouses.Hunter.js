@@ -1,6 +1,6 @@
 "use strict";
 
-const { H, ANIM, level, requireLevel, hasTool, nearby, roll, exchange, drop, xp, begin } = require("./Context");
+const { H, ANIM, level, requireLevel, hasTool, nearby, roll, exchange, drop, xp, begin } = require("./Context.Hunter");
 const ATTRIBUTE = "hunter.birdhouses";
 const DURATION = 50 * 60 * 1000;
 const bases = new Map();
@@ -48,7 +48,7 @@ function place(player, object, tier) {
   if (valid(houses(player)[object.getId()])) { player.sendMessage("There is already a birdhouse here."); return; }
   begin(player, 2, ANIM.SMALL, () => {
     const state = houses(player);
-    if (valid(state[object.getId()]) || !exchange(player, [[tier.item, 1]], [])) return;
+    if (!requireLevel(player, tier.level) || valid(state[object.getId()]) || !exchange(player, [[tier.item, 1]], [])) return;
     state[object.getId()] = { tier: tier.index, seeds: 0, filled: 0 };
     sync({ player });
     player.sendMessage("You place the birdhouse. Fill it with seeds to start catching birds.");
@@ -99,6 +99,12 @@ function build({ player, object }) {
   return true;
 }
 
+function makeAnimation(player) {
+  const I = H.core.ItemIdentifiers;
+  return player.getEquipment().getItems().some(item => [I.IMCANDO_HAMMER, I.IMCANDO_HAMMER_OFF_HAND_].includes(item?.getId()))
+    ? ANIM.BIRDHOUSE_IMCANDO : ANIM.BIRDHOUSE;
+}
+
 function craft(event) {
   const I = H.core.ItemIdentifiers;
   const pair = [event.usedItemId, event.usedWithItemId];
@@ -110,8 +116,8 @@ function craft(event) {
   if (!hasTool(player, I.HAMMER) || !hasTool(player, I.CHISEL)) { player.sendMessage("You need a hammer and a chisel."); return; }
   const inputs = [[tier.logs, 1], [I.CLOCKWORK, 1]], outputs = [[tier.item, 1]];
   if (!exchange(player, inputs, outputs, false)) { player.sendMessage("You need logs and a clockwork, and room for the birdhouse."); return; }
-  begin(player, 2, ANIM.SMALL, () => {
-    if (!hasTool(player, I.HAMMER) || !hasTool(player, I.CHISEL) || !exchange(player, inputs, outputs)) return;
+  begin(player, 2, makeAnimation(player), () => {
+    if (!requireLevel(player, tier.crafting, H.core.Skill.CRAFTING) || !hasTool(player, I.HAMMER) || !hasTool(player, I.CHISEL) || !exchange(player, inputs, outputs)) return;
     player.getSkillManager().addExperiences(H.core.Skill.CRAFTING, tier.craftXp);
     player.sendMessage("You craft a birdhouse.");
   });
@@ -120,16 +126,29 @@ function craft(event) {
 function loot(player, state) {
   const I = H.core.ItemIdentifiers;
   const result = [[I.CLOCKWORK, 1], [I.RAW_BIRD_MEAT, 10], [I.FEATHER, roll(30, 100)]];
-  const hunter = Math.min(99, level(player));
-  // ponytail: interpolate the seed-nest endpoints; replace with the exact
-  // integer curve if matching every intermediate level becomes necessary.
-  if (Math.random() < Math.floor(1 + 200 * (hunter - 1) / 98) / 256) result.push([I.BIRD_NEST_4, 1]);
+  const hunter = level(player);
+  if (Math.random() < require("./Context.Hunter").probability(0, 200, Math.min(99, hunter))) result.push([I.BIRD_NEST_4, 1]);
   const chance = [0.1, 0.125, 0.128, 0.13, 0.14, 0.15, 0.16, 0.17, 0.175][state.tier]
-    * (hunter <= 50 ? 0.5 : 0.5 + (hunter - 50) / 98);
-  for (let i = 0; i < 10; i++) {
+    * 3 * (hunter <= 50 ? 0.5 : 0.5 + (hunter - 50) / 98);
+  let clueGiven = false;
+  for (let i = 0; i < 5; i++) {
     if (Math.random() >= chance) continue;
-    const draw = roll(1, 100);
-    const nest = draw <= 60 ? I.BIRD_NEST_6 : draw <= 92 ? I.BIRD_NEST_5 : [I.BIRD_NEST, I.BIRD_NEST_2, I.BIRD_NEST_3][roll(0, 2)];
+    // ponytail: Wiki marks these clue-nest probabilities as approximate.
+    if (!clueGiven) {
+      let clue = null;
+      for (const [tier, numerator] of [["ELITE",1],["HARD",2],["MEDIUM",3],["EASY",4],["BEGINNER",30]]) {
+        if (!require("./Context.Hunter").ownsClue(player,tier) && roll(1,1500) <= numerator) { clue = tier; break; }
+      }
+      if (clue) {
+        const boxes = require("./Context.Hunter").questComplete(player,"x_marks_the_spot");
+        result.push([I[`${boxes ? "SCROLL_BOX" : "CLUE_NEST"}_${clue}_`],1]);
+        if (boxes) drop(player,[[I.BIRD_NEST_6,1]],player.getLocation());
+        clueGiven = true; continue;
+      }
+    }
+    const foot = player.getEquipment().getItems().some(item => item?.getId() === I.STRUNG_RABBIT_FOOT);
+    const draw = roll(1, foot ? 95 : 100);
+    const nest = draw <= 65 - (foot ? 5 : 0) ? I.BIRD_NEST_6 : draw <= (foot ? 92 : 97) ? I.BIRD_NEST_5 : [I.BIRD_NEST, I.BIRD_NEST_2, I.BIRD_NEST_3][roll(0, 2)];
     result.push([nest, 1]);
   }
   return result;
@@ -150,9 +169,9 @@ function collect(event, destroy = false, rebuild = false) {
   if (rebuild && (!next || !hasTool(player, H.core.ItemIdentifiers.HAMMER) || !hasTool(player, H.core.ItemIdentifiers.CHISEL))) {
     player.sendMessage("Bring suitable logs, a hammer and a chisel to reset this birdhouse."); return true;
   }
-  begin(player, 2, ANIM.SMALL, () => {
+  begin(player, 2, next ? makeAnimation(player) : ANIM.SMALL, () => {
     if (houses(player)[object.getId()] !== state) return;
-    if (next && (!hasTool(player, H.core.ItemIdentifiers.HAMMER) || !hasTool(player, H.core.ItemIdentifiers.CHISEL)
+    if (next && (!requireLevel(player,next.level) || !requireLevel(player,next.crafting,H.core.Skill.CRAFTING) || !hasTool(player, H.core.ItemIdentifiers.HAMMER) || !hasTool(player, H.core.ItemIdentifiers.CHISEL)
       || !exchange(player, [[next.logs, 1]], []))) return;
     const items = (destroy ? [[H.core.ItemIdentifiers.CLOCKWORK, 1]] : loot(player, state))
       .filter(item => !next || item[0] !== H.core.ItemIdentifiers.CLOCKWORK);
