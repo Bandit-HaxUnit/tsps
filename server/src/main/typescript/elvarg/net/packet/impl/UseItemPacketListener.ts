@@ -55,33 +55,49 @@ export class UseItemPacketListener {
       return;
     }
 
-    player.getMovementQueue().walkToObject(object, {
-      execute: () => {
-        player.getMovementQueue().reset();
-        player.getMovementQueue().walkToReset();
-        player.setPositionToFace(object.getLocation());
+    const useItem = () => {
+      player.getMovementQueue().reset();
+      player.getMovementQueue().walkToReset();
+      player.setPositionToFace(object.getLocation());
 
-        const handled = PluginManager.emitItemOnObject({
-          player,
-          object,
-          objectId: object.getId(),
-          item,
-          itemId,
-          itemSlot,
-          interfaceType,
-          location: {
-            x: object.getLocation().getX(),
-            y: object.getLocation().getY(),
-            z: object.getLocation().getZ(),
-          },
-          handled: false,
-        });
+      const handled = PluginManager.emitItemOnObject({
+        player,
+        object,
+        objectId: object.getId(),
+        item,
+        itemId,
+        itemSlot,
+        interfaceType,
+        location: {
+          x: object.getLocation().getX(),
+          y: object.getLocation().getY(),
+          z: object.getLocation().getZ(),
+        },
+        handled: false,
+      });
 
-        if (!handled) {
-          player.sendMessage("Nothing interesting happens.");
-        }
-      },
-    });
+      if (!handled) {
+        player.sendMessage("Nothing interesting happens.");
+      }
+    };
+
+    // The same route hook as clicking the loc, so a plugin's approach tile holds for items too.
+    const location = player.getLocation();
+    const routeEvent = {
+      player,
+      object,
+      objectId: object.getId(),
+      clickType: 0,
+      sourceLocation: { x: location.getX(), y: location.getY(), z: location.getZ() },
+      destination: null as { x: number; y: number; z: number } | null,
+    };
+    PluginManager.emitObjectRoute(routeEvent);
+    if (routeEvent.destination) {
+      const { x, y, z } = routeEvent.destination;
+      player.getMovementQueue().walkToTile(new Location(x, y, z), useItem);
+      return;
+    }
+    player.getMovementQueue().walkToObject(object, { execute: useItem });
   }
 
   public static itemOnGroundItem(player: any, inventoryItemId: number, groundItemId: number, x: number, y: number, inventorySlot?: number): void {
