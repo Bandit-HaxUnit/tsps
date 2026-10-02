@@ -130,18 +130,18 @@ function leaveLobby({ player }) {
   if (Raid.raidOf(player) && Shared.inTombs(player.getLocation())) return;
   player.getPacketSender().closeSubInterface(Shared.OVERLAY_HUD_UID);
   const { applied, current } = Parties.forget(player);
-  if (applied?.leader) refreshManagement(applied.leader);
+  if (applied?.leader) refreshIfViewing(applied.leader);
   if (current && !current.insideRaid()) {
     player.sendMessage("You have left the lobby, so you have been removed from your party.");
-    if (current.leader) refreshManagement(current.leader);
+    if (current.leader) refreshIfViewing(current.leader);
   }
 }
 
 function forgetOnLogout({ player }) {
   if (Raid.raidOf(player)) return;
   const { applied, current } = Parties.forget(player);
-  if (applied?.leader) refreshManagement(applied.leader);
-  if (current?.leader) refreshManagement(current.leader);
+  if (applied?.leader) refreshIfViewing(applied.leader);
+  if (current?.leader) refreshIfViewing(current.leader);
 }
 
 // ------------------------------------------------------------------ overview (772)
@@ -214,7 +214,7 @@ function makeOrViewParty(player) {
       return;
     }
     const applied = state.applied;
-    if (applied && applied.withdraw(player) && applied.leader) refreshManagement(applied.leader);
+    if (applied && applied.withdraw(player) && applied.leader) refreshIfViewing(applied.leader);
     state.viewing = Parties.createParty(player);
     state.tab = 1;
   } else {
@@ -243,9 +243,27 @@ function selectParty(event) {
 
 // ------------------------------------------------------------------ management (774)
 
+/**
+ * (Re)opens the details panel and draws it. The panel must be reopened for every redraw: the
+ * member and applicant rows (scripts 6722/6727) count themselves into varcs 178 and 1087,
+ * which only the interface's onLoad (script 6615) zeroes, so redrawing in place doubled
+ * "Members (x)" and "Applicants (x)" (OpenRune reopens it the same way).
+ */
 function openManagement(player) {
   player.getPacketSender().sendInterface(INTERFACE.PARTY_MANAGEMENT);
-  refreshManagement(player);
+  drawManagement(player);
+}
+
+/** Redraws the panel for the player who acted on it. */
+function refreshManagement(player) {
+  openManagement(player);
+}
+
+/** Redraws someone else's panel, only while it's open (on `party`, if given). */
+function refreshIfViewing(player, party = null) {
+  if (player.getInterfaceId() !== INTERFACE.PARTY_MANAGEMENT) return;
+  if (party && !viewingManagement(player, party)) return;
+  openManagement(player);
 }
 
 function viewingParty(player) {
@@ -261,8 +279,8 @@ function viewingManagement(player, party) {
   return Parties.stateOf(player).viewing === party;
 }
 
-/** Redraws the management panel for a player looking at a party. */
-function refreshManagement(player) {
+/** Draws the management panel's rows and settings for a player looking at a party. */
+function drawManagement(player) {
   const state = Parties.stateOf(player);
   const party = state.viewing;
   if (!party || !party.leader) return;
@@ -311,7 +329,7 @@ function statLine(player, self) {
 
 function refreshPartyViewers(party) {
   for (const member of [...party.players, ...party.applicants, ...party.blocked]) {
-    if (viewingManagement(member, party)) refreshManagement(member);
+    refreshIfViewing(member, party);
   }
 }
 
@@ -338,6 +356,7 @@ function clickManagementButton(event) {
       party.settings.clear();
       Shared.sound(player, Shared.SOUND.CLEAR);
       refreshPartyViewers(party);
+      refreshManagement(player);
     });
   } else if (slot === MANAGEMENT.LOAD_PRESET && leader) {
     loadPreset(player, party);
@@ -361,6 +380,7 @@ function promptCompletions(player, party) {
     execute: (value) => {
       party.settings.kcRequirement = Math.max(0, Math.min(100, value | 0));
       refreshPartyViewers(party);
+      refreshManagement(player);
     },
   });
   player.getPacketSender().sendEnterAmountPrompt("Set a preferred number of completions up to 100 (or 0 to clear it):");
@@ -423,7 +443,7 @@ function applyToParty(player, party) {
   }
   const apply = () => {
     const previous = state.applied;
-    if (previous && previous.withdraw(player) && previous.leader) refreshManagement(previous.leader);
+    if (previous && previous.withdraw(player) && previous.leader) refreshIfViewing(previous.leader);
     if (!party.apply(player)) {
       Shared.statement(player, "That party is no longer recruiting.");
       return;
@@ -462,7 +482,7 @@ function kick(player, party, target) {
   target.sendMessage(`You have been kicked from the party of ${Shared.displayName(player)}.`);
   Shared.sound(target, Shared.SOUND.DECLINE);
   player.sendMessage(`You have kicked ${Shared.displayName(target)} from your party.`);
-  if (viewingManagement(target, party)) refreshManagement(target);
+  refreshIfViewing(target, party);
   refreshManagement(player);
 }
 
@@ -530,6 +550,7 @@ function loadPreset(player, party) {
   player.sendMessage("Your preset has been loaded.");
   Shared.sound(player, Shared.SOUND.CONFIRM);
   refreshPartyViewers(party);
+  refreshManagement(player);
 }
 
 /** Each preset is three varps the panel reads to show what it holds. */
