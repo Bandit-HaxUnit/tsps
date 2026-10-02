@@ -1084,8 +1084,11 @@ export class CombatFactory {
             return;
         }
 
-        CombatFactory.skull(attacker, SkullType.WHITE_SKULL, 300);
+        // Wiki: a white skull lasts 30 minutes after attacking a player.
+        CombatFactory.skull(attacker, SkullType.WHITE_SKULL, CombatFactory.PVP_SKULL_SECONDS);
     }
+
+    public static readonly PVP_SKULL_SECONDS = 30 * 60;
 
     static skull(player: Player, type: SkullType, seconds: number) {
         player.setSkullType(type);
