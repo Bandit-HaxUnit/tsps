@@ -12,36 +12,47 @@ const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/ser
 const DEFAULT_PORT = 49700;
 const MAX_MESSAGES = 100;
 const MAX_WAIT_TICKS = 50;
-// A player whose tile hasn't changed for this many ticks has arrived, is blocked, or is busy acting.
+// Idle this many ticks in a row (no activity, same tile) before a wait counts as finished.
 const STILL_TICKS = 2;
-const messageLogs = new WeakMap();
+// Skilling plugins replay their animation every 4-5 ticks, so one this recent means still at it.
+const ANIMATION_TICKS = 5;
+const tracked = new WeakMap();
 
-// Records game messages for players an agent has touched; the client still receives them.
-function messageLog(player) {
-  let log = messageLogs.get(player);
-  if (log) return log;
-  log = [];
-  messageLogs.set(player, log);
+// Records game messages and animation timing for players an agent has touched; the client
+// still receives everything.
+function track(player, World) {
+  let state = tracked.get(player);
+  if (state) return state;
+  state = { messages: [], animatedAt: -Infinity };
+  tracked.set(player, state);
   const sender = player.getPacketSender();
   const send = sender.sendMessage.bind(sender);
   sender.sendMessage = (message) => {
-    log.push(String(message));
-    if (log.length > MAX_MESSAGES) log.shift();
+    state.messages.push(String(message));
+    if (state.messages.length > MAX_MESSAGES) state.messages.shift();
     return send(message);
   };
-  return log;
+  const animate = player.performAnimation?.bind(player);
+  if (animate) {
+    player.performAnimation = (animation) => {
+      if (animation) state.animatedAt = World.getProcessCycle?.() ?? 0;
+      return animate(animation);
+    };
+  }
+  return state;
 }
 
 const tile = (location) => ({ x: location.getX(), y: location.getY(), z: location.getZ() });
 
 function buildMcpServer(core) {
-  const { World, MapObjects, ObjectDefinition, ItemDefinition, Skill, GameConstants } = core;
+  const { World, MapObjects, ObjectDefinition, ItemDefinition, Skill, GameConstants, TaskManager } = core;
+  const messageLog = (p) => track(p, World).messages;
   const server = new McpServer({ name: "tsps-agent", version: "1.0.0" });
 
   const find = (username) => {
     const player = World.getPlayerByName(username);
     if (!player) throw new Error(`${username} is not online`);
-    messageLog(player);
+    track(player, World);
     return player;
   };
   const send = (player, message) => {
@@ -58,20 +69,39 @@ function buildMcpServer(core) {
 
   const sleepTicks = (ticks) =>
     new Promise((resolve) => setTimeout(resolve, ticks * GameConstants.GAME_ENGINE_PROCESSING_CYCLE_RATE));
-  const status = (p) => ({ ...tile(p.getLocation()), hitpoints: p.getHitpoints(), messages: messageLog(p).splice(0) });
-  // Polls each tick until the player reaches `target`, or stands still for STILL_TICKS, or maxTicks pass.
-  // ponytail: position-only, so an in-place skilling/combat loop counts as settled; add a busy check if agents need it.
+  // What the player is in the middle of; empty means idle.
+  const activity = (p) => {
+    const busy = [];
+    if (p.getMovementQueue?.()?.hasPendingWork()) busy.push("moving");
+    if (TaskManager?.hasActiveTask(p.getIndex(), "MovementTask")) busy.push("walking to interact");
+    if (p.getCombat?.()?.hasPendingWork()) busy.push("combat");
+    const now = World.getProcessCycle?.();
+    if (now !== undefined && now - track(p, World).animatedAt <= ANIMATION_TICKS) busy.push("animating");
+    return busy;
+  };
+  // An open dialogue or interface needs the agent's input before anything else happens.
+  const waitingOn = (p) =>
+    p.getDialogueManager?.()?.isActive() ? "dialogue" : p.getInterfaceId?.() > 0 ? "interface" : null;
+  const status = (p) => ({
+    ...tile(p.getLocation()), hitpoints: p.getHitpoints(), busy: activity(p), open: waitingOn(p),
+    messages: messageLog(p).splice(0),
+  });
+  // Polls each tick until the player reaches `target`, opens a dialogue/interface, or has been
+  // idle (no activity, same tile) for STILL_TICKS; gives up after maxTicks.
   const settle = async (username, maxTicks, target) => {
     let last = tile(find(username).getLocation());
-    let still = 0;
+    let idle = 0;
     for (let ticks = 1; ticks <= maxTicks; ticks++) {
       await sleepTicks(1);
       const p = find(username);
       const here = tile(p.getLocation());
       if (target && here.x === target.x && here.y === target.y) return { result: "arrived", ticks, ...status(p) };
-      still = here.x === last.x && here.y === last.y && here.z === last.z ? still + 1 : 0;
+      const open = waitingOn(p);
+      if (open) return { result: open, ticks, ...status(p) };
+      const moved = here.x !== last.x || here.y !== last.y || here.z !== last.z;
+      idle = moved || activity(p).length ? 0 : idle + 1;
       last = here;
-      if (still >= STILL_TICKS) return { result: target ? "stuck" : "settled", ticks, ...status(p) };
+      if (idle >= STILL_TICKS) return { result: target ? "stuck" : "idle", ticks, ...status(p) };
     }
     return { result: "timeout", ticks: maxTicks, ...status(find(username)) };
   };
@@ -168,7 +198,7 @@ function buildMcpServer(core) {
 
   tool(
     "interact",
-    "Click an option on the nearest NPC, object or ground item with this name, then wait until the player stops moving. E.g. target \"Guard\" option \"Attack\", \"Tree\"/\"Chop down\", \"Bones\"/\"Take\". Returns what was clicked, result, position, hitpoints and new game messages.",
+    "Click an option on the nearest NPC, object or ground item with this name, then wait until the player is idle (done walking, fighting and skilling) or a dialogue/interface opens. E.g. target \"Guard\" option \"Attack\", \"Tree\"/\"Chop down\", \"Bones\"/\"Take\". Returns what was clicked, result (idle/dialogue/interface/timeout), position, hitpoints, busy reasons and new game messages.",
     {
       player, target: z.string().min(1), option: z.string().min(1),
       radius: z.number().int().min(1).max(32).default(15),
@@ -306,7 +336,7 @@ function buildMcpServer(core) {
 
   tool(
     "wait_ticks",
-    "Wait some game ticks (0.6s each), then return position, hitpoints and new game messages.",
+    "Wait some game ticks (0.6s each), then return position, hitpoints, busy reasons, any open dialogue/interface and new game messages.",
     { player, ticks: z.number().int().min(1).max(MAX_WAIT_TICKS).default(3) },
     async ({ player: username, ticks }) => {
       find(username);
@@ -331,7 +361,7 @@ module.exports = {
         return;
       }
       // Stateless: a fresh server per request, players are named on every tool call.
-      const server = buildMcpServer(api.core);
+      const server = buildMcpServer({ ...api.core, TaskManager: api.getTaskManager() });
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableDnsRebindingProtection: true,

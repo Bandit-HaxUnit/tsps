@@ -14,8 +14,14 @@ const skill = { getName: () => "Woodcutting" };
 
 const clientMessages: string[] = [];
 const packetSender = { sendMessage: (message: string) => clientMessages.push(message) };
+let movingTicks = 0;
 const player = {
     getUsername: () => "Agent1",
+    getIndex: () => 1,
+    getMovementQueue: () => ({ hasPendingWork: () => movingTicks-- > 0 }),
+    getDialogueManager: () => ({ isActive: () => dialogueOpen }),
+    getInterfaceId: () => -1,
+    performAnimation: (_animation: unknown) => {},
     getLocation: () => location(3222, 3218),
     getHitpoints: () => 10,
     getRunEnergy: () => 100,
@@ -24,6 +30,7 @@ const player = {
     getInventory: () => ({ getItems: () => [item(1351), null, item(-1)] }),
     getEquipment: () => ({ getItems: () => [] }),
 };
+let dialogueOpen = false;
 const npc = {
     getIndex: () => 7,
     getId: () => 3106,
@@ -35,6 +42,8 @@ const dispatched: any[] = [];
 
 const core = {
     World: {
+        // One tick per millisecond, matching GAME_ENGINE_PROCESSING_CYCLE_RATE below.
+        getProcessCycle: () => Date.now(),
         getPlayerByName: (name: string) => (name.toLowerCase() === "agent1" ? player : undefined),
         getPlayers: () => ({ stream: () => [player] }),
         getNpcs: () => ({ stream: () => [npc, null], get: (index: number) => (index === 7 ? npc : undefined) }),
@@ -95,7 +104,7 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     await call(client, "chat", { player: "agent1", text: "::tele 3222 3218" });
     const interacted = (await call(client, "interact", { player: "agent1", target: "man", option: "Attack" })).value;
     assert.deepEqual(interacted.clicked, { kind: "npc", name: "Man", x: 3225, y: 3220 });
-    assert.equal(interacted.result, "settled");
+    assert.equal(interacted.result, "idle");
     await call(client, "interact", { player: "agent1", target: "Tree", option: "chop down" });
     await call(client, "interact", { player: "agent1", target: "item 526", option: "Take" });
     assert.deepEqual(dispatched, [
@@ -124,6 +133,22 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
 
     const waited = (await call(client, "wait_ticks", { player: "agent1", ticks: 2 })).value;
     assert.equal(waited.x, 3222);
+    assert.deepEqual(waited.busy, []);
+
+    // Busy keeps an interact waiting: 3 ticks of movement, then an animation, then idle.
+    movingTicks = 3;
+    (player as any).performAnimation({});
+    const busyWait = (await call(client, "interact", { player: "agent1", target: "Tree", option: "Chop down" })).value;
+    assert.equal(busyWait.result, "idle");
+    assert.ok(busyWait.ticks > 3, `waited ${busyWait.ticks} ticks`);
+    (player as any).performAnimation({});
+    assert.deepEqual((await call(client, "wait_ticks", { player: "agent1", ticks: 1 })).value.busy, ["animating"]);
+
+    // An open dialogue ends the wait so the agent can answer it.
+    dialogueOpen = true;
+    const talked = (await call(client, "interact", { player: "agent1", target: "Man", option: "Talk-to" })).value;
+    assert.equal(talked.result, "dialogue");
+    dialogueOpen = false;
 
     await client.close();
     console.log("agent-mcp smoke passed");
