@@ -43,7 +43,8 @@ const REWARD_POTENTIAL_INFO = "Reward Potential|"
   + "Close|";
 
 const NECROPOLIS_ENTRANCE_RADIUS = 8;
-const SACK_GRAIN_CHANCE = 20;
+// The lobby's sack: TOA_GRAIN, a needle, the camulet and the bank camel (TOA_BANK_CAMEL).
+const SACK = { LOW: 1, HIGH: 10, GRAIN: 27225, NEEDLE: 1733, CAMULET: 6707, CAMEL: 11806 };
 
 // ------------------------------------------------------------------ entrances
 
@@ -96,15 +97,58 @@ function enterTombs({ player }) {
   return true;
 }
 
+/**
+ * Wiki: a Thieving roll, 0.78% at level 1 rising to 4.30% at 99 (Jagex's level-scaled chance,
+ * 1-10 out of 256 plus one), and never with a full inventory. A success is grain or a needle,
+ * half and half; a failure is the camel spitting, or scolding a player wearing a camulet. The
+ * dialogue is OpenRune's (#271).
+ */
 function searchSack({ player }) {
   if (!Shared.inLobby(player.getLocation())) return false;
-  if (Shared.random(0, SACK_GRAIN_CHANCE) !== 0) {
-    Shared.statement(player, "You go to search the sack, but the bank camel glares at you menacingly and spits in your direction");
+  const { Skill } = Shared.core();
+  const level = player.getSkillManager().getCurrentLevel(Skill.THIEVING);
+  if (player.getInventory().getFreeSlots() < 1 || Math.random() >= sackChance(level)) {
+    sackCaught(player);
+    return true;
+  }
+  if (Shared.random(0, 1) === 0) {
+    player.getInventory().adds(SACK.NEEDLE, 1);
+    sackDialogue(player, SACK.NEEDLE, "You search the sack and find a needle.", [
+      "Wow! A needle in a hay sack?",
+      "Wait, isn't it supposed to be a stack, not a sack?",
+      "And now that I think about it, this sack is full of grain, not hay...",
+      "Ah well, never mind.",
+    ]);
+  } else {
+    player.getInventory().adds(SACK.GRAIN, 1);
+    sackDialogue(player, SACK.GRAIN, "You successfully take some grain while the bank camel isn't looking.", [
+      "It's just grain...",
+      "Well, I'm not entirely sure what else I expected.",
+    ]);
+  }
+  return true;
+}
+
+function sackChance(level) {
+  const value = Math.floor((SACK.LOW * (99 - level) + SACK.HIGH * (level - 1)) / 98 + 0.5);
+  return (value + 1) / 256;
+}
+
+function sackCaught(player) {
+  const { Equipment } = Shared.core();
+  if (player.getEquipment().getItems()[Equipment.AMULET_SLOT]?.getId?.() !== SACK.CAMULET) {
+    Shared.statement(player, "You go to search the sack, but the bank camel glares at you menacingly and spits in your direction.");
     return;
   }
-  Shared.statement(player, "You successfully take some grain while the bank camel isn't looking.");
-  const { ItemIdentifiers } = Shared.core();
-  player.getInventory().adds(ItemIdentifiers.GRAIN, 1);
+  Shared.npcSay(player, SACK.CAMEL, "Hey, get your hands off my food! Unless you'd like me to start eating the contents of your bank instead!");
+}
+
+function sackDialogue(player, itemId, found, lines) {
+  const { DialogueChainBuilder, ItemStatementDialogue, PlayerDialogue, EndDialogue } = Shared.core();
+  const chain = [new ItemStatementDialogue(0, itemId, found)];
+  lines.forEach((line, index) => chain.push(new PlayerDialogue(index + 1, line)));
+  chain.push(new EndDialogue(lines.length + 1));
+  player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(...chain));
 }
 
 function readInvocationBoard({ player }) {
