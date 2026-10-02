@@ -71,6 +71,14 @@ test("a divine potion's timer pauses while logged out and the state survives a s
 
 const SpellTeleports = require("../plugins/combat/SpellTeleports.plugin");
 const teleports = [];
+/** Stands in for Construction's "construction:house-tablet" answer. */
+let ownsHouse = true;
+const HOUSE_PORTAL = new (require("../dist/game/model/Location").Location)(2953, 3224, 0);
+function houseTablet(request) {
+  if (!ownsHouse) return;
+  request.destination = HOUSE_PORTAL;
+  request.onArrival = request.option === "outside" ? null : () => "entered";
+}
 let allowTeleport = true;
 let breakTablet;
 SpellTeleports.register({
@@ -78,11 +86,12 @@ SpellTeleports.register({
     ItemDefinition: { forId: (id) => ({ getName: () => (id === ItemIdentifiers.VARROCK_TELEPORT ? "Varrock teleport" : "Teleport to house") }) },
     TeleportHandler: {
       checkReqs: () => allowTeleport,
-      teleport: (player, destination, type) => teleports.push({ destination, type }),
+      teleport: (player, destination, type, warning, onArrival) => teleports.push({ destination, type, onArrival }),
     },
     TeleportType: { TELE_TAB: "TELE_TAB" },
   },
   onItemAction: (handler) => { breakTablet = handler; },
+  emitCustomEvent: (name, request) => houseTablet(request),
   onInterfaceActionClick() {},
 });
 
@@ -118,8 +127,37 @@ test("a refused tablet (teleblock, deep Wilderness, busy) is not used up", () =>
   assert.equal(teleports.length, 0);
 });
 
-test("the house tablet is left alone until there is a house", () => {
-  const event = { player: tabletHolder(0), itemId: ItemIdentifiers.TELEPORT_TO_HOUSE, option: "Break", handled: false };
+function houseTabletHolder() {
+  const items = [ItemIdentifiers.TELEPORT_TO_HOUSE];
+  return {
+    items,
+    getInventory: () => ({
+      contains: (id) => items.includes(id),
+      deleteNumber: (id) => items.splice(items.indexOf(id), 1),
+    }),
+  };
+}
+
+test("a house tablet without a house is refused and kept", () => {
+  teleports.length = 0;
+  allowTeleport = true;
+  ownsHouse = false;
+  const player = houseTabletHolder();
+  const event = { player, itemId: ItemIdentifiers.TELEPORT_TO_HOUSE, option: "Break", handled: false };
   breakTablet(event);
-  assert.equal(event.handled, false);
+  assert.equal(event.handled, true);
+  assert.equal(player.items.length, 1);
+  assert.equal(teleports.length, 0);
+});
+
+test("a house tablet goes to the house portal and enters unless Outside was chosen", () => {
+  teleports.length = 0;
+  allowTeleport = true;
+  ownsHouse = true;
+  for (const option of ["Break", "Inside", "Outside"]) {
+    breakTablet({ player: houseTabletHolder(), itemId: ItemIdentifiers.TELEPORT_TO_HOUSE, option, handled: false });
+  }
+  assert.equal(teleports.length, 3);
+  assert.ok(teleports.every(({ destination }) => destination === HOUSE_PORTAL));
+  assert.deepEqual(teleports.map(({ onArrival }) => onArrival?.() ?? null), ["entered", "entered", null]);
 });
