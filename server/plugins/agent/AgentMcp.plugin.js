@@ -6,6 +6,7 @@ const { createContext } = require("./mcp/Context.AgentMcp");
 // Lets an MCP client (Claude Code, etc.) drive an online player for testing. Actions are
 // injected as the same decoded client messages a real client produces, so they run through
 // the normal ClientConnection dispatch; the player's own web client keeps rendering it all.
+// The login tool brings a player online with no client at all, for testing without a browser.
 //   AGENT_MCP=1 yarn dev   (optional AGENT_MCP_PORT, default 49700)
 //   claude mcp add --transport http tsps http://127.0.0.1:49700/mcp
 // Tools live in ./mcp/, one file per area.
@@ -16,10 +17,12 @@ let httpServer = null;
 function buildMcpServer(core) {
   const server = new McpServer({ name: "tsps-agent", version: "1.0.0" });
   const ctx = createContext(core, server);
+  require("./mcp/Session.AgentMcp")(ctx);
   require("./mcp/World.AgentMcp")(ctx);
   require("./mcp/Dialogue.AgentMcp")(ctx);
   require("./mcp/Bank.AgentMcp")(ctx);
   require("./mcp/Shop.AgentMcp")(ctx);
+  require("./mcp/Social.AgentMcp")(ctx);
   return server;
 }
 
