@@ -29,7 +29,8 @@ function isGhost(player) {
 
 function passBarrier(event) {
   const room = raidRoom(event.player);
-  if (!room) return false;
+  // Only the room barriers' Pass / Quick-Pass: Het's puzzle has "Barrier"s to Break too.
+  if (!room || (event.option !== "Pass" && event.option !== "Quick-Pass")) return false;
   room.passBarrier(event.player, event.object, event.option !== "Pass");
   return true;
 }
