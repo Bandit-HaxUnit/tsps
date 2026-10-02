@@ -20,6 +20,8 @@ const OVERVIEW_BUTTONS_UID = (INTERFACE.PARTY_OVERVIEW << 16) | 1;
 const OVERVIEW_PARTY_LIST_UID = (INTERFACE.PARTY_OVERVIEW << 16) | 16;
 const MANAGEMENT_BUTTONS_UID = (INTERFACE.PARTY_MANAGEMENT << 16) | 1;
 const MANAGEMENT_REWARD_INFO_UID = (INTERFACE.PARTY_MANAGEMENT << 16) | 96;
+/** The details panel's pause buttons: tabs, members, applicants and invocations (0-97). */
+const MANAGEMENT_PAUSE_LAST = 97;
 const MANAGEMENT_PRESETS_UID = (INTERFACE.PARTY_MANAGEMENT << 16) | 98;
 const REWARD_POTENTIAL_TEXT_UID = 50724925;
 
@@ -150,8 +152,10 @@ function openOverview(player) {
   const sender = player.getPacketSender();
   sender.sendConfig(VARP.CURRENT_PARTY, state.current ? 0 : -1);
   sender.sendInterface(INTERFACE.PARTY_OVERVIEW);
-  sender.sendInterfaceFlagsRange(OVERVIEW_BUTTONS_UID, 0, 2, EVENT.OP1);
-  sender.sendInterfaceFlagsRange(OVERVIEW_PARTY_LIST_UID, 0, Shared.MAX_LOBBY_PARTIES, EVENT.OP1);
+  // The list's buttons and rows are pause buttons (resume_pausebutton), as OSRS sets them;
+  // as op1 clicks the script-built rows had nothing to click.
+  sender.sendInterfaceFlagsRange(OVERVIEW_BUTTONS_UID, 0, 2, EVENT.CONTINUE);
+  sender.sendInterfaceFlagsRange(OVERVIEW_PARTY_LIST_UID, 0, Shared.MAX_LOBBY_PARTIES - 1, EVENT.CONTINUE);
   sendPartyList(player);
 }
 
@@ -270,7 +274,7 @@ function refreshManagement(player) {
           : VIEW.NON_MEMBER;
   for (let index = 0; index < Shared.MAX_PARTY_SIZE; index++) {
     const member = party.players[index];
-    sender.sendClientScript(SCRIPT.PARTY_MEMBER_ROW, 2, member ? statLine(member, member === player) : "");
+    sender.sendClientScript(SCRIPT.PARTY_MEMBER_ROW, state.viewingValue, member ? statLine(member, member === player) : "");
   }
   for (const applicant of party.applicants) {
     sender.sendClientScript(SCRIPT.PARTY_APPLICANT_ROW, statLine(applicant, applicant === player));
@@ -278,8 +282,7 @@ function refreshManagement(player) {
   const { settings } = party;
   sender.sendClientScript(SCRIPT.PARTY_MANAGEMENT_INIT, state.viewingValue, settings.kcRequirement,
     settings.activeCount, settings.raidLevel, state.tab, settings.bitmaps[0], settings.bitmaps[1], settings.bitmaps[2]);
-  const lastSlot = MANAGEMENT.INVOCATION_FIRST + Invocations.KEYS.length - 1;
-  sender.sendInterfaceFlagsRange(MANAGEMENT_BUTTONS_UID, 0, lastSlot, EVENT.CONTINUE | EVENT.OP1);
+  sender.sendInterfaceFlagsRange(MANAGEMENT_BUTTONS_UID, 0, MANAGEMENT_PAUSE_LAST, EVENT.CONTINUE);
   sender.sendInterfaceFlags(MANAGEMENT_REWARD_INFO_UID, EVENT.OP1);
   if (party.isLeader(player)) {
     sender.sendInterfaceFlagsRange(MANAGEMENT_PRESETS_UID, 0, Parties.PRESET_COUNT, EVENT.OP1 | EVENT.OP2);
