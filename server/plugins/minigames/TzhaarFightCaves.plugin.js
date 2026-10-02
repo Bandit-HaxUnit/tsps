@@ -20,6 +20,8 @@ const HEALER_HEAL = 5;
 const HEALER_HEAL_TICKS = 4;
 const HEALER_COMBAT_REACH = 4;
 const HEAL_GRAPHIC = 444; // TZHAAR_HEAL
+const LOGOUT_PAUSED = "Your logout request has been received. The minigame will be paused at the end of this wave. "
+  + "If you try to log out before that, you will have to repeat this wave.";
 
 const BOUNDS = { minX: 2368, maxX: 2431, minY: 5056, maxY: 5119 };
 const ENTRY = { x: 2413, y: 5117 };
@@ -86,6 +88,16 @@ function createArea() {
   FightCaveArea ??= class extends core.PrivateArea {
     constructor() {
       super([new core.Boundary(BOUNDS.minX, BOUNDS.maxX, BOUNDS.minY, BOUNDS.maxY, 0)]);
+    }
+
+    // Any way out but a logout (a teleport, a command) ends the run, so login won't resume it.
+    // finishRun drops the session before leaving, so the exit and death skip this.
+    postLeave(mobile, logout) {
+      super.postLeave(mobile, logout);
+      if (logout || sessions.get(mobile)?.area !== this) return;
+      sessions.delete(mobile);
+      mobile.setAttribute(ATTR_WAVE, null);
+      mobile.setAttribute(ATTR_ROTATION, null);
     }
   };
   return new FightCaveArea();
@@ -177,7 +189,10 @@ function processRun({ player }) {
   }
   const cycle = core.World.getProcessCycle();
   if (session.exitAt !== -1) {
-    if (cycle >= session.exitAt) finishRun(player, FINAL_WAVE, true);
+    if (cycle >= session.exitAt) {
+      finishRun(player, FINAL_WAVE, true);
+      if (session.logoutRequested) player.getSession().logout();
+    }
     return;
   }
   tendJad(player, session);
@@ -196,6 +211,11 @@ function processRun({ player }) {
     session.wave++;
     player.setAttribute(ATTR_WAVE, session.wave);
     session.nextWaveAt = cycle + WAVE_DELAY_TICKS;
+    if (session.logoutRequested) {
+      session.logoutRequested = false;
+      player.getSession().logout();
+      return;
+    }
   }
   if (session.nextWaveAt !== -1 && cycle >= session.nextWaveAt) spawnWave(player, session);
 }
@@ -276,14 +296,29 @@ function noTeleportOut(event) {
   event.allow = false;
 }
 
+// The logout button mid-wave (or with Jad down) waits for the wave to end, then logs out with
+// the next wave saved; between waves it goes straight through. A dropped connection can't wait,
+// so it restarts the wave it happened in.
+function holdLogout(event) {
+  const session = sessions.get(event.player);
+  if (!session || (session.nextWaveAt !== -1 && session.exitAt === -1)) return;
+  session.logoutRequested = true;
+  event.allow = false;
+  event.reason = LOGOUT_PAUSED;
+}
+
 // A logout restarts the wave it happened in, from the middle of the room, with the same
-// rotation. Anyone left inside without a run (an old save) is put back outside.
+// rotation. Anyone left inside without a run (an old save) is put back outside, and a run
+// saved by someone who had already left the cave is dropped.
 function resumeRun({ player }) {
   const wave = Number(player.getAttribute(ATTR_WAVE) ?? 0);
-  if (wave >= 1 && wave <= FINAL_WAVE) {
+  if (wave >= 1 && wave <= FINAL_WAVE && inCave(player)) {
     startRun(player, wave, Number(player.getAttribute(ATTR_ROTATION) ?? 0), RESUME);
   } else if (inCave(player)) {
     player.moveTo(tile(EXIT));
+  } else {
+    player.setAttribute(ATTR_WAVE, null);
+    player.setAttribute(ATTR_ROTATION, null);
   }
 }
 
@@ -314,6 +349,7 @@ module.exports = {
     pluginApi.onPlayerDeath(caveDeath);
     pluginApi.onShouldDropItemsOnDeath(keepItemsInCave);
     pluginApi.onCanTeleport(noTeleportOut);
+    pluginApi.onCanLogout(holdLogout);
   },
   waveMonsters,
 };

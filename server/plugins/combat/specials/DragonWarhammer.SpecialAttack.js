@@ -1,4 +1,4 @@
-// TODO: ported from xrsps-typescript; untested.
+// Smash drains 30% of current Defence after a damaging hit.
 module.exports = function registerDragonWarhammerSpecialAttack(api) {
   const { Animation, CombatSpecial, Graphic, ItemIdentifiers, MeleeCombatMethod, Priority, Skill, Sounds } = api.core;
 
@@ -7,18 +7,20 @@ module.exports = function registerDragonWarhammerSpecialAttack(api) {
   const ANIMATION = new Animation(1378);
   const GRAPHIC = new Graphic(1292, Priority.HIGH);
 
-  function smash(target, damage) {
-    if (Math.floor(damage) <= 0) {
+  function smash(hit) {
+    if (!hit.isAccurate() || Math.floor(hit.getTotalDamage()) <= 0) {
       return;
     }
-    if (!target.isPlayer()) {
-      // TODO: NPC combat-stat drain is not exposed by our core NPC state.
-      return;
-    }
-    const skillManager = target.getAsPlayer().getSkillManager();
-    const currentLevel = Math.max(0, Math.floor(skillManager.getCurrentLevel(Skill.DEFENCE)));
+    const target = hit.getTarget();
+    const skillManager = target.isPlayer() ? target.getAsPlayer().getSkillManager() : null;
+    const currentLevel = Math.max(0, Math.floor(skillManager
+      ? skillManager.getCurrentLevel(Skill.DEFENCE) : target.getAsNpc().getDefenceLevel()));
     const drainAmount = Math.floor(currentLevel * DEFENCE_DRAIN_FRACTION);
-    skillManager.setCurrentLevels(Skill.DEFENCE, Math.max(0, currentLevel - drainAmount));
+    if (drainAmount <= 0) return;
+    const level = currentLevel - drainAmount;
+    if (skillManager) skillManager.setCurrentLevels(Skill.DEFENCE, level);
+    else target.getAsNpc().setDefenceLevel(level);
+    hit.getAttacker().getAsPlayer().sendMessage(`You reduce your opponent's Defence by ${drainAmount}, from ${currentLevel} to ${level}.`);
   }
 
   class DragonWarhammerCombatMethod extends MeleeCombatMethod {
@@ -30,13 +32,13 @@ module.exports = function registerDragonWarhammerSpecialAttack(api) {
     }
 
     handleAfterHitEffects(hit) {
-      smash(hit.getTarget(), hit.getTotalDamage());
+      smash(hit);
     }
   }
 
   api.registerCombatSpecial({
     id: "dragon_warhammer",
-    itemIds: [ItemIdentifiers.DRAGON_WARHAMMER],
+    itemIds: [ItemIdentifiers.DRAGON_WARHAMMER, ItemIdentifiers.DRAGON_WARHAMMER_3, ItemIdentifiers.DRAGON_WARHAMMER_OR_, ItemIdentifiers.DRAGON_WARHAMMER_CR_],
     drainAmount: DRAIN,
     strengthMultiplier: 1.5,
     accuracyMultiplier: 1,

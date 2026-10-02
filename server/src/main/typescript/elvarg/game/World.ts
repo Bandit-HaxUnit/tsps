@@ -244,6 +244,10 @@ export class World {
         return World.activeRegionIndex.getSnapshot();
     }
 
+    public static isLocationActive(location: Location): boolean {
+        return World.activeRegionIndex.isLocationActive(location.getX(), location.getY(), location.getZ());
+    }
+
     public static markActiveRegionsDirty(): void {
         World.refreshActiveRegions();
     }

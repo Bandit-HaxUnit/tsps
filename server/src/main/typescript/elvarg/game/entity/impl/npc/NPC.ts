@@ -112,6 +112,10 @@ export class NPC extends Mobile {
     private healthBarOverride: { id: number; width: number } | null = null;
     /** Scales the combat XP players get for damaging this NPC (OSRS gives some bosses less). */
     private combatXpMultiplier: number = 1;
+    private defenceLevel: number | null = null;
+    private defenceRestoreCycle = 0;
+    // ponytail: standard regeneration; add encounter-specific rates/caps with those bosses.
+    private static readonly STAT_RESTORE_TICKS = 100;
 
     constructor(id: number, position: Location) {
         super(position)
@@ -370,6 +374,27 @@ export class NPC extends Mobile {
         // 13 = magic
         // 14 = range
         return base;
+    }
+
+    /** Temporary Defence belongs to this NPC, never its shared definition. */
+    public getDefenceLevel(): number {
+        const base = this.getCurrentDefinition().getStats()[2];
+        if (this.defenceLevel === null) return base;
+        const restored = Math.floor((World.getProcessCycle() - this.defenceRestoreCycle) / NPC.STAT_RESTORE_TICKS);
+        if (restored > 0) {
+            this.defenceLevel = Math.min(base, this.defenceLevel + restored);
+            this.defenceRestoreCycle += restored * NPC.STAT_RESTORE_TICKS;
+            if (this.defenceLevel === base) this.defenceLevel = null;
+        }
+        return this.defenceLevel ?? base;
+    }
+
+    public setDefenceLevel(level: number): void {
+        if (!Number.isFinite(level)) throw new RangeError("Invalid NPC Defence level");
+        if (this.defenceLevel === null) this.defenceRestoreCycle = World.getProcessCycle();
+        const base = this.getCurrentDefinition().getStats()[2];
+        this.defenceLevel = Math.max(0, Math.min(base, Math.floor(level)));
+        if (this.defenceLevel === base) this.defenceLevel = null;
     }
 
     public getBaseAttackSpeed(): number {

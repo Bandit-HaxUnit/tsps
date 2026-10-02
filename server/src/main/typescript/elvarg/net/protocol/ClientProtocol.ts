@@ -2660,8 +2660,8 @@ export function encodeDefaultAnimations(): Buffer {
   return packet(ServerPacket.ANIM, payload, 0);
 }
 
-export function encodeLogoutResponse(reason = ""): Buffer {
-  return packet(ServerPacket.LOGOUT_RESPONSE, Buffer.concat([Buffer.from([1]), string(reason)]));
+export function encodeLogoutResponse(reason = "", success = true): Buffer {
+  return packet(ServerPacket.LOGOUT_RESPONSE, Buffer.concat([Buffer.from([success ? 1 : 0]), string(reason)]));
 }
 
 export function encodePlayerOption(slot: number, option: string, priority: boolean): Buffer {

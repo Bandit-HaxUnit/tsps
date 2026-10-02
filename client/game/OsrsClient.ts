@@ -5869,6 +5869,8 @@ export class OsrsClient {
         this.updateGameState(GameState.LOGIN_SCREEN);
     }
 
+    private logoutUnsubscribe?: () => void;
+
     /**
      * Perform logout - called by CS2 LOGOUT opcode.
      * Sends logout request to server and waits for consent before completing.
@@ -5876,11 +5878,12 @@ export class OsrsClient {
     performLogout(afterLogout?: () => void): void {
         console.log("[OsrsClient] Requesting logout from server...");
 
-        // Subscribe to logout response (one-shot)
+        // A refusal keeps listening: the server may approve later (a Fight Cave wave ending).
+        this.logoutUnsubscribe?.();
         const unsubscribe = subscribeLogoutResponse((response) => {
-            unsubscribe();
-
             if (response.success) {
+                unsubscribe();
+                this.logoutUnsubscribe = undefined;
                 console.log("[OsrsClient] Server approved logout, completing...");
 
                 // Suppress reconnection after intentional logout
@@ -5910,6 +5913,8 @@ export class OsrsClient {
                 chatHistory.addMessage("game", reason);
             }
         });
+
+        this.logoutUnsubscribe = unsubscribe;
 
         // Send logout request to server
         sendLogout();

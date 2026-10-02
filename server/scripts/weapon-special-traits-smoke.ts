@@ -10,6 +10,14 @@ import { FightStyle } from "../src/main/typescript/elvarg/game/content/combat/Fi
 import { BonusManager } from "../src/main/typescript/elvarg/game/model/equipment/BonusManager";
 import { PrayerHandler } from "../src/main/typescript/elvarg/game/content/PrayerHandler";
 import { Skill } from "../src/main/typescript/elvarg/game/model/Skill";
+import { NPC } from "../src/main/typescript/elvarg/game/entity/impl/npc/NPC";
+import { NpcDefinition } from "../src/main/typescript/elvarg/game/definition/NpcDefinition";
+import { World } from "../src/main/typescript/elvarg/game/World";
+import { Location } from "../src/main/typescript/elvarg/game/model/Location";
+import { PluginManager } from "../src/main/typescript/elvarg/plugins/PluginManager";
+import { CombatSpecial } from "../src/main/typescript/elvarg/game/content/combat/CombatSpecial";
+import { ItemIdentifiers } from "../src/main/typescript/elvarg/util/ItemIdentifiers";
+import { NpcIdentifiers } from "../src/main/typescript/elvarg/util/NpcIdentifiers";
 
 /**
  * OSRS accuracy / max-hit reference values.
@@ -273,6 +281,7 @@ assert.equal(
         isNpc: () => true,
         getHitpoints: () => 100,
         getAsNpc: () => npc,
+        getDefenceLevel: () => 10,
         getCurrentDefinition: () => ({ getStats: () => [0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }),
     };
     const attacks = fakePlayer({ attack: 99, style: FightStyle.AGGRESSIVE, bonusType: 0, attackBonus: [100, 0, 0, 0, 0] });
@@ -313,6 +322,96 @@ assert.equal(
         DamageFormulas.calculateMaxMeleeHit(ranged),
         "physical_melee source uses the melee max hit"
     );
+}
+
+// 10) Dragon warhammer drains current Defence at impact, including NPCs and PvP bots.
+{
+    require("../plugins/combat/specials/DragonWarhammer.SpecialAttack")({
+        core: (PluginManager as any).getCoreApi(), registerCombatSpecial: CombatSpecial.register,
+    });
+    const smash = CombatSpecial.getById("dragon_warhammer")!;
+    for (const id of [ItemIdentifiers.DRAGON_WARHAMMER, ItemIdentifiers.DRAGON_WARHAMMER_3, ItemIdentifiers.DRAGON_WARHAMMER_OR_, ItemIdentifiers.DRAGON_WARHAMMER_CR_]) {
+        assert.equal(CombatSpecial.getForWeaponId(id), smash, "usable variants share Smash");
+    }
+    for (const id of [ItemIdentifiers.DRAGON_WARHAMMER_2, ItemIdentifiers.DRAGON_WARHAMMER_4, ItemIdentifiers.DRAGON_WARHAMMER_OR__2, ItemIdentifiers.DRAGON_WARHAMMER_CR__2]) {
+        assert.equal(CombatSpecial.getForWeaponId(id), null, "notes and placeholders cannot use Smash");
+    }
+    const messages: string[] = [];
+    const attacker: any = { getAsPlayer: () => ({ sendMessage: (text: string) => messages.push(text) }) };
+    const impact = (target: any, damage = 1, accurate = true) => smash.getCombatMethod().handleAfterHitEffects({
+        getAttacker: () => attacker, getTarget: () => target, getTotalDamage: () => damage, isAccurate: () => accurate,
+    } as any);
+
+    const originalCycle = World.getProcessCycle, originalDefinition = NpcDefinition.forId;
+    let cycle = 1000;
+    World.getProcessCycle = () => cycle;
+    const definition = new NpcDefinition();
+    (definition as any).stats = [1, 1, 100, 1, 1, 0, 0, 0, 0, 0, 10, 20, 30, 40, 50];
+    NpcDefinition.forId = () => definition;
+    try {
+        const npc = new NPC(NpcIdentifiers.GENERAL_GRAARDOR, new Location(3200, 3200));
+        const other = npc.clone();
+        const meleeBefore = AccuracyFormulasDpsCalc.defenseMeleeRoll(npc, BonusManager.ATTACK_CRUSH);
+        const rangedBefore = AccuracyFormulasDpsCalc.defenseRangedRoll(npc);
+        const magicBefore = AccuracyFormulasDpsCalc.defenseMagicRoll(npc);
+        impact(npc, 0);
+        impact(npc, 1, false);
+        assert.equal(npc.getDefenceLevel(), 100);
+        assert.equal(messages.length, 0, "misses and zero damage do not claim a drain");
+        impact(npc);
+        assert.equal(npc.getDefenceLevel(), 70);
+        assert.ok(AccuracyFormulasDpsCalc.defenseMeleeRoll(npc, BonusManager.ATTACK_CRUSH) < meleeBefore, "same-tick melee rolls see the drain");
+        assert.ok(AccuracyFormulasDpsCalc.defenseRangedRoll(npc) < rangedBefore, "ranged rolls see the drain");
+        assert.equal(AccuracyFormulasDpsCalc.defenseMagicRoll(npc), magicBefore, "NPC magic defence uses Magic");
+        assert.equal(other.getDefenceLevel(), 100, "another NPC sharing the definition is unaffected");
+        assert.equal(definition.getStats()[2], 100, "shared definitions stay immutable");
+        assert.equal(npc.clone().getDefenceLevel(), 100, "respawn starts with full Defence");
+        assert.match(messages[0], /by 30, from 100 to 70/);
+        cycle += 50;
+        impact(npc);
+        assert.equal(npc.getDefenceLevel(), 49, "repeated drains use current Defence");
+        cycle = 1099;
+        assert.equal(npc.getDefenceLevel(), 49);
+        cycle = 1100;
+        assert.equal(npc.getDefenceLevel(), 50, "one level restores per minute without resetting on another drain");
+        cycle = 1500;
+        assert.equal(npc.getDefenceLevel(), 54, "restoration catches up across idle cycles");
+        cycle = 10000;
+        assert.equal(npc.getDefenceLevel(), 100, "restoration stops at base Defence");
+        npc.setDefenceLevel(0);
+        impact(npc);
+        assert.equal(npc.getDefenceLevel(), 0);
+        assert.throws(() => npc.setDefenceLevel(NaN), RangeError);
+
+        const bot = fakePlayer();
+        let defence = 99, inCombat = true;
+        bot.getSkillManager = () => ({
+            getCurrentLevel: (skill: Skill) => skill === Skill.DEFENCE ? defence : 99,
+            setCurrentLevels: (_: Skill, level: number) => { defence = level; },
+            getMaxLevel: () => 99,
+            increaseCurrentLevel: (skill: Skill, amount: number) => { if (skill === Skill.DEFENCE) defence += amount; },
+        });
+        bot.getUsername = () => "drained-bot";
+        bot.isRegistered = () => true;
+        bot.busy = () => false;
+        bot.getHitpoints = () => 99;
+        bot.isDyingReturn = () => false;
+        bot.getCombat = () => ({ getTarget: () => inCombat ? attacker : null });
+        const before = AccuracyFormulasDpsCalc.defenseMeleeRoll(bot, BonusManager.ATTACK_CRUSH);
+        impact(bot);
+        assert.equal(defence, 70, "player Defence drains too");
+        assert.ok(AccuracyFormulasDpsCalc.defenseMeleeRoll(bot, BonusManager.ATTACK_CRUSH) < before);
+        const { MaintainCombatBoostsActionNode } = require("../plugins/bots/behaviours/nodes/actions/MaintainCombatBoostsActionNode");
+        const boosts = new MaintainCombatBoostsActionNode(new Map([[bot.getUsername(), { mode: "pvp", pvp: { profileId: "standard" } }]]));
+        boosts.tick({ player: bot });
+        assert.equal(defence, 70, "PvP maintenance cannot erase the drain mid-fight");
+        inCombat = false;
+        boosts.tick({ player: bot });
+        assert.equal(defence, 111, "PvP boosts still apply outside combat");
+    } finally {
+        World.getProcessCycle = originalCycle;
+        NpcDefinition.forId = originalDefinition;
+    }
 }
 
 console.info("weapon special traits smoke passed");

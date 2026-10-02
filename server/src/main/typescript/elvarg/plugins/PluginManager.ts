@@ -22,6 +22,7 @@ import {
   PluginCanEquipEvent,
   PluginFiremakingBlockedEvent,
   PluginCanTeleportEvent,
+  PluginCanLogoutEvent,
   PluginGroundItemInteractionEvent,
   PluginItemActionEvent,
   PluginModule,
@@ -195,6 +196,7 @@ export class PluginManager {
   private static activeZonesByPlayer = new WeakMap<any, Set<number>>();
   private static canAttackHooks: PluginHook<PluginCanAttackEvent>[] = [];
   private static canTeleportHooks: PluginHook<PluginCanTeleportEvent>[] = [];
+  private static canLogoutHooks: PluginHook<PluginCanLogoutEvent>[] = [];
   private static canEatHooks: PluginHook<PluginCanEatEvent>[] = [];
   private static firemakingBlockedHooks: PluginHook<PluginFiremakingBlockedEvent>[] = [];
   private static canDrinkHooks: PluginHook<PluginCanDrinkEvent>[] = [];
@@ -955,6 +957,17 @@ export class PluginManager {
       if (event.allow !== null) {
         return event.allow;
       }
+    }
+    return null;
+  }
+
+  /** A plugin's reason to refuse the logout button, or null to let it through. */
+  public static emitCanLogout(player: any): string | null {
+    const event: PluginCanLogoutEvent = { player, allow: null };
+    for (const hook of PluginManager.canLogoutHooks) {
+      PluginManager.executeHook(hook, event, "can_logout", "can_logout");
+      if (event.allow === false) return event.reason ?? "You can't log out right now.";
+      if (event.allow === true) return null;
     }
     return null;
   }
@@ -1859,8 +1872,10 @@ export class PluginManager {
       PlayerDialogue: require(`${model}/dialogues/entries/impl/PlayerDialogue`).PlayerDialogue,
       OptionDialogue: require(`${model}/dialogues/entries/impl/OptionDialogue`).OptionDialogue,
       StatementDialogue: require(`${model}/dialogues/entries/impl/StatementDialogue`).StatementDialogue,
+      ItemStatementDialogue: require(`${model}/dialogues/entries/impl/ItemStatementDialogue`).ItemStatementDialogue,
       ActionDialogue: require(`${model}/dialogues/entries/impl/ActionDialogue`).ActionDialogue,
       EndDialogue: require(`${model}/dialogues/entries/impl/EndDialogue`).EndDialogue,
+      CreationMenu: require(`${model}/menu/CreationMenu`).CreationMenu,
       PlayerRights: require("../game/model/rights/PlayerRights").PlayerRights,
       Server: require("../Server").Server,
       PluginManager: require("./PluginManager").PluginManager,
@@ -2553,6 +2568,20 @@ export class PluginManager {
           return;
         }
         PluginManager.canTeleportHooks.push({
+          pluginName,
+          handler: (event) => {
+            if (!event || !event.player) {
+              return;
+            }
+            handler(event);
+          },
+        });
+      },
+      onCanLogout: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.canLogoutHooks.push({
           pluginName,
           handler: (event) => {
             if (!event || !event.player) {

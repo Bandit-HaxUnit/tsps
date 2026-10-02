@@ -1,4 +1,4 @@
-// Pure state-machine checks; no server, sockets, player login, or smoke-test harness.
+// Isolated state-machine and hook checks; no running server or sockets.
 // From server/: node -r ts-node/register/transpile-only plugins/skills/farming/Model.Farming.test.js
 // The plugin hands the farming files api.core; outside the server the test does it.
 require("../../../src/main/typescript/elvarg/game/World");
@@ -106,4 +106,95 @@ for (const xp of [6, 14, 23]) {
     assert.equal(first.xp + last.xp + last.bonus, batch.xp + batch.bonus);
     assert.equal(first.points + last.points, 35);
 }
-console.log("Farming state checks passed.");
+
+const core = require("./Core.Farming");
+const Patches = require("./Patches.Farming");
+const Services = require("./Services.Farming");
+const hooks = {};
+Patches.attach(new Proxy({}, { get: (_, name) => (...args) => (hooks[name] ??= []).push(args[0]) }));
+const login = hooks.onPlayerLogin[0], processPlayer = hooks.onPlayerProcess[0], logout = hooks.onPlayerLogout[0];
+function testPlayer() {
+    const attributes = new Map(), varbits = new Map();
+    const inventory = { items: [], scans: 0, refreshes: 0,
+        getItems() { this.scans++; return this.items; }, refreshItems() { this.refreshes++; } };
+    const sender = { getVarbit: id => varbits.get(id) ?? 0, getVarp: () => 0,
+        sendVarbit(id, value) { varbits.set(id, value); return this; } };
+    return { inventory, banks: Array(core.Bank.TOTAL_BANK_TABS).fill(null), location: new core.Location(3200, 3800, 0),
+        getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+        getInventory() { return inventory; }, getBanks() { return this.banks; },
+        getLocation() { return this.location; }, getPacketSender: () => sender, getPrivateArea: () => null };
+}
+const realNow = Date.now, realGetObject = core.MapObjects.get, realAdvance = Model.advanceFarm;
+let clock = now, growthCalls = 0;
+Date.now = () => clock;
+core.MapObjects.get = () => null;
+Model.advanceFarm = (...args) => { growthCalls++; return realAdvance(...args); };
+try {
+    const player = testPlayer();
+    login({ player });
+    assert.equal(growthCalls, 1, "login with uninitialized bank tabs must finish");
+    for (let tick = 1; tick <= 8; tick++) {
+        clock = now + tick * 600;
+        player.location.setX(3200 + tick);
+        processPlayer({ player });
+    }
+    assert.equal(growthCalls, 1, "movement must not restart growth each tick");
+    assert.equal(player.inventory.scans, 1, "bank and inventory scans keep the five-second cadence");
+    clock = now + 5400;
+    processPlayer({ player });
+    assert.equal(growthCalls, 2);
+    logout({ player });
+    login({ player });
+    assert.equal(growthCalls, 3, "relogin resets the growth timestamp");
+
+    // Movement must use the region index, not iterate the entire patch table.
+    const iterator = Data.CACHE.patches[Symbol.iterator];
+    Data.CACHE.patches[Symbol.iterator] = () => { throw new Error("full patch scan on movement"); };
+    try { player.location.setX(3200); processPlayer({ player }); }
+    finally { Data.CACHE.patches[Symbol.iterator] = iterator; }
+
+    // Compare the indexed selection to the original full scan, including reused varbits.
+    for (const base of Data.CACHE.patches) for (const delta of [-65, -64, -1, 0, 64, 65]) {
+        const visitor = testPlayer(), nearest = new Map();
+        const x = Math.floor((base.x + base.maxX) / 2) + delta;
+        const y = Math.floor((base.y + base.maxY) / 2) + delta;
+        visitor.location = new core.Location(x, y, base.z);
+        for (const patch of Data.CACHE.patches) {
+            const distance = Math.max(Math.abs((patch.x + patch.maxX) / 2 - x), Math.abs((patch.y + patch.maxY) / 2 - y));
+            if (patch.z === base.z && distance <= 64 && (!nearest.has(patch.varbit) || nearest.get(patch.varbit).distance > distance)) {
+                nearest.set(patch.varbit, { patch, distance });
+            }
+        }
+        login({ player: visitor });
+        assert.deepEqual(Object.keys(Patches.farmFor(visitor).patches).sort(),
+            [...nearest.values()].map(({ patch }) => Data.patchKey(patch)).sort(), `nearby patches at ${x},${y},${base.z}`);
+    }
+
+    const crop = { wateredSeedling: core.ItemIdentifiers.OAK_SEEDLING_W_, sapling: core.ItemIdentifiers.OAK_SAPLING };
+    Data.WATERED_SEEDLINGS.set(crop.wateredSeedling, crop);
+    const fresh = new core.Item(crop.wateredSeedling);
+    const mature = new core.Item(crop.wateredSeedling).setMetaValue("farming:saplingAt", clock - 1);
+    const future = new core.Item(crop.wateredSeedling).setMetaValue("farming:saplingAt", clock + Model.MINUTE);
+    const placeholder = new core.Item(crop.wateredSeedling, 0).setMetaValue("farming:saplingAt", clock - 1);
+    const bank = { ...player.inventory, items: [mature, future, placeholder], refreshes: 0 };
+    player.inventory.items = [null, fresh];
+    player.banks[1] = bank;
+    Services.humidified({ player });
+    const deadline = fresh.getMetaValue("farming:saplingAt");
+    assert.equal(deadline, Model.nextGrowth(clock, 5, Patches.farmFor(player).offset));
+    assert.equal(mature.getId(), crop.sapling, "seedlings mature in initialized bank tabs");
+    assert.equal(mature.getMetaValue("farming:saplingAt"), undefined);
+    assert.equal(bank.refreshes, 1);
+    assert.equal(future.getId(), crop.wateredSeedling);
+    assert.equal(placeholder.getId(), crop.wateredSeedling, "bank placeholders must stay unchanged");
+    Services.growSeedlings(player, deadline - 1);
+    assert.equal(fresh.getId(), crop.wateredSeedling);
+    Services.growSeedlings(player, deadline);
+    assert.equal(fresh.getId(), crop.sapling);
+    assert.equal(player.inventory.refreshes, 1);
+} finally {
+    Date.now = realNow;
+    core.MapObjects.get = realGetObject;
+    Model.advanceFarm = realAdvance;
+}
+console.log("Farming state and hook checks passed.");

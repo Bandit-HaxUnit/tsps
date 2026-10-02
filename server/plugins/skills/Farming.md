@@ -66,10 +66,11 @@ npx.cmd tsc --noEmit
 node -r ts-node/register/transpile-only plugins/skills/farming/Model.Farming.test.js
 ```
 
-The second command is an isolated state-machine check, without server startup,
-sockets, player login, or a smoke harness. It covers offline/save equivalence,
+The second command checks the state machine and mocked hooks without server startup
+or sockets. It covers offline/save equivalence,
 disease/death, mature immunity, private stump regrowth, herb formulas, critical
-cache states, and Tithe growth/scoring. Cache-only audits also checked crop item
+cache states, Tithe growth/scoring, null bank tabs, growth cadence, seedling deadlines
+and nearby patch selection across region boundaries. Cache-only audits also checked crop item
 resolution and growing, diseased, dead, and mature visual values.
 
 To regenerate `data/definitions/farming-data.json` (one crop, patch type, patch or loc per line):

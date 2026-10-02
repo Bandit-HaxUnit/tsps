@@ -13,6 +13,7 @@ import {
   ActorUpdateView,
   encodePlayerAppearance,
   encodeInitialPlayerSync,
+  encodeLogoutResponse,
   encodeNpcSync,
   encodePlaySong,
   encodePlayerSync,
@@ -159,6 +160,13 @@ export class PlayerSession {
       });
     }
     return true;
+  }
+
+  /** Logs out as an accepted logout button does: the client is told, then the socket closes. */
+  public logout(): void {
+    this.sendClientPacket(encodeLogoutResponse());
+    this.flushPackets();
+    this.channel.close?.(1000, "logout");
   }
 
   public flushPackets(): boolean {

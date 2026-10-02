@@ -93,6 +93,7 @@ const ROWS = [
 
 const CROPS = new Map();
 const SEEDS = new Map();
+const WATERED_SEEDLINGS = new Map();
 const ITEMS = new Map();
 function itemId(name) {
     if (!name) return -1;
@@ -118,6 +119,7 @@ function initializeFarmingData() {
             crop.seedling = itemId(`${prefix} seedling`);
             crop.wateredSeedling = itemId(`${prefix} seedling (w)`);
             SEEDS.set(crop.sapling, crop);
+            WATERED_SEEDLINGS.set(crop.wateredSeedling, crop);
         } else SEEDS.set(crop.seed, crop);
         CROPS.set(key, crop);
     }
@@ -141,4 +143,4 @@ const PET_RATES = {
 };
 const petRate = (crop) => PET_RATES[crop.key] ?? PET_RATES[crop.type];
 
-Object.assign(module.exports, { CACHE, CROPS, SEEDS, itemId, initializeFarmingData, patchKey, WATERABLE, COMPOSTABLE_YIELD, WOOD_TREES, petRate });
+Object.assign(module.exports, { CACHE, CROPS, SEEDS, WATERED_SEEDLINGS, itemId, initializeFarmingData, patchKey, WATERABLE, COMPOSTABLE_YIELD, WOOD_TREES, petRate });
