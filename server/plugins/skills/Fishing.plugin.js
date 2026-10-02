@@ -12,12 +12,14 @@ const FISHING_ANIMATION_INTERVAL_TICKS = 5;
 let fishingTick = 0;
 
 class Fish {
-  constructor(id, level, chance, experience, name) {
+  constructor(id, level, chance, experience, name, petBase) {
     this.id = id;
     this.level = level;
     this.chance = chance;
     this.experience = experience;
     this.name = name;
+    /** Heron base chance (Wiki). */
+    this.petBase = petBase;
   }
 }
 
@@ -33,16 +35,16 @@ class FishingTool {
 }
 
 const FISH = Object.freeze({
-  SHRIMP: new Fish(ItemIds.RAW_SHRIMPS, 1, Chance.VERY_COMMON, 10, "shrimp"),
-  ANCHOVY: new Fish(ItemIds.RAW_ANCHOVIES, 15, Chance.SOMETIMES, 40, "anchovy"),
-  SARDINE: new Fish(ItemIds.RAW_SARDINE, 5, Chance.VERY_COMMON, 20, "sardine"),
-  HERRING: new Fish(ItemIds.RAW_HERRING, 10, Chance.VERY_COMMON, 30, "herring"),
-  TROUT: new Fish(ItemIds.RAW_TROUT, 20, Chance.VERY_COMMON, 50, "trout"),
-  SALMON: new Fish(ItemIds.RAW_SALMON, 30, Chance.VERY_COMMON, 70, "salmon"),
-  TUNA: new Fish(ItemIds.RAW_TUNA, 35, Chance.VERY_COMMON, 80, "tuna"),
-  LOBSTER: new Fish(ItemIds.RAW_LOBSTER, 40, Chance.VERY_COMMON, 90, "lobster"),
-  SWORDFISH: new Fish(ItemIds.RAW_SWORDFISH, 50, Chance.COMMON, 100, "swordfish"),
-  SHARK: new Fish(ItemIds.RAW_SHARK, 76, Chance.COMMON, 110, "shark"),
+  SHRIMP: new Fish(ItemIds.RAW_SHRIMPS, 1, Chance.VERY_COMMON, 10, "shrimp", 870330),
+  ANCHOVY: new Fish(ItemIds.RAW_ANCHOVIES, 15, Chance.SOMETIMES, 40, "anchovy", 870330),
+  SARDINE: new Fish(ItemIds.RAW_SARDINE, 5, Chance.VERY_COMMON, 20, "sardine", 1056000),
+  HERRING: new Fish(ItemIds.RAW_HERRING, 10, Chance.VERY_COMMON, 30, "herring", 1056000),
+  TROUT: new Fish(ItemIds.RAW_TROUT, 20, Chance.VERY_COMMON, 50, "trout", 923616),
+  SALMON: new Fish(ItemIds.RAW_SALMON, 30, Chance.VERY_COMMON, 70, "salmon", 923616),
+  TUNA: new Fish(ItemIds.RAW_TUNA, 35, Chance.VERY_COMMON, 80, "tuna", 257770),
+  LOBSTER: new Fish(ItemIds.RAW_LOBSTER, 40, Chance.VERY_COMMON, 90, "lobster", 116129),
+  SWORDFISH: new Fish(ItemIds.RAW_SWORDFISH, 50, Chance.COMMON, 100, "swordfish", 257770),
+  SHARK: new Fish(ItemIds.RAW_SHARK, 76, Chance.COMMON, 110, "shark", 82243),
 });
 
 const TOOLS = Object.freeze({
@@ -265,7 +267,7 @@ class FishingTask extends Task {
         player.getInventory().addItem(new Item(fish.id, 1));
         player.sendMessage(`You catch a ${fish.name}.`);
         player.getSkillManager().addExperiences(Skill.FISHING, fish.experience);
-        pluginApi.emitCustomEvent("fishing:success", { player, skill: Skill.FISHING });
+        pluginApi.emitCustomEvent("fishing:success", { player, skill: Skill.FISHING, petBase: fish.petBase });
       }
 
       if (session.tool.needed > 0) {
