@@ -39,7 +39,13 @@ These follow the wiki's *Tombs of Amascut* mechanics:
 
 - **NPC hitpoints:** base × (1 + 0.4% per raid level) × party factor × path-level factor. The party factor is +90% for each of players two and three, then +60% each. Results are rounded to 10 above 100, otherwise to 5.
 - **NPC damage:** the same raid-level and path-level factors, capped at 2.5×.
-- **Points:** puzzles are worth 300, bosses 450, plus damage dealt × the NPC's points multiplier, capped at 64,000. A death costs 20% of a player's points (at least 1,000).
+- **Points:**
+  - Everyone starts on 5,000 points, which are taken off again for the loot and the purple chance.
+  - Damage dealt × the NPC's points multiplier earns room points, capped at 20,000 a room (60,000 for the Wardens, from OpenRune). They're added to the total, capped at 64,000, when the room is completed.
+  - The room's top scorer gets an MVP bonus of 300 × team size.
+  - Puzzle completions are worth Scabaras 300, Apmeken 450 and Crondis 400. These are OpenRune's numbers; the Wiki gives none.
+  - A death costs 20% of a player's total (at least 1,000).
+  - At the end, each player's loot points go to `TOA_PERSONAL_CONTRIBUTION` (varp 3606).
 - **Unique loot:** chance = total party points / (10,500 − 20 × (raid level up to 400 + a third of the next 150)) percent, capped at 55%. At most one unique per raid; the recipient is weighted by personal points. Weights out of 24: Lightbearer 7, Osmumten's fang 7, Elidinis' ward 3, each Masori piece 2, Tumeken's shadow 1. Below raid level 150, the ward, Masori and shadow need an extra 1/50 roll; below 50, so do all uniques.
 
 ## Behaviour taken only from Near-Reality
@@ -64,11 +70,11 @@ Each Tombs of Amascut NPC (11689-11804) has its block and death animations in `n
 
 - **Tumeken's shadow:** charges, checks and uncharges, but tsps has no powered-staff autocast path, so it does not cast its built-in spell yet.
 - **NPC defence:** not scaled by raid level; it comes from the shared definition.
-- **Zebak:** players don't swim, and there are no water crocodiles.
 - **Apmeken:** the corruption special is disabled, as it is in Near-Reality.
 - **Wardens phase three floor:** collapsed rows push players back onto the remaining floor rather than becoming unwalkable.
 - **The pet:** the Wiki gives its formula but not its exact raid level scaling beyond thresholds at 400 and 550; it uses a third of the levels between them.
-- **Logout and failure:** logging out leaves the raid with no rejoin, and a failed raid keeps your items.
+- **Logout and failure:** logging out leaves the raid with no rejoin, and a failed raid keeps your items. OSRS sends them to a retrieval chest in the lobby for a fee; there's no retrieval chest yet.
+- **Zebak's death:** no camera shake, because the core has no camera-shake packet.
 - **Restart recovery:** logging in inside the tombs without an active raid returns you to the lobby. The raid exit also returns stranded players to the lobby.
 - **Scoreboard:** the burial chamber scoreboard (44942) isn't implemented.
 
@@ -82,14 +88,33 @@ The first version was written without access to the Wiki or the cache, so it fol
 - **Interfaces 771–778 and 481:** all are the ToA groups they're used as. The boss health HUD (303 at `161:2`, varp 1683, varbits 6099/6100) matches a live capture from the Gemstone Crab.
 - **Varbits and varps:**
   - The reward niche (46224) switches on `TOA_SHOULD_HAVE_LOOT` (14319); 14139 was a PvP Arena varbit.
-  - Points had been sent to "varbit" 3586, a farming varbit in this cache. No ToA interface reads points, so they now stay on the server.
+  - Points had been sent to "varbit" 3586, a farming varbit in this cache. Now only each player's final loot points are sent, to `TOA_PERSONAL_CONTRIBUTION` (varp 3606), as OpenRune does.
+  - The crocodile wall openings (`TOA_WALL02_CROCODILES04`, 45434) and Zebak's rock steps (`TOA_ZEBAK_CLIMBING_ROCK`, 45509) are the cache's.
+- **The obelisk's interfaces:** the party list (772) and details panel (774) are built from pause buttons (`resume_pausebutton`), as OpenRune sets them. Ours had set op1 events, and the member rows always got the leader's view value.
 - **Options:** every hooked NPC, item and loc option exists in the cache. The supplies bag's are *Open*, *Withdraw 1*, *Withdraw All* and *Resupply*, and now all work.
 
 **Behaviour, against the Wiki:**
 - **Raid scaling** (raid level, party size, path level) matches.
 - **Zebak:** max hits are now 38 melee and 16 magic/ranged, and a wave hits for 6–10.
 - **Kephri:** her attacks speed up with path level, and her fireball's max hit is 24.
-- **Ba-Ba:** Protect from Melee fully blocks her melee (since June 2025), and her boulders have 27 and 31 hitpoints at path levels 2 and 4.
+- **Ba-Ba:** Protect from Melee fully blocks her melee (since June 2025), and her boulders have 27 and 31 hitpoints at path levels 2 and 4. She is worth 2 points per damage.
+- **Zebak's water:**
+  - A wave that runs out of floor throws the player into the water (5 tiles, from OpenRune).
+  - Swimmers can't attack or run, and climb out by the rock steps.
+  - The water crocodiles (11741: bubbles with strength 70, so a max hit of 8 before scaling) bite swimmers every 2 ticks.
+  - A bite bleeds 1 time in 4 instead of hitting: 5–10 at once, then 1–8 on each tick spent moving, for 10 ticks. These numbers are OpenRune's; the Wiki only says moving makes it worse.
+- **Crondis puzzle:**
+  - The palm needs 175 water, plus 125 for each extra player.
+  - A crocodile bites for 18, plus 3 for each acid or spear hit in the last 30 seconds, up to 36.
+  - Crocodiles go for anyone carrying water nearby, then a watered palm, then someone without a container who hit them.
+  - From OpenRune: crocodiles enter from one of three sides, a wave comes every 46–50 ticks, and they wake 4 ticks after spawning.
+- **Invocations:**
+  - On a Diet blocks all food, honey locusts included.
+  - Dehydration blocks every potion that restores health, Guthix rests included.
+  - The help invocations cut supplies to 66%, 33% and 10%.
+- **Supplies:** the helpful spirit's chaos pack is rolled (1–8 nectar, 0–6 tears, 0–2 salts, with rare ambrosia and adrenaline), and the power pack has 1 liquid adrenaline. A supply used on the bag goes back in (from OpenRune).
+- **Ghosts:** a ghost's inventory and worn equipment tabs close until it's revived (from OpenRune).
+- **Raid items:** logging in outside a raid strips raid supplies.
 - **The chest:** the unique chance and weights, the pet, the Thread of Elidinis, the four keris jewels and the elite clue now use the Wiki's rates.
 - **Moving NPCs:** Zebak's waves and jugs, Akkha's unstable orbs, Ba-Ba's boulders and the moving Wardens move with collision off, as in Near-Reality. Before, the route finder couldn't move them over tiles the map blocks.
 
