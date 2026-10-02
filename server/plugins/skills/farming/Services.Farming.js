@@ -202,11 +202,11 @@ function farmingItemPair(event) {
     }
 }
 function growSeedlings(player, now) {
-    const seedlings = new Map([...Data.CROPS.values()].filter(c => c.wateredSeedling).map(c => [c.wateredSeedling, c]));
     for (const container of [player.getInventory(), ...player.getBanks()]) {
+        if (!container) continue; // Bank tabs are created lazily, including for bots.
         let changed = false;
         for (const item of container.getItems()) {
-            const crop = seedlings.get(item.getId());
+            const crop = item && item.getAmount() > 0 && Data.WATERED_SEEDLINGS.get(item.getId());
             if (!crop) continue;
             const at = item.getMetaValue("farming:saplingAt");
             if (!at) item.setMetaValue("farming:saplingAt", Model.nextGrowth(now, 5, Patches.farmFor(player).offset));
