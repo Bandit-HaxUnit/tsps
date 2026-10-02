@@ -12,6 +12,8 @@
 
 const Shared = require("./GauntletShared");
 const Run = require("./GauntletRun");
+const Rewards = require("./GauntletRewards");
+const Scoreboard = require("./GauntletScoreboard");
 
 const ATTR_SPOKEN_TO_BRYN = "gauntlet:spoken-to-bryn";
 const BRYN = {
@@ -64,6 +66,25 @@ function channelUp(event) {
   return true;
 }
 
+const SCOREBOARD = 36060;
+const REWARD_CHESTS = [36087, 35988];
+
+function openChest(event) {
+  if (!REWARD_CHESTS.includes(event.objectId)) return false;
+  Rewards.openChest(event.player);
+  return true;
+}
+
+function readScoreboard(event) {
+  if (event.objectId !== SCOREBOARD) return false;
+  Scoreboard.readScoreboard(event.player, Run.statsOf(event.player));
+  return true;
+}
+
+function sendChestOnLogin({ player }) {
+  Rewards.sendChest(player);
+}
+
 /** Bryn's first talk explains the place; after it, the entrance lets you in. */
 function brynVariant({ player, npcId }) {
   if (npcId !== Shared.NPC.BRYN) return null;
@@ -79,6 +100,10 @@ module.exports = function registerGauntletLobby(api) {
   api.onObjectInteraction(Shared.OBJECT.PORTAL, { Enter: enterPortal });
   api.onObjectInteraction(Shared.OBJECT.TELEPORT_PLATFORM, { Channel: channelUp });
   api.onNpcDialogueVariant(brynVariant);
+  api.persistAttribute(Rewards.ATTR_REWARD);
+  api.onObjectInteraction("Reward Chest", { Open: openChest });
+  api.onObjectInteraction("Scoreboard", { Read: readScoreboard });
+  api.onPlayerLogin(sendChestOnLogin);
 };
 
 module.exports.ATTR_SPOKEN_TO_BRYN = ATTR_SPOKEN_TO_BRYN;

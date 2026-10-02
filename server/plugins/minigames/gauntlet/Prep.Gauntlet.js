@@ -16,6 +16,7 @@ const Shared = require("./GauntletShared");
 const Run = require("./GauntletRun");
 const Items = require("./GauntletItems");
 const Resources = require("./GauntletResources");
+const Rewards = require("./GauntletRewards");
 
 const ANIMATION = { FILL: 827, COOK: 896, GRIND: 364, MIX: 363 };
 const TOOL_NAMES = [["sceptre", "a sceptre"], ["axe", "an axe"], ["pickaxe", "a pickaxe"], ["harpoon", "a harpoon"], ["pestle", "a pestle and mortar"]];
@@ -140,6 +141,7 @@ function cook(event) {
     player.getInventory().adds(burnt ? items.burntPaddlefish : items.paddlefish, 1);
     player.getInventory().refreshItems();
     player.sendMessage(burnt ? "You accidentally burn the paddlefish." : "You successfully cook a paddlefish.");
+    run.addPoints(Rewards.POINTS.cook);
     if (!burnt) player.getSkillManager().addExperiences(Skill.COOKING, 15);
     return true;
   });
@@ -205,6 +207,8 @@ function sing(player, run, recipe, amount) {
       player.getSkillManager().addExperiences(Skill.CRAFTING, recipe.xp);
       player.getSkillManager().addExperiences(Skill.SMITHING, recipe.xp);
     }
+    if (recipe.gear) run.addPoints(Rewards.POINTS.tiers[recipe.tier]);
+    else if (recipe.id === items.comboFish) run.addPoints(Rewards.POINTS.comboFish);
   }
   player.getInventory().refreshItems();
   player.getEquipment().refreshItems();

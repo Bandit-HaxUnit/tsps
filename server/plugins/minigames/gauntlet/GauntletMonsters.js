@@ -21,6 +21,7 @@
 
 const Shared = require("./GauntletShared");
 const Items = require("./GauntletItems");
+const Rewards = require("./GauntletRewards");
 
 const MONSTERS = {
   rat: { ids: { regular: 9026, corrupted: 9040 }, tier: "weak" },
@@ -148,6 +149,7 @@ function rollDrops(run, player, npcId, random = run.random) {
   const table = TABLES[monster.tier];
   const drops = [{ itemId: items.shards, amount: randomInt(random, ...table.shards) }];
   run.kills[monster.tier] = (run.kills[monster.tier] ?? 0) + 1;
+  run.addPoints?.(Rewards.POINTS[monster.tier]);
 
   if (table.frame) {
     drops.push({ itemId: items.frame, amount: 1 });

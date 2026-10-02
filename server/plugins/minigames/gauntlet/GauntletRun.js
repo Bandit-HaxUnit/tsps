@@ -16,6 +16,8 @@ const GauntletMap = require("./GauntletMap");
 const Resources = require("./GauntletResources");
 const Monsters = require("./GauntletMonsters");
 const { HunllefFight } = require("./GauntletHunllef");
+const Rewards = require("./GauntletRewards");
+const Scoreboard = require("./GauntletScoreboard");
 
 const ATTR_RUN = "gauntlet:run";
 const ATTR_STATS = "gauntlet:stats";
@@ -65,7 +67,19 @@ function statsOf(player) {
   return {
     completions: { regular: 0, corrupted: 0, ...(saved?.completions ?? {}) },
     deaths: { regular: 0, corrupted: 0, ...(saved?.deaths ?? {}) },
+    // Fastest completions, start to kill, in ticks (-1 none yet).
+    bestTicks: { regular: -1, corrupted: -1, ...(saved?.bestTicks ?? {}) },
   };
+}
+
+/** Records a completion's time; true when it is a personal best. */
+function recordBest(player, mode, ticks) {
+  const stats = statsOf(player);
+  const best = stats.bestTicks[mode];
+  if (best > 0 && best <= ticks) return false;
+  stats.bestTicks[mode] = ticks;
+  player.setAttribute(ATTR_STATS, stats);
+  return true;
 }
 
 function recordStat(player, kind, mode) {
@@ -101,6 +115,8 @@ class GauntletRun {
     this.room = null;
     // Kills by tier and the weapon components dropped, for the drop rules (GauntletMonsters).
     this.kills = { weak: 0, strong: 0, demi: 0 };
+    // Reward points for a run that doesn't kill the Hunllef (GauntletRewards).
+    this.points = 0;
     this.strongFrame = false;
     this.components = new Set();
     runs.set(player.getUsername(), this);
@@ -216,6 +232,10 @@ class GauntletRun {
     }
   }
 
+  addPoints(points) {
+    if (this.stage !== "ended") this.points += points;
+  }
+
   /** Back to the start room, as the teleport crystal does. */
   teleportToStart() {
     if (this.stage !== "prep") return false;
@@ -270,9 +290,14 @@ class GauntletRun {
     runs.delete(this.player.getUsername());
     const player = this.player;
     player.setAttribute(ATTR_RUN, null);
-    if (reason === "death") recordStat(player, "deaths", this.mode);
-    if (reason === "completed") recordStat(player, "completions", this.mode);
-    Shared.api()?.emitCustomEvent?.("gauntlet:end", { run: this, player, reason });
+    const now = Shared.core().World.getProcessCycle();
+    if (reason === "death") {
+      recordStat(player, "deaths", this.mode);
+      Scoreboard.recordGlobal(this.mode, "death");
+    }
+    const messages = reason === "completed" ? this.completionMessages(now) : [];
+    const reward = Rewards.rewardFor(this, reason);
+    Shared.api()?.emitCustomEvent?.("gauntlet:end", { run: this, player, reason, reward });
 
     const leave = () => {
       Shared.clearItems(player);
@@ -288,12 +313,34 @@ class GauntletRun {
       // Saved back in the lobby; a logout saves on its own right after.
       if (reason !== "logout") savePlayer(player);
       if (reason === "death") player.sendMessage("Oh dear, you are dead!");
-      else if (reason !== "logout") player.sendMessage("You leave the Gauntlet.");
+      else if (reason !== "logout" && reason !== "completed") player.sendMessage("You leave the Gauntlet.");
+      for (const message of messages) player.sendMessage(message);
+      Rewards.setReward(player, this.mode, reward);
+      if (reward) player.sendMessage("Your reward awaits you in the nearby chest.");
     };
     if (fade) Shared.fadeMove(player, leave);
     else leave();
   }
 }
+
+const RED = (text) => `<col=ef1020>${text}</col>`;
+
+GauntletRun.prototype.completionMessages = function completionMessages(now) {
+  const player = this.player;
+  const total = Math.max(1, now - this.startCycle);
+  const prep = Math.max(0, (this.bossCycle || now) - this.startCycle);
+  const kill = Math.max(0, now - (this.bossCycle || now));
+  recordStat(player, "completions", this.mode);
+  const best = recordBest(player, this.mode, total);
+  Scoreboard.recordGlobal(this.mode, "completion", total);
+  const stats = statsOf(player);
+  const name = this.corrupted ? "Corrupted Gauntlet" : "Gauntlet";
+  return [
+    `Challenge duration: ${RED(Scoreboard.formatTicks(total))}.${best ? " (new personal best)" : ` Personal best: ${Scoreboard.formatTicks(stats.bestTicks[this.mode])}`}`,
+    `Preparation time: ${RED(Scoreboard.formatTicks(prep))}. Hunllef kill time: ${RED(Scoreboard.formatTicks(kill))}.`,
+    `Your ${name} completion count is: ${RED(stats.completions[this.mode])}.`,
+  ];
+};
 
 function startRun(player, options) {
   const run = new GauntletRun(player, options);

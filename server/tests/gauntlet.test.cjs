@@ -119,6 +119,14 @@ const RunHooks = require('../plugins/minigames/gauntlet/Run.Gauntlet');
 const { ItemIdentifiers: I } = require('../dist/util/ItemIdentifiers');
 
 const hooks = { objects: {}, items: {}, death: [], drops: [], teleports: [], login: [], variants: [], prompts: [] };
+// The world's scoreboard totals go to a scratch file, not data/saves.
+const os = require('node:os');
+const fs = require('node:fs');
+const path = require('node:path');
+const Scoreboard = require('../plugins/minigames/gauntlet/GauntletScoreboard');
+const scoreboardFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gauntlet-')), 'scoreboard.json');
+Scoreboard.useFile(scoreboardFile);
+
 // Saves are recorded, not written.
 const saves = [];
 PluginManager.getCoreApi().GameConstants.PLAYER_PERSISTENCE = { save: (player) => saves.push(player.getUsername()) };
@@ -177,6 +185,7 @@ function fakeApi() {
     onNpcDialogueVariant: (handler) => hooks.variants.push(handler),
     sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
     getBonusManager: () => ({ update() {} }),
+    getItemOnGroundManager: () => ({ registerLocation: (player, item) => (hooks.ground ??= []).push(item.getId()) }),
     spawnNpc: ({ id, x, y, z }) => { const npc = fakeNpc(id, x, y, z); spawnedNpcs.push(npc); return npc; },
     removeNpc: (npc) => { npc.removed = true; },
     emitCustomEvent() {},
@@ -257,6 +266,7 @@ function fakePlayer(name = 'Tester') {
     getInventory: () => p.inventory,
     getEquipment: () => p.equipment,
     getCurrentPet: () => null,
+    getBanks: () => [],
     resetAttributes() { p.resets++; },
     sendMessage: (message) => p.messages.push(message),
     xp: {},
@@ -290,6 +300,7 @@ function fakePlayer(name = 'Tester') {
         sendClientScript: (id, ...args) => { p.scripts.push([id, ...args]); return sender; },
         sendCreationMenu: (menu) => { p.menu = menu; return sender; },
         sendInterface: (id) => { p.interfaces.push(id); return sender; },
+        sendString: (text, uid) => { (p.strings ??= new Map()).set(uid, text); return sender; },
       };
       return sender;
     },
@@ -915,4 +926,95 @@ test('the Hunllef faces its challenger and walks in until they are within 5 tile
   } finally {
     run.end('exit', { fade: false });
   }
+});
+
+
+// ------------------------------------------------------------------ rewards
+
+const Rewards = require('../plugins/minigames/gauntlet/GauntletRewards');
+
+test('the reward follows the Wiki: completion, else the run\'s points; the platform gives nothing', () => {
+  const run = { points: 0 };
+  assert.equal(Rewards.rewardFor(run, 'completed'), 'completed');
+  assert.equal(Rewards.rewardFor({ points: 999 }, 'exit'), null, 'leaving by the teleport platform');
+  assert.equal(Rewards.rewardFor({ points: 50 }, 'death'), 'incomplete');
+  assert.equal(Rewards.rewardFor({ points: 49 }, 'escape'), 'junk');
+  assert.equal(Rewards.rewardFor({ points: 0 }, 'death'), null);
+  // The main tables' weights are the Wiki's x/24, doubled.
+  for (const mode of ['regular', 'corrupted']) {
+    assert.equal(Rewards.MAIN[mode].reduce((sum, row) => sum + row[3], 0), 48, mode);
+  }
+});
+
+test('a completed chest: shards and two (corrupted three) main rolls, the cape once', () => {
+  const regular = Rewards.rollReward({ mode: 'regular', kind: 'completed' }, false, seeded(5));
+  const shards = regular.find((item) => item.id === Rewards.ID.CRYSTAL_SHARD).amount;
+  assert.ok(shards >= 5 && shards <= 9);
+  assert.equal(regular.filter((item) => item.id !== Rewards.ID.CRYSTAL_SHARD && !Rewards.TERTIARY.regular.some(([id]) => id === item.id)).length, 2);
+  const corrupted = Rewards.rollReward({ mode: 'corrupted', kind: 'completed' }, false, seeded(6));
+  assert.ok(corrupted.some((item) => item.id === Rewards.ID.GAUNTLET_CAPE), 'the cape, not owned yet');
+  assert.ok(!Rewards.rollReward({ mode: 'corrupted', kind: 'completed' }, true, seeded(6)).some((item) => item.id === Rewards.ID.GAUNTLET_CAPE), 'not twice');
+  const lucky = Rewards.rollReward({ mode: 'regular', kind: 'completed' }, false, () => 0);
+  assert.ok(lucky.some((item) => item.id === Rewards.ID.YOUNGLLEF), 'every tertiary item rolls on its own');
+  assert.equal(Rewards.rollReward({ mode: 'regular', kind: 'junk' }, false, seeded(1)).length, 1);
+  assert.equal(Rewards.rollReward({ mode: 'regular', kind: 'incomplete' }, false, seeded(1)).length, 1);
+});
+
+test('points come from kills, crafting and cooking', () => {
+  bindPrep();
+  const { player, run } = startedRun('Pointer', { random: seeded(13) });
+  try {
+    Monsters.rollDrops(run, player, 9026);
+    Monsters.rollDrops(run, player, 9029);
+    Monsters.rollDrops(run, player, 9032);
+    assert.equal(run.points, 2 + 5 + 10);
+    const items = Items.itemsFor('regular');
+    player.inventory.adds(items.frame);
+    const bowl = run.map.getTemplateObjects(run.map.roomTile(run.map.room(run.map.start.x, run.map.start.y), 3, 12))[0];
+    interact('Singing Bowl', 'Sing-crystal', player, bowl);
+    player.menu.execute(items.staff[0], 1);
+    assert.equal(run.points, 17 + 2, 'a basic item');
+    player.inventory.adds(items.rawPaddlefish);
+    interact('Range', 'Cook', player, null);
+    assert.equal(run.points, 19 + 1, 'cooking a paddlefish');
+  } finally {
+    run.end('exit', { fade: false });
+  }
+});
+
+test('the chest gives the waiting reward once, and needs a free slot', () => {
+  bindPrep();
+  const player = fakePlayer('Opener');
+  Rewards.setReward(player, 'regular', 'completed');
+  assert.equal(player.varbits.get(9179), 1, 'the chest shows loot');
+  while (player.inventory.getFreeSlots() > 0) player.inventory.adds(1);
+  Rewards.openChest(player, seeded(2));
+  assert.ok(Rewards.waitingReward(player), 'kept for later');
+  player.inventory.resetItems();
+  Rewards.openChest(player, seeded(2));
+  assert.ok(player.inventory.contains(Rewards.ID.CRYSTAL_SHARD));
+  assert.equal(Rewards.waitingReward(player), null);
+  assert.equal(player.varbits.get(9179), 0);
+});
+
+test('completing a run: messages, a personal best, the world\'s totals and the scoreboard', () => {
+  const { player, run, fight } = bossRun('Champion');
+  ticks(5);
+  hooks.npcDeathHandler({ npc: fight.npc, npcId: fight.npc.getId(), killer: player });
+  ticks(6);
+  assert.ok(player.messages.some((m) => m.startsWith('Challenge duration:')));
+  assert.ok(player.messages.some((m) => m.startsWith('Preparation time:')));
+  assert.ok(player.messages.some((m) => m.includes('Gauntlet completion count is')));
+  assert.ok(player.messages.includes('Your reward awaits you in the nearby chest.'));
+  assert.ok(Run.statsOf(player).bestTicks.regular > 0);
+  assert.equal(Rewards.waitingReward(player)?.kind, 'completed');
+  const world = JSON.parse(fs.readFileSync(scoreboardFile, 'utf8'));
+  assert.ok(world.regular.completions >= 1 && world.regular.bestTicks > 0);
+
+  Scoreboard.readScoreboard(player, Run.statsOf(player));
+  const line = (component) => player.strings.get((639 << 16) | component);
+  assert.equal(line(5), 'The Gauntlet');
+  assert.equal(line(6), 'Your Completions:');
+  assert.equal(line(18), 'The Corrupted Gauntlet');
+  assert.match(line(15), /^\d+:\d\d\.\d\d$/, 'your best time');
 });
