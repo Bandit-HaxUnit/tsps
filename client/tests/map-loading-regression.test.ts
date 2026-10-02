@@ -90,7 +90,7 @@ async function instanceRebuildKeepsTheSceneUntilTheSwap(): Promise<void> {
             loadedCache: {},
             workerPool: { queueLoad: () => new Promise((resolve) => builds.push(resolve)) },
             clearMinimapImageUrls() {},
-            rehomeNpcs() { host.rehomed = (host.rehomed ?? 0) + 1; },
+            rehomeNpcs(refreshMapId?: number) { host.rehomed = (host.rehomed ?? 0) + 1; host.refreshedMapId = refreshMapId; },
         },
         addedLocs: new Map(), locOverrides: new Map(), locSpawns: new Map(),
         instanceActive: false, instanceTemplateChunks: null, instanceLocRebuildTimer: null,
@@ -130,6 +130,7 @@ async function instanceRebuildKeepsTheSceneUntilTheSwap(): Promise<void> {
     // other 64x64 squares were drawn offset and could not be clicked).
     assert.deepEqual(host.instanceSceneMap, { mapX: 12, mapY: 12 });
     assert.equal(host.rehomed, 1, "NPCs move to the instance square at the swap");
+    assert.equal(host.refreshedMapId, (12 << 8) | 12, "and the new scene's map gets its NPCs back");
     assert.equal(npcOwnerMapId({ x: 12 * 64 + 70, y: 12 * 64 + 3, ownerMapId: (12 << 8) | 12 }), (12 << 8) | 12);
     assert.equal(npcOwnerMapId({ x: 12 * 64 + 70, y: 12 * 64 + 3 }), (13 << 8) | 12, "outside an instance: its own square");
     // An instance is drawn from its scene base, not its square's corner: an NPC west of the

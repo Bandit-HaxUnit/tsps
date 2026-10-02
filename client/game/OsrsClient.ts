@@ -7135,9 +7135,15 @@ export class OsrsClient {
     /**
      * Moves every NPC to the map square that now owns it: called when an instance scene is drawn
      * (all of its NPCs move to its square) or left (they go back to their own squares).
+     * `refreshMapId` is a map just swapped in, whose NPCs are rebuilt either way.
      */
-    rehomeNpcs(): void {
+    rehomeNpcs(refreshMapId?: number): void {
         let changed = false;
+        // The new scene's map is rebuilt from scratch: give it its NPCs again.
+        if (typeof refreshMapId === "number") {
+            this.npcInstances.markMapPendingReload(refreshMapId | 0);
+            changed = true;
+        }
         for (const instance of this.npcInstances.instanceMap.values()) {
             if (typeof instance.worldViewId === "number" && instance.worldViewId >= 0) continue;
             const owner = this.npcOwnerMap(instance.x | 0, instance.y | 0);

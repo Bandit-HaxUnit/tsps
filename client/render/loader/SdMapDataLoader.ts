@@ -2278,11 +2278,14 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             mapY,
             maxLevel,
             loadedTextureIds,
+            renderBaseTile,
         }: {
             mapX: number;
             mapY: number;
             maxLevel: number;
             loadedTextureIds: Set<number>;
+            /** Where the map is drawn from, when not its corner (an instance's scene base). */
+            renderBaseTile?: { x: number; y: number };
         },
     ): Promise<RenderDataResult<NpcGeometryData>> {
         this.init();
@@ -2312,8 +2315,8 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             textureLoader,
             textureIdIndexMap,
             npcInstances,
-            mapX * Scene.MAP_SQUARE_SIZE,
-            mapY * Scene.MAP_SQUARE_SIZE,
+            renderBaseTile ? renderBaseTile.x | 0 : mapX * Scene.MAP_SQUARE_SIZE,
+            renderBaseTile ? renderBaseTile.y | 0 : mapY * Scene.MAP_SQUARE_SIZE,
         );
 
         const vertices = npcSceneBuf.vertexBuf.byteArray();

@@ -216,6 +216,11 @@ export class NpcInstanceFlushController {
                             mapY,
                             renderer.maxLevel ?? 3,
                             Array.from(renderer.loadedTextureIds ?? []),
+                            // NPC tiles are relative to where the map is drawn (an instance
+                            // scene's base, not its square's corner).
+                            typeof map.getRenderBaseTileX === "function"
+                                ? { x: map.getRenderBaseTileX(), y: map.getRenderBaseTileY() }
+                                : undefined,
                         );
                         if (!npcGeometry) return { mapId, status: "retry" as const };
 

@@ -892,7 +892,7 @@ export class WebGLMapSquare {
             let plane = npc.level | 0;
             if (
                 plane < 3 &&
-                (tileRenderFlags[1][tileX + borderSize][tileY + borderSize] & 0x2) === 2
+                ((tileRenderFlags[1]?.[tileX + borderSize]?.[tileY + borderSize] ?? 0) & 0x2) === 2
             ) {
                 plane++;
             }
@@ -1636,7 +1636,7 @@ export class WebGLMapSquare {
             let plane = npc.level | 0;
             if (
                 plane < 3 &&
-                (this.tileRenderFlags[1][tileX + borderSize][tileY + borderSize] & 0x2) === 2
+                ((this.tileRenderFlags[1]?.[tileX + borderSize]?.[tileY + borderSize] ?? 0) & 0x2) === 2
             ) {
                 plane++;
             }
