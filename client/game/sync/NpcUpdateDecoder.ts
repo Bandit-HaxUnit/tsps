@@ -32,6 +32,8 @@ export type NpcUpdateBlock = {
     healthBars?: HealthBarUpdate[];
     spotAnims?: NpcSpotAnimUpdate[];
     seq?: { id: number; delay: number };
+    /** Overhead icons set by the server (an empty list clears them), each a sprite group and index. */
+    headIcons?: Array<{ archiveId: number; spriteId: number }>;
     say?: string;
     colorOverride?: {
         startCycle: number;
@@ -352,6 +354,18 @@ export class NpcUpdateDecoder {
                 if (seqId === 65535) seqId = -1;
                 const delay = stream.readUnsignedByte() | 0;
                 block.seq = { id: seqId | 0, delay: delay & 0xff };
+            }
+
+            // HEAD_ICONS (0x200): overhead prayers the server sets (the Hunllef's protection).
+            if ((mask & 0x200) !== 0) {
+                const count = stream.readUnsignedByte() | 0;
+                const icons: Array<{ archiveId: number; spriteId: number }> = [];
+                for (let i = 0; i < count; i++) {
+                    const archiveId = stream.readUnsignedShortBE() | 0;
+                    const spriteId = stream.readUnsignedByte() | 0;
+                    icons.push({ archiveId, spriteId });
+                }
+                block.headIcons = icons;
             }
 
             if (Object.keys(block).length > 0) {

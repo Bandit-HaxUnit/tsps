@@ -1801,6 +1801,7 @@ export class PluginManager {
       CombatSpecial: require(`${combat}/CombatSpecial`).CombatSpecial,
       CombatFactory: require(`${combat}/CombatFactory`).CombatFactory,
       CombatType: require(`${combat}/CombatType`).CombatType,
+      SkullType: require(`${model}/SkullType`).SkullType,
       CombatConstants: require(`${combat}/CombatConstants`).CombatConstants,
       DamageFormulas: require(`${combat}/formula/DamageFormulas`).DamageFormulas,
       PendingHit: require(`${combat}/hit/PendingHit`).PendingHit,
@@ -1845,6 +1846,7 @@ export class PluginManager {
       World: require("../game/World").World,
       GameObject: require("../game/entity/impl/object/GameObject").GameObject,
       PrivateArea: require(`${model}/areas/impl/PrivateArea`).PrivateArea,
+      TemplatedInstanceArea: require(`${model}/areas/impl/TemplatedInstanceArea`).TemplatedInstanceArea,
       ObjectManager: require("../game/entity/impl/object/ObjectManager").ObjectManager,
       OperationType: require("../game/entity/impl/object/ObjectManager").OperationType,
       LocModelType: require("../game/cache/codec/rs/config/loctype/LocModelType").LocModelType,
@@ -1861,6 +1863,7 @@ export class PluginManager {
       NPC: require("../game/entity/impl/npc/NPC").NPC,
       GameConstants: require("../game/GameConstants").GameConstants,
       TeleportHandler: require(`${model}/teleportation/TeleportHandler`).TeleportHandler,
+      TeleportType: require(`${model}/teleportation/TeleportType`).TeleportType,
       DialogueChainBuilder: require(`${model}/dialogues/builders/DialogueChainBuilder`).DialogueChainBuilder,
       NpcDialogue: require(`${model}/dialogues/entries/impl/NpcDialogue`).NpcDialogue,
       PlayerDialogue: require(`${model}/dialogues/entries/impl/PlayerDialogue`).PlayerDialogue,
@@ -1876,6 +1879,7 @@ export class PluginManager {
       ShopManager: require("../game/model/container/shop/ShopManager").ShopManager,
       MultiChatboxPrompt: require("../game/model/menu/MultiChatboxPrompt").MultiChatboxPrompt,
       dispatchClientMessages: require("../net/NetworkBuilder").dispatchClientMessages,
+      connectHeadlessClient: require("../net/NetworkBuilder").connectHeadlessClient,
     });
     return PluginManager.pluginCoreApi;
   }

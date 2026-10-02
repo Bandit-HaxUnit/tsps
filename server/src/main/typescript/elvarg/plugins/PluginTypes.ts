@@ -1006,6 +1006,7 @@ export interface PluginCoreApi {
   CombatSpecial: any;
   CombatFactory: any;
   CombatType: any;
+  SkullType: any;
   CombatConstants: any;
   DamageFormulas: any;
   PendingHit: any;
@@ -1050,6 +1051,7 @@ export interface PluginCoreApi {
   World: any;
   GameObject: any;
   PrivateArea: any;
+  TemplatedInstanceArea: any;
   ObjectManager: any;
   OperationType: any;
   LocModelType: any;
@@ -1066,6 +1068,7 @@ export interface PluginCoreApi {
   NPC: any;
   GameConstants: any;
   TeleportHandler: any;
+  TeleportType: any;
   DialogueChainBuilder: any;
   NpcDialogue: any;
   PlayerDialogue: any;
@@ -1081,6 +1084,7 @@ export interface PluginCoreApi {
   ShopManager: any;
   MultiChatboxPrompt: any;
   dispatchClientMessages: (player: any, messages: any[]) => boolean;
+  connectHeadlessClient: (username: string, password: string) => Promise<{ player?: any; error?: string }>;
 }
 
 export interface PluginModule {

@@ -1671,7 +1671,8 @@ export class CombatSpells {
                     }
                     return;
                 }
-                const seconds = player.getPrayerActive()[PrayerHandler.PROTECT_FROM_MAGIC] ? 300 : 600;
+                // Wiki: 5 minutes, halved when Protect from Magic was already up.
+                const seconds = player.getPrayerActive()[PrayerHandler.PROTECT_FROM_MAGIC] ? 150 : 300;
                 player.getCombat().getTeleblockTimer().start(seconds);
                 player.getPacketSender().sendEffectTimer(seconds, EffectTimer.TELE_BLOCK)
                     .sendMessage("You have just been teleblocked!");

@@ -22,7 +22,6 @@ function playerWithAttributes(attributes = new Map()) {
     sendInterfaceDisplayState() { return sender; },
     sendEnterInputPrompt() { return sender; },
   };
-  let currentPreset = null;
   let syntaxAction = null;
   const player = {
     getAttribute: (key) => attributes.get(key),
@@ -30,8 +29,6 @@ function playerWithAttributes(attributes = new Map()) {
     getInterfaceId: () => GROUP_ID,
     getPacketSender: () => sender,
     sendMessage: (message) => sender.sendMessage(message),
-    getCurrentPreset: () => currentPreset,
-    setCurrentPreset: (preset) => { currentPreset = preset; },
     setEnteredSyntaxAction: (action) => { syntaxAction = action; },
     getEnteredSyntaxAction: () => syntaxAction,
     getInventory: () => ({ copyValidItemsArray: () => [] }),
@@ -72,7 +69,7 @@ test("custom presets rehydrate from their persisted attribute", () => {
     ["pvp:customPresets", JSON.parse(JSON.stringify(stored))],
   ]));
   onButton({ player: restored.player, buttonId: customSlot });
-  assert.equal(restored.player.getCurrentPreset().getName(), "Saved Build");
+  assert.equal(restored.player.getAttribute("pvp:current-preset").getName(), "Saved Build");
   assert.ok(restored.strings.includes("<col=ffffff>Saved Build</col>"));
 
   const messages = [];
@@ -238,7 +235,7 @@ test("dropping a preset item destroys it without the confirmation interface", ()
   const realEvent = {
     player: {
       getInventory: () => ({ deleteAtSlot: () => assert.fail("real untradeables keep the prompt") }),
-      setDestroyItem: () => {},
+      setAttribute: () => {},
       getPacketSender: () => {
         const sender = {
           sendChatboxInterface: () => sender,

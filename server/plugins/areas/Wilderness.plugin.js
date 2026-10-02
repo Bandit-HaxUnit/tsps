@@ -174,12 +174,14 @@ function sendThrottled(player, messages) {
   }
 }
 
+const CLAN_CHAT_ATTRIBUTE = "clan-chat:channel";
+
 function shareClanChat(attacker, target) {
   if (!attacker || !target || attacker === target) {
     return false;
   }
-  const attackerClan = attacker.getCurrentClanChat?.();
-  const targetClan = target.getCurrentClanChat?.();
+  const attackerClan = attacker.getAttribute?.(CLAN_CHAT_ATTRIBUTE);
+  const targetClan = target.getAttribute?.(CLAN_CHAT_ATTRIBUTE);
   return attackerClan != null && attackerClan === targetClan;
 }
 

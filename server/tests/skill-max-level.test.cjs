@@ -480,7 +480,7 @@ function feedbackPlayer(core) {
     getUsername: () => "feedback-test", isPlayerBot: () => false,
     performAnimation: a => animations.push(a.getId()), performGraphic() {}, sendMessage() {},
     getClickDelay: () => ({ elapsedTime: () => true, reset() {} }),
-    getSkill: () => null, setSkill() {}, setCreationMenu() {}, experienceLockedReturn: () => false,
+    getSkill: () => null, setSkill() {}, setCreationMenu() {},
     getUpdateFlag: () => ({ flag() {} }),
     getAttribute: k => attrs.get(k), setAttribute: (k, v) => attrs.set(k, v),
     getSkillManager: () => p.skills,

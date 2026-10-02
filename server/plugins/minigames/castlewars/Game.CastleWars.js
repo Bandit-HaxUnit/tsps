@@ -24,6 +24,8 @@ const PHASE = { IDLE: "idle", STARTING: "starting", ACTIVE: "active", ENDING: "e
 // Player attribute keys (objects, so they can't collide with anyone else's).
 const BOT_KEY = {};
 const TRANSITION_KEY = {};
+const IDLE_TICKS_KEY = "castlewars:idle-ticks";
+const SPAWN_IDLE_TICKS = 200;
 
 const teamByPlayer = new WeakMap();
 const sentVars = new WeakMap();
@@ -141,6 +143,10 @@ function isPlaying(player) {
 }
 
 /** For castle-only objects: refuses out loud instead of letting the click fall through silently. */
+function resetIdleTicks(player) {
+  player.setAttribute(IDLE_TICKS_KEY, SPAWN_IDLE_TICKS);
+}
+
 function requirePlaying(player) {
   if (isPlaying(player)) {
     return true;
@@ -480,7 +486,7 @@ function startGame() {
   resetMatchState();
   for (const teamId of Object.values(data.TEAM)) {
     for (const player of [...game.waitingAreas[teamId].getPlayers()]) {
-      player.resetCastlewarsIdleTime();
+      resetIdleTicks(player);
       chargeBracelet(player);
       player.setAttribute(TRANSITION_KEY, true);
       closeOverlay(player);
@@ -548,6 +554,7 @@ module.exports = function createCastleWarsGame(registry) {
     PHASE,
     BOT_KEY,
     TRANSITION_KEY,
+    IDLE_TICKS_KEY,
     AreaManager,
     // Filled in by Areas.CastleWars.js.
     lobbyArea: null,
@@ -573,6 +580,7 @@ module.exports = function createCastleWarsGame(registry) {
     setTeamVar,
     isPlaying,
     requirePlaying,
+    resetIdleTicks,
     swapObject,
     climbTo,
     refreshPlayerAppearance,

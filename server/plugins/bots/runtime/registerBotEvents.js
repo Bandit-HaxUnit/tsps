@@ -1,5 +1,6 @@
 const {
   FriendsChatManager,
+  CLAN_CHAT_ATTRIBUTE,
 } = require("../../interface/FriendsChatManager");
 const {
   ATTR_RECRUIT_OWNER_USERNAME,
@@ -47,7 +48,7 @@ function isActiveClanRecruit(owner, bot) {
     return false;
   }
   const ownerClan = FriendsChatManager.getOwnedChannel(owner);
-  return ownerClan != null && bot.getCurrentClanChat?.() === ownerClan;
+  return ownerClan != null && bot.getAttribute?.(CLAN_CHAT_ATTRIBUTE) === ownerClan;
 }
 
 function clearPersistentPvpRespawnAggro(victim, runtime, nowMs) {
@@ -100,8 +101,8 @@ function sharesClanChat(left, right) {
   if (!left || !right || left === right) {
     return false;
   }
-  const leftClan = left.getCurrentClanChat?.();
-  const rightClan = right.getCurrentClanChat?.();
+  const leftClan = left.getAttribute?.(CLAN_CHAT_ATTRIBUTE);
+  const rightClan = right.getAttribute?.(CLAN_CHAT_ATTRIBUTE);
   return leftClan != null && leftClan === rightClan;
 }
 

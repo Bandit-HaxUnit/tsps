@@ -68,7 +68,7 @@ test('ladder click waits for arrival before animating and changes plane one tick
     getSkillManager: () => ({ stopSkillable: noop }),
     setFollowing: noop, setCombatFollowing: noop, setPositionToFace: noop,
     setDirection: noop, setWalkingDirection: noop, setRunningDirection: noop,
-    setOldPosition: noop, isRunningReturn: () => false, sendMessage: noop,
+    isRunningReturn: () => false, sendMessage: noop,
     performAnimation: (animation) => events.push(['anim', World.getProcessCycle(), animation.getId()]),
     moveTo: (destination) => { queue.reset(); location = destination.clone(); events.push(['tele', World.getProcessCycle()]); },
   };

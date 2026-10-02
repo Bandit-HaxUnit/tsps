@@ -27,6 +27,7 @@ class SkillEntered implements EnteredAmountAction {
 export class SkillManager {
     public static readonly AMOUNT_OF_SKILLS: number = Skill.values().length;
     public static readonly MAX_EXPERIENCE: number = 1000000000;
+    public static readonly XP_LOCKED_ATTRIBUTE = "skills:xp-locked";
     public static readonly EXPERIENCE_FOR_99: number = 13034431;
     public static readonly EXP_ARRAY: number[] = [0, 83, 174, 276, 388, 512, 650, 801, 969, 1154, 1358, 1584, 1833, 2107,
         2411, 2746, 3115, 3523, 3973, 4470, 5018, 5624, 6291, 7028, 7842, 8740, 9730, 10824, 12031, 13363, 14833,
@@ -139,7 +140,7 @@ export class SkillManager {
         this.player.getPacketSender().sendExpDrop(skill, experience);
 
         // Don't add the experience if it has been locked..
-        if (this.player.experienceLockedReturn())
+        if (this.player.getAttribute(SkillManager.XP_LOCKED_ATTRIBUTE) === true)
             return this;
 
         // If we already have max exp, don't add any more.

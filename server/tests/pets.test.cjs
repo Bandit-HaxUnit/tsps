@@ -37,7 +37,7 @@ const HELLPUPPY = 13247;
 
 /** A player whose follower is already out, so awards land in the backpack. */
 function createPlayer({ level = 99, xp = 13034431 } = {}) {
-  const attributes = new Map();
+  const attributes = new Map([["pets:current", { isRegistered: () => true, getId: () => -1 }]]);
   const inventory = [];
   const messages = [];
   return {
@@ -47,7 +47,6 @@ function createPlayer({ level = 99, xp = 13034431 } = {}) {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getSkillManager: () => ({ getMaxLevel: () => level, getExperience: () => xp }),
-    getCurrentPet: () => ({ isRegistered: () => true, getId: () => -1 }),
     getInventory: () => ({
       isFull: () => inventory.length >= 28,
       adds: (itemId) => inventory.push(itemId),

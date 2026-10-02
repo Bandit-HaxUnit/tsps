@@ -8,6 +8,8 @@ const { Bank } = require("../../src/main/typescript/elvarg/game/model/container/
 const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
 const {NpcIdentifiers} = require("../../src/main/typescript/elvarg/util/NpcIdentifiers");
 
+const CURRENT_PET_ATTRIBUTE = "pets:current";
+
 const INTERACTION_ANIM = new Animation(827);
 const FOLLOWER_INDEX_VARP = 447;
 /** Every pet item the player has ever been awarded; Probita reclaims from it. */
@@ -377,7 +379,7 @@ function awardPet(player, itemId) {
     return false;
   }
   recordOwnership(player, pet.itemId);
-  const following = player.getCurrentPet?.()?.isRegistered?.() === true;
+  const following = player.getAttribute?.(CURRENT_PET_ATTRIBUTE)?.isRegistered?.() === true;
   if (following && player.getInventory().isFull()) {
     // ponytail: OSRS then loses the pet to Probita; the owned record lets her return it.
     player.sendMessage("You have a funny feeling like you would have been followed... Probita can help.");
@@ -393,7 +395,7 @@ function awardPet(player, itemId) {
 
 /** Does the player hold this pet item anywhere (follower, inventory, bank)? */
 function holdsPetItem(player, itemId) {
-  const current = player.getCurrentPet?.();
+  const current = player.getAttribute?.(CURRENT_PET_ATTRIBUTE);
   if (current?.isRegistered?.() && getPetByNpcId(current.getId())?.itemId === itemId) return true;
   if (player.getInventory?.()?.contains?.(itemId)) return true;
   const banks = player.getBanks?.() ?? [];
@@ -553,7 +555,7 @@ function summonOwnedPetOnBotLogin(player) {
   if (!player?.isPlayerBot?.() || !player.isPlayerBot()) {
     return false;
   }
-  if (player.getCurrentPet?.()) {
+  if (player.getAttribute?.(CURRENT_PET_ATTRIBUTE)) {
     return false;
   }
 
@@ -644,17 +646,17 @@ function drop(player, itemId, reward) {
     return false;
   }
 
-  const existingPet = player.getCurrentPet?.();
+  const existingPet = player.getAttribute?.(CURRENT_PET_ATTRIBUTE);
   if (existingPet && !existingPet.isRegistered?.()) {
     log("drop_clear_stale_current_pet", {
       username,
       itemId,
       stalePetId: existingPet.getId?.() ?? null,
     });
-    player.setCurrentPet?.(null);
+    player.setAttribute?.(CURRENT_PET_ATTRIBUTE, null);
   }
 
-  if (!player.getCurrentPet()) {
+  if (!player.getAttribute(CURRENT_PET_ATTRIBUTE)) {
     if (!canSummonPetHere(player, reward)) {
       log("drop_blocked_by_area", {
         username,
@@ -688,7 +690,7 @@ function drop(player, itemId, reward) {
       npcIndex: npc.getIndex?.() ?? null,
     });
 
-    player.setCurrentPet(npc);
+    player.setAttribute(CURRENT_PET_ATTRIBUTE, npc);
     syncFollowerIndex(player, npc);
     setTimeout(() => {
       const index = npc.getIndex?.() ?? -1;
@@ -704,7 +706,7 @@ function drop(player, itemId, reward) {
         addNpcQueueSize: World.getAddNPCQueue().length,
         removeNpcQueueSize: World.getRemoveNPCQueue().length,
       });
-      if (player.getCurrentPet?.() === npc) {
+      if (player.getAttribute?.(CURRENT_PET_ATTRIBUTE) === npc) {
         syncFollowerIndex(player, npc);
       }
     }, 1200);
@@ -727,7 +729,7 @@ function drop(player, itemId, reward) {
     }
     player.sendMessage("@dre@You've received a pet!");
   } else {
-    const currentPet = player.getCurrentPet();
+    const currentPet = player.getAttribute(CURRENT_PET_ATTRIBUTE);
     log("drop_already_has_pet", {
       username,
       itemId,
@@ -777,13 +779,13 @@ function pickup(player, npc) {
 
   player.sendMessage("You pick up your pet..");
   Sounds.sendSound(player, Sound.PICK_UP_ITEM);
-  player.setCurrentPet(null);
+  player.setAttribute(CURRENT_PET_ATTRIBUTE, null);
   syncFollowerIndex(player, null);
   return true;
 }
 
 function morph(player, npc) {
-  if (!npc || !player?.getCurrentPet?.()) {
+  if (!npc || !player?.getAttribute?.(CURRENT_PET_ATTRIBUTE)) {
     return false;
   }
 
@@ -792,7 +794,7 @@ function morph(player, npc) {
     return false;
   }
 
-  if (player.getCurrentPet() !== npc) {
+  if (player.getAttribute(CURRENT_PET_ATTRIBUTE) !== npc) {
     return false;
   }
 
@@ -804,7 +806,7 @@ function morph(player, npc) {
 }
 
 function interact(player, npc) {
-  if (!npc || !player?.getCurrentPet?.()) {
+  if (!npc || !player?.getAttribute?.(CURRENT_PET_ATTRIBUTE)) {
     return false;
   }
 
@@ -817,7 +819,7 @@ function interact(player, npc) {
     return false;
   }
 
-  if (player.getCurrentPet() !== npc) {
+  if (player.getAttribute(CURRENT_PET_ATTRIBUTE) !== npc) {
     return false;
   }
 
@@ -951,15 +953,15 @@ module.exports = {
     api.onNpcThirdClick(petNpcIds, interactWithPet);
 
     api.onPlayerLogout(({ player }) => {
-      pickup(player, player.getCurrentPet?.());
+      pickup(player, player.getAttribute?.(CURRENT_PET_ATTRIBUTE));
     });
 
     api.onPlayerDisconnect(({ player }) => {
-      pickup(player, player.getCurrentPet?.());
+      pickup(player, player.getAttribute?.(CURRENT_PET_ATTRIBUTE));
     });
 
     api.onPlayerLogin(({ player }) => {
-      syncFollowerIndex(player, player.getCurrentPet?.());
+      syncFollowerIndex(player, player.getAttribute?.(CURRENT_PET_ATTRIBUTE));
       summonOwnedPetOnBotLogin(player);
     });
 
