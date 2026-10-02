@@ -55,3 +55,19 @@ test('reward points: a 5,000 start, room points capped and added on completion, 
   assert.equal(members.get(b).points, 5000 + 1000 + 400);
   assert.equal(raid.lootPoints(a), 20000 + 400 + 600, 'the 5,000 start is taken off for the loot');
 });
+
+test('returning from a path lands on free Nexus floor, never inside its doorway', () => {
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { Location } = require('../dist/game/model/Location');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const Shared = require('../plugins/minigames/toa/ToaShared');
+  CachePipeline.initialize();
+  RegionManager.init();
+  Shared.bind({ core: PluginManager.getCoreApi() });
+  for (const path of Shared.PATHS) {
+    for (let dx = 0; dx <= path.spread; dx++) {
+      const tile = new Location(path.back.x + dx, path.back.y, 0);
+      assert.ok(Shared.floorFree(null, tile), `${path.name}: (${tile.getX()}, ${tile.getY()}) is blocked`);
+    }
+  }
+});

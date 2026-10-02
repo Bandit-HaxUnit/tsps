@@ -219,10 +219,12 @@ const ROOMS = {
 
 /**
  * The four paths off the Nexus, in the HUD's order (path varbit = index + 1). `entrance` is
- * the doorway object in the Nexus and `back` where you stand on returning from that path.
+ * the doorway object in the Nexus, and `back` the westmost of the `spread` + 1 tiles you land
+ * on returning from that path; they must clear the doorway's footprint.
  */
 const PATHS = [
-  { key: "APMEKEN", name: "Apmeken", first: "APMEKEN_PUZZLE", entrance: { x: 3562, y: 5146 }, back: { x: 3561, y: 5146 }, spread: 2 },
+  // Apmeken's doorway (3x2, turned) covers x 3562-3563, so the return tiles lie west of it.
+  { key: "APMEKEN", name: "Apmeken", first: "APMEKEN_PUZZLE", entrance: { x: 3562, y: 5146 }, back: { x: 3559, y: 5146 }, spread: 2 },
   { key: "SCABARAS", name: "Scabaras", first: "SCABARAS_PUZZLE", entrance: { x: 3559, y: 5155 }, back: { x: 3558, y: 5154 }, spread: 0 },
   { key: "HET", name: "Het", first: "HET_PUZZLE", entrance: { x: 3539, y: 5146 }, back: { x: 3541, y: 5146 }, spread: 2 },
   { key: "CRONDIS", name: "Crondis", first: "CRONDIS_PUZZLE", entrance: { x: 3541, y: 5155 }, back: { x: 3544, y: 5154 }, spread: 0 },
