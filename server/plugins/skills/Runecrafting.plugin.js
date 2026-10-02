@@ -28,6 +28,7 @@ let ABYSS_INNER_RING;
 const RUNE_MYSTERIES_STAGE_ATTRIBUTE = "quest.rune_mysteries.stage";
 const RUNE_MYSTERIES_COMPLETE_STAGE = 6;
 const ABYSS_OBSTACLE_XP = 25;
+const ABYSS_SKULL_SECONDS = 10 * 60;
 const RIFT_GUARDIAN_BASE = 1795758;
 const BLOOD_RIFT_GUARDIAN_BASE = 804984;
 const ABYSS_TELEPORT_STEP = "o8m7y6";
@@ -448,6 +449,8 @@ function teleportToAbyss(player) {
     return;
   }
   player.getSkillManager().setCurrentLevels(Skill.PRAYER, 0);
+  // The Mage of Zamorak skulls the player for 10 minutes (Wiki).
+  pluginApi.core.CombatFactory.skull(player, pluginApi.core.SkullType.WHITE_SKULL, ABYSS_SKULL_SECONDS);
   requestTeleport(player, ABYSS_INNER_RING);
 }
 

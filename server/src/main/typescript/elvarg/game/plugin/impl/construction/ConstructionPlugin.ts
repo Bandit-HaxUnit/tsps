@@ -503,6 +503,23 @@ function houseTeleportArrival({ player, name }: { player: Player; name: string }
   else enterHouse(player, saved.defaultBuildingMode);
 }
 
+/**
+ * "construction:house-tablet": where a Teleport to house tablet goes. Break follows the
+ * house's teleport setting, Inside/Outside override it; without a house it's refused
+ * (no destination) so the tablet is kept.
+ */
+function houseTablet(request: { player: Player; option: string; destination: Location | null; onArrival: (() => void) | null }): void {
+  const { player } = request;
+  const saved = houseStateFor(player);
+  if (saved.owned === false) {
+    player.sendMessage("You do not own a house. Speak to an Estate agent to buy one.");
+    return;
+  }
+  const outside = request.option === "outside" || (request.option === "break" && !!saved.teleportOutside);
+  request.destination = houseExit(saved);
+  request.onArrival = outside ? null : () => { enterHouse(player, saved.defaultBuildingMode); };
+}
+
 const HOUSE_VIEWER_INTERFACE = 422;
 type HouseViewer = {
   house: PlayerHouseInstance;
@@ -1017,6 +1034,7 @@ export const ConstructionPlugin = {
     api.onCustomEvent("door:toggle", openHouseDoor);
     api.onCustomEvent("interface:close", closeHouseSettings);
     api.onCustomEvent("spell:teleport-arrival", houseTeleportArrival);
+    api.onCustomEvent("construction:house-tablet", houseTablet);
     api.onPlayerLogin(loginHouse);
     api.onPlayerProcess(processHouse);
     api.onPlayerDisconnect(logoutHouse);

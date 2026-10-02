@@ -1006,6 +1006,7 @@ export interface PluginCoreApi {
   CombatSpecial: any;
   CombatFactory: any;
   CombatType: any;
+  SkullType: any;
   CombatConstants: any;
   DamageFormulas: any;
   PendingHit: any;
@@ -1066,6 +1067,7 @@ export interface PluginCoreApi {
   NPC: any;
   GameConstants: any;
   TeleportHandler: any;
+  TeleportType: any;
   DialogueChainBuilder: any;
   NpcDialogue: any;
   PlayerDialogue: any;
