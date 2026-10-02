@@ -230,7 +230,9 @@ class Room {
 
   /**
    * Spawns an NPC into the raid, scaled for raid level, party size and (for path bosses) the
-   * path level. `points` is the points-per-damage multiplier.
+   * path level. `points` is the points-per-damage multiplier. `inert` is for things players
+   * strike that never fight back (eggs, jugs, siphons, seals, obelisks): they don't retaliate,
+   * so they don't turn to face whoever hits them.
    */
   spawn(id, tile, options = {}) {
     const raid = this.raid;
@@ -246,6 +248,7 @@ class Room {
     npc.__skipDefaultRespawn = true;
     npc.__toaRoom = this;
     npc.__toaPoints = options.points ?? 1;
+    if (options.inert) npc.setFlag("combat:no-retaliate");
     raid.area.add(npc);
     this.npcs.add(npc);
     if (options.scale !== false) raid.scale(npc, options.pathLevel ?? this.pathLevel());

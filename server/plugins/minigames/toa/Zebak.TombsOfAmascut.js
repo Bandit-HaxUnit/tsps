@@ -626,7 +626,7 @@ class ZebakRoom extends Raid.Room {
   spawnJugs(tiles) {
     const { NpcIdentifiers } = Shared.core();
     for (const tile of tiles) {
-      const jug = this.spawn(NpcIdentifiers.COL_00FFFF_JUG_COL, { ...tile, z: 0 }, { scale: false, points: 0 });
+      const jug = this.spawn(NpcIdentifiers.COL_00FFFF_JUG_COL, { ...tile, z: 0 }, { scale: false, points: 0, inert: true });
       if (!jug) continue;
       jug.__toaScripted = true;
       jug.__toaJug = { direction: null };

@@ -190,7 +190,7 @@ class HetPuzzleRoom extends Raid.Room {
     this.rotation = Shared.random(0, ROOM_SETS.length - 1);
     this.orbIndex = Shared.random(0, ORB_PAIRS.length - 1);
     this.weakenPending = false;
-    this.seal = this.spawn(NpcIdentifiers.COL_00FFFF_HETS_SEAL_PROTECTED_COL, SEAL_TILE, { scale: false, points: SEAL_POINTS });
+    this.seal = this.spawn(NpcIdentifiers.COL_00FFFF_HETS_SEAL_PROTECTED_COL, SEAL_TILE, { scale: false, points: SEAL_POINTS, inert: true });
     if (this.seal) {
       this.seal.__toaScripted = true;
       this.seal.__toaSeal = true;

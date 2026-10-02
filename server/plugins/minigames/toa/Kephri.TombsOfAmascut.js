@@ -319,7 +319,7 @@ class KephriRoom extends Raid.Room {
   placeEgg(tile, brown) {
     if (this.dung.has(`${tile.x},${tile.y}`)) return;
     const { NpcIdentifiers, Animation } = Shared.core();
-    const egg = this.spawn(brown ? NpcIdentifiers.COL_00FFFF_EGG_COL_2 : NpcIdentifiers.COL_00FFFF_EGG_COL, { ...tile, z: 0 }, { scale: false, points: 0 });
+    const egg = this.spawn(brown ? NpcIdentifiers.COL_00FFFF_EGG_COL_2 : NpcIdentifiers.COL_00FFFF_EGG_COL, { ...tile, z: 0 }, { scale: false, points: 0, inert: true });
     if (!egg) return;
     egg.__toaScripted = true;
     egg.__toaEgg = brown ? "brown" : "plain";

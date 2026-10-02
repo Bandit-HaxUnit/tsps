@@ -93,7 +93,7 @@ class ScabarasPuzzleRoom extends Raid.Room {
     OBELISK_OFFSETS.forEach(([dx, dy], index) => {
       const tile = at(pillar, dx, dy);
       const id = index < 5 ? NpcIdentifiers.COL_00FFFF_OBELISK_COL : NpcIdentifiers.COL_00FFFF_OBELISK_COL_2;
-      const obelisk = this.spawn(id, tile, { scale: false });
+      const obelisk = this.spawn(id, tile, { scale: false, inert: true });
       if (!obelisk) return;
       obelisk.getMovementQueue().setBlockMovement(true);
       obelisk.__toaObelisk = index;

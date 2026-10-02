@@ -1240,7 +1240,7 @@ class WardensFinalRoom extends WardenRoomBase {
     const hitpoints = 1 + (groupSize < 4 ? 0 : Math.floor((groupSize - 2) / 2));
     this.siphonsDone = tiles.map(() => false);
     this.siphons = tiles.map((location, index) => {
-      const siphon = this.spawnFixed(I.COL_00FFFF_ENERGY_SIPHON_COL, { x: location.getX(), y: location.getY(), z: Z }, { scale: false, points: 0 });
+      const siphon = this.spawnFixed(I.COL_00FFFF_ENERGY_SIPHON_COL, { x: location.getX(), y: location.getY(), z: Z }, { scale: false, points: 0, inert: true });
       if (!siphon) return null;
       siphon.setMaxHitpoints(hitpoints);
       siphon.setHitpoints(hitpoints);
