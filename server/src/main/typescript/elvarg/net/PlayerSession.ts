@@ -1,5 +1,6 @@
 import { MAX_GAME_MESSAGE_BYTES } from "./BinaryChannel";
 import { BoatManager } from "../game/content/sailing/BoatManager";
+import { TemplatedInstanceArea } from "../game/model/areas/impl/TemplatedInstanceArea";
 import { WorldEntitySync } from "../game/content/sailing/WorldEntitySync";
 import { Packet } from "./packet/Packet";
 import { PacketBuilder } from "./packet/PacketBuilder";
@@ -68,6 +69,7 @@ export class PlayerSession {
   private replayedSceneBaseY = -1;
   private replayedSceneLevel = -1;
   private replayedPrivateArea: PrivateArea | null = null;
+  private replayedSceneVersion = 0;
   private hasReplayedScene = false;
   private playerSyncState?: PlayerSyncState;
   private npcSyncState: NpcSyncState = createNpcSyncState();
@@ -240,22 +242,25 @@ export class PlayerSession {
       if (localY < 16 || localY >= 88) this.sceneBaseY = Math.max(0, (sceneTile.y - 48) & ~7);
     }
     const privateArea = BoatManager.syncArea(player);
+    // A templated instance is drawn from its own palette, streamed like the normal map.
+    const templated = privateArea instanceof TemplatedInstanceArea ? privateArea : null;
+    const sceneVersion = templated?.getSceneVersion() ?? 0;
     const sceneChanged = !this.hasReplayedScene
       || this.replayedSceneBaseX !== this.sceneBaseX
       || this.replayedSceneBaseY !== this.sceneBaseY
       || this.replayedSceneLevel !== sceneTile.level
-      || this.replayedPrivateArea !== privateArea;
-    const normalRebuildNeeded = privateArea == null && (
+      || this.replayedPrivateArea !== privateArea
+      || this.replayedSceneVersion !== sceneVersion;
+    const rebuildNeeded = (privateArea == null || templated != null) && (
       !this.hasReplayedScene
       || this.replayedSceneBaseX !== this.sceneBaseX
       || this.replayedSceneBaseY !== this.sceneBaseY
       || this.replayedPrivateArea !== privateArea
+      || this.replayedSceneVersion !== sceneVersion
     );
-    if (normalRebuildNeeded && !this.sendRebuildNormal(
-      sceneTile.x >> 3,
-      sceneTile.y >> 3,
-      this.replayedPrivateArea != null,
-    )) {
+    if (rebuildNeeded && !(templated
+      ? this.sendClientPacket(templated.encodeScene(sceneTile.x >> 3, sceneTile.y >> 3))
+      : this.sendRebuildNormal(sceneTile.x >> 3, sceneTile.y >> 3, this.replayedPrivateArea != null))) {
       return;
     }
     const replacementWindowChanged = !this.hasReplayedScene
@@ -372,6 +377,7 @@ export class PlayerSession {
       this.replayedSceneBaseY = this.sceneBaseY;
       this.replayedSceneLevel = sceneTile.level;
       this.replayedPrivateArea = privateArea;
+      this.replayedSceneVersion = sceneVersion;
       this.hasReplayedScene = true;
     }
   }

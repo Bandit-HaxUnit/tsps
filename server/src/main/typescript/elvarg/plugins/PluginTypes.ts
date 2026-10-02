@@ -1050,6 +1050,7 @@ export interface PluginCoreApi {
   World: any;
   GameObject: any;
   PrivateArea: any;
+  TemplatedInstanceArea: any;
   ObjectManager: any;
   OperationType: any;
   LocModelType: any;

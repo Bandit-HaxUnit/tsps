@@ -1853,6 +1853,7 @@ export class PluginManager {
       World: require("../game/World").World,
       GameObject: require("../game/entity/impl/object/GameObject").GameObject,
       PrivateArea: require(`${model}/areas/impl/PrivateArea`).PrivateArea,
+      TemplatedInstanceArea: require(`${model}/areas/impl/TemplatedInstanceArea`).TemplatedInstanceArea,
       ObjectManager: require("../game/entity/impl/object/ObjectManager").ObjectManager,
       OperationType: require("../game/entity/impl/object/ObjectManager").OperationType,
       LocModelType: require("../game/cache/codec/rs/config/loctype/LocModelType").LocModelType,
