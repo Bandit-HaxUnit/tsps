@@ -12,6 +12,18 @@ const ANIM = { RAKE: 2273, PLANT: 2291, SAPLING: 2272, FILL_POT: 2287, WATER: 22
 const WORK = new WeakMap();
 const SYNC = new WeakMap();
 const RENDERED = new WeakMap();
+// A patch can be visible from its own 64-tile region or one of its neighbours.
+const PATCHES_BY_REGION = new Map();
+for (const patch of Data.CACHE.patches) {
+    const rx = Math.floor((patch.x + patch.maxX) / 128), ry = Math.floor((patch.y + patch.maxY) / 128);
+    for (let x = rx - 1; x <= rx + 1; x++) {
+        for (let y = ry - 1; y <= ry + 1; y++) {
+            const key = `${x}:${y}:${patch.z}`;
+            if (!PATCHES_BY_REGION.has(key)) PATCHES_BY_REGION.set(key, []);
+            PATCHES_BY_REGION.get(key).push(patch);
+        }
+    }
+}
 
 function farmFor(player) {
     let farm = player.getAttribute(FARM_ATTRIBUTE);
@@ -512,8 +524,8 @@ function playerProcess({ player }) {
             farm.boundStatus = status;
         }
         const nearest = new Map();
-        for (const patch of Data.CACHE.patches) {
-            if (patch.z !== pos.getZ()) continue;
+        const nearby = PATCHES_BY_REGION.get(`${Math.floor(pos.getX() / 64)}:${Math.floor(pos.getY() / 64)}:${pos.getZ()}`) ?? [];
+        for (const patch of nearby) {
             const distance = Math.max(Math.abs((patch.x + patch.maxX) / 2 - pos.getX()), Math.abs((patch.y + patch.maxY) / 2 - pos.getY()));
             if (distance <= 64 && (!nearest.has(patch.varbit) || nearest.get(patch.varbit).distance > distance)) nearest.set(patch.varbit, { patch, distance });
         }
