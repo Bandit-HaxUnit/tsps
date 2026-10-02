@@ -137,18 +137,49 @@ function bindHooks() {
   RunHooks(api);
 }
 
-/** A container that holds item ids by slot. */
+// Shards and dust stack; everything else takes a slot each.
+const STACKABLE = new Set([23866, 23867, 23824, 23830, 23904, 23858]);
+
+/** A container of { id, amount } slots. */
 function container(size) {
   const slots = new Array(size).fill(null);
   const self = {
     slots,
-    getValidItems: () => slots.filter(Boolean).map((id) => ({ getId: () => id })),
+    getItems: () => slots.map((slot) => ({ getId: () => slot?.id ?? -1, getAmount: () => slot?.amount ?? 0 })),
+    getValidItems: () => slots.filter(Boolean).map((slot) => ({ getId: () => slot.id })),
     resetItems() { slots.fill(null); return self; },
     refreshItems() { return self; },
-    adds(id) { slots[slots.indexOf(null)] = id; return self; },
-    setItem(slot, item) { slots[slot] = item?.getId?.() ?? null; return self; },
-    contains: (id) => slots.includes(id),
-    deleteAtSlot(slot) { slots[slot] = null; return self; },
+    adds(id, amount = 1) {
+      const stack = STACKABLE.has(id) && slots.find((slot) => slot?.id === id);
+      if (stack) stack.amount += amount;
+      else if (STACKABLE.has(id)) slots[slots.indexOf(null)] = { id, amount };
+      else for (let i = 0; i < amount; i++) slots[slots.indexOf(null)] = { id, amount: 1 };
+      return self;
+    },
+    setItem(slot, item) {
+      const id = item?.getId?.() ?? -1;
+      slots[slot] = id > 0 ? { id, amount: 1 } : null;
+      return self;
+    },
+    contains: (id) => slots.some((slot) => slot?.id === id),
+    getAmount: (id) => slots.reduce((sum, slot) => sum + (slot?.id === id ? slot.amount : 0), 0),
+    getFreeSlots: () => slots.filter((slot) => !slot).length,
+    delete(id, amount = 1) {
+      for (let i = 0; i < slots.length && amount > 0; i++) {
+        if (slots[i]?.id !== id) continue;
+        const taken = Math.min(amount, slots[i].amount);
+        slots[i].amount -= taken;
+        amount -= taken;
+        if (slots[i].amount <= 0) slots[i] = null;
+      }
+      return self;
+    },
+    deleteAtSlot(slot, amount = 1) {
+      if (!slots[slot]) return self;
+      slots[slot].amount -= amount;
+      if (slots[slot].amount <= 0) slots[slot] = null;
+      return self;
+    },
   };
   return self;
 }
@@ -175,6 +206,14 @@ function fakePlayer(name = 'Tester') {
     getCurrentPet: () => null,
     resetAttributes() { p.resets++; },
     sendMessage: (message) => p.messages.push(message),
+    xp: {},
+    animations: [],
+    getSkillManager: () => ({
+      addExperiences(skill, amount) { p.xp[skill.getName?.() ?? String(skill)] = (p.xp[skill.getName?.() ?? String(skill)] ?? 0) + amount; },
+      getCurrentLevel: () => 99,
+    }),
+    performAnimation(animation) { p.animations.push(animation.getId?.() ?? animation.id); },
+    getUpdateFlag: () => ({ flag() {} }),
     getCombat: () => ({ reset() {} }),
     getMovementQueue: () => ({ reset() {} }),
     getDialogueManager: () => ({ startDialogues: (chain) => p.statements.push(chain) }),
@@ -186,6 +225,8 @@ function fakePlayer(name = 'Tester') {
         sendSubInterface: (uid, id) => { p.interfaces.push(id); return sender; },
         closeSubInterface: (uid) => { p.interfaces.push(-uid); return sender; },
         sendClientScript: (id, ...args) => { p.scripts.push([id, ...args]); return sender; },
+        sendCreationMenu: (menu) => { p.menu = menu; return sender; },
+        sendInterface: (id) => { p.interfaces.push(id); return sender; },
       };
       return sender;
     },
@@ -334,6 +375,177 @@ test('passing the barrier from its corridor starts the fight and lands on the ar
     assert.equal(run.stage, 'boss');
     assert.ok(run.inArena(player.getLocation()), 'two tiles in, on the floor');
     assert.equal(RegionManager.getClipping(player.getLocation().getX(), player.getLocation().getY(), 1, run.map) & 0x1280100, 0);
+  } finally {
+    run.end('exit', { fade: false });
+  }
+});
+
+// ------------------------------------------------------------------ preparing
+
+const Items = require('../plugins/minigames/gauntlet/GauntletItems');
+const Resources = require('../plugins/minigames/gauntlet/GauntletResources');
+const Prep = require('../plugins/minigames/gauntlet/Prep.Gauntlet');
+
+function bindPrep() {
+  bindHooks();
+  Prep({
+    core: PluginManager.getCoreApi(),
+    onObjectInteraction: (name, actions) => { hooks.objects[name] = { ...(hooks.objects[name] ?? {}), ...actions }; },
+    onItemOnObject: (item, object, handler) => { hooks.itemOnObject = { ...(hooks.itemOnObject ?? {}), [`${item}|${object}`]: handler }; },
+    onItemOnItem: (a, b, handler) => { hooks.itemOnItem = { ...(hooks.itemOnItem ?? {}), [`${a}|${b}`]: handler }; },
+    onItemAction: (name, actions) => { hooks.items[name] = { ...(hooks.items[name] ?? {}), ...actions }; },
+    sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
+    getBonusManager: () => ({ update() {} }),
+  });
+}
+
+function startedRun(name, options = {}) {
+  const player = fakePlayer(name);
+  const run = Run.startRun(player, options);
+  ticks(3);
+  return { player, run };
+}
+
+test('lit rooms are stocked by the walls, clear of the doorways, and their nodes on both sides light up', () => {
+  bindPrep();
+  let stocked = 0;
+  for (let seed = 1; seed <= 12; seed++) {
+    const { player, run } = startedRun(`Stocker${seed}`, { random: seeded(seed) });
+    try {
+      run.map.lightAll();
+      for (const room of run.map.rooms.flat()) {
+        if (room.special) continue;
+        run.lightRoom(room.gridX, room.gridY); // already lit by lightAll: no second stocking
+        const placed = Resources.stockRoom(run.map, room, seeded(seed * 100 + room.gridX * 7 + room.gridY));
+        if (room.demiBoss) assert.equal(placed.length, 0, 'a demi-boss room holds only its demi-boss');
+        for (const { key, object } of placed) {
+          stocked++;
+          const origin = run.map.roomTile(room, 0, 0);
+          const x = object.getLocation().getX() - origin.getX();
+          const y = object.getLocation().getY() - origin.getY();
+          assert.ok(x >= 2 && y >= 2 && x + Resources.RESOURCES[key].size - 1 <= 13 && y + Resources.RESOURCES[key].size - 1 <= 13,
+            `${key} on the inner floor (${x}, ${y})`);
+          const clip = RegionManager.getClipping(object.getLocation().getX(), object.getLocation().getY(), 1, run.map);
+          assert.notEqual(clip & 0x100, 0, `${key} blocks its tile`);
+        }
+      }
+      // The passage between the start and boss rooms is lit on the start room's side.
+      const start = run.map.room(run.map.start.x, run.map.start.y);
+      const litNodes = run.map.getObjects().filter((o) => [36103, 36104].includes(o.getId())
+        && run.map.roomAt(o.getLocation()) === start);
+      assert.ok(litNodes.length >= 1, 'lit nodes beside the boss room');
+    } finally {
+      run.end('exit', { fade: false });
+    }
+  }
+  assert.ok(stocked > 50, `rooms hold resources (${stocked})`);
+});
+
+test('gathering a deposit gives 3 ore, one every 2 ticks, then leaves it depleted', () => {
+  bindPrep();
+  const { player, run } = startedRun('Miner', { random: seeded(21) });
+  try {
+    const room = run.map.room(run.map.start.x, run.map.start.y);
+    const deposit = new (PluginManager.getCoreApi().GameObject)(36064, run.map.roomTile(room, 5, 9), 10, 0, run.map);
+    PluginManager.getCoreApi().ObjectManager.register(deposit, true);
+    player.inventory.delete(I.CRYSTAL_PICKAXE_3, 1);
+    interact('Crystal Deposit', 'Mine', player, deposit);
+    assert.equal(player.inventory.getAmount(23877), 0, 'no pickaxe, no ore');
+    player.inventory.adds(I.CRYSTAL_PICKAXE_3);
+    interact('Crystal Deposit', 'Mine', player, deposit);
+    ticks(1);
+    assert.equal(player.inventory.getAmount(23877), 0);
+    ticks(1);
+    assert.equal(player.inventory.getAmount(23877), 1, 'the first after 2 ticks');
+    ticks(10);
+    assert.equal(player.inventory.getAmount(23877), 3, 'three from a deposit');
+    const depleted = run.map.getObjects().find((o) => o.getLocation().equals(deposit.getLocation()));
+    assert.equal(depleted?.getId(), 36065, 'the depleted deposit');
+    assert.equal(player.xp.Mining ?? player.xp.MINING ?? Object.values(player.xp)[0], 3);
+  } finally {
+    run.end('exit', { fade: false });
+  }
+});
+
+test('the singing bowl follows the Wiki costs and upgrades worn gear in place', () => {
+  bindPrep();
+  const { player, run } = startedRun('Singer', { random: seeded(31) });
+  try {
+    const items = Items.itemsFor('regular');
+    // A basic set: 3 of each resource and 150 shards.
+    player.inventory.adds(items.shards, 150);
+    for (const id of [items.ore, items.bark, items.linum]) player.inventory.adds(id, 3);
+    const bowl = run.map.getTemplateObjects(run.map.roomTile(run.map.room(run.map.start.x, run.map.start.y), 3, 12))[0];
+    interact('Singing Bowl', 'Sing-crystal', player, bowl);
+    const recipes = Items.bowlRecipes('regular', (id) => player.inventory.contains(id));
+    for (const piece of ['helm', 'body', 'legs']) {
+      assert.ok(recipes.some((recipe) => recipe.id === items[piece][0]), `${piece} (basic) offered`);
+      player.menu.execute(items[piece][0], 1);
+    }
+    assert.equal(player.inventory.getAmount(items.shards), 0, 'a basic set is 150 shards');
+    assert.equal(player.inventory.getAmount(items.ore), 0, 'and 3 ore');
+    // Worn and upgraded where it is worn.
+    const helmSlot = 0;
+    player.inventory.delete(items.helm[0], 1);
+    player.equipment.setItem(helmSlot, { getId: () => items.helm[0] });
+    player.inventory.adds(items.shards, 50);
+    for (const id of [items.ore, items.bark, items.linum]) player.inventory.adds(id, 1);
+    interact('Singing Bowl', 'Sing-crystal', player, bowl);
+    player.menu.execute(items.helm[1], 1);
+    assert.equal(player.equipment.slots[helmSlot]?.id, items.helm[1], 'the worn helm is attuned in place');
+    // Weapons: a frame, then 50 shards, then the component.
+    player.inventory.adds(items.frame);
+    interact('Singing Bowl', 'Sing-crystal', player, bowl);
+    player.menu.execute(items.bow[0], 1);
+    assert.ok(player.inventory.contains(items.bow[0]));
+    assert.ok(!player.inventory.contains(items.frame));
+    // Vials repeat for the amount chosen, 10 shards each.
+    player.inventory.adds(items.shards, 25);
+    interact('Singing Bowl', 'Sing-crystal', player, bowl);
+    player.menu.execute(items.vial, 5);
+    assert.equal(player.inventory.getAmount(items.vial), 2);
+    assert.equal(player.inventory.getAmount(items.shards), 5);
+  } finally {
+    run.end('exit', { fade: false });
+  }
+});
+
+test('an Egniol potion: water-filled vial, grym leaf, 10 shards ground to dust', () => {
+  bindPrep();
+  const { player, run } = startedRun('Brewer', { random: seeded(41) });
+  try {
+    const items = Items.itemsFor('regular');
+    player.inventory.adds(items.waterVial);
+    player.inventory.adds(items.grymLeaf);
+    player.inventory.adds(items.shards, 12);
+    const use = (a, b, ids) => hooks.itemOnItem[`${a}|${b}`]({ player, usedItemId: ids[0], usedWithItemId: ids[1] });
+    use('Grym leaf', 'Water-filled vial', [items.grymLeaf, items.waterVial]);
+    assert.ok(player.inventory.contains(items.grymPotion));
+    use('Pestle and mortar', 'Crystal shards', [items.pestle, items.shards]);
+    assert.equal(player.inventory.getAmount(items.dust), 10);
+    assert.equal(player.inventory.getAmount(items.shards), 2);
+    use('Crystal dust', 'Grym potion (unf)', [items.dust, items.grymPotion]);
+    assert.ok(player.inventory.contains(items.egniol3), 'an Egniol potion (3)');
+    assert.equal(player.inventory.getAmount(items.dust), 0);
+  } finally {
+    run.end('exit', { fade: false });
+  }
+});
+
+test('the teleport crystal works only away from the start room and before the fight', () => {
+  bindPrep();
+  const { player, run } = startedRun('Teleporter', { random: seeded(51) });
+  try {
+    const slot = player.inventory.slots.findIndex((slot) => slot?.id === I.TELEPORT_CRYSTAL);
+    const use = () => hooks.items['Teleport crystal'].Activate({ player, itemId: I.TELEPORT_CRYSTAL, slot });
+    use();
+    assert.ok(player.inventory.contains(I.TELEPORT_CRYSTAL), 'not used in the start room');
+    const elsewhere = run.map.room(run.map.start.x === 3 ? 4 : 3, run.map.start.x === 3 ? 3 : 4);
+    run.map.lightRoom(elsewhere.gridX, elsewhere.gridY);
+    player.moveTo(run.map.roomTile(elsewhere, 7, 7));
+    use();
+    assert.ok(!player.inventory.contains(I.TELEPORT_CRYSTAL), 'used up');
+    assert.ok(run.inStartRoom(player.getLocation()), 'back at the start');
   } finally {
     run.end('exit', { fade: false });
   }

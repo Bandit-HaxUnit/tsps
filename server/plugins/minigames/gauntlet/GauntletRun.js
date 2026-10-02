@@ -13,6 +13,7 @@
 
 const Shared = require("./GauntletShared");
 const GauntletMap = require("./GauntletMap");
+const Resources = require("./GauntletResources");
 
 const ATTR_RUN = "gauntlet:run";
 const ATTR_STATS = "gauntlet:stats";
@@ -38,6 +39,16 @@ function items() {
 function runOf(player) {
   return runs.get(player.getUsername?.()) ?? null;
 }
+
+/** The player's run, while they are in its maze. */
+function runInside(player) {
+  const run = runOf(player);
+  return run && player.getArea?.() === run.map ? run : null;
+}
+
+// Nodes beside a lit neighbour show lit (the unclickable version two ids on).
+const NODES = { regular: [36101, 36102], corrupted: [35998, 35999] };
+const LIT_NODE_OFFSET = 2;
 
 function statsOf(player) {
   const saved = player.getAttribute(ATTR_STATS);
@@ -91,6 +102,7 @@ class GauntletRun {
       this.giveStartingItems();
       player.resetAttributes();
       this.map.enter(player);
+      this.lightNodesAround(this.map.room(this.map.start.x, this.map.start.y));
       player.moveTo(this.map.startTile(this.random));
       player.sendMessage("You enter the Gauntlet.");
       this.startCycle = Shared.core().World.getProcessCycle();
@@ -153,7 +165,36 @@ class GauntletRun {
     if (this.stage !== "prep") return false;
     if (!this.map.lightRoom(gridX, gridY)) return false;
     this.player.getPacketSender().sendVarbit(Shared.VARBIT.ROOM_LIT_FIRST + gridY * GauntletMap.GRID + gridX, 1);
+    const room = this.map.room(gridX, gridY);
+    Resources.stockRoom(this.map, room, this.random);
+    this.lightNodesAround(room);
     return true;
+  }
+
+  /** Lights the nodes on both sides of every passage between this room and a lit neighbour. */
+  lightNodesAround(room) {
+    for (const side of GauntletMap.SIDES) {
+      const next = this.map.room(room.gridX + side.dx, room.gridY + side.dy);
+      if (!next?.lit) continue;
+      this.lightNodes(room, side);
+      this.lightNodes(next, GauntletMap.SIDES.find((other) => other.dx === -side.dx && other.dy === -side.dy));
+    }
+  }
+
+  lightNodes(room, side) {
+    const ids = NODES[this.mode];
+    const last = GauntletMap.ROOM_TILES - 1;
+    for (let i = 0; i <= last; i++) {
+      for (const depth of [0, 1]) {
+        const x = side.dx > 0 ? last - depth : side.dx < 0 ? depth : i;
+        const y = side.dy > 0 ? last - depth : side.dy < 0 ? depth : i;
+        const tile = this.map.roomTile(room, x, y);
+        const spawned = this.map.getObjects().some((object) => object.getLocation().equals(tile) && object.getType() === 10);
+        if (spawned) continue;
+        const node = this.map.getTemplateObjects(tile).find((object) => ids.includes(object.getId()));
+        if (node) Resources.replaceObject(this.map, node, node.getId() + LIT_NODE_OFFSET);
+      }
+    }
   }
 
   /** Back to the start room, as the teleport crystal does. */
@@ -161,6 +202,10 @@ class GauntletRun {
     if (this.stage !== "prep") return false;
     this.player.moveTo(this.map.startTile(this.random));
     return true;
+  }
+
+  inStartRoom(location) {
+    return this.map.roomAt(location) === this.map.room(this.map.start.x, this.map.start.y);
   }
 
   /** Through the barrier, or dragged in when the timer runs out. */
@@ -200,6 +245,7 @@ class GauntletRun {
     if (this.stage === "ended") return;
     this.stage = "ended";
     this.timer?.stop?.();
+    Resources.stopGathering(this.player);
     runs.delete(this.player.getUsername());
     const player = this.player;
     player.setAttribute(ATTR_RUN, null);
@@ -233,5 +279,5 @@ function startRun(player, options) {
 }
 
 module.exports = {
-  ATTR_RUN, ATTR_STATS, GauntletRun, runOf, startRun, statsOf, hasCompleted, sendCompletionVarp, items,
+  ATTR_RUN, ATTR_STATS, GauntletRun, runOf, runInside, startRun, statsOf, hasCompleted, sendCompletionVarp, items,
 };

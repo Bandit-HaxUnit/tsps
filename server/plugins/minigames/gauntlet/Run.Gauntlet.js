@@ -16,8 +16,7 @@ const INSTANCE_MAX_X = 9599;
 const EXIT_TEXT = "Are you sure you wish to exit the Gauntlet? All of your progress will be lost and you will start again upon re-entering.";
 
 function runIn(player) {
-  const run = Run.runOf(player);
-  return run && player.getArea?.() === run.map ? run : null;
+  return Run.runInside(player);
 }
 
 // ------------------------------------------------------------------ nodes
@@ -80,8 +79,13 @@ function useTeleportCrystal(event) {
   const { player, itemId, slot } = event;
   const run = runIn(player);
   if (!run || Run.items()[run.mode].teleportCrystal !== itemId) return false;
+  // Wiki: not in the start room, and not once the Hunllef fight has begun.
   if (run.stage !== "prep") {
-    player.sendMessage("You can't use that now.");
+    player.sendMessage("That won't help you now. At this point in the Gauntlet, you win or you die.");
+    return true;
+  }
+  if (run.inStartRoom(player.getLocation())) {
+    player.sendMessage("You're already at the start of the Gauntlet.");
     return true;
   }
   player.getInventory().deleteAtSlot(slot, 1);
