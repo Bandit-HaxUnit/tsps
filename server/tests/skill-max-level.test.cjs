@@ -217,3 +217,257 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
     Runtime.shutdown(); H.core = core; H.players.clear(); H.reserved.clear(); H.actions.clear(); H.hidden.clear();
   }
 });
+
+
+// Exercise native feedback and the real plugin actions without a client or game loop.
+function feedbackPlayer(core) {
+  const counts = new Map(), sent = [], animations = [], attrs = new Map();
+  let location = new core.Location(3000, 3000, 0), menu, chatbox = -1;
+  const inventory = {
+    get: slot => [...counts].map(([id, n]) => new core.Item(id, n))[slot],
+    contains: id => (counts.get(id) ?? 0) > 0, getAmount: id => counts.get(id) ?? 0,
+    deleteNumber(id, n) { const remaining = (counts.get(id) ?? 0) - n; if (remaining > 0) counts.set(id, remaining); else counts.delete(id); },
+    deleteAtSlot(slot, n) { this.deleteNumber(this.get(slot).getId(), n); },
+    addItem(item) { counts.set(item.getId(), (counts.get(item.getId()) ?? 0) + item.getAmount()); },
+    isFull: () => false, getFreeSlots: () => 28,
+  };
+  const sender = new Proxy({
+    sendCreationMenu(value) { menu = value; return sender; },
+    sendChatboxInterface(id) { chatbox = id; sent.push(["chatbox", id]); return sender; },
+    isChatboxInterface: id => chatbox === id,
+    closeInterface(id) { if (chatbox === id) chatbox = -1; return sender; },
+  }, { get: (target, key) => target[key] ?? ((...args) => { sent.push([key, ...args]); return sender; }) });
+  const p = {
+    counts, sent, animations, inventory, menu: () => menu,
+    getLocation: () => location, moveTo(value) { location = value; },
+    getInventory: () => inventory, getPacketSender: () => sender,
+    getMovementQueue: () => ({ size: () => 0 }), getForceMovement: () => null,
+    isRegistered: () => true, getHitpoints: () => 99,
+    getUsername: () => "feedback-test", isPlayerBot: () => false,
+    performAnimation: a => animations.push(a.getId()), performGraphic() {}, sendMessage() {},
+    getClickDelay: () => ({ elapsedTime: () => true, reset() {} }),
+    getSkill: () => null, setSkill() {}, setCreationMenu() {}, experienceLockedReturn: () => false,
+    getUpdateFlag: () => ({ flag() {} }),
+    getAttribute: k => attrs.get(k), setAttribute: (k, v) => attrs.set(k, v),
+    getSkillManager: () => p.skills,
+  };
+  p.skills = new SkillManager(p);
+  return p;
+}
+
+function registerFeedbackPlugin(name, core, extra = {}) {
+  const hooks = {};
+  const api = new Proxy({ core, log() {}, ...extra }, {
+    get: (target, key) => target[key] ?? ((...args) => { hooks[key] = args.find(arg => typeof arg === "function"); }),
+  });
+  require(`../plugins/${name}.plugin`).register(api);
+  return hooks;
+}
+
+test("every skill gets native level-up text, its own model, stats before hooks, and a working Continue", () => {
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  const core = PluginManager.getCoreApi();
+  const hooks = registerFeedbackPlugin("interface/SkillLevelUp", core);
+  const emit = PluginManager.emitPlayerLevelUp;
+  PluginManager.emitPlayerLevelUp = event => {
+    assert.equal(event.player.skills.getCurrentLevel(event.skill), event.newLevel);
+    assert.ok(event.player.sent.some(([type, s]) => type === "sendSkill" && s === event.skill));
+    hooks.onPlayerLevelUp(event);
+  };
+  const layers = [6, 17, 49, 30, 40, 38, 34, 12, 53, 25, 23, 21, 14, 47, 36, 28, 4, 51, 45, 19, 43, 9, 32, 57];
+  try {
+    for (const skill of Skill.values()) {
+      const p = feedbackPlayer(core);
+      p.skills.setCurrentLevels(skill, 1, false).setMaxLevel(skill, 1, false).setExperience(skill, 0);
+      p.sent.length = 0;
+      p.skills.addExperience(skill, SkillManager.getExperienceForLevel(2), false);
+      assert.ok(p.sent.some(([type, id]) => type === "chatbox" && id === 233), skill.getName());
+      assert.ok(p.sent.some(([type, text, id]) => type === "sendString" && id === ((233 << 16) | 2) && text.includes("2")));
+      assert.deepEqual(p.sent.filter(([type, , hidden]) => type === "sendInterfaceDisplayState" && !hidden),
+        [["sendInterfaceDisplayState", (233 << 16) | layers[skill.getIndex()], false]]);
+      assert.equal(p.sent.filter(([type]) => type === "sendSkill").length, 1, "one stats update for the resolving tick");
+      assert.equal(p.animations.at(-1), 65535);
+      assert.equal(hooks.onInterfaceActionButton({ player: p }), true);
+      assert.equal(p.getPacketSender().isChatboxInterface(233), false);
+      assert.equal(hooks.onInterfaceActionButton({ player: p }), false, "stale continue does not close another dialog");
+    }
+  } finally { PluginManager.emitPlayerLevelUp = emit; }
+});
+
+test("burying resolves inventory and XP together on tick two; movement, logout and cancellation preserve the bone", () => {
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  const core = PluginManager.getCoreApi(), tasks = [];
+  const hooks = registerFeedbackPlugin("skills/Prayer", core, {
+    getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
+  });
+  for (const mode of ["complete", "walk-before-resolve", "logout", "cancel"]) {
+    const p = feedbackPlayer(core);
+    p.counts.set(core.ItemIdentifiers.BONES, 1);
+    let xp = 0;
+    p.skills = { stopSkillable() {}, addExperiences(s, n) { assert.equal(s, Skill.PRAYER); xp += n; } };
+    assert.equal(hooks.onItemFirstAction({ player: p, itemId: core.ItemIdentifiers.BONES, slot: 0 }), true);
+    const task = tasks.pop();
+    assert.equal(task.key, p, "logout cancels tasks by player identity");
+    assert.equal(p.counts.get(core.ItemIdentifiers.BONES), 1);
+    task.tick();
+    if (mode === "walk-before-resolve") p.moveTo(new core.Location(3001, 3000, 0));
+    if (mode === "logout") p.isRegistered = () => false;
+    if (mode === "cancel") task.stop();
+    task.tick();
+    assert.equal(xp > 0, mode === "complete", mode);
+    assert.equal(p.counts.has(core.ItemIdentifiers.BONES), mode !== "complete", mode);
+    assert.equal(task.isRunning(), false);
+  }
+});
+
+test("Fletching cancels while waiting after movement and never restarts its animation after a level-up", () => {
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  const core = PluginManager.getCoreApi(), tasks = [];
+  const hooks = registerFeedbackPlugin("skills/Fletching", core, {
+    getTaskManager: () => ({ submit: task => tasks.push(task) }),
+  });
+  const feedback = registerFeedbackPlugin("interface/SkillLevelUp", core);
+  for (const mode of ["walk", "level-up"]) {
+    const p = feedbackPlayer(core);
+    let xp = 0;
+    p.skills = { getCurrentLevel: () => 99, addExperiences() {
+      xp++;
+      hooks.onPlayerLevelUp({ player: p });
+      feedback.onPlayerLevelUp({ player: p, skill: Skill.FLETCHING, newLevel: 2 });
+    } };
+    p.counts.set(core.ItemIdentifiers.KNIFE, 1); p.counts.set(core.ItemIdentifiers.LOGS, 2);
+    hooks.onItemOnItem({ player: p, usedItemId: core.ItemIdentifiers.KNIFE, usedWithItemId: core.ItemIdentifiers.LOGS });
+    const menu = p.menu(); assert.ok(menu);
+    menu.execute(menu.getItems()[0], 2);
+    if (mode === "walk") p.moveTo(new core.Location(3001, 3000, 0));
+    for (let n = 0; n < 7; n++) tasks[0].execute();
+    assert.equal(xp, mode === "walk" ? 0 : 1);
+    assert.equal(p.counts.get(core.ItemIdentifiers.LOGS), mode === "walk" ? 2 : 1);
+    assert.equal(p.animations.at(-1), 65535);
+    assert.equal(p.sent.some(([type]) => type === "sendSoundEffect"), false, "animation frames supply the audio");
+  }
+});
+
+test("native autocast indicators clear on staff removal while remembering the default", () => {
+  const { Autocasting } = require("../dist/game/content/combat/magic/Autocasting");
+  const { CombatSpells } = require("../dist/game/content/combat/magic/CombatSpells");
+  const { BonusManager } = require("../dist/game/model/equipment/BonusManager");
+  const { WeaponInterfaceManager } = require("../dist/game/content/combat/WeaponInterfaceManager");
+  const { CombatSpecial } = require("../dist/game/content/combat/CombatSpecial");
+  const { Item } = require("../dist/game/model/Item");
+  const update = BonusManager.update, assign = CombatSpecial.assign, bar = CombatSpecial.updateBar;
+  BonusManager.update = CombatSpecial.assign = CombatSpecial.updateBar = () => {};
+  try {
+    let staff = true, selected = null, fightType = null;
+    const varbits = new Map();
+    const sender = new Proxy({ sendVarbit(id, n) { varbits.set(id, n); return sender; } }, { get: (t, key) => t[key] ?? (() => sender) });
+    const p = { getCombat: () => ({ getAutocastSpell: () => selected, setAutocastSpell: s => { selected = s; } }),
+      getEquipment: () => ({ hasStaffEquipped: () => staff, getItems: () => new Array(14).fill(new Item(-1, 0)) }),
+      getPacketSender: () => sender, getFightType: () => fightType, setFightType: type => { fightType = type; },
+      setWeapon() {}, autoRetaliateReturn: () => false, sendMessage() {} };
+    Autocasting.setAutocast(p, CombatSpells.WIND_STRIKE);
+    assert.equal(varbits.get(275), 1); assert.equal(varbits.get(276), 1);
+    staff = false; WeaponInterfaceManager.assign(p);
+    assert.equal(selected, CombatSpells.WIND_STRIKE);
+    for (const id of [275, 276, 2668]) assert.equal(varbits.get(id), 0);
+    staff = true; Autocasting.setAutocast(p, selected);
+    assert.equal(varbits.get(275), 1);
+  } finally { BonusManager.update = update; CombatSpecial.assign = assign; CombatSpecial.updateBar = bar; }
+});
+
+
+test("client feedback IDs and per-gem animations exist in the active OSRS cache", async () => {
+  const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+  const { CacheIndexDat2 } = require("../dist/game/cache/codec/rs/cache/CacheIndex");
+  const { IndexType } = require("../dist/game/cache/codec/rs/cache/IndexType");
+  const { ConfigType } = require("../dist/game/cache/codec/rs/cache/ConfigType");
+  const { Sound } = require("../dist/game/Sound");
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  await CachePipeline.initialize(require("node:path").resolve(__dirname, ".."));
+  const store = CachePipeline.getStore();
+  const audio = CacheIndexDat2.fromStore(IndexType.DAT2.soundEffects, store);
+  for (const [name, id] of Object.entries({ COOKING_COOK: 2577, CRAFT_RUNES: 2710,
+    MINING_MINE: 3220, FISHING_FISH: 2600, CUTTING: 2605, SHEAR_SHEEP: 761,
+    POTION_MIX: 2611, GEM_CUTTING: 2586, SMELTING: 2725, BURY_BONES: 2738 })) {
+    assert.equal(Sound[name].getId(), id, name);
+    assert.ok(audio.getFileSmart(id)?.data.length, `OSRS synth ${name} exists`);
+  }
+  const interfaces = CacheIndexDat2.fromStore(IndexType.DAT2.interfaces, store);
+  for (const child of [1, 2, 3, 4, 6, 9, 12, 14, 17, 19, 21, 23, 25, 28, 30, 32, 34, 36, 38, 40, 43, 45, 47, 49, 51, 53, 57])
+    assert.ok(interfaces.getFile(233, child)?.data.length, `level-up component ${child}`);
+  const configs = CacheIndexDat2.fromStore(IndexType.DAT2.configs, store);
+  const core = PluginManager.getCoreApi();
+  const hooks = registerFeedbackPlugin("skills/Crafting", core);
+  for (const [uncut, cut, animation] of [["OPAL", "OPAL", 890], ["JADE", "JADE", 891],
+    ["RED_TOPAZ", "RED_TOPAZ", 892], ["SAPPHIRE", "SAPPHIRE", 888], ["EMERALD", "EMERALD", 889],
+    ["RUBY", "RUBY", 887], ["DIAMOND", "DIAMOND", 886], ["DRAGONSTONE", "DRAGONSTONE", 885],
+    ["ONYX", "ONYX", 2717], ["ZENYTE", "ZENYTE", 7185]]) {
+    assert.ok(configs.getFile(ConfigType.DAT2.seqs, animation)?.data.length, `gem sequence ${animation}`);
+    const p = feedbackPlayer(core), I = core.ItemIdentifiers;
+    p.skills = { getCurrentLevel: () => 99, addExperiences() {} };
+    p.counts.set(I.CHISEL, 1); p.counts.set(I[`UNCUT_${uncut}`], 1);
+    hooks.onItemOnItem({ player: p, usedItemId: I.CHISEL, usedWithItemId: I[`UNCUT_${uncut}`] });
+    assert.equal(p.animations.at(-1), animation, uncut);
+    assert.equal(p.counts.get(I[cut]), 1);
+    assert.equal(p.sent.filter(([type, id]) => type === "sendSoundEffect" && id === 2586).length, 1);
+  }
+});
+
+test("Defence threshold changes update native prayer-unlock varbits", () => {
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  const p = feedbackPlayer(PluginManager.getCoreApi());
+  p.skills.setMaxLevel(Skill.PRAYER, 99, false);
+  for (const level of [59, 60, 69, 70]) {
+    p.sent.length = 0;
+    p.skills.setMaxLevel(Skill.DEFENCE, level);
+    const bits = new Map(p.sent.filter(([type]) => type === "sendVarbit").map(([, id, n]) => [id, n]));
+    assert.equal(bits.get(3909), level >= 60 ? 8 : 0);
+    assert.equal(bits.get(5451), level >= 70 ? 1 : 0);
+    assert.equal(bits.get(5452), level >= 70 ? 1 : 0);
+  }
+});
+
+
+test("cancelling a combat target stops its animation and future attacks without clearing airborne hits", () => {
+  const { Combat } = require("../dist/game/content/combat/Combat");
+  const animations = [], hits = [{ launched: true }], target = {};
+  const character = { isPlayer: () => true, isNpc: () => false,
+    getAsPlayer: () => ({ getPacketSender: () => ({ sendConfig() {} }) }),
+    getMovementQueue: () => ({ reset() {} }), setMobileInteraction() {}, setPositionToFace() {},
+    performAnimation: animation => animations.push(animation.getId()),
+  };
+  const combat = { character, target, generation: 3, autoRetaliating: true,
+    cycleState: { target }, specialAttackQueued: true, hitQueue: hits };
+  Combat.prototype.reset.call(combat);
+  assert.equal(combat.target, null); assert.equal(combat.generation, 4);
+  assert.equal(combat.cycleState, null); assert.equal(combat.specialAttackQueued, false);
+  assert.deepEqual(animations, [65535]); assert.deepEqual(hits, [{ launched: true }]);
+  Combat.prototype.reset.call(combat);
+  assert.equal(animations.length, 1, "unrelated reset does not cancel a skilling animation");
+});
+
+test("moving or disconnecting during pickpocketing cancels the resolving tick", () => {
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  const core = PluginManager.getCoreApi(), tasks = [], npcHooks = {};
+  const hooks = registerFeedbackPlugin("skills/Thieving", core, {
+    getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
+    getCombatFactory: () => ({ inCombat: () => false }),
+    onNpcInteraction: (name, actions) => { npcHooks[name] = actions; },
+  });
+  for (const disconnect of [false, true]) {
+    const p = feedbackPlayer(core);
+    p.getIndex = () => 1; p.getTimers = () => ({ has: () => false });
+    p.setPositionToFace = () => {}; p.getMovementQueue = () => ({ size: () => 0, reset() {} });
+    p.skills = { getCurrentLevel: () => 99, addExperiences() { assert.fail("interrupted action awarded XP"); } };
+    const npc = { getDefinition: () => ({ getName: () => "Man" }),
+      getTimers: () => ({ registers() {} }), getLocation: p.getLocation, isRegistered: () => true };
+    npcHooks.Man.Pickpocket({ player: p, npc, definition: npc.getDefinition() });
+    const task = tasks.pop(); assert.ok(task); task.tick();
+    if (disconnect) p.isRegistered = () => false;
+    else p.moveTo(new core.Location(3001, 3000, 0));
+    task.tick();
+    assert.equal(task.isRunning(), false);
+    assert.equal(p.counts.size, 0, "interrupted action produced no loot");
+    if (!disconnect) assert.equal(p.animations.at(-1), 65535);
+  }
+});

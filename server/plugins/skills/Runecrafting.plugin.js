@@ -71,7 +71,7 @@ function initialize(api) {
     ObjectIdentifiers,
   } = api.core);
 
-  CRAFT_RUNES_GRAPHIC = new Graphic(186);
+  CRAFT_RUNES_GRAPHIC = new Graphic(186, api.core.GraphicHeight.HIGH);
   CRAFT_RUNES_ANIMATION = new Animation(791);
   RUNE_ESSENCE_MINE = new Location(2913, 4832, 0);
   ABYSS_INNER_RING = new Location(3040, 4839, 0);
@@ -381,7 +381,6 @@ function handleCraftRunes(event) {
     player.performGraphic(CRAFT_RUNES_GRAPHIC);
     player.performAnimation(CRAFT_RUNES_ANIMATION);
     Sounds.sendSound(player, Sound.CRAFT_RUNES);
-    Sounds.sendSound(player, Sound.RUNECRAFTING);
     player
       .getSkillManager()
       .addExperiences(Skill.RUNECRAFTING, craftedEssence * runeData.xp);

@@ -186,6 +186,12 @@ function finishObstacle(player, obstacle, success, completed) {
   if (!success) {
     return;
   }
+  // OSRS rooftop obstacles restore 1–2% energy; shortcuts and other courses do not.
+  // ponytail: use the documented 1% minimum until per-obstacle captures establish 2% overrides.
+  if (obstacle.course?.name.includes("Rooftop")) {
+    player.setRunEnergy(player.getRunEnergy() + 1);
+    player.getPacketSender().sendRunEnergy();
+  }
   obstacle.onSuccess?.(player);
   if (obstacle.course && obstacle.index != null) {
     advanceCourse(player, obstacle);

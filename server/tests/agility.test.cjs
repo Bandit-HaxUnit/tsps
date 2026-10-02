@@ -53,6 +53,8 @@ function createPlayer(x, y, z, level = 99) {
   const state = { xp: 0, messages: [], varbits: new Map(), animations: [], hits: 0, blocked: false, walked: 0 };
   const player = {
     state,
+    getRunEnergy: () => state.energy ?? 50,
+    setRunEnergy: value => { state.energy = Math.min(100, value); },
     getLocation: () => location,
     setLocation: (next) => { location = next.clone(); return player; },
     moveTo: (next) => { location = next.clone(); return player; },
@@ -79,6 +81,7 @@ function createPlayer(x, y, z, level = 99) {
     }),
     getPacketSender: () => ({
       sendVarbit: (id, value) => state.varbits.set(id, value),
+      sendRunEnergy: () => { state.energyUpdates = (state.energyUpdates ?? 0) + 1; },
       sendSound() {},
       sendObjectAnimation() {},
     }),
@@ -189,6 +192,13 @@ for (const course of COURSES) {
       assert.deepEqual(tileOf(player), LAP_ENDS[course.key]);
     }
     assert.equal(player.state.blocked, false, "movement unblocked after the lap");
+    assert.equal(player.state.animations.at(-1), 65535, "transient obstacle animation cleared");
+    if (course.name.includes("Rooftop")) {
+      assert.equal(player.state.energyUpdates, course.finalIndex, "energy updated after every successful rooftop obstacle");
+      assert.equal(player.state.energy, 50 + course.finalIndex);
+    } else {
+      assert.equal(player.state.energyUpdates, undefined, "no invented energy restore on other courses");
+    }
   });
 }
 

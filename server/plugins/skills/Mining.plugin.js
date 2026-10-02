@@ -4,8 +4,6 @@ const { Animation } = require("../../src/main/typescript/elvarg/game/model/Anima
 const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 const { MapObjects } = require("../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
 const { GameObject } = require("../../src/main/typescript/elvarg/game/entity/impl/object/GameObject");
-const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
-const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
 const { ItemIds, ObjectIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 
 const DEPLETED_ROCK_ID = 2704;
@@ -159,7 +157,7 @@ function startMining(player, rockObject, rock, activeSessions) {
   ACTIVE_MINERS.add(player);
 
   player.sendMessage("You swing your pickaxe at the rock..");
-  Sounds.sendSound(player, Sound.MINING_MINE);
+
   player.performAnimation(pickaxe.animation);
   return true;
 }
@@ -215,7 +213,6 @@ class MiningTask extends Task {
       }
 
       if (this.cycle >= state.nextAnimationTick) {
-        Sounds.sendSound(player, Sound.MINING_MINE);
         player.performAnimation(state.pickaxe.animation);
         state.nextAnimationTick = this.cycle + MINING_ANIMATION_INTERVAL_TICKS;
       }
@@ -243,7 +240,6 @@ class MiningTask extends Task {
         state.cyclesUntilOre = cyclesRequired(player, state.rock, pickaxe);
         continue;
       }
-      Sounds.sendSound(player, Sound.MINING_ROCK_GONE);
       depleteRock(rockObject, state.rock);
       stopMining(this.activeSessions, player);
     }

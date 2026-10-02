@@ -87,7 +87,9 @@ const clickStyle = (weapon: WeaponInterfaces, slot: number, combatType: CombatTy
         setFightType(type: FightType): void {
             this.fightType = type;
         },
-        getPacketSender: () => ({ sendConfig: () => undefined }),
+        getEquipment: () => ({ hasStaffEquipped: () => weapon === WeaponInterfaces.STAFF }),
+        getCombat: () => ({ getAutocastSpell: () => null }),
+        getPacketSender: () => ({ sendConfig() { return this; }, sendVarbit() { return this; } }),
     };
     assert.equal(WeaponInterfaceManager.changeCombatStyle(player, slot), true);
     return player.getFightType().getStyle().skill(combatType);

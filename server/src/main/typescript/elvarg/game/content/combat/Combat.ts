@@ -402,7 +402,10 @@ export class Combat {
         this.character.getMovementQueue().reset();
         this.character.setMobileInteraction(null);
         this.character.setPositionToFace(null);
-        if (this.character.isPlayer()) this.character.getAsPlayer().getPacketSender().sendConfig(COMBAT_TARGET_PLAYER_VARP, -1);
+        if (this.character.isPlayer()) {
+            if (previousTarget) this.character.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
+            this.character.getAsPlayer().getPacketSender().sendConfig(COMBAT_TARGET_PLAYER_VARP, -1);
+        }
         this.specialAttackQueued = false;
         if (this.character.isNpc()) World.markNpcCombatActive(this.character.getAsNpc(), this.attacker != null);
     }

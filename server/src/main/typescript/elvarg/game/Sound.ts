@@ -1,35 +1,31 @@
 export class Sound {
 
+    // OSRS synth IDs: RuneLite SoundEffectID / RuneStar synth names.
+    // Mining, fishing, fletching and anvil sequences already contain frame audio;
+    // callers must not send these effects again for those animations.
+
     // crafting sounds
 
-    public static CUTTING = new Sound(375, 1, 0, 0)
+    public static CUTTING = new Sound(2605, 1, 0, 0)
+
+    public static SHEAR_SHEEP = new Sound(761, 1, 0, 0)
 
     // cooking sounds
 
-    public static COOKING_COOK = new Sound(1039, 1, 10, 0)
-    public static COOKING_FOOD = new Sound(1039, 1, 10, 0)
-
-    public static COOKING_BURN = new Sound(240, 1, 0, 0)
+    public static COOKING_COOK = new Sound(2577, 1, 0, 0)
 
     // runecrafting sounds
 
-    // Confirmed wrong for this cache (207 = waterblast_cast_and_fire per OpenRune's
-    // synth.rscm), but no correct replacement id found there - left as-is rather than guessing.
-    public static CRAFT_RUNES = new Sound(207, 0, 0, 0)
+    // OSRS bind_runes; 207 belongs to waterblast, not skilling.
+    public static CRAFT_RUNES = new Sound(2710, 1, 0, 0)
 
     // mining sounds
 
-    public static MINING_MINE = new Sound(432, 1, 15, 0)
-
-    public static MINING_ROCK_GONE = new Sound(431, 1, 0, 0)
-
-    public static MINING_ROCK_RESTORE = new Sound(463, 1, 0, 0)
-
-    public static MINING_ROCK_EXPLODE = new Sound(1021, 1, 0, 0)
+    public static MINING_MINE = new Sound(3220, 1, 0, 0)
 
     // fishing sounds
 
-    public static FISHING_FISH = new Sound(379, 1, 10, 0)
+    public static FISHING_FISH = new Sound(2600, 1, 0, 0)
 
     // woodcutting sounds
 
@@ -128,7 +124,7 @@ export class Sound {
     public static FIRE_LIGHT = new Sound(2599, 1, 0, 0)
     public static FIRE_SUCCESSFUL = new Sound(2596, 1, 0, 0)
     public static FIRE_FIRST_ATTEMPT = new Sound(2584, 1, 0, 0)
-    public static POTION_MIX = new Sound(373, 1, 0, 0)
+    public static POTION_MIX = new Sound(2611, 1, 0, 0)
     public static SLASH_WEB = new Sound(237, 1, 0, 0)
     public static FAIL_SLASH_WEB = new Sound(2548, 1, 0, 0)
     public static FOOD_EAT = new Sound(2393, 1, 0, 0)
@@ -139,9 +135,9 @@ export class Sound {
     public static WILDERNESS_DITCH_JUMP = new Sound(2462, 1, 0, 0)
     public static THIEVING_STUNNED = new Sound(2727, 1, 0, 0)
     public static LEVEL_UP = new Sound(2396, 1, 0, 0)
-    public static GEM_CUTTING = new Sound(464, 1, 0, 0)
-    public static SMITHING = new Sound(468, 1, 0, 0)
-    public static SMELTING = new Sound(469, 1, 0, 0)
+    public static GEM_CUTTING = new Sound(2586, 1, 0, 0)
+    public static SMITHING = new Sound(3790, 1, 0, 0)
+    public static SMELTING = new Sound(2725, 1, 0, 0)
     public static PRAYER_DEPLETED = new Sound(2663, 1, 0, 0)
     public static PRAYER_PROTECT_MELEE = new Sound(2676, 1, 0, 0)
     public static PRAYER_SUPERHUMAN_STRENGTH = new Sound(2689, 1, 0, 0)
@@ -160,7 +156,7 @@ export class Sound {
     public static PRAYER_BURST_OF_STRENGTH = new Sound(2688, 1, 0, 0)
     public static PRAYER_ULTIMATE_STRENGTH = new Sound(2691, 1, 0, 0)
     public static PRAYER_RAPID_RESTORE = new Sound(2679, 1, 0, 0)
-    public static RUNECRAFTING = new Sound(481, 1, 0, 0)
+    public static RUNECRAFTING = Sound.CRAFT_RUNES
     public static HOME_TELEPORT = new Sound(193, 1, 0, 0)
     public static HOME_TELEPORT_ALT = Sound.HOME_TELEPORT
 

@@ -37,6 +37,7 @@ type SeqType = {
     rightHandItem: number;
     maxLoops: number;
     skeletalId: number;
+    sounds: string[];
 };
 
 function decodeSeq(id: number, data: Int8Array, revision: number): SeqType {
@@ -53,6 +54,7 @@ function decodeSeq(id: number, data: Int8Array, revision: number): SeqType {
         rightHandItem: -1,
         maxLoops: 99,
         skeletalId: -1,
+        sounds: [],
     };
     for (;;) {
         if (buf.offset >= buf.length) break;
@@ -91,22 +93,24 @@ function decodeSeq(id: number, data: Int8Array, revision: number): SeqType {
             for (let i = 0; i < count * 4; i++) buf.readUnsignedByte();
         } else if (opcode === 13 && !rev226) {
             const count = buf.readUnsignedByte();
-            for (let i = 0; i < count; i++) buf.readUnsignedMedium();
+            for (let i = 0; i < count; i++) {
+                const sound = buf.readUnsignedMedium();
+                if (sound) seq.sounds.push(`${i}:${sound >> 8}`);
+            }
         } else if (opcode === (rev226 ? 13 : 14)) {
             seq.skeletalId = buf.readInt();
         } else if (opcode === (rev226 ? 14 : 15)) {
             const entries = buf.readUnsignedShort();
             for (let i = 0; i < entries; i++) {
-                buf.readUnsignedShort();
+                const frame = buf.readUnsignedShort();
+                const sound = rev220 ? buf.readUnsignedShort() : buf.readUnsignedMedium() >> 8;
                 if (rev220) {
-                    buf.readUnsignedShort();
                     if (rev226) buf.readUnsignedByte();
                     buf.readUnsignedByte();
                     buf.readUnsignedByte();
                     buf.readUnsignedByte();
-                } else {
-                    buf.readUnsignedMedium();
                 }
+                seq.sounds.push(`${frame}:${sound}`);
             }
         } else if (opcode === (rev226 ? 15 : 16)) {
             buf.readUnsignedShort();
@@ -141,6 +145,7 @@ function format(seq: SeqType): string {
     ];
     if (seq.skeletalId >= 0) bits.push(`skeletal=${seq.skeletalId}`);
     else bits.push(`frameIds=${seq.frameIds.join(",")}`);
+    bits.push(`sounds=${seq.sounds.join(",") || "none"}`);
     return bits.join(" ");
 }
 
@@ -149,7 +154,8 @@ async function main() {
     const revision = CachePipeline.getActive().revision;
     const index = CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore());
     const archive = index.getArchive(ConfigType.DAT2.seqs);
-    const filter = new Set(process.argv.slice(2).map(Number));
+    console.log(`; cache revision ${revision}; sounds are frame:synthId`);
+    const filter = new Set(process.argv.slice(2).flatMap(arg => arg.split(",")).map(Number));
     for (const file of archive.files) {
         if (filter.size > 0 && !filter.has(file.id)) continue;
         try {
