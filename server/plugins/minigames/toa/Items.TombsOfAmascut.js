@@ -299,3 +299,6 @@ module.exports = function registerTombsItems(api) {
   }
   api.onItemAction("Tumeken's shadow", { Check: checkShadow, Uncharge: unchargeShadow });
 };
+
+/** Where a staff keeps its charges, for the shadow's combat (Shadow.TombsOfAmascut.js). */
+module.exports.SHADOW_CHARGES_KEY = SHADOW_CHARGES_KEY;

@@ -21,6 +21,7 @@ The whole raid, from the Jaltevas pyramid lobby to Osmumten's burial chamber. It
 | `Wardens.*`, `ToaWardensData.js` | The Wardens: obelisk and core phases (WARDENS_P1) and the final phase (WARDENS_P3). |
 | `Rewards.*`, `ToaRewards.js` | The burial chamber, loot rolls, the loot interface (771) and the lobby retrieval chest. |
 | `Items.*` | Masori fortifying, Armadyl to Armadylean plates, Elidinis' ward (f), Thread of Elidinis, keris jewels and Tumeken's shadow charges. |
+| `Shadow.*` | Tumeken's shadow in combat: its built-in spell and its passive. |
 
 ## Instancing
 
@@ -68,7 +69,7 @@ Each Tombs of Amascut NPC (11689-11804) has its block and death animations in `n
 
 ## Simplifications
 
-- **Tumeken's shadow:** charges, checks and uncharges, but tsps has no powered-staff autocast path, so it does not cast its built-in spell yet.
+- **Tumeken's shadow:** it has a fixed 8-tile range, because tsps has no powered-staff attack styles, so there's no longrange (+2). It plays no cast or impact sound (the ids aren't known), and it refuses every player target rather than only those outside minigames.
 - **NPC defence:** not scaled by raid level; it comes from the shared definition.
 - **Apmeken:** the corruption special is disabled, as it is in Near-Reality.
 - **Wardens phase three floor:** collapsed rows push players back onto the remaining floor rather than becoming unwalkable.
@@ -114,6 +115,11 @@ The first version was written without access to the Wiki or the cache, so it fol
   - The help invocations cut supplies to 66%, 33% and 10%.
 - **Supplies:** the helpful spirit's chaos pack is rolled (1–8 nectar, 0–6 tears, 0–2 salts, with rare ambrosia and adrenaline), and the power pack has 1 liquid adrenaline. A supply used on the bag goes back in (from OpenRune).
 - **The Wardens' void art:** the map keeps the collapsed floor's "Void" pieces (45726–45738) on plane 2, above the final arena. OSRS builds the room without them. The final room hides them, so they no longer show before the floor starts falling.
+- **Tumeken's shadow (Wiki):**
+  - It casts only its built-in spell: max hit floor(Magic / 3) + 1, every 5 ticks, from 8 tiles, one charge a cast, with the usual damage-based Magic experience.
+  - Its passive multiplies the worn gear's magic attack and magic damage bonuses by 3, or by 4 in the tombs. Magic damage is capped at 100%.
+  - It can't be used against players.
+  - The cast is OpenRune's: `TOA_SOT_CAST_B` (9493) with `TUMEKENS_SHADOW_CASTING` / `_TRAVEL` / `_IMPACT` (2125–2127). The hit lands as the projectile arrives.
 - **Ghosts:** a ghost's inventory and worn equipment tabs close until it's revived (from OpenRune).
 - **Raid items:** logging in outside a raid strips raid supplies.
 - **The chest:** the unique chance and weights, the pet, the Thread of Elidinis, the four keris jewels and the elite clue now use the Wiki's rates.
