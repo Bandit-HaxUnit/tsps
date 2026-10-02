@@ -82,6 +82,10 @@ class BaBaRoom extends Raid.Room {
     this.openBossHud(this.baba);
   }
 
+  lootSource() {
+    return this.baba;
+  }
+
   onComplete() {
     this.clearAdds();
   }

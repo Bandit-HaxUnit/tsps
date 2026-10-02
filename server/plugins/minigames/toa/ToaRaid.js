@@ -409,6 +409,7 @@ class Room {
     this.closeBossHud();
     this.onComplete();
     if (this.def.osmumten) this.spawnOsmumten();
+    this.dropBossLoot();
     if (this.def.boss && this.def.path) raid.completePath(this.def.path);
   }
 
@@ -426,6 +427,48 @@ class Room {
   challengeName() {
     if (this.def.puzzle) return `Path of ${Shared.PATH_BY_KEY[this.def.path].name}`;
     return this.def.boss ?? this.def.name;
+  }
+
+  /** The boss NPC whose damage decides who gets its trophy; boss rooms override this. */
+  lootSource() {
+    return null;
+  }
+
+  /**
+   * Wiki: each boss drops its capture book for everyone who doesn't have one (in their bank,
+   * inventory or as read), and the path bosses a trophy for whoever dealt them the most damage.
+   * They land beside Osmumten (or BOSS_DROPS' tile), visible only to their owner.
+   */
+  dropBossLoot() {
+    const drops = BOSS_DROPS[this.key];
+    if (!drops) return;
+    const { ItemOnGroundManager, Item } = Shared.core();
+    const tile = this.dropTile(drops.tile);
+    if (!tile) return;
+    const players = this.roomPlayers();
+    const drop = (player, id) => ItemOnGroundManager.registerLocation(player, new Item(id, 1), tile, this.raid.area);
+    for (const player of players) {
+      if (!ownsBook(player, drops.book, drops.bookVarbit)) drop(player, drops.book);
+    }
+    const damage = this.lootSource()?.__toaDamageBy;
+    if (!drops.trophy || !damage) return;
+    let hero = null;
+    for (const [player, dealt] of damage) {
+      if (players.includes(player) && (!hero || dealt > damage.get(hero))) hero = player;
+    }
+    if (hero) drop(hero, drops.trophy);
+  }
+
+  /** The first walkable tile beside Osmumten, or the room's own drop tile. */
+  dropTile(fixed) {
+    if (fixed) return Shared.loc(fixed);
+    const centre = this.def.osmumten;
+    if (!centre) return null;
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      const tile = Shared.loc({ x: centre.x + dx, y: centre.y + dy, z: centre.z });
+      if (Shared.floorFree(this.area, tile)) return tile;
+    }
+    return Shared.loc(centre);
   }
 
   spawnOsmumten() {
@@ -1115,6 +1158,27 @@ const ATTR_KILL_COUNTS = "toa:completions";
 
 // The gameframe's inventory (149) and worn equipment (387) tabs.
 const GHOST_TABS = [{ uid: (161 << 16) | 79, group: 149 }, { uid: (161 << 16) | 80, group: 387 }];
+
+// Wiki: each boss's capture book (and its "read" varbit, TOA_BOOK_*) and the path bosses'
+// trophies for the top damager: Eldritch ashes, Scarab dung, Big banana and Zebak's Fang.
+const BOSS_DROPS = {
+  HET_BOSS: { book: 27302, bookVarbit: 14452, trophy: 27223 }, // Het's capture, TOA_AKKHA_ASHES
+  SCABARAS_BOSS: { book: 27306, bookVarbit: 14449, trophy: 27214 }, // Scabaras' capture, TOA_KEPHRI_POO
+  APMEKEN_BOSS: { book: 27304, bookVarbit: 14450, trophy: 27221 }, // Apmeken's capture, TOA_BABA_BANANA
+  CRONDIS_BOSS: { book: 27308, bookVarbit: 14451, trophy: 27219, tile: { x: 3927, y: 5408, z: 0 } }, // OpenRune's tile
+  WARDENS_P3: { book: 27310, bookVarbit: 14453, tile: { x: 3936, y: 5158, z: 1 } }, // The wardens; the floor's edge
+};
+
+/** Already has the book: read (its varbit), or kept in the inventory or bank. */
+function ownsBook(player, book, varbit) {
+  if (player.getPacketSender().getVarbit?.(varbit) === 1) return true;
+  if (player.getInventory().contains(book)) return true;
+  const { Bank } = Shared.core();
+  for (let tab = 0; tab < Bank.TOTAL_BANK_TABS; tab++) {
+    if (player.getBank(tab)?.contains?.(book)) return true;
+  }
+  return false;
+}
 
 const START_POINTS = 5000;
 const TOTAL_POINTS_CAP = 64000;

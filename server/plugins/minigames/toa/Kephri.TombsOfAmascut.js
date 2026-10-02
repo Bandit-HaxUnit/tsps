@@ -93,6 +93,10 @@ class KephriRoom extends Raid.Room {
     this.openBossHud(this.kephri);
   }
 
+  lootSource() {
+    return this.kephri;
+  }
+
   onComplete() {
     this.clearAdds();
     this.clearDung();

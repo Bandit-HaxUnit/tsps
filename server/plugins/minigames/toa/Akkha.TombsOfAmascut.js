@@ -139,6 +139,10 @@ class AkkhaRoom extends Raid.Room {
     this.openBossHud(this.akkha);
   }
 
+  lootSource() {
+    return this.akkha;
+  }
+
   onComplete() {
     this.clearAdds();
   }

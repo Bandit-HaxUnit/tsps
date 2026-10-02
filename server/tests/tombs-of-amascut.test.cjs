@@ -216,3 +216,38 @@ test('floor decorations block only with blockWalk 1, so the Scabaras pressure pl
   ObjectManager.register(new GameObject(154, new Location(3542, 5285, 0), 22, 0, area), true);
   assert.equal(RegionManager.getClipping(3542, 5285, 0, area) & FLOOR_DECORATION, FLOOR_DECORATION);
 });
+
+test("boss drops (Wiki): the capture book for those without it, the trophy for the top damager", () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const Shared = require('../plugins/minigames/toa/ToaShared');
+  const { Room } = require('../plugins/minigames/toa/ToaRaid');
+  const core = PluginManager.getCoreApi();
+  const dropped = [];
+  Shared.bind({
+    core: { ...core, ItemOnGroundManager: { registerLocation: (player, item) => dropped.push([player.name, item.getId()]) } },
+  });
+  const player = (name, { varbit = 0, banked = false } = {}) => {
+    const none = { contains: () => false };
+    return {
+      name,
+      getPacketSender: () => ({ getVarbit: () => varbit }),
+      getInventory: () => none,
+      getBank: () => ({ contains: () => banked }),
+    };
+  };
+  const a = player('a');
+  const b = player('b', { banked: true });
+  const c = player('c', { varbit: 1 });
+  const zebak = { __toaDamageBy: new Map([[a, 120], [b, 300], [c, 50]]) };
+  const room = Object.assign(Object.create(Room.prototype), {
+    def: { key: 'CRONDIS_BOSS', osmumten: { x: 3928, y: 5408, z: 0 } },
+    roomPlayers: () => [a, b, c],
+    lootSource: () => zebak,
+    raid: { area: null },
+  });
+  Object.defineProperty(room, 'key', { value: 'CRONDIS_BOSS' });
+  room.dropBossLoot();
+  // Crondis' capture (27308) to a only (b banked it, c read it); the Fang (27219) to b, the top damager.
+  assert.deepEqual(dropped, [['a', 27308], ['b', 27219]]);
+  Shared.bind({ core });
+});

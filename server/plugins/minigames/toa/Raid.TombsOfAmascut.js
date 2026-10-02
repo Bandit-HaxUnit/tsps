@@ -127,6 +127,8 @@ function trackDamage(event) {
   const dealt = Math.min(hit?.getTotalDamage?.() ?? 0, Math.max(0, npc.getHitpoints()));
   if (dealt <= 0) return;
   raid.member(player).damageDone += dealt;
+  // Per NPC too: a boss's trophy goes to whoever dealt it the most.
+  (npc.__toaDamageBy ??= new Map()).set(player, (npc.__toaDamageBy.get(player) ?? 0) + dealt);
   raid.addPoints(player, dealt * room.pointsPerDamage(npc));
 }
 

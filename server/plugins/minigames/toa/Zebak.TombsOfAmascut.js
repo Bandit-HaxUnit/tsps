@@ -118,6 +118,10 @@ class ZebakRoom extends Raid.Room {
     this.spawnCrocodiles();
   }
 
+  lootSource() {
+    return this.zebak;
+  }
+
   onComplete() {
     this.clearAll();
   }
