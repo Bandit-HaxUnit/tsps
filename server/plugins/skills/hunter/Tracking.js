@@ -5,6 +5,7 @@
 const data = require("./TrackingData.json");
 const { H, ANIM, requireLevel, hasTool, nearby, exchange, xp, begin, roll, distance } = require("./Context");
 const trails = new Map();
+const ATTRIBUTE = "hunter.pursuit-charges";
 
 function tile(location) { return [location.getX(), location.getY(), location.getZ()]; }
 function same(a, b) { return a[0] === b[0] && a[1] === b[1] && a[2] === b[2]; }
@@ -57,11 +58,13 @@ function inspect({ player, object, definition }) {
     trails.set(player, { path, step: 0, area: player.getPrivateArea(), origin: object.getLocation().clone(), due: H.tick + 300 });
     H.players.add(player);
     player.getPacketSender().sendVarbit(path[0].varbit, path[0].inverted ? 5 : 4);
+    pursuit(player, trails.get(player));
     player.sendMessage("You discover tracks. Search along the trail to follow them.");
     return true;
   }
   const state = trails.get(player);
   if (!state || !nearby(player, object)) return false;
+  pursuit(player, state);
   const next = state.path[state.step + 1];
   if (next && (same(next.trigger ?? next.end, position) || same(next.end, position))) {
     state.step++;
@@ -83,15 +86,30 @@ function catchPrey({ player, object }) {
   if (!requireLevel(player, def.level)) return true;
   if (!exchange(player, [], rewards, false)) { player.getInventory().full(); return true; }
   begin(player, 2, ANIM.NOOSE, () => {
-    if (trails.get(player) !== state || !hasTool(player, H.core.ItemIdentifiers.NOOSE_WAND) || !exchange(player, [], rewards)) return;
-    clear({ player }); xp(player, def.xp, "tracking");
+    if (trails.get(player) !== state || !requireLevel(player, def.level) || !hasTool(player, H.core.ItemIdentifiers.NOOSE_WAND) || !exchange(player, [], rewards)) return;
+    clear({ player }); xp(player, def.xp, "tracking", H.core.NpcIdentifiers[last.kebbit.toUpperCase()], { creature: last.kebbit.toUpperCase() });
     player.sendMessage(`You catch a ${last.kebbit.replaceAll("_", " ")}!`);
   });
   return true;
 }
 
+function charges(player) { const n = Number(player.getAttribute(ATTRIBUTE)); return Number.isInteger(n) && n > 0 && n <= 10 ? n : 10; }
+function pursuit(player, state) {
+  if (state.revealed || player.getEquipment().get(H.core.Equipment.RING_SLOT).getId() !== H.core.ItemIdentifiers.RING_OF_PURSUIT) return;
+  state.revealed = true; state.step = state.path.length - 1;
+  for (const segment of state.path) player.getPacketSender().sendVarbit(segment.varbit, segment.inverted ? 5 : 4);
+  const left = charges(player) - 1;
+  player.setAttribute(ATTRIBUTE, left || 10);
+  if (!left) { player.getEquipment().set(H.core.Equipment.RING_SLOT, new H.core.Item(-1, 0)); player.getEquipment().refreshItems(); player.getUpdateFlag().flag(H.core.Flag.APPEARANCE); player.sendMessage("Your ring of pursuit crumbles to dust."); }
+  else player.sendMessage(`Your ring reveals the entire trail. It has ${left} charges remaining.`);
+}
+function checkRing({ player }) { player.sendMessage(`Your ring of pursuit has ${charges(player)} charges remaining.`); return true; }
+function breakRing({ player, itemId }) {
+  if (exchange(player, [[itemId, 1]], [])) { player.setAttribute(ATTRIBUTE, 10); player.sendMessage("You break the ring of pursuit."); }
+  return true;
+}
 function process() {
   for (const [player, state] of trails) if (H.tick >= state.due || state.area !== player.getPrivateArea() || distance(state.origin, player.getLocation()) > 64) clear({ player });
 }
 
-module.exports = { initialize, inspect, catchPrey, clear, process, generate, data };
+module.exports = { ATTRIBUTE, checkRing, breakRing, charges, initialize, inspect, catchPrey, clear, process, generate, data };

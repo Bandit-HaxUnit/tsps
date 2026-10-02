@@ -63,7 +63,7 @@ closes only the level-up chatbox. Level-up clears the interrupted animation.
 | Agility | Completion/cancellation releases force movement, render override and transient animation. Successful rooftop obstacles update the energy orb. |
 | Thieving | Movement/disconnect cancels pending pickpocket resolution. Failure already faces and force-chats the NPC, plays stun sound/graphic and queues a hit; the NPC attack animation now comes from its definition. |
 | Runecrafting | One bind_runes sound 2710 with sequence 791 and graphic 186 at height 100; inventory and XP resolve together. Existing pouch/altar paths remain connected. |
-| Hunter | Latest main already has owned visible trap states, expiration/collapse, capture/collection feedback and cancellation. Existing integration checks cover those paths. |
+| Hunter | Owned visible trap states, expiration/collapse, capture/collection feedback and cancellation are connected, plus the newer pitfalls, bait/smoke, drift-net, herbiboar and rumour paths. Extended integration checks cover pit building/teasing/force-movement/falls/collection, matching-bait bonuses, drift-net scare resolution and passive capture. Movement, logout and death cancel pending actions and release hidden creatures. |
 
 Rooftop restoration currently uses the documented **1% minimum** per successful
 obstacle. The Wiki does not identify which obstacles restore 2%; precise per-obstacle

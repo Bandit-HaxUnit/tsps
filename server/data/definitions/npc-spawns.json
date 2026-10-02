@@ -67693,7 +67693,7 @@
     },
     {
         "level": 0,
-        "name": "Le-sabrè",
+        "name": "Le-sabr\u00e8",
         "x": 3465,
         "y": 3478,
         "id": 5521
@@ -170238,6 +170238,1702 @@
         "y": 2979,
         "id": 14975,
         "direction": 6,
+        "wanderRadius": 0
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1510,
+        "y": 3046,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1511,
+        "y": 3050,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1513,
+        "y": 3043,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1515,
+        "y": 3049,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1518,
+        "y": 3051,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1518,
+        "y": 3041,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1519,
+        "y": 3045,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1521,
+        "y": 3048,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1522,
+        "y": 3043,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1524,
+        "y": 3050,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1524,
+        "y": 3046,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1664,
+        "y": 2998,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1664,
+        "y": 3003,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1664,
+        "y": 3005,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1666,
+        "y": 3006,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1667,
+        "y": 2996,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1667,
+        "y": 3001,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1667,
+        "y": 3004,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Embertailed jerboa",
+        "id": 13139,
+        "x": 1671,
+        "y": 3005,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Tecu salamander",
+        "id": 12769,
+        "x": 1472,
+        "y": 3088,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Tecu salamander",
+        "id": 12769,
+        "x": 1472,
+        "y": 3096,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Tecu salamander",
+        "id": 12769,
+        "x": 1473,
+        "y": 3086,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Tecu salamander",
+        "id": 12769,
+        "x": 1475,
+        "y": 3101,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Tecu salamander",
+        "id": 12769,
+        "x": 1477,
+        "y": 3099,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight antelope",
+        "id": 13132,
+        "x": 1555,
+        "y": 9416,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight antelope",
+        "id": 13132,
+        "x": 1562,
+        "y": 9417,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight antelope",
+        "id": 13132,
+        "x": 1557,
+        "y": 9422,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight antelope",
+        "id": 13132,
+        "x": 1561,
+        "y": 9421,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1568,
+        "y": 2995,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1570,
+        "y": 2987,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1571,
+        "y": 2998,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1572,
+        "y": 2994,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1572,
+        "y": 3003,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1575,
+        "y": 2998,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1578,
+        "y": 2985,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1578,
+        "y": 2990,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1580,
+        "y": 2994,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1582,
+        "y": 3002,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1584,
+        "y": 2991,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1584,
+        "y": 2998,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1584,
+        "y": 3003,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1588,
+        "y": 2994,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1590,
+        "y": 2998,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1591,
+        "y": 2988,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1592,
+        "y": 2982,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1595,
+        "y": 2986,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1550,
+        "y": 3016,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1551,
+        "y": 3012,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1554,
+        "y": 3016,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1555,
+        "y": 3012,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1556,
+        "y": 3017,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1558,
+        "y": 3016,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1559,
+        "y": 3014,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1562,
+        "y": 3012,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1564,
+        "y": 3016,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1568,
+        "y": 3011,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1568,
+        "y": 3022,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1572,
+        "y": 3016,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1573,
+        "y": 3024,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1575,
+        "y": 3021,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1576,
+        "y": 3017,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1576,
+        "y": 3023,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1577,
+        "y": 3024,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1578,
+        "y": 3020,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1582,
+        "y": 3024,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1582,
+        "y": 3031,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1583,
+        "y": 3011,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1584,
+        "y": 3021,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1585,
+        "y": 3009,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1585,
+        "y": 3026,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1586,
+        "y": 3013,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1586,
+        "y": 3019,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1588,
+        "y": 3024,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1588,
+        "y": 3027,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1589,
+        "y": 3010,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1591,
+        "y": 3036,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1592,
+        "y": 3012,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1596,
+        "y": 3020,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1598,
+        "y": 3016,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1598,
+        "y": 3029,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1551,
+        "y": 3089,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1551,
+        "y": 3093,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1553,
+        "y": 3091,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1554,
+        "y": 3087,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1554,
+        "y": 3095,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1556,
+        "y": 3091,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1557,
+        "y": 3085,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1557,
+        "y": 3089,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1557,
+        "y": 3093,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1560,
+        "y": 3086,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1560,
+        "y": 3091,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1560,
+        "y": 3095,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1562,
+        "y": 3089,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1562,
+        "y": 3092,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1564,
+        "y": 3087,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1602,
+        "y": 3033,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1603,
+        "y": 3021,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1604,
+        "y": 3037,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1605,
+        "y": 3028,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1610,
+        "y": 3030,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1611,
+        "y": 3020,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1615,
+        "y": 3028,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1617,
+        "y": 3024,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1619,
+        "y": 3031,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1634,
+        "y": 3032,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1634,
+        "y": 3036,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1636,
+        "y": 3029,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1636,
+        "y": 3034,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1638,
+        "y": 3031,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1641,
+        "y": 3036,
+        "wanderRadius": 3
+    },
+    {
+        "level": 1,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1434,
+        "y": 9632,
+        "wanderRadius": 3
+    },
+    {
+        "level": 1,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1437,
+        "y": 9637,
+        "wanderRadius": 3
+    },
+    {
+        "level": 1,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1444,
+        "y": 9626,
+        "wanderRadius": 3
+    },
+    {
+        "level": 1,
+        "name": "Sunlight Moth",
+        "id": 12770,
+        "x": 1445,
+        "y": 9633,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1554,
+        "y": 9433,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1557,
+        "y": 9427,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1562,
+        "y": 9441,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1565,
+        "y": 9432,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1568,
+        "y": 9439,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1570,
+        "y": 9444,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1573,
+        "y": 9441,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1573,
+        "y": 9446,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1370,
+        "y": 9685,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1371,
+        "y": 9707,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1372,
+        "y": 9674,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1372,
+        "y": 9680,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1372,
+        "y": 9712,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1373,
+        "y": 9704,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1374,
+        "y": 9688,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1375,
+        "y": 9672,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1378,
+        "y": 9704,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1378,
+        "y": 9715,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1380,
+        "y": 9713,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1382,
+        "y": 9705,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1384,
+        "y": 9712,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1386,
+        "y": 9678,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1389,
+        "y": 9683,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1392,
+        "y": 9701,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1393,
+        "y": 9696,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1394,
+        "y": 9688,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1395,
+        "y": 9680,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1396,
+        "y": 9709,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1398,
+        "y": 9698,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1399,
+        "y": 9690,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1400,
+        "y": 9685,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1363,
+        "y": 9705,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1370,
+        "y": 9691,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1372,
+        "y": 9700,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1380,
+        "y": 9693,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1380,
+        "y": 9698,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1479,
+        "y": 9680,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1481,
+        "y": 9690,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1482,
+        "y": 9696,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1485,
+        "y": 9681,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1486,
+        "y": 9699,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1507,
+        "y": 9677,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1508,
+        "y": 9680,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1509,
+        "y": 9676,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1523,
+        "y": 9675,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1526,
+        "y": 9676,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1482,
+        "y": 9699,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1502,
+        "y": 9701,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1514,
+        "y": 9711,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1516,
+        "y": 9698,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1522,
+        "y": 9716,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1490,
+        "y": 9680,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1491,
+        "y": 9679,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1497,
+        "y": 9712,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1504,
+        "y": 9679,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1507,
+        "y": 9716,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1509,
+        "y": 9678,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1516,
+        "y": 9687,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1522,
+        "y": 9697,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1523,
+        "y": 9671,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1523,
+        "y": 9678,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1524,
+        "y": 9706,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1525,
+        "y": 9668,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1525,
+        "y": 9674,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1526,
+        "y": 9686,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1349,
+        "y": 9574,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1350,
+        "y": 9554,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1350,
+        "y": 9570,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1361,
+        "y": 9558,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1362,
+        "y": 9570,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1644,
+        "y": 9641,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1639,
+        "y": 9618,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1619,
+        "y": 9624,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1622,
+        "y": 9642,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1330,
+        "y": 9403,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1290,
+        "y": 9375,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1294,
+        "y": 9372,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1295,
+        "y": 9374,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1300,
+        "y": 9377,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1304,
+        "y": 9385,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1305,
+        "y": 9387,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1308,
+        "y": 9386,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1306,
+        "y": 9383,
+        "wanderRadius": 3
+    },
+    {
+        "level": 2,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1315,
+        "y": 9425,
+        "wanderRadius": 3
+    },
+    {
+        "level": 2,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1316,
+        "y": 9431,
+        "wanderRadius": 3
+    },
+    {
+        "level": 2,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1308,
+        "y": 9427,
+        "wanderRadius": 3
+    },
+    {
+        "level": 1,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1326,
+        "y": 9440,
+        "wanderRadius": 3
+    },
+    {
+        "level": 1,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1331,
+        "y": 9453,
+        "wanderRadius": 3
+    },
+    {
+        "level": 1,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1298,
+        "y": 9437,
+        "wanderRadius": 3
+    },
+    {
+        "level": 1,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1289,
+        "y": 9444,
+        "wanderRadius": 3
+    },
+    {
+        "level": 1,
+        "name": "Moonlight moth",
+        "id": 12771,
+        "x": 1339,
+        "y": 9360,
+        "wanderRadius": 3
+    },
+    {
+        "level": 0,
+        "name": "Huntmaster Gilman (Novice)",
+        "id": 13121,
+        "x": 1556,
+        "y": 9464,
+        "wanderRadius": 0
+    },
+    {
+        "level": 0,
+        "name": "Guild Hunter Cervus (Adept)",
+        "id": 13123,
+        "x": 1559,
+        "y": 9459,
+        "wanderRadius": 0
+    },
+    {
+        "level": 0,
+        "name": "Guild Hunter Ornus (Adept)",
+        "id": 13122,
+        "x": 1559,
+        "y": 9460,
+        "wanderRadius": 0
+    },
+    {
+        "level": 0,
+        "name": "Guild Hunter Aco (Expert)",
+        "id": 13124,
+        "x": 1559,
+        "y": 9452,
+        "wanderRadius": 0
+    },
+    {
+        "level": 0,
+        "name": "Guild Hunter Teco (Expert)",
+        "id": 13125,
+        "x": 1561,
+        "y": 9454,
+        "wanderRadius": 0
+    },
+    {
+        "level": 0,
+        "name": "Guild Hunter Wolf (Master)",
+        "id": 13126,
+        "x": 1554,
+        "y": 9462,
+        "wanderRadius": 0
+    },
+    {
+        "level": 0,
+        "name": "Guild Scribe Verity",
+        "id": 13127,
+        "x": 1559,
+        "y": 9464,
         "wanderRadius": 0
     }
 ]
