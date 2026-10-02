@@ -2,7 +2,7 @@
 
 The Gauntlet and the Corrupted Gauntlet, ported from Near-Reality's implementation and checked against the OSRS Wiki and the cache. It is one plugin, `server/plugins/minigames/Gauntlet.plugin.js`, which delegates to one unit per area in `server/plugins/minigames/gauntlet/`.
 
-Status: done so far are the maze, the lobby, the run (entry, timer, exits, death) and preparing (resources, stations, the singing bowl, potions, cooking). monsters (with their drops), the Gauntlet weapons and the Hunllef. Rewards, the scoreboard and stats are still to come.
+Status: done so far are the maze, the lobby, the run (entry, timer, exits, death) and preparing (resources, stations, the singing bowl, potions, cooking). monsters (with their drops), the Gauntlet weapons, the Hunllef, the reward chest, the scoreboard and stats.
 
 ## Layout
 
@@ -19,6 +19,8 @@ Status: done so far are the maze, the lobby, the run (entry, timer, exits, death
 | `GauntletMonsters.js` | Monsters in lit rooms, demi-bosses, and the run's drop rules. |
 | `GauntletHunllef.js` | The Hunllef fight. |
 | `Weapons.*` | The halberds, bows and staffs in combat. |
+| `GauntletRewards.js` | Run points, the reward chest and its loot tables. |
+| `GauntletScoreboard.js` | The lobby scoreboard and the world's totals. |
 | `Commands.*` | Developer commands. |
 
 ## The maze
@@ -226,6 +228,40 @@ The Crystalline no-prayer maxes aren't on the Wiki: they're the Corrupted ratio 
 
 The Hunllef and its tornadoes are scripted: no default combat, and no drops (the reward is the chest).
 
+## Rewards (Wiki, Reward Chest (The Gauntlet))
+
+When a run ends, a reward waits in the lobby's Reward Chest (37341, a multiloc on varbit 9179). It's kept in the save, and Bryn won't let you back in until you've collected it.
+
+| How the run ended | Reward |
+| --- | --- |
+| Hunllef killed | 5–9 crystal shards and two rolls on the regular table |
+| Corrupted Hunllef killed | 7–12 crystal shards, the Gauntlet cape if you don't own one, and three rolls on the corrupted table |
+| Anything else, 50+ points | One item from the incomplete table (27 items, 1/27 each) |
+| Anything else, 1–49 points | One item from the junk table (Iwan's flyer, potion, rotten tomato) |
+| Anything else, 0 points | Nothing |
+| Left by the teleport platform | Nothing |
+
+Death, escaping at the barrier and logging out are all "anything else". The main tables are the Wiki's x/24 weights. Each tertiary item is rolled on its own: elite clue, crystal weapon and armour seeds, the enhanced seed, Youngllef.
+
+**Points** (Wiki):
+- 10: a demi-boss, or an attuned-to-perfected upgrade;
+- 5: a strong monster, or a basic-to-attuned upgrade;
+- 2: a weak monster, or a basic item;
+- 1: cooking a paddlefish, or adding crystals to one. The Wiki lists that last one at 2 in one place, but its worked example counts 1.
+
+The chest needs one free slot; anything that doesn't fit goes on the ground.
+
+## Stats and the scoreboard
+
+A completion prints:
+- the challenge duration (with your personal best),
+- the preparation and Hunllef kill times,
+- your completion count.
+
+Your stats are saved in `gauntlet:stats`: completions, deaths and best times per mode.
+
+The lobby Scoreboard (36060) opens interface 639, which has your numbers next to the world's for both modes (the Wiki). The world's totals are kept in `server/data/saves/gauntlet-scoreboard.json`, which is gitignored; plugins have no world store.
+
 ## Developer commands
 
 | Command | Does |
@@ -255,4 +291,5 @@ The Hunllef and its tornadoes are scripted: no default combat, and no drops (the
 - the teleport crystal's rules;
 - monster animations, rooms and demi-bosses, the drop rules, and the safe start room;
 - the Hunllef: its style cycle and stomp, max hits by armour and prayer, the protection switch, tornado counts, the floor tiles, and completion;
-- the weapons and `::gauntletgear`.
+- the weapons and `::gauntletgear`;
+- the reward rule and loot tables, points, the chest, completion messages and stats, and the scoreboard.
