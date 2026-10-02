@@ -333,6 +333,9 @@ function showHud(player) {
   updateHud(player);
   const sender = player.getPacketSender();
   sender.sendInterfaceDisplayState(HUD.hp, false);
+  // Fade the bar back in: an earlier fade-out (leaving, or the last crab burrowing) left its
+  // parts transparent, and the open script doesn't reset that (OpenRune fades in on open too).
+  fadeHud(player, true);
   sender.sendInterfaceScript(HUD.openScript, HUD.components);
 }
 

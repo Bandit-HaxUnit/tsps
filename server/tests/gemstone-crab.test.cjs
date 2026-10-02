@@ -238,7 +238,8 @@ test("leaving its mine fades the HUD out (script 2889 with its 14 components) an
   zone(hooks.zonesEnter).handler({ player: p });
   const HP = (303 << 16) | 5;
   assert.equal(p.hidden.get(HP), false, "shown on arrival");
-  assert.equal(p.scripts.at(-1)[0], 2376);
+  assert.deepEqual(p.scripts.slice(-2).map(([id, args]) => [id, args.length, args.at(-1)]), [[2887, 15, 255], [2376, 19, (303 << 16) | 3]],
+    "faded back in (an earlier fade-out leaves the bar transparent), then opened");
   zone(hooks.zonesExit).handler({ player: p });
   const [id, args] = p.scripts.at(-1);
   assert.equal(id, 2889);
