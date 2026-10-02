@@ -248,9 +248,17 @@ function clearEffectsOutside({ player }) {
   player.setAttribute(ATTR_EFFECTS, null);
 }
 
+/** A supply's doses and its family (most doses first), or null for anything else. */
+function doses(itemId) {
+  const supply = supplyFor(itemId);
+  if (!supply) return null;
+  return { chain: supply.chain, doses: supply.chain.length - supply.chain.indexOf(itemId) };
+}
+
 module.exports = function registerTombsSupplies(api) {
   Shared.bind(api);
   api.onItemFirstAction(consume);
   api.onPlayerProcess(tickEffects);
   api.onPlayerProcess(clearEffectsOutside);
 };
+module.exports.doses = doses;

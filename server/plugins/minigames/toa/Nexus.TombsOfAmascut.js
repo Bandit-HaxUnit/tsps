@@ -7,6 +7,7 @@
 
 const Shared = require("./ToaShared");
 const Raid = require("./ToaRaid");
+const Supplies = require("./Supplies.TombsOfAmascut");
 
 const { INTERFACE, EVENT, PATHS, PATH_BY_KEY } = Shared;
 
@@ -303,6 +304,79 @@ function useSupplyBag(event) {
   sendBagContents(player, member.supplies);
 }
 
+/**
+ * Withdraw-1 and Withdraw-all (Wiki): the first items, left to right, while the inventory has
+ * room. The last item still comes out with a full inventory, as the bag itself goes.
+ */
+function withdrawSupplies(player, count) {
+  const raid = Raid.raidOf(player);
+  if (!raid) return false;
+  const member = raid.member(player);
+  const inventory = player.getInventory();
+  let taken = 0;
+  while (taken < count && member.supplies.length > 0) {
+    const last = member.supplies.length === 1;
+    if (inventory.getFreeSlots() <= 0 && !last) {
+      player.sendMessage("You do not have enough space in your inventory to withdraw your supplies.");
+      break;
+    }
+    const id = member.supplies.shift();
+    if (last) inventory.delete(Shared.core().ItemIdentifiers.SUPPLIES, 1);
+    inventory.adds(id, 1);
+    taken++;
+  }
+  if (member.supplies.length === 0) player.getPacketSender().closeSubInterface(SIDE_MODAL_UID);
+  else sendBagContents(player, member.supplies);
+  return true;
+}
+
+function withdrawOne({ player }) {
+  return withdrawSupplies(player, 1);
+}
+
+function withdrawAll({ player }) {
+  return withdrawSupplies(player, SUPPLY_BAG_SIZE);
+}
+
+/**
+ * Resupply (Wiki): "restores any partially-used items in the player's inventory by using the
+ * items contained within", e.g. Smelling salts (1) becomes (2); it never adds new items.
+ */
+function resupply({ player }) {
+  const raid = Raid.raidOf(player);
+  if (!raid) return false;
+  const member = raid.member(player);
+  const inventory = player.getInventory();
+  const { Item } = Shared.core();
+  let restored = false;
+  inventory.getItems().forEach((item, slot) => {
+    const held = item ? Supplies.doses(item.getId()) : null;
+    if (!held || held.doses >= held.chain.length) return;
+    let have = held.doses;
+    for (let i = 0; i < member.supplies.length && have < held.chain.length; i++) {
+      const stored = Supplies.doses(member.supplies[i]);
+      if (!stored || stored.chain !== held.chain) continue;
+      const moved = Math.min(held.chain.length - have, stored.doses);
+      have += moved;
+      const left = stored.doses - moved;
+      if (left > 0) member.supplies[i] = held.chain[held.chain.length - left];
+      else member.supplies.splice(i--, 1);
+    }
+    if (have === held.doses) return;
+    inventory.setItem(slot, new Item(held.chain[held.chain.length - have], 1));
+    restored = true;
+  });
+  if (!restored) return true;
+  inventory.refreshItems();
+  if (member.supplies.length === 0) {
+    inventory.delete(Shared.core().ItemIdentifiers.SUPPLIES, 1);
+    player.getPacketSender().closeSubInterface(SIDE_MODAL_UID);
+  } else {
+    sendBagContents(player, member.supplies);
+  }
+  return true;
+}
+
 function registerRaidItems() {
   const I = Shared.core().ItemIdentifiers;
   Raid.registerRaidItems(
@@ -322,7 +396,7 @@ module.exports = function registerTombsNexus(api) {
   Shared.onObject(api, PATHS.map((path) => `Path of ${path.name}`), usePathEntrance);
   Shared.onObject(api, "Entry", useWardensEntry);
   api.onNpcInteraction("Helpful Spirit", { Claim: claimSupplies });
-  api.onItemAction("Supplies", { Open: openSupplyBag, Check: openSupplyBag, Withdraw: openSupplyBag });
+  api.onItemAction("Supplies", { Open: openSupplyBag, "Withdraw 1": withdrawOne, "Withdraw All": withdrawAll, Resupply: resupply });
   api.onInterfaceActionButton(SHOP_PACK_COMPONENTS.map((child) => (INTERFACE.SUPPLIES_SHOP << 16) | child), takePack);
   api.onInterfaceActionButton((INTERFACE.SUPPLIES_BAG << 16) | BAG_ITEMS_COMPONENT, useSupplyBag);
 };
