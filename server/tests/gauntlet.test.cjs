@@ -109,3 +109,232 @@ test('rooms are found from their tiles', () => {
     map.destroy();
   }
 });
+
+// ------------------------------------------------------------------ runs
+
+const { TaskManager } = require('../dist/game/task/TaskManager');
+const Run = require('../plugins/minigames/gauntlet/GauntletRun');
+const Lobby = require('../plugins/minigames/gauntlet/Lobby.Gauntlet');
+const RunHooks = require('../plugins/minigames/gauntlet/Run.Gauntlet');
+const { ItemIdentifiers: I } = require('../dist/util/ItemIdentifiers');
+
+const hooks = { objects: {}, items: {}, death: [], drops: [], teleports: [], login: [], variants: [], prompts: [] };
+function bindHooks() {
+  const api = {
+    core: PluginManager.getCoreApi(),
+    persistAttribute() {},
+    onObjectInteraction: (name, actions) => { hooks.objects[name] = { ...(hooks.objects[name] ?? {}), ...actions }; },
+    onItemAction: (name, actions) => { hooks.items[name] = actions; },
+    onShouldDropItemsOnDeath: (handler) => hooks.drops.push(handler),
+    onPlayerDeath: (handler) => hooks.death.push(handler),
+    onCanTeleport: (handler) => hooks.teleports.push(handler),
+    onPlayerLogin: (handler) => hooks.login.push(handler),
+    onNpcDialogueVariant: (handler) => hooks.variants.push(handler),
+    sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
+    emitCustomEvent() {},
+  };
+  Lobby(api);
+  RunHooks(api);
+}
+
+/** A container that holds item ids by slot. */
+function container(size) {
+  const slots = new Array(size).fill(null);
+  const self = {
+    slots,
+    getValidItems: () => slots.filter(Boolean).map((id) => ({ getId: () => id })),
+    resetItems() { slots.fill(null); return self; },
+    refreshItems() { return self; },
+    adds(id) { slots[slots.indexOf(null)] = id; return self; },
+    setItem(slot, item) { slots[slot] = item?.getId?.() ?? null; return self; },
+    contains: (id) => slots.includes(id),
+    deleteAtSlot(slot) { slots[slot] = null; return self; },
+  };
+  return self;
+}
+
+function fakePlayer(name = 'Tester') {
+  const varbits = new Map();
+  const attributes = new Map();
+  const p = {
+    messages: [], statements: [], scripts: [], interfaces: [], area: null, location: new Location(3032, 6127, 1),
+    inventory: container(28), equipment: container(14), resets: 0,
+    getUsername: () => name,
+    getIndex: () => 1,
+    isPlayer: () => true,
+    isNpc: () => false,
+    getAsPlayer: () => p,
+    getLocation: () => p.location,
+    moveTo(location) { p.location = location; },
+    getArea: () => p.area,
+    setArea(area) { p.area = area; },
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => p.inventory,
+    getEquipment: () => p.equipment,
+    getCurrentPet: () => null,
+    resetAttributes() { p.resets++; },
+    sendMessage: (message) => p.messages.push(message),
+    getCombat: () => ({ reset() {} }),
+    getMovementQueue: () => ({ reset() {} }),
+    getDialogueManager: () => ({ startDialogues: (chain) => p.statements.push(chain) }),
+    getPacketSender() {
+      const sender = {
+        sendVarbit: (id, value) => { varbits.set(id, value); return sender; },
+        getVarbit: (id) => varbits.get(id) ?? 0,
+        sendConfig: (id, value) => { varbits.set(`varp${id}`, value); return sender; },
+        sendSubInterface: (uid, id) => { p.interfaces.push(id); return sender; },
+        closeSubInterface: (uid) => { p.interfaces.push(-uid); return sender; },
+        sendClientScript: (id, ...args) => { p.scripts.push([id, ...args]); return sender; },
+      };
+      return sender;
+    },
+    varbits,
+  };
+  return p;
+}
+
+function ticks(count) {
+  for (let i = 0; i < count; i++) TaskManager.process();
+}
+
+function objectAt(map, room, id) {
+  for (let x = 0; x < 16; x++) {
+    for (let y = 0; y < 16; y++) {
+      const object = map.getTemplateObjects(map.roomTile(room, x, y)).find((o) => o.getId() === id);
+      if (object) return object;
+    }
+  }
+  return null;
+}
+
+function interact(name, option, player, object) {
+  return hooks.objects[name][option]({ player, object, objectId: object?.getId?.(), definition: object?.getDefinition?.() });
+}
+
+test('the entrance turns players away until they have spoken to Bryn, and with items on them', () => {
+  bindHooks();
+  const player = fakePlayer('Entrant');
+  interact('The Gauntlet', 'Enter', player, null);
+  assert.equal(Run.runOf(player), null, "Bryn hasn't been spoken to");
+  assert.equal(hooks.variants[0]({ player, npcId: 9020 }), 'first-time-talking-to-him');
+  assert.equal(hooks.variants[0]({ player, npcId: 9020 }), null, 'only the first time');
+  player.inventory.adds(995);
+  interact('The Gauntlet', 'Enter', player, null);
+  assert.equal(Run.runOf(player), null, 'nothing may be taken in');
+  player.inventory.resetItems();
+  interact('The Gauntlet', 'Enter-corrupted', player, null);
+  assert.equal(Run.runOf(player), null, 'Corrupted needs a completion first');
+  interact('The Gauntlet', 'Enter', player, null);
+  const run = Run.runOf(player);
+  assert.ok(run);
+  run.end('exit', { fade: false });
+});
+
+test('a run starts with the Wiki kit and the timer, and lighting a node opens the next room', () => {
+  bindHooks();
+  const player = fakePlayer('Runner');
+  const run = Run.startRun(player, { random: seeded(11) });
+  try {
+    ticks(3);
+    assert.equal(player.getArea(), run.map);
+    assert.equal(run.map.roomAt(player.getLocation()), run.map.room(run.map.start.x, run.map.start.y));
+    assert.ok(player.equipment.contains(I.CRYSTAL_SCEPTRE), 'the sceptre is wielded');
+    for (const id of [I.CRYSTAL_AXE_3, I.CRYSTAL_PICKAXE_3, I.CRYSTAL_HARPOON_3, I.PESTLE_AND_MORTAR_3, I.TELEPORT_CRYSTAL]) {
+      assert.ok(player.inventory.contains(id), `starts with ${id}`);
+    }
+    assert.ok(player.interfaces.includes(637), 'the timer overlay');
+    assert.deepEqual(player.scripts.find(([id]) => id === 2914), [2914, 1000], '10 minutes');
+    assert.equal(player.varbits.get(9178), 1, 'the maze map');
+
+    const start = run.map.room(run.map.start.x, run.map.start.y);
+    const away = GauntletMap.SIDES.find((side) => !run.map.room(start.gridX + side.dx, start.gridY + side.dy)?.special
+      && run.map.room(start.gridX + side.dx, start.gridY + side.dy));
+    const node = [36101, 36102].map((id) => {
+      for (let i = 0; i < 16; i++) {
+        const x = away.dx > 0 ? 14 : away.dx < 0 ? 0 : i;
+        const y = away.dy > 0 ? 14 : away.dy < 0 ? 0 : i;
+        const found = run.map.getTemplateObjects(run.map.roomTile(start, x, y)).find((o) => o.getId() === id);
+        if (found) return found;
+      }
+      return null;
+    }).find(Boolean);
+    assert.ok(node, `a node on the ${away.name} side`);
+    interact('Node', 'Light', player, node);
+    const next = run.map.room(start.gridX + away.dx, start.gridY + away.dy);
+    assert.ok(next.lit, 'the room past the node is lit');
+    assert.equal(player.varbits.get(9240 + next.gridY * 7 + next.gridX), 1);
+  } finally {
+    run.end('exit', { fade: false });
+  }
+});
+
+test('running out of time takes you to the Hunllef; the barrier then offers Escape, which ends the run', () => {
+  bindHooks();
+  const player = fakePlayer('Slowpoke');
+  const run = Run.startRun(player, { corrupted: true, random: seeded(2) });
+  ticks(3);
+  assert.equal(run.prepLeft, 750 - 1, 'Corrupted: 7 minutes 30');
+  run.prepLeft = 2;
+  ticks(2);
+  assert.equal(run.stage, 'boss');
+  assert.ok(run.inArena(player.getLocation()), 'dragged into the boss room');
+  assert.equal(player.varbits.get(9177), 1, 'the barrier turns to Escape');
+  const barrier = objectAt(run.map, run.map.room(3, 3), 37337);
+  assert.ok(barrier, 'the corrupted barrier');
+  interact('Barrier', 'Escape', player, barrier);
+  ticks(3);
+  assert.equal(Run.runOf(player), null);
+  assert.deepEqual([player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()], [3032, 6127, 1]);
+  assert.equal(player.inventory.getValidItems().length + player.equipment.getValidItems().length, 0, 'nothing leaves');
+  assert.equal(player.varbits.get(9177), 0);
+  assert.ok(run.map.isDestroyed(), 'the maze is gone');
+});
+
+test('dying, teleporting and logging out are handled by the run', () => {
+  bindHooks();
+  const player = fakePlayer('Unlucky');
+  const run = Run.startRun(player, { random: seeded(4) });
+  ticks(3);
+  const teleport = { player, allow: null };
+  hooks.teleports[0](teleport);
+  assert.equal(teleport.allow, false, 'teleports are blocked inside');
+  const drop = { player, shouldDrop: null };
+  hooks.drops[0](drop);
+  assert.equal(drop.shouldDrop, false);
+  const death = { player, handled: false };
+  hooks.death[0](death);
+  assert.ok(death.handled);
+  assert.equal(Run.runOf(player), null);
+  assert.equal(player.getLocation().getX(), 3032);
+  assert.ok(player.messages.includes('Oh dear, you are dead!'));
+  assert.equal(Run.statsOf(player).deaths.regular, 1);
+
+  const second = Run.startRun(player, { random: seeded(5) });
+  ticks(3);
+  second.map.leave(player, true);
+  assert.equal(Run.runOf(player), null, 'logging out ends the run');
+  assert.equal(player.getLocation().getX(), 3032, 'saved in the lobby');
+  assert.equal(player.inventory.getValidItems().length, 0);
+});
+
+test('passing the barrier from its corridor starts the fight and lands on the arena floor', () => {
+  bindHooks();
+  const player = fakePlayer('Eager');
+  const run = Run.startRun(player, { random: seeded(8) });
+  try {
+    ticks(3);
+    const boss = run.map.room(3, 3);
+    // The west barrier (37339 at 1,7, two tiles tall): its corridor tile is (0, 7).
+    const barrier = run.map.getTemplateObjects(run.map.roomTile(boss, 1, 7)).find((o) => o.getId() === 37339);
+    assert.ok(barrier);
+    player.moveTo(run.map.roomTile(boss, 0, 7));
+    assert.equal(run.inArena(player.getLocation()), false);
+    interact('Barrier', 'Quick-pass', player, barrier);
+    assert.equal(run.stage, 'boss');
+    assert.ok(run.inArena(player.getLocation()), 'two tiles in, on the floor');
+    assert.equal(RegionManager.getClipping(player.getLocation().getX(), player.getLocation().getY(), 1, run.map) & 0x1280100, 0);
+  } finally {
+    run.end('exit', { fade: false });
+  }
+});

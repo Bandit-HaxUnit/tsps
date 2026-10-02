@@ -132,6 +132,22 @@ function mapClass() {
       return false;
     }
 
+    isMulti() {
+      return true;
+    }
+
+    process(mobile) {
+      if (mobile.isPlayer?.()) this.run?.updateRoom?.();
+    }
+
+    postLeave(mobile, logout) {
+      // Logging out or being moved out of the maze by anything but the run ends the run.
+      if (mobile.isPlayer?.() && this.run?.player === mobile.getAsPlayer()) {
+        this.run.end(logout ? "logout" : "left", { fromArea: true });
+      }
+      super.postLeave(mobile, logout);
+    }
+
     room(gridX, gridY) {
       return this.rooms[gridX]?.[gridY] ?? null;
     }
