@@ -102,14 +102,17 @@ class RewardRoom extends Raid.Room {
     movement.reset();
     movement.setBlockMovement(true);
     player.setPositionToFace(Shared.loc(SARCOPHAGUS));
-    this.animateSarcophagus(SARCOPHAGUS.id, ANIMATION.REVEAL);
+    // Every form of the sarcophagus shares one model: the lid is moved only by animations.
+    // The opened one (Search) takes its place and slides open, holding the last frame.
+    raid.sarcophagusOpened = true;
+    this.setObject(OPENED_SARCOPHAGUS, SARCOPHAGUS, 10, SARCOPHAGUS.face);
+    this.animateSarcophagus(OPENED_SARCOPHAGUS, ANIMATION.REVEAL);
     // Timed on the player, not the room, so they're always freed even if the room goes.
     Shared.later(player, REVEAL_TICKS, () => {
       this.opening = false;
       movement.setBlockMovement(false);
       if (this.destroyed || !raid.players.includes(player)) return; // the lobby chest has it
-      raid.sarcophagusOpened = true;
-      this.setObject(OPENED_SARCOPHAGUS, SARCOPHAGUS, 10, SARCOPHAGUS.face);
+      // The open loop from here on, so a reloaded scene shows it open rather than opening.
       this.animateSarcophagus(OPENED_SARCOPHAGUS, ANIMATION.OPEN);
       if (Rewards.unsealUnique(player) === -1) return;
       sendChests(player);
