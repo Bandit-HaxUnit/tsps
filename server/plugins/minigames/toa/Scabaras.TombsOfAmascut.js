@@ -621,7 +621,7 @@ function canHitObelisk(event) {
 function struckObelisk(event) {
   const { player, target } = event;
   if (target?.__toaObelisk === undefined || !(target.__toaRoom instanceof ScabarasPuzzleRoom)) return;
-  Shared.skipAttackDelay(player);
+  Shared.skipAttackDelay(player, target);
 }
 
 // ------------------------------------------------------------------ shortcuts

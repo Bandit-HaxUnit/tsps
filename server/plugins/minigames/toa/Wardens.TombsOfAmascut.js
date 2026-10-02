@@ -1644,7 +1644,7 @@ function struckSiphon(event) {
   const { player, target, hit } = event;
   if (!target?.__toaSiphon || !finalRoom(target)) return;
   if (hit?.getCombatType?.() !== Shared.core().CombatType.MELEE) return;
-  Shared.skipAttackDelay(player);
+  Shared.skipAttackDelay(player, target);
 }
 
 /** Walk to the edge of the floor nearest the crystal rather than to its unreachable tile. */

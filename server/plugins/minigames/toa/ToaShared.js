@@ -459,10 +459,12 @@ function onObject(pluginApi, names, handler) {
  * Near-Reality does this for the Wardens' energy siphons and the Scabaras obelisks. Call it as
  * the attack goes out (onPlayerDealtDamage), after its delay was set; the hit still lands.
  */
-function skipAttackDelay(player) {
+function skipAttackDelay(player, target = null) {
   const combat = player.getCombat();
   combat.reset();
   combat.setAttackDelay(0);
+  // Stopping the attack also stops facing; keep facing what was just struck.
+  if (target) player.setPositionToFace(target.getLocation());
 }
 
 function isProtected(player, style) {
