@@ -1804,6 +1804,7 @@ export class PluginManager {
     PluginManager.pluginCoreApi = Object.freeze({
       MeleeCombatMethod: require(`${combat}/method/impl/MeleeCombatMethod`).MeleeCombatMethod,
       RangedCombatMethod: require(`${combat}/method/impl/RangedCombatMethod`).RangedCombatMethod,
+      MagicCombatMethod: require(`${combat}/method/impl/MagicCombatMethod`).MagicCombatMethod,
       CombatMethod: require(`${combat}/method/CombatMethod`).CombatMethod,
       CombatSpecial: require(`${combat}/CombatSpecial`).CombatSpecial,
       CombatFactory: require(`${combat}/CombatFactory`).CombatFactory,
@@ -1864,6 +1865,7 @@ export class PluginManager {
       ObjectDefinition: require("../game/definition/ObjectDefinition").ObjectDefinition,
       MagicSpellbook: require(`${model}/MagicSpellbook`).MagicSpellbook,
       Spell: require(`${combat}/magic/Spell`).Spell,
+      CombatNormalSpell: require(`${combat}/magic/CombatNormalSpell`).CombatNormalSpell,
       NPC: require("../game/entity/impl/npc/NPC").NPC,
       GameConstants: require("../game/GameConstants").GameConstants,
       TeleportHandler: require(`${model}/teleportation/TeleportHandler`).TeleportHandler,
