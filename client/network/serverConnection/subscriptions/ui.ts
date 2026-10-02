@@ -174,13 +174,13 @@ export function subscribeNotifications(cb: (event: NotificationEvent) => void): 
 }
 
 export function subscribeSystemUpdate(
-    cb: (info: { remainingSeconds: number }) => void,
+    cb: (info: { remainingCentis: number }) => void,
 ): () => void {
     state.systemUpdateListeners.add(cb);
     const last = state.lastSystemUpdate;
-    if (last && last.remainingSeconds > 0) {
+    if (last && last.remainingCentis > 0) {
         try {
-            cb({ remainingSeconds: last.remainingSeconds });
+            cb({ remainingCentis: last.remainingCentis });
         } catch {}
     }
     return () => state.systemUpdateListeners.delete(cb);

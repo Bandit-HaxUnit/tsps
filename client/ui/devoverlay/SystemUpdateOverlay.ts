@@ -26,8 +26,10 @@ export interface SystemUpdateOverlayOptions {
  * Renders a yellow "System update in: MM:SS" line above the chatbox while the
  * server has scheduled a shutdown (SYSTEM_UPDATE packet, opcode 220).
  *
- * The server pushes the remaining seconds once per tick; this overlay
- * interpolates locally so the digits advance smoothly between pushes.
+ * The server pushes the remaining centiseconds once per tick. Each push implies
+ * an absolute deadline; this overlay re-anchors a free-running local countdown
+ * to it, so the digits advance at a steady 1/s between pushes and never snap
+ * back up when the next push lands mid-second.
  */
 export class SystemUpdateOverlay implements Overlay {
     private app!: PicoApp;
@@ -46,9 +48,9 @@ export class SystemUpdateOverlay implements Overlay {
     private screenWidth: number = 765;
     private screenHeight: number = 503;
 
-    // Countdown state fed by the server (remaining seconds at last push)
-    private remainingSeconds: number = 0;
-    private lastPushAtMs: number = 0;
+    // Deadline (performance.now-based) the countdown runs toward; 0 = hidden.
+    // Each server push re-anchors it: deadline = pushTime + remainingCentis * 10.
+    private deadlineMs: number = 0;
     private unsubscribeUpdate?: () => void;
     private unsubscribeDisconnect?: () => void;
 
@@ -77,27 +79,31 @@ export class SystemUpdateOverlay implements Overlay {
         this.ctx = ctx;
 
         // A push may have arrived before the overlay existed (fast reconnect).
+        // `receivedAtMs` is on the Date.now() clock, so rebase via elapsed time
+        // instead of using it as a performance.now() timestamp; skip entries too
+        // stale to matter (the next push re-anchors within a server tick).
         const last = state.lastSystemUpdate;
-        if (last && last.remainingSeconds > 0) {
-            this.remainingSeconds = last.remainingSeconds;
-            this.lastPushAtMs = last.receivedAtMs;
+        if (last && last.remainingCentis > 0) {
+            const ageMs = Date.now() - last.receivedAtMs;
+            if (ageMs >= 0 && ageMs < 5000) {
+                this.deadlineMs =
+                    performance.now() + last.remainingCentis * 10 - ageMs;
+            }
         }
 
-        this.unsubscribeUpdate = subscribeSystemUpdate(({ remainingSeconds }) => {
-            this.remainingSeconds = Math.max(0, remainingSeconds);
-            this.lastPushAtMs = performance.now();
+        this.unsubscribeUpdate = subscribeSystemUpdate(({ remainingCentis }) => {
+            this.deadlineMs = performance.now() + remainingCentis * 10;
         });
         this.unsubscribeDisconnect = subscribeDisconnect(() => {
-            this.remainingSeconds = 0;
-            this.lastPushAtMs = 0;
+            this.deadlineMs = 0;
         });
     }
 
-    /** Whole seconds left, interpolated between server pushes. */
+    /** Seconds left, counting down locally from the deadline the last push set. */
     private displayRemainingSeconds(nowMs: number): number {
-        if (this.remainingSeconds <= 0) return 0;
-        const elapsedSec = (nowMs - this.lastPushAtMs) / 1000;
-        return Math.max(0, this.remainingSeconds - elapsedSec);
+        const remainingMs = this.deadlineMs - nowMs;
+        if (remainingMs <= 0) return 0;
+        return remainingMs / 1000;
     }
 
     private formatCountdown(totalSeconds: number): string {

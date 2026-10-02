@@ -134,8 +134,8 @@ export class PacketSender {
     return this;
   }
 
-  sendSystemUpdate(remainingSeconds: number): this {
-    if (this.player.getSession().sendClientPacket(encodeSystemUpdate(remainingSeconds))) return this;
+  sendSystemUpdate(remainingCentis: number): this {
+    if (this.player.getSession().sendClientPacket(encodeSystemUpdate(remainingCentis))) return this;
     return this;
   }
 

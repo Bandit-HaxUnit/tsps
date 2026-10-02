@@ -257,7 +257,7 @@ export const SERVER_PACKET_LENGTHS: Record<ServerPacketId, number> = {
 
     [ServerPacketId.GAMEMODE_DATA]: -2,
 
-    [ServerPacketId.SYSTEM_UPDATE]: 4, // remainingSeconds(4, big-endian)
+    [ServerPacketId.SYSTEM_UPDATE]: 4, // remainingCentis(4, big-endian)
 
     [ServerPacketId.DEBUG]: -2,
 };

@@ -1971,7 +1971,7 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             return {
                 type: "system_update",
                 payload: {
-                    remainingSeconds: reader.readInt() >>> 0,
+                    remainingCentis: reader.readInt() >>> 0,
                 },
             };
 

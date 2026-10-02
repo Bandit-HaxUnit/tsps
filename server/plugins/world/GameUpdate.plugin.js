@@ -8,7 +8,8 @@ const TASK_KEY = {};
 const MAX_SCHEDULED_SECONDS = 24 * 60 * 60;
 
 // >0 while a shutdown is scheduled; the task pushes the live countdown to every
-// player each tick and calls Server.shutdown once it hits zero.
+// player each tick (centiseconds, so the client can extrapolate between pushes)
+// and calls Server.shutdown once it hits zero.
 let scheduledUntilMs = 0;
 let countdownTask = null;
 // Assigned in register(): Task only exists on api.core by then, and a module-scope
@@ -51,15 +52,21 @@ function formatDurationHuman(totalSeconds) {
     return `${totalSeconds} second${totalSeconds === 1 ? "" : "s"}`;
 }
 
-function remainingSeconds() {
+// Wire value in centiseconds (opcode 220 is a 4-byte BE int); the client anchors a
+// free-running local countdown to it and re-anchors on each push.
+function remainingCentis() {
     if (scheduledUntilMs <= 0) return 0;
-    return Math.max(0, Math.ceil((scheduledUntilMs - Date.now()) / 1000));
+    return Math.max(0, Math.round((scheduledUntilMs - Date.now()) / 10));
 }
 
-function pushCountdown(remainingSec) {
+function remainingSeconds() {
+    return Math.ceil(remainingCentis() / 100);
+}
+
+function pushCountdown(remainingCentis) {
     for (const player of World.getPlayers()) {
         if (player) {
-            player.getPacketSender().sendSystemUpdate(remainingSec);
+            player.getPacketSender().sendSystemUpdate(remainingCentis);
         }
     }
 }
@@ -72,7 +79,7 @@ function startGameUpdate(seconds) {
     for (const player of World.getPlayers()) {
         if (!player) continue;
         player.sendMessage(notice);
-        player.getPacketSender().sendSystemUpdate(seconds);
+        player.getPacketSender().sendSystemUpdate(seconds * 100);
     }
     Server.getLogger().info(`[GameUpdate] server shutdown scheduled in ${formatDurationHuman(seconds)}`);
 }
@@ -128,7 +135,7 @@ function gameUpdateCommand({ player, parts }) {
 }
 
 function pushCountdownToLogin({ player }) {
-    const remaining = remainingSeconds();
+    const remaining = remainingCentis();
     if (remaining <= 0 || !player) return;
     player.getPacketSender().sendSystemUpdate(remaining);
 }
@@ -156,7 +163,7 @@ module.exports = {
                     this.stop();
                     return;
                 }
-                const remaining = remainingSeconds();
+                const remaining = remainingCentis();
                 pushCountdown(remaining);
                 if (remaining <= 0) {
                     this.stop();
