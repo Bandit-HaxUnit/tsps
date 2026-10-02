@@ -113,40 +113,33 @@ const DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
   Object.freeze([O.LARGE_DOOR_98, O.LARGE_DOOR_99, O.LARGE_DOOR_16, O.LARGE_DOOR_18]),
 ]);
 const SPECIAL_DOUBLE_DOOR_LEFT_IDS = new Set([O.GATE_26, O.GATE_29, O.GATE_33, O.DOOR_354, O.DOOR_356, O.GATE_40, O.GATE_92, O.GATE_94, O.LARGE_DOOR_24, O.LARGE_DOOR_26, O.LARGE_DOOR_29, O.LARGE_DOOR_31, O.LARGE_DOOR_98, O.LARGE_DOOR_16, O.LARGE_DOOR_7, O.LARGE_DOOR_8]);
-const SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map([
-  [O.GATE_26, [O.GATE_27]],
-  [O.GATE_27, [O.GATE_26]],
-  [O.GATE_29, [O.GATE_30]],
-  [O.GATE_30, [O.GATE_29]],
-  [O.GATE_33, [O.GATE_34]],
-  [O.GATE_34, [O.GATE_33]],
-  [O.DOOR_354, [O.DOOR_355, O.DOOR_357]],
-  [O.DOOR_355, [O.DOOR_354, O.DOOR_356]],
-  [O.DOOR_356, [O.DOOR_355, O.DOOR_357]],
-  [O.DOOR_357, [O.DOOR_354, O.DOOR_356]],
-  [O.GATE_40, [O.GATE_41]],
-  [O.GATE_41, [O.GATE_40]],
-  [O.GATE_92, [O.GATE_93]],
-  [O.GATE_93, [O.GATE_92]],
-  [O.GATE_94, [O.GATE_95]],
-  [O.GATE_95, [O.GATE_94]],
-  [O.LARGE_DOOR_24, [O.LARGE_DOOR_25]],
-  [O.LARGE_DOOR_25, [O.LARGE_DOOR_24]],
-  [O.LARGE_DOOR_26, [O.LARGE_DOOR_27]],
-  [O.LARGE_DOOR_27, [O.LARGE_DOOR_26]],
-  [O.LARGE_DOOR_29, [O.LARGE_DOOR_28]],
-  [O.LARGE_DOOR_28, [O.LARGE_DOOR_29]],
-  [O.LARGE_DOOR_31, [O.LARGE_DOOR_30]],
-  [O.LARGE_DOOR_30, [O.LARGE_DOOR_31]],
-  [O.LARGE_DOOR_98, [O.LARGE_DOOR_99]],
-  [O.LARGE_DOOR_99, [O.LARGE_DOOR_98]],
-  [O.LARGE_DOOR_16, [O.LARGE_DOOR_18]],
-  [O.LARGE_DOOR_18, [O.LARGE_DOOR_16]],
-  [O.LARGE_DOOR_7, [O.LARGE_DOOR_9]],
-  [O.LARGE_DOOR_9, [O.LARGE_DOOR_7]],
-  [O.LARGE_DOOR_8, [O.LARGE_DOOR_10]],
-  [O.LARGE_DOOR_10, [O.LARGE_DOOR_8]],
+// Both leaves of each pair are partners of the other.
+const SPECIAL_DOUBLE_DOOR_PAIRS = Object.freeze([
+  [O.GATE_26, O.GATE_27],
+  [O.GATE_29, O.GATE_30],
+  [O.GATE_33, O.GATE_34],
+  [O.DOOR_354, O.DOOR_355],
+  [O.DOOR_354, O.DOOR_357],
+  [O.DOOR_355, O.DOOR_356],
+  [O.DOOR_356, O.DOOR_357],
+  [O.GATE_40, O.GATE_41],
+  [O.GATE_92, O.GATE_93],
+  [O.GATE_94, O.GATE_95],
+  [O.LARGE_DOOR_24, O.LARGE_DOOR_25],
+  [O.LARGE_DOOR_26, O.LARGE_DOOR_27],
+  [O.LARGE_DOOR_29, O.LARGE_DOOR_28],
+  [O.LARGE_DOOR_31, O.LARGE_DOOR_30],
+  [O.LARGE_DOOR_98, O.LARGE_DOOR_99],
+  [O.LARGE_DOOR_16, O.LARGE_DOOR_18],
+  [O.LARGE_DOOR_7, O.LARGE_DOOR_9],
+  [O.LARGE_DOOR_8, O.LARGE_DOOR_10],
 ]);
+const SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map();
+for (const [a, b] of SPECIAL_DOUBLE_DOOR_PAIRS) {
+  for (const [id, partner] of [[a, b], [b, a]]) {
+    SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID.set(id, [...(SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID.get(id) ?? []), partner]);
+  }
+}
 const SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
   [O.GATE_26, O.GATE_29],
   [O.GATE_27, O.GATE_30],
@@ -181,6 +174,13 @@ const COORD_OFFSETS = Object.freeze([
   [1, 0],
   [0, -1],
 ]);
+
+// Double-door leaves turn opposite ways when they open: the face each closed face turns to.
+const LEFT_LEAF_OPEN_FACES = Object.freeze([3, 0, 1, 0]);
+const RIGHT_LEAF_OPEN_FACES = Object.freeze([1, 2, 3, 2]);
+// Double doors outside the SPECIAL_* maps pair by id: per closed face, where the left leaf
+// sits from the right one and how its id differs (the right leaf is the mirror).
+const LEFT_LEAF_OFFSETS = Object.freeze([[0, -1, -3], [-1, 0, -3], [0, 1, -3], [-1, 0, 3]]);
 
 const GATE_PARTNER_OFFSETS = Object.freeze([
   [0, 1],
@@ -238,7 +238,7 @@ function buildDoorCatalog() {
       hasAction(partner.actions, "open") &&
       !SELF_OPENING_DOOR_IDS.has(id + 1) &&
       JSON.stringify(partner.models) === JSON.stringify(def.models) &&
-      !DOUBLE_DOOR_ID_FAMILIES.some((family) => family.includes(id) || family.includes(id + 1)) &&
+      !DOUBLE_DOOR_FAMILY_IDS_BY_ID.has(id) && !DOUBLE_DOOR_FAMILY_IDS_BY_ID.has(id + 1) &&
       !openToClosed.has(id) &&
       !closedToOpen.has(id + 1)
     ) {
@@ -639,13 +639,6 @@ function handleMappedDoor(player, object, objectId, location) {
   ObjectManager.deregister(previousObject, true);
   requestDoorResync(player);
 
-  console.warn(
-    `[door-debug] user=${player.isPlayerBot?.() ? "BOT:" + player.getUsername?.() : player.getUsername?.()} ${open ? "CLOSE" : "OPEN"} click id=${objectId} closedId=${closedId} ` +
-    `prev(id=${previousObject.getId()},loc=${previousObject.getLocation().getX()},${previousObject.getLocation().getY()},${previousObject.getLocation().getZ()},face=${previousObject.getFace()}) ` +
-    `next(id=${nextObject.getId()},loc=${nextObject.getLocation().getX()},${nextObject.getLocation().getY()},${nextObject.getLocation().getZ()},face=${nextObject.getFace()}) ` +
-    `postCheck=${MapObjects.get(nextObject.getId(), nextObject.getLocation(), privateArea) ? "FOUND" : "MISSING"}`
-  );
-
   if (open) {
     clearOpenDoor(anchorKey);
   } else {
@@ -678,7 +671,6 @@ function createDynamicDoubleDoorRecord(object, location, originalId) {
   return {
     originalId,
     currentId: Number(object.getId?.() ?? object.id ?? originalId),
-    open: 0,
     x: Number(location.getX?.() ?? location.x ?? 0),
     y: Number(location.getY?.() ?? location.y ?? 0),
     z: Number(location.getZ?.() ?? location.z ?? 0),
@@ -737,10 +729,6 @@ function buildDoubleDoorAnchorKey(records) {
     .join("|");
 }
 
-function cloneDoubleDoorRecord(record) {
-  return { ...record };
-}
-
 function isDoubleDoorOpen(record) {
   return (
     record.currentId !== record.originalId ||
@@ -764,156 +752,20 @@ function resolveOpenedDoubleDoorId(record) {
   return SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID.get(record.originalId) ?? (record.originalId + 1);
 }
 
-function getNextLeftFace(record) {
-  let face = record.originalFace;
-
-  if (record.open === 0) {
-    if (record.originalFace === 0 && record.currentFace === 0) {
-      face = 3;
-    } else if (record.originalFace === 1 && record.currentFace === 1) {
-      face = 0;
-    } else if (record.originalFace === 2 && record.currentFace === 2) {
-      face = 1;
-    } else if (record.originalFace === 3 && record.currentFace === 3) {
-      face = 0;
-    } else if (record.originalFace !== record.currentFace) {
-      face = record.originalFace;
-    }
-  } else if (record.open === 1) {
-    if (record.originalFace === 0 && record.currentFace === 0) {
-      face = 1;
-    } else if (record.originalFace === 1 && record.currentFace === 1) {
-      face = 2;
-    } else if (record.originalFace === 2 && record.currentFace === 2) {
-      face = 1;
-    } else if (record.originalFace === 3 && record.currentFace === 3) {
-      face = 2;
-    } else if (record.originalFace !== record.currentFace) {
-      face = record.originalFace;
-    }
-  }
-
-  record.currentFace = face;
-  return face;
-}
-
-function getNextRightFace(record) {
-  let face = record.originalFace;
-
-  if (record.open === 0) {
-    if (record.originalFace === 0 && record.currentFace === 0) {
-      face = 1;
-    } else if (record.originalFace === 1 && record.currentFace === 1) {
-      face = 2;
-    } else if (record.originalFace === 2 && record.currentFace === 2) {
-      face = 3;
-    } else if (record.originalFace === 3 && record.currentFace === 3) {
-      face = 2;
-    } else if (record.originalFace !== record.currentFace) {
-      face = record.originalFace;
-    }
-  } else if (record.open === 1) {
-    if (record.originalFace === 0 && record.currentFace === 0) {
-      face = 3;
-    } else if (record.originalFace === 1 && record.currentFace === 1) {
-      face = 0;
-    } else if (record.originalFace === 2 && record.currentFace === 2) {
-      face = 1;
-    } else if (record.originalFace === 3 && record.currentFace === 3) {
-      face = 2;
-    } else if (record.originalFace !== record.currentFace) {
-      face = record.originalFace;
-    }
-  }
-
-  record.currentFace = face;
-  return face;
-}
-
-function changeLeftDoubleDoor(record) {
-  let xAdjustment = 0;
-  let yAdjustment = 0;
-
-  if (record.open === 0) {
-    if (record.originalFace === 0 && record.currentFace === 0) {
-      xAdjustment = -1;
-    } else if (record.originalFace === 1 && record.currentFace === 1) {
-      yAdjustment = 1;
-    } else if (record.originalFace === 2 && record.currentFace === 2) {
-      xAdjustment = 1;
-    } else if (record.originalFace === 3 && record.currentFace === 3) {
-      yAdjustment = -1;
-    }
-  } else if (record.open === 1) {
-    if (record.originalFace === 0 && record.currentFace === 0) {
-      yAdjustment = -1;
-    } else if (record.originalFace === 1 && record.currentFace === 1) {
-      xAdjustment = -1;
-    } else if (record.originalFace === 2 && record.currentFace === 2) {
-      xAdjustment = -1;
-    } else if (record.originalFace === 3 && record.currentFace === 3) {
-      xAdjustment = -1;
-    }
-  }
-
+// Swings one leaf of a double door: opening steps it a tile along its closed face and turns it
+// to openFaces[closed face], closing puts it back.
+function toggleDoubleDoorLeaf(record, openFaces) {
+  const closedPose = record.currentFace === record.originalFace;
+  const [dx, dy] = closedPose ? COORD_OFFSETS[record.originalFace] : [0, 0];
   if (record.x === record.originalX && record.y === record.originalY) {
-    record.x += xAdjustment;
-    record.y += yAdjustment;
+    record.x += dx;
+    record.y += dy;
   } else {
     record.x = record.originalX;
     record.y = record.originalY;
   }
-
-  if (record.currentId === record.originalId) {
-    record.currentId = resolveOpenedDoubleDoorId(record);
-  } else {
-    record.currentId = record.originalId;
-  }
-
-  getNextLeftFace(record);
-}
-
-function changeRightDoubleDoor(record) {
-  let xAdjustment = 0;
-  let yAdjustment = 0;
-
-  if (record.open === 0) {
-    if (record.originalFace === 0 && record.currentFace === 0) {
-      xAdjustment = -1;
-    } else if (record.originalFace === 1 && record.currentFace === 1) {
-      yAdjustment = 1;
-    } else if (record.originalFace === 2 && record.currentFace === 2) {
-      xAdjustment = 1;
-    } else if (record.originalFace === 3 && record.currentFace === 3) {
-      yAdjustment = -1;
-    }
-  } else if (record.open === 1) {
-    if (record.originalFace === 0 && record.currentFace === 0) {
-      xAdjustment = 1;
-    } else if (record.originalFace === 1 && record.currentFace === 1) {
-      xAdjustment = -1;
-    } else if (record.originalFace === 2 && record.currentFace === 2) {
-      yAdjustment = -1;
-    } else if (record.originalFace === 3 && record.currentFace === 3) {
-      xAdjustment = -1;
-    }
-  }
-
-  if (record.x === record.originalX && record.y === record.originalY) {
-    record.x += xAdjustment;
-    record.y += yAdjustment;
-  } else {
-    record.x = record.originalX;
-    record.y = record.originalY;
-  }
-
-  if (record.currentId === record.originalId) {
-    record.currentId = resolveOpenedDoubleDoorId(record);
-  } else {
-    record.currentId = record.originalId;
-  }
-
-  getNextRightFace(record);
+  record.currentId = record.currentId === record.originalId ? resolveOpenedDoubleDoorId(record) : record.originalId;
+  record.currentFace = closedPose ? openFaces[record.originalFace] : record.originalFace;
 }
 
 function resolveDoubleDoorPair(clicked) {
@@ -934,108 +786,20 @@ function resolveDoubleDoorPair(clicked) {
     }
   }
 
-  let leftDoor = null;
-  let rightDoor = null;
-  const { currentId: id, x, y, z, originalFace, open } = clicked;
-
-  if (open === 0) {
-    if (originalFace === 0) {
-      const lowerDoor = findDoubleDoorRecord(id - 3, x, y - 1, z);
-      const upperDoor = findDoubleDoorRecord(id + 3, x, y + 1, z);
-      if (lowerDoor) {
-        leftDoor = lowerDoor;
-        rightDoor = clicked;
-      } else if (upperDoor) {
-        leftDoor = clicked;
-        rightDoor = upperDoor;
-      }
-    } else if (originalFace === 1) {
-      const westDoor = findDoubleDoorRecord(id - 3, x - 1, y, z);
-      const eastDoor = findDoubleDoorRecord(id + 3, x + 1, y, z);
-      if (westDoor) {
-        leftDoor = westDoor;
-        rightDoor = clicked;
-      } else if (eastDoor) {
-        leftDoor = clicked;
-        rightDoor = eastDoor;
-      }
-    } else if (originalFace === 2) {
-      const lowerDoor = findDoubleDoorRecord(id - 3, x, y + 1, z);
-      const upperDoor = findDoubleDoorRecord(id + 3, x, y - 1, z);
-      if (lowerDoor) {
-        leftDoor = lowerDoor;
-        rightDoor = clicked;
-      } else if (upperDoor) {
-        leftDoor = clicked;
-        rightDoor = upperDoor;
-      }
-    } else if (originalFace === 3) {
-      const westDoor = findDoubleDoorRecord(id + 3, x - 1, y, z);
-      const eastDoor = findDoubleDoorRecord(id - 3, x + 1, y, z);
-      if (westDoor) {
-        leftDoor = westDoor;
-        rightDoor = clicked;
-      } else if (eastDoor) {
-        leftDoor = clicked;
-        rightDoor = eastDoor;
-      }
-    }
-  } else if (open === 1) {
-    if (originalFace === 0) {
-      const westDoor = findDoubleDoorRecord(id - 3, x - 1, y, z);
-      const eastDoor = findDoubleDoorRecord(id + 3, x + 1, y, z);
-      if (westDoor) {
-        leftDoor = westDoor;
-        rightDoor = clicked;
-      } else if (eastDoor) {
-        leftDoor = clicked;
-        rightDoor = eastDoor;
-      }
-    } else if (originalFace === 1) {
-      const northDoor = findDoubleDoorRecord(id - 3, x, y + 1, z);
-      const southDoor = findDoubleDoorRecord(id + 3, x, y - 1, z);
-      if (northDoor) {
-        leftDoor = northDoor;
-        rightDoor = clicked;
-      } else if (southDoor) {
-        leftDoor = clicked;
-        rightDoor = southDoor;
-      }
-    } else if (originalFace === 2) {
-      const westDoor = findDoubleDoorRecord(id - 3, x - 1, y, z);
-      const eastDoor = findDoubleDoorRecord(id + 3, x, y - 1, z);
-      if (westDoor) {
-        leftDoor = westDoor;
-        rightDoor = clicked;
-      } else if (eastDoor) {
-        leftDoor = clicked;
-        rightDoor = eastDoor;
-      }
-    } else if (originalFace === 3) {
-      const northDoor = findDoubleDoorRecord(id - 3, x, y + 1, z);
-      const southDoor = findDoubleDoorRecord(id + 3, x, y - 1, z);
-      if (northDoor) {
-        leftDoor = northDoor;
-        rightDoor = clicked;
-      } else if (southDoor) {
-        leftDoor = clicked;
-        rightDoor = southDoor;
-      }
-    }
-  }
-
-  return leftDoor && rightDoor ? [leftDoor, rightDoor] : null;
+  const { currentId: id, x, y, z, originalFace } = clicked;
+  const [dx, dy, idDelta] = LEFT_LEAF_OFFSETS[originalFace];
+  const left = findDoubleDoorRecord(id + idDelta, x + dx, y + dy, z);
+  if (left) return [left, clicked];
+  const right = findDoubleDoorRecord(id - idDelta, x - dx, y - dy, z);
+  return right ? [clicked, right] : null;
 }
 
 function handleDoubleDoor(player, object, objectId, location) {
   const x = location?.getX?.() ?? location?.x;
   const y = location?.getY?.() ?? location?.y;
   const z = location?.getZ?.() ?? location?.z ?? 0;
-  let clickedDoor = findDoubleDoorRecord(objectId, x, y, z);
-  if (!clickedDoor) {
-    ensureDynamicDoubleDoorRecords(object, objectId, location, player?.getPrivateArea?.() ?? null);
-    clickedDoor = findDoubleDoorRecord(objectId, x, y, z);
-  }
+  const clickedDoor = findDoubleDoorRecord(objectId, x, y, z)
+    ?? ensureDynamicDoubleDoorRecords(object, objectId, location, player?.getPrivateArea?.() ?? null)?.[0];
   if (!clickedDoor) {
     return false;
   }
@@ -1045,11 +809,10 @@ function handleDoubleDoor(player, object, objectId, location) {
     return false;
   }
 
-  const previousStates = pair.map(cloneDoubleDoorRecord);
-  const previousObjects = previousStates.map((record) => doubleDoorRecordToObject(record));
+  const previousObjects = pair.map((record) => doubleDoorRecordToObject(record));
 
-  changeLeftDoubleDoor(pair[0]);
-  changeRightDoubleDoor(pair[1]);
+  toggleDoubleDoorLeaf(pair[0], LEFT_LEAF_OPEN_FACES);
+  toggleDoubleDoorLeaf(pair[1], RIGHT_LEAF_OPEN_FACES);
 
   const currentObjects = pair.map((record) => doubleDoorRecordToObject(record));
   for (const previousObject of previousObjects) {
