@@ -91,6 +91,8 @@ const FINAL_ARRIVAL = { x: 3937, y: 5164, z: Z };
 const FLOOR_BASE = { x: 3936, y: 5157 };
 const FLOOR_MIN = { x: 3926, y: 5157 };
 const FLOOR_VOID = { x: 3936, y: 5130 };
+// Where the map keeps the collapsed floor's art, a plane above the final arena.
+const VOID_ART = { minX: 3920, maxX: 3952, minY: 5130, maxY: 5190 };
 const CRYSTAL_SPOT = { x: 3936, y: 5154, z: Z };
 // The crystal stands over the void where the Warden was; it's used from the floor's south
 // edge (y 5157, walkable from x 3932 to 3940), as no route reaches its tile.
@@ -1055,6 +1057,23 @@ class WardensFinalRoom extends WardenRoomBase {
     this.floorIndex = 0;
     this.floorTicks = 10;
     this.enragedTicks = 1;
+    this.hideVoidArt();
+  }
+
+  /**
+   * The map keeps the collapsed floor's "Void" pieces on the plane above the arena (z 2).
+   * OSRS builds the room from template chunks without them; shown as-is they hang over the
+   * fight before the floor falls, so they're cleared for this party.
+   */
+  hideVoidArt() {
+    const { MapObjects } = Shared.core();
+    const z = Z + 1;
+    for (let x = VOID_ART.minX; x <= VOID_ART.maxX; x++) {
+      for (let y = VOID_ART.minY; y <= VOID_ART.maxY; y++) {
+        const object = MapObjects.getType(Shared.loc({ x, y }, z), 22, null);
+        if (object?.getDefinition?.()?.getName?.() === "Void") this.setObject(-1, { x, y, z }, 22);
+      }
+    }
   }
 
   /** Picks up from WARDENS_P1 without a pause: the fight is already on. */

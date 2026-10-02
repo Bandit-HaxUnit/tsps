@@ -113,6 +113,7 @@ The first version was written without access to the Wiki or the cache, so it fol
   - Dehydration blocks every potion that restores health, Guthix rests included.
   - The help invocations cut supplies to 66%, 33% and 10%.
 - **Supplies:** the helpful spirit's chaos pack is rolled (1–8 nectar, 0–6 tears, 0–2 salts, with rare ambrosia and adrenaline), and the power pack has 1 liquid adrenaline. A supply used on the bag goes back in (from OpenRune).
+- **The Wardens' void art:** the map keeps the collapsed floor's "Void" pieces (45726–45738) on plane 2, above the final arena. OSRS builds the room without them. The final room hides them, so they no longer show before the floor starts falling.
 - **Ghosts:** a ghost's inventory and worn equipment tabs close until it's revived (from OpenRune).
 - **Raid items:** logging in outside a raid strips raid supplies.
 - **The chest:** the unique chance and weights, the pet, the Thread of Elidinis, the four keris jewels and the elite clue now use the Wiki's rates.
