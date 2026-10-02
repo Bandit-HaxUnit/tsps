@@ -142,6 +142,11 @@ the raid and unlock the normal reward route. Completion points and rewards still
 rebuilds the Nexus, so the Wardens' entrance opens and the helpful spirit offers supplies.
 The skipped paths give no points, so the loot reflects only what was actually fought.
 
+`::toaskiptoreward [points] [raid level]` (Developer-only) works anywhere in a raid. It ends
+the raid as if the Wardens fell and takes the party to the chest. Every player gets `points`
+loot points (on top of the 5,000 start; 0–59,000, default 20,000). A raid level (0–600), if
+given, replaces the invocations' level for the loot rolls. It doesn't add to completion counts.
+
 Run `npx tsc --noEmit -p tsconfig.json` in `server`, then load the plugins. With `TS_NODE_TRANSPILE_ONLY=1`, a `node -r ts-node/register` script that calls `PluginManager.loadFromDirectory()` should list `TombsOfAmascut` among the loaded plugins.
 
 In-game follow-up, done by hand:

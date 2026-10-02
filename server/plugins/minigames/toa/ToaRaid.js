@@ -1173,4 +1173,6 @@ module.exports = {
   registerRaidItems,
   styleMethod,
   walkThrough,
+  START_POINTS,
+  TOTAL_POINTS_CAP,
 };

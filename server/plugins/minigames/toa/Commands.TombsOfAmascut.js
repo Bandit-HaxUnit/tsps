@@ -71,8 +71,50 @@ function skipToWardens({ player }) {
   return true;
 }
 
+const DEFAULT_REWARD_POINTS = 20000;
+const MAX_RAID_LEVEL = 600;
+
+/**
+ * ::toaskiptoreward [points] [raid level]: ends the raid as if the Wardens fell and takes the
+ * party to the chest. Every player gets `points` loot points (beyond the 5,000 start; default
+ * 20,000). A raid level, if given, replaces the invocations' for the loot rolls.
+ */
+function skipToReward({ player, parts }) {
+  const raid = Raid.raidOf(player);
+  if (!raid || !Shared.inTombs(player.getLocation())) {
+    player.sendMessage("Enter a Tombs of Amascut raid before using ::toaskiptoreward.");
+    return true;
+  }
+  if (raid.lootRolled) {
+    player.sendMessage("This raid's loot has already been rolled.");
+    return true;
+  }
+  const maxPoints = Raid.TOTAL_POINTS_CAP - Raid.START_POINTS;
+  const points = parts?.[1] === undefined ? DEFAULT_REWARD_POINTS : Number(parts[1]);
+  const level = parts?.[2] === undefined ? null : Number(parts[2]);
+  if (!Number.isInteger(points) || points < 0 || points > maxPoints
+    || (level !== null && (!Number.isInteger(level) || level < 0 || level > MAX_RAID_LEVEL))) {
+    player.sendMessage(`Usage: ::toaskiptoreward [points 0-${maxPoints}] [raid level 0-${MAX_RAID_LEVEL}]`);
+    return true;
+  }
+  for (const path of Shared.PATHS) raid.completePath(path.key);
+  if (raid.startCycle === 0) raid.startCycle = Shared.cycle();
+  raid.setCompletion();
+  if (level !== null) raid.completedRaidLevel = level;
+  for (const member of raid.players) {
+    raid.member(member).points = Raid.START_POINTS + points;
+    raid.revive(member);
+  }
+  raid.sendContributions();
+  for (const member of [...raid.players]) raid.enterRoom(member, "REWARD", { leaderOnly: false });
+  raid.broadcast(`${Shared.displayName(player)} skipped to the rewards for testing: ${points.toLocaleString()} points each`
+    + ` at raid level ${raid.raidLevel}.`);
+  return true;
+}
+
 module.exports = function registerTombsCommands(api) {
   api.registerCommand("toaskippuzzle", skipPuzzle, api.core.PlayerRights.DEVELOPER);
   api.registerCommand("toaskipboss", skipBoss, api.core.PlayerRights.DEVELOPER);
   api.registerCommand("toaskiptowarden", skipToWardens, api.core.PlayerRights.DEVELOPER);
+  api.registerCommand("toaskiptoreward", skipToReward, api.core.PlayerRights.DEVELOPER);
 };
