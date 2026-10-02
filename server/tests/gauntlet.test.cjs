@@ -129,6 +129,15 @@ function fakeNpc(id, x, y, z) {
     id, location: new Location(x, y, z), area: null, removed: false,
     getId: () => id,
     getLocation: () => npc.location,
+    getSize: () => (id === 9021 || id === 9022 || id === 9023 || id === 9035 || id === 9036 || id === 9037 ? 5 : 1),
+    hitpoints: 600, flags: new Set(), animations: [], transform: -1,
+    getHitpoints: () => npc.hitpoints,
+    setFlag(flag) { npc.flags.add(flag); },
+    getMovementQueue: () => ({ setBlockMovement() { return this; }, reset() { return this; }, addSteps(tile) { npc.location = tile; } }),
+    performAnimation(animation) { npc.animations.push(animation.getId?.() ?? animation.id); },
+    setPositionToFace() {},
+    setNpcTransformationId(next) { npc.transform = next; },
+    getPrivateArea: () => npc.area,
     setArea(area) { npc.area = area; },
     getArea: () => npc.area,
     isRegistered: () => !npc.removed,
@@ -152,7 +161,12 @@ function fakeApi() {
     onShouldDropItemsOnDeath: (handler) => hooks.drops.push(handler),
     onPlayerDeath: (handler) => hooks.death.push(handler),
     onCanTeleport: (handler) => hooks.teleports.push(handler),
-    onCanAttack: (handler) => { hooks.canAttack = handler; },
+    onCanAttack: (handler) => { (hooks.canAttackAll ??= []).push(handler); hooks.canAttack ??= handler; },
+    onNpcHitModify: (handler) => { hooks.hitModify = handler; },
+    onNpcDeath: (handler) => { hooks.npcDeathHandler = handler; },
+    registerWeaponProfile() {},
+    registerRangedAmmoHandler() {},
+    registerCombatMethodResolver() {},
     onCustomEvent: (name, handler) => { hooks.custom = { ...(hooks.custom ?? {}), [name]: handler }; },
     onPlayerLogin: (handler) => hooks.login.push(handler),
     onNpcDialogueVariant: (handler) => hooks.variants.push(handler),
@@ -248,7 +262,17 @@ function fakePlayer(name = 'Tester') {
     }),
     performAnimation(animation) { p.animations.push(animation.getId?.() ?? animation.id); },
     getUpdateFlag: () => ({ flag() {} }),
-    getCombat: () => ({ reset() {} }),
+    hp: 99, damage: [], prayers: [], graphics: [],
+    getHitpoints: () => p.hp,
+    getSize: () => 1,
+    getPrivateArea: () => p.area,
+    getPrayerActive: () => p.prayers,
+    performGraphic(graphic) { p.graphics.push(graphic); },
+    getQuickPrayers: () => ({ setEnabled() {} }),
+    getCombat: () => ({
+      reset() {},
+      getHitQueue: () => ({ addPendingDamage: (hits) => p.damage.push(...hits.map((hit) => hit.getDamage())) }),
+    }),
     getMovementQueue: () => ({ reset() {} }),
     getDialogueManager: () => ({ startDialogues: (chain) => p.statements.push(chain) }),
     getPacketSender() {
@@ -678,6 +702,188 @@ test('nothing attacks into the start room', () => {
     const outside = { attacker: { __gauntletRun: run }, target: player, allow: null };
     hooks.canAttack(outside);
     assert.equal(outside.allow, null);
+  } finally {
+    run.end('exit', { fade: false });
+  }
+});
+
+// ------------------------------------------------------------------ the Hunllef
+
+const Hunllef = require('../plugins/minigames/gauntlet/GauntletHunllef');
+const Weapons = require('../plugins/minigames/gauntlet/Weapons.Gauntlet');
+const Commands = require('../plugins/minigames/gauntlet/Commands.Gauntlet');
+const { PrayerHandler } = require('../dist/game/content/PrayerHandler');
+const { CombatType } = require('../dist/game/content/combat/CombatType');
+
+function bossRun(name, options = {}) {
+  bindHooks();
+  const started = startedRun(name, { random: seeded(91), ...options });
+  const { player, run } = started;
+  run.startBossPhase({ forced: true });
+  return { ...started, fight: run.hunllef };
+}
+
+/** A player hit of a style, as the NpcHitModify hook sees it. */
+function playerHit(style, amount = 10) {
+  const parts = [{ damage: amount, setDamage(value) { this.damage = value; }, getDamage() { return this.damage; } }];
+  const type = { melee: CombatType.MELEE, ranged: CombatType.RANGED, magic: CombatType.MAGIC }[style];
+  return { parts, getCombatType: () => type, getHits: () => parts, updateTotalDamage() {} };
+}
+
+test('the Hunllef waits in its room and fights once the boss phase starts', () => {
+  const { player, run, fight } = bossRun('Challenger');
+  try {
+    assert.ok(fight?.npc, 'spawned with the maze');
+    assert.ok(fight.npc.flags.has('combat:no-retaliate'));
+    assert.equal(run.map.roomAt(fight.npc.getLocation()), run.map.room(3, 3));
+    ticks(3);
+    assert.ok(player.damage.length >= 1 || fight.attacks >= 1, 'it attacks');
+  } finally {
+    run.end('exit', { fade: false });
+  }
+});
+
+test('it switches between Ranged and Magic every 4 attacks, starting with Ranged', () => {
+  const { player, run, fight } = bossRun('Counter');
+  try {
+    const styles = [];
+    for (let i = 0; i < 9; i++) {
+      styles.push(fight.style);
+      fight.attack(player);
+    }
+    assert.deepEqual(styles, ['ranged', 'ranged', 'ranged', 'ranged', 'magic', 'magic', 'magic', 'magic', 'ranged']);
+    // The stomp does not count.
+    player.moveTo(fight.npc.getLocation().transform(1, 1));
+    const before = fight.attacks;
+    fight.attack(player);
+    assert.equal(fight.attacks, before, 'stomp');
+    assert.ok(fight.npc.animations.includes(8420));
+  } finally {
+    run.end('exit', { fade: false });
+  }
+});
+
+test('its max hit follows the armour tier and the protection prayer (Wiki)', () => {
+  const { player, run, fight } = bossRun('Tank', { corrupted: false });
+  try {
+    const items = Items.itemsFor('regular');
+    assert.equal(Hunllef.armourTier(player, 'regular'), 0);
+    player.equipment.setItem(0, { getId: () => items.helm[2] });
+    player.equipment.setItem(4, { getId: () => items.body[2] });
+    player.equipment.setItem(7, { getId: () => items.legs[1] });
+    assert.equal(Hunllef.armourTier(player, 'regular'), 2, 'the lowest piece counts');
+    assert.equal(Hunllef.MAX_HIT.regular.prayed[3], 6);
+    assert.deepEqual(Hunllef.MAX_HIT.corrupted.unprayed, [68, 55, 45, 35]);
+    // Praying correctly against ranged with attuned gear: never above 8.
+    player.prayers[PrayerHandler.PROTECT_FROM_MISSILES] = true;
+    fight.stop(); // only this attack
+    fight.random = () => 0.999;
+    fight.style = 'ranged';
+    player.damage.length = 0;
+    fight.standardAttack(player);
+    ticks(10);
+    assert.deepEqual(player.damage, [8]);
+  } finally {
+    run.end('exit', { fade: false });
+  }
+});
+
+test('hits it protects against do nothing; the 6th off-prayer hit changes its prayer', () => {
+  const { run, fight } = bossRun('Switcher');
+  try {
+    fight.protecting = 'magic';
+    const blocked = playerHit('magic');
+    fight.onHit(blocked);
+    assert.equal(blocked.parts[0].damage, 0);
+    for (let i = 0; i < 5; i++) fight.onHit(playerHit(i % 2 ? 'melee' : 'ranged'));
+    assert.equal(fight.protecting, 'magic', 'five is not enough');
+    const sixth = playerHit('ranged', 0);
+    fight.onHit(sixth);
+    assert.equal(fight.protecting, 'ranged', 'the sixth (even a zero) decides');
+    assert.equal(fight.npc.transform, 9022, 'it takes its protect-from-ranged form');
+  } finally {
+    run.end('exit', { fade: false });
+  }
+});
+
+test('tornadoes: 1 / 2 / 3 (corrupted 2 / 3 / 4) by its hitpoints, for 20 ticks', () => {
+  for (const corrupted of [false, true]) {
+    const { player, run, fight } = bossRun(corrupted ? 'StormC' : 'Storm', { corrupted });
+    try {
+      const max = Hunllef.HITPOINTS[corrupted ? 'corrupted' : 'regular'];
+      const counts = [];
+      for (const hp of [max, Math.floor(max / 2), Math.floor(max / 4)]) {
+        fight.npc.hitpoints = hp;
+        fight.stop();
+        fight.summonTornadoes(player);
+        counts.push(fight.tornadoes.length);
+      }
+      assert.deepEqual(counts, corrupted ? [2, 3, 4] : [1, 2, 3]);
+      for (let i = 0; i < 21; i++) fight.tickTornadoes(player);
+      assert.equal(fight.tornadoes.length, 0, 'gone after 20 ticks');
+    } finally {
+      run.end('exit', { fade: false });
+    }
+  }
+});
+
+test('floor tiles turn blue, then orange, and orange ones hurt', () => {
+  const { player, run, fight } = bossRun('Dancer');
+  try {
+    fight.stop();
+    fight.ticks = 100;
+    fight.startPattern();
+    const [key, tile] = [...fight.floor][0];
+    assert.ok(key);
+    const spot = fight.arenaTile(tile.x, tile.y);
+    const floor = () => run.map.getObjects().find((o) => o.getType() === 22 && o.getLocation().equals(spot))?.getId();
+    assert.equal(floor(), 36150, 'blue');
+    player.moveTo(spot);
+    player.damage.length = 0;
+    while (fight.ticks < tile.orangeAt) { fight.ticks++; fight.tickFloor(player); }
+    assert.equal(floor(), 36151, 'orange');
+    assert.ok(player.damage.length >= 1 && player.damage.every((d) => d >= 10 && d <= 20), 'orange tiles hurt 10-20');
+    while (fight.floor.size) { fight.ticks++; fight.tickFloor(player); }
+    assert.equal(floor(), 36149, 'back to the plain floor');
+  } finally {
+    run.end('exit', { fade: false });
+  }
+});
+
+test('killing the Hunllef completes the run', () => {
+  const { player, run, fight } = bossRun('Victor');
+  const completed = Run.statsOf(player).completions.regular;
+  fight.npc.hitpoints = 0;
+  hooks.npcDeathHandler({ npc: fight.npc, npcId: fight.npc.getId(), killer: player });
+  ticks(6);
+  assert.equal(Run.runOf(player), null, 'the run is over');
+  assert.equal(Run.statsOf(player).completions.regular, completed + 1);
+  assert.equal(player.getLocation().getX(), 3032, 'back in the lobby');
+  assert.equal(player.varbits.get('varp2353'), 1, 'Enter-corrupted is now offered');
+});
+
+test('the Gauntlet weapons: staff max hits by tier, the bows need no arrows', () => {
+  assert.deepEqual([23898, 23899, 23900].map((id) => Weapons.STAFF_MAX_HITS.get(id)), [23, 31, 39]);
+  assert.deepEqual([23852, 23853, 23854].map((id) => Weapons.STAFF_MAX_HITS.get(id)), [23, 31, 39]);
+  const { RangedWeapon, Ammunition } = require('../dist/game/content/combat/ranged/RangedData');
+  for (const id of [23901, 23902, 23903, 23855, 23856, 23857]) {
+    assert.equal(RangedWeapon.getSelfAmmo(id), Ammunition.GAUNTLET_BOW, `${id} fires without arrows`);
+  }
+});
+
+test('::gauntletgear sets up a Hunllef loadout of a tier during a run', () => {
+  bindHooks();
+  const commands = {};
+  Commands({ ...fakeApi(), registerCommand: (name, handler) => { commands[name] = handler; } });
+  const { player, run } = startedRun('Geared', { random: seeded(3) });
+  try {
+    commands.gauntletgear({ player, parts: ['gauntletgear', 'attuned'] });
+    const items = Items.itemsFor('regular');
+    assert.equal(Hunllef.armourTier(player, 'regular'), 2);
+    assert.equal(player.equipment.slots[3]?.id, items.bow[1]);
+    assert.ok(player.inventory.contains(items.staff[1]) && player.inventory.contains(items.halberd[1]));
+    assert.equal(player.inventory.getAmount(23885), 4);
+    assert.equal(player.inventory.getFreeSlots(), 0, 'the rest is food');
   } finally {
     run.end('exit', { fade: false });
   }

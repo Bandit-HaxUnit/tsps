@@ -3,6 +3,7 @@
 const Shared = require("./GauntletShared");
 const GauntletMap = require("./GauntletMap");
 const Run = require("./GauntletRun");
+const Items = require("./GauntletItems");
 
 /**
  * ::gauntletmap [corrupted] [all] - builds a maze (no run) and puts you in its start room, to
@@ -61,6 +62,47 @@ function setPrepTime({ player, parts }) {
   return true;
 }
 
+const TIERS = ["basic", "attuned", "perfected"];
+const EGNIOL_4 = 23885;
+
+/**
+ * ::gauntletgear [basic|attuned|perfected] - during a run, swaps what you carry for a Hunllef
+ * loadout of that tier (perfected by default): the armour worn and the bow wielded, the staff,
+ * the halberd, four Egniol potions, four crystal paddlefish and paddlefish in the rest.
+ */
+function gearUp({ player, parts }) {
+  const run = Run.runOf(player);
+  if (!run) {
+    player.sendMessage("Start a Gauntlet run before using ::gauntletgear.");
+    return true;
+  }
+  const wanted = String(parts?.[1] ?? "perfected").toLowerCase();
+  const tier = TIERS.indexOf(wanted);
+  if (tier < 0) {
+    player.sendMessage("Use ::gauntletgear [basic|attuned|perfected].");
+    return true;
+  }
+  const { Item, Equipment } = Shared.core();
+  const items = Items.itemsFor(run.mode);
+  Shared.clearItems(player);
+  const equipment = player.getEquipment();
+  equipment.setItem(Equipment.HEAD_SLOT, new Item(items.helm[tier], 1));
+  equipment.setItem(Equipment.BODY_SLOT, new Item(items.body[tier], 1));
+  equipment.setItem(Equipment.LEG_SLOT, new Item(items.legs[tier], 1));
+  equipment.setItem(Equipment.WEAPON_SLOT, new Item(items.bow[tier], 1));
+  equipment.refreshItems();
+  const inventory = player.getInventory();
+  inventory.adds(items.staff[tier], 1);
+  inventory.adds(items.halberd[tier], 1);
+  for (let i = 0; i < 4; i++) inventory.adds(EGNIOL_4, 1);
+  for (let i = 0; i < 4; i++) inventory.adds(items.comboFish, 1);
+  while (inventory.getFreeSlots() > 0) inventory.adds(items.paddlefish, 1);
+  inventory.refreshItems();
+  player.resetAttributes();
+  player.sendMessage(`You are equipped for the Hunllef with ${wanted} gear.`);
+  return true;
+}
+
 function toLobby({ player }) {
   if (Run.runOf(player)) {
     player.sendMessage("Leave your Gauntlet run before using ::gauntlet.");
@@ -78,4 +120,5 @@ module.exports = function registerGauntletCommands(api) {
   api.registerCommand("gauntletstart", startRun, DEVELOPER);
   api.registerCommand("gauntletboss", skipToBoss, DEVELOPER);
   api.registerCommand("gauntlettime", setPrepTime, DEVELOPER);
+  api.registerCommand("gauntletgear", gearUp, DEVELOPER);
 };

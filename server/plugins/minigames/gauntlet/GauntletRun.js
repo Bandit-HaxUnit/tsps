@@ -15,6 +15,7 @@ const Shared = require("./GauntletShared");
 const GauntletMap = require("./GauntletMap");
 const Resources = require("./GauntletResources");
 const Monsters = require("./GauntletMonsters");
+const { HunllefFight } = require("./GauntletHunllef");
 
 const ATTR_RUN = "gauntlet:run";
 const ATTR_STATS = "gauntlet:stats";
@@ -118,6 +119,8 @@ class GauntletRun {
       player.resetAttributes();
       this.map.enter(player);
       this.lightNodesAround(this.map.room(this.map.start.x, this.map.start.y));
+      // The Hunllef waits in its room from the start (the room is lit and can be seen into).
+      this.hunllef = new HunllefFight(this);
       player.moveTo(this.map.startTile(this.random));
       player.sendMessage("You enter the Gauntlet.");
       this.startCycle = Shared.core().World.getProcessCycle();
@@ -234,6 +237,7 @@ class GauntletRun {
     const sender = player.getPacketSender();
     sender.sendVarbit(Shared.VARBIT.BOSS_PHASE, 1);
     sender.sendClientScript(Shared.SCRIPT.TIMER_BOSS);
+    this.hunllef?.start();
     if (forced) {
       player.getCombat().reset();
       player.getMovementQueue().reset();
@@ -261,6 +265,7 @@ class GauntletRun {
     if (this.stage === "ended") return;
     this.stage = "ended";
     this.timer?.stop?.();
+    this.hunllef?.stop();
     Resources.stopGathering(this.player);
     runs.delete(this.player.getUsername());
     const player = this.player;

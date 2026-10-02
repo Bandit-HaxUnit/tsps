@@ -156,11 +156,29 @@ function dieInRun(event) {
 /** A run's monsters drop by the run's rules (GauntletMonsters) instead of the general tables. */
 function gauntletDrops(event) {
   const run = event.npc?.__gauntletRun;
-  if (!run || run.stage === "ended") return;
-  const drops = Monsters.rollDrops(run, event.player, event.npcId);
-  if (!drops) return;
+  if (!run) return;
+  // The Hunllef and its tornadoes drop nothing: the reward is the chest in the lobby.
+  const drops = run.stage === "ended" ? null : Monsters.rollDrops(run, event.player, event.npcId);
   event.drops.length = 0;
-  event.drops.push(...drops);
+  if (drops) event.drops.push(...drops);
+}
+
+/** The Hunllef and its tornadoes are scripted (GauntletHunllef): no default combat of their own. */
+function scriptedDontAttack(event) {
+  if (event.attacker?.__gauntletScripted) event.allow = false;
+}
+
+/** The player's hits on the Hunllef go through its protection prayer. */
+function hitHunllef(event) {
+  event.npc?.__gauntletHunllef?.onHit(event.hit);
+}
+
+/** Killing the Hunllef completes the run. */
+function hunllefDied(event) {
+  const fight = event.npc?.__gauntletHunllef;
+  if (!fight || fight.run.stage !== "boss") return;
+  fight.stop();
+  Shared.later(fight.run, 2, () => fight.run.end("completed"));
 }
 
 /** The start room is safe: nothing attacks into it (Near-Reality keeps monsters out too). */
@@ -207,5 +225,8 @@ module.exports = function registerGauntletRun(api) {
   api.onCanTeleport(blockTeleports);
   api.onCustomEvent("npc-drops:roll", gauntletDrops);
   api.onCanAttack(safeStartRoom);
+  api.onCanAttack(scriptedDontAttack);
+  api.onNpcHitModify(hitHunllef);
+  api.onNpcDeath(hunllefDied);
   api.onPlayerLogin(recoverOnLogin);
 };

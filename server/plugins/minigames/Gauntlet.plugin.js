@@ -10,6 +10,7 @@ module.exports = {
     require("./gauntlet/Lobby.Gauntlet")(api);
     require("./gauntlet/Run.Gauntlet")(api);
     require("./gauntlet/Prep.Gauntlet")(api);
+    require("./gauntlet/Weapons.Gauntlet")(api);
     require("./gauntlet/Commands.Gauntlet")(api);
   },
 };
