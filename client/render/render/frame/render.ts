@@ -1,3 +1,4 @@
+import { updateSkyColor } from "../environment";
 import Denque from "denque";
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { button, folder } from "leva";
@@ -579,6 +580,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
             sceneViewport.width,
             sceneViewport.height,
         );
+        updateSkyColor(host);
         host.clearSceneFramebuffer(sceneFramebufferViewport);
         // keep CS2-visible viewport zoom in sync with the viewport widget size
         // (Client.viewportZoom; i.e., Rasterizer3D.get3dZoom()) so scripts and widget models scale correctly.

@@ -533,13 +533,16 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     // Settings
     maxLevel: number = Scene.MAX_LEVELS - 1;
 
-    // 117HD blue skybox (#B9D6FF). Clear color + fog tint share this.
+    // Clear color + fog tint. Starts as 117HD's blue sky (#B9D6FF); updateSkyColor follows the
+    // area's environment each frame (render/environment.ts).
     skyColor: vec4 = vec4.fromValues(
         HD_SKY_COLOR_VEC4[0],
         HD_SKY_COLOR_VEC4[1],
         HD_SKY_COLOR_VEC4[2],
         HD_SKY_COLOR_VEC4[3],
     );
+    /** Set once a sky colour is picked in the dev panel; otherwise the area's environment decides. */
+    skyColorOverride: boolean = false;
     fogDepth: number = 24; // Manual fog start (tiles); used only when autoFogDepth is off
     /** Dynamic fog: fog start tracks render distance each frame. */
     autoFogDepth: boolean = true;
