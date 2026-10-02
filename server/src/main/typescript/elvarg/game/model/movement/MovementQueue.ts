@@ -413,6 +413,10 @@ export class MovementQueue {
      * a search every cycle. The queue is kept instead, and the actor resumes its
      * original path once the blocker moves.
      */
+    public isStepBlocked(): boolean {
+        return this.stepBlocked;
+    }
+
     public wasRouteInvalidated(): boolean {
         return this.stepBlocked && !this.stepBlockedByEntity;
     }
