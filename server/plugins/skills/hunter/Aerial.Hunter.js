@@ -1,12 +1,12 @@
 "use strict";
 
-const { H, level, requireLevel, hasTool, nearby, exchange, xp, begin, roll } = require("./Context");
+const { H, level, requireLevel, hasTool, nearby, exchange, xp, begin, roll } = require("./Context.Hunter");
 const borrowed = new Set();
 const ATTRIBUTE = "hunter.aerial-feed";
 
 function talk({player,npc}) {
   if (!nearby(player,npc)) return true;
-  require("./Context").choose(player,[["Borrow or return a cormorant",()=>{if(nearby(player,npc))borrow({player});}],
+  require("./Context.Hunter").choose(player,[["Borrow or return a cormorant",()=>{if(nearby(player,npc))borrow({player});}],
     ["Feed whole fish (20 pearls)",()=>{
       if(!nearby(player,npc))return;
       if(!player.getAttribute(ATTRIBUTE)&&!exchange(player,[[H.core.ItemIdentifiers.MOLCH_PEARL,20]],[]))return;
@@ -43,9 +43,9 @@ function fish({ player, npc, npcId }) {
   const bait = [I.FISH_OFFCUTS, I.FINE_FISH_OFFCUTS, I.KING_WORM,
     ...(player.getAttribute(ATTRIBUTE) ? H.data.aerialFish.map(f => f.item) : [])].find(id => player.getInventory().contains(id));
   if (!bait) { player.sendMessage("Your cormorant needs king worms or fish offcuts."); return true; }
-  const range = require("./Context").distance(player.getLocation(), npc.getLocation());
+  const range = require("./Context.Hunter").distance(player.getLocation(), npc.getLocation());
   const duration = Math.max(1, Math.ceil(range / 2));
-  const started = begin(player, duration, require("./Context").ANIM.FALCON, () => {
+  const started = begin(player, duration, require("./Context.Hunter").ANIM.FALCON, () => {
     if (!borrowed.has(player) || !player.getInventory().contains(bait) || !nearby(player, npc, 9)
       || !requireLevel(player, 35) || !requireLevel(player, 43, H.core.Skill.FISHING)) return;
     player.getPacketSender().sendGraphic(new H.core.Graphic(1633), npc.getLocation());
@@ -64,15 +64,15 @@ function fish({ player, npc, npcId }) {
     if (flakes) exchange(player, [[I.SPIRIT_FLAKES,1]], []);
     const doubled = Math.random() < (flakes ? 0.5 : 0) + (blessing + 1) * 0.02;
     const amount = doubled ? 2 : 1;
-    if (!exchange(player, [], [[fish, amount]]) && fish === I.GOLDEN_TENCH) require("./Context").drop(player, [[fish, amount]], player.getLocation());
+    if (!exchange(player, [], [[fish, amount]]) && fish === I.GOLDEN_TENCH) require("./Context.Hunter").drop(player, [[fish, amount]], player.getLocation());
     const denominator = Math.max(1, 100 - (combined - 40) * 25 / 59);
-    if (Math.random() < 1.5 / denominator && !exchange(player, [], [[I.MOLCH_PEARL, 1]])) require("./Context").drop(player, [[I.MOLCH_PEARL, 1]], player.getLocation());
+    if (Math.random() < 1.5 / denominator && !exchange(player, [], [[I.MOLCH_PEARL, 1]])) require("./Context.Hunter").drop(player, [[I.MOLCH_PEARL, 1]], player.getLocation());
     for (const [tier, modifier] of [["BEGINNER",0.2],["EASY",1.7],["MEDIUM",2],["HARD",3.3],["ELITE",10]]) {
-      if (require("./Context").ownsClue(player,tier)) continue;
+      if (require("./Context.Hunter").ownsClue(player,tier)) continue;
       const denominator = Math.floor(636833 / (100 + level(player,H.core.Skill.FISHING)) * modifier);
       if (roll(1,denominator) !== 1) continue;
-      const id = I[`${require("./Context").questComplete(player,"x_marks_the_spot") ? "SCROLL_BOX" : "CLUE_BOTTLE"}_${tier}_`];
-      if (!exchange(player,[],[[id,1]])) require("./Context").drop(player,[[id,1]],player.getLocation());
+      const id = I[`${require("./Context.Hunter").questComplete(player,"x_marks_the_spot") ? "SCROLL_BOX" : "CLUE_BOTTLE"}_${tier}_`];
+      if (!exchange(player,[],[[id,1]])) require("./Context.Hunter").drop(player,[[id,1]],player.getLocation());
     }
     xp(player, def.hunterXp, "aerial-fishing", npcId);
     player.getSkillManager().addExperiences(H.core.Skill.FISHING, def.fishingXp);

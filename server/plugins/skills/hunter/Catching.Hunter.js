@@ -1,6 +1,6 @@
 "use strict";
 
-const C = require("./Context");
+const C = require("./Context.Hunter");
 const { H, ANIM, level, requireLevel, hasTool, nearby, available, roll, exchange, xp, begin, hide, chance } = C;
 const tables = require("./ImplingLoot.json");
 const falcons = new Map();
@@ -177,7 +177,7 @@ function rewards(player, def) {
   if (def.key === "LUCKY") {
     const request = { player, rewards: null };
     H.api.emitCustomEvent("hunter:lucky-loot", request);
-    result = request.rewards ?? require("./LuckyLoot").roll(player);
+    result = request.rewards ?? require("./LuckyLoot.Hunter").roll(player);
     if (!Array.isArray(result) || !result.length) return null;
   } else {
     const rows = tables[def.key].filter(row => row[0] !== "DRAGON_JAVELIN_TIPS" || C.questComplete(player, "monkey_madness_ii"));

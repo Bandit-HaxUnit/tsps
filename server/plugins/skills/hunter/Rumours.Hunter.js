@@ -1,5 +1,5 @@
 "use strict";
-const C = require("./Context"), { H } = C;
+const C = require("./Context.Hunter"), { H } = C;
 const tasks = require("./RumourData.json"), loot = require("./SackLoot.json");
 const ATTRIBUTE = "hunter.rumours";
 const pendingSacks = new WeakMap();

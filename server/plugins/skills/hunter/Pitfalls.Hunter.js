@@ -1,7 +1,7 @@
 "use strict";
 
-const C = require("./Context"), { H, ANIM, requireLevel, hasTool, nearby, available, distance, begin, chance, hide } = C;
-const Traps = require("./Traps");
+const C = require("./Context.Hunter"), { H, ANIM, requireLevel, hasTool, nearby, available, distance, begin, chance, hide } = C;
+const Traps = require("./Traps.Hunter");
 const teased = new Map();
 const lastPit = new WeakMap();
 const leaps = new Map();

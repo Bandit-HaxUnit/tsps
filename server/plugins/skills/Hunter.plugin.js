@@ -1,21 +1,21 @@
 "use strict";
 
-const Runtime = require("./hunter/Runtime");
-const Traps = require("./hunter/Traps");
-const Catching = require("./hunter/Catching");
-const Birdhouses = require("./hunter/Birdhouses");
-const Tracking = require("./hunter/Tracking");
-const Pitfalls = require("./hunter/Pitfalls");
-const Aerial = require("./hunter/Aerial");
-const MagicBoxes = require("./hunter/MagicBoxes");
+const Runtime = require("./hunter/Runtime.Hunter");
+const Traps = require("./hunter/Traps.Hunter");
+const Catching = require("./hunter/Catching.Hunter");
+const Birdhouses = require("./hunter/Birdhouses.Hunter");
+const Tracking = require("./hunter/Tracking.Hunter");
+const Pitfalls = require("./hunter/Pitfalls.Hunter");
+const Aerial = require("./hunter/Aerial.Hunter");
+const MagicBoxes = require("./hunter/MagicBoxes.Hunter");
 
-const Rabbits = require("./hunter/Rabbits");
-const Herbiboar = require("./hunter/Herbiboar");
-const Crabs = require("./hunter/Crabs");
-const DriftNets = require("./hunter/DriftNets");
-const Dungeon = require("./hunter/Dungeon");
-const Rumours = require("./hunter/Rumours");
-const Broavs = require("./hunter/Broavs");
+const Rabbits = require("./hunter/Rabbits.Hunter");
+const Herbiboar = require("./hunter/Herbiboar.Hunter");
+const Crabs = require("./hunter/Crabs.Hunter");
+const DriftNets = require("./hunter/DriftNets.Hunter");
+const Dungeon = require("./hunter/Dungeon.Hunter");
+const Rumours = require("./hunter/Rumours.Hunter");
+const Broavs = require("./hunter/Broavs.Hunter");
 
 module.exports = {
   name: "Hunter",

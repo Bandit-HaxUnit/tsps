@@ -1,40 +1,40 @@
 # Hunter
 
 `Hunter.plugin.js` attaches hooks only; each activity is a module in this folder and reaches the
-server through `api.core`. One shared tick task (`Runtime.js`) drives cancellable actions, trap
+server through `api.core`. One shared tick task (`Runtime.Hunter.js`) drives cancellable actions, trap
 lifetimes, creature respawns and session timers. Attribute state (birdhouses, crab traps, drift
 nets, rumours, pursuit charges) is persisted and restored on login.
 
 ## Implemented
 
-- **Trap families** (`Traps.js`, `Rabbits.js`, `Broavs.js`): bird snares, box traps, deadfalls,
+- **Trap families** (`Traps.Hunter.js`, `Rabbits.Hunter.js`, `Broavs.Hunter.js`): bird snares, box traps, deadfalls,
   net traps (swamp/orange/red/black/tecu salamanders), magic boxes/imp banking, monkey deadfall,
-  rabbit snares flushed by ferret, and pitfalls with teasing (`Pitfalls.js`).
+  rabbit snares flushed by ferret, and pitfalls with teasing (`Pitfalls.Hunter.js`).
 - **Bait and scent**: tars, spicy tomato/minced meat, jerboa tail and kebbit baits (3% bonus for
   the matching creature), smoke from a lit/bruma torch or auto-applied anti-odour salt (2%).
   Ownership, per-kind trap limits (extra in the Wilderness), expiry/collapse and preflighted
   inventory transactions are enforced centrally.
-- **Tracking** (`Tracking.js`): five pursuit species, noose wand catches, ring of pursuit with
+- **Tracking** (`Tracking.Hunter.js`): five pursuit species, noose wand catches, ring of pursuit with
   10 persisted charges, trail varbits sent to the client.
-- **Catching** (`Catching.js`, `LuckyLoot.js`): falconry, four butterflies, sunlight/moonlight
+- **Catching** (`Catching.Hunter.js`, `LuckyLoot.Hunter.js`): falconry, four butterflies, sunlight/moonlight
   moths with barehand and net curves, twelve impling species with rebuilt Wiki loot tables,
   released-butterfly boosts, and Lucky jars resolved through `hunter:lucky-loot` or the local
   reward-casket tables.
-- **Birdhouses** (`Birdhouses.js`): nine tiers, crafting, seeding (hop/herb/allotment/flower/
+- **Birdhouses** (`Birdhouses.Hunter.js`): nine tiers, crafting, seeding (hop/herb/allotment/flower/
   bush), 50-minute wall-clock growth, nest/ring/egg/clue-nest/scroll-box rewards, reset.
-- **Aerial fishing** (`Aerial.js`): cormorant hire, king worms/fish offcuts/whole-fish feeding,
+- **Aerial fishing** (`Aerial.Hunter.js`): cormorant hire, king worms/fish offcuts/whole-fish feeding,
   Molch pearls, golden tench, spirit flakes, Rada's blessing, fish cutting and clue bottles.
-- **Herbiboar** (`Herbiboar.js`): five starts, cache-derived trail graph, fossil/numulite
+- **Herbiboar** (`Herbiboar.Hunter.js`): five starts, cache-derived trail graph, fossil/numulite
   inspections, tunnel flush, 1-4 herbs by Herblore level with magic secateurs, Herbi pet.
-- **Drift net fishing** (`DriftNets.js`): Ceto access (daily/permanent numulite), two anchors,
+- **Drift net fishing** (`DriftNets.Hunter.js`): Ceto access (daily/permanent numulite), two anchors,
   Annette's 2,000-net storage, active chase and passive capture, fish/fossil/clue rewards and
   bank-for-5-numulite, 44 Hunter/47 Fishing level-gated.
-- **Crab traps** (`Crabs.js`): red/blue/rainbow traps built with Construction, baiting,
+- **Crab traps** (`Crabs.Hunter.js`): red/blue/rainbow traps built with Construction, baiting,
   auto-rebait, crab meat/paste cutting.
-- **Dungeon** (`Dungeon.js`): seven Chambers of Xeric bats and the Neypotzli moss-lizard rope trap.
-- **Rumours** (`Rumours.js`): six guild hunters, eligibility and consecutive-rumour settings,
+- **Dungeon** (`Dungeon.Hunter.js`): seven Chambers of Xeric bats and the Neypotzli moss-lizard rope trap.
+- **Rumours** (`Rumours.Hunter.js`): six guild hunters, eligibility and consecutive-rumour settings,
   rare-part pity/outfit rates, four loot sacks, quetzal-whistle blueprints and guild armour.
-- **Broavs** (`Broavs.js`): While Guthix Sleeps pit trapping, wild broav capture, hunting-expert
+- **Broavs** (`Broavs.Hunter.js`): While Guthix Sleeps pit trapping, wild broav capture, hunting-expert
   training, release and pick-up.
 - **Pets**: baby chinchompas, Herbi and Quetzin roll from `hunter:success`; spawns for the
   Varlamore creatures/moths, guild NPCs and tecu salamanders live in `npc-spawns.json`.

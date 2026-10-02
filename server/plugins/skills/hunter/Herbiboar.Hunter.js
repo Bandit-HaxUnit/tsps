@@ -1,7 +1,7 @@
 "use strict";
 
 // Search coordinates from RuneLite (BSD-2-Clause, Herbiboar.LICENSE).
-const C = require("./Context"), { H } = C;
+const C = require("./Context.Hunter"), { H } = C;
 const data = require("./HerbiboarData.json");
 const hunts = new Map();
 const near = (point, location, range = 0) => location.getZ() === 0 && Math.max(Math.abs(point[0] - location.getX()), Math.abs(point[1] - location.getY())) <= range;
@@ -57,7 +57,7 @@ function inspect({ player, object }) {
       if (C.roll(1, 100) === 1) { clear({ player }); player.sendMessage("The creature has confused you with its tracks. Start again."); }
       else {
         C.xp(player, 50, "herbiboar-tracking");
-        const fossil = require("./DriftNets").fossil(7, 24);
+        const fossil = require("./DriftNets.Hunter").fossil(7, 24);
         if (fossil && !C.exchange(player, [], [fossil])) C.drop(player, [fossil], player.getLocation());
         next(player, hunt);
       }

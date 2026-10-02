@@ -1,6 +1,6 @@
 "use strict";
 
-const C = require("./Context"), { H } = C;
+const C = require("./Context.Hunter"), { H } = C;
 const traps = new Map(), released = new Map();
 
 function owns(player) {
@@ -26,7 +26,7 @@ function build({ player, object }) {
   if (!C.nearby(player, object) || !permitted(player)) return true;
   if ([...traps.values()].some(t => t.base.getLocation().equals(object.getLocation()) && t.base.getPrivateArea() === object.getPrivateArea())) return true;
   const I = H.core.ItemIdentifiers;
-  const logs = require("./Traps").materials({ logs: true }, player);
+  const logs = require("./Traps.Hunter").materials({ logs: true }, player);
   if (!C.hasTool(player, I.KNIFE)) { player.sendMessage("You need a knife and logs."); return true; }
   C.begin(player, 3, C.ANIM.SET, () => {
     if ([...traps.values()].some(t => t.base.getLocation().equals(object.getLocation()) && t.base.getPrivateArea() === object.getPrivateArea()) || traps.has(player) || !permitted(player) || !C.hasTool(player, I.KNIFE) || !C.exchange(player, logs, [])) return;

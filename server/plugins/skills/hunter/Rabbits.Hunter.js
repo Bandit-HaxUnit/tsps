@@ -1,7 +1,7 @@
 "use strict";
 
-const C = require("./Context"), { H } = C;
-const Traps = require("./Traps");
+const C = require("./Context.Hunter"), { H } = C;
+const Traps = require("./Traps.Hunter");
 const holes = new Map();
 const runs = new Set();
 // RuneLite SpotanimID.HUNTING_RABBIT_TRAVEL, validated against rev237.

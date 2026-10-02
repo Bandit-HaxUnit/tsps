@@ -1,6 +1,6 @@
 "use strict";
 
-const { H, ANIM, level, requireLevel, hasTool, nearby, roll, exchange, drop, xp, begin } = require("./Context");
+const { H, ANIM, level, requireLevel, hasTool, nearby, roll, exchange, drop, xp, begin } = require("./Context.Hunter");
 const ATTRIBUTE = "hunter.birdhouses";
 const DURATION = 50 * 60 * 1000;
 const bases = new Map();
@@ -127,7 +127,7 @@ function loot(player, state) {
   const I = H.core.ItemIdentifiers;
   const result = [[I.CLOCKWORK, 1], [I.RAW_BIRD_MEAT, 10], [I.FEATHER, roll(30, 100)]];
   const hunter = level(player);
-  if (Math.random() < require("./Context").probability(0, 200, Math.min(99, hunter))) result.push([I.BIRD_NEST_4, 1]);
+  if (Math.random() < require("./Context.Hunter").probability(0, 200, Math.min(99, hunter))) result.push([I.BIRD_NEST_4, 1]);
   const chance = [0.1, 0.125, 0.128, 0.13, 0.14, 0.15, 0.16, 0.17, 0.175][state.tier]
     * 3 * (hunter <= 50 ? 0.5 : 0.5 + (hunter - 50) / 98);
   let clueGiven = false;
@@ -137,10 +137,10 @@ function loot(player, state) {
     if (!clueGiven) {
       let clue = null;
       for (const [tier, numerator] of [["ELITE",1],["HARD",2],["MEDIUM",3],["EASY",4],["BEGINNER",30]]) {
-        if (!require("./Context").ownsClue(player,tier) && roll(1,1500) <= numerator) { clue = tier; break; }
+        if (!require("./Context.Hunter").ownsClue(player,tier) && roll(1,1500) <= numerator) { clue = tier; break; }
       }
       if (clue) {
-        const boxes = require("./Context").questComplete(player,"x_marks_the_spot");
+        const boxes = require("./Context.Hunter").questComplete(player,"x_marks_the_spot");
         result.push([I[`${boxes ? "SCROLL_BOX" : "CLUE_NEST"}_${clue}_`],1]);
         if (boxes) drop(player,[[I.BIRD_NEST_6,1]],player.getLocation());
         clueGiven = true; continue;

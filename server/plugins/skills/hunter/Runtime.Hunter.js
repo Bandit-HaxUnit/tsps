@@ -1,24 +1,24 @@
 "use strict";
 
-const C = require("./Context");
+const C = require("./Context.Hunter");
 const { H } = C;
-const Traps = require("./Traps");
-const Catching = require("./Catching");
-const Birdhouses = require("./Birdhouses");
-const Tracking = require("./Tracking");
-const Pitfalls = require("./Pitfalls");
-const Aerial = require("./Aerial");
-const MagicBoxes = require("./MagicBoxes");
-const Rabbits = require("./Rabbits");
-const Herbiboar = require("./Herbiboar");
-const Crabs = require("./Crabs");
-const DriftNets = require("./DriftNets");
-const Dungeon = require("./Dungeon");
-const Broavs = require("./Broavs");
+const Traps = require("./Traps.Hunter");
+const Catching = require("./Catching.Hunter");
+const Birdhouses = require("./Birdhouses.Hunter");
+const Tracking = require("./Tracking.Hunter");
+const Pitfalls = require("./Pitfalls.Hunter");
+const Aerial = require("./Aerial.Hunter");
+const MagicBoxes = require("./MagicBoxes.Hunter");
+const Rabbits = require("./Rabbits.Hunter");
+const Herbiboar = require("./Herbiboar.Hunter");
+const Crabs = require("./Crabs.Hunter");
+const DriftNets = require("./DriftNets.Hunter");
+const Dungeon = require("./Dungeon.Hunter");
+const Broavs = require("./Broavs.Hunter");
 let task;
 
 function start(api) {
-  H.api = api; H.core = api.core; H.data = require("./Data").build(api.core); H.tick = 0;
+  H.api = api; H.core = api.core; H.data = require("./Data.Hunter").build(api.core); H.tick = 0;
   Birdhouses.initialize(); Tracking.initialize(); Crabs.initialize(); DriftNets.initialize();
   class HunterTask extends H.core.Task { execute() { tick(); } }
   task = new HunterTask(1);

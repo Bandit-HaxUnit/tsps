@@ -26,12 +26,12 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
   const { PluginManager } = require("../dist/plugins/PluginManager");
   await CachePipeline.initialize(require("node:path").resolve(__dirname, ".."));
   const core = PluginManager.getCoreApi(), I = core.ItemIdentifiers;
-  const C = require("../plugins/skills/hunter/Context"), { H } = C;
-  const Traps = require("../plugins/skills/hunter/Traps");
-  const Houses = require("../plugins/skills/hunter/Birdhouses");
-  const Tracking = require("../plugins/skills/hunter/Tracking");
-  const Catching = require("../plugins/skills/hunter/Catching");
-  const Runtime = require("../plugins/skills/hunter/Runtime");
+  const C = require("../plugins/skills/hunter/Context.Hunter"), { H } = C;
+  const Traps = require("../plugins/skills/hunter/Traps.Hunter");
+  const Houses = require("../plugins/skills/hunter/Birdhouses.Hunter");
+  const Tracking = require("../plugins/skills/hunter/Tracking.Hunter");
+  const Catching = require("../plugins/skills/hunter/Catching.Hunter");
+  const Runtime = require("../plugins/skills/hunter/Runtime.Hunter");
   const originalChoose = C.choose;
   let startup;
   const hooks = [];
@@ -200,11 +200,11 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
     p.counts.set(I.LUCKY_IMPLING_JAR, 1);
     Catching.loot({ player: p, itemId: I.LUCKY_IMPLING_JAR });
     assert.equal(p.counts.has(I.LUCKY_IMPLING_JAR), false, "Lucky jars produce a clue-table reward without another plugin");
-    const Crabs = require("../plugins/skills/hunter/Crabs"), Drift = require("../plugins/skills/hunter/DriftNets");
-    const Herbi = require("../plugins/skills/hunter/Herbiboar"), Dungeon = require("../plugins/skills/hunter/Dungeon");
-    const Broavs = require("../plugins/skills/hunter/Broavs"), Rumours = require("../plugins/skills/hunter/Rumours");
-    const Rabbits = require("../plugins/skills/hunter/Rabbits"), Aerial = require("../plugins/skills/hunter/Aerial");
-    const Pitfalls = require("../plugins/skills/hunter/Pitfalls");
+    const Crabs = require("../plugins/skills/hunter/Crabs.Hunter"), Drift = require("../plugins/skills/hunter/DriftNets.Hunter");
+    const Herbi = require("../plugins/skills/hunter/Herbiboar.Hunter"), Dungeon = require("../plugins/skills/hunter/Dungeon.Hunter");
+    const Broavs = require("../plugins/skills/hunter/Broavs.Hunter"), Rumours = require("../plugins/skills/hunter/Rumours.Hunter");
+    const Rabbits = require("../plugins/skills/hunter/Rabbits.Hunter"), Aerial = require("../plugins/skills/hunter/Aerial.Hunter");
+    const Pitfalls = require("../plugins/skills/hunter/Pitfalls.Hunter");
     const successEvents=[];
     api.emitCustomEvent=(name,event)=>{if(name==='hunter:success'){successEvents.push(event);Rumours.success(event);}};
     const spawned=[];
@@ -410,7 +410,7 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
 
     const route = { npcId: core.NpcIdentifiers.FISHING_SPOT_12, definition: { getActions: () => ["Catch"] }, clickType: 1, range: 1 };
     Runtime.npcRoute(route); assert.equal(route.range, 9);
-    const MagicBoxes = require("../plugins/skills/hunter/MagicBoxes");
+    const MagicBoxes = require("../plugins/skills/hunter/MagicBoxes.Hunter");
     p.counts.clear(); p.counts.set(I.IMP_IN_A_BOX_2_, 1); p.counts.set(I.COINS, 500);
     let transferred = 0;
     H.core.Bank = { ...core.Bank, deposit(player, id, slot, amount) { player.getInventory().deleteNumber(id, amount); transferred += amount; } };

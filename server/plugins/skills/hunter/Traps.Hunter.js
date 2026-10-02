@@ -1,6 +1,6 @@
 "use strict";
 
-const C = require("./Context");
+const C = require("./Context.Hunter");
 const { H, ANIM, level, requireLevel, hasTool, distance, nearby, active, available, roll, rewardItems,
   exchange, drop, xp, chance, begin, hide, removeObject, questComplete } = C;
 

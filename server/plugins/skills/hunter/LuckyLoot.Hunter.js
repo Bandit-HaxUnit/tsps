@@ -1,5 +1,5 @@
 "use strict";
-const { H, roll: quantity } = require("./Context");
+const { H, roll: quantity } = require("./Context.Hunter");
 const tables = require("./LuckyLoot.json");
 // Wiki reward-casket per-roll tables; Lucky never rolls mimic/tertiary rewards.
 function roll() {
