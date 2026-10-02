@@ -92,6 +92,9 @@ const FLOOR_BASE = { x: 3936, y: 5157 };
 const FLOOR_MIN = { x: 3926, y: 5157 };
 const FLOOR_VOID = { x: 3936, y: 5130 };
 const CRYSTAL_SPOT = { x: 3936, y: 5154, z: Z };
+// The crystal stands over the void where the Warden was; it's used from the floor's south
+// edge (y 5157, walkable from x 3932 to 3940), as no route reaches its tile.
+const CRYSTAL_EDGE = { minX: 3932, maxX: 3940, y: 5157 };
 const PHANTOM_SPOTS = [{ x: 3943, y: 5153, z: Z }, { x: 3925, y: 5153, z: Z }];
 const ZEBAK_LAUNCH = { x: 3941, y: 5159 };
 const KEPHRI_LAUNCH = { x: 3928, y: 5156 };
@@ -1613,6 +1616,14 @@ function wardenAttackRules(event) {
   }
 }
 
+/** Walk to the edge of the floor nearest the crystal rather than to its unreachable tile. */
+function routeToCrystal(event) {
+  if (event.objectId !== Shared.core().ObjectIdentifiers.TELEPORT_CRYSTAL_3) return;
+  if (!(roomOfPlayer(event.player) instanceof WardensFinalRoom)) return;
+  const x = Math.min(CRYSTAL_EDGE.maxX, Math.max(CRYSTAL_EDGE.minX, event.player.getLocation().getX()));
+  event.destination = { x, y: CRYSTAL_EDGE.y, z: Z };
+}
+
 module.exports = function registerWardens(api) {
   Shared.bind(api);
   Raid.registerRoom("WARDENS_P1", WardensRoom);
@@ -1621,6 +1632,7 @@ module.exports = function registerWardens(api) {
   api.onNpcHitModify(filterWardenDamage);
   api.onNpcBeforeDeath(wardenDowned);
   api.onCanAttack(wardenAttackRules);
+  api.onObjectRoute(routeToCrystal);
   registerWardenCombat(api);
 };
 
