@@ -196,3 +196,23 @@ test("Tumeken's shadow: its own spell, the x3 (x4 in the tombs) passive and char
   staff.setMetaValue(Items.SHADOW_CHARGES_KEY, 5);
   assert.equal(method.canAttack(player, { isPlayer: () => true }), false, 'not against players');
 });
+
+test('floor decorations block only with blockWalk 1, so the Scabaras pressure plates are walkable', () => {
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { GameObject } = require('../dist/game/entity/impl/object/GameObject');
+  const { ObjectManager } = require('../dist/game/entity/impl/object/ObjectManager');
+  const { PrivateArea } = require('../dist/game/model/areas/impl/PrivateArea');
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { Location } = require('../dist/game/model/Location');
+  CachePipeline.initialize();
+  RegionManager.init();
+  const FLOOR_DECORATION = 0x40000;
+  const area = new PrivateArea([]);
+  // 45351 (a sum puzzle pressure plate) is interactive, but its blockWalk is 0.
+  ObjectManager.register(new GameObject(45351, new Location(3541, 5285, 0), 22, 1, area), true);
+  assert.equal(RegionManager.getClipping(3541, 5285, 0, area) & FLOOR_DECORATION, 0, 'a plate is walked on');
+  // One with blockWalk 1 still blocks (154, Rocks).
+  assert.equal(ObjectDefinition.forId(154).clipType, 1);
+  ObjectManager.register(new GameObject(154, new Location(3542, 5285, 0), 22, 0, area), true);
+  assert.equal(RegionManager.getClipping(3542, 5285, 0, area) & FLOOR_DECORATION, FLOOR_DECORATION);
+});
