@@ -61,6 +61,7 @@ The OSRS Wiki and the cache weren't reachable while this was written (see *Unver
 - **Wardens phase three floor:** collapsed rows push players back onto the remaining floor rather than becoming unwalkable.
 - **The pet:** rolls at 1/20 of the unique rate. This is an approximation.
 - **Logout and failure:** logging out leaves the raid with no rejoin, and a failed raid keeps your items.
+- **Restart recovery:** logging in inside the tombs without an active raid returns you to the lobby. The raid exit also returns stranded players to the lobby.
 - **Scoreboard:** the burial chamber scoreboard (44942) isn't implemented.
 
 ## Unverified
@@ -72,6 +73,17 @@ The game cache (`archive.openrs2.org`) and the OSRS Wiki were blocked by the net
 - animation, graphic and sound ids, all taken from Near-Reality.
 
 ## Verification
+
+Developer accounts can use `::toaskippuzzle` inside any of the four pre-boss puzzle rooms.
+It completes that room for the party, removes its remaining NPCs, and opens the normal
+route to the boss. Use the room exit afterward. It also works before starting the puzzle.
+The command uses normal completion, including puzzle points and revival; it does not
+complete bosses or work in the lobby or Nexus. Repeating it does not award points again.
+
+`::toaskipboss` is also Developer-only. It completes the current boss encounter for the
+party, removes remaining enemies, and preserves Osmumten and the normal route onward.
+At the Wardens it first advances to the final phase; use it again after arriving to finish
+the raid and unlock the normal reward route. Completion points and rewards still apply.
 
 Run `npx tsc --noEmit -p tsconfig.json` in `server`, then load the plugins. With `TS_NODE_TRANSPILE_ONLY=1`, a `node -r ts-node/register` script that calls `PluginManager.loadFromDirectory()` should list `TombsOfAmascut` among the loaded plugins.
 

@@ -23,5 +23,6 @@ module.exports = {
     require("./toa/Wardens.TombsOfAmascut")(api);
     require("./toa/Rewards.TombsOfAmascut")(api);
     require("./toa/Items.TombsOfAmascut")(api);
+    require("./toa/Commands.TombsOfAmascut")(api);
   },
 };
