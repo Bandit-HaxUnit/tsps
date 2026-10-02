@@ -64,6 +64,7 @@ import { LoginOverlay } from "../ui/devoverlay/LoginOverlay";
 import { OverheadPrayerOverlay } from "../ui/devoverlay/OverheadPrayerOverlay";
 import { OverheadTextOverlay } from "../ui/devoverlay/OverheadTextOverlay";
 import { TutorialHintOverlay } from "../ui/devoverlay/TutorialHintOverlay";
+import { SystemUpdateOverlay } from "../ui/devoverlay/SystemUpdateOverlay";
 import {
     HealthBarEntry,
     HitsplatEntry,
@@ -489,6 +490,7 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     public readonly interactHighlightDrawTargets: InteractHighlightDrawTarget[] = [];
     public loginOverlay?: LoginOverlay;
     public loadingMessageOverlay?: LoadingMessageOverlay;
+    public systemUpdateOverlay?: SystemUpdateOverlay;
     public objectIdOverlay?: any;
     public walkableOverlay?: any;
     public widgetsOverlay?: WidgetsOverlay;

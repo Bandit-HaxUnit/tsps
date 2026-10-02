@@ -1144,7 +1144,8 @@ module.exports = {
       Server.setUpdating(true);
       for (const p of World.getPlayers()) {
         if (p) {
-          p.getPacketSender().sendSystemUpdate(ticks);
+          // The system update packet carries whole seconds (tick = 600ms).
+          p.getPacketSender().sendSystemUpdate(Math.round(ticks * 0.6));
         }
       }
       TaskManager.submit(

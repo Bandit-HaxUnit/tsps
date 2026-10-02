@@ -116,6 +116,7 @@ export const state = {
     lastServerPath: undefined as { x: number; y: number }[] | undefined,
     animDebugProvider: null as (() => any) | null,
     lastSmithingState: createDefaultSmithingState(),
+    lastSystemUpdate: undefined as { remainingCentis: number; receivedAtMs: number } | undefined,
     combatStateStore: new CombatStateStore(),
     pending: new Map<number, PathCallback>(),
     tickListeners: new Set<(tick: number, time: number) => void>(),
@@ -176,6 +177,7 @@ export const state = {
     chatMessageListeners: new Set<(msg: ChatMessageEvent) => void>(),
     friendsChatListeners: new Set<(snapshot: FriendsChatSnapshot) => void>(),
     notificationListeners: new Set<(event: NotificationEvent) => void>(),
+    systemUpdateListeners: new Set<(info: { remainingCentis: number }) => void>(),
     groundItemListeners: new Set<(payload: GroundItemsServerPayload) => void>(),
     playerSyncListeners: new Set<(frame: PlayerSyncFrame) => void>(),
     disconnectListeners: new Set<

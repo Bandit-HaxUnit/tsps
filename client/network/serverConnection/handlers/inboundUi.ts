@@ -282,5 +282,19 @@ export function handleInboundUi(msg: any): boolean {
         for (const cb of state.notificationListeners) cb(payload);
         return true;
     }
+    if (msg.type === "system_update") {
+        const payload = msg.payload as { remainingCentis?: number } | undefined;
+        const raw = Number(payload?.remainingCentis);
+        const remainingCentis = Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
+        state.lastSystemUpdate = { remainingCentis, receivedAtMs: Date.now() };
+        for (const cb of state.systemUpdateListeners) {
+            try {
+                cb({ remainingCentis });
+            } catch (err) {
+                console.warn("system update listener error", err);
+            }
+        }
+        return true;
+    }
     return false;
 }
