@@ -26,6 +26,7 @@ let RUNE_ESSENCE_MINE;
 let ABYSS_INNER_RING;
 
 const RUNE_MYSTERIES_STAGE_ATTRIBUTE = "quest.rune_mysteries.stage";
+const POUCHES_ATTRIBUTE = "runecrafting:pouches";
 const RUNE_MYSTERIES_COMPLETE_STAGE = 6;
 const ABYSS_OBSTACLE_XP = 25;
 const ABYSS_SKULL_SECONDS = 10 * 60;
@@ -207,7 +208,7 @@ function requestTeleport(player, destination) {
 }
 
 function ensurePouchArray(player) {
-  const existing = player.getPouches?.();
+  const existing = player.getAttribute(POUCHES_ATTRIBUTE);
   const containers = Array.isArray(existing) ? existing : [];
 
   const byItemId = new Map();
@@ -233,7 +234,7 @@ function ensurePouchArray(player) {
     });
   }
 
-  player.setPouches?.(normalized);
+  player.setAttribute(POUCHES_ATTRIBUTE, normalized);
   return normalized;
 }
 

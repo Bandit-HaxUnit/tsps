@@ -265,7 +265,6 @@ function fakePlayer(name = 'Tester') {
     setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => p.inventory,
     getEquipment: () => p.equipment,
-    getCurrentPet: () => null,
     getBanks: () => [],
     resetAttributes() { p.resets++; },
     sendMessage: (message) => p.messages.push(message),

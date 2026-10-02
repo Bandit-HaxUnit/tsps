@@ -696,7 +696,7 @@ export class World {
 
         // Keep the owner's active pet in their local NPC list even when normal candidate
         // scans are noisy, to avoid a "spawned but invisible" pet.
-        const currentPet = player.getCurrentPet?.();
+        const currentPet = player.getAttribute("pets:current") as NPC | undefined;
         if (currentPet != null && currentPet.isRegistered() && currentPet.isVisible()) {
             if (currentPet.getPrivateArea() !== player.getPrivateArea()) {
                 currentPet.setArea(player.getArea());

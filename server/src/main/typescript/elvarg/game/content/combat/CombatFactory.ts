@@ -95,6 +95,9 @@ const isDeveloperQueuedAttackSpec = (entity: Mobile): entity is Player => {
 
 export class CombatFactory {
     private static readonly RANDOM = new RandomGen();
+    public static readonly RECOIL_DAMAGE_ATTRIBUTE = "ring-of-recoil:damage";
+    public static readonly CRYSTAL_BOW_SHOTS_ATTRIBUTE = "crystal-bow:shots-in-stage";
+    public static readonly CRYSTAL_BOW_ITEM_ATTRIBUTE = "crystal-bow:tracked-item";
     /**
      * The default melee combat method.
      */
@@ -1018,17 +1021,18 @@ export class CombatFactory {
         let returnDmg = Math.floor(Math.random() * 3) + 1 === 2 ? 0 : (damage * RECOIL_DMG_MULTIPLIER) + 1;
 
         // Increase recoil damage for a player.
-        player.setRecoilDamage(player.getRecoilDamage() + returnDmg);
+        const recoilDamage = Number(player.getAttribute(CombatFactory.RECOIL_DAMAGE_ATTRIBUTE) ?? 0) + returnDmg;
+        player.setAttribute(CombatFactory.RECOIL_DAMAGE_ATTRIBUTE, recoilDamage);
 
         // Deal damage back to attacker
         attacker.getCombat().getHitQueue().addPendingDamage([new HitDamage(returnDmg, HitMask.RED)]);
 
         // Degrading ring of recoil for a player.
-        if (player.getRecoilDamage() >= 40) {
+        if (recoilDamage >= 40) {
             player.getEquipment().set(Equipment.RING_SLOT, new Item(-1));
             player.getEquipment().refreshItems();
             player.sendMessage("Your ring of recoil has degraded.");
-            player.setRecoilDamage(0);
+            player.setAttribute(CombatFactory.RECOIL_DAMAGE_ATTRIBUTE, 0);
         }
     }
 
@@ -1346,12 +1350,9 @@ export class CombatFactory {
             if (!isChargedCrystalBow(weaponId)) {
                 return;
             }
-            if (player.getCrystalBowTrackedStageItemId() !== weaponId) {
-                player.setCrystalBowTrackedStageItemId(weaponId);
-                player.setCrystalBowShotsInStage(0);
-            }
-
-            let shotsInStage = Number(player.getCrystalBowShotsInStage() ?? 0);
+            let shotsInStage = player.getAttribute(CombatFactory.CRYSTAL_BOW_ITEM_ATTRIBUTE) === weaponId
+                ? Number(player.getAttribute(CombatFactory.CRYSTAL_BOW_SHOTS_ATTRIBUTE) ?? 0)
+                : 0;
             let currentWeaponId = weaponId;
             for (let shot = 0; shot < amount; shot++) {
                 shotsInStage += 1;
@@ -1367,8 +1368,8 @@ export class CombatFactory {
                 weaponItem.setId(nextWeaponId);
             }
 
-            player.setCrystalBowTrackedStageItemId(currentWeaponId);
-            player.setCrystalBowShotsInStage(shotsInStage);
+            player.setAttribute(CombatFactory.CRYSTAL_BOW_ITEM_ATTRIBUTE, currentWeaponId);
+            player.setAttribute(CombatFactory.CRYSTAL_BOW_SHOTS_ATTRIBUTE, shotsInStage);
             player.getEquipment().refreshItems();
             BonusManager.update(player);
             player.getUpdateFlag().flag(Flag.APPEARANCE);

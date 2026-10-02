@@ -628,7 +628,7 @@ export class PacketSender {
     this.player.setEnteredAmountAction?.(null);
     this.player.setEnteredSyntaxAction?.(null);
     this.player.getDialogueManager?.()?.reset?.();
-    this.player.setDestroyItem?.(-1);
+    this.player.setAttribute?.("destroy-item:pending", -1);
     this.player.setInterfaceId?.(-1);
     this.player.setCreationMenu?.(null);
     this.player.setSearchingBank?.(false);
