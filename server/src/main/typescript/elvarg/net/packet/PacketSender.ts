@@ -32,6 +32,7 @@ import {
   encodeSkillsDelta,
   encodeSkillsSnapshot,
   encodeSound,
+  encodeSystemUpdate,
   encodeVarbit,
   encodeVarp,
   encodeWidgetClose,
@@ -133,11 +134,8 @@ export class PacketSender {
     return this;
   }
 
-  sendSystemUpdate(time: number): this {
-    const out = new PacketBuilder(114);
-    const byteOrder = ByteOrder.LITTLE;
-    out.putShorts(time, byteOrder);
-    this.player.getSession().write(out);
+  sendSystemUpdate(remainingSeconds: number): this {
+    if (this.player.getSession().sendClientPacket(encodeSystemUpdate(remainingSeconds))) return this;
     return this;
   }
 

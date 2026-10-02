@@ -1371,6 +1371,13 @@ export function encodeRunEnergy(percent: number, running: boolean): Buffer {
   return encodeServerPacket(ServerPacketId.RUN_ENERGY, Buffer.from([Math.max(0, Math.min(100, percent)), running ? 1 : 0]));
 }
 
+/** Remaining shutdown countdown in whole seconds (0 clears the client's countdown HUD). */
+export function encodeSystemUpdate(remainingSeconds: number): Buffer {
+  const payload = Buffer.alloc(4);
+  payload.writeUInt32BE(Math.max(0, Math.floor(remainingSeconds)) >>> 0);
+  return encodeServerPacket(ServerPacketId.SYSTEM_UPDATE, payload);
+}
+
 export function encodeDestination(x: number, y: number): Buffer {
   const payload = Buffer.alloc(4);
   payload.writeUInt16BE(x & 0xffff);

@@ -173,6 +173,19 @@ export function subscribeNotifications(cb: (event: NotificationEvent) => void): 
     return () => state.notificationListeners.delete(cb);
 }
 
+export function subscribeSystemUpdate(
+    cb: (info: { remainingSeconds: number }) => void,
+): () => void {
+    state.systemUpdateListeners.add(cb);
+    const last = state.lastSystemUpdate;
+    if (last && last.remainingSeconds > 0) {
+        try {
+            cb({ remainingSeconds: last.remainingSeconds });
+        } catch {}
+    }
+    return () => state.systemUpdateListeners.delete(cb);
+}
+
 /**
  * Emit a client-side chat message (for testing purposes).
  * This triggers all chat message listeners as if a message came from the server.

@@ -1963,6 +1963,18 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             }
         }
 
+        // ========================================
+        // SYSTEM
+        // ========================================
+
+        case ServerPacketId.SYSTEM_UPDATE:
+            return {
+                type: "system_update",
+                payload: {
+                    remainingSeconds: reader.readInt() >>> 0,
+                },
+            };
+
         default:
             console.warn(`Unknown server packet opcode: ${opcode}`);
             return null;
@@ -1983,11 +1995,25 @@ export function isBinaryPacket(data: ArrayBuffer | string): boolean {
 }
 
 /**
+ * Result of decoding a batched server message.
+ */
+export interface BatchDecodeResult {
+    messages: DecodedServerMessage[];
+    /**
+     * True when the stream could not be consumed cleanly (unknown opcode or
+     * truncated packet). The caller must resync (reconnect) - continuing to
+     * consume the socket in this state keeps every later batch corrupt.
+     */
+    stalled: boolean;
+}
+
+/**
  * Decode multiple batched packets from a single ArrayBuffer
  * Server may concatenate multiple packets into one message for efficiency
  */
-export function decodeBatchedServerPackets(data: Uint8Array | ArrayBuffer): DecodedServerMessage[] {
+export function decodeBatchedServerPackets(data: Uint8Array | ArrayBuffer): BatchDecodeResult {
     const messages: DecodedServerMessage[] = [];
+    let stalled = false;
     const buffer = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
     let offset = 0;
 
@@ -2002,17 +2028,26 @@ export function decodeBatchedServerPackets(data: Uint8Array | ArrayBuffer): Deco
         let headerSize: number;
 
         if (fixedLength === undefined) {
-            // Unknown opcode - can't continue parsing
-            console.warn(`[batch] Unknown opcode ${opcode} at offset ${offset}`);
+            // Unknown opcode - the client/server packet tables are out of sync
+            // (or the stream is corrupt). Continuing would desync everything
+            // after this point, so stop and let the caller resync.
+            console.warn(`[batch] Unknown opcode ${opcode} at offset ${offset}; stalling stream`);
+            stalled = true;
             break;
         } else if (fixedLength === -1) {
             // Variable byte length
-            if (remaining < 2) break;
+            if (remaining < 2) {
+                stalled = true;
+                break;
+            }
             packetLength = buffer[offset + 1];
             headerSize = 2;
         } else if (fixedLength === -2) {
             // Variable short length
-            if (remaining < 3) break;
+            if (remaining < 3) {
+                stalled = true;
+                break;
+            }
             packetLength = (buffer[offset + 1] << 8) | buffer[offset + 2];
             headerSize = 3;
         } else {
@@ -2024,8 +2059,9 @@ export function decodeBatchedServerPackets(data: Uint8Array | ArrayBuffer): Deco
         const totalPacketSize = headerSize + packetLength;
         if (remaining < totalPacketSize) {
             console.warn(
-                `[batch] Incomplete packet at offset ${offset}, need ${totalPacketSize}, have ${remaining}`,
+                `[batch] Incomplete packet at offset ${offset}, need ${totalPacketSize}, have ${remaining}; stalling stream`,
             );
+            stalled = true;
             break;
         }
 
@@ -2039,7 +2075,7 @@ export function decodeBatchedServerPackets(data: Uint8Array | ArrayBuffer): Deco
         offset += totalPacketSize;
     }
 
-    return messages;
+    return { messages, stalled };
 }
 
 /**

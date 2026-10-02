@@ -138,11 +138,11 @@ export class Server {
   }
 
   private static async gracefulShutdown(
-    signal: NodeJS.Signals,
+    reason: string,
     mode: "exit" | "restart" = "exit"
   ): Promise<void> {
     if (Server.shuttingDown) {
-      console.info(`[shutdown] ${signal} ignored: shutdown already in progress`);
+      console.info(`[shutdown] ${reason} ignored: shutdown already in progress`);
       return;
     }
     Server.shuttingDown = true;
@@ -150,7 +150,7 @@ export class Server {
     try {
       const onlinePlayers = World.getPlayers().sizeReturn();
       console.info(
-        `[shutdown] ${signal} received. Persisting ${onlinePlayers} online players...`
+        `[shutdown] ${reason} received. Persisting ${onlinePlayers} online players...`
       );
       PluginManager.emitServerShutdown({ timestamp: Date.now() });
       World.savePlayers();
@@ -243,6 +243,11 @@ export class Server {
 
   public static setUpdating(isUpdating: boolean) {
     Server.updating = isUpdating;
+  }
+
+  /** Trigger the graceful shutdown sequence (persist players, then exit the process). */
+  public static shutdown(reason: string = "shutdown"): void {
+    void Server.gracefulShutdown(reason, "exit");
   }
 
   public static getFlooder() {
