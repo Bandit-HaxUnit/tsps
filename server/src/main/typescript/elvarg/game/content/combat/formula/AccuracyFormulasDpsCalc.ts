@@ -232,6 +232,12 @@ export class AccuracyFormulasDpsCalc {
         if (traits?.defenceRollMultiplier !== undefined) {
             defRoll = Math.floor(defRoll * traits.defenceRollMultiplier);
         }
+        if (entity.isNpc()) {
+            attRoll = Math.floor(attRoll * entity.getAsNpc().getRollFactor());
+        }
+        if (enemy.isNpc()) {
+            defRoll = Math.floor(defRoll * enemy.getAsNpc().getRollFactor());
+        }
 
         return { attack: attRoll, defence: defRoll };
     }

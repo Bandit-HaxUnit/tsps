@@ -39,6 +39,7 @@ Engine additions this feature needed:
 These follow the wiki's *Tombs of Amascut* mechanics:
 
 - **NPC hitpoints:** base × (1 + 0.4% per raid level) × party factor × path-level factor. The party factor is +90% for each of players two and three, then +60% each. Results are rounded to 10 above 100, otherwise to 5.
+- **NPC accuracy and defence:** attack and defence rolls × (1 + raid level / 250), applied to the roll rather than the Defence level, so drains still bite.
 - **NPC damage:** the same raid-level and path-level factors, capped at 2.5×.
 - **Points:**
   - Everyone starts on 5,000 points, which are taken off again for the loot and the purple chance.
@@ -83,7 +84,6 @@ Each Tombs of Amascut NPC (11689-11804) has its block and death animations in `n
 ## Simplifications
 
 - **Tumeken's shadow:** it plays no cast or impact sound (the ids aren't known), and it refuses every player target rather than only those outside minigames. Accurate's invisible +3 Magic isn't applied.
-- **NPC defence:** not scaled by raid level; it comes from the shared definition.
 - **Apmeken:** the corruption special is disabled, as it is in Near-Reality.
 - **Wardens phase three floor:** collapsed rows push players back onto the remaining floor rather than becoming unwalkable.
 - **The pet:** the Wiki gives its formula but not its exact raid level scaling beyond thresholds at 400 and 550; it uses a third of the levels between them.
