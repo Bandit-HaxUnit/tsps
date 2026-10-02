@@ -7,14 +7,18 @@ const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
 const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
 const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
-
-let ObjectManager;
-let TaskManager;
+const { ObjectIdentifiers: O } = require("../../src/main/typescript/elvarg/util/ObjectIdentifiers");
 
 // OSRS: an opened door/gate that nobody interacts with reverts on its own after
 // 300 seconds (500 ticks @ 600ms/tick). Cross-checked against rsmod/OpenRune-Server
 // (DoorConstants.DURATION = 500) and a from-scratch OSRS-parity server (DOOR_AUTO_CLOSE_TICKS).
 const DOOR_AUTO_CLOSE_TICKS = 500;
+
+const DOOR_RESYNC_TICKS_ATTR = "doors:resyncTicks";
+
+// Always name locs by their ObjectIdentifiers property (O.DOOR_358), never a raw id: the
+// generated enum follows the cache, so ids stay right when it changes. Only locs the cache
+// leaves nameless have no property; those stay numeric, marked "nameless".
 
 // Single-door closed/open pairs are discovered from this server's own cache instead of a
 // hand-picked ID list: OSRS models every plain door as two consecutive loc ids where the
@@ -31,26 +35,21 @@ const DOOR_AUTO_CLOSE_TICKS = 500;
 // Closed = "Open" action; its open variant is a "Close" loc with the same models (usually id+1).
 // Not id+1 -> SINGLE_DOOR_OPEN_IDS. Two leaves -> DOUBLE_DOOR_ID_FAMILIES (+ SPECIAL_* maps when
 // the open ids are not closed+1). Same trick works for NPCs/items via C.getNpc / C.getItem.
-function hasAction(actions, keyword) {
-  return Array.isArray(actions) && actions.some((action) => typeof action === "string" && action.toLowerCase() === keyword);
-}
-
 const DOOR_NAMES = new Set([
   "Door", "Doors", "Large door", "Castle door", "Cell Door", "Cell door",
   "Glass door", "Magic door", "Metal door", "Mind Door", "Tent door",
   "Gate", "Metal gate", "Doorway",
 ]);
-let DOOR_CATALOG = null;
 
 // Doors with no open variant in the cache: OSRS opens them by rotating the same loc
 // (open id === closed id). Their consecutive ids are unrelated doors with the same
 // model, so the same-model pairing below must not pair them. Tutorial Island:
-// start house, chef entry/exit, quest guide, and the bank/prayer area doors. 15056: a single
+// start house, chef entry/exit, quest guide, and the bank/prayer area doors. DOOR_358: a single
 // door whose same-model "Close" locs (5245, 11617, 15205, 17115) all belong to other doors.
-const SELF_OPENING_DOOR_IDS = new Set([9398, 9709, 9710, 9716, 9721, 9722, 9723, 9724, 15056]);
+const SELF_OPENING_DOOR_IDS = new Set([O.DOOR_223, O.DOOR_225, O.DOOR_226, O.DOOR_227, O.DOOR_228, O.DOOR_229, O.DOOR_230, O.DOOR_231, O.DOOR_358]);
 
 // Single doors whose open variant is not closedId + 1 (e.g. Large door 1517 -> 1520, same models).
-const SINGLE_DOOR_OPEN_IDS = new Map([[1517, 1520]]);
+const SINGLE_DOOR_OPEN_IDS = new Map([[O.LARGE_DOOR_11, O.LARGE_DOOR_14]]);
 
 // OSRS wooden gates are two locs that pivot together around the hinge post: a hinge panel
 // and an extension panel. Opening/closing moves BOTH pieces, so the "closed id + 1 = open
@@ -69,17 +68,17 @@ function woodenGate(hinge, extension, openHinge, openExtension) {
 }
 
 const WOODEN_GATES = Object.freeze([
-  woodenGate(47, 48, 49, 50),
-  woodenGate(883, 23917, 23918, 23919),
-  woodenGate(1558, 1560, 1559, 1567),
-  woodenGate(1561, 1562, 1563, 1564),
-  woodenGate(4311, 4312, 4313, 4314),
-  woodenGate(8810, 8811, 8812, 8813),
-  woodenGate(12816, 12817, 12818, 12819),
-  woodenGate(12986, 12987, 12988, 12989),
-  woodenGate(15514, 15516, 15511, 15513),
-  woodenGate(44920, 44921, 44922, 44923),
-  woodenGate(60763, 60760, 60761, 60762),
+  woodenGate(O.GATE_4, O.GATE_5, O.GATE_6, O.GATE_7),
+  woodenGate(O.GATE_17, O.GATE_167, O.GATE_168, O.GATE_169),
+  woodenGate(O.GATE_18, O.GATE_20, O.GATE_19, O.GATE_25),
+  woodenGate(O.GATE_21, O.GATE_22, O.GATE_23, O.GATE_24),
+  woodenGate(O.GATE_78, O.GATE_79, O.GATE_80, 4314), // 4314 nameless
+  woodenGate(O.GATE_83, O.GATE_84, O.GATE_85, O.GATE_86),
+  woodenGate(O.GATE_113, O.GATE_114, O.GATE_115, 12819), // 12819 nameless
+  woodenGate(O.GATE_116, O.GATE_117, O.GATE_118, O.GATE_119),
+  woodenGate(O.GATE_140, O.GATE_142, O.GATE_137, O.GATE_139),
+  woodenGate(O.GATE_243, O.GATE_244, O.GATE_245, O.GATE_246),
+  woodenGate(O.GATE_322, O.GATE_319, O.GATE_320, O.GATE_321),
 ]);
 
 const WOODEN_GATE_BY_ID = new Map();
@@ -89,6 +88,119 @@ for (const gate of WOODEN_GATES) {
   }
 }
 
+const DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
+  // Large doors (model 633): 1511 opens to 1512, 1513 to 1516 (1514 is an unnamed loc).
+  Object.freeze([O.LARGE_DOOR_7, O.LARGE_DOOR_9, O.LARGE_DOOR_8, O.LARGE_DOOR_10]),
+  Object.freeze([O.LARGE_DOOR_10, O.LARGE_DOOR_13]),
+  Object.freeze([O.GATE_33, O.GATE_34, O.GATE_29, O.GATE_30]),
+  Object.freeze([O.DOOR_354, O.DOOR_355, O.DOOR_356, O.DOOR_357]),
+  Object.freeze([O.LARGE_DOOR_15, O.LARGE_DOOR_16, O.LARGE_DOOR_17, O.LARGE_DOOR_18]),
+  Object.freeze([O.DOOR_36, O.DOOR_37, 1553, 1554]), // 1553, 1554 nameless
+  Object.freeze([1557, O.GATE_18, O.GATE_19]), // 1557 nameless
+  Object.freeze([O.GATE_26, O.GATE_27, O.GATE_29, O.GATE_30]),
+  Object.freeze([O.DOORWAY_2, O.DOORWAY_3, O.DOORWAY_4]),
+  Object.freeze([1596, O.WALL_5, O.WALL_6]), // 1596 nameless
+  // Castle Wars large doors. West leaf is left: Saradomin 4423/4424 -> 4425/4426,
+  // Zamorak 4428/4427 (ids run east to west on that wall) -> 4430/4429.
+  Object.freeze([O.LARGE_DOOR_24, O.LARGE_DOOR_25, O.LARGE_DOOR_26, O.LARGE_DOOR_27]),
+  Object.freeze([O.LARGE_DOOR_28, O.LARGE_DOOR_29, O.LARGE_DOOR_30, O.LARGE_DOOR_31]),
+  Object.freeze([O.GATE_40, O.GATE_41, O.GATE_29, O.GATE_30]),
+  // Tutorial Island mining exit: same metal gate as 1727/1728 (9717 is the left leaf).
+  Object.freeze([O.GATE_92, O.GATE_93, O.GATE_29, O.GATE_30]),
+  // Tutorial Island rat cage: same metal gate, face 0 (9719 is the left/south leaf).
+  Object.freeze([O.GATE_94, O.GATE_95, O.GATE_29, O.GATE_30]),
+  // Large doors sharing model 639 with 1521/1524; they open into that family's 1522/1525.
+  Object.freeze([O.LARGE_DOOR_98, O.LARGE_DOOR_99, O.LARGE_DOOR_16, O.LARGE_DOOR_18]),
+]);
+const SPECIAL_DOUBLE_DOOR_LEFT_IDS = new Set([O.GATE_26, O.GATE_29, O.GATE_33, O.DOOR_354, O.DOOR_356, O.GATE_40, O.GATE_92, O.GATE_94, O.LARGE_DOOR_24, O.LARGE_DOOR_26, O.LARGE_DOOR_29, O.LARGE_DOOR_31, O.LARGE_DOOR_98, O.LARGE_DOOR_16, O.LARGE_DOOR_7, O.LARGE_DOOR_8]);
+const SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map([
+  [O.GATE_26, [O.GATE_27]],
+  [O.GATE_27, [O.GATE_26]],
+  [O.GATE_29, [O.GATE_30]],
+  [O.GATE_30, [O.GATE_29]],
+  [O.GATE_33, [O.GATE_34]],
+  [O.GATE_34, [O.GATE_33]],
+  [O.DOOR_354, [O.DOOR_355, O.DOOR_357]],
+  [O.DOOR_355, [O.DOOR_354, O.DOOR_356]],
+  [O.DOOR_356, [O.DOOR_355, O.DOOR_357]],
+  [O.DOOR_357, [O.DOOR_354, O.DOOR_356]],
+  [O.GATE_40, [O.GATE_41]],
+  [O.GATE_41, [O.GATE_40]],
+  [O.GATE_92, [O.GATE_93]],
+  [O.GATE_93, [O.GATE_92]],
+  [O.GATE_94, [O.GATE_95]],
+  [O.GATE_95, [O.GATE_94]],
+  [O.LARGE_DOOR_24, [O.LARGE_DOOR_25]],
+  [O.LARGE_DOOR_25, [O.LARGE_DOOR_24]],
+  [O.LARGE_DOOR_26, [O.LARGE_DOOR_27]],
+  [O.LARGE_DOOR_27, [O.LARGE_DOOR_26]],
+  [O.LARGE_DOOR_29, [O.LARGE_DOOR_28]],
+  [O.LARGE_DOOR_28, [O.LARGE_DOOR_29]],
+  [O.LARGE_DOOR_31, [O.LARGE_DOOR_30]],
+  [O.LARGE_DOOR_30, [O.LARGE_DOOR_31]],
+  [O.LARGE_DOOR_98, [O.LARGE_DOOR_99]],
+  [O.LARGE_DOOR_99, [O.LARGE_DOOR_98]],
+  [O.LARGE_DOOR_16, [O.LARGE_DOOR_18]],
+  [O.LARGE_DOOR_18, [O.LARGE_DOOR_16]],
+  [O.LARGE_DOOR_7, [O.LARGE_DOOR_9]],
+  [O.LARGE_DOOR_9, [O.LARGE_DOOR_7]],
+  [O.LARGE_DOOR_8, [O.LARGE_DOOR_10]],
+  [O.LARGE_DOOR_10, [O.LARGE_DOOR_8]],
+]);
+const SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
+  [O.GATE_26, O.GATE_29],
+  [O.GATE_27, O.GATE_30],
+  [O.GATE_33, O.GATE_29],
+  [O.GATE_34, O.GATE_30],
+  [O.DOOR_354, O.DOOR_356],
+  [O.DOOR_355, O.DOOR_357],
+  [O.GATE_40, O.GATE_29],
+  [O.GATE_41, O.GATE_30],
+  [O.GATE_92, O.GATE_29],
+  [O.GATE_93, O.GATE_30],
+  [O.GATE_94, O.GATE_29],
+  [O.GATE_95, O.GATE_30],
+  [O.LARGE_DOOR_24, O.LARGE_DOOR_26],
+  [O.LARGE_DOOR_25, O.LARGE_DOOR_27],
+  [O.LARGE_DOOR_29, O.LARGE_DOOR_31],
+  [O.LARGE_DOOR_28, O.LARGE_DOOR_30],
+  [O.LARGE_DOOR_98, O.LARGE_DOOR_16],
+  [O.LARGE_DOOR_99, O.LARGE_DOOR_18],
+  [O.LARGE_DOOR_7, O.LARGE_DOOR_8],
+  [O.LARGE_DOOR_9, O.LARGE_DOOR_10],
+]);
+const DOUBLE_DOOR_FAMILY_IDS_BY_ID = new Map(
+  DOUBLE_DOOR_ID_FAMILIES.flatMap((familyIds) =>
+    familyIds.map((id) => [id, familyIds])
+  )
+);
+
+const COORD_OFFSETS = Object.freeze([
+  [-1, 0],
+  [0, 1],
+  [1, 0],
+  [0, -1],
+]);
+
+const GATE_PARTNER_OFFSETS = Object.freeze([
+  [0, 1],
+  [0, -1],
+  [1, 0],
+  [-1, 0],
+  [-1, -1],
+  [-1, 1],
+  [1, -1],
+  [1, 1],
+]);
+
+let ObjectManager;
+let TaskManager;
+let DOOR_CATALOG = null;
+const OPEN_OBJECT_STATES = new Map();
+const RUNTIME_DOUBLE_DOOR_RECORDS = [];
+function hasAction(actions, keyword) {
+  return Array.isArray(actions) && actions.some((action) => typeof action === "string" && action.toLowerCase() === keyword);
+}
 function buildDoorCatalog() {
   const closedToOpen = new Map();
   const openToClosed = new Map();
@@ -147,104 +259,6 @@ function getDoorCatalog() {
   }
   return DOOR_CATALOG;
 }
-
-const OPEN_OBJECT_STATES = new Map();
-const DOOR_RESYNC_TICKS_ATTR = "doors:resyncTicks";
-const DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
-  // Large doors (model 633): 1511 opens to 1512, 1513 to 1516 (1514 is an unnamed loc).
-  Object.freeze([1511, 1513, 1512, 1516]),
-  Object.freeze([1516, 1519]),
-  Object.freeze([1727, 1728, 1571, 1572]),
-  Object.freeze([14751, 14752, 14753, 14754]),
-  Object.freeze([1521, 1522, 1524, 1525]),
-  Object.freeze([1551, 1552, 1553, 1554]),
-  Object.freeze([1557, 1558, 1559]),
-  Object.freeze([1568, 1569, 1571, 1572]),
-  Object.freeze([1589, 1590, 1591]),
-  Object.freeze([1596, 1597, 1598]),
-  // Castle Wars large doors. West leaf is left: Saradomin 4423/4424 -> 4425/4426,
-  // Zamorak 4428/4427 (ids run east to west on that wall) -> 4430/4429.
-  Object.freeze([4423, 4424, 4425, 4426]),
-  Object.freeze([4427, 4428, 4429, 4430]),
-  Object.freeze([2039, 2041, 1571, 1572]),
-  // Tutorial Island mining exit: same metal gate as 1727/1728 (9717 is the left leaf).
-  Object.freeze([9717, 9718, 1571, 1572]),
-  // Tutorial Island rat cage: same metal gate, face 0 (9719 is the left/south leaf).
-  Object.freeze([9719, 9720, 1571, 1572]),
-  // Large doors sharing model 639 with 1521/1524; they open into that family's 1522/1525.
-  Object.freeze([30387, 30388, 1522, 1525]),
-]);
-const SPECIAL_DOUBLE_DOOR_LEFT_IDS = new Set([1568, 1571, 1727, 14751, 14753, 2039, 9717, 9719, 4423, 4425, 4428, 4430, 30387, 1522, 1511, 1512]);
-const SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map([
-  [1568, [1569]],
-  [1569, [1568]],
-  [1571, [1572]],
-  [1572, [1571]],
-  [1727, [1728]],
-  [1728, [1727]],
-  [14751, [14752, 14754]],
-  [14752, [14751, 14753]],
-  [14753, [14752, 14754]],
-  [14754, [14751, 14753]],
-  [2039, [2041]],
-  [2041, [2039]],
-  [9717, [9718]],
-  [9718, [9717]],
-  [9719, [9720]],
-  [9720, [9719]],
-  [4423, [4424]],
-  [4424, [4423]],
-  [4425, [4426]],
-  [4426, [4425]],
-  [4428, [4427]],
-  [4427, [4428]],
-  [4430, [4429]],
-  [4429, [4430]],
-  [30387, [30388]],
-  [30388, [30387]],
-  [1522, [1525]],
-  [1525, [1522]],
-  [1511, [1513]],
-  [1513, [1511]],
-  [1512, [1516]],
-  [1516, [1512]],
-]);
-const SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
-  [1568, 1571],
-  [1569, 1572],
-  [1727, 1571],
-  [1728, 1572],
-  [14751, 14753],
-  [14752, 14754],
-  [2039, 1571],
-  [2041, 1572],
-  [9717, 1571],
-  [9718, 1572],
-  [9719, 1571],
-  [9720, 1572],
-  [4423, 4425],
-  [4424, 4426],
-  [4428, 4430],
-  [4427, 4429],
-  [30387, 1522],
-  [30388, 1525],
-  [1511, 1512],
-  [1513, 1516],
-]);
-const DOUBLE_DOOR_FAMILY_IDS_BY_ID = new Map(
-  DOUBLE_DOOR_ID_FAMILIES.flatMap((familyIds) =>
-    familyIds.map((id) => [id, familyIds])
-  )
-);
-
-const COORD_OFFSETS = Object.freeze([
-  [-1, 0],
-  [0, 1],
-  [1, 0],
-  [0, -1],
-]);
-
-const RUNTIME_DOUBLE_DOOR_RECORDS = [];
 
 function doorSound(id, open) {
   const gate = CacheDefinitions.getObject(id)?.name === "Gate";
@@ -444,18 +458,6 @@ function reapplyOpenDoorsForRegion(regionId) {
     }
   }
 }
-
-const GATE_PARTNER_OFFSETS = Object.freeze([
-  [0, 1],
-  [0, -1],
-  [1, 0],
-  [-1, 0],
-  [-1, -1],
-  [-1, 1],
-  [1, -1],
-  [1, 1],
-]);
-
 // OSRS swings a wooden gate 90 degrees around its hinge post, so both panels land on the
 // perpendicular tile line and face the same direction. Ported 1:1 from the original elvarg
 // gate state manager (computeGateHingeOpenTransform / computeGateHingeCloseTransform).
