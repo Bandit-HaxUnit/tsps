@@ -32,7 +32,7 @@ const BANANA_PEEL = 45755;
 
 const ANIMATION = {
   SPAWN: 9752, ATTACK: 9743, THROW_ROCK: 9744, FLY: 9748, THROW_BOULDERS: 9749, PLAYER_FLYBACK: 9799,
-  PIT_FALL: 4366, ROLL: 9518, SLIP: 4030, COLLISION: 7210, SLIDE: 1114, BABOON_SPAWN: 9753, BABOON_RANGED: 9745, BABOON_MELEE: 9742,
+  PIT_FALL: 4366, SLIP: 4030, COLLISION: 7210, SLIDE: 1114, BABOON_SPAWN: 9753, BABOON_RANGED: 9745, BABOON_MELEE: 9742,
 };
 const GRAPHIC = {
   SHADOW_END: 1103, SHADOW_SLOW: 1447, SHADOW_FAST: 2111, SHADOW_RING: 1446, RUBBLE_FALL: 2250, ROCK_IMPACT: 1463,
@@ -635,7 +635,9 @@ class BaBaRoom extends Raid.Room {
         this.despawn(boulder);
         continue;
       }
-      boulder.performAnimation(new Animation(ANIMATION.ROLL));
+      // No animate here: the boulder's own idle and walk animation is the roll (9518), and
+      // restarting it every tick held the boulder still on the client (the sequence blocks
+      // movement while it plays), however far it moved on the server.
       Shared.walkStraight(boulder, next);
     }
   }
