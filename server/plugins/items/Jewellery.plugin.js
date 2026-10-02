@@ -7,6 +7,7 @@ const { Wilderness } = require("../../src/main/typescript/elvarg/game/content/wi
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { Flag } = require("../../src/main/typescript/elvarg/game/model/Flag");
 const { JEWELLERY, DEFAULT_WILDERNESS_LEVEL } = require("./jewellery/teleportJewellery");
+const QuestRuntime = require("../quests/QuestRuntime");
 
 /** Item param holding a worn item's first equipment option (RuneLite: OC_ITEM_OP1). */
 const WORN_OPTION_PARAM = 451;
@@ -15,6 +16,8 @@ const FIRST_WORN_OPTION_CLICK = 2;
 /** The chatbox prompt shows at most five options; longer lists page on the last one. */
 const PROMPT_PAGE_SIZE = 5;
 const CHARGE_COLOUR = "7F00FF";
+const FOUNTAIN_OF_RUNE_CHARGES = 6;
+const FOUNTAIN_OF_HEROES_CHARGES = 4;
 
 /**
  * itemId -> { piece, charges }. Eternal pieces have Infinity charges; uncharged
@@ -253,12 +256,59 @@ function handleJewelleryAction(event) {
   }
 }
 
+function questComplete(player, name) {
+  return QuestRuntime.getRegisteredQuests().find((quest) => quest.name === name)?.isComplete(player) ?? false;
+}
+
+/**
+ * Using jewellery on the Fountain of Rune (6 charges) or the Fountain of Heroes
+ * (glory only, 4 charges) recharges every applicable piece carried or worn at once.
+ */
+function rechargeAtFountain(event) {
+  const { player } = event;
+  const { ObjectIdentifiers, ItemIdentifiers } = pluginApi.core;
+  const rune = [ObjectIdentifiers.FOUNTAIN_OF_RUNE, ObjectIdentifiers.FOUNTAIN_OF_RUNE_2].includes(event.objectId);
+  const heroes = [ObjectIdentifiers.FOUNTAIN_OF_HEROES, ObjectIdentifiers.FOUNTAIN_OF_HEROES_2].includes(event.objectId);
+  const used = JEWELLERY_BY_ITEM.get(event.itemId);
+  if ((!rune && !heroes) || !used?.piece.recharge || used.charges === Infinity) return;
+  const fits = (piece) => piece.recharge && (rune || piece.recharge.heroes) && questComplete(player, piece.recharge.quest);
+  event.handled = true;
+  if (!fits(used.piece)) {
+    player.sendMessage("Nothing interesting happens.");
+    return;
+  }
+  const target = rune ? FOUNTAIN_OF_RUNE_CHARGES : FOUNTAIN_OF_HEROES_CHARGES;
+  let eternal = false;
+  for (const container of [player.getInventory(), player.getEquipment()]) {
+    for (const item of container.getItems()) {
+      const entry = item ? JEWELLERY_BY_ITEM.get(item.getId()) : null;
+      if (!entry || entry.charges === Infinity || entry.charges >= target || !fits(entry.piece)) continue;
+      const chance = rune ? entry.piece.recharge.eternalChance : 0;
+      if (chance && Math.random() < 1 / chance) {
+        item.setId(ItemIdentifiers.AMULET_OF_ETERNAL_GLORY);
+        eternal = true;
+      } else {
+        item.setId(entry.piece.charged.find(([, charges]) => charges === target)[0]);
+      }
+    }
+    container.refreshItems();
+  }
+  BonusManager.update(player);
+  player.getUpdateFlag().flag(Flag.APPEARANCE);
+  player.sendMessage(
+    eternal
+      ? "The power of the fountain is transferred into an amulet of eternal glory. It will now have unlimited charges."
+      : "You feel a power emanating from the fountain as it recharges your jewellery."
+  );
+}
+
 module.exports = {
   name: "Jewellery",
   register(api) {
     pluginApi = api;
     BonusManager = api.getBonusManager();
     api.onItemAction(handleJewelleryAction);
+    api.onItemOnObject(rechargeAtFountain, { noted: false });
   },
   _test: { JEWELLERY_BY_ITEM, chargeMessage, nextItemId, useCharge },
 };
