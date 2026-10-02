@@ -725,6 +725,14 @@ export class MovementQueue {
         }
         const nowMs = Date.now();
 
+        // A pet waits out its owner's death and catches up once they respawn.
+        const npcCharacter = this.character.isNpc() ? this.character.getAsNpc() : null;
+        if (npcCharacter?.isPet() && npcCharacter.getOwner() === following && following.isRegistered()
+            && (following.getHitpoints() <= 0 || following.getAsPlayer()?.isDyingReturn?.() === true)) {
+            this.reset();
+            return;
+        }
+
         if (
             following === this.character ||
             !following.isRegistered() ||
