@@ -674,6 +674,16 @@ function jumpPlatform(event) {
   return true;
 }
 
+/**
+ * "Hit" is an attack: walk only into the weapon's reach (with line of sight) before striking,
+ * as for Attack, rather than up to the obelisk. Melee still walks to it.
+ */
+function routeToObelisk(event) {
+  if (event.npc?.__toaObelisk === undefined || !scabarasRoom(event.player)) return;
+  const { CombatFactory } = Shared.core();
+  event.range = Math.max(1, CombatFactory.getMethod(event.player)?.attackDistance?.(event.player) ?? 1);
+}
+
 function attackObelisk(event) {
   const npc = event.npc;
   if (npc?.__toaObelisk === undefined) return false;
@@ -692,6 +702,7 @@ module.exports = function registerScabarasPuzzle(api) {
   Shared.onObject(api, "Platform", jumpPlatform);
   api.onObjectRoute(routeToShortcut);
   api.onNpcInteraction("<col=00ffff>Obelisk</col>", { Hit: attackObelisk });
+  api.onNpcRoute(routeToObelisk);
   api.onNpcHitModify(hitObelisk);
   api.onPlayerDealtDamage(struckObelisk);
   api.onCanAttack(canHitObelisk);
