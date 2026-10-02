@@ -300,6 +300,8 @@ export class Ammunition {
 
     public static readonly BOLT_RACK = new Ammunition(4740, null, 27, 55)
     public static readonly CRYSTAL_BOW = new Ammunition(ItemIdentifiers.CRYSTAL_BOW_FULL, null, CRYSTAL_BOW_PROJECTILE_ID, 0)
+    // The Gauntlet's crystal and corrupted bows: no ammunition, the strength is on the bow.
+    public static readonly GAUNTLET_BOW = new Ammunition(ItemIdentifiers.CRYSTAL_BOW_BASIC_, null, CRYSTAL_BOW_PROJECTILE_ID, 0)
     // Self-ammo weapons: the item generates its own projectile and is not loaded
     // from the ammo slot. Projectile ids are travel spotanims (RuneLite SpotanimID).
     // Craw's/Webweaver shots are the yellow-orange aura arrow (crystal-bow-style glow).
@@ -415,6 +417,7 @@ export class RangedWeaponType {
     static get BLOWPIPE() { const FT: any = getFightType(); return new RangedWeaponType(5, 7, FT?.BLOWPIPE_LONGRANGE ?? null); }
     static get SHORTBOW() { const FT: any = getFightType(); return new RangedWeaponType(7, 9, FT?.SHORTBOW_LONGRANGE ?? null); }
     static get CRYSTAL_BOW() { const FT: any = getFightType(); return new RangedWeaponType(10, 10, FT?.SHORTBOW_LONGRANGE ?? null); }
+    static get GAUNTLET_BOW() { const FT: any = getFightType(); return new RangedWeaponType(10, 10, FT?.LONGBOW_LONGRANGE ?? null); }
     static get CROSSBOW() { const FT: any = getFightType(); return new RangedWeaponType(7, 9, FT?.CROSSBOW_LONGRANGE ?? null); }
     static get BALLISTA() { const FT: any = getFightType(); return new RangedWeaponType(7, 9, FT?.BALLISTA_LONGRANGE ?? null); }
 
@@ -451,6 +454,10 @@ export class RangedWeapon {
     public static readonly MAGIC_LONGBOW = new RangedWeapon([859], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW], RangedWeaponType.LONGBOW)
     public static readonly MAGIC_SHORTBOW = new RangedWeapon([861, ItemIdentifiers.MAGIC_SHORTBOW_I_, ItemIdentifiers.MAGIC_SHORTBOW_3], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW], RangedWeaponType.SHORTBOW)
     public static readonly CRYSTAL_BOW = new RangedWeapon(CRYSTAL_BOW_ALL_WEAPON_IDS, [Ammunition.CRYSTAL_BOW], RangedWeaponType.CRYSTAL_BOW)
+    public static readonly GAUNTLET_BOW = new RangedWeapon([
+        ItemIdentifiers.CRYSTAL_BOW_BASIC_, ItemIdentifiers.CRYSTAL_BOW_ATTUNED_, ItemIdentifiers.CRYSTAL_BOW_PERFECTED_,
+        ItemIdentifiers.CORRUPTED_BOW_BASIC_, ItemIdentifiers.CORRUPTED_BOW_ATTUNED_, ItemIdentifiers.CORRUPTED_BOW_PERFECTED_,
+    ], [Ammunition.GAUNTLET_BOW], RangedWeaponType.GAUNTLET_BOW)
     public static readonly GODBOW = new RangedWeapon([19143, 19149, 19146], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.BROAD_ARROW, Ammunition.DRAGON_ARROW], RangedWeaponType.SHORTBOW)
     public static readonly ZARYTE_BOW = new RangedWeapon([20171], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.BROAD_ARROW, Ammunition.DRAGON_ARROW], RangedWeaponType.SHORTBOW)
     public static readonly WEBWEAVER_BOW = new RangedWeapon([ItemIdentifiers.WEBWEAVER_BOW, ItemIdentifiers.WEBWEAVER_BOW_2], [Ammunition.WEBWEAVER_BOW], RangedWeaponType.SHORTBOW)
