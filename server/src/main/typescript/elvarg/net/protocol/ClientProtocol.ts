@@ -1383,6 +1383,10 @@ export function encodeSkillsDelta(skills: SkillView[], totalLevel: number, comba
   return encodeSkills(ServerPacketId.SKILLS_DELTA, skills, totalLevel, combatLevel);
 }
 
+export function encodeChatFilterSettings(publicMode: number, privateMode: number, tradeMode: number): Buffer {
+  return encodeServerPacket(ServerPacketId.CHAT_FILTER_SETTINGS, Buffer.from([publicMode & 0xff, privateMode & 0xff, tradeMode & 0xff]));
+}
+
 export function encodeRunEnergy(percent: number, running: boolean): Buffer {
   return encodeServerPacket(ServerPacketId.RUN_ENERGY, Buffer.from([Math.max(0, Math.min(100, percent)), running ? 1 : 0]));
 }

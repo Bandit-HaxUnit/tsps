@@ -1128,6 +1128,16 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             return { type: "friends_chat", payload: { channel, friends, ignores } };
         }
 
+        case ServerPacketId.CHAT_FILTER_SETTINGS:
+            return {
+                type: "chat_filter_settings",
+                payload: {
+                    publicMode: reader.readByte(),
+                    privateMode: reader.readByte(),
+                    tradeMode: reader.readByte(),
+                },
+            };
+
         case ServerPacketId.SOUND: {
             const soundId = reader.readShort();
             const hasPosition = reader.readBoolean();
