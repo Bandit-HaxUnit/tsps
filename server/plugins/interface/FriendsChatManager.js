@@ -18,6 +18,8 @@ const FriendsChatRank = {
 const MAX_CHANNEL_MEMBERS = 500;
 const KICK_BAN_MS = 60 * 60 * 1000;
 const FRIENDS_CHAT_MESSAGE_TYPE = 9;
+/** [public, private, trade] chat filter modes, saved so they survive a relog. */
+const CHAT_FILTERS_ATTRIBUTE = "chat.filters";
 const FRIENDS_CHAT_NOTIFICATION_TYPE = 11;
 const MAIN_MODAL_TARGET_UID = (161 << 16) | 16;
 const SOCIAL_TAB_TARGET_UID = (161 << 16) | 85;
@@ -103,6 +105,9 @@ class FriendsChatManager {
     static offlinePlayerIds = new Set();
     static onLogin(player) {
         this.offlinePlayerIds.delete(player.getIndex());
+        const filters = player.getAttribute(CHAT_FILTERS_ATTRIBUTE);
+        if (Array.isArray(filters) && filters.length === 3)
+            player.getRelations().setChatModes(filters[0], filters[1], filters[2]);
         player.getRelations().onLogin(player);
         this.refreshOwnedChannel(player);
         this.sendSnapshot(player);
@@ -163,6 +168,8 @@ class FriendsChatManager {
     }
     static setChatFilters(player, publicMode, privateMode, tradeMode) {
         player.getRelations().setChatModes(publicMode, privateMode, tradeMode);
+        const relations = player.getRelations();
+        player.setAttribute(CHAT_FILTERS_ATTRIBUTE, [relations.getPublicChatMode(), relations.getStatus(), relations.getTradeChatMode()]);
         this.sendSnapshot(player);
         this.refreshFriendWatchers(player.getLongUsername(), player);
     }
@@ -652,4 +659,4 @@ class FriendsChatManager {
     }
 }
 
-module.exports = { FriendsChatManager };
+module.exports = { FriendsChatManager, CHAT_FILTERS_ATTRIBUTE };

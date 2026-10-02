@@ -28,6 +28,8 @@ let ABYSS_INNER_RING;
 const RUNE_MYSTERIES_STAGE_ATTRIBUTE = "quest.rune_mysteries.stage";
 const RUNE_MYSTERIES_COMPLETE_STAGE = 6;
 const ABYSS_OBSTACLE_XP = 25;
+const RIFT_GUARDIAN_BASE = 1795758;
+const BLOOD_RIFT_GUARDIAN_BASE = 804984;
 const ABYSS_TELEPORT_STEP = "o8m7y6";
 const ESSENCE_TELEPORT_STEPS = new Set(["ILlRUH", "SvUvek"]);
 
@@ -384,7 +386,14 @@ function handleCraftRunes(event) {
     player
       .getSkillManager()
       .addExperiences(Skill.RUNECRAFTING, craftedEssence * runeData.xp);
-    pluginApi.emitCustomEvent("runecrafting:success", { player, skill: Skill.RUNECRAFTING });
+    // The rift guardian rolls per essence (Wiki).
+    pluginApi.emitCustomEvent("runecrafting:success", {
+      player,
+      skill: Skill.RUNECRAFTING,
+      petBase: runeData.runeId === ItemIdentifiers.BLOOD_RUNE ? BLOOD_RIFT_GUARDIAN_BASE : RIFT_GUARDIAN_BASE,
+      rolls: craftedEssence,
+      runeId: runeData.runeId,
+    });
   }
 
   event.handled = true;

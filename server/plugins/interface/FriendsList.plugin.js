@@ -1,8 +1,9 @@
-const { FriendsChatManager } = require("./FriendsChatManager");
+const { FriendsChatManager, CHAT_FILTERS_ATTRIBUTE } = require("./FriendsChatManager");
 
 module.exports = {
   name: "FriendsList",
   register(api) {
+    api.persistAttribute(CHAT_FILTERS_ATTRIBUTE);
     api.onCanAttack((event) => {
       if (event.allow !== null) return;
       const { attacker, target } = event;

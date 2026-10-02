@@ -124,6 +124,8 @@ function completeLap(player, course) {
     player.sendMessage(`Your ${course.name} lap count is: <col=ff0000>${laps[course.key]}</col>.`);
   }
   pluginApi.emitCustomEvent("agility:lap", { player, course: course.key, laps: laps[course.key] });
+  // The giant squirrel rolls once per completed course.
+  pluginApi.emitCustomEvent("agility:success", { player, skill: Skill.AGILITY, petBase: course.petBase });
 }
 
 /** Grace's Toggle Counter: turns the lap count message off or back on. Guessed messages. */

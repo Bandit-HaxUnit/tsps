@@ -24,12 +24,17 @@
  *
  * Gaps (no dump/index support): the sapphire-lantern / light-creature travel to
  * the chasm and the water-bowl minigame interface + timer are not reproduced
- * (collection is a plain accumulate-then-settle); the seven-day cooldown and the
- * reminder toggle are not modelled; the tear streams do not drift, a wall click
+ * (collection is a plain accumulate-then-settle); the reminder toggle is not
+ * modelled; the tear streams do not drift, a wall click
  * always yields a blue tear and green only drains through the bowl on a green
  * tears object; Temple of Ikov does not track the Lucien choice, so both Lucien
  * story conditions answer false; Juna's post-quest minigame words are not on the
  * transcript page, so the default "starting-off" variant plays.
+ *
+ * A game (https://oldschool.runescape.wiki/w/Tears_of_Guthix_(minigame)) starts with
+ * the first tear caught: once every seven days, and only after a quest point or
+ * 100,000 total XP since the last game (the first game is free). It lasts one tick
+ * per quest point; the refusal messages are not on the Wiki and are ours.
  */
 module.exports = function registerTearsOfGuthixQuest(api) {
   const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
@@ -74,6 +79,13 @@ module.exports = function registerTearsOfGuthixQuest(api) {
   const START_HOOK = "quest:tears-of-guthix:start";
   const COMPLETE_ACTION_ID = "BitWHU";
   const TEARS_ATTRIBUTE = "quest.tears_of_guthix.tears";
+  /** { at, questPoints, totalXp } of the last game. */
+  const LAST_GAME_ATTRIBUTE = "quest.tears_of_guthix.last_game";
+  /** When the current game's time runs out (ms); not saved. */
+  const GAME_ENDS_ATTRIBUTE = "quest.tears_of_guthix.game_ends";
+  const GAME_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+  const GAME_XP_SINCE_LAST = 100000;
+  const TICK_MS = 600;
 
   const HAZEEL_SIDE_ATTRIBUTE = "quest.hazeel_cult.side";
   const SIDE_CARNILLEAN = 0;
@@ -300,6 +312,38 @@ module.exports = function registerTearsOfGuthixQuest(api) {
     startTranscript(api, event.player, JUNA_NPC_ID, PAGE, "starting-off-using-the-magic-stone-on-juna");
   }
 
+  /** Starts a game if none is running; false (with a message) when Juna won't allow one. */
+  function inGame(player) {
+    const endsAt = Number(player.getAttribute(GAME_ENDS_ATTRIBUTE)) || 0;
+    if (endsAt > Date.now()) return true;
+    if (endsAt > 0) {
+      endGame(player);
+      return false;
+    }
+    const last = player.getAttribute(LAST_GAME_ATTRIBUTE);
+    const totalXp = player.getSkillManager().getTotalExp();
+    if (last && typeof last === "object") {
+      const waitMs = (Number(last.at) || 0) + GAME_COOLDOWN_MS - Date.now();
+      if (waitMs > 0) {
+        const days = Math.ceil(waitMs / (24 * 60 * 60 * 1000));
+        player.sendMessage(`You must wait ${days} more day${days === 1 ? "" : "s"} before you can collect the tears again.`);
+        return false;
+      }
+      if (questPoints(player) <= (Number(last.questPoints) || 0) && totalXp - (Number(last.totalXp) || 0) < GAME_XP_SINCE_LAST) {
+        player.sendMessage("You need another quest point or 100,000 more experience before you can collect the tears again.");
+        return false;
+      }
+    }
+    player.setAttribute(LAST_GAME_ATTRIBUTE, { at: Date.now(), questPoints: questPoints(player), totalXp });
+    player.setAttribute(GAME_ENDS_ATTRIBUTE, Date.now() + questPoints(player) * TICK_MS);
+    return true;
+  }
+
+  function endGame(player) {
+    player.sendMessage("Your time in the cave is up.");
+    settleTears(player);
+  }
+
   function addTears(player, amount) {
     setAttr(player, TEARS_ATTRIBUTE, Math.max(0, attr(player, TEARS_ATTRIBUTE) + amount));
   }
@@ -312,6 +356,7 @@ module.exports = function registerTearsOfGuthixQuest(api) {
       player.sendMessage("You need Juna's blessing before you can collect the tears.");
       return;
     }
+    if (!inGame(player)) return;
     addTears(player, 1);
     player.sendMessage("You catch a blue tear.");
   }
@@ -328,6 +373,7 @@ module.exports = function registerTearsOfGuthixQuest(api) {
       player.sendMessage("You need Juna's blessing before you can collect the tears.");
       return;
     }
+    if (!inGame(player)) return;
     if (green) {
       const drained = attr(player, TEARS_ATTRIBUTE) > 0;
       addTears(player, -1);
@@ -362,6 +408,7 @@ module.exports = function registerTearsOfGuthixQuest(api) {
 
   /** Convert banked tears into XP in the player's weakest skill. */
   function settleTears(player) {
+    player.setAttribute(GAME_ENDS_ATTRIBUTE, 0);
     const points = attr(player, TEARS_ATTRIBUTE);
     if (points <= 0) {
       setAttr(player, TEARS_ATTRIBUTE, 0);
@@ -392,6 +439,7 @@ module.exports = function registerTearsOfGuthixQuest(api) {
   }
 
   api.persistAttribute(TEARS_ATTRIBUTE);
+  api.persistAttribute(LAST_GAME_ATTRIBUTE);
 
   quest = registerQuest(api, {
     key: "tears_of_guthix",

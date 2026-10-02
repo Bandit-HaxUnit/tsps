@@ -84,9 +84,18 @@ function drop(player, items, location, area = player.getPrivateArea()) {
   }
 }
 
+/** Only chinchompas roll the baby chinchompa (Wiki base chances). */
+function chinchompaPetBase(npcId) {
+  const N = H.core.NpcIdentifiers;
+  if (npcId === N.CHINCHOMPA) return 131395;
+  if (npcId === N.CARNIVOROUS_CHINCHOMPA) return 98373;
+  if (npcId === N.BLACK_CHINCHOMPA) return 82758;
+  return undefined;
+}
+
 function xp(player, amount, method, npcId) {
   player.getSkillManager().addExperiences(H.core.Skill.HUNTER, amount);
-  H.api.emitCustomEvent("hunter:success", { player, skill: H.core.Skill.HUNTER, method, npcId, xp: amount });
+  H.api.emitCustomEvent("hunter:success", { player, skill: H.core.Skill.HUNTER, method, npcId, xp: amount, petBase: chinchompaPetBase(npcId) });
 }
 
 function chance(player, creature, bonus = 0) {

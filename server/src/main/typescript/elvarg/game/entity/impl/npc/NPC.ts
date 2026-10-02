@@ -96,6 +96,8 @@ export class NPC extends Mobile {
     private movementCoordinator: NPCMovementCoordinator = new NPCMovementCoordinator(this);
     private hitpoints: number;
     private maxHitpointsOverride = -1;
+    /** Multiplies this NPC's attack and defence rolls (raid scaling); 1 leaves them alone. */
+    private rollFactor = 1;
     private spawnPosition: Location;
     private headIcon = -1;
     private isDying: boolean;
@@ -317,6 +319,15 @@ export class NPC extends Mobile {
     }
 
     /** Scales this one NPC's full health, e.g. by raid level or party size; -1 restores the definition's. */
+    public getRollFactor(): number {
+        return this.rollFactor;
+    }
+
+    public setRollFactor(factor: number): NPC {
+        this.rollFactor = Number.isFinite(factor) && factor > 0 ? factor : 1;
+        return this;
+    }
+
     public setMaxHitpoints(maxHitpoints: number): NPC {
         this.maxHitpointsOverride = Math.trunc(maxHitpoints);
         return this;

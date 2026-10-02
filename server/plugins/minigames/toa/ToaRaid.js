@@ -646,6 +646,8 @@ class Raid {
     hitpoints = Math.max(1, hitpoints);
     npc.setMaxHitpoints(hitpoints);
     npc.setHitpoints(hitpoints);
+    // Wiki: accuracy and the defence roll also rise 2% per 5 raid levels (base x (1 + level / 250)).
+    npc.setRollFactor(1 + this.settings.raidLevel / 250);
   }
 
   // ---------------------------------------------------------------- rooms

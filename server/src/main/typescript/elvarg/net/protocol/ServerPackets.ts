@@ -86,6 +86,7 @@ export const enum ServerPacketId {
     // ========================================
     CHAT_MESSAGE = 120,
     FRIENDS_CHAT_UPDATE = 121,
+    CHAT_FILTER_SETTINGS = 122,
 
     // ========================================
     // WORLD UPDATES (130-149)
@@ -215,6 +216,7 @@ export const SERVER_PACKET_LENGTHS: Record<ServerPacketId, number> = {
 
     [ServerPacketId.CHAT_MESSAGE]: -2, // var-short: tutorial/quest game messages exceed 255 bytes
     [ServerPacketId.FRIENDS_CHAT_UPDATE]: -2,
+    [ServerPacketId.CHAT_FILTER_SETTINGS]: 3, // public(1) + private(1) + trade(1)
 
     [ServerPacketId.LOC_CHANGE]: -1,
     [ServerPacketId.LOC_ADD_CHANGE]: -1,

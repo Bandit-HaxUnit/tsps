@@ -59,7 +59,7 @@ const TREES = [
     action: "Chop down",
     requiredLevel: 1,
     xpReward: 25,
-    logId: ItemIds.LOGS,
+    logId: ItemIds.LOGS, petBase: 317647,
     objectIds: [
       ObjectIds.EVERGREEN_TREE,
       ObjectIds.EVERGREEN_TREE_2,
@@ -107,7 +107,7 @@ const TREES = [
     action: "Chop",
     requiredLevel: 1,
     xpReward: 25,
-    logId: ItemIds.ACHEY_TREE_LOGS,
+    logId: ItemIds.ACHEY_TREE_LOGS, petBase: 317647,
     objectIds: [ObjectIds.ACHEY_TREE],
     cycles: 13,
     respawnTicks: 9,
@@ -119,7 +119,7 @@ const TREES = [
     action: "Chop down",
     requiredLevel: 15,
     xpReward: 38,
-    logId: ItemIds.OAK_LOGS,
+    logId: ItemIds.OAK_LOGS, petBase: 361146,
     objectIds: [
       ObjectIds.ARCTIC_PINE_TREE,
       ObjectIds.OAK_TREE, ObjectIds.OAK_TREE_2, ObjectIds.OAK_TREE_3, ObjectIds.OAK_TREE_4,
@@ -138,7 +138,7 @@ const TREES = [
     action: "Chop down",
     requiredLevel: 30,
     xpReward: 68,
-    logId: ItemIds.WILLOW_LOGS,
+    logId: ItemIds.WILLOW_LOGS, petBase: 289286,
     objectIds: [
       ObjectIds.WILLOW_TREE, ObjectIds.WILLOW_TREE_2, ObjectIds.WILLOW_TREE_3, ObjectIds.WILLOW_TREE_4,
       ObjectIds.WILLOW_TREE_5, ObjectIds.WILLOW_TREE_6, ObjectIds.WILLOW_TREE_7, ObjectIds.WILLOW_TREE_8,
@@ -155,7 +155,7 @@ const TREES = [
     action: "Chop down",
     requiredLevel: 35,
     xpReward: 85,
-    logId: ItemIds.TEAK_LOGS,
+    logId: ItemIds.TEAK_LOGS, petBase: 264336,
     objectIds: [
       ObjectIds.TEAK_TREE, ObjectIds.TEAK_TREE_2, ObjectIds.TEAK_TREE_3, ObjectIds.TEAK_TREE_4,
       ObjectIds.TEAK_TREE_5, ObjectIds.TEAK_TREE_6, ObjectIds.TEAK_TREE_7, ObjectIds.TEAK_TREE_8,
@@ -184,7 +184,7 @@ const TREES = [
     action: "Chop down",
     requiredLevel: 45,
     xpReward: 100,
-    logId: ItemIds.MAPLE_LOGS,
+    logId: ItemIds.MAPLE_LOGS, petBase: 221918,
     objectIds: [
       ObjectIds.MAPLE_TREE, ObjectIds.MAPLE_TREE_2, ObjectIds.MAPLE_TREE_3, ObjectIds.MAPLE_TREE_4,
       ObjectIds.MAPLE_TREE_5, ObjectIds.MAPLE_TREE_6, ObjectIds.MAPLE_TREE_7, ObjectIds.MAPLE_TREE_8,
@@ -202,7 +202,7 @@ const TREES = [
     action: "Chop down",
     requiredLevel: 50,
     xpReward: 125,
-    logId: ItemIds.MAHOGANY_LOGS,
+    logId: ItemIds.MAHOGANY_LOGS, petBase: 220623,
     objectIds: [
       ObjectIds.MAHOGANY_TREE, ObjectIds.MAHOGANY_TREE_2, ObjectIds.MAHOGANY_TREE_3, ObjectIds.MAHOGANY_TREE_4,
       ObjectIds.MAHOGANY_TREE_5, ObjectIds.MAHOGANY_TREE_6, ObjectIds.MAHOGANY_TREE_7, ObjectIds.MAHOGANY_TREE_8,
@@ -219,7 +219,7 @@ const TREES = [
     action: "Chop down",
     requiredLevel: 60,
     xpReward: 175,
-    logId: ItemIds.YEW_LOGS,
+    logId: ItemIds.YEW_LOGS, petBase: 145013,
     objectIds: [
       ObjectIds.YEW_TREE, ObjectIds.YEW_TREE_2, ObjectIds.YEW_TREE_3, ObjectIds.YEW_TREE_4,
       ObjectIds.YEW_TREE_5, ObjectIds.YEW_TREE_6, ObjectIds.YEW_TREE_7, ObjectIds.YEW_TREE_8,
@@ -237,7 +237,7 @@ const TREES = [
     action: "Chop down",
     requiredLevel: 75,
     xpReward: 250,
-    logId: ItemIds.MAGIC_LOGS,
+    logId: ItemIds.MAGIC_LOGS, petBase: 72321,
     objectIds: [
       ObjectIds.MAGIC_TREE, ObjectIds.MAGIC_TREE_2, ObjectIds.MAGIC_TREE_3, ObjectIds.MAGIC_TREE_4,
       ObjectIds.MAGIC_TREE_5, ObjectIds.MAGIC_TREE_6, ObjectIds.MAGIC_TREE_7, ObjectIds.MAGIC_TREE_8,
@@ -255,7 +255,7 @@ const TREES = [
     action: "Cut",
     requiredLevel: 90,
     xpReward: 380,
-    logId: ItemIds.REDWOOD_LOGS,
+    logId: ItemIds.REDWOOD_LOGS, petBase: 72321,
     objectIds: [
       ObjectIds.REDWOOD_TREE, ObjectIds.REDWOOD_TREE_2, ObjectIds.REDWOOD_TREE_3, ObjectIds.REDWOOD_TREE_4,
       ObjectIds.REDWOOD_TREE_5, ObjectIds.REDWOOD_TREE_6, ObjectIds.REDWOOD_TREE_7, ObjectIds.REDWOOD_TREE_8,
@@ -299,9 +299,9 @@ const TREES_BY_NAME = new Map(TREES.flatMap((tree) => tree.objectNames.map((name
 // Farmed sailing hardwoods use the same axe/action machinery as existing trees.
 // ponytail: these use this plugin's existing approximate axe/cycle model; exact forestry timers need a separate woodcutting update.
 const FARMED_HARDWOODS = [
-  { name: "camphor", requiredLevel: 66, xpReward: 143.5, logId: ItemIds.CAMPHOR_LOGS, cycles: 19, respawnTicks: 150, multi: true },
-  { name: "ironwood", requiredLevel: 80, xpReward: 175, logId: ItemIds.IRONWOOD_LOGS, cycles: 21, respawnTicks: 150, multi: true },
-  { name: "rosewood", requiredLevel: 92, xpReward: 212.5, logId: ItemIds.ROSEWOOD_LOGS, cycles: 23, respawnTicks: 150, multi: true },
+  { name: "camphor", requiredLevel: 66, xpReward: 143.5, logId: ItemIds.CAMPHOR_LOGS, petBase: 145013, cycles: 19, respawnTicks: 150, multi: true },
+  { name: "ironwood", requiredLevel: 80, xpReward: 175, logId: ItemIds.IRONWOOD_LOGS, petBase: 72321, cycles: 21, respawnTicks: 150, multi: true },
+  { name: "rosewood", requiredLevel: 92, xpReward: 212.5, logId: ItemIds.ROSEWOOD_LOGS, petBase: 72321, cycles: 23, respawnTicks: 150, multi: true },
 ];
 
 
@@ -660,7 +660,11 @@ function processWoodcuttingTick(activeSessions, currentTick) {
       player.getInventory().adds(state.tree.logId, 1);
       player.sendMessage("You get some logs.");
       player.getSkillManager().addExperiences(Skill.WOODCUTTING, state.tree.xpReward);
-      pluginApi.emitCustomEvent("woodcutting:success", { player, skill: Skill.WOODCUTTING });
+      pluginApi.emitCustomEvent("woodcutting:success", {
+        player,
+        skill: Skill.WOODCUTTING,
+        petBase: state.tree.petBase,
+      });
       maybeDropBirdNest(player);
     }
 

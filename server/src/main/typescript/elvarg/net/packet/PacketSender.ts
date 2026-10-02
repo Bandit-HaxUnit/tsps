@@ -31,6 +31,7 @@ import {
   encodePlaySong,
   encodeProjectiles,
   encodeRunClientScript,
+  encodeChatFilterSettings,
   encodeRunEnergy,
   encodeSkillsDelta,
   encodeSkillsSnapshot,
@@ -244,9 +245,7 @@ export class PacketSender {
     privateChat: number,
     tradeChat: number
   ): this {
-    const out = new PacketBuilder(206);
-    out.put(publicChat).put(privateChat).put(tradeChat);
-    this.player.getSession().write(out);
+    this.player.getSession().sendClientPacket(encodeChatFilterSettings(publicChat, privateChat, tradeChat));
     return this;
   }
 
