@@ -85,6 +85,12 @@ const HUD = {
   fadeComponents: [5, 8, 6, 7, 9, 11, 13, 14, 15, 20, 18, 19, 16, 17].map((child) => (303 << 16) | child),
   fadeInFrom: 255,
   fadeOutFrom: 0,
+  /**
+   * 2887 (via 2888) returns at once if told to start from the transparency the HUD already has,
+   * and a finished fade-out leaves it at 255. So showing it starts from 254: the script then
+   * shows its parts (2103) and fades them in.
+   */
+  showFadeFrom: 254,
   /** hpbar_hud:hp, hidden once the HUD has faded (OpenRune hides it 2 ticks after the fade-out). */
   hp: (303 << 16) | 5,
   hideAfterFadeTicks: 2,
@@ -334,14 +340,13 @@ function showHud(player) {
   const sender = player.getPacketSender();
   sender.sendInterfaceDisplayState(HUD.hp, false);
   // Fade the bar back in: an earlier fade-out (leaving, or the last crab burrowing) left its
-  // parts transparent, and the open script doesn't reset that (OpenRune fades in on open too).
-  fadeHud(player, true);
+  // parts at 255, and the open script doesn't reset that.
+  fadeHud(player, true, HUD.showFadeFrom);
   sender.sendInterfaceScript(HUD.openScript, HUD.components);
 }
 
-function fadeHud(player, fadeIn) {
-  player.getPacketSender().sendInterfaceScript(fadeIn ? HUD.fadeInScript : HUD.fadeOutScript,
-    [...HUD.fadeComponents, fadeIn ? HUD.fadeInFrom : HUD.fadeOutFrom]);
+function fadeHud(player, fadeIn, from = fadeIn ? HUD.fadeInFrom : HUD.fadeOutFrom) {
+  player.getPacketSender().sendInterfaceScript(fadeIn ? HUD.fadeInScript : HUD.fadeOutScript, [...HUD.fadeComponents, from]);
 }
 
 /** The mine whose players see the HUD: the crab's, until it fades after the crab burrows. */
