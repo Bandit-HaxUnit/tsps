@@ -1214,6 +1214,8 @@ class WardensFinalRoom extends WardenRoomBase {
     const { Animation } = Shared.core();
     const warden = this.warden;
     this.skullAttack = true;
+    // Everyone stops attacking the Warden, free to strike the siphons at once (Near-Reality).
+    for (const player of this.challengePlayers()) Shared.skipAttackDelay(player);
     if (!this.insanity) this.floorRotation = 0;
     warden.setUntargetable(true);
     warden.performAnimation(new Animation(ANIMATION.SKULL_SEND));
@@ -1637,6 +1639,14 @@ function wardenAttackRules(event) {
   }
 }
 
+/** A melee hit on a siphon costs no attack delay: the next one can be struck at once (Near-Reality). */
+function struckSiphon(event) {
+  const { player, target, hit } = event;
+  if (!target?.__toaSiphon || !finalRoom(target)) return;
+  if (hit?.getCombatType?.() !== Shared.core().CombatType.MELEE) return;
+  Shared.skipAttackDelay(player);
+}
+
 /** Walk to the edge of the floor nearest the crystal rather than to its unreachable tile. */
 function routeToCrystal(event) {
   if (event.objectId !== Shared.core().ObjectIdentifiers.TELEPORT_CRYSTAL_3) return;
@@ -1654,6 +1664,7 @@ module.exports = function registerWardens(api) {
   api.onNpcBeforeDeath(wardenDowned);
   api.onCanAttack(wardenAttackRules);
   api.onObjectRoute(routeToCrystal);
+  api.onPlayerDealtDamage(struckSiphon);
   registerWardenCombat(api);
 };
 

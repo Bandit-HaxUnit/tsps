@@ -606,6 +606,13 @@ function canHitObelisk(event) {
   if (!event.attacker?.isPlayer?.()) event.allow = false;
 }
 
+/** Striking an obelisk costs no attack delay: the next one can be struck at once (Near-Reality). */
+function struckObelisk(event) {
+  const { player, target } = event;
+  if (target?.__toaObelisk === undefined || !(target.__toaRoom instanceof ScabarasPuzzleRoom)) return;
+  Shared.skipAttackDelay(player);
+}
+
 function attackObelisk(event) {
   const npc = event.npc;
   if (npc?.__toaObelisk === undefined) return false;
@@ -622,6 +629,7 @@ module.exports = function registerScabarasPuzzle(api) {
   Shared.onObject(api, "Tile", turnTile);
   api.onNpcInteraction("<col=00ffff>Obelisk</col>", { Hit: attackObelisk });
   api.onNpcHitModify(hitObelisk);
+  api.onPlayerDealtDamage(struckObelisk);
   api.onCanAttack(canHitObelisk);
   registerScarabCombat(api);
 };

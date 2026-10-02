@@ -454,6 +454,17 @@ function onObject(pluginApi, names, handler) {
   });
 }
 
+/**
+ * Stops the player's attack and clears its delay, so the next target can be hit at once.
+ * Near-Reality does this for the Wardens' energy siphons and the Scabaras obelisks. Call it as
+ * the attack goes out (onPlayerDealtDamage), after its delay was set; the hit still lands.
+ */
+function skipAttackDelay(player) {
+  const combat = player.getCombat();
+  combat.reset();
+  combat.setAttackDelay(0);
+}
+
 function isProtected(player, style) {
   const { PrayerHandler } = core();
   const prayer = style === "magic" ? PrayerHandler.PROTECT_FROM_MAGIC
@@ -464,6 +475,7 @@ function isProtected(player, style) {
 
 module.exports = {
   walkStraight,
+  skipAttackDelay,
   bind,
   core,
   api,
