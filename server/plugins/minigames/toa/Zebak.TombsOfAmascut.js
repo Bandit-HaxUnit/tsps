@@ -503,7 +503,6 @@ class ZebakRoom extends Raid.Room {
   }
 
   tickJugs() {
-    const { PathFinder } = Shared.core();
     for (const jug of [...this.jugs]) {
       if (jug.getHitpoints() <= 0) {
         this.breakJug(jug);
@@ -522,7 +521,7 @@ class ZebakRoom extends Raid.Room {
         this.despawn(jug);
         continue;
       }
-      PathFinder.calculateWalkRoute(jug, next.getX(), next.getY());
+      Shared.walkStraight(jug, next);
     }
   }
 
@@ -615,7 +614,7 @@ class ZebakRoom extends Raid.Room {
 
   /** Waves push players, carry jugs, wash away some poison and smother blood clouds. */
   tickWaves(players) {
-    const { PathFinder, NpcIdentifiers } = Shared.core();
+    const { NpcIdentifiers } = Shared.core();
     for (const wave of [...this.waves]) {
       const state = wave.__toaWave;
       if (--state.tiles <= 0) {
@@ -642,7 +641,7 @@ class ZebakRoom extends Raid.Room {
         this.despawn(cloud);
         wave.setNpcTransformationId(NpcIdentifiers.COL_00FFFF_BLOODY_WAVE_COL);
       }
-      PathFinder.calculateWalkRoute(wave, location.getX(), location.getY() + step);
+      Shared.walkStraight(wave, location.transform(0, step));
     }
   }
 

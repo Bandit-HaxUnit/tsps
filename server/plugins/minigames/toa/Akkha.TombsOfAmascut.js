@@ -560,7 +560,7 @@ class AkkhaRoom extends Raid.Room {
         this.later(1, () => this.despawn(orb));
         continue;
       }
-      Shared.core().PathFinder.calculateWalkRoute(orb, next.getX(), next.getY());
+      Shared.walkStraight(orb, next);
     }
   }
 

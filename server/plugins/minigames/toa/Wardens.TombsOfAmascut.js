@@ -568,10 +568,8 @@ class WardensRoom extends WardenRoomBase {
     this.openBossHud(moving);
     this.later(9, () => { fallen.legs = true; });
     this.later(14, () => {
-      moving.getMovementQueue().setBlockMovement(false);
-      const { PathFinder } = Shared.core();
       const location = moving.getLocation();
-      PathFinder.calculateWalkRoute(moving, location.getX() + (this.elidinisStart ? 5 : -6), location.getY());
+      Shared.walkStraight(moving, location.transform(this.elidinisStart ? 5 : -6, 0));
     });
     this.later(17, () => moving.setUntargetable(false));
     this.later(20, () => this.setMovingCanAttack(true));

@@ -400,6 +400,20 @@ function floorFree(area, tile) {
 }
 
 /**
+ * Moves an NPC a straight line to `tile` whatever the map blocks there, as Near-Reality's
+ * collision-free walk steps (Zebak's waves and jugs, Akkha's unstable orbs, Ba-Ba's boulders,
+ * the moving Wardens). The route finder found no way over those tiles, so they stood still.
+ */
+function walkStraight(npc, tile) {
+  const location = tile.getX ? tile : loc(tile);
+  npc.setFlag("movement:ignore-clipping");
+  const movement = npc.getMovementQueue();
+  movement.setBlockMovement?.(false);
+  movement.reset();
+  movement.addSteps(location);
+}
+
+/**
  * A projectile between two tiles (or from/to an actor), seen only inside `area`. It leaves
  * after `delay` client cycles and lands `duration` + `perTile` x distance cycles later.
  * Returns the landing time in game ticks, for lining damage up with it.
@@ -448,6 +462,7 @@ function isProtected(player, style) {
 }
 
 module.exports = {
+  walkStraight,
   bind,
   core,
   api,

@@ -634,7 +634,7 @@ class BaBaRoom extends Raid.Room {
         continue;
       }
       boulder.performAnimation(new Animation(ANIMATION.ROLL));
-      Shared.core().PathFinder.calculateWalkRoute(boulder, next.getX(), next.getY());
+      Shared.walkStraight(boulder, next);
     }
   }
 
