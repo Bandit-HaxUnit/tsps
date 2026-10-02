@@ -421,9 +421,11 @@ export function addProjectileRenderData(host: WebGLOsrsRendererHost, map: WebGLM
         }
         map.projectileDataTextureOffsets[0] = baseOffset;
 
-        // Write projectile data
-        const mapWorldX = map.mapX << 13;
-        const mapWorldY = map.mapY << 13;
+        // Write projectile data, relative to where the map is drawn (its corner for a world
+        // square, the scene base for an instance).
+        const mapWorldX = map.getRenderBaseTileX() * 128;
+        const mapWorldY = map.getRenderBaseTileY() * 128;
+        const mapTileSpan = Math.max(1, map.getLocalTileSpan());
 
         for (let i = 0; i < projCount; i++) {
             const proj = projectiles[i];
@@ -437,8 +439,8 @@ export function addProjectileRenderData(host: WebGLOsrsRendererHost, map: WebGLM
             const baseRelativeX = Math.floor(relativeXf);
             const baseRelativeY = Math.floor(relativeYf);
 
-            const localTileX = clamp((baseRelativeX >> 7) | 0, 0, 63);
-            const localTileY = clamp((baseRelativeY >> 7) | 0, 0, 63);
+            const localTileX = clamp((baseRelativeX >> 7) | 0, 0, mapTileSpan - 1);
+            const localTileY = clamp((baseRelativeY >> 7) | 0, 0, mapTileSpan - 1);
             const renderPlane = resolveHeightSamplePlaneForLocal(
                 map,
                 proj.plane | 0,
