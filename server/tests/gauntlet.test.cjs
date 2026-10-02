@@ -136,6 +136,9 @@ function fakeNpc(id, x, y, z) {
     getMovementQueue: () => ({ setBlockMovement() { return this; }, reset() { return this; }, addSteps(tile) { npc.location = tile; } }),
     performAnimation(animation) { npc.animations.push(animation.getId?.() ?? animation.id); },
     setPositionToFace() {},
+    interacting: null,
+    setMobileInteraction(target) { npc.interacting = target; return npc; },
+    getInteractingMobile: () => npc.interacting,
     setNpcTransformationId(next) { npc.transform = next; },
     getPrivateArea: () => npc.area,
     setArea(area) { npc.area = area; },
@@ -884,6 +887,28 @@ test('::gauntletgear sets up a Hunllef loadout of a tier during a run', () => {
     assert.ok(player.inventory.contains(items.staff[1]) && player.inventory.contains(items.halberd[1]));
     assert.equal(player.inventory.getAmount(23885), 4);
     assert.equal(player.inventory.getFreeSlots(), 0, 'the rest is food');
+  } finally {
+    run.end('exit', { fade: false });
+  }
+});
+
+test('the Hunllef faces its challenger and walks in until they are within 5 tiles', () => {
+  const { player, run, fight } = bossRun('Kiter');
+  try {
+    fight.stop();
+    assert.ok(fight.npc.flags.has('interaction:keep'), 'keeps facing at any range');
+    // Far corner of the arena.
+    player.moveTo(fight.arenaTile(0, 0));
+    fight.npc.location = fight.arenaTile(7, 7);
+    const start = fight.distanceTo(player);
+    assert.ok(start > 5);
+    for (let i = 0; i < 20; i++) fight.approach(player);
+    assert.equal(fight.distanceTo(player), 5, 'closes in and holds at 5');
+    assert.ok(fight.arenaTile(0, 0).getX() <= fight.npc.getLocation().getX(), 'still inside the arena');
+    fight.npc.interacting = null;
+    run.hunllef.task = null;
+    run.hunllef.start();
+    assert.equal(fight.npc.interacting, player, 'faces its target');
   } finally {
     run.end('exit', { fade: false });
   }

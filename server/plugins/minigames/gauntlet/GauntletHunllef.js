@@ -68,6 +68,8 @@ const TORNADO_HIT_GRAPHIC = 1717;
 const ARENA = { min: 2, size: 12 };
 const SPAWN = { x: 6, y: 7 };
 const SIZE = 5;
+// Near-Reality's: it closes in until the player is within 5 tiles of it, then holds.
+const ATTACK_DISTANCE = 5;
 
 /** Near-Reality's three sets of floor patterns, as arena offsets. */
 function square(size, x, y) {
@@ -173,6 +175,7 @@ class HunllefFight {
     npc.__gauntletScripted = true;
     npc.__gauntletHunllef = this;
     npc.setFlag("combat:no-retaliate");
+    npc.setFlag("interaction:keep");
     npc.getMovementQueue().setBlockMovement(true);
     this.run.map.add(npc);
     return npc;
@@ -182,6 +185,8 @@ class HunllefFight {
   start() {
     if (this.task || !this.npc) return;
     this.nextAttack = FIRST_ATTACK_TICKS;
+    this.npc.getMovementQueue().setBlockMovement(false);
+    this.npc.setMobileInteraction?.(this.run.player);
     this.task = Shared.repeat(this, 1, () => this.tick());
   }
 
@@ -205,7 +210,8 @@ class HunllefFight {
       return false;
     }
     this.ticks++;
-    this.npc.setPositionToFace?.(player.getLocation());
+    if (this.npc.getInteractingMobile?.() !== player) this.npc.setMobileInteraction?.(player);
+    this.approach(player);
     this.tickTornadoes(player);
     this.tickFloor(player);
     if (this.ticks === this.nextPattern) this.startPattern();
@@ -215,6 +221,32 @@ class HunllefFight {
   }
 
   // -------------------------------------------------------------- attacks
+
+  /** Tiles between the player and the Hunllef's 5x5 body (0 under it). */
+  distanceTo(player) {
+    const npcTile = this.npc.getLocation();
+    const here = player.getLocation();
+    const gap = (value, from) => Math.max(0, from - value, value - (from + SIZE - 1));
+    return Math.max(gap(here.getX(), npcTile.getX()), gap(here.getY(), npcTile.getY()));
+  }
+
+  /** One step closer while the player is out of its reach, around the arena's walls. */
+  approach(player) {
+    if (this.distanceTo(player) <= ATTACK_DISTANCE) return;
+    const { RegionManager } = Shared.core();
+    const from = this.npc.getLocation();
+    const centre = (axis) => axis + Math.floor(SIZE / 2);
+    const dx = Math.sign(player.getLocation().getX() - centre(from.getX()));
+    const dy = Math.sign(player.getLocation().getY() - centre(from.getY()));
+    for (const [x, y] of [[dx, dy], [dx, 0], [0, dy]]) {
+      if (x === 0 && y === 0) continue;
+      if (!RegionManager.canMove(from.getX(), from.getY(), from.getX() + x, from.getY() + y, from.getZ(), SIZE, SIZE, this.run.map)) continue;
+      const movement = this.npc.getMovementQueue();
+      movement.reset();
+      movement.addSteps(from.transform(x, y));
+      return;
+    }
+  }
 
   underneath(player) {
     const npcTile = this.npc.getLocation();
