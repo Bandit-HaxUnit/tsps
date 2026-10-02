@@ -289,7 +289,6 @@ export class PacketSender {
   }
 
   sendWalkableInterface(interfaceId: number): this {
-    this.player.setWalkableInterfaceId(interfaceId);
     if (this.player.getSession().sendClientPacket(encodeWidgetOpen(interfaceId, false))) return this;
   }
 

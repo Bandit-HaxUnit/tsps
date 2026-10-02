@@ -230,7 +230,7 @@ function blockTeleport(event) {
 }
 
 function respawnInStartRoom(event) {
-  const { player, killer } = event;
+  const { player } = event;
   const teamId = player?.getArea?.() === game.gameArea ? game.getTeamId(player) : null;
   if (!teamId) {
     return;
@@ -238,10 +238,6 @@ function respawnInStartRoom(event) {
   game.dropCarriedFlag(player);
   player.resetCastlewarsIdleTime();
   player.smartMoves(game.getTeamData(teamId).respawnBounds);
-  player.castlewarsDeaths = (player.castlewarsDeaths | 0) + 1;
-  if (killer?.isPlayer?.() === true) {
-    killer.castlewarsKills = (killer.castlewarsKills | 0) + 1;
-  }
   event.handled = true;
 }
 

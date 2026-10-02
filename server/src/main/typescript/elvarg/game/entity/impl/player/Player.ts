@@ -18,13 +18,11 @@ import { NPC } from "../npc/NPC";
 import { NpcAggression } from "../npc/NpcAggression";
 import { Animation } from "../../../model/Animation";
 import { Appearance } from "../../../model/Appearance";
-import { ChatMessage } from "../../../model/ChatMessage";
 import { EnteredAmountAction } from "../../../model/EnteredAmountAction";
 import { EnteredSyntaxAction } from "../../../model/EnteredSyntaxAction";
 import { Flag } from "../../../model/Flag";
 import { ForceMovement } from "../../../model/ForceMovement";
 import { Location } from "../../../model/Location";
-import { PlayerInteractingOption, PlayerInteractingOptions } from "../../../model/PlayerInteractingOption";
 import { PlayerRelations } from "../../../model/PlayerRelations";
 import { PlayerStatus } from "../../../model/PlayerStatus";
 import { SecondsTimer } from "../../../model/SecondsTimer";
@@ -97,8 +95,6 @@ export class Player extends Mobile {
     */
     private vengeTimer: SecondsTimer = new SecondsTimer();
     public recentKills: string[] = []; // Contains ip addresses of recent kills
-    private chatMessageQueue = new Array<ChatMessage>();
-    public currentChatMessage: ChatMessage;
     // Logout
     public forcedLogoutTimer = new SecondsTimer();
     // Trading
@@ -117,14 +113,10 @@ export class Player extends Mobile {
     private cachedDiscordAccessToken: string = "";
     public longUsername: bigint = 0n;
     private session: PlayerSession;
-    private playerInteractingOption: PlayerInteractingOption;
     public status: PlayerStatus = PlayerStatus.NONE;
     public currentClanChat: any;
     public clanChatName: string;
-    // Legacy shop field kept for compile compatibility with deprecated core shop classes.
-    public shop: any;
     public interfaceId: number = -1
-    private walkableInterfaceId: number = -1
     private multiIcon: number;
     private isRunning = true;
     private playerBot = false;
@@ -148,9 +140,6 @@ export class Player extends Mobile {
     private prayerActivatedThisTick = false;
     private spellbook: MagicSpellbook = MagicSpellbook.NORMAL;
     private destroyItem = -1;
-    private updateInventory: boolean; // Updates inventory on next tick
-    private newPlayer: boolean;
-    private packetsBlocked = false;
 
     // Skilling
     private skill: any;
@@ -181,7 +170,6 @@ export class Player extends Mobile {
     private wildernessLevel: number;
     public skullTimer: number;
     public points: number;
-    private amountDonated: number;
     private crystalBowShotsInStage = 0;
     private crystalBowTrackedStageItemId = -1;
     // Bounty hunter
@@ -215,12 +203,7 @@ export class Player extends Mobile {
     public rights = PlayerRights.NONE;
     private chatIcons: number[] = [];
     public donatorRights = DonatorRights.NONE;
-    /**
-     * The cached player update block for updating.
-     */
-    private cachedUpdateBlock: Buffer;
     private loyaltyTitle = "empty";
-    private oldPosition: Location;
     public id: number;
     public name: string;
 
@@ -234,7 +217,6 @@ export class Player extends Mobile {
         this.session = playerIO;
         this.aggressionTolerance.start(NpcAggression.NPC_TOLERANCE_SECONDS);
     }
-
 
     public onAdd() {
         this.onLogin();
@@ -294,7 +276,6 @@ export class Player extends Mobile {
         return this.getSkillManager().getCurrentLevel(Skill.HITPOINTS);
     }
 
-
     public getAttackAnim(): number {
         const fightType = FightType.resolve(this.getFightType()) ?? FightType.UNARMED_KICK;
         return WeaponProfiles.attackAnimation(this, fightType.getAnimation());
@@ -337,7 +318,6 @@ export class Player extends Mobile {
             this.setHitpoints(this.getSkillManager().getCurrentLevel(Skill.HITPOINTS) + amount);
         }
     }
-
 
     public getBaseAttack(type: CombatType): number {
         if (type == CombatType.RANGED)
@@ -444,33 +424,11 @@ export class Player extends Mobile {
             timed("area", () => AreaManager.process(this));
         }
 
-        // Updates inventory if an update
-        // has been requested
-        if (this.isUpdateInventory()) {
-            if (!isBot) {
-                this.getInventory().refreshItems();
-            }
-            this.setUpdateInventory(false);
-        }
-
         // Updates appearance if an update
         // has been requested
         // or if skull timer hits 0.
         if (this.isSkulled() && this.getAndDecrementSkullTimer() == 0 && !isBot) {
             this.getUpdateFlag().flag(Flag.APPEARANCE);
-        }
-
-        // Send queued chat messages
-        if (this.getChatMessageQueue().length > 0) {
-            if (!isBot) {
-                this.setCurrentChatMessage(this.getChatMessageQueue().shift());
-                this.getUpdateFlag().flag(Flag.CHAT);
-            } else {
-                this.getChatMessageQueue().shift();
-                this.setCurrentChatMessage(null);
-            }
-        } else {
-            this.setCurrentChatMessage(null);
         }
 
         // Increase run energy
@@ -540,12 +498,6 @@ export class Player extends Mobile {
         }
     }
 
-
-    // Construction
-    /*
-     
-    public loadingHouse: boolean; public portalSelected: number; public inBuildingMode: boolean; public toConsCoords: number[]; public buildFurnitureId: number; public buildFurnitureX: number; public buildFurnitureY: number; public houseRooms: Room[][][] = new Array(5).fill(new Array(13).fill(new Array(13).fill(new Room()))); public playerFurniture: PlayerFurniture[] = []; public portals: Portal[] = [];
-    */
     /**
      
     Can the player logout?
@@ -683,20 +635,9 @@ export class Player extends Mobile {
     isDonator(): boolean {
         return (this.donatorRights != DonatorRights.NONE);
     }
-
-
-    isPacketsBlocked(): boolean {
-        return this.packetsBlocked;
-    }
-
-    setPacketsBlocked(blocked: boolean) {
-        this.packetsBlocked = blocked;
-    }
     /*
          * Getters/Setters
          */
-    public static Data = new Date();
-
     public getCreationDate(): Date {
         return this.creationDate;
     }
@@ -718,10 +659,6 @@ export class Player extends Mobile {
         const maximum = varpId === 18 ? 2 : 100;
         this.audioSettings[varpId] = Math.max(0, Math.min(maximum, Math.trunc(value)));
         return true;
-    }
-
-    public setCreationDate(timestamp: Date) {
-        this.creationDate = timestamp;
     }
 
     public getSession(): PlayerSession {
@@ -746,8 +683,6 @@ export class Player extends Mobile {
         return this;
     }
 
-    public castlewarsKills: number;
-    castlewarsDeaths: number;
     castlewarsIdleTime: number;
 
     public resetCastlewarsIdleTime(): void {
@@ -864,29 +799,12 @@ export class Player extends Mobile {
         return this.relations;
     }
 
-    public getWalkableInterfaceId(): number {
-        return this.walkableInterfaceId;
-    }
-
-    public setWalkableInterfaceId(interfaceId: number) {
-        this.walkableInterfaceId = interfaceId;
-    }
-
     public isRunningReturn(): boolean {
         return this.isRunning;
     }
 
     public setRunning(isRunning: boolean): this {
         this.isRunning = isRunning;
-        return this;
-    }
-
-    public getPlayerInteractingOption(): PlayerInteractingOption {
-        return this.playerInteractingOption;
-    }
-
-    public setPlayerInteractingOption(playerInteractingOption: PlayerInteractingOption): Player {
-        this.playerInteractingOption = playerInteractingOption;
         return this;
     }
 
@@ -1057,29 +975,8 @@ export class Player extends Mobile {
         this.points = points;
     }
 
-    public incrementPoints(points: number): void {
-        this.points += points;
-    }
-
-    public isUpdateInventory(): boolean {
-        return this.updateInventory;
-    }
-
-    public setUpdateInventory(updateInventory: boolean): void {
-        this.updateInventory = updateInventory;
-    }
-
     public getClickDelay(): Stopwatch {
         return this.clickDelay;
-    }
-
-    public getShop(): any {
-        return this.shop;
-    }
-
-    public setShop(shop: any): Player {
-        this.shop = shop;
-        return this;
     }
 
     public getStatus(): PlayerStatus {
@@ -1161,14 +1058,6 @@ export class Player extends Mobile {
         return this;
     }
 
-    public isNewPlayer(): boolean {
-        return this.newPlayer;
-    }
-
-    public setNewPlayer(newPlayer: boolean): void {
-        this.newPlayer = newPlayer;
-    }
-
     public isSearchingBank(): boolean {
         return this.searchingBank;
     }
@@ -1189,10 +1078,6 @@ export class Player extends Mobile {
         return this.preserveUnlocked;
     }
 
-    public getPreserveUnlocked(): boolean {
-        return this.preserveUnlocked;
-    }
-
     public setPreserveUnlocked(preserveUnlocked: boolean): void {
         this.preserveUnlocked = preserveUnlocked;
     }
@@ -1201,14 +1086,9 @@ export class Player extends Mobile {
         return this.rigourUnlocked;
     }
 
-    public getRigourUnlocked(): boolean {
-        return this.rigourUnlocked;
-    }
-
     public setRigourUnlocked(rigourUnlocked: boolean): void {
         this.rigourUnlocked = rigourUnlocked;
     }
-
 
     public getAuguryUnlocked(): boolean {
         return this.auguryUnlocked;
@@ -1254,11 +1134,6 @@ export class Player extends Mobile {
         return this.targetTeleportUnlocked;
     }
 
-
-    public getTargetTeleportUnlocked(): boolean {
-        return this.targetTeleportUnlocked;
-    }
-
     public setTargetTeleportUnlocked(targetTeleportUnlocked: boolean): void {
         this.targetTeleportUnlocked = targetTeleportUnlocked;
     }
@@ -1267,24 +1142,12 @@ export class Player extends Mobile {
         return this.yellDelay;
     }
 
-    public getAmountDonated(): number {
-        return this.amountDonated;
-    }
-
-    public setAmountDonated(amountDonated: number): void {
-        this.amountDonated = amountDonated;
-    }
-
     public isPlayerBot(): boolean {
         return this.playerBot;
     }
 
     public setPlayerBot(playerBot: boolean): void {
         this.playerBot = playerBot;
-    }
-
-    public incrementAmountDonated(amountDonated: number): void {
-        this.amountDonated += amountDonated;
     }
 
     public getTotalKills(): number {
@@ -1400,14 +1263,6 @@ export class Player extends Mobile {
         return this.aggressionTolerance;
     }
 
-    public getCachedUpdateBlock(): Buffer {
-        return this.cachedUpdateBlock;
-    }
-
-    public setCachedUpdateBlock(cachedUpdateBlock: Buffer) {
-        this.cachedUpdateBlock = cachedUpdateBlock;
-    }
-
     public getSkill(): any {
         return this.skill;
     }
@@ -1473,37 +1328,8 @@ export class Player extends Mobile {
         this.currentPreset = currentPreset;
     }
 
-    public getChatMessageQueue(): Array<ChatMessage> {
-        return this.chatMessageQueue;
-    }
-
-    public getCurrentChatMessage(): ChatMessage {
-        return this.currentChatMessage;
-    }
-
-    public setCurrentChatMessage(currentChatMessage: ChatMessage): void {
-        this.currentChatMessage = currentChatMessage;
-    }
-
-    public sendChat(message: string, colour: number = 0, effect: number = 0) {
-        if (!message) {
-            return;
-        }
-        const packed = Misc.textPack(message);
-        this.getChatMessageQueue().push(new ChatMessage(colour, effect, packed));
-        this.getUpdateFlag().flag(Flag.CHAT);
-    }
-
     public manipulateHit(hit: PendingHit): PendingHit {
         return hit;
-    }
-
-    public getOldPosition(): Location {
-        return this.oldPosition;
-    }
-
-    public setOldPosition(oldPosition: Location): void {
-        this.oldPosition = oldPosition;
     }
 
     public getEnteredAmountAction(): EnteredAmountAction {

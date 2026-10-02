@@ -1210,7 +1210,6 @@ export class World {
             World.players.forEach((player) => {
                 try {
                     player.resetUpdating();
-                    player.setCachedUpdateBlock(null);
                 } catch (e) {
                     console.log(e);
                     player.requestLogout();

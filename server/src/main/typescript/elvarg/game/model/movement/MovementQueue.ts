@@ -516,7 +516,6 @@ export class MovementQueue {
                 this.handleRegionChange();
                 this.syncWildernessStateForMovedPlayer();
                 this.drainRunEnergy();
-                this.character.getAsPlayer().setOldPosition(previous);
             }
         }
 
