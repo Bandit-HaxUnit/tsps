@@ -64,6 +64,8 @@ export class MovementQueue {
          * discarded.
          */
     private static MAXIMUM_SIZE = 100;
+    /** An entity flag: steps go straight on, whatever the map's clipping. */
+    public static readonly IGNORE_CLIPPING_FLAG = "movement:ignore-clipping";
 
     /**
      * The character whose walking queue this is.
@@ -584,6 +586,11 @@ export class MovementQueue {
     private validatedStep(source: Location, destination: Location): Location | null {
         const signX = Math.sign(destination.getX() - source.getX());
         const signY = Math.sign(destination.getY() - source.getY());
+        // An NPC that moves over what the map blocks (the Inferno's Ancestral Glyph, over the
+        // pit before TzKal-Zuk) steps straight on, as OSRS's walk steps without collision.
+        if (this.character.hasFlag?.(MovementQueue.IGNORE_CLIPPING_FLAG)) {
+            return source.transform(signX, signY);
+        }
         const candidates: number[][] = [];
         if (this.character.getSize() === 1 && signX !== 0 && signY !== 0) {
             candidates.push([signX, signY]);
@@ -1274,6 +1281,11 @@ export class MovementQueue {
                 routeSpec.reachBlockAccessFlags
             )) {
                 // Arrival is not a failed route: operate on the following cycle.
+                // No extra arriveDelay here: in OSRS that delay only applies to actions that
+                // move you. Banks, tables, shops and NPCs fire the tick after you arrive, which
+                // this already does. A global delay would make every one of those a tick slower
+                // than OSRS and break tick-based skilling. Ops that move the player get it from
+                // the shared climb (Ladders.plugin.js ladders:climbUp/climbDown) or ObstacleRunner.
                 if (this.didMoveThisCycle()) return;
                 if (objectX === this.player.getLocation().getX() && objectY === this.player.getLocation().getY()) {
                     this.player.setDirection([Direction.WEST, Direction.NORTH, Direction.EAST, Direction.SOUTH][direction]);

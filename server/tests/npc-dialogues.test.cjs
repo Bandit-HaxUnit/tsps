@@ -134,6 +134,67 @@ test('a nested "jump above" reaches an unselected sibling instead of looping', (
   assert.deepEqual(prompts, ['Q1', 'Q2', 'Q3']);
 });
 
+test('a jump after a repeated question carries on as that question, judged when it is reached', () => {
+  // Percy's unlocks: buying, then asking again, must not offer what was just bought, and the
+  // branch that jumps back into itself ("That'll be 200 nuggets") must not recurse forever.
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  let unlocked = false;
+  const condition = { pluginName: 'test', handler: ({ text }) => (text === 'If locked:' ? !unlocked : text === 'If unlocked:' ? unlocked : null) };
+  PluginManager.npcDialogueConditionHooks.unshift(condition);
+  const said = [];
+  const picks = ['Anything to unlock?', 'Buy', 'Anything to unlock?'];
+  const player = {
+    getDialogueManager: () => ({
+      reset() {},
+      startDialogues(chain) {
+        for (const entry of [...chain.getDialogues().values()].sort((a, b) => a.getIndex() - b.getIndex())) {
+          if (entry.text) said.push(entry.text);
+          try { entry.send(player); } catch { /* unwired dialogue entries are fine here */ }
+        }
+      },
+    }),
+    getPacketSender: () => ({ sendInterfaceRemoval() {} }),
+    sendMessage() {},
+  };
+  const api = {
+    emitCustomEvent(name, payload) {
+      if (name === 'npc-dialogue:action' && payload.stepId === 'pay' && payload.kind === 'message') unlocked = true;
+    },
+    sendMultiChatboxPrompt(_player, _title, ...pairs) {
+      const options = [];
+      for (let i = 0; i < pairs.length; i += 2) options.push({ text: pairs[i], cb: pairs[i + 1] });
+      const pick = options.find((option) => option.text === picks[0]);
+      if (!pick) return true;
+      picks.shift();
+      pick.cb();
+      return true;
+    },
+  };
+  const question = (steps) => ({ text: 'Anything to unlock?', steps: [{ player: 'Anything to unlock?' }, ...steps] });
+  const tree = [{
+    type: 'choice', prompt: 'Top', options: [question([
+      {
+        type: 'condition', text: 'If locked:', steps: [{
+          type: 'choice', prompt: 'Unlocks', options: [
+            { text: 'Buy', steps: [{ type: 'message', text: 'You pay.', id: 'pay' }, { player: 'Anything to unlock?' }, { type: 'jump', reference: 'below' }] },
+            { text: 'Too dear', steps: [{ npc: "That'll cost ye." }, { player: 'Anything to unlock?' }, { type: 'jump', reference: 'above' }] },
+          ],
+        }],
+      },
+      { type: 'condition', text: 'If unlocked:', steps: [{ npc: 'Ye have it all.' }] },
+    ])],
+  }];
+  const definition = { getName: () => 'Percy', getId: () => 6562 };
+  const event = { player, npc: { getId: () => 6562 }, npcId: 6562, definition };
+  try {
+    startDialogue(api, event, tree, {}, { player, npc: event.npc, npcId: 6562, definition, pages: [] });
+  } finally {
+    PluginManager.npcDialogueConditionHooks.splice(PluginManager.npcDialogueConditionHooks.indexOf(condition), 1);
+  }
+  assert.equal(unlocked, true);
+  assert.deepEqual(said.filter((line) => line === 'Ye have it all.'), ['Ye have it all.'], 'the jump saw the purchase');
+});
+
 test('an unreplayable menu jump ends the branch instead of leaking the next step', () => {
   const steps = flatten([
     {

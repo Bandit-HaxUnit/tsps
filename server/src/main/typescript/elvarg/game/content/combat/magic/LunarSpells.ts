@@ -15,6 +15,7 @@ import { EffectSpells } from "./EffectSpells";
 import { DialogueChainBuilder } from "../../../model/dialogues/builders/DialogueChainBuilder";
 import { OptionDialogue } from "../../../model/dialogues/entries/impl/OptionDialogue";
 import { DialogueOption } from "../../../model/dialogues/DialogueOption";
+import { PluginManager } from "../../../../plugins/PluginManager";
 
 type SpellData = { level: number; experience: number; runes: Item[] };
 type TeleportData = SpellData & { destination: Location };
@@ -168,6 +169,7 @@ export class LunarSpells {
             [1925, 1929], [1923, 1921], [1935, 1937], [229, 227], [6667, 6669],
             [1825, 1823], [1827, 1823], [1829, 1823], [1831, 1823], [5331, 5340],
         ]);
+        if (key === "humidify") PluginManager.emitCustomEvent("magic:water-containers", { player, containers: waterContainers });
         if (key === "humidify" && !items.some(item => waterContainers.has(item.getId()))) {
             player.sendMessage("You do not have any containers that can be filled with water.");
             return true;
@@ -210,6 +212,7 @@ export class LunarSpells {
                     const filled = waterContainers.get(item.getId());
                     if (filled) item.setId(filled);
                 }
+                PluginManager.emitCustomEvent("magic:humidified", { player });
             } else if (key === "hunter kit") {
                 inventory.adds(946, 1).adds(303, 1).adds(954, 2).adds(10029, 1).adds(10008, 1);
             } else if (key === "magic imbue") {

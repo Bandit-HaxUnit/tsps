@@ -90,6 +90,13 @@ function isNotedQuantity(raw) {
 }
 
 function applyWikiCorrections(tableById) {
+  // Each bronze piece survives on its own 9/10 roll (Wiki: 72.9% to get all three back); the
+  // export flattened them into one 27-slot roll that always returns exactly one piece.
+  for (const entry of tableById.animated_bronze_armour?.entries || []) {
+    if (entry.section === "Armour") {
+      Object.assign(entry, { separate_roll: true, weight: 9, out_of: 10 });
+    }
+  }
   const kalphiteQueen = tableById.kalphite_queen;
   if (!kalphiteQueen) {
     return;
@@ -364,6 +371,11 @@ function dropFor(player, npc, npcId, location) {
   }
 
   const drops = rollTable(table, player, npc);
+  // Drops that depend on the killer's progress (Warriors' Guild defenders) are edited in place.
+  pluginApi?.emitCustomEvent("npc-drops:roll", { player, npc, npcId, drops });
+  const event = { player, npc, npcId, drops, handled: false };
+  pluginApi.emitCustomEvent("npc-drops:generated", event);
+  if (event.handled) return drops.length;
   for (const drop of drops) {
     if (!Number.isInteger(drop.itemId) || drop.amount <= 0) {
       continue;

@@ -57,7 +57,8 @@ export type PlayerAppearance = {
 export type Tile = { x: number; y: number; level: number };
 
 export type HitsplatView = { type: number; damage: number; delay?: number };
-export type HealthView = { current: number; max: number };
+/** An actor's headbar: its HP and, when not the default (config 0, 30 wide), which bar. */
+export type HealthView = { current: number; max: number; bar?: { id: number; width: number } };
 export type AnimationView = { id: number; delay: number };
 export type GraphicView = { id: number; height: number; delay: number };
 export type ForcedMovementView = {
@@ -1511,6 +1512,15 @@ export function encodeWidgetSetModel(uid: number, modelId: number): Buffer {
   return encodeServerPacket(ServerPacketId.WIDGET_SET_MODEL, payload);
 }
 
+/** IF_SETPOSITION: move a component within its parent, keeping its position modes. */
+export function encodeWidgetSetPosition(uid: number, x: number, y: number): Buffer {
+  const payload = Buffer.alloc(8);
+  payload.writeInt32BE(uid | 0, 0);
+  payload.writeInt16BE(x | 0, 4);
+  payload.writeInt16BE(y | 0, 6);
+  return encodeServerPacket(ServerPacketId.WIDGET_SET_POSITION, payload);
+}
+
 export function encodeWidgetSetItem(uid: number, itemId: number, quantity = 1): Buffer {
   const payload = Buffer.alloc(10);
   payload.writeInt32BE(uid | 0);
@@ -1760,6 +1770,8 @@ export function encodeGameframeBootstrap(playerName: string, root: number = 161)
     [76, 593], [77, 320], [78, 629], [79, MAIN_INVENTORY_GROUP_ID], [80, 387], [81, 541],
     [82, 218], [83, 7], [84, 109], [85, 429], [86, 182], [87, 116],
     [88, 216], [89, 239],
+    // The boss HP bar HUD (hpbar_hud), as OSRS opens it at login (164:2 resizable).
+    [2, 303],
   ];
   const cameraScript = Buffer.concat([Buffer.alloc(2), scriptArgs([])]);
   cameraScript.writeUInt16BE(626, 0);
@@ -2130,8 +2142,9 @@ function writeText(bytes: number[], value: string): void {
 }
 
 function scaledHealth(health: HealthView): number {
+  const width = health.bar?.width ?? 30;
   if (health.current <= 0 || health.max <= 0) return 0;
-  return Math.max(1, Math.min(30, Math.floor((health.current * 30) / health.max)));
+  return Math.max(1, Math.min(width, Math.floor((health.current * width) / health.max)));
 }
 
 function writeHits(bytes: number[], view: ActorUpdateView, npc: boolean): void {
@@ -2148,7 +2161,7 @@ function writeHits(bytes: number[], view: ActorUpdateView, npc: boolean): void {
   if (npc) byteA(bytes, count);
   else byteC(bytes, count);
   if (health) {
-    smart(bytes, 0);
+    smart(bytes, health.bar?.id ?? 0);
     smart(bytes, 0);
     smart(bytes, 0);
     const value = scaledHealth(health);

@@ -48,6 +48,7 @@ import {
   encodeWidgetSetHidden,
   encodeWidgetSetItem,
   encodeWidgetSetModel,
+  encodeWidgetSetPosition,
   encodeWidgetSetNpcHead,
   encodeWidgetSetPlayerHead,
   encodeWidgetSetQuestList,
@@ -344,6 +345,11 @@ export class PacketSender {
 
   public sendInterfaceRawModel(interfaceId: number, modelId: number): this {
     this.player.getSession().sendClientPacket(encodeWidgetSetModel(interfaceId, modelId));
+    return this;
+  }
+
+  public sendInterfacePosition(uid: number, x: number, y: number): this {
+    this.player.getSession().sendClientPacket(encodeWidgetSetPosition(uid, x, y));
     return this;
   }
 

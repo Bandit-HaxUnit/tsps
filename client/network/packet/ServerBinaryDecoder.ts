@@ -889,6 +889,17 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                 payload: { action: "set_model", uid: reader.readInt(), modelId: reader.readInt() },
             };
 
+        case ServerPacketId.WIDGET_SET_POSITION:
+            return {
+                type: "widget",
+                payload: {
+                    action: "set_position",
+                    uid: reader.readInt(),
+                    x: reader.readSignedShort(),
+                    y: reader.readSignedShort(),
+                },
+            };
+
         case ServerPacketId.WIDGET_SET_ITEM:
             return {
                 type: "widget",

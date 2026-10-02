@@ -138,6 +138,25 @@ export class SceneBuilder {
         this.locOverrides.clear();
     }
 
+    /**
+     * A bridge tile (flag 0x2 on plane 1) is drawn a plane down, so the server (as OSRS) addresses
+     * its locs one plane lower than the map stores them: the Motherlode Mine's upper level is on
+     * plane 0 to the server and plane 1 in the map.
+     */
+    private static isBridge(scene: Scene, x: number, y: number): boolean {
+        return ((scene.tileRenderFlags?.[1]?.[x]?.[y] ?? 0) & 0x2) === 2;
+    }
+
+    /** The server's plane for a loc the map stores on `level`. */
+    private static serverLevel(scene: Scene, x: number, y: number, level: number): number {
+        return level > 0 && SceneBuilder.isBridge(scene, x, y) ? level - 1 : level;
+    }
+
+    /** The map plane of a loc the server spawns on `level`. */
+    private static mapLevel(scene: Scene, x: number, y: number, level: number): number {
+        return level < scene.levels - 1 && SceneBuilder.isBridge(scene, x, y) ? level + 1 : level;
+    }
+
     private getLocOverride(x: number, y: number, level: number, id: number, type: LocModelType, rotation: number) {
         for (const oldId of [id, -1]) {
             const key = `${x},${y},${level},${oldId}`;
@@ -599,8 +618,15 @@ export class SceneBuilder {
                     ) {
                         let collisionMap: CollisionMap | undefined = scene.collisionMaps[level];
 
-                        // Check for dynamic loc override
-                        const override = this.getLocOverride(sceneX, sceneY, level, id, type, rotation);
+                        // Check for dynamic loc override, which the server sends on its plane
+                        const override = this.getLocOverride(
+                            sceneX,
+                            sceneY,
+                            SceneBuilder.serverLevel(scene, sceneX, sceneY, level),
+                            id,
+                            type,
+                            rotation,
+                        );
                         const finalId = override
                             ? (override.newId | 0) >= 0
                                 ? override.newId
@@ -677,15 +703,17 @@ export class SceneBuilder {
                 sl >= 0 &&
                 sl < scene.levels
             ) {
+                // Spawns come on the server's plane; a bridge's are a map plane up.
+                const mapLevel = SceneBuilder.mapLevel(scene, sx, sy, sl);
                 this.addLoc(
                     scene,
-                    sl,
+                    mapLevel,
                     sx,
                     sy,
                     spawn.id,
                     spawn.type,
                     spawn.rotation,
-                    scene.collisionMaps[sl],
+                    scene.collisionMaps[mapLevel],
                     locLoadType,
                 );
             }

@@ -46,6 +46,9 @@ const BOTTOM_STONE: [string, number, number, boolean, boolean][] = [
 ];
 
 const ICON_SIZE = 30;
+const CHAT_BACKING_COLOUR = 0xffffff;
+/** The 317 parchment sits 4px higher than the stock chat display. */
+const CHAT_CONTENT_Y = -4;
 /** Fine-tuning for the OSRS icons (they don't quite match the 317 stone slots). */
 /** The 317 bottom stones are ~34x36, so centre the OSRS icons in that box. */
 const OSRS_SLOT_W = 34;
@@ -82,8 +85,11 @@ export class GameFrame317Plugin implements ClientPlugin {
             widgetRules: () => [
                 // Hide the OSRS chatbox background + tab stones (type 5); the
                 // chat text/messages are type 4 and still render over our section.
-                { group: 162, type: 3, hide: true },
-                { group: 162, type: 5, hide: true },
+                // Item icons are type 5 too (the chatbox item search), so keep those.
+                // Only the white transparent-chat backing rects go (clientscript 923); the
+                // input separator line and the dialog scroll-area frame are other colours.
+                { group: 162, type: 3, colour: CHAT_BACKING_COLOUR, hide: true },
+                { group: 162, type: 5, item: false, hide: true },
                 { contentType: 1339, hide: this.fixed },
             ],
             // Resizable keeps the OSRS minimap frame; fixed draws the 317 mapback.
@@ -107,8 +113,16 @@ export class GameFrame317Plugin implements ClientPlugin {
 
     /** Align mounted widgets before layout; restore stock coordinates when disabled. */
     updateWidgetLayout(): void {
-        if (!this.fixed) return;
         const manager = this.osrsClient.widgetManager;
+        // The chat display (messages + input + separator line) rides with 162:56
+        // in both layouts; the 317 sprite anchors to the container, not this child.
+        const display = manager.getWidgetByUid((162 << 16) | 56);
+        const displayY = this.enabled ? CHAT_CONTENT_Y : 0;
+        if (display && display.rawY !== displayY) {
+            display.rawY = displayY;
+            manager.invalidateWidget(display);
+        }
+        if (!this.fixed) return;
         for (const [child, property, stock, fixed] of [
             [17, "rawX", 547, 553],
             [9, "rawX", 516, 521],

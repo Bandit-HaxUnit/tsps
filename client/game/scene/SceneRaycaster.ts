@@ -1020,6 +1020,52 @@ export class SceneRaycaster {
         const tBoxMin = Math.max(boxHit.tMin, 0);
         if (tBoxMin > maxDistance) return undefined;
 
+        // OSRS (RSModel.drawFaces) tests the mouse against each face's projected 2D
+        // bounding box padded by 5px, not the triangle itself, so gaps in ladders,
+        // fences etc. are still clickable. Emulate it in a ray-aligned frame: project
+        // each vertex onto a plane perpendicular to the ray (x/z, y/z) where the mouse
+        // ray sits at (0, 0).
+        const dx = ray.direction[0];
+        const dy = ray.direction[1];
+        const dz = ray.direction[2];
+        // right = normalize(cross(dir, worldUp)) stays horizontal like the screen x axis.
+        let rx = -dz;
+        let rz = dx;
+        const rLen = Math.hypot(rx, rz);
+        if (rLen < 1e-6) {
+            rx = 1;
+            rz = 0;
+        } else {
+            rx /= rLen;
+            rz /= rLen;
+        }
+        // up = cross(right, dir)
+        const ux = -rz * dy;
+        const uy = rz * dx - rx * dz;
+        const uz = rx * dy;
+        const camera = this.osrsClient.camera;
+        const focalPx =
+            camera && camera.projectionMatrix[5] > 0 && camera.screenHeight > 0
+                ? (camera.projectionMatrix[5] * camera.screenHeight) / 2
+                : 512;
+        const pad = 5 / focalPx;
+        const ox = ray.origin[0];
+        const oy = ray.origin[1];
+        const oz = ray.origin[2];
+        const vertexCount = mesh.verticesX.length;
+        const projX = new Float32Array(vertexCount);
+        const projY = new Float32Array(vertexCount);
+        const depth = new Float32Array(vertexCount);
+        for (let v = 0; v < vertexCount; v++) {
+            const px = baseX + mesh.verticesX[v] * MODEL_WORLD_SCALE - ox;
+            const py = groundY + mesh.verticesY[v] * MODEL_WORLD_SCALE - oy;
+            const pz = baseZ + mesh.verticesZ[v] * MODEL_WORLD_SCALE - oz;
+            const z = px * dx + py * dy + pz * dz;
+            depth[v] = z;
+            projX[v] = (px * rx + pz * rz) / z;
+            projY[v] = (px * ux + py * uy + pz * uz) / z;
+        }
+
         let bestT = Number.POSITIVE_INFINITY;
         let hasVisibleFace = false;
         for (let i = 0; i < mesh.faceCount; i++) {
@@ -1030,31 +1076,22 @@ export class SceneRaycaster {
             const a = mesh.indices1[i] | 0;
             const b = mesh.indices2[i] | 0;
             const c = mesh.indices3[i] | 0;
+            if (a < 0 || b < 0 || c < 0 || a >= vertexCount || b >= vertexCount || c >= vertexCount) {
+                continue;
+            }
+            // Faces crossing the near plane are clipped in OSRS; skip them.
+            if (depth[a] <= 0 || depth[b] <= 0 || depth[c] <= 0) continue;
             if (
-                a < 0 ||
-                b < 0 ||
-                c < 0 ||
-                a >= mesh.verticesX.length ||
-                b >= mesh.verticesX.length ||
-                c >= mesh.verticesX.length
+                Math.min(projX[a], projX[b], projX[c]) > pad ||
+                Math.max(projX[a], projX[b], projX[c]) < -pad ||
+                Math.min(projY[a], projY[b], projY[c]) > pad ||
+                Math.max(projY[a], projY[b], projY[c]) < -pad
             ) {
                 continue;
             }
 
-            const ax = baseX + mesh.verticesX[a] * MODEL_WORLD_SCALE;
-            const ay = groundY + mesh.verticesY[a] * MODEL_WORLD_SCALE;
-            const az = baseZ + mesh.verticesZ[a] * MODEL_WORLD_SCALE;
-            const bx = baseX + mesh.verticesX[b] * MODEL_WORLD_SCALE;
-            const by = groundY + mesh.verticesY[b] * MODEL_WORLD_SCALE;
-            const bz = baseZ + mesh.verticesZ[b] * MODEL_WORLD_SCALE;
-            const cx = baseX + mesh.verticesX[c] * MODEL_WORLD_SCALE;
-            const cy = groundY + mesh.verticesY[c] * MODEL_WORLD_SCALE;
-            const cz = baseZ + mesh.verticesZ[c] * MODEL_WORLD_SCALE;
-
-            const t = this.intersectRayTriangle(ray, ax, ay, az, bx, by, bz, cx, cy, cz);
-            if (t === null || t < tBoxMin || t > maxDistance || t >= bestT) {
-                continue;
-            }
+            const t = (depth[a] + depth[b] + depth[c]) / 3;
+            if (t > maxDistance || t >= bestT) continue;
             bestT = t;
         }
 
@@ -1065,65 +1102,5 @@ export class SceneRaycaster {
         }
 
         return Number.isFinite(bestT) ? bestT : undefined;
-    }
-
-    private intersectRayTriangle(
-        ray: Ray,
-        ax: number,
-        ay: number,
-        az: number,
-        bx: number,
-        by: number,
-        bz: number,
-        cx: number,
-        cy: number,
-        cz: number,
-    ): number | null {
-        const EPS = 1e-6;
-
-        const edge1x = bx - ax;
-        const edge1y = by - ay;
-        const edge1z = bz - az;
-        const edge2x = cx - ax;
-        const edge2y = cy - ay;
-        const edge2z = cz - az;
-
-        const dirx = ray.direction[0];
-        const diry = ray.direction[1];
-        const dirz = ray.direction[2];
-
-        const px = diry * edge2z - dirz * edge2y;
-        const py = dirz * edge2x - dirx * edge2z;
-        const pz = dirx * edge2y - diry * edge2x;
-
-        const det = edge1x * px + edge1y * py + edge1z * pz;
-        if (det > -EPS && det < EPS) {
-            return null;
-        }
-        const invDet = 1 / det;
-
-        const tx = ray.origin[0] - ax;
-        const ty = ray.origin[1] - ay;
-        const tz = ray.origin[2] - az;
-
-        const u = (tx * px + ty * py + tz * pz) * invDet;
-        if (u < 0 || u > 1) {
-            return null;
-        }
-
-        const qx = ty * edge1z - tz * edge1y;
-        const qy = tz * edge1x - tx * edge1z;
-        const qz = tx * edge1y - ty * edge1x;
-
-        const v = (dirx * qx + diry * qy + dirz * qz) * invDet;
-        if (v < 0 || u + v > 1) {
-            return null;
-        }
-
-        const t = (edge2x * qx + edge2y * qy + edge2z * qz) * invDet;
-        if (t <= EPS) {
-            return null;
-        }
-        return t;
     }
 }

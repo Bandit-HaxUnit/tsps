@@ -43,48 +43,58 @@ export class NPCOptionPacketListener {
     PluginManager.emitNpcRoute(routeEvent);
     player.getMovementQueue().walkToEntity(npc, () => {
       player.setPositionToFace(npc.getLocation());
-      npc.setMobileInteraction?.(player);
-      npc.setPositionToFace?.(player.getLocation());
 
       const definition = npc.getCurrentDefinition(player);
       const option = definition?.getActions()?.[clickType - 1]?.toLowerCase();
       if (option === "attack") return;
 
-      if (
-        NpcInteractionManager.handle(
-          player,
-          npc,
-          index,
-          clickType
-        )
-      ) {
-        return;
-      }
+      NPCOptionPacketListener.operate(player, npc, index, clickType, definition, option);
 
-      if (option === "bank") {
-        player.getBank(player.getCurrentBankTab()).open();
-        return;
-      }
-
-      const handled = PluginManager.emitNpcInteraction({
-        player,
-        npc,
-        definition,
-        npcId: npc.getId(),
-        npcIndex: index,
-        clickType,
-        location: {
-          x: npc.getLocation().getX(),
-          y: npc.getLocation().getY(),
-          z: npc.getLocation().getZ(),
-        },
-        handled: false,
-      });
-
-      if (!handled) {
-        player.sendMessage("Nothing interesting happens.");
+      // OSRS NPCs only turn to a player they are talking to (chatnpc sets playerface) or
+      // fighting (retaliation, see combat:no-retaliate). An op on its own - Trade, Pickpocket,
+      // burning a barricade - leaves them facing the way they were.
+      if (player.getDialogueManager().isActive()) {
+        npc.setMobileInteraction?.(player);
+        npc.setPositionToFace?.(player.getLocation());
       }
     }, routeEvent.range);
+  }
+
+  private static operate(player: any, npc: any, index: number, clickType: number, definition: any, option: string | undefined): void {
+    if (
+      NpcInteractionManager.handle(
+        player,
+        npc,
+        index,
+        clickType
+      )
+    ) {
+      return;
+    }
+
+    if (option === "bank") {
+      player.getBank(player.getCurrentBankTab()).open();
+      return;
+    }
+
+    const handled = PluginManager.emitNpcInteraction({
+      player,
+      npc,
+      definition,
+      npcId: npc.getId(),
+      npcIndex: index,
+      clickType,
+      location: {
+        x: npc.getLocation().getX(),
+        y: npc.getLocation().getY(),
+        z: npc.getLocation().getZ(),
+      },
+      handled: false,
+    });
+
+    if (!handled) {
+      player.sendMessage("Nothing interesting happens.");
+    }
   }
 
   public static castSpell(player: any, index: number, spellId: number): boolean {
