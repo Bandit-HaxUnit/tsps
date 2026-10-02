@@ -43,6 +43,22 @@ const REWARD_POTENTIAL_INFO = "Reward Potential|"
   + "Close|";
 
 const NECROPOLIS_ENTRANCE_RADIUS = 8;
+// Interface 775: data_a_p/c_p/d_p (each followed by its world column), then per team size
+// data_<n>_p_o, _p_r, _g_o, _g_r from 53; the tabs story (Entry), normal and hard (Expert).
+const SCOREBOARD = {
+  LOC: 46071,
+  INTERFACE: 775,
+  TAB_VARBIT: 14320,
+  ATTEMPTS: 47,
+  COMPLETIONS: 49,
+  DEATHS: 51,
+  FIRST_ROW: 53,
+  TABS: [
+    { component: 86, mode: "normal" },
+    { component: 85, mode: "entry" },
+    { component: 87, mode: "expert" },
+  ],
+};
 const SHROUD_CHEST = 46080; // TOA_LOBBY_CAPE_CHEST
 const SHROUDS = [
   { id: 27257, completions: 100, option: "Take Icthlarin's shroud (tier 1)." },
@@ -177,6 +193,64 @@ function takeShroud(player, shroud) {
     new ItemStatementDialogue(0, shroud.id, "You take a mysterious shroud from the chest."),
     new EndDialogue(1),
   ));
+}
+
+/**
+ * The lobby scoreboard (TOA_SCOREBOARD 46071, interface 775), as OpenRune #271 fills it: a tab
+ * per mode (varbit TOA_SCOREBOARD_TAB) showing the player's attempts, completions and deaths, and
+ * their best challenge and overall times for each team size. The world columns stay "-": there
+ * are no world-wide records.
+ */
+function readScoreboard(event) {
+  const { player } = event;
+  if (event.objectId !== SCOREBOARD.LOC || !Shared.inLobby(player.getLocation())) return false;
+  const sender = player.getPacketSender();
+  sender.sendInterface(SCOREBOARD.INTERFACE);
+  for (const tab of SCOREBOARD.TABS) sender.sendInterfaceFlags(uid(SCOREBOARD.INTERFACE, tab.component), EVENT.OP1);
+  const tab = sender.getVarbit?.(SCOREBOARD.TAB_VARBIT) ?? 0;
+  sendScoreboard(player, SCOREBOARD.TABS[tab] ?? SCOREBOARD.TABS[0]);
+  return true;
+}
+
+function clickScoreboardTab(event) {
+  const { player } = event;
+  const index = SCOREBOARD.TABS.findIndex((tab) => uid(SCOREBOARD.INTERFACE, tab.component) === event.buttonId
+    || tab.component === event.childId);
+  if (index < 0) return;
+  player.getPacketSender().sendVarbit(SCOREBOARD.TAB_VARBIT, index);
+  sendScoreboard(player, SCOREBOARD.TABS[index]);
+}
+
+function sendScoreboard(player, tab) {
+  const sender = player.getPacketSender();
+  const stats = Raid.statsOf(player);
+  const counts = Raid.killCounts(player);
+  const text = (component, value) => sender.sendString(String(value), uid(SCOREBOARD.INTERFACE, component));
+  text(SCOREBOARD.ATTEMPTS, (stats.attempts[tab.mode] ?? 0).toLocaleString());
+  text(SCOREBOARD.ATTEMPTS + 1, "-");
+  text(SCOREBOARD.COMPLETIONS, (counts[tab.mode] ?? 0).toLocaleString());
+  text(SCOREBOARD.COMPLETIONS + 1, "-");
+  text(SCOREBOARD.DEATHS, (stats.deaths[tab.mode] ?? 0).toLocaleString());
+  text(SCOREBOARD.DEATHS + 1, "-");
+  for (let size = 1; size <= Raid.MAX_TEAM_SIZE; size++) {
+    const row = SCOREBOARD.FIRST_ROW + (size - 1) * 4; // personal overall, personal challenge, world overall, world challenge
+    text(row, scoreboardTime(stats.overall[`${tab.mode}:${size}`]));
+    text(row + 1, scoreboardTime(stats.challenge[`${tab.mode}:${size}`]));
+    text(row + 2, "-");
+    text(row + 3, "-");
+  }
+}
+
+/** m:ss.cc from ticks, as OpenRune shows them. */
+function scoreboardTime(ticks) {
+  if (!ticks) return "-";
+  const centis = ticks * 60;
+  const seconds = Math.floor(centis / 100);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}.${String(centis % 100).padStart(2, "0")}`;
+}
+
+function uid(group, child) {
+  return (group << 16) | child;
 }
 
 function sackChance(level) {
@@ -701,6 +775,9 @@ module.exports = function registerTombsLobby(api) {
   Shared.onObject(api, "Invocation Board", readInvocationBoard);
   Shared.onObject(api, "Sack", searchSack);
   api.onObjectClick(SHROUD_CHEST, 1, searchShroudChest);
+  api.onObjectClick(SCOREBOARD.LOC, 1, readScoreboard);
+  for (const tab of SCOREBOARD.TABS) api.onInterfaceActionButton(uid(SCOREBOARD.INTERFACE, tab.component), clickScoreboardTab);
+  api.persistAttribute(Raid.ATTR_STATS);
   api.onZoneEnter(Shared.LOBBY, enterLobby);
   api.onZoneExit(Shared.LOBBY, leaveLobby);
   api.onPlayerLogout(forgetOnLogout);

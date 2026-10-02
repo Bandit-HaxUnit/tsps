@@ -58,6 +58,10 @@ The OSRS Wiki and the cache weren't reachable when this was first written, so Ne
 - Points multipliers on Warden NPCs: obelisk 1.5, Warden 2, final Warden 2.5.
 - The common loot table's items and divisors, fossilised dung below 1,500 points, and the deathless kits and remnants. (The quantity factor above raid level 300 matches the Wiki.)
 - Tumeken's shadow charge cost (2 soul + 5 chaos per charge, 20,000 maximum), the Masori and Armadyl plate counts and experience, and the ward's 10,000 soul runes.
+- The lobby scoreboard (46071, interface 775), filled as OpenRune does:
+  - A tab per mode (`TOA_SCOREBOARD_TAB`) shows your attempts, completions and deaths, and your best overall and challenge times for each team size.
+  - These are recorded from now on: an attempt when a raid starts, a death on each death, and times on completion.
+  - The world columns show "-", since there are no world-wide records.
 - The lobby's shroud chest (46080): Icthlarin's shroud tiers at 100/500/1000/1500/2000 Normal+Expert completions, and the tier 5 hood (Wiki; the menu is OpenRune's).
 - The pickaxe cavities (45468 in Het's room, 49566 in the lobby) keep one pickaxe per player. It's shown in the wall by `TOA_PICKAXE_STORED` (varbit 14440, its place in OpenRune's list plus one). Bronze is turned away ("Het will provide"). Deposit stores the best held or wielded pickaxe; using one on the cavity stores that one.
 - The Scabaras puzzle room's shortcuts between its north and south paths (the Wiki only says they exist):
@@ -86,7 +90,7 @@ Each Tombs of Amascut NPC (11689-11804) has its block and death animations in `n
 - **Logout and failure:** logging out leaves the raid with no rejoin, and a failed raid keeps your items. OSRS sends them to a retrieval chest in the lobby for a fee; there's no retrieval chest yet.
 - **Zebak's death:** no camera shake, because the core has no camera-shake packet.
 - **Restart recovery:** logging in inside the tombs without an active raid returns you to the lobby. The raid exit also returns stranded players to the lobby.
-- **Scoreboard:** the burial chamber scoreboard (44942) isn't implemented.
+- **Scoreboard:** the burial chamber scoreboard (44942) isn't implemented; the lobby one shows only personal records.
 
 ## Checked against the Wiki and the cache
 

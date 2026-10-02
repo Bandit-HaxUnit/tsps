@@ -588,6 +588,7 @@ class Raid {
     lobby.unlist();
     for (const player of lobby.players) this.add(player);
     this.original = new Set(this.players.map((player) => player.getUsername()));
+    for (const player of this.players) recordStat(player, "attempts", this.settings.mode);
     raids.add(this);
   }
 
@@ -879,6 +880,7 @@ class Raid {
     const room = this.roomFor(player);
     this.totalDeaths++;
     member.deaths++;
+    recordStat(player, "deaths", Shared.modeName(this.raidLevel));
     member.points = Math.max(0, member.points - Math.max(1000, Math.floor(member.points * 0.2)));
     player.sendMessage(`You have died. Total deaths: <col=ff0000>${this.totalDeaths}</col>.`);
     if (room?.isStarted() && room.challengePlayers().length > 0) {
@@ -977,6 +979,7 @@ class Raid {
     player.sendMessage(`Tombs of Amascut: ${mode} Mode challenge completion time: <col=ef1020>${Shared.formatTicks(total)}</col>`);
     player.sendMessage(`Tombs of Amascut: ${mode} Mode total completion time: <col=ef1020>${Shared.formatTicks(this.totalTicks)}</col>`);
     const count = incrementKillCount(player, mode);
+    recordBestTimes(player, mode, this.original.size, total, this.totalTicks);
     player.sendMessage(`Your completed Tombs of Amascut: ${mode} Mode count is: <col=ff0000>${count}</col>.`);
     if (this.timeLimitMinutes !== -1) {
       player.sendMessage(this.failedTime
@@ -1196,6 +1199,39 @@ function incrementKillCount(player, mode) {
   return counts[key];
 }
 
+/**
+ * The lobby scoreboard's personal stats (OpenRune #271's ToaStats): attempts and deaths per
+ * mode, and the best challenge and overall times per mode and team size (1-8).
+ */
+const ATTR_STATS = "toa:stats";
+const MAX_TEAM_SIZE = 8;
+
+function statsOf(player) {
+  const saved = player.getAttribute(ATTR_STATS);
+  return {
+    attempts: { ...(saved?.attempts ?? {}) },
+    deaths: { ...(saved?.deaths ?? {}) },
+    challenge: { ...(saved?.challenge ?? {}) },
+    overall: { ...(saved?.overall ?? {}) },
+  };
+}
+
+function recordStat(player, kind, mode) {
+  const stats = statsOf(player);
+  const key = String(mode).toLowerCase();
+  stats[kind][key] = (stats[kind][key] ?? 0) + 1;
+  player.setAttribute(ATTR_STATS, stats);
+}
+
+function recordBestTimes(player, mode, teamSize, challengeTicks, overallTicks) {
+  const stats = statsOf(player);
+  const key = `${String(mode).toLowerCase()}:${Math.max(1, Math.min(MAX_TEAM_SIZE, teamSize))}`;
+  for (const [kind, ticks] of [["challenge", challengeTicks], ["overall", overallTicks]]) {
+    if (ticks > 0 && (!stats[kind][key] || ticks < stats[kind][key])) stats[kind][key] = ticks;
+  }
+  player.setAttribute(ATTR_STATS, stats);
+}
+
 function killCounts(player) {
   return { entry: 0, normal: 0, expert: 0, ...(player.getAttribute(ATTR_KILL_COUNTS) ?? {}) };
 }
@@ -1236,6 +1272,9 @@ module.exports = {
   begin,
   raids,
   killCounts,
+  statsOf,
+  ATTR_STATS,
+  MAX_TEAM_SIZE,
   removeRaidItems,
   registerRaidItems,
   styleMethod,
