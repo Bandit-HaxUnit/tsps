@@ -126,7 +126,11 @@ function owns(player, id) {
   return false;
 }
 
-/** Rolls every player's chest for a finished raid. Returns { uniqueWinner, uniqueId, petWinner }. */
+/**
+ * Rolls every player's chest for a finished raid. Returns { uniqueWinner, uniqueId, petWinner }.
+ * `raid.forcedLoot` ({ player, unique, pet }, set by ::toaskiptoreward) guarantees that player a
+ * unique (`unique`: an item id, or true for one picked by the usual weights) and/or the pet.
+ */
 function rollRaidLoot(raid) {
   const I = Shared.core().ItemIdentifiers;
   const players = raid.players.slice();
@@ -134,9 +138,13 @@ function rollRaidLoot(raid) {
   const raidLevel = raid.raidLevel;
   const total = players.reduce((sum, player) => sum + pointsOf(player), 0);
   const chance = uniqueChancePercent(total, raidLevel);
+  const forced = raid.forcedLoot && players.includes(raid.forcedLoot.player) ? raid.forcedLoot : null;
   let uniqueWinner = null;
   let uniqueId = -1;
-  if (Math.random() * 100 < chance) {
+  if (forced?.unique) {
+    uniqueWinner = forced.player;
+    uniqueId = forced.unique === true ? weightedPick(uniqueTable(I, raidLevel), (entry) => entry.weight).id : forced.unique;
+  } else if (Math.random() * 100 < chance) {
     const unique = weightedPick(uniqueTable(I, raidLevel), (entry) => entry.weight);
     if (raidLevel >= unique.level || Shared.random(0, 49) === 0) {
       uniqueWinner = weightedPick(players, (player) => Math.max(0, pointsOf(player)));
@@ -144,7 +152,8 @@ function rollRaidLoot(raid) {
     }
   }
   const petChance = petChancePercent(total, raidLevel);
-  const petWinner = Math.random() * 100 < petChance ? weightedPick(players, (player) => Math.max(0, pointsOf(player))) : null;
+  const petWinner = forced?.pet ? forced.player
+    : Math.random() * 100 < petChance ? weightedPick(players, (player) => Math.max(0, pointsOf(player))) : null;
   for (const player of players) {
     const loot = rollPlayer(raid, player, player === uniqueWinner ? uniqueId : -1);
     if (player === petWinner) loot.push({ id: I.TUMEKENS_GUARDIAN, amount: 1 });
@@ -164,7 +173,7 @@ function rollPlayer(raid, player, uniqueId) {
     if (existing) existing.amount += amount;
     else loot.push({ id, amount });
   };
-  if (points < DUNG_POINTS) {
+  if (points < DUNG_POINTS && uniqueId === -1) {
     add(I.FOSSILISED_DUNG);
     return loot;
   }

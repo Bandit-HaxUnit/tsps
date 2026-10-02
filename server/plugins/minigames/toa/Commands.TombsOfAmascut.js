@@ -73,11 +73,37 @@ function skipToWardens({ player }) {
 
 const DEFAULT_REWARD_POINTS = 20000;
 const MAX_RAID_LEVEL = 600;
+/** What ::toaskiptoreward can force for the player using it: a unique by name, or "purple". */
+const FORCED_UNIQUES = {
+  lightbearer: (I) => I.LIGHTBEARER,
+  fang: (I) => I.OSMUMTENS_FANG,
+  ward: (I) => I.ELIDINIS_WARD,
+  mask: (I) => I.MASORI_MASK,
+  body: (I) => I.MASORI_BODY,
+  chaps: (I) => I.MASORI_CHAPS,
+  masori: (I) => Shared.randomOf([I.MASORI_MASK, I.MASORI_BODY, I.MASORI_CHAPS]),
+  shadow: (I) => I.TUMEKENS_SHADOW_UNCHARGED_,
+};
+const REWARD_USAGE = "Usage: ::toaskiptoreward [points] [raid level] [purple|lightbearer|fang|ward|masori|mask|body|chaps|shadow] [pet]";
+
+/** The forced loot named after the level, e.g. ["shadow", "pet"]; null if a word isn't known. */
+function forcedLoot(player, words) {
+  const I = Shared.core().ItemIdentifiers;
+  const forced = { player, unique: null, pet: false };
+  for (const word of words.map((part) => part.toLowerCase())) {
+    if (word === "pet") forced.pet = true;
+    else if (word === "purple") forced.unique = true;
+    else if (FORCED_UNIQUES[word]) forced.unique = FORCED_UNIQUES[word](I);
+    else return null;
+  }
+  return forced.unique || forced.pet ? forced : undefined;
+}
 
 /**
- * ::toaskiptoreward [points] [raid level]: ends the raid as if the Wardens fell and takes the
- * party to the chest. Every player gets `points` loot points (beyond the 5,000 start; default
- * 20,000). A raid level, if given, replaces the invocations' for the loot rolls.
+ * ::toaskiptoreward [points] [raid level] [unique] [pet]: ends the raid as if the Wardens fell
+ * and takes the party to the chest. Every player gets `points` loot points (beyond the 5,000
+ * start; default 20,000). A raid level, if given, replaces the invocations' for the loot rolls.
+ * "purple" (or a unique's name) and "pet" guarantee them to the player using the command.
  */
 function skipToReward({ player, parts }) {
   const raid = Raid.raidOf(player);
@@ -90,13 +116,19 @@ function skipToReward({ player, parts }) {
     return true;
   }
   const maxPoints = Raid.TOTAL_POINTS_CAP - Raid.START_POINTS;
-  const points = parts?.[1] === undefined ? DEFAULT_REWARD_POINTS : Number(parts[1]);
-  const level = parts?.[2] === undefined ? null : Number(parts[2]);
+  // Numbers are the points then the raid level; words are what to force, in any order.
+  const args = parts?.slice(1) ?? [];
+  const numbers = args.filter((arg) => /^-?\d+$/.test(arg)).map(Number);
+  const points = numbers[0] ?? DEFAULT_REWARD_POINTS;
+  const level = numbers[1] ?? null;
+  const forced = numbers.length > 2 ? null : forcedLoot(player, args.filter((arg) => !/^-?\d+$/.test(arg)));
   if (!Number.isInteger(points) || points < 0 || points > maxPoints
-    || (level !== null && (!Number.isInteger(level) || level < 0 || level > MAX_RAID_LEVEL))) {
-    player.sendMessage(`Usage: ::toaskiptoreward [points 0-${maxPoints}] [raid level 0-${MAX_RAID_LEVEL}]`);
+    || (level !== null && (!Number.isInteger(level) || level < 0 || level > MAX_RAID_LEVEL)) || forced === null) {
+    player.sendMessage(REWARD_USAGE);
+    player.sendMessage(`Points 0-${maxPoints}, raid level 0-${MAX_RAID_LEVEL}.`);
     return true;
   }
+  raid.forcedLoot = forced ?? null;
   for (const path of Shared.PATHS) raid.completePath(path.key);
   if (raid.startCycle === 0) raid.startCycle = Shared.cycle();
   raid.setCompletion();
@@ -108,7 +140,7 @@ function skipToReward({ player, parts }) {
   raid.sendContributions();
   for (const member of [...raid.players]) raid.enterRoom(member, "REWARD", { leaderOnly: false });
   raid.broadcast(`${Shared.displayName(player)} skipped to the rewards for testing: ${points.toLocaleString()} points each`
-    + ` at raid level ${raid.raidLevel}.`);
+    + ` at raid level ${raid.raidLevel}${forced ? `, with ${[forced.unique && "a purple", forced.pet && "the pet"].filter(Boolean).join(" and ")} forced` : ""}.`);
   return true;
 }
 

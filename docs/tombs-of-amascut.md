@@ -146,6 +146,10 @@ The skipped paths give no points, so the loot reflects only what was actually fo
 the raid as if the Wardens fell and takes the party to the chest. Every player gets `points`
 loot points (on top of the 5,000 start; 0–59,000, default 20,000). A raid level (0–600), if
 given, replaces the invocations' level for the loot rolls. It doesn't add to completion counts.
+Words after the numbers force loot for the player using it: `purple` (a unique picked by the
+usual weights at that raid level), or one by name (`lightbearer`, `fang`, `ward`, `masori` for
+a random piece, `mask`, `body`, `chaps`, `shadow`), and `pet`. For example,
+`::toaskiptoreward 30000 500 shadow pet` or just `::toaskiptoreward purple`.
 
 Run `npx tsc --noEmit -p tsconfig.json` in `server`, then load the plugins. With `TS_NODE_TRANSPILE_ONLY=1`, a `node -r ts-node/register` script that calls `PluginManager.loadFromDirectory()` should list `TombsOfAmascut` among the loaded plugins.
 

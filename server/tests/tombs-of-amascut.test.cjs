@@ -71,3 +71,35 @@ test('returning from a path lands on free Nexus floor, never inside its doorway'
     }
   }
 });
+
+test('::toaskiptoreward can force a unique and the pet to one player', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { ItemIdentifiers: I } = require('../dist/util/ItemIdentifiers');
+  const Shared = require('../plugins/minigames/toa/ToaShared');
+  const Rewards = require('../plugins/minigames/toa/ToaRewards');
+  Shared.bind({ core: PluginManager.getCoreApi() });
+  const playerStub = () => {
+    const attributes = new Map();
+    const empty = { contains: () => false };
+    return {
+      getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+      getInventory: () => empty, getEquipment: () => empty, getBank: () => empty,
+    };
+  };
+  const a = playerStub();
+  const b = playerStub();
+  // No points at all: without forcing, there would be no purple and no pet.
+  const raid = {
+    players: [a, b], raidLevel: 0, totalDeaths: 1, lootPoints: () => 0,
+    settings: { isActive: () => false },
+    forcedLoot: { player: b, unique: I.TUMEKENS_SHADOW_UNCHARGED_, pet: true },
+  };
+  const { uniqueWinner, uniqueId, petWinner } = Rewards.rollRaidLoot(raid);
+  assert.equal(uniqueWinner, b);
+  assert.equal(uniqueId, I.TUMEKENS_SHADOW_UNCHARGED_);
+  assert.equal(petWinner, b);
+  const ids = Rewards.lootOf(b).map((entry) => entry.id);
+  assert.ok(ids.includes(I.TUMEKENS_SHADOW_UNCHARGED_), 'the forced unique is in the chest');
+  assert.ok(ids.includes(I.TUMEKENS_GUARDIAN), 'so is the pet');
+  assert.deepEqual(Rewards.lootOf(a).map((entry) => entry.id), [I.FOSSILISED_DUNG]);
+});
