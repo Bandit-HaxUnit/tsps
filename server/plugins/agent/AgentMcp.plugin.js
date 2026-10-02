@@ -14,7 +14,7 @@ const MAX_MESSAGES = 100;
 const MAX_WAIT_TICKS = 50;
 // Idle this many ticks in a row (no activity, same tile) before a wait counts as finished.
 const STILL_TICKS = 2;
-// Bank and shop clicks move fixed amounts, so larger amounts are sent as several clicks.
+// Shop clicks move fixed amounts (1/5/10/50), so larger amounts are sent as several clicks.
 const MAX_CLICKS = 50;
 const DIALOGUE_KINDS = {
   NpcDialogue: "npc", PlayerDialogue: "player", OptionDialogue: "options",
@@ -194,8 +194,16 @@ function buildMcpServer(core) {
     if (out.length > MAX_CLICKS) throw new Error(`That needs ${out.length} clicks; use a smaller amount or "all"`);
     return out;
   };
-  // One click per tick: each click can empty or shift the slot the next one resolves.
-  const clickEach = async (username, steps, message) => {
+  // Sends one packet per step. `oneByOne` spaces them a tick apart and re-resolves each, for
+  // non-stackable items where a click empties the slot the next one would use.
+  const clickEach = async (username, steps, message, oneByOne) => {
+    if (!oneByOne) {
+      const p = find(username);
+      const packets = steps.map((step) => message(p, step)).filter(Boolean);
+      if (!core.dispatchClientMessages(p, packets)) throw new Error(`${username} has no client connection`);
+      await sleepTicks(1);
+      return status(find(username));
+    }
     for (const step of steps) {
       const p = find(username);
       const packet = message(p, step);
@@ -471,15 +479,14 @@ function buildMcpServer(core) {
     async ({ player: username, item: name, amount }) => {
       const p = find(username);
       const entry = byName(bankEntries(p), name, "the bank");
-      const steps = amount === "all" || amount >= entry.amount ? ["All"] : clicks(amount, [10, 5, 1]);
-      return clickEach(username, steps, (p, step) => {
-        const current = bankEntries(p).find((e) => e.id === entry.id);
-        if (!current) return null;
-        return {
+      const all = amount === "all" || amount >= entry.amount;
+      // With the bank open, an entered amount becomes the X quantity, as when the client answers Withdraw-X.
+      return clickEach(username, all ? ["All"] : ["amount", "X"], (p, step) => step === "amount"
+        ? { type: "dialogue_amount", amount }
+        : {
           type: "widget_action", widgetId: (Bank.MAIN_INTERFACE_ID << 16) | 12, groupId: Bank.MAIN_INTERFACE_ID,
-          childId: 12, slot: current.slot, itemId: current.itemId, buttonNum: 1, option: `Withdraw-${step}`,
-        };
-      });
+          childId: 12, slot: entry.slot, itemId: entry.itemId, buttonNum: 1, option: `Withdraw-${step}`,
+        });
     }
   );
 
@@ -496,16 +503,15 @@ function buildMcpServer(core) {
         await sleepTicks(1);
         return status(find(username));
       }
-      const itemId = p.getInventory().getItems()[inventorySlot(p, name)].getId();
-      const steps = amount === "all" || amount >= carried(p, itemId) ? ["All"] : clicks(amount, [10, 5, 1]);
-      return clickEach(username, steps, (p, step) => {
-        const slot = items(p.getInventory()).find((e) => e.id === itemId)?.slot;
-        if (slot === undefined) return null;
-        return {
+      const slot = inventorySlot(p, name);
+      const itemId = p.getInventory().getItems()[slot].getId();
+      const all = amount === "all" || amount >= carried(p, itemId);
+      return clickEach(username, all ? ["All"] : ["amount", "X"], (p, step) => step === "amount"
+        ? { type: "dialogue_amount", amount }
+        : {
           type: "widget_action", widgetId: (Bank.SIDE_INTERFACE_ID << 16) | 3, groupId: Bank.SIDE_INTERFACE_ID,
           childId: 3, slot, itemId, buttonNum: 1, option: `Deposit-${step}`,
-        };
-      });
+        });
     }
   );
 
@@ -551,7 +557,7 @@ function buildMcpServer(core) {
         const slot = items(p.getInventory()).find((e) => e.id === itemId)?.slot;
         if (slot === undefined) return null;
         return { type: "widget_action", widgetId: groupId << 16, groupId, childId: 0, slot, itemId, buttonNum: 1, option: `Sell ${step}` };
-      });
+      }, !ItemDefinition.forId(itemId).isStackable?.());
     }
   );
 

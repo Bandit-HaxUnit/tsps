@@ -215,10 +215,8 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     assert.deepEqual(dispatched, [
         { type: "inventory_use_on", slot: 3, itemId: 590, target: { kind: "inventory", slot: 0, itemId: 1351 } },
         { type: "inventory_use_on", slot: 3, itemId: 590, target: { kind: "loc", id: 1276, x: 3220, y: 3216, level: 0 } },
-        { ...bank, option: "Withdraw-10" },
-        { ...bank, option: "Withdraw-1" },
-        { ...bank, option: "Withdraw-1" },
-        { ...bank, option: "Withdraw-1" },
+        { type: "dialogue_amount", amount: 13 },
+        { ...bank, option: "Withdraw-X" },
         { type: "widget_action", widgetId: (15 << 16) | 3, groupId: 15, childId: 3, slot: 3, itemId: 590, buttonNum: 1, option: "Deposit-All" },
         { ...buy, option: "Buy 5" },
         { ...buy, option: "Buy 1" },
