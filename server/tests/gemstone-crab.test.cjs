@@ -61,8 +61,10 @@ function player(name, x, y, z = 0) {
   const messages = [];
   const varbits = new Map();
   const items = [];
+  const scripts = [];
+  const hidden = new Map();
   return {
-    messages, varbits, items, location: new Location(x, y, z),
+    messages, varbits, items, scripts, hidden, location: new Location(x, y, z),
     getUsername: () => name,
     getLocation() { return this.location; },
     getHitpoints: () => 99,
@@ -72,7 +74,8 @@ function player(name, x, y, z = 0) {
       const sender = {
         sendVarbit: (id, value) => { varbits.set(id, value); return sender; },
         sendConfig: (id, value) => { varbits.set(`varp${id}`, value); return sender; },
-        sendInterfaceScript: () => sender,
+        sendInterfaceScript: (id, args = []) => { scripts.push([id, args]); return sender; },
+        sendInterfaceDisplayState: (uid, hide) => { hidden.set(uid, hide); return sender; },
       };
       return sender;
     },
@@ -209,6 +212,42 @@ test("the 16 top damage dealers may mine the shell, once each, for three gems", 
   assert.match(top.messages.at(-1), /^You mine an uncut [a-z ]+ from the crab shell\.$/);
   mine(top);
   assert.equal(top.messages.at(-1), "You have already taken your share of this crab's shell.");
+});
+
+test("the burrow messages go to the players at its mine, not the whole world", () => {
+  withRandom(0, () => spawnCrab());
+  const [x, y] = SPOTS[state.spot].crab;
+  const zone = (list) => list.find(({ zone }) => zone.minX <= x && x <= zone.maxX && zone.minY <= y && y <= zone.maxY);
+  const here = player("here", x - 1, y);
+  const edgeville = player("edgeville", 3093, 3493);
+  zone(hooks.zonesEnter).handler({ player: here });
+  state.damage.set("here", 5);
+  state.endsAt = state.tick;
+  withRandom(0.99, () => { for (let t = 0; t < 3; t++) tick(); });
+  assert.ok(here.messages.includes("The gemstone crab burrows away, leaving a piece of its shell behind."));
+  assert.ok(here.messages.includes("The top crab crusher was here!"));
+  assert.deepEqual(edgeville.messages, [], "nothing for a player elsewhere");
+  zone(hooks.zonesExit).handler({ player: here });
+});
+
+test("leaving its mine fades the HUD out (script 2889 with its 14 components) and then hides it", () => {
+  withRandom(0, () => spawnCrab());
+  const [x, y] = SPOTS[state.spot].crab;
+  const zone = (list) => list.find(({ zone }) => zone.minX <= x && x <= zone.maxX && zone.minY <= y && y <= zone.maxY);
+  const p = player("p", x - 1, y);
+  zone(hooks.zonesEnter).handler({ player: p });
+  const HP = (303 << 16) | 5;
+  assert.equal(p.hidden.get(HP), false, "shown on arrival");
+  assert.deepEqual(p.scripts.slice(-2).map(([id, args]) => [id, args.length, args.at(-1)]), [[2887, 15, 254], [2376, 19, (303 << 16) | 3]],
+    "faded back in (an earlier fade-out leaves the bar transparent), then opened");
+  zone(hooks.zonesExit).handler({ player: p });
+  const [id, args] = p.scripts.at(-1);
+  assert.equal(id, 2889);
+  assert.equal(args.length, 15, "14 components and a transparency");
+  assert.equal(args[0], HP);
+  for (let t = 0; t < 3; t++) TaskManager.process();
+  assert.equal(p.hidden.get(HP), true, "hidden once faded");
+  assert.equal(p.varbits.get("varp1683"), -1);
 });
 
 test("a shell roll is uncut dragonstone 1 in 500, else a gem by its weight out of 32", () => {

@@ -13,7 +13,7 @@ A timed world boss in the Tlati Rainforest (`server/plugins/bosses/GemstoneCrab.
 - **Its attacks:** max hit 1, crush, every 7 ticks. It focuses on one side (north, east, south or west), and every player on that side, beside or under its 5×5, can be hit (Wiki: "the quadrant it is focusing its attacks on"). It changes side as it changes target. The centre tile is safe.
 - **Multi-combat:** each mine's area is multi-combat (`world.json`), so many players can fight it at once (Wiki: it "can be fought in large groups").
 - **Combat XP** against it is 87.5% of normal (3.5 per damage instead of 4).
-- **Messages** (Wiki):
+- **Messages** (Wiki), sent to the players at the crab's mine (OpenRune sends them to the whole world; neither the Wiki nor our capture says which):
   - "The gemstone crab burrows away, leaving a piece of its shell behind.";
   - "The top three crab crushers were A, B, & C!";
   - to each player who may mine: "You gained enough understanding of the crab to mine from its remains.";
@@ -45,6 +45,7 @@ Bold values are captured; the rest are OpenRune's. OpenRune had mine 3's crab at
   - varbit 6100 `hpbar_hud_basehp` = lifetime;
   - varbit 12401 `hpbar_hud_boss` = 1;
   - client script 2376 `hp_hud_open`, given 19 of its components;
+  - the fade scripts 2887 (in) and 2889 (out) take 14 of its components and a transparency (OpenRune: 255 and 0). Leaving the mine fades the HUD out and hides `hpbar_hud:hp` (303:5) 2 ticks later, as OpenRune does. Showing it fades it back in (2887 from 254) before 2376: a finished fade-out leaves the bar's parts at transparency 255, 2376 doesn't reset them, and 2887 (via 2888) returns at once when told to start from the transparency they already have. OpenRune also runs 2287 and 2102 on open, but with arguments those scripts don't take (2287 is a 2-int helper, 2102 takes 12), so they're left out;
   - the bar's colours (303:13, :14 and :15 set to 25600, 576 and 800).
 
 ### The crab burrowing at mine 2 and rising at mine 1
