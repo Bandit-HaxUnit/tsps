@@ -24,3 +24,67 @@ test('every supported gameframe is accepted', () => {
 test('an unknown gameframe is rejected', () => {
   assert.throws(() => parseWorldDefinition(world({ gameframe: 'classic-resizable' })), WorldDefinitionValidationError);
 });
+
+test('voice is disabled in the default world', () => {
+  assert.ok(require('../data/definitions/world.json').disabledPlugins.includes('VoiceChat'));
+});
+
+test('plugin loading counts disabled files and logs only the final persistence override', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { GameConstants } = require('../dist/game/GameConstants');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'tsps-plugin-config-'));
+  const cwd = process.cwd();
+  const persistence = GameConstants.PLAYER_PERSISTENCE;
+  const disableBots = process.env.DISABLE_PLAYER_BOTS;
+  const originalInfo = console.info;
+  const originalWarn = console.warn;
+  const messages = [];
+  const warnings = [];
+  const write = (name, contents) => {
+    const file = path.join(directory, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, contents);
+  };
+  try {
+    write('data/definitions/world.json', JSON.stringify({
+      disabledPlugins: ['VoiceChat', 'DisabledAlias', 'NotInstalled'],
+    }));
+    // Disabled filenames must be filtered before require(), including VoiceChat.
+    write('plugins/VoiceChat.plugin.js', 'throw new Error("voice was evaluated");');
+    write('plugins/bots/PlayerBots.plugin.js', 'throw new Error("bots were evaluated");');
+    write('plugins/Alias.plugin.js', 'module.exports = { name: "DisabledAlias", register() { throw new Error("disabled alias registered"); } };');
+    write('plugins/First.plugin.js', `module.exports = { name: 'First', register(api) {
+      api.setPlayerPersistence(new class FirstPersistence { load() {} save() {} exists() {} });
+    } };`);
+    write('plugins/Last.plugin.js', `module.exports = { name: 'Last', dependsOn: ['First'], register(api) {
+      api.setPlayerPersistence(new class LastPersistence { load() {} save() {} exists() {} });
+      api.setPlayerPersistence({});
+    } };`);
+    process.chdir(directory);
+    process.env.DISABLE_PLAYER_BOTS = '1';
+    console.info = (message) => messages.push(message);
+    console.warn = (message) => warnings.push(message);
+    PluginManager.loadFromDirectory(path.join(directory, 'plugins'));
+    PluginManager.loadFromDirectory(path.join(directory, 'plugins'));
+    assert.deepEqual(messages, [
+      '[plugins] player persistence set by Last: FirstPersistence -> LastPersistence',
+      '[plugins] active=2 disabled=3',
+    ]);
+    assert.deepEqual(warnings, ['[plugins] Last attempted invalid player persistence registration']);
+    assert.equal(GameConstants.PLAYER_PERSISTENCE.constructor.name, 'LastPersistence');
+  } finally {
+    console.info = originalInfo;
+    console.warn = originalWarn;
+    process.chdir(cwd);
+    if (disableBots === undefined) delete process.env.DISABLE_PLAYER_BOTS;
+    else process.env.DISABLE_PLAYER_BOTS = disableBots;
+    GameConstants.setPlayerPersistence(persistence);
+    PluginManager.initialized = false;
+    PluginManager.loadedPlugins = [];
+    PluginManager.lastPersistenceOverride = null;
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});

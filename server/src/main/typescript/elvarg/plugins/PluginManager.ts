@@ -146,6 +146,7 @@ export class PluginManager {
   private static readonly MAX_PLUGIN_DEPTH = 2;
   private static initialized = false;
   private static loadedPlugins: string[] = [];
+  private static lastPersistenceOverride: string | null = null;
   private static loginHooks: PluginHook<PluginPlayerLoginEvent>[] = [];
   private static disconnectHooks: PluginHook<PluginPlayerDisconnectEvent>[] = [];
   private static logoutHooks: PluginHook<PluginPlayerLogoutEvent>[] = [];
@@ -483,13 +484,14 @@ export class PluginManager {
       process.argv.includes("--disablePlayerBots") ||
       process.env.DISABLE_PLAYER_BOTS === "1";
 
+    let disabledCount = 0;
     const filteredPluginFiles = pluginFiles.filter((pluginPath) => {
       if (
         disablePlayerBots &&
         pluginPath.includes(path.sep + "bots" + path.sep) &&
         pluginPath.endsWith("PlayerBots.plugin.js")
       ) {
-        console.info("[plugins] skipped PlayerBots due --disablePlayerBots");
+        disabledCount++;
         return false;
       }
       return true;
@@ -502,7 +504,7 @@ export class PluginManager {
       if (!disabledPluginNames.has(normalizePluginName(fileName))) {
         return true;
       }
-      console.info(`[plugins] skipped ${fileName}: disabled in world.json`);
+      disabledCount++;
       return false;
     });
     const candidates = PluginManager.collectPluginLoadCandidates(
@@ -514,30 +516,20 @@ export class PluginManager {
         if (!disabledPluginNames.has(normalizePluginName(candidate.pluginName))) {
           return true;
         }
-        console.info(`[plugins] skipped ${candidate.pluginName}: disabled in world.json`);
+        disabledCount++;
         return false;
       })
     );
 
-    if (enabledPluginFiles.length > 0 && candidates.length === 0) {
-      console.warn(
-        `[plugins] no valid plugins loaded from ${pluginDirectory}`
-      );
-      return;
+    if (PluginManager.lastPersistenceOverride) {
+      console.info(PluginManager.lastPersistenceOverride);
     }
-
-    if (PluginManager.loadedPlugins.length === 0) {
-      console.warn(
-        `[plugins] no valid plugins loaded from ${pluginDirectory}`
-      );
-      return;
-    }
-
     console.info(
-      `[plugins] loaded ${PluginManager.loadedPlugins.length}: ${PluginManager.loadedPlugins.join(
-        ", "
-      )}`
+      `[plugins] active=${PluginManager.loadedPlugins.length} disabled=${disabledCount}`
     );
+    if (enabledPluginFiles.length > 0 && PluginManager.loadedPlugins.length === 0) {
+      console.warn(`[plugins] no valid plugins loaded from ${pluginDirectory}`);
+    }
   }
 
   public static emitPlayerLogin(event: PluginPlayerLoginEvent): void {
@@ -3484,9 +3476,8 @@ export class PluginManager {
           GameConstants.PLAYER_PERSISTENCE?.constructor?.name ?? "unknown";
         const nextName = (persistence as any).constructor?.name ?? "unknown";
         GameConstants.setPlayerPersistence(persistence);
-        console.info(
-          `[plugins] player persistence set by ${pluginName}: ${previousName} -> ${nextName}`
-        );
+        PluginManager.lastPersistenceOverride =
+          `[plugins] player persistence set by ${pluginName}: ${previousName} -> ${nextName}`;
       },
       setExperienceRate: (rate) => GameConstants.setExperienceRate(rate),
       getActiveRegionSnapshot: () => {

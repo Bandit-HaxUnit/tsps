@@ -51,7 +51,7 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
 
         NpcSpawnDefinition.replace(definitions);
         const applied = this.applyToWorld(definitions);
-        console.info(
+        (invalid > 0 || unsupported > 0 || applied < definitions.length ? console.warn : console.debug)(
             `[npc-spawns] Loaded ${definitions.length} definitions from ` +
             `${loaded.sources.map((source) => source.name).join("+") || "none"} ` +
             `(candidates=${totalCandidates}, invalid=${invalid}, unsupported=${unsupported}, ` +

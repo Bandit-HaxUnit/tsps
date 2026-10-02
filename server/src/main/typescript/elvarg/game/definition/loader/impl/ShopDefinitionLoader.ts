@@ -82,7 +82,7 @@ export class ShopDefinitionLoader extends DefinitionLoader {
 
         const definitions = Array.from(definitionsById.values());
         ShopDefinition.replace(definitions);
-        console.info(
+        (invalid > 0 || this.unresolvedItemNames.size > 0 ? console.warn : console.debug)(
             `[shops] Loaded ${definitions.length} definitions from ` +
             `${sources.map((source) => source.name).join("+")} ` +
             `(candidates=${candidates}, invalid=${invalid}, unresolvedStock=${this.unresolvedItemNames.size})`

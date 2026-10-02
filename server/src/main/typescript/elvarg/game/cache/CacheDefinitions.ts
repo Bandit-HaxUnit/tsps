@@ -68,7 +68,7 @@ export class CacheDefinitions {
             objects: new ArchiveLocTypeLoader(info, configs.getArchive(ConfigType.DAT2.locs)),
             info,
         };
-        console.info(
+        console.debug(
             `[cache] definitions npc=${this.state.npcs.getCount()} item=${this.state.items.getCount()} object=${this.state.objects.getCount()}`,
         );
         return this.state;

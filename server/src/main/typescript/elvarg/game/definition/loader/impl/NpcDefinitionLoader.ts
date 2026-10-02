@@ -252,7 +252,7 @@ export class NpcDefinitionLoader extends DefinitionLoader {
                 });
             }
         }
-        console.info(
+        (mismatched > 0 ? console.warn : console.debug)(
             `[npc-definitions] cache-backed; configured stats applied=${applied}, mismatched=${mismatched}, ` +
             `service animations inferred=${inferredAnimations}, guessed=${guessedAnimations}`
         );
