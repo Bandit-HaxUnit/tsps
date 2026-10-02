@@ -45,8 +45,9 @@ let DOOR_CATALOG = null;
 // Doors with no open variant in the cache: OSRS opens them by rotating the same loc
 // (open id === closed id). Their consecutive ids are unrelated doors with the same
 // model, so the same-model pairing below must not pair them. Tutorial Island:
-// start house, chef entry/exit, quest guide, and the bank/prayer area doors.
-const SELF_OPENING_DOOR_IDS = new Set([9398, 9709, 9710, 9716, 9721, 9722, 9723, 9724]);
+// start house, chef entry/exit, quest guide, and the bank/prayer area doors. 15056: a single
+// door whose same-model "Close" locs (5245, 11617, 15205, 17115) all belong to other doors.
+const SELF_OPENING_DOOR_IDS = new Set([9398, 9709, 9710, 9716, 9721, 9722, 9723, 9724, 15056]);
 
 // Single doors whose open variant is not closedId + 1 (e.g. Large door 1517 -> 1520, same models).
 const SINGLE_DOOR_OPEN_IDS = new Map([[1517, 1520]]);
