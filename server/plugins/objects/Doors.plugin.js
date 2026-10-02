@@ -8,8 +8,6 @@ let core;
 // (DoorConstants.DURATION = 500) and a from-scratch OSRS-parity server (DOOR_AUTO_CLOSE_TICKS).
 const DOOR_AUTO_CLOSE_TICKS = 500;
 
-const DOOR_RESYNC_TICKS_ATTR = "doors:resyncTicks";
-
 // Single-door closed/open pairs are discovered from this server's own cache instead of a
 // hand-picked ID list: OSRS models every plain door as two consecutive loc ids where the
 // closed variant offers "Open" and closedId+1 offers "Close" (verified live against this
@@ -64,9 +62,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     woodenGate(O.GATE_17, O.GATE_167, O.GATE_168, O.GATE_169),
     woodenGate(O.GATE_18, O.GATE_20, O.GATE_19, O.GATE_25),
     woodenGate(O.GATE_21, O.GATE_22, O.GATE_23, O.GATE_24),
-    woodenGate(O.GATE_78, O.GATE_79, O.GATE_80, 4314), // 4314 nameless
+    woodenGate(O.GATE_78, O.GATE_79, O.GATE_80, 4314), // 4314: open extension, nameless in the cache
     woodenGate(O.GATE_83, O.GATE_84, O.GATE_85, O.GATE_86),
-    woodenGate(O.GATE_113, O.GATE_114, O.GATE_115, 12819), // 12819 nameless
+    woodenGate(O.GATE_113, O.GATE_114, O.GATE_115, 12819), // 12819: open extension, nameless in the cache
     woodenGate(O.GATE_116, O.GATE_117, O.GATE_118, O.GATE_119),
     woodenGate(O.GATE_140, O.GATE_142, O.GATE_137, O.GATE_139),
     woodenGate(O.GATE_243, O.GATE_244, O.GATE_245, O.GATE_246),
@@ -87,12 +85,11 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     Object.freeze([O.GATE_33, O.GATE_34, O.GATE_29, O.GATE_30]),
     Object.freeze([O.DOOR_354, O.DOOR_355, O.DOOR_356, O.DOOR_357]),
     Object.freeze([O.LARGE_DOOR_15, O.LARGE_DOOR_16, O.LARGE_DOOR_17, O.LARGE_DOOR_18]),
-    Object.freeze([O.DOOR_36, O.DOOR_37, 1553, 1554]), // 1553, 1554 nameless
-    Object.freeze([1557, O.GATE_18, O.GATE_19]), // 1557 nameless
+    Object.freeze([O.DOOR_36, O.DOOR_37]),
+    Object.freeze([O.GATE_18, O.GATE_19]),
     Object.freeze([O.GATE_26, O.GATE_27, O.GATE_29, O.GATE_30]),
     Object.freeze([O.DOORWAY_2, O.DOORWAY_3, O.DOORWAY_4]),
-    Object.freeze([1596, O.WALL_5, O.WALL_6]), // 1596 nameless
-    // Castle Wars large doors. West leaf is left: Saradomin 4423/4424 -> 4425/4426,
+      // Castle Wars large doors. West leaf is left: Saradomin 4423/4424 -> 4425/4426,
     // Zamorak 4428/4427 (ids run east to west on that wall) -> 4430/4429.
     Object.freeze([O.LARGE_DOOR_24, O.LARGE_DOOR_25, O.LARGE_DOOR_26, O.LARGE_DOOR_27]),
     Object.freeze([O.LARGE_DOOR_28, O.LARGE_DOOR_29, O.LARGE_DOOR_30, O.LARGE_DOOR_31]),
@@ -385,55 +382,6 @@ function scheduleAutoClose(anchorKey) {
   core.TaskManager.submit(task);
 }
 
-function stateMatchesPlayer(player, state) {
-  if (!player || !state) {
-    return false;
-  }
-  if (player.getPrivateArea?.() != null) {
-    return false;
-  }
-  const playerLocation = player.getLocation?.();
-  if (!playerLocation) {
-    return false;
-  }
-  const snapshots = [...(state.closed ?? []), ...(state.current ?? [])];
-  return snapshots.some((snapshot) => {
-    const snapshotLocation = cloneLocation(
-      snapshot.location.x,
-      snapshot.location.y,
-      snapshot.location.z
-    );
-    return playerLocation.isWithinDistance?.(snapshotLocation, 64) === true;
-  });
-}
-
-function syncOpenDoorsToPlayer(player) {
-  if (!player || player.getPrivateArea?.() != null) {
-    return;
-  }
-  for (const state of OPEN_OBJECT_STATES.values()) {
-    if (!stateMatchesPlayer(player, state)) {
-      continue;
-    }
-    for (const snapshot of state.closed ?? []) {
-      player.getPacketSender?.().sendObjectRemoval?.(objectFromSnapshot(snapshot));
-    }
-    for (const snapshot of state.current ?? []) {
-      player.getPacketSender?.().sendObject?.(objectFromSnapshot(snapshot));
-    }
-  }
-}
-
-function requestDoorResync(player, ticks = 3) {
-  if (!player || player.getPrivateArea?.() != null) {
-    return;
-  }
-  const current = Number(player.getAttribute?.(DOOR_RESYNC_TICKS_ATTR) ?? 0);
-  if (ticks > current) {
-    player.setAttribute?.(DOOR_RESYNC_TICKS_ATTR, ticks);
-  }
-}
-
 function reapplyOpenDoorsForRegion(regionId) {
   for (const state of OPEN_OBJECT_STATES.values()) {
     const inRegion = [...(state.closed ?? []), ...(state.current ?? [])].some(
@@ -487,7 +435,7 @@ function findAdjacentGatePartner(objectId, x, y, z, privateArea) {
 }
 
 // Opens/closes a wooden gate by swinging its hinge and extension panels together. Tracks
-// both pieces as one open-object state so auto-close and resync revert the whole gate.
+// both pieces as one open-object state so auto-close reverts the whole gate.
 function handleWoodenGate(player, object, objectId, location) {
   const gate = WOODEN_GATE_BY_ID.get(objectId);
   if (!gate || !object || !location) {
@@ -555,7 +503,6 @@ function handleWoodenGate(player, object, objectId, location) {
   core.ObjectManager.deregister(extensionOld.object, true);
   core.ObjectManager.register(hingeNew, true);
   core.ObjectManager.register(extensionNew, true);
-  requestDoorResync(player);
 
   // Anchor on the CLOSED hinge tile so open and close compute the same key for auto-close.
   const closedHingeX = isClosed ? hingeOld.x : transform.hinge[0];
@@ -629,7 +576,6 @@ function handleMappedDoor(player, object, objectId, location) {
 
   core.ObjectManager.register(nextObject, true);
   core.ObjectManager.deregister(previousObject, true);
-  requestDoorResync(player);
 
   if (open) {
     clearOpenDoor(anchorKey);
@@ -814,7 +760,6 @@ function handleDoubleDoor(player, object, objectId, location) {
     core.ObjectManager.register(currentObject, true);
   }
 
-  requestDoorResync(player);
 
   const anchorKey = buildDoubleDoorAnchorKey(pair);
   if (pair.some(isDoubleDoorOpen)) {
@@ -841,18 +786,6 @@ function toggleDoor({ player, object, objectId, location }) {
   return handleMappedDoor(player, object, objectId, location);
 }
 
-function resyncDoors({ player }) {
-  if (player.isNeedsPlacement?.() === true || player.isAllowRegionChangePacket?.() === true) {
-    requestDoorResync(player, 4);
-  }
-  const remaining = Number(player.getAttribute?.(DOOR_RESYNC_TICKS_ATTR) ?? 0);
-  if (remaining <= 0 || player.isAllowRegionChangePacket?.() === true) {
-    return;
-  }
-  syncOpenDoorsToPlayer(player);
-  player.setAttribute?.(DOOR_RESYNC_TICKS_ATTR, remaining - 1);
-}
-
 module.exports = {
   name: "Doors",
   register: (pluginApi) => {
@@ -867,6 +800,5 @@ module.exports = {
       api.onObjectInteraction(name, { Open: toggleDoor, Close: toggleDoor, Release: toggleDoor });
     }
     api.onRegionLoaded(({ regionId }) => reapplyOpenDoorsForRegion(regionId));
-    api.onPlayerProcess(resyncDoors);
   },
 };
