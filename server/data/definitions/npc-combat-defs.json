@@ -2698,6 +2698,30 @@
         "death": 3835
       }
     },
+    "9021": {
+      "name": "Crystalline Hunllef",
+      "anims": {
+        "attack": 8419,
+        "block": -1,
+        "death": 8421
+      }
+    },
+    "9022": {
+      "name": "Crystalline Hunllef",
+      "anims": {
+        "attack": 8419,
+        "block": -1,
+        "death": 8421
+      }
+    },
+    "9023": {
+      "name": "Crystalline Hunllef",
+      "anims": {
+        "attack": 8419,
+        "block": -1,
+        "death": 8421
+      }
+    },
     "9026": {
       "name": "Crystalline Rat",
       "anims": {
@@ -2776,6 +2800,30 @@
         "attack": 2731,
         "block": 2732,
         "death": 2733
+      }
+    },
+    "9035": {
+      "name": "Corrupted Hunllef",
+      "anims": {
+        "attack": 8419,
+        "block": -1,
+        "death": 8421
+      }
+    },
+    "9036": {
+      "name": "Corrupted Hunllef",
+      "anims": {
+        "attack": 8419,
+        "block": -1,
+        "death": 8421
+      }
+    },
+    "9037": {
+      "name": "Corrupted Hunllef",
+      "anims": {
+        "attack": 8419,
+        "block": -1,
+        "death": 8421
       }
     },
     "9040": {
