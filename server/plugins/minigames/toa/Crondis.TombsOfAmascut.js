@@ -385,10 +385,13 @@ class CrondisPuzzleRoom extends Raid.Room {
         continue;
       }
       if (target) crocodile.getCombat().reset();
-      const distance = crocodile.getLocation().getDistance(this.palm.getLocation().transform(1, 1));
-      if (distance > 3) {
-        if (crocodile.getMovementQueue().size() === 0) PathFinder.calculateWalkRoute(crocodile, PALM_TILE.x + 1, PALM_TILE.y + 1);
+      if (!besidePalm(crocodile, this.palm)) {
+        if (crocodile.getMovementQueue().size() === 0) {
+          const spot = palmApproach(crocodile, this.palm);
+          PathFinder.calculateWalkRoute(crocodile, spot.x, spot.y);
+        }
       } else if (--state.attackTicks <= 0) {
+        crocodile.setPositionToFace(this.palm.getLocation().transform(2, 2));
         state.attackTicks = CROCODILE_ATTACK_TICKS;
         crocodile.performAnimation(new (Shared.core().Animation)(crocodile.getAttackAnim()));
         this.watered = Math.max(0, this.watered - Shared.random(2, 5));
@@ -420,6 +423,34 @@ class CrondisPuzzleRoom extends Raid.Room {
     const viewer = this.roomPlayers()[0];
     if (viewer) Shared.graphicAt(viewer, id, Shared.loc({ x: tile.x, y: tile.y, z: 0 }), options);
   }
+}
+
+/** The crocodile's footprint touches the palm's along a side (OpenRune #271). */
+function besidePalm(crocodile, palm) {
+  const c = crocodile.getLocation();
+  const p = palm.getLocation();
+  const cs = crocodile.getSize();
+  const ps = palm.getSize();
+  const xOverlap = c.getX() < p.getX() + ps && c.getX() + cs > p.getX();
+  const yOverlap = c.getY() < p.getY() + ps && c.getY() + cs > p.getY();
+  const xTouch = c.getX() + cs === p.getX() || c.getX() === p.getX() + ps;
+  const yTouch = c.getY() + cs === p.getY() || c.getY() === p.getY() + ps;
+  return (xOverlap && yTouch) || (yOverlap && xTouch);
+}
+
+/** The nearest spot beside the palm, on the side the crocodile comes from (OpenRune #271). */
+function palmApproach(crocodile, palm) {
+  const c = crocodile.getLocation();
+  const p = palm.getLocation();
+  const cs = crocodile.getSize();
+  const ps = palm.getSize();
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const gapX = Math.max(p.getX() - (c.getX() + cs - 1), c.getX() - (p.getX() + ps - 1));
+  const gapY = Math.max(p.getY() - (c.getY() + cs - 1), c.getY() - (p.getY() + ps - 1));
+  if (gapX >= gapY) {
+    return { x: clamp(c.getX(), p.getX() - cs, p.getX() + ps), y: clamp(c.getY(), p.getY() - cs + 1, p.getY() + ps - 1) };
+  }
+  return { x: clamp(c.getX(), p.getX() - cs + 1, p.getX() + ps - 1), y: clamp(c.getY(), p.getY() - cs, p.getY() + ps) };
 }
 
 function crondisRoom(player) {
