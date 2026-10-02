@@ -58,6 +58,7 @@ const PROJECTILE = {
   RANGED: 2178, RANGED_SPLIT: 2187, POISON_SPREAD: 2194, JUG_SPREAD: 2193,
 };
 const GRAPHIC = {
+  MAGIC_BURST: 2186, RANGED_BURST: 2185, // ZEBAK_MAGE_SPLIT, ZEBAK_RANGED_SPLIT
   MAGIC_IMPACT: 131, RANGED_IMPACT: 1103, BLOOD: 377, ROCKS: 2195, SPLASH: 68, ROAR: 2184, JUG_BREAK: 2192, POISON_GONE: 95,
 };
 const SOUND = { MAGIC: 5823, RANGED: 5819, FINAL_PHASE: 3405, BARRAGE: 102, JUGS: 5908, POISON_LAND: 5909, BOULDER_LAND: 5913, PUSHED: 5888, RUMBLING: 1678, WAVE_HIT: 5868 };
@@ -65,6 +66,7 @@ const SOUND = { MAGIC: 5823, RANGED: 5819, FINAL_PHASE: 3405, BARRAGE: 102, JUGS
 // Wiki: max hits 38 melee, 16 magic and ranged; a wave hits for 6-10, all scaled by raid level.
 const MAX_HIT = { BITE: 38, VOLLEY: 16, POISON: 10, SCREAM: 20, WAVE: 10, BLOOD: 7 };
 const WAVE_MIN_HIT = 6;
+const VOLLEY = { SPLIT_TICKS: 4, BURST_HEIGHT: 750, FRAGMENT_CYCLES: 90, HIT_TICKS: 3 };
 // A bite bleeds 1 time in 4 instead of hitting: 5-10 at once, then 1-8 each tick spent
 // moving for 10 ticks (OpenRune; the Wiki only says moving makes it worse).
 const BLEED = { CHANCE: 4, TICKS: 10, APPLY_MIN: 5, APPLY_MAX: 10, MOVING_MIN: 1, MOVING_MAX: 8 };
@@ -217,15 +219,19 @@ class ZebakRoom extends Raid.Room {
     this.zebak.performAnimation(new Animation(ANIMATION.SHOOT));
     this.tail.performAnimation(new Animation(ANIMATION.TAIL_SHOOT));
     for (const player of players) Shared.sound(player, magic ? SOUND.MAGIC : SOUND.RANGED);
+    // OpenRune's timing: the volley rises for 120 client cycles whatever the distance, bursts
+    // (ZEBAK_MAGE_SPLIT / ZEBAK_RANGED_SPLIT) where it peaks four ticks in, and its fragments
+    // take 90 cycles to land, so the hit comes three ticks after they leave.
     Shared.tileProjectile(this.area, Shared.loc(PROJECTILE_START), Shared.loc(PROJECTILE_SPLIT), magic ? PROJECTILE.MAGIC : PROJECTILE.RANGED,
-      { delay: 60, duration: 60, startHeight: 50, endHeight: 175 });
-    this.later(3, () => {
+      { delay: 60, duration: 60, perTile: 0, startHeight: 50, endHeight: 175 });
+    this.later(VOLLEY.SPLIT_TICKS, () => {
+      this.graphic(magic ? GRAPHIC.MAGIC_BURST : GRAPHIC.RANGED_BURST, PROJECTILE_SPLIT, { height: VOLLEY.BURST_HEIGHT });
       for (const player of this.challengePlayers()) {
         Shared.tileProjectile(this.area, Shared.loc(PROJECTILE_SPLIT), player, magic ? PROJECTILE.MAGIC_SPLIT : PROJECTILE.RANGED_SPLIT,
-          { duration: 90, startHeight: 175, endHeight: 22 });
-        player.performGraphic(Shared.gfx(magic ? GRAPHIC.MAGIC_IMPACT : GRAPHIC.RANGED_IMPACT, { delay: 90, height: 90 }));
+          { duration: VOLLEY.FRAGMENT_CYCLES, perTile: 0, startHeight: 175, endHeight: 22 });
+        player.performGraphic(Shared.gfx(magic ? GRAPHIC.MAGIC_IMPACT : GRAPHIC.RANGED_IMPACT, { delay: VOLLEY.FRAGMENT_CYCLES, height: 90 }));
       }
-      this.later(2, () => {
+      this.later(VOLLEY.HIT_TICKS, () => {
         const style = magic ? "magic" : "ranged";
         for (const player of this.challengePlayers()) this.strike(this.zebak, player, null, style, MAX_HIT.VOLLEY, 0);
       });
