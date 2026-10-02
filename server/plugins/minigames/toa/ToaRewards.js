@@ -130,7 +130,7 @@ function owns(player, id) {
 function rollRaidLoot(raid) {
   const I = Shared.core().ItemIdentifiers;
   const players = raid.players.slice();
-  const pointsOf = (player) => raid.member(player).points;
+  const pointsOf = (player) => raid.lootPoints(player);
   const raidLevel = raid.raidLevel;
   const total = players.reduce((sum, player) => sum + pointsOf(player), 0);
   const chance = uniqueChancePercent(total, raidLevel);
@@ -155,7 +155,7 @@ function rollRaidLoot(raid) {
 
 function rollPlayer(raid, player, uniqueId) {
   const I = Shared.core().ItemIdentifiers;
-  const points = raid.member(player).points;
+  const points = raid.lootPoints(player);
   const raidLevel = raid.raidLevel;
   const loot = [];
   const add = (id, amount = 1) => {

@@ -84,7 +84,10 @@ class Member {
   constructor() {
     this.roomKey = null;
     this.deaths = 0;
-    this.points = 0;
+    // Wiki: everyone starts on 5,000 reward points, taken off again for the loot.
+    this.points = START_POINTS;
+    /** Points earned in the current room, added to `points` when it's completed. */
+    this.roomPoints = 0;
     this.damageDone = 0;
     this.damageTaken = 0;
     this.ghost = false;
@@ -387,7 +390,8 @@ class Room {
     const name = this.challengeName();
     const isEnd = this.key === "WARDENS_P3";
     if (isEnd) raid.setCompletion();
-    raid.addRoomPoints(this);
+    raid.completeRoomPoints(this);
+    if (isEnd) raid.sendContributions();
     for (const player of this.roomPlayers()) {
       raid.revive(player);
       if (this.def.puzzle) Shared.jingle(player, Shared.JINGLE.PUZZLE_DONE);
@@ -925,24 +929,53 @@ class Raid {
     }
   }
 
-  /** Wiki: every room completion is worth points to each player alive in it. */
-  addRoomPoints(room) {
-    const bonus = room.def.puzzle ? 300 : room.def.boss ? 450 : 0;
-    if (!bonus) return;
-    for (const player of room.roomPlayers()) this.addPoints(player, bonus);
+  /**
+   * Wiki: room points go to every player's total when the room is completed (capped at 64,000),
+   * and whoever scored the most in a puzzle or boss room gets an MVP bonus of 300 x team size.
+   * The puzzles' completion points are OpenRune's (the Wiki gives none).
+   */
+  completeRoomPoints(room) {
+    const def = room.def;
+    const completion = def.puzzle ? (PUZZLE_POINTS[def.path] ?? 0) : 0;
+    let mvp = null;
+    if (def.puzzle || def.boss) {
+      for (const player of this.players) {
+        if (this.member(player).roomPoints > (mvp ? this.member(mvp).roomPoints : 0)) mvp = player;
+      }
+    }
+    for (const player of this.players) {
+      const member = this.member(player);
+      let earned = member.roomPoints + completion;
+      if (player === mvp) earned += MVP_POINTS_PER_PLAYER * this.players.length;
+      member.points = Math.min(TOTAL_POINTS_CAP, member.points + earned);
+      member.roomPoints = 0;
+    }
   }
 
+  /**
+   * Room points for the room the player is in (Wiki: capped at 20,000; OpenRune gives the
+   * Wardens 60,000). They count once the room is completed.
+   */
   addPoints(player, amount) {
     const member = this.members.get(player);
     if (!member) return;
-    // Points stay on the server: no ToA interface in the cache reads them. Near-Reality sent
-    // them to "varbit" 3586, which in this cache is a farming varbit (ATJUN_MED_TEAK).
-    member.points = Math.min(64000, member.points + Math.floor(amount));
+    const cap = this.roomFor(player)?.def.key.startsWith("WARDENS") ? WARDENS_ROOM_POINTS_CAP : ROOM_POINTS_CAP;
+    member.roomPoints = Math.min(cap, member.roomPoints + Math.floor(amount));
+  }
+
+  /** The points the loot is rolled with: the total less the 5,000 everyone starts with. */
+  lootPoints(player) {
+    return Math.max(0, this.member(player).points - START_POINTS);
+  }
+
+  /** At the end, each player's loot points go to TOA_PERSONAL_CONTRIBUTION (as OpenRune). */
+  sendContributions() {
+    for (const player of this.players) player.getPacketSender().sendConfig(VARP_PERSONAL_CONTRIBUTION, this.lootPoints(player));
   }
 
   totalPoints() {
     let total = 0;
-    for (const player of this.players) total += this.member(player).points;
+    for (const player of this.players) total += this.lootPoints(player);
     return total;
   }
 
@@ -1066,6 +1099,14 @@ function stepsBetween(from, to) {
 }
 
 const ATTR_KILL_COUNTS = "toa:completions";
+
+const START_POINTS = 5000;
+const TOTAL_POINTS_CAP = 64000;
+const ROOM_POINTS_CAP = 20000;
+const WARDENS_ROOM_POINTS_CAP = 60000;
+const MVP_POINTS_PER_PLAYER = 300;
+const PUZZLE_POINTS = { SCABARAS: 300, APMEKEN: 450, CRONDIS: 400 };
+const VARP_PERSONAL_CONTRIBUTION = 3606;
 
 function incrementKillCount(player, mode) {
   const counts = { entry: 0, normal: 0, expert: 0, ...(player.getAttribute(ATTR_KILL_COUNTS) ?? {}) };

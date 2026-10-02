@@ -71,7 +71,7 @@ class BaBaRoom extends Raid.Room {
 
   onStart() {
     const { NpcIdentifiers, Animation } = Shared.core();
-    this.baba = this.spawn(NpcIdentifiers.BA_BA, SPAWN, { points: 0, face: 3 });
+    this.baba = this.spawn(NpcIdentifiers.BA_BA, SPAWN, { points: 2, face: 3 }); // Wiki: 2 points per damage
     if (!this.baba) return;
     this.baba.__toaBaba = true;
     this.baba.performAnimation(new Animation(ANIMATION.SPAWN));

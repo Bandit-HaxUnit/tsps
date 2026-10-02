@@ -36,3 +36,22 @@ test('the chest follows the Wiki: unique and pet chances, and the unique weights
   // 1% per 350,000 - 700 x RL points, RL scaled at 400 and 550.
   assert.equal(Rewards.petChancePercent(35000, 0).toFixed(2), '0.10', '35,000 points at raid level 0');
 });
+
+test('reward points: a 5,000 start, room points capped and added on completion, and the MVP bonus (Wiki)', () => {
+  const { Raid } = require('../plugins/minigames/toa/ToaRaid');
+  const a = { name: 'a' };
+  const b = { name: 'b' };
+  const room = { def: { key: 'CRONDIS_PUZZLE', puzzle: true, path: 'CRONDIS' } };
+  const members = new Map([[a, { points: 5000, roomPoints: 0 }], [b, { points: 5000, roomPoints: 0 }]]);
+  const raid = Object.assign(Object.create(Raid.prototype), {
+    players: [a, b], members, member: (player) => members.get(player), roomFor: () => room,
+  });
+  raid.addPoints(a, 25000);
+  raid.addPoints(b, 1000);
+  assert.equal(members.get(a).roomPoints, 20000, 'a room caps at 20,000');
+  assert.equal(members.get(a).points, 5000, 'nothing counts until the room is completed');
+  raid.completeRoomPoints(room);
+  assert.equal(members.get(a).points, 5000 + 20000 + 400 + 300 * 2, 'room points, Crondis completion and the MVP bonus');
+  assert.equal(members.get(b).points, 5000 + 1000 + 400);
+  assert.equal(raid.lootPoints(a), 20000 + 400 + 600, 'the 5,000 start is taken off for the loot');
+});
