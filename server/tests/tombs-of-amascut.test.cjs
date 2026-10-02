@@ -26,3 +26,13 @@ test("Tombs of Amascut NPCs don't block or die with the player's animations", ()
     assert.notEqual(definition.getDeathAnim(), 836, `${id} ${definition.getName()} dies like a player`);
   }
 });
+
+test('the chest follows the Wiki: unique and pet chances, and the unique weights by raid level', () => {
+  const Rewards = require('../plugins/minigames/toa/ToaRewards');
+  // 1% per 10,500 - 20 x RL points, RL scaled at 310 (a third) and 430 (a sixth).
+  assert.equal(Rewards.uniqueChancePercent(20000, 300).toFixed(2), (20000 / 4500).toFixed(2));
+  assert.equal(Rewards.uniqueChancePercent(20000, 430).toFixed(4), (20000 / (10500 - 20 * 350)).toFixed(4));
+  assert.equal(Rewards.uniqueChancePercent(90000, 600), Rewards.uniqueChancePercent(64000, 600), 'points capped at 64,000');
+  // 1% per 350,000 - 700 x RL points, RL scaled at 400 and 550.
+  assert.equal(Rewards.petChancePercent(35000, 0).toFixed(2), '0.10', '35,000 points at raid level 0');
+});

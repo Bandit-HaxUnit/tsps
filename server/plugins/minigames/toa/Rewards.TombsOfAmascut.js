@@ -207,4 +207,5 @@ module.exports = function registerTombsRewards(api) {
   api.onInterfaceActionButton((Shared.INTERFACE.LOOT << 16) | LOOT_COMPONENT.DISCARD_ALL, clickDiscardAll);
   api.onInterfaceActionButton(LOOT_ITEMS_UID, clickLootItem);
   api.persistAttribute(Rewards.ATTR_LOOT);
+  api.persistAttribute(Rewards.ATTR_THREAD);
 };
