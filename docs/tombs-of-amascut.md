@@ -44,12 +44,12 @@ These follow the wiki's *Tombs of Amascut* mechanics:
 
 ## Behaviour taken only from Near-Reality
 
-The OSRS Wiki and the cache weren't reachable while this was written (see *Unverified* below). The following came from Near-Reality's ToA code, which was used as a behaviour oracle, and should be checked:
+The OSRS Wiki and the cache weren't reachable when this was first written, so Near-Reality's ToA code was the behaviour oracle. The following still come from it alone, where the Wiki gives no numbers (see *Checked against the Wiki and the cache*):
 
 - Every boss's attack timings, special-attack cycles, tile patterns and base damage numbers. This includes the Wardens' orb paths, rotating-blade tiles, wheel, isolation, skull-bomb and floor-collapse tables (`ToaWardensData.js`), and Akkha's orb paths and quadrants.
 - Wardens phase two: only the Warden's current style (magic or ranged) breaks its shield. Core damage passes through ×5, and the core stays out for 21/29/37/45/53 ticks depending on remaining health.
 - Points multipliers on Warden NPCs: obelisk 1.5, Warden 2, final Warden 2.5.
-- The common loot table, its quantity factor above raid level 300, fossilised dung below 1,500 points, deathless kits and remnants, Thread of Elidinis 1/15, keris jewels 1/20 and elite clue 1/26.
+- The common loot table's items and divisors, fossilised dung below 1,500 points, and the deathless kits and remnants. (The quantity factor above raid level 300 matches the Wiki.)
 - Tumeken's shadow charge cost (2 soul + 5 chaos per charge, 20,000 maximum), the Masori and Armadyl plate counts and experience, and the ward's 10,000 soul runes.
 
 ## NPC animations
@@ -67,18 +67,37 @@ Each Tombs of Amascut NPC (11689-11804) has its block and death animations in `n
 - **Zebak:** players don't swim, and there are no water crocodiles.
 - **Apmeken:** the corruption special is disabled, as it is in Near-Reality.
 - **Wardens phase three floor:** collapsed rows push players back onto the remaining floor rather than becoming unwalkable.
-- **The pet:** rolls at 1/20 of the unique rate. This is an approximation.
+- **The pet:** the Wiki gives its formula but not its exact raid level scaling beyond thresholds at 400 and 550; it uses a third of the levels between them.
 - **Logout and failure:** logging out leaves the raid with no rejoin, and a failed raid keeps your items.
 - **Restart recovery:** logging in inside the tombs without an active raid returns you to the lobby. The raid exit also returns stranded players to the lobby.
 - **Scoreboard:** the burial chamber scoreboard (44942) isn't implemented.
 
-## Unverified
+## Checked against the Wiki and the cache
 
-The game cache (`archive.openrs2.org`) and the OSRS Wiki were blocked by the network policy. NPC, object and item ids were checked against the generated identifier files instead. Unnamed cache entries use numeric constants: Warden charging orb 11769, hidden Warden 11765, departing spirit 11829, blade objects 45748/45749, platform 45606, siphon block 26209, and the burial chamber chests. The following still need a check with the dump scripts:
+The first version was written without access to the Wiki or the cache, so it followed Near-Reality alone. A later pass checked it against both, along with RuneLite's gameval names (Jagex's own names for animations, spotanims, interfaces, varbits and varps).
 
-- interface component ids and scripts for 771–778 and 481, and the boss health HUD (303 at `161:2`, varp 1683, varbits 6099/6100);
-- object and NPC option labels, especially Osmumten's *Begin*, *Uncharge*/*Check* on the shadow, and the chest options;
-- animation, graphic and sound ids, all taken from Near-Reality.
+**Ids:**
+- **Animations:** every boss's matches its name. Zebak's and his tail's melee animations had been swapped.
+- **Projectiles and graphics:** all are named and fit.
+- **Interfaces 771–778 and 481:** all are the ToA groups they're used as. The boss health HUD (303 at `161:2`, varp 1683, varbits 6099/6100) matches a live capture from the Gemstone Crab.
+- **Varbits and varps:**
+  - The reward niche (46224) switches on `TOA_SHOULD_HAVE_LOOT` (14319); 14139 was a PvP Arena varbit.
+  - Points had been sent to "varbit" 3586, a farming varbit in this cache. No ToA interface reads points, so they now stay on the server.
+- **Options:** every hooked NPC, item and loc option exists in the cache. The supplies bag's are *Open*, *Withdraw 1*, *Withdraw All* and *Resupply*, and now all work.
+
+**Behaviour, against the Wiki:**
+- **Raid scaling** (raid level, party size, path level) matches.
+- **Zebak:** max hits are now 38 melee and 16 magic/ranged, and a wave hits for 6–10.
+- **Kephri:** her attacks speed up with path level, and her fireball's max hit is 24.
+- **Ba-Ba:** Protect from Melee fully blocks her melee (since June 2025), and her boulders have 27 and 31 hitpoints at path levels 2 and 4.
+- **The chest:** the unique chance and weights, the pet, the Thread of Elidinis, the four keris jewels and the elite clue now use the Wiki's rates.
+- **Moving NPCs:** Zebak's waves and jugs, Akkha's unstable orbs, Ba-Ba's boulders and the moving Wardens move with collision off, as in Near-Reality. Before, the route finder couldn't move them over tiles the map blocks.
+
+**Still open:**
+- **Akkha's damage:** the Wiki's infobox gives a max hit of 55, and the plugin uses 22 for every style. 22 x 2.5 (the +150% damage cap) is exactly 55, so the 55 may be the capped value.
+- **Impact graphics:** a few use generic graphics where the cache has dedicated ToA ones, for example Zebak's magic impact (`FIREBLAST_IMPACT` versus `ZEBAK_MAGE_SPLIT`). Only a capture would show which one OSRS plays.
+- **Sound ids:** RuneLite has no names for them.
+- **Unnamed cache entries:** these keep their numeric constants: Warden charging orb 11769, hidden Warden 11765, departing spirit 11829, blade objects 45748/45749, platform 45606, siphon block 26209.
 
 ## Verification
 
