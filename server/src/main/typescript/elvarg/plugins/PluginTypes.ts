@@ -1074,6 +1074,7 @@ export interface PluginCoreApi {
   PlayerRights: any;
   Server: any;
   PluginManager: any;
+  dispatchClientMessages: (player: any, messages: any[]) => boolean;
 }
 
 export interface PluginModule {

@@ -1877,6 +1877,7 @@ export class PluginManager {
       PlayerRights: require("../game/model/rights/PlayerRights").PlayerRights,
       Server: require("../Server").Server,
       PluginManager: require("./PluginManager").PluginManager,
+      dispatchClientMessages: require("../net/NetworkBuilder").dispatchClientMessages,
     });
     return PluginManager.pluginCoreApi;
   }

@@ -79,6 +79,17 @@ import { SpellTeleports } from "../game/content/combat/magic/SpellTeleports";
 const OBJECT_ACTIONS = new ObjectActionPacketListener();
 const NPC_ACTIONS = new NPCOptionPacketListener();
 const MAGIC_ITEMS = new MagicOnItemPacketListener();
+type ClientMessages = ReturnType<typeof decodeClientPackets>;
+const CONNECTIONS = new WeakMap<Player, ClientConnection>();
+
+/** Runs already-decoded messages through a logged-in player's own dispatch, as if their client sent them. */
+export function dispatchClientMessages(player: Player, messages: ClientMessages): boolean {
+  const connection = CONNECTIONS.get(player);
+  if (!connection) return false;
+  connection.inject(messages);
+  return true;
+}
+
 const CLOSE_ON_INTERFACE_CLOSE_ATTRIBUTE = "interface:close-on-interface-close";
 const WORLD_INTERACTIONS = new Set([
   "move",
@@ -208,7 +219,16 @@ class ClientConnection {
       console.warn("[network] rejected malformed client packet", (error as Error).message);
       return;
     }
+    await this.dispatch(packets);
+  }
 
+  public inject(messages: ClientMessages): void {
+    this.input = this.input.then(() => this.dispatch(messages)).catch((error) => {
+      console.warn("[network] injected client packet rejected", error);
+    });
+  }
+
+  private async dispatch(packets: ClientMessages): Promise<void> {
     for (const packet of packets) {
       if (this.player) LunarSpells.expireSpellbookSwap(this.player);
       if (this.player && WORLD_INTERACTIONS.has(packet.type)) {
@@ -359,7 +379,9 @@ class ClientConnection {
             if (packet.messageType === "public") {
               ChatPacketListener.handleText(this.player, packet.text);
             } else if (packet.messageType === "friends_chat") {
-              PluginManager.emitSocialPacket({ player: this.player, packet, handled: false });
+              PluginManager.emitSocialPacket({
+                player: this.player, packet: packet as typeof packet & { messageType: "friends_chat" }, handled: false,
+              });
             }
           }
           continue;
@@ -856,6 +878,7 @@ class ClientConnection {
       return;
     }
     this.player = player;
+    CONNECTIONS.set(player, this);
     this.releasePendingName();
     // Back aboard a boat they logged out on at sea.
     Sailing.onLogin(player);
