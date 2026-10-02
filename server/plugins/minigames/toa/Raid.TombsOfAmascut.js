@@ -49,7 +49,8 @@ function useEntry(event) {
 
 function useExit(event) {
   const { player } = event;
-  if (!Raid.raidOf(player) || !Shared.inTombs(player.getLocation())) return false;
+  if (!Shared.inTombs(player.getLocation())) return false;
+  if (recoverMissingRaid(event)) return true;
   if (isGhost(player)) {
     Shared.statement(player, "A mysterious force prevents you from doing that.");
     return true;
@@ -63,6 +64,17 @@ function useExit(event) {
       raid.leave(player, { teleport: true });
     },
     "No, I want to stay.", () => {});
+  return true;
+}
+
+/** Raid instances are not persisted across server restarts. */
+function recoverMissingRaid({ player }) {
+  if (!Shared.inTombs(player.getLocation()) || Raid.raidOf(player)) return false;
+  player.setAttribute(Raid.ATTR_RAID, null);
+  player.getPacketSender().closeSubInterface(Shared.OVERLAY_HUD_UID);
+  player.getPacketSender().sendVarbit(Shared.VARBIT.PARTY_STATUS, 0);
+  player.moveTo(Shared.loc(Shared.LOBBY_RETURN));
+  player.sendMessage("Your previous raid is no longer available. You have been returned to the lobby.");
   return true;
 }
 
@@ -184,6 +196,7 @@ function ghostsCantEquip(event) {
 
 module.exports = function registerTombsRaid(api) {
   Shared.bind(api);
+  api.onPlayerLogin(recoverMissingRaid);
   Shared.onObject(api, "Barrier", passBarrier);
   Shared.onObject(api, "Entry", useEntry);
   Shared.onObject(api, "Exit", useExit);
