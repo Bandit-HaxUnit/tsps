@@ -247,6 +247,12 @@ function dropChampionSkull({ player }) {
   player.setSkullIconOverride(null);
 }
 
+// Runs before the logout save: a fighter logging out comes back in the waiting room, not
+// mid-fight in the arena.
+function leaveArenaOnLogout({ player }) {
+  if (inside(player, ARENA)) player.moveTo(tile(WAITING_DROP));
+}
+
 module.exports = {
   name: "TzhaarFightPits",
   register(pluginApi) {
@@ -264,5 +270,6 @@ module.exports = {
     pluginApi.onShouldDropItemsOnDeath(keepItemsInPit);
     pluginApi.onCanAttack(pitCanAttack);
     pluginApi.onPlayerLogout(dropChampionSkull);
+    pluginApi.onPlayerLogout(leaveArenaOnLogout);
   },
 };

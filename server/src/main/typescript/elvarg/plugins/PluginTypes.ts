@@ -223,6 +223,13 @@ export interface PluginCanTeleportEvent {
   allow: boolean | null;
 }
 
+export interface PluginCanLogoutEvent {
+  player: any;
+  allow: boolean | null;
+  /** Shown to the player when allow is false. */
+  reason?: string;
+}
+
 export interface PluginCanEatEvent {
   player: any;
   itemId: number;
@@ -690,6 +697,7 @@ export interface PluginApi {
   onNpcHitModify(handler: (event: PluginNpcHitModifyEvent) => void): void;
   onCanAttack(handler: (event: PluginCanAttackEvent) => void): void;
   onCanTeleport(handler: (event: PluginCanTeleportEvent) => void): void;
+  onCanLogout(handler: (event: PluginCanLogoutEvent) => void): void;
   onCanEat(handler: (event: PluginCanEatEvent) => void): void;
   onFiremakingBlocked(
     handler: (event: PluginFiremakingBlockedEvent) => void
