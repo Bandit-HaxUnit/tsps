@@ -829,7 +829,6 @@ class Raid {
     this.totalDeaths++;
     member.deaths++;
     member.points = Math.max(0, member.points - Math.max(1000, Math.floor(member.points * 0.2)));
-    this.sendPoints(player);
     player.sendMessage(`You have died. Total deaths: <col=ff0000>${this.totalDeaths}</col>.`);
     if (room?.isStarted() && room.challengePlayers().length > 0) {
       player.sendMessage(this.permittedTeamDeaths === -1 || this.permittedTeamDeaths > this.teamDeaths + 1
@@ -936,12 +935,9 @@ class Raid {
   addPoints(player, amount) {
     const member = this.members.get(player);
     if (!member) return;
+    // Points stay on the server: no ToA interface in the cache reads them. Near-Reality sent
+    // them to "varbit" 3586, which in this cache is a farming varbit (ATJUN_MED_TEAK).
     member.points = Math.min(64000, member.points + Math.floor(amount));
-    this.sendPoints(player);
-  }
-
-  sendPoints(player) {
-    player.getPacketSender().sendVarbit(VARBIT.POINTS, Math.min(this.member(player).points, 65535));
   }
 
   totalPoints() {
@@ -960,7 +956,6 @@ class Raid {
     this.sendHudNames(player);
     this.sendTimer(player);
     for (let i = 0; i < this.pathLevels.length; i++) sender.sendVarbit(VARBIT.HUD_PATH_LEVEL_BASE + i, this.pathLevels[i]);
-    this.sendPoints(player);
     this.refreshHudStates();
   }
 

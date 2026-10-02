@@ -19,7 +19,11 @@ const LOOT_INVENTORY = 811;
 const LOOT_COMPONENT = { BANK_ALL: 4, INVENTORY_ALL: 6, DISCARD_ALL: 8, ITEMS: 10 };
 const LOOT_ITEMS_UID = (Shared.INTERFACE.LOOT << 16) | LOOT_COMPONENT.ITEMS;
 const SCRIPT_ITEM_OPS = 149;
-const VARBIT_CHEST_FULL = 14139;
+/**
+ * TOA_SHOULD_HAVE_LOOT: chest 46224 is a False Door at 0 and a Rewards Niche (Claim) at 1.
+ * (14139, used before, is a PvP Arena loadout varbit.)
+ */
+const VARBIT_CHEST_FULL = 14319;
 const OP10 = 1 << 10;
 
 class RewardRoom extends Raid.Room {
