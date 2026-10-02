@@ -228,8 +228,8 @@ class InvocationSettings {
 
   /** Fraction of the helpful spirit's supplies on offer. */
   supplyFactor() {
-    if (this.isActive("NEED_SOME_HELP")) return 0.67;
-    if (this.isActive("NEED_LESS_HELP")) return 0.34;
+    if (this.isActive("NEED_SOME_HELP")) return 0.66;
+    if (this.isActive("NEED_LESS_HELP")) return 0.33;
     if (this.isActive("NO_HELP_NEEDED")) return 0.1;
     return 1;
   }

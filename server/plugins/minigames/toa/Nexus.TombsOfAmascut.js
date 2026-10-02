@@ -21,6 +21,7 @@ const WARDENS_OPEN = 1;
 const SUPPLY_INVENTORIES = [807, 808, 809];
 const SUPPLY_BAG_INVENTORY = 810;
 const SUPPLY_BAG_SIZE = 28;
+const CHAOS_RARE_ONE_IN = 8;
 const SHOP_PACK_COMPONENTS = [6, 9, 12];
 const SHOP_CONTAINER_COMPONENTS = [4, 7, 10];
 const SIDE_MODAL_UID = (161 << 16) | 74;
@@ -150,12 +151,17 @@ class NexusRoom extends Raid.Room {
   }
 }
 
-/** Wiki: the helpful spirit's three packs; the help invocations shrink them. */
+/**
+ * Wiki: the helpful spirit's three packs; the help invocations shrink them (with at least one
+ * of each guaranteed item). The chaos pack is rolled: 1-8 nectar, 0-6 tears, 0-2 salts and a
+ * rare (1 in 8, OpenRune) ambrosia and liquid adrenaline.
+ */
 function supplyPacks(settings) {
   const I = Shared.core().ItemIdentifiers;
   const factor = settings.supplyFactor();
   const diet = settings.isActive("ON_A_DIET");
   const scaled = (amount, minimum = 1) => Math.max(minimum, Math.floor(amount * factor));
+  const rare = () => (Shared.random(1, CHAOS_RARE_ONE_IN) === 1 ? scaled(1, 0) : 0);
   const life = [
     [I.NECTAR_4_, scaled(5)],
     [I.TEARS_OF_ELIDINIS_4_, scaled(5)],
@@ -164,14 +170,15 @@ function supplyPacks(settings) {
   ];
   if (!diet) life.push([I.SILK_DRESSING_2_, scaled(3, 0)]);
   const chaos = [
-    [I.NECTAR_4_, scaled(8)],
-    [I.TEARS_OF_ELIDINIS_4_, scaled(6, 0)],
-    [I.SMELLING_SALTS_2_, scaled(2, 0)],
+    [I.NECTAR_4_, scaled(Shared.random(1, 8))],
+    [I.TEARS_OF_ELIDINIS_4_, scaled(Shared.random(0, 6), 0)],
+    [I.SMELLING_SALTS_2_, scaled(Shared.random(0, 2), 0)],
+    [I.AMBROSIA_2_, rare()],
+    [I.LIQUID_ADRENALINE_2_, rare()],
   ];
-  if (chaos.filter(([, amount]) => amount > 0).length < 2) chaos.push([I.LIQUID_ADRENALINE_2_, 1]);
   const power = [
     [I.SMELLING_SALTS_2_, scaled(2)],
-    [I.LIQUID_ADRENALINE_2_, scaled(2)],
+    [I.LIQUID_ADRENALINE_2_, scaled(1)],
   ];
   return [life, chaos, power].map((pack) => pack.filter(([, amount]) => amount > 0));
 }
@@ -304,6 +311,27 @@ function useSupplyBag(event) {
   sendBagContents(player, member.supplies);
 }
 
+/** Using one of the spirit's supplies on the bag puts it back in (OpenRune; not honey locusts). */
+function storeSupply(event) {
+  const { player } = event;
+  const raid = Raid.raidOf(player);
+  const { ItemIdentifiers } = Shared.core();
+  if (!raid) return;
+  const bag = ItemIdentifiers.SUPPLIES;
+  if (event.usedItemId !== bag && event.usedWithItemId !== bag) return;
+  const supplyId = event.usedItemId === bag ? event.usedWithItemId : event.usedItemId;
+  if (!Supplies.doses(supplyId) || supplyId === ItemIdentifiers.HONEY_LOCUST) return;
+  event.handled = true;
+  const member = raid.member(player);
+  if (member.supplies.length >= SUPPLY_BAG_SIZE) {
+    player.sendMessage("Your supply bag is full.");
+    return;
+  }
+  player.getInventory().delete(supplyId, 1);
+  member.supplies.push(supplyId);
+  sendBagContents(player, member.supplies);
+}
+
 /**
  * Withdraw-1 and Withdraw-all (Wiki): the first items, left to right, while the inventory has
  * room. The last item still comes out with a full inventory, as the bag itself goes.
@@ -397,6 +425,7 @@ module.exports = function registerTombsNexus(api) {
   Shared.onObject(api, "Entry", useWardensEntry);
   api.onNpcInteraction("Helpful Spirit", { Claim: claimSupplies });
   api.onItemAction("Supplies", { Open: openSupplyBag, "Withdraw 1": withdrawOne, "Withdraw All": withdrawAll, Resupply: resupply });
+  api.onItemOnItem(storeSupply);
   api.onInterfaceActionButton(SHOP_PACK_COMPONENTS.map((child) => (INTERFACE.SUPPLIES_SHOP << 16) | child), takePack);
   api.onInterfaceActionButton((INTERFACE.SUPPLIES_BAG << 16) | BAG_ITEMS_COMPONENT, useSupplyBag);
 };

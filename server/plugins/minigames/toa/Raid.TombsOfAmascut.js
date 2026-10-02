@@ -11,8 +11,8 @@ const Raid = require("./ToaRaid");
 
 const ABANDON_TEXT = "You are about to <col=ad2800>abandon the raid</col>. If you do this, you <col=ad2800>will not</col> be able to return to your current run.";
 
-// Restoration that Dehydration forbids (wiki: "Prevents the use of potions that restore Hitpoints").
-const DEHYDRATION_BLOCKED = ["Nectar", "Ambrosia", "Saradomin brew"];
+// Restoration that Dehydration forbids (wiki: "Players can no longer drink potions that restore health").
+const DEHYDRATION_BLOCKED = ["Nectar", "Ambrosia", "Saradomin brew", "Guthix rest"];
 
 function raidRoom(player) {
   const raid = Raid.raidOf(player);
@@ -161,8 +161,8 @@ function onADiet(event) {
     event.allow = false;
     return;
   }
-  const { ItemIdentifiers } = Shared.core();
-  if (raid.settings.isActive("ON_A_DIET") && event.itemId !== ItemIdentifiers.HONEY_LOCUST) {
+  // Wiki: no food at all, honey locusts included (the spirit and the paths stop giving them).
+  if (raid.settings.isActive("ON_A_DIET")) {
     event.player.sendMessage("You've been prevented from consuming food within the Tombs of Amascut");
     event.allow = false;
   }
