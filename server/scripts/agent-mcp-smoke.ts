@@ -13,10 +13,17 @@ const item = (id: number, amount = 1) => ({
 const skill = { getName: () => "Woodcutting" };
 
 const clientMessages: string[] = [];
-const packetSender = { chatboxGroupId: 231, sendMessage: (message: string) => clientMessages.push(message) };
-// Named like the real entry classes: the plugin reads the dialogue kind from the class name.
-class NpcDialogue { constructor(public npcId: number, public text: string) {} }
-class OptionDialogue { constructor(public options: string[]) {} }
+const packetSender = { getChatboxGroupId: () => 231, sendMessage: (message: string) => clientMessages.push(message) };
+class NpcDialogue {
+    constructor(private npcId: number, private text: string) {}
+    getNpcId() { return this.npcId; }
+    getText() { return this.text; }
+}
+class OptionDialogue {
+    constructor(private options: string[]) {}
+    getTitle() { return ""; }
+    getOptions() { return this.options; }
+}
 const dialogueManager = {
     index: -1,
     dialogues: new Map<number, unknown>([
@@ -24,9 +31,10 @@ const dialogueManager = {
         [1, new OptionDialogue(["Yes please.", "No thanks."])],
     ]),
     isActive() { return this.dialogues.has(this.index); },
+    getCurrent() { return this.dialogues.get(this.index); },
 };
 let bankOpen = false;
-let prompt: { title: string; options: string[]; widgetId: number } | null = null;
+let prompt: { title: string; options: string[] } | null = null;
 let movingTicks = 0;
 const player = {
     getUsername: () => "Agent1",
@@ -68,7 +76,12 @@ const core = {
     ObjectDefinition: { forPlayer: () => ({ getName: () => "Tree", getInteractions: () => ["Chop down", null] }) },
     ItemDefinition: { forId: (id: number) => ({ getName: () => `item ${id}` }) },
     NpcDefinition: { forId: () => ({ getName: () => "Man" }) },
-    MultiChatboxPrompt: { describe: () => prompt },
+    MultiChatboxPrompt: { OPTIONS_WIDGET_ID: (219 << 16) | 1, getPending: () => prompt },
+    NpcDialogue,
+    OptionDialogue,
+    PlayerDialogue: class {},
+    StatementDialogue: class {},
+    ItemStatementDialogue: class {},
     Bank: {
         MAIN_INTERFACE_ID: 12,
         SIDE_INTERFACE_ID: 15,
@@ -79,7 +92,7 @@ const core = {
     ShopManager: {
         MAIN_INTERFACE_ID: 300,
         SIDE_INTERFACE_ID: 301,
-        describe: () => ({ name: "General Store", currency: "Coins", items: [{ slot: 0, itemId: 1931, amount: 5, price: 1 }] }),
+        getOpenShop: () => ({ name: "General Store", currency: "Coins", stock: [{ itemId: 1931, amount: 5, price: 1 }] }),
     },
     Skill: { values: () => [skill] },
     GameConstants: { GAME_ENGINE_PROCESSING_CYCLE_RATE: 1 },
@@ -115,7 +128,9 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     player.getPacketSender().sendMessage("You swing your axe at the tree.");
     assert.deepEqual(clientMessages, ["You swing your axe at the tree."]);
 
-    snapshot = (await call(client, "observe", { player: "agent1" })).value;
+    const observed = await call(client, "observe", { player: "agent1" });
+    if (observed.error) throw new Error(observed.text);
+    snapshot = observed.value;
     assert.equal(snapshot.x, 3222);
     assert.deepEqual(snapshot.skills.Woodcutting, { level: 1, max: 1, xp: 0 });
     assert.deepEqual(snapshot.inventory[0], { slot: 0, id: 1351, name: "item 1351", amount: 1 });
@@ -190,7 +205,7 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     assert.equal(chose.dialogue, null);
 
     // Plugin menus (sendMultiChatboxPrompt) are answered with a resume on the options widget.
-    prompt = { title: "Select an Option", options: ["Who are you?", "Nothing."], widgetId: (219 << 16) | 1 };
+    prompt = { title: "Select an Option", options: ["Who are you?", "Nothing."] };
     assert.deepEqual((await call(client, "dialogue", { player: "agent1" })).value,
         { kind: "options", title: "Select an Option", options: ["Who are you?", "Nothing."] });
     dispatched.length = 0;

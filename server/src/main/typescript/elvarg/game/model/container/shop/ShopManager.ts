@@ -323,17 +323,17 @@ export class ShopManager {
         return false;
     }
 
-    /** The open shop as the player sees it; `slot` is the display slot shop widget actions use. */
-    public static describe(player: any): {
-        name: string; currency: string; items: Array<{ slot: number; itemId: number; amount: number; price: number }>;
+    /** The player's open shop; `stock` is in display order, so an entry's index is its display slot. */
+    public static getOpenShop(player: any): {
+        name: string; currency: string; stock: Array<{ itemId: number; amount: number; price: number }>;
     } | null {
         const shop = this.currentShop(player);
         if (!shop) return null;
         return {
             name: shop.definition.getName(),
             currency: this.currencyName(shop.definition.getCurrency()),
-            items: this.displayEntries(shop).map((entry, slot) => ({
-                slot, ...entry, price: this.itemPrice(shop, ItemDefinition.forId(entry.itemId)),
+            stock: this.displayEntries(shop).map((entry) => ({
+                ...entry, price: this.itemPrice(shop, ItemDefinition.forId(entry.itemId)),
             })),
         };
     }

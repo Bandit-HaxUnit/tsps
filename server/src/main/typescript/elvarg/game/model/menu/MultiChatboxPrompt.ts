@@ -21,7 +21,8 @@ type PendingMultiChatboxPrompt = {
 export class MultiChatboxPrompt {
   private static pendingPrompts = new WeakMap<any, PendingMultiChatboxPrompt>();
   private static readonly INTERFACE_ID = 219;
-  private static readonly OPTIONS_WIDGET_ID = (219 << 16) | 1;
+  /** Option n is picked with a resume (dialogue_continue) on this widget, childIndex n. */
+  public static readonly OPTIONS_WIDGET_ID = (219 << 16) | 1;
   private static readonly PROMPT_TTL_MS = 10 * 60_000;
 
   public static showPrompt(
@@ -101,8 +102,8 @@ export class MultiChatboxPrompt {
     return true;
   }
 
-  /** The prompt the player has open, if any; option n is picked with a resume on OPTIONS_WIDGET_ID, childIndex n. */
-  public static describe(player: any): { title: string; options: string[]; widgetId: number } | null {
+  /** The prompt the player has open, if any. */
+  public static getPending(player: any): { title: string; options: string[] } | null {
     const pending = MultiChatboxPrompt.pendingPrompts.get(player);
     // Closing the chatbox another way (walking off, a new dialogue) leaves the entry behind.
     if (!pending || pending.expiresAt < Date.now()) return null;
@@ -110,7 +111,6 @@ export class MultiChatboxPrompt {
     return {
       title: pending.title,
       options: pending.options.map((option) => option.text),
-      widgetId: MultiChatboxPrompt.OPTIONS_WIDGET_ID,
     };
   }
 
