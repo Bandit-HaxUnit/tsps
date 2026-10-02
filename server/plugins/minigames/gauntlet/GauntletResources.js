@@ -118,6 +118,65 @@ function claim(spots, spot, size) {
   }
 }
 
+// The inner floor tiles each doorway opens onto, and the approach kept clear in front of them.
+const DOORWAY_TILES = [[2, 7], [2, 8], [13, 7], [13, 8], [7, 2], [8, 2], [7, 13], [8, 13]];
+const APPROACH = 3;
+
+function inApproach(x, y) {
+  const across = (v) => v >= DOORWAY.from && v <= DOORWAY.to;
+  return (across(y) && (x < 2 + APPROACH || x > 13 - APPROACH))
+    || (across(x) && (y < 2 + APPROACH || y > 13 - APPROACH));
+}
+
+/**
+ * Whether every doorway of the room can still reach every other once `blocked` tiles (a node
+ * about to be placed) are taken. A spawned node must never wall off a way through the room.
+ */
+function staysConnected(map, room, blocked) {
+  const { RegionManager } = Shared.core();
+  const key = (x, y) => `${x},${y}`;
+  const open = (x, y) => x >= 2 && x <= 13 && y >= 2 && y <= 13 && !blocked.has(key(x, y))
+    && (clipAt(map, map.roomTile(room, x, y)) & BLOCKING) === 0;
+  const doorways = DOORWAY_TILES.filter(([x, y]) => open(x, y) && leadsOut(map, room, x, y));
+  if (doorways.length < 2) return true;
+  const seen = new Set([key(...doorways[0])]);
+  const queue = [doorways[0]];
+  while (queue.length) {
+    const [x, y] = queue.shift();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (seen.has(key(nx, ny)) || !open(nx, ny)) continue;
+      const from = map.roomTile(room, x, y);
+      if (!RegionManager.canMove(from.getX(), from.getY(), from.getX() + dx, from.getY() + dy, from.getZ(), 1, 1, map)) continue;
+      seen.add(key(nx, ny));
+      queue.push([nx, ny]);
+    }
+  }
+  return doorways.every(([x, y]) => seen.has(key(x, y)));
+}
+
+/** Whether a doorway tile has a passage beyond it (rim rooms have closed sides). */
+function leadsOut(map, room, x, y) {
+  const { RegionManager } = Shared.core();
+  const dx = x === 2 ? -1 : x === 13 ? 1 : 0;
+  const dy = y === 2 ? -1 : y === 13 ? 1 : 0;
+  const from = map.roomTile(room, x, y);
+  return RegionManager.canMove(from.getX(), from.getY(), from.getX() + dx, from.getY() + dy, from.getZ(), 1, 1, map);
+}
+
+/** A spot's tiles, if it can take a node there without blocking a doorway or a way through. */
+function placeable(map, room, spot, size) {
+  const tiles = [];
+  for (let dx = 0; dx < size; dx++) {
+    for (let dy = 0; dy < size; dy++) {
+      if (inApproach(spot.x + dx, spot.y + dy)) return false;
+      tiles.push(`${spot.x + dx},${spot.y + dy}`);
+    }
+  }
+  return staysConnected(map, room, new Set(tiles));
+}
+
 function spawnResource(map, room, key, spot, random) {
   const { GameObject, ObjectManager } = Shared.core();
   const resource = RESOURCES[key];
@@ -140,7 +199,7 @@ function stockRoom(map, room, random = Math.random) {
   const placed = [];
   const place = (key) => {
     const size = RESOURCES[key].size;
-    const spot = (size > 1 ? spots.square : spots.single)[0];
+    const spot = (size > 1 ? spots.square : spots.single).find((candidate) => placeable(map, room, candidate, size));
     if (!spot) return;
     claim(spots, spot, size);
     placed.push({ key, object: spawnResource(map, room, key, spot, random) });
@@ -242,5 +301,5 @@ function stopGathering(player) {
 }
 
 module.exports = {
-  RESOURCES, GATHERING, YIELD_TICKS, resourceById, spawnSpots, stockRoom, replaceObject, gather, stopGathering,
+  RESOURCES, GATHERING, YIELD_TICKS, resourceById, spawnSpots, staysConnected, stockRoom, replaceObject, gather, stopGathering,
 };

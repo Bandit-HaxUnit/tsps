@@ -454,6 +454,8 @@ test('lit rooms are stocked by the walls, clear of the doorways, and their nodes
           const clip = RegionManager.getClipping(object.getLocation().getX(), object.getLocation().getY(), 1, run.map);
           assert.notEqual(clip & 0x100, 0, `${key} blocks its tile`);
         }
+        assert.ok(Resources.staysConnected(run.map, room, new Set()),
+          `seed ${seed}: (${room.gridX}, ${room.gridY}) keeps every doorway reachable`);
       }
       // The passage between the start and boss rooms is lit on the start room's side.
       const start = run.map.room(run.map.start.x, run.map.start.y);
