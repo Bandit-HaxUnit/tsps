@@ -43,6 +43,15 @@ const REWARD_POTENTIAL_INFO = "Reward Potential|"
   + "Close|";
 
 const NECROPOLIS_ENTRANCE_RADIUS = 8;
+const SHROUD_CHEST = 46080; // TOA_LOBBY_CAPE_CHEST
+const SHROUDS = [
+  { id: 27257, completions: 100, option: "Take Icthlarin's shroud (tier 1)." },
+  { id: 27259, completions: 500, option: "Take Icthlarin's shroud (tier 2)." },
+  { id: 27261, completions: 1000, option: "Take Icthlarin's shroud (tier 3)." },
+  { id: 27263, completions: 1500, option: "Take Icthlarin's shroud (tier 4)." },
+  { id: 27265, completions: 2000, option: "Take Icthlarin's shroud (tier 5)." },
+  { id: 27267, completions: 2000, option: "Take Icthlarin's hood (tier 5)." },
+];
 // The lobby's sack: TOA_GRAIN, a needle, the camulet and the bank camel (TOA_BANK_CAMEL).
 const SACK = { LOW: 1, HIGH: 10, GRAIN: 27225, NEEDLE: 1733, CAMULET: 6707, CAMEL: 11806 };
 
@@ -127,6 +136,47 @@ function searchSack({ player }) {
     ]);
   }
   return true;
+}
+
+/**
+ * The chest across from the grouping obelisk (TOA_LOBBY_CAPE_CHEST, 46080). Wiki: Icthlarin's
+ * shroud tiers at 100/500/1000/1500/2000 Normal or Expert completions, and the tier 5 hood with
+ * the last. Any unlocked one can be taken (OpenRune #271's menu and messages).
+ */
+function searchShroudChest(event) {
+  const { player } = event;
+  if (event.objectId !== SHROUD_CHEST || !Shared.inLobby(player.getLocation())) return false;
+  const counts = Raid.killCounts(player);
+  const unlocked = SHROUDS.filter((shroud) => counts.normal + counts.expert >= shroud.completions);
+  if (unlocked.length === 0) Shared.statement(player, "There doesn't seem to be anything inside.");
+  else if (unlocked.length === 1) takeShroud(player, unlocked[0]);
+  else chooseShroud(player, unlocked, 0);
+  return true;
+}
+
+/** Up to five choices a page; more than that pages with "More...". */
+function chooseShroud(player, unlocked, page) {
+  const perPage = unlocked.length <= 5 ? 5 : 4;
+  const shown = unlocked.slice(page * perPage, page * perPage + perPage);
+  const pairs = shown.flatMap((shroud) => [shroud.option, () => takeShroud(player, shroud)]);
+  if (unlocked.length > 5) {
+    const next = (page + 1) * perPage < unlocked.length ? page + 1 : 0;
+    pairs.push("More...", () => chooseShroud(player, unlocked, next));
+  }
+  Shared.options(player, "Select an Option", ...pairs);
+}
+
+function takeShroud(player, shroud) {
+  if (player.getInventory().getFreeSlots() < 1) {
+    Shared.statement(player, "You don't have enough inventory space.");
+    return;
+  }
+  player.getInventory().adds(shroud.id, 1);
+  const { DialogueChainBuilder, ItemStatementDialogue, EndDialogue } = Shared.core();
+  player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
+    new ItemStatementDialogue(0, shroud.id, "You take a mysterious shroud from the chest."),
+    new EndDialogue(1),
+  ));
 }
 
 function sackChance(level) {
@@ -650,6 +700,7 @@ module.exports = function registerTombsLobby(api) {
   Shared.onObject(api, "Grouping Obelisk", inspectObelisk);
   Shared.onObject(api, "Invocation Board", readInvocationBoard);
   Shared.onObject(api, "Sack", searchSack);
+  api.onObjectClick(SHROUD_CHEST, 1, searchShroudChest);
   api.onZoneEnter(Shared.LOBBY, enterLobby);
   api.onZoneExit(Shared.LOBBY, leaveLobby);
   api.onPlayerLogout(forgetOnLogout);

@@ -24,6 +24,7 @@ const CASTER_STATUE = 45486;
 const SHIELD_STATUE = 45485;
 const BARRIER = 45135;
 const PICKAXE_STAND = 45468;
+const LOBBY_PICKAXE_CAVITY = 49566; // the same storage, by the lobby's scoreboard
 const WALL_SHAPE = 10;
 const MIRROR_SHAPE = 11;
 
@@ -639,13 +640,13 @@ function sealUnattackable(event) {
 }
 
 /**
- * The wall cavities (TOA_PICKAXE_STORED's multiloc) keep one pickaxe per player, shown in the
+ * The wall cavities (TOA_PICKAXE_STORED's multilocs, in Het's room and the lobby) keep one pickaxe per player, shown in the
  * wall by varbit 14440 (OpenRune #271): its value is the pickaxe's place in STORABLE_PICKAXES
  * plus one, 0 when empty. A bronze pickaxe isn't stored: Het provides one.
  */
 function usePickaxeStand(event) {
   const { player, option } = event;
-  if (!hetRoom(player) && !Raid.raidOf(player)) return false;
+  if (!canReachCavity(player)) return false;
   if (option === "Take-pickaxe") takeStoredPickaxe(player);
   else {
     const held = heldPickaxes(player);
@@ -657,9 +658,9 @@ function usePickaxeStand(event) {
 
 /** Use a pickaxe on the cavity to store that one. */
 function pickaxeOnStand(event) {
-  if (event.objectId !== PICKAXE_STAND) return;
+  if (event.objectId !== PICKAXE_STAND && event.objectId !== LOBBY_PICKAXE_CAVITY) return;
   const { player } = event;
-  if (!hetRoom(player) && !Raid.raidOf(player)) return;
+  if (!canReachCavity(player)) return;
   event.handled = true;
   const held = heldPickaxes(player).find((entry) => entry.id === event.itemId && entry.worn === false);
   if (!held) {
@@ -667,6 +668,11 @@ function pickaxeOnStand(event) {
     return;
   }
   storePickaxe(player, held);
+}
+
+/** Its cavities are in the Path of Het and the lobby. */
+function canReachCavity(player) {
+  return !!hetRoom(player) || !!Raid.raidOf(player) || Shared.inLobby(player.getLocation());
 }
 
 function takeStoredPickaxe(player) {
@@ -746,7 +752,7 @@ module.exports = function registerHetPuzzle(api) {
   Raid.registerRaidItems(MIRROR_ITEM);
   for (const clickType of [1, 2, 3, 4]) api.onObjectClick([MP, MIRROR_DIRTY], clickType, useMirrorObject);
   api.onObjectClick([B1 - 1, B2 - 1], 1, mineBarrier);
-  for (const clickType of [1, 2]) api.onObjectClick(PICKAXE_STAND, clickType, usePickaxeStandObject);
+  for (const clickType of [1, 2]) api.onObjectClick([PICKAXE_STAND, LOBBY_PICKAXE_CAVITY], clickType, usePickaxeStandObject);
   api.onItemAction("Mirror", { Place: placeMirror });
   api.onNpcInteraction("<col=00ffff>Het's Seal (weakened)</col>", { Destroy: destroySeal });
   api.onNpcInteraction("<col=00ffff>Het's Seal (protected)</col>", { Destroy: destroySeal });
