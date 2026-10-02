@@ -3048,8 +3048,137 @@
       "name": "TzKal-Zuk",
       "anims": {
         "attack": 7566,
-        "block": -1,
+        "block": 7565,
         "death": 7562
+      }
+    },
+    "7691": {
+      "name": "Jal-Nib",
+      "anims": {
+        "attack": 7574,
+        "block": 7575,
+        "death": 7576
+      }
+    },
+    "7692": {
+      "name": "Jal-MejRah",
+      "anims": {
+        "block": 7579,
+        "death": 7580
+      }
+    },
+    "7693": {
+      "name": "Jal-Ak",
+      "anims": {
+        "block": 7585,
+        "death": 7584
+      }
+    },
+    "7694": {
+      "name": "Jal-AkRek-Mej",
+      "anims": {
+        "block": 7585,
+        "death": 7584
+      }
+    },
+    "7695": {
+      "name": "Jal-AkRek-Xil",
+      "anims": {
+        "block": 7585,
+        "death": 7584
+      }
+    },
+    "7696": {
+      "name": "Jal-AkRek-Ket",
+      "anims": {
+        "block": 7585,
+        "death": 7584
+      }
+    },
+    "7697": {
+      "name": "Jal-ImKot",
+      "anims": {
+        "block": 7598,
+        "death": 7599
+      }
+    },
+    "7698": {
+      "name": "Jal-Xil",
+      "anims": {
+        "block": 7607,
+        "death": 7606
+      }
+    },
+    "7699": {
+      "name": "Jal-Zek",
+      "anims": {
+        "block": 7611,
+        "death": 7613
+      }
+    },
+    "7700": {
+      "name": "JalTok-Jad",
+      "anims": {
+        "block": 7591,
+        "death": 7594
+      }
+    },
+    "7701": {
+      "name": "Yt-HurKot",
+      "anims": {
+        "attack": 2637,
+        "block": 2635,
+        "death": 2638
+      }
+    },
+    "7702": {
+      "name": "Jal-Xil",
+      "anims": {
+        "block": 7607,
+        "death": 7606
+      }
+    },
+    "7703": {
+      "name": "Jal-Zek",
+      "anims": {
+        "block": 7611,
+        "death": 7613
+      }
+    },
+    "7704": {
+      "name": "JalTok-Jad",
+      "anims": {
+        "block": 7591,
+        "death": 7594
+      }
+    },
+    "7705": {
+      "name": "Yt-HurKot",
+      "anims": {
+        "attack": 2637,
+        "block": 2635,
+        "death": 2638
+      }
+    },
+    "7707": {
+      "name": "Ancestral Glyph",
+      "anims": {
+        "block": -1,
+        "death": 7569
+      }
+    },
+    "7708": {
+      "name": "Jal-MejJak",
+      "anims": {
+        "block": 2869,
+        "death": 2866
+      }
+    },
+    "7709": {
+      "name": "Rocky support",
+      "anims": {
+        "block": -1,
+        "death": -1
       }
     }
   },

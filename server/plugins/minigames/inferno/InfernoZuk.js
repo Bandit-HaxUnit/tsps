@@ -110,6 +110,9 @@ function begin(session) {
   // collision-free walk steps, and only where this plugin sends it.
   glyph?.setScriptedMovement(true);
   glyph?.setFlag("movement:ignore-clipping");
+  // This plugin drives all three. A hit would otherwise have them retaliate through the combat
+  // engine, which stops the glyph's sweep and plays its attack animation (Zuk's death).
+  for (const npc of [zuk, glyph]) npc?.setFlag("combat:no-retaliate");
   if (glyph) walkGlyph(glyph, GLYPH_REST);
   session.zuk = {
     zuk,
@@ -279,6 +282,8 @@ function summon(session, state) {
     for (const at of ZUK_HEALER_SPOTS) {
       const healer = run.spawn(session, Npcs.JAL_MEJJAK, at, { wave: false });
       if (!healer) continue;
+      // Hit, a healer turns on the player through provoke, not the combat engine.
+      healer.setFlag("combat:no-retaliate");
       healer.performAnimation(new core.Animation(HEALER_SPAWN_ANIM));
       healer.__infernoNextAct = now + HEALER_RISE_TICKS;
       state.healers.push(healer);
