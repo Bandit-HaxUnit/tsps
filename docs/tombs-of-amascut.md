@@ -58,6 +58,9 @@ The OSRS Wiki and the cache weren't reachable when this was first written, so Ne
 - Points multipliers on Warden NPCs: obelisk 1.5, Warden 2, final Warden 2.5.
 - The common loot table's items and divisors, fossilised dung below 1,500 points, and the deathless kits and remnants. (The quantity factor above raid level 300 matches the Wiki.)
 - Tumeken's shadow charge cost (2 soul + 5 chaos per charge, 20,000 maximum), the Masori and Armadyl plate counts and experience, and the ward's 10,000 soul runes.
+- The Scabaras puzzle room's shortcuts between its north and south paths (the Wiki only says they exist):
+  - The Passage (45343) is crawled through from (3548, 5276) or (3548, 5284).
+  - The Platform (45396) is jumped across from (3560, 5277) or (3560, 5283).
 - Attack delay:
   - Striking a Scabaras obelisk, or an energy siphon with melee, stops the attack and leaves no attack delay, so the next one can be hit at once.
   - When the final Warden sends its skulls, every player's attack is stopped and their delay cleared the same way.

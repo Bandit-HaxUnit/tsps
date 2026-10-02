@@ -58,6 +58,17 @@ const SOUND = {
   FLIP: 6560, PRESSURE: 6561, PUZZLE_DONE: 2655, ROCKFALL: 4459, RUMBLING: 6578,
   TILE: 6553, MATCH_FAIL: 6554, SUM_FAIL: 6558, BUTTON: 6559, MEMORY_FAIL: 6557, TABLET: 6548, OBELISK_HIT: 955,
 };
+// The shortcuts between the north and south paths (Near-Reality's PassageAction and
+// SteppingStonesAction): a crawl through the passage (45343) in the west, a jump across the
+// platform (45396) in the east. Each is used from the side the player stands on.
+const PASSAGE = 45343;
+const PASSAGE_SIDES = { north: { x: 3548, y: 5284 }, south: { x: 3548, y: 5276 } };
+const PLATFORM = 45396;
+const PLATFORM_TILE = { x: 3560, y: 5280 };
+const PLATFORM_SIDES = { north: { x: 3560, y: 5283 }, south: { x: 3560, y: 5277 } };
+const MIDDLE_Y = 5280;
+const SHORTCUT = { CRAWL: 2796, JUMP: 741, CRAWL_SOUND: 2454, JUMP_SOUND: 2461 }; // HUMAN_LONGCRAWL, HUMAN_SPOT_JUMP
+
 const SCARAB_PROJECTILE = 1766;
 const SCARAB_MAX_HIT = 6;
 const SCARAB_RANGE = 8;
@@ -613,6 +624,56 @@ function struckObelisk(event) {
   Shared.skipAttackDelay(player);
 }
 
+// ------------------------------------------------------------------ shortcuts
+
+/** The side of the room the player is on, and so the side the shortcut takes them from. */
+function sideOf(player) {
+  return player.getLocation().getY() < MIDDLE_Y ? "south" : "north";
+}
+
+/** Both shortcuts are used from the near side's landing tile; neither tile is reachable as a loc. */
+function routeToShortcut(event) {
+  if (event.objectId !== PASSAGE && event.objectId !== PLATFORM) return;
+  if (!scabarasRoom(event.player)) return;
+  const sides = event.objectId === PASSAGE ? PASSAGE_SIDES : PLATFORM_SIDES;
+  event.destination = { ...sides[sideOf(event.player)], z: 0 };
+}
+
+function crawlPassage(event) {
+  const { player } = event;
+  if (event.objectId !== PASSAGE || !scabarasRoom(player)) return false;
+  const { Animation } = Shared.core();
+  const to = PASSAGE_SIDES[sideOf(player) === "south" ? "north" : "south"];
+  player.getMovementQueue().reset();
+  player.performAnimation(new Animation(SHORTCUT.CRAWL));
+  Shared.sound(player, SHORTCUT.CRAWL_SOUND);
+  Shared.later(player, 1, () => {
+    if (!scabarasRoom(player)) return;
+    player.performAnimation(new Animation(-1));
+    player.moveTo(Shared.loc(to, 0));
+  });
+  return true;
+}
+
+/** Jumps onto the platform, then on to the far side. */
+function jumpPlatform(event) {
+  const { player } = event;
+  if (event.objectId !== PLATFORM || !scabarasRoom(player)) return false;
+  const north = sideOf(player) === "south";
+  const to = PLATFORM_SIDES[north ? "north" : "south"];
+  const direction = north ? 0 : 2;
+  const jump = (target) => {
+    const location = player.getLocation();
+    Shared.sound(player, SHORTCUT.JUMP_SOUND);
+    Shared.knockback(player, target.x - location.getX(), target.y - location.getY(),
+      { ticks: 1, speed: 35, direction, animation: SHORTCUT.JUMP });
+  };
+  player.getMovementQueue().reset();
+  jump(PLATFORM_TILE);
+  Shared.later(player, 2, () => scabarasRoom(player) && jump(to));
+  return true;
+}
+
 function attackObelisk(event) {
   const npc = event.npc;
   if (npc?.__toaObelisk === undefined) return false;
@@ -627,6 +688,9 @@ module.exports = function registerScabarasPuzzle(api) {
   Shared.onObject(api, "Ancient tablet", readSumTablet);
   Shared.onObject(api, "Ancient button", pressAncientButton);
   Shared.onObject(api, "Tile", turnTile);
+  Shared.onObject(api, "Passage", crawlPassage);
+  Shared.onObject(api, "Platform", jumpPlatform);
+  api.onObjectRoute(routeToShortcut);
   api.onNpcInteraction("<col=00ffff>Obelisk</col>", { Hit: attackObelisk });
   api.onNpcHitModify(hitObelisk);
   api.onPlayerDealtDamage(struckObelisk);
