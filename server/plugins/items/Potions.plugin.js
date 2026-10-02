@@ -30,6 +30,9 @@ const ATTR_STAMINA_END = "potions:stamina:end";
 const ATTR_STAMINA_ACC = "potions:stamina:acc";
 const ATTR_DIVINE_STATE = "potions:divine:state";
 const ATTR_OVERLOAD_STATE = "potions:overload:state";
+/** When the player logged out; timed effects are paused while offline. */
+const ATTR_PAUSED_AT = "potions:paused-at";
+const PERSISTED_ATTRIBUTES = [ATTR_STAMINA_END, ATTR_STAMINA_ACC, ATTR_DIVINE_STATE, ATTR_OVERLOAD_STATE, ATTR_PAUSED_AT];
 
 const POTION_BY_ITEM_ID = new Map();
 const REGISTERED_POTIONS = [];
@@ -145,11 +148,39 @@ function applyAntifire(player, seconds, tier = DragonfireProtectionTier.ANTIFIRE
   player.getPacketSender().sendEffectTimer(seconds, EffectTimer.ANTIFIRE);
 }
 
+const PRAYER_BONUS_WORN = [
+  Items.PRAYER_CAPE, Items.PRAYER_CAPE_T_, Items.PRAYER_CAPE_2, Items.PRAYER_CAPE_T__2,
+  Items.RING_OF_THE_GODS_I_, Items.RING_OF_THE_GODS_I__2, Items.RING_OF_THE_GODS_I__3,
+  Items.RING_OF_THE_GODS_I__4, Items.RING_OF_THE_GODS_I__5, Items.RING_OF_THE_GODS_I__6,
+];
+
+/** Wiki: a worn prayer cape or ring of the gods (i), or a carried holy wrench, boosts prayer restores. */
+function hasPrayerRestoreBonus(player) {
+  return player.getInventory?.()?.contains?.(Items.HOLY_WRENCH) === true ||
+    PRAYER_BONUS_WORN.some((itemId) => player.getEquipment?.()?.contains?.(itemId) === true);
+}
+
+/** Prayer potion: 7 + 25% (27% with the bonus); super restore: 8 + 25% (27%). */
 function applyPrayerRestore(player, isSuperRestore) {
+  restorePrayer(player, isSuperRestore ? 8 : 7, hasPrayerRestoreBonus(player) ? 0.27 : 0.25);
+}
+
+function restorePrayer(player, flat, percent) {
   const max = getMaxLevel(player, Skill.PRAYER);
-  const restored = Math.floor((isSuperRestore ? 8 : 7) + max / 4);
+  const restored = Math.floor(flat + max * percent);
   getSkillManager(player).increaseCurrentLevel(Skill.PRAYER, restored, max);
   Sounds.sendSound(player, Sound.PRAYER_RECHARGE);
+}
+
+/** Sanfew serum (Wiki): 4 + 30% to every stat, prayer 4 + 30% (32% with the bonus). */
+function applySanfewRestore(player) {
+  restorePrayer(player, 4, hasPrayerRestoreBonus(player) ? 0.32 : 0.3);
+  for (const skill of Skill.values()) {
+    if (skill === Skill.HITPOINTS || skill === Skill.PRAYER) {
+      continue;
+    }
+    restoreSkillToBaseWithFormula(player, skill, 4, 0.3);
+  }
 }
 
 function applyRestorePotion(player) {
@@ -221,7 +252,7 @@ function applyDivine(player, baseEffect, affectedSkills) {
   const targets = affectedSkills
     .filter(Boolean)
     .map((skill) => ({
-      skill,
+      skillIndex: skill.getIndex(),
       target: getCurrentLevel(player, skill),
     }));
 
@@ -533,7 +564,7 @@ registerPotion({
     doseChain("SANFEW_SERUM_4_3", "SANFEW_SERUM_3_3", "SANFEW_SERUM_2_3", "SANFEW_SERUM_1_3"),
   ],
   effect: (player) => {
-    applySuperRestore(player);
+    applySanfewRestore(player);
     applyPoisonImmunity(player, 360, false);
   },
 });
@@ -755,8 +786,9 @@ function processDivine(player) {
   if (Date.now() >= state.endsAt) {
     player.setAttribute(ATTR_DIVINE_STATE, null);
     for (const entry of state.targets) {
-      if (entry?.skill) {
-        setCurrentLevel(player, entry.skill, getMaxLevel(player, entry.skill));
+      const skill = Skill.values()[entry?.skillIndex];
+      if (skill) {
+        setCurrentLevel(player, skill, getMaxLevel(player, skill));
       }
     }
     player.sendMessage("Your divine potion effect has worn off.");
@@ -764,10 +796,10 @@ function processDivine(player) {
   }
 
   for (const entry of state.targets) {
-    if (!entry || !entry.skill) {
-      continue;
+    const skill = Skill.values()[entry?.skillIndex];
+    if (skill) {
+      setCurrentLevel(player, skill, entry.target);
     }
-    setCurrentLevel(player, entry.skill, entry.target);
   }
 }
 
@@ -868,17 +900,43 @@ function handlePotionDrink(player, itemId, slot) {
   return true;
 }
 
+function pauseTimedEffects({ player }) {
+  player.setAttribute(ATTR_PAUSED_AT, Date.now());
+}
+
+/** Shifts every running effect by the time spent offline, so a relog resumes it. */
+function resumeTimedEffects({ player }) {
+  const pausedAt = Number(player.getAttribute(ATTR_PAUSED_AT));
+  player.setAttribute(ATTR_PAUSED_AT, null);
+  if (!Number.isFinite(pausedAt) || pausedAt <= 0) return;
+  const offline = Math.max(0, Date.now() - pausedAt);
+  const staminaEnd = Number(player.getAttribute(ATTR_STAMINA_END));
+  if (Number.isFinite(staminaEnd) && staminaEnd > 0) player.setAttribute(ATTR_STAMINA_END, staminaEnd + offline);
+  for (const key of [ATTR_DIVINE_STATE, ATTR_OVERLOAD_STATE]) {
+    const state = player.getAttribute(key);
+    if (!state || typeof state !== "object") continue;
+    for (const field of ["endsAt", "nextBoostAt", "nextDamageAt"]) {
+      if (Number.isFinite(state[field])) state[field] += offline;
+    }
+    player.setAttribute(key, state);
+  }
+}
+
 module.exports = {
   name: "Potions",
   isPotionItem(itemId) {
     return POTION_BY_ITEM_ID.has(itemId);
   },
+  _test: { applyPrayerRestore, applySanfewRestore, applyDivine, processDivine, pauseTimedEffects, resumeTimedEffects },
   getPotionName(itemId) {
     return POTION_BY_ITEM_ID.get(itemId)?.potion?.name ?? null;
   },
   register(api) {
     pluginApi = api;
     initDragonfireProtectionCoreAccess(api);
+    PERSISTED_ATTRIBUTES.forEach((key) => api.persistAttribute(key));
+    api.onPlayerLogout(pauseTimedEffects);
+    api.onPlayerLogin(resumeTimedEffects);
     api.onItemFirstAction((event) => {
       const { player, itemId, slot } = event;
       return handlePotionDrink(player, itemId, slot);
