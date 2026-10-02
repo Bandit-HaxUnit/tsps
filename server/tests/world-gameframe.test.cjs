@@ -88,3 +88,24 @@ test('plugin loading counts disabled files and logs only the final persistence o
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('NPC click hooks accept the fifth option and reject options outside 1–5', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const hooks = PluginManager.npcInteractionHooks.slice();
+  const warnings = [];
+  const originalWarn = console.warn;
+  try {
+    console.warn = (message) => warnings.push(message);
+    const api = PluginManager.createApi('NpcClickTest');
+    const handler = () => true;
+    api.onNpcClick(1, 5, handler);
+    for (const invalid of [0, 6, 1.5]) api.onNpcClick(1, invalid, handler);
+    assert.equal(warnings.length, 3);
+    const event = { player: {}, npc: {}, npcId: 1, clickType: 5, handled: false };
+    assert.equal(PluginManager.emitNpcInteraction(event), true);
+    assert.equal(PluginManager.emitNpcInteraction({ ...event, clickType: 4, handled: false }), false);
+  } finally {
+    console.warn = originalWarn;
+    PluginManager.npcInteractionHooks = hooks;
+  }
+});

@@ -2008,7 +2008,7 @@ export class PluginManager {
         validIds.length === 0 ||
         !Number.isInteger(clickType) ||
         clickType < 1 ||
-        clickType > 4 ||
+        clickType > 5 ||
         typeof handler !== "function"
       ) {
         console.warn(
