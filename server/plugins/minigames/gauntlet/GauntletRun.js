@@ -14,6 +14,7 @@
 const Shared = require("./GauntletShared");
 const GauntletMap = require("./GauntletMap");
 const Resources = require("./GauntletResources");
+const Monsters = require("./GauntletMonsters");
 
 const ATTR_RUN = "gauntlet:run";
 const ATTR_STATS = "gauntlet:stats";
@@ -97,6 +98,10 @@ class GauntletRun {
     this.bossCycle = 0;
     this.timer = null;
     this.room = null;
+    // Kills by tier and the weapon components dropped, for the drop rules (GauntletMonsters).
+    this.kills = { weak: 0, strong: 0, demi: 0 };
+    this.strongFrame = false;
+    this.components = new Set();
     runs.set(player.getUsername(), this);
   }
 
@@ -177,6 +182,7 @@ class GauntletRun {
     this.player.getPacketSender().sendVarbit(Shared.VARBIT.ROOM_LIT_FIRST + gridY * GauntletMap.GRID + gridX, 1);
     const room = this.map.room(gridX, gridY);
     Resources.stockRoom(this.map, room, this.random);
+    Monsters.populateRoom(this, room, this.random);
     this.lightNodesAround(room);
     return true;
   }

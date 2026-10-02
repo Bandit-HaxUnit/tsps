@@ -123,22 +123,52 @@ const hooks = { objects: {}, items: {}, death: [], drops: [], teleports: [], log
 const saves = [];
 PluginManager.getCoreApi().GameConstants.PLAYER_PERSISTENCE = { save: (player) => saves.push(player.getUsername()) };
 
-function bindHooks() {
-  const api = {
+/** A plugin NPC: enough of one for the maze to hold it. */
+function fakeNpc(id, x, y, z) {
+  const npc = {
+    id, location: new Location(x, y, z), area: null, removed: false,
+    getId: () => id,
+    getLocation: () => npc.location,
+    setArea(area) { npc.area = area; },
+    getArea: () => npc.area,
+    isRegistered: () => !npc.removed,
+    isPlayer: () => false,
+    isNpc: () => true,
+  };
+  return npc;
+}
+
+const spawnedNpcs = [];
+
+/** One fake plugin API for every unit, as the server gives them all the same one. */
+function fakeApi() {
+  return {
     core: PluginManager.getCoreApi(),
     persistAttribute() {},
     onObjectInteraction: (name, actions) => { hooks.objects[name] = { ...(hooks.objects[name] ?? {}), ...actions }; },
-    onItemAction: (name, actions) => { hooks.items[name] = actions; },
+    onItemAction: (name, actions) => { hooks.items[name] = { ...(hooks.items[name] ?? {}), ...actions }; },
+    onItemOnObject: (item, object, handler) => { hooks.itemOnObject = { ...(hooks.itemOnObject ?? {}), [`${item}|${object}`]: handler }; },
+    onItemOnItem: (a, b, handler) => { hooks.itemOnItem = { ...(hooks.itemOnItem ?? {}), [`${a}|${b}`]: handler }; },
     onShouldDropItemsOnDeath: (handler) => hooks.drops.push(handler),
     onPlayerDeath: (handler) => hooks.death.push(handler),
     onCanTeleport: (handler) => hooks.teleports.push(handler),
+    onCanAttack: (handler) => { hooks.canAttack = handler; },
+    onCustomEvent: (name, handler) => { hooks.custom = { ...(hooks.custom ?? {}), [name]: handler }; },
     onPlayerLogin: (handler) => hooks.login.push(handler),
     onNpcDialogueVariant: (handler) => hooks.variants.push(handler),
     sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
+    getBonusManager: () => ({ update() {} }),
+    spawnNpc: ({ id, x, y, z }) => { const npc = fakeNpc(id, x, y, z); spawnedNpcs.push(npc); return npc; },
+    removeNpc: (npc) => { npc.removed = true; },
     emitCustomEvent() {},
   };
+}
+
+function bindHooks() {
+  const api = fakeApi();
   Lobby(api);
   RunHooks(api);
+  return api;
 }
 
 // Shards and dust stack; everything else takes a slot each.
@@ -392,16 +422,7 @@ const Resources = require('../plugins/minigames/gauntlet/GauntletResources');
 const Prep = require('../plugins/minigames/gauntlet/Prep.Gauntlet');
 
 function bindPrep() {
-  bindHooks();
-  Prep({
-    core: PluginManager.getCoreApi(),
-    onObjectInteraction: (name, actions) => { hooks.objects[name] = { ...(hooks.objects[name] ?? {}), ...actions }; },
-    onItemOnObject: (item, object, handler) => { hooks.itemOnObject = { ...(hooks.itemOnObject ?? {}), [`${item}|${object}`]: handler }; },
-    onItemOnItem: (a, b, handler) => { hooks.itemOnItem = { ...(hooks.itemOnItem ?? {}), [`${a}|${b}`]: handler }; },
-    onItemAction: (name, actions) => { hooks.items[name] = { ...(hooks.items[name] ?? {}), ...actions }; },
-    sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
-    getBonusManager: () => ({ update() {} }),
-  });
+  Prep(bindHooks());
 }
 
 function startedRun(name, options = {}) {
@@ -551,6 +572,110 @@ test('the teleport crystal works only away from the start room and before the fi
     use();
     assert.ok(!player.inventory.contains(I.TELEPORT_CRYSTAL), 'used up');
     assert.ok(run.inStartRoom(player.getLocation()), 'back at the start');
+  } finally {
+    run.end('exit', { fade: false });
+  }
+});
+
+// ------------------------------------------------------------------ monsters
+
+const Monsters = require('../plugins/minigames/gauntlet/GauntletMonsters');
+const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
+
+test('every Gauntlet monster has its own animations, and the casters their projectiles', () => {
+  new NpcDefinitionLoader().load();
+  for (const monster of Object.values(Monsters.MONSTERS)) {
+    for (const id of Object.values(monster.ids)) {
+      const definition = NpcDefinition.forId(id);
+      assert.notEqual(definition.getAttackAnim(), 422, `${id} attacks like a player`);
+      assert.notEqual(definition.getDeathAnim(), 836, `${id} dies like a player`);
+    }
+  }
+  assert.equal(NpcDefinition.forId(9033).getProjectileId(), 1701, 'the dragon breathes its own projectile');
+  assert.equal(NpcDefinition.forId(9048).getProjectileId(), 1606, 'the corrupted dark beast fires its own');
+});
+
+test('lit rooms hold monsters or their demi-boss, and the maze takes them with it', () => {
+  const api = bindHooks();
+  Shared.bind(api);
+  const { player, run } = startedRun('Hunter', { random: seeded(61) });
+  let weak = 0;
+  let strong = 0;
+  for (const room of run.map.rooms.flat()) {
+    if (room.special) continue;
+    run.lightRoom(room.gridX, room.gridY);
+    const npcs = run.map.getEntities?.() ?? run.map.entities.filter((entity) => entity.isNpc?.());
+    const here = npcs.filter((npc) => run.map.roomAt(npc.getLocation()) === room);
+    if (room.demiBoss) {
+      assert.equal(here.length, 1, 'a demi-boss alone');
+      assert.equal(here[0].getId(), Monsters.MONSTERS[room.demiBoss].ids.regular);
+      continue;
+    }
+    for (const npc of here) {
+      const tier = Monsters.byId.get(npc.getId()).tier;
+      if (tier === 'weak') weak++;
+      else strong++;
+      const x = npc.getLocation().getX() - run.map.roomTile(room, 0, 0).getX();
+      assert.ok(x >= 3 && x <= 12, 'on the inner floor');
+    }
+  }
+  assert.ok(weak > 0 && strong > 0, `weak ${weak}, strong ${strong}`);
+  const spawned = run.map.entities.filter((entity) => entity.isNpc?.());
+  run.end('exit', { fade: false });
+  ticks(1);
+  assert.ok(spawned.every((npc) => npc.removed), 'the monsters go with the maze');
+});
+
+test('drops follow the Wiki: a frame from the first weak kill, demi-bosses their missing component', () => {
+  bindHooks();
+  const { player, run } = startedRun('Looter', { random: seeded(71) });
+  try {
+    const items = Items.itemsFor('regular');
+    const has = (drops, id) => drops.some((drop) => drop.itemId === id);
+    const first = Monsters.rollDrops(run, player, 9026, seeded(1));
+    assert.ok(has(first, items.frame), 'the first weak kill drops a frame');
+    const shards = first.find((drop) => drop.itemId === items.shards).amount;
+    assert.ok(shards >= 20 && shards <= 30);
+
+    // The bear drops its spike first, then a missing component, never one owned or dropped.
+    assert.ok(has(Monsters.rollDrops(run, player, 9032), items.spike));
+    const second = Monsters.rollDrops(run, player, 9032);
+    assert.ok(!has(second, items.spike) && (has(second, items.orb) || has(second, items.bowstring)));
+    assert.ok(has(second, items.frame), 'demi-bosses always drop a frame');
+    Monsters.rollDrops(run, player, 9032);
+    assert.ok(!COMPONENTS().some((id) => has(Monsters.rollDrops(run, player, 9033), id)), 'all three dropped: none more');
+
+    // The second strong kill brings a frame if the first did not.
+    run.strongFrame = false;
+    run.kills.strong = 1;
+    assert.ok(has(Monsters.rollDrops(run, player, 9031, () => 0.99), items.frame));
+
+    // The general table is replaced for the run's monsters.
+    const drops = [{ itemId: 995, amount: 1 }];
+    hooks.custom['npc-drops:roll']({ player, npc: { __gauntletRun: run }, npcId: 9029, drops });
+    assert.ok(!has(drops, 995) && has(drops, items.shards));
+  } finally {
+    run.end('exit', { fade: false });
+  }
+
+  function COMPONENTS() {
+    const items = Items.itemsFor('regular');
+    return [items.spike, items.orb, items.bowstring];
+  }
+});
+
+test('nothing attacks into the start room', () => {
+  bindHooks();
+  const { player, run } = startedRun('Safe', { random: seeded(81) });
+  try {
+    const event = { attacker: { __gauntletRun: run }, target: player, allow: null };
+    hooks.canAttack(event);
+    assert.equal(event.allow, false);
+    player.moveTo(run.map.roomTile(run.map.room(3, 3), 7, 7));
+    const outside = { attacker: { __gauntletRun: run }, target: player, allow: null };
+    hooks.canAttack(outside);
+    assert.equal(outside.allow, null);
   } finally {
     run.end('exit', { fade: false });
   }

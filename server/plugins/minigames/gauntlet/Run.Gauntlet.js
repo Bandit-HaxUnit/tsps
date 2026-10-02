@@ -8,6 +8,7 @@
 const Shared = require("./GauntletShared");
 const GauntletMap = require("./GauntletMap");
 const Run = require("./GauntletRun");
+const Monsters = require("./GauntletMonsters");
 
 // Instances sit at tile 8192+ (TemplatedInstanceArea); a player saved there was in a run.
 const INSTANCE_MIN_X = 8192;
@@ -150,6 +151,25 @@ function dieInRun(event) {
   run.end("death");
 }
 
+// ------------------------------------------------------------------ monsters
+
+/** A run's monsters drop by the run's rules (GauntletMonsters) instead of the general tables. */
+function gauntletDrops(event) {
+  const run = event.npc?.__gauntletRun;
+  if (!run || run.stage === "ended") return;
+  const drops = Monsters.rollDrops(run, event.player, event.npcId);
+  if (!drops) return;
+  event.drops.length = 0;
+  event.drops.push(...drops);
+}
+
+/** The start room is safe: nothing attacks into it (Near-Reality keeps monsters out too). */
+function safeStartRoom(event) {
+  const run = event.attacker?.__gauntletRun;
+  if (!run || !event.target?.isPlayer?.()) return;
+  if (run.inStartRoom(event.target.getLocation())) event.allow = false;
+}
+
 /** Bryn: teleports are blocked inside. */
 function blockTeleports(event) {
   if (!runIn(event.player)) return;
@@ -185,5 +205,7 @@ module.exports = function registerGauntletRun(api) {
   api.onShouldDropItemsOnDeath(keepNothingOnDeath);
   api.onPlayerDeath(dieInRun);
   api.onCanTeleport(blockTeleports);
+  api.onCustomEvent("npc-drops:roll", gauntletDrops);
+  api.onCanAttack(safeStartRoom);
   api.onPlayerLogin(recoverOnLogin);
 };

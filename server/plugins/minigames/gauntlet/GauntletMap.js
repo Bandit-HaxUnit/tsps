@@ -140,6 +140,17 @@ function mapClass() {
       if (mobile.isPlayer?.()) this.run?.updateRoom?.();
     }
 
+    /** The maze's monsters go with it (they are its entities, not visitors it saw enter). */
+    destroy() {
+      if (this.isDestroyed()) return;
+      for (const entity of [...this.entities]) {
+        if (!entity.isNpc?.()) continue;
+        this.detach(entity);
+        Shared.api()?.removeNpc?.(entity);
+      }
+      super.destroy();
+    }
+
     postLeave(mobile, logout) {
       // Logging out or being moved out of the maze by anything but the run ends the run.
       if (mobile.isPlayer?.() && this.run?.player === mobile.getAsPlayer()) {
