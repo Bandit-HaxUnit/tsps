@@ -148,6 +148,8 @@ export class Ammunition {
     public static readonly RUNE_ARROW = new Ammunition(892, new Graphic(24, 0, GraphicHeight.HIGH), 15, 50)
     public static readonly ICE_ARROW = new Ammunition(78, new Graphic(25, 0, GraphicHeight.HIGH), 16, 58)
     public static readonly BROAD_ARROW = new Ammunition(4160, new Graphic(20, 0, GraphicHeight.HIGH), 11, 58)
+    // ponytail: training arrows reuse the bronze arrow launch/travel spotanims; no dedicated ones in RuneLite's SpotanimID.
+    public static readonly TRAINING_ARROWS = new Ammunition(ItemIdentifiers.TRAINING_ARROWS, new Graphic(19, 0, GraphicHeight.HIGH), 10, 7)
     public static readonly DRAGON_ARROW = new Ammunition(11212, new Graphic(1111, 0, GraphicHeight.HIGH), 1120, 65)
 
     public static readonly BRONZE_BOLT = new Ammunition(877, new Graphic(955, 0, GraphicHeight.HIGH), 27, 13)
@@ -437,6 +439,7 @@ export class RangedWeapon {
 
     public static readonly LONGBOW = new RangedWeapon([839], [Ammunition.BRONZE_ARROW], RangedWeaponType.LONGBOW)
     public static readonly SHORTBOW = new RangedWeapon([841], [Ammunition.BRONZE_ARROW], RangedWeaponType.SHORTBOW)
+    public static readonly TRAINING_BOW = new RangedWeapon([ItemIdentifiers.TRAINING_BOW], [Ammunition.TRAINING_ARROWS], RangedWeaponType.SHORTBOW)
     public static readonly OAK_LONGBOW = new RangedWeapon([845], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW], RangedWeaponType.LONGBOW)
     public static readonly OAK_SHORTBOW = new RangedWeapon([843], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW], RangedWeaponType.SHORTBOW)
     public static readonly WILLOW_LONGBOW = new RangedWeapon([847], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW], RangedWeaponType.LONGBOW)
@@ -514,7 +517,9 @@ export class RangedWeapon {
         this.type = type;
         for (const weaponId of weaponIds) {
             RangedWeapon.rangedWeapons.set(weaponId, this);
-            if (Array.isArray(ammunitionData) && ammunitionData.length === 1) {
+            // Self-ammo only when the weapon is its own ammo (darts, knives, Craw's bow); a
+            // bow limited to one arrow type (shortbow, training bow) still draws from the quiver.
+            if (Array.isArray(ammunitionData) && ammunitionData.length === 1 && weaponIds.includes(ammunitionData[0].getItemId())) {
                 RangedWeapon.selfAmmoByWeapon.set(weaponId, ammunitionData[0]);
             }
         }
