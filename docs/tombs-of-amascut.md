@@ -134,6 +134,8 @@ The first version was written without access to the Wiki or the cache, so it fol
 
 ## Verification
 
+Developer accounts can use `::toa` to teleport to the lobby beneath Necropolis (not from inside a raid).
+
 Developer accounts can use `::toaskippuzzle` inside any of the four pre-boss puzzle rooms.
 It completes that room for the party, removes its remaining NPCs, and opens the normal
 route to the boss. Use the room exit afterward. It also works before starting the puzzle.

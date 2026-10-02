@@ -47,6 +47,7 @@ const COMMANDS = {
     "::serverperf [ticks] - Show server performance",
   ],
   developer: [
+    "::toa - Teleport to the Tombs of Amascut lobby",
     "::toaskippuzzle - Complete the current ToA puzzle for the party",
     "::toaskipboss - Complete the current ToA boss encounter for the party",
     "::toaskiptowarden - Mark every ToA path complete (in the Nexus) to open the Wardens",

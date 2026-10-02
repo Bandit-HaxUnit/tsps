@@ -144,7 +144,19 @@ function skipToReward({ player, parts }) {
   return true;
 }
 
+/** ::toa: to the Tombs of Amascut lobby beneath Necropolis (not from inside a raid). */
+function toLobby({ player }) {
+  if (Raid.raidOf(player)) {
+    player.sendMessage("Leave your raid before using ::toa.");
+    return true;
+  }
+  player.moveTo(Shared.loc(Shared.LOBBY_RETURN));
+  player.sendMessage("You teleport to the Tombs of Amascut lobby.");
+  return true;
+}
+
 module.exports = function registerTombsCommands(api) {
+  api.registerCommand("toa", toLobby, api.core.PlayerRights.DEVELOPER);
   api.registerCommand("toaskippuzzle", skipPuzzle, api.core.PlayerRights.DEVELOPER);
   api.registerCommand("toaskipboss", skipBoss, api.core.PlayerRights.DEVELOPER);
   api.registerCommand("toaskiptowarden", skipToWardens, api.core.PlayerRights.DEVELOPER);
