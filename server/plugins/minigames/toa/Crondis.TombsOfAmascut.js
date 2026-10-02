@@ -28,28 +28,56 @@ const ACID_SOUTH = [{ x: 3941, y: 5257 }, { x: 3927, y: 5257 }];
 const ACID_NORTH = [{ x: 3941, y: 5303 }, { x: 3927, y: 5303 }];
 const SPEAR_ROWS = [{ x: 3925, y: 5293 }, { x: 3939, y: 5293 }, { x: 3925, y: 5258 }, { x: 3939, y: 5258 }];
 const SPEAR_DELAYS = [[0, 2, 4, 6, 8, 0, 2, 4, 6, 8], [0, 3, 6, 9, 2, 0, 3, 6, 9, 2], [2, 1, 1, 0, 0, 2, 2, 1, 1, 0], [0, 1, 2, 3, 4, 4, 3, 2, 1, 0]];
-const CROCODILE_SPAWNS = [{ x: 3925, y: 5285 }, { x: 3946, y: 5285 }, { x: 3925, y: 5274 }, { x: 3946, y: 5274 }];
+// The crocodiles come in from one of three sides, picked when the room is built; its wall
+// openings (toa_wall02_crocodiles04) show which (OpenRune). Faces: 0 west, 1 north, 2 east, 3 south.
+const CROCODILE_WALL = 45434;
+const CROCODILE_SIDES = [
+  {
+    spawns: [{ x: 3946, y: 5274 }, { x: 3925, y: 5285 }, { x: 3946, y: 5285 }, { x: 3925, y: 5274 }],
+    walls: [{ x: 3950, y: 5273, face: 0 }, { x: 3948, y: 5271, face: 1 }],
+  },
+  {
+    spawns: [{ x: 3925, y: 5274 }, { x: 3946, y: 5285 }, { x: 3925, y: 5285 }, { x: 3946, y: 5274 }],
+    walls: [{ x: 3922, y: 5273, face: 2 }, { x: 3924, y: 5271, face: 1 }],
+  },
+  {
+    spawns: [{ x: 3925, y: 5285 }, { x: 3946, y: 5274 }, { x: 3925, y: 5274 }, { x: 3946, y: 5285 }],
+    walls: [{ x: 3922, y: 5287, face: 2 }, { x: 3923, y: 5289, face: 3 }],
+  },
+];
 const PALM_TILE = { x: 3934, y: 5278, z: 0 };
 const END_BARRIER = { x: 3922, y: 5279 };
 
-const WATER_PER_PLAYER = 200;
+// Wiki (strategies): 175 water, and 125 more for each extra player.
+const WATER_FIRST_PLAYER = 175;
+const WATER_PER_EXTRA_PLAYER = 125;
 const ACID_GRAPHIC = 2129;
 const ANIMATION = { FILL: 827, SPEAR_END: 9562, MOUTH: 9563, SPEAR: 9565 };
 const SOUND = { FILL: 6522, EMPTY: 6524, SPILL: 2401, WATER_PALM: 6534, PALM_UP: 6516, PALM_DOWN: 6529, TAKE: 2582 };
-const CROCODILE_INTERVAL = 50;
+// A wave every 46-50 ticks (the first after a reset 10 sooner); they wake 4 ticks after
+// coming in (OpenRune). Wiki: at most 8, they bite every 7 ticks, and go for anyone carrying
+// water within reach, then a watered palm, then anyone without a container who hit them.
+const CROCODILE_WAVE_TICKS = [46, 50];
+const CROCODILE_RESET_SOONER = 10;
+const CROCODILE_WAKE_TICKS = 4;
 const CROCODILE_LIMIT = 8;
 const CROCODILE_ATTACK_TICKS = 7;
 const CROCODILE_SIGHT = 3;
+// Wiki: 18, and 3 more for each acid or spear hit in the last 30 seconds, up to 36.
+const CROCODILE_BITE = 18;
+const CROCODILE_BITE_PER_HAZARD = 3;
+const CROCODILE_BITE_MAX = 36;
+const HAZARD_WINDOW_TICKS = 50;
 
 class CrondisPuzzleRoom extends Raid.Room {
   build() {
     const { NpcIdentifiers } = Shared.core();
     this.water = new Map();
     this.watered = 0;
-    this.goal = WATER_PER_PLAYER;
+    this.goal = WATER_FIRST_PLAYER;
     this.acidTicks = 0;
     this.spearTick = 0;
-    this.crocodileTicks = CROCODILE_INTERVAL;
+    this.crocodileTicks = this.nextCrocodileWave();
     this.acid = [];
     this.crocodiles = new Set();
     this.recentHits = new Map();
@@ -64,6 +92,12 @@ class CrondisPuzzleRoom extends Raid.Room {
       this.palm.getMovementQueue().setBlockMovement(true);
     }
     this.setObject(INVISIBLE_BLOCK, PALM_TILE, 10, 0);
+    this.crocodileSide = CROCODILE_SIDES[Shared.random(0, CROCODILE_SIDES.length - 1)];
+    for (const wall of this.crocodileSide.walls) this.setObject(CROCODILE_WALL, { x: wall.x, y: wall.y, z: 0 }, 10, wall.face);
+  }
+
+  nextCrocodileWave() {
+    return Shared.random(CROCODILE_WAVE_TICKS[0], CROCODILE_WAVE_TICKS[1]) - 1;
   }
 
   onPlayerArrive(player) {
@@ -79,7 +113,7 @@ class CrondisPuzzleRoom extends Raid.Room {
   }
 
   onStart() {
-    this.goal = this.teamSize * WATER_PER_PLAYER;
+    this.goal = WATER_FIRST_PLAYER + (this.teamSize - 1) * WATER_PER_EXTRA_PLAYER;
     this.watered = 0;
     this.palm.setMaxHitpoints(this.goal);
     this.palm.setHitpoints(this.goal);
@@ -95,7 +129,9 @@ class CrondisPuzzleRoom extends Raid.Room {
   onReset() {
     this.clear();
     this.despawn(this.palm);
+    for (const wall of this.crocodileSide.walls) this.setObject(-1, { x: wall.x, y: wall.y, z: 0 }, 10);
     this.build();
+    this.crocodileTicks -= CROCODILE_RESET_SOONER;
     for (const player of this.roomPlayers()) this.placeContainers(player);
   }
 
@@ -212,7 +248,7 @@ class CrondisPuzzleRoom extends Raid.Room {
     const hits = this.recentHits.get(player) ?? {};
     if ((hits[kind] ?? -1) > now) return;
     hits[kind] = now + (kind === "acid" ? 2 : 3);
-    hits[`${kind}At`] = now;
+    hits.at = [...(hits.at ?? []), now];
     this.recentHits.set(player, hits);
     this.spill(player);
     const low = Math.floor(base * this.raid.damageFactor(0));
@@ -235,10 +271,11 @@ class CrondisPuzzleRoom extends Raid.Room {
     this.tickSpears();
     this.spearTick = (this.spearTick + 1) % 10;
     if (this.crocodileTicks-- <= 0) {
-      this.crocodileTicks = CROCODILE_INTERVAL;
+      this.crocodileTicks = this.nextCrocodileWave();
       if (this.crocodiles.size < CROCODILE_LIMIT) {
-        const count = Math.min(Math.ceil(this.teamSize / 2), CROCODILE_SPAWNS.length);
-        for (let i = 0; i < count; i++) this.spawnCrocodile(CROCODILE_SPAWNS[i]);
+        const spawns = this.crocodileSide.spawns;
+        const count = Math.min(Math.ceil(this.teamSize / 2), spawns.length);
+        for (let i = 0; i < count; i++) this.spawnCrocodile(spawns[i]);
       }
     }
     this.tickCrocodiles();
@@ -312,8 +349,15 @@ class CrondisPuzzleRoom extends Raid.Room {
     const { NpcIdentifiers } = Shared.core();
     const crocodile = this.spawn(NpcIdentifiers.CROCODILE_5, { ...tile, z: 0 }, { scale: false, points: 1 });
     if (!crocodile) return;
-    crocodile.__toaCrocodile = { attackTicks: 0 };
+    crocodile.__toaCrocodile = { attackTicks: 0, wakeAt: Shared.cycle() + CROCODILE_WAKE_TICKS, attackers: new Set() };
+    crocodile.setPositionToFace(this.palm.getLocation().transform(1, 1));
     this.crocodiles.add(crocodile);
+  }
+
+  /** Only someone without a container who hit it is worth chasing once nobody nearby carries water. */
+  mayRetaliate(crocodile, player) {
+    return crocodile.__toaCrocodile.attackers.has(player) && !player.getInventory().contains(CONTAINER)
+      && this.challengePlayers().includes(player);
   }
 
   /** They go for anyone carrying water close by, otherwise drink from a watered palm. */
@@ -324,15 +368,23 @@ class CrondisPuzzleRoom extends Raid.Room {
         this.crocodiles.delete(crocodile);
         continue;
       }
+      const state = crocodile.__toaCrocodile;
+      if (state.wakeAt > Shared.cycle()) {
+        crocodile.getCombat().reset();
+        continue;
+      }
       const carrier = this.challengePlayers().find((player) =>
         this.waterOf(player) > 0 && player.getLocation().getDistance(crocodile.getLocation()) <= CROCODILE_SIGHT);
       if (carrier) {
         if (crocodile.getCombat().getTarget?.() !== carrier) crocodile.getCombat().attack(carrier);
         continue;
       }
-      if (crocodile.getCombat().getTarget?.()) continue;
-      if (this.watered <= 0) continue;
-      const state = crocodile.__toaCrocodile;
+      const target = crocodile.getCombat().getTarget?.();
+      if (this.watered <= 0) {
+        if (target && !this.mayRetaliate(crocodile, target)) crocodile.getCombat().reset();
+        continue;
+      }
+      if (target) crocodile.getCombat().reset();
       const distance = crocodile.getLocation().getDistance(this.palm.getLocation().transform(1, 1));
       if (distance > 3) {
         if (crocodile.getMovementQueue().size() === 0) PathFinder.calculateWalkRoute(crocodile, PALM_TILE.x + 1, PALM_TILE.y + 1);
@@ -349,9 +401,8 @@ class CrondisPuzzleRoom extends Raid.Room {
   crocodileBite(npc, player, method) {
     const now = Shared.cycle();
     const hits = this.recentHits.get(player) ?? {};
-    let damage = 18;
-    if (now - (hits.acidAt ?? -1000) <= 98) damage += 3;
-    if (now - (hits.spearAt ?? -1000) <= 98) damage += 3;
+    hits.at = (hits.at ?? []).filter((cycle) => now - cycle < HAZARD_WINDOW_TICKS);
+    let damage = Math.min(CROCODILE_BITE_MAX, CROCODILE_BITE + CROCODILE_BITE_PER_HAZARD * hits.at.length);
     const hit = this.styledHit(npc, player, method, "melee", damage, 0, { prayable: false, scale: false });
     if (!hit.isAccurate()) return hit;
     if (Shared.isProtected(player, "melee")) {
@@ -447,6 +498,12 @@ function takeContainer(event) {
   }
 }
 
+/** Remembers who hit a crocodile, for when it may turn on them. */
+function crocodileStruck(event) {
+  const state = event.target?.__toaCrocodile;
+  if (state && event.player) state.attackers.add(event.player);
+}
+
 module.exports = function registerCrondisPuzzle(api) {
   Shared.bind(api);
   Raid.registerRoom("CRONDIS_PUZZLE", CrondisPuzzleRoom);
@@ -456,6 +513,7 @@ module.exports = function registerCrondisPuzzle(api) {
   api.onItemOnNpc(containerOnPalm);
   api.onItemOnObject(containerOnWaterfall);
   api.onItemAction("Water container", { Check: checkContainer, Empty: emptyContainer });
+  api.onPlayerDealtDamage(crocodileStruck);
   api.onGroundItemPickup(takeContainer);
   registerCrocodileCombat(api);
 };
