@@ -1080,12 +1080,14 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                 ne.forEachActive((ecsId: number) => {
                     if (overheadPrayers.length >= overheadPrayerMaxEntries) return;
                     const type = host.getEffectiveNpcType(ne.getNpcTypeId(ecsId) | 0);
+                    // Icons the server set (the Hunllef's protection) win over the type's own.
+                    const serverIcons = host.osrsClient.npcHeadIcons?.get(ne.getServerId(ecsId) | 0);
                     const archives = type?.headIconSpriteIds;
                     const sprites = type?.headIconSpriteIndices;
-                    if (!archives || !sprites) return;
+                    if (!serverIcons && (!archives || !sprites)) return;
 
-                    const npcHeadIcons = archives
-                        .map((archiveId, index) => ({ archiveId, spriteId: sprites[index] ?? -1 }))
+                    const npcHeadIcons = (serverIcons ?? archives!
+                        .map((archiveId, index) => ({ archiveId, spriteId: sprites![index] ?? -1 })))
                         .filter((icon) => icon.archiveId >= 0 && icon.spriteId >= 0);
                     if (npcHeadIcons.length === 0) return;
 

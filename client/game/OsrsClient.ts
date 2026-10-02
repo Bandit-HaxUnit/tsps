@@ -980,6 +980,8 @@ export class OsrsClient {
     private scriptRetryGeneration = 0;
     private readonly chatTextMetrics: ChatTextMetrics;
     private readonly npcInstances: NpcInstanceFlushController;
+    /** Overhead icons the server set on NPCs, by server index (they override the type's own). */
+    readonly npcHeadIcons = new Map<number, Array<{ archiveId: number; spriteId: number }>>();
 
     private resolveChatPlayerNameForScript(_scriptId: number): string {
         let baseName = this.localPlayerName ?? "";
@@ -7391,6 +7393,11 @@ export class OsrsClient {
         if (serverId <= 0) return;
         const ecsId = this.npcEcs.getEcsIdForServer(serverId);
 
+        if (Array.isArray(block.headIcons)) {
+            if (block.headIcons.length > 0) this.npcHeadIcons.set(serverId, block.headIcons);
+            else this.npcHeadIcons.delete(serverId);
+        }
+
         if (ecsId !== undefined) {
             if (typeof block.faceEntity === "number") {
                 this.npcEcs.setInteractionIndex(ecsId, block.faceEntity | 0);
@@ -7530,6 +7537,7 @@ export class OsrsClient {
         const existingInstance = this.npcInstances.instanceMap.get(instanceKey);
         // Keep OSRS-style global NPC index array in sync for menuAction packet gates.
         ClientState.npcs[sid] = null;
+        this.npcHeadIcons.delete(sid);
         try {
             (this.renderer as any)?.clearNpcHealthBars?.(sid);
         } catch {}

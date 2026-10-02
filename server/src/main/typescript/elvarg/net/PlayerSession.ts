@@ -322,6 +322,7 @@ export class PlayerSession {
           interactionIndex: this.interactionIndex(npc.getInteractingMobile()),
           index: npc.getIndex(),
           typeId: npc.getId(),
+          headIcon: npc.getHeadIcon(),
           x: location.getX(),
           y: location.getY(),
           level: location.getZ(),
