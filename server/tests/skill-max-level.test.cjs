@@ -388,7 +388,7 @@ test("client feedback IDs and per-gem animations exist in the active OSRS cache"
   const audio = CacheIndexDat2.fromStore(IndexType.DAT2.soundEffects, store);
   for (const [name, id] of Object.entries({ COOKING_COOK: 2577, CRAFT_RUNES: 2710,
     MINING_MINE: 3220, FISHING_FISH: 2600, CUTTING: 2605, SHEAR_SHEEP: 761,
-    POTION_MIX: 2611, GEM_CUTTING: 2586, SMELTING: 2725, BURY_BONES: 2738 })) {
+    POTION_MIX: 2611, GEM_CUTTING: 2586, SMELTING: 2725, BURY_BONES: 2738, PRAYER_RECHARGE: 2674 })) {
     assert.equal(Sound[name].getId(), id, name);
     assert.ok(audio.getFileSmart(id)?.data.length, `OSRS synth ${name} exists`);
   }
@@ -411,6 +411,48 @@ test("client feedback IDs and per-gem animations exist in the active OSRS cache"
     assert.equal(p.counts.get(I[cut]), 1);
     assert.equal(p.sent.filter(([type, id]) => type === "sendSoundEffect" && id === 2586).length, 1);
   }
+});
+
+test("sound lookup excludes Lost City IDs, altar switches use OSRS audio, and region music still resolves", () => {
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  const { Sound } = require("../dist/game/Sound");
+  const { Sounds } = require("../dist/game/Sounds");
+  const { Music } = require("../dist/game/Music");
+  const { ObjectIds } = require("../dist/util/IdEnums");
+  const core = PluginManager.getCoreApi();
+  for (const token of ["PRAYERON", "BAT_ATTACK", "SOUND_33", 1, "1"])
+    assert.equal(Sounds.resolveKnownSound(token), null, String(token));
+  for (const token of ["prayer_recharge", "Sound.PRAYER_RECHARGE", 2674, "2674"])
+    assert.equal(Sounds.resolveKnownSound(token), Sound.PRAYER_RECHARGE);
+  assert.ok(!Sounds.knownSoundNames().includes("PRAYERON"));
+
+  const interactions = new Map();
+  require("../plugins/objects/Altars.plugin").register({
+    onObjectInteraction: (name, actions) => interactions.set(name, actions),
+  });
+  const change = core.MagicSpellbook.changeSpellbook;
+  core.MagicSpellbook.changeSpellbook = (p, spellbook) => { p.spellbook = spellbook; };
+  try {
+    const cases = [["Ancient Altar", "Venerate", core.MagicSpellbook.ANCIENT],
+      ["Lunar Altar", "Venerate", core.MagicSpellbook.LUNAR],
+      ["Dark Altar", "Venerate", core.MagicSpellbook.ARCEUUS],
+      ["Altar of the Occult", "Venerate", core.MagicSpellbook.NORMAL],
+      ...["Standard", "Ancient", "Lunar", "Arceuus"].map((action, i) =>
+        ["Altar of the Occult", action, [core.MagicSpellbook.NORMAL, core.MagicSpellbook.ANCIENT,
+          core.MagicSpellbook.LUNAR, core.MagicSpellbook.ARCEUUS][i]])];
+    for (const [name, action, expected] of cases) {
+      const p = feedbackPlayer(core);
+      p.getSpellbook = () => core.MagicSpellbook.NORMAL;
+      assert.equal(interactions.get(name)[action]({ player: p, objectId: ObjectIds.ALTAR_OF_THE_OCCULT }), true);
+      assert.equal(p.spellbook, expected, `${name}: ${action}`);
+      assert.deepEqual(p.sent.filter(([type]) => type === "sendSoundEffect"), [["sendSoundEffect", 2674, 0, 0, 1]]);
+    }
+  } finally { core.MagicSpellbook.changeSpellbook = change; }
+
+  const regions = require("../data/definitions/music-data.json").regions;
+  const [region, tracks] = Object.entries(regions).find(([, tracks]) => tracks.length > 0);
+  assert.equal(Music.forRegion(Number(region)), tracks[0]);
+  assert.equal(Music.forRegion(-1), undefined);
 });
 
 test("Defence threshold changes update native prayer-unlock varbits", () => {

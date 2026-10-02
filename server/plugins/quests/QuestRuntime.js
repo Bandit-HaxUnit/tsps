@@ -50,7 +50,7 @@ const COMPLETED_CLOSE_CHILD = 16;
 const FLOATER_OVERLAY_UID = (161 << 16) | 18;
 
 const QUEST_POINTS_VARP = 101;
-const QUEST_COMPLETE_JINGLE = 238; // Music.QUEST_COMPLETE_JINGLES[0]
+const QUEST_COMPLETE_JINGLE = 238;
 const QUEST_POINTS_ATTRIBUTE = "quest.points";
 
 // Client quest list statuses.

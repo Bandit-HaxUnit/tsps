@@ -12,7 +12,7 @@ LostCity's older game revision is not an OSRS sound-ID authority.
 - [RuneLite SoundEffectID](https://github.com/runelite/runelite/blob/master/runelite-api/src/main/java/net/runelite/api/SoundEffectID.java): cooking 2577, mining 3220, burying 2738, woodcutting 2734/2735, anvil 3790/3791.
 - [RuneLite InterfaceID](https://github.com/runelite/runelite/blob/master/runelite-api/src/main/java/net/runelite/api/gameval/InterfaceID.java): level-up group 233, text children 1/2, Continue 3, per-skill model layers.
 - [RuneLite AnimationID](https://github.com/runelite/runelite/blob/master/runelite-api/src/main/java/net/runelite/api/AnimationID.java): tool, gem-cutting and bow-stringing sequences.
-- [RuneStar synth names](https://github.com/RuneStar/cs2/blob/master/src/main/resources/org/runestar/cs2/synth-names.tsv): chisel 2586, vial_mix 2611, bind_runes 2710, furnace 2725, shear_sheep 761. Retrieved directly from the primary repository; low IDs match the local reference table.
+- [RuneStar synth names](https://github.com/RuneStar/cs2/blob/master/src/main/resources/org/runestar/cs2/synth-names.tsv): chisel 2586, vial_mix 2611, bind_runes 2710, furnace 2725, shear_sheep 761, prayer_recharge 2674. Retrieved directly from the primary repository; low IDs match the local reference table.
 - [OpenRune runecrafting](https://github.com/OpenRune/OpenRune-Server/blob/main/content/skills/runecrafting/src/main/kotlin/org/rsmod/content/skills/runecrafting/action/RunecraftAction.kt): sound 2710 and runecrafting spot animation at height 100.
 - [OpenRune burial](https://github.com/OpenRune/OpenRune-Server/blob/main/content/skills/prayer/src/main/kotlin/org/rsmod/content/skills/prayer/PrayerBuryEvents.kt): resolve after two ticks and consume the bone with its XP award.
 - [Rooftop Agility Courses, OSRS Wiki copy](https://osrsindex.com/wiki/rooftop-agility-courses?site=osrs_wiki): successful rooftop obstacles restore 1–2% energy, rather than restoring every course on lap completion.
@@ -23,6 +23,12 @@ fletching audio in 1248 and 6671–6689; anvil hits 3790/3791 in 898;
 and tinder strikes 2597 in 733. The client renders these through
 `OsrsClient.handleSeqFrameSounds` and the player renderer. Explicit sends for
 those sequences duplicate the client audio and have been removed.
+
+The generated Lost City synth/MIDI tables, sound-name fallback and unused legacy
+audio constants have been removed. Altar spellbook switches use the existing
+OSRS `PRAYER_RECHARGE` sound (2674), replacing the obsolete `PRAYERON` lookup.
+Region music still resolves from `music-data.json`; login tracks and playback
+load from the OSRS client cache. Numeric admin sound previews remain available.
 
 Gem sequences 885/2717/7185 are named dragonstone/onyx/zenyte cutting in the local
 Offline_Scape revision-240 cache-name reference. Their existence is verified in
@@ -75,7 +81,7 @@ node --test tests/agility.test.cjs tests/skill-max-level.test.cjs tests/ranged-a
 ./node_modules/.bin/ts-node --transpile-only scripts/dump-seq.ts 618,619,621,622,624,625,628,733,791,898,899,1248,6671,6678,6689
 ```
 
-The 42 focused checks, server build, combat XP/projectile smoke checks and client
+The 43 focused checks, server build, combat XP/projectile smoke checks and client
 `tests/cache-streaming.test.ts` pass. The broader server suite has 381 passes and
 8 existing failures, reproduced on unmodified main: seven door-harness failures
 (`core.ObjectIdentifiers` missing) and one PvP test (`Wilderness.isPvpArea` missing).
