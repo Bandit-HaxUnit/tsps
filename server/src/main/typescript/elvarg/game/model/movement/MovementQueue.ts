@@ -1192,7 +1192,10 @@ export class MovementQueue {
         if (!object) return false;
         const location = object.getLocation();
         if (!location || location.getZ() !== this.player.getLocation().getZ()) return false;
-        if (object.getPrivateArea?.() !== this.player.getPrivateArea()) return false;
+        // A map loc (no private area of its own) is shared by the private areas laid over the
+        // map, as the click lookup (MapObjects.getPrivateArea) treats it: the Inferno's exit.
+        const area = object.getPrivateArea?.() ?? null;
+        if (area !== null && area !== this.player.getPrivateArea()) return false;
         return object.getId() === id && object.getType() === type;
     }
 
@@ -1250,9 +1253,10 @@ export class MovementQueue {
         //System.err.println("RequestedX=" + objectX + " requestedY=" + objectY + " givenX=" + finalDestinationX + " givenY=" + finalDestinationY);
 
         this.player.setPositionToFace(new Location(objectX, objectY));
+        const interactionArea = this.player.getPrivateArea();
         let repathAttempts = 0;
         TaskManager.submit(new MovementTask(this.player.getIndex(), (task) => {
-            if (!this.isInteractionObjectValid(object, id, type)) {
+            if (this.player.getPrivateArea() !== interactionArea || !this.isInteractionObjectValid(object, id, type)) {
                 this.reset();
                 task.stop();
                 return;
