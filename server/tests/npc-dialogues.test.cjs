@@ -238,3 +238,69 @@ test('a slayer master assigns from a slugged action, not literal prose', () => {
   // The placeholder line must not survive as something a player can read.
   assert.equal(found.spoken, false);
 });
+
+test('Lumbridge tutors hand out what their transcripts say', () => {
+  const { Skill } = require('../dist/game/model/Skill');
+  const { ItemIdentifiers: I } = require('../dist/util/ItemIdentifiers');
+  const { NpcIdentifiers: N } = require('../dist/util/NpcIdentifiers');
+  const hooks = {};
+  require('../plugins/npcs/Tutors.plugin').register({
+    core: { Skill, ItemIdentifiers: I, NpcIdentifiers: N, ItemDefinition: { forId: () => ({ getName: () => 'Thing' }) } },
+    persistAttribute() {}, onNpcDialogueVariant() {}, onItemOnNpc() {},
+    onNpcDialogueCondition(handler) { hooks.condition = handler; },
+    onCustomEvent(name, handler) { hooks[name] = handler; },
+    onNpcInteraction(name, actions) { hooks[name] = actions; },
+    emitCustomEvent(_name, request) { hooks.started = request.variant; },
+  });
+  const container = (items = {}) => {
+    const map = new Map(Object.entries(items).map(([id, n]) => [Number(id), n]));
+    return { getAmount: (id) => map.get(id) ?? 0, contains: (id) => map.has(id), adds: (id, n) => map.set(id, (map.get(id) ?? 0) + n),
+      getFreeSlots: () => 28 - map.size, getItems: () => [] };
+  };
+  const player = (bank = {}) => {
+    const attributes = {};
+    const inventory = container();
+    return { inventory, messages: [], getInventory: () => inventory, getEquipment: () => container(), getBanks: () => [container(bank)],
+      getAttribute: (key) => attributes[key], setAttribute: (key, value) => { attributes[key] = value; },
+      sendMessage(text) { this.messages.push(text); }, getSkillManager: () => ({ getMaxLevel: () => 1 }) };
+  };
+  // Plays a transcript the way startDialogue drives the hooks, taking the menu option `pick`.
+  const play = (p, npcId, steps, pick) => {
+    const queue = flatten(steps, { resolveCondition: (step) => hooks.condition({ player: p, npcId, text: step.text }) });
+    for (const step of queue) {
+      if (step.type === 'end') return;
+      if (step.type === 'choice') return play(p, npcId, step.options.find((option) => option.text.startsWith(pick)).steps);
+      const line = { player: p, npcId, text: step.npc, skip: false };
+      if (step.npc) hooks['npc-dialogue:line'](line);
+      if (step.type === 'action') hooks['npc-dialogue:action']({ player: p, npcId, step, text: step.text });
+      if (step.type === 'message') {
+        const message = { player: p, npcId, step, text: step.text, kind: 'message' };
+        hooks['npc-dialogue:action'](message);
+        if (!message.handled) p.sendMessage(step.text);
+      }
+    }
+  };
+  const transcript = (name, variant) => data[name].variants[variant];
+
+  const melee = player({ [I.TRAINING_SWORD]: 1 });
+  play(melee, N.MELEE_COMBAT_TUTOR, transcript('Melee combat tutor', 'standard-dialogue'), "I'd like a training");
+  assert.equal(melee.inventory.getAmount(I.TRAINING_SHIELD), 1);
+  assert.equal(melee.inventory.getAmount(I.TRAINING_SWORD), 0);
+
+  // No runes and room for both: mind and air runes, then the shared 30-minute cooldown.
+  const mage = player();
+  hooks['Magic combat tutor'].Claim({ player: mage, npcId: N.MAGIC_COMBAT_TUTOR });
+  play(mage, N.MAGIC_COMBAT_TUTOR, transcript('Magic combat tutor', hooks.started));
+  assert.equal(mage.inventory.getAmount(I.MIND_RUNE), 30);
+  assert.equal(mage.inventory.getAmount(I.AIR_RUNE), 30);
+  assert.deepEqual(mage.messages, ['Mikasi gives you 30 mind runes.', 'Mikasi gives you 30 air runes.']);
+  hooks['Ranged combat tutor'].Claim({ player: mage, npcId: N.RANGED_COMBAT_TUTOR });
+  play(mage, N.RANGED_COMBAT_TUTOR, transcript('Ranged combat tutor', hooks.started));
+  assert.equal(mage.inventory.getAmount(I.TRAINING_BOW), 0);
+
+  const ranger = player();
+  hooks['Ranged combat tutor'].Claim({ player: ranger, npcId: N.RANGED_COMBAT_TUTOR });
+  play(ranger, N.RANGED_COMBAT_TUTOR, transcript('Ranged combat tutor', hooks.started));
+  assert.equal(ranger.inventory.getAmount(I.TRAINING_BOW), 1);
+  assert.equal(ranger.inventory.getAmount(I.TRAINING_ARROWS), 25);
+});
