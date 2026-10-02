@@ -209,9 +209,9 @@ module.exports = function registerBiohazardQuest(api) {
   }
 
   function kingLathasVariant(stage) {
-    if (stage >= STAGE_COMPLETE) {
-      return "return-to-ardougne-talking-to-king-lathas-after-talking-to-elena-about-the-plague-talking-to-king-lathas-again";
-    }
+    // Underground Pass and Regicide continue Lathas's storyline after Biohazard;
+    // once Biohazard is finished, defer so their selectors can answer.
+    if (stage >= STAGE_COMPLETE) return null;
     if (stage >= STAGE_REPORTED_TO_ELENA) {
       return "return-to-ardougne-talking-to-king-lathas-after-talking-to-elena-about-the-plague";
     }
@@ -236,6 +236,9 @@ module.exports = function registerBiohazardQuest(api) {
     }
     if (KING_LATHAS_NPC_IDS.has(npcId)) return kingLathasVariant(stage);
     if (npcId === CHEMIST_NPC_ID) {
+      // Regicide reuses the Rimmington chemist for bomb-making; let it own him
+      // once that quest has started.
+      if ((Number(player.getAttribute("quest.regicide.stage")) || 0) >= 1) return null;
       if (stage === STAGE_GIVEN_DISTILLATOR) {
         quest.setStage(player, STAGE_SPOKEN_TO_CHEMIST);
         return "visiting-the-chemist-house-in-rimmington-talking-to-chemist";

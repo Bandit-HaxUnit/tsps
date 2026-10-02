@@ -179,7 +179,11 @@ module.exports = function registerDigSiteQuest(api) {
       if (stage >= STAGE_HAS_TALISMAN) return "making-a-discovery-turning-in-the-stone-table";
       return "making-a-discovery-talking-to-terry-balando";
     }
-    if (npcId === CURATOR_NPC_ID) return "starting-the-quest-getting-the-curator-s-approval";
+    if (npcId === CURATOR_NPC_ID) {
+      // The Golem reuses the museum curator; let it own him once started.
+      if ((Number(player.getAttribute("quest.the_golem.stage")) || 0) >= 1) return null;
+      return "starting-the-quest-getting-the-curator-s-approval";
+    }
     if (npcId === PANNING_GUIDE_NPC_ID) {
       return "the-first-exam-the-student-in-the-orange-shirt-talking-to-the-panning-guide";
     }
