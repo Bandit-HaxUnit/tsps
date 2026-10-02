@@ -67,7 +67,8 @@ function channelUp(event) {
 }
 
 const SCOREBOARD = 36060;
-const REWARD_CHESTS = [36087, 35988];
+// The lobby chest is a multiloc (37341, on varbit 9179): clicks carry its own id.
+const REWARD_CHESTS = [37341, 36087, 35988];
 
 function openChest(event) {
   if (!REWARD_CHESTS.includes(event.objectId)) return false;

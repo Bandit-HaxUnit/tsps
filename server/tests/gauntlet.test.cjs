@@ -1018,3 +1018,16 @@ test('completing a run: messages, a personal best, the world\'s totals and the s
   assert.equal(line(18), 'The Corrupted Gauntlet');
   assert.match(line(15), /^\d+:\d\d\.\d\d$/, 'your best time');
 });
+
+test('the lobby chest opens by its multiloc id, and ::gauntletreward fills it', () => {
+  bindHooks();
+  const commands = {};
+  Commands({ ...fakeApi(), registerCommand: (name, handler) => { commands[name] = handler; } });
+  const player = fakePlayer('ChestTester');
+  commands.gauntletreward({ player, parts: ['gauntletreward', 'corrupted'] });
+  assert.deepEqual(Rewards.waitingReward(player), { mode: 'corrupted', kind: 'completed' });
+  // The click carries the multiloc's id (37341), as the server logged.
+  hooks.objects['Reward Chest'].Open({ player, objectId: 37341 });
+  assert.equal(Rewards.waitingReward(player), null, 'opened');
+  assert.ok(player.inventory.contains(Rewards.ID.GAUNTLET_CAPE));
+});

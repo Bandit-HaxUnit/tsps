@@ -4,6 +4,7 @@ const Shared = require("./GauntletShared");
 const GauntletMap = require("./GauntletMap");
 const Run = require("./GauntletRun");
 const Items = require("./GauntletItems");
+const Rewards = require("./GauntletRewards");
 
 /**
  * ::gauntletmap [corrupted] [all] - builds a maze (no run) and puts you in its start room, to
@@ -103,6 +104,19 @@ function gearUp({ player, parts }) {
   return true;
 }
 
+/**
+ * ::gauntletreward [corrupted|incomplete|junk] - puts a reward in the lobby chest as if a run
+ * just ended: a Gauntlet kill by default, a Corrupted one, or a lost run's tables.
+ */
+function setReward({ player, parts }) {
+  const args = (parts?.slice(1) ?? []).map((arg) => arg.toLowerCase());
+  const mode = args.includes("corrupted") ? "corrupted" : "regular";
+  const kind = args.includes("incomplete") ? "incomplete" : args.includes("junk") ? "junk" : "completed";
+  Rewards.setReward(player, mode, kind);
+  player.sendMessage(`A ${mode === "corrupted" ? "Corrupted " : ""}Gauntlet reward (${kind}) waits in the lobby chest.`);
+  return true;
+}
+
 function toLobby({ player }) {
   if (Run.runOf(player)) {
     player.sendMessage("Leave your Gauntlet run before using ::gauntlet.");
@@ -121,4 +135,5 @@ module.exports = function registerGauntletCommands(api) {
   api.registerCommand("gauntletboss", skipToBoss, DEVELOPER);
   api.registerCommand("gauntlettime", setPrepTime, DEVELOPER);
   api.registerCommand("gauntletgear", gearUp, DEVELOPER);
+  api.registerCommand("gauntletreward", setReward, DEVELOPER);
 };

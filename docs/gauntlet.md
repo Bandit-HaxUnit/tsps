@@ -272,6 +272,7 @@ The lobby Scoreboard (36060) opens interface 639, which has your numbers next to
 | `::gauntletboss` | Ends preparation and takes you to the Hunllef. |
 | `::gauntlettime <seconds>` | Sets the preparation time left. |
 | `::gauntletgear [basic\|attuned\|perfected]` | During a run: a Hunllef loadout of that tier (default perfected): the armour worn, the bow wielded, the staff, the halberd, 4 Egniol potions, 4 crystal paddlefish and paddlefish in the rest. |
+| `::gauntletreward [corrupted] [incomplete\|junk]` | Puts a reward in the lobby chest as if a run just ended: a Gauntlet kill by default. |
 
 ## Tests
 
