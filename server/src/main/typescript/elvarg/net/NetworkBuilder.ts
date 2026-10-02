@@ -729,12 +729,18 @@ class ClientConnection {
         case "handshake":
           this.enterWorld(packet.clientType);
           continue;
-        case "logout":
+        case "logout": {
+          const refusal = this.player ? PluginManager.emitCanLogout(this.player) : null;
+          if (refusal) {
+            this.send(encodeLogoutResponse(refusal, false));
+            continue;
+          }
           this.send(encodeLogoutResponse());
           this.player?.getSession().flushPackets();
           this.cleanup("logout");
           this.channel.close(1000, "logout");
           return;
+        }
       }
     }
   }

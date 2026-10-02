@@ -1,15 +1,7 @@
 "use strict";
 
-const { Location } = require("../../src/main/typescript/elvarg/game/model/Location");
-const { GameObject } = require("../../src/main/typescript/elvarg/game/entity/impl/object/GameObject");
-const { MapObjects } = require("../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
-const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
-const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
-const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
-const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
-
-let ObjectManager;
-let TaskManager;
+let api;
+let core;
 
 // OSRS: an opened door/gate that nobody interacts with reverts on its own after
 // 300 seconds (500 ticks @ 600ms/tick). Cross-checked against rsmod/OpenRune-Server
@@ -31,35 +23,141 @@ const DOOR_AUTO_CLOSE_TICKS = 500;
 // Closed = "Open" action; its open variant is a "Close" loc with the same models (usually id+1).
 // Not id+1 -> SINGLE_DOOR_OPEN_IDS. Two leaves -> DOUBLE_DOOR_ID_FAMILIES (+ SPECIAL_* maps when
 // the open ids are not closed+1). Same trick works for NPCs/items via C.getNpc / C.getItem.
-function hasAction(actions, keyword) {
-  return Array.isArray(actions) && actions.some((action) => typeof action === "string" && action.toLowerCase() === keyword);
-}
-
 const DOOR_NAMES = new Set([
   "Door", "Doors", "Large door", "Castle door", "Cell Door", "Cell door",
   "Glass door", "Magic door", "Metal door", "Mind Door", "Tent door",
   "Gate", "Metal gate", "Doorway",
 ]);
-let DOOR_CATALOG = null;
 
-// Doors with no open variant in the cache: OSRS opens them by rotating the same loc
-// (open id === closed id). Their consecutive ids are unrelated doors with the same
-// model, so the same-model pairing below must not pair them. Tutorial Island:
-// start house, chef entry/exit, quest guide, and the bank/prayer area doors.
-const SELF_OPENING_DOOR_IDS = new Set([9398, 9709, 9710, 9716, 9721, 9722, 9723, 9724]);
+// Always name locs by their core.ObjectIdentifiers property (O.DOOR_358), never a raw id: the
+// generated enum follows the cache, so ids stay right when it changes. Only locs the cache
+// leaves nameless have no property; those stay numeric, marked "nameless". The tables need
+// api.core, so register() builds them.
+let SELF_OPENING_DOOR_IDS, SINGLE_DOOR_OPEN_IDS, WOODEN_GATES, WOODEN_GATE_BY_ID;
+let DOUBLE_DOOR_ID_FAMILIES, DOUBLE_DOOR_FAMILY_IDS_BY_ID, SPECIAL_DOUBLE_DOOR_LEFT_IDS;
+let SPECIAL_DOUBLE_DOOR_PAIRS, SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID, SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID;
 
-// Single doors whose open variant is not closedId + 1 (e.g. Large door 1517 -> 1520, same models).
-const SINGLE_DOOR_OPEN_IDS = new Map([[1517, 1520]]);
+function defineDoorData({ ObjectIdentifiers: O }) {
+  // Doors with no open variant in the cache: OSRS opens them by rotating the same loc
+  // (open id === closed id). Their consecutive ids are unrelated doors with the same
+  // model, so the same-model pairing below must not pair them. Tutorial Island:
+  // start house, chef entry/exit, quest guide, and the bank/prayer area doors. DOOR_358: a single
+  // door whose same-model "Close" locs (5245, 11617, 15205, 17115) all belong to other doors.
+  SELF_OPENING_DOOR_IDS = new Set([O.DOOR_223, O.DOOR_225, O.DOOR_226, O.DOOR_227, O.DOOR_228, O.DOOR_229, O.DOOR_230, O.DOOR_231, O.DOOR_358]);
 
-// OSRS wooden gates are two locs that pivot together around the hinge post: a hinge panel
-// and an extension panel. Opening/closing moves BOTH pieces, so the "closed id + 1 = open
-// id" auto-pairing below cannot find them (their ids are unrelated) and the metal
-// double-door families do not apply either. List each gate explicitly.
-// Sources: the original elvarg gate catalog (doors.json "definitions.gates", hinge style)
-// for 1558/1560, 1561/1562, 8810/8811, 12986/12987, 15514/15516; the remaining pairs come
-// from the unresolved gate catalog (gates.unresolved.json closed sets, id-collision) with
-// their adjacent-id open variants. Closed hinge is always the unrotated loc (or first
-// model), closed extension the rotated/mirrored one.
+  // Single doors whose open variant is not closedId + 1 (e.g. Large door 1517 -> 1520, same models).
+  SINGLE_DOOR_OPEN_IDS = new Map([[O.LARGE_DOOR_11, O.LARGE_DOOR_14]]);
+
+  // OSRS wooden gates are two locs that pivot together around the hinge post: a hinge panel
+  // and an extension panel. Opening/closing moves BOTH pieces, so the "closed id + 1 = open
+  // id" auto-pairing below cannot find them (their ids are unrelated) and the metal
+  // double-door families do not apply either. List each gate explicitly.
+  // Sources: the original elvarg gate catalog (doors.json "definitions.gates", hinge style)
+  // for 1558/1560, 1561/1562, 8810/8811, 12986/12987, 15514/15516; the remaining pairs come
+  // from the unresolved gate catalog (gates.unresolved.json closed sets, id-collision) with
+  // their adjacent-id open variants. Closed hinge is always the unrotated loc (or first
+  // model), closed extension the rotated/mirrored one.
+  WOODEN_GATES = Object.freeze([
+    woodenGate(O.GATE_4, O.GATE_5, O.GATE_6, O.GATE_7),
+    woodenGate(O.GATE_17, O.GATE_167, O.GATE_168, O.GATE_169),
+    woodenGate(O.GATE_18, O.GATE_20, O.GATE_19, O.GATE_25),
+    woodenGate(O.GATE_21, O.GATE_22, O.GATE_23, O.GATE_24),
+    woodenGate(O.GATE_78, O.GATE_79, O.GATE_80, 4314), // 4314: open extension, nameless in the cache
+    woodenGate(O.GATE_83, O.GATE_84, O.GATE_85, O.GATE_86),
+    woodenGate(O.GATE_113, O.GATE_114, O.GATE_115, 12819), // 12819: open extension, nameless in the cache
+    woodenGate(O.GATE_116, O.GATE_117, O.GATE_118, O.GATE_119),
+    woodenGate(O.GATE_140, O.GATE_142, O.GATE_137, O.GATE_139),
+    woodenGate(O.GATE_243, O.GATE_244, O.GATE_245, O.GATE_246),
+    woodenGate(O.GATE_322, O.GATE_319, O.GATE_320, O.GATE_321),
+  ]);
+
+  WOODEN_GATE_BY_ID = new Map();
+  for (const gate of WOODEN_GATES) {
+    for (const id of [gate.closed.hinge, gate.closed.extension, gate.opened.hinge, gate.opened.extension]) {
+      WOODEN_GATE_BY_ID.set(id, gate);
+    }
+  }
+
+  DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
+    // Large doors (model 633): 1511 opens to 1512, 1513 to 1516 (1514 is an unnamed loc).
+    Object.freeze([O.LARGE_DOOR_7, O.LARGE_DOOR_9, O.LARGE_DOOR_8, O.LARGE_DOOR_10]),
+    Object.freeze([O.LARGE_DOOR_10, O.LARGE_DOOR_13]),
+    Object.freeze([O.GATE_33, O.GATE_34, O.GATE_29, O.GATE_30]),
+    Object.freeze([O.DOOR_354, O.DOOR_355, O.DOOR_356, O.DOOR_357]),
+    Object.freeze([O.LARGE_DOOR_15, O.LARGE_DOOR_16, O.LARGE_DOOR_17, O.LARGE_DOOR_18]),
+    Object.freeze([O.DOOR_36, O.DOOR_37]),
+    Object.freeze([O.GATE_18, O.GATE_19]),
+    Object.freeze([O.GATE_26, O.GATE_27, O.GATE_29, O.GATE_30]),
+    Object.freeze([O.DOORWAY_2, O.DOORWAY_3, O.DOORWAY_4]),
+      // Castle Wars large doors. West leaf is left: Saradomin 4423/4424 -> 4425/4426,
+    // Zamorak 4428/4427 (ids run east to west on that wall) -> 4430/4429.
+    Object.freeze([O.LARGE_DOOR_24, O.LARGE_DOOR_25, O.LARGE_DOOR_26, O.LARGE_DOOR_27]),
+    Object.freeze([O.LARGE_DOOR_28, O.LARGE_DOOR_29, O.LARGE_DOOR_30, O.LARGE_DOOR_31]),
+    Object.freeze([O.GATE_40, O.GATE_41, O.GATE_29, O.GATE_30]),
+    // Tutorial Island mining exit: same metal gate as 1727/1728 (9717 is the left leaf).
+    Object.freeze([O.GATE_92, O.GATE_93, O.GATE_29, O.GATE_30]),
+    // Tutorial Island rat cage: same metal gate, face 0 (9719 is the left/south leaf).
+    Object.freeze([O.GATE_94, O.GATE_95, O.GATE_29, O.GATE_30]),
+    // Large doors sharing model 639 with 1521/1524; they open into that family's 1522/1525.
+    Object.freeze([O.LARGE_DOOR_98, O.LARGE_DOOR_99, O.LARGE_DOOR_16, O.LARGE_DOOR_18]),
+  ]);
+  SPECIAL_DOUBLE_DOOR_LEFT_IDS = new Set([O.GATE_26, O.GATE_29, O.GATE_33, O.DOOR_354, O.DOOR_356, O.GATE_40, O.GATE_92, O.GATE_94, O.LARGE_DOOR_24, O.LARGE_DOOR_26, O.LARGE_DOOR_29, O.LARGE_DOOR_31, O.LARGE_DOOR_98, O.LARGE_DOOR_16, O.LARGE_DOOR_7, O.LARGE_DOOR_8]);
+  // Both leaves of each pair are partners of the other.
+  SPECIAL_DOUBLE_DOOR_PAIRS = Object.freeze([
+    [O.GATE_26, O.GATE_27],
+    [O.GATE_29, O.GATE_30],
+    [O.GATE_33, O.GATE_34],
+    [O.DOOR_354, O.DOOR_355],
+    [O.DOOR_354, O.DOOR_357],
+    [O.DOOR_355, O.DOOR_356],
+    [O.DOOR_356, O.DOOR_357],
+    [O.GATE_40, O.GATE_41],
+    [O.GATE_92, O.GATE_93],
+    [O.GATE_94, O.GATE_95],
+    [O.LARGE_DOOR_24, O.LARGE_DOOR_25],
+    [O.LARGE_DOOR_26, O.LARGE_DOOR_27],
+    [O.LARGE_DOOR_29, O.LARGE_DOOR_28],
+    [O.LARGE_DOOR_31, O.LARGE_DOOR_30],
+    [O.LARGE_DOOR_98, O.LARGE_DOOR_99],
+    [O.LARGE_DOOR_16, O.LARGE_DOOR_18],
+    [O.LARGE_DOOR_7, O.LARGE_DOOR_9],
+    [O.LARGE_DOOR_8, O.LARGE_DOOR_10],
+  ]);
+  SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map();
+  for (const [a, b] of SPECIAL_DOUBLE_DOOR_PAIRS) {
+    for (const [id, partner] of [[a, b], [b, a]]) {
+      SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID.set(id, [...(SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID.get(id) ?? []), partner]);
+    }
+  }
+  SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
+    [O.GATE_26, O.GATE_29],
+    [O.GATE_27, O.GATE_30],
+    [O.GATE_33, O.GATE_29],
+    [O.GATE_34, O.GATE_30],
+    [O.DOOR_354, O.DOOR_356],
+    [O.DOOR_355, O.DOOR_357],
+    [O.GATE_40, O.GATE_29],
+    [O.GATE_41, O.GATE_30],
+    [O.GATE_92, O.GATE_29],
+    [O.GATE_93, O.GATE_30],
+    [O.GATE_94, O.GATE_29],
+    [O.GATE_95, O.GATE_30],
+    [O.LARGE_DOOR_24, O.LARGE_DOOR_26],
+    [O.LARGE_DOOR_25, O.LARGE_DOOR_27],
+    [O.LARGE_DOOR_29, O.LARGE_DOOR_31],
+    [O.LARGE_DOOR_28, O.LARGE_DOOR_30],
+    [O.LARGE_DOOR_98, O.LARGE_DOOR_16],
+    [O.LARGE_DOOR_99, O.LARGE_DOOR_18],
+    [O.LARGE_DOOR_7, O.LARGE_DOOR_8],
+    [O.LARGE_DOOR_9, O.LARGE_DOOR_10],
+  ]);
+  DOUBLE_DOOR_FAMILY_IDS_BY_ID = new Map(
+    DOUBLE_DOOR_ID_FAMILIES.flatMap((familyIds) =>
+      familyIds.map((id) => [id, familyIds])
+    )
+  );
+}
+
 function woodenGate(hinge, extension, openHinge, openExtension) {
   return Object.freeze({
     closed: Object.freeze({ hinge, extension }),
@@ -67,33 +165,43 @@ function woodenGate(hinge, extension, openHinge, openExtension) {
   });
 }
 
-const WOODEN_GATES = Object.freeze([
-  woodenGate(47, 48, 49, 50),
-  woodenGate(883, 23917, 23918, 23919),
-  woodenGate(1558, 1560, 1559, 1567),
-  woodenGate(1561, 1562, 1563, 1564),
-  woodenGate(4311, 4312, 4313, 4314),
-  woodenGate(8810, 8811, 8812, 8813),
-  woodenGate(12816, 12817, 12818, 12819),
-  woodenGate(12986, 12987, 12988, 12989),
-  woodenGate(15514, 15516, 15511, 15513),
-  woodenGate(44920, 44921, 44922, 44923),
-  woodenGate(60763, 60760, 60761, 60762),
+const COORD_OFFSETS = Object.freeze([
+  [-1, 0],
+  [0, 1],
+  [1, 0],
+  [0, -1],
 ]);
 
-const WOODEN_GATE_BY_ID = new Map();
-for (const gate of WOODEN_GATES) {
-  for (const id of [gate.closed.hinge, gate.closed.extension, gate.opened.hinge, gate.opened.extension]) {
-    WOODEN_GATE_BY_ID.set(id, gate);
-  }
-}
+// Double-door leaves turn opposite ways when they open: the face each closed face turns to.
+const LEFT_LEAF_OPEN_FACES = Object.freeze([3, 0, 1, 0]);
+const RIGHT_LEAF_OPEN_FACES = Object.freeze([1, 2, 3, 2]);
+// Double doors outside the SPECIAL_* maps pair by id: per closed face, where the left leaf
+// sits from the right one and how its id differs (the right leaf is the mirror).
+const LEFT_LEAF_OFFSETS = Object.freeze([[0, -1, -3], [-1, 0, -3], [0, 1, -3], [-1, 0, 3]]);
 
+const GATE_PARTNER_OFFSETS = Object.freeze([
+  [0, 1],
+  [0, -1],
+  [1, 0],
+  [-1, 0],
+  [-1, -1],
+  [-1, 1],
+  [1, -1],
+  [1, 1],
+]);
+
+let DOOR_CATALOG = null;
+const OPEN_OBJECT_STATES = new Map();
+const RUNTIME_DOUBLE_DOOR_RECORDS = [];
+function hasAction(actions, keyword) {
+  return Array.isArray(actions) && actions.some((action) => typeof action === "string" && action.toLowerCase() === keyword);
+}
 function buildDoorCatalog() {
   const closedToOpen = new Map();
   const openToClosed = new Map();
-  const total = CacheDefinitions.getCounts().objects;
+  const total = core.CacheDefinitions.getCounts().objects;
   for (let id = 0; id < total; id++) {
-    const def = CacheDefinitions.getObject(id);
+    const def = core.CacheDefinitions.getObject(id);
     if (!def || !DOOR_NAMES.has(def.name) || !hasAction(def.actions, "open")) {
       continue;
     }
@@ -105,7 +213,7 @@ function buildDoorCatalog() {
       closedToOpen.set(id, id);
       continue;
     }
-    const partner = CacheDefinitions.getObject(id + 1);
+    const partner = core.CacheDefinitions.getObject(id + 1);
     if (!partner || partner.name !== def.name) {
       continue;
     }
@@ -125,7 +233,7 @@ function buildDoorCatalog() {
       hasAction(partner.actions, "open") &&
       !SELF_OPENING_DOOR_IDS.has(id + 1) &&
       JSON.stringify(partner.models) === JSON.stringify(def.models) &&
-      !DOUBLE_DOOR_ID_FAMILIES.some((family) => family.includes(id) || family.includes(id + 1)) &&
+      !DOUBLE_DOOR_FAMILY_IDS_BY_ID.has(id) && !DOUBLE_DOOR_FAMILY_IDS_BY_ID.has(id + 1) &&
       !openToClosed.has(id) &&
       !closedToOpen.has(id + 1)
     ) {
@@ -147,111 +255,13 @@ function getDoorCatalog() {
   return DOOR_CATALOG;
 }
 
-const OPEN_OBJECT_STATES = new Map();
-const DOOR_RESYNC_TICKS_ATTR = "doors:resyncTicks";
-const DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
-  // Large doors (model 633): 1511 opens to 1512, 1513 to 1516 (1514 is an unnamed loc).
-  Object.freeze([1511, 1513, 1512, 1516]),
-  Object.freeze([1516, 1519]),
-  Object.freeze([1727, 1728, 1571, 1572]),
-  Object.freeze([14751, 14752, 14753, 14754]),
-  Object.freeze([1521, 1522, 1524, 1525]),
-  Object.freeze([1551, 1552, 1553, 1554]),
-  Object.freeze([1557, 1558, 1559]),
-  Object.freeze([1568, 1569, 1571, 1572]),
-  Object.freeze([1589, 1590, 1591]),
-  Object.freeze([1596, 1597, 1598]),
-  // Castle Wars large doors. West leaf is left: Saradomin 4423/4424 -> 4425/4426,
-  // Zamorak 4428/4427 (ids run east to west on that wall) -> 4430/4429.
-  Object.freeze([4423, 4424, 4425, 4426]),
-  Object.freeze([4427, 4428, 4429, 4430]),
-  Object.freeze([2039, 2041, 1571, 1572]),
-  // Tutorial Island mining exit: same metal gate as 1727/1728 (9717 is the left leaf).
-  Object.freeze([9717, 9718, 1571, 1572]),
-  // Tutorial Island rat cage: same metal gate, face 0 (9719 is the left/south leaf).
-  Object.freeze([9719, 9720, 1571, 1572]),
-  // Large doors sharing model 639 with 1521/1524; they open into that family's 1522/1525.
-  Object.freeze([30387, 30388, 1522, 1525]),
-]);
-const SPECIAL_DOUBLE_DOOR_LEFT_IDS = new Set([1568, 1571, 1727, 14751, 14753, 2039, 9717, 9719, 4423, 4425, 4428, 4430, 30387, 1522, 1511, 1512]);
-const SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map([
-  [1568, [1569]],
-  [1569, [1568]],
-  [1571, [1572]],
-  [1572, [1571]],
-  [1727, [1728]],
-  [1728, [1727]],
-  [14751, [14752, 14754]],
-  [14752, [14751, 14753]],
-  [14753, [14752, 14754]],
-  [14754, [14751, 14753]],
-  [2039, [2041]],
-  [2041, [2039]],
-  [9717, [9718]],
-  [9718, [9717]],
-  [9719, [9720]],
-  [9720, [9719]],
-  [4423, [4424]],
-  [4424, [4423]],
-  [4425, [4426]],
-  [4426, [4425]],
-  [4428, [4427]],
-  [4427, [4428]],
-  [4430, [4429]],
-  [4429, [4430]],
-  [30387, [30388]],
-  [30388, [30387]],
-  [1522, [1525]],
-  [1525, [1522]],
-  [1511, [1513]],
-  [1513, [1511]],
-  [1512, [1516]],
-  [1516, [1512]],
-]);
-const SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
-  [1568, 1571],
-  [1569, 1572],
-  [1727, 1571],
-  [1728, 1572],
-  [14751, 14753],
-  [14752, 14754],
-  [2039, 1571],
-  [2041, 1572],
-  [9717, 1571],
-  [9718, 1572],
-  [9719, 1571],
-  [9720, 1572],
-  [4423, 4425],
-  [4424, 4426],
-  [4428, 4430],
-  [4427, 4429],
-  [30387, 1522],
-  [30388, 1525],
-  [1511, 1512],
-  [1513, 1516],
-]);
-const DOUBLE_DOOR_FAMILY_IDS_BY_ID = new Map(
-  DOUBLE_DOOR_ID_FAMILIES.flatMap((familyIds) =>
-    familyIds.map((id) => [id, familyIds])
-  )
-);
-
-const COORD_OFFSETS = Object.freeze([
-  [-1, 0],
-  [0, 1],
-  [1, 0],
-  [0, -1],
-]);
-
-const RUNTIME_DOUBLE_DOOR_RECORDS = [];
-
 function doorSound(id, open) {
-  const gate = CacheDefinitions.getObject(id)?.name === "Gate";
-  return gate ? (open ? Sound.GATE_OPEN : Sound.GATE_CLOSE) : (open ? Sound.DOOR_OPEN : Sound.DOOR_CLOSE);
+  const gate = core.CacheDefinitions.getObject(id)?.name === "Gate";
+  return gate ? (open ? core.Sound.GATE_OPEN : core.Sound.GATE_CLOSE) : (open ? core.Sound.DOOR_OPEN : core.Sound.DOOR_CLOSE);
 }
 
 function cloneLocation(x, y, z) {
-  return new Location(x, y, z);
+  return new core.Location(x, y, z);
 }
 
 function locationKey(location) {
@@ -285,7 +295,7 @@ function toObjectSnapshot(object) {
 }
 
 function objectFromSnapshot(snapshot, privateArea = null) {
-  return new GameObject(
+  return new core.GameObject(
     snapshot.id,
     cloneLocation(snapshot.location.x, snapshot.location.y, snapshot.location.z),
     snapshot.type,
@@ -332,99 +342,44 @@ function rememberOpenObjects(anchorKey, closedObjects, currentObjects) {
 
 function clearOpenDoor(anchorKey) {
   OPEN_OBJECT_STATES.delete(anchorKey);
-  TaskManager?.cancelTasks?.(anchorKey);
+  core.TaskManager.cancelTasks(anchorKey);
 }
 
-// Reverts every object tracked under an anchor back to its closed snapshot. Shared by
-// the auto-close task and (indirectly, via clearOpenDoor's cancellation) manual closes.
-class AutoCloseDoorTask extends Task {
-  constructor(delayTicks, anchorKey) {
-    super(Math.max(1, delayTicks), anchorKey);
-    this.anchorKey = anchorKey;
+// Reverts every object tracked under an anchor back to its closed snapshot.
+function autoCloseDoor(anchorKey) {
+  const state = OPEN_OBJECT_STATES.get(anchorKey);
+  if (!state) {
+    return;
   }
-
-  execute() {
-    const state = OPEN_OBJECT_STATES.get(this.anchorKey);
-    if (state) {
-      for (const snapshot of state.current ?? []) {
-        ObjectManager.deregister(objectFromSnapshot(snapshot), true);
-      }
-      for (const snapshot of state.closed ?? []) {
-        ObjectManager.register(objectFromSnapshot(snapshot), true);
-      }
-      for (let i = RUNTIME_DOUBLE_DOOR_RECORDS.length - 1; i >= 0; i--) {
-        const record = RUNTIME_DOUBLE_DOOR_RECORDS[i];
-        if (state.closed.some((snapshot) => snapshot.id === record.originalId &&
-          snapshot.location.x === record.originalX && snapshot.location.y === record.originalY &&
-          snapshot.location.z === record.z)) {
-          RUNTIME_DOUBLE_DOOR_RECORDS.splice(i, 1);
-        }
-      }
-      OPEN_OBJECT_STATES.delete(this.anchorKey);
-      const closedSample = state.closed?.[0];
-      if (closedSample) {
-        Sounds.sendSound(objectFromSnapshot(closedSample), doorSound(closedSample.id, false));
-      }
+  for (const snapshot of state.current ?? []) {
+    core.ObjectManager.deregister(objectFromSnapshot(snapshot), true);
+  }
+  for (const snapshot of state.closed ?? []) {
+    core.ObjectManager.register(objectFromSnapshot(snapshot), true);
+  }
+  for (let i = RUNTIME_DOUBLE_DOOR_RECORDS.length - 1; i >= 0; i--) {
+    const record = RUNTIME_DOUBLE_DOOR_RECORDS[i];
+    if (state.closed.some((snapshot) => snapshot.id === record.originalId &&
+      snapshot.location.x === record.originalX && snapshot.location.y === record.originalY &&
+      snapshot.location.z === record.z)) {
+      RUNTIME_DOUBLE_DOOR_RECORDS.splice(i, 1);
     }
-    this.stop();
+  }
+  OPEN_OBJECT_STATES.delete(anchorKey);
+  const closedSample = state.closed?.[0];
+  if (closedSample) {
+    core.Sounds.sendSound(objectFromSnapshot(closedSample), doorSound(closedSample.id, false));
   }
 }
 
 function scheduleAutoClose(anchorKey) {
-  if (!TaskManager) {
-    return;
-  }
-  TaskManager.cancelTasks(anchorKey);
-  TaskManager.submit(new AutoCloseDoorTask(DOOR_AUTO_CLOSE_TICKS, anchorKey));
-}
-
-function stateMatchesPlayer(player, state) {
-  if (!player || !state) {
-    return false;
-  }
-  if (player.getPrivateArea?.() != null) {
-    return false;
-  }
-  const playerLocation = player.getLocation?.();
-  if (!playerLocation) {
-    return false;
-  }
-  const snapshots = [...(state.closed ?? []), ...(state.current ?? [])];
-  return snapshots.some((snapshot) => {
-    const snapshotLocation = cloneLocation(
-      snapshot.location.x,
-      snapshot.location.y,
-      snapshot.location.z
-    );
-    return playerLocation.isWithinDistance?.(snapshotLocation, 64) === true;
-  });
-}
-
-function syncOpenDoorsToPlayer(player) {
-  if (!player || player.getPrivateArea?.() != null) {
-    return;
-  }
-  for (const state of OPEN_OBJECT_STATES.values()) {
-    if (!stateMatchesPlayer(player, state)) {
-      continue;
-    }
-    for (const snapshot of state.closed ?? []) {
-      player.getPacketSender?.().sendObjectRemoval?.(objectFromSnapshot(snapshot));
-    }
-    for (const snapshot of state.current ?? []) {
-      player.getPacketSender?.().sendObject?.(objectFromSnapshot(snapshot));
-    }
-  }
-}
-
-function requestDoorResync(player, ticks = 3) {
-  if (!player || player.getPrivateArea?.() != null) {
-    return;
-  }
-  const current = Number(player.getAttribute?.(DOOR_RESYNC_TICKS_ATTR) ?? 0);
-  if (ticks > current) {
-    player.setAttribute?.(DOOR_RESYNC_TICKS_ATTR, ticks);
-  }
+  core.TaskManager.cancelTasks(anchorKey);
+  const task = new core.Task(DOOR_AUTO_CLOSE_TICKS, anchorKey);
+  task.execute = () => {
+    task.stop();
+    autoCloseDoor(anchorKey);
+  };
+  core.TaskManager.submit(task);
 }
 
 function reapplyOpenDoorsForRegion(regionId) {
@@ -436,25 +391,13 @@ function reapplyOpenDoorsForRegion(regionId) {
       continue;
     }
     for (const snapshot of state.closed ?? []) {
-      MapObjects.remove(objectFromSnapshot(snapshot));
+      core.MapObjects.remove(objectFromSnapshot(snapshot));
     }
     for (const snapshot of state.current ?? []) {
-      MapObjects.add(objectFromSnapshot(snapshot));
+      core.MapObjects.add(objectFromSnapshot(snapshot));
     }
   }
 }
-
-const GATE_PARTNER_OFFSETS = Object.freeze([
-  [0, 1],
-  [0, -1],
-  [1, 0],
-  [-1, 0],
-  [-1, -1],
-  [-1, 1],
-  [1, -1],
-  [1, 1],
-]);
-
 // OSRS swings a wooden gate 90 degrees around its hinge post, so both panels land on the
 // perpendicular tile line and face the same direction. Ported 1:1 from the original elvarg
 // gate state manager (computeGateHingeOpenTransform / computeGateHingeCloseTransform).
@@ -483,7 +426,7 @@ function gateHingeTransform(x, y, rotation, opening) {
 
 function findAdjacentGatePartner(objectId, x, y, z, privateArea) {
   for (const [dx, dy] of GATE_PARTNER_OFFSETS) {
-    const partner = MapObjects.get(objectId, cloneLocation(x + dx, y + dy, z), privateArea ?? null);
+    const partner = core.MapObjects.get(objectId, cloneLocation(x + dx, y + dy, z), privateArea ?? null);
     if (partner) {
       return partner;
     }
@@ -492,7 +435,7 @@ function findAdjacentGatePartner(objectId, x, y, z, privateArea) {
 }
 
 // Opens/closes a wooden gate by swinging its hinge and extension panels together. Tracks
-// both pieces as one open-object state so auto-close and resync revert the whole gate.
+// both pieces as one open-object state so auto-close reverts the whole gate.
 function handleWoodenGate(player, object, objectId, location) {
   const gate = WOODEN_GATE_BY_ID.get(objectId);
   if (!gate || !object || !location) {
@@ -541,14 +484,14 @@ function handleWoodenGate(player, object, objectId, location) {
     return false;
   }
 
-  const hingeNew = new GameObject(
+  const hingeNew = new core.GameObject(
     newHingeId,
     cloneLocation(transform.hinge[0], transform.hinge[1], z),
     hingeOld.type,
     transform.face,
     privateArea
   );
-  const extensionNew = new GameObject(
+  const extensionNew = new core.GameObject(
     newExtensionId,
     cloneLocation(transform.extension[0], transform.extension[1], z),
     extensionOld.type,
@@ -556,25 +499,24 @@ function handleWoodenGate(player, object, objectId, location) {
     privateArea
   );
 
-  ObjectManager.deregister(hingeOld.object, true);
-  ObjectManager.deregister(extensionOld.object, true);
-  ObjectManager.register(hingeNew, true);
-  ObjectManager.register(extensionNew, true);
-  requestDoorResync(player);
+  core.ObjectManager.deregister(hingeOld.object, true);
+  core.ObjectManager.deregister(extensionOld.object, true);
+  core.ObjectManager.register(hingeNew, true);
+  core.ObjectManager.register(extensionNew, true);
 
   // Anchor on the CLOSED hinge tile so open and close compute the same key for auto-close.
   const closedHingeX = isClosed ? hingeOld.x : transform.hinge[0];
   const closedHingeY = isClosed ? hingeOld.y : transform.hinge[1];
   const anchorKey = `woodenGate:${gate.closed.hinge}:${closedHingeX},${closedHingeY},${z}`;
   if (isClosed) {
-    const closedHinge = new GameObject(
+    const closedHinge = new core.GameObject(
       gate.closed.hinge,
       cloneLocation(hingeOld.x, hingeOld.y, z),
       hingeOld.type,
       hingeOld.rotation,
       privateArea
     );
-    const closedExtension = new GameObject(
+    const closedExtension = new core.GameObject(
       gate.closed.extension,
       cloneLocation(extensionOld.x, extensionOld.y, z),
       extensionOld.type,
@@ -586,7 +528,7 @@ function handleWoodenGate(player, object, objectId, location) {
     clearOpenDoor(anchorKey);
   }
 
-  Sounds.sendSound(player, doorSound(gate.closed.hinge, isClosed));
+  core.Sounds.sendSound(player, doorSound(gate.closed.hinge, isClosed));
 
   return true;
 }
@@ -620,7 +562,7 @@ function handleMappedDoor(player, object, objectId, location) {
   const privateArea = player?.getPrivateArea?.() ?? null;
 
   const previousObject = activeObject;
-  const nextObject = new GameObject(
+  const nextObject = new core.GameObject(
     nextId,
     cloneLocation(
       (activeLocation.getX?.() ?? activeLocation.x ?? 0) + dx,
@@ -632,21 +574,13 @@ function handleMappedDoor(player, object, objectId, location) {
     privateArea
   );
 
-  ObjectManager.register(nextObject, true);
-  ObjectManager.deregister(previousObject, true);
-  requestDoorResync(player);
-
-  console.warn(
-    `[door-debug] user=${player.isPlayerBot?.() ? "BOT:" + player.getUsername?.() : player.getUsername?.()} ${open ? "CLOSE" : "OPEN"} click id=${objectId} closedId=${closedId} ` +
-    `prev(id=${previousObject.getId()},loc=${previousObject.getLocation().getX()},${previousObject.getLocation().getY()},${previousObject.getLocation().getZ()},face=${previousObject.getFace()}) ` +
-    `next(id=${nextObject.getId()},loc=${nextObject.getLocation().getX()},${nextObject.getLocation().getY()},${nextObject.getLocation().getZ()},face=${nextObject.getFace()}) ` +
-    `postCheck=${MapObjects.get(nextObject.getId(), nextObject.getLocation(), privateArea) ? "FOUND" : "MISSING"}`
-  );
+  core.ObjectManager.register(nextObject, true);
+  core.ObjectManager.deregister(previousObject, true);
 
   if (open) {
     clearOpenDoor(anchorKey);
   } else {
-    const closedObject = new GameObject(
+    const closedObject = new core.GameObject(
       closedId,
       cloneLocation(
         location.getX?.() ?? location.x ?? 0,
@@ -660,7 +594,7 @@ function handleMappedDoor(player, object, objectId, location) {
     rememberOpenObjects(anchorKey, [closedObject], [nextObject]);
   }
 
-  Sounds.sendSound(player, doorSound(closedId, !open));
+  core.Sounds.sendSound(player, doorSound(closedId, !open));
 
   return true;
 }
@@ -675,7 +609,6 @@ function createDynamicDoubleDoorRecord(object, location, originalId) {
   return {
     originalId,
     currentId: Number(object.getId?.() ?? object.id ?? originalId),
-    open: 0,
     x: Number(location.getX?.() ?? location.x ?? 0),
     y: Number(location.getY?.() ?? location.y ?? 0),
     z: Number(location.getZ?.() ?? location.z ?? 0),
@@ -704,7 +637,7 @@ function ensureDynamicDoubleDoorRecords(object, objectId, location, privateArea 
       location.getZ?.() ?? location.z ?? 0
     );
     for (const partnerId of familyIds) {
-      const partnerObject = MapObjects.get(partnerId, candidateLocation, privateArea);
+      const partnerObject = core.MapObjects.get(partnerId, candidateLocation, privateArea);
       if (!partnerObject) {
         continue;
       }
@@ -734,10 +667,6 @@ function buildDoubleDoorAnchorKey(records) {
     .join("|");
 }
 
-function cloneDoubleDoorRecord(record) {
-  return { ...record };
-}
-
 function isDoubleDoorOpen(record) {
   return (
     record.currentId !== record.originalId ||
@@ -748,7 +677,7 @@ function isDoubleDoorOpen(record) {
 }
 
 function doubleDoorRecordToObject(record, privateArea = null) {
-  return new GameObject(
+  return new core.GameObject(
     record.currentId,
     cloneLocation(record.x, record.y, record.z),
     Number(record.type ?? 0),
@@ -761,156 +690,20 @@ function resolveOpenedDoubleDoorId(record) {
   return SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID.get(record.originalId) ?? (record.originalId + 1);
 }
 
-function getNextLeftFace(record) {
-  let face = record.originalFace;
-
-  if (record.open === 0) {
-    if (record.originalFace === 0 && record.currentFace === 0) {
-      face = 3;
-    } else if (record.originalFace === 1 && record.currentFace === 1) {
-      face = 0;
-    } else if (record.originalFace === 2 && record.currentFace === 2) {
-      face = 1;
-    } else if (record.originalFace === 3 && record.currentFace === 3) {
-      face = 0;
-    } else if (record.originalFace !== record.currentFace) {
-      face = record.originalFace;
-    }
-  } else if (record.open === 1) {
-    if (record.originalFace === 0 && record.currentFace === 0) {
-      face = 1;
-    } else if (record.originalFace === 1 && record.currentFace === 1) {
-      face = 2;
-    } else if (record.originalFace === 2 && record.currentFace === 2) {
-      face = 1;
-    } else if (record.originalFace === 3 && record.currentFace === 3) {
-      face = 2;
-    } else if (record.originalFace !== record.currentFace) {
-      face = record.originalFace;
-    }
-  }
-
-  record.currentFace = face;
-  return face;
-}
-
-function getNextRightFace(record) {
-  let face = record.originalFace;
-
-  if (record.open === 0) {
-    if (record.originalFace === 0 && record.currentFace === 0) {
-      face = 1;
-    } else if (record.originalFace === 1 && record.currentFace === 1) {
-      face = 2;
-    } else if (record.originalFace === 2 && record.currentFace === 2) {
-      face = 3;
-    } else if (record.originalFace === 3 && record.currentFace === 3) {
-      face = 2;
-    } else if (record.originalFace !== record.currentFace) {
-      face = record.originalFace;
-    }
-  } else if (record.open === 1) {
-    if (record.originalFace === 0 && record.currentFace === 0) {
-      face = 3;
-    } else if (record.originalFace === 1 && record.currentFace === 1) {
-      face = 0;
-    } else if (record.originalFace === 2 && record.currentFace === 2) {
-      face = 1;
-    } else if (record.originalFace === 3 && record.currentFace === 3) {
-      face = 2;
-    } else if (record.originalFace !== record.currentFace) {
-      face = record.originalFace;
-    }
-  }
-
-  record.currentFace = face;
-  return face;
-}
-
-function changeLeftDoubleDoor(record) {
-  let xAdjustment = 0;
-  let yAdjustment = 0;
-
-  if (record.open === 0) {
-    if (record.originalFace === 0 && record.currentFace === 0) {
-      xAdjustment = -1;
-    } else if (record.originalFace === 1 && record.currentFace === 1) {
-      yAdjustment = 1;
-    } else if (record.originalFace === 2 && record.currentFace === 2) {
-      xAdjustment = 1;
-    } else if (record.originalFace === 3 && record.currentFace === 3) {
-      yAdjustment = -1;
-    }
-  } else if (record.open === 1) {
-    if (record.originalFace === 0 && record.currentFace === 0) {
-      yAdjustment = -1;
-    } else if (record.originalFace === 1 && record.currentFace === 1) {
-      xAdjustment = -1;
-    } else if (record.originalFace === 2 && record.currentFace === 2) {
-      xAdjustment = -1;
-    } else if (record.originalFace === 3 && record.currentFace === 3) {
-      xAdjustment = -1;
-    }
-  }
-
+// Swings one leaf of a double door: opening steps it a tile along its closed face and turns it
+// to openFaces[closed face], closing puts it back.
+function toggleDoubleDoorLeaf(record, openFaces) {
+  const closedPose = record.currentFace === record.originalFace;
+  const [dx, dy] = closedPose ? COORD_OFFSETS[record.originalFace] : [0, 0];
   if (record.x === record.originalX && record.y === record.originalY) {
-    record.x += xAdjustment;
-    record.y += yAdjustment;
+    record.x += dx;
+    record.y += dy;
   } else {
     record.x = record.originalX;
     record.y = record.originalY;
   }
-
-  if (record.currentId === record.originalId) {
-    record.currentId = resolveOpenedDoubleDoorId(record);
-  } else {
-    record.currentId = record.originalId;
-  }
-
-  getNextLeftFace(record);
-}
-
-function changeRightDoubleDoor(record) {
-  let xAdjustment = 0;
-  let yAdjustment = 0;
-
-  if (record.open === 0) {
-    if (record.originalFace === 0 && record.currentFace === 0) {
-      xAdjustment = -1;
-    } else if (record.originalFace === 1 && record.currentFace === 1) {
-      yAdjustment = 1;
-    } else if (record.originalFace === 2 && record.currentFace === 2) {
-      xAdjustment = 1;
-    } else if (record.originalFace === 3 && record.currentFace === 3) {
-      yAdjustment = -1;
-    }
-  } else if (record.open === 1) {
-    if (record.originalFace === 0 && record.currentFace === 0) {
-      xAdjustment = 1;
-    } else if (record.originalFace === 1 && record.currentFace === 1) {
-      xAdjustment = -1;
-    } else if (record.originalFace === 2 && record.currentFace === 2) {
-      yAdjustment = -1;
-    } else if (record.originalFace === 3 && record.currentFace === 3) {
-      xAdjustment = -1;
-    }
-  }
-
-  if (record.x === record.originalX && record.y === record.originalY) {
-    record.x += xAdjustment;
-    record.y += yAdjustment;
-  } else {
-    record.x = record.originalX;
-    record.y = record.originalY;
-  }
-
-  if (record.currentId === record.originalId) {
-    record.currentId = resolveOpenedDoubleDoorId(record);
-  } else {
-    record.currentId = record.originalId;
-  }
-
-  getNextRightFace(record);
+  record.currentId = record.currentId === record.originalId ? resolveOpenedDoubleDoorId(record) : record.originalId;
+  record.currentFace = closedPose ? openFaces[record.originalFace] : record.originalFace;
 }
 
 function resolveDoubleDoorPair(clicked) {
@@ -931,108 +724,20 @@ function resolveDoubleDoorPair(clicked) {
     }
   }
 
-  let leftDoor = null;
-  let rightDoor = null;
-  const { currentId: id, x, y, z, originalFace, open } = clicked;
-
-  if (open === 0) {
-    if (originalFace === 0) {
-      const lowerDoor = findDoubleDoorRecord(id - 3, x, y - 1, z);
-      const upperDoor = findDoubleDoorRecord(id + 3, x, y + 1, z);
-      if (lowerDoor) {
-        leftDoor = lowerDoor;
-        rightDoor = clicked;
-      } else if (upperDoor) {
-        leftDoor = clicked;
-        rightDoor = upperDoor;
-      }
-    } else if (originalFace === 1) {
-      const westDoor = findDoubleDoorRecord(id - 3, x - 1, y, z);
-      const eastDoor = findDoubleDoorRecord(id + 3, x + 1, y, z);
-      if (westDoor) {
-        leftDoor = westDoor;
-        rightDoor = clicked;
-      } else if (eastDoor) {
-        leftDoor = clicked;
-        rightDoor = eastDoor;
-      }
-    } else if (originalFace === 2) {
-      const lowerDoor = findDoubleDoorRecord(id - 3, x, y + 1, z);
-      const upperDoor = findDoubleDoorRecord(id + 3, x, y - 1, z);
-      if (lowerDoor) {
-        leftDoor = lowerDoor;
-        rightDoor = clicked;
-      } else if (upperDoor) {
-        leftDoor = clicked;
-        rightDoor = upperDoor;
-      }
-    } else if (originalFace === 3) {
-      const westDoor = findDoubleDoorRecord(id + 3, x - 1, y, z);
-      const eastDoor = findDoubleDoorRecord(id - 3, x + 1, y, z);
-      if (westDoor) {
-        leftDoor = westDoor;
-        rightDoor = clicked;
-      } else if (eastDoor) {
-        leftDoor = clicked;
-        rightDoor = eastDoor;
-      }
-    }
-  } else if (open === 1) {
-    if (originalFace === 0) {
-      const westDoor = findDoubleDoorRecord(id - 3, x - 1, y, z);
-      const eastDoor = findDoubleDoorRecord(id + 3, x + 1, y, z);
-      if (westDoor) {
-        leftDoor = westDoor;
-        rightDoor = clicked;
-      } else if (eastDoor) {
-        leftDoor = clicked;
-        rightDoor = eastDoor;
-      }
-    } else if (originalFace === 1) {
-      const northDoor = findDoubleDoorRecord(id - 3, x, y + 1, z);
-      const southDoor = findDoubleDoorRecord(id + 3, x, y - 1, z);
-      if (northDoor) {
-        leftDoor = northDoor;
-        rightDoor = clicked;
-      } else if (southDoor) {
-        leftDoor = clicked;
-        rightDoor = southDoor;
-      }
-    } else if (originalFace === 2) {
-      const westDoor = findDoubleDoorRecord(id - 3, x - 1, y, z);
-      const eastDoor = findDoubleDoorRecord(id + 3, x, y - 1, z);
-      if (westDoor) {
-        leftDoor = westDoor;
-        rightDoor = clicked;
-      } else if (eastDoor) {
-        leftDoor = clicked;
-        rightDoor = eastDoor;
-      }
-    } else if (originalFace === 3) {
-      const northDoor = findDoubleDoorRecord(id - 3, x, y + 1, z);
-      const southDoor = findDoubleDoorRecord(id + 3, x, y - 1, z);
-      if (northDoor) {
-        leftDoor = northDoor;
-        rightDoor = clicked;
-      } else if (southDoor) {
-        leftDoor = clicked;
-        rightDoor = southDoor;
-      }
-    }
-  }
-
-  return leftDoor && rightDoor ? [leftDoor, rightDoor] : null;
+  const { currentId: id, x, y, z, originalFace } = clicked;
+  const [dx, dy, idDelta] = LEFT_LEAF_OFFSETS[originalFace];
+  const left = findDoubleDoorRecord(id + idDelta, x + dx, y + dy, z);
+  if (left) return [left, clicked];
+  const right = findDoubleDoorRecord(id - idDelta, x - dx, y - dy, z);
+  return right ? [clicked, right] : null;
 }
 
 function handleDoubleDoor(player, object, objectId, location) {
   const x = location?.getX?.() ?? location?.x;
   const y = location?.getY?.() ?? location?.y;
   const z = location?.getZ?.() ?? location?.z ?? 0;
-  let clickedDoor = findDoubleDoorRecord(objectId, x, y, z);
-  if (!clickedDoor) {
-    ensureDynamicDoubleDoorRecords(object, objectId, location, player?.getPrivateArea?.() ?? null);
-    clickedDoor = findDoubleDoorRecord(objectId, x, y, z);
-  }
+  const clickedDoor = findDoubleDoorRecord(objectId, x, y, z)
+    ?? ensureDynamicDoubleDoorRecords(object, objectId, location, player?.getPrivateArea?.() ?? null)?.[0];
   if (!clickedDoor) {
     return false;
   }
@@ -1042,21 +747,19 @@ function handleDoubleDoor(player, object, objectId, location) {
     return false;
   }
 
-  const previousStates = pair.map(cloneDoubleDoorRecord);
-  const previousObjects = previousStates.map((record) => doubleDoorRecordToObject(record));
+  const previousObjects = pair.map((record) => doubleDoorRecordToObject(record));
 
-  changeLeftDoubleDoor(pair[0]);
-  changeRightDoubleDoor(pair[1]);
+  toggleDoubleDoorLeaf(pair[0], LEFT_LEAF_OPEN_FACES);
+  toggleDoubleDoorLeaf(pair[1], RIGHT_LEAF_OPEN_FACES);
 
   const currentObjects = pair.map((record) => doubleDoorRecordToObject(record));
   for (const previousObject of previousObjects) {
-    ObjectManager.deregister(previousObject, true);
+    core.ObjectManager.deregister(previousObject, true);
   }
   for (const currentObject of currentObjects) {
-    ObjectManager.register(currentObject, true);
+    core.ObjectManager.register(currentObject, true);
   }
 
-  requestDoorResync(player);
 
   const anchorKey = buildDoubleDoorAnchorKey(pair);
   if (pair.some(isDoubleDoorOpen)) {
@@ -1065,7 +768,7 @@ function handleDoubleDoor(player, object, objectId, location) {
     clearOpenDoor(anchorKey);
   }
 
-  Sounds.sendSound(
+  core.Sounds.sendSound(
     player,
     doorSound(pair[0].originalId, pair.some(isDoubleDoorOpen))
   );
@@ -1073,7 +776,7 @@ function handleDoubleDoor(player, object, objectId, location) {
   return true;
 }
 
-function toggleDoor(api, { player, object, objectId, location }) {
+function toggleDoor({ player, object, objectId, location }) {
   if (!player || !object || !location) return false;
   const request = { player, object, objectId, location, handled: false };
   api.emitCustomEvent("door:toggle", request);
@@ -1085,39 +788,17 @@ function toggleDoor(api, { player, object, objectId, location }) {
 
 module.exports = {
   name: "Doors",
-  register: (api) => {
-    ObjectManager = api.getObjectManager();
-    TaskManager = api.getTaskManager();
+  register: (pluginApi) => {
+    api = pluginApi;
+    core = pluginApi.core;
+    defineDoorData(core);
     // Warm the door catalog at startup. It scans every loc definition (~185ms for ~60k
     // objects); building it lazily on the first door click stalled a live game tick.
     getDoorCatalog();
-    const toggle = toggleDoor.bind(null, api);
     for (const name of DOOR_NAMES) {
       // Some gates (e.g. 60760/60763) expose "Release" instead of "Open".
-      api.onObjectInteraction(name, { Open: toggle, Close: toggle, Release: toggle });
+      api.onObjectInteraction(name, { Open: toggleDoor, Close: toggleDoor, Release: toggleDoor });
     }
-    api.onRegionLoaded(({ regionId }) => {
-      if (!Number.isInteger(regionId)) {
-        return;
-      }
-      reapplyOpenDoorsForRegion(regionId);
-    });
-    api.onPlayerProcess(({ player }) => {
-      if (!player || player.isPlayerBot?.() === true) {
-        return;
-      }
-      if (player.isNeedsPlacement?.() === true || player.isAllowRegionChangePacket?.() === true) {
-        requestDoorResync(player, 4);
-      }
-      const remaining = Number(player.getAttribute?.(DOOR_RESYNC_TICKS_ATTR) ?? 0);
-      if (remaining <= 0) {
-        return;
-      }
-      if (player.isAllowRegionChangePacket?.() === true) {
-        return;
-      }
-      syncOpenDoorsToPlayer(player);
-      player.setAttribute?.(DOOR_RESYNC_TICKS_ATTR, remaining - 1);
-    });
+    api.onRegionLoaded(({ regionId }) => reapplyOpenDoorsForRegion(regionId));
   },
 };
