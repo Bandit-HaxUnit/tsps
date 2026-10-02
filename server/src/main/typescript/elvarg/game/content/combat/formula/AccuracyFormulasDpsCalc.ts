@@ -15,6 +15,7 @@ import { resolveSpecialAttackType, WeaponSpecialTraits } from "../WeaponSpecialT
 
 type RollCacheEntry = {
     cycle: number;
+    defenceLevel: number;
     effectiveAttackLevel?: number;
     effectiveDefenseLevel?: number;
     effectiveRangedAttack?: number;
@@ -55,11 +56,13 @@ export class AccuracyFormulasDpsCalc {
 
     private static getRollCache(entity: Mobile): RollCacheEntry {
         const cycle = World.getProcessCycle();
+        const defenceLevel = entity.isNpc() ? entity.getAsNpc().getDefenceLevel()
+            : entity.getAsPlayer().getSkillManager().getCurrentLevel(Skill.DEFENCE);
         const cached = this.rollCache.get(entity);
-        if (cached && cached.cycle === cycle) {
+        if (cached && cached.cycle === cycle && cached.defenceLevel === defenceLevel) {
             return cached;
         }
-        const next: RollCacheEntry = { cycle, defenseMeleeRolls: new Map<number, number>() };
+        const next: RollCacheEntry = { cycle, defenceLevel, defenseMeleeRolls: new Map<number, number>() };
         this.rollCache.set(entity, next);
         return next;
     }
@@ -367,7 +370,7 @@ export class AccuracyFormulasDpsCalc {
             return cache.effectiveDefenseLevel;
         }
         if (enemy.isNpc()) {
-            cache.effectiveDefenseLevel = enemy.getAsNpc().getCurrentDefinition().getStats()[2] + 9;
+            cache.effectiveDefenseLevel = cache.defenceLevel + 9;
             return cache.effectiveDefenseLevel;
         }
 
