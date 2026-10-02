@@ -76,6 +76,18 @@ const HUD = {
   npcVarp: 1683, hpVarbit: 6099, baseHpVarbit: 6100, bossVarbit: 12401,
   openScript: 2376, fadeInScript: 2887, fadeOutScript: 2889,
   components: [0, 2, 4, 5, 8, 10, 20, 13, 14, 15, 9, 6, 7, 11, 18, 19, 16, 17, 3].map((child) => (303 << 16) | child),
+  /**
+   * The fade scripts take 14 components and a transparency (OpenRune's hpbar plugin): hp,
+   * name_area, outer_border, name_backing, creature_name, inner_border, the bar's back,
+   * sliding and remaining parts, its text, its thresholds and hp_bar_1/2. They did nothing
+   * when sent without them.
+   */
+  fadeComponents: [5, 8, 6, 7, 9, 11, 13, 14, 15, 20, 18, 19, 16, 17].map((child) => (303 << 16) | child),
+  fadeInFrom: 255,
+  fadeOutFrom: 0,
+  /** hpbar_hud:hp, hidden once the HUD has faded (OpenRune hides it 2 ticks after the fade-out). */
+  hp: (303 << 16) | 5,
+  hideAfterFadeTicks: 2,
 };
 
 const CRAWL = { anim: 11580, sound: 2454, soundLoops: 3, soundDelay: 4, fadeCycles: 50 };
@@ -165,12 +177,16 @@ function topDealers() {
   return [...state.damage].sort((a, b) => b[1] - a[1]).slice(0, TOP_MINERS).map(([name]) => name);
 }
 
+/** The messages go to the players at the crab's mine, not the whole world. */
 function announceBurrow(burrow) {
-  World.sendMessage("The gemstone crab burrows away, leaving a piece of its shell behind.");
+  const tell = (text) => {
+    for (const player of inArea[burrow.spot]) player.sendMessage(text);
+  };
+  tell("The gemstone crab burrows away, leaving a piece of its shell behind.");
   const names = burrow.top.slice(0, 3);
-  if (names.length === 1) World.sendMessage(`The top crab crusher was ${names[0]}!`);
-  else if (names.length === 2) World.sendMessage(`The top two crab crushers were ${names[0]} & ${names[1]}!`);
-  else if (names.length === 3) World.sendMessage(`The top three crab crushers were ${names[0]}, ${names[1]}, & ${names[2]}!`);
+  if (names.length === 1) tell(`The top crab crusher was ${names[0]}!`);
+  else if (names.length === 2) tell(`The top two crab crushers were ${names[0]} & ${names[1]}!`);
+  else if (names.length === 3) tell(`The top three crab crushers were ${names[0]}, ${names[1]}, & ${names[2]}!`);
   if (state.shell) removeShell();
   const blocker = new GameObject(SHELL_BLOCKER, burrow.location.clone(), 10, 0, null);
   ObjectManager.register(blocker, true);
@@ -203,8 +219,8 @@ function tickBurrow() {
   const burrow = state.burrow;
   const since = state.tick - burrow.at;
   const watchers = inArea[burrow.spot];
-  if (BURROW.hudFadeIn.includes(since)) for (const player of watchers) player.getPacketSender().sendInterfaceScript(HUD.fadeInScript);
-  if (since === BURROW.hudFadeOut) for (const player of watchers) player.getPacketSender().sendInterfaceScript(HUD.fadeOutScript);
+  if (BURROW.hudFadeIn.includes(since)) for (const player of watchers) fadeHud(player, true);
+  if (since === BURROW.hudFadeOut) for (const player of watchers) fadeHud(player, false);
   if (since === BURROW.hudClear) for (const player of watchers) hideHud(player);
   if (since === BURROW.announce) announceBurrow(burrow);
   if (since === BURROW.shell) leaveShell(burrow);
@@ -315,7 +331,14 @@ function recordDamage({ player, target, hit }) {
 
 function showHud(player) {
   updateHud(player);
-  player.getPacketSender().sendInterfaceScript(HUD.openScript, HUD.components);
+  const sender = player.getPacketSender();
+  sender.sendInterfaceDisplayState(HUD.hp, false);
+  sender.sendInterfaceScript(HUD.openScript, HUD.components);
+}
+
+function fadeHud(player, fadeIn) {
+  player.getPacketSender().sendInterfaceScript(fadeIn ? HUD.fadeInScript : HUD.fadeOutScript,
+    [...HUD.fadeComponents, fadeIn ? HUD.fadeInFrom : HUD.fadeOutFrom]);
 }
 
 /** The mine whose players see the HUD: the crab's, until it fades after the crab burrows. */
@@ -335,6 +358,7 @@ function updateHud(player) {
 
 function hideHud(player) {
   const sender = player.getPacketSender();
+  sender.sendInterfaceDisplayState(HUD.hp, true);
   sender.sendConfig(HUD.npcVarp, -1);
   sender.sendVarbit(HUD.hpVarbit, 0);
   sender.sendVarbit(HUD.baseHpVarbit, 0);
@@ -353,9 +377,14 @@ function enterArea(spot, player) {
   if (hudSpot() === spot) showHud(player);
 }
 
+/** Leaving the mine (walking or teleporting away) fades the HUD out and then removes it. */
 function leaveArea(spot, player) {
   inArea[spot].delete(player);
-  if (hudSpot() === spot) hideHud(player);
+  if (hudSpot() !== spot) return;
+  fadeHud(player, false);
+  later(player, HUD.hideAfterFadeTicks, () => {
+    if (!SPOTS.some((_, index) => inArea[index].has(player) && hudSpot() === index)) hideHud(player);
+  });
 }
 
 // --- Mining the shell.
