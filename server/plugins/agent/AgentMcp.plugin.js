@@ -12,6 +12,8 @@ const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/ser
 const DEFAULT_PORT = 49700;
 const MAX_MESSAGES = 100;
 const MAX_WAIT_TICKS = 50;
+// A player whose tile hasn't changed for this many ticks has arrived, is blocked, or is busy acting.
+const STILL_TICKS = 2;
 const messageLogs = new WeakMap();
 
 // Records game messages for players an agent has touched; the client still receives them.
@@ -54,6 +56,66 @@ function buildMcpServer(core) {
       : null)
     .filter(Boolean);
 
+  const sleepTicks = (ticks) =>
+    new Promise((resolve) => setTimeout(resolve, ticks * GameConstants.GAME_ENGINE_PROCESSING_CYCLE_RATE));
+  const status = (p) => ({ ...tile(p.getLocation()), hitpoints: p.getHitpoints(), messages: messageLog(p).splice(0) });
+  // Polls each tick until the player reaches `target`, or stands still for STILL_TICKS, or maxTicks pass.
+  // ponytail: position-only, so an in-place skilling/combat loop counts as settled; add a busy check if agents need it.
+  const settle = async (username, maxTicks, target) => {
+    let last = tile(find(username).getLocation());
+    let still = 0;
+    for (let ticks = 1; ticks <= maxTicks; ticks++) {
+      await sleepTicks(1);
+      const p = find(username);
+      const here = tile(p.getLocation());
+      if (target && here.x === target.x && here.y === target.y) return { result: "arrived", ticks, ...status(p) };
+      still = here.x === last.x && here.y === last.y && here.z === last.z ? still + 1 : 0;
+      last = here;
+      if (still >= STILL_TICKS) return { result: target ? "stuck" : "settled", ticks, ...status(p) };
+    }
+    return { result: "timeout", ticks: maxTicks, ...status(find(username)) };
+  };
+  const npcClick = (p, npc, option) => {
+    const actions = npc.getCurrentDefinition(p)?.getActions() ?? [];
+    const clickType = actions.findIndex((action) => action?.toLowerCase() === option.toLowerCase()) + 1;
+    if (!clickType) throw new Error(`NPC has no "${option}" option; options: ${actions.filter(Boolean).join(", ")}`);
+    return { type: "npc_option", index: npc.getIndex(), clickType };
+  };
+  // Everything with a menu within `radius` tiles of the player.
+  const nearby = (p, radius) => {
+    const here = p.getLocation();
+    const near = (loc) => loc.getZ() === here.getZ()
+      && Math.abs(loc.getX() - here.getX()) <= radius && Math.abs(loc.getY() - here.getY()) <= radius;
+
+    const objects = [];
+    for (let x = here.getX() - radius; x <= here.getX() + radius; x++) {
+      for (let y = here.getY() - radius; y <= here.getY() + radius; y++) {
+        for (const object of MapObjects.mapObjects.get(MapObjects.getHash(x, y, here.getZ())) ?? []) {
+          const loc = object.getLocation();
+          if (loc.getX() !== x || loc.getY() !== y || loc.getZ() !== here.getZ()) continue;
+          const definition = ObjectDefinition.forPlayer(object.getId(), p);
+          const options = definition?.getInteractions()?.filter(Boolean);
+          if (options?.length) objects.push({ id: object.getId(), name: definition.getName(), options, x, y });
+        }
+      }
+    }
+
+    return {
+      npcs: World.getNpcs().stream().filter((npc) => npc && near(npc.getLocation())).map((npc) => {
+        const definition = npc.getCurrentDefinition(p);
+        return {
+          index: npc.getIndex(), id: npc.getId(), name: definition?.getName(),
+          options: (definition?.getActions() ?? []).filter(Boolean), ...tile(npc.getLocation()),
+        };
+      }),
+      objects,
+      groundItems: World.getItems().filter((item) => near(item.getPosition())).map((item) => ({
+        id: item.getItem().getId(), name: item.getItem().getDefinition().getName(),
+        amount: item.getItem().getAmount(), ...tile(item.getPosition()),
+      })),
+    };
+  };
+
   const tool = (name, description, inputSchema, handler) =>
     server.registerTool(name, { description, inputSchema }, async (args) => {
       try {
@@ -75,26 +137,9 @@ function buildMcpServer(core) {
     { player, radius: z.number().int().min(1).max(32).default(15) },
     ({ player: username, radius }) => {
       const p = find(username);
-      const here = p.getLocation();
-      const near = (loc) => loc.getZ() === here.getZ()
-        && Math.abs(loc.getX() - here.getX()) <= radius && Math.abs(loc.getY() - here.getY()) <= radius;
       const skills = p.getSkillManager();
-
-      const objects = [];
-      for (let x = here.getX() - radius; x <= here.getX() + radius; x++) {
-        for (let y = here.getY() - radius; y <= here.getY() + radius; y++) {
-          for (const object of MapObjects.mapObjects.get(MapObjects.getHash(x, y, here.getZ())) ?? []) {
-            const loc = object.getLocation();
-            if (loc.getX() !== x || loc.getY() !== y || loc.getZ() !== here.getZ()) continue;
-            const definition = ObjectDefinition.forPlayer(object.getId(), p);
-            const options = definition?.getInteractions()?.filter(Boolean);
-            if (options?.length) objects.push({ id: object.getId(), name: definition.getName(), options, x, y });
-          }
-        }
-      }
-
       return {
-        ...tile(here),
+        ...tile(p.getLocation()),
         hitpoints: p.getHitpoints(),
         runEnergy: p.getRunEnergy(),
         skills: Object.fromEntries(Skill.values().map((skill) => [skill.getName(), {
@@ -102,18 +147,7 @@ function buildMcpServer(core) {
         }])),
         inventory: items(p.getInventory()),
         equipment: items(p.getEquipment()),
-        npcs: World.getNpcs().stream().filter((npc) => npc && near(npc.getLocation())).map((npc) => {
-          const definition = npc.getCurrentDefinition(p);
-          return {
-            index: npc.getIndex(), id: npc.getId(), name: definition?.getName(),
-            options: (definition?.getActions() ?? []).filter(Boolean), ...tile(npc.getLocation()),
-          };
-        }),
-        objects,
-        groundItems: World.getItems().filter((item) => near(item.getPosition())).map((item) => ({
-          id: item.getItem().getId(), name: item.getItem().getDefinition().getName(),
-          amount: item.getItem().getAmount(), ...tile(item.getPosition()),
-        })),
+        ...nearby(p, radius),
         messages: messageLog(p).splice(0),
       };
     }
@@ -121,10 +155,57 @@ function buildMcpServer(core) {
 
   tool(
     "walk_to",
-    "Click a world tile, like a minimap/game click. run=true forces running.",
-    { player, x: z.number().int(), y: z.number().int(), run: z.boolean().default(false) },
-    ({ player: username, x, y, run }) =>
-      send(find(username), { type: "move", worldX: x, worldY: y, modifierFlags: run ? 2 : 0 })
+    "Walk to a world tile (like a minimap click) and wait until the player arrives or gets stuck. run=true forces running. Returns result (arrived/stuck/timeout), position, hitpoints and new game messages.",
+    {
+      player, x: z.number().int(), y: z.number().int(), run: z.boolean().default(false),
+      maxTicks: z.number().int().min(1).max(MAX_WAIT_TICKS).default(MAX_WAIT_TICKS),
+    },
+    async ({ player: username, x, y, run, maxTicks }) => {
+      send(find(username), { type: "move", worldX: x, worldY: y, modifierFlags: run ? 2 : 0 });
+      return settle(username, maxTicks, { x, y });
+    }
+  );
+
+  tool(
+    "interact",
+    "Click an option on the nearest NPC, object or ground item with this name, then wait until the player stops moving. E.g. target \"Guard\" option \"Attack\", \"Tree\"/\"Chop down\", \"Bones\"/\"Take\". Returns what was clicked, result, position, hitpoints and new game messages.",
+    {
+      player, target: z.string().min(1), option: z.string().min(1),
+      radius: z.number().int().min(1).max(32).default(15),
+      maxTicks: z.number().int().min(1).max(MAX_WAIT_TICKS).default(20),
+    },
+    async ({ player: username, target, option, radius, maxTicks }) => {
+      const p = find(username);
+      const here = p.getLocation();
+      const { npcs, objects, groundItems } = nearby(p, radius);
+      const named = (thing) => thing.name?.toLowerCase() === target.toLowerCase();
+      const hasOption = (thing) => thing.options.some((o) => o.toLowerCase() === option.toLowerCase());
+      // Ground items carry no option list, so any option is allowed on them.
+      const candidates = [
+        ...npcs.filter(named).filter(hasOption).map((thing) => ({ kind: "npc", thing })),
+        ...objects.filter(named).filter(hasOption).map((thing) => ({ kind: "object", thing })),
+        ...groundItems.filter(named).map((thing) => ({ kind: "ground item", thing })),
+      ];
+      const distance = ({ thing }) => Math.max(Math.abs(thing.x - here.getX()), Math.abs(thing.y - here.getY()));
+      const pick = candidates.sort((a, b) => distance(a) - distance(b))[0];
+      if (!pick) {
+        const matches = [...npcs, ...objects].filter(named);
+        if (matches.length) {
+          const options = [...new Set(matches.flatMap((thing) => thing.options))];
+          throw new Error(`No nearby "${target}" has a "${option}" option; options: ${options.join(", ")}`);
+        }
+        const names = [...new Set([...npcs, ...objects, ...groundItems].map((thing) => thing.name).filter(Boolean))];
+        throw new Error(`Nothing named "${target}" within ${radius} tiles; nearby: ${names.join(", ")}`);
+      }
+
+      const { kind, thing } = pick;
+      if (kind === "npc") send(p, npcClick(p, World.getNpcs().get(thing.index), option));
+      else if (kind === "object") {
+        const action = thing.options.find((o) => o.toLowerCase() === option.toLowerCase());
+        send(p, { type: "object_option", id: thing.id, x: thing.x, y: thing.y, action });
+      } else send(p, { type: "ground_item_action", itemId: thing.id, x: thing.x, y: thing.y, option });
+      return { clicked: { kind, name: thing.name, x: thing.x, y: thing.y }, ...(await settle(username, maxTicks)) };
+    }
   );
 
   tool(
@@ -135,10 +216,7 @@ function buildMcpServer(core) {
       const p = find(username);
       const npc = World.getNpcs().get(index);
       if (!npc) throw new Error(`No NPC at index ${index}`);
-      const actions = npc.getCurrentDefinition(p)?.getActions() ?? [];
-      const clickType = actions.findIndex((action) => action?.toLowerCase() === option.toLowerCase()) + 1;
-      if (!clickType) throw new Error(`NPC has no "${option}" option; options: ${actions.filter(Boolean).join(", ")}`);
-      return send(p, { type: "npc_option", index, clickType });
+      return send(p, npcClick(p, npc, option));
     }
   );
 
@@ -160,10 +238,22 @@ function buildMcpServer(core) {
 
   tool(
     "inventory_option",
-    "Click a menu option (e.g. Eat, Wield, Drop, Bury) on the item in an inventory slot.",
-    { player, slot: z.number().int().min(0).max(27), option: z.string() },
-    ({ player: username, slot, option }) => {
+    "Click a menu option (e.g. Eat, Wield, Drop, Bury) on an inventory item, chosen by item name or slot.",
+    {
+      player, option: z.string(),
+      item: z.string().optional().describe("Item name, e.g. Shrimps; the first matching slot is used"),
+      slot: z.number().int().min(0).max(27).optional(),
+    },
+    ({ player: username, item: name, slot, option }) => {
       const p = find(username);
+      const inventory = items(p.getInventory());
+      if (name !== undefined) {
+        slot = inventory.find((entry) => entry.name?.toLowerCase() === name.toLowerCase())?.slot;
+        if (slot === undefined) {
+          throw new Error(`No "${name}" in inventory; have: ${inventory.map((entry) => entry.name).join(", ") || "nothing"}`);
+        }
+      }
+      if (slot === undefined) throw new Error("item or slot is required");
       const item = p.getInventory().getItems()[slot];
       if (!item || item.getId() <= 0) throw new Error(`Inventory slot ${slot} is empty`);
       return send(p, { type: "inventory_action", slot, itemId: item.getId(), widgetId: 3214, option });
@@ -220,9 +310,8 @@ function buildMcpServer(core) {
     { player, ticks: z.number().int().min(1).max(MAX_WAIT_TICKS).default(3) },
     async ({ player: username, ticks }) => {
       find(username);
-      await new Promise((resolve) => setTimeout(resolve, ticks * GameConstants.GAME_ENGINE_PROCESSING_CYCLE_RATE));
-      const p = find(username);
-      return { ...tile(p.getLocation()), hitpoints: p.getHitpoints(), messages: messageLog(p).splice(0) };
+      await sleepTicks(ticks);
+      return status(find(username));
     }
   );
 

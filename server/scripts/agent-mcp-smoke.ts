@@ -85,18 +85,37 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     assert.deepEqual(snapshot.messages, ["You swing your axe at the tree."]);
     assert.deepEqual((await call(client, "observe", { player: "agent1" })).value.messages, []);
 
-    await call(client, "walk_to", { player: "agent1", x: 3230, y: 3230, run: true });
+    // The mock player never moves, so a walk elsewhere reports stuck and a walk to its own tile arrives.
+    assert.equal((await call(client, "walk_to", { player: "agent1", x: 3230, y: 3230, run: true })).value.result, "stuck");
+    assert.equal((await call(client, "walk_to", { player: "agent1", x: 3222, y: 3218 })).value.result, "arrived");
     await call(client, "npc_option", { player: "agent1", index: 7, option: "pickpocket" });
     await call(client, "object_option", { player: "agent1", id: 1276, x: 3220, y: 3216, option: "Chop down" });
     await call(client, "inventory_option", { player: "agent1", slot: 0, option: "Wield" });
+    await call(client, "inventory_option", { player: "agent1", item: "ITEM 1351", option: "Drop" });
     await call(client, "chat", { player: "agent1", text: "::tele 3222 3218" });
+    const interacted = (await call(client, "interact", { player: "agent1", target: "man", option: "Attack" })).value;
+    assert.deepEqual(interacted.clicked, { kind: "npc", name: "Man", x: 3225, y: 3220 });
+    assert.equal(interacted.result, "settled");
+    await call(client, "interact", { player: "agent1", target: "Tree", option: "chop down" });
+    await call(client, "interact", { player: "agent1", target: "item 526", option: "Take" });
     assert.deepEqual(dispatched, [
         { type: "move", worldX: 3230, worldY: 3230, modifierFlags: 2 },
+        { type: "move", worldX: 3222, worldY: 3218, modifierFlags: 0 },
         { type: "npc_option", index: 7, clickType: 4 },
         { type: "object_option", id: 1276, x: 3220, y: 3216, action: "Chop down" },
         { type: "inventory_action", slot: 0, itemId: 1351, widgetId: 3214, option: "Wield" },
+        { type: "inventory_action", slot: 0, itemId: 1351, widgetId: 3214, option: "Drop" },
         { type: "chat", text: "::tele 3222 3218", messageType: "public" },
+        { type: "npc_option", index: 7, clickType: 3 },
+        { type: "object_option", id: 1276, x: 3220, y: 3216, action: "Chop down" },
+        { type: "ground_item_action", itemId: 526, x: 3223, y: 3218, option: "Take" },
     ]);
+
+    const wrongOption = await call(client, "interact", { player: "agent1", target: "Man", option: "Trade" });
+    assert.ok(wrongOption.error && wrongOption.text.includes("Talk-to, Attack, Pickpocket"));
+    const unknown = await call(client, "interact", { player: "agent1", target: "Goblin", option: "Attack" });
+    assert.ok(unknown.error && unknown.text.includes("Man, Tree"));
+    assert.ok((await call(client, "inventory_option", { player: "agent1", item: "Shrimps", option: "Eat" })).error);
 
     const missingOption = await call(client, "npc_option", { player: "agent1", index: 7, option: "Trade" });
     assert.ok(missingOption.error && missingOption.text.includes("Talk-to, Attack, Pickpocket"));
