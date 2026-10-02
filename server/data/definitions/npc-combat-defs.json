@@ -2698,6 +2698,30 @@
         "death": 3835
       }
     },
+    "9021": {
+      "name": "Crystalline Hunllef",
+      "anims": {
+        "attack": 8419,
+        "block": -1,
+        "death": 8421
+      }
+    },
+    "9022": {
+      "name": "Crystalline Hunllef",
+      "anims": {
+        "attack": 8419,
+        "block": -1,
+        "death": 8421
+      }
+    },
+    "9023": {
+      "name": "Crystalline Hunllef",
+      "anims": {
+        "attack": 8419,
+        "block": -1,
+        "death": 8421
+      }
+    },
     "9026": {
       "name": "Crystalline Rat",
       "anims": {
@@ -2707,6 +2731,22 @@
       },
       "sounds": {
         "death": 512
+      }
+    },
+    "9027": {
+      "name": "Crystalline Spider",
+      "anims": {
+        "attack": 8339,
+        "block": -1,
+        "death": 8338
+      }
+    },
+    "9028": {
+      "name": "Crystalline Bat",
+      "anims": {
+        "attack": 4915,
+        "block": 4916,
+        "death": 4917
       }
     },
     "9029": {
@@ -2720,6 +2760,72 @@
         "death": 4625
       }
     },
+    "9030": {
+      "name": "Crystalline Scorpion",
+      "anims": {
+        "attack": 6254,
+        "block": 6255,
+        "death": 6256
+      }
+    },
+    "9031": {
+      "name": "Crystalline Wolf",
+      "anims": {
+        "attack": 6579,
+        "block": 6578,
+        "death": 6576
+      }
+    },
+    "9032": {
+      "name": "Crystalline Bear",
+      "anims": {
+        "attack": 4925,
+        "block": 4927,
+        "death": 4929
+      }
+    },
+    "9033": {
+      "name": "Crystalline Dragon",
+      "projectile": 1701,
+      "anims": {
+        "attack": 84,
+        "block": 89,
+        "death": 92
+      }
+    },
+    "9034": {
+      "name": "Crystalline Dark Beast",
+      "projectile": 1610,
+      "anims": {
+        "attack": 2731,
+        "block": 2732,
+        "death": 2733
+      }
+    },
+    "9035": {
+      "name": "Corrupted Hunllef",
+      "anims": {
+        "attack": 8419,
+        "block": -1,
+        "death": 8421
+      }
+    },
+    "9036": {
+      "name": "Corrupted Hunllef",
+      "anims": {
+        "attack": 8419,
+        "block": -1,
+        "death": 8421
+      }
+    },
+    "9037": {
+      "name": "Corrupted Hunllef",
+      "anims": {
+        "attack": 8419,
+        "block": -1,
+        "death": 8421
+      }
+    },
     "9040": {
       "name": "Corrupted Rat",
       "anims": {
@@ -2731,6 +2837,22 @@
         "death": 512
       }
     },
+    "9041": {
+      "name": "Corrupted Spider",
+      "anims": {
+        "attack": 8339,
+        "block": -1,
+        "death": 8338
+      }
+    },
+    "9042": {
+      "name": "Corrupted Bat",
+      "anims": {
+        "attack": 4915,
+        "block": 4916,
+        "death": 4917
+      }
+    },
     "9043": {
       "name": "Corrupted Unicorn",
       "anims": {
@@ -2740,6 +2862,48 @@
       },
       "sounds": {
         "death": 4625
+      }
+    },
+    "9044": {
+      "name": "Corrupted Scorpion",
+      "anims": {
+        "attack": 6254,
+        "block": 6255,
+        "death": 6256
+      }
+    },
+    "9045": {
+      "name": "Corrupted Wolf",
+      "anims": {
+        "attack": 6579,
+        "block": 6578,
+        "death": 6576
+      }
+    },
+    "9046": {
+      "name": "Corrupted Bear",
+      "anims": {
+        "attack": 4925,
+        "block": 4927,
+        "death": 4929
+      }
+    },
+    "9047": {
+      "name": "Corrupted Dragon",
+      "projectile": 1702,
+      "anims": {
+        "attack": 84,
+        "block": 89,
+        "death": 92
+      }
+    },
+    "9048": {
+      "name": "Corrupted Dark Beast",
+      "projectile": 1606,
+      "anims": {
+        "attack": 2731,
+        "block": 2732,
+        "death": 2733
       }
     },
     "9209": {

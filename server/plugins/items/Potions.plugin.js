@@ -20,6 +20,7 @@ let pluginApi;
 
 const DRINK_ANIMATION = new Animation(829);
 const DEFAULT_EMPTY_ITEM = ItemIds.VIAL;
+const NO_EMPTY_ITEM = -1;
 const STAMINA_DURATION_MS = 2 * 60 * 1000;
 const DIVINE_DURATION_MS = 5 * 60 * 1000;
 const OVERLOAD_DURATION_MS = 5 * 60 * 1000;
@@ -308,9 +309,12 @@ function registerPotion(definition) {
     effect: definition.effect,
     canUse: typeof definition.canUse === "function" ? definition.canUse : null,
     requiresFoodPermission: Boolean(definition.requiresFoodPermission),
-    emptyItemId: isItemId(definition.emptyItemId)
-      ? definition.emptyItemId
-      : DEFAULT_EMPTY_ITEM,
+    // null: nothing is left once the last dose is drunk.
+    emptyItemId: definition.emptyItemId === null
+      ? NO_EMPTY_ITEM
+      : isItemId(definition.emptyItemId)
+        ? definition.emptyItemId
+        : DEFAULT_EMPTY_ITEM,
     entries: [],
   };
 
@@ -530,6 +534,18 @@ registerPotion({
     doseChain("SUPER_ENERGY_4_3", "SUPER_ENERGY_3_3", "SUPER_ENERGY_2_3", "SUPER_ENERGY_1_3"),
   ],
   effect: (player) => restoreRunEnergy(player, 20),
+});
+// The Gauntlet's potion (Wiki): restores prayer like a prayer potion, 40% run energy, and works
+// as a stamina potion. Made with 3 doses; the guides' one vial per potion suggests no vial is left.
+registerPotion({
+  name: "Egniol potion",
+  chains: [doseChain("EGNIOL_POTION_4_", "EGNIOL_POTION_3_", "EGNIOL_POTION_2_", "EGNIOL_POTION_1_")],
+  emptyItemId: null,
+  effect: (player) => {
+    applyPrayerRestore(player, false);
+    restoreRunEnergy(player, 40);
+    startStamina(player);
+  },
 });
 registerPotion({
   name: "Stamina potion",
@@ -880,7 +896,7 @@ function handlePotionDrink(player, itemId, slot) {
   player.performAnimation(DRINK_ANIMATION);
   Sounds.sendSound(player, Sound.DRINK);
 
-  inventory.setItem(slot, new Item(entry.replacementId)).refreshItems();
+  inventory.setItem(slot, new Item(entry.replacementId, entry.replacementId === NO_EMPTY_ITEM ? 0 : 1)).refreshItems();
   entry.potion.effect(player);
 
   const share = player.getAttribute("lunar:potion-share");
