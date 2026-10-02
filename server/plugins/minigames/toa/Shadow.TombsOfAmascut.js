@@ -2,8 +2,8 @@
 
 /**
  * Tumeken's shadow in combat. Wiki: a powered staff with a built-in spell that can't cast
- * others: max hit floor(Magic / 3) + 1, an attack every 5 ticks from up to 8 tiles, one charge
- * a cast. Its passive triples the magic attack and magic damage bonuses of the worn gear
+ * others: max hit floor(Magic / 3) + 1, an attack every 5 ticks from 8 tiles (10 on Longrange),
+ * one charge a cast. Its styles are the powered staff's (cache weapon category 24). Its passive triples the magic attack and magic damage bonuses of the worn gear
  * (damage capped at 100%), quadruples them inside the Tombs of Amascut, and it can't be used
  * against other players. Casting gives the usual damage-based Magic experience.
  *
@@ -18,6 +18,7 @@ const ANIMATION_CAST = 9493;
 const GRAPHIC = { CASTING: 2125, TRAVEL: 2126, IMPACT: 2127 };
 const ATTACK_SPEED = 5;
 const ATTACK_RANGE = 8;
+const LONGRANGE_EXTRA = 2;
 const MAX_MAGIC_DAMAGE = 100;
 // The projectile (OpenRune's tumekens_shadow projanim, heights a quarter of theirs): it leaves
 // after 56 client cycles and takes 16 more plus 10 a tile.
@@ -128,8 +129,10 @@ function shadowMethod() {
       return ATTACK_SPEED;
     }
 
-    attackDistance() {
-      return ATTACK_RANGE;
+    attackDistance(character) {
+      const { FightStyle } = Shared.core();
+      // Longrange is the powered staff's defensive style.
+      return ATTACK_RANGE + (character.getFightType?.()?.getStyle?.() === FightStyle.DEFENSIVE ? LONGRANGE_EXTRA : 0);
     }
 
     /** Keeps attacking: the staff casts on its own, unlike a single manual cast. */

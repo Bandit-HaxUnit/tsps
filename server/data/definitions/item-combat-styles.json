@@ -125,7 +125,10 @@
     "GHRAZI_RAPIER_STAB": {"name":"Stab","animation":8145,"childId":0,"attackType":"STAB","style":"ACCURATE","sound":"WEAPON"},
     "GHRAZI_RAPIER_LUNGE": {"name":"Lunge","animation":8145,"childId":1,"attackType":"STAB","style":"AGGRESSIVE","sound":"WEAPON"},
     "GHRAZI_RAPIER_SLASH": {"name":"Slash","animation":390,"childId":2,"attackType":"SLASH","style":"AGGRESSIVE","sound":"WEAPON"},
-    "GHRAZI_RAPIER_BLOCK": {"name":"Block","animation":8145,"childId":3,"attackType":"STAB","style":"DEFENSIVE","sound":"WEAPON"}
+    "GHRAZI_RAPIER_BLOCK": {"name":"Block","animation":8145,"childId":3,"attackType":"STAB","style":"DEFENSIVE","sound":"WEAPON"},
+    "POWERED_STAFF_ACCURATE": {"animation":0,"sound":"WEAPON","name":"Accurate","childId":0,"style":"ACCURATE","attackType":"MAGIC"},
+    "POWERED_STAFF_ACCURATE_2": {"animation":0,"sound":"WEAPON","name":"Accurate","childId":1,"style":"ACCURATE","attackType":"MAGIC"},
+    "POWERED_STAFF_LONGRANGE": {"animation":0,"sound":"WEAPON","name":"Longrange","childId":3,"style":"DEFENSIVE","attackType":"MAGIC"}
   },
   "weaponInterfaces": {
     "STAFF": {"interfaceId":328,"nameLineId":355,"speed":5,"category":18,"specialBar":-1,"specialMeter":-1,"fightTypes":["STAFF_BASH","STAFF_POUND","STAFF_FOCUS"]},
@@ -163,6 +166,7 @@
     "DART": {"interfaceId":4446,"nameLineId":4449,"speed":3,"category":19,"specialBar":7649,"specialMeter":7661,"fightTypes":["DART_ACCURATE","DART_RAPID","DART_LONGRANGE"]},
     "JAVELIN": {"interfaceId":4446,"nameLineId":4449,"speed":6,"category":19,"specialBar":7649,"specialMeter":7661,"fightTypes":["JAVELIN_ACCURATE","JAVELIN_RAPID","JAVELIN_LONGRANGE"]},
     "ANCIENT_STAFF": {"interfaceId":328,"nameLineId":355,"speed":5,"category":18,"specialBar":-1,"specialMeter":-1,"fightTypes":["STAFF_BASH","STAFF_POUND","STAFF_FOCUS"]},
+    "POWERED_STAFF": {"interfaceId":328,"nameLineId":355,"speed":4,"category":24,"specialBar":-1,"specialMeter":-1,"fightTypes":["POWERED_STAFF_ACCURATE","POWERED_STAFF_ACCURATE_2","POWERED_STAFF_LONGRANGE"]},
     "DARK_BOW": {"interfaceId":1764,"nameLineId":1767,"speed":9,"category":3,"specialBar":7549,"specialMeter":7561,"fightTypes":["LONGBOW_ACCURATE","LONGBOW_RAPID","LONGBOW_LONGRANGE"]},
     "GODSWORD": {"interfaceId":4705,"nameLineId":4708,"speed":6,"category":10,"specialBar":7699,"specialMeter":7711,"fightTypes":["GODSWORD_CHOP","GODSWORD_SLASH","GODSWORD_SMASH","GODSWORD_BLOCK"]},
     "ABYSSAL_BLUDGEON": {"interfaceId":4705,"nameLineId":4708,"speed":4,"category":27,"specialBar":7699,"specialMeter":7711,"fightTypes":["ABYSSAL_BLUDGEON_POUND","ABYSSAL_BLUDGEON_PUMMEL","ABYSSAL_BLUDGEON_SMASH"]},

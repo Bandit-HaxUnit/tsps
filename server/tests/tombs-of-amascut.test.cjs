@@ -113,6 +113,19 @@ test('::toaskiptoreward can force a unique and the pet to one player', () => {
 });
 
 test("Tumeken's shadow: its own spell, the x3 (x4 in the tombs) passive and charges (Wiki)", () => {
+  // Its definition: the powered staff's styles and its own bonuses (Wiki: +35 magic attack,
+  // +20 magic defence, +1 prayer, two-handed, 85 Magic).
+  const { WeaponInterfaces } = require('../dist/game/content/combat/WeaponInterfaces');
+  const raw = require('../data/definitions/item-gameplay.json');
+  for (const id of [27275, 27277]) {
+    const entry = raw.find((item) => item.id === id);
+    assert.equal(entry.weaponInterface, 'POWERED_STAFF');
+    assert.deepEqual(entry.bonuses, [0, 0, 0, 35, 0, 0, 0, 0, 20, 0, 0, 0, 0, 1]);
+    assert.equal(entry.requirements[6], 85);
+    assert.equal(entry.doubleHanded, true);
+  }
+  assert.equal(WeaponInterfaces.POWERED_STAFF.getCategory(), 24);
+  assert.deepEqual(WeaponInterfaces.POWERED_STAFF.getFightType().map((type) => type.getChildId()), [0, 1, 3]);
   const { PluginManager } = require('../dist/plugins/PluginManager');
   const { ItemIdentifiers: I } = require('../dist/util/ItemIdentifiers');
   const { Location } = require('../dist/game/model/Location');
@@ -153,6 +166,9 @@ test("Tumeken's shadow: its own spell, the x3 (x4 in the tombs) passive and char
   assert.ok(method, 'the shadow attacks with its own method, not a kick');
   assert.equal(method.attackSpeed(player), 5);
   assert.equal(method.attackDistance(player), 8);
+  const { FightType } = require('../dist/game/content/combat/FightType');
+  player.getFightType = () => FightType.POWERED_STAFF_LONGRANGE;
+  assert.equal(method.attackDistance(player), 10, 'Longrange reaches 2 tiles further');
 
   // Passive: occult (+10%) and a +35 staff: x3 outside, x4 in the tombs, damage capped at 100%.
   const bonuses = () => { const b = new Array(14).fill(0); b[3] = 35; b[12] = 10; return b; };

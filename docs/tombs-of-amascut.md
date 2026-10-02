@@ -69,7 +69,7 @@ Each Tombs of Amascut NPC (11689-11804) has its block and death animations in `n
 
 ## Simplifications
 
-- **Tumeken's shadow:** it has a fixed 8-tile range, because tsps has no powered-staff attack styles, so there's no longrange (+2). It plays no cast or impact sound (the ids aren't known), and it refuses every player target rather than only those outside minigames.
+- **Tumeken's shadow:** it plays no cast or impact sound (the ids aren't known), and it refuses every player target rather than only those outside minigames. Accurate's invisible +3 Magic isn't applied.
 - **NPC defence:** not scaled by raid level; it comes from the shared definition.
 - **Apmeken:** the corruption special is disabled, as it is in Near-Reality.
 - **Wardens phase three floor:** collapsed rows push players back onto the remaining floor rather than becoming unwalkable.
@@ -116,7 +116,8 @@ The first version was written without access to the Wiki or the cache, so it fol
 - **Supplies:** the helpful spirit's chaos pack is rolled (1–8 nectar, 0–6 tears, 0–2 salts, with rare ambrosia and adrenaline), and the power pack has 1 liquid adrenaline. A supply used on the bag goes back in (from OpenRune).
 - **The Wardens' void art:** the map keeps the collapsed floor's "Void" pieces (45726–45738) on plane 2, above the final arena. OSRS builds the room without them. The final room hides them, so they no longer show before the floor starts falling.
 - **Tumeken's shadow (Wiki):**
-  - It casts only its built-in spell: max hit floor(Magic / 3) + 1, every 5 ticks, from 8 tiles, one charge a cast, with the usual damage-based Magic experience.
+  - It casts only its built-in spell: max hit floor(Magic / 3) + 1, every 5 ticks, from 8 tiles (10 on Longrange), one charge a cast, with the usual damage-based Magic experience.
+  - Its definition (`item-gameplay.json`): +35 magic attack, +20 magic defence and +1 prayer, two-handed, 85 Magic to wield. It uses the powered staff's styles (`POWERED_STAFF`, cache weapon category 24: Accurate, Accurate, Longrange). Before, it had no entry, so it fell back to unarmed with no bonuses.
   - Its passive multiplies the worn gear's magic attack and magic damage bonuses by 3, or by 4 in the tombs. Magic damage is capped at 100%.
   - It can't be used against players.
   - The cast is OpenRune's: `TOA_SOT_CAST_B` (9493) with `TUMEKENS_SHADOW_CASTING` / `_TRAVEL` / `_IMPACT` (2125–2127). The hit lands as the projectile arrives.
