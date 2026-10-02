@@ -2,7 +2,7 @@
 
 The Gauntlet and the Corrupted Gauntlet, ported from Near-Reality's implementation and checked against the OSRS Wiki and the cache. It is one plugin, `server/plugins/minigames/Gauntlet.plugin.js`, which delegates to one unit per area in `server/plugins/minigames/gauntlet/`.
 
-Status: done so far are the maze, the lobby, the run (entry, timer, exits, death) and preparing (resources, stations, the singing bowl, potions, cooking). Monsters, the Hunllef and rewards are still to come.
+Status: done so far are the maze, the lobby, the run (entry, timer, exits, death) and preparing (resources, stations, the singing bowl, potions, cooking). monsters (with their drops). The Hunllef and rewards are still to come.
 
 ## Layout
 
@@ -16,6 +16,7 @@ Status: done so far are the maze, the lobby, the run (entry, timer, exits, death
 | `GauntletItems.js` | Item ids per mode and the singing bowl's recipes. |
 | `GauntletResources.js` | Stocking lit rooms with resources, and gathering. |
 | `Prep.*` | The start room's stations, gathering hooks and Egniol potions. |
+| `GauntletMonsters.js` | Monsters in lit rooms, demi-bosses, and the run's drop rules. |
 | `Commands.*` | Developer commands. |
 
 ## The maze
@@ -151,6 +152,37 @@ It restores prayer like a prayer potion, gives 40% run energy, and works as a st
 
 **Teleport crystal** (Wiki): it doesn't work in the start room. Once the fight has begun it says: "That won't help you now. At this point in the Gauntlet, you win or you die."
 
+## Monsters
+
+| Tier | Crystalline (corrupted) |
+| --- | --- |
+| Weak | Rat 9026 (9040), Spider 9027 (9041), Bat 9028 (9042) |
+| Strong | Unicorn 9029 (9043), Scorpion 9030 (9044), Wolf 9031 (9045) |
+| Demi-boss | Bear 9032 (9046), Dragon 9033 (9047), Dark Beast 9034 (9048) |
+
+**Data sources:**
+- Stats, attack styles, aggression and sizes: `monsters-complete.json` (Wiki). Near-Reality's own numbers differ in places (the rat has 14 HP there, 12 on the Wiki), so they aren't used.
+- Animations and projectiles: `npc-combat-defs.json`, Near-Reality's ids. Each lies in the same range as that NPC's cache idle and walk animations.
+  - The dragon's projectile is 1701 (corrupted 1702), the dark beast's 1610 (corrupted 1606).
+  - The spider has no block animation.
+  - The dragon's impact graphic (1703/1704) isn't shown yet.
+
+**Rooms** (Near-Reality): a room marked for monsters when it was stocked gets:
+- three times in four, away from the rim, 1–4 weak monsters;
+- otherwise 2 strong ones.
+
+Each demi-boss stands alone in the middle of its room. Monsters don't respawn, and they're removed with the maze. Nothing attacks a player in the start room.
+
+**Drops.** The plugin replaces the general tables for a run's monsters (the `npc-drops:roll` event). The weights are the Corrupted Gauntlet Wiki pages', which are exact; the crystalline pages only say common/uncommon.
+
+| Tier | Always | Then one of (weight) | Weapon frame |
+| --- | --- | --- | --- |
+| Weak | 20–30 shards | nothing 9, 3–7 shards 9, 1–3 raw paddlefish 3, grym leaf 2, teleport crystal 1 | 1/4; always from the first weak kill of a run |
+| Strong | 80–100 shards | 7–14 shards 9, nothing 6, 2–4 paddlefish 3, grym leaf 2, teleport crystal 1 | 2/7; always by the second strong kill |
+| Demi-boss | 50–60 shards and a weapon frame | nothing 3, 10–21 shards 9, 3–5 paddlefish 3, grym leaf 2, teleport crystal 1 | always |
+
+A demi-boss also drops its own component (bear: spike, dragon: orb, dark beast: bowstring) if the player doesn't own it. Otherwise it drops any component they don't own, at an equal chance; once all three are owned, none.
+
 ## Developer commands
 
 | Command | Does |
@@ -176,4 +208,5 @@ It restores prayer like a prayer potion, gives 40% run energy, and works as a st
 - gathering;
 - the singing bowl's costs and in-place upgrades;
 - the Egniol chain;
-- the teleport crystal's rules.
+- the teleport crystal's rules;
+- monster animations, rooms and demi-bosses, the drop rules, and the safe start room.
