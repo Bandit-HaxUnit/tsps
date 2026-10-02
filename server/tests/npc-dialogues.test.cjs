@@ -304,3 +304,38 @@ test('Lumbridge tutors hand out what their transcripts say', () => {
   assert.equal(ranger.inventory.getAmount(I.TRAINING_BOW), 1);
   assert.equal(ranger.inventory.getAmount(I.TRAINING_ARROWS), 25);
 });
+
+test('"same as above" after an NPC line carries on as that line does elsewhere, never looping', () => {
+  const { collectPageLines, collectPageOptions } = require('../plugins/npcs/NpcDialogues.plugin');
+  // Bryn's page: the first-time answer says the opening line, then "jump above".
+  const record = data.Bryn;
+  const options = collectPageOptions(record);
+  const context = { pages: [], pageLines: collectPageLines(record), pageOptions: options.byText, pageOptionList: options.list };
+  const said = [];
+  let steps = 0;
+  const player = {
+    getDialogueManager: () => ({
+      reset() {},
+      startDialogues(chain) {
+        assert.ok(++steps < 20, 'dialogue looped');
+        const entries = [...chain.getDialogues().values()].sort((a, b) => a.getIndex() - b.getIndex());
+        for (const entry of entries) {
+          if (entry.constructor.name === 'ActionDialogue') return entry.send(player);
+          said.push(String(entry.text ?? ''));
+        }
+      },
+    }),
+    getPacketSender: () => ({ sendInterfaceRemoval() { said.push('<closed>'); } }),
+    sendMessage() {},
+  };
+  const definition = { getName: () => 'Bryn', getId: () => 9020 };
+  const api = {
+    emitCustomEvent() {},
+    sendMultiChatboxPrompt(_player, _title, ...pairs) { pairs[1](); return true; }, // "What is this place?"
+  };
+  const event = { player, npc: { getId: () => 9020 }, npcId: 9020, definition };
+  startDialogue(api, event, record.variants['first-time-talking-to-him'], {}, { ...context, player, npc: event.npc, npcId: 9020, definition });
+  assert.ok(said.includes('Train?'), 'the full explanation follows');
+  assert.equal(said.filter((line) => line.startsWith('This here is the Gauntlet')).length, 1, 'said once');
+  assert.equal(said.at(-1), '<closed>');
+});

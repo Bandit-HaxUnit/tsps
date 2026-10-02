@@ -363,11 +363,19 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         return realBody(repeatsLine ? asked.slice(1) : asked) ?? asked;
       }
     }
+    // After an NPC line, "same as above" carries on as that line does where the page first has
+    // it (Bryn's first-time "What is this place?" continues as his full explanation).
+    if (/^(above|below)/i.test(reference) && typeof previous?.npc === "string") {
+      const after = context.pageLines?.get(normText(previous.npc))?.slice(1);
+      if (after?.length && after[0] !== step && !jumpOnly(after)) return after;
+    }
     const current = context.currentRecord;
     const key = current ? normText(current.text) : "";
+    // A jump never leads back into the branch it is in: that replays the branch forever.
+    const elsewhere = (steps) => (steps && steps !== current?.steps ? steps : undefined);
     // The same option text (normalized) shown earlier, anywhere on the page.
     const sameText = current ? (recordsByText.get(key) ?? []).find((record) => record.steps !== current.steps) : undefined;
-    const fromPage = key ? context.pageOptions?.get(key) : undefined;
+    const fromPage = key ? elsewhere(context.pageOptions?.get(key)) : undefined;
     // Near text: a page option whose normalized text contains (or is contained by)
     // this one, e.g. "Aris said..." vs "Fortune-teller Aris said...".
     const near = key.length >= 8
@@ -603,6 +611,8 @@ module.exports = {
   aliasKeys,
   flatten,
   startDialogue,
+  collectPageLines,
+  collectPageOptions,
   register(api) {
     const dialogueFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json");
     const indexFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogue-index.json");
