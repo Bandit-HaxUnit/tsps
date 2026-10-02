@@ -3051,6 +3051,793 @@
         "block": -1,
         "death": 7562
       }
+    },
+    "11652": {
+      "name": "Tumeken's Guardian",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11689": {
+      "name": "Osmumten",
+      "anims": {
+        "block": 5533,
+        "death": 5534
+      }
+    },
+    "11690": {
+      "name": "Osmumten",
+      "anims": {
+        "block": 5533,
+        "death": 5534
+      }
+    },
+    "11694": {
+      "name": "Helpful Spirit",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11695": {
+      "name": "Ghost",
+      "anims": {
+        "block": 5541,
+        "death": 5542
+      }
+    },
+    "11697": {
+      "name": "Scarab",
+      "anims": {
+        "block": -1,
+        "death": 9590
+      }
+    },
+    "11698": {
+      "name": "Obelisk",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11699": {
+      "name": "Obelisk",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11700": {
+      "name": "Palm of Resourcefulness",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11701": {
+      "name": "Palm of Resourcefulness",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11702": {
+      "name": "Palm of Resourcefulness",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11703": {
+      "name": "Palm of Resourcefulness",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11704": {
+      "name": "Palm of Resourcefulness",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11705": {
+      "name": "Crocodile",
+      "anims": {
+        "attack": 9804,
+        "block": -1,
+        "death": 2038
+      }
+    },
+    "11706": {
+      "name": "Het's Seal (protected)",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11707": {
+      "name": "Het's Seal (weakened)",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11708": {
+      "name": "Orb of Darkness",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11709": {
+      "name": "Baboon Brawler",
+      "anims": {
+        "attack": 9742,
+        "block": -1,
+        "death": 9755
+      }
+    },
+    "11710": {
+      "name": "Baboon Thrower",
+      "anims": {
+        "attack": 9742,
+        "block": -1,
+        "death": 9755
+      }
+    },
+    "11711": {
+      "name": "Baboon Mage",
+      "anims": {
+        "attack": 9742,
+        "block": -1,
+        "death": 9755
+      }
+    },
+    "11712": {
+      "name": "Baboon Brawler",
+      "anims": {
+        "attack": 9742,
+        "block": -1,
+        "death": 9755
+      }
+    },
+    "11713": {
+      "name": "Baboon Thrower",
+      "anims": {
+        "attack": 9742,
+        "block": -1,
+        "death": 9755
+      }
+    },
+    "11714": {
+      "name": "Baboon Mage",
+      "anims": {
+        "attack": 9742,
+        "block": -1,
+        "death": 9755
+      }
+    },
+    "11715": {
+      "name": "Baboon Shaman",
+      "anims": {
+        "attack": 9742,
+        "block": -1,
+        "death": 9755
+      }
+    },
+    "11716": {
+      "name": "Volatile Baboon",
+      "anims": {
+        "attack": 9742,
+        "block": -1,
+        "death": 9755
+      }
+    },
+    "11717": {
+      "name": "Cursed Baboon",
+      "anims": {
+        "attack": 9742,
+        "block": -1,
+        "death": 9755
+      }
+    },
+    "11718": {
+      "name": "Baboon Thrall",
+      "anims": {
+        "attack": 9742,
+        "block": -1,
+        "death": 9755
+      }
+    },
+    "11719": {
+      "name": "Kephri",
+      "anims": {
+        "block": -1,
+        "death": 9582
+      }
+    },
+    "11720": {
+      "name": "Kephri",
+      "anims": {
+        "block": -1,
+        "death": 9582
+      }
+    },
+    "11722": {
+      "name": "Kephri",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11723": {
+      "name": "Scarab Swarm",
+      "anims": {
+        "block": -1,
+        "death": 9608
+      }
+    },
+    "11724": {
+      "name": "Soldier Scarab",
+      "anims": {
+        "block": -1,
+        "death": 9590
+      }
+    },
+    "11725": {
+      "name": "Spitting Scarab",
+      "anims": {
+        "block": -1,
+        "death": 9590
+      }
+    },
+    "11726": {
+      "name": "Arcane Scarab",
+      "anims": {
+        "block": -1,
+        "death": 9599
+      }
+    },
+    "11727": {
+      "name": "Agile Scarab",
+      "anims": {
+        "block": -1,
+        "death": 9599
+      }
+    },
+    "11728": {
+      "name": "Egg",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11729": {
+      "name": "Egg",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11730": {
+      "name": "Zebak",
+      "anims": {
+        "block": -1,
+        "death": 9634
+      }
+    },
+    "11731": {
+      "name": "Zebak's Tail",
+      "anims": {
+        "block": -1,
+        "death": 9635
+      }
+    },
+    "11733": {
+      "name": "Zebak",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11734": {
+      "name": "Zebak's Tail",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11735": {
+      "name": "Jug",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11736": {
+      "name": "Jug",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11737": {
+      "name": "Boulder",
+      "anims": {
+        "block": -1,
+        "death": 7717
+      }
+    },
+    "11738": {
+      "name": "Wave",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11739": {
+      "name": "Bloody Wave",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11742": {
+      "name": "Blood Cloud",
+      "anims": {
+        "block": -1,
+        "death": 8103
+      }
+    },
+    "11743": {
+      "name": "Blood Cloud",
+      "anims": {
+        "block": -1,
+        "death": 8103
+      }
+    },
+    "11746": {
+      "name": "Elidinis' Warden",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11747": {
+      "name": "Tumeken's Warden",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11748": {
+      "name": "Elidinis' Warden",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11749": {
+      "name": "Tumeken's Warden",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11750": {
+      "name": "Obelisk",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11751": {
+      "name": "Obelisk",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11752": {
+      "name": "Obelisk",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11753": {
+      "name": "Elidinis' Warden",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11754": {
+      "name": "Elidinis' Warden",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11755": {
+      "name": "Elidinis' Warden",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11756": {
+      "name": "Tumeken's Warden",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11757": {
+      "name": "Tumeken's Warden",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11758": {
+      "name": "Tumeken's Warden",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11759": {
+      "name": "Elidinis' Warden",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11760": {
+      "name": "Tumeken's Warden",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11761": {
+      "name": "Elidinis' Warden",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11762": {
+      "name": "Tumeken's Warden",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11763": {
+      "name": "Elidinis' Warden",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11764": {
+      "name": "Tumeken's Warden",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11771": {
+      "name": "Core",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11772": {
+      "name": "Energy Siphon",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11774": {
+      "name": "Zebak's Phantom",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11775": {
+      "name": "Ba-Ba's Phantom",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11777": {
+      "name": "Akkha's Phantom",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11778": {
+      "name": "Ba-Ba",
+      "anims": {
+        "attack": 9743,
+        "block": -1,
+        "death": 9754
+      }
+    },
+    "11781": {
+      "name": "Baboon",
+      "anims": {
+        "attack": 9742,
+        "block": -1,
+        "death": 9755
+      }
+    },
+    "11782": {
+      "name": "Boulder",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11783": {
+      "name": "Boulder",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11784": {
+      "name": "Rubble",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11789": {
+      "name": "Akkha",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11791": {
+      "name": "Akkha",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11792": {
+      "name": "Akkha",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11795": {
+      "name": "Akkha",
+      "anims": {
+        "block": -1,
+        "death": 9784
+      }
+    },
+    "11797": {
+      "name": "Akkha's Shadow",
+      "anims": {
+        "block": -1,
+        "death": 9792
+      }
+    },
+    "11798": {
+      "name": "Akkha's Shadow",
+      "anims": {
+        "block": -1,
+        "death": 9792
+      }
+    },
+    "11800": {
+      "name": "Orb of Lightning",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11801": {
+      "name": "Orb of Darkness",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11802": {
+      "name": "Burning Orb",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11803": {
+      "name": "Frozen Orb",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11804": {
+      "name": "Unstable Orb",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11691": {
+      "name": "Spirit",
+      "anims": {
+        "block": 5533,
+        "death": 5534
+      }
+    },
+    "11692": {
+      "name": "Osmumten",
+      "anims": {
+        "block": 5533,
+        "death": 5534
+      }
+    },
+    "11693": {
+      "name": "Osmumten",
+      "anims": {
+        "block": 5533,
+        "death": 5534
+      }
+    },
+    "11696": {
+      "name": "Amascut",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11721": {
+      "name": "Kephri",
+      "anims": {
+        "block": -1,
+        "death": 9582
+      }
+    },
+    "11732": {
+      "name": "Zebak",
+      "anims": {
+        "block": -1,
+        "death": 9634
+      }
+    },
+    "11740": {
+      "name": "Crocodile",
+      "anims": {
+        "attack": 9804,
+        "block": -1,
+        "death": 2038
+      }
+    },
+    "11741": {
+      "name": "Crocodile",
+      "anims": {
+        "attack": 9804,
+        "block": -1,
+        "death": 2038
+      }
+    },
+    "11767": {
+      "name": "Phantom",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11768": {
+      "name": "Phantom",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11770": {
+      "name": "Core",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11776": {
+      "name": "Kephri's Phantom",
+      "anims": {
+        "block": -1,
+        "death": 9582
+      }
+    },
+    "11779": {
+      "name": "Ba-Ba",
+      "anims": {
+        "attack": 9743,
+        "block": -1,
+        "death": 9754
+      }
+    },
+    "11780": {
+      "name": "Ba-Ba",
+      "anims": {
+        "attack": 9743,
+        "block": -1,
+        "death": 9754
+      }
+    },
+    "11785": {
+      "name": "Rubble",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11786": {
+      "name": "Rubble",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11787": {
+      "name": "Rubble",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11790": {
+      "name": "Akkha",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11793": {
+      "name": "Akkha",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11794": {
+      "name": "Akkha",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11796": {
+      "name": "Akkha",
+      "anims": {
+        "block": -1,
+        "death": -1
+      }
+    },
+    "11799": {
+      "name": "Akkha's Shadow",
+      "anims": {
+        "block": -1,
+        "death": 9792
+      }
     }
   },
   "refs": {

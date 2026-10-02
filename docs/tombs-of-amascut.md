@@ -52,6 +52,14 @@ The OSRS Wiki and the cache weren't reachable while this was written (see *Unver
 - The common loot table, its quantity factor above raid level 300, fossilised dung below 1,500 points, deathless kits and remnants, Thread of Elidinis 1/15, keris jewels 1/20 and elite clue 1/26.
 - Tumeken's shadow charge cost (2 soul + 5 chaos per charge, 20,000 maximum), the Masori and Armadyl plate counts and experience, and the ward's 10,000 soul runes.
 
+## NPC animations
+
+Each Tombs of Amascut NPC (11689-11804) has its block and death animations in `npc-combat-defs.json`. Without them, they fell back to the player's block (424) and death (836), so Zebak "blocked" like a human when hit.
+
+- **Block:** none of them has a block or defend animation, except Osmumten's ghosts, so a hit plays nothing.
+- **Death:** each uses its own death sequence, identified by its Jagex name in RuneLite's gameval `AnimationID`, for example `NPC_ZEBAK01_DEATH` (9634) and `NPC_KEPHRI_DEATH` (9582). The Near-Reality data gives Zebak and Kephri zombie animations (5568/5569), which aren't used.
+- **Scripted deaths:** the bosses' deaths are played by the plugins, and the definitions agree with them.
+
 ## Simplifications
 
 - **Tumeken's shadow:** charges, checks and uncharges, but tsps has no powered-staff autocast path, so it does not cast its built-in spell yet.
