@@ -137,7 +137,7 @@ import {
 import { ClientPacketId, createPacket, queuePacket } from "../network/packet";
 import { WebGLMapSquare } from "../render/WebGLMapSquare";
 import type { MinimapIcon } from "../render/loader/SdMapData";
-import type { NpcInstance } from "../render/npc/NpcRenderTemplate";
+import { type NpcInstance, npcOwnerMapId } from "../render/npc/NpcRenderTemplate";
 import { MenuTargetType, type OsrsMenuEntry } from "../rs/MenuEntry";
 import { SoundEffectLoader } from "../rs/audio/SoundEffectLoader";
 import { CacheSystem } from "../rs/cache/CacheSystem";
@@ -7108,7 +7108,7 @@ export class OsrsClient {
     }
 
     private getNpcInstanceRenderMapId(
-        instance: Pick<NpcInstance, "worldViewId" | "x" | "y">,
+        instance: Pick<NpcInstance, "worldViewId" | "x" | "y" | "ownerMapId">,
     ): number {
         const worldViewId = instance.worldViewId;
         if (typeof worldViewId === "number" && worldViewId >= 0) {
@@ -7116,9 +7116,41 @@ export class OsrsClient {
             const overlayMapY = 200 + (worldViewId | 0);
             return getMapSquareId(overlayMapX, overlayMapY);
         }
-        const mapX = getMapIndexFromTile(instance.x | 0);
-        const mapY = getMapIndexFromTile(instance.y | 0);
-        return getMapSquareId(mapX, mapY);
+        return npcOwnerMapId(instance);
+    }
+
+    /**
+     * The map square that owns (draws and picks) an NPC on a tile. An instance scene is built as
+     * one map square, so while one is drawn every NPC in it belongs to that square; elsewhere it
+     * is the 64x64 square the tile is in.
+     */
+    private npcOwnerMap(tileX: number, tileY: number): { mapX: number; mapY: number; instance: boolean } {
+        const scene = (this.renderer as any)?.instanceSceneMap as { mapX: number; mapY: number } | null | undefined;
+        if (scene && (this.renderer as any)?.instanceActive) {
+            return { mapX: scene.mapX | 0, mapY: scene.mapY | 0, instance: true };
+        }
+        return { mapX: getMapIndexFromTile(tileX | 0), mapY: getMapIndexFromTile(tileY | 0), instance: false };
+    }
+
+    /**
+     * Moves every NPC to the map square that now owns it: called when an instance scene is drawn
+     * (all of its NPCs move to its square) or left (they go back to their own squares).
+     */
+    rehomeNpcs(): void {
+        let changed = false;
+        for (const instance of this.npcInstances.instanceMap.values()) {
+            if (typeof instance.worldViewId === "number" && instance.worldViewId >= 0) continue;
+            const owner = this.npcOwnerMap(instance.x | 0, instance.y | 0);
+            const ownerMapId = getMapSquareId(owner.mapX, owner.mapY);
+            const nextOwner = owner.instance ? ownerMapId : undefined;
+            if (instance.ownerMapId === nextOwner && npcOwnerMapId(instance) === ownerMapId) continue;
+            instance.ownerMapId = nextOwner;
+            const ecsId = typeof instance.serverId === "number" ? this.npcEcs.getEcsIdForServer(instance.serverId) : undefined;
+            if (ecsId !== undefined) this.npcEcs.rebaseToMapSquare(ecsId, owner.mapX, owner.mapY);
+            this.npcInstances.markMapPendingReload(ownerMapId);
+            changed = true;
+        }
+        if (changed) this.npcInstances.scheduleFlush();
     }
 
     private spawnNpcBinary(
@@ -7132,10 +7164,12 @@ export class OsrsClient {
 
         const worldTileX = spawn.tileX | 0;
         const worldTileY = spawn.tileY | 0;
-        const mapX = getMapIndexFromTile(worldTileX);
-        const mapY = getMapIndexFromTile(worldTileY);
-        const localTileX = worldTileX & 63;
-        const localTileY = worldTileY & 63;
+        const owner = this.npcOwnerMap(worldTileX, worldTileY);
+        const mapX = owner.mapX;
+        const mapY = owner.mapY;
+        // Relative to the owning square, which in an instance need not contain the tile.
+        const localTileX = (worldTileX - mapX * 64) | 0;
+        const localTileY = (worldTileY - mapY * 64) | 0;
         const mapBaseX = (mapX << 13) | 0;
         const mapBaseY = (mapY << 13) | 0;
 
@@ -7318,8 +7352,9 @@ export class OsrsClient {
         try {
             const st = this.npcEcs.getServerState(ecsId);
             if (st) {
-                const nextMapX = getMapIndexFromTile(st.tileX | 0);
-                const nextMapY = getMapIndexFromTile(st.tileY | 0);
+                const nextOwner = this.npcOwnerMap(st.tileX | 0, st.tileY | 0);
+                const nextMapX = nextOwner.mapX;
+                const nextMapY = nextOwner.mapY;
                 const nextMapId = getMapSquareId(nextMapX, nextMapY) | 0;
                 if ((nextMapId | 0) !== (mapId | 0)) {
                     // Keep ECS map ownership in sync with movement state so map-bucketed systems
@@ -7442,6 +7477,7 @@ export class OsrsClient {
                     ? worldViewId | 0
                     : undefined
                 : prev?.worldViewId;
+        const owner = this.npcOwnerMap(worldTileX, worldTileY);
         const nextInstance: NpcInstance = {
             serverId: sid,
             typeId: typeId | 0,
@@ -7449,6 +7485,7 @@ export class OsrsClient {
             y: worldTileY | 0,
             level: level | 0,
             ...(nextWorldViewId !== undefined ? { worldViewId: nextWorldViewId } : {}),
+            ...(owner.instance ? { ownerMapId: getMapSquareId(owner.mapX, owner.mapY) } : {}),
         };
         const mapId = this.getNpcInstanceRenderMapId(nextInstance);
 
@@ -7472,6 +7509,7 @@ export class OsrsClient {
             prev.level = nextInstance.level;
             prev.serverId = sid;
             prev.worldViewId = nextInstance.worldViewId;
+            prev.ownerMapId = nextInstance.ownerMapId;
         } else {
             this.npcInstances.instanceMap.set(key, nextInstance);
             this.npcInstances.markMapPendingReload(mapId);

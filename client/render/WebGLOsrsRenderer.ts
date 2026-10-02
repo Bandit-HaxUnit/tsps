@@ -246,6 +246,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     public instanceBuildSeq: number = 0;
     /** A built instance scene waiting in mapsToLoad; it replaces the drawn scene when applied. */
     public pendingInstanceScene: SdMapData | null = null;
+    /** The map square the drawn instance scene is built as; it owns every NPC in the scene. */
+    public instanceSceneMap: { mapX: number; mapY: number } | null = null;
     /** Active world entity overlays (rendered on top of normal world). */
     public worldEntityOverlays: Map<
         number,

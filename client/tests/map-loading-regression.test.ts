@@ -22,6 +22,7 @@ import { CacheMaps } from "../../server/src/main/typescript/elvarg/game/cache/Ca
 import { getMinimapMaps } from "../widgets/gl/MinimapRenderer";
 import { registerMinimapData } from "../render/render/minimap";
 import { clearInstance, doInstanceSceneBuild, loadInstanceScene, replaceSceneWithInstance } from "../render/render/instance";
+import { npcOwnerMapId } from "../render/npc/NpcRenderTemplate";
 
 function houseMinimapUsesFullScene(): void {
     const maps = new MapManager<any>(4, () => {});
@@ -88,6 +89,7 @@ async function instanceRebuildKeepsTheSceneUntilTheSwap(): Promise<void> {
             loadedCache: {},
             workerPool: { queueLoad: () => new Promise((resolve) => builds.push(resolve)) },
             clearMinimapImageUrls() {},
+            rehomeNpcs() { host.rehomed = (host.rehomed ?? 0) + 1; },
         },
         addedLocs: new Map(), locOverrides: new Map(), locSpawns: new Map(),
         instanceActive: false, instanceTemplateChunks: null, instanceLocRebuildTimer: null,
@@ -123,6 +125,12 @@ async function instanceRebuildKeepsTheSceneUntilTheSwap(): Promise<void> {
     assert.equal(cleared, 1);
     assert.equal(host.skipMapFadeIn, true, "the new scene appears without the fog fade-in");
     assert.equal(host.pendingInstanceScene, null);
+    // Every NPC in the scene now belongs to the square it is built as (Gauntlet monsters in
+    // other 64x64 squares were drawn offset and could not be clicked).
+    assert.deepEqual(host.instanceSceneMap, { mapX: 12, mapY: 12 });
+    assert.equal(host.rehomed, 1, "NPCs move to the instance square at the swap");
+    assert.equal(npcOwnerMapId({ x: 12 * 64 + 70, y: 12 * 64 + 3, ownerMapId: (12 << 8) | 12 }), (12 << 8) | 12);
+    assert.equal(npcOwnerMapId({ x: 12 * 64 + 70, y: 12 * 64 + 3 }), (13 << 8) | 12, "outside an instance: its own square");
 }
 
 instanceRebuildKeepsTheSceneUntilTheSwap().catch(error => { console.error(error); process.exitCode = 1; });

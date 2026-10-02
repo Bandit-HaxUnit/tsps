@@ -301,6 +301,9 @@ export function replaceSceneWithInstance(host: WebGLOsrsRendererHost, mapData: S
         host.clearMaps();
         host.skipMapFadeIn = true;
         host.mapManager.loadingMapIds.add(getMapSquareId(mapData.mapX, mapData.mapY));
+        // Its NPCs belong to this one square now, wherever in the scene they stand.
+        host.instanceSceneMap = { mapX: mapData.mapX | 0, mapY: mapData.mapY | 0 };
+        host.osrsClient.rehomeNpcs?.();
     
 }
 
@@ -363,6 +366,7 @@ export function clearInstance(host: WebGLOsrsRendererHost, ): void {
 
         host.instanceActive = false;
         host.pendingInstanceScene = null;
+        host.instanceSceneMap = null;
         host.osrsClient.clearMinimapImageUrls();
         host.instanceTemplateChunks = null;
         if (host.instanceLocRebuildTimer !== null) {
@@ -373,6 +377,7 @@ export function clearInstance(host: WebGLOsrsRendererHost, ): void {
         host.locOverrides.clear();
         host.locSpawns.clear();
         host.clearMaps();
+        host.osrsClient.rehomeNpcs?.();
         console.log("[WebGLOsrsRenderer] Instance cleared, normal map streaming resumed");
     
 }
