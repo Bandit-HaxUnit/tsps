@@ -38,6 +38,11 @@ const WORLD_GAMEFRAME_OPTIONS = {
 // Cache script 3962 reads this to pick the selected dropdown row; 4607 is only
 // a display mirror of the layout (no rendering effect in this revision).
 const GAMEFRAME_STONE_VARBIT = 4607;
+// The enhanced client's "show mouseover text" setting (cache script 4582 toggles it).
+// Our client reports itself as enhanced (clienttype 10) and draws the top-left text, so
+// this must be on: with it, HUD overlays laid out by script 4731 (Wintertodt, the
+// Gauntlet, ToA...) drop 23px below the text instead of sitting under it, as on live.
+const MOUSEOVER_TEXT_VARBIT = 12377;
 // Opaque player attribute; NetworkBuilder/WelcomeScreen read it to boot the
 // saved gameframe.
 const CLIENT_LAYOUT_ATTRIBUTE = "clientLayoutRoot";
@@ -307,6 +312,7 @@ module.exports = {
       syncPlayerKeybindings(player);
       if (worldGameframeOption !== undefined) selectGameframeOption(player, worldGameframeOption);
       syncGameframeVarbit(player);
+      player.getPacketSender().sendVarbit(MOUSEOVER_TEXT_VARBIT, 1);
     });
 
     api.registerCommand("keybinds", ({ player }) => openKeybindings(player));
