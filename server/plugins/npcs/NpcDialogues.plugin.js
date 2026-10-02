@@ -417,7 +417,10 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     const { step, rest, record } = menu;
     context.currentMenu = menu;
     if (!context.menuHistory.includes(menu)) context.menuHistory.push(menu);
-    const options = step.options || [];
+    // An option the wiki guards ("If the player is wearing the Ring of Charos(a):") is hidden
+    // only once a plugin answers its condition false; unanswered ones still show.
+    const options = (step.options || []).filter((option) =>
+      !option.condition || resolveCondition({ text: option.condition, id: option.id }) !== false);
     const more = options.length - offset > 5;
     const visible = options.slice(offset, offset + (more ? 4 : 5));
     // Record every option when the prompt is shown (not on selection) so that a

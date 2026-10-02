@@ -1067,8 +1067,10 @@ export interface PluginCoreApi {
   PlayerDialogue: any;
   OptionDialogue: any;
   StatementDialogue: any;
+  ItemStatementDialogue: any;
   ActionDialogue: any;
   EndDialogue: any;
+  CreationMenu: any;
   PlayerRights: any;
   Server: any;
   PluginManager: any;
