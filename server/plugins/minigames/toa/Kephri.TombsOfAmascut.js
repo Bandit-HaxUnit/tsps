@@ -34,6 +34,7 @@ const DUNG = 45504;
 const INVISIBLE_BLOCK = 32740;
 const FINAL_PHASE_HITPOINTS = 80;
 const ATTACK_SPEED = 6;
+const FIREBALL_MAX_HIT = 24;
 const SHIELD_TICKS = 52;
 const EGG_FUSE = 16;
 const HEAL_CAP = 1.15;
@@ -144,7 +145,7 @@ class KephriRoom extends Raid.Room {
       this.spawnSwarm(true);
     }
     if (--this.attackTicks > 0) return;
-    this.attackTicks = ATTACK_SPEED;
+    this.attackTicks = this.attackSpeed();
     if (this.specialCycle-- === 0) {
       this.specialCycle = this.phase === 3 ? 2 : Shared.random(4, 5);
       if (this.dungNext || this.agile.size > 4 + this.teamSize) {
@@ -157,6 +158,11 @@ class KephriRoom extends Raid.Room {
     } else {
       this.regularAttack();
     }
+  }
+
+  /** Wiki: 6 ticks, and "every two levels" of the path her auto-attacks are faster. */
+  attackSpeed() {
+    return ATTACK_SPEED - Math.min(2, Math.floor(this.pathLevel() / 2));
   }
 
   prune() {
@@ -284,7 +290,8 @@ class KephriRoom extends Raid.Room {
         for (const player of this.challengePlayers()) {
           const location = player.getLocation();
           if (location.getX() !== tile.x || location.getY() !== tile.y) continue;
-          let base = this.maxHit(regular ? 8 : 5);
+          // Wiki: her auto-attack's max hit is 24 (the fly bombs keep their own 5-10).
+          let base = this.maxHit(regular ? FIREBALL_MAX_HIT / 2 : 5);
           if (Shared.isProtected(player, "magic")) base = Math.floor(base / 3);
           Shared.damage(player, Shared.random(base, base * 2));
         }

@@ -180,7 +180,8 @@ class BaBaRoom extends Raid.Room {
       state.rockThrow = 13;
     }
     this.baba.performAnimation(new Animation(ANIMATION.ATTACK));
-    return [this.styledHit(this.baba, target, method, "melee", MAX_HIT.MELEE, 0, { prayerMultiplier: 0.2 })];
+    // Wiki: since June 2025 her melee is fully blocked by Protect from Melee.
+    return [this.styledHit(this.baba, target, method, "melee", MAX_HIT.MELEE, 0, { prayerMultiplier: 0 })];
   }
 
   startSlam(target, underneath) {
@@ -591,7 +592,8 @@ class BaBaRoom extends Raid.Room {
     let health = cracked ? 1 : boulder.getDefinition().getHitpoints();
     if (!cracked) {
       const level = this.pathLevel();
-      health += level >= 4 ? 4 : level >= 2 ? 2 : 0;
+      // Wiki: +2 at path level 2 (27), and 4 more at level 4 (31).
+      health += level >= 4 ? 6 : level >= 2 ? 2 : 0;
       health = Math.floor(health * (1 + 0.45 * (this.teamSize - 1)));
     }
     boulder.setMaxHitpoints(health);

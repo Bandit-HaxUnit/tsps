@@ -46,7 +46,9 @@ const GRAPHIC = {
 };
 const SOUND = { MAGIC: 5823, RANGED: 5819, FINAL_PHASE: 3405, BARRAGE: 102, JUGS: 5908, POISON_LAND: 5909, BOULDER_LAND: 5913, PUSHED: 5888, RUMBLING: 1678, WAVE_HIT: 5868 };
 
-const MAX_HIT = { BITE: 34, VOLLEY: 32, POISON: 10, BLEED: 5, SCREAM: 20, WAVE: 8, BLOOD: 7 };
+// Wiki: max hits 38 melee, 16 magic and ranged; a wave hits for 6-10, all scaled by raid level.
+const MAX_HIT = { BITE: 38, VOLLEY: 16, POISON: 10, BLEED: 5, SCREAM: 20, WAVE: 10, BLOOD: 7 };
+const WAVE_MIN_HIT = 6;
 const ZEBAK_POINTS = 1.5;
 
 class ZebakRoom extends Raid.Room {
@@ -656,7 +658,8 @@ class ZebakRoom extends Raid.Room {
     player.performAnimation(new Animation(ANIMATION.PUSHED));
     Shared.sound(player, baseDamage === MAX_HIT.SCREAM ? SOUND.PUSHED : SOUND.WAVE_HIT);
     const damage = this.maxHit(baseDamage);
-    Shared.damage(player, Shared.random(damage, damage + 10));
+    if (baseDamage === MAX_HIT.WAVE) Shared.damage(player, Shared.random(this.maxHit(WAVE_MIN_HIT), damage));
+    else Shared.damage(player, Shared.random(damage, damage + 10));
   }
 
   nudgeOff(player) {
