@@ -140,6 +140,8 @@ function fakeNpc(id, x, y, z) {
     setMobileInteraction(target) { npc.interacting = target; return npc; },
     getInteractingMobile: () => npc.interacting,
     setNpcTransformationId(next) { npc.transform = next; },
+    headIcon: -1,
+    setHeadIcon(icon) { npc.headIcon = icon; },
     getPrivateArea: () => npc.area,
     setArea(area) { npc.area = area; },
     getArea: () => npc.area,
@@ -804,6 +806,7 @@ test('hits it protects against do nothing; the 6th off-prayer hit changes its pr
     fight.onHit(sixth);
     assert.equal(fight.protecting, 'ranged', 'the sixth (even a zero) decides');
     assert.equal(fight.npc.transform, 9022, 'it takes its protect-from-ranged form');
+    assert.equal(fight.npc.headIcon, Hunllef.HEAD_ICON.ranged, 'and shows Protect from Missiles overhead');
   } finally {
     run.end('exit', { fade: false });
   }

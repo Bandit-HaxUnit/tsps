@@ -34,6 +34,8 @@ const IDS = {
   corrupted: { melee: 9035, ranged: 9036, magic: 9037, tornado: 9039, floor: 36046 },
 };
 const STYLES = ["melee", "ranged", "magic"];
+// Its overhead prayer: an index in the headicons_prayer sprites.
+const HEAD_ICON = { melee: 0, ranged: 1, magic: 2 };
 const HITPOINTS = { regular: 600, corrupted: 1000 };
 const MAX_HIT = {
   regular: { prayed: [12, 10, 8, 6], unprayed: [51, 42, 36, 26], stomp: 51 },
@@ -176,6 +178,7 @@ class HunllefFight {
     npc.__gauntletHunllef = this;
     npc.setFlag("combat:no-retaliate");
     npc.setFlag("interaction:keep");
+    npc.setHeadIcon(HEAD_ICON[this.protecting]);
     npc.getMovementQueue().setBlockMovement(true);
     this.run.map.add(npc);
     return npc;
@@ -398,6 +401,7 @@ class HunllefFight {
       this.offPrayerHits = 0;
       this.protecting = style;
       this.npc.setNpcTransformationId(this.ids[style]);
+      this.npc.setHeadIcon(HEAD_ICON[style]);
     }
   }
 }
@@ -415,4 +419,4 @@ function walkToward(npc, target) {
   movement.addSteps(from.transform(dx, dy));
 }
 
-module.exports = { HunllefFight, IDS, MAX_HIT, TORNADO_DAMAGE, TORNADOES, PATTERNS, armourTier, HITPOINTS };
+module.exports = { HunllefFight, IDS, HEAD_ICON, MAX_HIT, TORNADO_DAMAGE, TORNADOES, PATTERNS, armourTier, HITPOINTS };
