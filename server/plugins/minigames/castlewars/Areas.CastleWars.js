@@ -158,17 +158,18 @@ function formatTicks(ticks) {
 
 function ejectIdlersFromSpawn(player, teamId) {
   const inSpawn = game.getTeamData(teamId).respawnBounds.inside(player.getLocation());
+  let idleTicks = player.getAttribute(game.IDLE_TICKS_KEY) | 0;
   player.getPacketSender().sendString(
-    inSpawn ? `You have ${formatTicks(player.castlewarsIdleTime | 0)} to leave the respawn room.` : "",
+    inSpawn ? `You have ${formatTicks(idleTicks)} to leave the respawn room.` : "",
     data.EJECT_TEXT_UID[teamId]
   );
   if (!inSpawn || player.isPlayerBot?.() === true) {
     return;
   }
-  if (player.castlewarsIdleTime > 0) {
-    player.castlewarsIdleTime--;
+  if (idleTicks > 0) {
+    player.setAttribute(game.IDLE_TICKS_KEY, --idleTicks);
   }
-  if (player.castlewarsIdleTime <= 0) {
+  if (idleTicks <= 0) {
     player.sendMessage("You idled too long in the respawn room.");
     game.returnToLobby(player);
   }
@@ -230,18 +231,14 @@ function blockTeleport(event) {
 }
 
 function respawnInStartRoom(event) {
-  const { player, killer } = event;
+  const { player } = event;
   const teamId = player?.getArea?.() === game.gameArea ? game.getTeamId(player) : null;
   if (!teamId) {
     return;
   }
   game.dropCarriedFlag(player);
-  player.resetCastlewarsIdleTime();
+  game.resetIdleTicks(player);
   player.smartMoves(game.getTeamData(teamId).respawnBounds);
-  player.castlewarsDeaths = (player.castlewarsDeaths | 0) + 1;
-  if (killer?.isPlayer?.() === true) {
-    killer.castlewarsKills = (killer.castlewarsKills | 0) + 1;
-  }
   event.handled = true;
 }
 

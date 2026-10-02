@@ -1084,6 +1084,7 @@ export interface PluginCoreApi {
   ShopManager: any;
   MultiChatboxPrompt: any;
   dispatchClientMessages: (player: any, messages: any[]) => boolean;
+  connectHeadlessClient: (username: string, password: string) => Promise<{ player?: any; error?: string }>;
 }
 
 export interface PluginModule {

@@ -15,6 +15,8 @@ const Run = require("./GauntletRun");
 const Rewards = require("./GauntletRewards");
 const Scoreboard = require("./GauntletScoreboard");
 
+const CURRENT_PET_ATTRIBUTE = "pets:current";
+
 const ATTR_SPOKEN_TO_BRYN = "gauntlet:spoken-to-bryn";
 const BRYN = {
   NOT_SPOKEN: "Don't think you want to be heading down there without knowing what you're getting into! Come and see me, if you really want to go down there.",
@@ -40,7 +42,7 @@ function startRun(player, corrupted) {
     Shared.npcSay(player, Shared.NPC.BRYN, BRYN.REWARD);
     return true;
   }
-  if (player.getCurrentPet?.()) {
+  if (player.getAttribute?.(CURRENT_PET_ATTRIBUTE)) {
     Shared.npcSay(player, Shared.NPC.BRYN, BRYN.PET);
     return true;
   }

@@ -16,7 +16,27 @@ import { StackType } from "../../../../model/container/StackType";
 import { Appearance } from "../../../../model/Appearance";
 
 export class PlayerSave {
-    private static readonly persistentAttributeKeys = new Set<string>();
+    /** Save fields that are player attributes now; an older save's value is read once on load. */
+    private static readonly LEGACY_FIELD_ATTRIBUTES: Readonly<Record<string, string>> = {
+        title: "loyalty:title",
+        xpLocked: "skills:xp-locked",
+        targetTeleportUnlocked: "bounty-hunter:target-teleport-unlocked",
+        preserveUnlocked: "prayer:preserve-unlocked",
+        rigourUnlocked: "prayer:rigour-unlocked",
+        auguryUnlocked: "prayer:augury-unlocked",
+        recoilDamage: "ring-of-recoil:damage",
+        crystalBowShotsInStage: "crystal-bow:shots-in-stage",
+        crystalBowTrackedStageItemId: "crystal-bow:tracked-item",
+        totalKills: "killstreaks:total-kills",
+        killstreak: "killstreaks:streak",
+        highestKillstreak: "killstreaks:highest-streak",
+        deaths: "killstreaks:deaths",
+        recentKills: "killstreaks:recent-kills",
+        points: "shop:points",
+        pcPoints: "pest-control:points",
+        pouches: "runecrafting:pouches",
+    };
+    private static readonly persistentAttributeKeys = new Set<string>(Object.values(PlayerSave.LEGACY_FIELD_ATTRIBUTES));
 
     public static persistAttribute(key: string): void {
         if (typeof key !== "string" || !key.trim() || key !== key.trim()) {
@@ -69,7 +89,6 @@ export class PlayerSave {
     private passwordHashWithSalt: string;
     private isDiscordLogin: boolean;
     private cachedDiscordAccessToken: string;
-    private title: string;
     private rights;
     private donatorRights;
     private position: Location;
@@ -78,21 +97,12 @@ export class PlayerSave {
     private autocastSpellId: number;
     private autoRetaliate: boolean;
     private audioSettings: Record<number, number>;
-    private xpLocked: boolean;
-    private clanChat: string;
-    private targetTeleportUnlocked: boolean;
-    private preserveUnlocked: boolean;
-    private rigourUnlocked: boolean;
-    private auguryUnlocked: boolean;
     private hasVengeance: boolean;
     private lastVengeanceTimer: number;
     private specPercentage: number;
-    private recoilDamage: number;
     private poisonDamage: number;
     /** Whether poisonDamage represents an active venom (vs. ordinary poison) affliction. */
     private venomed: boolean;
-    private crystalBowShotsInStage: number;
-    private crystalBowTrackedStageItemId: number;
     private poisonImmunityTimer: number;
     private fireImmunityTimer: number;
     private teleblockTimer: number;
@@ -101,14 +111,6 @@ export class PlayerSave {
     private skullType;
     private running: boolean;
     private runEnergy: number;
-    private totalKills: number;
-    private killstreak: number;
-    private highestKillstreak: number;
-    private recentKills: string[];
-    private deaths: number;
-    private points: number;
-    private pcPoints: number;
-    private pouches;
     private inventory: Item[];
     private equipment: Item[];
     private appearance: number[];
@@ -131,12 +133,6 @@ export class PlayerSave {
     }
     public setPasswordHashWithSalt(passwordHashWithSalt: string): void {
         this.passwordHashWithSalt = passwordHashWithSalt;
-    }
-    public getTitle(): string {
-        return this.title;
-    }
-    public setTitle(title: string): void {
-        this.title = title;
     }
     public getRights(): PlayerRights {
         return this.rights;
@@ -183,54 +179,6 @@ export class PlayerSave {
         this.autoRetaliate = autoRetaliate;
     }
 
-    public isXpLocked(): boolean {
-        return this.xpLocked;
-    }
-
-    public setXpLocked(xpLocked: boolean): void {
-        this.xpLocked = xpLocked;
-    }
-
-    public getClanChat(): string {
-        return this.clanChat;
-    }
-
-    public setClanChat(clanChat: string): void {
-        this.clanChat = clanChat;
-    }
-
-    public isTargetTeleportUnlocked(): boolean {
-        return this.targetTeleportUnlocked;
-    }
-
-    public setTargetTeleportUnlocked(targetTeleportUnlocked: boolean): void {
-        this.targetTeleportUnlocked = targetTeleportUnlocked;
-    }
-
-    public isPreserveUnlocked(): boolean {
-        return this.preserveUnlocked;
-    }
-
-    public setPreserveUnlocked(preserveUnlocked: boolean): void {
-        this.preserveUnlocked = preserveUnlocked;
-    }
-
-    public isRigourUnlocked(): boolean {
-        return this.rigourUnlocked;
-    }
-
-    public setRigourUnlocked(rigourUnlocked: boolean): void {
-        this.rigourUnlocked = rigourUnlocked;
-    }
-
-    public isAuguryUnlocked(): boolean {
-        return this.auguryUnlocked;
-    }
-
-    public setAuguryUnlocked(auguryUnlocked: boolean): void {
-        this.auguryUnlocked = auguryUnlocked;
-    }
-
     public isHasVengeance(): boolean {
         return this.hasVengeance;
     }
@@ -255,14 +203,6 @@ export class PlayerSave {
         this.specPercentage = specPercentage;
     }
 
-    public getRecoilDamage(): number {
-        return this.recoilDamage;
-    }
-
-    public setRecoilDamage(recoilDamage: number): void {
-        this.recoilDamage = recoilDamage;
-    }
-
     public getPoisonDamage(): number {
         return this.poisonDamage;
     }
@@ -277,22 +217,6 @@ export class PlayerSave {
 
     public setVenomed(venomed: boolean): void {
         this.venomed = venomed;
-    }
-
-    public getCrystalBowShotsInStage(): number {
-        return this.crystalBowShotsInStage;
-    }
-
-    public setCrystalBowShotsInStage(crystalBowShotsInStage: number): void {
-        this.crystalBowShotsInStage = crystalBowShotsInStage;
-    }
-
-    public getCrystalBowTrackedStageItemId(): number {
-        return this.crystalBowTrackedStageItemId;
-    }
-
-    public setCrystalBowTrackedStageItemId(crystalBowTrackedStageItemId: number): void {
-        this.crystalBowTrackedStageItemId = crystalBowTrackedStageItemId;
     }
 
     public getPoisonImmunityTimer(): number {
@@ -357,62 +281,6 @@ export class PlayerSave {
 
     public setRunEnergy(runEnergy: number): void {
         this.runEnergy = runEnergy;
-    }
-
-    public getTotalKills(): number {
-        return this.totalKills;
-    }
-
-    public setTotalKills(totalKills: number): void {
-        this.totalKills = totalKills;
-    }
-
-    public getKillstreak(): number {
-        return this.killstreak;
-    }
-
-    public setKillstreak(killstreak: number): void {
-        this.killstreak = killstreak;
-    }
-
-    public getHighestKillstreak(): number {
-        return this.highestKillstreak;
-    }
-
-    public setHighestKillstreak(highestKillstreak: number): void {
-        this.highestKillstreak = highestKillstreak;
-    }
-
-    public getRecentKills(): string[] {
-        return this.recentKills;
-    }
-
-    public setRecentKills(recentKills: string[]): void {
-        this.recentKills = recentKills;
-    }
-
-    public getDeaths(): number {
-        return this.deaths;
-    }
-
-    public setDeaths(deaths: number): void {
-        this.deaths = deaths;
-    }
-
-    public getPoints(): number {
-        return this.points;
-    }
-
-    public setPoints(points: number): void {
-        this.points = points;
-    }
-
-    public getPouches(): any[] {
-        return this.pouches;
-    }
-
-    public setPouches(pouches: any[]): void {
-        this.pouches = pouches;
     }
 
     public getInventory(): Item[] {
@@ -646,9 +514,6 @@ export class PlayerSave {
         player.setPasswordHashWithSalt(this.passwordHashWithSalt);
         player.setDiscordLogin(this.isDiscordLogin);
         player.setCachedDiscordAccessToken(this.cachedDiscordAccessToken);
-        player.setLoyaltyTitle(this.title);
-
-        player.setLoyaltyTitle(this.title);
         player.setRights(this.rights);
         player.setDonatorRights(this.donatorRights);
         player.setLocation(this.position);
@@ -662,18 +527,11 @@ export class PlayerSave {
         player.getCombat().setCastSpell(null);
         player.setAutoRetaliate(this.autoRetaliate);
         player.setAudioSettings(this.audioSettings);
-        player.setExperienceLocked(this.xpLocked);
-        player.setClanChatName(this.clanChat);
-        player.setTargetTeleportUnlocked(this.targetTeleportUnlocked);
-        player.setPreserveUnlocked(this.preserveUnlocked);
-        player.setRigourUnlocked(this.rigourUnlocked);
-        player.setAuguryUnlocked(this.auguryUnlocked);
         player.setHasVengeance(this.hasVengeance);
         player.getVengeanceTimer().start(this.lastVengeanceTimer);
         player.setRunning(this.running);
         player.setRunEnergy(this.runEnergy);
         player.setSpecialPercentage(this.specPercentage);
-        player.setRecoilDamage(this.recoilDamage);
         player.setPoisonDamage(this.poisonDamage);
         player.setVenomed(this.venomed);
 
@@ -685,18 +543,7 @@ export class PlayerSave {
         player.setSkullTimer(this.skullTimer);
         player.setSkullType(this.skullType);
 
-        player.setTotalKills(this.totalKills);
-        player.setKillstreak(this.killstreak);
-        player.setHighestKillstreak(this.highestKillstreak);
-        player.setDeaths(this.deaths);
-        player.setPoints(this.points);
-        player.pcPoints = Math.max(0, Math.min(4000, Number.isFinite(this.pcPoints) ? Math.trunc(this.pcPoints) : 0));
         player.setPoisonDamage(this.poisonDamage);
-        player.setCrystalBowShotsInStage(this.crystalBowShotsInStage);
-        player.setCrystalBowTrackedStageItemId(this.crystalBowTrackedStageItemId);
-
-        // RC pouches
-        player.setPouches(this.pouches);
 
         player.getInventory().setItems(this.inventory);
         player.getEquipment().setItems(this.equipment);
@@ -707,6 +554,12 @@ export class PlayerSave {
         player.getQuickPrayers().setPrayers(this.quickPrayers);
         player.setFlags(PlayerSave.normalizeFlags(this.flags));
         player.setSailing(normalizeSailingState(this.sailing));
+        const legacyFields = this as unknown as Record<string, unknown>;
+        for (const [field, key] of Object.entries(PlayerSave.LEGACY_FIELD_ATTRIBUTES)) {
+            if (legacyFields[field] != null && !Object.prototype.hasOwnProperty.call(this.attributes ?? {}, key)) {
+                player.setAttribute(key, PlayerSave.cloneAttribute(key, legacyFields[field]));
+            }
+        }
         for (const key of PlayerSave.persistentAttributeKeys) {
             if (Object.prototype.hasOwnProperty.call(this.attributes ?? {}, key)) {
                 player.setAttribute(key, PlayerSave.cloneAttribute(key, this.attributes[key]));
@@ -759,7 +612,6 @@ export class PlayerSave {
         playerSave.passwordHashWithSalt = (player.getPasswordHashWithSalt() || "").trim();
         playerSave.isDiscordLogin = player.isDiscordLoginReturn();
         playerSave.cachedDiscordAccessToken = player.getCachedDiscordAccessToken();
-        playerSave.title = player.getLoyaltyTitle();
         playerSave.rights = player.getRights();
         playerSave.donatorRights = player.getDonatorRights();
         playerSave.position = player.getLocation()?.clone?.() ?? new Location(3089, 3524, 0);
@@ -768,18 +620,11 @@ export class PlayerSave {
         playerSave.autocastSpellId = player.getCombat().getAutocastSpell()?.spellId?.() ?? -1;
         playerSave.autoRetaliate = player.autoRetaliateReturn();
         playerSave.audioSettings = { ...player.getAudioSettings() };
-        playerSave.xpLocked = player.experienceLockedReturn();
-        playerSave.clanChat = player.getClanChatName();
-        playerSave.targetTeleportUnlocked = player.isTargetTeleportUnlocked();
-        playerSave.preserveUnlocked = player.isPreserveUnlocked();
-        playerSave.rigourUnlocked = player.isRigourUnlocked();
-        playerSave.auguryUnlocked = player.getAuguryUnlocked();
         playerSave.hasVengeance = player.hasVengeanceReturn();
         playerSave.lastVengeanceTimer = player.getVengeanceTimer().secondsRemaining();
         playerSave.running = player.isRunningReturn();
         playerSave.runEnergy = player.getRunEnergy();
         playerSave.specPercentage = player.getSpecialPercentage();
-        playerSave.recoilDamage = player.getRecoilDamage();
         playerSave.poisonDamage = player.getPoisonDamage();
         playerSave.venomed = player.isVenomed();
 
@@ -791,24 +636,6 @@ export class PlayerSave {
 
         playerSave.skullTimer = player.getSkullTimer();
         playerSave.skullType = player.getSkullType();
-
-        playerSave.totalKills = player.getTotalKills();
-        playerSave.killstreak = player.getKillstreak();
-        playerSave.highestKillstreak = player.getHighestKillstreak();
-        playerSave.recentKills = [...(player.getRecentKills() ?? [])];
-        playerSave.deaths = player.getDeaths();
-        playerSave.points = player.getPoints();
-        playerSave.pcPoints = Math.max(0, Math.min(4000, Number.isFinite(player.pcPoints) ? Math.trunc(player.pcPoints) : 0));
-        playerSave.poisonDamage = player.getPoisonDamage();
-        playerSave.crystalBowShotsInStage = player.getCrystalBowShotsInStage();
-        playerSave.crystalBowTrackedStageItemId = player.getCrystalBowTrackedStageItemId();
-
-        // RC pouches
-        playerSave.pouches = (player.getPouches() ?? []).map((pouchState: any) => ({
-            pouch: pouchState?.pouch ? { ...pouchState.pouch } : pouchState?.pouch,
-            runeEssenceAmt: Number.isFinite(pouchState?.runeEssenceAmt) ? pouchState.runeEssenceAmt : 0,
-            pureEssenceAmt: Number.isFinite(pouchState?.pureEssenceAmt) ? pouchState.pureEssenceAmt : 0,
-        }));
 
         playerSave.inventory = player.getInventory().getCopiedItems();
         playerSave.equipment = player.getEquipment().getCopiedItems();

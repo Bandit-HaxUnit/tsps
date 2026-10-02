@@ -111,9 +111,9 @@ export class ItemActionPacketListener {
           return true;
         }
         if (
-          (itemId == 2542 && player.isPreserveUnlocked()) ||
-          (itemId == 2543 && player.isRigourUnlocked()) ||
-          (itemId == 2544 && player.getAuguryUnlocked())
+          (itemId == 2542 && player.getAttribute("prayer:preserve-unlocked") === true) ||
+          (itemId == 2543 && player.getAttribute("prayer:rigour-unlocked") === true) ||
+          (itemId == 2544 && player.getAttribute("prayer:augury-unlocked") === true)
         ) {
           player.sendMessage("You have already unlocked that prayer.");
           return true;
@@ -125,7 +125,7 @@ export class ItemActionPacketListener {
           player.sendMessage("You cannot do that right now.");
           return true;
         }
-        if (player.isTargetTeleportUnlocked()) {
+        if (player.getAttribute("bounty-hunter:target-teleport-unlocked") === true) {
           player.sendMessage("You have already unlocked that teleport.");
           return true;
         }

@@ -289,7 +289,6 @@ export class PacketSender {
   }
 
   sendWalkableInterface(interfaceId: number): this {
-    this.player.setWalkableInterfaceId(interfaceId);
     if (this.player.getSession().sendClientPacket(encodeWidgetOpen(interfaceId, false))) return this;
   }
 
@@ -629,7 +628,7 @@ export class PacketSender {
     this.player.setEnteredAmountAction?.(null);
     this.player.setEnteredSyntaxAction?.(null);
     this.player.getDialogueManager?.()?.reset?.();
-    this.player.setDestroyItem?.(-1);
+    this.player.setAttribute?.("destroy-item:pending", -1);
     this.player.setInterfaceId?.(-1);
     this.player.setCreationMenu?.(null);
     this.player.setSearchingBank?.(false);

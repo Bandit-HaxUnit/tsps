@@ -11,7 +11,7 @@ import { PlayerRights } from "../game/model/rights/PlayerRights";
 import { PluginManager } from "../plugins/PluginManager";
 import { Misc } from "../util/Misc";
 import { PlayerPunishment } from "../util/PlayerPunishment";
-import { BinaryChannel, MAX_GAME_MESSAGE_BYTES, WebSocketBinaryChannel } from "./BinaryChannel";
+import { BinaryChannel, HeadlessBinaryChannel, MAX_GAME_MESSAGE_BYTES, WebSocketBinaryChannel } from "./BinaryChannel";
 import { BrowserHostHttpBridge, BROWSER_HOST_BRIDGE_HTML } from "./BrowserHostHttpBridge";
 import { PlayerSession } from "./PlayerSession";
 import { CachePipeline } from "../game/cache/CachePipeline";
@@ -88,6 +88,18 @@ export function dispatchClientMessages(player: Player, messages: ClientMessages)
   if (!connection) return false;
   connection.inject(messages);
   return true;
+}
+
+/** Logs a player in through the normal login path with no client attached. Closing their session logs them out. */
+export async function connectHeadlessClient(username: string, password: string): Promise<{ player?: Player; error?: string }> {
+  const connection = new ClientConnection(new HeadlessBinaryChannel());
+  connection.inject([
+    { type: "login", username, password, revision: CachePipeline.getActive().revision },
+    { type: "handshake", name: username, clientType: 0 },
+  ]);
+  await connection.idle();
+  const player = connection.getPlayer();
+  return player ? { player } : { error: connection.getLoginFailure() ?? "Login did not complete." };
 }
 
 const CLOSE_ON_INTERFACE_CLOSE_ATTRIBUTE = "interface:close-on-interface-close";
@@ -195,6 +207,7 @@ class ClientConnection {
   private reservedName?: string;
   private player?: Player;
   private closed = false;
+  private loginFailure?: string;
   private input = Promise.resolve();
 
   constructor(private readonly channel: BinaryChannel) {
@@ -226,6 +239,18 @@ class ClientConnection {
     this.input = this.input.then(() => this.dispatch(messages)).catch((error) => {
       console.warn("[network] injected client packet rejected", error);
     });
+  }
+
+  public idle(): Promise<void> {
+    return this.input;
+  }
+
+  public getPlayer(): Player | undefined {
+    return this.player;
+  }
+
+  public getLoginFailure(): string | undefined {
+    return this.loginFailure;
   }
 
   private async dispatch(packets: ClientMessages): Promise<void> {
@@ -1041,6 +1066,7 @@ class ClientConnection {
   }
 
   private failLogin(code: number, message: string): void {
+    this.loginFailure = message;
     this.send(encodeLoginResponse(false, code, message));
   }
 
