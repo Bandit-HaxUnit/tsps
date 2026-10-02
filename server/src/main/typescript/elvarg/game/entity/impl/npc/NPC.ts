@@ -224,10 +224,13 @@ export class NPC extends Mobile {
                 // the same target via follow/combat. Without this guard, pets can oscillate:
                 // follow sets face-to-player, then NPC.process clears interaction for range
                 // and resets face back to spawn direction in the same cycle.
+                // "interaction:keep": a scripted NPC (a boss whose attacks a plugin drives) keeps
+                // facing its target at any range.
                 const trackingInteractionTarget =
                     this.getFollowing() === interactingMobile
                     || this.getCombatFollowing() === interactingMobile
-                    || this.getCombat().getTarget() === interactingMobile;
+                    || this.getCombat().getTarget() === interactingMobile
+                    || this.hasFlag("interaction:keep");
                 const targetUnregistered =
                     typeof interactingMobile.isRegistered === "function"
                     && !interactingMobile.isRegistered();
