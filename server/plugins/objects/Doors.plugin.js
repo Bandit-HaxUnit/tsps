@@ -45,8 +45,10 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   // door whose same-model "Close" locs (5245, 11617, 15205, 17115) all belong to other doors.
   SELF_OPENING_DOOR_IDS = new Set([O.DOOR_223, O.DOOR_225, O.DOOR_226, O.DOOR_227, O.DOOR_228, O.DOOR_229, O.DOOR_230, O.DOOR_231, O.DOOR_358]);
 
-  // Single doors whose open variant is not closedId + 1 (e.g. Large door 1517 -> 1520, same models).
-  SINGLE_DOOR_OPEN_IDS = new Map([[O.LARGE_DOOR_11, O.LARGE_DOOR_14]]);
+  // Single doors the pairing below can't find: the open variant is not closedId + 1 (e.g. Large
+  // door 1517 -> 1520, same models), or it has no "Close" (DOOR_181, the open Keldagrim door on
+  // the way to the Blast Furnace, shares DOOR_180's model but offers no option).
+  SINGLE_DOOR_OPEN_IDS = new Map([[O.LARGE_DOOR_11, O.LARGE_DOOR_14], [O.DOOR_180, O.DOOR_181]]);
 
   // OSRS wooden gates are two locs that pivot together around the hinge post: a hinge panel
   // and an extension panel. Opening/closing moves BOTH pieces, so the "closed id + 1 = open
