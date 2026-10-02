@@ -1351,7 +1351,7 @@ class WardensFinalRoom extends WardenRoomBase {
 
   spawnPhantom(id, spot) {
     const I = ids();
-    const npc = this.spawnFixed(id, spot, { scale: false, points: 0, face: 6 });
+    const npc = this.spawnFixed(id, spot, { scale: false, points: 0, face: FACE_NORTH });
     if (!npc) return;
     npc.setUntargetable(true);
     const apmeken = Shared.PATH_BY_KEY.APMEKEN.index;
