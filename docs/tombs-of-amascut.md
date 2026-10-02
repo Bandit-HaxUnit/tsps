@@ -137,6 +137,10 @@ party, removes remaining enemies, and preserves Osmumten and the normal route on
 At the Wardens it first advances to the final phase; use it again after arriving to finish
 the raid and unlock the normal reward route. Completion points and rewards still apply.
 
+`::toaskiptowarden` (Developer-only) works in the Nexus. It marks all four paths complete and
+rebuilds the Nexus, so the Wardens' entrance opens and the helpful spirit offers supplies.
+The skipped paths give no points, so the loot reflects only what was actually fought.
+
 Run `npx tsc --noEmit -p tsconfig.json` in `server`, then load the plugins. With `TS_NODE_TRANSPILE_ONLY=1`, a `node -r ts-node/register` script that calls `PluginManager.loadFromDirectory()` should list `TombsOfAmascut` among the loaded plugins.
 
 In-game follow-up, done by hand:

@@ -651,7 +651,8 @@ class Raid {
     this.roomKey = key;
     if (previous && previous !== room) {
       previous.destroy();
-      this.rooms.delete(previous.key);
+      // Rebuilding the same room keeps its new entry.
+      if (previous.key !== key) this.rooms.delete(previous.key);
     }
     room.build();
     return room;

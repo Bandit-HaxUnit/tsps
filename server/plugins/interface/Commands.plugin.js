@@ -49,6 +49,7 @@ const COMMANDS = {
   developer: [
     "::toaskippuzzle - Complete the current ToA puzzle for the party",
     "::toaskipboss - Complete the current ToA boss encounter for the party",
+    "::toaskiptowarden - Mark every ToA path complete (in the Nexus) to open the Wardens",
     "::kick [player] - Disconnect player",
     "::exit [player] - Close player client",
     "::copybank [player] - Copy player bank",

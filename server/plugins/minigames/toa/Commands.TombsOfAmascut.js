@@ -50,7 +50,29 @@ function skipBoss({ player }) {
   return true;
 }
 
+/** Marks every path complete and rebuilds the Nexus, so the Wardens' entrance opens. */
+function skipToWardens({ player }) {
+  const raid = Raid.raidOf(player);
+  const room = raid?.roomFor(player);
+  if (!Shared.inTombs(player.getLocation()) || room?.key !== "MAIN_HALL" || room.destroyed) {
+    player.sendMessage("Enter the Nexus of a Tombs of Amascut raid before using ::toaskiptowarden.");
+    return true;
+  }
+  if (raid.pathsCompleted.length === Shared.PATHS.length) {
+    player.sendMessage("Every path is already complete. The Wardens' entrance is open.");
+    return true;
+  }
+  for (const path of Shared.PATHS) raid.completePath(path.key);
+  if (raid.startCycle === 0) raid.startCycle = Shared.cycle();
+  const nexus = raid.buildRoom("MAIN_HALL");
+  for (const member of nexus.roomPlayers()) nexus.onPlayerArrive(member);
+  raid.refreshHudStates();
+  raid.broadcast(`${Shared.displayName(player)} completed every path for testing. The Wardens' entrance is open.`);
+  return true;
+}
+
 module.exports = function registerTombsCommands(api) {
   api.registerCommand("toaskippuzzle", skipPuzzle, api.core.PlayerRights.DEVELOPER);
   api.registerCommand("toaskipboss", skipBoss, api.core.PlayerRights.DEVELOPER);
+  api.registerCommand("toaskiptowarden", skipToWardens, api.core.PlayerRights.DEVELOPER);
 };
