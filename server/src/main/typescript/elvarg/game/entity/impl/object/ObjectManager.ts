@@ -34,11 +34,13 @@ export class ObjectManager {
         return area?.countsAsMainWorld() ? null : area;
     }
 
-    public static onRegionChange(player: Player, baseX: number, baseY: number, level: number) {
+    public static onRegionChange(player: Player, baseX: number, baseY: number) {
         const viewedArea = this.viewedArea(player);
         // Region sync should only target the requesting player.
         // Broadcasting every object spawn globally here causes redundant updates.
         // Apply base-map removals before additions, including replacements with a different shape.
+        // Every plane: the scene holds all four, and the packets carry their own level, so a
+        // change upstairs (or below) must not reappear when the scene is rebuilt.
         for (const object of World.getRemovedObjects()) {
             if (!object) {
                 continue;
@@ -47,8 +49,7 @@ export class ObjectManager {
                 continue;
             }
             const location = object.getLocation();
-            if (location.getZ() !== level
-                || location.getX() < baseX || location.getX() >= baseX + this.SCENE_SIZE
+            if (location.getX() < baseX || location.getX() >= baseX + this.SCENE_SIZE
                 || location.getY() < baseY || location.getY() >= baseY + this.SCENE_SIZE) {
                 continue;
             }
@@ -66,8 +67,7 @@ export class ObjectManager {
                 continue;
             }
             const location = object.getLocation();
-            if (location.getZ() !== level
-                || location.getX() < baseX || location.getX() >= baseX + this.SCENE_SIZE
+            if (location.getX() < baseX || location.getX() >= baseX + this.SCENE_SIZE
                 || location.getY() < baseY || location.getY() >= baseY + this.SCENE_SIZE) {
                 continue;
             }

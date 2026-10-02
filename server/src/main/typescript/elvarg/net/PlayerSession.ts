@@ -276,7 +276,7 @@ export class PlayerSession {
     // xrsps replays the initial scene during login; later scene replays follow
     // the authoritative player-sync base below.
     if (initialSync && sceneChanged) {
-      ObjectManager.onRegionChange(player, this.sceneBaseX, this.sceneBaseY, sceneTile.level);
+      ObjectManager.onRegionChange(player, this.sceneBaseX, this.sceneBaseY);
       if (!this.isBinaryChannelOpen()) return;
     }
 
@@ -364,7 +364,7 @@ export class PlayerSession {
     if (!syncSent) return;
 
     if (!initialSync && sceneChanged) {
-      ObjectManager.onRegionChange(player, this.sceneBaseX, this.sceneBaseY, sceneTile.level);
+      ObjectManager.onRegionChange(player, this.sceneBaseX, this.sceneBaseY);
       if (!this.isBinaryChannelOpen()) return;
     }
     if (sceneChanged) {
