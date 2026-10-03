@@ -242,6 +242,16 @@ class BotBrain {
   /** @returns {"running"|"idle"} */
   tick(nowMs = Date.now()) {
     this.dispatchMovement();
+    // Global support runs before the activity action, as the tree's first
+    // branches did: boosts, defensive/retreat, then eating.
+    const support = this.world?.supportTick?.({
+      player: this.player,
+      state: this.ensureState(),
+      nowMs,
+    });
+    if (support?.skip === true) {
+      return "running";
+    }
     const frame = this.frames[this.frames.length - 1];
     this.debugTick(frame);
     if (!frame) {

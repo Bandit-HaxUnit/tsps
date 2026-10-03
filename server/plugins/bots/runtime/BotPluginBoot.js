@@ -155,6 +155,8 @@ function bootPlayerBotsRuntime(options = {}) {
   });
   pvpController.setEntrySource(() => entries);
   brainWorld.pvpController = pvpController;
+  brainWorld.supportTick = ({ player, state, nowMs }) =>
+    pvpController.tickSupport({ player, state, nowMs });
   let brainRegistry = null;
   try {
     brainRegistry = createBotActivityRegistry({ api: botApi, world: brainWorld });

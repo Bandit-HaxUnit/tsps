@@ -1492,28 +1492,29 @@ class PvpController {
    * took the turn, so the engagement tick waits.
    */
   tickSupport({ player, state, nowMs }) {
-    const resolved = resolveBotNodeContext({ player, state, nowMs }, this.botStatesByName, {
-      requiredMode: this.behaviorMode.PVP,
+    const base = { player, state, nowMs };
+    // Boosts and defensive only apply to pvp-mode bots (their own contracts
+    // gate that); eating applies to every brain activity.
+    if (this.maintainCombatBoostsActionNode.tick({ ...base }) !== "failure") {
+      return { skip: true };
+    }
+    const resolved = resolveBotNodeContext(base, this.botStatesByName, {
       requireNotInCombat: false,
       requireNotBusy: false,
     });
-    if (!resolved) {
-      return { skip: false };
-    }
-    if (this.maintainCombatBoostsActionNode.tick({ ...resolved }) !== "failure") {
-      return { skip: true };
-    }
-    const defensive = this.defensiveActionNode.tick({
-      ...resolved,
-      target: this.resolveTargetPlayer(resolved.state),
-    });
-    if (defensive.handled) {
-      if (resolved.state?.pvp?.retreat && !resolved.player.isTeleportingReturn?.()) {
-        this.eatFoodActionNode.tick({ ...resolved });
+    if (resolved && resolved.state?.mode === this.behaviorMode.PVP) {
+      const defensive = this.defensiveActionNode.tick({
+        ...resolved,
+        target: this.resolveTargetPlayer(resolved.state),
+      });
+      if (defensive.handled) {
+        if (resolved.state?.pvp?.retreat && !resolved.player.isTeleportingReturn?.()) {
+          this.eatFoodActionNode.tick({ ...base });
+        }
+        return { skip: true };
       }
-      return { skip: true };
     }
-    if (this.eatFoodActionNode.tick({ ...resolved }) !== "failure") {
+    if (this.eatFoodActionNode.tick({ ...base }) !== "failure") {
       return { skip: true };
     }
     return { skip: false };

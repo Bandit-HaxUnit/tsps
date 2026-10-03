@@ -21,11 +21,6 @@ function createPvpCombatAction(spec, controller) {
       if ((player.getHitpoints?.() ?? 0) <= 0 || player.isDyingReturn?.() === true) {
         return "running";
       }
-      // Boosts, retreat/eating and defensive actions take precedence over the
-      // engagement tick, exactly as the tree ran them before every mode tick.
-      if (controller.tickSupport?.({ player, state, nowMs: ctx.nowMs })?.skip) {
-        return "running";
-      }
       controller.ensureLoadout(player, state);
       if (state.pvp.retreat) {
         return "running";
