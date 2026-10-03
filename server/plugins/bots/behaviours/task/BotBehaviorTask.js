@@ -22,6 +22,7 @@ const { getPvpProfile } = require("../pvp/PvpAssignment");
 const {
   ATTR_RECRUIT_OWNER_USERNAME,
 } = require("../../runtime/BotRecruitConstants");
+const { createBotTickMetrics } = require("../../runtime/BotTickMetrics");
 
 const NS_PER_MS = 1_000_000n;
 const MOVING_MODE_DECISION_DELAY_MS = 1500;
@@ -71,6 +72,7 @@ class BotBehaviorTask extends Task {
     this._humanObserverRevision = 0;
     this._cycleCounter = 0;
     this.taskProfiler = this.resolveTaskProfiler(options.taskProfiler ?? {});
+    this.tickMetrics = createBotTickMetrics(options.tickMetrics ?? {});
     this.executionBudget = this.resolveExecutionBudget(options.executionBudget ?? {});
     this._entryCursor = 0;
     this._nextBudgetLogAt = 0;
@@ -1747,6 +1749,9 @@ class BotBehaviorTask extends Task {
     if (sampleEntry && this._profileWindow) {
       entryStartNs = process.hrtime.bigint();
     }
+    const metricsStartNs = this.tickMetrics.enabled
+      ? process.hrtime.bigint()
+      : 0n;
     try {
       const state = entry?.state;
       const player = entry?.player;
@@ -1892,6 +1897,11 @@ class BotBehaviorTask extends Task {
           modeProfile.totalEntryMs += totalEntryMs;
         }
       }
+      if (metricsStartNs !== 0n) {
+        this.tickMetrics.recordEntry(
+          Number(process.hrtime.bigint() - metricsStartNs)
+        );
+      }
     }
   }
 
@@ -1906,6 +1916,7 @@ class BotBehaviorTask extends Task {
     }
 
     const startedAtMs = Date.now();
+    this.tickMetrics.beginCycle(now);
     const sharedCycleState = this.ServerPerf.measurePhase(
       "task.bot_behavior.build_cycle_state",
       () => this.buildPvpCycleState(now)
@@ -1955,11 +1966,19 @@ class BotBehaviorTask extends Task {
     );
     if (budgetYielded === true) {
       this.flushTaskProfileIfDue(now);
+      this.tickMetrics.endCycle(
+        Date.now(),
+        urgentEntries.size + processedRegularEntries
+      );
       return;
     }
 
     this._entryCursor = (startIndex + processedRegularEntries) % totalEntries;
     this.flushTaskProfileIfDue(now);
+    this.tickMetrics.endCycle(
+      Date.now(),
+      urgentEntries.size + processedRegularEntries
+    );
   }
 }
 

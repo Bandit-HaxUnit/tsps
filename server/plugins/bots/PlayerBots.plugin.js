@@ -111,6 +111,13 @@ const BOT_CONFIG = Object.freeze({
     intervalMs: parseEnvInt("BOT_TASK_PROFILER_INTERVAL_MS", 10000, 1000),
     sampleStride: parseEnvInt("BOT_TASK_PROFILER_SAMPLE_STRIDE", 4, 1),
   }),
+  tickMetrics: Object.freeze({
+    // Per-bot tick and per-cycle percentiles plus heap movement, logged per
+    // window. Opt-in because sampling every entry is not free.
+    enabled: (process.env.BOT_TICK_METRICS_ENABLED ?? "0") === "1",
+    windowMs: parseEnvInt("BOT_TICK_METRICS_WINDOW_MS", 30000, 5000),
+    maxSamples: parseEnvInt("BOT_TICK_METRICS_MAX_SAMPLES", 200000, 1000),
+  }),
   executionBudget: Object.freeze({
     enabled: (process.env.BOT_EXECUTION_BUDGET_ENABLED ?? "1") === "1",
     maxMs: parseEnvInt("BOT_EXECUTION_BUDGET_MS", 30, 5),

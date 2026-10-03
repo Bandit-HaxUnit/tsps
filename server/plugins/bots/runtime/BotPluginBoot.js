@@ -242,6 +242,7 @@ function bootPlayerBotsRuntime(options = {}) {
         timingDesyncMs: config.timingDesyncMs,
         lodConfig: config.lodConfig,
         taskProfiler: config.taskProfiler,
+        tickMetrics: config.tickMetrics,
         executionBudget: config.executionBudget,
         handlePersistentPvpRespawn: (entry, nowMs) => {
           const player = entry?.player;
