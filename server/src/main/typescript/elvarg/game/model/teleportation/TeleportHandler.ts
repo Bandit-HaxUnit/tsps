@@ -75,7 +75,7 @@ export class TeleportHandler {
                 warning += "Are you sure you want to teleport there? ";
                 if (wildernessLevel > 0) {
                     warning += "It's in level @red@" + wildernessLevel + "@bla@ wilderness! ";
-                    if (Wilderness.isMulti(targetLocation.getX(), targetLocation.getY())) {
+                    if (Wilderness.isMulti(targetLocation.getX(), targetLocation.getY(), targetLocation.getZ())) {
                         warning += "Additionally, @red@it's a multi zone@bla@. Other players may attack you simultaneously.";
                     } else {
                         warning += "Other players will be able to attack you.";

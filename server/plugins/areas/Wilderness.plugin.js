@@ -48,7 +48,7 @@ function tileFactsOf(player) {
     inWilderness: pvpArea && !safe,
     pvpOverlay: needsPvpOverlay(tile),
     level: Wilderness.levelAt(tile.x, tile.y),
-    multiIcon: Wilderness.isMulti(tile.x, tile.y) ? 1 : 0,
+    multiIcon: Wilderness.isMulti(tile.x, tile.y, tile.getZ()) ? 1 : 0,
   };
   tileFacts.set(player, facts);
   return facts;

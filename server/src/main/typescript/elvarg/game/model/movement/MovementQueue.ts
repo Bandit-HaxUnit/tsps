@@ -678,7 +678,7 @@ export class MovementQueue {
 
         if (inWilderness) {
             const wildernessLevel = Wilderness.levelAt(location.getX(), location.getY());
-            const multiIcon = Wilderness.isMulti(location.getX(), location.getY()) ? 1 : 0;
+            const multiIcon = Wilderness.isMulti(location.getX(), location.getY(), location.getZ()) ? 1 : 0;
             player.setWildernessLevel(wildernessLevel);
             player.setMultiIcon(multiIcon);
             // The pvp_icons overlay (and its level text) is owned by the Wilderness plugin.
