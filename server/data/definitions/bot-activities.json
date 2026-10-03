@@ -9,7 +9,7 @@
       "actions": [
         { "type": "equipTool", "tool": "axe" },
         { "type": "interactObject", "treeTier": "$tier", "option": "Chop down", "until": { "inventoryFull": true }, "stallSeconds": 120 },
-        { "type": "dropItems", "itemIds": ["$log"] }
+        { "type": "bank" }
       ]
     }
   },

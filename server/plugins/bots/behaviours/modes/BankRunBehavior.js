@@ -1,8 +1,7 @@
 const { MapObjects } = require("../../../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
-const { ObjectDefinition } = require("../../../../src/main/typescript/elvarg/game/definition/ObjectDefinition");
 const { Bank } = require("../../../../src/main/typescript/elvarg/game/model/container/impl/Bank");
 const { Location } = require("../../../../src/main/typescript/elvarg/game/model/Location");
-const { ObjectIds } = require("../../../../src/main/typescript/elvarg/util/IdEnums");
+const { BANK_BOOTH_IDS, isUsableBankBooth } = require("../../lib/BankBooths");
 const { resolveBotNodeContext } = require("../nodes/context/BotNodeContext");
 const { callModeHook } = require("../hooks/ModeHookContract");
 const {
@@ -32,17 +31,6 @@ const HARD_BLACKLISTED_BANK_BOOTH_KEYS = new Set([
   "3148,3449,0",
 ]);
 
-const BANK_BOOTH_IDS = new Set(
-  Object.entries(ObjectIds)
-    .filter(
-      ([name, id]) =>
-        typeof name === "string" &&
-        name.includes("BANK_BOOTH") &&
-        Number.isInteger(id)
-    )
-    .map(([, id]) => id)
-);
-
 class BankRunBehavior {
   constructor(botStatesByName, api, options) {
     this.botStatesByName = botStatesByName;
@@ -52,27 +40,6 @@ class BankRunBehavior {
     this.objectSearch = options.objectSearch ?? null;
     this.bankBoothSearchCacheByArea = new Map();
     this.globallyBlockedBoothsByKey = new Map();
-    this.usableBankBoothIds = new Map();
-  }
-
-  /**
-   * BANK_BOOTH_IDS is name-derived and includes non-interactable variants (Draynor
-   * 10527, closed booths); running to one looks broken and clicking it does nothing.
-   */
-  isUsableBankBooth(objectId) {
-    if (!BANK_BOOTH_IDS.has(objectId)) {
-      return false;
-    }
-    const cached = this.usableBankBoothIds.get(objectId);
-    if (cached !== undefined) {
-      return cached;
-    }
-    const interactions = ObjectDefinition.forId(objectId)?.getInteractions?.() ?? null;
-    const usable =
-      Array.isArray(interactions) &&
-      interactions.some((action) => action === "Bank" || action === "Use");
-    this.usableBankBoothIds.set(objectId, usable);
-    return usable;
   }
 
   getTraversalTarget(state) {
@@ -746,7 +713,7 @@ class BankRunBehavior {
       return null;
     }
     const object = MapObjects.get(target.objectId, loc, player.getPrivateArea());
-    if (!object || !this.isUsableBankBooth(object.getId())) {
+    if (!object || !isUsableBankBooth(object.getId())) {
       return null;
     }
     return object;
@@ -767,7 +734,7 @@ class BankRunBehavior {
     const otherRegions = [];
 
     for (const object of bankBooths) {
-      if (!object || !this.isUsableBankBooth(object.getId())) {
+      if (!object || !isUsableBankBooth(object.getId())) {
         continue;
       }
       const objectLoc = object.getLocation();

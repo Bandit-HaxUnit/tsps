@@ -7,6 +7,7 @@ const { ItemIds } = require("../../../src/main/typescript/elvarg/util/IdEnums");
 const { createInteractObjectAction } = require("./actions/InteractObject");
 const { createDropItemsAction } = require("./actions/DropItems");
 const { createEquipToolAction } = require("./actions/EquipTool");
+const { createBankAction } = require("./actions/Bank");
 
 const DEFAULT_DEFINITIONS_PATH = path.join(
   process.cwd(),
@@ -113,6 +114,9 @@ function createAction(spec, world) {
   }
   if (spec.type === "equipTool") {
     return createEquipToolAction(spec);
+  }
+  if (spec.type === "bank") {
+    return createBankAction(spec, world);
   }
   throw new Error(`[bot activities] unknown action type '${spec.type}'`);
 }
