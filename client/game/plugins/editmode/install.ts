@@ -339,6 +339,7 @@ export function parseEditModeWorldDefinition(value: unknown): EditModeWorldDefin
         disabledPlugins: (raw.disabledPlugins ?? []).map((name) => (name as string).trim()),
         experienceMultiplier: raw.experienceMultiplier === undefined ? 1 : raw.experienceMultiplier,
         ...(typeof raw.gameframe === "string" && { gameframe: raw.gameframe }),
+        ...(typeof raw.membersWorld === "boolean" && { membersWorld: raw.membersWorld }),
     };
 }
 
@@ -537,7 +538,7 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
         () => {
             const state = plugin.getState();
             return state.world.definition
-                ? { zones: state.world.definition.zones, showPvp: state.config.showPvpZones, showMulti: state.config.showMultiCombatZones, showDuel: state.config.showDuelZones, showSafe: state.config.showSafeZones }
+                ? { zones: state.world.definition.zones, showPvp: state.config.showPvpZones, showMulti: state.config.showMultiCombatZones, showDuel: state.config.showDuelZones, showSafe: state.config.showSafeZones, showF2p: state.config.showF2pZones }
                 : undefined;
         },
         (index, bounds) => plugin.resizeWorldZone(index, bounds),
@@ -862,13 +863,15 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
         const rects: ZoneGroundRect[] = [];
         for (const zone of world.zones) {
             if (zone.minX === undefined) continue; // Global rules have no editable rectangle.
-            if (!state.config.renderAllHeightLevels && zone.z !== state.config.heightLevel) continue;
+            // F2P land is matched on x/y by the server, so it shows on every plane.
+            const showF2p = state.config.showF2pZones && zone.tags.includes("f2p");
+            if (!showF2p && !state.config.renderAllHeightLevels && zone.z !== state.config.heightLevel) continue;
             const showPvp = state.config.showPvpZones && zone.tags.includes("pvp");
             const showMulti =
                 state.config.showMultiCombatZones && zone.tags.includes("multi-combat");
             const showDuel = state.config.showDuelZones && zone.tags.includes("duel");
             const showSafe = state.config.showSafeZones && zone.tags.includes("safe");
-            if (!showPvp && !showMulti && !showSafe && !showDuel) continue;
+            if (!showPvp && !showMulti && !showSafe && !showDuel && !showF2p) continue;
             for (let i = 0; i < renderer.mapManager.visibleMapCount; i++) {
                 const map = renderer.mapManager.visibleMaps[i];
                 if (
@@ -890,6 +893,7 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
                 const maxY = Math.min(zone.maxY, mapMinY + 63);
                 if (minX > maxX || minY > maxY) continue;
                 if (showSafe) rects.push({ minX, maxX, minY, maxY, plane: zone.z, colorRgb: 0x86efac, alpha: ZONE_OVERLAY_ALPHA });
+                if (showF2p) rects.push({ minX, maxX, minY, maxY, plane: state.config.heightLevel, colorRgb: 0x93c5fd, alpha: ZONE_OVERLAY_ALPHA });
                 if (showPvp) {
                     rects.push({
                         minX,
@@ -920,7 +924,7 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
     };
     const syncWorldZoneLoop = (): void => {
         const state = plugin.getState();
-        const visible = state.config.showDuelZones || state.config.showPvpZones || state.config.showMultiCombatZones || state.config.showSafeZones;
+        const visible = state.config.showDuelZones || state.config.showPvpZones || state.config.showMultiCombatZones || state.config.showSafeZones || state.config.showF2pZones;
         if (state.config.active && state.world.definition && visible) {
             if (zoneFrame === undefined) zoneFrame = requestAnimationFrame(drawWorldZones);
             return;

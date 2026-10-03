@@ -255,6 +255,7 @@ function leaveArenaOnLogout({ player }) {
 
 module.exports = {
   name: "TzhaarFightPits",
+  members: true,
   register(pluginApi) {
     api = pluginApi;
     core = pluginApi.core;

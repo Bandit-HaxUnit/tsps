@@ -14,6 +14,7 @@ const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/ri
 
 module.exports = {
   name: "Inferno",
+  members: true,
   register(api) {
     const { ObjectIdentifiers: Objects } = api.core;
     const combat = registerInfernoMonsters(api, { tryRevive: run.tryRevive });

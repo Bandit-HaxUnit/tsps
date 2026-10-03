@@ -260,6 +260,7 @@ function forgetSession({ player }) {
 
 module.exports = {
   name: "SailingSalvaging",
+  members: true,
   hookTierOf,
   successChance,
   rollLoot,

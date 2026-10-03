@@ -7,6 +7,7 @@
  */
 module.exports = {
   name: "TombsOfAmascut",
+  members: true,
   register(api) {
     require("./toa/Lobby.TombsOfAmascut")(api);
     require("./toa/Raid.TombsOfAmascut")(api);

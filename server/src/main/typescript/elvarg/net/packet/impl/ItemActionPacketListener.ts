@@ -23,6 +23,7 @@ export class ItemActionPacketListener {
   }
 
   public static handleAction(player: any, interfaceId: number, itemId: number, slot: number, clickType: number, option?: string): boolean {
+    if (PluginManager.emitCanUseItem(player, itemId, "action", option) === false) return true;
     if (clickType === 1) return this.handleFirstAction(player, interfaceId, itemId, slot, option);
     const item = this.itemContainer(player, interfaceId)?.getItems?.()[slot];
     if (!item || item.getId() !== itemId) return false;

@@ -34,7 +34,7 @@ const DOOR_NAMES = new Set([
 // leaves nameless have no property; those stay numeric, marked "nameless". The tables need
 // api.core, so register() builds them.
 let SELF_OPENING_DOOR_IDS, SINGLE_DOOR_OPEN_IDS, WOODEN_GATES, WOODEN_GATE_BY_ID;
-let DOUBLE_DOOR_ID_FAMILIES, DOUBLE_DOOR_FAMILY_IDS_BY_ID, SPECIAL_DOUBLE_DOOR_LEFT_IDS;
+let DOUBLE_DOOR_ID_FAMILIES, DOUBLE_DOOR_FAMILY_IDS_BY_ID;
 let SPECIAL_DOUBLE_DOOR_PAIRS, SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID, SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID;
 
 function defineDoorData({ ObjectIdentifiers: O }) {
@@ -103,7 +103,6 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     // Large doors sharing model 639 with 1521/1524; they open into that family's 1522/1525.
     Object.freeze([O.LARGE_DOOR_98, O.LARGE_DOOR_99, O.LARGE_DOOR_16, O.LARGE_DOOR_18]),
   ]);
-  SPECIAL_DOUBLE_DOOR_LEFT_IDS = new Set([O.GATE_26, O.GATE_29, O.GATE_33, O.DOOR_354, O.DOOR_356, O.GATE_40, O.GATE_92, O.GATE_94, O.LARGE_DOOR_24, O.LARGE_DOOR_26, O.LARGE_DOOR_29, O.LARGE_DOOR_31, O.LARGE_DOOR_98, O.LARGE_DOOR_16, O.LARGE_DOOR_7, O.LARGE_DOOR_8]);
   // Both leaves of each pair are partners of the other.
   SPECIAL_DOUBLE_DOOR_PAIRS = Object.freeze([
     [O.GATE_26, O.GATE_27],
@@ -719,9 +718,13 @@ function resolveDoubleDoorPair(clicked) {
         if (!partner) {
           continue;
         }
-        return SPECIAL_DOUBLE_DOOR_LEFT_IDS.has(clicked.currentId)
-          ? [clicked, partner]
-          : [partner, clicked];
+        // The cache places these pairs in both leaf orders (1728 west of 1727 on some
+        // walls), so the left leaf comes from the closed layout, never from the id.
+        // Closed positions keep this right while the leaves are swung open too.
+        const [leftDx, leftDy] = LEFT_LEAF_OFFSETS[clicked.originalFace];
+        const partnerIsLeft = partner.originalX - clicked.originalX === leftDx &&
+          partner.originalY - clicked.originalY === leftDy;
+        return partnerIsLeft ? [partner, clicked] : [clicked, partner];
       }
     }
   }

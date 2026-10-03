@@ -209,6 +209,7 @@ function chargeFromShard({ player, usedItem, usedWithItem }) {
 
 module.exports = {
   name: "AmuletOfBloodFury",
+  members: true,
   register(api) {
     BonusManager = api.getBonusManager();
     CombatFactory = api.getCombatFactory();

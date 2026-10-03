@@ -155,7 +155,7 @@ import {
 } from "../rs/config/meltype/MapElementTypeLoader";
 import { NpcTypeLoader } from "../rs/config/npctype/NpcTypeLoader";
 import { ObjModelLoader } from "../rs/config/objtype/ObjModelLoader";
-import { ObjTypeLoader } from "../rs/config/objtype/ObjTypeLoader";
+import { ObjTypeLoader, PostProcessedObjTypeLoader } from "../rs/config/objtype/ObjTypeLoader";
 import { EquipToDisplaySlot, EquipmentSlot } from "../rs/config/player/Equipment";
 import { PlayerAppearance } from "../rs/config/player/PlayerAppearance";
 import type { SeqSoundEffect, SeqType } from "../rs/config/seqtype/SeqType";
@@ -552,6 +552,8 @@ export class OsrsClient {
     // Local player name (from server handshake)
     localPlayerName: string = "";
     localPlayerIsAdmin: boolean = false;
+    /** From the login handshake; false = free-to-play world (read by cs1 and MAP_MEMBERS). */
+    isMembersWorld: boolean = true;
     private localChatNameIcons: number[] = [];
     private localChatNamePrefix: string = "";
     private readonly tradeRequestTargetsByName = new Map<string, number>();
@@ -3364,8 +3366,15 @@ export class OsrsClient {
             );
             // Capture server-assigned ID as soon as handshake arrives
             this.trackServerSubscription(
-                subscribeHandshake(({ id, name, appearance, chatIcons, chatPrefix, isAdmin }) => {
+                subscribeHandshake(({ id, name, appearance, chatIcons, chatPrefix, isAdmin, membersWorld }) => {
                     try {
+                        const isMembersWorld = membersWorld !== false;
+                        if (isMembersWorld !== this.isMembersWorld) {
+                            this.isMembersWorld = isMembersWorld;
+                            // Item names/options are baked at load; re-decode with the new world type.
+                            PostProcessedObjTypeLoader.membersWorld = isMembersWorld;
+                            this.objTypeLoader?.clearCache?.();
+                        }
                         // Store the local player name for CS2 scripts (CHAT_PLAYERNAME)
                         if (name) {
                             this.localPlayerName = name;
