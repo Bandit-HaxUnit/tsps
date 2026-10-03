@@ -175,6 +175,24 @@ test('player arrows land on the tick their hit applies', () => {
   assert.deepEqual(RangedCombatMethod.projectileTiming(40, [1], 0), { delay: 20, speed: 30 });
   assert.deepEqual(RangedCombatMethod.projectileTiming(40, [2], 0), { delay: 40, speed: 60 });
   assert.deepEqual(RangedCombatMethod.projectileTiming(40, [3], 0), { delay: 40, speed: 90 });
+  // NPCs take the processing-order tick, so the arrow lands with it.
+  assert.deepEqual(RangedCombatMethod.projectileTiming(40, [1], 0, 1), { delay: 40, speed: 60 });
   // Dark bow: the second arrow lands with its slower second hit.
   assert.deepEqual(RangedCombatMethod.projectileTiming(33, [1, 2], 1), { delay: 33, speed: 60 });
+});
+
+test('hits on NPCs and player melee take the processing-order tick', () => {
+  const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
+  const { CombatType } = require('../dist/game/content/combat/CombatType');
+  const hit = (playerAttacker, npcTarget, type) => ({
+    getAttacker: () => ({ isPlayer: () => playerAttacker }),
+    getTarget: () => ({ isNpc: () => npcTarget }),
+    getCombatType: () => type,
+  });
+  assert.equal(CombatFactory.hitProcessingDelay(hit(true, true, CombatType.RANGED)), 1);
+  assert.equal(CombatFactory.hitProcessingDelay(hit(true, true, CombatType.MAGIC)), 1);
+  assert.equal(CombatFactory.hitProcessingDelay(hit(true, false, CombatType.RANGED)), 0);
+  assert.equal(CombatFactory.hitProcessingDelay(hit(true, false, CombatType.MELEE)), 1);
+  assert.equal(CombatFactory.hitProcessingDelay(hit(false, false, CombatType.RANGED)), 0, 'NPC attacks on players are unchanged');
+  assert.equal(CombatFactory.hitProcessingDelay(hit(false, true, CombatType.RANGED)), 1);
 });

@@ -74,10 +74,12 @@ export class RangedCombatMethod extends CombatMethod {
         }
 
         const projectiles = profile?.projectiles ?? [{ delay: 40, speed: 57, startHeight: 43, endHeight: 31 }];
-        const hitDelays = WeaponProfiles.hitDelays(character.getAsPlayer(), character.getLocation().getDistance(target.getLocation()));
+        const processingOrder = target.isNpc() ? 1 : 0;
+        const hitDelays = WeaponProfiles.hitDelays(character.getAsPlayer(), character.getLocation().getDistance(target.getLocation()))
+            .map((ticks) => ticks + processingOrder);
         for (let index = 0; index < projectiles.length; index++) {
             const projectile = projectiles[index];
-            const timing = RangedCombatMethod.projectileTiming(projectile.delay, hitDelays, index);
+            const timing = RangedCombatMethod.projectileTiming(projectile.delay, hitDelays, index, processingOrder);
             Projectile.createProjectile(character, target, ammo.getProjectileId(), timing.delay, timing.speed, projectile.startHeight, projectile.endHeight).sendProjectile();
         }
         Sounds.sendSound(character, profile?.fireSound ?? Sound.SHOOT_ARROW);
@@ -93,8 +95,8 @@ export class RangedCombatMethod extends CombatMethod {
      * range and the hitsplat reads early up close. The launch is pulled in when the
      * hit lands sooner than the profile's usual delay, keeping a short flight.
      */
-    public static projectileTiming(baseDelay: number, hitDelays: number[], index: number): { delay: number; speed: number } {
-        const hitTicks = hitDelays[index] ?? hitDelays[hitDelays.length - 1] ?? 1;
+    public static projectileTiming(baseDelay: number, hitDelays: number[], index: number, processingOrder = 0): { delay: number; speed: number } {
+        const hitTicks = (hitDelays[index] ?? hitDelays[hitDelays.length - 1] ?? 1) + processingOrder;
         const speed = hitTicks * 30;
         return { delay: Math.max(0, Math.min(baseDelay, speed - 10)), speed };
     }

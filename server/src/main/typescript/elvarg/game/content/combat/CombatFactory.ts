@@ -720,9 +720,20 @@ export class CombatFactory {
         // Add this hit to the target's hitQueue.
         target.getCombat().getHitQueue().addPendingHit(
             qHit,
-            World.getProcessCycle() + qHit.getDelay() +
-                (attacker.isPlayer() && qHit.getCombatType() === CombatType.MELEE ? 1 : 0),
+            World.getProcessCycle() + qHit.getDelay() + CombatFactory.hitProcessingDelay(qHit),
         );
+    }
+
+    /**
+     * OSRS processes NPCs before players each tick, so a hit queued against an NPC lands
+     * one tick after the distance table (Wiki: Hit delay). Player melee keeps its tick too:
+     * the target's queue drains at the start of its own turn, which has already passed.
+     */
+    public static hitProcessingDelay(hit: PendingHit): number {
+        const targetIsNpc = hit.getTarget()?.isNpc?.() === true;
+        const meleePlayerAttack = hit.getAttacker()?.isPlayer?.() === true
+            && hit.getCombatType() === CombatType.MELEE;
+        return targetIsNpc || meleePlayerAttack ? 1 : 0;
     }
 
     public static executeHit(qHit: PendingHit) {
