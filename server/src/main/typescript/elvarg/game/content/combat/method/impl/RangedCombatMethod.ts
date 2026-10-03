@@ -74,14 +74,29 @@ export class RangedCombatMethod extends CombatMethod {
         }
 
         const projectiles = profile?.projectiles ?? [{ delay: 40, speed: 57, startHeight: 43, endHeight: 31 }];
-        for (const projectile of projectiles) {
-            Projectile.createProjectile(character, target, ammo.getProjectileId(), projectile.delay, projectile.speed, projectile.startHeight, projectile.endHeight).sendProjectile();
+        const hitDelays = WeaponProfiles.hitDelays(character.getAsPlayer(), character.getLocation().getDistance(target.getLocation()));
+        for (let index = 0; index < projectiles.length; index++) {
+            const projectile = projectiles[index];
+            const timing = RangedCombatMethod.projectileTiming(projectile.delay, hitDelays, index);
+            Projectile.createProjectile(character, target, ammo.getProjectileId(), timing.delay, timing.speed, projectile.startHeight, projectile.endHeight).sendProjectile();
         }
         Sounds.sendSound(character, profile?.fireSound ?? Sound.SHOOT_ARROW);
 
         if (character.isPlayer()) {
             CombatFactory.decrementAmmo(character.getAsPlayer(), target.getLocation(), profile?.ammoRequired ?? 1);
         }
+    }
+
+    /**
+     * Times a projectile to land on the tick its hit applies. The client interpolates
+     * between the two offsets, so a flat end offset lands at the same moment at any
+     * range and the hitsplat reads early up close. The launch is pulled in when the
+     * hit lands sooner than the profile's usual delay, keeping a short flight.
+     */
+    public static projectileTiming(baseDelay: number, hitDelays: number[], index: number): { delay: number; speed: number } {
+        const hitTicks = hitDelays[index] ?? hitDelays[hitDelays.length - 1] ?? 1;
+        const speed = hitTicks * 30;
+        return { delay: Math.max(0, Math.min(baseDelay, speed - 10)), speed };
     }
 
     attackDistance(character: Mobile): number {

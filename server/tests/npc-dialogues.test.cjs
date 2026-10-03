@@ -245,11 +245,17 @@ test('Lumbridge tutors hand out what their transcripts say', () => {
   const { NpcIdentifiers: N } = require('../dist/util/NpcIdentifiers');
   const hooks = {};
   require('../plugins/npcs/Tutors.plugin').register({
-    core: { Skill, ItemIdentifiers: I, NpcIdentifiers: N, ItemDefinition: { forId: () => ({ getName: () => 'Thing' }) } },
+    core: {
+      Skill, ItemIdentifiers: I, NpcIdentifiers: N, ItemDefinition: { forId: () => ({ getName: () => 'Thing' }) },
+      Equipment: require('../dist/game/model/container/impl/Equipment').Equipment,
+      Sounds: { sendSound() {} }, Sound: { PICK_UP_ITEM: 0 },
+      ItemOnGroundManager: { deregister(groundItem) { groundItem.deregistered = true; } },
+    },
     persistAttribute() {}, onNpcDialogueVariant() {}, onItemOnNpc() {},
     onNpcDialogueCondition(handler) { hooks.condition = handler; },
     onCustomEvent(name, handler) { hooks[name] = handler; },
     onNpcInteraction(name, actions) { hooks[name] = actions; },
+    onGroundItemPickup(handler) { hooks.pickup = handler; },
     emitCustomEvent(_name, request) { hooks.started = request.variant; },
   });
   const container = (items = {}) => {
@@ -303,6 +309,30 @@ test('Lumbridge tutors hand out what their transcripts say', () => {
   play(ranger, N.RANGED_COMBAT_TUTOR, transcript('Ranged combat tutor', hooks.started));
   assert.equal(ranger.inventory.getAmount(I.TRAINING_BOW), 1);
   assert.equal(ranger.inventory.getAmount(I.TRAINING_ARROWS), 25);
+
+  // The ranged tutor's pickup toggle: same ammo as the worn slot goes to the slot, not the bag.
+  hooks['npc-dialogue:choice']({ player: ranger, npcId: N.RANGED_COMBAT_TUTOR, option: 'Automatically equip it.' });
+  assert.equal(ranger.getAttribute('ranged:equip-ammo-on-pickup'), true);
+  const { Equipment } = require('../dist/game/model/container/impl/Equipment');
+  const { Item } = require('../dist/game/model/Item');
+  const ammoSlot = new Item(I.BRONZE_ARROW, 5);
+  ranger.getEquipment = () => ({
+    get: (slot) => slot === Equipment.AMMUNITION_SLOT ? ammoSlot : new Item(-1, 0),
+    refreshItems() {},
+  });
+  const matching = { player: ranger, groundItemId: I.BRONZE_ARROW, groundItem: { getItem: () => new Item(I.BRONZE_ARROW, 3) }, handled: false };
+  hooks.pickup(matching);
+  assert.equal(matching.handled, true);
+  assert.equal(matching.groundItem.deregistered, true);
+  assert.equal(ammoSlot.getAmount(), 8);
+  const wrongAmmo = { player: ranger, groundItemId: I.IRON_ARROW, groundItem: { getItem: () => new Item(I.IRON_ARROW, 1) }, handled: false };
+  hooks.pickup(wrongAmmo);
+  assert.equal(wrongAmmo.handled, false, 'different ammo stays on the normal inventory pickup path');
+  hooks['npc-dialogue:choice']({ player: ranger, npcId: N.RANGED_COMBAT_TUTOR, option: 'Place it in my inventory.' });
+  assert.equal(ranger.getAttribute('ranged:equip-ammo-on-pickup'), false);
+  const disabled = { player: ranger, groundItemId: I.BRONZE_ARROW, groundItem: { getItem: () => new Item(I.BRONZE_ARROW, 3) }, handled: false };
+  hooks.pickup(disabled);
+  assert.equal(disabled.handled, false);
 });
 
 test('"same as above" after an NPC line carries on as that line does elsewhere, never looping', () => {

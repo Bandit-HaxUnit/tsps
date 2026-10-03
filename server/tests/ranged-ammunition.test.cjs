@@ -65,3 +65,116 @@ test('a shot refreshes the native equipment counter immediately, including the f
   CombatFactory.decrementAmmo(p, null, 1);
   assert.equal(ammo.getId(), -1); assert.equal(amounts.length, 2);
 });
+
+// --- OSRS floor drops and Ava's devices (Wiki: Ava's device).
+
+const { CombatFactory: Factory } = require('../dist/game/content/combat/CombatFactory');
+const { Equipment: Slots } = require('../dist/game/model/container/impl/Equipment');
+const { Item: GroundItem } = require('../dist/game/model/Item');
+const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+const { PluginManager } = require('../dist/plugins/PluginManager');
+
+// The real Ava's plugin, with core standing in for the plugin API.
+let avaRecovery = null;
+require('../plugins/items/AvasAccumulator.plugin').register({
+  core: { Equipment: Slots, ItemIdentifiers: Items },
+  registerRangedAmmoRecovery(resolver) { avaRecovery = resolver; },
+});
+PluginManager.rangedAmmoRecovery = (player) => avaRecovery.recovery(player) ?? 0;
+
+const drops = [];
+ItemOnGroundManager.registerLocation = (player, item, position) => drops.push({ id: item.getId(), amount: item.getAmount(), position });
+
+const POS = { x: 3000, y: 3000, z: 0 };
+
+function ammoHarness({ itemId = Items.BRONZE_ARROW, amount = 5, capeId = -1 } = {}) {
+  let ammo = new GroundItem(itemId, amount);
+  const equipment = {
+    get: (slot) => slot === Slots.AMMUNITION_SLOT ? ammo
+      : slot === Slots.CAPE_SLOT ? new GroundItem(capeId, 1) : new GroundItem(-1, 0),
+    set: (_slot, item) => { ammo = item; },
+    refreshItems() {},
+  };
+  const player = {
+    getEquipment: () => equipment,
+    sendMessage() {},
+    getCombat: () => ({ getRangedWeapon: () => RangedWeapon.SHORTBOW, getAmmunition: () => Ammunition.getForItem(itemId) }),
+  };
+  return { player, ammo: () => ammo };
+}
+
+function roll(value, fn) {
+  const original = Math.random;
+  Math.random = () => value;
+  try { return fn(); } finally { Math.random = original; }
+}
+
+const shot = (harness, rollValue, pos = POS) => roll(rollValue, () => Factory.decrementAmmo(harness.player, pos, 1));
+
+test('fired ammo breaks 20% of the time and otherwise lands where the target stood', () => {
+  drops.length = 0;
+  const broken = ammoHarness();
+  shot(broken, 0.10); // roll 10: break
+  assert.equal(broken.ammo().getAmount(), 4);
+  assert.equal(drops.length, 0);
+
+  const landed = ammoHarness();
+  shot(landed, 0.50); // roll 50: drop
+  assert.equal(landed.ammo().getAmount(), 4);
+  assert.deepEqual(drops, [{ id: Items.BRONZE_ARROW, amount: 1, position: POS }]);
+});
+
+test("Ava's attractor recovers 60% and Ava's accumulator 72%", () => {
+  drops.length = 0;
+
+  // Accumulator: drops only on rolls 20-27 (8%), recovers from 28 up.
+  const accumulator = ammoHarness({ capeId: Items.AVAS_ACCUMULATOR });
+  shot(accumulator, 0.99);
+  assert.equal(accumulator.ammo().getAmount(), 5, 'recovered automatically');
+  shot(accumulator, 0.25);
+  assert.equal(accumulator.ammo().getAmount(), 4, 'dropped to the floor');
+  assert.equal(drops.length, 1);
+
+  // Attractor: drops on rolls 20-39 (20%), recovers from 40 up.
+  const attractor = ammoHarness({ capeId: Items.AVAS_ATTRACTOR });
+  shot(attractor, 0.50);
+  assert.equal(attractor.ammo().getAmount(), 5);
+  shot(attractor, 0.30);
+  assert.equal(attractor.ammo().getAmount(), 4);
+
+  // The plugin only claims what it knows: other capes fall through to core.
+  const assembler = ammoHarness({ capeId: Items.AVAS_ASSEMBLER });
+  assert.equal(avaRecovery.recovery(assembler.player), null);
+  drops.length = 0;
+  shot(assembler, 0.50);
+  assert.equal(assembler.ammo().getAmount(), 4);
+  assert.equal(drops.length, 1);
+});
+
+test('javelins drop and are recoverable like other ammunition', () => {
+  drops.length = 0;
+  const javelin = ammoHarness({ itemId: Items.BRONZE_JAVELIN });
+  shot(javelin, 0.50);
+  assert.equal(javelin.ammo().getAmount(), 4);
+  assert.deepEqual(drops, [{ id: Items.BRONZE_JAVELIN, amount: 1, position: POS }]);
+
+  const recovered = ammoHarness({ itemId: Items.BRONZE_JAVELIN, capeId: Items.AVAS_ACCUMULATOR });
+  shot(recovered, 0.99);
+  assert.equal(recovered.ammo().getAmount(), 5);
+});
+
+test('training arrows fire the aide arrow visuals, not bronze', () => {
+  assert.equal(Ammunition.TRAINING_ARROWS.getProjectileId(), 805);
+  assert.equal(Ammunition.TRAINING_ARROWS.getStartGraphic().getId(), 806);
+  assert.deepEqual(RangedWeapon.TRAINING_BOW.getAmmunitionData(), [Ammunition.TRAINING_ARROWS]);
+});
+
+test('player arrows land on the tick their hit applies', () => {
+  const { RangedCombatMethod } = require('../dist/game/content/combat/method/impl/RangedCombatMethod');
+  // 30 client cycles per game tick; the OSRS bow table is 1/2/3 ticks at 1/3/9 tiles.
+  assert.deepEqual(RangedCombatMethod.projectileTiming(40, [1], 0), { delay: 20, speed: 30 });
+  assert.deepEqual(RangedCombatMethod.projectileTiming(40, [2], 0), { delay: 40, speed: 60 });
+  assert.deepEqual(RangedCombatMethod.projectileTiming(40, [3], 0), { delay: 40, speed: 90 });
+  // Dark bow: the second arrow lands with its slower second hit.
+  assert.deepEqual(RangedCombatMethod.projectileTiming(33, [1, 2], 1), { delay: 33, speed: 60 });
+});

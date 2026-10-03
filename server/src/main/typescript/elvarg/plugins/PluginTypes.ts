@@ -620,6 +620,12 @@ export interface PluginRangedAmmoHandler {
   decrementAmmo(player: any, pos: any, amount: number): boolean;
 }
 
+/** A share of fired ammunition recovered before it lands, e.g. by an Ava's device. */
+export interface PluginRangedAmmoRecovery {
+  /** Percentage (0-100) recovered for this player, or null to fall through. */
+  recovery(player: any): number | null;
+}
+
 export interface PluginRangedCombatModifier {
   modifyMaxHit(attacker: any, target: any, maxHit: number): number | null;
   modifyAttackRoll(attacker: any, target: any, attackRoll: number): number | null;
@@ -972,6 +978,7 @@ export interface PluginApi {
   registerBonusProvider(provider: PluginBonusProvider): void;
   registerRangedAmmoResolver(resolver: PluginRangedAmmoResolver): void;
   registerRangedAmmoHandler(handler: PluginRangedAmmoHandler): void;
+  registerRangedAmmoRecovery(recovery: PluginRangedAmmoRecovery): void;
   registerRangedCombatModifier(modifier: PluginRangedCombatModifier): void;
   registerWeaponProfile(profile: WeaponCombatProfile): void;
   /**

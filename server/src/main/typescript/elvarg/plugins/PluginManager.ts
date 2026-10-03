@@ -92,6 +92,7 @@ import {
   PluginBonusProvider,
   PluginRangedAmmoHandler,
   PluginRangedAmmoResolver,
+  PluginRangedAmmoRecovery,
   PluginRangedCombatModifier,
   PluginNpcCombatMethodProvider,
   PluginNpcCombatMethodProviderEntry,
@@ -254,6 +255,7 @@ export class PluginManager {
   private static bonusProviders: Array<{ pluginName: string; provider: PluginBonusProvider }> = [];
   private static rangedAmmoResolvers: Array<{ pluginName: string; resolver: PluginRangedAmmoResolver }> = [];
   private static rangedAmmoHandlers: Array<{ pluginName: string; handler: PluginRangedAmmoHandler }> = [];
+  private static rangedAmmoRecoveries: Array<{ pluginName: string; recovery: PluginRangedAmmoRecovery }> = [];
   private static rangedCombatModifiers: Array<{ pluginName: string; modifier: PluginRangedCombatModifier }> = [];
   private static combatMethodResolvers: PluginCombatMethodResolver[] = [];
   private static npcCombatMethodProviders: PluginNpcCombatMethodProviderEntry[] = [];
@@ -3641,6 +3643,15 @@ export class PluginManager {
         }
         PluginManager.registerRangedAmmoHandlerInternal(pluginName, handler);
       },
+      registerRangedAmmoRecovery: (recovery) => {
+        if (!recovery || typeof recovery.recovery !== "function") {
+          console.warn(
+            `[plugins] ${pluginName} attempted invalid ranged ammo recovery registration`
+          );
+          return;
+        }
+        PluginManager.registerRangedAmmoRecoveryInternal(pluginName, recovery);
+      },
       registerRangedCombatModifier: (modifier) => {
         if (
           !modifier ||
@@ -3821,6 +3832,24 @@ export class PluginManager {
     return false;
   }
 
+  /** The first plugin-declared recovery share for this player's shot, or 0 when none applies. */
+  public static rangedAmmoRecovery(player: any): number {
+    for (const entry of PluginManager.rangedAmmoRecoveries) {
+      try {
+        const recovery = entry.recovery.recovery(player);
+        if (recovery != null && Number.isFinite(recovery)) {
+          return Math.max(0, Math.min(100, Math.floor(recovery)));
+        }
+      } catch (err) {
+        console.error(
+          `[plugins] ranged ammo recovery failed (${entry.pluginName})`,
+          err
+        );
+      }
+    }
+    return 0;
+  }
+
   public static modifyRangedMaxHit(attacker: any, target: any, maxHit: number): number {
     let current = Number.isFinite(maxHit) ? Math.max(0, Math.floor(maxHit)) : 0;
     for (const entry of PluginManager.rangedCombatModifiers) {
@@ -3916,6 +3945,13 @@ export class PluginManager {
     handler: PluginRangedAmmoHandler
   ): void {
     PluginManager.rangedAmmoHandlers.push({ pluginName, handler });
+  }
+
+  private static registerRangedAmmoRecoveryInternal(
+    pluginName: string,
+    recovery: PluginRangedAmmoRecovery
+  ): void {
+    PluginManager.rangedAmmoRecoveries.push({ pluginName, recovery });
   }
 
   private static registerRangedCombatModifierInternal(

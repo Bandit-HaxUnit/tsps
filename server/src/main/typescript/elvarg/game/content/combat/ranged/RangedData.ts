@@ -148,8 +148,9 @@ export class Ammunition {
     public static readonly RUNE_ARROW = new Ammunition(892, new Graphic(24, 0, GraphicHeight.HIGH), 15, 50)
     public static readonly ICE_ARROW = new Ammunition(78, new Graphic(25, 0, GraphicHeight.HIGH), 16, 58)
     public static readonly BROAD_ARROW = new Ammunition(4160, new Graphic(20, 0, GraphicHeight.HIGH), 11, 58)
-    // ponytail: training arrows reuse the bronze arrow launch/travel spotanims; no dedicated ones in RuneLite's SpotanimID.
-    public static readonly TRAINING_ARROWS = new Ammunition(ItemIdentifiers.TRAINING_ARROWS, new Graphic(19, 0, GraphicHeight.HIGH), 10, 7)
+    // RuneLite names these AIDE_ARROW_LAUNCH/TRAVEL; their recolours match the training
+    // arrow item's palette [61,57,5012,926] -> [127,111,41366,41282].
+    public static readonly TRAINING_ARROWS = new Ammunition(ItemIdentifiers.TRAINING_ARROWS, new Graphic(806, 0, GraphicHeight.HIGH), 805, 7)
     public static readonly DRAGON_ARROW = new Ammunition(11212, new Graphic(1111, 0, GraphicHeight.HIGH), 1120, 65)
 
     public static readonly BRONZE_BOLT = new Ammunition(877, new Graphic(955, 0, GraphicHeight.HIGH), 27, 13)
@@ -312,15 +313,6 @@ export class Ammunition {
     public static readonly MORRIGANS_THROWING_AXE = new Ammunition(ItemIdentifiers.MORRIGANS_THROWING_AXE_BH_, new Graphic(1624, 0, GraphicHeight.HIGH), 1623, 0) // MORRIGANS_TAXE_LAUNCH/TRAVEL
     public static readonly TONALZTICS_OF_RALOS = new Ammunition(ItemIdentifiers.TONALZTICS_OF_RALOS, null, 2729, 0) // PROJANIM_GLAIVE_01_REGULAR
 
-    private static NO_GROUND_DROP: Set<Ammunition> = new Set([
-        Ammunition.BRONZE_JAVELIN,
-        Ammunition.IRON_JAVELIN,
-        Ammunition.STEEL_JAVELIN,
-        Ammunition.ADAMANT_JAVELIN,
-        Ammunition.RUNE_JAVELIN,
-        Ammunition.DRAGON_JAVELIN
-    ]);
-
     private readonly startGfx: Graphic;
     private readonly itemId: number;
     private readonly projectileId: number;
@@ -388,10 +380,6 @@ export class Ammunition {
 
     public getStrength(): number {
         return this.strength;
-    }
-
-    public dropOnFloor(): boolean {
-        return !Ammunition.NO_GROUND_DROP.has(this);
     }
 }
 
