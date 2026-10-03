@@ -82,6 +82,14 @@ export function getDefaultServerSecure(): boolean {
 }
 
 /**
+ * Debug "ID:" labels on examine/menu targets are disabled by default.
+ * Set `REACT_APP_DISABLE_DEBUG_ID=false` at build time to enable them.
+ */
+export function isDebugIdEnabled(): boolean {
+    return !readBoolean(process.env.REACT_APP_DISABLE_DEBUG_ID, true);
+}
+
+/**
  * Optional full server list baked in at build time (JSON array).
  * When set, this takes precedence over fetching `/servers.json`.
  */

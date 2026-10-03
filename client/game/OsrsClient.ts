@@ -47,6 +47,7 @@ import {
     getDefaultServerName,
     getDefaultServerSecure,
     getDefaultWsUrl,
+    isDebugIdEnabled,
 } from "../config/clientEnv";
 import {
     type BankServerUpdate,
@@ -664,7 +665,11 @@ export class OsrsClient {
     private lastCastSpotStartCycleByPlayer: Map<number, number> = new Map();
     // Track last active spot animation id per player for telemetry parity
     private lastSpotGraphicByPlayer: Map<number, number> = new Map();
-    debugId: boolean = true;
+    /**
+     * Examine "ID:" labels on menu targets (also gates null-name world entries).
+     * Disabled by default; enable with REACT_APP_DISABLE_DEBUG_ID=false at build time.
+     */
+    debugId: boolean = isDebugIdEnabled();
 
     // State
 
