@@ -392,15 +392,26 @@ function tendMeleers(session) {
     npc.performAnimation(new Animation(MELEER_DIG_ANIM));
     monsters.later(npc, MELEER_DIG_TICKS, () => {
       const at = burrowExit(session, npc);
-      if (at) npc.moveTo(at);
-      npc.performAnimation(new Animation(MELEER_RISE_ANIM));
-      npc.setUntargetable(false);
-      npc.setScriptedMovement(false);
-      npc.__infernoDigging = false;
-      npc.__infernoLastStrike = cycle();
-      npc.getCombat().attack(session.player);
+      if (!at) {
+        riseMeleer(session, npc);
+        return;
+      }
+      // A teleported NPC is out of players' views on the tick it moves, and that tick's
+      // animation is never sent, so it rises the tick after.
+      npc.moveTo(at);
+      monsters.later(npc, 1, () => riseMeleer(session, npc));
     });
   }
+}
+
+function riseMeleer(session, npc) {
+  const { Animation } = core;
+  npc.performAnimation(new Animation(MELEER_RISE_ANIM));
+  npc.setUntargetable(false);
+  npc.setScriptedMovement(false);
+  npc.__infernoDigging = false;
+  npc.__infernoLastStrike = cycle();
+  npc.getCombat().attack(session.player);
 }
 
 function burrowExit(session, npc) {
