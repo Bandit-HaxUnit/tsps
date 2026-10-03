@@ -118,6 +118,8 @@ const PETS = [
   { enumName: "OLMLET", petId: 7520, morphId: 0, itemId: 20851, dialogue: 298 },
   { enumName: "SKOTOS", petId: 425, morphId: 0, itemId: 21273, dialogue: 298 },
 
+  // Wintertodt's reward cart (followers are 7370, as in live captures).
+  { enumName: "PHOENIX", petId: NpcIdentifiers.PHOENIX_2, morphId: 0, itemId: 20693, dialogue: -1 },
   { enumName: "HERON", petId: 6715, morphId: 0, itemId: 13320, dialogue: -1, skill: Skill.FISHING, chance: 5000 },
   {
     enumName: "BEAVER",

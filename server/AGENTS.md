@@ -188,6 +188,28 @@ The entry point stays scannable and units can be added, removed or reused withou
 shared code. See `plugins/combat/SpecialAttacks.plugin.js` and `plugins/combat/specials/` for
 the canonical example.
 
+### Members Content
+
+Every plugin whose content is members-only in OSRS (members skills, areas, bosses, minigames,
+members items) **must** export `members: true`. When world.json sets `"membersWorld": false`,
+`PluginManager` skips those plugins entirely, so an untagged members plugin leaks members
+content into a free-to-play world.
+
+```js
+module.exports = {
+  name: "Barrows",
+  members: true,
+  register(api) { ... },
+};
+```
+
+- Check the OSRS wiki page's "Members" field when unsure; F2P content (e.g. Castle Wars,
+  Emir's Arena, Obor) stays untagged.
+- Quests are not plugins: add members quests to `QUESTS` only and free-to-play ones to
+  `F2P_QUESTS` as well, in `plugins/quests/Quests.plugin.js`.
+- Members gating that a whole-plugin skip can't express (items, XP, spawns, shop stock, areas)
+  lives in `plugins/modes/FreeToPlay.plugin.js` via the `onCan*` hooks, not in core.
+
 ### Name-Based Hooks
 
 Use the name-based overloads wherever they exist. They read as the game reads, and they
@@ -218,8 +240,15 @@ api.registerCommand("players", listPlayers);              // anyone
 ```
 
 `api.setCommandRights(command, minimumRights)` overrides whatever a command registered
-with, so a plugin can widen or narrow someone else's command - a spawn mode opening
-`::items` to everyone passes `PlayerRights.NONE`.
+with, so a plugin can widen or narrow someone else's command.
+
+World owners set ranks without a plugin through world.json `pluginConfig`
+`"commands:permissions"`, a map of command name (no `::`) to a `PlayerRights` name. It
+wins over both of the above:
+
+```json
+"pluginConfig": { "commands:permissions": { "items": "NONE", "teleports": "OWNER" } }
+```
 
 ## Cache Lookup Tooling
 
@@ -301,6 +330,10 @@ capability belongs in the runtime as a declared option, not in a feature-specifi
   interface ids, item/npc/object ids).
 - If a constant does not exist yet, add one in the appropriate shared module instead of
   repeating raw numbers.
+- Attribute keys are kebab-case, namespaced with `:` (`warriors-guild:basement-unlocked`,
+  `pvp:open-presets-on-death`, `blast-furnace`). Declare each key once in a `*_ATTRIBUTE`
+  constant and read/write through it; item `getMetaValue`/`setMetaValue` keys follow the
+  same rule.
 - Derive from the cache where the cache knows the answer. A rule that reads definitions
   (`plugins/objects/Doors.plugin.js` builds its open/closed pairs this way) beats a
   hand-picked id list that only covers what someone happened to test.

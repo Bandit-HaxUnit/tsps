@@ -134,7 +134,7 @@ function registerBonds() {
 
 test("Bonds plugin registers its hooks and persists the membership expiry", () => {
   const handlers = registerBonds();
-  assert.deepEqual(handlers.persisted, ["bondMembershipExpiry"]);
+  assert.deepEqual(handlers.persisted, ["bond-membership-expiry"]);
   assert.ok(handlers.itemActions.has("Old school bond"));
   assert.ok(handlers.itemActions.has("Old school bond (untradeable)"));
   assert.equal(handlers.tradeCompleted.length, 1);
@@ -229,7 +229,7 @@ test("redeeming two bonds grants the 29-day package and consumes both", () => {
 
   assert.equal(player.getInventory().getAmount(TRADEABLE_BOND), 0);
   assert.equal(player.getInventory().getAmount(UNTRADEABLE_BOND), 0);
-  const remainingDays = (player.getAttribute("bondMembershipExpiry") - Date.now()) / (24 * 60 * 60 * 1000);
+  const remainingDays = (player.getAttribute("bond-membership-expiry") - Date.now()) / (24 * 60 * 60 * 1000);
   assert.ok(remainingDays > 28.9 && remainingDays <= 29);
 });
 

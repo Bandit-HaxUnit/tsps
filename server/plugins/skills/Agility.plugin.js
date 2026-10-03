@@ -14,7 +14,7 @@ const LAPS_ATTRIBUTE = "agility.laps";
  * Persisted: the lap count chat message is off (Grace's Toggle Counter). Laps are still
  * counted (OSRS Wiki, Grace).
  */
-const LAP_COUNTER_OFF_ATTRIBUTE = "agility.lapCounterOff";
+const LAP_COUNTER_OFF_ATTRIBUTE = "agility.lap-counter-off";
 
 /**
  * Marks of grace appear on rooftop courses while a lap is in progress. One roll per
@@ -270,6 +270,7 @@ buildIndex();
 
 module.exports = {
   name: "Agility",
+  members: true,
   register(api) {
     pluginApi = api;
     ItemOnGroundManager = api.getItemOnGroundManager();

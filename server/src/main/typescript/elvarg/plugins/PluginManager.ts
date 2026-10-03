@@ -6,6 +6,8 @@ import { CustomInterfaceRegistry } from "../game/interfaces/CustomInterfaceRegis
 import * as fs from "fs";
 import * as path from "path";
 import { GameConstants } from "../game/GameConstants";
+import { isMembersWorld } from "../game/definition/WorldDefinition";
+import { PlayerRights } from "../game/model/rights/PlayerRights";
 import { MapRegionReplacementManager } from "../game/collision/MapRegionReplacementManager";
 import { DefinitionLoader } from "../game/definition/loader/DefinitionLoader";
 import { ShopManager } from "../game/model/container/shop/ShopManager";
@@ -20,6 +22,11 @@ import {
   PluginCanDrinkEvent,
   PluginCanEatEvent,
   PluginCanEquipEvent,
+  PluginCanUseItemEvent,
+  PluginCanGainExperienceEvent,
+  PluginCanSpawnNpcEvent,
+  PluginCanStockItemEvent,
+  PluginPrayerDisabledEvent,
   PluginFiremakingBlockedEvent,
   PluginCanTeleportEvent,
   PluginCanLogoutEvent,
@@ -93,6 +100,7 @@ import {
   PluginBonusProvider,
   PluginRangedAmmoHandler,
   PluginRangedAmmoResolver,
+  PluginRangedAmmoRecovery,
   PluginRangedCombatModifier,
   PluginNpcCombatMethodProvider,
   PluginNpcCombatMethodProviderEntry,
@@ -141,6 +149,15 @@ type PluginPerfStat = {
 };
 
 type ObjectInteractionHook = PluginHook<PluginObjectInteractionEvent> & { order: number };
+
+/** PlayerRights names world.json "commands:permissions" accepts, mapped to their rights ids. */
+const COMMAND_PERMISSION_RIGHTS: Record<string, number> = {
+  NONE: PlayerRights.NONE.getId(),
+  MODERATOR: PlayerRights.MODERATOR.getId(),
+  ADMINISTRATOR: PlayerRights.ADMINISTRATOR.getId(),
+  OWNER: PlayerRights.OWNER.getId(),
+  DEVELOPER: PlayerRights.DEVELOPER.getId(),
+};
 
 export class PluginManager {
   private static readonly PERF_EVENT_SAMPLE_LIMIT = 128;
@@ -214,6 +231,11 @@ export class PluginManager {
   private static shouldKeepItemOnDeathHooks: PluginHook<PluginShouldKeepItemOnDeathEvent>[] = [];
   private static playerDeathItemDropHooks: PluginHook<PluginPlayerDeathItemDropEvent>[] = [];
   private static canEquipHooks: PluginHook<PluginCanEquipEvent>[] = [];
+  private static canUseItemHooks: PluginHook<PluginCanUseItemEvent>[] = [];
+  private static canGainExperienceHooks: PluginHook<PluginCanGainExperienceEvent>[] = [];
+  private static canSpawnNpcHooks: PluginHook<PluginCanSpawnNpcEvent>[] = [];
+  private static canStockItemHooks: PluginHook<PluginCanStockItemEvent>[] = [];
+  private static prayerDisabledHooks: PluginHook<PluginPrayerDisabledEvent>[] = [];
   private static canUnequipHooks: PluginHook<PluginCanUnequipEvent>[] = [];
   private static playerDeathHooks: PluginHook<PluginPlayerDeathEvent>[] = [];
   private static playerOptionHooks: PluginHook<PluginPlayerOptionEvent>[] = [];
@@ -249,6 +271,7 @@ export class PluginManager {
   private static commandRights = new Map<string, number | null>();
   /** Lowest rights id a plugin has overridden a command to, taking priority over registration. */
   private static commandRightsOverrides = new Map<string, number | null>();
+  private static commandPermissionsCache: Map<string, number> | null = null;
   private static combatEngine: PluginCombatEngine | null = null;
   private static combatEngineOwner: string | null = null;
   private static combatDamageProvider: PluginCombatDamageProvider | null = null;
@@ -256,6 +279,7 @@ export class PluginManager {
   private static bonusProviders: Array<{ pluginName: string; provider: PluginBonusProvider }> = [];
   private static rangedAmmoResolvers: Array<{ pluginName: string; resolver: PluginRangedAmmoResolver }> = [];
   private static rangedAmmoHandlers: Array<{ pluginName: string; handler: PluginRangedAmmoHandler }> = [];
+  private static rangedAmmoRecoveries: Array<{ pluginName: string; recovery: PluginRangedAmmoRecovery }> = [];
   private static rangedCombatModifiers: Array<{ pluginName: string; modifier: PluginRangedCombatModifier }> = [];
   private static combatMethodResolvers: PluginCombatMethodResolver[] = [];
   private static npcCombatMethodProviders: PluginNpcCombatMethodProviderEntry[] = [];
@@ -512,14 +536,21 @@ export class PluginManager {
     const candidates = PluginManager.collectPluginLoadCandidates(
       enabledPluginFiles
     );
+    const membersWorld = isMembersWorld();
+    let membersOnlyCount = 0;
     PluginManager.loadPluginCandidatesWithDependencies(
       candidates.filter((candidate) => {
         // Keep exported-name configuration working when it differs from the filename.
-        if (!disabledPluginNames.has(normalizePluginName(candidate.pluginName))) {
-          return true;
+        if (disabledPluginNames.has(normalizePluginName(candidate.pluginName))) {
+          disabledCount++;
+          return false;
         }
-        disabledCount++;
-        return false;
+        // Members content stays unloaded on a free-to-play world.
+        if (!membersWorld && candidate.plugin.members === true) {
+          membersOnlyCount++;
+          return false;
+        }
+        return true;
       })
     );
 
@@ -527,7 +558,8 @@ export class PluginManager {
       console.info(PluginManager.lastPersistenceOverride);
     }
     console.info(
-      `[plugins] active=${PluginManager.loadedPlugins.length} disabled=${disabledCount}`
+      `[plugins] active=${PluginManager.loadedPlugins.length} disabled=${disabledCount}` +
+        (membersOnlyCount > 0 ? ` members-only=${membersOnlyCount}` : "")
     );
     if (enabledPluginFiles.length > 0 && PluginManager.loadedPlugins.length === 0) {
       console.warn(`[plugins] no valid plugins loaded from ${pluginDirectory}`);
@@ -941,11 +973,11 @@ export class PluginManager {
     return null;
   }
 
-  public static emitCanTeleport(player: any, wildernessLevelLimit: number = 20): boolean | null {
+  public static emitCanTeleport(player: any, wildernessLevelLimit: number = 20, destination?: any): boolean | null {
     if (PluginManager.canTeleportHooks.length === 0) {
       return null;
     }
-    const event: PluginCanTeleportEvent = { player, wildernessLevelLimit, allow: null };
+    const event: PluginCanTeleportEvent = { player, wildernessLevelLimit, destination, allow: null };
     for (const hook of PluginManager.canTeleportHooks) {
       PluginManager.executeHook(hook, event, "can_teleport", "can_teleport");
       if (event.allow !== null) {
@@ -1190,6 +1222,55 @@ export class PluginManager {
     return null;
   }
 
+  /** Runs hooks until one sets `answerKey`; returns that answer, or null when none did. */
+  private static firstAnswer<T>(
+    hooks: PluginHook<T>[],
+    event: T,
+    label: string,
+    answerKey: keyof T
+  ): boolean | null {
+    for (const hook of hooks) {
+      PluginManager.executeHook(hook, event, label, label);
+      if (event[answerKey] !== null) {
+        return event[answerKey] as unknown as boolean;
+      }
+    }
+    return null;
+  }
+
+  public static emitCanUseItem(player: any, itemId: number, action: string, option?: string): boolean | null {
+    if (PluginManager.canUseItemHooks.length === 0) return null;
+    return PluginManager.firstAnswer(PluginManager.canUseItemHooks,
+      { player, itemId, action, option, allow: null }, "can_use_item", "allow");
+  }
+
+  public static emitCanGainExperience(player: any, skill: any, experience: number): boolean | null {
+    if (PluginManager.canGainExperienceHooks.length === 0) return null;
+    return PluginManager.firstAnswer(PluginManager.canGainExperienceHooks,
+      { player, skill, experience, allow: null }, "can_gain_experience", "allow");
+  }
+
+  public static emitCanSpawnNpc(npcId: number, location: any): boolean | null {
+    if (PluginManager.canSpawnNpcHooks.length === 0) return null;
+    return PluginManager.firstAnswer(PluginManager.canSpawnNpcHooks,
+      { npcId, location, allow: null }, "can_spawn_npc", "allow");
+  }
+
+  public static emitCanStockItem(shopId: number, itemId: number): boolean | null {
+    if (PluginManager.canStockItemHooks.length === 0) return null;
+    return PluginManager.firstAnswer(PluginManager.canStockItemHooks,
+      { shopId, itemId, allow: null }, "can_stock_item", "allow");
+  }
+
+  /** The plugin's refusal message when a prayer is disabled, or null when it is usable. */
+  public static emitPrayerDisabled(player: any, prayer: any): string | null {
+    if (PluginManager.prayerDisabledHooks.length === 0) return null;
+    const event: PluginPrayerDisabledEvent = { player, prayer, disabled: null };
+    return PluginManager.firstAnswer(PluginManager.prayerDisabledHooks, event, "prayer_disabled", "disabled") === true
+      ? event.message ?? "You cannot use that prayer here."
+      : null;
+  }
+
   public static emitCanUnequip(player: any, slot: number, item: any): boolean | null {
     const event: PluginCanUnequipEvent = { player, slot, item, allow: null };
     for (const hook of PluginManager.canUnequipHooks) {
@@ -1265,12 +1346,14 @@ export class PluginManager {
   public static emitSpellDisabled(
     player: any,
     spellbook: any,
-    spellId: number
+    spellId: number,
+    spell?: any
   ): boolean | null {
     const event: PluginSpellDisabledEvent = {
       player,
       spellbook,
       spellId,
+      spell,
       disabled: null,
     };
     for (const hook of PluginManager.spellDisabledHooks) {
@@ -1499,13 +1582,40 @@ export class PluginManager {
    * developer), so a command's requirement is a floor everyone above also clears.
    */
   public static playerHasCommandRights(player: any, base: string): boolean {
-    const required = PluginManager.commandRightsOverrides.has(base)
-      ? PluginManager.commandRightsOverrides.get(base)
-      : PluginManager.commandRights.get(base);
+    // world.json wins over the registered rank and plugin overrides (it is the world owner's call).
+    const required = PluginManager.commandPermissions().get(base) ??
+      (PluginManager.commandRightsOverrides.has(base)
+        ? PluginManager.commandRightsOverrides.get(base)
+        : PluginManager.commandRights.get(base));
     if (required === null || required === undefined) {
       return true;
     }
     return player.getRights().getId() >= required;
+  }
+
+  /**
+   * world.json pluginConfig "commands:permissions": { "<command>": "<PlayerRights name>" },
+   * e.g. { "items": "NONE", "teleports": "OWNER" }. Each entry sets the lowest rank that
+   * may run that command (no "::"), raising or lowering what it registered with.
+   */
+  private static commandPermissions(): Map<string, number> {
+    if (!PluginManager.commandPermissionsCache) {
+      const permissions = new Map<string, number>();
+      const config = PluginManager.getPluginConfig<unknown>("commands:permissions", {});
+      if (config && typeof config === "object" && !Array.isArray(config)) {
+        for (const [command, rights] of Object.entries(config)) {
+          const name = command.trim().replace(/^::/, "").toLowerCase();
+          const id = typeof rights === "string" ? COMMAND_PERMISSION_RIGHTS[rights.trim().toUpperCase()] : undefined;
+          if (!name || id === undefined) {
+            console.warn(`[plugins] commands:permissions ignores ${JSON.stringify(command)}: ${JSON.stringify(rights)}`);
+            continue;
+          }
+          permissions.set(name, id);
+        }
+      }
+      PluginManager.commandPermissionsCache = permissions;
+    }
+    return PluginManager.commandPermissionsCache;
   }
 
   /** Overrides the rank a command requires. PlayerRights.NONE opens it to every player. */
@@ -1872,6 +1982,8 @@ export class PluginManager {
       CombatNormalSpell: require(`${combat}/magic/CombatNormalSpell`).CombatNormalSpell,
       NPC: require("../game/entity/impl/npc/NPC").NPC,
       GameConstants: require("../game/GameConstants").GameConstants,
+      // world.json accessors (isMembersWorld, isMembersArea, WORLD_SPAWN, zone boundaries).
+      WorldDefinition: require("../game/definition/WorldDefinition"),
       TeleportHandler: require(`${model}/teleportation/TeleportHandler`).TeleportHandler,
       TeleportType: require(`${model}/teleportation/TeleportType`).TeleportType,
       DialogueChainBuilder: require(`${model}/dialogues/builders/DialogueChainBuilder`).DialogueChainBuilder,
@@ -2802,6 +2914,21 @@ export class PluginManager {
           },
         });
       },
+      onCanUseItem: (handler) => {
+        if (typeof handler === "function") PluginManager.canUseItemHooks.push({ pluginName, handler });
+      },
+      onCanGainExperience: (handler) => {
+        if (typeof handler === "function") PluginManager.canGainExperienceHooks.push({ pluginName, handler });
+      },
+      onCanSpawnNpc: (handler) => {
+        if (typeof handler === "function") PluginManager.canSpawnNpcHooks.push({ pluginName, handler });
+      },
+      onCanStockItem: (handler) => {
+        if (typeof handler === "function") PluginManager.canStockItemHooks.push({ pluginName, handler });
+      },
+      onPrayerDisabled: (handler) => {
+        if (typeof handler === "function") PluginManager.prayerDisabledHooks.push({ pluginName, handler });
+      },
       onCanEquip: (handler) => {
         if (typeof handler !== "function") {
           return;
@@ -3655,6 +3782,15 @@ export class PluginManager {
         }
         PluginManager.registerRangedAmmoHandlerInternal(pluginName, handler);
       },
+      registerRangedAmmoRecovery: (recovery) => {
+        if (!recovery || typeof recovery.recovery !== "function") {
+          console.warn(
+            `[plugins] ${pluginName} attempted invalid ranged ammo recovery registration`
+          );
+          return;
+        }
+        PluginManager.registerRangedAmmoRecoveryInternal(pluginName, recovery);
+      },
       registerRangedCombatModifier: (modifier) => {
         if (
           !modifier ||
@@ -3835,6 +3971,24 @@ export class PluginManager {
     return false;
   }
 
+  /** The first plugin-declared recovery share for this player's shot, or 0 when none applies. */
+  public static rangedAmmoRecovery(player: any): number {
+    for (const entry of PluginManager.rangedAmmoRecoveries) {
+      try {
+        const recovery = entry.recovery.recovery(player);
+        if (recovery != null && Number.isFinite(recovery)) {
+          return Math.max(0, Math.min(100, Math.floor(recovery)));
+        }
+      } catch (err) {
+        console.error(
+          `[plugins] ranged ammo recovery failed (${entry.pluginName})`,
+          err
+        );
+      }
+    }
+    return 0;
+  }
+
   public static modifyRangedMaxHit(attacker: any, target: any, maxHit: number): number {
     let current = Number.isFinite(maxHit) ? Math.max(0, Math.floor(maxHit)) : 0;
     for (const entry of PluginManager.rangedCombatModifiers) {
@@ -3930,6 +4084,13 @@ export class PluginManager {
     handler: PluginRangedAmmoHandler
   ): void {
     PluginManager.rangedAmmoHandlers.push({ pluginName, handler });
+  }
+
+  private static registerRangedAmmoRecoveryInternal(
+    pluginName: string,
+    recovery: PluginRangedAmmoRecovery
+  ): void {
+    PluginManager.rangedAmmoRecoveries.push({ pluginName, recovery });
   }
 
   private static registerRangedCombatModifierInternal(

@@ -81,6 +81,7 @@ const DESTINATIONS = {
     teleport("Count Draynor", location(3077, 9772), TeleportType.NORMAL),
     teleport("Elvarg", location(2852, 9637), TeleportType.NORMAL),
     teleport("Kalphite Queen", location(3508, 9494), TeleportType.NORMAL),
+    teleport("Corporeal Beast", location(2966, 4252, 2), TeleportType.NORMAL),
   ],
   [TAB.MINIGAMES]: [
     teleport("Barrows", location(3565, 3315), TeleportType.NORMAL),
@@ -94,6 +95,7 @@ const DESTINATIONS = {
     teleport("The Gauntlet", location(3032, 6127, 1), TeleportType.NORMAL),
     teleport("The Inferno", location(2495, 5111), TeleportType.NORMAL),
     teleport("Warriors' Guild", location(2876, 3546), TeleportType.NORMAL),
+    teleport("Wintertodt", location(1630, 3955), TeleportType.NORMAL),
   ],
 };
 

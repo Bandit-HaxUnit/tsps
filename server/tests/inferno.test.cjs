@@ -380,9 +380,11 @@ test('a meleer that cannot land a hit burrows up beside the player', () => {
   assert.equal(meleer.untargetable, true);
   assert.ok(meleer.animations.includes(7600));
   tick(player, 4);
+  assert.equal(meleer.calculateDistance(player), 1, 'moved beside the player');
+  assert.ok(!meleer.animations.includes(7601), 'not on the tick it teleports: it is out of view then');
+  tick(player, 1);
   assert.equal(meleer.untargetable, false);
-  assert.equal(meleer.calculateDistance(player), 1);
-  assert.ok(meleer.animations.includes(7601));
+  assert.ok(meleer.animations.includes(7601), 'it rises the tick after');
   run.leave(player);
 });
 

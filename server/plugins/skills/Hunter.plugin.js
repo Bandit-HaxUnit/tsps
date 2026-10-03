@@ -19,6 +19,7 @@ const Broavs = require("./hunter/Broavs.Hunter");
 
 module.exports = {
   name: "Hunter",
+  members: true,
   register(api) {
     api.onServerStartup(Runtime.start.bind(null, api));
     api.onServerShutdown(Runtime.shutdown);

@@ -160,12 +160,12 @@ function boost(event) {
   if (!def) return;
   event.handled = true;
   const { player, target } = event;
-  if (!nearby(player, target) || target.getAttribute("acceptAid") === false || target.getHitpoints() <= 0
+  if (!nearby(player, target) || target.getAttribute("accept-aid") === false || target.getHitpoints() <= 0
     || !exchange(player, [[def.jar, 1]], [[H.core.ItemIdentifiers.BUTTERFLY_JAR, 1]])) return;
   bonus(target, def);
   if (H.api.getAreaManager().inMulti(target)) {
     const others = H.core.World.getNearbyPlayersForUpdate(target).filter(p => p !== target && p !== player
-      && nearby(target, p, 2) && p.getAttribute("acceptAid") !== false && p.getHitpoints() > 0);
+      && nearby(target, p, 2) && p.getAttribute("accept-aid") !== false && p.getHitpoints() > 0);
     for (let i = 0; i < 3 && others.length; i++) bonus(others.splice(roll(0, others.length - 1), 1)[0], def);
   }
   target.sendMessage("A butterfly restores your vigour.");

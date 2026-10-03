@@ -31,7 +31,7 @@ const {
 const CLAN_ASSIST_DURATION_MS = 30000;
 const BOT_RESPAWN_REACQUIRE_DELAY_MIN_MS = 3500;
 const BOT_RESPAWN_REACQUIRE_DELAY_MAX_MS = 7000;
-const ATTR_RECRUIT_SINGLEWAY_WARN_UNTIL = "botRecruitSinglewayWarnUntil";
+const ATTR_RECRUIT_SINGLEWAY_WARN_UNTIL = "bot-recruit-singleway-warn-until";
 const RECRUIT_SINGLEWAY_WARN_COOLDOWN_MS = 5000;
 
 function isActiveClanRecruit(owner, bot) {

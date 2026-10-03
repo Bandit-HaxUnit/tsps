@@ -21,6 +21,12 @@ test('every supported gameframe is accepted', () => {
   }
 });
 
+test('pluginConfig is carried so the map editor saves it back', () => {
+  const pluginConfig = { 'TutorialIsland:allowSkip': false };
+  assert.deepEqual(parseWorldDefinition(world({ pluginConfig })).pluginConfig, pluginConfig);
+  assert.equal('pluginConfig' in parseWorldDefinition(world({ pluginConfig: [] })), false, 'malformed config is ignored');
+});
+
 test('an unknown gameframe is rejected', () => {
   assert.throws(() => parseWorldDefinition(world({ gameframe: 'classic-resizable' })), WorldDefinitionValidationError);
 });
@@ -107,5 +113,35 @@ test('NPC click hooks accept the fifth option and reject options outside 1–5',
   } finally {
     console.warn = originalWarn;
     PluginManager.npcInteractionHooks = hooks;
+  }
+});
+
+test('pluginConfig commands:permissions sets the rank a command needs, either way', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const config = PluginManager.pluginConfigCache;
+  const permissions = PluginManager.commandPermissionsCache;
+  const registered = PluginManager.commandRights.get('items');
+  const player = (rights) => ({ getRights: () => ({ getId: () => rights }) });
+  const warn = console.warn;
+  try {
+    console.warn = () => {};
+    PluginManager.commandRights.set('items', 2);
+    PluginManager.pluginConfigCache = { 'commands:permissions': { '::Teleports': 'OWNER', items: 'none', bad: 'KING' } };
+    PluginManager.commandPermissionsCache = null;
+    assert.equal(PluginManager.playerHasCommandRights(player(2), 'teleports'), false, 'raised to owner');
+    assert.equal(PluginManager.playerHasCommandRights(player(3), 'teleports'), true);
+    assert.equal(PluginManager.playerHasCommandRights(player(0), 'items'), true, 'lowered below its registered administrator rank');
+    assert.equal(PluginManager.playerHasCommandRights(player(0), 'bad'), true, 'unknown rights names are ignored');
+
+    PluginManager.pluginConfigCache = { 'commands:permissions': {} };
+    PluginManager.commandPermissionsCache = null;
+    assert.equal(PluginManager.playerHasCommandRights(player(0), 'items'), false, 'falls back to the registered rank');
+    assert.equal(PluginManager.playerHasCommandRights(player(0), 'teleports'), true);
+  } finally {
+    console.warn = warn;
+    PluginManager.pluginConfigCache = config;
+    PluginManager.commandPermissionsCache = permissions;
+    if (registered === undefined) PluginManager.commandRights.delete('items');
+    else PluginManager.commandRights.set('items', registered);
   }
 });

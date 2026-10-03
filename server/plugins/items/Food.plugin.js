@@ -181,6 +181,7 @@ module.exports = {
       const verb = food.verb || "eat";
       const itemName = ItemDefinition.forId(itemId).getName().toLowerCase();
       player.sendMessage(`You ${verb} the ${itemName}.`);
+      api.emitCustomEvent("food:eaten", { player, itemId, heal: healAmount });
       return true;
     });
 

@@ -216,7 +216,7 @@ export class LunarSpells {
             } else if (key === "hunter kit") {
                 inventory.adds(946, 1).adds(303, 1).adds(954, 2).adds(10029, 1).adds(10008, 1);
             } else if (key === "magic imbue") {
-                player.setAttribute("lunar:magicImbueUntil", Date.now() + 12 * 60_000);
+                player.setAttribute("lunar:magic-imbue-until", Date.now() + 12 * 60_000);
             } else if (key === "spin flax") {
                 for (const item of inventory.getValidItems()) if (item.getId() === 1779) item.setId(1777);
             } else if (key === "superglass make") {
@@ -356,7 +356,7 @@ export class LunarSpells {
     }
 
     private static acceptsAid(player: Player): boolean {
-        return player.getAttribute("acceptAid") !== false;
+        return player.getAttribute("accept-aid") !== false;
     }
 
     public static expireSpellbookSwap(player: Player): void {

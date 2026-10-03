@@ -20,7 +20,7 @@ const TOXIC_BLOWPIPE_ID = ItemIdentifiers.TOXIC_BLOWPIPE;
 const ZULRAH_SCALES_ID = 12934;
 const TOXIC_BLOWPIPE_MAX_SCALES = 16383;
 const TOXIC_BLOWPIPE_MAX_DARTS = 16383;
-const TOXIC_BLOWPIPE_META_KEY = "toxicBlowpipe";
+const TOXIC_BLOWPIPE_META_KEY = "toxic-blowpipe";
 
 const DART_RANGED_STRENGTHS = new Map([
   [ItemIdentifiers.BRONZE_DART, 1],
@@ -429,6 +429,7 @@ let CombatFactory;
 
 module.exports = {
   name: "ToxicBlowpipe",
+  members: true,
   register(api) {
     BonusManager = api.getBonusManager();
     CombatFactory = api.getCombatFactory();

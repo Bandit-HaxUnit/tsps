@@ -3,9 +3,9 @@ const { Wilderness } = require("../../src/main/typescript/elvarg/game/content/wi
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
 
-const GLOW_PRESET_ATTRIBUTE = "visual:glowPreset";
-const GLOW_INTENSITY_ATTRIBUTE = "visual:glowIntensity";
-const LAST_GLOW_PRESET_ATTRIBUTE = "killstreaks:lastGlowPreset";
+const GLOW_PRESET_ATTRIBUTE = "visual:glow-preset";
+const GLOW_INTENSITY_ATTRIBUTE = "visual:glow-intensity";
+const LAST_GLOW_PRESET_ATTRIBUTE = "killstreaks:last-glow-preset";
 const TOTAL_KILLS_ATTRIBUTE = "killstreaks:total-kills";
 const STREAK_ATTRIBUTE = "killstreaks:streak";
 const HIGHEST_STREAK_ATTRIBUTE = "killstreaks:highest-streak";

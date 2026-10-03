@@ -220,7 +220,49 @@ export interface PluginCanAttackEvent {
 export interface PluginCanTeleportEvent {
   player: any;
   wildernessLevelLimit?: number;
+  /** Where the teleport lands, when the caller knows it. */
+  destination?: any;
   allow: boolean | null;
+}
+
+/** Inventory item click, item-on-X use or spell-on-item; allow=false drops the packet. */
+export interface PluginCanUseItemEvent {
+  player: any;
+  itemId: number;
+  /** "action", "use", "magic", or "bonus" (worn item's stats being counted; no message expected). */
+  action: string;
+  /** The clicked menu option for "action" (e.g. "Drop", "Examine"). */
+  option?: string;
+  allow: boolean | null;
+}
+
+export interface PluginCanGainExperienceEvent {
+  player: any;
+  skill: any;
+  experience: number;
+  allow: boolean | null;
+}
+
+/** Fired per npc-spawns definition at load; allow=false skips the spawn. */
+export interface PluginCanSpawnNpcEvent {
+  npcId: number;
+  location: any;
+  allow: boolean | null;
+}
+
+/** Fired per shop stock entry at load; allow=false drops it from the shop. */
+export interface PluginCanStockItemEvent {
+  shopId: number;
+  itemId: number;
+  allow: boolean | null;
+}
+
+export interface PluginPrayerDisabledEvent {
+  player: any;
+  prayer: any;
+  disabled: boolean | null;
+  /** Shown to the player when disabled is true. */
+  message?: string;
 }
 
 export interface PluginCanLogoutEvent {
@@ -395,6 +437,8 @@ export interface PluginSpellDisabledEvent {
   player: any;
   spellbook: any;
   spellId: number;
+  /** The Spell being cast, when the caller has it (e.g. spell.isMembers()). */
+  spell?: any;
   disabled: boolean | null;
 }
 
@@ -634,6 +678,12 @@ export interface PluginRangedAmmoHandler {
   decrementAmmo(player: any, pos: any, amount: number): boolean;
 }
 
+/** A share of fired ammunition recovered before it lands, e.g. by an Ava's device. */
+export interface PluginRangedAmmoRecovery {
+  /** Percentage (0-100) recovered for this player, or null to fall through. */
+  recovery(player: any): number | null;
+}
+
 export interface PluginRangedCombatModifier {
   modifyMaxHit(attacker: any, target: any, maxHit: number): number | null;
   modifyAttackRoll(attacker: any, target: any, attackRoll: number): number | null;
@@ -735,6 +785,11 @@ export interface PluginApi {
     handler: (event: PluginPlayerDeathItemDropEvent) => void
   ): void;
   onCanEquip(handler: (event: PluginCanEquipEvent) => void): void;
+  onCanUseItem(handler: (event: PluginCanUseItemEvent) => void): void;
+  onCanGainExperience(handler: (event: PluginCanGainExperienceEvent) => void): void;
+  onCanSpawnNpc(handler: (event: PluginCanSpawnNpcEvent) => void): void;
+  onCanStockItem(handler: (event: PluginCanStockItemEvent) => void): void;
+  onPrayerDisabled(handler: (event: PluginPrayerDisabledEvent) => void): void;
   onCanUnequip(handler: (event: PluginCanUnequipEvent) => void): void;
   onPlayerDeath(handler: (event: PluginPlayerDeathEvent) => void): void;
   onPlayerOption(handler: (event: PluginPlayerOptionEvent) => void): void;
@@ -987,6 +1042,7 @@ export interface PluginApi {
   registerBonusProvider(provider: PluginBonusProvider): void;
   registerRangedAmmoResolver(resolver: PluginRangedAmmoResolver): void;
   registerRangedAmmoHandler(handler: PluginRangedAmmoHandler): void;
+  registerRangedAmmoRecovery(recovery: PluginRangedAmmoRecovery): void;
   registerRangedCombatModifier(modifier: PluginRangedCombatModifier): void;
   registerWeaponProfile(profile: WeaponCombatProfile): void;
   /**
@@ -1083,6 +1139,7 @@ export interface PluginCoreApi {
   CombatNormalSpell: any;
   NPC: any;
   GameConstants: any;
+  WorldDefinition: any;
   TeleportHandler: any;
   TeleportType: any;
   DialogueChainBuilder: any;
@@ -1106,5 +1163,7 @@ export interface PluginCoreApi {
 export interface PluginModule {
   name: string;
   dependsOn?: string[];
+  /** Members content: not loaded when world.json sets membersWorld false. */
+  members?: boolean;
   register(api: PluginApi): void;
 }

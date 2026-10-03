@@ -26,7 +26,7 @@ const GAMEFRAME_LAYOUT_ROOTS = [548, 164, 161, 161, 548];
 const GAMEFRAME_317_OPTION = 3;
 const GAMEFRAME_317_FIXED_OPTION = 4;
 const GAMEFRAME_317_VARP = 7997; // mirrors client/common/ui/gameframeLayout.ts
-const CLIENT_LAYOUT_317_ATTRIBUTE = "clientLayout317";
+const CLIENT_LAYOUT_317_ATTRIBUTE = "client-layout317";
 const DEFAULT_GAMEFRAME_ROOT = 161;
 // world.json "gameframe" -> the dropdown option (enum 3509 index) it forces on login.
 const WORLD_GAMEFRAME_OPTIONS = {
@@ -38,9 +38,14 @@ const WORLD_GAMEFRAME_OPTIONS = {
 // Cache script 3962 reads this to pick the selected dropdown row; 4607 is only
 // a display mirror of the layout (no rendering effect in this revision).
 const GAMEFRAME_STONE_VARBIT = 4607;
+// The enhanced client's "show mouseover text" setting (cache script 4582 toggles it).
+// Our client reports itself as enhanced (clienttype 10) and draws the top-left text, so
+// this must be on: with it, HUD overlays laid out by script 4731 (Wintertodt, the
+// Gauntlet, ToA...) drop 23px below the text instead of sitting under it, as on live.
+const MOUSEOVER_TEXT_VARBIT = 12377;
 // Opaque player attribute; NetworkBuilder/WelcomeScreen read it to boot the
 // saved gameframe.
-const CLIENT_LAYOUT_ATTRIBUTE = "clientLayoutRoot";
+const CLIENT_LAYOUT_ATTRIBUTE = "client-layout-root";
 
 const ALL_SETTINGS_INTERFACE_ID = 134;
 const ALL_SETTINGS_SIDE_BUTTON = (116 << 16) | 32;
@@ -199,7 +204,7 @@ function openAllSettings(player) {
   sender.sendInterfaceFlagsRange(ALL_SETTINGS_CATEGORIES_CLICKZONE, 0, 15, TRANSMIT_OP1);
   sender.sendInterfaceFlagsRange(ALL_SETTINGS_SETTINGS_CLICKZONE, 0, 63, TRANSMIT_OP1);
   sender.sendInterfaceFlagsRange(ALL_SETTINGS_DROPDOWN_BUTTONS, 0, 63, TRANSMIT_OP1);
-  player.setAttribute("settingsKeybindVarbit", -1);
+  player.setAttribute("settings-keybind-varbit", -1);
   return true;
 }
 
@@ -236,7 +241,7 @@ module.exports = {
     // Changing category (or clicking any non-keybind row) must clear the tracked
     // keybind, otherwise a later dropdown in another category edits it.
     api.onInterfaceActionButton(ALL_SETTINGS_CATEGORIES_CLICKZONE, ({ player }) => {
-      player.setAttribute("settingsKeybindVarbit", -1);
+      player.setAttribute("settings-keybind-varbit", -1);
       return false;
     });
 
@@ -244,14 +249,14 @@ module.exports = {
     // will edit. The server is authoritative (as in OpenRune), so we only track.
     api.onInterfaceActionButton(ALL_SETTINGS_SETTINGS_CLICKZONE, ({ player, slot }) => {
       const varbit = ALL_SETTINGS_KEYBIND_VARBITS[slot - ALL_SETTINGS_KEYBIND_SLOT_BASE];
-      player.setAttribute("settingsKeybindVarbit", Number.isInteger(varbit) ? varbit : -1);
+      player.setAttribute("settings-keybind-varbit", Number.isInteger(varbit) ? varbit : -1);
       return false;
     });
 
     // All Settings dropdown option selected: apply it to the tracked keybind.
     // Option buttons sit three components apart in the dropdown panel.
     api.onInterfaceActionButton(ALL_SETTINGS_DROPDOWN_BUTTONS, ({ player, slot }) => {
-      const varbit = player.getAttribute("settingsKeybindVarbit");
+      const varbit = player.getAttribute("settings-keybind-varbit");
       if (!Number.isInteger(varbit) || varbit < 0) return false;
       const option = Math.floor(slot / 3);
       if (!Number.isInteger(option) || option < KEY_NONE || option > MAX_KEY_VALUE) {
@@ -270,7 +275,7 @@ module.exports = {
     api.onInterfaceActionButton([...BUTTON_TO_SLOT.keys()], ({ player, buttonId }) => {
       const slot = BUTTON_TO_SLOT.get(buttonId);
       if (typeof slot === "number") {
-        player.setAttribute("activeKeybindSlot", slot);
+        player.setAttribute("active-keybind-slot", slot);
         player.getPacketSender().sendVarbit(ACTIVE_KEYBIND_SLOT_VARBIT, slot);
       }
       return false;
@@ -278,7 +283,7 @@ module.exports = {
 
     // Store the key chosen from the popup against the tracked tab.
     api.onInterfaceActionButton(KEYBINDINGS_POPUP_CONTAINER, ({ player, slot }) => {
-      const varbit = SLOT_TO_VARBIT.get(player.getAttribute("activeKeybindSlot") || 1);
+      const varbit = SLOT_TO_VARBIT.get(player.getAttribute("active-keybind-slot") || 1);
       if (varbit === undefined) return false;
       return applyKeybind(player, varbit, slot);
     });
@@ -307,6 +312,7 @@ module.exports = {
       syncPlayerKeybindings(player);
       if (worldGameframeOption !== undefined) selectGameframeOption(player, worldGameframeOption);
       syncGameframeVarbit(player);
+      player.getPacketSender().sendVarbit(MOUSEOVER_TEXT_VARBIT, 1);
     });
 
     api.registerCommand("keybinds", ({ player }) => openKeybindings(player));

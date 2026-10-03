@@ -312,6 +312,7 @@ function slayerPointsCurrency() {
 
 module.exports = {
   name: "Slayer",
+  members: true,
   // Exported for tests/slayer-assign.test.cjs; nothing else reads them.
   assignTask,
   assignTaskForNpc,

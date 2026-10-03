@@ -22,7 +22,7 @@ import { BoatManager } from "./content/sailing/BoatManager";
 import type { Mobile } from "./entity/impl/Mobile";
 import { HitQueue } from './content/combat/hit/HitQueue';
 
-const ATTR_SKIP_PERSISTENCE = "botSkipPersistence";
+const ATTR_SKIP_PERSISTENCE = "bot-skip-persistence";
 
 export class World {
     // 2048 leaves headroom above the 2000-bot stress-test mode (see

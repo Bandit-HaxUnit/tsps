@@ -142,6 +142,7 @@ function heading({ player, parts }) {
 
 module.exports = {
   name: "SailingCommands",
+  members: true,
   register(api) {
     content();
     api.registerCommand("raft", giveRaft, PlayerRights.DEVELOPER);

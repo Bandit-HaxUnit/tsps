@@ -130,6 +130,9 @@ export class SkillManager {
         if (!Number.isFinite(experience) || experience <= 0) {
             return this;
         }
+        if (PluginManager.emitCanGainExperience(this.player, skill, experience) === false) {
+            return this;
+        }
 
         // Multipliers...
         if (multipliers) {
