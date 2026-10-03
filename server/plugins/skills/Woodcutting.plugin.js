@@ -9,11 +9,36 @@ const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
 const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
 const { ItemIds, ObjectIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 
-const TREE_STUMP_OBJECT_ID = ObjectIds.TREE_STUMP_3;
+const DEFAULT_TREE_STUMP_ID = ObjectIds.TREE_STUMP_2;
+// Classic normal-tree variants share models but not stumps; key their stump by the tree's model.
+const NORMAL_TREE_STUMP_BY_MODEL = new Map([
+  [1570, ObjectIds.TREE_STUMP_2],
+  [1637, ObjectIds.TREE_STUMP_2],
+  [1667, ObjectIds.TREE_STUMP_2],
+  [1715, ObjectIds.TREE_STUMP_7],
+  [1716, ObjectIds.TREE_STUMP_11],
+  [1718, ObjectIds.TREE_STUMP_14],
+  [1719, ObjectIds.TREE_STUMP_18],
+  [1700, ObjectIds.TREE_STUMP_19],
+  [23908, ObjectIds.TREE_STUMP_50],
+  [1611, ObjectIds.TREE_STUMP_15],
+  [1614, ObjectIds.TREE_STUMP_15],
+  [1688, ObjectIds.TREE_STUMP_15],
+  [1681, ObjectIds.TREE_STUMP_17],
+  [1682, ObjectIds.TREE_STUMP_17],
+  [1683, ObjectIds.TREE_STUMP_17],
+  [14747, ObjectIds.DYING_TREE_STUMP],
+  [3944, ObjectIds.TREE_STUMP_22],
+]);
+const stumpIdByTreeId = new Map();
 const WOODCUTTING_ACTION_INTERVAL_TICKS = 4;
 const CHOP_ANIMATION_INTERVAL_TICKS = 4;
+// Fallback for multi-log trees without a known Forestry despawn timer: 1/8 per log.
 const MULTI_TREE_DEPLETION_ROLL_MAX = 15;
 const MULTI_TREE_DEPLETION_THRESHOLD = 2;
+// OSRS Forestry: a tree's despawn timer counts down one per tick while anyone is chopping it
+// and regenerates one per tick while nobody is; it falls on the first log after reaching 0.
+const treeDespawnTimers = new Map();
 const BIRD_NEST_DROP_CHANCE = 256;
 let woodcuttingTick = 0;
 let activeSessionsRef = null;
@@ -35,6 +60,41 @@ const SEARCHABLE_NEST_IDS = new Set([
   BIRD_NESTS.SEED_NEST,
   BIRD_NESTS.RING_NEST,
 ]);
+
+const WOODCUTTING_CAPE_IDS = [ItemIds.WOODCUTTING_CAPE, ItemIds.WOODCUT_CAPE_T_];
+const WOODCUTTING_CAPE_NEST_MULTIPLIER = 1.1;
+
+// OSRS Wiki seed nest table (1,011 slots).
+const NEST_SEEDS = [
+  { id: ItemIds.ACORN, name: "acorn", weight: 214 },
+  { id: ItemIds.APPLE_TREE_SEED, name: "apple", weight: 170 },
+  { id: ItemIds.WILLOW_SEED, name: "willow", weight: 135 },
+  { id: ItemIds.BANANA_TREE_SEED, name: "banana", weight: 108 },
+  { id: ItemIds.ORANGE_TREE_SEED, name: "orange", weight: 85 },
+  { id: ItemIds.CURRY_TREE_SEED, name: "curry", weight: 68 },
+  { id: ItemIds.MAPLE_SEED, name: "maple", weight: 54 },
+  { id: ItemIds.PINEAPPLE_SEED, name: "pineapple", weight: 42 },
+  { id: ItemIds.PAPAYA_TREE_SEED, name: "papaya", weight: 34 },
+  { id: ItemIds.YEW_SEED, name: "yew", weight: 27 },
+  { id: ItemIds.PALM_TREE_SEED, name: "palm", weight: 22 },
+  { id: ItemIds.CALQUAT_TREE_SEED, name: "calquat", weight: 17 },
+  { id: ItemIds.SPIRIT_SEED, name: "spirit", weight: 11 },
+  { id: ItemIds.DRAGONFRUIT_TREE_SEED, name: "dragonfruit", weight: 6 },
+  { id: ItemIds.MAGIC_SEED, name: "magic", weight: 5 },
+  { id: ItemIds.TEAK_SEED, name: "teak", weight: 4 },
+  { id: ItemIds.MAHOGANY_SEED, name: "mahogany", weight: 4 },
+  { id: ItemIds.CELASTRUS_SEED, name: "celastrus", weight: 3 },
+  { id: ItemIds.REDWOOD_TREE_SEED, name: "redwood", weight: 2 },
+];
+
+// OSRS Wiki ring nest table.
+const NEST_RINGS = [
+  { id: ItemIds.GOLD_RING, name: "gold", weight: 35 },
+  { id: ItemIds.SAPPHIRE_RING, name: "sapphire", weight: 40 },
+  { id: ItemIds.EMERALD_RING, name: "emerald", weight: 15 },
+  { id: ItemIds.RUBY_RING, name: "ruby", weight: 9 },
+  { id: ItemIds.DIAMOND_RING, name: "diamond", weight: 1 },
+];
 
 const AXES = [
   { id: ItemIds.BRONZE_AXE, requiredLevel: 1, speed: 0.03, animationId: 879 },
@@ -99,6 +159,7 @@ const TREES = [
     ],
     cycles: 10,
     respawnTicks: 8,
+    stumpId: ObjectIds.TREE_STUMP_2,
     multi: false,
   },
   {
@@ -111,6 +172,7 @@ const TREES = [
     objectIds: [ObjectIds.ACHEY_TREE],
     cycles: 13,
     respawnTicks: 9,
+    stumpId: ObjectIds.ACHEY_TREE_STUMP,
     multi: false,
   },
   {
@@ -130,7 +192,9 @@ const TREES = [
     ],
     cycles: 14,
     respawnTicks: 11,
+    stumpId: ObjectIds.TREE_STUMP_16,
     multi: true,
+    despawnTicks: 45,
   },
   {
     name: "willow",
@@ -147,7 +211,9 @@ const TREES = [
     ],
     cycles: 15,
     respawnTicks: 14,
+    stumpId: ObjectIds.TREE_STUMP_35,
     multi: true,
+    despawnTicks: 50,
   },
   {
     name: "teak",
@@ -164,7 +230,9 @@ const TREES = [
     ],
     cycles: 16,
     respawnTicks: 16,
+    stumpId: ObjectIds.TREE_STUMP_32,
     multi: true,
+    despawnTicks: 50,
   },
   {
     name: "dramen",
@@ -194,7 +262,9 @@ const TREES = [
     ],
     cycles: 17,
     respawnTicks: 18,
+    stumpId: ObjectIds.TREE_STUMP_36,
     multi: true,
+    despawnTicks: 100,
   },
   {
     name: "mahogany",
@@ -211,7 +281,9 @@ const TREES = [
     ],
     cycles: 17,
     respawnTicks: 20,
+    stumpId: ObjectIds.TREE_STUMP_31,
     multi: true,
+    despawnTicks: 100,
   },
   {
     name: "yew",
@@ -229,7 +301,9 @@ const TREES = [
     ],
     cycles: 18,
     respawnTicks: 28,
+    stumpId: ObjectIds.TREE_STUMP_38,
     multi: true,
+    despawnTicks: 190,
   },
   {
     name: "magic",
@@ -247,7 +321,9 @@ const TREES = [
     ],
     cycles: 20,
     respawnTicks: 40,
+    stumpId: ObjectIds.TREE_STUMP_37,
     multi: true,
+    despawnTicks: 390,
   },
   {
     name: "redwood",
@@ -292,6 +368,7 @@ const TREES = [
     cycles: 22,
     respawnTicks: 43,
     multi: true,
+    despawnTicks: 440,
   },
 ];
 
@@ -362,70 +439,103 @@ function calculateCyclesRequired(player, tree, axe) {
   return Math.max(1, Math.ceil(tickBudget / WOODCUTTING_ACTION_INTERVAL_TICKS));
 }
 
-function shouldDepleteTree(tree) {
+function treeTimerKey(objectId, location) {
+  return `${objectId}:${location.getX()},${location.getY()},${location.getZ()}`;
+}
+
+function tickTreeDespawnTimer(state, currentTick) {
+  if (!state.tree.despawnTicks) {
+    return;
+  }
+  const key = treeTimerKey(state.objectId, state.location);
+  let timer = treeDespawnTimers.get(key);
+  if (!timer) {
+    timer = { remaining: state.tree.despawnTicks, max: state.tree.despawnTicks, lastChopTick: -1 };
+    treeDespawnTimers.set(key, timer);
+  }
+  // Several players on one tree still only drain it once per tick.
+  if (timer.lastChopTick !== currentTick) {
+    timer.lastChopTick = currentTick;
+    timer.remaining = Math.max(0, timer.remaining - 1);
+  }
+}
+
+function regenerateTreeDespawnTimers(currentTick) {
+  for (const [key, timer] of treeDespawnTimers) {
+    if (timer.lastChopTick === currentTick) {
+      continue;
+    }
+    timer.remaining++;
+    if (timer.remaining >= timer.max) {
+      treeDespawnTimers.delete(key);
+    }
+  }
+}
+
+function shouldDepleteTree(state) {
+  const tree = state.tree;
   if (!tree.multi) {
     return true;
   }
+  if (tree.despawnTicks) {
+    const timer = treeDespawnTimers.get(treeTimerKey(state.objectId, state.location));
+    return !!timer && timer.remaining <= 0;
+  }
   const roll = randomIntInclusive(0, MULTI_TREE_DEPLETION_ROLL_MAX);
-  return roll >= MULTI_TREE_DEPLETION_THRESHOLD;
+  return roll < MULTI_TREE_DEPLETION_THRESHOLD;
 }
 
-function rollBirdNestId() {
-  const random = Math.random();
-  if (random < 0.64) {
-    return BIRD_NESTS.SEED_NEST;
+function rollWeighted(table) {
+  const total = table.reduce((sum, entry) => sum + entry.weight, 0);
+  let roll = randomIntInclusive(1, total);
+  for (const entry of table) {
+    roll -= entry.weight;
+    if (roll <= 0) {
+      return entry;
+    }
   }
-  if (random < 0.96) {
-    return BIRD_NESTS.RING_NEST;
-  }
-  const color = randomIntInclusive(0, 2);
-  if (color === 0) {
-    return BIRD_NESTS.RED_EGG_NEST;
-  }
-  if (color === 1) {
-    return BIRD_NESTS.GREEN_EGG_NEST;
-  }
-  return BIRD_NESTS.BLUE_EGG_NEST;
+  return table[table.length - 1];
+}
+
+function isWearing(player, slot, itemIds) {
+  const item = player.getEquipment().getItems()[slot];
+  return !!item && itemIds.includes(item.getId());
+}
+
+// OSRS: 100 slots (seed 65, ring 32, one per egg colour); a strung rabbit foot drops 5 seed slots.
+function rollBirdNestId(player) {
+  const seedWeight = isWearing(player, Equipment.AMULET_SLOT, [ItemIds.STRUNG_RABBIT_FOOT]) ? 60 : 65;
+  return rollWeighted([
+    { id: BIRD_NESTS.SEED_NEST, weight: seedWeight },
+    { id: BIRD_NESTS.RING_NEST, weight: 32 },
+    { id: BIRD_NESTS.RED_EGG_NEST, weight: 1 },
+    { id: BIRD_NESTS.GREEN_EGG_NEST, weight: 1 },
+    { id: BIRD_NESTS.BLUE_EGG_NEST, weight: 1 },
+  ]).id;
 }
 
 function maybeDropBirdNest(player) {
-  if (!player || player.getLocation().getZ() > 0) {
+  if (!player) {
     return;
   }
-  if (randomIntInclusive(1, BIRD_NEST_DROP_CHANCE) !== 1) {
+  const chance = isWearing(player, Equipment.CAPE_SLOT, WOODCUTTING_CAPE_IDS)
+    ? WOODCUTTING_CAPE_NEST_MULTIPLIER / BIRD_NEST_DROP_CHANCE
+    : 1 / BIRD_NEST_DROP_CHANCE;
+  if (Math.random() >= chance) {
     return;
   }
 
-  const nestId = rollBirdNestId();
+  const nestId = rollBirdNestId(player);
   ItemOnGroundManager.registers(player, new Item(nestId, 1));
-  player.sendMessage("@red@A bird's nest falls out of the tree.");
+  player.sendMessage("<col=ff0000>A bird's nest falls out of the tree.");
 }
 
 function rollNestSeed() {
-  const random = randomIntInclusive(1, 1000);
-  if (random <= 220) return { id: ItemIds.ACORN, name: "acorn" };
-  if (random <= 350) return { id: ItemIds.WILLOW_SEED, name: "willow" };
-  if (random <= 400) return { id: ItemIds.MAPLE_SEED, name: "maple" };
-  if (random <= 430) return { id: ItemIds.YEW_SEED, name: "yew" };
-  if (random <= 440) return { id: ItemIds.MAGIC_SEED, name: "magic" };
-  if (random <= 600) return { id: ItemIds.APPLE_TREE_SEED, name: "apple" };
-  if (random <= 700) return { id: ItemIds.BANANA_TREE_SEED, name: "banana" };
-  if (random <= 790) return { id: ItemIds.ORANGE_TREE_SEED, name: "orange" };
-  if (random <= 850) return { id: ItemIds.CURRY_TREE_SEED, name: "curry" };
-  if (random <= 900) return { id: ItemIds.PINEAPPLE_SEED, name: "pineapple" };
-  if (random <= 930) return { id: ItemIds.PAPAYA_TREE_SEED, name: "papaya" };
-  if (random <= 960) return { id: ItemIds.PALM_TREE_SEED, name: "palm" };
-  if (random <= 980) return { id: ItemIds.CALQUAT_TREE_SEED, name: "calquat" };
-  return { id: ItemIds.SPIRIT_SEED, name: "spirit" };
+  return rollWeighted(NEST_SEEDS);
 }
 
 function rollNestRing() {
-  const random = randomIntInclusive(1, 100);
-  if (random <= 35) return { id: ItemIds.GOLD_RING, name: "gold" };
-  if (random <= 75) return { id: ItemIds.SAPPHIRE_RING, name: "sapphire" };
-  if (random <= 90) return { id: ItemIds.EMERALD_RING, name: "emerald" };
-  if (random <= 98) return { id: ItemIds.RUBY_RING, name: "ruby" };
-  return { id: ItemIds.DIAMOND_RING, name: "diamond" };
+  return rollWeighted(NEST_RINGS);
 }
 
 function searchBirdNest(player, nestId) {
@@ -501,12 +611,44 @@ class TreeRespawnTask extends Task {
   }
 }
 
+function firstModelId(def) {
+  return def?.models?.[0]?.[0];
+}
+
+// Newer trees keep their depleted state at the next loc id: an option-less "...stump", or (redwood,
+// some Forestry-era maples) an option-less loc with the tree's own name and a different model.
+function nextIdStump(treeId, treeDef, allowSameName) {
+  const next = pluginApi.core.CacheDefinitions.getObject(treeId + 1);
+  if (!next || (next.actions || []).some(Boolean)) {
+    return null;
+  }
+  const isStump = /stump/i.test(next.name || "");
+  const isDepletedVariant =
+    allowSameName && next.name === treeDef.name && firstModelId(next) !== firstModelId(treeDef);
+  return isStump || isDepletedVariant ? treeId + 1 : null;
+}
+
+function resolveStumpId(treeId, tree) {
+  if (stumpIdByTreeId.has(treeId)) {
+    return stumpIdByTreeId.get(treeId);
+  }
+  const treeDef = pluginApi.core.CacheDefinitions.getObject(treeId);
+  const stumpId =
+    (treeDef && nextIdStump(treeId, treeDef, false)) ??
+    NORMAL_TREE_STUMP_BY_MODEL.get(firstModelId(treeDef)) ??
+    (treeDef && nextIdStump(treeId, treeDef, true)) ??
+    tree.stumpId ??
+    DEFAULT_TREE_STUMP_ID;
+  stumpIdByTreeId.set(treeId, stumpId);
+  return stumpId;
+}
+
 function depleteTree(player, treeObject, tree) {
   const event = { player, object: treeObject, respawnTicks: tree.respawnTicks, handled: false };
   pluginApi.emitCustomEvent("woodcutting:deplete-tree", event);
   if (event.handled) return;
   const stump = new GameObject(
-    TREE_STUMP_OBJECT_ID,
+    resolveStumpId(treeObject.getId(), tree),
     treeObject.getLocation().clone(),
     treeObject.getType(),
     treeObject.getFace(),
@@ -642,6 +784,8 @@ function processWoodcuttingTick(activeSessions, currentTick) {
       continue;
     }
 
+    tickTreeDespawnTimer(state, currentTick);
+
     if (currentTick >= state.nextAnimationTick) {
       player.performAnimation(new Animation(state.axe.animationId));
       state.nextAnimationTick = currentTick + CHOP_ANIMATION_INTERVAL_TICKS;
@@ -668,7 +812,8 @@ function processWoodcuttingTick(activeSessions, currentTick) {
       maybeDropBirdNest(player);
     }
 
-    if (shouldDepleteTree(state.tree)) {
+    if (shouldDepleteTree(state)) {
+      treeDespawnTimers.delete(treeTimerKey(state.objectId, state.location));
       Sounds.sendSound(player, Sound.WOODCUTTING_TREE_DOWN);
       depleteTree(player, activeTree, state.tree);
       stopWoodcutting(activeSessions, player);
@@ -694,6 +839,7 @@ class WoodcuttingTask extends Task {
     this.currentTick++;
     woodcuttingTick = this.currentTick;
     processWoodcuttingTick(this.activeSessions, this.currentTick);
+    regenerateTreeDespawnTimers(this.currentTick);
   }
 }
 
