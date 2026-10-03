@@ -1,5 +1,5 @@
 {
-  "disabledPlugins": ["SpawnMode", "TutorialIsland", "VoiceChat"],
+  "disabledPlugins": ["TutorialIsland", "VoiceChat"],
   "pluginConfig": {},
   "experienceMultiplier": 1,
   "spawn": {

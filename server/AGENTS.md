@@ -240,8 +240,15 @@ api.registerCommand("players", listPlayers);              // anyone
 ```
 
 `api.setCommandRights(command, minimumRights)` overrides whatever a command registered
-with, so a plugin can widen or narrow someone else's command - a spawn mode opening
-`::items` to everyone passes `PlayerRights.NONE`.
+with, so a plugin can widen or narrow someone else's command.
+
+World owners set ranks without a plugin through world.json `pluginConfig`
+`"commands:permissions"`, a map of command name (no `::`) to a `PlayerRights` name. It
+wins over both of the above:
+
+```json
+"pluginConfig": { "commands:permissions": { "items": "NONE", "teleports": "OWNER" } }
+```
 
 ## Cache Lookup Tooling
 

@@ -7,6 +7,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { GameConstants } from "../game/GameConstants";
 import { isMembersWorld } from "../game/definition/WorldDefinition";
+import { PlayerRights } from "../game/model/rights/PlayerRights";
 import { MapRegionReplacementManager } from "../game/collision/MapRegionReplacementManager";
 import { DefinitionLoader } from "../game/definition/loader/DefinitionLoader";
 import { ShopManager } from "../game/model/container/shop/ShopManager";
@@ -148,6 +149,15 @@ type PluginPerfStat = {
 
 type ObjectInteractionHook = PluginHook<PluginObjectInteractionEvent> & { order: number };
 
+/** PlayerRights names world.json "commands:permissions" accepts, mapped to their rights ids. */
+const COMMAND_PERMISSION_RIGHTS: Record<string, number> = {
+  NONE: PlayerRights.NONE.getId(),
+  MODERATOR: PlayerRights.MODERATOR.getId(),
+  ADMINISTRATOR: PlayerRights.ADMINISTRATOR.getId(),
+  OWNER: PlayerRights.OWNER.getId(),
+  DEVELOPER: PlayerRights.DEVELOPER.getId(),
+};
+
 export class PluginManager {
   private static readonly PERF_EVENT_SAMPLE_LIMIT = 128;
   private static readonly MAX_PLUGIN_DEPTH = 2;
@@ -259,6 +269,7 @@ export class PluginManager {
   private static commandRights = new Map<string, number | null>();
   /** Lowest rights id a plugin has overridden a command to, taking priority over registration. */
   private static commandRightsOverrides = new Map<string, number | null>();
+  private static commandPermissionsCache: Map<string, number> | null = null;
   private static combatEngine: PluginCombatEngine | null = null;
   private static combatEngineOwner: string | null = null;
   private static combatDamageProvider: PluginCombatDamageProvider | null = null;
@@ -1562,13 +1573,40 @@ export class PluginManager {
    * developer), so a command's requirement is a floor everyone above also clears.
    */
   public static playerHasCommandRights(player: any, base: string): boolean {
-    const required = PluginManager.commandRightsOverrides.has(base)
-      ? PluginManager.commandRightsOverrides.get(base)
-      : PluginManager.commandRights.get(base);
+    // world.json wins over the registered rank and plugin overrides (it is the world owner's call).
+    const required = PluginManager.commandPermissions().get(base) ??
+      (PluginManager.commandRightsOverrides.has(base)
+        ? PluginManager.commandRightsOverrides.get(base)
+        : PluginManager.commandRights.get(base));
     if (required === null || required === undefined) {
       return true;
     }
     return player.getRights().getId() >= required;
+  }
+
+  /**
+   * world.json pluginConfig "commands:permissions": { "<command>": "<PlayerRights name>" },
+   * e.g. { "items": "NONE", "teleports": "OWNER" }. Each entry sets the lowest rank that
+   * may run that command (no "::"), raising or lowering what it registered with.
+   */
+  private static commandPermissions(): Map<string, number> {
+    if (!PluginManager.commandPermissionsCache) {
+      const permissions = new Map<string, number>();
+      const config = PluginManager.getPluginConfig<unknown>("commands:permissions", {});
+      if (config && typeof config === "object" && !Array.isArray(config)) {
+        for (const [command, rights] of Object.entries(config)) {
+          const name = command.trim().replace(/^::/, "").toLowerCase();
+          const id = typeof rights === "string" ? COMMAND_PERMISSION_RIGHTS[rights.trim().toUpperCase()] : undefined;
+          if (!name || id === undefined) {
+            console.warn(`[plugins] commands:permissions ignores ${JSON.stringify(command)}: ${JSON.stringify(rights)}`);
+            continue;
+          }
+          permissions.set(name, id);
+        }
+      }
+      PluginManager.commandPermissionsCache = permissions;
+    }
+    return PluginManager.commandPermissionsCache;
   }
 
   /** Overrides the rank a command requires. PlayerRights.NONE opens it to every player. */
