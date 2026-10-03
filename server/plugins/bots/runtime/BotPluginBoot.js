@@ -132,7 +132,9 @@ function bootPlayerBotsRuntime(options = {}) {
     trackedTraversalObjectIds.add(objectId);
   }
   traversalAssist.trackObjectIds([...trackedTraversalObjectIds]);
-  // Defer index initialization until after core startup has initialized regions.
+  // A valid dump loads here, before regions load; a missing/stale one is scanned and
+  // rewritten once core startup has initialized regions.
+  traversalAssist.initializePersistentIndex();
   traversalAssist.schedulePersistentIndexInitialization(0);
 
   const traversalService = new DitchTraversalService({
