@@ -1660,6 +1660,36 @@ class PvpController {
    * Target selection. Throttled through state.pvp.nextActionAt so a bot with no
    * candidate does not rescan the world every tick.
    */
+  /**
+   * Builds the target-count maps the old per-cycle pvpIndex carried, from the
+   * live entries. Without them getActivePvpTargetCount() returns 0 and every
+   * wilderness bot can pile onto the same real player; with them the multi-way
+   * cap (2) and single-way occupancy rules apply again.
+   */
+  buildSeekCycleState(entries) {
+    const activePvpTargetCounts = new Map();
+    const activePvpTargetByUsername = new Map();
+    for (const entry of entries) {
+      const entryState = entry?.state;
+      if (entryState?.mode !== this.behaviorMode.PVP) {
+        continue;
+      }
+      const targetUsername = entryState?.pvp?.targetUsername ?? null;
+      if (!targetUsername) {
+        continue;
+      }
+      activePvpTargetCounts.set(
+        targetUsername,
+        (activePvpTargetCounts.get(targetUsername) ?? 0) + 1
+      );
+      const username = entry?.player?.getUsername?.() ?? null;
+      if (username) {
+        activePvpTargetByUsername.set(username, targetUsername);
+      }
+    }
+    return { pvpIndex: { activePvpTargetCounts, activePvpTargetByUsername } };
+  }
+
   seek({ player, state, nowMs }) {
     const entries = this.getEntries();
     // Candidates are compared by entry identity, so the source must be the
@@ -1669,7 +1699,7 @@ class PvpController {
     const started = this.tryStartMode({
       entry,
       entries,
-      sharedCycleState: null,
+      sharedCycleState: this.buildSeekCycleState(entries),
       nowMs,
     });
     if (!started && state?.pvp) {
