@@ -1,6 +1,7 @@
 import { DIRECTION_TO_ORIENTATION } from "../../common/Direction";
 import { BitStream } from "./BitStream";
-import type { HealthBarUpdate, HitsplatUpdate } from "./PlayerSyncTypes";
+import { readForcedMovement } from "./ForcedMovementReader";
+import type { ForcedMovementUpdate, HealthBarUpdate, HitsplatUpdate } from "./PlayerSyncTypes";
 
 export type NpcSpotAnimUpdate = {
     slot: number;
@@ -34,6 +35,8 @@ export type NpcUpdateBlock = {
     seq?: { id: number; delay: number };
     /** Overhead icons set by the server (an empty list clears them), each a sprite group and index. */
     headIcons?: Array<{ archiveId: number; spriteId: number }>;
+    /** A glide between two tiles relative to the NPC (OSRS npc exact_move), cycles absolute. */
+    exactMove?: ForcedMovementUpdate;
     say?: string;
     colorOverride?: {
         startCycle: number;
@@ -59,13 +62,17 @@ export type NpcInfoFrame = {
  * Notes:
  * - Maintains a local NPC id list internally.
  * - Only decodes the subset of update blocks that our server currently emits:
- *   FACE_ENTITY (0x8), HIT_MASK (0x20), COLOR_OVERRIDE (0x100), SPOTANIM2 (0x20000), SEQUENCE (0x10).
+ *   FACE_ENTITY (0x8), HIT_MASK (0x20), COLOR_OVERRIDE (0x100), SPOTANIM2 (0x20000), SEQUENCE (0x10),
+ *   HEAD_ICONS (0x200), EXACT_MOVE (0x400).
  */
 export class NpcUpdateDecoder {
     private npcIndices: number[] = [];
+    /** Each local NPC's type, to tell a teleport (removed and re-added as itself) from a removal. */
+    private typeIds = new Map<number, number>();
 
     reset(): void {
         this.npcIndices.length = 0;
+        this.typeIds.clear();
     }
 
     decode(
@@ -99,6 +106,7 @@ export class NpcUpdateDecoder {
             // Desync detected — reset local list and let server re-add everything
             for (const id of this.npcIndices) removals.push(id | 0);
             this.npcIndices = [];
+            this.typeIds.clear();
             return {
                 spawns: [],
                 removals,
@@ -368,15 +376,28 @@ export class NpcUpdateDecoder {
                 block.headIcons = icons;
             }
 
+            // EXACT_MOVE (0x400): a glide between two tiles, laid out as players' forced movement.
+            if ((mask & 0x400) !== 0) {
+                block.exactMove = readForcedMovement(stream, opts.clientCycle | 0);
+            }
+
             if (Object.keys(block).length > 0) {
                 updateBlocks.set(npcId | 0, block);
             }
         }
 
         this.npcIndices = nextIndices.slice(0, 255);
+        // A teleport is sent as a removal and an add of the same NPC; like the game's client, keep
+        // the NPC (its model, animation and any exact move) rather than destroying and rebuilding it.
+        const readded = new Set(
+            spawns.filter((spawn) => this.typeIds.get(spawn.npcId) === spawn.typeId).map((spawn) => spawn.npcId),
+        );
+        const kept = removals.filter((npcId) => !readded.has(npcId));
+        for (const npcId of kept) this.typeIds.delete(npcId);
+        for (const spawn of spawns) this.typeIds.set(spawn.npcId, spawn.typeId);
         return {
             spawns,
-            removals,
+            removals: kept,
             movements,
             updateBlocks,
             localNpcIds: this.npcIndices.slice(),

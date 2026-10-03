@@ -311,6 +311,7 @@ import {
 } from "./state";
 import { initPlayerSyncHuffman } from "./sync/HuffmanProvider";
 import { NpcUpdateDecoder } from "./sync/NpcUpdateDecoder";
+import { applyNpcExactMove } from "./sync/NpcExactMove";
 import { PlayerSyncManager } from "./sync/PlayerSyncManager";
 import type { PlayerSpotAnimationEvent } from "./sync/PlayerSyncTypes";
 import { resolveTradeActionQuantity } from "./trade/TradeActionQuantity";
@@ -7413,6 +7414,9 @@ export class OsrsClient {
         }
 
         if (ecsId !== undefined) {
+            if (block.exactMove) {
+                applyNpcExactMove(this.npcEcs, ecsId, block.exactMove, getClientCycle() | 0);
+            }
             if (typeof block.faceEntity === "number") {
                 this.npcEcs.setInteractionIndex(ecsId, block.faceEntity | 0);
             }

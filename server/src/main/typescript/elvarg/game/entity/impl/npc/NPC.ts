@@ -22,6 +22,19 @@ import { GameConstants } from "../../../GameConstants";
 import { Animation } from "../../../model/Animation";
 import { PluginManager } from "../../../../plugins/PluginManager";
 
+/**
+ * A glide the client plays between two tiles (OSRS npc exact_move): from the tile the NPC left
+ * to where it now stands, from `startCycles` to `endCycles` client cycles into the tick, facing
+ * `angle` (0 south, 512 west, 1024 north, 1536 east).
+ */
+export type NpcExactMove = {
+    fromX: number;
+    fromY: number;
+    startCycles: number;
+    endCycles: number;
+    angle: number;
+};
+
 export class NPC extends Mobile {
     private static sameLocation(a: Location | null | undefined, b: Location | null | undefined): boolean {
         if (a == null && b == null) {
@@ -100,6 +113,8 @@ export class NPC extends Mobile {
     private rollFactor = 1;
     private spawnPosition: Location;
     private headIcon = -1;
+    /** This tick's glide, sent with the NPC's update and cleared after it. */
+    private exactMoveState: NpcExactMove | null = null;
     private isDying: boolean;
     private owner: Player;
     private ownerOnly: boolean = false;
@@ -531,6 +546,44 @@ export class NPC extends Mobile {
     public setHeadIcon(headIcon: number): void {
         this.headIcon = headIcon;
         // getUpdateFlag().flag(Flag.NPC_APPEARANCE);
+    }
+
+    /**
+     * Moves the NPC to `destination` at once and has clients glide it there from where it
+     * stood, as OSRS does with a teleport and an exact_move in the same tick. By default the
+     * glide takes the whole tick (cycles 0 to 30) and faces the way it travels.
+     */
+    public exactMove(
+        destination: Location,
+        options: { startCycles?: number; endCycles?: number; angle?: number } = {}
+    ): NPC {
+        const from = this.getLocation();
+        const dx = destination.getX() - from.getX();
+        const dy = destination.getY() - from.getY();
+        this.moveTo(destination);
+        this.exactMoveState = {
+            fromX: from.getX(),
+            fromY: from.getY(),
+            startCycles: Math.max(0, Math.trunc(options.startCycles ?? 0)),
+            endCycles: Math.max(0, Math.trunc(options.endCycles ?? 30)),
+            angle: (options.angle ?? NPC.travelAngle(dx, dy)) & 2047,
+        };
+        return this;
+    }
+
+    public getExactMove(): NpcExactMove | null {
+        return this.exactMoveState;
+    }
+
+    /** The orientation facing along (dx, dy): 0 south, 512 west, 1024 north, 1536 east. */
+    public static travelAngle(dx: number, dy: number): number {
+        if (dx === 0 && dy === 0) return 0;
+        return Math.round((Math.atan2(-dx, -dy) * 1024) / Math.PI) & 2047;
+    }
+
+    public resetUpdating() {
+        super.resetUpdating();
+        this.exactMoveState = null;
     }
 
     public getCombatMethod(): CombatMethod {

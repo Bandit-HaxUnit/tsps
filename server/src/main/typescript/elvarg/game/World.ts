@@ -671,6 +671,14 @@ export class World {
 
     // Maintains player.getLocalNpcs() - the per-tick sync path (PlayerSession.flushClient)
     // reads this list directly to know which NPCs to include in the player's view.
+    /**
+     * A teleported NPC leaves the local list for its teleport tick, except one gliding there
+     * (npc.exactMove): the glide has to reach clients in that very tick, with the teleport.
+     */
+    private static isExactMoving(npc: NPC): boolean {
+        return npc.getExactMove?.() != null;
+    }
+
     private static updateLocalNpcs(player: Player, nearbyNpcs: NPC[]): void {
         const localNpcs = player.getLocalNpcs();
         const origin = BoatManager.rootLocation(player);
@@ -682,7 +690,7 @@ export class World {
                 npc.isRegistered() &&
                 npc.isVisible() &&
                 origin.isViewableFrom(BoatManager.rootLocation(npc)) &&
-                !npc.isNeedsPlacement() &&
+                (!npc.isNeedsPlacement() || World.isExactMoving(npc)) &&
                 BoatManager.syncArea(npc) === privateArea &&
                 (!npc.isOwnerOnly?.() || npc.getOwner?.() === player)
             ) {
@@ -713,7 +721,8 @@ export class World {
 
         for (const npc of nearbyNpcs) {
             if (localNpcs.length >= World.MAX_LOCAL_NPCS) break;
-            if (npc == null || localIndexes.has(npc.getIndex()) || !npc.isVisible() || npc.isNeedsPlacement()) continue;
+            if (npc == null || localIndexes.has(npc.getIndex()) || !npc.isVisible()) continue;
+            if (npc.isNeedsPlacement() && !World.isExactMoving(npc)) continue;
             if (BoatManager.syncArea(npc) !== privateArea) continue;
             if (npc.isOwnerOnly?.() && npc.getOwner?.() !== player) continue;
             if (!BoatManager.rootLocation(npc).isViewableFrom(origin)) continue;
