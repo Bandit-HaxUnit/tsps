@@ -52,6 +52,27 @@ class BankRunBehavior {
     this.objectSearch = options.objectSearch ?? null;
     this.bankBoothSearchCacheByArea = new Map();
     this.globallyBlockedBoothsByKey = new Map();
+    this.usableBankBoothIds = new Map();
+  }
+
+  /**
+   * BANK_BOOTH_IDS is name-derived and includes non-interactable variants (Draynor
+   * 10527, closed booths); running to one looks broken and clicking it does nothing.
+   */
+  isUsableBankBooth(objectId) {
+    if (!BANK_BOOTH_IDS.has(objectId)) {
+      return false;
+    }
+    const cached = this.usableBankBoothIds.get(objectId);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const interactions = ObjectDefinition.forId(objectId)?.getInteractions?.() ?? null;
+    const usable =
+      Array.isArray(interactions) &&
+      interactions.some((action) => action === "Bank" || action === "Use");
+    this.usableBankBoothIds.set(objectId, usable);
+    return usable;
   }
 
   getTraversalTarget(state) {
@@ -725,7 +746,7 @@ class BankRunBehavior {
       return null;
     }
     const object = MapObjects.get(target.objectId, loc, player.getPrivateArea());
-    if (!object || !BANK_BOOTH_IDS.has(object.getId())) {
+    if (!object || !this.isUsableBankBooth(object.getId())) {
       return null;
     }
     return object;
@@ -746,7 +767,7 @@ class BankRunBehavior {
     const otherRegions = [];
 
     for (const object of bankBooths) {
-      if (!object || !BANK_BOOTH_IDS.has(object.getId())) {
+      if (!object || !this.isUsableBankBooth(object.getId())) {
         continue;
       }
       const objectLoc = object.getLocation();
