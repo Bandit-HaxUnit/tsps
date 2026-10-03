@@ -214,12 +214,12 @@
       "spawnRadius": 10
     },
     {
-      "id": "varrock_west_copper",
+      "id": "copper_rocks_site",
       "activity": "copper_rocks",
       "count": 8,
       "anchor": {
-        "x": 3178,
-        "y": 3370,
+        "x": 1232,
+        "y": 3048,
         "z": 0
       },
       "spawnRadius": 8
