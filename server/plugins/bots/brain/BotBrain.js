@@ -63,7 +63,9 @@ class BotBrain {
     const frame = new BehaviourFrame(activity);
     frame.enteredAt = nowMs;
     this.frames.push(frame);
-    this.registry?.occupy?.(activity);
+    if (activity.resolver !== true) {
+      this.registry?.occupy?.(activity);
+    }
     if (activity.actions?.length) {
       this.activeActivity = activity;
       const state = this.ensureState();
@@ -83,6 +85,14 @@ class BotBrain {
   reset() {
     this.releaseActivity();
     this.frames = [];
+  }
+
+  /** Skill plugins announce produces; this keeps stall timers from firing. */
+  noteProgress(nowMs = Date.now()) {
+    const frame = this.frames[this.frames.length - 1];
+    if (frame) {
+      frame.lastProgressAt = nowMs;
+    }
   }
 
   assignNext(nowMs) {

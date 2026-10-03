@@ -8,11 +8,23 @@
       "produces": ["logs", "woodcutting"],
       "actions": [
         { "type": "equipTool", "tool": "axe" },
-        { "type": "interactObject", "treeTier": "$tier", "option": "Chop down", "until": { "inventoryFull": true }, "stallSeconds": 120 },
+        { "type": "interactObject", "catalog": "tree", "tier": "$tier", "option": "Chop down", "until": { "inventoryFull": true }, "stallSeconds": 120 },
         { "type": "bank" }
       ]
     }
   },
+  "resolvers": [
+    {
+      "id": "withdraw_axe",
+      "resolves": "item:axe",
+      "actions": [{ "type": "bank", "withdraw": [{ "item": "bronze_axe", "amount": 1 }] }]
+    },
+    {
+      "id": "return_to_site",
+      "resolves": "area",
+      "actions": [{ "type": "walkTo", "x": 3147, "y": 3230, "z": 0, "radius": 6 }]
+    }
+  ],
   "activities": [
     {
       "id": "lumbridge_normal_trees",

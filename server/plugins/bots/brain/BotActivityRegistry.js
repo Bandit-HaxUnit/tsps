@@ -8,6 +8,7 @@ const { createInteractObjectAction } = require("./actions/InteractObject");
 const { createDropItemsAction } = require("./actions/DropItems");
 const { createEquipToolAction } = require("./actions/EquipTool");
 const { createBankAction } = require("./actions/Bank");
+const { createWalkToAction } = require("./actions/WalkTo");
 
 const DEFAULT_DEFINITIONS_PATH = path.join(
   process.cwd(),
@@ -71,6 +72,7 @@ function createCondition(spec) {
     const min = Number(spec.hasItem.min ?? 1);
     return {
       id: `item:${spec.hasItem.id}`,
+      resolverKey: spec.resolver ?? `item:${spec.hasItem.id}`,
       check(ctx) {
         const inventory = ctx.player?.getInventory?.();
         if (!inventory) {
@@ -84,6 +86,7 @@ function createCondition(spec) {
     const area = spec.inArea;
     return {
       id: `area:${area.minX},${area.minY}`,
+      resolverKey: spec.resolver ?? "area",
       check(ctx) {
         const loc = ctx.player?.getLocation?.();
         if (!loc) {
@@ -116,12 +119,26 @@ function createAction(spec, world) {
     return createEquipToolAction(spec);
   }
   if (spec.type === "bank") {
-    return createBankAction(spec, world);
+    return createBankAction(
+      {
+        ...spec,
+        withdraw: (spec.withdraw ?? [])
+          .map((entry) => ({
+            item: resolveItemId(entry.item),
+            amount: Math.max(1, Math.floor(Number(entry.amount ?? 1))),
+          }))
+          .filter((entry) => Number.isInteger(entry.item)),
+      },
+      world
+    );
+  }
+  if (spec.type === "walkTo") {
+    return createWalkToAction(spec);
   }
   throw new Error(`[bot activities] unknown action type '${spec.type}'`);
 }
 
-function compileActivity(definition, templates, world) {
+function compileActivity(definition, templates, world, options = {}) {
   const template = definition.template ? templates[definition.template] : null;
   if (definition.template && !template) {
     throw new Error(`[bot activities] unknown template '${definition.template}'`);
@@ -132,6 +149,8 @@ function compileActivity(definition, templates, world) {
   );
   return {
     id: merged.id,
+    resolver: options.resolver === true,
+    resolves: options.resolver === true ? merged.resolves ?? null : null,
     mode: merged.mode ?? null,
     capacity: Number.isFinite(merged.capacity) ? Math.max(1, Math.floor(merged.capacity)) : 1,
     repeat: merged.repeat === true,
@@ -158,6 +177,7 @@ function createBotActivityRegistry(options = {}) {
   }
   const templates = raw.templates ?? {};
   const activities = [];
+  const resolvers = [];
   const byId = new Map();
   for (const definition of raw.activities ?? []) {
     if (!definition?.id || byId.has(definition.id)) {
@@ -166,6 +186,17 @@ function createBotActivityRegistry(options = {}) {
     const activity = compileActivity(definition, templates, world);
     activities.push(activity);
     byId.set(activity.id, activity);
+  }
+  for (const definition of raw.resolvers ?? []) {
+    if (!definition?.id || byId.has(definition.id)) {
+      throw new Error("[bot activities] resolver ids must be unique");
+    }
+    const resolver = compileActivity(definition, templates, world, { resolver: true });
+    if (!resolver.resolves) {
+      throw new Error(`[bot activities] resolver '${resolver.id}' needs a resolves key`);
+    }
+    resolvers.push(resolver);
+    byId.set(resolver.id, resolver);
   }
   const sites = (raw.sites ?? []).map((site) => {
     const activity = byId.get(site.activity);
@@ -187,6 +218,7 @@ function createBotActivityRegistry(options = {}) {
 
   return {
     activities,
+    resolvers,
     byId,
     sites,
     hasRoom(activityId) {
@@ -212,8 +244,12 @@ function createBotActivityRegistry(options = {}) {
       }
       return picked;
     },
-    resolversFor() {
-      return [];
+    resolversFor(condition) {
+      const key = condition?.resolverKey;
+      if (!key) {
+        return [];
+      }
+      return resolvers.filter((resolver) => resolver.resolves === key);
     },
     getSite(siteId) {
       return sites.find((site) => site.id === siteId) ?? null;

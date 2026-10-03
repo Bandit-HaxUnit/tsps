@@ -3,6 +3,7 @@
 const { MapObjects } = require("../../../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
 const { Skill } = require("../../../../src/main/typescript/elvarg/game/model/Skill");
 const Woodcutting = require("../../../skills/Woodcutting.plugin");
+const { resolveCatalogObjectIds } = require("../BotObjectCatalog");
 const {
   approachObject,
   queueRouteAndFlagAppearance,
@@ -14,29 +15,13 @@ const MAX_DIRECT_ROUTE_TILES = 20;
 const SEARCH_WALK_RADIUS = 10;
 const INTERACT_COOLDOWN_MS = 1500;
 
-function resolveObjectIds(spec) {
-  if (Array.isArray(spec.objectIds) && spec.objectIds.length > 0) {
-    return spec.objectIds.map(Number).filter(Number.isFinite);
-  }
-  if (spec.treeTier) {
-    const tier = Woodcutting.TREES.find(
-      (tree) =>
-        tree.name === `${spec.treeTier} tree` ||
-        tree.name === spec.treeTier ||
-        tree.name?.startsWith(`${spec.treeTier} `)
-    );
-    return tier?.objectIds ?? [];
-  }
-  return [];
-}
-
 /**
  * Generic "walk to an object and use an option until X" action, modelled on the
  * old woodcutting loop but with no per-mode state: target acquisition, segmented
  * approach, interact, then progress is measured by produced items or XP.
  */
 function createInteractObjectAction(spec, world) {
-  const objectIds = resolveObjectIds(spec);
+  const objectIds = resolveCatalogObjectIds(spec);
   const option = spec.option ?? "Chop down";
   const stallMs = Math.max(5, Number(spec.stallSeconds ?? 120)) * 1000;
   let target = null;

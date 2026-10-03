@@ -38,6 +38,7 @@ const { ReturnHomeModeHandler } = require("../behaviours/modes/ReturnHomeModeHan
 const { createBotRegistry } = require("./BotRegistry");
 const { createBotTickMetrics } = require("./BotTickMetrics");
 const { createBotActivityRegistry } = require("../brain/BotActivityRegistry");
+const { registerBrainProgressEvents } = require("../brain/BotBrainEvents");
 const { woodcuttingProductionCount } = require("../brain/actions/InteractObject");
 const Woodcutting = require("../../skills/Woodcutting.plugin");
 const { BotStatusReporter } = require("./BotStatusReporter");
@@ -364,6 +365,8 @@ function bootPlayerBotsRuntime(options = {}) {
     entries,
     entriesByUsername,
   });
+
+  registerBrainProgressEvents({ api, runtime });
 
   const botStatusReporter = new BotStatusReporter({
     api: botApi,

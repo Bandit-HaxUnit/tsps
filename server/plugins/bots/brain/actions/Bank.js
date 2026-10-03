@@ -16,10 +16,54 @@ const DEPOSIT_DELAY_MS = 600;
  * re-issuing walkToObject every tick cancels the arrival callback.
  */
 function createBankAction(spec, world) {
-  const requireFull = spec.until?.inventoryFull !== false;
+  const withdrawSpecs = Array.isArray(spec.withdraw) ? spec.withdraw : [];
+  const isWithdraw = withdrawSpecs.length > 0;
+  const requireFull = !isWithdraw && spec.until?.inventoryFull !== false;
   let booth = null;
   let lastClickAt = 0;
   let depositAt = 0;
+
+  function withdrawSatisfied(player) {
+    const inventory = player.getInventory();
+    return withdrawSpecs.every(
+      (entry) => inventory.getAmount(entry.item) >= entry.amount
+    );
+  }
+
+  function performWithdraw(player) {
+    const inventory = player.getInventory();
+    for (const entry of withdrawSpecs) {
+      let remaining = entry.amount - inventory.getAmount(entry.item);
+      let guard = 0;
+      while (remaining > 0 && guard++ < 40) {
+        let withdrew = false;
+        for (let tab = 0; tab < Bank.TOTAL_BANK_TABS - 1; tab++) {
+          const bank = player.getBank(tab);
+          if (!bank) {
+            continue;
+          }
+          const slot = bank.getSlotForItemId?.(entry.item) ?? -1;
+          if (slot < 0) {
+            continue;
+          }
+          const stack = bank.getItems()[slot];
+          if (!stack || stack.getId() !== entry.item) {
+            continue;
+          }
+          const take = Math.min(remaining, stack.getAmount());
+          Bank.withdraw(player, entry.item, slot, take, tab);
+          remaining -= take;
+          withdrew = true;
+          if (remaining <= 0) {
+            break;
+          }
+        }
+        if (!withdrew) {
+          break;
+        }
+      }
+    }
+  }
 
   function findBooth(player) {
     const loc = player.getLocation();
@@ -64,11 +108,21 @@ function createBankAction(spec, world) {
     update(ctx) {
       const { player, nowMs } = ctx;
       if (depositAt > 0 && nowMs >= depositAt) {
-        Bank.depositItems(player, player.getInventory(), true);
+        if (isWithdraw) {
+          performWithdraw(player);
+          world.log?.("bot_brain_bank_withdrew", {
+            username: player.getUsername?.(),
+          });
+        } else {
+          Bank.depositItems(player, player.getInventory(), true);
+          world.log?.("bot_brain_bank_deposited", {
+            username: player.getUsername?.(),
+          });
+        }
         depositAt = 0;
-        world.log?.("bot_brain_bank_deposited", {
-          username: player.getUsername?.(),
-        });
+        return "success";
+      }
+      if (isWithdraw && withdrawSatisfied(player)) {
         return "success";
       }
       if (requireFull && !player.getInventory().isFull()) {
