@@ -51,30 +51,10 @@ class PlayerBotBehaviorTreeFactory {
     // PvP moved to the brain; the tree still needs the controller for the
     // shared defensive/retreat branch that runs before every other action.
     this.pvpBehavior = options.pvpController ?? null;
-    this.woodcuttingBehavior = requireModeBehavior(
-      this.modeHandlers,
-      this.behaviorMode.WOODCUTTING,
-      "WOODCUTTING"
-    );
-    this.miningBehavior = requireModeBehavior(
-      this.modeHandlers,
-      this.behaviorMode.MINING,
-      "MINING"
-    );
-    this.smeltingBehavior = requireModeBehavior(
-      this.modeHandlers,
-      this.behaviorMode.SMELTING,
-      "SMELTING"
-    );
     this.bankRunBehavior = requireModeBehavior(
       this.modeHandlers,
       this.behaviorMode.BANK_RUN,
       "BANK_RUN"
-    );
-    this.firemakingBehavior = requireModeBehavior(
-      this.modeHandlers,
-      this.behaviorMode.FIREMAKING,
-      "FIREMAKING"
     );
     this.eatFoodActionNode = new EatFoodActionNode(botStatesByName, api, {
       lowHpRatio: this.botEatLowHpRatio,
@@ -140,14 +120,6 @@ class PlayerBotBehaviorTreeFactory {
             ...context,
             traversalService: this.traversalService,
           });
-        case this.behaviorMode.WOODCUTTING:
-          return this.woodcuttingBehavior.tick(context);
-        case this.behaviorMode.MINING:
-          return this.miningBehavior.tick(context);
-        case this.behaviorMode.SMELTING:
-          return this.smeltingBehavior.tick(context);
-        case this.behaviorMode.FIREMAKING:
-          return this.firemakingBehavior.tick(context);
         case this.behaviorMode.ROAMING:
           return roamingCooldownNode.tick(context);
         default:

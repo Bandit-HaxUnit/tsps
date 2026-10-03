@@ -1,7 +1,6 @@
 "use strict";
 
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
-const { callModeHook } = require("../behaviours/hooks/ModeHookContract");
 const { attachBrain } = require("../brain/attachBrain");
 
 const DEFAULT_SITE = Object.freeze({ x: 3147, y: 3230, z: 0 });
@@ -36,8 +35,6 @@ function createBotBenchmark(options = {}) {
     api,
     botApi,
     runtime,
-    modeHandlers,
-    assignableBehaviors,
     tickMetrics,
     resetMovementState,
     brainRegistry,
@@ -48,19 +45,10 @@ function createBotBenchmark(options = {}) {
   if (count <= 0 || !runtime || !tickMetrics) {
     return null;
   }
-  const useBrain = (process.env.BOT_BENCH_BRAIN ?? "0") === "1";
   const brainActivityId = process.env.BOT_BENCH_ACTIVITY ?? "lumbridge_normal_trees";
-  const brainActivity = useBrain
-    ? brainRegistry?.byId?.get(brainActivityId) ?? null
-    : null;
-  if (useBrain && !brainActivity) {
+  const brainActivity = brainRegistry?.byId?.get(brainActivityId) ?? null;
+  if (!brainActivity) {
     botApi?.log?.("bot_bench_unknown_activity", { activity: brainActivityId });
-    return null;
-  }
-  const modeKey = String(process.env.BOT_BENCH_MODE ?? "woodcutting").toLowerCase();
-  const mode = brainActivity ? null : assignableBehaviors?.[modeKey] ?? null;
-  if (!useBrain && !mode) {
-    botApi?.log?.("bot_bench_invalid_mode", { modeKey });
     return null;
   }
   const site = {
@@ -97,10 +85,9 @@ function createBotBenchmark(options = {}) {
   }
 
   function spawnBenchBot(index) {
-    // Brain bots must spawn unprimed: a null mode means "pvp" to the spawner and
-    // fills the inventory with a preset, which breaks the activity loop.
-    const spawnMode = brainActivity ? brainActivity.mode : mode;
-    const bot = runtime.spawnPvpBot(resolveSpawnLocation(index), { mode: spawnMode });
+    const bot = runtime.spawnPvpBot(resolveSpawnLocation(index), {
+      mode: brainActivity.mode,
+    });
     if (!bot) {
       return false;
     }
@@ -111,42 +98,19 @@ function createBotBenchmark(options = {}) {
     }
     state.home = { x: site.x, y: site.y, z: site.z };
     // PvP bots keep their pvp-only priming; other brain activities drop it.
-    if (state.autonomy && brainActivity?.mode !== "pvp") {
+    if (state.autonomy && brainActivity.mode !== "pvp") {
       state.autonomy.allowedAutonomousModes = null;
     }
-    if (brainActivity) {
-      botApi?.log?.("bot_bench_brain_attached", { username, activity: brainActivity.id });
-      return attachBrain({
-        runtime,
-        registry: brainRegistry,
-        world: brainWorld,
-        bot,
-        activity: brainActivity,
-        home: site,
-        resetMovementState,
-      });
-    }
-    const activated =
-      callModeHook({
-        modeHandlers,
-        mode,
-        hookName: "activateMode",
-        payload: { player: bot, state, nowMs: Date.now(), reason: "bench_spawn" },
-        fallback: false,
-        api: botApi,
-        errorEvent: "bot_bench_mode_activate_error",
-      }) === true;
-    if (!activated) {
-      return false;
-    }
-    if (!state.autonomy) {
-      state.autonomy = {};
-    }
-    state.autonomy.manualMode = mode;
-    state.autonomy.modeEndsAt = Number.MAX_SAFE_INTEGER;
-    state.autonomy.nextDecisionAt = Number.MAX_SAFE_INTEGER;
-    resetMovementState?.(bot);
-    return true;
+    botApi?.log?.("bot_bench_brain_attached", { username, activity: brainActivity.id });
+    return attachBrain({
+      runtime,
+      registry: brainRegistry,
+      world: brainWorld,
+      bot,
+      activity: brainActivity,
+      home: site,
+      resetMovementState,
+    });
   }
 
   function start() {
@@ -159,8 +123,8 @@ function createBotBenchmark(options = {}) {
     const setup = {
       requested: count,
       spawned,
-      mode: brainActivity ? brainActivity.id : mode,
-      driver: brainActivity ? "brain" : "mode",
+      mode: brainActivity.id,
+      driver: "brain",
       site,
       warmupMs,
       durationMs,
