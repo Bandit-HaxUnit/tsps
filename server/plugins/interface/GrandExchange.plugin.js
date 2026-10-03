@@ -45,9 +45,9 @@ function validItem(id) {
 }
 
 function price(id) {
-  // ponytail: fixed cache values, minimum 1 gp; replace with market prices if needed.
+  // OSRS market quote from item-prices.json; store value for unquoted/custom items.
   const base = ItemDefinition.forId(id).unNote();
-  return Math.max(1, Math.min(MAX, Math.floor(ItemDefinition.forId(base).getValue()) || 1));
+  return Math.max(1, Math.min(MAX, Math.floor(ItemDefinition.forId(base).getGrandExchangeValue()) || 1));
 }
 
 function active(player, offer) {
