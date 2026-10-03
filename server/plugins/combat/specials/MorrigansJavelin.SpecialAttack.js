@@ -11,7 +11,10 @@ module.exports = function registerMorrigansJavelinSpecialAttack(api) {
   const BLEED_TASK_KEY_ATTRIBUTE = "combat:bleed:task-key";
   const JAVELIN_ITEM_IDS = [
     ItemIdentifiers.MORRIGANS_JAVELIN,
+    ItemIdentifiers.MORRIGANS_JAVELIN_2,
     ItemIdentifiers.MORRIGANS_JAVELIN_3,
+    ItemIdentifiers.MORRIGANS_JAVELIN_BH_,
+    ItemIdentifiers.MORRIGANS_JAVELIN_BH__2,
   ];
 
   function applyBleed(attacker, target, damage) {

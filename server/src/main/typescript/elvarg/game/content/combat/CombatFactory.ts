@@ -50,6 +50,7 @@ import { Wilderness } from "../wilderness/Wilderness";
 import { PluginManager } from "../../../plugins/PluginManager";
 import { ServerPerf } from "../../../util/ServerPerf";
 import { World } from "../../World";
+import { ItemOnGroundManager } from "../../entity/impl/grounditem/ItemOnGroundManager";
 import { WeaponProfiles } from "./WeaponProfile";
 import { Barrows } from "./Barrows";
 import {
@@ -719,9 +720,20 @@ export class CombatFactory {
         // Add this hit to the target's hitQueue.
         target.getCombat().getHitQueue().addPendingHit(
             qHit,
-            World.getProcessCycle() + qHit.getDelay() +
-                (attacker.isPlayer() && qHit.getCombatType() === CombatType.MELEE ? 1 : 0),
+            World.getProcessCycle() + qHit.getDelay() + CombatFactory.hitProcessingDelay(qHit),
         );
+    }
+
+    /**
+     * OSRS processes NPCs before players each tick, so a hit queued against an NPC lands
+     * one tick after the distance table (Wiki: Hit delay). Player melee keeps its tick too:
+     * the target's queue drains at the start of its own turn, which has already passed.
+     */
+    public static hitProcessingDelay(hit: PendingHit): number {
+        const targetIsNpc = hit.getTarget()?.isNpc?.() === true;
+        const meleePlayerAttack = hit.getAttacker()?.isPlayer?.() === true
+            && hit.getCombatType() === CombatType.MELEE;
+        return targetIsNpc || meleePlayerAttack ? 1 : 0;
     }
 
     public static executeHit(qHit: PendingHit) {
@@ -1312,25 +1324,19 @@ export class CombatFactory {
         return true;
     }
 
-    public static decrementAmmo(player: Player, pos: Location, amount: number) {
+    /** Fired ammunition has a 20% chance to break on impact; the rest lands on the floor. */
+    private static readonly AMMO_BREAK_CHANCE = 20;
+
+    /**
+     * @param delayTicks the shot's flight time in ticks. The outcome is rolled now but the
+     *   count and the floor drop only apply when the projectile lands, so the quiver matches
+     *   the hitsplat instead of emptying at the bowstring.
+     */
+    public static decrementAmmo(player: Player, pos: Location, amount: number, delayTicks = 0) {
         // Get the ranged weapon data
         const rangedWeapon = player.getCombat().getRangedWeapon();
 
-        // Determine which slot we are decrementing ammo from.
-        let slot = Equipment.AMMUNITION_SLOT;
-
-        // Thrown weapons consume ammunition from the weapon slot.
-        if (CombatFactory.usesWeaponSlotAmmo(rangedWeapon)) {
-            slot = Equipment.WEAPON_SLOT;
-        }
-
-        let accumalator = player.getEquipment().get(Equipment.CAPE_SLOT).getId() == 10499;
-        if (accumalator) {
-            if (Misc.getRandom(12) <= 9) {
-                return;
-            }
-        }
-
+        // Plugin-owned ammunition (toxic blowpipe scales, the Gauntlet's bows) consumes itself.
         if (PluginManager.decrementRangedAmmo(player, pos, amount)) {
             return;
         }
@@ -1380,34 +1386,73 @@ export class CombatFactory {
             return;
         }
 
-        player.getEquipment().get(slot).decrementAmountBy(amount);
+        // Determine which slot we are decrementing ammo from.
+        // Thrown weapons consume ammunition from the weapon slot.
+        let slot = Equipment.AMMUNITION_SLOT;
+        if (CombatFactory.usesWeaponSlotAmmo(rangedWeapon)) {
+            slot = Equipment.WEAPON_SLOT;
+        }
+        const ammoItem = player.getEquipment().get(slot);
 
-        // Drop arrows if the player isn't using an accumalator
-        if (player.getCombat().getAmmunition().dropOnFloor()) {
-            if (!accumalator) {
-                /*
-                for(let i = 0; i < amount; i++) {
-                    GroundItemManager.spawnGroundItem(player,
-                    new GroundItem(new Item(player.getEquipment().get(slot).getId()), pos,
-                    player.getUsername(), false, 120, true, 120));
+        // Per shot: 20% break, (80 - recovery)% land on the floor where the target stood,
+        // the rest is recovered by a plugin (Ava's devices).
+        const recovery = PluginManager.rangedAmmoRecovery(player);
+        const dropChance = 80 - recovery;
+        let lost = 0;
+        let dropped = 0;
+        for (let shot = 0; shot < amount; shot++) {
+            const roll = Misc.getRandom(99); // 0..99
+            if (roll < CombatFactory.AMMO_BREAK_CHANCE) {
+                lost++;
+            } else if (roll < CombatFactory.AMMO_BREAK_CHANCE + dropChance) {
+                dropped++;
+            }
+            // Otherwise the device recovered it before it hit the floor.
+        }
+
+        const apply = () => {
+            // A swap mid-flight moved this stack out of the slot; don't touch the new one.
+            if (player.getEquipment().get(slot) !== ammoItem) {
+                return;
+            }
+
+            if (dropped > 0 && pos) {
+                ItemOnGroundManager.registerLocation(player, new Item(ammoItem.getId(), dropped), pos);
+            }
+
+            const consumed = lost + dropped;
+            if (consumed > 0) {
+                ammoItem.decrementAmountBy(consumed);
+            }
+
+            // If we are at 0 ammo remove the item from the equipment completely.
+            if (ammoItem.getAmount() == 0) {
+                player.sendMessage("You have run out of ammunition!");
+                player.getEquipment().set(slot, new Item(-1));
+
+                if (slot == Equipment.WEAPON_SLOT) {
+                    WeaponInterfaceManager.assign(player);
+                    player.getUpdateFlag().flag(Flag.APPEARANCE);
                 }
-                */
             }
+
+            // Refresh the equipment interface.
+            player.getEquipment().refreshItems();
+        };
+
+        if (delayTicks > 0) {
+            TaskManager.submit(new (class extends Task {
+                constructor() {
+                    super(delayTicks);
+                }
+                execute(): void {
+                    apply();
+                    this.stop();
+                }
+            })());
+        } else {
+            apply();
         }
-
-        // If we are at 0 ammo remove the item from the equipment completely.
-        if (player.getEquipment().get(slot).getAmount() == 0) {
-            player.sendMessage("You have run out of ammunition!");
-            player.getEquipment().set(slot, new Item(-1));
-
-            if (slot == Equipment.WEAPON_SLOT) {
-                WeaponInterfaceManager.assign(player);
-                player.getUpdateFlag().flag(Flag.APPEARANCE);
-            }
-        }
-
-        // Refresh the equipment interface.
-        player.getEquipment().refreshItems();
     }
 
     private static usesWeaponSlotAmmo(rangedWeapon: RangedWeapon): boolean {
