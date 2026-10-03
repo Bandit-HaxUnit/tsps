@@ -130,7 +130,7 @@ export class TeleportHandler {
             return false;
         }
 
-        if (PluginManager.emitCanTeleport(player, wildernessLevelLimit) === false) {
+        if (PluginManager.emitCanTeleport(player, wildernessLevelLimit, targetLocation) === false) {
             return false;
         }
 

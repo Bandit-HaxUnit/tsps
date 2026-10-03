@@ -1889,7 +1889,8 @@ export function encodeHandshake(
   name: string,
   isAdmin: boolean,
   appearance?: PlayerAppearance,
-  chatIcons: readonly number[] = []
+  chatIcons: readonly number[] = [],
+  membersWorld: boolean = true
 ): Buffer {
   const idBuffer = Buffer.alloc(4);
   idBuffer.writeInt32BE(id, 0);
@@ -1919,6 +1920,7 @@ export function encodeHandshake(
       Buffer.from([icons.length, ...icons]),
       string(""),
       Buffer.from([isAdmin ? 1 : 0]),
+      Buffer.from([membersWorld ? 1 : 0]),
     ])
   );
 }

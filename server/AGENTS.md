@@ -188,6 +188,28 @@ The entry point stays scannable and units can be added, removed or reused withou
 shared code. See `plugins/combat/SpecialAttacks.plugin.js` and `plugins/combat/specials/` for
 the canonical example.
 
+### Members Content
+
+Every plugin whose content is members-only in OSRS (members skills, areas, bosses, minigames,
+members items) **must** export `members: true`. When world.json sets `"membersWorld": false`,
+`PluginManager` skips those plugins entirely, so an untagged members plugin leaks members
+content into a free-to-play world.
+
+```js
+module.exports = {
+  name: "Barrows",
+  members: true,
+  register(api) { ... },
+};
+```
+
+- Check the OSRS wiki page's "Members" field when unsure; F2P content (e.g. Castle Wars,
+  Emir's Arena, Obor) stays untagged.
+- Quests are not plugins: add members quests to `QUESTS` only and free-to-play ones to
+  `F2P_QUESTS` as well, in `plugins/quests/Quests.plugin.js`.
+- Members gating that a whole-plugin skip can't express (items, XP, spawns, shop stock, areas)
+  lives in `plugins/modes/FreeToPlay.plugin.js` via the `onCan*` hooks, not in core.
+
 ### Name-Based Hooks
 
 Use the name-based overloads wherever they exist. They read as the game reads, and they

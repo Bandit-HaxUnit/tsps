@@ -500,6 +500,7 @@ function forceBurrow({ player }) {
 
 module.exports = {
   name: "GemstoneCrab",
+  members: true,
   _test: { state, tick, attack, inReach, rollGem, spawnCrab, startBurrow, topDealers, recordDamage, SPOTS },
   register(api) {
     pluginApi = api;

@@ -67,6 +67,7 @@ function breakTablet({ player, itemId }) {
 
 module.exports = {
   name: "SailingBoatTeleport",
+  members: true,
   register(api) {
     pluginApi = api;
     core = api.core;

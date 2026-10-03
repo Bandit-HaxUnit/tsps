@@ -1222,6 +1222,7 @@ function leaveMatch({ player, npc }) {
 
 module.exports = {
   name: "PestControl",
+  members: true,
   register(api) {
     AreaManager = api.getAreaManager();
     ObjectManager = api.getObjectManager();

@@ -1005,6 +1005,7 @@ const furnitureObjectIds = [...new Set(CONSTRUCTION_BUILDABLES.flatMap(buildable
 
 export const ConstructionPlugin = {
   name: "Construction",
+  members: true,
   register(api: PluginApi): void {
     EstateAgentPlugin.register(api);
     ConstructionServants.register(api);

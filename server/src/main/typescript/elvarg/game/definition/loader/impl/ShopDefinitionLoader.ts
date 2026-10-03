@@ -6,6 +6,7 @@ import {
     ShopStockDefinition,
 } from "../../ShopDefinition";
 import { DefinitionLoader, LoadedDefinitionSource } from "../DefinitionLoader";
+import { PluginManager } from "../../../../plugins/PluginManager";
 
 interface RawShopStockDefinition {
     id?: unknown;
@@ -166,6 +167,9 @@ export class ShopDefinitionLoader extends DefinitionLoader {
             });
         }
 
+        // Plugins can drop stock entries (e.g. members items on a free-to-play world).
+        const allowedStock = stock.filter((entry) => PluginManager.emitCanStockItem(id, entry.id) !== false);
+
         const name = typeof raw.name === "string" && raw.name.trim()
             ? raw.name.trim()
             : "Shop";
@@ -179,7 +183,7 @@ export class ShopDefinitionLoader extends DefinitionLoader {
             id,
             name,
             currency,
-            stock,
+            allowedStock,
             defaultRestockTicks,
             defaultDestockTicks,
             soldItemDestockTicks,

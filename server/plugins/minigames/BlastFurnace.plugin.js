@@ -532,6 +532,7 @@ function start() {
 
 module.exports = {
   name: "BlastFurnace",
+  members: true,
   _test: { init, tick, stateOf, putOre, smelt, takeBars, take, foremanCondition, foremanPaid, enterRoom, coolWithWater },
   register(api) {
     init(api);

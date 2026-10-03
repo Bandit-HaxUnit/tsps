@@ -6,6 +6,7 @@ import { CustomInterfaceRegistry } from "../game/interfaces/CustomInterfaceRegis
 import * as fs from "fs";
 import * as path from "path";
 import { GameConstants } from "../game/GameConstants";
+import { isMembersWorld } from "../game/definition/WorldDefinition";
 import { MapRegionReplacementManager } from "../game/collision/MapRegionReplacementManager";
 import { DefinitionLoader } from "../game/definition/loader/DefinitionLoader";
 import { ShopManager } from "../game/model/container/shop/ShopManager";
@@ -20,6 +21,11 @@ import {
   PluginCanDrinkEvent,
   PluginCanEatEvent,
   PluginCanEquipEvent,
+  PluginCanUseItemEvent,
+  PluginCanGainExperienceEvent,
+  PluginCanSpawnNpcEvent,
+  PluginCanStockItemEvent,
+  PluginPrayerDisabledEvent,
   PluginFiremakingBlockedEvent,
   PluginCanTeleportEvent,
   PluginCanLogoutEvent,
@@ -214,6 +220,11 @@ export class PluginManager {
   private static shouldKeepItemOnDeathHooks: PluginHook<PluginShouldKeepItemOnDeathEvent>[] = [];
   private static playerDeathItemDropHooks: PluginHook<PluginPlayerDeathItemDropEvent>[] = [];
   private static canEquipHooks: PluginHook<PluginCanEquipEvent>[] = [];
+  private static canUseItemHooks: PluginHook<PluginCanUseItemEvent>[] = [];
+  private static canGainExperienceHooks: PluginHook<PluginCanGainExperienceEvent>[] = [];
+  private static canSpawnNpcHooks: PluginHook<PluginCanSpawnNpcEvent>[] = [];
+  private static canStockItemHooks: PluginHook<PluginCanStockItemEvent>[] = [];
+  private static prayerDisabledHooks: PluginHook<PluginPrayerDisabledEvent>[] = [];
   private static canUnequipHooks: PluginHook<PluginCanUnequipEvent>[] = [];
   private static playerDeathHooks: PluginHook<PluginPlayerDeathEvent>[] = [];
   private static playerOptionHooks: PluginHook<PluginPlayerOptionEvent>[] = [];
@@ -512,14 +523,21 @@ export class PluginManager {
     const candidates = PluginManager.collectPluginLoadCandidates(
       enabledPluginFiles
     );
+    const membersWorld = isMembersWorld();
+    let membersOnlyCount = 0;
     PluginManager.loadPluginCandidatesWithDependencies(
       candidates.filter((candidate) => {
         // Keep exported-name configuration working when it differs from the filename.
-        if (!disabledPluginNames.has(normalizePluginName(candidate.pluginName))) {
-          return true;
+        if (disabledPluginNames.has(normalizePluginName(candidate.pluginName))) {
+          disabledCount++;
+          return false;
         }
-        disabledCount++;
-        return false;
+        // Members content stays unloaded on a free-to-play world.
+        if (!membersWorld && candidate.plugin.members === true) {
+          membersOnlyCount++;
+          return false;
+        }
+        return true;
       })
     );
 
@@ -527,7 +545,8 @@ export class PluginManager {
       console.info(PluginManager.lastPersistenceOverride);
     }
     console.info(
-      `[plugins] active=${PluginManager.loadedPlugins.length} disabled=${disabledCount}`
+      `[plugins] active=${PluginManager.loadedPlugins.length} disabled=${disabledCount}` +
+        (membersOnlyCount > 0 ? ` members-only=${membersOnlyCount}` : "")
     );
     if (enabledPluginFiles.length > 0 && PluginManager.loadedPlugins.length === 0) {
       console.warn(`[plugins] no valid plugins loaded from ${pluginDirectory}`);
@@ -941,11 +960,11 @@ export class PluginManager {
     return null;
   }
 
-  public static emitCanTeleport(player: any, wildernessLevelLimit: number = 20): boolean | null {
+  public static emitCanTeleport(player: any, wildernessLevelLimit: number = 20, destination?: any): boolean | null {
     if (PluginManager.canTeleportHooks.length === 0) {
       return null;
     }
-    const event: PluginCanTeleportEvent = { player, wildernessLevelLimit, allow: null };
+    const event: PluginCanTeleportEvent = { player, wildernessLevelLimit, destination, allow: null };
     for (const hook of PluginManager.canTeleportHooks) {
       PluginManager.executeHook(hook, event, "can_teleport", "can_teleport");
       if (event.allow !== null) {
@@ -1190,6 +1209,55 @@ export class PluginManager {
     return null;
   }
 
+  /** Runs hooks until one sets `answerKey`; returns that answer, or null when none did. */
+  private static firstAnswer<T>(
+    hooks: PluginHook<T>[],
+    event: T,
+    label: string,
+    answerKey: keyof T
+  ): boolean | null {
+    for (const hook of hooks) {
+      PluginManager.executeHook(hook, event, label, label);
+      if (event[answerKey] !== null) {
+        return event[answerKey] as unknown as boolean;
+      }
+    }
+    return null;
+  }
+
+  public static emitCanUseItem(player: any, itemId: number, action: string, option?: string): boolean | null {
+    if (PluginManager.canUseItemHooks.length === 0) return null;
+    return PluginManager.firstAnswer(PluginManager.canUseItemHooks,
+      { player, itemId, action, option, allow: null }, "can_use_item", "allow");
+  }
+
+  public static emitCanGainExperience(player: any, skill: any, experience: number): boolean | null {
+    if (PluginManager.canGainExperienceHooks.length === 0) return null;
+    return PluginManager.firstAnswer(PluginManager.canGainExperienceHooks,
+      { player, skill, experience, allow: null }, "can_gain_experience", "allow");
+  }
+
+  public static emitCanSpawnNpc(npcId: number, location: any): boolean | null {
+    if (PluginManager.canSpawnNpcHooks.length === 0) return null;
+    return PluginManager.firstAnswer(PluginManager.canSpawnNpcHooks,
+      { npcId, location, allow: null }, "can_spawn_npc", "allow");
+  }
+
+  public static emitCanStockItem(shopId: number, itemId: number): boolean | null {
+    if (PluginManager.canStockItemHooks.length === 0) return null;
+    return PluginManager.firstAnswer(PluginManager.canStockItemHooks,
+      { shopId, itemId, allow: null }, "can_stock_item", "allow");
+  }
+
+  /** The plugin's refusal message when a prayer is disabled, or null when it is usable. */
+  public static emitPrayerDisabled(player: any, prayer: any): string | null {
+    if (PluginManager.prayerDisabledHooks.length === 0) return null;
+    const event: PluginPrayerDisabledEvent = { player, prayer, disabled: null };
+    return PluginManager.firstAnswer(PluginManager.prayerDisabledHooks, event, "prayer_disabled", "disabled") === true
+      ? event.message ?? "You cannot use that prayer here."
+      : null;
+  }
+
   public static emitCanUnequip(player: any, slot: number, item: any): boolean | null {
     const event: PluginCanUnequipEvent = { player, slot, item, allow: null };
     for (const hook of PluginManager.canUnequipHooks) {
@@ -1258,12 +1326,14 @@ export class PluginManager {
   public static emitSpellDisabled(
     player: any,
     spellbook: any,
-    spellId: number
+    spellId: number,
+    spell?: any
   ): boolean | null {
     const event: PluginSpellDisabledEvent = {
       player,
       spellbook,
       spellId,
+      spell,
       disabled: null,
     };
     for (const hook of PluginManager.spellDisabledHooks) {
@@ -1864,6 +1934,8 @@ export class PluginManager {
       CombatNormalSpell: require(`${combat}/magic/CombatNormalSpell`).CombatNormalSpell,
       NPC: require("../game/entity/impl/npc/NPC").NPC,
       GameConstants: require("../game/GameConstants").GameConstants,
+      // world.json accessors (isMembersWorld, isMembersArea, WORLD_SPAWN, zone boundaries).
+      WorldDefinition: require("../game/definition/WorldDefinition"),
       TeleportHandler: require(`${model}/teleportation/TeleportHandler`).TeleportHandler,
       TeleportType: require(`${model}/teleportation/TeleportType`).TeleportType,
       DialogueChainBuilder: require(`${model}/dialogues/builders/DialogueChainBuilder`).DialogueChainBuilder,
@@ -2793,6 +2865,21 @@ export class PluginManager {
             handler(event);
           },
         });
+      },
+      onCanUseItem: (handler) => {
+        if (typeof handler === "function") PluginManager.canUseItemHooks.push({ pluginName, handler });
+      },
+      onCanGainExperience: (handler) => {
+        if (typeof handler === "function") PluginManager.canGainExperienceHooks.push({ pluginName, handler });
+      },
+      onCanSpawnNpc: (handler) => {
+        if (typeof handler === "function") PluginManager.canSpawnNpcHooks.push({ pluginName, handler });
+      },
+      onCanStockItem: (handler) => {
+        if (typeof handler === "function") PluginManager.canStockItemHooks.push({ pluginName, handler });
+      },
+      onPrayerDisabled: (handler) => {
+        if (typeof handler === "function") PluginManager.prayerDisabledHooks.push({ pluginName, handler });
       },
       onCanEquip: (handler) => {
         if (typeof handler !== "function") {
