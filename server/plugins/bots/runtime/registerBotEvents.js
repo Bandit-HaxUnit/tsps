@@ -19,10 +19,6 @@ const {
   randomInRange,
 } = require("../behaviours/navigation/BotNavigation");
 const {
-  armRecruitFollowBack,
-  recallRecruitedBot,
-} = require("./BotRecruitRuntime");
-const {
   initBotDeathLootCoreAccess,
   clearBotDeathLootPlan,
   handleBotDeathItemDrop,
@@ -231,16 +227,7 @@ function recallClanRecruitsOnOwnerDefeat({ runtime, behaviorMode, owner, nowMs }
     bot.getCombat?.().setUnderAttack?.(null);
     bot.setCombatFollowing?.(null);
     bot.getMovementQueue?.().reset?.();
-
-    armRecruitFollowBack(state, behaviorMode);
-    recallRecruitedBot(
-      bot,
-      owner,
-      state,
-      behaviorMode,
-      CLAN_ASSIST_DURATION_MS,
-      nowMs
-    );
+    // The follow_owner brain keeps ticking; it re-snaps once the owner returns.
   }
 }
 

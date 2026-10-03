@@ -6,9 +6,6 @@ const {
   resetMovementState,
   initPlayerBotStateCoreAccess,
 } = require("./behaviours/state/PlayerBotState");
-const {
-  initBotRecruitRuntimeCoreAccess,
-} = require("./runtime/BotRecruitRuntime");
 const { registerBotCommands } = require("./runtime/registerBotCommands");
 const { registerBotEvents } = require("./runtime/registerBotEvents");
 const { createBotPluginLogging } = require("./runtime/BotPluginLogging");
@@ -242,7 +239,6 @@ module.exports = {
   register(api) {
     registerDuelBotAcceptance(api);
     initPlayerBotStateCoreAccess(api);
-    initBotRecruitRuntimeCoreAccess(api);
     const { botApi, recentBotLogsByUsername } = createBotPluginLogging({
       api,
       logPath: BOT_CONFIG.logging.logPath,

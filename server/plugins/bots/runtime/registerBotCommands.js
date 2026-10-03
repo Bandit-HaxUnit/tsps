@@ -1,10 +1,10 @@
 const { PlayerRights } = require("../../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { FriendsChatManager } = require("../../interface/FriendsChatManager");
-const { recallRecruitedBot } = require("./BotRecruitRuntime");
 const { callModeHook } = require("../behaviours/hooks/ModeHookContract");
 const { isPvpOnlyBotState } = require("../behaviours/state/PlayerBotState");
 const { ATTR_RECRUIT_OWNER_USERNAME } = require("./BotRecruitConstants");
 const { startBrainRoam } = require("../brain/RoamService");
+const { startRecruit } = require("../brain/RecruitService");
 
 function registerBotCommands(options) {
   const {
@@ -49,6 +49,7 @@ function registerBotCommands(options) {
       ...brainModes,
       ...Object.keys(assignableBehaviors ?? {}),
     ]),
+    "recruit",
     "auto",
   ].sort((a, b) => a.localeCompare(b)).join("|");
 
@@ -59,6 +60,13 @@ function registerBotCommands(options) {
     }
     if (requested === "pvp" || requested === "sparring") {
       return brainRegistry.byId?.get("pvp") ?? null;
+    }
+    if (
+      requested === "recruit" ||
+      requested === "follow" ||
+      requested === "follow_owner"
+    ) {
+      return brainRegistry.byId?.get("follow_owner") ?? null;
     }
     const mode = assignableBehaviors?.[requested] ?? requested;
     return (
@@ -73,7 +81,10 @@ function registerBotCommands(options) {
     if (!entry) {
       return false;
     }
-    entry.brain = null;
+    if (entry.brain) {
+      entry.brain.releaseActivity?.();
+      entry.brain = null;
+    }
     if (state.autonomy) {
       state.autonomy.manualMode = activity.mode;
       state.autonomy.modeEndsAt = Number.MAX_SAFE_INTEGER;
@@ -134,14 +145,50 @@ function registerBotCommands(options) {
 
   const pendingRecruits = new Map();
   api.registerCommand("bot", ({ player, parts }) => {
-    const requested = (parts[1] ?? "pvp").toLowerCase();
+    const requested = (parts[1] ?? "recruit").toLowerCase();
     const wantsAuto = requested === "auto";
+    const isRecruitRequest =
+      requested === "recruit" ||
+      requested === "follow" ||
+      requested === "follow_owner";
     const activity = findBrainActivity(requested);
     const normalizedBehavior =
       activity?.mode ??
       (wantsAuto ? "auto" : assignableBehaviors?.[requested] ?? null);
     if (!activity && !wantsAuto && !normalizedBehavior) {
       player.sendMessage(`Usage: ::bot [${supportedBehaviorList}] (default pvp)`);
+      return true;
+    }
+    // Recruits spawn geared (pvp priming applies the generated loadout) and
+    // follow the owner through the follow_owner brain; the clan-chat join waits
+    // for the bot session in the drain below.
+    if (isRecruitRequest) {
+      const recruitActivity = findBrainActivity("recruit");
+      if (!recruitActivity) {
+        player.sendMessage("Recruit activity is unavailable.");
+        return true;
+      }
+      const recruit = runtime.spawnPvpBot(player.getLocation(), {
+        mode: behaviorMode.PVP,
+      });
+      if (!recruit) {
+        player.sendMessage("Unable to spawn a bot right now.");
+        return true;
+      }
+      const recruitUsername = recruit.getUsername?.();
+      const recruitState = recruitUsername
+        ? runtime.botStatesByName.get(recruitUsername)
+        : null;
+      const started =
+        recruitState && startRecruit(recruit, recruitState, player);
+      player.sendMessage(
+        started
+          ? `${recruitUsername} is geared and following you.`
+          : `Unable to start following for ${recruitUsername}.`
+      );
+      if (started) {
+        pendingRecruits.set(recruit, { owner: player, behavior: "recruit" });
+      }
       return true;
     }
     const bot = runtime.spawnPvpBot(player.getLocation(), {
@@ -180,6 +227,20 @@ function registerBotCommands(options) {
       if (!owner.isRegistered()) continue;
       const username = bot.getUsername?.();
       const state = username ? runtime.botStatesByName.get(username) : null;
+      if (pending.behavior === "recruit") {
+        if (!owner.getRelations().getFriendsChatChannelName()) {
+          FriendsChatManager.setOwnChannelName(owner, owner.getUsername());
+        }
+        const recruited = FriendsChatManager.recruitBot(owner, bot);
+        bot.setArea(owner.getArea());
+        bot.moveTo(owner.getLocation().clone());
+        owner.sendMessage(
+          recruited
+            ? `${username} is geared, in your clan chat, and following you.`
+            : `${username} is geared and following you, but could not join your clan chat.`
+        );
+        continue;
+      }
       if (pending.behavior !== behaviorMode.PVP) {
         if (!state) {
           owner.sendMessage(`Unable to start ${pending.behavior} for ${username}: missing bot state.`);
@@ -201,21 +262,6 @@ function registerBotCommands(options) {
         });
         continue;
       }
-      if (!owner.getRelations().getFriendsChatChannelName()) {
-        FriendsChatManager.setOwnChannelName(owner, owner.getUsername());
-      }
-      const recruited = FriendsChatManager.recruitBot(owner, bot);
-      if (recruited && !recallRecruitedBot(bot, owner, state, behaviorMode)) {
-        bot.setAttribute?.(ATTR_RECRUIT_OWNER_USERNAME, owner.getUsername());
-        bot.setFollowing?.(owner);
-        bot.setMobileInteraction?.(owner);
-        bot.setPositionToFace?.(owner.getLocation?.());
-      }
-      bot.setArea(owner.getArea());
-      bot.moveTo(owner.getLocation().clone());
-      owner.sendMessage(recruited
-        ? `${username} is geared, in your clan chat, and ready beside you.`
-        : `${username} is geared and beside you, but could not join your clan chat.`);
     }
   });
 
@@ -318,6 +364,12 @@ function registerBotCommands(options) {
     }
 
     if (activity) {
+      if (activity.id === "follow_owner") {
+        target.setAttribute?.(
+          ATTR_RECRUIT_OWNER_USERNAME,
+          player.getUsername?.() ?? null
+        );
+      }
       if (!assignBrainActivity(target, state, activity)) {
         player.sendMessage(`bh: failed to attach ${activity.id} to ${targetUsername}`);
         return true;

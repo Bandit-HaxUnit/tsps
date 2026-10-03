@@ -237,6 +237,20 @@
           "type": "wander"
         }
       ]
+    },
+    {
+      "id": "follow_owner",
+      "mode": "follow_owner",
+      "capacity": 64,
+      "repeat": false,
+      "ephemeral": true,
+      "manual": true,
+      "failureCooldownSeconds": 5,
+      "actions": [
+        {
+          "type": "followOwner"
+        }
+      ]
     }
   ],
   "sites": [

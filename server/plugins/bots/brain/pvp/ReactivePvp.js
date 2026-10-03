@@ -27,9 +27,6 @@ function startReactivePvp(player, state, nowMs = Date.now()) {
   if (!entry) {
     return false;
   }
-  if (entry.brain) {
-    return true;
-  }
   const activity = service.registry.byId?.get("pvp_engage") ?? null;
   if (!activity) {
     return false;
@@ -37,6 +34,15 @@ function startReactivePvp(player, state, nowMs = Date.now()) {
   if (state.pvp) {
     state.pvp.phase = "combat";
     state.pvp.nextActionAt = nowMs;
+  }
+  // A brain already exists: stack the fight as a child frame so the parent
+  // activity (follow_owner, roam, a skilling loop) resumes when it ends.
+  if (entry.brain) {
+    if (entry.brain.isRunningActivity?.("pvp_engage")) {
+      return true;
+    }
+    entry.brain.pushActivity(activity, nowMs);
+    return true;
   }
   return attachBrain({
     runtime: service.runtime,

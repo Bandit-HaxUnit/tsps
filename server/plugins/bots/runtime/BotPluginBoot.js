@@ -41,6 +41,7 @@ const { attachBrain } = require("../brain/attachBrain");
 const { PvpController } = require("../brain/pvp/PvpController");
 const { configureReactivePvp } = require("../brain/pvp/ReactivePvp");
 const { configureRoam } = require("../brain/RoamService");
+const { configureRecruit } = require("../brain/RecruitService");
 const { registerBrainProgressEvents } = require("../brain/BotBrainEvents");
 const { listCatalogObjectIds } = require("../brain/BotObjectCatalog");
 const { inventoryProductionCount } = require("../brain/actions/InteractObject");
@@ -116,6 +117,9 @@ function bootPlayerBotsRuntime(options = {}) {
 
   const brainWorld = {
     objectSearch: traversalAssist,
+    regionManager: botApi.getRegionManager(),
+    areaManager: botApi.getAreaManager(),
+    getPlayerByName: (name) => World.getPlayerByName(name),
     ditch: {
       objectId: config.wildernessDitchObjectId,
       attemptCooldownMs: config.ditchAttemptCooldownMs,
@@ -384,6 +388,12 @@ function bootPlayerBotsRuntime(options = {}) {
     resetMovementState,
   });
   configureRoam({
+    runtime,
+    registry: brainRegistry,
+    world: brainWorld,
+    resetMovementState,
+  });
+  configureRecruit({
     runtime,
     registry: brainRegistry,
     world: brainWorld,

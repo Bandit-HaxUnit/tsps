@@ -10,14 +10,8 @@ const {
 const {
   ProcessPendingMovementActionNode,
 } = require("../nodes/actions/ProcessPendingMovementActionNode");
-const {
-  ClanRecruitActionNode,
-} = require("../nodes/actions/ClanRecruitActionNode");
 const { ReturnHomeActionNode } = require("../nodes/actions/ReturnHomeActionNode");
 const { peekMovementRequest } = require("../navigation/BotNavigation");
-const {
-  ATTR_RECRUIT_OWNER_USERNAME,
-} = require("../../runtime/BotRecruitConstants");
 
 function requireModeBehavior(modeHandlers, modeValue, label) {
   const behavior = modeHandlers?.[modeValue];
@@ -85,13 +79,6 @@ class PlayerBotBehaviorTreeFactory {
         behaviorMode: this.behaviorMode,
       }
     );
-    const clanRecruitActionNode = new ClanRecruitActionNode(
-      this.botStatesByName,
-      this.api,
-      {
-        behaviorMode: this.behaviorMode,
-      }
-    );
     const resolveState = (context) => {
       const player = context?.player;
       const username = player?.getUsername?.();
@@ -132,12 +119,6 @@ class PlayerBotBehaviorTreeFactory {
         return processPendingMovementActionNode.tick(context);
       }),
       new ActionNode((context) => this.eatFoodActionNode.tick(context)),
-      new ActionNode((context) => {
-        if (!context?.player?.getAttribute?.(ATTR_RECRUIT_OWNER_USERNAME)) {
-          return "failure";
-        }
-        return clanRecruitActionNode.tick(context);
-      }),
       new ActionNode((context) => tickCurrentMode(context)),
     ]);
   }

@@ -31,6 +31,7 @@ class BehaviourFrame {
     this.blocked = new Set();
     this.lastProgressAt = 0;
     this.enteredAt = 0;
+    this.occupied = false;
   }
 
   action() {
@@ -45,7 +46,6 @@ class BotBrain {
     this.registry = options.registry;
     this.world = options.world;
     this.frames = [];
-    this.activeActivity = null;
     this.lastError = null;
     // Ephemeral brains are reactive overlays (a recruit defending its owner):
     // when the activity ends, onExhausted hands the bot back to the tree.
@@ -71,9 +71,9 @@ class BotBrain {
     this.frames.push(frame);
     if (activity.resolver !== true) {
       this.registry?.occupy?.(activity);
+      frame.occupied = true;
     }
     if (activity.actions?.length) {
-      this.activeActivity = activity;
       const state = this.ensureState();
       if (state && activity.mode) {
         state.mode = activity.mode;
@@ -81,15 +81,27 @@ class BotBrain {
     }
   }
 
-  releaseActivity() {
-    if (this.activeActivity) {
-      this.registry?.release?.(this.activeActivity);
-      this.activeActivity = null;
+  /** Releases the capacity slot of one frame; overlays must not leak the parent's. */
+  releaseFrame(frame) {
+    if (frame?.occupied) {
+      this.registry?.release?.(frame.behaviour);
+      frame.occupied = false;
     }
   }
 
+  /** Releases the current frame's slot (used when swapping activities). */
+  releaseActivity() {
+    this.releaseFrame(this.frames[this.frames.length - 1]);
+  }
+
+  isRunningActivity(activityId) {
+    return this.frames.some((frame) => frame.behaviour?.id === activityId);
+  }
+
   reset() {
-    this.releaseActivity();
+    for (const frame of this.frames) {
+      this.releaseFrame(frame);
+    }
     this.frames = [];
   }
 
@@ -173,11 +185,19 @@ class BotBrain {
     if (!frame) {
       return;
     }
-    if (frame.behaviour.actions?.length && frame.behaviour === this.activeActivity) {
-      this.releaseActivity();
-    }
+    this.releaseFrame(frame);
     const parent = this.frames[this.frames.length - 1];
     if (parent) {
+      // An overlay (pvp_engage) may have changed state.mode; give it back.
+      const state = this.state;
+      if (
+        state &&
+        parent.behaviour.mode &&
+        frame.behaviour.mode &&
+        state.mode === frame.behaviour.mode
+      ) {
+        state.mode = parent.behaviour.mode;
+      }
       parent.state = FRAME_STATE.PENDING;
       return;
     }
@@ -193,7 +213,8 @@ class BotBrain {
       player: this.player,
       state: this.ensureState(),
       world: this.world,
-      activity: this.activeActivity,
+      brain: this,
+      activity: frame?.behaviour ?? null,
       frame,
       nowMs,
     };
@@ -289,7 +310,7 @@ class BotBrain {
           this.lastError = String(error?.message ?? error);
           this.world?.log?.("bot_brain_action_failed", {
             action: action.id,
-            activity: this.activeActivity?.id ?? null,
+            activity: this.frames[this.frames.length - 1]?.behaviour?.id ?? null,
             error: this.lastError,
           });
           result = "failed";
@@ -341,7 +362,7 @@ class BotBrain {
           behaviour.failureCooldownMs
         );
       }
-      this.releaseActivity();
+      this.releaseFrame(frame);
     }
     const parent = this.frames[this.frames.length - 1];
     if (parent) {

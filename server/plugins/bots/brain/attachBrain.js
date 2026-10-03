@@ -50,6 +50,9 @@ function attachBrain(options = {}) {
       resetMovementState?.(bot);
     };
   }
+  if (entry.brain && entry.brain !== brain) {
+    entry.brain.releaseActivity?.();
+  }
   entry.brain = brain;
   resetMovementState?.(bot);
   return true;

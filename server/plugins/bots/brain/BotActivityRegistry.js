@@ -14,6 +14,7 @@ const { createLightFireAction } = require("./actions/LightFire");
 const { createSmeltAction } = require("./actions/Smelt");
 const { createPvpCombatAction } = require("./actions/PvpCombat");
 const { createWanderAction } = require("./actions/Wander");
+const { createFollowOwnerAction } = require("./actions/FollowOwner");
 
 const DEFAULT_DEFINITIONS_PATH = path.join(
   process.cwd(),
@@ -158,6 +159,9 @@ function createAction(spec, world) {
   if (spec.type === "wander") {
     return createWanderAction(spec, world);
   }
+  if (spec.type === "followOwner") {
+    return createFollowOwnerAction(spec, world);
+  }
   throw new Error(`[bot activities] unknown action type '${spec.type}'`);
 }
 
@@ -178,6 +182,7 @@ function compileActivity(definition, templates, world, options = {}) {
     capacity: Number.isFinite(merged.capacity) ? Math.max(1, Math.floor(merged.capacity)) : 1,
     repeat: merged.repeat === true,
     ephemeral: merged.ephemeral === true,
+    manual: merged.manual === true,
     failureCooldownMs: Math.max(
       0,
       Math.floor(Number(merged.failureCooldownSeconds ?? 15)) * 1000
@@ -245,6 +250,7 @@ function createBotActivityRegistry(options = {}) {
   function available(player, nowMs) {
     return activities.filter(
       (activity) =>
+        activity.manual !== true &&
         (slots.get(activity.id) ?? 0) < activity.capacity &&
         !isBlocked(player, activity.id, nowMs) &&
         activity.requires.every((condition) => condition.check({ player }))
