@@ -16,6 +16,11 @@ const TARGET_SPREAD = 6;
 const MAX_DIRECT_ROUTE_TILES = 20;
 const SEARCH_WALK_RADIUS = 10;
 const INTERACT_COOLDOWN_MS = 1500;
+// Consecutive clicks on the same object from the same tile that never start a
+// session mean the route failed (tree behind a closed gate/fence). Blacklist and
+// repick instead of parking there forever.
+const UNREACHABLE_CLICKS = 2;
+const UNREACHABLE_AVOID_MS = 60000;
 
 /**
  * Generic "walk to an object and use an option until X" action. Target
@@ -31,6 +36,11 @@ function createInteractObjectAction(spec, world) {
       target: null,
       lastProduction: null,
       lastClickAt: 0,
+      lastTargetKey: null,
+      lastClickX: null,
+      lastClickY: null,
+      failedClicks: 0,
+      avoid: new Map(),
     }));
 
   function productionCount(player) {
@@ -46,7 +56,7 @@ function createInteractObjectAction(spec, world) {
     return total;
   }
 
-  function findTarget(player) {
+  function findTarget(player, nowMs) {
     const bot = stateFor(player);
     const loc = player.getLocation();
     const candidates =
@@ -65,9 +75,18 @@ function createInteractObjectAction(spec, world) {
       const dx = objectLoc.getX() - loc.getX();
       const dy = objectLoc.getY() - loc.getY();
       const distSq = dx * dx + dy * dy;
-      if (distSq <= maxDistSq) {
-        live.push({ object, distSq });
+      if (distSq > maxDistSq) {
+        continue;
       }
+      const key = `${object.getId()}:${objectLoc.getX()}:${objectLoc.getY()}`;
+      const avoidedUntil = bot.avoid.get(key);
+      if (avoidedUntil !== undefined) {
+        if (avoidedUntil > nowMs) {
+          continue;
+        }
+        bot.avoid.delete(key);
+      }
+      live.push({ object, distSq });
     }
     live.sort((left, right) => left.distSq - right.distSq);
     const pool = live.slice(0, TARGET_SPREAD);
@@ -141,7 +160,7 @@ function createInteractObjectAction(spec, world) {
       let object = bot.target ? resolveTargetObject(player) : null;
       if (!object) {
         bot.target = null;
-        findTarget(player);
+        findTarget(player, nowMs);
         object = bot.target ? resolveTargetObject(player) : null;
         if (!object) {
           if (nowMs - ctx.frame.lastProgressAt > stallMs) {
@@ -179,9 +198,27 @@ function createInteractObjectAction(spec, world) {
         debug(ctx, "cooldown");
         return "running";
       }
-      bot.lastClickAt = nowMs;
 
       const objectLoc = object.getLocation();
+      const key = `${object.getId()}:${objectLoc.getX()}:${objectLoc.getY()}`;
+      const now = player.getLocation();
+      const stayedPut =
+        bot.lastClickX === now.getX() && bot.lastClickY === now.getY();
+      bot.failedClicks =
+        bot.lastTargetKey === key && stayedPut ? bot.failedClicks + 1 : 0;
+      if (bot.failedClicks >= UNREACHABLE_CLICKS) {
+        bot.avoid.set(key, nowMs + UNREACHABLE_AVOID_MS);
+        bot.target = null;
+        bot.lastTargetKey = null;
+        bot.failedClicks = 0;
+        debug(ctx, "unreachable-repick");
+        findTarget(player, nowMs);
+        return "running";
+      }
+      bot.lastTargetKey = key;
+      bot.lastClickX = now.getX();
+      bot.lastClickY = now.getY();
+      bot.lastClickAt = nowMs;
       const queue = player.getMovementQueue();
       debug(
         ctx,

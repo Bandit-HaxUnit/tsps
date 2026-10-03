@@ -10,6 +10,10 @@ const BANK_SEARCH_REGION_RADIUS = 2;
 const MAX_DIRECT_ROUTE_TILES = 20;
 const INTERACT_COOLDOWN_MS = 1500;
 const DEPOSIT_DELAY_MS = 600;
+// Same unreachable-target guard as InteractObject: a booth whose route keeps
+// failing is avoided for a while so another booth gets picked.
+const UNREACHABLE_CLICKS = 2;
+const UNREACHABLE_AVOID_MS = 60000;
 
 /**
  * Deposits the inventory at the nearest usable bank booth, then reports success.
@@ -25,6 +29,11 @@ function createBankAction(spec, world) {
       booth: null,
       lastClickAt: 0,
       depositAt: 0,
+      lastTargetKey: null,
+      lastClickX: null,
+      lastClickY: null,
+      failedClicks: 0,
+      avoid: new Map(),
     }));
 
   function withdrawSatisfied(player) {
@@ -69,7 +78,8 @@ function createBankAction(spec, world) {
     }
   }
 
-  function findBooth(player) {
+  function findBooth(player, nowMs) {
+    const bot = stateFor(player);
     const loc = player.getLocation();
     const candidates =
       world.objectSearch?.findCandidatesByIds?.(player, [...BANK_BOOTH_IDS], {
@@ -79,6 +89,8 @@ function createBankAction(spec, world) {
       }) ?? [];
     let best = null;
     let bestDistSq = Number.MAX_SAFE_INTEGER;
+    let fallback = null;
+    let fallbackDistSq = Number.MAX_SAFE_INTEGER;
     for (const object of candidates) {
       if (!object || !isUsableBankBooth(object.getId())) {
         continue;
@@ -90,12 +102,22 @@ function createBankAction(spec, world) {
       const dx = objectLoc.getX() - loc.getX();
       const dy = objectLoc.getY() - loc.getY();
       const distSq = dx * dx + dy * dy;
+      if (distSq < fallbackDistSq) {
+        fallbackDistSq = distSq;
+        fallback = object;
+      }
+      const key = `${object.getId()}:${objectLoc.getX()}:${objectLoc.getY()}`;
+      const avoidedUntil = bot.avoid.get(key);
+      if (avoidedUntil !== undefined && avoidedUntil > nowMs) {
+        continue;
+      }
       if (distSq < bestDistSq) {
         bestDistSq = distSq;
         best = object;
       }
     }
-    return best;
+    // If every booth is avoided, ignore the list: better a retry than a stall.
+    return best ?? fallback;
   }
 
   function resolveBooth(player) {
@@ -135,7 +157,7 @@ function createBankAction(spec, world) {
         return "success";
       }
 
-      const object = resolveBooth(player) ?? findBooth(player);
+      const object = resolveBooth(player) ?? findBooth(player, nowMs);
       if (!object) {
         return "failed";
       }
@@ -164,9 +186,25 @@ function createBankAction(spec, world) {
       if (nowMs - bot.lastClickAt < INTERACT_COOLDOWN_MS) {
         return "running";
       }
-      bot.lastClickAt = nowMs;
 
       const objectLoc = object.getLocation();
+      const key = `${object.getId()}:${objectLoc.getX()}:${objectLoc.getY()}`;
+      const now = player.getLocation();
+      const stayedPut =
+        bot.lastClickX === now.getX() && bot.lastClickY === now.getY();
+      bot.failedClicks =
+        bot.lastTargetKey === key && stayedPut ? bot.failedClicks + 1 : 0;
+      if (bot.failedClicks >= UNREACHABLE_CLICKS) {
+        bot.avoid.set(key, nowMs + UNREACHABLE_AVOID_MS);
+        bot.booth = null;
+        bot.lastTargetKey = null;
+        bot.failedClicks = 0;
+        return "running";
+      }
+      bot.lastTargetKey = key;
+      bot.lastClickX = now.getX();
+      bot.lastClickY = now.getY();
+      bot.lastClickAt = nowMs;
       player.getMovementQueue().walkToObject(object, {
         execute: () => {
           world.emitObjectInteraction?.({
