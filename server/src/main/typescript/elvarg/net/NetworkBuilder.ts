@@ -202,7 +202,7 @@ export class NetworkBuilder {
   }
 }
 
-class ClientConnection {
+export class ClientConnection {
   private static readonly pendingNames = new Set<string>();
   private pending?: PendingLogin;
   private reservedName?: string;
@@ -255,6 +255,10 @@ class ClientConnection {
   }
 
   private async dispatch(packets: ClientMessages): Promise<void> {
+    // Frames already queued on the input chain can outlive the socket (a handshake
+    // buffered before a disconnect, for example). A closed connection must not act
+    // on them or build a player for a socket that is already gone.
+    if (this.closed) return;
     for (const packet of packets) {
       if (this.player) LunarSpells.expireSpellbookSwap(this.player);
       if (this.player && WORLD_INTERACTIONS.has(packet.type)) {
@@ -875,6 +879,12 @@ class ClientConnection {
       return;
     }
 
+    // encryptPassword/checkPassword are async; the socket can close while they run.
+    // Do not leave a pending login behind for a connection cleanup already released.
+    if (this.closed) {
+      this.releasePendingName();
+      return;
+    }
     this.pending = { username, passwordHash, save };
     this.send(encodeLoginResponse(true, -1, "", username));
     console.info(`[login] accepted ${username} from ${this.channel.remoteAddress}`);
@@ -882,6 +892,10 @@ class ClientConnection {
 
   private enterWorld(clientType: number = 0): void {
     if (!this.pending || this.player) return;
+    if (this.closed) {
+      this.releasePendingName();
+      return;
+    }
     const pending = this.pending;
     const session = new PlayerSession(this.channel);
     const player = new Player(session, GameConstants.DEFAULT_LOCATION.clone());
@@ -899,6 +913,7 @@ class ClientConnection {
     player.getUpdateFlag().flag(Flag.APPEARANCE);
 
     if (!World.getPlayers().add(player)) {
+      this.releasePendingName();
       this.failLogin(2, "This world is full.");
       this.channel.close(1013, "world full");
       return;
