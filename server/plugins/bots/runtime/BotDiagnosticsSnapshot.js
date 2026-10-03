@@ -307,6 +307,51 @@ function buildStuckDiagnosis(snapshot) {
   return { stuck: false, reason: "no stuck indicators detected" };
 }
 
+/** One line of "what is it waiting on" so a standstill is readable, not guessed. */
+function describeModeState(state, nowMs) {
+  if (!state?.mode) {
+    return null;
+  }
+  const next = (value) => `next=${msRemainingLabel(value, nowMs)}`;
+  if (state.mode === "woodcutting" && state.woodcutting) {
+    return `target=${formatPoint(state.woodcutting.target)} ${next(
+      state.woodcutting.nextActionAt
+    )}`;
+  }
+  if (state.mode === "mining" && state.mining) {
+    return `target=${formatPoint(state.mining.target)} ${next(
+      state.mining.nextActionAt
+    )}`;
+  }
+  if (state.mode === "firemaking" && state.firemaking) {
+    return `phase=${state.firemaking.phase ?? "n/a"} tile=${formatPoint(
+      state.firemaking.lightTile
+    )} ${next(state.firemaking.nextActionAt)}`;
+  }
+  if (state.mode === "smelting" && state.smelting) {
+    return `phase=${state.smelting.phase ?? "n/a"} ${next(
+      state.smelting.nextActionAt
+    )}`;
+  }
+  if (state.mode === "bank_run" && state.bankRun) {
+    return `phase=${state.bankRun.phase ?? "n/a"} target=${formatPoint(
+      state.bankRun.travelTarget ?? state.bankRun.bankTarget
+    )} ${next(state.bankRun.nextActionAt)}`;
+  }
+  if (state.mode === "roaming" && state.roaming) {
+    return `target=${formatPoint(state.roaming.target)} nextWalk=${msRemainingLabel(
+      state.roaming.nextWalkAt,
+      nowMs
+    )}`;
+  }
+  if (state.mode === "pvp" && state.pvp) {
+    return `phase=${state.pvp.phase ?? "n/a"} target=${
+      state.pvp.targetUsername ?? "none"
+    } ${next(state.pvp.nextActionAt)}`;
+  }
+  return null;
+}
+
 function createBotDiagnosticsSnapshot({
   bot,
   state,
@@ -390,6 +435,11 @@ function renderBotDiagnosticsLines({
       } ${statusLabel}`
     )
   );
+  lines.push(chatTrim(`[Bot Status] Position: ${formatPoint(currentTile)}`));
+  const modeDetail = describeModeState(state, nowMs);
+  if (modeDetail) {
+    lines.push(chatTrim(`[Bot Status] Mode: ${modeDetail}`));
+  }
   const pvpLoadoutId = state?.pvp?.loadoutId ?? "n/a";
   const equipmentItems = bot?.getEquipment?.()?.getCopiedItems?.() ?? [];
   const equipped = Array.isArray(equipmentItems)
