@@ -330,6 +330,9 @@ export function parseEditModeWorldDefinition(value: unknown): EditModeWorldDefin
         return parsed;
     });
     return {
+        // Keys the editor does not edit (pluginConfig, gameframe, membersWorld, ...) pass
+        // through untouched, so saving world.json never drops settings it doesn't know.
+        ...raw,
         spawn: {
             x: worldCoordinate(spawn.x, "World API spawn.x"),
             y: worldCoordinate(spawn.y, "World API spawn.y"),
@@ -338,8 +341,6 @@ export function parseEditModeWorldDefinition(value: unknown): EditModeWorldDefin
         zones,
         disabledPlugins: (raw.disabledPlugins ?? []).map((name) => (name as string).trim()),
         experienceMultiplier: raw.experienceMultiplier === undefined ? 1 : raw.experienceMultiplier,
-        ...(typeof raw.gameframe === "string" && { gameframe: raw.gameframe }),
-        ...(typeof raw.membersWorld === "boolean" && { membersWorld: raw.membersWorld }),
     };
 }
 

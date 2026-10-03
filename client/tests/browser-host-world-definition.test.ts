@@ -42,6 +42,9 @@ for (const tags of [[], ["custom:arena", "__proto__"], ["duel"], ["pvp"], ["pvp"
     assert.deepEqual(parsed, world, "Global rules must not reject the spawn or be lost on save");
     assert.deepEqual(parseBrowserHostWorldDefinition(JSON.stringify(parsed)), world);
 }
+const configuredWorld = { ...parsedWorld, pluginConfig: { "TutorialIsland:allowSkip": false }, futureKey: [1] };
+assert.deepEqual(parseBrowserHostWorldDefinition(JSON.stringify(configuredWorld)), configuredWorld,
+    "Saving must keep pluginConfig and any other key the editor does not edit");
 const f2pWorld = { ...parsedWorld, membersWorld: false };
 assert.deepEqual(parseBrowserHostWorldDefinition(JSON.stringify(f2pWorld)), f2pWorld, "Saving must not reset a free-to-play world");
 for (const zone of [{ minX: 1, tags: ["pvp"] }, { tags: [123] }, { ...parsedWorld.zones[0], tags: [] }]) {
