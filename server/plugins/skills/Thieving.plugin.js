@@ -258,6 +258,7 @@ function pickpocket(event) {
 
 module.exports = {
   name: "Thieving",
+  members: true,
   register(api) {
     pluginApi = api;
     TaskManager = api.getTaskManager();

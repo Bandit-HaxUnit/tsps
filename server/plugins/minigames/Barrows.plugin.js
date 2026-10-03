@@ -700,6 +700,7 @@ function playerDeath(event) {
 
 module.exports = {
   name: "Barrows",
+  members: true,
   register(api) {
     World = api.getWorld();
     RegionManager = api.getRegionManager();

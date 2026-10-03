@@ -85,6 +85,8 @@ export interface EditModeWorldDefinition {
     experienceMultiplier: number;
     /** Opaque to the editor; kept so saving world.json does not drop the forced layout. */
     gameframe?: string;
+    /** Kept so saving zones from the editor doesn't reset a free-to-play world. */
+    membersWorld?: boolean;
 }
 
 export interface EditModeTile {
@@ -151,6 +153,7 @@ export interface EditModePluginConfig {
     showPvpZones: boolean;
     showDuelZones: boolean;
     showSafeZones: boolean;
+    showF2pZones: boolean;
     showMultiCombatZones: boolean;
     edits: EditModeEdit[];
 }

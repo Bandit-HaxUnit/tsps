@@ -334,6 +334,7 @@ function splitTzKek(player, session, npc) {
 
 module.exports = {
   name: "TzhaarFightCaves",
+  members: true,
   register(pluginApi) {
     api = pluginApi;
     core = pluginApi.core;

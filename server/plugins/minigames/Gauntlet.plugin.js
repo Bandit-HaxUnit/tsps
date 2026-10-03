@@ -6,6 +6,7 @@
  */
 module.exports = {
   name: "Gauntlet",
+  members: true,
   register(api) {
     require("./gauntlet/Lobby.Gauntlet")(api);
     require("./gauntlet/Run.Gauntlet")(api);

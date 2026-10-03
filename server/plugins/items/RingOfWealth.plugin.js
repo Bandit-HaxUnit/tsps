@@ -223,6 +223,7 @@ function removeImbueOnDeath(event, itemOnGroundManager) {
 
 module.exports = {
   name: "RingOfWealth",
+  members: true,
   ACTIONS,
   register(api) {
     const itemOnGroundManager = api.getItemOnGroundManager();

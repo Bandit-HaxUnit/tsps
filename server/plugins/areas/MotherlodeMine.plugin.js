@@ -215,6 +215,7 @@ function start() {
 
 module.exports = {
   name: "MotherlodeMine",
+  members: true,
   _test: { tick, start, crawl, climb, squeezeThrough, percyCondition, percyPays, enterMine },
   register(api) {
     Machine.init(api);

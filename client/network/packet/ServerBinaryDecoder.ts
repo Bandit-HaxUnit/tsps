@@ -604,6 +604,7 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             let chatIcons: number[] | undefined = undefined;
             let chatPrefix: string | undefined = undefined;
             let isAdmin: boolean | undefined = undefined;
+            let membersWorld: boolean | undefined = undefined;
             if (reader.remaining > 0) {
                 const iconCount = reader.readByte() | 0;
                 const icons: number[] = [];
@@ -618,10 +619,13 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                 if (reader.remaining > 0) {
                     isAdmin = reader.readBoolean();
                 }
+                if (reader.remaining > 0) {
+                    membersWorld = reader.readBoolean();
+                }
             }
             return {
                 type: "handshake",
-                payload: { id, name: name || undefined, appearance, chatIcons, chatPrefix, isAdmin },
+                payload: { id, name: name || undefined, appearance, chatIcons, chatPrefix, isAdmin, membersWorld },
             };
         }
 

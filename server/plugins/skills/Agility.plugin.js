@@ -270,6 +270,7 @@ buildIndex();
 
 module.exports = {
   name: "Agility",
+  members: true,
   register(api) {
     pluginApi = api;
     ItemOnGroundManager = api.getItemOnGroundManager();

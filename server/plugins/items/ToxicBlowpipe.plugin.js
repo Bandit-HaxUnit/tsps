@@ -429,6 +429,7 @@ let CombatFactory;
 
 module.exports = {
   name: "ToxicBlowpipe",
+  members: true,
   register(api) {
     BonusManager = api.getBonusManager();
     CombatFactory = api.getCombatFactory();

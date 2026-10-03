@@ -18,6 +18,13 @@ export abstract class Spell {
     abstract startCast(cast: Mobile, castOn: Mobile): void
     abstract baseExperience();
 
+    /** Members-only on the standard spellbook; free-to-play worlds disable it (other books are all members). */
+    public members = false;
+
+    public isMembers(): boolean {
+        return this.members;
+    }
+
     public getSpellbook(): MagicSpellbook {
         return MagicSpellbook.NORMAL;
     }
@@ -54,7 +61,8 @@ export abstract class Spell {
             PluginManager.emitSpellDisabled(
                 player,
                 this.getSpellbook(),
-                this.spellId()
+                this.spellId(),
+                this
             ) === true
         ) {
             player.getCombat().setCastSpell(null);
