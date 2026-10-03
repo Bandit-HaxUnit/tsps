@@ -10,6 +10,20 @@
  *
  * A wave that pushes someone off the edge washes them into the water. Swimmers can't attack or
  * run, the crocodiles there bite them, and they climb back out by the rock steps.
+ *
+ * Checked against OpenRune-Server #274 (built against a live capture), Wiki first:
+ * - Wiki: each roar wave hits each rock for 50 (150 HP); blood clouds lose 2 for each tile they
+ *   move; his Defence drains at most 20; a barrage heals him twice the damage it deals; a
+ *   special still queued when he enrages is dropped.
+ * - OpenRune (the Wiki gives no figures): acid 6-10 and barrage 3-5 before scaling, the bite
+ *   landing 2 ticks after it with Protect from Melee blocking half, his first attack after 10
+ *   ticks, autos carrying on through the specials, the specials' timings, jugs rolling 8 tiles,
+ *   only the first roar wave chipping jugs, the rock area and the camera shakes.
+ * - The volley as OSRS draws it: the burst rides a helper NPC (SPOTANIM_ZEBAK_RANGED01_NPC) so it
+ *   plays at height 750 where the rising projectile peaks (a tile graphic's height is a byte),
+ *   and the rising projectile and fragments arc at 30 and 127.
+ * - Enraged he becomes TOA_ZEBAK_ENRAGED, with the enraged attack animations and projectiles
+ *   (named so in RuneLite's gameval; OpenRune uses the enraged melee only).
  */
 
 const Shared = require("./ToaShared");
@@ -19,8 +33,8 @@ const SPAWN = { x: 3918, y: 5404, z: 0 };
 const TAIL_SPAWN = { x: 3909, y: 5403, z: 0 };
 const GROUND_MIN = { x: 3926, y: 5398 };
 const GROUND_MAX = { x: 3942, y: 5418 };
-const BOULDER_MIN = { x: 3927, y: 5400 };
-const BOULDER_MAX = { x: 3937, y: 5414 };
+const BOULDER_MIN = { x: 3925, y: 5401 };
+const BOULDER_MAX = { x: 3935, y: 5415 };
 const MIDDLE = { x: 3926, y: 5408 };
 const PROJECTILE_START = { x: 3925, y: 5408 };
 const PROJECTILE_SPLIT = { x: 3933, y: 5408 };
@@ -28,6 +42,8 @@ const WAVE_SOUTH = { x: 3923, y: 5397 };
 const WAVE_NORTH = { x: 3923, y: 5419 };
 const BLOOD_SPELL_TILES = [{ x: 3924, y: 5406 }, { x: 3925, y: 5410 }];
 const BLOOD_CLOUD_TILES = [{ x: 3931, y: 5413 }, { x: 3934, y: 5401 }];
+/** The volley's burst rides this 7x7 helper, centred on the split point (OSRS; OpenRune). */
+const SPLIT_HELPER = { id: 11744, tile: { x: 3930, y: 5405 }, ticks: 3 };
 
 const POISON = 45570; // 45570..45575
 const BOULDER_BLOCK = 43876;
@@ -48,6 +64,7 @@ const WATER_JUMP = 5;
 
 const ANIMATION = {
   SHOOT: 9624, TAIL_SHOOT: 9625, MELEE: 9620, TAIL_MELEE: 9621, DEATH: 9634, TAIL_DEATH: 9635,
+  MELEE_ENRAGED: 9622, TAIL_MELEE_ENRAGED: 9623, SHOOT_ENRAGED: 9626, TAIL_SHOOT_ENRAGED: 9627,
   SCREAM: 9628, TAIL_SCREAM: 9629, CALL_WAVE: 9630, TAIL_CALL_WAVE: 9631, PUSHED: 4177, SLIDE: 1114, JUG_MOVE: 834,
   CROC_BITE: 9804,
 };
@@ -56,6 +73,7 @@ const SWIM_ANIMATIONS = [773, 772, 772, 772, 772, 772, 772];
 const PROJECTILE = {
   POISON: 1555, BOULDER: 2172, JUG: 2173, POISON_BOULDER: 2194, MAGIC: 2176, MAGIC_SPLIT: 2181,
   RANGED: 2178, RANGED_SPLIT: 2187, POISON_SPREAD: 2194, JUG_SPREAD: 2193,
+  MAGIC_ENRAGED: 2177, RANGED_ENRAGED: 2179,
 };
 const GRAPHIC = {
   MAGIC_BURST: 2186, RANGED_BURST: 2185, // ZEBAK_MAGE_SPLIT, ZEBAK_RANGED_SPLIT
@@ -64,9 +82,25 @@ const GRAPHIC = {
 const SOUND = { MAGIC: 5823, RANGED: 5819, FINAL_PHASE: 3405, BARRAGE: 102, JUGS: 5908, POISON_LAND: 5909, BOULDER_LAND: 5913, PUSHED: 5888, RUMBLING: 1678, WAVE_HIT: 5868 };
 
 // Wiki: max hits 38 melee, 16 magic and ranged; a wave hits for 6-10, all scaled by raid level.
-const MAX_HIT = { BITE: 38, VOLLEY: 16, POISON: 10, SCREAM: 20, WAVE: 10, BLOOD: 7 };
+const MAX_HIT = { BITE: 38, VOLLEY: 16, SCREAM: 20, WAVE: 10 };
 const WAVE_MIN_HIT = 6;
-const VOLLEY = { SPLIT_TICKS: 4, BURST_HEIGHT: 750, FRAGMENT_CYCLES: 90, HIT_TICKS: 3 };
+/** Acid 6-10 a tick and the barrage 3-5, before scaling (OpenRune). */
+const ACID = { MIN: 6, MAX: 10 };
+const BARRAGE = { MIN: 3, SPREAD: 2, HEAL_PER_DAMAGE: 2 };
+/** The bite lands 2 ticks after it, and Protect from Melee lets half through (OpenRune). */
+const BITE = { HIT_TICKS: 2, THROUGH_PRAYER: 0.5 };
+const VOLLEY = { SPLIT_TICKS: 4, BURST_HEIGHT: 750, FRAGMENT_CYCLES: 90, HIT_TICKS: 3, RISE_ANGLE: 30, FRAGMENT_ANGLE: 127 };
+/** Wiki: each roar wave hits each rock for 50, and a rock has 150. */
+const ROCK = { HITPOINTS: 150, ROAR_DAMAGE: 50 };
+/** Wiki: his Defence drains by at most 20 (to 50). */
+const MAX_DEFENCE_DRAIN = 20;
+const FIRST_ATTACK_TICKS = 10;
+const JUG_ROLL_TILES = 8;
+/** OpenRune's camera shakes: [slot, random amplitude] (slot 0 left-right, 1 up-down, 2 forwards). */
+const SHAKE = {
+  DEATH: { delay: 2, axes: [[0, 5], [1, 5], [2, 2]], resetAfter: 4 },
+  WAVES: { axes: [[0, [5, 7]], [1, [7, 8]], [2, [6, 6]]], resetAfter: 2 },
+};
 // A bite bleeds 1 time in 4 instead of hitting: 5-10 at once, then 1-8 each tick spent
 // moving for 10 ticks (OpenRune; the Wiki only says moving makes it worse).
 const BLEED = { CHANCE: 4, TICKS: 10, APPLY_MIN: 5, APPLY_MAX: 10, MOVING_MIN: 1, MOVING_MAX: 8 };
@@ -77,7 +111,7 @@ class ZebakRoom extends Raid.Room {
     const { NpcIdentifiers } = Shared.core();
     const level = this.pathLevel();
     this.attackSpeed = 7 - Math.min(2, Math.floor(level / 2));
-    this.attackTicks = 7;
+    this.attackTicks = FIRST_ATTACK_TICKS;
     this.specialsDone = 0;
     this.queued = [];
     this.busy = false;
@@ -151,10 +185,16 @@ class ZebakRoom extends Raid.Room {
 
   // -------------------------------------------------------------- health phases
 
-  /** Called after each hit on him: queue specials at 85/70/55/40%, speed up below 25%. */
+  /**
+   * Called after each hit on him: his Defence can't drain more than 20, specials queue at
+   * 85/70/55/40%, and below 25% he enrages (a queued special is dropped).
+   */
   checkPhases() {
     const zebak = this.zebak;
-    if (this.lastPhase || !zebak) return;
+    if (!zebak) return;
+    const floor = zebak.getCurrentDefinition().getStats()[2] - MAX_DEFENCE_DRAIN;
+    if (zebak.getDefenceLevel() < floor) zebak.setDefenceLevel(floor);
+    if (this.lastPhase) return;
     const ratio = zebak.getHitpoints() / zebak.getMaxHitpoints();
     const thresholds = [0.85, 0.7, 0.55, 0.4];
     while (this.specialsDone < thresholds.length && ratio <= thresholds[this.specialsDone]) {
@@ -163,8 +203,11 @@ class ZebakRoom extends Raid.Room {
       this.specialsDone++;
     }
     if (ratio <= 0.25) {
+      const { NpcIdentifiers } = Shared.core();
       this.lastPhase = true;
+      this.queued = [];
       this.attackSpeed = Math.max(2, this.attackSpeed - 3);
+      zebak.setNpcTransformationId(NpcIdentifiers.ZEBAK_3);
       for (const player of this.challengePlayers()) Shared.sound(player, SOUND.FINAL_PHASE);
     }
   }
@@ -190,11 +233,12 @@ class ZebakRoom extends Raid.Room {
     }
     if (--this.attackTicks > 0) return;
     this.attackTicks = this.attackSpeed;
+    // A special takes his attack's turn; his autos carry on while it plays out (OpenRune).
     if (!this.lastPhase && !this.busy && this.queued.length > 0) {
       const special = this.queued.shift();
       if (special === "jugs") this.boulderSpecial();
       else this.waveSpecial();
-    } else if (!this.busy) {
+    } else {
       this.normalAttack(players);
     }
   }
@@ -203,32 +247,34 @@ class ZebakRoom extends Raid.Room {
     const { Animation } = Shared.core();
     if (Shared.random(0, 2) === 0) this.useMagic = !this.useMagic;
     const inReach = players.filter((player) => withinReach(this.zebak, player));
+    const enraged = this.lastPhase;
     if (inReach.length > 0 && Shared.random(0, 2) === 0) {
-      this.zebak.performAnimation(new Animation(ANIMATION.MELEE));
-      this.tail.performAnimation(new Animation(ANIMATION.TAIL_MELEE));
-      this.later(1, () => {
+      this.zebak.performAnimation(new Animation(enraged ? ANIMATION.MELEE_ENRAGED : ANIMATION.MELEE));
+      this.tail.performAnimation(new Animation(enraged ? ANIMATION.TAIL_MELEE_ENRAGED : ANIMATION.TAIL_MELEE));
+      // Prayer counts when the bite lands, and only halves it.
+      this.later(BITE.HIT_TICKS, () => {
         for (const player of inReach) {
           if (player.getHitpoints() <= 0 || !this.inChallenge(player)) continue;
           if (Shared.random(1, BLEED.CHANCE) === 1) this.bleed(player);
-          else this.strike(this.zebak, player, null, "melee", MAX_HIT.BITE, 0);
+          else this.strike(this.zebak, player, null, "melee", MAX_HIT.BITE, 0, { prayerMultiplier: BITE.THROUGH_PRAYER });
         }
       });
       return;
     }
     const magic = this.useMagic;
-    this.zebak.performAnimation(new Animation(ANIMATION.SHOOT));
-    this.tail.performAnimation(new Animation(ANIMATION.TAIL_SHOOT));
+    this.zebak.performAnimation(new Animation(enraged ? ANIMATION.SHOOT_ENRAGED : ANIMATION.SHOOT));
+    this.tail.performAnimation(new Animation(enraged ? ANIMATION.TAIL_SHOOT_ENRAGED : ANIMATION.TAIL_SHOOT));
     for (const player of players) Shared.sound(player, magic ? SOUND.MAGIC : SOUND.RANGED);
-    // OpenRune's timing: the volley rises for 120 client cycles whatever the distance, bursts
-    // (ZEBAK_MAGE_SPLIT / ZEBAK_RANGED_SPLIT) where it peaks four ticks in, and its fragments
-    // take 90 cycles to land, so the hit comes three ticks after they leave.
-    Shared.tileProjectile(this.area, Shared.loc(PROJECTILE_START), Shared.loc(PROJECTILE_SPLIT), magic ? PROJECTILE.MAGIC : PROJECTILE.RANGED,
-      { delay: 60, duration: 60, perTile: 0, startHeight: 50, endHeight: 175 });
+    // The volley rises for 120 client cycles whatever the distance and bursts where it peaks,
+    // four ticks in; its fragments take 90 cycles to land, so the hit comes three ticks after.
+    const rising = enraged ? (magic ? PROJECTILE.MAGIC_ENRAGED : PROJECTILE.RANGED_ENRAGED) : (magic ? PROJECTILE.MAGIC : PROJECTILE.RANGED);
+    Shared.tileProjectile(this.area, Shared.loc(PROJECTILE_START), Shared.loc(PROJECTILE_SPLIT), rising,
+      { delay: 60, duration: 60, perTile: 0, startHeight: 50, endHeight: 175, angle: VOLLEY.RISE_ANGLE });
     this.later(VOLLEY.SPLIT_TICKS, () => {
-      this.graphic(magic ? GRAPHIC.MAGIC_BURST : GRAPHIC.RANGED_BURST, PROJECTILE_SPLIT, { height: VOLLEY.BURST_HEIGHT });
+      this.burst(magic ? GRAPHIC.MAGIC_BURST : GRAPHIC.RANGED_BURST);
       for (const player of this.challengePlayers()) {
         Shared.tileProjectile(this.area, Shared.loc(PROJECTILE_SPLIT), player, magic ? PROJECTILE.MAGIC_SPLIT : PROJECTILE.RANGED_SPLIT,
-          { duration: VOLLEY.FRAGMENT_CYCLES, perTile: 0, startHeight: 175, endHeight: 22 });
+          { duration: VOLLEY.FRAGMENT_CYCLES, perTile: 0, startHeight: 175, endHeight: 22, angle: VOLLEY.FRAGMENT_ANGLE });
         player.performGraphic(Shared.gfx(magic ? GRAPHIC.MAGIC_IMPACT : GRAPHIC.RANGED_IMPACT, { delay: VOLLEY.FRAGMENT_CYCLES, height: 90 }));
       }
       this.later(VOLLEY.HIT_TICKS, () => {
@@ -238,6 +284,17 @@ class ZebakRoom extends Raid.Room {
     });
   }
 
+
+  /** The volley's burst, played on a helper NPC so it can sit at the projectile's peak. */
+  burst(graphicId) {
+    const helper = this.spawn(SPLIT_HELPER.id, { ...SPLIT_HELPER.tile, z: 0 }, { scale: false, points: 0, inert: true });
+    if (!helper) return;
+    helper.__toaScripted = true;
+    helper.setUntargetable(true);
+    helper.getMovementQueue().setBlockMovement(true);
+    helper.performGraphic(Shared.gfx(graphicId, { height: VOLLEY.BURST_HEIGHT }));
+    this.later(SPLIT_HELPER.ticks, () => this.despawn(helper));
+  }
 
   // -------------------------------------------------------------- blood magic
 
@@ -252,17 +309,18 @@ class ZebakRoom extends Raid.Room {
     });
   }
 
-  /** Blood barrage on everyone (and those next to them); unprotected damage heals him. */
+  /** Blood barrage on everyone (and those next to them); he heals twice what it deals (Wiki). */
   bloodBarrage(players) {
     let heal = 0;
-    const base = Math.floor(MAX_HIT.BLOOD * this.raid.damageFactor(0));
+    const base = Math.floor(BARRAGE.MIN * this.raid.damageFactor(0));
     for (const player of players) {
-      const damage = Shared.random(base, base + 7);
+      const damage = Shared.random(base, base + BARRAGE.SPREAD);
       for (const victim of players) {
         const near = victim === player || victim.getLocation().getDistance(player.getLocation()) <= (this.spreadBarrage ? 2 : 1);
         if (!near) continue;
-        if (!Shared.isProtected(victim, "magic")) heal += Math.floor(damage * 0.66);
-        Shared.damage(victim, Shared.isProtected(victim, "magic") ? 0 : damage);
+        if (Shared.isProtected(victim, "magic")) continue;
+        heal += damage * BARRAGE.HEAL_PER_DAMAGE;
+        Shared.damage(victim, damage);
       }
       player.performGraphic(Shared.gfx(GRAPHIC.BLOOD));
       Shared.sound(player, SOUND.BARRAGE);
@@ -279,14 +337,14 @@ class ZebakRoom extends Raid.Room {
       const cloud = this.spawn(this.multipleClouds ? NpcIdentifiers.BLOOD_CLOUD_2 : NpcIdentifiers.BLOOD_CLOUD, tile, { scale: false, points: 0 });
       if (!cloud) continue;
       cloud.__toaScripted = true;
-      cloud.__toaCloud = { delay: 4, target: null, switchTicks: Shared.random(10, 20) };
+      cloud.__toaCloud = { delay: 4, target: null, switchTicks: Shared.random(10, 20), last: cloud.getLocation().clone() };
       cloud.canWalkThroughNPCs = () => true;
       this.clouds.add(cloud);
     }
     this.cloudsSouth = !this.cloudsSouth;
   }
 
-  /** Clouds chase someone and drain 2 a tick from anyone beside them, or wither away if they can't. */
+  /** Clouds chase someone, losing 2 for each tile they move (Wiki), and drain 2 a tick from anyone beside them. */
   tickClouds(players) {
     const { PathFinder } = Shared.core();
     for (const cloud of [...this.clouds]) {
@@ -295,6 +353,10 @@ class ZebakRoom extends Raid.Room {
         continue;
       }
       const state = cloud.__toaCloud;
+      const here = cloud.getLocation();
+      const moved = Math.max(Math.abs(here.getX() - state.last.getX()), Math.abs(here.getY() - state.last.getY()));
+      state.last = here.clone();
+      if (moved > 0) Shared.damage(cloud, 2 * moved);
       if (state.delay > 0) state.delay--;
       state.switchTicks = Math.max(0, state.switchTicks - 1);
       if (state.switchTicks === 0 || !state.target || !players.includes(state.target)) {
@@ -306,14 +368,11 @@ class ZebakRoom extends Raid.Room {
         PathFinder.calculateWalkRoute(cloud, state.target.getLocation().getX(), state.target.getLocation().getY());
       }
       if (state.delay > 0) continue;
-      let fed = false;
       for (const player of players) {
         if (!withinReach(cloud, player)) continue;
-        fed = true;
         Shared.damage(player, 2);
         cloud.setHitpoints(Math.min(cloud.getMaxHitpoints(), cloud.getHitpoints() + 2));
       }
-      if (!fed) cloud.setHitpoints(Math.max(0, cloud.getHitpoints() - 2));
     }
   }
 
@@ -325,8 +384,7 @@ class ZebakRoom extends Raid.Room {
     for (const player of players) {
       const location = player.getLocation();
       if (!this.activePoison.has(key(location.getX(), location.getY()))) continue;
-      const base = this.maxHit(MAX_HIT.POISON);
-      Shared.damage(player, Shared.random(base, base + 7));
+      Shared.damage(player, this.maxHit(Shared.random(ACID.MIN, ACID.MAX)));
       CombatFactory.poisonEntity(player, 2);
     }
     // Pools placed last tick become harmful this tick.
@@ -512,17 +570,44 @@ class ZebakRoom extends Raid.Room {
     return Shared.shuffle(tiles);
   }
 
-  /** Boulders and jugs rain down, then he screams three times; only those behind a boulder stay put. */
+  /**
+   * Boulders and jugs rain down, then he screams three times; only those behind a boulder stay
+   * put. His next attack comes 10 ticks on and then as usual; the scream holds it 11 (OpenRune).
+   */
   boulderSpecial() {
-    const { Animation, NpcIdentifiers } = Shared.core();
+    const { Animation } = Shared.core();
     this.busy = true;
-    this.attackSpeed = Math.max(this.attackSpeed, 10);
+    this.attackTicks = 10;
     this.zebak.performAnimation(new Animation(ANIMATION.SHOOT));
-    const boulders = this.pickBoulders();
-    if (!boulders) {
+    this.tail.performAnimation(new Animation(ANIMATION.TAIL_SHOOT));
+    this.roaring = false;
+    this.later(1, () => {
+      this.roaring = this.throwBoulders();
+      if (!this.roaring) this.busy = false;
+    });
+    this.later(33, () => {
+      if (!this.roaring) return;
+      this.zebak.performAnimation(new Animation(ANIMATION.SCREAM));
+      this.tail.performAnimation(new Animation(ANIMATION.TAIL_SCREAM));
+      this.attackTicks = Math.max(this.attackTicks, 11);
+    });
+    [36, 38, 40].forEach((tick, index) => this.later(tick, () => {
+      if (this.roaring) this.scream(index === 0);
+    }));
+    this.later(58, () => {
+      if (!this.roaring) return;
+      this.roaring = false;
+      for (const boulder of this.boulders) this.removeBoulder(boulder);
+      this.boulders = [];
       this.busy = false;
-      return;
-    }
+    });
+  }
+
+  /** Throws the rocks, jugs and acid; false when there's no room for the rocks. */
+  throwBoulders() {
+    const { NpcIdentifiers } = Shared.core();
+    const boulders = this.pickBoulders();
+    if (!boulders) return false;
     const jugs = this.pickJugs(boulders);
     const pools = this.freeTiles(GROUND_MIN, GROUND_MAX, boulders).slice(0, 6);
     const boulderPools = boulders.map((tile) => ({ x: tile.x + 2, y: tile.y })).filter((tile) => !pools.some((pool) => pool.x === tile.x && pool.y === tile.y));
@@ -537,8 +622,12 @@ class ZebakRoom extends Raid.Room {
         const boulder = this.spawn(NpcIdentifiers.COL_00FFFF_BOULDER_COL_4, { ...tile, z: 0 }, { scale: false, points: 0 });
         if (!boulder) continue;
         boulder.__toaScripted = true;
+        boulder.__toaRock = true;
         boulder.setUntargetable(true);
         boulder.getMovementQueue().setBlockMovement(true);
+        boulder.setMaxHitpoints(ROCK.HITPOINTS);
+        boulder.setHitpoints(ROCK.HITPOINTS);
+        this.removePoison(key(tile.x, tile.y));
         this.setObject(BOULDER_BLOCK, { ...tile, z: 0 }, 10, 0);
         this.boulders.push(boulder);
         for (const player of this.challengePlayers()) {
@@ -552,24 +641,15 @@ class ZebakRoom extends Raid.Room {
       for (const tile of pools) this.addPoison(tile, true, false);
       this.spawnJugs(jugs);
     });
-    this.later(33, () => {
-      this.zebak.performAnimation(new Animation(ANIMATION.SCREAM));
-      this.tail.performAnimation(new Animation(ANIMATION.TAIL_SCREAM));
-    });
-    for (const tick of [36, 38, 40]) this.later(tick, () => this.scream());
-    this.later(49, () => {
-      for (const boulder of this.boulders) this.removeBoulder(boulder);
-      this.boulders = [];
-      this.busy = false;
-      this.attackTicks = 11;
-    });
+    return true;
   }
 
-  scream() {
+  /** One roar wave: those not sheltered are pushed, each rock takes 50, the first chips the jugs. */
+  scream(first) {
     for (let x = GROUND_MIN.x; x <= GROUND_MAX.x; x++) {
       for (let y = GROUND_MIN.y; y <= GROUND_MAX.y; y++) {
         if (this.sheltered(x, y) || this.objectAt({ x, y, z: 0 }, 10)) continue;
-        this.graphic(GRAPHIC.ROAR, { x, y }, { height: 1 + Math.max(Math.abs(x - MIDDLE.x), Math.abs(y - MIDDLE.y)) });
+        this.graphic(GRAPHIC.ROAR, { x, y }, { delay: 1 + Math.max(Math.abs(x - MIDDLE.x), Math.abs(y - MIDDLE.y)) });
       }
     }
     for (const player of this.challengePlayers()) {
@@ -577,7 +657,8 @@ class ZebakRoom extends Raid.Room {
       if (this.isSwimming(player) || this.sheltered(location.getX(), location.getY())) continue;
       this.push(player, 1, 0, 2, MAX_HIT.SCREAM);
     }
-    for (const jug of this.jugs) jug.setHitpoints(Math.max(0, jug.getHitpoints() - 5));
+    for (const boulder of [...this.boulders]) Shared.damage(boulder, ROCK.ROAR_DAMAGE);
+    if (first) for (const jug of this.jugs) jug.setHitpoints(Math.max(0, jug.getHitpoints() - 5));
   }
 
   /** The three tiles east of a boulder are out of the scream. */
@@ -614,8 +695,10 @@ class ZebakRoom extends Raid.Room {
   }
 
   /** Jugs that can be pushed into a boulder (one per boulder), padded with a few random ones. */
+  /** Jugs that can be pushed into a rock, then as many decoys at most, never on the floor's edge (OpenRune). */
   pickJugs(boulders) {
-    const free = this.freeTiles(GROUND_MIN, GROUND_MAX, boulders);
+    const free = this.freeTiles(GROUND_MIN, GROUND_MAX, boulders)
+      .filter((tile) => tile.x !== GROUND_MIN.x && tile.x !== GROUND_MAX.x && tile.y !== GROUND_MIN.y && tile.y !== GROUND_MAX.y);
     const useful = [];
     const others = [];
     for (const tile of free) {
@@ -630,7 +713,7 @@ class ZebakRoom extends Raid.Room {
       (lines ? useful : others).push(tile);
     }
     const jugs = useful.slice(0, boulders.length);
-    return jugs.concat(others.slice(0, Math.max(0, Shared.random(6, 8) - jugs.length)));
+    return jugs.concat(others.slice(0, Math.min(jugs.length, Math.max(0, Shared.random(6, 8) - jugs.length))));
   }
 
   spawnJugs(tiles) {
@@ -660,6 +743,7 @@ class ZebakRoom extends Raid.Room {
     const dy = Math.sign(push ? at.getY() - from.getY() : from.getY() - at.getY());
     if (dx === 0 && dy === 0) return;
     state.direction = [dx, dy];
+    state.left = JUG_ROLL_TILES;
     jug.setNpcTransformationId(NpcIdentifiers.COL_00FFFF_JUG_COL_2);
     player.performAnimation(new Animation(ANIMATION.JUG_MOVE));
   }
@@ -670,8 +754,16 @@ class ZebakRoom extends Raid.Room {
         this.breakJug(jug);
         continue;
       }
-      const direction = jug.__toaJug.direction;
+      const state = jug.__toaJug;
+      const direction = state.direction;
       if (!direction) continue;
+      if (state.left !== undefined && state.left <= 0) {
+        // A pushed jug stops after 8 tiles; one a wave carries keeps going.
+        state.direction = null;
+        state.left = undefined;
+        jug.setNpcTransformationId(-1);
+        continue;
+      }
       const next = jug.getLocation().transform(direction[0], direction[1]);
       if (this.boulders.some((boulder) => boulder.getLocation().getX() === next.getX() && boulder.getLocation().getY() === next.getY())) {
         this.breakJug(jug);
@@ -684,6 +776,7 @@ class ZebakRoom extends Raid.Room {
         continue;
       }
       Shared.walkStraight(jug, next);
+      if (state.left !== undefined) state.left--;
     }
   }
 
@@ -711,43 +804,51 @@ class ZebakRoom extends Raid.Room {
   // -------------------------------------------------------------- waves
 
   /** Three waves sweep the arena from one side, each with a gap or two to stand in. */
+  /**
+   * Waves: jugs and acid at tick 1, the tail slam at 5, rocks falling (and the camera shaking)
+   * at 7, rows at 14, 21 and 28, done at 45. His next attack comes 15 ticks on (OpenRune).
+   */
   waveSpecial() {
     const { Animation } = Shared.core();
     this.busy = true;
-    this.attackTicks = 16;
+    this.attackTicks = 15;
     this.zebak.performAnimation(new Animation(ANIMATION.SHOOT));
+    this.tail.performAnimation(new Animation(ANIMATION.TAIL_SHOOT));
     const jugs = this.freeTiles(GROUND_MIN, GROUND_MAX).slice(0, Shared.random(6, 8));
     const pools = this.freeTiles(GROUND_MIN, GROUND_MAX, jugs).slice(0, 16);
     const from = Shared.loc(PROJECTILE_START);
-    for (const tile of pools) Shared.tileProjectile(this.area, from, Shared.loc(tile, 0), PROJECTILE.POISON, { delay: 30, duration: 120, startHeight: 62 });
-    for (const tile of jugs) Shared.tileProjectile(this.area, from, Shared.loc(tile, 0), PROJECTILE.JUG, { delay: 30, duration: 120, startHeight: 62 });
+    this.later(1, () => {
+      for (const tile of pools) Shared.tileProjectile(this.area, from, Shared.loc(tile, 0), PROJECTILE.POISON, { delay: 30, duration: 120, startHeight: 62 });
+      for (const tile of jugs) Shared.tileProjectile(this.area, from, Shared.loc(tile, 0), PROJECTILE.JUG, { delay: 30, duration: 120, startHeight: 62 });
+    });
     const south = this.wavesSouth;
-    this.later(4, () => {
+    this.later(5, () => {
       this.zebak.performAnimation(new Animation(ANIMATION.CALL_WAVE));
       this.tail.performAnimation(new Animation(ANIMATION.TAIL_CALL_WAVE));
     });
-    this.later(5, () => {
+    this.later(6, () => {
       for (const tile of pools) this.addPoison(tile, true, false);
       this.spawnJugs(jugs);
     });
-    this.later(6, () => {
+    this.later(7, () => {
       const base = south ? WAVE_SOUTH : WAVE_NORTH;
       for (let x = 0; x < 7; x++) {
         this.graphic(GRAPHIC.SPLASH, { x: base.x + x * 3, y: base.y }, { delay: 200 });
         this.graphic(GRAPHIC.ROCKS, { x: base.x + x * 3, y: base.y });
       }
       for (const player of this.challengePlayers()) Shared.sound(player, SOUND.RUMBLING);
+      this.shakeCameras(SHAKE.WAVES);
     });
     let skip = -1;
     const holes = 3 - Math.min(2, Math.floor(this.pathLevel() / 2));
-    for (const tick of [13, 20, 27]) {
+    for (const tick of [14, 21, 28]) {
       this.later(tick, () => {
         const gap = skip === -1 ? Shared.random(0, 12) : 12 - skip;
         this.spawnWave(south, gap, holes);
         skip = skip === -1 ? gap : -1;
       });
     }
-    this.later(47, () => {
+    this.later(45, () => {
       this.busy = false;
       this.wavesSouth = !this.wavesSouth;
     });
@@ -792,6 +893,7 @@ class ZebakRoom extends Raid.Room {
       for (const jug of this.jugs) {
         if (jug.getLocation().getX() === location.getX() && jug.getLocation().getY() === location.getY() + step * 2 && !jug.__toaJug.direction) {
           jug.__toaJug.direction = [0, step];
+          jug.__toaJug.left = undefined;
           jug.setNpcTransformationId(NpcIdentifiers.COL_00FFFF_JUG_COL_2);
         }
       }
@@ -853,10 +955,23 @@ class ZebakRoom extends Raid.Room {
     this.zebak.performAnimation(new Animation(ANIMATION.DEATH));
     this.tail.performAnimation(new Animation(ANIMATION.TAIL_DEATH));
     this.complete();
+    Shared.later(this.taskKey, SHAKE.DEATH.delay, () => this.shakeCameras(SHAKE.DEATH));
     Shared.later(this.taskKey, 3, () => {
       if (this.destroyed) return;
       this.zebak.setNpcTransformationId(NpcIdentifiers.ZEBAK_4);
       this.tail.setNpcTransformationId(NpcIdentifiers.ZEBAKS_TAIL_2);
+    });
+  }
+
+  /** Shakes everyone's camera on each axis, then puts it back a few ticks later. */
+  shakeCameras({ axes, resetAfter }) {
+    const players = this.roomPlayers();
+    const rolled = axes.map(([slot, amplitude]) => [slot, Array.isArray(amplitude) ? Shared.random(amplitude[0], amplitude[1]) : amplitude]);
+    for (const player of players) {
+      for (const [slot, amplitude] of rolled) player.getPacketSender().sendCameraShake(slot, amplitude);
+    }
+    Shared.later(this.taskKey, resetAfter, () => {
+      for (const player of players) player.getPacketSender().sendCameraReset();
     });
   }
 
@@ -905,6 +1020,11 @@ function zebakDowned(event) {
   } else if (event.npc.__toaJug) {
     event.preventDeath = true;
     room.breakJug(event.npc);
+  } else if (event.npc.__toaRock) {
+    // A rock worn down by the roar crumbles (Wiki: 150 HP, 50 a wave).
+    event.preventDeath = true;
+    room.removeBoulder(event.npc);
+    room.boulders = room.boulders.filter((boulder) => boulder !== event.npc);
   }
 }
 
@@ -915,7 +1035,9 @@ function jugStruck(event) {
   if (event.hit.getAttacker?.()?.isPlayer?.()) {
     for (const hit of event.hit.getHits()) hit.setDamage(0);
     event.hit.updateTotalDamage();
-    room.breakJug(event.npc);
+    // It shatters the tick after the blow (OpenRune).
+    event.npc.__toaJug.direction = null;
+    room.later(1, () => room.breakJug(event.npc));
   }
 }
 

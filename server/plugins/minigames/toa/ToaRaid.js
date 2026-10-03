@@ -642,7 +642,10 @@ class Raid {
   scale(npc, pathLevel) {
     const base = npc.getDefinition()?.getHitpoints?.() ?? npc.getHitpoints();
     let hitpoints = base * this.hitpointFactor(pathLevel);
-    hitpoints = hitpoints >= 100 ? Math.round(hitpoints / 10) * 10 : Math.round(hitpoints / 5) * 5;
+    // The Wiki DPS calculator's rounding: to 10 above 300, to 5 above 100, none below.
+    if (hitpoints > 300) hitpoints = Math.round(hitpoints / 10) * 10;
+    else if (hitpoints > 100) hitpoints = Math.round(hitpoints / 5) * 5;
+    else hitpoints = Math.round(hitpoints);
     hitpoints = Math.max(1, hitpoints);
     npc.setMaxHitpoints(hitpoints);
     npc.setHitpoints(hitpoints);

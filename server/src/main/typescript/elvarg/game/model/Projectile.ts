@@ -14,6 +14,8 @@ export class Projectile {
     private lockonTargetIndex: number;
     private delay: number;
     private privateArea: PrivateArea;
+    /** The arc's slope at launch (the packet's angle); 16 unless set. */
+    private angle = 16;
 
     constructor(start: Location, end: Location, lockon: Mobile, projectileId: number, delay: number, speed: number,
         startHeight: number, endHeight: number, privateArea: PrivateArea) {
@@ -90,6 +92,12 @@ export class Projectile {
     }
 
 
+    /** Sets the arc's slope at launch: higher is steeper (Zebak's falling fragments use 127). */
+    public withAngle(angle: number): Projectile {
+        this.angle = Math.max(0, Math.min(255, Math.trunc(angle)));
+        return this;
+    }
+
     public sendProjectile(): void {
         let resolvedDelay = this.delay;
         let resolvedSpeed = this.speed;
@@ -145,7 +153,8 @@ export class Projectile {
                     this.startHeight,
                     this.endHeight,
                     this.lockonTargetIndex,
-                    resolvedDelay
+                    resolvedDelay,
+                    this.angle
                 );
         });
         if (process.env.PROJECTILE_DEBUG === "1") {

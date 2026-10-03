@@ -31,6 +31,8 @@ import {
   encodePlaySong,
   encodeProjectiles,
   encodeRunClientScript,
+  encodeCameraShake,
+  encodeCameraReset,
   encodeChatFilterSettings,
   encodeRunEnergy,
   encodeSkillsDelta,
@@ -762,6 +764,18 @@ export class PacketSender {
   }
 
   sendEffectTimer(_seconds: number, _effect: any): this {
+    return this;
+  }
+
+  /** Shakes the camera on one axis; slot 0 left-right, 1 up-down, 2 forwards-backwards. */
+  sendCameraShake(slot: number, randomAmplitude: number, sineAmplitude = 0, sineFrequency = 0): this {
+    this.player.getSession().sendClientPacket(encodeCameraShake(slot, randomAmplitude, sineAmplitude, sineFrequency));
+    return this;
+  }
+
+  /** Resets the camera, ending any shake. */
+  sendCameraReset(): this {
+    this.player.getSession().sendClientPacket(encodeCameraReset());
     return this;
   }
 

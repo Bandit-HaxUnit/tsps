@@ -95,6 +95,7 @@ export const enum ServerPacketId {
     LOC_ADD_CHANGE = 134,
     LOC_DEL = 135,
     LOC_ANIM = 136,
+    CAMERA_CONTROL = 137,
     SOUND = 131,
     PLAY_JINGLE = 132,
     PLAY_SONG = 133,
@@ -164,6 +165,7 @@ export const SERVER_PACKET_LENGTHS: Record<ServerPacketId, number> = {
     [ServerPacketId.WELCOME]: 8, // tickMs(4) + serverTime(4)
     [ServerPacketId.TICK]: 8, // tick(4) + time(4)
     [ServerPacketId.HANDSHAKE]: -1,
+    [ServerPacketId.CAMERA_CONTROL]: -1,
     [ServerPacketId.LOGIN_RESPONSE]: -1,
     [ServerPacketId.LOGOUT_RESPONSE]: -1,
     [ServerPacketId.PATH_RESPONSE]: -1,
