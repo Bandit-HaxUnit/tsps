@@ -83,6 +83,7 @@ const DESTINATIONS = {
     teleport("Kalphite Queen", location(3508, 9494), TeleportType.NORMAL),
     teleport("Corporeal Beast", location(2966, 4252, 2), TeleportType.NORMAL),
     teleport("Zulrah", location(2196, 3056), TeleportType.NORMAL),
+    teleport("Doom of Mokhaiotl", location(1311, 9531, 1), TeleportType.NORMAL),
   ],
   [TAB.MINIGAMES]: [
     teleport("Barrows", location(3565, 3315), TeleportType.NORMAL),
