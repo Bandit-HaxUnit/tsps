@@ -6,6 +6,8 @@ import { Packet } from "./packet/Packet";
 import { PacketBuilder } from "./packet/PacketBuilder";
 import { NetworkConstants } from "./NetworkConstants";
 import type { Player } from "../game/entity/impl/player/Player";
+import type { NpcExactMove } from "../game/entity/impl/npc/NPC";
+import type { Location } from "../game/model/Location";
 import { Appearance } from "../game/model/Appearance";
 import { Flag } from "../game/model/Flag";
 import {
@@ -20,6 +22,7 @@ import {
   encodePlayerSync,
   encodeRebuildNormal,
   encodeTick,
+  ForcedMovementView,
   GraphicView,
   NpcSyncState,
   PlayerSyncState,
@@ -330,6 +333,7 @@ export class PlayerSession {
           rotation: this.clientDirection(face),
           walkDirection: this.clientDirection(npc.getWalkingDirection()),
           runDirection: this.clientDirection(npc.getRunningDirection()),
+          exactMove: this.exactMoveView(npc.getExactMove?.(), location),
         };
       })
     );
@@ -505,6 +509,20 @@ export class PlayerSession {
             level: location.getZ(),
           }
         : undefined,
+    };
+  }
+
+  /** An NPC's glide, from the tile it left to the one it stands on. */
+  private exactMoveView(move: NpcExactMove | null | undefined, location: Location): ForcedMovementView | undefined {
+    if (!move) return undefined;
+    return {
+      startDeltaX: move.fromX - location.getX(),
+      startDeltaY: move.fromY - location.getY(),
+      endDeltaX: 0,
+      endDeltaY: 0,
+      startCycleOffset: move.startCycles,
+      endCycleOffset: move.endCycles,
+      direction: move.angle,
     };
   }
 

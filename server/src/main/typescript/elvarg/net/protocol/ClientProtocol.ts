@@ -120,6 +120,8 @@ export type NpcView = Tile & ActorUpdateView & {
   typeId: number;
   /** The overhead prayer icon (an index in headicons_prayer: 0 melee, 1 ranged, 2 magic), -1 none. */
   headIcon?: number;
+  /** A glide from the tile it left to where it stands (OSRS npc exact_move), relative to its tile. */
+  exactMove?: ForcedMovementView;
   rotation: number;
   walkDirection: number;
   runDirection: number;
@@ -2124,6 +2126,7 @@ const NPC_MASK = {
   HIT: 0x20,
   FORCED_CHAT: 0x40,
   HEAD_ICONS: 0x200,
+  EXACT_MOVE: 0x400,
   SPOT_ANIM: 0x20000,
 } as const;
 
@@ -2234,7 +2237,18 @@ function npcUpdateMask(view: NpcView, writeInteraction: boolean, writeHeadIcon =
     (view.animation ? NPC_MASK.ANIMATION : 0) |
     (view.hits ? NPC_MASK.HIT : 0) |
     (view.forcedChat !== undefined ? NPC_MASK.FORCED_CHAT : 0) |
+    (view.exactMove ? NPC_MASK.EXACT_MOVE : 0) |
     (view.graphics?.length ? NPC_MASK.SPOT_ANIM : 0);
+}
+
+/** The forced-movement fields, as players' forced movement writes them. */
+function writeForcedMovement(bytes: number[], movement: ForcedMovementView): void {
+  byteS(bytes, movement.startDeltaX);
+  bytes.push(movement.startDeltaY & 0xff, movement.endDeltaX & 0xff);
+  byteA(bytes, movement.endDeltaY);
+  shortBEA(bytes, movement.startCycleOffset);
+  shortBE(bytes, movement.endCycleOffset);
+  shortLEA(bytes, movement.direction & 2047);
 }
 
 function writePlayerUpdateBlock(
@@ -2265,15 +2279,7 @@ function writePlayerUpdateBlock(
     byteC(bytes, length);
     bytes.push(...view.appearance.subarray(0, length));
   }
-  if (view.forcedMovement) {
-    const movement = view.forcedMovement;
-    byteS(bytes, movement.startDeltaX);
-    bytes.push(movement.startDeltaY & 0xff, movement.endDeltaX & 0xff);
-    byteA(bytes, movement.endDeltaY);
-    shortBEA(bytes, movement.startCycleOffset);
-    shortBE(bytes, movement.endCycleOffset);
-    shortLEA(bytes, movement.direction & 2047);
-  }
+  if (view.forcedMovement) writeForcedMovement(bytes, view.forcedMovement);
   if (view.resetPath) byteS(bytes, 127);
   if (view.graphics?.length) {
     byteA(bytes, view.graphics.length);
@@ -2318,6 +2324,7 @@ function writeNpcUpdateBlock(view: NpcView, writeInteraction: boolean, writeHead
       bytes.push(icon & 0xff);
     }
   }
+  if (view.exactMove) writeForcedMovement(bytes, view.exactMove);
   return Buffer.from(bytes);
 }
 
