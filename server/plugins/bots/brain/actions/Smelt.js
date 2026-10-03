@@ -2,6 +2,7 @@
 
 const Smithing = require("../../../skills/Smithing.plugin");
 const { resolveCatalogObjectIds } = require("../BotObjectCatalog");
+const { playerState } = require("../ActionState");
 const { approachObject } = require("../../behaviours/navigation/BotNavigation");
 
 const FURNACE_IDS = Object.freeze(
@@ -29,7 +30,8 @@ function resolveRecipe(spec) {
  */
 function createSmeltAction(spec, world) {
   const recipe = resolveRecipe(spec);
-  let lastClickAt = 0;
+  const stateFor = (player) =>
+    playerState(action, player, () => ({ lastClickAt: 0 }));
 
   function barsFromInventory(player, targetRecipe) {
     const inventory = player?.getInventory?.();
@@ -72,10 +74,11 @@ function createSmeltAction(spec, world) {
     return best;
   }
 
-  return {
+  const action = {
     id: "smelt",
     update(ctx) {
       const { player, nowMs } = ctx;
+      const bot = stateFor(player);
       if (!recipe) {
         return "failed";
       }
@@ -106,10 +109,10 @@ function createSmeltAction(spec, world) {
       if (player.getMovementQueue?.()?.size?.() > 0) {
         return "running";
       }
-      if (nowMs - lastClickAt < INTERACT_COOLDOWN_MS) {
+      if (nowMs - bot.lastClickAt < INTERACT_COOLDOWN_MS) {
         return "running";
       }
-      lastClickAt = nowMs;
+      bot.lastClickAt = nowMs;
 
       player.getMovementQueue().walkToObject(furnace, {
         execute: () => {
@@ -138,10 +141,15 @@ function createSmeltAction(spec, world) {
       });
       return "running";
     },
-    stop() {
-      lastClickAt = 0;
+    stop(ctx) {
+      const player = ctx?.player;
+      if (!player) {
+        return;
+      }
+      stateFor(player).lastClickAt = 0;
     },
   };
+  return action;
 }
 
 module.exports = {

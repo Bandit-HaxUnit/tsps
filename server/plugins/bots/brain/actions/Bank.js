@@ -3,6 +3,7 @@
 const { MapObjects } = require("../../../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
 const { Bank } = require("../../../../src/main/typescript/elvarg/game/model/container/impl/Bank");
 const { BANK_BOOTH_IDS, isUsableBankBooth } = require("../../lib/BankBooths");
+const { playerState } = require("../ActionState");
 const { approachObject } = require("../../behaviours/navigation/BotNavigation");
 
 const BANK_SEARCH_REGION_RADIUS = 2;
@@ -19,9 +20,12 @@ function createBankAction(spec, world) {
   const withdrawSpecs = Array.isArray(spec.withdraw) ? spec.withdraw : [];
   const isWithdraw = withdrawSpecs.length > 0;
   const requireFull = !isWithdraw && spec.until?.inventoryFull !== false;
-  let booth = null;
-  let lastClickAt = 0;
-  let depositAt = 0;
+  const stateFor = (player) =>
+    playerState(action, player, () => ({
+      booth: null,
+      lastClickAt: 0,
+      depositAt: 0,
+    }));
 
   function withdrawSatisfied(player) {
     const inventory = player.getInventory();
@@ -95,6 +99,7 @@ function createBankAction(spec, world) {
   }
 
   function resolveBooth(player) {
+    const booth = stateFor(player).booth;
     if (!booth) {
       return null;
     }
@@ -103,11 +108,12 @@ function createBankAction(spec, world) {
     return MapObjects.get(booth.objectId, loc, player.getPrivateArea());
   }
 
-  return {
+  const action = {
     id: "bank",
     update(ctx) {
       const { player, nowMs } = ctx;
-      if (depositAt > 0 && nowMs >= depositAt) {
+      const bot = stateFor(player);
+      if (bot.depositAt > 0 && nowMs >= bot.depositAt) {
         if (isWithdraw) {
           performWithdraw(player);
           world.log?.("bot_brain_bank_withdrew", {
@@ -119,7 +125,7 @@ function createBankAction(spec, world) {
             username: player.getUsername?.(),
           });
         }
-        depositAt = 0;
+        bot.depositAt = 0;
         return "success";
       }
       if (isWithdraw && withdrawSatisfied(player)) {
@@ -133,7 +139,7 @@ function createBankAction(spec, world) {
       if (!object) {
         return "failed";
       }
-      booth = {
+      bot.booth = {
         objectId: object.getId(),
         x: object.getLocation().getX(),
         y: object.getLocation().getY(),
@@ -142,8 +148,8 @@ function createBankAction(spec, world) {
 
       const loc = player.getLocation();
       const distance = Math.max(
-        Math.abs(loc.getX() - booth.x),
-        Math.abs(loc.getY() - booth.y)
+        Math.abs(loc.getX() - bot.booth.x),
+        Math.abs(loc.getY() - bot.booth.y)
       );
       if (distance > MAX_DIRECT_ROUTE_TILES) {
         approachObject(player, object, { nowMs, reason: "brain_bank_approach" });
@@ -155,10 +161,10 @@ function createBankAction(spec, world) {
       if (player.getMovementQueue?.()?.size?.() > 0) {
         return "running";
       }
-      if (nowMs - lastClickAt < INTERACT_COOLDOWN_MS) {
+      if (nowMs - bot.lastClickAt < INTERACT_COOLDOWN_MS) {
         return "running";
       }
-      lastClickAt = nowMs;
+      bot.lastClickAt = nowMs;
 
       const objectLoc = object.getLocation();
       player.getMovementQueue().walkToObject(object, {
@@ -180,17 +186,23 @@ function createBankAction(spec, world) {
             },
             handled: false,
           });
-          depositAt = Date.now() + DEPOSIT_DELAY_MS;
+          stateFor(player).depositAt = Date.now() + DEPOSIT_DELAY_MS;
         },
       });
       return "running";
     },
-    stop() {
-      booth = null;
-      lastClickAt = 0;
-      depositAt = 0;
+    stop(ctx) {
+      const player = ctx?.player;
+      if (!player) {
+        return;
+      }
+      const bot = stateFor(player);
+      bot.booth = null;
+      bot.lastClickAt = 0;
+      bot.depositAt = 0;
     },
   };
+  return action;
 }
 
 module.exports = {
