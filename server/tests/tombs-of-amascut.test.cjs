@@ -315,3 +315,87 @@ test('struct reads decode the struct archive once, so the first party (44 invoca
   assert.equal(reads, 1, 'one decode for every struct');
   assert.equal(CacheDefinitions.getStructParams(2971).get(1160), 'Insanity');
 });
+
+test('raid scaling rounds hitpoints as the Wiki DPS calculator does; Zebak matches the checkpoints', () => {
+  const { Raid } = require('../plugins/minigames/toa/ToaRaid');
+  const scaled = (base, raidLevel, size) => {
+    const raid = Object.assign(Object.create(Raid.prototype), { settings: { raidLevel }, original: { size } });
+    let hp = 0;
+    raid.scale({ getDefinition: () => ({ getHitpoints: () => base }), setMaxHitpoints: (v) => { hp = v; }, setHitpoints() {}, setRollFactor() {} }, 0);
+    return hp;
+  };
+  assert.deepEqual([scaled(580, 0, 1), scaled(580, 150, 1), scaled(580, 300, 1), scaled(580, 150, 2)], [580, 930, 1280, 1760]);
+  assert.equal(scaled(150, 100, 1), 210, 'to 5 between 100 and 300');
+  assert.equal(scaled(48, 100, 1), 67, 'not rounded below 100');
+});
+
+test("Zebak (Wiki, OpenRune): rocks wear down, clouds pay for moving, the barrage heals twice, enrage and his Defence floor", () => {
+  CachePipeline.initialize();
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const Raid = require('../plugins/minigames/toa/ToaRaid');
+  let ZebakRoom = null;
+  const register = Raid.registerRoom;
+  Raid.registerRoom = (key, Room) => { if (key === 'CRONDIS_BOSS') ZebakRoom = Room; };
+  const noop = () => {};
+  require('../plugins/minigames/toa/Zebak.TombsOfAmascut')(new Proxy({ core: PluginManager.getCoreApi() }, { get: (t, k) => k in t ? t[k] : noop }));
+  Raid.registerRoom = register;
+  const { Location } = require('../dist/game/model/Location');
+  const hits = new Map();
+  const mob = (name, x, y, hp = 100) => ({
+    name, hp, max: hp, loc: new Location(x, y, 0), transform: -1,
+    getHitpoints() { return this.hp; }, setHitpoints(v) { this.hp = v; },
+    getMaxHitpoints() { return this.max; }, getLocation() { return this.loc; },
+    getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (list) => hits.set(name, (hits.get(name) ?? 0) + list.reduce((s, h) => s + h.getDamage(), 0)) }) }),
+    setNpcTransformationId(id) { this.transform = id; },
+    getPrayerActive: () => [],
+    performGraphic: noop,
+    getPacketSender() { const sender = new Proxy({}, { get: () => () => sender }); return sender; },
+  });
+  const room = Object.assign(Object.create(ZebakRoom.prototype), {
+    boulders: [], jugs: new Set(), clouds: new Set(), queued: ['waves'], specialsDone: 2, lastPhase: false, attackSpeed: 7,
+    raid: { damageFactor: () => 1 }, graphic: noop, push: noop, isSwimming: () => false, objectAt: () => null,
+  });
+  room.challengePlayers = () => [player];
+  const player = mob('player', 3930, 5408, 99);
+
+  // Each roar wave takes 50 off every rock; only the first chips the jugs.
+  const rock = mob('rock', 3927, 5410, 150);
+  const jug = mob('jug', 3935, 5410, 20);
+  room.boulders = [rock];
+  room.jugs = new Set([jug]);
+  room.scream(true);
+  room.scream(false);
+  assert.equal(hits.get('rock'), 100);
+  assert.equal(jug.hp, 15);
+
+  // A cloud loses 2 for each tile it moves.
+  const cloud = mob('cloud', 3930, 5400, 30);
+  cloud.getMovementQueue = () => ({ size: () => 1 });
+  cloud.__toaCloud = { delay: 4, target: player, switchTicks: 5, last: new Location(3927, 5400, 0) };
+  room.clouds = new Set([cloud]);
+  room.tickClouds([player]);
+  assert.equal(hits.get('cloud'), 6, 'three tiles moved');
+
+  // The barrage heals him twice the damage it deals to those not praying Magic.
+  const zebak = mob('zebak', 3918, 5404, 1000);
+  zebak.hp = 500;
+  zebak.getCurrentDefinition = () => ({ getStats: () => [0, 0, 70] });
+  let defence = 70;
+  zebak.getDefenceLevel = () => defence;
+  zebak.setDefenceLevel = (v) => { defence = v; };
+  room.zebak = zebak;
+  hits.delete('player');
+  room.bloodBarrage([player]);
+  assert.ok(hits.get('player') >= 3 && hits.get('player') <= 5, 'a 3-5 barrage');
+  assert.equal(zebak.hp, 500 + 2 * hits.get('player'));
+
+  // His Defence drains to 50 at most; at 25% he enrages and a queued special is dropped.
+  defence = 40;
+  zebak.hp = 240;
+  room.checkPhases();
+  assert.equal(defence, 50);
+  assert.equal(room.lastPhase, true);
+  assert.deepEqual(room.queued, []);
+  assert.equal(zebak.transform, 11732, 'TOA_ZEBAK_ENRAGED');
+  assert.equal(room.attackSpeed, 4);
+});

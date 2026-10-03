@@ -1089,6 +1089,25 @@ export function encodeTileSpotAnim(spotId: number, x: number, y: number, level: 
   return encodeServerPacket(ServerPacketId.SPOT_ANIM, payload);
 }
 
+/**
+ * Shakes the camera on one axis (slot: 0 left-right, 1 up-down, 2 forwards-backwards, ...),
+ * as OSRS's cam_shake does: a random wobble plus a sine of the given amplitude and frequency.
+ */
+export function encodeCameraShake(slot: number, randomAmplitude: number, sineAmplitude: number, sineFrequency: number): Buffer {
+  const payload = Buffer.alloc(8);
+  payload[0] = 3;
+  payload[1] = slot & 0xff;
+  payload.writeUInt16BE(randomAmplitude & 0xffff, 2);
+  payload.writeUInt16BE(sineAmplitude & 0xffff, 4);
+  payload.writeUInt16BE(sineFrequency & 0xffff, 6);
+  return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
+}
+
+/** Puts the camera back on the player and stops any shake (cam_reset). */
+export function encodeCameraReset(): Buffer {
+  return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, Buffer.from([0]));
+}
+
 export function encodeRebuildNormal(regionX: number, regionY: number, forceReload: boolean, xteaKeys: number[][]): Buffer {
   const payload = Buffer.alloc(7 + xteaKeys.length * 16);
   payload.writeUInt16BE(regionX & 0xffff);

@@ -38,7 +38,7 @@ Engine additions this feature needed:
 
 These follow the wiki's *Tombs of Amascut* mechanics:
 
-- **NPC hitpoints:** base × (1 + 0.4% per raid level) × party factor × path-level factor. The party factor is +90% for each of players two and three, then +60% each. Results are rounded to 10 above 100, otherwise to 5.
+- **NPC hitpoints:** base × (1 + 0.4% per raid level) × party factor × path-level factor. The party factor is +90% for each of players two and three, then +60% each. Results are rounded as the Wiki's DPS calculator does: to 10 above 300 HP, to 5 above 100, and not below that. (OpenRune #274's Zebak checkpoints, 580 / 930 / 1,280 solo at raid level 0 / 150 / 300 and 1,760 for two at 150, come out the same.)
 - **NPC accuracy and defence:** attack and defence rolls × (1 + raid level / 250), applied to the roll rather than the Defence level, so drains still bite.
 - **NPC damage:** the same raid-level and path-level factors, capped at 2.5×.
 - **Points:**
@@ -81,6 +81,41 @@ Each Tombs of Amascut NPC (11689-11804) has its block and death animations in `n
 - **Death:** each uses its own death sequence, identified by its Jagex name in RuneLite's gameval `AnimationID`, for example `NPC_ZEBAK01_DEATH` (9634) and `NPC_KEPHRI_DEATH` (9582). The Near-Reality data gives Zebak and Kephri zombie animations (5568/5569), which aren't used.
 - **Scripted deaths:** the bosses' deaths are played by the plugins, and the definitions agree with them.
 
+## Zebak
+
+Checked against OpenRune-Server #274, which was built against a live capture, with the Wiki taking priority. RuneLite's gameval names the ids.
+
+**From the Wiki:**
+- Each roar wave hits each rock for 50; a rock has 150 HP and crumbles when it runs out.
+- Blood clouds lose 2 for every tile they move, and drain 2 a tick from anyone beside them.
+- His Defence drains by at most 20, so never below 50.
+- A blood barrage heals him twice the damage it deals.
+- A special still queued when he enrages is dropped.
+
+**From OpenRune, where the Wiki gives no figures:**
+
+| What | Value |
+| --- | --- |
+| Acid | 6-10 a tick, scaled |
+| Barrage | 3-5, scaled |
+| Bite | Lands 2 ticks after it; Protect from Melee blocks half |
+| First attack | After 10 ticks |
+| During specials | His autos carry on; the roar holds them 10 ticks at the start and 11 for the scream |
+| Great Roar | Throws at tick 1, scream at 33, waves at 36/38/40, rocks cleared at 58 |
+| Tidal waves | Throws at 1, tail slam at 5, rocks fall at 7, rows at 14/21/28, done at 45 |
+| Jugs | A push rolls them 8 tiles; a hit shatters them a tick later; only the first roar wave chips them |
+| Rocks | Placed within (3925, 5401)-(3935, 5415); acid under one is cleared |
+| Camera shakes | His death (2 ticks in) and the falling rocks before the waves |
+
+**The volley as OSRS draws it:**
+1. The volley rises (2176/2178) from height 200 to 700, arcing at 30.
+2. It bursts (2186/2185) at height 750 on a helper NPC, `SPOTANIM_ZEBAK_RANGED01_NPC` (11744), spawned for 3 ticks so it is centred on the split point. A tile graphic's height is one byte, so it can't sit that high.
+3. The fragments (2181/2187) drop from 700 to 90 over 90 cycles, arcing at 127.
+
+**Enraged** (below 25%) he becomes `TOA_ZEBAK_ENRAGED` (11732), with the enraged attack animations (9622/9623 melee, 9626/9627 ranged) and the enraged rising projectiles (2177/2179). RuneLite names them for the enrage; OpenRune uses the enraged melee only.
+
+**Not done:** acid that ramps up the longer you stand in it (the Wiki describes it; neither source gives numbers), and the volley's split and impact sounds (RuneLite doesn't name sound ids).
+
 ## Simplifications
 
 - **Tumeken's shadow:** it plays no cast or impact sound (the ids aren't known), and it refuses every player target rather than only those outside minigames. Accurate's invisible +3 Magic isn't applied.
@@ -88,7 +123,6 @@ Each Tombs of Amascut NPC (11689-11804) has its block and death animations in `n
 - **Wardens phase three floor:** collapsed rows push players back onto the remaining floor rather than becoming unwalkable.
 - **The pet:** the Wiki gives its formula but not its exact raid level scaling beyond thresholds at 400 and 550; it uses a third of the levels between them.
 - **Logout and failure:** logging out leaves the raid with no rejoin, and a failed raid keeps your items. OSRS sends them to a retrieval chest in the lobby for a fee; there's no retrieval chest yet.
-- **Zebak's death:** no camera shake, because the core has no camera-shake packet.
 - **Restart recovery:** logging in inside the tombs without an active raid returns you to the lobby. The raid exit also returns stranded players to the lobby.
 - **Scoreboard:** the burial chamber scoreboard (44942) isn't implemented; the lobby one shows only personal records.
 
@@ -149,7 +183,7 @@ The first version was written without access to the Wiki or the cache, so it fol
 
 **Still open:**
 - **Akkha's damage:** the Wiki's infobox gives a max hit of 55, and the plugin uses 22 for every style. 22 x 2.5 (the +150% damage cap) is exactly 55, so the 55 may be the capped value.
-- **Impact graphics:** a few use generic graphics where the cache has dedicated ToA ones, for example Zebak's magic impact (`FIREBLAST_IMPACT` versus `ZEBAK_MAGE_SPLIT`). Only a capture would show which one OSRS plays.
+- **Impact graphics:** a few use generic graphics where the cache has dedicated ToA ones. Zebak's are settled: OpenRune's capture-based volley also lands with `FIREBLAST_IMPACT` / `DARKBOW_SMOKE_ARROW_IMPACT`, and `ZEBAK_MAGE_SPLIT` / `ZEBAK_RANGED_SPLIT` are the bursts.
 - **Sound ids:** RuneLite has no names for them.
 - **Unnamed cache entries:** these keep their numeric constants: Warden charging orb 11769, hidden Warden 11765, departing spirit 11829, blade objects 45748/45749, platform 45606, siphon block 26209.
 

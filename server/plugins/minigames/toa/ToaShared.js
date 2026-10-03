@@ -419,13 +419,13 @@ function walkStraight(npc, tile) {
  * after `delay` client cycles and lands `duration` + `perTile` x distance cycles later.
  * Returns the landing time in game ticks, for lining damage up with it.
  */
-function tileProjectile(area, from, to, id, { delay = 0, duration = 30, perTile = 5, startHeight = 43, endHeight = 0 } = {}) {
+function tileProjectile(area, from, to, id, { delay = 0, duration = 30, perTile = 5, startHeight = 43, endHeight = 0, angle = 16 } = {}) {
   const { Projectile } = core();
   const start = from.getLocation ? Projectile.centreOf(from) : (from.getX ? from : loc(from));
   const end = to.getLocation ? Projectile.centreOf(to) : (to.getX ? to : loc(to));
   const lockon = to.getLocation ? to : null;
   const speed = delay + duration + start.getDistance(end) * perTile;
-  new Projectile(start, end, lockon, id, delay, speed, startHeight, endHeight, area).sendProjectile();
+  new Projectile(start, end, lockon, id, delay, speed, startHeight, endHeight, area).withAngle(angle).sendProjectile();
   return Math.ceil(speed / 30);
 }
 
