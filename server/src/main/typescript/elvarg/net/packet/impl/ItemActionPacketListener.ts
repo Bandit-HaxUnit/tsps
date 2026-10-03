@@ -24,6 +24,13 @@ export class ItemActionPacketListener {
 
   public static handleAction(player: any, interfaceId: number, itemId: number, slot: number, clickType: number, option?: string): boolean {
     if (PluginManager.emitCanUseItem(player, itemId, "action", option) === false) return true;
+    // OSRS: an item action inside the inventory is a hard interruption. It clears the
+    // current interaction (a queued walk-to op or a combat target) but leaves the walk
+    // queue, so the player keeps walking without completing the clicked action. The
+    // equipment tab is exempt (osrs-docs: Entity Interactions - Interruptions).
+    if (this.itemContainer(player, interfaceId) === player?.getInventory?.()) {
+      player.clearPendingAction?.();
+    }
     if (clickType === 1) return this.handleFirstAction(player, interfaceId, itemId, slot, option);
     const item = this.itemContainer(player, interfaceId)?.getItems?.()[slot];
     if (!item || item.getId() !== itemId) return false;
