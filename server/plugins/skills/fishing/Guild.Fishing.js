@@ -2,6 +2,8 @@
  * Fishing Guild (OSRS Wiki): level 68 Fishing to go through the front door, and temporary boosts
  * count. Inside, an invisible +7 Fishing boost applies to catch rolls.
  */
+const ObstacleRunner = require("../agility/ObstacleRunner");
+
 const GUILD_LEVEL = 68;
 const INVISIBLE_BOOST = 7;
 
@@ -15,8 +17,6 @@ const OUTSIDE = Object.freeze([2611, 3393]);
 // (Wiki: about 11 cage/harpoon and 9 big net/harpoon), so these bounds stand in for the fenced
 // grounds. Kylie Minnow's platform (y 3437 up) is not part of the guild and gets no boost.
 const GUILD_BOUNDS = Object.freeze({ minX: 2560, maxX: 2623, minY: DOOR.y, maxY: 3436, z: DOOR.z });
-
-const WALK_ANIMATION = 819;
 
 let core = null;
 
@@ -33,16 +33,9 @@ function invisibleBoost(player) {
   return isInGuild(player) ? INVISIBLE_BOOST : 0;
 }
 
-function later(owner, ticks, action) {
-  core.TaskManager.submit(new (class extends core.Task {
-    constructor() { super(ticks, owner, false); }
-    execute() { this.stop(); action(); }
-  })());
-}
-
 /** Steps the player through the doorway, hiding the door for them while they pass. */
 function crossDoor(player, door, x, y) {
-  if (player.getForceMovement()) return;
+  if (ObstacleRunner.isBusy(player)) return;
   const from = player.getLocation().clone();
   const dx = x - from.getX();
   const dy = y - from.getY();
@@ -51,11 +44,12 @@ function crossDoor(player, door, x, y) {
     return;
   }
   player.getPacketSender().sendObjectRemoval(door);
-  const direction = dy > 0 ? 0 : dx > 0 ? 1 : dy < 0 ? 2 : 3;
-  // 30 client cycles is one tick; the task moves the player once it has played out.
-  core.TaskManager.submit(new core.ForceMovementTask(player, 2,
-    new core.ForceMovement(from, new core.Location(dx, dy, 0), 0, 30, direction, WALK_ANIMATION)));
-  later(player, 3, () => player.getPacketSender().sendObject(door));
+  // The agility runner walks one tile per tick through the doorway, as the Al
+  // Kharid toll gate does, so the client plays the player's own walk animation
+  // and a weapon with a distinct walk anim is not overwritten by a fixed one.
+  ObstacleRunner.run({ player }, [{ wait: 1 }, { walk: [[x, y]] }], {
+    onFinish: () => player.getPacketSender().sendObject(door),
+  });
 }
 
 // Leaving is always allowed; only players outside are checked.
@@ -77,6 +71,7 @@ function useGuildDoor(request) {
 
 function attach(api) {
   core = api.core;
+  ObstacleRunner.init(api);
   api.onCustomEvent("door:toggle", useGuildDoor);
 }
 

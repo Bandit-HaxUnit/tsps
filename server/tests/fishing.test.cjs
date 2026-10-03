@@ -257,14 +257,17 @@ test("the infernal harpoon cooks a third of its catch, runs on 5,000 charges and
   const { Location } = core;
   function visitor(level, [x, y]) {
     const log = { messages: [], removed: 0, moved: null };
+    const attributes = new Map();
     return Object.assign(log, {
       getLocation: () => new Location(x, y, 0),
       getSkillManager: () => ({ getCurrentLevel: () => level }),
       sendMessage: (message) => log.messages.push(message),
+      getAttribute: (key) => attributes.get(key),
+      setAttribute: (key, value) => attributes.set(key, value),
       getForceMovement: () => null,
       setForceMovement() {},
       getCombat: () => ({ reset() {} }),
-      getMovementQueue: () => ({ reset() {} }),
+      getMovementQueue: () => ({ reset() {}, setBlockMovement() {} }),
       getPacketSender: () => ({ sendObjectRemoval: () => log.removed++, sendObject() {} }),
       moveTo: (to) => { log.moved = to; },
     });
