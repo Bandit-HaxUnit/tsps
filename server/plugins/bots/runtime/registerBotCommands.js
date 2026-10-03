@@ -38,28 +38,98 @@ function registerBotCommands(options) {
     "auto",
   ].join("|");
 
+  /** Locks a controlled bot into one behavior tree, shared by ::bh and ::bot <behavior>. */
+  const assignManualBehavior = (target, state, normalizedBehavior) => {
+    if (!activateMode(target, state, normalizedBehavior, "manual_override_assign")) {
+      return false;
+    }
+    const currentLoc = target.getLocation?.();
+    if (currentLoc) {
+      state.home = {
+        x: currentLoc.getX(),
+        y: currentLoc.getY(),
+        z: currentLoc.getZ(),
+      };
+    }
+    if (!state.autonomy) {
+      state.autonomy = {};
+    }
+    state.autonomy.manualMode = normalizedBehavior;
+    state.autonomy.modeEndsAt = Number.MAX_SAFE_INTEGER;
+    state.autonomy.nextDecisionAt = Number.MAX_SAFE_INTEGER;
+    resetMovementState(target);
+    return true;
+  };
+
+  /** Hands a bot back to autonomous mode selection. */
+  const assignAutoBehavior = (target, state) => {
+    if (!state.autonomy) {
+      state.autonomy = {};
+    }
+    state.autonomy.manualMode = null;
+    state.autonomy.modeEndsAt = 0;
+    state.autonomy.nextDecisionAt = 0;
+    if (!activateMode(target, state, behaviorMode.ROAMING, "manual_override_auto")) {
+      return false;
+    }
+    resetMovementState(target);
+    return true;
+  };
+
   const pendingRecruits = new Map();
-  api.registerCommand("bot", ({ player }) => {
-    const bot = runtime.spawnPvpBot(player.getLocation());
+  api.registerCommand("bot", ({ player, parts }) => {
+    const requested = (parts[1] ?? "pvp").toLowerCase();
+    const normalizedBehavior =
+      requested === "auto"
+        ? "auto"
+        : assignableBehaviors?.[requested] ??
+          (requested === "sparring" ? assignableBehaviors?.pvp : null);
+    if (!normalizedBehavior) {
+      player.sendMessage(`Usage: ::bot [${supportedBehaviorList}] (default pvp)`);
+      return true;
+    }
+    const bot = runtime.spawnPvpBot(player.getLocation(), { mode: normalizedBehavior });
     if (!bot) {
       player.sendMessage("Unable to spawn a PvP bot right now.");
       return true;
     }
-    // The factory queues a world login. Clan membership needs the assigned player index.
-    pendingRecruits.set(bot, player);
+    // The factory queues a world login. Clan membership and mode activation need the bot registered.
+    pendingRecruits.set(bot, { owner: player, behavior: normalizedBehavior });
     return true;
   }, PlayerRights.DEVELOPER);
   api.onPlayerProcess(({ player: owner }) => {
     if (owner.isPlayerBot?.()) return;
-    for (const [bot, pendingOwner] of pendingRecruits) {
-      if (pendingOwner !== owner || !bot.isRegistered()) continue;
+    for (const [bot, pending] of pendingRecruits) {
+      if (pending.owner !== owner || !bot.isRegistered()) continue;
       pendingRecruits.delete(bot);
       if (!owner.isRegistered()) continue;
+      const username = bot.getUsername?.();
+      const state = username ? runtime.botStatesByName.get(username) : null;
+      if (pending.behavior !== behaviorMode.PVP) {
+        if (!state) {
+          owner.sendMessage(`Unable to start ${pending.behavior} for ${username}: missing bot state.`);
+          continue;
+        }
+        // spawnPvpBot primes PvP-only autonomy; the requested behavior replaces it.
+        if (state.autonomy) state.autonomy.allowedAutonomousModes = null;
+        const assigned = pending.behavior === "auto"
+          ? assignAutoBehavior(bot, state)
+          : assignManualBehavior(bot, state, pending.behavior);
+        owner.sendMessage(assigned
+          ? `${username} spawned as ${pending.behavior}.`
+          : `Unable to start ${pending.behavior} for ${username}.`);
+        botApi.log("bot_spawn_behavior_assigned", {
+          assignedBy: owner.getUsername(),
+          target: username,
+          behavior: pending.behavior,
+          assigned,
+        });
+        continue;
+      }
       if (!owner.getRelations().getFriendsChatChannelName()) {
         FriendsChatManager.setOwnChannelName(owner, owner.getUsername());
       }
       const recruited = FriendsChatManager.recruitBot(owner, bot);
-      const state = runtime.botStatesByName.get(bot.getUsername());
       if (recruited && !recallRecruitedBot(bot, owner, state, behaviorMode)) {
         bot.setAttribute?.(ATTR_RECRUIT_OWNER_USERNAME, owner.getUsername());
         bot.setFollowing?.(owner);
@@ -69,8 +139,8 @@ function registerBotCommands(options) {
       bot.setArea(owner.getArea());
       bot.moveTo(owner.getLocation().clone());
       owner.sendMessage(recruited
-        ? `${bot.getUsername()} is geared, in your clan chat, and ready beside you.`
-        : `${bot.getUsername()} is geared and beside you, but could not join your clan chat.`);
+        ? `${username} is geared, in your clan chat, and ready beside you.`
+        : `${username} is geared and beside you, but could not join your clan chat.`);
     }
   });
 
@@ -157,17 +227,10 @@ function registerBotCommands(options) {
     }
 
     if (wantsAuto) {
-      if (!state.autonomy) {
-        state.autonomy = {};
-      }
-      state.autonomy.manualMode = null;
-      state.autonomy.modeEndsAt = 0;
-      state.autonomy.nextDecisionAt = 0;
-      if (!activateMode(target, state, behaviorMode.ROAMING, "manual_override_auto")) {
+      if (!assignAutoBehavior(target, state)) {
         player.sendMessage(`bh: failed to switch ${targetUsername} to auto`);
         return true;
       }
-      resetMovementState(target);
       taskManager.submit(flashHintArrowTaskFactory(player, target));
 
       player.sendMessage(`bh: ${targetUsername} -> auto`);
@@ -179,31 +242,10 @@ function registerBotCommands(options) {
       return true;
     }
 
-    const activated = activateMode(
-      target,
-      state,
-      normalizedBehavior,
-      "manual_override_assign"
-    );
-    if (!activated) {
+    if (!assignManualBehavior(target, state, normalizedBehavior)) {
       player.sendMessage(`bh: failed to activate mode for ${targetUsername}`);
       return true;
     }
-    const currentLoc = target.getLocation?.();
-    if (currentLoc) {
-      state.home = {
-        x: currentLoc.getX(),
-        y: currentLoc.getY(),
-        z: currentLoc.getZ(),
-      };
-    }
-    if (!state.autonomy) {
-      state.autonomy = {};
-    }
-    state.autonomy.manualMode = normalizedBehavior;
-    state.autonomy.modeEndsAt = Number.MAX_SAFE_INTEGER;
-    state.autonomy.nextDecisionAt = Number.MAX_SAFE_INTEGER;
-    resetMovementState(target);
     taskManager.submit(flashHintArrowTaskFactory(player, target));
 
     player.sendMessage(`bh: ${targetUsername} -> ${normalizedBehavior}`);

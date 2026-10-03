@@ -536,7 +536,13 @@ function createBotRegistry(options) {
     if (!state.autonomy) {
       state.autonomy = {};
     }
-    primePvpOnlyStartupState(state, nowMs);
+    // A requested non-PvP mode (::bot woodcutting) starts ungeared and unlocked, so
+    // the behavior's own tooling applies instead of a PvP preset and seeking state.
+    const requestedMode = plan.mode ?? null;
+    const wantsPvpPriming = requestedMode == null || requestedMode === behaviorMode.PVP;
+    if (wantsPvpPriming) {
+      primePvpOnlyStartupState(state, nowMs);
+    }
     if (!state.roaming) {
       state.roaming = {};
     }
@@ -551,20 +557,22 @@ function createBotRegistry(options) {
         z: assignedBounds.z ?? assignedHotspot?.area?.z ?? botSpawn.getZ(),
       };
     }
-    const pvpMetadata =
-      assignedHotspotId != null
-        ? buildHotspotPvpMetadata({
-            hotspotId: assignedHotspotId,
-          })
-        : buildRoamingPvpMetadata({
-            excludeF2p: true,
-          });
-    assignPvpMetadata(state, {
-      metadata: pvpMetadata,
-    });
-    state.pvp.presetPoolEnabled = true;
-    syncBotProfileAttribute(bot, state);
-    if (!applyInitialPvpLoadout(bot, state)) state.pvp.loadoutPending = true;
+    if (wantsPvpPriming) {
+      const pvpMetadata =
+        assignedHotspotId != null
+          ? buildHotspotPvpMetadata({
+              hotspotId: assignedHotspotId,
+            })
+          : buildRoamingPvpMetadata({
+              excludeF2p: true,
+            });
+      assignPvpMetadata(state, {
+        metadata: pvpMetadata,
+      });
+      state.pvp.presetPoolEnabled = true;
+      syncBotProfileAttribute(bot, state);
+      if (!applyInitialPvpLoadout(bot, state)) state.pvp.loadoutPending = true;
+    }
     applyForcedModeForDiagnosis(bot, state);
     bot.setLocation?.(botSpawn.clone());
     bot.setLastKnownRegion?.(botSpawn.clone());
@@ -1134,11 +1142,15 @@ function createBotRegistry(options) {
     hasControllerForPlayer,
     resolveControlledPlayer,
     spawnConfiguredBots,
-    spawnPvpBot(location) {
+    spawnPvpBot(location, options = {}) {
       let username;
       do { username = `DevBot${++developerBotId}`; }
       while (entriesByUsername.has(username) || worldGetPlayerByName(username));
-      return spawnWildernessBot({ username, spawnLocation: location });
+      return spawnWildernessBot({
+        username,
+        spawnLocation: location,
+        mode: options.mode ?? null,
+      });
     },
     scheduleInitialSpawn,
     enableControllerForPlayer,
