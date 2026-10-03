@@ -258,10 +258,6 @@ class WoodcuttingBehavior {
       if (nowMs < (state.woodcutting.nextSearchAt ?? 0)) {
         return "running";
       }
-      if (this.scheduleRespawnWaitIfNear(player, state, nowMs)) {
-        return "running";
-      }
-      state.woodcutting.nextSearchAt = nowMs + RETRY_SEARCH_MS;
 
       const treeTiers = this.resolveBestTreeTiersForLevel(
         this.getWoodcuttingLevel(player)
@@ -281,6 +277,12 @@ class WoodcuttingBehavior {
         }
       }
       if (!targetTree) {
+        // Nothing eligible in range: wait out the felled tree's respawn if we
+        // are beside it, otherwise wander and search again.
+        if (this.scheduleRespawnWaitIfNear(player, state, nowMs)) {
+          return "running";
+        }
+        state.woodcutting.nextSearchAt = nowMs + RETRY_SEARCH_MS;
         state.woodcutting.target = null;
         if (this.queueSearchWalk(player, state)) {
           state.woodcutting.nextActionAt = nowMs + WALK_COMMAND_COOLDOWN_MS;
@@ -288,10 +290,11 @@ class WoodcuttingBehavior {
         this.api.log("woodcutting_no_tree_found", {
           username: player.getUsername(),
           level: this.getWoodcuttingLevel(player),
-          visibleTrees,
         });
         return "running";
       }
+
+      state.woodcutting.nextSearchAt = nowMs + RETRY_SEARCH_MS;
 
       const distanceToTarget = this.getDistanceToTree(player, targetTree);
       if (distanceToTarget > MAX_TREE_TARGET_DISTANCE_TILES) {
@@ -328,16 +331,19 @@ class WoodcuttingBehavior {
         return "running";
       }
 
-      // If the next available tree is too far away, keep waiting at the
-      // previous tree location for its respawn instead of running off.
+      // The next eligible tree is far: wait at the felled tree for its respawn
+      // rather than running off, and only re-search once that wait is up.
       if (
         state.woodcutting.target &&
         distanceToTarget > MAX_NEXT_TREE_DISTANCE_TILES &&
         !this.isLowerTierFallbackTarget(state.woodcutting.target, targetTree)
       ) {
-        state.woodcutting.nextActionAt = nowMs + RETRY_SEARCH_MS;
-        state.woodcutting.nextSearchAt = nowMs + RETRY_SEARCH_MS;
-        return "running";
+        if (this.scheduleRespawnWaitIfNear(player, state, nowMs)) {
+          return "running";
+        }
+        // Not near the felled tree (or the wait roll said look elsewhere): drop the
+        // stale target and take the far tree instead of re-searching in place forever.
+        state.woodcutting.target = null;
       }
 
       state.woodcutting.target = {
