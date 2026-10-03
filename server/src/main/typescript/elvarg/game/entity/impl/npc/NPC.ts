@@ -118,6 +118,8 @@ export class NPC extends Mobile {
     private defenceRestoreCycle = 0;
     // ponytail: standard regeneration; add encounter-specific rates/caps with those bosses.
     private static readonly STAT_RESTORE_TICKS = 100;
+    /** Ticks per level a drained stat comes back; a boss can restore faster (the Corporeal Beast). */
+    private statRestoreTicks = NPC.STAT_RESTORE_TICKS;
 
     constructor(id: number, position: Location) {
         super(position)
@@ -394,13 +396,17 @@ export class NPC extends Mobile {
     public getDefenceLevel(): number {
         const base = this.getCurrentDefinition().getStats()[2];
         if (this.defenceLevel === null) return base;
-        const restored = Math.floor((World.getProcessCycle() - this.defenceRestoreCycle) / NPC.STAT_RESTORE_TICKS);
+        const restored = Math.floor((World.getProcessCycle() - this.defenceRestoreCycle) / this.statRestoreTicks);
         if (restored > 0) {
             this.defenceLevel = Math.min(base, this.defenceLevel + restored);
-            this.defenceRestoreCycle += restored * NPC.STAT_RESTORE_TICKS;
+            this.defenceRestoreCycle += restored * this.statRestoreTicks;
             if (this.defenceLevel === base) this.defenceLevel = null;
         }
         return this.defenceLevel ?? base;
+    }
+
+    public setStatRestoreTicks(ticks: number): void {
+        this.statRestoreTicks = Math.max(1, Math.trunc(ticks));
     }
 
     public setDefenceLevel(level: number): void {
