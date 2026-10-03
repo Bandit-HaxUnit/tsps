@@ -33,6 +33,8 @@ export interface WorldDefinitionData {
     gameframe?: WorldGameframe;
     /** False makes this a free-to-play world (FreeToPlay plugin); needs zones tagged "f2p". */
     membersWorld: boolean;
+    /** Per-plugin settings, read by PluginManager.getPluginConfig; carried for /api/world. */
+    pluginConfig?: Record<string, unknown>;
 }
 
 export class WorldDefinitionValidationError extends Error {}
@@ -165,6 +167,9 @@ export function parseWorldDefinition(value: unknown): WorldDefinitionData {
         experienceMultiplier,
         membersWorld,
         ...(world.gameframe !== undefined && { gameframe: world.gameframe as WorldGameframe }),
+        // Malformed config is ignored here as in PluginManager.loadPluginConfig, not fatal.
+        ...(world.pluginConfig && typeof world.pluginConfig === "object" && !Array.isArray(world.pluginConfig) &&
+            { pluginConfig: world.pluginConfig as Record<string, unknown> }),
     };
 }
 
@@ -245,6 +250,7 @@ function copyWorldDefinition(): WorldDefinitionData {
         experienceMultiplier: definition.experienceMultiplier,
         membersWorld: definition.membersWorld,
         ...(definition.gameframe !== undefined && { gameframe: definition.gameframe }),
+        ...(definition.pluginConfig !== undefined && { pluginConfig: structuredClone(definition.pluginConfig) }),
     };
 }
 

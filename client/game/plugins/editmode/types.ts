@@ -83,10 +83,11 @@ export interface EditModeWorldDefinition {
     zones: EditModeWorldZone[];
     disabledPlugins: string[];
     experienceMultiplier: number;
-    /** Opaque to the editor; kept so saving world.json does not drop the forced layout. */
-    gameframe?: string;
-    /** Kept so saving zones from the editor doesn't reset a free-to-play world. */
-    membersWorld?: boolean;
+    /**
+     * Every other world.json key (pluginConfig, gameframe, membersWorld, ...) is opaque to
+     * the editor and carried through unchanged so saving never drops it.
+     */
+    [key: string]: unknown;
 }
 
 export interface EditModeTile {
