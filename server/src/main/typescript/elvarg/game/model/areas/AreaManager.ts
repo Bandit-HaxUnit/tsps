@@ -90,7 +90,7 @@ export class AreaManager {
             return true;
         }
         const location = c.getLocation();
-        return Wilderness.isMulti(location.getX(), location.getY());
+        return Wilderness.isMulti(location.getX(), location.getY(), location.getZ());
     }
 
     /**
