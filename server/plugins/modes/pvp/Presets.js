@@ -38,9 +38,9 @@ const {
 
 const CURRENT_PRESET_ATTRIBUTE = "pvp:current-preset";
 
-const OPEN_ON_DEATH_ATTRIBUTE = "pvp:openPresetsOnDeath";
-const CUSTOM_PRESETS_ATTRIBUTE = "pvp:customPresets";
-const CUSTOM_PRESET_SLOT_ATTRIBUTE = "pvp:selectedCustomPresetSlot";
+const OPEN_ON_DEATH_ATTRIBUTE = "pvp:open-presets-on-death";
+const CUSTOM_PRESETS_ATTRIBUTE = "pvp:custom-presets";
+const CUSTOM_PRESET_SLOT_ATTRIBUTE = "pvp:selected-custom-preset-slot";
 let presetsEnabled = false;
 
 function shouldOpenOnDeath(player) {

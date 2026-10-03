@@ -324,7 +324,7 @@ function createBotDiagnosticsSnapshot({
   const currentTile = readTile(bot?.getLocation?.());
   const faceTile = readTile(bot?.getPositionToFace?.());
   const followUsername = bot?.getFollowing?.()?.getUsername?.() ?? null;
-  const recruitOwnerUsername = bot?.getAttribute?.("botRecruitOwnerUsername") ?? null;
+  const recruitOwnerUsername = bot?.getAttribute?.("bot-recruit-owner-username") ?? null;
   const queueSize = resolveQueueSize(queue);
   const moving = isQueueMoving(queue);
   const recentHistory =

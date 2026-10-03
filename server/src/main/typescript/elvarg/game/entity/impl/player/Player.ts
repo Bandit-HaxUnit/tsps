@@ -56,7 +56,7 @@ import { World } from "../../../World";
 import { PluginManager } from "../../../../plugins/PluginManager";
 import { ServerPerf } from "../../../../util/ServerPerf";
 
-const ATTR_SKIP_PERSISTENCE = "botSkipPersistence";
+const ATTR_SKIP_PERSISTENCE = "bot-skip-persistence";
 const DEFAULT_AUDIO_SETTINGS: Readonly<Record<number, number>> = {
     18: 0,
     168: 100,

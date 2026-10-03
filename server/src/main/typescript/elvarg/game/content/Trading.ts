@@ -12,7 +12,7 @@ import { Misc } from "../../util/Misc";
 import { PluginManager } from "../../plugins/PluginManager";
 import { encodeChatMessage, encodeTradeClose, encodeTradeOpen, encodeTradeRequest, encodeTradeUpdate, TradePartyView } from "../../net/protocol/ClientProtocol";
 
-const ATTR_SKIP_PERSISTENCE = "botSkipPersistence";
+const ATTR_SKIP_PERSISTENCE = "bot-skip-persistence";
 
 class PlayerItemContainer extends ItemContainer {
     constructor(player, private readonly execFunc: Function) {

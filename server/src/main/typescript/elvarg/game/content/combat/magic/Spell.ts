@@ -8,7 +8,7 @@ import { Skill } from "../../../model/Skill";
 import { PluginManager } from "../../../../plugins/PluginManager";
 
 export abstract class Spell {
-    private static readonly NEXT_CAST_AT = "magic:nextCastAt";
+    private static readonly NEXT_CAST_AT = "magic:next-cast-at";
     private static readonly CAST_DELAY_MS = 600;
 
     abstract spellId(): number;

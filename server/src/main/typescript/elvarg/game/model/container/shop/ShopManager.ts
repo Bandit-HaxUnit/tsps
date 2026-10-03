@@ -78,7 +78,7 @@ export class ShopManager {
     private static readonly QUANTITY_VARBIT = 6348;
     private static readonly QUANTITY_MODE_BY_BUTTON = new Map([[5, 0], [8, 1], [10, 2], [12, 3], [14, 4]]);
     private static readonly QUANTITY_BY_MODE = [0, 1, 5, 10, 50];
-    private static readonly QUANTITY_MODE_ATTRIBUTE = "shop:quantityMode";
+    private static readonly QUANTITY_MODE_ATTRIBUTE = "shop:quantity-mode";
     private static readonly POINTS_ATTRIBUTE = "shop:points";
     private static readonly shopsById = new Map<number, RuntimeShop>();
     private static readonly activeShopByPlayer = new WeakMap<object, number>();

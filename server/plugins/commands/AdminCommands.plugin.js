@@ -85,9 +85,9 @@ const NPC_FACING_ALIASES = Object.freeze({
   SOUTHEAST: "SOUTH_EAST",
   SOUTH_EAST: "SOUTH_EAST",
 });
-const GLOW_PRESET_ATTRIBUTE = "visual:glowPreset";
-const GLOW_INTENSITY_ATTRIBUTE = "visual:glowIntensity";
-const GLOW_CYCLE_TASK_KEY_ATTRIBUTE = "visual:glowCycleTaskKey";
+const GLOW_PRESET_ATTRIBUTE = "visual:glow-preset";
+const GLOW_INTENSITY_ATTRIBUTE = "visual:glow-intensity";
+const GLOW_CYCLE_TASK_KEY_ATTRIBUTE = "visual:glow-cycle-task-key";
 const GLOW_CYCLE_PRESETS = Object.freeze([
   "blood",
   "toxic",
