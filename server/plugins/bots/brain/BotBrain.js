@@ -5,6 +5,7 @@ const {
   dispatchMovementRequest,
   peekMovementRequest,
 } = require("../behaviours/navigation/BotNavigation");
+const { maybeCrossDitch } = require("./DitchCrossing");
 
 /**
  * Void-style behaviour runner: one action per bot per tick, driven by a frame
@@ -209,6 +210,16 @@ class BotBrain {
     }
     const request = peekMovementRequest(player);
     if (!request) {
+      return;
+    }
+    if (
+      maybeCrossDitch({
+        player,
+        state: this.state ?? null,
+        world: this.world,
+        request,
+      })
+    ) {
       return;
     }
     const result = dispatchMovementRequest(player, request, this.state ?? undefined);

@@ -115,6 +115,11 @@ function bootPlayerBotsRuntime(options = {}) {
 
   const brainWorld = {
     objectSearch: traversalAssist,
+    ditch: {
+      objectId: config.wildernessDitchObjectId,
+      attemptCooldownMs: config.ditchAttemptCooldownMs,
+      postCrossDelayMs: config.ditchPostCrossRetryDelayMs,
+    },
     emitObjectInteraction: (event) => botApi.emitObjectInteraction(event),
     isBusy: (player) =>
       Woodcutting.isWoodcuttingActive?.(player) === true ||
