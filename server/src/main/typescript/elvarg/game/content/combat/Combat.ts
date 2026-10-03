@@ -397,6 +397,16 @@ export class Combat {
     }
 
     public reset(): void {
+        this.clearInteraction();
+        this.character.getMovementQueue().reset();
+    }
+
+    /**
+     * Clears the current interaction but leaves the walk queue intact, matching the
+     * OSRS rule that an inventory item action is a hard interruption which does not
+     * stop queued movement (osrs-docs: Entity Interactions).
+     */
+    public clearInteraction(): void {
         this.manualMovementUntilCycle = -1;
         const previousTarget = this.target;
         this.generation++;
@@ -405,7 +415,6 @@ export class Combat {
         this.cycleState = null;
         if (previousTarget && this.method) this.method.onCombatEnded(this.character, previousTarget);
         this.method = null;
-        this.character.getMovementQueue().reset();
         this.character.setMobileInteraction(null);
         this.character.setPositionToFace(null);
         if (this.character.isPlayer()) {

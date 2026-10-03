@@ -595,6 +595,17 @@ export class Player extends Mobile {
         return false;
     }
 
+    /**
+     * OSRS hard interruption for item actions inside the inventory: clears the queued
+     * interaction (combat target or walk-to callback) but leaves the walk queue intact,
+     * so the player keeps walking to the clicked destination without completing the
+     * action. osrs-docs: Entity Interactions - Interruptions.
+     */
+    clearPendingAction(): void {
+        this.getCombat().clearInteraction();
+        TaskManager.cancelWalkToTasks(this.getIndex());
+    }
+
     isStaff(): boolean {
         return this.rights !== PlayerRights.NONE;
     }

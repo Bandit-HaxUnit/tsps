@@ -892,7 +892,6 @@ function handlePotionDrink(player, itemId, slot) {
   timers.extendOrRegister(TimerKey.FOOD, 3);
 
   player.getPacketSender().sendInterfaceRemoval();
-  player.getCombat().reset();
   player.performAnimation(DRINK_ANIMATION);
   Sounds.sendSound(player, Sound.DRINK);
 
