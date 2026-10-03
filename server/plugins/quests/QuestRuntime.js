@@ -442,4 +442,5 @@ module.exports = {
   openJournalBySlot,
   startDialogue,
   startTranscript,
+  loadTranscripts,
 };

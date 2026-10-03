@@ -410,7 +410,21 @@ export interface PluginCombatHitRollEvent {
   target: any;
   combatType: any;
   forceAccurate: boolean;
+  /** Set to make an accurate roll land on the maximum hit. */
+  forceMaxHit?: boolean;
   bypassProtectionPrayer: boolean;
+}
+
+/**
+ * Fired whenever combat asks how far an attacker reaches. Handlers may lower or raise
+ * `distance`; it never goes below 1. `manualCast` is a player's single click-cast spell.
+ */
+export interface PluginCombatAttackDistanceEvent {
+  attacker: any;
+  target: any;
+  combatType: any;
+  manualCast: boolean;
+  distance: number;
 }
 
 export interface PluginCombatHitResolvedEvent {
@@ -784,6 +798,7 @@ export interface PluginApi {
   ): void;
   onCombatHitRoll(handler: (event: PluginCombatHitRollEvent) => void): void;
   onCombatHitResolved(handler: (event: PluginCombatHitResolvedEvent) => void): void;
+  onCombatAttackDistance(handler: (event: PluginCombatAttackDistanceEvent) => void): void;
   onSpellDisabled(handler: (event: PluginSpellDisabledEvent) => void): void;
   onSpellRuneBypass(handler: (event: PluginSpellRuneBypassEvent) => void): void;
   onNpcAggressionTolerance(
@@ -1065,6 +1080,7 @@ export interface PluginCoreApi {
   SkullType: any;
   CombatConstants: any;
   DamageFormulas: any;
+  AccuracyFormulasDpsCalc: any;
   PendingHit: any;
   HitDamage: any;
   HitMask: any;

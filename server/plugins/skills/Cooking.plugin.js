@@ -238,6 +238,14 @@ function handleRangeCook(activeSessions, event) {
   );
 }
 
+/** "cooking:raw-xp": the Cooking XP for cooking request.rawId, e.g. for the infernal harpoon. */
+function answerRawXp(request) {
+  const cookable = COOKABLE_BY_RAW.get(request.rawId);
+  if (cookable) {
+    request.xp = cookable.xp;
+  }
+}
+
 module.exports = {
   name: "Cooking",
   register(api) {
@@ -255,6 +263,7 @@ module.exports = {
 
     api.onItemOnObject(handleCook.bind(null, activeSessions), { noted: false });
     api.onObjectInteraction("Range", { Cook: handleRangeCook.bind(null, activeSessions) });
+    api.onCustomEvent("cooking:raw-xp", answerRawXp);
 
     api.log("registered", {
       cookables: COOKABLES.length,

@@ -712,8 +712,8 @@ test("cancelling a combat target stops its animation and future attacks without 
     getMovementQueue: () => ({ reset() {} }), setMobileInteraction() {}, setPositionToFace() {},
     performAnimation: animation => animations.push(animation.getId()),
   };
-  const combat = { character, target, generation: 3, autoRetaliating: true,
-    cycleState: { target }, specialAttackQueued: true, hitQueue: hits };
+  const combat = Object.assign(Object.create(Combat.prototype), { character, target, generation: 3, autoRetaliating: true,
+    cycleState: { target }, specialAttackQueued: true, hitQueue: hits });
   Combat.prototype.reset.call(combat);
   assert.equal(combat.target, null); assert.equal(combat.generation, 4);
   assert.equal(combat.cycleState, null); assert.equal(combat.specialAttackQueued, false);

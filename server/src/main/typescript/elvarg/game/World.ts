@@ -1057,7 +1057,13 @@ export class World {
                     if (player.isPlayerBot?.() !== true) {
                         activeRegionsChanged = true;
                     }
-                    World.players.remove(player);
+                    try {
+                        World.players.remove(player);
+                    } catch (e) {
+                        // A removal hook (logout/save) threw: the player is already deregistered,
+                        // so keep the tick alive and leave the failure observable.
+                        console.error(`[world] Failed to remove player ${player.getUsername?.() ?? "unknown"}`, e);
+                    }
                     World.removePlayerQueue.splice(index, 1);
                 }
                 amount++;
@@ -1108,7 +1114,12 @@ export class World {
                 const wasRegistered =
                     typeof npc.isRegistered === "function" ? npc.isRegistered() : null;
                 const indexBefore = typeof npc.getIndex === "function" ? npc.getIndex() : null;
-                World.npcs.remove(npc);
+                try {
+                    World.npcs.remove(npc);
+                } catch (e) {
+                    // Same contract as players: a throwing removal hook must not abort the tick.
+                    console.error("[world] Failed to remove npc", indexBefore, e);
+                }
                 if (typeof npc.isPet === "function" && npc.isPet()) {
                     const owner: any = typeof npc.getOwner === "function" ? npc.getOwner() : null;
                     const ownerName = owner && typeof owner.getUsername === "function"
