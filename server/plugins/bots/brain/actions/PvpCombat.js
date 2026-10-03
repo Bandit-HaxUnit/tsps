@@ -12,7 +12,7 @@ function createPvpCombatAction(spec, controller) {
     update(ctx) {
       const player = ctx.player;
       const state = ctx.state;
-      if (!player || !state || !state.pvp || !controller?.isActive?.()) {
+      if (!player || !state || !state.pvp || typeof controller?.tick !== "function") {
         return "failed";
       }
       if ((player.getHitpoints?.() ?? 0) <= 0 || player.isDyingReturn?.() === true) {

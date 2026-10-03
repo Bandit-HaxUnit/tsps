@@ -38,7 +38,6 @@ const { ReturnHomeModeHandler } = require("../behaviours/modes/ReturnHomeModeHan
 const { createBotRegistry } = require("./BotRegistry");
 const { createBotTickMetrics } = require("./BotTickMetrics");
 const { createBotActivityRegistry } = require("../brain/BotActivityRegistry");
-const { createPvpController } = require("../brain/pvp/PvpController");
 const { registerBrainProgressEvents } = require("../brain/BotBrainEvents");
 const { listCatalogObjectIds } = require("../brain/BotObjectCatalog");
 const { inventoryProductionCount } = require("../brain/actions/InteractObject");
@@ -146,12 +145,10 @@ function bootPlayerBotsRuntime(options = {}) {
     "player_bots_mode_handlers"
   );
 
-  // Brain PvP reuses the mode handler's engine instead of duplicating its nodes.
-  brainWorld.pvpController = createPvpController({
-    behavior: modeHandlers[behaviorMode.PVP] ?? null,
-    api: botApi,
-    getEntries: () => entries,
-  });
+  // The pvp mode handler is the same controller the brain drives; it just needs
+  // the runtime entries for target selection.
+  brainWorld.pvpController = modeHandlers[behaviorMode.PVP] ?? null;
+  brainWorld.pvpController?.setEntrySource?.(() => entries);
   let brainRegistry = null;
   try {
     brainRegistry = createBotActivityRegistry({ api: botApi, world: brainWorld });
