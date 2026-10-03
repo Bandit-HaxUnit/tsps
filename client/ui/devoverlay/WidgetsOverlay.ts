@@ -21,11 +21,12 @@ import { drawTextGL } from "../../widgets/components/TextRenderer";
 import type { WidgetManager } from "../../widgets/WidgetManager";
 import type { GameFrameDrawContext } from "../../game/plugins/ClientPluginManager";
 import { Overlay, OverlayInitArgs, OverlayUpdateArgs, RenderPhase } from "./Overlay";
+import { CLIENT_TYPE_ENHANCED, reportedClientType } from "../../rs/cs2/ClientType";
 
 /**
- * The enhanced client's "show mouseover text" setting. We report clienttype 10, so cache
- * script 4731 only leaves room for the top-left text above HUD overlays while it is 1; the
- * text follows it so the two never disagree. The server turns it on at login.
+ * The enhanced client's "show mouseover text" setting. For clienttype 10 the game draws that
+ * text itself (cache script 4726, while this is 1) and lays HUD overlays out below it (4731).
+ * The server turns it on at login.
  */
 const VARBIT_SHOW_MOUSEOVER_TEXT = 12377;
 
@@ -595,6 +596,11 @@ export class WidgetsOverlay implements Overlay {
     private getMouseOverTextVisualState(menuOpen: boolean): MouseOverTextVisualState {
         const client = this.ctx.getGameContext?.()?.osrsClient;
         if (!client?.showMouseOverText || menuOpen || client.menuOpen) {
+            return { signature: "hidden" };
+        }
+        // As the enhanced client, the game draws the mouseover text itself (script 4726);
+        // drawing ours too showed it twice. Ours is only for other client types.
+        if (reportedClientType(client.widgetManager?.rootInterface) === CLIENT_TYPE_ENHANCED) {
             return { signature: "hidden" };
         }
         if (client.varManager?.getVarbit?.(VARBIT_SHOW_MOUSEOVER_TEXT) === 0) {
