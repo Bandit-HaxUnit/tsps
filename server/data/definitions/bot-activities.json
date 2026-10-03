@@ -211,6 +211,20 @@
           "type": "pvpCombat"
         }
       ]
+    },
+    {
+      "id": "pvp_engage",
+      "mode": "pvp",
+      "capacity": 64,
+      "repeat": false,
+      "ephemeral": true,
+      "failureCooldownSeconds": 5,
+      "actions": [
+        {
+          "type": "pvpCombat",
+          "exitWhenIdle": true
+        }
+      ]
     }
   ],
   "sites": [

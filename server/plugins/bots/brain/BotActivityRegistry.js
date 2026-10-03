@@ -173,6 +173,7 @@ function compileActivity(definition, templates, world, options = {}) {
     mode: merged.mode ?? null,
     capacity: Number.isFinite(merged.capacity) ? Math.max(1, Math.floor(merged.capacity)) : 1,
     repeat: merged.repeat === true,
+    ephemeral: merged.ephemeral === true,
     failureCooldownMs: Math.max(
       0,
       Math.floor(Number(merged.failureCooldownSeconds ?? 15)) * 1000

@@ -8,10 +8,8 @@ const {
 } = require("../../../../interface/FriendsChatManager");
 const { resolveAlternativeLoadoutId } = require("../../pvp/PvpAssignment");
 const { applyGeneratedPvpLoadout } = require("../../policies/PvpLoadoutPolicy");
-const {
-  setModeFollowBack,
-  setModePvp,
-} = require("../../state/PlayerBotState");
+const { setModeFollowBack } = require("../../state/PlayerBotState");
+const { startReactivePvp } = require("../../../brain/pvp/ReactivePvp");
 const {
   ATTR_RECRUIT_OWNER_USERNAME,
   ATTR_RECRUIT_RETURN_AFTER_DEATH_AT,
@@ -90,15 +88,13 @@ class ClanRecruitActionNode {
         state.mode !== this.behaviorMode.PVP ||
         state?.pvp?.targetUsername !== assistTarget.getUsername?.()
       ) {
-        setModePvp(
-          player,
-          state,
-          assistTarget,
-          nowMs,
-          PVP_DURATION_MS,
-          this.behaviorMode,
-          { allowInCombatTransition: true }
-        );
+        if (state.pvp) {
+          state.pvp.targetUsername = assistTarget.getUsername?.() ?? null;
+          state.pvp.targetPlayer = assistTarget;
+          state.pvp.endsAt = nowMs + PVP_DURATION_MS;
+          state.pvp.nextActionAt = nowMs;
+        }
+        startReactivePvp(player, state, nowMs);
       }
       return "failure";
     }

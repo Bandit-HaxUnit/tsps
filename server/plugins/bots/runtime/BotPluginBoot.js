@@ -11,7 +11,6 @@ const { createBotPlayer } = require("../behaviours/spawn/BotPlayerFactory");
 const {
   clearFollowState,
   createInitialState,
-  isPvpOnlyBotState,
   resetMovementState,
 } = require("../behaviours/state/PlayerBotState");
 const {
@@ -39,6 +38,8 @@ const { createBotRegistry } = require("./BotRegistry");
 const { createBotTickMetrics } = require("./BotTickMetrics");
 const { createBotActivityRegistry } = require("../brain/BotActivityRegistry");
 const { attachBrain } = require("../brain/attachBrain");
+const { PvpController } = require("../brain/pvp/PvpController");
+const { configureReactivePvp } = require("../brain/pvp/ReactivePvp");
 const { registerBrainProgressEvents } = require("../brain/BotBrainEvents");
 const { listCatalogObjectIds } = require("../brain/BotObjectCatalog");
 const { inventoryProductionCount } = require("../brain/actions/InteractObject");
@@ -146,10 +147,11 @@ function bootPlayerBotsRuntime(options = {}) {
     "player_bots_mode_handlers"
   );
 
-  // The pvp mode handler is the same controller the brain drives; it just needs
-  // the runtime entries for target selection.
-  brainWorld.pvpController = modeHandlers[behaviorMode.PVP] ?? null;
-  brainWorld.pvpController?.setEntrySource?.(() => entries);
+  // One pvp engine for every driver: brain activities, the tree's defensive
+  // branch and reactive combat hand-offs.
+  const pvpController = new PvpController(botStatesByName, botApi, { behaviorMode });
+  pvpController.setEntrySource(() => entries);
+  brainWorld.pvpController = pvpController;
   let brainRegistry = null;
   try {
     brainRegistry = createBotActivityRegistry({ api: botApi, world: brainWorld });
@@ -195,6 +197,7 @@ function bootPlayerBotsRuntime(options = {}) {
     behaviorMode,
     ...(config.treeOptions ?? {}),
     modeHandlers,
+    pvpController,
     traversalService,
   });
 
@@ -282,49 +285,6 @@ function bootPlayerBotsRuntime(options = {}) {
         taskProfiler: config.taskProfiler,
         tickMetrics,
         executionBudget: config.executionBudget,
-        handlePersistentPvpRespawn: (entry, nowMs) => {
-          const player = entry?.player;
-          const state = entry?.state;
-          if (!player || !state?.pvp) {
-            return false;
-          }
-          if (isPvpOnlyBotState(state)) {
-            // PlayerDeath already uses the registry's assigned respawn resolver.
-            const hotspotId = state.pvp.hotspotId;
-            const nextMetadata = hotspotId
-              ? buildHotspotPvpMetadata({ config, hotspotId })
-              : buildRoamingPvpMetadata({ config, excludeF2p: true });
-            assignPvpMetadata(state, {
-              config,
-              metadata: nextMetadata,
-            });
-          }
-          state.pvp.targetUsername = null;
-          state.pvp.targetPlayer = null;
-          state.pvp.currentTargetScore = 0;
-          state.pvp.targetLockUntil = 0;
-          state.pvp.endsAt = 0;
-          player.getCombat?.().reset?.();
-          player.getCombat?.().setUnderAttack?.(null);
-          player.setFollowing?.(null);
-          player.setCombatFollowing?.(null);
-          player.setMobileInteraction?.(null);
-          player.setPositionToFace?.(null);
-          player.getMovementQueue?.().reset?.();
-          state.pvp.nextActionAt = nowMs + randomInRange(3500, 7000);
-          state.pvp.phase = "seeking";
-
-          const loadoutApplied = applyGeneratedPvpLoadout(player, state, {
-            api: botApi,
-          });
-
-          botApi.log("persistent_pvp_respawn_reset", {
-            username: player.getUsername?.(),
-            hotspotId: state.pvp.hotspotId ?? null,
-            loadoutId: state.pvp.loadoutId ?? null,
-          });
-          return loadoutApplied;
-        },
       })
     );
     behaviorTaskStarted = true;
@@ -405,6 +365,12 @@ function bootPlayerBotsRuntime(options = {}) {
   });
 
   registerBrainProgressEvents({ api, runtime });
+  configureReactivePvp({
+    runtime,
+    registry: brainRegistry,
+    world: brainWorld,
+    resetMovementState,
+  });
 
   const botStatusReporter = new BotStatusReporter({
     api: botApi,

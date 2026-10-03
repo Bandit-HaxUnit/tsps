@@ -38,6 +38,7 @@ function registerBotCommands(options) {
     }) === true;
   const supportedBehaviorList = [
     ...Object.keys(assignableBehaviors ?? {}).sort((a, b) => a.localeCompare(b)),
+    "pvp",
     "auto",
   ].join("|");
 
@@ -82,21 +83,26 @@ function registerBotCommands(options) {
   const pendingRecruits = new Map();
   api.registerCommand("bot", ({ player, parts }) => {
     const requested = (parts[1] ?? "pvp").toLowerCase();
+    const isPvpRequest = requested === "pvp" || requested === "sparring";
     const normalizedBehavior =
       requested === "auto"
         ? "auto"
         : assignableBehaviors?.[requested] ??
-          (requested === "sparring" ? assignableBehaviors?.pvp : null);
+          (isPvpRequest ? behaviorMode.PVP : null);
     if (!normalizedBehavior) {
       player.sendMessage(`Usage: ::bot [${supportedBehaviorList}] (default pvp)`);
       return true;
     }
-    const brainActivity =
-      process.env.BOT_BRAIN_MODES === "1" && brainRegistry
-        ? brainRegistry.activities?.find(
-            (activity) => activity.mode === normalizedBehavior
-          ) ?? null
-        : null;
+    // PvP is brain-only now; other modes stay behind the BOT_BRAIN_MODES flag.
+    const brainActivity = brainRegistry
+      ? isPvpRequest
+        ? brainRegistry.byId?.get("pvp") ?? null
+        : process.env.BOT_BRAIN_MODES === "1"
+          ? brainRegistry.activities?.find(
+              (activity) => activity.mode === normalizedBehavior
+            ) ?? null
+          : null
+      : null;
     const bot = runtime.spawnPvpBot(player.getLocation(), { mode: normalizedBehavior });
     if (!bot) {
       player.sendMessage("Unable to spawn a PvP bot right now.");

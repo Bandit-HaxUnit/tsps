@@ -13,8 +13,8 @@ const {
 } = require("./BotPersistenceConstants");
 const {
   isPvpOnlyBotState,
-  setModePvp,
 } = require("../behaviours/state/PlayerBotState");
+const { startReactivePvp } = require("../brain/pvp/ReactivePvp");
 const {
   randomInRange,
 } = require("../behaviours/navigation/BotNavigation");
@@ -191,15 +191,13 @@ function handleClanRecruitAssist({ runtime, behaviorMode, player, target, nowMs,
 
     if (!alreadyHelping) {
       if (target.isPlayer?.() === true) {
-        setModePvp(
-          bot,
-          state,
-          target,
-          nowMs,
-          CLAN_ASSIST_DURATION_MS,
-          behaviorMode,
-          { allowInCombatTransition: true }
-        );
+        if (state.pvp) {
+          state.pvp.targetUsername = target.getUsername?.() ?? null;
+          state.pvp.targetPlayer = target;
+          state.pvp.endsAt = nowMs + CLAN_ASSIST_DURATION_MS;
+          state.pvp.nextActionAt = nowMs;
+        }
+        startReactivePvp(bot, state, nowMs);
       }
       bot.getMovementQueue?.().reset?.();
     } else if (target.isPlayer?.() === true && state?.pvp) {

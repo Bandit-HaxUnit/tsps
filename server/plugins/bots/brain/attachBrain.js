@@ -22,14 +22,35 @@ function attachBrain(options = {}) {
   if (state.autonomy && activity.mode !== "pvp") {
     state.autonomy.allowedAutonomousModes = null;
   }
-  entry.brain = new BotBrain({
+  const brain = new BotBrain({
     player: bot,
     state,
     registry,
     world,
     activity,
+    ephemeral: activity.ephemeral === true,
     nowMs: nowMs ?? Date.now(),
   });
+  if (brain.ephemeral) {
+    const previousMode = state.mode;
+    brain.onExhausted = () => {
+      if (entry.brain !== brain) {
+        return;
+      }
+      entry.brain = null;
+      if (previousMode && state.mode === activity.mode) {
+        state.mode = previousMode;
+      }
+      if (state.pvp) {
+        state.pvp.targetUsername = null;
+        state.pvp.targetPlayer = null;
+        state.pvp.phase = "idle";
+        state.pvp.endsAt = 0;
+      }
+      resetMovementState?.(bot);
+    };
+  }
+  entry.brain = brain;
   resetMovementState?.(bot);
   return true;
 }

@@ -48,11 +48,9 @@ class PlayerBotBehaviorTreeFactory {
       this.behaviorMode.ROAMING,
       "ROAMING"
     );
-    this.pvpBehavior = requireModeBehavior(
-      this.modeHandlers,
-      this.behaviorMode.PVP,
-      "PVP"
-    );
+    // PvP moved to the brain; the tree still needs the controller for the
+    // shared defensive/retreat branch that runs before every other action.
+    this.pvpBehavior = options.pvpController ?? null;
     this.woodcuttingBehavior = requireModeBehavior(
       this.modeHandlers,
       this.behaviorMode.WOODCUTTING,
@@ -150,8 +148,6 @@ class PlayerBotBehaviorTreeFactory {
           return this.smeltingBehavior.tick(context);
         case this.behaviorMode.FIREMAKING:
           return this.firemakingBehavior.tick(context);
-        case this.behaviorMode.PVP:
-          return this.pvpBehavior.tick(context);
         case this.behaviorMode.ROAMING:
           return roamingCooldownNode.tick(context);
         default:
@@ -162,7 +158,7 @@ class PlayerBotBehaviorTreeFactory {
       new ActionNode((context) => this.maintainCombatBoostsActionNode.tick(context)),
       new ActionNode((context) => {
         // Escape decisions must run before queued chasing, food, or target selection.
-        const defensive = this.pvpBehavior.tickDefensive(context);
+        const defensive = this.pvpBehavior?.tickDefensive(context) ?? { handled: false };
         if (!defensive.handled) return "failure";
         if (resolveState(context)?.pvp?.retreat && !context.player.isTeleportingReturn()) {
           this.eatFoodActionNode.tick(context);

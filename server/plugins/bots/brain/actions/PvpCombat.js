@@ -3,10 +3,13 @@
 /**
  * Brain action that keeps a PvP bot in the fight loop: re-gear after death,
  * seek a target when idle, then hand every tick to the shared PvP engine.
- * Always reports "running" so the activity repeats for the bot's whole life.
+ *
+ * exitWhenIdle marks a reactive overlay (a recruit defending its owner): it
+ * ends the activity once the seeded target is gone so the tree resumes.
  */
 function createPvpCombatAction(spec, controller) {
   const id = spec?.id ?? "pvpCombat";
+  const exitWhenIdle = spec?.exitWhenIdle === true;
   return {
     id,
     update(ctx) {
@@ -30,7 +33,12 @@ function createPvpCombatAction(spec, controller) {
         (target.getHitpoints?.() ?? 1) > 0;
       if (targetAlive) {
         controller.tick({ player, state, nowMs: ctx.nowMs });
-      } else if (ctx.nowMs >= Number(state.pvp.nextActionAt ?? 0)) {
+        return "running";
+      }
+      if (exitWhenIdle) {
+        return "success";
+      }
+      if (ctx.nowMs >= Number(state.pvp.nextActionAt ?? 0)) {
         controller.seek({ player, state, nowMs: ctx.nowMs });
       }
       return "running";

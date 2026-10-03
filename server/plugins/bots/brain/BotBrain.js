@@ -46,6 +46,11 @@ class BotBrain {
     this.frames = [];
     this.activeActivity = null;
     this.lastError = null;
+    // Ephemeral brains are reactive overlays (a recruit defending its owner):
+    // when the activity ends, onExhausted hands the bot back to the tree.
+    this.ephemeral = options.ephemeral === true;
+    this.onExhausted =
+      typeof options.onExhausted === "function" ? options.onExhausted : null;
     if (options.activity) {
       this.pushActivity(options.activity, options.nowMs ?? Date.now());
     }
@@ -175,6 +180,10 @@ class BotBrain {
       parent.state = FRAME_STATE.PENDING;
       return;
     }
+    if (this.ephemeral) {
+      this.onExhausted?.();
+      return;
+    }
     this.assignNext(nowMs);
   }
 
@@ -236,7 +245,9 @@ class BotBrain {
     const frame = this.frames[this.frames.length - 1];
     this.debugTick(frame);
     if (!frame) {
-      this.assignNext(nowMs);
+      if (!this.ephemeral) {
+        this.assignNext(nowMs);
+      }
       return "running";
     }
     switch (frame.state) {
@@ -315,6 +326,10 @@ class BotBrain {
     if (parent) {
       // A resolver failed: retry the parent next tick, it will look for another.
       parent.state = FRAME_STATE.PENDING;
+      return;
+    }
+    if (this.ephemeral) {
+      this.onExhausted?.();
       return;
     }
     this.assignNext(nowMs);
