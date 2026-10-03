@@ -72,17 +72,7 @@ function resolveModeActionAt(state) {
   switch (state?.mode) {
     case "roaming":
       return state?.roaming?.nextWalkAt ?? null;
-    case "woodcutting":
-      return state?.woodcutting?.nextActionAt ?? null;
-    case "mining":
-      return state?.mining?.nextActionAt ?? null;
-    case "firemaking":
-      return state?.firemaking?.nextActionAt ?? null;
-    case "smelting":
-      return state?.smelting?.nextActionAt ?? null;
     case "pvp":
-      return state?.pvp?.nextActionAt ?? null;
-    case "sparring":
       return state?.pvp?.nextActionAt ?? null;
     default:
       return null;
@@ -283,26 +273,6 @@ function describeModeState(state, nowMs) {
     return null;
   }
   const next = (value) => `next=${msRemainingLabel(value, nowMs)}`;
-  if (state.mode === "woodcutting" && state.woodcutting) {
-    return `target=${formatPoint(state.woodcutting.target)} ${next(
-      state.woodcutting.nextActionAt
-    )}`;
-  }
-  if (state.mode === "mining" && state.mining) {
-    return `target=${formatPoint(state.mining.target)} ${next(
-      state.mining.nextActionAt
-    )}`;
-  }
-  if (state.mode === "firemaking" && state.firemaking) {
-    return `phase=${state.firemaking.phase ?? "n/a"} tile=${formatPoint(
-      state.firemaking.lightTile
-    )} ${next(state.firemaking.nextActionAt)}`;
-  }
-  if (state.mode === "smelting" && state.smelting) {
-    return `phase=${state.smelting.phase ?? "n/a"} ${next(
-      state.smelting.nextActionAt
-    )}`;
-  }
   if (state.mode === "roaming" && state.roaming) {
     return `target=${formatPoint(state.roaming.target)} nextWalk=${msRemainingLabel(
       state.roaming.nextWalkAt,

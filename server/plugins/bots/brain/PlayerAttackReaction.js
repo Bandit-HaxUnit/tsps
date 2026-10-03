@@ -1,8 +1,7 @@
 "use strict";
 
 const { isPvpOnlyBotState } = require("../behaviours/state/PlayerBotState");
-const { startReactivePvp } = require("./pvp/ReactivePvp");
-const { startBankTrip } = require("./BankTripService");
+const { startBankTrip, startReactivePvp } = require("./BrainActivities");
 
 const PERSISTENT_PVP_REACTION_DURATION_MS = 30000;
 const FIGHT_REACTION_DURATION_MS = 30000;

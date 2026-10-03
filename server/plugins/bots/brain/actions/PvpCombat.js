@@ -5,7 +5,7 @@
  * seek a target when idle, then hand every tick to the shared PvP engine.
  *
  * exitWhenIdle marks a reactive overlay (a recruit defending its owner): it
- * ends the activity once the seeded target is gone so the tree resumes.
+ * ends the activity once the seeded target is gone so the parent resumes.
  */
 function createPvpCombatAction(spec, controller) {
   const id = spec?.id ?? "pvpCombat";

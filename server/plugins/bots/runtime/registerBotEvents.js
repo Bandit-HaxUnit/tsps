@@ -14,7 +14,7 @@ const {
 const {
   isPvpOnlyBotState,
 } = require("../behaviours/state/PlayerBotState");
-const { startReactivePvp } = require("../brain/pvp/ReactivePvp");
+const { startReactivePvp } = require("../brain/BrainActivities");
 const {
   handlePlayerAttackReaction,
 } = require("../brain/PlayerAttackReaction");
@@ -244,7 +244,6 @@ function registerBotEvents(options) {
     npcAggroBlockedModes,
     avengeOpponentPolicy,
     pvpJumpOnKillPolicy,
-    followBackDurationMs,
     playerAttackFleeChance,
   } = options;
 

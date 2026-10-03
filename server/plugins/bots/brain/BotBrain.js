@@ -22,6 +22,13 @@ const FRAME_STATE = Object.freeze({
   FAILED: "failed",
 });
 
+/** Hands state.mode back when an overlay that set it ends. */
+function restoreMode(state, endingMode, previousMode) {
+  if (state && endingMode && previousMode && state.mode === endingMode) {
+    state.mode = previousMode;
+  }
+}
+
 class BehaviourFrame {
   constructor(behaviour) {
     this.behaviour = behaviour;
@@ -47,8 +54,8 @@ class BotBrain {
     this.world = options.world;
     this.frames = [];
     this.lastError = null;
-    // Ephemeral brains are reactive overlays (a recruit defending its owner):
-    // when the activity ends, onExhausted hands the bot back to the tree.
+    // Ephemeral brains are reactive overlays (a bot fighting back): when the
+    // activity ends, onExhausted restores whatever ran before it.
     this.ephemeral = options.ephemeral === true;
     this.onExhausted =
       typeof options.onExhausted === "function" ? options.onExhausted : null;
@@ -87,11 +94,6 @@ class BotBrain {
       this.registry?.release?.(frame.behaviour);
       frame.occupied = false;
     }
-  }
-
-  /** Releases the current frame's slot (used when swapping activities). */
-  releaseActivity() {
-    this.releaseFrame(this.frames[this.frames.length - 1]);
   }
 
   isRunningActivity(activityId) {
@@ -181,23 +183,33 @@ class BotBrain {
   }
 
   completeFrame(nowMs) {
-    const frame = this.frames.pop();
-    if (!frame) {
-      return;
+    const frame = this.frames[this.frames.length - 1];
+    if (frame) {
+      this.endFrame(frame, nowMs);
     }
+  }
+
+  /**
+   * Pops the top frame and resumes its parent (a failed resolver makes the
+   * parent look for another). A failed activity is put on cooldown so the
+   * next assignment picks something else.
+   */
+  endFrame(frame, nowMs, failed = false) {
+    this.frames.pop();
     this.releaseFrame(frame);
+    const behaviour = frame.behaviour;
+    if (failed && behaviour.resolver !== true && behaviour.actions?.length) {
+      this.registry?.blockActivity?.(
+        this.player,
+        behaviour.id,
+        nowMs,
+        behaviour.failureCooldownMs
+      );
+    }
     const parent = this.frames[this.frames.length - 1];
     if (parent) {
       // An overlay (pvp_engage) may have changed state.mode; give it back.
-      const state = this.state;
-      if (
-        state &&
-        parent.behaviour.mode &&
-        frame.behaviour.mode &&
-        state.mode === frame.behaviour.mode
-      ) {
-        state.mode = parent.behaviour.mode;
-      }
+      restoreMode(this.state, behaviour.mode, parent.behaviour.mode);
       parent.state = FRAME_STATE.PENDING;
       return;
     }
@@ -220,7 +232,7 @@ class BotBrain {
     };
   }
 
-  /** Brain entries skip the behaviour tree, so they dispatch their own movement. */
+  /** Dispatches the bot's pending movement request (ditch crossings included). */
   dispatchMovement() {
     const player = this.player;
     if (!player || player.getForceMovement?.() != null) {
@@ -274,8 +286,8 @@ class BotBrain {
   /** @returns {"running"|"idle"} */
   tick(nowMs = Date.now()) {
     this.dispatchMovement();
-    // Global support runs before the activity action, as the tree's first
-    // branches did: boosts, defensive/retreat, then eating.
+    // Support runs before the activity action: boosts, defensive/retreat,
+    // then eating.
     const support = this.world?.supportTick?.({
       player: this.player,
       state: this.ensureState(),
@@ -341,7 +353,7 @@ class BotBrain {
         this.completeFrame(nowMs);
         break;
       case FRAME_STATE.FAILED:
-        this.failFrame(frame, nowMs);
+        this.endFrame(frame, nowMs, true);
         break;
       default:
         frame.state = FRAME_STATE.PENDING;
@@ -349,36 +361,10 @@ class BotBrain {
     }
     return "running";
   }
-
-  failFrame(frame, nowMs) {
-    this.frames.pop();
-    const behaviour = frame.behaviour;
-    if (behaviour.actions?.length) {
-      if (behaviour.resolver !== true) {
-        this.registry?.blockActivity?.(
-          this.player,
-          behaviour.id,
-          nowMs,
-          behaviour.failureCooldownMs
-        );
-      }
-      this.releaseFrame(frame);
-    }
-    const parent = this.frames[this.frames.length - 1];
-    if (parent) {
-      // A resolver failed: retry the parent next tick, it will look for another.
-      parent.state = FRAME_STATE.PENDING;
-      return;
-    }
-    if (this.ephemeral) {
-      this.onExhausted?.();
-      return;
-    }
-    this.assignNext(nowMs);
-  }
 }
 
 module.exports = {
   BotBrain,
   FRAME_STATE,
+  restoreMode,
 };

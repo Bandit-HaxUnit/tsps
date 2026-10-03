@@ -76,12 +76,8 @@ class BotBehaviorTask extends Task {
     return {
       startedAt: nowMs,
       sampledEntries: 0,
-      heavyEntries: 0,
-      traversalMs: 0,
-      npcAggroMs: 0,
       heavyGateMs: 0,
-      autonomyMs: 0,
-      controllerMs: 0,
+      brainMs: 0,
       totalEntryMs: 0,
       modeSamples: Object.create(null),
     };
@@ -114,9 +110,7 @@ class BotBehaviorTask extends Task {
     if (!window.modeSamples[key]) {
       window.modeSamples[key] = {
         sampledEntries: 0,
-        heavyEntries: 0,
-        autonomyMs: 0,
-        controllerMs: 0,
+        brainMs: 0,
         totalEntryMs: 0,
       };
     }
@@ -147,30 +141,23 @@ class BotBehaviorTask extends Task {
       return;
     }
     const sampledEntries = window.sampledEntries;
-    const heavyEntries = window.heavyEntries;
     const avg = (total, count) => (count > 0 ? Number((total / count).toFixed(4)) : 0);
     const topModes = Object.entries(window.modeSamples)
       .map(([mode, stats]) => ({
         mode,
         sampledEntries: stats.sampledEntries,
-        heavyEntries: stats.heavyEntries,
         avgEntryMs: avg(stats.totalEntryMs, stats.sampledEntries),
-        avgAutonomyMs: avg(stats.autonomyMs, stats.heavyEntries),
-        avgControllerMs: avg(stats.controllerMs, stats.heavyEntries),
+        avgBrainMs: avg(stats.brainMs, stats.sampledEntries),
       }))
       .sort((a, b) => b.avgEntryMs - a.avgEntryMs)
       .slice(0, 6);
     this.api?.log?.("bot_task_profile_snapshot", {
       windowMs: nowMs - window.startedAt,
       sampledEntries,
-      heavyEntries,
       sampleStride: this.taskProfiler.sampleStride,
       avgEntryMs: avg(window.totalEntryMs, sampledEntries),
-      avgTraversalMs: avg(window.traversalMs, sampledEntries),
-      avgNpcAggroMs: avg(window.npcAggroMs, sampledEntries),
       avgHeavyGateMs: avg(window.heavyGateMs, sampledEntries),
-      avgAutonomyMs: avg(window.autonomyMs, heavyEntries),
-      avgControllerMs: avg(window.controllerMs, heavyEntries),
+      avgBrainMs: avg(window.brainMs, sampledEntries),
       topModes,
     });
   }
@@ -504,7 +491,7 @@ class BotBehaviorTask extends Task {
     if (player.getAttribute?.(ATTR_RECRUIT_OWNER_USERNAME)) {
       return true;
     }
-    if (state.awaitingDitchTransition != null || state.roaming?.pendingRetry != null) {
+    if (state.awaitingDitchTransition != null) {
       return true;
     }
     if (player.getForceMovement?.() != null) {
@@ -608,8 +595,8 @@ class BotBehaviorTask extends Task {
   }
 
   shouldProcessEntryHeavy(entry, nowMs) {
-    // Temporal sharding for performance: calm/idle bots skip heavy BT/autonomy
-    // work on some cycles. Urgent bots (combat, traversal, transient, pvp) are
+    // Temporal sharding for performance: calm/idle bots skip brain ticks on
+    // some cycles. Urgent bots (combat, traversal, transient, pvp) are
     // always processed every cycle for responsiveness.
     const stride = this.resolveEntryStride(entry, nowMs);
     if (stride <= 1) {
@@ -637,7 +624,7 @@ class BotBehaviorTask extends Task {
       );
       return (this._cycleCounter + shard) % offscreenPvpCombatStride === 0;
     }
-    if (state.awaitingDitchTransition != null || state.roaming?.pendingRetry != null) {
+    if (state.awaitingDitchTransition != null) {
       return true;
     }
     if (player.getForceMovement?.() != null) {
@@ -755,7 +742,6 @@ class BotBehaviorTask extends Task {
     }
     if (state?.roaming) {
       state.roaming.target = null;
-      state.roaming.pendingRetry = null;
       state.roaming.nextWalkAt = nowMs + randomInRange(600, 1500);
     }
     if (state?.home) {
@@ -879,9 +865,9 @@ class BotBehaviorTask extends Task {
       }
       if (sampleEntry && this._profileWindow) {
         const brainMs = this.elapsedMs(brainStartNs);
-        this._profileWindow.controllerMs += brainMs;
+        this._profileWindow.brainMs += brainMs;
         if (modeProfile) {
-          modeProfile.controllerMs += brainMs;
+          modeProfile.brainMs += brainMs;
         }
       }
     } catch (err) {

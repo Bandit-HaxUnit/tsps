@@ -583,8 +583,7 @@ function createBotRegistry(options) {
 
     const entry = { player: bot, state };
     addEntry(username, entry);
-    // Managed wilderness bots are brain-driven; the controller stays for the
-    // behaviour tree only if the brain attachment is unavailable.
+    // Managed wilderness bots run the pvp brain activity.
     if (assignmentMap && typeof attachWildernessBrain === "function") {
       attachWildernessBrain({ entry, bot, state, plan, hotspotId: assignedHotspotId });
     }
@@ -1096,7 +1095,7 @@ function createBotRegistry(options) {
     const state = username ? botStatesByName.get(username) : null;
     const entry = username ? entriesByUsername.get(username) : null;
     if (entry?.brain) {
-      entry.brain.releaseActivity?.();
+      entry.brain.reset();
       entry.brain = null;
     }
     clearFollowState(player, state);

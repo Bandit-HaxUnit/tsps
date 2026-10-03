@@ -1,12 +1,5 @@
-const { Flag } = require("../../../../src/main/typescript/elvarg/game/model/Flag");
-const { Animation } = require("../../../../src/main/typescript/elvarg/game/model/Animation");
-const { Graphic } = require("../../../../src/main/typescript/elvarg/game/model/Graphic");
-const { Location } = require("../../../../src/main/typescript/elvarg/game/model/Location");
 const { clearMovementRequest } = require("../navigation/BotNavigation");
 
-const HOME_TELEPORT_START_ANIMATION = new Animation(714);
-const HOME_TELEPORT_END_ANIMATION = new Animation(715);
-const HOME_TELEPORT_START_GRAPHIC = new Graphic(308, 50);
 const DEFAULT_TRANSITION_PROFILE = Object.freeze({ resetTraversal: true });
 const MODE_TRANSITION_PROFILE_OVERRIDES = Object.freeze({
   ROAMING: Object.freeze({ resetTraversal: false }),
@@ -15,7 +8,6 @@ function createRoamingBehaviorState() {
   return {
     target: null,
     nextWalkAt: 0,
-    pendingRetry: null,
     endpointPauseUntil: 0,
   };
 }
@@ -26,47 +18,7 @@ function clearRoamingBehaviorState(state) {
   }
   state.roaming.target = null;
   state.roaming.nextWalkAt = 0;
-  state.roaming.pendingRetry = null;
   state.roaming.endpointPauseUntil = 0;
-}
-
-function createWoodcuttingBehaviorState() {
-  return {
-    target: null,
-    nextActionAt: 0,
-    nextSearchAt: 0,
-    searchTarget: null,
-  };
-}
-
-function createMiningBehaviorState() {
-  return {
-    target: null,
-    nextActionAt: 0,
-    nextSearchAt: 0,
-    searchTarget: null,
-  };
-}
-
-function createFiremakingBehaviorState() {
-  return {
-    phase: "burning",
-    nextActionAt: 0,
-    bankTarget: null,
-    lightTile: null,
-    travelTarget: null,
-  };
-}
-
-function createSmeltingBehaviorState() {
-  return {
-    phase: "withdraw",
-    nextActionAt: 0,
-    recipeBarId: null,
-    bankTarget: null,
-    furnaceTarget: null,
-    travelTarget: null,
-  };
 }
 
 function createPvpBehaviorState() {
@@ -143,7 +95,6 @@ function createPvpBehaviorState() {
     observedPrayerTargetCombatType: null,
     pendingPrayerTargetCombatType: null,
     pendingPrayerTargetCombatTypeAt: 0,
-    currentCyclePvpIndex: null,
     nextOneTickCheckAt: 0,
     nextSwitchbackCheckAt: 0,
     nextPressureCheckAt: 0,
@@ -219,7 +170,6 @@ function clearPvpBehaviorState(state) {
   state.pvp.observedPrayerTargetCombatType = null;
   state.pvp.pendingPrayerTargetCombatType = null;
   state.pvp.pendingPrayerTargetCombatTypeAt = 0;
-  state.pvp.currentCyclePvpIndex = null;
   state.pvp.nextOneTickCheckAt = 0;
   state.pvp.nextSwitchbackCheckAt = 0;
   state.pvp.nextPressureCheckAt = 0;
@@ -234,49 +184,6 @@ function createAutonomyState() {
     allowedAutonomousModes: null,
     manualMode: null,
   };
-}
-
-function clearWoodcuttingBehaviorState(state) {
-  if (!state?.woodcutting) {
-    return;
-  }
-  state.woodcutting.target = null;
-  state.woodcutting.nextActionAt = 0;
-  state.woodcutting.nextSearchAt = 0;
-  state.woodcutting.searchTarget = null;
-}
-
-function clearMiningBehaviorState(state) {
-  if (!state?.mining) {
-    return;
-  }
-  state.mining.target = null;
-  state.mining.nextActionAt = 0;
-  state.mining.nextSearchAt = 0;
-  state.mining.searchTarget = null;
-}
-
-function clearFiremakingBehaviorState(state) {
-  if (!state?.firemaking) {
-    return;
-  }
-  state.firemaking.phase = "burning";
-  state.firemaking.nextActionAt = 0;
-  state.firemaking.bankTarget = null;
-  state.firemaking.lightTile = null;
-  state.firemaking.travelTarget = null;
-}
-
-function clearSmeltingBehaviorState(state) {
-  if (!state?.smelting) {
-    return;
-  }
-  state.smelting.phase = "withdraw";
-  state.smelting.nextActionAt = 0;
-  state.smelting.recipeBarId = null;
-  state.smelting.bankTarget = null;
-  state.smelting.furnaceTarget = null;
-  state.smelting.travelTarget = null;
 }
 
 let TaskManager = null;
@@ -323,10 +230,6 @@ function clearAllBehaviorStates(state) {
     return;
   }
   clearRoamingBehaviorState(state);
-  clearWoodcuttingBehaviorState(state);
-  clearMiningBehaviorState(state);
-  clearFiremakingBehaviorState(state);
-  clearSmeltingBehaviorState(state);
   clearPvpBehaviorState(state);
 }
 
@@ -352,17 +255,6 @@ function listAllowedAutonomousModes(state) {
     return null;
   }
   return modes.filter((mode) => typeof mode === "string" && mode.length > 0);
-}
-
-function allowsAutonomousMode(state, mode) {
-  if (typeof mode !== "string" || mode.length === 0) {
-    return false;
-  }
-  const allowedModes = listAllowedAutonomousModes(state);
-  if (!allowedModes) {
-    return true;
-  }
-  return allowedModes.includes(mode);
 }
 
 function isPvpOnlyBotState(state) {
@@ -455,66 +347,6 @@ function setModeRoaming(player, state, behaviorMode) {
   transitionToMode(player, state, behaviorMode, "ROAMING");
 }
 
-function setModeReturnHome(player, state, behaviorMode) {
-  transitionToMode(player, state, behaviorMode, "RETURN_HOME");
-}
-
-function setModeFollowBack(
-  player,
-  state,
-  followTarget,
-  nowMs,
-  followBackDurationMs,
-  behaviorMode,
-  options = {}
-) {
-  if (!player || !state || !followTarget) {
-    return false;
-  }
-  const followTargetUsername = followTarget.getUsername?.();
-  if (!followTargetUsername) {
-    return false;
-  }
-
-  if (
-    !transitionToMode(player, state, behaviorMode, "FOLLOW_BACK", {
-      allowInCombatTransition: options.allowInCombatTransition === true,
-    })
-  ) {
-    return false;
-  }
-  state.followTargetUsername = followTargetUsername;
-  state.followUntilMs = nowMs + followBackDurationMs;
-  state.nextFollowRepathAt = 0;
-  clearMovementRequest(player);
-  player.getMovementQueue?.()?.reset?.();
-  clearRoamingBehaviorState(state);
-  if (player.getRunEnergy?.() > 0) {
-    player.setRunning?.(true);
-    player.getPacketSender?.()?.sendRunStatus?.();
-  }
-  player.setFollowing(followTarget);
-  player.setMobileInteraction(followTarget);
-  player.setPositionToFace(followTarget.getLocation());
-  return true;
-}
-
-function setModeWoodcutting(player, state, behaviorMode) {
-  transitionToMode(player, state, behaviorMode, "WOODCUTTING");
-}
-
-function setModeMining(player, state, behaviorMode) {
-  transitionToMode(player, state, behaviorMode, "MINING");
-}
-
-function setModeFiremaking(player, state, behaviorMode) {
-  transitionToMode(player, state, behaviorMode, "FIREMAKING");
-}
-
-function setModeSmelting(player, state, behaviorMode) {
-  transitionToMode(player, state, behaviorMode, "SMELTING");
-}
-
 function setModePvp(
   player,
   state,
@@ -557,49 +389,6 @@ function setModePvp(
   return true;
 }
 
-function setModeSparring(
-  player,
-  state,
-  targetPlayer,
-  nowMs,
-  durationMs,
-  behaviorMode
-) {
-  return setModePvp(player, state, targetPlayer, nowMs, durationMs, behaviorMode);
-}
-
-function isInsideHomeArea(player, state, botHomeRadius) {
-  if (!player || !state?.home) {
-    return false;
-  }
-  const current = player.getLocation();
-  const homeX = state.home.x;
-  const homeY = state.home.y;
-  const homeZ = state.home.z ?? current.getZ();
-  if (current.getZ() !== homeZ) {
-    return false;
-  }
-  const dx = current.getX() - homeX;
-  const dy = current.getY() - homeY;
-  return dx * dx + dy * dy <= botHomeRadius * botHomeRadius;
-}
-
-function teleportHome(player, state) {
-  if (!player || !state?.home) {
-    return false;
-  }
-  if (isTeleblocked(player)) {
-    return false;
-  }
-  const home = new Location(state.home.x, state.home.y, state.home.z ?? 0);
-  player.performAnimation(HOME_TELEPORT_START_ANIMATION);
-  player.performGraphic(HOME_TELEPORT_START_GRAPHIC);
-  player.moveTo(home);
-  player.performAnimation(HOME_TELEPORT_END_ANIMATION);
-  player.getUpdateFlag().flag(Flag.APPEARANCE);
-  return true;
-}
-
 function isTeleblocked(player) {
   return player?.getCombat?.()?.getTeleblockTimer?.()?.finished?.() === false;
 }
@@ -617,10 +406,6 @@ function createInitialState(home, behaviorMode) {
     // Keep roaming internals in a dedicated child state; this prevents future
     // behavior modes (minigames, skilling, PvP) from coupling to roam fields.
     roaming: createRoamingBehaviorState(),
-    woodcutting: createWoodcuttingBehaviorState(),
-    mining: createMiningBehaviorState(),
-    firemaking: createFiremakingBehaviorState(),
-    smelting: createSmeltingBehaviorState(),
     pvp: createPvpBehaviorState(),
     autonomy: createAutonomyState(),
     followTargetUsername: null,
@@ -632,36 +417,14 @@ function createInitialState(home, behaviorMode) {
   };
 }
 
-function markResumeSoon(state, nowMs = Date.now(), blockedRetargetMinDelayMs = 0) {
-  if (!state) {
-    return;
-  }
-  if (!state.roaming) {
-    state.roaming = createRoamingBehaviorState();
-  }
-  state.roaming.nextWalkAt = nowMs + blockedRetargetMinDelayMs;
-}
-
 module.exports = {
   initPlayerBotStateCoreAccess,
-  allowsAutonomousMode,
   clearFollowState,
   createInitialState,
   isPvpOnlyBotState,
-  isInsideHomeArea,
-  listAllowedAutonomousModes,
-  markResumeSoon,
   resetMovementState,
-  setModeFollowBack,
   setModePvp,
-  setModeSparring,
-  setModeReturnHome,
   setModeRoaming,
-  setModeWoodcutting,
-  setModeMining,
-  setModeSmelting,
-  setModeFiremaking,
-  teleportHome,
   isTeleblocked,
   computeEatThreshold,
 };

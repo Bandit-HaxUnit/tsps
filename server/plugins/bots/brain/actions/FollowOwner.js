@@ -12,8 +12,7 @@ const {
 const {
   applyGeneratedPvpLoadout,
 } = require("../../behaviours/policies/PvpLoadoutPolicy");
-const { startReactivePvp } = require("../pvp/ReactivePvp");
-const { startBrainRoam } = require("../RoamService");
+const { startBrainRoam, startReactivePvp } = require("../BrainActivities");
 const { playerState } = require("../ActionState");
 const {
   ATTR_RECRUIT_OWNER_USERNAME,

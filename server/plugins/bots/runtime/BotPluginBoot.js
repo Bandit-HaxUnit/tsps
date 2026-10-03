@@ -18,16 +18,11 @@ const { PvpJumpOnKillPolicy } = require("../behaviours/policies/PvpJumpOnKillPol
 const { createBotRegistry } = require("./BotRegistry");
 const { createBotTickMetrics } = require("./BotTickMetrics");
 const { createBotActivityRegistry } = require("../brain/BotActivityRegistry");
-const { attachBrain } = require("../brain/attachBrain");
 const { PvpController } = require("../brain/pvp/PvpController");
-const { configureReactivePvp } = require("../brain/pvp/ReactivePvp");
-const { configureRoam } = require("../brain/RoamService");
-const { configureRecruit } = require("../brain/RecruitService");
-const { configureBankTrip } = require("../brain/BankTripService");
+const { configureBrainActivities, startActivity } = require("../brain/BrainActivities");
 const { registerBrainProgressEvents } = require("../brain/BotBrainEvents");
 const { listCatalogObjectIds } = require("../brain/BotObjectCatalog");
 const { BANK_BOOTH_IDS } = require("../lib/BankBooths");
-const { inventoryProductionCount } = require("../brain/actions/InteractObject");
 const Woodcutting = require("../../skills/Woodcutting.plugin");
 const Mining = require("../../skills/Mining.plugin");
 const Firemaking = require("../../skills/Firemaking.plugin");
@@ -90,27 +85,21 @@ function bootPlayerBotsRuntime(options = {}) {
       Mining.isMiningActive?.(player) === true ||
       Firemaking.isFiremakingActive?.(player) === true ||
       Smithing.isSmeltingActive?.(player) === true,
-    productionCount: inventoryProductionCount,
     log: (message, extra) => botApi.log(message, extra),
   };
 
   // One pvp engine for the brain activities and reactive overlays.
   const pvpController = new PvpController(botStatesByName, botApi, {
     behaviorMode,
-    ...(config.treeOptions ?? {}),
+    ...(config.eatOptions ?? {}),
   });
   pvpController.setEntrySource(() => entries);
   brainWorld.pvpController = pvpController;
   brainWorld.supportTick = ({ player, state, nowMs }) =>
     pvpController.tickSupport({ player, state, nowMs });
-  let brainRegistry = null;
-  try {
-    brainRegistry = createBotActivityRegistry({ api: botApi, world: brainWorld });
-  } catch (error) {
-    botApi.log("bot_activities_load_failed", {
-      error: String(error?.message ?? error),
-    });
-  }
+  // Every bot runs on the brain, so a broken bot-activities.json must fail boot
+  // loudly rather than leave the whole population standing still.
+  const brainRegistry = createBotActivityRegistry({ api: botApi, world: brainWorld });
 
   traversalAssist.trackObjectIds([
     config.wildernessDitchObjectId,
@@ -197,36 +186,11 @@ function bootPlayerBotsRuntime(options = {}) {
         api: botApi,
       }),
     ensureBehaviorTaskStarted,
-    attachAssistantBrain: ({ player, state }) => {
-      // ::botme drives a real player through the roam brain.
-      const activity = brainRegistry?.byId?.get("roam") ?? null;
-      if (!activity || !runtime) {
-        return false;
-      }
-      return attachBrain({
-        runtime,
-        registry: brainRegistry,
-        world: brainWorld,
-        bot: player,
-        activity,
-        home: state?.home ?? null,
-        resetMovementState,
-      });
-    },
+    // ::botme drives a real player through the roam brain.
+    attachAssistantBrain: ({ player, state }) =>
+      startActivity(player, "roam", { home: state?.home ?? null }),
     attachWildernessBrain: ({ bot, state }) => {
-      const activity = brainRegistry?.byId?.get("pvp") ?? null;
-      if (!activity || !runtime) {
-        return false;
-      }
-      const attached = attachBrain({
-        runtime,
-        registry: brainRegistry,
-        world: brainWorld,
-        bot,
-        activity,
-        home: state?.home ?? null,
-        resetMovementState,
-      });
+      const attached = startActivity(bot, "pvp", { home: state?.home ?? null });
       if (attached) {
         botApi.log("bot_wilderness_brain_attached", {
           username: bot.getUsername?.(),
@@ -254,25 +218,7 @@ function bootPlayerBotsRuntime(options = {}) {
   });
 
   registerBrainProgressEvents({ api, runtime });
-  configureReactivePvp({
-    runtime,
-    registry: brainRegistry,
-    world: brainWorld,
-    resetMovementState,
-  });
-  configureRoam({
-    runtime,
-    registry: brainRegistry,
-    world: brainWorld,
-    resetMovementState,
-  });
-  configureRecruit({
-    runtime,
-    registry: brainRegistry,
-    world: brainWorld,
-    resetMovementState,
-  });
-  configureBankTrip({
+  configureBrainActivities({
     runtime,
     registry: brainRegistry,
     world: brainWorld,

@@ -20,12 +20,34 @@ const INTERACT_COOLDOWN_MS = 1500;
 // session mean the route failed (tree behind a closed gate/fence). Blacklist and
 // repick instead of parking there forever.
 const UNREACHABLE_CLICKS = 2;
-const UNREACHABLE_AVOID_MS = 60000;
+const UNREACHABLE_AVOID_MS = 5 * 60 * 1000;
+// Shared by every bot and activity: one bot learning a tree is unreachable
+// spares the rest of the crowd from re-pathing to it. Keyed by object + tile,
+// so it is bounded by the number of objects bots ever target.
+const UNREACHABLE_UNTIL = new Map();
+
+function objectKey(object) {
+  const loc = object.getLocation();
+  return `${object.getId()}:${loc.getX()}:${loc.getY()}:${loc.getZ()}`;
+}
+
+function isAvoided(key, nowMs) {
+  const until = UNREACHABLE_UNTIL.get(key);
+  if (until === undefined) {
+    return false;
+  }
+  if (until > nowMs) {
+    return true;
+  }
+  UNREACHABLE_UNTIL.delete(key);
+  return false;
+}
 
 /**
  * Generic "walk to an object and use an option until X" action. Target
- * acquisition, segmented approach, interact, then progress is measured by
- * produced items or XP. State is per player: the action instance is shared.
+ * acquisition, segmented approach, then interact. Progress comes from the
+ * skill plugins' produce events (BotBrainEvents), so this never polls the
+ * inventory. State is per player: the action instance is shared.
  */
 function createInteractObjectAction(spec, world) {
   const objectIds = resolveCatalogObjectIds(spec);
@@ -34,27 +56,12 @@ function createInteractObjectAction(spec, world) {
   const stateFor = (player) =>
     playerState(action, player, () => ({
       target: null,
-      lastProduction: null,
       lastClickAt: 0,
       lastTargetKey: null,
       lastClickX: null,
       lastClickY: null,
       failedClicks: 0,
-      avoid: new Map(),
     }));
-
-  function productionCount(player) {
-    if (world.productionCount) {
-      return world.productionCount(player);
-    }
-    let total = 0;
-    for (const item of player?.getInventory?.()?.getItems?.() ?? []) {
-      if (item?.getId?.() > 0) {
-        total += item.getAmount();
-      }
-    }
-    return total;
-  }
 
   function findTarget(player, nowMs) {
     const bot = stateFor(player);
@@ -78,13 +85,8 @@ function createInteractObjectAction(spec, world) {
       if (distSq > maxDistSq) {
         continue;
       }
-      const key = `${object.getId()}:${objectLoc.getX()}:${objectLoc.getY()}`;
-      const avoidedUntil = bot.avoid.get(key);
-      if (avoidedUntil !== undefined) {
-        if (avoidedUntil > nowMs) {
-          continue;
-        }
-        bot.avoid.delete(key);
+      if (isAvoided(objectKey(object), nowMs)) {
+        continue;
       }
       live.push({ object, distSq });
     }
@@ -158,6 +160,10 @@ function createInteractObjectAction(spec, world) {
       }
 
       let object = bot.target ? resolveTargetObject(player) : null;
+      // Another bot may have flagged this target unreachable since it was picked.
+      if (object && isAvoided(objectKey(object), nowMs)) {
+        object = null;
+      }
       if (!object) {
         bot.target = null;
         findTarget(player, nowMs);
@@ -200,14 +206,22 @@ function createInteractObjectAction(spec, world) {
       }
 
       const objectLoc = object.getLocation();
-      const key = `${object.getId()}:${objectLoc.getX()}:${objectLoc.getY()}`;
+      const key = objectKey(object);
       const now = player.getLocation();
       const stayedPut =
         bot.lastClickX === now.getX() && bot.lastClickY === now.getY();
       bot.failedClicks =
         bot.lastTargetKey === key && stayedPut ? bot.failedClicks + 1 : 0;
       if (bot.failedClicks >= UNREACHABLE_CLICKS) {
-        bot.avoid.set(key, nowMs + UNREACHABLE_AVOID_MS);
+        // Once per object (bot event logging is off by default, so this goes
+        // to the server log where core's per-click warning used to land).
+        if (!UNREACHABLE_UNTIL.has(key)) {
+          console.warn("[bots] object unreachable", {
+            object: key,
+            from: `${now.getX()},${now.getY()}`,
+          });
+        }
+        UNREACHABLE_UNTIL.set(key, nowMs + UNREACHABLE_AVOID_MS);
         bot.target = null;
         bot.lastTargetKey = null;
         bot.failedClicks = 0;
@@ -255,37 +269,19 @@ function createInteractObjectAction(spec, world) {
       });
       return "running";
     },
-    madeProgress(ctx) {
-      const bot = stateFor(ctx.player);
-      const produced = productionCount(ctx.player);
-      const progressed = bot.lastProduction !== null && produced !== bot.lastProduction;
-      bot.lastProduction = produced;
-      return progressed;
-    },
     stop(ctx) {
       const player = ctx?.player;
       if (!player) {
         return;
       }
-      const bot = stateFor(player);
-      bot.target = null;
-      bot.lastProduction = null;
+      stateFor(player).target = null;
     },
   };
   return action;
 }
 
-function inventoryProductionCount(player) {
-  let total = 0;
-  for (const item of player?.getInventory?.()?.getItems?.() ?? []) {
-    if (item?.getId?.() > 0) {
-      total += item.getAmount();
-    }
-  }
-  return total;
-}
-
 module.exports = {
   createInteractObjectAction,
-  inventoryProductionCount,
+  isAvoided,
+  UNREACHABLE_UNTIL,
 };

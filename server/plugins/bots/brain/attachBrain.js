@@ -1,6 +1,6 @@
 "use strict";
 
-const { BotBrain } = require("./BotBrain");
+const { BotBrain, restoreMode } = require("./BotBrain");
 
 /** Wires a spawned bot's entry to a brain running `activity`. Shared by sites, bench and ::bot. */
 function attachBrain(options = {}) {
@@ -38,9 +38,7 @@ function attachBrain(options = {}) {
         return;
       }
       entry.brain = null;
-      if (previousMode && state.mode === activity.mode) {
-        state.mode = previousMode;
-      }
+      restoreMode(state, activity.mode, previousMode);
       if (state.pvp) {
         state.pvp.targetUsername = null;
         state.pvp.targetPlayer = null;
@@ -50,8 +48,10 @@ function attachBrain(options = {}) {
       resetMovementState?.(bot);
     };
   }
+  // Release every frame's capacity slot, not just the top one: a replaced
+  // brain may still hold its parent activity under an overlay.
   if (entry.brain && entry.brain !== brain) {
-    entry.brain.releaseActivity?.();
+    entry.brain.reset();
   }
   entry.brain = brain;
   resetMovementState?.(bot);

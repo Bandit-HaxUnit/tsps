@@ -1,11 +1,10 @@
 "use strict";
 
 /**
- * Brain-owned wilderness ditch crossing. The brain dispatches its own movement
- * (BotBrain.dispatchMovement), so the behaviour tree's traversal service never
- * runs for brain bots; this intercepts a movement request whose route crosses
- * the ditch, walks to the object, clicks Cross, and waits for the force
- * movement before resuming the original request from the far side.
+ * Brain-owned wilderness ditch crossing. BotBrain.dispatchMovement routes
+ * every movement request through here; a request whose route crosses the
+ * ditch walks to the object, clicks Cross, and waits for the force movement
+ * before resuming the original request from the far side.
  */
 
 const ATTEMPT_TIMEOUT_MS = 5000;
@@ -16,12 +15,22 @@ function isBetween(fromY, toY, objectY) {
   return (fromY - objectY) * (toY - objectY) <= 0 && fromY !== toY;
 }
 
+// A retreating bot runs deeper/away inside the Wilderness and never escapes
+// south over the ditch; crossing back north is still allowed.
+function isRetreatBlocked(player, state, objectY) {
+  return !!state.pvp?.retreat && player.getLocation().getY() > objectY;
+}
+
 function startCross({ player, state, world, object, objectY, request, nowMs }) {
   const objectLoc = object.getLocation();
   const ditch = world.ditch;
   state.nextDitchAttemptAt = nowMs + Number(ditch?.attemptCooldownMs ?? DEFAULT_ATTEMPT_COOLDOWN_MS);
   player.getMovementQueue().walkToObject(object, {
     execute: () => {
+      // A crossing queued before the retreat began must not fire.
+      if (isRetreatBlocked(player, state, objectY)) {
+        return;
+      }
       const startSide = player.getLocation().getY() <= objectY ? "south" : "north";
       state.awaitingDitchTransition = {
         ditchY: objectY,
@@ -110,7 +119,7 @@ function maybeCrossDitch({ player, state, world, request }) {
     return false;
   }
   const objectY = object.getLocation().getY();
-  if (!isBetween(from.getY(), to.y, objectY)) {
+  if (!isBetween(from.getY(), to.y, objectY) || isRetreatBlocked(player, state, objectY)) {
     return false;
   }
   return startCross({ player, state, world, object, objectY, request, nowMs: now });

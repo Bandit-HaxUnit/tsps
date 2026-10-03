@@ -4,7 +4,7 @@ const {
 const {
   ATTR_RECRUIT_OWNER_USERNAME,
 } = require("./BotRecruitConstants");
-const { startRecruit } = require("../brain/RecruitService");
+const { startRecruit } = require("../brain/BrainActivities");
 
 function registerBotStatusInteractions(options = {}) {
   const {

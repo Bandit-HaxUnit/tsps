@@ -12,7 +12,6 @@ const { createBotPluginLogging } = require("./runtime/BotPluginLogging");
 const { bootPlayerBotsRuntime } = require("./runtime/BotPluginBoot");
 const { createBotBenchmark } = require("./runtime/BotBenchmark");
 const { startBotSites } = require("./brain/BotSiteSpawner");
-const { attachBrain } = require("./brain/attachBrain");
 const { setActiveBotRuntime } = require("./runtime/BotRuntimeRegistry");
 const {
   registerBotStatusInteractions,
@@ -26,10 +25,6 @@ const BOT_BEHAVIOR_MODE = Object.freeze({
   FIREMAKING: "firemaking",
   BANK_RUN: "bank_run",
   PVP: "pvp",
-  // Backward-compat alias for in-flight references.
-  SPARRING: "pvp",
-  FOLLOW_BACK: "follow_back",
-  RETURN_HOME: "return_home",
 });
 function parseEnvInt(name, fallback, min = 0) {
   const value = Number(process.env[name]);
@@ -39,13 +34,11 @@ function parseEnvInt(name, fallback, min = 0) {
   return Math.max(min, Math.floor(value));
 }
 
-const BOT_TREE_OPTIONS = Object.freeze({
+const BOT_EAT_OPTIONS = Object.freeze({
   botEatLowHpRatio: 0.45,
   botEatHealMin: 12,
   botEatHealMax: 18,
   botEatMaxCharges: 16,
-  botHomeRadius: 10,
-  blockedRetargetMinDelayMs: 450,
 });
 
 const BOT_CONFIG = Object.freeze({
@@ -68,25 +61,9 @@ const BOT_CONFIG = Object.freeze({
   // LOD/budget logic so PvP bots do not move in visible waves.
   botDecisionTicks: 1,
   botBaseCooldownMs: 1200,
-  botJitterMs: 300,
   ditchAttemptCooldownMs: 1200,
   roamingDitchCrossMaxDistanceY: 12,
-  ditchTransitionTimeoutMs: 15000,
   ditchPostCrossRetryDelayMs: 0,
-  blockedRetargetMinDelayMs: 450,
-  blockedRetargetMaxDelayMs: 900,
-  // Path-blocked mitigation:
-  // - dedupe repeated identical block events
-  // - only re-run heavy recovery on meaningful state changes
-  // - cap repeated retries with exponential backoff
-  pathBlockedDuplicateEventWindowMs: 1200,
-  // Minimum time between path-blocked recovery attempts per bot.
-  pathBlockedHandleMinIntervalMs: 750,
-  pathBlockedMeaningfulRecheckMs: 3500,
-  pathBlockedMaxRepeatBeforeBackoff: 2,
-  pathBlockedBackoffBaseMs: 600,
-  pathBlockedBackoffMaxMs: 8000,
-  pathBlockedIgnoredModes: [BOT_BEHAVIOR_MODE.PVP],
   npcAggroBlockedModes: [
     BOT_BEHAVIOR_MODE.WOODCUTTING,
     BOT_BEHAVIOR_MODE.MINING,
@@ -118,19 +95,14 @@ const BOT_CONFIG = Object.freeze({
   botSpawnRadius: 14,
   botSpawnMinDistance: 2,
   botSpawnMaxAttempts: 80,
-  followBackDurationMs: 3 * 60 * 1000,
   playerAttackFleeChance: 0.5,
-  followBlockedRetryMs: 200,
-  autoModeDecisionMinMs: 7000,
-  autoModeDecisionMaxMs: 22000,
-  // Throttle heavy BT work for calm/idle bots:
+  // Throttle brain ticks for calm/idle bots:
   // 1 = every bot every cycle, 2 = every second cycle, 3 = every third, etc.
   // Combat/traversal/transient bots still run every cycle.
-  modeValidationIntervalMs: 2500,
   idleEntryStride: 4,
   // Bot LOD simulation:
   // Near real players, bots tick every cycle for responsiveness.
-  // Further away, bot behavior-tree work is downsampled.
+  // Further away, brain ticks are downsampled.
   lodConfig: Object.freeze({
     enabled: true,
     refreshIntervalMs: 1400,
@@ -170,7 +142,7 @@ const BOT_CONFIG = Object.freeze({
     recentLogLines: 8,
     diagnoseLogPath: path.join(process.cwd(), "logs", "diagnose-stuck-bot.log"),
   }),
-  treeOptions: BOT_TREE_OPTIONS,
+  eatOptions: BOT_EAT_OPTIONS,
   pvp: Object.freeze({
     pjOpportunityWindowMs: 6000,
     pjObserveDistanceTiles: 18,
@@ -297,8 +269,6 @@ module.exports = {
       taskManager: api.getTaskManager(),
       flashHintArrowTaskFactory: boot.flashHintArrowTaskFactory,
       brainRegistry: boot.brainRegistry,
-      brainWorld: boot.brainWorld,
-      attachBrain,
     });
 
     registerBotEvents({
@@ -308,7 +278,6 @@ module.exports = {
       behaviorMode: BOT_CONFIG.behaviorMode,
       playerPersistence: GameConstants.PLAYER_PERSISTENCE,
       npcAggroBlockedModes: BOT_CONFIG.npcAggroBlockedModes,
-      followBackDurationMs: BOT_CONFIG.followBackDurationMs,
       playerAttackFleeChance: BOT_CONFIG.playerAttackFleeChance,
       avengeOpponentPolicy: boot.avengeOpponentPolicy,
       pvpJumpOnKillPolicy: boot.pvpJumpOnKillPolicy,
@@ -330,12 +299,9 @@ module.exports = {
       walkRadius: BOT_CONFIG.botWalkRadius,
       decisionTicks: BOT_CONFIG.botDecisionTicks,
       baseCooldownMs: BOT_CONFIG.botBaseCooldownMs,
-      jitterMs: BOT_CONFIG.botJitterMs,
       ditchObjectId: BOT_CONFIG.wildernessDitchObjectId,
       roamingDitchCrossMaxDistanceY: BOT_CONFIG.roamingDitchCrossMaxDistanceY,
       roamRadius: BOT_CONFIG.botWalkRadius,
-      followBackDurationMs: BOT_CONFIG.followBackDurationMs,
-      homeRadius: BOT_CONFIG.treeOptions.botHomeRadius,
     });
   },
   registerDuelBotAcceptance,

@@ -2,8 +2,11 @@ const { PlayerRights } = require("../../../src/main/typescript/elvarg/game/model
 const { FriendsChatManager } = require("../../interface/FriendsChatManager");
 const { isPvpOnlyBotState } = require("../behaviours/state/PlayerBotState");
 const { ATTR_RECRUIT_OWNER_USERNAME } = require("./BotRecruitConstants");
-const { startBrainRoam } = require("../brain/RoamService");
-const { startRecruit } = require("../brain/RecruitService");
+const {
+  startActivity,
+  startBrainRoam,
+  startRecruit,
+} = require("../brain/BrainActivities");
 
 function registerBotCommands(options) {
   const {
@@ -15,13 +18,11 @@ function registerBotCommands(options) {
     taskManager,
     flashHintArrowTaskFactory,
     brainRegistry,
-    brainWorld,
-    attachBrain,
   } = options;
 
   const brainModes = [
     ...new Set(
-      (brainRegistry?.activities ?? [])
+      brainRegistry.activities
         .map((activity) => activity.mode)
         .filter(Boolean)
     ),
@@ -32,11 +33,8 @@ function registerBotCommands(options) {
     "auto",
   ].sort((a, b) => a.localeCompare(b)).join("|");
 
-  /** Brain activity for a requested behavior name, or null to fall back to the tree. */
+  /** Brain activity for a requested behavior name, or null when unknown. */
   const findBrainActivity = (requested) => {
-    if (!brainRegistry) {
-      return null;
-    }
     if (requested === "pvp" || requested === "sparring") {
       return brainRegistry.byId?.get("pvp") ?? null;
     }
@@ -53,35 +51,16 @@ function registerBotCommands(options) {
     );
   };
 
-  /** Swaps a controlled bot onto a brain activity, dropping any tree brain. */
+  /** Swaps a controlled bot onto a brain activity, replacing its current one. */
   const assignBrainActivity = (target, state, activity) => {
-    const username = target.getUsername?.();
-    const entry = username ? runtime.entriesByUsername?.get?.(username) : null;
-    if (!entry) {
-      return false;
-    }
-    if (entry.brain) {
-      entry.brain.releaseActivity?.();
-      entry.brain = null;
-    }
     if (state.autonomy) {
       state.autonomy.manualMode = activity.mode;
       state.autonomy.modeEndsAt = Number.MAX_SAFE_INTEGER;
       state.autonomy.nextDecisionAt = Number.MAX_SAFE_INTEGER;
     }
-    return (
-      attachBrain?.({
-        runtime,
-        registry: brainRegistry,
-        world: brainWorld,
-        bot: target,
-        activity,
-        home:
-          state.home ??
-          target.getLocation?.(),
-        resetMovementState,
-      }) === true
-    );
+    return startActivity(target, activity.id, {
+      home: state.home ?? target.getLocation?.(),
+    });
   };
 
   /** Hands a bot back to autonomous behavior: the brain roam activity. */
@@ -153,15 +132,7 @@ function registerBotCommands(options) {
       return true;
     }
     if (activity) {
-      const attached = attachBrain?.({
-        runtime,
-        registry: brainRegistry,
-        world: brainWorld,
-        bot,
-        activity,
-        home: player.getLocation(),
-        resetMovementState,
-      });
+      const attached = startActivity(bot, activity.id, { home: player.getLocation() });
       player.sendMessage(
         attached
           ? `${bot.getUsername()} spawned as ${activity.mode} (brain).`

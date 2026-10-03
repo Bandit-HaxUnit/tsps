@@ -162,7 +162,17 @@
     {
       "id": "lumbridge_normal_trees",
       "template": "chop_trees",
-      "capacity": 64,
+      "capacity": 100,
+      "fields": {
+        "level": 1,
+        "tier": "normal",
+        "log": "logs"
+      }
+    },
+    {
+      "id": "barbarian_village_normal_trees",
+      "template": "chop_trees",
+      "capacity": 100,
       "fields": {
         "level": 1,
         "tier": "normal",
@@ -173,6 +183,15 @@
       "id": "copper_rocks",
       "template": "mine_rocks",
       "capacity": 32,
+      "fields": {
+        "level": 1,
+        "tier": "copper"
+      }
+    },
+    {
+      "id": "rimmington_copper_rocks",
+      "template": "mine_rocks",
+      "capacity": 50,
       "fields": {
         "level": 1,
         "tier": "copper"
@@ -275,13 +294,46 @@
     {
       "id": "lumbridge_forest",
       "activity": "lumbridge_normal_trees",
-      "count": 40,
+      "count": 100,
       "anchor": {
         "x": 3147,
         "y": 3230,
         "z": 0
       },
       "spawnRadius": 10
+    },
+    {
+      "id": "barbarian_village_forest",
+      "activity": "barbarian_village_normal_trees",
+      "count": 100,
+      "anchor": {
+        "x": 3046,
+        "y": 3435,
+        "z": 0
+      },
+      "spawnRadius": 10
+    },
+    {
+      "id": "rimmington_mine",
+      "activity": "rimmington_copper_rocks",
+      "count": 50,
+      "anchor": {
+        "x": 2974,
+        "y": 3241,
+        "z": 0
+      },
+      "spawnRadius": 8
+    },
+    {
+      "id": "grand_exchange_roamers",
+      "activity": "roam",
+      "count": 300,
+      "anchor": {
+        "x": 3164,
+        "y": 3487,
+        "z": 0
+      },
+      "spawnRadius": 12
     },
     {
       "id": "copper_rocks_site",
