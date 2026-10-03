@@ -44,6 +44,8 @@ export class CacheDefinitions {
     private static customModels?: Array<{ id: number; data: string }>;
     private static dbRows?: { byId: Map<number, DbRowType>; byTable: Map<number, DbRowType[]> };
     private static structParams = new Map<number, ReadonlyMap<number, number | string>>();
+    /** The struct archive, read once: re-reading it per struct took ~75 ms each. */
+    private static structArchive?: ReturnType<ReturnType<typeof CacheIndexDat2.fromStore>["getArchive"]>;
 
     private static getState() {
         if (this.state) return this.state;
@@ -115,8 +117,9 @@ export class CacheDefinitions {
         const cached = this.structParams.get(id);
         if (cached) return cached;
         const params = new Map<number, number | string>();
-        const configs = CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore());
-        const file = configs.getArchive(ConfigType.OSRS.struct).getFile(id);
+        this.structArchive ??= CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore())
+            .getArchive(ConfigType.OSRS.struct);
+        const file = this.structArchive.getFile(id);
         if (file) {
             const buffer = new ByteBuffer(new Int8Array(file.data));
             for (let opcode = buffer.readUnsignedByte(); opcode !== 0; opcode = buffer.readUnsignedByte()) {

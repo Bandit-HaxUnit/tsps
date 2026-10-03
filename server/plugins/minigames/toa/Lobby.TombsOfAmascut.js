@@ -26,10 +26,16 @@ const MANAGEMENT_PRESETS_UID = (INTERFACE.PARTY_MANAGEMENT << 16) | 98;
 const REWARD_POTENTIAL_TEXT_UID = 50724925;
 
 const OVERVIEW = { REFRESH: 0, MAKE_PARTY: 1, FILTER: 2 };
+/**
+ * The details panel's pause button numbers, as its cache scripts number them: the 12 fixed
+ * buttons (enum 4792), then from 12 members, from 36 applicants' Accept and from 44 their
+ * Decline (6746: 12 + 24 (+ 8) + row), and from 52 the invocations in enum 4664's order
+ * (6754: 12 + 24 + 16 + grid position).
+ */
 const MANAGEMENT = {
   OPEN_LIST: 0, REFRESH: 1, UNBLOCK: 2, SET_COMPLETIONS: 3, MEMBER_OPTION: 4, CLEAR_ALL: 5,
   LOAD_PRESET: 6, SAVE_PRESET: 7, TAB_FIRST: 8, TAB_LAST: 11, MEMBER_FIRST: 12, MEMBER_LAST: 19,
-  ACCEPT_FIRST: 20, DECLINE_FIRST: 28, APPLICANT_LAST: 35, INVOCATION_FIRST: 36,
+  ACCEPT_FIRST: 36, DECLINE_FIRST: 44, APPLICANT_LAST: 51, INVOCATION_FIRST: 52,
 };
 const VIEW = { NON_MEMBER: 0, MEMBER: 1, LEADER: 2, APPLICANT: 3, DECLINED: 4 };
 
