@@ -26,6 +26,7 @@ export function processWidgetClickInput(
     if (isNewClick) {
         // New click - reset drag state
         widgetInteraction.widgetDragDuration = 0;
+        widgetInteraction.dragClickCycle = deps.getTransmitCycles().cycleCntr | 0;
         widgetInteraction.isDraggingWidget = false;
         widgetInteraction.dragClickX = input.leftClickX;
         widgetInteraction.dragClickY = input.leftClickY;
