@@ -536,86 +536,6 @@ function dispatchMovementRequest(player, request, state = request?.state) {
   };
 }
 
-function retargetAfterBlocked(
-  player,
-  state,
-  api,
-  reason,
-  event,
-  nowMs = Date.now(),
-  blockedRetargetMinDelayMs = 0,
-  blockedRetargetMaxDelayMs = 0,
-  botWalkRadius = 0,
-  chooseOptions = null
-) {
-  if (!player || !state) {
-    return false;
-  }
-  if (!state.roaming) {
-    return false;
-  }
-  const username = player.getUsername?.();
-  const logBudget = consumePathBlockedLogBudget(username, nowMs);
-
-  const previousTarget = state.roaming.target
-    ? {
-        x: state.roaming.target.x,
-        y: state.roaming.target.y,
-        z: state.roaming.target.z,
-      }
-    : null;
-
-  state.roaming.endpointPauseUntil = 0;
-  const nextTarget = chooseNextTarget(
-    player,
-    state,
-    botWalkRadius,
-    chooseOptions ?? {}
-  );
-  if (!nextTarget) {
-    state.roaming.target = null;
-    state.roaming.nextWalkAt = nowMs + blockedRetargetMaxDelayMs;
-    if (logBudget.shouldLog) {
-      api.log("path_blocked_retarget_failed", {
-        username,
-        reason,
-        previousTarget,
-        from: event?.from ?? null,
-        to: event?.to ?? null,
-        suppressed: logBudget.suppressedCount,
-      });
-    }
-    return false;
-  }
-
-  state.roaming.target = nextTarget;
-  const retryInMs = randomInRange(
-    blockedRetargetMinDelayMs,
-    blockedRetargetMaxDelayMs
-  );
-  state.roaming.nextWalkAt = nowMs + retryInMs;
-  requestMovement(player, nextTarget.x, nextTarget.y, {
-    nowMs,
-    reason: `blocked_retarget:${reason}`,
-    basicPather: true,
-    nextDispatchAtMs: nowMs + retryInMs,
-    z: nextTarget.z,
-  });
-  if (logBudget.shouldLog) {
-    api.log("path_blocked_retarget", {
-      username,
-      reason,
-      previousTarget,
-      nextTarget,
-      retryInMs,
-      from: event?.from ?? null,
-      to: event?.to ?? null,
-      suppressed: logBudget.suppressedCount,
-    });
-  }
-  return true;
-}
-
 module.exports = {
   approachObject,
   calculateStrictWalkRoute,
@@ -628,5 +548,4 @@ module.exports = {
   randomInRange,
   requestMovement,
   resolveSegmentTarget,
-  retargetAfterBlocked,
 };

@@ -42,16 +42,6 @@ function parseEnvInt(name, fallback, min = 0) {
   return Math.max(min, Math.floor(value));
 }
 
-const BOT_MODE_BEHAVIOR_OPTIONS = Object.freeze({
-  endpointLingerMs: 500,
-  botWalkRadius: 10,
-  roamingMinMs: 22000,
-  roamingMaxMs: 80000,
-  wildernessDitchObjectId: ObjectIds.WILDERNESS_DITCH,
-  roamingDitchCrossMaxDistanceY: 12,
-  roamingDitchProbeRadius: 30,
-});
-
 const BOT_TREE_OPTIONS = Object.freeze({
   botEatLowHpRatio: 0.45,
   botEatHealMin: 12,
@@ -183,7 +173,6 @@ const BOT_CONFIG = Object.freeze({
     recentLogLines: 8,
     diagnoseLogPath: path.join(process.cwd(), "logs", "diagnose-stuck-bot.log"),
   }),
-  modeBehaviorOptions: BOT_MODE_BEHAVIOR_OPTIONS,
   treeOptions: BOT_TREE_OPTIONS,
   pvp: Object.freeze({
     pjOpportunityWindowMs: 6000,

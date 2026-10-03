@@ -225,6 +225,18 @@
           "exitWhenIdle": true
         }
       ]
+    },
+    {
+      "id": "roam",
+      "mode": "roaming",
+      "capacity": 1024,
+      "repeat": true,
+      "failureCooldownSeconds": 5,
+      "actions": [
+        {
+          "type": "wander"
+        }
+      ]
     }
   ],
   "sites": [

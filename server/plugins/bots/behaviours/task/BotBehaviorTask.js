@@ -19,6 +19,7 @@ const {
   ATTR_RECRUIT_OWNER_USERNAME,
 } = require("../../runtime/BotRecruitConstants");
 const { createBotTickMetrics } = require("../../runtime/BotTickMetrics");
+const { startBrainRoam } = require("../../brain/RoamService");
 
 const NS_PER_MS = 1_000_000n;
 const MOVING_MODE_DECISION_DELAY_MS = 1500;
@@ -1147,34 +1148,13 @@ class BotBehaviorTask extends Task {
   }
 
   startRoamingFallback(entry, nowMs, reason = "fallback_roaming", sharedCycleState = null) {
-    if (this.isPvpOnlyBot(entry?.state)) {
-      const pvpDefinition = this.getAutonomousModeDefinition(this.behaviorMode.PVP);
-      if (pvpDefinition) {
-        return this.startAutonomousMode(
-          entry,
-          {
-            ...pvpDefinition,
-            reason: reason === "fallback_roaming" ? "fallback_pvp" : reason,
-          },
-          nowMs,
-          sharedCycleState
-        );
-      }
+    if (!entry?.player || !entry?.state) {
       return false;
     }
-    const roamingDefinition = this.getAutonomousModeDefinition(this.behaviorMode.ROAMING);
-    if (!roamingDefinition) {
+    if (this.isPvpOnlyBot(entry.state)) {
       return false;
     }
-    return this.startAutonomousMode(
-      entry,
-      {
-        ...roamingDefinition,
-        reason,
-      },
-      nowMs,
-      sharedCycleState
-    );
+    return startBrainRoam(entry.player, entry.state, nowMs, entry.state.home ?? null);
   }
 
   processAutonomousMode(entry, nowMs, sharedCycleState = null) {

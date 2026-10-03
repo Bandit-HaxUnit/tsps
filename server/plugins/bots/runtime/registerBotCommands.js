@@ -4,6 +4,7 @@ const { recallRecruitedBot } = require("./BotRecruitRuntime");
 const { callModeHook } = require("../behaviours/hooks/ModeHookContract");
 const { isPvpOnlyBotState } = require("../behaviours/state/PlayerBotState");
 const { ATTR_RECRUIT_OWNER_USERNAME } = require("./BotRecruitConstants");
+const { startBrainRoam } = require("../brain/RoamService");
 
 function registerBotCommands(options) {
   const {
@@ -116,20 +117,15 @@ function registerBotCommands(options) {
     return true;
   };
 
-  /** Hands a bot back to autonomous mode selection. */
+  /** Hands a bot back to autonomous behavior: the brain roam activity. */
   const assignAutoBehavior = (target, state) => {
-    const username = target.getUsername?.();
-    const entry = username ? runtime.entriesByUsername?.get?.(username) : null;
-    if (entry) {
-      entry.brain = null;
-    }
     if (!state.autonomy) {
       state.autonomy = {};
     }
     state.autonomy.manualMode = null;
     state.autonomy.modeEndsAt = 0;
     state.autonomy.nextDecisionAt = 0;
-    if (!activateMode(target, state, behaviorMode.ROAMING, "manual_override_auto")) {
+    if (!startBrainRoam(target, state)) {
       return false;
     }
     resetMovementState(target);

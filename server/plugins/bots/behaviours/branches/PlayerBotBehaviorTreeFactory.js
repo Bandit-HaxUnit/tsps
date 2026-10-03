@@ -1,6 +1,5 @@
 const {
   ActionNode,
-  CooldownNode,
   SelectorNode,
 } = require("../../../../src/main/typescript/elvarg/game/bot/BehaviorTree");
 const { FollowBackActionNode } = require("../nodes/actions/FollowBackActionNode");
@@ -43,11 +42,6 @@ class PlayerBotBehaviorTreeFactory {
     this.blockedRetargetMinDelayMs = options.blockedRetargetMinDelayMs;
     this.modeHandlers = options.modeHandlers;
     this.traversalService = options.traversalService ?? null;
-    this.roamingBehavior = requireModeBehavior(
-      this.modeHandlers,
-      this.behaviorMode.ROAMING,
-      "ROAMING"
-    );
     // PvP moved to the brain; the tree still needs the controller for the
     // shared defensive/retreat branch that runs before every other action.
     this.pvpBehavior = options.pvpController ?? null;
@@ -98,11 +92,6 @@ class PlayerBotBehaviorTreeFactory {
         behaviorMode: this.behaviorMode,
       }
     );
-    const roamingCooldownNode = new CooldownNode(
-      cooldownMs,
-      new ActionNode((context) => this.roamingBehavior.tick(context)),
-      initialDelayMs
-    );
     const resolveState = (context) => {
       const player = context?.player;
       const username = player?.getUsername?.();
@@ -120,8 +109,6 @@ class PlayerBotBehaviorTreeFactory {
             ...context,
             traversalService: this.traversalService,
           });
-        case this.behaviorMode.ROAMING:
-          return roamingCooldownNode.tick(context);
         default:
           return "failure";
       }

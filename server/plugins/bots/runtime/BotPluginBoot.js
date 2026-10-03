@@ -40,6 +40,7 @@ const { createBotActivityRegistry } = require("../brain/BotActivityRegistry");
 const { attachBrain } = require("../brain/attachBrain");
 const { PvpController } = require("../brain/pvp/PvpController");
 const { configureReactivePvp } = require("../brain/pvp/ReactivePvp");
+const { configureRoam } = require("../brain/RoamService");
 const { registerBrainProgressEvents } = require("../brain/BotBrainEvents");
 const { listCatalogObjectIds } = require("../brain/BotObjectCatalog");
 const { inventoryProductionCount } = require("../brain/actions/InteractObject");
@@ -119,6 +120,7 @@ function bootPlayerBotsRuntime(options = {}) {
       objectId: config.wildernessDitchObjectId,
       attemptCooldownMs: config.ditchAttemptCooldownMs,
       postCrossDelayMs: config.ditchPostCrossRetryDelayMs,
+      roamMaxDistanceY: config.roamingDitchCrossMaxDistanceY,
     },
     emitObjectInteraction: (event) => botApi.emitObjectInteraction(event),
     isBusy: (player) =>
@@ -376,6 +378,12 @@ function bootPlayerBotsRuntime(options = {}) {
 
   registerBrainProgressEvents({ api, runtime });
   configureReactivePvp({
+    runtime,
+    registry: brainRegistry,
+    world: brainWorld,
+    resetMovementState,
+  });
+  configureRoam({
     runtime,
     registry: brainRegistry,
     world: brainWorld,

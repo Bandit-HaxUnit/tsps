@@ -3,10 +3,10 @@ const {
   isInsideHomeArea,
   markResumeSoon,
   resetMovementState,
-  setModeRoaming,
   teleportHome,
 } = require("../../state/PlayerBotState");
 const { resolveBotNodeContext } = require("../context/BotNodeContext");
+const { startBrainRoam } = require("../../../brain/RoamService");
 
 class ReturnHomeActionNode {
   constructor(botStatesByName, api, options) {
@@ -30,14 +30,14 @@ class ReturnHomeActionNode {
     resetMovementState(player);
 
     if (isInsideHomeArea(player, state, this.botHomeRadius)) {
-      setModeRoaming(player, state, this.behaviorMode);
+      startBrainRoam(player, state, nowMs, state.home);
       markResumeSoon(state, nowMs, this.blockedRetargetMinDelayMs);
       this.api.log("return_home_local_resume", { username: player.getUsername() });
       return "success";
     }
 
     if (teleportHome(player, state)) {
-      setModeRoaming(player, state, this.behaviorMode);
+      startBrainRoam(player, state, nowMs, state.home);
       markResumeSoon(state, nowMs, this.blockedRetargetMinDelayMs);
       this.api.log("return_home_teleport", {
         username: player.getUsername(),
