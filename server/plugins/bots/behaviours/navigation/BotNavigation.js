@@ -3,6 +3,8 @@ const { PathFinder } = require("../../../../src/main/typescript/elvarg/game/mode
 const { isOutsideWildernessHotspots } = require("../pvp/WildernessHotspotRegistry");
 
 const MAX_ROUTE_SEGMENT_TILES = 24;
+// Objects farther than this are approached in segments; see approachObject.
+const MAX_OBJECT_DIRECT_ROUTE_TILES = 20;
 const PATH_BLOCKED_LOG_THROTTLE_MS = 2500;
 const NO_PATH_RETRY_BASE_MS = 1200;
 const NO_PATH_RETRY_MAX_MS = 6000;
@@ -358,6 +360,40 @@ function requestMovement(player, targetX, targetY, options = {}) {
   return true;
 }
 
+/**
+ * The pathfinder only routes inside a 128-tile window around the player, so an object
+ * farther than `maxDirectTiles` must be approached in segments before the final
+ * walkToObject route. Returns true when a segmented approach was queued (the caller
+ * should wait); false when the object is close enough to route to directly.
+ */
+function approachObject(player, object, options = {}) {
+  const objectLoc = object?.getLocation?.();
+  const playerLoc = player?.getLocation?.();
+  if (!objectLoc || !playerLoc) {
+    return false;
+  }
+  const maxDirectTiles =
+    Number.isFinite(options.maxDirectTiles) && options.maxDirectTiles > 0
+      ? Math.floor(options.maxDirectTiles)
+      : MAX_OBJECT_DIRECT_ROUTE_TILES;
+  const distance = Math.max(
+    Math.abs(playerLoc.getX() - objectLoc.getX()),
+    Math.abs(playerLoc.getY() - objectLoc.getY())
+  );
+  if (distance <= maxDirectTiles) {
+    return false;
+  }
+  queueRouteAndFlagAppearance(player, objectLoc.getX(), objectLoc.getY(), {
+    nowMs: options.nowMs,
+    reason: options.reason ?? "object_approach",
+    // moveNear: an exact-tile route keeps failing on the last segment before water,
+    // which stalls the whole approach; the caller only needs progress.
+    basicPather: options.basicPather !== false,
+    maxRouteSegmentTiles: options.maxRouteSegmentTiles,
+  });
+  return true;
+}
+
 function peekMovementRequest(player) {
   if (!player) {
     return null;
@@ -581,6 +617,7 @@ function retargetAfterBlocked(
 }
 
 module.exports = {
+  approachObject,
   calculateStrictWalkRoute,
   chooseNextTarget,
   clearMovementRequest,

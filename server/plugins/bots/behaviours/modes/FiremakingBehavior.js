@@ -3,7 +3,10 @@ const { Bank } = require("../../../../src/main/typescript/elvarg/game/model/cont
 const { Location } = require("../../../../src/main/typescript/elvarg/game/model/Location");
 const { ObjectIds } = require("../../../../src/main/typescript/elvarg/util/IdEnums");
 const { resolveBotNodeContext } = require("../nodes/context/BotNodeContext");
-const { queueRouteAndFlagAppearance } = require("../navigation/BotNavigation");
+const {
+  approachObject,
+  queueRouteAndFlagAppearance,
+} = require("../navigation/BotNavigation");
 const {
   handlePlayerAttackReaction,
 } = require("../policies/PlayerAttackReactionPolicy");
@@ -468,6 +471,11 @@ class FiremakingBehavior {
       return "running";
     }
     if (player.getMovementQueue?.()?.size?.() > 0) {
+      return "running";
+    }
+
+    if (approachObject(player, bankBooth, { nowMs, reason: "firemaking_bank_travel" })) {
+      firemaking.nextActionAt = nowMs + RETRY_ACTION_MS;
       return "running";
     }
 

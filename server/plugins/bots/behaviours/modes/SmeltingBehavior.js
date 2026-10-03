@@ -5,6 +5,7 @@ const { Skill } = require("../../../../src/main/typescript/elvarg/game/model/Ski
 const { ObjectIds } = require("../../../../src/main/typescript/elvarg/util/IdEnums");
 const { resolveBotNodeContext } = require("../nodes/context/BotNodeContext");
 const { setModeBankRun, setModeSmelting } = require("../state/PlayerBotState");
+const { approachObject } = require("../navigation/BotNavigation");
 const {
   handlePlayerAttackReaction,
 } = require("../policies/PlayerAttackReactionPolicy");
@@ -429,6 +430,11 @@ class SmeltingBehavior {
       return "running";
     }
 
+    if (approachObject(player, bankBooth, { nowMs, reason: "smelting_bank_travel" })) {
+      smelting.nextActionAt = nowMs + RETRY_ACTION_MS;
+      return "running";
+    }
+
     player.getMovementQueue().walkToObject(bankBooth, {
       execute: () => {
         if (state.mode !== this.behaviorMode.SMELTING || !state.smelting) {
@@ -568,6 +574,11 @@ class SmeltingBehavior {
       return "running";
     }
     if (player.getMovementQueue?.()?.size?.() > 0) {
+      return "running";
+    }
+
+    if (approachObject(player, furnace, { nowMs, reason: "smelting_furnace_travel" })) {
+      smelting.nextActionAt = nowMs + RETRY_ACTION_MS;
       return "running";
     }
 

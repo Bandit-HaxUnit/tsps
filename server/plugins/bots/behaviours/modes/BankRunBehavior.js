@@ -1,10 +1,12 @@
 const { MapObjects } = require("../../../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
+const { ObjectDefinition } = require("../../../../src/main/typescript/elvarg/game/definition/ObjectDefinition");
 const { Bank } = require("../../../../src/main/typescript/elvarg/game/model/container/impl/Bank");
 const { Location } = require("../../../../src/main/typescript/elvarg/game/model/Location");
 const { ObjectIds } = require("../../../../src/main/typescript/elvarg/util/IdEnums");
 const { resolveBotNodeContext } = require("../nodes/context/BotNodeContext");
 const { callModeHook } = require("../hooks/ModeHookContract");
 const {
+  approachObject,
   queueRouteAndFlagAppearance,
   requestMovement,
 } = require("../navigation/BotNavigation");
@@ -350,6 +352,11 @@ class BankRunBehavior {
       return "running";
     }
 
+    if (approachObject(player, bankBooth, { nowMs, reason: "bank_run_travel" })) {
+      bankRun.nextActionAt = nowMs + WALK_COMMAND_COOLDOWN_MS;
+      return "running";
+    }
+
     player.getMovementQueue().walkToObject(bankBooth, {
       execute: () => {
         if (state.mode !== this.behaviorMode.BANK_RUN || !state.bankRun) {
@@ -465,7 +472,13 @@ class BankRunBehavior {
       return "running";
     }
 
-    queueRouteAndFlagAppearance(player, returnTo.x, returnTo.y);
+    queueRouteAndFlagAppearance(player, returnTo.x, returnTo.y, {
+      nowMs,
+      reason: "bank_run_return",
+      // moveNear for the same reason as approachObject: exact-tile segments fail
+      // on the riverbank hop and would pin the bot at the bank.
+      basicPather: true,
+    });
     bankRun.nextActionAt = nowMs + WALK_COMMAND_COOLDOWN_MS;
     return "running";
   }
