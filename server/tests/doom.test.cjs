@@ -43,6 +43,11 @@ function fakeNpc(id, x, y) {
     getIndex: () => npc.index,
     getLocation: () => npc.location,
     moveTo(location) { npc.location = location; },
+    exactMoves: [],
+    exactMove(location, options) {
+      npc.exactMoves.push({ from: npc.location, to: location, options, tick: npc.tickOf?.() });
+      npc.location = location;
+    },
     getSize: () => SIZES[id] ?? 1,
     getHitpoints: () => npc.hp,
     setHitpoints(value) { npc.hp = value; },
@@ -708,6 +713,7 @@ test('delve 4: coloured larvae take only their own style', () => {
 
 test('delve 5: after the shield it burrows, zooms past the player and surfaces into a shockwave', () => {
   const { player, run } = runAt(5);
+  run.boss.tickOf = () => run.ticks;
   run.attacks.active = true;
   const south = Shared.shift({ x: 1311, y: 9564 }, true);
   player.location = new Location(south.x, south.y, 0);
@@ -727,6 +733,19 @@ test('delve 5: after the shield it burrows, zooms past the player and surfaces i
   const at = Shared.frame(run.boss.location);
   assert.ok(at.y < 9571, 'it went south, towards the player');
   assert.ok(run.boss.anims.includes(12417));
+  // Capture: each tick of a zoom is one teleport and exact_move with delay1 0, delay2 30 and the
+  // direction of travel - npc.exactMove's defaults, so no options are passed.
+  const glides = run.boss.exactMoves;
+  assert.ok(glides.length >= 2, `${glides.length} glides`);
+  for (const [index, glide] of glides.entries()) {
+    const dx = glide.to.getX() - glide.from.getX();
+    const dy = glide.to.getY() - glide.from.getY();
+    assert.ok(Math.max(Math.abs(dx), Math.abs(dy)) <= 4, `glide ${index}: at most 4 tiles a tick`);
+    assert.equal(glide.options, undefined, 'the defaults: cycles 0-30, facing the way it goes');
+    if (index > 0 && glides[index - 1].tick === glide.tick - 1) {
+      assert.ok(glides[index - 1].to.equals(glide.from), 'each glide starts where the last ended');
+    }
+  }
   ticks(40);
   assert.equal(run.attacks.phase, 'attacks', 'surfaced');
   assert.equal(run.boss.getId(), Shared.NPC.DOOM);
@@ -877,4 +896,30 @@ test('death puts the player by the gap (capture)', () => {
   assert.deepEqual([player.location.getX(), player.location.getY()], [1313, 9555]);
   assert.equal(Run.runOf(player), null);
   assert.equal(player.varps.get(Shared.VARP.CURRENT_LEVEL), 0);
+});
+
+test('a zoom glides once a tick, breaking rocks and trampling the player along the way', () => {
+  const { player, run } = runAt(5);
+  run.attacks.phase = 'burrow';
+  const start = run.boss.location;
+  // Eight tiles west in two ticks; the player and a rock stand in the way of the first stretch.
+  const path = Array.from({ length: 8 }, (_, index) => ({ x: start.getX() - 1 - index, y: start.getY() }));
+  run.burrow.step = { name: 'move', at: run.ticks, path, travelled: 8, trampled: false };
+  run.burrow.zoomsLeft = 2;
+  const standing = new Location(start.getX() - 3, start.getY() + 2, 0);
+  player.location = standing;
+  run.hazards.addRock({ x: start.getX() - 2, y: start.getY() + 4 });
+  const hurt = player.damage.length;
+  run.burrow.move();
+  assert.equal(run.boss.exactMoves.length, 1, 'one glide for the tick');
+  assert.equal(run.boss.location.getX(), start.getX() - 4, 'four tiles on');
+  assert.equal(run.hazards.rocks.length, 0, 'the rock it passed broke');
+  assert.deepEqual(player.damage.slice(hurt), [10], 'trampled once (10 at delve 5)');
+  player.location = new Location(start.getX() - 20, start.getY(), 0);
+  run.burrow.move();
+  assert.equal(run.boss.exactMoves.length, 2);
+  assert.ok(run.boss.exactMoves[1].from.equals(run.boss.exactMoves[0].to));
+  assert.equal(run.boss.location.getX(), start.getX() - 8);
+  assert.equal(player.damage.length, hurt + 1, 'not trampled twice in a zoom');
+  run.end('exit');
 });

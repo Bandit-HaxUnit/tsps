@@ -166,7 +166,7 @@ The Doom's own combat does nothing; the run attacks on its own timer.
   - 5 ticks after burrowing it becomes 14709 (HUD with its real hitpoints), charging for 600 cycles (20 ticks). Each hit restarts the charge.
   - 3 ticks later the eye (graphic 3416, and 3415 with delay 60) marks where its centre will stop. That is the compass direction of the player from its centre, as far as the player is plus four, kept inside the arena.
   - 3 ticks after the eye it goes there, 4 tiles a tick. Rocks in the way break (graphic 2699).
-  - Each tick of a zoom is a teleport to the next tile plus an NPC `exact_move` from the tile it left, with `delay1=0`, `delay2=30` and `angle` the direction of travel (768 north-west, 1536 east). This server can't send NPC `exact_move` yet, so the Doom jumps tile to tile; once it can, each hop should send these values.
+  - Each tick of a zoom is a teleport to that tick's last tile plus an NPC `exact_move` from the tile it left, with `delay1=0`, `delay2=30` and `angle` the direction of travel (768 north-west, 1536 east). Here that is one `npc.exactMove` a tick (its defaults are these values), so the Doom glides; rocks and the player are still checked tile by tile along the way.
   - The next eye comes 9 ticks after it stops. After the second zoom it surfaces 5 ticks later, into volatile earth and the shockwave.
   - Trample: 10 at delve 5 (seen), 20/30/40 at 6/7/8+ (Wiki).
 - **Delve 6+** (Wiki): three zooms, each followed by 1–3 orbs and a car slam.
@@ -224,8 +224,7 @@ The scoreboard (57288) opens interface 920, filled with strings:
 - **Not shown here:**
   - the HUD's colours and the charge bars (headbars 81 and 11), which need `if_setcolour` and custom headbar fills this server can't send;
   - the Doom's heal and bonus hitsplat types (6 and 17);
-  - camera shakes;
-  - the burrowed Doom's glide (teleport plus `exact_move`; NPCs here can't `exact_move`, so it jumps tile to tile).
+  - camera shakes.
 - **Not done:** the melee-punish kill's restoring projectiles; the collection log.
 
 ## Developer commands

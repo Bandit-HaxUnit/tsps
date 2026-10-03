@@ -23,13 +23,12 @@
  *   from its centre, the compass direction of where the player was a tick before, as far as the
  *   player is plus four. 3 ticks after the eye it moves there, 4 tiles a tick (anim 12417 with
  *   graphic 3371): each tick a teleport and an exact_move from the tile it left, delay1 0, delay2
- *   30, angle the direction of travel (768 north-west, 1536 east). Rocks in the way break (graphic 2699) and any acid
- *   under them is back.
+ *   30, angle the direction of travel (768 north-west, 1536 east), npc.exactMove's defaults.
+ *   Rocks in the way break (graphic 2699) and any acid under them is back.
  * - The next eye comes 9 ticks after it stops; after the second zoom it surfaces 5 ticks later
  *   (12418 with graphic 3372).
  * Guesses: 16 rocks from delve 8; 3 ticks of grace; 5 tiles a tick at delves 6-7 and 8 from 8;
  * the slam's damage (as a shockwave, 26-42); an orb per 5 tiles travelled, 2 ticks apart.
- * Here the Doom jumps tile to tile: NPCs have no exact_move.
  */
 
 const Shared = require("./DoomShared");
@@ -199,19 +198,24 @@ class BurrowPhase {
     const step = this.step;
     boss.performAnimation(new Animation(ANIM.MOVE));
     boss.performGraphic(Shared.gfx(GFX.MOVE));
+    // Tile by tile along this tick's stretch: rocks under it break, and the player is trampled.
+    const player = run.player.getLocation();
+    let end = null;
     for (let moved = 0; moved < speed(run.level) && step.path.length > 0; moved++) {
-      const tile = step.path.shift();
-      boss.moveTo(Shared.loc({ x: tile.x, y: tile.y, z: 0 }));
-      for (let x = tile.x; x < tile.x + 5; x++) {
-        for (let y = tile.y; y < tile.y + 5; y++) {
+      end = step.path.shift();
+      for (let x = end.x; x < end.x + 5; x++) {
+        for (let y = end.y; y < end.y + 5; y++) {
           if (run.hazards.breakRockAt(x, y)) Shared.graphicAt(run.player, GFX.RUBBLE, { x, y, z: 0 });
         }
       }
-      if (!step.trampled && Shared.distanceTo(boss, run.player.getLocation()) === 0) {
+      const under = player.getX() >= end.x && player.getX() < end.x + 5 && player.getY() >= end.y && player.getY() < end.y + 5;
+      if (!step.trampled && under) {
         step.trampled = true;
         run.hurt(trample(run.level));
       }
     }
+    // Capture: a teleport and an exact_move a tick (delay1 0, delay2 30, facing the way it goes).
+    if (end) boss.exactMove(Shared.loc({ x: end.x, y: end.y, z: 0 }));
     if (step.path.length > 0) return;
     this.shove();
     if (run.level >= 6) {
