@@ -281,6 +281,7 @@ assert.equal(
         isNpc: () => true,
         getHitpoints: () => 100,
         getAsNpc: () => npc,
+        getRollFactor: () => 1,
         getDefenceLevel: () => 10,
         getCurrentDefinition: () => ({ getStats: () => [0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }),
     };
@@ -412,6 +413,84 @@ assert.equal(
         World.getProcessCycle = originalCycle;
         NpcDefinition.forId = originalDefinition;
     }
+}
+
+// 11) Utility specials (skipAttack) are instant: the button press runs the
+// plugin effect, drains the whole bar, and clears the activated flag - no
+// target and no attack swing (Lumber Up, Rock Knocker, Fishstabber, ...).
+{
+    const registerSpecial = (name: string) => {
+        require(`../plugins/combat/specials/${name}.SpecialAttack`)({
+            core: (PluginManager as any).getCoreApi(),
+            registerCombatSpecial: CombatSpecial.register,
+        });
+    };
+    registerSpecial("DragonAxe");
+    registerSpecial("DragonPickaxe");
+    registerSpecial("DragonHarpoon");
+
+    const utilityPlayer = (spec: any, percentage: number) => {
+        const levels: Record<number, number> = {};
+        const messages: string[] = [];
+        let activated = false;
+        let special = percentage;
+        const player: any = {
+            isPlayer: () => true,
+            getAsPlayer: () => player,
+            getCombatSpecial: () => spec,
+            getDueling: () => ({ inDuel: () => false, getRules: () => [] }),
+            isSpecialActivated: () => activated,
+            setSpecialActivated: (value: boolean) => { activated = value; },
+            getSpecialPercentage: () => special,
+            decrementSpecialPercentage: (amount: number) => { special = Math.max(0, special - amount); },
+            isRecoveringSpecialAttack: () => true,
+            sendMessage: (text: string) => messages.push(text),
+            getEquipment: () => ({ get: () => ({ getId: () => 0 }) }),
+            getWeapon: () => null,
+            getPacketSender: () => ({
+                updateSpecialAttackOrb: () => {},
+                sendSpecialAttackState: () => {},
+                sendInterfaceComponentMoval: () => {},
+                sendString: () => {},
+            }),
+            getSkillManager: () => ({
+                getMaxLevel: () => 70,
+                getCurrentLevel: (skill: any) => levels[skill.getIndex()] ?? 70,
+                setCurrentLevels: (skill: any, level: number) => { levels[skill.getIndex()] = level; },
+            }),
+        };
+        return { player, messages, levels, isActivated: () => activated, percentage: () => special };
+    };
+
+    const cases = [
+        { id: "dragon_axe", skill: Skill.WOODCUTTING },
+        { id: "dragon_pickaxe", skill: Skill.MINING },
+        { id: "dragon_harpoon", skill: Skill.FISHING },
+    ];
+    for (const { id, skill } of cases) {
+        const spec = CombatSpecial.getById(id)!;
+        assert.equal(spec.getTraits()?.skipAttack, true, `${id} is a skipAttack utility special`);
+
+        const boosted = utilityPlayer(spec, 100);
+        CombatSpecial.activate(boosted.player);
+        assert.equal(boosted.levels[skill.getIndex()], 73, `${id} boosts its skill on activation`);
+        assert.equal(boosted.percentage(), 0, `${id} drains the full bar`);
+        assert.equal(boosted.isActivated(), false, `${id} does not stay toggled`);
+
+        const dry = utilityPlayer(spec, 0);
+        CombatSpecial.activate(dry.player);
+        assert.equal(dry.levels[skill.getIndex()], undefined, `${id} does not boost without energy`);
+        assert.equal(dry.isActivated(), false, `${id} never toggles on when out of energy`);
+        assert.match(dry.messages[0] ?? "", /enough special attack energy/, `${id} reports the missing energy`);
+    }
+
+    // Normal (hit-producing) specials keep the attack-swing toggle behaviour.
+    const normalSpec: any = special({});
+    normalSpec.getCombatMethod = () => ({ type: () => CombatType.MELEE });
+    const normal = utilityPlayer(normalSpec, 100);
+    CombatSpecial.activate(normal.player);
+    assert.equal(normal.isActivated(), true, "non-utility specials still toggle on");
+    assert.equal(normal.percentage(), 100, "activating a normal special does not drain on its own");
 }
 
 console.info("weapon special traits smoke passed");
