@@ -81,6 +81,7 @@ const DESTINATIONS = {
     teleport("Count Draynor", location(3077, 9772), TeleportType.NORMAL),
     teleport("Elvarg", location(2852, 9637), TeleportType.NORMAL),
     teleport("Kalphite Queen", location(3508, 9494), TeleportType.NORMAL),
+    teleport("Zulrah", location(2196, 3056), TeleportType.NORMAL),
   ],
   [TAB.MINIGAMES]: [
     teleport("Barrows", location(3565, 3315), TeleportType.NORMAL),
