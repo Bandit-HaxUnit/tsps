@@ -2,6 +2,7 @@
 
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
 const { callModeHook } = require("../behaviours/hooks/ModeHookContract");
+const { BotBrain } = require("../brain/BotBrain");
 
 const DEFAULT_SITE = Object.freeze({ x: 3147, y: 3230, z: 0 });
 const SPAWN_RING_TILES = 10;
@@ -39,15 +40,26 @@ function createBotBenchmark(options = {}) {
     assignableBehaviors,
     tickMetrics,
     resetMovementState,
+    brainRegistry,
+    brainWorld,
   } = options;
 
   const count = parseEnvInt("BOT_BENCH_COUNT", 0, 0);
   if (count <= 0 || !runtime || !tickMetrics) {
     return null;
   }
+  const useBrain = (process.env.BOT_BENCH_BRAIN ?? "0") === "1";
+  const brainActivityId = process.env.BOT_BENCH_ACTIVITY ?? "lumbridge_normal_trees";
+  const brainActivity = useBrain
+    ? brainRegistry?.byId?.get(brainActivityId) ?? null
+    : null;
+  if (useBrain && !brainActivity) {
+    botApi?.log?.("bot_bench_unknown_activity", { activity: brainActivityId });
+    return null;
+  }
   const modeKey = String(process.env.BOT_BENCH_MODE ?? "woodcutting").toLowerCase();
-  const mode = assignableBehaviors?.[modeKey] ?? null;
-  if (!mode) {
+  const mode = brainActivity ? null : assignableBehaviors?.[modeKey] ?? null;
+  if (!useBrain && !mode) {
     botApi?.log?.("bot_bench_invalid_mode", { modeKey });
     return null;
   }
@@ -85,7 +97,10 @@ function createBotBenchmark(options = {}) {
   }
 
   function spawnBenchBot(index) {
-    const bot = runtime.spawnPvpBot(resolveSpawnLocation(index), { mode });
+    // Brain bots must spawn unprimed: a null mode means "pvp" to the spawner and
+    // fills the inventory with a preset, which breaks the activity loop.
+    const spawnMode = brainActivity ? brainActivity.mode : mode;
+    const bot = runtime.spawnPvpBot(resolveSpawnLocation(index), { mode: spawnMode });
     if (!bot) {
       return false;
     }
@@ -97,6 +112,22 @@ function createBotBenchmark(options = {}) {
     state.home = { x: site.x, y: site.y, z: site.z };
     if (state.autonomy) {
       state.autonomy.allowedAutonomousModes = null;
+    }
+    if (brainActivity) {
+      const entry = username ? runtime.entriesByUsername?.get?.(username) : null;
+      if (!entry) {
+        return false;
+      }
+      botApi?.log?.("bot_bench_brain_attached", { username, activity: brainActivity.id });
+      entry.brain = new BotBrain({
+        player: bot,
+        state,
+        registry: brainRegistry,
+        world: brainWorld,
+        activity: brainActivity,
+        nowMs: Date.now(),
+      });
+      return true;
     }
     const activated =
       callModeHook({
@@ -131,7 +162,8 @@ function createBotBenchmark(options = {}) {
     const setup = {
       requested: count,
       spawned,
-      mode,
+      mode: brainActivity ? brainActivity.id : mode,
+      driver: brainActivity ? "brain" : "mode",
       site,
       warmupMs,
       durationMs,

@@ -1,0 +1,33 @@
+{
+  "templates": {
+    "chop_trees": {
+      "mode": "woodcutting",
+      "repeat": true,
+      "requires": [{ "skill": { "id": "woodcutting", "min": "$level" } }],
+      "setup": [],
+      "produces": ["logs", "woodcutting"],
+      "actions": [
+        { "type": "equipTool", "tool": "axe" },
+        { "type": "interactObject", "treeTier": "$tier", "option": "Chop down", "until": { "inventoryFull": true }, "stallSeconds": 120 },
+        { "type": "dropItems", "itemIds": ["$log"] }
+      ]
+    }
+  },
+  "activities": [
+    {
+      "id": "lumbridge_normal_trees",
+      "template": "chop_trees",
+      "capacity": 64,
+      "fields": { "level": 1, "tier": "normal", "log": "logs" }
+    }
+  ],
+  "sites": [
+    {
+      "id": "lumbridge_forest",
+      "activity": "lumbridge_normal_trees",
+      "count": 40,
+      "anchor": { "x": 3147, "y": 3230, "z": 0 },
+      "spawnRadius": 10
+    }
+  ]
+}

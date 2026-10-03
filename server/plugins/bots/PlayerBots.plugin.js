@@ -281,6 +281,8 @@ module.exports = {
       assignableBehaviors: boot.modeRegistries.assignableBehaviors,
       tickMetrics: boot.tickMetrics,
       resetMovementState,
+      brainRegistry: boot.brainRegistry,
+      brainWorld: boot.brainWorld,
     });
 
     registerBotStatusInteractions({

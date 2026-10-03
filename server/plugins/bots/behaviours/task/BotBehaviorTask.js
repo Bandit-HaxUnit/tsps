@@ -1773,6 +1773,11 @@ class BotBehaviorTask extends Task {
           modeProfile.sampledEntries += 1;
         }
       }
+      // Brain-driven bots run their own action loop instead of the behaviour tree.
+      if (entry.brain) {
+        entry.brain.tick(entryNow);
+        return;
+      }
 
       const combat = player.getCombat?.();
       const attacker = combat?.getAttacker?.();

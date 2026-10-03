@@ -37,6 +37,9 @@ const { FollowBackModeHandler } = require("../behaviours/modes/FollowBackModeHan
 const { ReturnHomeModeHandler } = require("../behaviours/modes/ReturnHomeModeHandler");
 const { createBotRegistry } = require("./BotRegistry");
 const { createBotTickMetrics } = require("./BotTickMetrics");
+const { createBotActivityRegistry } = require("../brain/BotActivityRegistry");
+const { woodcuttingProductionCount } = require("../brain/actions/InteractObject");
+const Woodcutting = require("../../skills/Woodcutting.plugin");
 const { BotStatusReporter } = require("./BotStatusReporter");
 const { FlashHintArrowTask } = require("./FlashHintArrowTask");
 const { listPvpProfiles } = require("../behaviours/pvp/PvpProfileRegistry");
@@ -102,6 +105,22 @@ function bootPlayerBotsRuntime(options = {}) {
     objectIds: [config.wildernessDitchObjectId],
     cachePath: config.objectIndexCachePath,
   });
+
+  const brainWorld = {
+    objectSearch: traversalAssist,
+    emitObjectInteraction: (event) => botApi.emitObjectInteraction(event),
+    isBusy: (player) => Woodcutting.isWoodcuttingActive?.(player) === true,
+    productionCount: woodcuttingProductionCount,
+    log: (message, extra) => botApi.log(message, extra),
+  };
+  let brainRegistry = null;
+  try {
+    brainRegistry = createBotActivityRegistry({ api: botApi, world: brainWorld });
+  } catch (error) {
+    botApi.log("bot_activities_load_failed", {
+      error: String(error?.message ?? error),
+    });
+  }
 
   const { requiredHooksByMode } = createModeHandlers({
     botStatesByName,
@@ -411,6 +430,8 @@ function bootPlayerBotsRuntime(options = {}) {
     combatReactionTrigger,
     botStatusReporter,
     tickMetrics,
+    brainRegistry,
+    brainWorld,
     flashHintArrowTaskFactory: (player, target) =>
       new FlashHintArrowTask(player, target),
     pvpCatalogs: {
