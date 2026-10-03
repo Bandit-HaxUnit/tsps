@@ -17,7 +17,9 @@ function attachBrain(options = {}) {
   if (home) {
     state.home = { x: home.x, y: home.y, z: home.z ?? 0 };
   }
-  if (state.autonomy) {
+  // PvP bots must stay pvp-only (target filters and tryStartMode rely on it);
+  // other brain activities drop the PvP priming so they cannot be dragged into fights.
+  if (state.autonomy && activity.mode !== "pvp") {
     state.autonomy.allowedAutonomousModes = null;
   }
   entry.brain = new BotBrain({

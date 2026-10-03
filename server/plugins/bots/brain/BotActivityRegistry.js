@@ -12,6 +12,7 @@ const { createWalkToAction } = require("./actions/WalkTo");
 const { createEnsureItemAction } = require("./actions/EnsureItem");
 const { createLightFireAction } = require("./actions/LightFire");
 const { createSmeltAction } = require("./actions/Smelt");
+const { createPvpCombatAction } = require("./actions/PvpCombat");
 
 const DEFAULT_DEFINITIONS_PATH = path.join(
   process.cwd(),
@@ -149,6 +150,9 @@ function createAction(spec, world) {
   }
   if (spec.type === "smelt") {
     return createSmeltAction(spec, world);
+  }
+  if (spec.type === "pvpCombat") {
+    return createPvpCombatAction(spec, world?.pvpController ?? null);
   }
   throw new Error(`[bot activities] unknown action type '${spec.type}'`);
 }

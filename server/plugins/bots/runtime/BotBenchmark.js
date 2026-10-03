@@ -110,7 +110,8 @@ function createBotBenchmark(options = {}) {
       return true;
     }
     state.home = { x: site.x, y: site.y, z: site.z };
-    if (state.autonomy) {
+    // PvP bots keep their pvp-only priming; other brain activities drop it.
+    if (state.autonomy && brainActivity?.mode !== "pvp") {
       state.autonomy.allowedAutonomousModes = null;
     }
     if (brainActivity) {

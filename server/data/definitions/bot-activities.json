@@ -199,6 +199,18 @@
         "oreAmount": 10,
         "bar": "Bronze bar"
       }
+    },
+    {
+      "id": "pvp",
+      "mode": "pvp",
+      "capacity": 64,
+      "repeat": true,
+      "failureCooldownSeconds": 5,
+      "actions": [
+        {
+          "type": "pvpCombat"
+        }
+      ]
     }
   ],
   "sites": [

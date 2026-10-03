@@ -38,6 +38,7 @@ const { ReturnHomeModeHandler } = require("../behaviours/modes/ReturnHomeModeHan
 const { createBotRegistry } = require("./BotRegistry");
 const { createBotTickMetrics } = require("./BotTickMetrics");
 const { createBotActivityRegistry } = require("../brain/BotActivityRegistry");
+const { createPvpController } = require("../brain/pvp/PvpController");
 const { registerBrainProgressEvents } = require("../brain/BotBrainEvents");
 const { listCatalogObjectIds } = require("../brain/BotObjectCatalog");
 const { inventoryProductionCount } = require("../brain/actions/InteractObject");
@@ -122,15 +123,6 @@ function bootPlayerBotsRuntime(options = {}) {
     productionCount: inventoryProductionCount,
     log: (message, extra) => botApi.log(message, extra),
   };
-  let brainRegistry = null;
-  try {
-    brainRegistry = createBotActivityRegistry({ api: botApi, world: brainWorld });
-  } catch (error) {
-    botApi.log("bot_activities_load_failed", {
-      error: String(error?.message ?? error),
-    });
-  }
-
   const { requiredHooksByMode } = createModeHandlers({
     botStatesByName,
     api: botApi,
@@ -153,6 +145,21 @@ function bootPlayerBotsRuntime(options = {}) {
     botApi,
     "player_bots_mode_handlers"
   );
+
+  // Brain PvP reuses the mode handler's engine instead of duplicating its nodes.
+  brainWorld.pvpController = createPvpController({
+    behavior: modeHandlers[behaviorMode.PVP] ?? null,
+    api: botApi,
+    getEntries: () => entries,
+  });
+  let brainRegistry = null;
+  try {
+    brainRegistry = createBotActivityRegistry({ api: botApi, world: brainWorld });
+  } catch (error) {
+    botApi.log("bot_activities_load_failed", {
+      error: String(error?.message ?? error),
+    });
+  }
 
   const trackedTraversalObjectIds = new Set([config.wildernessDitchObjectId]);
   for (const objectId of collectTrackedObjectIdsFromModes({
