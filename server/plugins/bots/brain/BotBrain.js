@@ -301,6 +301,14 @@ class BotBrain {
     this.frames.pop();
     const behaviour = frame.behaviour;
     if (behaviour.actions?.length) {
+      if (behaviour.resolver !== true) {
+        this.registry?.blockActivity?.(
+          this.player,
+          behaviour.id,
+          nowMs,
+          behaviour.failureCooldownMs
+        );
+      }
       this.releaseActivity();
     }
     const parent = this.frames[this.frames.length - 1];

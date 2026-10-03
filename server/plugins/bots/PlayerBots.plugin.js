@@ -15,6 +15,7 @@ const { createBotPluginLogging } = require("./runtime/BotPluginLogging");
 const { bootPlayerBotsRuntime } = require("./runtime/BotPluginBoot");
 const { createBotBenchmark } = require("./runtime/BotBenchmark");
 const { startBotSites } = require("./brain/BotSiteSpawner");
+const { attachBrain } = require("./brain/attachBrain");
 const { setActiveBotRuntime } = require("./runtime/BotRuntimeRegistry");
 const {
   registerBotStatusInteractions,
@@ -314,6 +315,9 @@ module.exports = {
       resetMovementState,
       taskManager: api.getTaskManager(),
       flashHintArrowTaskFactory: boot.flashHintArrowTaskFactory,
+      brainRegistry: boot.brainRegistry,
+      brainWorld: boot.brainWorld,
+      attachBrain,
     });
 
     registerBotEvents({

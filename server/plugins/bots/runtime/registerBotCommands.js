@@ -16,6 +16,9 @@ function registerBotCommands(options) {
     resetMovementState,
     taskManager,
     flashHintArrowTaskFactory,
+    brainRegistry,
+    brainWorld,
+    attachBrain,
   } = options;
 
   const activateMode = (target, state, mode, reason) =>
@@ -88,9 +91,32 @@ function registerBotCommands(options) {
       player.sendMessage(`Usage: ::bot [${supportedBehaviorList}] (default pvp)`);
       return true;
     }
+    const brainActivity =
+      process.env.BOT_BRAIN_MODES === "1" && brainRegistry
+        ? brainRegistry.activities?.find(
+            (activity) => activity.mode === normalizedBehavior
+          ) ?? null
+        : null;
     const bot = runtime.spawnPvpBot(player.getLocation(), { mode: normalizedBehavior });
     if (!bot) {
       player.sendMessage("Unable to spawn a PvP bot right now.");
+      return true;
+    }
+    if (brainActivity) {
+      const attached = attachBrain?.({
+        runtime,
+        registry: brainRegistry,
+        world: brainWorld,
+        bot,
+        activity: brainActivity,
+        home: player.getLocation(),
+        resetMovementState,
+      });
+      player.sendMessage(
+        attached
+          ? `${bot.getUsername()} spawned as ${normalizedBehavior} (brain).`
+          : `Unable to attach the brain to ${bot.getUsername()}.`
+      );
       return true;
     }
     // The factory queues a world login. Clan membership and mode activation need the bot registered.

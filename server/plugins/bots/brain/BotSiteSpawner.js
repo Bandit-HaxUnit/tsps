@@ -1,7 +1,7 @@
 "use strict";
 
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
-const { BotBrain } = require("./BotBrain");
+const { attachBrain } = require("./attachBrain");
 
 const SPAWN_ATTEMPTS = 16;
 
@@ -47,26 +47,15 @@ function startBotSites(options = {}) {
     if (!bot) {
       return false;
     }
-    const username = bot.getUsername?.();
-    const state = username ? runtime.botStatesByName?.get?.(username) : null;
-    const entry = username ? runtime.entriesByUsername?.get?.(username) : null;
-    if (!state || !entry) {
-      return false;
-    }
-    state.home = { x: anchor.x, y: anchor.y, z: anchor.z ?? 0 };
-    if (state.autonomy) {
-      state.autonomy.allowedAutonomousModes = null;
-    }
-    entry.brain = new BotBrain({
-      player: bot,
-      state,
+    return attachBrain({
+      runtime,
       registry,
       world,
+      bot,
       activity: site.activity,
-      nowMs: Date.now(),
+      home: anchor,
+      resetMovementState,
     });
-    resetMovementState?.(bot);
-    return true;
   }
 
   function start() {

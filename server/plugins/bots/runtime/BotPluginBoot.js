@@ -39,8 +39,12 @@ const { createBotRegistry } = require("./BotRegistry");
 const { createBotTickMetrics } = require("./BotTickMetrics");
 const { createBotActivityRegistry } = require("../brain/BotActivityRegistry");
 const { registerBrainProgressEvents } = require("../brain/BotBrainEvents");
-const { woodcuttingProductionCount } = require("../brain/actions/InteractObject");
+const { listCatalogObjectIds } = require("../brain/BotObjectCatalog");
+const { inventoryProductionCount } = require("../brain/actions/InteractObject");
 const Woodcutting = require("../../skills/Woodcutting.plugin");
+const Mining = require("../../skills/Mining.plugin");
+const Firemaking = require("../../skills/Firemaking.plugin");
+const Smithing = require("../../skills/Smithing.plugin");
 const { BotStatusReporter } = require("./BotStatusReporter");
 const { FlashHintArrowTask } = require("./FlashHintArrowTask");
 const { listPvpProfiles } = require("../behaviours/pvp/PvpProfileRegistry");
@@ -110,8 +114,12 @@ function bootPlayerBotsRuntime(options = {}) {
   const brainWorld = {
     objectSearch: traversalAssist,
     emitObjectInteraction: (event) => botApi.emitObjectInteraction(event),
-    isBusy: (player) => Woodcutting.isWoodcuttingActive?.(player) === true,
-    productionCount: woodcuttingProductionCount,
+    isBusy: (player) =>
+      Woodcutting.isWoodcuttingActive?.(player) === true ||
+      Mining.isMiningActive?.(player) === true ||
+      Firemaking.isFiremakingActive?.(player) === true ||
+      Smithing.isSmeltingActive?.(player) === true,
+    productionCount: inventoryProductionCount,
     log: (message, extra) => botApi.log(message, extra),
   };
   let brainRegistry = null;
@@ -153,7 +161,10 @@ function bootPlayerBotsRuntime(options = {}) {
   })) {
     trackedTraversalObjectIds.add(objectId);
   }
-  traversalAssist.trackObjectIds([...trackedTraversalObjectIds]);
+  traversalAssist.trackObjectIds([
+    ...trackedTraversalObjectIds,
+    ...listCatalogObjectIds(),
+  ]);
   // A valid dump loads here, before regions load; a missing/stale one is scanned and
   // rewritten once core startup has initialized regions.
   traversalAssist.initializePersistentIndex();

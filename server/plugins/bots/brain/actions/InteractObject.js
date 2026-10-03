@@ -1,8 +1,6 @@
 "use strict";
 
 const { MapObjects } = require("../../../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
-const { Skill } = require("../../../../src/main/typescript/elvarg/game/model/Skill");
-const Woodcutting = require("../../../skills/Woodcutting.plugin");
 const { resolveCatalogObjectIds } = require("../BotObjectCatalog");
 const {
   approachObject,
@@ -29,7 +27,16 @@ function createInteractObjectAction(spec, world) {
   let lastClickAt = 0;
 
   function productionCount(player) {
-    return world.productionCount?.(player) ?? 0;
+    if (world.productionCount) {
+      return world.productionCount(player);
+    }
+    let total = 0;
+    for (const item of player?.getInventory?.()?.getItems?.() ?? []) {
+      if (item?.getId?.() > 0) {
+        total += item.getAmount();
+      }
+    }
+    return total;
   }
 
   function findTarget(player) {
@@ -199,22 +206,17 @@ function createInteractObjectAction(spec, world) {
   };
 }
 
-function woodcuttingProductionCount(player) {
-  const inventory = player.getInventory?.();
-  if (!inventory) {
-    return 0;
-  }
+function inventoryProductionCount(player) {
   let total = 0;
-  for (const logId of Woodcutting.TREE_LOG_IDS ?? []) {
-    total += inventory.getAmount(logId);
+  for (const item of player?.getInventory?.()?.getItems?.() ?? []) {
+    if (item?.getId?.() > 0) {
+      total += item.getAmount();
+    }
   }
-  total += Math.floor(
-    player.getSkillManager?.().getExperience?.(Skill.WOODCUTTING) ?? 0
-  );
   return total;
 }
 
 module.exports = {
   createInteractObjectAction,
-  woodcuttingProductionCount,
+  inventoryProductionCount,
 };

@@ -2,7 +2,7 @@
 
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
 const { callModeHook } = require("../behaviours/hooks/ModeHookContract");
-const { BotBrain } = require("../brain/BotBrain");
+const { attachBrain } = require("../brain/attachBrain");
 
 const DEFAULT_SITE = Object.freeze({ x: 3147, y: 3230, z: 0 });
 const SPAWN_RING_TILES = 10;
@@ -114,20 +114,16 @@ function createBotBenchmark(options = {}) {
       state.autonomy.allowedAutonomousModes = null;
     }
     if (brainActivity) {
-      const entry = username ? runtime.entriesByUsername?.get?.(username) : null;
-      if (!entry) {
-        return false;
-      }
       botApi?.log?.("bot_bench_brain_attached", { username, activity: brainActivity.id });
-      entry.brain = new BotBrain({
-        player: bot,
-        state,
+      return attachBrain({
+        runtime,
         registry: brainRegistry,
         world: brainWorld,
+        bot,
         activity: brainActivity,
-        nowMs: Date.now(),
+        home: site,
+        resetMovementState,
       });
-      return true;
     }
     const activated =
       callModeHook({

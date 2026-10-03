@@ -5,11 +5,19 @@ const { Item } = require("../../../../src/main/typescript/elvarg/game/model/Item
 const { Flag } = require("../../../../src/main/typescript/elvarg/game/model/Flag");
 const { Skill } = require("../../../../src/main/typescript/elvarg/game/model/Skill");
 const Woodcutting = require("../../../skills/Woodcutting.plugin");
+const Mining = require("../../../skills/Mining.plugin");
 
 const TOOL_RESOLVERS = {
   axe(player) {
     const level = player.getSkillManager().getCurrentLevel(Skill.WOODCUTTING);
     return Woodcutting.findBestUsableAxeByLevel(level)?.id ?? null;
+  },
+  pickaxe(player) {
+    const level = player.getSkillManager().getCurrentLevel(Skill.MINING);
+    const pickaxe = (Mining.PICKAXES_DESC ?? []).find(
+      (entry) => level >= entry.requiredLevel
+    );
+    return pickaxe?.id ?? null;
   },
 };
 

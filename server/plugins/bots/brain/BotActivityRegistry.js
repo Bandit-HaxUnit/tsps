@@ -9,6 +9,9 @@ const { createDropItemsAction } = require("./actions/DropItems");
 const { createEquipToolAction } = require("./actions/EquipTool");
 const { createBankAction } = require("./actions/Bank");
 const { createWalkToAction } = require("./actions/WalkTo");
+const { createEnsureItemAction } = require("./actions/EnsureItem");
+const { createLightFireAction } = require("./actions/LightFire");
+const { createSmeltAction } = require("./actions/Smelt");
 
 const DEFAULT_DEFINITIONS_PATH = path.join(
   process.cwd(),
@@ -135,6 +138,18 @@ function createAction(spec, world) {
   if (spec.type === "walkTo") {
     return createWalkToAction(spec);
   }
+  if (spec.type === "ensureItem") {
+    return createEnsureItemAction({
+      ...spec,
+      item: resolveItemId(spec.item),
+    });
+  }
+  if (spec.type === "lightFire") {
+    return createLightFireAction(spec, world);
+  }
+  if (spec.type === "smelt") {
+    return createSmeltAction(spec, world);
+  }
   throw new Error(`[bot activities] unknown action type '${spec.type}'`);
 }
 
@@ -154,6 +169,10 @@ function compileActivity(definition, templates, world, options = {}) {
     mode: merged.mode ?? null,
     capacity: Number.isFinite(merged.capacity) ? Math.max(1, Math.floor(merged.capacity)) : 1,
     repeat: merged.repeat === true,
+    failureCooldownMs: Math.max(
+      0,
+      Math.floor(Number(merged.failureCooldownSeconds ?? 15)) * 1000
+    ),
     requires: (merged.requires ?? []).map(createCondition),
     setup: (merged.setup ?? []).map(createCondition),
     actions: (merged.actions ?? []).map((action) => createAction(action, world)),
@@ -207,11 +226,18 @@ function createBotActivityRegistry(options = {}) {
   });
   const slots = new Map();
   const lastActivityByPlayer = new WeakMap();
+  const blockedUntilByPlayer = new WeakMap();
 
-  function available(player) {
+  function isBlocked(player, activityId, nowMs) {
+    const until = blockedUntilByPlayer.get(player)?.get(activityId);
+    return until !== undefined && until > nowMs;
+  }
+
+  function available(player, nowMs) {
     return activities.filter(
       (activity) =>
         (slots.get(activity.id) ?? 0) < activity.capacity &&
+        !isBlocked(player, activity.id, nowMs) &&
         activity.requires.every((condition) => condition.check({ player }))
     );
   }
@@ -234,9 +260,17 @@ function createBotActivityRegistry(options = {}) {
       const next = Math.max(0, (slots.get(activity.id) ?? 0) - 1);
       slots.set(activity.id, next);
     },
-    pickActivity(player) {
+    blockActivity(player, activityId, nowMs = Date.now(), durationMs = 15000) {
+      let blocked = blockedUntilByPlayer.get(player);
+      if (!blocked) {
+        blocked = new Map();
+        blockedUntilByPlayer.set(player, blocked);
+      }
+      blocked.set(activityId, nowMs + Math.max(0, durationMs));
+    },
+    pickActivity(player, nowMs = Date.now()) {
       const previousId = lastActivityByPlayer.get(player);
-      const candidates = available(player);
+      const candidates = available(player, nowMs);
       const previous = candidates.find((activity) => activity.id === previousId);
       const picked = previous ?? candidates[Math.floor(Math.random() * candidates.length)] ?? null;
       if (picked) {
