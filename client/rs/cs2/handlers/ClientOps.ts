@@ -9,6 +9,7 @@ import {
 } from "../../../game/ClientState";
 import { getClientClock } from "../../../game/TransmitCycles";
 import { getSafeAreaBounds, isTouchDevice } from "../../../common/utils/DeviceUtil";
+import { MOBILE_ROOT_INTERFACE, reportedClientType } from "../ClientType";
 import { VARBIT_ROOF_REMOVAL } from "../../../common/vars";
 import { MenuTargetType } from "../../MenuEntry";
 import { chatHistory } from "../ChatHistory";
@@ -539,8 +540,8 @@ export function registerClientOps(handlers: HandlerMap): void {
         // Return 2 (android) for mobile interface or touch devices, 10 otherwise.
         // [proc,on_mobile] checks `clienttype = 7` as one condition.
         const wm = ctx.widgetManager as any;
-        const isMobileInterface = wm?.rootInterface === 601;
-        const result = isMobileInterface || isTouchDevice ? 2 : 10;
+        const isMobileInterface = wm?.rootInterface === MOBILE_ROOT_INTERFACE;
+        const result = reportedClientType(wm?.rootInterface);
         if (!loggedClientType) {
             loggedClientType = true;
             console.log(
