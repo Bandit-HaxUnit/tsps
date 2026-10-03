@@ -149,7 +149,10 @@ function bootPlayerBotsRuntime(options = {}) {
 
   // One pvp engine for every driver: brain activities, the tree's defensive
   // branch and reactive combat hand-offs.
-  const pvpController = new PvpController(botStatesByName, botApi, { behaviorMode });
+  const pvpController = new PvpController(botStatesByName, botApi, {
+    behaviorMode,
+    ...(config.treeOptions ?? {}),
+  });
   pvpController.setEntrySource(() => entries);
   brainWorld.pvpController = pvpController;
   let brainRegistry = null;

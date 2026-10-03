@@ -46,6 +46,10 @@ const {
   setModeRoaming,
 } = require("../../behaviours/state/PlayerBotState");
 const { resolveBotNodeContext } = require("../../behaviours/nodes/context/BotNodeContext");
+const { EatFoodActionNode } = require("../../behaviours/nodes/actions/EatFoodActionNode");
+const {
+  MaintainCombatBoostsActionNode,
+} = require("../../behaviours/nodes/actions/MaintainCombatBoostsActionNode");
 const {
   getPvpProfile,
   getWildernessHotspot,
@@ -214,6 +218,17 @@ class PvpController {
     if (typeof options.getEntries === "function") {
       ENTRY_SOURCES.set(this, options.getEntries);
     }
+    // The tree ran these as global branches before every mode tick; brain bots
+    // bypass the tree, so the pvp action drives them through tickSupport.
+    this.eatFoodActionNode = new EatFoodActionNode(botStatesByName, api, {
+      lowHpRatio: options.botEatLowHpRatio,
+      minHeal: options.botEatHealMin,
+      maxHeal: options.botEatHealMax,
+      maxCharges: options.botEatMaxCharges,
+    });
+    this.maintainCombatBoostsActionNode = new MaintainCombatBoostsActionNode(
+      botStatesByName
+    );
     this.validateEngagementNode = new PvpValidateEngagementNode({
       api,
       behaviorMode: this.behaviorMode,
@@ -1469,6 +1484,39 @@ class PvpController {
     return this.defensiveActionNode.tick({
       ...resolved, target: this.resolveTargetPlayer(resolved.state),
     });
+  }
+
+  /**
+   * Tree parity layer: boosts, retreat/defensive and food ran as the first
+   * branches of the behaviour tree. Returns { skip: true } when one of them
+   * took the turn, so the engagement tick waits.
+   */
+  tickSupport({ player, state, nowMs }) {
+    const resolved = resolveBotNodeContext({ player, state, nowMs }, this.botStatesByName, {
+      requiredMode: this.behaviorMode.PVP,
+      requireNotInCombat: false,
+      requireNotBusy: false,
+    });
+    if (!resolved) {
+      return { skip: false };
+    }
+    if (this.maintainCombatBoostsActionNode.tick({ ...resolved }) !== "failure") {
+      return { skip: true };
+    }
+    const defensive = this.defensiveActionNode.tick({
+      ...resolved,
+      target: this.resolveTargetPlayer(resolved.state),
+    });
+    if (defensive.handled) {
+      if (resolved.state?.pvp?.retreat && !resolved.player.isTeleportingReturn?.()) {
+        this.eatFoodActionNode.tick({ ...resolved });
+      }
+      return { skip: true };
+    }
+    if (this.eatFoodActionNode.tick({ ...resolved }) !== "failure") {
+      return { skip: true };
+    }
+    return { skip: false };
   }
 
   tick(context) {
