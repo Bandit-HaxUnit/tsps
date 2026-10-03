@@ -158,7 +158,7 @@ function farmingItemPair(event) {
         event.handled = true;
         if (!Patches.water(player, can)) return;
         const slot = a === seedling.seedling ? event.usedItemSlot : event.usedWithItemSlot;
-        inventory.forSlot(slot).setId(seedling.wateredSeedling).setMetaValue("farming:saplingAt", Model.nextGrowth(Date.now(), 5, Patches.farmFor(player).offset));
+        inventory.forSlot(slot).setId(seedling.wateredSeedling).setMetaValue("farming:sapling-at", Model.nextGrowth(Date.now(), 5, Patches.farmFor(player).offset));
         inventory.refreshItems();
         return;
     }
@@ -208,9 +208,9 @@ function growSeedlings(player, now) {
         for (const item of container.getItems()) {
             const crop = item && item.getAmount() > 0 && Data.WATERED_SEEDLINGS.get(item.getId());
             if (!crop) continue;
-            const at = item.getMetaValue("farming:saplingAt");
-            if (!at) item.setMetaValue("farming:saplingAt", Model.nextGrowth(now, 5, Patches.farmFor(player).offset));
-            else if (now >= at) { item.setId(crop.sapling).setMetaValue("farming:saplingAt", undefined); changed = true; }
+            const at = item.getMetaValue("farming:sapling-at");
+            if (!at) item.setMetaValue("farming:sapling-at", Model.nextGrowth(now, 5, Patches.farmFor(player).offset));
+            else if (now >= at) { item.setId(crop.sapling).setMetaValue("farming:sapling-at", undefined); changed = true; }
         }
         if (changed) container.refreshItems();
     }

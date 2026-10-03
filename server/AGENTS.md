@@ -301,6 +301,10 @@ capability belongs in the runtime as a declared option, not in a feature-specifi
   interface ids, item/npc/object ids).
 - If a constant does not exist yet, add one in the appropriate shared module instead of
   repeating raw numbers.
+- Attribute keys are kebab-case, namespaced with `:` (`warriors-guild:basement-unlocked`,
+  `pvp:open-presets-on-death`, `blast-furnace`). Declare each key once in a `*_ATTRIBUTE`
+  constant and read/write through it; item `getMetaValue`/`setMetaValue` keys follow the
+  same rule.
 - Derive from the cache where the cache knows the answer. A rule that reads definitions
   (`plugins/objects/Doors.plugin.js` builds its open/closed pairs this way) beats a
   hand-picked id list that only covers what someone happened to test.

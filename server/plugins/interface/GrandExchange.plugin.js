@@ -53,8 +53,8 @@ function active(player, offer) {
 }
 
 function completedOffers(player) {
-  let slots = player.getAttribute("grandExchangeOffers");
-  if (!slots) player.setAttribute("grandExchangeOffers", slots = {});
+  let slots = player.getAttribute("grand-exchange-offers");
+  if (!slots) player.setAttribute("grand-exchange-offers", slots = {});
   return slots;
 }
 
@@ -426,7 +426,7 @@ module.exports = {
   name: "GrandExchange",
   register(api) {
     pluginApi = api;
-    api.persistAttribute("grandExchangeOffers");
+    api.persistAttribute("grand-exchange-offers");
     api.onPlayerLogin(({ player }) => {
       for (const offer of Object.values(completedOffers(player))) scheduleCompletion(player, offer);
     });

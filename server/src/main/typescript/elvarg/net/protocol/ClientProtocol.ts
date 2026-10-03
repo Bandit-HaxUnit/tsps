@@ -1758,7 +1758,7 @@ export function encodeGameframeFlags(root: number = 161): Buffer[] {
 }
 
 // Transient player attribute set from the handshake's clientType byte.
-export const MOBILE_CLIENT_ATTRIBUTE = "mobileClient";
+export const MOBILE_CLIENT_ATTRIBUTE = "mobile-client";
 // Mobile clients boot the Stock mobile toplevel (toplevel_osm); the client maps
 // the standard 161 mounts onto it via cache enum 1745.
 export const MOBILE_GAMEFRAME_ROOT = 601;
@@ -1774,7 +1774,7 @@ export function resolveGameframeRoot(
   fallback: number = 161
 ): number {
   if (player.getAttribute(MOBILE_CLIENT_ATTRIBUTE) === true) return MOBILE_GAMEFRAME_ROOT;
-  const saved = Number(player.getAttribute("clientLayoutRoot"));
+  const saved = Number(player.getAttribute("client-layout-root"));
   return STANDARD_GAMEFRAME_ROOTS.has(saved) ? saved : fallback;
 }
 

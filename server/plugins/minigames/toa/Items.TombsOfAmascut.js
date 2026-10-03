@@ -9,7 +9,7 @@
 const Shared = require("./ToaShared");
 
 const ANIMATION = { FORTIFY: 3676, CHISEL: 8833, FUSE: 791 };
-const SHADOW_CHARGES_KEY = "tumekensShadowCharges";
+const SHADOW_CHARGES_KEY = "tumekens-shadow-charges";
 const SHADOW_MAX_CHARGES = 20000;
 const SHADOW_SOULS_PER_CHARGE = 2;
 const SHADOW_CHAOS_PER_CHARGE = 5;

@@ -69,7 +69,7 @@ const JORZIK_GATE_VARIANT = "sometimes-when-attempting-to-open-the-gate-to-the-a
 /** The foreman's coin conditions that guard the Ring of Charos(a) haggle rather than the full fee. */
 const CHARM_COIN_CONDITION = "NCZ97a";
 
-const STATE_ATTRIBUTE = "blastFurnace";
+const STATE_ATTRIBUTE = "blast-furnace";
 
 let core;
 let pluginApi;

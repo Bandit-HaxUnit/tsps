@@ -10,7 +10,7 @@ const TRADEABLE_BOND = ItemIdentifiers.OLD_SCHOOL_BOND;
 const UNTRADEABLE_BOND = ItemIdentifiers.OLD_SCHOOL_BOND_UNTRADEABLE_;
 const BOND_IDS = new Set([TRADEABLE_BOND, UNTRADEABLE_BOND]);
 const COINS = ItemIdentifiers.COINS;
-const MEMBERSHIP_ATTRIBUTE = "bondMembershipExpiry";
+const MEMBERSHIP_ATTRIBUTE = "bond-membership-expiry";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CONVERT_RATE = 0.1;
 // Wiki: 14 days for 1 bond, 29 for 2, 45 for 3, 12 months for 20.

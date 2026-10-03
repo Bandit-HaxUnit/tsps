@@ -27,7 +27,7 @@ import { Spell } from "./Spell";
  * the weapon simply can't cast once depleted. See plugins/items/Trident.plugin.js
  * for the charging interaction; both sides share state via TRIDENT_CHARGE_META_KEY.
  */
-export const TRIDENT_CHARGE_META_KEY = "tridentCharges";
+export const TRIDENT_CHARGE_META_KEY = "trident-charges";
 export const TRIDENT_MAX_CHARGES = 2500;
 
 class TridentSpell extends CombatNormalSpell {
@@ -144,12 +144,12 @@ class CombatArceuusEffectSpell extends CombatEffectSpell {
     }
 }
 
-const ARCEUUS_MARK_UNTIL = "arceuus:markUntil";
+const ARCEUUS_MARK_UNTIL = "arceuus:mark-until";
 
 const hasArceuusMark = (target: Mobile): boolean =>
     Number(target.getAttribute(ARCEUUS_MARK_UNTIL) ?? 0) > Date.now();
 const hasArceuusWard = (target: Mobile): boolean =>
-    Number(target.getAttribute("arceuus:wardUntil") ?? 0) > Date.now();
+    Number(target.getAttribute("arceuus:ward-until") ?? 0) > Date.now();
 
 const getCombatFactory = () =>
     require("../CombatFactory").CombatFactory as typeof import("../CombatFactory").CombatFactory;
@@ -1560,7 +1560,7 @@ export class CombatSpells {
         spellEffect: (_cast, target) => {
             if (!target.isNpc()) return;
             target.getMovementQueue().reset();
-            target.setAttribute("arceuus:darkLureUntil", Date.now() + 20_000);
+            target.setAttribute("arceuus:dark-lure-until", Date.now() + 20_000);
             target.getCombat().attack(_cast);
         },
     });

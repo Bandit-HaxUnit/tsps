@@ -45,6 +45,14 @@ export class PlayerSave {
         PlayerSave.persistentAttributeKeys.add(key);
     }
 
+    private static readonly CAMEL_CASE_ATTRIBUTE_KEY = /([a-z0-9])([A-Z])/g;
+    /** Save migration: camelCase attribute keys were renamed to kebab-case. */
+    private static migrateAttributeKey(key: string): string {
+        if (PlayerSave.persistentAttributeKeys.has(key)) return key;
+        const kebab = key.replace(PlayerSave.CAMEL_CASE_ATTRIBUTE_KEY, "$1-$2").toLowerCase();
+        return PlayerSave.persistentAttributeKeys.has(kebab) ? kebab : key;
+    }
+
     public attributes: Record<string, unknown> = {};
     private static cloneAttribute(key: string, value: unknown): unknown {
         return JSON.parse(JSON.stringify(value, (_name, entry) => {
@@ -554,6 +562,11 @@ export class PlayerSave {
         player.getQuickPrayers().setPrayers(this.quickPrayers);
         player.setFlags(PlayerSave.normalizeFlags(this.flags));
         player.setSailing(normalizeSailingState(this.sailing));
+        if (this.attributes) {
+            this.attributes = Object.fromEntries(
+                Object.entries(this.attributes).map(([key, value]) => [PlayerSave.migrateAttributeKey(key), value])
+            );
+        }
         const legacyFields = this as unknown as Record<string, unknown>;
         for (const [field, key] of Object.entries(PlayerSave.LEGACY_FIELD_ATTRIBUTES)) {
             if (legacyFields[field] != null && !Object.prototype.hasOwnProperty.call(this.attributes ?? {}, key)) {

@@ -509,7 +509,7 @@ function handleWoodenGate(player, object, objectId, location) {
   // Anchor on the CLOSED hinge tile so open and close compute the same key for auto-close.
   const closedHingeX = isClosed ? hingeOld.x : transform.hinge[0];
   const closedHingeY = isClosed ? hingeOld.y : transform.hinge[1];
-  const anchorKey = `woodenGate:${gate.closed.hinge}:${closedHingeX},${closedHingeY},${z}`;
+  const anchorKey = `wooden-gate:${gate.closed.hinge}:${closedHingeX},${closedHingeY},${z}`;
   if (isClosed) {
     const closedHinge = new core.GameObject(
       gate.closed.hinge,

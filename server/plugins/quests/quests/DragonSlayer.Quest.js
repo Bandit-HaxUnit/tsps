@@ -140,10 +140,10 @@ module.exports = function registerDragonSlayerQuest(api) {
     crandorSurface: new Location(2833, 3255, 0),
   };
 
-  const ATTR_ORACLE = "dragonSlayer.oracle";
-  const ATTR_NED_ASKED = "dragonSlayer.nedAsked";
-  const ATTR_OZIACH_CONGRATS = "dragonSlayer.oziachCongrats";
-  const ATTR_SHORTCUT = "dragonSlayer.shortcut";
+  const ATTR_ORACLE = "dragon-slayer.oracle";
+  const ATTR_NED_ASKED = "dragon-slayer.ned-asked";
+  const ATTR_OZIACH_CONGRATS = "dragon-slayer.oziach-congrats";
+  const ATTR_SHORTCUT = "dragon-slayer.shortcut";
   const QUEST_POINTS_ATTRIBUTE = "quest.points";
 
   const PAGE = "Dragon Slayer I";

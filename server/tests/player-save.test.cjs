@@ -38,3 +38,16 @@ test("an attribute already in the save wins over the old field", () => {
 
   assert.equal(player.getAttribute("killstreaks:total-kills"), 9);
 });
+
+test("camelCase attribute keys from older saves migrate to kebab-case", () => {
+  PlayerSave.persistAttribute("warriors-guild:defender");
+  const save = PlayerSave.fromPlayer(new Player(null));
+  save.attributes["warriorsGuild:defender"] = true;
+
+  const player = new Player(null);
+  save.applyToPlayer(player);
+  assert.equal(player.getAttribute("warriors-guild:defender"), true);
+
+  const resaved = PlayerSave.fromPlayer(player);
+  assert.deepEqual(resaved.attributes, { "warriors-guild:defender": true });
+});
