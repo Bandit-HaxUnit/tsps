@@ -6,27 +6,15 @@ const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
 const { ItemIds, NpcIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const QuestRuntime = require("../quests/QuestRuntime");
 const InfernalHarpoon = require("./fishing/InfernalHarpoon.Fishing");
+const Guild = require("./fishing/Guild.Fishing");
+const AnglerOutfit = require("./fishing/AnglerOutfit.Fishing");
+const MinnowPlatform = require("./fishing/MinnowPlatform.Fishing");
 
 const FISHING_ACTION_INTERVAL_TICKS = 5;
 const FISHING_ANIMATION_INTERVAL_TICKS = 5;
 let fishingTick = 0;
 
 const ANIM = Object.freeze({ HARPOON: 618, CAGE: 619, BIG_NET: 620, NET: 621, ROD: 622 });
-
-// Fishing Guild: its map region holds only the guild's own spots (Wiki: about 11 cage/harpoon
-// and 9 big net/harpoon), so the region bounds stand in for the guild grounds.
-const FISHING_GUILD = Object.freeze({ minX: 2560, maxX: 2623, minY: 3392, maxY: 3455, z: 0 });
-const FISHING_GUILD_BOOST = 7;
-
-// OSRS Wiki (Angler's outfit): hat 0.4%, top 0.8%, waders 0.6%, boots 0.2%, plus 0.5% for all
-// four, so 2.5% more Fishing XP. Spirit angler pieces count the same.
-const ANGLER_OUTFIT = Object.freeze([
-  { slot: "HEAD_SLOT", ids: [ItemIds.ANGLER_HAT, ItemIds.SPIRIT_ANGLER_HEADBAND], bonus: 0.004 },
-  { slot: "BODY_SLOT", ids: [ItemIds.ANGLER_TOP, ItemIds.SPIRIT_ANGLER_TOP], bonus: 0.008 },
-  { slot: "LEG_SLOT", ids: [ItemIds.ANGLER_WADERS, ItemIds.SPIRIT_ANGLER_WADERS], bonus: 0.006 },
-  { slot: "FEET_SLOT", ids: [ItemIds.ANGLER_BOOTS, ItemIds.SPIRIT_ANGLER_BOOTS], bonus: 0.002 },
-]);
-const ANGLER_SET_BONUS = 0.005;
 
 class Fish {
   /**
@@ -269,21 +257,12 @@ function getFishingLevel(player) {
   return player.getSkillManager().getCurrentLevel(Skill.FISHING);
 }
 
-function inFishingGuild(player) {
-  const location = player.getLocation?.();
-  if (!location) return false;
-  const { minX, maxX, minY, maxY, z } = FISHING_GUILD;
-  const x = location.getX();
-  const y = location.getY();
-  return location.getZ() === z && x >= minX && x <= maxX && y >= minY && y <= maxY;
-}
-
 /**
  * The level catch rolls use. Wiki (Fishing Guild, citing Mod Ash): a visible level above
  * 99 counts as 99, and the guild adds an invisible +7 on top that never unlocks a fish.
  */
 function catchLevel(player) {
-  return Math.min(99, getFishingLevel(player)) + (inFishingGuild(player) ? FISHING_GUILD_BOOST : 0);
+  return Math.min(99, getFishingLevel(player)) + Guild.invisibleBoost(player);
 }
 
 function meetsLevels(player, requires) {
@@ -389,16 +368,8 @@ function rollCatch(player, tool, random = Math.random, bonus = 100) {
   return caught;
 }
 
-function anglerXpMultiplier(player) {
-  const { Equipment } = pluginApi.core;
-  const equipment = player.getEquipment().getItems();
-  const worn = ANGLER_OUTFIT.filter((piece) => piece.ids.includes(equipment[Equipment[piece.slot]]?.getId()));
-  const bonus = worn.reduce((sum, piece) => sum + piece.bonus, 0);
-  return 1 + bonus + (worn.length === ANGLER_OUTFIT.length ? ANGLER_SET_BONUS : 0);
-}
-
 function landCatch(player, tool, variant, caught) {
-  const xpMultiplier = anglerXpMultiplier(player);
+  const xpMultiplier = AnglerOutfit.xpMultiplier(player);
   const landed = caught.slice(0, Math.max(1, player.getInventory().getFreeSlots()));
   for (const fish of landed) {
     if (!variant.infernal || !InfernalHarpoon.tryCookFish(player, fish.id)) {
@@ -530,6 +501,9 @@ module.exports = {
     const activeSessions = new Map();
     TaskManager.submit(new FishingTask(activeSessions));
     InfernalHarpoon.attach(api);
+    Guild.attach(api);
+    AnglerOutfit.attach(api);
+    MinnowPlatform.attach(api);
 
     api.onPlayerDisconnect(({ player }) => {
       stopFishing(activeSessions, player, false);
@@ -562,5 +536,5 @@ module.exports = {
   getSpotTool,
   hasToolRequirements,
   landCatch,
-  anglerXpMultiplier,
+  anglerXpMultiplier: (player) => AnglerOutfit.xpMultiplier(player),
 };

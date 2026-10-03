@@ -252,10 +252,134 @@ test("the infernal harpoon cooks a third of its catch, runs on 5,000 charges and
     Math.random = random;
   }
 
+  // Fishing Guild door (loc 20925 at 2611,3394): 68 Fishing to go in, boosts count, leaving is free.
+  const Guild = require("../plugins/skills/fishing/Guild.Fishing");
+  const { Location } = core;
+  function visitor(level, [x, y]) {
+    const log = { messages: [], removed: 0, moved: null };
+    return Object.assign(log, {
+      getLocation: () => new Location(x, y, 0),
+      getSkillManager: () => ({ getCurrentLevel: () => level }),
+      sendMessage: (message) => log.messages.push(message),
+      getForceMovement: () => null,
+      setForceMovement() {},
+      getCombat: () => ({ reset() {} }),
+      getMovementQueue: () => ({ reset() {} }),
+      getPacketSender: () => ({ sendObjectRemoval: () => log.removed++, sendObject() {} }),
+      moveTo: (to) => { log.moved = to; },
+    });
+  }
+  const door = { x: 2611, y: 3394, z: 0 };
+  const knock = (p, objectId = core.ObjectIdentifiers.DOOR_422, location = door) => {
+    const request = { player: p, object: {}, objectId, location, handled: false };
+    Guild.useGuildDoor(request);
+    return request;
+  };
+  assert.equal(core.ObjectIdentifiers.DOOR_422, 20925);
+  const tooLow = visitor(67, Guild.OUTSIDE);
+  assert.equal(knock(tooLow).handled, true);
+  assert.equal(tooLow.messages[0], "You need a Fishing level of 68 to enter the Fishing Guild.");
+  assert.equal(tooLow.removed, 0);
+  const boosted = visitor(68, Guild.OUTSIDE);
+  knock(boosted);
+  assert.equal(boosted.removed, 1, "walks through");
+  const leaving = visitor(1, Guild.INSIDE);
+  knock(leaving);
+  assert.equal(leaving.removed, 1, "anyone can leave");
+  assert.equal(knock(visitor(1, Guild.OUTSIDE), core.ObjectIdentifiers.DOOR_422, { x: 3200, y: 3200, z: 0 }).handled, false);
+  assert.equal(Guild.invisibleBoost({ getLocation: () => new Location(...Guild.OUTSIDE, 0) }), 0);
+  assert.equal(Guild.invisibleBoost({ getLocation: () => new Location(...Guild.INSIDE, 0) }), 7);
+
   // A dragon harpoon recharges an uncharged one.
   const recharge = itemOnItem.find(([a, b]) => a === "Dragon harpoon" && b === "Infernal harpoon (uncharged)")[2];
   const owner = player({ inventory: [I.DRAGON_HARPOON, I.INFERNAL_HARPOON_UNCHARGED_] });
   recharge(use(owner));
   assert.deepEqual(owner.items.map((item) => item.getId()), [I.INFERNAL_HARPOON]);
   assert.equal(InfernalHarpoon.charges(owner.items[0]), 5000);
+});
+
+test("Kylie Minnow lets qualified fishers onto her platform, and the row boats follow her rules", async () => {
+  const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  await CachePipeline.initialize(path.resolve(__dirname, ".."));
+  const core = PluginManager.getCoreApi();
+  const { ItemIdentifiers: I, Skill, Item, Equipment, Location } = core;
+  const api = new Proxy({ core, getTaskManager: () => ({ submit() {} }), getWorld: () => ({}) },
+    { get: (target, name) => target[name] ?? (() => {}) });
+  require("../plugins/skills/Fishing.plugin").register(api);
+  const Platform = require("../plugins/skills/fishing/MinnowPlatform.Fishing");
+  const Guild = require("../plugins/skills/fishing/Guild.Fishing");
+
+  // Capture what Kylie would say instead of opening dialogue interfaces.
+  const dialogues = require("../plugins/npcs/NpcDialogues.plugin.js");
+  const played = [];
+  const startDialogue = dialogues.startDialogue;
+  dialogues.startDialogue = (_api, event, steps) => played.push({ npcId: event.npcId, steps });
+  try {
+    function fisher({ level = 99, outfit = false } = {}) {
+      const attributes = new Map();
+      const equipment = new Array(14).fill(null);
+      if (outfit) {
+        equipment[Equipment.HEAD_SLOT] = new Item(I.ANGLER_HAT, 1);
+        equipment[Equipment.BODY_SLOT] = new Item(I.ANGLER_TOP, 1);
+        equipment[Equipment.LEG_SLOT] = new Item(I.SPIRIT_ANGLER_WADERS, 1);
+        equipment[Equipment.FEET_SLOT] = new Item(I.ANGLER_BOOTS, 1);
+      }
+      const p = {
+        varbits: new Map(), movedTo: null,
+        getAttribute: (key) => attributes.get(key),
+        setAttribute: (key, value) => attributes.set(key, value),
+        getPacketSender: () => ({ sendVarbit: (id, value) => p.varbits.set(id, value) }),
+        getSkillManager: () => ({ getMaxLevel: (skill) => (skill === Skill.FISHING ? level : 99) }),
+        getEquipment: () => ({ getItems: () => equipment }),
+        getInventory: () => ({ getAmount: () => 0, getFreeSlots: () => 28 }),
+        moveTo: (to) => { p.movedTo = [to.getX(), to.getY(), to.getZ()]; },
+      };
+      return p;
+    }
+    const lastNpcLine = () => played.at(-1).steps.find((step) => step.npc)?.npc;
+    const ask = (p, text) => Platform.kylieCondition({ player: p, npcId: core.NpcIdentifiers.KYLIE_MINNOW, text });
+
+    // The guild boat turns away anyone under 82 Fishing, then anyone Kylie has not let on yet.
+    const novice = fisher({ level: 81 });
+    Platform.travelToPlatform({ player: novice });
+    assert.match(lastNpcLine(), /You need a fishing level of 82/);
+    assert.equal(novice.movedTo, null);
+    const stranger = fisher();
+    Platform.travelToPlatform({ player: stranger });
+    assert.match(lastNpcLine(), /I don't think I have given you access/);
+    assert.equal(stranger.movedTo, null);
+
+    // First talk is her introduction; after that the player just asks again.
+    Platform.talkToKylie({ player: stranger });
+    assert.equal(played.at(-1).steps[0].npc, "Strewth! Nippy little blighters!");
+    assert.equal(stranger.varbits.get(Platform.ACCESS_VARBIT), 1);
+    Platform.talkToKylie({ player: stranger });
+    assert.equal(played.at(-1).steps[0].player, "So, how about letting me out onto your fishing platform?");
+
+    // Without the outfit she says so and grants nothing.
+    assert.equal(ask(stranger, "If the player meets all the requirements:"), false);
+    assert.equal(ask(stranger, "If the player isn't wearing the Angler's outfit:"), true);
+    assert.equal(ask(stranger, "If the player doesn't have 82 Fishing:"), false);
+    assert.equal(Platform.hasAccess(stranger), false);
+
+    // Meeting every requirement grants access for good (varbit 5669 = 2 shows her Trade option).
+    const angler = fisher({ outfit: true });
+    assert.equal(ask(angler, "If the player meets all the requirements:"), true);
+    assert.equal(Platform.hasAccess(angler), true);
+    assert.equal(angler.varbits.get(Platform.ACCESS_VARBIT), 2);
+    Platform.talkToKylie({ player: angler });
+    assert.match(lastNpcLine(), /Have you got any minnows for trade/);
+    assert.equal(played.at(-1).npcId, core.NpcIdentifiers.KYLIE_MINNOW_2);
+
+    // Boats: out to the platform and back to the dock; the platform is outside the guild boost.
+    Platform.travelToPlatform({ player: angler });
+    assert.deepEqual(angler.movedTo, [...Platform.PLATFORM_LANDING]);
+    Platform.leavePlatform({ player: angler });
+    assert.deepEqual(angler.movedTo, [...Platform.DOCK_LANDING]);
+    assert.equal(Guild.invisibleBoost({ getLocation: () => new Location(...Platform.PLATFORM_LANDING) }), 0);
+    assert.equal(Guild.invisibleBoost({ getLocation: () => new Location(...Platform.DOCK_LANDING) }), 7);
+  } finally {
+    dialogues.startDialogue = startDialogue;
+  }
 });
