@@ -9,6 +9,7 @@ import { Projectile } from "../../../../model/Projectile";
 import { Sound } from "../../../../Sound";
 import { Sounds } from "../../../../Sounds";
 import { WeaponProfiles } from "../../WeaponProfile";
+import type { ProjectileProfile } from "../../WeaponProfile";
 export class RangedCombatMethod extends CombatMethod {
     /** Bronze arrow; used when an npc has no projectile configured. */
     private static readonly DEFAULT_NPC_PROJECTILE = 10;
@@ -73,32 +74,35 @@ export class RangedCombatMethod extends CombatMethod {
             return;
         }
 
-        const projectiles = profile?.projectiles ?? [{ delay: 40, speed: 57, startHeight: 43, endHeight: 31 }];
+        const projectiles = profile?.projectiles ?? [{ delay: 41, lengthAdjustment: 5, stepMultiplier: 5, startHeight: 43, endHeight: 31 }];
+        const distance = character.getLocation().getDistance(target.getLocation());
         const processingOrder = target.isNpc() ? 1 : 0;
-        const hitDelays = WeaponProfiles.hitDelays(character.getAsPlayer(), character.getLocation().getDistance(target.getLocation()))
+        const hitDelays = WeaponProfiles.hitDelays(character.getAsPlayer(), distance)
             .map((ticks) => ticks + processingOrder);
         for (let index = 0; index < projectiles.length; index++) {
             const projectile = projectiles[index];
-            const timing = RangedCombatMethod.projectileTiming(projectile.delay, hitDelays, index, processingOrder);
-            Projectile.createProjectile(character, target, ammo.getProjectileId(), timing.delay, timing.speed, projectile.startHeight, projectile.endHeight).sendProjectile();
+            const end = RangedCombatMethod.projectileEnd(projectile, distance);
+            Projectile.createProjectile(character, target, ammo.getProjectileId(), projectile.delay, end, projectile.startHeight, projectile.endHeight).sendProjectile();
         }
         Sounds.sendSound(character, profile?.fireSound ?? Sound.SHOOT_ARROW);
 
         if (character.isPlayer()) {
-            CombatFactory.decrementAmmo(character.getAsPlayer(), target.getLocation(), profile?.ammoRequired ?? 1);
+            // The shot's ammo is consumed when its hit lands, like the hitsplat.
+            const flightTicks = Math.max(1, ...hitDelays);
+            CombatFactory.decrementAmmo(character.getAsPlayer(), target.getLocation(), profile?.ammoRequired ?? 1, flightTicks);
         }
     }
 
     /**
-     * Times a projectile to land on the tick its hit applies. The client interpolates
-     * between the two offsets, so a flat end offset lands at the same moment at any
-     * range and the hitsplat reads early up close. The launch is pulled in when the
-     * hit lands sooner than the profile's usual delay, keeping a short flight.
+     * A projectile's landing offset in client cycles, from the OSRS server projanim types:
+     * delay + lengthAdjustment + stepMultiplier * distance. Profiles without a step keep
+     * their flat speed as the end offset.
      */
-    public static projectileTiming(baseDelay: number, hitDelays: number[], index: number, processingOrder = 0): { delay: number; speed: number } {
-        const hitTicks = (hitDelays[index] ?? hitDelays[hitDelays.length - 1] ?? 1) + processingOrder;
-        const speed = hitTicks * 30;
-        return { delay: Math.max(0, Math.min(baseDelay, speed - 10)), speed };
+    public static projectileEnd(projectile: ProjectileProfile, distance: number): number {
+        if (projectile.stepMultiplier != null) {
+            return projectile.delay + (projectile.lengthAdjustment ?? 0) + projectile.stepMultiplier * distance;
+        }
+        return projectile.speed ?? projectile.delay + 1;
     }
 
     attackDistance(character: Mobile): number {

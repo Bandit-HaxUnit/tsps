@@ -496,7 +496,10 @@ export class RangedWeapon {
     public static readonly DRAGON_THROWNAXE = new RangedWeapon([ItemIdentifiers.DRAGON_THROWNAXE, ItemIdentifiers.DRAGON_THROWNAXE_2, ItemIdentifiers.DRAGON_THROWNAXE_3], [Ammunition.DRAGON_THROWNAXE], RangedWeaponType.THROWNAXE)
     public static readonly MORRIGANS_THROWING_AXE = new RangedWeapon([ItemIdentifiers.MORRIGANS_THROWING_AXE, ItemIdentifiers.MORRIGANS_THROWING_AXE_2, ItemIdentifiers.MORRIGANS_THROWING_AXE_BH_, ItemIdentifiers.MORRIGANS_THROWING_AXE_BH__2], [Ammunition.MORRIGANS_THROWING_AXE], RangedWeaponType.THROWNAXE)
     public static readonly TONALZTICS_OF_RALOS = new RangedWeapon([ItemIdentifiers.TONALZTICS_OF_RALOS, ItemIdentifiers.TONALZTICS_OF_RALOS_2], [Ammunition.TONALZTICS_OF_RALOS], RangedWeaponType.GLAIVE)
-    public static readonly MORRIGANS_JAVELIN = new RangedWeapon([ItemIdentifiers.MORRIGANS_JAVELIN], [Ammunition.MORRIGANS_JAVELIN], RangedWeaponType.MORRIGANS_JAVELIN)
+    public static readonly MORRIGANS_JAVELIN = new RangedWeapon([
+        ItemIdentifiers.MORRIGANS_JAVELIN, ItemIdentifiers.MORRIGANS_JAVELIN_2, ItemIdentifiers.MORRIGANS_JAVELIN_3,
+        ItemIdentifiers.MORRIGANS_JAVELIN_BH_, ItemIdentifiers.MORRIGANS_JAVELIN_BH__2,
+    ], [Ammunition.MORRIGANS_JAVELIN], RangedWeaponType.MORRIGANS_JAVELIN)
 
 
 

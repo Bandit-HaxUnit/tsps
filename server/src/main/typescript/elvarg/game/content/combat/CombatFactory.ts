@@ -1327,7 +1327,12 @@ export class CombatFactory {
     /** Fired ammunition has a 20% chance to break on impact; the rest lands on the floor. */
     private static readonly AMMO_BREAK_CHANCE = 20;
 
-    public static decrementAmmo(player: Player, pos: Location, amount: number) {
+    /**
+     * @param delayTicks the shot's flight time in ticks. The outcome is rolled now but the
+     *   count and the floor drop only apply when the projectile lands, so the quiver matches
+     *   the hitsplat instead of emptying at the bowstring.
+     */
+    public static decrementAmmo(player: Player, pos: Location, amount: number, delayTicks = 0) {
         // Get the ranged weapon data
         const rangedWeapon = player.getCombat().getRangedWeapon();
 
@@ -1405,28 +1410,49 @@ export class CombatFactory {
             // Otherwise the device recovered it before it hit the floor.
         }
 
-        if (dropped > 0 && pos) {
-            ItemOnGroundManager.registerLocation(player, new Item(ammoItem.getId(), dropped), pos);
-        }
-
-        const consumed = lost + dropped;
-        if (consumed > 0) {
-            ammoItem.decrementAmountBy(consumed);
-        }
-
-        // If we are at 0 ammo remove the item from the equipment completely.
-        if (ammoItem.getAmount() == 0) {
-            player.sendMessage("You have run out of ammunition!");
-            player.getEquipment().set(slot, new Item(-1));
-
-            if (slot == Equipment.WEAPON_SLOT) {
-                WeaponInterfaceManager.assign(player);
-                player.getUpdateFlag().flag(Flag.APPEARANCE);
+        const apply = () => {
+            // A swap mid-flight moved this stack out of the slot; don't touch the new one.
+            if (player.getEquipment().get(slot) !== ammoItem) {
+                return;
             }
-        }
 
-        // Refresh the equipment interface.
-        player.getEquipment().refreshItems();
+            if (dropped > 0 && pos) {
+                ItemOnGroundManager.registerLocation(player, new Item(ammoItem.getId(), dropped), pos);
+            }
+
+            const consumed = lost + dropped;
+            if (consumed > 0) {
+                ammoItem.decrementAmountBy(consumed);
+            }
+
+            // If we are at 0 ammo remove the item from the equipment completely.
+            if (ammoItem.getAmount() == 0) {
+                player.sendMessage("You have run out of ammunition!");
+                player.getEquipment().set(slot, new Item(-1));
+
+                if (slot == Equipment.WEAPON_SLOT) {
+                    WeaponInterfaceManager.assign(player);
+                    player.getUpdateFlag().flag(Flag.APPEARANCE);
+                }
+            }
+
+            // Refresh the equipment interface.
+            player.getEquipment().refreshItems();
+        };
+
+        if (delayTicks > 0) {
+            TaskManager.submit(new (class extends Task {
+                constructor() {
+                    super(delayTicks);
+                }
+                execute(): void {
+                    apply();
+                    this.stop();
+                }
+            })());
+        } else {
+            apply();
+        }
     }
 
     private static usesWeaponSlotAmmo(rangedWeapon: RangedWeapon): boolean {
