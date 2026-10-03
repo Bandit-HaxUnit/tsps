@@ -3,9 +3,7 @@
 const { GameConstants } = require("../../../src/main/typescript/elvarg/game/GameConstants");
 const { Misc } = require("../../../src/main/typescript/elvarg/util/Misc");
 const {
-  isPvpOnlyBotState,
   setModeFollowBack,
-  setModeRoaming,
 } = require("../behaviours/state/PlayerBotState");
 const {
   ATTR_RECRUIT_OWNER_USERNAME,
@@ -95,63 +93,10 @@ function recallRecruitedBot(
   );
 }
 
-function releaseRecruitedBotToAutonomy(
-  bot,
-  botState,
-  behaviorMode,
-  nowMs = Date.now()
-) {
-  if (!bot || !botState || !behaviorMode) {
-    return false;
-  }
-
-  bot.setAttribute?.(ATTR_RECRUIT_OWNER_USERNAME, null);
-  bot.setAttribute?.(ATTR_RECRUIT_RETURN_AFTER_DEATH_AT, null);
-  bot.setAttribute?.(ATTR_RECRUIT_OWNER_MISSING_SINCE, null);
-  bot.setFollowing?.(null);
-  bot.setMobileInteraction?.(null);
-  bot.setPositionToFace?.(null);
-  bot.setCombatFollowing?.(null);
-  bot.getMovementQueue?.().reset?.();
-  bot.getCombat?.().reset?.();
-  bot.getCombat?.().setUnderAttack?.(null);
-
-  if (!botState.autonomy) {
-    botState.autonomy = {};
-  }
-  if (botState.autonomy.manualMode === behaviorMode.FOLLOW_BACK) {
-    botState.autonomy.manualMode = null;
-  }
-  botState.autonomy.modeEndsAt = 0;
-  botState.autonomy.nextDecisionAt = nowMs;
-  botState.autonomy.pvpCooldownUntil = 0;
-  botState.followTargetUsername = null;
-  botState.followUntilMs = 0;
-  botState.nextFollowRepathAt = 0;
-
-  if (botState.pvp) {
-    botState.pvp.targetUsername = null;
-    botState.pvp.targetPlayer = null;
-    botState.pvp.currentTargetScore = 0;
-    botState.pvp.targetLockUntil = 0;
-    botState.pvp.endsAt = 0;
-    botState.pvp.nextActionAt = nowMs;
-    if (isPvpOnlyBotState(botState)) {
-      botState.pvp.phase = "seeking";
-    } else {
-      botState.pvp.phase = "idle";
-    }
-  }
-
-  setModeRoaming(bot, botState, behaviorMode);
-  return true;
-}
-
 module.exports = {
   initBotRecruitRuntimeCoreAccess,
   alignBotToOwnerArea,
   armRecruitFollowBack,
   recallRecruitedBot,
-  releaseRecruitedBotToAutonomy,
   teleportBotNearOwnerIfNeeded,
 };
