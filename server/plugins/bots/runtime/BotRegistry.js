@@ -39,9 +39,9 @@ function createBotRegistry(options) {
     assignPvpMetadata: assignPvpMetadataFn,
     applyInitialPvpLoadout: applyInitialPvpLoadoutFn,
     applyForcedModeForDiagnosis: applyForcedModeForDiagnosisFn,
-    createController,
     ensureBehaviorTaskStarted,
     attachWildernessBrain,
+    attachAssistantBrain,
     emitPlayerLogin,
     worldGetPlayerByName,
     formatText,
@@ -581,15 +581,7 @@ function createBotRegistry(options) {
     playerBotUsernames.add(username);
     assignmentMap?.set(username, assignmentValue);
 
-    const entry = {
-      player: bot,
-      state,
-      controller: createController(
-        bot,
-        botSpawn,
-        0
-      ),
-    };
+    const entry = { player: bot, state };
     addEntry(username, entry);
     // Managed wilderness bots are brain-driven; the controller stays for the
     // behaviour tree only if the brain attachment is unavailable.
@@ -908,15 +900,7 @@ function createBotRegistry(options) {
         botStatesByName.set(username, state);
         playerBotUsernames.add(username);
 
-        addEntry(username, {
-          player: bot,
-          state,
-          controller: createController(
-            bot,
-            botSpawn,
-            0
-          ),
-        });
+        addEntry(username, { player: bot, state });
         emitPlayerLogin({
           player: bot,
           username,
@@ -1093,11 +1077,11 @@ function createBotRegistry(options) {
     botStatesByName.set(username, state);
     botmeUsernames.add(username);
     player.setPlayerBot?.(true);
-    addEntry(username, {
-      player,
-      state,
-      controller: createController(player, location, 0),
-    });
+    const entry = { player, state };
+    addEntry(username, entry);
+    if (typeof attachAssistantBrain === "function") {
+      attachAssistantBrain({ entry, player, state });
+    }
     resetMovementState(player);
     ensureBehaviorTaskStarted();
     return { ok: true };
@@ -1110,6 +1094,11 @@ function createBotRegistry(options) {
     player.setPlayerBot?.(false);
     const username = player.getUsername();
     const state = username ? botStatesByName.get(username) : null;
+    const entry = username ? entriesByUsername.get(username) : null;
+    if (entry?.brain) {
+      entry.brain.releaseActivity?.();
+      entry.brain = null;
+    }
     clearFollowState(player, state);
     if (username) {
       botStatesByName.delete(username);

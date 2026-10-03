@@ -16,6 +16,9 @@ const {
 } = require("../behaviours/state/PlayerBotState");
 const { startReactivePvp } = require("../brain/pvp/ReactivePvp");
 const {
+  handlePlayerAttackReaction,
+} = require("../brain/PlayerAttackReaction");
+const {
   randomInRange,
 } = require("../behaviours/navigation/BotNavigation");
 const {
@@ -238,12 +241,11 @@ function registerBotEvents(options) {
     runtime,
     behaviorMode,
     playerPersistence,
-    followBackTrigger,
-    combatReactionTrigger,
-    pathBlockedHandler,
-    npcAggroPolicyHandler,
+    npcAggroBlockedModes,
     avengeOpponentPolicy,
     pvpJumpOnKillPolicy,
+    followBackDurationMs,
+    playerAttackFleeChance,
   } = options;
 
   initBotDeathLootCoreAccess(api);
@@ -289,12 +291,31 @@ function registerBotEvents(options) {
     handleBotDeathItemDrop(event, runtime);
   });
 
-  api.onPlayerFollow((event) => {
-    followBackTrigger.handlePlayerFollow(event, Date.now());
-  });
-
-  api.onPlayerAttack((event) => {
-    combatReactionTrigger.handlePlayerAttack(event, Date.now());
+  api.onPlayerAttack(({ player, target }) => {
+    const followed = target;
+    const followedUsername = followed?.getUsername?.();
+    if (
+      !followed ||
+      followed === player ||
+      !followedUsername ||
+      !runtime.playerBotUsernames.has(followedUsername) ||
+      !followed.isRegistered?.()
+    ) {
+      return;
+    }
+    const state = runtime.botStatesByName.get(followedUsername);
+    if (!state) {
+      return;
+    }
+    handlePlayerAttackReaction({
+      bot: followed,
+      state,
+      attacker: player,
+      attackerIsPlayerBot: player.isPlayerBot?.() === true,
+      nowMs: Date.now(),
+      playerAttackFleeChance,
+      api,
+    });
   });
 
   // Manual object interactions (doors, levers, etc.) are the live equivalent
@@ -334,17 +355,26 @@ function registerBotEvents(options) {
     });
   });
 
-  api.onPlayerPathBlocked((event) => {
-    const username = event?.username;
-    if (!username || !runtime.playerBotUsernames.has(username)) {
-      return;
-    }
-    pathBlockedHandler.handle(event, Date.now());
-  });
-
-  if (npcAggroPolicyHandler) {
+  const blockedAggroModes = new Set(npcAggroBlockedModes ?? []);
+  if (blockedAggroModes.size > 0) {
     api.onCanAttack((event) => {
-      npcAggroPolicyHandler.handleCanAttack(event);
+      if (!event || event.allow !== null) {
+        return;
+      }
+      const attacker = event.attacker;
+      const target = event.target;
+      if (attacker?.isNpc?.() !== true || target?.isPlayer?.() !== true) {
+        return;
+      }
+      const player = target.getAsPlayer?.() ?? target;
+      if (player?.isPlayerBot?.() !== true) {
+        return;
+      }
+      const username = player.getUsername?.();
+      const state = username ? runtime.botStatesByName.get(username) : null;
+      if (state && blockedAggroModes.has(state.mode)) {
+        event.allow = false;
+      }
     });
   }
 

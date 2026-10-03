@@ -9,7 +9,6 @@ const {
   peekMovementRequest,
   randomInRange,
 } = require("../navigation/BotNavigation");
-const { callModeHook } = require("../hooks/ModeHookContract");
 const {
   isPvpOnlyBotState,
   isTeleblocked,
@@ -19,17 +18,15 @@ const {
   ATTR_RECRUIT_OWNER_USERNAME,
 } = require("../../runtime/BotRecruitConstants");
 const { createBotTickMetrics } = require("../../runtime/BotTickMetrics");
-const { startBrainRoam } = require("../../brain/RoamService");
 
 const NS_PER_MS = 1_000_000n;
 const MOVING_MODE_DECISION_DELAY_MS = 1500;
 const BLOCKED_TILE_CHECK_INTERVAL_MS = 5000;
 
 class BotBehaviorTask extends Task {
-  constructor(entries, traversalService, decisionTicks, options = {}) {
+  constructor(entries, decisionTicks, options = {}) {
     super(decisionTicks);
     this.entries = entries;
-    this.traversalService = traversalService;
     this.api = options.api ?? null;
     this.World = this.api?.getWorld();
     this.RegionManager = this.api?.getRegionManager();
@@ -37,20 +34,6 @@ class BotBehaviorTask extends Task {
     this.AreaManager = this.api?.getAreaManager();
     this.ServerPerf = this.api?.getServerPerf();
     this.behaviorMode = options.behaviorMode ?? null;
-    this.modeHandlers = options.modeHandlers ?? {};
-    this.autonomy = {
-      decisionDelayMinMs: options.decisionDelayMinMs ?? 4500,
-      decisionDelayMaxMs: options.decisionDelayMaxMs ?? 14000,
-    };
-    this.autonomousModes = Array.isArray(options.autonomousModes)
-      ? options.autonomousModes
-      : [];
-    this.modeStopParamsByMode = options.modeStopParamsByMode ?? {};
-    this.transientModes = new Set(options.transientModes ?? []);
-    this.npcAggroPolicyHandler = options.npcAggroPolicyHandler ?? null;
-    this.modeValidationIntervalMs = Number.isFinite(options.modeValidationIntervalMs)
-      ? Math.max(0, Math.floor(options.modeValidationIntervalMs))
-      : 1200;
     this.idleEntryStride = Number.isFinite(options.idleEntryStride)
       ? Math.max(1, Math.floor(options.idleEntryStride))
       : 2;
@@ -232,14 +215,6 @@ class BotBehaviorTask extends Task {
   getHumanObserverBucketKey(x, y, z) {
     const chunkSize = this.lodConfig.chunkSizeTiles;
     return `${z}:${Math.floor(x / chunkSize)}:${Math.floor(y / chunkSize)}`;
-  }
-
-  resolveModeActiveDuration(definition) {
-    const minMs = Number(definition?.minMs ?? 0);
-    const maxMs = Number(definition?.maxMs ?? minMs);
-    const safeMinMs = Number.isFinite(minMs) && minMs > 0 ? minMs : 1;
-    const safeMaxMs = Number.isFinite(maxMs) && maxMs >= safeMinMs ? maxMs : safeMinMs;
-    return randomInRange(safeMinMs, safeMaxMs);
   }
 
   refreshHumanObservers(nowMs) {
@@ -620,24 +595,6 @@ class BotBehaviorTask extends Task {
     return nowMs - offsetMs;
   }
 
-  ensureAutonomyState(state) {
-    if (!state) {
-      return null;
-    }
-    if (!state.autonomy) {
-      state.autonomy = {
-        nextDecisionAt: 0,
-        modeEndsAt: 0,
-        pvpCooldownUntil: 0,
-        manualMode: null,
-      };
-    }
-    if (!Object.prototype.hasOwnProperty.call(state.autonomy, "manualMode")) {
-      state.autonomy.manualMode = null;
-    }
-    return state.autonomy;
-  }
-
   isInCombat(player) {
     if (!player) {
       return false;
@@ -648,51 +605,6 @@ class BotBehaviorTask extends Task {
       combat?.getAttacker?.() ||
       player.getCombatFollowing?.()
     );
-  }
-
-  isTraversingBarrier(player, state) {
-    if (!player || !state) {
-      return false;
-    }
-    return (
-      state.awaitingDitchTransition != null ||
-      state.roaming?.pendingRetry != null ||
-      player.getForceMovement?.() != null
-    );
-  }
-
-  shouldDelayModeDecisionWhileMoving(player, state) {
-    if (!player || !state || this.transientModes.has(state.mode)) {
-      return false;
-    }
-    if (state.mode === this.behaviorMode?.PVP) {
-      return false;
-    }
-    const queueSize = Number(player.getMovementQueue?.()?.size?.() ?? 0);
-    if (queueSize > 0) {
-      return true;
-    }
-    return peekMovementRequest(player) != null;
-  }
-
-  scheduleNextDecision(state, nowMs) {
-    const autonomy = this.ensureAutonomyState(state);
-    if (!autonomy) {
-      return;
-    }
-    autonomy.nextDecisionAt =
-      nowMs +
-      randomInRange(this.autonomy.decisionDelayMinMs, this.autonomy.decisionDelayMaxMs);
-  }
-
-  ensureDecisionScheduled(state, nowMs) {
-    const autonomy = this.ensureAutonomyState(state);
-    if (!autonomy) {
-      return;
-    }
-    if (!Number.isFinite(autonomy.nextDecisionAt) || autonomy.nextDecisionAt <= nowMs) {
-      this.scheduleNextDecision(state, nowMs);
-    }
   }
 
   shouldProcessEntryHeavy(entry, nowMs) {
@@ -731,26 +643,10 @@ class BotBehaviorTask extends Task {
     if (player.getForceMovement?.() != null) {
       return true;
     }
-    const blockedBackoffUntil = Number(state.pathBlockedTracker?.backoffUntil ?? 0);
-    if (
-      blockedBackoffUntil > nowMs &&
-      !this.transientModes.has(state.mode) &&
-      state.mode !== this.behaviorMode?.PVP
-    ) {
-      const backoffStride = Math.max(4, stride * 2);
-      return (this._cycleCounter + shard) % backoffStride === 0;
-    }
     const queueSize = Number(player.getMovementQueue?.()?.size?.() ?? 0);
-    if (
-      queueSize > 0 &&
-      !this.transientModes.has(state.mode) &&
-      state.mode !== this.behaviorMode?.PVP
-    ) {
+    if (queueSize > 0 && state.mode !== this.behaviorMode?.PVP) {
       const movingStride = Math.max(2, stride);
       return (this._cycleCounter + shard) % movingStride === 0;
-    }
-    if (this.transientModes.has(state.mode)) {
-      return true;
     }
     if (state.mode === this.behaviorMode?.PVP) {
       const pvpNextActionAt = Number(state.pvp?.nextActionAt ?? 0);
@@ -773,132 +669,6 @@ class BotBehaviorTask extends Task {
       return (this._cycleCounter + shard) % pvpStride === 0;
     }
     return (this._cycleCounter + shard) % stride === 0;
-  }
-
-  behaviorRequirementsMet(mode, player, state, nowMs = Date.now()) {
-    return (
-      callModeHook({
-        modeHandlers: this.modeHandlers,
-        mode,
-        hookName: "behaviorRequirementsMet",
-        payload: { player, state, nowMs },
-        fallback: true,
-        api: this.api,
-        errorEvent: "bot_behavior_requirements_error",
-      }) === true
-    );
-  }
-
-  activateModeWithHandler(entry, mode, reason = "mode_switch") {
-    return (
-      callModeHook({
-        modeHandlers: this.modeHandlers,
-        mode,
-        hookName: "activateMode",
-        payload: {
-          player: entry.player,
-          state: entry.state,
-          nowMs: Date.now(),
-          reason,
-        },
-        fallback: false,
-        api: this.api,
-        errorEvent: "bot_mode_activation_error",
-      }) === true
-    );
-  }
-
-  startModeWithHandler(entry, mode, nowMs, minMs, maxMs, reason = "auto_switch") {
-    const safeMinMs = Number.isFinite(minMs) && minMs > 0 ? minMs : 1;
-    const safeMaxMs = Number.isFinite(maxMs) && maxMs >= safeMinMs ? maxMs : safeMinMs;
-    const activeForMs = randomInRange(safeMinMs, safeMaxMs);
-    const started =
-      callModeHook({
-        modeHandlers: this.modeHandlers,
-        mode,
-        hookName: "startMode",
-        payload: {
-          player: entry.player,
-          state: entry.state,
-          nowMs,
-          activeForMs,
-          reason,
-        },
-        fallback: false,
-        api: this.api,
-        errorEvent: "bot_mode_start_error",
-      }) === true;
-    if (!started) {
-      return false;
-    }
-    const autonomy = this.ensureAutonomyState(entry.state);
-    autonomy.modeEndsAt = nowMs + activeForMs;
-    this.scheduleNextDecision(entry.state, nowMs);
-    return true;
-  }
-
-  isModeStateValid(mode, entry, nowMs) {
-    return (
-      callModeHook({
-        modeHandlers: this.modeHandlers,
-        mode,
-        hookName: "isModeStateValid",
-        payload: {
-          player: entry?.player,
-          state: entry?.state,
-          nowMs,
-        },
-        fallback: true,
-        api: this.api,
-        errorEvent: "bot_mode_state_validation_error",
-      }) === true
-    );
-  }
-
-  stopModeWithHandler(entry, mode, nowMs, reason, params = {}) {
-    return (
-      callModeHook({
-        modeHandlers: this.modeHandlers,
-        mode,
-        hookName: "stopMode",
-        payload: {
-          entry,
-          nowMs,
-          reason,
-          ...params,
-        },
-        fallback: false,
-        api: this.api,
-        errorEvent: "bot_mode_stop_error",
-      }) === true
-    );
-  }
-
-  tryStartModeWithHandler(entry, mode, nowMs, params = {}, sharedCycleState = null) {
-    return (
-      callModeHook({
-        modeHandlers: this.modeHandlers,
-        mode,
-        hookName: "tryStartMode",
-        payload: {
-          entry,
-          entries: this.entries,
-          sharedCycleState,
-          nowMs,
-          ...params,
-        },
-        fallback: false,
-        api: this.api,
-        errorEvent: "bot_mode_try_start_error",
-      }) === true
-    );
-  }
-
-  getAutonomousModeDefinition(mode) {
-    if (!mode || !Array.isArray(this.autonomousModes)) {
-      return null;
-    }
-    return this.autonomousModes.find((definition) => definition?.mode === mode) ?? null;
   }
 
   isPvpOnlyBot(state) {
@@ -1052,347 +822,7 @@ class BotBehaviorTask extends Task {
     );
   }
 
-  hasNearbyRealPlayerOpportunity(player, state, nowMs) {
-    if (!player || !this.isPvpOnlyBot(state)) {
-      return false;
-    }
-    if (state?.mode !== this.behaviorMode.ROAMING) {
-      return false;
-    }
-    this.refreshHumanObservers(nowMs);
-    if (this._humanObserverCount === 0) {
-      return false;
-    }
-    const locationSnapshot = this.getLocationSnapshot(player);
-    if (!locationSnapshot || player.getPrivateArea?.() != null) {
-      return false;
-    }
-    return (
-      this.findNearestHumanObserverDistance(
-        locationSnapshot.x,
-        locationSnapshot.y,
-        locationSnapshot.z,
-        3
-      ) <= 3
-    );
-  }
-
-  selectWeightedMode(definitions) {
-    if (!Array.isArray(definitions) || definitions.length === 0) {
-      return null;
-    }
-    const totalWeight = definitions.reduce((sum, definition) => {
-      const weight = Number(definition?.weight ?? 0);
-      return weight > 0 ? sum + weight : sum;
-    }, 0);
-    if (totalWeight <= 0) {
-      return null;
-    }
-
-    let roll = Math.random() * totalWeight;
-    for (const definition of definitions) {
-      const weight = Number(definition?.weight ?? 0);
-      if (weight <= 0) {
-        continue;
-      }
-      roll -= weight;
-      if (roll <= 0) {
-        return definition;
-      }
-    }
-    return definitions[definitions.length - 1] ?? null;
-  }
-
-  startAutonomousMode(entry, definition, nowMs, sharedCycleState = null) {
-    const mode = definition?.mode;
-    if (!mode) {
-      return false;
-    }
-    const strategy = definition?.strategy ?? "start";
-    if (strategy === "try_start") {
-      return this.tryStartModeWithHandler(
-        entry,
-        mode,
-        nowMs,
-        definition?.params ?? {},
-        sharedCycleState
-      );
-    }
-    if (entry?.state?.mode === mode) {
-      const autonomy = this.ensureAutonomyState(entry.state);
-      if (autonomy) {
-        const activeForMs = this.resolveModeActiveDuration(definition);
-        autonomy.modeEndsAt = nowMs + activeForMs;
-        this.scheduleNextDecision(entry.state, nowMs);
-      }
-      return true;
-    }
-    return this.startModeWithHandler(
-      entry,
-      mode,
-      nowMs,
-      Number(definition?.minMs ?? 1),
-      Number(definition?.maxMs ?? definition?.minMs ?? 1),
-      definition?.reason ?? "auto_switch"
-    );
-  }
-
-  startRoamingFallback(entry, nowMs, reason = "fallback_roaming", sharedCycleState = null) {
-    if (!entry?.player || !entry?.state) {
-      return false;
-    }
-    if (this.isPvpOnlyBot(entry.state)) {
-      return false;
-    }
-    return startBrainRoam(entry.player, entry.state, nowMs, entry.state.home ?? null);
-  }
-
-  processAutonomousMode(entry, nowMs, sharedCycleState = null) {
-    if (!this.behaviorMode || !entry?.state || !entry?.player) {
-      return;
-    }
-    const player = entry.player;
-    const state = entry.state;
-    const autonomy = this.ensureAutonomyState(state);
-    const deadOrDying =
-      (player.getHitpoints?.() ?? 0) <= 0 ||
-      player.isDyingReturn?.() === true;
-
-    // Ensure bot-specific temporary modes (follow-back/pvp/return-home)
-    // are cleared after death so the bot resumes normal autonomous behavior.
-    if (deadOrDying) {
-      if (!state.deathResetApplied) {
-        if (state.pvp?.retreat) {
-          player.setAutoRetaliate(state.pvp.retreat.autoRetaliate);
-          state.pvp.retreat = null;
-        }
-        if (state?.pvp) {
-          state.pvp.appliedBoostProfileId = null;
-        }
-        this.activateModeWithHandler(
-          entry,
-          this.isPvpOnlyBot(state) ? this.behaviorMode.PVP : this.behaviorMode.ROAMING,
-          "post_death_reset"
-        );
-        state.virtualFoodChargesRemaining = null;
-        state.nextNoFoodLogAt = 0;
-        autonomy.modeEndsAt = 0;
-        autonomy.nextDecisionAt = 0;
-        state.deathResetApplied = true;
-        this.api?.log?.("bot_post_death_reset", {
-          username: player.getUsername?.(),
-        });
-      }
-      return;
-    }
-
-    if (state.deathResetApplied) {
-      state.deathResetApplied = false;
-      this.scheduleNextDecision(state, nowMs);
-    }
-
-
-    if (state.pvp?.retreat) return;
-
-    const recruitOwnerUsername = player.getAttribute?.(ATTR_RECRUIT_OWNER_USERNAME);
-    if (recruitOwnerUsername) {
-      const autonomy = this.ensureAutonomyState(state);
-      autonomy.manualMode = this.behaviorMode.FOLLOW_BACK;
-      autonomy.nextDecisionAt = Number.MAX_SAFE_INTEGER;
-      autonomy.modeEndsAt = Number.MAX_SAFE_INTEGER;
-      if (!state.followTargetUsername) {
-        state.followTargetUsername = recruitOwnerUsername;
-      }
-      const combat = player.getCombat?.();
-      const inCombatWithLiveTarget = !!(
-        combat?.getTarget?.() ||
-        combat?.getAttacker?.() ||
-        player.getCombatFollowing?.()
-      );
-      if (
-        state.mode === this.behaviorMode.PVP &&
-        !inCombatWithLiveTarget
-      ) {
-        this.activateModeWithHandler(
-          entry,
-          this.behaviorMode.FOLLOW_BACK,
-          "recruit_resume_follow"
-        );
-      }
-      if (
-        state.mode !== this.behaviorMode.FOLLOW_BACK &&
-        state.mode !== this.behaviorMode.PVP
-      ) {
-        this.activateModeWithHandler(
-          entry,
-          this.behaviorMode.FOLLOW_BACK,
-          "recruit_lock"
-        );
-      }
-      return;
-    }
-
-    const manualMode = autonomy.manualMode ?? null;
-    if (manualMode) {
-      const isTransient = this.transientModes.has(state.mode);
-      if (isTransient) {
-        return;
-      }
-
-      if (state.mode !== manualMode) {
-        const switched = this.activateModeWithHandler(
-          entry,
-          manualMode,
-          "manual_override_resume"
-        );
-        if (switched) {
-          this.api?.log?.("bot_mode_switch", {
-            username: player.getUsername?.(),
-            mode: manualMode,
-            reason: "manual_override_resume",
-            activeForMs: -1,
-          });
-        } else {
-          autonomy.manualMode = null;
-          autonomy.modeEndsAt = 0;
-          autonomy.nextDecisionAt = 0;
-          this.api?.log?.("bot_manual_mode_invalid", {
-            username: player.getUsername?.(),
-            mode: manualMode,
-          });
-          return;
-        }
-      }
-
-      if (autonomy.nextDecisionAt !== Number.MAX_SAFE_INTEGER) {
-        autonomy.nextDecisionAt = Number.MAX_SAFE_INTEGER;
-      }
-      if (autonomy.modeEndsAt !== Number.MAX_SAFE_INTEGER) {
-        autonomy.modeEndsAt = Number.MAX_SAFE_INTEGER;
-      }
-      return;
-    }
-
-    if (this.transientModes.has(state.mode)) {
-      this.ensureDecisionScheduled(state, nowMs);
-      return;
-    }
-
-    if (this.isTraversingBarrier(player, state)) {
-      return;
-    }
-
-    const modeValidationDueAt = Number(autonomy.nextModeValidationAt ?? 0);
-    // Mode-state validation can be expensive (hook fan-out per bot), so we
-    // rate-limit it instead of running every cycle for every bot.
-    if (modeValidationDueAt <= nowMs) {
-      autonomy.nextModeValidationAt = nowMs + this.modeValidationIntervalMs;
-      if (!this.isModeStateValid(state.mode, entry, nowMs)) {
-        const stopParamsSource = this.modeStopParamsByMode[state.mode];
-        const stopParams =
-          typeof stopParamsSource === "function"
-            ? stopParamsSource({ entry, player, state, nowMs })
-            : stopParamsSource ?? {};
-        if (
-          !this.stopModeWithHandler(
-            entry,
-            state.mode,
-            nowMs,
-            "mode_state_invalid",
-            stopParams
-          )
-        ) {
-          this.startRoamingFallback(entry, nowMs, "mode_state_invalid", sharedCycleState);
-        }
-        return;
-      }
-    }
-
-    if (this.isInCombat(player)) {
-      this.ensureDecisionScheduled(state, nowMs);
-      return;
-    }
-
-    if (nowMs < (autonomy.nextDecisionAt ?? 0)) {
-      if (!this.isPvpOnlyBot(state) && this.hasNearbyRealPlayerOpportunity(player, state, nowMs)) {
-        autonomy.nextDecisionAt = 0;
-      } else {
-        return;
-      }
-    }
-    if (nowMs < (autonomy.modeEndsAt ?? 0)) {
-      return;
-    }
-    if (this.shouldDelayModeDecisionWhileMoving(player, state)) {
-      autonomy.nextDecisionAt = nowMs + MOVING_MODE_DECISION_DELAY_MS;
-      return;
-    }
-
-    const forcePvpOnly = this.isPvpOnlyBot(state);
-    let allowedAutonomousModes = null;
-    if (Array.isArray(autonomy.allowedAutonomousModes)) {
-      const modeKey = autonomy.allowedAutonomousModes.join("|");
-      if (autonomy.allowedAutonomousModesKey !== modeKey) {
-        autonomy.allowedAutonomousModesKey = modeKey;
-        autonomy.allowedAutonomousModeSet = new Set(
-          autonomy.allowedAutonomousModes.filter((mode) => typeof mode === "string")
-        );
-      }
-      allowedAutonomousModes = autonomy.allowedAutonomousModeSet;
-    }
-    const candidates = [];
-    for (const definition of this.autonomousModes) {
-      const mode = definition?.mode;
-      const weight = Number(definition?.weight ?? 0);
-      if (!mode || weight <= 0) {
-        continue;
-      }
-      if (allowedAutonomousModes && !allowedAutonomousModes.has(mode)) {
-        continue;
-      }
-      if (forcePvpOnly && mode !== this.behaviorMode.PVP) {
-        continue;
-      }
-      if (!this.behaviorRequirementsMet(mode, player, state, nowMs)) {
-        continue;
-      }
-      candidates.push(definition);
-    }
-
-    if (this.isPvpOnlyBot(state)) {
-      const pvpCandidate = candidates.find(
-        (definition) => definition?.mode === this.behaviorMode.PVP
-      );
-      if (
-        pvpCandidate &&
-        this.startAutonomousMode(entry, pvpCandidate, nowMs, sharedCycleState)
-      ) {
-        return;
-      }
-    }
-
-    const selectedMode = this.selectWeightedMode(candidates);
-    if (!selectedMode) {
-      this.scheduleNextDecision(state, nowMs);
-      return;
-    }
-    if (this.startAutonomousMode(entry, selectedMode, nowMs, sharedCycleState)) {
-      return;
-    }
-
-    for (const fallbackMode of candidates) {
-      if (fallbackMode === selectedMode) {
-        continue;
-      }
-      if (this.startAutonomousMode(entry, fallbackMode, nowMs, sharedCycleState)) {
-        return;
-      }
-    }
-
-    this.startRoamingFallback(entry, nowMs, "auto_switch_fallback", sharedCycleState);
-  }
-
-  processEntry(entry, index, now, sharedCycleState = null, options = {}) {
+  processEntry(entry, index, now, options = {}) {
     const entryNow = this.resolveEntryNowMs(entry, now);
     const urgentPhasePrefix = options?.urgentPhasePrefix ?? null;
     const sampleEntry = this.shouldSampleEntry(index);
@@ -1425,108 +855,37 @@ class BotBehaviorTask extends Task {
           modeProfile.sampledEntries += 1;
         }
       }
-      // Brain-driven bots run their own action loop instead of the behaviour tree.
-      if (entry.brain) {
-        entry.brain.tick(entryNow);
+      if (!entry.brain) {
         return;
       }
-
-      const combat = player.getCombat?.();
-      const attacker = combat?.getAttacker?.();
-      const target = combat?.getTarget?.();
-      const hasPendingTraversal =
-        state.awaitingDitchTransition != null ||
-        state.roaming?.pendingRetry != null;
-      const needsNpcAggro =
-        !!this.npcAggroPolicyHandler &&
-        (attacker?.isNpc?.() === true || target?.isNpc?.() === true);
-
-      let shouldProcessHeavy = true;
-      let traversalStartNs = 0n;
-      let npcAggroStartNs = 0n;
+      let heavyGateStartNs = 0n;
       if (sampleEntry && this._profileWindow) {
-        traversalStartNs = process.hrtime.bigint();
-        npcAggroStartNs = process.hrtime.bigint();
+        heavyGateStartNs = process.hrtime.bigint();
       }
-
-      if (!hasPendingTraversal && !needsNpcAggro) {
-        let heavyGateStartNs = 0n;
-        if (sampleEntry && this._profileWindow) {
-          heavyGateStartNs = process.hrtime.bigint();
-        }
-        shouldProcessHeavy = this.shouldProcessEntryHeavy(entry, entryNow);
-        if (sampleEntry && this._profileWindow) {
-          this._profileWindow.heavyGateMs += this.elapsedMs(heavyGateStartNs);
-        }
-        if (!shouldProcessHeavy) {
-          return;
-        }
-      }
-
-      if (hasPendingTraversal && state.awaitingDitchTransition != null) {
-        this.traversalService.processTransition(player, state, entryNow);
-      }
-      if (hasPendingTraversal && state.roaming?.pendingRetry != null) {
-        this.traversalService.processPendingRetry(player, state, entryNow);
-      }
+      const shouldProcessHeavy = this.shouldProcessEntryHeavy(entry, entryNow);
       if (sampleEntry && this._profileWindow) {
-        this._profileWindow.traversalMs += this.elapsedMs(traversalStartNs);
+        this._profileWindow.heavyGateMs += this.elapsedMs(heavyGateStartNs);
       }
-
-      if (needsNpcAggro) {
-        this.npcAggroPolicyHandler.handlePlayerProcess({
-          player,
-          nowMs: entryNow,
-        });
+      if (!shouldProcessHeavy) {
+        return;
       }
-      if (sampleEntry && this._profileWindow) {
-        this._profileWindow.npcAggroMs += this.elapsedMs(npcAggroStartNs);
-      }
-
-      if (sampleEntry && this._profileWindow) {
-        this._profileWindow.heavyEntries += 1;
-        if (modeProfile) {
-          modeProfile.heavyEntries += 1;
-        }
-      }
-      let autonomyStartNs = 0n;
-      if (sampleEntry && this._profileWindow) {
-        autonomyStartNs = process.hrtime.bigint();
-      }
+      const brainStartNs = sampleEntry && this._profileWindow ? process.hrtime.bigint() : 0n;
       if (urgentPhasePrefix) {
-        this.ServerPerf.measurePhase(`${urgentPhasePrefix}.autonomy`, () =>
-          this.processAutonomousMode(entry, entryNow, sharedCycleState)
+        this.ServerPerf.measurePhase(`${urgentPhasePrefix}.brain`, () =>
+          entry.brain.tick(entryNow)
         );
       } else {
-        this.processAutonomousMode(entry, entryNow, sharedCycleState);
+        entry.brain.tick(entryNow);
       }
       if (sampleEntry && this._profileWindow) {
-        const autonomyMs = this.elapsedMs(autonomyStartNs);
-        this._profileWindow.autonomyMs += autonomyMs;
+        const brainMs = this.elapsedMs(brainStartNs);
+        this._profileWindow.controllerMs += brainMs;
         if (modeProfile) {
-          modeProfile.autonomyMs += autonomyMs;
-        }
-      }
-      let controllerStartNs = 0n;
-      if (sampleEntry && this._profileWindow) {
-        controllerStartNs = process.hrtime.bigint();
-      }
-      if (urgentPhasePrefix) {
-        this.ServerPerf.measurePhase(`${urgentPhasePrefix}.controller`, () =>
-          entry.controller.tick(entryNow)
-        );
-      } else {
-        entry.controller.tick(entryNow);
-      }
-      if (sampleEntry && this._profileWindow) {
-        const controllerMs = this.elapsedMs(controllerStartNs);
-        this._profileWindow.controllerMs += controllerMs;
-        if (modeProfile) {
-          modeProfile.controllerMs += controllerMs;
+          modeProfile.controllerMs += brainMs;
         }
       }
     } catch (err) {
-      console.error("[bots] behavior tick failed", err);
+      console.error("[bots] brain tick failed", err);
     } finally {
       if (sampleEntry && this._profileWindow) {
         const totalEntryMs = this.elapsedMs(entryStartNs);
@@ -1555,7 +914,6 @@ class BotBehaviorTask extends Task {
 
     const startedAtMs = Date.now();
     this.tickMetrics.beginCycle(now);
-    const sharedCycleState = null;
     const urgentEntries = new Set();
     this.ServerPerf.measurePhase("task.bot_behavior.urgent_entries", () => {
       for (let index = 0; index < totalEntries; index++) {
@@ -1564,7 +922,7 @@ class BotBehaviorTask extends Task {
           continue;
         }
         urgentEntries.add(entry);
-        this.processEntry(entry, index, now, sharedCycleState, {
+        this.processEntry(entry, index, now, {
           urgentPhasePrefix: "task.bot_behavior.urgent",
         });
       }
@@ -1594,7 +952,7 @@ class BotBehaviorTask extends Task {
             return true;
           }
           processedRegularEntries += 1;
-          this.processEntry(entry, index, now, sharedCycleState);
+          this.processEntry(entry, index, now);
         }
         return false;
       }

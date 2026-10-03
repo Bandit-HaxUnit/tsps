@@ -1,6 +1,5 @@
 const { GameConstants } = require("../../../src/main/typescript/elvarg/game/GameConstants");
 const { Misc } = require("../../../src/main/typescript/elvarg/util/Misc");
-const { BotController } = require("../../../src/main/typescript/elvarg/game/bot/BehaviorTree");
 const { createTraversalAssist } = require("../lib/TraversalAssist");
 const { randomInRange, peekMovementRequest } = require("../behaviours/navigation/BotNavigation");
 const {
@@ -13,27 +12,9 @@ const {
   createInitialState,
   resetMovementState,
 } = require("../behaviours/state/PlayerBotState");
-const {
-  PlayerBotBehaviorTreeFactory,
-} = require("../behaviours/branches/PlayerBotBehaviorTreeFactory");
 const { BotBehaviorTask } = require("../behaviours/task/BotBehaviorTask");
-const { DitchTraversalService } = require("../behaviours/traversal/DitchTraversalService");
-const { PathBlockedHandler } = require("../behaviours/traversal/PathBlockedHandler");
-const { FollowBackTrigger } = require("../behaviours/handlers/FollowBackTrigger");
-const { CombatReactionTrigger } = require("../behaviours/handlers/CombatReactionTrigger");
-const { NpcAggroPolicyHandler } = require("../behaviours/handlers/NpcAggroPolicyHandler");
 const { AvengeOpponentPolicy } = require("../behaviours/policies/AvengeOpponentPolicy");
 const { PvpJumpOnKillPolicy } = require("../behaviours/policies/PvpJumpOnKillPolicy");
-const {
-  validateModeHandlerContracts,
-  callModeHook,
-} = require("../behaviours/hooks/ModeHookContract");
-const {
-  createModeHandlers,
-  buildModeRegistries,
-} = require("../behaviours/factory/BotModeFactory");
-const { FollowBackModeHandler } = require("../behaviours/modes/FollowBackModeHandler");
-const { ReturnHomeModeHandler } = require("../behaviours/modes/ReturnHomeModeHandler");
 const { createBotRegistry } = require("./BotRegistry");
 const { createBotTickMetrics } = require("./BotTickMetrics");
 const { createBotActivityRegistry } = require("../brain/BotActivityRegistry");
@@ -67,30 +48,6 @@ const {
   applyGeneratedPvpLoadout,
 } = require("../behaviours/policies/PvpLoadoutPolicy");
 
-function collectTrackedObjectIdsFromModes({ modeHandlers, api }) {
-  const objectIds = new Set();
-  for (const mode of Object.keys(modeHandlers ?? {})) {
-    const ids = callModeHook({
-      modeHandlers,
-      mode,
-      hookName: "collectTrackedObjectIds",
-      payload: {},
-      fallback: [],
-      api,
-      errorEvent: "bot_mode_collect_tracked_object_ids_error",
-    });
-    if (!Array.isArray(ids)) {
-      continue;
-    }
-    for (const objectId of ids) {
-      if (Number.isFinite(objectId)) {
-        objectIds.add(objectId);
-      }
-    }
-  }
-  return objectIds;
-}
-
 function bootPlayerBotsRuntime(options = {}) {
   const api = options.api;
   const botApi = options.botApi ?? api;
@@ -111,7 +68,6 @@ function bootPlayerBotsRuntime(options = {}) {
   const playerBotUsernames = new Set();
   const entries = [];
   const entriesByUsername = new Map();
-  const modeHandlers = {};
   const traversalAssist = createTraversalAssist(botApi, {
     objectIds: [config.wildernessDitchObjectId],
     cachePath: config.objectIndexCachePath,
@@ -137,31 +93,8 @@ function bootPlayerBotsRuntime(options = {}) {
     productionCount: inventoryProductionCount,
     log: (message, extra) => botApi.log(message, extra),
   };
-  const { requiredHooksByMode } = createModeHandlers({
-    botStatesByName,
-    api: botApi,
-    behaviorMode,
-    modeHandlers,
-    objectSearch: traversalAssist,
-    options: config.modeBehaviorOptions ?? {},
-  });
-  modeHandlers[behaviorMode.FOLLOW_BACK] = new FollowBackModeHandler({
-    api: botApi,
-    behaviorMode,
-    followBlockedRetryMs: config.followBlockedRetryMs,
-  });
-  modeHandlers[behaviorMode.RETURN_HOME] = new ReturnHomeModeHandler();
 
-  const modeRegistries = buildModeRegistries(behaviorMode);
-  validateModeHandlerContracts(
-    modeHandlers,
-    requiredHooksByMode,
-    botApi,
-    "player_bots_mode_handlers"
-  );
-
-  // One pvp engine for every driver: brain activities, the tree's defensive
-  // branch and reactive combat hand-offs.
+  // One pvp engine for the brain activities and reactive overlays.
   const pvpController = new PvpController(botStatesByName, botApi, {
     behaviorMode,
     ...(config.treeOptions ?? {}),
@@ -179,15 +112,8 @@ function bootPlayerBotsRuntime(options = {}) {
     });
   }
 
-  const trackedTraversalObjectIds = new Set([config.wildernessDitchObjectId]);
-  for (const objectId of collectTrackedObjectIdsFromModes({
-    modeHandlers,
-    api: botApi,
-  })) {
-    trackedTraversalObjectIds.add(objectId);
-  }
   traversalAssist.trackObjectIds([
-    ...trackedTraversalObjectIds,
+    config.wildernessDitchObjectId,
     ...listCatalogObjectIds(),
     ...BANK_BOOTH_IDS,
   ]);
@@ -196,55 +122,6 @@ function bootPlayerBotsRuntime(options = {}) {
   traversalAssist.initializePersistentIndex();
   traversalAssist.schedulePersistentIndexInitialization(0);
 
-  const traversalService = new DitchTraversalService({
-    api: botApi,
-    traversalAssist,
-    objectId: config.wildernessDitchObjectId,
-    emitObjectInteraction: (interaction) =>
-      botApi.emitObjectInteraction(interaction),
-    options: {
-      behaviorMode,
-      modeHandlers,
-      roamingDitchCrossMaxDistanceY: config.roamingDitchCrossMaxDistanceY,
-      ditchAttemptCooldownMs: config.ditchAttemptCooldownMs,
-      ditchPostCrossRetryDelayMs: config.ditchPostCrossRetryDelayMs,
-      ditchTransitionTimeoutMs: config.ditchTransitionTimeoutMs,
-    },
-  });
-
-  const treeFactory = new PlayerBotBehaviorTreeFactory(botStatesByName, botApi, {
-    behaviorMode,
-    ...(config.treeOptions ?? {}),
-    modeHandlers,
-    pvpController,
-    traversalService,
-  });
-
-  const pathBlockedHandler = new PathBlockedHandler({
-    botStatesByName,
-    traversalService,
-    api: botApi,
-    modeHandlers,
-    options: {
-      blockedRetargetMinDelayMs: config.blockedRetargetMinDelayMs,
-      blockedRetargetMaxDelayMs: config.blockedRetargetMaxDelayMs,
-      duplicateEventWindowMs: config.pathBlockedDuplicateEventWindowMs,
-      minHandleIntervalMs: config.pathBlockedHandleMinIntervalMs,
-      meaningfulRecheckMs: config.pathBlockedMeaningfulRecheckMs,
-      maxRepeatBeforeBackoff: config.pathBlockedMaxRepeatBeforeBackoff,
-      backoffBaseMs: config.pathBlockedBackoffBaseMs,
-      backoffMaxMs: config.pathBlockedBackoffMaxMs,
-      ignoredModes: config.pathBlockedIgnoredModes,
-    },
-  });
-  const npcAggroPolicyHandler = new NpcAggroPolicyHandler({
-    botStatesByName,
-    modeHandlers,
-    api: botApi,
-    options: {
-      npcAggroBlockedModes: config.npcAggroBlockedModes,
-    },
-  });
   const pvpJumpOnKillPolicy = new PvpJumpOnKillPolicy({
     botStatesByName,
     api: botApi,
@@ -267,36 +144,15 @@ function bootPlayerBotsRuntime(options = {}) {
 
   let runtime = null;
   let behaviorTaskStarted = false;
-  const randomizedCooldownMs = () =>
-    config.botBaseCooldownMs + randomInRange(-config.botJitterMs, config.botJitterMs);
-  const createController = (player, location, initialDelayMs) =>
-    new BotController(
-      player,
-      location.getX(),
-      location.getY(),
-      location.getZ(),
-      treeFactory.create(randomizedCooldownMs(), initialDelayMs)
-    );
 
   const ensureBehaviorTaskStarted = () => {
     if (behaviorTaskStarted || !runtime || runtime.entries.length === 0) {
       return;
     }
     TaskManager.submit(
-      new BotBehaviorTask(runtime.entries, traversalService, config.botDecisionTicks, {
+      new BotBehaviorTask(runtime.entries, config.botDecisionTicks, {
         api: botApi,
         behaviorMode,
-        modeHandlers,
-        decisionDelayMinMs: config.autoModeDecisionMinMs,
-        decisionDelayMaxMs: config.autoModeDecisionMaxMs,
-        autonomousModes: modeRegistries.autonomousModes,
-        transientModes: [
-          behaviorMode.FOLLOW_BACK,
-          behaviorMode.RETURN_HOME,
-        ],
-        modeStopParamsByMode: modeRegistries.modeStopParamsByMode,
-        npcAggroPolicyHandler,
-        modeValidationIntervalMs: config.modeValidationIntervalMs,
         idleEntryStride: config.idleEntryStride,
         timingDesyncMs: config.timingDesyncMs,
         lodConfig: config.lodConfig,
@@ -340,8 +196,23 @@ function bootPlayerBotsRuntime(options = {}) {
       applyGeneratedPvpLoadout(player, state, {
         api: botApi,
       }),
-    createController,
     ensureBehaviorTaskStarted,
+    attachAssistantBrain: ({ player, state }) => {
+      // ::botme drives a real player through the roam brain.
+      const activity = brainRegistry?.byId?.get("roam") ?? null;
+      if (!activity || !runtime) {
+        return false;
+      }
+      return attachBrain({
+        runtime,
+        registry: brainRegistry,
+        world: brainWorld,
+        bot: player,
+        activity,
+        home: state?.home ?? null,
+        resetMovementState,
+      });
+    },
     attachWildernessBrain: ({ bot, state }) => {
       const activity = brainRegistry?.byId?.get("pvp") ?? null;
       if (!activity || !runtime) {
@@ -418,59 +289,12 @@ function bootPlayerBotsRuntime(options = {}) {
     peekMovementRequest,
   });
 
-  const followBackTrigger = new FollowBackTrigger({
-    botStatesByName: runtime.botStatesByName,
-    playerBotUsernames: runtime.playerBotUsernames,
-    modeHandlers,
-    api: botApi,
-    options: {
-      behaviorMode,
-      botStatusReporter,
-    },
-  });
-  const combatReactionTrigger = new CombatReactionTrigger({
-    botStatesByName: runtime.botStatesByName,
-    playerBotUsernames: runtime.playerBotUsernames,
-    modeHandlers,
-    api: botApi,
-    options: {
-      behaviorMode,
-      followBackDurationMs: config.followBackDurationMs,
-      playerRunAwayChance: config.playerAttackFleeChance,
-    },
-  });
-
-  for (const [mode, handler] of Object.entries(modeHandlers)) {
-    if (typeof handler?.registerEvents !== "function") {
-      continue;
-    }
-    try {
-      handler.registerEvents({
-        api,
-        botApi,
-        runtime,
-        behaviorMode,
-      });
-    } catch (err) {
-      botApi.log("bot_mode_register_events_error", {
-        mode,
-        error: String(err?.message ?? err),
-      });
-    }
-  }
-
   runtime.scheduleInitialSpawn();
 
   return {
     runtime,
-    modeHandlers,
-    modeRegistries,
-    pathBlockedHandler,
-    npcAggroPolicyHandler,
     avengeOpponentPolicy,
     pvpJumpOnKillPolicy,
-    followBackTrigger,
-    combatReactionTrigger,
     botStatusReporter,
     tickMetrics,
     brainRegistry,

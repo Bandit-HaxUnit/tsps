@@ -19,9 +19,6 @@ const { PvpJumpKilledTargetNode } = require("../../behaviours/nodes/pvp/PvpJumpK
 const { PvpVengeanceNode } = require("../../behaviours/nodes/pvp/PvpVengeanceNode");
 const { ReplenishAfterKillNode } = require("../../behaviours/nodes/pvp/ReplenishAfterKillNode");
 const { PvpValidateEngagementNode } = require("../../behaviours/nodes/pvp/PvpValidateEngagementNode");
-const {
-  handlePlayerAttackReaction,
-} = require("../../behaviours/policies/PlayerAttackReactionPolicy");
 const { applyGeneratedPvpLoadout } = require("../../behaviours/policies/PvpLoadoutPolicy");
 const { pickPvpOpponent } = require("../../behaviours/policies/PvpTargetSelectionPolicy");
 const {
@@ -299,14 +296,6 @@ class PvpController {
   handleBlocked() {
     // PvP movement/combat loop handles its own recovery.
     return true;
-  }
-
-  onPlayerAttackReaction(payload) {
-    return handlePlayerAttackReaction({
-      ...payload,
-      behaviorMode: this.behaviorMode,
-      api: this.api,
-    });
   }
 
   setPhase(state, phase) {

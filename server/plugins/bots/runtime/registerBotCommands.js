@@ -1,6 +1,5 @@
 const { PlayerRights } = require("../../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { FriendsChatManager } = require("../../interface/FriendsChatManager");
-const { callModeHook } = require("../behaviours/hooks/ModeHookContract");
 const { isPvpOnlyBotState } = require("../behaviours/state/PlayerBotState");
 const { ATTR_RECRUIT_OWNER_USERNAME } = require("./BotRecruitConstants");
 const { startBrainRoam } = require("../brain/RoamService");
@@ -12,8 +11,6 @@ function registerBotCommands(options) {
     botApi,
     runtime,
     behaviorMode,
-    assignableBehaviors,
-    modeHandlers,
     resetMovementState,
     taskManager,
     flashHintArrowTaskFactory,
@@ -22,21 +19,6 @@ function registerBotCommands(options) {
     attachBrain,
   } = options;
 
-  const activateMode = (target, state, mode, reason) =>
-    callModeHook({
-      modeHandlers,
-      mode,
-      hookName: "activateMode",
-      payload: {
-        player: target,
-        state,
-        nowMs: Date.now(),
-        reason,
-      },
-      fallback: false,
-      api: botApi,
-      errorEvent: "bot_mode_activation_error",
-    }) === true;
   const brainModes = [
     ...new Set(
       (brainRegistry?.activities ?? [])
@@ -45,10 +27,7 @@ function registerBotCommands(options) {
     ),
   ];
   const supportedBehaviorList = [
-    ...new Set([
-      ...brainModes,
-      ...Object.keys(assignableBehaviors ?? {}),
-    ]),
+    ...new Set(brainModes),
     "recruit",
     "auto",
   ].sort((a, b) => a.localeCompare(b)).join("|");
@@ -68,7 +47,7 @@ function registerBotCommands(options) {
     ) {
       return brainRegistry.byId?.get("follow_owner") ?? null;
     }
-    const mode = assignableBehaviors?.[requested] ?? requested;
+    const mode = requested;
     return (
       brainRegistry.activities?.find((activity) => activity.mode === mode) ?? null
     );
@@ -105,29 +84,6 @@ function registerBotCommands(options) {
     );
   };
 
-  /** Locks a controlled bot into one behavior tree, shared by ::bh and ::bot <behavior>. */
-  const assignManualBehavior = (target, state, normalizedBehavior) => {
-    if (!activateMode(target, state, normalizedBehavior, "manual_override_assign")) {
-      return false;
-    }
-    const currentLoc = target.getLocation?.();
-    if (currentLoc) {
-      state.home = {
-        x: currentLoc.getX(),
-        y: currentLoc.getY(),
-        z: currentLoc.getZ(),
-      };
-    }
-    if (!state.autonomy) {
-      state.autonomy = {};
-    }
-    state.autonomy.manualMode = normalizedBehavior;
-    state.autonomy.modeEndsAt = Number.MAX_SAFE_INTEGER;
-    state.autonomy.nextDecisionAt = Number.MAX_SAFE_INTEGER;
-    resetMovementState(target);
-    return true;
-  };
-
   /** Hands a bot back to autonomous behavior: the brain roam activity. */
   const assignAutoBehavior = (target, state) => {
     if (!state.autonomy) {
@@ -152,10 +108,8 @@ function registerBotCommands(options) {
       requested === "follow" ||
       requested === "follow_owner";
     const activity = findBrainActivity(requested);
-    const normalizedBehavior =
-      activity?.mode ??
-      (wantsAuto ? "auto" : assignableBehaviors?.[requested] ?? null);
-    if (!activity && !wantsAuto && !normalizedBehavior) {
+    const normalizedBehavior = activity?.mode ?? (wantsAuto ? "auto" : null);
+    if (!activity && !wantsAuto) {
       player.sendMessage(`Usage: ::bot [${supportedBehaviorList}] (default pvp)`);
       return true;
     }
@@ -241,26 +195,22 @@ function registerBotCommands(options) {
         );
         continue;
       }
-      if (pending.behavior !== behaviorMode.PVP) {
+      if (pending.behavior === "auto") {
         if (!state) {
-          owner.sendMessage(`Unable to start ${pending.behavior} for ${username}: missing bot state.`);
+          owner.sendMessage(`Unable to start auto for ${username}: missing bot state.`);
           continue;
         }
-        // spawnPvpBot primes PvP-only autonomy; the requested behavior replaces it.
         if (state.autonomy) state.autonomy.allowedAutonomousModes = null;
-        const assigned = pending.behavior === "auto"
-          ? assignAutoBehavior(bot, state)
-          : assignManualBehavior(bot, state, pending.behavior);
+        const assigned = assignAutoBehavior(bot, state);
         owner.sendMessage(assigned
-          ? `${username} spawned as ${pending.behavior}.`
-          : `Unable to start ${pending.behavior} for ${username}.`);
+          ? `${username} spawned as auto.`
+          : `Unable to start auto for ${username}.`);
         botApi.log("bot_spawn_behavior_assigned", {
           assignedBy: owner.getUsername(),
           target: username,
-          behavior: pending.behavior,
+          behavior: "auto",
           assigned,
         });
-        continue;
       }
     }
   });
@@ -322,9 +272,7 @@ function registerBotCommands(options) {
 
     const wantsAuto = behaviorArg === "auto";
     const activity = findBrainActivity(behaviorArg);
-    const normalizedBehavior =
-      activity?.mode ?? assignableBehaviors[behaviorArg] ?? null;
-    if (!activity && !normalizedBehavior && !wantsAuto) {
+    if (!activity && !wantsAuto) {
       player.sendMessage(`Unknown behaviour. Supported: ${supportedBehaviorList}`);
       return true;
     }
@@ -374,13 +322,15 @@ function registerBotCommands(options) {
         player.sendMessage(`bh: failed to attach ${activity.id} to ${targetUsername}`);
         return true;
       }
-    } else if (!assignManualBehavior(target, state, normalizedBehavior)) {
-      player.sendMessage(`bh: failed to activate mode for ${targetUsername}`);
-      return true;
+    } else {
+      if (!assignAutoBehavior(target, state)) {
+        player.sendMessage(`bh: failed to switch ${targetUsername} to auto`);
+        return true;
+      }
     }
     taskManager.submit(flashHintArrowTaskFactory(player, target));
 
-    const assigned = activity ? activity.mode : normalizedBehavior;
+    const assigned = activity ? activity.mode : "auto";
     player.sendMessage(`bh: ${targetUsername} -> ${assigned}`);
     botApi.log("bot_behavior_assigned", {
       assignedBy: player.getUsername(),
