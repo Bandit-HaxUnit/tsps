@@ -223,6 +223,7 @@ export abstract class Mobile extends Entity {
         this.forcedChat = null;
         this.animation = null;
         this.graphic = null;
+        this.slotGraphics.clear();
         this.displayedHealth = null;
     }
 
@@ -291,6 +292,27 @@ export abstract class Mobile extends Entity {
 
         this.graphic = graphic;
         this.getUpdateFlag().flag(Flag.GRAPHIC);
+    }
+
+    /** This tick's graphics in spotanim slots other than 0; null clears a slot. */
+    private readonly slotGraphics = new Map<number, Graphic | null>();
+
+    /**
+     * Plays a graphic in one of the actor's spotanim slots, which show at once - a Manticore's
+     * three charged orbs, say. Slot 0 is performGraphic's; a null graphic clears the slot.
+     */
+    performGraphicInSlot(slot: number, graphic: Graphic | null): void {
+        const index = Math.trunc(slot) & 0xff;
+        if (index === 0) {
+            if (graphic) this.performGraphic(graphic);
+            return;
+        }
+        this.slotGraphics.set(index, graphic);
+        this.getUpdateFlag().flag(Flag.GRAPHIC);
+    }
+
+    getSlotGraphics(): ReadonlyMap<number, Graphic | null> {
+        return this.slotGraphics;
     }
 
     delayedAnimation(animation: Animation, ticks: number) {

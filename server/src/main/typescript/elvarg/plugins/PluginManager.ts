@@ -86,6 +86,7 @@ import {
   PluginPlayerDealtDamageEvent,
   PluginCombatHitRollEvent,
   PluginCombatHitResolvedEvent,
+  PluginCombatAttackDistanceEvent,
   PluginCanUnequipEvent,
   PluginCombatDamageProvider,
   PluginCombatEngine,
@@ -241,6 +242,7 @@ export class PluginManager {
   private static playerDealtDamageHooks: PluginHook<PluginPlayerDealtDamageEvent>[] = [];
   private static combatHitRollHooks: PluginHook<PluginCombatHitRollEvent>[] = [];
   private static combatHitResolvedHooks: PluginHook<PluginCombatHitResolvedEvent>[] = [];
+  private static combatAttackDistanceHooks: PluginHook<PluginCombatAttackDistanceEvent>[] = [];
   private static spellDisabledHooks: PluginHook<PluginSpellDisabledEvent>[] = [];
   private static spellRuneBypassHooks: PluginHook<PluginSpellRuneBypassEvent>[] = [];
   private static npcAggressionToleranceHooks: PluginHook<PluginNpcAggressionToleranceEvent>[] = [];
@@ -1334,6 +1336,13 @@ export class PluginManager {
     }
   }
 
+  public static emitCombatAttackDistance(event: PluginCombatAttackDistanceEvent): number {
+    for (const hook of PluginManager.combatAttackDistanceHooks) {
+      PluginManager.executeHook(hook, event, "combat_attack_distance", "combat_attack_distance");
+    }
+    return Math.max(1, Math.trunc(event.distance));
+  }
+
   public static emitSpellDisabled(
     player: any,
     spellbook: any,
@@ -1914,6 +1923,7 @@ export class PluginManager {
       SkullType: require(`${model}/SkullType`).SkullType,
       CombatConstants: require(`${combat}/CombatConstants`).CombatConstants,
       DamageFormulas: require(`${combat}/formula/DamageFormulas`).DamageFormulas,
+      AccuracyFormulasDpsCalc: require(`${combat}/formula/AccuracyFormulasDpsCalc`).AccuracyFormulasDpsCalc,
       PendingHit: require(`${combat}/hit/PendingHit`).PendingHit,
       HitDamage: require(`${combat}/hit/HitDamage`).HitDamage,
       HitMask: require(`${combat}/hit/HitMask`).HitMask,
@@ -3012,6 +3022,10 @@ export class PluginManager {
       onCombatHitResolved: (handler) => {
         if (typeof handler !== "function") return;
         PluginManager.combatHitResolvedHooks.push({ pluginName, handler });
+      },
+      onCombatAttackDistance: (handler) => {
+        if (typeof handler !== "function") return;
+        PluginManager.combatAttackDistanceHooks.push({ pluginName, handler });
       },
       onSpellDisabled: (handler) => {
         if (typeof handler !== "function") {
