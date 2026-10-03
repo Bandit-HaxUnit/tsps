@@ -265,6 +265,7 @@ function depositAllFromLoc({ player }) {
 
 module.exports = {
   name: "SailingCargoHold",
+  members: true,
   opAmount,
   register(api) {
     content();

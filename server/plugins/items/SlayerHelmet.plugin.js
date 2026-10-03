@@ -109,6 +109,7 @@ function disassemble(event) {
 
 module.exports = {
   name: "SlayerHelmet",
+  members: true,
   register(api) {
     pluginApi = api;
     ({ ItemIdentifiers, Skill } = api.core);

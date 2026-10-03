@@ -30,6 +30,8 @@ const FINISHED = 5;
 const OFFER_DELAY_MS = 5000;
 const MAX = 0x7fffffff;
 const COINS = ItemIdentifiers.COINS;
+// OSRS: members get all 8 offer slots, free-to-play worlds the first 3.
+const usableSlots = () => (pluginApi.core.WorldDefinition.isMembersWorld() ? 8 : 3);
 const offers = new WeakMap();
 const completionTimers = new WeakMap();
 const viewing = new WeakMap();
@@ -190,8 +192,12 @@ function chooseItem(player, offer) {
 }
 
 function start(player, sell, slot = 0, itemId = -1) {
+  if (slot >= usableSlots()) {
+    player.sendMessage("You need to be on a members' world to use this slot.");
+    return;
+  }
   if (Object.hasOwn(completedOffers(player), slot)) {
-    const free = Array.from({ length: 8 }, (_, i) => i).find((i) => !Object.hasOwn(completedOffers(player), i));
+    const free = Array.from({ length: usableSlots() }, (_, i) => i).find((i) => !Object.hasOwn(completedOffers(player), i));
     if (free == null) {
       player.sendMessage("Collect an offer before creating another one.");
       return;
@@ -354,6 +360,10 @@ function openCollectionBox({ player }) {
     sender.sendInterfaceFlagsRange(collectUid(child), 3, 4, 14);
   }
   sender.sendInterfaceFlags(collectUid(3), 2).sendInterfaceFlags(collectUid(4), 2);
+  // Children 5-12 are slots 1-8; script 789 draws all of them, so hide the members-only ones.
+  for (let child = 5; child <= 12; child++) {
+    sender.sendInterfaceDisplayState(collectUid(child), child - 5 >= usableSlots());
+  }
   return true;
 }
 

@@ -4,6 +4,11 @@ import { Location } from "../../../game/model/Location";
 import { PluginManager } from "../../../plugins/PluginManager";
 
 export class UseItemPacketListener {
+  /** Plugins can veto any item-on-X use (e.g. members items on a free-to-play world). */
+  private static canUse(player: any, ...itemIds: number[]): boolean {
+    return itemIds.every((itemId) => PluginManager.emitCanUseItem(player, itemId, "use") !== false);
+  }
+
   public static itemOnItem(player: any, usedItemSlot: number, usedWithSlot: number): void {
     if (
       usedWithSlot < 0 ||
@@ -16,7 +21,7 @@ export class UseItemPacketListener {
 
     const usedItem = player.getInventory().getItems()[usedItemSlot];
     const usedWithItem = player.getInventory().getItems()[usedWithSlot];
-    if (!usedItem || !usedWithItem) {
+    if (!usedItem || !usedWithItem || !this.canUse(player, usedItem.getId(), usedWithItem.getId())) {
       return;
     }
 
@@ -46,7 +51,7 @@ export class UseItemPacketListener {
     }
 
     const item = player.getInventory().getItems()[itemSlot];
-    if (!item || item.getId() !== itemId) {
+    if (!item || item.getId() !== itemId || !this.canUse(player, itemId)) {
       return;
     }
 
@@ -108,7 +113,7 @@ export class UseItemPacketListener {
     const inventoryItem = Number.isInteger(inventorySlot)
       ? player.getInventory().getItems()[inventorySlot!]
       : player.getInventory().getItems().find((it: any) => it && it.getId() === inventoryItemId);
-    if (!inventoryItem || inventoryItem.getId() !== inventoryItemId) {
+    if (!inventoryItem || inventoryItem.getId() !== inventoryItemId || !this.canUse(player, inventoryItemId)) {
       return;
     }
 
@@ -133,7 +138,7 @@ export class UseItemPacketListener {
     }
 
     const item = player.getInventory().getItems()[slot];
-    if (!item || item.getId() !== itemId) {
+    if (!item || item.getId() !== itemId || !this.canUse(player, itemId)) {
       return;
     }
 
@@ -158,7 +163,7 @@ export class UseItemPacketListener {
     }
     const target = World.getNpcs().get(targetIndex);
     const item = player.getInventory().getItems()[slot];
-    if (!target || !item || item.getId() !== itemId) {
+    if (!target || !item || item.getId() !== itemId || !this.canUse(player, itemId)) {
       return;
     }
     player.getMovementQueue().walkToEntity(target, () => {

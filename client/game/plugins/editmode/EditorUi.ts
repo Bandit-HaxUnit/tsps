@@ -177,6 +177,7 @@ class EditorChrome {
     private readonly pvpZonesInput: HTMLInputElement;
     private readonly duelZonesInput: HTMLInputElement;
     private readonly safeZonesInput: HTMLInputElement;
+    private readonly f2pZonesInput: HTMLInputElement;
     private readonly multiCombatZonesInput: HTMLInputElement;
     private readonly unsubscribe: () => void;
     private readonly canvasShell?: HTMLElement;
@@ -417,6 +418,9 @@ class EditorChrome {
         this.safeZonesInput = zoneToggle("Safe", "#86efac", (checked) =>
             this.plugin.setConfig({ showSafeZones: checked }),
         );
+        this.f2pZonesInput = zoneToggle("F2P", "#93c5fd", (checked) =>
+            this.plugin.setConfig({ showF2pZones: checked }),
+        );
         this.topBar.append(
             heightLabel,
             decrement,
@@ -594,6 +598,8 @@ class EditorChrome {
         this.safeZonesInput.disabled = !state.world.definition;
         this.duelZonesInput.checked = state.config.showDuelZones;
         this.safeZonesInput.checked = state.config.showSafeZones;
+        this.f2pZonesInput.disabled = !state.world.definition;
+        this.f2pZonesInput.checked = state.config.showF2pZones;
         this.multiCombatZonesInput.disabled = !state.world.definition;
         this.heightInput.value = String(state.config.heightLevel);
         this.renderAllInput.checked = state.config.renderAllHeightLevels;

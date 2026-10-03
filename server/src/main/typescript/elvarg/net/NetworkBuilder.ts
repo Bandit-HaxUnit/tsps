@@ -8,6 +8,7 @@ import { Flag } from "../game/model/Flag";
 import { Location } from "../game/model/Location";
 import { PlayerStatus } from "../game/model/PlayerStatus";
 import { PlayerRights } from "../game/model/rights/PlayerRights";
+import { isMembersWorld } from "../game/definition/WorldDefinition";
 import { PluginManager } from "../plugins/PluginManager";
 import { Misc } from "../util/Misc";
 import { PlayerPunishment } from "../util/PlayerPunishment";
@@ -919,7 +920,8 @@ class ClientConnection {
         player.getUsername(),
         PlayerRights.hasAdminRights(player),
         this.getPlayerAppearance(player),
-        player.getChatIcons()
+        player.getChatIcons(),
+        isMembersWorld()
       )
     );
     this.send(encodeDefaultAnimations());
@@ -933,6 +935,9 @@ class ClientConnection {
       // varbit 4070, so the cache scripts would draw the standard book for everyone.
       // sendTabInterface(6) is the one place that publishes the spellbook varbit.
       .sendTabInterface(6, player.getSpellbook().getInterfaceId())
+      // Cache script 828 sets varc 103 (account is a member), which the GE, collection box
+      // and membership panels read; everyone on a members world is a member.
+      .sendInterfaceScript(828, [isMembersWorld() ? 1 : 0])
       .sendItemContainer(player.getInventory(), 3214)
       .sendSkillsSnapshot()
       .sendRunEnergy();

@@ -6,6 +6,7 @@ import { Direction } from "../../../model/Direction";
 import { Location } from "../../../model/Location";
 import { DefinitionLoader } from "../DefinitionLoader";
 import { CacheDefinitions } from "../../../cache/CacheDefinitions";
+import { PluginManager } from "../../../../plugins/PluginManager";
 
 interface RawNpcSpawnDefinition {
     id: number;
@@ -32,6 +33,7 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
         let totalCandidates = 0;
         let invalid = 0;
         let unsupported = 0;
+        let vetoed = 0;
 
         for (const source of loaded.sources) {
             totalCandidates += source.definitions.length;
@@ -45,6 +47,10 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
                     unsupported++;
                     continue;
                 }
+                if (PluginManager.emitCanSpawnNpc(definition.getId(), definition.getPosition()) === false) {
+                    vetoed++;
+                    continue;
+                }
                 definitions.push(definition);
             }
         }
@@ -54,7 +60,7 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
         (invalid > 0 || unsupported > 0 || applied < definitions.length ? console.warn : console.debug)(
             `[npc-spawns] Loaded ${definitions.length} definitions from ` +
             `${loaded.sources.map((source) => source.name).join("+") || "none"} ` +
-            `(candidates=${totalCandidates}, invalid=${invalid}, unsupported=${unsupported}, ` +
+            `(candidates=${totalCandidates}, invalid=${invalid}, unsupported=${unsupported}, vetoed=${vetoed}, ` +
             `applied=${applied})`
         );
         return loaded.failures === 0;
