@@ -251,6 +251,24 @@
           "type": "followOwner"
         }
       ]
+    },
+    {
+      "id": "bank_trip",
+      "mode": "bank_run",
+      "capacity": 64,
+      "repeat": false,
+      "ephemeral": true,
+      "manual": true,
+      "failureCooldownSeconds": 5,
+      "actions": [
+        {
+          "type": "bank",
+          "until": {
+            "inventoryFull": false
+          },
+          "suppressAutoRetaliate": true
+        }
+      ]
     }
   ],
   "sites": [

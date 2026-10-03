@@ -740,16 +740,6 @@ class BotBehaviorTask extends Task {
       const backoffStride = Math.max(4, stride * 2);
       return (this._cycleCounter + shard) % backoffStride === 0;
     }
-    if (state.mode === this.behaviorMode?.BANK_RUN) {
-      const queueSize = Number(player.getMovementQueue?.()?.size?.() ?? 0);
-      const nextActionAt = Number(state.bankRun?.nextActionAt ?? 0);
-      // Bank runs can spend long periods walking to/from booths; we can
-      // downsample BT work while movement is already in progress.
-      if (queueSize > 0 && nowMs < nextActionAt) {
-        const bankRunStride = Math.max(2, stride);
-        return (this._cycleCounter + shard) % bankRunStride === 0;
-      }
-    }
     const queueSize = Number(player.getMovementQueue?.()?.size?.() ?? 0);
     if (
       queueSize > 0 &&

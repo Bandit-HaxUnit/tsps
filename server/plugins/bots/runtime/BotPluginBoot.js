@@ -42,8 +42,10 @@ const { PvpController } = require("../brain/pvp/PvpController");
 const { configureReactivePvp } = require("../brain/pvp/ReactivePvp");
 const { configureRoam } = require("../brain/RoamService");
 const { configureRecruit } = require("../brain/RecruitService");
+const { configureBankTrip } = require("../brain/BankTripService");
 const { registerBrainProgressEvents } = require("../brain/BotBrainEvents");
 const { listCatalogObjectIds } = require("../brain/BotObjectCatalog");
+const { BANK_BOOTH_IDS } = require("../lib/BankBooths");
 const { inventoryProductionCount } = require("../brain/actions/InteractObject");
 const Woodcutting = require("../../skills/Woodcutting.plugin");
 const Mining = require("../../skills/Mining.plugin");
@@ -187,6 +189,7 @@ function bootPlayerBotsRuntime(options = {}) {
   traversalAssist.trackObjectIds([
     ...trackedTraversalObjectIds,
     ...listCatalogObjectIds(),
+    ...BANK_BOOTH_IDS,
   ]);
   // A valid dump loads here, before regions load; a missing/stale one is scanned and
   // rewritten once core startup has initialized regions.
@@ -290,7 +293,6 @@ function bootPlayerBotsRuntime(options = {}) {
         transientModes: [
           behaviorMode.FOLLOW_BACK,
           behaviorMode.RETURN_HOME,
-          behaviorMode.BANK_RUN,
         ],
         modeStopParamsByMode: modeRegistries.modeStopParamsByMode,
         npcAggroPolicyHandler,
@@ -394,6 +396,12 @@ function bootPlayerBotsRuntime(options = {}) {
     resetMovementState,
   });
   configureRecruit({
+    runtime,
+    registry: brainRegistry,
+    world: brainWorld,
+    resetMovementState,
+  });
+  configureBankTrip({
     runtime,
     registry: brainRegistry,
     world: brainWorld,

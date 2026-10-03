@@ -7,20 +7,10 @@ const { clearMovementRequest } = require("../navigation/BotNavigation");
 const HOME_TELEPORT_START_ANIMATION = new Animation(714);
 const HOME_TELEPORT_END_ANIMATION = new Animation(715);
 const HOME_TELEPORT_START_GRAPHIC = new Graphic(308, 50);
-let BANK_RUN_SEQUENCE = 0;
 const DEFAULT_TRANSITION_PROFILE = Object.freeze({ resetTraversal: true });
 const MODE_TRANSITION_PROFILE_OVERRIDES = Object.freeze({
   ROAMING: Object.freeze({ resetTraversal: false }),
 });
-const RESUMABLE_MODE_KEYS = Object.freeze([
-  "ROAMING",
-  "WOODCUTTING",
-  "MINING",
-  "SMELTING",
-  "FIREMAKING",
-  "PVP",
-]);
-
 function createRoamingBehaviorState() {
   return {
     target: null,
@@ -76,28 +66,6 @@ function createSmeltingBehaviorState() {
     bankTarget: null,
     furnaceTarget: null,
     travelTarget: null,
-  };
-}
-
-function createBankRunBehaviorState() {
-  return {
-    id: null,
-    phase: "idle",
-    nextActionAt: 0,
-    bankTarget: null,
-    travelTarget: null,
-    returnMode: null,
-    returnTo: null,
-    resumeWoodcuttingTarget: null,
-    resumeMiningTarget: null,
-    startedAt: 0,
-    phaseStartedAt: 0,
-    lastPhaseLogged: null,
-    phaseTimeoutCount: 0,
-    lastHeartbeatAt: 0,
-    lastStuckWarningAt: 0,
-    suppressAutoRetaliate: false,
-    previousAutoRetaliate: null,
   };
 }
 
@@ -311,29 +279,6 @@ function clearSmeltingBehaviorState(state) {
   state.smelting.travelTarget = null;
 }
 
-function clearBankRunBehaviorState(state) {
-  if (!state?.bankRun) {
-    return;
-  }
-  state.bankRun.phase = "idle";
-  state.bankRun.id = null;
-  state.bankRun.nextActionAt = 0;
-  state.bankRun.bankTarget = null;
-  state.bankRun.travelTarget = null;
-  state.bankRun.returnMode = null;
-  state.bankRun.returnTo = null;
-  state.bankRun.resumeWoodcuttingTarget = null;
-  state.bankRun.resumeMiningTarget = null;
-  state.bankRun.startedAt = 0;
-  state.bankRun.phaseStartedAt = 0;
-  state.bankRun.lastPhaseLogged = null;
-  state.bankRun.phaseTimeoutCount = 0;
-  state.bankRun.lastHeartbeatAt = 0;
-  state.bankRun.lastStuckWarningAt = 0;
-  state.bankRun.suppressAutoRetaliate = false;
-  state.bankRun.previousAutoRetaliate = null;
-}
-
 let TaskManager = null;
 
 /** Called once from PlayerBots.plugin.js's register(api), before any bot behavior runs. */
@@ -382,7 +327,6 @@ function clearAllBehaviorStates(state) {
   clearMiningBehaviorState(state);
   clearFiremakingBehaviorState(state);
   clearSmeltingBehaviorState(state);
-  clearBankRunBehaviorState(state);
   clearPvpBehaviorState(state);
 }
 
@@ -392,20 +336,6 @@ function restoreSuppressedAutoRetaliate(player, state, nextMode) {
     state.pvp.retreat = null;
   }
 
-  if (
-    !player ||
-    !state ||
-    state.bankRun?.suppressAutoRetaliate !== true ||
-    state.mode === nextMode
-  ) {
-    return;
-  }
-  const previousAutoRetaliate = state.bankRun.previousAutoRetaliate;
-  player.setAutoRetaliate(
-    typeof previousAutoRetaliate === "boolean" ? previousAutoRetaliate : true
-  );
-  state.bankRun.suppressAutoRetaliate = false;
-  state.bankRun.previousAutoRetaliate = null;
 }
 
 function clearCombatState(player) {
@@ -585,96 +515,6 @@ function setModeSmelting(player, state, behaviorMode) {
   transitionToMode(player, state, behaviorMode, "SMELTING");
 }
 
-function isResumableMode(mode, behaviorMode) {
-  if (!behaviorMode) {
-    return false;
-  }
-  return RESUMABLE_MODE_KEYS.some(
-    (modeKey) => resolveBehaviorModeValue(behaviorMode, modeKey) === mode
-  );
-}
-
-function resolveBankRunResumeMode(state, behaviorMode) {
-  if (!behaviorMode) {
-    return null;
-  }
-  if (isResumableMode(state?.mode, behaviorMode)) {
-    return state.mode;
-  }
-  const manualMode = state?.autonomy?.manualMode;
-  if (isResumableMode(manualMode, behaviorMode)) {
-    return manualMode;
-  }
-  return behaviorMode.ROAMING;
-}
-
-function setModeBankRun(player, state, behaviorMode, options = {}) {
-  if (!state) {
-    return false;
-  }
-  const loc = player?.getLocation?.();
-  const fallbackReturn = loc
-    ? { x: loc.getX(), y: loc.getY(), z: loc.getZ() }
-    : null;
-  const returnMode =
-    options.returnMode ?? resolveBankRunResumeMode(state, behaviorMode);
-  const returnTo = options.returnTo ?? fallbackReturn;
-  const resumeWoodcuttingTarget = options.resumeWoodcuttingTarget
-    ? {
-        objectId: options.resumeWoodcuttingTarget.objectId,
-        x: options.resumeWoodcuttingTarget.x,
-        y: options.resumeWoodcuttingTarget.y,
-        z: options.resumeWoodcuttingTarget.z,
-      }
-    : null;
-  const resumeMiningTarget = options.resumeMiningTarget
-    ? {
-        objectId: options.resumeMiningTarget.objectId,
-        x: options.resumeMiningTarget.x,
-        y: options.resumeMiningTarget.y,
-        z: options.resumeMiningTarget.z,
-      }
-    : null;
-
-  if (!transitionToMode(player, state, behaviorMode, "BANK_RUN")) {
-    return false;
-  }
-  if (!state.bankRun) {
-    state.bankRun = createBankRunBehaviorState();
-  }
-  const nowMs = Date.now();
-  BANK_RUN_SEQUENCE += 1;
-  state.bankRun.id = BANK_RUN_SEQUENCE;
-  state.bankRun.phase = "to_bank";
-  state.bankRun.nextActionAt = 0;
-  state.bankRun.bankTarget = null;
-  state.bankRun.travelTarget = null;
-  state.bankRun.returnMode = returnMode;
-  state.bankRun.returnTo = returnTo
-    ? { x: returnTo.x, y: returnTo.y, z: returnTo.z }
-    : null;
-  state.bankRun.resumeWoodcuttingTarget = resumeWoodcuttingTarget;
-  state.bankRun.resumeMiningTarget = resumeMiningTarget;
-  state.bankRun.startedAt = nowMs;
-  state.bankRun.phaseStartedAt = nowMs;
-  state.bankRun.lastPhaseLogged = null;
-  state.bankRun.phaseTimeoutCount = 0;
-  state.bankRun.lastHeartbeatAt = 0;
-  state.bankRun.lastStuckWarningAt = 0;
-  state.bankRun.suppressAutoRetaliate = options.suppressAutoRetaliate === true;
-  state.bankRun.previousAutoRetaliate = null;
-  if (
-    state.bankRun.suppressAutoRetaliate &&
-    player &&
-    typeof player.autoRetaliateReturn === "function" &&
-    typeof player.setAutoRetaliate === "function"
-  ) {
-    state.bankRun.previousAutoRetaliate = player.autoRetaliateReturn();
-    player.setAutoRetaliate(false);
-  }
-  return true;
-}
-
 function setModePvp(
   player,
   state,
@@ -781,7 +621,6 @@ function createInitialState(home, behaviorMode) {
     mining: createMiningBehaviorState(),
     firemaking: createFiremakingBehaviorState(),
     smelting: createSmeltingBehaviorState(),
-    bankRun: createBankRunBehaviorState(),
     pvp: createPvpBehaviorState(),
     autonomy: createAutonomyState(),
     followTargetUsername: null,
@@ -812,14 +651,12 @@ module.exports = {
   isInsideHomeArea,
   listAllowedAutonomousModes,
   markResumeSoon,
-  resolveBankRunResumeMode,
   resetMovementState,
   setModeFollowBack,
   setModePvp,
   setModeSparring,
   setModeReturnHome,
   setModeRoaming,
-  setModeBankRun,
   setModeWoodcutting,
   setModeMining,
   setModeSmelting,

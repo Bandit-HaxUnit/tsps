@@ -29,6 +29,7 @@ function createBankAction(spec, world) {
       booth: null,
       lastClickAt: 0,
       depositAt: 0,
+      suppressedAutoRetaliate: null,
       lastTargetKey: null,
       lastClickX: null,
       lastClickY: null,
@@ -135,6 +136,16 @@ function createBankAction(spec, world) {
     update(ctx) {
       const { player, nowMs } = ctx;
       const bot = stateFor(player);
+      if (
+        spec.suppressAutoRetaliate === true &&
+        bot.suppressedAutoRetaliate === null
+      ) {
+        bot.suppressedAutoRetaliate =
+          typeof player.autoRetaliateReturn === "function"
+            ? player.autoRetaliateReturn()
+            : true;
+        player.setAutoRetaliate?.(false);
+      }
       if (bot.depositAt > 0 && nowMs >= bot.depositAt) {
         if (isWithdraw) {
           performWithdraw(player);
@@ -238,6 +249,10 @@ function createBankAction(spec, world) {
       bot.booth = null;
       bot.lastClickAt = 0;
       bot.depositAt = 0;
+      if (bot.suppressedAutoRetaliate !== null) {
+        player.setAutoRetaliate?.(bot.suppressedAutoRetaliate);
+        bot.suppressedAutoRetaliate = null;
+      }
     },
   };
   return action;

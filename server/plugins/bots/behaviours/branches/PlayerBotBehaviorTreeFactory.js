@@ -39,11 +39,6 @@ class PlayerBotBehaviorTreeFactory {
     // PvP moved to the brain; the tree still needs the controller for the
     // shared defensive/retreat branch that runs before every other action.
     this.pvpBehavior = options.pvpController ?? null;
-    this.bankRunBehavior = requireModeBehavior(
-      this.modeHandlers,
-      this.behaviorMode.BANK_RUN,
-      "BANK_RUN"
-    );
     this.eatFoodActionNode = new EatFoodActionNode(botStatesByName, api, {
       lowHpRatio: this.botEatLowHpRatio,
       minHeal: this.botEatHealMin,
@@ -91,11 +86,6 @@ class PlayerBotBehaviorTreeFactory {
           return returnHomeActionNode.tick(context);
         case this.behaviorMode.FOLLOW_BACK:
           return followBackActionNode.tick(context);
-        case this.behaviorMode.BANK_RUN:
-          return this.bankRunBehavior.tick({
-            ...context,
-            traversalService: this.traversalService,
-          });
         default:
           return "failure";
       }

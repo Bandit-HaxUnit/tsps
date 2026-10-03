@@ -8,7 +8,6 @@ const DEFAULT_MAX_REPEAT_BEFORE_BACKOFF = 4;
 const DEFAULT_BACKOFF_BASE_MS = 400;
 const DEFAULT_BACKOFF_MAX_MS = 8000;
 const MODE_COOLDOWN_STATE_KEY_BY_MODE = Object.freeze({
-  bank_run: "bankRun",
   woodcutting: "woodcutting",
   mining: "mining",
   smelting: "smelting",

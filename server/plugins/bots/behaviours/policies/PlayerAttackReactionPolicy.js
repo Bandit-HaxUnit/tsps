@@ -1,10 +1,9 @@
 const {
   isPvpOnlyBotState,
-  resolveBankRunResumeMode,
-  setModeBankRun,
   setModeFollowBack,
   setModePvp,
 } = require("../state/PlayerBotState");
+const { startBankTrip } = require("../../brain/BankTripService");
 
 const PERSISTENT_PVP_REACTION_DURATION_MS = 30000;
 
@@ -48,38 +47,13 @@ function startRunAwayBankRun({
   if (state.mode === behaviorMode.BANK_RUN) {
     return true;
   }
-
-  const location = bot.getLocation?.();
-  const returnTo = location
-    ? {
-        x: location.getX(),
-        y: location.getY(),
-        z: location.getZ(),
-      }
-    : null;
-  const returnMode = resolveBankRunResumeMode(state, behaviorMode);
-  const switched = setModeBankRun(bot, state, behaviorMode, {
-    returnMode,
-    returnTo,
-    resumeWoodcuttingTarget: cloneResourceTarget(state?.woodcutting?.target),
-    resumeMiningTarget: cloneResourceTarget(state?.mining?.target),
-    suppressAutoRetaliate: true,
-  });
-  if (!switched) {
+  if (!startBankTrip(bot, state, nowMs)) {
     return false;
   }
-
-  state.bankRun.nextActionAt = nowMs;
-  api?.log?.("bot_mode_switch", {
-    username: bot.getUsername?.(),
-    mode: behaviorMode.BANK_RUN,
-    reason: "attacked_by_player_flee_bank_run",
-    returnMode,
-  });
   api?.log?.("bot_run_away_started_by_attack", {
     bot: bot.getUsername?.(),
     attacker: attacker?.getUsername?.() ?? null,
-    returnMode,
+    mode: behaviorMode.BANK_RUN,
   });
   return true;
 }

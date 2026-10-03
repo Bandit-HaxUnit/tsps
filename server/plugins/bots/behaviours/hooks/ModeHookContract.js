@@ -11,7 +11,6 @@ const KNOWN_MODE_HOOKS = Object.freeze([
   "setTraversalTarget",
   "onPostTraversalRetryScheduled",
   "getModeLogContext",
-  "onBankRunResume",
   "onNpcAggroAttempt",
   "onNpcCombatDetected",
   "onPlayerAttackReaction",
