@@ -38,6 +38,7 @@ const { ReturnHomeModeHandler } = require("../behaviours/modes/ReturnHomeModeHan
 const { createBotRegistry } = require("./BotRegistry");
 const { createBotTickMetrics } = require("./BotTickMetrics");
 const { createBotActivityRegistry } = require("../brain/BotActivityRegistry");
+const { attachBrain } = require("../brain/attachBrain");
 const { registerBrainProgressEvents } = require("../brain/BotBrainEvents");
 const { listCatalogObjectIds } = require("../brain/BotObjectCatalog");
 const { inventoryProductionCount } = require("../brain/actions/InteractObject");
@@ -363,6 +364,28 @@ function bootPlayerBotsRuntime(options = {}) {
       }),
     createController,
     ensureBehaviorTaskStarted,
+    attachWildernessBrain: ({ bot, state }) => {
+      const activity = brainRegistry?.byId?.get("pvp") ?? null;
+      if (!activity || !runtime) {
+        return false;
+      }
+      const attached = attachBrain({
+        runtime,
+        registry: brainRegistry,
+        world: brainWorld,
+        bot,
+        activity,
+        home: state?.home ?? null,
+        resetMovementState,
+      });
+      if (attached) {
+        botApi.log("bot_wilderness_brain_attached", {
+          username: bot.getUsername?.(),
+          hotspotId: state?.pvp?.hotspotId ?? null,
+        });
+      }
+      return attached;
+    },
     emitPlayerLogin: (event) => botApi.emitPlayerLogin(event),
     worldGetPlayerByName: (name) => World.getPlayerByName(name),
     formatText: (value) => Misc.formatText(value),

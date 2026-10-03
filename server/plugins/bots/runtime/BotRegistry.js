@@ -41,6 +41,7 @@ function createBotRegistry(options) {
     applyForcedModeForDiagnosis: applyForcedModeForDiagnosisFn,
     createController,
     ensureBehaviorTaskStarted,
+    attachWildernessBrain,
     emitPlayerLogin,
     worldGetPlayerByName,
     formatText,
@@ -580,7 +581,7 @@ function createBotRegistry(options) {
     playerBotUsernames.add(username);
     assignmentMap?.set(username, assignmentValue);
 
-    addEntry(username, {
+    const entry = {
       player: bot,
       state,
       controller: createController(
@@ -588,7 +589,13 @@ function createBotRegistry(options) {
         botSpawn,
         0
       ),
-    });
+    };
+    addEntry(username, entry);
+    // Managed wilderness bots are brain-driven; the controller stays for the
+    // behaviour tree only if the brain attachment is unavailable.
+    if (assignmentMap && typeof attachWildernessBrain === "function") {
+      attachWildernessBrain({ entry, bot, state, plan, hotspotId: assignedHotspotId });
+    }
     emitPlayerLogin({
       player: bot,
       username,
