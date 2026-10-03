@@ -87,6 +87,7 @@ const DESTINATIONS = {
     teleport("Blast Furnace", location(1939, 4958), TeleportType.NORMAL),
     teleport("Castle Wars", location(2440, 3089), TeleportType.NORMAL),
     teleport("Duel Arena", location(3366, 3266), TeleportType.NORMAL),
+    teleport("Fortis Colosseum", location(1799, 9506), TeleportType.NORMAL),
     teleport("Pest Control", location(2657, 2639), TeleportType.NORMAL),
     teleport("TzHaar Fight Caves", location(2438, 5168), TeleportType.NORMAL),
     teleport("TzHaar Fight Pits", location(2399, 5177), TeleportType.NORMAL),

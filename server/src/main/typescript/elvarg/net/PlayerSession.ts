@@ -20,6 +20,7 @@ import {
   encodePlayerSync,
   encodeRebuildNormal,
   encodeTick,
+  GraphicView,
   NpcSyncState,
   PlayerSyncState,
   PlayerView,
@@ -527,19 +528,30 @@ export class PlayerSession {
       animation: flags.flagged(Flag.ANIMATION) && animation
         ? { id: animation.getId(), delay: animation.getDelay() }
         : undefined,
-      graphic: flags.flagged(Flag.GRAPHIC) && graphic
-        ? { id: graphic.getId(), height: graphic.getHeight(), delay: graphic.getDelay() }
-        : undefined,
+      graphics: flags.flagged(Flag.GRAPHIC) ? this.graphicViews(graphic, actor.getSlotGraphics?.()) : undefined,
       hits: hits.length > 0
         ? hits.map((hit: any) => ({
-            type: this.hitsplatType(hit.getHitmask(), mine),
+            type: hit.getSplatType?.(mine) ?? this.hitsplatType(hit.getHitmask(), mine),
             damage: hit.getDamage(),
           }))
         : undefined,
       health: hits.length > 0
-        ? { current: actor.getHitpoints(), max: maxHitpoints, bar: actor.getHealthBar?.() ?? undefined }
+        ? actor.getDisplayedHealth?.()
+          ?? { current: actor.getHitpoints(), max: maxHitpoints, bar: actor.getHealthBar?.() ?? undefined }
         : undefined,
     };
+  }
+
+  /** Slot 0's graphic and any in other slots; a cleared slot is id -1. */
+  private graphicViews(graphic: any, slots?: ReadonlyMap<number, any>): GraphicView[] | undefined {
+    const views: GraphicView[] = [];
+    if (graphic) views.push({ slot: 0, id: graphic.getId(), height: graphic.getHeight(), delay: graphic.getDelay() });
+    for (const [slot, slotGraphic] of slots ?? []) {
+      views.push(slotGraphic
+        ? { slot, id: slotGraphic.getId(), height: slotGraphic.getHeight(), delay: slotGraphic.getDelay() }
+        : { slot, id: -1, height: 0, delay: 0 });
+    }
+    return views.length > 0 ? views : undefined;
   }
 
   private hitsplatType(mask: HitMask, mine: boolean): number {

@@ -156,8 +156,11 @@ export class NPC extends Mobile {
      * Can this npc walk through other NPCs?
      * @return
      */
+    /** Flag for an NPC that, like a pet, is not stopped by other NPCs or players. */
+    public static readonly WALK_THROUGH_ENTITIES_FLAG = "movement:walk-through-entities";
+
     public canWalkThroughNPCs(): boolean {
-        if (this.pet) {
+        if (this.pet || this.hasFlag(NPC.WALK_THROUGH_ENTITIES_FLAG)) {
             return true;
         }
         return false;

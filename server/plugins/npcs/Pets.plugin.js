@@ -26,6 +26,7 @@ const PETS = [
   { enumName: "SCURRY", petId: 7219, morphId: 0, itemId: 28801, dialogue: -1 },
   { enumName: "LIL_ZIK", petId: NpcIdentifiers.LIL_ZIK, morphId: 0, itemId: 22473, dialogue: -1 },
   { enumName: "TUMEKENS_GUARDIAN", petId: NpcIdentifiers.TUMEKENS_GUARDIAN, morphId: 0, itemId: 27352, dialogue: -1 },
+  { enumName: "SMOL_HEREDIT", petId: NpcIdentifiers.SMOL_HEREDIT_2, morphId: 0, itemId: 28960, dialogue: -1 },
   { enumName: "NEXLING", petId: NpcIdentifiers.NEXLING, morphId: 0, itemId: 26348, dialogue: -1 },
   { enumName: "VORKI", petId: NpcIdentifiers.VORKI, morphId: 0, itemId: 21992, dialogue: -1 },
   { enumName: "MUPHIN", petId: NpcIdentifiers.MUPHIN, morphId: 0, itemId: 27590, dialogue: -1 },

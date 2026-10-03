@@ -60,7 +60,8 @@ export type HitsplatView = { type: number; damage: number; delay?: number };
 /** An actor's headbar: its HP and, when not the default (config 0, 30 wide), which bar. */
 export type HealthView = { current: number; max: number; bar?: { id: number; width: number } };
 export type AnimationView = { id: number; delay: number };
-export type GraphicView = { id: number; height: number; delay: number };
+/** A spotanim on an actor, in one of its slots (0 unless the actor shows several at once). */
+export type GraphicView = { id: number; height: number; delay: number; slot?: number };
 export type ForcedMovementView = {
   startDeltaX: number;
   startDeltaY: number;
@@ -75,7 +76,7 @@ export type ActorUpdateView = {
   forcedChat?: string;
   interactionIndex?: number;
   animation?: AnimationView;
-  graphic?: GraphicView;
+  graphics?: GraphicView[];
   hits?: HitsplatView[];
   health?: HealthView;
 };
@@ -2203,7 +2204,7 @@ function playerUpdateMask(
     (view.forcedMovement ? PLAYER_MASK.FORCE_MOVEMENT : 0) |
     (writeMovementType ? PLAYER_MASK.MOVEMENT_TYPE : 0) |
     (view.resetPath ? PLAYER_MASK.MOVEMENT_FLAG : 0) |
-    (view.graphic ? PLAYER_MASK.SPOT_ANIM : 0);
+    (view.graphics?.length ? PLAYER_MASK.SPOT_ANIM : 0);
 }
 
 function npcUpdateMask(view: NpcView, writeInteraction: boolean, writeHeadIcon = false): number {
@@ -2212,7 +2213,7 @@ function npcUpdateMask(view: NpcView, writeInteraction: boolean, writeHeadIcon =
     (view.animation ? NPC_MASK.ANIMATION : 0) |
     (view.hits ? NPC_MASK.HIT : 0) |
     (view.forcedChat !== undefined ? NPC_MASK.FORCED_CHAT : 0) |
-    (view.graphic ? NPC_MASK.SPOT_ANIM : 0);
+    (view.graphics?.length ? NPC_MASK.SPOT_ANIM : 0);
 }
 
 function writePlayerUpdateBlock(
@@ -2253,11 +2254,13 @@ function writePlayerUpdateBlock(
     shortLEA(bytes, movement.direction & 2047);
   }
   if (view.resetPath) byteS(bytes, 127);
-  if (view.graphic) {
-    byteA(bytes, 1);
-    bytes.push(0);
-    shortBE(bytes, view.graphic.id < 0 ? 0xffff : view.graphic.id);
-    intME(bytes, ((view.graphic.height & 0xffff) << 16) | (view.graphic.delay & 0xffff));
+  if (view.graphics?.length) {
+    byteA(bytes, view.graphics.length);
+    for (const graphic of view.graphics) {
+      bytes.push((graphic.slot ?? 0) & 0xff);
+      shortBE(bytes, graphic.id < 0 ? 0xffff : graphic.id);
+      intME(bytes, ((graphic.height & 0xffff) << 16) | (graphic.delay & 0xffff));
+    }
   }
   return Buffer.from(bytes);
 }
@@ -2273,11 +2276,13 @@ function writeNpcUpdateBlock(view: NpcView, writeInteraction: boolean, writeHead
   }
   if (view.hits) writeHits(bytes, view, true);
   if (view.forcedChat !== undefined) writeText(bytes, view.forcedChat);
-  if (view.graphic) {
-    bytes.push(1);
-    byteA(bytes, 0);
-    shortLE(bytes, view.graphic.id < 0 ? 0xffff : view.graphic.id);
-    intME(bytes, ((view.graphic.height & 0xffff) << 16) | (view.graphic.delay & 0xffff));
+  if (view.graphics?.length) {
+    bytes.push(view.graphics.length);
+    for (const graphic of view.graphics) {
+      byteA(bytes, (graphic.slot ?? 0) & 0xff);
+      shortLE(bytes, graphic.id < 0 ? 0xffff : graphic.id);
+      intME(bytes, ((graphic.height & 0xffff) << 16) | (graphic.delay & 0xffff));
+    }
   }
   if (view.animation) {
     shortBE(bytes, view.animation.id < 0 ? 0xffff : view.animation.id);

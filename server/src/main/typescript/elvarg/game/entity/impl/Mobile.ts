@@ -1,7 +1,8 @@
 import { Entity } from "../Entity";
 import { Sound } from "../../Sound";
 import type { CombatType } from "../../content/combat/CombatType";
-import type { HitDamage } from "../../content/combat/hit/HitDamage";
+import { HitDamage } from "../../content/combat/hit/HitDamage";
+import { HitMask } from "../../content/combat/hit/HitMask";
 import type { PendingHit } from "../../content/combat/hit/PendingHit";
 import type { NPC } from "./npc/NPC";
 import type { Player } from "./player/Player";
@@ -222,6 +223,39 @@ export abstract class Mobile extends Entity {
         this.forcedChat = null;
         this.animation = null;
         this.graphic = null;
+        this.slotGraphics.clear();
+        this.displayedHealth = null;
+    }
+
+    /** What the health bar shows with this tick's hits, when it is not the actor's hitpoints. */
+    private displayedHealth: { current: number; max: number; bar?: { id: number; width: number } } | null = null;
+
+    /**
+     * Shows a hitsplat that changes nothing - a meter other than hitpoints, such as the
+     * Wintertodt's cold on the warmth meter. `splat` is the cache hitsplat for the target and
+     * for everyone else; `health`, when given, is what the health bar shows with it.
+     */
+    showHitsplat(
+        damage: number,
+        splat: { mine: number; others: number },
+        health?: { current: number; max: number; bar?: { id: number; width: number } },
+    ): void {
+        const hit = new HitDamage(Math.max(0, Math.trunc(damage)), HitMask.RED).setSplatTypes(splat.mine, splat.others);
+        const flags = this.getUpdateFlag();
+        if (!flags.flagged(Flag.SINGLE_HIT)) {
+            this.setPrimaryHit(hit);
+            flags.flag(Flag.SINGLE_HIT);
+        } else if (!flags.flagged(Flag.DOUBLE_HIT)) {
+            this.setSecondaryHit(hit);
+            flags.flag(Flag.DOUBLE_HIT);
+        } else {
+            return;
+        }
+        if (health) this.displayedHealth = health;
+    }
+
+    getDisplayedHealth(): { current: number; max: number; bar?: { id: number; width: number } } | null {
+        return this.displayedHealth;
     }
 
     forceChat(message: string): Mobile {
@@ -258,6 +292,27 @@ export abstract class Mobile extends Entity {
 
         this.graphic = graphic;
         this.getUpdateFlag().flag(Flag.GRAPHIC);
+    }
+
+    /** This tick's graphics in spotanim slots other than 0; null clears a slot. */
+    private readonly slotGraphics = new Map<number, Graphic | null>();
+
+    /**
+     * Plays a graphic in one of the actor's spotanim slots, which show at once - a Manticore's
+     * three charged orbs, say. Slot 0 is performGraphic's; a null graphic clears the slot.
+     */
+    performGraphicInSlot(slot: number, graphic: Graphic | null): void {
+        const index = Math.trunc(slot) & 0xff;
+        if (index === 0) {
+            if (graphic) this.performGraphic(graphic);
+            return;
+        }
+        this.slotGraphics.set(index, graphic);
+        this.getUpdateFlag().flag(Flag.GRAPHIC);
+    }
+
+    getSlotGraphics(): ReadonlyMap<number, Graphic | null> {
+        return this.slotGraphics;
     }
 
     delayedAnimation(animation: Animation, ticks: number) {

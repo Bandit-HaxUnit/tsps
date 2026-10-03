@@ -443,7 +443,26 @@ export class SkillManager {
         const fromExp = Math.max(1, SkillManager.getLevelForExperience(this.getExperience(skill)));
         // Don't write this back: mid-way through setMaxLevel(...).setExperience(...) the old
         // experience would pin the max level at its old value (issue #101).
-        return Math.max(fromArray, fromExp);
+        const level = Math.max(fromArray, fromExp);
+        const cap = this.levelCaps.get(idx);
+        return cap === undefined ? level : Math.max(1, Math.min(level, cap));
+    }
+
+    /** Temporary, unsaved caps on base levels, by skill index (a minigame's handicap, say). */
+    private readonly levelCaps = new Map<number, number>();
+
+    /**
+     * Caps a skill's base level until cleared with `null`. Nothing is saved: the cap is gone
+     * on the next login. The current level is lowered to the cap if above it.
+     */
+    public setMaxLevelCap(skill: Skill, cap: number | null): SkillManager {
+        if (cap == null) this.levelCaps.delete(skill.getIndex());
+        else this.levelCaps.set(skill.getIndex(), Math.max(1, Math.floor(cap)));
+        if (cap != null && this.getCurrentLevel(skill) > this.getMaxLevel(skill)) {
+            this.setCurrentLevel(skill, this.getMaxLevel(skill), false);
+        }
+        this.updateSkill(skill);
+        return this;
     }
 
     /**
