@@ -383,3 +383,112 @@ test("Kylie Minnow lets qualified fishers onto her platform, and the row boats f
     dialogues.startDialogue = startDialogue;
   }
 });
+
+test("minnow fishing: Wiki catch rates, rotating spots, flying fish and Kylie's shark exchange", async () => {
+  const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  await CachePipeline.initialize(path.resolve(__dirname, ".."));
+  const core = PluginManager.getCoreApi();
+  const { ItemIdentifiers: I, NpcIdentifiers: N, NpcDefinition, ItemDefinition, Skill, Item, Location } = core;
+
+  // Spot NPCs where npc-spawns.json puts them, in a stub world the rotation task walks.
+  const spawns = [[N.FISHING_SPOT_87, 2609, 3443], [N.FISHING_SPOT_88, 2612, 3444], [N.FISHING_SPOT_89, 2617, 3444], [N.FISHING_SPOT_90, 2620, 3443]];
+  const npcs = spawns.map(([id, x, y], index) => {
+    let at = new Location(x, y, 0);
+    return { getId: () => id, getIndex: () => index + 1, getLocation: () => at, moveTo: (to) => { at = to; } };
+  });
+  const api = new Proxy({ core, getTaskManager: () => ({ submit() {} }), getWorld: () => ({ getNpcs: () => npcs }) },
+    { get: (target, name) => target[name] ?? (() => {}) });
+  const Fishing = require("../plugins/skills/Fishing.plugin");
+  Fishing.register(api);
+  const Platform = require("../plugins/skills/fishing/MinnowPlatform.Fishing");
+  const { TOOLS, FISH, catchChance, getSpotTool, hasToolRequirements, landCatch, findTool } = Fishing;
+
+  const definition = NpcDefinition.forId(N.FISHING_SPOT_87);
+  assert.equal(getSpotTool(N.FISHING_SPOT_87, definition, definition.getActions().indexOf("Small Net") + 1), TOOLS.MINNOW_NET);
+
+  function angler({ level = 99, boosted = level, minnows = 0, free = 27 } = {}) {
+    const items = [];
+    if (minnows) items.push(new Item(I.MINNOW, minnows));
+    const p = {
+      items, messages: [], xp: 0, prompt: null,
+      getSkillManager: () => ({
+        getCurrentLevel: (skill) => (skill === Skill.FISHING ? boosted : 99),
+        getMaxLevel: (skill) => (skill === Skill.FISHING ? level : 99),
+        addExperiences: (skill, amount) => { if (skill === Skill.FISHING) p.xp += amount; },
+      }),
+      getInventory: () => ({
+        contains: (id) => items.some((item) => item.getId() === id),
+        getAmount: (id) => items.filter((item) => item.getId() === id).reduce((sum, item) => sum + item.getAmount(), 0),
+        getFreeSlots: () => free,
+        isFull: () => free === 0,
+        addItem: (item) => {
+          const stack = items.find((held) => held.getId() === item.getId());
+          if (stack) stack.setAmount(stack.getAmount() + item.getAmount()); else items.push(item);
+        },
+        deleteNumber: (id, amount) => {
+          const stack = items.find((held) => held.getId() === id);
+          stack.setAmount(stack.getAmount() - amount);
+        },
+      }),
+      getEquipment: () => ({ getItems: () => new Array(14).fill(null), contains: () => false }),
+      getLocation: () => new Location(...Platform.PLATFORM_LANDING),
+      getPacketSender: () => ({ sendInterfaceRemoval() {}, sendEnterAmountPrompt: (text) => { p.promptText = text; } }),
+      setEnteredAmountAction: (action) => { p.prompt = action; },
+      sendMessage: (message) => p.messages.push(message),
+    };
+    p.items.push(new Item(I.SMALL_FISHING_NET, 1));
+    return p;
+  }
+
+  // 82 Fishing that boosts can't reach.
+  assert.equal(hasToolRequirements(angler({ level: 81, boosted: 85 }), TOOLS.MINNOW_NET), null);
+  assert.ok(hasToolRequirements(angler({ level: 82 }), TOOLS.MINNOW_NET));
+
+  // The fitted chart reproduces the Wiki's catches per hour at a 2-tick attempt (3,000 attempts/h).
+  const perHour = (level) => 3000 * catchChance(level, FISH.MINNOW);
+  for (const [level, wiki] of [[82, 1500], [85, 1545], [90, 1625], [95, 1692]]) {
+    assert.ok(Math.abs(perHour(level) - wiki) / wiki < 0.01, `${level}: ${perHour(level)} vs ${wiki}`);
+  }
+  assert.deepEqual([82, 84, 85, 90, 95, 98, 99].map((level) => Platform.minnowsPerCatch(angler({ level }))), [10, 10, 11, 12, 13, 13, 14]);
+
+  // A catch stacks 10-14 minnows, gives 26.1 XP, and carries on with a full inventory.
+  const full = angler({ level: 85, minnows: 100, free: 0 });
+  landCatch(full, TOOLS.MINNOW_NET, findTool(full, TOOLS.MINNOW_NET), [FISH.MINNOW]);
+  assert.equal(full.getInventory().getAmount(I.MINNOW), 111);
+  assert.ok(Math.abs(full.xp - 26.1) < 1e-9);
+  assert.match(full.messages[0], /You catch some minnows/);
+
+  // Spots circle their 4x2 pond clockwise, one tile every 25 ticks, staying opposite each other.
+  assert.deepEqual(Platform.nextSpotTile(2609, 3443), [2609, 3444]);
+  assert.deepEqual(Platform.nextSpotTile(2612, 3444), [2612, 3443]);
+  assert.equal(Platform.nextSpotTile(2614, 3444), null);
+  let [x, y] = [2609, 3443];
+  for (let step = 0; step < 8; step++) [x, y] = Platform.nextSpotTile(x, y);
+  assert.deepEqual([x, y], [2609, 3443], "eight moves bring a spot home");
+  Platform.rotateSpots();
+  assert.deepEqual(npcs.map((npc) => [npc.getLocation().getX(), npc.getLocation().getY()]),
+    [[2609, 3444], [2612, 3443], [2618, 3444], [2619, 3443]]);
+
+  // Flying fish: rolled on the first click after a move, then it eats 16-26 minnows per catch.
+  const spot = npcs[0];
+  const victim = angler({ minnows: 50 });
+  Platform.onStart(victim, spot, () => 0);
+  Platform.onStart(angler(), spot, () => 0.99);
+  assert.equal(Platform.takesCatch(victim, spot, () => 0), true, "a second player doesn't reroll the spot");
+  assert.equal(victim.getInventory().getAmount(I.MINNOW), 34);
+  assert.match(victim.messages[0], /flying fish/);
+  Platform.takesCatch(victim, spot, () => 0.999);
+  assert.equal(victim.getInventory().getAmount(I.MINNOW), 8);
+  Platform.rotateSpots();
+  Platform.onStart(victim, spot, () => 0.5);
+  assert.equal(Platform.takesCatch(victim, spot), false, "moving clears the flying fish");
+
+  // Kylie: 40 minnows for each noted raw shark.
+  const trader = angler({ minnows: 130 });
+  Platform.exchangeMinnows(trader);
+  assert.equal(trader.promptText, "How many sharks would you like?");
+  trader.prompt.execute("5");
+  assert.equal(trader.getInventory().getAmount(I.MINNOW), 10);
+  assert.equal(trader.getInventory().getAmount(ItemDefinition.forId(I.RAW_SHARK).getNoteId()), 3);
+});

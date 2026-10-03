@@ -21,8 +21,9 @@ class Fish {
    * rolls: Wiki skilling success chart values [low, high] (out of 256, at levels 1 and 99).
    * Most fish have one; a big net's mackerel has two, so one cast can net two.
    * requires/extraXp: other skills barbarian fishing needs and trains.
+   * amount: how many of the fish one catch lands (minnows come 10-14 at a time).
    */
-  constructor({ id, level, rolls, xp, caught, petBase = null, requires = [], extraXp = [] }) {
+  constructor({ id, level, rolls, xp, caught, petBase = null, requires = [], extraXp = [], amount = () => 1 }) {
     this.id = id;
     this.level = level;
     this.rolls = rolls;
@@ -33,6 +34,7 @@ class Fish {
     this.petBase = petBase;
     this.requires = requires;
     this.extraXp = extraXp;
+    this.amount = amount;
   }
 }
 
@@ -44,8 +46,13 @@ class FishingTool {
    * variants: items that count as this tool, best first, each with a level and catch bonus.
    * bait: any one of these is used up per catch. worn: one must be equipped.
    * quest: required once that quest is implemented here.
+   * interval: ticks between attempts. unboostable: the level must be the real one.
+   * spot: a module that moves its own spots and can take over a catch (minnows' flying fish).
    */
-  constructor({ id, level, animation, fish, variants, bait = [], worn = [], quest = null, multi = false, requires = [] }) {
+  constructor({
+    id, level, animation, fish, variants, bait = [], worn = [], quest = null, multi = false, requires = [],
+    interval = FISHING_ACTION_INTERVAL_TICKS, unboostable = false, spot = null,
+  }) {
     this.id = id;
     this.level = level;
     this.animationId = animation;
@@ -56,6 +63,9 @@ class FishingTool {
     this.quest = quest;
     this.multi = multi;
     this.requires = requires;
+    this.interval = interval;
+    this.unboostable = unboostable;
+    this.spot = spot;
   }
 }
 
@@ -126,6 +136,11 @@ const FISH = Object.freeze({
   ANGLERFISH: new Fish({ id: ItemIds.RAW_ANGLERFISH, level: 82, rolls: [[3, 36]], xp: 120, caught: "a raw anglerfish", petBase: 78649 }),
   DARK_CRAB: new Fish({ id: ItemIds.RAW_DARK_CRAB, level: 85, rolls: [[3, 40]], xp: 130, caught: "a raw dark crab", petBase: 149434 }),
 
+  MINNOW: new Fish({
+    id: ItemIds.MINNOW, level: 82, rolls: [MinnowPlatform.CATCH_CHART], xp: 26.1, caught: "some minnows", petBase: 977778,
+    amount: MinnowPlatform.minnowsPerCatch,
+  }),
+
   LEAPING_TROUT: new Fish({ id: ItemIds.LEAPING_TROUT, level: 48, rolls: [[32, 192]], xp: 50, caught: "a leaping trout", petBase: 1280862, ...barbarian(15, 5) }),
   LEAPING_SALMON: new Fish({ id: ItemIds.LEAPING_SALMON, level: 58, rolls: [[16, 96]], xp: 70, caught: "a leaping salmon", petBase: 1280862, ...barbarian(30, 6) }),
   LEAPING_STURGEON: new Fish({ id: ItemIds.LEAPING_STURGEON, level: 70, rolls: [[8, 64]], xp: 80, caught: "a leaping sturgeon", petBase: 1280862, ...barbarian(45, 7) }),
@@ -185,6 +200,11 @@ const TOOLS = Object.freeze({
   DARK_CRAB_POT: new FishingTool({
     id: ItemIds.LOBSTER_POT, level: 85, animation: ANIM.CAGE, fish: [FISH.DARK_CRAB], bait: [ItemIds.DARK_FISHING_BAIT],
   }),
+  // Wiki (Minnow): 82 Fishing that boosts can't reach, though boosts still speed up the catch.
+  MINNOW_NET: new FishingTool({
+    id: ItemIds.SMALL_FISHING_NET, level: 82, animation: ANIM.NET, fish: [FISH.MINNOW], unboostable: true,
+    interval: MinnowPlatform.ATTEMPT_INTERVAL_TICKS, spot: MinnowPlatform,
+  }),
   BARBARIAN_ROD: new FishingTool({
     id: ItemIds.BARBARIAN_ROD, level: 48, animation: ANIM.ROD,
     fish: [FISH.LEAPING_STURGEON, FISH.LEAPING_SALMON, FISH.LEAPING_TROUT], variants: BARBARIAN_RODS,
@@ -240,6 +260,11 @@ const SPOT_TOOLS_BY_NPC = new Map([
   [NpcIds.ROD_FISHING_SPOT_16, { Bait: TOOLS.ANGLERFISH_ROD }],
   // Mor Ul Rek.
   [NpcIds.ROD_FISHING_SPOT_20, { Bait: TOOLS.INFERNAL_EEL_ROD }],
+  // Kylie Minnow's platform at the Fishing Guild.
+  [NpcIds.FISHING_SPOT_87, { "Small Net": TOOLS.MINNOW_NET }],
+  [NpcIds.FISHING_SPOT_88, { "Small Net": TOOLS.MINNOW_NET }],
+  [NpcIds.FISHING_SPOT_89, { "Small Net": TOOLS.MINNOW_NET }],
+  [NpcIds.FISHING_SPOT_90, { "Small Net": TOOLS.MINNOW_NET }],
 ]);
 
 const FISHING_SPOT_NAMES = ["Fishing spot", "Rod Fishing spot"];
@@ -289,7 +314,7 @@ function findBait(player, tool) {
 
 /** Messages and returns null when the player can't fish with this tool, else the variant. */
 function hasToolRequirements(player, tool) {
-  const level = getFishingLevel(player);
+  const level = tool.unboostable ? player.getSkillManager().getMaxLevel(Skill.FISHING) : getFishingLevel(player);
   if (level < tool.level) {
     player.sendMessage(`You need a Fishing level of at least ${tool.level} to do this.`);
     return null;
@@ -368,12 +393,19 @@ function rollCatch(player, tool, random = Math.random, bonus = 100) {
   return caught;
 }
 
+/** A full inventory only stops fishing when the catch has nowhere to stack. */
+function inventoryBlocks(player, tool) {
+  const inventory = player.getInventory();
+  return inventory.isFull() &&
+    !tool.fish.some((fish) => inventory.contains(fish.id) && pluginApi.core.ItemDefinition.forId(fish.id).isStackable());
+}
+
 function landCatch(player, tool, variant, caught) {
   const xpMultiplier = AnglerOutfit.xpMultiplier(player);
   const landed = caught.slice(0, Math.max(1, player.getInventory().getFreeSlots()));
   for (const fish of landed) {
     if (!variant.infernal || !InfernalHarpoon.tryCookFish(player, fish.id)) {
-      player.getInventory().addItem(new Item(fish.id, 1));
+      player.getInventory().addItem(new Item(fish.id, fish.amount(player)));
       player.sendMessage(`You catch ${fish.caught}.`);
     }
     player.getSkillManager().addExperiences(Skill.FISHING, fish.experience * xpMultiplier);
@@ -398,7 +430,7 @@ function startFishing(player, npc, tool, activeSessions) {
     return true;
   }
 
-  if (player.getInventory().isFull()) {
+  if (inventoryBlocks(player, tool)) {
     player.getInventory().full();
     return true;
   }
@@ -408,10 +440,14 @@ function startFishing(player, npc, tool, activeSessions) {
   activeSessions.set(player, {
     npcIndex: npc.getIndex(),
     npcId: npc.getId(),
+    // A spot that moves ends the session, as in OSRS: the player has to click it again.
+    spotX: npc.getLocation().getX(),
+    spotY: npc.getLocation().getY(),
     tool,
     nextAnimationTick: fishingTick + FISHING_ANIMATION_INTERVAL_TICKS,
-    nextCatchTick: fishingTick + FISHING_ACTION_INTERVAL_TICKS,
+    nextCatchTick: fishingTick + tool.interval,
   });
+  tool.spot?.onStart(player, npc);
 
   player.sendMessage("You begin to fish..");
 
@@ -442,7 +478,8 @@ class FishingTask extends Task {
       }
 
       const npc = World.getNpcs().get(session.npcIndex);
-      if (!npc || npc.getId() !== session.npcId) {
+      if (!npc || npc.getId() !== session.npcId ||
+          npc.getLocation().getX() !== session.spotX || npc.getLocation().getY() !== session.spotY) {
         stopFishing(this.activeSessions, player);
         continue;
       }
@@ -458,7 +495,7 @@ class FishingTask extends Task {
         continue;
       }
 
-      if (player.getInventory().isFull()) {
+      if (inventoryBlocks(player, session.tool)) {
         player.getInventory().full();
         stopFishing(this.activeSessions, player);
         continue;
@@ -472,16 +509,20 @@ class FishingTask extends Task {
       if (this.cycle < session.nextCatchTick) {
         continue;
       }
-      session.nextCatchTick = this.cycle + FISHING_ACTION_INTERVAL_TICKS;
+      session.nextCatchTick = this.cycle + session.tool.interval;
 
       const caught = rollCatch(player, session.tool, Math.random, variant.bonus);
       if (caught.length === 0) {
         continue;
       }
+      if (session.tool.spot?.takesCatch(player, npc)) {
+        continue;
+      }
       landCatch(player, session.tool, variant, caught);
 
-      if (player.getInventory().isFull() || !hasToolRequirements(player, session.tool) ||
-          Misc.getRandom(90) === 0) {
+      // ponytail: spots without their own movement still stop at random instead of moving.
+      if (inventoryBlocks(player, session.tool) || !hasToolRequirements(player, session.tool) ||
+          (!session.tool.spot && Misc.getRandom(90) === 0)) {
         stopFishing(this.activeSessions, player);
       }
     }

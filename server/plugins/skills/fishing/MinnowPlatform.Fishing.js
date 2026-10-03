@@ -28,9 +28,84 @@ const MINNOWS_PER_SHARK = 40;
 const PLATFORM_LANDING = Object.freeze([2614, 3440, 0]);
 const DOCK_LANDING = Object.freeze([2600, 3425, 0]);
 
+// --- Minnow fishing (OSRS Wiki: Minnow, Fishing spot (minnow)) ---
+
+// Spots move one tile clockwise every 25 ticks. The cache map has two 4x2 ponds on the platform
+// with two spots each, at opposite corners of the pond's 8-tile loop, so each spot circles its pond.
+const ROTATION_TICKS = 25;
+const PONDS = Object.freeze([{ x: 2609, y: 3443 }, { x: 2617, y: 3443 }]);
+
+// ponytail: the Wiki gives no catch chart for minnows. These are fitted to its catches per hour
+// (minnows/h over minnows per catch: 1,500 at 82, 1,545 at 85, 1,625 at 90, 1,692 at 95) with an
+// attempt every 2 ticks; "at most 10 XP drops per spot position" (25 ticks) rules out 5-tick
+// attempts. Replace both with the real values when a source turns up.
+const ATTEMPT_INTERVAL_TICKS = 2;
+const CATCH_CHART = Object.freeze([24, 148]);
+
+// Wiki table: 10 at 82, 11 at 85, 12 at 90, 13 at 95; "10-14" puts 14 at 99.
+const MINNOWS_BY_LEVEL = Object.freeze([[99, 14], [95, 13], [90, 12], [85, 11], [0, 10]]);
+
+// After a spot moves, the first click on it has a 1/10 chance of a flying fish, which eats 16-26
+// minnows from the player each catch until the spot moves again.
+const FLYING_FISH_CHANCE = 10;
+const FLYING_FISH_EATS = Object.freeze([16, 26]);
+
 let api = null;
 let core = null;
 let kylieIds = new Set();
+let spotIds = new Set();
+/** npc index -> true/false once the spot's flying fish roll has happened since it last moved. */
+const flyingFish = new Map();
+
+function pondLoop({ x, y }) {
+  return [[x, y + 1], [x + 1, y + 1], [x + 2, y + 1], [x + 3, y + 1], [x + 3, y], [x + 2, y], [x + 1, y], [x, y]];
+}
+
+/** The next tile clockwise around whichever pond holds (x, y), or null off the ponds. */
+function nextSpotTile(x, y) {
+  for (const pond of PONDS) {
+    const loop = pondLoop(pond);
+    const index = loop.findIndex(([tileX, tileY]) => tileX === x && tileY === y);
+    if (index >= 0) return loop[(index + 1) % loop.length];
+  }
+  return null;
+}
+
+function rotateSpots() {
+  for (const npc of api.getWorld().getNpcs()) {
+    if (!npc || !spotIds.has(npc.getId())) continue;
+    const location = npc.getLocation();
+    const next = nextSpotTile(location.getX(), location.getY());
+    if (!next) continue;
+    npc.moveTo(new core.Location(next[0], next[1], location.getZ()));
+    flyingFish.delete(npc.getIndex());
+  }
+}
+
+function minnowsPerCatch(player) {
+  const level = player.getSkillManager().getMaxLevel(core.Skill.FISHING);
+  return MINNOWS_BY_LEVEL.find(([from]) => level >= from)[1];
+}
+
+/** Fishing.plugin calls this when a player starts on a minnow spot. */
+function onStart(_player, npc, random = Math.random) {
+  if (!flyingFish.has(npc.getIndex())) {
+    flyingFish.set(npc.getIndex(), Math.floor(random() * FLYING_FISH_CHANCE) === 0);
+  }
+}
+
+/** Fishing.plugin calls this on each catch; true when a flying fish took it instead. */
+function takesCatch(player, npc, random = Math.random) {
+  if (!flyingFish.get(npc.getIndex())) return false;
+  const [least, most] = FLYING_FISH_EATS;
+  const held = player.getInventory().getAmount(core.ItemIdentifiers.MINNOW);
+  const eaten = Math.min(held, least + Math.floor(random() * (most - least + 1)));
+  if (eaten > 0) {
+    player.getInventory().deleteNumber(core.ItemIdentifiers.MINNOW, eaten);
+  }
+  player.sendMessage("A flying fish jumps up and eats some of your minnows!");
+  return true;
+}
 
 function accessState(player) {
   return Number(player.getAttribute(ACCESS_ATTRIBUTE)) || 0;
@@ -134,6 +209,42 @@ function leavePlatform({ player }) {
   return true;
 }
 
+// --- Kylie's minnow exchange: 40 minnows for one noted raw shark (Wiki: Kylie Minnow) ---
+
+function exchangeMinnows(player) {
+  const { ItemIdentifiers: I, NpcIdentifiers: N, ItemDefinition, Item } = core;
+  const affordable = Math.floor(minnows(player) / MINNOWS_PER_SHARK);
+  if (affordable < 1) {
+    return sayAsKylie(player, N.KYLIE_MINNOW_2, variant("after-gaining-access-trade-option-without-at-least-40-minnows"));
+  }
+  const notedShark = ItemDefinition.forId(I.RAW_SHARK).getNoteId();
+  if (player.getInventory().getFreeSlots() === 0 && !player.getInventory().contains(notedShark)) {
+    return sayAsKylie(player, N.KYLIE_MINNOW_2, [{ npc: "I can't trade you any sharks while you don't have any space for them!" }]);
+  }
+  player.getPacketSender().sendInterfaceRemoval();
+  player.setEnteredAmountAction({
+    execute: (amount) => {
+      const sharks = Math.min(Math.floor(Number(amount)), Math.floor(minnows(player) / MINNOWS_PER_SHARK));
+      if (!(sharks > 0)) return;
+      player.getInventory().deleteNumber(I.MINNOW, sharks * MINNOWS_PER_SHARK);
+      player.getInventory().addItem(new Item(notedShark, sharks));
+    },
+  });
+  player.getPacketSender().sendEnterAmountPrompt("How many sharks would you like?");
+  return true;
+}
+
+function tradeWithKylie({ player }) {
+  return exchangeMinnows(player);
+}
+
+/** Her dialogue's "opens Minnow exchange" step. */
+function openExchange(request) {
+  if (!kylieIds.has(request.npcId) || request.action !== "open_interface" || request.target !== "Minnow exchange") return;
+  request.handled = true;
+  exchangeMinnows(request.player);
+}
+
 function restoreAccess({ player }) {
   const state = accessState(player);
   if (state > 0) {
@@ -146,15 +257,22 @@ function attach(pluginApi) {
   core = api.core;
   const { NpcIdentifiers: N } = core;
   kylieIds = new Set([N.KYLIE_MINNOW, N.KYLIE_MINNOW_2]);
+  spotIds = new Set([N.FISHING_SPOT_87, N.FISHING_SPOT_88, N.FISHING_SPOT_89, N.FISHING_SPOT_90]);
 
   api.persistAttribute(ACCESS_ATTRIBUTE);
   api.onPlayerLogin(restoreAccess);
-  api.onNpcInteraction("Kylie Minnow", { "Talk-to": talkToKylie });
+  api.onNpcInteraction("Kylie Minnow", { "Talk-to": talkToKylie, Trade: tradeWithKylie });
   api.onNpcDialogueCondition(kylieCondition);
+  api.onCustomEvent("npc-dialogue:action", openExchange);
   api.onObjectInteraction("Row boat", { "Travel to platform": travelToPlatform, "Leave platform": leavePlatform });
+  api.getTaskManager().submit(new (class extends core.Task {
+    constructor() { super(ROTATION_TICKS); }
+    execute() { rotateSpots(); }
+  })());
 }
 
 module.exports = {
   attach, hasAccess, talkToKylie, kylieCondition, travelToPlatform, leavePlatform,
-  ACCESS_VARBIT, ACCESS_ATTRIBUTE, PLATFORM_LANDING, DOCK_LANDING,
+  onStart, takesCatch, minnowsPerCatch, nextSpotTile, rotateSpots, exchangeMinnows,
+  ACCESS_VARBIT, ACCESS_ATTRIBUTE, PLATFORM_LANDING, DOCK_LANDING, ATTEMPT_INTERVAL_TICKS, CATCH_CHART,
 };

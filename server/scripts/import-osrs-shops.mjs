@@ -43,6 +43,10 @@ const EXCLUDED = new Set([
 
 const INFINITE_STOCK = 2_000_000_000;
 
+// Items the dump resolves to the wrong id of a shared name. 6209 is Evil Bob's untradeable
+// random-event net (Wiki: Small fishing net (Evil Bob)); fishing shops sell the regular 303.
+const ITEM_ID_FIXES = new Map([[6209, 303]]);
+
 function parseArgs(argv) {
   let docs;
   let check = false;
@@ -77,7 +81,7 @@ function originalStock(items) {
   for (const item of items ?? []) {
     const amount = stockAmount(item.stock);
     if (!Number.isInteger(item.id) || item.id <= 0 || amount <= 0) continue;
-    const entry = { id: item.id, amount };
+    const entry = { id: ITEM_ID_FIXES.get(item.id) ?? item.id, amount };
     const restock = Number(item.restock_time);
     if (Number.isFinite(restock) && restock > 0) entry.restockTicks = restock;
     stock.push(entry);
