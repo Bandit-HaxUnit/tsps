@@ -13,6 +13,7 @@ const { registerBotCommands } = require("./runtime/registerBotCommands");
 const { registerBotEvents } = require("./runtime/registerBotEvents");
 const { createBotPluginLogging } = require("./runtime/BotPluginLogging");
 const { bootPlayerBotsRuntime } = require("./runtime/BotPluginBoot");
+const { createBotBenchmark } = require("./runtime/BotBenchmark");
 const { setActiveBotRuntime } = require("./runtime/BotRuntimeRegistry");
 const {
   registerBotStatusInteractions,
@@ -271,6 +272,16 @@ module.exports = {
       config: BOT_CONFIG,
     });
     setActiveBotRuntime(boot.runtime, BOT_CONFIG.behaviorMode);
+
+    createBotBenchmark({
+      api,
+      botApi,
+      runtime: boot.runtime,
+      modeHandlers: boot.modeHandlers,
+      assignableBehaviors: boot.modeRegistries.assignableBehaviors,
+      tickMetrics: boot.tickMetrics,
+      resetMovementState,
+    });
 
     registerBotStatusInteractions({
       api,

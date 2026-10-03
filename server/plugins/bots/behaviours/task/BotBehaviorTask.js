@@ -72,7 +72,10 @@ class BotBehaviorTask extends Task {
     this._humanObserverRevision = 0;
     this._cycleCounter = 0;
     this.taskProfiler = this.resolveTaskProfiler(options.taskProfiler ?? {});
-    this.tickMetrics = createBotTickMetrics(options.tickMetrics ?? {});
+    this.tickMetrics =
+      options.tickMetrics && typeof options.tickMetrics.beginCycle === "function"
+        ? options.tickMetrics
+        : createBotTickMetrics(options.tickMetrics ?? {});
     this.executionBudget = this.resolveExecutionBudget(options.executionBudget ?? {});
     this._entryCursor = 0;
     this._nextBudgetLogAt = 0;

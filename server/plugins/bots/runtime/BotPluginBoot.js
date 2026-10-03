@@ -36,6 +36,7 @@ const {
 const { FollowBackModeHandler } = require("../behaviours/modes/FollowBackModeHandler");
 const { ReturnHomeModeHandler } = require("../behaviours/modes/ReturnHomeModeHandler");
 const { createBotRegistry } = require("./BotRegistry");
+const { createBotTickMetrics } = require("./BotTickMetrics");
 const { BotStatusReporter } = require("./BotStatusReporter");
 const { FlashHintArrowTask } = require("./FlashHintArrowTask");
 const { listPvpProfiles } = require("../behaviours/pvp/PvpProfileRegistry");
@@ -82,6 +83,7 @@ function bootPlayerBotsRuntime(options = {}) {
   const TaskManager = botApi.getTaskManager();
   const World = botApi.getWorld();
   const config = options.config ?? {};
+  const tickMetrics = createBotTickMetrics(config.tickMetrics ?? {});
   const behaviorMode = config.behaviorMode;
   const recentBotLogsByUsername = options.recentBotLogsByUsername ?? new Map();
   const runtimeEventLoggingEnabled = config.logging?.runtimeEventLoggingEnabled === true;
@@ -242,7 +244,7 @@ function bootPlayerBotsRuntime(options = {}) {
         timingDesyncMs: config.timingDesyncMs,
         lodConfig: config.lodConfig,
         taskProfiler: config.taskProfiler,
-        tickMetrics: config.tickMetrics,
+        tickMetrics,
         executionBudget: config.executionBudget,
         handlePersistentPvpRespawn: (entry, nowMs) => {
           const player = entry?.player;
@@ -408,6 +410,7 @@ function bootPlayerBotsRuntime(options = {}) {
     followBackTrigger,
     combatReactionTrigger,
     botStatusReporter,
+    tickMetrics,
     flashHintArrowTaskFactory: (player, target) =>
       new FlashHintArrowTask(player, target),
     pvpCatalogs: {
