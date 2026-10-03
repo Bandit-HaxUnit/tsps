@@ -189,6 +189,12 @@ function createBotActivityRegistry(options = {}) {
     activities,
     byId,
     sites,
+    hasRoom(activityId) {
+      const activity = byId.get(activityId);
+      return (
+        !!activity && (slots.get(activity.id) ?? 0) < activity.capacity
+      );
+    },
     occupy(activity) {
       slots.set(activity.id, (slots.get(activity.id) ?? 0) + 1);
     },
