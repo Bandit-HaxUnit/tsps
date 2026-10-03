@@ -22,8 +22,10 @@ const DEFINITIONS = {
   [COINS]: { value: 1 },
   [LOBSTER]: { value: 150 },
 };
+const MARKET_VALUES = new Map();
 ItemDefinition.forId = (id) => ({
   getValue: () => DEFINITIONS[id]?.value ?? 0,
+  getGrandExchangeValue: () => MARKET_VALUES.get(id) || DEFINITIONS[id]?.value || 0,
   isNoted: () => false,
 });
 
@@ -210,6 +212,25 @@ test("converting without enough coins refuses and keeps the untradeable bond", (
   assert.equal(player.getInventory().getAmount(COINS), CONVERT_FEE - 1);
   assert.equal(player.getInventory().getAmount(UNTRADEABLE_BOND), 1);
   assert.ok(player.messages.some((message) => message.includes("You need 200,000 coins")));
+});
+
+test("a market quote replaces the cache guide value for the conversion fee", () => {
+  MARKET_VALUES.set(TRADEABLE_BOND, 1000000);
+  try {
+    const handlers = registerBonds();
+    const convert = handlers.itemActions.get("Old school bond (untradeable)").Convert;
+    const player = makePlayer("alice");
+    player.getInventory().adds(COINS, 100000);
+    const bond = new Item(UNTRADEABLE_BOND, 1);
+    player.getInventory().setItem(1, bond);
+
+    convert({ player, item: bond, slot: 1, itemId: UNTRADEABLE_BOND, handled: false });
+
+    assert.equal(player.getInventory().getAmount(COINS), 0);
+    assert.equal(player.getInventory().getAmount(TRADEABLE_BOND), 1);
+  } finally {
+    MARKET_VALUES.delete(TRADEABLE_BOND);
+  }
 });
 
 test("redeeming two bonds grants the 29-day package and consumes both", () => {

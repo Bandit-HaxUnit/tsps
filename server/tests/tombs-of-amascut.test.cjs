@@ -252,6 +252,70 @@ test("boss drops (Wiki): the capture book for those without it, the trophy for t
   Shared.bind({ core });
 });
 
+test("the party panel's buttons follow the cache: Accept 36-43, Decline 44-51, invocations from 52", () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const Lobby = require('../plugins/minigames/toa/Lobby.TombsOfAmascut');
+  const Parties = require('../plugins/minigames/toa/ToaParties');
+  CachePipeline.initialize();
+  const buttons = new Map();
+  const noop = () => {};
+  const api = new Proxy({ core: PluginManager.getCoreApi() }, {
+    get: (target, key) => key in target ? target[key]
+      : key === 'onInterfaceActionButton' ? (uid, handler) => buttons.set(uid, handler) : noop,
+  });
+  Lobby(api);
+  const fakePlayer = (name) => {
+    const attributes = new Map();
+    const sender = new Proxy({}, { get: (_, key) => key === 'getVarbit' ? () => 0 : () => sender });
+    return {
+      name, messages: [],
+      getUsername: () => name,
+      getAttribute: (key) => attributes.get(key),
+      setAttribute: (key, value) => attributes.set(key, value),
+      sendMessage(message) { this.messages.push(message); },
+      getPacketSender: () => sender,
+      getSkillManager: () => ({ getMaxLevel: () => 99, getCombatLevel: () => 126 }),
+      getInterfaceId: () => -1,
+    };
+  };
+  const click = buttons.get((774 << 16) | 1);
+  const leader = fakePlayer('Leader');
+  const party = Parties.createParty(leader);
+  Parties.stateOf(leader).viewing = party;
+  const first = fakePlayer('First');
+  const second = fakePlayer('Second');
+  party.apply(first);
+  party.apply(second);
+
+  click({ player: leader, slot: 36 });
+  assert.deepEqual(party.players, [leader, first], 'Accept on the first applicant');
+  click({ player: leader, slot: 44 });
+  assert.deepEqual(party.applicants, [], 'Decline on the (new) first applicant');
+  assert.ok(party.blocked.includes(second));
+
+  click({ player: leader, slot: 52 });
+  assert.equal(party.settings.isActive('TRY_AGAIN'), true, "the first invocation (enum 4664's first)");
+  party.disband();
+});
+
+test('struct reads decode the struct archive once, so the first party (44 invocation structs) does not stall', () => {
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const { CacheIndexDat2 } = require('../dist/game/cache/codec/rs/cache/CacheIndex');
+  CachePipeline.initialize();
+  CacheDefinitions.structArchive = undefined;
+  CacheDefinitions.structParams.clear();
+  const fromStore = CacheIndexDat2.fromStore;
+  let reads = 0;
+  CacheIndexDat2.fromStore = (...args) => { reads++; return fromStore.apply(CacheIndexDat2, args); };
+  try {
+    for (const id of [417, 418, 419, 420, 2971]) CacheDefinitions.getStructParams(id);
+  } finally {
+    CacheIndexDat2.fromStore = fromStore;
+  }
+  assert.equal(reads, 1, 'one decode for every struct');
+  assert.equal(CacheDefinitions.getStructParams(2971).get(1160), 'Insanity');
+});
+
 test('raid scaling rounds hitpoints as the Wiki DPS calculator does; Zebak matches the checkpoints', () => {
   const { Raid } = require('../plugins/minigames/toa/ToaRaid');
   const scaled = (base, raidLevel, size) => {

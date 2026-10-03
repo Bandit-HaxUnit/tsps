@@ -24355,5 +24355,12 @@
   {"level":0,"name":"Guild Hunter Aco (Expert)","id":13124,"x":1559,"y":9452,"wanderRadius":0},
   {"level":0,"name":"Guild Hunter Teco (Expert)","id":13125,"x":1561,"y":9454,"wanderRadius":0},
   {"level":0,"name":"Guild Hunter Wolf (Master)","id":13126,"x":1554,"y":9462,"wanderRadius":0},
-  {"level":0,"name":"Guild Scribe Verity","id":13127,"x":1559,"y":9464,"wanderRadius":0}
+  {"level":0,"name":"Guild Scribe Verity","id":13127,"x":1559,"y":9464,"wanderRadius":0},
+  {"level":0,"name":"Minimus","x":1805,"y":9508,"id":12807,"wanderRadius":0,"direction":6},
+  {"level":0,"name":"Gloria","x":1802,"y":9513,"id":12809,"wanderRadius":3},
+  {"level":0,"name":"Gladiator","x":1802,"y":9490,"id":12834,"wanderRadius":3},
+  {"level":0,"name":"Gladiator","x":1811,"y":9518,"id":12835,"wanderRadius":3},
+  {"level":0,"name":"Gladiator","x":1807,"y":9491,"id":12836,"wanderRadius":3},
+  {"level":0,"name":"Gladiator","x":1805,"y":9523,"id":12838,"wanderRadius":0,"direction":6},
+  {"level":0,"name":"Gladiator","x":1807,"y":9523,"id":12839,"wanderRadius":0,"direction":6}
 ]

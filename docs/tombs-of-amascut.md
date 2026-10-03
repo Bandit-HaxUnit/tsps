@@ -139,6 +139,7 @@ The first version was written without access to the Wiki or the cache, so it fol
   - Points had been sent to "varbit" 3586, a farming varbit in this cache. Now only each player's final loot points are sent, to `TOA_PERSONAL_CONTRIBUTION` (varp 3606), as OpenRune does.
   - The crocodile wall openings (`TOA_WALL02_CROCODILES04`, 45434) and Zebak's rock steps (`TOA_ZEBAK_CLIMBING_ROCK`, 45509) are the cache's.
 - **The obelisk's interfaces:** the party list (772) and details panel (774) are built from pause buttons (`resume_pausebutton`), as OpenRune sets them. Ours had set op1 events, and the member rows always got the leader's view value.
+- **The details panel's button numbers** come from its cache scripts: the 12 fixed buttons (enum 4792), members from 12, the applicants' Accept from 36 and Decline from 44 (script 6746), and the invocations from 52 in enum 4664's order (script 6754). Ours had Accept at 20, Decline at 28 and the invocations at 36, so Accept toggled an invocation and the invocation buttons were 16 off. Enum 4664's last two, Blazing Tombs I and II (structs 5892/5893, an event's), aren't offered. Those buttons click through with `.cc_resume_pausebutton` (operand 1: the child found with `cc_find 1` on 774:1). The client used to resume the clicked button itself whatever the operand, so the server never heard those clicks.
 - **Options:** every hooked NPC, item and loc option exists in the cache. The supplies bag's are *Open*, *Withdraw 1*, *Withdraw All* and *Resupply*, and now all work.
 
 **Behaviour, against the Wiki:**

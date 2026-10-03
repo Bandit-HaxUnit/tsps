@@ -3355,11 +3355,12 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         ctx.forwardIfTriggerOpLocal();
     });
 
-    handlers.set(Opcodes.CC_RESUME_PAUSEBUTTON, (ctx) => {
+    handlers.set(Opcodes.CC_RESUME_PAUSEBUTTON, (ctx, intOp) => {
         // Resume paused button - signals that a dialog continue button was clicked.
-        // Uses activeWidget.id (parent UID), not activeWidget.uid.
-        // resumePauseWidget
-        const w = ctx.activeWidget;
+        // Uses the widget's id (parent UID), not its uid. Like the other cc_ ops, the operand
+        // picks the widget: 1 is the one found with cc_find 1 (the ToA party panel's applicant
+        // and invocation buttons resume their pausebuttons child that way).
+        const w = getTargetWidget(ctx, intOp);
         if (w && ctx.sendResumePauseButton) {
             const widgetUid =
                 (typeof (w as any).id === "number" ? (w as any).id : (w.uid ?? 0)) | 0;

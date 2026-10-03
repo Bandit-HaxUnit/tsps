@@ -27,7 +27,7 @@ let pluginApi;
 
 function convertFee() {
   // Wiki: 10% of the tradeable bond's Grand Exchange value, paid in coins.
-  return Math.max(1, Math.floor(ItemDefinition.forId(TRADEABLE_BOND).getValue() * CONVERT_RATE));
+  return Math.max(1, Math.floor(ItemDefinition.forId(TRADEABLE_BOND).getGrandExchangeValue() * CONVERT_RATE));
 }
 
 function bondCount(player) {

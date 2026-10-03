@@ -68,7 +68,9 @@ function isEligibleKill(killer, victim) {
 }
 
 function itemValue(item) {
-  return (ItemDefinition.forId(item?.id ?? item?.getId?.())?.getValue?.() ?? 0) * (item?.amount ?? item?.getAmount?.() ?? 0);
+  // Loot wealth reads as market value, falling back to the store value.
+  const price = ItemDefinition.forId(item?.id ?? item?.getId?.())?.getGrandExchangeValue?.() ?? 0;
+  return price * (item?.amount ?? item?.getAmount?.() ?? 0);
 }
 
 const totalValue = (items) => items.reduce((total, item) => total + itemValue(item), 0);
