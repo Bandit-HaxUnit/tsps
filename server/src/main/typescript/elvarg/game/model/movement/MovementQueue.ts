@@ -1327,17 +1327,21 @@ export class MovementQueue {
             MovementQueue.log(
                 `[walkToObject] ${this.ownerLabel()} failed route=${this.player.getMovementQueue().hasRoute()} current=${this.player.getLocation().getX()},${this.player.getLocation().getY()} expected=${finalDestinationX},${finalDestinationY}`
             );
-            console.warn("[object-route] unreachable", {
-                objectId: id,
-                shape: type,
-                rotation: direction,
-                target: [objectX, objectY],
-                player: [this.player.getLocation().getX(), this.player.getLocation().getY(), this.player.getLocation().getZ()],
-                routeEnd: [this.pathX, this.pathY],
-                accessMask: routeSpec.reachBlockAccessFlags,
-                routeInvalidated: this.wasRouteInvalidated(),
-                blockedByEntity: this.wasBlockedByDynamicOccupancy(),
-            });
+            // Bots record unreachable objects themselves (once per object), so
+            // only warn for real players instead of once per bot click.
+            if (!this.player.isPlayerBot()) {
+                console.warn("[object-route] unreachable", {
+                    objectId: id,
+                    shape: type,
+                    rotation: direction,
+                    target: [objectX, objectY],
+                    player: [this.player.getLocation().getX(), this.player.getLocation().getY(), this.player.getLocation().getZ()],
+                    routeEnd: [this.pathX, this.pathY],
+                    accessMask: routeSpec.reachBlockAccessFlags,
+                    routeInvalidated: this.wasRouteInvalidated(),
+                    blockedByEntity: this.wasBlockedByDynamicOccupancy(),
+                });
+            }
             this.player.sendMessage("You can't reach that!");
             task.stop();
             TaskManager.cancelTasks(this.player.getIndex());

@@ -184,28 +184,30 @@ test('PvP retreat waits for no food and low HP, runs first, then respects depth/
 });
 
 test('retreat blocks southbound ditch crossings, including queued crossings, but allows returning north', () => {
-  const { DitchTraversalService } = require('../plugins/bots/behaviours/traversal/DitchTraversalService');
+  const { maybeCrossDitch } = require('../plugins/bots/brain/DitchCrossing');
   let location = new Location(3100, 3525, 0), pending, crossings = 0;
   const player = {
     getLocation: () => location, getUsername: () => 'retreat-test', setPositionToFace: () => {},
+    getForceMovement: () => null,
     getMovementQueue: () => ({ walkToObject: (_, action) => { pending = action; }, reset: () => {} }),
   };
-  const state = { pvp: { retreat: {} }, roaming: { target: { x: 3100, y: 3518, z: 0 } } };
   const ditch = { getLocation: () => new Location(3100, 3521, 0), getId: () => 23271 };
-  const service = new DitchTraversalService({
-    api: { log: () => {} }, options: { ditchAttemptCooldownMs: 0 },
+  const world = {
+    ditch: { objectId: 23271, attemptCooldownMs: 0 },
+    objectSearch: { findObjectOnRoute: () => ditch },
     emitObjectInteraction: () => { crossings++; return true; },
-  });
-  assert.equal(service.requestCross(player, state, ditch), false);
+  };
+  const state = { pvp: { retreat: {} } };
+  const south = { x: 3100, y: 3518, z: 0 };
+  assert.equal(maybeCrossDitch({ player, state, world, request: south }), false);
   assert.equal(pending, undefined);
   state.pvp.retreat = null;
-  assert.equal(service.requestCross(player, state, ditch), true);
+  assert.equal(maybeCrossDitch({ player, state, world, request: south }), true);
   state.pvp.retreat = {};
   pending.execute();
   assert.equal(crossings, 0, 'queued southbound crossing is cancelled when retreat begins');
   location = new Location(3100, 3518, 0);
-  state.roaming.target.y = 3550;
-  assert.equal(service.requestCross(player, state, ditch), true);
+  assert.equal(maybeCrossDitch({ player, state, world, request: { x: 3100, y: 3550, z: 0 } }), true);
   pending.execute();
   assert.equal(crossings, 1, 'returning to the Wilderness is allowed');
 });

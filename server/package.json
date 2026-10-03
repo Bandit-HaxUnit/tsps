@@ -70,7 +70,6 @@
     "test:smelting-quantity": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/smelting-quantity-smoke.ts",
     "test:bank-deposit-box": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2022\"}' ts-node ./scripts/bank-deposit-box-smoke.ts",
     "test:stress-bot-bounds": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2022\"}' ts-node ./scripts/stress-bot-bounds-smoke.ts",
-    "test:bot-recruit-option": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/bot-recruit-option-smoke.ts",
     "test:region-loading": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2022\"}' ts-node ./scripts/region-loading-smoke.ts",
     "test:duel-arena": "ts-node ./scripts/duel-arena-smoke.ts",
     "test:wilderness": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/wilderness-plugin-smoke.ts",

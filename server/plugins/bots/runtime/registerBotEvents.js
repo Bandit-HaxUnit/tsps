@@ -13,15 +13,14 @@ const {
 } = require("./BotPersistenceConstants");
 const {
   isPvpOnlyBotState,
-  setModePvp,
 } = require("../behaviours/state/PlayerBotState");
+const { startReactivePvp } = require("../brain/BrainActivities");
+const {
+  handlePlayerAttackReaction,
+} = require("../brain/PlayerAttackReaction");
 const {
   randomInRange,
 } = require("../behaviours/navigation/BotNavigation");
-const {
-  armRecruitFollowBack,
-  recallRecruitedBot,
-} = require("./BotRecruitRuntime");
 const {
   initBotDeathLootCoreAccess,
   clearBotDeathLootPlan,
@@ -191,15 +190,13 @@ function handleClanRecruitAssist({ runtime, behaviorMode, player, target, nowMs,
 
     if (!alreadyHelping) {
       if (target.isPlayer?.() === true) {
-        setModePvp(
-          bot,
-          state,
-          target,
-          nowMs,
-          CLAN_ASSIST_DURATION_MS,
-          behaviorMode,
-          { allowInCombatTransition: true }
-        );
+        if (state.pvp) {
+          state.pvp.targetUsername = target.getUsername?.() ?? null;
+          state.pvp.targetPlayer = target;
+          state.pvp.endsAt = nowMs + CLAN_ASSIST_DURATION_MS;
+          state.pvp.nextActionAt = nowMs;
+        }
+        startReactivePvp(bot, state, nowMs);
       }
       bot.getMovementQueue?.().reset?.();
     } else if (target.isPlayer?.() === true && state?.pvp) {
@@ -233,16 +230,7 @@ function recallClanRecruitsOnOwnerDefeat({ runtime, behaviorMode, owner, nowMs }
     bot.getCombat?.().setUnderAttack?.(null);
     bot.setCombatFollowing?.(null);
     bot.getMovementQueue?.().reset?.();
-
-    armRecruitFollowBack(state, behaviorMode);
-    recallRecruitedBot(
-      bot,
-      owner,
-      state,
-      behaviorMode,
-      CLAN_ASSIST_DURATION_MS,
-      nowMs
-    );
+    // The follow_owner brain keeps ticking; it re-snaps once the owner returns.
   }
 }
 
@@ -253,12 +241,10 @@ function registerBotEvents(options) {
     runtime,
     behaviorMode,
     playerPersistence,
-    followBackTrigger,
-    combatReactionTrigger,
-    pathBlockedHandler,
-    npcAggroPolicyHandler,
+    npcAggroBlockedModes,
     avengeOpponentPolicy,
     pvpJumpOnKillPolicy,
+    playerAttackFleeChance,
   } = options;
 
   initBotDeathLootCoreAccess(api);
@@ -304,12 +290,31 @@ function registerBotEvents(options) {
     handleBotDeathItemDrop(event, runtime);
   });
 
-  api.onPlayerFollow((event) => {
-    followBackTrigger.handlePlayerFollow(event, Date.now());
-  });
-
-  api.onPlayerAttack((event) => {
-    combatReactionTrigger.handlePlayerAttack(event, Date.now());
+  api.onPlayerAttack(({ player, target }) => {
+    const followed = target;
+    const followedUsername = followed?.getUsername?.();
+    if (
+      !followed ||
+      followed === player ||
+      !followedUsername ||
+      !runtime.playerBotUsernames.has(followedUsername) ||
+      !followed.isRegistered?.()
+    ) {
+      return;
+    }
+    const state = runtime.botStatesByName.get(followedUsername);
+    if (!state) {
+      return;
+    }
+    handlePlayerAttackReaction({
+      bot: followed,
+      state,
+      attacker: player,
+      attackerIsPlayerBot: player.isPlayerBot?.() === true,
+      nowMs: Date.now(),
+      playerAttackFleeChance,
+      api,
+    });
   });
 
   // Manual object interactions (doors, levers, etc.) are the live equivalent
@@ -349,17 +354,26 @@ function registerBotEvents(options) {
     });
   });
 
-  api.onPlayerPathBlocked((event) => {
-    const username = event?.username;
-    if (!username || !runtime.playerBotUsernames.has(username)) {
-      return;
-    }
-    pathBlockedHandler.handle(event, Date.now());
-  });
-
-  if (npcAggroPolicyHandler) {
+  const blockedAggroModes = new Set(npcAggroBlockedModes ?? []);
+  if (blockedAggroModes.size > 0) {
     api.onCanAttack((event) => {
-      npcAggroPolicyHandler.handleCanAttack(event);
+      if (!event || event.allow !== null) {
+        return;
+      }
+      const attacker = event.attacker;
+      const target = event.target;
+      if (attacker?.isNpc?.() !== true || target?.isPlayer?.() !== true) {
+        return;
+      }
+      const player = target.getAsPlayer?.() ?? target;
+      if (player?.isPlayerBot?.() !== true) {
+        return;
+      }
+      const username = player.getUsername?.();
+      const state = username ? runtime.botStatesByName.get(username) : null;
+      if (state && blockedAggroModes.has(state.mode)) {
+        event.allow = false;
+      }
     });
   }
 

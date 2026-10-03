@@ -39,8 +39,9 @@ function createBotRegistry(options) {
     assignPvpMetadata: assignPvpMetadataFn,
     applyInitialPvpLoadout: applyInitialPvpLoadoutFn,
     applyForcedModeForDiagnosis: applyForcedModeForDiagnosisFn,
-    createController,
     ensureBehaviorTaskStarted,
+    attachWildernessBrain,
+    attachAssistantBrain,
     emitPlayerLogin,
     worldGetPlayerByName,
     formatText,
@@ -536,7 +537,13 @@ function createBotRegistry(options) {
     if (!state.autonomy) {
       state.autonomy = {};
     }
-    primePvpOnlyStartupState(state, nowMs);
+    // A requested non-PvP mode (::bot woodcutting) starts ungeared and unlocked, so
+    // the behavior's own tooling applies instead of a PvP preset and seeking state.
+    const requestedMode = plan.mode ?? null;
+    const wantsPvpPriming = requestedMode == null || requestedMode === behaviorMode.PVP;
+    if (wantsPvpPriming) {
+      primePvpOnlyStartupState(state, nowMs);
+    }
     if (!state.roaming) {
       state.roaming = {};
     }
@@ -551,20 +558,22 @@ function createBotRegistry(options) {
         z: assignedBounds.z ?? assignedHotspot?.area?.z ?? botSpawn.getZ(),
       };
     }
-    const pvpMetadata =
-      assignedHotspotId != null
-        ? buildHotspotPvpMetadata({
-            hotspotId: assignedHotspotId,
-          })
-        : buildRoamingPvpMetadata({
-            excludeF2p: true,
-          });
-    assignPvpMetadata(state, {
-      metadata: pvpMetadata,
-    });
-    state.pvp.presetPoolEnabled = true;
-    syncBotProfileAttribute(bot, state);
-    if (!applyInitialPvpLoadout(bot, state)) state.pvp.loadoutPending = true;
+    if (wantsPvpPriming) {
+      const pvpMetadata =
+        assignedHotspotId != null
+          ? buildHotspotPvpMetadata({
+              hotspotId: assignedHotspotId,
+            })
+          : buildRoamingPvpMetadata({
+              excludeF2p: true,
+            });
+      assignPvpMetadata(state, {
+        metadata: pvpMetadata,
+      });
+      state.pvp.presetPoolEnabled = true;
+      syncBotProfileAttribute(bot, state);
+      if (!applyInitialPvpLoadout(bot, state)) state.pvp.loadoutPending = true;
+    }
     applyForcedModeForDiagnosis(bot, state);
     bot.setLocation?.(botSpawn.clone());
     bot.setLastKnownRegion?.(botSpawn.clone());
@@ -572,15 +581,12 @@ function createBotRegistry(options) {
     playerBotUsernames.add(username);
     assignmentMap?.set(username, assignmentValue);
 
-    addEntry(username, {
-      player: bot,
-      state,
-      controller: createController(
-        bot,
-        botSpawn,
-        0
-      ),
-    });
+    const entry = { player: bot, state };
+    addEntry(username, entry);
+    // Managed wilderness bots run the pvp brain activity.
+    if (assignmentMap && typeof attachWildernessBrain === "function") {
+      attachWildernessBrain({ entry, bot, state, plan, hotspotId: assignedHotspotId });
+    }
     emitPlayerLogin({
       player: bot,
       username,
@@ -893,15 +899,7 @@ function createBotRegistry(options) {
         botStatesByName.set(username, state);
         playerBotUsernames.add(username);
 
-        addEntry(username, {
-          player: bot,
-          state,
-          controller: createController(
-            bot,
-            botSpawn,
-            0
-          ),
-        });
+        addEntry(username, { player: bot, state });
         emitPlayerLogin({
           player: bot,
           username,
@@ -1078,11 +1076,11 @@ function createBotRegistry(options) {
     botStatesByName.set(username, state);
     botmeUsernames.add(username);
     player.setPlayerBot?.(true);
-    addEntry(username, {
-      player,
-      state,
-      controller: createController(player, location, 0),
-    });
+    const entry = { player, state };
+    addEntry(username, entry);
+    if (typeof attachAssistantBrain === "function") {
+      attachAssistantBrain({ entry, player, state });
+    }
     resetMovementState(player);
     ensureBehaviorTaskStarted();
     return { ok: true };
@@ -1095,6 +1093,11 @@ function createBotRegistry(options) {
     player.setPlayerBot?.(false);
     const username = player.getUsername();
     const state = username ? botStatesByName.get(username) : null;
+    const entry = username ? entriesByUsername.get(username) : null;
+    if (entry?.brain) {
+      entry.brain.reset();
+      entry.brain = null;
+    }
     clearFollowState(player, state);
     if (username) {
       botStatesByName.delete(username);
@@ -1134,11 +1137,15 @@ function createBotRegistry(options) {
     hasControllerForPlayer,
     resolveControlledPlayer,
     spawnConfiguredBots,
-    spawnPvpBot(location) {
+    spawnPvpBot(location, options = {}) {
       let username;
       do { username = `DevBot${++developerBotId}`; }
       while (entriesByUsername.has(username) || worldGetPlayerByName(username));
-      return spawnWildernessBot({ username, spawnLocation: location });
+      return spawnWildernessBot({
+        username,
+        spawnLocation: location,
+        mode: options.mode ?? null,
+      });
     },
     scheduleInitialSpawn,
     enableControllerForPlayer,
