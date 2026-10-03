@@ -532,12 +532,13 @@ export class PlayerSession {
         : undefined,
       hits: hits.length > 0
         ? hits.map((hit: any) => ({
-            type: this.hitsplatType(hit.getHitmask(), mine),
+            type: hit.getSplatType?.(mine) ?? this.hitsplatType(hit.getHitmask(), mine),
             damage: hit.getDamage(),
           }))
         : undefined,
       health: hits.length > 0
-        ? { current: actor.getHitpoints(), max: maxHitpoints, bar: actor.getHealthBar?.() ?? undefined }
+        ? actor.getDisplayedHealth?.()
+          ?? { current: actor.getHitpoints(), max: maxHitpoints, bar: actor.getHealthBar?.() ?? undefined }
         : undefined,
     };
   }
