@@ -12,6 +12,7 @@ export class HitQueue {
     private readonly pendingHits: ScheduledHit[] = [];
     private readonly pendingDamage: HitDamage[] = [];
     private lastProcessedCycle = -1;
+    private lastAppliedHit: HitDamage | null = null;
 
     constructor(private readonly character: Mobile) {}
 
@@ -58,9 +59,22 @@ export class HitQueue {
         // Every hit due this tick lands this tick. Once the owner is dead the rest
         // still show, as 0s - decrementHealth never takes hitpoints below zero.
         while (this.pendingDamage.length > 0) {
-            character.addTickHit(character.decrementHealth(this.pendingDamage.shift()!));
+            character.addTickHit(this.applyDamage(this.pendingDamage.shift()!));
         }
         if (!this.hasPendingWork()) HitQueue.active.delete(this);
+    }
+
+    /** Takes a hit off the owner's hitpoints, then runs effects that react to the result. */
+    private applyDamage(hit: HitDamage): HitDamage {
+        const applied = this.character.decrementHealth(hit);
+        if (applied.getDamage() > 0 || this.character.getHitpoints() > 0) this.lastAppliedHit = applied;
+        CombatFactory.handleRedemption(this.character);
+        return applied;
+    }
+
+    /** The last hit taken; after a death it is the killing blow. */
+    getLastAppliedHit(): HitDamage | null {
+        return this.lastAppliedHit;
     }
 
     addPendingHit(hit: PendingHit, revealCycle: number): void {

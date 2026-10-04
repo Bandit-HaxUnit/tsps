@@ -14,6 +14,7 @@ function buildTarget(hp) {
         hp,
         shown,
         isRegistered: () => true,
+        isPlayer: () => false,
         getHitpoints: () => target.hp,
         decrementHealth: (hit) => {
             if (target.hp <= 0) hit.setDamage(0);
