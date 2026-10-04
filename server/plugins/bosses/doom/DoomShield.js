@@ -84,6 +84,8 @@ class ShieldPhase {
     this.firesAt = run.ticks + chargeTicks(run.level);
     if (cancelled) {
       run.boss.performAnimation(new Animation(ANIM.BEAM_CANCEL));
+      // Capture: no charge graphic on a tick a demonbane hit cancels it.
+      Shared.withdrawChargeGraphic(run.boss);
       this.cancelledAt = run.ticks;
     }
     Shared.chargeBar(run.boss, SHIELD.chargeCycles);
@@ -97,9 +99,7 @@ class ShieldPhase {
   tick() {
     const run = this.run;
     if (this.up && run.ticks >= this.firesAt) {
-      const { Animation } = Shared.core();
-      run.boss.performAnimation(new Animation(ANIM.BEAM_FIRE));
-      run.hurt(run.delve.beam);
+      Shared.fireBeam(run, run.delve.beam);
       this.end();
       return;
     }

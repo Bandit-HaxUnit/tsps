@@ -8,9 +8,12 @@
  * graves, so what would drop lands there); a melee charge is stopped only by melee, which
  * always hits and adds a fifth of the Strength bonus; larvae take one damage a hit unless it
  * is demonbane; two destroyed volatile earth make the earthen shield. Larvae and volatile earth
- * can be attacked on cooldown, and a demonbane weapon (the Eye of Ayak among them) adds no delay
- * after it; attacks while the Doom charges (melee during the melee charge, any while burrowed)
- * are 100% accurate.
+ * can be attacked on cooldown; attacks while the Doom charges (melee during the melee charge, any
+ * while burrowed) are 100% accurate.
+ * Capture (a demonbane bow, speed 4): a larva shot on cooldown leaves the timer as it was (Doom
+ * 359, larva 360, Doom 363), and one shot off cooldown makes the next attack wait 1 tick (larva
+ * 350, Doom 351); volatile earth shot on cooldown sets the bow's full delay (Doom 246, earth 248
+ * and 250, Doom 254). Wiki: other weapons on larvae get their normal delay.
  */
 
 const Shared = require("./DoomShared");
@@ -132,14 +135,20 @@ function bossHit(run, hit) {
   if (hit.getTotalDamage() > 0) run.acid.spray();
 }
 
-/** Larvae and volatile earth: hit on cooldown, and with demonbane the timer is left alone (Wiki). */
+/** Larvae and volatile earth: hit on cooldown; demonbane on a larva leaves the timer, plus 1 tick (capture). */
 function attackTiming(event) {
   const npc = event.target;
   const run = ownRun(npc);
   if (!run || event.attacker !== run.player || !(npc.__doomLarva || npc.__doomEarth)) return;
   event.ignoreDelay = true;
-  if (isDemonbane(event.attacker)) event.keepDelay = true;
+  if (npc.__doomLarva && isDemonbane(event.attacker)) {
+    event.keepDelay = true;
+    event.minimumDelay = LARVA_DEMONBANE_DELAY;
+  }
 }
+
+/** Capture: after a demonbane attack on a larva the next attack may come the tick after. */
+const LARVA_DEMONBANE_DELAY = 1;
 
 /** Wiki: attacks while the Doom charges are 100% accurate (melee for the melee charge). */
 function chargedAccuracy(event) {
