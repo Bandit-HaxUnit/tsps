@@ -1044,21 +1044,12 @@ export class CombatFactory {
         player.sendMessage("You have been disabled and can no longer use protection prayers.");
     }
 
-    /** Rings of suffering charged with rings of recoil; they keep their own charges. */
-    private static readonly SUFFERING_RECOIL_RING_IDS = new Set<number>([
-        ItemIdentifiers.RING_OF_SUFFERING_R_,
-        ItemIdentifiers.RING_OF_SUFFERING_RI_,
-        ItemIdentifiers.RING_OF_SUFFERING_RI__3,
-        ItemIdentifiers.RING_OF_SUFFERING_RI__5,
-        ItemIdentifiers.RING_OF_SUFFERING_RI__6,
-    ]);
-
     /** Damage a ring of recoil holds before it shatters (Wiki: Ring of recoil). */
     public static readonly RECOIL_RING_CHARGES = 40;
 
+    /** A ring of recoil; a charged ring of suffering recoils from the RingOfSuffering plugin. */
     public static wearingRecoilRing(player: Player): boolean {
-        const ringId = player.getEquipment().get(Equipment.RING_SLOT).getId();
-        return ringId === ItemIdentifiers.RING_OF_RECOIL || CombatFactory.SUFFERING_RECOIL_RING_IDS.has(ringId);
+        return player.getEquipment().get(Equipment.RING_SLOT).getId() === ItemIdentifiers.RING_OF_RECOIL;
     }
 
     /** 10% + 1 of the damage taken, rounded down (Wiki: Ring of recoil). */
@@ -1067,22 +1058,14 @@ export class CombatFactory {
     }
 
     /**
-     * Rebounds recoil damage to the attacker. A ring of recoil's 40 charges are
-     * tracked per player and its last recoil deals only what is left. A charged
-     * ring of suffering keeps up to 100,000 charges on the ring; they are not
-     * tracked here, so it recoils without draining.
+     * Rebounds ring of recoil damage to the attacker. The ring's 40 charges are
+     * tracked per player and its last recoil deals only what is left.
      */
     public static handleRecoil(player: Player, attacker: Mobile, damage: number) {
         let returnDmg = CombatFactory.recoilDamage(damage);
         if (returnDmg <= 0) {
             return;
         }
-        const ringId = player.getEquipment().get(Equipment.RING_SLOT).getId();
-        if (CombatFactory.SUFFERING_RECOIL_RING_IDS.has(ringId)) {
-            attacker.getCombat().getHitQueue().addPendingDamage([new HitDamage(returnDmg, HitMask.RED).markReflected().setSource(player)]);
-            return;
-        }
-
         const used = Math.max(0, Number(player.getAttribute(CombatFactory.RECOIL_DAMAGE_ATTRIBUTE) ?? 0) || 0);
         returnDmg = Math.min(returnDmg, Math.max(0, CombatFactory.RECOIL_RING_CHARGES - used));
         if (returnDmg <= 0) {

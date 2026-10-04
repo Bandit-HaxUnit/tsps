@@ -2,10 +2,12 @@
  * Ring of suffering (https://oldschool.runescape.wiki/w/Ring_of_suffering).
  *
  * Charged with rings of recoil (40 charges each, 100,000 max), becoming the
- * ring of suffering (r); the imbued variant becomes (ri). While worn and not
- * toggled off, it recoils 10% + 1 of incoming damage with the same 1-in-3
- * fizzle as a ring of recoil, spending one charge per proc. Discharging the
- * ring loses the stored rings.
+ * ring of suffering (r); the imbued variants become (ri). While worn and not
+ * toggled off, it recoils like a ring of recoil - 10% + 1 of each damaging hit,
+ * rounded down, when the hit lands - and a charge is a point of recoil damage,
+ * as a ring of recoil's 40 are; the last recoil deals only what is left.
+ * Discharging the ring loses the stored rings. The core ring of recoil leaves
+ * these rings to this plugin.
  */
 const Equipment = require("../../src/main/typescript/elvarg/game/model/container/impl/Equipment").Equipment;
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
@@ -37,8 +39,8 @@ function refresh(player) {
   player.getEquipment().refreshItems();
 }
 
-function useCharge(player, item) {
-  const left = charges(item) - 1;
+function useCharges(player, item, spent) {
+  const left = charges(item) - spent;
   if (left > 0) {
     item.setMetaValue(CHARGES_META_KEY, left);
     return;
@@ -49,24 +51,28 @@ function useCharge(player, item) {
   player.sendMessage("Your ring of suffering has run out of charges.");
 }
 
-/** Same recoil formula as the core ring of recoil. */
-function onIncomingDamage(entity, hitDamage, context = {}) {
-  if (!entity?.isPlayer?.() || !(hitDamage?.getDamage?.() > 0) || !context.attacker) {
+/** A landed hit on the wearer: recoil 10% + 1 of it, up to the charges left. */
+function onHitResolved({ attacker, target, hit }) {
+  if (!target?.isPlayer?.() || !attacker) {
     return;
   }
-  const player = entity.getAsPlayer();
+  const damage = Number(hit?.getTotalDamage?.() ?? 0);
+  if (!(damage > 0)) {
+    return;
+  }
+  const player = target.getAsPlayer();
   const ring = wornRing(player);
   if (!ring || player.getAttribute?.(DISABLED_ATTRIBUTE) === true) {
     return;
   }
-  if (Math.floor(Math.random() * 3) + 1 === 2) {
+  const recoil = Math.min(Math.floor(damage / 10) + 1, charges(ring));
+  if (recoil <= 0) {
     return;
   }
-  const returnDamage = Math.floor(hitDamage.getDamage() * 0.1) + 1;
-  if (returnDamage > 0) {
-    context.attacker.getCombat?.().getHitQueue().addPendingDamage([new HitDamage(returnDamage, HitMask.RED)]);
-  }
-  useCharge(player, ring);
+  attacker.getCombat?.().getHitQueue().addPendingDamage([
+    new HitDamage(recoil, HitMask.RED).markReflected().setSource(player),
+  ]);
+  useCharges(player, ring, recoil);
 }
 
 function checkCharges({ player, item }) {
@@ -119,21 +125,21 @@ function discharge({ player, item }) {
 module.exports = {
   name: "RingOfSuffering",
   members: true,
-  _test: { charges, wornRing, useCharge, onIncomingDamage, chargeRing, discharge, MAX_CHARGES },
+  _test: { charges, wornRing, useCharges, onHitResolved, chargeRing, discharge, MAX_CHARGES },
   register(api) {
     core = api.core;
     const I = core.ItemIdentifiers;
     baseByRecoil = new Map([
       [I.RING_OF_SUFFERING_R_, I.RING_OF_SUFFERING],
       [I.RING_OF_SUFFERING_RI_, I.RING_OF_SUFFERING_I_],
+      [I.RING_OF_SUFFERING_RI__3, I.RING_OF_SUFFERING_I__3],
+      [I.RING_OF_SUFFERING_RI__5, I.RING_OF_SUFFERING_I__5],
+      [I.RING_OF_SUFFERING_RI__6, I.RING_OF_SUFFERING_I__6],
     ]);
-    recoilByBase = new Map([
-      [I.RING_OF_SUFFERING, I.RING_OF_SUFFERING_R_],
-      [I.RING_OF_SUFFERING_I_, I.RING_OF_SUFFERING_RI_],
-    ]);
+    recoilByBase = new Map([...baseByRecoil].map(([recoil, base]) => [base, recoil]));
     recoilIds = new Set(baseByRecoil.keys());
     api.persistAttribute(DISABLED_ATTRIBUTE);
-    api.registerIncomingDamageModifier(onIncomingDamage);
+    api.onCombatHitResolved(onHitResolved);
     api.onItemAction((event) => {
       const isRecoil = recoilIds.has(event.itemId);
       const isBase = recoilByBase.has(event.itemId);
