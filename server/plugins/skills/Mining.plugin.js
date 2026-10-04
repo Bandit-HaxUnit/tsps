@@ -6,6 +6,7 @@ const { MapObjects } = require("../../src/main/typescript/elvarg/game/entity/imp
 const { GameObject } = require("../../src/main/typescript/elvarg/game/entity/impl/object/GameObject");
 const { ItemIds, ObjectIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const InfernalPickaxe = require("./mining/InfernalPickaxe.Mining");
+const CrystalPickaxe = require("./mining/CrystalPickaxe.Mining");
 
 const DEPLETED_ROCK_ID = 2704;
 const MINING_ANIMATION_INTERVAL_TICKS = 4;
@@ -236,6 +237,7 @@ class MiningTask extends Task {
         player.getInventory().adds(state.rock.oreId, 1);
         player.sendMessage(state.rock.oreMessage ?? "You get some ores.");
       }
+      CrystalPickaxe.tryUseCharge(player);
       player.getSkillManager().addExperiences(Skill.MINING, state.rock.xp);
       pluginApi.emitCustomEvent("mining:success", { player, skill: Skill.MINING, petBase: state.rock.petBase });
       if (state.rock.infinite) {
@@ -297,6 +299,7 @@ module.exports = {
     }
 
     InfernalPickaxe.attach(api);
+    CrystalPickaxe.attach(api);
 
     api.log("registered", {
       rocks: ROCKS.length,

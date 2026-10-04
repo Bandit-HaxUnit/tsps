@@ -259,6 +259,18 @@ export class WeaponProfiles {
             projectiles: [DEFAULT_PROJECTILE],
             fireSound: Sound.SHOOT_BOW_QUIET,
         });
+        // 3rd Age bow (Wiki): shortbow speed with a 9-tile range.
+        this.register({
+            itemIds: [ItemIdentifiers._3RD_AGE_BOW],
+            attackAnimation: 426,
+            attackSpeed: 4,
+            attackDistance: 9,
+            longRangeDistance: 9,
+            longRangeFightType: FightType.SHORTBOW_LONGRANGE,
+            hitDelays: [STANDARD_HIT],
+            projectiles: [DEFAULT_PROJECTILE],
+            fireSound: Sound.SHOOT_BOW_QUIET,
+        });
         // Chinchompas (Wiki): thrown, 3-tick medium fuse / 4-tick otherwise, 9-tile range.
         this.register({
             itemIds: [10033, 10034, 11959],
