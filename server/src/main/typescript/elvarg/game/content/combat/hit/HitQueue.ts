@@ -13,6 +13,7 @@ export class HitQueue {
     private readonly pendingHits: ScheduledHit[] = [];
     private readonly pendingDamage: HitDamage[] = [];
     private lastProcessedCycle = -1;
+    private lastAppliedHit: HitDamage | null = null;
 
     constructor(private readonly character: Mobile) {}
 
@@ -57,14 +58,27 @@ export class HitQueue {
         }
 
         if (!character.getUpdateFlag().flagged(Flag.SINGLE_HIT) && this.pendingDamage.length > 0) {
-            character.setPrimaryHit(character.decrementHealth(this.pendingDamage.shift()!));
+            character.setPrimaryHit(this.applyDamage(this.pendingDamage.shift()!));
             character.getUpdateFlag().flag(Flag.SINGLE_HIT);
         }
         if (!character.getUpdateFlag().flagged(Flag.DOUBLE_HIT) && this.pendingDamage.length > 0) {
-            character.setSecondaryHit(character.decrementHealth(this.pendingDamage.shift()!));
+            character.setSecondaryHit(this.applyDamage(this.pendingDamage.shift()!));
             character.getUpdateFlag().flag(Flag.DOUBLE_HIT);
         }
         if (!this.hasPendingWork()) HitQueue.active.delete(this);
+    }
+
+    /** Takes a hit off the owner's hitpoints, then runs effects that react to the result. */
+    private applyDamage(hit: HitDamage): HitDamage {
+        const applied = this.character.decrementHealth(hit);
+        if (applied.getDamage() > 0 || this.character.getHitpoints() > 0) this.lastAppliedHit = applied;
+        CombatFactory.handleRedemption(this.character);
+        return applied;
+    }
+
+    /** The last hit taken; after a death it is the killing blow. */
+    getLastAppliedHit(): HitDamage | null {
+        return this.lastAppliedHit;
     }
 
     addPendingHit(hit: PendingHit, revealCycle: number): void {
