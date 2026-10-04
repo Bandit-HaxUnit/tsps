@@ -1789,9 +1789,16 @@ const ACCOUNT_SUMMARY_COMBAT_TASKS_ROW = 5; // op1-4 Overview/Bosses/Tasks/Rewar
 const ACCOUNT_SUMMARY_COLLECTION_LOG_ROW = 6; // op1 "Collection Log", op2 "Collection Overview"
 const ACCOUNT_SUMMARY_PLAYTIME_ROW = 7; // op1 "Reveal"
 
+// The worn equipment tab's quiver slot (387:28): script 5026 gives it Quiver-Remove (op1),
+// Fill/Swap (op2) and Examine (op10) with if_setop, and the client only sends ops the server has
+// enabled. Static component, so slots -1..-1.
+const EQUIPMENT_QUIVER_SLOT_UID = (387 << 16) | 28;
+const EQUIPMENT_QUIVER_SLOT_FLAGS = (1 << 1) | (1 << 2) | (1 << 10);
+
 export function encodeGameframeFlags(root: number = 161): Buffer[] {
   const questTabChild = QUEST_TAB_ICON_CHILD_BY_ROOT[root] ?? QUEST_TAB_ICON_CHILD_ID;
   return [
+    encodeWidgetSetFlagsRange(EQUIPMENT_QUIVER_SLOT_UID, -1, -1, EQUIPMENT_QUIVER_SLOT_FLAGS),
     encodeWidgetSetFlagsRange(MAIN_INVENTORY_WIDGET_UID, 0, 27, MAIN_INVENTORY_SLOT_FLAGS),
     encodeWidgetSetFlags((root << 16) | questTabChild, QUEST_TAB_ICON_FLAGS),
     encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_QUESTS_ROW, ACCOUNT_SUMMARY_ACHIEVEMENTS_ROW, 1 << 1),
