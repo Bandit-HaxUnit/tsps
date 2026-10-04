@@ -113,6 +113,27 @@ export class AccuracyFormulasDpsCalc {
         return 100;
     }
 
+    /**
+     * Invisible Defence levels from the selected stance: Defensive and Longrange +3,
+     * Controlled +1. Autocasting gives no invisible bonuses (Wiki: Combat Options).
+     */
+    private static defenceStanceBonus(player: Player): number {
+        if (player.getCombat().getAutocastSpell() != null) {
+            return 0;
+        }
+        const fightStyle = player.getFightType().getStyle();
+        if (fightStyle == FightStyle.DEFENSIVE) return 3;
+        if (fightStyle == FightStyle.CONTROLLED) return 1;
+        return 0;
+    }
+
+    /** A powered staff's Accurate style: a magic attack style, not a staff's melee bash. */
+    private static usingPoweredStaffAccurate(player: Player): boolean {
+        const fightType = player.getFightType();
+        return fightType.getBonusType() === BonusManager.ATTACK_MAGIC
+            && fightType.getStyle() == FightStyle.ACCURATE;
+    }
+
     private static defencePrayerPercent(player: Player): number {
         if (PrayerHandler.isActivated(player, PrayerHandler.THICK_SKIN)) {
             return 105;
@@ -386,12 +407,7 @@ export class AccuracyFormulasDpsCalc {
             AccuracyFormulasDpsCalc.defencePrayerPercent(player)
         );
 
-        let fightStyle = player.getFightType().getStyle();
-        if (fightStyle == FightStyle.DEFENSIVE)
-            def += 3;
-        else if (fightStyle == FightStyle.CONTROLLED)
-            def += 1;
-        def += 8;
+        def += AccuracyFormulasDpsCalc.defenceStanceBonus(player) + 8;
 
         def = Math.floor(applyMeleeDefenseModifiers(player, def));
 
@@ -532,11 +548,13 @@ export class AccuracyFormulasDpsCalc {
             AccuracyFormulasDpsCalc.magicAttackPrayerPercent(player)
         );
 
-        // +8 base, +1 style. Magic's style bonus is always 1 regardless of the
-        // weapon's selected melee stance - a caster's FightType is still their
-        // staff's bash/pound/focus, so reading it here handed staves left on
-        // Accurate a free +3 magic attack.
+        // +8 base and +1 for every cast; a powered staff on Accurate adds 2 more
+        // (the Wiki DPS calculator). A staff's own bash/pound/focus stances are
+        // melee styles and give magic nothing.
         mag += 9;
+        if (AccuracyFormulasDpsCalc.usingPoweredStaffAccurate(player)) {
+            mag += 2;
+        }
 
         if (CombatEquipment.wearingVoid(player, CombatType.MAGIC)
             || CombatEquipment.wearingEliteVoid(player, CombatType.MAGIC)) {
@@ -566,11 +584,12 @@ export class AccuracyFormulasDpsCalc {
                 player.getSkillManager().getCurrentLevel(Skill.DEFENCE),
                 AccuracyFormulasDpsCalc.defencePrayerPercent(player)
             );
-            defLevel = AccuracyFormulasDpsCalc.scaleRatio(
-                magicLevel * 7 + defenceLevel * 3,
-                1,
-                10
-            ) + 8;
+            // 70% Magic and 30% Defence, each rounded down, then the Defence
+            // stance bonus and +8 (the Wiki DPS calculator's player defence roll).
+            defLevel = AccuracyFormulasDpsCalc.scaleRatio(magicLevel, 7, 10)
+                + AccuracyFormulasDpsCalc.scaleRatio(defenceLevel, 3, 10)
+                + AccuracyFormulasDpsCalc.defenceStanceBonus(player)
+                + 8;
             defLevel = applyMagicDefenseModifiers(player, defLevel);
         }
 

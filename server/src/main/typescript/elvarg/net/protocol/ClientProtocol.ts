@@ -1001,6 +1001,23 @@ export function encodeInventorySlot(slot: number, itemId: number, quantity: numb
   return encodeServerPacket(ServerPacketId.INVENTORY_SLOT, encodeItemSlot(slot, itemId, quantity));
 }
 
+/**
+ * The collection log is client-side CS2 backed by the `collection_transmit` inventory (620);
+ * a snapshot of what the player owns drives its "collected" ticks.
+ */
+export function encodeCollectionLogSnapshot(slots: Array<{ slot: number; itemId: number; quantity: number }>): Buffer {
+  const body = Buffer.alloc(2 + slots.length * 8);
+  body.writeUInt16BE(slots.length, 0);
+  let offset = 2;
+  for (const { slot, itemId, quantity } of slots) {
+    body.writeUInt16BE(slot & 0xffff, offset);
+    body.writeUInt16BE(itemId & 0xffff, offset + 2);
+    body.writeInt32BE(quantity | 0, offset + 4);
+    offset += 8;
+  }
+  return encodeServerPacket(ServerPacketId.COLLECTION_LOG_SNAPSHOT, body);
+}
+
 export type BankSlotView = { slot: number; itemId: number; quantity: number; placeholder?: boolean; tab?: number };
 
 function encodeBankSlotPayload(slot: BankSlotView): Buffer {
@@ -1789,9 +1806,16 @@ const ACCOUNT_SUMMARY_COMBAT_TASKS_ROW = 5; // op1-4 Overview/Bosses/Tasks/Rewar
 const ACCOUNT_SUMMARY_COLLECTION_LOG_ROW = 6; // op1 "Collection Log", op2 "Collection Overview"
 const ACCOUNT_SUMMARY_PLAYTIME_ROW = 7; // op1 "Reveal"
 
+// The worn equipment tab's quiver slot (387:28): script 5026 gives it Quiver-Remove (op1),
+// Fill/Swap (op2) and Examine (op10) with if_setop, and the client only sends ops the server has
+// enabled. Static component, so slots -1..-1.
+const EQUIPMENT_QUIVER_SLOT_UID = (387 << 16) | 28;
+const EQUIPMENT_QUIVER_SLOT_FLAGS = (1 << 1) | (1 << 2) | (1 << 10);
+
 export function encodeGameframeFlags(root: number = 161): Buffer[] {
   const questTabChild = QUEST_TAB_ICON_CHILD_BY_ROOT[root] ?? QUEST_TAB_ICON_CHILD_ID;
   return [
+    encodeWidgetSetFlagsRange(EQUIPMENT_QUIVER_SLOT_UID, -1, -1, EQUIPMENT_QUIVER_SLOT_FLAGS),
     encodeWidgetSetFlagsRange(MAIN_INVENTORY_WIDGET_UID, 0, 27, MAIN_INVENTORY_SLOT_FLAGS),
     encodeWidgetSetFlags((root << 16) | questTabChild, QUEST_TAB_ICON_FLAGS),
     encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_QUESTS_ROW, ACCOUNT_SUMMARY_ACHIEVEMENTS_ROW, 1 << 1),

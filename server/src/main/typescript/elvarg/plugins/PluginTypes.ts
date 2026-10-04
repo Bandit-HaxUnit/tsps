@@ -695,7 +695,8 @@ export interface PluginRangedAmmoResolver {
 
 export interface PluginRangedAmmoHandler {
   checkAmmo(player: any, amountRequired: number, silent?: boolean): boolean | null;
-  decrementAmmo(player: any, pos: any, amount: number): boolean;
+  /** `delayTicks`: the shot's flight time; floor drops and the count apply as it lands. */
+  decrementAmmo(player: any, pos: any, amount: number, delayTicks?: number): boolean;
 }
 
 /** A share of fired ammunition recovered before it lands, e.g. by an Ava's device. */
@@ -1075,6 +1076,12 @@ export interface PluginApi {
   ): void;
   registerMagicDefenseModifier(
     modifier: (entity: any, baseHit: number) => number
+  ): void;
+  registerRunEnergyRestoreModifier(
+    modifier: (entity: any, delayMs: number) => number
+  ): void;
+  registerIncomingDamageModifier(
+    modifier: (entity: any, hitDamage: any) => void
   ): void;
   setCombatEngine(engine: PluginCombatEngine): void;
   setCombatDamageProvider(provider: PluginCombatDamageProvider): void;

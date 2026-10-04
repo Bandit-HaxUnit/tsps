@@ -210,6 +210,10 @@ export class NpcDefinition {
         return this.demon;
     }
 
+    public isUndead(): boolean {
+        return this.hasAttribute("undead");
+    }
+
     public getAttributes(): readonly string[] {
         return this.attributes;
     }

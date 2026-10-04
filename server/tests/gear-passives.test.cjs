@@ -38,6 +38,7 @@ function buildApi({ onTask = false } = {}) {
         registerMeleeDefenseModifier: register('meleeDefence'),
         registerRangedDefenseModifier: register('rangedDefence'),
         registerMagicDefenseModifier: register('magicDefence'),
+        registerIncomingDamageModifier: register('incomingDamage'),
         onCustomEvent: (name, handler) => listeners.set(name, [...(listeners.get(name) ?? []), handler]),
         emitCustomEvent: (name, payload) => {
             for (const handler of listeners.get(name) ?? []) handler(payload);
@@ -65,7 +66,7 @@ function player(worn, target) {
         isPlayer: () => true,
         isNpc: () => false,
         getAsPlayer: () => entity,
-        getEquipment: () => ({ getItems: () => items }),
+        getEquipment: () => ({ getItems: () => items, get: (slot) => items[slot] }),
         getCombat: () => ({ getTarget: () => target }),
         getFightType: () => ({ getBonusType: () => 0 }),
     };

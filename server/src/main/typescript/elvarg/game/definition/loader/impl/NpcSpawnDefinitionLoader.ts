@@ -113,6 +113,11 @@ export class NpcSpawnDefinitionLoader extends DefinitionLoader {
             0,
             World.getNpcs().capacityReturn() - World.getNpcs().sizeReturn() - 1
         );
+        if (definitions.length > availableCapacity) {
+            console.warn(
+                `[npc-spawns] NPC pool full: applying ${availableCapacity} of ${definitions.length} spawns`
+            );
+        }
         let applied = 0;
         for (const definition of definitions.slice(0, availableCapacity)) {
             const npc = NPC.create(definition.getId(), definition.getPosition());

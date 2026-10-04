@@ -114,6 +114,7 @@ function fakeApi() {
     sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
     spawnNpc: ({ id, x, y }) => fakeNpc(id, x, y),
     removeNpc: (npc) => { npc.registered = false; },
+    emitCustomEvent() {},
   };
 }
 

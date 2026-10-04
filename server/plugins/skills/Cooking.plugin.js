@@ -7,6 +7,7 @@ const { MapObjects } = require("../../src/main/typescript/elvarg/game/entity/imp
 const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
 const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
 const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
+const { Equipment } = require("../../src/main/typescript/elvarg/game/model/container/impl/Equipment");
 
 const FIRE_COOK_ANIMATION = new Animation(896);
 const RANGE_COOK_ANIMATION = new Animation(897);
@@ -64,18 +65,49 @@ const COOKABLE_BY_RAW = new Map(COOKABLES.map((cookable) => [cookable.raw, cooka
 const FIRE_OBJECT_NAMES = new Set(["Fire", "Forester's Campfire"]);
 const COOKABLE_OBJECT_NAMES = new Set(["Cooking range", "Range", "Stove", ...FIRE_OBJECT_NAMES]);
 
+/**
+ * Wiki: cooking gauntlets only affect lobster, swordfish, kyatt, monkfish,
+ * shark and anglerfish, lowering the level at which they stop burning.
+ */
+const GAUNTLETS_STOP_BURN = new Map([
+  [ItemIds.RAW_LOBSTER, 64],
+  [ItemIds.RAW_SWORDFISH, 80],
+  [ItemIds.RAW_KYATT, 80],
+  [ItemIds.RAW_MONKFISH, 86],
+  [ItemIds.RAW_SHARK, 89],
+  [ItemIds.RAW_ANGLERFISH, 93],
+]);
+
+function stopBurnLevel(player, cookable) {
+  const hands = player.getEquipment?.()?.getItems?.()[Equipment.HANDS_SLOT]?.getId?.();
+  if (hands !== ItemIds.COOKING_GAUNTLETS) {
+    return cookable.stopBurn;
+  }
+  return GAUNTLETS_STOP_BURN.get(cookable.raw) ?? cookable.stopBurn;
+}
+
+/** Wiki: a worn Cooking cape never burns food, and supersedes the gauntlets. */
+function wearingCookingCape(player) {
+  const cape = player.getEquipment?.()?.getItems?.()[Equipment.CAPE_SLOT]?.getId?.();
+  return cape === ItemIds.COOKING_CAPE || cape === ItemIds.COOKING_CAPE_T_;
+}
+
 function isSuccess(player, cookable) {
   const cookingLevel = player.getSkillManager().getCurrentLevel(Skill.COOKING);
-  if (cookingLevel >= cookable.stopBurn) {
+  if (wearingCookingCape(player)) {
     return true;
   }
-  if (cookable.stopBurn <= cookable.level) {
+  const stopBurn = stopBurnLevel(player, cookable);
+  if (cookingLevel >= stopBurn) {
+    return true;
+  }
+  if (stopBurn <= cookable.level) {
     return true;
   }
 
   const burnBonus = 3;
   let burnChance = 45.0 - burnBonus;
-  const burnDec = burnChance / (cookable.stopBurn - cookable.level);
+  const burnDec = burnChance / (stopBurn - cookable.level);
   burnChance -= (cookingLevel - cookable.level) * burnDec;
   const roll = Math.random() * 100.0;
   return burnChance <= roll;
@@ -273,4 +305,5 @@ module.exports = {
       cookObjectNames: COOKABLE_OBJECT_NAMES.size,
     });
   },
+  _test: { isSuccess, stopBurnLevel, wearingCookingCape, GAUNTLETS_STOP_BURN, COOKABLE_BY_RAW },
 };

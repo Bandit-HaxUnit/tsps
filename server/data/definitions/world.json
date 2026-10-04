@@ -1,7 +1,7 @@
 {
-  "disabledPlugins": ["TutorialIsland", "VoiceChat"],
-  "pluginConfig": {},
-  "experienceMultiplier": 1,
+  "disabledPlugins": ["VoiceChat"],
+  "pluginConfig": {"TutorialIsland:allowSkip": true},
+  "experienceMultiplier": 10,
   "spawn": {
     "x": 3089,
     "y": 3524,

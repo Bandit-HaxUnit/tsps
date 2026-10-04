@@ -77,7 +77,7 @@ test('::toaskiptoreward can force a unique and the pet to one player', () => {
   const { ItemIdentifiers: I } = require('../dist/util/ItemIdentifiers');
   const Shared = require('../plugins/minigames/toa/ToaShared');
   const Rewards = require('../plugins/minigames/toa/ToaRewards');
-  Shared.bind({ core: PluginManager.getCoreApi() });
+  Shared.bind({ core: PluginManager.getCoreApi(), emitCustomEvent: () => {} });
   const playerStub = () => {
     const attributes = new Map();
     const empty = { contains: () => false };

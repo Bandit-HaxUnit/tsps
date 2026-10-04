@@ -9,26 +9,36 @@ const { Skill } = require("../dist/game/model/Skill");
 const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
 
 const Potions = require("../plugins/items/Potions.plugin");
-const { applyPrayerRestore, applySanfewRestore, applyDivine, processDivine, pauseTimedEffects, resumeTimedEffects } = Potions._test;
+const {
+  applyPrayerRestore, applySanfewRestore, applyAncientBrew, applyDivine, processDivine,
+  applyMenaphiteRemedy, processMenaphite, processBoostDecay, curePoisonAndVenom,
+  pauseTimedEffects, resumeTimedEffects,
+} = Potions._test;
 
 function createPlayer({ base = 99, current = 1, inventory = [], equipment = [] } = {}) {
   const levels = new Map(Skill.values().map((skill) => [skill, current]));
   const attributes = new Map();
   const player = {
     levels,
+    attributes,
+    poisonDamage: current,
+    venomed: current > 0,
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => ({ contains: (id) => inventory.includes(id) }),
     getEquipment: () => ({ contains: (id) => equipment.includes(id) }),
-    getPacketSender: () => ({ sendSound() { return this; } }),
+    getPacketSender: () => ({ sendSound() { return this; }, sendPoisonType() {} }),
     getSession: () => ({ sendClientPacket() {} }),
     setHitpoints(value) { levels.set(Skill.HITPOINTS, value); },
+    setPoisonDamage(value) { player.poisonDamage = value; },
+    setVenomed(value) { player.venomed = value; },
     sendMessage() {},
     getSkillManager: () => ({
       getMaxLevel: () => base,
       getCurrentLevel: (skill) => levels.get(skill),
       setCurrentLevels: (skill, level) => levels.set(skill, level),
       increaseCurrentLevel: (skill, amount, max) => levels.set(skill, Math.min(max, levels.get(skill) + amount)),
+      decreaseCurrentLevel: (skill, amount, minimum) => levels.set(skill, Math.max(minimum, levels.get(skill) - amount)),
     }),
   };
   return player;
@@ -160,4 +170,85 @@ test("a house tablet goes to the house portal and enters unless Outside was chos
   assert.equal(teleports.length, 3);
   assert.ok(teleports.every(({ destination }) => destination === HOUSE_PORTAL));
   assert.deepEqual(teleports.map(({ onArrival }) => onArrival?.() ?? null), ["entered", "entered", null]);
+});
+
+test("the minute cycle decays boosts and restores drains one point toward base", () => {
+  const player = createPlayer({ base: 99, current: 99 });
+  player.levels.set(Skill.ATTACK, 110);
+  player.levels.set(Skill.STRENGTH, 90);
+  player.levels.set(Skill.PRAYER, 110);
+  player.levels.set(Skill.HITPOINTS, 110);
+
+  processBoostDecay(player);
+  assert.equal(player.levels.get(Skill.ATTACK), 110, "the first process only arms the cycle");
+  player.setAttribute("potions:boost-cycle", Date.now() - 1);
+  processBoostDecay(player);
+  assert.equal(player.levels.get(Skill.ATTACK), 109, "a boost loses a point");
+  assert.equal(player.levels.get(Skill.STRENGTH), 91, "a drain gains a point");
+  assert.equal(player.levels.get(Skill.PRAYER), 110, "prayer points do not decay");
+  assert.equal(player.levels.get(Skill.HITPOINTS), 110, "hitpoints do not decay");
+});
+
+test("a divine-timed skill is pinned and only decays after the divine state ends", () => {
+  const player = createPlayer({ base: 99, current: 99 });
+  applyDivine(player, (p) => p.levels.set(Skill.ATTACK, 118), [Skill.ATTACK]);
+  processDivine(player);
+  player.setAttribute("potions:boost-cycle", Date.now() - 1);
+  processBoostDecay(player);
+  assert.equal(player.levels.get(Skill.ATTACK), 118, "the divine boost holds through a decay cycle");
+  player.setAttribute("potions:divine:state", null);
+  player.setAttribute("potions:boost-cycle", Date.now() - 1);
+  processBoostDecay(player);
+  assert.equal(player.levels.get(Skill.ATTACK), 117, "once unpinned it decays normally");
+});
+
+test("ancient and forgotten brew boost Magic, over-restore prayer and drain melee stats", () => {
+  const player = createPlayer({ base: 99, current: 99 });
+  applyAncientBrew(player, 2, 0.05);
+  assert.equal(player.levels.get(Skill.MAGIC), 99 + 2 + 4, "floor(99 * 0.05) + 2");
+  assert.equal(player.levels.get(Skill.PRAYER), 103, "floor(99 * 0.10) + 2, capped at +5% over base");
+  assert.equal(player.levels.get(Skill.ATTACK), 99 - (2 + 9), "floor(99 * 0.10) + 2 drain");
+
+  const forgotten = createPlayer({ base: 99, current: 99 });
+  applyAncientBrew(forgotten, 3, 0.08);
+  assert.equal(forgotten.levels.get(Skill.MAGIC), 99 + 3 + 7, "floor(99 * 0.08) + 3");
+});
+
+test("Menaphite remedy restores combat stats every 15s and dispels divine boosts", () => {
+  const player = createPlayer({ base: 99, current: 1 });
+  applyDivine(player, () => {}, [Skill.ATTACK]);
+  applyMenaphiteRemedy(player);
+  assert.equal(player.getAttribute("potions:divine:state"), null, "divine state is dispelled");
+  assert.equal(player.levels.get(Skill.PRAYER), 1, "prayer is not restored");
+  assert.equal(player.levels.get(Skill.ATTACK), 1 + 15 + 6, "floor(99 * 0.16) + 6");
+  player.getAttribute("potions:menaphite:state").nextRestoreAt = Date.now() - 1;
+  processMenaphite(player);
+  assert.equal(player.levels.get(Skill.ATTACK), 1 + 2 * (15 + 6), "the 15s restore repeats");
+  player.setAttribute("potions:menaphite:state", { endsAt: Date.now() - 1, nextRestoreAt: Date.now() - 1 });
+  processMenaphite(player);
+  assert.equal(player.getAttribute("potions:menaphite:state"), null, "the state expires after 5 minutes");
+});
+
+test("alcohol registrations load and apply their Wiki boosts", () => {
+  for (const id of [ItemIdentifiers.WIZARDS_MIND_BOMB, ItemIdentifiers.DWARVEN_STOUT, ItemIdentifiers.AXEMANS_FOLLY, ItemIdentifiers.BANDITS_BREW]) {
+    const entry = Potions._test.findPotionEntry(id);
+    assert.ok(entry, `registered ${id}`);
+  }
+  const player = createPlayer({ base: 99, current: 99 });
+  Potions._test.findPotionEntry(ItemIdentifiers.WIZARDS_MIND_BOMB).potion.effect(player);
+  assert.equal(player.levels.get(Skill.MAGIC), 102);
+  assert.equal(player.levels.get(Skill.ATTACK), 99 - (1 + 4));
+  const stout = createPlayer({ base: 99, current: 99 });
+  Potions._test.findPotionEntry(ItemIdentifiers.DWARVEN_STOUT).potion.effect(stout);
+  assert.equal(stout.levels.get(Skill.MINING), 100);
+  assert.equal(stout.levels.get(Skill.SMITHING), 100);
+});
+
+test("curing poison also clears the sticky venom flag", () => {
+  const player = createPlayer({ current: 99 });
+  player.setPoisonDamage(20);
+  player.setVenomed(true);
+  curePoisonAndVenom(player);
+  assert.equal(player.poisonDamage, 0);
+  assert.equal(player.venomed, false);
 });

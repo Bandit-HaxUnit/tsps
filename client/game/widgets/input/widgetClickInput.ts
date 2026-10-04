@@ -53,8 +53,15 @@ export function processWidgetClickInput(
                     typeof (w as any).itemId === "number" &&
                     (w as any).itemId > 0;
                 // Check for actual handlers, not just empty arrays
-                // Empty arrays are truthy but shouldn't count as having handlers
-                const hasActions = Array.isArray(w.actions) && w.actions.length > 0;
+                // Empty arrays are truthy but shouldn't count as having handlers.
+                // OSRS lists an op only when it has text, and a left-click is the top menu
+                // entry: a component whose ops are all empty (or the cache's "*" placeholder)
+                // offers nothing, so the click falls through to what lies under it - e.g. the
+                // bolt pouch slot (387:30), emptied by script 4039, over Dizana's quiver slot.
+                const hasActionList = Array.isArray(w.actions) && w.actions.length > 0;
+                const hasActions =
+                    hasActionList && w.actions.some((action: any) => !!sanitizeText(action));
+                const opsCleared = hasActionList && !hasActions;
                 const getWidgetByUid = (uid: number) => widgetManager?.getWidgetByUid(uid);
                 const isPauseButtonWidget = isPauseButtonWidgetUtil(
                     w,
@@ -95,7 +102,7 @@ export function processWidgetClickInput(
                     // IF_SETEVENTS transmit bits can make otherwise-empty STATIC widgets
                     // clickable (e.g., server-authoritative tab controls). For dynamic children,
                     // transmit-only hit targets can incorrectly steal clicks from scripted row widgets.
-                    (!isDynamicWidget && hasTransmitOps) ||
+                    (!isDynamicWidget && hasTransmitOps && !opsCleared) ||
                     hasSpellAction
                 );
                 if (hasHandlers) {

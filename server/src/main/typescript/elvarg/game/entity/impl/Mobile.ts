@@ -94,8 +94,8 @@ export abstract class Mobile extends Entity {
     specialActivated = false;
     recoveringSpecialAttack = false;
     isTeleporting = false;
-    primaryHit: any;
-    secondaryHit: any;
+    /** Every hitsplat shown this tick, in the order the hits landed. */
+    private readonly tickHits: HitDamage[] = [];
 
     private registred: boolean
 
@@ -216,6 +216,7 @@ export abstract class Mobile extends Entity {
      */
     resetUpdating() {
         this.getUpdateFlag().reset();
+        this.tickHits.length = 0;
         this.walkingDirection = Direction.NONE;
         this.runningDirection = Direction.NONE;
         this.needsPlacement = false;
@@ -241,16 +242,7 @@ export abstract class Mobile extends Entity {
         health?: { current: number; max: number; bar?: { id: number; width: number } },
     ): void {
         const hit = new HitDamage(Math.max(0, Math.trunc(damage)), HitMask.RED).setSplatTypes(splat.mine, splat.others);
-        const flags = this.getUpdateFlag();
-        if (!flags.flagged(Flag.SINGLE_HIT)) {
-            this.setPrimaryHit(hit);
-            flags.flag(Flag.SINGLE_HIT);
-        } else if (!flags.flagged(Flag.DOUBLE_HIT)) {
-            this.setSecondaryHit(hit);
-            flags.flag(Flag.DOUBLE_HIT);
-        } else {
-            return;
-        }
+        this.addTickHit(hit);
         if (health) this.displayedHealth = health;
     }
 
@@ -587,20 +579,17 @@ export abstract class Mobile extends Entity {
         this.setHitpoints(outcome);
         return hit;
     }
-    getPrimaryHit(): HitDamage {
-        return this.primaryHit;
+    /**
+     * Queues a hitsplat for this tick's update. Every hit is sent; the client keeps
+     * four on screen and its hitsplat definitions decide which one a fifth replaces.
+     */
+    addTickHit(hit: HitDamage): void {
+        this.tickHits.push(hit);
+        this.getUpdateFlag().flag(Flag.HIT);
     }
 
-    setPrimaryHit(hit: HitDamage): void {
-        this.primaryHit = hit;
-    }
-
-    getSecondaryHit(): HitDamage {
-        return this.secondaryHit;
-    }
-
-    setSecondaryHit(hit: HitDamage): void {
-        this.secondaryHit = hit;
+    getTickHits(): readonly HitDamage[] {
+        return this.tickHits;
     }
 
     getWalkingDirection(): Direction {
