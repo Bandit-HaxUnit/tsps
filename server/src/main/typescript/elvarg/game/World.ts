@@ -424,7 +424,8 @@ export class World {
         location: Location | null | undefined,
         ignoredNpc: NPC | null = null,
         size = 1,
-        privateArea?: any
+        privateArea?: any,
+        ignoreWalkThrough = false
     ): boolean {
         if (!location) {
             return false;
@@ -433,7 +434,8 @@ export class World {
             for (let y = 0; y < Math.max(1, size); y++) {
                 const key = World.getNpcTileKey(location.getX() + x, location.getY() + y, location.getZ());
                 if (World.npcTileOccupants.get(key)?.some((npc) => npc && npc !== ignoredNpc &&
-                    (privateArea === undefined || npc.getPrivateArea() === privateArea))) {
+                    (privateArea === undefined || npc.getPrivateArea() === privateArea) &&
+                    (!ignoreWalkThrough || !npc.canWalkThroughNPCs()))) {
                     return true;
                 }
             }

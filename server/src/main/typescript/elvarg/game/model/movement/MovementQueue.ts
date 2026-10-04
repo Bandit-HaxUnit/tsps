@@ -562,21 +562,30 @@ export class MovementQueue {
      * as blocking NPCs but never as blocking players, so NPCs are stopped by both
      * NPCs and players while players walk freely through each other.
      *
+     * The NPC flag blocks players too (osrs-docs: Entity Collision - "Checked by
+     * all NPCs but the excluded NPCs, players"), which is what stops a player from
+     * stepping onto a moving NPC while walking to interact with it. Excluded NPCs
+     * (followers/pets and the walk-through flag) add no flag, so they are ignored.
+     *
      * Upstream splits the two opt-outs (walk-through-NPCs and walk-through-players
      * are separate NPC properties). Pets are this server's only walk-through NPC
      * and need both, so one flag covers it; split canWalkThroughNPCs() if an NPC
      * ever needs to pass NPCs but not players.
      */
     private isDynamicallyOccupied(next: Location): boolean {
+        const size = this.character.getSize();
+        const privateArea = this.character.getPrivateArea();
         if (this.character.isNpc() && !(this.character as NPC).canWalkThroughNPCs()) {
-            const size = this.character.getSize();
-            const privateArea = this.character.getPrivateArea();
             if (World.isNpcOccupyingTile(next, this.character as NPC, size, privateArea)) {
                 return true;
             }
             if (World.isPlayerOccupyingTile(next, null, size, privateArea)) {
                 return true;
             }
+        }
+        if (this.character.isPlayer() &&
+            World.isNpcOccupyingTile(next, null, size, privateArea, true)) {
+            return true;
         }
         return false;
     }
