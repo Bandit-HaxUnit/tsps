@@ -6,7 +6,7 @@ const Gift = require("./GiftRewards");
 const GROUP = 184;
 const MODEL = (GROUP << 16) | 7;
 const FIRST_OPTION = 8;
-const SELECT_ACTION = 2;
+const SELECT_ACTION = 1;
 // Cache 237's unnamed macro-quiz items; RuneLite's generated ItemID labels
 // identify their categories. Fish variants share an answer, so use one.
 const FISH = 6189, SWORD = 6191, BATTLEAXE = 6192, HELMET = 6193, SHIELD = 6194;

@@ -6,7 +6,7 @@
 const TRAY_GROUP = 297;
 const TRAY_TITLE = (TRAY_GROUP << 16) | 2;
 const TRAY_FIRST_FOOD = 6;
-const TRAY_SELECT_ACTION = 2;
+const TRAY_SELECT_ACTION = 1;
 const EVENT_LIFETIME_MS = 180_000;
 const NAG_INTERVAL_MS = 18_000;
 const MAX_DISTANCE = 15;
@@ -185,7 +185,7 @@ function serve(active, rewards, exchange = null) {
   // Void clears state before serving: repeated interactions cannot claim twice.
   finish(active);
   if (exchange) inventory.deleteAtSlot(exchange.slot, 1);
-  for (const item of items) inventory.adds(item);
+  for (const item of items) inventory.addItem(item);
   return true;
 }
 

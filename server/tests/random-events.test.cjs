@@ -72,7 +72,7 @@ function harness(t, members = true) {
       getInterfaceId: () => p.interfaceId, sendMessage: text => messages.push(text),
       getInventory: () => ({ get: slot => slots[slot], getItems: () => slots, getFreeSlots: () => p.free,
         containsNumber: id => slots.some(item => item?.getId() === id && item.getAmount() > 0),
-        adds(item) { rewards.push(item.getId()); rewardItems.push(item); },
+        addItem(item) { rewards.push(item.getId()); rewardItems.push(item); },
         deleteAtSlot(slot) { slots[slot] = undefined; p.free++; } }),
       getSkillManager: () => ({ getMaxLevel: skill => levels.get(skill) ?? 1,
         getExperience: skill => xp.get(skill) ?? 0,
@@ -182,14 +182,59 @@ test('Genie and dwarf deny other players, retain full-inventory events and grant
   }
 });
 
+test('every event delivers real inventory items and refreshes the container exactly once per reward', t => {
+  const h = harness(t);
+  const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+  const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
+  t.mock.method(ItemDefinition, 'forId', id => ({ isStackable: () => id === I.COINS }));
+  for (const [index, name, expected] of [[0, 'Genie', [[I.LAMP, 1]]],
+    [1, 'Sandwich lady', [[I.BAGUETTE, 1]]], [2, 'Drunken Dwarf', [[I.KEBAB, 1], [I.BEER, 1]]],
+    [3, 'Rick Turpentine', [[I.COINS, 80]]], [4, 'Niles', [[I.COINS, 80]]],
+    [5, 'Mysterious Old Man', [[I.COINS, 80]]], [6, 'Dr Jekyll', [[I.STRENGTH_POTION_2_, 1]]],
+    [7, 'Strange plant', [[I.STRANGE_FRUIT, 1]]]]) {
+    const p = h.player(), inventory = new Inventory(p), sender = p.getPacketSender();
+    let refreshes = 0;
+    sender.sendItemContainer = container => { assert.equal(container, inventory); refreshes++; };
+    p.getPacketSender = () => sender;
+    p.getInventory = () => inventory;
+    const npc = h.spawn(p, index, 0);
+    h.random(index === 1 ? 0.5 : 0);
+    if (index === 7) h.advance(27_000);
+    const interact = () => h.hooks[name][index === 7 ? 'Pick' : 'Talk-to']({ player: p, npc });
+    interact();
+    if (index === 1) h.emit('InterfaceActionClick', { player: p, buttonId: (297 << 16) | 6, action: 1 });
+    if (index === 4) certerChoice(h, p, 'Fish');
+    interact();
+    assert.deepEqual(inventory.getValidItems().map(item => [item.getId(), item.getAmount()]), expected, name);
+    assert.equal(refreshes, expected.length, name);
+    assert.equal(npc.removed, true, name);
+  }
+  // The real container must also accept a stacked reward with no free slot and
+  // reuse the exact consumed herb slot for a full-inventory exchange.
+  for (const index of [3, 6]) {
+    const p = h.player(), inventory = new Inventory(p), sender = p.getPacketSender();
+    sender.sendItemContainer = () => {};
+    p.getPacketSender = () => sender; p.getInventory = () => inventory;
+    for (let slot = 0; slot < 28; slot++) inventory.getItems()[slot] = new Item(I.SHARK, 1);
+    inventory.getItems()[5] = new Item(index === 3 ? I.COINS : I.TORSTOL, index === 3 ? 10 : 1);
+    const npc = h.spawn(p, index); h.random(0);
+    assert.equal(inventory.getFreeSlots(), 0);
+    h.hooks[index === 3 ? 'Rick Turpentine' : 'Dr Jekyll']['Talk-to']({ player: p, npc });
+    if (index === 6) h.prompts.at(-1).options[0].cb();
+    assert.equal(inventory.get(5).getId(), index === 3 ? I.COINS : I.STAMINA_POTION_4_);
+    assert.equal(inventory.get(5).getAmount(), index === 3 ? 90 : 1);
+    assert.equal(inventory.getFreeSlots(), 0); assert.equal(npc.removed, true);
+  }
+});
+
 test('Sandwich tray validates owner, selection and open interface, with harmless retry and stale roll', t => {
   const h = harness(t), p = h.player(), other = h.player(), npc = h.spawn(p, 1, 0);
-  const click = (player, index, action = 2) => h.emit('InterfaceActionClick', { player, buttonId: (297 << 16) | (6 + index), action });
+  const click = (player, index, action = 1) => h.emit('InterfaceActionClick', { player, buttonId: (297 << 16) | (6 + index), action });
   click(p, 0); assert.deepEqual(p.rewards, []);
   h.hooks['Sandwich lady']['Talk-to']({ player: p, npc });
   assert.equal(p.tray.length, 7); assert.match(p.trayTitle, /baguette/);
-  assert.deepEqual(p.flags, Array.from({ length: 7 }, (_, index) => [(297 << 16) | (6 + index), -1, -1, 4]));
-  click(p, 0, 1); assert.deepEqual(p.rewards, []);
+  assert.deepEqual(p.flags, Array.from({ length: 7 }, (_, index) => [(297 << 16) | (6 + index), -1, -1, 2]));
+  click(p, 0, 2); assert.deepEqual(p.rewards, []);
   other.interfaceId = 297; click(other, 0); click(p, 1); assert.deepEqual(p.rewards, []); assert.equal(npc.removed, undefined);
   p.free = 0; click(p, 0); assert.equal(npc.removed, undefined);
   p.free = 1; h.random(0); click(p, 0); click(p, 0);
@@ -302,7 +347,7 @@ test('F2P has no Jekyll definition and coins can join an existing stack in a ful
   const last = h.spawn(h.player(), 4, 6); assert.equal(last.definition.id, N.GILES);
 });
 
-function certerChoice(h, p, name, action = 2) {
+function certerChoice(h, p, name, action = 1) {
   const index = [1, 2, 3].findIndex(child => p.strings?.get((184 << 16) | child) === name);
   assert.notEqual(index, -1, `choice ${name}`);
   h.emit('InterfaceActionClick', { player: p, buttonId: (184 << 16) | (8 + index), action });
@@ -316,9 +361,9 @@ test('all Certer brothers use cache models, distinct answers, owner/op/interface
     h.random(0); h.hooks[name]['Talk-to']({ player: p, npc });
     assert.equal(p.tray[0][0], (184 << 16) | 7); assert.equal(p.tray[0][1], 6189);
     assert.equal(new Set(p.strings.values()).size, 3);
-    assert.deepEqual(p.flags, [8, 9, 10].map(child => [(184 << 16) | child, -1, -1, 4]));
+    assert.deepEqual(p.flags, [8, 9, 10].map(child => [(184 << 16) | child, -1, -1, 2]));
     other.interfaceId = 184; other.strings = p.strings; certerChoice(h, other, 'Fish');
-    certerChoice(h, p, 'Fish', 1); p.interfaceId = -1; certerChoice(h, p, 'Fish');
+    certerChoice(h, p, 'Fish', 2); p.interfaceId = -1; certerChoice(h, p, 'Fish');
     assert.deepEqual(p.rewards, []); assert.equal(npc.removed, undefined);
     h.hooks[name]['Talk-to']({ player: p, npc });
     p.free = 0; h.random(0.6); certerChoice(h, p, 'Fish');

@@ -56,7 +56,10 @@ description is registered for command search.
 
 Verify after build: `node --test tests/random-events.test.cjs tests/food-effects.test.cjs`.
 These tests exercise real plugin registration with controlled lifecycle/collision/
-inventory adapters; they do not replace a live-client visual check of tray rendering.
+inventory adapters, plus the real Inventory reward path. From `client/`, run
+`yarn tsx tests/widget-loader.test.ts` to check the plugin's actual selection flags
+against the current cache decoder/menu builder. These do not replace a live-client
+visual check of tray rendering.
 
 ## Rick Turpentine, Dr Jekyll and Certers
 
@@ -89,7 +92,7 @@ There is no obsolete Mr Hyde punishment.
 
 Cache 237 verifies NPCs 375/307/5436–5438 with Talk-to/Dismiss and rewards with
 their normal Eat/Drink actions. `yarn dump:widget 184` verifies Certer model7,
-texts1–3 and selectors8–10 (option2). Cache quiz-presentation items 6189/6191–6198
+texts1–3 and selectors8–10 (option1). Cache quiz-presentation items 6189/6191–6198
 have the expected model/angles/zoom. RuneLite's generated `ItemID.java` gives
 their food/weapon/armour/tool/jewellery categories, and the historical
 [presentation-item list](https://runescape.wiki/w/Hex_edit_detected) identifies
@@ -97,8 +100,10 @@ fish, sword, battleaxe, helmet, shield, shears, spade, ring and necklace.
 Both fish models have the same answer; one is used to keep nine distinct choices.
 The question stays fixed when reopened; incorrect answers end the event without
 reward, and expiry/dismissal/lifecycle cleanup close an owned open interface.
-Both Certer and Sandwich selectors have zero cache flags and use option2;
-opening either interface enables that option with flags4 on the exact selectors.
+Both Certer and Sandwich selectors have cache flags2 and use option1;
+opening either interface enables that option with flags2 on the exact selectors.
+The dump script now reads cache 237's four-byte model ID, matching the client;
+its old two-byte decoder shifted the actions/flags and incorrectly suggested option2.
 Other packet options are rejected by the handlers.
 The Certer brothers share one event weight.
 
