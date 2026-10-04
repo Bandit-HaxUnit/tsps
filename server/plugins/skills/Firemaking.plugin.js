@@ -232,21 +232,39 @@ function findNearbyCampfire(location, privateArea, ignoredObject) {
   return null;
 }
 
+/**
+ * A floor decoration (shape 22) only blocks a fire tile when its clip type says
+ * so. Tutorial Island's grass tufts are shape 22 and walkable, so they don't
+ * stop a fire; everything else (scenery, an existing fire) still does.
+ */
+function blocksFireTile(object) {
+  if (!object) {
+    return false;
+  }
+  if (object.getType?.() === 22) {
+    return object.getDefinition?.()?.isClippedDecoration?.() === true;
+  }
+  return true;
+}
+
 function hasObjectAtLocation(location, privateArea) {
   if (privateArea) {
     const instanced = privateArea.getObjects?.() ?? [];
-    if (instanced.some((object) => object.getLocation().equals(location))) {
+    if (instanced.some((object) => object.getLocation().equals(location) && blocksFireTile(object))) {
       return true;
     }
   }
   RegionManager.loadMapFiles(location.getX(), location.getY());
   const hash = MapObjects.getHash(location.getX(), location.getY(), location.getZ());
   const objects = MapObjects.mapObjects.get(hash) ?? [];
-  return objects.some((object) => object.getLocation().equals(location));
+  return objects.some((object) => object.getLocation().equals(location) && blocksFireTile(object));
 }
 
 function isFireTileBlocked(location, privateArea) {
-  return ObjectManager.existsLocation(location) || hasObjectAtLocation(location, privateArea);
+  const worldBlocked = World.getObjects().some(
+    (object) => object.getLocation().equals(location) && blocksFireTile(object)
+  );
+  return worldBlocked || hasObjectAtLocation(location, privateArea);
 }
 
 function canLightFireAt(player, location, privateArea) {
@@ -911,6 +929,7 @@ module.exports = {
   CAMPFIRE_MAX_LIFETIME_TICKS,
   CAMPFIRE_MIN_SPACING_TILES,
   isFireTileBlocked,
+  blocksFireTile,
   register(api) {
     TaskManager = api.getTaskManager();
     ObjectManager = api.getObjectManager();

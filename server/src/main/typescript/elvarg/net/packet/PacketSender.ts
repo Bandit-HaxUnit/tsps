@@ -501,10 +501,12 @@ export class PacketSender {
   }
 
   /**
-   * Points the native hint arrow at a tile. `tilePosition` is kept for signature
-   * compatibility; the client always centres the 6-byte marker on the tile.
+   * Points the native hint arrow at a tile. The arrow follows the player's
+   * plane; `height` lifts it above the tile (in tiles) for targets on tall
+   * scenery, like the tutorial tree. `tilePosition` is kept for signature
+   * compatibility.
    */
-  public sendPositionalHint(position: any, tilePosition = 2): this {
+  public sendPositionalHint(position: any, _tilePosition = 2, height = 0): this {
     if (
       !position ||
       typeof position.getX !== "function" ||
@@ -512,10 +514,9 @@ export class PacketSender {
     ) {
       return this;
     }
-    const z = typeof position.getZ === "function" ? position.getZ() : 0;
     this.player
       .getSession()
-      .sendClientPacket(encodeHintArrow(2, position.getX(), position.getY(), z));
+      .sendClientPacket(encodeHintArrow(2, position.getX(), position.getY(), height));
     return this;
   }
 

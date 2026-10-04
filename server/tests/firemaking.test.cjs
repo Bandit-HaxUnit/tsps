@@ -88,6 +88,18 @@ test("firemaking logs, success chance, pyromancer bonus and campfire timers foll
   assert.equal(campfireCheckMessage(10), "The embers glow softly.");
   assert.equal(campfireCheckMessage(60), "The flames flicker gently.");
   assert.equal(campfireCheckMessage(299), "The roaring fire crackles invitingly.");
+
+  // Walkable floor decorations (Tutorial Island's grass, shape 22 without a
+  // clip) must not refuse a fire tile; scenery still does.
+  const { blocksFireTile } = Firemaking;
+  const object = (type, clipped) => ({
+    getType: () => type,
+    getDefinition: () => ({ isClippedDecoration: () => clipped }),
+  });
+  assert.equal(blocksFireTile(object(22, false)), false);
+  assert.equal(blocksFireTile(object(22, true)), true);
+  assert.equal(blocksFireTile(object(10, false)), true, "scenery blocks");
+  assert.equal(blocksFireTile(null), false);
 });
 
 test("lighting, tending and expiry move a log from inventory to fire to ashes", async () => {

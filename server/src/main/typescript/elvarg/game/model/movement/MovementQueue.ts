@@ -97,6 +97,7 @@ export class MovementQueue {
     private blockedByDynamicOccupancy = false;
     private routeEvaluated = false;
     private alternativeRoute = false;
+    private entityPursuit: (() => void) | null = null;
     /**
      * Set when a step toward the head checkpoint was rejected, plus whether an
      * entity was the reason. Both survive beginCycle() so the next cycle's
@@ -396,6 +397,11 @@ export class MovementQueue {
         return this.movedThisCycle;
     }
 
+    /** Stepped during the current world cycle (unlike didMoveThisCycle, never stale before this actor's turn). */
+    public steppedThisWorldCycle(): boolean {
+        return this.lastMoveCycle === World.getProcessCycle();
+    }
+
     public didMovePreviousCycle(): boolean {
         return this.lastMoveCycle === World.getProcessCycle() - 1;
     }
@@ -559,14 +565,11 @@ export class MovementQueue {
     }
 
     /**
-     * Occupancy the static clipping map cannot know about. A player marks its tile
-     * as blocking NPCs but never as blocking players, so NPCs are stopped by both
-     * NPCs and players while players walk freely through each other.
-     *
-     * The NPC flag blocks players too (osrs-docs: Entity Collision - "Checked by
-     * all NPCs but the excluded NPCs, players"), which is what stops a player from
-     * stepping onto a moving NPC while walking to interact with it. Excluded NPCs
-     * (followers/pets and the walk-through flag) add no flag, so they are ignored.
+     * Occupancy the static clipping map cannot know about. The NPC flag is set and
+     * checked by NPCs only; players pass over it (and clear it in OSRS, which is
+     * the entity-stacking mechanic) - osrs-docs: Entity Collision, NPC flag
+     * "Checked by: all NPCs but the excluded NPCs". Only the separate "full" flag
+     * (gorillas, Vanstrom) blocks players, and no NPC here sets it yet.
      *
      * Upstream splits the two opt-outs (walk-through-NPCs and walk-through-players
      * are separate NPC properties). Pets are this server's only walk-through NPC
@@ -583,10 +586,6 @@ export class MovementQueue {
             if (World.isPlayerOccupyingTile(next, null, size, privateArea)) {
                 return true;
             }
-        }
-        if (this.character.isPlayer() &&
-            World.isNpcOccupyingTile(next, null, size, privateArea, true)) {
-            return true;
         }
         return false;
     }
@@ -1162,9 +1161,11 @@ export class MovementQueue {
             return;
         }
 
-        let routedX = entity.getLocation().getX();
-        let routedY = entity.getLocation().getY();
-        TaskManager.submit(new MovementTask(this.player.getIndex(), (task: MovementTask) => {
+        // OSRS order (LostCity Player.processInteraction): before stepping, try the
+        // op, then re-path to where the target stands now if on the last waypoint;
+        // step; try the op again. Re-pathing after the step instead leaves the
+        // player a tick behind a walking NPC, trailing it before the op fires.
+        const task = new MovementTask(this.player.getIndex(), (task: MovementTask) => {
             if (!this.isInteractionTargetValid(entity)) {
                 this.reset();
                 task.stop();
@@ -1173,37 +1174,52 @@ export class MovementQueue {
             this.player.setMobileInteraction(entity);
 
             if (reached()) {
-                this.player.getMovementQueue().reset();
+                this.reset();
                 runnable?.();
                 task.stop();
                 return;
-            }
-
-            const queue = this.player.getMovementQueue();
-            const location = entity.getLocation();
-            // Only the final stretch is rebuilt, and only when the target actually
-            // moved - the turning points behind it are still good. A step the clipping
-            // map rejected invalidates the corridor wherever we are standing.
-            const targetMoved = routedX !== location.getX() || routedY !== location.getY();
-            if (queue.size() === 0 || queue.wasRouteInvalidated() || (queue.size() === 1 && targetMoved)) {
-                routedX = location.getX();
-                routedY = location.getY();
-                PathFinder.calculateEntityRoute(this.player, entity);
             }
 
             if (this.canInteractWithUnreachableNpc(entity)) {
-                queue.reset();
+                this.reset();
                 task.stop();
                 runnable?.();
                 return;
             }
-            if (queue.points.length || queue.isMovings()) {
+            if (this.points.length || this.isMovings()) {
                 return;
             }
-            queue.reset();
+            this.reset();
             task.stop();
             this.player.sendMessage("I can't reach that!");
-        }));
+        });
+        this.entityPursuit = () => {
+            if (!task.isRunning()) {
+                this.entityPursuit = null;
+                return;
+            }
+            if (!this.isInteractionTargetValid(entity)) {
+                return; // the post-step check ends it
+            }
+            if (reached()) {
+                this.entityPursuit = null;
+                this.reset();
+                this.player.setMobileInteraction(entity);
+                runnable?.();
+                task.stop();
+                return;
+            }
+            // A step the clipping map rejected invalidates the corridor wherever we stand.
+            if (this.points.length <= 1 || this.wasRouteInvalidated()) {
+                PathFinder.calculateEntityRoute(this.player, entity);
+            }
+        };
+        TaskManager.submit(task);
+    }
+
+    /** Pre-step half of an NPC walk-to; called from the player's turn before movement. */
+    public processEntityPursuit(): void {
+        this.entityPursuit?.();
     }
 
     /**
@@ -1373,8 +1389,10 @@ export class MovementQueue {
     }
 
     private canInteractWithUnreachableNpc(entity: Mobile): boolean {
-        // Prefer adjacent reach. Counters may leave an NPC visible but no adjacent tile reachable.
-        return entity.isNpc() && (this.alternativeRoute || this.points.length === 0) && !this.isMovings() &&
+        // Prefer adjacent reach. Counters (or water, for fishing spots) may leave an NPC
+        // visible but no adjacent tile reachable: interact once the nearest-tile route
+        // has been walked, on the arrival tick like a normal reach.
+        return entity.isNpc() && this.points.length === 0 &&
             this.isWithinEntityInteractionDistance(entity.getLocation()) &&
             RegionManager.canProjectileAttack(this.player, this.player.getLocation(), entity.getLocation());
     }

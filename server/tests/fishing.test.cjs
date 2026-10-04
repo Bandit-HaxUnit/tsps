@@ -218,6 +218,14 @@ test("the infernal harpoon cooks a third of its catch, runs on 5,000 charges and
     Math.random = random;
   }
 
+  // A fishing:success listener can stop the session (Tutorial Island's one shrimp).
+  events.set("fishing:success", (payload) => { payload.stop = true; });
+  const stopCatch = player({ inventory: [I.SMALL_FISHING_NET] });
+  assert.equal(landCatch(stopCatch, TOOLS.NET, findTool(stopCatch, TOOLS.NET), [FISH.SHRIMP]), true);
+  events.delete("fishing:success");
+  const keepCatch = player({ inventory: [I.SMALL_FISHING_NET] });
+  assert.equal(landCatch(keepCatch, TOOLS.NET, findTool(keepCatch, TOOLS.NET), [FISH.SHRIMP]), false);
+
   const check = player({ inventory: [I.INFERNAL_HARPOON] });
   itemActions.get("Infernal harpoon").Check({ player: check, item: check.items[0] });
   assert.equal(check.messages[0], "Your infernal harpoon has 5,000 charges left.");
