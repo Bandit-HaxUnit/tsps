@@ -227,6 +227,43 @@ Fall back to raw ids only when the name is genuinely ambiguous or the behaviour 
 id-specific (a single transformed variant, for example). When you do, use a named constant
 from `IdEnums` / the generated identifier files, never a bare number.
 
+### Area-Scoped Content
+
+Content that only applies where a player stands (the Wilderness, a minigame, a boss room) is
+an `Area`, not a set of global hooks. A global `onPlayerProcess` / `onCanAttack` /
+`onCanTeleport` / `onNpcAggressionTolerance` runs for every player on every call and has to
+ask "am I in my area?" itself - O(players) per tick per hook even when the area is empty.
+`AreaManager` already resolves each actor's area once, when they move, so an Area costs
+nothing for anyone outside it and gets reliable `postEnter` / `postLeave` edges for free.
+
+```js
+function createArena(api) {
+  class Arena extends api.core.Area {
+    process(mobile) { /* per tick, actors in the area only */ }
+    postLeave(mobile, logout) { /* reset UI, drop carried items */ }
+    canAttack(attacker, target) { return null; }      // true / false / null = no opinion
+    canTeleport(player, wildernessLevelLimit) { return null; }
+    npcAggressionTolerance(player, npc) { return null; }
+  }
+  return new Arena(ARENA_BOUNDARIES);
+}
+
+register(api) {
+  api.registerArea(createArena(api));
+}
+```
+
+- Register with `api.registerArea`, not `AreaManager.areas.push`: it attributes the area's
+  time to your plugin in `::pluginperf` and isolates a throw from the player's tick.
+- Core asks the attacker's area, then the target's, before the global hooks; `null` falls
+  through. Keep a global hook only for rules that genuinely span areas.
+- An actor holds one area and the first registered match wins. A broad area (one that can
+  cover the whole map) registers in `onServerStartup` so specific areas take priority.
+- Rules still read the actor's live state (tile, combat level); membership only decides who
+  is asked, and can trail a teleport by a tick.
+
+See `plugins/areas/Wilderness.plugin.js` for the worked example.
+
 ### Command Rights
 
 Commands are rights-checked by the core, never by the handler. Pass the lowest rank that
