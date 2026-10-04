@@ -41,6 +41,9 @@ function defineAreas() {
       if (!player) {
         return;
       }
+      if (player.isPlayerBot?.() === true && game.releaseSeededBots()) {
+        return;
+      }
       game.setTeamId(player, this.teamId);
       game.equipTeamColours(player, this.teamId);
       player.getPacketSender().sendSubInterface(data.OVERLAY_HUD_UID, data.WAITING_ROOM_INTERFACE, 1);
@@ -67,6 +70,9 @@ function defineAreas() {
       player.resetAttributes();
       game.setTeamId(player, null);
       game.closeOverlay(player);
+      if (player.isPlayerBot?.() !== true) {
+        game.releaseSeededBots();
+      }
       game.checkStartCountdown();
     }
 
@@ -115,6 +121,9 @@ function defineAreas() {
         game.returnToLobby(player);
       }
       game.setTeamId(player, null);
+      if (player.isPlayerBot?.() !== true) {
+        game.releaseSeededBots();
+      }
       game.checkTeamsRemain();
     }
 

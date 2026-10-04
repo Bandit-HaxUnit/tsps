@@ -17,8 +17,10 @@ function buildData(core) {
   return Object.freeze({
     TEAM,
     TEAM_DATA: {
-      [TEAM.SARADOMIN]: { id: TEAM.SARADOMIN, name: "Saradomin", capeId: I.SARADOMIN_CLOAK_3, hoodId: I.CASTLEWARS_HOOD, bannerId: I.SARADOMIN_BANNER, waitingRoom: loc(2381, 9489, 0), startRoom: loc(2426, 3076, 1), respawnBounds: box(2423, 2431, 3072, 3080, 1), standLocation: loc(2429, 3074, 3), safeStandId: O.SARADOMIN_STANDARD_2, emptyStandId: O.STANDARD_STAND, droppedFlagObjectId: O.SARADOMIN_STANDARD, waitingBounds: [box(2368, 2392, 9481, 9497, 0)] },
-      [TEAM.ZAMORAK]: { id: TEAM.ZAMORAK, name: "Zamorak", capeId: I.ZAMORAK_CLOAK_3, hoodId: I.CASTLEWARS_HOOD_2, bannerId: I.ZAMORAK_BANNER, waitingRoom: loc(2421, 9524, 0), startRoom: loc(2372, 3131, 1), respawnBounds: box(2368, 2376, 3127, 3135, 1), standLocation: loc(2370, 3133, 3), safeStandId: O.ZAMORAK_STANDARD_2, emptyStandId: O.STANDARD_STAND_2, droppedFlagObjectId: O.ZAMORAK_STANDARD, waitingBounds: [box(2408, 2432, 9512, 9535, 0)] },
+      // standType/standFace match the map's own stand loc, so a spawned stand replaces it on the
+      // client instead of stacking next to it.
+      [TEAM.SARADOMIN]: { id: TEAM.SARADOMIN, name: "Saradomin", capeId: I.SARADOMIN_CLOAK_3, hoodId: I.CASTLEWARS_HOOD, bannerId: I.SARADOMIN_BANNER, waitingRoom: loc(2381, 9489, 0), startRoom: loc(2426, 3076, 1), respawnBounds: box(2423, 2431, 3072, 3080, 1), standLocation: loc(2429, 3074, 3), standType: 11, standFace: 1, safeStandId: O.SARADOMIN_STANDARD_2, emptyStandId: O.STANDARD_STAND, droppedFlagObjectId: O.SARADOMIN_STANDARD, waitingBounds: [box(2368, 2392, 9481, 9497, 0)] },
+      [TEAM.ZAMORAK]: { id: TEAM.ZAMORAK, name: "Zamorak", capeId: I.ZAMORAK_CLOAK_3, hoodId: I.CASTLEWARS_HOOD_2, bannerId: I.ZAMORAK_BANNER, waitingRoom: loc(2421, 9524, 0), startRoom: loc(2372, 3131, 1), respawnBounds: box(2368, 2376, 3127, 3135, 1), standLocation: loc(2370, 3133, 3), standType: 11, standFace: 3, safeStandId: O.ZAMORAK_STANDARD_2, emptyStandId: O.STANDARD_STAND_2, droppedFlagObjectId: O.ZAMORAK_STANDARD, waitingBounds: [box(2408, 2432, 9512, 9535, 0)] },
     },
     START_TASK_KEY: "cw.start",
     END_TASK_KEY: "cw.end",
