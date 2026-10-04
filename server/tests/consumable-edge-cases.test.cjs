@@ -320,6 +320,21 @@ test("prayer regeneration restores a point every 12 ticks, never above max, and 
   assert.equal(player.getAttribute("potions:prayer-regen:state"), null, "death clears the effect");
 });
 
+test("the Drunken Dwarf's beer is drinkable and leaves a beer glass", () => {
+  const entry = Potions._test.findPotionEntry(ItemIdentifiers.BEER);
+  assert.equal(entry.replacementId, ItemIdentifiers.BEER_GLASS);
+  assert.equal(entry.potion.shareable, false);
+  assert.equal(Potions._test.findPotionEntry(ItemIdentifiers.BEER_2), null, "noted beer cannot be drunk");
+  const player = createPlayer({ base: 99, current: 50 });
+  entry.potion.effect(player);
+  assert.equal(player.levels.get(Skill.HITPOINTS), 51);
+  assert.equal(player.levels.get(Skill.STRENGTH), 101);
+  assert.equal(player.levels.get(Skill.ATTACK), 46);
+  entry.potion.effect(player);
+  assert.equal(player.levels.get(Skill.STRENGTH), 101, "the boost does not stack");
+  assert.equal(player.levels.get(Skill.ATTACK), 43, "the drain uses the current level");
+});
+
 test("Moonlight mead and Slayer's respite match the Wiki", () => {
   const mead = createPlayer({ base: 99, current: 50 });
   Potions._test.findPotionEntry(ItemIdentifiers.MOONLIGHT_MEAD).potion.effect(mead);
