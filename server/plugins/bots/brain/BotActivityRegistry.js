@@ -12,6 +12,7 @@ const { createWalkToAction } = require("./actions/WalkTo");
 const { createEnsureItemAction } = require("./actions/EnsureItem");
 const { createLightFireAction } = require("./actions/LightFire");
 const { createSmeltAction } = require("./actions/Smelt");
+const { createTrainCombatAction } = require("./actions/TrainCombat");
 const { createPvpCombatAction } = require("./actions/PvpCombat");
 const { createWanderAction } = require("./actions/Wander");
 const { createFollowOwnerAction } = require("./actions/FollowOwner");
@@ -152,6 +153,9 @@ function createAction(spec, world) {
   }
   if (spec.type === "smelt") {
     return createSmeltAction(spec, world);
+  }
+  if (spec.type === "trainCombat") {
+    return createTrainCombatAction(spec, world);
   }
   if (spec.type === "pvpCombat") {
     return createPvpCombatAction(spec, world?.pvpController ?? null);

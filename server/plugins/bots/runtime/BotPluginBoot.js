@@ -69,6 +69,8 @@ function bootPlayerBotsRuntime(options = {}) {
   });
 
   const brainWorld = {
+    core: botApi.core,
+    refreshEquipment: (player) => botApi.getBonusManager().update(player),
     objectSearch: traversalAssist,
     regionManager: botApi.getRegionManager(),
     areaManager: botApi.getAreaManager(),
