@@ -106,7 +106,12 @@ class EatFoodActionNode {
       }
     }
 
-    if (!Number.isFinite(state.virtualFoodChargesRemaining)) {
+    const inventory = player.getInventory?.();
+    const foodSlots = findFoodSlots(inventory);
+    // PvP loadouts have real food; a profile budget must not hide remaining meals.
+    if (pvpProfile) {
+      state.virtualFoodChargesRemaining = foodSlots.length;
+    } else if (!Number.isFinite(state.virtualFoodChargesRemaining)) {
       const profileCharges = Number(pvpProfile?.foodCharges);
       state.virtualFoodChargesRemaining = Number.isFinite(profileCharges)
         ? Math.max(1, Math.floor(profileCharges))
@@ -128,8 +133,6 @@ class EatFoodActionNode {
       return "failure";
     }
 
-    const inventory = player.getInventory?.();
-    const foodSlots = findFoodSlots(inventory);
     if (foodSlots.length === 0) {
       if (Number(state.virtualFoodChargesRemaining) > 0) {
         state.virtualFoodChargesRemaining = 0;

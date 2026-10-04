@@ -150,7 +150,7 @@ module.exports = {
   ATTACK_DELAY,
   COMBO_ATTACK_DELAY,
   isFoodItem(itemId) {
-    return FOOD.has(itemId);
+    return Number.isInteger(itemId) && FOOD.has(itemId);
   },
   _test: { getAnglerfishHeal, getStrawberryHeal, canAnglerfishOverheal },
   register(api) {
