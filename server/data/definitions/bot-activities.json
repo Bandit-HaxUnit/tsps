@@ -201,6 +201,244 @@
       }
     },
     {
+      "id": "combat_training",
+      "mode": "combat_training",
+      "capacity": 64,
+      "repeat": true,
+      "failureCooldownSeconds": 30,
+      "produces": [
+        "attack",
+        "strength",
+        "defence",
+        "hitpoints"
+      ],
+      "actions": [
+        {
+          "type": "trainCombat",
+          "durationSeconds": {
+            "min": 300,
+            "max": 720
+          },
+          "food": "TROUT",
+          "foodAmount": 16,
+          "gearTiers": [
+            {
+              "minLevel": 1,
+              "weapon": "BRONZE_SCIMITAR",
+              "armour": {
+                "HEAD_SLOT": "BRONZE_FULL_HELM",
+                "BODY_SLOT": "BRONZE_PLATEBODY",
+                "LEG_SLOT": "BRONZE_PLATELEGS",
+                "SHIELD_SLOT": "BRONZE_KITESHIELD"
+              }
+            },
+            {
+              "minLevel": 5,
+              "weapon": "STEEL_SCIMITAR",
+              "armour": {
+                "HEAD_SLOT": "STEEL_FULL_HELM",
+                "BODY_SLOT": "STEEL_PLATEBODY",
+                "LEG_SLOT": "STEEL_PLATELEGS",
+                "SHIELD_SLOT": "STEEL_KITESHIELD"
+              }
+            },
+            {
+              "minLevel": 10,
+              "weapon": "BLACK_SCIMITAR",
+              "armour": {
+                "HEAD_SLOT": "BLACK_FULL_HELM",
+                "BODY_SLOT": "BLACK_PLATEBODY",
+                "LEG_SLOT": "BLACK_PLATELEGS",
+                "SHIELD_SLOT": "BLACK_KITESHIELD"
+              }
+            },
+            {
+              "minLevel": 20,
+              "weapon": "MITHRIL_SCIMITAR",
+              "armour": {
+                "HEAD_SLOT": "MITHRIL_FULL_HELM",
+                "BODY_SLOT": "MITHRIL_PLATEBODY",
+                "LEG_SLOT": "MITHRIL_PLATELEGS",
+                "SHIELD_SLOT": "MITHRIL_KITESHIELD"
+              }
+            },
+            {
+              "minLevel": 30,
+              "weapon": "ADAMANT_SCIMITAR",
+              "armour": {
+                "HEAD_SLOT": "ADAMANT_FULL_HELM",
+                "BODY_SLOT": "ADAMANT_PLATEBODY",
+                "LEG_SLOT": "ADAMANT_PLATELEGS",
+                "SHIELD_SLOT": "ADAMANT_KITESHIELD"
+              }
+            },
+            {
+              "minLevel": 40,
+              "weapon": "RUNE_SCIMITAR",
+              "armour": {
+                "HEAD_SLOT": "RUNE_FULL_HELM",
+                "BODY_SLOT": "RUNE_PLATEBODY",
+                "LEG_SLOT": "RUNE_PLATELEGS",
+                "SHIELD_SLOT": "RUNE_KITESHIELD"
+              }
+            }
+          ],
+          "stages": [
+            {
+              "id": "chickens",
+              "minLevel": 1,
+              "sites": [
+                {
+                  "id": "lumbridge_chickens",
+                  "names": [
+                    "Chicken"
+                  ],
+                  "anchor": {
+                    "x": 3230,
+                    "y": 3298,
+                    "z": 0
+                  },
+                  "area": {
+                    "minX": 3224,
+                    "maxX": 3238,
+                    "minY": 3290,
+                    "maxY": 3305,
+                    "z": 0
+                  }
+                }
+              ]
+            },
+            {
+              "id": "livestock_and_goblins",
+              "minLevel": 10,
+              "sites": [
+                {
+                  "id": "lumbridge_goblins",
+                  "names": [
+                    "Goblin"
+                  ],
+                  "anchor": {
+                    "x": 3249,
+                    "y": 3244,
+                    "z": 0
+                  },
+                  "area": {
+                    "minX": 3238,
+                    "maxX": 3264,
+                    "minY": 3225,
+                    "maxY": 3258,
+                    "z": 0
+                  }
+                },
+                {
+                  "id": "lumbridge_cows",
+                  "names": [
+                    "Cow"
+                  ],
+                  "anchor": {
+                    "x": 3252,
+                    "y": 3288,
+                    "z": 0
+                  },
+                  "area": {
+                    "minX": 3240,
+                    "maxX": 3267,
+                    "minY": 3263,
+                    "maxY": 3300,
+                    "z": 0
+                  }
+                }
+              ]
+            },
+            {
+              "id": "monks_and_barbarians",
+              "minLevel": 20,
+              "sites": [
+                {
+                  "id": "edgeville_monks",
+                  "names": [
+                    "Monk"
+                  ],
+                  "anchor": {
+                    "x": 3049,
+                    "y": 3491,
+                    "z": 0
+                  },
+                  "area": {
+                    "minX": 3038,
+                    "maxX": 3058,
+                    "minY": 3480,
+                    "maxY": 3502,
+                    "z": 0
+                  }
+                },
+                {
+                  "id": "barbarian_village",
+                  "names": [
+                    "Barbarian"
+                  ],
+                  "anchor": {
+                    "x": 3083,
+                    "y": 3424,
+                    "z": 0
+                  },
+                  "area": {
+                    "minX": 3070,
+                    "maxX": 3093,
+                    "minY": 3407,
+                    "maxY": 3442,
+                    "z": 0
+                  }
+                }
+              ]
+            },
+            {
+              "id": "guards",
+              "minLevel": 40,
+              "sites": [
+                {
+                  "id": "varrock_guards",
+                  "names": [
+                    "Guard"
+                  ],
+                  "anchor": {
+                    "x": 3211,
+                    "y": 3431,
+                    "z": 0
+                  },
+                  "area": {
+                    "minX": 3200,
+                    "maxX": 3225,
+                    "minY": 3400,
+                    "maxY": 3445,
+                    "z": 0
+                  }
+                },
+                {
+                  "id": "falador_guards",
+                  "names": [
+                    "Guard"
+                  ],
+                  "anchor": {
+                    "x": 2964,
+                    "y": 3381,
+                    "z": 0
+                  },
+                  "area": {
+                    "minX": 2950,
+                    "maxX": 2972,
+                    "minY": 3368,
+                    "maxY": 3405,
+                    "z": 0
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "pvp",
       "mode": "pvp",
       "capacity": 64,
