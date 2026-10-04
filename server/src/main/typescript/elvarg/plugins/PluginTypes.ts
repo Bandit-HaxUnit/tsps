@@ -1,5 +1,6 @@
 import type { NpcDefinition } from "../game/definition/NpcDefinition";
 import type { ObjectDefinition } from "../game/definition/ObjectDefinition";
+import type { Item } from "../game/model/Item";
 import type { WeaponCombatProfile } from "../game/content/combat/WeaponProfile";
 import type { PlayerPersistence } from "../game/entity/impl/player/persistence/PlayerPersistence";
 import type { ActiveRegionSnapshot } from "../game/ActiveRegionIndex";
@@ -699,6 +700,14 @@ export interface PluginRangedAmmoHandler {
   decrementAmmo(player: any, pos: any, amount: number, delayTicks?: number): boolean;
 }
 
+/** A container that can supply runes the inventory cannot, e.g. a rune pouch. */
+export interface PluginSpellRuneSource {
+  /** True when this source holds every item in `missingItems` in full. */
+  check(player: any, missingItems: Item[]): boolean;
+  /** Deducts `missingItems` from this source; only called after check() returned true. */
+  consume(player: any, missingItems: Item[]): void;
+}
+
 /** A share of fired ammunition recovered before it lands, e.g. by an Ava's device. */
 export interface PluginRangedAmmoRecovery {
   /** Percentage (0-100) recovered for this player, or null to fall through. */
@@ -1089,6 +1098,7 @@ export interface PluginApi {
   registerRangedAmmoResolver(resolver: PluginRangedAmmoResolver): void;
   registerRangedAmmoHandler(handler: PluginRangedAmmoHandler): void;
   registerRangedAmmoRecovery(recovery: PluginRangedAmmoRecovery): void;
+  registerSpellRuneSource(source: PluginSpellRuneSource): void;
   registerRangedCombatModifier(modifier: PluginRangedCombatModifier): void;
   registerWeaponProfile(profile: WeaponCombatProfile): void;
   /**

@@ -159,10 +159,12 @@ function threadRunePouch({ player }) {
   }
   Shared.confirm(player, "Augment your rune pouch?", () => {
     craft(player, ANIMATION.CHISEL, () => {
-      if (!inventory.contains(I.RUNE_POUCH) || !inventory.contains(I.THREAD_OF_ELIDINIS)) return;
+      const pouch = inventory.getValidItems().find((item) => item.getId() === I.RUNE_POUCH);
+      if (!pouch || !inventory.contains(I.THREAD_OF_ELIDINIS)) return;
       inventory.deleteNumber(I.RUNE_POUCH, 1);
       inventory.deleteNumber(I.THREAD_OF_ELIDINIS, 1);
-      inventory.addItem(new Item(I.DIVINE_RUNE_POUCH, 1));
+      // The upgraded pouch keeps whatever runes the old one held.
+      inventory.addItem(new Item(I.DIVINE_RUNE_POUCH, 1, pouch.getMeta()));
       player.sendMessage("You skillfully weave the Thread of Elidinis into the rune pouch and watch as it transforms into something more.");
     });
   });

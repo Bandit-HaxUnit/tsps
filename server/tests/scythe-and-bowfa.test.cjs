@@ -39,17 +39,27 @@ let rerolled = [];
 let maxHit = 0;
 let resolver;
 class MeleeCombatMethod {}
-class PendingHit {}
+class PendingHit {
+    constructor() {
+        this.damage = 0;
+    }
+    getTotalDamage() {
+        return this.damage;
+    }
+}
 Scythe.register({
     core: {
         Equipment,
         ItemDefinition,
+        ItemIdentifiers,
         MeleeCombatMethod,
         PendingHit,
-        CombatFactory: { applyStyleDamage: (hit, max) => rerolled.push(max) },
+        CombatFactory: { applyStyleDamage: (hit, max) => { rerolled.push(max); hit.damage = max; } },
         DamageFormulas: { calculateMaxMeleeHit: () => maxHit },
     },
     registerCombatMethodResolver: (r) => { resolver = r; },
+    onItemAction: () => {},
+    onItemOnItem: () => {},
 });
 
 function swing(target, max) {
@@ -62,6 +72,8 @@ function swing(target, max) {
 }
 
 const SCYTHE = item('Scythe of vitur');
+NAMES.set(ItemIdentifiers.SCYTHE_OF_VITUR, 'Scythe of vitur');
+NAMES.set(ItemIdentifiers.SCYTHE_OF_VITUR_UNCHARGED_, 'Scythe of vitur (uncharged)');
 
 test('the scythe hits once per tile of target width, up to three', () => {
     assert.equal(swing(npcOfSize(1), 47).hits.length, 1);
@@ -104,4 +116,126 @@ test('crystal armour boosts a crystal bow or bow of Faerdhinen by its pieces', (
 
     const gauntletBow = player({ [Equipment.WEAPON_SLOT]: item('Crystal bow (perfected)'), [Equipment.HEAD_SLOT]: helm });
     assert.equal(CrystalArmour._test.pieces(gauntletBow), 0);
+});
+
+// Scythe charges (Wiki: Scythe of Vitur#Charging and degradation).
+function chargeableItem(id, amount = 0) {
+    let currentId = id;
+    const meta = new Map();
+    if (amount > 0) meta.set(Scythe._test.CHARGE_META_KEY, amount);
+    return {
+        getId: () => currentId,
+        setId: (next) => { currentId = next; },
+        getMetaValue: (key) => meta.get(key),
+        setMetaValue: (key, value) => { if (value === undefined) meta.delete(key); else meta.set(key, value); },
+    };
+}
+
+function chargePlayer(weapon, { runes = 0, vials = 0 } = {}) {
+    const items = new Array(14).fill(null).map(() => ({ getId: () => -1 }));
+    items[Equipment.WEAPON_SLOT] = weapon;
+    const messages = [];
+    const inventory = {
+        runes,
+        vials,
+        getAmount(id) {
+            return id === ItemIdentifiers.BLOOD_RUNE ? this.runes : id === ItemIdentifiers.VIAL_OF_BLOOD_2 ? this.vials : 0;
+        },
+        deleteNumber(id, amount = 1) {
+            if (id === ItemIdentifiers.BLOOD_RUNE) this.runes -= amount;
+            else if (id === ItemIdentifiers.VIAL_OF_BLOOD_2) this.vials -= amount;
+        },
+        refreshItems() {},
+    };
+    const entity = {
+        isPlayer: () => true,
+        getAsPlayer: () => entity,
+        getEquipment: () => ({ get: (slot) => items[slot], getItems: () => items, refreshItems: () => {} }),
+        getInventory: () => inventory,
+        sendMessage: (message) => messages.push(message),
+    };
+    return { entity, weapon, inventory, messages };
+}
+
+test('a scythe swing spends one charge per attack, and only when a hit deals damage (Wiki)', () => {
+    const loaded = chargePlayer(chargeableItem(ItemIdentifiers.SCYTHE_OF_VITUR, 5));
+    const method = resolver.resolve(loaded.entity);
+    assert.ok(method, 'a scythe resolves to the scythe method');
+    maxHit = 47;
+
+    method.hits(loaded.entity, npcOfSize(1));
+    assert.equal(Scythe._test.charges(loaded.weapon), 5, 'a swing that deals no damage is free');
+
+    const hits = method.hits(loaded.entity, npcOfSize(3));
+    assert.equal(hits.length, 3);
+    assert.equal(Scythe._test.charges(loaded.weapon), 4, 'three hits still spend one charge');
+});
+
+test('the last charge reverts the scythe to its uncharged form', () => {
+    const loaded = chargePlayer(chargeableItem(ItemIdentifiers.SCYTHE_OF_VITUR, 1));
+    const method = resolver.resolve(loaded.entity);
+    maxHit = 47;
+    method.hits(loaded.entity, npcOfSize(3));
+    assert.equal(loaded.weapon.getId(), ItemIdentifiers.SCYTHE_OF_VITUR_UNCHARGED_);
+    assert.equal(Scythe._test.charges(loaded.weapon), 0);
+    assert.match(loaded.messages.at(-1), /run out of charges/);
+});
+
+test('an uncharged scythe still swings, but spends nothing and never changes id', () => {
+    const loaded = chargePlayer(chargeableItem(ItemIdentifiers.SCYTHE_OF_VITUR_UNCHARGED_));
+    const method = resolver.resolve(loaded.entity);
+    assert.ok(method, 'the uncharged scythe keeps the multi-hit passive');
+    maxHit = 47;
+    const hits = method.hits(loaded.entity, npcOfSize(3));
+    assert.equal(hits.length, 3);
+    assert.equal(loaded.weapon.getId(), ItemIdentifiers.SCYTHE_OF_VITUR_UNCHARGED_);
+});
+
+test('one vial of blood and 200 blood runes buy 100 scythe charges (Wiki)', () => {
+    const loaded = chargePlayer(chargeableItem(ItemIdentifiers.SCYTHE_OF_VITUR_UNCHARGED_), { runes: 450, vials: 2 });
+    Scythe._test.chargeScythe({
+        player: loaded.entity,
+        usedItem: loaded.weapon,
+        usedWithItem: { getId: () => ItemIdentifiers.VIAL_OF_BLOOD_2 },
+        usedItemId: ItemIdentifiers.SCYTHE_OF_VITUR_UNCHARGED_,
+        usedWithItemId: ItemIdentifiers.VIAL_OF_BLOOD_2,
+    });
+    assert.equal(loaded.weapon.getId(), ItemIdentifiers.SCYTHE_OF_VITUR);
+    assert.equal(Scythe._test.charges(loaded.weapon), 200);
+    assert.deepEqual([loaded.inventory.runes, loaded.inventory.vials], [50, 0]);
+});
+
+test('a partial set of 200 blood runes charges nothing, and a full scythe takes no more', () => {
+    const short = chargePlayer(chargeableItem(ItemIdentifiers.SCYTHE_OF_VITUR_UNCHARGED_), { runes: 199, vials: 1 });
+    Scythe._test.chargeScythe({
+        player: short.entity,
+        usedItem: { getId: () => ItemIdentifiers.BLOOD_RUNE },
+        usedWithItem: short.weapon,
+        usedItemId: ItemIdentifiers.BLOOD_RUNE,
+        usedWithItemId: ItemIdentifiers.SCYTHE_OF_VITUR_UNCHARGED_,
+    });
+    assert.equal(Scythe._test.charges(short.weapon), 0);
+    assert.match(short.messages.at(-1), /vial of blood and 200 blood runes/);
+
+    const full = chargePlayer(chargeableItem(ItemIdentifiers.SCYTHE_OF_VITUR, 19950), { runes: 400, vials: 2 });
+    Scythe._test.chargeScythe({
+        player: full.entity,
+        usedItem: full.weapon,
+        usedWithItem: { getId: () => ItemIdentifiers.BLOOD_RUNE },
+        usedItemId: ItemIdentifiers.SCYTHE_OF_VITUR,
+        usedWithItemId: ItemIdentifiers.BLOOD_RUNE,
+    });
+    assert.equal(Scythe._test.charges(full.weapon), 19950, '50 charges of room is under one whole batch');
+    assert.match(full.messages.at(-1), /cannot hold any more charges/);
+});
+
+test('Check reports charges and Uncharge clears them without a refund (Wiki)', () => {
+    const loaded = chargePlayer(chargeableItem(ItemIdentifiers.SCYTHE_OF_VITUR, 125));
+    Scythe._test.checkCharges({ player: loaded.entity, item: loaded.weapon });
+    assert.match(loaded.messages.at(-1), /125 charges left/);
+
+    Scythe._test.uncharge({ player: loaded.entity, item: loaded.weapon });
+    assert.equal(loaded.weapon.getId(), ItemIdentifiers.SCYTHE_OF_VITUR_UNCHARGED_);
+    assert.equal(Scythe._test.charges(loaded.weapon), 0);
+    assert.deepEqual([loaded.inventory.runes, loaded.inventory.vials], [0, 0], 'the vyre well is not modelled');
 });

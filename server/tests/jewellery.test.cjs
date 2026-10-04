@@ -118,6 +118,24 @@ test("a glory's last charge leaves an uncharged amulet that can no longer telepo
   assert.equal(player.messages.at(-1), "Your amulet hasn't got any charges left.");
 });
 
+test("a refused teleport (teleblock or over-level) keeps the charge", () => {
+  const player = createPlayer();
+  const glory = new Item(ItemIds.AMULET_OF_GLORY_4_, 1);
+  player.inventory.setItem(0, glory);
+
+  TeleportHandler.checkReqs = () => false;
+  try {
+    inventoryClick(player, glory, "Rub");
+    pick("Edgeville");
+  } finally {
+    TeleportHandler.checkReqs = (p, target, wildernessLevel) => {
+      teleports.push({ target: [target.getX(), target.getY(), target.getZ()], wildernessLevel });
+      return true;
+    };
+  }
+  assert.equal(glory.getId(), ItemIds.AMULET_OF_GLORY_4_, "the rejected teleport consumed no charge");
+});
+
 test("an uncharged piece never teleports from a direct worn option", () => {
   const player = createPlayer();
   const glory = new Item(ItemIds.AMULET_OF_GLORY, 1);

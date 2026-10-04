@@ -8,6 +8,7 @@ let pluginApi;
 const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
+const { Wilderness } = require("../../src/main/typescript/elvarg/game/content/wilderness/Wilderness");
 
 const EAT_ANIMATION = new Animation(829);
 // Ticks eating adds to the attack timer; combo foods add 2 (Wiki: Food).
@@ -118,6 +119,19 @@ function canEat(player, itemId) {
   return pluginApi.emitCanEat(player, itemId) !== false;
 }
 
+/**
+ * Wiki: anglerfish cannot overheal while its eater is in combat in a PvP
+ * area, with either a player or an NPC; everywhere else the heal may raise
+ * Hitpoints above the base maximum.
+ */
+function canAnglerfishOverheal(player) {
+  if (!Wilderness.isPvpArea(player?.getLocation?.())) {
+    return true;
+  }
+  const combat = player.getCombat?.();
+  return combat?.getTarget?.() == null && combat?.getAttacker?.() == null;
+}
+
 module.exports = {
   name: "Food",
   FOOD,
@@ -127,7 +141,7 @@ module.exports = {
   isFoodItem(itemId) {
     return FOOD.has(itemId);
   },
-  _test: { getAnglerfishHeal, getStrawberryHeal },
+  _test: { getAnglerfishHeal, getStrawberryHeal, canAnglerfishOverheal },
   register(api) {
     pluginApi = api;
     api.onItemFirstAction((event) => {
@@ -189,7 +203,9 @@ module.exports = {
 
       if (food.anglerfish) {
         healAmount = getAnglerfishHeal(currentHp);
-        maxHp += healAmount;
+        if (canAnglerfishOverheal(player)) {
+          maxHp += healAmount;
+        }
       } else if (food.sweetcorn) {
         healAmount = Math.floor(maxHp / 10) + 1;
       } else if (food.strawberry) {

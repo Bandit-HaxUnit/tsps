@@ -7,6 +7,7 @@ Server.installProductionPathResolver();
 
 const { ItemIds } = require("../dist/util/IdEnums");
 const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
+const { Location } = require("../dist/game/model/Location");
 const Food = require("../plugins/items/Food.plugin");
 
 test("strawberries heal 1 + 6% of max hitpoints, capped at six", () => {
@@ -35,4 +36,18 @@ test("gnome crunchies and battas are combo foods with their Wiki heals", () => {
     assert.equal(food.heal, heal, `food ${id} heal`);
     assert.equal(food.karambwan, true, `food ${id} is combo food`);
   }
+});
+
+function inCombatAt(x, y, target = null, attacker = null) {
+  return {
+    getLocation: () => new Location(x, y, 0),
+    getCombat: () => ({ getTarget: () => target, getAttacker: () => attacker }),
+  };
+}
+
+test("anglerfish cannot over-heal while in combat in a PvP area", () => {
+  assert.equal(Food._test.canAnglerfishOverheal(inCombatAt(3200, 3600)), true, "idle in the Wilderness");
+  assert.equal(Food._test.canAnglerfishOverheal(inCombatAt(3200, 3600, {})), false, "fighting an NPC");
+  assert.equal(Food._test.canAnglerfishOverheal(inCombatAt(3200, 3600, null, {})), false, "being attacked");
+  assert.equal(Food._test.canAnglerfishOverheal(inCombatAt(3222, 3222, {})), true, "Edgeville is not a PvP area");
 });
