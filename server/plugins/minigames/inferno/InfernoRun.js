@@ -567,8 +567,11 @@ function finishRun(player, wavesCleared, won) {
     give(player, Items.INFERNAL_CAPE, 1);
     give(player, Items.TOKKUL, COMPLETION_TOKKUL);
     if (core.Misc.getRandom(PET_CHANCE - 1) === 0) {
-      give(player, Items.JAL_NIB_REK, 1);
-      player.sendMessage("You have a funny feeling like you're being followed.");
+      // Pets awards it as a follower (or backpack item on a duplicate) and removes it
+      // from the array; without the Pets plugin it still lands as an item.
+      const drops = [{ itemId: Items.JAL_NIB_REK, amount: 1 }];
+      api.emitCustomEvent("npc-drops:roll", { player, drops });
+      if (drops.length > 0) give(player, Items.JAL_NIB_REK, 1);
     }
     say(player, keh,
       "You are very impressive for a JalYt. You managed to defeat TzKal-Zuk, for now...",
