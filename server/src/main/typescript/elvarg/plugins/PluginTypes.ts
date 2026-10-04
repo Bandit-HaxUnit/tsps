@@ -7,6 +7,13 @@ import type { DefinitionSource } from "../game/definition/loader/DefinitionLoade
 import type { FriendsChatAction } from "../net/protocol/ClientProtocol";
 import type { PlayerRights } from "../game/model/rights/PlayerRights";
 
+/** A player entered a different 64x64 map square (or plane), by walking or teleporting. */
+export interface PluginPlayerMapSquareChangeEvent {
+  player: any;
+  previous: any;
+  location: any;
+}
+
 export interface PluginPlayerLoginEvent {
   player: any;
   username: string;
@@ -704,6 +711,9 @@ export interface PluginRangedCombatModifier {
 
 export interface PluginApi {
   onPlayerLogin(handler: (event: PluginPlayerLoginEvent) => void): void;
+  /** Fires per map square crossed, not per tile: content spread over the map (patches, bird
+   * houses) syncs here instead of checking every player every tick. */
+  onPlayerMapSquareChange(handler: (event: PluginPlayerMapSquareChangeEvent) => void): void;
   onPlayerDisconnect(handler: (event: PluginPlayerDisconnectEvent) => void): void;
   onPlayerLogout(handler: (event: PluginPlayerLogoutEvent) => void): void;
   onSocialPacket(handler: (event: PluginSocialPacketEvent) => void): void;

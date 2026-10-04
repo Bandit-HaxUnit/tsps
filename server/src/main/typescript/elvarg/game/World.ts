@@ -299,6 +299,11 @@ export class World {
         if (!player || !previousLocation || !nextLocation || previousLocation.equals(nextLocation)) return;
         World.removePlayerFromTileOccupants(player, previousLocation);
         World.addPlayerToTileOccupants(player, nextLocation);
+        if ((previousLocation.getX() >> 6) !== (nextLocation.getX() >> 6)
+            || (previousLocation.getY() >> 6) !== (nextLocation.getY() >> 6)
+            || previousLocation.getZ() !== nextLocation.getZ()) {
+            PluginManager.emitPlayerMapSquareChange({ player, previous: previousLocation, location: nextLocation });
+        }
     }
 
     public static isPlayerOccupyingTile(

@@ -261,6 +261,13 @@ function attempt(trap) {
 
 function process() {
   for (const trap of H.traps) {
+    if (trap.area !== trap.player.getPrivateArea()) {
+      // The owner changed instance: recover reusable tools rather than leave them in an
+      // inaccessible area.
+      for (const item of returnedItems(trap)) if (!exchange(trap.player, [], [item])) drop(trap.player, [item], trap.player.getLocation());
+      remove(trap);
+      continue;
+    }
     if (H.tick >= trap.expires) {
       drop(trap.player, returnedItems(trap), trap.location, trap.area);
       remove(trap);

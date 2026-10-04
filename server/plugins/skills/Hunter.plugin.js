@@ -35,7 +35,6 @@ module.exports = {
     api.onPlayerLogout(Runtime.cleanup);
     api.onPlayerDisconnect(Runtime.cleanup);
     api.onPlayerDeath(Runtime.cleanup);
-    api.onPlayerProcess(Runtime.processPlayer);
     api.onCanEquip(Runtime.equipment);
     api.onCanUnequip(Runtime.equipment);
     api.onNpcRoute(Runtime.npcRoute);

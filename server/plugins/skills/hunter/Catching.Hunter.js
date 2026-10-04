@@ -5,9 +5,13 @@ const { H, ANIM, level, requireLevel, hasTool, nearby, available, roll, exchange
 const tables = require("./ImplingLoot.json");
 const falcons = new Map();
 const caught = new Map();
+// Players wearing a falconer's glove, so leaving the falconry grounds is checked for them only.
+const gloved = new Set();
 const pendingLoot = new WeakMap();
 
 function gloves(player, id) {
+  if (id > 0) gloved.add(player);
+  else gloved.delete(player);
   player.getEquipment().set(H.core.Equipment.WEAPON_SLOT, new H.core.Item(id, id > 0 ? 1 : 0));
   player.getEquipment().refreshItems();
   player.getUpdateFlag().flag(H.core.Flag.APPEARANCE);
@@ -221,13 +225,18 @@ function equipment(event) {
   }
 }
 
-function processPlayer({ player }) {
-  const p = player.getLocation();
-  if (hasFalcon(player) && (p.getZ() !== 0 || p.getX() < 2360 || p.getX() > 2399 || p.getY() < 3570 || p.getY() > 3620)) cleanup({ player });
+/** A glove kept through a crash still needs taking back off the grounds. */
+function login({ player }) {
+  if (hasFalcon(player)) gloved.add(player);
 }
 
 function process() {
   for (const state of caught.values()) if (H.tick >= state.due || !state.falcon.isRegistered()) removeFalcon(state);
+  for (const player of gloved) {
+    const p = player.getLocation();
+    if (!hasFalcon(player)) gloved.delete(player);
+    else if (p.getZ() !== 0 || p.getX() < 2360 || p.getX() > 2399 || p.getY() < 3570 || p.getY() > 3620) cleanup({ player });
+  }
 }
 
 function cleanup({ player }) {
@@ -236,4 +245,4 @@ function cleanup({ player }) {
   if (hasFalcon(player)) gloves(player, -1);
 }
 
-module.exports = { catchNpc, hire, retrieve, release, boost, loot, rewards, equipment, process, processPlayer, cleanup };
+module.exports = { catchNpc, hire, retrieve, release, boost, loot, rewards, equipment, login, process, cleanup };

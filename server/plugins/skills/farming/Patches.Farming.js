@@ -9,8 +9,8 @@ const Hespori = require("./Hespori.Farming");
 
 const FARM_ATTRIBUTE = "farming:state";
 const ANIM = { RAKE: 2273, PLANT: 2291, SAPLING: 2272, FILL_POT: 2287, WATER: 2293, DIG: 830, HARVEST: 2282, COMPOST: 2283, CURE: 2288, PRUNE: 2275 };
-const WORK = new WeakMap();
-const SYNC = new WeakMap();
+// Player -> queued rake/harvest, stepped every tick by the farming task.
+const WORK = new Map();
 const RENDERED = new WeakMap();
 // A patch can be visible from its own 64-tile region or one of its neighbours.
 const PATCHES_BY_REGION = new Map();
@@ -504,53 +504,75 @@ function depleteTree(event) {
     state.nextAt = Date.now() + event.respawnTicks * 600;
     syncPatch(event.player, patch);
 }
-function playerProcess({ player }) {
-    const previous = SYNC.get(player);
-    const pos = player.getLocation();
+// Growth runs every GROW_TICKS (~5 s) per player, spread over that many buckets so each tick
+// grows about 1/GROW_TICKS of players instead of checking everyone every tick.
+const GROW_TICKS = 8;
+const growBuckets = Array.from({ length: GROW_TICKS }, () => new Set());
+const growBucketOf = new WeakMap();
+let nextGrowBucket = 0;
+let farmingTicks = 0;
+
+function grow(player) {
+    const farm = farmFor(player);
     const now = Date.now();
-    const grow = !previous || now - previous.at >= 5000;
-    if (grow || previous.x !== pos.getX() || previous.y !== pos.getY() || previous.z !== pos.getZ()) {
-        const farm = farmFor(player);
-        if (grow) {
-            if (player.getPacketSender().getVarbit(7925)) farm.hosidiusProtected = true;
-            if (player.getPacketSender().getVarbit(4465)) farm.faladorProtected = true;
-            if (player.getPacketSender().getVarp(4130) >= 16000) farm.fortisProtected = true;
-            Model.advanceFarm(farm, now); Services.growSeedlings(player, now);
-            const bound = farm.patches[farm.boundPatch];
-            const status = bound?.crop ? bound.status : "empty";
-            if (farm.boundStatus !== status && ["diseased", "dead", "grown"].includes(status) && hasTool(player, "Amulet of nature")) {
-                player.sendMessage(`Your amulet of nature hums: the crop in your bound patch is ${status}.`);
-            }
-            farm.boundStatus = status;
-        }
-        const nearest = new Map();
-        const nearby = PATCHES_BY_REGION.get(`${Math.floor(pos.getX() / 64)}:${Math.floor(pos.getY() / 64)}:${pos.getZ()}`) ?? [];
-        for (const patch of nearby) {
-            const distance = Math.max(Math.abs((patch.x + patch.maxX) / 2 - pos.getX()), Math.abs((patch.y + patch.maxY) / 2 - pos.getY()));
-            if (distance <= 64 && (!nearest.has(patch.varbit) || nearest.get(patch.varbit).distance > distance)) nearest.set(patch.varbit, { patch, distance });
-        }
-        for (const { patch } of nearest.values()) syncPatch(player, patch);
-        SYNC.set(player, { x: pos.getX(), y: pos.getY(), z: pos.getZ(), at: grow ? now : previous.at });
+    if (player.getPacketSender().getVarbit(7925)) farm.hosidiusProtected = true;
+    if (player.getPacketSender().getVarbit(4465)) farm.faladorProtected = true;
+    if (player.getPacketSender().getVarp(4130) >= 16000) farm.fortisProtected = true;
+    Model.advanceFarm(farm, now); Services.growSeedlings(player, now);
+    const bound = farm.patches[farm.boundPatch];
+    const status = bound?.crop ? bound.status : "empty";
+    if (farm.boundStatus !== status && ["diseased", "dead", "grown"].includes(status) && hasTool(player, "Amulet of nature")) {
+        player.sendMessage(`Your amulet of nature hums: the crop in your bound patch is ${status}.`);
     }
-    const work = WORK.get(player);
-    if (work) workStep(player, work);
+    farm.boundStatus = status;
+}
+/** Shows the nearest patch for each varbit indexed around the player's map square. */
+function syncNearby(player) {
+    const pos = player.getLocation();
+    const nearest = new Map();
+    const nearby = PATCHES_BY_REGION.get(`${Math.floor(pos.getX() / 64)}:${Math.floor(pos.getY() / 64)}:${pos.getZ()}`) ?? [];
+    for (const patch of nearby) {
+        const distance = Math.max(Math.abs((patch.x + patch.maxX) / 2 - pos.getX()), Math.abs((patch.y + patch.maxY) / 2 - pos.getY()));
+        if (!nearest.has(patch.varbit) || nearest.get(patch.varbit).distance > distance) nearest.set(patch.varbit, { patch, distance });
+    }
+    for (const { patch } of nearest.values()) syncPatch(player, patch);
+}
+function refresh(player) {
+    grow(player);
+    syncNearby(player);
+}
+function farmingTick() {
+    for (const [player, work] of WORK) workStep(player, work);
+    for (const player of growBuckets[farmingTicks++ % GROW_TICKS]) refresh(player);
+}
+function startTicking() {
+    class FarmingTask extends core.Task { execute() { farmingTick(); } }
+    core.TaskManager.submit(new FarmingTask(1));
+}
+function mapSquareChanged({ player }) {
+    if (growBucketOf.has(player)) syncNearby(player);
 }
 function login(event) {
-    for (const state of Object.values(farmFor(event.player).patches)) state.hesporiFight = false;
-    SYNC.delete(event.player); RENDERED.delete(event.player); playerProcess(event);
+    const { player } = event;
+    for (const state of Object.values(farmFor(player).patches)) state.hesporiFight = false;
+    RENDERED.delete(player);
+    if (player.isPlayerBot?.() === true) return;
+    const bucket = growBuckets[nextGrowBucket++ % GROW_TICKS];
+    bucket.add(player);
+    growBucketOf.set(player, bucket);
+    refresh(player);
 }
-function logout({ player }) { WORK.delete(player); SYNC.delete(player); RENDERED.delete(player); Hespori.hesporiLogout({ player }); }
+function logout({ player }) { WORK.delete(player); RENDERED.delete(player); growBucketOf.get(player)?.delete(player); growBucketOf.delete(player); Hespori.hesporiLogout({ player }); }
 function cancelWork({ player }) { WORK.delete(player); }
 
 /** Every hook the Farming plugin attaches. */
 function attach(api) {
     api.persistAttribute(FARM_ATTRIBUTE);
     api.onServerStartup(Data.initializeFarmingData);
+    api.onServerStartup(startTicking);
     api.onPlayerLogin(login);
     api.onPlayerLogin(Tithe.titheLogin);
-    api.onPlayerProcess(playerProcess);
-    api.onPlayerProcess(Hespori.hesporiProcess);
-    api.onPlayerProcess(Tithe.titheProcess);
+    api.onPlayerMapSquareChange(mapSquareChanged);
     api.onPlayerLogout(logout);
     api.onPlayerLogout(Tithe.titheLogout);
     api.onPlayerLevelUp(cancelWork);
@@ -573,7 +595,6 @@ function attach(api) {
     api.onCustomEvent("player:world-input", Hespori.hesporiInput);
     api.onCustomEvent("player:world-input", cancelWork);
     api.onCustomEvent("npc-drops:generated", Hespori.hesporiLoot);
-    api.onCanAttack(Hespori.hesporiCanAttack);
     api.onCombatHitRoll(Hespori.hesporiHitRoll);
     api.onCombatHitResolved(Hespori.hesporiHit);
     api.onPlayerDealtDamage(Hespori.hesporiDamage);

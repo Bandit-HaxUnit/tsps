@@ -97,10 +97,21 @@ function diseaseFree(farm, patch, state, at) {
 }
 
 /** Process crop events in time order, so offline flower/anima protection has the same lifetime as online. */
+// Patch definitions by patchKey, so a farm is walked by the patches it has state for rather
+// than by every patch in the game - most players have a handful, or none.
+const PATCH_BY_KEY = new Map(Data.CACHE.patches.map((patch) => [Data.patchKey(patch), patch]));
+
+function* patchStates(farm) {
+    for (const key in farm.patches) {
+        const patch = PATCH_BY_KEY.get(key);
+        if (patch) yield { patch, state: farm.patches[key] };
+    }
+}
+
 function advanceFarm(farm, now, random = Math.random) {
     const kronos = new Map();
-    const planted = Data.CACHE.patches.map(patch => ({ patch, state: farm.patches[Data.patchKey(patch)] }))
-        .filter(({ state }) => state?.crop && state.status !== "dead");
+    const planted = [];
+    for (const entry of patchStates(farm)) if (entry.state?.crop && entry.state.status !== "dead") planted.push(entry);
     for (;;) {
         let due;
         for (const entry of planted) {
@@ -148,8 +159,7 @@ function advanceFarm(farm, now, random = Math.random) {
         state.nextAt = nextGrowth(at, state.status === "diseased" ? crop.minutes * 2
             : state.status === "grown" && crop.regrow ? crop.regrow : crop.minutes, farm.offset);
     }
-    for (const patch of Data.CACHE.patches) {
-        const state = farm.patches[Data.patchKey(patch)];
+    for (const { patch, state } of patchStates(farm)) {
         if (!state || ["GRAPES", "CORAL"].includes(patch.type)) continue;
         if (state.crop || state.scarecrow || state.bin || farm.autoWeed) continue;
         if (state.nextAt <= now) {
