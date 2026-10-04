@@ -528,6 +528,33 @@ function checkTeamsRemain() {
   }
 }
 
+/**
+ * Dev-seeded bots only exist for real players. Once no real player is left in the lobby, a
+ * waiting room or the game, the bots log out; an active bot-only match ends instead of running
+ * out the clock.
+ */
+function releaseSeededBots() {
+  const waitingAreas = Object.values(game.waitingAreas ?? {});
+  const areas = [game.lobbyArea, ...waitingAreas, game.gameArea].filter(Boolean);
+  if (areas.some((area) => area.getPlayers().some((player) => player.getAttribute(BOT_KEY) !== true))) {
+    return false;
+  }
+  if (phase === PHASE.ACTIVE) {
+    endGame();
+    return true;
+  }
+  let released = false;
+  for (const area of [game.lobbyArea, ...waitingAreas].filter(Boolean)) {
+    for (const bot of [...area.getPlayers()]) {
+      if (bot.getAttribute(BOT_KEY) === true) {
+        returnToLobby(bot);
+        released = true;
+      }
+    }
+  }
+  return released;
+}
+
 function later(ticks, callback) {
   TaskManager.submit(new core.CountdownTask({}, ticks, callback));
 }
@@ -606,6 +633,7 @@ module.exports = function createCastleWarsGame(registry) {
     beginStartCountdown,
     checkStartCountdown,
     checkTeamsRemain,
+    releaseSeededBots,
     resetMatchState,
     returnToLobby,
     later,
