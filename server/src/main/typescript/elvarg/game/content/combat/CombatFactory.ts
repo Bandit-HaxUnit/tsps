@@ -640,7 +640,11 @@ export class CombatFactory {
             (Wilderness.isInSafeBuilding(attacker.getLocation()) || Wilderness.isInSafeBuilding(target.getLocation()))) {
             return CanAttackResponse.CANT_ATTACK_IN_AREA;
         }
-        const pluginCanAttack = PluginManager.emitCanAttack(attacker, target, method);
+        const attackerArea = attacker.getArea();
+        const targetArea = target.getArea();
+        const pluginCanAttack = (attackerArea ? PluginManager.callArea(attackerArea, "canAttack", attacker, target, method) : null)
+            ?? (targetArea && targetArea !== attackerArea ? PluginManager.callArea(targetArea, "canAttack", attacker, target, method) : null)
+            ?? PluginManager.emitCanAttack(attacker, target, method);
         if (pluginCanAttack === true) {
             return CanAttackResponse.CAN_ATTACK;
         }

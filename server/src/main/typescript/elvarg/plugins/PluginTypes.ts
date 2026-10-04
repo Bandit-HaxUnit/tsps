@@ -996,6 +996,8 @@ export interface PluginApi {
   getRegionManager(): any;
   getCombatFactory(): any;
   getAreaManager(): any;
+  /** Adds an Area to AreaManager; its methods are timed and reported under this plugin. */
+  registerArea(area: any): void;
   getPrayerHandler(): any;
   getBonusManager(): any;
   getItemOnGroundManager(): any;
@@ -1135,6 +1137,14 @@ export interface PluginCoreApi {
   Boundary: any;
   PolygonalBoundary: any;
   Area: any;
+  ServerPerf: any;
+  /** The ::pluginperf data: per-plugin hook and area timings, collected only while enabled. */
+  PluginPerf: {
+    snapshot(limit?: number): any[];
+    reset(): void;
+    setEnabled(enabled: boolean): void;
+    isEnabled(): boolean;
+  };
   World: any;
   GameObject: any;
   PrivateArea: any;

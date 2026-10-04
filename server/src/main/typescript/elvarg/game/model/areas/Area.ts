@@ -8,6 +8,8 @@ export abstract class Area {
     private npcs: { [key: number]: NPC } = {};
     private players: { [key: number]: Player } = {};
     private playerBots: { [key: number]: any } = {};
+    /** Set by api.registerArea; pluginperf reports this area's methods under it. */
+    public pluginName: string | null = null;
 
     constructor(boundaries?: Boundary[]) {
         this.boundaries = boundaries;
@@ -41,6 +43,24 @@ export abstract class Area {
 
     process(character: Mobile) {
         // By default, do nothing in process.
+    }
+
+    // Rule hooks for actors standing in this area. Core asks the area before the global
+    // plugin hooks, so a rule that only applies here costs nothing for anyone elsewhere.
+    // null means "no opinion" and falls through to the plugin hooks.
+
+    /** Asked of the attacker's area, then the target's. */
+    canAttack(attacker: Mobile, target: Mobile, method?: any): boolean | null {
+        return null;
+    }
+
+    canTeleport(player: Player, wildernessLevelLimit: number, destination?: any): boolean | null {
+        return null;
+    }
+
+    /** true keeps `npc` aggressive towards `player` despite their tolerance timer. */
+    npcAggressionTolerance(player: Player, npc: NPC): boolean | null {
+        return null;
     }
 
     /** Whether this area is a multi-combat zone. Areas outside the Wilderness opt in here. */
