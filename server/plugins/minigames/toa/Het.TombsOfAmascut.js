@@ -756,7 +756,7 @@ module.exports = function registerHetPuzzle(api) {
   api.onItemAction("Mirror", { Place: placeMirror });
   api.onNpcInteraction("<col=00ffff>Het's Seal (weakened)</col>", { Destroy: destroySeal });
   api.onNpcInteraction("<col=00ffff>Het's Seal (protected)</col>", { Destroy: destroySeal });
-  api.onCanAttack(sealUnattackable);
+  Raid.onRaidArea("canAttack", sealUnattackable);
   api.persistAttribute(ATTR_STORED_PICKAXE);
   api.onItemOnObject(pickaxeOnStand);
   api.onPlayerLogin(sendStoredPickaxeOnLogin);

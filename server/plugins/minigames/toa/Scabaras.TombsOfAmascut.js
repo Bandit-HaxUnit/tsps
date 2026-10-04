@@ -705,7 +705,7 @@ module.exports = function registerScabarasPuzzle(api) {
   api.onNpcRoute(routeToObelisk);
   api.onNpcHitModify(hitObelisk);
   api.onPlayerDealtDamage(struckObelisk);
-  api.onCanAttack(canHitObelisk);
+  Raid.onRaidArea("canAttack", canHitObelisk);
   registerScarabCombat(api);
 };
 
