@@ -41,6 +41,9 @@ function createPvpCombatAction(spec, controller) {
       if (ctx.nowMs >= Number(state.pvp.nextActionAt ?? 0)) {
         controller.seek({ player, state, nowMs: ctx.nowMs });
       }
+      if (!state.pvp.targetUsername) {
+        controller.wanderWhileSeeking?.({ player, state, nowMs: ctx.nowMs });
+      }
       return "running";
     },
     madeProgress(ctx) {

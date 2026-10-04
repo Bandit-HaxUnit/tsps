@@ -2,6 +2,8 @@
   "hotspots": [
     {
       "id": "edge_ditch",
+      "combatLevelRange": { "min": 100, "max": 102 },
+      "freeCombatLevelRange": { "min": 73, "max": 75 },
       "label": "Edge Ditch",
       "dangerTier": "medium",
       "enabled": true,
@@ -27,6 +29,8 @@
     },
     {
       "id": "edge_south",
+      "combatLevelRange": { "min": 73, "max": 75 },
+      "freeCombatLevelRange": { "min": 73, "max": 75 },
       "label": "Edge North East",
       "dangerTier": "medium",
       "enabled": true,
