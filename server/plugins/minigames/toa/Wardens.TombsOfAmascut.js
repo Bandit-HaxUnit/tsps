@@ -1662,7 +1662,7 @@ module.exports = function registerWardens(api) {
   api.onNpcInteraction("Osmumten", { Begin: beginWardens, "Talk-to": talkToWardensOsmumten });
   api.onNpcHitModify(filterWardenDamage);
   api.onNpcBeforeDeath(wardenDowned);
-  api.onCanAttack(wardenAttackRules);
+  Raid.onRaidArea("canAttack", wardenAttackRules);
   api.onObjectRoute(routeToCrystal);
   api.onPlayerDealtDamage(struckSiphon);
   registerWardenCombat(api);

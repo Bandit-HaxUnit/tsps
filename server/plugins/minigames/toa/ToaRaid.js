@@ -29,6 +29,23 @@ function registerRaidItems(...ids) {
   }
 }
 
+// Raid-scoped rules and per-tick work from the unit files. The raid's area runs them, so
+// nobody outside a raid pays for them. canAttack/canTeleport handlers take the old hook event
+// ({ attacker, target, allow } / { player, allow }) and the first to set `allow` decides.
+const areaHandlers = { canAttack: [], canTeleport: [], process: [], leave: [] };
+
+function onRaidArea(kind, handler) {
+  areaHandlers[kind].push(handler);
+}
+
+function firstVerdict(handlers, event) {
+  for (const handler of handlers) {
+    handler(event);
+    if (event.allow !== null) return event.allow;
+  }
+  return null;
+}
+
 function registerRoom(key, RoomClass) {
   roomTypes.set(key, RoomClass);
 }
@@ -68,13 +85,29 @@ function areaClass() {
     }
 
     postLeave(mobile, logout) {
-      if (mobile.isPlayer?.()) this.raid.onAreaLeave(mobile.getAsPlayer(), logout);
+      if (mobile.isPlayer?.()) {
+        const player = mobile.getAsPlayer();
+        this.raid.onAreaLeave(player, logout);
+        for (const handler of areaHandlers.leave) handler({ player, logout });
+      }
       super.postLeave(mobile, logout);
     }
 
     process(mobile) {
       this.raid.processOnce();
-      if (mobile.isPlayer?.()) this.raid.processPlayer(mobile.getAsPlayer());
+      if (mobile.isPlayer?.()) {
+        const player = mobile.getAsPlayer();
+        this.raid.processPlayer(player);
+        for (const handler of areaHandlers.process) handler({ player });
+      }
+    }
+
+    canAttack(attacker, target, method) {
+      return firstVerdict(areaHandlers.canAttack, { attacker, target, method, allow: null });
+    }
+
+    canTeleport(player, wildernessLevelLimit, destination) {
+      return firstVerdict(areaHandlers.canTeleport, { player, wildernessLevelLimit, destination, allow: null });
     }
   };
   return AreaClass;
@@ -1272,6 +1305,7 @@ module.exports = {
   Room,
   Raid,
   registerRoom,
+  onRaidArea,
   raidOf,
   roomOf,
   begin,

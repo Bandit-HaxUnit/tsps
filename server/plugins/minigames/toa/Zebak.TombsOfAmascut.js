@@ -1081,6 +1081,6 @@ module.exports = function registerZebak(api) {
   api.onNpcBeforeDeath(zebakDowned);
   api.onNpcHitModify(jugStruck);
   api.onNpcInteraction("<col=00ffff>Jug</col>", { Push: pushJug, Pull: pullJug, Hit: hitJug });
-  api.onCanAttack(swimmerCantAttack);
+  Raid.onRaidArea("canAttack", swimmerCantAttack);
   Shared.onObject(api, ROCK_STEPS, climbRockSteps);
 };

@@ -721,7 +721,7 @@ module.exports = function registerBaBa(api) {
   Raid.registerRoom("APMEKEN_BOSS", BaBaRoom);
   api.onNpcBeforeDeath(babaDowned);
   api.onNpcHitModify(crackedBoulder);
-  api.onCanAttack(babaUnreachable);
+  Raid.onRaidArea("canAttack", babaUnreachable);
   registerBaBaCombat(api);
 };
 

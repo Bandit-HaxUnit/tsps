@@ -126,6 +126,18 @@ function defineAreas() {
       }
       sendGameVars(player, teamId);
       ejectIdlersFromSpawn(player, teamId);
+      for (const processor of game.inGameProcessors) {
+        processor(player);
+      }
+    }
+
+    canAttack(attacker, target) {
+      return friendlyFireVerdict(attacker, target);
+    }
+
+    canTeleport(player) {
+      player.sendMessage("You can't leave just like that!");
+      return false;
     }
   }
 
@@ -175,12 +187,17 @@ function ejectIdlersFromSpawn(player, teamId) {
   }
 }
 
-function registerAreas() {
+function registerAreas(api) {
   const areas = defineAreas();
   Object.assign(game, areas, {
     castleWarsAreas: new Set([areas.gameArea, ...Object.values(areas.waitingAreas)]),
+    // Per-tick work for players in the game, added by the other unit files; the game area
+    // runs it, so nobody outside Castle Wars pays for it.
+    inGameProcessors: [],
   });
-  game.AreaManager.areas.push(areas.lobbyArea, ...Object.values(areas.waitingAreas), areas.gameArea);
+  for (const area of [areas.lobbyArea, ...Object.values(areas.waitingAreas), areas.gameArea]) {
+    api.registerArea(area);
+  }
 }
 
 function setUpCastle() {
@@ -208,26 +225,18 @@ function protectTeamColours(event) {
   event.allow = false;
 }
 
-function blockFriendlyFire(event) {
-  const attacker = event.attacker?.getAsPlayer?.();
-  const target = event.target?.getAsPlayer?.();
+/** Inside the game only the other team is fair game; null leaves anyone else to other rules. */
+function friendlyFireVerdict(attackerMobile, targetMobile) {
+  const attacker = attackerMobile?.getAsPlayer?.();
+  const target = targetMobile?.getAsPlayer?.();
   if (attacker?.getArea?.() !== game.gameArea || target?.getArea?.() !== game.gameArea) {
-    return;
+    return null;
   }
   if (game.getTeamId(attacker) === game.getTeamId(target)) {
     attacker.sendMessage("You can't attack your own team in Castle Wars.");
-    event.allow = false;
-    return;
+    return false;
   }
-  event.allow = true;
-}
-
-function blockTeleport(event) {
-  if (event.player?.getArea?.() !== game.gameArea) {
-    return;
-  }
-  event.player.sendMessage("You can't leave just like that!");
-  event.allow = false;
+  return true;
 }
 
 function respawnInStartRoom(event) {
@@ -260,13 +269,11 @@ module.exports = function attachCastleWarsAreas(api, castleWars) {
   game = castleWars;
   core = api.core;
   data = castleWars.data;
-  registerAreas();
+  registerAreas(api);
   api.onServerStartup(setUpCastle);
   api.onPlayerLogin(restoreLoginInsideCastleWars);
   api.onCanEquip(protectTeamColours);
   api.onCanUnequip(protectTeamColours);
-  api.onCanAttack(blockFriendlyFire);
-  api.onCanTeleport(blockTeleport);
   api.onPlayerDeath(respawnInStartRoom);
   api.onPlayerDeathItemDrop(keepGameItemsOffTheFloor);
 };

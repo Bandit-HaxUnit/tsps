@@ -239,8 +239,8 @@ function tickEffects({ player }) {
 }
 
 /** Leaving the tombs ends every supply effect. */
-function clearEffectsOutside({ player }) {
-  if (!player.getAttribute(ATTR_EFFECTS) || Shared.inTombs(player.getLocation())) return;
+function clearEffects({ player }) {
+  if (!player.getAttribute(ATTR_EFFECTS)) return;
   const effects = effectsOf(player);
   if (effects.salts > 0) {
     for (const skill of skills().combat) player.getSkillManager().setCurrentLevels(skill, player.getSkillManager().getMaxLevel(skill));
@@ -258,7 +258,7 @@ function doses(itemId) {
 module.exports = function registerTombsSupplies(api) {
   Shared.bind(api);
   api.onItemFirstAction(consume);
-  api.onPlayerProcess(tickEffects);
-  api.onPlayerProcess(clearEffectsOutside);
+  Raid.onRaidArea("process", tickEffects);
+  Raid.onRaidArea("leave", clearEffects);
 };
 module.exports.doses = doses;

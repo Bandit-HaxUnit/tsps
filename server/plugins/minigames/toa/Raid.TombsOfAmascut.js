@@ -212,11 +212,11 @@ module.exports = function registerTombsRaid(api) {
   api.onPlayerDeath(respawnInRaid);
   api.onPlayerDealtDamage(trackDamage);
   api.onCombatHitResolved(afterPlayerHit);
-  api.onCanAttack(blockScriptedNpcs);
-  api.onCanAttack(blockGhostAttacks);
+  Raid.onRaidArea("canAttack", blockScriptedNpcs);
+  Raid.onRaidArea("canAttack", blockGhostAttacks);
   api.onCanEat(onADiet);
   api.onCanDrink(dehydration);
-  api.onCanTeleport(ghostsCantTeleport);
+  Raid.onRaidArea("canTeleport", ghostsCantTeleport);
   api.onCanEquip(ghostsCantEquip);
   api.onCanUnequip(ghostsCantEquip);
 };
