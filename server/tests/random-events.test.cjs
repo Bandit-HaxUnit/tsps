@@ -13,6 +13,7 @@ const JekyllPlugin = require('../plugins/npcs/DrJekyll.plugin');
 const Gift = require('../plugins/npcs/random-events/GiftRewards');
 const PlantPlugin = require('../plugins/npcs/StrangePlant.plugin');
 const { Animation } = require('../dist/game/model/Animation');
+const { PlayerRights } = require('../dist/game/model/rights/PlayerRights');
 const { ItemOnGround, State } = require('../dist/game/entity/impl/grounditem/ItemOnGround');
 
 function harness(t, members = true) {
@@ -25,7 +26,8 @@ function harness(t, members = true) {
   let enabled = true, blocked = () => false, movable = () => true;
   const api = {
     core: { Item, ItemIdentifiers: I, NpcIdentifiers: N, Skill, Location, Wilderness: { isPvpArea: () => false },
-      WorldDefinition: { isMembersWorld: () => members }, Animation },
+      WorldDefinition: { isMembersWorld: () => members }, Animation, PlayerRights },
+    registerCommand(name, handler, rights, description) { hooks[name] = { handler, rights, description }; },
     onCustomEvent(name, cb) { custom.set(name, [...(custom.get(name) ?? []), cb]); },
     emitCustomEvent(name, event) { custom.get(name)?.forEach(cb => cb(event)); },
     getPluginConfig: () => enabled,
@@ -123,6 +125,47 @@ test('natural scheduling checks eligibility, traversable spawn squares, one foll
 test('bots and inaccessible squares cannot produce event NPCs', t => {
   const h = harness(t), p = h.player(); p.bot = true; h.spawn(p); assert.equal(h.npcs.length, 0);
   p.bot = false; h.collision(() => false, () => false); h.spawn(p); assert.equal(h.npcs.length, 0);
+});
+
+test('randevt is described and owner-only, selects each index immediately and replaces the owned event', t => {
+  const h = harness(t), p = h.player(), command = h.hooks.randevt;
+  assert.equal(command.rights, PlayerRights.OWNER);
+  assert.match(command.description, /zero-based event index/);
+  h.disable();
+  const ids = [N.GENIE, N.SANDWICH_LADY, N.DRUNKEN_DWARF, N.RICK_TURPENTINE,
+    N.MILES, N.MYSTERIOUS_OLD_MAN_2, N.DR_JEKYLL, N.STRANGE_PLANT];
+  let previous;
+  ids.forEach((id, index) => {
+    const event = { player: p, parts: ['randevt', String(index)], handled: false };
+    command.handler(event);
+    assert.equal(event.handled, true);
+    const npc = h.npcs.at(-1);
+    assert.equal(npc.definition.id, id); assert.equal(npc.owner, p);
+    if (previous) assert.equal(previous.removed, true);
+    if (index === 1) h.hooks['Sandwich lady']['Talk-to']({ player: p, npc });
+    if (index === 2) assert.equal(p.interfaceId, -1, 'replacement closes the old tray');
+    previous = npc;
+  });
+  h.random(0); command.handler({ player: p, parts: ['randevt'] });
+  assert.equal(h.npcs.at(-1).definition.id, N.GENIE, 'omitting the index picks a random event');
+  assert.equal(previous.removed, true);
+  h.emit('PlayerLogout', { player: p }); assert.equal(h.npcs.at(-1).removed, true);
+});
+
+test('randevt rejects malformed/unavailable indices and ineligible players without replacing an event', t => {
+  const h = harness(t, false), p = h.player(), command = h.hooks.randevt.handler;
+  command({ player: p, parts: ['randevt', '0'] }); const first = h.npcs.at(-1);
+  for (const args of [['-1'], ['6'], ['7'], ['8'], ['1.5'], ['nope'], ['1x'], [''], ['1', '2']]) {
+    command({ player: p, parts: ['randevt', ...args] });
+    assert.match(p.messages.at(-1), /Usage:.*0-5/);
+    assert.equal(h.npcs.length, 1); assert.equal(first.removed, undefined);
+  }
+  p.target = {}; command({ player: p, parts: ['randevt', '1'] });
+  assert.equal(h.npcs.length, 1); assert.equal(first.removed, undefined);
+  p.target = null; h.collision(() => true, () => false);
+  command({ player: p, parts: ['randevt', '1'] });
+  assert.equal(h.npcs.length, 1); assert.match(p.messages.at(-1), /No traversable square/);
+  h.emit('PlayerProcess', { player: p }); assert.equal(h.npcs.length, 1, 'failed test retains the cooldown');
 });
 
 test('Genie and dwarf deny other players, retain full-inventory events and grant only once', t => {

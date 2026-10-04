@@ -70,7 +70,7 @@ function eligible(player) {
     !combat.getTarget() && !combat.getAttacker() && !player.getCombatFollowing?.();
 }
 
-function spawn(player, state, now) {
+function spawn(player, state, now, definition = null) {
   const origin = player.getLocation();
   const { Location } = api.core;
   // LostCity uses a line-of-walk square beside the player; the local collision
@@ -81,7 +81,7 @@ function spawn(player, state, now) {
     .find((location) => !region.blocked(location, player.getPrivateArea?.()) &&
       region.canMovestart(origin, location, 1, 1, player.getPrivateArea?.()));
   if (!tile) return false;
-  const definition = events[Math.floor(Math.random() * events.length)];
+  definition ??= events[Math.floor(Math.random() * events.length)];
   const npc = api.spawnNpc({
     id: definition.ids ? definition.ids[Math.floor(Math.random() * definition.ids.length)] : definition.id,
     x: tile.getX(), y: tile.getY(), z: tile.getZ(),
@@ -103,6 +103,27 @@ function spawn(player, state, now) {
   if (definition.greeting) npc.forceChat(`${definition.greeting} ${player.getUsername()}!`);
   definition.onSpawn?.(active);
   return true;
+}
+
+function spawnCommand(event) {
+  event.handled = true;
+  const { player, parts } = event;
+  const index = parts.length === 1 ? Math.floor(Math.random() * events.length) : Number(parts[1]);
+  if (parts.length > 2 || (parts.length === 2 && !/^\d+$/.test(parts[1])) ||
+      !Number.isInteger(index) || index < 0 || index >= events.length) {
+    player.sendMessage(`Usage: ::randevt [id] (0-${events.length - 1}; omit id for random).`);
+    return;
+  }
+  if (!eligible(player)) {
+    player.sendMessage("Move outside combat and restricted activities before testing a random event.");
+    return;
+  }
+  login({ player }); // Replace the previous owned event and re-arm its cooldown.
+  if (spawn(player, players.get(player), Date.now(), events[index])) {
+    player.sendMessage(`Spawned random event ${index} (${events[index].kind}).`);
+  } else {
+    player.sendMessage("No traversable square is available beside you.");
+  }
 }
 
 function valid(active, player, now = Date.now()) {
@@ -246,4 +267,4 @@ function shutdown() {
   players.clear();
 }
 
-module.exports = { DEFINITIONS_EVENT, initialize, login, processPlayer, talk, chooseSandwich, chooseCerter, dismiss, cleanup, shutdown };
+module.exports = { DEFINITIONS_EVENT, initialize, login, processPlayer, spawnCommand, talk, chooseSandwich, chooseCerter, dismiss, cleanup, shutdown };

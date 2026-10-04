@@ -6,6 +6,7 @@ const Lamp = require("./random-events/GenieLamp");
 module.exports = {
   name: "RandomEvents",
   register(api) {
+    api.registerCommand("randevt", Events.spawnCommand, api.core.PlayerRights.OWNER, "Test a random event ([id] = zero-based event index; omit for random)");
     api.onServerStartup(Events.initialize.bind(null, api));
     api.onServerShutdown(Events.shutdown);
     api.onPlayerLogin(Events.login);

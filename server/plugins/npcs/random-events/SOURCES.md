@@ -44,7 +44,15 @@ before adding items, callbacks check server ownership and the lamp's exact slot/
 and logout/disconnect/death invalidate pending rewards. Expiry/distance/instance
 changes remove followers. All 24 cache skills are selectable via existing prompts;
 blocked/maxed XP retains the lamp. No native reward interface 240 reconstruction,
-extra commands, dependencies or core feature hooks are needed.
+dependencies or core feature hooks are needed.
+
+Owners can test with `::randevt [id]`, bypassing the natural cooldown and scheduler
+enable flag. Omit the index for a random event. The zero-based indices are:
+0 Genie, 1 Sandwich Lady, 2 Drunken Dwarf, 3 Rick Turpentine, 4 Certers,
+5 Mysterious Old Man, 6 Dr Jekyll, 7 Strange Plant. F2P only exposes indices 0–5.
+The command replaces your previous event using its normal cleanup, and retains
+eligibility, traversable spawning, ownership, expiry and reward checks. Its
+description is registered for command search.
 
 Verify after build: `node --test tests/random-events.test.cjs tests/food-effects.test.cjs`.
 These tests exercise real plugin registration with controlled lifecycle/collision/
