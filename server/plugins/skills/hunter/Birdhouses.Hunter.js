@@ -201,4 +201,16 @@ function seeds({ player, object }) {
   return true;
 }
 
-module.exports = { initialize, login, sync, use, build, craft, empty, reset, dismantle, seeds, ATTRIBUTE, DURATION, bases, status, seedValue };
+/** Test hook: moves this player's bird houses `ms` closer to full. */
+function advanceTime(event) {
+  const { player, ms } = event;
+  let moved = false;
+  for (const house of Object.values(houses(player))) {
+    if (valid(house) && house.seeds === 10) { house.filled -= ms; moved = true; }
+  }
+  if (!moved) return;
+  sync({ player });
+  event.handledBy.push("Hunter");
+}
+
+module.exports = { initialize, login, sync, use, build, craft, empty, reset, dismantle, seeds, advanceTime, ATTRIBUTE, DURATION, bases, status, seedValue };

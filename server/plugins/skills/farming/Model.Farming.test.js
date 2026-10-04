@@ -161,6 +161,13 @@ try {
     clock = dueAt + 600;
     Patches.tick();
     assert.equal(herbState.stage, stage + 1, "growth lands on the farming tick");
+
+    // advance_time skips the farming clock forward and grows as normal.
+    const skip = { player: farmer, ms: 3 * Data.CROPS.get("RANARR").minutes * Model.MINUTE, handledBy: [] };
+    Patches.advanceTime(skip);
+    assert.deepEqual(skip.handledBy, ["Farming"]);
+    assert.ok(herbState.stage >= stage + 3 || herbState.status !== "growing", "three growth cycles applied");
+    assert.ok(herbState.nextAt > clock, "the next stage is scheduled after the skip");
     logout({ player: farmer });
 
     // Movement must use the region index, not iterate the entire patch table.

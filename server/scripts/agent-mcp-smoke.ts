@@ -13,7 +13,15 @@ const item = (id: number, amount = 1) => ({
 const skill = { getName: () => "Woodcutting" };
 
 const clientMessages: string[] = [];
-const packetSender = { getChatboxGroupId: () => 231, sendMessage: (message: string) => clientMessages.push(message) };
+const varbits = new Map<number, number>();
+const packetSender = {
+    getChatboxGroupId: () => 231,
+    sendMessage: (message: string) => clientMessages.push(message),
+    sendVarbit: (id: number, value: number) => { varbits.set(id, value); return packetSender; },
+    getVarbit: (id: number) => varbits.get(id) ?? 0,
+    getVarp: () => 0,
+    sendInterfaceDisplayState: () => packetSender,
+};
 class NpcDialogue {
     constructor(private npcId: number, private text: string) {}
     getNpcId() { return this.npcId; }
@@ -36,9 +44,14 @@ const dialogueManager = {
 let bankOpen = false;
 let prompt: { title: string; options: string[] } | null = null;
 let movingTicks = 0;
+let rights = "NONE";
 const player = {
     getUsername: () => "Agent1",
     getIndex: () => 1,
+    getRights: () => rights,
+    setRights: (next: string) => { rights = next; },
+    getArea: () => ({ getName: () => "Wilderness", pluginName: "Wilderness" }),
+    getPrivateArea: () => null,
     getMovementQueue: () => ({ hasPendingWork: () => movingTicks-- > 0 }),
     getDialogueManager: () => dialogueManager,
     getInterfaceId: () => -1,
@@ -57,6 +70,7 @@ const npc = {
     getLocation: () => location(3225, 3220),
     getCurrentDefinition: () => ({ getName: () => "Man", getActions: () => ["Talk-to", null, "Attack", "Pickpocket"] }),
 };
+const rival = { getUsername: () => "Agent2", getIndex: () => 2, getLocation: () => location(3223, 3218), getPacketSender: () => ({ sendMessage: () => {} }) };
 const tree = { getId: () => 1276, getLocation: () => location(3220, 3216) };
 const dispatched: any[] = [];
 
@@ -75,8 +89,28 @@ const connectHeadlessClient = async (username: string) => {
     return { player: loadPlayer };
 };
 
+const advanced: any[] = [];
+const commandRights: string[] = [];
 const core = {
     connectHeadlessClient,
+    PlayerRights: { DEVELOPER: "DEVELOPER" },
+    CanAttackResponse: { CAN_ATTACK: 0, CANT_ATTACK_IN_AREA: 1, 0: "CAN_ATTACK", 1: "CANT_ATTACK_IN_AREA" },
+    CombatFactory: {
+        canAttackPermission: (attacker: any, target: any) => {
+            attacker.getPacketSender().sendMessage("You can't attack your own team in Castle Wars.");
+            return target === rival ? 1 : 0;
+        },
+    },
+    TeleportHandler: { checkReqs: (_p: unknown, destination: any) => destination.getY() < 3520 },
+    CacheDefinitions: {
+        getSpellByName: (name: string) => (name.toLowerCase() === "varrock teleport" ? { widgetId: (218 << 16) | 23, itemId: 20 } : undefined),
+    },
+    PluginManager: {
+        emitCustomEvent: (name: string, event: any) => {
+            advanced.push([name, event.ms]);
+            if (name === "agent:advance-time") event.handledBy.push("Farming");
+        },
+    },
     Location: class { constructor(private x: number, private y: number, private z: number) {} getX() { return this.x; } getY() { return this.y; } getZ() { return this.z; } },
     RegionManager: { blocked: () => false },
     ServerPerf: {
@@ -97,7 +131,7 @@ const core = {
     World: {
         // One tick per millisecond, matching GAME_ENGINE_PROCESSING_CYCLE_RATE below.
         getProcessCycle: () => Date.now(),
-        getPlayerByName: (name: string) => (name.toLowerCase() === "agent1" ? player : loadOnline.get(name)),
+        getPlayerByName: (name: string) => (name.toLowerCase() === "agent1" ? player : name.toLowerCase() === "agent2" ? rival : loadOnline.get(name)),
         getPlayers: () => ({ stream: () => [player, ...loadOnline.values()] }),
         getNpcs: () => ({ stream: () => [npc, null], get: (index: number) => (index === 7 ? npc : undefined) }),
         getItems: () => [{ getItem: () => item(526), getPosition: () => location(3223, 3218) }],
@@ -131,6 +165,7 @@ const core = {
     GameConstants: { GAME_ENGINE_PROCESSING_CYCLE_RATE: 1 },
     dispatchClientMessages: (target: unknown, messages: unknown[]) => {
         assert.equal(target, player);
+        for (const message of messages as any[]) if (message.type === "chat" && message.text.startsWith("::")) commandRights.push(rights);
         dispatched.push(...messages);
         // Stand in for the server: continue advances the dialogue, an option click ends it.
         for (const message of messages as any[]) {
@@ -271,6 +306,47 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
         { type: "widget_action", widgetId: 301 << 16, groupId: 301, childId: 0, slot: 0, itemId: 1351, buttonNum: 1, option: "Sell 1" },
     ]);
     assert.ok((await call(client, "bank_withdraw", { player: "agent1", item: "Shrimps" })).error);
+
+    // Admin commands run as a developer for that call only.
+    dispatched.length = 0;
+    await call(client, "command", { player: "agent1", text: "tele 3093 3493", ticks: 1 });
+    assert.deepEqual(dispatched, [{ type: "chat", text: "::tele 3093 3493", messageType: "public" }]);
+    assert.equal(commandRights.at(-1), "DEVELOPER", "the command runs as a developer");
+    assert.equal(rights, "NONE", "the player's own rank is restored");
+
+    // Rule probes report the real verdict and what it told the player.
+    let verdict = (await call(client, "can_attack", { attacker: "agent1", target: { player: "agent2" } })).value;
+    assert.deepEqual(verdict, { response: "CANT_ATTACK_IN_AREA", allowed: false, messages: ["You can't attack your own team in Castle Wars."] });
+    verdict = (await call(client, "can_attack", { attacker: "agent1", target: { npc: 7 } })).value;
+    assert.equal(verdict.allowed, true);
+    assert.ok((await call(client, "can_attack", { attacker: "agent1", target: { npc: 99 } })).error);
+    assert.equal((await call(client, "can_teleport", { player: "agent1", x: 3093, y: 3493 })).value.allowed, true);
+    assert.equal((await call(client, "can_teleport", { player: "agent1", x: 3093, y: 3700 })).value.allowed, false);
+
+    // Player options and spells go out as the packets a client sends.
+    dispatched.length = 0;
+    await call(client, "player_option", { player: "agent1", target: "agent2", option: "Attack", ticks: 0 });
+    await call(client, "cast_spell", { player: "agent1", spell: "Varrock Teleport", ticks: 0 });
+    await call(client, "cast_spell", { player: "agent1", spell: "varrock teleport", target: { npc: 7 }, ticks: 0 });
+    assert.deepEqual(dispatched, [
+        { type: "player_option", index: 2, option: 1 },
+        { type: "widget_action", widgetId: (218 << 16) | 23, groupId: 218, childId: 23, buttonNum: 1, option: "Cast", itemId: 20 },
+        { type: "spell_on_npc", targetIndex: 7, spellWidget: (218 << 16) | 23, spellChild: -1, spellItemId: 20 },
+    ]);
+    assert.ok((await call(client, "cast_spell", { player: "agent1", spell: "Not A Spell" })).error);
+
+    // Time skips go to the plugins that keep timed state.
+    const skipped = (await call(client, "advance_time", { player: "agent1", minutes: 80, ticks: 0 })).value;
+    assert.deepEqual([skipped.handledBy, advanced.at(-1)], [["Farming"], ["agent:advance-time", 80 * 60_000]]);
+
+    // What the client was told comes back once, alongside the player's area.
+    player.getPacketSender().sendVarbit(5963, 1);
+    player.getPacketSender().sendInterfaceDisplayState((90 << 16) | 43, true);
+    const seen = (await call(client, "observe", { player: "agent1", varbits: [5963] })).value;
+    assert.deepEqual(seen.area, { name: "Wilderness", plugin: "Wilderness", private: false });
+    assert.deepEqual(seen.client, { varbits: { 5963: 1 }, interfaces: ["hide 90:43"] });
+    assert.deepEqual(seen.varbitValues, { 5963: 1 });
+    assert.equal((await call(client, "observe", { player: "agent1" })).value.client.varbits, undefined, "reported once");
 
     // Perf numbers come back as data, rounded to the microsecond.
     const serverPerf = (await call(client, "server_perf", { ticks: 30 })).value;
