@@ -61,7 +61,24 @@ const tree = { getId: () => 1276, getLocation: () => location(3220, 3216) };
 const dispatched: any[] = [];
 
 let pluginProfiling = false;
+// Headless load players: online until requestLogout.
+const loadOnline = new Map<string, any>();
+const connectHeadlessClient = async (username: string) => {
+    const loadPlayer = {
+        attributes: new Map<string, unknown>(),
+        location: null as any,
+        setAttribute(key: string, value: unknown) { this.attributes.set(key, value); },
+        moveTo(tile: any) { this.location = tile; },
+        requestLogout: () => loadOnline.delete(username),
+    };
+    loadOnline.set(username, loadPlayer);
+    return { player: loadPlayer };
+};
+
 const core = {
+    connectHeadlessClient,
+    Location: class { constructor(private x: number, private y: number, private z: number) {} getX() { return this.x; } getY() { return this.y; } getZ() { return this.z; } },
+    RegionManager: { blocked: () => false },
     ServerPerf: {
         getSummary: (ticks: number) => ({
             ticks, avgTickMs: 12.34567, maxTickMs: 40, avgDriftMs: 0, maxDriftMs: 1, lastTickNumber: 9,
@@ -80,8 +97,8 @@ const core = {
     World: {
         // One tick per millisecond, matching GAME_ENGINE_PROCESSING_CYCLE_RATE below.
         getProcessCycle: () => Date.now(),
-        getPlayerByName: (name: string) => (name.toLowerCase() === "agent1" ? player : undefined),
-        getPlayers: () => ({ stream: () => [player] }),
+        getPlayerByName: (name: string) => (name.toLowerCase() === "agent1" ? player : loadOnline.get(name)),
+        getPlayers: () => ({ stream: () => [player, ...loadOnline.values()] }),
         getNpcs: () => ({ stream: () => [npc, null], get: (index: number) => (index === 7 ? npc : undefined) }),
         getItems: () => [{ getItem: () => item(526), getPosition: () => location(3223, 3218) }],
     },
@@ -264,6 +281,26 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     assert.equal(pluginPerf.profiling, true);
     assert.deepEqual([pluginPerf.plugins[0].pluginName, pluginPerf.plugins[0].totalMs], ["Wilderness", 1.235]);
     assert.equal((await call(client, "plugin_perf", { profiling: "off" })).value.profiling, false);
+
+    // Load players log in scattered around the spot, are never saved, and number on from the
+    // last one with that prefix.
+    let spawned = (await call(client, "load_spawn", { count: 3, x: 3200, y: 3200, radius: 2, wanderChance: 0 })).value;
+    assert.deepEqual([spawned.spawned, spawned.loadPlayers, spawned.playersOnline], [3, 3, 4]);
+    spawned = (await call(client, "load_spawn", { count: 2, x: 3100, y: 3500, radius: 0, wanderChance: 0 })).value;
+    assert.ok(loadOnline.has("load5"));
+    assert.equal(loadOnline.get("load1").attributes.get("bot-skip-persistence"), true);
+    assert.equal(loadOnline.get("load5").location.getY(), 3500);
+    assert.ok(Math.abs(loadOnline.get("load1").location.getX() - 3200) <= 2);
+    const statusValue = (await call(client, "load_status", {})).value;
+    assert.equal(statusValue.loadPlayers, 5);
+    assert.equal(Object.keys(statusValue.spots).length, 2);
+    const sampled = await call(client, "perf_sample", { seconds: 5 });
+    if (sampled.error) throw new Error(sampled.text);
+    const sample = sampled.value;
+    assert.deepEqual([sample.loadPlayers, sample.playersOnline, sample.server.ticks], [5, 6, 5000]);
+    assert.equal(pluginProfiling, false, "perf_sample restores the profiling state it found");
+    assert.deepEqual((await call(client, "load_despawn", {})).value, { removed: 5, loadPlayers: 0 });
+    assert.equal(loadOnline.size, 0);
 
     await client.close();
     console.log("agent-mcp smoke passed");
