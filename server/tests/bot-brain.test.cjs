@@ -145,3 +145,67 @@ test('an unreachable object is avoided by every bot until it expires', () => {
   assert.equal(isAvoided('1278:3230:3279:0', 1000), false, 'expired entries are retried');
   assert.equal(UNREACHABLE_UNTIL.has('1278:3230:3279:0'), false);
 });
+
+const { createPvpCombatAction } = require('../plugins/bots/brain/actions/PvpCombat');
+const { PvpController } = require('../plugins/bots/brain/pvp/PvpController');
+const { Location } = require('../dist/game/model/Location');
+const { peekMovementRequest, clearMovementRequest } = require('../plugins/bots/behaviours/navigation/BotNavigation');
+const { __testing: loadoutTesting } = require('../plugins/bots/behaviours/policies/PvpLoadoutPolicy');
+const { getWildernessHotspot } = require('../plugins/bots/behaviours/pvp/WildernessHotspotRegistry');
+const { SkillManager } = require('../dist/game/content/skill/SkillManager');
+
+test('unmatched pvp bots walk between seek retries; overlays return to their activity', () => {
+  const calls = [];
+  const controller = {
+    tick: () => calls.push('fight'), ensureLoadout() {},
+    seek: () => calls.push('seek'), wanderWhileSeeking: () => calls.push('walk'),
+  };
+  const ctx = { nowMs: 10, player: { getHitpoints: () => 99 }, state: { pvp: { nextActionAt: 100 } } };
+  createPvpCombatAction({}, controller).update(ctx);
+  assert.deepEqual(calls, ['walk']);
+  calls.length = 0;
+  assert.equal(createPvpCombatAction({ exitWhenIdle: true }, controller).update(ctx), 'success');
+  assert.deepEqual(calls, []);
+  ctx.player.getCombat = () => ({ getTarget: () => ({ getHitpoints: () => 99 }) });
+  createPvpCombatAction({}, controller).update(ctx);
+  assert.deepEqual(calls, ['fight']);
+});
+
+test('idle pvp walking stays inside its hotspot and pauses for movement or combat', () => {
+  const player = { ...fakePlayer('wander', 3085, 3528), getLocation: () => new Location(3085, 3528, 0) };
+  const state = { autonomy: { allowedAutonomousModes: ['pvp'] }, pvp: { hotspotId: 'edge_ditch' },
+    roaming: { nextWalkAt: 0, roamBounds: getWildernessHotspot('edge_ditch').area } };
+  const controller = Object.create(PvpController.prototype);
+  controller.api = { getRegionManager: () => ({ blocked: () => false, isWater: () => false }) };
+  controller.getEntries = () => [];
+  controller.wanderWhileSeeking({ player, state, nowMs: 100 });
+  const request = peekMovementRequest(player);
+  assert.ok(request);
+  assert.ok(request.x >= 3078 && request.x <= 3091 && request.y >= 3525 && request.y <= 3535);
+  assert.notDeepEqual([request.x, request.y], [3085, 3528]);
+  assert.ok(state.roaming.nextWalkAt >= 3600);
+  clearMovementRequest(player);
+  assert.equal(controller.wanderWhileSeeking({ player, state, nowMs: 101 }), false);
+  player.getCombat = () => ({ getAttacker: () => ({}) });
+  assert.equal(controller.wanderWhileSeeking({ player, state, nowMs: 20000 }), false);
+  assert.equal(peekMovementRequest(player), null);
+});
+
+test('Edgeville generated and global presets remain within narrow combat bands', () => {
+  for (const hotspotId of ['edge_ditch', 'edge_south']) {
+    const hotspot = getWildernessHotspot(hotspotId);
+    const band = hotspot.combatLevelRange;
+    for (const profileId of hotspot.allowedProfiles) {
+      for (const loadoutId of hotspot.allowedLoadouts) {
+        for (let i = 0; i < 5; i++) {
+          const state = { pvp: { hotspotId, loadoutId, profileId, presetPoolEnabled: true } };
+          const generated = loadoutTesting.buildGeneratedPreset(null, state);
+          assert.ok(generated, `${hotspotId}/${profileId}/${loadoutId}`);
+          const stats = generated.preset.getStats();
+          const level = SkillManager.prototype.getCombatLevel.call({ skills: { maxLevel: stats } });
+          assert.ok(level >= band.min && level <= band.max, `${generated.archetypeId}: ${level}`);
+        }
+      }
+    }
+  }
+});
