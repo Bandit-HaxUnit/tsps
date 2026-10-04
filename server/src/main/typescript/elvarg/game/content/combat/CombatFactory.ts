@@ -230,7 +230,8 @@ export class CombatFactory {
                 }
             }
         }
-        if (victim.isPlayer() && Misc.getRandom(100) <= 70) {
+        // The Elysian spirit shield cuts damage by 25% 70% of the time (Wiki).
+        if (victim.isPlayer() && Math.random() < CombatConstants.ELYSIAN_ACTIVATION_CHANCE) {
             if (victim.getAsPlayer().getEquipment().getItems()[Equipment.SHIELD_SLOT].getId() == 12817) {
                 hitDamage.multiplyDamage(CombatConstants.ELYSIAN_DAMAGE_REDUCTION);
                 victim.performGraphic(new Graphic(321, 40)); // Elysian spirit shield effect gfx
@@ -323,6 +324,7 @@ export class CombatFactory {
      */
     private static applyResolvedHitDamage(target: Mobile, resolvedHit: PendingHit): void {
         const hits = resolvedHit.getHits();
+        for (const hit of hits) if (hit.getSource() == null) hit.setSource(resolvedHit.getAttacker());
         const delays = resolvedHit.getHitDelays();
         if (!delays || delays.length <= 1 || delays.length !== hits.length) {
             target.getCombat().getHitQueue().addPendingDamage(hits);
@@ -805,10 +807,8 @@ export class CombatFactory {
             }
 
             // Prayer effects.
+            // Redemption checks after the damage lands (HitQueue -> handleRedemption).
             if (resolvedHit.isAccurate()) {
-                if (PrayerHandler.isActivated(playerTarget, PrayerHandler.REDEMPTION)) {
-                    CombatFactory.handleRedemption(attacker, playerTarget, damage);
-                }
                 if (PrayerHandler.isActivated(attacker, PrayerHandler.SMITE)) {
                     CombatFactory.handleSmite(attacker, playerTarget, damage);
                 }
@@ -882,10 +882,7 @@ export class CombatFactory {
 
         // Handle ring of recoil and vengeance for target.
         if (damage > 0) {
-            if (
-                target.isPlayer() &&
-                target.getAsPlayer().getEquipment().get(Equipment.RING_SLOT).getId() == ItemIdentifiers.RING_OF_RECOIL
-            ) {
+            if (target.isPlayer() && CombatFactory.wearingRecoilRing(target.getAsPlayer())) {
                 CombatFactory.handleRecoil(target.getAsPlayer(), attacker, damage);
             }
             if (target.hasVengeanceReturn()) {
@@ -1038,26 +1035,59 @@ export class CombatFactory {
         player.sendMessage("You have been disabled and can no longer use protection prayers.");
     }
 
+    /** Rings of suffering charged with rings of recoil; they keep their own charges. */
+    private static readonly SUFFERING_RECOIL_RING_IDS = new Set<number>([
+        ItemIdentifiers.RING_OF_SUFFERING_R_,
+        ItemIdentifiers.RING_OF_SUFFERING_RI_,
+        ItemIdentifiers.RING_OF_SUFFERING_RI__3,
+        ItemIdentifiers.RING_OF_SUFFERING_RI__5,
+        ItemIdentifiers.RING_OF_SUFFERING_RI__6,
+    ]);
+
+    /** Damage a ring of recoil holds before it shatters (Wiki: Ring of recoil). */
+    public static readonly RECOIL_RING_CHARGES = 40;
+
+    public static wearingRecoilRing(player: Player): boolean {
+        const ringId = player.getEquipment().get(Equipment.RING_SLOT).getId();
+        return ringId === ItemIdentifiers.RING_OF_RECOIL || CombatFactory.SUFFERING_RECOIL_RING_IDS.has(ringId);
+    }
+
+    /** 10% + 1 of the damage taken, rounded down (Wiki: Ring of recoil). */
+    public static recoilDamage(damage: number): number {
+        return damage > 0 ? Math.floor(damage / 10) + 1 : 0;
+    }
+
+    /**
+     * Rebounds recoil damage to the attacker. A ring of recoil's 40 charges are
+     * tracked per player and its last recoil deals only what is left. A charged
+     * ring of suffering keeps up to 100,000 charges on the ring; they are not
+     * tracked here, so it recoils without draining.
+     */
     public static handleRecoil(player: Player, attacker: Mobile, damage: number) {
-        if (damage == 0) {
+        let returnDmg = CombatFactory.recoilDamage(damage);
+        if (returnDmg <= 0) {
             return;
         }
-        const RECOIL_DMG_MULTIPLIER = 0.1;
-        let returnDmg = Math.floor(Math.random() * 3) + 1 === 2 ? 0 : (damage * RECOIL_DMG_MULTIPLIER) + 1;
+        const ringId = player.getEquipment().get(Equipment.RING_SLOT).getId();
+        if (CombatFactory.SUFFERING_RECOIL_RING_IDS.has(ringId)) {
+            attacker.getCombat().getHitQueue().addPendingDamage([new HitDamage(returnDmg, HitMask.RED).markReflected().setSource(player)]);
+            return;
+        }
 
-        // Increase recoil damage for a player.
-        const recoilDamage = Number(player.getAttribute(CombatFactory.RECOIL_DAMAGE_ATTRIBUTE) ?? 0) + returnDmg;
-        player.setAttribute(CombatFactory.RECOIL_DAMAGE_ATTRIBUTE, recoilDamage);
+        const used = Math.max(0, Number(player.getAttribute(CombatFactory.RECOIL_DAMAGE_ATTRIBUTE) ?? 0) || 0);
+        returnDmg = Math.min(returnDmg, Math.max(0, CombatFactory.RECOIL_RING_CHARGES - used));
+        if (returnDmg <= 0) {
+            return;
+        }
+        attacker.getCombat().getHitQueue().addPendingDamage([new HitDamage(returnDmg, HitMask.RED).markReflected().setSource(player)]);
 
-        // Deal damage back to attacker
-        attacker.getCombat().getHitQueue().addPendingDamage([new HitDamage(returnDmg, HitMask.RED)]);
-
-        // Degrading ring of recoil for a player.
-        if (recoilDamage >= 40) {
+        if (used + returnDmg >= CombatFactory.RECOIL_RING_CHARGES) {
             player.getEquipment().set(Equipment.RING_SLOT, new Item(-1));
             player.getEquipment().refreshItems();
-            player.sendMessage("Your ring of recoil has degraded.");
+            player.sendMessage("<col=7f007f>Your Ring of Recoil has shattered.</col>");
             player.setAttribute(CombatFactory.RECOIL_DAMAGE_ATTRIBUTE, 0);
+        } else {
+            player.setAttribute(CombatFactory.RECOIL_DAMAGE_ATTRIBUTE, used + returnDmg);
         }
     }
 
@@ -1066,7 +1096,7 @@ export class CombatFactory {
             return;
         }
         const returnDmg = Math.max(1, Math.floor(damage * 0.75));
-        attacker.getCombat().getHitQueue().addPendingDamage([new HitDamage(returnDmg, HitMask.RED)]);
+        attacker.getCombat().getHitQueue().addPendingDamage([new HitDamage(returnDmg, HitMask.RED).markReflected().setSource(character)]);
         character.forceChat("Taste Vengeance!");
         character.setHasVengeance(false);
     }
@@ -1243,26 +1273,50 @@ export class CombatFactory {
         }
     }
 
-    private static handleRedemption(attacker: Mobile, victim: Player, damage: number) {
-        if ((victim.getHitpoints() - damage) <= (victim.getSkillManager().getMaxLevel(Skill.HITPOINTS) / 10)) {
-            const amountToHeal = (victim.getSkillManager().getMaxLevel(Skill.PRAYER) * .25);
-            victim.performGraphic(new Graphic(436));
-            victim.getSkillManager().setCurrentLevels(Skill.PRAYER, 0);
-            victim.getSkillManager().setCurrentLevels(Skill.HITPOINTS, victim.getHitpoints() + amountToHeal);
-            victim.sendMessage("You've run out of prayer points!");
-            PrayerHandler.deactivatePrayers(victim);
+    /**
+     * Redemption, run after a hit has been applied: a living player under 10% of
+     * their Hitpoints (9 or below at 99) has their prayer drained to 0 and heals
+     * a quarter of their base Prayer level, rounded down. It fires on any hit,
+     * including 0s, but can't save a player from a lethal one (Wiki: Redemption).
+     */
+    public static handleRedemption(victim: Mobile) {
+        if (!victim.isPlayer()) {
+            return;
+        }
+        const player = victim.getAsPlayer();
+        const hitpoints = player.getHitpoints();
+        if (hitpoints <= 0 || !PrayerHandler.isActivated(player, PrayerHandler.REDEMPTION)) {
+            return;
+        }
+        const skills = player.getSkillManager();
+        if (hitpoints * 10 >= skills.getMaxLevel(Skill.HITPOINTS)) {
+            return;
+        }
+        player.performGraphic(new Graphic(436));
+        skills.setCurrentLevels(Skill.PRAYER, 0);
+        skills.setCurrentLevels(Skill.HITPOINTS, hitpoints + Math.floor(skills.getMaxLevel(Skill.PRAYER) / 4));
+        player.sendMessage("You have run out of Prayer points!");
+        PrayerHandler.deactivatePrayers(player);
+    }
+
+    /** Smite drains a quarter of the damage dealt from the target's Prayer, rounded down (Wiki: Smite). */
+    public static handleSmite(attacker: Mobile, victim: Player, damage: number) {
+        const drain = Math.floor(damage / 4);
+        if (drain > 0) {
+            victim.getSkillManager().decreaseCurrentLevel(Skill.PRAYER, drain, 0);
         }
     }
 
-    private static handleSmite(attacker: Mobile, victim: Player, damage: number) {
-        victim.getSkillManager().decreaseCurrentLevel(Skill.PRAYER, (damage / 4), 0);
-    }
-
+    /**
+     * Retribution: on death, hits the killer if they're next to the dying player
+     * for up to a quarter of the dying player's base Prayer level (Wiki: Retribution).
+     */
     static handleRetribution(killed: Player, killer: Player) {
         killed.performGraphic(new Graphic(437));
-        if (killer.getLocation().isWithinDistance(killer.getLocation(), CombatConstants.RETRIBUTION_RADIUS)) {
+        if (killer.getLocation().isWithinDistance(killed.getLocation(), CombatConstants.RETRIBUTION_RADIUS)) {
+            const maxHit = Math.floor(killed.getSkillManager().getMaxLevel(Skill.PRAYER) / 4);
             killer.getCombat().getHitQueue().addPendingDamage([
-                new HitDamage(Misc.getRandom(CombatConstants.MAXIMUM_RETRIBUTION_DAMAGE), HitMask.RED)]);
+                new HitDamage(Misc.randomInclusive(0, maxHit), HitMask.RED).markReflected().setSource(killed)]);
         }
     }
 

@@ -1,4 +1,5 @@
 import { HitMask } from './HitMask';
+import type { Mobile } from '../../../entity/impl/Mobile';
 export class HitDamage {
     private damage: number;
     private hitmask: HitMask;
@@ -56,6 +57,33 @@ export class HitDamage {
     public setSplatTypes(mine: number, others: number): HitDamage {
         this.splatTypes = { mine, others };
         return this;
+    }
+
+    /** Damage rebounded by recoil, vengeance or retribution; a death from it doesn't trigger Retribution. */
+    private reflected = false;
+
+    public markReflected(): HitDamage {
+        this.reflected = true;
+        return this;
+    }
+
+    public isReflected(): boolean {
+        return this.reflected;
+    }
+
+    /**
+     * Who dealt the hit, when known. The dealer sees it as their own hitsplat, like
+     * the player it lands on; everyone else sees the darker "other" one.
+     */
+    private source: Mobile | null = null;
+
+    public setSource(source: Mobile | null): HitDamage {
+        this.source = source;
+        return this;
+    }
+
+    public getSource(): Mobile | null {
+        return this.source;
     }
 
     public getSplatType(mine: boolean): number | null {

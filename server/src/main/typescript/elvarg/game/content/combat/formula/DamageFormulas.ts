@@ -7,7 +7,7 @@ import { Mobile } from "../../../entity/impl/Mobile";
 import type { Player } from "../../../entity/impl/player/Player";
 import type { NPC } from "../../../entity/impl/npc/NPC";
 import type { CombatSpell } from "../magic/CombatSpell";
-import { applyMagicHitModifiers, applyMeleeHitModifiers } from "../EquipmentEffects";
+import { applyMagicHitModifiers, applyMeleeHitModifiers, applyRangedHitModifiers } from "../EquipmentEffects";
 import { CombatEquipment } from "../CombatEquipment";
 import { CombatSpecial } from "../CombatSpecial";
 import { SpecialAttackMaximumHitSource, WeaponSpecialTraits } from "../WeaponSpecialTraits";
@@ -316,7 +316,7 @@ export class DamageFormulas {
                 );
         }
 
-        return Math.floor(maxHit);
+        return Math.floor(applyRangedHitModifiers(player, maxHit));
     }
 
     /**
