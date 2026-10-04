@@ -357,14 +357,15 @@ function closeSpawnSearchOnMove({ player }) {
 
 function spawnSearchPick(player, input) {
   const spawn = spawnSearches.get(player);
-  // The client closes the search itself once a row is picked.
-  endSpawnSearch(player);
   const [idPart, opPart] = String(input).split(" ");
   const id = parseIntArg(idPart);
   const op = parseIntArg(opPart) ?? 1;
   if (!spawn || id === null || id < 0) {
     return;
   }
+  // Re-arm: the client keeps the results open, so later picks must still reach us
+  // (the input handler clears the action unless it was replaced during the call).
+  player.setEnteredSyntaxAction({ execute: (next) => spawnSearchPick(player, next) });
   if (op === SPAWN_OP_X) {
     player.setEnteredAmountAction({ execute: (amount) => spawnEnteredAmount(spawn, amount, id) });
     player.getPacketSender().sendEnterAmountPrompt("Enter the amount to spawn.");

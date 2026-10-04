@@ -673,7 +673,7 @@ export class OsrsClient {
     private lastSpotGraphicByPlayer: Map<number, number> = new Map();
     /**
      * Examine "ID:" labels on menu targets (also gates null-name world entries).
-     * Disabled by default; enable with REACT_APP_DISABLE_DEBUG_ID=false at build time.
+     * On in development; disable with REACT_APP_DISABLE_DEBUG_ID=true at build time.
      */
     debugId: boolean = isDebugIdEnabled();
 

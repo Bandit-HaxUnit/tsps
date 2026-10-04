@@ -1166,6 +1166,7 @@ export interface PluginCoreApi {
   ForceMovementTask: any;
   TaskManager: any;
   ItemIdentifiers: any;
+  ItemIds: any;
   NpcIdentifiers: any;
   ObjectIdentifiers: any;
   ShopIdentifiers: any;

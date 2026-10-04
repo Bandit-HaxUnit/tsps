@@ -1,6 +1,7 @@
-import { sendWidgetAction, sendWidgetActionMessage } from "../../../network/ServerConnection";
+import { sendResumeNameDialog, sendWidgetAction, sendWidgetActionMessage } from "../../../network/ServerConnection";
 import { ClientPacketId, createPacket, queuePacket } from "../../../network/packet";
 import type { ScriptEvent } from "../../../rs/cs2/Cs2Vm";
+import { spawnSearchPick } from "../../../rs/cs2/spawnSearch";
 import { shouldTransmitAction } from "../../../widgets/WidgetFlags";
 import {
     isPauseButtonWidget as isPauseButtonWidgetUtil,
@@ -264,6 +265,16 @@ export function processWidgetClickInput(
                     // Handlers can mutate widget ops (e.g., Mute -> Unmute), but the transmitted action
                     // should reflect what was clicked pre-mutation.
                     const primaryAction = getPrimaryWidgetAction(w);
+
+                    // A ::items / ::npcs result row: send the pick ourselves and skip the
+                    // cache search's select script, which resumes the dialog and closes the
+                    // search. Keeps the results open for repeat spawns.
+                    const spawnPick = spawnSearchPick(w, primaryAction.opIndex ?? 1);
+                    if (spawnPick !== null) {
+                        sendResumeNameDialog(spawnPick);
+                        widgetInteraction.clickedWidgetHandled = true;
+                        break;
+                    }
 
                     // Trade item slots are draggable and reach handleWidgetAction on mouse-up,
                     // but the native Accept/Decline buttons are not. Route these primary button
