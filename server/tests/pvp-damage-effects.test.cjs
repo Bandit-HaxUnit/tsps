@@ -79,13 +79,9 @@ test('a ring of recoil shatters after 40 damage, its last recoil dealing only wh
     assert.equal(player.getAttribute(CombatFactory.RECOIL_DAMAGE_ATTRIBUTE), 0, 'the next ring has 40 again');
 });
 
-test('a ring of suffering (r) recoils without breaking', () => {
-    const player = buildPlayer({ ring: ItemIdentifiers.RING_OF_SUFFERING_RI_ });
-    const attacker = buildPlayer();
-    assert.ok(CombatFactory.wearingRecoilRing(player));
-    for (let i = 0; i < 10; i++) CombatFactory.handleRecoil(player, attacker, 60);
-    assert.equal(attacker.received.length, 10);
-    assert.equal(player.ring(), ItemIdentifiers.RING_OF_SUFFERING_RI_);
+test('core recoil is only the ring of recoil; a ring of suffering (r) recoils from its plugin', () => {
+    assert.ok(CombatFactory.wearingRecoilRing(buildPlayer({ ring: ItemIdentifiers.RING_OF_RECOIL })));
+    assert.equal(CombatFactory.wearingRecoilRing(buildPlayer({ ring: ItemIdentifiers.RING_OF_SUFFERING_RI_ })), false);
 });
 
 test('Redemption fires after the hit, under 10% HP, and never saves a lethal hit', () => {

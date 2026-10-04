@@ -36,6 +36,7 @@ SlayerHelmet.register({
   registerMagicHitModifier: (fn) => { modifiers.magicHit = fn; },
   onItemOnItem: (fn) => { assemble = fn; },
   onItemAction() {},
+  onCustomEvent() {},
 });
 
 function item(id) {

@@ -16,6 +16,7 @@ import { Misc } from "../../util/Misc";
 import {
   encodeBankSnapshot,
   encodeChatMessage,
+  encodeCollectionLogSnapshot,
   encodeContentData,
   encodeDestination,
   encodeHintArrow,
@@ -612,6 +613,12 @@ export class PacketSender {
       slot, itemId: Bank.displayItemId(item), quantity: item.getAmount(), tab,
     }));
     this.player.getSession().sendClientPacket(encodeBankSnapshot(1410, slots));
+    return this;
+  }
+
+  /** Ticks the collection log's collected entries (the collection_transmit inventory, 620). */
+  sendCollectionLogSnapshot(slots: Array<{ slot: number; itemId: number; quantity: number }>): this {
+    this.player.getSession().sendClientPacket(encodeCollectionLogSnapshot(slots));
     return this;
   }
 

@@ -1,16 +1,28 @@
 import type { Mobile } from "../../entity/impl/Mobile";
+import type { HitDamage } from "./hit/HitDamage";
 
 export type HitModifier = (entity: Mobile, baseHit: number) => number;
+export type RunEnergyRestoreModifier = (entity: Mobile, delayMs: number) => number;
+export interface IncomingDamageContext {
+  type?: unknown;
+  attacker?: Mobile;
+  /** Melee attack bonus index (0 stab, 1 slash, 2 crush) when the hit is melee. */
+  meleeAttackBonusIndex?: number;
+}
+export type IncomingDamageModifier = (entity: Mobile, hitDamage: HitDamage, context: IncomingDamageContext) => void;
 
 const meleeHitModifiers: HitModifier[] = [];
 const rangedHitModifiers: HitModifier[] = [];
 const magicHitModifiers: HitModifier[] = [];
+const magicDamageBonusModifiers: HitModifier[] = [];
 const meleeAttackAccuracyModifiers: HitModifier[] = [];
 const meleeDefenseModifiers: HitModifier[] = [];
 const rangedAttackAccuracyModifiers: HitModifier[] = [];
 const rangedDefenseModifiers: HitModifier[] = [];
 const magicAttackAccuracyModifiers: HitModifier[] = [];
 const magicDefenseModifiers: HitModifier[] = [];
+const runEnergyRestoreModifiers: RunEnergyRestoreModifier[] = [];
+const incomingDamageModifiers: IncomingDamageModifier[] = [];
 
 const applyModifiers = (modifiers: HitModifier[], entity: Mobile, baseHit: number): number =>
   modifiers.reduce((damage, modifier) => {
@@ -37,6 +49,10 @@ export function registerMagicHitModifier(modifier: HitModifier): void {
   registerModifier(magicHitModifiers, modifier);
 }
 
+export function registerMagicDamageBonusModifier(modifier: HitModifier): void {
+  registerModifier(magicDamageBonusModifiers, modifier);
+}
+
 export function registerMeleeAttackAccuracyModifier(modifier: HitModifier): void {
   registerModifier(meleeAttackAccuracyModifiers, modifier);
 }
@@ -61,6 +77,20 @@ export function registerMagicDefenseModifier(modifier: HitModifier): void {
   registerModifier(magicDefenseModifiers, modifier);
 }
 
+export function registerRunEnergyRestoreModifier(modifier: RunEnergyRestoreModifier): void {
+  if (typeof modifier !== "function") {
+    return;
+  }
+  runEnergyRestoreModifiers.push(modifier);
+}
+
+export function registerIncomingDamageModifier(modifier: IncomingDamageModifier): void {
+  if (typeof modifier !== "function") {
+    return;
+  }
+  incomingDamageModifiers.push(modifier);
+}
+
 export function applyMeleeHitModifiers(entity: Mobile, baseHit: number): number {
   return applyModifiers(meleeHitModifiers, entity, baseHit);
 }
@@ -71,6 +101,11 @@ export function applyRangedHitModifiers(entity: Mobile, baseHit: number): number
 
 export function applyMagicHitModifiers(entity: Mobile, baseHit: number): number {
   return applyModifiers(magicHitModifiers, entity, baseHit);
+}
+
+/** The magic damage bonus in permille, after effects that add to it. */
+export function applyMagicDamageBonusModifiers(entity: Mobile, permille: number): number {
+  return applyModifiers(magicDamageBonusModifiers, entity, permille);
 }
 
 export function applyMeleeAttackAccuracyModifiers(entity: Mobile, value: number): number {
@@ -95,4 +130,19 @@ export function applyMagicAttackAccuracyModifiers(entity: Mobile, value: number)
 
 export function applyMagicDefenseModifiers(entity: Mobile, value: number): number {
   return applyModifiers(magicDefenseModifiers, entity, value);
+}
+
+/** Milliseconds between run-energy points; modifiers divide by the restore-rate bonus. */
+export function applyRunEnergyRestoreModifiers(entity: Mobile, delayMs: number): number {
+  return runEnergyRestoreModifiers.reduce((delay, modifier) => {
+    const next = modifier(entity, delay);
+    return Number.isFinite(next) && next > 0 ? next : delay;
+  }, delayMs);
+}
+
+/** Notifies listeners of a landed hit so they can reduce it or react (charges, set effects). */
+export function applyIncomingDamageModifiers(entity: Mobile, hitDamage: HitDamage, context: IncomingDamageContext = {}): void {
+  for (const modifier of incomingDamageModifiers) {
+    modifier(entity, hitDamage, context);
+  }
 }

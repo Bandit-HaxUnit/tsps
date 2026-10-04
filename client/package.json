@@ -46,6 +46,7 @@
     "test:head-icons": "tsx tests/player-head-icons.test.ts",
     "test:fire-cape-texture": "tsx tests/fire-cape-texture.test.ts",
     "test:appearance-transform": "tsx tests/appearance-npc-transform.test.ts",
+    "test:forum-avatar": "tsx tests/forum-avatar.test.ts",
     "test:first-person-reticle": "tsx tests/first-person-reticle-input.test.ts",
     "test:spell-quest-gate": "tsx tests/spell-quest-gate.test.ts",
     "test:webrtc-world-list": "tsx tests/webrtc-world-list.test.ts",

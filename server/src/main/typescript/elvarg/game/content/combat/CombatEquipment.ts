@@ -25,28 +25,7 @@ export class CombatEquipment {
         [LEG_SLOT, ItemIdentifiers.ELITE_VOID_ROBE],
         [HANDS_SLOT, ItemIdentifiers.VOID_KNIGHT_GLOVES],
     ];
-    public static readonly OBSIDIAN_WEAPONS = [
-        746, 747, 6523, 6525, 6526, 6527, 6528
-    ];
     private static readonly VOID_KNIGHT_DEFLECTOR = 19712;
-    /**
- * Is the player wearing obsidian?
- *
- * @param player The player.
- * @return true if player is wearing obsidian, false otherwise.
- */
-    public static wearingObsidian(player: Player): boolean {
-        if (player.getEquipment().getItems()[2].getId() != 11128)
-            return false;
-
-        for (let weapon of CombatEquipment.OBSIDIAN_WEAPONS) {
-            if (player.getEquipment().getItems()[3].getId() == weapon) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /**
      * Is the player wearing void?
      *

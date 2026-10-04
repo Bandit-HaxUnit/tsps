@@ -213,6 +213,7 @@ function createWorld() {
     registerNpcCombatMethodProvider: (ids, ctor) => { for (const id of [ids].flat()) world.providers.set(id, ctor); },
     persistAttribute: hook('persist'),
     sendMultiChatboxPrompt: (player, title, ...pairs) => { world.prompt = { title, pairs }; return true; },
+    emitCustomEvent: () => {},
   };
   for (const name of ['onNpcDialogueCondition', 'onCustomEvent', 'onObjectFirstClick', 'onObjectSecondClick', 'onObjectRoute', 'onPlayerLogin', 'onPlayerLogout', 'onPlayerProcess',
     'onPlayerDeath', 'onShouldDropItemsOnDeath', 'onCanTeleport', 'onCanAttack', 'onNpcBeforeDeath', 'onCombatHitResolved',

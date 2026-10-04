@@ -274,7 +274,7 @@ function useOnObject(player, item, objectId) {
   return event;
 }
 
-test("the Fountain of Rune recharges every glory and skills necklace carried or worn to 6", () => {
+test("the Fountain of Rune recharges glories to 6 but not skills necklaces", () => {
   completeQuests.clear();
   completeQuests.add("Heroes' Quest").add("Legends' Quest");
   const player = createPlayer();
@@ -287,8 +287,26 @@ test("the Fountain of Rune recharges every glory and skills necklace carried or 
   const event = useOnObject(player, glory, ObjectIdentifiers.FOUNTAIN_OF_RUNE);
   assert.equal(event.handled, true);
   assert.ok([ItemIds.AMULET_OF_GLORY_6_, ItemIdentifiers.AMULET_OF_ETERNAL_GLORY].includes(glory.getId()));
-  assert.equal(skills.getId(), ItemIds.SKILLS_NECKLACE_6_);
+  assert.equal(skills.getId(), ItemIds.SKILLS_NECKLACE_2_, "the fountain does not recharge a skills necklace");
   assert.ok([ItemIds.AMULET_OF_GLORY_6_, ItemIdentifiers.AMULET_OF_ETERNAL_GLORY].includes(worn.getId()));
+});
+
+test("the Legends' Guild totem pole recharges skills necklaces and combat bracelets to 6", () => {
+  completeQuests.clear();
+  completeQuests.add("Legends' Quest");
+  const player = createPlayer();
+  const skills = new Item(ItemIds.SKILLS_NECKLACE_1_, 1);
+  const combat = new Item(ItemIds.COMBAT_BRACELET, 1);
+  const glory = new Item(ItemIds.AMULET_OF_GLORY_1_, 1);
+  player.inventory.setItem(0, skills);
+  player.inventory.setItem(1, combat);
+  player.inventory.setItem(2, glory);
+  const event = useOnObject(player, skills, ObjectIdentifiers.TOTEM_POLE_2);
+  assert.equal(event.handled, true);
+  assert.equal(skills.getId(), ItemIds.SKILLS_NECKLACE_6_);
+  assert.equal(combat.getId(), ItemIds.COMBAT_BRACELET_6_);
+  assert.equal(glory.getId(), ItemIds.AMULET_OF_GLORY_1_, "the totem does not recharge glories");
+  assert.equal(player.messages.at(-1), "The totem pole recharges your jewellery.");
 });
 
 test("the Fountain of Heroes recharges glories to 4 but not skills necklaces", () => {

@@ -160,6 +160,7 @@ import { ObjModelLoader } from "../rs/config/objtype/ObjModelLoader";
 import { ObjTypeLoader, PostProcessedObjTypeLoader } from "../rs/config/objtype/ObjTypeLoader";
 import { EquipToDisplaySlot, EquipmentSlot } from "../rs/config/player/Equipment";
 import { PlayerAppearance } from "../rs/config/player/PlayerAppearance";
+import { uploadForumAvatar } from "./ForumAvatar";
 import type { SeqSoundEffect, SeqType } from "../rs/config/seqtype/SeqType";
 import { SeqTypeLoader } from "../rs/config/seqtype/SeqTypeLoader";
 import { SpotAnimTypeLoader } from "../rs/config/spotanimtype/SpotAnimTypeLoader";
@@ -5923,6 +5924,8 @@ export class OsrsClient {
                 unsubscribe();
                 this.logoutUnsubscribe = undefined;
                 console.log("[OsrsClient] Server approved logout, completing...");
+
+                void uploadForumAvatar(this, getLastUrl()).catch((error) => console.warn("[avatar]", error));
 
                 // Suppress reconnection after intentional logout
                 suppressReconnection();

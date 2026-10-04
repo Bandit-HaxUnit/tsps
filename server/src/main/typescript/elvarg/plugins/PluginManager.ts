@@ -3773,6 +3773,10 @@ export class PluginManager {
         require("../game/content/combat/EquipmentEffects").registerMagicHitModifier(
           modifier
         ),
+      registerMagicDamageBonusModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerMagicDamageBonusModifier(
+          modifier
+        ),
       registerMeleeAttackAccuracyModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerMeleeAttackAccuracyModifier(
           modifier
@@ -3795,6 +3799,14 @@ export class PluginManager {
         ),
       registerMagicDefenseModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerMagicDefenseModifier(
+          modifier
+        ),
+      registerRunEnergyRestoreModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerRunEnergyRestoreModifier(
+          modifier
+        ),
+      registerIncomingDamageModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerIncomingDamageModifier(
           modifier
         ),
       setCombatEngine: (engine) => {
@@ -4026,10 +4038,10 @@ export class PluginManager {
     return null;
   }
 
-  public static decrementRangedAmmo(player: any, pos: any, amount: number): boolean {
+  public static decrementRangedAmmo(player: any, pos: any, amount: number, delayTicks = 0): boolean {
     for (const entry of PluginManager.rangedAmmoHandlers) {
       try {
-        if (entry.handler.decrementAmmo(player, pos, amount) === true) {
+        if (entry.handler.decrementAmmo(player, pos, amount, delayTicks) === true) {
           return true;
         }
       } catch (err) {

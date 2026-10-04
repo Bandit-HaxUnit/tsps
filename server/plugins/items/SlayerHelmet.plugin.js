@@ -3,6 +3,9 @@
  *
  * On a Slayer task the black mask and slayer helmet boost melee accuracy and damage
  * by 7/6; their imbued forms also boost Ranged and Magic accuracy and damage by 15%.
+ * A salve amulet that boosts the same style wins over them ("salve:applies"), and
+ * the dragon hunter crossbow's damage adds to the imbued ranged bonus instead of
+ * multiplying it ("slayer:imbued-ranged-bonus").
  * The helmet is assembled at 55 Crafting by using any component on another with
  * them all in the inventory (a charged mask loses its charges), and Disassemble
  * turns it back into its parts.
@@ -14,7 +17,8 @@
 const CRAFTING_LEVEL = 55;
 const MELEE_NUMERATOR = 7;
 const MELEE_DENOMINATOR = 6;
-const IMBUED_BOOST = 1.15;
+const IMBUED_NUMERATOR = 23;
+const IMBUED_DENOMINATOR = 20;
 
 let pluginApi;
 let ItemIdentifiers;
@@ -46,18 +50,45 @@ function onTask(player) {
   return request.onTask === true;
 }
 
-function meleeBoost(entity, value) {
-  if (!entity?.isPlayer?.()) return value;
-  const player = entity.getAsPlayer();
-  if (!slayerHeadwear(player) || !onTask(player)) return value;
-  return Math.floor((value * MELEE_NUMERATOR) / MELEE_DENOMINATOR);
+function salveApplies(player, style) {
+  const query = { player, style, applies: false };
+  pluginApi.emitCustomEvent("salve:applies", query);
+  return query.applies === true;
 }
 
-function imbuedBoost(entity, value) {
-  if (!entity?.isPlayer?.()) return value;
-  const player = entity.getAsPlayer();
-  if (slayerHeadwear(player) !== "all" || !onTask(player)) return value;
-  return Math.floor(value * IMBUED_BOOST);
+/** Whether the headwear boosts `style` against the player's current target. */
+function boostActive(player, style) {
+  const headwear = slayerHeadwear(player);
+  if (!headwear || (style !== "melee" && headwear !== "all")) return false;
+  return onTask(player) && !salveApplies(player, style);
+}
+
+function boost(style) {
+  return (entity, value) => {
+    if (!entity?.isPlayer?.() || !boostActive(entity.getAsPlayer(), style)) return value;
+    return style === "melee"
+      ? Math.floor((value * MELEE_NUMERATOR) / MELEE_DENOMINATOR)
+      : Math.floor((value * IMBUED_NUMERATOR) / IMBUED_DENOMINATOR);
+  };
+}
+
+const meleeBoost = boost("melee");
+const rangedAccuracyBoost = boost("ranged");
+const magicBoost = boost("magic");
+
+/** Ranged damage: 23/20, plus what other gear adds to it (the dragon hunter crossbow's 5). */
+function rangedDamageBoost(entity, value) {
+  if (!entity?.isPlayer?.() || !boostActive(entity.getAsPlayer(), "ranged")) return value;
+  const bonus = { player: entity.getAsPlayer(), numerator: IMBUED_NUMERATOR };
+  pluginApi.emitCustomEvent("slayer:imbued-ranged-bonus", bonus);
+  return Math.floor((value * bonus.numerator) / IMBUED_DENOMINATOR);
+}
+
+/** "slayer:imbued-active": { player, style } -> active = true when the imbued boost applies. */
+function imbuedActive(query) {
+  if (query?.player && slayerHeadwear(query.player) === "all" && boostActive(query.player, query.style)) {
+    query.active = true;
+  }
 }
 
 /** "plain" / "imbued" for any black mask, charged or not; null for anything else. */
@@ -122,13 +153,14 @@ module.exports = {
     ];
     api.registerMeleeAttackAccuracyModifier(meleeBoost);
     api.registerMeleeHitModifier(meleeBoost);
-    api.registerRangedAttackAccuracyModifier(imbuedBoost);
-    api.registerRangedHitModifier(imbuedBoost);
-    api.registerMagicAttackAccuracyModifier(imbuedBoost);
-    api.registerMagicHitModifier(imbuedBoost);
+    api.registerRangedAttackAccuracyModifier(rangedAccuracyBoost);
+    api.registerRangedHitModifier(rangedDamageBoost);
+    api.registerMagicAttackAccuracyModifier(magicBoost);
+    api.registerMagicHitModifier(magicBoost);
+    api.onCustomEvent("slayer:imbued-active", imbuedActive);
     api.onItemOnItem(assemble, { noted: false });
     api.onItemAction("Slayer helmet", { Disassemble: disassemble });
     api.onItemAction("Slayer helmet (i)", { Disassemble: disassemble });
   },
-  _test: { slayerHeadwear, meleeBoost, imbuedBoost },
+  _test: { slayerHeadwear, meleeBoost, rangedAccuracyBoost, rangedDamageBoost, magicBoost },
 };

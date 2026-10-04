@@ -1,6 +1,5 @@
 import { CombatFactory } from "../CombatFactory";
 import type { Mobile } from "../../../entity/impl/Mobile";
-import { Flag } from "../../../model/Flag";
 import { World } from "../../../World";
 import { HitDamage } from "./HitDamage";
 import { PendingHit } from "./PendingHit";
@@ -57,13 +56,10 @@ export class HitQueue {
             }
         }
 
-        if (!character.getUpdateFlag().flagged(Flag.SINGLE_HIT) && this.pendingDamage.length > 0) {
-            character.setPrimaryHit(this.applyDamage(this.pendingDamage.shift()!));
-            character.getUpdateFlag().flag(Flag.SINGLE_HIT);
-        }
-        if (!character.getUpdateFlag().flagged(Flag.DOUBLE_HIT) && this.pendingDamage.length > 0) {
-            character.setSecondaryHit(this.applyDamage(this.pendingDamage.shift()!));
-            character.getUpdateFlag().flag(Flag.DOUBLE_HIT);
+        // Every hit due this tick lands this tick. Once the owner is dead the rest
+        // still show, as 0s - decrementHealth never takes hitpoints below zero.
+        while (this.pendingDamage.length > 0) {
+            character.addTickHit(this.applyDamage(this.pendingDamage.shift()!));
         }
         if (!this.hasPendingWork()) HitQueue.active.delete(this);
     }
