@@ -13,12 +13,12 @@ const MAX_CLICKS = 50;
 const ANIMATION_TICKS = 5;
 const tracked = new WeakMap();
 
-// Records game messages and animation timing for players an agent has touched; the client
-// still receives everything.
+// Records game messages, animation timing and what the client was told (varbits, varps,
+// interfaces) for players an agent has touched; the client still receives everything.
 function track(player, World) {
   let state = tracked.get(player);
   if (state) return state;
-  state = { messages: [], animatedAt: -Infinity };
+  state = { messages: [], animatedAt: -Infinity, client: emptyClientLog() };
   tracked.set(player, state);
   const sender = player.getPacketSender();
   const send = sender.sendMessage.bind(sender);
@@ -27,6 +27,7 @@ function track(player, World) {
     if (state.messages.length > MAX_MESSAGES) state.messages.shift();
     return send(message);
   };
+  recordClient(sender, state);
   const animate = player.performAnimation?.bind(player);
   if (animate) {
     player.performAnimation = (animation) => {
@@ -35,6 +36,29 @@ function track(player, World) {
     };
   }
   return state;
+}
+
+const emptyClientLog = () => ({ varbits: {}, varps: {}, interfaces: [] });
+
+// Wraps the PacketSender calls a test asserts on. Varbits and varps keep their latest value;
+// interface events keep their order.
+function recordClient(sender, state) {
+  const wrap = (name, record) => {
+    const original = sender[name]?.bind(sender);
+    if (!original) return;
+    sender[name] = (...args) => {
+      record(...args);
+      if (state.client.interfaces.length > MAX_MESSAGES) state.client.interfaces.shift();
+      return original(...args);
+    };
+  };
+  wrap("sendVarbit", (id, value) => { state.client.varbits[id] = value; });
+  wrap("sendConfig", (id, value) => { state.client.varps[id] = value; });
+  wrap("sendInterface", (id) => state.client.interfaces.push(`open ${id}`));
+  wrap("sendSubInterface", (target, group) => state.client.interfaces.push(`open ${group} on ${target >>> 16}:${target & 0xffff}`));
+  wrap("closeSubInterface", (target) => state.client.interfaces.push(`close ${target >>> 16}:${target & 0xffff}`));
+  wrap("sendInterfaceRemoval", () => state.client.interfaces.push("close main"));
+  wrap("sendInterfaceDisplayState", (uid, hide) => state.client.interfaces.push(`${hide ? "hide" : "show"} ${uid >>> 16}:${uid & 0xffff}`));
 }
 
 const tile = (location) => ({ x: location.getX(), y: location.getY(), z: location.getZ() });
@@ -82,9 +106,20 @@ function createContext(core, server) {
     ? "dialogue" : p.getInterfaceId?.() > 0 ? "interface" : null;
   // Game messages since the last call; each message is returned once.
   const takeMessages = (p) => track(p, World).messages.splice(0);
+  // What the client was told since the last call, leaving out empty parts.
+  const takeClient = (p) => {
+    const state = track(p, World);
+    const log = state.client;
+    state.client = emptyClientLog();
+    return Object.fromEntries(Object.entries(log).filter(([, value]) => Object.keys(value).length > 0));
+  };
+  const area = (p) => {
+    const current = p.getArea?.();
+    return current ? { name: current.getName(), plugin: current.pluginName ?? null, private: !!p.getPrivateArea?.() } : null;
+  };
   const status = (p) => ({
     ...tile(p.getLocation()), hitpoints: p.getHitpoints(), busy: activity(p), open: waitingOn(p),
-    messages: takeMessages(p),
+    area: area(p), messages: takeMessages(p), client: takeClient(p),
   });
   // Polls each tick until the player reaches `target`, opens a dialogue/interface, or has been
   // idle (no activity, same tile) for STILL_TICKS; gives up after maxTicks.
@@ -221,7 +256,7 @@ function createContext(core, server) {
     core, z, tool, MAX_WAIT_TICKS,
     player: z.string().describe("Username of an online player"),
     amountSchema: z.union([z.number().int().min(1), z.literal("all")]).default(1),
-    find, send, items, tile, sleepTicks, takeMessages, status, settle, npcClick, nearby, nearest,
+    find, send, items, tile, sleepTicks, takeMessages, takeClient, area, status, settle, npcClick, nearby, nearest,
     inventorySlot, carried, byName, clicks, clickEach,
   };
 }

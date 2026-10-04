@@ -32,6 +32,7 @@ export class CacheDefinitions {
     private static readonly SPELL_WIDGET_PARAM_ID = 596;
     private static readonly SPELL_NAME_PARAM_ID = 601;
     private static spellNamesByWidget?: Map<number, string>;
+    private static spellsByName?: Map<string, { widgetId: number; itemId: number }>;
     private static state?: {
         npcs: ArchiveNpcTypeLoader;
         varbits: ArchiveVarBitTypeLoader;
@@ -285,5 +286,21 @@ export class CacheDefinitions {
             }
         }
         return this.spellNamesByWidget.get(widgetId);
+    }
+
+    /** The spellbook widget and spell item a client sends for the spell with this name. */
+    static getSpellByName(name: string): { widgetId: number; itemId: number } | undefined {
+        if (!this.spellsByName) {
+            this.spellsByName = new Map();
+            for (let id = 0; id < this.getState().items.getCount(); id++) {
+                const params = this.getItem(id).params;
+                const widgetId = params?.get(this.SPELL_WIDGET_PARAM_ID);
+                const spellName = params?.get(this.SPELL_NAME_PARAM_ID);
+                if (typeof widgetId === "number" && typeof spellName === "string" && !this.spellsByName.has(spellName.toLowerCase())) {
+                    this.spellsByName.set(spellName.toLowerCase(), { widgetId, itemId: id });
+                }
+            }
+        }
+        return this.spellsByName.get(name.trim().toLowerCase());
     }
 }

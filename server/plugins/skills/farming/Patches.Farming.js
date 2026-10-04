@@ -604,6 +604,24 @@ function mapSquareChanged({ player }) {
     if (tracked.has(player)) followPatches(player);
 }
 /** A seedling was just watered: grow it on time even if no patch is due sooner. */
+/** Test hook: moves this player's farming clock `ms` forward, then grows as normal. */
+function advanceTime(event) {
+    const { player, ms } = event;
+    if (!tracked.has(player)) return;
+    for (const state of Object.values(farmFor(player).patches)) {
+        if (Number.isFinite(state.nextAt)) state.nextAt -= ms;
+        if (Number.isFinite(state.plantedAt)) state.plantedAt -= ms;
+    }
+    for (const container of [player.getInventory(), ...player.getBanks()]) {
+        for (const item of container?.getItems() ?? []) {
+            const at = item?.getMetaValue?.("farming:sapling-at");
+            if (at) item.setMetaValue("farming:sapling-at", at - ms);
+        }
+    }
+    seedlingDue.delete(player);
+    refresh(player);
+    event.handledBy.push("Farming");
+}
 function noteSeedling(player, at) {
     if (!tracked.has(player) || !Number.isFinite(at)) return;
     seedlingDue.set(player, Math.min(seedlingDue.get(player) ?? Infinity, at));
@@ -652,6 +670,7 @@ function attach(api) {
     api.onCustomEvent("woodcutting:deplete-tree", depleteTree);
     api.onCustomEvent("magic:water-containers", Services.waterContainers);
     api.onCustomEvent("magic:humidified", Services.humidified);
+    api.onCustomEvent("agent:advance-time", advanceTime);
     api.onCustomEvent("player:world-input", Hespori.hesporiInput);
     api.onCustomEvent("player:world-input", cancelWork);
     api.onCustomEvent("npc-drops:generated", Hespori.hesporiLoot);
@@ -663,4 +682,4 @@ function attach(api) {
     api.registerNpcCombatMethodProvider(core.NpcIdentifiers.HESPORI, Hespori.HesporiCombat, { singleton: false });
 }
 
-Object.assign(module.exports, { FARM_ATTRIBUTE, farmFor, stateFor, hasTool, requireTool, award, give, choose, clearPatch, syncPatch, nearPatch, water, fertilize, cure, noteSeedling, attach, tick: farmingTick });
+Object.assign(module.exports, { FARM_ATTRIBUTE, farmFor, stateFor, hasTool, requireTool, award, give, choose, clearPatch, syncPatch, nearPatch, water, fertilize, cure, noteSeedling, advanceTime, attach, tick: farmingTick });

@@ -1,7 +1,7 @@
 // Looking around, moving, and clicking things in the world or inventory.
 module.exports = function registerWorldTools(ctx) {
   const {
-    core, tool, z, player, find, send, items, tile, settle, status, sleepTicks, takeMessages,
+    core, tool, z, player, find, send, items, tile, settle, status, sleepTicks, takeMessages, takeClient, area,
     nearby, nearest, npcClick, inventorySlot, MAX_WAIT_TICKS,
   } = ctx;
   const { World, Skill } = core;
@@ -13,15 +13,23 @@ module.exports = function registerWorldTools(ctx) {
 
   tool(
     "observe",
-    "Snapshot of a player: position, stats, inventory, equipment, nearby NPCs/objects/ground items, and game messages since the last observe/wait.",
-    { player, radius: z.number().int().min(1).max(32).default(15) },
-    ({ player: username, radius }) => {
+    "Snapshot of a player: position, area, stats, inventory, equipment, nearby NPCs/objects/ground items, game messages and client updates (varbits, varps, interface opens/closes/hides) since the last call. Pass varbits/varps to read their current values.",
+    {
+      player, radius: z.number().int().min(1).max(32).default(15),
+      varbits: z.array(z.number().int().min(0)).max(50).default([]),
+      varps: z.array(z.number().int().min(0)).max(50).default([]),
+    },
+    ({ player: username, radius, varbits, varps }) => {
       const p = find(username);
+      const sender = p.getPacketSender();
       const skills = p.getSkillManager();
       return {
         ...tile(p.getLocation()),
+        area: area(p),
         hitpoints: p.getHitpoints(),
         runEnergy: p.getRunEnergy(),
+        ...(varbits.length ? { varbitValues: Object.fromEntries(varbits.map((id) => [id, sender.getVarbit(id)])) } : {}),
+        ...(varps.length ? { varpValues: Object.fromEntries(varps.map((id) => [id, sender.getVarp(id)])) } : {}),
         skills: Object.fromEntries(Skill.values().map((skill) => [skill.getName(), {
           level: skills.getCurrentLevel(skill), max: skills.getMaxLevel(skill), xp: skills.getExperience(skill),
         }])),
@@ -29,6 +37,7 @@ module.exports = function registerWorldTools(ctx) {
         equipment: items(p.getEquipment()),
         ...nearby(p, radius),
         messages: takeMessages(p),
+        client: takeClient(p),
       };
     }
   );

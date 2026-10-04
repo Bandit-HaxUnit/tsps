@@ -1103,6 +1103,7 @@ export interface PluginCoreApi {
   CombatMethod: any;
   CombatSpecial: any;
   CombatFactory: any;
+  CanAttackResponse: any;
   CombatType: any;
   SkullType: any;
   CombatConstants: any;
