@@ -11,16 +11,26 @@ const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
 const Potions = require("../plugins/items/Potions.plugin");
 const {
   applyPrayerRestore, applySanfewRestore, applyAncientBrew, applyDivine, processDivine,
-  applyMenaphiteRemedy, processMenaphite, processBoostDecay, curePoisonAndVenom,
+  applyMenaphiteRemedy, processMenaphite, applyPrayerRegeneration, processPrayerRegeneration,
+  clearPrayerRegeneration, processBoostDecay, curePoisonAndVenom,
   pauseTimedEffects, resumeTimedEffects,
 } = Potions._test;
 
 function createPlayer({ base = 99, current = 1, inventory = [], equipment = [] } = {}) {
   const levels = new Map(Skill.values().map((skill) => [skill, current]));
   const attributes = new Map();
+  const poisonImmunity = {
+    seconds: 0,
+    startedAt: 0,
+    start(seconds) { this.seconds = seconds; this.startedAt = Date.now(); },
+    stop() { this.seconds = 0; },
+    secondsRemaining() { return this.seconds > 0 ? Math.max(0, this.seconds - Math.floor((Date.now() - this.startedAt) / 1000)) : 0; },
+    finished() { return this.secondsRemaining() === 0; },
+  };
   const player = {
     levels,
     attributes,
+    poisonImmunity,
     poisonDamage: current,
     venomed: current > 0,
     getAttribute: (key) => attributes.get(key),
@@ -33,6 +43,7 @@ function createPlayer({ base = 99, current = 1, inventory = [], equipment = [] }
     setPoisonDamage(value) { player.poisonDamage = value; },
     setVenomed(value) { player.venomed = value; },
     sendMessage() {},
+    getCombat: () => ({ getPoisonImmunityTimer: () => poisonImmunity }),
     getSkillManager: () => ({
       getMaxLevel: () => base,
       getCurrentLevel: (skill) => levels.get(skill),
@@ -251,4 +262,88 @@ test("curing poison also clears the sticky venom flag", () => {
   curePoisonAndVenom(player);
   assert.equal(player.poisonDamage, 0);
   assert.equal(player.venomed, false);
+});
+
+test("an antipoison mix heals its extra 3 Hitpoints and cures poison in one drink", () => {
+  const player = createPlayer({ base: 99, current: 50 });
+  player.setPoisonDamage(20);
+  player.setVenomed(true);
+  Potions._test.findPotionEntry(ItemIdentifiers.ANTIPOISON_MIX_2_).potion.effect(player);
+  assert.equal(player.levels.get(Skill.HITPOINTS), 53, "the mix adds 3 Hitpoints");
+  assert.equal(player.poisonDamage, 0);
+  assert.equal(player.venomed, false);
+  assert.equal(player.poisonImmunity.seconds, 90);
+});
+
+test("a weaker antipoison never shortens an active poison immunity", () => {
+  const player = createPlayer({ base: 99, current: 99 });
+  Potions._test.findPotionEntry(ItemIdentifiers.ANTI_VENOM_4_).potion.effect(player);
+  assert.equal(player.poisonImmunity.seconds, 720, "anti-venom gives 12 minutes");
+  Potions._test.findPotionEntry(ItemIdentifiers.ANTIPOISON_4_).potion.effect(player);
+  assert.equal(player.poisonImmunity.seconds, 720, "the weaker dose does not decrease it");
+  player.poisonImmunity.seconds = 0;
+  Potions._test.findPotionEntry(ItemIdentifiers.ANTIDOTE_4_).potion.effect(player);
+  assert.equal(player.poisonImmunity.seconds, 540, "Antidote+ gives 9 minutes");
+  player.poisonImmunity.seconds = 0;
+  Potions._test.findPotionEntry(ItemIdentifiers.ANTI_VENOM_4__3).potion.effect(player);
+  assert.equal(player.poisonImmunity.seconds, 900, "Anti-venom+ gives 15 minutes");
+});
+
+test("prayer regeneration restores a point every 12 ticks, never above max, and clears on death", () => {
+  const entry = Potions._test.findPotionEntry(ItemIdentifiers.PRAYER_REGENERATION_POTION_4_);
+  assert.ok(entry, "the potion is registered");
+  assert.equal(entry.replacementId, ItemIdentifiers.PRAYER_REGENERATION_POTION_3_, "doses chain");
+  assert.equal(entry.potion.shareable, false, "it cannot be shared by Stat Restore Pot Share");
+
+  const player = createPlayer({ base: 99, current: 1 });
+  applyPrayerRegeneration(player);
+  assert.equal(player.levels.get(Skill.PRAYER), 1, "nothing is restored instantly");
+  processPrayerRegeneration(player);
+  assert.equal(player.levels.get(Skill.PRAYER), 1, "the first point waits for the 12-tick interval");
+
+  const state = player.getAttribute("potions:prayer-regen:state");
+  state.nextRestoreAt = Date.now() - 1;
+  processPrayerRegeneration(player);
+  assert.equal(player.levels.get(Skill.PRAYER), 2, "one point per interval");
+
+  player.levels.set(Skill.PRAYER, 99);
+  state.nextRestoreAt = Date.now() - 1;
+  processPrayerRegeneration(player);
+  assert.equal(player.levels.get(Skill.PRAYER), 99, "prayer never exceeds max");
+
+  player.setAttribute("potions:prayer-regen:state", { endsAt: Date.now() - 1, nextRestoreAt: Date.now() - 1 });
+  processPrayerRegeneration(player);
+  assert.equal(player.getAttribute("potions:prayer-regen:state"), null, "the state expires after 8 minutes");
+
+  applyPrayerRegeneration(player);
+  clearPrayerRegeneration({ player });
+  assert.equal(player.getAttribute("potions:prayer-regen:state"), null, "death clears the effect");
+});
+
+test("Moonlight mead and Slayer's respite match the Wiki", () => {
+  const mead = createPlayer({ base: 99, current: 50 });
+  Potions._test.findPotionEntry(ItemIdentifiers.MOONLIGHT_MEAD).potion.effect(mead);
+  assert.equal(mead.levels.get(Skill.HITPOINTS), 54, "moonlight mead heals 4");
+  const matureMead = createPlayer({ base: 99, current: 50 });
+  Potions._test.findPotionEntry(ItemIdentifiers.MOONLIGHT_MEAD_M_).potion.effect(matureMead);
+  assert.equal(matureMead.levels.get(Skill.HITPOINTS), 56, "mature moonlight mead heals 6");
+
+  const respite = createPlayer({ base: 99, current: 99 });
+  Potions._test.findPotionEntry(ItemIdentifiers.SLAYERS_RESPITE).potion.effect(respite);
+  assert.equal(respite.levels.get(Skill.SLAYER), 101, "+2 Slayer");
+  assert.equal(respite.levels.get(Skill.ATTACK), 99 - (2 + Math.floor(99 * 0.02)));
+  const matureRespite = createPlayer({ base: 99, current: 99 });
+  Potions._test.findPotionEntry(ItemIdentifiers.SLAYERS_RESPITE_M_).potion.effect(matureRespite);
+  assert.equal(matureRespite.levels.get(Skill.SLAYER), 103, "+4 Slayer");
+});
+
+test("Overload needs more than 50 Hitpoints and a Saradomin brew may over-heal", () => {
+  const overload = Potions._test.findPotionEntry(ItemIdentifiers.OVERLOAD_4_);
+  assert.equal(overload.potion.canUse(createPlayer({ base: 99, current: 50 })), false);
+  assert.equal(overload.potion.canUse(createPlayer({ base: 99, current: 51 })), true);
+
+  const brewed = createPlayer({ base: 99, current: 50 });
+  Potions._test.findPotionEntry(ItemIdentifiers.SARADOMIN_BREW_4_).potion.effect(brewed);
+  assert.equal(brewed.levels.get(Skill.HITPOINTS), 50 + Math.floor(2 + 99 * 0.15), "the brew may heal over max");
+  assert.equal(brewed.levels.get(Skill.ATTACK), 50 - (2 + Math.floor(50 * 0.1)));
 });

@@ -32,15 +32,19 @@ const ATTR_STAMINA_ACC = "potions:stamina:acc";
 const ATTR_DIVINE_STATE = "potions:divine:state";
 const ATTR_OVERLOAD_STATE = "potions:overload:state";
 const ATTR_MENAPHITE_STATE = "potions:menaphite:state";
+const ATTR_PRAYER_REGEN_STATE = "potions:prayer-regen:state";
 /** Shared 60-second cycle that decays every temporary skill boost by one (Wiki). */
 const ATTR_BOOST_CYCLE = "potions:boost-cycle";
 /** When the player logged out; timed effects are paused while offline. */
 const ATTR_PAUSED_AT = "potions:paused-at";
-const PERSISTED_ATTRIBUTES = [ATTR_STAMINA_END, ATTR_STAMINA_ACC, ATTR_DIVINE_STATE, ATTR_OVERLOAD_STATE, ATTR_MENAPHITE_STATE, ATTR_BOOST_CYCLE, ATTR_PAUSED_AT];
+const PERSISTED_ATTRIBUTES = [ATTR_STAMINA_END, ATTR_STAMINA_ACC, ATTR_DIVINE_STATE, ATTR_OVERLOAD_STATE, ATTR_MENAPHITE_STATE, ATTR_PRAYER_REGEN_STATE, ATTR_BOOST_CYCLE, ATTR_PAUSED_AT];
 
 const BOOST_DECAY_MS = 60 * 1000;
 const MENAPHITE_DURATION_MS = 5 * 60 * 1000;
 const MENAPHITE_RESTORE_INTERVAL_MS = 15 * 1000;
+const PRAYER_REGEN_DURATION_MS = 8 * 60 * 1000;
+/** Wiki: one Prayer point every 12 ticks (7.2s) for 8 minutes, 66 points total. */
+const PRAYER_REGEN_INTERVAL_MS = 12 * 600;
 
 const POTION_BY_ITEM_ID = new Map();
 const REGISTERED_POTIONS = [];
@@ -150,9 +154,15 @@ function curePoisonAndVenom(player) {
 
 function applyPoisonImmunity(player, seconds, message = true) {
   curePoisonAndVenom(player);
-  player.getCombat().getPoisonImmunityTimer().start(seconds);
+  // Wiki (7 April 2016): drinking any kind of antipoison will no longer
+  // decrease your poison immunity, so a weaker dose never shortens the timer.
+  const timer = player.getCombat().getPoisonImmunityTimer();
+  const remaining = timer.secondsRemaining();
+  if (remaining < seconds) {
+    timer.start(seconds);
+  }
   if (message) {
-    player.sendMessage(`You are now immune to poison for another ${seconds} seconds.`);
+    player.sendMessage(`You are now immune to poison for another ${Math.max(remaining, seconds)} seconds.`);
   }
 }
 
@@ -307,6 +317,38 @@ function processMenaphite(player) {
   }
 }
 
+/** Wiki: restores one Prayer point every 12 ticks for 8 minutes; never over max. */
+function applyPrayerRegeneration(player) {
+  const now = Date.now();
+  player.setAttribute(ATTR_PRAYER_REGEN_STATE, {
+    endsAt: now + PRAYER_REGEN_DURATION_MS,
+    nextRestoreAt: now + PRAYER_REGEN_INTERVAL_MS,
+  });
+}
+
+function clearPrayerRegeneration({ player }) {
+  player.setAttribute(ATTR_PRAYER_REGEN_STATE, null);
+}
+
+function processPrayerRegeneration(player) {
+  const state = player.getAttribute(ATTR_PRAYER_REGEN_STATE);
+  if (!state) {
+    return;
+  }
+  const now = Date.now();
+  if (now >= state.endsAt) {
+    player.setAttribute(ATTR_PRAYER_REGEN_STATE, null);
+    return;
+  }
+  if (now < state.nextRestoreAt) {
+    return;
+  }
+  const max = getMaxLevel(player, Skill.PRAYER);
+  getSkillManager(player).increaseCurrentLevel(Skill.PRAYER, 1, max);
+  state.nextRestoreAt = now + PRAYER_REGEN_INTERVAL_MS;
+  player.setAttribute(ATTR_PRAYER_REGEN_STATE, state);
+}
+
 /** Skills pinned by an active overload/divine state; their controllers reset them every tick. */
 function timedEffectSkillIndexes(player) {
   const pinned = new Set();
@@ -411,10 +453,11 @@ function applyOverload(player, flat = 5, percent = 0.15) {
   });
 }
 
-function applyMix(baseEffect) {
+/** Barbarian mixes heal 6 Hitpoints, except antipoison and restore mixes which heal 3 (Wiki). */
+function applyMix(baseEffect, healAmount = 6) {
   return (player) => {
     baseEffect(player);
-    heal(player, 3);
+    heal(player, healAmount);
   };
 }
 
@@ -436,6 +479,7 @@ function registerPotion(definition) {
     effect: definition.effect,
     canUse: typeof definition.canUse === "function" ? definition.canUse : null,
     requiresFoodPermission: Boolean(definition.requiresFoodPermission),
+    shareable: definition.shareable !== false,
     // null: nothing is left once the last dose is drunk.
     emptyItemId: definition.emptyItemId === null
       ? NO_EMPTY_ITEM
@@ -504,6 +548,26 @@ for (const [id, effect] of [
     requiresFoodPermission: true, effect: player => { heal(player, 1); effect(player); } });
 }
 
+// Wiki: Moonlight mead heals 4 (mature 6) with no boosts or drains.
+registerPotion({ name: "Moonlight mead", chains: [[Items.MOONLIGHT_MEAD]], emptyItemId: Items.BEER_GLASS_4,
+  requiresFoodPermission: true, effect: (player) => heal(player, 4) });
+registerPotion({ name: "Moonlight mead(m)", chains: [[Items.MOONLIGHT_MEAD_M_]], emptyItemId: Items.BEER_GLASS_4,
+  requiresFoodPermission: true, effect: (player) => heal(player, 6) });
+// Wiki: Slayer's respite boosts Slayer by 2 (mature 4) and drains Attack and
+// Strength by floor(current * 0.02) + 2 (mature + 3); it heals 1 (mature 2).
+registerPotion({ name: "Slayer's respite", chains: [[Items.SLAYERS_RESPITE]], emptyItemId: Items.BEER_GLASS_4,
+  requiresFoodPermission: true, effect: (player) => {
+    heal(player, 1);
+    boostSkill(player, Skill.SLAYER, 2, 0);
+    for (const skill of [Skill.ATTACK, Skill.STRENGTH]) lowerSkillByCurrent(player, skill, 2, 0.02);
+  } });
+registerPotion({ name: "Slayer's respite(m)", chains: [[Items.SLAYERS_RESPITE_M_]], emptyItemId: Items.BEER_GLASS_4,
+  requiresFoodPermission: true, effect: (player) => {
+    heal(player, 2);
+    boostSkill(player, Skill.SLAYER, 4, 0);
+    for (const skill of [Skill.ATTACK, Skill.STRENGTH]) lowerSkillByCurrent(player, skill, 3, 0.02);
+  } });
+
 // Core combat/stat potions.
 registerPotion({
   name: "Attack potion",
@@ -524,7 +588,7 @@ registerPotion({
   name: "Combat potion",
   chains: [
     doseChain("COMBAT_POTION_4_", "COMBAT_POTION_3_", "COMBAT_POTION_2_", "COMBAT_POTION_1_"),
-    doseChain("COMBAT_POTION_4_3", "COMBAT_POTION_3_3", "COMBAT_POTION_2_3", "COMBAT_POTION_1_3"),
+    doseChain("COMBAT_POTION_4__2", "COMBAT_POTION_3__2", "COMBAT_POTION_2__2", "COMBAT_POTION_1__2"),
   ],
   effect: (player) => {
     boostSkill(player, Skill.ATTACK, 3, 0.1);
@@ -550,7 +614,7 @@ registerPotion({
   name: "Super combat potion",
   chains: [
     doseChain("SUPER_COMBAT_POTION_4_", "SUPER_COMBAT_POTION_3_", "SUPER_COMBAT_POTION_2_", "SUPER_COMBAT_POTION_1_"),
-    doseChain("SUPER_COMBAT_POTION_4_3", "SUPER_COMBAT_POTION_3_3", "SUPER_COMBAT_POTION_2_3", "SUPER_COMBAT_POTION_1_3"),
+    doseChain("SUPER_COMBAT_POTION_4__2", "SUPER_COMBAT_POTION_3__2", "SUPER_COMBAT_POTION_2__2", "SUPER_COMBAT_POTION_1__2"),
   ],
   effect: (player) => {
     boostSkill(player, Skill.ATTACK, 5, 0.15);
@@ -562,7 +626,7 @@ registerPotion({
   name: "Ranging potion",
   chains: [
     doseChain("RANGING_POTION_4_", "RANGING_POTION_3_", "RANGING_POTION_2_", "RANGING_POTION_1_"),
-    doseChain("RANGING_POTION_4_3", "RANGING_POTION_3_3", "RANGING_POTION_2_3", "RANGING_POTION_1_3"),
+    doseChain("RANGING_POTION_4__2", "RANGING_POTION_3__2", "RANGING_POTION_2__2", "RANGING_POTION_1__2"),
   ],
   effect: (player) => boostSkill(player, Skill.RANGED, 4, 0.1),
 });
@@ -602,10 +666,22 @@ registerPotion({
   name: "Prayer potion",
   chains: [
     doseChain("PRAYER_POTION_4_", "PRAYER_POTION_3_", "PRAYER_POTION_2_", "PRAYER_POTION_1_"),
-    doseChain("PRAYER_POTION_4_3", "PRAYER_POTION_3_3", "PRAYER_POTION_2_3", "PRAYER_POTION_1_3"),
-    doseChain("PRAYER_POTION_4_4", "PRAYER_POTION_3_4", "PRAYER_POTION_2_4", "PRAYER_POTION_1_4"),
+    doseChain("PRAYER_POTION_4__2", "PRAYER_POTION_3__2", "PRAYER_POTION_2__2", "PRAYER_POTION_1__2"),
+    doseChain("PRAYER_POTION_4__3", "PRAYER_POTION_3__3", "PRAYER_POTION_2__3", "PRAYER_POTION_1__3"),
   ],
   effect: (player) => applyPrayerRestore(player, false),
+});
+// Wiki: one Prayer point every 12 ticks for 8 minutes; cannot be shared or mixed.
+registerPotion({
+  name: "Prayer regeneration potion",
+  chains: [[
+    Items.PRAYER_REGENERATION_POTION_4_,
+    Items.PRAYER_REGENERATION_POTION_3_,
+    Items.PRAYER_REGENERATION_POTION_2_,
+    Items.PRAYER_REGENERATION_POTION_1_,
+  ]],
+  shareable: false,
+  effect: applyPrayerRegeneration,
 });
 registerPotion({
   name: "Restore potion",
@@ -616,7 +692,7 @@ registerPotion({
   name: "Super restore",
   chains: [
     doseChain("SUPER_RESTORE_4_", "SUPER_RESTORE_3_", "SUPER_RESTORE_2_", "SUPER_RESTORE_1_"),
-    doseChain("SUPER_RESTORE_4_3", "SUPER_RESTORE_3_3", "SUPER_RESTORE_2_3", "SUPER_RESTORE_1_3"),
+    doseChain("SUPER_RESTORE_4__2", "SUPER_RESTORE_3__2", "SUPER_RESTORE_2__2", "SUPER_RESTORE_1__2"),
     doseChain("BLIGHTED_SUPER_RESTORE_4_", "BLIGHTED_SUPER_RESTORE_3_", "BLIGHTED_SUPER_RESTORE_2_", "BLIGHTED_SUPER_RESTORE_1_"),
   ],
   effect: applySuperRestore,
@@ -625,7 +701,7 @@ registerPotion({
   name: "Saradomin brew",
   chains: [
     doseChain("SARADOMIN_BREW_4_", "SARADOMIN_BREW_3_", "SARADOMIN_BREW_2_", "SARADOMIN_BREW_1_"),
-    doseChain("SARADOMIN_BREW_4_3", "SARADOMIN_BREW_3_3", "SARADOMIN_BREW_2_3", "SARADOMIN_BREW_1_3"),
+    doseChain("SARADOMIN_BREW_4__2", "SARADOMIN_BREW_3__2", "SARADOMIN_BREW_2__2", "SARADOMIN_BREW_1__2"),
   ],
   requiresFoodPermission: true,
   effect: applySaradominBrew,
@@ -637,7 +713,7 @@ registerPotion({
 });
 registerPotion({
   name: "Guthix rest",
-  chains: [doseChain("GUTHIX_REST_4_", "GUTHIX_REST_3_", "GUTHIX_REST_2_", "GUTHIX_REST_1_", "GUTHIX_REST")],
+  chains: [doseChain("GUTHIX_REST_4_", "GUTHIX_REST_3_", "GUTHIX_REST_2_", "GUTHIX_REST_1_")],
   requiresFoodPermission: true,
   effect: applyGuthixRest,
 });
@@ -666,7 +742,7 @@ registerPotion({
   name: "Super energy",
   chains: [
     doseChain("SUPER_ENERGY_4_", "SUPER_ENERGY_3_", "SUPER_ENERGY_2_", "SUPER_ENERGY_1_"),
-    doseChain("SUPER_ENERGY_4_3", "SUPER_ENERGY_3_3", "SUPER_ENERGY_2_3", "SUPER_ENERGY_1_3"),
+    doseChain("SUPER_ENERGY_4__2", "SUPER_ENERGY_3__2", "SUPER_ENERGY_2__2", "SUPER_ENERGY_1__2"),
   ],
   effect: (player) => restoreRunEnergy(player, 20),
 });
@@ -700,19 +776,19 @@ registerPotion({
 });
 registerPotion({
   name: "Antidote+",
-  chains: [doseChain("ANTIDOTE_PLUS_4_", "ANTIDOTE_PLUS_3_", "ANTIDOTE_PLUS_2_", "ANTIDOTE_PLUS_1_")],
-  effect: (player) => applyPoisonImmunity(player, 600),
+  chains: [doseChain("ANTIDOTE_4_", "ANTIDOTE_3_", "ANTIDOTE_2_", "ANTIDOTE_1_")],
+  effect: (player) => applyPoisonImmunity(player, 540),
 });
 registerPotion({
   name: "Antidote++",
-  chains: [doseChain("ANTIDOTE_PLUS_PLUS_4_", "ANTIDOTE_PLUS_PLUS_3_", "ANTIDOTE_PLUS_PLUS_2_", "ANTIDOTE_PLUS_PLUS_1_")],
+  chains: [doseChain("ANTIDOTE_4__3", "ANTIDOTE_3__3", "ANTIDOTE_2__3", "ANTIDOTE_1__3")],
   effect: (player) => applyPoisonImmunity(player, 720),
 });
 registerPotion({
   name: "Sanfew serum",
   chains: [
     doseChain("SANFEW_SERUM_4_", "SANFEW_SERUM_3_", "SANFEW_SERUM_2_", "SANFEW_SERUM_1_"),
-    doseChain("SANFEW_SERUM_4_3", "SANFEW_SERUM_3_3", "SANFEW_SERUM_2_3", "SANFEW_SERUM_1_3"),
+    doseChain("SANFEW_SERUM_4__2", "SANFEW_SERUM_3__2", "SANFEW_SERUM_2__2", "SANFEW_SERUM_1__2"),
   ],
   effect: (player) => {
     applySanfewRestore(player);
@@ -722,12 +798,12 @@ registerPotion({
 registerPotion({
   name: "Anti-venom",
   chains: [doseChain("ANTI_VENOM_4_", "ANTI_VENOM_3_", "ANTI_VENOM_2_", "ANTI_VENOM_1_")],
-  effect: (player) => applyPoisonImmunity(player, 180),
+  effect: (player) => applyPoisonImmunity(player, 720),
 });
 registerPotion({
   name: "Anti-venom+",
-  chains: [doseChain("ANTI_VENOM_PLUS_4_", "ANTI_VENOM_PLUS_3_", "ANTI_VENOM_PLUS_2_", "ANTI_VENOM_PLUS_1_")],
-  effect: (player) => applyPoisonImmunity(player, 360),
+  chains: [doseChain("ANTI_VENOM_4__3", "ANTI_VENOM_3__3", "ANTI_VENOM_2__3", "ANTI_VENOM_1__3")],
+  effect: (player) => applyPoisonImmunity(player, 900),
 });
 
 registerPotion({
@@ -755,13 +831,13 @@ registerPotion({
   name: "Antipoison mix",
   chains: [doseChain("ANTIPOISON_MIX_2_", "ANTIPOISON_MIX_1_")],
   requiresFoodPermission: true,
-  effect: applyMix((player) => applyPoisonImmunity(player, 90, false)),
+  effect: applyMix((player) => applyPoisonImmunity(player, 90, false), 3),
 });
 registerPotion({
   name: "Restore mix",
   chains: [doseChain("RESTORE_MIX_2_", "RESTORE_MIX_1_")],
   requiresFoodPermission: true,
-  effect: applyMix(applyRestorePotion),
+  effect: applyMix(applyRestorePotion, 3),
 });
 registerPotion({
   name: "Super energy mix",
@@ -777,9 +853,9 @@ registerPotion({
 });
 registerPotion({
   name: "Antidote+ mix",
-  chains: [doseChain("ANTIDOTE_PLUS_MIX_2_", "ANTIDOTE_PLUS_MIX_1_")],
+  chains: [doseChain("ANTIDOTE_MIX_2_", "ANTIDOTE_MIX_1_")],
   requiresFoodPermission: true,
-  effect: applyMix((player) => applyPoisonImmunity(player, 600, false)),
+  effect: applyMix((player) => applyPoisonImmunity(player, 540, false)),
 });
 registerPotion({
   name: "Antifire mix",
@@ -1050,7 +1126,7 @@ function handlePotionDrink(player, itemId, slot) {
   entry.potion.effect(player);
 
   const share = player.getAttribute("lunar:potion-share");
-  if (share && Date.now() < share.expiresAt) {
+  if (share && entry.potion.shareable && Date.now() < share.expiresAt) {
     const restorative = /restore|prayer|energy|stamina|antipoison|antidote|antifire|guthix rest/i.test(entry.potion.name);
     if ((share.type === "restore") === restorative) {
       entry.potion.effect(share.target);
@@ -1080,7 +1156,7 @@ function resumeTimedEffects({ player }) {
   if (Number.isFinite(staminaEnd) && staminaEnd > 0) player.setAttribute(ATTR_STAMINA_END, staminaEnd + offline);
   const boostCycle = Number(player.getAttribute(ATTR_BOOST_CYCLE));
   if (Number.isFinite(boostCycle) && boostCycle > 0) player.setAttribute(ATTR_BOOST_CYCLE, boostCycle + offline);
-  for (const key of [ATTR_DIVINE_STATE, ATTR_OVERLOAD_STATE, ATTR_MENAPHITE_STATE]) {
+  for (const key of [ATTR_DIVINE_STATE, ATTR_OVERLOAD_STATE, ATTR_MENAPHITE_STATE, ATTR_PRAYER_REGEN_STATE]) {
     const state = player.getAttribute(key);
     if (!state || typeof state !== "object") continue;
     for (const field of ["endsAt", "nextBoostAt", "nextDamageAt", "nextRestoreAt"]) {
@@ -1097,7 +1173,8 @@ module.exports = {
   },
   _test: {
     applyPrayerRestore, applySanfewRestore, applyAncientBrew, restorePrayerOverheal, applyDivine, processDivine,
-    applyMenaphiteRemedy, processMenaphite, processBoostDecay, curePoisonAndVenom, pauseTimedEffects, resumeTimedEffects,
+    applyMenaphiteRemedy, processMenaphite, applyPrayerRegeneration, processPrayerRegeneration, clearPrayerRegeneration,
+    processBoostDecay, curePoisonAndVenom, pauseTimedEffects, resumeTimedEffects,
     findPotionEntry: (itemId) => POTION_BY_ITEM_ID.get(itemId) ?? null,
   },
   getPotionName(itemId) {
@@ -1109,6 +1186,7 @@ module.exports = {
     PERSISTED_ATTRIBUTES.forEach((key) => api.persistAttribute(key));
     api.onPlayerLogout(pauseTimedEffects);
     api.onPlayerLogin(resumeTimedEffects);
+    api.onPlayerDeath(clearPrayerRegeneration);
     api.onItemFirstAction((event) => {
       const { player, itemId, slot } = event;
       return handlePotionDrink(player, itemId, slot);
@@ -1122,6 +1200,7 @@ module.exports = {
       processDivine(player);
       processOverload(player);
       processMenaphite(player);
+      processPrayerRegeneration(player);
       processBoostDecay(player);
       processDragonfireProtection(player);
     });

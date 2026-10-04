@@ -104,6 +104,7 @@ import {
   PluginRangedAmmoResolver,
   PluginRangedAmmoRecovery,
   PluginRangedCombatModifier,
+  PluginSpellRuneSource,
   PluginNpcCombatMethodProvider,
   PluginNpcCombatMethodProviderEntry,
   PluginPlayerLogoutEvent,
@@ -284,6 +285,7 @@ export class PluginManager {
   private static rangedAmmoResolvers: Array<{ pluginName: string; resolver: PluginRangedAmmoResolver }> = [];
   private static rangedAmmoHandlers: Array<{ pluginName: string; handler: PluginRangedAmmoHandler }> = [];
   private static rangedAmmoRecoveries: Array<{ pluginName: string; recovery: PluginRangedAmmoRecovery }> = [];
+  private static spellRuneSources: Array<{ pluginName: string; source: PluginSpellRuneSource }> = [];
   private static rangedCombatModifiers: Array<{ pluginName: string; modifier: PluginRangedCombatModifier }> = [];
   private static combatMethodResolvers: PluginCombatMethodResolver[] = [];
   private static npcCombatMethodProviders: PluginNpcCombatMethodProviderEntry[] = [];
@@ -3865,6 +3867,19 @@ export class PluginManager {
         }
         PluginManager.registerRangedAmmoHandlerInternal(pluginName, handler);
       },
+      registerSpellRuneSource: (source) => {
+        if (
+          !source ||
+          typeof source.check !== "function" ||
+          typeof source.consume !== "function"
+        ) {
+          console.warn(
+            `[plugins] ${pluginName} attempted invalid spell rune source registration`
+          );
+          return;
+        }
+        PluginManager.registerSpellRuneSourceInternal(pluginName, source);
+      },
       registerRangedAmmoRecovery: (recovery) => {
         if (!recovery || typeof recovery.recovery !== "function") {
           console.warn(
@@ -4054,6 +4069,46 @@ export class PluginManager {
     return false;
   }
 
+  /** The first source that can supply every missing item answers true, or false when none can. */
+  public static checkSpellRuneSource(player: any, missingItems: any[]): boolean {
+    if (!Array.isArray(missingItems) || missingItems.length === 0) {
+      return false;
+    }
+    for (const entry of PluginManager.spellRuneSources) {
+      try {
+        if (entry.source.check(player, missingItems) === true) {
+          return true;
+        }
+      } catch (err) {
+        console.error(
+          `[plugins] spell rune source check failed (${entry.pluginName})`,
+          err
+        );
+      }
+    }
+    return false;
+  }
+
+  /** Deducts the shortfall from the first source that can supply it, leaving the rest alone. */
+  public static consumeSpellRuneSource(player: any, missingItems: any[]): void {
+    if (!Array.isArray(missingItems) || missingItems.length === 0) {
+      return;
+    }
+    for (const entry of PluginManager.spellRuneSources) {
+      try {
+        if (entry.source.check(player, missingItems) === true) {
+          entry.source.consume(player, missingItems);
+          return;
+        }
+      } catch (err) {
+        console.error(
+          `[plugins] spell rune source consume failed (${entry.pluginName})`,
+          err
+        );
+      }
+    }
+  }
+
   /** The first plugin-declared recovery share for this player's shot, or 0 when none applies. */
   public static rangedAmmoRecovery(player: any): number {
     for (const entry of PluginManager.rangedAmmoRecoveries) {
@@ -4167,6 +4222,13 @@ export class PluginManager {
     handler: PluginRangedAmmoHandler
   ): void {
     PluginManager.rangedAmmoHandlers.push({ pluginName, handler });
+  }
+
+  private static registerSpellRuneSourceInternal(
+    pluginName: string,
+    source: PluginSpellRuneSource
+  ): void {
+    PluginManager.spellRuneSources.push({ pluginName, source });
   }
 
   private static registerRangedAmmoRecoveryInternal(
