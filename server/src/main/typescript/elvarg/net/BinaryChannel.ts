@@ -1,4 +1,5 @@
-import { Socket } from "net";
+import { isIP, Socket } from "net";
+import type { IncomingMessage } from "http";
 import { RawData, WebSocket } from "ws";
 
 export const MAX_GAME_MESSAGE_BYTES = 64 * 1024;
@@ -23,10 +24,15 @@ export class WebSocketBinaryChannel implements BinaryChannel {
   public readonly kind = "websocket" as const;
   public readonly binaryTransport = true as const;
 
-  constructor(private readonly socket: WebSocket) {}
+  constructor(private readonly socket: WebSocket, private readonly request?: IncomingMessage) {}
 
   public get remoteAddress(): string {
-    return (this.socket as any)?._socket?.remoteAddress ?? "";
+    const address = this.request?.socket.remoteAddress ?? (this.socket as any)?._socket?.remoteAddress ?? "";
+    const realIp = this.request?.headers["x-real-ip"];
+    // nginx overwrites this header; only a local proxy may supply player identity.
+    if (["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(address)
+      && typeof realIp === "string" && isIP(realIp)) return realIp;
+    return address;
   }
 
   public get bufferedAmount(): number {

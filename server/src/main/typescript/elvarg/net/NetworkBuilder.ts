@@ -185,7 +185,7 @@ export class NetworkBuilder {
       perMessageDeflate: false,
       maxPayload: MAX_GAME_MESSAGE_BYTES,
     });
-    server.on("connection", (socket) => new ClientConnection(new WebSocketBinaryChannel(socket)));
+    server.on("connection", (socket, request) => new ClientConnection(new WebSocketBinaryChannel(socket, request)));
     server.on("listening", () => console.info(`[network] client websocket listening on ${port}`));
     server.on("error", (error) => console.error("[network] websocket error", error));
     http.listen(port);

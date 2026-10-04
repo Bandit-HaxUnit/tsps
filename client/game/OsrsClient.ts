@@ -5285,7 +5285,7 @@ export class OsrsClient {
                           worldId: this.loginState.serverWorldId,
                           iceServers: this.loginState.serverIceServers,
                       }
-                    : undefined,
+                    : null,
             );
         }
 
@@ -5774,7 +5774,7 @@ export class OsrsClient {
                                   worldId: server.worldId,
                                   iceServers: server.iceServers ?? [],
                               }
-                            : undefined,
+                            : null,
                     );
                     this.loginState.saveLastServer();
                 }

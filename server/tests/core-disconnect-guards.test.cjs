@@ -14,8 +14,20 @@ const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { decodeClientPackets } = require('../dist/net/protocol/ClientProtocol');
 const { Location } = require('../dist/game/model/Location');
 const net = require('../dist/net/NetworkBuilder');
+const { WebSocketBinaryChannel } = require('../dist/net/BinaryChannel');
 
 const REVISION = 435;
+
+test('only a loopback WebSocket proxy can supply a validated player IP', () => {
+  const channel = (address, realIp) => new WebSocketBinaryChannel({}, {
+    socket: { remoteAddress: address }, headers: { 'x-real-ip': realIp },
+  });
+  assert.equal(channel('127.0.0.1', '203.0.113.4').remoteAddress, '203.0.113.4');
+  assert.equal(channel('::ffff:127.0.0.1', '2001:db8::1').remoteAddress, '2001:db8::1');
+  assert.equal(channel('203.0.113.5', '203.0.113.4').remoteAddress, '203.0.113.5');
+  assert.equal(channel('127.0.0.1', 'invalid').remoteAddress, '127.0.0.1');
+  assert.equal(channel('127.0.0.1', ['203.0.113.4']).remoteAddress, '127.0.0.1');
+});
 
 function stubMobile(overrides = {}) {
   return {
