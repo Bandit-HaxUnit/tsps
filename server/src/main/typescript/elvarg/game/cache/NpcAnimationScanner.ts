@@ -64,6 +64,42 @@ export function getSequenceFrameIds(data: Int8Array, revision = 237): number[] {
     return [];
 }
 
+const sequencePriorities = new Map<number, number>();
+
+/**
+ * SeqType.priority (opcode 10; -1 when unset): 1 means the client drops the seq
+ * when the actor takes a step, as skilling loops do.
+ */
+export function getSequencePriority(id: number): number {
+    const cached = sequencePriorities.get(id);
+    if (cached !== undefined) return cached;
+    let priority = -1;
+    try {
+        const configs = CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore());
+        const data = configs.getArchive(ConfigType.DAT2.seqs).getFile(id)?.data;
+        const revision = CachePipeline.getActive().revision;
+        const buffer = new ByteBuffer(data ?? new Int8Array());
+        while (buffer.remaining > 0) {
+            const opcode = buffer.readUnsignedByte();
+            if (opcode === 0) break;
+            if (opcode === 10) {
+                priority = buffer.readUnsignedByte();
+                break;
+            }
+            if (opcode === 1) {
+                const count = buffer.readUnsignedShort();
+                buffer.offset += count * 6;
+                continue;
+            }
+            if (!skipSequenceOpcode(buffer, opcode, revision)) break;
+        }
+    } catch {
+        // No cache (tests, tools): treat as unset.
+    }
+    sequencePriorities.set(id, priority);
+    return priority;
+}
+
 export function getLastSequenceId(): number {
     const configs = CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore());
     return configs.getArchive(ConfigType.DAT2.seqs).lastFileId;

@@ -274,12 +274,11 @@ export function deriveMenuEntriesForWidget(
             const verbLower = verb.toLowerCase();
             const alreadyHasVerb = ops.some((o) => String(o.text).toLowerCase() === verbLower);
             if (!alreadyHasVerb) {
-                // Insert after the first non-drop action when present, otherwise at the top.
-                const firstNonDropIdx = ops.findIndex((o) => {
-                    const lower = String(o.text).toLowerCase();
-                    return lower !== "drop" && lower !== "examine" && lower !== "cancel";
-                });
-                const insertAt = firstNonDropIdx >= 0 ? firstNonDropIdx + 1 : 0;
+                // An item's primary op only lives in slot 1 or 2 (weapons keep
+                // Wield on op2); with only later slots set (pot of flour's Empty
+                // is op4) "Use" is the default action, so it goes first.
+                const primary = ops[0];
+                const insertAt = primary && primary.index <= 1 ? 1 : 0;
                 ops.splice(insertAt, 0, { text: verb, index: -1 }); // -1 = targetVerb, not an action index
             }
         }

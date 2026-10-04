@@ -935,7 +935,9 @@ function startWoodcutting(player, treeObject, tree, activeSessions) {
 
   player.getSkillManager()?.stopSkillable?.();
   stopWoodcutting(activeSessions, player, false);
+  // reset() clears the face the object click set, so face the tree again.
   player.getCombat()?.reset?.();
+  player.setPositionToFace(treeObject.getLocation());
 
   activeSessions.set(player, {
     tree,

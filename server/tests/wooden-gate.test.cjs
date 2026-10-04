@@ -603,3 +603,26 @@ test('clicking Pay-toll pays directly and refuses when the backpack is short', (
   }
 });
 
+
+test('the Tutorial Island survival gate swings open and closes back to its own panels', () => {
+  const h = buildHarness();
+  try {
+    // 9470/9708 open into 8812/8813, the same open panels as the 8810/8811 gate.
+    h.place(9470, 200, 200, 0);
+    h.place(9708, 200, 201, 0);
+    assert.deepEqual(h.click(9470, 200, 200, 0), [
+      ['deregister', 9470, 200, 200, 0],
+      ['deregister', 9708, 200, 201, 0],
+      ['register', 8812, 199, 200, 3],
+      ['register', 8813, 198, 200, 3],
+    ]);
+    assert.deepEqual(h.click(8812, 199, 200, 3, 'Close'), [
+      ['deregister', 8812, 199, 200, 3],
+      ['deregister', 8813, 198, 200, 3],
+      ['register', 9470, 200, 200, 0],
+      ['register', 9708, 200, 201, 0],
+    ], 'not 8810/8811');
+  } finally {
+    h.restore();
+  }
+});

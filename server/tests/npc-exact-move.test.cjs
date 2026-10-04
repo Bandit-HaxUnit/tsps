@@ -102,7 +102,7 @@ test('a face tile lasts a tick; crawling stays until it is turned off', () => {
   assert.equal(npc.isCrawling(), true);
 });
 
-test('an NPC blocks players stepping onto it, a walk-through pet does not', () => {
+test('players walk through NPCs, while NPCs still block each other', () => {
   const { World } = require('../dist/game/World');
   const { MovementQueue } = require('../dist/game/model/movement/MovementQueue');
   const npc = new NPC(3106, new Location(3300, 3300, 0));
@@ -111,15 +111,23 @@ test('an NPC blocks players stepping onto it, a walk-through pet does not', () =
   assert.ok(World.getNpcs().add(npc, true), 'registered');
   assert.ok(World.getNpcs().add(pet, true), 'registered');
   try {
-    // osrs-docs: Entity Collision - the NPC flag is checked by players too, so walking
-    // to interact with an NPC stops against it instead of stepping onto its tile
-    // (entity reach excludes overlap, so an overlap would never open the dialogue).
+    // osrs-docs: Entity Collision - the NPC flag is checked by NPCs only; players
+    // walk over it and clear it (the entity-stacking mechanic). Followers/pets add
+    // no flag at all.
     const player = { isNpc: () => false, isPlayer: () => true, getSize: () => 1, getPrivateArea: () => null };
     const occupied = (x, y) => MovementQueue.prototype.isDynamicallyOccupied.call(
       { character: player }, new Location(x, y, 0));
-    assert.equal(occupied(3300, 3300), true, 'a player cannot step onto a normal NPC');
-    assert.equal(occupied(3300, 3301), false, 'the free tile beside it is still walkable');
+    assert.equal(occupied(3300, 3300), false, 'a player steps onto a normal NPC tile');
     assert.equal(occupied(3300, 3302), false, 'followers/pets are walk-through');
+
+    const otherNpc = {
+      isNpc: () => true, isPlayer: () => false, getSize: () => 1,
+      getPrivateArea: () => null, canWalkThroughNPCs: () => false,
+    };
+    const npcBlocked = (x, y) => MovementQueue.prototype.isDynamicallyOccupied.call(
+      { character: otherNpc }, new Location(x, y, 0));
+    assert.equal(npcBlocked(3300, 3300), true, 'an NPC is stopped by another NPC');
+    assert.equal(npcBlocked(3300, 3301), false, 'the free tile beside it is walkable');
   } finally {
     World.getNpcs().remove(npc);
     World.getNpcs().remove(pet);

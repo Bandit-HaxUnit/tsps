@@ -419,8 +419,12 @@ function landCatch(player, tool, variant, caught) {
     }
   }
   // Wiki (Heron): a big net catch rolls the pet once per kind of fish in it.
+  // A listener may take over the session (the tutorial stops after one catch).
+  let stop = false;
   for (const fish of new Set(landed)) {
-    pluginApi.emitCustomEvent("fishing:success", { player, skill: Skill.FISHING, petBase: fish.petBase });
+    const event = { player, skill: Skill.FISHING, petBase: fish.petBase, stop: false };
+    pluginApi.emitCustomEvent("fishing:success", event);
+    if (event.stop) stop = true;
   }
 
   // Bait and feathers are only used up by a catch, one per cast.
@@ -428,6 +432,7 @@ function landCatch(player, tool, variant, caught) {
   if (bait !== undefined) {
     player.getInventory().deleteNumber(bait, 1);
   }
+  return stop;
 }
 
 function startFishing(player, npc, tool, activeSessions) {
@@ -523,10 +528,10 @@ class FishingTask extends Task {
       if (session.tool.spot?.takesCatch(player, npc)) {
         continue;
       }
-      landCatch(player, session.tool, variant, caught);
+      const stopAfterCatch = landCatch(player, session.tool, variant, caught);
 
       // ponytail: spots without their own movement still stop at random instead of moving.
-      if (inventoryBlocks(player, session.tool) || !hasToolRequirements(player, session.tool) ||
+      if (stopAfterCatch || inventoryBlocks(player, session.tool) || !hasToolRequirements(player, session.tool) ||
           (!session.tool.spot && Misc.getRandom(90) === 0)) {
         stopFishing(this.activeSessions, player);
       }

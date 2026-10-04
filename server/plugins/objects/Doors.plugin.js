@@ -71,12 +71,16 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     woodenGate(O.GATE_140, O.GATE_142, O.GATE_137, O.GATE_139),
     woodenGate(O.GATE_243, O.GATE_244, O.GATE_245, O.GATE_246),
     woodenGate(O.GATE_322, O.GATE_319, O.GATE_320, O.GATE_321),
+    // Tutorial Island survival gate: swings open into 8810/8811's open panels (Zenyte Gate.java).
+    woodenGate(O.GATE_90, O.GATE_91, O.GATE_85, O.GATE_86),
   ]);
 
   WOODEN_GATE_BY_ID = new Map();
   for (const gate of WOODEN_GATES) {
+    // Open panels can be shared (the survival gate opens into 8812/8813); the first
+    // gate keeps them, and closing restores the remembered closed panels anyway.
     for (const id of [gate.closed.hinge, gate.closed.extension, gate.opened.hinge, gate.opened.extension]) {
-      WOODEN_GATE_BY_ID.set(id, gate);
+      if (!WOODEN_GATE_BY_ID.has(id)) WOODEN_GATE_BY_ID.set(id, gate);
     }
   }
 
@@ -445,6 +449,18 @@ function handleWoodenGate(player, object, objectId, location) {
 
   const privateArea = player?.getPrivateArea?.() ?? null;
   const isClosed = objectId === gate.closed.hinge || objectId === gate.closed.extension;
+  // Closing a gate this plugin opened puts back exactly the panels it replaced.
+  if (!isClosed) {
+    const key = locationKey(location);
+    for (const [anchorKey, state] of OPEN_OBJECT_STATES) {
+      if (anchorKey.startsWith("wooden-gate:") &&
+          state.current.some((snapshot) => snapshot.id === objectId && locationKey(snapshot.location) === key)) {
+        core.TaskManager.cancelTasks(anchorKey);
+        autoCloseDoor(anchorKey);
+        return true;
+      }
+    }
+  }
   const isHinge = objectId === gate.closed.hinge || objectId === gate.opened.hinge;
 
   const oldHingeId = isClosed ? gate.closed.hinge : gate.opened.hinge;

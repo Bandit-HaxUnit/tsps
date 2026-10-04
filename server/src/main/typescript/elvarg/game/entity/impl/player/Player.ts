@@ -55,6 +55,7 @@ import { Task } from "../../../task/Task";
 import { World } from "../../../World";
 import { PluginManager } from "../../../../plugins/PluginManager";
 import { ServerPerf } from "../../../../util/ServerPerf";
+import { getSequencePriority } from "../../../cache/NpcAnimationScanner";
 
 const ATTR_SKIP_PERSISTENCE = "bot-skip-persistence";
 const DEFAULT_AUDIO_SETTINGS: Readonly<Record<number, number>> = {
@@ -340,6 +341,25 @@ export class Player extends Mobile {
         return 1;
     }
 
+    /** An arrival-step animation held for one cycle (see performAnimation). */
+    private arrivalAnimation: Animation | null = null;
+
+    /**
+     * OSRS p_arrivedelay, applied globally: the client drops a priority-1 seq
+     * (skilling loops) that lands in the same update as a step, so one started on
+     * the tick the player stepped is held a tick. A further step drops it, as the
+     * client would.
+     */
+    override performAnimation(animation: Animation) {
+        if (animation != null && this.getMovementQueue().steppedThisWorldCycle() &&
+            getSequencePriority(animation.getId()) === 1) {
+            this.arrivalAnimation = animation;
+            return;
+        }
+        this.arrivalAnimation = null;
+        super.performAnimation(animation);
+    }
+
     public process() {
         const isBot = this.isPlayerBot();
         const timed = <T>(phase: string, fn: () => T): T =>
@@ -361,6 +381,7 @@ export class Player extends Mobile {
             timed("combat_pre_movement", () => combat.preMovementProcess());
         }
 
+        movement.processEntityPursuit();
         // Process walking queue only when movement/follow state exists.
         if (movement.hasPendingWork()) {
             timed("movement", () => movement.process());
@@ -372,6 +393,11 @@ export class Player extends Mobile {
         if (processCombat) {
             timed("combat_post_movement", () => combat.postMovementProcess());
         }
+
+        // Release last cycle's held arrival animation, unless this cycle stepped again.
+        const held = this.arrivalAnimation;
+        this.arrivalAnimation = null;
+        if (held && !movement.didMoveThisCycle()) super.performAnimation(held);
 
         // Reach checks for walk-to interactions run here, after this cycle's steps,
         // so arriving at an object/npc/ground item resolves on the same cycle.

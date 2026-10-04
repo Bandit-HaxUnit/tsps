@@ -7687,7 +7687,10 @@ export class OsrsClient {
             const actions: Array<string | null | undefined> = Array.isArray(obj?.inventoryActions)
                 ? obj.inventoryActions
                 : [];
-            for (const act of actions) {
+            // Only slots 1-2 can hold an item's primary op (weapons keep Wield on
+            // op2). With only later ops set (pot of flour's Empty is op4), the
+            // click selects the item for use instead.
+            for (const act of actions.slice(0, 2)) {
                 if (typeof act === "string" && act.trim().length > 0) return act.trim();
             }
         } catch (err) {

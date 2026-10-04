@@ -195,7 +195,14 @@ class CookingTask extends Task {
       player.performAnimation(session.animation);
 
       player.getInventory().deleteNumber(session.cookable.raw, 1);
-      if (isSuccess(player, session.cookable)) {
+      const burnRequest = {
+        player,
+        rawId: session.cookable.raw,
+        itemId: session.cookable.cooked,
+        burn: !isSuccess(player, session.cookable),
+      };
+      pluginApi.emitCustomEvent("cooking:burn", burnRequest);
+      if (!burnRequest.burn) {
         player.getInventory().addItem(new Item(session.cookable.cooked, 1));
         player.sendMessage(`You cook the ${session.cookable.name}.`);
         pluginApi.emitCustomEvent("cooking:success", {
