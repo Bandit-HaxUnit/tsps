@@ -20,6 +20,12 @@ Rules for both:
 
 - Read-only and public. Anything player-specific or privileged stays on the game socket,
   where the session is already authenticated.
+  A search declaration can use `dataComponent` instead of `endpoint`: send JSON rows
+  (`[{ id, name }]`) to that hidden text component with `sendString`. The shared search
+  runtime filters those rows locally, including all rows when the query is empty. Use
+  `list.textOnly: true` for rows that are text rather than inventory items. Commands uses
+  this mode to send only the current player's permitted commands, then prefills the query
+  by sending text to `search.inputComponent`.
 - Responses carry an ETag and revalidate to 304, so definitions are fetched once per build
   rather than pushed on every open.
 - The first open of a session waits on a fetch. Updates sent in the same batch are held by

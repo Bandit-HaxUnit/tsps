@@ -472,7 +472,7 @@ module.exports = {
         player.sendMessage("Error reloading npc drops.");
       }
       return true;
-    }, PlayerRights.OWNER);
+    }, PlayerRights.OWNER, "Reload NPC drops");
 
     api.log("registered", { lazy: true });
   },

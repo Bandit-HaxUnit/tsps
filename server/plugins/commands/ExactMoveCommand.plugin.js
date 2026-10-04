@@ -86,7 +86,7 @@ module.exports = {
   name: "ExactMoveCommand",
   register(api) {
     pluginApi = api;
-    api.registerCommand("exactmove", exactMove, api.core.PlayerRights.DEVELOPER);
+    api.registerCommand("exactmove", exactMove, api.core.PlayerRights.DEVELOPER, "Test NPC exact movement");
   },
 };
 

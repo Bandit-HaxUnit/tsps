@@ -88,8 +88,8 @@ module.exports = {
   name: "HeadbarColourCommands",
   register(api) {
     pluginApi = api;
-    api.registerCommand("headbar", headbar, api.core.PlayerRights.DEVELOPER);
-    api.registerCommand("ifcolour", ifColour, api.core.PlayerRights.DEVELOPER);
+    api.registerCommand("headbar", headbar, api.core.PlayerRights.DEVELOPER, "Test NPC health-bar animations");
+    api.registerCommand("ifcolour", ifColour, api.core.PlayerRights.DEVELOPER, "Set a widget colour");
   },
 };
 

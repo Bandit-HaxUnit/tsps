@@ -450,7 +450,7 @@ module.exports = {
   register(api) {
     World = api.getWorld();
     ItemOnGroundManager = api.getItemOnGroundManager();
-    api.registerCommand("kdr", sayKillDeathRatio);
+    api.registerCommand("kdr", sayKillDeathRatio, undefined, "Say your kill/death ratio");
     api.onPlayerLogin(({ player }) => {
       syncKillstreakGlow(player);
       updatePvpInterface(player);

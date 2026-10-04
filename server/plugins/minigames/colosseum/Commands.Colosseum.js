@@ -77,9 +77,9 @@ function setModifier({ player, parts }) {
 
 module.exports = function registerColosseumCommands(api) {
   const { DEVELOPER } = api.core.PlayerRights;
-  api.registerCommand("colosseum", toLobby, DEVELOPER);
-  api.registerCommand("colokill", killWave, DEVELOPER);
-  api.registerCommand("cologlory", setGlory, DEVELOPER);
-  api.registerCommand("colowave", setWave, DEVELOPER);
-  api.registerCommand("colomod", setModifier, DEVELOPER);
+  api.registerCommand("colosseum", toLobby, DEVELOPER, "Teleport to the Colosseum lobby");
+  api.registerCommand("colokill", killWave, DEVELOPER, "Kill the active Colosseum wave");
+  api.registerCommand("cologlory", setGlory, DEVELOPER, "Set your best Glory");
+  api.registerCommand("colowave", setWave, DEVELOPER, "Set the next Colosseum wave (1-12)");
+  api.registerCommand("colomod", setModifier, DEVELOPER, "Set a Colosseum modifier tier");
 };

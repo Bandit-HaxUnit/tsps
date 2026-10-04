@@ -451,8 +451,8 @@ module.exports = {
       for (const timer of completionTimers.get(player) ?? []) clearTimeout(timer);
       completionTimers.delete(player);
     });
-    api.registerCommand("ge", openGrandExchange);
-    api.registerCommand("gecollect", openCollectionBox);
+    api.registerCommand("ge", openGrandExchange, undefined, "Open the Grand Exchange");
+    api.registerCommand("gecollect", openCollectionBox, undefined, "Open the Grand Exchange collection box");
 
     api.onNpcInteraction("Grand Exchange Clerk", { "Exchange": openGrandExchange });
     api.onNpcInteraction("Banker", { "Collect": openCollectionBox });

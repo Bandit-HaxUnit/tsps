@@ -143,7 +143,7 @@ function registerBotCommands(options) {
     // The factory queues a world login. Clan membership and mode activation need the bot registered.
     pendingRecruits.set(bot, { owner: player, behavior: normalizedBehavior });
     return true;
-  }, PlayerRights.DEVELOPER);
+  }, PlayerRights.DEVELOPER, "Manage player bots");
   api.onPlayerProcess(({ player: owner }) => {
     if (owner.isPlayerBot?.()) return;
     for (const [bot, pending] of pendingRecruits) {
@@ -231,7 +231,7 @@ function registerBotCommands(options) {
 
     player.sendMessage("Usage: ::botme [on|off|toggle|status]");
     return true;
-  }, PlayerRights.ADMINISTRATOR);
+  }, PlayerRights.ADMINISTRATOR, "Control yourself as a bot");
 
   api.registerCommand("bh", ({ player, parts }) => {
     const usernameArg = parts[1];
@@ -309,7 +309,7 @@ function registerBotCommands(options) {
       behavior: assigned,
     });
     return true;
-  }, PlayerRights.ADMINISTRATOR);
+  }, PlayerRights.ADMINISTRATOR, "Set bot behaviour");
 
   api.registerCommand("bothotspots", ({ player }) => {
     const countsByHotspot = new Map();
@@ -345,7 +345,7 @@ function registerBotCommands(options) {
       `profiles ${formatCounts(countsByProfile) || "none"}`
     );
     return true;
-  }, PlayerRights.ADMINISTRATOR);
+  }, PlayerRights.ADMINISTRATOR, "Show bot hotspot counts");
 }
 
 module.exports = {

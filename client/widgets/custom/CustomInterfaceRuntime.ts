@@ -31,7 +31,9 @@ export type CustomInterfaceDeclaration = {
         blurColor?: number;
         blurHoverColor?: number;
         /** Content endpoint path, e.g. "/api/content/items". */
-        endpoint: string;
+        endpoint?: string;
+        /** Hidden text component receiving JSON rows over the authenticated game socket. */
+        dataComponent?: number;
         queryParam?: string;
         limit?: number;
         debounceMs?: number;
@@ -48,6 +50,8 @@ export type CustomInterfaceDeclaration = {
         backgroundBaseY?: number;
         /** "%name" and "%id" are replaced per row. */
         itemLabel?: string;
+        /** Text lists have no inventory item associated with each row. */
+        textOnly?: boolean;
     };
     /**
      * Containers that scroll their own children. The rows are part of the definition, so
@@ -115,6 +119,7 @@ export class CustomInterfaceRuntime {
     private focused = false;
     private query = "";
     private rows: CustomInterfaceRow[] = [];
+    private sourceRows: CustomInterfaceRow[] = [];
     private total = 0;
     private renderedVersion = -1;
     private version = 0;
@@ -155,6 +160,18 @@ export class CustomInterfaceRuntime {
     /** The server can drive the query too - prefill, clear, or correct it. */
     handleSetText(uid: number, text: string): boolean {
         const search = this.declaration?.search;
+        if (search?.dataComponent !== undefined && uid === this.uid(search.dataComponent)) {
+            try {
+                const rows = JSON.parse(text);
+                this.sourceRows = Array.isArray(rows)
+                    ? rows.filter((row) => Number.isInteger(row?.id) && row.id > 0 && typeof row.name === "string")
+                    : [];
+            } catch {
+                this.sourceRows = [];
+            }
+            this.scheduleFetch();
+            return true;
+        }
         if (!search || uid !== this.uid(search.inputComponent)) {
             return false;
         }
@@ -256,6 +273,7 @@ export class CustomInterfaceRuntime {
         this.focused = false;
         this.query = "";
         this.rows = [];
+        this.sourceRows = [];
         this.total = 0;
         this.version = 0;
         this.renderedVersion = -1;
@@ -345,6 +363,14 @@ export class CustomInterfaceRuntime {
             clearTimeout(this.fetchTimer);
         }
         const query = this.query;
+        if (search.dataComponent !== undefined) {
+            const term = query.trim().toLowerCase();
+            this.rows = this.sourceRows.filter((row) => row.name.toLowerCase().includes(term));
+            this.total = this.rows.length;
+            this.version++;
+            this.renderRows(true);
+            return;
+        }
         if (query.trim().length === 0) {
             this.rows = [];
             this.total = 0;
@@ -361,7 +387,7 @@ export class CustomInterfaceRuntime {
 
     private async fetchRows(query: string): Promise<void> {
         const search = this.declaration?.search;
-        if (!search) {
+        if (!search?.endpoint) {
             return;
         }
         const sequence = ++this.fetchSequence;
@@ -440,7 +466,7 @@ export class CustomInterfaceRuntime {
             this.setText(status.component, status.loading);
             return;
         }
-        if (this.query.trim().length === 0) {
+        if (this.query.trim().length === 0 && this.declaration?.search?.dataComponent === undefined) {
             this.setText(status.component, status.idle ?? "");
             return;
         }
@@ -495,9 +521,9 @@ export class CustomInterfaceRuntime {
             icon.isHidden = hidden;
 
             if (row) {
-                icon.itemId = row.id | 0;
-                icon.itemQuantity = 1;
-                icon.itemAmount = 1;
+                icon.itemId = list.textOnly ? -1 : row.id | 0;
+                icon.itemQuantity = list.textOnly ? 0 : 1;
+                icon.itemAmount = list.textOnly ? 0 : 1;
                 icon.text = label
                     .replace("%name", sanitize(row.name))
                     .replace("%id", String(row.id | 0));

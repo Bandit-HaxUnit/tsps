@@ -32,7 +32,7 @@ function killZulrah({ player }) {
 
 module.exports = function registerZulrahCommands(api) {
   const { PlayerRights } = api.core;
-  api.registerCommand("zulrah", toZulAndra, PlayerRights.DEVELOPER);
-  api.registerCommand("zulrahfight", startFight, PlayerRights.DEVELOPER);
-  api.registerCommand("zulrahkill", killZulrah, PlayerRights.DEVELOPER);
+  api.registerCommand("zulrah", toZulAndra, PlayerRights.DEVELOPER, "Teleport to Zul-Andra");
+  api.registerCommand("zulrahfight", startFight, PlayerRights.DEVELOPER, "Start a Zulrah fight (optional rotation 1-4)");
+  api.registerCommand("zulrahkill", killZulrah, PlayerRights.DEVELOPER, "Kill your active Zulrah");
 };
