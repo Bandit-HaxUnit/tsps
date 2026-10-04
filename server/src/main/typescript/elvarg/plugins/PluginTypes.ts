@@ -923,12 +923,16 @@ export interface PluginApi {
    * Registers a command handler. `minimumRights` is the lowest rank that may run it -
    * the core denies everyone below before the handler is called, so handlers never
    * check rights themselves. Omitted means any player may run it.
+   * `description` is shown and searched in the Commands interface.
    */
   registerCommand(
     command: string,
     handler: (event: PluginCommandEvent) => void | boolean,
-    minimumRights?: PluginCommandRights
+    minimumRights?: PluginCommandRights,
+    description?: string
   ): void;
+  /** Registered commands this player can run, including world/plugin rank overrides. */
+  getRegisteredCommands(player: any): Array<{ command: string; description: string }>;
   /**
    * Overrides the rank a command requires, whoever registered it. `PlayerRights.NONE`
    * opens the command to every player - e.g. a spawn-mode plugin granting ::items.

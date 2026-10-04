@@ -193,6 +193,63 @@ async function main(): Promise<void> {
     assert.equal(runtime.isSearchFocused(), false);
     assert.equal(runtime.handleSearchKeyEvents([{ keyTyped: 0, keyPressed: 97 }]), false);
 
+    // Use the actual Commands declaration with private rows sent over the game socket.
+    const Commands = require("../../server/plugins/interface/Commands.plugin.js");
+    let commandsDefinition: any;
+    Commands.register({
+        registerCustomInterface: (definition: any) => { commandsDefinition = definition; },
+        registerCommand() {},
+    });
+    setCustomInterface(commandsDefinition);
+    for (const widget of commandsDefinition.widgets) {
+        widgets.set(widget.uid, { ...widget });
+    }
+    const { COMPONENT, uid: commandUid } = Commands._test;
+    for (const component of [COMPONENT.SEARCH_BOX, COMPONENT.SEARCH_INPUT]) {
+        assert.deepEqual(widgets.get(commandUid(component)).actions, ["Search"]);
+        assert.ok(widgets.get(commandUid(component)).flags & (1 << 1), "search widgets accept a native menu click");
+    }
+    requestedUrl = "";
+    runtime.onInterfaceOpened(commandsDefinition.groupId);
+    const commandRows = Array.from({ length: 300 }, (_, index) => ({
+        id: index + 1, name: `::test${index} - ${index === 299 ? "Teleport to coordinates" : "Plugin command"}`,
+    }));
+    runtime.handleSetText(commandUid(COMPONENT.DATA), JSON.stringify(commandRows));
+    assert.equal(widgets.get(commandUid(COMPONENT.STATUS)).text, "Commands: 300");
+    assert.equal(widgets.get(commandUid(COMPONENT.ROW_START)).text, "::test0 - Plugin command");
+    assert.equal(widgets.get(commandUid(COMPONENT.ROW_START)).itemId, -1, "text results are not inventory items");
+    const commandsView = widgets.get(commandUid(COMPONENT.LIST_VIEW));
+    assert.equal(commandsView.scrollHeight, 300 * 16);
+    commandsView.scrollY = 280 * 16;
+    runtime.tick();
+    assert.equal(widgets.get(commandUid(COMPONENT.ROW_START)).text, "::test280 - Plugin command",
+        "virtual rows allow scrolling past the old 128-row limit");
+    runtime.handleSetText(commandUid(COMPONENT.SEARCH_INPUT), "  TELEPORT  ");
+    assert.equal(widgets.get(commandUid(COMPONENT.ROW_START)).text, "::test299 - Teleport to coordinates",
+        "the prefill searches descriptions without case sensitivity");
+    assert.equal(commandsView.scrollY, 0, "filtering resets scroll");
+    runtime.handleSetText(commandUid(COMPONENT.SEARCH_INPUT), "test29");
+    assert.equal(widgets.get(commandUid(COMPONENT.STATUS)).text, "Commands: 11", "names are searchable too");
+    runtime.handleWidgetClick(commandsDefinition.groupId, COMPONENT.LIST_VIEW);
+    assert.equal(runtime.isSearchFocused(), false);
+    runtime.handleWidgetClick(commandsDefinition.groupId, COMPONENT.SEARCH_BOX);
+    assert.equal(runtime.isSearchFocused(), true, "clicking the box resumes filtering");
+    type("z");
+    assert.equal(widgets.get(commandUid(COMPONENT.STATUS)).text, "No matching commands.");
+    assert.equal(widgets.get(commandUid(COMPONENT.ROW_START)).hidden, true);
+    runtime.handleSearchKeyEvents([{ keyTyped: 85, keyPressed: 0 }]);
+    assert.equal(widgets.get(commandUid(COMPONENT.STATUS)).text, "Commands: 11");
+    runtime.handleSetText(commandUid(COMPONENT.SEARCH_INPUT), "");
+    assert.equal(widgets.get(commandUid(COMPONENT.STATUS)).text, "Commands: 300", "clearing restores the full catalog");
+    runtime.handleSetText(commandUid(COMPONENT.DATA), "invalid JSON");
+    assert.equal(widgets.get(commandUid(COMPONENT.ROW_START)).hidden, true, "bad data clears old rows");
+    runtime.handleSetText(commandUid(COMPONENT.DATA), JSON.stringify(commandRows));
+    runtime.onInterfaceClosed(commandsDefinition.groupId);
+    runtime.onInterfaceOpened(commandsDefinition.groupId);
+    assert.equal(widgets.get(commandUid(COMPONENT.ROW_START)).hidden, true, "reopening awaits the new player's catalog");
+    assert.equal(requestedUrl, "", "private command rows never use a public HTTP endpoint");
+    runtime.onInterfaceClosed(commandsDefinition.groupId);
+
     console.log("custom-interface-runtime.test.ts: all tests passed");
 }
 

@@ -183,7 +183,7 @@ module.exports = {
   name: "TeleportInterface",
   register(api) {
     api.registerCustomInterface(INTERFACE_DEFINITION);
-    api.registerCommand("teleports", ({ player }) => (open(player), true));
+    api.registerCommand("teleports", ({ player }) => (open(player), true), undefined, "Browse teleport destinations");
     api.onInterfaceActionButton(TAB_UIDS, ({ player, buttonId }) => {
       const index = TAB_UIDS.indexOf(buttonId);
       if (index >= 0) render(player, TAB_ORDER[index]);

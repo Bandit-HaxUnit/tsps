@@ -166,6 +166,14 @@ api.registerCommand("npc", spawnNpc, PlayerRights.OWNER); // owner and developer
 api.registerCommand("players", listPlayers);              // anyone
 ```
 
+Give commands a description as the fourth argument. The Commands interface reads the live
+registry and filters it using the same permissions as command execution:
+
+```js
+api.registerCommand("tele", teleport, api.core.PlayerRights.OWNER, "Teleport to coordinates (x y [z])");
+api.getRegisteredCommands(player); // [{ command: "tele", description: "..." }, ...]
+```
+
 `api.setCommandRights(command, minimumRights)` overrides whatever a command registered
 with, so a plugin can widen or narrow someone else's command.
 

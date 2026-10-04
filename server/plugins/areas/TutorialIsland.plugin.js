@@ -1613,8 +1613,8 @@ module.exports = {
   register(api) {
     initialize(api);
     api.persistAttribute(STAGE_ATTR);
-    api.registerCommand("tutnext", onTutNext, PlayerRights.NONE);
-    api.registerCommand("tutlast", onTutLast, PlayerRights.NONE);
+    api.registerCommand("tutnext", onTutNext, PlayerRights.NONE, "Advance to the next tutorial step");
+    api.registerCommand("tutlast", onTutLast, PlayerRights.NONE, "Return to the previous tutorial step");
     api.onNpcInteraction("Gielinor Guide", { "Talk-to": talkToGielinorGuide });
     api.onPlayerLogin(handleLogin);
     api.onPlayerProcess(handleProcess);

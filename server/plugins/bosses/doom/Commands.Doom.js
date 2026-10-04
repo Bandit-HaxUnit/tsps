@@ -35,9 +35,9 @@ function kill({ player }) {
 module.exports = function registerDoomCommands(api) {
   Shared.bind(api);
   const { PlayerRights } = api.core;
-  api.registerCommand("doom", toLobby, PlayerRights.DEVELOPER);
-  api.registerCommand("doomdelve", startAt, PlayerRights.DEVELOPER);
-  api.registerCommand("doomkill", kill, PlayerRights.DEVELOPER);
+  api.registerCommand("doom", toLobby, PlayerRights.DEVELOPER, "Teleport to the Doom lobby");
+  api.registerCommand("doomdelve", startAt, PlayerRights.DEVELOPER, "Start at a chosen delve level");
+  api.registerCommand("doomkill", kill, PlayerRights.DEVELOPER, "Defeat the current Doom delve");
 };
 
 Object.assign(module.exports, { toLobby, startAt, kill });

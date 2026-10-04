@@ -156,9 +156,9 @@ function toLobby({ player }) {
 }
 
 module.exports = function registerTombsCommands(api) {
-  api.registerCommand("toa", toLobby, api.core.PlayerRights.DEVELOPER);
-  api.registerCommand("toaskippuzzle", skipPuzzle, api.core.PlayerRights.DEVELOPER);
-  api.registerCommand("toaskipboss", skipBoss, api.core.PlayerRights.DEVELOPER);
-  api.registerCommand("toaskiptowarden", skipToWardens, api.core.PlayerRights.DEVELOPER);
-  api.registerCommand("toaskiptoreward", skipToReward, api.core.PlayerRights.DEVELOPER);
+  api.registerCommand("toa", toLobby, api.core.PlayerRights.DEVELOPER, "Teleport to the Tombs of Amascut lobby");
+  api.registerCommand("toaskippuzzle", skipPuzzle, api.core.PlayerRights.DEVELOPER, "Complete the current ToA puzzle for the party");
+  api.registerCommand("toaskipboss", skipBoss, api.core.PlayerRights.DEVELOPER, "Complete the current ToA boss encounter for the party");
+  api.registerCommand("toaskiptowarden", skipToWardens, api.core.PlayerRights.DEVELOPER, "Mark every ToA path complete (in the Nexus) to open the Wardens");
+  api.registerCommand("toaskiptoreward", skipToReward, api.core.PlayerRights.DEVELOPER, "End the ToA raid and go to the chest");
 };

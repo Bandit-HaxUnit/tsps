@@ -238,6 +238,6 @@ module.exports = {
     api.onObjectInteraction("Broken strut", { Hammer: Machine.hammerStrut });
     api.onNpcDialogueCondition(percyCondition);
     api.onCustomEvent("npc-dialogue:action", percyPays);
-    api.registerCommand("mlmstrut", Machine.forceBreak, PlayerRights.DEVELOPER);
+    api.registerCommand("mlmstrut", Machine.forceBreak, PlayerRights.DEVELOPER, "Break a Motherlode Mine strut");
   },
 };
