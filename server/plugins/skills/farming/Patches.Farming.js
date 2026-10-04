@@ -89,6 +89,8 @@ function syncPatch(player, patch) {
     let rendered = RENDERED.get(player);
     if (!rendered) RENDERED.set(player, rendered = new Map());
     if (rendered.get(Data.patchKey(patch)) === value && sender.getVarbit(patch.varbit) === value) return;
+    // Every patch action ends here, so a changed patch reschedules its owner's next growth.
+    if (tracked.has(player)) dirty.add(player);
     sender.sendVarbit(patch.varbit, value);
     // The client rebuilds loc geometry on object updates, not varbit updates.
     // Use the actual map locs so multi-tile patches retain every shape/rotation.
@@ -504,13 +506,20 @@ function depleteTree(event) {
     state.nextAt = Date.now() + event.respawnTicks * 600;
     syncPatch(event.player, patch);
 }
-// Growth runs every GROW_TICKS (~5 s) per player, spread over that many buckets so each tick
-// grows about 1/GROW_TICKS of players instead of checking everyone every tick.
-const GROW_TICKS = 8;
-const growBuckets = Array.from({ length: GROW_TICKS }, () => new Set());
-const growBucketOf = new WeakMap();
-let nextGrowBucket = 0;
-let farmingTicks = 0;
+// Each player is grown when their next patch stage or watered seedling is due - the OSRS
+// farming tick, with their account offset - and at least every SWEEP_MS in case something
+// changed that nothing reported (a seedling received in a trade, say).
+const SWEEP_MS = 5 * Model.MINUTE;
+const dueByMinute = new Map(); // minute -> players due within it
+const dueMinuteOf = new WeakMap();
+const immediate = new Set();
+const dirty = new Set(); // players whose patches changed; rescheduled on the next tick
+const tracked = new WeakSet();
+const seedlingDue = new WeakMap();
+// Players standing in a map square with patches nearby -> their last tile, so nearby patches
+// follow them tile by tile without checking anyone who is nowhere near a patch.
+const nearPatches = new Map();
+let lastMinute = null;
 
 function grow(player) {
     const farm = farmFor(player);
@@ -518,7 +527,8 @@ function grow(player) {
     if (player.getPacketSender().getVarbit(7925)) farm.hosidiusProtected = true;
     if (player.getPacketSender().getVarbit(4465)) farm.faladorProtected = true;
     if (player.getPacketSender().getVarp(4130) >= 16000) farm.fortisProtected = true;
-    Model.advanceFarm(farm, now); Services.growSeedlings(player, now);
+    Model.advanceFarm(farm, now);
+    seedlingDue.set(player, Services.growSeedlings(player, now));
     const bound = farm.patches[farm.boundPatch];
     const status = bound?.crop ? bound.status : "empty";
     if (farm.boundStatus !== status && ["diseased", "dead", "grown"].includes(status) && hasTool(player, "Amulet of nature")) {
@@ -526,43 +536,93 @@ function grow(player) {
     }
     farm.boundStatus = status;
 }
-/** Shows the nearest patch for each varbit indexed around the player's map square. */
+const squareKey = (pos) => `${Math.floor(pos.getX() / 64)}:${Math.floor(pos.getY() / 64)}:${pos.getZ()}`;
+/** Shows the nearest patch within 64 tiles for each varbit indexed around the player. */
 function syncNearby(player) {
     const pos = player.getLocation();
     const nearest = new Map();
-    const nearby = PATCHES_BY_REGION.get(`${Math.floor(pos.getX() / 64)}:${Math.floor(pos.getY() / 64)}:${pos.getZ()}`) ?? [];
-    for (const patch of nearby) {
+    for (const patch of PATCHES_BY_REGION.get(squareKey(pos)) ?? []) {
         const distance = Math.max(Math.abs((patch.x + patch.maxX) / 2 - pos.getX()), Math.abs((patch.y + patch.maxY) / 2 - pos.getY()));
-        if (!nearest.has(patch.varbit) || nearest.get(patch.varbit).distance > distance) nearest.set(patch.varbit, { patch, distance });
+        if (distance <= 64 && (!nearest.has(patch.varbit) || nearest.get(patch.varbit).distance > distance)) nearest.set(patch.varbit, { patch, distance });
     }
     for (const { patch } of nearest.values()) syncPatch(player, patch);
+}
+function unschedule(player) {
+    const minute = dueMinuteOf.get(player);
+    if (minute !== undefined) dueByMinute.get(minute)?.delete(player);
+    dueMinuteOf.delete(player);
+    immediate.delete(player);
+}
+function schedule(player) {
+    unschedule(player);
+    const now = Date.now();
+    const due = Math.min(Model.nextDue(farmFor(player)), seedlingDue.get(player) ?? Infinity, now + SWEEP_MS);
+    if (due <= now) { immediate.add(player); return; }
+    const minute = Math.ceil(due / Model.MINUTE);
+    let players = dueByMinute.get(minute);
+    if (!players) dueByMinute.set(minute, players = new Set());
+    players.add(player);
+    dueMinuteOf.set(player, minute);
 }
 function refresh(player) {
     grow(player);
     syncNearby(player);
+    schedule(player);
+    dirty.delete(player);
 }
 function farmingTick() {
     for (const [player, work] of WORK) workStep(player, work);
-    for (const player of growBuckets[farmingTicks++ % GROW_TICKS]) refresh(player);
+    for (const player of dirty) schedule(player);
+    dirty.clear();
+    for (const [player, tile] of nearPatches) {
+        const pos = player.getLocation();
+        const here = (pos.getZ() << 28) | (pos.getX() << 14) | pos.getY();
+        if (here !== tile) { nearPatches.set(player, here); syncNearby(player); }
+    }
+    const minute = Math.floor(Date.now() / Model.MINUTE);
+    lastMinute ??= minute;
+    while (lastMinute < minute) {
+        const due = dueByMinute.get(++lastMinute);
+        if (!due) continue;
+        dueByMinute.delete(lastMinute);
+        for (const player of due) { dueMinuteOf.delete(player); immediate.add(player); }
+    }
+    if (immediate.size === 0) return;
+    const batch = [...immediate];
+    immediate.clear();
+    for (const player of batch) refresh(player);
 }
 function startTicking() {
     class FarmingTask extends core.Task { execute() { farmingTick(); } }
     core.TaskManager.submit(new FarmingTask(1));
 }
+function followPatches(player) {
+    if (PATCHES_BY_REGION.has(squareKey(player.getLocation()))) nearPatches.set(player, -1);
+    else nearPatches.delete(player);
+}
 function mapSquareChanged({ player }) {
-    if (growBucketOf.has(player)) syncNearby(player);
+    if (tracked.has(player)) followPatches(player);
+}
+/** A seedling was just watered: grow it on time even if no patch is due sooner. */
+function noteSeedling(player, at) {
+    if (!tracked.has(player) || !Number.isFinite(at)) return;
+    seedlingDue.set(player, Math.min(seedlingDue.get(player) ?? Infinity, at));
+    dirty.add(player);
 }
 function login(event) {
     const { player } = event;
     for (const state of Object.values(farmFor(player).patches)) state.hesporiFight = false;
     RENDERED.delete(player);
     if (player.isPlayerBot?.() === true) return;
-    const bucket = growBuckets[nextGrowBucket++ % GROW_TICKS];
-    bucket.add(player);
-    growBucketOf.set(player, bucket);
+    tracked.add(player);
+    followPatches(player);
     refresh(player);
 }
-function logout({ player }) { WORK.delete(player); RENDERED.delete(player); growBucketOf.get(player)?.delete(player); growBucketOf.delete(player); Hespori.hesporiLogout({ player }); }
+function logout({ player }) {
+    WORK.delete(player); RENDERED.delete(player);
+    unschedule(player); tracked.delete(player); dirty.delete(player); nearPatches.delete(player); seedlingDue.delete(player);
+    Hespori.hesporiLogout({ player });
+}
 function cancelWork({ player }) { WORK.delete(player); }
 
 /** Every hook the Farming plugin attaches. */
@@ -603,4 +663,4 @@ function attach(api) {
     api.registerNpcCombatMethodProvider(core.NpcIdentifiers.HESPORI, Hespori.HesporiCombat, { singleton: false });
 }
 
-Object.assign(module.exports, { FARM_ATTRIBUTE, farmFor, stateFor, hasTool, requireTool, award, give, choose, clearPatch, syncPatch, nearPatch, water, fertilize, cure, attach });
+Object.assign(module.exports, { FARM_ATTRIBUTE, farmFor, stateFor, hasTool, requireTool, award, give, choose, clearPatch, syncPatch, nearPatch, water, fertilize, cure, noteSeedling, attach, tick: farmingTick });

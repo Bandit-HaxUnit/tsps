@@ -108,10 +108,29 @@ function* patchStates(farm) {
     }
 }
 
+/** Whether advanceFarm still has growth to apply to this planted state. */
+function growing(state) {
+    if (!state?.crop || state.status === "dead") return false;
+    return !(state.status === "grown" && !Data.CROPS.get(state.crop)?.regrow && !state.stump);
+}
+/** Whether advanceFarm still regrows weeds on this unplanted state. */
+function weeding(farm, patch, state) {
+    return !!state && !["GRAPES", "CORAL"].includes(patch.type)
+        && !(state.crop || state.scarecrow || state.bin || farm.autoWeed) && state.weeds < 3;
+}
+/** When advanceFarm next has something to do for this farm, or Infinity. */
+function nextDue(farm) {
+    let due = Infinity;
+    for (const { patch, state } of patchStates(farm)) {
+        if (growing(state) || weeding(farm, patch, state)) due = Math.min(due, state.nextAt);
+    }
+    return due;
+}
+
 function advanceFarm(farm, now, random = Math.random) {
     const kronos = new Map();
     const planted = [];
-    for (const entry of patchStates(farm)) if (entry.state?.crop && entry.state.status !== "dead") planted.push(entry);
+    for (const entry of patchStates(farm)) if (growing(entry.state)) planted.push(entry);
     for (;;) {
         let due;
         for (const entry of planted) {
@@ -194,4 +213,4 @@ function patchValue(patch, state) {
     return (state.watered ? visual.WATERED?.[state.stage] : undefined) ?? visual.GROWING[state.stage];
 }
 
-Object.assign(module.exports, { MINUTE, advanceTithe, titheDeposit, nextGrowth, emptyPatch, startingLives, diseaseChance, saveLifeChance, activeAnima, advanceFarm, patchValue });
+Object.assign(module.exports, { MINUTE, advanceTithe, titheDeposit, nextGrowth, emptyPatch, startingLives, diseaseChance, saveLifeChance, activeAnima, advanceFarm, nextDue, patchValue });
