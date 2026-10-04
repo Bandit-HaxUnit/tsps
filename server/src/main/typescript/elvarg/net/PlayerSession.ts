@@ -531,9 +531,7 @@ export class PlayerSession {
 
   private createActorUpdates(actor: any, maxHitpoints: number, mine: boolean): ActorUpdateView {
     const flags = actor.getUpdateFlag();
-    const hits = [];
-    if (flags.flagged(Flag.SINGLE_HIT) && actor.getPrimaryHit()) hits.push(actor.getPrimaryHit());
-    if (flags.flagged(Flag.DOUBLE_HIT) && actor.getSecondaryHit()) hits.push(actor.getSecondaryHit());
+    const hits = flags.flagged(Flag.HIT) ? actor.getTickHits() : [];
     const interaction = actor.getInteractingMobile();
     const animation = actor.getAnimation();
     const graphic = actor.getGraphic();
