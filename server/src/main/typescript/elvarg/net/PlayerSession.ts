@@ -551,10 +551,7 @@ export class PlayerSession {
         : undefined,
       graphics: flags.flagged(Flag.GRAPHIC) ? this.graphicViews(graphic, actor.getSlotGraphics?.()) : undefined,
       hits: hits.length > 0
-        ? hits.map((hit: any) => ({
-            type: hit.getSplatType?.(mine) ?? this.hitsplatType(hit.getHitmask(), mine),
-            damage: hit.getDamage(),
-          }))
+        ? hits.map((hit: any) => this.hitView(hit, mine))
         : undefined,
       health: hits.length > 0
         ? actor.getDisplayedHealth?.()
@@ -573,6 +570,19 @@ export class PlayerSession {
         : { slot, id: -1, height: 0, delay: 0 });
     }
     return views.length > 0 ? views : undefined;
+  }
+
+  /**
+   * A hitsplat as this player sees it: their own (bright) type for hits on them
+   * and hits they dealt, the darker "other" type for everyone else's (RuneLite
+   * HitsplatID DAMAGE_ME / DAMAGE_OTHER).
+   */
+  private hitView(hit: any, onMe: boolean): { type: number; damage: number } {
+    const own = onMe || (this.player != null && hit.getSource?.() === this.player);
+    return {
+      type: hit.getSplatType?.(own) ?? this.hitsplatType(hit.getHitmask(), own),
+      damage: hit.getDamage(),
+    };
   }
 
   private hitsplatType(mask: HitMask, mine: boolean): number {

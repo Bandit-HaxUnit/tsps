@@ -324,6 +324,7 @@ export class CombatFactory {
      */
     private static applyResolvedHitDamage(target: Mobile, resolvedHit: PendingHit): void {
         const hits = resolvedHit.getHits();
+        for (const hit of hits) if (hit.getSource() == null) hit.setSource(resolvedHit.getAttacker());
         const delays = resolvedHit.getHitDelays();
         if (!delays || delays.length <= 1 || delays.length !== hits.length) {
             target.getCombat().getHitQueue().addPendingDamage(hits);
@@ -1069,7 +1070,7 @@ export class CombatFactory {
         }
         const ringId = player.getEquipment().get(Equipment.RING_SLOT).getId();
         if (CombatFactory.SUFFERING_RECOIL_RING_IDS.has(ringId)) {
-            attacker.getCombat().getHitQueue().addPendingDamage([new HitDamage(returnDmg, HitMask.RED).markReflected()]);
+            attacker.getCombat().getHitQueue().addPendingDamage([new HitDamage(returnDmg, HitMask.RED).markReflected().setSource(player)]);
             return;
         }
 
@@ -1078,7 +1079,7 @@ export class CombatFactory {
         if (returnDmg <= 0) {
             return;
         }
-        attacker.getCombat().getHitQueue().addPendingDamage([new HitDamage(returnDmg, HitMask.RED).markReflected()]);
+        attacker.getCombat().getHitQueue().addPendingDamage([new HitDamage(returnDmg, HitMask.RED).markReflected().setSource(player)]);
 
         if (used + returnDmg >= CombatFactory.RECOIL_RING_CHARGES) {
             player.getEquipment().set(Equipment.RING_SLOT, new Item(-1));
@@ -1095,7 +1096,7 @@ export class CombatFactory {
             return;
         }
         const returnDmg = Math.max(1, Math.floor(damage * 0.75));
-        attacker.getCombat().getHitQueue().addPendingDamage([new HitDamage(returnDmg, HitMask.RED).markReflected()]);
+        attacker.getCombat().getHitQueue().addPendingDamage([new HitDamage(returnDmg, HitMask.RED).markReflected().setSource(character)]);
         character.forceChat("Taste Vengeance!");
         character.setHasVengeance(false);
     }
@@ -1315,7 +1316,7 @@ export class CombatFactory {
         if (killer.getLocation().isWithinDistance(killed.getLocation(), CombatConstants.RETRIBUTION_RADIUS)) {
             const maxHit = Math.floor(killed.getSkillManager().getMaxLevel(Skill.PRAYER) / 4);
             killer.getCombat().getHitQueue().addPendingDamage([
-                new HitDamage(Misc.randomInclusive(0, maxHit), HitMask.RED).markReflected()]);
+                new HitDamage(Misc.randomInclusive(0, maxHit), HitMask.RED).markReflected().setSource(killed)]);
         }
     }
 
