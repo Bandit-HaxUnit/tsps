@@ -399,13 +399,16 @@ function leaveWilderness(player, facts, wasInWilderness) {
   lastPvpLayoutState.delete(player);
 }
 
-// Leaving the area is the player's last tile change it sees, so the exit edge runs here.
+// What a player off PvP ground sees: no overlay, no level, no Attack option.
+const OFF_PVP_FACTS = Object.freeze({ pvpOverlay: false, safe: false, level: 0, multiIcon: 0, inWilderness: false });
+
+// Leaving the area is the exit edge. It is judged off the area, not the tile: an instance can
+// claim a player before moving them, so the tile may still be in the wild.
 function playerLeft(state, player, logout) {
   const previous = state.tiles.get(player);
   state.tiles.delete(player);
-  const facts = logout ? null : tileFactsOf(player);
-  if (facts) {
-    leaveWilderness(player, facts, previous?.inWilderness === true);
+  if (!logout) {
+    leaveWilderness(player, OFF_PVP_FACTS, previous?.inWilderness === true);
   }
 }
 

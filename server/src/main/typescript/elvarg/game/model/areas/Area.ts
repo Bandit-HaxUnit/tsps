@@ -2,6 +2,7 @@ import { Boundary } from '../../../game/model/Boundary';
 import { Player } from '../../entity/impl/player/Player';
 import { NPC } from '../../entity/impl/npc/NPC';
 import { Mobile } from '../../entity/impl/Mobile';
+import { PluginManager } from '../../../plugins/PluginManager';
 
 export abstract class Area {
     private boundaries: Boundary[];
@@ -16,6 +17,12 @@ export abstract class Area {
     }
 
     enter(character: Mobile) {
+        // Code that moves an actor straight into another area (an instance claiming a player
+        // mid-teleport) bypasses AreaManager, so the area it was in would never hear it left.
+        const previous = character.getArea();
+        if (previous && previous !== this && previous.hasMember(character)) {
+            PluginManager.callArea(previous, "leave", character, false);
+        }
         // bots disabled in this runtime
 
         if (character.isPlayer()) {
@@ -40,6 +47,14 @@ export abstract class Area {
     }
 
     postLeave(character: Mobile, logout: boolean) { }
+
+    /** Whether `character` entered this area and has not left it. */
+    hasMember(character: Mobile): boolean {
+        if (character.isPlayer()) {
+            return this.players[character.getIndex()] === (character as unknown);
+        }
+        return character.isNpc() && this.npcs[character.getIndex()] === (character as unknown);
+    }
 
     process(character: Mobile) {
         // By default, do nothing in process.
