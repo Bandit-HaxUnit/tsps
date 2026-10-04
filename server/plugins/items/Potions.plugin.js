@@ -31,9 +31,16 @@ const ATTR_STAMINA_END = "potions:stamina:end";
 const ATTR_STAMINA_ACC = "potions:stamina:acc";
 const ATTR_DIVINE_STATE = "potions:divine:state";
 const ATTR_OVERLOAD_STATE = "potions:overload:state";
+const ATTR_MENAPHITE_STATE = "potions:menaphite:state";
+/** Shared 60-second cycle that decays every temporary skill boost by one (Wiki). */
+const ATTR_BOOST_CYCLE = "potions:boost-cycle";
 /** When the player logged out; timed effects are paused while offline. */
 const ATTR_PAUSED_AT = "potions:paused-at";
-const PERSISTED_ATTRIBUTES = [ATTR_STAMINA_END, ATTR_STAMINA_ACC, ATTR_DIVINE_STATE, ATTR_OVERLOAD_STATE, ATTR_PAUSED_AT];
+const PERSISTED_ATTRIBUTES = [ATTR_STAMINA_END, ATTR_STAMINA_ACC, ATTR_DIVINE_STATE, ATTR_OVERLOAD_STATE, ATTR_MENAPHITE_STATE, ATTR_BOOST_CYCLE, ATTR_PAUSED_AT];
+
+const BOOST_DECAY_MS = 60 * 1000;
+const MENAPHITE_DURATION_MS = 5 * 60 * 1000;
+const MENAPHITE_RESTORE_INTERVAL_MS = 15 * 1000;
 
 const POTION_BY_ITEM_ID = new Map();
 const REGISTERED_POTIONS = [];
@@ -133,6 +140,11 @@ function restoreRunEnergy(player, amount) {
 
 function curePoisonAndVenom(player) {
   player.setPoisonDamage(0);
+  // The venom flag is sticky on purpose (poisonEntity only clears it on cure);
+  // without this a later poison could inherit the old venom state.
+  if (typeof player.setVenomed === "function") {
+    player.setVenomed(false);
+  }
   player.getPacketSender().sendPoisonType(0);
 }
 
@@ -234,6 +246,117 @@ function applyGuthixRest(player) {
   heal(player, 5);
   restoreRunEnergy(player, 5);
   curePoisonAndVenom(player);
+}
+
+/** Prayer restore that may over-heal by up to `overPercent` above base (ancient/forgotten brew). */
+function restorePrayerOverheal(player, flat, percent, overPercent = 0.05) {
+  const max = getMaxLevel(player, Skill.PRAYER);
+  const cap = max + Math.floor(max * overPercent);
+  const restored = Math.floor(flat + max * percent);
+  getSkillManager(player).increaseCurrentLevel(Skill.PRAYER, restored, cap);
+  Sounds.sendSound(player, Sound.PRAYER_RECHARGE);
+}
+
+/** Ancient brew / forgotten brew (Wiki): Magic boost, prayer restore and an Attack/Strength/Defence drain. */
+function applyAncientBrew(player, magicFlat, magicPercent) {
+  boostSkill(player, Skill.MAGIC, magicFlat, magicPercent);
+  restorePrayerOverheal(player, 2, 0.1);
+  for (const skill of [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE]) {
+    lowerSkillByCurrent(player, skill, 2, 0.1);
+  }
+}
+
+const MENAPHITE_SKILLS = [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE, Skill.RANGED, Skill.MAGIC, Skill.HITPOINTS];
+
+/** Menaphite remedy (Wiki): 6 + 16% of every combat stat, never above base. */
+function restoreCombatStats(player) {
+  for (const skill of MENAPHITE_SKILLS) {
+    const max = getMaxLevel(player, skill);
+    if (getCurrentLevel(player, skill) >= max) {
+      continue;
+    }
+    getSkillManager(player).increaseCurrentLevel(skill, Math.floor(max * 0.16) + 6, max);
+  }
+}
+
+function applyMenaphiteRemedy(player) {
+  // Dispels locked divine boosts so they decay normally (Wiki).
+  player.setAttribute(ATTR_DIVINE_STATE, null);
+  restoreCombatStats(player);
+  const now = Date.now();
+  player.setAttribute(ATTR_MENAPHITE_STATE, {
+    endsAt: now + MENAPHITE_DURATION_MS,
+    nextRestoreAt: now + MENAPHITE_RESTORE_INTERVAL_MS,
+  });
+}
+
+function processMenaphite(player) {
+  const state = player.getAttribute(ATTR_MENAPHITE_STATE);
+  if (!state) {
+    return;
+  }
+  const now = Date.now();
+  if (now >= state.endsAt) {
+    player.setAttribute(ATTR_MENAPHITE_STATE, null);
+    return;
+  }
+  if (now >= state.nextRestoreAt) {
+    restoreCombatStats(player);
+    state.nextRestoreAt = now + MENAPHITE_RESTORE_INTERVAL_MS;
+    player.setAttribute(ATTR_MENAPHITE_STATE, state);
+  }
+}
+
+/** Skills pinned by an active overload/divine state; their controllers reset them every tick. */
+function timedEffectSkillIndexes(player) {
+  const pinned = new Set();
+  if (player.getAttribute(ATTR_OVERLOAD_STATE)) {
+    for (const skill of OVERLOAD_SKILLS) {
+      pinned.add(skill.getIndex());
+    }
+  }
+  const divine = player.getAttribute(ATTR_DIVINE_STATE);
+  if (divine && Array.isArray(divine.targets)) {
+    for (const entry of divine.targets) {
+      if (Number.isInteger(entry?.skillIndex)) {
+        pinned.add(entry.skillIndex);
+      }
+    }
+  }
+  return pinned;
+}
+
+/**
+ * Wiki: temporary boosts and drains move one point toward base every minute on a
+ * continuous cycle. Prayer points and Hitpoints are not covered.
+ */
+function processBoostDecay(player) {
+  const now = Date.now();
+  const nextDecayAt = Number(player.getAttribute(ATTR_BOOST_CYCLE));
+  if (!Number.isFinite(nextDecayAt) || nextDecayAt <= 0) {
+    player.setAttribute(ATTR_BOOST_CYCLE, now + BOOST_DECAY_MS);
+    return;
+  }
+  if (now < nextDecayAt) {
+    return;
+  }
+  const elapsed = now - nextDecayAt;
+  player.setAttribute(ATTR_BOOST_CYCLE, nextDecayAt + BOOST_DECAY_MS * (Math.floor(elapsed / BOOST_DECAY_MS) + 1));
+
+  const pinned = timedEffectSkillIndexes(player);
+  for (const skill of Skill.values()) {
+    const index = skill.getIndex();
+    if (index === Skill.HITPOINTS.getIndex() || index === Skill.PRAYER.getIndex() || pinned.has(index)) {
+      continue;
+    }
+    const current = getCurrentLevel(player, skill);
+    const base = getMaxLevel(player, skill);
+    if (current > base) {
+      setCurrentLevel(player, skill, current - 1);
+    } else if (current < base) {
+      setCurrentLevel(player, skill, current + 1);
+    }
+  }
 }
 
 function startStamina(player) {
@@ -364,6 +487,14 @@ for (const [id, effect] of [
   [Items.GREENMANS_ALE_3, player => { boostSkill(player, Skill.HERBLORE, 1, 0); for (const skill of [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE]) lowerSkillByCurrent(player, skill, 3, 0); }],
   [Items.DRAGON_BITTER_3, player => { boostSkill(player, Skill.STRENGTH, 2, 0); lowerSkillByCurrent(player, Skill.ATTACK, 2, 0.05); }],
   [Items.CHEFS_DELIGHT_3, player => { boostSkill(player, Skill.COOKING, 1, 0.05); lowerSkillByCurrent(player, Skill.ATTACK, 2, 0.05); lowerSkillByCurrent(player, Skill.STRENGTH, 2, 0.05); }],
+  // Wiki: Wizard's mind bomb +2/+3 Magic, -1/-5 Attack, Strength and Defence.
+  [Items.WIZARDS_MIND_BOMB, player => { boostSkill(player, Skill.MAGIC, 2, 0.02); for (const skill of [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE]) lowerSkillByCurrent(player, skill, 1, 0.05); }],
+  // Wiki: Dwarven stout +1 Mining and Smithing, -4% - 2 Attack, Strength and Defence.
+  [Items.DWARVEN_STOUT, player => { boostSkill(player, Skill.MINING, 1, 0); boostSkill(player, Skill.SMITHING, 1, 0); for (const skill of [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE]) lowerSkillByCurrent(player, skill, 2, 0.04); }],
+  // Wiki: Axeman's folly +1 Woodcutting, -3 Attack and Strength.
+  [Items.AXEMANS_FOLLY, player => { boostSkill(player, Skill.WOODCUTTING, 1, 0); for (const skill of [Skill.ATTACK, Skill.STRENGTH]) lowerSkillByCurrent(player, skill, 3, 0); }],
+  // Wiki: Bandit's brew +1 Thieving and Attack, -6% - 3 Strength and Defence.
+  [Items.BANDITS_BREW, player => { boostSkill(player, Skill.THIEVING, 1, 0); boostSkill(player, Skill.ATTACK, 1, 0); for (const skill of [Skill.STRENGTH, Skill.DEFENCE]) lowerSkillByCurrent(player, skill, 3, 0.06); }],
 ]) {
   registerPotion({ name: "House ale", chains: [[id]], emptyItemId: Items.BEER_GLASS_4,
     requiresFoodPermission: true, effect: player => { heal(player, 1); effect(player); } });
@@ -755,6 +886,22 @@ registerPotion({
   effect: (player) => applyOverload(player, 6, 0.16),
 });
 
+registerPotion({
+  name: "Ancient brew",
+  chains: [doseChain("ANCIENT_BREW_4_", "ANCIENT_BREW_3_", "ANCIENT_BREW_2_", "ANCIENT_BREW_1_")],
+  effect: (player) => applyAncientBrew(player, 2, 0.05),
+});
+registerPotion({
+  name: "Forgotten brew",
+  chains: [doseChain("FORGOTTEN_BREW_4_", "FORGOTTEN_BREW_3_", "FORGOTTEN_BREW_2_", "FORGOTTEN_BREW_1_")],
+  effect: (player) => applyAncientBrew(player, 3, 0.08),
+});
+registerPotion({
+  name: "Menaphite remedy",
+  chains: [doseChain("MENAPHITE_REMEDY_4_", "MENAPHITE_REMEDY_3_", "MENAPHITE_REMEDY_2_", "MENAPHITE_REMEDY_1_")],
+  effect: applyMenaphiteRemedy,
+});
+
 function processStamina(player) {
   const endsAt = player.getAttribute(ATTR_STAMINA_END);
   if (!Number.isFinite(endsAt)) {
@@ -927,10 +1074,12 @@ function resumeTimedEffects({ player }) {
   const offline = Math.max(0, Date.now() - pausedAt);
   const staminaEnd = Number(player.getAttribute(ATTR_STAMINA_END));
   if (Number.isFinite(staminaEnd) && staminaEnd > 0) player.setAttribute(ATTR_STAMINA_END, staminaEnd + offline);
-  for (const key of [ATTR_DIVINE_STATE, ATTR_OVERLOAD_STATE]) {
+  const boostCycle = Number(player.getAttribute(ATTR_BOOST_CYCLE));
+  if (Number.isFinite(boostCycle) && boostCycle > 0) player.setAttribute(ATTR_BOOST_CYCLE, boostCycle + offline);
+  for (const key of [ATTR_DIVINE_STATE, ATTR_OVERLOAD_STATE, ATTR_MENAPHITE_STATE]) {
     const state = player.getAttribute(key);
     if (!state || typeof state !== "object") continue;
-    for (const field of ["endsAt", "nextBoostAt", "nextDamageAt"]) {
+    for (const field of ["endsAt", "nextBoostAt", "nextDamageAt", "nextRestoreAt"]) {
       if (Number.isFinite(state[field])) state[field] += offline;
     }
     player.setAttribute(key, state);
@@ -942,7 +1091,11 @@ module.exports = {
   isPotionItem(itemId) {
     return POTION_BY_ITEM_ID.has(itemId);
   },
-  _test: { applyPrayerRestore, applySanfewRestore, applyDivine, processDivine, pauseTimedEffects, resumeTimedEffects },
+  _test: {
+    applyPrayerRestore, applySanfewRestore, applyAncientBrew, restorePrayerOverheal, applyDivine, processDivine,
+    applyMenaphiteRemedy, processMenaphite, processBoostDecay, curePoisonAndVenom, pauseTimedEffects, resumeTimedEffects,
+    findPotionEntry: (itemId) => POTION_BY_ITEM_ID.get(itemId) ?? null,
+  },
   getPotionName(itemId) {
     return POTION_BY_ITEM_ID.get(itemId)?.potion?.name ?? null;
   },
@@ -964,6 +1117,8 @@ module.exports = {
       processStamina(player);
       processDivine(player);
       processOverload(player);
+      processMenaphite(player);
+      processBoostDecay(player);
       processDragonfireProtection(player);
     });
 
