@@ -10,10 +10,10 @@ const { ItemIds } = require("../dist/util/IdEnums");
 
 const RingOfSuffering = require("../plugins/items/RingOfSuffering.plugin");
 
-let incoming;
+let hitResolved;
 RingOfSuffering.register({
   core: { ItemIdentifiers: ItemIds },
-  registerIncomingDamageModifier: (modifier) => { incoming = modifier; },
+  onCombatHitResolved: (handler) => { hitResolved = handler; },
   onItemAction() {},
   onItemOnItem() {},
   persistAttribute() {},
@@ -73,51 +73,38 @@ test("rings of recoil charge the ring and switch it to (r)", () => {
   assert.equal(RingOfSuffering._test.charges(ring), 40);
 });
 
-test("a recoil proc deals 10% + 1 and spends a charge", () => {
-  const ring = item(ItemIds.RING_OF_SUFFERING_R_, { "ring-of-suffering": 5 });
-  const player = createPlayer({ ring });
-  const enemy = attacker();
-  const original = Math.random;
-  try {
-    Math.random = () => 0.9; // not the 1-in-3 fizzle
-    incoming(player, { getDamage: () => 100 }, { attacker: enemy });
-  } finally {
-    Math.random = original;
-  }
-  assert.equal(enemy.pending.length, 1);
-  assert.equal(enemy.pending[0].getDamage(), 11);
-  assert.equal(RingOfSuffering._test.charges(ring), 4);
+/** A hit of `damage` from `from` landing on `player`. */
+function land(player, damage, from = attacker()) {
+  hitResolved({ attacker: from, target: player, hit: { getTotalDamage: () => damage } });
+  return from;
+}
 
-  ring.setMetaValue("ring-of-suffering", 1);
-  incoming(player, { getDamage: () => 10 }, { attacker: attacker() });
-  assert.equal(ring.getId(), ItemIds.RING_OF_SUFFERING, "the last charge reverts the ring");
+test("every damaging hit recoils 10% + 1, spending a charge per point of recoil", () => {
+  const ring = item(ItemIds.RING_OF_SUFFERING_R_, { "ring-of-suffering": 40 });
+  const player = createPlayer({ ring });
+  for (let i = 0; i < 3; i++) {
+    const enemy = land(player, 100);
+    assert.equal(enemy.pending.length, 1, "no random fizzle");
+    assert.equal(enemy.pending[0].getDamage(), 11);
+    assert.ok(enemy.pending[0].isReflected());
+    assert.equal(enemy.pending[0].getSource(), player);
+  }
+  assert.equal(RingOfSuffering._test.charges(ring), 40 - 33);
+  assert.equal(land(player, 0).pending.length, 0, "a 0 recoils nothing");
 });
 
-test("the toggle disables the effect and the fizzle rolls nothing", () => {
+test("the last recoil deals only the charges left and reverts the ring", () => {
+  const ring = item(ItemIds.RING_OF_SUFFERING_R_, { "ring-of-suffering": 3 });
+  const player = createPlayer({ ring });
+  const enemy = land(player, 100);
+  assert.equal(enemy.pending[0].getDamage(), 3);
+  assert.equal(ring.getId(), ItemIds.RING_OF_SUFFERING, "the last charge reverts the ring");
+  assert.match(player.messages.at(-1), /run out of charges/);
+});
+
+test("the toggle disables the effect without spending charges", () => {
   const ring = item(ItemIds.RING_OF_SUFFERING_R_, { "ring-of-suffering": 5 });
   const disabled = createPlayer({ ring, disabled: true });
-  incoming(disabled, { getDamage: () => 100 }, { attacker: attacker() });
+  assert.equal(land(disabled, 100).pending.length, 0);
   assert.equal(RingOfSuffering._test.charges(ring), 5, "disabled spends nothing");
-
-  const player = createPlayer({ ring });
-  const enemy = attacker();
-  const original = Math.random;
-  try {
-    Math.random = () => 0.1; // hits the 2 in floor(random*3)+1 === 2? 0.1 -> 1, not 2
-    incoming(player, { getDamage: () => 100 }, { attacker: enemy });
-  } finally {
-    Math.random = original;
-  }
-  assert.equal(enemy.pending.length, 1);
-
-  const fizzle = createPlayer({ ring });
-  const fizzleEnemy = attacker();
-  try {
-    Math.random = () => 0.4; // floor(0.4*3)+1 = 2 -> fizzle
-    incoming(fizzle, { getDamage: () => 100 }, { attacker: fizzleEnemy });
-  } finally {
-    Math.random = original;
-  }
-  assert.equal(fizzleEnemy.pending.length, 0, "the one-in-three fizzle deals nothing");
-  assert.equal(RingOfSuffering._test.charges(ring), 4, "no charge is spent on a fizzle");
 });
