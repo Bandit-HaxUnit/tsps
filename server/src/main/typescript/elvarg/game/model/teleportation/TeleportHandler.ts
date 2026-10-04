@@ -130,7 +130,10 @@ export class TeleportHandler {
             return false;
         }
 
-        if (PluginManager.emitCanTeleport(player, wildernessLevelLimit, targetLocation) === false) {
+        const area = player.getArea();
+        const canTeleport = (area ? PluginManager.callArea(area, "canTeleport", player, wildernessLevelLimit, targetLocation) : null)
+            ?? PluginManager.emitCanTeleport(player, wildernessLevelLimit, targetLocation);
+        if (canTeleport === false) {
             return false;
         }
 

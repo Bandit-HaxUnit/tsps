@@ -23,6 +23,7 @@ function buildMcpServer(core) {
   require("./mcp/Bank.AgentMcp")(ctx);
   require("./mcp/Shop.AgentMcp")(ctx);
   require("./mcp/Social.AgentMcp")(ctx);
+  require("./mcp/Perf.AgentMcp")(ctx);
   return server;
 }
 

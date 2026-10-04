@@ -60,7 +60,23 @@ const npc = {
 const tree = { getId: () => 1276, getLocation: () => location(3220, 3216) };
 const dispatched: any[] = [];
 
+let pluginProfiling = false;
 const core = {
+    ServerPerf: {
+        getSummary: (ticks: number) => ({
+            ticks, avgTickMs: 12.34567, maxTickMs: 40, avgDriftMs: 0, maxDriftMs: 1, lastTickNumber: 9,
+            lastPlayers: 1, lastNpcs: 2, lastTasks: 3, topPhases: [{ name: "area", totalMs: 6, avgMs: 0.1, maxMs: 0.5 }],
+        }),
+    },
+    PluginPerf: {
+        snapshot: () => [{
+            pluginName: "Wilderness", calls: 4, errors: 0, totalMs: 1.23456, avgMs: 0.3, maxMs: 0.5,
+            topEventName: "area:process", topEventCalls: 4, topEventTotalMs: 1.2, topEventAvgMs: 0.3, topEventP95Ms: 0.5,
+        }],
+        reset: () => {},
+        setEnabled: (enabled: boolean) => { pluginProfiling = enabled; },
+        isEnabled: () => pluginProfiling,
+    },
     World: {
         // One tick per millisecond, matching GAME_ENGINE_PROCESSING_CYCLE_RATE below.
         getProcessCycle: () => Date.now(),
@@ -238,6 +254,16 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
         { type: "widget_action", widgetId: 301 << 16, groupId: 301, childId: 0, slot: 0, itemId: 1351, buttonNum: 1, option: "Sell 1" },
     ]);
     assert.ok((await call(client, "bank_withdraw", { player: "agent1", item: "Shrimps" })).error);
+
+    // Perf numbers come back as data, rounded to the microsecond.
+    const serverPerf = (await call(client, "server_perf", { ticks: 30 })).value;
+    assert.equal(serverPerf.ticks, 30);
+    assert.equal(serverPerf.avgTickMs, 12.346);
+    assert.equal(serverPerf.topPhases[0].name, "area");
+    const pluginPerf = (await call(client, "plugin_perf", { profiling: "on" })).value;
+    assert.equal(pluginPerf.profiling, true);
+    assert.deepEqual([pluginPerf.plugins[0].pluginName, pluginPerf.plugins[0].totalMs], ["Wilderness", 1.235]);
+    assert.equal((await call(client, "plugin_perf", { profiling: "off" })).value.profiling, false);
 
     await client.close();
     console.log("agent-mcp smoke passed");

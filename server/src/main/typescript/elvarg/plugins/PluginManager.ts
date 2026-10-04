@@ -322,6 +322,39 @@ export class PluginManager {
     }
   }
 
+  /**
+   * Runs one Area method the way hooks run: timed under pluginperf against the plugin that
+   * registered the area, and a throw is logged instead of escaping into the actor's tick
+   * (which logs a player out). Fixed args rather than a closure: this sits on per-pair paths.
+   */
+  public static callArea(area: any, method: string, a?: any, b?: any, c?: any): any {
+    if (!PluginManager.pluginPerfEnabled) {
+      try {
+        return area[method](a, b, c);
+      } catch (err) {
+        console.error(`[plugins] area ${method} failed (${area.pluginName ?? area.getName()})`, err);
+        return null;
+      }
+    }
+
+    const start = process.hrtime.bigint();
+    let failed = false;
+    try {
+      return area[method](a, b, c);
+    } catch (err) {
+      failed = true;
+      console.error(`[plugins] area ${method} failed (${area.pluginName ?? area.getName()})`, err);
+      return null;
+    } finally {
+      PluginManager.recordHookTiming(
+        area.pluginName ?? area.getName(),
+        `area:${method}`,
+        process.hrtime.bigint() - start,
+        failed
+      );
+    }
+  }
+
   private static recordHookTiming(
     pluginName: string,
     eventName: string,
@@ -1972,6 +2005,13 @@ export class PluginManager {
       Boundary: require(`${model}/Boundary`).Boundary,
       PolygonalBoundary: require(`${model}/PolygonalBoundary`).PolygonalBoundary,
       Area: require(`${model}/areas/Area`).Area,
+      ServerPerf: require("../util/ServerPerf").ServerPerf,
+      PluginPerf: Object.freeze({
+        snapshot: (limit?: number) => PluginManager.getPluginPerformanceSnapshot(limit),
+        reset: () => PluginManager.resetPluginPerformanceStats(),
+        setEnabled: (enabled: boolean) => PluginManager.setPluginPerformanceProfilingEnabled(enabled),
+        isEnabled: () => PluginManager.isPluginPerformanceProfilingEnabled(),
+      }),
       World: require("../game/World").World,
       GameObject: require("../game/entity/impl/object/GameObject").GameObject,
       PrivateArea: require(`${model}/areas/impl/PrivateArea`).PrivateArea,
@@ -2641,6 +2681,10 @@ export class PluginManager {
         PluginManager.npcDialogueConditionHooks.push({ pluginName, handler });
       },
       registerNpcInteraction: registerNpcInteractionDefinition,
+      registerArea: (area) => {
+        area.pluginName = pluginName;
+        require("../game/model/areas/AreaManager").AreaManager.areas.push(area);
+      },
       onNpcDeath: (handler) => {
         if (typeof handler !== "function") {
           return;
