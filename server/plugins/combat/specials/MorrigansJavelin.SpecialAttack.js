@@ -51,7 +51,7 @@ module.exports = function registerMorrigansJavelinSpecialAttack(api) {
         }
         const damageToDeal = Math.min(BLEED_CHUNK, remainingDamage);
         remainingDamage -= damageToDeal;
-        target.getCombat().getHitQueue().addPendingDamage([new HitDamage(damageToDeal, HitMask.RED)]);
+        target.getCombat().getHitQueue().addPendingDamage([new HitDamage(damageToDeal, HitMask.RED).setSource(attacker)]);
         if (remainingDamage <= 0) {
           clear();
           this.stop();

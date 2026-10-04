@@ -58,6 +58,7 @@ const COMMANDS = {
     "::bank - Open bank",
     "::runes - Add runes",
     "::master - Max all skills",
+    "::maxgear [melee|range|mage] [void] - Wear best-in-slot gear (worn items go to the bank)",
     "::reset - Reset skills",
     "::normal - Set normal spellbook",
     "::lunar - Set lunar spellbook",

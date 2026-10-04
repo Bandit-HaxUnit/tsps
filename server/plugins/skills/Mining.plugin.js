@@ -5,6 +5,8 @@ const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 const { MapObjects } = require("../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
 const { GameObject } = require("../../src/main/typescript/elvarg/game/entity/impl/object/GameObject");
 const { ItemIds, ObjectIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
+const InfernalPickaxe = require("./mining/InfernalPickaxe.Mining");
+const CrystalPickaxe = require("./mining/CrystalPickaxe.Mining");
 
 const DEPLETED_ROCK_ID = 2704;
 const MINING_ANIMATION_INTERVAL_TICKS = 4;
@@ -19,6 +21,8 @@ const PICKAXES = [
   { id: ItemIds.ADAMANT_PICKAXE, requiredLevel: 31, speed: 0.16, attemptIntervalTicks: 4, animation: new Animation(629) },
   { id: ItemIds.RUNE_PICKAXE, requiredLevel: 41, speed: 0.2, attemptIntervalTicks: 3, animation: new Animation(624) },
   { id: ItemIds.DRAGON_PICKAXE, requiredLevel: 61, speed: 0.25, attemptIntervalTicks: 3, animation: new Animation(624) },
+  { id: ItemIds.CRYSTAL_PICKAXE, requiredLevel: 71, speed: 0.25, attemptIntervalTicks: 3, animation: new Animation(624) },
+  { id: ItemIds.INFERNAL_PICKAXE, requiredLevel: 61, speed: 0.25, attemptIntervalTicks: 3, animation: new Animation(624) },
 ];
 
 const PICKAXES_DESC = [...PICKAXES].sort((a, b) => b.requiredLevel - a.requiredLevel);
@@ -227,8 +231,13 @@ class MiningTask extends Task {
         continue;
       }
 
-      player.getInventory().adds(state.rock.oreId, 1);
-      player.sendMessage(state.rock.oreMessage ?? "You get some ores.");
+      if (InfernalPickaxe.tryCombustOre(player, state.pickaxe.id, state.rock.oreId)) {
+        player.sendMessage("The infernal pickaxe smelts the ore as you mine it.");
+      } else {
+        player.getInventory().adds(state.rock.oreId, 1);
+        player.sendMessage(state.rock.oreMessage ?? "You get some ores.");
+      }
+      CrystalPickaxe.tryUseCharge(player);
       player.getSkillManager().addExperiences(Skill.MINING, state.rock.xp);
       pluginApi.emitCustomEvent("mining:success", { player, skill: Skill.MINING, petBase: state.rock.petBase });
       if (state.rock.infinite) {
@@ -288,6 +297,9 @@ module.exports = {
     for (const rock of ALL_ROCKS) {
       api.onObjectInteraction(rock.objectName, { Mine: handleMine });
     }
+
+    InfernalPickaxe.attach(api);
+    CrystalPickaxe.attach(api);
 
     api.log("registered", {
       rocks: ROCKS.length,

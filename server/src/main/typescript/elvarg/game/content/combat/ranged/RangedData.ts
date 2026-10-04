@@ -308,12 +308,28 @@ export class Ammunition {
     // Craw's/Webweaver shots are the yellow-orange aura arrow (crystal-bow-style glow).
     public static readonly WEBWEAVER_BOW = new Ammunition(ItemIdentifiers.WEBWEAVER_BOW, new Graphic(1692, 0, GraphicHeight.HIGH), 1693, 0) // arrow_glow_orange launch/travel
     public static readonly CRAWS_BOW = new Ammunition(ItemIdentifiers.CRAWS_BOW, new Graphic(1692, 0, GraphicHeight.HIGH), 1693, 0) // arrow_glow_orange launch/travel
-    public static readonly RUNE_THROWNAXE = new Ammunition(ItemIdentifiers.RUNE_THROWNAXE, new Graphic(48, 0, GraphicHeight.HIGH), 41, 0) // RUNE_TAXE_LAUNCH/TRAVEL
-    public static readonly DRAGON_THROWNAXE = new Ammunition(ItemIdentifiers.DRAGON_THROWNAXE, new Graphic(1320, 0, GraphicHeight.HIGH), 1319, 0) // DRAGON_TAXE_LAUNCH/TRAVEL
+    // Thrownaxes (Wiki): ranged strength +5/+7/+11/+16/+23/+36/+47; launch/travel spotanims from the cache.
+    public static readonly BRONZE_THROWNAXE = new Ammunition(ItemIdentifiers.BRONZE_THROWNAXE, new Graphic(43, 0, GraphicHeight.HIGH), 36, 5)
+    public static readonly IRON_THROWNAXE = new Ammunition(ItemIdentifiers.IRON_THROWNAXE, new Graphic(42, 0, GraphicHeight.HIGH), 35, 7)
+    public static readonly STEEL_THROWNAXE = new Ammunition(ItemIdentifiers.STEEL_THROWNAXE, new Graphic(44, 0, GraphicHeight.HIGH), 37, 11)
+    public static readonly MITHRIL_THROWNAXE = new Ammunition(ItemIdentifiers.MITHRIL_THROWNAXE, new Graphic(45, 0, GraphicHeight.HIGH), 38, 16)
+    public static readonly ADAMANT_THROWNAXE = new Ammunition(ItemIdentifiers.ADAMANT_THROWNAXE, new Graphic(46, 0, GraphicHeight.HIGH), 39, 23)
+    public static readonly RUNE_THROWNAXE = new Ammunition(ItemIdentifiers.RUNE_THROWNAXE, new Graphic(48, 0, GraphicHeight.HIGH), 41, 36) // RUNE_TAXE_LAUNCH/TRAVEL
+    public static readonly DRAGON_THROWNAXE = new Ammunition(ItemIdentifiers.DRAGON_THROWNAXE, new Graphic(1320, 0, GraphicHeight.HIGH), 1319, 47) // DRAGON_TAXE_LAUNCH/TRAVEL
     public static readonly MORRIGANS_THROWING_AXE = new Ammunition(ItemIdentifiers.MORRIGANS_THROWING_AXE_BH_, new Graphic(1624, 0, GraphicHeight.HIGH), 1623, 0) // MORRIGANS_TAXE_LAUNCH/TRAVEL
     public static readonly BOW_OF_FAERDHINEN: Ammunition[] = BOW_OF_FAERDHINEN_ARROWS.map(
         ({ bow, travel, launch }) => new Ammunition(bow, new Graphic(launch, 0, GraphicHeight.HIGH), travel, 0)
     );
+    // Chinchompas: the wielded creature is its own ammunition (RuneLite grenade spotanims).
+    public static readonly CHINCHOMPA = new Ammunition(ItemIdentifiers.CHINCHOMPA_2, null, 908, 0) // CHINCHOMPA_GRENADE
+    public static readonly RED_CHINCHOMPA = new Ammunition(ItemIdentifiers.RED_CHINCHOMPA_2, null, 909, 0) // BIG_CHINCHOMPA_GRENADE
+    public static readonly BLACK_CHINCHOMPA = new Ammunition(ItemIdentifiers.BLACK_CHINCHOMPA, null, 1272, 0) // BLACK_CHINCHOMPA_GRENADE
+    // Salamander fuel (Wiki): the tar's ranged strength is the ranged-mode max-hit basis.
+    public static readonly GUAM_TAR = new Ammunition(ItemIdentifiers.GUAM_TAR, null, 33, 16)
+    public static readonly MARRENTILL_TAR = new Ammunition(ItemIdentifiers.MARRENTILL_TAR, null, 33, 20)
+    public static readonly TARROMIN_TAR = new Ammunition(ItemIdentifiers.TARROMIN_TAR, null, 33, 26)
+    public static readonly HARRALANDER_TAR = new Ammunition(ItemIdentifiers.HARRALANDER_TAR, null, 33, 31)
+    public static readonly IRIT_TAR = new Ammunition(ItemIdentifiers.IRIT_TAR, null, 33, 36)
     public static readonly TONALZTICS_OF_RALOS = new Ammunition(ItemIdentifiers.TONALZTICS_OF_RALOS, null, 2729, 0) // PROJANIM_GLAIVE_01_REGULAR
 
     private readonly startGfx: Graphic;
@@ -415,6 +431,8 @@ export class RangedWeaponType {
     static get DART() { const FT: any = getFightType(); return new RangedWeaponType(3, 5, FT?.DART_LONGRANGE ?? null); }
     static get TOKTZ_XIL_UL() { const FT: any = getFightType(); return new RangedWeaponType(5, 6, FT?.OBBY_RING_LONGRANGE ?? null); }
     static get MORRIGANS_JAVELIN() { const FT: any = getFightType(); return new RangedWeaponType(5, 6, FT?.JAVELIN_LONGRANGE ?? null); }
+    static get CHINCHOMPA() { const FT: any = getFightType(); return new RangedWeaponType(9, 9, FT?.CHINCHOMPA_LONG_FUSE ?? null); }
+    static get SALAMANDER() { return new RangedWeaponType(1, 1, null); }
     static get LONGBOW() { const FT: any = getFightType(); return new RangedWeaponType(9, 10, FT?.LONGBOW_LONGRANGE ?? null); }
     static get TWISTED_BOW() { const FT: any = getFightType(); return new RangedWeaponType(10, 10, FT?.LONGBOW_LONGRANGE ?? null); }
     static get BLOWPIPE() { const FT: any = getFightType(); return new RangedWeaponType(5, 7, FT?.BLOWPIPE_LONGRANGE ?? null); }
@@ -456,6 +474,8 @@ export class RangedWeapon {
     public static readonly YEW_SHORTBOW = new RangedWeapon([857], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW], RangedWeaponType.SHORTBOW)
     public static readonly MAGIC_LONGBOW = new RangedWeapon([859], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW], RangedWeaponType.LONGBOW)
     public static readonly MAGIC_SHORTBOW = new RangedWeapon([861, ItemIdentifiers.MAGIC_SHORTBOW_I_, ItemIdentifiers.MAGIC_SHORTBOW_3], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW], RangedWeaponType.SHORTBOW)
+    // Wiki: 3rd Age bow shoots at shortbow speed with a 9-tile range and can fire dragon arrows.
+    public static readonly THIRD_AGE_BOW = new RangedWeapon([ItemIdentifiers._3RD_AGE_BOW], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW, Ammunition.DRAGON_ARROW], RangedWeaponType.SHORTBOW)
     public static readonly CRYSTAL_BOW = new RangedWeapon(CRYSTAL_BOW_ALL_WEAPON_IDS, [Ammunition.CRYSTAL_BOW], RangedWeaponType.CRYSTAL_BOW)
     public static readonly GAUNTLET_BOW = new RangedWeapon([
         ItemIdentifiers.CRYSTAL_BOW_BASIC_, ItemIdentifiers.CRYSTAL_BOW_ATTUNED_, ItemIdentifiers.CRYSTAL_BOW_PERFECTED_,
@@ -511,6 +531,23 @@ export class RangedWeapon {
     public static readonly TOXIC_BLOWPIPE = new RangedWeapon([12926], [Ammunition.BRONZE_DART, Ammunition.IRON_DART, Ammunition.STEEL_DART, Ammunition.BLACK_DART, Ammunition.MITHRIL_DART, Ammunition.ADAMANT_DART, Ammunition.RUNE_DART, Ammunition.AMETHYST_DART, Ammunition.DRAGON_DART], RangedWeaponType.BLOWPIPE)
     public static readonly ROSEWOOD_BLOWPIPE = new RangedWeapon([ItemIdentifiers.ROSEWOOD_BLOWPIPE, ItemIdentifiers.ROSEWOOD_BLOWPIPE_2], [Ammunition.BRONZE_DART, Ammunition.IRON_DART, Ammunition.STEEL_DART, Ammunition.BLACK_DART, Ammunition.MITHRIL_DART, Ammunition.ADAMANT_DART, Ammunition.RUNE_DART, Ammunition.AMETHYST_DART, Ammunition.DRAGON_DART], RangedWeaponType.BLOWPIPE)
     public static readonly RUNE_THROWNAXE = new RangedWeapon([ItemIdentifiers.RUNE_THROWNAXE, ItemIdentifiers.RUNE_THROWNAXE_2], [Ammunition.RUNE_THROWNAXE], RangedWeaponType.THROWNAXE)
+    public static readonly BRONZE_THROWNAXE = new RangedWeapon([ItemIdentifiers.BRONZE_THROWNAXE], [Ammunition.BRONZE_THROWNAXE], RangedWeaponType.THROWNAXE)
+    public static readonly IRON_THROWNAXE = new RangedWeapon([ItemIdentifiers.IRON_THROWNAXE], [Ammunition.IRON_THROWNAXE], RangedWeaponType.THROWNAXE)
+    public static readonly STEEL_THROWNAXE = new RangedWeapon([ItemIdentifiers.STEEL_THROWNAXE], [Ammunition.STEEL_THROWNAXE], RangedWeaponType.THROWNAXE)
+    public static readonly MITHRIL_THROWNAXE = new RangedWeapon([ItemIdentifiers.MITHRIL_THROWNAXE], [Ammunition.MITHRIL_THROWNAXE], RangedWeaponType.THROWNAXE)
+    public static readonly ADAMANT_THROWNAXE = new RangedWeapon([ItemIdentifiers.ADAMANT_THROWNAXE], [Ammunition.ADAMANT_THROWNAXE], RangedWeaponType.THROWNAXE)
+    // Composite bows: their ammunition tiers match the same-tier shortbow (Wiki).
+    public static readonly WILLOW_COMP_BOW = new RangedWeapon([10280], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW], RangedWeaponType.SHORTBOW)
+    public static readonly YEW_COMP_BOW = new RangedWeapon([10282], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW], RangedWeaponType.SHORTBOW)
+    public static readonly MAGIC_COMP_BOW = new RangedWeapon([10284], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW, Ammunition.ICE_ARROW, Ammunition.BROAD_ARROW], RangedWeaponType.SHORTBOW)
+    public static readonly COMP_OGRE_BOW = new RangedWeapon([4827], [Ammunition.BRONZE_ARROW, Ammunition.IRON_ARROW, Ammunition.STEEL_ARROW, Ammunition.MITHRIL_ARROW, Ammunition.ADAMANT_ARROW, Ammunition.RUNE_ARROW], RangedWeaponType.SHORTBOW)
+    public static readonly CHINCHOMPA = new RangedWeapon([ItemIdentifiers.CHINCHOMPA_2], [Ammunition.CHINCHOMPA], RangedWeaponType.CHINCHOMPA)
+    public static readonly RED_CHINCHOMPA = new RangedWeapon([ItemIdentifiers.RED_CHINCHOMPA_2], [Ammunition.RED_CHINCHOMPA], RangedWeaponType.CHINCHOMPA)
+    public static readonly BLACK_CHINCHOMPA = new RangedWeapon([ItemIdentifiers.BLACK_CHINCHOMPA], [Ammunition.BLACK_CHINCHOMPA], RangedWeaponType.CHINCHOMPA)
+    public static readonly SWAMP_LIZARD = new RangedWeapon([10149], [Ammunition.GUAM_TAR], RangedWeaponType.SALAMANDER)
+    public static readonly ORANGE_SALAMANDER = new RangedWeapon([10146], [Ammunition.MARRENTILL_TAR], RangedWeaponType.SALAMANDER)
+    public static readonly RED_SALAMANDER = new RangedWeapon([10147], [Ammunition.TARROMIN_TAR], RangedWeaponType.SALAMANDER)
+    public static readonly BLACK_SALAMANDER = new RangedWeapon([10148], [Ammunition.HARRALANDER_TAR], RangedWeaponType.SALAMANDER)
     public static readonly DRAGON_THROWNAXE = new RangedWeapon([ItemIdentifiers.DRAGON_THROWNAXE, ItemIdentifiers.DRAGON_THROWNAXE_2, ItemIdentifiers.DRAGON_THROWNAXE_3], [Ammunition.DRAGON_THROWNAXE], RangedWeaponType.THROWNAXE)
     public static readonly MORRIGANS_THROWING_AXE = new RangedWeapon([ItemIdentifiers.MORRIGANS_THROWING_AXE, ItemIdentifiers.MORRIGANS_THROWING_AXE_2, ItemIdentifiers.MORRIGANS_THROWING_AXE_BH_, ItemIdentifiers.MORRIGANS_THROWING_AXE_BH__2], [Ammunition.MORRIGANS_THROWING_AXE], RangedWeaponType.THROWNAXE)
     public static readonly TONALZTICS_OF_RALOS = new RangedWeapon([ItemIdentifiers.TONALZTICS_OF_RALOS, ItemIdentifiers.TONALZTICS_OF_RALOS_2], [Ammunition.TONALZTICS_OF_RALOS], RangedWeaponType.GLAIVE)

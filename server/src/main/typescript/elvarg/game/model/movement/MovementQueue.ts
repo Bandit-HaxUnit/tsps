@@ -21,6 +21,7 @@ import { GameConstants } from "../../GameConstants";
 import { FastDeque } from "../../../util/FastDeque";
 import { ServerPerf } from "../../../util/ServerPerf";
 import { Wilderness } from "../../content/wilderness/Wilderness";
+import { applyRunEnergyRestoreModifiers } from "../../content/combat/EquipmentEffects";
 import * as fs from "fs";
 import * as path from "path";
 export class MovementQueue {
@@ -562,21 +563,30 @@ export class MovementQueue {
      * as blocking NPCs but never as blocking players, so NPCs are stopped by both
      * NPCs and players while players walk freely through each other.
      *
+     * The NPC flag blocks players too (osrs-docs: Entity Collision - "Checked by
+     * all NPCs but the excluded NPCs, players"), which is what stops a player from
+     * stepping onto a moving NPC while walking to interact with it. Excluded NPCs
+     * (followers/pets and the walk-through flag) add no flag, so they are ignored.
+     *
      * Upstream splits the two opt-outs (walk-through-NPCs and walk-through-players
      * are separate NPC properties). Pets are this server's only walk-through NPC
      * and need both, so one flag covers it; split canWalkThroughNPCs() if an NPC
      * ever needs to pass NPCs but not players.
      */
     private isDynamicallyOccupied(next: Location): boolean {
+        const size = this.character.getSize();
+        const privateArea = this.character.getPrivateArea();
         if (this.character.isNpc() && !(this.character as NPC).canWalkThroughNPCs()) {
-            const size = this.character.getSize();
-            const privateArea = this.character.getPrivateArea();
             if (World.isNpcOccupyingTile(next, this.character as NPC, size, privateArea)) {
                 return true;
             }
             if (World.isPlayerOccupyingTile(next, null, size, privateArea)) {
                 return true;
             }
+        }
+        if (this.character.isPlayer() &&
+            World.isNpcOccupyingTile(next, null, size, privateArea, true)) {
+            return true;
         }
         return false;
     }
@@ -692,7 +702,8 @@ export class MovementQueue {
     }
 
     public static runEnergyRestoreDelay(p: Player) {
-        return 1700 - (p.getSkillManager().getCurrentLevel(Skill.AGILITY) * 10);
+        const delay = 1700 - (p.getSkillManager().getCurrentLevel(Skill.AGILITY) * 10);
+        return Math.max(1, Math.round(applyRunEnergyRestoreModifiers(p, delay)));
     }
 
     public reset(clearDestination = true): MovementQueue {

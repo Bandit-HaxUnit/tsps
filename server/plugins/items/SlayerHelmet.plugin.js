@@ -46,17 +46,26 @@ function onTask(player) {
   return request.onTask === true;
 }
 
+/** Wiki: a salve amulet's undead bonus replaces the mask/helmet bonus, never stacks. */
+function salveOverrides(player) {
+  const amuletId = player.getEquipment?.()?.getItems?.()?.[pluginApi.core.Equipment.AMULET_SLOT]?.getId?.();
+  if (!amuletId) return false;
+  if (!itemName(amuletId).includes("salve amulet")) return false;
+  const target = player.getCombat?.()?.getTarget?.();
+  return target?.isNpc?.() && target.getAsNpc?.()?.getCurrentDefinition?.()?.isUndead?.() === true;
+}
+
 function meleeBoost(entity, value) {
   if (!entity?.isPlayer?.()) return value;
   const player = entity.getAsPlayer();
-  if (!slayerHeadwear(player) || !onTask(player)) return value;
+  if (!slayerHeadwear(player) || !onTask(player) || salveOverrides(player)) return value;
   return Math.floor((value * MELEE_NUMERATOR) / MELEE_DENOMINATOR);
 }
 
 function imbuedBoost(entity, value) {
   if (!entity?.isPlayer?.()) return value;
   const player = entity.getAsPlayer();
-  if (slayerHeadwear(player) !== "all" || !onTask(player)) return value;
+  if (slayerHeadwear(player) !== "all" || !onTask(player) || salveOverrides(player)) return value;
   return Math.floor(value * IMBUED_BOOST);
 }
 

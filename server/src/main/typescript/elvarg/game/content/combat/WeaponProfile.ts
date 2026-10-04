@@ -248,6 +248,50 @@ export class WeaponProfiles {
             fireSound: Sound.SHOOT_CROSSBOW,
             boltEffects: true,
         });
+        // Machetes, sickles and canes share the slash-sword/mace interfaces but swing one tick slower.
+        this.register({
+            itemIds: [975, 6313, 6315, 6317, 2961, 2963, 3899, 22433, 22435, 24693, 24695],
+            attackSpeed: 5,
+        });
+        this.register({
+            itemIds: [12373, 12374, 12375, 12376, 12377, 12378, 12379, 12380],
+            attackSpeed: 5,
+        });
+        // Composite bows (Wiki): 5-tick standard, 4-tick rapid, 10-tile range.
+        this.register({
+            itemIds: [4827, 10280, 10282, 10284],
+            attackAnimation: 426,
+            attackSpeed: 5,
+            attackDistance: 10,
+            longRangeDistance: 10,
+            longRangeFightType: FightType.SHORTBOW_LONGRANGE,
+            hitDelays: [STANDARD_HIT],
+            projectiles: [DEFAULT_PROJECTILE],
+            fireSound: Sound.SHOOT_BOW_QUIET,
+        });
+        // 3rd Age bow (Wiki): shortbow speed with a 9-tile range.
+        this.register({
+            itemIds: [ItemIdentifiers._3RD_AGE_BOW],
+            attackAnimation: 426,
+            attackSpeed: 4,
+            attackDistance: 9,
+            longRangeDistance: 9,
+            longRangeFightType: FightType.SHORTBOW_LONGRANGE,
+            hitDelays: [STANDARD_HIT],
+            projectiles: [DEFAULT_PROJECTILE],
+            fireSound: Sound.SHOOT_BOW_QUIET,
+        });
+        // Chinchompas (Wiki): thrown, 3-tick medium fuse / 4-tick otherwise, 9-tile range.
+        this.register({
+            itemIds: [10033, 10034, 11959],
+            attackSpeed: 4,
+            attackDistance: 9,
+            longRangeDistance: 9,
+            longRangeFightType: FightType.CHINCHOMPA_LONG_FUSE,
+            hitDelays: [{ base: 1, distanceOffset: 0, divisor: 6 }],
+            projectiles: [THROWN_PROJECTILE],
+            fireSound: Sound.THROW_DART,
+        });
         return true;
     })();
 }

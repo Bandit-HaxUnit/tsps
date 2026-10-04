@@ -267,23 +267,33 @@ function questComplete(player, name) {
 }
 
 /**
- * Using jewellery on the Fountain of Rune (6 charges) or the Fountain of Heroes
- * (glory only, 4 charges) recharges every applicable piece carried or worn at once.
+ * Using jewellery on the Fountain of Rune (6 charges), the Fountain of Heroes
+ * (glory only, 4 charges) or the Legends' Guild totem pole (skills necklace and
+ * combat bracelet, 6 charges) recharges every applicable piece carried or worn.
  */
 function rechargeAtFountain(event) {
   const { player } = event;
   const { ObjectIdentifiers, ItemIdentifiers } = pluginApi.core;
   const rune = [ObjectIdentifiers.FOUNTAIN_OF_RUNE, ObjectIdentifiers.FOUNTAIN_OF_RUNE_2].includes(event.objectId);
   const heroes = [ObjectIdentifiers.FOUNTAIN_OF_HEROES, ObjectIdentifiers.FOUNTAIN_OF_HEROES_2].includes(event.objectId);
+  const totem = [
+    ObjectIdentifiers.TOTEM_POLE_2, ObjectIdentifiers.TOTEM_POLE_3, ObjectIdentifiers.TOTEM_POLE_4,
+    ObjectIdentifiers.TOTEM_POLE_5, ObjectIdentifiers.TOTEM_POLE_7,
+  ].includes(event.objectId);
   const used = JEWELLERY_BY_ITEM.get(event.itemId);
-  if ((!rune && !heroes) || !used?.piece.recharge || used.charges === Infinity) return;
-  const fits = (piece) => piece.recharge && (rune || piece.recharge.heroes) && questComplete(player, piece.recharge.quest);
+  if ((!rune && !heroes && !totem) || !used?.piece.recharge || used.charges === Infinity) return;
+  const fits = (piece) => {
+    if (!piece.recharge || !questComplete(player, piece.recharge.quest)) return false;
+    if (totem) return piece.recharge.totem === true;
+    if (piece.recharge.totem) return false;
+    return rune || piece.recharge.heroes;
+  };
   event.handled = true;
   if (!fits(used.piece)) {
     player.sendMessage("Nothing interesting happens.");
     return;
   }
-  const target = rune ? FOUNTAIN_OF_RUNE_CHARGES : FOUNTAIN_OF_HEROES_CHARGES;
+  const target = totem || rune ? FOUNTAIN_OF_RUNE_CHARGES : FOUNTAIN_OF_HEROES_CHARGES;
   let eternal = false;
   for (const container of [player.getInventory(), player.getEquipment()]) {
     for (const item of container.getItems()) {
@@ -304,7 +314,9 @@ function rechargeAtFountain(event) {
   player.sendMessage(
     eternal
       ? "The power of the fountain is transferred into an amulet of eternal glory. It will now have unlimited charges."
-      : "You feel a power emanating from the fountain as it recharges your jewellery."
+      : totem
+        ? "The totem pole recharges your jewellery."
+        : "You feel a power emanating from the fountain as it recharges your jewellery."
   );
 }
 

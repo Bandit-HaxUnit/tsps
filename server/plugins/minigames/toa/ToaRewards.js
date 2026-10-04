@@ -181,8 +181,14 @@ function rollRaidLoot(raid) {
     // rolls (its tertiaries still come).
     if (player === uniqueWinner) player.setAttribute(ATTR_SARCOPHAGUS, uniqueId);
     const loot = rollPlayer(raid, player, player === uniqueWinner);
-    if (player === petWinner) loot.push({ id: I.TUMEKENS_GUARDIAN, amount: 1 });
-    setLoot(player, loot.slice(0, LOOT_SLOTS));
+    const capped = loot.slice(0, player === petWinner ? LOOT_SLOTS - 1 : LOOT_SLOTS);
+    if (player === petWinner) capped.push({ id: I.TUMEKENS_GUARDIAN, amount: 1 });
+    setLoot(player, capped);
+    if (player === petWinner) {
+      // The pet appears at raid completion rather than waiting in the chest; Pets owns
+      // the duplicate policy and the follower spawn.
+      Shared.api().emitCustomEvent("npc-drops:roll", { player, drops: lootOf(player) });
+    }
   }
   return { uniqueWinner, uniqueId, petWinner };
 }
