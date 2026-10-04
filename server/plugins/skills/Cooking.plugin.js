@@ -86,8 +86,17 @@ function stopBurnLevel(player, cookable) {
   return GAUNTLETS_STOP_BURN.get(cookable.raw) ?? cookable.stopBurn;
 }
 
+/** Wiki: a worn Cooking cape never burns food, and supersedes the gauntlets. */
+function wearingCookingCape(player) {
+  const cape = player.getEquipment?.()?.getItems?.()[Equipment.CAPE_SLOT]?.getId?.();
+  return cape === ItemIds.COOKING_CAPE || cape === ItemIds.COOKING_CAPE_T_;
+}
+
 function isSuccess(player, cookable) {
   const cookingLevel = player.getSkillManager().getCurrentLevel(Skill.COOKING);
+  if (wearingCookingCape(player)) {
+    return true;
+  }
   const stopBurn = stopBurnLevel(player, cookable);
   if (cookingLevel >= stopBurn) {
     return true;
@@ -296,5 +305,5 @@ module.exports = {
       cookObjectNames: COOKABLE_OBJECT_NAMES.size,
     });
   },
-  _test: { isSuccess, stopBurnLevel, GAUNTLETS_STOP_BURN, COOKABLE_BY_RAW },
+  _test: { isSuccess, stopBurnLevel, wearingCookingCape, GAUNTLETS_STOP_BURN, COOKABLE_BY_RAW },
 };
