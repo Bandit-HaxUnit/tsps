@@ -1,6 +1,6 @@
 {
   "disabledPlugins": ["VoiceChat", "TutorialIsland"],
-  "experienceMultiplier": 10,
+  "experienceMultiplier": 1,
   "spawn": {
     "x": 3089,
     "y": 3524,
