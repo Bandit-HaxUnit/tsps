@@ -162,7 +162,10 @@ class FriendsChatManager {
             return;
         }
         if (player.getRelations().getStatus() === 2) {
-            player.getRelations().setStatus(1, false);
+            // OSRS forces private chat to Friends when you send a PM; route
+            // through setChatFilters so the change survives a relog.
+            const relations = player.getRelations();
+            this.setChatFilters(player, relations.getPublicChatMode(), 1, relations.getTradeChatMode());
         }
         recipient.getSession().sendClientPacket(encodeChatMessage("private_in", text, player.getUsername(), "", player.getIndex(), 3));
         player.getSession().sendClientPacket(encodeChatMessage("private_out", text, recipient.getUsername(), "", recipient.getIndex(), 6));

@@ -39,7 +39,9 @@ const declaration = {
     status: {
         component: 5,
         idle: "idle",
+        loading: "searching...",
         empty: "no matches",
+        error: "search unavailable",
         matches: "Matches: %total",
         truncated: "Matches: %total (showing %shown)",
     },
@@ -163,6 +165,28 @@ async function main(): Promise<void> {
         "Matches: 9 (showing 2)",
         "a truncated result set says so",
     );
+
+    // A slow request shows the loading row until the results arrive.
+    let resolveSlow: ((value: any) => void) | undefined;
+    (globalThis as any).fetch = async () =>
+        await new Promise((resolve) => {
+            resolveSlow = resolve;
+        });
+    runtime.handleSetText(uid(4), "slow");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(widgets.get(uid(5)).text, "searching...", "an in-flight fetch shows the loading row");
+    resolveSlow!({ ok: true, json: async () => ({ total: 1, rows: [{ id: 1, name: "One" }] }) });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(widgets.get(uid(5)).text, "Matches: 1", "loading clears when the fetch resolves");
+
+    // A failed request clears stale rows and explains the failure.
+    (globalThis as any).fetch = async () => {
+        throw new Error("boom");
+    };
+    runtime.handleSetText(uid(4), "fail");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(widgets.get(uid(5)).text, "search unavailable", "a failed fetch shows the error row");
+    assert.equal(widgets.get(uid(100)).hidden, true, "stale rows are cleared on failure");
 
     // Closing releases the interface.
     runtime.onInterfaceClosed(GROUP_ID);

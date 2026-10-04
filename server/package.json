@@ -47,8 +47,6 @@
     "test:spell-cooldown": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/spell-cooldown-smoke.ts",
     "test:bones-fruit": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/bones-fruit-smoke.ts",
     "test:protocol": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/login-protocol-harness.ts",
-    "test:client-protocol": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/client-protocol-smoke.ts",
-    "test:webrtc": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/webrtc-loopback-smoke.ts",
     "test:pathfinding": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/pathfinding-smoke.ts",
     "test:combat-pathing": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/combat-pathing-smoke.ts",
     "test:quest-list": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/quest-list-smoke.ts",

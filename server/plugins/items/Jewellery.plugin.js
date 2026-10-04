@@ -101,6 +101,12 @@ function teleport(player, item, destination) {
   const entry = JEWELLERY_BY_ITEM.get(item.getId());
   if (!entry || !findItem(player, item)) return;
   const { piece } = entry;
+  // A spent/uncharged piece must never teleport for free, whatever menu path
+  // reached here (Rub already checks, the worn/right-click options did not).
+  if (entry.charges <= 0) {
+    player.sendMessage(piece.emptyMessage);
+    return;
+  }
   const target = destinationTile(player, destination);
   if (!TeleportHandler.checkReqs(player, target, piece.wildernessLevel ?? DEFAULT_WILDERNESS_LEVEL)) {
     return;

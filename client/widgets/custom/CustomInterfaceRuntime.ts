@@ -61,7 +61,9 @@ export type CustomInterfaceDeclaration = {
     status?: {
         component: number;
         idle?: string;
+        loading?: string;
         empty?: string;
+        error?: string;
         /** "%shown" and "%total" are replaced. */
         matches?: string;
         truncated?: string;
@@ -120,6 +122,8 @@ export class CustomInterfaceRuntime {
     private scrollbarState = new Map<number, string>();
     private fetchTimer: ReturnType<typeof setTimeout> | undefined;
     private fetchSequence = 0;
+    private fetchPending = false;
+    private fetchFailed = false;
 
     constructor(private readonly deps: CustomInterfaceRuntimeDeps) {}
 
@@ -344,6 +348,8 @@ export class CustomInterfaceRuntime {
         if (query.trim().length === 0) {
             this.rows = [];
             this.total = 0;
+            this.fetchPending = false;
+            this.fetchFailed = false;
             this.version++;
             this.renderRows(true);
             return;
@@ -363,12 +369,17 @@ export class CustomInterfaceRuntime {
         const url = `${search.endpoint}?${search.queryParam ?? "q"}=${encodeURIComponent(
             query,
         )}&limit=${search.limit ?? DEFAULT_LIMIT}`;
+        this.fetchPending = true;
+        this.fetchFailed = false;
+        this.applyStatus();
         try {
             const payload = (await this.deps.fetchContent(url)) as { total?: number; rows?: unknown[] };
             // A slower earlier request must not overwrite a newer one's results.
             if (sequence !== this.fetchSequence || query !== this.query) {
                 return;
             }
+            this.fetchPending = false;
+            this.fetchFailed = false;
             this.rows = Array.isArray(payload.rows)
                 ? (payload.rows as any[])
                       .map((row) => ({ id: row?.id | 0, name: String(row?.name ?? "") }))
@@ -378,7 +389,16 @@ export class CustomInterfaceRuntime {
             this.version++;
             this.renderRows(true);
         } catch (error) {
+            if (sequence !== this.fetchSequence || query !== this.query) {
+                return;
+            }
             console.warn("[custom-interface] content fetch failed", error);
+            this.fetchPending = false;
+            this.fetchFailed = true;
+            this.rows = [];
+            this.total = 0;
+            this.version++;
+            this.renderRows(true);
         }
     }
 
@@ -417,13 +437,17 @@ export class CustomInterfaceRuntime {
         }
         const shown = this.rows.length;
         const text =
-            this.query.trim().length === 0
-                ? status.idle ?? ""
-                : shown === 0
-                  ? status.empty ?? ""
-                  : (this.total > shown ? status.truncated ?? status.matches ?? "" : status.matches ?? "")
-                        .replace("%shown", String(shown))
-                        .replace("%total", String(this.total));
+            this.fetchFailed && status.error
+                ? status.error
+                : this.fetchPending && status.loading
+                  ? status.loading
+                  : this.query.trim().length === 0
+                    ? status.idle ?? ""
+                    : shown === 0
+                      ? status.empty ?? ""
+                      : (this.total > shown ? status.truncated ?? status.matches ?? "" : status.matches ?? "")
+                            .replace("%shown", String(shown))
+                            .replace("%total", String(this.total));
         this.setText(status.component, text);
     }
 

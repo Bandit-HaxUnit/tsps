@@ -198,6 +198,9 @@ export class Player extends Mobile {
         this.getCombat().getPoisonImmunityTimer().stop();
         this.getCombat().getTeleblockTimer().stop();
         this.getTimers().cancel(TimerKey.FREEZE);
+        this.getTimers().cancel(TimerKey.FREEZE_IMMUNITY);
+        this.getCombat().setCastSpell(null);
+        this.getCombat().setPreviousCast(null);
         this.getCombat().getPrayerBlockTimer().stop();
         this.setPoisonDamage(0);
         this.setVenomed(false);

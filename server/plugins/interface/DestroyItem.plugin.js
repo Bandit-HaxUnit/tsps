@@ -214,6 +214,10 @@ module.exports = {
         return;
       }
       if (event.item.isDropable()) return;
+      // The confirmation re-runs the policy for the pending item; let every other
+      // plugin veto that pass instead of reopening this interface.
+      const pending = pendingDestroy(event.player);
+      if (pending && pending.itemId === event.itemId) return;
       open(event.player, event.item, event.slot);
       event.handled = true;
     });
@@ -223,7 +227,23 @@ module.exports = {
       if (!pending) return false;
 
       const item = player.getInventory().getItems()[pending.slot];
-      if (item?.getId() === pending.itemId) {
+      if (item?.getId() !== pending.itemId) {
+        close(player);
+        return true;
+      }
+      // Re-check the drop policy so a plugin that vetoes destruction (bonds)
+      // can still block it after the interface was opened.
+      const event = {
+        player,
+        interfaceId: GROUP_ID,
+        item,
+        itemId: pending.itemId,
+        slot: pending.slot,
+        dropToGround: false,
+        handled: false,
+      };
+      api.core?.PluginManager?.emitItemDropPolicy(event);
+      if (!event.handled) {
         player.getInventory().deleteAtSlot(pending.slot, pending.amount);
       }
       close(player);
