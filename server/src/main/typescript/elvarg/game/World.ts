@@ -618,7 +618,8 @@ export class World {
     }
 
     public static getNearbyNpcsForUpdate(player: Player): NPC[] {
-        const nearby = World.collectFromBuckets(World.npcUpdateBuckets, BoatManager.rootLocation(player));
+        const radius = Math.max(World.UPDATE_BUCKET_RADIUS, Math.ceil(World.npcViewDistance(player) / 8));
+        const nearby = World.collectFromBuckets(World.npcUpdateBuckets, BoatManager.rootLocation(player), radius);
         nearby.sort((a, b) => a.getIndex() - b.getIndex());
         return nearby;
     }
@@ -684,8 +685,14 @@ export class World {
         return npc.getExactMove?.() != null;
     }
 
+    /** How far the player sees NPCs (15 unless an area widens it). */
+    private static npcViewDistance(player: Player): number {
+        return player.getNpcViewDistance?.() ?? 15;
+    }
+
     private static updateLocalNpcs(player: Player, nearbyNpcs: NPC[]): void {
         const localNpcs = player.getLocalNpcs();
+        const viewDistance = World.npcViewDistance(player);
         const origin = BoatManager.rootLocation(player);
         const privateArea = BoatManager.syncArea(player);
         for (let index = 0; index < localNpcs.length;) {
@@ -694,7 +701,7 @@ export class World {
                 World.getNpcs().get(npc.getIndex()) != null &&
                 npc.isRegistered() &&
                 npc.isVisible() &&
-                origin.isViewableFrom(BoatManager.rootLocation(npc)) &&
+                origin.isViewableFromWithin(BoatManager.rootLocation(npc), viewDistance) &&
                 (!npc.isNeedsPlacement() || World.isExactMoving(npc)) &&
                 BoatManager.syncArea(npc) === privateArea &&
                 (!npc.isOwnerOnly?.() || npc.getOwner?.() === player)
@@ -730,7 +737,7 @@ export class World {
             if (npc.isNeedsPlacement() && !World.isExactMoving(npc)) continue;
             if (BoatManager.syncArea(npc) !== privateArea) continue;
             if (npc.isOwnerOnly?.() && npc.getOwner?.() !== player) continue;
-            if (!BoatManager.rootLocation(npc).isViewableFrom(origin)) continue;
+            if (!BoatManager.rootLocation(npc).isViewableFromWithin(origin, viewDistance)) continue;
             localNpcs.push(npc);
             localIndexes.add(npc.getIndex());
         }

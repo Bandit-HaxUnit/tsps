@@ -98,6 +98,8 @@ export type PlayerView = Tile & ActorUpdateView & {
   faceDirection?: number;
   forcedMovement?: ForcedMovementView;
   forcedMovementEnd?: Tile;
+  /** OSRS tinting: an HSL tint over client cycles; hue/saturation/lightness -1 keep the model's own. */
+  tint?: { startCycle: number; endCycle: number; hue: number; saturation: number; lightness: number; weight: number };
   /** The world entity (boat) whose deck the player stands on; the coordinates are deck coordinates. */
   worldView?: number;
 };
@@ -2163,6 +2165,7 @@ const PLAYER_MASK = {
   FACE_ENTITY: 0x40,
   FORCE_MOVEMENT: 0x400,
   MOVEMENT_TYPE: 0x1000,
+  TINT: 0x200,
   MOVEMENT_FLAG: 0x2000,
   SPOT_ANIM: 0x10000,
 } as const;
@@ -2292,6 +2295,7 @@ function playerUpdateMask(
     (view.forcedMovement ? PLAYER_MASK.FORCE_MOVEMENT : 0) |
     (writeMovementType ? PLAYER_MASK.MOVEMENT_TYPE : 0) |
     (view.resetPath ? PLAYER_MASK.MOVEMENT_FLAG : 0) |
+    (view.tint ? PLAYER_MASK.TINT : 0) |
     (view.graphics?.length ? PLAYER_MASK.SPOT_ANIM : 0);
 }
 
@@ -2353,6 +2357,14 @@ function writePlayerUpdateBlock(
       shortBE(bytes, graphic.id < 0 ? 0xffff : graphic.id);
       intME(bytes, ((graphic.height & 0xffff) << 16) | (graphic.delay & 0xffff));
     }
+  }
+  if (view.tint) {
+    shortLE(bytes, view.tint.startCycle & 0xffff);
+    shortLE(bytes, view.tint.endCycle & 0xffff);
+    byteS(bytes, view.tint.hue);
+    bytes.push(view.tint.saturation & 0xff);
+    byteA(bytes, view.tint.lightness);
+    byteC(bytes, view.tint.weight);
   }
   return Buffer.from(bytes);
 }

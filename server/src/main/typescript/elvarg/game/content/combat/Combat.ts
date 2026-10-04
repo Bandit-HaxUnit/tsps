@@ -382,8 +382,8 @@ export class Combat {
     }
 
     /** What plugins say about the attack timer for an attack on `target` (PluginAttackTimingEvent). */
-    private attackTiming(method: CombatMethod, target: Mobile): { ignoreDelay: boolean; keepDelay: boolean } {
-        const event = { attacker: this.character, target, method, ignoreDelay: false, keepDelay: false };
+    private attackTiming(method: CombatMethod, target: Mobile): { ignoreDelay: boolean; keepDelay: boolean; minimumDelay: number } {
+        const event = { attacker: this.character, target, method, ignoreDelay: false, keepDelay: false, minimumDelay: 0 };
         PluginManager.emitAttackTiming(event);
         return event;
     }
@@ -587,6 +587,8 @@ export class Combat {
         if (!bypass && !timing.keepDelay) {
             const speed = specialTraits?.attackSpeedTicks ?? method.attackSpeed(this.character);
             this.nextAttackCycle = cycle + Math.max(1, speed | 0);
+        } else if (!bypass && timing.minimumDelay > 0) {
+            this.nextAttackCycle = Math.max(this.nextAttackCycle, cycle + (timing.minimumDelay | 0));
         }
 
         method.start(this.character, target);
