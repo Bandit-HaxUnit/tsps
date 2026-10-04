@@ -1,3 +1,4 @@
+const registerCrystalArmourEffects = require("./effects/CrystalArmour");
 const registerDharoksArmourEffects = require("./effects/DharoksArmour");
 const registerObsidianEffects = require("./effects/ObsidianArmour");
 const registerInquisitorsArmourEffects = require("./effects/InquisitorsArmour");
@@ -11,6 +12,8 @@ const registerDemonbaneEffects = require("./effects/Demonbane");
 module.exports = {
   name: "EquipmentEffects",
   register(api) {
+    // Crystal armour first: the Wiki applies it to the bow's base roll and max hit.
+    registerCrystalArmourEffects(api);
     registerDharoksArmourEffects(api);
     registerObsidianEffects(api);
     registerInquisitorsArmourEffects(api);
