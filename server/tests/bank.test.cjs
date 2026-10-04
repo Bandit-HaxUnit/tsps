@@ -109,6 +109,49 @@ test("depositing items keeps each one's metadata", () => {
   assert.equal(player.getInventory().getValidItems().length, 0);
 });
 
+test("inventory bank options count matching unnoted items across slots", () => {
+  for (const [buttonNum, option, custom, mode, expected] of [
+    [8, "Deposit-All", 0, 0, 4],
+    [7, "Deposit-X", 3, 0, 3],
+    [7, undefined, 3, 0, 3],
+    [4, "Deposit-5", 0, 0, 4],
+    [5, "Deposit-10", 0, 0, 4],
+    [2, undefined, 3, 3, 3],
+    [2, undefined, 0, 4, 4],
+    [1, "Deposit-1", 0, 0, 1],
+  ]) {
+    const player = createPlayer();
+    player.getBankCustomQuantity = () => custom;
+    player.getBankQuantityMode = () => mode;
+    for (const charges of [5, 20, 100, 1200]) {
+      player.getInventory().add(new Item(TRIDENT, 1, { charges }), false);
+    }
+    player.getInventory().add(new Item(LAVA_BATTLESTAFF, 1), false);
+
+    Bank.handleWidgetAction(player, {
+      groupId: Bank.SIDE_INTERFACE_ID, childId: Bank.SIDE_ITEMS_CHILD,
+      buttonNum, option, slot: 3, itemId: TRIDENT,
+    });
+
+    assert.equal(player.getBank().getAmount(TRIDENT), expected);
+    assert.equal(player.getInventory().getAmount(TRIDENT), 4 - expected);
+    assert.equal(player.getInventory().getAmount(LAVA_BATTLESTAFF), 1);
+    assert.deepEqual(player.getBank().getValidItems()[0].getMeta(), { charges: 1200 });
+  }
+});
+
+test("Deposit-X still moves a partial noted stack", () => {
+  const player = createPlayer();
+  player.getBankCustomQuantity = () => 3;
+  player.getInventory().add(new Item(LAVA_BATTLESTAFF_NOTE, 7), false);
+  Bank.handleWidgetAction(player, {
+    groupId: Bank.SIDE_INTERFACE_ID, childId: Bank.SIDE_ITEMS_CHILD,
+    buttonNum: 7, option: "Deposit-X", slot: 0, itemId: LAVA_BATTLESTAFF_NOTE,
+  });
+  assert.equal(player.getBank().getAmount(LAVA_BATTLESTAFF), 3);
+  assert.equal(player.getInventory().getAmount(LAVA_BATTLESTAFF_NOTE), 4);
+});
+
 test("withdrawing an item keeps its metadata", () => {
   const player = createPlayer();
   player.getBank(0).add(new Item(TRIDENT, 1, { charges: 1200 }), false);

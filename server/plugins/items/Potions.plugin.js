@@ -507,6 +507,8 @@ function registerPotion(definition) {
       const entry = {
         potion: normalized,
         itemId,
+        chain,
+        doses: chain.length - index,
         replacementId: isItemId(replacementId)
           ? replacementId
           : normalized.emptyItemId,
@@ -714,6 +716,7 @@ registerPotion({
 registerPotion({
   name: "Guthix rest",
   chains: [doseChain("GUTHIX_REST_4_", "GUTHIX_REST_3_", "GUTHIX_REST_2_", "GUTHIX_REST_1_")],
+  emptyItemId: Items.EMPTY_CUP,
   requiresFoodPermission: true,
   effect: applyGuthixRest,
 });
@@ -1142,6 +1145,32 @@ function handlePotionDrink(player, itemId, slot) {
   return true;
 }
 
+/** Pour matching four-dose drinks into the target, leaving excess in the source. */
+function combinePotionDoses(event) {
+  const { player, usedItemId, usedWithItemId, usedItemSlot, usedWithItemSlot } = event;
+  const source = POTION_BY_ITEM_ID.get(usedItemId);
+  const target = POTION_BY_ITEM_ID.get(usedWithItemId);
+  if (!source || !target || source.chain !== target.chain || source.chain.length !== 4 ||
+      source.potion.emptyItemId <= 0 || usedItemSlot === usedWithItemSlot) return;
+
+  const inventory = player.getInventory();
+  const sourceItem = inventory.getItems()[usedItemSlot];
+  const targetItem = inventory.getItems()[usedWithItemSlot];
+  if (sourceItem?.getId() !== usedItemId || targetItem?.getId() !== usedWithItemId ||
+      sourceItem.getAmount() !== 1 || targetItem.getAmount() !== 1) return;
+
+  event.handled = true;
+  const transferred = Math.min(source.doses, source.chain.length - target.doses);
+  if (transferred === 0) return;
+  const remaining = source.doses - transferred;
+  const { Item } = pluginApi.core;
+  inventory.setItem(usedItemSlot, new Item(remaining > 0
+    ? source.chain[source.chain.length - remaining] : source.potion.emptyItemId, 1));
+  inventory.setItem(usedWithItemSlot, new Item(target.chain[target.chain.length - target.doses - transferred], 1));
+  inventory.refreshItems();
+  player.sendMessage("You pour from one container into the other.");
+}
+
 function pauseTimedEffects({ player }) {
   player.setAttribute(ATTR_PAUSED_AT, Date.now());
 }
@@ -1187,6 +1216,7 @@ module.exports = {
     api.onPlayerLogout(pauseTimedEffects);
     api.onPlayerLogin(resumeTimedEffects);
     api.onPlayerDeath(clearPrayerRegeneration);
+    api.onItemOnItem(combinePotionDoses, { noted: false });
     api.onItemFirstAction((event) => {
       const { player, itemId, slot } = event;
       return handlePotionDrink(player, itemId, slot);

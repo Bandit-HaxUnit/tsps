@@ -528,7 +528,7 @@ export class Bank extends ItemContainer {
             const item = player.getInventory().getItems()[packet.slot];
             if (!item || item.getId() < 0 || (packet.itemId != null && packet.itemId !== item.getId())) return true;
             const amount = Bank.actionAmount(
-                "deposit", packet.buttonNum, packet.option, item.getAmount(),
+                "deposit", packet.buttonNum, packet.option, player.getInventory().getAmount(item.getId()),
                 player.getBankCustomQuantity(), player.getBankQuantityMode(),
             );
             if (amount > 0) Bank.deposits(player, item.getId(), packet.slot, amount);

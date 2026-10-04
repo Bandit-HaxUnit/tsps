@@ -9,12 +9,72 @@ const { Skill } = require("../dist/game/model/Skill");
 const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
 
 const Potions = require("../plugins/items/Potions.plugin");
+const { Item } = require("../dist/game/model/Item");
+let combinePotions;
+Potions.register(new Proxy({}, {
+  get: (_, key) => key === "core" ? { Item } : (...args) => {
+    if (key === "onItemOnItem") {
+      combinePotions = args[0];
+      assert.deepEqual(args[1], { noted: false });
+    }
+  },
+}));
 const {
   applyPrayerRestore, applySanfewRestore, applyAncientBrew, applyDivine, processDivine,
   applyMenaphiteRemedy, processMenaphite, applyPrayerRegeneration, processPrayerRegeneration,
   clearPrayerRegeneration, processBoostDecay, curePoisonAndVenom,
   pauseTimedEffects, resumeTimedEffects,
 } = Potions._test;
+
+function pour(sourceId, targetId, sourceSlot = 0, targetSlot = 1) {
+  const items = [new Item(sourceId, 1), new Item(targetId, 1)];
+  let refreshes = 0;
+  const inventory = {
+    getItems: () => items,
+    setItem(slot, item) { items[slot] = item; return this; },
+    refreshItems() { refreshes++; return this; },
+  };
+  const event = {
+    player: { getInventory: () => inventory, sendMessage() {} },
+    usedItemId: sourceId, usedWithItemId: targetId,
+    usedItemSlot: sourceSlot, usedWithItemSlot: targetSlot, handled: false,
+  };
+  combinePotions(event);
+  return { ids: items.map((item) => item.getId()), refreshes, handled: event.handled };
+}
+
+test("using matching potions combines doses in either order and leaves a vial", () => {
+  const I = ItemIdentifiers;
+  assert.deepEqual(pour(I.ENERGY_POTION_1_, I.ENERGY_POTION_3_), {
+    ids: [I.VIAL, I.ENERGY_POTION_4_], refreshes: 1, handled: true,
+  });
+  assert.deepEqual(pour(I.ENERGY_POTION_3_, I.ENERGY_POTION_1_), {
+    ids: [I.VIAL, I.ENERGY_POTION_4_], refreshes: 1, handled: true,
+  });
+  assert.deepEqual(pour(I.PRAYER_POTION_3_, I.PRAYER_POTION_3_), {
+    ids: [I.PRAYER_POTION_2_, I.PRAYER_POTION_4_], refreshes: 1, handled: true,
+  });
+  assert.deepEqual(pour(I.GUTHIX_REST_1_, I.GUTHIX_REST_3_), {
+    ids: [I.EMPTY_CUP, I.GUTHIX_REST_4_], refreshes: 1, handled: true,
+  });
+});
+
+test("combining never mixes potion variants, notes or the same slot", () => {
+  const I = ItemIdentifiers;
+  for (const [a, b, targetSlot] of [
+    [I.ENERGY_POTION_1_, I.PRAYER_POTION_3_, 1],
+    [I.SUPER_RESTORE_1_, I.BLIGHTED_SUPER_RESTORE_3_, 1],
+    [I.ENERGY_POTION_1__2, I.ENERGY_POTION_3_, 1],
+    [I.ENERGY_POTION_3_, I.ENERGY_POTION_3_, 0],
+  ]) {
+    const result = pour(a, b, 0, targetSlot);
+    assert.deepEqual(result.ids, [a, b]);
+    assert.equal(result.refreshes, 0);
+  }
+  const result = pour(I.ENERGY_POTION_1_, I.ENERGY_POTION_4_);
+  assert.deepEqual(result.ids, [I.ENERGY_POTION_1_, I.ENERGY_POTION_4_]);
+  assert.equal(result.refreshes, 0);
+});
 
 function createPlayer({ base = 99, current = 1, inventory = [], equipment = [] } = {}) {
   const levels = new Map(Skill.values().map((skill) => [skill, current]));
