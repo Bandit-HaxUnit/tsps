@@ -7,8 +7,7 @@ import { Mobile } from "../../../entity/impl/Mobile";
 import type { Player } from "../../../entity/impl/player/Player";
 import type { NPC } from "../../../entity/impl/npc/NPC";
 import type { CombatSpell } from "../magic/CombatSpell";
-import { applyMagicDamageBonusModifiers, applyMagicHitModifiers, applyMeleeHitModifiers, applyRangedHitModifiers } from "../EquipmentEffects";
-import { CombatEquipment } from "../CombatEquipment";
+import { applyCombatEffectiveLevelModifiers, applyMagicDamageBonusModifiers, applyMagicHitModifiers, applyMeleeHitModifiers, applyRangedHitModifiers } from "../EquipmentEffects";
 import { CombatSpecial } from "../CombatSpecial";
 import { SpecialAttackMaximumHitSource, WeaponSpecialTraits } from "../WeaponSpecialTraits";
 
@@ -95,10 +94,6 @@ export class DamageFormulas {
         return baseLevel + bonus + 8;
     }
 
-    private static applyVoidMultiplier(baseLevel: number, numerator: number, denominator = 100): number {
-        return DamageFormulas.scaleRatio(baseLevel, numerator, denominator);
-    }
-
     private static meleeStrengthPrayerPercent(player: Player): number {
         if (PrayerHandler.isActivated(player, PrayerHandler.BURST_OF_STRENGTH)) {
             return 105;
@@ -145,12 +140,7 @@ export class DamageFormulas {
 
         let effectiveLevel = DamageFormulas.applyEffectiveLevelBonus(prayerAdjusted, styleBonus);
 
-        if (CombatEquipment.wearingVoid(player, CombatType.MELEE)
-            || CombatEquipment.wearingEliteVoid(player, CombatType.MELEE)) {
-            effectiveLevel = DamageFormulas.applyVoidMultiplier(effectiveLevel, 110);
-        }
-
-        return effectiveLevel;
+        return applyCombatEffectiveLevelModifiers(player, effectiveLevel, { combatType: CombatType.MELEE, purpose: "damage" });
     }
 
     public static calculateMaxMeleeHit(entity: Mobile, includeSpecial?: boolean): number {
@@ -281,11 +271,7 @@ export class DamageFormulas {
 
         let effectiveLevel = DamageFormulas.applyEffectiveLevelBonus(prayerAdjusted, styleBonus);
 
-        if (CombatEquipment.wearingEliteVoid(player, CombatType.RANGED)) {
-            effectiveLevel = DamageFormulas.applyVoidMultiplier(effectiveLevel, 1125, 1000);
-        } else if (CombatEquipment.wearingVoid(player, CombatType.RANGED)) {
-            effectiveLevel = DamageFormulas.applyVoidMultiplier(effectiveLevel, 110);
-        }
+        effectiveLevel = applyCombatEffectiveLevelModifiers(player, effectiveLevel, { combatType: CombatType.RANGED, purpose: "damage" });
 
         // if (dragonHunter(input))
         // rngStrength = (int) (rngStrength * 1.3f);
@@ -346,11 +332,10 @@ export class DamageFormulas {
             (player.getBonusManager().getOtherBonus()[BonusManager.MAGIC_STRENGTH] ?? 0) * 10
         );
         const prayerPermille = DamageFormulas.magicDamagePrayerPermille(player);
-        const eliteVoidPermille = CombatEquipment.wearingEliteVoid(player, CombatType.MAGIC) ? 50 : 0;
 
         const bonusPermille = applyMagicDamageBonusModifiers(
             player,
-            equipmentPermille + prayerPermille + eliteVoidPermille
+            equipmentPermille + prayerPermille
         );
         return DamageFormulas.scaleRatio(maxHit, 1000 + bonusPermille, 1000);
     }

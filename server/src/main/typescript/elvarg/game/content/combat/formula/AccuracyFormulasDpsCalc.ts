@@ -5,10 +5,9 @@ import { Misc } from "../../../../util/Misc";
 import { Mobile } from "../../../entity/impl/Mobile";
 import { BonusManager } from "../../../model/equipment/BonusManager";
 import { Skill } from "../../../model/Skill";
-import { applyMeleeAttackAccuracyModifiers, applyRangedAttackAccuracyModifiers, applyMagicAttackAccuracyModifiers, applyMeleeDefenseModifiers, applyRangedDefenseModifiers, applyMagicDefenseModifiers } from "../EquipmentEffects";
+import { applyCombatEffectiveLevelModifiers, applyMeleeAttackAccuracyModifiers, applyRangedAttackAccuracyModifiers, applyMagicAttackAccuracyModifiers, applyMeleeDefenseModifiers, applyRangedDefenseModifiers, applyMagicDefenseModifiers } from "../EquipmentEffects";
 import type { Player } from '../../../entity/impl/player/Player';
 import { World } from "../../../World";
-import { CombatEquipment } from "../CombatEquipment";
 import { PluginManager } from "../../../../plugins/PluginManager";
 import { CombatSpecial } from "../CombatSpecial";
 import { resolveSpecialAttackType, WeaponSpecialTraits } from "../WeaponSpecialTraits";
@@ -337,10 +336,7 @@ export class AccuracyFormulasDpsCalc {
             att += 1;
         att += 8;
 
-        if (CombatEquipment.wearingVoid(player, CombatType.MELEE)
-            || CombatEquipment.wearingEliteVoid(player, CombatType.MELEE)) {
-            att = AccuracyFormulasDpsCalc.scalePercent(att, 110);
-        }
+        att = applyCombatEffectiveLevelModifiers(entity, att, { combatType: CombatType.MELEE, purpose: "accuracy" });
 
         cache.effectiveAttackLevel = att;
         return att;
@@ -492,10 +488,7 @@ export class AccuracyFormulasDpsCalc {
             rngStrength += 3;
         rngStrength += 8;
 
-        // Void and elite void both add 10% ranged accuracy; elite's 12.5% is damage only.
-        if (CombatEquipment.wearingEliteVoid(player, CombatType.RANGED) || CombatEquipment.wearingVoid(player, CombatType.RANGED)) {
-            rngStrength = AccuracyFormulasDpsCalc.scalePercent(rngStrength, 110);
-        }
+        rngStrength = applyCombatEffectiveLevelModifiers(entity, rngStrength, { combatType: CombatType.RANGED, purpose: "accuracy" });
 
         //    if (dragonHunter(input))
         //        rngStrength =
@@ -556,10 +549,7 @@ export class AccuracyFormulasDpsCalc {
             mag += 2;
         }
 
-        if (CombatEquipment.wearingVoid(player, CombatType.MAGIC)
-            || CombatEquipment.wearingEliteVoid(player, CombatType.MAGIC)) {
-            mag = AccuracyFormulasDpsCalc.scalePercent(mag, 145);
-        }
+        mag = applyCombatEffectiveLevelModifiers(entity, mag, { combatType: CombatType.MAGIC, purpose: "accuracy" });
 
         cache.effectiveMagicLevel = mag;
         return mag;

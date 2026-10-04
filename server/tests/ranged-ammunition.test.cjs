@@ -245,29 +245,30 @@ test('scaled damage rounds down: a 17 into a protection prayer in PvP is 10', ()
 
 test('elite void adds 10% ranged accuracy like void (its 12.5% is damage only)', () => {
   const { AccuracyFormulasDpsCalc } = require('../dist/game/content/combat/formula/AccuracyFormulasDpsCalc');
-  const { CombatEquipment } = require('../dist/game/content/combat/CombatEquipment');
+  const { CombatType } = require('../dist/game/content/combat/CombatType');
   const { FightStyle } = require('../dist/game/content/combat/FightStyle');
-  const original = { elite: CombatEquipment.wearingEliteVoid, plain: CombatEquipment.wearingVoid };
-  let elite = false;
-  CombatEquipment.wearingEliteVoid = () => elite;
-  CombatEquipment.wearingVoid = () => elite;
-  try {
-    const roll = () => {
-      const player = {
-        isNpc: () => false, isPlayer: () => true, getAsPlayer() { return this; },
-        getSkillManager: () => ({ getCurrentLevel: () => 99 }),
-        getFightType: () => ({ getStyle: () => FightStyle.RAPID }),
-        getPrayerActive: () => [],
-        getEquipment: () => ({ getItems: () => [], get: () => ({ getId: () => -1 }) }),
-        getAttribute: () => undefined,
-      };
-      return AccuracyFormulasDpsCalc.effectiveRangedAttack(player);
+  const effects = require('../dist/game/content/combat/EquipmentEffects');
+  require('../plugins/items/VoidEquipment.plugin').register({
+    core: { Equipment: Slots, ItemIdentifiers: Items, CombatType },
+    registerCombatEffectiveLevelModifier: effects.registerCombatEffectiveLevelModifier,
+    registerMagicDamageBonusModifier: effects.registerMagicDamageBonusModifier,
+  });
+  const roll = (top, robe) => {
+    const items = Array.from({ length: 14 }, () => new GroundItem(-1, 0));
+    items[Slots.HEAD_SLOT] = new GroundItem(Items.VOID_RANGER_HELM);
+    items[Slots.BODY_SLOT] = new GroundItem(top);
+    items[Slots.LEG_SLOT] = new GroundItem(robe);
+    items[Slots.HANDS_SLOT] = new GroundItem(Items.VOID_KNIGHT_GLOVES);
+    const player = {
+      isNpc: () => false, isPlayer: () => true, getAsPlayer() { return this; },
+      getSkillManager: () => ({ getCurrentLevel: () => 99 }),
+      getFightType: () => ({ getStyle: () => FightStyle.RAPID }),
+      getPrayerActive: () => [],
+      getEquipment: () => ({ getItems: () => items }),
     };
-    const plain = roll();
-    elite = true;
-    assert.equal(roll(), Math.floor(plain * 110 / 100));
-  } finally {
-    CombatEquipment.wearingEliteVoid = original.elite;
-    CombatEquipment.wearingVoid = original.plain;
-  }
+    return AccuracyFormulasDpsCalc.effectiveRangedAttack(player);
+  };
+  assert.equal(roll(-1, -1), 107, 'incomplete set gives no accuracy');
+  assert.equal(roll(Items.VOID_KNIGHT_TOP, Items.VOID_KNIGHT_ROBE), 117);
+  assert.equal(roll(Items.ELITE_VOID_TOP, Items.ELITE_VOID_ROBE), 117, 'elite accuracy is 10%, not 12.5%');
 });
