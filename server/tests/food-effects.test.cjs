@@ -10,6 +10,14 @@ const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
 const { Location } = require("../dist/game/model/Location");
 const Food = require("../plugins/items/Food.plugin");
 
+test("food lookup rejects missing and invalid IDs, noted food and non-food items", () => {
+  for (const id of [undefined, null, NaN, {}, -1, String(ItemIdentifiers.SHARK), 385.5,
+    ItemIdentifiers.SHARK_2, ItemIdentifiers.COINS]) {
+    assert.equal(Food.isFoodItem(id), false, `non-edible item ID ${String(id)}`);
+  }
+  assert.equal(Food.isFoodItem(ItemIdentifiers.SHARK), true);
+});
+
 test("strawberries heal 1 + 6% of max hitpoints, capped at six", () => {
   assert.equal(Food._test.getStrawberryHeal(10), 1);
   assert.equal(Food._test.getStrawberryHeal(17), 2);
