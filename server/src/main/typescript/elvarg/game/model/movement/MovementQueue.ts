@@ -21,6 +21,7 @@ import { GameConstants } from "../../GameConstants";
 import { FastDeque } from "../../../util/FastDeque";
 import { ServerPerf } from "../../../util/ServerPerf";
 import { Wilderness } from "../../content/wilderness/Wilderness";
+import { applyRunEnergyRestoreModifiers } from "../../content/combat/EquipmentEffects";
 import * as fs from "fs";
 import * as path from "path";
 export class MovementQueue {
@@ -701,7 +702,8 @@ export class MovementQueue {
     }
 
     public static runEnergyRestoreDelay(p: Player) {
-        return 1700 - (p.getSkillManager().getCurrentLevel(Skill.AGILITY) * 10);
+        const delay = 1700 - (p.getSkillManager().getCurrentLevel(Skill.AGILITY) * 10);
+        return Math.max(1, Math.round(applyRunEnergyRestoreModifiers(p, delay)));
     }
 
     public reset(clearDestination = true): MovementQueue {

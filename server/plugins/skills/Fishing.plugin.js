@@ -6,6 +6,7 @@ const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
 const { ItemIds, NpcIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const QuestRuntime = require("../quests/QuestRuntime");
 const InfernalHarpoon = require("./fishing/InfernalHarpoon.Fishing");
+const CrystalHarpoon = require("./fishing/CrystalHarpoon.Fishing");
 const Guild = require("./fishing/Guild.Fishing");
 const AnglerOutfit = require("./fishing/AnglerOutfit.Fishing");
 const MinnowPlatform = require("./fishing/MinnowPlatform.Fishing");
@@ -73,7 +74,8 @@ class FishingTool {
 // (bonus is a percentage of the chart's low/high). The inactive crystal harpoon works as
 // a dragon harpoon, and a barb-tail is a plain harpoon you can wield.
 const HARPOONS = Object.freeze([
-  { ids: [ItemIds.CRYSTAL_HARPOON, ItemIds.CRYSTAL_HARPOON_3], level: 71, bonus: 135 },
+  // Charged crystal harpoons consume one charge per fish (./fishing/CrystalHarpoon.Fishing.js).
+  { ids: [ItemIds.CRYSTAL_HARPOON, ItemIds.CRYSTAL_HARPOON_3], level: 71, bonus: 135, crystal: true },
   // Charged infernal harpoons can cook what they catch (./fishing/InfernalHarpoon.Fishing.js).
   {
     ids: [ItemIds.INFERNAL_HARPOON, ItemIds.INFERNAL_HARPOON_OR_, ItemIds.INFERNAL_HARPOON_OR__3],
@@ -408,6 +410,9 @@ function landCatch(player, tool, variant, caught) {
       player.getInventory().addItem(new Item(fish.id, fish.amount(player)));
       player.sendMessage(`You catch ${fish.caught}.`);
     }
+    if (variant.crystal) {
+      CrystalHarpoon.tryUseCharge(player);
+    }
     player.getSkillManager().addExperiences(Skill.FISHING, fish.experience * xpMultiplier);
     for (const [skill, xp] of fish.extraXp) {
       player.getSkillManager().addExperiences(skill, xp);
@@ -542,6 +547,7 @@ module.exports = {
     const activeSessions = new Map();
     TaskManager.submit(new FishingTask(activeSessions));
     InfernalHarpoon.attach(api);
+    CrystalHarpoon.attach(api);
     Guild.attach(api);
     AnglerOutfit.attach(api);
     MinnowPlatform.attach(api);

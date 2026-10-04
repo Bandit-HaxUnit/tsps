@@ -1064,6 +1064,12 @@ export interface PluginApi {
   registerMagicDefenseModifier(
     modifier: (entity: any, baseHit: number) => number
   ): void;
+  registerRunEnergyRestoreModifier(
+    modifier: (entity: any, delayMs: number) => number
+  ): void;
+  registerIncomingDamageModifier(
+    modifier: (entity: any, hitDamage: any) => void
+  ): void;
   setCombatEngine(engine: PluginCombatEngine): void;
   setCombatDamageProvider(provider: PluginCombatDamageProvider): void;
   registerBonusProvider(provider: PluginBonusProvider): void;

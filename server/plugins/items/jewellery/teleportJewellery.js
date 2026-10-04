@@ -127,8 +127,8 @@ const JEWELLERY = [
     ],
     spent: ItemIds.SKILLS_NECKLACE,
     rechargeable: true,
-    // Fountain of Rune: 6 charges once Legends' Quest is complete (Wiki).
-    recharge: { quest: "Legends' Quest" },
+    // Legends' Guild totem pole: 6 charges once Legends' Quest is complete (Wiki).
+    recharge: { totem: true, quest: "Legends' Quest" },
     wildernessLevel: DRAGONSTONE_WILDERNESS_LEVEL,
     emptyMessage: "You will need to recharge your skills necklace before you can use it again.",
     lastChargeMessage: "You use your skills necklace's last charge.",
@@ -160,7 +160,8 @@ const JEWELLERY = [
     ],
     spent: ItemIds.COMBAT_BRACELET,
     rechargeable: true,
-    recharge: { quest: "Legends' Quest" },
+    // Legends' Guild totem pole (Wiki).
+    recharge: { totem: true, quest: "Legends' Quest" },
     wildernessLevel: DRAGONSTONE_WILDERNESS_LEVEL,
     rubMessage: "You rub the bracelet...",
     emptyMessage: "You will need to recharge your combat bracelet before you can use it again.",

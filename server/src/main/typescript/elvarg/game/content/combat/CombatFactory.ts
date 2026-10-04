@@ -48,6 +48,7 @@ import { PoisonType } from "../../task/impl/CombatPoisonEffect";
 import { CombatConstants } from "./CombatConstants";
 import { Wilderness } from "../wilderness/Wilderness";
 import { PluginManager } from "../../../plugins/PluginManager";
+import { applyIncomingDamageModifiers } from "./EquipmentEffects";
 import { ServerPerf } from "../../../util/ServerPerf";
 import { World } from "../../World";
 import { ItemOnGroundManager } from "../../entity/impl/grounditem/ItemOnGroundManager";
@@ -236,6 +237,14 @@ export class CombatFactory {
                 hitDamage.multiplyDamage(CombatConstants.ELYSIAN_DAMAGE_REDUCTION);
                 victim.performGraphic(new Graphic(321, 40)); // Elysian spirit shield effect gfx
             }
+        }
+
+        // Plugin-owned reactions to a landed hit (crystal armour charges, Justiciar reduction).
+        if (victim.isPlayer() && hitDamage.getDamage() > 0) {
+            const meleeAttackBonusIndex = type == CombatType.MELEE && entity.isPlayer()
+                ? entity.getAsPlayer().getFightType().getBonusType()
+                : undefined;
+            applyIncomingDamageModifiers(victim, hitDamage, { type, attacker: entity, meleeAttackBonusIndex });
         }
 
         if (type == CombatType.MELEE && isDeveloperQueuedAttackSpec(entity)) {

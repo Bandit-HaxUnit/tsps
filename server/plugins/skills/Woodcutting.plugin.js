@@ -11,6 +11,7 @@ const { ItemIds, ObjectIds } = require("../../src/main/typescript/elvarg/util/Id
 const Guild = require("./woodcutting/Guild.Woodcutting");
 const ClueNests = require("./woodcutting/ClueNests.Woodcutting");
 const InfernalAxe = require("./woodcutting/InfernalAxe.Woodcutting");
+const CrystalAxe = require("./woodcutting/CrystalAxe.Woodcutting");
 
 const DEFAULT_TREE_STUMP_ID = ObjectIds.TREE_STUMP_2;
 // Older trees share models but not stumps, and some sit next to an unrelated stump id; key their
@@ -1042,6 +1043,7 @@ function processWoodcuttingTick(activeSessions, currentTick) {
         player.getInventory().adds(state.tree.logId, 1);
         player.sendMessage(logMessage(state.tree));
       }
+      CrystalAxe.tryUseCharge(player);
       player
         .getSkillManager()
         .addExperiences(Skill.WOODCUTTING, state.tree.xpReward * lumberjackXpMultiplier(player));
@@ -1122,6 +1124,7 @@ module.exports = {
     Guild.attach(api);
     ClueNests.attach(api);
     InfernalAxe.attach(api);
+    CrystalAxe.attach(api);
 
     api.onPlayerDisconnect(({ player }) => {
       stopWoodcutting(activeSessions, player, false);

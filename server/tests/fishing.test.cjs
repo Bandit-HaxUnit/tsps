@@ -169,6 +169,7 @@ test("the infernal harpoon cooks a third of its catch, runs on 5,000 charges and
       getInventory: () => ({
         ...container(items),
         getFreeSlots: () => 28 - items.length,
+        getAmount: (id) => items.reduce((sum, item) => sum + (item?.getId() === id ? item.getAmount() : 0), 0),
         addItem: (item) => items.push(item),
         deleteNumber: (id) => items.splice(items.findIndex((item) => item.getId() === id), 1),
       }),
@@ -220,6 +221,46 @@ test("the infernal harpoon cooks a third of its catch, runs on 5,000 charges and
   const check = player({ inventory: [I.INFERNAL_HARPOON] });
   itemActions.get("Infernal harpoon").Check({ player: check, item: check.items[0] });
   assert.equal(check.messages[0], "Your infernal harpoon has 5,000 charges left.");
+
+  // Crystal harpoon: one charge per catch, 10,000 start, elven signet saves 10%.
+  const CrystalHarpoon = require("../plugins/skills/fishing/CrystalHarpoon.Fishing");
+  const crystal = player({ weapon: I.CRYSTAL_HARPOON });
+  assert.equal(CrystalHarpoon.tryUseCharge(crystal, () => 0.5), true);
+  assert.equal(CrystalHarpoon.charges(crystal.equipment[Equipment.WEAPON_SLOT]), 9999);
+
+  const signet = player({ weapon: I.CRYSTAL_HARPOON });
+  signet.equipment[Equipment.RING_SLOT] = new Item(I.ELVEN_SIGNET, 1);
+  assert.equal(CrystalHarpoon.tryUseCharge(signet, () => 0.05), false, "the signet saves the charge");
+  assert.equal(CrystalHarpoon.charges(signet.equipment[Equipment.WEAPON_SLOT]), 10000);
+  assert.equal(CrystalHarpoon.tryUseCharge(signet, () => 0.5), true, "outside the 10% roll it spends one");
+
+  const crystalLast = player({ inventory: [I.CRYSTAL_HARPOON] });
+  crystalLast.items[0].setMetaValue("crystal-harpoon", { charges: 1 });
+  assert.equal(CrystalHarpoon.tryUseCharge(crystalLast, () => 0.5), true);
+  assert.equal(crystalLast.items[0].getId(), I.CRYSTAL_HARPOON_INACTIVE_);
+  assert.equal(findTool(crystalLast, TOOLS.HARPOON).bonus, 120, "inactive fishes as a dragon harpoon");
+
+  const crystalCheck = player({ inventory: [I.CRYSTAL_HARPOON] });
+  itemActions.get("Crystal harpoon").Check({ player: crystalCheck, item: crystalCheck.items[0] });
+  assert.equal(crystalCheck.messages[0], "Your crystal harpoon has 10,000 charges left.");
+
+  const shardRecharge = itemOnItem.find(([a, b]) => a === "Crystal shard" && b === "Crystal harpoon (inactive)")[2];
+  const recharget = player({ inventory: [I.CRYSTAL_HARPOON_INACTIVE_], });
+  recharget.items[0].setMetaValue("crystal-harpoon", { charges: 5000 });
+  recharget.items.push(new Item(I.CRYSTAL_SHARD, 60));
+  shardRecharge({
+    player: recharget,
+    usedItem: recharget.items[1],
+    usedItemId: I.CRYSTAL_SHARD,
+    usedItemSlot: 1,
+    usedWithItem: recharget.items[0],
+    usedWithItemId: I.CRYSTAL_HARPOON_INACTIVE_,
+    usedWithItemSlot: 0,
+    handled: false,
+  });
+  assert.equal(CrystalHarpoon.charges(recharget.items[0]), 11000, "60 shards add 6,000 charges");
+  assert.equal(recharget.items[0].getId(), I.CRYSTAL_HARPOON, "recharging reactivates the harpoon");
+  assert.equal(recharget.items.filter((item) => item.getId() === I.CRYSTAL_SHARD).length, 0);
 
   // Smouldering stone on a dragon harpoon: 75 Fishing and 85 Cooking.
   const make = itemOnItem.find(([a, b]) => a === "Smouldering stone" && b === "Dragon harpoon")[2];

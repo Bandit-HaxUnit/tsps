@@ -3797,6 +3797,14 @@ export class PluginManager {
         require("../game/content/combat/EquipmentEffects").registerMagicDefenseModifier(
           modifier
         ),
+      registerRunEnergyRestoreModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerRunEnergyRestoreModifier(
+          modifier
+        ),
+      registerIncomingDamageModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerIncomingDamageModifier(
+          modifier
+        ),
       setCombatEngine: (engine) => {
         if (!engine || typeof engine.getMethod !== "function") {
           console.warn(
