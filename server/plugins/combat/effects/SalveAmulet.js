@@ -1,44 +1,65 @@
+/**
+ * Salve amulets against undead (Wiki: Salve amulet; order and rounding from the
+ * Wiki DPS calculator):
+ * - salve amulet and (i): melee accuracy and damage x7/6; (e) and (ei): x6/5.
+ * - (i) also ranged x7/6, and magic +15% accuracy and +15% magic damage; (ei) 20%.
+ * The salve wins over a black mask or slayer helmet for any style it boosts; the
+ * slayer helmet asks through "salve:applies".
+ */
 const { Equipment } = require("../../../src/main/typescript/elvarg/game/model/container/impl/Equipment");
-const { ItemIdentifiers } = require("../../../src/main/typescript/elvarg/util/ItemIdentifiers");
+const { asPlayer, wornName, targetHasAttribute, scale } = require("./GearChecks");
 
-// Wiki: melee 1/6, ranged 1/6 and magic 15% against undead; the enchanted
-// variants push melee to 20% and (ei) every style to 20%. The bonus does not
-// stack with the black mask/slayer helmet (the SlayerHelmet plugin suppresses
-// its own bonus when a salve amulet is worn against an undead target).
-const AMULETS = new Map([
-  [ItemIdentifiers.SALVE_AMULET, { melee: 1 / 6 }],
-  [ItemIdentifiers.SALVE_AMULET_E_, { melee: 0.20 }],
-  [ItemIdentifiers.SALVE_AMULET_I_, { melee: 1 / 6, ranged: 1 / 6, magic: 0.15 }],
-  [ItemIdentifiers.SALVE_AMULET_EI_, { melee: 0.20, ranged: 0.20, magic: 0.20 }],
+const SALVES = new Map([
+  ["salve amulet", { melee: [7, 6] }],
+  ["salve amulet (e)", { melee: [6, 5] }],
+  ["salve amulet(i)", { melee: [7, 6], ranged: [7, 6], magicPercent: 15 }],
+  ["salve amulet(ei)", { melee: [6, 5], ranged: [6, 5], magicPercent: 20 }],
 ]);
 
-function isUndead(target) {
-  return target?.isNpc?.() && target.getAsNpc()?.getCurrentDefinition?.()?.isUndead?.() === true;
+/** The worn salve's bonuses when it boosts `style` against the entity's target. */
+function activeSalve(entity, style) {
+  const player = asPlayer(entity);
+  if (!player) return null;
+  const salve = SALVES.get(wornName(player, Equipment.AMULET_SLOT));
+  if (!salve) return null;
+  const boosts = style === "magic" ? salve.magicPercent != null : salve[style] != null;
+  return boosts && targetHasAttribute(entity, "undead") ? salve : null;
 }
 
-function undeadBonus(entity, style) {
-  if (!entity?.isPlayer?.()) {
-    return 0;
-  }
-  const player = entity.getAsPlayer();
-  const amuletId = Number(player.getEquipment().get(Equipment.AMULET_SLOT)?.getId?.() ?? -1);
-  const entry = AMULETS.get(amuletId);
-  if (!entry || !isUndead(entity.getCombat?.()?.getTarget?.())) {
-    return 0;
-  }
-  return entry[style] ?? 0;
+function meleeBoost(entity, value) {
+  const salve = activeSalve(entity, "melee");
+  return salve ? scale(value, ...salve.melee) : value;
 }
 
-function applyBonus(entity, value, style) {
-  const bonus = undeadBonus(entity, style);
-  return bonus > 0 ? value * (1 + bonus) : value;
+function rangedBoost(entity, value) {
+  const salve = activeSalve(entity, "ranged");
+  return salve ? scale(value, ...salve.ranged) : value;
+}
+
+function magicAccuracyBoost(entity, value) {
+  const salve = activeSalve(entity, "magic");
+  return salve ? scale(value, 100 + salve.magicPercent, 100) : value;
+}
+
+/** Magic damage in permille: the salve adds to the magic damage bonus. */
+function magicDamageBonus(entity, permille) {
+  const salve = activeSalve(entity, "magic");
+  return salve ? permille + salve.magicPercent * 10 : permille;
+}
+
+/** "salve:applies": { player, style } -> applies = true when a salve boosts that style. */
+function salveApplies(payload) {
+  if (activeSalve(payload?.player, payload?.style)) payload.applies = true;
 }
 
 module.exports = function registerSalveAmuletEffects(api) {
-  api.registerMeleeAttackAccuracyModifier((entity, value) => applyBonus(entity, value, "melee"));
-  api.registerMeleeHitModifier((entity, value) => applyBonus(entity, value, "melee"));
-  api.registerRangedAttackAccuracyModifier((entity, value) => applyBonus(entity, value, "ranged"));
-  api.registerRangedHitModifier((entity, value) => applyBonus(entity, value, "ranged"));
-  api.registerMagicAttackAccuracyModifier((entity, value) => applyBonus(entity, value, "magic"));
-  api.registerMagicHitModifier((entity, value) => applyBonus(entity, value, "magic"));
+  api.registerMeleeAttackAccuracyModifier(meleeBoost);
+  api.registerMeleeHitModifier(meleeBoost);
+  api.registerRangedAttackAccuracyModifier(rangedBoost);
+  api.registerRangedHitModifier(rangedBoost);
+  api.registerMagicAttackAccuracyModifier(magicAccuracyBoost);
+  api.registerMagicDamageBonusModifier(magicDamageBonus);
+  api.onCustomEvent("salve:applies", salveApplies);
 };
+
+module.exports._test = { activeSalve, meleeBoost, rangedBoost, magicAccuracyBoost, magicDamageBonus };

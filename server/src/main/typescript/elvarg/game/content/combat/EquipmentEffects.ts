@@ -14,6 +14,7 @@ export type IncomingDamageModifier = (entity: Mobile, hitDamage: HitDamage, cont
 const meleeHitModifiers: HitModifier[] = [];
 const rangedHitModifiers: HitModifier[] = [];
 const magicHitModifiers: HitModifier[] = [];
+const magicDamageBonusModifiers: HitModifier[] = [];
 const meleeAttackAccuracyModifiers: HitModifier[] = [];
 const meleeDefenseModifiers: HitModifier[] = [];
 const rangedAttackAccuracyModifiers: HitModifier[] = [];
@@ -46,6 +47,10 @@ export function registerRangedHitModifier(modifier: HitModifier): void {
 
 export function registerMagicHitModifier(modifier: HitModifier): void {
   registerModifier(magicHitModifiers, modifier);
+}
+
+export function registerMagicDamageBonusModifier(modifier: HitModifier): void {
+  registerModifier(magicDamageBonusModifiers, modifier);
 }
 
 export function registerMeleeAttackAccuracyModifier(modifier: HitModifier): void {
@@ -96,6 +101,11 @@ export function applyRangedHitModifiers(entity: Mobile, baseHit: number): number
 
 export function applyMagicHitModifiers(entity: Mobile, baseHit: number): number {
   return applyModifiers(magicHitModifiers, entity, baseHit);
+}
+
+/** The magic damage bonus in permille, after effects that add to it. */
+export function applyMagicDamageBonusModifiers(entity: Mobile, permille: number): number {
+  return applyModifiers(magicDamageBonusModifiers, entity, permille);
 }
 
 export function applyMeleeAttackAccuracyModifiers(entity: Mobile, value: number): number {

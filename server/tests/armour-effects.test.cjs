@@ -6,6 +6,10 @@ const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 
 const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
+const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+
+// Obsidian gear is matched by item name, read from the cache.
+CachePipeline.initialize();
 
 const registerObsidianEffects = require("../plugins/combat/effects/ObsidianArmour");
 const Graceful = require("../plugins/items/GracefulOutfit.plugin");

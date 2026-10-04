@@ -342,8 +342,6 @@ export class AccuracyFormulasDpsCalc {
             att = AccuracyFormulasDpsCalc.scalePercent(att, 110);
         }
 
-        att = Math.floor(applyMeleeAttackAccuracyModifiers(player, att));
-
         cache.effectiveAttackLevel = att;
         return att;
     }
@@ -385,6 +383,8 @@ export class AccuracyFormulasDpsCalc {
                 attRoll *= maxAtt + 64;
         }
 
+        // Gear bonuses (salve, slayer helm, ...) scale the finished roll (Wiki DPS calculator).
+        attRoll = Math.floor(applyMeleeAttackAccuracyModifiers(player, attRoll));
         attRoll = AccuracyFormulasDpsCalc.applyAccuracyTraits(attRoll, entity, CombatType.MELEE, traits);
 
         cache.attackMeleeRoll = Math.floor(attRoll);
@@ -497,8 +497,6 @@ export class AccuracyFormulasDpsCalc {
             rngStrength = AccuracyFormulasDpsCalc.scalePercent(rngStrength, 110);
         }
 
-        rngStrength = Math.floor(applyRangedAttackAccuracyModifiers(player, rngStrength));
-
         //    if (dragonHunter(input))
         //        rngStrength =
         cache.effectiveRangedAttack = rngStrength;
@@ -517,6 +515,9 @@ export class AccuracyFormulasDpsCalc {
         let attRoll = AccuracyFormulasDpsCalc.effectiveRangedAttack(entity);
 
         attRoll *= (accuracyBonus + 64);
+        if (entity.isPlayer()) {
+            attRoll = Math.floor(applyRangedAttackAccuracyModifiers(entity, attRoll));
+        }
 
         attRoll = AccuracyFormulasDpsCalc.applyAccuracyTraits(
             attRoll,
@@ -559,8 +560,6 @@ export class AccuracyFormulasDpsCalc {
             || CombatEquipment.wearingEliteVoid(player, CombatType.MAGIC)) {
             mag = AccuracyFormulasDpsCalc.scalePercent(mag, 145);
         }
-
-        mag = Math.floor(applyMagicAttackAccuracyModifiers(player, mag));
 
         cache.effectiveMagicLevel = mag;
         return mag;
@@ -613,6 +612,9 @@ export class AccuracyFormulasDpsCalc {
 
         let attRoll = AccuracyFormulasDpsCalc.effectiveMagicLevel(entity);
         attRoll *= (accuracyBonus + 64);
+        if (entity.isPlayer()) {
+            attRoll = Math.floor(applyMagicAttackAccuracyModifiers(entity, attRoll));
+        }
 
         attRoll = AccuracyFormulasDpsCalc.applyAccuracyTraits(
             attRoll,

@@ -21,7 +21,7 @@ type CombatStats = {
     poisonous?: boolean;
     venomous?: boolean;
     demon?: boolean;
-    undead?: boolean;
+    attributes?: string[];
     members?: boolean;
     attackType?: CombatType;
     slayerLevel?: number;
@@ -83,7 +83,7 @@ export class NpcDefinitionLoader extends DefinitionLoader {
             poisonous: monster.poisonous === true,
             venomous: monster.venomous === true,
             demon: Array.isArray(monster.attributes) && monster.attributes.includes("demon"),
-            undead: Array.isArray(monster.attributes) && monster.attributes.includes("undead"),
+            attributes: Array.isArray(monster.attributes) ? monster.attributes.map(String) : undefined,
             members: monster.members === true,
             attackType: NpcDefinitionLoader.resolveAttackType(monster.attack_type),
             slayerLevel:
@@ -233,7 +233,7 @@ export class NpcDefinitionLoader extends DefinitionLoader {
                     poisonous: stat.poisonous ?? definition.isPoisonous(),
                     venomous: stat.venomous ?? definition.isVenomous(),
                     demon: stat.demon ?? definition.isDemon(),
-                    undead: stat.undead ?? definition.isUndead(),
+                    attributes: stat.attributes ?? definition.getAttributes(),
                     members: stat.members ?? definition.isMembers(),
                     attackType: stat.attackType ?? definition.getAttackType(),
                     slayerLevel: stat.slayerLevel ?? definition.getSlayerLevel(),

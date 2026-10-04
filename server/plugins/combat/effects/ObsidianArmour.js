@@ -1,63 +1,52 @@
-const { CombatEquipment } = require("../../../src/main/typescript/elvarg/game/content/combat/CombatEquipment");
+/**
+ * Obsidian weapon bonuses (Wiki: Obsidian armour, Berserker necklace; order and
+ * rounding from the Wiki DPS calculator), melee with a TzHaar weapon only:
+ * - Helmet, platebody and platelegs together: +10% melee accuracy and damage.
+ * - Berserker necklace or (or): damage x6/5.
+ */
 const { Equipment } = require("../../../src/main/typescript/elvarg/game/model/container/impl/Equipment");
-const { ItemIdentifiers } = require("../../../src/main/typescript/elvarg/util/ItemIdentifiers");
+const { asPlayer, wearing, weaponName, scale } = require("./GearChecks");
 
-// Wiki: the berserker necklace gives +20% melee damage with an obsidian weapon,
-// and the obsidian armour set (helm, body, legs) gives a further +10% melee
-// accuracy and damage. Both need an obsidian weapon and stack.
-const NECKLACE_MULTIPLIER = 1.20;
-const SET_MULTIPLIER = 1.10;
-
-const OBSIDIAN_SET = new Map([
-  [Equipment.HEAD_SLOT, ItemIdentifiers.OBSIDIAN_HELMET],
-  [Equipment.BODY_SLOT, ItemIdentifiers.OBSIDIAN_PLATEBODY],
-  [Equipment.LEG_SLOT, ItemIdentifiers.OBSIDIAN_PLATELEGS],
+const TZHAAR_WEAPONS = new Set([
+  "tzhaar-ket-em",
+  "tzhaar-ket-om",
+  "tzhaar-ket-om (t)",
+  "toktz-xil-ak",
+  "toktz-xil-ek",
+  "toktz-mej-tal",
 ]);
+const ARMOUR = [
+  [Equipment.HEAD_SLOT, new Set(["obsidian helmet"])],
+  [Equipment.BODY_SLOT, new Set(["obsidian platebody"])],
+  [Equipment.LEG_SLOT, new Set(["obsidian platelegs"])],
+];
+const BERSERKER_NECKLACES = new Set(["berserker necklace", "berserker necklace (or)"]);
 
-function wieldingObsidianWeapon(player) {
-  const weaponId = player.getEquipment().getItems()[Equipment.WEAPON_SLOT]?.getId?.();
-  return CombatEquipment.OBSIDIAN_WEAPONS.includes(weaponId);
+function tzhaarWielder(entity) {
+  const player = asPlayer(entity);
+  return player && TZHAAR_WEAPONS.has(weaponName(player)) ? player : null;
 }
 
-function wearingObsidianSet(player) {
-  const items = player.getEquipment().getItems();
-  for (const [slot, itemId] of OBSIDIAN_SET) {
-    if (items[slot]?.getId?.() !== itemId) {
-      return false;
-    }
-  }
-  return true;
+function wearingSet(player) {
+  return ARMOUR.every(([slot, names]) => wearing(player, slot, names));
 }
 
-function obsidianPlayer(entity) {
-  if (!entity?.isPlayer?.()) {
-    return null;
-  }
-  const player = entity.getAsPlayer();
-  return wieldingObsidianWeapon(player) ? player : null;
+function setBonus(entity, value) {
+  const player = tzhaarWielder(entity);
+  return player && wearingSet(player) ? value + Math.floor(value / 10) : value;
 }
 
-function applyObsidianDamage(entity, baseHit) {
-  const player = obsidianPlayer(entity);
-  if (!player) {
-    return baseHit;
-  }
-  let hit = baseHit;
-  if (CombatEquipment.wearingObsidian(player)) {
-    hit *= NECKLACE_MULTIPLIER;
-  }
-  if (wearingObsidianSet(player)) {
-    hit *= SET_MULTIPLIER;
-  }
-  return hit;
-}
-
-function applyObsidianAccuracy(entity, value) {
-  const player = obsidianPlayer(entity);
-  return player && wearingObsidianSet(player) ? value * SET_MULTIPLIER : value;
+function damage(entity, value) {
+  const player = tzhaarWielder(entity);
+  if (!player) return value;
+  let boosted = wearingSet(player) ? value + Math.floor(value / 10) : value;
+  if (wearing(player, Equipment.AMULET_SLOT, BERSERKER_NECKLACES)) boosted = scale(boosted, 6, 5);
+  return boosted;
 }
 
 module.exports = function registerObsidianEffects(api) {
-  api.registerMeleeHitModifier(applyObsidianDamage);
-  api.registerMeleeAttackAccuracyModifier(applyObsidianAccuracy);
+  api.registerMeleeAttackAccuracyModifier(setBonus);
+  api.registerMeleeHitModifier(damage);
 };
+
+module.exports._test = { setBonus, damage };
