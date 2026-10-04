@@ -1,3 +1,4 @@
+const { restoreRunEnergy, curePoisonAndVenom } = require("./ConsumableEffects");
 const { TimerKey } = require("../../src/main/typescript/elvarg/util/timers/TimerKey");
 const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
 const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
@@ -131,25 +132,6 @@ function damageButKeepAlive(player, amount) {
   const current = getCurrentLevel(player, Skill.HITPOINTS);
   const next = Math.max(1, current - Math.max(0, amount));
   player.setHitpoints(next);
-}
-
-function restoreRunEnergy(player, amount) {
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return;
-  }
-  const next = clamp(Math.floor(player.getRunEnergy() + amount), 0, 100);
-  player.setRunEnergy(next);
-  player.getPacketSender().sendRunEnergy();
-}
-
-function curePoisonAndVenom(player) {
-  player.setPoisonDamage(0);
-  // The venom flag is sticky on purpose (poisonEntity only clears it on cure);
-  // without this a later poison could inherit the old venom state.
-  if (typeof player.setVenomed === "function") {
-    player.setVenomed(false);
-  }
-  player.getPacketSender().sendPoisonType(0);
 }
 
 function applyPoisonImmunity(player, seconds, message = true) {
@@ -521,6 +503,14 @@ function registerPotion(definition) {
     REGISTERED_POTIONS.push(normalized);
   }
 }
+
+// https://oldschool.runescape.wiki/w/Free-to-play_Ironman_guide#Boosts
+registerPotion({ name: "Beer", chains: [[Items.BEER]], emptyItemId: Items.BEER_GLASS,
+  requiresFoodPermission: true, shareable: false, effect: (player) => {
+    heal(player, 1);
+    boostSkill(player, Skill.STRENGTH, 1, 0.02);
+    lowerSkillByCurrent(player, Skill.ATTACK, 1, 0.06);
+  } });
 
 // POH refreshments use the same consumption, cooldown and stat-boost rules as potions.
 for (const [id, cup, boost] of [[Items.CUP_OF_TEA_9, Items.EMPTY_CUP_3, 1],

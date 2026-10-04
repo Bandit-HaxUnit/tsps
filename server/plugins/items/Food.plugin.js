@@ -5,6 +5,7 @@ const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
 const { Animation } = require("../../src/main/typescript/elvarg/game/model/Animation");
 const { ItemDefinition } = require("../../src/main/typescript/elvarg/game/definition/ItemDefinition");
 let pluginApi;
+const { restoreRunEnergy, curePoisonAndVenom } = require("./ConsumableEffects");
 const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
@@ -17,6 +18,16 @@ const COMBO_ATTACK_DELAY = 2;
 
 const FOOD = new Map([
   [ItemIds.KEBAB, { heal: 4 }],
+  [ItemIdentifiers.BAGUETTE, { heal: 6 }],
+  [ItemIdentifiers.TRIANGLE_SANDWICH, { heal: 6 }],
+  [ItemIdentifiers.SQUARE_SANDWICH, { heal: 6 }],
+  [ItemIdentifiers.ROLL, { heal: 6 }],
+  [ItemIdentifiers.CHOCOLATE_BAR, { heal: 3 }],
+  [ItemIdentifiers.SPINACH_ROLL, { heal: 2 }],
+  [ItemIdentifiers.STRANGE_FRUIT, { heal: 0, energy: 30, poisonProtection: 18,
+    message: "You eat the fruit. It tastes great, some of your energy is restored!" }],
+  [ItemIdentifiers.MEAT_PIE, { heal: 6, replacementId: ItemIdentifiers.HALF_A_MEAT_PIE }],
+  [ItemIdentifiers.HALF_A_MEAT_PIE, { heal: 6, replacementId: ItemIdentifiers.PIE_DISH }],
   [ItemIds.CHEESE, { heal: 4 }],
   [ItemIds.CAKE, { heal: 5, replacementId: ItemIds._2_3_CAKE }],
   [ItemIds._2_3_CAKE, { heal: 5, replacementId: ItemIds.SLICE_OF_CAKE }],
@@ -212,12 +223,17 @@ module.exports = {
         healAmount = getStrawberryHeal(maxHp);
       }
 
-      const nextHp = Math.min(currentHp + healAmount, maxHp);
-      player.setHitpoints(Math.max(0, nextHp));
+      if (healAmount > 0) player.setHitpoints(Math.max(0, Math.min(currentHp + healAmount, maxHp)));
+      if (food.energy) restoreRunEnergy(player, food.energy);
+      if (food.poisonProtection) {
+        curePoisonAndVenom(player);
+        const immunity = player.getCombat().getPoisonImmunityTimer();
+        if (immunity.secondsRemaining() < food.poisonProtection) immunity.start(food.poisonProtection);
+      }
 
       const verb = food.verb || "eat";
       const itemName = ItemDefinition.forId(itemId).getName().toLowerCase();
-      player.sendMessage(`You ${verb} the ${itemName}.`);
+      player.sendMessage(food.message ?? `You ${verb} the ${itemName}.`);
       api.emitCustomEvent("food:eaten", { player, itemId, heal: healAmount });
       return true;
     });
