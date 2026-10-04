@@ -1413,7 +1413,7 @@ export class CombatFactory {
         const rangedWeapon = player.getCombat().getRangedWeapon();
 
         // Plugin-owned ammunition (toxic blowpipe scales, the Gauntlet's bows) consumes itself.
-        if (PluginManager.decrementRangedAmmo(player, pos, amount)) {
+        if (PluginManager.decrementRangedAmmo(player, pos, amount, delayTicks)) {
             return;
         }
 
