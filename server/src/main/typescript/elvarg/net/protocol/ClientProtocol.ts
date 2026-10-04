@@ -1001,6 +1001,23 @@ export function encodeInventorySlot(slot: number, itemId: number, quantity: numb
   return encodeServerPacket(ServerPacketId.INVENTORY_SLOT, encodeItemSlot(slot, itemId, quantity));
 }
 
+/**
+ * The collection log is client-side CS2 backed by the `collection_transmit` inventory (620);
+ * a snapshot of what the player owns drives its "collected" ticks.
+ */
+export function encodeCollectionLogSnapshot(slots: Array<{ slot: number; itemId: number; quantity: number }>): Buffer {
+  const body = Buffer.alloc(2 + slots.length * 8);
+  body.writeUInt16BE(slots.length, 0);
+  let offset = 2;
+  for (const { slot, itemId, quantity } of slots) {
+    body.writeUInt16BE(slot & 0xffff, offset);
+    body.writeUInt16BE(itemId & 0xffff, offset + 2);
+    body.writeInt32BE(quantity | 0, offset + 4);
+    offset += 8;
+  }
+  return encodeServerPacket(ServerPacketId.COLLECTION_LOG_SNAPSHOT, body);
+}
+
 export type BankSlotView = { slot: number; itemId: number; quantity: number; placeholder?: boolean; tab?: number };
 
 function encodeBankSlotPayload(slot: BankSlotView): Buffer {
