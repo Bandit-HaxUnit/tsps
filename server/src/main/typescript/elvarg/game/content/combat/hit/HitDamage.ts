@@ -58,6 +58,18 @@ export class HitDamage {
         return this;
     }
 
+    /** Damage rebounded by recoil, vengeance or retribution; a death from it doesn't trigger Retribution. */
+    private reflected = false;
+
+    public markReflected(): HitDamage {
+        this.reflected = true;
+        return this;
+    }
+
+    public isReflected(): boolean {
+        return this.reflected;
+    }
+
     public getSplatType(mine: boolean): number | null {
         return this.splatTypes ? (mine ? this.splatTypes.mine : this.splatTypes.others) : null;
     }
