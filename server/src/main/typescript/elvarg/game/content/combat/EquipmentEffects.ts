@@ -1,6 +1,7 @@
 import type { Mobile } from "../../entity/impl/Mobile";
 
 export type HitModifier = (entity: Mobile, baseHit: number) => number;
+export type RunEnergyRestoreModifier = (entity: Mobile, delayMs: number) => number;
 
 const meleeHitModifiers: HitModifier[] = [];
 const rangedHitModifiers: HitModifier[] = [];
@@ -11,6 +12,7 @@ const rangedAttackAccuracyModifiers: HitModifier[] = [];
 const rangedDefenseModifiers: HitModifier[] = [];
 const magicAttackAccuracyModifiers: HitModifier[] = [];
 const magicDefenseModifiers: HitModifier[] = [];
+const runEnergyRestoreModifiers: RunEnergyRestoreModifier[] = [];
 
 const applyModifiers = (modifiers: HitModifier[], entity: Mobile, baseHit: number): number =>
   modifiers.reduce((damage, modifier) => {
@@ -61,6 +63,13 @@ export function registerMagicDefenseModifier(modifier: HitModifier): void {
   registerModifier(magicDefenseModifiers, modifier);
 }
 
+export function registerRunEnergyRestoreModifier(modifier: RunEnergyRestoreModifier): void {
+  if (typeof modifier !== "function") {
+    return;
+  }
+  runEnergyRestoreModifiers.push(modifier);
+}
+
 export function applyMeleeHitModifiers(entity: Mobile, baseHit: number): number {
   return applyModifiers(meleeHitModifiers, entity, baseHit);
 }
@@ -95,4 +104,12 @@ export function applyMagicAttackAccuracyModifiers(entity: Mobile, value: number)
 
 export function applyMagicDefenseModifiers(entity: Mobile, value: number): number {
   return applyModifiers(magicDefenseModifiers, entity, value);
+}
+
+/** Milliseconds between run-energy points; modifiers divide by the restore-rate bonus. */
+export function applyRunEnergyRestoreModifiers(entity: Mobile, delayMs: number): number {
+  return runEnergyRestoreModifiers.reduce((delay, modifier) => {
+    const next = modifier(entity, delay);
+    return Number.isFinite(next) && next > 0 ? next : delay;
+  }, delayMs);
 }
