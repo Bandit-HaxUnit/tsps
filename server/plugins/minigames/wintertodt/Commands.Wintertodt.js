@@ -122,13 +122,13 @@ function attack({ player, parts }) {
 
 module.exports = function registerWintertodtCommands(api) {
   const { DEVELOPER } = api.core.PlayerRights;
-  api.registerCommand("wintertodt", toCamp, DEVELOPER);
-  api.registerCommand("wtstart", startRound, DEVELOPER);
-  api.registerCommand("wtenergy", setEnergy, DEVELOPER);
-  api.registerCommand("wtpoints", addPoints, DEVELOPER);
-  api.registerCommand("wtwarmth", setWarmth, DEVELOPER);
-  api.registerCommand("wtrewards", setRewards, DEVELOPER);
-  api.registerCommand("wtinfo", info, DEVELOPER);
-  api.registerCommand("wtlight", lightAll, DEVELOPER);
-  api.registerCommand("wtattack", attack, DEVELOPER);
+  api.registerCommand("wintertodt", toCamp, DEVELOPER, "Teleport to the Wintertodt camp");
+  api.registerCommand("wtstart", startRound, DEVELOPER, "Start the Wintertodt round");
+  api.registerCommand("wtenergy", setEnergy, DEVELOPER, "Set Wintertodt energy");
+  api.registerCommand("wtpoints", addPoints, DEVELOPER, "Add Wintertodt points");
+  api.registerCommand("wtwarmth", setWarmth, DEVELOPER, "Set your warmth");
+  api.registerCommand("wtrewards", setRewards, DEVELOPER, "Set rewards owed by the cart");
+  api.registerCommand("wtinfo", info, DEVELOPER, "Show Wintertodt warmth and damage");
+  api.registerCommand("wtlight", lightAll, DEVELOPER, "Light braziers and heal pyromancers");
+  api.registerCommand("wtattack", attack, DEVELOPER, "Trigger a Wintertodt attack");
 };

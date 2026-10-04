@@ -513,6 +513,6 @@ module.exports = {
       api.onZoneEnter(zone, enter);
       api.onZoneExit(zone, exit);
     }
-    api.registerCommand("gemstonecrab", forceBurrow, PlayerRights.DEVELOPER);
+    api.registerCommand("gemstonecrab", forceBurrow, PlayerRights.DEVELOPER, "Force the gemstone crab to burrow");
   },
 };

@@ -315,8 +315,8 @@ module.exports = {
       player.getPacketSender().sendVarbit(MOUSEOVER_TEXT_VARBIT, 1);
     });
 
-    api.registerCommand("keybinds", ({ player }) => openKeybindings(player));
-    api.registerCommand("settings", ({ player }) => openAllSettings(player));
+    api.registerCommand("keybinds", ({ player }) => openKeybindings(player), undefined, "Open keybindings");
+    api.registerCommand("settings", ({ player }) => openAllSettings(player), undefined, "Open settings");
 
     api.log("registered");
   },

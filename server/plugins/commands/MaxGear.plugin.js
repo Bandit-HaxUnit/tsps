@@ -107,7 +107,7 @@ module.exports = {
   name: "MaxGear",
   register(api) {
     pluginApi = api;
-    api.registerCommand("maxgear", maxGear, api.core.PlayerRights.DEVELOPER);
+    api.registerCommand("maxgear", maxGear, api.core.PlayerRights.DEVELOPER, "Wear best-in-slot gear (worn items go to the bank)");
   },
   maxGear,
   loadoutFor,

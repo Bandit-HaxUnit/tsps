@@ -129,11 +129,11 @@ function toLobby({ player }) {
 module.exports = function registerGauntletCommands(api) {
   Shared.bind(api);
   const { DEVELOPER } = api.core.PlayerRights;
-  api.registerCommand("gauntlet", toLobby, DEVELOPER);
-  api.registerCommand("gauntletmap", buildMap, DEVELOPER);
-  api.registerCommand("gauntletstart", startRun, DEVELOPER);
-  api.registerCommand("gauntletboss", skipToBoss, DEVELOPER);
-  api.registerCommand("gauntlettime", setPrepTime, DEVELOPER);
-  api.registerCommand("gauntletgear", gearUp, DEVELOPER);
-  api.registerCommand("gauntletreward", setReward, DEVELOPER);
+  api.registerCommand("gauntlet", toLobby, DEVELOPER, "Teleport to the Gauntlet lobby");
+  api.registerCommand("gauntletmap", buildMap, DEVELOPER, "Build a Gauntlet map");
+  api.registerCommand("gauntletstart", startRun, DEVELOPER, "Start a Gauntlet run");
+  api.registerCommand("gauntletboss", skipToBoss, DEVELOPER, "Skip to the Gauntlet boss");
+  api.registerCommand("gauntlettime", setPrepTime, DEVELOPER, "Set Gauntlet preparation time");
+  api.registerCommand("gauntletgear", gearUp, DEVELOPER, "Give Gauntlet equipment");
+  api.registerCommand("gauntletreward", setReward, DEVELOPER, "Set Gauntlet rewards");
 };

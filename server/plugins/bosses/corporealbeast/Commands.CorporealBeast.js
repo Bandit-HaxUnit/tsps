@@ -32,7 +32,7 @@ function killBeast({ player }) {
 
 module.exports = function registerCorporealBeastCommands(api) {
   Shared.bind(api);
-  api.registerCommand("corpkill", killBeast, api.core.PlayerRights.DEVELOPER);
+  api.registerCommand("corpkill", killBeast, api.core.PlayerRights.DEVELOPER, "Kill the Corporeal Beast encounter");
 };
 
 module.exports.killBeast = killBeast;
