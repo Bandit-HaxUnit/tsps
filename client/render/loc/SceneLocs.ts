@@ -6,7 +6,7 @@ import { Loc } from "../../rs/scene/Loc";
 import { Scene } from "../../rs/scene/Scene";
 import { SceneLoc } from "../../rs/scene/SceneLoc";
 import { SceneTile } from "../../rs/scene/SceneTile";
-import { embeddedWallDecorationShift } from "../../rs/scene/WallDecorationOffset";
+import { embeddedWallDecorationShift, wallDecorationNudge } from "../../rs/scene/WallDecorationOffset";
 import { getIdFromTag } from "../../rs/scene/entity/EntityTag";
 import { LocEntity } from "../../rs/scene/entity/LocEntity";
 import { INVALID_HSL_COLOR } from "../../rs/util/ColorUtil";
@@ -372,27 +372,56 @@ export function getSceneLocs(
                 const decorationRotation = (sourceTile.wallDecoration.flags >> 6) & 3;
 
                 let embeddedShift = { x: 0, y: 0 };
-                const diagonalWall = startLocList.find(
-                    (loc) => (loc.flags & 0x3f) === LocModelType.WALL_DIAGONAL,
-                );
-                if (diagonalWall) {
-                    const wallRotation = (diagonalWall.flags >> 6) & 3;
+
+                // Straight and corner walls live on tile.wall. Shape-9 diagonal walls live
+                // in tile.locs, so resolve both host representations before rendering.
+                if (sourceTile.wall) {
+                    const wallType = sourceTile.wall.flags & 0x3f;
+                    const wallRotation = (sourceTile.wall.flags >> 6) & 3;
                     let wallDisplacement = LocType.DEFAULT_DECOR_DISPLACEMENT;
                     try {
-                        wallDisplacement = locTypeLoader.load(getIdFromTag(diagonalWall.tag)).decorDisplacement;
+                        wallDisplacement = locTypeLoader.load(
+                            getIdFromTag(sourceTile.wall.tag),
+                        ).decorDisplacement;
                     } catch {}
 
                     embeddedShift = embeddedWallDecorationShift(
                         decorationType,
                         decorationRotation,
-                        LocModelType.WALL_DIAGONAL,
+                        wallType,
                         wallRotation,
                         wallDisplacement,
                     );
                 }
 
-                const offsetX = sourceTile.wallDecoration.offsetX + embeddedShift.x;
-                const offsetY = sourceTile.wallDecoration.offsetY + embeddedShift.y;
+                if (embeddedShift.x === 0 && embeddedShift.y === 0) {
+                    const diagonalWall = startLocList.find(
+                        (loc) => (loc.flags & 0x3f) === LocModelType.WALL_DIAGONAL,
+                    );
+                    if (diagonalWall) {
+                        const wallRotation = (diagonalWall.flags >> 6) & 3;
+                        let wallDisplacement = LocType.DEFAULT_DECOR_DISPLACEMENT;
+                        try {
+                            wallDisplacement = locTypeLoader.load(
+                                getIdFromTag(diagonalWall.tag),
+                            ).decorDisplacement;
+                        } catch {}
+
+                        embeddedShift = embeddedWallDecorationShift(
+                            decorationType,
+                            decorationRotation,
+                            LocModelType.WALL_DIAGONAL,
+                            wallRotation,
+                            wallDisplacement,
+                        );
+                    }
+                }
+
+                const nudge = wallDecorationNudge(decorationType, decorationRotation);
+                const offsetX =
+                    sourceTile.wallDecoration.offsetX + embeddedShift.x + nudge.x;
+                const offsetY =
+                    sourceTile.wallDecoration.offsetY + embeddedShift.y + nudge.y;
                 if (sourceTile.wallDecoration.entity0 instanceof Model) {
                     locs.push(
                         createSceneModel(
@@ -431,8 +460,8 @@ export function getSceneLocs(
                             scene,
                             sourceTile.wallDecoration.entity1,
                             sourceTile.wallDecoration,
-                            embeddedShift.x + sceneOffset,
-                            embeddedShift.y + sceneOffset,
+                            embeddedShift.x + nudge.x + sceneOffset,
+                            embeddedShift.y + nudge.y + sceneOffset,
                             renderLevel,
                             tileX,
                             tileY,
@@ -446,8 +475,8 @@ export function getSceneLocs(
                             locTypeLoader,
                             sourceTile.wallDecoration.entity1,
                             sourceTile.wallDecoration,
-                            embeddedShift.x + sceneOffset,
-                            embeddedShift.y + sceneOffset,
+                            embeddedShift.x + nudge.x + sceneOffset,
+                            embeddedShift.y + nudge.y + sceneOffset,
                             renderLevel,
                             10,
                             planeCullLevel,

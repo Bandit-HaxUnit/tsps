@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { LocModelType } from "../rs/config/loctype/LocModelType";
-import { embeddedWallDecorationShift } from "../rs/scene/WallDecorationOffset";
+import {
+    embeddedWallDecorationShift,
+    wallDecorationNudge,
+    wallDecorationOffset,
+} from "../rs/scene/WallDecorationOffset";
 
 assert.deepEqual(
     embeddedWallDecorationShift(
@@ -48,13 +52,53 @@ assert.deepEqual(
 
 assert.deepEqual(
     embeddedWallDecorationShift(
-        LocModelType.WALL_DECORATION_DIAGONAL_DOUBLE,
-        1,
+        LocModelType.WALL_DECORATION_INSIDE,
+        0,
         LocModelType.WALL,
-        3,
+        0,
+        16,
+    ),
+    { x: 16, y: 0 },
+);
+
+assert.deepEqual(
+    embeddedWallDecorationShift(
+        LocModelType.WALL_DECORATION_INSIDE,
+        1,
+        LocModelType.WALL_CORNER,
+        0,
+        16,
+    ),
+    { x: 0, y: -16 },
+);
+
+assert.deepEqual(
+    embeddedWallDecorationShift(
+        LocModelType.WALL_DECORATION_INSIDE,
+        2,
+        LocModelType.WALL_CORNER,
+        0,
         16,
     ),
     { x: 0, y: 0 },
 );
 
-console.log("embedded diagonal wall-decoration offset check passed");
+assert.deepEqual(
+    wallDecorationOffset(LocModelType.WALL_DECORATION_OUTSIDE, 2, 16),
+    { x: -16, y: 0 },
+);
+
+assert.deepEqual(wallDecorationNudge(LocModelType.WALL_DECORATION_INSIDE, 0), {
+    x: 1,
+    y: 0,
+});
+assert.deepEqual(wallDecorationNudge(LocModelType.WALL_DECORATION_OUTSIDE, 1), {
+    x: 0,
+    y: -1,
+});
+assert.deepEqual(
+    wallDecorationNudge(LocModelType.WALL_DECORATION_DIAGONAL_DOUBLE, 3),
+    { x: 0, y: 0 },
+);
+
+console.log("wall-decoration host offset and nudge checks passed");

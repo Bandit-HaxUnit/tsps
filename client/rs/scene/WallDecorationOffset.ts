@@ -5,6 +5,8 @@ export type WallDecorationShift = {
     y: number;
 };
 
+const CARDINAL_DISPLACEMENT_X = [1, 0, -1, 0] as const;
+const CARDINAL_DISPLACEMENT_Y = [0, -1, 0, 1] as const;
 const DIAGONAL_DISPLACEMENT_X = [1, -1, -1, 1] as const;
 const DIAGONAL_DISPLACEMENT_Y = [-1, -1, 1, 1] as const;
 
@@ -16,13 +18,63 @@ function isDiagonalDecoration(type: LocModelType): boolean {
     );
 }
 
+export function wallDecorationOffset(
+    decorationType: LocModelType,
+    rotation: number,
+    wallDisplacement: number,
+): WallDecorationShift {
+    const rot = rotation & 3;
+
+    if (decorationType === LocModelType.WALL_DECORATION_OUTSIDE) {
+        return {
+            x: wallDisplacement * CARDINAL_DISPLACEMENT_X[rot],
+            y: wallDisplacement * CARDINAL_DISPLACEMENT_Y[rot],
+        };
+    }
+
+    if (
+        decorationType === LocModelType.WALL_DECORATION_DIAGONAL_OUTSIDE ||
+        decorationType === LocModelType.WALL_DECORATION_DIAGONAL_DOUBLE
+    ) {
+        const displacement = (wallDisplacement / 2) | 0;
+        return {
+            x: displacement * DIAGONAL_DISPLACEMENT_X[rot],
+            y: displacement * DIAGONAL_DISPLACEMENT_Y[rot],
+        };
+    }
+
+    return { x: 0, y: 0 };
+}
+
 /**
- * Returns the render-time correction needed when a diagonal wall decoration is
- * embedded in a shape-9 diagonal wall whose authored thickness faces the
- * opposite direction.
+ * The client nudges straight wall decorations one scene unit toward the
+ * interior after applying their authored wall displacement.
+ */
+export function wallDecorationNudge(
+    decorationType: LocModelType,
+    rotation: number,
+): WallDecorationShift {
+    if (
+        decorationType !== LocModelType.WALL_DECORATION_INSIDE &&
+        decorationType !== LocModelType.WALL_DECORATION_OUTSIDE
+    ) {
+        return { x: 0, y: 0 };
+    }
+
+    const rot = rotation & 3;
+    return {
+        x: CARDINAL_DISPLACEMENT_X[rot],
+        y: CARDINAL_DISPLACEMENT_Y[rot],
+    };
+}
+
+/**
+ * Returns the render-time correction needed to place a wall decoration on the
+ * face of its host wall.
  *
- * Shape-9 walls are stored as scene locs rather than tile.wall, so SceneBuilder
- * cannot reliably derive this correction from getWallTag().
+ * Straight/corner walls are stored on tile.wall, while shape-9 diagonal walls
+ * are scene locs. Callers resolve the host representation and pass its type,
+ * rotation, and decorDisplacement here.
  */
 export function embeddedWallDecorationShift(
     decorationType: LocModelType,
@@ -31,19 +83,37 @@ export function embeddedWallDecorationShift(
     wallRotation: number,
     wallDisplacement: number,
 ): WallDecorationShift {
+    const decRot = decorationRotation & 3;
+    const wallRot = wallRotation & 3;
+
+    if (decorationType === LocModelType.WALL_DECORATION_INSIDE) {
+        const onEdge =
+            (wallType === LocModelType.WALL && wallRot === decRot) ||
+            (wallType === LocModelType.WALL_CORNER &&
+                (wallRot === decRot || ((wallRot + 1) & 3) === decRot));
+
+        if (!onEdge) {
+            return { x: 0, y: 0 };
+        }
+
+        return wallDecorationOffset(
+            LocModelType.WALL_DECORATION_OUTSIDE,
+            decRot,
+            wallDisplacement,
+        );
+    }
+
     if (!isDiagonalDecoration(decorationType) || wallType !== LocModelType.WALL_DIAGONAL) {
         return { x: 0, y: 0 };
     }
 
-    const decRot = decorationRotation & 3;
-    const wallRot = wallRotation & 3;
     if (wallRot !== ((decRot + 2) & 3)) {
         return { x: 0, y: 0 };
     }
 
-    const displacement = (wallDisplacement / 2) | 0;
-    return {
-        x: displacement * DIAGONAL_DISPLACEMENT_X[wallRot],
-        y: displacement * DIAGONAL_DISPLACEMENT_Y[wallRot],
-    };
+    return wallDecorationOffset(
+        LocModelType.WALL_DECORATION_DIAGONAL_OUTSIDE,
+        wallRot,
+        wallDisplacement,
+    );
 }
