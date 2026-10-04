@@ -25,6 +25,8 @@
  *   graphic 3371): each tick a teleport and an exact_move from the tile it left, delay1 0, delay2
  *   30, angle the direction of travel (768 north-west, 1536 east), npc.exactMove's defaults.
  *   Rocks in the way break (graphic 2699) and any acid under them is back.
+ * - Burrowed, it isn't locked on to the player: it turns to the corner tile it will stop on as
+ *   the eye appears, and to the player's tile once, the tick after it stops (face coord).
  * - The next eye comes 9 ticks after it stops; after the second zoom it surfaces 5 ticks later
  *   (12418 with graphic 3372).
  * Guesses: 16 rocks from delve 8; 3 ticks of grace; 5 tiles a tick at delves 6-7 and 8 from 8;
@@ -43,6 +45,9 @@ const BURROW = {
   grace: 3, rocks: 24, fewerRocks: 16, rocksLand: 6, transform: 5, firstEye: 3, eyeTicks: 3,
   charge: 20, nextEye: 9, surface: 5, slamReach: 15, slamDamage: [26, 42], tilesPerOrb: 5,
   fallDelay: [0, 40],
+  /** Capture: the charge bar runs 600 cycles; the camera shakes (random 5 on each axis) until it turns. */
+  chargeCycles: 600,
+  shake: 5,
 };
 const TRAMPLE = { 5: 10, 6: 20, 7: 30 };
 const SPEED = { 5: 4, 6: 5, 7: 5 };
@@ -96,19 +101,28 @@ class BurrowPhase {
     const boss = run.boss;
     run.attacks.phase = "burrow";
     run.immuneUntil = run.ticks + BURROW.grace;
+    boss.setMobileInteraction?.(null);
     boss.performAnimation(new Animation(ANIM.BURROW));
     boss.performGraphic(Shared.gfx(GFX.BURROW));
     this.dropRocks(run.level >= 8 ? BURROW.fewerRocks : BURROW.rocks);
     this.zoomsLeft = run.level >= 6 ? 3 : 2;
     this.firesAt = Infinity;
     this.step = null;
+    const sender = run.player.getPacketSender();
+    for (const axis of [0, 1, 2]) sender.sendCameraShake?.(axis, BURROW.shake, 0, 0);
     run.attacks.after(BURROW.transform, () => {
+      sender.sendCameraReset?.();
       boss.setNpcTransformationId(Shared.NPC.DOOM_BURROWED);
       boss.performAnimation(new Animation(ANIM.IDLE));
-      this.firesAt = run.ticks + BURROW.charge;
+      this.restartCharge();
       this.step = { name: "wait", at: run.ticks + BURROW.firstEye };
       run.updateHud(true);
     });
+  }
+
+  restartCharge() {
+    this.firesAt = this.run.ticks + BURROW.charge;
+    Shared.chargeBar(this.run.boss, BURROW.chargeCycles);
   }
 
   /** Rocks fall on free tiles away from the Doom and the player, landing 6 ticks later. */
@@ -130,7 +144,7 @@ class BurrowPhase {
 
   /** Any hit resets the charge (Wiki). */
   hit() {
-    if (this.run.attacks.phase === "burrow") this.firesAt = this.run.ticks + BURROW.charge;
+    if (this.run.attacks.phase === "burrow" && Number.isFinite(this.firesAt)) this.restartCharge();
   }
 
   tick() {
@@ -139,7 +153,7 @@ class BurrowPhase {
       const { Animation } = Shared.core();
       run.boss.performAnimation(new Animation(BOSS_ANIM.BEAM_FIRE));
       run.hurt(run.delve.beam);
-      this.firesAt = run.ticks + BURROW.charge;
+      this.restartCharge();
     }
     const step = this.step;
     if (!step) return;
@@ -188,6 +202,8 @@ class BurrowPhase {
     const at = run.boss.getLocation();
     const from = { x: at.getX(), y: at.getY() };
     const path = [...between(from, target), target].filter((tile) => tile.x !== from.x || tile.y !== from.y);
+    // Capture: it turns to the corner tile it will stop on.
+    run.boss.faceTile?.(Shared.loc({ x: target.x, y: target.y, z: 0 }));
     this.step = { name: "eye", at: run.ticks + BURROW.eyeTicks, path, travelled: path.length, trampled: false };
   }
 
@@ -217,6 +233,8 @@ class BurrowPhase {
     // Capture: a teleport and an exact_move a tick (delay1 0, delay2 30, facing the way it goes).
     if (end) boss.exactMove(Shared.loc({ x: end.x, y: end.y, z: 0 }));
     if (step.path.length > 0) return;
+    // Capture: the tick after it stops it turns once to the player's tile.
+    run.attacks.after(1, () => boss.faceTile?.(run.player.getLocation()));
     this.shove();
     if (run.level >= 6) {
       this.step = { name: "orbs", at: run.ticks + 1, left: Math.max(1, Math.min(3, Math.ceil(step.travelled / BURROW.tilesPerOrb))) };
@@ -296,6 +314,7 @@ class BurrowPhase {
     const boss = run.boss;
     this.step = null;
     this.firesAt = Infinity;
+    Shared.emptyChargeBar(boss);
     boss.setNpcTransformationId(-1);
     boss.performAnimation(new Animation(ANIM.EMERGE));
     boss.performGraphic(Shared.gfx(GFX.EMERGE));
