@@ -2,6 +2,9 @@ const registerDharoksArmourEffects = require("./effects/DharoksArmour");
 const registerObsidianEffects = require("./effects/ObsidianArmour");
 const registerInquisitorsArmourEffects = require("./effects/InquisitorsArmour");
 const registerChaosGauntletsEffects = require("./effects/ChaosGauntlets");
+const registerSalveAmuletEffects = require("./effects/SalveAmulet");
+const registerDragonHunterEffects = require("./effects/DragonHunter");
+const registerDemonbaneEffects = require("./effects/Demonbane");
 
 module.exports = {
   name: "EquipmentEffects",
@@ -10,5 +13,8 @@ module.exports = {
     registerObsidianEffects(api);
     registerInquisitorsArmourEffects(api);
     registerChaosGauntletsEffects(api);
+    registerSalveAmuletEffects(api);
+    registerDragonHunterEffects(api);
+    registerDemonbaneEffects(api);
   },
 };

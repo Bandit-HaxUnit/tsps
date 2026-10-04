@@ -7,7 +7,7 @@ import { Mobile } from "../../../entity/impl/Mobile";
 import type { Player } from "../../../entity/impl/player/Player";
 import type { NPC } from "../../../entity/impl/npc/NPC";
 import type { CombatSpell } from "../magic/CombatSpell";
-import { applyMagicHitModifiers, applyMeleeHitModifiers } from "../EquipmentEffects";
+import { applyMagicDamageBonusModifiers, applyMagicHitModifiers, applyMeleeHitModifiers, applyRangedHitModifiers } from "../EquipmentEffects";
 import { CombatEquipment } from "../CombatEquipment";
 import { CombatSpecial } from "../CombatSpecial";
 import { SpecialAttackMaximumHitSource, WeaponSpecialTraits } from "../WeaponSpecialTraits";
@@ -316,7 +316,7 @@ export class DamageFormulas {
                 );
         }
 
-        return Math.floor(maxHit);
+        return Math.floor(applyRangedHitModifiers(player, maxHit));
     }
 
     /**
@@ -348,11 +348,11 @@ export class DamageFormulas {
         const prayerPermille = DamageFormulas.magicDamagePrayerPermille(player);
         const eliteVoidPermille = CombatEquipment.wearingEliteVoid(player, CombatType.MAGIC) ? 50 : 0;
 
-        return DamageFormulas.scaleRatio(
-            maxHit,
-            1000 + equipmentPermille + prayerPermille + eliteVoidPermille,
-            1000
+        const bonusPermille = applyMagicDamageBonusModifiers(
+            player,
+            equipmentPermille + prayerPermille + eliteVoidPermille
         );
+        return DamageFormulas.scaleRatio(maxHit, 1000 + bonusPermille, 1000);
     }
 
     private static magicDamagePrayerPermille(player: Player): number {

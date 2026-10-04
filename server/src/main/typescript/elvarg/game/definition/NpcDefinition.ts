@@ -27,6 +27,8 @@ export class NpcDefinition {
     private poisonous: boolean = false;
     private venomous: boolean = false;
     private demon: boolean = false;
+    /** The Wiki's monster attributes: undead, demon, dragon, kalphite, ... */
+    private attributes: readonly string[] = [];
     /** Wiki "members" flag from monsters-complete.json; false for NPCs not in the dump. */
     private members: boolean = false;
     /** Which default CombatMethod this NPC fights with; see NPC.getCombatMethod(). */
@@ -206,6 +208,14 @@ export class NpcDefinition {
 
     public isDemon(): boolean {
         return this.demon;
+    }
+
+    public getAttributes(): readonly string[] {
+        return this.attributes;
+    }
+
+    public hasAttribute(attribute: string): boolean {
+        return this.attributes.includes(attribute);
     }
 
     public isMembers(): boolean {

@@ -3773,6 +3773,10 @@ export class PluginManager {
         require("../game/content/combat/EquipmentEffects").registerMagicHitModifier(
           modifier
         ),
+      registerMagicDamageBonusModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerMagicDamageBonusModifier(
+          modifier
+        ),
       registerMeleeAttackAccuracyModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerMeleeAttackAccuracyModifier(
           modifier
