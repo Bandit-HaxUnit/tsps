@@ -108,9 +108,11 @@ function equipment(event) {
   }
 }
 
-function processPlayer({ player }) {
-  const p = player.getLocation();
-  if (borrowed.has(player) && (p.getZ() !== 0 || p.getX() < 1350 || p.getX() > 1400 || p.getY() < 3600 || p.getY() > 3650)) cleanup({ player });
+function process() {
+  for (const player of borrowed) {
+    const p = player.getLocation();
+    if (p.getZ() !== 0 || p.getX() < 1350 || p.getX() > 1400 || p.getY() < 3600 || p.getY() > 3650) cleanup({ player });
+  }
 }
 
 function cleanup({ player }) {
@@ -119,4 +121,4 @@ function cleanup({ player }) {
   if ([I.CORMORANTS_GLOVE, I.CORMORANTS_GLOVE_2].includes(player.getEquipment().get(H.core.Equipment.WEAPON_SLOT).getId())) glove(player, -1);
 }
 
-module.exports = { ATTRIBUTE, talk, borrow, fish, cut, tench, equipment, processPlayer, cleanup };
+module.exports = { ATTRIBUTE, talk, borrow, fish, cut, tench, equipment, process, cleanup };

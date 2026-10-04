@@ -16,6 +16,8 @@ const DriftNets = require("./DriftNets.Hunter");
 const Dungeon = require("./Dungeon.Hunter");
 const Broavs = require("./Broavs.Hunter");
 let task;
+// Bird house status only changes when a full house finishes, so a slow sweep is enough.
+const BIRDHOUSE_SYNC_TICKS = 50;
 
 function start(api) {
   H.api = api; H.core = api.core; H.data = require("./Data.Hunter").build(api.core); H.tick = 0;
@@ -27,7 +29,10 @@ function start(api) {
 
 function tick() {
   H.tick++;
-  C.processActions(); Traps.process(); C.processHidden(); Catching.process(); Tracking.process(); Pitfalls.process(); Rabbits.process(); Herbiboar.process(); Crabs.process(); DriftNets.process(); Dungeon.process(); Broavs.process();
+  C.processActions(); Traps.process(); C.processHidden(); Catching.process(); Aerial.process(); Tracking.process(); Pitfalls.process(); Rabbits.process(); Herbiboar.process(); Crabs.process(); DriftNets.process(); Dungeon.process(); Broavs.process();
+  if (H.tick % BIRDHOUSE_SYNC_TICKS === 0) {
+    for (const player of H.players) if (player.isPlayerBot?.() !== true) Birdhouses.sync({ player });
+  }
 }
 
 function cleanup(event) {
@@ -39,15 +44,6 @@ function shutdown() {
   task?.stop(); Rabbits.shutdown();
   for (const player of H.players) cleanup({ player });
   for (const npc of H.hidden.keys()) C.reveal(npc);
-}
-
-function processPlayer(event) {
-  Birdhouses.sync(event); Crabs.sync(event); Catching.processPlayer(event); Aerial.processPlayer(event);
-  for (const trap of H.traps) if (trap.player === event.player && trap.area !== event.player.getPrivateArea()) {
-    // Recover reusable tools before changing instances, rather than leave them in an inaccessible area.
-    for (const item of Traps.returnedItems(trap)) if (!C.exchange(event.player, [], [item])) C.drop(event.player, [item], event.player.getLocation());
-    Traps.remove(trap);
-  }
 }
 
 function catchNpc(event) { return Aerial.fish(event) || Dungeon.catchBat(event) || Catching.catchNpc(event); }
@@ -67,7 +63,7 @@ function npcUse(event) { Aerial.tench(event); if (!event.handled) Broavs.train(e
 function pitBuild(event) { return Broavs.build(event) || Pitfalls.build(event); }
 function dismantle(event) { return Broavs.dismantle(event) || Traps.dismantle(event); }
 function attack(event) { return Herbiboar.attack(event) || Tracking.catchPrey(event); }
-function login(event) { H.players.add(event.player); Birdhouses.login(event); Crabs.login(event); DriftNets.login(event); }
+function login(event) { H.players.add(event.player); Birdhouses.login(event); Crabs.login(event); DriftNets.login(event); Catching.login(event); }
 function equipment(event) { Catching.equipment(event); Aerial.equipment(event); }
 
 function release({ player, itemId }) {
@@ -77,4 +73,4 @@ function release({ player, itemId }) {
   return true;
 }
 
-module.exports = { start, tick, shutdown, login, inspect, attack, cleanup, processPlayer, catchNpc, npcRoute, objectUse, itemUse, equipment, release, npcUse, pitBuild, dismantle };
+module.exports = { start, tick, shutdown, login, inspect, attack, cleanup, catchNpc, npcRoute, objectUse, itemUse, equipment, release, npcUse, pitBuild, dismantle };

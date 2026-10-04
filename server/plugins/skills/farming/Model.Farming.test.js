@@ -112,7 +112,7 @@ const Patches = require("./Patches.Farming");
 const Services = require("./Services.Farming");
 const hooks = {};
 Patches.attach(new Proxy({}, { get: (_, name) => (...args) => (hooks[name] ??= []).push(args[0]) }));
-const login = hooks.onPlayerLogin[0], processPlayer = hooks.onPlayerProcess[0], logout = hooks.onPlayerLogout[0];
+const login = hooks.onPlayerLogin[0], logout = hooks.onPlayerLogout[0], mapSquareChanged = hooks.onPlayerMapSquareChange[0];
 function testPlayer() {
     const attributes = new Map(), varbits = new Map();
     const inventory = { items: [], scans: 0, refreshes: 0,
@@ -136,21 +136,37 @@ try {
     for (let tick = 1; tick <= 8; tick++) {
         clock = now + tick * 600;
         player.location.setX(3200 + tick);
-        processPlayer({ player });
+        Patches.tick();
     }
     assert.equal(growthCalls, 1, "movement must not restart growth each tick");
-    assert.equal(player.inventory.scans, 1, "bank and inventory scans keep the five-second cadence");
-    clock = now + 5400;
-    processPlayer({ player });
-    assert.equal(growthCalls, 2);
+    assert.equal(player.inventory.scans, 1, "nothing due means no bank and inventory scans");
+    clock = now + 5 * Model.MINUTE + 600;
+    Patches.tick();
+    assert.equal(growthCalls, 2, "the five-minute farming tick still checks everyone");
     logout({ player });
     login({ player });
-    assert.equal(growthCalls, 3, "relogin resets the growth timestamp");
+    assert.equal(growthCalls, 3, "relogin grows straight away");
+
+    // A planted patch grows on its own farming tick, not on a poll.
+    const farmer = testPlayer();
+    const herbFarm = planted();
+    const herbState = herbFarm.patches[Data.patchKey(herb)];
+    herbState.nextAt = Model.nextGrowth(clock, Data.CROPS.get("RANARR").minutes, herbFarm.offset);
+    farmer.setAttribute(Patches.FARM_ATTRIBUTE, herbFarm);
+    login({ player: farmer });
+    const stage = herbState.stage, dueAt = herbState.nextAt;
+    clock = dueAt - 600;
+    Patches.tick();
+    assert.equal(herbState.stage, stage, "nothing grows before its farming tick");
+    clock = dueAt + 600;
+    Patches.tick();
+    assert.equal(herbState.stage, stage + 1, "growth lands on the farming tick");
+    logout({ player: farmer });
 
     // Movement must use the region index, not iterate the entire patch table.
     const iterator = Data.CACHE.patches[Symbol.iterator];
     Data.CACHE.patches[Symbol.iterator] = () => { throw new Error("full patch scan on movement"); };
-    try { player.location.setX(3200); processPlayer({ player }); }
+    try { player.location.setX(3200); mapSquareChanged({ player }); Patches.tick(); }
     finally { Data.CACHE.patches[Symbol.iterator] = iterator; }
 
     // Compare the indexed selection to the original full scan, including reused varbits.

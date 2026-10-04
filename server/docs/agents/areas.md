@@ -50,3 +50,15 @@ register(api) {
   is asked, and can trail a teleport by a tick.
 
 See `plugins/areas/Wilderness.plugin.js` for the worked example.
+
+## Content spread across the map
+
+An Area fits a compact zone with rules. Content scattered over the map (farming patches, bird
+houses, hunting grounds) doesn't fit one: an actor holds one area at a time, and most of the
+cost is usually not about location anyway. Instead:
+
+- Sync per map square with `api.onPlayerMapSquareChange`, which fires once per 64x64 square
+  crossed (walking or teleporting), not per tile.
+- Drive timed work from one `core.Task` that visits only what is active (players with queued
+  work, traps, glove holders), or spreads a per-player sweep over several ticks.
+- Walk a player's own state, not every definition in the game.

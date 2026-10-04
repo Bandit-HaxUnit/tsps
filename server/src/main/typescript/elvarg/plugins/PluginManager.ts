@@ -65,6 +65,7 @@ import {
   PluginActiveRegionsEvent,
   PluginPlayerDisconnectEvent,
   PluginPlayerLoginEvent,
+  PluginPlayerMapSquareChangeEvent,
   PluginServerLifecycleEvent,
   PluginFriendEvent,
   PluginRegionLoadedEvent,
@@ -167,6 +168,7 @@ export class PluginManager {
   private static loadedPlugins: string[] = [];
   private static lastPersistenceOverride: string | null = null;
   private static loginHooks: PluginHook<PluginPlayerLoginEvent>[] = [];
+  private static mapSquareChangeHooks: PluginHook<PluginPlayerMapSquareChangeEvent>[] = [];
   private static disconnectHooks: PluginHook<PluginPlayerDisconnectEvent>[] = [];
   private static logoutHooks: PluginHook<PluginPlayerLogoutEvent>[] = [];
   private static socialPacketHooks: PluginHook<PluginSocialPacketEvent>[] = [];
@@ -611,6 +613,12 @@ export class PluginManager {
 
     // Do not flood login with non-visible replacement regions.
     // Visible replacements are sent during map-region packets.
+  }
+
+  public static emitPlayerMapSquareChange(event: PluginPlayerMapSquareChangeEvent): void {
+    for (const hook of PluginManager.mapSquareChangeHooks) {
+      PluginManager.executeHook(hook, event, "map_square_change", "player_map_square_change");
+    }
   }
 
   public static emitPlayerDisconnect(event: PluginPlayerDisconnectEvent): void {
@@ -2404,6 +2412,11 @@ export class PluginManager {
 
     return {
       core: PluginManager.getCoreApi(),
+      onPlayerMapSquareChange: (handler) => {
+        if (typeof handler === "function") {
+          PluginManager.mapSquareChangeHooks.push({ pluginName, handler });
+        }
+      },
       onPlayerLogin: (handler) => {
         if (typeof handler !== "function") {
           return;
