@@ -300,7 +300,8 @@ function removeDroppedFlagObject(flagTeam) {
 }
 
 function updateFlagStand(flagTeam, objectId) {
-  ObjectManager.register(new core.GameObject(objectId, getTeamData(flagTeam).standLocation, 10, 2, null), true);
+  const team = getTeamData(flagTeam);
+  ObjectManager.register(new core.GameObject(objectId, team.standLocation, team.standType, team.standFace, null), true);
 }
 
 function restoreFlagToBase(flagTeam) {
