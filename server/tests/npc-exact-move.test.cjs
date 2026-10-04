@@ -102,6 +102,30 @@ test('a face tile lasts a tick; crawling stays until it is turned off', () => {
   assert.equal(npc.isCrawling(), true);
 });
 
+test('an NPC blocks players stepping onto it, a walk-through pet does not', () => {
+  const { World } = require('../dist/game/World');
+  const { MovementQueue } = require('../dist/game/model/movement/MovementQueue');
+  const npc = new NPC(3106, new Location(3300, 3300, 0));
+  const pet = new NPC(3106, new Location(3300, 3302, 0));
+  pet.setPet(true);
+  assert.ok(World.getNpcs().add(npc, true), 'registered');
+  assert.ok(World.getNpcs().add(pet, true), 'registered');
+  try {
+    // osrs-docs: Entity Collision - the NPC flag is checked by players too, so walking
+    // to interact with an NPC stops against it instead of stepping onto its tile
+    // (entity reach excludes overlap, so an overlap would never open the dialogue).
+    const player = { isNpc: () => false, isPlayer: () => true, getSize: () => 1, getPrivateArea: () => null };
+    const occupied = (x, y) => MovementQueue.prototype.isDynamicallyOccupied.call(
+      { character: player }, new Location(x, y, 0));
+    assert.equal(occupied(3300, 3300), true, 'a player cannot step onto a normal NPC');
+    assert.equal(occupied(3300, 3301), false, 'the free tile beside it is still walkable');
+    assert.equal(occupied(3300, 3302), false, 'followers/pets are walk-through');
+  } finally {
+    World.getNpcs().remove(npc);
+    World.getNpcs().remove(pet);
+  }
+});
+
 test('the attack timing hook lets an attack ignore the timer, or leave it as it was', () => {
   const { PluginManager } = require('../dist/plugins/PluginManager');
   const api = PluginManager.createApi('timing-test');
