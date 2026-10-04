@@ -36,7 +36,8 @@ function createLightFireAction(spec, world) {
       const candidate = new Location(loc.getX() + dx, loc.getY() + dy, loc.getZ());
       if (
         !RegionManager.blocked(candidate, player.getPrivateArea?.() ?? null) &&
-        !ObjectManager.existsLocation(candidate)
+        !ObjectManager.existsLocation(candidate) &&
+        !Firemaking.isFireTileBlocked?.(candidate, player.getPrivateArea?.() ?? null)
       ) {
         requestMovement(player, candidate.getX(), candidate.getY(), {
           reason: "brain_light_tile",

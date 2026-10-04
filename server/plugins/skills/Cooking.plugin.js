@@ -61,7 +61,8 @@ const COOKABLES = Object.freeze([
 
 const COOKABLE_BY_RAW = new Map(COOKABLES.map((cookable) => [cookable.raw, cookable]));
 
-const COOKABLE_OBJECT_NAMES = new Set(["Cooking range", "Range", "Stove", "Fire"]);
+const FIRE_OBJECT_NAMES = new Set(["Fire", "Forester's Campfire"]);
+const COOKABLE_OBJECT_NAMES = new Set(["Cooking range", "Range", "Stove", ...FIRE_OBJECT_NAMES]);
 
 function isSuccess(player, cookable) {
   const cookingLevel = player.getSkillManager().getCurrentLevel(Skill.COOKING);
@@ -103,7 +104,7 @@ function startCooking(player, object, cookable, activeSessions) {
   stopCooking(activeSessions, player, false);
   activeSessions.set(player, {
     cookable,
-    animation: object.getDefinition().getName() === "Fire" ? FIRE_COOK_ANIMATION : RANGE_COOK_ANIMATION,
+    animation: FIRE_OBJECT_NAMES.has(object.getDefinition().getName()) ? FIRE_COOK_ANIMATION : RANGE_COOK_ANIMATION,
     objectId: object.getId(),
     location: object.getLocation().clone(),
     privateArea: object.getPrivateArea(),
@@ -198,13 +199,15 @@ let pluginApi;
 function handleCook(activeSessions, event) {
   const definition = event.object.getDefinition();
   const actions = definition.getInteractions() ?? [];
+  const isFire = FIRE_OBJECT_NAMES.has(definition.getName());
+  // A Forester's Campfire has no Cook action; food is used on it directly.
   if (!COOKABLE_OBJECT_NAMES.has(definition.getName())
-    || (actions.some(Boolean) && !actions.includes("Cook"))) {
+    || (actions.some(Boolean) && !actions.includes("Cook") && !isFire)) {
     return;
   }
 
   const cookable = COOKABLE_BY_RAW.get(event.itemId);
-  if (!cookable || (cookable.rangeOnly && definition.getName() === "Fire")) {
+  if (!cookable || (cookable.rangeOnly && isFire)) {
     return;
   }
 
