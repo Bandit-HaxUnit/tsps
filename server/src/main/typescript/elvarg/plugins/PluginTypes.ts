@@ -1051,6 +1051,10 @@ export interface PluginApi {
   resetPluginPerformanceStats(): void;
   setPluginPerformanceProfilingEnabled(enabled: boolean): void;
   isPluginPerformanceProfilingEnabled(): boolean;
+  /** Adjusts effective levels after prayers/stance, before equipment bonuses and special multipliers. */
+  registerCombatEffectiveLevelModifier(
+    modifier: (entity: any, level: number, context: import("../game/content/combat/EquipmentEffects").CombatEffectiveLevelContext) => number
+  ): void;
   registerMeleeHitModifier(
     modifier: (entity: any, baseHit: number) => number
   ): void;

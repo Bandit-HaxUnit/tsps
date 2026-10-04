@@ -1,7 +1,13 @@
 import type { Mobile } from "../../entity/impl/Mobile";
 import type { HitDamage } from "./hit/HitDamage";
+import type { CombatType } from "./CombatType";
 
 export type HitModifier = (entity: Mobile, baseHit: number) => number;
+export interface CombatEffectiveLevelContext {
+  combatType: CombatType;
+  purpose: "accuracy" | "damage";
+}
+export type CombatEffectiveLevelModifier = (entity: Mobile, level: number, context: CombatEffectiveLevelContext) => number;
 export type RunEnergyRestoreModifier = (entity: Mobile, delayMs: number) => number;
 export interface IncomingDamageContext {
   type?: unknown;
@@ -12,6 +18,7 @@ export interface IncomingDamageContext {
 export type IncomingDamageModifier = (entity: Mobile, hitDamage: HitDamage, context: IncomingDamageContext) => void;
 
 const meleeHitModifiers: HitModifier[] = [];
+const combatEffectiveLevelModifiers: CombatEffectiveLevelModifier[] = [];
 const rangedHitModifiers: HitModifier[] = [];
 const magicHitModifiers: HitModifier[] = [];
 const magicDamageBonusModifiers: HitModifier[] = [];
@@ -39,6 +46,18 @@ const registerModifier = (modifiers: HitModifier[], modifier: HitModifier): void
 
 export function registerMeleeHitModifier(modifier: HitModifier): void {
   registerModifier(meleeHitModifiers, modifier);
+}
+
+/** Runs after prayers/stance bonuses, before multiplying equipment bonuses. */
+export function registerCombatEffectiveLevelModifier(modifier: CombatEffectiveLevelModifier): void {
+  if (typeof modifier === "function") combatEffectiveLevelModifiers.push(modifier);
+}
+
+export function applyCombatEffectiveLevelModifiers(entity: Mobile, level: number, context: CombatEffectiveLevelContext): number {
+  return combatEffectiveLevelModifiers.reduce((value, modifier) => {
+    const next = modifier(entity, value, context);
+    return Number.isFinite(next) ? next : value;
+  }, level);
 }
 
 export function registerRangedHitModifier(modifier: HitModifier): void {
