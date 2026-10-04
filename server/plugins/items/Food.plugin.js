@@ -22,7 +22,15 @@ const FOOD = new Map([
   [ItemIds.SLICE_OF_CAKE, { heal: 5 }],
   [ItemIds.NULL_2422, { heal: 12, verb: "use" }],
   [ItemIds.JANGERBERRIES, { heal: 2 }],
-  [ItemIds.WORM_CRUNCHIES, { heal: 7, karambwan: true }],
+  [ItemIds.WORM_CRUNCHIES, { heal: 8, karambwan: true }],
+  [ItemIdentifiers.CHOCCHIP_CRUNCHIES, { heal: 7, karambwan: true }],
+  [ItemIdentifiers.SPICY_CRUNCHIES, { heal: 7, karambwan: true }],
+  [ItemIdentifiers.TOAD_CRUNCHIES, { heal: 8, karambwan: true }],
+  [ItemIdentifiers.WORM_BATTA, { heal: 11, karambwan: true }],
+  [ItemIdentifiers.TOAD_BATTA, { heal: 11, karambwan: true }],
+  [ItemIdentifiers.CHEESE_TOM_BATTA, { heal: 11, karambwan: true }],
+  [ItemIdentifiers.FRUIT_BATTA, { heal: 11, karambwan: true }],
+  [ItemIdentifiers.VEGETABLE_BATTA, { heal: 11, karambwan: true }],
   [ItemIds.EDIBLE_SEAWEED, { heal: 4 }],
   [ItemIds.ANCHOVIES, { heal: 1 }],
   [ItemIds.SHRIMPS, { heal: 3 }],
@@ -84,7 +92,7 @@ const FOOD = new Map([
   [ItemIdentifiers.CHOCOLATE_CAKE, { heal: 5, replacementId: ItemIdentifiers._2_3_CHOCOLATE_CAKE }],
   [ItemIdentifiers._2_3_CHOCOLATE_CAKE, { heal: 5, replacementId: ItemIdentifiers.CHOCOLATE_SLICE }],
   [ItemIdentifiers.CHOCOLATE_SLICE, { heal: 5 }],
-  [ItemIdentifiers.STRAWBERRY, { heal: 1 }],
+  [ItemIdentifiers.STRAWBERRY, { heal: 1, strawberry: true }],
   [ItemIdentifiers.COOKED_SWEETCORN, { heal: 0, sweetcorn: true }],
 ]);
 
@@ -101,6 +109,11 @@ function getAnglerfishHeal(currentHp) {
   return Math.min(22, heal);
 }
 
+/** Wiki: 1 + 6% of the player's maximum hitpoints, capped at 6. */
+function getStrawberryHeal(maxHp) {
+  return Math.min(6, 1 + Math.floor(maxHp * 0.06));
+}
+
 function canEat(player, itemId) {
   return pluginApi.emitCanEat(player, itemId) !== false;
 }
@@ -114,6 +127,7 @@ module.exports = {
   isFoodItem(itemId) {
     return FOOD.has(itemId);
   },
+  _test: { getAnglerfishHeal, getStrawberryHeal },
   register(api) {
     pluginApi = api;
     api.onItemFirstAction((event) => {
@@ -178,6 +192,8 @@ module.exports = {
         maxHp += healAmount;
       } else if (food.sweetcorn) {
         healAmount = Math.floor(maxHp / 10) + 1;
+      } else if (food.strawberry) {
+        healAmount = getStrawberryHeal(maxHp);
       }
 
       const nextHp = Math.min(currentHp + healAmount, maxHp);
