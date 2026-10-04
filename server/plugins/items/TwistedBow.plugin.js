@@ -5,6 +5,8 @@ const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
 
 const TWISTED_BOW_ID = ItemIdentifiers.TWISTED_BOW;
 const MAGIC_CAP = 250;
+/** Chambers of Xeric monsters (the "xerician" attribute) raise the cap to 350. */
+const XERICIAN_MAGIC_CAP = 350;
 
 function getEquippedWeaponId(player) {
   return Number(player?.getEquipment?.()?.get?.(Equipment.WEAPON_SLOT)?.getId?.() ?? -1);
@@ -43,14 +45,19 @@ function getTargetMagicAccuracy(target) {
   return 0;
 }
 
+function isXerician(target) {
+  return target?.isNpc?.() === true
+    && target.getAsNpc()?.getCurrentDefinition?.()?.hasAttribute?.("xerician") === true;
+}
+
 /**
- * The target's Magic level or magic accuracy, whichever is higher, capped at 250
- * (Wiki: Twisted bow). The cap is 350 inside the Chambers of Xeric, which has no
- * raid area here yet.
+ * The target's Magic level or magic accuracy, whichever is higher, capped at 250,
+ * or 350 against Chambers of Xeric monsters (Wiki: Twisted bow).
  */
 function getTwistedBowScaleValue(target) {
+  const cap = isXerician(target) ? XERICIAN_MAGIC_CAP : MAGIC_CAP;
   const scale = Math.max(getTargetMagicLevel(target), getTargetMagicAccuracy(target));
-  return Math.max(0, Math.min(MAGIC_CAP, Math.floor(scale)));
+  return Math.max(0, Math.min(cap, Math.floor(scale)));
 }
 
 function twistedBowDamagePercent(scale) {

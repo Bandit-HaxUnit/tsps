@@ -124,6 +124,18 @@ test('Twisted bow scales on an NPC\'s magic accuracy when it beats its Magic lev
     assert.equal(getTwistedBowScaleValue(zuk), 250, 'magic accuracy 550, capped at 250');
     assert.equal(twistedBowDamagePercent(250), 215);
     assert.equal(twistedBowAccuracyPercent(250), 140);
+
+    const olm = {
+        isPlayer: () => false,
+        isNpc: () => true,
+        getAsNpc: () => olm,
+        getCurrentDefinition: () => ({
+            getStats: () => [250, 0, 0, 0, 250, 0, 0, 400, 0, 0],
+            hasAttribute: (attribute) => attribute === 'xerician',
+        }),
+    };
+    assert.equal(getTwistedBowScaleValue(olm), 350, 'the Chambers of Xeric cap');
+    assert.equal(twistedBowDamagePercent(350), 248);
 });
 
 test('ranged gear damage modifiers reach the ranged max hit', () => {
