@@ -1,3 +1,11 @@
+/**
+ * Followers, ownership, storage and pet-specific behaviour.
+ *
+ * Ownership is item-backed: a pet item in the inventory, any bank tab, or an active
+ * follower is the durable record; `pets.owned` remembers which pets Probita insures
+ * for reclaim. Variants chosen with Metamorphosis persist in `pets:variant` keyed by
+ * pet family, and are re-applied when the follower is summoned.
+ */
 const { NPC } = require("../../src/main/typescript/elvarg/game/entity/impl/npc/NPC");
 const { Animation } = require("../../src/main/typescript/elvarg/game/model/Animation");
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
@@ -6,14 +14,17 @@ const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
 const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
 const { Bank } = require("../../src/main/typescript/elvarg/game/model/container/impl/Bank");
 const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
-const {NpcIdentifiers} = require("../../src/main/typescript/elvarg/util/NpcIdentifiers");
+const { NpcIdentifiers } = require("../../src/main/typescript/elvarg/util/NpcIdentifiers");
 
 const CURRENT_PET_ATTRIBUTE = "pets:current";
+/** The item of the follower the player logged out with; re-summoned on login. */
+const LAST_PET_ATTRIBUTE = "pets:last";
+const VARIANT_ATTRIBUTE = "pets:variant";
+/** Every pet item the player has ever been awarded; Probita reclaims from it. */
+const OWNED_ATTRIBUTE = "pets.owned";
 
 const INTERACTION_ANIM = new Animation(827);
 const FOLLOWER_INDEX_VARP = 447;
-/** Every pet item the player has ever been awarded; Probita reclaims from it. */
-const OWNED_ATTRIBUTE = "pets.owned";
 const MAX_XP = 200000000;
 let pluginApi = null;
 
@@ -26,19 +37,29 @@ const PETS = [
   { enumName: "SCURRY", petId: 7219, morphId: 0, itemId: 28801, dialogue: -1 },
   { enumName: "LIL_ZIK", petId: NpcIdentifiers.LIL_ZIK, morphId: 0, itemId: 22473, dialogue: -1 },
   { enumName: "TUMEKENS_GUARDIAN", petId: NpcIdentifiers.TUMEKENS_GUARDIAN, morphId: 0, itemId: 27352, dialogue: -1 },
-  { enumName: "SMOL_HEREDIT", petId: NpcIdentifiers.SMOL_HEREDIT_2, morphId: 0, itemId: 28960, dialogue: -1 },
+  { enumName: "SMOL_HEREDIT", petId: NpcIdentifiers.SMOL_HEREDIT_2, morphId: 0, itemId: 28960, dialogue: -1, mainDrop: true },
   { enumName: "NEXLING", petId: NpcIdentifiers.NEXLING, morphId: 0, itemId: 26348, dialogue: -1 },
   { enumName: "VORKI", petId: NpcIdentifiers.VORKI, morphId: 0, itemId: 21992, dialogue: -1 },
   { enumName: "MUPHIN", petId: NpcIdentifiers.MUPHIN, morphId: 0, itemId: 27590, dialogue: -1 },
   { enumName: "LIL_CREATOR", petId: NpcIdentifiers.LIL_CREATOR, morphId: 0, itemId: 25348, dialogue: -1 },
   { enumName: "LIL_DESTRUCTOR", petId: NpcIdentifiers.LIL_DESTRUCTOR, morphId: 0, itemId: 25350, dialogue: -1 },
-  { enumName: "JAL_NIB_REK", petId: NpcIdentifiers.JAL_NIB_REK, morphId: 0, itemId: 21291, dialogue: -1 },
+  { enumName: "JAL_NIB_REK", petId: 7675, morphId: 8011, itemId: 21291, dialogue: -1 },
+  { enumName: "TZREK_ZUK", petId: 8011, morphId: 7675, itemId: 21291, dialogue: -1 },
   { enumName: "MIDNIGHT", petId: NpcIdentifiers.MIDNIGHT, morphId: 0, itemId: 21750, dialogue: -1 },
   { enumName: "NOON", petId: NpcIdentifiers.NOON, morphId: 0, itemId: 21748, dialogue: -1 },
   { enumName: "HERBI", petId: NpcIdentifiers.HERBI, morphId: 0, itemId: 21509, dialogue: -1 },
-  { enumName: "DARK_CORE", petId: 318, morphId: 0, itemId: 12816, dialogue: 123 },
-  { enumName: "VENENATIS_SPIDERLING", petId: 495, morphId: 0, itemId: 13177, dialogue: 126 },
-  { enumName: "CALLISTO_CUB", petId: 497, morphId: 0, itemId: 13178, dialogue: 130 },
+  { enumName: "ABYSSAL_ORPHAN", petId: 5884, morphId: 0, itemId: 13262, dialogue: 202, mainDrop: true,
+    getDialogue(player) {
+      if (!player?.getAppearance?.()?.isMale?.()) return 206;
+      const ids = [202, 209];
+      return ids[Misc.getRandom(ids.length - 1)];
+    } },
+  { enumName: "DARK_CORE", petId: 318, morphId: 8010, itemId: 12816, dialogue: 123 },
+  { enumName: "CORPOREAL_CRITTER", petId: 8010, morphId: 318, itemId: 12816, dialogue: 123 },
+  { enumName: "VENENATIS_SPIDERLING", petId: 5557, morphId: 11985, itemId: 13177, dialogue: 126 },
+  { enumName: "VENENATIS_SPIDERLING_LEGACY", petId: 11985, morphId: 5557, itemId: 13177, dialogue: 126 },
+  { enumName: "CALLISTO_CUB", petId: 5558, morphId: 11986, itemId: 13178, dialogue: 130 },
+  { enumName: "CALLISTO_CUB_LEGACY", petId: 11986, morphId: 5558, itemId: 13178, dialogue: 130 },
   {
     enumName: "HELLPUPPY",
     // 317 clients reliably render the legacy hellcat model id.
@@ -59,23 +80,9 @@ const PETS = [
   { enumName: "VETION_JR_REBORN", petId: 5537, morphId: 5536, itemId: 13179, dialogue: 189 },
   { enumName: "SCORPIAS_OFFSPRING", petId: 5561, morphId: 0, itemId: 13181, dialogue: 195 },
   {
-    enumName: "ABYSSAL_ORPHAN",
-    petId: 5884,
-    morphId: 0,
-    itemId: 13262,
-    dialogue: 202,
-    getDialogue(player) {
-      if (!player?.getAppearance?.()?.isMale?.()) {
-        return 206;
-      }
-      const ids = [202, 209];
-      return ids[Misc.getRandom(ids.length - 1)];
-    },
-  },
-  {
     enumName: "TZREK_JAD",
-    petId: 5892,
-    morphId: 0,
+    petId: 5893,
+    morphId: 10625,
     itemId: 13225,
     dialogue: 212,
     getDialogue() {
@@ -83,6 +90,7 @@ const PETS = [
       return ids[Misc.getRandom(ids.length - 1)];
     },
   },
+  { enumName: "JALREK_JAD", petId: 10625, morphId: 5893, itemId: 13225, dialogue: 212 },
   { enumName: "SUPREME_HATCHLING", petId: 6628, morphId: 0, itemId: 12643, dialogue: 220 },
   { enumName: "PRIME_HATCHLING", petId: 6629, morphId: 0, itemId: 12644, dialogue: 223 },
   { enumName: "REX_HATCHLING", petId: 6630, morphId: 0, itemId: 12645, dialogue: 231 },
@@ -95,32 +103,55 @@ const PETS = [
     itemId: 12651,
     dialogue: 250,
     getDialogue(player) {
-      if (player?.getEquipment?.()?.contains?.(11806)) {
-        return 252;
-      }
+      if (player?.getEquipment?.()?.contains?.(11806)) return 252;
       return 250;
     },
   },
   { enumName: "KRIL_TINYROTH", petId: 6634, morphId: 0, itemId: 12652, dialogue: 254 },
   { enumName: "BABY_MOLE", petId: 6635, morphId: 0, itemId: 12646, dialogue: 261 },
   { enumName: "PRINCE_BLACK_DRAGON", petId: 6636, morphId: 0, itemId: 12653, dialogue: 267 },
-  { enumName: "KALPHITE_PRINCESS", petId: 6637, morphId: 6638, itemId: 12654, dialogue: 271 },
-  {
-    enumName: "MORPHED_KALPHITE_PRINCESS",
-    petId: 6638,
-    morphId: 6637,
-    itemId: 12654,
-    dialogue: 279,
-  },
-  { enumName: "SMOKE_DEVIL", petId: 6639, morphId: 0, itemId: 12648, dialogue: 288 },
+  // The cache's Kalphite princess item is 12647; 12654 is the duplicate id drops never use.
+  { enumName: "KALPHITE_PRINCESS", petId: 6637, morphId: 6638, itemId: 12647, dialogue: 271 },
+  { enumName: "MORPHED_KALPHITE_PRINCESS", petId: 6638, morphId: 6637, itemId: 12647, dialogue: 279 },
+  { enumName: "SMOKE_DEVIL", petId: 6639, morphId: 8483, itemId: 12648, dialogue: 288 },
+  { enumName: "SMOKE_DEVIL_NORMAL", petId: 8483, morphId: 6639, itemId: 12648, dialogue: 288 },
   { enumName: "KRAKEN", petId: 6640, morphId: 0, itemId: 12655, dialogue: 291 },
   { enumName: "PENANCE_PRINCESS", petId: 6642, morphId: 0, itemId: 12703, dialogue: 296 },
-  { enumName: "OLMLET", petId: 7520, morphId: 0, itemId: 20851, dialogue: 298 },
+  { enumName: "OLMLET", petId: 7520, morphId: 8201, itemId: 20851, dialogue: 298 },
+  { enumName: "PUPPADILE", petId: 8201, morphId: 8202, itemId: 20851, dialogue: 298 },
+  { enumName: "TEKTINY", petId: 8202, morphId: 8203, itemId: 20851, dialogue: 298 },
+  { enumName: "VANGUARD_PET", petId: 8203, morphId: 8204, itemId: 20851, dialogue: 298 },
+  { enumName: "VASA_MINIRIO", petId: 8204, morphId: 8205, itemId: 20851, dialogue: 298 },
+  { enumName: "VESPINA", petId: 8205, morphId: 7520, itemId: 20851, dialogue: 298 },
   { enumName: "SKOTOS", petId: 425, morphId: 0, itemId: 21273, dialogue: 298 },
+  { enumName: "IKKLE_HYDRA", petId: NpcIdentifiers.IKKLE_HYDRA, morphId: NpcIdentifiers.IKKLE_HYDRA_2, itemId: 22746, dialogue: -1 },
+  { enumName: "IKKLE_HYDRA_ELECTRIC", petId: NpcIdentifiers.IKKLE_HYDRA_2, morphId: NpcIdentifiers.IKKLE_HYDRA_3, itemId: 22746, dialogue: -1 },
+  { enumName: "IKKLE_HYDRA_FIRE", petId: NpcIdentifiers.IKKLE_HYDRA_3, morphId: NpcIdentifiers.IKKLE_HYDRA_4, itemId: 22746, dialogue: -1 },
+  { enumName: "IKKLE_HYDRA_EXTINGUISHED", petId: NpcIdentifiers.IKKLE_HYDRA_4, morphId: NpcIdentifiers.IKKLE_HYDRA, itemId: 22746, dialogue: -1 },
+  // Cache `isFollower` ids: 2144/11159/11160 are the pet; 2143/11157/11158 are static copies.
+  { enumName: "SRARACHA", petId: 2144, morphId: 11159, itemId: 23495, dialogue: -1 },
+  { enumName: "SRARACHA_2", petId: 11159, morphId: 11160, itemId: 23495, dialogue: -1 },
+  { enumName: "SRARACHA_3", petId: 11160, morphId: 2144, itemId: 23495, dialogue: -1 },
+  { enumName: "SMOLCANO", petId: NpcIdentifiers.SMOLCANO_2, morphId: 0, itemId: 23760, dialogue: -1 },
+  { enumName: "LITTLE_NIGHTMARE", petId: NpcIdentifiers.LITTLE_NIGHTMARE_2, morphId: 0, itemId: 24491, dialogue: -1 },
+  { enumName: "YOUNGLLEF", petId: NpcIdentifiers.YOUNGLLEF_2, morphId: NpcIdentifiers.CORRUPTED_YOUNGLLEF_2, itemId: 23757, dialogue: -1 },
+  { enumName: "CORRUPTED_YOUNGLLEF", petId: NpcIdentifiers.CORRUPTED_YOUNGLLEF_2, morphId: NpcIdentifiers.YOUNGLLEF_2, itemId: 23757, dialogue: -1 },
+  { enumName: "TINY_TEMPOR", petId: NpcIdentifiers.TINY_TEMPOR_2, morphId: 0, itemId: 25602, dialogue: -1 },
+  { enumName: "ABYSSAL_PROTECTOR", petId: NpcIdentifiers.ABYSSAL_PROTECTOR_2, morphId: 0, itemId: 26901, dialogue: -1 },
+  { enumName: "HUBERTE", petId: NpcIdentifiers.HUBERTE_2, morphId: 0, itemId: 30152, dialogue: -1 },
+  { enumName: "MOXI", petId: NpcIdentifiers.MOXI_2, morphId: 0, itemId: 30154, dialogue: -1 },
+  { enumName: "BRAN", petId: NpcIdentifiers.BRAN_2, morphId: 0, itemId: 30622, dialogue: -1 },
+  { enumName: "YAMI", petId: NpcIdentifiers.YAMI_2, morphId: 0, itemId: 30888, dialogue: -1 },
+  { enumName: "DOM", petId: NpcIdentifiers.DOM_2, morphId: 0, itemId: 31130, dialogue: -1 },
+  // The follower Gulldamar look: 14931 carries the Metamorph option live.
+  { enumName: "GULL", petId: NpcIdentifiers.GULL_7, morphId: 0, itemId: 31285, dialogue: -1 },
+  { enumName: "CHOMPY_CHICK", petId: NpcIdentifiers.CHOMPY_CHICK_2, morphId: 0, itemId: 13071, dialogue: -1 },
+  { enumName: "BLOODHOUND", petId: NpcIdentifiers.BLOODHOUND_2, morphId: 0, itemId: 19730, dialogue: -1 },
 
   // Wintertodt's reward cart (followers are 7370, as in live captures).
   { enumName: "PHOENIX", petId: NpcIdentifiers.PHOENIX_2, morphId: 0, itemId: 20693, dialogue: -1 },
-  { enumName: "HERON", petId: 6715, morphId: 0, itemId: 13320, dialogue: -1, skill: Skill.FISHING, chance: 5000 },
+  { enumName: "HERON", petId: 6722, morphId: 10636, itemId: 13320, dialogue: -1, skill: Skill.FISHING, chance: 5000 },
+  { enumName: "GREAT_BLUE_HERON", petId: 10636, morphId: 6722, itemId: 13320, dialogue: -1, skill: Skill.FISHING, chance: 5000 },
   {
     enumName: "BEAVER",
     petId: 6717,
@@ -193,6 +224,28 @@ const PETS = [
     skill: Skill.THIEVING,
     chance: 5000,
   },
+  {
+    enumName: "SOUP",
+    petId: NpcIdentifiers.SOUP,
+    morphId: 0,
+    itemId: 31283,
+    dialogue: -1,
+    skill: Skill.SAILING,
+    // Sailors roll Soup per action's own chance (Salvaging passes petChance); the flat
+    // base keeps the entry resolvable for the skill event registration.
+    chance: 800000,
+  },
+
+  // Kitten items 1555-1560: the quest grants the kitten; the item is the durable form.
+  // The cache gives the six kitten followers ids 5591-5596 but does not link item colour
+  // to npc, so the parallel item/npc order is used and a colour mismatch is possible.
+  // ponytail: no kitten growth timer; a kitten stays a kitten until grown elsewhere.
+  { enumName: "PET_KITTEN", petId: 5591, morphId: 0, itemId: 1555, dialogue: -1, reclaimable: false },
+  { enumName: "PET_KITTEN_2", petId: 5592, morphId: 0, itemId: 1556, dialogue: -1, reclaimable: false },
+  { enumName: "PET_KITTEN_3", petId: 5593, morphId: 0, itemId: 1557, dialogue: -1, reclaimable: false },
+  { enumName: "PET_KITTEN_4", petId: 5594, morphId: 0, itemId: 1558, dialogue: -1, reclaimable: false },
+  { enumName: "PET_KITTEN_5", petId: 5595, morphId: 0, itemId: 1559, dialogue: -1, reclaimable: false },
+  { enumName: "PET_KITTEN_6", petId: 5596, morphId: 0, itemId: 1560, dialogue: -1, reclaimable: false },
 
   {
     enumName: "FIRE_RIFT_GUARDIAN",
@@ -344,6 +397,7 @@ const SKILLING_PETS = [
   PET_BY_NAME.get("GIANT_SQUIRREL"),
   PET_BY_NAME.get("TANGLEROOT"),
   PET_BY_NAME.get("ROCKY"),
+  PET_BY_NAME.get("SOUP"),
   ...PETS.filter((pet) => pet.enumName.endsWith("_RIFT_GUARDIAN")),
 ].filter((pet) => pet != null);
 
@@ -354,7 +408,7 @@ function petFamily(pet) {
 
 function getOwnedPetItems(player) {
   const owned = player.getAttribute(OWNED_ATTRIBUTE);
-  return Array.isArray(owned) ? owned : [];
+  return Array.isArray(owned) ? owned.filter((itemId) => getPetForItemId(itemId)) : [];
 }
 
 function ownsPetFamily(player, pet) {
@@ -365,26 +419,70 @@ function ownsPetFamily(player, pet) {
   });
 }
 
-function recordOwnership(player, itemId) {
+function recordOwnership(player, pet) {
+  if (pet?.reclaimable === false) return;
+  const family = petFamily(pet);
   const owned = getOwnedPetItems(player);
-  if (!owned.includes(itemId)) player.setAttribute(OWNED_ATTRIBUTE, [...owned, itemId]);
+  // One ownership record per pet family: a metamorphosis that changes the item (a
+  // rift guardian's colour) replaces the old record instead of insuring both.
+  const others = owned.filter((itemId) => {
+    const other = getPetForItemId(itemId);
+    return other == null || petFamily(other) !== family;
+  });
+  if (others.length === owned.length && owned.includes(pet.itemId)) return;
+  player.setAttribute(OWNED_ATTRIBUTE, [...others, pet.itemId]);
+  syncCollectionLog(player);
+}
+
+/** The collection log lists one item per pet: a skilling pet's base colour, never a morph. */
+function collectionLogItemId(pet) {
+  if (pet?.skill == null) return pet?.itemId;
+  const base = SKILLING_PETS.find((candidate) => candidate.skill === pet.skill);
+  return base?.itemId ?? pet.itemId;
+}
+
+/** Ticks the collection log's collected entries from the persisted ownership record. */
+function syncCollectionLog(player) {
+  const sender = player?.getPacketSender?.();
+  if (typeof sender?.sendCollectionLogSnapshot !== "function") return;
+  const itemIds = [];
+  for (const itemId of getOwnedPetItems(player)) {
+    const logId = collectionLogItemId(getPetForItemId(itemId));
+    if (Number.isInteger(logId) && !itemIds.includes(logId)) itemIds.push(logId);
+  }
+  sender.sendCollectionLogSnapshot(itemIds.map((itemId, slot) => ({ slot, itemId, quantity: 1 })));
+}
+
+/** One pet item into the backpack, or the ground when there is no space. */
+function deliverPetItem(player, itemId) {
+  if (!player.getInventory().isFull()) {
+    player.getInventory().adds(itemId, 1);
+    return true;
+  }
+  ItemOnGroundManager.registerNonGlobal(player, new Item(itemId));
+  return false;
 }
 
 /**
  * Awards a pet the way OSRS does: a follower if there is none, otherwise into the
- * backpack; a pet the player already owns is a "would have been followed" miss.
+ * backpack; a pet the player already owns is a "would have been followed" miss,
+ * unless the pet is a main drop (Abyssal orphan, Smol Heredit) which always lands.
  */
 function awardPet(player, itemId) {
   const pet = getPetForItemId(itemId);
   if (!pet) return false;
   if (ownsPetFamily(player, pet)) {
+    if (pet.mainDrop) {
+      deliverPetItem(player, pet.itemId);
+      return true;
+    }
     player.sendMessage("You have a funny feeling like you would have been followed...");
     return false;
   }
-  recordOwnership(player, pet.itemId);
+  recordOwnership(player, pet);
   const following = player.getAttribute?.(CURRENT_PET_ATTRIBUTE)?.isRegistered?.() === true;
   if (following && player.getInventory().isFull()) {
-    // ponytail: OSRS then loses the pet to Probita; the owned record lets her return it.
+    // OSRS then loses the pet to Probita; the owned record lets her return it.
     player.sendMessage("You have a funny feeling like you would have been followed... Probita can help.");
     return true;
   }
@@ -408,7 +506,7 @@ function holdsPetItem(player, itemId) {
   return false;
 }
 
-/** Probita's "Let's have a look...": every owned pet the player no longer has comes back. */
+/** Probita's "Let's have a look...": every insured pet the player no longer has comes back. */
 function reclaimPets(event) {
   if (event.npcId !== NpcIdentifiers.PROBITA || event.action !== "open_interface" || event.target !== "Pet Insurance") {
     return;
@@ -416,7 +514,7 @@ function reclaimPets(event) {
   event.handled = true;
   event.end = true;
   const { player } = event;
-  // ponytail: no Pet Insurance interface yet, so the lost pets go straight to the backpack.
+  // Pets are automatically, freely insured (Wiki, Probita); generic pets are excluded.
   const lost = getOwnedPetItems(player).filter((itemId) => !holdsPetItem(player, itemId));
   if (lost.length === 0) {
     player.sendMessage("You don't have any pets to reclaim.");
@@ -430,14 +528,16 @@ function reclaimPets(event) {
     player.getInventory().adds(itemId, 1);
     player.sendMessage(`Probita returns your ${getPetDisplayName(getPetForItemId(itemId))}.`);
   }
+  syncCollectionLog(player);
 }
 
 /** Boss pets come straight to the killer instead of landing on the floor. */
 function awardDroppedPets({ player, drops }) {
   if (!player || !Array.isArray(drops)) return;
   for (let index = drops.length - 1; index >= 0; index--) {
-    if (!getPetForItemId(drops[index]?.itemId)) continue;
-    const [{ itemId }] = drops.splice(index, 1);
+    const itemId = drops[index]?.itemId ?? drops[index]?.id;
+    if (!getPetForItemId(itemId)) continue;
+    drops.splice(index, 1);
     awardPet(player, itemId);
   }
 }
@@ -492,6 +592,34 @@ function log(event, extra = {}) {
     // Best-effort logging only.
   }
 }
+
+// ---------------------------------------------------------------- variants
+
+function getVariantMap(player) {
+  const stored = player.getAttribute?.(VARIANT_ATTRIBUTE);
+  return stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
+}
+
+/** The stored npc id of the chosen metamorphosis form for this pet's family. */
+function getStoredVariant(player, pet) {
+  const variant = getVariantMap(player)[petFamily(pet)];
+  const variantPet = Number.isInteger(variant) ? getPetByNpcId(variant) : null;
+  return variantPet && petFamily(variantPet) === petFamily(pet) ? variant : 0;
+}
+
+function setStoredVariant(player, pet, npcId) {
+  player.setAttribute(VARIANT_ATTRIBUTE, { ...getVariantMap(player), [petFamily(pet)]: npcId });
+}
+
+/** Re-applies the chosen form to a freshly summoned follower. */
+function applyStoredVariant(player, npc, pet) {
+  const variant = getStoredVariant(player, pet);
+  if (variant && variant !== npc.getRealId?.()) {
+    npc.setNpcTransformationId(variant);
+  }
+}
+
+// ---------------------------------------------------------------- follower
 
 function chooseSpawnLocation(player) {
   const tiles = [];
@@ -554,33 +682,6 @@ function findOwnedPetItemSource(player) {
   return null;
 }
 
-function summonOwnedPetOnBotLogin(player) {
-  if (!player?.isPlayerBot?.() || !player.isPlayerBot()) {
-    return false;
-  }
-  if (player.getAttribute?.(CURRENT_PET_ATTRIBUTE)) {
-    return false;
-  }
-
-  const ownedPet = findOwnedPetItemSource(player);
-  if (!ownedPet) {
-    return false;
-  }
-
-  // Use reward summon path to avoid interaction-side effects while auto-restoring bots.
-  const summoned = drop(player, ownedPet.itemId, true);
-  if (!summoned) {
-    return false;
-  }
-
-  if (ownedPet.source === "inventory") {
-    player.getInventory().deleteNumber(ownedPet.itemId, 1);
-  } else {
-    player.getBank(ownedPet.bankTab).deleteNumber(ownedPet.itemId, 1);
-  }
-  return true;
-}
-
 function spawnPetNpc(npc) {
   if (World.getNpcs().add(npc)) {
     return {
@@ -641,7 +742,7 @@ function syncFollowerIndex(player, pet) {
   player?.getPacketSender?.().sendConfig(FOLLOWER_INDEX_VARP, index > 0 ? index : 65535);
 }
 
-function drop(player, itemId, reward) {
+function drop(player, itemId, reward, { silent = false } = {}) {
   const username = player?.getUsername?.() ?? null;
   const pet = getPetForItemId(itemId);
   if (!pet) {
@@ -678,6 +779,7 @@ function drop(player, itemId, reward) {
     npc.setFollowing(player);
     npc.setMobileInteraction(player);
     npc.setArea(player.getArea());
+    applyStoredVariant(player, npc, pet);
     const spawnResult = spawnPetNpc(npc);
     log(spawnResult.mode === "direct" ? "drop_spawn_added" : "drop_spawn_queued", {
       username,
@@ -694,6 +796,7 @@ function drop(player, itemId, reward) {
     });
 
     player.setAttribute(CURRENT_PET_ATTRIBUTE, npc);
+    player.setAttribute(LAST_PET_ATTRIBUTE, pet.itemId);
     syncFollowerIndex(player, npc);
     setTimeout(() => {
       const index = npc.getIndex?.() ?? -1;
@@ -714,9 +817,9 @@ function drop(player, itemId, reward) {
       }
     }, 1200);
 
-    recordOwnership(player, pet.itemId);
+    recordOwnership(player, pet);
     if (reward) {
-      player.sendMessage("You have a funny feeling like you're being followed.");
+      if (!silent) player.sendMessage("You have a funny feeling like you're being followed.");
     } else {
       player.getInventory().deleteNumber(pet.itemId, 1);
       Sounds.sendSound(player, Sound.DROP_ITEM);
@@ -730,7 +833,7 @@ function drop(player, itemId, reward) {
     } else {
       ItemOnGroundManager.registerNonGlobal(player, new Item(pet.itemId));
     }
-    player.sendMessage("@dre@You've received a pet!");
+    if (!silent) player.sendMessage("@dre@You've received a pet!");
   } else {
     const currentPet = player.getAttribute(CURRENT_PET_ATTRIBUTE);
     log("drop_already_has_pet", {
@@ -745,7 +848,7 @@ function drop(player, itemId, reward) {
   return true;
 }
 
-function pickup(player, npc) {
+function pickup(player, npc, { auto = false } = {}) {
   if (!npc || !player) {
     return false;
   }
@@ -760,8 +863,18 @@ function pickup(player, npc) {
   }
 
   if (player.getInventory().isFull()) {
-    player.sendMessage("You don't have enough inventory space.");
-    return true;
+    if (!auto) {
+      player.sendMessage("You don't have enough inventory space.");
+      return true;
+    }
+    // A logout cannot leave the follower behind: OSRS banks a pet with no inventory room.
+    const bank = player.getBank?.(Bank.getTabForItem(player, pet.itemId));
+    if (!bank || bank.adds(pet.itemId, 1) === false) {
+      player.sendMessage("You don't have enough inventory or bank space for your pet.");
+      return true;
+    }
+  } else {
+    player.getInventory().adds(pet.itemId, 1);
   }
 
   player.getMovementQueue().reset();
@@ -778,13 +891,22 @@ function pickup(player, npc) {
     removeNpcQueueSize: World.getRemoveNPCQueue().length,
   });
 
-  player.getInventory().adds(pet.itemId, 1);
-
   player.sendMessage("You pick up your pet..");
   Sounds.sendSound(player, Sound.PICK_UP_ITEM);
+  // The item now in hand is the current form; a cross-item morph replaces the record.
+  recordOwnership(player, pet);
   player.setAttribute(CURRENT_PET_ATTRIBUTE, null);
+  if (!auto) player.setAttribute(LAST_PET_ATTRIBUTE, null);
   syncFollowerIndex(player, null);
   return true;
+}
+
+/** Logout/disconnect: remember the follower, then pick it up (bank if the backpack is full). */
+function returnFollowerOnLogout(player) {
+  const npc = player.getAttribute?.(CURRENT_PET_ATTRIBUTE);
+  const pet = npc ? getPetByNpcId(npc.getId()) : null;
+  if (pet) player.setAttribute(LAST_PET_ATTRIBUTE, pet.itemId);
+  pickup(player, npc, { auto: true });
 }
 
 function morph(player, npc) {
@@ -793,7 +915,7 @@ function morph(player, npc) {
   }
 
   const pet = getPetByNpcId(npc.getId());
-  if (!pet) {
+  if (!pet || pet.morphId === 0) {
     return false;
   }
 
@@ -801,10 +923,14 @@ function morph(player, npc) {
     return false;
   }
 
-  if (pet.morphId === 0) {
+  const next = getPetByNpcId(pet.morphId);
+  if (!next || petFamily(next) !== petFamily(pet)) {
+    // A cycle must stay within the pet's family so the item and ownership never change.
+    player.sendMessage("Your pet can't change like that.");
     return false;
   }
   npc.setNpcTransformationId(pet.morphId);
+  setStoredVariant(player, pet, pet.morphId);
   player.sendMessage("Your pet endures metamorphosis and transforms.");
   return true;
 }
@@ -829,12 +955,124 @@ function interact(player, npc) {
     return true;
   }
 
-  // Dialogue handlers are still commented out in both Java and TS branches.
+  // The wiki pet transcripts are not in npc-dialogues.json, so Interact stays a
+  // deterministic no-op rather than inventing lines; pick-up and Metamorphosis still work.
+  return true;
+}
+
+/** Which pet action a click maps to, from the NPC's cached options, then the click index. */
+function handlePetClick(event) {
+  if (!event?.player || !event.npc || !getPetByNpcId(event.npcId)) {
+    return false;
+  }
+  const action = String(event.definition?.getActions?.()?.[event.clickType - 1] ?? "");
+  const lower = action.toLowerCase();
+  if (lower === "pick-up") return pickup(event.player, event.npc);
+  if (lower === "metamorphosis" || lower === "metamorph") return morph(event.player, event.npc);
+  if (lower === "talk-to" || lower === "interact" || lower === "stroke") {
+    return interact(event.player, event.npc);
+  }
+  if (action) return false;
+  // The client injects Talk-to/Metamorphosis/Pick-up on pet definitions that predate them.
+  if (event.clickType === 1) return interact(event.player, event.npc);
+  if (event.clickType === 2) return morph(event.player, event.npc) || pickup(event.player, event.npc);
+  return pickup(event.player, event.npc);
+}
+
+function pickUpAction(event) {
+  return pickup(event.player, event.npc);
+}
+
+function morphAction(event) {
+  return morph(event.player, event.npc);
+}
+
+/** Re-summons the pet the player logged out with; a normal relog rebuilds at most one. */
+function restoreFollowerOnLogin(player) {
+  if (!player) return false;
+  const existing = player.getAttribute?.(CURRENT_PET_ATTRIBUTE);
+  if (existing && !existing.isRegistered?.()) {
+    player.setAttribute(CURRENT_PET_ATTRIBUTE, null);
+  }
+  if (player.getAttribute?.(CURRENT_PET_ATTRIBUTE)) return false;
+
+  const last = player.getAttribute?.(LAST_PET_ATTRIBUTE);
+  const itemId = Number.isInteger(last) ? last : null;
+  if (itemId && player.getInventory?.().contains?.(itemId)) {
+    if (drop(player, itemId, true, { silent: true })) {
+      player.getInventory().deleteNumber(itemId, 1);
+      return true;
+    }
+  }
+  // A logout with a full backpack banks the follower; take it back out on login.
+  const banks = player.getBanks?.() ?? [];
+  for (let tab = 0; itemId && tab < Bank.TOTAL_BANK_TABS; tab++) {
+    if (tab === Bank.BANK_SEARCH_TAB_INDEX) continue;
+    const bank = banks[tab];
+    if (!bank?.contains?.(itemId)) continue;
+    if (drop(player, itemId, true, { silent: true })) {
+      player.getBank(tab).deleteNumber(itemId, 1);
+      return true;
+    }
+    break;
+  }
+  return summonOwnedPetOnBotLogin(player);
+}
+
+function summonOwnedPetOnBotLogin(player) {
+  if (!player?.isPlayerBot?.() || !player.isPlayerBot()) {
+    return false;
+  }
+  if (player.getAttribute?.(CURRENT_PET_ATTRIBUTE)) {
+    return false;
+  }
+
+  const ownedPet = findOwnedPetItemSource(player);
+  if (!ownedPet) {
+    return false;
+  }
+
+  // Use reward summon path to avoid interaction-side effects while auto-restoring bots.
+  const summoned = drop(player, ownedPet.itemId, true, { silent: true });
+  if (!summoned) {
+    return false;
+  }
+
+  if (ownedPet.source === "inventory") {
+    player.getInventory().deleteNumber(ownedPet.itemId, 1);
+  } else {
+    player.getBank(ownedPet.bankTab).deleteNumber(ownedPet.itemId, 1);
+  }
   return true;
 }
 
 /** rune id -> rift guardian colour, chinchompa npc id -> baby chinchompa colour; filled at register. */
 const SKILL_PET_VARIANTS = new Map();
+
+function skillPetHandler(skill) {
+  return (event) => onSkill(event.player, skill, event);
+}
+
+function onPetItemDropPolicy(event) {
+  if (!event?.player) return;
+  if (drop(event.player, event.itemId, false)) {
+    event.handled = true;
+  }
+}
+
+function onPetPlayerLogout({ player }) {
+  returnFollowerOnLogout(player);
+}
+
+function onPetPlayerDisconnect({ player }) {
+  returnFollowerOnLogout(player);
+}
+
+function onPetPlayerLogin({ player }) {
+  syncFollowerIndex(player, player.getAttribute?.(CURRENT_PET_ATTRIBUTE));
+  restoreFollowerOnLogin(player);
+  syncCollectionLog(player);
+}
 
 /**
  * Rolls a skill's pet at the Wiki rate, 1 in (base - level * 25), fifteen times as
@@ -898,84 +1136,45 @@ module.exports = {
     pluginApi = api;
     fillSkillPetVariants(api.core);
     api.persistAttribute(OWNED_ATTRIBUTE);
+    api.persistAttribute(LAST_PET_ATTRIBUTE);
+    api.persistAttribute(VARIANT_ATTRIBUTE);
+
     for (const skill of new Set(SKILLING_PETS.map((pet) => pet.skill))) {
-      const eventName = `${normalizeSkillName(skill)}:success`;
-      api.onCustomEvent(eventName, (event) => onSkill(event.player, skill, event));
+      api.onCustomEvent(`${normalizeSkillName(skill)}:success`, skillPetHandler(skill));
     }
     api.onCustomEvent("npc-drops:roll", awardDroppedPets);
     api.onCustomEvent("npc-dialogue:action", reclaimPets);
+    api.onItemDropPolicy(onPetItemDropPolicy);
 
-    api.onItemDropPolicy((event) => {
-      if (!event || !event.player) {
-        return;
-      }
-      log("item_drop_event", {
-        username: event.player.getUsername?.() ?? null,
-        itemId: event.itemId,
-        interfaceId: event.interfaceId,
-        slot: event.slot,
-      });
-      if (drop(event.player, event.itemId, false)) {
-        event.handled = true;
-      }
-    });
-
-    function interactWithPet(event) {
-      if (!event || !event.player || !event.npc) {
-        return false;
-      }
-      if (event.clickType === 1) {
-        if (interact(event.player, event.npc)) {
-          event.handled = true;
-          return true;
-        }
-        return false;
-      }
-      if (event.clickType === 2) {
-        if (pickup(event.player, event.npc)) {
-          event.handled = true;
-          return true;
-        }
-        return false;
-      }
-      if (event.clickType === 3) {
-        // Morphable pets show Metamorphosis as their third option; pickup is the
-        // fallback for pets without a morph.
-        if (morph(event.player, event.npc)) {
-          event.handled = true;
-          return true;
-        }
-        if (pickup(event.player, event.npc)) {
-          event.handled = true;
-          return true;
-        }
-      }
-      return false;
-    }
-    api.onAnyNpcInteraction({
-      "Pick-up": (event) => pickup(event.player, event.npc),
-    });
     const petNpcIds = Array.from(PET_BY_ID.keys());
-    api.onNpcFirstClick(petNpcIds, interactWithPet);
-    api.onNpcSecondClick(petNpcIds, interactWithPet);
-    api.onNpcThirdClick(petNpcIds, interactWithPet);
+    for (let clickType = 1; clickType <= 5; clickType++) {
+      api.onNpcClick(petNpcIds, clickType, handlePetClick);
+    }
+    api.onAnyNpcInteraction({ "Pick-up": pickUpAction, Metamorphosis: morphAction, Metamorph: morphAction });
 
-    api.onPlayerLogout(({ player }) => {
-      pickup(player, player.getAttribute?.(CURRENT_PET_ATTRIBUTE));
-    });
-
-    api.onPlayerDisconnect(({ player }) => {
-      pickup(player, player.getAttribute?.(CURRENT_PET_ATTRIBUTE));
-    });
-
-    api.onPlayerLogin(({ player }) => {
-      syncFollowerIndex(player, player.getAttribute?.(CURRENT_PET_ATTRIBUTE));
-      summonOwnedPetOnBotLogin(player);
-    });
+    api.onPlayerLogout(onPetPlayerLogout);
+    api.onPlayerDisconnect(onPetPlayerDisconnect);
+    api.onPlayerLogin(onPetPlayerLogin);
 
     api.log("registered", {
       pets: PETS.length,
       skillingPets: SKILLING_PETS.length,
     });
+  },
+
+  // Exposed for tests/pets.test.cjs; nothing else reads them.
+  __internals: {
+    PETS,
+    PET_BY_ID,
+    PET_BY_ITEM_ID,
+    petFamily,
+    getStoredVariant,
+    applyStoredVariant,
+    morph,
+    interact,
+    pickup,
+    handlePetClick,
+    awardPet,
+    getOwnedPetItems,
   },
 };
