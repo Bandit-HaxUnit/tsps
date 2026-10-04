@@ -1,7 +1,9 @@
 import type { Mobile } from "../../entity/impl/Mobile";
+import type { HitDamage } from "./hit/HitDamage";
 
 export type HitModifier = (entity: Mobile, baseHit: number) => number;
 export type RunEnergyRestoreModifier = (entity: Mobile, delayMs: number) => number;
+export type IncomingDamageModifier = (entity: Mobile, hitDamage: HitDamage) => void;
 
 const meleeHitModifiers: HitModifier[] = [];
 const rangedHitModifiers: HitModifier[] = [];
@@ -13,6 +15,7 @@ const rangedDefenseModifiers: HitModifier[] = [];
 const magicAttackAccuracyModifiers: HitModifier[] = [];
 const magicDefenseModifiers: HitModifier[] = [];
 const runEnergyRestoreModifiers: RunEnergyRestoreModifier[] = [];
+const incomingDamageModifiers: IncomingDamageModifier[] = [];
 
 const applyModifiers = (modifiers: HitModifier[], entity: Mobile, baseHit: number): number =>
   modifiers.reduce((damage, modifier) => {
@@ -70,6 +73,13 @@ export function registerRunEnergyRestoreModifier(modifier: RunEnergyRestoreModif
   runEnergyRestoreModifiers.push(modifier);
 }
 
+export function registerIncomingDamageModifier(modifier: IncomingDamageModifier): void {
+  if (typeof modifier !== "function") {
+    return;
+  }
+  incomingDamageModifiers.push(modifier);
+}
+
 export function applyMeleeHitModifiers(entity: Mobile, baseHit: number): number {
   return applyModifiers(meleeHitModifiers, entity, baseHit);
 }
@@ -112,4 +122,11 @@ export function applyRunEnergyRestoreModifiers(entity: Mobile, delayMs: number):
     const next = modifier(entity, delay);
     return Number.isFinite(next) && next > 0 ? next : delay;
   }, delayMs);
+}
+
+/** Notifies listeners of a landed hit so they can reduce it or react (charges, set effects). */
+export function applyIncomingDamageModifiers(entity: Mobile, hitDamage: HitDamage): void {
+  for (const modifier of incomingDamageModifiers) {
+    modifier(entity, hitDamage);
+  }
 }
