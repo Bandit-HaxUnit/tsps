@@ -195,10 +195,9 @@ export class CombatFactory {
                 if (damageRange) {
                     damage = Math.max(damageRange.minimum, Math.min(damageRange.maximum, damage));
                 }
-                if (profile?.boltEffects && CombatFactory.boltEffectTriggered(entity)) {
-                    let multiplier = RangedData.getSpecialEffectsMultiplier(player, victim, damage);
-                    damage *= multiplier;
-                }
+                // Enchanted-bolt activation is applied exactly once, by
+                // applyExtraHitRolls after the accuracy roll. Rolling it here as
+                // well let a bolt fire twice on one shot.
             }
         } else if (type == CombatType.MAGIC) {
             damage = CombatFactory.rollSpecialDamage(entity, DamageFormulas.sourceMaxHit(entity, CombatType.MAGIC), boundsOverride);
@@ -669,6 +668,11 @@ export class CombatFactory {
         if (!candidate || candidate === attacker || candidate === primaryTarget) {
             return false;
         }
+        // Registered/untargetable/needsPlacement/dying guards, so a splash can
+        // never land on a corpse or an actor that has left the area.
+        if (!CombatFactory.validTarget(attacker, candidate)) {
+            return false;
+        }
         // Duel damage is restricted to the agreed opponent, including spell splashes.
         if ((attacker.isPlayer() && attacker.getAsPlayer().getDueling().inDuel()) ||
             (candidate.isPlayer() && candidate.getAsPlayer().getDueling().inDuel())) {
@@ -923,7 +927,10 @@ export class CombatFactory {
         // Add magic exp, even if total damage is 0.
         // Since spells have a base exp reward
         if (hit.getCombatType() === CombatType.MAGIC) {
-            if (player.getCombat().getPreviousCast() != null) {
+            // The hit is queued before MagicCombatMethod.finished() moves the
+            // active cast into previousCast, so the first cast of a session
+            // must read castSpell or it would award no Magic XP at all.
+            if ((player.getCombat().getCastSpell() ?? player.getCombat().getPreviousCast()) != null) {
                 if (hit.isAccurate()) {
                     if (!defensiveMagicSplit) {
                         player.getSkillManager().addExperience(
@@ -1024,7 +1031,9 @@ export class CombatFactory {
         if (!player.getCombat().getPrayerBlockTimer().finished()) {
             return;
         }
-        player.getCombat().getPrayerBlockTimer().start(200);
+        // OSRS: the dragon scimitar's Sever blocks protection prayers for 8
+        // ticks (4.8s). The shared timer counts whole seconds, so use 5.
+        player.getCombat().getPrayerBlockTimer().start(5);
         PrayerHandler.resetPrayers(player, PrayerHandler.PROTECTION_PRAYERS);
         player.sendMessage("You have been disabled and can no longer use protection prayers.");
     }

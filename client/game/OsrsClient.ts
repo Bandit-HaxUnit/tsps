@@ -28,6 +28,7 @@ import {
     VARBIT_LEAGUE_RELIC_7,
     VARBIT_LEAGUE_RELIC_8,
     VARBIT_ROOF_REMOVAL,
+    VARBIT_ACTIVE_SPELLBOOK,
     VARBIT_STAMINA_ACTIVE,
     VARC_COMBAT_LEVEL,
     VARC_ACTIVE_TAB,
@@ -923,6 +924,8 @@ export class OsrsClient {
     // Hide-roofs toggle: when true, every plane above the player's plane is hidden.
     // When false, roofs are only removed while the player/camera is inside a building.
     roofsHidden: boolean = true;
+    /** Last value of the bit-packed spellbook varbit (base var 439). */
+    private lastActiveSpellbook?: number;
 
     setRoofsHidden(roofsHidden: boolean): void {
         if (this.roofsHidden === roofsHidden) {
@@ -3168,6 +3171,14 @@ export class OsrsClient {
                     });
                     // Mark each changed stat ID for trigger checking
                     markStatTransmit(entry.id);
+                }
+
+                // Death (hitpoints reach 0) drops a pending spell selection.
+                const hitpointsEntry = update.skills.find(
+                    (entry) => (entry.id | 0) === SkillId.Hitpoints,
+                );
+                if (hitpointsEntry != null && (hitpointsEntry.currentLevel ?? 1) <= 0) {
+                    this.clearSelectedSpell();
                 }
 
                 // "Depends on combat levels" comparisons use the local player's combat level.
@@ -6411,6 +6422,20 @@ export class OsrsClient {
                     const varbitValue = this.varManager.getVarbit(VARBIT_ROOF_REMOVAL);
                     if (varbitValue !== undefined) {
                         this.setRoofsHidden(varbitValue === 1);
+                    }
+                } catch {}
+                // Varbit 4070 is packed into varp 439: track its value so a
+                // spellbook switch clears any spell selected in the old book.
+                try {
+                    const spellbook = this.varManager.getVarbit(VARBIT_ACTIVE_SPELLBOOK);
+                    if (spellbook !== undefined) {
+                        if (
+                            this.lastActiveSpellbook !== undefined &&
+                            spellbook !== this.lastActiveSpellbook
+                        ) {
+                            this.clearSelectedSpell();
+                        }
+                        this.lastActiveSpellbook = spellbook;
                     }
                 } catch {}
             };

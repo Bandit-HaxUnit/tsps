@@ -71,6 +71,9 @@ function scheduleCompletion(player, offer) {
   const timer = setTimeout(() => {
     timers.delete(timer);
     if (completedOffers(player)[offer.slot] !== offer) return;
+    // A second timer for the same offer (e.g. rescheduled on login) must not
+    // re-save and re-announce an already-completed offer.
+    if (offer.finished) return;
     offer.finished = true;
     saveOffers(player);
     refreshCollectionBox(player);

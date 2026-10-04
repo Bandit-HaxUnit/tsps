@@ -801,10 +801,11 @@ function morph(player, npc) {
     return false;
   }
 
-  if (pet.morphId !== 0) {
-    npc.setNpcTransformationId(pet.morphId);
-    player.sendMessage("Your pet endures metamorphosis and transforms.");
+  if (pet.morphId === 0) {
+    return false;
   }
+  npc.setNpcTransformationId(pet.morphId);
+  player.sendMessage("Your pet endures metamorphosis and transforms.");
   return true;
 }
 
@@ -818,12 +819,14 @@ function interact(player, npc) {
     return false;
   }
 
-  if (getPetDialogue(pet, player) === -1) {
+  if (player.getAttribute(CURRENT_PET_ATTRIBUTE) !== npc) {
     return false;
   }
 
-  if (player.getAttribute(CURRENT_PET_ATTRIBUTE) !== npc) {
-    return false;
+  // Skilling pets carry dialogue -1: Interact is a no-op rather than an empty
+  // dialogue box or the generic "Nothing interesting happens." fallback.
+  if (getPetDialogue(pet, player) === -1) {
+    return true;
   }
 
   // Dialogue handlers are still commented out in both Java and TS branches.
@@ -936,11 +939,13 @@ module.exports = {
         return false;
       }
       if (event.clickType === 3) {
-        if (pickup(event.player, event.npc)) {
+        // Morphable pets show Metamorphosis as their third option; pickup is the
+        // fallback for pets without a morph.
+        if (morph(event.player, event.npc)) {
           event.handled = true;
           return true;
         }
-        if (morph(event.player, event.npc)) {
+        if (pickup(event.player, event.npc)) {
           event.handled = true;
           return true;
         }

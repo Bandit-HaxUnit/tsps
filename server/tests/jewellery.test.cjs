@@ -118,6 +118,15 @@ test("a glory's last charge leaves an uncharged amulet that can no longer telepo
   assert.equal(player.messages.at(-1), "Your amulet hasn't got any charges left.");
 });
 
+test("an uncharged piece never teleports from a direct worn option", () => {
+  const player = createPlayer();
+  const glory = new Item(ItemIds.AMULET_OF_GLORY, 1);
+  player.equipment.setItem(Equipment.AMULET_SLOT, glory);
+  assert.equal(equippedClick(player, glory, 2, "Edgeville").handled, true);
+  assert.equal(teleports.length, 0);
+  assert.equal(player.messages.at(-1), "Your amulet hasn't got any charges left.");
+});
+
 test("a games necklace crumbles after its last charge", () => {
   const player = createPlayer();
   const necklace = new Item(ItemIds.GAMES_NECKLACE_1_, 1);

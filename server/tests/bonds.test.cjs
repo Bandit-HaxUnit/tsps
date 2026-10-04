@@ -279,6 +279,68 @@ test("bonds cannot be dropped and are always kept on death", () => {
   assert.equal(lobster.keep, null);
 });
 
+test("confirming destroy re-checks the drop policy and refuses an untradeable bond", () => {
+  const handlers = registerBonds();
+
+  let destroyPolicy;
+  let yesHandler;
+  const emitItemDropPolicy = (event) => {
+    for (const hook of [destroyPolicy, ...handlers.dropPolicy]) hook(event);
+    return event.handled === true;
+  };
+  delete require.cache[require.resolve("../plugins/interface/DestroyItem.plugin")];
+  require("../plugins/interface/DestroyItem.plugin").register({
+    core: { PluginManager: { emitItemDropPolicy } },
+    registerCustomInterface() {},
+    onItemDropPolicy: (handler) => {
+      destroyPolicy = handler;
+    },
+    onInterfaceActionButton: (_button, handler) => {
+      yesHandler = handler;
+    },
+  });
+
+  const player = makePlayer("alice");
+  const inventory = player.getInventory();
+  const item = new Item(UNTRADEABLE_BOND, 1);
+  item.isDropable = () => false;
+  item.getDefinition = () => ({ getName: () => "Old school bond (untradeable)" });
+  inventory.setItem(0, item);
+  let deleted = 0;
+  inventory.deleteAtSlot = () => {
+    deleted++;
+  };
+  const sender = {
+    isChatboxInterface: () => true,
+    sendChatboxInterface() {
+      return this;
+    },
+    sendItemOnInterface() {
+      return this;
+    },
+    sendString() {
+      return this;
+    },
+    sendInterfaceRemoval() {},
+  };
+  player.getPacketSender = () => sender;
+
+  const drop = {
+    player,
+    item,
+    itemId: UNTRADEABLE_BOND,
+    slot: 0,
+    interfaceId: 3214,
+    dropToGround: true,
+    handled: false,
+  };
+  assert.equal(emitItemDropPolicy(drop), true, "dropping opens the destroy confirmation");
+
+  yesHandler({ player });
+  assert.equal(deleted, 0, "the confirmed destroy must not delete the bond");
+  assert.ok(player.messages.some((message) => message.includes("cannot be dropped or destroyed")));
+});
+
 test("the Grand Exchange refuses untradeable bond sales and delivers bought bonds untradeable", () => {
   const handlers = registerBonds();
   const player = makePlayer("alice");

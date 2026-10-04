@@ -276,6 +276,7 @@ module.exports = {
     ItemOnGroundManager = api.getItemOnGroundManager();
     ObstacleRunner.init(api);
 
+    api.persistAttribute(PROGRESS_ATTRIBUTE);
     api.persistAttribute(LAPS_ATTRIBUTE);
     api.persistAttribute(LAP_COUNTER_OFF_ATTRIBUTE);
     api.onNpcInteraction("Grace", { "Toggle Counter": toggleLapCounter });
