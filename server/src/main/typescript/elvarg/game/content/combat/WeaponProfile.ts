@@ -3,7 +3,7 @@ import type { Player } from "../../entity/impl/player/Player";
 import { Equipment } from "../../model/container/impl/Equipment";
 import { FightType } from "./FightType";
 import { WeaponInterfaces } from "./WeaponInterfaces";
-import { CRYSTAL_BOW_ALL_WEAPON_IDS } from "./ranged/CrystalBow";
+import { BOW_OF_FAERDHINEN_IDS, CRYSTAL_BOW_ALL_WEAPON_IDS } from "./ranged/CrystalBow";
 import { ItemIdentifiers } from "../../../util/ItemIdentifiers";
 
 export type HitDelayProfile = { base: number; distanceOffset: number; divisor: number };
@@ -208,6 +208,16 @@ export class WeaponProfiles {
         });
         this.register({
             itemIds: CRYSTAL_BOW_ALL_WEAPON_IDS,
+            attackAnimation: 426,
+            attackSpeed: 5,
+            attackDistance: 10,
+            longRangeDistance: 10,
+            hitDelays: [STANDARD_HIT],
+            projectiles: [DEFAULT_PROJECTILE],
+            fireSound: Sound.SHOOT_ARROW,
+        });
+        this.register({
+            itemIds: BOW_OF_FAERDHINEN_IDS,
             attackAnimation: 426,
             attackSpeed: 5,
             attackDistance: 10,
