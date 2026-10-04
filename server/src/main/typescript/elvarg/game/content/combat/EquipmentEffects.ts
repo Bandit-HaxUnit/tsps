@@ -3,7 +3,13 @@ import type { HitDamage } from "./hit/HitDamage";
 
 export type HitModifier = (entity: Mobile, baseHit: number) => number;
 export type RunEnergyRestoreModifier = (entity: Mobile, delayMs: number) => number;
-export type IncomingDamageModifier = (entity: Mobile, hitDamage: HitDamage) => void;
+export interface IncomingDamageContext {
+  type?: unknown;
+  attacker?: Mobile;
+  /** Melee attack bonus index (0 stab, 1 slash, 2 crush) when the hit is melee. */
+  meleeAttackBonusIndex?: number;
+}
+export type IncomingDamageModifier = (entity: Mobile, hitDamage: HitDamage, context: IncomingDamageContext) => void;
 
 const meleeHitModifiers: HitModifier[] = [];
 const rangedHitModifiers: HitModifier[] = [];
@@ -125,8 +131,8 @@ export function applyRunEnergyRestoreModifiers(entity: Mobile, delayMs: number):
 }
 
 /** Notifies listeners of a landed hit so they can reduce it or react (charges, set effects). */
-export function applyIncomingDamageModifiers(entity: Mobile, hitDamage: HitDamage): void {
+export function applyIncomingDamageModifiers(entity: Mobile, hitDamage: HitDamage, context: IncomingDamageContext = {}): void {
   for (const modifier of incomingDamageModifiers) {
-    modifier(entity, hitDamage);
+    modifier(entity, hitDamage, context);
   }
 }

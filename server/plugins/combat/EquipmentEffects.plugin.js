@@ -3,6 +3,8 @@ const registerObsidianEffects = require("./effects/ObsidianArmour");
 const registerInquisitorsArmourEffects = require("./effects/InquisitorsArmour");
 const registerChaosGauntletsEffects = require("./effects/ChaosGauntlets");
 const registerLeafBladedBattleaxeEffects = require("./effects/LeafBladedBattleaxe");
+const registerJusticiarEffects = require("./effects/JusticiarArmour");
+const registerSalveAmuletEffects = require("./effects/SalveAmulet");
 
 module.exports = {
   name: "EquipmentEffects",
@@ -12,5 +14,7 @@ module.exports = {
     registerInquisitorsArmourEffects(api);
     registerChaosGauntletsEffects(api);
     registerLeafBladedBattleaxeEffects(api);
+    registerJusticiarEffects(api);
+    registerSalveAmuletEffects(api);
   },
 };

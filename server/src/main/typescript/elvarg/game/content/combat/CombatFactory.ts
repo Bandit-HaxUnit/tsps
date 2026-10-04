@@ -240,7 +240,10 @@ export class CombatFactory {
 
         // Plugin-owned reactions to a landed hit (crystal armour charges, Justiciar reduction).
         if (victim.isPlayer() && hitDamage.getDamage() > 0) {
-            applyIncomingDamageModifiers(victim, hitDamage);
+            const meleeAttackBonusIndex = type == CombatType.MELEE && entity.isPlayer()
+                ? entity.getAsPlayer().getFightType().getBonusType()
+                : undefined;
+            applyIncomingDamageModifiers(victim, hitDamage, { type, attacker: entity, meleeAttackBonusIndex });
         }
 
         if (type == CombatType.MELEE && isDeveloperQueuedAttackSpec(entity)) {

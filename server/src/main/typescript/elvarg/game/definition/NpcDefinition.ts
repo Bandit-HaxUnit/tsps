@@ -27,6 +27,7 @@ export class NpcDefinition {
     private poisonous: boolean = false;
     private venomous: boolean = false;
     private demon: boolean = false;
+    private undead: boolean = false;
     /** Wiki "members" flag from monsters-complete.json; false for NPCs not in the dump. */
     private members: boolean = false;
     /** Which default CombatMethod this NPC fights with; see NPC.getCombatMethod(). */
@@ -206,6 +207,10 @@ export class NpcDefinition {
 
     public isDemon(): boolean {
         return this.demon;
+    }
+
+    public isUndead(): boolean {
+        return this.undead;
     }
 
     public isMembers(): boolean {
