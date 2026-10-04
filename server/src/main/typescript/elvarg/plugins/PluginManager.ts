@@ -270,7 +270,7 @@ export class PluginManager {
   private static commandHooks: PluginHook<PluginCommandEvent>[] = [];
   private static commandHandlersByBase = new Map<
     string,
-    (PluginHook<PluginCommandEvent> & { description: string })[]
+    PluginHook<PluginCommandEvent>[]
   >();
   /** Lowest rights id each command was registered with. Null means anyone may run it. */
   private static commandRights = new Map<string, number | null>();
@@ -1686,13 +1686,6 @@ export class PluginManager {
       normalized,
       PluginManager.normalizeCommandRights(minimumRights)
     );
-  }
-
-  public static getRegisteredCommands(player: any): Array<{ command: string; description: string }> {
-    return [...PluginManager.commandHandlersByBase]
-      .filter(([command]) => PluginManager.playerHasCommandRights(player, command))
-      .map(([command, hooks]) => ({ command, description: hooks.find((hook) => hook.description)?.description ?? "" }))
-      .sort((a, b) => a.command.localeCompare(b.command));
   }
 
   public static emitCommand(event: PluginCommandEvent): boolean {
@@ -3530,8 +3523,7 @@ export class PluginManager {
           console.error(`[plugins] ${pluginName} custom interface rejected`, error);
         }
       },
-      getRegisteredCommands: (player) => PluginManager.getRegisteredCommands(player),
-      registerCommand: (command, handler, minimumRights, description) => {
+      registerCommand: (command, handler, minimumRights) => {
         if (typeof command !== "string" || typeof handler !== "function") {
           return;
         }
@@ -3544,9 +3536,8 @@ export class PluginManager {
           PluginManager.normalizeCommandRights(minimumRights)
         );
 
-        const wrapper: PluginHook<PluginCommandEvent> & { description: string } = {
+        const wrapper: PluginHook<PluginCommandEvent> = {
           pluginName,
-          description: typeof description === "string" ? description.trim() : "",
           handler: (event) => {
             if (!event || event.handled) {
               return;
