@@ -365,8 +365,12 @@ function startStamina(player) {
 }
 
 function applyStamina(player) {
-  restoreRunEnergy(player, 20);
-  startStamina(player);
+  // Ring of endurance doubles this by mutating the payload (Wiki).
+  const request = { player, energy: 20, durationMs: STAMINA_DURATION_MS };
+  pluginApi.emitCustomEvent("potions:stamina-effect", request);
+  restoreRunEnergy(player, request.energy);
+  player.setAttribute(ATTR_STAMINA_END, Date.now() + request.durationMs);
+  player.setAttribute(ATTR_STAMINA_ACC, 0);
 }
 
 function applyDivine(player, baseEffect, affectedSkills) {
