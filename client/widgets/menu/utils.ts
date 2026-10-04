@@ -274,11 +274,13 @@ export function deriveMenuEntriesForWidget(
             const verbLower = verb.toLowerCase();
             const alreadyHasVerb = ops.some((o) => String(o.text).toLowerCase() === verbLower);
             if (!alreadyHasVerb) {
-                // An item's primary op only lives in slot 1 or 2 (weapons keep
-                // Wield on op2); with only later slots set (pot of flour's Empty
-                // is op4) "Use" is the default action, so it goes first.
+                // Only inventory ops 1-2 are primary. The cache's inventory script
+                // stores op1..5 in widget slots 2,3,4,6,7 (enum 4303), so widget
+                // action indices 1-2 are the primaries; anything first visible
+                // later (pot of flour's Empty is op4 -> index 5) has no primary
+                // op, making "Use" the default action.
                 const primary = ops[0];
-                const insertAt = primary && primary.index <= 1 ? 1 : 0;
+                const insertAt = primary && primary.index <= 2 ? 1 : 0;
                 ops.splice(insertAt, 0, { text: verb, index: -1 }); // -1 = targetVerb, not an action index
             }
         }

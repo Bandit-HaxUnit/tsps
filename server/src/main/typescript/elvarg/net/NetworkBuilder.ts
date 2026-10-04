@@ -472,7 +472,11 @@ export class ClientConnection {
         case "dialogue_input": {
           const action = this.player?.getEnteredSyntaxAction();
           if (action) action.execute(packet.value);
-          this.player?.setEnteredSyntaxAction(null);
+          // A handler may keep the input open (e.g. the ::items spawn search, which stays
+          // armed for repeat picks); only clear the action when it did not re-arm itself.
+          if (this.player?.getEnteredSyntaxAction() === action) {
+            this.player?.setEnteredSyntaxAction(null);
+          }
           continue;
         }
         case "widget_action":

@@ -42,8 +42,10 @@ assert.equal(dispatched?.slot, 7);
 assert.equal(dispatched?.itemId, 4151);
 assert.equal(use.menuStateIndex, undefined, "widget actions must not run through generic menuAction");
 
-// Pot of flour's only ops are Empty (op4) and Drop, so "Use" is the default
-// action. A weapon keeps its op2 Wield as primary.
+// Cached inventory ops land in widget action slots via enum 4303
+// (inv op1..5 -> slots 2,3,4,6,7, i.e. action indices 1,2,3,5,6).
+// Pot of flour's only ops are Empty (op4 -> index 5) and Drop, so "Use" is the
+// default action. A weapon keeps its op2 Wield (index 2) as primary.
 const allOpsVisible = () => -1;
 const noWidgetLookup = () => undefined;
 const entriesFor = (itemId: number, actions: (string | null)[]) =>
@@ -53,19 +55,19 @@ const entriesFor = (itemId: number, actions: (string | null)[]) =>
         allOpsVisible,
         noWidgetLookup,
     );
-const flour = entriesFor(1933, [null, null, null, "Empty", "Drop"]);
+const flour = entriesFor(1933, [null, null, null, null, null, "Empty", "Drop"]);
 assert.deepEqual(
     flour.map((entry) => entry.option),
     ["Use", "Empty", "Drop", "Cancel"],
 );
 assert.equal(chooseDefaultMenuEntry(flour, {})?.option, "Use");
-const staff = entriesFor(1381, [null, "Wield", null, null, "Drop"]);
+const staff = entriesFor(1381, [null, null, "Wield", null, null, null, "Drop"]);
 assert.deepEqual(
     staff.map((entry) => entry.option),
     ["Wield", "Use", "Drop", "Cancel"],
 );
 assert.equal(chooseDefaultMenuEntry(staff, {})?.option, "Wield");
-const shark = entriesFor(385, ["Eat", null, null, null, "Drop"]);
+const shark = entriesFor(385, [null, "Eat", null, null, null, null, "Drop"]);
 assert.deepEqual(
     shark.map((entry) => entry.option),
     ["Eat", "Use", "Drop", "Cancel"],

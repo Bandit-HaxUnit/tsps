@@ -2005,6 +2005,7 @@ export class PluginManager {
       ForceMovementTask: require("../game/task/impl/ForceMovementTask").ForceMovementTask,
       TaskManager: require("../game/task/TaskManager").TaskManager,
       ItemIdentifiers: require("../util/ItemIdentifiers").ItemIdentifiers,
+      ItemIds: require("../util/IdEnums").ItemIds,
       NpcIdentifiers: require("../util/NpcIdentifiers").NpcIdentifiers,
       ObjectIdentifiers: require("../util/ObjectIdentifiers").ObjectIdentifiers,
       ShopIdentifiers: require("../util/ShopIdentifiers").ShopIdentifiers,

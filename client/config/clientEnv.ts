@@ -82,11 +82,14 @@ export function getDefaultServerSecure(): boolean {
 }
 
 /**
- * Debug "ID:" labels on examine/menu targets are disabled by default.
- * Set `REACT_APP_DISABLE_DEBUG_ID=false` at build time to enable them.
+ * Debug "ID:" labels on examine/menu targets (object ids and tile coords).
+ * Enabled by default in development; set `REACT_APP_DISABLE_DEBUG_ID=true`
+ * to turn them off (production builds do this) or `=false` to force them on.
  */
 export function isDebugIdEnabled(): boolean {
-    return !readBoolean(process.env.REACT_APP_DISABLE_DEBUG_ID, true);
+    const override = read(process.env.REACT_APP_DISABLE_DEBUG_ID);
+    if (override !== undefined) return !readBoolean(override, false);
+    return process.env.NODE_ENV !== "production";
 }
 
 /**
