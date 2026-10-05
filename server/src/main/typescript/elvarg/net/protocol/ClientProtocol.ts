@@ -213,7 +213,8 @@ export type FriendsChatSnapshot = {
 };
 
 export type ClientMessage =
-  | { type: "move"; worldX: number; worldY: number; modifierFlags: number }
+  /** modifierFlags is the click's key byte (OSRS: 1 Ctrl, 2 Ctrl+Shift); run forces running. */
+  | { type: "move"; worldX: number; worldY: number; modifierFlags: number; run?: boolean }
   | { type: "npc_option"; index: number; clickType: number }
   | { type: "object_option"; id: number; x: number; y: number; clickType?: number; action?: string }
   | { type: "chat"; text: string; messageType: "public" | "game" | "friends_chat" }
@@ -668,7 +669,7 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
     }
     case HighClientPacket.WALK: {
       const worldX = reader.short(), worldY = reader.short(), flags = reader.byte();
-      return { type: "move", worldX, worldY, modifierFlags: (flags & 1) !== 0 ? 2 : flags >> 1 };
+      return { type: "move", worldX, worldY, modifierFlags: flags >> 1, run: (flags & 1) !== 0 };
     }
     case ClientPacket.FACE: {
       const rotation = reader.byte() ? reader.short() : undefined;
