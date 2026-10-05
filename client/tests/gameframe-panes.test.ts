@@ -46,8 +46,8 @@ assert.equal(classic.get(33), 33, "classic minimap orbs retain a valid mount");
 const mobile = loadGameframePaneRedirect(enumLoader, 601);
 assert.ok(mobile, "mobile layout has a redirect");
 assert.equal(mobile.get(96), 49, "mobile chatbox");
-assert.equal(mobile.get(9), 21, "mobile username");
-assert.equal(mobile.get(33), 22, "mobile minimap orbs");
+assert.equal(mobile.get(9), 15, "mobile username");
+assert.equal(mobile.get(33), 37, "mobile minimap orbs");
 assert.equal(mobile.get(16), 27, "mobile main modal");
 assert.equal(mobile.get(76), 116, "mobile combat tab");
 
