@@ -11,6 +11,15 @@ import { BotRuntimeTelemetry } from '../util/BotRuntimeTelemetry';
  *
  * @author Professor Oak
  */
+/**
+ * The engine's clock: monotonic, so it can't jump. The wall clock can (WSL2 resyncs it in
+ * seconds-long steps), which threw the tick schedule and logged lag that never happened.
+ */
+const monotonicNow = (): number => performance.now();
+
+/** A monotonic reading as a wall-clock date, for logs. */
+const asDate = (monotonicMs: number): string => new Date(performance.timeOrigin + monotonicMs).toISOString();
+
 export class GameEngine  {
     private scheduler: NodeJS.Timeout | null = null;
     private eventLoopMonitor: NodeJS.Timeout | null = null;
@@ -41,7 +50,7 @@ export class GameEngine  {
     }
     
     public init() {
-        const now = Date.now();
+        const now = monotonicNow();
         this.nextExpectedTickAt = now + this.tickRateMs;
         this.startEventLoopProbe(now);
         this.scheduleNextRun(this.tickRateMs);
@@ -59,7 +68,7 @@ export class GameEngine  {
     }
     
     public async run() {
-        const tickStartedAt = Date.now();
+        const tickStartedAt = monotonicNow();
         this.tickNumber++;
 
         if (this.tickInProgress) {
@@ -83,8 +92,8 @@ export class GameEngine  {
             console.log(e);
             World.savePlayers();
         } finally {
-            const tickEndedAt = Date.now();
-            const tickDurationMs = tickEndedAt - tickStartedAt;
+            const tickEndedAt = monotonicNow();
+            const tickDurationMs = Math.round(tickEndedAt - tickStartedAt);
             ServerPerf.endTick(
                 tickDurationMs,
                 World.getPlayers().sizeReturn(),
@@ -109,13 +118,13 @@ export class GameEngine  {
     }
 
     private probeEventLoopDelay(): void {
-        const nowMs = Date.now();
+        const nowMs = monotonicNow();
         if (this.nextEventLoopProbeAt <= 0) {
             this.nextEventLoopProbeAt = nowMs + this.eventLoopProbeIntervalMs;
             return;
         }
 
-        const stallMs = nowMs - this.nextEventLoopProbeAt;
+        const stallMs = Math.round(nowMs - this.nextEventLoopProbeAt);
         this.nextEventLoopProbeAt += this.eventLoopProbeIntervalMs;
         if (nowMs > this.nextEventLoopProbeAt + this.eventLoopProbeIntervalMs) {
             this.nextEventLoopProbeAt = nowMs + this.eventLoopProbeIntervalMs;
@@ -171,12 +180,15 @@ export class GameEngine  {
     }
 
     private logTickLag(tickStartedAt: number): number {
-        if (this.nextExpectedTickAt <= 0) {
+        // The first tick waits for the plugins' startup work, which isn't game lag: it sets the
+        // schedule instead of being measured against it.
+        if (this.nextExpectedTickAt <= 0 || this.tickNumber <= 1) {
             this.nextExpectedTickAt = tickStartedAt + this.tickRateMs;
             return 0;
         }
 
-        const driftMs = tickStartedAt - this.nextExpectedTickAt;
+        // Whole milliseconds: the monotonic clock reads fractions.
+        const driftMs = Math.round(tickStartedAt - this.nextExpectedTickAt);
         // Move expected schedule forward for the next cycle, even if we lagged.
         this.nextExpectedTickAt += this.tickRateMs;
         if (tickStartedAt > this.nextExpectedTickAt + this.tickRateMs) {
@@ -194,8 +206,8 @@ export class GameEngine  {
 
         console.warn(
             `[engine] tick_start_lag tick=${this.tickNumber} driftMs=${driftMs} ` +
-            `expected=${new Date(this.nextExpectedTickAt - this.tickRateMs).toISOString()} ` +
-            `started=${new Date(tickStartedAt).toISOString()} players=${World.getPlayers().sizeReturn()} ` +
+            `expected=${asDate(this.nextExpectedTickAt - this.tickRateMs)} ` +
+            `started=${asDate(tickStartedAt)} players=${World.getPlayers().sizeReturn()} ` +
             `npcs=${World.getNpcs().sizeReturn()} tasks=${TaskManager.getTaskAmount()}`
         );
 
@@ -208,8 +220,8 @@ export class GameEngine  {
                 tick: this.tickNumber,
                 driftMs,
                 thresholdMs: this.lagDiagnosticThresholdMs,
-                expectedAt: this.nextExpectedTickAt - this.tickRateMs,
-                startedAt: tickStartedAt,
+                expectedAt: asDate(this.nextExpectedTickAt - this.tickRateMs),
+                startedAt: asDate(tickStartedAt),
             });
         }
 
@@ -218,8 +230,8 @@ export class GameEngine  {
                 tick: this.tickNumber,
                 driftMs,
                 thresholdMs: this.severeLagThresholdMs,
-                expectedAt: this.nextExpectedTickAt - this.tickRateMs,
-                startedAt: tickStartedAt,
+                expectedAt: asDate(this.nextExpectedTickAt - this.tickRateMs),
+                startedAt: asDate(tickStartedAt),
             });
         }
         return driftMs;
