@@ -1,4 +1,5 @@
 
+import { PendingHit } from "../hit/PendingHit";
 import { Mobile } from "../../../entity/impl/Mobile";
 import { Player } from "../../../entity/impl/player/Player";
 import { Animation } from "../../../model/Animation";
@@ -91,12 +92,52 @@ class ChargeSpell extends Spell {
     }
 }
 
+/** A grasp's bind (Wiki): its chance (doubled by Mark of Darkness), length, and target graphics. */
+type GraspBind = { chance: number; ticks: number; bound: number; unbound: number };
+
+/** Grasp binds rolled at the cast, applied when each hit lands (first in, first out). */
+const pendingBinds = new WeakMap<Mobile, boolean[]>();
+
 class CombatArceuusSpell extends CombatNormalSpell {
     constructor(
         options: CombatNormalSpellOptions,
         private readonly demonbane = false,
+        private readonly grasp: GraspBind | null = null,
     ) {
         super(options);
+    }
+
+    /** Wiki (Hit delay): grasps land after 1 tick and demonbanes after 2, whatever the distance. */
+    public hitDelay(): number {
+        return this.demonbane ? 2 : 1;
+    }
+
+    /**
+     * A grasp that hits rolls its bind at the cast and shows it on the target 30 cycles later
+     * (capture, Undead Grasp: the bind graphic or the plain impact, sent with the cast).
+     */
+    public onHitCalc(hit: PendingHit): void {
+        super.onHitCalc(hit);
+        const grasp = this.grasp;
+        if (!grasp || !hit.isAccurate()) return;
+        const caster = hit.getAttacker();
+        const target = hit.getTarget();
+        const marked = caster.isPlayer() && hasArceuusMark(caster);
+        const binds = Math.random() * 100 < (marked ? grasp.chance * 2 : grasp.chance);
+        target.performGraphic(new Graphic(binds ? grasp.bound : grasp.unbound, GRASP_IMPACT_DELAY));
+        const queue = pendingBinds.get(target) ?? [];
+        queue.push(binds);
+        pendingBinds.set(target, queue);
+    }
+
+    /** The bind takes hold when the hit lands: its ticks, 1 against Ward of Arceuus. */
+    public finishCast(cast: Mobile, castOn: Mobile, accurate: boolean, damage: number): void {
+        super.finishCast(cast, castOn, accurate, damage);
+        if (!this.grasp || !accurate) return;
+        const binds = pendingBinds.get(castOn)?.shift() ?? false;
+        if (!binds) return;
+        const ticks = castOn.isPlayer() && hasArceuusWard(castOn) ? 1 : this.grasp.ticks;
+        getCombatFactory().freeze(castOn, ticks * 0.6);
     }
 
     public getSpellbook(): MagicSpellbook {
@@ -172,19 +213,8 @@ const wieldsPurgingStaff = (caster: Mobile): boolean =>
 const GRASP_ANIMATION = 8972;
 const DEMONBANE_ANIMATION = 8977;
 
-/**
- * Wiki: a grasp that hits binds the target with a chance (doubled by Mark of Darkness) for a fixed
- * number of ticks (1 against Ward of Arceuus). Capture (Undead Grasp): the target shows the
- * "hit" graphic when bound and the "miss" one when not, both at ground height.
- */
-const graspHit = (chance: number, ticks: number, bound: number, unbound: number) =>
-    (cast: Mobile, target: Mobile, accurate: boolean): void => {
-        if (!accurate) return;
-        const marked = cast.isPlayer() && hasArceuusMark(cast);
-        const binds = Math.random() * 100 < (marked ? chance * 2 : chance);
-        target.performGraphic(new Graphic(binds ? bound : unbound));
-        if (binds) getCombatFactory().freeze(target, (target.isPlayer() && hasArceuusWard(target) ? 1 : ticks) * 0.6);
-    };
+/** Capture (Undead Grasp): the target's graphic is sent with the cast, 30 cycles on. */
+const GRASP_IMPACT_DELAY = 30;
 
 const getCombatFactory = () =>
     require("../CombatFactory").CombatFactory as typeof import("../CombatFactory").CombatFactory;
@@ -1484,8 +1514,7 @@ export class CombatSpells {
         itemsRequired: () => [new Item(556, 4), new Item(562)],
         levelRequired: () => 35,
         spellId: () => 21826,
-        finishCast: graspHit(10, 2, 1857, 1858),
-    });
+    }, false, { chance: 10, ticks: 2, bound: 1857, unbound: 1858 });
 
     public static INFERIOR_DEMONBANE = new CombatArceuusSpell({
         castAnimation: () => new Animation(DEMONBANE_ANIMATION),
@@ -1509,8 +1538,7 @@ export class CombatSpells {
         itemsRequired: () => [new Item(557, 8), new Item(560)],
         levelRequired: () => 56,
         spellId: () => 21829,
-        finishCast: graspHit(25, 3, 1860, 1861),
-    });
+    }, false, { chance: 25, ticks: 3, bound: 1860, unbound: 1861 });
 
     public static SUPERIOR_DEMONBANE = new CombatArceuusSpell({
         castAnimation: () => new Animation(DEMONBANE_ANIMATION),
@@ -1534,8 +1562,7 @@ export class CombatSpells {
         itemsRequired: () => [new Item(554, 12), new Item(565)],
         levelRequired: () => 79,
         spellId: () => 21832,
-        finishCast: graspHit(50, 4, 1863, 1864),
-    });
+    }, false, { chance: 50, ticks: 4, bound: 1863, unbound: 1864 });
 
     public static DARK_DEMONBANE = new CombatArceuusSpell({
         castAnimation: () => new Animation(DEMONBANE_ANIMATION),

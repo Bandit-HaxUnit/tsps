@@ -56,9 +56,9 @@ export class MagicCombatMethod extends CombatMethod {
     }
 
     public hits(character: Mobile, target: Mobile): PendingHit[] {
-        let hits: PendingHit[] = [new PendingHit(character, target, this, 3)];
-
         let spell = character.getCombat().getSelectedSpell();
+        let hits: PendingHit[] = [new PendingHit(character, target, this, spell?.hitDelay?.() ?? 3)];
+
 
         if (!spell) {
             return hits;
@@ -221,7 +221,8 @@ export class MagicCombatMethod extends CombatMethod {
         if (previousSpell) {
             if (accurate) {
                 const endGraphic = previousSpell.endGraphic();
-                target.performGraphic(endGraphic);
+                // A spell with no impact graphic (a grasp shows its own at the cast) sends none.
+                if (endGraphic) target.performGraphic(endGraphic);
                 const impactSound = previousSpell.impactSound()
                     ?? MagicCombatMethod.resolveImpactSound(previousSpell.spellId());
                 Sounds.sendSound(target, impactSound);

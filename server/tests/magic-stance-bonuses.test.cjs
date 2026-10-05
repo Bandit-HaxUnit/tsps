@@ -128,33 +128,48 @@ function withRandom(value, fn) {
     try { return fn(); } finally { Math.random = random; }
 }
 
-test('grasps: cast animation and graphic; a hit binds by chance (doubled by the Mark), showing the bind or the plain impact (Wiki, capture)', () => {
+test('grasps: the bind is rolled at the cast (doubled by the Mark) and shown 30 cycles on; it takes hold when the hit lands (Wiki, capture)', () => {
     const { CombatSpells } = require('../dist/game/content/combat/magic/CombatSpells');
     const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
     const freezes = [];
     const freeze = CombatFactory.freeze;
     CombatFactory.freeze = (target, seconds) => freezes.push(seconds);
+    const delays = [];
+    const cast = (spell, caster, target, accurate, random) => {
+        target.performGraphic = (graphic) => { target.graphics.push(graphic?.getId?.() ?? null); delays.push(graphic?.delay ?? graphic?.getDelay?.()); };
+        const hit = { isAccurate: () => accurate, getAttacker: () => caster, getTarget: () => target, getTotalDamage: () => 5 };
+        withRandom(random, () => spell.onHitCalc(hit));
+        spell.finishCast(caster, target, accurate, 5);
+    };
     try {
         const spell = CombatSpells.UNDEAD_GRASP;
         assert.equal(spell.castAnimation().getId(), 8972);
         assert.equal(spell.startGraphic().getId(), 1862);
         const caster = arceuusPlayer();
         const target = arceuusPlayer();
-        withRandom(0.49, () => spell.finishCast(caster, target, true, 10));
-        assert.deepEqual([target.graphics.at(-1), freezes.at(-1)], [1863, 4 * 0.6], '50%: bound for 4 ticks, the bind graphic');
-        withRandom(0.51, () => spell.finishCast(caster, target, true, 10));
+        cast(spell, caster, target, true, 0.49);
+        assert.deepEqual([target.graphics.at(-1), delays.at(-1), freezes.at(-1)], [1863, 30, 4 * 0.6], '50%: bound for 4 ticks, the bind graphic 30 cycles on');
+        cast(spell, caster, target, true, 0.51);
         assert.deepEqual([target.graphics.at(-1), freezes.length], [1864, 1], 'not bound: the plain impact');
         caster.setAttribute('arceuus:mark-until', Date.now() + 60_000);
-        withRandom(0.99, () => spell.finishCast(caster, target, true, 10));
+        cast(spell, caster, target, true, 0.99);
         assert.equal(freezes.length, 2, 'the Mark makes 50% into 100%');
         target.setAttribute('arceuus:ward-until', Date.now() + 60_000);
-        withRandom(0, () => CombatSpells.GHOSTLY_GRASP.finishCast(caster, target, true, 5));
+        cast(CombatSpells.GHOSTLY_GRASP, caster, target, true, 0);
         assert.equal(freezes.at(-1), 0.6, 'warded: 1 tick');
-        withRandom(0, () => spell.finishCast(caster, arceuusPlayer(), false, 0));
-        assert.equal(freezes.length, 3, 'a splash binds nothing');
+        const missed = arceuusPlayer();
+        cast(spell, caster, missed, false, 0);
+        assert.deepEqual([missed.graphics, freezes.length], [[], 3], 'a splash: no grasp graphic, no bind');
     } finally {
         CombatFactory.freeze = freeze;
     }
+});
+
+test('grasps land after 1 tick and demonbanes after 2, whatever the distance (Wiki: Hit delay)', () => {
+    const { CombatSpells } = require('../dist/game/content/combat/magic/CombatSpells');
+    for (const grasp of [CombatSpells.GHOSTLY_GRASP, CombatSpells.SKELETAL_GRASP, CombatSpells.UNDEAD_GRASP]) assert.equal(grasp.hitDelay(), 1);
+    for (const demonbane of [CombatSpells.INFERIOR_DEMONBANE, CombatSpells.SUPERIOR_DEMONBANE, CombatSpells.DARK_DEMONBANE]) assert.equal(demonbane.hitDelay(), 2);
+    assert.equal(CombatSpells.FIRE_STRIKE.hitDelay(), null, 'other spells keep the usual delay');
 });
 
 test('demonbanes: +20% accuracy, +40% and +25% damage with the Mark, doubled with a purging staff (Wiki)', () => {
