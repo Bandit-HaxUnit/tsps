@@ -452,6 +452,7 @@ test("as captured: closing the bank by any route ends a bank search; closing any
         closeTrackedInterfaces: () => true,
         sendSubInterface: () => {},
         endBankSearch: PacketSender.prototype.endBankSearch,
+        emitInterfaceClosed: () => {},
       });
       return player.scripts;
     };

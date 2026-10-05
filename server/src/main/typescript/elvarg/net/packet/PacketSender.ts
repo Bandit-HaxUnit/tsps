@@ -656,6 +656,16 @@ export class PacketSender {
     Bank.closeSearch(this.player);
   }
 
+  /**
+   * "interface:closed" { player, interfaceId }: the player's main interface closed, by any route
+   * (its own close, the client's IF_CLOSE, walking away), so content can undo what it set up.
+   */
+  private emitInterfaceClosed(interfaceId: number): void {
+    if (interfaceId < 0) return;
+    const { PluginManager } = require("../../plugins/PluginManager") as typeof import("../../plugins/PluginManager");
+    PluginManager.emitCustomEvent("interface:closed", { player: this.player, interfaceId });
+  }
+
   private closeTrackedInterfaces(): boolean {
     const closable = [...this.subInterfaceTargets.entries()]
       .filter(([, entry]) => entry.type === 0 || entry.type === 3);
@@ -689,6 +699,7 @@ export class PacketSender {
     const interfaceId = this.resetInterfaceState();
     const closed = this.closeTrackedInterfaces();
     this.endBankSearch(interfaceId);
+    this.emitInterfaceClosed(interfaceId);
     if (closed) {
       if (interfaceId === 300 || interfaceId === 334 || interfaceId === 335) {
         this.sendSubInterface((161 << 16) | 79, MAIN_INVENTORY_GROUP_ID, 1);
@@ -721,6 +732,7 @@ export class PacketSender {
     const interfaceId = this.resetInterfaceState();
     const closed = this.closeTrackedInterfaces();
     this.endBankSearch(interfaceId);
+    this.emitInterfaceClosed(interfaceId);
     if (closed) {
       if (interfaceId === 300 || interfaceId === 334 || interfaceId === 335) {
         this.sendSubInterface((161 << 16) | 79, MAIN_INVENTORY_GROUP_ID, 1);
