@@ -48,6 +48,7 @@ export class CacheDefinitions {
     private static enumValues = new Map<number, ReadonlyMap<number, number | string>>();
     /** The struct archive, read once: re-reading it per struct took ~75 ms each. */
     private static structArchive?: ReturnType<ReturnType<typeof CacheIndexDat2.fromStore>["getArchive"]>;
+    private static enumArchive?: ReturnType<ReturnType<typeof CacheIndexDat2.fromStore>["getArchive"]>;
 
     private static getState() {
         if (this.state) return this.state;
@@ -137,12 +138,24 @@ export class CacheDefinitions {
      * A cache enum's key -> value entries (config archive 8), the tables cache scripts read with
      * enum. Empty when the enum does not exist. The default value is not included.
      */
+    /** Decodes the enums archive at startup, so no enum's first lookup does it mid-tick. */
+    static preloadEnums(): void {
+        try {
+            this.enumArchive ??= CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore())
+                .getArchive(ConfigType.DAT2.enums);
+        } catch {
+            // No cache (tests, tools): looked up lazily instead.
+        }
+    }
+
     static getEnumValues(id: number): ReadonlyMap<number, number | string> {
         const cached = this.enumValues.get(id);
         if (cached) return cached;
         const values = new Map<number, number | string>();
-        const file = CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore())
-            .getFile(ConfigType.DAT2.enums, id);
+        // The enums archive is decoded once; decompressing it for each new enum caused a hitch.
+        this.enumArchive ??= CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore())
+            .getArchive(ConfigType.DAT2.enums);
+        const file = this.enumArchive.getFile(id);
         if (file) {
             const buffer = new ByteBuffer(new Int8Array(file.data));
             for (let opcode = buffer.readUnsignedByte(); opcode !== 0; opcode = buffer.readUnsignedByte()) {

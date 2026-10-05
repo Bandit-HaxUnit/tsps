@@ -35,3 +35,14 @@ test('a skilling seq started on a step is held a tick; combat seqs are not', asy
   player.performAnimation(new Animation(621));
   assert.deepEqual(played, [422, 621], 'standing still plays at once');
 });
+
+test('a sequence priority lookup reads the decoded archive, not a fresh decompress each time', async () => {
+  const { preloadSequences } = require('../dist/game/cache/NpcAnimationScanner');
+  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  preloadSequences();
+  const start = performance.now();
+  for (let id = 8000; id < 8200; id++) getSequencePriority(id);
+  // Each fresh decompress took ~100 ms; 200 first-time lookups now take well under one.
+  assert.ok(performance.now() - start < 50, `${(performance.now() - start).toFixed(1)} ms for 200 lookups`);
+  assert.equal(getSequencePriority(733), 1, 'cooking is still dropped by movement');
+});
