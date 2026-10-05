@@ -322,7 +322,13 @@ function createBotActivityRegistry(options = {}) {
       blocked.set(activityId, nowMs + Math.max(0, durationMs));
     },
     /** `allowed` limits the pick to those ids; `avoid` excludes one (a rotation switch). */
-    pickActivity(player, nowMs = Date.now(), { allowed = null, avoid = null } = {}) {
+    pickActivity(player, nowMs = Date.now(), { allowed = null, avoid = null, own = null } = {}) {
+      if (own) {
+        // A bot going back to the activity it was given: only its failure cooldown
+        // holds it back (capacity and `manual` are about handing out new activities).
+        const activity = byId.get(own) ?? null;
+        return activity && !isBlocked(player, own, nowMs) ? activity : null;
+      }
       const previousId = lastActivityByPlayer.get(player);
       const candidates = available(player, nowMs).filter(
         (activity) => activity.id !== avoid && (!allowed || allowed.includes(activity.id))

@@ -108,6 +108,16 @@ test('the wilderness ditch is jumped across its own axis (north-south piece at 2
   assert.deepEqual(resolveJump(at(2998, 3533), { x: 2996, y: 3533 }, { x: 2998, y: 3533 }, 3), { dx: -3, dy: 0, direction: 3 }, 'east side jumps west');
 });
 
+test('a bot without a rotation returns to its own activity, never a random one (wilderness pvp bots)', () => {
+  const pvp = { id: 'pvp', mode: 'pvp', actions: [action('fight', ['failed'])] };
+  const asked = [];
+  const registry = { ...fakeRegistry(), pickActivity: (_, __, options) => { asked.push(options); return options.own === 'pvp' ? pvp : null; } };
+  const brain = new BotBrain({ player: fakePlayer('WildyBot1'), state: {}, registry, activity: pvp });
+  tickN(brain, 3);
+  assert.deepEqual(asked[0], { own: 'pvp' }, 'only its own activity, whatever the capacity');
+  assert.equal(brain.frames[0]?.behaviour.id, 'pvp');
+});
+
 for (const outcome of ['success', 'failed']) {
   test(`an overlay hands state.mode back to its parent on ${outcome}`, () => {
     const state = {};

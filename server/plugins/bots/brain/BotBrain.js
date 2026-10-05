@@ -73,6 +73,9 @@ class BotBrain {
     // Only activityIds are ever assigned; with switchAfterMs ({min,max}) the bot
     // swaps to another of them at random once its activity has run that long.
     this.rotation = options.rotation ?? null;
+    // Without a rotation the bot only ever returns to the activity it was given: a
+    // wilderness bot whose pvp activity ends goes back to pvp, not to a random skill.
+    this.rootActivityId = options.activity?.id ?? null;
     this.switchAt = 0;
     if (options.activity) {
       this.pushRoot(options.activity, options.nowMs ?? Date.now());
@@ -154,9 +157,9 @@ class BotBrain {
   }
 
   assignNext(nowMs) {
-    const activity = this.registry?.pickActivity?.(this.player, nowMs, {
-      allowed: this.rotation?.activityIds ?? null,
-    });
+    const activity = this.registry?.pickActivity?.(this.player, nowMs, this.rotation
+      ? { allowed: this.rotation.activityIds }
+      : { own: this.rootActivityId });
     if (!activity) {
       return false;
     }
