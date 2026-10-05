@@ -551,6 +551,13 @@ module.exports = function registerDragonSlayerQuest(api) {
     repairShip(event.player);
   }
 
+  /** The Lady Lumbridge's gangplanks are this quest's, not the generic gangplank crossing's. */
+  function claimShipGangplank(request) {
+    if (!LOC.shipGangplanks.includes(request.objectId)) return;
+    request.handled = true;
+    handleGangplankClick(request);
+  }
+
   function handleGangplankClick(event) {
     if (quest.getStage(event.player) !== STAGE_NED_READY) {
       event.player.sendMessage("The ship is not ready to sail yet.");
@@ -703,6 +710,7 @@ module.exports = function registerDragonSlayerQuest(api) {
   api.onItemOnObject(handleItemOnObject);
   api.onObjectFirstClick(LOC.shipHole, handleShipHoleClick);
   api.onObjectFirstClick(LOC.shipGangplanks, handleGangplankClick);
+  api.onCustomEvent("ladders:climb", claimShipGangplank);
   api.onObjectFirstClick(LOC.magicDoor, handleMagicDoorClick);
   api.onObjectFirstClick(LOC.oracleChest, handleOracleChestClick);
   api.onObjectFirstClick(LOC.melzarChest, handleMelzarChestClick);
