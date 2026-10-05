@@ -25,6 +25,7 @@ function freezeHotspot(hotspot) {
   return Object.freeze({
     ...hotspot,
     area: freezeArea(hotspot.area),
+    combatLevelRange: isMembersWorld() ? hotspot.combatLevelRange : hotspot.freeCombatLevelRange,
     anchor: Object.freeze({ ...(hotspot.anchor ?? {}) }),
     roamRadius: Number.isFinite(hotspot.roamRadius) ? Math.max(1, Math.floor(hotspot.roamRadius)) : 3,
     lingerMs: Number.isFinite(hotspot.lingerMs) ? Math.max(0, Math.floor(hotspot.lingerMs)) : 10000,

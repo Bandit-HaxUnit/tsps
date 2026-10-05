@@ -664,6 +664,21 @@ function PluginHubPanel({ osrsClient }: { osrsClient: OsrsClient }): JSX.Element
         vengeanceTimerGetSnapshot,
     );
 
+    const attackTimerPlugin = osrsClient.attackTimerPlugin;
+    const attackTimerSubscribe = useCallback(
+        (listener: () => void) => attackTimerPlugin.subscribe(listener),
+        [attackTimerPlugin],
+    );
+    const attackTimerGetSnapshot = useCallback(
+        () => attackTimerPlugin.getState(),
+        [attackTimerPlugin],
+    );
+    const attackTimerState = useSyncExternalStore(
+        attackTimerSubscribe,
+        attackTimerGetSnapshot,
+        attackTimerGetSnapshot,
+    );
+
     const poisonTimerPlugin = osrsClient.poisonTimerPlugin;
     const poisonTimerSubscribe = useCallback(
         (listener: () => void) => poisonTimerPlugin.subscribe(listener),
@@ -760,6 +775,15 @@ function PluginHubPanel({ osrsClient }: { osrsClient: OsrsClient }): JSX.Element
                 },
             },
             {
+                id: "attack_timer",
+                name: "Attack Timer",
+                description: "Shows the ticks until your next attack over your head.",
+                enabled: attackTimerState.config.enabled,
+                setEnabled: (enabled: boolean) => {
+                    attackTimerPlugin.setConfig({ enabled });
+                },
+            },
+            {
                 id: "poison_timer",
                 name: "Poison Timer",
                 description: "Shows poison or venom duration and type.",
@@ -793,6 +817,8 @@ function PluginHubPanel({ osrsClient }: { osrsClient: OsrsClient }): JSX.Element
             tileMarkersState.config.enabled,
             vengeanceTimerPlugin,
             vengeanceTimerState.config.enabled,
+            attackTimerPlugin,
+            attackTimerState.config.enabled,
             poisonTimerPlugin,
             poisonTimerState.config.enabled,
             freezeTimerPlugin,

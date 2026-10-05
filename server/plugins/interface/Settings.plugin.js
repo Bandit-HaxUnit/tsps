@@ -12,6 +12,7 @@ const {
   DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID,
 } = require("../../src/main/typescript/elvarg/net/protocol/ClientProtocol");
 const { getWorldDefinition } = require("../../src/main/typescript/elvarg/game/definition/WorldDefinition");
+const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
 
 const ROOT_INTERFACE = 161;
 const MAIN_MODAL_UID = (ROOT_INTERFACE << 16) | 16;
@@ -53,6 +54,13 @@ const ALL_SETTINGS_CLOSE_BUTTON = (ALL_SETTINGS_INTERFACE_ID << 16) | 4;
 const ALL_SETTINGS_CATEGORIES_CLICKZONE = (ALL_SETTINGS_INTERFACE_ID << 16) | 24;
 const ALL_SETTINGS_SETTINGS_CLICKZONE = (ALL_SETTINGS_INTERFACE_ID << 16) | 20;
 const ALL_SETTINGS_DROPDOWN_BUTTONS = (ALL_SETTINGS_INTERFACE_ID << 16) | 29;
+// The search bar's click zone, beside the "Search:" label.
+const ALL_SETTINGS_SEARCH_BAR = (ALL_SETTINGS_INTERFACE_ID << 16) | 11;
+// The category shown: scripts 3837/3840 draw the category list and its settings from it.
+const SETTINGS_CATEGORY_VARBIT = 9656;
+// Rows and dropdown options that may reach us (OpenRune AllSettingsScript: 0..512). Search
+// results number rows across every category, so they run far past one category's length.
+const ALL_SETTINGS_LAST_SLOT = 511;
 
 const KEYBINDINGS_INTERFACE_ID = 121;
 const KEYBINDINGS_RESTORE_DEFAULTS = (KEYBINDINGS_INTERFACE_ID << 16) | 104;
@@ -92,12 +100,57 @@ const TAB_VARBIT_MAP = [
   { slot: 14, varbit: 4688, defaultKey: 12, buttonChild: 100 }, // Music/Emotes
 ];
 
-// All Settings > Controls category (914) keybind rows, in category order: row
-// slot 27 + i maps to ALL_SETTINGS_KEYBIND_VARBITS[i]. settingId 16..29 -> varbit.
-const ALL_SETTINGS_KEYBIND_SLOT_BASE = 27;
-const ALL_SETTINGS_KEYBIND_VARBITS = [
-  4675, 4680, 4686, 4676, 4682, 4687, 4677, 4684, 4683, 4678, 6517, 4688, 4679, 4689,
-];
+// The settings catalog, from the cache as OpenRune's AllSettingsScript reads it: enum 422 lists
+// the searchable categories (structs) in order; each category's param 745 is an enum of its
+// setting structs in row order, and a setting struct's param 1077 is its setting id. In a
+// category, a row's slot is its index in that category; in search results it is its index in
+// every searchable category's settings in turn.
+const SEARCH_CATEGORIES_ENUM = 422;
+const PARAM_CATEGORY_ID = 743;
+const PARAM_CATEGORY_SETTINGS = 745;
+const PARAM_SETTING_ID = 1077;
+const SEARCH_VIEW = -1;
+
+// The keybind settings (ids 16..29, All Settings > Controls) and the varbit each drives
+// (OpenRune's settings_configs table; the varbits are TAB_VARBIT_MAP's).
+const KEYBIND_VARBIT_BY_SETTING = new Map([
+  [16, 4675], [17, 4680], [18, 4686], [19, 4676], [20, 4682], [21, 4687], [22, 4677],
+  [23, 4684], [24, 4683], [25, 4678], [26, 6517], [27, 4688], [28, 4679], [29, 4689],
+]);
+
+let settingsCatalog = null;
+
+/** { byCategory: Map<category id, setting ids in row order>, all: every setting id in turn }. */
+function catalog() {
+  if (settingsCatalog) return settingsCatalog;
+  const byCategory = new Map();
+  const all = [];
+  const categories = [...CacheDefinitions.getEnumValues(SEARCH_CATEGORIES_ENUM)].sort(([a], [b]) => a - b);
+  for (const [, structId] of categories) {
+    const category = CacheDefinitions.getStructParams(Number(structId));
+    const rows = [...CacheDefinitions.getEnumValues(Number(category.get(PARAM_CATEGORY_SETTINGS)))]
+      .sort(([a], [b]) => a - b)
+      .map(([, settingStruct]) => CacheDefinitions.getStructParams(Number(settingStruct)).get(PARAM_SETTING_ID));
+    byCategory.set(Number(category.get(PARAM_CATEGORY_ID)), rows);
+    all.push(...rows);
+  }
+  settingsCatalog = { byCategory, all };
+  return settingsCatalog;
+}
+
+/** The keybind varbit a clicked row edits, or -1: a row is read in the category shown, or search. */
+function keybindVarbitForRow(player, slot) {
+  const view = player.getAttribute("settings-view");
+  const rows = view === SEARCH_VIEW ? catalog().all : catalog().byCategory.get(Number.isInteger(view) ? view : 0);
+  const settingId = rows?.[slot];
+  return KEYBIND_VARBIT_BY_SETTING.get(Number(settingId)) ?? -1;
+}
+
+function showCategory(player, category) {
+  player.setAttribute("settings-view", category);
+  player.setAttribute("settings-keybind-varbit", -1);
+  player.getPacketSender().sendVarbit(SETTINGS_CATEGORY_VARBIT, category);
+}
 
 const BUTTON_TO_SLOT = new Map(
   TAB_VARBIT_MAP.map((tab) => [(KEYBINDINGS_INTERFACE_ID << 16) | tab.buttonChild, tab.slot])
@@ -202,9 +255,10 @@ function openAllSettings(player) {
   // these transmit flags their ops never reach us (OpenRune AllSettingsScript
   // does the same via ifSetEvents). Op1 over the used slot range.
   sender.sendInterfaceFlagsRange(ALL_SETTINGS_CATEGORIES_CLICKZONE, 0, 15, TRANSMIT_OP1);
-  sender.sendInterfaceFlagsRange(ALL_SETTINGS_SETTINGS_CLICKZONE, 0, 63, TRANSMIT_OP1);
-  sender.sendInterfaceFlagsRange(ALL_SETTINGS_DROPDOWN_BUTTONS, 0, 63, TRANSMIT_OP1);
-  player.setAttribute("settings-keybind-varbit", -1);
+  sender.sendInterfaceFlagsRange(ALL_SETTINGS_SETTINGS_CLICKZONE, 0, ALL_SETTINGS_LAST_SLOT, TRANSMIT_OP1);
+  sender.sendInterfaceFlagsRange(ALL_SETTINGS_DROPDOWN_BUTTONS, 0, ALL_SETTINGS_LAST_SLOT, TRANSMIT_OP1);
+  // It opens on the first category (OpenRune does the same).
+  showCategory(player, 0);
   return true;
 }
 
@@ -225,6 +279,7 @@ module.exports = {
   syncPlayerKeybindings,
   openAllSettings,
   openKeybindings,
+  keybindVarbitForRow,
   register(api) {
     for (const tab of TAB_VARBIT_MAP) {
       api.persistAttribute(keybindAttribute(tab.varbit));
@@ -238,18 +293,22 @@ module.exports = {
       return true;
     });
 
-    // Changing category (or clicking any non-keybind row) must clear the tracked
-    // keybind, otherwise a later dropdown in another category edits it.
-    api.onInterfaceActionButton(ALL_SETTINGS_CATEGORIES_CLICKZONE, ({ player }) => {
+    // Changing category, or searching, changes what a row's slot means and clears the
+    // tracked keybind, otherwise a later dropdown elsewhere edits it.
+    api.onInterfaceActionButton(ALL_SETTINGS_CATEGORIES_CLICKZONE, ({ player, slot }) => {
+      if (Number.isInteger(slot)) showCategory(player, slot);
+      return false;
+    });
+    api.onInterfaceActionButton(ALL_SETTINGS_SEARCH_BAR, ({ player }) => {
+      player.setAttribute("settings-view", SEARCH_VIEW);
       player.setAttribute("settings-keybind-varbit", -1);
       return false;
     });
 
-    // All Settings > Controls: a keybind row remembers which varbit its dropdown
-    // will edit. The server is authoritative (as in OpenRune), so we only track.
+    // A keybind row remembers which varbit its dropdown will edit. The server is
+    // authoritative (as in OpenRune), so we only track.
     api.onInterfaceActionButton(ALL_SETTINGS_SETTINGS_CLICKZONE, ({ player, slot }) => {
-      const varbit = ALL_SETTINGS_KEYBIND_VARBITS[slot - ALL_SETTINGS_KEYBIND_SLOT_BASE];
-      player.setAttribute("settings-keybind-varbit", Number.isInteger(varbit) ? varbit : -1);
+      player.setAttribute("settings-keybind-varbit", Number.isInteger(slot) ? keybindVarbitForRow(player, slot) : -1);
       return false;
     });
 

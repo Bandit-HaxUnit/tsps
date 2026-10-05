@@ -59,6 +59,7 @@ export const enum ServerPacketId {
     DESTINATION = 87,
     PLAYER_OPTION = 88,
     HINT_ARROW = 89,
+    ATTACK_TIMER = 90, // ticks until the local player's next attack (not an OSRS packet)
 
     // ========================================
     // INTERFACES/WIDGETS (100-119)
@@ -200,6 +201,7 @@ export const SERVER_PACKET_LENGTHS: Record<ServerPacketId, number> = {
     [ServerPacketId.PLAYER_OPTION]: -1,
     [ServerPacketId.DESTINATION]: 4, // worldX(2) + worldY(2)
     [ServerPacketId.HINT_ARROW]: 6, // type(1) + a(2) + b(2) + c(1)
+    [ServerPacketId.ATTACK_TIMER]: 1, // ticks(1)
 
     [ServerPacketId.WIDGET_OPEN]: 3, // groupId(2) + modal(1)
     [ServerPacketId.WIDGET_CLOSE]: 2, // groupId(2)

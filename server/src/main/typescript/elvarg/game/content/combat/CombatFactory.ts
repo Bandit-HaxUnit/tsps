@@ -204,8 +204,9 @@ export class CombatFactory {
             damage = CombatFactory.rollSpecialDamage(entity, DamageFormulas.sourceMaxHit(entity, CombatType.MAGIC), boundsOverride);
         }
 
+        // Wiki (Ward of Arceuus): demons hit 10% less, that 10% rounded down first.
         if (entity.isNpc() && victim.isPlayer() && ArceuusSpells.hasWard(victim)) {
-            if (entity.getAsNpc().getCurrentDefinition()?.isDemon?.()) damage = Math.floor(damage * 0.9);
+            if (entity.getAsNpc().getCurrentDefinition()?.isDemon?.()) damage -= Math.floor(damage / 10);
         }
 
         // Do magic effects with the calculated damage..
