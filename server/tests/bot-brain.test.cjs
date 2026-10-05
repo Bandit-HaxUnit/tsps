@@ -99,6 +99,15 @@ test('an ended action closes the interface it left open (bank screen after a dep
   assert.equal(interfaceId, -1, 'the next action starts with no interface open (not busy)');
 });
 
+test('the wilderness ditch is jumped across its own axis (north-south piece at 2996,3530-3533)', () => {
+  const { resolveJump } = require('../plugins/objects/WildernessDitch.plugin');
+  const at = (x, y) => ({ getLocation: () => ({ getX: () => x, getY: () => y }) });
+  assert.deepEqual(resolveJump(at(3090, 3520), { x: 3090, y: 3521 }, { x: 3090, y: 3520 }, 0), { dx: 0, dy: 3, direction: 0 });
+  assert.deepEqual(resolveJump(at(3090, 3523), { x: 3090, y: 3521 }, { x: 3090, y: 3523 }, 2), { dx: 0, dy: -3, direction: 2 });
+  assert.deepEqual(resolveJump(at(2995, 3533), { x: 2996, y: 3533 }, { x: 2995, y: 3533 }, 3), { dx: 3, dy: 0, direction: 1 }, 'west side jumps east');
+  assert.deepEqual(resolveJump(at(2998, 3533), { x: 2996, y: 3533 }, { x: 2998, y: 3533 }, 3), { dx: -3, dy: 0, direction: 3 }, 'east side jumps west');
+});
+
 for (const outcome of ['success', 'failed']) {
   test(`an overlay hands state.mode back to its parent on ${outcome}`, () => {
     const state = {};
