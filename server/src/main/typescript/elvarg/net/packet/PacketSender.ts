@@ -33,7 +33,7 @@ import {
   encodeProjectiles,
   encodeRunClientScript,
   encodeCameraShake,
-  encodeWidgetSetColour,
+  encodeWidgetSetColour, encodeAttackTimer,
   encodeCameraReset,
   encodeChatFilterSettings,
   encodeRunEnergy,
@@ -781,6 +781,12 @@ export class PacketSender {
    * Recolours a text or rectangle component (IF_SETCOLOUR). `colour` is 15-bit RGB as the game
    * sends it - five bits each of red, green and blue, as rsprox logs it.
    */
+  /** The ticks until the player's next attack, for the client's attack timer. */
+  sendAttackTimer(ticks: number): this {
+    this.player.getSession().sendClientPacket(encodeAttackTimer(ticks));
+    return this;
+  }
+
   sendInterfaceColour(uid: number, colour: number): this {
     this.player.getSession().sendClientPacket(encodeWidgetSetColour(uid, colour));
     return this;
