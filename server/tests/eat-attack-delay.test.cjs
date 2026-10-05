@@ -89,3 +89,26 @@ test('eating while idle does not delay the next attack', () => {
     eat({ player: late.player, itemId: ItemIds.SHARK, slot: 0 });
     assert.equal(late.combat.getAttackDelay(), 5, 'two ticks left plus 3');
 });
+
+test('the client\'s attack timer gets the ticks to the next attack whenever they change and lie ahead', () => {
+    const sent = [];
+    const character = {
+        isPlayer: () => true, isNpc: () => false,
+        getAsPlayer: () => ({ getPacketSender: () => ({ sendAttackTimer: (ticks) => sent.push(ticks) }) }),
+    };
+    const combat = new Combat(character);
+    setCycle(100);
+    combat.setAttackDelay(4);
+    assert.deepEqual(sent, [4], 'an attack (speed 4)');
+    setCycle(102);
+    combat.delayAttack(3);
+    assert.deepEqual(sent, [4, 5], 'eating 2 ticks in: 2 left + 3');
+    combat.extendAttackDelay(1);
+    assert.deepEqual(sent, [4, 5], 'no change, nothing sent');
+    setCycle(120);
+    combat.delayAttack(3);
+    assert.deepEqual(sent, [4, 5], 'eating long after: no delay, nothing to show');
+    const npc = new Combat({ isPlayer: () => false, isNpc: () => true });
+    npc.setAttackDelay(4);
+    assert.deepEqual(sent, [4, 5], 'NPCs send nothing');
+});

@@ -284,6 +284,8 @@ import { TileMarkersPlugin } from "./plugins/tilemarkers/TileMarkersPlugin";
 import { createHelmSteeringDeps, steerFromHelm } from "./sailing/HelmSteering";
 import { createBrowserVengeanceTimerPluginPersistence } from "./plugins/vengeancetimer/BrowserVengeanceTimerPluginPersistence";
 import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlugin";
+import { AttackTimerPlugin } from "./plugins/attacktimer/AttackTimerPlugin";
+import { createBrowserAttackTimerPluginPersistence } from "./plugins/attacktimer/BrowserAttackTimerPluginPersistence";
 import { createBrowserStatusTimerPluginPersistence } from "./plugins/statustimer/BrowserStatusTimerPluginPersistence";
 import { StatusTimerPlugin } from "./plugins/statustimer/StatusTimerPlugin";
 import {
@@ -579,6 +581,7 @@ export class OsrsClient {
     readonly rememberLoginPlugin: RememberLoginPlugin;
     readonly tileMarkersPlugin: TileMarkersPlugin;
     readonly vengeanceTimerPlugin: VengeanceTimerPlugin;
+    readonly attackTimerPlugin: AttackTimerPlugin;
     readonly poisonTimerPlugin: StatusTimerPlugin;
     readonly freezeTimerPlugin: StatusTimerPlugin;
     readonly splitPrivateChatPlugin: SplitPrivateChatPlugin;
@@ -1186,6 +1189,9 @@ export class OsrsClient {
         );
         this.vengeanceTimerPlugin = new VengeanceTimerPlugin(
             createBrowserVengeanceTimerPluginPersistence("osrs.plugin.vengeance_timer.v1"),
+        );
+        this.attackTimerPlugin = new AttackTimerPlugin(
+            createBrowserAttackTimerPluginPersistence("osrs.plugin.attack_timer.v1"),
         );
         this.poisonTimerPlugin = new StatusTimerPlugin(
             createBrowserStatusTimerPluginPersistence("osrs.plugin.poison_timer.v1"),

@@ -1,5 +1,6 @@
 import { ClientState } from "../../../game/ClientState";
 import { clearHintArrow, setHintArrowNpc, setHintArrowTile } from "../../../game/HintArrow";
+import { setAttackTimer } from "../../../game/plugins/attacktimer/attackTimerState";
 import { state } from "../state";
 
 export function handleAuthTickMessage(msg: any): boolean {
@@ -76,6 +77,12 @@ export function handleAuthTickMessage(msg: any): boolean {
         ClientState.setDestination(localX, localY);
         ClientState.destinationWorldX = worldX;
         ClientState.destinationWorldY = worldY;
+        return true;
+    }
+    if (msg.type === "attack_timer") {
+        // Sent while the server processes a tick, so it arrives just before that tick's TICK
+        // packet: it counts from the tick about to begin.
+        setAttackTimer(Number(msg.payload?.ticks) | 0, (state.currentTick | 0) + 1);
         return true;
     }
     if (msg.type === "hint_arrow") {

@@ -390,10 +390,27 @@ export class Combat {
 
     public setAttackDelay(ticks: number): void {
         this.nextAttackCycle = World.getProcessCycle() + Math.max(0, ticks | 0);
+        this.sendAttackTimer();
     }
 
     public extendAttackDelay(ticks: number): void {
         this.nextAttackCycle = Math.max(this.nextAttackCycle, World.getProcessCycle() + Math.max(0, ticks | 0));
+        this.sendAttackTimer();
+    }
+
+    /** The next-attack tick last sent to the player's client (its attack timer). */
+    private sentAttackCycle = 0;
+
+    /**
+     * Tells the player's client how many ticks remain until their next attack, whenever that
+     * changes and lies ahead (an attack, eating, a special). The client counts it down.
+     */
+    private sendAttackTimer(): void {
+        if (!this.character.isPlayer() || this.nextAttackCycle === this.sentAttackCycle) return;
+        const remaining = this.getAttackDelay();
+        if (remaining <= 0 && this.sentAttackCycle <= World.getProcessCycle()) return;
+        this.sentAttackCycle = this.nextAttackCycle;
+        this.character.getAsPlayer?.()?.getPacketSender?.()?.sendAttackTimer?.(remaining);
     }
 
     /**
@@ -403,6 +420,7 @@ export class Combat {
      */
     public delayAttack(ticks: number): void {
         this.nextAttackCycle += Math.max(0, ticks | 0);
+        this.sendAttackTimer();
     }
 
     public getAttackDelay(): number {
@@ -587,6 +605,7 @@ export class Combat {
         if (!bypass && !timing.keepDelay) {
             const speed = specialTraits?.attackSpeedTicks ?? method.attackSpeed(this.character);
             this.nextAttackCycle = cycle + Math.max(1, speed | 0);
+            this.sendAttackTimer();
         }
 
         method.start(this.character, target);

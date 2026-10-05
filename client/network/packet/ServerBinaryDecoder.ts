@@ -341,6 +341,9 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                 },
             };
 
+        case ServerPacketId.ATTACK_TIMER:
+            return { type: "attack_timer", payload: { ticks: reader.readByte() } };
+
         case ServerPacketId.HINT_ARROW:
             return {
                 type: "hint_arrow",
