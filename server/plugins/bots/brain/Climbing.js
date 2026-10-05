@@ -132,8 +132,10 @@ function maybeClimb({ player, state, world, request }) {
     return false;
   }
   const at = stairs.getLocation();
-  if (request.climbVia?.x !== at.getX() || request.climbVia?.y !== at.getY() || request.climbVia?.z !== here.z) {
-    request.climbVia = { x: at.getX(), y: at.getY(), z: here.z };
+  // Walk to a tile the stairs can be used from (their open side), not just near them.
+  const stand = ClimbLinks.landingTile(stairs, here, null) ?? at;
+  if (request.climbVia?.x !== stand.getX() || request.climbVia?.y !== stand.getY() || request.climbVia?.z !== here.z) {
+    request.climbVia = { x: stand.getX(), y: stand.getY(), z: here.z };
   }
   if (!inReach(player, stairs) || nowMs < (state?.climbAt ?? 0)) return false;
   if (state) state.climbAt = nowMs + CLIMB_COOLDOWN_MS;
