@@ -19,6 +19,8 @@ const ClimbLinks = require("../../objects/ClimbLinks");
 const SEARCH_RADIUS = 24;
 const CLIMB_COOLDOWN_MS = 3000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
+// Past this many cached answers, expired ones are swept.
+const MAX_CACHED = 2000;
 // Floors a chain of stairs may span (ground to top floor).
 const MAX_HOPS = 3;
 // Within this, a path (doors allowed) must exist; further is the long-route planner's job.
@@ -75,6 +77,9 @@ function stairsAround(centre, z, direction, into) {
  */
 function findStairs(here, goal, direction, nowMs, hops = MAX_HOPS) {
   const key = `${here.x >> 3},${here.y >> 3},${here.z}>${goal.x >> 3},${goal.y >> 3},${goal.z}`;
+  if (stairsByGoal.size > MAX_CACHED) {
+    for (const [stale, entry] of stairsByGoal) if (nowMs - entry.at >= CACHE_TTL_MS) stairsByGoal.delete(stale);
+  }
   const cached = stairsByGoal.get(key);
   if (cached && nowMs - cached.at < CACHE_TTL_MS) return cached.object;
   RegionManager.loadMapFiles(goal.x, goal.y);

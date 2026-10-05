@@ -57,8 +57,24 @@ function isDoorTile(player) {
   };
 }
 
+// Expired plans and failures are swept now and then, so the caches stay bounded on a
+// server left running overnight.
+const SWEEP_MS = 60 * 1000;
+let nextSweepAt = 0;
+function sweep(nowMs) {
+  if (nowMs < nextSweepAt) return;
+  nextSweepAt = nowMs + SWEEP_MS;
+  for (const [key, until] of failedUntil) if (until <= nowMs) failedUntil.delete(key);
+  for (const [key, plans] of routesByGoal) {
+    const live = plans.filter((plan) => nowMs - plan.at < ROUTE_TTL_MS);
+    if (live.length) routesByGoal.set(key, live);
+    else routesByGoal.delete(key);
+  }
+}
+
 /** A route toward `goal` this player can follow from where it stands; undefined = try later. */
 function routeFor(player, here, goal, nowMs) {
+  sweep(nowMs);
   const goalKey = areaKey(goal.x, goal.y, goal.z);
   const plans = (routesByGoal.get(goalKey) ?? []).filter((plan) => nowMs - plan.at < ROUTE_TTL_MS);
   for (const plan of plans) {

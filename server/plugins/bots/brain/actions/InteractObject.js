@@ -44,6 +44,17 @@ const CROWDED_MOVE_ON_MS = 60000;
 const NO_PROGRESS_MS = 60000;
 const ARRIVED_TILES = 20;
 const CLAIMS = new Map();
+// Past this many claims, expired ones are swept (they hold players, which would keep
+// logged-out bots in memory on a long-running server).
+const MAX_CLAIMS = 2000;
+function claim(key, player, nowMs) {
+  if (CLAIMS.size > MAX_CLAIMS) {
+    for (const [stale, entry] of CLAIMS) {
+      if (entry.until <= nowMs || entry.player.isRegistered?.() === false) CLAIMS.delete(stale);
+    }
+  }
+  CLAIMS.set(key, { player, until: nowMs + CLAIM_MS });
+}
 function claimedByOther(key, player, nowMs) {
   const claim = CLAIMS.get(key);
   if (!claim) {
@@ -127,7 +138,7 @@ function createInteractObjectAction(spec, world) {
       // Drop any leftover search walk: dispatched later it would drag the bot off
       // the rock (and moving cancels the skilling session).
       clearMovementRequest(player);
-      CLAIMS.set(objectKey(best), { player, until: nowMs + CLAIM_MS });
+      claim(objectKey(best), player, nowMs);
     }
     bot.target = best
       ? {
@@ -170,7 +181,7 @@ function createInteractObjectAction(spec, world) {
     if (claimedByOther(key, player, Date.now())) {
       return null;
     }
-    CLAIMS.set(key, { player, until: Date.now() + CLAIM_MS });
+    claim(key, player, Date.now());
     const loc = player.getLocation().clone();
     loc.set(target.x, target.y, target.z);
     return MapObjects.get(target.objectId, loc, player.getPrivateArea());
