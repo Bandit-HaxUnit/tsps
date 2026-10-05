@@ -97,6 +97,9 @@ export class ObjectManager {
             }
             RegionManager.removeObjectClipping(removed);
             World.getRemovedObjects().splice(index, 1);
+            // It takes a removed map object's place (a door closed again): removing it later must
+            // hide that spot on scene reloads, as for the original.
+            object.markBaseMap();
         }
 
         World.getObjects().push(object);
@@ -104,7 +107,18 @@ export class ObjectManager {
             ObjectManager.perform(object, OperationType.SPAWN);
         }
     }
+    /** True for a map object, or a copy of one (Doors rebuild theirs from a snapshot). */
+    private static standsForMapObject(object: GameObject): boolean {
+        if (object.isBaseMap()) {
+            return true;
+        }
+        const placed = MapObjects.get(object.getId(), object.getLocation().clone(), null);
+        return placed != null && placed.isBaseMap() && placed.getType() === object.getType();
+    }
+
     public static deregister(object: GameObject, playerUpdate: boolean) {
+        // Before the despawn takes it out of MapObjects.
+        const mapObject = object.getPrivateArea() != null || ObjectManager.standsForMapObject(object);
         for (let index = World.getObjects().length - 1; index >= 0; index--) {
             const existing = World.getObjects()[index];
             if (!ObjectManager.sameObjectIdentity(existing, object)) {
@@ -117,6 +131,12 @@ export class ObjectManager {
             ObjectManager.perform(object, OperationType.DESPAWN);
         }
 
+        // Only map objects have to stay hidden when a scene reloads. Runtime objects (fires,
+        // traps, temporary locs) used to pile up here for good: every scene load re-sent their
+        // removals and every register/deregister scanned them all.
+        if (!mapObject) {
+            return;
+        }
         const alreadyMarkedRemoved = World.getRemovedObjects().some((removed) =>
             ObjectManager.sameObjectIdentity(removed, object)
         );

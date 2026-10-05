@@ -310,7 +310,7 @@ export class RegionManager {
         if (objectId === -1) {
             MapObjects.clear(position, type);
         } else {
-            MapObjects.add(new GameObject(objectId, position, type, direction, null));
+            MapObjects.add(new GameObject(objectId, position, type, direction, null).markBaseMap());
         }
     }
     public static addObjectClipping(object: GameObject) {

@@ -14,6 +14,11 @@ export class GameObject extends Entity {
     private type: number;
     private face: number;
     private privateArea: PrivateArea;
+    /**
+     * Stands for an object of the cache's map (loaded with the region, or put back in place of
+     * one). Only these are remembered once removed, so a reloaded scene keeps them hidden.
+     */
+    private baseMap = false;
 
     constructor(id: number, position: Location, type: number, face: number, privateArea: PrivateArea) {
         super(position);
@@ -28,6 +33,15 @@ export class GameObject extends Entity {
 
     public getId(): number {
         return this.id;
+    }
+
+    public isBaseMap(): boolean {
+        return this.baseMap;
+    }
+
+    public markBaseMap(): this {
+        this.baseMap = true;
+        return this;
     }
 
     public getType(): number {
