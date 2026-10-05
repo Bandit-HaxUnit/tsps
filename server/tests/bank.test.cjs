@@ -402,3 +402,60 @@ test("dragging onto the empty space after a tab's items moves the item to the en
 
   assert.deepEqual(tabsOf(player), [[1, A, 1], [1, B, 1], [1, C, 1]]);
 });
+
+/** A player whose packet sender records client scripts. */
+function recordingPlayer() {
+  const player = createPlayer();
+  const scripts = [];
+  const sender = new Proxy({}, {
+    get: (_target, name) => (...args) => {
+      if (name === "sendClientScript") scripts.push(args);
+      return sender;
+    },
+  });
+  player.getPacketSender = () => sender;
+  player.scripts = scripts;
+  return player;
+}
+
+test("as captured: picking a tab, on the tab bar or a tab heading, ends the bank search", () => {
+  const player = recordingPlayer();
+  for (const tab of [1, 2, 3]) player.getBank(tab).add(new Item(TRIDENT, 1), false);
+  clickTab(player, 1, 1, "View tab");
+  assert.equal(player.getCurrentBankTab(), 1);
+  assert.deepEqual(player.scripts, [[101, 11]], "meslayer_close for the bank search input");
+  // The all-items view's tab headings are bankmain:items slots 1419-1427 (tabs 1-9).
+  player.scripts.length = 0;
+  Bank.handleWidgetAction(player, { groupId: Bank.MAIN_INTERFACE_ID, childId: 12, buttonNum: 1, slot: 1421 });
+  assert.equal(player.getCurrentBankTab(), 3);
+  assert.deepEqual(player.scripts, [[101, 11]]);
+});
+
+test("as captured: Search switches to the main tab", () => {
+  const player = recordingPlayer();
+  player.getBank(1).add(new Item(TRIDENT, 1), false);
+  clickTab(player, 1, 1, "View tab");
+  Bank.handleWidgetAction(player, { groupId: Bank.MAIN_INTERFACE_ID, childId: Bank.SEARCH_CHILD, buttonNum: 1 });
+  assert.equal(player.getCurrentBankTab(), 0);
+});
+
+test("as captured: closing the bank by any route ends a bank search; closing anything else does not", () => {
+  const { PacketSender } = require("../dist/net/packet/PacketSender");
+  // sendInterfaceRemoval: the bank's own close; closeInterruptibleInterfaces: the X (IF_CLOSE)
+  // and walking away.
+  for (const route of ["sendInterfaceRemoval", "closeInterruptibleInterfaces"]) {
+    const close = (interfaceId) => {
+      const player = recordingPlayer();
+      PacketSender.prototype[route].call({
+        player,
+        resetInterfaceState: () => interfaceId,
+        closeTrackedInterfaces: () => true,
+        sendSubInterface: () => {},
+        endBankSearch: PacketSender.prototype.endBankSearch,
+      });
+      return player.scripts;
+    };
+    assert.deepEqual(close(Bank.MAIN_INTERFACE_ID), [[101, 11]], route);
+    assert.deepEqual(close(300), [], route);
+  }
+});
