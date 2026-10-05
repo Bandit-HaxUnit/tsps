@@ -51,10 +51,44 @@ export class MagicCombatMethod extends CombatMethod {
         return CombatType.MAGIC;
     }
 
-    public hits(character: Mobile, target: Mobile): PendingHit[] {
-        let hits: PendingHit[] = [new PendingHit(character, target, this, 3)];
+    /** NPC casters keep their old fixed delay; their attacks are tuned around it. */
+    private static readonly NPC_HIT_DELAY = 3;
 
+    /**
+     * Wiki (Hit delay): a player's magic lands 1 + (1 + distance) / 3 ticks after the cast, the
+     * distance measured edge to edge (to the target's nearest tile); barrage spells measure to
+     * its south-west tile. A spell with a fixed delay of its own keeps it.
+     */
+    public static hitDelay(attacker: Mobile, target: Mobile, spell?: any): number {
+        const own = spell?.hitDelay?.();
+        if (typeof own === "number") return own;
+        if (!attacker.isPlayer()) return MagicCombatMethod.NPC_HIT_DELAY;
+        const distance = MagicCombatMethod.isBarrage(spell)
+            ? attacker.getLocation().getDistance(target.getLocation())
+            : MagicCombatMethod.edgeDistance(attacker, target);
+        return 1 + Math.floor((1 + distance) / 3);
+    }
+
+    /** Chebyshev distance from the attacker's tile to the nearest tile of the target. */
+    private static edgeDistance(attacker: Mobile, target: Mobile): number {
+        const from = attacker.getLocation();
+        const to = target.getLocation();
+        const size = Math.max(1, target.getSize?.() ?? 1);
+        const dx = Math.max(0, to.getX() - from.getX(), from.getX() - (to.getX() + size - 1));
+        const dy = Math.max(0, to.getY() - from.getY(), from.getY() - (to.getY() + size - 1));
+        return Math.max(dx, dy);
+    }
+
+    /** Barrages are the only area spells from level 86 (bursts go up to 70). */
+    private static isBarrage(spell: any): boolean {
+        return typeof spell?.spellRadius === "function" && spell.spellRadius() > 0 &&
+            (spell.levelRequired?.() ?? 0) >= 86;
+    }
+
+    public hits(character: Mobile, target: Mobile): PendingHit[] {
         let spell = character.getCombat().getSelectedSpell();
+        let hits: PendingHit[] = [new PendingHit(character, target, this, MagicCombatMethod.hitDelay(character, target, spell))];
+
 
         if (!spell) {
             return hits;
@@ -89,7 +123,7 @@ export class MagicCombatMethod extends CombatMethod {
                 if (!CombatFactory.canAttackSecondaryTarget(character, target, next, spellRadius)) {
                     continue;
                 }
-                let pendingHit: PendingHit = new PendingHit(character, next, this, 3, false);
+                let pendingHit: PendingHit = new PendingHit(character, next, this, MagicCombatMethod.hitDelay(character, next, spell), false);
                 multiCombatHits.push(pendingHit);
                 spell.onHitCalc(pendingHit);
             }
