@@ -152,9 +152,27 @@ function createBankAction(spec, world) {
     return MapObjects.get(booth.objectId, loc, player.getPrivateArea());
   }
 
-  const action = {
-    id: "bank",
-    update(ctx) {
+  /**
+   * A bank upstairs (Lumbridge castle) is left the way the bot came: the step only
+   * ends back on the floor it started from, or the next step (trees, rocks, NPCs,
+   * all found on the bot's own floor) would search the bank floor forever.
+   */
+  function update(ctx) {
+    const { player, nowMs } = ctx;
+    const bot = stateFor(player);
+    const loc = player.getLocation();
+    bot.origin ??= { x: loc.getX(), y: loc.getY(), z: loc.getZ() };
+    if (!bot.outcome) {
+      const result = bankStep(ctx);
+      if ((result !== "success" && result !== "failed") || loc.getZ() === bot.origin.z) return result;
+      bot.outcome = result;
+    }
+    if (loc.getZ() === bot.origin.z) return bot.outcome;
+    requestMovement(player, bot.origin.x, bot.origin.y, { nowMs, z: bot.origin.z, reason: "brain_bank_return", basicPather: true });
+    return "running";
+  }
+
+  function bankStep(ctx) {
       const { player, nowMs } = ctx;
       const bot = stateFor(player);
       if (
@@ -282,13 +300,19 @@ function createBankAction(spec, world) {
         },
       });
       return "running";
-    },
+  }
+
+  const action = {
+    id: "bank",
+    update,
     stop(ctx) {
       const player = ctx?.player;
       if (!player) {
         return;
       }
       const bot = stateFor(player);
+      bot.origin = null;
+      bot.outcome = null;
       bot.booth = null;
       bot.lastClickAt = 0;
       bot.depositAt = 0;

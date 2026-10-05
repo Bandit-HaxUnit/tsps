@@ -249,6 +249,8 @@ function createInteractObjectAction(spec, world) {
     queueRouteAndFlagAppearance(player, targetX, targetY, {
       reason: "brain_search_walk",
       basicPather: true,
+      // Home's floor: a bot left upstairs (a bank floor) takes the stairs back down.
+      z: Number.isFinite(home.z) ? home.z : undefined,
     });
   }
 

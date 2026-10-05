@@ -436,6 +436,14 @@ function createTrainCombatAction(spec, world) {
           leaveSite(player, bot, nowMs, SITE_AVOID_MS);
           return "failed";
         }
+        const home = state.home;
+        if (!bot.site && home && Number.isFinite(home.z) && location.getZ() !== home.z) {
+          // Left upstairs (a bank floor): NPC clusters are found per floor, go back down first.
+          if (!peekMovementRequest(player)) {
+            requestMovement(player, home.x, home.y, { state, nowMs, z: home.z, reason: "brain_combat_training", basicPather: true });
+          }
+          return "running";
+        }
         if (!bot.site) {
           const selected = selectSite(player, bot, stage, nowMs);
           if (selected === null) return "running";

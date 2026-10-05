@@ -451,6 +451,38 @@ test('a bank one bot cannot walk to is skipped by that bot only', () => {
   ObjectDefinition.forId = realForId;
 });
 
+test('a bank upstairs: the bot walks back down to its floor before the step ends', () => {
+  const { createBankAction } = require('../plugins/bots/brain/actions/Bank');
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { peekMovementRequest: peek, clearMovementRequest: clear } =
+    require('../plugins/bots/behaviours/navigation/BotNavigation');
+  const { Location: Loc } = require('../dist/game/model/Location');
+  const boothId = 18491;
+  const realForId = ObjectDefinition.forId;
+  ObjectDefinition.forId = (id) => (id === boothId ? { getInteractions: () => [null, 'Bank'] } : realForId.call(ObjectDefinition, id));
+  const castleBooth = { getId: () => boothId, getLocation: () => new Loc(3208, 3221, 2) };
+  const world = { objectSearch: { findCandidatesByIds: (_, __, { z }) => (z === 2 ? [castleBooth] : []) } };
+  const a = createBankAction({}, world);
+  let at = new Loc(3215, 3218, 0);
+  let full = true;
+  const player = {
+    ...fakePlayer('banker'), getLocation: () => at, getPrivateArea: () => null,
+    getInventory: () => ({ isFull: () => full }), getUpdateFlag: () => ({ flag() {} }),
+    getMovementQueue: () => ({ size: () => 0 }), getCombat: () => ({ getTarget: () => null }),
+  };
+  a.update({ player, state: {}, nowMs: 1000 });
+  assert.equal(peek(player)?.z, 2, 'walks to the booth on the top floor');
+  clear(player);
+  at = new Loc(3208, 3220, 2);
+  full = false; // deposited
+  assert.equal(a.update({ player, state: {}, nowMs: 2000 }), 'running', 'not done while upstairs');
+  assert.deepEqual([peek(player)?.x, peek(player)?.y, peek(player)?.z], [3215, 3218, 0], 'heads back down to where it came from');
+  clear(player);
+  at = new Loc(3206, 3229, 0);
+  assert.equal(a.update({ player, state: {}, nowMs: 3000 }), 'success', 'done once back on its floor');
+  ObjectDefinition.forId = realForId;
+});
+
 test('a gatherer commits to its far spot: no turning back halfway, and it waits on arrival', () => {
   const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject');
   const { peekMovementRequest: peek, clearMovementRequest: clear } =
