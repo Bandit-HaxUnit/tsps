@@ -483,6 +483,46 @@ test('a bank upstairs: the bot walks back down to its floor before the step ends
   ObjectDefinition.forId = realForId;
 });
 
+test('a firemaker on a tile that refuses fires (a bank floor) moves off it, and gives up if nowhere works', () => {
+  const Firemaking = require('../plugins/skills/Firemaking.plugin');
+  const { createLightFireAction } = require('../plugins/bots/brain/actions/LightFire');
+  const { peekMovementRequest: peek, clearMovementRequest: clear } =
+    require('../plugins/bots/behaviours/navigation/BotNavigation');
+  const { Location: Loc } = require('../dist/game/model/Location');
+  const real = { ...Firemaking };
+  // The bank tile the bot stands on refuses fires; the street outside does not.
+  let blockedTiles = (loc) => loc.getX() === 3208 && loc.getY() === 3220;
+  let started = 0;
+  Object.assign(Firemaking, {
+    isFiremakingActive: () => false,
+    isWoodcuttingLog: () => true,
+    canPlayerBurnLog: () => true,
+    isFireTileBlocked: (loc) => blockedTiles(loc),
+    startBotInventoryFiremaking: () => { started += 1; return true; },
+  });
+  try {
+    const a = createLightFireAction({}, {});
+    const player = {
+      ...fakePlayer('firemaker', 3208, 3220), getPrivateArea: () => null,
+      getInventory: () => ({ getItems: () => [{ getId: () => 1511 }] }),
+      getMovementQueue: () => ({ size: () => 0 }),
+    };
+    assert.equal(a.update({ player }), 'running');
+    assert.ok(peek(player), 'walks to a clear tile instead of retrying the refused one');
+    assert.equal(started, 0, 'never lights on a refused tile');
+    clear(player);
+    blockedTiles = () => true; // nowhere clear around
+    a.update({ player }); clear(player);
+    a.update({ player }); clear(player);
+    assert.equal(a.update({ player }), 'failed', 'nowhere clear: the step gives up so the activity moves on');
+    blockedTiles = () => false;
+    assert.equal(a.update({ player }), 'running');
+    assert.equal(started, 1, 'lights on a clear tile');
+  } finally {
+    Object.assign(Firemaking, real);
+  }
+});
+
 test('a gatherer commits to its far spot: no turning back halfway, and it waits on arrival', () => {
   const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject');
   const { peekMovementRequest: peek, clearMovementRequest: clear } =
