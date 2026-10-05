@@ -87,7 +87,7 @@ const BOT_CONFIG = Object.freeze({
   }),
   executionBudget: Object.freeze({
     enabled: (process.env.BOT_EXECUTION_BUDGET_ENABLED ?? "1") === "1",
-    maxMs: parseEnvInt("BOT_EXECUTION_BUDGET_MS", 30, 5),
+    maxMs: parseEnvInt("BOT_EXECUTION_BUDGET_MS", 60, 5),
     minEntriesPerCycle: parseEnvInt("BOT_EXECUTION_MIN_ENTRIES_PER_CYCLE", 24, 1),
     logCooldownMs: parseEnvInt("BOT_EXECUTION_BUDGET_LOG_COOLDOWN_MS", 5000, 1000),
   }),
@@ -110,8 +110,10 @@ const BOT_CONFIG = Object.freeze({
     mediumDistanceTiles: 48,
     chunkSizeTiles: 32,
     nearStride: 1,
-    mediumStride: 3,
-    farStride: 12,
+    // Far bots every 4 cycles (2.4s): slower left them standing ~10s between
+    // decisions and walk legs; a profile showed bots under 10% of server CPU.
+    mediumStride: 2,
+    farStride: 4,
   }),
   wildernessDitchObjectId: ObjectIds.WILDERNESS_DITCH,
   logging: Object.freeze({

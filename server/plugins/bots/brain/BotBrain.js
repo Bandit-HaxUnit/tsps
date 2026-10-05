@@ -29,6 +29,8 @@ const FRAME_STATE = Object.freeze({
 const FRAME_STALL_MS = 180000;
 // A due rotation with nothing else free keeps the current activity and asks again later.
 const SWITCH_RETRY_MS = 30000;
+// Failed dispatches in a row before a pending walk is dropped.
+const DEAD_WALK_ATTEMPTS = 3;
 
 /** Hands state.mode back when an overlay that set it ends. */
 function restoreMode(state, endingMode, previousMode) {
@@ -338,7 +340,13 @@ class BotBrain {
         clearMovementRequest(player);
       }
     } else if (latest === request) {
-      maybeOpenDoor({ player, state: this.state ?? null, world: this.world, request, select: true });
+      const opening = maybeOpenDoor({ player, state: this.state ?? null, world: this.world, request, select: true });
+      // A walk that keeps finding no path (onto a rock or booth tile the bot already
+      // stands by, a spot cut off) and no door to open is dead: drop it, so the
+      // action re-decides instead of waiting on it forever.
+      if (!opening && !this.state?.doorAttempt && Number(request.noPathAttempts ?? 0) >= DEAD_WALK_ATTEMPTS) {
+        clearMovementRequest(player);
+      }
     }
   }
 
