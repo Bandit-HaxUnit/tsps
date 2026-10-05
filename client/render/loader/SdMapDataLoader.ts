@@ -26,6 +26,7 @@ import { WorkerState } from "../../game/worker/RenderDataWorker";
 import { AnimationFrames } from "../AnimationFrames";
 import { DrawRange, NULL_DRAW_RANGE, newDrawRange } from "../DrawRange";
 import { ModelHashBuffer, getModelHash } from "../buffer/ModelHashBuffer";
+import { buildActorNormals } from "../buffer/ActorNormals";
 import {
     DrawCommand,
     ModelFace,
@@ -1057,8 +1058,9 @@ function addNpcAnimationFrames(
     for (let i = 0; i < frameCount; i++) {
         const model = npcModelLoader.getModel(npcType, seqId, i);
         if (model) {
-            frames[i] = sceneBuf.addModelAnimFrame(model, false);
-            framesAlpha[i] = sceneBuf.addModelAnimFrame(model, true);
+            const normals = buildActorNormals(model, npcModelLoader.modelCache.get(npcType.id) ?? model);
+            frames[i] = sceneBuf.addModelAnimFrame(model, false, normals);
+            framesAlpha[i] = sceneBuf.addModelAnimFrame(model, true, normals);
             if (framesAlpha[i][1] > 0) {
                 alphaFrameCount++;
             }
@@ -1089,8 +1091,9 @@ function addNpcStaticFrame(
         return undefined;
     }
 
-    const frame = sceneBuf.addModelAnimFrame(model, false);
-    const alphaFrame = sceneBuf.addModelAnimFrame(model, true);
+    const normals = buildActorNormals(model, npcModelLoader.modelCache.get(npcType.id) ?? model);
+    const frame = sceneBuf.addModelAnimFrame(model, false, normals);
+    const alphaFrame = sceneBuf.addModelAnimFrame(model, true, normals);
     return {
         frames: [frame],
         framesAlpha: alphaFrame[1] > 0 ? [alphaFrame] : undefined,
@@ -1196,7 +1199,7 @@ function buildNpcGeometry(
     baseTileX: number,
     baseTileY: number,
 ) {
-    const npcSceneBuf = new SceneBuffer(textureLoader, textureIdIndexMap, 20000);
+    const npcSceneBuf = new SceneBuffer(textureLoader, textureIdIndexMap, 20000, true);
     const npcRenderBundles = createNpcRenderBundles(
         npcModelLoader,
         basTypeLoader,
@@ -1612,7 +1615,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             }
         }
         const { npcSceneBuf, npcs } = shouldLoadPartial
-            ? { npcSceneBuf: new SceneBuffer(textureLoader, textureIdIndexMap, 1), npcs: [] }
+            ? { npcSceneBuf: new SceneBuffer(textureLoader, textureIdIndexMap, 1, true), npcs: [] }
             : buildNpcGeometry(
                   npcModelLoader,
                   basTypeLoader,

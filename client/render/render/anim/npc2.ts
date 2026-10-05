@@ -16,6 +16,7 @@ import {
     VertexBuffer,
 } from "picogl";
 
+import { ACTOR_VERTEX_STRIDE } from "../../buffer/ActorNormals";
 import {
     getClientCycle,
     getCurrentTick,
@@ -369,7 +370,7 @@ export function uploadDynamicNpcGeometry(host: WebGLOsrsRendererHost,
                 host.dynamicNpcDrawCall = undefined;
             }
 
-            host.dynamicNpcInterleavedBuffer = host.app.createInterleavedBuffer(12, vertices);
+            host.dynamicNpcInterleavedBuffer = host.app.createInterleavedBuffer(ACTOR_VERTEX_STRIDE, vertices);
             host.dynamicNpcIndexBuffer = host.app.createIndexBuffer(PicoGL.UNSIGNED_INT, indices);
             host.dynamicNpcBufferVertexSize = vertices.length;
             host.dynamicNpcBufferIndexSize = indices.length;
@@ -379,8 +380,8 @@ export function uploadDynamicNpcGeometry(host: WebGLOsrsRendererHost,
                 .createVertexArray()
                 .vertexAttributeBuffer(0, host.dynamicNpcInterleavedBuffer, {
                     type: PicoGL.UNSIGNED_INT,
-                    size: 3,
-                    stride: 12,
+                    size: 4,
+                    stride: ACTOR_VERTEX_STRIDE,
                     integer: true as any,
                 })
                 .indexBuffer(host.dynamicNpcIndexBuffer);
