@@ -649,6 +649,13 @@ export class PacketSender {
     return interfaceId;
   }
 
+  /** Capture (bank search): once the bank closes, by any route, a search typed in the chatbox ends too. */
+  private endBankSearch(closedInterfaceId: number): void {
+    if (closedInterfaceId !== 12) return;
+    const { Bank } = require("../../game/model/container/impl/Bank") as typeof import("../../game/model/container/impl/Bank");
+    Bank.closeSearch(this.player);
+  }
+
   private closeTrackedInterfaces(): boolean {
     const closable = [...this.subInterfaceTargets.entries()]
       .filter(([, entry]) => entry.type === 0 || entry.type === 3);
@@ -680,7 +687,9 @@ export class PacketSender {
 
   closeInterruptibleInterfaces(): this {
     const interfaceId = this.resetInterfaceState();
-    if (this.closeTrackedInterfaces()) {
+    const closed = this.closeTrackedInterfaces();
+    this.endBankSearch(interfaceId);
+    if (closed) {
       if (interfaceId === 300 || interfaceId === 334 || interfaceId === 335) {
         this.sendSubInterface((161 << 16) | 79, MAIN_INVENTORY_GROUP_ID, 1);
       }
@@ -710,7 +719,9 @@ export class PacketSender {
 
   sendInterfaceRemoval(): this {
     const interfaceId = this.resetInterfaceState();
-    if (this.closeTrackedInterfaces()) {
+    const closed = this.closeTrackedInterfaces();
+    this.endBankSearch(interfaceId);
+    if (closed) {
       if (interfaceId === 300 || interfaceId === 334 || interfaceId === 335) {
         this.sendSubInterface((161 << 16) | 79, MAIN_INVENTORY_GROUP_ID, 1);
       }
