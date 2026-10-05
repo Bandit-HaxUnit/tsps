@@ -161,6 +161,8 @@ export class Sound {
     public static PRAYER_RAPID_RESTORE = new Sound(2679, 1, 0, 0)
     public static RUNECRAFTING = Sound.CRAFT_RUNES
     public static HOME_TELEPORT = new Sound(193, 1, 0, 0)
+    /** An experience reward granted (genie's lamp, as captured). */
+    public static XP_REWARD = new Sound(2655, 1, 0, 0)
     public static HOME_TELEPORT_ALT = Sound.HOME_TELEPORT
 
     public id: number;

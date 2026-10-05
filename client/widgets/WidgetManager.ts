@@ -118,6 +118,8 @@ export class WidgetManager {
     onLoadListener?: (scriptId: number, sourceWidget: WidgetNode) => void;
     /** Invoker for runtime-set onLoad handlers (set via IF_SETONLOAD/CC_SETONLOAD) */
     onLoadInvoker?: (sourceWidget: WidgetNode) => void;
+    /** Called once a group has been loaded (its widgets now exist). */
+    onGroupLoaded?: (groupId: number) => void;
     /** Callback fired when an interface closes - used to clean up click targets */
     onInterfaceClose?: (groupId: number) => void;
     onResizeListener?: (scriptId: number, sourceWidget: WidgetNode) => void;
@@ -1239,6 +1241,7 @@ export class WidgetManager {
 
             // Mark as loaded
             this.loadedGroups[groupId] = true;
+            this.onGroupLoaded?.(groupId);
 
             return instance;
         } catch {

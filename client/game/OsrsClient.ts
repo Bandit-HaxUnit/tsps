@@ -345,6 +345,7 @@ import { WidgetInteractionController } from "./widgets/WidgetInteractionControll
 import { WidgetTransmitProcessor } from "./widgets/WidgetTransmitProcessor";
 import { CustomInterfaceRuntime } from "../widgets/custom/CustomInterfaceRuntime";
 import { PendingInterfaceUpdates } from "../widgets/custom/PendingInterfaceUpdates";
+import { HeldWidgetProperties } from "../widgets/HeldWidgetProperties";
 import { setCustomInterface } from "../common/gamemode/GamemodeContentStore";
 import {
     fetchInterfaceDefinition,
@@ -383,6 +384,11 @@ const KEYBINDING_TABS: ReadonlyArray<{ varbit: number; tab: number }> = [
 
 // Enum IDs consumed by the stock tab-switch script (914), per game-frame layout.
 const TAB_SWITCH_SCRIPT = 914;
+/** Server-set widget properties held while their cache interface is not loaded. */
+const HELD_WIDGET_ACTIONS: ReadonlySet<string> = new Set([
+    "set_text", "set_hidden", "set_model", "set_colour", "set_position", "set_item",
+    "set_npc_head", "set_animation", "set_player_head",
+]);
 const DEFAULT_ROOT_INTERFACE = 161;
 const DEFAULT_DISPLAY_ENUM = 1130;
 const DISPLAY_ENUM_BY_ROOT_INTERFACE: Readonly<Record<number, number>> = {
@@ -968,6 +974,7 @@ export class OsrsClient {
         Map<number, number> | undefined
     >();
     private handleWidgetPayload?: (payload: any) => void;
+    private heldWidgetProperties = new HeldWidgetProperties();
     private unsubscribeNpcInfo?: () => void;
     private unsubscribeCombat?: () => void;
     private unsubscribePlayerSync?: () => void;
@@ -1429,6 +1436,18 @@ export class OsrsClient {
             }
         }
         this.customInterfaces.onInterfaceOpened(payload.groupId | 0);
+    }
+
+    /**
+     * A property for a cache interface that is not loaded yet waits for it to load (see
+     * HeldWidgetProperties); true when the payload was held.
+     */
+    private holdForUnloadedGroup(payload: any): boolean {
+        if (!HELD_WIDGET_ACTIONS.has(payload?.action) || !this.widgetManager) return false;
+        const uid = Number(payload.uid) | 0;
+        if (this.widgetManager.getWidgetByUid(uid) || this.widgetManager.isGroupLoaded(uid >>> 16)) return false;
+        this.heldWidgetProperties.hold(payload);
+        return true;
     }
 
     private cancelPendingInterfaceOpen(targetUid: number): void {
@@ -2446,6 +2465,9 @@ export class OsrsClient {
         this.widgetSessionManager = new WidgetSessionManager();
         const handleWidgetPayload = (payload: any) => {
             if (this.pendingInterfaceUpdates.defer(payload)) {
+                return;
+            }
+            if (this.holdForUnloadedGroup(payload)) {
                 return;
             }
             if (payload.action !== "set_text" && (payload as any).uid !== 10616865) {
@@ -5964,6 +5986,7 @@ export class OsrsClient {
 
                 // Clear widgets
                 this.widgetManager?.clear();
+                this.heldWidgetProperties.clear();
 
                 // Reset login state
                 this.loginState.reset();
@@ -6521,6 +6544,9 @@ export class OsrsClient {
             // Phase 9: Preparing interface
             await showPhase(90, "Preparing interface...");
             this.widgetManager = new WidgetManager(this.cacheSystem);
+            this.widgetManager.onGroupLoaded = (groupId) => {
+                for (const held of this.heldWidgetProperties.take(groupId)) this.handleWidgetPayload?.(held);
+            };
             try {
                 const { GraphicsDefaults } = require("../rs/config/defaults/GraphicsDefaults");
                 const graphicsDefaults = GraphicsDefaults.load(cache.info, this.cacheSystem);
