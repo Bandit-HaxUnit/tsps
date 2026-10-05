@@ -178,6 +178,10 @@ function serverSpawnRendersBeforeMapBatchRefresh(): void {
         // valid map draw entry, while NPC 3's stale batch entry is suppressed, so
         // NPCs 1 and 3 must use the immediate path from the map that owns them.
         shouldRenderNpcFromMap: (map: any, id: number) => mapByNpc.get(id) === map,
+        smoothed: new Set<number>(),
+        isNpcSmoothed(id: number) {
+            return this.smoothed.has(id);
+        },
     };
 
     addUnbatchedNpcRenderData(host as any);
@@ -190,6 +194,15 @@ function serverSpawnRendersBeforeMapBatchRefresh(): void {
     assert.deepEqual(
         host.unbatchedNpcRenderEntries.map((entry) => entry.dataOffset),
         [0, 1],
+    );
+
+    // Animation smoothing draws NPC 2 through this path too, though its map's batch has it.
+    host.smoothed.add(2);
+    host.actorRenderCount = 0;
+    addUnbatchedNpcRenderData(host as any);
+    assert.deepEqual(
+        host.unbatchedNpcRenderEntries.map((entry) => entry.ecsId),
+        [1, 2, 3],
     );
 }
 

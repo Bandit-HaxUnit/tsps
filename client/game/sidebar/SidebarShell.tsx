@@ -724,6 +724,21 @@ function PluginHubPanel({ osrsClient }: { osrsClient: OsrsClient }): JSX.Element
         menuSwapperGetSnapshot,
     );
 
+    const animationSmoothingPlugin = osrsClient.animationSmoothingPlugin;
+    const animationSmoothingSubscribe = useCallback(
+        (listener: () => void) => animationSmoothingPlugin.subscribe(listener),
+        [animationSmoothingPlugin],
+    );
+    const animationSmoothingGetSnapshot = useCallback(
+        () => animationSmoothingPlugin.getState(),
+        [animationSmoothingPlugin],
+    );
+    const animationSmoothingState = useSyncExternalStore(
+        animationSmoothingSubscribe,
+        animationSmoothingGetSnapshot,
+        animationSmoothingGetSnapshot,
+    );
+
     const hdPlugin = osrsClient.hdPlugin;
     const hdEnabled = useSyncExternalStore(hdPlugin.subscribe, hdPlugin.getEnabled, hdPlugin.getEnabled);
 
@@ -809,6 +824,15 @@ function PluginHubPanel({ osrsClient }: { osrsClient: OsrsClient }): JSX.Element
                 },
             },
             {
+                id: "animation_smoothing",
+                name: "Animation Smoothing",
+                description: "Blends player, NPC and graphic animations between their frames.",
+                enabled: animationSmoothingState.config.enabled,
+                setEnabled: (enabled: boolean) => {
+                    animationSmoothingPlugin.setConfig({ enabled });
+                },
+            },
+            {
                 id: "poison_timer",
                 name: "Poison Timer",
                 description: "Shows poison or venom duration and type.",
@@ -844,6 +868,8 @@ function PluginHubPanel({ osrsClient }: { osrsClient: OsrsClient }): JSX.Element
             vengeanceTimerState.config.enabled,
             attackTimerPlugin,
             attackTimerState.config.enabled,
+            animationSmoothingPlugin,
+            animationSmoothingState.config.enabled,
             menuSwapperPlugin,
             menuSwapperState.config.enabled,
             poisonTimerPlugin,

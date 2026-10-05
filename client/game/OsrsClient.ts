@@ -286,6 +286,8 @@ import { createBrowserVengeanceTimerPluginPersistence } from "./plugins/vengeanc
 import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlugin";
 import { AttackTimerPlugin } from "./plugins/attacktimer/AttackTimerPlugin";
 import { createBrowserAttackTimerPluginPersistence } from "./plugins/attacktimer/BrowserAttackTimerPluginPersistence";
+import { AnimationSmoothingPlugin } from "./plugins/animationsmoothing/AnimationSmoothingPlugin";
+import { createBrowserAnimationSmoothingPluginPersistence } from "./plugins/animationsmoothing/BrowserAnimationSmoothingPersistence";
 import { MenuSwapperPlugin } from "./plugins/menuswapper/MenuSwapperPlugin";
 import { createBrowserMenuSwapperPluginPersistence } from "./plugins/menuswapper/BrowserMenuSwapperPersistence";
 import { setMenuTransform } from "../ui/menu/menuTransforms";
@@ -587,6 +589,7 @@ export class OsrsClient {
     readonly tileMarkersPlugin: TileMarkersPlugin;
     readonly vengeanceTimerPlugin: VengeanceTimerPlugin;
     readonly attackTimerPlugin: AttackTimerPlugin;
+    readonly animationSmoothingPlugin: AnimationSmoothingPlugin;
     readonly menuSwapperPlugin: MenuSwapperPlugin;
     readonly poisonTimerPlugin: StatusTimerPlugin;
     readonly freezeTimerPlugin: StatusTimerPlugin;
@@ -1199,6 +1202,9 @@ export class OsrsClient {
         );
         this.attackTimerPlugin = new AttackTimerPlugin(
             createBrowserAttackTimerPluginPersistence("osrs.plugin.attack_timer.v1"),
+        );
+        this.animationSmoothingPlugin = new AnimationSmoothingPlugin(
+            createBrowserAnimationSmoothingPluginPersistence("osrs.plugin.animation_smoothing.v1"),
         );
         this.menuSwapperPlugin = new MenuSwapperPlugin(
             createBrowserMenuSwapperPluginPersistence("osrs.plugin.menu_swapper.v1"),

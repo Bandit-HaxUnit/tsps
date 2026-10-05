@@ -14,6 +14,8 @@ type Pass = "opaque" | "alpha";
 type ProjectileRenderGroup = {
     spotId: number;
     frameIdx: number;
+    /** Cycles into the frame when animation smoothing blends it; 0 otherwise. */
+    frameCycle: number;
     slots: number[];
 };
 
@@ -55,10 +57,18 @@ export class ProjectileRenderer {
         frameIdx: number,
         transparent: boolean,
         program: any,
+        frameCycle: number = 0,
     ): SpotAnimGpuRecord | undefined {
         if (!program) return undefined;
         const programKey = transparent ? "projectile-alpha" : "projectile-opaque";
-        return this.gpuCache?.getOrCreate(spotId, frameIdx, transparent, programKey, program);
+        return this.gpuCache?.getOrCreate(
+            spotId,
+            frameIdx,
+            transparent,
+            programKey,
+            program,
+            frameCycle,
+        );
     }
 
     private getReusableGroups(): Map<string, ProjectileRenderGroup> {
@@ -114,11 +124,13 @@ export class ProjectileRenderer {
             const spotId = projectile.projectileId | 0;
             const frameIdx = this.resolveFrameIndex(spotId, projectile);
             this.dispatchFrameSound(projectile, spotId, frameIdx);
+            const frameCycle =
+                this.gfxCache?.smoothingCycle(spotId, frameIdx, projectile.getFrameCycle()) ?? 0;
 
-            const key = `${spotId}|${frameIdx}`;
+            const key = `${spotId}|${frameIdx}|${frameCycle}`;
             let group = groups.get(key);
             if (!group) {
-                group = { spotId, frameIdx, slots: [] };
+                group = { spotId, frameIdx, frameCycle, slots: [] };
                 groups.set(key, group);
             }
             group.slots.push(slot);
@@ -208,6 +220,7 @@ export class ProjectileRenderer {
                 group.frameIdx,
                 transparent,
                 prog,
+                group.frameCycle,
             );
             if (!vaoRec) {
                 continue;

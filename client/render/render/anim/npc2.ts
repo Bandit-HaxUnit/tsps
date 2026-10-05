@@ -453,6 +453,7 @@ export function resolveUnbatchedNpcGeometry(
                     frameId,
                     overlaySeqId,
                     overlayFrameId,
+                    Math.max(0, npcSmoothingCycle(host, ecsId)),
                 );
             }
             const hasGraphics =
@@ -469,4 +470,43 @@ export function resolveUnbatchedNpcGeometry(
         }
         return geometry;
 
+}
+
+/** NPCs this close to the local player (in tiles) are drawn smoothed when the plugin is on. */
+const NPC_SMOOTHING_RADIUS_TILES = 16;
+
+/**
+ * Animation smoothing for an NPC: -1 when it is not smoothed (drawn from the map's baked
+ * frames), otherwise the cycles into its current frame (0..length) to blend toward the next
+ * frame. Smoothed NPCs are drawn through the unbatched (CPU) path, which can blend frames.
+ */
+export function npcSmoothingCycle(host: WebGLOsrsRendererHost, ecsId: number): number {
+    const client = host.osrsClient;
+    const plugin = client.animationSmoothingPlugin;
+    if (!plugin?.isEnabled() || !host.dynamicNpcAnimLoader?.isReady()) return -1;
+    const ecs = client.npcEcs;
+    if ((ecs.getWorldViewId(ecsId) | 0) >= 0) return -1;
+
+    const playerIndex = client.playerEcs.getIndexForServerId(client.controlledPlayerServerId | 0);
+    if (playerIndex === undefined) return -1;
+    const radius = NPC_SMOOTHING_RADIUS_TILES * 128;
+    const dx = (ecs.getWorldX(ecsId) | 0) - (client.playerEcs.getX(playerIndex) | 0);
+    const dy = (ecs.getWorldY(ecsId) | 0) - (client.playerEcs.getY(playerIndex) | 0);
+    if (Math.abs(dx) > radius || Math.abs(dy) > radius) return -1;
+
+    const actionSeqId = ecs.getSeqId(ecsId) | 0;
+    const action = actionSeqId >= 0 && (ecs.getSeqDelay?.(ecsId) | 0) === 0;
+    const { movementSeqId, idleSeqId } = host.resolveNpcMovementSequenceIds(ecs, ecsId);
+    const seqId = action ? actionSeqId : movementSeqId | 0;
+    if (seqId < 0) return -1;
+    // An action layered over movement is not blended (as in RuneLite).
+    const layered =
+        action &&
+        host.shouldLayerNpcMovementSequence(actionSeqId, movementSeqId | 0, idleSeqId | 0);
+    if (layered) return -1;
+    if (!plugin.smoothsNpc(ecs.getNpcTypeId(ecsId) | 0, seqId, action)) return -1;
+    const seqType: any = client.seqTypeLoader.load(seqId);
+    if (!seqType || seqType.isSkeletalSeq?.() || !(seqType.frameIds?.length > 1)) return -1;
+    const cycle = action ? ecs.getAnimTick(ecsId) : ecs.getMovementAnimTick(ecsId);
+    return Math.max(0, cycle | 0);
 }
