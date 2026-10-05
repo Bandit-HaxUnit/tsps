@@ -57,3 +57,38 @@ test('magic defence takes 70% Magic and 30% Defence, each rounded down, plus the
     assert.equal(magicDefenceLevel(caster(FightType.STAFF_BASH, { autocasting: true })), 106);
     assert.equal(magicDefenceLevel(caster(FightType.POWERED_STAFF_LONGRANGE)), 109);
 });
+
+test('the autocast selector gets the spellbook\'s list: the Slayer\'s staff\'s own on standard, Arceuus on Arceuus', () => {
+    const { Autocasting } = require('../dist/game/content/combat/magic/Autocasting');
+    const { MagicSpellbook } = require('../dist/game/model/MagicSpellbook');
+    const { CombatSpells } = require('../dist/game/content/combat/magic/CombatSpells');
+    const { ItemIdentifiers: Items } = require('../dist/util/ItemIdentifiers');
+    // Varp 664 (cache scripts 2098/243): -1 standard, 4170 the Slayer's staff, 9013 Arceuus.
+    assert.equal(Autocasting.selectorList(MagicSpellbook.NORMAL, Items.STAFF_OF_FIRE), -1);
+    assert.equal(Autocasting.selectorList(MagicSpellbook.NORMAL, Items.SLAYERS_STAFF), 4170);
+    assert.equal(Autocasting.selectorList(MagicSpellbook.NORMAL, Items.SLAYERS_STAFF_E_), 4170, 'the (e) has no entry of its own');
+    assert.equal(Autocasting.selectorList(MagicSpellbook.ARCEUUS, Items.SLAYERS_STAFF), 9013);
+    assert.equal(Autocasting.selectorList(MagicSpellbook.ARCEUUS, Items.SLAYERS_STAFF_E_), 9013);
+    assert.equal(Autocasting.selectorList(MagicSpellbook.ANCIENT, Items.ANCIENT_STAFF), Items.ANCIENT_STAFF);
+    // Wiki (Autocast): who may autocast Arceuus spells.
+    for (const name of ["Slayer's staff", "Slayer's staff (e)", "Skull sceptre (i)", "Ahrim's staff 75", "Kodai wand", "Toxic staff of the dead"]) {
+        assert.ok(Autocasting.canAutocastArceuus(name), name);
+    }
+    for (const name of ['Staff of fire', 'Ancient staff', 'Trident of the seas']) assert.ok(!Autocasting.canAutocastArceuus(name), name);
+    // The selector's Arceuus slots: demonbanes on top, grasps below (cache script 4133, Wiki picture).
+    assert.deepEqual([53, 54, 55, 56, 57, 58].map((slot) => Autocasting.autocastSpell(slot)), [
+        CombatSpells.INFERIOR_DEMONBANE, CombatSpells.GHOSTLY_GRASP, CombatSpells.SUPERIOR_DEMONBANE,
+        CombatSpells.SKELETAL_GRASP, CombatSpells.DARK_DEMONBANE, CombatSpells.UNDEAD_GRASP,
+    ]);
+});
+
+test('the Slayer\'s staff (e) is a staff, as the plain one is', () => {
+    const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+    const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
+    const { WeaponInterfaces } = require('../dist/game/content/combat/WeaponInterfaces');
+    const { ItemIdentifiers: Items } = require('../dist/util/ItemIdentifiers');
+    CachePipeline.initialize();
+    require('../plugins/items/ItemDefinitionLoader.plugin').register({ log() {}, onPlayerLogin() {}, registerContentEndpoint() {} });
+    assert.equal(ItemDefinition.forId(Items.SLAYERS_STAFF_E_).getWeaponInterface(), WeaponInterfaces.STAFF);
+    assert.equal(ItemDefinition.forId(Items.SLAYERS_STAFF).getWeaponInterface(), WeaponInterfaces.STAFF);
+});
