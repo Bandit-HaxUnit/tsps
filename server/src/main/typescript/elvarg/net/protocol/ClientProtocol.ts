@@ -1588,6 +1588,11 @@ export function encodeWidgetSetColour(uid: number, colour: number): Buffer {
   return encodeServerPacket(ServerPacketId.WIDGET_SET_COLOUR, payload);
 }
 
+/** The ticks until the player's next attack, for the client's attack timer (not an OSRS packet). */
+export function encodeAttackTimer(ticks: number): Buffer {
+  return encodeServerPacket(ServerPacketId.ATTACK_TIMER, Buffer.from([Math.max(0, Math.min(255, ticks | 0))]));
+}
+
 /** IF_SETPOSITION: move a component within its parent, keeping its position modes. */
 export function encodeWidgetSetPosition(uid: number, x: number, y: number): Buffer {
   const payload = Buffer.alloc(8);

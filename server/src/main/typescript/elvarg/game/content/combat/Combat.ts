@@ -390,10 +390,27 @@ export class Combat {
 
     public setAttackDelay(ticks: number): void {
         this.nextAttackCycle = World.getProcessCycle() + Math.max(0, ticks | 0);
+        this.sendAttackTimer();
     }
 
     public extendAttackDelay(ticks: number): void {
         this.nextAttackCycle = Math.max(this.nextAttackCycle, World.getProcessCycle() + Math.max(0, ticks | 0));
+        this.sendAttackTimer();
+    }
+
+    /** The next-attack tick last sent to the player's client (its attack timer). */
+    private sentAttackCycle = 0;
+
+    /**
+     * Tells the player's client how many ticks remain until their next attack, whenever that
+     * changes and lies ahead (an attack, eating, a special). The client counts it down.
+     */
+    private sendAttackTimer(): void {
+        if (!this.character.isPlayer() || this.nextAttackCycle === this.sentAttackCycle) return;
+        const remaining = this.getAttackDelay();
+        if (remaining <= 0 && this.sentAttackCycle <= World.getProcessCycle()) return;
+        this.sentAttackCycle = this.nextAttackCycle;
+        this.character.getAsPlayer?.()?.getPacketSender?.()?.sendAttackTimer?.(remaining);
     }
 
     /**
@@ -403,6 +420,7 @@ export class Combat {
      */
     public delayAttack(ticks: number): void {
         this.nextAttackCycle += Math.max(0, ticks | 0);
+        this.sendAttackTimer();
     }
 
     public getAttackDelay(): number {
@@ -413,8 +431,9 @@ export class Combat {
         return this.getAttackDelay() <= Math.max(0, ticks | 0);
     }
 
-    public reset(): void {
-        this.clearInteraction();
+    /** `resetAnimation` false keeps this tick's animation (a manual spell's cast after it resolves). */
+    public reset(resetAnimation = true): void {
+        this.clearInteraction(resetAnimation);
         this.character.getMovementQueue().reset();
     }
 
@@ -423,7 +442,7 @@ export class Combat {
      * OSRS rule that an inventory item action is a hard interruption which does not
      * stop queued movement (osrs-docs: Entity Interactions).
      */
-    public clearInteraction(): void {
+    public clearInteraction(resetAnimation = true): void {
         this.manualMovementUntilCycle = -1;
         const previousTarget = this.target;
         this.generation++;
@@ -435,7 +454,7 @@ export class Combat {
         this.character.setMobileInteraction(null);
         this.character.setPositionToFace(null);
         if (this.character.isPlayer()) {
-            if (previousTarget) this.character.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
+            if (previousTarget && resetAnimation) this.character.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
             this.character.getAsPlayer().getPacketSender().sendConfig(COMBAT_TARGET_PLAYER_VARP, -1);
         }
         this.specialAttackQueued = false;
@@ -587,6 +606,7 @@ export class Combat {
         if (!bypass && !timing.keepDelay) {
             const speed = specialTraits?.attackSpeedTicks ?? method.attackSpeed(this.character);
             this.nextAttackCycle = cycle + Math.max(1, speed | 0);
+            this.sendAttackTimer();
         }
 
         method.start(this.character, target);

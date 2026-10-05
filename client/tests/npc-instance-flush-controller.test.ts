@@ -115,6 +115,12 @@ function serverSpawnRendersBeforeMapBatchRefresh(): void {
         npcEntityIds: [] as number[],
         drawCallNpc: undefined,
         getLocalTileSpan: () => 64,
+        getRenderBaseTileX() {
+            return this.mapX * 64;
+        },
+        getRenderBaseTileY() {
+            return this.mapY * 64;
+        },
     };
     const existingMap = {
         mapX: 51,
@@ -122,11 +128,18 @@ function serverSpawnRendersBeforeMapBatchRefresh(): void {
         npcEntityIds: [2, 3],
         drawCallNpc: {},
         getLocalTileSpan: () => 64,
+        getRenderBaseTileX() {
+            return this.mapX * 64;
+        },
+        getRenderBaseTileY() {
+            return this.mapY * 64;
+        },
     };
     const mapByNpc = new Map<number, any>([
         [1, unbatchedMap],
         [2, existingMap],
-        [3, existingMap],
+        // NPC 3 walked into the unbatched map; the existing map's batch still lists it.
+        [3, unbatchedMap],
     ]);
     const ecs = {
         getServerLinkedEcsIds: () => [1, 2, 3],
@@ -134,8 +147,9 @@ function serverSpawnRendersBeforeMapBatchRefresh(): void {
         getNpcTypeId: (id: number) => 100 + id,
         getMapX: (id: number) => mapByNpc.get(id).mapX,
         getMapY: (id: number) => mapByNpc.get(id).mapY,
-        getLocalXForMap: (id: number) => 64 + id * 128,
-        getLocalYForMap: (id: number) => 192 + id * 128,
+        // World positions, 1/128 tile: (64 + id * 128, 192 + id * 128) inside the owning map.
+        getWorldX: (id: number) => mapByNpc.get(id).mapX * 64 * 128 + 64 + id * 128,
+        getWorldY: (id: number) => mapByNpc.get(id).mapY * 64 * 128 + 192 + id * 128,
         getLevel: () => 0,
         getRotation: () => 0,
         getServerId: (id: number) => 500 + id,
@@ -160,9 +174,10 @@ function serverSpawnRendersBeforeMapBatchRefresh(): void {
             visibleMaps: [unbatchedMap, existingMap],
         },
         getEffectiveNpcType: () => ({}),
-        // NPC 2 already has a valid map draw entry. NPC 3 is present in that
-        // batch but currently suppressed, so it must use the immediate path.
-        shouldRenderNpcFromMap: (_map: any, id: number) => id === 2,
+        // As in the renderer, a map draws an NPC only when it owns it: NPC 2 has a
+        // valid map draw entry, while NPC 3's stale batch entry is suppressed, so
+        // NPCs 1 and 3 must use the immediate path from the map that owns them.
+        shouldRenderNpcFromMap: (map: any, id: number) => mapByNpc.get(id) === map,
     };
 
     addUnbatchedNpcRenderData(host as any);

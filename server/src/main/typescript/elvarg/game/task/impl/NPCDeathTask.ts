@@ -54,7 +54,7 @@ export class NPCDeathTask extends Task {
                             z: this.npc.getLocation().getZ(),
                         },
                     });
-                    if (ArceuusSpells.hasDeathCharge(this.killer)) {
+                    if (ArceuusSpells.useDeathCharge(this.killer)) {
                         this.killer.setSpecialPercentage(Math.min(100, this.killer.getSpecialPercentage() + 15));
                         CombatSpecial.updateBar(this.killer);
                     }

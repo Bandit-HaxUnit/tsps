@@ -1777,7 +1777,6 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
     // The welcome screen's "Edit Mode" button is the way in, and Ctrl+E arms
     // it while logged in.
     plugin.setConfig({ enabled: true });
-    const params = new URLSearchParams(window.location.search);
     const host = browserHostWindow();
     if (isBrowserHostClient() && host) {
         const hostOrigin = browserHostOrigin();
