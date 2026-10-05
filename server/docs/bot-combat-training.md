@@ -225,6 +225,29 @@ floor.
 - LOD: bots far from real players run every 4 cycles (was 12), medium every 2, with a 60 ms per
   tick budget. A CPU profile with 615 players had the server 87% idle and bots under 10%.
 
+## Fishing and cooking
+
+Tiered like the other skills, one activity per tier in each town's rotation (template `catch_fish`):
+
+| Activity | Level | Tool | Spots | Fish |
+| --- | --- | --- | --- | --- |
+| `net_fishing` | 1 | small fishing net | Small Net/Net spots | shrimps, anchovies |
+| `fly_fishing` | 20 | fly fishing rod + feathers | Lure spots | trout, salmon |
+| `lobster_fishing` | 40 | lobster pot | Cage spots | lobster |
+| `harpoon_fishing` | 60 | harpoon | Harpoon spots | tuna, swordfish |
+
+Spots are NPCs, so they come from the NPC cluster index, keyed by the tool each spot option takes
+(`Fishing.spotTools`, from the cache option list), and a fisher picks a cluster as a combat trainer
+does: fewest fishers per spot plus distance, skipping clusters the route planner cannot reach
+(Karamja) or it never gets closer to (the Fishing Guild below 68). Fishing goes through the fishing
+plugin's own NPC option handler (`api.emitNpcInteraction`). Feathers are lent like a combat bot's
+runes and taken back when the step ends, so they never reach a bank.
+
+On a full inventory: bank, drop, sell, or cook then bank/sell/drop. `cook` uses a range within 24
+tiles (object catalog `range`), else a fire within 8; with neither it drops a fish for room, chops
+one log (axe as a tool), lights one fire and cooks on it, through the cooking plugin's item-on-object
+handler (`api.emitItemOnObject`). Food the bot's Cooking level cannot cook is left raw.
+
 ## PvP (wilderness) bots
 
 Configured in the same file, under `"pvp"`: `botPool` (how many `WildyBot` names exist),
