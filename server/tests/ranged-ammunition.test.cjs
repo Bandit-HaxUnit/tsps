@@ -272,3 +272,29 @@ test('elite void adds 10% ranged accuracy like void (its 12.5% is damage only)',
   assert.equal(roll(Items.VOID_KNIGHT_TOP, Items.VOID_KNIGHT_ROBE), 117);
   assert.equal(roll(Items.ELITE_VOID_TOP, Items.ELITE_VOID_ROBE), 117, 'elite accuracy is 10%, not 12.5%');
 });
+
+test('the scorching bow is a bow: arrows up to dragon, speed 5, range 10, its stats and 77 Ranged (Wiki)', () => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
+  const { WeaponInterfaces } = require('../dist/game/content/combat/WeaponInterfaces');
+  const { WeaponProfiles } = require('../dist/game/content/combat/WeaponProfile');
+  const { Equipment } = require('../dist/game/model/container/impl/Equipment');
+  const { Item } = require('../dist/game/model/Item');
+  CachePipeline.initialize();
+  require('../plugins/items/ItemDefinitionLoader.plugin').register({ log() {}, onPlayerLogin() {}, registerContentEndpoint() {} });
+  const items = Array.from({ length: 14 }, () => new Item(-1, 0));
+  items[Equipment.WEAPON_SLOT] = new Item(Items.SCORCHING_BOW, 1);
+  const archer = { getEquipment: () => ({ getItems: () => items }), getWeapon: () => WeaponInterfaces.LONGBOW };
+  const bow = RangedWeapon.getFor(archer);
+  assert.equal(bow, RangedWeapon.SCORCHING_BOW, 'a ranged weapon, not a kick');
+  assert.ok(bow.getAmmunitionData().includes(Ammunition.DRAGON_ARROW));
+  assert.equal(bow.getType().getDefaultDistance?.() ?? 10, 10);
+  const profile = WeaponProfiles.get(archer);
+  assert.deepEqual([profile.attackAnimation, profile.attackSpeed, profile.attackDistance], [426, 5, 10]);
+  const definition = ItemDefinition.forId(Items.SCORCHING_BOW);
+  assert.equal(definition.getWeaponInterface(), WeaponInterfaces.LONGBOW);
+  assert.equal(definition.isDoubleHanded(), true);
+  assert.equal(definition.getBonuses()[4], 124, 'ranged attack');
+  assert.equal(definition.getBonuses()[11], 40, 'ranged strength');
+  assert.equal(definition.getRequirements()[4], 77, 'Ranged to wield');
+});
