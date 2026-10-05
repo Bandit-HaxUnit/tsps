@@ -148,6 +148,7 @@ export class DynamicNpcAnimLoader {
         frameId: number,
         overlaySeqId: number = -1,
         overlayFrameId: number = -1,
+        frameCycle: number = 0,
     ): DynamicNpcFrameGeometry | undefined {
         if (!this.isReady()) {
             return undefined;
@@ -168,7 +169,16 @@ export class DynamicNpcAnimLoader {
         const normalizedOverlayFrame = Math.max(0, overlayFrameId | 0);
         const overlayKey =
             overlaySeqId >= 0 ? `:${overlaySeqId | 0}:${normalizedOverlayFrame | 0}` : "";
-        const key = `${resolvedNpcType.id}:${seqId}:${normalizedFrame}${overlayKey}`;
+        // Animation smoothing blends toward the next frame once it has streamed in.
+        const cycle =
+            frameCycle > 0 &&
+            overlaySeqId < 0 &&
+            normalizedFrame + 1 < (meta.frameCount | 0) &&
+            this.isSequenceFrameReady(seqId, normalizedFrame + 1)
+                ? frameCycle | 0
+                : 0;
+        const cycleKey = cycle > 0 ? `~${cycle}` : "";
+        const key = `${resolvedNpcType.id}:${seqId}:${normalizedFrame}${cycleKey}${overlayKey}`;
         const cached = this.geomCache.get(key);
         if (cached) {
             this.promoteGeometryEntry(key, cached);
@@ -189,6 +199,7 @@ export class DynamicNpcAnimLoader {
             normalizedFrame,
             overlaySeqId | 0,
             normalizedOverlayFrame | 0,
+            cycle,
         );
         if (!model) {
             return undefined;

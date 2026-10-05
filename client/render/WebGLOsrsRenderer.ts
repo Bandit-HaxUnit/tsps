@@ -1344,6 +1344,11 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render.resolveUnbatchedNpcGeometry(this, ecsId);
     }
 
+    /** Animation smoothing draws this NPC via the unbatched path, not the map's baked frames. */
+    public isNpcSmoothed(ecsId: number): boolean {
+        return render.npcSmoothingCycle(this, ecsId) >= 0;
+    }
+
     initFramebuffers(): void {
         return render.initFramebuffers(this);
     }

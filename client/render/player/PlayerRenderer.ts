@@ -92,6 +92,8 @@ export class PlayerRenderer {
             appearance: PlayerAppearance;
             seqId: number;
             frameIdx: number;
+            /** Cycles into the frame when animation smoothing blends it; 0 otherwise. */
+            frameCycle: number;
             overlaySeqId?: number;
             overlayFrameIdx?: number;
             instances: Array<{ slot: number; pid: number; mode: "idle" | "walk" | "run" }>;
@@ -105,6 +107,8 @@ export class PlayerRenderer {
             appearance: PlayerAppearance;
             seqId: number;
             frameIdx: number;
+            /** Cycles into the frame when animation smoothing blends it; 0 otherwise. */
+            frameCycle: number;
             overlaySeqId?: number;
             overlayFrameIdx?: number;
             instances: Array<{ slot: number; pid: number; mode: "idle" | "walk" | "run" }>;
@@ -1019,6 +1023,7 @@ export class PlayerRenderer {
         seqId: number,
         frameIdx: number,
         mv: any,
+        frameCycle: number = 0,
     ): boolean {
         if (!seqType) return false;
         if (seqType.isSkeletalSeq?.()) {
@@ -1037,11 +1042,47 @@ export class PlayerRenderer {
             const key = ids[idx] | 0;
             const frame0 = mv.seqFrameLoader.load(key);
             if (frame0) {
-                model.animate(frame0, undefined, !!seqType.op14);
+                const next = frameCycle > 0 ? this.smoothingTarget(seqType, idx, mv) : undefined;
+                if (next) {
+                    const alpha = Math.min(1, frameCycle / next.length);
+                    model.animateInterpolated(frame0, next.frame, alpha, !!seqType.op14);
+                } else {
+                    model.animate(frame0, undefined, !!seqType.op14);
+                }
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Cycles into the current frame when animation smoothing blends this player's animation
+     * toward its next frame, else 0. Only a single keyframe animation is blended (not skeletal
+     * ones, which already move every cycle, nor an action layered over movement).
+     */
+    private smoothingCycle(
+        seqId: number,
+        overlaySeqId: number | undefined,
+        frameCycle: number,
+    ): number {
+        if (!(frameCycle > 0) || seqId < 0 || overlaySeqId !== undefined) return 0;
+        if (!this.renderer.osrsClient.animationSmoothingPlugin?.smoothsPlayer(seqId)) return 0;
+        const seqType: any = this.renderer.osrsClient.seqTypeLoader.load(seqId | 0);
+        if (!seqType || seqType.isSkeletalSeq?.() || !(seqType.frameIds?.length > 1)) return 0;
+        return frameCycle | 0;
+    }
+
+    /** The frame after `idx` and the current frame's length; none for the last frame. */
+    private smoothingTarget(
+        seqType: any,
+        idx: number,
+        mv: any,
+    ): { frame: any; length: number } | undefined {
+        const ids = seqType.frameIds as number[];
+        if (idx + 1 >= ids.length) return undefined;
+        const frame = mv.seqFrameLoader.load(ids[idx + 1] | 0);
+        const length = seqType.getFrameLength(mv.seqFrameLoader, idx) | 0;
+        return frame && length > 0 ? { frame, length } : undefined;
     }
 
     private applySequenceTransformationsToModel(
@@ -1053,6 +1094,7 @@ export class PlayerRenderer {
         overlaySeqId: number,
         overlayFrameIdx: number,
         mv: any,
+        frameCycle: number = 0,
     ): boolean {
         if (!baseType) return false;
         if (!overlayType) {
@@ -1062,6 +1104,7 @@ export class PlayerRenderer {
                 baseSeqId | 0,
                 baseFrameIdx | 0,
                 mv,
+                frameCycle | 0,
             );
         }
 
@@ -1221,6 +1264,7 @@ export class PlayerRenderer {
         overlaySeqId?: number,
         overlayFrameIdx?: number,
         uploadTarget: "both" | "opaqueOnly" | "alphaOnly" | "cacheOnly" = "both",
+        frameCycle: number = 0,
     ): { countOpaque: number; countAlpha: number } {
         const r: any = this.renderer as any;
         if (!r.playerInterleavedBuffer || !r.playerIndexBuffer)
@@ -1305,6 +1349,7 @@ export class PlayerRenderer {
                     overlayId | 0,
                     overlayFrame | 0,
                     mv,
+                    frameCycle | 0,
                 );
             }
         } catch {}
@@ -1960,13 +2005,18 @@ export class PlayerRenderer {
 
             let movementFrameIdx = 0;
             let actionFrameIdx = 0;
+            let movementFrameCycle = 0;
+            let actionFrameCycle = 0;
             if (!unanimatedIdle) {
                 const controller = this.renderer.osrsClient.playerAnimController;
                 const serverId = this.renderer.osrsClient.playerEcs.getServerIdForIndex(pid);
                 if (controller && serverId !== undefined) {
-                    movementFrameIdx =
-                        (controller.getMovementSequenceState(serverId)?.frame ?? 0) | 0;
-                    actionFrameIdx = (controller.getSequenceState(serverId)?.frame ?? 0) | 0;
+                    const movementState = controller.getMovementSequenceState(serverId);
+                    const actionState = controller.getSequenceState(serverId);
+                    movementFrameIdx = (movementState?.frame ?? 0) | 0;
+                    actionFrameIdx = (actionState?.frame ?? 0) | 0;
+                    movementFrameCycle = (movementState?.frameCycle ?? 0) | 0;
+                    actionFrameCycle = (actionState?.frameCycle ?? 0) | 0;
                 }
             }
 
@@ -2081,7 +2131,16 @@ export class PlayerRenderer {
                 typeof overlaySeqId === "number" && typeof overlayFrameIdx === "number"
                     ? `|${overlaySeqId | 0}|${overlayFrameIdx | 0}`
                     : "";
-            const batchKey = `${appKey}|${seqId}|${frameIdx}${overlayKey}`;
+            const frameCycle =
+                forcedSeq !== undefined || unanimatedIdle
+                    ? 0
+                    : this.smoothingCycle(
+                          seqId,
+                          overlaySeqId,
+                          useActionSequence ? actionFrameCycle : movementFrameCycle,
+                      );
+            const cycleKey = frameCycle > 0 ? `~${frameCycle}` : "";
+            const batchKey = `${appKey}|${seqId}|${frameIdx}${cycleKey}${overlayKey}`;
 
             // Add player to batch group
             let group = this.batchGroups.get(batchKey);
@@ -2090,6 +2149,7 @@ export class PlayerRenderer {
                     appearance: effectiveApp,
                     seqId: seqId | 0,
                     frameIdx: frameIdx | 0,
+                    frameCycle,
                     overlaySeqId: overlaySeqId,
                     overlayFrameIdx: overlayFrameIdx,
                     instances: [],
@@ -2161,6 +2221,7 @@ export class PlayerRenderer {
                         group.overlaySeqId,
                         group.overlayFrameIdx,
                         "cacheOnly",
+                        group.frameCycle,
                     );
                     gpuGeometry = this.getPlayerGpuGeometry(gpuOwnerKey, batchKey);
                 }
@@ -2181,6 +2242,7 @@ export class PlayerRenderer {
                           group.overlaySeqId,
                           group.overlayFrameIdx,
                           "opaqueOnly",
+                          group.frameCycle,
                       );
                 for (const inst of group.instances) {
                     if (this.canBatchPlayer(inst.pid, playerEcs)) {
@@ -2225,6 +2287,7 @@ export class PlayerRenderer {
                     group.overlaySeqId,
                     group.overlayFrameIdx,
                     "opaqueOnly",
+                    group.frameCycle,
                 );
                 this.framePlayerAlphaCounts.set(inst.pid | 0, counts.countAlpha | 0);
 
@@ -2333,13 +2396,18 @@ export class PlayerRenderer {
 
                 let movementFrameIdx = 0;
                 let actionFrameIdx = 0;
+                let movementFrameCycle = 0;
+                let actionFrameCycle = 0;
                 if (!unanimatedIdle) {
                     const controller = this.renderer.osrsClient.playerAnimController;
                     const serverId = this.renderer.osrsClient.playerEcs.getServerIdForIndex(pid);
                     if (controller && serverId !== undefined) {
-                        movementFrameIdx =
-                            (controller.getMovementSequenceState(serverId)?.frame ?? 0) | 0;
-                        actionFrameIdx = (controller.getSequenceState(serverId)?.frame ?? 0) | 0;
+                        const movementState = controller.getMovementSequenceState(serverId);
+                        const actionState = controller.getSequenceState(serverId);
+                        movementFrameIdx = (movementState?.frame ?? 0) | 0;
+                        actionFrameIdx = (actionState?.frame ?? 0) | 0;
+                        movementFrameCycle = (movementState?.frameCycle ?? 0) | 0;
+                        actionFrameCycle = (actionState?.frameCycle ?? 0) | 0;
                     }
                 }
 
@@ -2428,7 +2496,16 @@ export class PlayerRenderer {
                     typeof overlaySeqId === "number" && typeof overlayFrameIdx === "number"
                         ? `|${overlaySeqId | 0}|${overlayFrameIdx | 0}`
                         : "";
-                const batchKey = `${appKey}|${seqId}|${frameIdx}${overlayKey}`;
+                const frameCycle =
+                    forcedSeq !== undefined || unanimatedIdle
+                        ? 0
+                        : this.smoothingCycle(
+                              seqId,
+                              overlaySeqId,
+                              useActionSequence ? actionFrameCycle : movementFrameCycle,
+                          );
+                const cycleKey = frameCycle > 0 ? `~${frameCycle}` : "";
+                const batchKey = `${appKey}|${seqId}|${frameIdx}${cycleKey}${overlayKey}`;
 
                 // Add to alpha batch group
                 let group = alphaBatchGroups.get(batchKey);
@@ -2437,6 +2514,7 @@ export class PlayerRenderer {
                         appearance: effectiveApp,
                         seqId: seqId | 0,
                         frameIdx: frameIdx | 0,
+                        frameCycle,
                         overlaySeqId: overlaySeqId,
                         overlayFrameIdx: overlayFrameIdx,
                         instances: [],
@@ -2495,6 +2573,7 @@ export class PlayerRenderer {
                             group.overlaySeqId,
                             group.overlayFrameIdx,
                             "cacheOnly",
+                            group.frameCycle,
                         );
                         gpuGeometry = this.getPlayerGpuGeometry(gpuOwnerKey, batchKey);
                     }
@@ -2512,6 +2591,7 @@ export class PlayerRenderer {
                               group.overlaySeqId,
                               group.overlayFrameIdx,
                               "alphaOnly",
+                              group.frameCycle,
                           );
                     if ((counts.countAlpha | 0) > 0) {
                         const playerDraw = gpuGeometry?.alpha
@@ -2551,6 +2631,7 @@ export class PlayerRenderer {
                         group.overlaySeqId,
                         group.overlayFrameIdx,
                         "alphaOnly",
+                        group.frameCycle,
                     );
 
                     if ((counts.countAlpha | 0) <= 0) continue;

@@ -3,7 +3,7 @@ import PicoGL, { DrawCall, Texture } from "picogl";
 
 import { WebGLMapSquare } from "../WebGLMapSquare";
 import type { WebGLOsrsRenderer } from "../WebGLOsrsRenderer";
-import { GfxCache } from "./GfxCache";
+import { GfxCache, graphicFrameCycle } from "./GfxCache";
 import { GfxManager } from "./GfxManager";
 import type { GfxInstance } from "./GfxManager";
 import { SpotAnimGpuCache } from "./SpotAnimGpuCache";
@@ -154,7 +154,16 @@ export class GfxRenderer {
                     } catch {}
                     inst.lastSoundFrame = frameIdx | 0;
                 }
-                const key = `${inst.spotId}|${frameIdx}`;
+                const frameCycle = this.cache.smoothingCycle(
+                    inst.spotId,
+                    frameIdx,
+                    graphicFrameCycle(
+                        this.getFrameOffsets(inst.spotId),
+                        Math.floor(ageMs),
+                        frameIdx,
+                    ),
+                );
+                const key = `${inst.spotId}|${frameIdx}|${frameCycle}`;
                 const arr = groups.get(key) ?? [];
                 const yOffUnits = resolveYOffset(entry) | 0;
                 arr.push({ slot, yOffUnits });
@@ -163,15 +172,17 @@ export class GfxRenderer {
 
             for (const [key, instances] of groups) {
                 if (instances.length === 0) continue;
-                const [spotStr, frameStr] = key.split("|");
+                const [spotStr, frameStr, cycleStr] = key.split("|");
                 const spotId = parseInt(spotStr, 10) | 0;
                 const frameIdx = parseInt(frameStr, 10) | 0;
+                const frameCycle = parseInt(cycleStr, 10) | 0;
                 const vaoRec = this.gpuCache.getOrCreate(
                     spotId,
                     frameIdx,
                     transparent,
                     programKey,
                     prog,
+                    frameCycle,
                 );
                 if (!vaoRec) continue;
                 const dc: DrawCall = this.renderer
