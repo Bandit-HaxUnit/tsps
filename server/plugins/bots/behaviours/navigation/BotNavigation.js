@@ -416,16 +416,18 @@ function dispatchMovementRequest(player, request, state = request?.state) {
   const nowMs = Date.now();
   // Long walks follow a planned route (detours past fences/rivers the route
   // finder's 128-tile window cannot see); short ones walk straight at the target.
-  const waypoint = nextWaypoint(player, request, nowMs);
+  // A walk to another floor heads for the stairs first (brain/Climbing sets climbVia).
+  const target = request.climbVia ?? request;
+  const waypoint = nextWaypoint(player, target, nowMs);
   const segmentTarget = resolveSegmentTarget(
     player,
     request.pvpOnly === true,
-    waypoint?.x ?? request.x,
-    waypoint?.y ?? request.y,
+    waypoint?.x ?? target.x,
+    waypoint?.y ?? target.y,
     request.maxRouteSegmentTiles
   );
-  const segmentZ = Number.isFinite(request.z)
-    ? request.z
+  const segmentZ = Number.isFinite(target.z)
+    ? target.z
     : player.getLocation()?.getZ?.() ?? 0;
   const unreachableTracker = getUnreachableSegmentTracker(player);
   if (unreachableTracker) {

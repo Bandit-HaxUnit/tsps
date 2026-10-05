@@ -7,6 +7,7 @@ const {
 } = require("../behaviours/navigation/BotNavigation");
 const { maybeCrossDitch } = require("./DitchCrossing");
 const { maybeOpenDoor } = require("./DoorOpening");
+const { maybeClimb } = require("./Climbing");
 
 /**
  * Void-style behaviour runner: one action per bot per tick, driven by a frame
@@ -313,6 +314,9 @@ class BotBrain {
     if (maybeOpenDoor({ player, state: this.state ?? null, world: this.world, request })) {
       return;
     }
+    if (maybeClimb({ player, state: this.state ?? null, world: this.world, request })) {
+      return;
+    }
     if (
       maybeCrossDitch({
         player,
@@ -329,7 +333,7 @@ class BotBrain {
       // A planned long route keeps its request until the last leg: the next leg goes
       // out as soon as this one is walked, instead of the bot standing until its
       // activity asks again (which made long walks crawl a leg at a time).
-      const route = request.route;
+      const route = (request.climbVia ?? request).route;
       if (!(route && route.index < route.waypoints.length)) {
         clearMovementRequest(player);
       }

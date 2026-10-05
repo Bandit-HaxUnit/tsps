@@ -4,7 +4,7 @@ const { MapObjects } = require("../../../../src/main/typescript/elvarg/game/enti
 const { Bank } = require("../../../../src/main/typescript/elvarg/game/model/container/impl/Bank");
 const { BANK_BOOTH_IDS, isUsableBankBooth } = require("../../lib/BankBooths");
 const { playerState } = require("../ActionState");
-const { approachObject } = require("../../behaviours/navigation/BotNavigation");
+const { approachObject, requestMovement } = require("../../behaviours/navigation/BotNavigation");
 
 const BANK_SEARCH_REGION_RADIUS = 2;
 const MAX_DIRECT_ROUTE_TILES = 20;
@@ -19,6 +19,10 @@ const UNREACHABLE_AVOID_MS = 60000;
 const APPROACH_STUCK_MS = 20000;
 const SKIP_BANK_MS = 10 * 60 * 1000;
 const bankArea = (x, y, z) => `${x >> 5},${y >> 5},${z}`;
+// Booths upstairs (Lumbridge castle's top floor) count as this many tiles further
+// per floor: the bot climbs to them (brain/Climbing) when they are still nearest.
+const FLOOR_PENALTY_TILES = 15;
+const MAX_PLANE = 3;
 
 /**
  * Deposits the inventory at the nearest usable bank booth, then reports success.
@@ -88,12 +92,19 @@ function createBankAction(spec, world) {
   function findBooth(player, nowMs) {
     const bot = stateFor(player);
     const loc = player.getLocation();
-    const candidates =
-      world.objectSearch?.findCandidatesByIds?.(player, [...BANK_BOOTH_IDS], {
+    const candidates = [];
+    for (let z = 0; z <= (player.getPrivateArea?.() ? -1 : MAX_PLANE); z++) {
+      candidates.push(...(world.objectSearch?.findCandidatesByIds?.(player, [...BANK_BOOTH_IDS], {
         regionRadius: BANK_SEARCH_REGION_RADIUS,
-        z: loc.getZ(),
-        privateArea: player.getPrivateArea?.() ?? null,
-      }) ?? [];
+        z,
+        privateArea: null,
+      }) ?? []));
+    }
+    if (player.getPrivateArea?.()) {
+      candidates.push(...(world.objectSearch?.findCandidatesByIds?.(player, [...BANK_BOOTH_IDS], {
+        regionRadius: BANK_SEARCH_REGION_RADIUS, z: loc.getZ(), privateArea: player.getPrivateArea(),
+      }) ?? []));
+    }
     let best = null;
     let bestDistSq = Number.MAX_SAFE_INTEGER;
     let fallback = null;
@@ -103,7 +114,7 @@ function createBankAction(spec, world) {
         continue;
       }
       const objectLoc = object.getLocation();
-      if (!objectLoc || objectLoc.getZ() !== loc.getZ()) {
+      if (!objectLoc) {
         continue;
       }
       if ((bot.skipAreas.get(bankArea(objectLoc.getX(), objectLoc.getY(), objectLoc.getZ())) ?? 0) > nowMs) {
@@ -111,7 +122,8 @@ function createBankAction(spec, world) {
       }
       const dx = objectLoc.getX() - loc.getX();
       const dy = objectLoc.getY() - loc.getY();
-      const distSq = dx * dx + dy * dy;
+      const floors = Math.abs(objectLoc.getZ() - loc.getZ()) * FLOOR_PENALTY_TILES;
+      const distSq = dx * dx + dy * dy + floors * floors;
       if (distSq < fallbackDistSq) {
         fallbackDistSq = distSq;
         fallback = object;
@@ -198,7 +210,7 @@ function createBankAction(spec, world) {
         Math.abs(loc.getX() - bot.booth.x),
         Math.abs(loc.getY() - bot.booth.y)
       );
-      if (distance > MAX_DIRECT_ROUTE_TILES) {
+      if (distance > MAX_DIRECT_ROUTE_TILES || bot.booth.z !== loc.getZ()) {
         const here = `${loc.getX()},${loc.getY()}`;
         if (here !== bot.approachAt) {
           bot.approachAt = here;
@@ -209,7 +221,12 @@ function createBankAction(spec, world) {
           bot.approachAt = null;
           return "running";
         }
-        approachObject(player, object, { nowMs, reason: "brain_bank_approach" });
+        if (bot.booth.z !== loc.getZ()) {
+          // Upstairs/downstairs: a walk on the booth's floor climbs there on the way.
+          requestMovement(player, bot.booth.x, bot.booth.y, { nowMs, z: bot.booth.z, reason: "brain_bank_approach", basicPather: true });
+        } else {
+          approachObject(player, object, { nowMs, reason: "brain_bank_approach" });
+        }
         return "running";
       }
       if (player.getForceMovement?.() != null) {
