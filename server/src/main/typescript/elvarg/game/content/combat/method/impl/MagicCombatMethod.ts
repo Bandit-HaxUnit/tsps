@@ -33,6 +33,8 @@ export class MagicCombatMethod extends CombatMethod {
         12901: 6589, 12911: 6589, 12919: 6589, 12929: 6589, 12939: 6589,
         12951: 6589, 12963: 6589, 12975: 6589, 12987: 6589, 12999: 6589,
         13011: 6589, 13023: 6589,
+        // Capture: Undead Grasp.
+        21832: 5030,
     };
     private static readonly IMPACT_SOUNDS: Readonly<Record<number, number>> = {
         1: 1460,
@@ -45,6 +47,8 @@ export class MagicCombatMethod extends CombatMethod {
         12901: 110, 12911: 104, 12919: 105, 12929: 102, 12939: 185,
         12951: 181, 12963: 182, 12975: 180, 12987: 179, 12999: 176,
         13011: 177, 13023: 175,
+        // Capture: Undead Grasp (an area sound at the target).
+        21832: 5055,
     };
 
     public type(): CombatType {
@@ -52,9 +56,9 @@ export class MagicCombatMethod extends CombatMethod {
     }
 
     public hits(character: Mobile, target: Mobile): PendingHit[] {
-        let hits: PendingHit[] = [new PendingHit(character, target, this, 3)];
-
         let spell = character.getCombat().getSelectedSpell();
+        let hits: PendingHit[] = [new PendingHit(character, target, this, spell?.hitDelay?.() ?? 3)];
+
 
         if (!spell) {
             return hits;
@@ -194,7 +198,8 @@ export class MagicCombatMethod extends CombatMethod {
         const current = character.getCombat().getCastSpell();
         character.getCombat().setCastSpell(null);
         if (character.getCombat().getAutocastSpell() === null) {
-            character.getCombat().reset();
+            // The same tick as the cast: keep its animation, which the reset would replace.
+            character.getCombat().reset(false);
             // reset() clears the interaction; a resolved manual cast still faces its target.
             character.setMobileInteraction(target);
         }
@@ -216,7 +221,8 @@ export class MagicCombatMethod extends CombatMethod {
         if (previousSpell) {
             if (accurate) {
                 const endGraphic = previousSpell.endGraphic();
-                target.performGraphic(endGraphic);
+                // A spell with no impact graphic (a grasp shows its own at the cast) sends none.
+                if (endGraphic) target.performGraphic(endGraphic);
                 const impactSound = previousSpell.impactSound()
                     ?? MagicCombatMethod.resolveImpactSound(previousSpell.spellId());
                 Sounds.sendSound(target, impactSound);
