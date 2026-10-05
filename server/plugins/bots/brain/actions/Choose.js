@@ -37,8 +37,10 @@ function createChooseAction(spec, compileAction) {
       const result = step.update(ctx);
       if (result === "success") {
         step.stop?.(ctx);
-        // As between brain actions: the next step must not inherit this one's walk.
+        // As between brain actions: the next step must not inherit this one's walk,
+        // nor an interface it left open (busy() would stall it).
         clearMovementRequest(ctx.player);
+        if (Number(ctx.player.getInterfaceId?.() ?? -1) > 0) ctx.player.getPacketSender?.()?.sendInterfaceRemoval?.();
         bot.index += 1;
         if (bot.index < bot.option.actions.length) {
           return "running";

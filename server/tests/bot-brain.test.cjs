@@ -84,6 +84,21 @@ test('an ended action takes its pending walk with it', () => {
   assert.equal(pendingAtMine, null, 'a booth walk that never completes must not hold up the next action');
 });
 
+test('an ended action closes the interface it left open (bank screen after a deposit)', () => {
+  let interfaceId = 12;
+  let closed = 0;
+  const player = {
+    ...fakePlayer('banker'), getInterfaceId: () => interfaceId,
+    getPacketSender: () => ({ sendInterfaceRemoval: () => { closed += 1; interfaceId = -1; } }),
+  };
+  const bank = { id: 'bank', update: () => 'success' };
+  const train = { id: 'train', update: () => 'running' };
+  const brain = new BotBrain({ player, state: {}, registry: fakeRegistry(), activity: { id: 'a', repeat: true, actions: [bank, train] } });
+  tickN(brain, 2);
+  assert.equal(closed, 1);
+  assert.equal(interfaceId, -1, 'the next action starts with no interface open (not busy)');
+});
+
 for (const outcome of ['success', 'failed']) {
   test(`an overlay hands state.mode back to its parent on ${outcome}`, () => {
     const state = {};

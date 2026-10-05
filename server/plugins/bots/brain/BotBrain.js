@@ -126,6 +126,11 @@ class BotBrain {
   stopAction(action, ctx) {
     action?.stop?.(ctx);
     clearMovementRequest(this.player);
+    // Nor does an interface it opened (the bank after a deposit, a shop after a sale):
+    // left open, the bot stays busy() and the next action never starts.
+    if (Number(this.player.getInterfaceId?.() ?? -1) > 0) {
+      this.player.getPacketSender?.()?.sendInterfaceRemoval?.();
+    }
   }
 
   isRunningActivity(activityId) {
