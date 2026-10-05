@@ -127,15 +127,15 @@
   ],
   "activities": [
     {
-      "id": "lumbridge_normal_trees",
+      "id": "normal_trees",
       "template": "chop_trees",
-      "capacity": 150,
+      "capacity": 300,
       "fields": {"level": 1, "tier": "normal", "log": "logs", "resources": ["logs"]}
     },
     {
       "id": "copper_tin_rocks",
       "template": "mine_rocks",
-      "capacity": 80,
+      "capacity": 160,
       "fields": {
         "level": 1,
         "tier": ["copper", "tin"],
@@ -147,37 +147,37 @@
     {
       "id": "burn_normal_logs",
       "template": "burn_logs",
-      "capacity": 60,
+      "capacity": 120,
       "fields": {"level": 1, "log": "logs", "logs": 27}
     },
     {
       "id": "smelt_bronze",
       "template": "smelt_bar",
-      "capacity": 40,
+      "capacity": 80,
       "fields": {"level": 1, "ore1": "copper_ore", "ore2": "tin_ore", "oreAmount": 13, "bar": "Bronze bar"}
     },
     {
       "id": "oak_trees",
       "template": "chop_trees",
-      "capacity": 80,
+      "capacity": 160,
       "fields": {"level": 15, "tier": "oak", "log": "oak_logs", "resources": ["oak_logs"]}
     },
     {
       "id": "willow_trees",
       "template": "chop_trees",
-      "capacity": 80,
+      "capacity": 160,
       "fields": {"level": 30, "tier": "willow", "log": "willow_logs", "resources": ["willow_logs"]}
     },
     {
       "id": "yew_trees",
       "template": "chop_trees",
-      "capacity": 80,
+      "capacity": 160,
       "fields": {"level": 60, "tier": "yew", "log": "yew_logs", "resources": ["yew_logs"]}
     },
     {
       "id": "iron_rocks",
       "template": "mine_rocks",
-      "capacity": 80,
+      "capacity": 160,
       "fields": {
         "level": 15,
         "tier": "iron",
@@ -189,7 +189,7 @@
     {
       "id": "coal_rocks",
       "template": "mine_rocks",
-      "capacity": 80,
+      "capacity": 160,
       "fields": {
         "level": 30,
         "tier": "coal",
@@ -201,7 +201,7 @@
     {
       "id": "mithril_rocks",
       "template": "mine_rocks",
-      "capacity": 80,
+      "capacity": 160,
       "fields": {
         "level": 50,
         "tier": "mithril",
@@ -213,25 +213,25 @@
     {
       "id": "burn_oak_logs",
       "template": "burn_logs",
-      "capacity": 40,
+      "capacity": 80,
       "fields": {"level": 15, "log": "oak_logs", "logs": 27}
     },
     {
       "id": "burn_willow_logs",
       "template": "burn_logs",
-      "capacity": 40,
+      "capacity": 80,
       "fields": {"level": 30, "log": "willow_logs", "logs": 27}
     },
     {
       "id": "burn_yew_logs",
       "template": "burn_logs",
-      "capacity": 40,
+      "capacity": 80,
       "fields": {"level": 60, "log": "yew_logs", "logs": 27}
     },
     {
       "id": "combat_training",
       "mode": "combat_training",
-      "capacity": 500,
+      "capacity": 1000,
       "repeat": true,
       "failureCooldownSeconds": 30,
       "produces": ["attack", "strength", "defence", "ranged", "magic", "hitpoints"],
@@ -521,10 +521,10 @@
   "sites": [
     {
       "id": "lumbridge_novices",
-      "activities": ["combat_training", "lumbridge_normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze"],
+      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 1,
-      "count": 175,
+      "count": 70,
       "anchor": {"x": 3222, "y": 3218, "z": 0},
       "spawnRadius": 6
     },
@@ -533,7 +533,7 @@
       "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 20,
-      "count": 125,
+      "count": 50,
       "anchor": {"x": 3222, "y": 3218, "z": 0},
       "spawnRadius": 6
     },
@@ -542,7 +542,7 @@
       "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 40,
-      "count": 100,
+      "count": 40,
       "anchor": {"x": 3222, "y": 3218, "z": 0},
       "spawnRadius": 6
     },
@@ -551,8 +551,152 @@
       "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 60,
-      "count": 100,
+      "count": 40,
       "anchor": {"x": 3222, "y": 3218, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "varrock_novices",
+      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 1,
+      "count": 70,
+      "anchor": {"x": 3212, "y": 3424, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "varrock_intermediates",
+      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 20,
+      "count": 50,
+      "anchor": {"x": 3212, "y": 3424, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "varrock_advanced",
+      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 40,
+      "count": 40,
+      "anchor": {"x": 3212, "y": 3424, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "varrock_experts",
+      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 60,
+      "count": 40,
+      "anchor": {"x": 3212, "y": 3424, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "falador_novices",
+      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 1,
+      "count": 70,
+      "anchor": {"x": 2964, "y": 3378, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "falador_intermediates",
+      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 20,
+      "count": 50,
+      "anchor": {"x": 2964, "y": 3378, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "falador_advanced",
+      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 40,
+      "count": 40,
+      "anchor": {"x": 2964, "y": 3378, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "falador_experts",
+      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 60,
+      "count": 40,
+      "anchor": {"x": 2964, "y": 3378, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "seers_novices",
+      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 1,
+      "count": 70,
+      "anchor": {"x": 2723, "y": 3484, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "seers_intermediates",
+      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 20,
+      "count": 50,
+      "anchor": {"x": 2723, "y": 3484, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "seers_advanced",
+      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 40,
+      "count": 40,
+      "anchor": {"x": 2723, "y": 3484, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "seers_experts",
+      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 60,
+      "count": 40,
+      "anchor": {"x": 2723, "y": 3484, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "east_ardougne_novices",
+      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 1,
+      "count": 70,
+      "anchor": {"x": 2662, "y": 3305, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "east_ardougne_intermediates",
+      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 20,
+      "count": 50,
+      "anchor": {"x": 2662, "y": 3305, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "east_ardougne_advanced",
+      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 40,
+      "count": 40,
+      "anchor": {"x": 2662, "y": 3305, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "east_ardougne_experts",
+      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 60,
+      "count": 40,
+      "anchor": {"x": 2662, "y": 3305, "z": 0},
       "spawnRadius": 6
     }
   ],

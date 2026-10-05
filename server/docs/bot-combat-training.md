@@ -238,17 +238,20 @@ ended it and the bot was handed a random activity (WildyBots skilling in Lumbrid
 
 ## Test tiers
 
-Startup spawns 500 bots at the Lumbridge spawn in four sites, each with its levels set at spawn
-(`levels`: a number for every skill, or `{ "all": 40, "mining": 60 }`; hitpoints at least 10).
-Gear follows from the levels: combat gear tiers (dragon/magic bow/mystic at 60) and the best
-usable axe/pickaxe.
+Startup spawns 1000 bots: 200 each at Lumbridge, Varrock, Falador, Seers' Village and East
+Ardougne market, each town split over the same four tiers (sites `<town>_novices` ... `<town>_experts`).
+Levels are set at spawn (`levels`: a number for every skill, or `{ "all": 40, "mining": 60 }`;
+hitpoints at least 10). Gear follows from the levels: combat gear tiers (dragon/magic bow/mystic
+at 60) and the best usable axe/pickaxe. Trees, rocks, banks, stores and NPC clusters are found
+from wherever the bot is, so the same activities work in every town. Activity capacities are
+global (shared by all towns).
 
-| Site | Bots | Levels | Rotates between |
+| Tier (per town) | Bots | Levels | Rotates between |
 | --- | --- | --- | --- |
-| `lumbridge_novices` | 175 | 1 | combat (NPC lv 1-5), normal trees, copper/tin, burn logs, smelt bronze |
-| `lumbridge_intermediates` | 125 | 20 | combat (lv 9-27), oaks, iron (Al Kharid mine), burn oak logs |
-| `lumbridge_advanced` | 100 | 40 | combat (lv 20-45), willows, coal (swamp west mine), burn willow logs |
-| `lumbridge_experts` | 100 | 60 | combat (lv 30-90: black/white knights, druids, outlaws), yews, mithril (swamp west), burn yew logs |
+| `novices` | 70 | 1 | combat (NPC lv 1-5), normal trees, copper/tin, burn logs, smelt bronze |
+| `intermediates` | 50 | 20 | combat (lv 9-27), oaks, iron, burn oak logs |
+| `advanced` | 40 | 40 | combat (lv 20-45), willows, coal, burn willow logs |
+| `experts` | 40 | 60 | combat (lv 30-90), yews, mithril, burn yew logs |
 
 Level 40-90 NPCs near Lumbridge are almost all past the Shantay Pass or the River Salve, which
 the route planner cannot reach, so the expert band starts at 30.

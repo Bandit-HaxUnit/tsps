@@ -1239,9 +1239,12 @@ test('sites compile their rotation and the registry only assigns their activitie
   const { createBotActivityRegistry } = require('../plugins/bots/brain/BotActivityRegistry');
   const registry = createBotActivityRegistry({ world: { core: PluginManager.getCoreApi() } });
   const bySite = new Map(registry.sites.map((site) => [site.id, site]));
-  assert.deepEqual(registry.sites.map((site) => [site.id, site.levels]),
-    [['lumbridge_novices', 1], ['lumbridge_intermediates', 20], ['lumbridge_advanced', 40], ['lumbridge_experts', 60]]);
-  assert.equal(registry.sites.reduce((sum, site) => sum + site.count, 0), 500);
+  const towns = ['lumbridge', 'varrock', 'falador', 'seers', 'east_ardougne'];
+  for (const town of towns) {
+    assert.deepEqual(registry.sites.filter((site) => site.id.startsWith(`${town}_`)).map((site) => [site.levels, site.count]),
+      [[1, 70], [20, 50], [40, 40], [60, 40]], `${town}: 200 bots over the four tiers`);
+  }
+  assert.equal(registry.sites.reduce((sum, site) => sum + site.count, 0), 1000);
   const raw = JSON.parse(fs.readFileSync('data/definitions/bot-activities.json', 'utf8'));
   for (const site of registry.sites) {
     assert.deepEqual(site.rotation.switchAfterMs, { min: 900000, max: 1500000 }, site.id);
