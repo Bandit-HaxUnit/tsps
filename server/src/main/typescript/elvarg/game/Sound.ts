@@ -133,6 +133,7 @@ export class Sound {
     public static GENIE_LAMP = new Sound(430, 1, 0, 0)
     public static BURY_BONES = new Sound(2738, 1, 0, 0)
     public static WILDERNESS_DITCH_JUMP = new Sound(2462, 1, 0, 0)
+    public static THIEVING_PICKPOCKET = new Sound(2581, 1, 0, 0)
     public static THIEVING_STUNNED = new Sound(2727, 1, 0, 0)
     public static LEVEL_UP = new Sound(2396, 1, 0, 0)
     public static GEM_CUTTING = new Sound(2586, 1, 0, 0)
