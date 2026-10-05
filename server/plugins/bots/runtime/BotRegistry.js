@@ -1018,22 +1018,27 @@ function createBotRegistry(options) {
     if (totalTiles <= 0) {
       return RegionManager.blocked(anchor, null) || RegionManager.isWater(anchor) ? null : anchor;
     }
-    const seedBase =
-      Math.imul(index + 1, 1103515245) ^
-      Math.imul(hotspotId.length + 17, 12345) ^
-      Math.imul(minX + maxY + (anchor.getZ?.() ?? 0), 2654435761);
-    const startIndex = Math.abs(seedBase) % totalTiles;
-    const rawStep = Math.abs(Math.imul(seedBase ^ 0x9e3779b9, 48271)) % totalTiles;
-    const step = rawStep === 0 ? 1 : rawStep;
+    // Randomize both axes independently; a sequential spawn index must not
+    // produce a repeatable row or column. Probe every tile at most once.
+    const tileIndices = Array.from({ length: totalTiles }, (_, tileIndex) => tileIndex);
+    for (let i = tileIndices.length - 1; i > 0; i -= 1) {
+      const j = randomInRange(0, i);
+      [tileIndices[i], tileIndices[j]] = [tileIndices[j], tileIndices[i]];
+    }
     const z = Math.floor(area.z ?? anchor.getZ?.() ?? 0);
     const attempts = Math.min(totalTiles, WILDERNESS_SPAWN_TILE_PROBE_LIMIT);
     for (let attempt = 0; attempt < attempts; attempt += 1) {
-      const tileIndex = (startIndex + attempt * step) % totalTiles;
+      const tileIndex = tileIndices[attempt];
       const offsetX = tileIndex % width;
       const offsetY = Math.floor(tileIndex / width);
       const candidate = new Location(minX + offsetX, minY + offsetY, z);
+      const occupied = entries.some((entry) => {
+        const location = entry.player?.getLocation?.();
+        return location?.getX() === candidate.getX() && location?.getY() === candidate.getY() &&
+          location?.getZ() === z;
+      });
       if (
-        Wilderness.isInLocation(candidate) &&
+        !occupied && Wilderness.isInLocation(candidate) &&
         !isMembersArea(candidate.getX(), candidate.getY()) &&
         !RegionManager.blocked(candidate, null) &&
         !RegionManager.isWater(candidate)

@@ -45,6 +45,7 @@ export class CacheDefinitions {
     private static customModels?: Array<{ id: number; data: string }>;
     private static dbRows?: { byId: Map<number, DbRowType>; byTable: Map<number, DbRowType[]> };
     private static structParams = new Map<number, ReadonlyMap<number, number | string>>();
+    private static enumValues = new Map<number, ReadonlyMap<number, number | string>>();
     /** The struct archive, read once: re-reading it per struct took ~75 ms each. */
     private static structArchive?: ReturnType<ReturnType<typeof CacheIndexDat2.fromStore>["getArchive"]>;
 
@@ -130,6 +131,42 @@ export class CacheDefinitions {
         }
         this.structParams.set(id, params);
         return params;
+    }
+
+    /**
+     * A cache enum's key -> value entries (config archive 8), the tables cache scripts read with
+     * enum. Empty when the enum does not exist. The default value is not included.
+     */
+    static getEnumValues(id: number): ReadonlyMap<number, number | string> {
+        const cached = this.enumValues.get(id);
+        if (cached) return cached;
+        const values = new Map<number, number | string>();
+        const file = CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore())
+            .getFile(ConfigType.DAT2.enums, id);
+        if (file) {
+            const buffer = new ByteBuffer(new Int8Array(file.data));
+            for (let opcode = buffer.readUnsignedByte(); opcode !== 0; opcode = buffer.readUnsignedByte()) {
+                if (opcode === 1 || opcode === 2) buffer.readUnsignedByte(); // key / value type
+                else if (opcode === 3) buffer.readString(); // default string
+                else if (opcode === 4) buffer.readInt(); // default int
+                else if (opcode === 5 || opcode === 6) {
+                    const size = buffer.readUnsignedShort();
+                    for (let i = 0; i < size; i++) {
+                        const key = buffer.readInt();
+                        values.set(key, opcode === 5 ? buffer.readString() : buffer.readInt());
+                    }
+                } else if (opcode === 7 || opcode === 8) {
+                    buffer.readUnsignedShort(); // the dense table's size
+                    const size = buffer.readUnsignedShort();
+                    for (let i = 0; i < size; i++) {
+                        const key = buffer.readUnsignedShort();
+                        values.set(key, opcode === 7 ? buffer.readString() : buffer.readInt());
+                    }
+                } else break;
+            }
+        }
+        this.enumValues.set(id, values);
+        return values;
     }
 
     static getVarbit(id: number) {

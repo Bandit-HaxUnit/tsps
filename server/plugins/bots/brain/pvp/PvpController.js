@@ -11,6 +11,7 @@ const { Skill } = require("../../../../src/main/typescript/elvarg/game/model/Ski
 const {
   queueRouteAndFlagAppearance,
   randomInRange,
+  peekMovementRequest,
 } = require("../../behaviours/navigation/BotNavigation");
 const { PvpCombatExecutionNode } = require("../../behaviours/nodes/pvp/PvpCombatExecutionNode");
 const { PvpDefensiveActionNode } = require("../../behaviours/nodes/pvp/PvpDefensiveActionNode");
@@ -1299,6 +1300,43 @@ class PvpController {
       state.pvp.nextActionAt = nowMs + randomInRange(SEEK_RETRY_MIN_MS, SEEK_RETRY_MAX_MS);
     }
     return started;
+  }
+
+  wanderWhileSeeking({ player, state, nowMs }) {
+    if (!this.isPvpOnly(state) || this.isInCombat(player) || state?.pvp?.retreat ||
+        player.isTeleportingReturn?.() || player.busy?.() || player.getForceMovement?.() ||
+        player.getMovementQueue?.()?.size?.() > 0 || peekMovementRequest(player)) {
+      return false;
+    }
+    const roaming = state.roaming;
+    const bounds = roaming?.roamBounds;
+    if (!bounds || nowMs < Number(roaming.nextWalkAt ?? 0)) return false;
+    roaming.nextWalkAt = nowMs + randomInRange(3500, 9000);
+    const location = player.getLocation();
+    const hotspot = getWildernessHotspot(state.pvp.hotspotId);
+    const radius = hotspot?.roamRadius ?? 6;
+    const centerX = Math.max(bounds.minX, Math.min(bounds.maxX, location.getX()));
+    const centerY = Math.max(bounds.minY, Math.min(bounds.maxY, location.getY()));
+    const regionManager = this.api.getRegionManager();
+    for (let attempt = 0; attempt < 24; attempt += 1) {
+      const x = randomInRange(Math.max(bounds.minX, centerX - radius),
+        Math.min(bounds.maxX, centerX + radius));
+      const y = randomInRange(Math.max(bounds.minY, centerY - radius),
+        Math.min(bounds.maxY, centerY + radius));
+      const tile = new Location(x, y, bounds.z ?? location.getZ());
+      if (x === location.getX() && y === location.getY()) continue;
+      if (!Wilderness.isInLocation(tile) || regionManager.blocked(tile, player.getPrivateArea?.() ?? null) ||
+          regionManager.isWater(tile)) continue;
+      const occupied = this.getEntries().some((entry) => {
+        const other = entry.player?.getLocation?.();
+        return other?.getX() === x && other?.getY() === y && other?.getZ() === tile.getZ();
+      });
+      if (occupied) continue;
+      return queueRouteAndFlagAppearance(player, x, y, {
+        state, nowMs, reason: "pvp_idle_wander",
+      });
+    }
+    return false;
   }
 
   /** PvP-only bots respawn through the registry resolver; re-gear them once healthy. */
