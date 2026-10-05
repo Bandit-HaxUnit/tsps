@@ -7,49 +7,59 @@
  * The changelog has it guaranteed when the Doom dies during the melee punish phase. A capture
  * shows none when the killing blow was an arrow loosed before the charge, so here it takes the
  * punishing melee hit, or its bonus the tick after.
- * Guesses: four projectiles (holy water's, 192) from its centre to tiles two to four away, about
- * a tick in flight; the restore given once, as the first lands.
+ * In game (player report): only a player standing where one lands (its 3x3) is restored.
+ * Guesses: seven projectiles (holy water's, 192) from its centre to tiles up to four from it,
+ * landing a tick apart; the restore given once, by the first that lands on the player.
  */
 
 const Shared = require("./DoomShared");
 
 const HOLY_WATER = {
   projectile: 192,
-  count: 4,
-  reach: [2, 4],
+  count: 7,
+  spread: 4,
   flight: { delay: 0, end: 40, startHeight: 120, endHeight: 0 },
   hitpoints: 28,
   prayer: 14,
   special: 25,
   lastDelve: 8,
 };
-const DIRECTIONS = [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [1, -1], [-1, -1], [-1, 1]];
 
 /** Whether the Doom just died to a melee punish (the hit, or its bonus the tick after). */
 function punishKill(run) {
   return run.level <= HOLY_WATER.lastDelve && Number.isFinite(run.punishedAt) && run.ticks - run.punishedAt <= 1;
 }
 
-/** The holy water flies out; acid around each landing tile goes, and the player is restored once. */
+/** The holy water flies out; acid around each landing tile goes, and a player in a splash is restored once. */
 function launch(run, boss) {
   const { Projectile } = Shared.core();
   const centre = Projectile.centreOf(boss);
-  const half = boss.getSize() >> 1;
-  const directions = DIRECTIONS.slice().sort(() => run.random() - 0.5).slice(0, HOLY_WATER.count);
+  const tiles = [];
+  for (let attempt = 0; tiles.length < HOLY_WATER.count && attempt < 200; attempt++) {
+    const tile = {
+      x: centre.getX() + Shared.random(-HOLY_WATER.spread, HOLY_WATER.spread),
+      y: centre.getY() + Shared.random(-HOLY_WATER.spread, HOLY_WATER.spread),
+      z: centre.getZ(),
+    };
+    if (!Shared.onFloor(tile) || tiles.some((other) => other.x === tile.x && other.y === tile.y)) continue;
+    tiles.push(tile);
+  }
   let restored = false;
-  for (const [dx, dy] of directions) {
-    const out = half + Shared.random(...HOLY_WATER.reach);
-    const tile = { x: centre.getX() + dx * out, y: centre.getY() + dy * out, z: centre.getZ() };
-    const lands = Shared.projectile(run.area, centre, Shared.loc(tile), HOLY_WATER.projectile, HOLY_WATER.flight);
+  tiles.forEach((tile, index) => {
+    const flight = { ...HOLY_WATER.flight, end: HOLY_WATER.flight.end + index * 30 };
+    const lands = Shared.projectile(run.area, centre, Shared.loc(tile), HOLY_WATER.projectile, flight);
     Shared.later(run, lands, () => {
       for (let x = tile.x - 1; x <= tile.x + 1; x++) {
         for (let y = tile.y - 1; y <= tile.y + 1; y++) run.acid.clearAt(x, y);
       }
-      if (restored) return;
+      const at = run.player.getLocation();
+      const inSplash = Math.abs(at.getX() - tile.x) <= 1 && Math.abs(at.getY() - tile.y) <= 1;
+      if (restored || !inSplash) return;
       restored = true;
       restore(run.player);
     });
-  }
+  });
+  return tiles;
 }
 
 function restore(player) {

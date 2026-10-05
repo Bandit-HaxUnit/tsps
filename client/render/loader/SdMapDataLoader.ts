@@ -39,7 +39,7 @@ import {
 } from "../buffer/SceneBuffer";
 import { LocAnimatedGroup } from "../loc/LocAnimatedGroup";
 import { SceneLocEntity } from "../loc/SceneLocEntity";
-import { getSceneLocs, isDoorLocType, isLowDetail } from "../loc/SceneLocs";
+import { getSceneLocs, isDoorLocType, isLowDetail, isRoofLocModelType } from "../loc/SceneLocs";
 import { createNpcDatas } from "../npc/NpcData";
 import {
     type NpcInstance,
@@ -618,10 +618,10 @@ function addSceneModels(
     sceneModels: SceneModel[],
     minimizeDrawCalls: boolean,
 ): void {
-    const groupedModels = new Map<number, SceneModel[]>();
+    const groupedModels = new Map<string, SceneModel[]>();
     for (const sceneModel of sceneModels) {
         const model = sceneModel.model;
-        const hash = getModelHash(modelHashBuf, model);
+        const hash = `${getModelHash(modelHashBuf, model)}:${Number(!!sceneModel.doubleSided)}`;
         const locs = groupedModels.get(hash);
         if (locs) {
             locs.push(sceneModel);
@@ -633,6 +633,7 @@ function addSceneModels(
     const modelGroupMap: Map<number, ModelMergeGroup> = new Map();
     for (const sceneModels of groupedModels.values()) {
         const model = sceneModels[0].model;
+        const doubleSided = sceneModels[0].doubleSided;
         const faces = getModelFaces(model);
 
         const opaqueFaces: ModelFace[] = [];
@@ -679,7 +680,7 @@ function addSceneModels(
             createModelGroups(modelGroupMap, instancedModels, false);
         } else if (opaqueFaces.length > 0) {
             const indexOffset = sceneBuf.indexByteOffset();
-            sceneBuf.addModel(model, opaqueFaces);
+            sceneBuf.addModel(model, opaqueFaces, undefined, true, undefined, doubleSided);
             const elementCount = (sceneBuf.indexByteOffset() - indexOffset) / 4;
 
             // Group instanced models by level AND planeCullLevel to keep CPU plane-culling accurate per draw range
@@ -727,7 +728,7 @@ function addSceneModels(
             createModelGroups(modelGroupMap, instancedModels, true);
         } else if (transparentFaces.length > 0) {
             const indexOffset = sceneBuf.indexByteOffset();
-            sceneBuf.addModel(model, transparentFaces);
+            sceneBuf.addModel(model, transparentFaces, undefined, true, undefined, doubleSided);
             const elementCount = (sceneBuf.indexByteOffset() - indexOffset) / 4;
 
             // Group instanced models by level AND planeCullLevel for transparent path as well
@@ -841,6 +842,7 @@ function addLocAnimationFrames(
     if (frameCount === 0) {
         return undefined;
     }
+    const doubleSided = isRoofLocModelType(entity.type);
     const frames = new Array<DrawRange>(frameCount);
     const framesAlpha = new Array<DrawRange>(frameCount);
     let alphaFrameCount = 0;
@@ -853,8 +855,8 @@ function addLocAnimationFrames(
             i,
         );
         if (model) {
-            frames[i] = sceneBuf.addModelAnimFrame(model, false);
-            framesAlpha[i] = sceneBuf.addModelAnimFrame(model, true);
+            frames[i] = sceneBuf.addModelAnimFrame(model, false, undefined, doubleSided);
+            framesAlpha[i] = sceneBuf.addModelAnimFrame(model, true, undefined, doubleSided);
             if (framesAlpha[i][1] > 0) {
                 alphaFrameCount++;
             }

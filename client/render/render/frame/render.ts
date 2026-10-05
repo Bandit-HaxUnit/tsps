@@ -1,3 +1,4 @@
+import { appendAttackTimerOverhead } from "../../../game/plugins/attacktimer/AttackTimerOverhead";
 import { updateSkyColor } from "../environment";
 import Denque from "denque";
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
@@ -1032,6 +1033,16 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                         playerDefaultHeightTiles,
                     );
                 }
+            } catch {}
+            // The attack timer plugin's countdown, with the local player's text.
+            try {
+                appendAttackTimerOverhead(
+                    host,
+                    localPlayerTextIdx,
+                    overheadTexts,
+                    overheadTextMaxEntries,
+                    playerDefaultHeightTiles,
+                );
             } catch {}
 
             // Render overhead skull and prayer icons for all players.

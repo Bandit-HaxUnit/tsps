@@ -30,6 +30,20 @@ export class Bank extends ItemContainer {
     /** The tab buttons: slot 10 is "all items", slots 11-19 are tabs 1-9. */
     public static readonly TABS_CHILD = 10;
     public static readonly TAB_BUTTON_SLOT_OFFSET = 10;
+    /** bankmain:search, which starts the client's own bank search in the chatbox. */
+    public static readonly SEARCH_CHILD = 42;
+    /** bankmain:items slots 1419-1427: the tab headings shown in the all-items view (tabs 1-9). */
+    public static readonly TAB_HEADING_FIRST_SLOT = 1419;
+    public static readonly TAB_HEADING_LAST_SLOT = 1427;
+    /** varc 5's mode while the bank search is typed in the chatbox. */
+    public static readonly SEARCH_INPUT_MODE = 11;
+    /** meslayer_close: closes the chatbox input, if it is in the given mode (or none is open). */
+    private static readonly MESLAYER_CLOSE_SCRIPT = 101;
+
+    /** Ends the client's bank search, as OSRS does on closing the bank or picking a tab. */
+    public static closeSearch(player: Player): void {
+        player.getPacketSender().sendClientScript(Bank.MESLAYER_CLOSE_SCRIPT, Bank.SEARCH_INPUT_MODE);
+    }
     public static readonly ITEMS_CHILD = 12;
     public static readonly SIDE_ITEMS_CHILD = 3;
     /** Drops on the empty space after tab N's items report item-grid slot 1428 + N. */
@@ -506,6 +520,14 @@ export class Bank extends ItemContainer {
     }): boolean {
         if (!Bank.isOpen(player)) return false;
 
+        // Capture (bank search): picking a tab heading switches to that tab and ends the search.
+        if (packet.groupId === Bank.MAIN_INTERFACE_ID && packet.childId === 12 && packet.slot != null &&
+            packet.slot >= Bank.TAB_HEADING_FIRST_SLOT && packet.slot <= Bank.TAB_HEADING_LAST_SLOT) {
+            Bank.viewTab(player, packet.slot - Bank.TAB_HEADING_FIRST_SLOT + 1);
+            Bank.closeSearch(player);
+            return true;
+        }
+
         if (packet.groupId === Bank.MAIN_INTERFACE_ID && packet.childId === 12 && packet.slot != null) {
             const entry = Bank.resolveDisplaySlot(player, packet.slot);
             if (!entry || (packet.itemId != null && packet.itemId !== Bank.displayItemId(entry.item))) return true;
@@ -541,7 +563,16 @@ export class Bank extends ItemContainer {
             const option = packet.option?.trim().toLowerCase() ?? "";
             if (packet.buttonNum === 6 || option.includes("collapse")) Bank.collapseTab(player, tab);
             else if (packet.buttonNum === 7 || option.includes("placeholder")) Bank.releasePlaceholders(player, tab);
-            else Bank.viewTab(player, tab);
+            else {
+                Bank.viewTab(player, tab);
+                Bank.closeSearch(player);
+            }
+            return true;
+        }
+
+        // Capture: Search switches to the main tab (the client runs the search itself).
+        if (packet.groupId === Bank.MAIN_INTERFACE_ID && packet.childId === Bank.SEARCH_CHILD) {
+            if (player.getCurrentBankTab() !== 0) Bank.viewTab(player, 0);
             return true;
         }
 

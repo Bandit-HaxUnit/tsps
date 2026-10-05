@@ -24,6 +24,8 @@ export enum ContourGroundType {
 }
 
 export type ModelInfo = {
+    // Roof undersides must occlude the sky when viewed below the eaves.
+    doubleSided?: boolean;
     sceneX: number;
     sceneZ: number;
     heightOffset: number;
@@ -263,12 +265,17 @@ export class SceneBuffer {
         return this.vertexCount() - terrainStartVertexCount;
     }
 
-    addModelAnimFrame(model: Model, transparent: boolean, actorNormals?: Uint16Array): DrawRange {
+    addModelAnimFrame(
+        model: Model,
+        transparent: boolean,
+        actorNormals?: Uint16Array,
+        doubleSided: boolean = false,
+    ): DrawRange {
         // Optimized: filter transparency in single pass instead of getModelFaces() + filter()
         const faces = getModelFacesFiltered(model, this.textureLoader, transparent);
 
         const offset = this.indexByteOffset();
-        this.addModel(model, faces, undefined, true, actorNormals);
+        this.addModel(model, faces, undefined, true, actorNormals, doubleSided);
         const elements = (this.indexByteOffset() - offset) / 4;
 
         return newDrawRange(offset, elements, 1);
@@ -403,7 +410,7 @@ export class SceneBuffer {
                 vertexOffset[1] = -sceneModel.heightOffset;
             }
             const offset = this.indexByteOffset();
-            this.addModel(model, faces, vertexOffset);
+            this.addModel(model, faces, vertexOffset, true, undefined, sceneModel.doubleSided);
             const elements = (this.indexByteOffset() - offset) / 4;
 
             const drawCommand: DrawCommand = {
@@ -471,7 +478,14 @@ export class SceneBuffer {
         }
     }
 
-    addModel(model: Model, faces: ModelFace[], offset?: vec3, reuseVertices: boolean = true, actorNormals?: Uint16Array): void {
+    addModel(
+        model: Model,
+        faces: ModelFace[],
+        offset?: vec3,
+        reuseVertices: boolean = true,
+        actorNormals?: Uint16Array,
+        doubleSided: boolean = false,
+    ): void {
         if (faces.length === 0) {
             return;
         }
@@ -619,6 +633,9 @@ export class SceneBuffer {
             );
 
             this.indices.push(index0, index1, index2);
+            // Only roofs need an underside. Reuse their packed vertices/UVs;
+            // global culling still keeps actors and other scenery single-sided.
+            if (doubleSided) this.indices.push(index2, index1, index0);
         }
     }
 }

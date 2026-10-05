@@ -43,8 +43,9 @@ function breakTablet(event) {
   if (!destination) return;
   const { player } = event;
   if (!player.getInventory().contains(event.itemId) || !core.TeleportHandler.checkReqs(player, destination)) return;
-  player.getInventory().deleteNumber(event.itemId, 1);
-  core.TeleportHandler.teleport(player, destination, core.TeleportType.TELE_TAB, false, onArrival);
+  // OSRS uses the tablet up two ticks in, as it is absorbed (docs/teleport-tablets.md).
+  const useTablet = () => player.getInventory().deleteNumber(event.itemId, 1);
+  core.TeleportHandler.teleport(player, destination, core.TeleportType.TELE_TAB, false, onArrival, useTablet);
 }
 
 module.exports = {

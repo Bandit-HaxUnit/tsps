@@ -24,7 +24,7 @@ export type SceneLocs = {
 const FIRST_ROOF_TYPE = LocModelType.ROOF_SLOPED;
 const LAST_ROOF_TYPE = LocModelType.ROOF_SLOPED_OVERHANG_HARD_OUTER_CORNER;
 
-function isRoofLocModelType(modelType: number): boolean {
+export function isRoofLocModelType(modelType: number): boolean {
     return modelType >= FIRST_ROOF_TYPE && modelType <= LAST_ROOF_TYPE;
 }
 
@@ -147,6 +147,7 @@ export function createSceneModel(
 
     return {
         model,
+        doubleSided: isRoofLocModelType(type),
         sceneHeight,
         lowDetail: isLowDetail(scene, level, tileX, tileY, locType, type),
         forceMerge: locType.contourGroundType > 1,
@@ -185,6 +186,7 @@ export function createSceneLocEntity(
     return {
         entity,
         sceneLoc,
+        doubleSided: isRoofLocModelType(entity.type),
         lowDetail: false,
 
         sceneX,

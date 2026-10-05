@@ -76,6 +76,9 @@ function fakeNpc(id, x, y) {
     getInteractingMobile: () => npc.facing,
     performAnimation(animation) { npc.anims.push(animation.getId()); },
     performGraphic(graphic) { npc.gfx.push(graphic.getId()); },
+    slotGfx: [],
+    performGraphicInSlot(slot, graphic) { npc.slotGfx.push({ slot, id: graphic.getId(), tick: npc.tickOf?.() }); },
+    withdrawGraphicInSlot(slot) { npc.slotGfx = npc.slotGfx.filter((entry) => entry.slot !== slot || entry.tick !== npc.tickOf?.()); },
     getMovementQueue: () => ({ setBlockMovement() {}, reset() {}, addSteps(location) { npc.location = location; } }),
     getCurrentDefinition: () => NpcDefinition.forId(id),
     getDefinition: () => NpcDefinition.forId(id),
@@ -134,6 +137,9 @@ function fakePlayer() {
     }),
     dialogueActive: true, hp: 99, strength: 0, weapon: -1, varbits, varps,
     colours: [], scriptArgs: [], camera: [], hudLog: [], prayer: 30, maxPrayer: 70, special: 50,
+    sounds: [], areaSounds: [], mapGfx: [], tints: [], npcView: 15,
+    tint(tint) { p.tints.push(tint); },
+    setNpcViewDistance(distance) { p.npcView = distance ?? 15; },
     heal(amount) { p.hp = Math.min(99, p.hp + amount); },
     getSkillManager: () => ({
       getMaxLevel: () => p.maxPrayer,
@@ -158,6 +164,8 @@ function fakePlayer() {
     setAttribute: (key, value) => attributes.set(key, value),
     sendMessage: (message) => p.messages.push(message),
     performGraphic(graphic) { p.gfx.push(graphic.getId()); },
+    slotGfx: [],
+    performGraphicInSlot(slot, graphic) { p.gfx.push(graphic.getId()); p.slotGfx.push([slot, graphic.getId()]); },
     performAnimation(animation) { p.anims.push(animation.getId()); },
     getMovementQueue: () => ({ reset() {} }),
     getDialogueManager: () => ({ isActive: () => p.dialogueActive, startDialogues() { p.dialogueActive = true; } }),
@@ -179,7 +187,9 @@ function fakePlayer() {
         sendInterfaceColour: (uid, colour) => { p.colours.push([uid & 0xffff, colour]); p.hudLog.push(['colour', uid & 0xffff, colour]); return sender; },
         sendCameraShake: (axis, random) => { p.camera.push(['shake', axis, random]); return sender; },
         sendCameraReset: () => { p.camera.push(['reset']); return sender; },
-        sendGraphic: () => sender,
+        sendGraphic: (graphic, at) => { p.mapGfx.push({ id: graphic.getId(), x: at.getX(), y: at.getY(), delay: graphic.delay ?? 0 }); return sender; },
+        sendSoundEffect: (id, loops, delay) => { p.sounds.push({ id, loops, delay }); return sender; },
+        sendAreaSound: (id, x, y, z, loops, delay, range) => { p.areaSounds.push({ id, x, y, delay, range }); return sender; },
         sendObject: () => sender,
         sendObjectRemoval: () => sender,
         sendSong: () => sender,
@@ -714,9 +724,9 @@ test('an unbroken shield fires the beam and drops', () => {
   run.attacks.active = true;
   run.attacks.phase = 'shield';
   run.shield.start();
-  ticks(chargeTicks(4));
+  ticks(chargeTicks(4) + 1);
   assert.equal(chargeTicks(4), 17, 'capture: 510 cycles');
-  assert.ok(player.damage.includes(80), 'delve 4 beam');
+  assert.ok(player.damage.includes(80), 'delve 4 beam, the tick after it fires');
   assert.equal(run.attacks.phase, 'attacks');
   run.end('exit');
 });
@@ -1014,28 +1024,46 @@ test('a larva reaching the Doom shows its heal as a heal splat (6)', () => {
   run.end('exit');
 });
 
-test('killing it with a melee punish throws holy water: acid around it goes, and the player is restored', () => {
+test('killing it with a melee punish throws holy water: acid where it lands goes; only a player in a splash is restored', () => {
   const HolyWater = require('../plugins/bosses/doom/DoomHolyWater');
   const { player, run } = runAt(3);
   run.attacks.active = true;
   const centre = { x: run.boss.location.getX() + 2, y: run.boss.location.getY() + 2 };
-  for (let x = centre.x - 8; x <= centre.x + 8; x++) for (let y = centre.y - 8; y <= centre.y + 8; y++) run.acid.place({ x, y, z: 0 });
-  const acid = run.acid.pools.size;
   player.hp = 50;
   run.punishedAt = run.ticks;
   assert.ok(HolyWater.punishKill(run));
-  run.defeated();
-  ticks(2);
-  assert.equal(player.hp, 78, '+28 hitpoints');
+  const tiles = HolyWater.launch(run, run.boss);
+  assert.equal(tiles.length, 7, 'seven splashes');
+  for (const tile of tiles) assert.ok(Math.max(Math.abs(tile.x - centre.x), Math.abs(tile.y - centre.y)) <= 4, 'within 4 of its centre');
+  player.location = new Location(tiles[3].x + 1, tiles[3].y, 0);
+  // Acid all around, but not under the player (it would burn them).
+  for (let x = centre.x - 8; x <= centre.x + 8; x++) {
+    for (let y = centre.y - 8; y <= centre.y + 8; y++) {
+      if (x !== player.location.getX() || y !== player.location.getY()) run.acid.place({ x, y, z: 0 });
+    }
+  }
+  const acid = run.acid.pools.size;
+  ticks(10);
+  assert.equal(player.hp, 78, '+28 hitpoints, once');
   assert.equal(player.prayer, 44, '+14 prayer');
   assert.equal(player.special, 75, '+25% special attack');
-  assert.ok(run.acid.pools.size < acid, 'acid cleared where it landed');
+  assert.ok(run.acid.pools.size <= acid - 9, 'acid cleared around where they landed');
+  run.end('exit');
+
+  const { player: away, run: missed } = runAt(3);
+  missed.attacks.active = true;
+  away.hp = 50;
+  const far = HolyWater.launch(missed, missed.boss);
+  const spot = { x: far[0].x + 20, y: far[0].y + 20 };
+  away.location = new Location(spot.x, spot.y, 0);
+  ticks(10);
+  assert.equal(away.hp, 50, 'outside every splash: nothing');
+  missed.end('exit');
 
   const { run: later } = runAt(9);
   later.punishedAt = later.ticks;
   assert.ok(!HolyWater.punishKill(later), 'not past delve 8');
   later.end('exit');
-  run.end('exit');
 });
 
 test('the HUD opens as the capture does: hp hidden at the delve change, then colours, 2376 and a fade-in', () => {
@@ -1060,14 +1088,17 @@ test('the shield loops its charge each tick (12409 with 3412) and a demonbane hi
   run.attacks.phase = 'shield';
   run.shield.start();
   run.shield.nextLarvaAt = Infinity;
+  run.boss.tickOf = () => run.ticks;
   run.boss.anims.length = 0;
-  run.boss.gfx.length = 0;
+  run.boss.slotGfx = [];
   ticks(2);
   assert.deepEqual(run.boss.anims, [12409, 12409]);
-  assert.deepEqual(run.boss.gfx, [3412, 3412]);
+  assert.deepEqual(run.boss.slotGfx.map(({ slot, id }) => [slot, id]), [[2, 3412], [2, 3412]]);
   player.weapon = 29591;
+  ticks(1);
   hitBoss(run, player, CombatType.RANGED, 20);
   assert.equal(run.boss.anims.at(-1), 12410, 'the hit cancels the charge');
+  assert.equal(run.boss.slotGfx.filter((graphic) => graphic.tick === run.ticks).length, 0, 'and its graphic that tick (capture)');
   run.boss.anims.length = 0;
   ticks(1);
   assert.deepEqual(run.boss.anims, [12409], 'and it loops again the tick after');
@@ -1108,24 +1139,27 @@ test('after a rock throw the next orb lands after the rock\'s last orb (capture:
   run.end('exit');
 });
 
-test('larvae and volatile earth can be hit on cooldown; demonbane leaves the timer alone', () => {
+test('larvae and volatile earth can be hit on cooldown; demonbane on a larva keeps the timer, plus 1 tick (capture)', () => {
   const { player, run } = surfacedRun();
   player.location = new Location(1311, 9565, 0);
   run.hazards.spawnLarva();
   const larva = [...run.hazards.larvae][0];
-  const timing = (target) => {
-    const event = { attacker: player, target, method: null, ignoreDelay: false, keepDelay: false };
+  const timing = (target, newTarget = true) => {
+    const event = { attacker: player, target, method: null, ignoreDelay: false, keepDelay: false, minimumDelay: 0, newTarget };
     for (const handler of hooks.timing) handler(event);
-    return [event.ignoreDelay, event.keepDelay];
+    return [event.ignoreDelay, event.keepDelay, event.minimumDelay];
   };
   player.weapon = 4151;
-  assert.deepEqual(timing(larva), [true, false], 'any weapon: on cooldown, then its normal delay');
+  assert.deepEqual(timing(larva), [true, false, 0], 'any weapon: on cooldown, then its normal delay (Wiki)');
   player.weapon = 29591;
-  assert.deepEqual(timing(larva), [true, true], 'demonbane: no delay after');
+  assert.deepEqual(timing(larva), [true, true, 1], 'demonbane: the timer kept, the next attack at least a tick on');
   const earth = run.spawnNpc(Shared.NPC.VOLATILE_EARTH ?? 14714, { x: 1305, y: 9565 });
   earth.__doomEarth = true;
-  assert.deepEqual(timing(earth), [true, true]);
-  assert.deepEqual(timing(run.boss), [false, false], 'not the Doom');
+  assert.deepEqual(timing(earth), [true, false, 0], 'volatile earth: on cooldown, then the full delay even with demonbane');
+  assert.deepEqual(timing(run.boss), [false, false, 0], 'not the Doom');
+  assert.deepEqual(timing(earth, false), [false, false, 0], 'the same earth again: the timer as usual, no second shot a tick later');
+  player.weapon = 4151;
+  assert.deepEqual(timing(larva, false), [false, false, 0], 'the same larva again (two hits without demonbane): the timer as usual');
   run.end('exit');
 });
 
@@ -1192,4 +1226,210 @@ test('the burrow hole is used from wherever it is clicked, without walking to it
   assert.deepEqual(route(Shared.OBJECT.BURROW_HOLE), { x: player.location.getX(), y: player.location.getY(), z: 0 }, 'its own tile: no walk');
   assert.equal(route(Shared.OBJECT.GAP_EXIT), null, 'other locs are walked to');
   run.end('exit');
+});
+
+
+// ------------------------------------------------------------------ capture: timings, sounds, graphics
+
+test('from delve 5 a rock flies to cycle 180 and bursts 6 ticks after the throw, 7 before (capture)', () => {
+  assert.deepEqual([Boss.rockFlight(4).end, Boss.rockBurstTicks(4)], [210, 7]);
+  assert.deepEqual([Boss.rockFlight(5).end, Boss.rockBurstTicks(5)], [180, 6]);
+  assert.deepEqual([Boss.rockFlight(5).angle, Boss.rockFlight(5).progress], [50, 124], 'its arc');
+  assert.deepEqual([Boss.orbFlight(5).angle, Boss.orbFlight(5).progress], [30, 147], 'the orbs\' arc');
+  for (const [level, burstsAfter] of [[4, 7], [5, 6]]) {
+    const { player, run } = runAt(level);
+    run.attacks.active = true;
+    const bursts = [];
+    const burst = run.hazards.burstRock.bind(run.hazards);
+    run.hazards.burstRock = (...args) => { bursts.push(run.ticks); return burst(...args); };
+    const thrownAt = run.ticks;
+    run.attacks.throwRock('ranged', { orbs: 0 });
+    ticks(10);
+    assert.deepEqual(bursts.map((tick) => tick - thrownAt), [burstsAfter], `delve ${level}`);
+    assert.ok(player.areaSounds.some((sound) => sound.id === 10331 && sound.range === 10), 'the split\'s sound');
+    const pieces = player.areaSounds.filter((sound) => sound.id === 10297);
+    assert.ok(pieces.length >= 2 && pieces.every((sound) => sound.range === 1), 'a sound for each piece landing');
+    run.end('exit');
+  }
+});
+
+test('an orb\'s launch sound, and its impact graphic and sound only when not prayed against (capture)', () => {
+  const { player, run } = surfacedRun();
+  run.attacks.active = true;
+  run.attacks.orb('ranged');
+  assert.deepEqual(player.sounds.at(-1), { id: 10341, loops: 1, delay: 55 });
+  const isProtected = Shared.isProtected;
+  try {
+    Shared.isProtected = () => true;
+    player.gfx.length = 0;
+    player.sounds.length = 0;
+    run.attacks.orbLands('magic');
+    assert.deepEqual([player.gfx, player.sounds], [[], []], 'prayed against: neither');
+    Shared.isProtected = () => false;
+    run.attacks.orbLands('magic');
+    assert.deepEqual(player.gfx, [2492]);
+    assert.deepEqual(player.slotGfx.at(-1), [2, 2492], 'in spotanim slot 2 (capture)');
+    assert.deepEqual(player.sounds.map((sound) => sound.id), [7023]);
+    run.attacks.orbLands('melee');
+    assert.deepEqual(player.gfx.at(-1), 2491, 'the red orb\'s impact');
+  } finally {
+    Shared.isProtected = isProtected;
+  }
+  run.end('exit');
+});
+
+test('the beam: anim 12411, five projectiles, then graphic 3413 and the hit the next tick (capture)', () => {
+  const { player, run } = runAt(5);
+  run.attacks.active = true;
+  run.attacks.phase = 'attacks';
+  run.attacks.startCharge();
+  run.attacks.charge.firesAt = run.ticks + 1;
+  const hurt = player.damage.length;
+  ticks(1);
+  assert.equal(run.boss.anims.at(-1), 12411);
+  assert.equal(player.damage.length, hurt, 'not yet');
+  ticks(1);
+  assert.deepEqual(player.damage.slice(hurt), [80]);
+  assert.ok(player.gfx.includes(3413));
+  run.end('exit');
+});
+
+test('burrowing: a rock on its centre, 24-28 in all, sounds, and graphic 3414 each burrowed tick but one a hit restarts the charge (capture)', () => {
+  const { player, run } = runAt(5);
+  run.boss.tickOf = () => run.ticks;
+  run.attacks.active = true;
+  const centre = run.burrow.centre;
+  run.attacks.phase = 'shield';
+  run.shield.start();
+  run.shield.damage(500);
+  assert.equal(run.attacks.phase, 'burrow');
+  assert.deepEqual(player.sounds.slice(-3).map(({ id, loops, delay }) => [id, loops, delay]), [[10303, 5, 0], [10301, 1, 45], [10372, 1, 160]]);
+  const falls = player.mapGfx.filter((graphic) => graphic.id === 2529);
+  assert.ok(falls.length >= 24 && falls.length <= 28, `${falls.length} rocks`);
+  assert.ok(falls.every((graphic) => graphic.delay === 20), 'each with delay 20');
+  ticks(6);
+  assert.ok(run.hazards.rockAt(centre.x, centre.y), 'one on its centre tile');
+  run.boss.slotGfx = [];
+  ticks(2);
+  assert.deepEqual(run.boss.slotGfx.map(({ slot, id }) => [slot, id]), [[2, 3414], [2, 3414]]);
+  ticks(1);
+  run.burrow.hit();
+  assert.equal(run.boss.slotGfx.filter((graphic) => graphic.tick === run.ticks).length, 0, 'none the tick a hit restarts it');
+  ticks(1);
+  assert.equal(run.boss.slotGfx.at(-1).tick, run.ticks, 'and back the tick after');
+  run.end('exit');
+});
+
+test('inside the earthen shield the player is tinted each tick, outside untinted (capture)', () => {
+  const { player, run } = runAt(1);
+  const shield = run.spawnNpc(Shared.NPC.EARTHEN_SHIELD, { x: 1305, y: 9570 });
+  run.hazards.shield = { npc: shield, destination: { x: 1316, y: 9571 }, movedAt: run.ticks, spawnedAt: run.ticks };
+  run.hazards.walkShield();
+  assert.deepEqual(player.tints, [], 'not the tick it appears');
+  run.ticks++;
+  player.location = new Location(1306, 9571, 0);
+  run.hazards.walkShield();
+  assert.deepEqual(player.tints.at(-1), { startCycle: 0, endCycle: 30, hue: 0, saturation: 0, lightness: 106, weight: 112 });
+  run.ticks++;
+  player.location = new Location(1311, 9561, 0);
+  run.hazards.walkShield();
+  assert.deepEqual(player.tints.at(-1), { startCycle: 0, endCycle: 0, hue: -1, saturation: -1, lightness: -1, weight: 0 });
+  run.end('exit');
+});
+
+test('in the arena NPCs are seen 32 tiles out (capture: the large NPC update throughout), 15 again after', () => {
+  const player = fakePlayer();
+  const run = Run.start(player);
+  assert.equal(player.npcView, 32);
+  run.end('exit');
+  assert.equal(player.npcView, 15);
+});
+
+test('a larva reaching the Doom hurts the player at most 12, 20 from delve 8, 30 for a giant', () => {
+  assert.equal(Hazards.larvaDamageCap(5, false), 12);
+  assert.equal(Hazards.larvaDamageCap(8, false), 20);
+  assert.equal(Hazards.larvaDamageCap(9, true), 30);
+  const { player, run } = surfacedRun();
+  run.boss.hp = 400;
+  run.hazards.charge = 40;
+  player.location = new Location(1311, 9565, 0);
+  run.hazards.spawnLarva();
+  const larva = [...run.hazards.larvae][0];
+  const before = player.damage.length;
+  run.hazards.larvaReached(larva);
+  assert.deepEqual(player.damage.slice(before), [12], 'capped at 12');
+  run.end('exit');
+});
+
+test('larvae path around rocks to the Doom\'s centre, and crawl straight on when walled in', () => {
+  const { player, run } = surfacedRun();
+  player.location = new Location(1311, 9565, 0);
+  run.hazards.spawnLarva();
+  const larva = [...run.hazards.larvae][0];
+  const centre = PluginManager.getCoreApi().Projectile.centreOf(run.boss);
+  // A wall of rocks across the larva's straight line, two tiles on.
+  larva.location = new Location(centre.getX(), centre.getY() - 8, 0);
+  for (let dx = -2; dx <= 2; dx++) run.hazards.addRock({ x: centre.getX() + dx, y: centre.getY() - 6 });
+  const next = run.hazards.larvaStep(larva, centre);
+  assert.ok(next, 'a way round');
+  assert.ok(!run.hazards.rockAt(next.getX(), next.getY()));
+  // Walk it there: it never stands on a rock and reaches the centre.
+  for (let step = 0; step < 40 && !(larva.location.getX() === centre.getX() && larva.location.getY() === centre.getY()); step++) {
+    const tile = run.hazards.larvaStep(larva, centre);
+    assert.ok(!run.hazards.rockAt(tile.getX(), tile.getY()), `step ${step} onto a rock`);
+    larva.location = tile;
+  }
+  assert.deepEqual([larva.location.getX(), larva.location.getY()], [centre.getX(), centre.getY()]);
+  // Walled in on every side: no way round.
+  larva.location = new Location(1302, 9566, 0);
+  for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (dx || dy) run.hazards.addRock({ x: 1302 + dx, y: 9566 + dy });
+  assert.equal(run.hazards.larvaStep(larva, centre), null);
+  run.end('exit');
+});
+
+test('larvae are demons, so demonbane spells can be cast on them (Wiki)', () => {
+  const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+  new NpcDefinitionLoader().load();
+  for (const id of [14707, 14710, 14711, 14712, 14713, 14788, 14789]) {
+    assert.equal(NpcDefinition.forId(id).isDemon(), true, `${id}`);
+  }
+});
+
+test('a rock: the split, its pieces\' impacts 2 ticks on, then the rock and its orbs together 3 ticks after the split (capture)', () => {
+  const { player, run } = runAt(2);
+  run.attacks.active = true;
+  const at = {};
+  const burst = run.hazards.burstRock.bind(run.hazards);
+  run.hazards.burstRock = (...args) => { at.split = run.ticks; return burst(...args); };
+  const lands = run.hazards.rockLands.bind(run.hazards);
+  run.hazards.rockLands = (...args) => { at.rock = run.ticks; return lands(...args); };
+  const rockOrb = run.attacks.rockOrb.bind(run.attacks);
+  at.orbs = [];
+  run.attacks.rockOrb = (...args) => { at.orbs.push(run.ticks); return rockOrb(...args); };
+  player.mapGfx.length = 0;
+  run.attacks.throwRock('ranged', { orbs: 2 });
+  const impacts = [];
+  for (let i = 0; i < 12; i++) {
+    const before = player.mapGfx.length;
+    ticks(1);
+    if (player.mapGfx.slice(before).some((graphic) => graphic.id === 3404)) impacts.push(run.ticks);
+  }
+  assert.deepEqual(impacts, [at.split + 2], 'impacts');
+  assert.equal(at.rock, at.split + 3, 'rock');
+  assert.deepEqual(at.orbs, [at.split + 3, at.split + 3], 'orbs leave with the rock');
+  run.end('exit');
+});
+
+test('the earthen shield crawls (slides) at delves 1-2, where it steps every 2 ticks, and walks from delve 3 (capture)', () => {
+  for (const [level, crawling] of [[1, true], [2, true], [3, false]]) {
+    const { run } = runAt(level);
+    const [first, second] = Hazards.EARTH.pool.slice(0, 2).map(([x, y]) => run.tile({ x, y, z: 0 }));
+    run.hazards.destroyed = [first];
+    const earth = run.spawnNpc(Shared.NPC.VOLATILE_EARTH, second);
+    earth.__doomEarth = true;
+    run.hazards.earth.add(earth);
+    run.hazards.earthDestroyed(earth);
+    assert.equal(run.hazards.shield?.npc.crawling, crawling, `delve ${level}`);
+    run.end('exit');
+  }
 });

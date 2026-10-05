@@ -133,7 +133,8 @@ function sangMethod() {
 
     hits(character, target) {
       const spell = spellFor(character.getAsPlayer());
-      const hit = new PendingHit(character, target, this, 3);
+      // Wiki (Hit delay): powered staves land as spells do, by distance.
+      const hit = new PendingHit(character, target, this, MagicCombatMethod.hitDelay(character, target, spell));
       spell.onHitCalc(hit);
       applyLifeLeech(hit);
       return [hit];

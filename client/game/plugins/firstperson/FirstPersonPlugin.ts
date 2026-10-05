@@ -67,7 +67,7 @@ export class FirstPersonPlugin implements ClientPlugin, InputKeyHandler, InputMo
     }
 
     onMouseDown(event: MouseEvent): void {
-        if (!this.enabled || event.button !== 0 && event.button !== 2) return;
+        if (!this.enabled || (event.button !== 0 && event.button !== 2)) return;
         if (event.button === 2 && this.cursorMode === "none") {
             this.awaitingMenuOpen = true;
             this.menuOpenChecked = false;

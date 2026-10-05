@@ -98,6 +98,14 @@ export class Projectile {
         return this;
     }
 
+    /** Where along the source tile it starts, in 1/128ths of a tile (the packet's progress); 64 unless set. */
+    private progress = 64;
+
+    public withProgress(progress: number): Projectile {
+        this.progress = Math.max(0, Math.min(255, Math.trunc(progress)));
+        return this;
+    }
+
     public sendProjectile(): void {
         let resolvedDelay = this.delay;
         let resolvedSpeed = this.speed;
@@ -129,14 +137,16 @@ export class Projectile {
                 skippedArea++;
                 return;
             }
-            if (!this.start.isViewableFrom(player.getLocation())) {
+            // Seen as far as NPCs are: an area that widens that shows their projectiles too.
+            const range = Math.max(15, player.getNpcViewDistance?.() ?? 15);
+            if (!this.start.isViewableFromWithin(player.getLocation(), range)) {
                 skippedView++;
                 return;
             }
             if (
                 this.lockon &&
                 typeof this.lockon.getLocation === "function" &&
-                !this.lockon.getLocation().isViewableFrom(player.getLocation())
+                !this.lockon.getLocation().isViewableFromWithin(player.getLocation(), range)
             ) {
                 skippedTargetView++;
                 return;
@@ -154,7 +164,8 @@ export class Projectile {
                     this.endHeight,
                     this.lockonTargetIndex,
                     resolvedDelay,
-                    this.angle
+                    this.angle,
+                    this.progress
                 );
         });
         if (process.env.PROJECTILE_DEBUG === "1") {

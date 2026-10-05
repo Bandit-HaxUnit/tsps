@@ -440,7 +440,8 @@ export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
                     </span>
                 )}
 
-                {!hideUi && !osrsClient.isOnLoginScreen() && (
+                {/* Only in game: not while the cache downloads (DOWNLOADING) or on the login screen. */}
+                {!hideUi && osrsClient.isLoggedIn() && (
                     <SidebarShell osrsClient={osrsClient} store={osrsClient.sidebar} />
                 )}
             </div>

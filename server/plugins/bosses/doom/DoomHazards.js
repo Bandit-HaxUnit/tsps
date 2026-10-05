@@ -34,14 +34,18 @@
  *   4x4 blast, tripled penalties). Larvae give up after about 20 seconds once the Doom has
  *   burrowed elsewhere. From delve 7 a rock's orbs land 2 ticks after its debris; at delve 8 two
  *   rocks are thrown, their debris never overlapping.
+ * In game (player report): larvae path around rocks rather than crawling through them, and a
+ *   larva reaching the Doom hurts the player at most 12 (20 from delve 8, 30 for a giant).
  * Guesses: a giant larva one time in three at delve 8, adding one charge; one more piece of rock
- *   a delve after delve 5; orbs from cycle 30 from delve 7.
+ *   a delve after delve 5; orbs from cycle 30 from delve 7; a larva walled in by rocks crawls
+ *   straight on, through them.
  */
 
 const Shared = require("./DoomShared");
 
 const LARVA = {
   hp: 2, crawlTicks: 2, spawnGfx: 3417, spawnAnim: 12458, impactGfx: 3426,
+  damageCap: { normal: 12, deep: 20, giant: 30 },
   explosion: 21, bossDamage: [5, 10], heal: 9, lifetime: 33, past: [3, 5], deathAnim: 12459, blastGfx: 3374,
 };
 const HEAD_ICON = { melee: 0, ranged: 1, magic: 2 };
@@ -85,6 +89,9 @@ function rockOrbFlight(level, index) {
  */
 const EARTH = {
   anim: 12432, pop: 12434, death: 12433, shieldSpawn: 12436, count: [19, 28], gone: 2,
+  /** Capture: the player's tint inside the shield (over 30 cycles), and none outside. */
+  tint: { startCycle: 0, endCycle: 30, hue: 0, saturation: 0, lightness: 106, weight: 112 },
+  noTint: { startCycle: 0, endCycle: 0, hue: -1, saturation: -1, lightness: -1, weight: 0 },
   pool: [
     [1301, 9583], [1302, 9565], [1302, 9570], [1302, 9581], [1303, 9576], [1304, 9573], [1305, 9568], [1305, 9579],
     [1305, 9583], [1306, 9564], [1307, 9571], [1307, 9575], [1308, 9581], [1309, 9567], [1309, 9574], [1309, 9578],
@@ -113,6 +120,14 @@ function shuffle(list) {
 
 function step(from, to) {
   return Math.sign(to - from);
+}
+
+const NEIGHBOURS = [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [1, -1], [-1, -1], [-1, 1]];
+
+/** A larva's reach cap on the damage it does the player (in game: 12, 20 from delve 8, 30 giant). */
+function larvaDamageCap(level, giant) {
+  if (giant) return LARVA.damageCap.giant;
+  return level >= 8 ? LARVA.damageCap.deep : LARVA.damageCap.normal;
 }
 
 class HazardSet {
@@ -262,11 +277,62 @@ class HazardSet {
     const every = state.style === "melee" && this.run.random() < 0.5 ? 1 : LARVA.crawlTicks;
     if (this.run.ticks - state.movedAt < every) return;
     state.movedAt = this.run.ticks;
-    const next = at.transform(step(at.getX(), centre.getX()), step(at.getY(), centre.getY()));
+    const next = this.larvaStep(larva, centre)
+      ?? at.transform(step(at.getX(), centre.getX()), step(at.getY(), centre.getY()));
     const movement = larva.getMovementQueue();
     movement.reset();
     movement.addSteps?.(next);
     if (!movement.addSteps) larva.moveTo(next);
+  }
+
+  /**
+   * The larva's next tile towards the Doom's centre, around rocks: a breadth-first search over the
+   * arena floor, 8 ways (diagonals only past two free sides). The Doom's own tiles are always
+   * open, as NPCs don't block each other, so it goes into the Doom over the last stretch. Null
+   * when rocks wall it in.
+   */
+  larvaStep(larva, centre) {
+    const size = larva.getSize?.() ?? 1;
+    const boss = this.run.boss;
+    const at = larva.getLocation();
+    const start = { x: at.getX(), y: at.getY() };
+    const goal = { x: centre.getX(), y: centre.getY() };
+    const underBoss = (x, y) => Shared.distanceTo(boss, { x, y, z: 0 }) === 0;
+    const open = (x, y) => {
+      for (let dx = 0; dx < size; dx++) {
+        for (let dy = 0; dy < size; dy++) {
+          const tx = x + dx;
+          const ty = y + dy;
+          if (underBoss(tx, ty)) continue;
+          if (!Shared.onFloor({ x: tx, y: ty, z: 0 }) || this.rockAt(tx, ty)) return false;
+        }
+      }
+      return true;
+    };
+    const key = (x, y) => `${x},${y}`;
+    const from = new Map([[key(start.x, start.y), null]]);
+    const queue = [start];
+    for (let head = 0; head < queue.length; head++) {
+      const tile = queue[head];
+      if (tile.x === goal.x && tile.y === goal.y) {
+        let current = tile;
+        while (true) {
+          const previous = from.get(key(current.x, current.y));
+          if (!previous || (previous.x === start.x && previous.y === start.y)) break;
+          current = previous;
+        }
+        return Shared.loc({ x: current.x, y: current.y, z: at.getZ() });
+      }
+      for (const [dx, dy] of NEIGHBOURS) {
+        const x = tile.x + dx;
+        const y = tile.y + dy;
+        if (from.has(key(x, y)) || !open(x, y)) continue;
+        if (dx && dy && (!open(tile.x + dx, tile.y) || !open(tile.x, tile.y + dy))) continue;
+        from.set(key(x, y), tile);
+        queue.push({ x, y });
+      }
+    }
+    return null;
   }
 
   /** Into the Doom: it heals, the player is hurt, and the charge grows (Wiki, capture). */
@@ -277,7 +343,7 @@ class HazardSet {
     this.charge++;
     this.player.getPacketSender().sendVarbit(Shared.VARBIT.MISSED_ORBS, this.charge);
     this.player.performGraphic(Shared.gfx(LARVA.impactGfx));
-    this.run.hurt(this.charge * times);
+    this.run.hurt(Math.min(this.charge * times, larvaDamageCap(this.run.level, times > 1)));
     this.run.heal((LARVA.heal + this.charge) * times);
   }
 
@@ -296,6 +362,7 @@ class HazardSet {
     // Capture: the death anim, the blast over the 3x3 (graphic 3374), and it goes a tick later.
     this.larvae.delete(larva);
     larva.performAnimation(new Animation(LARVA.deathAnim));
+    Shared.areaSound(this.player, Shared.SOUND.LARVA_DEATH, { x: at.getX(), y: at.getY(), z: at.getZ() }, { range: 7 });
     this.run.attacks.after(1, () => this.removeLarva(larva));
     this.run.shield.larvaKilled();
     for (let x = at.getX() - 1; x <= at.getX() + size; x++) {
@@ -349,6 +416,7 @@ class HazardSet {
     const { PrayerHandler } = Shared.core();
     const player = this.player;
     Shared.graphicAt(player, ROCK.splitGfx[style], Shared.loc(at));
+    Shared.areaSound(player, Shared.SOUND.ROCK_SPLIT, at, { range: 10 });
     for (const prayer of [PrayerHandler.PROTECT_FROM_MAGIC, PrayerHandler.PROTECT_FROM_MISSILES, PrayerHandler.PROTECT_FROM_MELEE]) {
       if (PrayerHandler.isActivated(player, prayer)) PrayerHandler.deactivatePrayer(player, prayer);
     }
@@ -362,7 +430,11 @@ class HazardSet {
     });
     // Capture: the impacts are sent 2 ticks on, each delayed to its piece's landing.
     this.run.attacks.after(ROCK.landTicks, () => {
-      tiles.forEach((tile, index) => Shared.graphicAt(player, ROCK.impactGfx, tile, { delay: Math.max(0, ends[index] - 60) }));
+      tiles.forEach((tile, index) => {
+        const delay = Math.max(0, ends[index] - 60);
+        Shared.graphicAt(player, ROCK.impactGfx, tile, { delay });
+        Shared.areaSound(player, Shared.SOUND.ROCK_PIECE, tile, { delay, range: 1 });
+      });
     });
     this.run.attacks.after(ROCK.rockTicks, () => this.rockLands(marked, tiles, style, orbs));
     return tiles;
@@ -486,8 +558,10 @@ class HazardSet {
     const shield = this.run.spawnNpc(Shared.NPC.EARTHEN_SHIELD, { x: from.x - 1, y: from.y - 1 });
     if (!shield) return;
     shield.setFlag?.("movement:ignore-clipping");
+    // Capture: a step every 2 ticks (delves 1-2) is a crawl, so it slides; every tick it walks.
+    shield.setCrawling?.(this.run.delve.shieldWalk >= 2);
     shield.performAnimation(new Animation(EARTH.shieldSpawn));
-    this.shield = { npc: shield, destination, movedAt: this.run.ticks };
+    this.shield = { npc: shield, destination, movedAt: this.run.ticks, spawnedAt: this.run.ticks };
     const rest = [...this.earth];
     this.earth.clear();
     for (const other of rest) other.performAnimation(new Animation(EARTH.death));
@@ -505,6 +579,10 @@ class HazardSet {
     if (centre.getX() === destination.x && centre.getY() === destination.y) {
       this.removeShield();
       return;
+    }
+    // Capture: from the tick after it appears, the player is tinted each tick inside it, untinted outside.
+    if (this.run.ticks > shield.spawnedAt) {
+      this.player.tint?.(this.sheltered(this.player) ? EARTH.tint : EARTH.noTint);
     }
     if (this.run.ticks - shield.movedAt < this.run.delve.shieldWalk) return;
     shield.movedAt = this.run.ticks;
@@ -559,4 +637,4 @@ class HazardSet {
   }
 }
 
-module.exports = { HazardSet, isDemonbane, rockPieces, rockOrbFlight, LARVA, ROCK, EARTH };
+module.exports = { HazardSet, isDemonbane, rockPieces, rockOrbFlight, larvaDamageCap, LARVA, ROCK, EARTH };

@@ -1,3 +1,5 @@
+import { MenuTargetType } from "../../rs/MenuEntry";
+import { applyMenuTransform } from "../../ui/menu/menuTransforms";
 import { isDropTarget, isPauseButton, shouldShowMenuOption } from "../WidgetFlags";
 
 export type SimpleMenuEntry = {
@@ -11,6 +13,8 @@ export type SimpleMenuEntry = {
     forceLeftClick?: boolean;
     /** Submenu entry texts for this op (widget.submenuActions[opIndex-1]) */
     subOptions?: string[];
+    /** Set by a client plugin: this entry is the left-click (see chooseDefaultMenuEntry) */
+    swapPinned?: boolean;
 };
 
 /** Widget ops with 0-based index above targetPriority use the low-priority opcode. */
@@ -225,7 +229,40 @@ export function isPauseButtonWidget(
 // Menu options are only shown if:
 // 1. The transmit flag for that action is set (bits 1-10), OR
 // 2. The widget has an onOp handler
+const INVENTORY_GROUP_ID = 149;
+
+/**
+ * An inventory item's menu as the client plugins order it (e.g. a swapped left-click). `menu`
+ * is true for the opened right-click menu, which plugins may extend.
+ */
+export function transformWidgetMenuEntries<T extends { option: string }>(
+    w: any,
+    entries: T[],
+    menu: boolean = false,
+): T[] {
+    const itemId = typeof w?.itemId === "number" ? w.itemId | 0 : -1;
+    const uid = typeof w?.uid === "number" ? w.uid | 0 : 0;
+    if (itemId <= 0 || uid >>> 16 !== INVENTORY_GROUP_ID) return entries;
+    return applyMenuTransform(entries as any, {
+        surface: "inventory",
+        menu,
+        target: { type: MenuTargetType.ITEM, id: itemId, name: getWidgetTargetLabel(w) },
+    }) as unknown as T[];
+}
+
+/** A widget's menu entries in OSRS display order, after client plugins' reordering. */
 export function deriveMenuEntriesForWidget(
+    w: any,
+    onlyBasic?: boolean,
+    getWidgetFlags?: (w: any) => number,
+    getWidgetByUid?: (uid: number) => any,
+): SimpleMenuEntry[] {
+    const entries = deriveRawMenuEntriesForWidget(w, onlyBasic, getWidgetFlags, getWidgetByUid);
+    return onlyBasic ? entries : transformWidgetMenuEntries(w, entries);
+}
+
+/** A widget's menu entries as its ops define them (safe to cache). */
+export function deriveRawMenuEntriesForWidget(
     w: any,
     onlyBasic?: boolean,
     getWidgetFlags?: (w: any) => number,

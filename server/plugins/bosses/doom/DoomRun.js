@@ -37,6 +37,8 @@ const ANIM = { EMERGE: 12418, DESPAWN: 12422 };
 const GFX = { EMERGE: 3372, DESPAWN: 3377 };
 const HEALTH_BAR = { id: 20, width: 120 };
 /** Capture: the burrow hole opens 5 ticks after the Doom's death (loc anim 12477), and the Doom goes at 7. */
+/** How far NPCs are seen in the arena: across the whole floor. */
+const NPC_VIEW_DISTANCE = 32;
 const HOLE_DELAY = 5;
 const BOSS_GONE = 7;
 const HOLE_ANIM = 12477;
@@ -165,6 +167,8 @@ class DoomRun {
     savePlayer(player);
     player.setAttribute(ATTR.RUN, true);
     this.area.enter(player);
+    // Capture: the fight uses the large NPC update throughout, NPCs seen across the arena.
+    player.setNpcViewDistance?.(NPC_VIEW_DISTANCE);
     this.place(Shared.TILES.ARRIVAL);
     this.placeExit();
     this.task = Shared.repeat(this, 1, () => this.tick());
@@ -525,6 +529,7 @@ class DoomRun {
     runs.delete(this.player);
     const player = this.player;
     player.setAttribute(ATTR.RUN, null);
+    player.setNpcViewDistance?.(null);
     this.settleLoot(reason);
     if (reason === "claimed" || reason === "exit" || reason === "death") this.restoreView();
     this.attacks.stop();

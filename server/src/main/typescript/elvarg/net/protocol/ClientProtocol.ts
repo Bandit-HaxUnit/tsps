@@ -98,6 +98,8 @@ export type PlayerView = Tile & ActorUpdateView & {
   faceDirection?: number;
   forcedMovement?: ForcedMovementView;
   forcedMovementEnd?: Tile;
+  /** OSRS tinting: an HSL tint over client cycles; hue/saturation/lightness -1 keep the model's own. */
+  tint?: { startCycle: number; endCycle: number; hue: number; saturation: number; lightness: number; weight: number };
   /** The world entity (boat) whose deck the player stands on; the coordinates are deck coordinates. */
   worldView?: number;
 };
@@ -213,7 +215,8 @@ export type FriendsChatSnapshot = {
 };
 
 export type ClientMessage =
-  | { type: "move"; worldX: number; worldY: number; modifierFlags: number }
+  /** modifierFlags is the click's key byte (OSRS: 1 Ctrl, 2 Ctrl+Shift); run forces running. */
+  | { type: "move"; worldX: number; worldY: number; modifierFlags: number; run?: boolean }
   | { type: "npc_option"; index: number; clickType: number }
   | { type: "object_option"; id: number; x: number; y: number; clickType?: number; action?: string }
   | { type: "chat"; text: string; messageType: "public" | "game" | "friends_chat" }
@@ -668,7 +671,7 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
     }
     case HighClientPacket.WALK: {
       const worldX = reader.short(), worldY = reader.short(), flags = reader.byte();
-      return { type: "move", worldX, worldY, modifierFlags: (flags & 1) !== 0 ? 2 : flags >> 1 };
+      return { type: "move", worldX, worldY, modifierFlags: flags >> 1, run: (flags & 1) !== 0 };
     }
     case ClientPacket.FACE: {
       const rotation = reader.byte() ? reader.short() : undefined;
@@ -1588,6 +1591,11 @@ export function encodeWidgetSetColour(uid: number, colour: number): Buffer {
   return encodeServerPacket(ServerPacketId.WIDGET_SET_COLOUR, payload);
 }
 
+/** The ticks until the player's next attack, for the client's attack timer (not an OSRS packet). */
+export function encodeAttackTimer(ticks: number): Buffer {
+  return encodeServerPacket(ServerPacketId.ATTACK_TIMER, Buffer.from([Math.max(0, Math.min(255, ticks | 0))]));
+}
+
 /** IF_SETPOSITION: move a component within its parent, keeping its position modes. */
 export function encodeWidgetSetPosition(uid: number, x: number, y: number): Buffer {
   const payload = Buffer.alloc(8);
@@ -2163,6 +2171,7 @@ const PLAYER_MASK = {
   FACE_ENTITY: 0x40,
   FORCE_MOVEMENT: 0x400,
   MOVEMENT_TYPE: 0x1000,
+  TINT: 0x200,
   MOVEMENT_FLAG: 0x2000,
   SPOT_ANIM: 0x10000,
 } as const;
@@ -2292,6 +2301,7 @@ function playerUpdateMask(
     (view.forcedMovement ? PLAYER_MASK.FORCE_MOVEMENT : 0) |
     (writeMovementType ? PLAYER_MASK.MOVEMENT_TYPE : 0) |
     (view.resetPath ? PLAYER_MASK.MOVEMENT_FLAG : 0) |
+    (view.tint ? PLAYER_MASK.TINT : 0) |
     (view.graphics?.length ? PLAYER_MASK.SPOT_ANIM : 0);
 }
 
@@ -2353,6 +2363,14 @@ function writePlayerUpdateBlock(
       shortBE(bytes, graphic.id < 0 ? 0xffff : graphic.id);
       intME(bytes, ((graphic.height & 0xffff) << 16) | (graphic.delay & 0xffff));
     }
+  }
+  if (view.tint) {
+    shortLE(bytes, view.tint.startCycle & 0xffff);
+    shortLE(bytes, view.tint.endCycle & 0xffff);
+    byteS(bytes, view.tint.hue);
+    bytes.push(view.tint.saturation & 0xff);
+    byteA(bytes, view.tint.lightness);
+    byteC(bytes, view.tint.weight);
   }
   return Buffer.from(bytes);
 }

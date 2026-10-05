@@ -20,6 +20,9 @@ import { processWidgetScrollWheelInput } from "./input/widgetScrollWheelInput";
 
 export type { WidgetInputControllerDeps } from "./input/widgetInputTypes";
 
+const ALL_SETTINGS_GROUP = 134;
+const RESTORE_CHAT_KEYBOARD_SCRIPT = 2158;
+
 /** Per-frame widget hover/scroll/click/drag/keyboard input extracted from OsrsClient. */
 export class WidgetInputController {
     private readonly state: WidgetInputState = createWidgetInputState();
@@ -27,6 +30,14 @@ export class WidgetInputController {
     constructor(private readonly deps: WidgetInputControllerDeps) {}
 
     onInterfaceClosed(groupId: number): void {
+        if (groupId === ALL_SETTINGS_GROUP) {
+            // A search in All Settings takes the keyboard from chat (script 2157). Script 2158
+            // gives it back (4079: varc 11 = 0 and chat's key listener re-added); run it on
+            // every close - the close button, Esc or another interface - or chat stays deaf.
+            const chat = this.deps.getWidgetManager().findWidget(162, 0);
+            if (chat) this.deps.executeScriptListener(chat, [RESTORE_CHAT_KEYBOARD_SCRIPT]);
+            return;
+        }
         if (groupId !== 458) return;
         // Cache script 2157 removes chat's onKey listener. Restore it when
         // leaving the build menu, including menus opened by older servers.
