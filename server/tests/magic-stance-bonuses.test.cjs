@@ -197,3 +197,27 @@ test('corruption: certain with the Mark at casting (50% without), with its hit g
         Spell.prototype.canCast = canCast;
     }
 });
+
+test("a manual cast keeps its cast animation: the combat reset after it doesn't replace it", () => {
+    const { Combat } = require('../dist/game/content/combat/Combat');
+    const { MagicCombatMethod } = require('../dist/game/content/combat/method/impl/MagicCombatMethod');
+    const animations = [];
+    const character = {
+        isPlayer: () => true, isNpc: () => false,
+        getAsPlayer: () => ({ getPacketSender: () => ({ sendConfig() {} }) }),
+        setMobileInteraction() {}, setPositionToFace() {},
+        performAnimation: (animation) => animations.push(animation.getId()),
+        getMovementQueue: () => ({ reset() {} }),
+    };
+    const combat = new Combat(character);
+    character.getCombat = () => combat;
+    combat.target = {};
+    combat.setAutocastSpell?.(null);
+    const cast = { id: 'dark demonbane' };
+    combat.setCastSpell?.(cast);
+    new MagicCombatMethod().finished(character, {});
+    assert.deepEqual(animations, [], 'no reset animation after a manual cast');
+    combat.target = {};
+    combat.reset();
+    assert.deepEqual(animations, [65535], 'an ordinary reset still stops the animation');
+});

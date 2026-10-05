@@ -198,7 +198,8 @@ export class MagicCombatMethod extends CombatMethod {
         const current = character.getCombat().getCastSpell();
         character.getCombat().setCastSpell(null);
         if (character.getCombat().getAutocastSpell() === null) {
-            character.getCombat().reset();
+            // The same tick as the cast: keep its animation, which the reset would replace.
+            character.getCombat().reset(false);
             // reset() clears the interaction; a resolved manual cast still faces its target.
             character.setMobileInteraction(target);
         }

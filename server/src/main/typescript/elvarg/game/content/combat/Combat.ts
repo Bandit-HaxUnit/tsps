@@ -413,8 +413,9 @@ export class Combat {
         return this.getAttackDelay() <= Math.max(0, ticks | 0);
     }
 
-    public reset(): void {
-        this.clearInteraction();
+    /** `resetAnimation` false keeps this tick's animation (a manual spell's cast after it resolves). */
+    public reset(resetAnimation = true): void {
+        this.clearInteraction(resetAnimation);
         this.character.getMovementQueue().reset();
     }
 
@@ -423,7 +424,7 @@ export class Combat {
      * OSRS rule that an inventory item action is a hard interruption which does not
      * stop queued movement (osrs-docs: Entity Interactions).
      */
-    public clearInteraction(): void {
+    public clearInteraction(resetAnimation = true): void {
         this.manualMovementUntilCycle = -1;
         const previousTarget = this.target;
         this.generation++;
@@ -435,7 +436,7 @@ export class Combat {
         this.character.setMobileInteraction(null);
         this.character.setPositionToFace(null);
         if (this.character.isPlayer()) {
-            if (previousTarget) this.character.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
+            if (previousTarget && resetAnimation) this.character.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
             this.character.getAsPlayer().getPacketSender().sendConfig(COMBAT_TARGET_PLAYER_VARP, -1);
         }
         this.specialAttackQueued = false;
