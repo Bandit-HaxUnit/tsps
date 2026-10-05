@@ -17,6 +17,7 @@ import { SeqFrameLoader } from "../../rs/model/seq/SeqFrameLoader";
 import { SkeletalSeqLoader } from "../../rs/model/skeletal/SkeletalSeqLoader";
 import { TextureLoader } from "../../rs/texture/TextureLoader";
 import { SceneBuffer } from "../buffer/SceneBuffer";
+import { buildActorNormals } from "../buffer/ActorNormals";
 
 export interface DynamicNpcSequenceMeta {
     key: string;
@@ -243,8 +244,9 @@ export class DynamicNpcAnimLoader {
         overlaySeqId?: number,
         overlayFrameId?: number,
     ): DynamicNpcFrameGeometry {
-        const opaque = this.buildGeometry(model, false);
-        const alpha = this.buildGeometry(model, true);
+        const actorNormals = buildActorNormals(model, this.npcModelLoader?.modelCache.get(npcTypeId) ?? model);
+        const opaque = this.buildGeometry(model, false, actorNormals);
+        const alpha = this.buildGeometry(model, true, actorNormals);
         const entry: DynamicNpcFrameGeometry = {
             key,
             npcTypeId,
@@ -342,6 +344,7 @@ export class DynamicNpcAnimLoader {
     private buildGeometry(
         model: Model,
         transparent: boolean,
+        actorNormals: Uint16Array,
     ): { vertices: Uint8Array; indices: Int32Array } {
         if (!this.textureLoader || !this.textureIdIndexMap) {
             return {
@@ -356,6 +359,7 @@ export class DynamicNpcAnimLoader {
                 this.textureLoader,
                 this.textureIdIndexMap,
                 Math.max(16, (model.verticesCount | 0) + 16),
+                true,
             );
             if (transparent) {
                 this.alphaSceneBuf = sceneBuf;
@@ -365,7 +369,7 @@ export class DynamicNpcAnimLoader {
         }
 
         this.resetSceneBuf(sceneBuf);
-        sceneBuf.addModelAnimFrame(model, transparent);
+        sceneBuf.addModelAnimFrame(model, transparent, actorNormals);
 
         return {
             vertices: new Uint8Array(sceneBuf.vertexBuf.byteArray()),
