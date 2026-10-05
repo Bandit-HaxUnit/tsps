@@ -12,35 +12,10 @@ const { ArceuusSpells } = require("../../src/main/typescript/elvarg/game/content
 
 const THIEVING_ANIMATION = new Animation(881);
 const PICKPOCKET_COOLDOWN_MS = 1200;
-
-class PickpocketResolveTask extends Task {
-  constructor(player, onResolve) {
-    super(2, player.getIndex());
-    this.player = player;
-    this.location = player.getLocation().clone();
-    this.onResolve = onResolve;
-  }
-
-  canResolve() {
-    return this.player.isRegistered() && this.player.getHitpoints() > 0 &&
-      this.player.getLocation().equals(this.location) && this.player.getMovementQueue().size() === 0 &&
-      this.player.getForceMovement() == null;
-  }
-
-  execute() {
-    if (this.canResolve()) this.onResolve();
-    this.stop();
-  }
-
-  onTick() {
-    if (!this.canResolve()) this.stop();
-  }
-
-  stop() {
-    super.stop();
-    if (this.player.isRegistered()) this.player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
-  }
-}
+// Wiki (Pickpocketing): a failed pickpocket stops the player moving for 9 ticks and from
+// pickpocketing again for 8, whichever NPC it was.
+const PICKPOCKET_STUN_TICKS = 9;
+const PICKPOCKET_STUN_LOCK_TICKS = 8;
 
 const PICKPOCKETS = [
   {
@@ -48,7 +23,6 @@ const PICKPOCKETS = [
     petBase: 257211,
     level: 1,
     xp: 8,
-    stunTime: 8,
     stunDamage: 1,
     rewards: [[ItemIds.COINS, 3]],
   },
@@ -57,7 +31,6 @@ const PICKPOCKETS = [
     petBase: 257211,
     level: 10,
     xp: 14.5,
-    stunTime: 8,
     stunDamage: 1,
     rewards: [[ItemIds.COINS, 9], [ItemIds.POTATO_SEED, 1]],
   },
@@ -66,7 +39,6 @@ const PICKPOCKETS = [
     petBase: 257211,
     level: 32,
     xp: 36.5,
-    stunTime: 9,
     stunDamage: 2,
     rewards: [[ItemIds.COINS, 34], [ItemIds.LOCKPICK, 1], [ItemIds.JUG_OF_WINE, 1]],
   },
@@ -75,7 +47,6 @@ const PICKPOCKETS = [
     petBase: 257211,
     level: 38,
     xp: 43,
-    stunTime: 9,
     stunDamage: 3,
     rewards: [[ItemIds.POTATO_SEED, 1], [ItemIds.ONION_SEED, 1], [ItemIds.MARRENTILL_SEED, 1], [ItemIds.RANARR_SEED, 1]],
   },
@@ -84,7 +55,6 @@ const PICKPOCKETS = [
     petBase: 257211,
     level: 40,
     xp: 47,
-    stunTime: 9,
     stunDamage: 2,
     rewards: [[ItemIds.COINS, 30]],
   },
@@ -93,7 +63,6 @@ const PICKPOCKETS = [
     petBase: 127056,
     level: 70,
     xp: 152,
-    stunTime: 10,
     stunDamage: 3,
     rewards: [[ItemIds.COINS, 80], [ItemIds.CHAOS_RUNE, 2]],
   },
@@ -102,7 +71,6 @@ const PICKPOCKETS = [
     petBase: 108718,
     level: 75,
     xp: 199,
-    stunTime: 10,
     stunDamage: 1,
     rewards: [[ItemIds.COINS, 300], [ItemIds.GOLD_ORE, 1], [ItemIds.EARTH_RUNE, 1]],
   },
@@ -174,6 +142,52 @@ function handleStealFromStall(event) {
   event.handled = true;
 }
 
+/** The attempt message goes out on the click; the animation and the outcome follow a tick later. */
+class PickpocketTask extends Task {
+  constructor(player, npc, name, def) {
+    super(1, player.getIndex());
+    this.player = player;
+    this.npc = npc;
+    this.name = name;
+    this.def = def;
+  }
+
+  execute() {
+    this.stop();
+    const { player, npc } = this;
+    if (!player.isRegistered() || !npc.isRegistered() || player.getHitpoints() <= 0) return;
+    player.performAnimation(THIEVING_ANIMATION);
+    resolvePickpocket(player, npc, this.name, this.def);
+  }
+}
+
+function resolvePickpocket(player, npc, name, def) {
+  if (pickpocketSucceeded(player, def)) {
+    const loot = randomReward(def.rewards);
+    player.getInventory().addItem(loot);
+    player.sendMessage(`You pick the ${name}'s pocket.`);
+    player.getSkillManager().addExperiences(Skill.THIEVING, def.xp);
+    pluginApi.emitCustomEvent("thieving:success", { player, skill: Skill.THIEVING, petBase: def.petBase });
+    return;
+  }
+
+  if (ArceuusSpells.hasShadowVeil(player) && Math.random() < 0.15) {
+    player.sendMessage("Your shadow veil prevents you from being noticed.");
+    return;
+  }
+
+  npc.setPositionToFace(player.getLocation());
+  npc.forceChat("What do you think you're doing?");
+  npc.performAnimation(new Animation(npc.getAttackAnim()));
+  player.sendMessage(`You fail to pickpocket the ${name}.`);
+  Sounds.sendSound(player, Sound.THIEVING_STUNNED);
+  CombatFactory.stunTicks(player, PICKPOCKET_STUN_TICKS, true);
+  player
+    .getCombat()
+    .getHitQueue()
+    .addPendingDamage([new HitDamage(def.stunDamage, HitMask.RED)]);
+}
+
 function pickpocket(event) {
   const { player, npc } = event;
   const def = PICKPOCKET_BY_NAME.get(event.definition.getName());
@@ -190,7 +204,8 @@ function pickpocket(event) {
     event.handled = true;
     return;
   }
-  if (player.getTimers().has(TimerKey.STUN)) {
+  // The stun's last tick still holds the player in place but no longer stops a pickpocket.
+  if (player.getTimers().getTicks(TimerKey.STUN) > PICKPOCKET_STUN_TICKS - PICKPOCKET_STUN_LOCK_TICKS) {
     event.handled = true;
     return;
   }
@@ -210,48 +225,16 @@ function pickpocket(event) {
     return;
   }
 
+  // The attempt message goes out on the click; the animation and the outcome (experience and loot,
+  // or the stun) come together on the next tick. Wiki (Pickpocketing): NPCs may be pickpocketed
+  // every two ticks.
   player.getMovementQueue().reset();
   player.setPositionToFace(npc.getLocation());
-  player.performAnimation(THIEVING_ANIMATION);
-  player.sendMessage("You attempt to pick the npc's pocket..");
+  const name = event.definition.getName().toLowerCase();
+  player.sendMessage(`You attempt to pick the ${name}'s pocket.`);
   player.getClickDelay().reset();
   npc.getTimers().registers(TimerKey.ATTACK_IMMUNITY, 10);
-
-  TaskManager.submit(
-    new PickpocketResolveTask(player, () => {
-      if (!player.isRegistered() || !npc.isRegistered()) {
-        return;
-      }
-
-      if (pickpocketSucceeded(player, def)) {
-        const loot = randomReward(def.rewards);
-        if (!player.getInventory().isFull()) {
-          player.getInventory().addItem(loot);
-        }
-        player.sendMessage(`You steal ${loot.getAmount()} x ${loot.getDefinition().getName()}.`);
-        player.getSkillManager().addExperiences(Skill.THIEVING, def.xp);
-        pluginApi.emitCustomEvent("thieving:success", { player, skill: Skill.THIEVING, petBase: def.petBase });
-        return;
-      }
-
-      if (ArceuusSpells.hasShadowVeil(player) && Math.random() < 0.15) {
-        player.sendMessage("Your shadow veil prevents you from being noticed.");
-        return;
-      }
-
-      npc.setPositionToFace(player.getLocation());
-      npc.forceChat("What do you think you're doing?");
-      npc.performAnimation(new Animation(npc.getAttackAnim()));
-      player.sendMessage("You fail to pick the pocket.");
-      Sounds.sendSound(player, Sound.THIEVING_STUNNED);
-      CombatFactory.stun(player, def.stunTime, true);
-      player
-        .getCombat()
-        .getHitQueue()
-        .addPendingDamage([new HitDamage(def.stunDamage, HitMask.RED)]);
-      player.getMovementQueue().reset();
-    })
-  );
+  TaskManager.submit(new PickpocketTask(player, npc, name, def));
 
   event.handled = true;
 }
@@ -277,3 +260,5 @@ module.exports = {
     });
   },
 };
+
+module.exports._test = { pickpocket };
