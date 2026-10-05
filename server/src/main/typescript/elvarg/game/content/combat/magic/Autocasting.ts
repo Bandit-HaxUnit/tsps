@@ -42,10 +42,11 @@ export class Autocasting {
         [41, CombatSpells.BLOOD_BLITZ], [42, CombatSpells.ICE_BLITZ],
         [43, CombatSpells.SMOKE_BARRAGE], [44, CombatSpells.SHADOW_BARRAGE],
         [45, CombatSpells.BLOOD_BARRAGE], [46, CombatSpells.ICE_BARRAGE],
-        // Arceuus (cache script 4133 lays them out in three columns: demonbanes on top, grasps below).
-        [53, CombatSpells.INFERIOR_DEMONBANE], [54, CombatSpells.GHOSTLY_GRASP],
-        [55, CombatSpells.SUPERIOR_DEMONBANE], [56, CombatSpells.SKELETAL_GRASP],
-        [57, CombatSpells.DARK_DEMONBANE], [58, CombatSpells.UNDEAD_GRASP],
+        // Arceuus (cache script 4133: 53-55 the top row, 56-58 the bottom; enum 1986's icons):
+        // the demonbanes on top, the grasps below.
+        [53, CombatSpells.INFERIOR_DEMONBANE], [54, CombatSpells.SUPERIOR_DEMONBANE],
+        [55, CombatSpells.DARK_DEMONBANE], [56, CombatSpells.GHOSTLY_GRASP],
+        [57, CombatSpells.SKELETAL_GRASP], [58, CombatSpells.UNDEAD_GRASP],
     ]);
 
     /** Wiki (Autocast): the weapons that can autocast Arceuus spells, by name (any charge or degrade). */

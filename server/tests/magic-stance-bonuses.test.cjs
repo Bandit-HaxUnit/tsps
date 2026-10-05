@@ -75,11 +75,15 @@ test('the autocast selector gets the spellbook\'s list: the Slayer\'s staff\'s o
         assert.ok(Autocasting.canAutocastArceuus(name), name);
     }
     for (const name of ['Staff of fire', 'Ancient staff', 'Trident of the seas']) assert.ok(!Autocasting.canAutocastArceuus(name), name);
-    // The selector's Arceuus slots: demonbanes on top, grasps below (cache script 4133, Wiki picture).
+    // The selector's Arceuus slots: 53-55 the top row (demonbanes), 56-58 the bottom (grasps),
+    // as cache script 4133 lays them out, enum 1986's icons and the Wiki's picture show.
     assert.deepEqual([53, 54, 55, 56, 57, 58].map((slot) => Autocasting.autocastSpell(slot)), [
-        CombatSpells.INFERIOR_DEMONBANE, CombatSpells.GHOSTLY_GRASP, CombatSpells.SUPERIOR_DEMONBANE,
-        CombatSpells.SKELETAL_GRASP, CombatSpells.DARK_DEMONBANE, CombatSpells.UNDEAD_GRASP,
+        CombatSpells.INFERIOR_DEMONBANE, CombatSpells.SUPERIOR_DEMONBANE, CombatSpells.DARK_DEMONBANE,
+        CombatSpells.GHOSTLY_GRASP, CombatSpells.SKELETAL_GRASP, CombatSpells.UNDEAD_GRASP,
     ]);
+    // Each slot's icon in cache enum 1986 is that spell's own id.
+    assert.deepEqual([53, 54, 55, 56, 57, 58].map((slot) => Autocasting.autocastSpell(slot).spellId()),
+        [20398, 20399, 20400, 21826, 21829, 21832]);
 });
 
 test('the Slayer\'s staff (e) is a staff, as the plain one is', () => {
