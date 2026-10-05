@@ -136,6 +136,19 @@ class BotBrain {
     }
   }
 
+  /**
+   * Progress for actions that do not report their own: the bot changed tile. A long walk
+   * (to a furnace, a far bank) must not trip the stall check halfway.
+   */
+  movedSinceLastTick() {
+    const loc = this.player.getLocation?.();
+    const position = loc ? `${loc.getX()},${loc.getY()},${loc.getZ()}` : null;
+    // The first reading is the baseline, not a move.
+    const moved = this.lastPosition !== undefined && position !== this.lastPosition;
+    this.lastPosition = position;
+    return moved;
+  }
+
   isRunningActivity(activityId) {
     return this.frames.some((frame) => frame.behaviour?.id === activityId);
   }
@@ -435,7 +448,7 @@ class BotBrain {
           frame.state = FRAME_STATE.WAIT;
           frame.waitTicks = Math.max(1, Number(ctx.waitTicks ?? 1));
         } else {
-          if (action.madeProgress?.(ctx)) {
+          if (typeof action.madeProgress === "function" ? action.madeProgress(ctx) : this.movedSinceLastTick()) {
             frame.lastProgressAt = nowMs;
           }
           if (nowMs - frame.lastProgressAt >= FRAME_STALL_MS) {

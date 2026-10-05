@@ -305,6 +305,16 @@ function createBankAction(spec, world) {
   const action = {
     id: "bank",
     update,
+    // Walking to a far bank (up Lumbridge castle and back down) is progress: without it
+    // the brain's stall check ended the trip upstairs and stranded the bot there.
+    madeProgress(ctx) {
+      const bot = stateFor(ctx.player);
+      const loc = ctx.player.getLocation();
+      const position = `${loc.getX()},${loc.getY()},${loc.getZ()}`;
+      const moved = position !== bot.lastPosition;
+      bot.lastPosition = position;
+      return moved;
+    },
     stop(ctx) {
       const player = ctx?.player;
       if (!player) {

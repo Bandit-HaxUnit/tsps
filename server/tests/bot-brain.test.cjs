@@ -1097,6 +1097,16 @@ test('a two-handed weapon clears the shield slot', () => {
   a.stop(s.ctx);
 });
 
+test('a long walk counts as progress for an action that reports none (a far bank)', () => {
+  let x = 3200;
+  const walking = { id: 'bank', update: () => 'running' };
+  const player = { ...fakePlayer('walker'), getLocation: () => ({ getX: () => x, getY: () => 3200, getZ: () => 0 }) };
+  const brain = new BotBrain({ player, state: {}, world: { log() {} }, registry: fakeRegistry(),
+    activity: { id: 'walk_activity', actions: [walking], repeat: true } });
+  for (let t = 1000; t <= 400000; t += 60000) { x += 10; brain.tick(t); }
+  assert.equal(brain.frames.length, 1, 'still walking after more than three minutes');
+});
+
 test('a frame with no progress for three minutes fails and logs a stall', () => {
   const logs = [];
   const stalled = { id: 'stalled', update: () => 'running' };

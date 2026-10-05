@@ -138,6 +138,12 @@ function createFishAction(spec, world) {
         return "running";
       }
       if (player.getMovementQueue().size() > 0 || peekMovementRequest(player)) return "running";
+      const home = ctx.state?.home;
+      if (!bot.site && home && Number.isFinite(home.z) && loc.getZ() !== home.z) {
+        // Left upstairs (a bank floor): spots are found per floor, go back down first.
+        requestMovement(player, home.x, home.y, { nowMs, z: home.z, reason: "brain_fish_walk", basicPather: true });
+        return "running";
+      }
       if (!bot.site) {
         const selected = selectSite(player, bot, nowMs);
         if (selected === null) return "running";
