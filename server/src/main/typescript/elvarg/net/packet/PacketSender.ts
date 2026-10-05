@@ -8,6 +8,7 @@ import { PlayerStatus } from "../../game/model/PlayerStatus";
 import { Flag } from "../../game/model/Flag";
 import { Skill } from "../../game/model/Skill";
 import { Location } from "../../game/model/Location";
+import { BoatManager } from "../../game/content/sailing/BoatManager";
 import { Graphic } from "../../game/model/Graphic";
 import { World } from "../../game/World";
 import { DonatorRights } from "../../game/model/rights/DonatorRights";
@@ -1139,12 +1140,23 @@ export class PacketSender {
     return this.sendInterfaceScript(1749, [this.worldMapPosition, -1, -1]);
   }
 
+  /**
+   * Where the world map marks the player: their tile, or aboard a boat the boat's own tile (its
+   * world entity's coordinate, as an OSRS capture of a player sailing shows; docs/world-map.md).
+   */
+  worldMapLocation(): Location {
+    const boat = BoatManager.getBoatAboard(this.player);
+    if (!boat) return this.player.getLocation();
+    const tile = boat.worldTile();
+    return new Location(tile.x, tile.y, tile.level);
+  }
+
   toggleWorldMap(): this {
     if (this.isWorldMapOpen()) {
       return this.closeSubInterface(WORLD_MAP_TARGET_UID);
     }
     return this
-      .sendWorldMapPosition(this.player.getLocation())
+      .sendWorldMapPosition(this.worldMapLocation())
       .sendSubInterface(WORLD_MAP_TARGET_UID, WORLD_MAP_GROUP_ID)
       .sendInterfaceFlagsRange((WORLD_MAP_GROUP_ID << 16) | 21, 0, 4, 1 << 1);
   }
