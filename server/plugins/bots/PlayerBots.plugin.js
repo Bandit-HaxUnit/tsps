@@ -13,6 +13,7 @@ const { bootPlayerBotsRuntime } = require("./runtime/BotPluginBoot");
 const { createBotBenchmark } = require("./runtime/BotBenchmark");
 const { startBotSites } = require("./brain/BotSiteSpawner");
 const { setActiveBotRuntime } = require("./runtime/BotRuntimeRegistry");
+const { PVP_BOT_SETTINGS } = require("./behaviours/pvp/WildernessHotspotRegistry");
 const {
   registerBotStatusInteractions,
 } = require("./runtime/registerBotStatusInteractions");
@@ -44,11 +45,12 @@ const BOT_EAT_OPTIONS = Object.freeze({
 const BOT_CONFIG = Object.freeze({
   behaviorMode: BOT_BEHAVIOR_MODE,
   botCount: 0,
-  wildernessRoamerBotCount: 845,
-  wildernessActiveRegionBotsPerRegion: 24,
-  // Active-region snapshots are currently radius=1 (3x3 around each player region).
-  // Inset by 1 to target only the true active core for regional wilderness bots.
-  wildernessActiveRegionInset: 1,
+  // PvP bot pool and spread live in bot-activities.json ("pvp"), with the hotspots.
+  // Active-region snapshots are radius=1 (3x3 around each player region); the inset
+  // targets only the true active core for regional wilderness bots.
+  wildernessRoamerBotCount: PVP_BOT_SETTINGS.botPool,
+  wildernessActiveRegionBotsPerRegion: PVP_BOT_SETTINGS.activeRegionBotsPerRegion,
+  wildernessActiveRegionInset: PVP_BOT_SETTINGS.activeRegionInset,
   botWalkRadius: 10,
   objectIndexCachePath: path.join(
     process.cwd(),

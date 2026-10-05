@@ -43,12 +43,34 @@ function freezeHotspot(hotspot) {
   });
 }
 
+/**
+ * PvP bots are configured with the rest of the bot population, in bot-activities.json
+ * ("pvp": pool size, active-region spread and hotspots); their gear catalogue stays in
+ * pvp-bot-loadouts.json, which hotspots refer to by loadout id.
+ */
+function loadPvpBotConfig() {
+  const file = path.join(GameConstants.DEFINITIONS_DIRECTORY, "bot-activities.json");
+  const pvp = JSON.parse(fs.readFileSync(file, "utf8")).pvp;
+  if (!pvp) {
+    throw new Error("[bot activities] missing pvp section");
+  }
+  return pvp;
+}
+
+const PVP_BOT_CONFIG = loadPvpBotConfig();
+
+/** How many wilderness bot names exist and how they spread over players' active regions. */
+const PVP_BOT_SETTINGS = Object.freeze({
+  botPool: Math.max(0, Math.floor(Number(PVP_BOT_CONFIG.botPool ?? 0))),
+  activeRegionBotsPerRegion: Math.max(0, Math.floor(Number(PVP_BOT_CONFIG.activeRegionBotsPerRegion ?? 0))),
+  activeRegionInset: Math.max(0, Math.floor(Number(PVP_BOT_CONFIG.activeRegionInset ?? 0))),
+});
+
 function loadWildernessHotspots() {
-  const hotspotFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "pvp-bot-hotspots.json");
   const loadoutFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "pvp-bot-loadouts.json");
-  const definitions = JSON.parse(fs.readFileSync(hotspotFile, "utf8"));
+  const definitions = PVP_BOT_CONFIG;
   if (!Array.isArray(definitions?.hotspots) || definitions.hotspots.length === 0) {
-    throw new Error("[pvp bot loadouts] missing hotspots");
+    throw new Error("[bot activities] pvp.hotspots missing");
   }
   const loadouts = JSON.parse(fs.readFileSync(loadoutFile, "utf8"));
   const loadoutIds = new Set((loadouts.loadouts ?? []).map((loadout) => loadout?.id));
@@ -116,6 +138,7 @@ function isOutsideWildernessHotspots(location) {
 }
 
 module.exports = {
+  PVP_BOT_SETTINGS,
   WILDERNESS_HOTSPOT_IDS,
   WILDERNESS_HOTSPOTS,
   createHotspotAnchorLocation,

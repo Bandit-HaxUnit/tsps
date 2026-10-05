@@ -225,6 +225,17 @@ floor.
 - LOD: bots far from real players run every 4 cycles (was 12), medium every 2, with a 60 ms per
   tick budget. A CPU profile with 615 players had the server 87% idle and bots under 10%.
 
+## PvP (wilderness) bots
+
+Configured in the same file, under `"pvp"`: `botPool` (how many `WildyBot` names exist),
+`activeRegionBotsPerRegion` / `activeRegionInset` (regional spread around players) and `hotspots`
+(area, anchor, `targetBots` / `maxBots`, level ranges, allowed loadouts). The gear catalogue stays
+in `pvp-bot-loadouts.json`; hotspots refer to it by loadout id.
+
+A wilderness bot's brain runs `pvp` with no rotation, so it only ever returns to `pvp`. The pvp
+loop reports progress while the bot fights or moves; before that, the brain's 3-minute stall check
+ended it and the bot was handed a random activity (WildyBots skilling in Lumbridge).
+
 ## Test tiers
 
 Startup spawns 500 bots at the Lumbridge spawn in four sites, each with its levels set at spawn
