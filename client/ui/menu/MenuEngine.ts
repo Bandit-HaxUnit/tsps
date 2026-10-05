@@ -20,6 +20,7 @@ export type SimpleMenuEntry = {
     shiftClick?: boolean; // Whether this entry can be executed via shift-click (bypasses menu)
     forceLeftClick?: boolean; // Forces left-click execution even when the menu would open
     subEntries?: SimpleMenuEntry[]; // Nested submenu entries (rendered as a child menu)
+    swapPinned?: boolean; // A plugin's chosen left-click (a shift-click swap); after Cast/Use
 };
 
 export type MenuClickContext = {
@@ -315,6 +316,13 @@ export function chooseDefaultMenuEntry(
             if (!useEntry.action) useEntry.action = inferMenuAction(useEntry.option);
             return useEntry;
         }
+    }
+
+    // A client plugin pinned this entry as the left-click (e.g. a custom shift-click swap).
+    const pinned = entries.find((e) => e.swapPinned && !e.deprioritized);
+    if (pinned) {
+        if (!pinned.action) pinned.action = inferMenuAction(pinned.option, pinned.targetType);
+        return pinned;
     }
 
     // Shift-click: find the entry matching shiftClickActionIndex

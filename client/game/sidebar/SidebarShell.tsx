@@ -8,6 +8,7 @@ import "./SidebarShell.css";
 import type { SidebarStore } from "./SidebarStore";
 import type { ClientSidebarEntryData, SidebarPanelId } from "./entries";
 import type { SidebarRailIconRenderer } from "./pluginTypes";
+import { MenuSwapperPanel } from "../plugins/menuswapper/MenuSwapperPanel";
 
 function toColorInput(color: number): string {
     const hex = (Math.max(0, color | 0) & 0xffffff).toString(16).padStart(6, "0");
@@ -708,6 +709,21 @@ function PluginHubPanel({ osrsClient }: { osrsClient: OsrsClient }): JSX.Element
         freezeTimerGetSnapshot,
     );
 
+    const menuSwapperPlugin = osrsClient.menuSwapperPlugin;
+    const menuSwapperSubscribe = useCallback(
+        (listener: () => void) => menuSwapperPlugin.subscribe(listener),
+        [menuSwapperPlugin],
+    );
+    const menuSwapperGetSnapshot = useCallback(
+        () => menuSwapperPlugin.getState(),
+        [menuSwapperPlugin],
+    );
+    const menuSwapperState = useSyncExternalStore(
+        menuSwapperSubscribe,
+        menuSwapperGetSnapshot,
+        menuSwapperGetSnapshot,
+    );
+
     const hdPlugin = osrsClient.hdPlugin;
     const hdEnabled = useSyncExternalStore(hdPlugin.subscribe, hdPlugin.getEnabled, hdPlugin.getEnabled);
 
@@ -784,6 +800,15 @@ function PluginHubPanel({ osrsClient }: { osrsClient: OsrsClient }): JSX.Element
                 },
             },
             {
+                id: "menu_swapper",
+                name: "Menu Entry Swapper",
+                description: "Choose the left-click and shift-click options of things.",
+                enabled: menuSwapperState.config.enabled,
+                setEnabled: (enabled: boolean) => {
+                    menuSwapperPlugin.setConfig({ enabled });
+                },
+            },
+            {
                 id: "poison_timer",
                 name: "Poison Timer",
                 description: "Shows poison or venom duration and type.",
@@ -819,6 +844,8 @@ function PluginHubPanel({ osrsClient }: { osrsClient: OsrsClient }): JSX.Element
             vengeanceTimerState.config.enabled,
             attackTimerPlugin,
             attackTimerState.config.enabled,
+            menuSwapperPlugin,
+            menuSwapperState.config.enabled,
             poisonTimerPlugin,
             poisonTimerState.config.enabled,
             freezeTimerPlugin,
@@ -869,6 +896,7 @@ const DEFAULT_PANEL_RENDERERS: Record<string, SidebarPanelRenderer> = {
     interact_highlight: (ctx) => <InteractHighlightPanel osrsClient={ctx.osrsClient} />,
     tile_markers: (ctx) => <TileMarkersPanel osrsClient={ctx.osrsClient} />,
     notes: (ctx) => <SidebarNotesPanel osrsClient={ctx.osrsClient} />,
+    menu_swapper: (ctx) => <MenuSwapperPanel plugin={ctx.osrsClient.menuSwapperPlugin} />,
 };
 
 export function SidebarShell({
