@@ -236,6 +236,17 @@ export class WeaponProfiles {
             projectiles: [DEFAULT_PROJECTILE],
             fireSound: Sound.SHOOT_ARROW,
         });
+        // Wiki (and cache params 13/14): attack range 10, speed 5.
+        this.register({
+            itemIds: [ItemIdentifiers.SCORCHING_BOW],
+            attackAnimation: 426,
+            attackSpeed: 5,
+            attackDistance: 10,
+            longRangeDistance: 10,
+            hitDelays: [STANDARD_HIT],
+            projectiles: [DEFAULT_PROJECTILE],
+            fireSound: Sound.SHOOT_ARROW,
+        });
         this.register({
             itemIds: [21902],
             attackAnimation: 7552,
