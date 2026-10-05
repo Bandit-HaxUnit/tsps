@@ -205,3 +205,22 @@ test('two blood runes a charge up to 20,000; checking and uncharging return ever
     assert.equal(unchargeInventory.added[0].getId(), I.BLOOD_RUNE);
     assert.equal(unchargeInventory.added[0].getAmount(), MAX_CHARGES * BLOOD_RUNES_PER_CHARGE);
 });
+
+test('magic lands 1 + (1 + distance) / 3 ticks after the cast, edge to edge; barrages to the south-west tile (Wiki: Hit delay)', () => {
+    const { MagicCombatMethod } = require('../dist/game/content/combat/method/impl/MagicCombatMethod');
+    const { Location } = require('../dist/game/model/Location');
+    const caster = (x, y) => ({ isPlayer: () => true, getLocation: () => new Location(x, y, 0) });
+    const npc = (x, y, size = 1) => ({ getLocation: () => new Location(x, y, 0), getSize: () => size });
+    const delay = (from, to, spell) => MagicCombatMethod.hitDelay(from, to, spell);
+    // The Wiki's table: 1 tile 1 tick, 2-4 tiles 2, 5-7 3, 8-10 4.
+    assert.deepEqual([1, 2, 4, 5, 7, 8, 10].map((d) => delay(caster(3200 + d, 3200), npc(3200, 3200))), [1, 2, 2, 3, 3, 4, 4]);
+    // A 5x5 NPC on (3200, 3200) seen from the east, 3 tiles past its edge: 2 ticks, not 3.
+    assert.equal(delay(caster(3207, 3200), npc(3200, 3200, 5)), 2);
+    const barrage = { spellRadius: () => 1, levelRequired: () => 94 };
+    assert.equal(delay(caster(3207, 3200), npc(3200, 3200, 5), barrage), 3, 'a barrage measures to the south-west tile (7)');
+    const burst = { spellRadius: () => 1, levelRequired: () => 70 };
+    assert.equal(delay(caster(3207, 3200), npc(3200, 3200, 5), burst), 2, 'a burst measures edge to edge');
+    assert.equal(delay(caster(3209, 3200), npc(3200, 3200), { hitDelay: () => 1 }), 1, 'a spell with its own delay keeps it');
+    const npcCaster = { isPlayer: () => false, getLocation: () => new Location(3201, 3200, 0) };
+    assert.equal(delay(npcCaster, npc(3200, 3200)), 3, 'NPC casters keep their fixed delay');
+});
