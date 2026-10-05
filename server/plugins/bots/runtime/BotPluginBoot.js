@@ -25,6 +25,8 @@ const { listCatalogObjectIds } = require("../brain/BotObjectCatalog");
 const { BANK_BOOTH_IDS } = require("../lib/BankBooths");
 const Woodcutting = require("../../skills/Woodcutting.plugin");
 const Mining = require("../../skills/Mining.plugin");
+const Fishing = require("../../skills/Fishing.plugin");
+const Cooking = require("../../skills/Cooking.plugin");
 const Firemaking = require("../../skills/Firemaking.plugin");
 const Smithing = require("../../skills/Smithing.plugin");
 const { BotStatusReporter } = require("./BotStatusReporter");
@@ -82,7 +84,11 @@ function bootPlayerBotsRuntime(options = {}) {
       roamMaxDistanceY: config.roamingDitchCrossMaxDistanceY,
     },
     emitObjectInteraction: (event) => botApi.emitObjectInteraction(event),
+    emitNpcInteraction: (event) => botApi.emitNpcInteraction(event),
+    emitItemOnObject: (event) => botApi.emitItemOnObject(event),
     isBusy: (player) =>
+      Fishing.isFishingActive?.(player) === true ||
+      Cooking.isCookingActive?.(player) === true ||
       Woodcutting.isWoodcuttingActive?.(player) === true ||
       Mining.isMiningActive?.(player) === true ||
       Firemaking.isFiremakingActive?.(player) === true ||

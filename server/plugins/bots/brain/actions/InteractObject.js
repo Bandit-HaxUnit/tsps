@@ -82,6 +82,7 @@ function createInteractObjectAction(spec, world) {
   const option = spec.option ?? "Chop down";
   const routeExists = world.routes?.canReachSpot ?? canReachSpot;
   const stallMs = Math.max(5, Number(spec.stallSeconds ?? 120)) * 1000;
+  const untilAnyItem = (spec.until?.hasAnyItem ?? []).filter(Number.isInteger);
   const stateFor = (player) =>
     playerState(action, player, () => ({
       target: null,
@@ -308,6 +309,10 @@ function createInteractObjectAction(spec, world) {
       const bot = stateFor(player);
       if (spec.until?.inventoryFull && player.getInventory().isFull()) {
         debug(ctx, "full");
+        return "success";
+      }
+      // Done once any of these is held (one log for a cooking fire).
+      if (untilAnyItem.some((itemId) => player.getInventory().getAmount(itemId) > 0)) {
         return "success";
       }
       if (world.isBusy?.(player)) {

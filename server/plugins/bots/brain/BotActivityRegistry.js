@@ -18,6 +18,8 @@ const { createTrainCombatAction } = require("./actions/TrainCombat");
 const { createPvpCombatAction } = require("./actions/PvpCombat");
 const { createWanderAction } = require("./actions/Wander");
 const { createFollowOwnerAction } = require("./actions/FollowOwner");
+const { createFishAction } = require("./actions/Fish");
+const { createCookAction } = require("./actions/Cook");
 
 const DEFAULT_DEFINITIONS_PATH = path.join(
   process.cwd(),
@@ -176,6 +178,12 @@ function createAction(spec, world) {
   }
   if (spec.type === "followOwner") {
     return createFollowOwnerAction(spec, world);
+  }
+  if (spec.type === "fish") {
+    return createFishAction({ ...spec, bait: spec.bait ? resolveItemId(spec.bait) : null }, world);
+  }
+  if (spec.type === "cook") {
+    return createCookAction(spec, world);
   }
   throw new Error(`[bot activities] unknown action type '${spec.type}'`);
 }

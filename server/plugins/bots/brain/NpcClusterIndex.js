@@ -86,7 +86,8 @@ const INDEX_BY_WORLD = new WeakMap();
 
 /**
  * The world's cluster index for one grouping, built from its live NPCs on first
- * use. `keyOf(definition)` returns the group key (null skips the NPC); `cacheKey`
+ * use. `keyOf(definition)` returns the group key, or several (a fishing spot with both a
+ * cage and a harpoon); null skips the NPC. `cacheKey`
  * names that grouping so each caller's index is built once.
  */
 function npcClustersFor(world, cacheKey, keyOf) {
@@ -105,7 +106,10 @@ function npcClustersFor(world, cacheKey, keyOf) {
       continue;
     }
     const spawn = npc.getSpawnPosition?.() ?? npc.getLocation();
-    entries.push({ key: keyOf(npc.getDefinition?.()), x: spawn.getX(), y: spawn.getY(), z: spawn.getZ() });
+    const keys = keyOf(npc.getDefinition?.());
+    for (const key of Array.isArray(keys) ? keys : [keys]) {
+      entries.push({ key, x: spawn.getX(), y: spawn.getY(), z: spawn.getZ() });
+    }
   }
   const index = buildNpcClusters(entries, (x, y) => WorldDefinition?.isMembersArea?.(x, y) === true);
   // ponytail: built once; NPCs spawned after the first query (events) are not indexed.

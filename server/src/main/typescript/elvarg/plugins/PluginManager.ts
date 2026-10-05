@@ -3766,6 +3766,8 @@ export class PluginManager {
         PluginManager.emitShouldKeepItemOnDeath(player, item),
       emitFiremakingBlocked: (event) => PluginManager.emitFiremakingBlocked(event),
       emitObjectInteraction: (event) => PluginManager.emitObjectInteraction(event),
+      emitNpcInteraction: (event) => PluginManager.emitNpcInteraction(event),
+      emitItemOnObject: (event) => PluginManager.emitItemOnObject(event),
       emitPlayerLogin: (event) => PluginManager.emitPlayerLogin(event),
       emitCustomEvent: (eventName, payload) =>
         PluginManager.emitCustomEvent(eventName, payload),

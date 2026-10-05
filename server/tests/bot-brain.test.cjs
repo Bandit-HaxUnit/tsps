@@ -118,6 +118,67 @@ test('a bot without a rotation returns to its own activity, never a random one (
   assert.equal(brain.frames[0]?.behaviour.id, 'pvp');
 });
 
+test('cooking: food goes on a fire nearby; with no range or fire about, the bot lights one', () => {
+  const Cooking = require('../plugins/skills/Cooking.plugin');
+  const Firemaking = require('../plugins/skills/Firemaking.plugin');
+  const { createCookAction } = require('../plugins/bots/brain/actions/Cook');
+  const { Skill } = require('../dist/game/model/Skill');
+  const { Location: Loc } = require('../dist/game/model/Location');
+  const real = { cooking: Cooking.isCookingActive, firemaking: Firemaking.isFiremakingActive,
+    light: Firemaking.startBotInventoryFiremaking, canBurn: Firemaking.canPlayerBurnLog };
+  const RAW_SHRIMPS = 317;
+  const LOGS = 1511;
+  const items = new Map([[RAW_SHRIMPS, 27]]);
+  const used = [];
+  let lit = null;
+  const fire = { getId: () => 26185, getLocation: () => new Loc(3230, 3220, 0), getDefinition: () => ({ getName: () => 'Fire' }) };
+  const objects = [];
+  try {
+    Cooking.isCookingActive = () => false;
+    Firemaking.isFiremakingActive = () => false;
+    Firemaking.canPlayerBurnLog = () => true;
+    Firemaking.startBotInventoryFiremaking = (_, logId) => { lit = logId; return true; };
+    const world = {
+      core: { Skill, World: { getObjects: () => objects } },
+      objectSearch: { findCandidatesByIds: () => [] },
+      emitItemOnObject: (event) => used.push([event.itemId, event.objectId]),
+    };
+    const a = createCookAction({}, world);
+    const player = {
+      ...fakePlayer('cook', 3225, 3220),
+      getSkillManager: () => ({ getCurrentLevel: () => 1 }),
+      getInventory: () => ({
+        getItems: () => [...items].flatMap(([id, n]) => Array.from({ length: n }, () => ({ getId: () => id }))),
+        getAmount: (id) => items.get(id) ?? 0,
+        adds: (id, n) => items.set(id, (items.get(id) ?? 0) + n),
+        isFull: () => false,
+        deleteNumber: () => {},
+      }),
+      getMovementQueue: () => ({ size: () => 0, walkToObject: (object, { execute }) => execute() }),
+    };
+    items.set(LOGS, 1);
+    assert.equal(a.update({ player, nowMs: 1000 }), 'running');
+    assert.equal(lit, LOGS, 'no range or fire nearby: lights one fire with its log');
+    assert.ok(items.get(590) > 0, 'with a tinderbox it was given (a tool)');
+    objects.push(fire);
+    a.update({ player, nowMs: 5000 });
+    assert.deepEqual(used, [[RAW_SHRIMPS, 26185]], 'then uses the raw food on the fire');
+    items.set(RAW_SHRIMPS, 0);
+    assert.equal(a.update({ player, nowMs: 9000 }), 'success', 'nothing left to cook');
+  } finally {
+    Object.assign(Cooking, { isCookingActive: real.cooking });
+    Object.assign(Firemaking, { isFiremakingActive: real.firemaking, startBotInventoryFiremaking: real.light, canPlayerBurnLog: real.canBurn });
+  }
+});
+
+test('fishing spots are indexed by the tools they take (from the cache option list)', () => {
+  const { spotKeys } = require('../plugins/bots/brain/actions/Fish');
+  const spot = (name, actions) => ({ getName: () => name, getId: () => 1520, getActions: () => actions });
+  assert.deepEqual(spotKeys(spot('Fishing spot', ['Cage', 'Harpoon', null, null, null])), ['LOBSTER_POT', 'HARPOON']);
+  assert.deepEqual(spotKeys(spot('Rod Fishing spot', ['Lure', 'Bait', null, null, null])), ['FLY_FISHING_ROD', 'PIKE_ROD']);
+  assert.equal(spotKeys(spot('Goblin', ['Attack'])), null);
+});
+
 for (const outcome of ['success', 'failed']) {
   test(`an overlay hands state.mode back to its parent on ${outcome}`, () => {
     const state = {};
@@ -1178,7 +1239,14 @@ test('a planned walk never skips the far side of a gate it has not crossed', () 
 
 test('bots are given tools, never resources: inputs come from gathering or the bank', () => {
   const raw = JSON.parse(fs.readFileSync('data/definitions/bot-activities.json', 'utf8'));
-  const TOOLS = new Set(['tinderbox']);
+  const TOOLS = new Set(['tinderbox', 'small_fishing_net', 'fly_fishing_rod', 'lobster_pot', 'harpoon']);
+  // A template's "$tool" is whatever each activity fills it with.
+  for (const activity of raw.activities) {
+    if (activity.fields?.tool !== undefined) {
+      assert.ok(TOOLS.has(activity.fields.tool), `${activity.id}: ${activity.fields.tool} is a tool`);
+    }
+  }
+  TOOLS.add('$tool');
   const conjured = [];
   const walk = (node, where) => {
     if (Array.isArray(node)) return node.forEach((child) => walk(child, where));

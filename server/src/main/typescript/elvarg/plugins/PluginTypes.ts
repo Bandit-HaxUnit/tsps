@@ -1045,6 +1045,10 @@ export interface PluginApi {
   emitShouldKeepItemOnDeath(player: any, item: any): boolean | null;
   emitFiremakingBlocked(event: PluginFiremakingBlockedEvent): boolean;
   emitObjectInteraction(event: PluginObjectInteractionEvent): boolean;
+  /** Runs the NPC option handlers as a click would (a bot fishing a spot). */
+  emitNpcInteraction(event: PluginNpcInteractionEvent): boolean;
+  /** Runs the item-on-object handlers as a use would (a bot cooking on a range). */
+  emitItemOnObject(event: PluginItemOnObjectEvent): boolean;
   emitPlayerLogin(event: PluginPlayerLoginEvent): void;
   /** Dispatches synchronously; payloads are not queued or retained by the manager. */
   emitCustomEvent(

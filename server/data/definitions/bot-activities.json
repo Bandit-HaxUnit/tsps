@@ -107,6 +107,30 @@
         {"type": "smelt", "bar": "$bar"},
         {"type": "bank", "until": {"inventoryFull": false}}
       ]
+    },
+    "catch_fish": {
+      "mode": "fishing",
+      "repeat": true,
+      "requires": [
+        {"skill": {"id": "fishing", "min": "$level"}}
+      ],
+      "setup": [],
+      "produces": ["fish", "fishing"],
+      "actions": [
+        {"type": "ensureItem", "item": "$tool"},
+        {"type": "fish", "tool": "$spotTool", "bait": "$bait", "until": {"inventoryFull": true}},
+        {
+          "type": "choose",
+          "options": [
+            {"weight": 2, "actions": [{"type": "bank"}]},
+            {"weight": 1, "actions": [{"type": "dropItems", "itemIds": "$resources"}]},
+            {"weight": 1, "actions": [{"type": "sellItems", "itemIds": "$resources"}]},
+            {"weight": 1, "actions": [{"type": "cook"}, {"type": "bank", "until": {"inventoryFull": false}}]},
+            {"weight": 1, "actions": [{"type": "cook"}, {"type": "sellItems", "itemIds": "$cooked"}]},
+            {"weight": 1, "actions": [{"type": "cook"}, {"type": "dropItems", "itemIds": "$cooked"}]}
+          ]
+        }
+      ]
     }
   },
   "resolvers": [
@@ -227,6 +251,46 @@
       "template": "burn_logs",
       "capacity": 80,
       "fields": {"level": 60, "log": "yew_logs", "logs": 27}
+    },
+    {
+      "id": "net_fishing",
+      "template": "catch_fish",
+      "capacity": 160,
+      "fields": {
+        "level": 1, "tool": "small_fishing_net", "spotTool": "NET", "bait": null,
+        "resources": ["raw_shrimps", "raw_anchovies"],
+        "cooked": ["shrimps", "anchovies", "burnt_shrimp", "burnt_fish", "raw_shrimps", "raw_anchovies"]
+      }
+    },
+    {
+      "id": "fly_fishing",
+      "template": "catch_fish",
+      "capacity": 160,
+      "fields": {
+        "level": 20, "tool": "fly_fishing_rod", "spotTool": "FLY_FISHING_ROD", "bait": "feather",
+        "resources": ["raw_trout", "raw_salmon"],
+        "cooked": ["trout", "salmon", "burnt_fish_3", "raw_trout", "raw_salmon"]
+      }
+    },
+    {
+      "id": "lobster_fishing",
+      "template": "catch_fish",
+      "capacity": 160,
+      "fields": {
+        "level": 40, "tool": "lobster_pot", "spotTool": "LOBSTER_POT", "bait": null,
+        "resources": ["raw_lobster"],
+        "cooked": ["lobster", "burnt_lobster", "raw_lobster"]
+      }
+    },
+    {
+      "id": "harpoon_fishing",
+      "template": "catch_fish",
+      "capacity": 160,
+      "fields": {
+        "level": 60, "tool": "harpoon", "spotTool": "HARPOON", "bait": null,
+        "resources": ["raw_tuna", "raw_swordfish"],
+        "cooked": ["tuna", "swordfish", "burnt_fish_7", "burnt_swordfish", "raw_tuna", "raw_swordfish"]
+      }
     },
     {
       "id": "combat_training",
@@ -521,7 +585,7 @@
   "sites": [
     {
       "id": "lumbridge_novices",
-      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze"],
+      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze", "net_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 1,
       "count": 70,
@@ -530,7 +594,7 @@
     },
     {
       "id": "lumbridge_intermediates",
-      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs"],
+      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs", "fly_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 20,
       "count": 50,
@@ -539,7 +603,7 @@
     },
     {
       "id": "lumbridge_advanced",
-      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs"],
+      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs", "lobster_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 40,
       "count": 40,
@@ -548,7 +612,7 @@
     },
     {
       "id": "lumbridge_experts",
-      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs"],
+      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs", "harpoon_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 60,
       "count": 40,
@@ -557,7 +621,7 @@
     },
     {
       "id": "varrock_novices",
-      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze"],
+      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze", "net_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 1,
       "count": 70,
@@ -566,7 +630,7 @@
     },
     {
       "id": "varrock_intermediates",
-      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs"],
+      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs", "fly_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 20,
       "count": 50,
@@ -575,7 +639,7 @@
     },
     {
       "id": "varrock_advanced",
-      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs"],
+      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs", "lobster_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 40,
       "count": 40,
@@ -584,7 +648,7 @@
     },
     {
       "id": "varrock_experts",
-      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs"],
+      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs", "harpoon_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 60,
       "count": 40,
@@ -593,7 +657,7 @@
     },
     {
       "id": "falador_novices",
-      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze"],
+      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze", "net_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 1,
       "count": 70,
@@ -602,7 +666,7 @@
     },
     {
       "id": "falador_intermediates",
-      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs"],
+      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs", "fly_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 20,
       "count": 50,
@@ -611,7 +675,7 @@
     },
     {
       "id": "falador_advanced",
-      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs"],
+      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs", "lobster_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 40,
       "count": 40,
@@ -620,7 +684,7 @@
     },
     {
       "id": "falador_experts",
-      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs"],
+      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs", "harpoon_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 60,
       "count": 40,
@@ -629,7 +693,7 @@
     },
     {
       "id": "seers_novices",
-      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze"],
+      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze", "net_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 1,
       "count": 70,
@@ -638,7 +702,7 @@
     },
     {
       "id": "seers_intermediates",
-      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs"],
+      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs", "fly_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 20,
       "count": 50,
@@ -647,7 +711,7 @@
     },
     {
       "id": "seers_advanced",
-      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs"],
+      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs", "lobster_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 40,
       "count": 40,
@@ -656,7 +720,7 @@
     },
     {
       "id": "seers_experts",
-      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs"],
+      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs", "harpoon_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 60,
       "count": 40,
@@ -665,7 +729,7 @@
     },
     {
       "id": "east_ardougne_novices",
-      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze"],
+      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze", "net_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 1,
       "count": 70,
@@ -674,7 +738,7 @@
     },
     {
       "id": "east_ardougne_intermediates",
-      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs"],
+      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs", "fly_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 20,
       "count": 50,
@@ -683,7 +747,7 @@
     },
     {
       "id": "east_ardougne_advanced",
-      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs"],
+      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs", "lobster_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 40,
       "count": 40,
@@ -692,7 +756,7 @@
     },
     {
       "id": "east_ardougne_experts",
-      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs"],
+      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs", "harpoon_fishing"],
       "switchAfterSeconds": {"min": 900, "max": 1500},
       "levels": 60,
       "count": 40,

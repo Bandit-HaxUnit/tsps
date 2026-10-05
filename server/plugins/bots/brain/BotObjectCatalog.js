@@ -3,6 +3,7 @@
 const Woodcutting = require("../../skills/Woodcutting.plugin");
 const Mining = require("../../skills/Mining.plugin");
 const Smithing = require("../../skills/Smithing.plugin");
+const Cooking = require("../../skills/Cooking.plugin");
 const {
   CacheDefinitions,
 } = require("../../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
@@ -20,6 +21,14 @@ const CATALOGS = {
       objectNames: rock.objectName ? [rock.objectName] : [],
       ids: rock.objectIds ?? [],
     })),
+  // Ranges and stoves food is cooked on (fires are runtime objects, found separately).
+  range: () => [
+    {
+      name: "range",
+      objectNames: [...(Cooking.COOKABLE_OBJECT_NAMES ?? [])].filter((name) => !Cooking.FIRE_OBJECT_NAMES?.has(name)),
+      ids: [],
+    },
+  ],
   furnace: () => [
     {
       name: "furnace",
