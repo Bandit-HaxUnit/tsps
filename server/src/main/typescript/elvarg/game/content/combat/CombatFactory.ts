@@ -1156,6 +1156,11 @@ export class CombatFactory {
     }
 
     static stun(character: Mobile, seconds: number, force: boolean) {
+        CombatFactory.stunTicks(character, Misc.getTicks(seconds), force);
+    }
+
+    /** A stun of a whole number of ticks (seconds don't divide into ticks exactly: 5.4 s is 9.000…02). */
+    static stunTicks(character: Mobile, ticks: number, force: boolean) {
         // OSRS grants a 1-tick grace period after a stun wears off during
         // which the target can't be re-stunned - always enforced (unlike
         // the "already stunned" guard below, `force` never bypasses this).
@@ -1168,7 +1173,6 @@ export class CombatFactory {
             }
         }
 
-        const ticks = Misc.getTicks(seconds);
         character.getTimers().registers(TimerKey.STUN, ticks);
         character.getTimers().registers(TimerKey.STUN_IMMUNITY, ticks + 1);
         character.getCombat().reset();
