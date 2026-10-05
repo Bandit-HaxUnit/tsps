@@ -14,8 +14,9 @@ const WAYPOINT_ARRIVE_TILES = 4;
 const ROUTE_TTL_MS = 10 * 60 * 1000;
 const MAX_ROUTES_PER_GOAL = 6;
 const FAILED_TTL_MS = 5 * 60 * 1000;
-// Planning CPU per game tick (600 ms window); over it, bots walk straight-line this tick.
-const PLAN_BUDGET_MS = 25;
+// Planning CPU per game tick (600 ms window); over it, plans wait for the next tick.
+// 25 ms starved bots picking a far site for minutes with 500 bots (plans are ~2% CPU).
+const PLAN_BUDGET_MS = 60;
 
 // Routes are shared by destination area (16x16): bots heading the same way, and a
 // bot re-requesting the next leg, rejoin a cached route instead of re-planning.

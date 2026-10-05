@@ -199,9 +199,31 @@ planned route (`behaviours/navigation/LongRoutePlanner.js`, wired in by `BotLong
 - Used for walks over 32 tiles, or any walk a straight dispatch already failed to path.
 - Routes are cached by destination area (16x16, 10 min); a bot joins a cached route at the
   furthest nearby waypoint it can actually walk to. Failed plans are cached for 5 min. Planning
-  is capped at 25 ms per game tick; over it, a bot walks straight-line that tick.
+  is capped at 60 ms per game tick; a bot choosing a far spot or combat site waits for the
+  planner's verdict rather than walking blind (straight-line into the sea).
 - Cost (warm): 1-3 ms for Lumbridge -> Al Kharid / Varrock; ~25 ms to prove an island
   unreachable (cached).
+
+## Other floors (stairs and ladders)
+
+A walk whose target is on another plane (Lumbridge castle's top-floor bank) goes by the stairs
+(`brain/Climbing.js`), using the cache-backed links from `plugins/objects/ClimbLinks.js`; no
+coordinate lists. Stairs are searched near the bot and near the target; one counts only if the
+bot can get to it (door-aware) and its landing leads on: to the target, or to further stairs that
+do. That passes over Lumbridge castle's tower ladders, whose top rooms do not reach the bank.
+The walk heads for the stairs (`request.climbVia`), the bot clicks the climb option once in reach,
+and carries on from the new floor. Banks look for booths on every floor, 15 tiles further per
+floor.
+
+## Bots standing around
+
+- Every action that ends drops its pending walk (`BotBrain.stopAction`), and a walk that finds no
+  path 3 dispatches in a row with no door to open is dropped: the next action re-decides
+  instead of waiting forever (bank walks onto a booth tile, rock approaches).
+- Trainers settled at a cluster with nothing attackable (caged jail NPCs, all claimed) move on
+  after 45 s.
+- LOD: bots far from real players run every 4 cycles (was 12), medium every 2, with a 60 ms per
+  tick budget. A CPU profile with 615 players had the server 87% idle and bots under 10%.
 
 ## Test tiers
 

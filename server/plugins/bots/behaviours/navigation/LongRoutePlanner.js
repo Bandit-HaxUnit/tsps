@@ -97,6 +97,7 @@ class Heap {
  * @param to {x, y}
  * @param getFlag (x, y, z) => collision flags
  * @param isDoor (x, y, z) => true when a closed door/gate stands on that tile
+ * @param exactOnly true: no near-goal fallback (a yes/no reachability question)
  * @returns {{ waypoints: {x, y, z}[], tiles: number } | null}
  */
 function planRoute(options) {
@@ -114,7 +115,7 @@ function planRoute(options) {
   }
   // No exact way in (a goal on water): the closest reachable tile, found only after
   // the widest search, so a wall with a gate further off is never cut short.
-  return nearest;
+  return options.exactOnly ? null : nearest;
 }
 
 /** A* inside the start/goal box widened by `margin`: { exact, plan }, or false (box too big). */

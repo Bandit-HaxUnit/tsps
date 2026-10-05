@@ -4,24 +4,29 @@ const { RegionManager } = require("../../../src/main/typescript/elvarg/game/coll
 const { MapObjects } = require("../../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
 const { ObjectDefinition } = require("../../../src/main/typescript/elvarg/game/definition/ObjectDefinition");
 const { PathFinder } = require("../../../src/main/typescript/elvarg/game/model/movement/path/PathFinder");
+const { planRoute } = require("../behaviours/navigation/LongRoutePlanner");
 const ClimbLinks = require("../../objects/ClimbLinks");
 
 /**
  * Walks to another floor: a movement request whose `z` differs from the bot's plane
- * goes by the stairs/ladder nearest the way there, found in the map like the climb
+ * goes by the stairs/ladder that leads there, found in the map like the climb
  * handlers find the other end (ClimbLinks, cache backed, no coordinate lists).
  * The walk is pointed at the stairs (`request.climbVia`); once they are in reach
  * the bot clicks the climb option and the walk carries on from the new floor.
  */
 
-// Stairs are looked for this far around the destination, on the bot's plane.
+// Stairs are looked for this far around the destination and around the bot.
 const SEARCH_RADIUS = 24;
 const CLIMB_COOLDOWN_MS = 3000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
+// Floors a chain of stairs may span (ground to top floor).
+const MAX_HOPS = 3;
+// Within this, a path (doors allowed) must exist; further is the long-route planner's job.
+const LOCAL_TILES = 60;
 const UP_OPTIONS = ["climb-up", "climb up", "walk-up", "ascend", "top-floor"];
 const DOWN_OPTIONS = ["climb-down", "climb down", "walk-down", "descend", "bottom-floor"];
 
-// "plane>goal area" -> { object, at }: stairs are map data, the same for every bot.
+// "bot area>goal area" -> { object, at }: stairs are map data, the same for every bot there.
 const stairsByGoal = new Map();
 
 const chebyshev = (ax, ay, bx, by) => Math.max(Math.abs(ax - bx), Math.abs(ay - by));
@@ -35,27 +40,66 @@ function climbOption(objectId, direction) {
   return index >= 0 ? index + 1 : 0;
 }
 
-/** Nearest stairs on `here`'s plane that climb toward `goal` (on the way, near it). */
-function findStairs(here, goal, direction, nowMs) {
-  const key = `${here.z}>${goal.x >> 3},${goal.y >> 3},${goal.z}`;
+let isClosedDoor = null;
+/** Door-aware: can a player on `from` get next to `to` on that plane (closed doors count as open)? */
+function pathExists(from, to) {
+  if (chebyshev(from.x, from.y, to.x, to.y) > LOCAL_TILES) return true;
+  isClosedDoor ??= require("./DoorOpening").isClosedDoor;
+  const isDoor = (x, y, z) => (MapObjects.mapObjects.get(MapObjects.getHash(x, y, z)) ?? []).some((object) => {
+    const loc = object.getLocation();
+    return loc.getX() === x && loc.getY() === y && isClosedDoor(object, null);
+  });
+  return planRoute({
+    from, to: { x: to.x, y: to.y }, exactOnly: true,
+    getFlag: (x, y, z) => RegionManager.getClipping(x, y, z, null), isDoor,
+  }) !== null;
+}
+
+/** Stairs on plane `z` within SEARCH_RADIUS of `centre` that climb `direction`. */
+function stairsAround(centre, z, direction, into) {
+  for (let dx = -SEARCH_RADIUS; dx <= SEARCH_RADIUS; dx++) {
+    for (let dy = -SEARCH_RADIUS; dy <= SEARCH_RADIUS; dy++) {
+      for (const object of MapObjects.mapObjects.get(MapObjects.getHash(centre.x + dx, centre.y + dy, z)) ?? []) {
+        const loc = object.getLocation();
+        if (loc.getX() !== centre.x + dx || loc.getY() !== centre.y + dy) continue;
+        if (ClimbLinks.climbs(object.getId(), direction) && climbOption(object.getId(), direction) > 0) into.add(object);
+      }
+    }
+  }
+}
+
+/**
+ * Stairs on `here`'s plane that climb toward `goal`, nearest the way there, that the
+ * bot can get to and whose landing really leads on: to the goal, or (a floor short)
+ * to more stairs that do. A tower ladder up to a separate top room is passed over.
+ */
+function findStairs(here, goal, direction, nowMs, hops = MAX_HOPS) {
+  const key = `${here.x >> 3},${here.y >> 3},${here.z}>${goal.x >> 3},${goal.y >> 3},${goal.z}`;
   const cached = stairsByGoal.get(key);
   if (cached && nowMs - cached.at < CACHE_TTL_MS) return cached.object;
   RegionManager.loadMapFiles(goal.x, goal.y);
+  RegionManager.loadMapFiles(here.x, here.y);
+  // Near the destination (going up to a bank) and near the bot (going down to a far mine).
+  const found = new Set();
+  stairsAround(goal, here.z, direction, found);
+  stairsAround(here, here.z, direction, found);
+  const score = (object) => {
+    const loc = object.getLocation();
+    return chebyshev(here.x, here.y, loc.getX(), loc.getY()) + chebyshev(loc.getX(), loc.getY(), goal.x, goal.y);
+  };
   let best = null;
-  let bestScore = Infinity;
-  for (let dx = -SEARCH_RADIUS; dx <= SEARCH_RADIUS; dx++) {
-    for (let dy = -SEARCH_RADIUS; dy <= SEARCH_RADIUS; dy++) {
-      for (const object of MapObjects.mapObjects.get(MapObjects.getHash(goal.x + dx, goal.y + dy, here.z)) ?? []) {
-        const loc = object.getLocation();
-        if (loc.getX() !== goal.x + dx || loc.getY() !== goal.y + dy) continue;
-        if (!ClimbLinks.climbs(object.getId(), direction) || climbOption(object.getId(), direction) === 0) continue;
-        const score = chebyshev(here.x, here.y, loc.getX(), loc.getY()) + chebyshev(loc.getX(), loc.getY(), goal.x, goal.y);
-        if (score >= bestScore) continue;
-        const landing = ClimbLinks.destination(object, direction, loc, null);
-        if (!landing || landing.getZ() !== here.z + direction) continue;
-        best = object;
-        bestScore = score;
-      }
+  for (const object of [...found].sort((a, b) => score(a) - score(b))) {
+    const loc = object.getLocation();
+    if (!pathExists(here, { x: loc.getX(), y: loc.getY() })) continue;
+    const landing = ClimbLinks.destination(object, direction, loc, null);
+    if (!landing || landing.getZ() !== here.z + direction) continue;
+    const at = { x: landing.getX(), y: landing.getY(), z: landing.getZ() };
+    const leadsOn = at.z === goal.z
+      ? pathExists(at, goal)
+      : hops > 1 && findStairs(at, goal, direction, nowMs, hops - 1) !== null;
+    if (leadsOn) {
+      best = object;
+      break;
     }
   }
   stairsByGoal.set(key, { object: best, at: nowMs });

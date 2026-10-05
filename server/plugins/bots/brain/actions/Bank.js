@@ -263,7 +263,9 @@ function createBankAction(spec, world) {
             player,
             object,
             objectId: object.getId(),
-            clickType: 1,
+            // "Bank" is not always first (Lumbridge castle's booths list it second).
+            clickType: Math.max(0, (object.getDefinition?.()?.getInteractions?.() ?? [])
+              .findIndex((option) => /^bank$/i.test(String(option ?? "")))) + 1,
             location: {
               x: objectLoc.getX(),
               y: objectLoc.getY(),
