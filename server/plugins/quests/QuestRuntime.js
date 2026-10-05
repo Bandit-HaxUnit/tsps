@@ -434,6 +434,7 @@ function startTranscript(api, player, npcId, page, variant) {
 
 module.exports = {
   QUEST_POINTS_VARP,
+  QUEST_POINTS_ATTRIBUTE,
   QUEST_COMPLETE_JINGLE,
   registerQuest,
   getRegisteredQuests: () => quests.slice(),
