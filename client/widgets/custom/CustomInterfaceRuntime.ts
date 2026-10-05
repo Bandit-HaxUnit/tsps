@@ -209,7 +209,7 @@ export class CustomInterfaceRuntime {
         if (!search || !this.focused) {
             return false;
         }
-        if (!this.isMounted()) {
+        if (!this.isAttached()) {
             this.reset();
             return false;
         }
@@ -254,7 +254,7 @@ export class CustomInterfaceRuntime {
     }
 
     tick(): void {
-        if (!this.declaration || !this.isMounted()) {
+        if (!this.declaration || !this.isAttached()) {
             return;
         }
         this.initializeScrollView();
@@ -289,7 +289,7 @@ export class CustomInterfaceRuntime {
         return this.deps.widgetManager.getWidgetByUid(this.uid(component));
     }
 
-    private isMounted(): boolean {
+    private isAttached(): boolean {
         const groupId = this.declaration?.groupId;
         if (groupId === undefined) {
             return false;
@@ -301,7 +301,7 @@ export class CustomInterfaceRuntime {
     }
 
     private setFocus(focused: boolean): void {
-        this.focused = !!focused && this.isMounted();
+        this.focused = !!focused && this.isAttached();
         this.syncInput();
     }
 
@@ -426,7 +426,7 @@ export class CustomInterfaceRuntime {
 
     private renderRows(resetScroll: boolean): void {
         const declaration = this.declaration;
-        if (!declaration || !this.isMounted()) {
+        if (!declaration || !this.isAttached()) {
             return;
         }
         this.applyStatus();
