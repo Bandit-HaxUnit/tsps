@@ -57,3 +57,143 @@ test('magic defence takes 70% Magic and 30% Defence, each rounded down, plus the
     assert.equal(magicDefenceLevel(caster(FightType.STAFF_BASH, { autocasting: true })), 106);
     assert.equal(magicDefenceLevel(caster(FightType.POWERED_STAFF_LONGRANGE)), 109);
 });
+
+// ------------------------------------------------------------------ Arceuus spells
+
+function arceuusPlayer({ magic = 99, prayer = 50, energy = 40, weapon = -1 } = {}) {
+    const attributes = new Map();
+    const player = {
+        attributes, graphics: [], animations: [], messages: [], freezes: [], prayer, energy,
+        isPlayer: () => true, isNpc: () => false, isRegistered: () => true, getAsPlayer: () => player,
+        getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+        performGraphic: (graphic) => player.graphics.push(graphic?.getId?.() ?? null),
+        performAnimation: (animation) => player.animations.push(animation.getId()),
+        sendMessage: (message) => player.messages.push(message),
+        getEquipment: () => ({ getWeapon: () => ({ getId: () => weapon }) }),
+        getSkillManager: () => ({
+            getMaxLevel: () => magic,
+            getCurrentLevel: (skill) => (skill === 5 ? player.prayer : magic),
+            decreaseCurrentLevel: (skill, amount) => { player.prayer -= amount; },
+            addExperiences: () => {},
+        }),
+        getRunEnergy: () => player.energy,
+        setRunEnergy: (value) => { player.energy = value; },
+        getPacketSender: () => ({ sendRunEnergy() {} }),
+    };
+    return player;
+}
+
+function withRandom(value, fn) {
+    const random = Math.random;
+    Math.random = () => value;
+    try { return fn(); } finally { Math.random = random; }
+}
+
+test('grasps: cast animation and graphic; a hit binds by chance (doubled by the Mark), showing the bind or the plain impact (Wiki, capture)', () => {
+    const { CombatSpells } = require('../dist/game/content/combat/magic/CombatSpells');
+    const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
+    const freezes = [];
+    const freeze = CombatFactory.freeze;
+    CombatFactory.freeze = (target, seconds) => freezes.push(seconds);
+    try {
+        const spell = CombatSpells.UNDEAD_GRASP;
+        assert.equal(spell.castAnimation().getId(), 8972);
+        assert.equal(spell.startGraphic().getId(), 1862);
+        const caster = arceuusPlayer();
+        const target = arceuusPlayer();
+        withRandom(0.49, () => spell.finishCast(caster, target, true, 10));
+        assert.deepEqual([target.graphics.at(-1), freezes.at(-1)], [1863, 4 * 0.6], '50%: bound for 4 ticks, the bind graphic');
+        withRandom(0.51, () => spell.finishCast(caster, target, true, 10));
+        assert.deepEqual([target.graphics.at(-1), freezes.length], [1864, 1], 'not bound: the plain impact');
+        caster.setAttribute('arceuus:mark-until', Date.now() + 60_000);
+        withRandom(0.99, () => spell.finishCast(caster, target, true, 10));
+        assert.equal(freezes.length, 2, 'the Mark makes 50% into 100%');
+        target.setAttribute('arceuus:ward-until', Date.now() + 60_000);
+        withRandom(0, () => CombatSpells.GHOSTLY_GRASP.finishCast(caster, target, true, 5));
+        assert.equal(freezes.at(-1), 0.6, 'warded: 1 tick');
+        withRandom(0, () => spell.finishCast(caster, arceuusPlayer(), false, 0));
+        assert.equal(freezes.length, 3, 'a splash binds nothing');
+    } finally {
+        CombatFactory.freeze = freeze;
+    }
+});
+
+test('demonbanes: +20% accuracy, +40% and +25% damage with the Mark, doubled with a purging staff (Wiki)', () => {
+    const { CombatSpells } = require('../dist/game/content/combat/magic/CombatSpells');
+    const spell = CombatSpells.DARK_DEMONBANE;
+    assert.deepEqual([spell.castAnimation().getId(), spell.startGraphic().getId(), spell.endGraphic().getId()], [8977, 1869, 1870]);
+    const plain = arceuusPlayer();
+    assert.deepEqual([spell.demonbaneAccuracyMultiplier(plain), spell.demonbaneDamageMultiplier(plain)], [1.2, 1]);
+    plain.setAttribute('arceuus:mark-until', Date.now() + 60_000);
+    assert.deepEqual([spell.demonbaneAccuracyMultiplier(plain), spell.demonbaneDamageMultiplier(plain)], [1.4, 1.25]);
+    const purging = arceuusPlayer({ weapon: 29594 });
+    purging.setAttribute('arceuus:mark-until', Date.now() + 60_000);
+    assert.deepEqual([spell.demonbaneAccuracyMultiplier(purging), spell.demonbaneDamageMultiplier(purging)], [1.8, 1.5]);
+    assert.equal(CombatSpells.UNDEAD_GRASP.demonbaneAccuracyMultiplier(plain), 1, 'not a demonbane spell');
+});
+
+test('Mark of Darkness: 3 ticks per base Magic level (x5 with a purging staff), a warning 10 ticks before, then it fades (Wiki)', () => {
+    const { ArceuusSpells } = require('../dist/game/content/combat/magic/ArceuusSpells');
+    const { TaskManager } = require('../dist/game/task/TaskManager');
+    const player = arceuusPlayer({ magic: 20 });
+    const start = Date.now();
+    ArceuusSpells.placeMark(player);
+    const ticks = (player.getAttribute('arceuus:mark-until') - start) / 600;
+    assert.ok(Math.abs(ticks - 60) < 1, `${ticks} ticks for level 20`);
+    for (let i = 0; i < 50; i++) TaskManager.process();
+    assert.deepEqual(player.messages, ['Your Mark of Darkness is about to run out.']);
+    for (let i = 0; i < 10; i++) TaskManager.process();
+    assert.deepEqual(player.messages.at(-1), 'Your Mark of Darkness has faded away.');
+    assert.equal(player.graphics.at(-1), 1886);
+    const purging = arceuusPlayer({ magic: 20, weapon: 29595 });
+    ArceuusSpells.placeMark(purging);
+    assert.ok(Math.abs((purging.getAttribute('arceuus:mark-until') - Date.now()) / 600 - 300) < 1, 'x5');
+});
+
+test('Vile Vigour spends only the prayer that fills run energy; Death Charge restores once per cast (Wiki)', () => {
+    const { ArceuusSpells } = require('../dist/game/content/combat/magic/ArceuusSpells');
+    const { Spell } = require('../dist/game/content/combat/magic/Spell');
+    const canCast = Spell.prototype.canCast;
+    Spell.prototype.canCast = () => true;
+    try {
+        const player = arceuusPlayer({ prayer: 50, energy: 80 });
+        ArceuusSpells.handleSpell(player, 'Vile Vigour');
+        assert.deepEqual([player.energy, player.prayer], [100, 30], '20 prayer for 20% energy');
+        assert.deepEqual(player.animations, [8978]);
+        assert.deepEqual(player.graphics, [1876]);
+        ArceuusSpells.handleSpell(player, 'Vile Vigour');
+        assert.equal(player.messages.at(-1), "You're already at maximum run energy.");
+        player.energy = 10;
+        player.setAttribute('arceuus:vile-vigour-cooldown', Date.now() + 10_200); // as the cast's rune check sets it
+        ArceuusSpells.handleSpell(player, 'Vile Vigour');
+        assert.equal(player.messages.at(-1), 'You can only cast Vile Vigour every 10 seconds.');
+
+        const killer = arceuusPlayer();
+        ArceuusSpells.handleSpell(killer, 'Death Charge');
+        assert.equal(ArceuusSpells.useDeathCharge(killer), true);
+        assert.equal(ArceuusSpells.useDeathCharge(killer), false, 'once per cast');
+        assert.equal(killer.graphics.at(-1), 1855);
+    } finally {
+        Spell.prototype.canCast = canCast;
+    }
+});
+
+test('corruption: certain with the Mark at casting (50% without), with its hit graphic (Wiki)', () => {
+    const { ArceuusSpells } = require('../dist/game/content/combat/magic/ArceuusSpells');
+    const { Spell } = require('../dist/game/content/combat/magic/Spell');
+    const canCast = Spell.prototype.canCast;
+    Spell.prototype.canCast = () => true;
+    try {
+        const caster = arceuusPlayer();
+        caster.setAttribute('arceuus:mark-until', Date.now() + 60_000);
+        ArceuusSpells.handleSpell(caster, 'Greater Corruption');
+        const target = arceuusPlayer();
+        withRandom(0.99, () => ArceuusSpells.applyCorruption(caster, target));
+        assert.equal(target.graphics.at(-1), 1880, 'corrupted though the roll was high');
+        caster.setAttribute('arceuus:corruption-cooldown', Date.now() + 30_000); // as the cast's rune check sets it
+        ArceuusSpells.handleSpell(caster, 'Lesser Corruption');
+        assert.equal(caster.messages.at(-1), 'You can only cast corruption spells every 30 seconds.');
+    } finally {
+        Spell.prototype.canCast = canCast;
+    }
+});

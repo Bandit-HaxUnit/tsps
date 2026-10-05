@@ -33,6 +33,8 @@ export class MagicCombatMethod extends CombatMethod {
         12901: 6589, 12911: 6589, 12919: 6589, 12929: 6589, 12939: 6589,
         12951: 6589, 12963: 6589, 12975: 6589, 12987: 6589, 12999: 6589,
         13011: 6589, 13023: 6589,
+        // Capture: Undead Grasp.
+        21832: 5030,
     };
     private static readonly IMPACT_SOUNDS: Readonly<Record<number, number>> = {
         1: 1460,
@@ -45,6 +47,8 @@ export class MagicCombatMethod extends CombatMethod {
         12901: 110, 12911: 104, 12919: 105, 12929: 102, 12939: 185,
         12951: 181, 12963: 182, 12975: 180, 12987: 179, 12999: 176,
         13011: 177, 13023: 175,
+        // Capture: Undead Grasp (an area sound at the target).
+        21832: 5055,
     };
 
     public type(): CombatType {

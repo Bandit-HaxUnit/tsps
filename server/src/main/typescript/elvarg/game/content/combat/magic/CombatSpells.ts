@@ -107,12 +107,19 @@ class CombatArceuusSpell extends CombatNormalSpell {
         return 4;
     }
 
+    /**
+     * Wiki (demonbane spells, which only demons can be hit with): +20% accuracy; with Mark of Darkness
+     * +40% accuracy and +25% damage, doubled to +80% and +50% with a purging staff.
+     */
     public demonbaneDamageMultiplier(caster: Mobile | null): number {
-        return this.demonbane && caster?.isPlayer() && hasArceuusMark(caster) ? 1.25 : 1;
+        if (!this.demonbane || !caster?.isPlayer() || !hasArceuusMark(caster)) return 1;
+        return wieldsPurgingStaff(caster) ? 1.5 : 1.25;
     }
 
     public demonbaneAccuracyMultiplier(caster: Mobile | null): number {
-        return this.demonbane && caster?.isPlayer() && hasArceuusMark(caster) ? 1.25 : 1;
+        if (!this.demonbane || !caster?.isPlayer()) return 1;
+        if (!hasArceuusMark(caster)) return 1.2;
+        return wieldsPurgingStaff(caster) ? 1.8 : 1.4;
     }
 
     public canCastOnTarget(cast: Mobile, target: Mobile): boolean {
@@ -144,12 +151,40 @@ class CombatArceuusEffectSpell extends CombatEffectSpell {
     }
 }
 
+/** Wiki: Dark Lure has a 10.2-second cooldown. */
+class DarkLureSpell extends CombatArceuusEffectSpell {
+    protected getCastCooldown() {
+        return { attribute: "arceuus:dark-lure-cooldown", duration: 10_200 };
+    }
+}
+
 const ARCEUUS_MARK_UNTIL = "arceuus:mark-until";
 
 const hasArceuusMark = (target: Mobile): boolean =>
     Number(target.getAttribute(ARCEUUS_MARK_UNTIL) ?? 0) > Date.now();
 const hasArceuusWard = (target: Mobile): boolean =>
     Number(target.getAttribute("arceuus:ward-until") ?? 0) > Date.now();
+const PURGING_STAFFS = new Set([29594, 29595]);
+const wieldsPurgingStaff = (caster: Mobile): boolean =>
+    PURGING_STAFFS.has(caster.getAsPlayer().getEquipment().getWeapon()?.getId?.() ?? -1);
+
+/** The cache's Arceuus combat-spell animations (human_spellcast_grasp / _demonbane). */
+const GRASP_ANIMATION = 8972;
+const DEMONBANE_ANIMATION = 8977;
+
+/**
+ * Wiki: a grasp that hits binds the target with a chance (doubled by Mark of Darkness) for a fixed
+ * number of ticks (1 against Ward of Arceuus). Capture (Undead Grasp): the target shows the
+ * "hit" graphic when bound and the "miss" one when not, both at ground height.
+ */
+const graspHit = (chance: number, ticks: number, bound: number, unbound: number) =>
+    (cast: Mobile, target: Mobile, accurate: boolean): void => {
+        if (!accurate) return;
+        const marked = cast.isPlayer() && hasArceuusMark(cast);
+        const binds = Math.random() * 100 < (marked ? chance * 2 : chance);
+        target.performGraphic(new Graphic(binds ? bound : unbound));
+        if (binds) getCombatFactory().freeze(target, (target.isPlayer() && hasArceuusWard(target) ? 1 : ticks) * 0.6);
+    };
 
 const getCombatFactory = () =>
     require("../CombatFactory").CombatFactory as typeof import("../CombatFactory").CombatFactory;
@@ -1440,26 +1475,24 @@ export class CombatSpells {
     });
 
     public static GHOSTLY_GRASP = new CombatArceuusSpell({
-        castAnimation: () => new Animation(711),
+        castAnimation: () => new Animation(GRASP_ANIMATION),
         castProjectile: () => null,
         endGraphic: () => null,
         maximumHit: () => 12,
-        startGraphic: () => null,
+        startGraphic: () => new Graphic(1856),
         baseExperience: () => 22.5,
         itemsRequired: () => [new Item(556, 4), new Item(562)],
         levelRequired: () => 35,
         spellId: () => 21826,
-        finishCast: (_cast, target, accurate, damage) => {
-            if (accurate && damage > 0) getCombatFactory().freeze(target, hasArceuusWard(target) ? 0.6 : hasArceuusMark(_cast) ? 2.4 : 1.2);
-        },
+        finishCast: graspHit(10, 2, 1857, 1858),
     });
 
     public static INFERIOR_DEMONBANE = new CombatArceuusSpell({
-        castAnimation: () => new Animation(711),
+        castAnimation: () => new Animation(DEMONBANE_ANIMATION),
         castProjectile: () => null,
-        endGraphic: () => null,
+        endGraphic: () => new Graphic(1866),
         maximumHit: () => 16,
-        startGraphic: () => null,
+        startGraphic: () => new Graphic(1865),
         baseExperience: () => 27,
         itemsRequired: () => [new Item(554, 3), new Item(566)],
         levelRequired: () => 44,
@@ -1467,26 +1500,24 @@ export class CombatSpells {
     }, true);
 
     public static SKELETAL_GRASP = new CombatArceuusSpell({
-        castAnimation: () => new Animation(711),
+        castAnimation: () => new Animation(GRASP_ANIMATION),
         castProjectile: () => null,
         endGraphic: () => null,
         maximumHit: () => 17,
-        startGraphic: () => null,
+        startGraphic: () => new Graphic(1859),
         baseExperience: () => 33,
         itemsRequired: () => [new Item(557, 8), new Item(560)],
         levelRequired: () => 56,
         spellId: () => 21829,
-        finishCast: (_cast, target, accurate, damage) => {
-            if (accurate && damage > 0) getCombatFactory().freeze(target, hasArceuusWard(target) ? 0.6 : hasArceuusMark(_cast) ? 3.6 : 1.8);
-        },
+        finishCast: graspHit(25, 3, 1860, 1861),
     });
 
     public static SUPERIOR_DEMONBANE = new CombatArceuusSpell({
-        castAnimation: () => new Animation(711),
+        castAnimation: () => new Animation(DEMONBANE_ANIMATION),
         castProjectile: () => null,
-        endGraphic: () => null,
+        endGraphic: () => new Graphic(1868),
         maximumHit: () => 23,
-        startGraphic: () => null,
+        startGraphic: () => new Graphic(1867),
         baseExperience: () => 36,
         itemsRequired: () => [new Item(554, 5), new Item(566)],
         levelRequired: () => 62,
@@ -1494,26 +1525,24 @@ export class CombatSpells {
     }, true);
 
     public static UNDEAD_GRASP = new CombatArceuusSpell({
-        castAnimation: () => new Animation(711),
+        castAnimation: () => new Animation(GRASP_ANIMATION),
         castProjectile: () => null,
         endGraphic: () => null,
         maximumHit: () => 24,
-        startGraphic: () => null,
+        startGraphic: () => new Graphic(1862),
         baseExperience: () => 46.5,
         itemsRequired: () => [new Item(554, 12), new Item(565)],
         levelRequired: () => 79,
         spellId: () => 21832,
-        finishCast: (_cast, target, accurate, damage) => {
-            if (accurate && damage > 0) getCombatFactory().freeze(target, hasArceuusWard(target) ? 0.6 : hasArceuusMark(_cast) ? 4.8 : 2.4);
-        },
+        finishCast: graspHit(50, 4, 1863, 1864),
     });
 
     public static DARK_DEMONBANE = new CombatArceuusSpell({
-        castAnimation: () => new Animation(711),
+        castAnimation: () => new Animation(DEMONBANE_ANIMATION),
         castProjectile: () => null,
-        endGraphic: () => null,
+        endGraphic: () => new Graphic(1870),
         maximumHit: () => 30,
-        startGraphic: () => null,
+        startGraphic: () => new Graphic(1869),
         baseExperience: () => 43.5,
         itemsRequired: () => [new Item(554, 7), new Item(566, 2)],
         levelRequired: () => 82,
@@ -1564,11 +1593,12 @@ export class CombatSpells {
         },
     });
 
-    public static DARK_LURE = new CombatArceuusEffectSpell({
-        castAnimation: () => new Animation(711),
-        castProjectile: () => null,
-        endGraphic: () => null,
-        startGraphic: () => null,
+    // The cache's Dark Lure animation (human_cast_vicious_strike) and graphics (cast, travel, hit).
+    public static DARK_LURE = new DarkLureSpell({
+        castAnimation: () => new Animation(8974),
+        castProjectile: (cast, castOn) => Projectile.createProjectile(cast, castOn, 1883, 0, 20, 43, 31),
+        endGraphic: () => new Graphic(1884, GraphicHeight.HIGH),
+        startGraphic: () => new Graphic(1882),
         baseExperience: () => 60,
         itemsRequired: () => [new Item(560), new Item(561)],
         levelRequired: () => 50,
