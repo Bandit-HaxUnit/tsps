@@ -759,6 +759,26 @@ export class Player extends Mobile {
         return this.viewDistance;
     }
 
+    /** How far away NPCs (and their projectiles) are seen; 15 unless an area widens it. */
+    private npcViewDistance = Player.NPC_VIEW_DISTANCE;
+    private static readonly NPC_VIEW_DISTANCE = 15;
+    /** NPC positions are sent as signed 8-bit offsets from the player. */
+    private static readonly MAX_NPC_VIEW_DISTANCE = 127;
+
+    public getNpcViewDistance(): number {
+        return this.npcViewDistance;
+    }
+
+    /**
+     * Widens how far NPCs are seen, as OSRS does in some large arenas (the Doom of Mokhaiotl's
+     * fight uses the large NPC update throughout). null puts it back to 15.
+     */
+    public setNpcViewDistance(distance: number | null): void {
+        this.npcViewDistance = distance == null
+            ? Player.NPC_VIEW_DISTANCE
+            : Math.max(1, Math.min(Player.MAX_NPC_VIEW_DISTANCE, Math.trunc(distance)));
+    }
+
     public resizeViewDistance(localPlayerCount: number): void {
         if (localPlayerCount >= Player.PREFERRED_LOCAL_PLAYERS) {
             if (this.viewDistance > 1) this.viewDistance--;

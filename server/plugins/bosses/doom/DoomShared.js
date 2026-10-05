@@ -247,13 +247,65 @@ function graphicAt(player, id, tile, options = {}) {
  * A projectile as the capture logs it: `delay` and `end` in client cycles from now, heights
  * as the client sees them (the wire carries them x4). Returns the landing tick.
  */
-function projectile(area, from, to, id, { delay = 0, end = 30, startHeight = 0, endHeight = 0 } = {}) {
+function projectile(area, from, to, id, { delay = 0, end = 30, startHeight = 0, endHeight = 0, angle = 0, progress = 0 } = {}) {
   const { Projectile } = core();
   const start = from.getLocation ? Projectile.centreOf(from) : (from.getX ? from : loc(from));
   const target = to.getLocation ? Projectile.centreOf(to) : (to.getX ? to : loc(to));
   const lockon = to.getLocation ? to : null;
-  new Projectile(start, target, lockon, id, delay, end, Math.round(startHeight / 4), Math.round(endHeight / 4), area).sendProjectile();
+  // Capture: every Doom projectile has its arc set (0 and 0 unless noted: orbs, rock launches).
+  new Projectile(start, target, lockon, id, delay, end, Math.round(startHeight / 4), Math.round(endHeight / 4), area)
+    .withAngle(angle)
+    .withProgress(progress)
+    .sendProjectile();
   return Math.ceil(end / 30);
+}
+
+/**
+ * Capture: the Doom's sounds. Orbs: a launch sound (delay 55) and, when it isn't prayed against,
+ * an impact sound; area sounds for a rock splitting (range 10) and each piece landing (range 1,
+ * delayed as its impact), acid flying (range 10) and a larva dying (range 7); burrowing, a
+ * rumble (5 loops), rocks falling (delay 45) and landing (delay 160).
+ * Guess: the red orb's impact sound, 7025, between the magic and ranged ones.
+ */
+const SOUND = {
+  ORB_LAUNCH: { ranged: 10341, magic: 10375, melee: 10367 },
+  ORB_IMPACT: { ranged: 7026, magic: 7023, melee: 7025 },
+  ORB_LAUNCH_DELAY: 55,
+  ROCK_SPLIT: 10331, ROCK_PIECE: 10297, ACID: 10345, LARVA_DEATH: 163,
+  BURROW_RUMBLE: 10303, BURROW_ROCKS_FALL: 10301, BURROW_ROCKS_LAND: 10372,
+};
+
+/** A sound for the player alone; `delay` in client cycles. */
+function sound(player, id, { delay = 0, loops = 1 } = {}) {
+  player?.getPacketSender?.().sendSoundEffect?.(id, loops, delay, 255);
+}
+
+/** A sound heard around a tile, `range` tiles out. */
+function areaSound(player, id, tile, { delay = 0, range = 10, loops = 1 } = {}) {
+  player?.getPacketSender?.().sendAreaSound?.(id, tile.x, tile.y, tile.z ?? 0, loops, delay, range);
+}
+
+/**
+ * Capture: the Special Beam. Anim 12411 and five projectiles from the Doom's centre to the player
+ * (a head, three middle segments, an end; heights 100, flat), then the next tick graphic 3413 on
+ * the player (height 50) and the hit.
+ */
+const BEAM = {
+  anim: 12411, impact: 3413, impactHeight: 50, height: 100,
+  segments: [[3409, 0, 25], [3410, 1, 26], [3410, 1, 27], [3410, 1, 28], [3411, 2, 29]],
+};
+
+function fireBeam(run, damage) {
+  const { Animation } = core();
+  const { boss, player } = run;
+  boss.performAnimation(new Animation(BEAM.anim));
+  for (const [id, delay, end] of BEAM.segments) {
+    projectile(run.area, boss, player, id, { delay, end, startHeight: BEAM.height, endHeight: BEAM.height });
+  }
+  run.attacks.after(1, () => {
+    player.performGraphic(gfx(BEAM.impact, { height: BEAM.impactHeight }));
+    run.hurt(damage);
+  });
 }
 
 /** Typeless damage, queued for the next hit processing. */
@@ -291,6 +343,11 @@ function emptyChargeBar(npc) {
  * the charge loop (12409) with graphic 3412 in spotanim slot 2.
  */
 const CHARGE_LOOP = { anim: 12409, gfx: 3412, slot: 2 };
+
+/** The charge loop's graphic, taken back on a tick a hit cancels the charge (hits come after it). */
+function withdrawChargeGraphic(npc, slot = CHARGE_LOOP.slot) {
+  npc?.withdrawGraphicInSlot?.(slot);
+}
 
 function chargeLoop(npc) {
   const { Animation } = core();
@@ -334,5 +391,6 @@ module.exports = {
   TILES, ARENA, DEEP, DEEP_ARENA, FLOOR, RUINS, NPC, OBJECT, VARP, VARBIT, FINAL_DAWN_COMPLETE, INTERFACE, HUD_UID,
   loc, tileOf, inBox, inArena, isDeep, frame, shift, cycle, random, randomOf, later, repeat, statement, options, fade, fadeMove,
   gfx, graphicAt, projectile, damage, isProtected, distanceTo, floorFree, onFloor,
-  SPLAT, CHARGE_BAR, chargeBar, emptyChargeBar, CHARGE_LOOP, chargeLoop,
+  SPLAT, CHARGE_BAR, chargeBar, emptyChargeBar, CHARGE_LOOP, chargeLoop, withdrawChargeGraphic,
+  SOUND, sound, areaSound, BEAM, fireBeam,
 };
