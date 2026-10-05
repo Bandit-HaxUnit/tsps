@@ -10,6 +10,7 @@ import { ActorAnimationClip } from "../../game/actor/ActorAnimation";
 import type { PlayerAnimKey } from "../../game/ecs/PlayerEcs";
 import { resolveHeightSamplePlaneForLocal } from "../../game/scene/PlaneResolver";
 import { DrawRange, NULL_DRAW_RANGE, newDrawRange } from "../DrawRange";
+import { ACTOR_VERTEX_STRIDE, buildActorNormals } from "../buffer/ActorNormals";
 import { WebGLMapSquare } from "../WebGLMapSquare";
 import type { WebGLOsrsRenderer } from "../WebGLOsrsRenderer";
 
@@ -483,7 +484,7 @@ export class PlayerRenderer {
         if (indices.length <= 0) return undefined;
 
         const r: any = this.renderer as any;
-        const vb = r.app.createInterleavedBuffer(12, vertices, PicoGL.DYNAMIC_DRAW);
+        const vb = r.app.createInterleavedBuffer(ACTOR_VERTEX_STRIDE, vertices, PicoGL.DYNAMIC_DRAW);
         const ib = r.app.createIndexBuffer(
             PicoGL.UNSIGNED_INT as number,
             indices,
@@ -493,8 +494,8 @@ export class PlayerRenderer {
             .createVertexArray()
             .vertexAttributeBuffer(0, vb, {
                 type: PicoGL.UNSIGNED_INT,
-                size: 3,
-                stride: 12,
+                size: 4,
+                stride: ACTOR_VERTEX_STRIDE,
                 integer: true as any,
             })
             .instanceAttributeBuffer(1, r.playerSlotBuffer, {
@@ -1410,14 +1411,15 @@ export class PlayerRenderer {
         };
 
         // Build opaque geometry. For local player, reuse SceneBuffer + typed index arrays.
+        const actorNormals = buildActorNormals(model, baseModel);
         let vertices: Uint8Array;
         let indices: Int32Array;
         if (controlled) {
             if (!this.localSceneBuf) {
-                this.localSceneBuf = new SceneBufferCls(textureLoader, textureIdIndexMap, 0);
+                this.localSceneBuf = new SceneBufferCls(textureLoader, textureIdIndexMap, 0, true);
             }
             resetSceneBuf(this.localSceneBuf);
-            if (facesOpaque.length > 0) this.localSceneBuf.addModel(model, facesOpaque);
+            if (facesOpaque.length > 0) this.localSceneBuf.addModel(model, facesOpaque, undefined, true, actorNormals);
             vertices = this.localSceneBuf.vertexBuf.byteArray();
             indices = fillScratch(this.localSceneBuf.indices, false);
         } else {
@@ -1425,8 +1427,9 @@ export class PlayerRenderer {
                 textureLoader,
                 textureIdIndexMap,
                 model.verticesCount + 16,
+                true,
             );
-            if (facesOpaque.length > 0) sceneBuf.addModel(model, facesOpaque);
+            if (facesOpaque.length > 0) sceneBuf.addModel(model, facesOpaque, undefined, true, actorNormals);
             vertices = sceneBuf.vertexBuf.byteArray();
             indices = new Int32Array(sceneBuf.indices);
         }
@@ -1473,10 +1476,10 @@ export class PlayerRenderer {
         if (facesAlpha.length > 0) {
             if (controlled) {
                 if (!this.localSceneBuf) {
-                    this.localSceneBuf = new SceneBufferCls(textureLoader, textureIdIndexMap, 0);
+                    this.localSceneBuf = new SceneBufferCls(textureLoader, textureIdIndexMap, 0, true);
                 }
                 resetSceneBuf(this.localSceneBuf);
-                this.localSceneBuf.addModel(model, facesAlpha);
+                this.localSceneBuf.addModel(model, facesAlpha, undefined, true, actorNormals);
                 verticesAlpha = this.localSceneBuf.vertexBuf.byteArray();
                 indicesAlpha = fillScratch(this.localSceneBuf.indices, true);
             } else {
@@ -1484,8 +1487,9 @@ export class PlayerRenderer {
                     textureLoader,
                     textureIdIndexMap,
                     model.verticesCount + 16,
+                    true,
                 );
-                sceneBufA.addModel(model, facesAlpha);
+                sceneBufA.addModel(model, facesAlpha, undefined, true, actorNormals);
                 verticesAlpha = sceneBufA.vertexBuf.byteArray();
                 indicesAlpha = new Int32Array(sceneBufA.indices);
             }
@@ -1563,7 +1567,7 @@ export class PlayerRenderer {
             return n;
         };
 
-        const strideBytes = 12;
+        const strideBytes = ACTOR_VERTEX_STRIDE;
 
         if (needGrowVB) {
             const oldBuf = r.playerInterleavedBuffer;
@@ -1574,7 +1578,7 @@ export class PlayerRenderer {
             // Rebind VAO attribute 0 to new buffer
             r.playerVertexArray = vao.vertexAttributeBuffer(0, newBuf, {
                 type: PicoGL.UNSIGNED_INT,
-                size: 3,
+                size: 4,
                 stride: strideBytes,
                 integer: true as any,
             });
@@ -1642,7 +1646,7 @@ export class PlayerRenderer {
             while (n < Math.max(1, v)) n <<= 1;
             return n;
         };
-        const strideBytes = 12;
+        const strideBytes = ACTOR_VERTEX_STRIDE;
 
         if (needGrowVB) {
             const oldBuf = r.playerInterleavedBufferAlpha;
@@ -1652,7 +1656,7 @@ export class PlayerRenderer {
             const newBuf = app.createInterleavedBuffer(strideBytes, capBytes);
             r.playerVertexArrayAlpha = vao.vertexAttributeBuffer(0, newBuf, {
                 type: PicoGL.UNSIGNED_INT,
-                size: 3,
+                size: 4,
                 stride: strideBytes,
                 integer: true as any,
             });
@@ -2215,7 +2219,7 @@ export class PlayerRenderer {
                     baseRec.baseCenterZ,
                     group.seqId,
                     group.frameIdx,
-                    this.isControlledPid(inst.pid) ? undefined : batchKey,
+                    batchKey,
                     inst.pid,
                     inst.mode,
                     group.overlaySeqId,
@@ -2541,7 +2545,7 @@ export class PlayerRenderer {
                         baseRec.baseCenterZ,
                         group.seqId,
                         group.frameIdx,
-                        this.isControlledPid(inst.pid) ? undefined : batchKey,
+                        batchKey,
                         inst.pid,
                         inst.mode,
                         group.overlaySeqId,

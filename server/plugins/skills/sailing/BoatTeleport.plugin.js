@@ -31,7 +31,7 @@ function teleportToBoat(player, itemId, boat) {
   if (!dock) return;
   const landing = new core.Location(dock.landing.x, dock.landing.y, dock.landing.z);
   if (!player.getInventory().contains(itemId) || !core.TeleportHandler.checkReqs(player, landing)) return;
-  player.getInventory().deleteNumber(itemId, 1);
+  const useTablet = () => player.getInventory().deleteNumber(itemId, 1);
   core.TeleportHandler.teleport(player, landing, core.TeleportType.TELE_TAB, false, () => {
     const refusal = Sailing.board(player, dock.id, boat.slot);
     if (refusal) {
@@ -40,7 +40,7 @@ function teleportToBoat(player, itemId, boat) {
     }
     playSound(player, SOUND_BOARD_BOAT);
     player.sendMessage("You board your boat.");
-  });
+  }, useTablet);
 }
 
 function breakTablet({ player, itemId }) {

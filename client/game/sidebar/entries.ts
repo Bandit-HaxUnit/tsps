@@ -1,5 +1,6 @@
 import { GROUND_ITEMS_SIDEBAR_PLUGIN } from "../plugins/grounditems/SidebarPlugin";
 import { INTERACT_HIGHLIGHT_SIDEBAR_PLUGIN } from "../plugins/interacthighlight/SidebarPlugin";
+import { MENU_SWAPPER_SIDEBAR_PLUGIN } from "../plugins/menuswapper/SidebarPlugin";
 import { NOTES_SIDEBAR_PLUGIN } from "../plugins/notes/SidebarPlugin";
 import { PLUGIN_HUB_SIDEBAR_PLUGIN } from "../plugins/pluginhub/SidebarPlugin";
 import { TILE_MARKERS_SIDEBAR_PLUGIN } from "../plugins/tilemarkers/SidebarPlugin";
@@ -21,6 +22,7 @@ export interface ClientSidebarEntryData {
 export interface SidebarPluginVisibilityOptions {
     groundItemsEnabled?: boolean;
     interactHighlightEnabled?: boolean;
+    menuSwapperEnabled?: boolean;
     notesEnabled?: boolean;
     tileMarkersEnabled?: boolean;
 }
@@ -30,6 +32,7 @@ const DEFAULT_CLIENT_SIDEBAR_PLUGINS: ReadonlyArray<ClientSidebarPluginDefinitio
     GROUND_ITEMS_SIDEBAR_PLUGIN,
     TILE_MARKERS_SIDEBAR_PLUGIN,
     INTERACT_HIGHLIGHT_SIDEBAR_PLUGIN,
+    MENU_SWAPPER_SIDEBAR_PLUGIN,
     NOTES_SIDEBAR_PLUGIN,
 ]);
 
@@ -57,6 +60,9 @@ function isPluginVisible(pluginId: string, options: SidebarPluginVisibilityOptio
     }
     if (pluginId === "notes") {
         return options.notesEnabled !== false;
+    }
+    if (pluginId === "menu_swapper") {
+        return options.menuSwapperEnabled !== false;
     }
     if (pluginId === "tile_markers") {
         return options.tileMarkersEnabled !== false;

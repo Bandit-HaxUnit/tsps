@@ -21,7 +21,8 @@ before(async () => {
       Location,
       TeleportHandler: {
         checkReqs: () => allowTeleport,
-        teleport: (player, destination, type, warning, onArrival) => teleports.push({ destination, type, onArrival }),
+        teleport: (player, destination, type, warning, onArrival, onMiddle) =>
+          teleports.push({ destination, type, onArrival, onMiddle }),
       },
       TeleportType: { TELE_TAB: "TELE_TAB" },
     },
@@ -64,6 +65,8 @@ test("a tablet takes you to the dock of your only boat with a greater teleport f
   allowTeleport = true;
   const player = createPlayer([boat(0, "port_sarim"), boat(1, "the_pandemonium", { focus: false }), boat(2, null, { kind: "sunk" })]);
   breakIt(player);
+  assert.equal(player.items.length, 1, "the tablet goes as it is absorbed, two ticks in");
+  teleports[0].onMiddle();
   assert.equal(player.items.length, 0);
   assert.equal(teleports.length, 1);
   assert.equal(teleports[0].type, "TELE_TAB");
@@ -97,5 +100,6 @@ test("with several boats the player picks one, the last sailed first", () => {
   assert.match(pairs[2], /Port Sarim/);
   pairs[1]();
   assert.equal(teleports.length, 1);
+  teleports[0].onMiddle();
   assert.equal(player.items.length, 0);
 });

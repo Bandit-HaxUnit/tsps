@@ -110,14 +110,14 @@ The Doom's own combat does nothing; the run attacks on its own timer. None of it
 - **First attack:** 6 ticks after it surfaces.
 - **Tongue:** when the player stands beside it (not at a corner). Anim 12416, the hit lands the next tick, and it acts again 4 ticks later. Wiki: up to 40, halved by Protect from Melee.
 - **Orb:** anim 12406, projectile 3380 (Ranged), 3379 (Magic) or, from delve 2, 3378 (Melee).
-  - It flies from cycle 55 to the cycle in the table, heights 387 to 100.
-  - It lands with graphic 2490 or 2492 at height 100.
+  - It flies from cycle 55 to the cycle in the table, heights 387 to 100, angle 30 and progress 147. Its launch sound plays at delay 55: 10341 (Ranged), 10375 (Magic), 10367 (Melee).
+  - It lands with graphic 2490 or 2492 (spotanim slot 2) at height 100 and impact sound 7026 or 7023, but only when it isn't prayed against (51 impacts for 91 orbs in the capture). The red orb's are guesses: 2491 (between the others, on the same animation) and 7025.
   - It is rolled on impact (Wiki).
 - **The pattern** (capture): one to three orbs between rock throws, sometimes a throw at once. After a throw the Doom acts again after twice its attack speed.
   - **No overlap with the rock's orbs:** its next attack waits while a rock is in the air, and until its orb would land the tick after the rock's last orb. The delve-5 capture had the orb after a throw 12 ticks on, not 10; the Wiki's changelog keeps them apart after a melee punish too.
-- **Rock throw:** anim 12407, projectile 3384/3385 from its centre to the tile beside it towards the player (cycles 60 to 210, heights 340 to 500).
-  - **7 ticks later it bursts.** Graphic 3386/3387 where it lands, and the player's protection prayers turn off.
-  - The pieces fly (see the table): one to the player's tile and the rest within four tiles. Projectiles 3388–3395, 60 + 3 cycles a tile, heights 500 to 0, each with a shadow (2380) on its tile.
+- **Rock throw:** anim 12407, projectile 3384/3385 from its centre to the tile beside it towards the player (cycles 60 to 210, from delve 5 to 180; heights 340 to 500, angle 50, progress 124).
+  - **7 ticks later it bursts** (6 from delve 5: all four delve-5 throws in the capture). Graphic 3386/3387 where it lands, with area sound 10331 (range 10), and the player's protection prayers turn off.
+  - The pieces fly (see the table): one to the player's tile and the rest within four tiles. Projectiles 3388–3395, 60 + 3 cycles a tile, heights 500 to 0, each with a shadow (2380) on its tile. Each piece's impact comes with area sound 10297 (range 1), delayed as the impact.
   - **2 ticks later** the impacts (3404) are sent, each delayed to its piece's landing.
   - **The tick after:**
     - a rock (57286) stands on the marked tile;
@@ -130,7 +130,8 @@ The Doom's own combat does nothing; the run attacks on its own timer. None of it
   - Anim 12408, then 12409 with graphic 3412 each tick.
   - Only melee lands, and always (100% accurate through `api.onCombatHitRoll`'s `forceAccurate`). A melee hit cancels the charge (12410). The bonus, a fifth of the visible Strength bonus, lands the next tick as its own hitsplat (type 17), once per hitsplat of the hit (23 and 23 from a crystal halberd).
   - Left 13 ticks it fires (12411), hitting the next tick: 80 at delve 5 killed the captured player.
-  - **A melee-punish kill** (Wiki): at delves 1–8, holy water flies out around the Doom, restoring 28 hitpoints, 14 prayer and 25% special attack, and clearing acid in a 3×3 where each lands. The changelog has it guaranteed when the Doom dies during the punish phase. The capture shows none when the killing blow was an arrow loosed before the charge, so here it takes the punishing melee hit (or its bonus the tick after).
+  - **The beam** (capture, also the shield's and the burrowed Doom's): five flat projectiles from its centre to the player at height 100, a head (3409, cycles 0–25), three middle segments (3410, 1–26, 1–27, 1–28) and an end (3411, 2–29); the next tick graphic 3413 (height 50) on the player and the hit.
+  - **A melee-punish kill** (Wiki): at delves 1–8, holy water flies out around the Doom, restoring 28 hitpoints, 14 prayer and 25% special attack, and clearing acid in a 3×3 where each lands. Only a player standing in a splash's 3×3 is restored (seen in game), once. The changelog has it guaranteed when the Doom dies during the punish phase. The capture shows none when the killing blow was an arrow loosed before the charge, so here it takes the punishing melee hit (or its bonus the tick after).
 - **Shockwave:** volatile earth appear 79–96 ticks into the fight. The timer stands still while the shield is up, and from delve 5 the earth comes as the Doom surfaces instead.
   - The Doom keeps attacking until 15 ticks later: anim 12412, then 12413 at 17.
   - A slam (12414, graphic 3370) at 19, and another every 2 ticks for each further shockwave. Each lands 2 ticks after its slam, with graphics over the floor.
@@ -138,14 +139,21 @@ The Doom's own combat does nothing; the run attacks on its own timer. None of it
   - Hits of 26–33 were seen; the Wiki says 30–42, so 26–42 here.
 - **Volatile earth** (14714, anim 12432): 19–28 of a pool of 39 tiles each time, never under rocks. Destroying one pops it (12434).
   - The second destroyed brings the earthen shield (14715, anim 12436) centred on it. The rest die (12433) and go 2 ticks later.
-  - The shield walks to the first earth, diagonally first: every 2 ticks at delve 1 (capture: delve 2 too), every tick from delve 3. Standing in it blocks the shockwave.
+  - The shield walks to the first earth, diagonally first: every 2 ticks at delve 1 (capture: delve 2 too), every tick from delve 3. The 2-tick steps are crawls (capture), so it slides; the every-tick steps are walks. Standing in it blocks the shockwave.
+  - From the tick after it appears, a player inside it is tinted each tick (player tinting: lightness 106, weight 112 over 30 cycles) and one outside gets the clearing tint (hue, saturation and lightness -1). Core's `mobile.tint` sends it.
 - **Larvae** (capture):
   - **When:** with about one attack in three at delve 1, one in six deeper. They drop about four tiles past the player, away from the Doom, two side by side from delve 5. They show graphic 3417 and anim 12458.
   - **Prayers:** half pray Melee at delves 1–2 (headicon 0); any prayer at delve 3 (0–2). From delve 4 they are coloured: Melee (14713, headicon 6), Magic (14712, 7) and Ranged (14711, 8). Each takes only its own style, and Melee ones come only during the shield.
-  - **Crawl:** a tile every 2 ticks (Melee ones often every tick) to the Doom's centre. Every step is sent as an NPC crawl (`npc.setCrawling`), which clients play at half walking speed, so a larva keeps moving instead of walking a tile and waiting. There the charge varbit 17758 goes up, the player takes graphic 3426 and a hit of the charge, and the Doom heals 9 plus the charge, shown as a heal hitsplat (type 6).
-  - **Killed:** they play 12459 with graphic 3374 over their 3×3 and go the next tick. Wiki: up to 21 to the player, or 5–10 to the Doom instead (a type-17 hitsplat in the capture).
+  - **Crawl:** a tile every 2 ticks (Melee ones often every tick) to the Doom's centre. Every step is sent as an NPC crawl (`npc.setCrawling`), which clients play at half walking speed, so a larva keeps moving instead of walking a tile and waiting. They path around rocks (seen in game), over the arena floor, and go into the Doom over the last stretch. There the charge varbit 17758 goes up, the player takes graphic 3426 and a hit of the charge, at most 12 (20 from delve 8, 30 for a giant; seen in game), and the Doom heals 9 plus the charge, shown as a heal hitsplat (type 6).
+  - **Killed:** they play 12459 with graphic 3374 over their 3×3, with area sound 163 (range 7), and go the next tick. Wiki: up to 21 to the player, or 5–10 to the Doom instead (a type-17 hitsplat in the capture).
   - **Hit with the style they pray:** "The demonic larva seems resistant to your attack."
-  - **Attack timer** (Wiki): larvae and volatile earth can be attacked while the player's attack is on cooldown. With a demonbane weapon (the Eye of Ayak among them) the timer is left as it was, so the Doom can be hit straight after; other weapons get their normal delay. Core's `api.onAttackTiming` (`ignoreDelay`, `keepDelay`) does this.
+  - **Demons** (Wiki): demonbane spells are cast on them, so `monsters-complete.json` lists them (14710–14713, giants 14788/14789) with the demon attribute; without it the spells were refused.
+  - **Attack timer:** larvae and volatile earth can be attacked while the player's attack is on cooldown (Wiki). The capture (a demonbane bow, speed 4) shows how the timer moves:
+    - a larva shot on cooldown leaves the timer as it was (Doom 359, larva 360, Doom 363);
+    - a larva shot off cooldown makes the next attack wait 1 tick (larva 350, Doom 351);
+    - volatile earth sets the weapon's full delay, demonbane or not (Doom 246, earth 248 and 250, Doom 254).
+    
+    Only a new target goes in on cooldown: the capture's two earth shots (248, 250) were at two different earths, so attacking the same one again waits for the timer and auto-attack doesn't fire a second shot while the first is in the air. Other weapons on larvae get their normal delay (Wiki). Core's `api.onAttackTiming` (`ignoreDelay`, `keepDelay`, `minimumDelay`, `newTarget`) does this.
 
 ## Delves 3–4
 
@@ -158,7 +166,7 @@ The Doom's own combat does nothing; the run attacks on its own timer. None of it
 - **The demonic shield** (capture): at 75% or less once it has attacked twice (seen at 68%).
   - It comes at its attack's turn: anim 12408, then 2 ticks later it becomes 14708.
   - The HUD shows 500/500 (varp 1683 = 14708), and its bar turns blue: `if_setcolour` on 303:13–15 (132/623/853, back to 25600/576/800 when it ends), then script 2102.
-  - Every tick it loops the charge (12409, graphic 3412 in spotanim slot 2), as the melee charge does; it never plays a block animation.
+  - Every tick it loops the charge (12409, graphic 3412 in spotanim slot 2), as the melee charge does; it never plays a block animation. On a tick a demonbane hit cancels it, neither the loop nor its graphic plays (hits are processed after the plugin's tick, so the graphic is withdrawn: `mobile.withdrawGraphicInSlot`).
   - Headbar 81 runs 510 cycles (17 ticks) at every delve. Each demonbane hit restarts it (12410 in place of the loop that tick; a larva bursting on the shield doesn't), and shows the shield's points on headbar 11 (120 wide) instead of hitpoints. Anything else is "The demonic shield resists your attack!" (Wiki).
   - A larva bursting on it takes 100, shown as a type-17 hitsplat. Larvae come every 7–9 ticks from the north-west, 8–12 tiles out, the first 5 ticks in.
   - Broken, it becomes the Doom again with a rock throw (delves 3–4), or burrows (delve 5).
@@ -167,8 +175,8 @@ The Doom's own combat does nothing; the run attacks on its own timer. None of it
 ## Delves 5–8+
 
 - **Burrowing** (capture, delve 5):
-  - As the shield breaks: anim 12420 with graphic 3375, and rocks fall (graphic 2529, delayed per tile) on 24 tiles. The rocks stand 6 ticks later.
-  - The camera shakes as it burrows (random 5 on each axis) and resets 5 ticks later, when it becomes 14709 (HUD with its real hitpoints), charging for 600 cycles (20 ticks, headbar 81). Each hit restarts the charge.
+  - As the shield breaks: anim 12420 with graphic 3375, and rocks fall (graphic 2529, delay 20) on 24 and 26 tiles in two captures (24–28 here): one on the Doom's centre tile, the rest anywhere free, beside and under it too. The rocks stand 6 ticks later. Sounds: a rumble (10303, 5 loops), rocks falling (10301, delay 45) and landing (10372, delay 160).
+  - The camera shakes as it burrows (random 5 on each axis) and resets 5 ticks later, when it becomes 14709 (HUD with its real hitpoints), charging for 600 cycles (20 ticks, headbar 81). Each hit restarts the charge. From then on it shows graphic 3414 in spotanim slot 2 every tick, except a tick a hit restarts the charge.
   - 3 ticks later the eye (graphic 3416, and 3415 with delay 60) marks where its centre will stop. That is the compass direction of the player from its centre, as far as the player is plus four, kept inside the arena.
   - 3 ticks after the eye it goes there, 4 tiles a tick. Rocks in the way break (graphic 2699).
   - Each tick of a zoom is a teleport to that tick's last tile plus an NPC `exact_move` from the tile it left, with `delay1=0`, `delay2=30` and `angle` the direction of travel (768 north-west, 1536 east). Here that is one `npc.exactMove` a tick (its defaults are these values), so the Doom glides; rocks and the player are still checked tile by tile along the way.
@@ -180,6 +188,10 @@ The Doom's own combat does nothing; the run attacks on its own timer. None of it
   - The slam breaks every rock within 15 tiles that no other rock shelters, and hits the player unless a rock is in the way.
   - A rock under its centre (rockblock) stops the slam, and only that rock breaks.
 - **Rotation from delve 5** (Wiki): shield, burrow, the shockwave, two attacks, the shield again.
+
+**NPC view distance:** the capture uses the large NPC update throughout the fight (554 of 556), so in the arena NPCs are seen 32 tiles out (`player.setNpcViewDistance`, back to 15 on leaving), the whole floor; their projectiles reach as far.
+
+**Other sounds** (capture): acid flying plays area sound 10345 (range 10) at the Doom's centre.
 - **Deep delves (9+):** delve 8 with 625 hitpoints.
 
 ## Rewards
@@ -223,11 +235,12 @@ The scoreboard (57288) opens interface 920, filled with strings:
   - the moon key half (30105).
 - **Delves 6+:** orb timings (cycle 115), rock pieces (one more a delve) and rock-orb timings from delve 7 (from cycle 30).
 - **Burrowing:**
-  - 16 rocks from delve 8, and 3 ticks of grace;
+  - 24–28 rocks at delves 5–7 (24 and 26 seen), 16 from delve 8, never on the player's tile, and 3 ticks of grace;
   - speeds of 5/5/8 tiles a tick at delves 6/7/8+;
   - the car slam's damage (26–42) and its orbs (one per 5 tiles travelled).
 - **Larvae:** a giant one in three at delve 8, adding one charge.
-- **Holy water:** four projectiles (holy water's, 192) two to four tiles out from the Doom's edge, about a tick in flight, the restore given once as the first lands.
+- **Holy water:** seven projectiles (holy water's, 192) up to four tiles from the Doom's centre, landing a tick apart.
+- **Larvae walled in by rocks** crawl straight on, through them.
 - **Shockwaves:** at delves 1–4, a repeat 100 ticks after the last.
 - **Not done:** the collection log (the server tracks none yet).
 

@@ -487,6 +487,7 @@ export class PlayerSession {
       appearance: payload,
       worldView: BoatManager.getBoatAboard(player)?.entityIndex,
       resetPath: player.isNeedsPlacement(),
+      tint: player.getTint?.() ?? undefined,
       movementType: player.getRunningDirection().getId() >= 0
         ? 2
         : player.getWalkingDirection().getId() >= 0 ? 1 : undefined,

@@ -150,3 +150,16 @@ test('the attack timing hook lets an attack ignore the timer, or leave it as it 
   PluginManager.emitAttackTiming(boss);
   assert.deepEqual([boss.ignoreDelay, boss.keepDelay], [false, false]);
 });
+
+test('a player sees NPCs 15 tiles out unless an area widens it (up to 127, the large NPC update)', () => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const player = { npcViewDistance: 15 };
+  const get = () => Player.prototype.getNpcViewDistance.call(player);
+  const set = (distance) => Player.prototype.setNpcViewDistance.call(player, distance);
+  set(32);
+  assert.equal(get(), 32);
+  set(500);
+  assert.equal(get(), 127);
+  set(null);
+  assert.equal(get(), 15);
+});

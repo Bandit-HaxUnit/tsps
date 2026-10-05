@@ -34,7 +34,6 @@
  */
 
 const Shared = require("./DoomShared");
-const { ANIM: BOSS_ANIM } = require("./DoomBoss");
 
 const ANIM = { MOVE: 12417, EMERGE: 12418, SLAM: 12419, BURROW: 12420, IDLE: 12421 };
 const GFX = {
@@ -42,9 +41,12 @@ const GFX = {
   EYE: 3416, EYE_MOVE: 3415, ROCK_FALL: 2529, RUBBLE: 2699,
 };
 const BURROW = {
-  grace: 3, rocks: 24, fewerRocks: 16, rocksLand: 6, transform: 5, firstEye: 3, eyeTicks: 3,
+  grace: 3, rocks: [24, 28], fewerRocks: 16, rocksLand: 6, transform: 5, firstEye: 3, eyeTicks: 3,
   charge: 20, nextEye: 9, surface: 5, slamReach: 15, slamDamage: [26, 42], tilesPerOrb: 5,
-  fallDelay: [0, 40],
+  /** Capture: every falling rock's graphic has delay 20. */
+  fallDelay: 20,
+  /** Capture: burrowed, graphic 3414 in spotanim slot 2 each tick, except one a hit restarts the charge. */
+  chargeGfx: 3414, chargeSlot: 2,
   /** Capture: the charge bar runs 600 cycles; the camera shakes (random 5 on each axis) until it turns. */
   chargeCycles: 600,
   shake: 5,
@@ -104,7 +106,7 @@ class BurrowPhase {
     boss.setMobileInteraction?.(null);
     boss.performAnimation(new Animation(ANIM.BURROW));
     boss.performGraphic(Shared.gfx(GFX.BURROW));
-    this.dropRocks(run.level >= 8 ? BURROW.fewerRocks : BURROW.rocks);
+    this.dropRocks(run.level >= 8 ? BURROW.fewerRocks : Shared.random(...BURROW.rocks));
     this.zoomsLeft = run.level >= 6 ? 3 : 2;
     this.firesAt = Infinity;
     this.step = null;
@@ -122,38 +124,50 @@ class BurrowPhase {
 
   restartCharge() {
     this.firesAt = this.run.ticks + BURROW.charge;
+    this.restartedAt = this.run.ticks;
     Shared.chargeBar(this.run.boss, BURROW.chargeCycles);
   }
 
   /** Rocks fall on free tiles away from the Doom and the player, landing 6 ticks later. */
   dropRocks(count) {
     const run = this.run;
-    const boss = run.boss;
     const player = Shared.tileOf(run.player);
-    const tiles = [];
+    // Capture: one falls on the Doom's centre tile; the rest anywhere free, beside or under it too.
+    const centre = this.centre;
+    const tiles = run.hazards.rockAt(centre.x, centre.y) ? [] : [{ x: centre.x, y: centre.y, z: 0 }];
     for (let attempt = 0; tiles.length < count && attempt < 400; attempt++) {
       const tile = run.tile({ x: Shared.random(Shared.FLOOR.minX, Shared.FLOOR.maxX), y: Shared.random(BOUNDS.minY, Shared.FLOOR.maxY), z: 0 });
       if (!Shared.onFloor(tile) || !Shared.floorFree(run.area, tile)) continue;
-      if (Shared.distanceTo(boss, tile) <= 1 || (tile.x === player.x && tile.y === player.y)) continue;
+      if (tile.x === player.x && tile.y === player.y) continue;
       if (run.hazards.rockAt(tile.x, tile.y) || tiles.some((other) => other.x === tile.x && other.y === tile.y)) continue;
       tiles.push(tile);
     }
-    for (const tile of tiles) Shared.graphicAt(run.player, GFX.ROCK_FALL, tile, { delay: Shared.random(...BURROW.fallDelay) });
+    for (const tile of tiles) Shared.graphicAt(run.player, GFX.ROCK_FALL, tile, { delay: BURROW.fallDelay });
+    const { SOUND } = Shared;
+    Shared.sound(run.player, SOUND.BURROW_RUMBLE, { loops: 5 });
+    Shared.sound(run.player, SOUND.BURROW_ROCKS_FALL, { delay: 45 });
+    Shared.sound(run.player, SOUND.BURROW_ROCKS_LAND, { delay: 160 });
     run.attacks.after(BURROW.rocksLand, () => tiles.forEach((tile) => run.hazards.addRock(tile)));
   }
 
   /** Any hit resets the charge (Wiki). */
   hit() {
-    if (this.run.attacks.phase === "burrow" && Number.isFinite(this.firesAt)) this.restartCharge();
+    if (this.run.attacks.phase !== "burrow" || !Number.isFinite(this.firesAt)) return;
+    this.restartCharge();
+    // Hits come after the tick's charge graphic: none on a tick a hit restarts it (capture).
+    Shared.withdrawChargeGraphic(this.run.boss, BURROW.chargeSlot);
   }
 
   tick() {
     const run = this.run;
     if (run.ticks >= this.firesAt) {
-      const { Animation } = Shared.core();
-      run.boss.performAnimation(new Animation(BOSS_ANIM.BEAM_FIRE));
-      run.hurt(run.delve.beam);
+      Shared.fireBeam(run, run.delve.beam);
       this.restartCharge();
+    }
+    if (Number.isFinite(this.firesAt) && this.restartedAt !== run.ticks) {
+      const graphic = Shared.gfx(BURROW.chargeGfx);
+      if (run.boss.performGraphicInSlot) run.boss.performGraphicInSlot(BURROW.chargeSlot, graphic);
+      else run.boss.performGraphic(graphic);
     }
     const step = this.step;
     if (!step) return;

@@ -204,8 +204,9 @@ export class CombatFactory {
             damage = CombatFactory.rollSpecialDamage(entity, DamageFormulas.sourceMaxHit(entity, CombatType.MAGIC), boundsOverride);
         }
 
+        // Wiki (Ward of Arceuus): demons hit 10% less, that 10% rounded down first.
         if (entity.isNpc() && victim.isPlayer() && ArceuusSpells.hasWard(victim)) {
-            if (entity.getAsNpc().getCurrentDefinition()?.isDemon?.()) damage = Math.floor(damage * 0.9);
+            if (entity.getAsNpc().getCurrentDefinition()?.isDemon?.()) damage -= Math.floor(damage / 10);
         }
 
         // Do magic effects with the calculated damage..
@@ -1155,6 +1156,20 @@ export class CombatFactory {
     }
 
     static stun(character: Mobile, seconds: number, force: boolean) {
+        CombatFactory.stunTicks(character, Misc.getTicks(seconds), force);
+    }
+
+    /**
+     * A stun of a whole number of ticks (seconds don't divide into ticks exactly: 5.4 s is 9.000…02).
+     * `graphic` replaces the default stun graphic (null for none); `message: false` leaves the
+     * "You've been stunned!" message to the caller, for stuns whose message comes later.
+     */
+    static stunTicks(
+        character: Mobile,
+        ticks: number,
+        force: boolean,
+        options: { graphic?: Graphic | null; message?: boolean } = {}
+    ) {
         // OSRS grants a 1-tick grace period after a stun wears off during
         // which the target can't be re-stunned - always enforced (unlike
         // the "already stunned" guard below, `force` never bypasses this).
@@ -1167,14 +1182,14 @@ export class CombatFactory {
             }
         }
 
-        const ticks = Misc.getTicks(seconds);
         character.getTimers().registers(TimerKey.STUN, ticks);
         character.getTimers().registers(TimerKey.STUN_IMMUNITY, ticks + 1);
         character.getCombat().reset();
         character.getMovementQueue().reset();
-        character.performGraphic(new Graphic(348, GraphicHeight.HIGH));
+        const graphic = options.graphic === undefined ? new Graphic(348, GraphicHeight.HIGH) : options.graphic;
+        if (graphic) character.performGraphic(graphic);
 
-        if (character.isPlayer()) {
+        if (character.isPlayer() && options.message !== false) {
             character.getAsPlayer().sendMessage("You've been stunned!");
         }
     }

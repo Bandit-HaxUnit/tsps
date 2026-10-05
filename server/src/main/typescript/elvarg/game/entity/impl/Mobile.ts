@@ -47,6 +47,18 @@ class MobileTask extends Task {
 
 }
 
+/** An actor tint: cycles from now, HSL (-1 keeps the model's own) and how strongly (0-255). */
+export type ActorTint = {
+    startCycle: number;
+    endCycle: number;
+    hue: number;
+    saturation: number;
+    lightness: number;
+    weight: number;
+};
+
+export const ACTOR_TINT_NONE: ActorTint = { startCycle: 0, endCycle: 0, hue: -1, saturation: -1, lightness: -1, weight: 0 };
+
 export abstract class Mobile extends Entity {
     private index: number;
     public lastKnownRegion: Location;
@@ -226,6 +238,22 @@ export abstract class Mobile extends Entity {
         this.graphic = null;
         this.slotGraphics.clear();
         this.displayedHealth = null;
+        this.tintState = null;
+    }
+
+    /** This tick's tint (OSRS actor tinting), sent with the update and cleared after it. */
+    private tintState: ActorTint | null = null;
+
+    /**
+     * Tints the actor's model towards an HSL colour over client cycles (OSRS tinting): `weight`
+     * is how strongly, 0-255. `ActorTint.NONE` takes a tint away. Only players send it so far.
+     */
+    tint(tint: ActorTint): void {
+        this.tintState = tint;
+    }
+
+    getTint(): ActorTint | null {
+        return this.tintState;
     }
 
     /** What the health bar shows with this tick's hits, when it is not the actor's hitpoints. */
@@ -310,6 +338,14 @@ export abstract class Mobile extends Entity {
         }
         this.slotGraphics.set(index, graphic);
         this.getUpdateFlag().flag(Flag.GRAPHIC);
+    }
+
+    /**
+     * Takes back a graphic queued this tick in a slot other than 0, so none is sent there: a boss's
+     * per-tick charge graphic on the tick a hit (processed after plugin tasks) cancels the charge.
+     */
+    withdrawGraphicInSlot(slot: number): void {
+        this.slotGraphics.delete(Math.trunc(slot) & 0xff);
     }
 
     getSlotGraphics(): ReadonlyMap<number, Graphic | null> {

@@ -167,7 +167,8 @@ SpellTeleports.register({
     ItemDefinition: { forId: (id) => ({ getName: () => (id === ItemIdentifiers.VARROCK_TELEPORT ? "Varrock teleport" : "Teleport to house") }) },
     TeleportHandler: {
       checkReqs: () => allowTeleport,
-      teleport: (player, destination, type, warning, onArrival) => teleports.push({ destination, type, onArrival }),
+      teleport: (player, destination, type, warning, onArrival, onMiddle) =>
+        teleports.push({ destination, type, onArrival, onMiddle }),
     },
     TeleportType: { TELE_TAB: "TELE_TAB" },
   },
@@ -194,6 +195,8 @@ test("breaking a tablet teleports to its spell's destination and uses one tablet
   const event = { player, itemId: ItemIdentifiers.VARROCK_TELEPORT, option: "Break", handled: false };
   breakTablet(event);
   assert.equal(event.handled, true);
+  assert.equal(player.items.length, 2, "the tablet goes as it is absorbed, two ticks in");
+  teleports[0].onMiddle();
   assert.equal(player.items.length, 1);
   assert.deepEqual([teleports[0].destination.getX(), teleports[0].destination.getY()], [3213, 3424]);
   assert.equal(teleports[0].type, "TELE_TAB");

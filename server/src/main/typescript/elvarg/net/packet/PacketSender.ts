@@ -8,6 +8,7 @@ import { PlayerStatus } from "../../game/model/PlayerStatus";
 import { Flag } from "../../game/model/Flag";
 import { Skill } from "../../game/model/Skill";
 import { Location } from "../../game/model/Location";
+import { BoatManager } from "../../game/content/sailing/BoatManager";
 import { Graphic } from "../../game/model/Graphic";
 import { World } from "../../game/World";
 import { DonatorRights } from "../../game/model/rights/DonatorRights";
@@ -33,7 +34,7 @@ import {
   encodeProjectiles,
   encodeRunClientScript,
   encodeCameraShake,
-  encodeWidgetSetColour,
+  encodeWidgetSetColour, encodeAttackTimer,
   encodeCameraReset,
   encodeChatFilterSettings,
   encodeRunEnergy,
@@ -648,6 +649,23 @@ export class PacketSender {
     return interfaceId;
   }
 
+  /** Capture (bank search): once the bank closes, by any route, a search typed in the chatbox ends too. */
+  private endBankSearch(closedInterfaceId: number): void {
+    if (closedInterfaceId !== 12) return;
+    const { Bank } = require("../../game/model/container/impl/Bank") as typeof import("../../game/model/container/impl/Bank");
+    Bank.closeSearch(this.player);
+  }
+
+  /**
+   * "interface:closed" { player, interfaceId }: the player's main interface closed, by any route
+   * (its own close, the client's IF_CLOSE, walking away), so content can undo what it set up.
+   */
+  private emitInterfaceClosed(interfaceId: number): void {
+    if (interfaceId < 0) return;
+    const { PluginManager } = require("../../plugins/PluginManager") as typeof import("../../plugins/PluginManager");
+    PluginManager.emitCustomEvent("interface:closed", { player: this.player, interfaceId });
+  }
+
   private closeTrackedInterfaces(): boolean {
     const closable = [...this.subInterfaceTargets.entries()]
       .filter(([, entry]) => entry.type === 0 || entry.type === 3);
@@ -679,7 +697,10 @@ export class PacketSender {
 
   closeInterruptibleInterfaces(): this {
     const interfaceId = this.resetInterfaceState();
-    if (this.closeTrackedInterfaces()) {
+    const closed = this.closeTrackedInterfaces();
+    this.endBankSearch(interfaceId);
+    this.emitInterfaceClosed(interfaceId);
+    if (closed) {
       if (interfaceId === 300 || interfaceId === 334 || interfaceId === 335) {
         this.sendSubInterface((161 << 16) | 79, MAIN_INVENTORY_GROUP_ID, 1);
       }
@@ -709,7 +730,10 @@ export class PacketSender {
 
   sendInterfaceRemoval(): this {
     const interfaceId = this.resetInterfaceState();
-    if (this.closeTrackedInterfaces()) {
+    const closed = this.closeTrackedInterfaces();
+    this.endBankSearch(interfaceId);
+    this.emitInterfaceClosed(interfaceId);
+    if (closed) {
       if (interfaceId === 300 || interfaceId === 334 || interfaceId === 335) {
         this.sendSubInterface((161 << 16) | 79, MAIN_INVENTORY_GROUP_ID, 1);
       }
@@ -781,6 +805,12 @@ export class PacketSender {
    * Recolours a text or rectangle component (IF_SETCOLOUR). `colour` is 15-bit RGB as the game
    * sends it - five bits each of red, green and blue, as rsprox logs it.
    */
+  /** The ticks until the player's next attack, for the client's attack timer. */
+  sendAttackTimer(ticks: number): this {
+    this.player.getSession().sendClientPacket(encodeAttackTimer(ticks));
+    return this;
+  }
+
   sendInterfaceColour(uid: number, colour: number): this {
     this.player.getSession().sendClientPacket(encodeWidgetSetColour(uid, colour));
     return this;
@@ -1116,14 +1146,40 @@ export class PacketSender {
     return this;
   }
 
+  isWorldMapOpen(): boolean {
+    return this.subInterfaceTargets.has(WORLD_MAP_GROUP_ID);
+  }
+
+  /** The last position sendWorldMapPosition sent, packed; -1 before any. */
+  private worldMapPosition = -1;
+
+  getWorldMapPosition(): number {
+    return this.worldMapPosition;
+  }
+
+  /** worldmap_transmitdata (1749): where the world map marks the player. */
+  sendWorldMapPosition(location: Location): this {
+    this.worldMapPosition = packWorldMapCoord(location.getX(), location.getY(), location.getZ());
+    return this.sendInterfaceScript(1749, [this.worldMapPosition, -1, -1]);
+  }
+
+  /**
+   * Where the world map marks the player: their tile, or aboard a boat the boat's own tile (its
+   * world entity's coordinate, as an OSRS capture of a player sailing shows; docs/world-map.md).
+   */
+  worldMapLocation(): Location {
+    const boat = BoatManager.getBoatAboard(this.player);
+    if (!boat) return this.player.getLocation();
+    const tile = boat.worldTile();
+    return new Location(tile.x, tile.y, tile.level);
+  }
+
   toggleWorldMap(): this {
-    if (this.subInterfaceTargets.has(WORLD_MAP_GROUP_ID)) {
+    if (this.isWorldMapOpen()) {
       return this.closeSubInterface(WORLD_MAP_TARGET_UID);
     }
-    const location = this.player.getLocation();
-    const packed = packWorldMapCoord(location.getX(), location.getY(), location.getZ());
     return this
-      .sendInterfaceScript(1749, [packed, -1, -1])
+      .sendWorldMapPosition(this.worldMapLocation())
       .sendSubInterface(WORLD_MAP_TARGET_UID, WORLD_MAP_GROUP_ID)
       .sendInterfaceFlagsRange((WORLD_MAP_GROUP_ID << 16) | 21, 0, 4, 1 << 1);
   }

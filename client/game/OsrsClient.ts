@@ -284,6 +284,11 @@ import { TileMarkersPlugin } from "./plugins/tilemarkers/TileMarkersPlugin";
 import { createHelmSteeringDeps, steerFromHelm } from "./sailing/HelmSteering";
 import { createBrowserVengeanceTimerPluginPersistence } from "./plugins/vengeancetimer/BrowserVengeanceTimerPluginPersistence";
 import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlugin";
+import { AttackTimerPlugin } from "./plugins/attacktimer/AttackTimerPlugin";
+import { createBrowserAttackTimerPluginPersistence } from "./plugins/attacktimer/BrowserAttackTimerPluginPersistence";
+import { MenuSwapperPlugin } from "./plugins/menuswapper/MenuSwapperPlugin";
+import { createBrowserMenuSwapperPluginPersistence } from "./plugins/menuswapper/BrowserMenuSwapperPersistence";
+import { setMenuTransform } from "../ui/menu/menuTransforms";
 import { createBrowserStatusTimerPluginPersistence } from "./plugins/statustimer/BrowserStatusTimerPluginPersistence";
 import { StatusTimerPlugin } from "./plugins/statustimer/StatusTimerPlugin";
 import {
@@ -445,6 +450,7 @@ export class OsrsClient {
         const visibility: Required<SidebarPluginVisibilityOptions> = {
             groundItemsEnabled: this.groundItemsPlugin.getConfig().enabled,
             interactHighlightEnabled: this.interactHighlightPlugin.getConfig().enabled,
+            menuSwapperEnabled: this.menuSwapperPlugin.getState().config.enabled,
             notesEnabled: this.notesPlugin.getConfig().enabled,
             tileMarkersEnabled: this.tileMarkersPlugin.getConfig().enabled,
         };
@@ -455,6 +461,7 @@ export class OsrsClient {
             this.sidebarPluginVisibility.interactHighlightEnabled ===
                 visibility.interactHighlightEnabled &&
             this.sidebarPluginVisibility.notesEnabled === visibility.notesEnabled &&
+            this.sidebarPluginVisibility.menuSwapperEnabled === visibility.menuSwapperEnabled &&
             this.sidebarPluginVisibility.tileMarkersEnabled === visibility.tileMarkersEnabled
         ) {
             return;
@@ -579,6 +586,8 @@ export class OsrsClient {
     readonly rememberLoginPlugin: RememberLoginPlugin;
     readonly tileMarkersPlugin: TileMarkersPlugin;
     readonly vengeanceTimerPlugin: VengeanceTimerPlugin;
+    readonly attackTimerPlugin: AttackTimerPlugin;
+    readonly menuSwapperPlugin: MenuSwapperPlugin;
     readonly poisonTimerPlugin: StatusTimerPlugin;
     readonly freezeTimerPlugin: StatusTimerPlugin;
     readonly splitPrivateChatPlugin: SplitPrivateChatPlugin;
@@ -590,6 +599,7 @@ export class OsrsClient {
     private sidebarPluginVisibility: Required<SidebarPluginVisibilityOptions> = {
         groundItemsEnabled: true,
         interactHighlightEnabled: true,
+        menuSwapperEnabled: true,
         notesEnabled: true,
         tileMarkersEnabled: true,
     };
@@ -1187,6 +1197,12 @@ export class OsrsClient {
         this.vengeanceTimerPlugin = new VengeanceTimerPlugin(
             createBrowserVengeanceTimerPluginPersistence("osrs.plugin.vengeance_timer.v1"),
         );
+        this.attackTimerPlugin = new AttackTimerPlugin(
+            createBrowserAttackTimerPluginPersistence("osrs.plugin.attack_timer.v1"),
+        );
+        this.menuSwapperPlugin = new MenuSwapperPlugin(
+            createBrowserMenuSwapperPluginPersistence("osrs.plugin.menu_swapper.v1"),
+        );
         this.poisonTimerPlugin = new StatusTimerPlugin(
             createBrowserStatusTimerPluginPersistence("osrs.plugin.poison_timer.v1"),
         );
@@ -1196,6 +1212,11 @@ export class OsrsClient {
         this.splitPrivateChatPlugin = new SplitPrivateChatPlugin();
         this.firstPersonPlugin = new FirstPersonPlugin(this);
         this.clientPlugins.add(this.firstPersonPlugin);
+        this.clientPlugins.add(this.menuSwapperPlugin);
+        // Menus are built in pure modules (ui/menu, widgets/menu); they reach the plugins here.
+        setMenuTransform((entries, context) =>
+            this.clientPlugins.transformMenuEntries(entries, context),
+        );
         this.clientPlugins.add(this.hdPlugin);
         this.gameFrame317Plugin = new GameFrame317Plugin(this);
         this.clientPlugins.add(this.gameFrame317Plugin);
@@ -1213,6 +1234,9 @@ export class OsrsClient {
             this.syncSidebarPlugins();
         });
         this.tileMarkersPlugin.subscribe(() => {
+            this.syncSidebarPlugins();
+        });
+        this.menuSwapperPlugin.subscribe(() => {
             this.syncSidebarPlugins();
         });
         // If cache is provided, initialize immediately
@@ -3750,6 +3774,8 @@ export class OsrsClient {
         // derive the ctrlHeld bit relative to the current run toggle to preserve that behavior.
         // => ctrlHeld = run XOR runMode.
         const ctrlHeld = run !== !!this.runMode;
+        // OSRS sends 2 for a Ctrl+Shift click; the server decides what it means (a staff teleport).
+        const ctrlShiftHeld = ClientState.isCtrlPressed() && ClientState.isShiftPressed();
 
         // Keep client destination marker parity (destinationX/Y are local coords relative to scene base).
         try {
@@ -3776,7 +3802,7 @@ export class OsrsClient {
         if (isServerConnected()) {
             const node = createPacket(ClientPacketId.MOVE_GAMECLICK);
             node.packetBuffer.writeShortAddLE(worldY);
-            node.packetBuffer.writeByteNeg(ctrlHeld ? 1 : 0);
+            node.packetBuffer.writeByteNeg(ctrlShiftHeld ? 2 : ctrlHeld ? 1 : 0);
             node.packetBuffer.writeShortAddLE(worldX);
             // Final shortAdd param; unused for ground clicks.
             node.packetBuffer.writeShortAdd(0);

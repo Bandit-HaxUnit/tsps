@@ -29,8 +29,12 @@
  * earthen shield, one to five of them; no melee charge with the throws before a shockwave; only
  * a melee hit stops it, for a fifth of the Strength bonus; from delve 5 the shield comes two
  * attacks after each shockwave.
+ * Capture: an orb's impact graphic and sound show only when it isn't prayed against (51 of 91
+ * orbs); orbs fly with angle 30 and progress 147, rock launches with 50 and 124. From delve 5 a
+ * rock flies to cycle 180 (not 210) and bursts 6 ticks after the throw (not 7).
  * Guesses: shockwaves every 100 ticks after the first at delves 1-4; the red orb's impact
- * graphic (none); orbs landing at cycle 115 from delve 6.
+ * graphic, 2491 (between the others, on the same animation); orbs landing at cycle 115 from
+ * delve 6.
  */
 
 const Shared = require("./DoomShared");
@@ -46,16 +50,22 @@ const GFX = { AREA_SLAM: 3370, FLOOR_SLAM: [3405, 3406, 3407] };
 const ORB = {
   ranged: { projectile: 3380, impact: 2490 },
   magic: { projectile: 3379, impact: 2492 },
-  melee: { projectile: 3378, impact: -1 },
+  melee: { projectile: 3378, impact: 2491 },
 };
 /** Capture: orbs land at cycle 205 at delves 1-2, 175 at 3-4, 145 at 5 (guess: 115 from 6). */
 const ORB_END = [205, 205, 175, 175, 145, 115];
 function orbFlight(level) {
-  return { delay: 55, end: ORB_END[Math.min(level, ORB_END.length) - 1], startHeight: 387, endHeight: 100 };
+  return { delay: 55, end: ORB_END[Math.min(level, ORB_END.length) - 1], startHeight: 387, endHeight: 100, angle: 30, progress: 147 };
 }
+const ORB_IMPACT_SLOT = 2;
 const ROCK_LAUNCH = { ranged: 3384, magic: 3385 };
-const ROCK_FLIGHT = { delay: 60, end: 210, startHeight: 340, endHeight: 500 };
-const ROCK_BURST_TICKS = 7;
+/** Capture: the rock's flight and when it bursts, faster from delve 5. */
+function rockFlight(level) {
+  return { delay: 60, end: level >= 5 ? 180 : 210, startHeight: 340, endHeight: 500, angle: 50, progress: 124 };
+}
+function rockBurstTicks(level) {
+  return level >= 5 ? 6 : 7;
+}
 const SECOND_ROCK_TICKS = 3;
 
 const FIRST_ATTACK_TICKS = 6;
@@ -365,6 +375,7 @@ class AttackCycle {
     const boss = this.boss;
     boss.performAnimation(new Animation(ANIM.ORB));
     const lands = Shared.projectile(this.run.area, boss, this.player, ORB[style].projectile, orbFlight(this.run.level));
+    Shared.sound(this.player, Shared.SOUND.ORB_LAUNCH[style], { delay: Shared.SOUND.ORB_LAUNCH_DELAY });
     this.after(lands, () => this.orbLands(style));
   }
 
@@ -372,7 +383,13 @@ class AttackCycle {
   orbLands(style) {
     const player = this.player;
     if (player.getHitpoints() <= 0) return;
-    if (ORB[style].impact >= 0) player.performGraphic(Shared.gfx(ORB[style].impact, { height: 100 }));
+    if (!Shared.isProtected(player, style)) {
+      // Capture: in spotanim slot 2.
+      const impact = Shared.gfx(ORB[style].impact, { height: 100 });
+      if (player.performGraphicInSlot) player.performGraphicInSlot(ORB_IMPACT_SLOT, impact);
+      else player.performGraphic(impact);
+      Shared.sound(player, Shared.SOUND.ORB_IMPACT[style]);
+    }
     this.strike(style, this.run.delve.maxHit, 0);
   }
 
@@ -412,8 +429,8 @@ class AttackCycle {
     const at = burstTile(boss, this.player);
     boss.performAnimation(new Animation(ANIM.ROCK_THROW));
     this.rocksUp++;
-    Shared.projectile(this.run.area, boss, Shared.loc(at), ROCK_LAUNCH[style], ROCK_FLIGHT);
-    this.after(ROCK_BURST_TICKS, () => landed(this.run.hazards.burstRock(at, style, { orbs, exclude: exclude() })));
+    Shared.projectile(this.run.area, boss, Shared.loc(at), ROCK_LAUNCH[style], rockFlight(this.run.level));
+    this.after(rockBurstTicks(this.run.level), () => landed(this.run.hazards.burstRock(at, style, { orbs, exclude: exclude() })));
   }
 
   // ---------------------------------------------------------------- the melee charge
@@ -460,10 +477,8 @@ class AttackCycle {
 
   /** Capture: the beam fires and hits the next tick. */
   fireBeam() {
-    const { Animation } = Shared.core();
     this.endCharge();
-    this.boss.performAnimation(new Animation(ANIM.BEAM_FIRE));
-    this.after(1, () => this.run.hurt(this.run.delve.beam));
+    Shared.fireBeam(this.run, this.run.delve.beam);
     this.nextAt = this.run.ticks + this.run.delve.speed;
   }
 
@@ -512,4 +527,4 @@ class AttackCycle {
   }
 }
 
-module.exports = { AttackCycle, idleMethod, styleMethod, besideBoss, burstTile, orbFlight, ANIM, ORB, SHOCKWAVE, CHARGE };
+module.exports = { AttackCycle, idleMethod, styleMethod, besideBoss, burstTile, orbFlight, rockFlight, rockBurstTicks, ANIM, ORB, SHOCKWAVE, CHARGE };

@@ -5,6 +5,8 @@ import type { ProgramSource } from "../../render/shaders/ShaderUtil";
 import type { WebGLOsrsRenderer } from "../../render/WebGLOsrsRenderer";
 import type { GLRenderer } from "../../widgets/gl/renderer";
 import type { ClickRegistry } from "../../widgets/gl/click-registry";
+import type { SimpleMenuEntry } from "../../ui/menu/MenuEngine";
+import type { MenuTransformContext } from "../../ui/menu/menuTransforms";
 
 /**
  * Draw/input context handed to a plugin that supplies a custom gameframe (the
@@ -80,6 +82,11 @@ export interface ClientPlugin {
     gameFrame?: GameFrameProvider;
     /** Handle a client-side `::command`; return true to consume it (no server round trip). */
     handleClientCommand?(command: string): boolean;
+    /** Reorders or extends a menu (top first); its first eligible entry is the left-click. */
+    transformMenuEntries?(
+        entries: SimpleMenuEntry[],
+        context: MenuTransformContext,
+    ): SimpleMenuEntry[];
 }
 
 export class ClientPluginManager {
@@ -92,6 +99,16 @@ export class ClientPluginManager {
     transformSceneProgram(source: ProgramSource): ProgramSource {
         for (const plugin of this.plugins) source = plugin.transformSceneProgram?.(source) ?? source;
         return source;
+    }
+
+    transformMenuEntries(
+        entries: SimpleMenuEntry[],
+        context: MenuTransformContext,
+    ): SimpleMenuEntry[] {
+        for (const plugin of this.plugins) {
+            entries = plugin.transformMenuEntries?.(entries, context) ?? entries;
+        }
+        return entries;
     }
 
     sceneProgramsReady(renderer: WebGLOsrsRenderer, programs: Program[]): void {

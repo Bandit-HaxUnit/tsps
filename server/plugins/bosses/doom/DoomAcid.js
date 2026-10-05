@@ -60,6 +60,7 @@ class AcidPools {
     if (!this.active || !boss || run.attacks.phase !== "attacks") return;
     const direction = this.direction ?? (this.direction = Shared.randomOf(DIRECTIONS));
     const centre = Shared.core().Projectile.centreOf(boss);
+    Shared.areaSound(run.player, Shared.SOUND.ACID, { x: centre.getX(), y: centre.getY(), z: centre.getZ() }, { range: 10 });
     const level = run.level;
     const offsets = [[ACID.edge, 0]];
     for (let index = 0; index < extraBlobs(level); index++) {
