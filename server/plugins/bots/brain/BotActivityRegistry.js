@@ -6,6 +6,8 @@ const { Skill } = require("../../../src/main/typescript/elvarg/game/model/Skill"
 const { ItemIds } = require("../../../src/main/typescript/elvarg/util/IdEnums");
 const { createInteractObjectAction } = require("./actions/InteractObject");
 const { createDropItemsAction } = require("./actions/DropItems");
+const { createChooseAction } = require("./actions/Choose");
+const { createSellItemsAction } = require("./actions/SellItems");
 const { createEquipToolAction } = require("./actions/EquipTool");
 const { createBankAction } = require("./actions/Bank");
 const { createWalkToAction } = require("./actions/WalkTo");
@@ -115,6 +117,15 @@ function createCondition(spec) {
 function createAction(spec, world) {
   if (spec.type === "interactObject") {
     return createInteractObjectAction(spec, world);
+  }
+  if (spec.type === "choose") {
+    return createChooseAction(spec, (option) => createAction(option, world));
+  }
+  if (spec.type === "sellItems") {
+    return createSellItemsAction(
+      { ...spec, itemIds: (spec.itemIds ?? []).map(resolveItemId).filter((id) => Number.isInteger(id)) },
+      world
+    );
   }
   if (spec.type === "dropItems") {
     return createDropItemsAction({
@@ -235,12 +246,35 @@ function createBotActivityRegistry(options = {}) {
     resolvers.push(resolver);
     byId.set(resolver.id, resolver);
   }
+  // A site spawns `count` bots that only ever run its `activities` (or the single
+  // `activity`); `switchAfterSeconds: {min,max}` rotates them between those at random.
   const sites = (raw.sites ?? []).map((site) => {
-    const activity = byId.get(site.activity);
-    if (!activity) {
-      throw new Error(`[bot activities] site '${site.id}' references unknown activity '${site.activity}'`);
+    const ids = site.activities ?? [site.activity];
+    const siteActivities = ids.map((id) => {
+      const activity = byId.get(id);
+      if (!activity || activity.resolver === true) {
+        throw new Error(`[bot activities] site '${site.id}' references unknown activity '${id}'`);
+      }
+      if (activity.manual || activity.ephemeral) {
+        throw new Error(`[bot activities] site '${site.id}' cannot assign manual/overlay activity '${id}'`);
+      }
+      return activity;
+    });
+    if (!siteActivities.length) {
+      throw new Error(`[bot activities] site '${site.id}' needs at least one activity`);
     }
-    return { ...site, activity };
+    const switchAfter = site.switchAfterSeconds;
+    const minMs = Math.max(1, Number(switchAfter?.min) || 0) * 1000;
+    return {
+      ...site,
+      activities: siteActivities,
+      rotation: {
+        activityIds: siteActivities.map((activity) => activity.id),
+        switchAfterMs: switchAfter
+          ? { min: minMs, max: Math.max(minMs, (Number(switchAfter.max) || 0) * 1000) }
+          : null,
+      },
+    };
   });
   const slots = new Map();
   const lastActivityByPlayer = new WeakMap();
@@ -287,9 +321,12 @@ function createBotActivityRegistry(options = {}) {
       }
       blocked.set(activityId, nowMs + Math.max(0, durationMs));
     },
-    pickActivity(player, nowMs = Date.now()) {
+    /** `allowed` limits the pick to those ids; `avoid` excludes one (a rotation switch). */
+    pickActivity(player, nowMs = Date.now(), { allowed = null, avoid = null } = {}) {
       const previousId = lastActivityByPlayer.get(player);
-      const candidates = available(player, nowMs);
+      const candidates = available(player, nowMs).filter(
+        (activity) => activity.id !== avoid && (!allowed || allowed.includes(activity.id))
+      );
       const previous = candidates.find((activity) => activity.id === previousId);
       const picked = previous ?? candidates[Math.floor(Math.random() * candidates.length)] ?? null;
       if (picked) {

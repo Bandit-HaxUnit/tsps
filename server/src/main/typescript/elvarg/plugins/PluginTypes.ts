@@ -1206,11 +1206,14 @@ export interface PluginCoreApi {
   ItemDefinition: any;
   CacheDefinitions: any;
   PathFinder: any;
+  RsmodRouteFinding: any;
   NpcDefinition: any;
   ObjectDefinition: any;
   MagicSpellbook: any;
   Spell: any;
   CombatNormalSpell: any;
+  CombatSpells: any;
+  Autocasting: any;
   NPC: any;
   GameConstants: any;
   WorldDefinition: any;

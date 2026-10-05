@@ -3,8 +3,10 @@
 const { MapObjects } = require("../../../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
 const { resolveCatalogObjectIds } = require("../BotObjectCatalog");
 const { playerState } = require("../ActionState");
+const { canReachSpot } = require("../../behaviours/navigation/BotLongRoutes");
 const {
-  approachObject,
+  clearMovementRequest,
+  peekMovementRequest,
   queueRouteAndFlagAppearance,
   randomInRange,
 } = require("../../behaviours/navigation/BotNavigation");
@@ -16,31 +18,46 @@ const TARGET_SPREAD = 6;
 const MAX_DIRECT_ROUTE_TILES = 20;
 const SEARCH_WALK_RADIUS = 10;
 const INTERACT_COOLDOWN_MS = 1500;
-// Consecutive clicks on the same object from the same tile that never start a
-// session mean the route failed (tree behind a closed gate/fence). Blacklist and
-// repick instead of parking there forever.
-const UNREACHABLE_CLICKS = 2;
-const UNREACHABLE_AVOID_MS = 5 * 60 * 1000;
-// Shared by every bot and activity: one bot learning a tree is unreachable
-// spares the rest of the crowd from re-pathing to it. Keyed by object + tile,
-// so it is bounded by the number of objects bots ever target.
-const UNREACHABLE_UNTIL = new Map();
+// Clicks on the same object from the same tile that never produce (and never
+// start a session) mean this bot cannot use it right now: it moves on to another
+// for SKIP_CLICK_MS. Never shared, never about depletion: a depleted rock is a
+// different object and is simply waited out until it respawns.
+const UNREACHABLE_CLICKS = 3;
+const SKIP_CLICK_MS = 2 * 60 * 1000;
+// ...and only after this long since the first idle attempt: three quick attempts
+// can all land inside one dispatch delay.
+const UNREACHABLE_MIN_MS = 10000;
+// Failing to reach something from far away says nothing about the thing (ores
+// never run out; the walk may just be slow): only that bot skips it for a while.
+// What is unreachable for everyone (an island) the route planner already knows.
+const NEAR_TILES = 16;
+const SKIP_MS = 10 * 60 * 1000;
+const spotKey = (x, y, z) => `spot:${x >> 4},${y >> 4},${z}`;
+// Shared: object key -> { player, until }. One gatherer per tree/rock, so a crowd
+// spreads over the spot and then on to the next one instead of piling up.
+const CLAIM_MS = 10000;
+// Rocks respawn within seconds: only a crowd that lasts this long sends a gatherer
+// on to the next spot.
+const CROWDED_MOVE_ON_MS = 60000;
+// A far walk that gets no closer for this long (fenced field, water) gives up on
+// that spot and counts against its area; within ARRIVED_TILES it is just waiting.
+const NO_PROGRESS_MS = 60000;
+const ARRIVED_TILES = 20;
+const CLAIMS = new Map();
+function claimedByOther(key, player, nowMs) {
+  const claim = CLAIMS.get(key);
+  if (!claim) {
+    return false;
+  }
+  if (claim.until <= nowMs || claim.player === player || claim.player.isRegistered?.() === false) {
+    return false;
+  }
+  return true;
+}
 
 function objectKey(object) {
   const loc = object.getLocation();
   return `${object.getId()}:${loc.getX()}:${loc.getY()}:${loc.getZ()}`;
-}
-
-function isAvoided(key, nowMs) {
-  const until = UNREACHABLE_UNTIL.get(key);
-  if (until === undefined) {
-    return false;
-  }
-  if (until > nowMs) {
-    return true;
-  }
-  UNREACHABLE_UNTIL.delete(key);
-  return false;
 }
 
 /**
@@ -52,6 +69,7 @@ function isAvoided(key, nowMs) {
 function createInteractObjectAction(spec, world) {
   const objectIds = resolveCatalogObjectIds(spec);
   const option = spec.option ?? "Chop down";
+  const routeExists = world.routes?.canReachSpot ?? canReachSpot;
   const stallMs = Math.max(5, Number(spec.stallSeconds ?? 120)) * 1000;
   const stateFor = (player) =>
     playerState(action, player, () => ({
@@ -61,10 +79,15 @@ function createInteractObjectAction(spec, world) {
       lastClickX: null,
       lastClickY: null,
       failedClicks: 0,
+      // Nearest indexed object beyond live range, walked to when nothing is close.
+      searchTarget: null,
+      // This bot's own skips (object keys and far spots it could not get to) -> until.
+      skips: new Map(),
     }));
 
   function findTarget(player, nowMs) {
     const bot = stateFor(player);
+    bot.crowded = false;
     const loc = player.getLocation();
     const candidates =
       world.objectSearch?.findCandidatesByIds?.(player, objectIds, {
@@ -85,7 +108,11 @@ function createInteractObjectAction(spec, world) {
       if (distSq > maxDistSq) {
         continue;
       }
-      if (isAvoided(objectKey(object), nowMs)) {
+      if ((bot.skips.get(objectKey(object)) ?? 0) > nowMs) {
+        continue;
+      }
+      if (claimedByOther(objectKey(object), player, nowMs)) {
+        bot.crowded = true;
         continue;
       }
       live.push({ object, distSq });
@@ -93,6 +120,15 @@ function createInteractObjectAction(spec, world) {
     live.sort((left, right) => left.distSq - right.distSq);
     const pool = live.slice(0, TARGET_SPREAD);
     const best = pool[Math.floor(Math.random() * pool.length)]?.object ?? null;
+    if (best) {
+      bot.searchTarget = null;
+      bot.crowded = false;
+      bot.movingOn = false;
+      // Drop any leftover search walk: dispatched later it would drag the bot off
+      // the rock (and moving cancels the skilling session).
+      clearMovementRequest(player);
+      CLAIMS.set(objectKey(best), { player, until: nowMs + CLAIM_MS });
+    }
     bot.target = best
       ? {
           objectId: best.getId(),
@@ -103,18 +139,111 @@ function createInteractObjectAction(spec, world) {
       : null;
   }
 
+  const RouteFinder = world.core?.RsmodRouteFinding ?? null;
+  const routeFinder = RouteFinder ? new RouteFinder() : null;
+  /** Wall-aware: can the bot route to an interaction tile of this object from here? */
+  function canReach(player, object) {
+    if (!routeFinder) {
+      return true;
+    }
+    const from = player.getLocation();
+    const objectLoc = object.getLocation();
+    const definition = object.getDefinition?.();
+    return routeFinder.findRoute({
+      level: from.getZ(), srcX: from.getX(), srcY: from.getY(),
+      srcSize: Math.max(1, Math.floor(player.getSize?.() ?? 1)),
+      destX: objectLoc.getX(), destY: objectLoc.getY(),
+      destWidth: Math.max(1, definition?.getSizeX?.() ?? 1),
+      destLength: Math.max(1, definition?.getSizeY?.() ?? 1),
+      locAngle: object.getFace?.() ?? 0, locShape: object.getType?.() ?? 10,
+      moveNear: false, blockAccessFlags: 0, maxWaypoints: 25,
+      privateArea: player.getPrivateArea?.() ?? null,
+    }).success === true;
+  }
+
   function resolveTargetObject(player) {
     const target = stateFor(player).target;
     if (!target) {
       return null;
     }
+    const key = `${target.objectId}:${target.x}:${target.y}:${target.z}`;
+    if (claimedByOther(key, player, Date.now())) {
+      return null;
+    }
+    CLAIMS.set(key, { player, until: Date.now() + CLAIM_MS });
     const loc = player.getLocation().clone();
     loc.set(target.x, target.y, target.z);
     return MapObjects.get(target.objectId, loc, player.getPrivateArea());
   }
 
-  function wander(player, state) {
-    const home = state?.home ?? player.getLocation();
+  /**
+   * Nothing in live range: head for the nearest indexed object (far regions are
+   * never scanned; segmented walking covers the distance), else search around home.
+   */
+  /**
+   * Nothing usable in live range. Commit to one far spot (the nearest indexed
+   * object) and walk there; wait on arrival for respawns rather than turning back.
+   * Give the spot up only if the walk stops getting closer, or after a lasting
+   * crowd (then pick a spot past it).
+   */
+  function wander(player, state, nowMs) {
+    const bot = stateFor(player);
+    const here = player.getLocation();
+    const distanceTo = (spot) => Math.max(Math.abs(here.getX() - spot.x), Math.abs(here.getY() - spot.y));
+    if (!bot.crowded) {
+      bot.crowdedSince = null;
+    } else {
+      bot.crowdedSince ??= nowMs;
+      if (nowMs - bot.crowdedSince < CROWDED_MOVE_ON_MS) {
+        return; // a rock is about to respawn or be freed: wait here
+      }
+      if (!bot.movingOn) {
+        bot.movingOn = true;
+        bot.searchTarget = null; // one new spot past the crowd
+      }
+    }
+    if (bot.searchTarget) {
+      const distance = distanceTo(bot.searchTarget);
+      if (distance < bot.bestDistance) {
+        bot.bestDistance = distance;
+        bot.progressAt = nowMs;
+        bot.walkProgress = true; // a long walk to a far spot is progress (madeProgress)
+      } else if (distance > ARRIVED_TILES && nowMs - bot.progressAt >= NO_PROGRESS_MS) {
+        // This bot cannot get there right now: it alone tries another spot.
+        bot.skips.set(spotKey(bot.searchTarget.x, bot.searchTarget.y, bot.searchTarget.z ?? here.getZ()), nowMs + SKIP_MS);
+        bot.searchTarget = null;
+      }
+    }
+    // The nearest spot the route planner can reach (an island is never picked).
+    for (let attempt = 0; !bot.searchTarget && attempt < 4; attempt += 1) {
+      const minDistance = bot.crowded ? MAX_TARGET_TILES : 0;
+      const spot = world.objectSearch?.findNearestIndexedLocation?.(player, objectIds, {
+        accept: (id, x, y, z) => (bot.skips.get(`${id}:${x}:${y}:${z}`) ?? 0) <= nowMs &&
+          (bot.skips.get(spotKey(x, y, z)) ?? 0) <= nowMs &&
+          Math.max(Math.abs(x - here.getX()), Math.abs(y - here.getY())) > minDistance,
+      }) ?? null;
+      if (!spot) {
+        break;
+      }
+      const reachable = routeExists(player, spot, nowMs);
+      if (reachable === undefined) {
+        // Not planned yet (this tick's planning budget is spent): ask again next
+        // tick rather than set off straight-line toward a spot across the sea.
+        return;
+      }
+      if (reachable === false) {
+        bot.skips.set(spotKey(spot.x, spot.y, spot.z ?? here.getZ()), nowMs + SKIP_MS);
+        continue;
+      }
+      bot.searchTarget = spot;
+      bot.bestDistance = distanceTo(spot);
+      bot.progressAt = nowMs;
+    }
+    // Keep walking the current leg: re-randomising every tick zig-zags the bot.
+    if (peekMovementRequest(player) || player.getMovementQueue?.()?.size?.() > 0) {
+      return;
+    }
+    const home = bot.searchTarget ?? state?.home ?? { x: here.getX(), y: here.getY() };
     const targetX = home.x + randomInRange(-SEARCH_WALK_RADIUS, SEARCH_WALK_RADIUS);
     const targetY = home.y + randomInRange(-SEARCH_WALK_RADIUS, SEARCH_WALK_RADIUS);
     queueRouteAndFlagAppearance(player, targetX, targetY, {
@@ -147,6 +276,20 @@ function createInteractObjectAction(spec, world) {
 
   const action = {
     id: "interactObject",
+    // Getting closer to a far spot keeps the activity alive: a long walk to the
+    // next mine must not trip the produce-based stall before it arrives.
+    madeProgress(ctx) {
+      const bot = stateFor(ctx.player);
+      const progressed = bot.walkProgress === true;
+      bot.walkProgress = false;
+      return progressed;
+    },
+    describe(ctx) {
+      const bot = stateFor(ctx.player);
+      const target = bot.target;
+      return `gather target=${target ? `${target.objectId}@${target.x},${target.y}` : "none"} ` +
+        `far=${bot.searchTarget ? `${bot.searchTarget.x},${bot.searchTarget.y}` : "none"} failedClicks=${bot.failedClicks}`;
+    },
     update(ctx) {
       const { player, state, nowMs } = ctx;
       const bot = stateFor(player);
@@ -160,10 +303,6 @@ function createInteractObjectAction(spec, world) {
       }
 
       let object = bot.target ? resolveTargetObject(player) : null;
-      // Another bot may have flagged this target unreachable since it was picked.
-      if (object && isAvoided(objectKey(object), nowMs)) {
-        object = null;
-      }
       if (!object) {
         bot.target = null;
         findTarget(player, nowMs);
@@ -173,7 +312,7 @@ function createInteractObjectAction(spec, world) {
             return "failed";
           }
           debug(ctx, "no-target");
-          wander(player, state);
+          wander(player, state, nowMs);
           ctx.waitTicks = 2;
           return "wait";
         }
@@ -185,11 +324,6 @@ function createInteractObjectAction(spec, world) {
         Math.abs(loc.getX() - target.x),
         Math.abs(loc.getY() - target.y)
       );
-      if (distance > MAX_DIRECT_ROUTE_TILES) {
-        debug(ctx, `approach:${distance}`);
-        approachObject(player, object, { nowMs, reason: "brain_target_approach" });
-        return "running";
-      }
       if (player.getForceMovement?.() != null) {
         debug(ctx, "force");
         return "running";
@@ -210,18 +344,19 @@ function createInteractObjectAction(spec, world) {
       const now = player.getLocation();
       const stayedPut =
         bot.lastClickX === now.getX() && bot.lastClickY === now.getY();
+      // A repeat click only counts as failed when nothing was produced since the
+      // last one: a rock that gave its ore, depleted and respawned is clicked again
+      // from the same tile by a bot that is mining it just fine.
+      const producedSinceClick = ctx.frame.lastProgressAt > bot.lastClickAt;
       bot.failedClicks =
-        bot.lastTargetKey === key && stayedPut ? bot.failedClicks + 1 : 0;
-      if (bot.failedClicks >= UNREACHABLE_CLICKS) {
-        // Once per object (bot event logging is off by default, so this goes
-        // to the server log where core's per-click warning used to land).
-        if (!UNREACHABLE_UNTIL.has(key)) {
-          console.warn("[bots] object unreachable", {
-            object: key,
-            from: `${now.getX()},${now.getY()}`,
-          });
-        }
-        UNREACHABLE_UNTIL.set(key, nowMs + UNREACHABLE_AVOID_MS);
+        bot.lastTargetKey === key && stayedPut && !producedSinceClick ? bot.failedClicks + 1 : 0;
+      if (bot.failedClicks === 1) {
+        bot.failingSince = nowMs;
+      }
+      if (bot.failedClicks >= UNREACHABLE_CLICKS && nowMs - bot.failingSince >= UNREACHABLE_MIN_MS) {
+        // This bot alone moves on: its walk never got there (far), or its clicks do
+        // nothing here (near). Other bots keep using the object.
+        bot.skips.set(key, nowMs + (distance > NEAR_TILES ? SKIP_MS : SKIP_CLICK_MS));
         bot.target = null;
         bot.lastTargetKey = null;
         bot.failedClicks = 0;
@@ -233,6 +368,17 @@ function createInteractObjectAction(spec, world) {
       bot.lastClickX = now.getX();
       bot.lastClickY = now.getY();
       bot.lastClickAt = nowMs;
+      if (distance > MAX_DIRECT_ROUTE_TILES || !canReach(player, object)) {
+        // Far away, or a fence/closed gate in the way: walkToObject would just fail,
+        // so walk at it with brain movement (staged, opens the blocking gate).
+        // Counted like a click: no movement and no produce blacklists it.
+        debug(ctx, `approach:${distance}`);
+        queueRouteAndFlagAppearance(player, objectLoc.getX(), objectLoc.getY(), {
+          nowMs, reason: "brain_target_approach", basicPather: true,
+        });
+        return "running";
+      }
+      clearMovementRequest(player);
       const queue = player.getMovementQueue();
       debug(
         ctx,
@@ -281,7 +427,6 @@ function createInteractObjectAction(spec, world) {
 }
 
 module.exports = {
+  CLAIMS,
   createInteractObjectAction,
-  isAvoided,
-  UNREACHABLE_UNTIL,
 };

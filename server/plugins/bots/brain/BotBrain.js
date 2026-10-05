@@ -6,6 +6,7 @@ const {
   peekMovementRequest,
 } = require("../behaviours/navigation/BotNavigation");
 const { maybeCrossDitch } = require("./DitchCrossing");
+const { maybeOpenDoor } = require("./DoorOpening");
 
 /**
  * Void-style behaviour runner: one action per bot per tick, driven by a frame
@@ -21,6 +22,12 @@ const FRAME_STATE = Object.freeze({
   SUCCESS: "success",
   FAILED: "failed",
 });
+
+// Last-resort watchdog: an action that reports no progress this long fails the
+// frame (and is logged), so a stuck bot cannot occupy a slot silently forever.
+const FRAME_STALL_MS = 180000;
+// A due rotation with nothing else free keeps the current activity and asks again later.
+const SWITCH_RETRY_MS = 30000;
 
 /** Hands state.mode back when an overlay that set it ends. */
 function restoreMode(state, endingMode, previousMode) {
@@ -59,9 +66,21 @@ class BotBrain {
     this.ephemeral = options.ephemeral === true;
     this.onExhausted =
       typeof options.onExhausted === "function" ? options.onExhausted : null;
+    // Optional rotation (bot-activities.json sites): { activityIds, switchAfterMs }.
+    // Only activityIds are ever assigned; with switchAfterMs ({min,max}) the bot
+    // swaps to another of them at random once its activity has run that long.
+    this.rotation = options.rotation ?? null;
+    this.switchAt = 0;
     if (options.activity) {
-      this.pushActivity(options.activity, options.nowMs ?? Date.now());
+      this.pushRoot(options.activity, options.nowMs ?? Date.now());
     }
+  }
+
+  /** Starts a bottom-of-stack activity and schedules its rotation switch. */
+  pushRoot(activity, nowMs) {
+    this.pushActivity(activity, nowMs);
+    const span = this.rotation?.switchAfterMs;
+    this.switchAt = span ? nowMs + span.min + Math.random() * (span.max - span.min) : 0;
   }
 
   ensureState() {
@@ -96,13 +115,23 @@ class BotBrain {
     }
   }
 
+  /**
+   * Ends an action. Its walk goes with it: a request it left behind (a bank walk
+   * onto a booth tile that never completes) would otherwise hold up the next
+   * action, which waits for pending movement before choosing its own.
+   */
+  stopAction(action, ctx) {
+    action?.stop?.(ctx);
+    clearMovementRequest(this.player);
+  }
+
   isRunningActivity(activityId) {
     return this.frames.some((frame) => frame.behaviour?.id === activityId);
   }
 
   reset() {
     for (const frame of [...this.frames].reverse()) {
-      frame.action()?.stop?.(this.context(frame, Date.now()));
+      this.stopAction(frame.action(), this.context(frame, Date.now()));
       this.releaseFrame(frame);
     }
     this.frames = [];
@@ -117,12 +146,47 @@ class BotBrain {
   }
 
   assignNext(nowMs) {
-    const activity = this.registry?.pickActivity?.(this.player, nowMs);
+    const activity = this.registry?.pickActivity?.(this.player, nowMs, {
+      allowed: this.rotation?.activityIds ?? null,
+    });
     if (!activity) {
       return false;
     }
-    this.pushActivity(activity, nowMs);
+    this.pushRoot(activity, nowMs);
     return true;
+  }
+
+  /**
+   * Rotation: once the root activity's time is up, swap it for another of the
+   * rotation's activities. Waits for a safe point - no resolver/overlay on top
+   * and no fight in progress.
+   */
+  maybeSwitchActivity(nowMs) {
+    if (!this.switchAt || nowMs < this.switchAt || this.frames.length !== 1) {
+      return;
+    }
+    const combat = this.player.getCombat?.();
+    if (combat?.getTarget?.() || combat?.getAttacker?.()) {
+      return;
+    }
+    const frame = this.frames[0];
+    const next = this.registry?.pickActivity?.(this.player, nowMs, {
+      allowed: this.rotation.activityIds,
+      avoid: frame.behaviour.id,
+    });
+    if (!next) {
+      this.switchAt = nowMs + SWITCH_RETRY_MS;
+      return;
+    }
+    this.stopAction(frame.action(), this.context(frame, nowMs));
+    this.releaseFrame(frame);
+    this.frames = [];
+    this.world?.log?.("bot_brain_activity_switch", {
+      username: this.player.getUsername?.() ?? null,
+      from: frame.behaviour.id,
+      to: next.id,
+    });
+    this.pushRoot(next, nowMs);
   }
 
   startFrame(frame, nowMs) {
@@ -233,7 +297,7 @@ class BotBrain {
     };
   }
 
-  /** Dispatches the bot's pending movement request (ditch crossings included). */
+  /** Dispatches the bot's pending movement request (ditch crossings and doors included). */
   dispatchMovement() {
     const player = this.player;
     if (!player || player.getForceMovement?.() != null) {
@@ -244,6 +308,9 @@ class BotBrain {
     }
     const request = peekMovementRequest(player);
     if (!request) {
+      return;
+    }
+    if (maybeOpenDoor({ player, state: this.state ?? null, world: this.world, request })) {
       return;
     }
     if (
@@ -259,7 +326,15 @@ class BotBrain {
     const result = dispatchMovementRequest(player, request, this.state ?? undefined);
     const latest = peekMovementRequest(player);
     if (latest === request && result?.hasRoute === true) {
-      clearMovementRequest(player);
+      // A planned long route keeps its request until the last leg: the next leg goes
+      // out as soon as this one is walked, instead of the bot standing until its
+      // activity asks again (which made long walks crawl a leg at a time).
+      const route = request.route;
+      if (!(route && route.index < route.waypoints.length)) {
+        clearMovementRequest(player);
+      }
+    } else if (latest === request) {
+      maybeOpenDoor({ player, state: this.state ?? null, world: this.world, request, select: true });
     }
   }
 
@@ -286,6 +361,7 @@ class BotBrain {
 
   /** @returns {"running"|"idle"} */
   tick(nowMs = Date.now()) {
+    this.lastTickAt = nowMs;
     this.dispatchMovement();
     // Support runs before the activity action: boosts, defensive/retreat,
     // then eating.
@@ -297,6 +373,7 @@ class BotBrain {
     if (support?.skip === true) {
       return "running";
     }
+    this.maybeSwitchActivity(nowMs);
     const frame = this.frames[this.frames.length - 1];
     this.debugTick(frame);
     if (!frame) {
@@ -329,10 +406,10 @@ class BotBrain {
           result = "failed";
         }
         if (result === "success") {
-          action.stop?.(ctx);
+          this.stopAction(action, ctx);
           this.nextAction(nowMs);
         } else if (result === "failed") {
-          action.stop?.(ctx);
+          this.stopAction(action, ctx);
           frame.state = FRAME_STATE.FAILED;
         } else if (result === "wait") {
           frame.state = FRAME_STATE.WAIT;
@@ -340,6 +417,19 @@ class BotBrain {
         } else {
           if (action.madeProgress?.(ctx)) {
             frame.lastProgressAt = nowMs;
+          }
+          if (nowMs - frame.lastProgressAt >= FRAME_STALL_MS) {
+            const loc = this.player.getLocation?.();
+            this.world?.log?.("bot_brain_frame_stalled", {
+              username: this.player.getUsername?.() ?? null,
+              activity: frame.behaviour?.id ?? null,
+              action: action.id,
+              stallMs: nowMs - frame.lastProgressAt,
+              x: loc?.getX?.() ?? null,
+              y: loc?.getY?.() ?? null,
+            });
+            this.stopAction(action, ctx);
+            frame.state = FRAME_STATE.FAILED;
           }
         }
         break;

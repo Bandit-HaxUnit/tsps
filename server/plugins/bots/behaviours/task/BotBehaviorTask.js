@@ -622,7 +622,7 @@ class BotBehaviorTask extends Task {
         2,
         Math.max(stride, this.lodConfig.farStride) * 5
       );
-      return (this._cycleCounter + shard) % offscreenPvpCombatStride === 0;
+      return this.isDue(state, offscreenPvpCombatStride, shard);
     }
     if (state.awaitingDitchTransition != null) {
       return true;
@@ -633,7 +633,7 @@ class BotBehaviorTask extends Task {
     const queueSize = Number(player.getMovementQueue?.()?.size?.() ?? 0);
     if (queueSize > 0 && state.mode !== this.behaviorMode?.PVP) {
       const movingStride = Math.max(2, stride);
-      return (this._cycleCounter + shard) % movingStride === 0;
+      return this.isDue(state, movingStride, shard);
     }
     if (state.mode === this.behaviorMode?.PVP) {
       const pvpNextActionAt = Number(state.pvp?.nextActionAt ?? 0);
@@ -653,9 +653,26 @@ class BotBehaviorTask extends Task {
           ? Math.max(stride, this.lodConfig.farStride) * 5
           : stride
       );
-      return (this._cycleCounter + shard) % pvpStride === 0;
+      return this.isDue(state, pvpStride, shard);
     }
-    return (this._cycleCounter + shard) % stride === 0;
+    return this.isDue(state, stride, shard);
+  }
+
+  /**
+   * LOD gate: true once `stride` cycles have passed since this entry last ran
+   * (first run offset by its shard, to spread the load). A `(cycle + shard) %
+   * stride === 0` gate aliased with the budget's round-robin: an entry visited
+   * only every few cycles could keep missing its slot and starve for minutes.
+   */
+  isDue(state, stride, shard) {
+    if (!Number.isFinite(state.nextHeavyCycle)) {
+      state.nextHeavyCycle = this._cycleCounter + shard;
+    }
+    if (this._cycleCounter < state.nextHeavyCycle) {
+      return false;
+    }
+    state.nextHeavyCycle = this._cycleCounter + stride;
+    return true;
   }
 
   isPvpOnlyBot(state) {

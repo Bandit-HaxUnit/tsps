@@ -16,7 +16,7 @@ export class GameEngine  {
     private eventLoopMonitor: NodeJS.Timeout | null = null;
     private tickInProgress = false;
     private nextExpectedTickAt = 0;
-    private nextEventLoopProbeAt = 0;
+    private lastEventLoopProbeAt = 0;
     private tickNumber = 0;
     private lastLagLogAt = 0;
     private lastOverrunLogAt = 0;
@@ -98,7 +98,7 @@ export class GameEngine  {
     }
 
     private startEventLoopProbe(nowMs: number): void {
-        this.nextEventLoopProbeAt = nowMs + this.eventLoopProbeIntervalMs;
+        this.lastEventLoopProbeAt = nowMs;
         if (this.eventLoopMonitor) {
             clearInterval(this.eventLoopMonitor);
         }
@@ -110,17 +110,16 @@ export class GameEngine  {
 
     private probeEventLoopDelay(): void {
         const nowMs = Date.now();
-        if (this.nextEventLoopProbeAt <= 0) {
-            this.nextEventLoopProbeAt = nowMs + this.eventLoopProbeIntervalMs;
+        const previousProbeAt = this.lastEventLoopProbeAt;
+        this.lastEventLoopProbeAt = nowMs;
+        if (previousProbeAt <= 0) {
             return;
         }
 
-        const stallMs = nowMs - this.nextEventLoopProbeAt;
-        this.nextEventLoopProbeAt += this.eventLoopProbeIntervalMs;
-        if (nowMs > this.nextEventLoopProbeAt + this.eventLoopProbeIntervalMs) {
-            this.nextEventLoopProbeAt = nowMs + this.eventLoopProbeIntervalMs;
-        }
-
+        // Measure each probe against the previous one: a single stall is reported
+        // once and the schedule stays anchored, instead of drifting until every
+        // probe logs forever.
+        const stallMs = nowMs - previousProbeAt - this.eventLoopProbeIntervalMs;
         if (stallMs < this.eventLoopStallThresholdMs) {
             return;
         }

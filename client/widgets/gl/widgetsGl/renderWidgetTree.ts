@@ -2186,6 +2186,16 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                         });
                     }
                 }
+                const playerDots: number[][] = worldMapRenderHost?.worldMapPlayers ?? [];
+                const dotSize = Math.max(2, 3 * renderScale);
+                for (const [dotX, dotY, dotPlane, isBot] of playerDots) {
+                    const displayPos = currentArea.position(dotPlane, dotX, dotY);
+                    if (!displayPos) continue;
+                    const dot = projectDisplayToScreen(displayPos.x + 0.5, displayPos.y + 0.5);
+                    if (dot.x < x || dot.y < y || dot.x > x + width || dot.y > y + height) continue;
+                    glr.drawRect(dot.x - dotSize / 2, dot.y - dotSize / 2, dotSize, dotSize,
+                        isBot ? [1, 1, 1, 1] : [1, 1, 0, 1]);
+                }
                 for (const labelDraw of worldMapLabelDraws) {
                     if (labelDraw.font && !/<(?!br\s*\/?\s*>)/i.test(labelDraw.text)) {
                         drawWorldMapLabelGL(

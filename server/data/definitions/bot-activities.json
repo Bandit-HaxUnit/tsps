@@ -4,35 +4,27 @@
       "mode": "woodcutting",
       "repeat": true,
       "requires": [
-        {
-          "skill": {
-            "id": "woodcutting",
-            "min": "$level"
-          }
-        }
+        {"skill": {"id": "woodcutting", "min": "$level"}}
       ],
       "setup": [],
-      "produces": [
-        "logs",
-        "woodcutting"
-      ],
+      "produces": ["logs", "woodcutting"],
       "actions": [
-        {
-          "type": "equipTool",
-          "tool": "axe"
-        },
+        {"type": "equipTool", "tool": "axe"},
         {
           "type": "interactObject",
           "catalog": "tree",
           "tier": "$tier",
           "option": "Chop down",
-          "until": {
-            "inventoryFull": true
-          },
+          "until": {"inventoryFull": true},
           "stallSeconds": 120
         },
         {
-          "type": "bank"
+          "type": "choose",
+          "options": [
+            {"weight": 2, "actions": [{"type": "bank"}]},
+            {"weight": 1, "actions": [{"type": "dropItems", "itemIds": "$resources"}]},
+            {"weight": 1, "actions": [{"type": "sellItems", "itemIds": "$resources"}]}
+          ]
         }
       ]
     },
@@ -40,31 +32,47 @@
       "mode": "mining",
       "repeat": true,
       "requires": [
-        {
-          "skill": {
-            "id": "mining",
-            "min": "$level"
-          }
-        }
+        {"skill": {"id": "mining", "min": "$level"}}
       ],
       "setup": [],
       "actions": [
-        {
-          "type": "equipTool",
-          "tool": "pickaxe"
-        },
+        {"type": "equipTool", "tool": "pickaxe"},
         {
           "type": "interactObject",
           "catalog": "rock",
           "tier": "$tier",
           "option": "Mine",
-          "until": {
-            "inventoryFull": true
-          },
+          "until": {"inventoryFull": true},
           "stallSeconds": 120
         },
         {
-          "type": "bank"
+          "type": "choose",
+          "options": [
+            {"weight": 2, "actions": [{"type": "bank"}]},
+            {"weight": 1, "actions": [{"type": "dropItems", "itemIds": "$resources"}]},
+            {"weight": 1, "actions": [{"type": "sellItems", "itemIds": "$resources"}]},
+            {
+              "weight": 1,
+              "actions": [
+                {"type": "smelt", "bar": "$bar"},
+                {"type": "bank", "until": {"inventoryFull": false}}
+              ]
+            },
+            {
+              "weight": 1,
+              "actions": [
+                {"type": "smelt", "bar": "$bar"},
+                {"type": "sellItems", "itemIds": "$smelted"}
+              ]
+            },
+            {
+              "weight": 1,
+              "actions": [
+                {"type": "smelt", "bar": "$bar"},
+                {"type": "dropItems", "itemIds": "$smelted"}
+              ]
+            }
+          ]
         }
       ]
     },
@@ -72,59 +80,32 @@
       "mode": "firemaking",
       "repeat": true,
       "requires": [
-        {
-          "skill": {
-            "id": "firemaking",
-            "min": "$level"
-          }
-        }
+        {"skill": {"id": "firemaking", "min": "$level"}}
       ],
       "setup": [],
       "actions": [
-        {
-          "type": "ensureItem",
-          "item": "tinderbox"
-        },
-        {
-          "type": "ensureItem",
-          "item": "$log",
-          "amount": "$logs"
-        },
-        {
-          "type": "lightFire"
-        }
+        {"type": "ensureItem", "item": "tinderbox"},
+        {"type": "bank", "withdraw": [{"item": "$log", "amount": "$logs"}]},
+        {"type": "lightFire"}
       ]
     },
     "smelt_bar": {
       "mode": "smelting",
       "repeat": true,
       "requires": [
-        {
-          "skill": {
-            "id": "smithing",
-            "min": "$level"
-          }
-        }
+        {"skill": {"id": "smithing", "min": "$level"}}
       ],
       "setup": [],
       "actions": [
         {
-          "type": "ensureItem",
-          "item": "$ore1",
-          "amount": "$oreAmount"
+          "type": "bank",
+          "withdraw": [
+            {"item": "$ore1", "amount": "$oreAmount"},
+            {"item": "$ore2", "amount": "$oreAmount"}
+          ]
         },
-        {
-          "type": "ensureItem",
-          "item": "$ore2",
-          "amount": "$oreAmount"
-        },
-        {
-          "type": "smelt",
-          "bar": "$bar"
-        },
-        {
-          "type": "bank"
-        }
+        {"type": "smelt", "bar": "$bar"},
+        {"type": "bank", "until": {"inventoryFull": false}}
       ]
     }
   },
@@ -133,28 +114,14 @@
       "id": "withdraw_axe",
       "resolves": "item:axe",
       "actions": [
-        {
-          "type": "bank",
-          "withdraw": [
-            {
-              "item": "bronze_axe",
-              "amount": 1
-            }
-          ]
-        }
+        {"type": "bank", "withdraw": [{"item": "bronze_axe", "amount": 1}]}
       ]
     },
     {
       "id": "return_to_site",
       "resolves": "area",
       "actions": [
-        {
-          "type": "walkTo",
-          "x": 3147,
-          "y": 3230,
-          "z": 0,
-          "radius": 6
-        }
+        {"type": "walkTo", "x": 3147, "y": 3230, "z": 0, "radius": 6}
       ]
     }
   ],
@@ -162,278 +129,335 @@
     {
       "id": "lumbridge_normal_trees",
       "template": "chop_trees",
-      "capacity": 64,
-      "fields": {
-        "level": 1,
-        "tier": "normal",
-        "log": "logs"
-      }
+      "capacity": 150,
+      "fields": {"level": 1, "tier": "normal", "log": "logs", "resources": ["logs"]}
     },
     {
-      "id": "copper_rocks",
+      "id": "copper_tin_rocks",
       "template": "mine_rocks",
-      "capacity": 32,
+      "capacity": 80,
       "fields": {
         "level": 1,
-        "tier": "copper"
+        "tier": ["copper", "tin"],
+        "resources": ["copper_ore", "tin_ore"],
+        "bar": "Bronze bar",
+        "smelted": ["bronze_bar", "copper_ore", "tin_ore"]
       }
     },
     {
       "id": "burn_normal_logs",
       "template": "burn_logs",
-      "capacity": 16,
-      "fields": {
-        "level": 1,
-        "log": "logs",
-        "logs": 20
-      }
+      "capacity": 60,
+      "fields": {"level": 1, "log": "logs", "logs": 27}
     },
     {
       "id": "smelt_bronze",
       "template": "smelt_bar",
-      "capacity": 8,
+      "capacity": 40,
+      "fields": {"level": 1, "ore1": "copper_ore", "ore2": "tin_ore", "oreAmount": 13, "bar": "Bronze bar"}
+    },
+    {
+      "id": "oak_trees",
+      "template": "chop_trees",
+      "capacity": 80,
+      "fields": {"level": 15, "tier": "oak", "log": "oak_logs", "resources": ["oak_logs"]}
+    },
+    {
+      "id": "willow_trees",
+      "template": "chop_trees",
+      "capacity": 80,
+      "fields": {"level": 30, "tier": "willow", "log": "willow_logs", "resources": ["willow_logs"]}
+    },
+    {
+      "id": "yew_trees",
+      "template": "chop_trees",
+      "capacity": 80,
+      "fields": {"level": 60, "tier": "yew", "log": "yew_logs", "resources": ["yew_logs"]}
+    },
+    {
+      "id": "iron_rocks",
+      "template": "mine_rocks",
+      "capacity": 80,
       "fields": {
-        "level": 1,
-        "ore1": "copper_ore",
-        "ore2": "tin_ore",
-        "oreAmount": 10,
-        "bar": "Bronze bar"
+        "level": 15,
+        "tier": "iron",
+        "resources": ["iron_ore"],
+        "bar": "Iron bar",
+        "smelted": ["iron_bar", "iron_ore"]
       }
+    },
+    {
+      "id": "coal_rocks",
+      "template": "mine_rocks",
+      "capacity": 80,
+      "fields": {
+        "level": 30,
+        "tier": "coal",
+        "resources": ["coal"],
+        "bar": "Steel bar",
+        "smelted": ["steel_bar", "coal"]
+      }
+    },
+    {
+      "id": "mithril_rocks",
+      "template": "mine_rocks",
+      "capacity": 80,
+      "fields": {
+        "level": 50,
+        "tier": "mithril",
+        "resources": ["mithril_ore"],
+        "bar": "Mithril bar",
+        "smelted": ["mithril_bar", "mithril_ore"]
+      }
+    },
+    {
+      "id": "burn_oak_logs",
+      "template": "burn_logs",
+      "capacity": 40,
+      "fields": {"level": 15, "log": "oak_logs", "logs": 27}
+    },
+    {
+      "id": "burn_willow_logs",
+      "template": "burn_logs",
+      "capacity": 40,
+      "fields": {"level": 30, "log": "willow_logs", "logs": 27}
+    },
+    {
+      "id": "burn_yew_logs",
+      "template": "burn_logs",
+      "capacity": 40,
+      "fields": {"level": 60, "log": "yew_logs", "logs": 27}
     },
     {
       "id": "combat_training",
       "mode": "combat_training",
-      "capacity": 64,
+      "capacity": 500,
       "repeat": true,
       "failureCooldownSeconds": 30,
-      "produces": [
-        "attack",
-        "strength",
-        "defence",
-        "hitpoints"
-      ],
+      "produces": ["attack", "strength", "defence", "ranged", "magic", "hitpoints"],
       "actions": [
         {
           "type": "trainCombat",
-          "durationSeconds": {
-            "min": 300,
-            "max": 720
-          },
+          "durationSeconds": {"min": 300, "max": 720},
           "food": "TROUT",
           "foodAmount": 16,
+          "maxFailedTargets": 6,
+          "styles": ["melee", "ranged", "magic"],
           "gearTiers": [
             {
               "minLevel": 1,
-              "weapon": "BRONZE_SCIMITAR",
+              "weapons": ["BRONZE_DAGGER", "BRONZE_SWORD", "BRONZE_LONGSWORD", "BRONZE_MACE", "BRONZE_AXE", "BRONZE_BATTLEAXE", "BRONZE_WARHAMMER", "BRONZE_SCIMITAR", "IRON_DAGGER", "IRON_SWORD", "IRON_LONGSWORD", "IRON_MACE", "IRON_AXE", "IRON_BATTLEAXE", "IRON_WARHAMMER", "IRON_SCIMITAR"],
               "armour": {
-                "HEAD_SLOT": "BRONZE_FULL_HELM",
-                "BODY_SLOT": "BRONZE_PLATEBODY",
-                "LEG_SLOT": "BRONZE_PLATELEGS",
-                "SHIELD_SLOT": "BRONZE_KITESHIELD"
+                "HEAD_SLOT": ["BRONZE_FULL_HELM", "BRONZE_MED_HELM", "IRON_FULL_HELM", "IRON_MED_HELM", "LEATHER_COWL", "COIF", null],
+                "BODY_SLOT": ["BRONZE_PLATEBODY", "BRONZE_CHAINBODY", "IRON_PLATEBODY", "IRON_CHAINBODY", "LEATHER_BODY", "HARDLEATHER_BODY", null],
+                "LEG_SLOT": ["BRONZE_PLATELEGS", "BRONZE_PLATESKIRT", "IRON_PLATELEGS", "IRON_PLATESKIRT", "LEATHER_CHAPS", null],
+                "SHIELD_SLOT": ["BRONZE_KITESHIELD", "BRONZE_SQ_SHIELD", "IRON_KITESHIELD", "IRON_SQ_SHIELD", "WOODEN_SHIELD", null, null],
+                "CAPE_SLOT": ["RED_CAPE", "BLUE_CAPE", "GREEN_CAPE", "YELLOW_CAPE", "PURPLE_CAPE", "ORANGE_CAPE", "BLACK_CAPE", null],
+                "HANDS_SLOT": ["LEATHER_GLOVES", "HARDLEATHER_GLOVES", null],
+                "FEET_SLOT": ["LEATHER_BOOTS", null],
+                "AMULET_SLOT": ["AMULET_OF_ACCURACY", "AMULET_OF_STRENGTH", "AMULET_OF_DEFENCE", null]
               }
             },
             {
               "minLevel": 5,
-              "weapon": "STEEL_SCIMITAR",
+              "weapons": ["IRON_DAGGER", "IRON_SWORD", "IRON_LONGSWORD", "IRON_MACE", "IRON_AXE", "IRON_BATTLEAXE", "IRON_WARHAMMER", "IRON_SCIMITAR", "STEEL_DAGGER", "STEEL_SWORD", "STEEL_LONGSWORD", "STEEL_MACE", "STEEL_AXE", "STEEL_BATTLEAXE", "STEEL_WARHAMMER", "STEEL_SCIMITAR"],
               "armour": {
-                "HEAD_SLOT": "STEEL_FULL_HELM",
-                "BODY_SLOT": "STEEL_PLATEBODY",
-                "LEG_SLOT": "STEEL_PLATELEGS",
-                "SHIELD_SLOT": "STEEL_KITESHIELD"
+                "HEAD_SLOT": ["IRON_FULL_HELM", "IRON_MED_HELM", "STEEL_FULL_HELM", "STEEL_MED_HELM", null],
+                "BODY_SLOT": ["IRON_PLATEBODY", "IRON_CHAINBODY", "STEEL_PLATEBODY", "STEEL_CHAINBODY", null],
+                "LEG_SLOT": ["IRON_PLATELEGS", "IRON_PLATESKIRT", "STEEL_PLATELEGS", "STEEL_PLATESKIRT", null],
+                "SHIELD_SLOT": ["IRON_KITESHIELD", "IRON_SQ_SHIELD", "STEEL_KITESHIELD", null]
               }
             },
             {
               "minLevel": 10,
-              "weapon": "BLACK_SCIMITAR",
+              "weapons": ["STEEL_DAGGER", "STEEL_SWORD", "STEEL_LONGSWORD", "STEEL_MACE", "STEEL_AXE", "STEEL_BATTLEAXE", "STEEL_WARHAMMER", "STEEL_SCIMITAR", "BLACK_DAGGER", "BLACK_SWORD", "BLACK_LONGSWORD", "BLACK_MACE", "BLACK_AXE", "BLACK_BATTLEAXE", "BLACK_WARHAMMER", "BLACK_SCIMITAR"],
               "armour": {
-                "HEAD_SLOT": "BLACK_FULL_HELM",
-                "BODY_SLOT": "BLACK_PLATEBODY",
-                "LEG_SLOT": "BLACK_PLATELEGS",
-                "SHIELD_SLOT": "BLACK_KITESHIELD"
+                "HEAD_SLOT": ["STEEL_FULL_HELM", "STEEL_MED_HELM", "BLACK_FULL_HELM", "BLACK_MED_HELM", null],
+                "BODY_SLOT": ["STEEL_PLATEBODY", "STEEL_CHAINBODY", "BLACK_PLATEBODY", "BLACK_CHAINBODY", null],
+                "LEG_SLOT": ["STEEL_PLATELEGS", "STEEL_PLATESKIRT", "BLACK_PLATELEGS", "BLACK_PLATESKIRT", null],
+                "SHIELD_SLOT": ["STEEL_KITESHIELD", "BLACK_KITESHIELD", null]
               }
             },
             {
               "minLevel": 20,
-              "weapon": "MITHRIL_SCIMITAR",
+              "weapons": ["BLACK_DAGGER", "BLACK_SWORD", "BLACK_LONGSWORD", "BLACK_MACE", "BLACK_AXE", "BLACK_BATTLEAXE", "BLACK_WARHAMMER", "BLACK_SCIMITAR", "MITHRIL_DAGGER", "MITHRIL_SWORD", "MITHRIL_LONGSWORD", "MITHRIL_MACE", "MITHRIL_AXE", "MITHRIL_BATTLEAXE", "MITHRIL_WARHAMMER", "MITHRIL_SCIMITAR"],
               "armour": {
-                "HEAD_SLOT": "MITHRIL_FULL_HELM",
-                "BODY_SLOT": "MITHRIL_PLATEBODY",
-                "LEG_SLOT": "MITHRIL_PLATELEGS",
-                "SHIELD_SLOT": "MITHRIL_KITESHIELD"
+                "HEAD_SLOT": ["BLACK_FULL_HELM", "BLACK_MED_HELM", "MITHRIL_FULL_HELM", "MITHRIL_MED_HELM", null],
+                "BODY_SLOT": ["BLACK_PLATEBODY", "BLACK_CHAINBODY", "MITHRIL_PLATEBODY", "MITHRIL_CHAINBODY", null],
+                "LEG_SLOT": ["BLACK_PLATELEGS", "BLACK_PLATESKIRT", "MITHRIL_PLATELEGS", "MITHRIL_PLATESKIRT", null],
+                "SHIELD_SLOT": ["BLACK_KITESHIELD", "MITHRIL_KITESHIELD", null]
               }
             },
             {
               "minLevel": 30,
-              "weapon": "ADAMANT_SCIMITAR",
+              "weapons": ["MITHRIL_DAGGER", "MITHRIL_SWORD", "MITHRIL_LONGSWORD", "MITHRIL_MACE", "MITHRIL_AXE", "MITHRIL_BATTLEAXE", "MITHRIL_WARHAMMER", "MITHRIL_SCIMITAR", "ADAMANT_DAGGER", "ADAMANT_SWORD", "ADAMANT_LONGSWORD", "ADAMANT_MACE", "ADAMANT_AXE", "ADAMANT_BATTLEAXE", "ADAMANT_WARHAMMER", "ADAMANT_SCIMITAR"],
               "armour": {
-                "HEAD_SLOT": "ADAMANT_FULL_HELM",
-                "BODY_SLOT": "ADAMANT_PLATEBODY",
-                "LEG_SLOT": "ADAMANT_PLATELEGS",
-                "SHIELD_SLOT": "ADAMANT_KITESHIELD"
+                "HEAD_SLOT": ["MITHRIL_FULL_HELM", "MITHRIL_MED_HELM", "ADAMANT_FULL_HELM", "ADAMANT_MED_HELM", null],
+                "BODY_SLOT": ["MITHRIL_PLATEBODY", "MITHRIL_CHAINBODY", "ADAMANT_PLATEBODY", "ADAMANT_CHAINBODY", null],
+                "LEG_SLOT": ["MITHRIL_PLATELEGS", "MITHRIL_PLATESKIRT", "ADAMANT_PLATELEGS", "ADAMANT_PLATESKIRT", null],
+                "SHIELD_SLOT": ["MITHRIL_KITESHIELD", "ADAMANT_KITESHIELD", null]
               }
             },
             {
               "minLevel": 40,
-              "weapon": "RUNE_SCIMITAR",
+              "weapons": ["ADAMANT_DAGGER", "ADAMANT_SWORD", "ADAMANT_LONGSWORD", "ADAMANT_MACE", "ADAMANT_AXE", "ADAMANT_BATTLEAXE", "ADAMANT_WARHAMMER", "ADAMANT_SCIMITAR", "RUNE_DAGGER", "RUNE_SWORD", "RUNE_LONGSWORD", "RUNE_MACE", "RUNE_AXE", "RUNE_BATTLEAXE", "RUNE_WARHAMMER", "RUNE_SCIMITAR"],
               "armour": {
-                "HEAD_SLOT": "RUNE_FULL_HELM",
-                "BODY_SLOT": "RUNE_PLATEBODY",
-                "LEG_SLOT": "RUNE_PLATELEGS",
-                "SHIELD_SLOT": "RUNE_KITESHIELD"
+                "HEAD_SLOT": ["ADAMANT_FULL_HELM", "ADAMANT_MED_HELM", "RUNE_FULL_HELM", "RUNE_MED_HELM", null],
+                "BODY_SLOT": ["ADAMANT_PLATEBODY", "ADAMANT_CHAINBODY", "RUNE_PLATEBODY", "RUNE_CHAINBODY", null],
+                "LEG_SLOT": ["ADAMANT_PLATELEGS", "ADAMANT_PLATESKIRT", "RUNE_PLATELEGS", "RUNE_PLATESKIRT", null],
+                "SHIELD_SLOT": ["ADAMANT_KITESHIELD", "RUNE_KITESHIELD", null]
+              }
+            },
+            {
+              "minLevel": 60,
+              "weapons": ["DRAGON_DAGGER", "DRAGON_SCIMITAR", "DRAGON_LONGSWORD", "DRAGON_MACE", "DRAGON_BATTLEAXE"],
+              "armour": {
+                "HEAD_SLOT": ["DRAGON_MED_HELM", "RUNE_FULL_HELM", null],
+                "BODY_SLOT": ["RUNE_PLATEBODY", "RUNE_CHAINBODY"],
+                "LEG_SLOT": ["RUNE_PLATELEGS", "RUNE_PLATESKIRT"],
+                "SHIELD_SLOT": ["RUNE_KITESHIELD", "RUNE_SQ_SHIELD", null],
+                "CAPE_SLOT": ["OBSIDIAN_CAPE", null],
+                "HANDS_SLOT": ["HARDLEATHER_GLOVES", null],
+                "FEET_SLOT": ["CLIMBING_BOOTS", null],
+                "AMULET_SLOT": ["AMULET_OF_POWER", "AMULET_OF_STRENGTH", "AMULET_OF_GLORY"]
               }
             }
           ],
-          "stages": [
+          "rangedTiers": [
             {
-              "id": "chickens",
               "minLevel": 1,
-              "sites": [
-                {
-                  "id": "lumbridge_chickens",
-                  "names": [
-                    "Chicken"
-                  ],
-                  "anchor": {
-                    "x": 3230,
-                    "y": 3298,
-                    "z": 0
-                  },
-                  "area": {
-                    "minX": 3224,
-                    "maxX": 3238,
-                    "minY": 3290,
-                    "maxY": 3305,
-                    "z": 0
-                  }
-                }
-              ]
+              "weapons": ["SHORTBOW", "LONGBOW"],
+              "ammo": ["BRONZE_ARROW"],
+              "armour": {
+                "HEAD_SLOT": ["COIF", "LEATHER_COWL", null],
+                "BODY_SLOT": ["LEATHER_BODY", null],
+                "LEG_SLOT": ["LEATHER_CHAPS", null],
+                "HANDS_SLOT": ["LEATHER_GLOVES", null],
+                "FEET_SLOT": ["LEATHER_BOOTS", null],
+                "CAPE_SLOT": ["RED_CAPE", "BLUE_CAPE", "GREEN_CAPE", "YELLOW_CAPE", "PURPLE_CAPE", "ORANGE_CAPE", "BLACK_CAPE", null],
+                "AMULET_SLOT": ["AMULET_OF_ACCURACY", null]
+              }
             },
             {
-              "id": "livestock_and_goblins",
-              "minLevel": 10,
-              "sites": [
-                {
-                  "id": "lumbridge_goblins",
-                  "names": [
-                    "Goblin"
-                  ],
-                  "anchor": {
-                    "x": 3249,
-                    "y": 3244,
-                    "z": 0
-                  },
-                  "area": {
-                    "minX": 3238,
-                    "maxX": 3264,
-                    "minY": 3225,
-                    "maxY": 3258,
-                    "z": 0
-                  }
-                },
-                {
-                  "id": "lumbridge_cows",
-                  "names": [
-                    "Cow"
-                  ],
-                  "anchor": {
-                    "x": 3252,
-                    "y": 3288,
-                    "z": 0
-                  },
-                  "area": {
-                    "minX": 3240,
-                    "maxX": 3267,
-                    "minY": 3263,
-                    "maxY": 3300,
-                    "z": 0
-                  }
-                }
-              ]
+              "minLevel": 5,
+              "weapons": ["OAK_SHORTBOW", "OAK_LONGBOW"],
+              "ammo": ["IRON_ARROW", "STEEL_ARROW"],
+              "armour": {
+                "HEAD_SLOT": ["COIF", "LEATHER_COWL", null],
+                "BODY_SLOT": ["HARDLEATHER_BODY", "LEATHER_BODY", null],
+                "LEG_SLOT": ["LEATHER_CHAPS", null],
+                "HANDS_SLOT": ["HARDLEATHER_GLOVES", "LEATHER_GLOVES", null],
+                "FEET_SLOT": ["LEATHER_BOOTS", null],
+                "AMULET_SLOT": ["AMULET_OF_ACCURACY", null]
+              }
             },
             {
-              "id": "monks_and_barbarians",
               "minLevel": 20,
-              "sites": [
-                {
-                  "id": "edgeville_monks",
-                  "names": [
-                    "Monk"
-                  ],
-                  "anchor": {
-                    "x": 3049,
-                    "y": 3491,
-                    "z": 0
-                  },
-                  "area": {
-                    "minX": 3038,
-                    "maxX": 3058,
-                    "minY": 3480,
-                    "maxY": 3502,
-                    "z": 0
-                  }
-                },
-                {
-                  "id": "barbarian_village",
-                  "names": [
-                    "Barbarian"
-                  ],
-                  "anchor": {
-                    "x": 3083,
-                    "y": 3424,
-                    "z": 0
-                  },
-                  "area": {
-                    "minX": 3070,
-                    "maxX": 3093,
-                    "minY": 3407,
-                    "maxY": 3442,
-                    "z": 0
-                  }
-                }
-              ]
+              "weapons": ["WILLOW_SHORTBOW", "WILLOW_LONGBOW"],
+              "ammo": ["STEEL_ARROW", "MITHRIL_ARROW"],
+              "armour": {
+                "HEAD_SLOT": ["COIF", null],
+                "BODY_SLOT": ["STUDDED_BODY", "HARDLEATHER_BODY", null],
+                "LEG_SLOT": ["STUDDED_CHAPS", "LEATHER_CHAPS", null],
+                "HANDS_SLOT": ["HARDLEATHER_GLOVES", null],
+                "FEET_SLOT": ["LEATHER_BOOTS", null],
+                "AMULET_SLOT": ["AMULET_OF_ACCURACY", "AMULET_OF_POWER", null]
+              }
             },
             {
-              "id": "guards",
+              "minLevel": 30,
+              "weapons": ["MAPLE_SHORTBOW", "MAPLE_LONGBOW"],
+              "ammo": ["MITHRIL_ARROW", "ADAMANT_ARROW"],
+              "armour": {
+                "HEAD_SLOT": ["COIF", null],
+                "BODY_SLOT": ["STUDDED_BODY", null],
+                "LEG_SLOT": ["STUDDED_CHAPS", null],
+                "HANDS_SLOT": ["HARDLEATHER_GLOVES", null],
+                "FEET_SLOT": ["LEATHER_BOOTS", null],
+                "AMULET_SLOT": ["AMULET_OF_ACCURACY", "AMULET_OF_POWER", null]
+              }
+            },
+            {
               "minLevel": 40,
-              "sites": [
-                {
-                  "id": "varrock_guards",
-                  "names": [
-                    "Guard"
-                  ],
-                  "anchor": {
-                    "x": 3211,
-                    "y": 3431,
-                    "z": 0
-                  },
-                  "area": {
-                    "minX": 3200,
-                    "maxX": 3225,
-                    "minY": 3400,
-                    "maxY": 3445,
-                    "z": 0
-                  }
-                },
-                {
-                  "id": "falador_guards",
-                  "names": [
-                    "Guard"
-                  ],
-                  "anchor": {
-                    "x": 2964,
-                    "y": 3381,
-                    "z": 0
-                  },
-                  "area": {
-                    "minX": 2950,
-                    "maxX": 2972,
-                    "minY": 3368,
-                    "maxY": 3405,
-                    "z": 0
-                  }
-                }
-              ]
+              "weapons": ["YEW_SHORTBOW", "YEW_LONGBOW"],
+              "ammo": ["ADAMANT_ARROW", "RUNE_ARROW"],
+              "armour": {
+                "HEAD_SLOT": ["COIF", null],
+                "BODY_SLOT": ["STUDDED_BODY", null],
+                "LEG_SLOT": ["STUDDED_CHAPS", null],
+                "HANDS_SLOT": ["HARDLEATHER_GLOVES", null],
+                "FEET_SLOT": ["LEATHER_BOOTS", null],
+                "AMULET_SLOT": ["AMULET_OF_POWER", "AMULET_OF_ACCURACY", null]
+              }
+            },
+            {
+              "minLevel": 60,
+              "weapons": ["MAGIC_SHORTBOW", "MAGIC_LONGBOW"],
+              "ammo": ["RUNE_ARROW"],
+              "armour": {
+                "HEAD_SLOT": ["COIF", null],
+                "BODY_SLOT": ["GREEN_DHIDE_BODY", "BLUE_DHIDE_BODY"],
+                "LEG_SLOT": ["GREEN_DHIDE_CHAPS", "BLUE_DHIDE_CHAPS"],
+                "HANDS_SLOT": ["GREEN_DHIDE_VAMBRACES", "BLUE_DHIDE_VAMBRACES"],
+                "FEET_SLOT": ["LEATHER_BOOTS", null],
+                "AMULET_SLOT": ["AMULET_OF_POWER", "AMULET_OF_GLORY", null]
+              }
             }
+          ],
+          "magicTiers": [
+            {
+              "minLevel": 1,
+              "weapons": ["STAFF", "STAFF_OF_AIR", "STAFF_OF_WATER", "STAFF_OF_EARTH", "STAFF_OF_FIRE"],
+              "spells": ["WIND_STRIKE", "WATER_STRIKE", "EARTH_STRIKE", "FIRE_STRIKE"],
+              "armour": {
+                "HEAD_SLOT": ["WIZARD_HAT", "BLUE_WIZARD_HAT", null],
+                "BODY_SLOT": ["BLUE_WIZARD_ROBE", null],
+                "CAPE_SLOT": ["RED_CAPE", "BLUE_CAPE", "GREEN_CAPE", "YELLOW_CAPE", "PURPLE_CAPE", "ORANGE_CAPE", "BLACK_CAPE", null],
+                "AMULET_SLOT": ["AMULET_OF_MAGIC", "AMULET_OF_ACCURACY", null]
+              }
+            },
+            {
+              "minLevel": 20,
+              "weapons": ["STAFF_OF_AIR", "STAFF_OF_WATER", "STAFF_OF_EARTH", "STAFF_OF_FIRE"],
+              "spells": ["WIND_BOLT", "WATER_BOLT", "EARTH_BOLT", "FIRE_BOLT"],
+              "armour": {
+                "HEAD_SLOT": ["WIZARD_HAT", "BLUE_WIZARD_HAT", null],
+                "BODY_SLOT": ["BLUE_WIZARD_ROBE", null],
+                "AMULET_SLOT": ["AMULET_OF_MAGIC", null]
+              }
+            },
+            {
+              "minLevel": 41,
+              "weapons": ["STAFF_OF_AIR", "STAFF_OF_WATER", "STAFF_OF_EARTH", "STAFF_OF_FIRE"],
+              "spells": ["WIND_BLAST", "WATER_BLAST", "EARTH_BLAST", "FIRE_BLAST"],
+              "armour": {
+                "HEAD_SLOT": ["WIZARD_HAT", "BLUE_WIZARD_HAT", null],
+                "BODY_SLOT": ["BLUE_WIZARD_ROBE", null],
+                "AMULET_SLOT": ["AMULET_OF_MAGIC", null]
+              }
+            },
+            {
+              "minLevel": 60,
+              "weapons": ["STAFF_OF_AIR", "STAFF_OF_WATER", "STAFF_OF_EARTH", "STAFF_OF_FIRE"],
+              "spells": ["WIND_BLAST", "WATER_BLAST", "EARTH_BLAST", "FIRE_BLAST"],
+              "armour": {
+                "HEAD_SLOT": ["MYSTIC_HAT", null],
+                "BODY_SLOT": ["MYSTIC_ROBE_TOP"],
+                "LEG_SLOT": ["MYSTIC_ROBE_BOTTOM"],
+                "HANDS_SLOT": ["MYSTIC_GLOVES", null],
+                "FEET_SLOT": ["MYSTIC_BOOTS", null],
+                "AMULET_SLOT": ["AMULET_OF_MAGIC", "AMULET_OF_GLORY", null]
+              }
+            }
+          ],
+          "spreadDistance": 150,
+          "excludeNames": ["Duck", "Duckling"],
+          "stages": [
+            {"id": "beginner", "minLevel": 1, "npcLevels": {"min": 1, "max": 5}},
+            {"id": "novice", "minLevel": 10, "npcLevels": {"min": 2, "max": 13}},
+            {"id": "intermediate", "minLevel": 20, "npcLevels": {"min": 9, "max": 27}},
+            {"id": "advanced", "minLevel": 40, "npcLevels": {"min": 20, "max": 45}},
+            {"id": "expert", "minLevel": 60, "npcLevels": {"min": 30, "max": 90}}
           ]
         }
       ]
@@ -445,9 +469,7 @@
       "repeat": true,
       "failureCooldownSeconds": 5,
       "actions": [
-        {
-          "type": "pvpCombat"
-        }
+        {"type": "pvpCombat"}
       ]
     },
     {
@@ -458,10 +480,7 @@
       "ephemeral": true,
       "failureCooldownSeconds": 5,
       "actions": [
-        {
-          "type": "pvpCombat",
-          "exitWhenIdle": true
-        }
+        {"type": "pvpCombat", "exitWhenIdle": true}
       ]
     },
     {
@@ -471,9 +490,7 @@
       "repeat": true,
       "failureCooldownSeconds": 5,
       "actions": [
-        {
-          "type": "wander"
-        }
+        {"type": "wander"}
       ]
     },
     {
@@ -485,9 +502,7 @@
       "manual": true,
       "failureCooldownSeconds": 5,
       "actions": [
-        {
-          "type": "followOwner"
-        }
+        {"type": "followOwner"}
       ]
     },
     {
@@ -499,15 +514,46 @@
       "manual": true,
       "failureCooldownSeconds": 5,
       "actions": [
-        {
-          "type": "bank",
-          "until": {
-            "inventoryFull": false
-          },
-          "suppressAutoRetaliate": true
-        }
+        {"type": "bank", "until": {"inventoryFull": false}, "suppressAutoRetaliate": true}
       ]
     }
   ],
-  "sites": []
+  "sites": [
+    {
+      "id": "lumbridge_novices",
+      "activities": ["combat_training", "lumbridge_normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 1,
+      "count": 175,
+      "anchor": {"x": 3222, "y": 3218, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "lumbridge_intermediates",
+      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 20,
+      "count": 125,
+      "anchor": {"x": 3222, "y": 3218, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "lumbridge_advanced",
+      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 40,
+      "count": 100,
+      "anchor": {"x": 3222, "y": 3218, "z": 0},
+      "spawnRadius": 6
+    },
+    {
+      "id": "lumbridge_experts",
+      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs"],
+      "switchAfterSeconds": {"min": 900, "max": 1500},
+      "levels": 60,
+      "count": 100,
+      "anchor": {"x": 3222, "y": 3218, "z": 0},
+      "spawnRadius": 6
+    }
+  ]
 }

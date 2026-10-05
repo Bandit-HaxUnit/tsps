@@ -1,6 +1,7 @@
 const { Flag } = require("../../../../src/main/typescript/elvarg/game/model/Flag");
 const { PathFinder } = require("../../../../src/main/typescript/elvarg/game/model/movement/path/PathFinder");
 const { isOutsideWildernessHotspots } = require("../pvp/WildernessHotspotRegistry");
+const { nextWaypoint } = require("./BotLongRoutes");
 
 const MAX_ROUTE_SEGMENT_TILES = 24;
 // Objects farther than this are approached in segments; see approachObject.
@@ -413,11 +414,14 @@ function dispatchMovementRequest(player, request, state = request?.state) {
     return null;
   }
   const nowMs = Date.now();
+  // Long walks follow a planned route (detours past fences/rivers the route
+  // finder's 128-tile window cannot see); short ones walk straight at the target.
+  const waypoint = nextWaypoint(player, request, nowMs);
   const segmentTarget = resolveSegmentTarget(
     player,
     request.pvpOnly === true,
-    request.x,
-    request.y,
+    waypoint?.x ?? request.x,
+    waypoint?.y ?? request.y,
     request.maxRouteSegmentTiles
   );
   const segmentZ = Number.isFinite(request.z)

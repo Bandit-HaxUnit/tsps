@@ -1128,6 +1128,10 @@ export class PacketSender {
       .sendInterfaceFlagsRange((WORLD_MAP_GROUP_ID << 16) | 21, 0, 4, 1 << 1);
   }
 
+  isWorldMapOpen(): boolean {
+    return this.subInterfaceTargets.has(WORLD_MAP_GROUP_ID);
+  }
+
   closeWorldMap(): this {
     return this.closeSubInterface(WORLD_MAP_TARGET_UID);
   }

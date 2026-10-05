@@ -14,6 +14,11 @@ const DEPOSIT_DELAY_MS = 600;
 // failing is avoided for a while so another booth gets picked.
 const UNREACHABLE_CLICKS = 2;
 const UNREACHABLE_AVOID_MS = 60000;
+// A walk to a bank that leaves the bot standing this long: that bot alone uses
+// another bank for a while (not shared: a stuck walk says nothing about the bank).
+const APPROACH_STUCK_MS = 20000;
+const SKIP_BANK_MS = 10 * 60 * 1000;
+const bankArea = (x, y, z) => `${x >> 5},${y >> 5},${z}`;
 
 /**
  * Deposits the inventory at the nearest usable bank booth, then reports success.
@@ -35,13 +40,14 @@ function createBankAction(spec, world) {
       lastClickY: null,
       failedClicks: 0,
       avoid: new Map(),
+      skipAreas: new Map(),
     }));
 
+  // Already holding some of every input (ores mined on the way): use those first
+  // instead of a bank trip; the bank tops up once they run out.
   function withdrawSatisfied(player) {
     const inventory = player.getInventory();
-    return withdrawSpecs.every(
-      (entry) => inventory.getAmount(entry.item) >= entry.amount
-    );
+    return withdrawSpecs.every((entry) => inventory.getAmount(entry.item) > 0);
   }
 
   function performWithdraw(player) {
@@ -100,6 +106,9 @@ function createBankAction(spec, world) {
       if (!objectLoc || objectLoc.getZ() !== loc.getZ()) {
         continue;
       }
+      if ((bot.skipAreas.get(bankArea(objectLoc.getX(), objectLoc.getY(), objectLoc.getZ())) ?? 0) > nowMs) {
+        continue;
+      }
       const dx = objectLoc.getX() - loc.getX();
       const dy = objectLoc.getY() - loc.getY();
       const distSq = dx * dx + dy * dy;
@@ -152,6 +161,11 @@ function createBankAction(spec, world) {
           world.log?.("bot_brain_bank_withdrew", {
             username: player.getUsername?.(),
           });
+          bot.depositAt = 0;
+          // Inputs come from the bank, never from thin air: nothing of an item in
+          // the bank fails the step, so the activity backs off and rotates.
+          const inventory = player.getInventory();
+          return withdrawSpecs.every((entry) => inventory.getAmount(entry.item) > 0) ? "success" : "failed";
         } else {
           Bank.depositItems(player, player.getInventory(), true);
           world.log?.("bot_brain_bank_deposited", {
@@ -185,6 +199,16 @@ function createBankAction(spec, world) {
         Math.abs(loc.getY() - bot.booth.y)
       );
       if (distance > MAX_DIRECT_ROUTE_TILES) {
+        const here = `${loc.getX()},${loc.getY()}`;
+        if (here !== bot.approachAt) {
+          bot.approachAt = here;
+          bot.approachSince = nowMs;
+        } else if (nowMs - bot.approachSince >= APPROACH_STUCK_MS) {
+          bot.skipAreas.set(bankArea(bot.booth.x, bot.booth.y, bot.booth.z), nowMs + SKIP_BANK_MS);
+          bot.booth = null;
+          bot.approachAt = null;
+          return "running";
+        }
         approachObject(player, object, { nowMs, reason: "brain_bank_approach" });
         return "running";
       }
