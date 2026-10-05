@@ -275,7 +275,7 @@ export class ClientConnection {
       }
       switch (packet.type) {
         case "move":
-          this.walk(packet.worldX, packet.worldY, packet.modifierFlags);
+          this.walk(packet.worldX, packet.worldY, packet.modifierFlags, packet.run === true);
           continue;
         case "set_heading":
           if (this.player) BoatManager.setHelmHeading(this.player, packet.heading);
@@ -963,14 +963,16 @@ export class ClientConnection {
     player.getQuickPrayers().sync();
   }
 
-  private walk(x: number, y: number, modifierFlags: number): void {
+  private walk(x: number, y: number, modifierFlags: number, forceRun = false): void {
     const player = this.player;
     if (!player) return;
     // At a boat's helm a click sets the heading (the client normally sends SET_HEADING).
     if (BoatManager.steerToward(player, x, y)) return;
     player.getCombat().reset();
-    const run = modifierFlags === 2 ||
-      ((modifierFlags & 1) !== 0 ? !player.isRunningReturn() : player.isRunningReturn());
+    // Ctrl (1) inverts the run toggle for this walk; Ctrl+Shift (2) is a staff teleport that
+    // plugins take over, and walks like a Ctrl-click for everyone else.
+    const invert = modifierFlags === 2 || (modifierFlags & 1) !== 0;
+    const run = forceRun || (invert ? !player.isRunningReturn() : player.isRunningReturn());
     player.setRunning(run);
     player.getMovementQueue().requestWalk(
       new Location(x, y, player.getLocation().getZ())

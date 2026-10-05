@@ -3756,6 +3756,8 @@ export class OsrsClient {
         // derive the ctrlHeld bit relative to the current run toggle to preserve that behavior.
         // => ctrlHeld = run XOR runMode.
         const ctrlHeld = run !== !!this.runMode;
+        // OSRS sends 2 for a Ctrl+Shift click; the server decides what it means (a staff teleport).
+        const ctrlShiftHeld = ClientState.isCtrlPressed() && ClientState.isShiftPressed();
 
         // Keep client destination marker parity (destinationX/Y are local coords relative to scene base).
         try {
@@ -3782,7 +3784,7 @@ export class OsrsClient {
         if (isServerConnected()) {
             const node = createPacket(ClientPacketId.MOVE_GAMECLICK);
             node.packetBuffer.writeShortAddLE(worldY);
-            node.packetBuffer.writeByteNeg(ctrlHeld ? 1 : 0);
+            node.packetBuffer.writeByteNeg(ctrlShiftHeld ? 2 : ctrlHeld ? 1 : 0);
             node.packetBuffer.writeShortAddLE(worldX);
             // Final shortAdd param; unused for ground clicks.
             node.packetBuffer.writeShortAdd(0);
