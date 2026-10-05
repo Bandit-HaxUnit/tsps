@@ -416,7 +416,8 @@ export interface PluginPlayerDealtDamageEvent {
 /**
  * Asked before an attack: `ignoreDelay` lets it happen though the attacker's attack timer hasn't
  * run out, and `keepDelay` leaves that timer as it was afterwards (a boss's larvae that may be hit
- * on cooldown, some weapons adding no delay). With `keepDelay`, `minimumDelay` still makes the
+ * on cooldown, some weapons adding no delay). `newTarget` says whether the target differs from the
+ * attacker's last attacked one (a fresh click rather than a repeat). With `keepDelay`, `minimumDelay` still makes the
  * next attack wait at least that many ticks.
  */
 export interface PluginAttackTimingEvent {
@@ -426,6 +427,7 @@ export interface PluginAttackTimingEvent {
   ignoreDelay: boolean;
   keepDelay: boolean;
   minimumDelay?: number;
+  newTarget: boolean;
 }
 
 export interface PluginCombatHitRollEvent {

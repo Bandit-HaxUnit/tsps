@@ -13,7 +13,9 @@
  * Capture (a demonbane bow, speed 4): a larva shot on cooldown leaves the timer as it was (Doom
  * 359, larva 360, Doom 363), and one shot off cooldown makes the next attack wait 1 tick (larva
  * 350, Doom 351); volatile earth shot on cooldown sets the bow's full delay (Doom 246, earth 248
- * and 250, Doom 254). Wiki: other weapons on larvae get their normal delay.
+ * and 250, Doom 254). Wiki: other weapons on larvae get their normal delay. The capture's shots on
+ * cooldown were each at a new target (earth 248 and 250 were two different ones): attacking the
+ * same one again waits for the timer, so auto-attack doesn't fire a tick later.
  */
 
 const Shared = require("./DoomShared");
@@ -135,11 +137,12 @@ function bossHit(run, hit) {
   if (hit.getTotalDamage() > 0) run.acid.spray();
 }
 
-/** Larvae and volatile earth: hit on cooldown; demonbane on a larva leaves the timer, plus 1 tick (capture). */
+/** A new larva or volatile earth: hit on cooldown; demonbane on a larva leaves the timer, plus 1 tick (capture). */
 function attackTiming(event) {
   const npc = event.target;
   const run = ownRun(npc);
   if (!run || event.attacker !== run.player || !(npc.__doomLarva || npc.__doomEarth)) return;
+  if (!event.newTarget) return;
   event.ignoreDelay = true;
   if (npc.__doomLarva && isDemonbane(event.attacker)) {
     event.keepDelay = true;

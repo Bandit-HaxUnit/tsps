@@ -153,7 +153,7 @@ The Doom's own combat does nothing; the run attacks on its own timer. None of it
     - a larva shot off cooldown makes the next attack wait 1 tick (larva 350, Doom 351);
     - volatile earth sets the weapon's full delay, demonbane or not (Doom 246, earth 248 and 250, Doom 254).
     
-    Other weapons on larvae get their normal delay (Wiki). Core's `api.onAttackTiming` (`ignoreDelay`, `keepDelay`, `minimumDelay`) does this.
+    Only a new target goes in on cooldown: the capture's two earth shots (248, 250) were at two different earths, so attacking the same one again waits for the timer and auto-attack doesn't fire a second shot while the first is in the air. Other weapons on larvae get their normal delay (Wiki). Core's `api.onAttackTiming` (`ignoreDelay`, `keepDelay`, `minimumDelay`, `newTarget`) does this.
 
 ## Delves 3–4
 

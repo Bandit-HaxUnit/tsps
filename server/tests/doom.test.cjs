@@ -1144,8 +1144,8 @@ test('larvae and volatile earth can be hit on cooldown; demonbane on a larva kee
   player.location = new Location(1311, 9565, 0);
   run.hazards.spawnLarva();
   const larva = [...run.hazards.larvae][0];
-  const timing = (target) => {
-    const event = { attacker: player, target, method: null, ignoreDelay: false, keepDelay: false, minimumDelay: 0 };
+  const timing = (target, newTarget = true) => {
+    const event = { attacker: player, target, method: null, ignoreDelay: false, keepDelay: false, minimumDelay: 0, newTarget };
     for (const handler of hooks.timing) handler(event);
     return [event.ignoreDelay, event.keepDelay, event.minimumDelay];
   };
@@ -1157,6 +1157,9 @@ test('larvae and volatile earth can be hit on cooldown; demonbane on a larva kee
   earth.__doomEarth = true;
   assert.deepEqual(timing(earth), [true, false, 0], 'volatile earth: on cooldown, then the full delay even with demonbane');
   assert.deepEqual(timing(run.boss), [false, false, 0], 'not the Doom');
+  assert.deepEqual(timing(earth, false), [false, false, 0], 'the same earth again: the timer as usual, no second shot a tick later');
+  player.weapon = 4151;
+  assert.deepEqual(timing(larva, false), [false, false, 0], 'the same larva again (two hits without demonbane): the timer as usual');
   run.end('exit');
 });
 

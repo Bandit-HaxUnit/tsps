@@ -382,8 +382,14 @@ export class Combat {
     }
 
     /** What plugins say about the attack timer for an attack on `target` (PluginAttackTimingEvent). */
+    /** Who the last attack went at (PluginAttackTimingEvent.newTarget). */
+    private lastAttackTarget: Mobile | null = null;
+
     private attackTiming(method: CombatMethod, target: Mobile): { ignoreDelay: boolean; keepDelay: boolean; minimumDelay: number } {
-        const event = { attacker: this.character, target, method, ignoreDelay: false, keepDelay: false, minimumDelay: 0 };
+        const event = {
+            attacker: this.character, target, method, ignoreDelay: false, keepDelay: false, minimumDelay: 0,
+            newTarget: target !== this.lastAttackTarget,
+        };
         PluginManager.emitAttackTiming(event);
         return event;
     }
@@ -590,6 +596,7 @@ export class Combat {
         } else if (!bypass && timing.minimumDelay > 0) {
             this.nextAttackCycle = Math.max(this.nextAttackCycle, cycle + (timing.minimumDelay | 0));
         }
+        this.lastAttackTarget = target;
 
         method.start(this.character, target);
         const hits = method.hits(this.character, target);
