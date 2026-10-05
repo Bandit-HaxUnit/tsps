@@ -1122,14 +1122,29 @@ export class PacketSender {
     return this;
   }
 
+  isWorldMapOpen(): boolean {
+    return this.subInterfaceTargets.has(WORLD_MAP_GROUP_ID);
+  }
+
+  /** The last position sendWorldMapPosition sent, packed; -1 before any. */
+  private worldMapPosition = -1;
+
+  getWorldMapPosition(): number {
+    return this.worldMapPosition;
+  }
+
+  /** worldmap_transmitdata (1749): where the world map marks the player. */
+  sendWorldMapPosition(location: Location): this {
+    this.worldMapPosition = packWorldMapCoord(location.getX(), location.getY(), location.getZ());
+    return this.sendInterfaceScript(1749, [this.worldMapPosition, -1, -1]);
+  }
+
   toggleWorldMap(): this {
-    if (this.subInterfaceTargets.has(WORLD_MAP_GROUP_ID)) {
+    if (this.isWorldMapOpen()) {
       return this.closeSubInterface(WORLD_MAP_TARGET_UID);
     }
-    const location = this.player.getLocation();
-    const packed = packWorldMapCoord(location.getX(), location.getY(), location.getZ());
     return this
-      .sendInterfaceScript(1749, [packed, -1, -1])
+      .sendWorldMapPosition(this.player.getLocation())
       .sendSubInterface(WORLD_MAP_TARGET_UID, WORLD_MAP_GROUP_ID)
       .sendInterfaceFlagsRange((WORLD_MAP_GROUP_ID << 16) | 21, 0, 4, 1 << 1);
   }
