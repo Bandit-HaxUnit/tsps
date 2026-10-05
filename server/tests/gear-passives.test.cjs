@@ -78,6 +78,7 @@ const SALVE_EI = item('Salve amulet(ei)');
 const SLAYER_HELM_I = item('Slayer helmet (i)');
 const DHCB = item('Dragon hunter crossbow');
 const DHL = item('Dragon hunter lance');
+const SCORCHING_BOW = item('Scorching bow');
 const ARCLIGHT = item('Arclight');
 const TZHAAR_KET_OM = item('Tzhaar-ket-om');
 const OBSIDIAN = [item('Obsidian helmet'), item('Obsidian platebody'), item('Obsidian platelegs')];
@@ -121,6 +122,19 @@ test('dragon hunter crossbow damage adds to the imbued slayer helmet instead of 
 
     const vsElvarg = player({ [Equipment.WEAPON_SLOT]: DHCB }, npc([]));
     assert.equal(offTask.apply('rangedHit', vsElvarg, 100), 100);
+});
+
+test('scorching bow: +30% against demons, its damage additive with the imbued slayer helmet', () => {
+    const offTask = buildApi({ onTask: false });
+    const archer = player({ [Equipment.WEAPON_SLOT]: SCORCHING_BOW, [Equipment.HEAD_SLOT]: SLAYER_HELM_I }, npc(['demon']));
+    assert.equal(offTask.apply('rangedHit', archer, 100), 130, '+30% off task');
+    assert.equal(offTask.apply('rangedAccuracy', archer, 1000), 1300);
+
+    const onTask = buildApi({ onTask: true });
+    assert.equal(onTask.apply('rangedHit', archer, 100), 145, '(23 + 6) / 20 (Wiki: 45%), not 115 * 1.3');
+
+    const vsDragon = player({ [Equipment.WEAPON_SLOT]: SCORCHING_BOW }, npc(['dragon']));
+    assert.equal(offTask.apply('rangedHit', vsDragon, 100), 100, 'nothing against a non-demon');
 });
 
 test('dragon hunter lance and Arclight', () => {
