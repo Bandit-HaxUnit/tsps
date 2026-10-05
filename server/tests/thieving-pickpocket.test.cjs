@@ -77,6 +77,9 @@ function player({ level = 99, farming = 99, stunLeft = 0, worn = {}, inventory =
         }),
         getMovementQueue: () => ({ reset: () => {} }),
         setPositionToFace: () => {},
+        interacting: null,
+        getInteractingMobile() { return this.interacting; },
+        setMobileInteraction(mobile) { this.interacting = mobile; },
         performAnimation: (animation) => log.push(`anim ${animation.getId()}`),
         getBlockAnim: () => 420,
         sendMessage: (message) => log.push(message),
@@ -180,6 +183,20 @@ test('a failure, as captured on a hero: the message and line, then the strike an
         ['npc anim 422', 'anim 420', 'stun 9 ticks, graphic 245/124, message false'],
         ["You've been stunned!", 'hit 1'],
     ]);
+});
+
+test('with the outcome the player stops tracking the NPC, so it is not followed round as it walks', (t) => {
+    const who = player({ level: 1 });
+    const target = npc();
+    who.setMobileInteraction(target);
+    const original = Math.random;
+    Math.random = () => 0;
+    t.after(() => { Math.random = original; });
+    submitted.length = 0;
+    Thieving._test.pickpocket({ player: who, npc: target, npcId: 0, definition: { getName: () => 'Man' } });
+    assert.equal(who.getInteractingMobile(), target, 'still facing it while the attempt is pending');
+    submitted[0].execute();
+    assert.equal(who.getInteractingMobile(), null);
 });
 
 test('a caught player cannot start another pickpocket before the stun lands', (t) => {

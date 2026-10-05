@@ -330,6 +330,10 @@ class PickpocketTask extends Task {
     this.stop();
     const { player, npc, target, name } = this;
     if (!player.isRegistered() || !npc.isRegistered() || player.getHitpoints() <= 0) return;
+    // Capture (a hero): with the outcome the player stops tracking the NPC and keeps facing the
+    // tile it stood on, so a walking NPC isn't followed round.
+    if (player.getInteractingMobile?.() === npc) player.setMobileInteraction(null);
+    player.setPositionToFace(npc.getLocation());
     if (Math.random() < successChance(player, target)) succeed(player, target, name);
     else fail(player, npc, target, name);
   }

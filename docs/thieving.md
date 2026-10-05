@@ -45,21 +45,22 @@ Success is out of 256, at level 1 / level 99. A `*` marks a target whose page ha
 ## How a pickpocket plays out
 
 1. **The click tick:** the checks run, the attempt message is sent ("You attempt to pick the man's pocket.") and the two-tick cooldown starts. The checks are the level, the requirement, the stun, combat, the coin pouch limit and inventory space.
-2. **The next tick, on success:** the pickpocket animation (881), the loot, "You pick the man's pocket.", the pickpocket sound (2581) and the experience.
-3. **The next ticks, on failure** (from an rsprox capture of a hero, 2026-10-05):
+2. **The outcome tick, either way:** the player stops tracking the NPC and faces the tile it stood on, so a walking NPC isn't followed round.
+3. **The next tick, on success:** the pickpocket animation (881), the loot, "You pick the man's pocket.", the pickpocket sound (2581) and the experience.
+4. **The next ticks, on failure** (from an rsprox capture of a hero, 2026-10-05):
    - **The next tick:** "You fail to pick the man's pocket." and the NPC's line ("What do you think you're doing?"), with no pickpocket animation.
    - **A tick later:** the NPC turns and strikes (its attack animation). The player blocks under the stunned_thieving graphic (245, height 124), the stun sound (2727) plays, and the 9-tick stun starts. Pickpocketing is blocked for 8 of those ticks, and no new attempt can start before the stun lands.
    - **A tick after that:** "You've been stunned!" and the target's stun damage.
-4. **Success chance:** the Wiki's interpolation, `(floor(low × (99 − level) / 98 + high × (level − 1) / 98 + 0.5) + 1) / 256`. Each bonus scales low and high first, rounded down.
-5. **Loot**, from the data file:
+5. **Success chance:** the Wiki's interpolation, `(floor(low × (99 − level) / 98 + high × (level − 1) / 98 + 0.5) + 1) / 256`. Each bonus scales low and high first, rounded down.
+6. **Loot**, from the data file:
    - every `always` item;
    - then each `first` roll in order (clue scrolls, the Prifddinas crystal shard and enhanced crystal teleport seed, the vyre blood shard), where a hit replaces the table;
    - then one weighted `table` roll.
 
    Coins are given as the target's coin pouch.
-6. **Clue scrolls:** a clue is a scroll box once X Marks the Spot is complete. Rolling a tier the player already owns, carried or banked, gives nothing.
-7. **Master Farmer:** its herb seeds follow Farming level, as in the Wiki's calculator. Herb seeds are 48/1000 of its loot. Within that, ranarr, snapdragon and torstol share `(6 + min(85, Farming)) / 1000`, and guam gets 0.401 minus that.
-8. **Digsite workman:** "Steal-from" rather than "Pickpocket". After The Dig Site, coins are 4/11 and the animal skull no longer drops.
+7. **Clue scrolls:** a clue is a scroll box once X Marks the Spot is complete. Rolling a tier the player already owns, carried or banked, gives nothing.
+8. **Master Farmer:** its herb seeds follow Farming level, as in the Wiki's calculator. Herb seeds are 48/1000 of its loot. Within that, ranarr, snapdragon and torstol share `(6 + min(85, Farming)) / 1000`, and guam gets 0.401 minus that.
+9. **Digsite workman:** "Steal-from" rather than "Pickpocket". After The Dig Site, coins are 4/11 and the animal skull no longer drops.
 
 ## Equipment and effects
 
