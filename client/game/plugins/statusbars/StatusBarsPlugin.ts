@@ -119,7 +119,7 @@ export class StatusBarsPlugin extends Plugin implements ClientPlugin {
         this.osrsClient = osrsClient ?? inject<OsrsClient>(CLIENT_TOKEN);
     }
 
-    /** The side panel to anchor to and the two bars, or nothing outside the OSRS gameframes. */
+    /** The side panel to anchor to and the two bars, or nothing where they have no place (317 fixed). */
     private layout() {
         const client = this.osrsClient;
         const manager = client.widgetManager;
@@ -130,8 +130,9 @@ export class StatusBarsPlugin extends Plugin implements ClientPlugin {
             : root === 161 ? SIDE_CONTAINER_RESIZABLE
             : root === 164 ? SIDE_BACKGROUND_MODERN
             : -1;
-        // The 317 frames reuse roots 548/161 under this varp.
-        if (uid < 0 || client.varManager?.getVarp(VARP_GAMEFRAME_317) === 1) return undefined;
+        // The 317 frames reuse roots 548/161 under this varp; only resizable keeps the bars.
+        if (uid < 0) return undefined;
+        if (root === 548 && client.varManager?.getVarp(VARP_GAMEFRAME_317) === 1) return undefined;
         const anchor: any = manager.getWidgetByUid(uid);
         if (!anchor || manager.isEffectivelyHidden(uid) || !(anchor._absWidth > 0)) return undefined;
         return {
