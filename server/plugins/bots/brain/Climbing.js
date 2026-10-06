@@ -45,7 +45,9 @@ function climbOption(objectId, direction) {
 let isClosedDoor = null;
 /** Door-aware: can a player on `from` get next to `to` on that plane (closed doors count as open)? */
 function pathExists(from, to) {
-  if (chebyshev(from.x, from.y, to.x, to.y) > LOCAL_TILES) return true;
+  // Far away, only the ground floor is one connected world; an upper floor is one building,
+  // so Varrock's stairs are never the way down from Lumbridge castle's middle floor.
+  if (chebyshev(from.x, from.y, to.x, to.y) > LOCAL_TILES) return from.z === 0;
   isClosedDoor ??= require("./DoorOpening").isClosedDoor;
   const isDoor = (x, y, z) => (MapObjects.mapObjects.get(MapObjects.getHash(x, y, z)) ?? []).some((object) => {
     const loc = object.getLocation();
