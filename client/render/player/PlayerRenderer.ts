@@ -71,6 +71,7 @@ type PlayerGpuPass = {
 
 type PlayerGpuGeometry = {
     geometryKey: string;
+    bytes: number;
     opaque?: PlayerGpuPass;
     alpha?: PlayerGpuPass;
 };
@@ -329,6 +330,9 @@ export class PlayerRenderer {
         { verts: Uint8Array; inds: Int32Array; vertsA: Uint8Array; indsA: Int32Array }
     > = new Map();
     private playerGpuGeometryCache: Map<string, PlayerGpuGeometry> = new Map();
+    private playerGpuGeometryBytes = 0;
+    /** ~1,600 frames at the ~40 KB a player frame measures; a crowd of ~25 fits. */
+    private static readonly GPU_GEOMETRY_BUDGET_BYTES = 64 * 1024 * 1024;
 
     private ensureBaseForAppearance(
         app: PlayerAppearance,
@@ -429,70 +433,66 @@ export class PlayerRenderer {
         );
     }
 
-    private getPlayerGpuGeometry(ownerKey: string, geometryKey: string): PlayerGpuGeometry | undefined {
-        let geometry = this.playerGpuGeometryCache.get(ownerKey);
-        if (geometry?.geometryKey === geometryKey) {
-            this.playerGpuGeometryCache.delete(ownerKey);
-            this.playerGpuGeometryCache.set(ownerKey, geometry);
-            return geometry;
+    /**
+     * GPU geometry for one animation frame (appearance|seq|frame...), uploaded once and kept.
+     * Crowds cycle through thousands of frames; keeping one slot per appearance+animation
+     * re-uploaded nearly every frame step, and the 384-entry CPU cache thrashed behind it.
+     */
+    private getPlayerGpuGeometry(geometryKey: string): PlayerGpuGeometry | undefined {
+        const hit = this.playerGpuGeometryCache.get(geometryKey);
+        if (hit) {
+            this.playerGpuGeometryCache.delete(geometryKey);
+            this.playerGpuGeometryCache.set(geometryKey, hit);
+            return hit;
         }
 
         const cached = this.geomCache.get(geometryKey);
         if (!cached) return undefined;
 
-        geometry ??= { geometryKey };
-        geometry.opaque = this.updatePlayerGpuPass(
-            geometry.opaque,
-            cached.verts,
-            cached.inds,
-            (this.renderer as any).playerProgramOpaque ?? (this.renderer as any).playerProgram,
-        );
-        geometry.alpha = this.updatePlayerGpuPass(
-            geometry.alpha,
-            cached.vertsA,
-            cached.indsA,
-            (this.renderer as any).playerProgram,
-        );
-        geometry.geometryKey = geometryKey;
-        this.playerGpuGeometryCache.delete(ownerKey);
-        this.playerGpuGeometryCache.set(ownerKey, geometry);
+        const r: any = this.renderer as any;
+        const geometry: PlayerGpuGeometry = {
+            geometryKey,
+            bytes:
+                cached.verts.byteLength +
+                cached.inds.byteLength +
+                cached.vertsA.byteLength +
+                cached.indsA.byteLength,
+            opaque: this.createPlayerGpuPass(
+                cached.verts,
+                cached.inds,
+                r.playerProgramOpaque ?? r.playerProgram,
+            ),
+            alpha: this.createPlayerGpuPass(cached.vertsA, cached.indsA, r.playerProgram),
+        };
+        this.playerGpuGeometryCache.set(geometryKey, geometry);
+        this.playerGpuGeometryBytes += geometry.bytes;
 
-        while (this.playerGpuGeometryCache.size > PlayerRenderer.GEOM_CACHE_MAX_ENTRIES) {
-            const oldest = this.playerGpuGeometryCache.keys().next().value as string | undefined;
-            if (oldest === undefined) break;
-            const evicted = this.playerGpuGeometryCache.get(oldest);
-            if (evicted) this.deletePlayerGpuGeometry(evicted);
-            this.playerGpuGeometryCache.delete(oldest);
+        // ponytail: one VAO + buffer pair per frame; pack frames into shared arenas if the
+        // object count ever shows up in profiles.
+        while (
+            this.playerGpuGeometryBytes > PlayerRenderer.GPU_GEOMETRY_BUDGET_BYTES &&
+            this.playerGpuGeometryCache.size > 1
+        ) {
+            const [oldestKey, oldest] = this.playerGpuGeometryCache.entries().next().value!;
+            this.playerGpuGeometryCache.delete(oldestKey);
+            this.deletePlayerGpuGeometry(oldest);
         }
         return geometry;
     }
 
-    private updatePlayerGpuPass(
-        pass: PlayerGpuPass | undefined,
+    private createPlayerGpuPass(
         vertices: Uint8Array,
         indices: Int32Array,
         program: any,
     ): PlayerGpuPass | undefined {
-        if (!program) return undefined;
-        if (
-            pass &&
-            pass.vb.byteLength >= vertices.byteLength &&
-            pass.ib.byteLength >= indices.byteLength
-        ) {
-            if (vertices.byteLength > 0) pass.vb.data(vertices);
-            if (indices.byteLength > 0) pass.ib.data(indices);
-            pass.count = indices.length | 0;
-            return pass;
-        }
-        if (pass) this.deletePlayerGpuPass(pass);
-        if (indices.length <= 0) return undefined;
+        if (!program || indices.length <= 0) return undefined;
 
         const r: any = this.renderer as any;
-        const vb = r.app.createInterleavedBuffer(ACTOR_VERTEX_STRIDE, vertices, PicoGL.DYNAMIC_DRAW);
+        const vb = r.app.createInterleavedBuffer(ACTOR_VERTEX_STRIDE, vertices, PicoGL.STATIC_DRAW);
         const ib = r.app.createIndexBuffer(
             PicoGL.UNSIGNED_INT as number,
             indices,
-            PicoGL.DYNAMIC_DRAW,
+            PicoGL.STATIC_DRAW,
         );
         const vao = r.app
             .createVertexArray()
@@ -527,6 +527,7 @@ export class PlayerRenderer {
     }
 
     private deletePlayerGpuGeometry(geometry: PlayerGpuGeometry): void {
+        this.playerGpuGeometryBytes -= geometry.bytes;
         if (geometry.opaque) this.deletePlayerGpuPass(geometry.opaque);
         if (geometry.alpha) this.deletePlayerGpuPass(geometry.alpha);
     }
@@ -536,6 +537,7 @@ export class PlayerRenderer {
             this.deletePlayerGpuGeometry(geometry);
         }
         this.playerGpuGeometryCache.clear();
+        this.playerGpuGeometryBytes = 0;
     }
 
     // ==== Spot GFX helpers (id 833) ====
@@ -2204,10 +2206,7 @@ export class PlayerRenderer {
             }
 
             if (batchSource) {
-                const gpuOwnerKey = `${this.getAppearanceCacheKey(group.appearance)}|seq:${
-                    group.seqId | 0
-                }|overlay:${group.overlaySeqId ?? -1}`;
-                let gpuGeometry = this.getPlayerGpuGeometry(gpuOwnerKey, batchKey);
+                let gpuGeometry = this.getPlayerGpuGeometry(batchKey);
                 if (!gpuGeometry) {
                     this.dynamicUpdateBuffersFor(
                         baseRec.baseModel,
@@ -2223,7 +2222,7 @@ export class PlayerRenderer {
                         "cacheOnly",
                         group.frameCycle,
                     );
-                    gpuGeometry = this.getPlayerGpuGeometry(gpuOwnerKey, batchKey);
+                    gpuGeometry = this.getPlayerGpuGeometry(batchKey);
                 }
                 const counts = gpuGeometry
                     ? {
@@ -2556,10 +2555,7 @@ export class PlayerRenderer {
                 }
 
                 if (batchSource) {
-                    const gpuOwnerKey = `${this.getAppearanceCacheKey(group.appearance)}|seq:${
-                        group.seqId | 0
-                    }|overlay:${group.overlaySeqId ?? -1}`;
-                    let gpuGeometry = this.getPlayerGpuGeometry(gpuOwnerKey, batchKey);
+                    let gpuGeometry = this.getPlayerGpuGeometry(batchKey);
                     if (!gpuGeometry) {
                         this.dynamicUpdateBuffersFor(
                             baseRec.baseModel,
@@ -2575,7 +2571,7 @@ export class PlayerRenderer {
                             "cacheOnly",
                             group.frameCycle,
                         );
-                        gpuGeometry = this.getPlayerGpuGeometry(gpuOwnerKey, batchKey);
+                        gpuGeometry = this.getPlayerGpuGeometry(batchKey);
                     }
                     const counts = gpuGeometry
                         ? { countAlpha: gpuGeometry.alpha?.count ?? 0 }
