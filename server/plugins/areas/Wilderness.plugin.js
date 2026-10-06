@@ -13,7 +13,7 @@ const {
 const { Obelisks } = require("../../src/main/typescript/elvarg/game/content/Obelisks");
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { Location } = require("../../src/main/typescript/elvarg/game/model/Location");
-const { isSafeLocation: isFeroxSafeLocation } = require("../items/LootKeys.plugin");
+const { isSafeLocation: isFeroxSafeLocation } = require("./ferox/FeroxBounds");
 
 // Everything this plugin asks of a tile. The safe test alone checks building roofs, Ferox's
 // polygon and nine map-object buckets, and the attack hook asks it several times per
