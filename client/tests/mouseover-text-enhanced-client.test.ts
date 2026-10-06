@@ -1,36 +1,67 @@
 import assert from "node:assert/strict";
 
-import { CLIENT_TYPE_ANDROID, CLIENT_TYPE_ENHANCED, reportedClientType } from "../rs/cs2/ClientType";
-import { WidgetsOverlay } from "../ui/devoverlay/WidgetsOverlay";
-
-/**
- * As the enhanced client (clienttype 10) the game draws the top-left mouseover text itself
- * (cache script 4726, with varbit 12377 on), so the client's own text stays hidden: drawing
- * both showed it twice.
- */
-assert.equal(reportedClientType(161), CLIENT_TYPE_ENHANCED, "the desktop layout is the enhanced client");
-assert.equal(reportedClientType(601), CLIENT_TYPE_ANDROID, "the mobile layout is android");
-
-const client: any = {
-    showMouseOverText: true,
-    menuOpen: false,
-    widgetManager: { rootInterface: 161 },
-    varManager: { getVarbit: () => 1 },
-    menuActiveSimpleEntries: [{ option: "Walk here", target: "" }],
-};
-const overlay: any = Object.create(WidgetsOverlay.prototype);
-Object.assign(overlay, {
-    ctx: { getGameContext: () => ({ osrsClient: client }) },
-    glRenderer: { width: 800, height: 600 },
-    app: { width: 800 },
-    overlayScaleX: 1,
-    overlayScaleY: 1,
-    getOverlayTextScale: () => ({ x: 1, y: 1 }),
+// A touchscreen Windows laptop: touch hardware reports mobile, the Windows UA renders the desktop
+// layout. Stubbed before the client modules load so their device constants see it.
+Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+        userAgent:
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        maxTouchPoints: 10,
+    },
 });
-assert.deepEqual(overlay.getMouseOverTextVisualState(false), { signature: "hidden" }, "the game's text is the only one");
 
-// Other client types still get the client's own text.
-client.widgetManager.rootInterface = 601;
-assert.equal(overlay.getMouseOverTextVisualState(false).text, "Walk here");
+async function main(): Promise<void> {
+    const { isMobileMode, isTouchDevice } = await import("../common/utils/DeviceUtil");
+    const { CLIENT_TYPE_ANDROID, CLIENT_TYPE_ENHANCED, isMobileClient, reportedClientType } =
+        await import("../rs/cs2/ClientType");
+    const { WidgetsOverlay } = await import("../ui/devoverlay/WidgetsOverlay");
 
-console.log("mouseover text (enhanced client): ok");
+    assert.equal(isTouchDevice, true, "the touchscreen is detected as a touch device");
+    assert.equal(isMobileMode, false, "a touchscreen laptop keeps the desktop layout");
+
+    /**
+     * As the enhanced client (clienttype 10) the game draws the top-left mouseover text itself
+     * (cache script 4726, with varbit 12377 on), so the client's own text stays hidden: drawing
+     * both showed it twice. A touchscreen desktop is still the enhanced client (#358), or the
+     * mobile scripts hide the text on it.
+     */
+    assert.equal(isMobileClient(161), false, "a touchscreen desktop is not a mobile client");
+    assert.equal(isMobileClient(601), true, "the mobile layout is a mobile client");
+    assert.equal(
+        reportedClientType(161),
+        CLIENT_TYPE_ENHANCED,
+        "the desktop layout is the enhanced client",
+    );
+    assert.equal(reportedClientType(601), CLIENT_TYPE_ANDROID, "the mobile layout is android");
+
+    const client: any = {
+        showMouseOverText: true,
+        menuOpen: false,
+        widgetManager: { rootInterface: 161 },
+        varManager: { getVarbit: () => 1 },
+        menuActiveSimpleEntries: [{ option: "Walk here", target: "" }],
+    };
+    const overlay: any = Object.create(WidgetsOverlay.prototype);
+    Object.assign(overlay, {
+        ctx: { getGameContext: () => ({ osrsClient: client }) },
+        glRenderer: { width: 800, height: 600 },
+        app: { width: 800 },
+        overlayScaleX: 1,
+        overlayScaleY: 1,
+        getOverlayTextScale: () => ({ x: 1, y: 1 }),
+    });
+    assert.deepEqual(
+        overlay.getMouseOverTextVisualState(false),
+        { signature: "hidden" },
+        "the game's text is the only one",
+    );
+
+    // Other client types still get the client's own text.
+    client.widgetManager.rootInterface = 601;
+    assert.equal(overlay.getMouseOverTextVisualState(false).text, "Walk here");
+
+    console.log("mouseover text (enhanced client): ok");
+}
+
+void main();

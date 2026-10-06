@@ -9,7 +9,7 @@ import {
 } from "../../../game/ClientState";
 import { getClientClock } from "../../../game/TransmitCycles";
 import { getSafeAreaBounds, isTouchDevice } from "../../../common/utils/DeviceUtil";
-import { MOBILE_ROOT_INTERFACE, reportedClientType } from "../ClientType";
+import { isMobileClient, reportedClientType } from "../ClientType";
 import { VARBIT_ROOF_REMOVAL } from "../../../common/vars";
 import { MenuTargetType } from "../../MenuEntry";
 import { chatHistory } from "../ChatHistory";
@@ -511,18 +511,17 @@ export function registerClientOps(handlers: HandlerMap): void {
         // [proc,on_mobile] checks:
         // 1. %osm_simulate = 1 (desktop mobile simulation)
         // 2. clienttype = 7 (mobile client type)
-        // 3. on_mobile opcode (touch device check)
+        // 3. on_mobile opcode (mobile layout check)
         const wm = ctx.widgetManager as any;
-        const isMobileInterface = wm?.rootInterface === 601;
 
         // Check osm_simulate varbit for desktop mobile simulation
         const osmSimulate = ctx.varManager?.getVarbit(OSM_SIMULATE_VARBIT) ?? 0;
 
-        const result = osmSimulate === 1 || isMobileInterface || isTouchDevice ? 1 : 0;
+        const result = osmSimulate === 1 || isMobileClient(wm?.rootInterface) ? 1 : 0;
         if (!loggedOnMobile) {
             loggedOnMobile = true;
             console.log(
-                `[ON_MOBILE] result=${result} (osmSimulate=${osmSimulate}, rootInterface=${wm?.rootInterface}, isTouchDevice=${isTouchDevice})`,
+                `[ON_MOBILE] result=${result} (osmSimulate=${osmSimulate}, rootInterface=${wm?.rootInterface}, isMobileClient=${isMobileClient(wm?.rootInterface)})`,
             );
         }
         ctx.pushInt(result);
@@ -537,15 +536,14 @@ export function registerClientOps(handlers: HandlerMap): void {
         // 5 = mac
         // 7 = mobile (generic - used by ~on_mobile proc)
         // 10 = steam/enhanced variant
-        // Return 2 (android) for mobile interface or touch devices, 10 otherwise.
+        // Return 2 (android) on the mobile layout, 10 otherwise; see isMobileClient.
         // [proc,on_mobile] checks `clienttype = 7` as one condition.
         const wm = ctx.widgetManager as any;
-        const isMobileInterface = wm?.rootInterface === MOBILE_ROOT_INTERFACE;
         const result = reportedClientType(wm?.rootInterface);
         if (!loggedClientType) {
             loggedClientType = true;
             console.log(
-                `[CLIENTTYPE] result=${result} (isMobileInterface=${isMobileInterface}, isTouchDevice=${isTouchDevice})`,
+                `[CLIENTTYPE] result=${result} (rootInterface=${wm?.rootInterface}, isMobileClient=${isMobileClient(wm?.rootInterface)})`,
             );
         }
         ctx.pushInt(result);
