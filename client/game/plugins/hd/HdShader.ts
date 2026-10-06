@@ -1,6 +1,6 @@
 import type { ProgramSource } from "../../../render/shaders/ShaderUtil";
 
-/** Adapt the shared world programs, never UI shaders or water shading. */
+/** Adapt the shared world programs (never UI shaders); also gates the floor water shading. */
 export function createHdProgram([vertex, fragment]: ProgramSource, lighting: string): ProgramSource {
     const vertexEnd = vertex.lastIndexOf("}");
     if (vertexEnd < 0 || !vertex.includes("vec4 viewPos =") || !fragment.includes("void main()") ||
@@ -98,6 +98,8 @@ void main()`);
         return;
     }
     float banding =`);
+    // Floor water is 117 HD's: core leaves it off, HD turns it on with the toggle.
+    fragment = fragment.replace("const bool hdWater = false;", "bool hdWater = u_hdEnabled;");
     fragment = fragment.replace("    vec3 surface;", `
     // Like 117 HD, replace baked directional shading on textured faces with
     // neutral brightness. Otherwise brick walls are lit twice and lose detail.
