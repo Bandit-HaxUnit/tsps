@@ -40,7 +40,8 @@ export type PluginSocialPacketEvent = {
     | { type: "friends_chat_action"; action: FriendsChatAction }
     | { type: "private_message"; recipient: string; text: string }
     | { type: "chat_filter"; publicMode: number; privateMode: number; tradeMode: number }
-    | { type: "chat"; text: string; messageType: "friends_chat" };
+    | { type: "chat"; text: string; messageType: "friends_chat" }
+    | { type: "public_chat"; text: string };
 };
 
 export interface PluginServerLifecycleEvent {
@@ -174,6 +175,12 @@ export interface PluginNpcDeathEvent {
   npc: any;
   npcId: number;
   location: { x: number; y: number; z: number };
+  /**
+   * Set by a handler to leave the npc in the world after it dies (an Ent's trunk): it stays
+   * `ticks` ticks before it is removed, then respawns `respawnTicks` later (default: its
+   * definition's respawn).
+   */
+  remains?: { ticks: number; respawnTicks?: number } | null;
 }
 
 /** Fired before an NPC enters its death task. Set preventDeath for phase changes. */
@@ -1224,6 +1231,7 @@ export interface PluginCoreApi {
   Autocasting: any;
   NPC: any;
   GameConstants: any;
+  Music: any;
   WorldDefinition: any;
   TeleportHandler: any;
   TeleportType: any;

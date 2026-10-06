@@ -627,7 +627,7 @@ export class Combat {
         }
         this.trace(`hits=${hits.length} dmg=[${hits.map((h: any) => h?.getTotalDamage?.()).join(",")}]`, target);
         // A block animation of -1 means the target doesn't block (e.g. the Gemstone Crab).
-        if (hits.length > 0 && method.type() === CombatType.MELEE && target.getBlockAnim() >= 0) {
+        if (hits.length > 0 && method.type() === CombatType.MELEE && target.getBlockAnim() >= 0 && method.playsBlockAnimation?.() !== false) {
             target.performAnimation(new Animation(target.getBlockAnim()));
         }
         for (const hit of hits) CombatFactory.addPendingHit(hit);

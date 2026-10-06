@@ -56,6 +56,8 @@ function harness(t, members = true) {
   for (const name of ['ServerStartup', 'ServerShutdown', 'PlayerLogin', 'PlayerProcess', 'PlayerLogout',
     'PlayerDisconnect', 'PlayerDeath', 'InterfaceActionClick']) api[`on${name}`] = (cb) => (hooks[name] ??= []).push(cb);
   Plugin.register(api);
+  const xpRewards = [];
+  custom.set('xpreward:open', [request => xpRewards.push(request)]);
   if (members) { JekyllPlugin.register(api); PlantPlugin.register(api); }
   const emit = (name, event) => hooks[name].forEach(cb => cb(event));
   emit('ServerStartup');
@@ -98,7 +100,7 @@ function harness(t, members = true) {
     t.mock.method(Math, 'random', () => random);
     return npcs.at(-1);
   }
-  return { api, hooks, emit, npcs, prompts, drops, player, spawn,
+  return { api, hooks, emit, npcs, prompts, drops, xpRewards, player, spawn,
     advance: ms => { now += ms; }, random: value => { random = value; },
     collision: (b, m) => { blocked = b; movable = m; }, disable: () => { enabled = false; } };
 }
@@ -267,20 +269,16 @@ function rub(h, p, slot = 3) {
   assert.equal(h.hooks.Lamp.Rub({ player: p, item, itemId: I.LAMP, slot, clickType: 1, handled: false }), true);
   return item;
 }
-function select(h, name) {
-  for (let page = 0; page < 10; page++) {
-    const menu = h.prompts.at(-1), choice = menu.options.find(o => o.label === name);
-    if (choice) { choice.cb(); return; }
-    menu.options.find(o => o.label === 'More skills').cb();
-  }
-  assert.fail(`skill ${name} unreachable`);
-}
+/** Confirming a skill on the xpreward interface the lamp opened (the reward's message box text). */
+const confirm = (h, skill) => h.xpRewards.at(-1).onConfirm(skill, skill.getName());
 
 test('real Rub event reaches every skill, uses base level XP, exact slot and one confirmation only', t => {
   const h = harness(t);
   for (const skill of Skill.values()) {
-    const p = h.player(); p.levels.set(skill, 37); rub(h, p); select(h, skill.getName());
-    const yes = h.prompts.at(-1).options[0].cb; yes(); yes();
+    const p = h.player(); p.levels.set(skill, 37); rub(h, p);
+    assert.equal(h.xpRewards.at(-1).player, p, 'opens the xpreward interface');
+    assert.equal(confirm(h, skill), `Your wish has been granted!<br>You have been awarded 370 ${skill.getName()} XP!`);
+    assert.equal(confirm(h, skill), null, 'once');
     assert.equal(p.xp.get(skill), 370, skill.getName()); assert.equal(p.slots[3], undefined);
   }
 });
@@ -288,7 +286,8 @@ test('real Rub event reaches every skill, uses base level XP, exact slot and one
 test('lamp keeps blocked/maxed XP and rejects changed slot, replay, replacement prompts and logout', t => {
   const h = harness(t), skill = Skill.values()[0];
   for (const reason of ['blocked', 'moved', 'swapped', 'new-request', 'offline', 'PlayerLogout', 'PlayerDisconnect', 'PlayerDeath']) {
-    const p = h.player(), item = rub(h, p); select(h, skill.getName()); const yes = h.prompts.at(-1).options[0].cb;
+    const p = h.player(), item = rub(h, p); const request = h.xpRewards.at(-1);
+    const yes = () => request.onConfirm(skill, skill.getName());
     if (reason === 'blocked') p.blockXp = true;
     if (reason === 'moved') { p.slots[4] = item; p.slots[3] = undefined; }
     if (reason === 'swapped') p.slots[3] = new Item(I.LAMP, 1);
@@ -299,7 +298,7 @@ test('lamp keeps blocked/maxed XP and rejects changed slot, replay, replacement 
     if (reason === 'blocked') assert.equal(p.slots[3], item, 'denied XP retains lamp');
   }
   const maxed = h.player(), lamp = rub(h, maxed); maxed.xp.set(skill, 200_000_000);
-  select(h, skill.getName()); h.prompts.at(-1).options[0].cb();
+  assert.equal(confirm(h, skill), null);
   assert.equal(maxed.xp.get(skill), 200_000_000); assert.equal(maxed.slots[3], lamp);
 });
 

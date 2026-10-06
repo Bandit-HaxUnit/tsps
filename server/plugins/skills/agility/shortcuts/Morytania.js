@@ -10,6 +10,10 @@ const SPIKEY_CHAINS = [
   { at: [3447, 3576, 1], plane: 2, level: 71 },
 ];
 
+/** Slayer Tower ivy and windows (OSRS capture, docs/slayer-tower.md): climbing and landing sounds. */
+const SLAYER_TOWER_SOUND = { CLIMB: 2454, JUMP: 2461, LAND: 2462 };
+const IVY_FOOT = [3418, 3533, 0];
+
 module.exports = [
   between({
     object: ObjectIds.BROKEN_FENCE_3,
@@ -101,6 +105,64 @@ module.exports = [
       { wait: 1 },
       { tele: [pos.x, pos.y + 4, pos.z] },
       { wait: 2 },
+      { anim: -1 },
+    ],
+  },
+  // Slayer Tower banshee window: one 2-tile slide through it, either way (captured; Wiki: 18, 3 XP).
+  between({
+    object: ObjectIds.BROKEN_WINDOW_3,
+    level: 18,
+    xp: 3,
+    ends: [[3442, 3531, 0], [3444, 3533, 0]],
+    cross: (from, to) => [{ move: to, anim: Anim.CLIMB_LOW_WALL, speed: [0, 94], ticks: 3 }],
+  }),
+  {
+    // Slayer Tower ivy: up two floors, along the ledge and in through the window (captured;
+    // Wiki: 81). The capture shows no XP, though the Wiki lists 3.
+    object: ObjectIds.IVY,
+    at: IVY_FOOT,
+    level: 81,
+    xp: 0,
+    route: IVY_FOOT,
+    steps: [
+      { faceDir: "north" },
+      { anim: Anim.CLIMB_UP },
+      { sound: SLAYER_TOWER_SOUND.CLIMB },
+      { wait: 1 },
+      { tele: [3418, 3533, 1] },
+      { anim: ShortcutAnim.CLIMB_LOOP },
+      { sound: SLAYER_TOWER_SOUND.CLIMB },
+      { wait: 1 },
+      { tele: [3418, 3533, 2] },
+      { sound: SLAYER_TOWER_SOUND.CLIMB },
+      { wait: 1 },
+      { move: [3419, 3533, 2], anim: ShortcutAnim.LEDGE_SIDESTEP_LEFT, speed: [0, 30] },
+      { sound: SLAYER_TOWER_SOUND.LAND },
+      { move: [3420, 3534, 2], anim: Anim.LAND, speed: [0, 12] },
+    ],
+  },
+  {
+    // ...and back: out of the window onto the ledge, along it and down the ivy (captured).
+    object: ObjectIds.BROKEN_WINDOW_2,
+    at: [3419, 3533, 2],
+    level: 81,
+    xp: 0,
+    route: [3420, 3534, 2],
+    steps: [
+      { sound: SLAYER_TOWER_SOUND.JUMP },
+      { move: [3419, 3533, 2], anim: Anim.JUMP, speed: [15, 30] },
+      { move: [3418, 3533, 2], anim: ShortcutAnim.LEDGE_SIDESTEP_RIGHT, speed: [0, 30] },
+      { faceDir: "north" },
+      { anim: Anim.CLIMB_ROCKS },
+      { sound: SLAYER_TOWER_SOUND.CLIMB },
+      { wait: 1 },
+      { tele: [3418, 3533, 1] },
+      { sound: SLAYER_TOWER_SOUND.CLIMB },
+      { wait: 1 },
+      { tele: IVY_FOOT },
+      { sound: SLAYER_TOWER_SOUND.CLIMB },
+      { wait: 1 },
+      { faceDir: "south" },
       { anim: -1 },
     ],
   },

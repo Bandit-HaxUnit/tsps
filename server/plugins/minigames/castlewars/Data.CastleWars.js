@@ -31,6 +31,8 @@ function buildData(core) {
 
     // OSRS interfaces (cache 237). The old 317 ids (11146/11479/...) don't exist in this cache.
     OVERLAY_HUD_UID: (161 << 16) | 8, // component.toplevel_osrs_stretch:overlay_hud
+    // The client shows "Attack" on players from player option slot 1 (sendPlayerOption).
+    ATTACK_OPTION_SLOT: 1,
     WAITING_ROOM_INTERFACE: 131, // interface.castlewars_waitingroom
     STATUS_OVERLAY_INTERFACE: { [TEAM.SARADOMIN]: 58, [TEAM.ZAMORAK]: 59 }, // interface.castlewars_status_overlay_*
     EJECT_TEXT_UID: { [TEAM.SARADOMIN]: (58 << 16) | 26, [TEAM.ZAMORAK]: (59 << 16) | 25 },

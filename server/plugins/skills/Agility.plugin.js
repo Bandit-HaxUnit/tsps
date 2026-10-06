@@ -231,6 +231,9 @@ function attemptObstacle(player, object, obstacle) {
     render: success ? obstacle.render : obstacle.fail?.render ?? obstacle.render,
     onFinish: (completed) => {
       finishObstacle(player, obstacle, success, completed);
+      if (completed && success) {
+        pluginApi.emitCustomEvent("agility:obstacle", { player, objectId: object.getId(), location: context.obj });
+      }
       if (completed && success && obstacle.skipTo != null) {
         skipAhead(player, obstacle, context);
       }

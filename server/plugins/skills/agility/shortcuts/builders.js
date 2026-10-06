@@ -23,6 +23,9 @@ const ShortcutAnim = Object.freeze({
   FALL_INTO_WATER_LEFT: 2581,
   FALL_INTO_WATER_RIGHT: 2582,
   SWIM: 772,
+  CLIMB_LOOP: 4435,
+  LEDGE_SIDESTEP_LEFT: 2757,
+  LEDGE_SIDESTEP_RIGHT: 7142,
 });
 
 function distance(a, b) {

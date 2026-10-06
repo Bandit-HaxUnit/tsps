@@ -1,28 +1,49 @@
-import type { NotesPluginConfig, NotesPluginPersistence, NotesPluginState } from "./types";
+import { ConfigGroup, ConfigItem } from "@runelite/client/config/ConfigItem";
+import { ConfigChanged } from "@runelite/api/events";
+import { inject } from "@runelite/client/plugins/PluginInjector";
+import { ConfigManager } from "@runelite/client/config/ConfigManager";
+import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
+
+export const NotesConfig = ConfigGroup("notes", {
+    notes: ConfigItem({ name: "Notes", description: "Notes persisted locally.", textArea: true, default: "" }),
+});
+
+export type NotesPluginConfig = {
+    enabled: boolean;
+    notes: string;
+};
+
+export type NotesPluginState = {
+    config: NotesPluginConfig;
+    version: number;
+};
+
+export type NotesPluginPersistence = {
+    load(): Partial<NotesPluginConfig> | undefined;
+    save(config: NotesPluginConfig): void;
+};
 
 type NotesPluginListener = () => void;
 
-const DEFAULT_CONFIG: NotesPluginConfig = Object.freeze({
-    enabled: true,
-    notes: "",
-});
+export class NotesPlugin extends Plugin {
+    static descriptor: PluginDescriptor = {
+        name: "Notes",
+        description: "Persistent local notes for client/plugin tasks.",
+        tags: ["notes"],
+        configKey: "notesplugin",
+    };
 
-export class NotesPlugin {
+    static config = NotesConfig;
+
     private readonly listeners: Set<NotesPluginListener> = new Set();
-    private readonly persistence?: NotesPluginPersistence;
-
-    private config: NotesPluginConfig;
+    private readonly configManager = inject(ConfigManager);
     private state: NotesPluginState;
     private version = 0;
 
-    constructor(persistence?: NotesPluginPersistence) {
-        this.persistence = persistence;
-        const loaded = persistence?.load();
-        this.config = this.sanitizeConfig(loaded);
-        this.state = {
-            config: this.config,
-            version: this.version,
-        };
+    constructor() {
+        super();
+        this.configManager.getConfig(NotesConfig);
+        this.state = { config: this.getConfig(), version: 0 };
     }
 
     subscribe(listener: NotesPluginListener): () => void {
@@ -37,33 +58,27 @@ export class NotesPlugin {
     }
 
     getConfig(): NotesPluginConfig {
-        return this.state.config;
+        const config = this.configManager.getConfig(NotesConfig);
+        return { enabled: this.isEnabled(), notes: config.notes() };
     }
 
     setConfig(nextConfig: Partial<NotesPluginConfig>): void {
-        this.config = this.sanitizeConfig({
-            ...this.config,
-            ...nextConfig,
-        });
+        if (nextConfig.notes !== undefined) {
+            this.configManager.setConfiguration(NotesConfig.group, "notes", nextConfig.notes);
+        }
         this.commit();
     }
 
-    private sanitizeConfig(input: Partial<NotesPluginConfig> | undefined): NotesPluginConfig {
-        const src = input ? input : {};
-        return {
-            enabled: src.enabled !== false,
-            notes: typeof src.notes === "string" ? src.notes : DEFAULT_CONFIG.notes,
-        };
+    onConfigChanged(event: ConfigChanged): void {
+        if (event.getGroup() === NotesConfig.group) {
+            this.commit();
+        }
     }
 
     private commit(): void {
         this.version++;
-        this.state = {
-            config: this.config,
-            version: this.version,
-        };
-        this.persistence?.save(this.config);
-        for (const listener of this.listeners) {
+        this.state = { config: this.getConfig(), version: this.version };
+        for (const listener of [...this.listeners]) {
             try {
                 listener();
             } catch (err) {

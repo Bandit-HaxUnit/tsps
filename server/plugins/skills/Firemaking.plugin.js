@@ -261,9 +261,8 @@ function hasObjectAtLocation(location, privateArea) {
 }
 
 function isFireTileBlocked(location, privateArea) {
-  const worldBlocked = World.getObjects().some(
-    (object) => object.getLocation().equals(location) && blocksFireTile(object)
-  );
+  // The tile's runtime objects only (ObjectManager indexes them), not every one in the world.
+  const worldBlocked = ObjectManager.objectsAt(location).some(blocksFireTile);
   return worldBlocked || hasObjectAtLocation(location, privateArea);
 }
 

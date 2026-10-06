@@ -19,6 +19,8 @@ export class GameObject extends Entity {
      * one). Only these are remembered once removed, so a reloaded scene keeps them hidden.
      */
     private baseMap = false;
+    /** The very instance the region loader created from the cache's map data. */
+    private mapOriginal = false;
 
     constructor(id: number, position: Location, type: number, face: number, privateArea: PrivateArea) {
         super(position);
@@ -42,6 +44,16 @@ export class GameObject extends Entity {
     public markBaseMap(): this {
         this.baseMap = true;
         return this;
+    }
+
+    public isMapOriginal(): boolean {
+        return this.mapOriginal;
+    }
+
+    /** Set by the region loader only: this object is the cache map's own. */
+    public markMapOriginal(): this {
+        this.mapOriginal = true;
+        return this.markBaseMap();
     }
 
     public getType(): number {

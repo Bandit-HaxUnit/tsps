@@ -198,6 +198,8 @@ const WELCOME_SCREEN_GROUP_ID = 378;
 
 export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: number, resized: boolean): void {
 
+        host.osrsClient.runeLite?.postBeforeRender();
+
         profiler.startFrame();
 
         // One-time initialization of overlay scales. onResize fires before host.app is
@@ -811,6 +813,10 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         host.renderTransparentPlayerPass(playerDataTextureIndex, playerDataTexture);
         transparentPlayerIndices = Math.max(0, host._frameIndices - passStartIndices);
         transparentPlayerBatches = Math.max(0, host._frameBatches - passStartBatches);
+        profiler.endPhase();
+
+        profiler.startPhase("afterScene");
+        host.osrsClient.clientPlugins.afterSceneRender(host);
         profiler.endPhase();
 
         try {

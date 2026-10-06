@@ -925,6 +925,9 @@ export function registerWidgetOps(handlers: HandlerMap): void {
             if (ctx.widgetManager.isServerOwnedWidget(uid)) {
                 return;
             }
+            // Scripts often rebuild the same children right after (every cycle, for timers):
+            // the redraw waits to see whether anything changed.
+            ctx.widgetManager.beginChildRebuild(w);
             // Unregister all dynamic children first
             if (w.children) {
                 for (const child of w.children) {

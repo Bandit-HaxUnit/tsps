@@ -13,7 +13,7 @@ export function createHdProgram([vertex, fragment]: ProgramSource, lighting: str
     vertex = vertex.slice(0, vertexEnd) + `
     v_hdTerrain = ${terrain ? "modelInfo.contourGround == 3.0 ? 1.0 : 0.0" : "0.0"};
     v_hdGroundMaterial = ${terrain ? "v_hdTerrain > 0.5 && vertex.textureId == 0u ? uint(max(round(-vertex.texCoord.x * 64.0), 0.0)) : 0u" : "0u"};
-    v_hdNormal = ${terrain ? "u_hdEnabled && !u_hdShadowPass && v_hdTerrain > 0.5 ? hdTerrainNormal(localPos.xz - u_mapPos * 64.0, modelInfo.plane) : vec3(0.0)" : actorInfo ? `u_hdEnabled && !u_hdShadowPass && (a_vertex.w >> 16u) != 0u ? mat3(u_hdInverseView * u_worldEntityTransform * u_viewMatrix) * (vec4(hdActorNormal(a_vertex.w), 0.0) * rotationY(float(${actorInfo}.rotation) * RS_TO_RADIANS)).xyz : vec3(0.0)` : "vec3(0.0)"};
+    v_hdNormal = ${terrain ? "u_hdEnabled && !u_hdShadowPass && v_hdTerrain > 0.5 ? hdTerrainNormal(localPos.xz - u_mapPos * 64.0, modelInfo.plane) : vec3(0.0)" : actorInfo ? `u_hdEnabled && !u_hdShadowPass && (a_vertex.w >> 16u) != 0u ? mat3(u_hdInverseView * u_worldEntityTransform * u_viewMatrix) * (vec4(${actorInfo === "playerInfo" ? "skinNormal(hdActorNormal(a_vertex.w))" : "hdActorNormal(a_vertex.w)"}, 0.0) * rotationY(float(${actorInfo}.rotation) * RS_TO_RADIANS)).xyz : vec3(0.0)` : "vec3(0.0)"};
     ${actorInfo ? `if (u_hdEnabled && !u_hdShadowPass && (a_vertex.w >> 16u) != 0u) {
         int baseHsl = applyHslOverride(int(a_vertex.w & 0xffffu), ${actorInfo}.hslOverride);
         baseHsl = applyHslOverride(baseHsl, u_sceneHslOverride);

@@ -112,6 +112,44 @@ test('::toaskiptoreward can force a unique and the pet to one player', () => {
   assert.equal(Rewards.sealedUnique(b), -1);
 });
 
+test('the collection log gets the loot when it is claimed (as in OSRS), once; the pet winner rolls only the pet', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { ItemIdentifiers: I } = require('../dist/util/ItemIdentifiers');
+  const Shared = require('../plugins/minigames/toa/ToaShared');
+  const Rewards = require('../plugins/minigames/toa/ToaRewards');
+  const events = [];
+  Shared.bind({ core: PluginManager.getCoreApi(), emitCustomEvent: (name, event) => events.push({ name, ...event, drops: event.drops && [...event.drops] }) });
+  const playerStub = () => {
+    const attributes = new Map();
+    const empty = { contains: () => false };
+    return {
+      getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+      getInventory: () => empty, getEquipment: () => empty, getBank: () => empty,
+    };
+  };
+  const a = playerStub();
+  const b = playerStub();
+  Rewards.rollRaidLoot({
+    players: [a, b], raidLevel: 0, totalDeaths: 1, lootPoints: () => 0,
+    settings: { isActive: () => false },
+    forcedLoot: { player: b, unique: I.TUMEKENS_SHADOW_UNCHARGED_, pet: true },
+  });
+  const logged = (player) => events.filter((e) => e.name === 'collection-log:obtain' && e.player === player).map((e) => e.itemId);
+  assert.deepEqual(logged(a), [], 'nothing as the loot is rolled');
+  assert.deepEqual(logged(b), []);
+  const rolls = events.filter((e) => e.name === 'npc-drops:roll');
+  assert.deepEqual(rolls.map((e) => [e.player, e.drops.map((d) => d.id)]), [[b, [I.TUMEKENS_GUARDIAN]]], 'only the pet is rolled');
+  // Searching the sarcophagus (or opening a chest) opens the loot.
+  Rewards.unsealUnique(b);
+  Rewards.logClaimed(b);
+  Rewards.logClaimed(a);
+  assert.deepEqual(logged(a), [I.FOSSILISED_DUNG]);
+  assert.ok(logged(b).includes(I.TUMEKENS_SHADOW_UNCHARGED_), 'the shadow, once the sarcophagus is searched');
+  const before = events.length;
+  Rewards.logClaimed(b);
+  assert.equal(events.length, before, 'reopening logs nothing again');
+});
+
 test("Tumeken's shadow: its own spell, the x3 (x4 in the tombs) passive and charges (Wiki)", () => {
   // Its definition: the powered staff's styles and its own bonuses (Wiki: +35 magic attack,
   // +20 magic defence, +1 prayer, two-handed, 85 Magic).

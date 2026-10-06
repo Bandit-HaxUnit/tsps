@@ -2,11 +2,6 @@
  * Config operations: ObjType, NpcType, LocType, Struct, Enum parameters
  */
 import {
-    getCollectionLogEnumCountOverride,
-    getCollectionLogEnumValueOverride,
-    getCollectionLogStructParamOverride,
-} from "../../../common/collectionlog/custom";
-import {
     getCustomEnumCountOverride,
     getCustomEnumValueOverride,
     getCustomStructParam,
@@ -311,17 +306,6 @@ export function registerConfigOps(handlers: HandlerMap): void {
         const structId = ctx.intStack[--ctx.intStackSize];
         const param = ctx.paramTypeLoader?.load(paramId);
 
-        // Collection log definitions are data-driven and override cache struct params.
-        const collectionLogOverride = getCollectionLogStructParamOverride(structId, paramId);
-        if (collectionLogOverride !== undefined) {
-            if (typeof collectionLogOverride === "string") {
-                ctx.pushString(collectionLogOverride);
-            } else {
-                ctx.pushInt(collectionLogOverride | 0);
-            }
-            return;
-        }
-
         // Check for custom content override first (centralized registry)
         let overrideVal = getCustomStructParam(structId, paramId);
         // Then check for cache league task data
@@ -367,13 +351,6 @@ export function registerConfigOps(handlers: HandlerMap): void {
         const enumId = ctx.intStack[--ctx.intStackSize];
         const inputType = ctx.intStack[--ctx.intStackSize]; // type code (not used, but must pop)
         const outputType = ctx.intStack[--ctx.intStackSize]; // type code (not used, but must pop)
-
-        // Collection log enums are server-configurable and override cache enum values.
-        const collectionLogEnumValue = getCollectionLogEnumValueOverride(enumId, key);
-        if (collectionLogEnumValue !== undefined) {
-            ctx.pushInt(collectionLogEnumValue | 0);
-            return;
-        }
 
         const enumType = loadEnum(ctx, enumId);
         const baseCount = enumType?.outputCount ?? 0;
@@ -434,12 +411,6 @@ export function registerConfigOps(handlers: HandlerMap): void {
         const key = ctx.intStack[--ctx.intStackSize];
         const enumId = ctx.intStack[--ctx.intStackSize];
 
-        const collectionLogEnumValue = getCollectionLogEnumValueOverride(enumId, key);
-        if (collectionLogEnumValue !== undefined) {
-            ctx.pushString(String(collectionLogEnumValue | 0));
-            return;
-        }
-
         const enumType = loadEnum(ctx, enumId);
         if (enumType && enumType.stringValues) {
             const idx = enumType.keys?.indexOf(key) ?? -1;
@@ -453,12 +424,6 @@ export function registerConfigOps(handlers: HandlerMap): void {
 
     handlers.set(Opcodes.ENUM_GETOUTPUTCOUNT, (ctx) => {
         const enumId = ctx.intStack[--ctx.intStackSize];
-
-        const collectionLogCount = getCollectionLogEnumCountOverride(enumId);
-        if (collectionLogCount !== undefined) {
-            ctx.pushInt(collectionLogCount);
-            return;
-        }
 
         const enumType = loadEnum(ctx, enumId);
         const baseCount = enumType?.outputCount ?? 0;
