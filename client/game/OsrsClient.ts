@@ -11,7 +11,7 @@ import {
     INTERFACE_QUEST_LIST_ID,
     SIDE_JOURNAL_GROUP_ID,
 } from "../common/ui/sideJournal";
-import { isMobileMode, isTouchDevice } from "../common/utils/DeviceUtil";
+import { isMobileMode, isTouchDevice, tooltipsEnabledByDefault } from "../common/utils/DeviceUtil";
 import { clamp } from "../common/utils/MathUtil";
 import {
     TRANSMIT_VARPS,
@@ -637,7 +637,7 @@ export class OsrsClient {
     targetFps: number = DEFAULT_FPS_LIMIT;
     mobileEffectiveResolutionScale: number = 1;
 
-    tooltips: boolean = !isTouchDevice;
+    tooltips: boolean = tooltipsEnabledByDefault;
     /**
      * Minimap zoom value (CS2 `minimap_getzoom` / `minimap_setzoom`).
      * OSRS stores the value in the 2..8 range and wheel input moves it by 0.25.

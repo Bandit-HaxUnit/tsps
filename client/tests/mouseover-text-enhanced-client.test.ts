@@ -12,13 +12,20 @@ Object.defineProperty(globalThis, "navigator", {
 });
 
 async function main(): Promise<void> {
-    const { isMobileMode, isTouchDevice } = await import("../common/utils/DeviceUtil");
+    const { isMobileMode, isTouchDevice, tooltipsEnabledByDefault } = await import(
+        "../common/utils/DeviceUtil"
+    );
     const { CLIENT_TYPE_ANDROID, CLIENT_TYPE_ENHANCED, isMobileClient, reportedClientType } =
         await import("../rs/cs2/ClientType");
     const { WidgetsOverlay } = await import("../ui/devoverlay/WidgetsOverlay");
 
     assert.equal(isTouchDevice, true, "the touchscreen is detected as a touch device");
     assert.equal(isMobileMode, false, "a touchscreen laptop keeps the desktop layout");
+    assert.equal(
+        tooltipsEnabledByDefault,
+        true,
+        "a touchscreen laptop keeps hover tooltips, or the world mouseover text has no menu",
+    );
 
     /**
      * As the enhanced client (clienttype 10) the game draws the top-left mouseover text itself
