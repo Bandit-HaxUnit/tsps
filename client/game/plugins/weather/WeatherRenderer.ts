@@ -22,9 +22,9 @@ uniform mat4 u_viewProj;
 out vec4 v_color;
 
 void main() {
-    // The scene negates model Y so that negative is up; instance y is a
-    // terrain sample in the same world-tile space.
-    vec3 world = vec3(a_position.x, -a_position.y, a_position.z) / 128.0 + a_instance.xyz;
+    // Model and world Y share the scene's convention (negative is up, as in
+    // main.vert); instance y is a terrain sample in the same world-tile space.
+    vec3 world = a_position / 128.0 + a_instance.xyz;
     gl_Position = u_viewProj * vec4(world, 1.0);
     v_color = a_color;
 }
@@ -212,7 +212,7 @@ export class WeatherRenderer {
                 .vertexAttributeBuffer(1, record.colorBuffer, { normalized: true } as any)
                 .instanceAttributeBuffer(2, record.instanceBuffer)
                 .indexBuffer(record.indexBuffer);
-            record.drawCall.delete();
+            // DrawCall holds no GPU resource (PicoGL has no delete for it); just replace it.
             record.drawCall = app.createDrawCall(state.program, record.vao);
             record.drawCall.uniform("u_alpha", 1.0);
         }
