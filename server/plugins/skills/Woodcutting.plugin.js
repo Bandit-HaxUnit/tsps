@@ -12,6 +12,8 @@ const Guild = require("./woodcutting/Guild.Woodcutting");
 const ClueNests = require("./woodcutting/ClueNests.Woodcutting");
 const InfernalAxe = require("./woodcutting/InfernalAxe.Woodcutting");
 const CrystalAxe = require("./woodcutting/CrystalAxe.Woodcutting");
+const EntTrunk = require("./woodcutting/EntTrunk.Woodcutting");
+const Shrine = require("./woodcutting/Shrine.Woodcutting");
 
 const DEFAULT_TREE_STUMP_ID = ObjectIds.TREE_STUMP_2;
 // Older trees share models but not stumps, and some sit next to an unrelated stump id; key their
@@ -1053,6 +1055,7 @@ function processWoodcuttingTick(activeSessions, currentTick) {
         player,
         skill: Skill.WOODCUTTING,
         petBase: state.tree.petBase,
+        logId: state.tree.logId,
       });
       maybeDropBirdNest(player);
       ClueNests.rollClueNests(player, state.tree);
@@ -1127,6 +1130,8 @@ module.exports = {
     ClueNests.attach(api);
     InfernalAxe.attach(api);
     CrystalAxe.attach(api);
+    EntTrunk.attach(api, { findBestUsableAxe, calculateCutChance, lumberjackXpMultiplier, maybeDropBirdNest });
+    Shrine.attach(api);
 
     api.onPlayerDisconnect(({ player }) => {
       stopWoodcutting(activeSessions, player, false);

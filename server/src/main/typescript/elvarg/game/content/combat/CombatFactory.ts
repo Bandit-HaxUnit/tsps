@@ -1226,9 +1226,11 @@ export class CombatFactory {
         if (!hasActiveDifferentTarget || npcCanRetargetInMulti) {
             let auto_ret = false;
             if (target.isPlayer()) {
+                // combat:no-retaliate: a player mid-action that ignores hits (chopping an Ent trunk).
                 auto_ret =
                     target.getAsPlayer().autoRetaliateReturn() &&
-                    !playerIsBusy();
+                    !playerIsBusy() &&
+                    target.hasFlag?.("combat:no-retaliate") !== true;
             } else if (target.isNpc()) {
                 auto_ret = target.hasFlag?.("combat:no-retaliate") !== true
                     && target.getAsNpc().getMovementCoordinator().getCoordinateState() == CoordinateState.HOME;
@@ -1259,7 +1261,8 @@ export class CombatFactory {
             }
             TaskManager.submit(new CombatFactoryTask(1, target, false, () => {
                 if (target.isPlayer() &&
-                    (!target.getAsPlayer().autoRetaliateReturn() || playerIsBusy())) {
+                    (!target.getAsPlayer().autoRetaliateReturn() || playerIsBusy()
+                        || target.hasFlag?.("combat:no-retaliate") === true)) {
                     return;
                 }
                 target.getCombat().attack(attacker, true);

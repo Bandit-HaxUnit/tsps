@@ -174,6 +174,12 @@ export interface PluginNpcDeathEvent {
   npc: any;
   npcId: number;
   location: { x: number; y: number; z: number };
+  /**
+   * Set by a handler to leave the npc in the world after it dies (an Ent's trunk): it stays
+   * `ticks` ticks before it is removed, then respawns `respawnTicks` later (default: its
+   * definition's respawn).
+   */
+  remains?: { ticks: number; respawnTicks?: number } | null;
 }
 
 /** Fired before an NPC enters its death task. Set preventDeath for phase changes. */
