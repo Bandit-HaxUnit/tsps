@@ -17,12 +17,13 @@ const { ObjectManager } = require("../dist/game/entity/impl/object/ObjectManager
 const { ItemOnGroundManager } = require("../dist/game/entity/impl/grounditem/ItemOnGroundManager");
 const ObstacleRunner = require("../plugins/skills/agility/ObstacleRunner");
 const NpcDrops = require("../plugins/npcs/NpcDrops.plugin");
-const Plugin = require("../plugins/areas/edgevilledungeon/EdgevilleDungeon.plugin");
-const Lair = require("../plugins/areas/edgevilledungeon/GiantLair");
-const Obor = require("../plugins/areas/edgevilledungeon/Obor");
-const Bryophyta = require("../plugins/areas/edgevilledungeon/Bryophyta");
-const GiantBones = require("../plugins/areas/edgevilledungeon/GiantBones");
+const Dungeon = require("../plugins/areas/edgevilledungeon/EdgevilleDungeon.plugin");
 const BrassKeyDoor = require("../plugins/areas/edgevilledungeon/BrassKeyDoor");
+const GiantLairs = require("../plugins/bosses/giantlairs/GiantLairs.plugin");
+const Lair = require("../plugins/bosses/giantlairs/GiantLair");
+const Obor = require("../plugins/bosses/giantlairs/Obor");
+const Bryophyta = require("../plugins/bosses/giantlairs/Bryophyta");
+const GiantBones = require("../plugins/bosses/giantlairs/GiantBones");
 
 const DATA = Lair.DATA;
 const OBOR = DATA.lairs.obor;
@@ -59,7 +60,8 @@ before(async () => {
   RegionManager.init();
   for (const [x, y] of [[3091, 9805], [3220, 9933], [3115, 3450]]) RegionManager.loadMapFiles(x, y);
   ObstacleRunner.init(api);
-  Plugin.register(api);
+  Dungeon.register(api);
+  GiantLairs.register(api);
   NpcDrops.register(api);
   ObjectManager.register = (object) => placed.push({ id: object.getId(), x: object.getLocation().getX(), y: object.getLocation().getY(), face: object.getFace() });
   ObjectManager.deregister = (object) => placed.push({ removed: object.getId() });
@@ -190,15 +192,15 @@ test("the data: every id as the cache names it, Bryophyta no longer in the open 
   assert.equal(loc(DATA.obor.pitRocks), "Rocks");
   assert.equal(loc(DATA.bryophyta.logs.withAxe), "Logs");
   assert.equal(npc(DATA.bryophyta.growthling), "Growthling");
-  assert.equal(loc(DATA.brassKeyDoor.door), "Door");
-  assert.equal(item(DATA.brassKeyDoor.key), "Brass key");
+  assert.equal(loc(Dungeon.DATA.brassKeyDoor.door), "Door");
+  assert.equal(item(Dungeon.DATA.brassKeyDoor.key), "Brass key");
   assert.equal(item(DATA.giantBones.item), "Giant bones");
   const spawns = fs.readFileSync(path.resolve(__dirname, "../data/definitions/npc-spawns.json"), "utf8");
   assert.ok(!spawns.includes('"name":"Bryophyta"'), "she lives only in each player's lair");
 });
 
 test("as captured: the brass key door is locked without the key; with it, the player steps through and it shuts", () => {
-  const door = DATA.brassKeyDoor;
+  const door = Dungeon.DATA.brassKeyDoor;
   const without = createPlayer({ x: 3115, y: 3449 });
   BrassKeyDoor.open({ player: without, ...object(door.door, 3115, 3450) });
   assert.deepEqual(without.log, ["The door is locked."]);

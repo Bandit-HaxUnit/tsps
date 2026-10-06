@@ -7,14 +7,26 @@
  * The capture went in; the way out is assumed to be the same.
  */
 const ObstacleRunner = require("../../skills/agility/ObstacleRunner");
-const Lair = require("./GiantLair");
-
-const DOOR = Lair.DATA.brassKeyDoor;
 
 let core = null;
+let DOOR = null;
 
-function bind(pluginApi) {
+function bind(pluginApi, door) {
   core = pluginApi.core;
+  DOOR = door;
+}
+
+function later(ticks, action) {
+  const { Task, TaskManager } = core;
+  TaskManager.submit(new (class extends Task {
+    constructor() {
+      super(ticks, null, false);
+    }
+    execute() {
+      this.stop();
+      action();
+    }
+  })());
 }
 
 const same = (location, tile) => location.x === tile.x && location.y === tile.y && (location.z ?? 0) === (tile.z ?? 0);
@@ -46,7 +58,7 @@ function open(event) {
         place(DOOR.invisibleWall, DOOR.tile, DOOR.face);
         const opened = place(DOOR.openDoor, DOOR.openDoorTile, DOOR.openDoorFace);
         player.getPacketSender().sendSound(DOOR.openSound, 1, 0);
-        Lair.later(DOOR.shutTicks, () => {
+        later(DOOR.shutTicks, () => {
           core.ObjectManager.deregister(opened, true);
           place(DOOR.door, DOOR.tile, DOOR.face);
         });
@@ -57,5 +69,4 @@ function open(event) {
   return true;
 }
 
-module.exports = { open };
-module.exports.bind = bind;
+module.exports = { bind, open };

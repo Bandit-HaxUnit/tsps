@@ -1,23 +1,7 @@
 {
   "meta": {
-    "about": "Obor's and Bryophyta's lairs and the Edgeville Dungeon's brass key door. Positions, ids, timings and messages are from rsprox captures and the cache's map; stats and the chest tables are from the OSRS Wiki (Obor, Bryophyta, Growthling, Chest (Obor's lair), Chest (Bryophyta's lair)). Chest tables use the npc-drops table format.",
+    "about": "Obor's and Bryophyta's lairs. Positions, ids, timings and messages are from rsprox captures and the cache's map; stats and the chest tables are from the OSRS Wiki (Obor, Bryophyta, Growthling, Chest (Obor's lair), Chest (Bryophyta's lair)). Chest tables use the npc-drops table format.",
     "license": "Chest tables: CC BY-NC-SA 3.0, content from the Old School RuneScape Wiki"
-  },
-  "brassKeyDoor": {
-    "door": 1804,
-    "key": 983,
-    "tile": { "x": 3115, "y": 3450, "z": 0 },
-    "face": 3,
-    "outside": { "x": 3115, "y": 3449, "z": 0 },
-    "inside": { "x": 3115, "y": 3450, "z": 0 },
-    "invisibleWall": 38848,
-    "openDoor": 1539,
-    "openDoorTile": { "x": 3115, "y": 3449, "z": 0 },
-    "openDoorFace": 0,
-    "unlockSound": 2402,
-    "openSound": 62,
-    "shutTicks": 2,
-    "messages": { "locked": "The door is locked.", "unlock": "You unlock the door." }
   },
   "lairs": {
     "obor": {
@@ -204,10 +188,5 @@
     "sound": 2738,
     "xp": 150,
     "noRoom": "I don't think those will fit in my backpack..."
-  },
-  "diary": {
-    "pipe": { "object": 16511, "minX": 3149, "maxX": 3155, "y": 9906, "diary": "varrock", "task": "squeeze-through-an-obstacle-pipe-in-edgeville-du" },
-    "vannaka": { "master": 403, "diary": "varrock", "task": "get-a-slayer-task-from-vannaka" },
-    "earthWarrior": { "name": "Earth warrior", "area": { "minX": 3100, "maxX": 3140, "minY": 9970, "maxY": 10010 }, "diary": "wilderness", "task": "kill-an-earth-warrior-in-the-wilderness-beneath" }
   }
 }

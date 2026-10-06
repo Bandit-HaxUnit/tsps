@@ -1,12 +1,8 @@
 # Edgeville Dungeon
 
-The Edgeville Dungeon's monsters, spawns, kill drops and agility shortcuts come from the general data. This page covers what `server/plugins/areas/edgevilledungeon/` adds:
-- the brass key door;
-- Obor's and Bryophyta's lairs, with their bosses and chests;
-- giant bones;
-- the area's diary tasks.
-
-Its data is `server/data/definitions/giant-boss-lairs.json`.
+The Edgeville Dungeon's monsters, spawns, kill drops and agility shortcuts come from the general data. This page covers what two plugins add:
+- `server/plugins/areas/edgevilledungeon/`: the brass key door and the area's diary tasks (data: `edgeville-dungeon.json`);
+- `server/plugins/bosses/giantlairs/`: Obor's and Bryophyta's lairs, with their bosses and chests, and giant bones (data: `giant-boss-lairs.json`).
 
 ## Sources
 

@@ -1,28 +1,24 @@
 /**
  * The Edgeville Dungeon (https://oldschool.runescape.wiki/w/Edgeville_Dungeon), from
- * data/definitions/giant-boss-lairs.json: the brass key door, Obor's and Bryophyta's lairs with
- * their bosses and chests, giant bones, and the area's diary tasks, as captured. See
+ * data/definitions/edgeville-dungeon.json: the brass key door and the area's diary tasks, as
+ * captured. Obor's and Bryophyta's lairs are plugins/bosses/giantlairs. See
  * docs/edgeville-dungeon.md.
  */
-const Lair = require("./GiantLair");
-const Obor = require("./Obor");
-const Bryophyta = require("./Bryophyta");
-const GiantBones = require("./GiantBones");
+const fs = require("fs");
+const path = require("path");
+const { GameConstants } = require("../../../src/main/typescript/elvarg/game/GameConstants");
 const BrassKeyDoor = require("./BrassKeyDoor");
 
-const DIARY = Lair.DATA.diary;
-const OBOR = Lair.DATA.lairs.obor;
-const BRYOPHYTA = Lair.DATA.lairs.bryophyta;
+const DATA = JSON.parse(
+  fs.readFileSync(path.join(GameConstants.DEFINITIONS_DIRECTORY, "edgeville-dungeon.json"), "utf8"),
+);
+const DIARY = DATA.diary;
 
 let api = null;
 
 function bind(pluginApi) {
   api = pluginApi;
-  Lair.bind(pluginApi);
-  Obor.bind(pluginApi);
-  Bryophyta.bind(pluginApi);
-  GiantBones.bind(pluginApi);
-  BrassKeyDoor.bind(pluginApi);
+  BrassKeyDoor.bind(pluginApi, DATA.brassKeyDoor);
 }
 
 const task = (player, { diary, task: key }) => api.emitCustomEvent("diary:task", { player, diary, task: key });
@@ -39,9 +35,7 @@ function taskAssigned({ player, master }) {
 }
 
 /** Wilderness easy: an Earth warrior in the dungeon's Wilderness part. */
-function npcKilled(event) {
-  Lair.onBossDeath(event);
-  const { killer, npc } = event;
+function npcKilled({ killer, npc }) {
   const warrior = DIARY.earthWarrior;
   if (!killer?.isPlayer?.() || npc?.getDefinition?.()?.getName?.() !== warrior.name) return;
   const at = npc.getLocation();
@@ -51,23 +45,11 @@ function npcKilled(event) {
 
 module.exports = {
   name: "EdgevilleDungeon",
+  DATA,
   register(pluginApi) {
     bind(pluginApi);
-    for (const key of [...Lair.ATTRIBUTES, GiantBones.DATA.dontAskAttribute]) pluginApi.persistAttribute(key);
-    pluginApi.onPlayerLogin(Lair.restore);
     pluginApi.onObjectInteraction("Door", { Open: BrassKeyDoor.open });
-    pluginApi.onObjectInteraction("Gate", { Open: Lair.gate, "Quick-exit": Lair.quickExit });
-    pluginApi.onObjectInteraction("Rock Pile", { Clamber: Lair.exitLair, "Quick-exit": Lair.quickExit });
-    pluginApi.onObjectInteraction("Chest", { Open: Lair.openChest });
-    pluginApi.onObjectInteraction("Rocks", { Climb: Obor.climbRocks });
-    pluginApi.onObjectInteraction("Logs", { "Take-axe": Bryophyta.takeAxe });
-    pluginApi.registerNpcCombatMethodProvider([OBOR.boss], Obor.defineOborCombatMethod(), { singleton: false });
-    pluginApi.registerNpcCombatMethodProvider([BRYOPHYTA.boss], Bryophyta.defineBryophytaCombatMethod(), { singleton: false });
-    pluginApi.onNpcHitModify(Bryophyta.modifyHit);
     pluginApi.onNpcDeath(npcKilled);
-    pluginApi.onGroundItemPickup(GiantBones.take);
-    pluginApi.onGroundItemClick(GiantBones.DATA.item, 3, GiantBones.bury);
-    pluginApi.onCustomEvent("collection-log:category-count", Lair.collectionLogCount);
     pluginApi.onCustomEvent("agility:obstacle", pipeSqueezed);
     pluginApi.onCustomEvent("slayer:task-assigned", taskAssigned);
   },
