@@ -615,10 +615,31 @@ function createModelGroups(
  * Repeated scenery merges into the map square's shared geometry when its copies total fewer
  * faces than this; above it, the model is drawn instanced. Each instanced model is a draw of
  * its own, and where multi-draw is emulated (ANGLE on D3D11) every one costs a real draw call:
- * at 100 faces, Edgeville drew ~1,000 per frame. 1,000 merges ~3/4 of them for ~5 MB per
+ * at 100 faces, Edgeville drew ~1,000 per frame. 3,000 merges ~9/10 of them for ~12 MB per
  * six map squares; big clusters (a forest of one tree) stay instanced.
  */
-const MERGE_INSTANCED_FACES = 1000;
+const MERGE_INSTANCED_FACES = 3000;
+
+/** Instances by level and plane-cull level (key: level | planeCull << 8), one draw per group. */
+function groupByLevelAndPlane(models: SceneModel[]): Map<number, SceneModel[]> {
+    const groups = new Map<number, SceneModel[]>();
+    for (const sm of models) {
+        const planeCull = sm.planeCullLevel ?? sm.level;
+        const key = sm.level | (planeCull << 8);
+        const list = groups.get(key);
+        if (list) list.push(sm);
+        else groups.set(key, [sm]);
+    }
+    return groups;
+}
+
+/** Whether every level/plane group would draw one copy: then merging costs no duplication. */
+function onlySingleCopyGroups(models: SceneModel[]): boolean {
+    for (const group of groupByLevelAndPlane(models).values()) {
+        if (group.length > 1) return false;
+    }
+    return true;
+}
 
 function addSceneModels(
     modelHashBuf: ModelHashBuffer,
@@ -675,14 +696,19 @@ function addSceneModels(
         }
 
         const instanceCount = instancedModels.length;
+        const singleCopies = instanceCount > 1 && onlySingleCopyGroups(instancedModels);
         const mergeOpaque =
             instanceCount === 1 ||
+            singleCopies ||
             instanceCount * opaqueFaces.length < MERGE_INSTANCED_FACES ||
             minimizeDrawCalls;
         const mergeTransparent =
             instanceCount === 1 ||
+            singleCopies ||
             instanceCount * transparentFaces.length < MERGE_INSTANCED_FACES ||
             minimizeDrawCalls;
+        const singleOpaque: SceneModel[] = [];
+        const singleTransparent: SceneModel[] = [];
 
         // mergeOpaque = false;
         // mergeTransparent = false;
@@ -714,6 +740,11 @@ function addSceneModels(
             }
 
             for (const [key, models] of byLevelAndPlane.entries()) {
+                // One copy on this level/plane: merged, it's no extra geometry and no extra draw.
+                if (models.length === 1) {
+                    singleOpaque.push(models[0]);
+                    continue;
+                }
                 const lvl = key & 0xff;
                 const drawCommand: DrawCommand = {
                     offset: indexOffset,
@@ -762,6 +793,10 @@ function addSceneModels(
             }
 
             for (const [key, models] of byLevelAndPlane.entries()) {
+                if (models.length === 1) {
+                    singleTransparent.push(models[0]);
+                    continue;
+                }
                 const lvl = key & 0xff;
                 const drawCommand: DrawCommand = {
                     offset: indexOffset,
@@ -783,6 +818,8 @@ function addSceneModels(
                 }
             }
         }
+        if (singleOpaque.length > 0) createModelGroups(modelGroupMap, singleOpaque, false);
+        if (singleTransparent.length > 0) createModelGroups(modelGroupMap, singleTransparent, true);
     }
 
     for (const group of modelGroupMap.values()) {
