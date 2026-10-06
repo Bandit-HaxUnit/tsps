@@ -13,9 +13,11 @@
  *   dragon's table (and Forinthry surge with an amulet of avarice); everyone else who hurt it
  *   gets a blighted super restore and two blighted food, under them.
  */
-const { rollDrops } = require("./RevenantDrops");
+const { rollDrops } = require("./Drops.Revenants");
+const { MALEDICTUS_ID, inCaves } = require("./Data.Revenants");
+const Avarice = require("./Avarice.Revenants");
 
-const ID = 11246;
+const ID = MALEDICTUS_ID;
 const NAME = "Revenant maledictus";
 const SPAWN_RATE = 10_000; // ours (Near-Reality's): the Wiki's "flat spawn rate" isn't published
 const COOLDOWN_MS = 45 * 60_000;
@@ -304,4 +306,29 @@ function createMaledictus(api, core, { inCaves, surge }) {
   return { MaledictusCombat, onRevenantKilled, spawn, rememberDamagers, dropLoot, nextAttack };
 }
 
-module.exports = { createMaledictus, ID, SPAWNS, SPAWN_RATE, state };
+let maledictus = null;
+
+/** Called by the revenant loot for every revenant killed in the caves. */
+function onRevenantKilled(combatLevel) {
+  maledictus?.onRevenantKilled(combatLevel);
+}
+
+function dropLoot(event) {
+  if (event.npcId === ID) maledictus.dropLoot(event);
+}
+
+/** ::maledictus - spawns the Revenant maledictus here (testing; the natural spawn is rare). */
+function spawnHere({ player }) {
+  const at = player.getLocation();
+  maledictus.spawn({ x: at.getX(), y: at.getY(), hint: "middle" });
+}
+
+module.exports = function attachMaledictus(api) {
+  maledictus = createMaledictus(api, api.core, { inCaves, surge: Avarice });
+  api.registerNpcCombatMethodProvider([ID], maledictus.MaledictusCombat, { singleton: false });
+  api.onNpcBeforeDeath(maledictus.rememberDamagers);
+  api.onNpcDeath(dropLoot);
+  api.registerCommand("maledictus", spawnHere, api.core.PlayerRights.DEVELOPER, "Spawn the Revenant maledictus here");
+};
+
+Object.assign(module.exports, { createMaledictus, onRevenantKilled, ID, SPAWNS, SPAWN_RATE, state });

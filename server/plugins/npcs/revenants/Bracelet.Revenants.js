@@ -4,7 +4,8 @@
  * and makes revenants tolerant. With absorption on, defeated revenants' ether goes straight into
  * it. The check and toggle messages are captured; the rest is ours (docs/revenants.md).
  */
-const { ITEMS } = require("./RevenantData");
+const { ITEMS } = require("./Data.Revenants");
+const Revenants = require("./Common.Revenants");
 
 const MAX_CHARGES = 16_000;
 const DISMANTLE_ETHER = 250;
@@ -142,7 +143,33 @@ function emptyForDeathDrop(item) {
   return amount;
 }
 
-module.exports = {
+/** A charged bracelet drops uncharged, with its ether beside it (Wiki: always lost on death). */
+function braceletDeathDrop(event) {
+  const id = event.item?.getId?.();
+  if (id !== ITEMS.BRACELET_CHARGED || !event.shouldDropItems) return;
+  const { core } = Revenants;
+  const ether = emptyForDeathDrop(event.item);
+  const owner = event.killer?.isPlayer?.() ? event.killer.getAsPlayer() : event.player;
+  core.ItemOnGroundManager.registerLocation(owner, new core.Item(ITEMS.BRACELET_UNCHARGED, 1), event.location);
+  if (ether > 0) core.ItemOnGroundManager.registerLocation(owner, new core.Item(ITEMS.ETHER, ether), event.location);
+  event.handled = true;
+}
+
+module.exports = function attachBracelet(api) {
+  api.persistAttribute(ABSORB_ATTRIBUTE);
+  api.onItemOnItem("Revenant ether", "Bracelet of ethereum", chargeWithEther);
+  api.onItemOnItem("Revenant ether", "Bracelet of ethereum (uncharged)", chargeWithEther);
+  api.onItemAction("Bracelet of ethereum", {
+    Check: check, "Toggle-absorption": toggleAbsorption, Uncharge: uncharge,
+  });
+  api.onItemAction("Bracelet of ethereum (uncharged)", {
+    "Toggle-absorption": toggleAbsorption, Dismantle: dismantle,
+  });
+  api.onShouldKeepItemOnDeath(neverKept);
+  api.onPlayerDeathItemDrop(braceletDeathDrop);
+};
+
+Object.assign(module.exports, {
   MAX_CHARGES,
   ABSORB_ATTRIBUTE,
   charges,
@@ -157,4 +184,5 @@ module.exports = {
   dismantle,
   neverKept,
   emptyForDeathDrop,
-};
+  braceletDeathDrop,
+});

@@ -1,6 +1,6 @@
 # Revenants
 
-`server/plugins/npcs/revenants/` covers the revenants' combat, their shared drop table and the bracelet of ethereum. The caves (entrances, fee, exits, scroll) are in [Revenant Caves](revenant-caves.md).
+`server/plugins/npcs/Revenants.plugin.js`, with its parts in `server/plugins/npcs/revenants/`, covers the revenants' combat (`Combat.Revenants.js`), their shared drop table (`Drops.Revenants.js`, dropped by `Loot.Revenants.js`), the bracelet of ethereum (`Bracelet.Revenants.js`), the amulet of avarice and the Revenant maledictus. The caves (entrances, fee, exits, scroll) are in [Revenant Caves](revenant-caves.md).
 
 **Sources:**
 - **OSRS captures** (rsprox): fights with a revenant hellhound, pyrefiend and dragon, deaths in the caves, and the bracelet's charging, check and toggle;
@@ -49,7 +49,7 @@
 
 ## Revenant maledictus
 
-`Maledictus.js`, from a captured fight (spawn to loot) and the Wiki.
+`Maledictus.Revenants.js`, from a captured fight (spawn to loot) and the Wiki.
 
 **Spawning:**
 - Each revenant killed in the caves adds its combat level to a world total. The boss spawns when a roll out of the "flat spawn rate" lands under that total (Wiki). The rate isn't published, so **10,000 is ours** (Near-Reality uses the same).
@@ -75,7 +75,7 @@
 - **Everyone else who hurt it:** a Blighted super restore(4) and 2 of one blighted food, under them.
 - **Announcements:** every participant sees each drop: "<col=005f00>{name} received a drop: {2 x }{item}</col> <col=106f10>(Revenant maledictus)</col>".
 
-**Amulet of avarice and Forinthry surge** (`Avarice.js`, Wiki):
+**Amulet of avarice and Forinthry surge** (`Avarice.Revenants.js`, Wiki):
 - **Amulet:** +20% accuracy and damage against revenants in the caves, and the wearer stays skulled.
 - **Forinthry surge:** the top damage dealer, if wearing the amulet, gets 15% more for 30 minutes. Applied one after the other (**ours**; the Wiki doesn't say how they combine).
 - **Our wording:** "You are empowered by the Forinthry surge."

@@ -85,6 +85,9 @@ const HEAL = {
   sound: 3887,
 };
 
+/** The Revenant maledictus, the caves' superior revenant. */
+const MALEDICTUS_ID = 11246;
+
 const ITEMS = {
   COINS: 995,
   ETHER: 21820,
@@ -93,4 +96,4 @@ const ITEMS = {
   AMULET_OF_AVARICE: 22557,
 };
 
-module.exports = { REVENANTS, REVENANT_IDS, inCaves, STYLE_ANIMATIONS, ATTACK_SOUNDS, MAGIC, RANGED, HEAL, ITEMS };
+module.exports = { REVENANTS, REVENANT_IDS, MALEDICTUS_ID, inCaves, STYLE_ANIMATIONS, ATTACK_SOUNDS, MAGIC, RANGED, HEAL, ITEMS };
