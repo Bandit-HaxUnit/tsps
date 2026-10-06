@@ -93,11 +93,18 @@ function parseNameToId(source: string): Map<string, number> {
 
 /** Reads the last git-committed version of a file, or null if there isn't one (new file / no git). */
 function loadCommittedNameToId(filePath: string): Map<string, number> {
+    // `HEAD:./file` resolves against git's working directory (the file's own folder), so this
+    // works from any cwd. The item and object files are over 1 MB, past execFileSync's default
+    // buffer. Without the committed names every constant is renamed, so say so if it fails.
     try {
-        const relative = path.relative(process.cwd(), filePath);
-        const source = execFileSync("git", ["show", `HEAD:${relative}`], { encoding: "utf8" });
+        const source = execFileSync("git", ["show", `HEAD:./${path.basename(filePath)}`], {
+            cwd: path.dirname(filePath),
+            encoding: "utf8",
+            maxBuffer: 64 * 1024 * 1024,
+        });
         return parseNameToId(source);
-    } catch {
+    } catch (error) {
+        console.warn(`  could not read the committed ${path.basename(filePath)}; names will not be kept stable (${(error as Error).message.split("\n")[0]})`);
         return new Map();
     }
 }

@@ -12,11 +12,13 @@ do not have to guess - each one documents its own output in its file header:
 | `yarn dump:seq [<seqId...>]` | Animation sequences: frame count/ids, priority and loop count - what an attack animation lookup needs. |
 | `yarn dump:spotanim [<spotanimId...>]` | Graphics (spotanim) configs: the model and sequence each gfx plays. |
 | `yarn dump:item-combat-styles` | Refreshes `data/definitions/item-combat-styles.json` from cache dbtable 78, preserving server-owned fields. |
+| `yarn remap:components <cache dir>` | Every interface component whose id differs in another cache revision, matched by gameval name, and the literal `(group << 16) \| component` ids in our code that would point elsewhere. Read-only. |
 | `yarn ensure-cache` | Downloads/validates the cache the above need. |
 
 Typical flow for an interface:
 
-1. Find the group/component name in RuneLite's generated `InterfaceID.java`.
+1. Find the group/component name: the cache's own gamevals name them (`chatbox:chatmodal`),
+   which is what rsprox prints in captures; RuneLite's generated `InterfaceID.java` too.
 2. Confirm it against this cache with `yarn dump:widget <groupId>`.
 3. If a value renders oddly, `yarn dump:cs2` the listener to see what drives it.
 
@@ -24,5 +26,27 @@ Typical flow for an interface:
 that the same script will overwrite a tick later.**
 
 Item/NPC/object constants are generated from the live cache - regenerate with
-`scripts/generate-identifiers.ts` rather than hand-editing, and `scripts/audit-identifiers.ts`
+`scripts/generate-identifiers.ts` rather than hand-editing (run `--dry-run` first: it reports
+added/changed/removed names and keeps existing names stable), and `scripts/audit-identifiers.ts`
 checks the names still match the cache.
+
+## Gamevals
+
+The OSRS cache carries Jagex's own names for its ids in index 24 (one archive per kind: objs,
+npcs, locs, seqs, spotanims, varps, varbits, dbrows, and interfaces with their components).
+`game/cache/Gamevals.ts` reads them: `componentName(uid)` / `componentId("chatbox:chatmodal")`
+and `namesOf(GamevalKind.SEQ)`. They are the names rsprox prints (`human_reachforladder`,
+`slayertower_door`), so a capture maps straight onto ids.
+
+## Updating the cache revision
+
+`target.txt` names the cache. Before moving to a newer one:
+
+- Config and clientscript opcode meanings for the new revision: https://github.com/zwyz/osrs-cache
+  (`data/commands/*.txt` for every CS2 command with its signature,
+  `src/main/java/osrs/unpack/config/*Unpacker.java` for config opcodes).
+- What changed in the client per revision: rsprot's `WHATSNEW.md` (https://github.com/blurite/rsprot).
+- `yarn remap:components <new cache dir>` for interface components that moved.
+- `scripts/generate-identifiers.ts --dry-run` for item/NPC/object names that moved or vanished.
+- Worktrees share `server/caches` through a symlink and `ensure-cache` rewrites `caches.json`
+  for every one of them: try a new revision in a worktree with its own `server/caches`.
