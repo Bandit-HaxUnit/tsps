@@ -70,6 +70,10 @@ function bootPlayerBotsRuntime(options = {}) {
     cachePath: config.objectIndexCachePath,
   });
 
+  const faceTarget = (event) => {
+    const target = event?.object?.getLocation?.() ?? event?.npc?.getLocation?.();
+    if (target) event.player?.setPositionToFace?.(target);
+  };
   const brainWorld = {
     core: botApi.core,
     refreshEquipment: (player) => botApi.getBonusManager().update(player),
@@ -83,9 +87,20 @@ function bootPlayerBotsRuntime(options = {}) {
       postCrossDelayMs: config.ditchPostCrossRetryDelayMs,
       roamMaxDistanceY: config.roamingDitchCrossMaxDistanceY,
     },
-    emitObjectInteraction: (event) => botApi.emitObjectInteraction(event),
-    emitNpcInteraction: (event) => botApi.emitNpcInteraction(event),
-    emitItemOnObject: (event) => botApi.emitItemOnObject(event),
+    // Face what is used, as the click handlers do for players (ObjectActionPacketListener,
+    // NPCOptionPacketListener): bots skip those packets, so trees and rocks went unfaced.
+    emitObjectInteraction: (event) => {
+      faceTarget(event);
+      return botApi.emitObjectInteraction(event);
+    },
+    emitNpcInteraction: (event) => {
+      faceTarget(event);
+      return botApi.emitNpcInteraction(event);
+    },
+    emitItemOnObject: (event) => {
+      faceTarget(event);
+      return botApi.emitItemOnObject(event);
+    },
     isBusy: (player) =>
       Fishing.isFishingActive?.(player) === true ||
       Cooking.isCookingActive?.(player) === true ||

@@ -6,8 +6,6 @@ const { canReachSpot } = require("../../behaviours/navigation/BotLongRoutes");
 const { requestMovement, peekMovementRequest } = require("../../behaviours/navigation/BotNavigation");
 const Fishing = require("../../../skills/Fishing.plugin");
 
-// Fishing ends when the player is further than this from the spot.
-const FISH_RANGE = 2;
 // Spots of the chosen cluster: within this of its centre.
 const SITE_RADIUS = 16;
 // Within this of the centre a bot stops walking and looks for a spot.
@@ -15,8 +13,9 @@ const SITE_ARRIVE = 8;
 const START_RETRY_MS = 3000;
 // At the cluster with no spot to fish (all moved off, out of reach): move on.
 const IDLE_MS = 60000;
-// A spot walked at but never got within FISH_RANGE of (boat-only water): skip it.
-const SPOT_TRIES = 2;
+// A spot walked at this many times without the fishing starting (no shore tile in reach):
+// skip it.
+const SPOT_TRIES = 3;
 const SPOT_AVOID_MS = 2 * 60 * 1000;
 const SITE_AVOID_MS = 10 * 60 * 1000;
 // Walking to a cluster without getting any closer this long (a members-only or level-locked
@@ -135,6 +134,8 @@ function createFishAction(spec, world) {
       }
       if (Fishing.isFishingActive(player)) {
         bot.idleSince = 0;
+        if (bot.approach) bot.spotTries.delete(bot.approach);
+        bot.approach = null;
         return "running";
       }
       if (player.getMovementQueue().size() > 0 || peekMovementRequest(player)) return "running";
@@ -152,30 +153,29 @@ function createFishAction(spec, world) {
       const here = tile(loc);
       const spot = nearestSpot(player, bot, nowMs);
       if (spot) {
-        const at = tile(spot.getLocation());
-        if (chebyshev(at, here) <= FISH_RANGE) {
-          bot.approach = null;
-          if (nowMs - bot.lastStartAt >= START_RETRY_MS) {
-            bot.lastStartAt = nowMs;
-            player.setPositionToFace?.(spot.getLocation());
-            world.emitNpcInteraction?.({
-              player, npc: spot, npcId: spot.getId(), npcIndex: spot.getIndex(),
-              clickType: clickTypeAt(spot), location: at, handled: false,
-            });
-          }
-          return "running";
-        }
-        // The walk to the last spot ended out of range: that spot is off the shore.
+        if (nowMs - bot.lastStartAt < START_RETRY_MS) return "running";
+        // Walked at before and still not fishing: that spot has no shore tile in reach.
         if (bot.approach === spot) {
           const tries = (bot.spotTries.get(spot) ?? 0) + 1;
           bot.spotTries.set(spot, tries);
           if (tries >= SPOT_TRIES) {
             bot.avoidedSpots.set(spot, nowMs + SPOT_AVOID_MS);
             bot.spotTries.delete(spot);
+            bot.approach = null;
+            return "running";
           }
         }
         bot.approach = spot;
-        requestMovement(player, at.x, at.y, { nowMs, z: at.z, reason: "brain_fish_walk", basicPather: true });
+        bot.lastStartAt = nowMs;
+        // As a player's click on the spot: walk into NPC reach (adjacent, not diagonal or a
+        // square back), face it and fish (NPCOptionPacketListener does the same).
+        player.getMovementQueue().walkToEntity(spot, () => {
+          const at = spot.getLocation();
+          world.emitNpcInteraction?.({
+            player, npc: spot, npcId: spot.getId(), npcIndex: spot.getIndex(),
+            clickType: clickTypeAt(spot), location: { x: at.getX(), y: at.getY(), z: at.getZ() }, handled: false,
+          });
+        }, 1);
         return "running";
       }
       const fromSite = chebyshev(here, bot.site);
