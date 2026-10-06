@@ -1,4 +1,5 @@
 import { PrayerHandler, PrayerData } from "../../../../content/PrayerHandler";
+import { AggressionTolerance } from "../../npc/AggressionTolerance";
 import { normalizeSailingState, type SailingState } from "../../../../content/sailing/SailingState";
 import { FightType } from "../../../../content/combat/FightType";
 import { CombatSpells } from "../../../../content/combat/magic/CombatSpells";
@@ -36,7 +37,11 @@ export class PlayerSave {
         pcPoints: "pest-control:points",
         pouches: "runecrafting:pouches",
     };
-    private static readonly persistentAttributeKeys = new Set<string>(Object.values(PlayerSave.LEGACY_FIELD_ATTRIBUTES));
+    /** Core state kept as attributes: logging out doesn't reset aggression tolerance (Wiki). */
+    private static readonly persistentAttributeKeys = new Set<string>([
+        ...Object.values(PlayerSave.LEGACY_FIELD_ATTRIBUTES),
+        AggressionTolerance.ATTRIBUTE,
+    ]);
 
     public static persistAttribute(key: string): void {
         if (typeof key !== "string" || !key.trim() || key !== key.trim()) {

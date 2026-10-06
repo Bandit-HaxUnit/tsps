@@ -183,7 +183,8 @@ function taskTip(player) {
 }
 
 function isTaskNpc(task, npc) {
-  const npcName = npc?.getDefinition?.()?.getName?.();
+  // A transformed npc counts as what it is now (a woken Sand Crab, not its Sandy rocks).
+  const npcName = npc?.getCurrentDefinition?.()?.getName?.() ?? npc?.getDefinition?.()?.getName?.();
   if (!task || !npcName) {
     return false;
   }
@@ -207,7 +208,7 @@ function onNpcKilled(player, npc) {
 
   player
     .getSkillManager()
-    .addExperiences(Skill.SLAYER, npc.getDefinition().getHitpoints());
+    .addExperiences(Skill.SLAYER, (npc.getCurrentDefinition?.() ?? npc.getDefinition()).getHitpoints());
   task.setRemaining(task.getRemaining() - 1);
 
   if (task.getRemaining() > 0) {
