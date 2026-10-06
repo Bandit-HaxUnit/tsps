@@ -521,7 +521,7 @@ function recordOwnership(player, pet) {
   });
   if (others.length === owned.length && owned.includes(pet.itemId)) return;
   player.setAttribute(OWNED_ATTRIBUTE, [...others, pet.itemId]);
-  syncCollectionLog(player);
+  syncCollectionLog(player, { silent: false });
 }
 
 /** The collection log lists one item per pet: a skilling pet's base colour, never a morph. */
@@ -531,16 +531,16 @@ function collectionLogItemId(pet) {
   return base?.itemId ?? pet.itemId;
 }
 
-/** Ticks the collection log's collected entries from the persisted ownership record. */
-function syncCollectionLog(player) {
-  const sender = player?.getPacketSender?.();
-  if (typeof sender?.sendCollectionLogSnapshot !== "function") return;
-  const itemIds = [];
+/**
+ * Makes sure every owned pet is in the collection log (plugins/collectionlog/). Only a newly
+ * recorded pet announces itself; login and reclaiming re-sync silently.
+ */
+function syncCollectionLog(player, { silent = true } = {}) {
+  if (!player || !pluginApi) return;
   for (const itemId of getOwnedPetItems(player)) {
     const logId = collectionLogItemId(getPetForItemId(itemId));
-    if (Number.isInteger(logId) && !itemIds.includes(logId)) itemIds.push(logId);
+    if (Number.isInteger(logId)) pluginApi.emitCustomEvent("collection-log:obtain", { player, itemId: logId, ensure: true, silent });
   }
-  sender.sendCollectionLogSnapshot(itemIds.map((itemId, slot) => ({ slot, itemId, quantity: 1 })));
 }
 
 /** One pet item into the backpack, or the ground when there is no space. */

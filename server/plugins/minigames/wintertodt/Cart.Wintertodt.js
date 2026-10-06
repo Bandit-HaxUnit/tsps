@@ -56,6 +56,7 @@ function takeOne(player) {
   }
   player.getInventory().adds(reward.id, reward.amount);
   player.getInventory().refreshItems();
+  Shared.api()?.emitCustomEvent("collection-log:obtain", { player, itemId: reward.id, amount: reward.amount });
   Round.setRewardsOwed(player, Round.rewardsOwed(player) - 1);
   player.sendMessage(`You found some loot: ${reward.amount} x ${itemName(reward.id)}`);
   return true;
