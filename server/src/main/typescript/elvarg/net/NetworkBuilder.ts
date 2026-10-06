@@ -997,7 +997,7 @@ export class ClientConnection {
     if (optionIndex === 0) return;
     if (/^(wield|wear|equip)$/.test(option)) {
       EquipPacketListener.equip(player, packet.itemId, packet.slot, 3214);
-    } else if (option === "drop" || option === "destroy" || optionIndex === 5) {
+    } else if (ItemActionPacketListener.isDropOption(option, optionIndex)) {
       DropItemPacketListener.drop(player, packet.itemId, 3214, packet.slot);
     } else if (option === "examine") {
       const definition = ItemDefinition.forId(packet.itemId);

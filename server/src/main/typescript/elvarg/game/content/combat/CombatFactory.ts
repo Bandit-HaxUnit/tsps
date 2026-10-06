@@ -528,6 +528,12 @@ export class CombatFactory {
         return CanAttackResponse.CAN_ATTACK;
     }
 
+    /** Multi-combat rules apply: both stand in multi, or either is an NPC that is always multi. */
+    public static multiCombatBetween(attacker: Mobile, target: Mobile): boolean {
+        const alwaysMulti = (mobile: Mobile) => mobile.isNpc() && mobile.getAsNpc().isMultiCombat();
+        return alwaysMulti(attacker) || alwaysMulti(target) || (AreaManager.inMulti(attacker) && AreaManager.inMulti(target));
+    }
+
     /** Target/area ownership checks safe to run before pursuit; no ammo or runes are consumed. */
     public static canAttackPermission(
         attacker: Mobile,
@@ -560,7 +566,7 @@ export class CombatFactory {
         // Only check if we aren't in multi.
         if (!ServerPerf.measurePhase(
             "combat.process.can_attack.multi_check",
-            () => AreaManager.inMulti(attacker) && AreaManager.inMulti(target)
+            () => CombatFactory.multiCombatBetween(attacker, target)
         )) {
             if (
                 ServerPerf.measurePhase("combat.process.can_attack.attacker_busy", () =>

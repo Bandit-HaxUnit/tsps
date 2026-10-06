@@ -130,6 +130,7 @@ export class NPC extends Mobile {
     private isDying: boolean;
     private owner: Player;
     private ownerOnly: boolean = false;
+    private multiCombat: boolean = false;
     private visible: boolean = true;
     private face: FacingDirection = FacingDirection.SOUTH;
     private pet: boolean;
@@ -519,6 +520,20 @@ export class NPC extends Mobile {
 
     public setOwnerOnly(ownerOnly: boolean): NPC {
         this.ownerOnly = ownerOnly;
+        return this;
+    }
+
+    /**
+     * Fights with this NPC follow multi-combat rules wherever it stands: any number of players
+     * may attack it, and it may attack them all (the Revenant maledictus in the singles-plus
+     * Revenant Caves).
+     */
+    public isMultiCombat(): boolean {
+        return this.multiCombat;
+    }
+
+    public setMultiCombat(multiCombat: boolean): NPC {
+        this.multiCombat = multiCombat;
         return this;
     }
 
