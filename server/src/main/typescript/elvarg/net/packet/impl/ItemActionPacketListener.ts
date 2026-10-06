@@ -11,6 +11,8 @@ const getEquipPacketListener = () =>
   require("./EquipPacketListener")
     .EquipPacketListener as typeof import("./EquipPacketListener").EquipPacketListener;
 
+const DROP_OPTIONS = new Set(["drop", "destroy", "discard", "release"]);
+
 export class ItemActionPacketListener {
   /** Cache script 7779 uses enum 4303: inventory actions 1..5 occupy widget ops 2,3,4,6,7. */
   public static resolveInventoryWidgetAction(itemId: number, widgetOp: number): { optionIndex: number; option: string } | null {
@@ -20,6 +22,18 @@ export class ItemActionPacketListener {
     const index = widgetOp === 1 ? definition.getShiftClickIndex() : [2, 3, 4, 6, 7].indexOf(widgetOp);
     const option = definition.inventoryActions[index];
     return option ? { optionIndex: index + 1, option } : null;
+  }
+
+  /**
+   * Whether an inventory click drops (or destroys) the item. The fifth option is Drop or Destroy
+   * on most items, but not all (the Revenant cave teleport's is "Config", charged items'
+   * "Uncharge"), so the option's name decides; the slot alone only when the click carries no
+   * option text. "Discard" (Nightmare Zone) and "Release" (toads, chinchompas) still drop, as
+   * nothing handles them yet.
+   */
+  public static isDropOption(option: string, optionIndex: number): boolean {
+    if (option) return DROP_OPTIONS.has(option);
+    return optionIndex === 5;
   }
 
   public static handleAction(player: any, interfaceId: number, itemId: number, slot: number, clickType: number, option?: string): boolean {
