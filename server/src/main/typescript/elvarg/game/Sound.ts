@@ -161,6 +161,8 @@ export class Sound {
     public static PRAYER_RAPID_RESTORE = new Sound(2679, 1, 0, 0)
     public static RUNECRAFTING = Sound.CRAFT_RUNES
     public static HOME_TELEPORT = new Sound(193, 1, 0, 0)
+    /** A new item in the collection log (with its notification popup, as captured). */
+    public static COLLECTION_LOG_NEW_ITEM = new Sound(2304, 1, 0, 0)
     public static HOME_TELEPORT_ALT = Sound.HOME_TELEPORT
 
     public id: number;

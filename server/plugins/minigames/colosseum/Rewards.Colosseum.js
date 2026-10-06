@@ -102,6 +102,9 @@ function waveCompleted(run) {
   const earned = run.loot.future;
   merge(run.loot.rewards, earned);
   Loot.received(run.player, earned);
+  for (const { id, amount } of earned) {
+    Shared.api().emitCustomEvent("collection-log:obtain", { player: run.player, itemId: id, amount });
+  }
   run.loot.previous = earned;
   run.loot.future = wave < Shared.FINAL_WAVE ? Loot.roll(wave + 1, run.player, run.random) : [];
   if (wave >= Shared.FINAL_WAVE && Loot.rollsPet(run.random)) {

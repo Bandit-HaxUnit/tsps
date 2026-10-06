@@ -17,7 +17,7 @@ const broadcasts = [];
 const loginHooks = [];
 const logoutHooks = [];
 const deathHooks = [];
-const collectionLogSnapshots = [];
+const collectionLogObtains = [];
 const prompts = [];
 const npcApi = {};
 const world = {
@@ -43,6 +43,7 @@ Pets.register({
   getItemOnGroundManager: () => ({ registerNonGlobal() {}, registerLocation() {} }),
   persistAttribute() {},
   onCustomEvent: (name, handler) => events.set(name, handler),
+  emitCustomEvent: (name, request) => { if (name === "collection-log:obtain") collectionLogObtains.push(request); },
   onItemDropPolicy() {},
   onItemOnNpc() {},
   onAnyNpcInteraction() {},
@@ -92,7 +93,6 @@ function createPlayer({ level = 99, xp = 13034431 } = {}) {
     getPacketSender: () => ({
       sendConfig() {},
       sendSoundEffect() {},
-      sendCollectionLogSnapshot: (slots) => collectionLogSnapshots.push(slots),
     }),
     getArea: () => null,
     getPrivateArea: () => null,
@@ -131,7 +131,7 @@ const realRandom = Math.random;
 beforeEach(() => {
   Math.random = realRandom;
   broadcasts.length = 0;
-  collectionLogSnapshots.length = 0;
+  collectionLogObtains.length = 0;
   prompts.length = 0;
   npcApi.npcs.length = 0;
   npcApi.addQueue.length = 0;
@@ -193,16 +193,16 @@ test("a boss pet drop goes to the killer, not the floor", () => {
   assert.deepEqual(player.getAttribute("pets.owned"), [HELLPUPPY]);
 });
 
-test("the collection log snapshot ticks every owned pet item", () => {
+test("every owned pet reaches the collection log; only the new one announces itself", () => {
   const player = createPlayer();
   player.setAttribute("pets.owned", [HELLPUPPY, GIANT_SQUIRREL]);
   events.get("npc-drops:roll")({ player, drops: [{ id: 12921, amount: 1 }] });
-  const last = collectionLogSnapshots.at(-1);
-  assert.deepEqual(last, [
-    { slot: 0, itemId: HELLPUPPY, quantity: 1 },
-    { slot: 1, itemId: GIANT_SQUIRREL, quantity: 1 },
-    { slot: 2, itemId: SNAKELING_ITEM, quantity: 1 },
+  assert.deepEqual(collectionLogObtains.map(({ itemId, ensure, silent }) => [itemId, ensure, silent]), [
+    [HELLPUPPY, true, false],
+    [GIANT_SQUIRREL, true, false],
+    [SNAKELING_ITEM, true, false],
   ]);
+  assert.ok(collectionLogObtains.every((request) => request.player === player));
 });
 
 test("Probita returns owned pets the player no longer has, once", () => {
@@ -288,7 +288,7 @@ test("a cross-item morph keeps one ownership record and ticks the base log item"
   assert.equal(Pets.__internals.pickup(player, npc), true);
   assert.deepEqual(player.inventory, [ItemIdentifiers.AIR_TALISMAN, 20667]);
   assert.deepEqual(player.getAttribute("pets.owned"), [20667]);
-  assert.deepEqual(collectionLogSnapshots.at(-1), [{ slot: 0, itemId: 20665, quantity: 1 }]);
+  assert.deepEqual(collectionLogObtains.at(-1)?.itemId, 20665, "the base log item");
 });
 
 test("a cached Metamorphosis option dispatches to morph, Talk-to to interact", () => {

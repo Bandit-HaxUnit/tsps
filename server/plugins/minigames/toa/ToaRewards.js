@@ -82,6 +82,22 @@ function setLoot(player, loot) {
   player.setAttribute(ATTR_LOOT, loot.length > 0 ? loot : null);
 }
 
+/**
+ * The loot is opened (the sarcophagus searched, a chest opened): as in OSRS, that is when it
+ * reaches the collection log. Each entry is marked, so reopening a part-claimed chest adds nothing.
+ */
+function logClaimed(player) {
+  const loot = lootOf(player);
+  let changed = false;
+  for (const entry of loot) {
+    if (entry.logged) continue;
+    Shared.api().emitCustomEvent("collection-log:obtain", { player, itemId: entry.id, amount: entry.amount });
+    entry.logged = true;
+    changed = true;
+  }
+  if (changed) setLoot(player, loot);
+}
+
 function hasLoot(player) {
   return lootOf(player).length > 0;
 }
@@ -186,8 +202,11 @@ function rollRaidLoot(raid) {
     setLoot(player, capped);
     if (player === petWinner) {
       // The pet appears at raid completion rather than waiting in the chest; Pets owns
-      // the duplicate policy and the follower spawn.
-      Shared.api().emitCustomEvent("npc-drops:roll", { player, drops: lootOf(player) });
+      // the duplicate policy and the follower spawn. Only the pet is rolled here: the rest of
+      // the loot reaches the collection log when it is claimed (logClaimed).
+      const pet = [{ id: I.TUMEKENS_GUARDIAN, amount: 1 }];
+      Shared.api().emitCustomEvent("npc-drops:roll", { player, drops: pet });
+      if (pet.length === 0) setLoot(player, lootOf(player).filter((entry) => entry.id !== I.TUMEKENS_GUARDIAN));
     }
   }
   return { uniqueWinner, uniqueId, petWinner };
@@ -256,6 +275,7 @@ module.exports = {
   hasLoot,
   sealedUnique,
   unsealUnique,
+  logClaimed,
   hasRewards,
   uniqueChancePercent,
   petChancePercent,

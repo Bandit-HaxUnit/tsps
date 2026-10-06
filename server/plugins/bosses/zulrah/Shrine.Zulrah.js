@@ -275,8 +275,14 @@ function collect({ player }) {
   return true;
 }
 
+/** The collection log's "Zulrah kills" are the shrine's own count. */
+function collectionLogCount(request) {
+  if (request.category === "Zulrah") request.count = Number(request.player.getAttribute(Shared.ATTR.KILLS)) || 0;
+}
+
 module.exports = function registerZulrahShrine(api) {
   Shared.bind(api);
+  api.onCustomEvent("collection-log:category-count", collectionLogCount);
   for (const key of Object.values(Shared.ATTR)) api.persistAttribute(key);
   api.registerNpcCombatMethodProvider([...Shared.FORM_IDS], Fight.idleMethod(), { singleton: false });
   api.registerNpcCombatMethodProvider([Shared.NPC.SNAKELING_MELEE], MeleeSnakeling(), { singleton: false });

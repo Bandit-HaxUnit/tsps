@@ -565,6 +565,7 @@ function finishRun(player, wavesCleared, won) {
   if (won) {
     player.setAttribute(ATTR_COMPLETIONS, Number(player.getAttribute(ATTR_COMPLETIONS) ?? 0) + 1);
     give(player, Items.INFERNAL_CAPE, 1);
+    api.emitCustomEvent("collection-log:obtain", { player, itemId: Items.INFERNAL_CAPE, amount: 1 });
     give(player, Items.TOKKUL, COMPLETION_TOKKUL);
     if (core.Misc.getRandom(PET_CHANCE - 1) === 0) {
       // Pets awards it as a follower (or backpack item on a duplicate) and removes it
