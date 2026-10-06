@@ -726,6 +726,8 @@ export class WidgetsOverlay implements Overlay {
                 const cameraYaw = gameCtx?.osrsClient?.camera?.yaw ?? 0;
                 widgetManager.updateCompassAngle(cameraYaw);
 
+                // Rebuilt widgets only need a redraw if they came out different.
+                widgetManager.flushChildRebuilds?.();
                 // Check if any root widget region needs redraw
                 anyDirty = widgetManager.isAnyRootDirty();
                 const getPreciseDirtyWidgets = (widgetManager as any).getPreciseDirtyWidgets;
