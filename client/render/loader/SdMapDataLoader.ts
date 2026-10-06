@@ -611,6 +611,15 @@ function createModelGroups(
     }
 }
 
+/**
+ * Repeated scenery merges into the map square's shared geometry when its copies total fewer
+ * faces than this; above it, the model is drawn instanced. Each instanced model is a draw of
+ * its own, and where multi-draw is emulated (ANGLE on D3D11) every one costs a real draw call:
+ * at 100 faces, Edgeville drew ~1,000 per frame. 1,000 merges ~3/4 of them for ~5 MB per
+ * six map squares; big clusters (a forest of one tree) stay instanced.
+ */
+const MERGE_INSTANCED_FACES = 1000;
+
 function addSceneModels(
     modelHashBuf: ModelHashBuffer,
     textureLoader: TextureLoader,
@@ -667,10 +676,12 @@ function addSceneModels(
 
         const instanceCount = instancedModels.length;
         const mergeOpaque =
-            instanceCount === 1 || instanceCount * opaqueFaces.length < 100 || minimizeDrawCalls;
+            instanceCount === 1 ||
+            instanceCount * opaqueFaces.length < MERGE_INSTANCED_FACES ||
+            minimizeDrawCalls;
         const mergeTransparent =
             instanceCount === 1 ||
-            instanceCount * transparentFaces.length < 100 ||
+            instanceCount * transparentFaces.length < MERGE_INSTANCED_FACES ||
             minimizeDrawCalls;
 
         // mergeOpaque = false;
