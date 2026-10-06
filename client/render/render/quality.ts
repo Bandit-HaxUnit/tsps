@@ -425,7 +425,8 @@ export function getSceneResolutionScale(host: WebGLOsrsRendererHost, ): number {
 
         if (!isTouchDevice || host.osrsClient.isOnLoginScreen()) {
             host.osrsClient.mobileEffectiveResolutionScale = 1;
-            return 1;
+            if (host.osrsClient.isOnLoginScreen()) return 1;
+            return host.osrsClient.performancePlugin?.sceneScale() ?? 1;
         }
         const profile = host.syncBrowserQualityProfile();
         const scale = Math.max(0.5, Math.min(1, profile.defaultSceneScale || 1));

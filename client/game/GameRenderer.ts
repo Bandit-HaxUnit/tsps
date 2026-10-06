@@ -56,6 +56,10 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         if (target > 0) {
             limit = limit > 0 ? Math.min(limit, target) : target;
         }
+        const pluginCap = this.osrsClient.performancePlugin?.maxFps() ?? 0;
+        if (pluginCap > 0) {
+            limit = limit > 0 ? Math.min(limit, pluginCap) : pluginCap;
+        }
         try {
             if (typeof document !== "undefined" && document.hidden) {
                 limit = limit > 0 ? Math.min(limit, 30) : 30;
