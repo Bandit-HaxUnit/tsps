@@ -126,7 +126,10 @@ export class GameEngine  {
 
         const stallMs = Math.round(nowMs - this.nextEventLoopProbeAt);
         this.nextEventLoopProbeAt += this.eventLoopProbeIntervalMs;
-        if (nowMs > this.nextEventLoopProbeAt + this.eventLoopProbeIntervalMs) {
+        // Fallen a whole probe behind (a stall): start over from now. Catching up only past two
+        // probes left a 1.5-2s stall measured against the old schedule on every later probe, so
+        // one stall was logged every few seconds, creeping up, for minutes.
+        if (nowMs >= this.nextEventLoopProbeAt) {
             this.nextEventLoopProbeAt = nowMs + this.eventLoopProbeIntervalMs;
         }
 
