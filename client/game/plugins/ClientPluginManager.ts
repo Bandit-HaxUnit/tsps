@@ -70,6 +70,8 @@ export interface ClientPlugin {
     transformSceneProgram?(source: ProgramSource): ProgramSource;
     sceneProgramsReady?(renderer: WebGLOsrsRenderer, programs: Program[]): void;
     beforeSceneRender?(renderer: WebGLOsrsRenderer, drawActors: () => void): void;
+    /** Draws over the finished scene (depth test and blending still active). */
+    afterSceneRender?(renderer: WebGLOsrsRenderer): void;
     configureSceneDrawCall?(renderer: WebGLOsrsRenderer, drawCall: DrawCall): void;
     disposeRenderer?(renderer: WebGLOsrsRenderer): void;
     handleCameraKeys?(context: CameraInputContext): boolean;
@@ -117,6 +119,10 @@ export class ClientPluginManager {
 
     beforeSceneRender(renderer: WebGLOsrsRenderer, drawActors: () => void): void {
         for (const plugin of this.plugins) plugin.beforeSceneRender?.(renderer, drawActors);
+    }
+
+    afterSceneRender(renderer: WebGLOsrsRenderer): void {
+        for (const plugin of this.plugins) plugin.afterSceneRender?.(renderer);
     }
 
     configureSceneDrawCall(renderer: WebGLOsrsRenderer, drawCall: DrawCall): void {

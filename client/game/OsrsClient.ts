@@ -282,6 +282,7 @@ import { FreezeTimerPlugin, PoisonTimerPlugin } from "./plugins/statustimer/Stat
 import { AttackTimerPlugin } from "./plugins/attacktimer/AttackTimerPlugin";
 import { AnimationSmoothingPlugin } from "./plugins/animationsmoothing/AnimationSmoothingPlugin";
 import { MenuSwapperPlugin } from "./plugins/menuswapper/MenuSwapperPlugin";
+import { WeatherPlugin } from "./plugins/weather/WeatherPlugin";
 import { RuneLite } from "../runelite/client/RuneLite";
 import { setMenuTransform } from "../ui/menu/menuTransforms";
 import {
@@ -596,6 +597,7 @@ export class OsrsClient {
     readonly firstPersonPlugin: FirstPersonPlugin;
     readonly gameFrame317Plugin: GameFrame317Plugin;
     readonly hdPlugin: HdPlugin;
+    readonly weatherPlugin: WeatherPlugin;
     readonly tileHighlightManager: TileHighlightManager = new TileHighlightManager();
     private sidebarPluginVisibility: Required<SidebarPluginVisibilityOptions> = {
         groundItemsEnabled: true,
@@ -1200,6 +1202,7 @@ export class OsrsClient {
         this.firstPersonPlugin = pluginManager.getPlugin(FirstPersonPlugin)!;
         this.gameFrame317Plugin = pluginManager.getPlugin(GameFrame317Plugin)!;
         this.hdPlugin = pluginManager.getPlugin(HdPlugin)!;
+        this.weatherPlugin = pluginManager.getPlugin(WeatherPlugin)!;
         // Menus are built in pure modules (ui/menu, widgets/menu); they reach the plugins here.
         setMenuTransform((entries, context) =>
             this.clientPlugins.transformMenuEntries(entries, context),
