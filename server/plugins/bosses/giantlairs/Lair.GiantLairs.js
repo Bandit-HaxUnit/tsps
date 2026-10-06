@@ -9,16 +9,9 @@
  * - the exit asks first, or Quick-exit leaves straight away. Leaving, teleporting, dying or
  *   logging out ends the lair; logging back in puts the player outside its gate.
  */
-const fs = require("fs");
-const path = require("path");
-const { GameConstants } = require("../../../src/main/typescript/elvarg/game/GameConstants");
-const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
-const { Music } = require("../../../src/main/typescript/elvarg/game/Music");
+const Common = require("./Common.GiantLairs");
 
-const DATA = JSON.parse(
-  fs.readFileSync(path.join(GameConstants.DEFINITIONS_DIRECTORY, "giant-boss-lairs.json"), "utf8"),
-);
-const LAIRS = Object.entries(DATA.lairs).map(([slug, lair]) => Object.assign(lair, { slug }));
+const { later, toLocation, UNLOCKED_ATTRIBUTE, CHESTS_ATTRIBUTE } = Common;
 
 const BUSY_VARBIT = 12393;
 const OVERLAY_ATMOSPHERE_UID = (161 << 16) | 1;
@@ -39,34 +32,13 @@ let core = null;
 /** Per player: their lair while they are in one. */
 const sessions = new Map();
 
-function bind(pluginApi) {
-  api = pluginApi;
-  core = pluginApi.core;
-}
-
-const toLocation = ({ x, y, z }) => new Location(x, y, z ?? 0);
-const lairBy = (field, id) => LAIRS.find((lair) => (Array.isArray(lair[field]) ? lair[field].includes(id) : lair[field] === id)) ?? null;
+const lairBy = (field, id) => Common.lairs.find((lair) => (Array.isArray(lair[field]) ? lair[field].includes(id) : lair[field] === id)) ?? null;
 const inBounds = (lair, location) => {
   const { minX, maxX, minY, maxY } = lair.area;
   const x = location.getX();
   const y = location.getY();
   return location.getZ() === 0 && x >= minX && x <= maxX && y >= minY && y <= maxY;
 };
-
-function later(ticks, action, key = null) {
-  const { Task, TaskManager } = core;
-  const task = new (class extends Task {
-    constructor() {
-      super(Math.max(1, ticks), key, false);
-    }
-    execute() {
-      this.stop();
-      action();
-    }
-  })();
-  TaskManager.submit(task);
-  return task;
-}
 
 function fade(player, out) {
   const args = out ? [0, 255, 0, 0, FADE_CYCLES] : [0, 0, 0, 255, FADE_CYCLES];
@@ -186,7 +158,7 @@ class LairSession {
     // Wherever the player went (the exit, a teleport, death), its region's song again.
     if (this.lair.music != null && this.player.isRegistered?.()) {
       const at = this.player.getLocation();
-      const track = Music.forRegion(((at.getX() >> 6) << 8) | (at.getY() >> 6));
+      const track = core.Music.forRegion(((at.getX() >> 6) << 8) | (at.getY() >> 6));
       if (track !== undefined) this.player.getPacketSender().sendSong(track);
     }
   }
@@ -200,7 +172,7 @@ function hasKey(player, lair) {
 }
 
 function unlocked(player, lair) {
-  return player.getAttribute(lair.unlockAttribute) === true;
+  return player.getAttribute(UNLOCKED_ATTRIBUTE[lair.slug]) === true;
 }
 
 function options(player, prompt, onYes) {
@@ -235,7 +207,7 @@ function openGate(event) {
 function enter(player, lair, keyed) {
   player.getPacketSender().sendInterfaceRemoval();
   sessionOf(player)?.end();
-  if (keyed) player.setAttribute(lair.unlockAttribute, true);
+  if (keyed) player.setAttribute(UNLOCKED_ATTRIBUTE[lair.slug], true);
   const session = new LairSession(player, lair);
   sessions.set(player, session);
   const arrive = () => {
@@ -312,11 +284,11 @@ function setChest(session, open) {
 }
 
 function count(player, lair) {
-  return Number(player.getAttribute(lair.countAttribute)) || 0;
+  return Number(player.getAttribute(CHESTS_ATTRIBUTE[lair.slug])) || 0;
 }
 
 function openChest(event) {
-  const lair = LAIRS.find((entry) => entry.chest.closed === event.objectId) ?? null;
+  const lair = Common.lairs.find((entry) => entry.chest.closed === event.objectId) ?? null;
   if (!lair) return false;
   const { player } = event;
   const session = sessionOf(player);
@@ -341,7 +313,7 @@ function openChest(event) {
   player.getPacketSender().sendSound(CHEST_SOUND, 1, 0);
   session.schedule(1, () => {
     const opened = count(player, lair) + 1;
-    player.setAttribute(lair.countAttribute, opened);
+    player.setAttribute(CHESTS_ATTRIBUTE[lair.slug], opened);
     player.getPacketSender().sendConfig(lair.countVarp, opened);
     player.sendMessage(lair.messages.spill);
     player.sendMessage(lair.messages.count.replace("{count}", String(opened)));
@@ -364,7 +336,7 @@ function onBossDeath({ npc }) {
 
 /** The chest count's varp, and a player who logged out in a lair put outside its gate. */
 function restore({ player }) {
-  for (const lair of LAIRS) {
+  for (const lair of Common.lairs) {
     const opened = count(player, lair);
     if (opened > 0) player.getPacketSender().sendConfig(lair.countVarp, opened);
     if (inBounds(lair, player.getLocation()) && !sessionOf(player)) player.moveTo(toLocation(lair.outside));
@@ -373,13 +345,25 @@ function restore({ player }) {
 
 /** The collection log's Obor and Bryophyta pages count chests opened. */
 function collectionLogCount(request) {
-  const lair = LAIRS.find((entry) => entry.name === request.category);
+  const lair = Common.lairs.find((entry) => entry.name === request.category);
   if (lair) request.count = count(request.player, lair);
 }
 
-const ATTRIBUTES = LAIRS.flatMap((lair) => [lair.countAttribute, lair.unlockAttribute]);
+/** The lairs' gates, exits and chests, their saved progress, and the bosses' deaths. */
+function attach(pluginApi) {
+  api = pluginApi;
+  core = pluginApi.core;
+  for (const key of [...Object.values(UNLOCKED_ATTRIBUTE), ...Object.values(CHESTS_ATTRIBUTE)]) pluginApi.persistAttribute(key);
+  pluginApi.onPlayerLogin(restore);
+  pluginApi.onObjectInteraction("Gate", { Open: gate, "Quick-exit": quickExit });
+  pluginApi.onObjectInteraction("Rock Pile", { Clamber: exitLair, "Quick-exit": quickExit });
+  pluginApi.onObjectInteraction("Chest", { Open: openChest });
+  pluginApi.onNpcDeath(onBossDeath);
+  pluginApi.onCustomEvent("collection-log:category-count", collectionLogCount);
+}
 
-module.exports = {
-  DATA, LAIRS, ATTRIBUTES, bind, later, sessionOf, sessionForNpc,
-  gate, openGate, exitLair, quickExit, openChest, onBossDeath, restore, collectionLogCount, enter, leave,
-};
+module.exports = attach;
+Object.assign(module.exports, {
+  sessionOf, sessionForNpc, gate, openGate, exitLair, quickExit, openChest, onBossDeath, restore,
+  collectionLogCount, enter, leave,
+});

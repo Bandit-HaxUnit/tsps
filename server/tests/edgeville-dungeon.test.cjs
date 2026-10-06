@@ -17,17 +17,20 @@ const { ObjectManager } = require("../dist/game/entity/impl/object/ObjectManager
 const { ItemOnGroundManager } = require("../dist/game/entity/impl/grounditem/ItemOnGroundManager");
 const ObstacleRunner = require("../plugins/skills/agility/ObstacleRunner");
 const NpcDrops = require("../plugins/npcs/NpcDrops.plugin");
-const Dungeon = require("../plugins/areas/edgevilledungeon/EdgevilleDungeon.plugin");
-const BrassKeyDoor = require("../plugins/areas/edgevilledungeon/BrassKeyDoor");
-const GiantLairs = require("../plugins/bosses/giantlairs/GiantLairs.plugin");
-const Lair = require("../plugins/bosses/giantlairs/GiantLair");
-const Obor = require("../plugins/bosses/giantlairs/Obor");
-const Bryophyta = require("../plugins/bosses/giantlairs/Bryophyta");
-const GiantBones = require("../plugins/bosses/giantlairs/GiantBones");
+const Dungeon = require("../plugins/areas/EdgevilleDungeon.plugin");
+const DungeonCommon = require("../plugins/areas/edgevilledungeon/Common.EdgevilleDungeon");
+const BrassKeyDoor = require("../plugins/areas/edgevilledungeon/BrassKeyDoor.EdgevilleDungeon");
+const GiantLairs = require("../plugins/bosses/GiantLairs.plugin");
+const Common = require("../plugins/bosses/giantlairs/Common.GiantLairs");
+const Lair = require("../plugins/bosses/giantlairs/Lair.GiantLairs");
+const Obor = require("../plugins/bosses/giantlairs/Obor.GiantLairs");
+const Bryophyta = require("../plugins/bosses/giantlairs/Bryophyta.GiantLairs");
+const GiantBones = require("../plugins/bosses/giantlairs/GiantBones.GiantLairs");
 
-const DATA = Lair.DATA;
-const OBOR = DATA.lairs.obor;
-const BRYOPHYTA = DATA.lairs.bryophyta;
+// The data is loaded when the plugins register (before()).
+let DATA = null;
+let OBOR = null;
+let BRYOPHYTA = null;
 const core = PluginManager.getCoreApi();
 
 const prompts = [];
@@ -62,6 +65,9 @@ before(async () => {
   ObstacleRunner.init(api);
   Dungeon.register(api);
   GiantLairs.register(api);
+  DATA = Common.data;
+  OBOR = DATA.lairs.obor;
+  BRYOPHYTA = DATA.lairs.bryophyta;
   NpcDrops.register(api);
   ObjectManager.register = (object) => placed.push({ id: object.getId(), x: object.getLocation().getX(), y: object.getLocation().getY(), face: object.getFace() });
   ObjectManager.deregister = (object) => placed.push({ removed: object.getId() });
@@ -192,15 +198,15 @@ test("the data: every id as the cache names it, Bryophyta no longer in the open 
   assert.equal(loc(DATA.obor.pitRocks), "Rocks");
   assert.equal(loc(DATA.bryophyta.logs.withAxe), "Logs");
   assert.equal(npc(DATA.bryophyta.growthling), "Growthling");
-  assert.equal(loc(Dungeon.DATA.brassKeyDoor.door), "Door");
-  assert.equal(item(Dungeon.DATA.brassKeyDoor.key), "Brass key");
+  assert.equal(loc(DungeonCommon.data.brassKeyDoor.door), "Door");
+  assert.equal(item(DungeonCommon.data.brassKeyDoor.key), "Brass key");
   assert.equal(item(DATA.giantBones.item), "Giant bones");
   const spawns = fs.readFileSync(path.resolve(__dirname, "../data/definitions/npc-spawns.json"), "utf8");
   assert.ok(!spawns.includes('"name":"Bryophyta"'), "she lives only in each player's lair");
 });
 
 test("as captured: the brass key door is locked without the key; with it, the player steps through and it shuts", () => {
-  const door = Dungeon.DATA.brassKeyDoor;
+  const door = DungeonCommon.data.brassKeyDoor;
   const without = createPlayer({ x: 3115, y: 3449 });
   BrassKeyDoor.open({ player: without, ...object(door.door, 3115, 3450) });
   assert.deepEqual(without.log, ["The door is locked."]);
@@ -237,7 +243,7 @@ test("as captured: Obor's gate - locked, then the question, the fade, the lair a
   runTicks();
   assert.ok(player.log.includes("Your key fits the gate, causing it to swing open."));
   assert.deepEqual(player.inventory, [OBOR.key], "the gate keeps the key");
-  assert.equal(player.getAttribute(OBOR.unlockAttribute), true);
+  assert.equal(player.getAttribute(Common.UNLOCKED_ATTRIBUTE.obor), true);
 
   // Unlocked once: no key needed.
   player.inventory.length = 0;
@@ -297,7 +303,7 @@ test("as captured: the chest - not while the boss lives; after a kill the stir, 
     "The loot spills out as you open the chest.",
     "Your Obor chests opened count is: <col=ff0000>1</col>.",
   ]);
-  assert.equal(player.getAttribute(OBOR.countAttribute), 1);
+  assert.equal(player.getAttribute(Common.CHESTS_ATTRIBUTE.obor), 1);
   const loot = grounded.map((drop) => drop.id);
   assert.ok(loot.includes(23182) && loot.includes(13475), "the clue and the ensouled head always");
   assert.ok(grounded.every((drop) => drop.x === OBOR.loot.x && drop.y === OBOR.loot.y && drop.area === session.area));
@@ -320,7 +326,7 @@ test("as captured: the chest - not while the boss lives; after a kill the stir, 
 
 test("the collection log counts chests opened", () => {
   const player = createPlayer();
-  player.setAttribute(BRYOPHYTA.countAttribute, 4);
+  player.setAttribute(Common.CHESTS_ATTRIBUTE.bryophyta, 4);
   const request = { player, category: "Bryophyta", count: null };
   Lair.collectionLogCount(request);
   assert.equal(request.count, 4);

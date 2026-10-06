@@ -10,10 +10,11 @@
  *   hurt but never killed;
  * - the logs in her lair give a bronze axe to a player without one, and grow it back.
  */
-const Lair = require("./GiantLair");
+const Common = require("./Common.GiantLairs");
+const Lair = require("./Lair.GiantLairs");
 
-const DATA = Lair.DATA.bryophyta;
-const LAIR = Lair.DATA.lairs.bryophyta;
+let DATA = null;
+let LAIR = null;
 const SECATEURS = new Set([7409, 11711]);
 /** Woodcutting axes; not battleaxes, the zombie axe or the blessed axe (Wiki). */
 const AXE_NAME = /(^|\s)axe(\s\(.*\))?$/i;
@@ -21,11 +22,6 @@ const NOT_AN_AXE = /^(zombie|blessed) axe/i;
 
 let api = null;
 let core = null;
-
-function bind(pluginApi) {
-  api = pluginApi;
-  core = pluginApi.core;
-}
 
 const roll = (oneIn) => Math.floor(Math.random() * oneIn) === 0;
 
@@ -219,4 +215,16 @@ function takeAxe(event) {
   return true;
 }
 
-module.exports = { bind, defineBryophytaCombatMethod, modifyHit, takeAxe, canPrune, maybeSummon, liveGrowthlings };
+/** Bryophyta's own combat, her growthlings and the logs' axe. */
+function attach(pluginApi) {
+  api = pluginApi;
+  core = pluginApi.core;
+  DATA = Common.data.bryophyta;
+  LAIR = Common.data.lairs.bryophyta;
+  pluginApi.registerNpcCombatMethodProvider([LAIR.boss], defineBryophytaCombatMethod(), { singleton: false });
+  pluginApi.onNpcHitModify(modifyHit);
+  pluginApi.onObjectInteraction("Logs", { "Take-axe": takeAxe });
+}
+
+module.exports = attach;
+Object.assign(module.exports, { defineBryophytaCombatMethod, modifyHit, takeAxe, canPrune, maybeSummon, liveGrowthlings });

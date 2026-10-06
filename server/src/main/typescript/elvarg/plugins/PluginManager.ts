@@ -2050,6 +2050,7 @@ export class PluginManager {
       CombatNormalSpell: require(`${combat}/magic/CombatNormalSpell`).CombatNormalSpell,
       NPC: require("../game/entity/impl/npc/NPC").NPC,
       GameConstants: require("../game/GameConstants").GameConstants,
+      Music: require("../game/Music").Music,
       // world.json accessors (isMembersWorld, isMembersArea, WORLD_SPAWN, zone boundaries).
       WorldDefinition: require("../game/definition/WorldDefinition"),
       TeleportHandler: require(`${model}/teleportation/TeleportHandler`).TeleportHandler,

@@ -12,9 +12,10 @@
  * How often he stamps or knocks back isn't on the Wiki; the odds in the data are estimates.
  */
 const ObstacleRunner = require("../../skills/agility/ObstacleRunner");
-const Lair = require("./GiantLair");
+const Common = require("./Common.GiantLairs");
+const Lair = require("./Lair.GiantLairs");
 
-const DATA = Lair.DATA.obor;
+let DATA = null;
 const BUSY_VARBIT = 12393;
 const CAMERA_SHAKE = [4, 4, 0, 1];
 const CAMERA_STILL = [4, 0, 0, 0];
@@ -22,13 +23,7 @@ const CAMERA_STILL = [4, 0, 0, 0];
 const STEP_DIRECTION = { "0,1": 1, "-1,0": 3, "1,0": 4, "0,-1": 6 };
 const KNOCKBACK_DIRECTION = { "0,1": "north", "-1,0": "west", "1,0": "east", "0,-1": "south" };
 
-let api = null;
 let core = null;
-
-function bind(pluginApi) {
-  api = pluginApi;
-  core = pluginApi.core;
-}
 
 const roll = (oneIn) => Math.floor(Math.random() * oneIn) === 0;
 
@@ -81,7 +76,7 @@ function stamp(npc, target) {
   if (tiles.length === 0) return;
   const sender = target.getPacketSender();
   sender.sendGlobalGraphic(new Graphic(rocks.origin, rocks.originDelay), origin);
-  Lair.later(1, () => {
+  Common.later(1, () => {
     if (!target.isRegistered() || npc.getHitpoints() <= 0) return;
     tiles.forEach((tile, index) => {
       sender.sendGlobalGraphic(new Graphic(rocks.graphic, rocks.cyclesPerTile * (index + 1), rocks.height), tile);
@@ -90,7 +85,7 @@ function stamp(npc, target) {
     target.performAnimation(new core.Animation(rocks.playerAnim, landing));
     for (const sound of rocks.sounds) sender.sendSound(sound, 1, 0);
     shake(target, CAMERA_SHAKE);
-    Lair.later(1, () => target.isRegistered() && shake(target, CAMERA_STILL));
+    Common.later(1, () => target.isRegistered() && shake(target, CAMERA_STILL));
   });
 }
 
@@ -133,7 +128,7 @@ function boulderLands(target) {
   target.performAnimation(new Animation(impact.playerAnim, impact.delay));
   target.getPacketSender().sendSound(impact.sound, 1, impact.delay);
   shake(target, CAMERA_SHAKE);
-  Lair.later(1, () => target.isRegistered() && shake(target, CAMERA_STILL));
+  Common.later(1, () => target.isRegistered() && shake(target, CAMERA_STILL));
 }
 
 /** His ranged hit: rolled through prayer, then halved by Protect from Missiles (Wiki). */
@@ -234,4 +229,13 @@ function climbRocks(event) {
   return true;
 }
 
-module.exports = { bind, defineOborCombatMethod, climbRocks, knockbackPath, rockLine, inReach, rangedDamage };
+/** Obor's own combat and his pit's rocks. */
+function attach(pluginApi) {
+  core = pluginApi.core;
+  DATA = Common.data.obor;
+  pluginApi.registerNpcCombatMethodProvider([Common.data.lairs.obor.boss], defineOborCombatMethod(), { singleton: false });
+  pluginApi.onObjectInteraction("Rocks", { Climb: climbRocks });
+}
+
+module.exports = attach;
+Object.assign(module.exports, { defineOborCombatMethod, climbRocks, knockbackPath, rockLine, inReach, rangedDamage });

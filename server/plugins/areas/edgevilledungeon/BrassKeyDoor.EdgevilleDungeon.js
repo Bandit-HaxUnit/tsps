@@ -7,14 +7,10 @@
  * The capture went in; the way out is assumed to be the same.
  */
 const ObstacleRunner = require("../../skills/agility/ObstacleRunner");
+const Common = require("./Common.EdgevilleDungeon");
 
 let core = null;
 let DOOR = null;
-
-function bind(pluginApi, door) {
-  core = pluginApi.core;
-  DOOR = door;
-}
 
 function later(ticks, action) {
   const { Task, TaskManager } = core;
@@ -69,4 +65,11 @@ function open(event) {
   return true;
 }
 
-module.exports = { bind, open };
+function attach(api) {
+  core = api.core;
+  DOOR = Common.data.brassKeyDoor;
+  api.onObjectInteraction("Door", { Open: open });
+}
+
+module.exports = attach;
+Object.assign(module.exports, { open });
