@@ -129,7 +129,7 @@ assert.deepEqual(vertices(pivot), animated(halfway));
 const plugin = new AnimationSmoothingPlugin();
 assert.equal(plugin.isEnabled(), false);
 assert.equal(plugin.smoothsPlayer(808), false, "nothing while disabled");
-plugin.setConfig({ enabled: true });
+plugin.setEnabledState(true);
 assert.equal(plugin.smoothsPlayer(808), true);
 assert.equal(plugin.smoothsPlayer(244), false, "excluded player pose");
 assert.equal(plugin.smoothsNpc(3106, 6566, true), false, "hellhound defence");

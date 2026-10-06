@@ -1,7 +1,8 @@
+import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
 import { ClientState } from "../../ClientState";
 import type { SimpleMenuEntry } from "../../../ui/menu/MenuEngine";
 import type { MenuTransformContext } from "../../../ui/menu/menuTransforms";
-import type { ClientPlugin } from "../ClientPluginManager";
+import { createBrowserMenuSwapperPluginPersistence } from "./BrowserMenuSwapperPersistence";
 import { applyMenuSwaps } from "./menuSwaps";
 import type {
     MenuSwapKind,
@@ -34,7 +35,14 @@ function withDefaults(
  * RuneLite-style menu entry swapper: Shift + right-click a target for "Swap left click" /
  * "Swap shift click", plus a few built-in presets. Swaps are saved per NPC, object or item id.
  */
-export class MenuSwapperPlugin implements ClientPlugin {
+export class MenuSwapperPlugin extends Plugin {
+    static descriptor: PluginDescriptor = {
+        name: "Menu Entry Swapper",
+        description: "Choose the left-click and shift-click options of things.",
+        tags: ["menu"],
+        configKey: "menuentryswapper",
+    };
+
     private readonly listeners = new Set<MenuSwapperPluginListener>();
     private readonly persistence?: MenuSwapperPluginPersistence;
     private config: MenuSwapperPluginConfig;
@@ -42,8 +50,9 @@ export class MenuSwapperPlugin implements ClientPlugin {
     private version = 0;
 
     constructor(persistence?: MenuSwapperPluginPersistence) {
-        this.persistence = persistence;
-        this.config = withDefaults(persistence?.load());
+        super();
+        this.persistence = persistence ?? createBrowserMenuSwapperPluginPersistence("osrs.plugin.menu_swapper.v1");
+        this.config = withDefaults(this.persistence?.load());
         this.state = { config: this.config, version: this.version };
     }
 
@@ -57,7 +66,10 @@ export class MenuSwapperPlugin implements ClientPlugin {
     }
 
     setConfig(next: Partial<MenuSwapperPluginConfig>): void {
-        this.config = withDefaults({ ...this.config, ...next });
+        if (next.enabled !== undefined) {
+            void this.setPluginEnabled(next.enabled);
+        }
+        this.config = withDefaults({ ...this.config, ...next, enabled: this.isEnabled() });
         this.version++;
         this.state = { config: this.config, version: this.version };
         this.persistence?.save(this.config);
@@ -84,7 +96,7 @@ export class MenuSwapperPlugin implements ClientPlugin {
         return applyMenuSwaps(
             entries,
             { ...context, isShiftHeld: ClientState.isShiftPressed() },
-            this.config,
+            { ...this.config, enabled: this.isEnabled() },
             (kind, key, option, name) => this.setSwap(kind, key, option, name),
         );
     }

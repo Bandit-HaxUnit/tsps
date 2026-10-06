@@ -198,6 +198,8 @@ const WELCOME_SCREEN_GROUP_ID = 378;
 
 export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: number, resized: boolean): void {
 
+        host.osrsClient.runeLite?.postBeforeRender();
+
         profiler.startFrame();
 
         // One-time initialization of overlay scales. onResize fires before host.app is
