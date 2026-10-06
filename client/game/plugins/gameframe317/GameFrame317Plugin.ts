@@ -1,3 +1,6 @@
+import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
+import { CLIENT_TOKEN, inject } from "@runelite/client/plugins/PluginInjector";
+import type { OsrsClient } from "../../OsrsClient";
 import type { ClientPlugin, GameFrameDrawContext, GameFrameProvider } from "../ClientPluginManager";
 import type { GLRenderer } from "../../../widgets/gl/renderer";
 import { GAMEFRAME_LAYOUT_DROPDOWN, GAMEFRAME_317_OPTION, VARP_GAMEFRAME_317 } from "../../../common/ui/gameframeLayout";
@@ -61,7 +64,15 @@ const OSRS_ICON_TUNE: Record<string, { scale?: number; dx?: number; dy?: number 
 const ICON_COUNT = 13;
 type Texture = ReturnType<GLRenderer["createTextureFromCanvas"]>;
 
-export class GameFrame317Plugin implements ClientPlugin {
+export class GameFrame317Plugin extends Plugin implements ClientPlugin {
+    static descriptor: PluginDescriptor = {
+        name: "Gameframe 317",
+        description: "Classic 317 gameframe chrome.",
+        tags: ["gameframe"],
+        hidden: true,
+        configKey: "gameframe317plugin",
+    };
+
     public readonly gameFrame: GameFrameProvider;
     private get fixed(): boolean {
         return this.osrsClient.widgetManager?.rootInterface === 548;
@@ -77,8 +88,11 @@ export class GameFrame317Plugin implements ClientPlugin {
     private readonly canvases = new Map<string, HTMLCanvasElement>();
     private readonly textures = new Map<string, Texture>();
     private readonly iconTextures: Texture[] = [];
+    private readonly osrsClient: OsrsClient;
 
-    constructor(private readonly osrsClient: any) {
+    constructor(osrsClient?: OsrsClient) {
+        super();
+        this.osrsClient = osrsClient ?? inject<OsrsClient>(CLIENT_TOKEN);
         this.gameFrame = {
             isGameFrameActive: () => this.enabled,
             hideStockChrome: () => true,

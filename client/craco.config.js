@@ -123,6 +123,12 @@ module.exports = {
 
             webpackConfig.resolve.extensions = [".web.js", ...webpackConfig.resolve.extensions];
 
+            // RuneLite-shaped plugin API lives in runelite/ (mirrors the Java packages).
+            webpackConfig.resolve.alias = {
+                ...(webpackConfig.resolve.alias ?? {}),
+                "@runelite": path.resolve(appRoot, "runelite"),
+            };
+
             webpackConfig.optimization.minimizer.push(new JsonMinimizerPlugin());
             webpackConfig.ignoreWarnings = [
                 ...(webpackConfig.ignoreWarnings ?? []),

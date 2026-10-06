@@ -641,7 +641,7 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
                 ...client.interactHighlightPlugin.getConfig(),
             };
         }
-        Object.assign(client.interactHighlightPlugin.getConfig(), {
+        client.interactHighlightPlugin.setConfig({
             enabled: true,
             showHover: true,
             showInteract: true,
@@ -657,10 +657,7 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
         const renderer = terrainHost(client);
         renderer?.clearInteractHighlightActiveTarget();
         if (previousInteractHighlightConfig) {
-            Object.assign(
-                client.interactHighlightPlugin.getConfig(),
-                previousInteractHighlightConfig,
-            );
+            client.interactHighlightPlugin.setConfig(previousInteractHighlightConfig);
             previousInteractHighlightConfig = undefined;
         }
     };

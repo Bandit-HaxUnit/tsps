@@ -271,28 +271,19 @@ import { ClientPluginManager } from "./plugins/ClientPluginManager";
 import { FirstPersonPlugin } from "./plugins/firstperson/FirstPersonPlugin";
 import { GameFrame317Plugin } from "./plugins/gameframe317/GameFrame317Plugin";
 import { HdPlugin } from "./plugins/hd/HdPlugin";
-import { createBrowserGroundItemsPluginPersistence } from "./plugins/grounditems/BrowserGroundItemsPluginPersistence";
 import { GroundItemsPlugin } from "./plugins/grounditems/GroundItemsPlugin";
-import { createBrowserInteractHighlightPluginPersistence } from "./plugins/interacthighlight/BrowserInteractHighlightPluginPersistence";
 import { InteractHighlightPlugin } from "./plugins/interacthighlight/InteractHighlightPlugin";
-import { createBrowserNotesPluginPersistence } from "./plugins/notes/BrowserNotesPluginPersistence";
 import { NotesPlugin } from "./plugins/notes/NotesPlugin";
-import { createBrowserRememberLoginPluginPersistence } from "./plugins/rememberlogin/BrowserRememberLoginPluginPersistence";
 import { RememberLoginPlugin } from "./plugins/rememberlogin/RememberLoginPlugin";
-import { createBrowserTileMarkersPluginPersistence } from "./plugins/tilemarkers/BrowserTileMarkersPluginPersistence";
 import { TileMarkersPlugin } from "./plugins/tilemarkers/TileMarkersPlugin";
 import { createHelmSteeringDeps, steerFromHelm } from "./sailing/HelmSteering";
-import { createBrowserVengeanceTimerPluginPersistence } from "./plugins/vengeancetimer/BrowserVengeanceTimerPluginPersistence";
 import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlugin";
+import { FreezeTimerPlugin, PoisonTimerPlugin } from "./plugins/statustimer/StatusTimerPlugin";
 import { AttackTimerPlugin } from "./plugins/attacktimer/AttackTimerPlugin";
-import { createBrowserAttackTimerPluginPersistence } from "./plugins/attacktimer/BrowserAttackTimerPluginPersistence";
 import { AnimationSmoothingPlugin } from "./plugins/animationsmoothing/AnimationSmoothingPlugin";
-import { createBrowserAnimationSmoothingPluginPersistence } from "./plugins/animationsmoothing/BrowserAnimationSmoothingPersistence";
 import { MenuSwapperPlugin } from "./plugins/menuswapper/MenuSwapperPlugin";
-import { createBrowserMenuSwapperPluginPersistence } from "./plugins/menuswapper/BrowserMenuSwapperPersistence";
+import { RuneLite } from "../runelite/client/RuneLite";
 import { setMenuTransform } from "../ui/menu/menuTransforms";
-import { createBrowserStatusTimerPluginPersistence } from "./plugins/statustimer/BrowserStatusTimerPluginPersistence";
-import { StatusTimerPlugin } from "./plugins/statustimer/StatusTimerPlugin";
 import {
     SPLIT_PRIVATE_CHAT_VARP,
     SplitPrivateChatPlugin,
@@ -588,22 +579,23 @@ export class OsrsClient {
 
     /** Renderer-agnostic sidebar state/registry. */
     readonly sidebar: SidebarStore<ClientSidebarEntryData>;
+    readonly runeLite: RuneLite;
     readonly groundItemsPlugin: GroundItemsPlugin;
     readonly interactHighlightPlugin: InteractHighlightPlugin;
     readonly notesPlugin: NotesPlugin;
     readonly rememberLoginPlugin: RememberLoginPlugin;
     readonly tileMarkersPlugin: TileMarkersPlugin;
     readonly vengeanceTimerPlugin: VengeanceTimerPlugin;
+    readonly poisonTimerPlugin: PoisonTimerPlugin;
+    readonly freezeTimerPlugin: FreezeTimerPlugin;
     readonly attackTimerPlugin: AttackTimerPlugin;
     readonly animationSmoothingPlugin: AnimationSmoothingPlugin;
     readonly menuSwapperPlugin: MenuSwapperPlugin;
-    readonly poisonTimerPlugin: StatusTimerPlugin;
-    readonly freezeTimerPlugin: StatusTimerPlugin;
     readonly splitPrivateChatPlugin: SplitPrivateChatPlugin;
     readonly clientPlugins: ClientPluginManager = new ClientPluginManager();
     readonly firstPersonPlugin: FirstPersonPlugin;
     readonly gameFrame317Plugin: GameFrame317Plugin;
-    readonly hdPlugin = new HdPlugin();
+    readonly hdPlugin: HdPlugin;
     readonly tileHighlightManager: TileHighlightManager = new TileHighlightManager();
     private sidebarPluginVisibility: Required<SidebarPluginVisibilityOptions> = {
         groundItemsEnabled: true,
@@ -1189,67 +1181,34 @@ export class OsrsClient {
             defaultOpen: false,
             persistence: createBrowserSidebarPersistence("osrs.sidebar.v1"),
         });
-        this.groundItemsPlugin = new GroundItemsPlugin(
-            createBrowserGroundItemsPluginPersistence("osrs.plugin.ground_items.v1"),
-        );
-        this.interactHighlightPlugin = new InteractHighlightPlugin(
-            createBrowserInteractHighlightPluginPersistence("osrs.plugin.interact_highlight.v1"),
-        );
-        this.notesPlugin = new NotesPlugin(
-            createBrowserNotesPluginPersistence("osrs.plugin.notes.v1", "osrs.sidebar.notes"),
-        );
-        this.rememberLoginPlugin = new RememberLoginPlugin(
-            createBrowserRememberLoginPluginPersistence("osrs.plugin.remember_login.v1"),
-        );
-        this.tileMarkersPlugin = new TileMarkersPlugin(
-            createBrowserTileMarkersPluginPersistence("osrs.plugin.tile_markers.v1"),
-        );
-        this.vengeanceTimerPlugin = new VengeanceTimerPlugin(
-            createBrowserVengeanceTimerPluginPersistence("osrs.plugin.vengeance_timer.v1"),
-        );
-        this.attackTimerPlugin = new AttackTimerPlugin(
-            createBrowserAttackTimerPluginPersistence("osrs.plugin.attack_timer.v1"),
-        );
-        this.animationSmoothingPlugin = new AnimationSmoothingPlugin(
-            createBrowserAnimationSmoothingPluginPersistence("osrs.plugin.animation_smoothing.v1"),
-        );
-        this.menuSwapperPlugin = new MenuSwapperPlugin(
-            createBrowserMenuSwapperPluginPersistence("osrs.plugin.menu_swapper.v1"),
-        );
-        this.poisonTimerPlugin = new StatusTimerPlugin(
-            createBrowserStatusTimerPluginPersistence("osrs.plugin.poison_timer.v1"),
-        );
-        this.freezeTimerPlugin = new StatusTimerPlugin(
-            createBrowserStatusTimerPluginPersistence("osrs.plugin.freeze_timer.v1"),
-        );
-        this.splitPrivateChatPlugin = new SplitPrivateChatPlugin();
-        this.firstPersonPlugin = new FirstPersonPlugin(this);
-        this.clientPlugins.add(this.firstPersonPlugin);
-        this.clientPlugins.add(this.menuSwapperPlugin);
+        // Boots the RuneLite-shaped runtime: config, event bus, plugin manager,
+        // core plugins (constructed inside the injector, enabled ones started).
+        this.runeLite = RuneLite.start(this);
+        const pluginManager = this.runeLite.pluginManager;
+        this.groundItemsPlugin = pluginManager.getPlugin(GroundItemsPlugin)!;
+        this.interactHighlightPlugin = pluginManager.getPlugin(InteractHighlightPlugin)!;
+        this.notesPlugin = pluginManager.getPlugin(NotesPlugin)!;
+        this.rememberLoginPlugin = pluginManager.getPlugin(RememberLoginPlugin)!;
+        this.tileMarkersPlugin = pluginManager.getPlugin(TileMarkersPlugin)!;
+        this.vengeanceTimerPlugin = pluginManager.getPlugin(VengeanceTimerPlugin)!;
+        this.poisonTimerPlugin = pluginManager.getPlugin(PoisonTimerPlugin)!;
+        this.freezeTimerPlugin = pluginManager.getPlugin(FreezeTimerPlugin)!;
+        this.attackTimerPlugin = pluginManager.getPlugin(AttackTimerPlugin)!;
+        this.animationSmoothingPlugin = pluginManager.getPlugin(AnimationSmoothingPlugin)!;
+        this.menuSwapperPlugin = pluginManager.getPlugin(MenuSwapperPlugin)!;
+        this.splitPrivateChatPlugin = pluginManager.getPlugin(SplitPrivateChatPlugin)!;
+        this.firstPersonPlugin = pluginManager.getPlugin(FirstPersonPlugin)!;
+        this.gameFrame317Plugin = pluginManager.getPlugin(GameFrame317Plugin)!;
+        this.hdPlugin = pluginManager.getPlugin(HdPlugin)!;
         // Menus are built in pure modules (ui/menu, widgets/menu); they reach the plugins here.
         setMenuTransform((entries, context) =>
             this.clientPlugins.transformMenuEntries(entries, context),
         );
-        this.clientPlugins.add(this.hdPlugin);
-        this.gameFrame317Plugin = new GameFrame317Plugin(this);
-        this.clientPlugins.add(this.gameFrame317Plugin);
         this.syncSidebarPlugins(true);
         if (new URLSearchParams(window.location.search).has("edit")) {
             this.loadEditModePlugin();
         }
-        this.groundItemsPlugin.subscribe(() => {
-            this.syncSidebarPlugins();
-        });
-        this.interactHighlightPlugin.subscribe(() => {
-            this.syncSidebarPlugins();
-        });
-        this.notesPlugin.subscribe(() => {
-            this.syncSidebarPlugins();
-        });
-        this.tileMarkersPlugin.subscribe(() => {
-            this.syncSidebarPlugins();
-        });
-        this.menuSwapperPlugin.subscribe(() => {
+        pluginManager.subscribe(() => {
             this.syncSidebarPlugins();
         });
         // If cache is provided, initialize immediately
@@ -6096,6 +6055,7 @@ export class OsrsClient {
     private runClientTicks(ticks: number): void {
         if (!(ticks > 0)) return;
         for (let t = 0; t < (ticks | 0); t++) {
+            this.runeLite?.postClientTick();
             // Client.cycleCntr advances once per 20ms client tick.
             this.transmitCycles.cycleCntr++;
 
@@ -6149,6 +6109,7 @@ export class OsrsClient {
             try {
                 this.widgetManager.tickModelAnimations(1, this.seqTypeLoader);
             } catch {}
+            this.runeLite?.postPostClientTick();
         }
     }
 
