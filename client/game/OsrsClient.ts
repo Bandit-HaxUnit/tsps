@@ -8102,10 +8102,12 @@ export class OsrsClient {
             }
             this.splitPrivateChatPlugin.clear();
 
-            // Clear transient varcs while keeping persistent client preferences loaded.
+            // Clear the last account's varps and transient varcs, keeping persistent client
+            // preferences loaded: the next login only sends its non-zero varps, so anything
+            // left over would show as that account's (a home teleport cooldown, say).
             // Camera zoom bounds are reseeded by the login root bootstrap script.
             try {
-                this.varManager?.clearTransientVarcs?.();
+                this.varManager?.resetForLogout?.();
             } catch (err) {
                 console.warn("[OsrsClient] VarManager clear error:", err);
             }

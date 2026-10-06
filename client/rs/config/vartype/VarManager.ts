@@ -196,6 +196,17 @@ export class VarManager {
         }
     }
 
+    /**
+     * Back to the login screen: every varp (and so every varbit) goes back to 0, as the server
+     * only sends a player's non-zero values when they log in, and transient varcs are cleared.
+     * Persistent varcs (client preferences) stay. No change callbacks fire: nothing should react
+     * to a logged-out player's vars, and the next login's values arrive as changes from 0.
+     */
+    resetForLogout(): void {
+        this.values.fill(0);
+        this.clearTransientVarcs();
+    }
+
     set(values: Int32Array): void {
         this.values.set(values);
     }
