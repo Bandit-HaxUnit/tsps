@@ -673,6 +673,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     playerIndexBufferAlpha?: VertexBuffer;
     playerInterleavedBufferAlpha?: VertexBuffer;
     playerSlotBuffer?: VertexBuffer;
+    /** Player pose matrices for GPU animation (PlayerRenderer); every player draw binds it. */
+    playerPoseTexture?: Texture;
     playerDrawCall?: DrawCall;
     playerDrawCallAlpha?: DrawCall;
     playerDrawRanges?: DrawRange[];
