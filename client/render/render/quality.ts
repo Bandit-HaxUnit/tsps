@@ -96,7 +96,6 @@ import {
     getCanvasCssSize,
     isIos,
     isMobileMode,
-    isTouchDevice,
     isWebGL2Supported,
 } from "../../common/utils/DeviceUtil";
 import { clamp } from "../../common/utils/MathUtil";
@@ -373,7 +372,7 @@ export function getCanvasResolutionScale(host: WebGLOsrsRendererHost, cssWidth: 
 
         const safeCssWidth = Number.isFinite(cssWidth) ? Math.max(1, cssWidth) : 1;
         const safeCssHeight = Number.isFinite(cssHeight) ? Math.max(1, cssHeight) : 1;
-        const maxPixelCount = isTouchDevice ? 6_000_000 : 12_000_000;
+        const maxPixelCount = isMobileMode ? 6_000_000 : 12_000_000;
         const targetPixelCount = safeCssWidth * safeCssHeight * targetScale * targetScale;
         if (targetPixelCount <= maxPixelCount) {
             return targetScale;
@@ -386,7 +385,9 @@ export function getCanvasResolutionScale(host: WebGLOsrsRendererHost, cssWidth: 
 
 export function resolveBrowserQualityProfile(host: WebGLOsrsRendererHost, ): BrowserQualityProfile {
 
-        if (!isTouchDevice) {
+        // The platform, not touch hardware: a touchscreen laptop on the desktop layout is a
+        // desktop (#358), and must not get the handheld profile's half-resolution scene.
+        if (!isMobileMode) {
             return DESKTOP_QUALITY_PROFILE;
         }
         if (isIos) {
@@ -423,7 +424,7 @@ export function getActiveQualityProfileLabel(host: WebGLOsrsRendererHost, ): str
 
 export function getSceneResolutionScale(host: WebGLOsrsRendererHost, ): number {
 
-        if (!isTouchDevice || host.osrsClient.isOnLoginScreen()) {
+        if (!isMobileMode || host.osrsClient.isOnLoginScreen()) {
             host.osrsClient.mobileEffectiveResolutionScale = 1;
             if (host.osrsClient.isOnLoginScreen()) return 1;
             return host.osrsClient.performancePlugin?.sceneScale() ?? 1;
