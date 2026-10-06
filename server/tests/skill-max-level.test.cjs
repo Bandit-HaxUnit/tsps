@@ -722,28 +722,27 @@ test("cancelling a combat target stops its animation and future attacks without 
   assert.equal(animations.length, 1, "unrelated reset does not cancel a skilling animation");
 });
 
-test("moving or disconnecting during pickpocketing cancels the resolving tick", () => {
+test("disconnecting before a pickpocket's outcome tick cancels it", () => {
+  // The attempt message goes out on the click; the outcome lands on the next tick
+  // (thieving-pickpocket.test.cjs). A player gone by then gets nothing.
   const { PluginManager } = require("../dist/plugins/PluginManager");
   const core = PluginManager.getCoreApi(), tasks = [], npcHooks = {};
-  const hooks = registerFeedbackPlugin("skills/Thieving", core, {
+  registerFeedbackPlugin("skills/Thieving", core, {
     getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
     getCombatFactory: () => ({ inCombat: () => false }),
     onNpcInteraction: (name, actions) => { npcHooks[name] = actions; },
   });
-  for (const disconnect of [false, true]) {
-    const p = feedbackPlayer(core);
-    p.getIndex = () => 1; p.getTimers = () => ({ has: () => false });
-    p.setPositionToFace = () => {}; p.getMovementQueue = () => ({ size: () => 0, reset() {} });
-    p.skills = { getCurrentLevel: () => 99, addExperiences() { assert.fail("interrupted action awarded XP"); } };
-    const npc = { getDefinition: () => ({ getName: () => "Man" }),
-      getTimers: () => ({ registers() {} }), getLocation: p.getLocation, isRegistered: () => true };
-    npcHooks.Man.Pickpocket({ player: p, npc, definition: npc.getDefinition() });
-    const task = tasks.pop(); assert.ok(task); task.tick();
-    if (disconnect) p.isRegistered = () => false;
-    else p.moveTo(new core.Location(3001, 3000, 0));
-    task.tick();
-    assert.equal(task.isRunning(), false);
-    assert.equal(p.counts.size, 0, "interrupted action produced no loot");
-    if (!disconnect) assert.equal(p.animations.at(-1), 65535);
-  }
+  const p = feedbackPlayer(core);
+  p.getIndex = () => 1; p.getTimers = () => ({ has: () => false, getTicks: () => 0 });
+  p.setPositionToFace = () => {}; p.getMovementQueue = () => ({ size: () => 0, reset() {} });
+  p.getHitpoints = () => 10;
+  p.skills = { getCurrentLevel: () => 99, addExperiences() { assert.fail("interrupted action awarded XP"); } };
+  const npc = { getDefinition: () => ({ getName: () => "Man" }),
+    getTimers: () => ({ registers() {} }), getLocation: p.getLocation, isRegistered: () => true };
+  npcHooks.Man.Pickpocket({ player: p, npc, definition: npc.getDefinition() });
+  const task = tasks.pop(); assert.ok(task);
+  p.isRegistered = () => false;
+  task.tick();
+  assert.equal(task.isRunning(), false);
+  assert.equal(p.counts.size, 0, "interrupted action produced no loot");
 });

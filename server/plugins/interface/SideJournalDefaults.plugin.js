@@ -21,6 +21,8 @@ const SIDE_JOURNAL_ACHIEVEMENT_DIARY_TAB = 2;
 const SIDE_JOURNAL_SUMMARY_ICON_UID = (SIDE_JOURNAL_GROUP_ID << 16) | 2;
 const SIDE_JOURNAL_QUEST_ICON_UID = (SIDE_JOURNAL_GROUP_ID << 16) | 10;
 const SIDE_JOURNAL_DIARY_ICON_UID = (SIDE_JOURNAL_GROUP_ID << 16) | 18;
+const ACHIEVEMENT_DIARY_TASKBOX_UID = (INTERFACE_ACHIEVEMENT_DIARY_ID << 16) | 2;
+const ACHIEVEMENT_DIARY_COUNT = 12;
 
 const ROOT_INTERFACE_ID = 161;
 const QUEST_TAB_ICON_UID = (ROOT_INTERFACE_ID << 16) | 61;
@@ -57,6 +59,10 @@ function mountSideJournalContent(player, groupId, tabIndex) {
     // The client renders the quest list only while 399 is mounted and purges the
     // row flags on unmount, so the quest runtime repopulates on every open.
     pluginApi?.emitCustomEvent("quest:list-refresh", { player });
+  }
+  if (groupId === INTERFACE_ACHIEVEMENT_DIARY_ID) {
+    // As captured: the diary rows (one per diary) take Open and Wiki each time the tab mounts.
+    player.getPacketSender().sendInterfaceFlagsRange(ACHIEVEMENT_DIARY_TASKBOX_UID, 0, ACHIEVEMENT_DIARY_COUNT - 1, FLAGS_OP1_2);
   }
   if (groupId === INTERFACE_CHARACTER_SUMMARY_ID) {
     // Re-send row flags every time 712 comes back - the client drops them

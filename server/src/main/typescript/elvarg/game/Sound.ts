@@ -163,6 +163,8 @@ export class Sound {
     public static HOME_TELEPORT = new Sound(193, 1, 0, 0)
     /** A new item in the collection log (with its notification popup, as captured). */
     public static COLLECTION_LOG_NEW_ITEM = new Sound(2304, 1, 0, 0)
+    /** An experience reward granted (genie's lamp, as captured). */
+    public static XP_REWARD = new Sound(2655, 1, 0, 0)
     public static HOME_TELEPORT_ALT = Sound.HOME_TELEPORT
 
     public id: number;
