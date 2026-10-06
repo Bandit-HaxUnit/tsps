@@ -5148,6 +5148,20 @@ export class OsrsClient {
         this.closeMenu();
     }
 
+    /** A ground item's own option other than Take (giant bones' Bury), sent by name and number. */
+    groundItemOption(stack: ClientGroundItemStack, option: string, opNum: number): void {
+        if (isServerConnected()) {
+            sendGroundItemAction({
+                stackId: stack.id | 0,
+                itemId: stack.itemId | 0,
+                tile: { ...stack.tile },
+                option,
+                opNum,
+            });
+        }
+        this.closeMenu();
+    }
+
     examineGroundItem(stack: ClientGroundItemStack): void {
         if (isServerConnected()) {
             sendGroundItemAction({

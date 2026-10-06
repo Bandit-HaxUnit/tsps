@@ -1217,6 +1217,7 @@ export interface PluginCoreApi {
   CombatNormalSpell: any;
   NPC: any;
   GameConstants: any;
+  Music: any;
   WorldDefinition: any;
   TeleportHandler: any;
   TeleportType: any;

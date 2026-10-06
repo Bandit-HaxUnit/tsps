@@ -802,6 +802,7 @@ export class CombatFactory {
         if (
             combatType !== CombatType.MELEE &&
             target.getBlockAnim() >= 0 &&
+            method?.playsBlockAnimation?.() !== false &&
             target.getHitpoints() >
                 target.getCombat().getHitQueue().getQueuedDamage() + damage
         ) {
