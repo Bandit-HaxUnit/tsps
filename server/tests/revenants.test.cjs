@@ -10,11 +10,12 @@ const { CachePipeline } = require("../dist/game/cache/CachePipeline");
 const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
 const { PluginManager } = require("../dist/plugins/PluginManager");
 const { Location } = require("../dist/game/model/Location");
-const Data = require("../plugins/npcs/revenants/RevenantData");
-const { createRevenantCombat, chooseStyle, takeHeal } = require("../plugins/npcs/revenants/RevenantCombat");
-const Drops = require("../plugins/npcs/revenants/RevenantDrops");
-const Bracelet = require("../plugins/npcs/revenants/BraceletOfEthereum");
-const Revenants = require("../plugins/npcs/revenants/Revenants.plugin");
+const Data = require("../plugins/npcs/revenants/Data.Revenants");
+const { createRevenantCombat, chooseStyle, takeHeal } = require("../plugins/npcs/revenants/Combat.Revenants");
+const Drops = require("../plugins/npcs/revenants/Drops.Revenants");
+const Bracelet = require("../plugins/npcs/revenants/Bracelet.Revenants");
+const Revenants = require("../plugins/npcs/revenants/Common.Revenants");
+const Loot = require("../plugins/npcs/revenants/Loot.Revenants");
 
 const { ITEMS } = Data;
 let core;
@@ -278,7 +279,7 @@ test("every kill drops an even amount of ether in range; the rolls land in the r
 
 test("loot: under the revenant for the killer, ether absorbed, avarice notes", () => {
   const registered = [];
-  Revenants._test.attach({
+  Revenants.init({
     core: { ...core, ItemOnGroundManager: { registerLocation: (owner, i, at) => registered.push([i.getId(), i.getAmount()]) } },
     emitCustomEvent: () => {},
   });
@@ -290,7 +291,7 @@ test("loot: under the revenant for the killer, ether absorbed, avarice notes", (
   const random = Math.random;
   Math.random = () => 0.999;
   try {
-    Revenants._test.dropLoot({ killer, npc, npcId: 7940 });
+    Loot.dropLoot({ killer, npc, npcId: 7940 });
   } finally {
     Math.random = random;
   }
@@ -331,8 +332,8 @@ test("the freeze's Ice Barrage impact is on the ground; the revenant impact at h
 
 // ------------------------------------------------------------------ the maledictus
 
-const Maledictus = require("../plugins/npcs/revenants/Maledictus");
-const Avarice = require("../plugins/npcs/revenants/Avarice");
+const Maledictus = require("../plugins/npcs/revenants/Maledictus.Revenants");
+const Avarice = require("../plugins/npcs/revenants/Avarice.Revenants");
 
 function maledictusHarness({ players = [] } = {}) {
   const spawned = [];

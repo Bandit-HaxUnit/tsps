@@ -10,8 +10,8 @@
  * - A charged bracelet of ethereum takes 75% off each attack for a charge, and revenants don't
  *   start fights with its wearer (tolerance); they still fight back.
  */
-const { STYLE_ANIMATIONS, ATTACK_SOUNDS, MAGIC, RANGED, HEAL } = require("./RevenantData");
-const Bracelet = require("./BraceletOfEthereum");
+const { REVENANT_IDS, STYLE_ANIMATIONS, ATTACK_SOUNDS, MAGIC, RANGED, HEAL } = require("./Data.Revenants");
+const Bracelet = require("./Bracelet.Revenants");
 
 const ATTACK_DISTANCE = 8;
 const FREEZE_IMMUNE_ATTRIBUTE = "revenants:freeze-immune-until";
@@ -167,4 +167,8 @@ function createRevenantCombat(core) {
   return RevenantCombat;
 }
 
-module.exports = { createRevenantCombat, resetHeals, chooseStyle, takeHeal };
+module.exports = function attachCombat(api) {
+  api.registerNpcCombatMethodProvider(REVENANT_IDS, createRevenantCombat(api.core), { singleton: false });
+};
+
+Object.assign(module.exports, { createRevenantCombat, resetHeals, chooseStyle, takeHeal });

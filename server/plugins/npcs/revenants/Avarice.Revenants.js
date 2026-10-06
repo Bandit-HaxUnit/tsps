@@ -7,8 +7,7 @@
  *   minutes while the amulet is worn. Applied one after the other here (the Wiki doesn't say
  *   how they combine), and without the surge's own skull icon, which isn't identified yet.
  */
-const { REVENANT_IDS, ITEMS, inCaves } = require("./RevenantData");
-const { ID: MALEDICTUS } = require("./Maledictus");
+const { REVENANT_IDS, MALEDICTUS_ID: MALEDICTUS, ITEMS, inCaves } = require("./Data.Revenants");
 
 const AMULET_SLOT = 2;
 const SURGE_ATTRIBUTE = "revenants:forinthry-surge-until";
@@ -54,7 +53,7 @@ function keepSkulled({ player }) {
   core.CombatFactory.skull(player, core.SkullType.WHITE_SKULL, core.CombatFactory.PVP_SKULL_SECONDS);
 }
 
-function register(api) {
+module.exports = function attachAvarice(api) {
   core = api.core;
   api.persistAttribute(SURGE_ATTRIBUTE);
   for (const style of ["Melee", "Ranged", "Magic"]) {
@@ -62,6 +61,6 @@ function register(api) {
     api[`register${style}HitModifier`](boost);
   }
   api.onPlayerProcess(keepSkulled);
-}
+};
 
-module.exports = { register, grant, boost, wearsAvarice, surgeActive, SURGE_ATTRIBUTE };
+Object.assign(module.exports, { grant, boost, wearsAvarice, surgeActive, SURGE_ATTRIBUTE });

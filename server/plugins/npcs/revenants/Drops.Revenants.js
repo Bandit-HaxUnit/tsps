@@ -7,7 +7,7 @@
  * otherwise. The unique table (1/(A x 26.667), skulled x1/0.55, on task x5), the blighted
  * secondary (100/(250 - combat)), the tertiaries and the ether roll on their own.
  */
-const { REVENANTS, ITEMS } = require("./RevenantData");
+const { REVENANTS, ITEMS } = require("./Data.Revenants");
 
 /** Unique table: avarice 2/5, each weapon 1/5. */
 const UNIQUES = [
