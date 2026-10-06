@@ -10,7 +10,6 @@ import { InteractHighlightPlugin } from "../../../game/plugins/interacthighlight
 import { MenuSwapperPlugin } from "../../../game/plugins/menuswapper/MenuSwapperPlugin";
 import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
 import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
-import { PerformancePlugin } from "../../../game/plugins/performance/PerformancePlugin";
 import { RememberLoginPlugin } from "../../../game/plugins/rememberlogin/RememberLoginPlugin";
 import { SplitPrivateChatPlugin } from "../../../game/plugins/splitprivatechat/SplitPrivateChatPlugin";
 import {
@@ -36,7 +35,6 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     RememberLoginPlugin,
     SplitPrivateChatPlugin,
     AnimationSmoothingPlugin,
-    PerformancePlugin,
     AttackTimerPlugin,
     VengeanceTimerPlugin,
     PoisonTimerPlugin,

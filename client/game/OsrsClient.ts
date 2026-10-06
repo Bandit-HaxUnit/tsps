@@ -281,7 +281,6 @@ import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlu
 import { FreezeTimerPlugin, PoisonTimerPlugin } from "./plugins/statustimer/StatusTimerPlugin";
 import { AttackTimerPlugin } from "./plugins/attacktimer/AttackTimerPlugin";
 import { AnimationSmoothingPlugin } from "./plugins/animationsmoothing/AnimationSmoothingPlugin";
-import { PerformancePlugin } from "./plugins/performance/PerformancePlugin";
 import { MenuSwapperPlugin } from "./plugins/menuswapper/MenuSwapperPlugin";
 import { RuneLite } from "../runelite/client/RuneLite";
 import { setMenuTransform } from "../ui/menu/menuTransforms";
@@ -591,7 +590,6 @@ export class OsrsClient {
     readonly freezeTimerPlugin: FreezeTimerPlugin;
     readonly attackTimerPlugin: AttackTimerPlugin;
     readonly animationSmoothingPlugin: AnimationSmoothingPlugin;
-    readonly performancePlugin: PerformancePlugin;
     readonly menuSwapperPlugin: MenuSwapperPlugin;
     readonly splitPrivateChatPlugin: SplitPrivateChatPlugin;
     readonly clientPlugins: ClientPluginManager = new ClientPluginManager();
@@ -1197,7 +1195,6 @@ export class OsrsClient {
         this.freezeTimerPlugin = pluginManager.getPlugin(FreezeTimerPlugin)!;
         this.attackTimerPlugin = pluginManager.getPlugin(AttackTimerPlugin)!;
         this.animationSmoothingPlugin = pluginManager.getPlugin(AnimationSmoothingPlugin)!;
-        this.performancePlugin = pluginManager.getPlugin(PerformancePlugin)!;
         this.menuSwapperPlugin = pluginManager.getPlugin(MenuSwapperPlugin)!;
         this.splitPrivateChatPlugin = pluginManager.getPlugin(SplitPrivateChatPlugin)!;
         this.firstPersonPlugin = pluginManager.getPlugin(FirstPersonPlugin)!;

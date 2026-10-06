@@ -380,6 +380,11 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     colorTarget?: Renderbuffer;
     depthTarget?: Renderbuffer;
     framebuffer?: Framebuffer;
+    /**
+     * Desktop 3D scene resolution as a share of the canvas (0.5-1), set in the debug panel. The
+     * scene is drawn smaller and scaled up; the interface stays at full resolution.
+     */
+    public sceneResolutionScale: number = 1;
     public sceneRenderWidth: number = 1;
     public sceneRenderHeight: number = 1;
 
