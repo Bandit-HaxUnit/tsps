@@ -103,7 +103,8 @@ function createFishAction(spec, world) {
     const here = tile(player.getLocation());
     let best = null;
     let bestDistance = Infinity;
-    for (const npc of world.core.World.getNearbyNpcsForUpdate(player)) {
+    // Not getNearbyNpcsForUpdate: that only sees NPCs in regions active around real players.
+    for (const npc of world.core.World.getNpcsNear(player.getLocation(), SITE_RADIUS + 8, player.getPrivateArea?.() ?? null)) {
       if (npc.isRegistered?.() === false || (bot.avoidedSpots.get(npc) ?? 0) > nowMs || clickTypeAt(npc) === 0) continue;
       const at = tile(npc.getLocation());
       if (at.z !== here.z || chebyshev(at, bot.site) > SITE_RADIUS) continue;

@@ -485,7 +485,7 @@ test('sellItems walks to the nearest general store keeper and sells through the 
   const inventory = new Map([[436, 3], [438, 2], [333, 16]]);
   const world = {
     core: {
-      World: { getNpcs: () => [keeper], getNearbyNpcsForUpdate: () => [keeper] },
+      World: { getNpcs: () => [keeper], getNpcsNear: () => [keeper] },
       ShopManager: {
         INVENTORY_INTERFACE_ID: 3823,
         open: (_p, shopId) => { opened = shopId; return true; },
@@ -828,7 +828,7 @@ function trainingScene(level = 1) {
   };
   const world = {
     core: { Skill, Equipment, Item: TrainingItem, ItemIdentifiers, Flag, FightStyle,
-      World: { getNearbyNpcsForUpdate: () => [npc], getNpcs: () => [npc] },
+      World: { getNpcsNear: () => [npc], getNpcs: () => [npc] },
       WorldDefinition: { isMembersArea: () => false },
       RsmodRouteFinding: class { findRoute({ destX, destY }) { return { success: true, endX: destX, endY: destY }; } },
       CombatSpells: new Proxy({}, { get: () => ({ levelRequired: () => 1, itemsRequired: () => [] }) }),
@@ -916,7 +916,7 @@ test('NPC training skips occupied, forbidden, dead and unregistered targets', ()
 
 test('NPC reservations prevent simultaneous claims, and stop releases them', () => {
   const first = trainingScene(), second = trainingScene();
-  second.world.core.World.getNearbyNpcsForUpdate = () => [first.npc];
+  second.world.core.World.getNpcsNear = () => [first.npc];
   const a = createTrainCombatAction(chickenSpec, first.world);
   const b = createTrainCombatAction(chickenSpec, second.world);
   a.update(first.ctx); b.update(second.ctx);
@@ -937,7 +937,7 @@ test('stalled targets are abandoned and death resets the training destination', 
 test('trainers skip a cluster the route planner cannot reach (jail, desert pass)', () => {
   const s = trainingScene();
   s.world.core.World.getNpcs = () => [fakeNpc('Chicken', 3330, 3298), fakeNpc('Chicken', 3130, 3298)];
-  s.world.core.World.getNearbyNpcsForUpdate = () => [];
+  s.world.core.World.getNpcsNear = () => [];
   s.world.routes = { canReachSpot: (_player, cluster) => cluster.x < 3300 };
   const a = createTrainCombatAction(chickenSpec, s.world);
   a.update(s.ctx);
@@ -952,7 +952,7 @@ test('beginners train on any NPC in their combat-level band, not on named ones',
   const duck = fakeNpc('Duck', 3217, 3185);
   s.move(3218, 3190);
   s.world.core.World.getNpcs = () => [duck, bigFrog, frog];
-  s.world.core.World.getNearbyNpcsForUpdate = () => [duck, bigFrog, frog];
+  s.world.core.World.getNpcsNear = () => [duck, bigFrog, frog];
   const a = createTrainCombatAction(trainingSpec, s.world);
   a.update(s.ctx);
   assert.equal(s.logs[0].site, `${3218 >> 5},${3185 >> 5},0`, 'the swamp frogs are found by level');
@@ -967,7 +967,7 @@ test('a frozen movement request is dropped and the site rotates', () => {
     const s = trainingScene();
     s.move(3170, 3240);
     s.world.core.World.getNpcs = () => [s.npc, fakeNpc('Chicken', 3330, 3298)];
-    s.world.core.World.getNearbyNpcsForUpdate = () => []; // nothing in view: walk to the cluster
+    s.world.core.World.getNpcsNear = () => []; // nothing in view: walk to the cluster
     const a = createTrainCombatAction(trainingSpec, s.world);
     a.update(s.ctx);
     const firstSite = s.logs[0].site;
@@ -987,7 +987,7 @@ test('a frozen movement request is dropped and the site rotates', () => {
 test('a slow-ticking far bot does not call its fresh walk frozen after one late tick', () => {
   const s = trainingScene();
   s.move(3170, 3240);
-  s.world.core.World.getNearbyNpcsForUpdate = () => [];
+  s.world.core.World.getNpcsNear = () => [];
   const a = createTrainCombatAction(trainingSpec, s.world);
   a.update(s.ctx);
   s.ctx.nowMs += 15000; // LOD + task budget: the next brain tick comes 15 s later
@@ -1000,7 +1000,7 @@ test('a slow-ticking far bot does not call its fresh walk frozen after one late 
 test('a trainer at its cluster with nothing to fight waits there instead of blacklisting it', () => {
   const s = trainingScene();
   s.move(3229, 3297);
-  s.world.core.World.getNearbyNpcsForUpdate = () => []; // every chicken busy with someone else
+  s.world.core.World.getNpcsNear = () => []; // every chicken busy with someone else
   const a = createTrainCombatAction(trainingSpec, s.world);
   for (let i = 0; i < 6; i += 1) { a.update(s.ctx); s.ctx.nowMs += 3000; }
   assert.equal(peekMovementRequest(s.player), null, 'no walk onto the tile it already stands on');
@@ -1011,7 +1011,7 @@ test('a trainer at its cluster with nothing to fight waits there instead of blac
 test('a centre on water: a stalled walk within the cluster radius trains from where it stopped', () => {
   const s = trainingScene();
   s.move(3218, 3298); // 12 tiles from the centre, can get no closer
-  s.world.core.World.getNearbyNpcsForUpdate = () => [];
+  s.world.core.World.getNpcsNear = () => [];
   const a = createTrainCombatAction(trainingSpec, s.world);
   a.update(s.ctx);
   assert.ok(peekMovementRequest(s.player), 'walks toward the centre');
@@ -1044,7 +1044,7 @@ test('maxFailedTargets targets in a row that never take damage fail the training
     const s = trainingScene();
     const second = { ...s.npc, getLocation: () => new Location(3232, 3298, 0) };
     const third = { ...s.npc, getLocation: () => new Location(3234, 3298, 0) };
-    s.world.core.World.getNearbyNpcsForUpdate = () => [s.npc, second, third];
+    s.world.core.World.getNpcsNear = () => [s.npc, second, third];
     const a = createTrainCombatAction({ ...chickenSpec, maxFailedTargets: 3 }, s.world);
     a.update(s.ctx);
     assert.equal(s.attacks.length, 1);

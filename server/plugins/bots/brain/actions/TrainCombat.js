@@ -456,7 +456,8 @@ function createTrainCombatAction(spec, world) {
         if (nowMs < bot.retryAt) return "running";
         bot.retryAt = nowMs + TARGET_RETRY_MS;
         prepare(player, state);
-        const candidates = world.core.World.getNearbyNpcsForUpdate(player)
+        // Every NPC near the cluster, not just those in regions active around real players.
+        const candidates = world.core.World.getNpcsNear(location, SITE_RADIUS + ATTACK_DISTANCE, player.getPrivateArea?.() ?? null)
           .filter((npc) => available(player, npc, bot, nowMs))
           .sort((a, b) => location.getDistance(a.getLocation()) - location.getDistance(b.getLocation()))
           .slice(0, TARGET_SPREAD);

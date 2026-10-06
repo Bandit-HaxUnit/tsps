@@ -73,7 +73,7 @@ function createSellItemsAction(spec, world, keepers = loadGeneralStoreKeepers())
       } else if (nowMs - bot.movedAt > STUCK_MS) {
         return "failed";
       }
-      const keeper = world.core.World.getNearbyNpcsForUpdate(player)
+      const keeper = world.core.World.getNpcsNear(loc, 16, player.getPrivateArea?.() ?? null)
         .find((npc) => keeperShop(npc) !== undefined && npc.isRegistered?.() !== false);
       const at = keeper?.getLocation();
       if (at && Math.max(Math.abs(at.getX() - loc.getX()), Math.abs(at.getY() - loc.getY())) <= TRADE_RANGE) {
