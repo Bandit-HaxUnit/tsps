@@ -152,6 +152,22 @@ test('the assignment event fills the line and ignores non-masters', () => {
   assert.equal(outsider.line, null);
 });
 
+test('a transformed npc counts as what it is now (a woken crab, not its disguise)', () => {
+  const api = captureApi();
+  const player = fakePlayer({ 'slayer:task': { masterId: 403, slug: 'crabs', remaining: 10 } });
+  const sandCrab = (current) => ({
+    getDefinition: () => ({ getName: () => 'Sandy rocks' }),
+    getCurrentDefinition: () => ({ getName: () => current }),
+  });
+  const onTask = (npc) => {
+    const request = { player, npc, onTask: null };
+    api.events['slayer:on-task'](request);
+    return request.onTask;
+  };
+  assert.equal(onTask(sandCrab('Sand Crab')), true);
+  assert.equal(onTask(sandCrab('Sandy rocks')), false);
+});
+
 test('the task-tip event reports the active task location', () => {
   const api = captureApi();
   const tasked = { player: fakePlayer({ 'slayer:task': { masterId: 7663, slug: 'ankou', remaining: 4 } }), line: null };

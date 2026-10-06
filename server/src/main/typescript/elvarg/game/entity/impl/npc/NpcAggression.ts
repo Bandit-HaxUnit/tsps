@@ -8,7 +8,6 @@ import { NPC } from "./NPC";
 import { PluginManager } from "../../../../plugins/PluginManager";
 
 export class NpcAggression {
-    public static NPC_TOLERANCE_SECONDS = 600; // 10 mins (Accurate to OSRS)
 
     public static process(player: Player) {
         // Make sure we can attack the player
