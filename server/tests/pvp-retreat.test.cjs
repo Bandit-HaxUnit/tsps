@@ -238,7 +238,7 @@ test('PvP worlds add 15 to the shared Wilderness level for players and bots', ()
         levelAt, isPvpArea: () => true, isInLocation: () => true,
         isInSafeBuilding: () => false, isMulti: () => false,
       } };
-      if (name.endsWith('/ferox/FeroxBounds')) return { isSafeLocation: () => false };
+      if (name.endsWith('/ferox/Bounds.FeroxEnclave')) return { isSafeLocation: () => false };
       return local(name);
     },
   }, { filename: file });

@@ -1,6 +1,6 @@
 /**
  * Ferox Enclave's ground (https://oldschool.runescape.wiki/w/Ferox_Enclave): the town's outline,
- * its barriers, and the buffer just outside them. Shared by FeroxEnclave.plugin.js and the
+ * its barriers, and the buffer just outside them. Shared by the FeroxEnclave plugin and the
  * plugins that treat the town as safe (Wilderness, LootKeys, LootingBag, PvP presets).
  */
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");

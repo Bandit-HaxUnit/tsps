@@ -4,7 +4,7 @@ const { ItemDefinition } = require("../../src/main/typescript/elvarg/game/defini
 const { Wilderness } = require("../../src/main/typescript/elvarg/game/content/wilderness/Wilderness");
 const Food = require("./Food.plugin");
 const Potions = require("./Potions.plugin");
-const { isInsideEnclave } = require("../areas/ferox/FeroxBounds");
+const { isInsideEnclave } = require("../areas/ferox/Bounds.FeroxEnclave");
 
 const BAG_DATA = "lootingBag";
 const DEPOSIT_RESTRICTION = "You can only deposit items into the looting bag in the wilderness";

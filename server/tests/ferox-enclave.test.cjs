@@ -12,10 +12,12 @@ const { RegionManager } = require("../dist/game/collision/RegionManager");
 const { MapObjects } = require("../dist/game/entity/impl/object/MapObjects");
 const { Location } = require("../dist/game/model/Location");
 const { TaskManager } = require("../dist/game/task/TaskManager");
-const Bounds = require("../plugins/areas/ferox/FeroxBounds");
-const Ferox = require("../plugins/areas/ferox/FeroxEnclave.plugin");
+const Bounds = require("../plugins/areas/ferox/Bounds.FeroxEnclave");
+const Ferox = require("../plugins/areas/ferox/Common.FeroxEnclave");
+const Barriers = require("../plugins/areas/ferox/Barriers.FeroxEnclave");
+const Pool = require("../plugins/areas/ferox/Pool.FeroxEnclave");
+const FFA = require("../plugins/areas/ferox/FreeForAll.FeroxEnclave");
 
-const T = Ferox._test;
 let prompt = null;
 let barrier = null;
 
@@ -24,16 +26,15 @@ before(async () => {
   RegionManager.init();
   RegionManager.loadMapFiles(3123, 3629);
   barrier = (MapObjects.mapObjects.get(MapObjects.getHash(3123, 3629, 0)) ?? []).find((o) => o.getId() === 39652);
-  T.attach({
-    core: PluginManager.getCoreApi(),
-    sendMultiChatboxPrompt: (player, title, ...pairs) => {
-      const options = pairs.filter((x) => typeof x === "string");
-      const actions = pairs.filter((x) => typeof x === "function");
-      prompt = { title, options, choose: (text) => actions[options.indexOf(text)](player) };
-      return true;
-    },
-  });
+  Ferox.init({ core: PluginManager.getCoreApi(), sendMultiChatboxPrompt: recordPrompt });
 });
+
+function recordPrompt(player, title, ...pairs) {
+  const options = pairs.filter((x) => typeof x === "string");
+  const actions = pairs.filter((x) => typeof x === "function");
+  prompt = { title, options, choose: (text) => actions[options.indexOf(text)](player) };
+  return true;
+}
 
 /** A player recording, per tick, what the server sends. */
 function player({ at = new Location(3123, 3629, 0), teleblocked = false } = {}) {
@@ -104,8 +105,8 @@ test("the barrier in this cache crosses between the town and the buffer (capture
 
 test("leaving warns once: the warning, the three options, then the drag and a step through", () => {
   const p = player();
-  T.passThrough({ player: p, object: barrier });
-  assert.deepEqual(p.ticks[0], ["varbit 12393=1", `statement: ${T.BARRIER_WARNING}`]);
+  Barriers.passThrough({ player: p, object: barrier });
+  assert.deepEqual(p.ticks[0], ["varbit 12393=1", `statement: ${Barriers.BARRIER_WARNING}`]);
   p.continueDialogue();
   assert.equal(prompt.title, "Continue through the Barrier?");
   assert.deepEqual(prompt.options, ["Yes.", "Yes, and don't ask again.", "No."]);
@@ -117,34 +118,34 @@ test("leaving warns once: the warning, the three options, then the drag and a st
 
 test("'Yes, and don't ask again' sets varbit 10532 and skips the warning next time", () => {
   const p = player();
-  T.passThrough({ player: p, object: barrier });
+  Barriers.passThrough({ player: p, object: barrier });
   p.continueDialogue();
   prompt.choose("Yes, and don't ask again.");
   assert.equal(p.varbits.get(10532), 1);
   const again = player();
-  again.setAttribute(T.DONT_ASK_ATTRIBUTE, true);
-  T.passThrough({ player: again, object: barrier });
+  again.setAttribute(Barriers.DONT_ASK_ATTRIBUTE, true);
+  Barriers.passThrough({ player: again, object: barrier });
   assert.ok(!again.ticks[0].some((x) => x.startsWith("statement")));
   assert.ok(again.ticks[0].includes("anim 4282"));
 });
 
 test("coming back in needs no warning; a teleblocked player is turned away", () => {
   const p = player({ at: new Location(3122, 3629, 0) });
-  T.passThrough({ player: p, object: barrier });
+  Barriers.passThrough({ player: p, object: barrier });
   assert.ok(p.ticks[0].includes("anim 4282"), "straight through");
   const blocked = player({ at: new Location(3122, 3629, 0), teleblocked: true });
-  T.passThrough({ player: blocked, object: barrier });
+  Barriers.passThrough({ player: blocked, object: barrier });
   assert.deepEqual(blocked.ticks[0], ["A magical force prevents you from entering the Ferox Enclave while teleblocked."]);
 });
 
 test("the Pool of Refreshment: drink, restore everything (prayers off) and the captured message", () => {
   const core = PluginManager.getCoreApi();
-  T.attach({ core: { ...core, PrayerHandler: { deactivatePrayers: (who) => who.sendMessage("(prayers off)") } }, sendMultiChatboxPrompt: () => true });
+  Ferox.init({ core: { ...core, PrayerHandler: { deactivatePrayers: (who) => who.sendMessage("(prayers off)") } }, sendMultiChatboxPrompt: recordPrompt });
   const p = player({ at: new Location(3129, 3635, 0) });
   try {
-    T.drink({ player: p });
+    Pool.drink({ player: p });
   } finally {
-    T.attach({ core, sendMultiChatboxPrompt: () => true });
+    Ferox.init({ core, sendMultiChatboxPrompt: recordPrompt });
   }
   assert.deepEqual(p.ticks[0].filter((x) => !x.startsWith("poison") && !x.startsWith("run")), [
     "anim 7305", "varp 456=-1", "(prayers off)", "You feel reinvigorated after drinking from the pool.",
@@ -155,10 +156,10 @@ test("the Pool of Refreshment: drink, restore everything (prayers off) and the c
 
 test("the Ferox varbits: 6549 inside the town, 10530 in the buffer", () => {
   const inside = player({ at: new Location(3130, 3630, 0) });
-  T.syncState({ player: inside });
+  Barriers.syncState({ player: inside });
   assert.deepEqual([inside.varbits.get(6549), inside.varbits.get(10530)], [1, 0]);
   const buffer = player({ at: new Location(3122, 3629, 0) });
-  T.syncState({ player: buffer });
+  Barriers.syncState({ player: buffer });
   assert.deepEqual([buffer.varbits.get(6549), buffer.varbits.get(10530)], [0, 1]);
 });
 
@@ -166,41 +167,22 @@ test("players can't attack each other in the town unless one is teleblocked", ()
   const a = player({ at: new Location(3130, 3630, 0) });
   const b = player({ at: new Location(3131, 3630, 0) });
   const event = { attacker: a, target: b, allow: null };
-  T.denySafeZoneAttack(event);
+  Barriers.denySafeZoneAttack(event);
   assert.equal(event.allow, false);
   const tb = player({ at: new Location(3131, 3630, 0), teleblocked: true });
   const allowed = { attacker: a, target: tb, allow: null };
-  T.denySafeZoneAttack(allowed);
+  Barriers.denySafeZoneAttack(allowed);
   assert.equal(allowed.allow, null);
 });
 
 // ------------------------------------------------------------------ the free-for-all arena
 
-const FFA = require("../plugins/areas/ferox/FreeForAll");
-
+/** The free-for-all's handlers, with its Area defined; restores show as "run 100" (run energy back). */
 function ffaHarness() {
-  const core = PluginManager.getCoreApi();
-  const restored = [];
-  const harness = FFA.createFreeForAll(
-    {
-      sendMultiChatboxPrompt: (player, title, ...pairs) => {
-        const options = pairs.filter((x) => typeof x === "string");
-        const actions = pairs.filter((x) => typeof x === "function");
-        prompt = { title, options, choose: (text) => actions[options.indexOf(text)](player) };
-        return true;
-      },
-    },
-    core,
-    {
-      restore: (player) => restored.push(player),
-      later: (player, ticks, action) => TaskManager.submit(new (class extends core.Task {
-        constructor() { super(ticks, player, false); }
-        execute() { this.stop(); action(); }
-      })()),
-    },
-  );
-  return { ...harness, restored };
+  return { ...FFA, FreeForAllArena: FFA.defineArena() };
 }
+
+const restores = (p) => p.ticks.flat().filter((x) => x === "run 100").length;
 
 function arenaPlayer(at = new Location(3327, 4760, 0)) {
   const p = player({ at });
@@ -221,13 +203,13 @@ function arenaPlayer(at = new Location(3327, 4760, 0)) {
 }
 
 test("free-for-all: in a tick after the click, restored; the arena shows Attack and the safe PvP overlay", () => {
-  const { enter, FreeForAllArena, restored } = ffaHarness();
+  const { enter, FreeForAllArena } = ffaHarness();
   const p = arenaPlayer(new Location(3127, 3627, 0));
   enter({ player: p });
   assert.deepEqual(p.ticks[0], []);
   p.nextTick();
   assert.ok(runTicks(p, 1)[1].includes("teleport 3327,4751"));
-  assert.deepEqual(restored, [p]);
+  assert.equal(restores(p), 1, "restored on the way in");
   const arena = new FreeForAllArena([]);
   arena.postEnter(p);
   assert.ok(p.ticks.flat().includes("option 1 Attack"), "player option slot 1, which the client reads");
@@ -236,7 +218,7 @@ test("free-for-all: in a tick after the click, restored; the arena shows Attack 
   arena.postLeave(p, false);
   assert.deepEqual([p.display.get(43), p.display.get(47), p.varbits.get(8121)], [false, false, 0]);
   assert.ok(p.ticks.flat().includes("option 1 (none)"));
-  assert.equal(restored.length, 2, "leaving restores again");
+  assert.equal(restores(p), 2, "leaving restores again");
 });
 
 test("free-for-all: anyone may attack anyone past the line (8875, y 4759-4760); not from the safe zone", () => {

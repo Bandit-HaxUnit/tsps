@@ -1,6 +1,6 @@
 # Ferox Enclave
 
-`server/plugins/areas/ferox/`: the town's barriers, safe ground, Pools of Refreshment and free-for-all portal.
+`server/plugins/areas/FeroxEnclave.plugin.js`, with its parts in `server/plugins/areas/ferox/`: the town's barriers and safe ground (`Barriers.FeroxEnclave.js`), the Pools of Refreshment (`Pool.FeroxEnclave.js`) and the free-for-all portal and arena (`FreeForAll.FeroxEnclave.js`). `Common.FeroxEnclave.js` holds what they share: tick timing, the busy varbit and the full restore.
 
 **Sources:**
 - **OSRS captures** (rsprox): passing through a barrier both ways (once with the warning, once with "don't ask again"), drinking from a pool, and the free-for-all portal there and back;
@@ -8,7 +8,7 @@
 
 All object ids and tiles are checked against this cache.
 
-`FeroxBounds.js` holds the town's outline, the barriers (39652, 39653) and the buffer outside them. It moved here from `LootKeys.plugin.js`; LootKeys, LootingBag, the PvP presets and the Wilderness plugin now use it from here.
+`Bounds.FeroxEnclave.js` holds the town's outline, the barriers (39652, 39653) and the buffer outside them. It moved here from `LootKeys.plugin.js`; LootKeys, LootingBag, the PvP presets and the Wilderness plugin now use it from here.
 
 ## Barriers
 - **Leaving, the first time:**
@@ -38,7 +38,7 @@ Players can't attack each other inside the town or in its buffer, unless one of 
 
 ## Free-for-all arena
 
-`FreeForAll.js`, from two captures (the portal there and back; Disable-XP, a walk through the arena, the Mysterious Portal) and the Wiki.
+`FreeForAll.FeroxEnclave.js`, from two captures (the portal there and back; Disable-XP, a walk through the arena, the Mysterious Portal) and the Wiki.
 
 **The portals:**
 - **"Enter"** (26645): a teleport to 3327, 4751 a tick after the click, fully restored, as at the pool but with prayers left on (Wiki).
