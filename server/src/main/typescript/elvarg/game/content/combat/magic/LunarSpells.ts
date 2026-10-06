@@ -68,7 +68,6 @@ export class LunarSpells {
     ]);
 
     private static readonly TELEPORTS = new Map<string, LunarTeleport>([
-        ["lunar home teleport", teleport(0, 0, [], 2113, 3917)],
         ["moonclan teleport", teleport(69, 66, [rune(9075, 2), rune(557, 2), rune(563)], 2113, 3917)],
         ["ourania teleport", teleport(71, 69, [rune(9075, 6), rune(557, 2), rune(563)], 2468, 3248)],
         ["waterbirth teleport", teleport(72, 71, [rune(9075), rune(555, 2), rune(563)], 2548, 3758)],
