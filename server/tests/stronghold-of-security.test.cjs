@@ -110,6 +110,21 @@ test("the data: every object and boot item as the cache names it, 33 questions w
   }
 });
 
+test("as captured: a door speaks with its floor's door NPC as the head, door_chathead, under its name", () => {
+  const { DoorChatDialogue } = require("../plugins/areas/strongholdofsecurity/SosDialogues");
+  const calls = [];
+  const sender = new Proxy({}, { get: (_t, method) => (...args) => { calls.push([method, ...args]); return sender; } });
+  new DoorChatDialogue(0, 2495, "Rickety Door", "Correct!").send({ getPacketSender: () => sender });
+  assert.deepEqual(calls.slice(0, 4), [
+    ["sendChatboxInterface", 231],
+    ["sendNpcHeadOnInterface", 2495, (231 << 16) | 2],
+    ["sendInterfaceAnimation", (231 << 16) | 2, 4281],
+    ["sendString", "Rickety Door", (231 << 16) | 4],
+  ]);
+  const npc = (id) => CacheDefinitions.getNpc(id).name;
+  assert.deepEqual(Data.DATA.floors.map((floor) => npc(floor.doorHead)), ["Gate of War", "Ricketty door", "Oozing barrier", "Portal of Death"]);
+});
+
 test("as captured: entering the gap is free - busy, drag, sound; the move a tick later; then appear", () => {
   const player = createPlayer({ x: 2040, y: 5244 });
   tasks.length = 0;
@@ -130,12 +145,12 @@ test("as captured: leaving the gap asks; any answer gives its response and opens
   tasks.length = 0;
   prompts.length = 0;
   openDoor(player, door(2039, 5244));
-  assert.match(player.log[0], /^say Rickety door\|To pass you must answer me this: /);
+  assert.match(player.log[0], /^say Rickety Door\|To pass you must answer me this: /);
   player.next();
   const { pairs } = prompts.at(-1);
   const wrong = pairs.findIndex((entry, index) => index % 2 === 0 && !/^Correct/.test(Data.DATA.questions.find((q) => q.options.some((o) => o.text === entry))?.options.find((o) => o.text === entry)?.response ?? ""));
   pairs[(wrong >= 0 ? wrong : 0) + 1]();
-  assert.match(player.log.at(-1), /^say Rickety door\|/);
+  assert.match(player.log.at(-1), /^say Rickety Door\|/);
   player.log.length = 0;
   player.next();
   assert.deepEqual(player.log, ["close", "varbit 12393=1", "anim 4282", "move 2040,5244,0"], "even a wrong answer passes");
@@ -154,7 +169,7 @@ test("the partner door asks again, and nothing asks once the Stronghold is compl
   const player = createPlayer({ x: 2037, y: 5244 });
   player.setAttribute(Doors.LAST_ANSWERED_ATTRIBUTE, "2039,5244,0");
   openDoor(player, door(2037, 5244));
-  assert.match(player.log[0], /^say Rickety door\|To pass/);
+  assert.match(player.log[0], /^say Rickety Door\|To pass/);
   const done = createPlayer({ x: 2037, y: 5244 });
   done.setAttribute(Data.CLAIMED_ATTRIBUTE, [0, 1, 2, 3]);
   openDoor(done, door(2037, 5244));

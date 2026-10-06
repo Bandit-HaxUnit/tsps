@@ -28,7 +28,7 @@ The doors are Gate of War, Rickety door, Oozing barrier and Portal of Death. The
 
 **Any answer passes.** The door gives that answer's response, and on its continue, opens. The capture shows this for a wrong answer.
 
-**The dialogue:** the door speaks under its own name with no head: "To pass you must answer me this: …", then the options, then the response.
+**The dialogue:** the door speaks as its floor's door NPC: the head (Gate of War 2494, Ricketty door 2495, Oozing barrier 2496, Portal of Death 2497) playing `door_chathead` (4281), under the name "Rickety Door" or "Portal of Death", as captured. Floors 1 and 3 use their NPC's name, not captured. The lines are "To pass you must answer me this: …", then the options, then the response.
 
 **Passing a door:**
 

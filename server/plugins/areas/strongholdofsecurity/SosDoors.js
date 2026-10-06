@@ -17,7 +17,7 @@ const { MapObjects } = require("../../../src/main/typescript/elvarg/game/entity/
 const { ObjectDefinition } = require("../../../src/main/typescript/elvarg/game/definition/ObjectDefinition");
 const { DialogueChainBuilder } = require("../../../src/main/typescript/elvarg/game/model/dialogues/builders/DialogueChainBuilder");
 const { ActionDialogue } = require("../../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/ActionDialogue");
-const { NamedChatDialogue } = require("./SosDialogues");
+const { DoorChatDialogue } = require("./SosDialogues");
 const Data = require("./SosData");
 
 const BUSY_VARBIT = 12393;
@@ -121,13 +121,15 @@ function randomQuestion(random = Math.random) {
 /** A security question; whatever the answer, its response, then through the door. */
 function ask(player, name, door, to, random = Math.random) {
   const question = randomQuestion(random);
+  const floor = Data.FLOORS.find((entry) => entry.door === name);
+  const say = (index, text) => new DoorChatDialogue(index, floor.doorHead, floor.doorSpeaker, text);
   const chain = new DialogueChainBuilder();
-  chain.add(new NamedChatDialogue(0, name, `${ASK}${question.question}`));
+  chain.add(say(0, `${ASK}${question.question}`));
   chain.add(new ActionDialogue(1, { execute: () => {
     pluginApi.sendMultiChatboxPrompt(player, "Select an option", ...question.options.flatMap((option) => [option.text, () => {
       player.setAttribute(LAST_ANSWERED_ATTRIBUTE, doorKey(door.getLocation()));
       player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
-        new NamedChatDialogue(0, name, option.response),
+        say(0, option.response),
         new ActionDialogue(1, { execute: () => {
           player.getPacketSender().sendInterfaceRemoval();
           pass(player, to, { immediate: true });

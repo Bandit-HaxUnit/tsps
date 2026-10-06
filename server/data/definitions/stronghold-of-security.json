@@ -1,5 +1,5 @@
 {
- "$comment": "The Stronghold of Security. Object ids, positions and destinations: rsprox capture of a full run, plus the cache's map positions where it went unvisited (the up-ladders land next to the ladder above; floor 4's portal lands at the Cradle). Rewards and portal combat levels: Wiki. Questions: the Wiki's Doors table, with the capture's wording where it showed them (every answer passes; the response teaches). Boots ids: capture.",
+ "$comment": "The Stronghold of Security. Object ids, positions and destinations: rsprox capture of a full run, plus the cache's map positions where it went unvisited (the up-ladders land next to the ladder above; floor 4's portal lands at the Cradle). Rewards and portal combat levels: Wiki. Questions: the Wiki's Doors table, with the capture's wording where it showed them (every answer passes; the response teaches). Boots ids: capture. A door speaks as its floor's door NPC (doorHead, with the door_chathead animation 4281) under doorSpeaker: captured for Rickety Door and Portal of Death; floors 1 and 3 use their NPC's name (unverified).",
  "source": "https://oldschool.runescape.wiki/w/Stronghold_of_Security",
  "entrance": {
   "object": 20790,
@@ -44,7 +44,9 @@
     "emote": "Flap",
     "opening": "The box hinges creak and appear to be forming audible words....",
     "jingle": 157
-   }
+   },
+   "doorHead": 2494,
+   "doorSpeaker": "Gate of War"
   },
   {
    "name": "Catacomb of Famine",
@@ -78,7 +80,9 @@
     "emote": "Slap Head",
     "opening": "The grain shifts in the sack, sighing audible words....",
     "jingle": 179
-   }
+   },
+   "doorHead": 2495,
+   "doorSpeaker": "Rickety Door"
   },
   {
    "name": "Pit of Pestilence",
@@ -113,7 +117,9 @@
     "opening": "The box hinges creak and appear to be forming audible words....",
     "jingle": 177,
     "restore": true
-   }
+   },
+   "doorHead": 2496,
+   "doorSpeaker": "Oozing barrier"
   },
   {
    "name": "Sepulchre of Death",
@@ -140,7 +146,9 @@
     "emoteVarbit": 2312,
     "emote": "Stamp Foot",
     "jingle": 158
-   }
+   },
+   "doorHead": 2497,
+   "doorSpeaker": "Portal of Death"
   }
  ],
  "boots": [
