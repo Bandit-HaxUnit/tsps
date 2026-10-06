@@ -461,7 +461,10 @@ export class ClientConnection {
         }
         case "dialogue_amount": {
           const action = this.player?.getEnteredAmountAction();
-          if (action && packet.amount > 0) action.execute(packet.amount);
+          // 0 is dropped unless the prompt takes it (a setting where 0 means off).
+          if (action && (packet.amount > 0 || (packet.amount === 0 && (action as { acceptsZero?: boolean }).acceptsZero === true))) {
+            action.execute(packet.amount);
+          }
           else if (this.player && Bank.isOpen(this.player) && packet.amount > 0) {
             this.player.setBankCustomQuantity(packet.amount);
             this.player.getPacketSender().sendVarbit(3960, packet.amount);
