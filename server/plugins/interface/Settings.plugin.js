@@ -145,12 +145,17 @@ function catalog() {
   return settingsCatalog;
 }
 
-/** The keybind varbit a clicked row edits, or -1: a row is read in the category shown, or search. */
-function keybindVarbitForRow(player, slot) {
+/** The setting a clicked row is, or -1: a row is read in the category shown, or search. */
+function settingForRow(player, slot) {
   const view = player.getAttribute("settings-view");
   const rows = view === SEARCH_VIEW ? catalog().all : catalog().byCategory.get(Number.isInteger(view) ? view : 0);
-  const settingId = rows?.[slot];
-  return KEYBIND_VARBIT_BY_SETTING.get(Number(settingId)) ?? -1;
+  const settingId = Number(rows?.[slot]);
+  return Number.isInteger(settingId) ? settingId : -1;
+}
+
+/** The keybind varbit a clicked row edits, or -1. */
+function keybindVarbitForRow(player, slot) {
+  return KEYBIND_VARBIT_BY_SETTING.get(settingForRow(player, slot)) ?? -1;
 }
 
 function showCategory(player, category) {
@@ -331,7 +336,12 @@ module.exports = {
     // authoritative, so we only track.
     api.onInterfaceActionButton(ALL_SETTINGS_SETTINGS_CLICKZONE, ({ player, slot }) => {
       player.setAttribute("settings-keybind-varbit", Number.isInteger(slot) ? keybindVarbitForRow(player, slot) : -1);
-      return false;
+      // Other plugins own their settings: "settings:setting-clicked" { player, settingId, handled }.
+      const settingId = Number.isInteger(slot) ? settingForRow(player, slot) : -1;
+      if (settingId < 0) return false;
+      const request = { player, settingId, handled: false };
+      api.emitCustomEvent("settings:setting-clicked", request);
+      return request.handled;
     });
 
     // All Settings dropdown option selected: apply it to the tracked keybind.
