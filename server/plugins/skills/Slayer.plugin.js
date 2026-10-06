@@ -21,6 +21,8 @@ const SLAYER_MASTERS = Object.freeze(Object.fromEntries(
 ));
 
 const TASK_ATTRIBUTE = "slayer:task";
+
+let pluginApi = null;
 const POINTS_ATTRIBUTE = "slayer:points";
 const STREAK_ATTRIBUTE = "slayer:streak";
 
@@ -147,6 +149,7 @@ function assignTask(player, masterData) {
     wrapTask(selected),
     remaining
   ));
+  pluginApi?.emitCustomEvent("slayer:task-assigned", { player, master: masterData.id, task: selected.slug });
   return `Your new task is to kill ${remaining} ${selected.name.toLowerCase()}.`;
 }
 
@@ -319,6 +322,7 @@ module.exports = {
   getActiveTask,
   taskTip,
   register(api) {
+    pluginApi = api;
     api.persistAttribute(TASK_ATTRIBUTE);
     api.persistAttribute(POINTS_ATTRIBUTE);
     api.persistAttribute(STREAK_ATTRIBUTE);

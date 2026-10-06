@@ -34,7 +34,7 @@ function spokenLine(player) {
 }
 
 function captureApi() {
-  const api = { log() {}, onNpcDeath() {}, persisted: [], events: {}, anyNpc: {}, currencies: {} };
+  const api = { log() {}, onNpcDeath() {}, persisted: [], events: {}, emitted: [], anyNpc: {}, currencies: {} };
   Slayer.register({
     ...api,
     persistAttribute: (key) => api.persisted.push(key),
@@ -42,9 +42,20 @@ function captureApi() {
     onNpcInteraction: (handler) => { api.npcClick = handler; },
     onAnyNpcInteraction: (registered) => { api.anyNpc = registered; },
     onCustomEvent: (name, handler) => { api.events[name] = handler; },
+    emitCustomEvent: (name, payload) => { api.emitted.push([name, payload]); },
   });
   return api;
 }
+
+test('a new assignment tells other plugins who gave it (diary tasks such as Vannaka\'s)', () => {
+  const api = captureApi();
+  const player = fakePlayer();
+  assignTask(player, MASTER);
+  const [name, payload] = api.emitted.at(-1);
+  assert.equal(name, 'slayer:task-assigned');
+  assert.equal(payload.player, player);
+  assert.equal(payload.master, MASTER.id);
+});
 
 test('a new assignment is stored as a persisted attribute snapshot', () => {
   const player = fakePlayer();

@@ -1035,7 +1035,9 @@ export class ClientConnection {
     if (option === "examine") {
       const definition = ItemDefinition.forId(packet.itemId);
       player.sendMessage(definition.getExamine() || definition.getName());
-    } else if (player.getPrivateArea() || option === "take" || packet.optionIndex === 3 || packet.optionIndex == null) {
+    } else if (option === "take" || (!option && (player.getPrivateArea() || packet.optionIndex === 3 || packet.optionIndex == null))) {
+      // A named option other than Take is the item's own, even in a private area (giant
+      // bones' "Bury" is their op3, where Take usually sits).
       PickupItemPacketListener.pickup(player, packet.itemId, packet.x, packet.y, packet.stackId);
     } else {
       SecondGroundItemOptionPacketListener.interact(
