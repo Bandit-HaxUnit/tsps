@@ -12,6 +12,7 @@ import { MapManager, MapSquare } from "./MapManager";
 import { OsrsClient } from "./OsrsClient";
 import { IProjectileManager } from "./interfaces/IProjectileManager";
 import type { PlayerSpotAnimationEvent } from "./sync/PlayerSyncTypes";
+import type { WidgetsOverlay } from "../ui/devoverlay/WidgetsOverlay";
 
 export interface HitsplatEventPayload {
     targetType: "player" | "npc";
@@ -32,6 +33,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
 
     mapManager: MapManager<T>;
     uiHidden: boolean = false;
+    widgetsOverlay?: WidgetsOverlay;
 
     /** Drops any cached roof visibility state so the next frame recomputes it. */
     invalidateRoofState(): void {}
@@ -174,7 +176,8 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         this.handleKeyInput(deltaTime);
         this.handleControllerInput(deltaTime);
 
-        if (!this.uiHidden && !this.osrsClient.inputManager.hasInteractionPointerOverride()) {
+        if (!this.uiHidden && (!this.osrsClient.inputManager.hasInteractionPointerOverride() ||
+            this.osrsClient.inputManager.isWidgetInteractionPointer())) {
             // Process UI interaction BEFORE mouse input so widgets can consume scroll
             // before camera zoom uses it
             this.osrsClient.handleUiInput();

@@ -19,6 +19,7 @@ import {
 } from "../../widgets/gl/widgets-gl";
 import { drawTextGL } from "../../widgets/components/TextRenderer";
 import type { WidgetManager } from "../../widgets/WidgetManager";
+import type { WidgetNode } from "../../widgets/WidgetNode";
 import type { GameFrameDrawContext } from "../../game/plugins/ClientPluginManager";
 import { Overlay, OverlayInitArgs, OverlayUpdateArgs, RenderPhase } from "./Overlay";
 import { CLIENT_TYPE_ENHANCED, reportedClientType } from "../../rs/cs2/ClientType";
@@ -75,6 +76,14 @@ type MouseOverTextVisualState = {
 };
 
 export class WidgetsOverlay implements Overlay {
+    getWidgetInputPoint(widget: WidgetNode): { x: number; y: number } | undefined {
+        if (widget._absX === undefined || widget._absY === undefined) return undefined;
+        return {
+            x: (widget._absX + (widget._absWidth ?? widget.width) / 2) / this.overlayScaleX,
+            y: (widget._absY + (widget._absHeight ?? widget.height) / 2) / this.overlayScaleY,
+        };
+    }
+
     private app!: PicoApp;
     private glRenderer?: GLRenderer;
     private overlayCanvas?: HTMLCanvasElement;

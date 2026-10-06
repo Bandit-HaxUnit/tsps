@@ -5,6 +5,7 @@ import { createHdProgram } from "../game/plugins/hd/HdShader";
 import { resolveHdEnvironment } from "../game/plugins/hd/HdEnvironment";
 import { animateHdLight, hdLightOffset } from "../game/plugins/hd/HdLights";
 import { HD_OBJECT_LIGHTS_BY_ID } from "../game/plugins/hd/hdObjectLightData";
+import { resolveFogRange } from "../render/RenderDistancePolicy";
 import { prependDefines } from "../render/shaders/ShaderUtil";
 
 function shader(file: string): string {
@@ -27,6 +28,10 @@ for (const kind of ["main", "npc", "projectile", "player"]) {
         assert.match(result[1], /flat in float v_hdTerrain;/);
         if (kind === "main") assert.match(result[0], /if \(modelInfo.contourGround < CONTOUR_GROUND_NONE\) \{\s*localPos.y -= getHeightInterp/);
         assert.match(result[1], /if \(u_hdEnabled &&/);
+        assert.ok(result[1].indexOf("if (hdDistanceFog >= 1.0) discard;") < result[1].indexOf("vec4 textureColor ="),
+            "Fully fogged fragments must skip texture and material work");
+        assert.match(result[1], /else textureColor = (sampleModelTexture|texture)\(/,
+            "The original albedo sample is only needed when no HD replacement is ready");
         assert.match(result[1], /if \(!gl_FrontFacing\) normal = -normal;/);
         assert.ok(!result[1].includes("if (dot(normal, viewDir) < 0.0) normal = -normal;"),
             "Smooth normals must not flip at grazing camera angles");
@@ -53,6 +58,7 @@ assert.ok(Math.abs(hdLightOffset("FRONT", 1, 2, 4)[0] + 1) < 1e-6);
 require.extensions[".glsl"] = (module, file) => { module.exports = fs.readFileSync(file, "utf8"); };
 require.extensions[".png"] = (module, file) => { module.exports = file; };
 require.extensions[".jpg"] = (module, file) => { module.exports = file; };
+require.extensions[".webp"] = (module, file) => { module.exports = file; };
 (globalThis as any).self = globalThis;
 const { HdPlugin } = require("../game/plugins/hd/HdPlugin");
 const storage = new Map<string, string>();
@@ -83,6 +89,7 @@ const app = {
 };
 const renderer = {
     app, gl: { getParameter: () => [0, 0, 640, 480], isEnabled: () => false, clear() {}, drawBuffers() {} },
+    autoFogDepth: true, autoFogDepthFactor: 0.85, fogDepth: 24,
     playerPosUni: [0, 0], getFrameRenderDistanceTiles: () => 50, getPlayerRawPlane: () => 0,
     osrsClient: { camera: { viewMatrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] } },
     mapManager: { visibleMapCount: 0 }, textureIdIndexMap: new Map(),
@@ -106,6 +113,11 @@ programBinds = 0;
 plugin.beforeSceneRender(renderer, () => actorShadows++);
 assert.equal(programBinds, 2, "Bind once for shadow uniforms and once to restore the scene pass");
 assert.equal(shadows, 1);
+const programFog = values.get("u_hdFog") as number[];
+const expectedFog = resolveFogRange({ renderDistance: 50, autoFogDepth: true,
+    autoFogDepthFactor: 0.85, manualFogDepth: 24, hd: true });
+assert.ok(programFog[0] === expectedFog.fogDepth && programFog[1] === expectedFog.fogEnd && Math.abs(programFog[2] - 0.8) < 1e-9,
+    "HD programs must use the same gradual fog range as geometry culling");
 assert.deepEqual(viewport, [0, 0, 640, 480], "Restore scene viewport after the smaller shadow pass");
 assert.equal(actorShadows, 1);
 assert.equal(shadowCopies, 1);
@@ -140,7 +152,7 @@ assert.equal(values.get("u_hdEnabled"), false);
 assert.equal(notifications, 2);
 unsubscribe();
 plugin.disposeRenderer(renderer);
-assert.equal(deleted, 7, "Dispose both shadow framebuffers/depth textures and material/placeholder textures");
+assert.equal(deleted, 8, "Dispose both shadow framebuffers/depth textures, both material arrays and lookup/placeholder textures");
 assert.equal(new HdPlugin().getEnabled(), false, "Persist the disabled state");
 plugin.setEnabled(true);
 assert.equal(new HdPlugin().getEnabled(), true, "Explicit opt-in persists");
@@ -156,14 +168,13 @@ for (const id of [1, 2, 3, 4, 5]) {
 }
 const images: any[] = [];
 (globalThis as any).Image = class { onload: any; src = ""; constructor() { images.push(this); } };
-const texels = new Uint8ClampedArray(HD_TEXTURE_SIZE * HD_TEXTURE_SIZE * 4).fill(192);
-(globalThis as any).document = { createElement: () => ({ getContext: () => ({ drawImage() {}, getImageData: () => ({ data: texels }) }) }) };
+(globalThis as any).document = { createElement: () => ({ getContext: () => ({ drawImage() {}, getImageData: (_x: number, _y: number, width: number, height: number) => ({ data: new Uint8ClampedArray(width * height * 4).fill(192) }) }) }) };
 let lookup: Float32Array;
 let atlasUploads = 0;
 const materialState = new HdMaterials({
     createTexture2D: () => ({ data: (data: Float32Array) => { lookup = data.slice(); }, delete() {} }),
     createTextureArray: (_data: unknown, width: number, height: number, depth: number, options: any) => {
-        assert.equal(width, 256); assert.equal(height, 256); assert.ok(depth <= width);
+        assert.ok(width === HD_TEXTURE_SIZE || width === 512); assert.equal(height, width); assert.ok(depth <= width);
         assert.equal(options.maxAnisotropy, 8);
         return { data: () => atlasUploads++, delete() {} };
     },
@@ -176,7 +187,8 @@ assert.equal(metadata(5)[0], 0, "Use the cache texture until the HD image loads"
 const brick = HD_MATERIALS.find((m: any) => m.id === 2);
 images.find(image => image.src === brick.file).onload();
 materialState.update(layers);
-assert.ok(metadata(5)[0] > 0, "Publish a successfully loaded replacement");
+assert.ok(metadata(5)[0] < 0, "Select the 512px array for a successfully loaded detailed wall");
+assert.equal(metadata(5)[1], 2, "World mapping must not mark masonry as unlit");
 assert.equal(metadata(5)[2], 0, "Keep geometric normals until the normal image loads");
 images.find(image => image.src === brick.normal).onload();
 materialState.update(layers);
@@ -185,7 +197,7 @@ const uploadsBeforeRemap = atlasUploads;
 layers.set(2, 9);
 materialState.update(layers);
 assert.equal(metadata(5)[0], 0);
-assert.ok(metadata(9)[0] > 0, "Follow cache-layer remaps without reuploading image pixels");
+assert.ok(metadata(9)[0] < 0, "Follow cache-layer remaps without reuploading image pixels");
 assert.equal(atlasUploads, uploadsBeforeRemap);
 materialState.dispose();
 images.find(image => image.src === brick.file).onload();

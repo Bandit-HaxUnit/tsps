@@ -198,7 +198,8 @@ export function isSupported(): boolean{
 export function resolveEffectiveLodThresholdTiles(host: WebGLOsrsRendererHost, frameId: number): number {
 
         const renderDistance = host.getFrameRenderDistanceTiles() | 0;
-        const base = clamp(host.osrsClient.lodDistance | 0, 0, Math.max(0, renderDistance));
+        const base = clamp(host.osrsClient.lodDistance | 0, 0,
+            Math.min(renderDistance, host.osrsClient.hdPlugin?.getEnabled() ? 48 : renderDistance));
         if ((host.effectiveLodThresholdFrame | 0) === (frameId | 0)) {
             return host.effectiveLodThresholdTiles | 0;
         }

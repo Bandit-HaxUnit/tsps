@@ -35,9 +35,9 @@ export class MapManager<T extends MapSquare> {
     // OSRS top-level scene window is 104x104 tiles, rebased by server packets.
     static readonly SCENE_STREAM_SIZE_TILES = 104;
     static readonly SCENE_STREAM_HALF_TILES = MapManager.SCENE_STREAM_SIZE_TILES >> 1;
-    // OSRS expanded loading grows scene bounds in 8-tile steps, up to 5 levels.
+    // OSRS preferences use 0..5 levels; HD scenery can request a wider static window.
     static readonly SCENE_EXPANDED_STEP_TILES = 8;
-    static readonly SCENE_MAX_EXPANDED_LEVEL = 5;
+    static readonly SCENE_MAX_EXPANDED_LEVEL = 20;
     // Scene base rebases when local player exits [16, 88) in the 104x104 window.
     static readonly SCENE_REBASE_MIN_LOCAL_TILE = 16;
     static readonly SCENE_REBASE_MAX_LOCAL_TILE = 88;

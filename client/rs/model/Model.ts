@@ -1016,8 +1016,49 @@ export class Model extends Entity {
         mask: number,
         alpha: number,
     ): void {
-        void nextFrame;
-        void alpha;
+        // Use the exact endpoint: sparse zero transforms can otherwise change origin rounding.
+        if (nextFrame?.base === base && alpha >= 1) {
+            frame = nextFrame;
+            nextFrame = undefined;
+        }
+        if (nextFrame?.base === base && alpha > 0) {
+            let current = 0;
+            let next = 0;
+            while (current < frame.transformCount || next < nextFrame.transformCount) {
+                const group = Math.min(
+                    frame.transformGroups[current] ?? Infinity,
+                    nextFrame.transformGroups[next] ?? Infinity,
+                );
+                const a = frame.transformGroups[current] === group ? current++ : -1;
+                const b = nextFrame.transformGroups[next] === group ? next++ : -1;
+                const type = base.types[group];
+                if (animateLabels && animateLabels[group] !== condition && type !== SeqTransformType.ORIGIN) {
+                    continue;
+                }
+                const origin = Math.max(
+                    a < 0 ? -1 : frame.resetOriginGroups[a],
+                    b < 0 ? -1 : nextFrame.resetOriginGroups[b],
+                );
+                if (origin !== -1) {
+                    this.transform(SeqTransformType.ORIGIN, base.labels[origin],
+                        0, 0, 0, op14, base.masks[origin] & mask);
+                }
+                const fallback = type === SeqTransformType.SCALE ? 128 : 0;
+                const blend = (from: number[], to: number[]) => {
+                    const start = a < 0 ? fallback : from[a];
+                    const end = b < 0 ? fallback : to[b];
+                    // Cache angles wrap at 256: interpolate across zero, not through a full turn.
+                    const delta = type === SeqTransformType.ROTATE
+                        ? ((end - start + 128) & 255) - 128
+                        : end - start;
+                    return Math.round(start + delta * alpha);
+                };
+                this.transform(type, base.labels[group], blend(frame.transformX, nextFrame.transformX),
+                    blend(frame.transformY, nextFrame.transformY), blend(frame.transformZ, nextFrame.transformZ),
+                    op14, base.masks[group] & mask);
+            }
+            return;
+        }
         for (let i = 0; i < frame.transformCount; i++) {
             const group = frame.transformGroups[i];
             const type = base.types[group];

@@ -1019,6 +1019,7 @@ export class PlayerRenderer {
         seqId: number,
         frameIdx: number,
         mv: any,
+        frameCycle: number = 0,
     ): boolean {
         if (!seqType) return false;
         if (seqType.isSkeletalSeq?.()) {
@@ -1037,7 +1038,19 @@ export class PlayerRenderer {
             const key = ids[idx] | 0;
             const frame0 = mv.seqFrameLoader.load(key);
             if (frame0) {
-                model.animate(frame0, undefined, !!seqType.op14);
+                if (frameCycle <= 0) {
+                    model.animate(frame0, undefined, !!seqType.op14);
+                    return true;
+                }
+                let nextIndex = idx + 1;
+                if (nextIndex >= ids.length) {
+                    nextIndex = seqType.frameStep > 0 ? nextIndex - seqType.frameStep : 0;
+                }
+                const next = frameCycle > 0 && nextIndex >= 0 && nextIndex < ids.length
+                    ? mv.seqFrameLoader.load(ids[nextIndex])
+                    : undefined;
+                const length = Math.max(1, seqType.getFrameLength(mv.seqFrameLoader, idx));
+                model.animateInterpolated(frame0, next, Math.min(1, frameCycle / length), !!seqType.op14);
                 return true;
             }
         }
@@ -1053,6 +1066,7 @@ export class PlayerRenderer {
         overlaySeqId: number,
         overlayFrameIdx: number,
         mv: any,
+        frameCycle: number = 0,
     ): boolean {
         if (!baseType) return false;
         if (!overlayType) {
@@ -1062,6 +1076,7 @@ export class PlayerRenderer {
                 baseSeqId | 0,
                 baseFrameIdx | 0,
                 mv,
+                frameCycle,
             );
         }
 
@@ -1209,6 +1224,19 @@ export class PlayerRenderer {
         return true;
     }
 
+    private getMovementFrameCycle(pid: number, seqId: number, frameIdx: number): number {
+        const { playerEcs: ecs, playerAnimController: controller } = this.renderer.osrsClient;
+        // Resample the nearby local actor on client ticks; distant players keep cached keyframes.
+        if (!this.isControlledPid(pid) || !ecs.isMoving(pid) ||
+            seqId === ecs.getAnimSeq(pid, "idle") ||
+            (ecs.getAnimSeqId(pid) >= 0 && ecs.getAnimSeqDelay(pid) === 0)) {
+            return 0;
+        }
+        const serverId = ecs.getServerIdForIndex(pid);
+        const state = serverId === undefined ? undefined : controller?.getMovementSequenceState(serverId);
+        return state?.seqId === seqId && state.frame === frameIdx ? state.frameCycle : 0;
+    }
+
     private dynamicUpdateBuffersFor(
         baseModel: any,
         baseCenterX: number,
@@ -1226,6 +1254,9 @@ export class PlayerRenderer {
         if (!r.playerInterleavedBuffer || !r.playerIndexBuffer)
             return { countOpaque: 0, countAlpha: 0 };
         const controlled = this.isControlledPid(pid);
+        const frameCycle = overlaySeqId === undefined ? this.getMovementFrameCycle(pid, seqId, frameIdx) : 0;
+        // Opaque, alpha and shadow passes must share the same resampled pose.
+        if (cacheKey && frameCycle > 0) cacheKey += `|cycle:${frameCycle}`;
         const uploadOpaque = uploadTarget === "both" || uploadTarget === "opaqueOnly";
         const uploadAlpha = uploadTarget === "both" || uploadTarget === "alphaOnly";
         const opaqueUploadKey = cacheKey && uploadOpaque ? `opaque:${cacheKey}` : undefined;
@@ -1305,6 +1336,7 @@ export class PlayerRenderer {
                     overlayId | 0,
                     overlayFrame | 0,
                     mv,
+                    frameCycle,
                 );
             }
         } catch {}

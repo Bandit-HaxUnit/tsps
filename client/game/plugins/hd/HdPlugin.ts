@@ -8,6 +8,8 @@ import { createHdProgram } from "./HdShader";
 import { collectHdLights } from "./HdLights";
 import lighting from "./hd-lighting.glsl";
 import { HdMaterials } from "./HdMaterials";
+import { Frustum } from "../../Frustum";
+import { resolveFogRange } from "../../../render/RenderDistancePolicy";
 
 // PicoGL exposes these methods at runtime but omits them from its declarations.
 type SceneProgram = Program & { bind(): void; uniform(name: string, value: unknown): void };
@@ -29,6 +31,7 @@ export class HdPlugin implements ClientPlugin {
         worldShadow?: Texture;
         worldFramebuffer?: Framebuffer;
         shadowPass: boolean;
+        shadowFrustum: Frustum;
         lightPositions: Float32Array;
         lightColors: Float32Array;
         lightCount: number;
@@ -66,7 +69,7 @@ export class HdPlugin implements ClientPlugin {
             minFilter: PicoGL.NEAREST, magFilter: PicoGL.NEAREST,
         });
         this.renderers.set(renderer, {
-            programs: programs as SceneProgram[], placeholder, materials: new HdMaterials(renderer.app), shadowPass: false,
+            programs: programs as SceneProgram[], placeholder, materials: new HdMaterials(renderer.app), shadowPass: false, shadowFrustum: new Frustum(),
             lightPositions: new Float32Array(LIGHT_LIMIT * 4), lightColors: new Float32Array(LIGHT_LIMIT * 4), lightCount: 0,
         });
     }
@@ -77,6 +80,7 @@ export class HdPlugin implements ClientPlugin {
         drawCall.texture("u_hdShadowMap", state.shadowPass ? state.placeholder : state.shadow ?? state.placeholder);
         drawCall.texture("u_hdMaterials", state.materials.lookup);
         drawCall.texture("u_hdTextures", state.materials.textures);
+        drawCall.texture("u_hdDetailTextures", state.materials.detailTextures);
     }
 
     beforeSceneRender(renderer: WebGLOsrsRenderer, drawActors: () => void): void {
@@ -113,7 +117,10 @@ export class HdPlugin implements ClientPlugin {
         set("u_hdDirectional", environment.directionalColor.map(c => c * environment.lightStrength * 0.9));
         set("u_hdFogColor", environment.fogColor);
         const fogEnd = Math.max(1, renderer.getFrameRenderDistanceTiles());
-        set("u_hdFog", [environment.fogDepth, environment.fogScale, fogEnd]);
+        const fog = resolveFogRange({ renderDistance: fogEnd, autoFogDepth: renderer.autoFogDepth,
+            autoFogDepthFactor: renderer.autoFogDepthFactor, manualFogDepth: renderer.fogDepth, hd: true });
+        set("u_hdFog", [fog.fogDepth, fog.fogEnd, Math.max(0.6, Math.min(1.2,
+            1.2 - environment.fogDepth * environment.fogScale * 0.08))]);
         set("u_hdGroundFog", [environment.groundFogStart / 128, environment.groundFogEnd / 128, environment.groundFogOpacity]);
         set("u_hdGrading", [1.12, 1, 0.6, 0]);
         set("u_hdSpecular", 1);
@@ -162,6 +169,7 @@ export class HdPlugin implements ClientPlugin {
             }
             set("u_hdShadowMatrix", this.shadowMatrix);
             set("u_hdShadowStrength", 0.5);
+            state.shadowFrustum.setPlanes(this.shadowMatrix);
         }
 
         const viewport = renderer.gl.getParameter(PicoGL.VIEWPORT) as Int32Array;
@@ -169,6 +177,8 @@ export class HdPlugin implements ClientPlugin {
         const blend = renderer.gl.isEnabled(PicoGL.BLEND);
         const framebuffer = renderer.shouldUseDirectTextureScenePass() ? renderer.textureFramebuffer! : renderer.framebuffer!;
         state.shadowPass = true;
+        const previousShadowFrustum = renderer.hdShadowFrustum;
+        renderer.hdShadowFrustum = state.shadowFrustum;
         set("u_hdShadowPass", true);
         try {
             flush();
@@ -190,6 +200,7 @@ export class HdPlugin implements ClientPlugin {
             drawActors();
         } finally {
             state.shadowPass = false;
+            renderer.hdShadowFrustum = previousShadowFrustum;
             set("u_hdShadowPass", false);
             flush();
             renderer.app.defaultReadFramebuffer();

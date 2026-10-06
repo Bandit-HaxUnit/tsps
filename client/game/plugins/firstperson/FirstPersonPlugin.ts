@@ -1,6 +1,11 @@
 import type { Camera } from "../../Camera";
 import type { InputKeyHandler, InputManager, InputMouseHandler } from "../../InputManager";
 import type { CameraFollowContext, CameraInputContext, ClientPlugin } from "../ClientPluginManager";
+import { RS_TO_RADIANS } from "../../../rs/MathConstants";
+import type { PlayerEcs } from "../../ecs/PlayerEcs";
+import type { WidgetNode } from "../../../widgets/WidgetNode";
+import type { WidgetManager } from "../../../widgets/WidgetManager";
+import { deriveMenuEntriesForWidget, getRootRenderTransform } from "../../../widgets/menu/utils";
 
 if (typeof document !== "undefined") require("./FirstPersonPlugin.css");
 
@@ -11,25 +16,75 @@ type FirstPersonClient = {
     firstPersonArmsVisible?: boolean;
     followPlayerCamera: boolean;
     menuOpen: boolean;
+    menuKeyboardIndex?: number;
+    menuKeyboardSelect?: boolean;
+    menuActiveSimpleEntries?: readonly unknown[];
+    controlledPlayerServerId?: number;
+    playerEcs?: Pick<PlayerEcs, "getIndexForServerId" | "getX" | "getY" | "getDefaultHeightTiles" | "setRotationOverride"> &
+        { getLevel?(index: number): number };
+    runMode?: boolean;
+    setKeyboardMovement?(dx: number, dy: number, running: boolean, rotation: number): void;
+    stopKeyboardMovement?(deactivate?: boolean): void;
+    setKeyboardRunMode?(running: boolean): void;
+    switchToTab?(tab: number, forceOpen?: boolean): void;
+    renderer?: { widgetsOverlay?: { getWidgetInputPoint(widget: WidgetNode): { x: number; y: number } | undefined } };
+    cs2Vm?: { inputDialogType: number };
+    isWidgetTextInputActive?(): boolean;
+    widgetManager?: Pick<WidgetManager, "interfaceParents"> & Partial<Pick<WidgetManager,
+        "rootInterface" | "findWidget" | "isEffectivelyHidden" | "invalidateWidgetRender" |
+        "getAllGroupRoots" | "getStaticChildrenByParentUid" | "getWidgetFlags" | "getWidgetByUid" |
+        "invalidateScroll" | "ensureLayout">>;
     isLoggedIn(): boolean;
     addGameMessage(message: string): void;
     closeMenu(): void;
 };
 
 type CursorMode = "none" | "alt" | "menu";
+type InputMode = "movement" | "chat" | "inventory" | "interface";
+type KeyboardWidget = {
+    widget: WidgetNode;
+    root: WidgetNode;
+    x: number;
+    y: number;
+    parent?: KeyboardWidget;
+};
 const MENU_ANCHOR_Y_OFFSET = 12;
-const CONTROLS_HINT = "Press Alt for mouse look. Press Insert to hide arm visibility.";
+const CONTROLS_HINT = "WASD to move. Tab cycles movement, chat and inventory. Arrows select items or interface options. Left/Right at an item row's edge switches panels; Tab also switches panels. Option/Alt toggles mouse look. Hold Shift to run. Tap Space to interact; hold Space for options, then Up/Down and Space to choose.";
+const SPACE_MENU_HOLD_MS = 450;
+const MOVEMENT_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD"];
+const ARROW_KEYS = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+
 
 export class FirstPersonPlugin implements ClientPlugin, InputKeyHandler, InputMouseHandler {
     private enabled = false;
+    private inputMode: InputMode = "movement";
+    private inventorySlot = 0;
+    private inventoryWidget?: WidgetNode;
+    private interfaceGroups: number[] = [];
+    private interfaceGroup?: number;
+    private interfaceWidgets = new Map<number, KeyboardWidget[]>();
+    private interfacePanels = new Map<number, KeyboardWidget>();
+    private interfaceWidget?: KeyboardWidget;
+    private interfaceSelections = new Map<number, { uid: number; childIndex?: number }>();
+    private restoreInputMode?: InputMode;
+    private interfaceMounts = "";
+    private interfaceScanAt = 0;
     private cursorMode: CursorMode = "none";
     private awaitingMenuOpen = false;
     private menuOpenChecked = false;
     private menuPointerX = 0;
     private menuPointerY = 0;
     private restoreRenderSelf?: boolean;
+    private restoreArmsVisible?: boolean;
     private restoreFollowPlayerCamera?: boolean;
     private controlsHintShown = false;
+    private restoreRunMode?: boolean;
+    private spaceDown = false;
+    private spaceStartedAt = 0;
+    private spaceHandled = false;
+    private facingPlayerIndex?: number;
+    private dialogueOptions: WidgetNode[] = [];
+    private dialogueOptionIndex = 0;
 
     constructor(private readonly client: FirstPersonClient) {
         client.inputManager.addKeyHandler(this);
@@ -41,13 +96,98 @@ export class FirstPersonPlugin implements ClientPlugin, InputKeyHandler, InputMo
             this.setEnabled(!this.enabled);
             return true;
         }
-        if (
-            event.code === "Insert" &&
-            this.enabled &&
-            this.cursorMode !== "menu" &&
-            !event.repeat
-        ) {
-            this.client.firstPersonArmsVisible = !this.client.firstPersonArmsVisible;
+        this.syncInterfaceSelection(true);
+        this.syncDialogueOptions();
+        if (this.dialogueOptions.length > 0 &&
+            (event.code === "Space" || event.code === "ArrowUp" || event.code === "ArrowDown")) {
+            this.clearMovement();
+            this.spaceHandled = true;
+            this.client.inputManager.keys.delete(event.code);
+            if (event.code === "Space") {
+                if (!event.repeat) {
+                    // Use the cache dialogue's existing number-key selection handler.
+                    const option = this.dialogueOptions[this.dialogueOptionIndex].childIndex!;
+                    this.client.inputManager.enqueueTypedChar(48 + option, `Digit${option}`);
+                }
+            } else {
+                this.dialogueOptionIndex = Math.max(0, Math.min(this.dialogueOptions.length - 1,
+                    this.dialogueOptionIndex + (event.code === "ArrowUp" ? -1 : 1)));
+                const choice = this.dialogueOptions[this.dialogueOptionIndex];
+                this.selectInterfaceWidget(this.interfaceWidgets.get(219)?.find((target) => target.widget === choice));
+                this.syncDialogueOptions();
+            }
+            return true;
+        }
+        if (event.code === "Tab" && this.canUseKeyboard() && (this.canControlPlayer() || this.interfaceGroups.length > 0)) {
+            if (!event.repeat) {
+                if (this.interfaceGroups.length > 0) {
+                    const index = this.interfaceGroups.indexOf(this.interfaceGroup ?? -1);
+                    this.interfaceGroup = this.interfaceGroups[(index + (event.shiftKey ? -1 : 1) + this.interfaceGroups.length) % this.interfaceGroups.length];
+                    this.inputMode = this.interfaceGroup === 149 ? "inventory" : "interface";
+                } else {
+                    this.inputMode = this.inputMode === "movement" ? "chat" : this.inputMode === "chat" ? "inventory" : "movement";
+                }
+                this.applyInputFocus();
+            }
+            return true;
+        }
+        if (this.cursorMode === "menu" && this.canInteract()) {
+            if (event.code === "Escape") {
+                this.spaceHandled = true;
+                this.client.inputManager.clickMode1 = 0;
+                this.client.inputManager.clickMode2 = 0;
+                this.client.inputManager.clickMode3 = 0;
+                this.closeWorldMenu();
+                this.resumeMouseLook();
+                return true;
+            }
+            if (event.code === "ArrowUp" || event.code === "ArrowDown") {
+                this.client.inputManager.keys.delete(event.code);
+                const count = this.getWidgetMenu()?.entries?.length ?? this.client.menuActiveSimpleEntries?.length ?? 0;
+                this.client.menuKeyboardIndex = Math.max(0, Math.min(Math.max(0, count - 1),
+                    (this.client.menuKeyboardIndex ?? 0) + (event.code === "ArrowUp" ? -1 : 1)));
+                return true;
+            }
+        }
+        if ((this.inputMode === "inventory" || this.inputMode === "interface") && this.canInteract() && ARROW_KEYS.includes(event.code)) {
+            this.client.inputManager.keys.delete(event.code);
+            if (this.isMenuOpen() || this.cursorMode === "menu") return true;
+            if (this.inputMode === "interface") this.moveInterfaceSelection(event.code);
+            else {
+                const column = this.inventorySlot % 4;
+                const row = Math.floor(this.inventorySlot / 4);
+                const horizontal = event.code === "ArrowRight" ? 1 : event.code === "ArrowLeft" ? -1 : 0;
+                const vertical = event.code === "ArrowDown" ? 1 : event.code === "ArrowUp" ? -1 : 0;
+                const distance = (widget: WidgetNode) =>
+                    Math.abs(Math.floor(widget.childIndex! / 4) - row) * 4 + Math.abs(widget.childIndex! % 4 - column);
+                const next = this.getInventorySlots().filter((widget) => horizontal
+                    ? Math.floor(widget.childIndex! / 4) === row && (widget.childIndex! % 4 - column) * horizontal > 0
+                    : (Math.floor(widget.childIndex! / 4) - row) * vertical > 0,
+                ).sort((a, b) => distance(a) - distance(b))[0];
+                if (next) this.inventorySlot = next.childIndex!;
+                else if (horizontal) this.switchInterfacePanel(horizontal);
+                this.syncInventorySelection();
+            }
+            return true;
+        }
+        if (event.code === "Space") {
+            if (this.spaceDown) return true;
+            if (!this.canInteract()) return false;
+            if (event.repeat) return true;
+            this.spaceDown = true;
+            this.spaceStartedAt = Date.now();
+            this.spaceHandled = this.cursorMode === "menu" || this.isMenuOpen();
+            if (this.isMenuOpen() && this.cursorMode !== "menu") this.enterMenuMode();
+            if (this.spaceHandled && this.isMenuOpen()) {
+                this.client.menuKeyboardIndex ??= 0;
+                this.client.menuKeyboardSelect = true;
+            }
+            return true;
+        }
+        if (MOVEMENT_KEYS.includes(event.code) && this.canMove()) {
+            // Consume movement before the normal chat character queue.
+            this.client.inputManager.keys.set(event.code, true);
+            this.handleMovement(this.client.camera, this.client.inputManager);
             return true;
         }
         if (
@@ -55,32 +195,61 @@ export class FirstPersonPlugin implements ClientPlugin, InputKeyHandler, InputMo
             this.enabled &&
             !event.repeat
         ) {
-            if (this.cursorMode === "alt") this.resumeMouseLook();
+            if (this.cursorMode === "alt") {
+                this.client.inputManager.enablePointerLock = true;
+                this.resumeMouseLook();
+            }
             else this.unlockCursor();
             return true;
         }
+        if (this.canInteract() &&
+            (event.key?.length === 1 || event.code === "Enter" || event.code === "Backspace") &&
+            !event.ctrlKey && !event.metaKey && !event.altKey) return true;
         return false;
     }
 
     onKeyUp(event: KeyboardEvent): boolean {
+        if (event.code === "Space" && this.spaceDown) {
+            if (!this.spaceHandled && this.canInteract() && !this.isMenuOpen()) {
+                if (Date.now() - this.spaceStartedAt >= SPACE_MENU_HOLD_MS) this.openSpaceMenu();
+                else {
+                    this.clearMovement();
+                    const point = this.getActionPoint();
+                    if (point) {
+                        if (this.inputMode === "inventory" || this.inputMode === "interface") {
+                            this.client.inputManager.setInteractionPointerOverride(point.x, point.y, true);
+                        }
+                        this.client.inputManager.applyTouchTap(point.x, point.y);
+                    }
+                }
+            }
+            this.spaceDown = false;
+            return true;
+        }
+        if (ARROW_KEYS.includes(event.code) && (this.cursorMode === "menu" || this.inputMode === "inventory" || this.inputMode === "interface")) {
+            this.client.inputManager.keys.delete(event.code);
+            return true;
+        }
+        if (MOVEMENT_KEYS.includes(event.code)) {
+            this.client.inputManager.keys.delete(event.code);
+            if (!MOVEMENT_KEYS.some((key) => this.client.inputManager.isKeyDown(key))) this.stopWalking();
+        }
         return this.enabled && (event.code === "AltLeft" || event.code === "AltRight");
     }
 
     onMouseDown(event: MouseEvent): void {
         if (!this.enabled || (event.button !== 0 && event.button !== 2)) return;
+        this.spaceHandled = true;
+        if (event.button === 0 && this.cursorMode === "none") {
+            this.clearMovement();
+            this.client.stopKeyboardMovement?.(true);
+        }
+        this.useMouseMenuPointer();
         if (event.button === 2 && this.cursorMode === "none") {
-            this.awaitingMenuOpen = true;
-            this.menuOpenChecked = false;
-            this.menuPointerX = this.client.camera.viewportXOffset + this.client.camera.viewportWidth / 2;
-            this.menuPointerY = this.client.camera.viewportYOffset + this.client.camera.viewportHeight / 2;
-            this.client.inputManager.setContextMenuAnchorOverride(
-                this.menuPointerX,
-                this.menuPointerY - MENU_ANCHOR_Y_OFFSET,
-            );
-            this.cursorMode = "menu";
+            this.beginWorldMenu();
             return;
         }
-        if (this.cursorMode !== "menu" || !this.client.menuOpen) return;
+        if (this.cursorMode !== "menu" || !this.isMenuOpen()) return;
         if (event.button === 0) {
             // Leave the menu state intact until its existing click handler invokes or cancels it.
             this.setMenuClickPosition();
@@ -95,17 +264,24 @@ export class FirstPersonPlugin implements ClientPlugin, InputKeyHandler, InputMo
 
     onMouseMove(event: MouseEvent): void {
         if (!this.enabled || this.cursorMode !== "menu") return;
+        this.useMouseMenuPointer();
         const canvas = this.client.inputManager.element as HTMLCanvasElement | undefined;
         const width = canvas?.width ?? 0;
         const height = canvas?.height ?? 0;
-        this.menuPointerX = Math.max(0, Math.min(width, this.menuPointerX + event.movementX));
-        this.menuPointerY = Math.max(0, Math.min(height, this.menuPointerY + event.movementY));
+        const captured = this.client.inputManager.isPointerLock();
+        this.menuPointerX = Math.max(0, Math.min(width, captured ? this.menuPointerX + event.movementX : this.client.inputManager.mouseX));
+        this.menuPointerY = Math.max(0, Math.min(height, captured ? this.menuPointerY + event.movementY : this.client.inputManager.mouseY));
         this.client.inputManager.mouseX = this.menuPointerX;
         this.client.inputManager.mouseY = this.menuPointerY;
     }
 
     handleCameraKeys({ camera, input, deltaTime }: CameraInputContext): boolean {
         if (!this.enabled) return false;
+        if (this.cursorMode === "menu" || !this.canUseWorldInput()) {
+            this.syncPlayerFacing(camera);
+            this.clearMovement();
+            return true;
+        }
         const deltaPitch = (64 * 8 * deltaTime) / 1000;
         const deltaYaw = (512 * deltaTime) / 1000;
         // First-person arrows intentionally run opposite to the normal camera controls.
@@ -113,13 +289,16 @@ export class FirstPersonPlugin implements ClientPlugin, InputKeyHandler, InputMo
         if (input.isKeyDown("ArrowDown")) camera.setViewPitchOverride((camera.getViewPitchOverride() ?? 0) + deltaPitch);
         if (input.isKeyDown("ArrowRight")) camera.updateYaw(camera.yaw, deltaYaw);
         if (input.isKeyDown("ArrowLeft")) camera.updateYaw(camera.yaw, -deltaYaw);
+        this.syncPlayerFacing(camera);
+        this.handleMovement(camera, input);
         return true;
     }
 
     handleCameraMouse({ camera, input }: CameraInputContext): boolean {
         if (!this.enabled) return false;
-        if (this.client.menuOpen) {
-            if (this.cursorMode === "none") this.enterMenuMode();
+        if (this.isMenuOpen()) {
+            if (this.cursorMode === "none" || ((this.inputMode === "inventory" || this.inputMode === "interface") && this.cursorMode !== "menu")) this.enterMenuMode();
+            if (this.awaitingMenuOpen && (this.inputMode === "inventory" || this.inputMode === "interface")) this.client.menuKeyboardIndex ??= 0;
             this.awaitingMenuOpen = false;
         } else if (
             this.cursorMode === "menu" &&
@@ -127,12 +306,14 @@ export class FirstPersonPlugin implements ClientPlugin, InputKeyHandler, InputMo
         ) {
             this.resumeMouseLook();
         }
-        if (this.cursorMode !== "none" || !input.isPointerLock()) return true;
+        if (this.cursorMode !== "none" || !input.isPointerLock() || !this.canUseWorldInput()) return true;
         const deltaX = input.getDeltaMouseX();
         const deltaY = input.getDeltaMouseY();
         if (deltaX !== 0 || deltaY !== 0) {
             camera.setViewPitchOverride((camera.getViewPitchOverride() ?? 0) - deltaY * 0.9);
             camera.updateYaw(camera.yaw, -deltaX * 0.9);
+            this.syncPlayerFacing(camera);
+            if (deltaX !== 0) this.handleMovement(camera, input);
         }
         return true;
     }
@@ -146,19 +327,39 @@ export class FirstPersonPlugin implements ClientPlugin, InputKeyHandler, InputMo
     updateInteractionPointer(camera: Camera): void {
         const input = this.client.inputManager;
         this.updateLoginSession();
+        this.syncInterfaceSelection();
+        this.syncDialogueOptions();
+        this.syncInventorySelection();
         this.updateReticleVisibility();
-        if (!this.client.isLoggedIn()) {
+        if (this.cursorMode === "menu" && this.client.menuKeyboardIndex !== undefined && !this.canInteract()) {
+            this.unlockCursor();
+        }
+        if (this.spaceDown && !this.spaceHandled) {
+            if (!this.canInteract()) this.spaceHandled = true;
+            else if (Date.now() - this.spaceStartedAt >= SPACE_MENU_HOLD_MS) this.openSpaceMenu();
+        }
+        if (!this.client.isLoggedIn() || this.inputMode === "chat") {
             input.clearInteractionPointerOverride();
             return;
         }
-        if (this.cursorMode === "menu" && this.client.menuOpen) {
+        if (this.cursorMode === "menu" && this.isMenuOpen()) {
             input.clearInteractionPointerOverride();
             input.mouseX = this.menuPointerX;
             input.mouseY = this.menuPointerY;
             this.updateReticlePosition(input, this.menuPointerX, this.menuPointerY);
             return;
         }
-        const waitingForMenu = this.cursorMode === "menu" && !this.client.menuOpen;
+        if (this.enabled && (this.inputMode === "inventory" || this.inputMode === "interface")) {
+            const point = this.getActionPoint();
+            if (point) {
+                input.mouseX = point.x;
+                input.mouseY = point.y;
+                input.setInteractionPointerOverride(point.x, point.y, true);
+            } else input.clearInteractionPointerOverride();
+            if (this.cursorMode === "menu" && input.clickMode1 !== 2) this.menuOpenChecked = true;
+            return;
+        }
+        const waitingForMenu = this.cursorMode === "menu" && !this.isMenuOpen();
         if (
             !this.enabled ||
             (!waitingForMenu && this.cursorMode !== "none") ||
@@ -172,18 +373,400 @@ export class FirstPersonPlugin implements ClientPlugin, InputKeyHandler, InputMo
         input.mouseX = x;
         input.mouseY = y;
         input.setInteractionPointerOverride(x, y);
-        if (waitingForMenu) this.menuOpenChecked = true;
+        if (waitingForMenu && input.clickMode1 !== 2) this.menuOpenChecked = true;
         this.updateReticlePosition(input, x, y);
     }
 
     handleCameraFollow({ camera, playerX, playerY, playerZ }: CameraFollowContext): boolean {
         if (!this.enabled) return false;
+        this.syncPlayerFacing(camera);
+        const index = this.client.playerEcs?.getIndexForServerId(this.client.controlledPlayerServerId ?? -1);
+        const height = index === undefined ? undefined : this.client.playerEcs?.getDefaultHeightTiles(index);
+        const yaw = camera.yaw * RS_TO_RADIANS;
+        // Close third-person view: keep the full player below and ahead of the camera.
         camera.snapToPosition(
-            playerX,
-            playerY === undefined ? undefined : Math.round((playerY - 1.5) * 128) / 128,
-            playerZ,
+            Math.round((playerX - Math.sin(yaw) * 2.5) * 128) / 128,
+            playerY === undefined ? undefined : playerY - (height ?? 200 / 128) - 0.75,
+            Math.round((playerZ - Math.cos(yaw) * 2.5) * 128) / 128,
         );
         return true;
+    }
+
+    private canMove(): boolean {
+        return this.canUseWorldInput() && this.cursorMode !== "menu" && !this.isMenuOpen();
+    }
+
+    private applyInputFocus(): void {
+        this.spaceHandled = true;
+        this.clearMovement();
+        for (const key of ARROW_KEYS) this.client.inputManager.keys.delete(key);
+        this.client.stopKeyboardMovement?.(true);
+        this.closeWorldMenu();
+        if (this.cursorMode === "menu") this.resumeMouseLook();
+        if (this.inputMode === "inventory" && this.interfaceGroups.length === 0) this.client.switchToTab?.(3, true);
+        this.syncInterfaceSelection(true);
+        this.revealInterfaceSelection();
+        this.syncDialogueOptions();
+        this.syncInventorySelection();
+        this.client.inputManager.clearInteractionPointerOverride();
+        this.syncPlayerFacing(this.client.camera);
+        this.updateReticleVisibility();
+    }
+
+    private switchInterfacePanel(direction: number): void {
+        const panelX = (group: number): number => {
+            const panel = this.interfacePanels.get(group);
+            if (!panel) return NaN;
+            const transform = getRootRenderTransform(panel.root);
+            return (panel.x + panel.widget.width / 2) * transform.scaleX + transform.offsetX;
+        };
+        const currentX = panelX(this.interfaceGroup ?? -1);
+        const next = this.interfaceGroups.filter((group) => (panelX(group) - currentX) * direction > 1)
+            .sort((a, b) => Math.abs(panelX(a) - currentX) - Math.abs(panelX(b) - currentX))[0];
+        if (next === undefined) return;
+        this.interfaceGroup = next;
+        this.inputMode = next === 149 ? "inventory" : "interface";
+        this.applyInputFocus();
+    }
+
+    private syncInterfaceSelection(force = false): void {
+        const manager = this.client.widgetManager;
+        const previousGroups = this.interfaceGroups;
+        const mounts = this.enabled && this.client.isLoggedIn()
+            ? [...(manager?.interfaceParents.entries() ?? [])].filter(([uid, parent]) =>
+                (parent.type === 0 || parent.type === 3) && parent.group !== undefined &&
+                !manager?.isEffectivelyHidden?.(uid)) : [];
+        const signature = mounts.map(([uid, parent]) => `${uid}:${parent.group}`).join(",");
+        const changed = signature !== this.interfaceMounts;
+        this.interfaceMounts = signature;
+        if (mounts.length === 0) {
+            this.interfaceGroups = [];
+            this.interfaceWidgets.clear();
+            this.interfacePanels.clear();
+            this.selectInterfaceWidget(undefined);
+            this.interfaceGroup = undefined;
+            if (this.restoreInputMode !== undefined) {
+                this.inputMode = this.restoreInputMode;
+                this.restoreInputMode = undefined;
+                this.spaceHandled = true;
+                this.client.inputManager.clearInteractionPointerOverride();
+            }
+            return;
+        }
+        if (force || changed || Date.now() >= this.interfaceScanAt) {
+            // ponytail: scan only open panels at 10 Hz; use widget change notifications if very large interfaces need more.
+            this.interfaceScanAt = Date.now() + 100;
+            const groups = mounts.map(([, parent]) => parent.group!);
+            const inventoryMounted = [...(manager?.interfaceParents.entries() ?? [])].some(([uid, parent]) =>
+                parent.group === 149 && !manager?.isEffectivelyHidden?.(uid));
+            if (inventoryMounted && !groups.includes(149)) groups.push(149);
+            const wanted = new Set(groups);
+            // Chatbox modals are nested inside the chat overlay, rather than directly in the gameframe.
+            const reachable = new Set(groups);
+            for (let size = -1; size !== reachable.size;) {
+                size = reachable.size;
+                for (const [uid, mount] of manager?.interfaceParents ?? []) {
+                    if (mount.group !== undefined && reachable.has(mount.group)) reachable.add(uid >>> 16);
+                }
+            }
+            this.interfaceWidgets = new Map(groups.map((group) => [group, []]));
+            this.interfacePanels.clear();
+            const seen = new Set<WidgetNode>();
+            const visit = (widget: WidgetNode, root: WidgetNode, ox: number, oy: number,
+                parent?: KeyboardWidget, group?: number) => {
+                if (seen.has(widget) || widget.hidden || widget.isHidden || manager?.isEffectivelyHidden?.(widget.uid)) return;
+                seen.add(widget);
+                manager?.ensureLayout?.(widget);
+                const target: KeyboardWidget = { widget, root, x: ox + (widget.x ?? 0), y: oy + (widget.y ?? 0), parent };
+                if (group !== undefined && !this.interfacePanels.has(group)) this.interfacePanels.set(group, target);
+                if (group !== undefined && group !== 149 && widget.width > 0 && widget.height > 0) {
+                    const handlers = widget.eventHandlers;
+                    const click = handlers?.onClick || handlers?.onOp || handlers?.onHold || handlers?.onRelease ||
+                        widget.onClick || widget.onOp || widget.onHold || widget.onRelease;
+                    const entries = deriveMenuEntriesForWidget(widget, false,
+                        (w) => manager?.getWidgetFlags?.(w) ?? w.flags ?? 0,
+                        (uid) => manager?.getWidgetByUid?.(uid));
+                    const choice = group === 219 && widget.type === 4 &&
+                        (widget.childIndex ?? 0) > 0 && (widget.childIndex ?? 0) <= 5 && !!widget.text;
+                    if (click || choice || entries.some((entry) => entry.option.toLowerCase() !== "cancel")) {
+                        this.interfaceWidgets.get(group)?.push(target);
+                    }
+                }
+                const container = widget.type === 0 || widget.type === 11;
+                const cx = target.x - (container ? widget.scrollX ?? 0 : 0);
+                const cy = target.y - (container ? widget.scrollY ?? 0 : 0);
+                if (widget.type === 0 && (widget.childIndex ?? -1) < 0) {
+                    for (const child of manager?.getStaticChildrenByParentUid?.(widget.uid) ?? []) visit(child, root, cx, cy, target, group);
+                }
+                for (const child of widget.children ?? []) if (child) visit(child, root, cx, cy, target, group);
+                const mount = widget.type === 0 ? manager?.interfaceParents.get(widget.uid) : undefined;
+                if (mount?.group !== undefined && (reachable.has(mount.group) || group !== undefined)) {
+                    for (const child of manager?.getAllGroupRoots?.(mount.group) ?? []) {
+                        visit(child, root, target.x, target.y, target, wanted.has(mount.group) ? mount.group : group);
+                    }
+                }
+            };
+            const roots = manager?.getAllGroupRoots?.(manager.rootInterface ?? -1) ?? [];
+            for (const root of roots) visit(root, root, 0, 0);
+            if (roots.length === 0) {
+                for (const group of groups) for (const root of manager?.getAllGroupRoots?.(group) ?? []) visit(root, root, 0, 0, undefined, group);
+            }
+            this.interfaceGroups = groups.filter((group, index) => groups.indexOf(group) === index &&
+                (group === 149 || (this.interfaceWidgets.get(group)?.length ?? 0) > 0 ||
+                    (this.interfacePanels.has(group) && mounts.some(([, mount]) => mount.group === group && mount.type === 3))));
+            // Leave native dialogue shortcuts in charge until the opening panel has its options.
+            if (!this.interfaceGroups.some((group) => group !== 149)) this.interfaceGroups = [];
+        }
+        if (this.interfaceGroups.length > 0 && (changed || this.restoreInputMode === undefined)) {
+            this.restoreInputMode ??= this.inputMode;
+            this.interfaceGroup = this.interfaceGroups.find((group) => !previousGroups.includes(group)) ??
+                (this.interfaceGroups.includes(this.interfaceGroup ?? -1) ? this.interfaceGroup : this.interfaceGroups[0]);
+            this.inputMode = this.interfaceGroup === 149 ? "inventory" : "interface";
+            this.spaceHandled = true;
+            this.clearMovement();
+        }
+        if (!this.interfaceGroups.includes(this.interfaceGroup ?? -1)) {
+            this.interfaceGroup = this.interfaceGroups[0];
+            if (this.interfaceGroup !== undefined) this.inputMode = this.interfaceGroup === 149 ? "inventory" : "interface";
+        }
+        const targets = this.interfaceWidgets.get(this.interfaceGroup ?? -1) ?? [];
+        const previous = this.interfaceSelections.get(this.interfaceGroup ?? -1);
+        const selected = targets.find(({ widget }) => widget.uid === previous?.uid && widget.childIndex === previous.childIndex);
+        const first = targets.find(({ widget }) => (widget.itemId ?? -1) >= 0) ?? targets.find(({ widget }) =>
+            !deriveMenuEntriesForWidget(widget, false, (w) => manager?.getWidgetFlags?.(w) ?? w.flags ?? 0)
+                .some((entry) => entry.option.toLowerCase() === "close")) ?? targets[0];
+        const old = this.interfaceWidget?.widget;
+        this.selectInterfaceWidget(this.canUseKeyboard() && this.inputMode === "interface" ? selected ?? first : undefined);
+        if (this.interfaceWidget && old !== this.interfaceWidget.widget) this.revealInterfaceSelection();
+    }
+
+    private selectInterfaceWidget(target: KeyboardWidget | undefined): void {
+        const old = this.interfaceWidget?.widget;
+        this.interfaceWidget = target;
+        if (old !== target?.widget) {
+            if (old) {
+                delete old.keyboardOutline;
+                this.client.widgetManager?.invalidateWidgetRender?.(old, "interface-keyboard-selection");
+            }
+            if (target) {
+                target.widget.keyboardOutline = true;
+                this.client.widgetManager?.invalidateWidgetRender?.(target.widget, "interface-keyboard-selection");
+            }
+        }
+        if (target && this.interfaceGroup !== undefined) {
+            this.interfaceSelections.set(this.interfaceGroup, { uid: target.widget.uid, childIndex: target.widget.childIndex });
+        }
+    }
+
+    private moveInterfaceSelection(code: string): void {
+        const horizontal = code === "ArrowLeft" || code === "ArrowRight";
+        const direction = code === "ArrowLeft" || code === "ArrowUp" ? -1 : 1;
+        const current = this.interfaceWidget;
+        if (!current) {
+            if (horizontal) this.switchInterfacePanel(direction);
+            return;
+        }
+        const centre = (target: KeyboardWidget) => ({ x: target.x + target.widget.width / 2, y: target.y + target.widget.height / 2 });
+        const origin = centre(current);
+        const distance = (target: KeyboardWidget) => {
+            const point = centre(target);
+            const dx = point.x - origin.x, dy = point.y - origin.y;
+            const along = horizontal ? dx : dy, across = horizontal ? dy : dx;
+            if (horizontal && (current.widget.itemId ?? -1) >= 0 &&
+                ((target.widget.itemId ?? -1) < 0 || Math.abs(dy) >= (current.widget.height + target.widget.height) / 2)) return Infinity;
+            return along * direction > 1 ? along * along + across * across * 4 : Infinity;
+        };
+        const next = (this.interfaceWidgets.get(this.interfaceGroup ?? -1) ?? [])
+            .filter((target) => Number.isFinite(distance(target))).sort((a, b) => distance(a) - distance(b))[0];
+        if (!next) {
+            if (horizontal) this.switchInterfacePanel(direction);
+            return;
+        }
+        this.selectInterfaceWidget(next);
+        this.revealInterfaceSelection();
+    }
+
+    private revealInterfaceSelection(): void {
+        const target = this.interfaceWidget;
+        if (!target) return;
+        let x = target.x, y = target.y;
+        for (let parent = target.parent; parent; parent = parent.parent) {
+            const widget = parent.widget;
+            const dx = (widget.scrollWidth ?? 0) > widget.width
+                ? Math.min(x - parent.x, Math.max(0, x + target.widget.width - parent.x - widget.width)) : 0;
+            const dy = (widget.scrollHeight ?? 0) > widget.height
+                ? Math.min(y - parent.y, Math.max(0, y + target.widget.height - parent.y - widget.height)) : 0;
+            if (!dx && !dy) continue;
+            const oldX = widget.scrollX ?? 0, oldY = widget.scrollY ?? 0;
+            widget.scrollX = Math.max(0, Math.min(Math.max(0, (widget.scrollWidth ?? widget.width) - widget.width), oldX + dx));
+            widget.scrollY = Math.max(0, Math.min(Math.max(0, (widget.scrollHeight ?? widget.height) - widget.height), oldY + dy));
+            this.client.widgetManager?.invalidateScroll?.(widget);
+            x -= widget.scrollX - oldX;
+            y -= widget.scrollY - oldY;
+        }
+        this.syncInterfaceSelection(true);
+    }
+
+    private getInventorySlots(): WidgetNode[] {
+        const manager = this.client.widgetManager;
+        if (this.inputMode !== "inventory" || !this.canUseKeyboard()) return [];
+        return (manager?.findWidget?.(149, 0)?.children ?? []).filter((child): child is WidgetNode =>
+            !!child && child.type === 5 && (child.childIndex ?? -1) >= 0 && (child.childIndex ?? -1) < 28 &&
+            (child.itemId ?? -1) >= 0 && !child.hidden && !child.isHidden && !manager?.isEffectivelyHidden?.(child.uid));
+    }
+
+    private syncInventorySelection(): void {
+        const manager = this.client.widgetManager;
+        const slots = this.getInventorySlots();
+        const widget = slots.find((child) => child.childIndex === this.inventorySlot) ?? slots[0];
+        if (widget) this.inventorySlot = widget.childIndex!;
+        if (widget === this.inventoryWidget) return;
+        if (this.inventoryWidget) {
+            delete this.inventoryWidget.keyboardOutline;
+            manager?.invalidateWidgetRender?.(this.inventoryWidget, "inventory-keyboard-selection");
+        }
+        this.inventoryWidget = widget;
+        if (widget) {
+            widget.keyboardOutline = true;
+            manager?.invalidateWidgetRender?.(widget, "inventory-keyboard-selection");
+        }
+    }
+
+    private getActionPoint(): { x: number; y: number } | undefined {
+        if (this.inputMode === "interface") {
+            this.syncInterfaceSelection();
+            const target = this.interfaceWidget;
+            if (!target || !this.canUseKeyboard()) return undefined;
+            const transform = getRootRenderTransform(target.root);
+            return { x: (target.x + target.widget.width / 2) * transform.scaleX + transform.offsetX,
+                y: (target.y + target.widget.height / 2) * transform.scaleY + transform.offsetY };
+        }
+        if (this.inputMode === "inventory") {
+            this.syncInventorySelection();
+            const widget = this.inventoryWidget;
+            return widget && (widget.itemId ?? -1) >= 0
+                ? this.client.renderer?.widgetsOverlay?.getWidgetInputPoint(widget) : undefined;
+        }
+        const camera = this.client.camera;
+        return { x: camera.viewportXOffset + camera.viewportWidth / 2,
+            y: camera.viewportYOffset + camera.viewportHeight / 2 };
+    }
+
+    private getWidgetMenu() {
+        const canvas = this.client.inputManager.element as
+            | (HTMLCanvasElement & { __ui?: { menu?: { source?: string; open?: boolean; entries?: readonly unknown[] } } })
+            | undefined;
+        const menu = canvas?.__ui?.menu;
+        return menu?.open && menu.source === "widgets" ? menu : undefined;
+    }
+
+    private isMenuOpen(): boolean {
+        return this.client.menuOpen || !!this.getWidgetMenu();
+    }
+
+    private syncDialogueOptions(): void {
+        const manager = this.client.widgetManager;
+        const mounted = this.inputMode !== "inventory" &&
+            (this.inputMode !== "interface" || this.interfaceGroup === 219) && this.canUseKeyboard() &&
+            [...(manager?.interfaceParents.entries() ?? [])].some(([uid, parent]) =>
+                parent.group === 219 && !manager?.isEffectivelyHidden?.(uid));
+        // Cache script 58 creates the heading at child 0 and choices at children 1..5.
+        const options = mounted ? (manager?.findWidget?.(219, 1)?.children ?? []).filter(
+            (widget): widget is WidgetNode => !!widget && widget.type === 4 &&
+                (widget.childIndex ?? -1) > 0 && (widget.childIndex ?? -1) <= 5 &&
+                !widget.hidden && !widget.isHidden && !!widget.text,
+        ) : [];
+        if (options[0] !== this.dialogueOptions[0] || options.length !== this.dialogueOptions.length) {
+            for (const widget of this.dialogueOptions) {
+                delete widget.keyboardTextColor;
+                manager?.invalidateWidgetRender?.(widget, "dialogue-keyboard-selection");
+            }
+            this.dialogueOptions = options;
+            this.dialogueOptionIndex = 0;
+            if (options[0]) this.selectInterfaceWidget(this.interfaceWidgets.get(219)?.find((target) => target.widget === options[0]));
+        }
+        for (let index = 0; index < this.dialogueOptions.length; index++) {
+            const widget = this.dialogueOptions[index];
+            const color = index === this.dialogueOptionIndex ? 0xffffff : 0;
+            if (widget.keyboardTextColor === color) continue;
+            widget.keyboardTextColor = color;
+            manager?.invalidateWidgetRender?.(widget, "dialogue-keyboard-selection");
+        }
+    }
+
+    private canUseWorldInput(): boolean {
+        return this.canControlPlayer() && this.inputMode === "movement";
+    }
+
+    private canInteract(): boolean {
+        return this.canUseKeyboard() && this.inputMode !== "chat" &&
+            (this.canControlPlayer() || this.interfaceGroups.length > 0);
+    }
+
+    private canUseKeyboard(): boolean {
+        const active = typeof document === "undefined" ? undefined : document.activeElement;
+        return this.enabled && this.client.isLoggedIn() &&
+            !active?.matches?.("input, textarea, select, [contenteditable='true']") &&
+            !this.client.isWidgetTextInputActive?.() &&
+            (this.client.cs2Vm?.inputDialogType ?? 0) <= 1;
+    }
+
+    private canControlPlayer(): boolean {
+        return this.canUseKeyboard() &&
+            ![...(this.client.widgetManager?.interfaceParents.entries() ?? [])]
+                .some(([uid, parent]) => (parent.type === 0 || parent.type === 3) &&
+                    !this.client.widgetManager?.isEffectivelyHidden?.(uid));
+    }
+
+    private syncPlayerFacing(camera: Camera): void {
+        const pe = this.client.playerEcs;
+        const index = this.canUseWorldInput() && this.cursorMode !== "menu" && !this.client.menuOpen
+            ? pe?.getIndexForServerId(this.client.controlledPlayerServerId ?? -1) : undefined;
+        if (this.facingPlayerIndex !== undefined && this.facingPlayerIndex !== index) {
+            pe?.setRotationOverride(this.facingPlayerIndex, undefined);
+        }
+        this.facingPlayerIndex = index;
+        // Actor yaw faces south at zero; camera yaw looks north at zero.
+        if (index !== undefined) pe?.setRotationOverride(index, (camera.getYaw() + 1024) & 2047);
+    }
+
+    private clearMovement(): void {
+        for (const key of MOVEMENT_KEYS) this.client.inputManager.keys.delete(key);
+        this.stopWalking();
+    }
+
+    private stopWalking(): void {
+        if (this.client.isLoggedIn()) {
+            this.client.stopKeyboardMovement?.();
+            if (this.restoreRunMode !== undefined) this.client.setKeyboardRunMode?.(this.restoreRunMode);
+        }
+        this.restoreRunMode = undefined;
+    }
+
+    tickMovement(): void {
+        if (this.enabled) this.handleMovement(this.client.camera, this.client.inputManager);
+    }
+
+    private handleMovement(camera: Camera, input: InputManager): void {
+        if (!this.canMove()) {
+            this.clearMovement();
+            return;
+        }
+        const forward = Number(input.isKeyDown("KeyW")) - Number(input.isKeyDown("KeyS"));
+        const right = Number(input.isKeyDown("KeyD")) - Number(input.isKeyDown("KeyA"));
+        if (!forward && !right) {
+            this.stopWalking();
+            this.client.setKeyboardMovement?.(0, 0, false, (camera.getYaw() + 1024) & 2047);
+            return;
+        }
+        const yaw = camera.yaw * RS_TO_RADIANS;
+        const length = Math.hypot(forward, right);
+        const dx = (Math.sin(yaw) * forward + Math.cos(yaw) * right) / length;
+        const dy = (Math.cos(yaw) * forward - Math.sin(yaw) * right) / length;
+        this.restoreRunMode ??= !!this.client.runMode;
+        const running = this.restoreRunMode || input.isShiftDown();
+        this.client.setKeyboardRunMode?.(running);
+        this.client.setKeyboardMovement?.(dx, dy, running, (camera.getYaw() + 1024) & 2047);
     }
 
     shouldKeepWorldMenuOpen(): boolean {
@@ -191,15 +774,26 @@ export class FirstPersonPlugin implements ClientPlugin, InputKeyHandler, InputMo
     }
 
     private setEnabled(enabled: boolean): void {
+        this.spaceHandled = true;
         this.enabled = enabled;
+        this.inputMode = "movement";
+        this.restoreInputMode = undefined;
+        this.interfaceMounts = "";
+        this.syncInterfaceSelection(true);
+        if (!enabled) this.client.stopKeyboardMovement?.(true);
+        this.syncPlayerFacing(this.client.camera);
         this.cursorMode = enabled ? "alt" : "none";
         this.awaitingMenuOpen = false;
         this.menuOpenChecked = false;
+        this.clearMovement();
         const { inputManager: input, camera } = this.client;
         input.enablePointerLock = false;
+        input.releasePointerLock();
         input.clearInteractionPointerOverride();
         input.clearContextMenuAnchorOverride();
         this.closeWorldMenu();
+        this.syncDialogueOptions();
+        this.syncInventorySelection();
         this.updateReticleVisibility();
         if (enabled) {
             if (this.updateLoginSession() && !this.controlsHintShown) {
@@ -207,52 +801,65 @@ export class FirstPersonPlugin implements ClientPlugin, InputKeyHandler, InputMo
                 this.controlsHintShown = true;
             }
             this.restoreRenderSelf = this.client.renderSelf;
+            this.restoreArmsVisible = this.client.firstPersonArmsVisible;
             this.restoreFollowPlayerCamera = this.client.followPlayerCamera;
-            this.client.renderSelf = false;
-            this.client.firstPersonArmsVisible = true;
+            this.client.renderSelf = true;
+            this.client.firstPersonArmsVisible = false;
             this.client.followPlayerCamera = true;
-            camera.setViewPitchOverride(0);
+            camera.setViewPitchOverride(128);
             return;
         }
         camera.setViewPitchOverride(undefined);
         camera.setViewZoomScale(1);
         if (this.restoreRenderSelf !== undefined) this.client.renderSelf = this.restoreRenderSelf;
-        this.client.firstPersonArmsVisible = false;
+        this.client.firstPersonArmsVisible = this.restoreArmsVisible;
         if (this.restoreFollowPlayerCamera !== undefined) this.client.followPlayerCamera = this.restoreFollowPlayerCamera;
         this.restoreRenderSelf = undefined;
+        this.restoreArmsVisible = undefined;
         this.restoreFollowPlayerCamera = undefined;
-        input.releasePointerLock();
     }
 
     private updateLoginSession(): boolean {
         const loggedIn = this.client.isLoggedIn();
-        if (!loggedIn) this.controlsHintShown = false;
+        if (!loggedIn) {
+            this.syncPlayerFacing(this.client.camera);
+            this.controlsHintShown = false;
+            this.clearMovement();
+        }
         return loggedIn;
     }
 
     private unlockCursor(): void {
+        this.spaceHandled = true;
+        if (this.cursorMode === "menu") this.closeWorldMenu();
         this.cursorMode = "alt";
         this.client.inputManager.enablePointerLock = false;
         this.client.inputManager.clearInteractionPointerOverride();
+        this.client.inputManager.clearContextMenuAnchorOverride();
         this.client.inputManager.releasePointerLock();
     }
 
     private resumeMouseLook(): void {
-        this.cursorMode = "none";
+        this.client.menuKeyboardIndex = undefined;
+        this.client.menuKeyboardSelect = false;
+        this.cursorMode = this.client.inputManager.enablePointerLock ? "none" : "alt";
         this.awaitingMenuOpen = false;
         this.menuOpenChecked = false;
-        this.client.inputManager.enablePointerLock = true;
         this.client.inputManager.clearInteractionPointerOverride();
         this.client.inputManager.clearContextMenuAnchorOverride();
-        this.client.inputManager.requestPointerLock();
+        if (this.client.inputManager.enablePointerLock) this.client.inputManager.requestPointerLock();
     }
 
     private closeWorldMenu(): void {
+        if (this.client.menuKeyboardIndex !== undefined && this.client.inputManager.clickMode1 === 2) {
+            this.client.inputManager.clickMode1 = 0;
+            this.client.inputManager.clickMode2 = 0;
+        }
         this.client.closeMenu();
         const canvas = this.client.inputManager.element as
             | (HTMLCanvasElement & { __ui?: { menu?: { source?: string; open?: boolean } } })
             | undefined;
-        if (canvas?.__ui?.menu?.source === "map") {
+        if (canvas?.__ui?.menu) {
             canvas.__ui.menu.open = false;
             canvas.__ui.menu = undefined;
         }
@@ -260,8 +867,41 @@ export class FirstPersonPlugin implements ClientPlugin, InputKeyHandler, InputMo
 
     private enterMenuMode(): void {
         this.cursorMode = "menu";
-        this.menuPointerX = this.client.camera.viewportXOffset + this.client.camera.viewportWidth / 2;
-        this.menuPointerY = this.client.camera.viewportYOffset + this.client.camera.viewportHeight / 2;
+        this.client.stopKeyboardMovement?.(true);
+        this.syncPlayerFacing(this.client.camera);
+        const point = this.getActionPoint();
+        this.menuPointerX = point?.x ?? this.client.inputManager.mouseX;
+        this.menuPointerY = point?.y ?? this.client.inputManager.mouseY;
+    }
+
+    private beginWorldMenu(): void {
+        this.clearMovement();
+        this.awaitingMenuOpen = true;
+        this.menuOpenChecked = false;
+        this.enterMenuMode();
+        this.client.inputManager.setContextMenuAnchorOverride(this.menuPointerX,
+            this.menuPointerY - MENU_ANCHOR_Y_OFFSET);
+    }
+
+    private openSpaceMenu(): void {
+        this.spaceHandled = true;
+        const point = this.getActionPoint();
+        if (!point) return;
+        this.beginWorldMenu();
+        if (this.inputMode === "inventory" || this.inputMode === "interface") {
+            this.client.inputManager.setInteractionPointerOverride(point.x, point.y, true);
+        }
+        this.client.menuKeyboardIndex = 0;
+        this.client.inputManager.applyTouchLongPress(this.menuPointerX, this.menuPointerY);
+        this.client.inputManager.clickMode2 = 0;
+    }
+
+    private useMouseMenuPointer(): void {
+        if (this.client.menuKeyboardIndex === undefined) return;
+        this.menuPointerX = this.client.inputManager.mouseX;
+        this.menuPointerY = this.client.inputManager.mouseY;
+        this.client.menuKeyboardIndex = undefined;
+        this.client.menuKeyboardSelect = false;
     }
 
     private setMenuClickPosition(): void {
@@ -284,7 +924,19 @@ export class FirstPersonPlugin implements ClientPlugin, InputKeyHandler, InputMo
     private updateReticleVisibility(): void {
         this.client.inputManager.element?.parentElement?.classList.toggle(
             "first-person-reticle",
-            this.enabled && this.client.isLoggedIn(),
+            this.enabled && this.client.isLoggedIn() && this.inputMode === "movement" && this.interfaceGroups.length === 0,
+        );
+        this.client.inputManager.element?.parentElement?.classList.toggle(
+            "first-person-chatting",
+            this.enabled && this.client.isLoggedIn() && this.inputMode === "chat",
+        );
+        this.client.inputManager.element?.parentElement?.classList.toggle(
+            "first-person-interface",
+            this.enabled && this.client.isLoggedIn() && this.inputMode === "interface",
+        );
+        this.client.inputManager.element?.parentElement?.classList.toggle(
+            "first-person-inventory",
+            this.enabled && this.client.isLoggedIn() && this.inputMode === "inventory",
         );
     }
 }
