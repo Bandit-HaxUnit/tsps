@@ -96,3 +96,30 @@ test('runtime objects are indexed by tile and region, in step with the world lis
     assert.equal(ObjectManager.objectsAt(new Location(3222, 3218, 0)).length, 0);
     assert.ok(!World.getObjects().includes(fire) && !World.getObjects().includes(elsewhere));
 });
+
+test('a door closed again (Doors puts back a copy of the map door) restores the map too', () => {
+    RegionManager.loadMapFiles(3226, 3214);
+    const door = MapObjects.get(1535, new Location(3226, 3214, 0), null);
+    assert.ok(door?.isMapOriginal(), 'the castle door is a map object');
+    const objects = () => World.getObjects().length;
+    const before = objects();
+
+    // Opened: the map door goes (remembered), the open door stands beside it.
+    ObjectManager.deregister(door, true);
+    const open = new GameObject(1536, new Location(3227, 3214, 0), door.getType(), (door.getFace() + 1) & 3, null);
+    ObjectManager.register(open, true);
+    assert.equal(objects(), before + 1);
+
+    // Closed: the open door goes and a copy of the map door is put back.
+    ObjectManager.deregister(open, true);
+    const closed = new GameObject(1535, new Location(3226, 3214, 0), door.getType(), door.getFace(), null);
+    ObjectManager.register(closed, true);
+    assert.equal(objects(), before, 'the closed copy is the map again, not a runtime object');
+    assert.ok(!removed().some((entry) => entry.getLocation().equals(door.getLocation())), 'nothing remembered');
+
+    // Opened again: still remembered as removed, so a scene reload hides it.
+    const recorded = removed().length;
+    ObjectManager.deregister(closed, true);
+    assert.equal(removed().length, recorded + 1);
+    ObjectManager.register(door, true);
+});
