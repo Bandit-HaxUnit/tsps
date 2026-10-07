@@ -12495,7 +12495,7 @@
   {"level":0,"name":"Warrior woman","x":2575,"y":3384,"id":3260},
   {"level":0,"name":"Mourner","x":2582,"y":3329,"id":5301},
   {"level":0,"name":"Guard","x":2588,"y":3341,"id":6705},
-  {"level":0,"name":"Elena","x":2592,"y":3336,"id":2011},
+  {"level":0,"name":"Elena","x":2592,"y":3336,"key":"ELENA_2"},
   {"level":0,"name":"Farmer Brumty","x":2593,"y":3358,"id":3985},
   {"level":0,"name":"Yellow Sheep","x":2596,"y":3359,"id":3993,"wanderRadius":0},
   {"level":0,"name":"Blue Sheep","x":2597,"y":3360,"id":3992,"wanderRadius":0},
