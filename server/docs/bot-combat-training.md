@@ -4,8 +4,9 @@
 The existing bot activity command can also assign `combat_training` to a controlled bot.
 Commands retain their existing developer permissions.
 
-At startup the `sites` in `bot-activities.json` spawn 500 bots around the Lumbridge spawn
-(3222,3218, radius 6). A site's bots only ever run its `activities`; on the shared
+The `sites` in `bot-activities.json` are **off by default** (no skilling or combat-training
+crowd on a fresh world): set `BOT_SITES=1` to spawn them. With them on, each site spawns its
+`count` around its anchor at spawn. A site's bots only ever run its `activities`; on the shared
 `switchAfterSeconds` default each bot swaps to another of them at random once its
 current activity has run that long (between fights, never under a bank-trip/fight-back
 overlay; a switch with no free capacity slot elsewhere retries 30 s later). Without it the
@@ -17,8 +18,8 @@ bots are dedicated: a failed activity waits out its cooldown and resumes.
 
 Trainers find their NPCs through the NPC cluster index (below), so they fan out across every
 nearby group of their tier's monsters. Each bot starts on a random activity that has a free slot; the skilling
-activities have 150/80/60/40 slots (woodcutting/mining/firemaking/smelting), the rest train combat. Change `count` there, or set `BOT_SITES=0` for
-a bot-free world. `maxFailedTargets` (default 6) sets how many targets or frozen routes in a row
+activities have 150/80/60/40 slots (woodcutting/mining/firemaking/smelting), the rest train combat. Change `count` there; leave `BOT_SITES`
+unset for a bot-free world. `maxFailedTargets` (default 6) sets how many targets or frozen routes in a row
 without landing damage fail a training site; that cluster is then skipped by the bot for 10 min.
 
 The activity uses the lowest permanent level of Attack, Strength and Defence to choose a

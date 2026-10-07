@@ -135,11 +135,12 @@ const SPAWN_ATTEMPTS = 16;
 
 /**
  * Spawns the data-driven sites (bot-activities.json "sites") as brain-driven
- * bots. On by default; BOT_SITES=0 disables them for a bots-free world.
+ * bots. Off by default so a ship world has no skilling/combat-training crowd;
+ * BOT_SITES=1 enables them.
  */
 function startBotSites(options = {}) {
   const { api, botApi, runtime, registry, world, resetMovementState } = options;
-  if ((process.env.BOT_SITES ?? "1") === "0") {
+  if ((process.env.BOT_SITES ?? "0") !== "1") {
     return null;
   }
   if (!runtime || !registry || !Array.isArray(registry.sites) || registry.sites.length === 0) {
