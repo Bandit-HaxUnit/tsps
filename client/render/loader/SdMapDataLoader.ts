@@ -920,7 +920,7 @@ function addLocAnimationFrames(
     };
 }
 
-function addLocEntities(
+export function addLocEntities(
     centerLocHeightWithSize: boolean,
     locModelLoader: LocModelLoader,
     varManager: VarManager,
@@ -972,15 +972,10 @@ function addLocEntities(
             endY = tileY + 1;
         }
 
-        // Sample heights from the effective surface for bridge-promoted columns.
-        // Keep the render level unchanged (objects remain on their plane),
-        // but when a base tile was shifted down from level 1 (bridge flag at [1]),
-        // use level 1 heights for centerHeight and contouring so objects sit on the
-        // visible walkway rather than the original base below.
-        let heightLevel = level;
-        if (level === 0 && (scene.tileRenderFlags[1][tileX][tileY] & 0x2) === 2) {
-            heightLevel = 1;
-        }
+        // Sample heights on the plane the map stores the loc on, as SceneBuilder.addLoc
+        // does. Bridge demotion moves tiles, not heights, so a bridge's locs (map plane 1,
+        // drawn on 0) sit on the walkway and the locs under it (map plane 0) stay below.
+        const heightLevel = entity.level;
         const heightMap = scene.tileHeights[heightLevel];
         let heightMapAbove: Int32Array[] | undefined;
         if (heightLevel < scene.levels - 1) {
