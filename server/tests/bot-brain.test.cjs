@@ -950,17 +950,20 @@ test('unmatched pvp bots walk between seek retries; overlays return to their act
 });
 
 test('idle pvp walking stays inside its hotspot and pauses for movement or combat', () => {
-  const player = { ...fakePlayer('wander', 3085, 3528), getLocation: () => new Location(3085, 3528, 0) };
-  const state = { autonomy: { allowedAutonomousModes: ['pvp'] }, pvp: { hotspotId: 'edge_ditch' },
-    roaming: { nextWalkAt: 0, roamBounds: getWildernessHotspot('edge_ditch').area } };
+  const hotspot = getWildernessHotspot('edge_mains');
+  const { x: spotX, y: spotY } = hotspot.anchor;
+  const player = { ...fakePlayer('wander', spotX, spotY), getLocation: () => new Location(spotX, spotY, 0) };
+  const state = { autonomy: { allowedAutonomousModes: ['pvp'] }, pvp: { hotspotId: 'edge_mains' },
+    roaming: { nextWalkAt: 0, roamBounds: hotspot.area } };
   const controller = Object.create(PvpController.prototype);
   controller.api = { getRegionManager: () => ({ blocked: () => false, isWater: () => false }) };
   controller.getEntries = () => [];
   controller.wanderWhileSeeking({ player, state, nowMs: 100 });
   const request = peekMovementRequest(player);
   assert.ok(request);
-  assert.ok(request.x >= 3078 && request.x <= 3091 && request.y >= 3525 && request.y <= 3535);
-  assert.notDeepEqual([request.x, request.y], [3085, 3528]);
+  assert.ok(request.x >= hotspot.area.minX && request.x <= hotspot.area.maxX &&
+    request.y >= hotspot.area.minY && request.y <= hotspot.area.maxY);
+  assert.notDeepEqual([request.x, request.y], [spotX, spotY]);
   assert.ok(state.roaming.nextWalkAt >= 3600);
   clearMovementRequest(player);
   assert.equal(controller.wanderWhileSeeking({ player, state, nowMs: 101 }), false);
