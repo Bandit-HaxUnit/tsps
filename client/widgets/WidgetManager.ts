@@ -2131,4 +2131,15 @@ export class WidgetManager {
             this.invalidateWidgetRender(this.compassWidget, "compass");
         }
     }
+
+    /**
+     * Redraws the minimap every frame it is on screen, as OSRS draws it: its zoom, the player,
+     * the dots and the destination flag all change it, and none of them marks a widget dirty.
+     * Only the minimap's own rectangle is redrawn.
+     */
+    updateMinimap(): void {
+        const minimap = this.minimapWidget;
+        if (!minimap || this.isEffectivelyHidden(minimap.uid)) return;
+        this.invalidateWidgetRect(minimap);
+    }
 }
