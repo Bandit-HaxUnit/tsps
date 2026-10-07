@@ -191,6 +191,7 @@ import { KNOWN_WATER_TEXTURE_IDS } from "./water/WaterTextureIds";
 
 import * as render from "./render";
 import { RENDER_CONSTANTS, TextureFilterMode, HD_SKY_COLOR_VEC4, HD_AUTO_FOG_DEPTH_FACTOR } from "./render/constants";
+import { gammaFromScreenBrightness, loadScreenBrightness } from "../ui/ScreenBrightness";
 import type {
     BrowserQualityProfile,
     BrowserQualityProfileKey,
@@ -558,7 +559,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     //          lum (-1=no override, 0-127), amount (0-255, 0=disabled)]
     sceneHslOverride: vec4 = vec4.fromValues(-1, -1, -1, 0);
 
-    brightness: number = 0.8;
+    /** OSRS's gamma exponent (lower is brighter), from the Settings "Screen brightness" slider. */
+    brightness: number = gammaFromScreenBrightness(loadScreenBrightness());
     colorBanding: number = 255;
 
     smoothTerrain: boolean = false;

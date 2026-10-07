@@ -187,6 +187,13 @@ import { TextureLoader } from "../rs/texture/TextureLoader";
 import { faceAngleRs } from "../rs/utils/rotation";
 import { getOsrsInterfaceScalingPercent, setOsrsInterfaceScalingPercent } from "../ui/UiScale";
 import {
+    DEVICE_OPTION_SCREEN_BRIGHTNESS,
+    gammaFromScreenBrightness,
+    loadScreenBrightness,
+    normalizeScreenBrightness,
+    saveScreenBrightness,
+} from "../ui/ScreenBrightness";
+import {
     setHelmSteeringHandler,
     setNpcExamineIdResolver,
     setSpellSelectionClearHandler,
@@ -502,7 +509,9 @@ export class OsrsClient {
     // These store engine-level settings like audio volume, brightness, etc.
     clientOptions: Map<number, number> = new Map();
     gameOptions: Map<number, number> = new Map();
-    deviceOptions: Map<number, number> = new Map();
+    // Device option 6 (screen brightness) starts from the saved setting, so the Settings slider
+    // shows it.
+    deviceOptions: Map<number, number> = new Map([[DEVICE_OPTION_SCREEN_BRIGHTNESS, loadScreenBrightness()]]);
 
     // Client-side gameplay/UI preferences that affect input semantics.
     // Exposed for UI semantics (e.g., Shift-click Drop, tap-to-drop, left-click menu).
@@ -2077,6 +2086,9 @@ export class OsrsClient {
                         break;
                     case DEVICE_OPTION_INTERFACE_SCALING:
                         self.audioVarp.applyInterfaceScalingPercentDeviceOption(storedValue);
+                        break;
+                    case DEVICE_OPTION_SCREEN_BRIGHTNESS:
+                        self.applyScreenBrightness(storedValue);
                         break;
                 }
             },
@@ -3993,6 +4005,17 @@ export class OsrsClient {
 
     private applyMasterVolume(): void {
         this.audioVarp.applyMasterVolume();
+    }
+
+    /** The Settings "Screen brightness" slider (device option 6, 0..100): saved, and the scene's gamma follows. */
+    applyScreenBrightness(value: number): void {
+        const brightness = normalizeScreenBrightness(value);
+        this.deviceOptions.set(DEVICE_OPTION_SCREEN_BRIGHTNESS, brightness);
+        saveScreenBrightness(brightness);
+        const renderer = this.renderer as { brightness?: number } | undefined;
+        if (renderer && typeof renderer.brightness === "number") {
+            renderer.brightness = gammaFromScreenBrightness(brightness);
+        }
     }
 
     private applyInterfaceScalingPercentDeviceOption(value: number): void {
