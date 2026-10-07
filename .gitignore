@@ -61,6 +61,7 @@ AGENTS.md
 !/AGENTS.md
 toolkit
 CLAUDE.md
+!/CLAUDE.md
 # VitePress local cache/output (config/theme under docs/.vitepress stay tracked)
 **/.vitepress/cache
 **/.vitepress/dist
