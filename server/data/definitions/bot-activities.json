@@ -583,186 +583,26 @@
     }
   ],
   "sites": [
-    {
-      "id": "lumbridge_novices",
-      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze", "net_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [1, 19] },
-      "count": 70,
-      "anchor": {"x": 3222, "y": 3218, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "lumbridge_intermediates",
-      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs", "fly_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [20, 39] },
-      "count": 50,
-      "anchor": {"x": 3222, "y": 3218, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "lumbridge_advanced",
-      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs", "lobster_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [40, 59] },
-      "count": 40,
-      "anchor": {"x": 3222, "y": 3218, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "lumbridge_experts",
-      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs", "harpoon_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [60, 99] },
-      "count": 40,
-      "anchor": {"x": 3222, "y": 3218, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "varrock_novices",
-      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze", "net_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [1, 19] },
-      "count": 70,
-      "anchor": {"x": 3212, "y": 3424, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "varrock_intermediates",
-      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs", "fly_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [20, 39] },
-      "count": 50,
-      "anchor": {"x": 3212, "y": 3424, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "varrock_advanced",
-      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs", "lobster_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [40, 59] },
-      "count": 40,
-      "anchor": {"x": 3212, "y": 3424, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "varrock_experts",
-      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs", "harpoon_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [60, 99] },
-      "count": 40,
-      "anchor": {"x": 3212, "y": 3424, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "falador_novices",
-      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze", "net_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [1, 19] },
-      "count": 70,
-      "anchor": {"x": 2964, "y": 3378, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "falador_intermediates",
-      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs", "fly_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [20, 39] },
-      "count": 50,
-      "anchor": {"x": 2964, "y": 3378, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "falador_advanced",
-      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs", "lobster_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [40, 59] },
-      "count": 40,
-      "anchor": {"x": 2964, "y": 3378, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "falador_experts",
-      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs", "harpoon_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [60, 99] },
-      "count": 40,
-      "anchor": {"x": 2964, "y": 3378, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "seers_novices",
-      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze", "net_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [1, 19] },
-      "count": 70,
-      "anchor": {"x": 2723, "y": 3484, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "seers_intermediates",
-      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs", "fly_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [20, 39] },
-      "count": 50,
-      "anchor": {"x": 2723, "y": 3484, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "seers_advanced",
-      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs", "lobster_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [40, 59] },
-      "count": 40,
-      "anchor": {"x": 2723, "y": 3484, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "seers_experts",
-      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs", "harpoon_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [60, 99] },
-      "count": 40,
-      "anchor": {"x": 2723, "y": 3484, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "east_ardougne_novices",
-      "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze", "net_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [1, 19] },
-      "count": 70,
-      "anchor": {"x": 2662, "y": 3305, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "east_ardougne_intermediates",
-      "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs", "fly_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [20, 39] },
-      "count": 50,
-      "anchor": {"x": 2662, "y": 3305, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "east_ardougne_advanced",
-      "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs", "lobster_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [40, 59] },
-      "count": 40,
-      "anchor": {"x": 2662, "y": 3305, "z": 0},
-      "spawnRadius": 6
-    },
-    {
-      "id": "east_ardougne_experts",
-      "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs", "harpoon_fishing"],
-      "switchAfterSeconds": {"min": 900, "max": 1500},
-      "levels": { "all": [60, 99] },
-      "count": 40,
-      "anchor": {"x": 2662, "y": 3305, "z": 0},
-      "spawnRadius": 6
-    }
+    { "id": "lumbridge_novices", "tier": "novices", "count": 70, "anchor": {"x": 3222, "y": 3218, "z": 0}, "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze", "net_fishing"] },
+    { "id": "lumbridge_intermediates", "tier": "intermediates", "count": 50, "anchor": {"x": 3222, "y": 3218, "z": 0}, "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs", "fly_fishing"] },
+    { "id": "lumbridge_advanced", "tier": "advanced", "count": 40, "anchor": {"x": 3222, "y": 3218, "z": 0}, "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs", "lobster_fishing"] },
+    { "id": "lumbridge_experts", "tier": "experts", "count": 40, "anchor": {"x": 3222, "y": 3218, "z": 0}, "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs", "harpoon_fishing"] },
+    { "id": "varrock_novices", "tier": "novices", "count": 70, "anchor": {"x": 3212, "y": 3424, "z": 0}, "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze", "net_fishing"] },
+    { "id": "varrock_intermediates", "tier": "intermediates", "count": 50, "anchor": {"x": 3212, "y": 3424, "z": 0}, "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs", "fly_fishing"] },
+    { "id": "varrock_advanced", "tier": "advanced", "count": 40, "anchor": {"x": 3212, "y": 3424, "z": 0}, "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs", "lobster_fishing"] },
+    { "id": "varrock_experts", "tier": "experts", "count": 40, "anchor": {"x": 3212, "y": 3424, "z": 0}, "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs", "harpoon_fishing"] },
+    { "id": "falador_novices", "tier": "novices", "count": 70, "anchor": {"x": 2964, "y": 3378, "z": 0}, "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze", "net_fishing"] },
+    { "id": "falador_intermediates", "tier": "intermediates", "count": 50, "anchor": {"x": 2964, "y": 3378, "z": 0}, "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs", "fly_fishing"] },
+    { "id": "falador_advanced", "tier": "advanced", "count": 40, "anchor": {"x": 2964, "y": 3378, "z": 0}, "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs", "lobster_fishing"] },
+    { "id": "falador_experts", "tier": "experts", "count": 40, "anchor": {"x": 2964, "y": 3378, "z": 0}, "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs", "harpoon_fishing"] },
+    { "id": "seers_novices", "tier": "novices", "count": 70, "anchor": {"x": 2723, "y": 3484, "z": 0}, "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze", "net_fishing"] },
+    { "id": "seers_intermediates", "tier": "intermediates", "count": 50, "anchor": {"x": 2723, "y": 3484, "z": 0}, "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs", "fly_fishing"] },
+    { "id": "seers_advanced", "tier": "advanced", "count": 40, "anchor": {"x": 2723, "y": 3484, "z": 0}, "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs", "lobster_fishing"] },
+    { "id": "seers_experts", "tier": "experts", "count": 40, "anchor": {"x": 2723, "y": 3484, "z": 0}, "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs", "harpoon_fishing"] },
+    { "id": "east_ardougne_novices", "tier": "novices", "count": 70, "anchor": {"x": 2662, "y": 3305, "z": 0}, "activities": ["combat_training", "normal_trees", "copper_tin_rocks", "burn_normal_logs", "smelt_bronze", "net_fishing"] },
+    { "id": "east_ardougne_intermediates", "tier": "intermediates", "count": 50, "anchor": {"x": 2662, "y": 3305, "z": 0}, "activities": ["combat_training", "oak_trees", "iron_rocks", "burn_oak_logs", "fly_fishing"] },
+    { "id": "east_ardougne_advanced", "tier": "advanced", "count": 40, "anchor": {"x": 2662, "y": 3305, "z": 0}, "activities": ["combat_training", "willow_trees", "coal_rocks", "burn_willow_logs", "lobster_fishing"] },
+    { "id": "east_ardougne_experts", "tier": "experts", "count": 40, "anchor": {"x": 2662, "y": 3305, "z": 0}, "activities": ["combat_training", "yew_trees", "mithril_rocks", "burn_yew_logs", "harpoon_fishing"] }
   ],
   "pvp": {
     "botPool": 845,

@@ -5,8 +5,8 @@ The existing bot activity command can also assign `combat_training` to a control
 Commands retain their existing developer permissions.
 
 At startup the `sites` in `bot-activities.json` spawn 500 bots around the Lumbridge spawn
-(3222,3218, radius 6). A site's bots only ever run its `activities`; with
-`switchAfterSeconds: { min, max }` each bot swaps to another of them at random once its
+(3222,3218, radius 6). A site's bots only ever run its `activities`; on the shared
+`switchAfterSeconds` default each bot swaps to another of them at random once its
 current activity has run that long (between fights, never under a bank-trip/fight-back
 overlay; a switch with no free capacity slot elsewhere retries 30 s later). Without it the
 bots are dedicated: a failed activity waits out its cooldown and resumes.
@@ -263,18 +263,20 @@ ended it and the bot was handed a random activity (WildyBots skilling in Lumbrid
 
 Startup spawns 1000 bots: 200 each at Lumbridge, Varrock, Falador, Seers' Village and East
 Ardougne market, each town split over the same four tiers (sites `<town>_novices` ... `<town>_experts`).
-Levels are set at spawn (`levels`: a number for every skill, or `{ "all": 40, "mining": 60 }`;
-hitpoints at least 10). Gear follows from the levels: combat gear tiers (dragon/magic bow/mystic
-at 60) and the best usable axe/pickaxe. Trees, rocks, banks, stores and NPC clusters are found
+A site in `bot-activities.json` is just `{ id, tier, count, anchor, activities }`: the tier's
+level band is code-owned (`SITE_TIER_LEVELS` in `BotActivityRegistry.js`) and each skill rolls
+inside it at spawn (hitpoints at least 10, agility always 99); the rotation timing and spawn
+radius are shared defaults in the same file. Gear — combat kit and the best usable
+axe/pickaxe — follows from the levels. Trees, rocks, banks, stores and NPC clusters are found
 from wherever the bot is, so the same activities work in every town. Activity capacities are
 global (shared by all towns).
 
-| Tier (per town) | Bots | Levels | Rotates between |
+| Tier (per town) | Bots | Spawn levels | Rotates between |
 | --- | --- | --- | --- |
-| `novices` | 70 | 1 | combat (NPC lv 1-5), normal trees, copper/tin, burn logs, smelt bronze |
-| `intermediates` | 50 | 20 | combat (lv 9-27), oaks, iron, burn oak logs |
-| `advanced` | 40 | 40 | combat (lv 20-45), willows, coal, burn willow logs |
-| `experts` | 40 | 60 | combat (lv 30-90), yews, mithril, burn yew logs |
+| `novices` | 70 | 1-19 | combat (NPC lv 1-5), normal trees, copper/tin, burn logs, smelt bronze |
+| `intermediates` | 50 | 20-39 | combat (lv 9-27), oaks, iron, burn oak logs |
+| `advanced` | 40 | 40-59 | combat (lv 20-45), willows, coal, burn willow logs |
+| `experts` | 40 | 60-99 | combat (lv 30-90), yews, mithril, burn yew logs |
 
 Level 40-90 NPCs near Lumbridge are almost all past the Shantay Pass or the River Salve, which
 the route planner cannot reach, so the expert band starts at 30.

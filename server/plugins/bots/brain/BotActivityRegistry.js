@@ -28,6 +28,23 @@ const DEFAULT_DEFINITIONS_PATH = path.join(
   "bot-activities.json"
 );
 
+/**
+ * A site's tier sets the level band its bots spawn at (each skill rolls inside the band).
+ * The bands are code-owned so the JSON only carries a site's coordinates, count and
+ * activity list; everything else is the same for every site.
+ */
+const SITE_TIER_LEVELS = Object.freeze({
+  novices: Object.freeze({ min: 1, max: 19 }),
+  intermediates: Object.freeze({ min: 20, max: 39 }),
+  advanced: Object.freeze({ min: 40, max: 59 }),
+  experts: Object.freeze({ min: 60, max: 99 }),
+});
+
+const SITE_DEFAULTS = Object.freeze({
+  switchAfterSeconds: Object.freeze({ min: 900, max: 1500 }),
+  spawnRadius: 6,
+});
+
 function applyFields(value, fields) {
   if (typeof value === "string") {
     if (value.startsWith("$") && Object.prototype.hasOwnProperty.call(fields, value.slice(1))) {
@@ -254,9 +271,16 @@ function createBotActivityRegistry(options = {}) {
     resolvers.push(resolver);
     byId.set(resolver.id, resolver);
   }
-  // A site spawns `count` bots that only ever run its `activities` (or the single
-  // `activity`); `switchAfterSeconds: {min,max}` rotates them between those at random.
+  // A site spawns `count` bots around `anchor` that only ever run its `activities`. Its
+  // `tier` picks the spawn level band from SITE_TIER_LEVELS; rotation timing and spawn
+  // radius come from SITE_DEFAULTS.
   const sites = (raw.sites ?? []).map((site) => {
+    const tier = SITE_TIER_LEVELS[site.tier];
+    if (!tier) {
+      throw new Error(
+        `[bot activities] site '${site.id}' needs a known tier (${Object.keys(SITE_TIER_LEVELS).join(", ")})`
+      );
+    }
     const ids = site.activities ?? [site.activity];
     const siteActivities = ids.map((id) => {
       const activity = byId.get(id);
@@ -271,10 +295,12 @@ function createBotActivityRegistry(options = {}) {
     if (!siteActivities.length) {
       throw new Error(`[bot activities] site '${site.id}' needs at least one activity`);
     }
-    const switchAfter = site.switchAfterSeconds;
+    const switchAfter = site.switchAfterSeconds ?? SITE_DEFAULTS.switchAfterSeconds;
     const minMs = Math.max(1, Number(switchAfter?.min) || 0) * 1000;
     return {
+      ...SITE_DEFAULTS,
       ...site,
+      levels: { all: [tier.min, tier.max] },
       activities: siteActivities,
       rotation: {
         activityIds: siteActivities.map((activity) => activity.id),
