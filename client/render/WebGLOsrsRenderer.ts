@@ -330,10 +330,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     public pendingStreamMapsByGeneration: Map<number, StreamMapBatch> = new Map();
     // Coalesce back-to-back loc changes (e.g. 2-piece gates) to avoid transient half-updates/flicker.
     public static readonly LOC_RELOAD_FLUSH_DELAY_MS = 25;
-    public static readonly MOBILE_GAMEPLAY_UI_MIN_SCALE = 1.25;
-    public static readonly MOBILE_GAMEPLAY_UI_MAX_SCALE = 1.5;
-    public static readonly MOBILE_GAMEPLAY_UI_PHONE_EDGE = 390;
-    public static readonly MOBILE_GAMEPLAY_UI_TABLET_EDGE = 768;
     app!: PicoApp;
     gl!: WebGL2RenderingContext;
 
@@ -803,6 +799,15 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
             this.getWorldEntityTransformForMap(map);
         this.sceneRaycaster.deckToWorldProvider = (entityIndex, fineX, fineY) =>
             this.projectDeckToWorld(entityIndex, fineX, fineY);
+        this.sceneRaycaster.npcHeightProvider = (npcTypeId) => this.getNpcDefaultHeight(npcTypeId);
+        this.sceneRaycaster.npcTrianglesProvider = (ecsId, serverId) =>
+            this.buildNpcModelHighlightTriangles({
+                kind: "npc",
+                ecsId,
+                serverId,
+                npcTypeId: this.osrsClient.npcEcs.getNpcTypeId(ecsId),
+                plane: 0,
+            });
         const previousOnMapRemoved = this.mapManager.onMapRemoved;
         this.mapManager.onMapRemoved = (mapX: number, mapY: number) => {
             this.clearMinimapIconsForMap(mapX | 0, mapY | 0);
