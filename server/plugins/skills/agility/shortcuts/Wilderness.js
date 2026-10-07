@@ -14,11 +14,9 @@ module.exports = {
 
   /**
    * Revenant Caves pillars: jump two tiles onto the pillar and two beyond it. A pillar facing 0
-   * is crossed north-south, otherwise east-west. `levels` keys a pillar's level by its x; the
-   * others take the entry's level.
+   * is crossed north-south, otherwise east-west.
    */
-  revenantPillar: ({ levels }, entry) => ({
-    level: ({ obj }) => levels[obj.x] ?? entry.level,
+  revenantPillar: () => ({
     route: ({ pos, obj }) => {
       if (obj.face === 0) {
         return [obj.x, obj.y + (pos.y > obj.y ? 2 : -2), obj.z];

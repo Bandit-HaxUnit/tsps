@@ -146,21 +146,47 @@
       "stile": {"axis":"y"}
     },
     {
-      "name": "Stepping stones (Lumbridge Swamp, south)",
+      "name": "Stepping stone (Lumbridge Swamp)",
       "object": 16513,
       "level": 66,
       "between": {"ends":[[3212,3137,0],[3214,3132,0]],"cross":[{"use":"hops","args":["object","to"]}]}
     },
     {
-      "name": "Stepping stones (Lumbridge Swamp Caves)",
+      "name": "Stepping stone (Lumbridge Swamp Caves)",
       "object": 5949,
       "level": 1,
+      "xp": 3,
+      "fail": {
+        "low": 51,
+        "high": 252,
+        "xp": 1,
+        "steps": [
+          {"anim":"BALANCE_FALL"},
+          {"wait":1},
+          {"hit":[1,3]},
+          {"msg":"You slip and fall."}
+        ]
+      },
+      "unverified": "the failure's steps (no capture)",
       "between": {"ends":[[3221,9556,0],[3221,9552,0]],"cross":[{"use":"hops","args":["object","to"]}]}
     },
     {
-      "name": "Stepping stones (Lumbridge Swamp Caves)",
+      "name": "Stepping stone (Lumbridge Swamp Caves)",
       "object": 5948,
       "level": 1,
+      "xp": 3,
+      "fail": {
+        "low": 51,
+        "high": 252,
+        "xp": 1,
+        "steps": [
+          {"anim":"BALANCE_FALL"},
+          {"wait":1},
+          {"hit":[1,3]},
+          {"msg":"You slip and fall."}
+        ]
+      },
+      "unverified": "the failure's steps (no capture)",
       "between": {"ends":[[3208,9572,0],[3204,9572,0]],"cross":[{"use":"hops","args":["object","to"]}]}
     },
     {
@@ -186,7 +212,7 @@
       "between": {"ends":[[3065,3260,0],[3070,3260,0]],"cross":[{"use":"tunnel","args":["to"]}]}
     },
     {
-      "name": "Stepping stones (River Lum, Draynor)",
+      "name": "Stepping stone (Champions' Guild)",
       "object": 16533,
       "level": 31,
       "xp": 3,
@@ -196,7 +222,7 @@
       "params": {"westStone":[3150,3363],"westShore":[3149,3363],"eastStone":[3153,3363],"eastShore":[3154,3363]}
     },
     {
-      "name": "Fence (Lumbridge cow field)",
+      "name": "Fence (Varrock)",
       "object": 16518,
       "level": 13,
       "between": {
@@ -239,6 +265,9 @@
       "name": "Obstacle pipe (Edgeville Dungeon)",
       "object": 16511,
       "level": 51,
+      "xp": 10,
+      "fail": {"low":0,"high":254,"cross":true,"hit":[1,4]},
+      "unverified": "the failure's damage (no capture)",
       "between": {
         "ends": [[3149,9906,0],[3155,9906,0]],
         "via": [[3152,9906]],
@@ -248,18 +277,24 @@
       }
     },
     {
-      "name": "Jutting wall (Zanaris, west)",
+      "name": "Jutting wall (Zanaris, medium)",
       "object": 17002,
       "at": [2400,4403,0],
       "level": 46,
+      "xp": 9.9,
+      "fail": {"low":50,"high":254,"xp":6,"cross":true,"hit":[1,4]},
+      "unverified": "the failure's damage (no capture)",
       "script": "zanarisJuttingWall",
       "params": {"pivot":4403}
     },
     {
-      "name": "Jutting wall (Zanaris, east)",
+      "name": "Jutting wall (Zanaris, advanced)",
       "object": 17002,
       "at": [2409,4401,0],
       "level": 66,
+      "xp": 9.9,
+      "fail": {"low":50,"high":254,"xp":6,"cross":true,"hit":[1,4]},
+      "unverified": "the failure's damage (no capture)",
       "script": "zanarisJuttingWall",
       "params": {"pivot":4401}
     },
@@ -267,6 +302,7 @@
       "name": "Crumbling wall (Falador)",
       "object": 24222,
       "level": 5,
+      "xp": 0.5,
       "between": {
         "ends": [[2934,3355,0],[2936,3355,0]],
         "cross": [
@@ -281,7 +317,7 @@
       "between": {"ends":[[2948,3309,0],[2948,3313,0]],"cross":[{"use":"tunnel","args":["to",150]}]}
     },
     {
-      "name": "Crevice (Dwarven Mine)",
+      "name": "Narrow crevice (Dwarven Mine)",
       "object": 16543,
       "level": 42,
       "end": "You climb your way through the narrow crevice.",
@@ -294,12 +330,31 @@
       }
     },
     {
-      "name": "Rough wall (Falador, grapple)",
+      "name": "Rough wall (Falador)",
       "object": [17047,17049,17050],
       "at": [3033,3390,0],
       "level": 11,
       "route": [3033,3390,0],
-      "script": "grappleReady",
+      "unverified": "the barehanded climb's animation (no capture)",
+      "requires": [
+        {
+          "skills": {"agility":11,"strength":37,"ranged":19},
+          "equipped": [
+            {"slot":"weapon","name":"crossbow","message":"You need a crossbow equipped to do that."},
+            {"slot":"ammunition","ids":[9419],"message":"You need a mithril grapple tipped bolt with a rope to do that."}
+          ]
+        },
+        {
+          "skills": {"agility":52},
+          "steps": [
+            {"face":{"object":[0,0]}},
+            {"anim":"CLIMB_WALL"},
+            {"wait":2},
+            {"anim":-1},
+            {"tele":[3033,3389,1]}
+          ]
+        }
+      ],
       "steps": [
         {"face":{"object":[0,0]}},
         {"anim":"FIRE_GRAPPLE"},
@@ -311,12 +366,31 @@
       ]
     },
     {
-      "name": "Rough wall (Falador, grapple)",
+      "name": "Rough wall (Falador)",
       "object": [17047,17049,17050],
       "at": [3032,3389,0],
       "level": 11,
       "route": [3032,3388,0],
-      "script": "grappleReady",
+      "unverified": "the barehanded climb's animation (no capture)",
+      "requires": [
+        {
+          "skills": {"agility":11,"strength":37,"ranged":19},
+          "equipped": [
+            {"slot":"weapon","name":"crossbow","message":"You need a crossbow equipped to do that."},
+            {"slot":"ammunition","ids":[9419],"message":"You need a mithril grapple tipped bolt with a rope to do that."}
+          ]
+        },
+        {
+          "skills": {"agility":52},
+          "steps": [
+            {"face":{"object":[0,0]}},
+            {"anim":"CLIMB_WALL"},
+            {"wait":2},
+            {"anim":-1},
+            {"tele":[3032,3389,1]}
+          ]
+        }
+      ],
       "steps": [
         {"face":{"object":[0,0]}},
         {"anim":"FIRE_GRAPPLE"},
@@ -328,12 +402,31 @@
       ]
     },
     {
-      "name": "Rough wall (Yanille, grapple)",
+      "name": "Wall (Yanille)",
       "object": [17047,17049,17050],
       "at": [2556,3075,0],
       "level": 39,
       "route": [2556,3075,0],
-      "script": "grappleReady",
+      "unverified": "the barehanded climb's animation (no capture)",
+      "requires": [
+        {
+          "skills": {"agility":39,"strength":38,"ranged":21},
+          "equipped": [
+            {"slot":"weapon","name":"crossbow","message":"You need a crossbow equipped to do that."},
+            {"slot":"ammunition","ids":[9419],"message":"You need a mithril grapple tipped bolt with a rope to do that."}
+          ]
+        },
+        {
+          "skills": {"agility":69},
+          "steps": [
+            {"face":{"object":[0,0]}},
+            {"anim":"CLIMB_WALL"},
+            {"wait":2},
+            {"anim":-1},
+            {"tele":[2556,3074,1]}
+          ]
+        }
+      ],
       "steps": [
         {"face":{"object":[0,0]}},
         {"anim":"FIRE_GRAPPLE"},
@@ -345,12 +438,31 @@
       ]
     },
     {
-      "name": "Rough wall (Yanille, grapple)",
+      "name": "Wall (Yanille)",
       "object": [17047,17049,17050],
       "at": [2556,3072,0],
       "level": 39,
       "route": [2556,3072,0],
-      "script": "grappleReady",
+      "unverified": "the barehanded climb's animation (no capture)",
+      "requires": [
+        {
+          "skills": {"agility":39,"strength":38,"ranged":21},
+          "equipped": [
+            {"slot":"weapon","name":"crossbow","message":"You need a crossbow equipped to do that."},
+            {"slot":"ammunition","ids":[9419],"message":"You need a mithril grapple tipped bolt with a rope to do that."}
+          ]
+        },
+        {
+          "skills": {"agility":69},
+          "steps": [
+            {"face":{"object":[0,0]}},
+            {"anim":"CLIMB_WALL"},
+            {"wait":2},
+            {"anim":-1},
+            {"tele":[2556,3073,1]}
+          ]
+        }
+      ],
       "steps": [
         {"face":{"object":[0,0]}},
         {"anim":"FIRE_GRAPPLE"},
@@ -362,7 +474,7 @@
       ]
     },
     {
-      "name": "Wall (Falador, jump down)",
+      "name": "Falador (jump down)",
       "object": [17048,17051,17052],
       "at": [3033,3390,1],
       "level": 1,
@@ -374,7 +486,7 @@
       ]
     },
     {
-      "name": "Wall (Falador, jump down)",
+      "name": "Falador (jump down)",
       "object": [17048,17051,17052],
       "at": [3032,3388,1],
       "level": 1,
@@ -386,7 +498,7 @@
       ]
     },
     {
-      "name": "Wall (Yanille, jump down)",
+      "name": "Yanille (jump down)",
       "object": [17048,17051,17052],
       "at": [2556,3075,1],
       "level": 1,
@@ -398,7 +510,7 @@
       ]
     },
     {
-      "name": "Wall (Yanille, jump down)",
+      "name": "Yanille (jump down)",
       "object": [17048,17051,17052],
       "at": [2556,3072,1],
       "level": 1,
@@ -410,10 +522,21 @@
       ]
     },
     {
-      "name": "Tight gap (Taverley, from the east)",
+      "name": "Tight-gap (Goblin Village, from the east)",
       "object": 16468,
       "at": [2928,3521,0],
-      "level": 1,
+      "level": 14,
+      "requires": [
+        {
+          "skills": {"agility":14},
+          "diary": {
+            "key": "falador",
+            "tier": "easy",
+            "enforce": false,
+            "message": "You need to complete the easy Falador Diary to use this shortcut."
+          }
+        }
+      ],
       "steps": [
         {"anim":"LEDGE_STEP_OFF"},
         {"render":"LEDGE_WALK_BACK"},
@@ -423,10 +546,21 @@
       ]
     },
     {
-      "name": "Tight gap (Taverley, from the west)",
+      "name": "Tight-gap (Goblin Village, from the west)",
       "object": 16468,
       "at": [2927,3522,0],
-      "level": 1,
+      "level": 14,
+      "requires": [
+        {
+          "skills": {"agility":14},
+          "diary": {
+            "key": "falador",
+            "tier": "easy",
+            "enforce": false,
+            "message": "You need to complete the easy Falador Diary to use this shortcut."
+          }
+        }
+      ],
       "steps": [
         {"anim":"LEDGE_TURN"},
         {"render":"LEDGE_WALK"},
@@ -447,6 +581,8 @@
       "object": 16509,
       "level": 70,
       "xp": 10,
+      "fail": {"low":0,"high":254,"cross":true,"hit":[1,4]},
+      "unverified": "the failure's damage (no capture)",
       "between": {
         "ends": [[2886,9799,0],[2892,9799,0]],
         "via": [[2889,9799]],
@@ -458,7 +594,7 @@
     {
       "name": "Loose railing (Taverley Dungeon)",
       "object": 28849,
-      "level": 30,
+      "level": 63,
       "script": "looseRailing",
       "params": {"other":[2936,9810]}
     },
@@ -470,13 +606,24 @@
       "end": "You make the jump easily.",
       "script": "taverleySpikes",
       "params": {"ends":[[2876,9813,0],[2882,9813,0]],"landing":{"east":[2880,9813],"west":[2878,9813]}},
-      "fail": {"baseChance":50,"neverFailLevel":95,"xp":0}
+      "fail": {"low":0,"high":220,"xp":0}
     },
     {
-      "name": "Crevice (Taverley Dungeon)",
+      "name": "Crevice (Heroes' Guild)",
       "object": [9739,9740],
       "level": 67,
       "end": "You climb your way through the narrow crevice.",
+      "requires": [
+        {
+          "skills": {"agility":67},
+          "diary": {
+            "key": "falador",
+            "tier": "hard",
+            "enforce": false,
+            "message": "You need to complete the hard Falador Diary to use this shortcut."
+          }
+        }
+      ],
       "between": {
         "ends": [[2898,9902,0],[2915,9894,0]],
         "via": [[2899,9901],[2914,9895]],
@@ -486,10 +633,21 @@
       }
     },
     {
-      "name": "Dark tunnel (Lithkren)",
+      "name": "Dark tunnel (Motherlode Mine)",
       "object": 10047,
       "level": 54,
       "end": "You climb your way through the dark tunnel.",
+      "requires": [
+        {
+          "skills": {"agility":54},
+          "diary": {
+            "key": "falador",
+            "tier": "medium",
+            "enforce": false,
+            "message": "You need to complete the medium Falador Diary to use this shortcut."
+          }
+        }
+      ],
       "between": {"ends":[[3759,5670,0],[3765,5671,0]],"cross":[{"anim":"DARK_TUNNEL"},{"wait":1},{"tele":"to"}]}
     },
     {"name":"Stile (Kandarin)","object":993,"level":1,"stile":{}},
@@ -505,8 +663,8 @@
         {"walk":[[2602,3336]]}
       ],
       "fail": {
-        "baseChance": 50,
-        "neverFailLevel": 63,
+        "low": 90,
+        "high": 250,
         "xp": 2,
         "render": "BALANCE_WALK",
         "end": "You finally come to the shore.",
@@ -539,8 +697,8 @@
         {"walk":[[2598,3336]]}
       ],
       "fail": {
-        "baseChance": 50,
-        "neverFailLevel": 63,
+        "low": 90,
+        "high": 250,
         "xp": 2,
         "render": "BALANCE_WALK",
         "end": "You finally come to the shore.",
@@ -565,6 +723,7 @@
       "name": "Log balance (Coal Trucks)",
       "object": 23274,
       "level": 20,
+      "xp": 8.5,
       "render": "BALANCE_WALK",
       "between": {"ends":[[2598,3477,0],[2603,3477,0]],"cross":[{"walk":["to"]}]}
     },
@@ -572,7 +731,20 @@
       "name": "Log balance (Fremennik Province)",
       "object": [16540,16541,16542],
       "level": 48,
+      "xp": 4,
       "render": "BALANCE_WALK",
+      "fail": {
+        "low": 140,
+        "high": 255,
+        "xp": 2,
+        "steps": [
+          {"anim":"BALANCE_FALL"},
+          {"wait":1},
+          {"hit":[1,3]},
+          {"msg":"You slip and fall."}
+        ]
+      },
+      "unverified": "the failure's steps (no capture)",
       "between": {"ends":[[2722,3592,0],[2722,3596,0]],"cross":[{"walk":["to"]}]}
     },
     {
@@ -600,6 +772,15 @@
       "name": "Rocks (Tree Gnome Stronghold, up)",
       "object": 16534,
       "level": 37,
+      "requires": [
+        {
+          "skills": {"agility":37},
+          "quest": [
+            {"key":"grand_tree","message":"You need to complete The Grand Tree to use this shortcut."},
+            {"key":"tree_gnome_village","message":"You need to complete Tree Gnome Village to use this shortcut."}
+          ]
+        }
+      ],
       "route": [2486,3515,0],
       "steps": [
         {"move":[2489,3516],"anim":"CLIMB_ROCKS","speed":[0,90],"ticks":2},
@@ -611,6 +792,15 @@
       "name": "Rocks (Tree Gnome Stronghold, down)",
       "object": 16535,
       "level": 37,
+      "requires": [
+        {
+          "skills": {"agility":37},
+          "quest": [
+            {"key":"grand_tree","message":"You need to complete The Grand Tree to use this shortcut."},
+            {"key":"tree_gnome_village","message":"You need to complete Tree Gnome Village to use this shortcut."}
+          ]
+        }
+      ],
       "route": [2489,3521,0],
       "steps": [
         {"move":[2489,3516],"anim":"CLIMB_ROCKS","speed":[0,150],"ticks":4},
@@ -619,7 +809,7 @@
       ]
     },
     {
-      "name": "Castle wall (Ardougne)",
+      "name": "Underwall tunnel (Yanille)",
       "object": [16519,16520],
       "level": 16,
       "between": {"ends":[[2575,3107,0],[2575,3112,0]],"cross":[{"use":"tunnel","args":["to"]}]}
@@ -701,9 +891,10 @@
       ]
     },
     {
-      "name": "Rocks (Gnome Stronghold, west)",
+      "name": "Rocks (Eagles' Peak)",
       "object": 19849,
       "level": 25,
+      "xp": 1,
       "between": {
         "ends": [[2324,3497,0],[2322,3502,0]],
         "cross": [
@@ -721,39 +912,66 @@
       ]
     },
     {
-      "name": "Stepping stones (Isafdar)",
+      "name": "Stepping stone (Zul-Andra)",
       "object": 10663,
       "level": 76,
+      "requires": [
+        {
+          "skills": {"agility":76},
+          "quest": {"key":"regicide","message":"You need to complete Regicide to use this shortcut."}
+        }
+      ],
       "between": {"ends":[[2154,3072,0],[2160,3072,0]],"cross":[{"use":"hops","args":["object","to"]}]}
     },
     {
-      "name": "Rocks (Feldip Hills, up)",
+      "name": "Rocks (Corsair Cove Resource Area, up)",
       "object": 31758,
       "level": 30,
+      "xp": 2,
+      "requires": [
+        {
+          "skills": {"agility":30},
+          "quest": {"key":"dragon_slayer_i","message":"You need to complete Dragon Slayer I to use this shortcut."}
+        }
+      ],
       "steps": [
         {"use":"crawlUp","args":[[2485,2898]]}
       ]
     },
     {
-      "name": "Rocks (Feldip Hills, down)",
+      "name": "Rocks (Corsair Cove Resource Area, down)",
       "object": 31759,
       "level": 30,
+      "xp": 2,
+      "requires": [
+        {
+          "skills": {"agility":30},
+          "quest": {"key":"dragon_slayer_i","message":"You need to complete Dragon Slayer I to use this shortcut."}
+        }
+      ],
       "steps": [
         {"use":"crawlDown","args":[[2483,2898],[2489,2898],"west"]}
       ]
     },
     {
-      "name": "Rocks (Feldip Hills, hunter area)",
+      "name": "Rocks (Corsair Cove)",
       "object": 31757,
-      "level": 30,
+      "level": 10,
       "xp": 1,
       "end": "You climb over the rocks.",
       "between": {"ends":[[2546,2871,0],[2546,2873,0]],"cross":[{"use":"climbOver","args":["to","CLIMB_OVER",2]}]}
     },
     {
-      "name": "Pillar (Ancient Cavern)",
+      "name": "Pillar (Corsair Cove Dungeon)",
       "object": 31809,
       "level": 15,
+      "xp": 2,
+      "requires": [
+        {
+          "skills": {"agility":15},
+          "quest": {"key":"dragon_slayer_i","message":"You need to complete Dragon Slayer I to use this shortcut."}
+        }
+      ],
       "between": {"ends":[[1981,8994,1],[1981,8999,1]],"cross":[{"use":"hops","args":["object","to"]}]}
     },
     {
@@ -789,10 +1007,10 @@
       ]
     },
     {
-      "name": "Stepping stones (Brimhaven Dungeon)",
+      "name": "Stepping stones (Western Brimhaven Dungeon)",
       "object": [21738,21739],
       "level": 12,
-      "xp": 7,
+      "xp": 7.5,
       "between": {
         "ends": [[2649,9562,0],[2647,9557,0]],
         "via": [[2649,9561],[2649,9560],[2648,9560],[2647,9560],[2647,9559],[2647,9558]],
@@ -802,9 +1020,9 @@
       }
     },
     {
-      "name": "Stepping stones (Brimhaven Dungeon red dragons)",
+      "name": "Stepping stones (Eastern Brimhaven Dungeon)",
       "object": 19040,
-      "level": 83,
+      "level": 56,
       "script": "brimhavenRiver",
       "params": {
         "splitY": 9531,
@@ -835,17 +1053,36 @@
       ]
     },
     {
-      "name": "Stepping stones (Karamja volcano)",
+      "name": "Stepping stones (Karamja)",
       "object": [23645,23646,23647],
       "level": 30,
+      "xp": 3,
+      "fail": {
+        "low": 50,
+        "high": 253,
+        "xp": 1,
+        "steps": [
+          {"anim":"BALANCE_FALL"},
+          {"wait":1},
+          {"hit":[1,3]},
+          {"msg":"You slip and fall."}
+        ]
+      },
+      "unverified": "the failure's steps (no capture)",
       "steps": [
         {"use":"hops","args":["object"]}
       ]
     },
     {
-      "name": "Vines (Karamja)",
+      "name": "Vine (Kharazi Jungle)",
       "object": [26875,26877],
       "level": 79,
+      "requires": [
+        {
+          "skills": {"agility":79},
+          "quest": {"key":"legends_quest","message":"You need to complete Legends' Quest to use this shortcut."}
+        }
+      ],
       "script": "karamjaVines",
       "params": {"splitY":2938,"north":[2899,2942],"south":[2899,2937]}
     },
@@ -872,13 +1109,15 @@
       ]
     },
     {
-      "name": "Stepping stones (Shilo Village)",
+      "name": "Stepping stone (Shilo Village)",
       "object": 16466,
-      "level": 77,
+      "level": 32,
       "between": {"ends":[[2863,2971,0],[2863,2976,0]],"cross":[{"use":"hops","args":["object","to"]}]}
     },
     {
-      "name": "Rocks (Cairn Isle, heading east)",
+      "name": "Rock slide (Cairn Isle, heading east)",
+      "fail": {"low":170,"high":253,"cross":true,"hit":[1,4]},
+      "unverified": "the failure's damage (no capture)",
       "object": 2231,
       "at": [[2792,2978,0],[2792,2979,0],[2792,2980,0]],
       "level": 15,
@@ -888,7 +1127,9 @@
       ]
     },
     {
-      "name": "Rocks (Cairn Isle, heading west)",
+      "name": "Rock slide (Cairn Isle, heading west)",
+      "fail": {"low":170,"high":253,"cross":true,"hit":[1,4]},
+      "unverified": "the failure's damage (no capture)",
       "object": 2231,
       "at": [[2794,2978,0],[2794,2979,0],[2794,2980,0]],
       "level": 15,
@@ -918,9 +1159,15 @@
       ]
     },
     {
-      "name": "Big window (Al Kharid Palace)",
+      "name": "Big window (Al Kharid)",
       "object": 33348,
       "level": 70,
+      "requires": [
+        {
+          "skills": {"agility":70},
+          "quest": {"key":"prince_ali_rescue","message":"You need to complete Prince Ali Rescue to use this shortcut."}
+        }
+      ],
       "between": {
         "ends": [
           {"object":[0,0,0]},
@@ -940,7 +1187,7 @@
       "between": {"ends":[[3295,3157,0],[3295,3158,0]],"cross":[{"use":"climbOver","args":["to"]}]}
     },
     {
-      "name": "Rocks (Al Kharid mine, up)",
+      "name": "Rocks (Al Kharid, up)",
       "object": 16550,
       "level": 38,
       "steps": [
@@ -948,7 +1195,7 @@
       ]
     },
     {
-      "name": "Rocks (Al Kharid mine, down)",
+      "name": "Rocks (Al Kharid, down)",
       "object": 16549,
       "level": 38,
       "steps": [
@@ -960,6 +1207,17 @@
       "object": 16465,
       "level": 86,
       "end": "You climb your way through the narrow crevice.",
+      "requires": [
+        {
+          "skills": {"agility":86},
+          "diary": {
+            "key": "desert",
+            "tier": "elite",
+            "enforce": false,
+            "message": "You need to complete the elite Desert Diary to use this shortcut."
+          }
+        }
+      ],
       "between": {
         "ends": [[3500,9510,2],[3506,9505,2]],
         "via": [[3501,9510],[3506,9506]],
@@ -982,9 +1240,19 @@
       "between": {"ends":[{"object":[0,-1,0]},{"object":[0,2,0]}],"cross":[{"use":"climbOver","args":["to"]}]}
     },
     {
-      "name": "Low fence (Canifis)",
+      "name": "Fence (Burgh de Rott)",
       "object": 12776,
-      "level": 33,
+      "level": 25,
+      "requires": [
+        {
+          "skills": {"agility":25},
+          "quest": {
+            "key": "in_aid_of_the_myreque",
+            "stage": "started",
+            "message": "You need to have started In Aid of the Myreque to use this shortcut."
+          }
+        }
+      ],
       "between": {
         "ends": [[3471,3221,0],[3477,3221,0]],
         "via": [[3473,3221],[3474,3221]],
@@ -994,13 +1262,13 @@
       }
     },
     {
-      "name": "Stepping stone (Mort Myre)",
+      "name": "Stepping stone (Mort Myre Swamp)",
       "object": 13504,
       "level": 50,
       "between": {"ends":[[3417,3325,0],[3422,3325,0]],"cross":[{"use":"hops","args":["object","to"]}]}
     },
     {
-      "name": "Ornate railing (Mort Myre)",
+      "name": "Ornate railing",
       "object": 16552,
       "level": 65,
       "between": {
@@ -1011,7 +1279,7 @@
       }
     },
     {
-      "name": "Ornate railing (Mort Myre, north)",
+      "name": "Ornate railing (north)",
       "object": 17000,
       "level": 65,
       "between": {
@@ -1038,10 +1306,9 @@
       ]
     },
     {
-      "name": "Weathered wall (Ectofuntus, up)",
+      "name": "Weathered wall (up)",
       "object": 16525,
-      "level": 57,
-      "xp": 2,
+      "level": 58,
       "steps": [
         {"anim":"CLIMB_WALL"},
         {"wait":1},
@@ -1050,10 +1317,9 @@
       ]
     },
     {
-      "name": "Weathered wall (Ectofuntus, down)",
+      "name": "Weathered wall (down)",
       "object": 16526,
-      "level": 57,
-      "xp": 2,
+      "level": 58,
       "steps": [
         {"face":[3671,9888]},
         {"anim":"LEAP","delay":15},
@@ -1063,15 +1329,15 @@
       ]
     },
     {
-      "name": "Stepping stones (Mos Le'Harmless)",
+      "name": "Stepping stone (Mos Le'Harmless)",
       "object": 19042,
       "level": 60,
       "between": {"ends":[[3708,2969,0],[3715,2969,0]],"cross":[{"use":"hops","args":["object","to"]}]}
     },
     {
-      "name": "Bridge (Mort'ton mausoleum, north)",
+      "name": "Bridge (Mausoleum)",
       "object": 5159,
-      "level": 1,
+      "level": 69,
       "route": ["object.x",3558,0],
       "steps": [
         {"walk":[{"pos":[0,1]}]},
@@ -1083,9 +1349,9 @@
       ]
     },
     {
-      "name": "Bridge (Mort'ton mausoleum, south)",
+      "name": "Bridge (Mausoleum, south)",
       "object": 5160,
-      "level": 1,
+      "level": 69,
       "route": {"object":[0,0,0]},
       "steps": [
         {"walk":[{"pos":[0,1]}]},
@@ -1097,7 +1363,7 @@
       ]
     },
     {
-      "name": "Broken window (Slayer Tower banshees)",
+      "name": "Broken window (Slayer Tower)",
       "object": 57679,
       "level": 18,
       "xp": 3,
@@ -1110,6 +1376,7 @@
     },
     {
       "name": "Ivy (Slayer Tower, up)",
+      "note": "Captured: no XP, though the Wiki lists 3",
       "object": 57677,
       "at": [3418,3533,0],
       "level": 81,
@@ -1132,7 +1399,8 @@
       ]
     },
     {
-      "name": "Broken window (Slayer Tower, back down the ivy)",
+      "name": "Ivy (Slayer Tower, back down from the window)",
+      "note": "Captured",
       "object": 57678,
       "at": [3419,3533,2],
       "level": 81,
@@ -1204,7 +1472,7 @@
       ]
     },
     {
-      "name": "Rope anchor (Fossil Island)",
+      "name": "Rope (Fossil Island)",
       "object": [30916,30917],
       "level": 64,
       "render": "BALANCE_WALK",
@@ -1244,7 +1512,7 @@
       "params": {"length":9}
     },
     {
-      "name": "Stepping stones (Fremennik Isles)",
+      "name": "Stepping stone (Miscellania)",
       "object": 11768,
       "level": 55,
       "between": {"ends":[[2573,3859,0],[2575,3861,0]],"cross":[{"use":"hops","args":["object","to"]}]}
@@ -1269,7 +1537,7 @@
     {
       "name": "Crevice (Fremennik Slayer Dungeon)",
       "object": 16539,
-      "level": 62,
+      "level": 61,
       "end": "You climb your way through the narrow crevice.",
       "between": {
         "ends": [[2730,10008,0],[2735,10008,0]],
@@ -1284,6 +1552,7 @@
       "object": 16544,
       "level": 81,
       "xp": 5,
+      "unverified": "the level: the Wiki's infobox says 43, its success chart starts at 81",
       "script": "fremennikStrangeFloor",
       "params": {
         "westCrack": [2769,10002],
@@ -1346,6 +1615,15 @@
       "at": [2843,3693,0],
       "level": 73,
       "route": [2844,3693,0],
+      "requires": [
+        {
+          "skills": {"agility":73},
+          "quest": {
+            "key": "my_arms_big_adventure",
+            "message": "You need to complete My Arm's Big Adventure to use this shortcut."
+          }
+        }
+      ],
       "steps": [
         {"use":"crawlUp","args":[[2843,3693],[2839,3693],[2838,3693]]}
       ]
@@ -1354,6 +1632,15 @@
       "name": "Rocks (Troll Stronghold, down)",
       "object": 16464,
       "level": 73,
+      "requires": [
+        {
+          "skills": {"agility":73},
+          "quest": {
+            "key": "my_arms_big_adventure",
+            "message": "You need to complete My Arm's Big Adventure to use this shortcut."
+          }
+        }
+      ],
       "steps": [
         {"use":"crawlDown","args":[[2837,3693],[2844,3693],"west"]}
       ]
@@ -1367,23 +1654,35 @@
       "params": {"alongY":[[2888,3660],[2856,3611],[2834,3628]]}
     },
     {
-      "name": "Rocks (Trollheim paths, higher)",
+      "name": "Rocks (Trollheim advanced)",
       "object": [3748,16523],
       "level": 44,
       "end": "You climb over the rocks.",
+      "fail": {"low":170,"high":253,"cross":true,"hit":[1,4]},
+      "unverified": "the failure's damage (no capture)",
       "script": "trollheimRockStep",
       "params": {"alongY":[[2888,3660],[2856,3611],[2834,3628]]}
     },
     {
-      "name": "Rocky handholds (Trollheim)",
+      "name": "Rocky handholds (God Wars Dungeon, Wilderness)",
       "object": [26400,26401,26402],
       "level": 60,
       "end": "You climb over the rocks.",
+      "requires": [
+        {
+          "skills": {"agility":60},
+          "quest": {
+            "key": "troll_stronghold",
+            "stage": "started",
+            "message": "You need to have started Troll Stronghold to use this shortcut."
+          }
+        }
+      ],
       "script": "trollheimHandholds",
       "params": {"topY":3760,"top":[2928,3760,0],"landing":[2928,3757]}
     },
     {
-      "name": "Rocks (Troll Stronghold paths)",
+      "name": "Rocks (Trollheim easy)",
       "object": [16521,16522,16524],
       "at": [2871,3671,0],
       "level": 41,
@@ -1394,10 +1693,12 @@
           {"move":"to","anim":"CLIMB_ROCKS","speed":[0,60]},
           {"anim":-1}
         ]
-      }
+      },
+      "fail": {"low":170,"high":253,"cross":true,"hit":[1,4]},
+      "unverified": "the failure's damage (no capture)"
     },
     {
-      "name": "Rocks (Troll Stronghold paths)",
+      "name": "Rocks (Trollheim easy)",
       "object": [16521,16522,16524],
       "at": [2870,3671,0],
       "level": 41,
@@ -1408,10 +1709,12 @@
           {"move":"to","anim":"CLIMB_ROCKS","speed":[0,60]},
           {"anim":-1}
         ]
-      }
+      },
+      "fail": {"low":170,"high":253,"cross":true,"hit":[1,4]},
+      "unverified": "the failure's damage (no capture)"
     },
     {
-      "name": "Rocks (Troll Stronghold paths)",
+      "name": "Rocks (Trollheim medium)",
       "object": [16521,16522,16524],
       "at": [2878,3667,0],
       "level": 43,
@@ -1422,10 +1725,12 @@
           {"move":"to","anim":"CLIMB_ROCKS","speed":[0,60]},
           {"anim":-1}
         ]
-      }
+      },
+      "fail": {"low":170,"high":253,"cross":true,"hit":[1,4]},
+      "unverified": "the failure's damage (no capture)"
     },
     {
-      "name": "Rocks (Troll Stronghold paths)",
+      "name": "Rocks (Trollheim medium)",
       "object": [16521,16522,16524],
       "at": [2878,3666,0],
       "level": 43,
@@ -1436,10 +1741,12 @@
           {"move":"to","anim":"CLIMB_ROCKS","speed":[0,60]},
           {"anim":-1}
         ]
-      }
+      },
+      "fail": {"low":170,"high":253,"cross":true,"hit":[1,4]},
+      "unverified": "the failure's damage (no capture)"
     },
     {
-      "name": "Rocks (Troll Stronghold paths)",
+      "name": "Rocks (Trollheim hard)",
       "object": [16521,16522,16524],
       "at": [2901,3680,0],
       "level": 47,
@@ -1450,10 +1757,12 @@
           {"move":"to","anim":"CLIMB_ROCKS","speed":[0,60]},
           {"anim":-1}
         ]
-      }
+      },
+      "fail": {"low":170,"high":253,"cross":true,"hit":[1,4]},
+      "unverified": "the failure's damage (no capture)"
     },
     {
-      "name": "Rocks (Troll Stronghold paths)",
+      "name": "Rocks (Trollheim hard)",
       "object": [16521,16522,16524],
       "at": [2902,3680,0],
       "level": 47,
@@ -1464,7 +1773,9 @@
           {"move":"to","anim":"CLIMB_ROCKS","speed":[0,60]},
           {"anim":-1}
         ]
-      }
+      },
+      "fail": {"low":170,"high":253,"cross":true,"hit":[1,4]},
+      "unverified": "the failure's damage (no capture)"
     },
     {
       "name": "Stile (Burthorpe)",
@@ -1530,7 +1841,7 @@
       }
     },
     {
-      "name": "Rocks (God Wars Dungeon path)",
+      "name": "Rocks (Wilderness, Trollheim)",
       "object": 16545,
       "at": [2947,3678,0],
       "level": 64,
@@ -1565,6 +1876,16 @@
       "name": "Rocky handholds (God Wars Dungeon)",
       "object": [26405,26406],
       "level": 60,
+      "requires": [
+        {
+          "skills": {"agility":60},
+          "quest": {
+            "key": "troll_stronghold",
+            "stage": "started",
+            "message": "You need to have started Troll Stronghold to use this shortcut."
+          }
+        }
+      ],
       "steps": [
         {"move":[2950,3767],"anim":"CLIMB_ROCKS","speed":[0,210],"ticks":6,"dir":"west"},
         {"anim":-1}
@@ -1633,22 +1954,23 @@
       ]
     },
     {
-      "name": "Stone (Lizardman Settlement)",
+      "name": "Stones (Catacombs of Kourend)",
       "object": 28893,
       "level": 28,
+      "xp": 2,
       "steps": [
         {"use":"hops","args":["object"]}
       ]
     },
     {
-      "name": "Boulder (Arceuus dark altar)",
+      "name": "Boulder (dense essence mine)",
       "object": 27990,
       "level": 49,
       "script": "arceuusBoulder",
       "params": {"south":[1776,3880],"top":[1776,3882],"north":[1776,3884]}
     },
     {
-      "name": "Rocks (Arceuus, up)",
+      "name": "Rocks (dense essence mine, east, up)",
       "object": 27988,
       "level": 52,
       "steps": [
@@ -1656,7 +1978,7 @@
       ]
     },
     {
-      "name": "Rocks (Arceuus, down)",
+      "name": "Rocks (dense essence mine, east, down)",
       "object": 27987,
       "level": 52,
       "steps": [
@@ -1664,7 +1986,7 @@
       ]
     },
     {
-      "name": "Rocks (Arceuus dark altar, west cliff)",
+      "name": "Rocks (dense essence mine, west)",
       "object": 27984,
       "at": [1743,3854,0],
       "level": 73,
@@ -1673,7 +1995,7 @@
       ]
     },
     {
-      "name": "Rocks (Arceuus dark altar, north)",
+      "name": "Rocks (dense essence mine, north side)",
       "object": [27984,27985],
       "at": [1761,3872,0],
       "level": 69,
@@ -1682,7 +2004,7 @@
       ]
     },
     {
-      "name": "Rocks (Arceuus dark altar, south)",
+      "name": "Rocks (dense essence mine, south side)",
       "object": [27984,27985],
       "at": [1761,3873,0],
       "level": 69,
@@ -1691,33 +2013,33 @@
       ]
     },
     {
-      "name": "Rocks (Arceuus dark altar, from below)",
+      "name": "Rocks (dense essence mine, from below)",
       "object": 27985,
       "at": [1751,3854,0],
       "level": 69,
       "refuse": "You can't use that from here!"
     },
     {
-      "name": "Stepping stones (Lake Molch)",
+      "name": "Stepping stones (Hosidius)",
       "object": 29728,
       "level": 45,
       "between": {"ends":[[1720,3551,0],[1724,3551,0]],"cross":[{"use":"hops","args":["object","to"]}]}
     },
     {
-      "name": "Rocks (Lovakengj)",
+      "name": "Rocks (dense essence mine, north)",
       "object": 34741,
       "level": 69,
       "end": "You climb over the rocks.",
       "script": "climbOverLoc"
     },
     {
-      "name": "Stepping stones (Hosidius)",
+      "name": "Stepping stones (River Hos)",
       "object": 29730,
       "level": 40,
       "between": {"ends":[[1603,3571,0],[1607,3571,0]],"cross":[{"use":"hops","args":["object","to"]}]}
     },
     {
-      "name": "Stepping stones (Hosidius, east)",
+      "name": "Stepping stones (River Hos, east)",
       "object": 29729,
       "level": 40,
       "between": {"ends":[[1610,3570,0],[1614,3570,0]],"cross":[{"use":"hops","args":["object","to"]}]}
@@ -1774,13 +2096,13 @@
       "params": {"middleX":2432,"westOfX":2429,"westExitX":2435,"eastExitX":2429}
     },
     {
-      "name": "Stepping stones (Wilderness, Chaos Temple)",
+      "name": "Stepping stone (Lava Dragon Isle)",
       "object": 14918,
       "level": 74,
       "between": {"ends":[[3201,3807,0],[3201,3810,0]],"cross":[{"use":"hops","args":["object","to"]}]}
     },
     {
-      "name": "Stepping stone (Wilderness, Lava Dragon Isle)",
+      "name": "Stepping stone (Lava Maze)",
       "object": 14917,
       "level": 82,
       "between": {
@@ -1792,10 +2114,21 @@
       }
     },
     {
-      "name": "Crevice (Deep Wilderness Dungeon)",
+      "name": "Narrow crevice (Deep Wilderness Dungeon)",
       "object": 19043,
       "level": 46,
       "end": "You climb your way through the narrow crevice.",
+      "requires": [
+        {
+          "skills": {"agility":46},
+          "diary": {
+            "key": "wilderness",
+            "tier": "medium",
+            "enforce": false,
+            "message": "You need to complete the medium Wilderness Diary to use this shortcut."
+          }
+        }
+      ],
       "between": {
         "ends": [[3046,10326,0],[3048,10336,0]],
         "via": [[3046,10327],[3048,10335]],
@@ -1812,11 +2145,28 @@
       "params": {"northOfY":10149,"south":[3066,10147,3],"north":[3066,10149,3]}
     },
     {
-      "name": "Pillar (Revenant Caves)",
+      "name": "Pillar (Revenant Caves, easy)",
       "object": 31561,
+      "at": [[3220,10086,0]],
+      "level": 65,
+      "xp": 6.5,
+      "script": "revenantPillar"
+    },
+    {
+      "name": "Pillar (Revenant Caves, medium)",
+      "object": 31561,
+      "at": [[3180,10209,0],[3200,10136,0],[3202,10196,0]],
       "level": 75,
-      "script": "revenantPillar",
-      "params": {"levels":{"3220":65,"3241":89}}
+      "xp": 7.5,
+      "script": "revenantPillar"
+    },
+    {
+      "name": "Pillar (Revenant Caves, hard)",
+      "object": 31561,
+      "at": [[3241,10145,0]],
+      "level": 89,
+      "xp": 8.9,
+      "script": "revenantPillar"
     }
   ]
 }

@@ -20,21 +20,6 @@ function spikeJump(from, to, { obj }, trap, landing) {
 
 /** Asgarnia shortcut scripts (agility-shortcuts.json). */
 module.exports = {
-  /** The Falador and Yanille grapples need a crossbow and a mith grapple equipped. */
-  grappleReady: () => ({
-    precondition: ({ player, core }) => {
-      const items = player.getEquipment().getItems();
-      const weapon = items[core.Equipment.WEAPON_SLOT];
-      if (!weapon?.getDefinition?.()?.getName?.()?.toLowerCase?.().includes("crossbow")) {
-        return "You need a crossbow equipped to do that.";
-      }
-      if (items[core.Equipment.AMMUNITION_SLOT]?.getId?.() !== core.ItemIds.MITH_GRAPPLE_2) {
-        return "You need a mithril grapple tipped bolt with a rope to do that.";
-      }
-      return null;
-    },
-  }),
-
   /** Taverley Dungeon: the rock up to (and down from) the blue dragon ledge. */
   taverleyDragonRock: ({ ledge, foot, ground }) => ({
     steps: ({ pos, obj }) => (pos.z === 0

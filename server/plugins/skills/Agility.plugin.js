@@ -91,13 +91,26 @@ function agilityLevel(player) {
 }
 
 /**
- * Linear success chance: `base`% at the requirement, rising to certain success at
- * `never`. Obstacles without a `fail` block never fail.
+ * The OSRS skilling success roll the Wiki's success charts use: `low` and `high` out of 256,
+ * interpolated over levels 1-99 (Wiki: Skilling success rate).
+ */
+function skillingChance(low, high, level) {
+  const capped = Math.max(1, Math.min(99, level));
+  return (1 + Math.floor((low * (99 - capped)) / 98 + (high * (capped - 1)) / 98 + 0.5)) / 256;
+}
+
+/**
+ * Whether the obstacle succeeds. A `fail` block with `low`/`high` rolls the OSRS success chance;
+ * the older linear one is `baseChance`% at the requirement, rising to certain success at
+ * `neverFailLevel`. Obstacles without a `fail` block never fail.
  */
 function rollSuccess(player, obstacle, requirement) {
   const fail = obstacle.fail;
   if (!fail) return true;
   const level = agilityLevel(player);
+  if (fail.low != null && fail.high != null) {
+    return Math.random() < skillingChance(fail.low, fail.high, level);
+  }
   const never = fail.neverFailLevel ?? requirement + 20;
   if (level >= never) return true;
   const base = fail.baseChance ?? 75;
@@ -206,11 +219,71 @@ function skipAhead(player, obstacle, context) {
   }
 }
 
-function attemptObstacle(player, object, obstacle) {
+function skillMessage(skillName, level) {
+  const name = skillName[0].toUpperCase() + skillName.slice(1);
+  const article = /^[AEIOU]/.test(name) ? "an" : "a";
+  return `You need ${article} ${name} level of at least ${level} to attempt this.`;
+}
+
+/** Why `requirement` isn't met, or null. Quests and diaries this server doesn't know are no bar. */
+function unmet(player, requirement) {
+  for (const [skillName, level] of Object.entries(requirement.skills ?? {})) {
+    const skill = core.Skill[skillName.toUpperCase()];
+    if (player.getSkillManager().getCurrentLevel(skill) < level) return skillMessage(skillName, level);
+  }
+  const worn = player.getEquipment().getItems();
+  for (const item of requirement.equipped ?? []) {
+    const held = worn[core.Equipment[`${item.slot.toUpperCase()}_SLOT`]];
+    const name = String(held?.getDefinition?.()?.getName?.() ?? "").toLowerCase();
+    const matches = item.ids ? item.ids.includes(held?.getId?.()) : item.name ? name.includes(item.name) : false;
+    if (!matches) return item.message;
+  }
+  for (const item of requirement.items ?? []) {
+    if (!item.ids.some((id) => player.getInventory().contains(id))) return item.message;
+  }
+  for (const { key, stage = "complete", message } of [].concat(requirement.quest ?? [])) {
+    const request = { player, key, complete: null, started: null };
+    pluginApi.emitCustomEvent(stage === "started" ? "quest:is-started" : "quest:is-complete", request);
+    if ((stage === "started" ? request.started : request.complete) === false) return message;
+  }
+  if (requirement.diary?.enforce) {
+    const { key, tier, message } = requirement.diary;
+    const request = { player, diary: key, tier, complete: null };
+    pluginApi.emitCustomEvent("diary:is-complete", request);
+    if (request.complete === false) return message;
+  }
+  return null;
+}
+
+/**
+ * The obstacle as this player can use it: with `requires`, the first alternative they meet
+ * (which may bring its own steps), else the refusal of the first alternative. Without it, the
+ * Agility level.
+ */
+function usable(player, obstacle, level) {
+  if (!obstacle.requires) {
+    return agilityLevel(player) < level
+      ? { refusal: `You need an Agility level of at least ${level} to attempt this.` }
+      : { obstacle };
+  }
+  let refusal = null;
+  for (const alternative of obstacle.requires) {
+    const reason = unmet(player, alternative);
+    if (!reason) {
+      const { steps, start, end } = alternative;
+      return { obstacle: { ...obstacle, ...(steps ? { steps } : {}), ...(start ? { start } : {}), ...(end ? { end } : {}) } };
+    }
+    refusal ??= reason;
+  }
+  return { refusal };
+}
+
+function attemptObstacle(player, object, entry) {
   const context = objectContext(player, object);
-  const level = resolve(obstacle.level, context);
-  if (agilityLevel(player) < level) {
-    player.sendMessage(`You need an Agility level of at least ${level} to attempt this.`);
+  const level = resolve(entry.level, context);
+  const { obstacle, refusal } = usable(player, entry, level);
+  if (refusal) {
+    player.sendMessage(refusal);
     return;
   }
   const blocked = obstacle.precondition?.(context);

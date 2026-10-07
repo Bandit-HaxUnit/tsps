@@ -50,9 +50,12 @@ const COORDINATES = {
 };
 const ENTRY_KEYS = new Set([
   "name", "object", "at", "level", "xp", "start", "end", "render", "route", "refuse",
-  "steps", "between", "stile", "script", "params", "fail",
+  "steps", "between", "stile", "script", "params", "fail", "requires", "unverified", "note",
 ]);
-const FAIL_KEYS = new Set(["baseChance", "neverFailLevel", "fromLevel", "xp", "start", "end", "render", "steps"]);
+const FAIL_KEYS = new Set([
+  "low", "high", "baseChance", "neverFailLevel", "fromLevel", "xp", "start", "end", "render", "steps", "cross", "hit",
+]);
+const REQUIREMENT_KEYS = new Set(["skills", "equipped", "items", "quest", "diary", "steps", "start", "end"]);
 
 function animation(name, where) {
   const id = ANIMATIONS[name];
@@ -158,6 +161,31 @@ function failOf(spec, where) {
   return fail;
 }
 
+/**
+ * A failure that still gets the player across (`cross`): the success steps, then the hit. Made
+ * once the success steps are known.
+ */
+function crossingFail(fail, steps) {
+  if (!fail?.cross) return fail;
+  const hit = { hit: fail.hit ?? [1, 4] };
+  return {
+    ...fail,
+    steps: (context) => [...(typeof steps === "function" ? steps(context) : steps), hit],
+  };
+}
+
+/** `requires`: alternatives, any one of which lets the player use the shortcut. */
+function requirementsOf(spec, where) {
+  if (!spec) return undefined;
+  if (!Array.isArray(spec) || spec.length === 0) throw new Error(`agility-shortcuts.json: requires must be a list (${where})`);
+  return spec.map((alternative) => {
+    for (const key of Object.keys(alternative)) {
+      if (!REQUIREMENT_KEYS.has(key)) throw new Error(`agility-shortcuts.json: unknown requirement "${key}" (${where})`);
+    }
+    return alternative.steps ? { ...alternative, steps: template(alternative.steps, where) } : alternative;
+  });
+}
+
 function build(raw, index) {
   const where = raw.name ?? `entry ${index}`;
   for (const key of Object.keys(raw)) {
@@ -179,6 +207,8 @@ function build(raw, index) {
   if (raw.route != null) entry.route = template(raw.route, where);
   const fail = failOf(raw.fail, where);
   if (fail) entry.fail = fail;
+  const requires = requirementsOf(raw.requires, where);
+  if (requires) entry.requires = requires;
 
   let built;
   if (raw.between) {
@@ -199,6 +229,8 @@ function build(raw, index) {
       Object.assign(built, scripted, scripted.fail ? { fail: { ...built.fail, ...scripted.fail } } : {});
     }
   }
+
+  if (built.fail?.cross) built.fail = crossingFail(built.fail, built.steps);
 
   const tiles = raw.at == null ? [null] : Array.isArray(raw.at[0]) ? raw.at : [raw.at];
   return tiles.map((at) => (at ? { ...built, at } : built));

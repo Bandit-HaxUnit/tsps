@@ -17,7 +17,9 @@ Each entry in `agility-shortcuts.json`'s `shortcuts`:
 | `start`, `end` | Optional messages at the start and on success |
 | `render` | Optional walk animation for the whole crossing (`"BALANCE_WALK"`) |
 | `route` | Optional tile the player walks to before starting |
-| `fail` | Optional: the chance (`baseChance`, `neverFailLevel`, `fromLevel`), `xp` and `steps` of a failure |
+| `requires` | Optional: alternatives, any one of which lets the player use it (below). Without it, `level` is the Agility needed |
+| `fail` | Optional: the chance (`low`/`high`, the Wiki's success chart), `xp` and `steps` of a failure, or `cross: true` and `hit` when a failed attempt still gets across |
+| `unverified`, `note` | What has no capture behind it, or where a value comes from |
 
 and one way to play it:
 
@@ -28,6 +30,24 @@ and one way to play it:
 | `stile` | A two-tile stile: `axis` (`"x"`/`"y"`), `before`, `after`, `anim` |
 | `script` | A named script from `shortcuts/<Region>.js` or `shortcuts/Common.js`, given the entry's `params`, for what a template can't say (which way the player faces, which rock they clicked). Its `route`, `precondition` and `steps` replace the data's |
 | `refuse` | A message: the loc can't be used from there |
+
+### Requirements
+
+`requires` is a list; the first alternative the player meets is used, and its `steps` (and
+`start`, `end`) replace the entry's. Otherwise the player gets the first alternative's refusal.
+
+| Key | |
+| --- | --- |
+| `skills` | `{ "agility": 11, "strength": 37, "ranged": 19 }`, current (boosted) levels |
+| `equipped` | `[{ "slot": "weapon", "name": "crossbow", "message": ... }, { "slot": "ammunition", "ids": [9419], "message": ... }]` |
+| `items` | `[{ "ids": [...], "message": ... }]`, carried |
+| `quest` | `{ "key": "regicide", "stage": "complete" \| "started", "message": ... }`, or a list; asked through `quest:is-complete` / `quest:is-started`. A quest no plugin answers for is no bar |
+| `diary` | `{ "key": "falador", "tier": "medium", "enforce": false, "message": ... }`; checked through `diary:is-complete` only once `enforce` is true, when that tier's tasks can all be done here |
+
+### Failing
+
+With `low` and `high`, success is the OSRS skilling roll the Wiki's success charts plot:
+`(1 + floor(low × (99 − L) / 98 + high × (L − 1) / 98 + 0.5)) / 256` at Agility level `L`.
 
 ### Steps
 
