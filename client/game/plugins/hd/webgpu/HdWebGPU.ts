@@ -15,6 +15,11 @@ import {
     GPU_TEXTURE_USAGE,
 } from "../../../../render/webgpu/bindings";
 import { resolveWebGPURenderDistance } from "../../../../render/webgpu/frameConfig";
+import { resolveFogRange } from "../../../../render/RenderDistancePolicy";
+import { HD_AUTO_FOG_DEPTH_FACTOR } from "../../../../render/render/constants";
+
+const resolveHdFogRange = (renderDistance: number) => resolveFogRange({ renderDistance, autoFogDepth: true,
+    autoFogDepthFactor: HD_AUTO_FOG_DEPTH_FACTOR, manualFogDepth: 0, hd: true });
 import {
     SCENE_EXTENSION_FIRST_BINDING,
     type WebGPUSceneExtension,
@@ -325,9 +330,11 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
         this.uniforms[OFF_DIRECTIONAL + 1] = environment.directionalColor[1] * environment.lightStrength * 0.9;
         this.uniforms[OFF_DIRECTIONAL + 2] = environment.directionalColor[2] * environment.lightStrength * 0.9;
         this.uniforms.set(environment.fogColor, OFF_FOG_COLOR);
-        this.uniforms[OFF_FOG] = environment.fogDepth;
-        this.uniforms[OFF_FOG + 1] = environment.fogScale;
-        this.uniforms[OFF_FOG + 2] = fogEnd;
+        // Same haze as the WebGL path (HdPlugin): one range for both backends.
+        const fog = resolveHdFogRange(fogEnd);
+        this.uniforms[OFF_FOG] = fog.fogDepth;
+        this.uniforms[OFF_FOG + 1] = fog.fogEnd;
+        this.uniforms[OFF_FOG + 2] = Math.max(0.6, Math.min(1.2, 1.2 - environment.fogDepth * environment.fogScale * 0.08));
         this.uniforms[OFF_GROUND_FOG] = environment.groundFogStart / 128;
         this.uniforms[OFF_GROUND_FOG + 1] = environment.groundFogEnd / 128;
         this.uniforms[OFF_GROUND_FOG + 2] = environment.groundFogOpacity;

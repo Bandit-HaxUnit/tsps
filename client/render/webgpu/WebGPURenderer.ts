@@ -22,6 +22,7 @@ import { SdMapData } from "../loader/SdMapData";
 import { SdMapDataLoader } from "../loader/SdMapDataLoader";
 import { SdMapLoaderInput } from "../loader/SdMapLoaderInput";
 import { WebGPUMapSquare } from "./WebGPUMapSquare";
+import { resolveFogRange } from "../RenderDistancePolicy";
 import { WorldResources } from "./WorldResources";
 import { WebGPUActors } from "./actors/WebGPUActors";
 import { WebGPUInstances } from "./instances";
@@ -399,8 +400,9 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.cameraPosUni[1] = camera.getPosZ();
 
         const renderDistance = resolveWebGPURenderDistance(this);
-        const fogEnd = renderDistance;
-        const fogDepth = Math.max(0, fogEnd * AUTO_FOG_DEPTH_FACTOR);
+        // HD spreads haze over long views, as on WebGL (render/render/frame/render.ts).
+        const { fogEnd, fogDepth } = resolveFogRange({ renderDistance, autoFogDepth: true,
+            autoFogDepthFactor: AUTO_FOG_DEPTH_FACTOR, manualFogDepth: 0, hd: this.osrsClient.hdPlugin?.isEnabled() });
 
         const data = this.world.sceneData;
         data.set(camera.viewProjMatrix as Float32Array, 0);

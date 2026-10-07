@@ -15,7 +15,7 @@ struct HdUniforms {
     u_hdAmbient: vec4<f32>,
     u_hdDirectional: vec4<f32>,
     u_hdFogColor: vec4<f32>,
-    u_hdFog: vec4<f32>,          // depth, scale, draw distance in tiles
+    u_hdFog: vec4<f32>,          // start, end (tiles), curve exponent
     u_hdGroundFog: vec4<f32>,    // start, end, opacity
     u_hdGrading: vec4<f32>,      // saturation, contrast, brightness, rim
     u_hdSpecular: f32,
@@ -38,21 +38,9 @@ fn hdSaturation(color: vec3<f32>, amount: f32) -> vec3<f32> {
 }
 
 fn hdFogAmount(position: vec2<f32>) -> f32 {
-    let depth = clamp(hd.u_hdFog.x / 5.0, 0.0, 1.0);
-    if (depth <= 0.0002) {
-        return 0.0;
-    }
-    let scale = clamp(hd.u_hdFog.y, 0.0, 16.0);
-    let distance = hd.u_hdFog.z;
     let delta = abs(position - scene.u_playerPos);
     let squareDist = max(delta.x, delta.y);
-    let reach = clamp((scale - 1.0) / 15.0, 0.0, 1.0);
-    let rimWidth = max(8.0, distance * 0.18) * mix(1.0, 3.0, reach);
-    let rim = pow(smoothstep(distance - rimWidth, distance, squareDist), mix(0.72, 0.42, depth));
-    let wallBand = max(3.0, distance * 0.06) * mix(1.0, 2.0, reach);
-    let wall = 1.0 - smoothstep(0.0, wallBand, distance - squareDist);
-    let nearAttenuation = smoothstep(0.0, distance * mix(0.18, 0.34, reach), squareDist);
-    return clamp((rim * (1.0 + 0.55 * depth) + wall * (0.9 + 0.5 * depth)) * scale * pow(depth, 0.55) * 1.25 * nearAttenuation, 0.0, 1.0);
+    return pow(smoothstep(hd.u_hdFog.x, hd.u_hdFog.y, squareDist), hd.u_hdFog.z);
 }
 
 fn hdShadow(position: vec3<f32>, normal: vec3<f32>) -> f32 {

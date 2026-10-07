@@ -131,7 +131,7 @@ function shade(skip: string): string {
             let hdFog = hdFogAmount(input.v_hdPosition.xz);
             let groundFog = smoothstep(0.0, 1.0, (input.v_hdPosition.y - hd.u_hdGroundFog.x) / min(-0.001, hd.u_hdGroundFog.y - hd.u_hdGroundFog.x)) * hd.u_hdGroundFog.z;
             fog = max(fog, max(hdFog, groundFog));
-            fogColor = hd.u_hdFogColor.rgb;
+            fogColor = mix(hd.u_hdFogColor.rgb, scene.u_skyColor.rgb, hdFog);
         }
     }
 `;
