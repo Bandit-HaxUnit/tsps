@@ -26,6 +26,7 @@ const RESTORE_CHAT_KEYBOARD_SCRIPT = 2158;
 /** Per-frame widget hover/scroll/click/drag/keyboard input extracted from OsrsClient. */
 export class WidgetInputController {
     private readonly state: WidgetInputState = createWidgetInputState();
+    private worldMapTouchDrag = false;
 
     constructor(private readonly deps: WidgetInputControllerDeps) {}
 
@@ -96,9 +97,21 @@ export class WidgetInputController {
 
         const isNewClick = input.leftClickX !== -1 && input.leftClickY !== -1;
         const isHolding = input.isDragging();
-        this.deps
+        // Touch has no held button (a one-finger drag orbits the camera), so a swipe that
+        // starts on the world map pans it like a held left button, and the camera stays put.
+        const touchDrag = input.isTouch && input.mouseWheelDown;
+        const touchDragStarted = touchDrag && !this.worldMapTouchDrag;
+        this.worldMapTouchDrag = touchDrag;
+        const panningMap = this.deps
             .getWorldMap()
-            .handleWorldMapDragInput(frame.hits, frame.mx, frame.my, isNewClick, isHolding);
+            .handleWorldMapDragInput(
+                frame.hits,
+                frame.mx,
+                frame.my,
+                isNewClick || touchDragStarted,
+                isHolding || touchDrag,
+            );
+        if (panningMap && touchDrag) input.consumeCameraDrag();
 
         const getPrimaryWidgetAction = createPrimaryWidgetActionResolver(
             this.deps,
