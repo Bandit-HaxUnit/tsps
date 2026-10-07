@@ -463,6 +463,7 @@ function resetMatchState() {
   restoreFlagToBase(data.TEAM.SARADOMIN);
   restoreFlagToBase(data.TEAM.ZAMORAK);
   clearStrayDroppedFlags();
+  clearFlagHints();
 }
 
 function beginStartCountdown() {
@@ -567,7 +568,9 @@ function clearGroundItems() {
  * target sent per player so a stationary flag does not spam packets, and it still re-sends
  * every HINT_REFRESH_MS in case any other system cleared the arrow behind its back.
  */
-const hintState = new WeakMap();
+// Keyed by player so a hint can be cleared later even after the player has left the arena
+// (area-membership lists miss anyone who crossed the boundary at the wrong tick).
+const hintState = new Map();
 const HINT_REFRESH_MS = 2000;
 
 function updateFlagHint(player) {
@@ -625,14 +628,14 @@ function updateFlagHint(player) {
 }
 
 function clearFlagHints() {
-  if (!game.gameArea) {
-    return;
+  let cleared = 0;
+  for (const player of hintState.keys()) {
+    player.getPacketSender?.()?.clearHintArrow?.();
+    cleared += 1;
   }
-  for (const player of game.gameArea.getPlayers()) {
-    if (hintState.has(player)) {
-      hintState.delete(player);
-      player.getPacketSender().clearHintArrow();
-    }
+  hintState.clear();
+  if (process.env.CW_BOT_DEBUG === "1" && cleared > 0) {
+    console.log(`[cw_hint] clearFlagHints cleared=${cleared}`);
   }
 }
 
@@ -753,6 +756,8 @@ module.exports = function createCastleWarsGame(registry) {
   RegionManager = registry.getRegionManager();
   TaskManager = registry.getTaskManager();
   World = registry.getWorld();
+  // Hint state holds a strong ref only while a hint is live; forget players on logout.
+  registry.onPlayerLogout?.(({ player }) => hintState.delete(player));
   const { SARADOMIN, ZAMORAK } = data.TEAM;
   teamVars = { [SARADOMIN]: new Map(), [ZAMORAK]: new Map() };
   flagStatus = { [SARADOMIN]: 0, [ZAMORAK]: 0 };
