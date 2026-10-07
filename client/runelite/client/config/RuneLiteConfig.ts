@@ -14,7 +14,7 @@ export const RuneLiteConfig = ConfigGroup("runelite", {
         description:
             "Docked: panels open beside the game, which narrows to make room. Overlay: panels open over the game.",
         enum: SidebarMode,
-        default: SidebarMode.Docked,
+        default: SidebarMode.Overlay,
         position: 0,
     }),
 });
