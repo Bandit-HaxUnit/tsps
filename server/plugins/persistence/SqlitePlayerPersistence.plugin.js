@@ -14,6 +14,7 @@ const { SkullType } = require("../../src/main/typescript/elvarg/game/model/Skull
 const { DonatorRights } = require("../../src/main/typescript/elvarg/game/model/rights/DonatorRights");
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
+const { SqliteSaveHistory, PRE_ROLLBACK_REASON, ROLLBACK_REASON } = require("./SqliteSaveHistory");
 
 function legacyJsonImportEnabled() {
   const value = String(process.env.PLAYER_SAVE_IMPORT_LEGACY_JSON ?? "0")
@@ -62,6 +63,10 @@ class SqlitePlayerPersistence extends PlayerPersistence {
         save_json = excluded.save_json,
         updated_at = excluded.updated_at
     `);
+    this.history = new SqliteSaveHistory(this.database);
+    this.markInUse();
+    /** Restores waiting for an online player's next save: username -> { json, recorded }. */
+    this.pendingRestores = new Map();
     if (SqlitePlayerPersistence.IMPORT_LEGACY_JSON) {
       this.importLegacySaves();
     } else {
@@ -70,6 +75,8 @@ class SqlitePlayerPersistence extends PlayerPersistence {
   }
 
   load(username) {
+    // Logging back in after a rollback: the restored save is in place.
+    this.pendingRestores.delete(this.normalizeUsername(username));
     const row = this.findSave.get(this.normalizeUsername(username));
     if (!row || typeof row.saveJson !== "string") {
       return null;
@@ -78,19 +85,88 @@ class SqlitePlayerPersistence extends PlayerPersistence {
     return this.hydratePlayerSave(parsed);
   }
 
-  save(player) {
+  /**
+   * Writes the player's save and, for a real player, a copy in the save history. A player with a
+   * restore waiting (rolled back while online) gets the restored save instead, until they log
+   * back in; their own state goes in the history first as "pre-rollback".
+   */
+  save(player, reason = "save") {
     if (!player || !player.getUsername()) {
       return;
     }
 
+    const username = this.normalizeUsername(player.getUsername());
     const save = PlayerSave.fromPlayer(player);
     const serialized = JSON.stringify(save, this.replacer.bind(this), 2);
     this.validateSerializedSave(serialized, player.getUsername());
-    this.savePlayer.run(
-      this.normalizeUsername(player.getUsername()),
-      serialized,
-      new Date().toISOString()
-    );
+    const savedAt = new Date().toISOString();
+    const pending = this.pendingRestores.get(username);
+    const keepHistory = player.isPlayerBot?.() !== true;
+    this.inTransaction(() => {
+      if (pending) {
+        if (!pending.recorded) this.history.record(username, serialized, PRE_ROLLBACK_REASON, savedAt);
+        pending.recorded = true;
+        this.savePlayer.run(username, pending.json, savedAt);
+        this.history.record(username, pending.json, ROLLBACK_REASON, savedAt);
+        return;
+      }
+      this.savePlayer.run(username, serialized, savedAt);
+      if (keepHistory) this.history.record(username, serialized, reason, savedAt);
+    });
+  }
+
+  /**
+   * Writes `<database>.pid` while this server has the database open, so the rollback script
+   * (scripts/rollback-saves.mjs) can refuse to run under it.
+   */
+  markInUse() {
+    const pidFile = `${SqlitePlayerPersistence.DATABASE_PATH}.pid`;
+    fs.writeFileSync(pidFile, String(process.pid));
+    process.once("exit", () => {
+      try {
+        if (fs.readFileSync(pidFile, "utf8") === String(process.pid)) fs.unlinkSync(pidFile);
+      } catch {
+        // Already gone.
+      }
+    });
+  }
+
+  inTransaction(work) {
+    this.database.exec("BEGIN");
+    try {
+      work();
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  supportsHistory() {
+    return true;
+  }
+
+  listSnapshots(username, limit = 15) {
+    return this.history.list(this.normalizeUsername(username), limit);
+  }
+
+  /** See PlayerPersistence.restoreSnapshot. An offline player's current save goes in the history first. */
+  restoreSnapshot(username, id, { online = false } = {}) {
+    const name = this.normalizeUsername(username);
+    const copy = this.history.get(name, id);
+    if (!copy) return null;
+    if (online) {
+      this.pendingRestores.set(name, { json: copy.json, recorded: false });
+      return { snapshot: copy.snapshot, pending: true };
+    }
+    const current = this.findSave.get(name)?.saveJson;
+    const savedAt = new Date().toISOString();
+    this.inTransaction(() => {
+      if (typeof current === "string") this.history.record(name, current, PRE_ROLLBACK_REASON, savedAt);
+      this.savePlayer.run(name, copy.json, savedAt);
+      this.history.record(name, copy.json, ROLLBACK_REASON, savedAt);
+    });
+    return { snapshot: copy.snapshot, pending: false };
   }
 
   exists(username) {

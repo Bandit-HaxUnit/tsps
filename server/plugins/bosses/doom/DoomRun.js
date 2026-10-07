@@ -91,7 +91,7 @@ function arenaClass() {
 
 function savePlayer(player) {
   try {
-    Shared.core().GameConstants.PLAYER_PERSISTENCE?.save(player);
+    Shared.core().GameConstants.PLAYER_PERSISTENCE?.save(player, "doom");
   } catch (error) {
     console.warn("[doom] save failed", error);
   }

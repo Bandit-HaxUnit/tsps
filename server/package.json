@@ -35,6 +35,7 @@
     "dev:stress": "SERVER_PERF_PERIODIC_ENABLED=1 SERVER_PERF_PERIODIC_INTERVAL_MS=10000 SERVER_PERF_PERIODIC_SUMMARY_TICKS=30 node ../scripts/run-with-env.mjs - ./node_modules/nodemon/bin/nodemon.js --ext ts,json,js ./src/main/typescript/elvarg/Server.ts 0 --stressTest",
     "test:player-punishment": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/player-punishment-smoke.ts",
     "test:password": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/password-util-smoke.ts",
+    "saves:rollback": "node ./scripts/rollback-saves.mjs",
     "ensure-cache": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/ensure-cache.ts",
     "test:login": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/login-smoke.ts",
     "test:developer-rights": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/developer-rights-smoke.ts",
