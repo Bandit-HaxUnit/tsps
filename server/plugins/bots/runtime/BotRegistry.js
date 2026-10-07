@@ -570,7 +570,9 @@ function createBotRegistry(options) {
       assignPvpMetadata(state, {
         metadata: pvpMetadata,
       });
-      state.pvp.presetPoolEnabled = true;
+      // Hotspot clusters use their loadout catalogue bands (wide variety inside a level
+      // band); only the free-roaming region bots wear a player preset.
+      state.pvp.presetPoolEnabled = assignedHotspotId == null;
       syncBotProfileAttribute(bot, state);
       if (!applyInitialPvpLoadout(bot, state)) state.pvp.loadoutPending = true;
     }

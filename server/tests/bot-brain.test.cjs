@@ -972,28 +972,27 @@ test('idle pvp walking stays inside its hotspot and pauses for movement or comba
   assert.equal(peekMovementRequest(player), null);
 });
 
-test('hotspot clusters match their design: preset groups, or the f2p ditch', () => {
+test('hotspot clusters fill their band from their loadout catalogue; the ditch stays f2p', () => {
   for (const hotspot of listWildernessHotspots()) {
     if (hotspot.id === 'varrock_ditch') {
-      // The one free-to-play spot: f2p loadouts only, no player-preset group.
       assert.equal(hotspot.presetGroup ?? null, null, 'the ditch is not a preset cluster');
       for (const loadoutId of hotspot.allowedLoadouts) {
         assert.ok(loadoutId.startsWith('f2p_'), `${hotspot.id} is free-to-play only`);
       }
       continue;
     }
-    assert.ok(hotspot.presetGroup, `${hotspot.id} names a preset group`);
+    assert.equal(hotspot.presetGroup ?? null, null, `${hotspot.id} does not use player presets`);
     const band = hotspot.combatLevelRange;
     for (const loadoutId of hotspot.allowedLoadouts) {
       assert.equal(loadoutId.startsWith('f2p_'), false, `${hotspot.id} is members-only`);
-      for (let i = 0; i < 3; i++) {
-        const state = { pvp: { hotspotId: hotspot.id, loadoutId, profileId: hotspot.allowedProfiles[0], presetPoolEnabled: true, presetPoolGroup: hotspot.presetGroup } };
-        const generated = loadoutTesting.buildGeneratedPreset(null, state);
-        assert.ok(generated, `${hotspot.id}/${loadoutId} generates a preset`);
-        const stats = generated.preset.getStats();
-        const level = SkillManager.prototype.getCombatLevel.call({ skills: { maxLevel: stats } });
-        assert.ok(level >= band.min && level <= band.max, `${hotspot.id} ${generated.archetypeId}: level ${level} outside ${band.min}-${band.max}`);
-      }
+      const generated = loadoutTesting.buildGeneratedPreset(null, {
+        pvp: { hotspotId: hotspot.id, loadoutId, profileId: hotspot.allowedProfiles[0] },
+      });
+      assert.ok(generated, `${hotspot.id}/${loadoutId} generates a loadout`);
+      const stats = generated.preset.getStats();
+      const level = SkillManager.prototype.getCombatLevel.call({ skills: { maxLevel: stats } });
+      assert.ok(level >= band.min && level <= band.max,
+        `${hotspot.id}/${loadoutId}: level ${level} outside ${band.min}-${band.max}`);
     }
   }
 });
