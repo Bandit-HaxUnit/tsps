@@ -22,10 +22,12 @@ import { TileMarkersPlugin } from "../../../game/plugins/tilemarkers/TileMarkers
 import { VengeanceTimerPlugin } from "../../../game/plugins/vengeancetimer/VengeanceTimerPlugin";
 import { WeatherPlugin } from "../../../game/plugins/weather/WeatherPlugin";
 import type { LegacyConfigMigration } from "../../impl/LegacyConfigMigration";
+import { ConfigPlugin } from "./config/ConfigPlugin";
 import type { PluginClass } from "./Plugin";
 
 /** Static core plugin list (RuneLite's `PluginManager.loadCorePlugins`). */
 export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
+    ConfigPlugin,
     HdPlugin,
     FirstPersonPlugin,
     GameFrame317Plugin,
