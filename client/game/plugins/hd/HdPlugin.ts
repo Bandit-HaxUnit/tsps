@@ -1,8 +1,8 @@
 import { mat4, vec3 } from "gl-matrix";
 import PicoGL, { type DrawCall, type Framebuffer, type Program, type Texture } from "picogl";
+import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
 import type { WebGLOsrsRenderer } from "../../../render/WebGLOsrsRenderer";
 import type { ProgramSource } from "../../../render/shaders/ShaderUtil";
-import type { ClientPlugin } from "../ClientPluginManager";
 import { environmentAt } from "../../../render/render/environment";
 import { createHdProgram } from "./HdShader";
 import { collectHdLights } from "./HdLights";
@@ -10,18 +10,28 @@ import lighting from "./hd-lighting.glsl";
 import { HdMaterials } from "./HdMaterials";
 import { Frustum } from "../../Frustum";
 import { resolveFogRange } from "../../../render/RenderDistancePolicy";
+import type {
+    WebGPUSceneExtension,
+    WebGPUSceneExtensionContext,
+} from "../../../render/webgpu/sceneExtension";
+import { createHdWebGPUExtension } from "./webgpu/HdWebGPU";
 
 // PicoGL exposes these methods at runtime but omits them from its declarations.
 type SceneProgram = Program & { bind(): void; uniform(name: string, value: unknown): void };
-const STORAGE_KEY = "xrsps.plugin.hd.enabled";
 const SHADOW_MAP_SIZE = 2048;
 const LIGHT_LIMIT = 16;
 const SHADOW_INTERVAL_MS = 1000 / 15;
 const LIGHT_INTERVAL_MS = 1000 / 30;
 
-export class HdPlugin implements ClientPlugin {
-    private enabled = false;
-    private readonly listeners = new Set<() => void>();
+export class HdPlugin extends Plugin {
+    static descriptor: PluginDescriptor = {
+        name: "117 HD",
+        description: "HD lighting, environments and shadows.",
+        tags: ["render"],
+        enabledByDefault: false,
+        configKey: "hdplugin",
+    };
+
     private readonly renderers = new Map<WebGLOsrsRenderer, {
         programs: SceneProgram[];
         placeholder: Texture;
@@ -40,23 +50,6 @@ export class HdPlugin implements ClientPlugin {
     }>();
     private readonly shadowMatrix = mat4.create();
     private readonly inverseView = mat4.create();
-
-    constructor() {
-        try { this.enabled = localStorage.getItem(STORAGE_KEY) === "true"; } catch { /* Storage can be unavailable. */ }
-    }
-
-    getEnabled = (): boolean => this.enabled;
-    subscribe = (listener: () => void): (() => void) => {
-        this.listeners.add(listener);
-        return () => { this.listeners.delete(listener); };
-    };
-
-    setEnabled = (enabled: boolean): void => {
-        if (this.enabled === enabled) return;
-        this.enabled = enabled;
-        try { localStorage.setItem(STORAGE_KEY, String(enabled)); } catch { /* Session toggle still works. */ }
-        for (const listener of this.listeners) listener();
-    };
 
     transformSceneProgram(source: ProgramSource): ProgramSource {
         return createHdProgram(source, lighting);
@@ -95,9 +88,9 @@ export class HdPlugin implements ClientPlugin {
             }
             uniforms.clear();
         };
-        set("u_hdEnabled", this.enabled);
+        set("u_hdEnabled", this.isEnabled());
         set("u_hdShadowPass", false);
-        if (!this.enabled) {
+        if (!this.isEnabled()) {
             state.lastShadow = undefined;
             state.lastLights = undefined;
             flush();
@@ -209,6 +202,11 @@ export class HdPlugin implements ClientPlugin {
             if (scissor) renderer.app.enable(PicoGL.SCISSOR_TEST);
             if (blend) renderer.app.enable(PicoGL.BLEND);
         }
+    }
+
+    /** The WebGPU backend's equivalent of the hooks above: see ./webgpu/HdWebGPU.ts. */
+    createWebGPUSceneExtension(context: WebGPUSceneExtensionContext): WebGPUSceneExtension {
+        return createHdWebGPUExtension(() => this.isEnabled(), context);
     }
 
     disposeRenderer(renderer: WebGLOsrsRenderer): void {

@@ -128,6 +128,11 @@ export const isDebugMode = urlParams?.has("debug") ?? false;
 // not generic touch-capable desktop hardware.
 export const isMobileMode = checkAndroid() || isIos || forceMobileMode;
 
+// Hover tooltips (and the world mouseover text they feed) are a desktop-mouse feature;
+// mobile opens the menu on tap. Touch hardware alone must not turn them off, or a
+// touchscreen laptop loses the world hover text while keeping the desktop layout (#358).
+export const tooltipsEnabledByDefault = !isMobileMode;
+
 export type SafeAreaInsets = {
     top: number;
     right: number;
@@ -262,6 +267,15 @@ export const isWebGL2Supported = (() => {
     if (typeof document === "undefined") return false;
     try {
         return !!document.createElement("canvas").getContext("webgl2");
+    } catch {
+        return false;
+    }
+})();
+
+export const isWebGPUSupported = (() => {
+    if (typeof navigator === "undefined") return false;
+    try {
+        return !!navigator.gpu;
     } catch {
         return false;
     }

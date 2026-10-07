@@ -4,7 +4,9 @@ import { HD_MATERIALS, HD_GROUND_MATERIALS, HD_DETAIL_TEXTURES, type HdMaterial 
 export const HD_TEXTURE_SIZE = 256;
 export const HD_DETAIL_TEXTURE_SIZE = 512;
 export const HD_LOOKUP_WIDTH = 1024 + HD_GROUND_MATERIALS.length + 1;
-const files = [...new Set([...HD_MATERIALS, ...HD_GROUND_MATERIALS].flatMap(m => [m.file, m.normal]).filter((file): file is string => !!file && !HD_DETAIL_TEXTURES.includes(file)))];
+export const HD_TEXTURE_FILES = [...new Set([...HD_MATERIALS, ...HD_GROUND_MATERIALS].flatMap(m => [m.file, m.normal]).filter((file): file is string => !!file))];
+// WebGL loads detail textures into their own 512px array; WebGPU keeps them all at 256px.
+const files = HD_TEXTURE_FILES.filter(file => !HD_DETAIL_TEXTURES.includes(file));
 
 export class HdMaterials {
     readonly lookup: Texture;
@@ -28,7 +30,7 @@ export class HdMaterials {
         this.pixels.fill(255, 0, HD_TEXTURE_SIZE * HD_TEXTURE_SIZE * 4);
         // Allocate at final dimensions: PicoGL counts array depth when allocating
         // mip levels, so width/height must exceed our small material layer count.
-        this.textures = app.createTextureArray(this.pixels, HD_TEXTURE_SIZE, HD_TEXTURE_SIZE, files.length + 1, {
+        this.textures = app.createTextureArray(this.pixels, HD_TEXTURE_SIZE, HD_TEXTURE_SIZE, HD_TEXTURE_FILES.length + 1, {
             minFilter: PicoGL.LINEAR_MIPMAP_LINEAR, magFilter: PicoGL.LINEAR,
             wrapS: PicoGL.REPEAT, wrapT: PicoGL.REPEAT, maxAnisotropy: 8,
         });

@@ -198,6 +198,8 @@ const WELCOME_SCREEN_GROUP_ID = 378;
 
 export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: number, resized: boolean): void {
 
+        host.osrsClient.runeLite?.postBeforeRender();
+
         profiler.startFrame();
 
         // One-time initialization of overlay scales. onResize fires before host.app is
@@ -662,7 +664,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         const renderDistance = host.resolveEffectiveRenderDistanceTiles(frameCount | 0);
         // Server scene rebases at local tile 16/88. Load enough static scenery
         // beyond those edges for the requested HD view, without changing simulation.
-        const sceneryPadding = host.osrsClient.hdPlugin?.getEnabled() ? Math.ceil(Math.max(0, renderDistance - 16) / 8) : 0;
+        const sceneryPadding = host.osrsClient.hdPlugin?.isEnabled() ? Math.ceil(Math.max(0, renderDistance - 16) / 8) : 0;
         host.mapManager.update(
             host.playerPosUni[0],
             host.playerPosUni[1],
@@ -683,7 +685,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
             autoFogDepth: host.autoFogDepth,
             autoFogDepthFactor: host.autoFogDepthFactor,
             manualFogDepth: host.fogDepth,
-            hd: host.osrsClient.hdPlugin?.getEnabled(),
+            hd: host.osrsClient.hdPlugin?.isEnabled(),
         });
 
         // Update scene uniform buffer
@@ -815,6 +817,10 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         host.renderTransparentPlayerPass(playerDataTextureIndex, playerDataTexture);
         transparentPlayerIndices = Math.max(0, host._frameIndices - passStartIndices);
         transparentPlayerBatches = Math.max(0, host._frameBatches - passStartBatches);
+        profiler.endPhase();
+
+        profiler.startPhase("afterScene");
+        host.osrsClient.clientPlugins.afterSceneRender(host);
         profiler.endPhase();
 
         try {

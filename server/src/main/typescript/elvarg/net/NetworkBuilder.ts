@@ -22,6 +22,7 @@ import {
   CREATION_MENU_GROUP_ID,
   CREATION_MENU_FIRST_ITEM_COMPONENT,
   CREATION_MENU_MAX_QUANTITY,
+  CREATION_MENU_LAST_ITEM_ATTRIBUTE,
 } from "./packet/PacketSender";
 import { MapRegionReplacementManager } from "../game/collision/MapRegionReplacementManager";
 import {
@@ -441,9 +442,12 @@ export class ClientConnection {
           ) {
             const itemId = creationMenu.getItems()[creationChildId - CREATION_MENU_FIRST_ITEM_COMPONENT];
             if (Number.isInteger(itemId)) {
+              const limit = creationMenu.getOptions?.()?.maxAmount;
               const amount = Number.isInteger(packet.childIndex) && packet.childIndex > 0
-                ? Math.min(packet.childIndex, CREATION_MENU_MAX_QUANTITY)
+                ? Math.min(packet.childIndex, Number.isInteger(limit) ? limit : CREATION_MENU_MAX_QUANTITY)
                 : 1;
+              // Remembered for the space key next time (CREATION_MENU_LAST_ITEM_VARP).
+              this.player.setAttribute(CREATION_MENU_LAST_ITEM_ATTRIBUTE, creationChildId - CREATION_MENU_FIRST_ITEM_COMPONENT);
               this.player.getPacketSender().closeCreationMenu();
               creationMenu.execute(itemId, amount);
               continue;
@@ -466,7 +470,10 @@ export class ClientConnection {
         }
         case "dialogue_amount": {
           const action = this.player?.getEnteredAmountAction();
-          if (action && packet.amount > 0) action.execute(packet.amount);
+          // 0 is dropped unless the prompt takes it (a setting where 0 means off).
+          if (action && (packet.amount > 0 || (packet.amount === 0 && (action as { acceptsZero?: boolean }).acceptsZero === true))) {
+            action.execute(packet.amount);
+          }
           else if (this.player && Bank.isOpen(this.player) && packet.amount > 0) {
             this.player.setBankCustomQuantity(packet.amount);
             this.player.getPacketSender().sendVarbit(3960, packet.amount);
@@ -1001,7 +1008,7 @@ export class ClientConnection {
     if (optionIndex === 0) return;
     if (/^(wield|wear|equip)$/.test(option)) {
       EquipPacketListener.equip(player, packet.itemId, packet.slot, 3214);
-    } else if (option === "drop" || option === "destroy" || optionIndex === 5) {
+    } else if (ItemActionPacketListener.isDropOption(option, optionIndex)) {
       DropItemPacketListener.drop(player, packet.itemId, 3214, packet.slot);
     } else if (option === "examine") {
       const definition = ItemDefinition.forId(packet.itemId);
@@ -1042,7 +1049,9 @@ export class ClientConnection {
     if (option === "examine") {
       const definition = ItemDefinition.forId(packet.itemId);
       player.sendMessage(definition.getExamine() || definition.getName());
-    } else if (player.getPrivateArea() || option === "take" || packet.optionIndex === 3 || packet.optionIndex == null) {
+    } else if (option === "take" || (!option && (player.getPrivateArea() || packet.optionIndex === 3 || packet.optionIndex == null))) {
+      // A named option other than Take is the item's own, even in a private area (giant
+      // bones' "Bury" is their op3, where Take usually sits).
       PickupItemPacketListener.pickup(player, packet.itemId, packet.x, packet.y, packet.stackId);
     } else {
       SecondGroundItemOptionPacketListener.interact(

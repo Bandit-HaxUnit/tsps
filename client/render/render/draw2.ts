@@ -320,11 +320,7 @@ export function drawWithRoofPlaneFilter(host: WebGLOsrsRendererHost,
             return;
         }
 
-        if (!map && (!drawRangePlanes || roofPlaneLimit >= 3)) {
-            host.draw(drawCall, drawRanges);
-            return;
-        }
-
+        const cullPlanes = !!drawRangePlanes && roofPlaneLimit < 3;
         const cullLimit = roofPlaneLimit | 0;
         const filtered = host.roofFilteredDrawIndices;
         filtered.length = 0;
@@ -332,18 +328,21 @@ export function drawWithRoofPlaneFilter(host: WebGLOsrsRendererHost,
         const point = map ? host.getRenderCullTile() : undefined;
         let distance = map ? resolveFogRange({ renderDistance: host.getFrameRenderDistanceTiles(),
             autoFogDepth: host.autoFogDepth, autoFogDepthFactor: host.autoFogDepthFactor,
-            manualFogDepth: host.fogDepth, hd: host.osrsClient.hdPlugin?.getEnabled() }).fogEnd : 0;
+            manualFogDepth: host.fogDepth, hd: host.osrsClient.hdPlugin?.isEnabled() }).fogEnd : 0;
         // Fog is centred on the shader's player position. Free-camera culling
         // can use a different origin; pad conservatively rather than opening holes.
-        if (map && host.osrsClient.hdPlugin?.getEnabled()) distance += Math.max(
+        if (map && host.osrsClient.hdPlugin?.isEnabled()) distance += Math.max(
             Math.abs(point!.x - host.playerPosUni[0]), Math.abs(point!.y - host.playerPosUni[1]));
         const lodDistance = map ? host.getFrameLodThresholdTiles() : 0;
         const baseX = map?.getRenderBaseTileX() ?? 0, baseZ = map?.getRenderBaseTileY() ?? 0;
 
         for (let i = 0; i < totalRanges; i++) {
+            // An empty range (an animated loc on an empty frame) is still a draw call where
+            // multi-draw is emulated (ANGLE on D3D11).
+            if (((drawRanges[i]?.[1] ?? 0) | 0) === 0) continue;
             // Missing plane metadata should never happen, but default to visible to avoid
             // accidentally dropping geometry.
-            const plane = drawRangePlanes && i < drawRangePlanes.length ? drawRangePlanes[i] : 0;
+            const plane = cullPlanes && i < drawRangePlanes!.length ? drawRangePlanes![i] : 0;
             if (plane <= cullLimit && (!map || moving || sceneryRangeVisible(drawRanges[i], baseX, baseZ,
                 point!.x, point!.y, distance, lodDistance, lod, host.osrsClient.camera.frustum, host.hdShadowFrustum))) {
                 filtered.push(i);
@@ -438,7 +437,7 @@ export function isMapWithinRenderDistance(host: WebGLOsrsRendererHost,
 
 export function resolveEffectiveRenderDistanceTiles(host: WebGLOsrsRendererHost, frameId: number): number {
 
-        const base = clamp(host.osrsClient.renderDistance | 0, 25, host.osrsClient.hdPlugin?.getEnabled() ? 160 : 90);
+        const base = clamp(host.osrsClient.renderDistance | 0, 25, host.osrsClient.hdPlugin?.isEnabled() ? 160 : 90);
         if ((host.effectiveRenderDistanceFrame | 0) === (frameId | 0)) {
             return host.effectiveRenderDistanceTiles | 0;
         }

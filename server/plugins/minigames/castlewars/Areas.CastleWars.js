@@ -104,7 +104,7 @@ function defineAreas() {
       }
       player.setAttribute(game.TRANSITION_KEY, false);
       player.getPacketSender().sendSubInterface(data.OVERLAY_HUD_UID, data.STATUS_OVERLAY_INTERFACE[game.getTeamId(player)], 1);
-      player.getPacketSender().sendInteractionOption("Attack", 2, true);
+      player.getPacketSender().sendPlayerOption(data.ATTACK_OPTION_SLOT, "Attack", true);
     }
 
     postLeave(character, logout) {
@@ -112,7 +112,7 @@ function defineAreas() {
       if (!player) {
         return;
       }
-      player.getPacketSender().sendInteractionOption("null", 2, true);
+      player.getPacketSender().sendPlayerOption(data.ATTACK_OPTION_SLOT, "", false);
       game.closeOverlay(player);
       player.getPacketSender().sendEntityHintRemoval(true);
       game.clearCastleWarsItems(player);

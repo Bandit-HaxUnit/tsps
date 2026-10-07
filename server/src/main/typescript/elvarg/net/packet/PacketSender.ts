@@ -44,6 +44,7 @@ import {
   encodeSystemUpdate,
   encodeVarbit,
   encodeVarp,
+  encodeVarpLong,
   encodeWidgetClose,
   encodeWidgetCloseSub,
   encodeWidgetOpen,
@@ -76,7 +77,7 @@ import {
   WORLD_MAP_TARGET_UID,
 } from "../protocol/WorldMapProtocol";
 import { CacheDefinitions } from "../../game/cache/CacheDefinitions";
-const CHATBOX_MODAL_TARGET_UID = (162 << 16) | 567;
+const CHATBOX_MODAL_TARGET_UID = (162 << 16) | 568;
 const MAIN_MODAL_TARGET_UID = (161 << 16) | 16;
 const VARBIT_MULTICOMBAT_AREA = 4605;
 // Quest completion states consulted by spellbook CS2 scripts. Keep these client
@@ -123,6 +124,10 @@ export const CREATION_MENU_GROUP_ID = 270;
 export const CREATION_MENU_FIRST_ITEM_COMPONENT = 15;
 export const CREATION_MENU_MAX_QUANTITY = 28;
 export const CREATION_MENU_CHATMODAL_UNCLAMP_VARBIT = 10670;
+// The menu's script gives the space key to the item at this varp's position: the one chosen
+// last (clientscript 2046 reads it for every menu whose enum 3623 entry is 1, the default).
+export const CREATION_MENU_LAST_ITEM_VARP = 2673;
+export const CREATION_MENU_LAST_ITEM_ATTRIBUTE = "creation-menu:last-item";
 // Widget transmit flags: bit (opIndex+1) must be set for that op to reach the server (see
 // WidgetActionRouter.shouldTransmitAction on the client) - ops 1-5 are Make 1/5/10/X/All.
 const CREATION_MENU_OP_FLAGS = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5);
@@ -225,6 +230,12 @@ export class PacketSender {
   getVarbit(id: number): number {
     const { baseVar, startBit, endBit } = CacheDefinitions.getVarbit(id);
     return (this.getVarp(baseVar) >> startBit) & BIT_MASKS[endBit - startBit];
+  }
+
+  /** A 64-bit varp; the client's scripts read it with push_var_long. */
+  sendVarpLong(id: number, value: bigint | number): this {
+    this.player.getSession().sendClientPacket(encodeVarpLong(id, BigInt(value)));
+    return this;
   }
 
   sendConfig(id: number, state: number): this {
@@ -656,6 +667,16 @@ export class PacketSender {
     Bank.closeSearch(this.player);
   }
 
+  /**
+   * "interface:closed" { player, interfaceId }: the player's main interface closed, by any route
+   * (its own close, the client's IF_CLOSE, walking away), so content can undo what it set up.
+   */
+  private emitInterfaceClosed(interfaceId: number): void {
+    if (interfaceId < 0) return;
+    const { PluginManager } = require("../../plugins/PluginManager") as typeof import("../../plugins/PluginManager");
+    PluginManager.emitCustomEvent("interface:closed", { player: this.player, interfaceId });
+  }
+
   private closeTrackedInterfaces(): boolean {
     const closable = [...this.subInterfaceTargets.entries()]
       .filter(([, entry]) => entry.type === 0 || entry.type === 3);
@@ -689,6 +710,7 @@ export class PacketSender {
     const interfaceId = this.resetInterfaceState();
     const closed = this.closeTrackedInterfaces();
     this.endBankSearch(interfaceId);
+    this.emitInterfaceClosed(interfaceId);
     if (closed) {
       if (interfaceId === 300 || interfaceId === 334 || interfaceId === 335) {
         this.sendSubInterface((161 << 16) | 79, MAIN_INVENTORY_GROUP_ID, 1);
@@ -721,6 +743,7 @@ export class PacketSender {
     const interfaceId = this.resetInterfaceState();
     const closed = this.closeTrackedInterfaces();
     this.endBankSearch(interfaceId);
+    this.emitInterfaceClosed(interfaceId);
     if (closed) {
       if (interfaceId === 300 || interfaceId === 334 || interfaceId === 335) {
         this.sendSubInterface((161 << 16) | 79, MAIN_INVENTORY_GROUP_ID, 1);
@@ -963,7 +986,13 @@ export class PacketSender {
     }
 
     this.player.setCreationMenu?.(menu);
-    const names = items.map((id: number) => CacheDefinitions.hasItem(id) ? CacheDefinitions.getItem(id).name : "null");
+    const options = menu.getOptions?.() ?? {};
+    const names = items.map((id: number, index: number) => options.labels?.[index]
+      ?? (CacheDefinitions.hasItem(id) ? CacheDefinitions.getItem(id).name : "null"));
+    const maxAmount = Number.isInteger(options.maxAmount)
+      ? Math.max(0, Math.min(options.maxAmount, CREATION_MENU_MAX_QUANTITY))
+      : CREATION_MENU_MAX_QUANTITY;
+    const lastAmount = Number.isInteger(options.lastAmount) ? Math.max(0, Math.min(options.lastAmount, maxAmount)) : maxAmount;
     const paddedIds = [...items];
     while (paddedIds.length < 18) paddedIds.push(-1);
 
@@ -975,12 +1004,14 @@ export class PacketSender {
       const buttonId = (CREATION_MENU_GROUP_ID << 16) | (CREATION_MENU_FIRST_ITEM_COMPONENT + i);
       this.sendInterfaceFlagsRange(buttonId, 0, CREATION_MENU_MAX_QUANTITY, CREATION_MENU_OP_FLAGS);
     }
+    const lastItem = this.player.getAttribute?.(CREATION_MENU_LAST_ITEM_ATTRIBUTE);
+    if (Number.isInteger(lastItem)) this.sendConfig(CREATION_MENU_LAST_ITEM_VARP, lastItem);
     this.sendInterfaceScript(2046, [
-      13,
+      Number.isInteger(options.mode) ? options.mode : 13,
       [String(menu.getTitle() ?? "What would you like to make?"), ...names].join("|"),
-      CREATION_MENU_MAX_QUANTITY,
+      maxAmount,
       ...paddedIds,
-      CREATION_MENU_MAX_QUANTITY,
+      lastAmount,
     ]);
     return this;
   }

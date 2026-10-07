@@ -37,6 +37,8 @@ for (const kind of ["main", "npc", "projectile", "player"]) {
             "Smooth normals must not flip at grazing camera angles");
         if (kind !== "player") {
             assert.match(result[1], /if \(u_hdEnabled && !isFloorWater\)/);
+            assert.ok(fragment.includes("const bool hdWater = false;"), "Core water is vanilla without 117 HD");
+            assert.ok(result[1].includes("bool hdWater = u_hdEnabled;"), "117 HD switches floor water on");
             const waterFunction = fragment.slice(fragment.indexOf("vec3 shadeWater("), fragment.indexOf("vec4 sampleModelTexture("));
             assert.ok(result[1].includes(waterFunction), "Water shading must remain byte-for-byte unchanged");
         }
@@ -68,9 +70,7 @@ const plugin = new HdPlugin();
 let frameTime = 0;
 const originalNow = performance.now;
 performance.now = () => frameTime;
-assert.equal(plugin.getEnabled(), false, "Fresh installs must keep HD disabled");
-let notifications = 0;
-const unsubscribe = plugin.subscribe(() => notifications++);
+assert.equal(plugin.isEnabled(), false, "Fresh installs must keep HD disabled");
 let deleted = 0;
 let shadows = 0;
 let actorShadows = 0;
@@ -108,7 +108,7 @@ plugin.sceneProgramsReady(renderer, [program]);
 plugin.beforeSceneRender(renderer, () => actorShadows++);
 assert.equal(shadows, 0);
 assert.equal(programBinds, 1, "Batch disabled-state uniforms into one program bind");
-plugin.setEnabled(true);
+plugin.setEnabledState(true);
 programBinds = 0;
 plugin.beforeSceneRender(renderer, () => actorShadows++);
 assert.equal(programBinds, 2, "Bind once for shadow uniforms and once to restore the scene pass");
@@ -146,16 +146,12 @@ renderer.renderOpaquePass = () => { throw new Error("draw failed"); };
 assert.throws(() => plugin.beforeSceneRender(renderer, () => {}), /draw failed/);
 assert.equal(values.get("u_hdShadowPass"), false, "Restore shadow state even after a failed draw");
 assert.equal(app.target, renderer.textureFramebuffer);
-plugin.setEnabled(false);
+plugin.setEnabledState(false);
 plugin.beforeSceneRender(renderer, () => {});
 assert.equal(values.get("u_hdEnabled"), false);
-assert.equal(notifications, 2);
-unsubscribe();
 plugin.disposeRenderer(renderer);
 assert.equal(deleted, 8, "Dispose both shadow framebuffers/depth textures, both material arrays and lookup/placeholder textures");
-assert.equal(new HdPlugin().getEnabled(), false, "Persist the disabled state");
-plugin.setEnabled(true);
-assert.equal(new HdPlugin().getEnabled(), true, "Explicit opt-in persists");
+assert.equal(new HdPlugin().isEnabled(), false, "Disabled by default");
 performance.now = originalNow;
 
 const { HdMaterials, HD_LOOKUP_WIDTH, HD_TEXTURE_SIZE } = require("../game/plugins/hd/HdMaterials");

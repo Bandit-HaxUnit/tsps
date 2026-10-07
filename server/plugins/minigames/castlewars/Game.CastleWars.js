@@ -510,7 +510,7 @@ function endGame() {
     clearCastleWarsItems(player);
     setTeamId(player, null);
     closeOverlay(player);
-    player.getPacketSender().sendInteractionOption("null", 2, true);
+    player.getPacketSender().sendPlayerOption(data.ATTACK_OPTION_SLOT, "", false);
     returnToLobby(player);
   }
   resetMatchState();

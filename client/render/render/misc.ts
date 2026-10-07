@@ -199,7 +199,7 @@ export function resolveEffectiveLodThresholdTiles(host: WebGLOsrsRendererHost, f
 
         const renderDistance = host.getFrameRenderDistanceTiles() | 0;
         const base = clamp(host.osrsClient.lodDistance | 0, 0,
-            Math.min(renderDistance, host.osrsClient.hdPlugin?.getEnabled() ? 48 : renderDistance));
+            Math.min(renderDistance, host.osrsClient.hdPlugin?.isEnabled() ? 48 : renderDistance));
         if ((host.effectiveLodThresholdFrame | 0) === (frameId | 0)) {
             return host.effectiveLodThresholdTiles | 0;
         }

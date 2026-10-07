@@ -371,6 +371,8 @@ for (const continuous of [false, true]) for (const running of [false, true]) {
     ecs.setRotationImmediate(index, 1024);
     const animations = { idle: 808, walk: 819, run: 824 };
     ecs.setAnimSet(index, animations);
+    assert.equal(ecs.getAnimMovementSeqId(index), animations.idle,
+        "a stationary player initializes to idle");
     if (continuous) ecs.setContinuousPosition(index, fine(100), fine(100) + 4,
         0, 1, running, true, 1024);
     else ecs.setServerPos(index, fine(100), fine(101), running ? 2 : 1);
@@ -388,7 +390,14 @@ for (const continuous of [false, true]) for (const running of [false, true]) {
         "equipment animation changes wait for the movement tick to select a coherent pose");
     ecs.updateClient();
     assert.equal(ecs.getAnimMovementSeqId(index), running ? 825 : 820);
+    if (continuous) continue;
+    ecs.updateClient(100);
+    assert.equal(ecs.isMoving(index), false);
+    ecs.setAnimSet(index, { ...animations, idle: 809 });
+    assert.equal(ecs.getAnimMovementSeqId(index), 809,
+        "a stationary appearance refresh still applies the new idle animation");
 }
+console.log("appearance refresh movement animation checks passed");
 
 // Exercise the real movement input codec, server plugin, acknowledgement codec,
 // prediction, collision footprint, and the handoff back to native tile routes.

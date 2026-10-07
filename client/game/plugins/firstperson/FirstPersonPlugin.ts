@@ -1,3 +1,6 @@
+import type { OsrsClient } from "../../OsrsClient";
+import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
+import { CLIENT_TOKEN, inject } from "@runelite/client/plugins/PluginInjector";
 import type { Camera } from "../../Camera";
 import type { InputKeyHandler, InputManager, InputMouseHandler } from "../../InputManager";
 import type { CameraFollowContext, CameraInputContext, ClientPlugin } from "../ClientPluginManager";
@@ -55,7 +58,15 @@ const MOVEMENT_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD"];
 const ARROW_KEYS = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
 
 
-export class FirstPersonPlugin implements ClientPlugin, InputKeyHandler, InputMouseHandler {
+export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyHandler, InputMouseHandler {
+    static descriptor: PluginDescriptor = {
+        name: "First Person",
+        description: "First-person camera with mouse look.",
+        tags: ["camera"],
+        hidden: true,
+        configKey: "firstpersonplugin",
+    };
+
     private enabled = false;
     private inputMode: InputMode = "movement";
     private inventorySlot = 0;
@@ -85,10 +96,13 @@ export class FirstPersonPlugin implements ClientPlugin, InputKeyHandler, InputMo
     private facingPlayerIndex?: number;
     private dialogueOptions: WidgetNode[] = [];
     private dialogueOptionIndex = 0;
+    private readonly client: FirstPersonClient;
 
-    constructor(private readonly client: FirstPersonClient) {
-        client.inputManager.addKeyHandler(this);
-        client.inputManager.addMouseHandler(this);
+    constructor(client?: FirstPersonClient) {
+        super();
+        this.client = client ?? inject<OsrsClient>(CLIENT_TOKEN);
+        this.client.inputManager.addKeyHandler(this);
+        this.client.inputManager.addMouseHandler(this);
     }
 
     onKeyDown(event: KeyboardEvent): boolean {

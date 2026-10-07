@@ -15,6 +15,7 @@ import { ItemDefinition } from "../../../definition/ItemDefinition";
 import { Mobile } from "../Mobile";
 import { NPC } from "../npc/NPC";
 import { NpcAggression } from "../npc/NpcAggression";
+import { AggressionTolerance } from "../npc/AggressionTolerance";
 import { Animation } from "../../../model/Animation";
 import { Appearance } from "../../../model/Appearance";
 import { EnteredAmountAction } from "../../../model/EnteredAmountAction";
@@ -87,7 +88,7 @@ export class Player extends Mobile {
     public equipment = new Equipment(this);
     private clickDelay = new Stopwatch();
     private lastItemPickup = new Stopwatch();
-    private aggressionTolerance = new SecondsTimer();
+    private aggressionTolerance = new AggressionTolerance(this);
     // Delay for restoring special attack
     private specialAttackRestore = new SecondsTimer();
     /*
@@ -183,7 +184,6 @@ export class Player extends Mobile {
     constructor(playerIO: PlayerSession, spawnLocation?: Location) {
         super(spawnLocation ?? GameConstants.DEFAULT_LOCATION.clone());
         this.session = playerIO;
-        this.aggressionTolerance.start(NpcAggression.NPC_TOLERANCE_SECONDS);
     }
 
     public onAdd() {
@@ -405,6 +405,7 @@ export class Player extends Mobile {
 
         // Process aggression
         if (!isBot) {
+            this.aggressionTolerance.update(this.getLocation());
             timed("npc_aggression", () => NpcAggression.process(this));
         }
 
@@ -551,7 +552,7 @@ export class Player extends Mobile {
         this.setHasVengeance(false);
         this.getVengeanceTimer().stop();
         if (this.getAttribute?.(ATTR_SKIP_PERSISTENCE) !== true) {
-            GameConstants.PLAYER_PERSISTENCE.save(this);
+            GameConstants.PLAYER_PERSISTENCE.save(this, "logout");
         }
 
         const ch: any = this.getSession()?.getChannel();
@@ -1117,7 +1118,7 @@ export class Player extends Mobile {
         return this.dueling;
     }
 
-    public getAggressionTolerance(): SecondsTimer {
+    public getAggressionTolerance(): AggressionTolerance {
         return this.aggressionTolerance;
     }
 

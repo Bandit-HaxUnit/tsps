@@ -130,6 +130,7 @@ export class NPC extends Mobile {
     private isDying: boolean;
     private owner: Player;
     private ownerOnly: boolean = false;
+    private multiCombat: boolean = false;
     private visible: boolean = true;
     private face: FacingDirection = FacingDirection.SOUTH;
     private pet: boolean;
@@ -522,6 +523,20 @@ export class NPC extends Mobile {
         return this;
     }
 
+    /**
+     * Fights with this NPC follow multi-combat rules wherever it stands: any number of players
+     * may attack it, and it may attack them all (the Revenant maledictus in the singles-plus
+     * Revenant Caves).
+     */
+    public isMultiCombat(): boolean {
+        return this.multiCombat;
+    }
+
+    public setMultiCombat(multiCombat: boolean): NPC {
+        this.multiCombat = multiCombat;
+        return this;
+    }
+
     public getMovementCoordinator(): NPCMovementCoordinator {
         return this.movementCoordinator;
     }
@@ -536,6 +551,16 @@ export class NPC extends Mobile {
         if (!player) return NpcDefinition.forId(id);
         const resolved = CacheDefinitions.resolveNpc(id, player.getPacketSender());
         return resolved ? NpcDefinition.forId(resolved.id) : undefined;
+    }
+
+    /**
+     * The id content keys on: the cache variant this NPC's transform resolves to for
+     * `player`. Revision 241 moved many display names into NPC transforms, leaving the
+     * spawned id as a nameless parent, while quest plugins and npc-dialogue-index.json
+     * list the resolved variant ids. Interaction events pass this id so both sides meet.
+     */
+    public getContentId(player?: Player): number {
+        return this.getCurrentDefinition(player)?.getId?.() ?? this.getId();
     }
 
     /**

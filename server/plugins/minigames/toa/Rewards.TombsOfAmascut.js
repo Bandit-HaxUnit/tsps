@@ -65,12 +65,8 @@ class RewardRoom extends Raid.Room {
     raid.lootRolled = true;
     raid.chestSlots = new Map(raid.players.map((player, slot) => [player, slot]));
     const { uniqueWinner, uniqueId, petWinner } = Rewards.rollRaidLoot(raid);
-    const { ItemDefinition } = Shared.core();
-    if (uniqueWinner) {
-      raid.sarcophagusOwner = uniqueWinner;
-      const name = ItemDefinition.forId(uniqueId)?.getName?.() ?? "a unique";
-      raid.broadcast(`<col=a53fff>Special loot:</col> ${Shared.displayName(uniqueWinner)} found ${name}!`);
-    }
+    // The party hears of the unique when its finder claims it (announceUnique).
+    if (uniqueWinner) raid.sarcophagusOwner = uniqueWinner;
     if (petWinner) raid.broadcast(`<col=ff0000>${Shared.displayName(petWinner)} has a funny feeling like they would have been followed...</col>`);
   }
 
@@ -114,7 +110,9 @@ class RewardRoom extends Raid.Room {
       if (this.destroyed || !raid.players.includes(player)) return; // the lobby chest has it
       // The open loop from here on, so a reloaded scene shows it open rather than opening.
       this.animateSarcophagus(OPENED_SARCOPHAGUS, ANIMATION.OPEN);
-      if (Rewards.unsealUnique(player) === -1) return;
+      const unique = Rewards.unsealUnique(player);
+      if (unique === -1) return;
+      announceUnique(raid, player, unique);
       sendChests(player);
       openLoot(player);
     });
@@ -125,6 +123,14 @@ class RewardRoom extends Raid.Room {
     const object = new GameObject(id, Shared.loc(SARCOPHAGUS), 10, SARCOPHAGUS.face, null);
     for (const viewer of this.roomPlayers()) viewer.getPacketSender().sendObjectAnimation(object, new Animation(animation));
   }
+}
+
+/** As in OSRS, the party hears of a unique once its finder claims it. */
+function announceUnique(raid, player, itemId) {
+  const name = Shared.core().ItemDefinition.forId(itemId)?.getName?.() ?? "something";
+  const message = `<col=ff0000>${Shared.displayName(player)}</col> found something special: <col=ff0000>${name}</col>`;
+  if (raid) raid.broadcast(message);
+  else player.sendMessage(message);
 }
 
 /** Shows the player their own chest (with loot, or emptied) among the party's. */
@@ -148,6 +154,7 @@ function openLoot(player) {
     player.getPacketSender().sendVarbit(VARBIT_CHEST_FULL, 0);
     return;
   }
+  Rewards.logClaimed(player);
   const sender = player.getPacketSender();
   sendLoot(player, loot);
   sender.sendInterface(Shared.INTERFACE.LOOT);
@@ -270,7 +277,8 @@ function openChest(event) {
   event.handled = true;
   if (atLobby) {
     // A sarcophagus left unopened hands its unique over with the rest of the loot.
-    Rewards.unsealUnique(player);
+    const unique = Rewards.unsealUnique(player);
+    if (unique !== -1) announceUnique(Raid.raidOf(player), player, unique);
     if (!Rewards.hasLoot(player)) {
       Shared.statement(player, "There is nothing to collect.");
       return;

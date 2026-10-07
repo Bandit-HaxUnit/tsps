@@ -528,6 +528,12 @@ export class CombatFactory {
         return CanAttackResponse.CAN_ATTACK;
     }
 
+    /** Multi-combat rules apply: both stand in multi, or either is an NPC that is always multi. */
+    public static multiCombatBetween(attacker: Mobile, target: Mobile): boolean {
+        const alwaysMulti = (mobile: Mobile) => mobile.isNpc() && mobile.getAsNpc().isMultiCombat();
+        return alwaysMulti(attacker) || alwaysMulti(target) || (AreaManager.inMulti(attacker) && AreaManager.inMulti(target));
+    }
+
     /** Target/area ownership checks safe to run before pursuit; no ammo or runes are consumed. */
     public static canAttackPermission(
         attacker: Mobile,
@@ -560,7 +566,7 @@ export class CombatFactory {
         // Only check if we aren't in multi.
         if (!ServerPerf.measurePhase(
             "combat.process.can_attack.multi_check",
-            () => AreaManager.inMulti(attacker) && AreaManager.inMulti(target)
+            () => CombatFactory.multiCombatBetween(attacker, target)
         )) {
             if (
                 ServerPerf.measurePhase("combat.process.can_attack.attacker_busy", () =>
@@ -728,7 +734,7 @@ export class CombatFactory {
             });
 
             // Reward the player experience after plugins have finalized this hit.
-            CombatFactory.rewardExp(attacker.getAsPlayer(), qHit);
+            if (qHit.rewardsExperience()) CombatFactory.rewardExp(attacker.getAsPlayer(), qHit);
 
             // Java parity: apply skull at hit-queue time, before executeHit mutates
             // attacker/retaliation state (which can otherwise suppress skulling).
@@ -796,6 +802,7 @@ export class CombatFactory {
         if (
             combatType !== CombatType.MELEE &&
             target.getBlockAnim() >= 0 &&
+            method?.playsBlockAnimation?.() !== false &&
             target.getHitpoints() >
                 target.getCombat().getHitQueue().getQueuedDamage() + damage
         ) {
@@ -1219,9 +1226,11 @@ export class CombatFactory {
         if (!hasActiveDifferentTarget || npcCanRetargetInMulti) {
             let auto_ret = false;
             if (target.isPlayer()) {
+                // combat:no-retaliate: a player mid-action that ignores hits (chopping an Ent trunk).
                 auto_ret =
                     target.getAsPlayer().autoRetaliateReturn() &&
-                    !playerIsBusy();
+                    !playerIsBusy() &&
+                    target.hasFlag?.("combat:no-retaliate") !== true;
             } else if (target.isNpc()) {
                 auto_ret = target.hasFlag?.("combat:no-retaliate") !== true
                     && target.getAsNpc().getMovementCoordinator().getCoordinateState() == CoordinateState.HOME;
@@ -1252,7 +1261,8 @@ export class CombatFactory {
             }
             TaskManager.submit(new CombatFactoryTask(1, target, false, () => {
                 if (target.isPlayer() &&
-                    (!target.getAsPlayer().autoRetaliateReturn() || playerIsBusy())) {
+                    (!target.getAsPlayer().autoRetaliateReturn() || playerIsBusy()
+                        || target.hasFlag?.("combat:no-retaliate") === true)) {
                     return;
                 }
                 target.getCombat().attack(attacker, true);

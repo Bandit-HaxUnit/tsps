@@ -2,8 +2,7 @@
 // side panel's "Game client layout" dropdown (116:40).
 // Component ids, varbits and the settings catalog order below are verified
 // against cache rev 237 and cross-checked with RuneLite (InterfaceID.Settings,
-// VarbitID) and OpenRune-Server (AllSettingsScript/SettingConfigs,
-// DisplaySettingsScript).
+// VarbitID).
 const {
   encodeGameframeFlags,
   MOBILE_CLIENT_ATTRIBUTE,
@@ -39,11 +38,12 @@ const WORLD_GAMEFRAME_OPTIONS = {
 // Cache script 3962 reads this to pick the selected dropdown row; 4607 is only
 // a display mirror of the layout (no rendering effect in this revision).
 const GAMEFRAME_STONE_VARBIT = 4607;
-// The enhanced client's "show mouseover text" setting (cache script 4582 toggles it).
-// Our client reports itself as enhanced (clienttype 10) and draws the top-left text, so
-// this must be on: with it, HUD overlays laid out by script 4731 (Wintertodt, the
-// Gauntlet, ToA...) drop 23px below the text instead of sitting under it, as on live.
-const MOUSEOVER_TEXT_VARBIT = 12377;
+// The enhanced client's mouseover text setting (cache script 4582 toggles it), from rev 241
+// mouseover_text_disabled (it was 12377, mouseover_text_enabled). Our client reports itself as
+// enhanced (clienttype 10) and draws the top-left text, so this must be 0 (shown): then HUD
+// overlays laid out by script 4731 (Wintertodt, the Gauntlet, ToA...) drop 23px below the
+// text instead of sitting under it, as on live.
+const MOUSEOVER_TEXT_DISABLED_VARBIT = 10035;
 // Opaque player attribute; NetworkBuilder/WelcomeScreen read it to boot the
 // saved gameframe.
 const CLIENT_LAYOUT_ATTRIBUTE = "client-layout-root";
@@ -56,9 +56,17 @@ const ALL_SETTINGS_SETTINGS_CLICKZONE = (ALL_SETTINGS_INTERFACE_ID << 16) | 20;
 const ALL_SETTINGS_DROPDOWN_BUTTONS = (ALL_SETTINGS_INTERFACE_ID << 16) | 29;
 // The search bar's click zone, beside the "Search:" label.
 const ALL_SETTINGS_SEARCH_BAR = (ALL_SETTINGS_INTERFACE_ID << 16) | 11;
+// Capture (All Settings search, then the world map): clicking the search bar sets both and runs
+// chatdefault_stopinput; closing All Settings clears both and runs chatdefault_restoreinput.
+// While they are set, script 1701 gives the keyboard only to the settings search, so a close
+// that left them set kept every other search (the world map's) from receiving keys.
+const FLOATER_IS_SEARCHING_VARBIT = 16073;
+const FLOATER_SEARCH_LISTEN_FOR_KEYBOARD_VARBIT = 16074;
+const CHATDEFAULT_STOPINPUT_SCRIPT = 4020;
+const CHATDEFAULT_RESTOREINPUT_SCRIPT = 2158;
 // The category shown: scripts 3837/3840 draw the category list and its settings from it.
 const SETTINGS_CATEGORY_VARBIT = 9656;
-// Rows and dropdown options that may reach us (OpenRune AllSettingsScript: 0..512). Search
+// Rows and dropdown options that may reach us (0..512). Search
 // results number rows across every category, so they run far past one category's length.
 const ALL_SETTINGS_LAST_SLOT = 511;
 
@@ -100,7 +108,7 @@ const TAB_VARBIT_MAP = [
   { slot: 14, varbit: 4688, defaultKey: 12, buttonChild: 100 }, // Music/Emotes
 ];
 
-// The settings catalog, from the cache as OpenRune's AllSettingsScript reads it: enum 422 lists
+// The settings catalog, from the cache: enum 422 lists
 // the searchable categories (structs) in order; each category's param 745 is an enum of its
 // setting structs in row order, and a setting struct's param 1077 is its setting id. In a
 // category, a row's slot is its index in that category; in search results it is its index in
@@ -112,7 +120,7 @@ const PARAM_SETTING_ID = 1077;
 const SEARCH_VIEW = -1;
 
 // The keybind settings (ids 16..29, All Settings > Controls) and the varbit each drives
-// (OpenRune's settings_configs table; the varbits are TAB_VARBIT_MAP's).
+// (the varbits are TAB_VARBIT_MAP's).
 const KEYBIND_VARBIT_BY_SETTING = new Map([
   [16, 4675], [17, 4680], [18, 4686], [19, 4676], [20, 4682], [21, 4687], [22, 4677],
   [23, 4684], [24, 4683], [25, 4678], [26, 6517], [27, 4688], [28, 4679], [29, 4689],
@@ -138,12 +146,17 @@ function catalog() {
   return settingsCatalog;
 }
 
-/** The keybind varbit a clicked row edits, or -1: a row is read in the category shown, or search. */
-function keybindVarbitForRow(player, slot) {
+/** The setting a clicked row is, or -1: a row is read in the category shown, or search. */
+function settingForRow(player, slot) {
   const view = player.getAttribute("settings-view");
   const rows = view === SEARCH_VIEW ? catalog().all : catalog().byCategory.get(Number.isInteger(view) ? view : 0);
-  const settingId = rows?.[slot];
-  return KEYBIND_VARBIT_BY_SETTING.get(Number(settingId)) ?? -1;
+  const settingId = Number(rows?.[slot]);
+  return Number.isInteger(settingId) ? settingId : -1;
+}
+
+/** The keybind varbit a clicked row edits, or -1. */
+function keybindVarbitForRow(player, slot) {
+  return KEYBIND_VARBIT_BY_SETTING.get(settingForRow(player, slot)) ?? -1;
 }
 
 function showCategory(player, category) {
@@ -252,14 +265,32 @@ function openAllSettings(player) {
   const sender = player.getPacketSender();
   sender.sendSubInterface(MAIN_MODAL_UID, ALL_SETTINGS_INTERFACE_ID, 0);
   // The settings/controls are dynamic children created client-side; without
-  // these transmit flags their ops never reach us (OpenRune AllSettingsScript
-  // does the same via ifSetEvents). Op1 over the used slot range.
+  // these transmit flags their ops never reach us. Op1 over the used slot range.
   sender.sendInterfaceFlagsRange(ALL_SETTINGS_CATEGORIES_CLICKZONE, 0, 15, TRANSMIT_OP1);
   sender.sendInterfaceFlagsRange(ALL_SETTINGS_SETTINGS_CLICKZONE, 0, ALL_SETTINGS_LAST_SLOT, TRANSMIT_OP1);
   sender.sendInterfaceFlagsRange(ALL_SETTINGS_DROPDOWN_BUTTONS, 0, ALL_SETTINGS_LAST_SLOT, TRANSMIT_OP1);
-  // It opens on the first category (OpenRune does the same).
+  // It opens on the first category.
   showCategory(player, 0);
   return true;
+}
+
+function startSettingsSearch({ player }) {
+  player.setAttribute("settings-view", SEARCH_VIEW);
+  player.setAttribute("settings-keybind-varbit", -1);
+  player.getPacketSender()
+    .sendVarbit(FLOATER_IS_SEARCHING_VARBIT, 1)
+    .sendVarbit(FLOATER_SEARCH_LISTEN_FOR_KEYBOARD_VARBIT, 1)
+    .sendClientScript(CHATDEFAULT_STOPINPUT_SCRIPT);
+  return false;
+}
+
+/** All Settings closed, by any route: its search lets go of the keyboard and chat takes it back. */
+function endSettingsSearch({ player, interfaceId }) {
+  if (interfaceId !== ALL_SETTINGS_INTERFACE_ID) return;
+  player.getPacketSender()
+    .sendVarbit(FLOATER_IS_SEARCHING_VARBIT, 0)
+    .sendVarbit(FLOATER_SEARCH_LISTEN_FOR_KEYBOARD_VARBIT, 0)
+    .sendClientScript(CHATDEFAULT_RESTOREINPUT_SCRIPT);
 }
 
 function openKeybindings(player) {
@@ -299,17 +330,19 @@ module.exports = {
       if (Number.isInteger(slot)) showCategory(player, slot);
       return false;
     });
-    api.onInterfaceActionButton(ALL_SETTINGS_SEARCH_BAR, ({ player }) => {
-      player.setAttribute("settings-view", SEARCH_VIEW);
-      player.setAttribute("settings-keybind-varbit", -1);
-      return false;
-    });
+    api.onInterfaceActionButton(ALL_SETTINGS_SEARCH_BAR, startSettingsSearch);
+    api.onCustomEvent("interface:closed", endSettingsSearch);
 
     // A keybind row remembers which varbit its dropdown will edit. The server is
-    // authoritative (as in OpenRune), so we only track.
+    // authoritative, so we only track.
     api.onInterfaceActionButton(ALL_SETTINGS_SETTINGS_CLICKZONE, ({ player, slot }) => {
       player.setAttribute("settings-keybind-varbit", Number.isInteger(slot) ? keybindVarbitForRow(player, slot) : -1);
-      return false;
+      // Other plugins own their settings: "settings:setting-clicked" { player, settingId, handled }.
+      const settingId = Number.isInteger(slot) ? settingForRow(player, slot) : -1;
+      if (settingId < 0) return false;
+      const request = { player, settingId, handled: false };
+      api.emitCustomEvent("settings:setting-clicked", request);
+      return request.handled;
     });
 
     // All Settings dropdown option selected: apply it to the tracked keybind.
@@ -371,7 +404,7 @@ module.exports = {
       syncPlayerKeybindings(player);
       if (worldGameframeOption !== undefined) selectGameframeOption(player, worldGameframeOption);
       syncGameframeVarbit(player);
-      player.getPacketSender().sendVarbit(MOUSEOVER_TEXT_VARBIT, 1);
+      player.getPacketSender().sendVarbit(MOUSEOVER_TEXT_DISABLED_VARBIT, 0);
     });
 
     api.registerCommand("keybinds", ({ player }) => openKeybindings(player), undefined, "Open keybindings");
