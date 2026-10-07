@@ -88,3 +88,6 @@ docs/node_modules/
 
 # WebGPU smoke-test screenshots
 client/tests/artifacts/
+
+# Per-deployment world overrides (WorldDefinition.readWorldConfig)
+server/data/definitions/world.local.json
