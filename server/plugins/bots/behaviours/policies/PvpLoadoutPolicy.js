@@ -108,8 +108,8 @@ const BOT_PRESET_GROUPS = Object.freeze(BOT_LOADOUT_DEFINITIONS.presetGroups.map
 ));
 
 function matchesHotspotCombatBand(stats, state) {
-  const hotspot = getWildernessHotspot(state?.pvp?.hotspotId);
-  const band = hotspot?.combatLevelRange;
+  // Hotspot assignments carry their band; minigames (Castle Wars tiers) set one directly.
+  const band = state?.pvp?.combatLevelRange ?? getWildernessHotspot(state?.pvp?.hotspotId)?.combatLevelRange;
   if (!band) return true;
   // Match SkillManager.getCombatLevel, using the preset's seven combat stats.
   const [attack, defence, strength, hp, ranged, prayer, magic] = stats;
