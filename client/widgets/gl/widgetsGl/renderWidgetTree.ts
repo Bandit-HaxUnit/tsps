@@ -2731,8 +2731,18 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                                 targetFineY = ((mapId & 0xff) << 13) + (npcEcs.getY(ecsIdx) | 0);
                             }
                         } else if (hintArrow.type === 2) {
+                            // The minimap marks the target on every floor; only the world
+                            // arrow (overlay passes) is scoped to the viewer's plane.
                             targetFineX = (hintArrow.x << 7) + 64;
                             targetFineY = (hintArrow.y << 7) + 64;
+                        } else if (hintArrow.type === 3) {
+                            // Player hint: playerEcs coordinates are already world-fine.
+                            const pe = osrsClient.playerEcs;
+                            const playerIdx = pe?.getIndexForServerId?.(hintArrow.playerId);
+                            if (playerIdx !== undefined && playerIdx >= 0) {
+                                targetFineX = pe.getX(playerIdx) | 0;
+                                targetFineY = pe.getY(playerIdx) | 0;
+                            }
                         }
                         if (targetFineX >= 0) {
                             // Native minimap pixels (4 per tile) after zoom, north-up.
