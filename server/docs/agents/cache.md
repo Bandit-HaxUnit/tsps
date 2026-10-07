@@ -71,5 +71,7 @@ The full procedure, and what 237 → 241 changed, is in [docs/cache-revision-upd
   worktree already on the new cache, pass `--older <old cache dir> --code <checkout before the
   update>`.
 - `scripts/generate-identifiers.ts --dry-run` for item/NPC/object names that moved or vanished.
+- Data files: `yarn dump:item-combat-styles`, and fix `item-gameplay.json` entries whose name no
+  longer matches the cache (the loader skips them). See "Server data files" in the playbook.
 - Worktrees share `server/caches` through a symlink and `ensure-cache` rewrites `caches.json`
   for every one of them: try a new revision in a worktree with its own `server/caches`.

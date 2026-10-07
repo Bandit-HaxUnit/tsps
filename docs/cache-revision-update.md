@@ -86,13 +86,31 @@ when the server's first update arrives) and lists script errors and components s
 "null" text that the old cache did not have. `*` marks interfaces our server opens. The
 `interface-sweep` test asserts those load without script errors.
 
-### 8. World map and the rest
+### 8. Server data files
+
+Data in `server/data/definitions` is keyed by id, and OSRS ids do not move, so most of it survives
+an update. What to do with each source:
+
+| Data | Source | On an update |
+|---|---|---|
+| `item-combat-styles.json` | cache DB table 78 | `yarn dump:item-combat-styles` (in `server/`) and commit the result |
+| `item-gameplay.json` | an old export, no generator | `ItemDefinitionLoader` skips an entry whose name differs from the cache's (ignoring case), so list the entries that match the old cache's name but not the new one's and fix them by hand, checking the item against the cache (a rename can be a different item: check its params) |
+| `monsters-complete`, `npc-drops`, `npc-dialogues`, `npc-dialogue-index`, `shops` | [osrsreboxed-db](https://github.com/DayV-git/osrsreboxed-db), built from the live Wiki | Usually already on the new revision; refresh only to pick up new content |
+| `item-prices.json` | live Wiki prices | `yarn fetch:prices` if it predates the revision |
+| `npc-spawns`, `object-spawns`, plugin data | captures and hand edits | Check NPCs whose name moved into a transform (below) |
+
+Data matched by name is what breaks: the loader check above, and strings in plugins. Most of 241's
+1,133 item renames are capitalisation ("Staff of the Dead"), which the loader's check ignores.
+
+### 9. World map and the rest
 
 - `world-map-cache-format` (test): every map area, composite map and geography file decodes.
 - `graphics-defaults` (test): the default sprites (compass, head icons, hint arrows, scrollbars).
+- Map XTEA keys: `ensure-cache` writes OpenRS2's keys to `keys.json`. Since 241 there are none and
+  map files are unencrypted; a missing key means "read as is" on both server and client.
 - Full client tests (`yarn test`) and server tests (`yarn build`, then `node --test tests/*.test.cjs`).
 
-### 9. Play
+### 10. Play
 
 The tools do not see behaviour that depends on server data, or features that never existed. Check
 in game: world map (switch maps), compass and head icons, hover text and HUD overlays, chat, bank
@@ -109,6 +127,7 @@ NPC whose name moved into a transform (see below).
 | Seq opcode 19 (`crossworldsound`) | — | `SeqType` |
 | NPC/loc/spot anim opcode 42 (recolall), spot anim 10 (`rotate=no`), varc opcode 3 (array type) | — (not used by 241 entries, except varc 3) | decoders; spot anims now throw on unknown opcodes |
 | Graphics defaults: the sprite list moved to opcode 6 (12 sprites); opcodes 3/4/5 added | No compass, head icons, hint arrows, scrollbars | `GraphicsDefaults` |
+| Map files are no longer encrypted: OpenRS2 has no XTEA keys for 241 (`keys.json` is `{}`) | none: with no key, map files are read as they are (all 2937 regions decode) | `CacheMaps` takes keys from `CachePipeline`; the edit-mode region pack no longer needs keys for loc data |
 | World map (index 19) lost its group names; composite map entries lost their geography refs; geography (18) and ground (20) keyed by region `(x << 8) \| y` with file = map area id, headerless; chunk regions are one file per area holding only its chunks; decoration loc ids are ints | Map does not open | `WorldMapArea`, `WorldMapArchiveRenderer` |
 
 ### Client scripts
@@ -130,7 +149,7 @@ NPC whose name moved into a transform (see below).
 | DB table 166 gained a column at 27; table 179 lost three | Sailing parts and facilities | `boatParts.js`, `boatFacilities.js` |
 | Display names moved into NPC transforms (Morgan 3479, Dr Harlow 3480: name `null`, a varbit picks the named variant) | none: hooks resolve the variant | — |
 | 431 object and 23 item names gone or reused | compile errors | identifiers regenerated; plugins renamed (e.g. "Scythe of Vitur") |
-
+| Eight items renamed outright: 9487–9490 "Wizard blizzard" → "Cocktail glass", 9735/9738 "Desert goat horn" → "Goat horn", 23595/23596 "Berserker ring" → "Berserker ring (i)" | Their `item-gameplay.json` entries were skipped (23595 lost its bonuses) | names updated; 23595 takes the imbued +8 its cache params give |
 ## Bugs the tools found that predate 241
 
 Found by the stack and interface checks, present on 237 too:
@@ -157,3 +176,7 @@ created by scripts 793 and 819).
   scripts read eight); `worldmap_getsourcecoord` (6618) is unused and its second output unknown.
 - The script sweep's "new since" list needs reading; the interface sweep cannot reach code that
   only runs with server state (the bank crash needed tags that exist).
+- REBUILD_NORMAL, REBUILD_REGION and world-entity packets still carry a key per region. The client
+  decodes them but uses its own `keys.json`, and the server looks them up by region id while the
+  keys are stored by archive id, so they are zeros. Dropping them changes the packet format, so
+  they stay for now. XTEA decryption also stays for caches older than 241.
