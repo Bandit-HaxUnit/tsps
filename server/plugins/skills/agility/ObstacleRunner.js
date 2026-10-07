@@ -28,7 +28,7 @@ const { HitMask } = require("../../../src/main/typescript/elvarg/game/content/co
  *   { face: [x, y] } | { faceDir: "north" | ... }
  *   { hit: n | [min, max] }           damage the player
  *   { msg: text } | { say: text }     game message / overhead text
- *   { sound: id }                     sound effect
+ *   { sound: id, loops?, delay? }     sound effect (delay in client cycles)
  *   { gfx: id }                       play a graphic on the player
  *   { objAnim: id }                   animate the obstacle object
  *   { run: (ctx) => void }            escape hatch for one-off behaviour
@@ -213,7 +213,7 @@ class ObstacleTask extends Task {
     } else if (step.say) {
       player.forceChat(step.say);
     } else if (step.sound != null) {
-      player.getPacketSender().sendSound(step.sound, 1, 0);
+      player.getPacketSender().sendSoundEffect(step.sound, step.loops ?? 1, step.delay ?? 0);
     } else if (step.gfx != null) {
       player.performGraphic(new Graphic(step.gfx));
     } else if (step.objAnim != null) {

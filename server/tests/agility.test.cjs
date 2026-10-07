@@ -1,13 +1,15 @@
 // Run after `yarn build`: node --test tests/agility.test.cjs
 const assert = require("node:assert/strict");
-const { test } = require("node:test");
+const { test, before } = require("node:test");
+const path = require("node:path");
 
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 
 const { Location } = require("../dist/game/model/Location");
 const { Skill } = require("../dist/game/model/Skill");
-const { ObjectIdentifiers } = require("../dist/util/ObjectIdentifiers");
+const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
 const { ObjectIds } = require("../dist/util/IdEnums");
 
 /** Runs submitted tasks on demand instead of on the game loop. */
@@ -83,6 +85,7 @@ function createPlayer(x, y, z, level = 99) {
       sendVarbit: (id, value) => state.varbits.set(id, value),
       sendRunEnergy: () => { state.energyUpdates = (state.energyUpdates ?? 0) + 1; },
       sendSound() {},
+      sendSoundEffect() {},
       sendObjectAnimation() {},
     }),
     getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: () => { state.hits++; } }) }),
@@ -142,13 +145,21 @@ function runLap(course, player) {
   }
 }
 
-const KNOWN_OBJECT_IDS = new Set(Object.values(ObjectIdentifiers).filter(Number.isInteger));
+before(async () => {
+  await CachePipeline.initialize(path.resolve(__dirname, ".."));
+});
+
+/** A loc the cache has: named, or a nameless multiloc (Wyrmscraig's cliff top) drawn as one. */
+function isCacheLoc(id) {
+  const loc = Number.isInteger(id) ? CacheDefinitions.getObject(id) : null;
+  return !!loc && ((loc.name && loc.name !== "null") || (loc.transforms ?? []).some((other) => other >= 0));
+}
 
 test("every obstacle and shortcut uses an object id from the cache", () => {
   for (const entry of [...COURSES.flatMap((course) => course.obstacles), ...SHORTCUTS]) {
     const ids = Array.isArray(entry.object) ? entry.object : [entry.object];
     for (const id of ids) {
-      assert.ok(KNOWN_OBJECT_IDS.has(id), `unknown object id ${id} (${entry.course?.key ?? "shortcut"})`);
+      assert.ok(isCacheLoc(id), `unknown object id ${id} (${entry.course?.key ?? "shortcut"})`);
     }
   }
 });
