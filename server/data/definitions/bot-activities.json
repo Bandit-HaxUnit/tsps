@@ -10,6 +10,12 @@
     {"id":"withdraw_axe","resolves":"item:axe","actions":[{"type":"bank","withdraw":[{"item":"bronze_axe","amount":1}]}]},
     {"id":"return_to_site","resolves":"area","actions":[{"type":"walkTo","x":3147,"y":3230,"z":0,"radius":6}]}
   ],
+  "tierActivities": {
+    "novices": ["combat_training","normal_trees","copper_tin_rocks","burn_normal_logs","smelt_bronze","net_fishing"],
+    "intermediates": ["combat_training","oak_trees","iron_rocks","burn_oak_logs","fly_fishing"],
+    "advanced": ["combat_training","willow_trees","coal_rocks","burn_willow_logs","lobster_fishing"],
+    "experts": ["combat_training","yew_trees","mithril_rocks","burn_yew_logs","harpoon_fishing"]
+  },
   "activities": [
     {"id":"normal_trees","template":"chop_trees","capacity":300,"fields":{"level":1,"tier":"normal","log":"logs"}},
     {"id":"copper_tin_rocks","template":"mine_rocks","capacity":160,"fields":{"level":1,"tier":["copper","tin"],"resources":["copper_ore","tin_ore"],"bar":"Bronze bar","smelted":["bronze_bar","copper_ore","tin_ore"]}},
@@ -36,26 +42,11 @@
     {"id":"bank_trip","mode":"bank_run","capacity":64,"repeat":false,"ephemeral":true,"manual":true,"failureCooldownSeconds":5,"actions":[{"type":"bank","until":{"inventoryFull":false},"suppressAutoRetaliate":true}]}
   ],
   "sites": [
-    {"id":"lumbridge_novices","tier":"novices","count":70,"anchor":{"x":3222,"y":3218,"z":0},"activities":["combat_training","normal_trees","copper_tin_rocks","burn_normal_logs","smelt_bronze","net_fishing"]},
-    {"id":"lumbridge_intermediates","tier":"intermediates","count":50,"anchor":{"x":3222,"y":3218,"z":0},"activities":["combat_training","oak_trees","iron_rocks","burn_oak_logs","fly_fishing"]},
-    {"id":"lumbridge_advanced","tier":"advanced","count":40,"anchor":{"x":3222,"y":3218,"z":0},"activities":["combat_training","willow_trees","coal_rocks","burn_willow_logs","lobster_fishing"]},
-    {"id":"lumbridge_experts","tier":"experts","count":40,"anchor":{"x":3222,"y":3218,"z":0},"activities":["combat_training","yew_trees","mithril_rocks","burn_yew_logs","harpoon_fishing"]},
-    {"id":"varrock_novices","tier":"novices","count":70,"anchor":{"x":3212,"y":3424,"z":0},"activities":["combat_training","normal_trees","copper_tin_rocks","burn_normal_logs","smelt_bronze","net_fishing"]},
-    {"id":"varrock_intermediates","tier":"intermediates","count":50,"anchor":{"x":3212,"y":3424,"z":0},"activities":["combat_training","oak_trees","iron_rocks","burn_oak_logs","fly_fishing"]},
-    {"id":"varrock_advanced","tier":"advanced","count":40,"anchor":{"x":3212,"y":3424,"z":0},"activities":["combat_training","willow_trees","coal_rocks","burn_willow_logs","lobster_fishing"]},
-    {"id":"varrock_experts","tier":"experts","count":40,"anchor":{"x":3212,"y":3424,"z":0},"activities":["combat_training","yew_trees","mithril_rocks","burn_yew_logs","harpoon_fishing"]},
-    {"id":"falador_novices","tier":"novices","count":70,"anchor":{"x":2964,"y":3378,"z":0},"activities":["combat_training","normal_trees","copper_tin_rocks","burn_normal_logs","smelt_bronze","net_fishing"]},
-    {"id":"falador_intermediates","tier":"intermediates","count":50,"anchor":{"x":2964,"y":3378,"z":0},"activities":["combat_training","oak_trees","iron_rocks","burn_oak_logs","fly_fishing"]},
-    {"id":"falador_advanced","tier":"advanced","count":40,"anchor":{"x":2964,"y":3378,"z":0},"activities":["combat_training","willow_trees","coal_rocks","burn_willow_logs","lobster_fishing"]},
-    {"id":"falador_experts","tier":"experts","count":40,"anchor":{"x":2964,"y":3378,"z":0},"activities":["combat_training","yew_trees","mithril_rocks","burn_yew_logs","harpoon_fishing"]},
-    {"id":"seers_novices","tier":"novices","count":70,"anchor":{"x":2723,"y":3484,"z":0},"activities":["combat_training","normal_trees","copper_tin_rocks","burn_normal_logs","smelt_bronze","net_fishing"]},
-    {"id":"seers_intermediates","tier":"intermediates","count":50,"anchor":{"x":2723,"y":3484,"z":0},"activities":["combat_training","oak_trees","iron_rocks","burn_oak_logs","fly_fishing"]},
-    {"id":"seers_advanced","tier":"advanced","count":40,"anchor":{"x":2723,"y":3484,"z":0},"activities":["combat_training","willow_trees","coal_rocks","burn_willow_logs","lobster_fishing"]},
-    {"id":"seers_experts","tier":"experts","count":40,"anchor":{"x":2723,"y":3484,"z":0},"activities":["combat_training","yew_trees","mithril_rocks","burn_yew_logs","harpoon_fishing"]},
-    {"id":"east_ardougne_novices","tier":"novices","count":70,"anchor":{"x":2662,"y":3305,"z":0},"activities":["combat_training","normal_trees","copper_tin_rocks","burn_normal_logs","smelt_bronze","net_fishing"]},
-    {"id":"east_ardougne_intermediates","tier":"intermediates","count":50,"anchor":{"x":2662,"y":3305,"z":0},"activities":["combat_training","oak_trees","iron_rocks","burn_oak_logs","fly_fishing"]},
-    {"id":"east_ardougne_advanced","tier":"advanced","count":40,"anchor":{"x":2662,"y":3305,"z":0},"activities":["combat_training","willow_trees","coal_rocks","burn_willow_logs","lobster_fishing"]},
-    {"id":"east_ardougne_experts","tier":"experts","count":40,"anchor":{"x":2662,"y":3305,"z":0},"activities":["combat_training","yew_trees","mithril_rocks","burn_yew_logs","harpoon_fishing"]}
+    {"id":"lumbridge","anchor":{"x":3222,"y":3218,"z":0},"counts":{"novices":70,"intermediates":50,"advanced":40,"experts":40}},
+    {"id":"varrock","anchor":{"x":3212,"y":3424,"z":0},"counts":{"novices":70,"intermediates":50,"advanced":40,"experts":40}},
+    {"id":"falador","anchor":{"x":2964,"y":3378,"z":0},"counts":{"novices":70,"intermediates":50,"advanced":40,"experts":40}},
+    {"id":"seers","anchor":{"x":2723,"y":3484,"z":0},"counts":{"novices":70,"intermediates":50,"advanced":40,"experts":40}},
+    {"id":"east_ardougne","anchor":{"x":2662,"y":3305,"z":0},"counts":{"novices":70,"intermediates":50,"advanced":40,"experts":40}}
   ],
   "pvp": {
     "botPool": 845,

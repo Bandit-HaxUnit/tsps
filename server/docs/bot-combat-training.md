@@ -264,13 +264,14 @@ ended it and the bot was handed a random activity (WildyBots skilling in Lumbrid
 
 Startup spawns 1000 bots: 200 each at Lumbridge, Varrock, Falador, Seers' Village and East
 Ardougne market, each town split over the same four tiers (sites `<town>_novices` ... `<town>_experts`).
-A site in `bot-activities.json` is just `{ id, tier, count, anchor, activities }`: the tier's
-level band is code-owned (`SITE_TIER_LEVELS` in `BotActivityRegistry.js`) and each skill rolls
-inside it at spawn (hitpoints at least 10, agility always 99); the rotation timing and spawn
-radius are shared defaults in the same file. Gear — combat kit and the best usable
-axe/pickaxe — follows from the levels. Trees, rocks, banks, stores and NPC clusters are found
-from wherever the bot is, so the same activities work in every town. Activity capacities are
-global (shared by all towns).
+`bot-activities.json` lists one entry per town — `{ id, anchor, counts }` — and one shared
+`tierActivities` map; the registrar expands each town × tier into a site. A tier's level band
+is code-owned (`SITE_TIER_LEVELS` in `BotActivityRegistry.js`) and each skill rolls inside it
+at spawn (hitpoints at least 10, agility always 99); rotation timing and spawn radius are
+shared defaults in the same file. Gear — combat kit and the best usable axe/pickaxe —
+follows from the levels. Trees, rocks, banks, stores and NPC clusters are found from wherever
+the bot is, so the same activities work in every town. Activity capacities are global
+(shared by all towns).
 
 | Tier (per town) | Bots | Spawn levels | Rotates between |
 | --- | --- | --- | --- |

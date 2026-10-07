@@ -310,45 +310,52 @@ function createBotActivityRegistry(options = {}) {
     resolvers.push(resolver);
     byId.set(resolver.id, resolver);
   }
-  // A site spawns `count` bots around `anchor` that only ever run its `activities`. Its
-  // `tier` picks the spawn level band from SITE_TIER_LEVELS; rotation timing and spawn
-  // radius come from SITE_DEFAULTS.
-  const sites = (raw.sites ?? []).map((site) => {
-    const tier = SITE_TIER_LEVELS[site.tier];
-    if (!tier) {
-      throw new Error(
-        `[bot activities] site '${site.id}' needs a known tier (${Object.keys(SITE_TIER_LEVELS).join(", ")})`
-      );
-    }
-    const ids = site.activities ?? [site.activity];
-    const siteActivities = ids.map((id) => {
-      const activity = byId.get(id);
-      if (!activity || activity.resolver === true) {
-        throw new Error(`[bot activities] site '${site.id}' references unknown activity '${id}'`);
+  // Each town spawns its per-tier `counts` of bots around `anchor`: one site per tier,
+  // named `<town>_<tier>`. The tier picks the spawn level band (SITE_TIER_LEVELS) and the
+  // shared activity list (`tierActivities`); rotation timing and spawn radius are defaults.
+  const tierActivities = raw.tierActivities ?? {};
+  const sites = [];
+  for (const town of raw.sites ?? []) {
+    for (const [tierName, count] of Object.entries(town.counts ?? {})) {
+      const tier = SITE_TIER_LEVELS[tierName];
+      if (!tier) {
+        throw new Error(
+          `[bot activities] site '${town.id}' has unknown tier '${tierName}' (${Object.keys(SITE_TIER_LEVELS).join(", ")})`
+        );
       }
-      if (activity.manual || activity.ephemeral) {
-        throw new Error(`[bot activities] site '${site.id}' cannot assign manual/overlay activity '${id}'`);
+      const siteId = `${town.id}_${tierName}`;
+      const ids = tierActivities[tierName];
+      if (!Array.isArray(ids) || ids.length === 0) {
+        throw new Error(`[bot activities] tier '${tierName}' has no activities`);
       }
-      return activity;
-    });
-    if (!siteActivities.length) {
-      throw new Error(`[bot activities] site '${site.id}' needs at least one activity`);
+      const siteActivities = ids.map((id) => {
+        const activity = byId.get(id);
+        if (!activity || activity.resolver === true) {
+          throw new Error(`[bot activities] site '${siteId}' references unknown activity '${id}'`);
+        }
+        if (activity.manual || activity.ephemeral) {
+          throw new Error(`[bot activities] site '${siteId}' cannot assign manual/overlay activity '${id}'`);
+        }
+        return activity;
+      });
+      sites.push({
+        ...SITE_DEFAULTS,
+        id: siteId,
+        tier: tierName,
+        anchor: town.anchor,
+        count: count,
+        levels: { all: [tier.min, tier.max] },
+        activities: siteActivities,
+        rotation: {
+          activityIds: siteActivities.map((activity) => activity.id),
+          switchAfterMs: {
+            min: SITE_DEFAULTS.switchAfterSeconds.min * 1000,
+            max: SITE_DEFAULTS.switchAfterSeconds.max * 1000,
+          },
+        },
+      });
     }
-    const switchAfter = site.switchAfterSeconds ?? SITE_DEFAULTS.switchAfterSeconds;
-    const minMs = Math.max(1, Number(switchAfter?.min) || 0) * 1000;
-    return {
-      ...SITE_DEFAULTS,
-      ...site,
-      levels: { all: [tier.min, tier.max] },
-      activities: siteActivities,
-      rotation: {
-        activityIds: siteActivities.map((activity) => activity.id),
-        switchAfterMs: switchAfter
-          ? { min: minMs, max: Math.max(minMs, (Number(switchAfter.max) || 0) * 1000) }
-          : null,
-      },
-    };
-  });
+  }
   const slots = new Map();
   const lastActivityByPlayer = new WeakMap();
   const blockedUntilByPlayer = new WeakMap();
