@@ -314,7 +314,7 @@ function grappleGear() {
 
 test("a grapple needs the gear and skills, or the barehanded Agility level (Wiki: Rough wall)", () => {
   const wall = [3033, 3390, 0];
-  const falls = (player) => player.state.animations.includes(4455);
+  const fires = (player) => player.state.animations.includes(1779); // fire and climb (rsprox, rev 237)
   const bare = createPlayer(3033, 3390, 0, 40, { skills: { strength: 37, ranged: 19 } });
   operate(bare, ObjectIds.ROUGH_WALL_8, wall);
   assert.deepEqual(tileOf(bare), [3033, 3390, 0], "refused: no crossbow, and short of the barehanded 52");
@@ -323,7 +323,7 @@ test("a grapple needs the gear and skills, or the barehanded Agility level (Wiki
   const geared = createPlayer(3033, 3390, 0, 11, { skills: { strength: 37, ranged: 19 }, worn: grappleGear() });
   operate(geared, ObjectIds.ROUGH_WALL_8, wall);
   assert.deepEqual(tileOf(geared), [3033, 3389, 1]);
-  assert.ok(falls(geared), "fires the grapple");
+  assert.ok(fires(geared), "fires the grapple");
 
   const weak = createPlayer(3033, 3390, 0, 11, { skills: { strength: 36, ranged: 19 }, worn: grappleGear() });
   operate(weak, ObjectIds.ROUGH_WALL_8, wall);
@@ -333,7 +333,7 @@ test("a grapple needs the gear and skills, or the barehanded Agility level (Wiki
   const climber = createPlayer(3033, 3390, 0, 52);
   operate(climber, ObjectIds.ROUGH_WALL_8, wall);
   assert.deepEqual(tileOf(climber), [3033, 3389, 1], "barehanded at 52");
-  assert.ok(!falls(climber), "no grapple fired");
+  assert.ok(!fires(climber), "no grapple fired");
 });
 
 test("a quest gate refuses only when the quest plugin says it isn't done", () => {
@@ -482,7 +482,7 @@ test("logging out mid-obstacle lands the player on the far side", () => {
   assert.equal(player.state.xp, 8);
 });
 
-test("a move lands after exactly its ticks (Rocks, Ralos' Rise: 10)", () => {
+test("moves land after exactly their ticks (Rocks, Ralos' Rise: three 2-tick moves, as captured)", () => {
   const player = createPlayer(1455, 3128, 0);
   hooks.click.get(ObjectIds.ROCKS_151)({ player, object: gameObject(ObjectIds.ROCKS_151, 1456, 3128, 0), objectId: ObjectIds.ROCKS_151, clickType: 1, location: { x: 1456, y: 3128, z: 0 }, handled: false });
   let ticks = 0;
@@ -490,8 +490,18 @@ test("a move lands after exactly its ticks (Rocks, Ralos' Rise: 10)", () => {
     tick();
     ticks++;
   }
-  assert.equal(ticks, 10);
+  assert.equal(ticks, 6);
   for (let more = 0; player.getAttribute("agility.obstacle") != null && more < 5; more++) tick();
+});
+
+test("the Mokhaiotl pillars swap sides: each jump sets varbit 16716 so the far pillar shows (as captured)", () => {
+  const player = createPlayer(1311, 9506, 1);
+  operate(player, 56608, [1311, 9509, 1]);
+  assert.deepEqual(tileOf(player), [1311, 9509, 1]);
+  assert.equal(player.state.varbits.get(16716), 1);
+  operate(player, 56609, [1311, 9506, 1]);
+  assert.deepEqual(tileOf(player), [1311, 9506, 1]);
+  assert.equal(player.state.varbits.get(16716), 0);
 });
 
 test("teleports are refused while crossing an obstacle", () => {

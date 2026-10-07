@@ -24,17 +24,24 @@ module.exports = {
     },
   }),
 
-  /** Zanaris jutting walls: shimmy past to the other side of `pivot`'s row. */
+  /**
+   * Zanaris jutting walls: shimmy past to the other side of `pivot`'s row. As captured (rsprox
+   * 359, 424; southward): the side-step from cycle 28 to 124, sound 2489 and the message at once,
+   * sound 2490 five ticks later.
+   */
   zanarisJuttingWall: ({ pivot }) => ({
     steps: ({ pos, obj }) => {
       const southward = pos.y >= pivot;
       return [
+        { sound: 2489 },
+        { msg: "You try to squeeze past." },
         {
           move: [obj.x, southward ? obj.y - 1 : obj.y + 1],
           anim: southward ? ShortcutAnim.JUTTING_WALL_LEFT : ShortcutAnim.JUTTING_WALL_RIGHT,
-          speed: [0, 120],
-          ticks: 4,
+          speed: [28, 124],
+          ticks: 5,
         },
+        { sound: 2490 },
       ];
     },
   }),
