@@ -1,4 +1,5 @@
 import type { OsrsClient } from "../../../game/OsrsClient";
+import { withSeqHandItems } from "../../../rs/config/player/Equipment";
 import type { PlayerAppearance } from "../../../rs/config/player/PlayerAppearance";
 import { Model } from "../../../rs/model/Model";
 import type { TextureLoader } from "../../../rs/texture/TextureLoader";
@@ -75,18 +76,23 @@ export class PlayerPoseGeometry {
      */
     resolve(pid: number, allowGpu: boolean = true): PosedActorGeometry | undefined {
         const pe = this.client.playerEcs;
-        const app = pe.getAppearance(pid);
-        if (!app) return undefined;
-
-        const base = this.baseForAppearance(app);
-        if (!base) return undefined;
-
         const actionSeqId = pe.getAnimSeqId(pid) | 0;
         const movementSeqId = pe.getAnimMovementSeqId(pid) | 0;
         const idleSeqId = pe.getAnimSeq(pid, "idle") | 0;
         const actionDelay = pe.getAnimSeqDelay?.(pid) ?? 0;
         const actionActive = actionSeqId >= 0 && actionDelay === 0;
         if (!actionActive && movementSeqId < 0) return undefined;
+
+        let app = pe.getAppearance(pid);
+        if (!app) return undefined;
+        if (actionActive) {
+            try {
+                app = withSeqHandItems(app, this.client.seqTypeLoader.load(actionSeqId));
+            } catch {}
+        }
+
+        const base = this.baseForAppearance(app);
+        if (!base) return undefined;
 
         let movementFrameIdx = 0;
         let actionFrameIdx = 0;

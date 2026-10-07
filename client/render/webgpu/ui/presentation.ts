@@ -1,4 +1,5 @@
-import { GameState } from "../../../game/login";
+import { isMobileMode } from "../../../common/utils/DeviceUtil";
+import { GameState, LoginIndex } from "../../../game/login";
 import type { LoginRenderer } from "../../../game/login/LoginRenderer";
 import type { LoginState } from "../../../game/login/LoginState";
 import { withRenderTransform } from "../../../game/login/renderer/layout/config";
@@ -9,6 +10,7 @@ import type { OverlayUpdateArgs } from "../../../ui/devoverlay/Overlay";
 import { SystemUpdateOverlay } from "../../../ui/devoverlay/SystemUpdateOverlay";
 import { getChatboxScreenRect } from "../../../widgets/gl/widgetsOverlayFactory";
 import type { WebGPURenderer } from "../WebGPURenderer";
+import { createMobileLoginInput, type MobileLoginInput } from "./mobileLoginInput";
 import type { UiRenderMetrics } from "./WebGPUUi";
 
 /** Widget root the server opens while the post-login welcome screen is up. */
@@ -30,6 +32,7 @@ export class WebgpuUiPresentation {
     private hudFxCtx: CanvasRenderingContext2D | null = null;
     private readonly loadingMessageOverlay: LoadingMessageOverlay;
     private readonly systemUpdateOverlay: SystemUpdateOverlay;
+    private readonly mobileLoginInput: MobileLoginInput;
 
     constructor(
         private readonly renderer: WebGPURenderer,
@@ -47,6 +50,7 @@ export class WebgpuUiPresentation {
         this.systemUpdateOverlay = new SystemUpdateOverlay({
             getChatboxRect: () => getChatboxScreenRect({ osrsClient }),
         });
+        this.mobileLoginInput = createMobileLoginInput(renderer);
     }
 
     /** Appended after the widget overlay exists, so the title always composites on top. */
@@ -60,6 +64,7 @@ export class WebgpuUiPresentation {
         const bufW = Math.max(1, renderer.canvas.width | 0);
         const bufH = Math.max(1, renderer.canvas.height | 0);
         const metrics = this.computeMetrics(bufW, bufH);
+        this.mobileLoginInput.sync(false);
 
         if (renderer.uiHidden) {
             this.hide(this.loginCanvas);
@@ -81,6 +86,7 @@ export class WebgpuUiPresentation {
     dispose(): void {
         this.loadingMessageOverlay.dispose();
         this.systemUpdateOverlay.dispose();
+        this.mobileLoginInput.dispose();
         this.loginCanvas.remove();
         this.hudFxCanvas.remove();
     }
@@ -134,8 +140,14 @@ export class WebgpuUiPresentation {
                     inputManager.saveClickY,
                     inputManager.clickMode3,
                 );
+                const { loginState } = osrsClient;
+                this.mobileLoginInput.sync(
+                    isMobileMode &&
+                        loginState.loginIndex === LoginIndex.LOGIN_FORM &&
+                        loginState.virtualKeyboardVisible &&
+                        inputManager.isTouch,
+                );
                 if (action === "connect") {
-                    const { loginState } = osrsClient;
                     loginState.savePersistedLoginState();
                     sendLogin(
                         loginState.username.trim(),
@@ -169,6 +181,7 @@ export class WebgpuUiPresentation {
         const layoutW = metrics.layoutW;
         const layoutH = metrics.layoutH;
 
+        loginRenderer.syncMobileViewportState(loginState, this.mobileLoginInput.isKeyboardOpen());
         loginRenderer.setMousePosition(inputManager.mouseX | 0, inputManager.mouseY | 0);
         loginState.hoveredServerIndex = loginRenderer.computeHoveredServerIndex(loginState);
 

@@ -1,7 +1,7 @@
 import { vec2 } from "gl-matrix";
 import PicoGL, { DrawCall, Texture, VertexBuffer } from "picogl";
 
-import { EquipmentSlot } from "../../rs/config/player/Equipment";
+import { withSeqHandItems } from "../../rs/config/player/Equipment";
 import { PlayerAppearance } from "../../rs/config/player/PlayerAppearance";
 import { Model } from "../../rs/model/Model";
 import { ModelData } from "../../rs/model/ModelData";
@@ -2296,26 +2296,10 @@ export class PlayerRenderer {
             let effectiveApp = app;
             if (useActionSequence && (app.npcTransformationId ?? -1) < 0) {
                 try {
-                    const seqType = this.renderer.osrsClient.seqTypeLoader.load(actionSeqId | 0);
-                    if (seqType && (seqType.leftHandItem >= 0 || seqType.rightHandItem >= 0)) {
-                        const newEquip = app.equip.slice();
-                        // OSRS cache SeqType stores item IDs with 512 offset (0x200) for equipment overrides.
-                        // We must strip this offset to get the actual Item ID for our loader.
-                        let shield = seqType.leftHandItem;
-                        let weapon = seqType.rightHandItem;
-                        if (shield >= 512) shield -= 512;
-                        if (weapon >= 512) weapon -= 512;
-
-                        if (shield >= 0) newEquip[EquipmentSlot.SHIELD] = shield;
-                        if (weapon >= 0) newEquip[EquipmentSlot.WEAPON] = weapon;
-                        effectiveApp = new PlayerAppearance(
-                            app.gender,
-                            app.colors,
-                            app.kits,
-                            newEquip,
-                            app.headIcons,
-                        );
-                    }
+                    effectiveApp = withSeqHandItems(
+                        app,
+                        this.renderer.osrsClient.seqTypeLoader.load(actionSeqId | 0),
+                    );
                 } catch {}
             }
             const serverId = peInst.getServerIdForIndex(pid);
@@ -2660,28 +2644,10 @@ export class PlayerRenderer {
                 let effectiveApp = app;
                 if (useActionSequence && (app.npcTransformationId ?? -1) < 0) {
                     try {
-                        const seqType = this.renderer.osrsClient.seqTypeLoader.load(
-                            actionSeqId | 0,
+                        effectiveApp = withSeqHandItems(
+                            app,
+                            this.renderer.osrsClient.seqTypeLoader.load(actionSeqId | 0),
                         );
-                        if (seqType && (seqType.leftHandItem >= 0 || seqType.rightHandItem >= 0)) {
-                            const newEquip = app.equip.slice();
-                            // OSRS cache SeqType stores item IDs with 512 offset (0x200) for equipment overrides.
-                            // We must strip this offset to get the actual Item ID for our loader.
-                            let shield = seqType.leftHandItem;
-                            let weapon = seqType.rightHandItem;
-                            if (shield >= 512) shield -= 512;
-                            if (weapon >= 512) weapon -= 512;
-
-                            if (shield >= 0) newEquip[EquipmentSlot.SHIELD] = shield;
-                            if (weapon >= 0) newEquip[EquipmentSlot.WEAPON] = weapon;
-                            effectiveApp = new PlayerAppearance(
-                                app.gender,
-                                app.colors,
-                                app.kits,
-                                newEquip,
-                                app.headIcons,
-                            );
-                        }
                     } catch {}
                 }
                 const serverId = peInst.getServerIdForIndex(pid);
