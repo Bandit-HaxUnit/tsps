@@ -95,10 +95,11 @@ Not captured, and not built: the golem's "Investigate" and the stairs up to the 
 
 - **The death animation** (14448) plays for 7 ticks (`deathTicks` in `npc-combat-defs.json`).
 - **Then, together:** "Your Mad Angel kill count is: N." (varp 5712), "Fight duration: … Personal best: …" (or "(new personal best)"), the drop, and the corpse (16308). 4 ticks later the HUD fades out, and 4 after that it is cleared, as captured.
-- **The drop** is the Wiki's table (`npc-drops.json`), with three corrections in `NpcDrops`:
+- **The drop** is the Wiki's table (`npc-drops.json`), with four corrections in `NpcDrops`:
   - the sunstone crystal is Fallen From Grace's, so it's left out;
   - the Ardeaglais teleport's pre-roll is 1/25;
   - a supply batch (16/150) is sharks or yellowfins, each with a prayer potion(2) and a super combat potion(1).
+  - the super combat potions(3), raw monkfish, emeralds and sapphires are noted, as the Wiki marks them (the export lost every "(noted)").
 
   The export had listed the batch as four separate rolls on a 182 table.
 - **The respawn:** the corpse stays for the Wiki's respawn time (26 ticks). Then the angel is back on its spot, dormant, for the next "Wake".

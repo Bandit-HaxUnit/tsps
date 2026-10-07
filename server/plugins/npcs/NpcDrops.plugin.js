@@ -119,6 +119,8 @@ function applyWikiCorrections(tableById) {
 const MAD_ANGEL_SUNSTONE_CRYSTAL = 34032;
 const MAD_ANGEL_TELEPORT = 34033;
 const MAD_ANGEL_SUPPLY_FISH = new Set([385, 32328]);
+/** Super combat potion(3), raw monkfish, emerald and sapphire: "(noted)" on the Wiki, lost by the export. */
+const MAD_ANGEL_NOTED = new Set([12697, 7944, 1605, 1607]);
 const MAD_ANGEL_SUPPLY_BONUS = [
   { item_id: 141, name: "Prayer potion(2)", quantity: [1, 1] },
   { item_id: 12701, name: "Super combat potion(1)", quantity: [1, 1] },
@@ -137,6 +139,7 @@ function correctMadAngel(table) {
   for (const entry of table.entries) {
     if (entry.item_id === MAD_ANGEL_TELEPORT) entry.out_of = 25;
     if (entry.section === "Supply batch") entry.bonus_drops = MAD_ANGEL_SUPPLY_BONUS;
+    if (MAD_ANGEL_NOTED.has(entry.item_id)) entry.noted = true;
     if (Number.isInteger(entry.out_of) && entry.out_of === table.main_max_roll) entry.out_of = 150;
   }
   table.main_max_roll = 150;

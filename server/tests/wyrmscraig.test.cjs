@@ -16,6 +16,7 @@ const { NpcDefinition } = require("../dist/game/definition/NpcDefinition");
 const { Location } = require("../dist/game/model/Location");
 const { PluginManager } = require("../dist/plugins/PluginManager");
 const { TaskManager } = require("../dist/game/task/TaskManager");
+const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
 const NpcDrops = require("../plugins/npcs/NpcDrops.plugin");
 const Wyrmscraig = require("../plugins/areas/Wyrmscraig.plugin");
 const AreaCommon = require("../plugins/areas/wyrmscraig/Common.Wyrmscraig");
@@ -154,7 +155,7 @@ test("as captured: the cave - the crawl, the fade, the move 2 ticks in, and back
 
 // ------------------------------------------------------------------ drops
 
-test("the drop table, corrected: no quest crystal, a 1/25 teleport, the supply batch bundled, 150 in all", () => {
+test("the drop table, corrected: no quest crystal, a 1/25 teleport, the supply batch bundled, the Wiki's noted drops, 150 in all", () => {
   const { loadDrops, tablesByNpc } = NpcDrops.__internals;
   loadDrops();
   const table = [tablesByNpc.get(16305)].flat()[0];
@@ -170,6 +171,12 @@ test("the drop table, corrected: no quest crystal, a 1/25 teleport, the supply b
     ["Shark", 8, ["Prayer potion(2)", "Super combat potion(1)"]],
     ["Yellowfin", 8, ["Prayer potion(2)", "Super combat potion(1)"]],
   ]);
+  assert.deepEqual(entries.filter((entry) => entry.noted).map((entry) => entry.name),
+    ["Super combat potion(3)", "Raw monkfish", "Emerald", "Sapphire"], "as the Wiki marks them");
+  for (const entry of entries.filter((entry) => entry.noted)) {
+    const noteId = ItemDefinition.forId(entry.item_id).getNoteId();
+    assert.ok(noteId >= 0 && ItemDefinition.forId(noteId).isNoted(), `${entry.name} has a noted form`);
+  }
 });
 
 // ------------------------------------------------------------------ the fight's rules
