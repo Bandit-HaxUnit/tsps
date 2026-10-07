@@ -169,8 +169,9 @@ let lookup: Float32Array;
 let atlasUploads = 0;
 const materialState = new HdMaterials({
     createTexture2D: () => ({ data: (data: Float32Array) => { lookup = data.slice(); }, delete() {} }),
-    createTextureArray: (_data: unknown, width: number, height: number, depth: number, options: any) => {
+    createTextureArray: (data: Uint8Array, width: number, height: number, depth: number, options: any) => {
         assert.ok(width === HD_TEXTURE_SIZE || width === 512); assert.equal(height, width); assert.ok(depth <= width);
+        assert.equal(data.length, width * height * depth * 4, "A texture array smaller than its depth fails to upload and samples black");
         assert.equal(options.maxAnisotropy, 8);
         return { data: () => atlasUploads++, delete() {} };
     },
