@@ -90,6 +90,7 @@ const PRESET_ROW_START = 200;
 // rows so the row's own (transparent) text does not hand it clicks; it paints through.
 const PRESET_LEVEL_START = 60;
 const PRESET_LEVEL_WIDTH = 30;
+const PRESET_LEVEL_RIGHT_GAP = 5;
 const GLOBAL_ROW_COUNT = 18;
 const CUSTOM_ROW_COUNT = 10;
 const PRESET_ROW_COUNT = GLOBAL_ROW_COUNT + CUSTOM_ROW_COUNT;
@@ -326,7 +327,7 @@ function buildPresetsWidgetGroup() {
       actions: ["Select"],
       flags: FLAG_OP1,
     });
-    label(PRESET_LEVEL_START + row, listView, LIST_WIDTH - PRESET_LEVEL_WIDTH, row * ROW_PITCH, PRESET_LEVEL_WIDTH, {
+    label(PRESET_LEVEL_START + row, listView, LIST_WIDTH - PRESET_LEVEL_WIDTH - PRESET_LEVEL_RIGHT_GAP, row * ROW_PITCH, PRESET_LEVEL_WIDTH, {
       xTextAlignment: 2,
       textColor: COLOUR_MUTED,
     });
