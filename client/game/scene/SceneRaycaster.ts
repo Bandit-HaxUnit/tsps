@@ -34,7 +34,6 @@ type LocModelMesh = {
     indices1: Int32Array;
     indices2: Int32Array;
     indices3: Int32Array;
-    faceAlphas?: Int8Array;
     faceColors3?: Int32Array;
     faceCount: number;
     minX: number;
@@ -988,8 +987,6 @@ export class SceneRaycaster {
             model.faceColors3 && model.faceColors3.length >= faceCount
                 ? model.faceColors3
                 : undefined;
-        const faceAlphas =
-            model.faceAlphas && model.faceAlphas.length >= faceCount ? model.faceAlphas : undefined;
 
         return {
             verticesX,
@@ -999,7 +996,6 @@ export class SceneRaycaster {
             indices2,
             indices3,
             faceColors3,
-            faceAlphas,
             faceCount,
             minX,
             maxX,
@@ -1057,8 +1053,8 @@ export class SceneRaycaster {
         let bestT = Number.POSITIVE_INFINITY;
         let hasVisibleFace = false;
         for (let i = 0; i < mesh.faceCount; i++) {
+            // Fully transparent faces still click in OSRS: a fairy ring's centre is one.
             if (mesh.faceColors3 && mesh.faceColors3[i] === -2) continue;
-            if (mesh.faceAlphas && (mesh.faceAlphas[i] & 0xff) >= 254) continue;
             hasVisibleFace = true;
 
             const a = mesh.indices1[i] | 0;
@@ -1072,8 +1068,7 @@ export class SceneRaycaster {
             bestT = t;
         }
 
-        // Invisible interaction volumes (all faces fully transparent) use AABB
-        // hit distance so they remain clickable.
+        // Models whose faces are all hidden use the AABB hit distance so they remain clickable.
         if (!hasVisibleFace && Number.isFinite(tBoxMin)) {
             return tBoxMin;
         }
