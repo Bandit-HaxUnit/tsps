@@ -995,8 +995,10 @@ const { Equipment } = require('../dist/game/model/container/impl/Equipment');
 const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
 const { FightStyle } = require('../dist/game/content/combat/FightStyle');
 const { Flag } = require('../dist/game/model/Flag');
-const trainingSpec = JSON.parse(fs.readFileSync('data/definitions/bot-activities.json', 'utf8'))
+const trainingDefinition = JSON.parse(fs.readFileSync('data/definitions/bot-activities.json', 'utf8'))
   .activities.find((a) => a.id === 'combat_training').actions[0];
+const combatGear = JSON.parse(fs.readFileSync('data/definitions/bot-combat-gear.json', 'utf8'))[trainingDefinition.gearRef];
+const trainingSpec = { ...trainingDefinition, ...combatGear };
 
 const chickenSpec = trainingSpec;
 const NPC_LEVELS = { Chicken: 1, Duck: 1, Goblin: 2, Cow: 2, Frog: 5, Barbarian: 10, 'Big frog': 10, Guard: 21 };

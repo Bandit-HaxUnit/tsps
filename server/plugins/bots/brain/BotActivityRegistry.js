@@ -236,6 +236,29 @@ function compileActivity(definition, templates, world, options = {}) {
 }
 
 /**
+ * An action may name a gear table (`gearRef`) instead of carrying one inline; the tables
+ * live in bot-combat-gear.json next to the activity definitions.
+ */
+function expandGearRefs(definition, gearTables) {
+  if (!Array.isArray(definition?.actions)) {
+    return definition;
+  }
+  const actions = definition.actions.map((action) => {
+    const gearRef = action?.gearRef;
+    if (!gearRef) {
+      return action;
+    }
+    const gear = gearTables[gearRef];
+    if (!gear) {
+      throw new Error(`[bot activities] '${definition.id}' references unknown gear '${gearRef}'`);
+    }
+    const { gearRef: _ref, ...rest } = action;
+    return { ...rest, ...gear };
+  });
+  return { ...definition, actions };
+}
+
+/**
  * Loads data-driven activities, their resolver links and sites. Capacity slots
  * cap how many bots may run an activity at once; assignment happens only when a
  * brain goes idle, never per tick.
@@ -248,15 +271,31 @@ function createBotActivityRegistry(options = {}) {
   if (!raw || typeof raw !== "object") {
     throw new Error("[bot activities] definitions must be an object");
   }
+  const gearPath = options.combatGearPath ?? path.join(path.dirname(definitionsPath), "bot-combat-gear.json");
+  const gearTables = JSON.parse(fs.readFileSync(gearPath, "utf8"));
   const templates = raw.templates ?? {};
   const activities = [];
   const resolvers = [];
   const byId = new Map();
+  const fieldsById = new Map();
   for (const definition of raw.activities ?? []) {
     if (!definition?.id || byId.has(definition.id)) {
       throw new Error("[bot activities] activity ids must be unique");
     }
-    const activity = compileActivity(definition, templates, world);
+    // `fieldsFrom` copies another activity's fields first (a burn tier reuses its tree's
+    // level and log), so only the differences stay in the file.
+    let fields = definition.fields;
+    if (definition.fieldsFrom) {
+      const inherited = fieldsById.get(definition.fieldsFrom);
+      if (!inherited) {
+        throw new Error(
+          `[bot activities] '${definition.id}' fieldsFrom unknown activity '${definition.fieldsFrom}'`
+        );
+      }
+      fields = { ...inherited, ...(definition.fields ?? {}) };
+    }
+    fieldsById.set(definition.id, fields);
+    const activity = compileActivity(expandGearRefs({ ...definition, fields }, gearTables), templates, world);
     activities.push(activity);
     byId.set(activity.id, activity);
   }

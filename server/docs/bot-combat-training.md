@@ -92,8 +92,9 @@ tier; this activity does not yet cover advanced PvM.
   cannot leave combat following or a target reservation behind.
 
 The definitions live in `data/definitions/bot-activities.json`; `trainCombat` is a shared
-brain action with per-player state. It can participate in future general-purpose activity
-selection without adding another bot runner.
+brain action with per-player state, and its gear tables live in
+`data/definitions/bot-combat-gear.json` (the activity references them by `gearRef`). It can
+participate in future general-purpose activity selection without adding another bot runner.
 
 ## Validation
 
