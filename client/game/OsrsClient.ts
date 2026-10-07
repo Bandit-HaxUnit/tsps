@@ -2946,14 +2946,14 @@ export class OsrsClient {
                         });
                     } else if (typeof payload.npcId === "number") {
                         const npcServerId = payload.npcId | 0;
-                        (this.renderer as any)?.registerNpcSpotAnimation?.({
+                        this.renderer?.registerNpcSpotAnimation({
                             npcServerId,
                             spotId: payload.spotId | 0,
                             height: (payload.height ?? 0) | 0,
                             startCycle,
                         });
                     } else if (payload.tile) {
-                        (this.renderer as any)?.registerWorldSpotAnimation?.({
+                        this.renderer?.registerWorldSpotAnimation({
                             spotId: payload.spotId | 0,
                             tile: payload.tile,
                             height: (payload.height ?? 0) | 0,
@@ -3467,13 +3467,11 @@ export class OsrsClient {
                         );
                         ClientState.inInstance = true;
                         ClientState.instanceTemplateChunks = payload.templateChunks;
-                        if (this.renderer && "loadInstanceScene" in this.renderer) {
-                            (this.renderer as any).loadInstanceScene(
-                                payload.templateChunks,
-                                payload.regionX,
-                                payload.regionY,
-                            );
-                        }
+                        void this.renderer?.loadInstanceScene(
+                            payload.templateChunks,
+                            payload.regionX,
+                            payload.regionY,
+                        );
                     } catch (err) {
                         console.warn("[OsrsClient] rebuild_region error", err);
                     }
@@ -3489,9 +3487,9 @@ export class OsrsClient {
                         const wasInInstance = ClientState.inInstance;
                         ClientState.inInstance = false;
                         ClientState.instanceTemplateChunks = null;
-                        const rendererWasInInstance = (this.renderer as any)?.instanceActive === true;
-                        if ((wasInInstance || rendererWasInInstance) && this.renderer && "clearInstance" in this.renderer) {
-                            (this.renderer as any).clearInstance();
+                        const rendererWasInInstance = this.renderer?.instanceActive === true;
+                        if (wasInInstance || rendererWasInInstance) {
+                            this.renderer?.clearInstance();
                         }
                     } catch (err) {
                         console.warn("[OsrsClient] rebuild_normal error", err);
@@ -4012,10 +4010,7 @@ export class OsrsClient {
         const brightness = normalizeScreenBrightness(value);
         this.deviceOptions.set(DEVICE_OPTION_SCREEN_BRIGHTNESS, brightness);
         saveScreenBrightness(brightness);
-        const renderer = this.renderer as { brightness?: number } | undefined;
-        if (renderer && typeof renderer.brightness === "number") {
-            renderer.brightness = gammaFromScreenBrightness(brightness);
-        }
+        if (this.renderer) this.renderer.brightness = gammaFromScreenBrightness(brightness);
     }
 
     private applyInterfaceScalingPercentDeviceOption(value: number): void {
@@ -6973,8 +6968,8 @@ export class OsrsClient {
                 `[OsrsClient] Loc change: ${oldId} -> ${newId} at (${tile.x}, ${tile.y}, ${level})`,
             );
             // Notify renderer to update the loc
-            if (this.renderer && typeof (this.renderer as any).onLocChange === "function") {
-                (this.renderer as any).onLocChange(oldId, newId, tile, level, opts);
+            if (this.renderer) {
+                this.renderer.onLocChange(oldId, newId, tile, level, opts);
             }
         } catch (err) {
             console.warn("onLocChange error", err);
@@ -6988,7 +6983,7 @@ export class OsrsClient {
         objectData?: Uint8Array;
     }): void {
         try {
-            (this.renderer as any)?.onRegionReplacement?.(payload);
+            this.renderer?.onRegionReplacement(payload);
         } catch (err) {
             console.warn("onRegionReplacement error", err);
         }
@@ -6996,12 +6991,7 @@ export class OsrsClient {
 
     refreshGamemodeWorldLocs(): void {
         try {
-            if (
-                this.renderer &&
-                typeof (this.renderer as any).refreshGamemodeWorldLocs === "function"
-            ) {
-                (this.renderer as any).refreshGamemodeWorldLocs();
-            }
+            this.renderer?.refreshGamemodeWorldLocs();
         } catch (err) {
             console.warn("refreshGamemodeWorldLocs error", err);
         }
@@ -7018,8 +7008,8 @@ export class OsrsClient {
             console.log(
                 `[OsrsClient] Loc add: ${locId} at (${tile.x}, ${tile.y}, ${level}) shape=${shape} rot=${rotation}`,
             );
-            if (this.renderer && typeof (this.renderer as any).onLocAddChange === "function") {
-                (this.renderer as any).onLocAddChange(locId, tile, level, shape, rotation);
+            if (this.renderer) {
+                this.renderer.onLocAddChange(locId, tile, level, shape, rotation);
             }
         } catch (err) {
             console.warn("onLocAddChange error", err);
@@ -7031,8 +7021,8 @@ export class OsrsClient {
             console.log(
                 `[OsrsClient] Loc del at (${tile.x}, ${tile.y}, ${level}) shape=${shape} rot=${rotation}`,
             );
-            if (this.renderer && typeof (this.renderer as any).onLocDel === "function") {
-                (this.renderer as any).onLocDel(tile, level, shape, rotation);
+            if (this.renderer) {
+                this.renderer.onLocDel(tile, level, shape, rotation);
             }
         } catch (err) {
             console.warn("onLocDel error", err);
@@ -7048,8 +7038,8 @@ export class OsrsClient {
         animId: number,
     ): void {
         try {
-            if (this.renderer && typeof (this.renderer as any).onLocAnim === "function") {
-                (this.renderer as any).onLocAnim(locId, tile, level, shape, rotation, animId);
+            if (this.renderer) {
+                this.renderer.onLocAnim(locId, tile, level, shape, rotation, animId);
             }
         } catch (err) {
             console.warn("onLocAnim error", err);
@@ -7196,8 +7186,8 @@ export class OsrsClient {
      * is the 64x64 square the tile is in.
      */
     private npcOwnerMap(tileX: number, tileY: number): { mapX: number; mapY: number; instance: boolean } {
-        const scene = (this.renderer as any)?.instanceSceneMap as { mapX: number; mapY: number } | null | undefined;
-        if (scene && (this.renderer as any)?.instanceActive) {
+        const scene = this.renderer?.instanceSceneMap;
+        if (scene && this.renderer?.instanceActive) {
             return { mapX: scene.mapX | 0, mapY: scene.mapY | 0, instance: true };
         }
         return { mapX: getMapIndexFromTile(tileX | 0), mapY: getMapIndexFromTile(tileY | 0), instance: false };
@@ -7537,7 +7527,7 @@ export class OsrsClient {
                 // spot animation delay is in client cycles (Client.cycle units).
                 const delayCycles = Math.max(0, spot.delayCycles | 0);
                 const startCycle = getClientCycle() + delayCycles;
-                (this.renderer as any)?.registerNpcSpotAnimation?.({
+                this.renderer?.registerNpcSpotAnimation({
                     npcServerId: serverId,
                     spotId: spot.id | 0,
                     height: spot.height | 0,
