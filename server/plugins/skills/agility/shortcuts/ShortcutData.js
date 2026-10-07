@@ -55,7 +55,7 @@ const ENTRY_KEYS = new Set([
 const FAIL_KEYS = new Set([
   "low", "high", "baseChance", "neverFailLevel", "fromLevel", "xp", "start", "end", "render", "steps", "cross", "hit",
 ]);
-const REQUIREMENT_KEYS = new Set(["skills", "equipped", "items", "quest", "diary", "steps", "start", "end"]);
+const REQUIREMENT_KEYS = new Set(["skills", "equipped", "items", "quest", "diary", "steps", "cross", "start", "end"]);
 
 function animation(name, where) {
   const id = ANIMATIONS[name];
@@ -231,6 +231,12 @@ function build(raw, index) {
   }
 
   if (built.fail?.cross) built.fail = crossingFail(built.fail, built.steps);
+  // An alternative's own crossing of the same two ends (a barehanded climb beside a grapple).
+  if (raw.between && built.requires) {
+    built.requires = built.requires.map((alternative) => (alternative.cross
+      ? { ...alternative, steps: betweenEntry({}, { ...raw.between, cross: alternative.cross }, where).steps }
+      : alternative));
+  }
 
   const tiles = raw.at == null ? [null] : Array.isArray(raw.at[0]) ? raw.at : [raw.at];
   return tiles.map((at) => (at ? { ...built, at } : built));

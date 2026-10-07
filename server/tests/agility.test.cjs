@@ -409,6 +409,18 @@ test("logging out mid-obstacle lands the player on the far side", () => {
   assert.equal(player.state.xp, 8);
 });
 
+test("a move lands after exactly its ticks (Rocks, Ralos' Rise: 10)", () => {
+  const player = createPlayer(1455, 3128, 0);
+  hooks.click.get(ObjectIds.ROCKS_151)({ player, object: gameObject(ObjectIds.ROCKS_151, 1456, 3128, 0), objectId: ObjectIds.ROCKS_151, clickType: 1, location: { x: 1456, y: 3128, z: 0 }, handled: false });
+  let ticks = 0;
+  while (tileOf(player)[0] !== 1465 && ticks < 60) {
+    tick();
+    ticks++;
+  }
+  assert.equal(ticks, 10);
+  for (let more = 0; player.getAttribute("agility.obstacle") != null && more < 5; more++) tick();
+});
+
 test("teleports are refused while crossing an obstacle", () => {
   const rope = COURSES.find((entry) => entry.key === "draynor").obstacles.find((entry) => entry.index === 2);
   const player = createPlayer(3099, 3277, 3);

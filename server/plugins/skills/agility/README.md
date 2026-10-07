@@ -34,7 +34,9 @@ and one way to play it:
 ### Requirements
 
 `requires` is a list; the first alternative the player meets is used, and its `steps` (and
-`start`, `end`) replace the entry's. Otherwise the player gets the first alternative's refusal.
+`start`, `end`) replace the entry's. On a `between` entry an alternative can give its own
+`cross` instead, played between the same two ends (a barehanded climb beside a grapple).
+Otherwise the player gets the first alternative's refusal.
 
 | Key | |
 | --- | --- |

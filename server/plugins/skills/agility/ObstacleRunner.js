@@ -145,7 +145,8 @@ function createObstacleTask(Task) {
       this.steps = expandSteps(steps);
       this.onFinish = onFinish;
       this.index = 0;
-      this.delay = 0;
+      // Not `delay`: that is Task's own interval between executes.
+      this.waitTicks = 0;
       this.walkPath = null;
       this.walkedTiles = 0;
       this.finished = false;
@@ -164,12 +165,12 @@ function createObstacleTask(Task) {
         this.advanceWalk();
         if (this.walkPath) return;
       }
-      if (this.delay > 0 && --this.delay > 0) {
+      if (this.waitTicks > 0 && --this.waitTicks > 0) {
         return;
       }
       while (this.index < this.steps.length) {
         this.applyStep(this.steps[this.index++]);
-        if (this.walkPath || this.delay > 0 || this.finished) return;
+        if (this.walkPath || this.waitTicks > 0 || this.finished) return;
       }
       this.finish(true);
     }
@@ -187,7 +188,7 @@ function createObstacleTask(Task) {
     applyStep(step) {
       const player = this.player;
       if (step.wait != null) {
-        this.delay = step.wait;
+        this.waitTicks = step.wait;
       } else if (step.anim != null) {
         animate(player, step.anim, step.delay ?? 0);
       } else if ("render" in step) {
