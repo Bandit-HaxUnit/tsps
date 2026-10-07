@@ -19,6 +19,17 @@
     z-index: 1;
 }
 
+/* Taking a hit reddens the screen edge; the plugin sets --first-person-hit (0..1). */
+.first-person-reticle::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 55%, rgb(150 0 0 / 60%) 100%);
+    opacity: var(--first-person-hit, 0);
+    pointer-events: none;
+    z-index: 1;
+}
+
 .first-person-chatting::before,
 .first-person-inventory::before,
 .first-person-interface::before {

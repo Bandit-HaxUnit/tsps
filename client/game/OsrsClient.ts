@@ -2352,6 +2352,7 @@ export class OsrsClient {
                         );
                     } catch {}
                 }
+                this.clientPlugins.onHitsplat(payload as any);
                 if (this.renderer) this.renderer.registerHitsplat(payload as any);
                 else this.hitsplatFlush.queueHitsplat(payload as any);
             },

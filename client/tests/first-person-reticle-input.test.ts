@@ -192,15 +192,74 @@ try {
     assert.equal(input.enablePointerLock, true, "Alt should enable pointer lock for mouse look");
     input.keys.delete("ArrowUp");
     client.camera.snapToYaw(512);
-    plugin.handleCameraFollow({ camera: client.camera, playerX: 10, playerY: -3, playerZ: 20 });
-    assert.deepEqual(Array.from(client.camera.pos), [7.5, -5.75, 20], "camera follows behind and above the full player model");
+    client.camera.setViewPitchOverride(128);
+    const follow = (extra: object = {}) => plugin.handleCameraFollow({ camera: client.camera, playerX: 10, playerY: -3, playerZ: 20, ...extra });
+    follow();
+    // Pivot at 90% of the 2-tile model height, 2.6 tiles out at 22.5 degrees down.
+    const reach = 2.6 * Math.cos(Math.PI / 8), rise = 2.6 * Math.sin(Math.PI / 8);
+    assert.equal(client.camera.pos[0], Math.round((10 - reach) * 128) / 128, "camera follows behind the player");
+    assert.ok(Math.abs(client.camera.getPosY() - (-3 - 1.8 - rise)) < 1e-6, "camera sits above the full player model");
+    assert.equal(client.camera.pos[2], 20);
     plugin.handleCameraFollow({ camera: client.camera, playerX: 10, playerY: -3.001, playerZ: 20 });
-    assert.ok(Math.abs(client.camera.getPosY() + 5.751) < 0.000001,
+    assert.ok(Math.abs(client.camera.getPosY() - (-3.001 - 1.8 - rise)) < 1e-6,
         "camera height follows fractional ground height without a whole-unit step");
-    plugin.handleCameraFollow({ camera: client.camera, playerX: 10, playerY: -3, playerZ: 20 });
+    follow();
+    const levelY = client.camera.getPosY();
     client.camera.snapToYaw(0);
     plugin.handleCameraFollow({ camera: client.camera, playerX: 10, playerZ: 20 });
-    assert.deepEqual(Array.from(client.camera.pos), [10, -5.75, 17.5], "yaw rotates the rear offset and unloaded terrain preserves height");
+    assert.deepEqual([client.camera.pos[0], client.camera.pos[2]], [10, Math.round((20 - reach) * 128) / 128],
+        "yaw rotates the rear offset");
+    assert.equal(client.camera.getPosY(), levelY, "unloaded terrain preserves height");
+
+    client.camera.snapToYaw(512);
+    client.camera.setViewPitchOverride(380);
+    follow();
+    assert.ok(client.camera.getPosY() < levelY - 1 && client.camera.pos[0] > 10 - reach,
+        "looking down orbits the camera up and over the player");
+    client.camera.setViewPitchOverride(-480);
+    follow();
+    assert.equal(client.camera.getViewPitchOverride(), -192, "pitch stops before the camera goes under the player");
+    follow({ groundHeightAt: () => -4 });
+    assert.ok(Math.abs(client.camera.getPosY() + 4.3) < 1e-6, "looking up keeps the lens above rising ground");
+    client.camera.setViewPitchOverride(128);
+    // At yaw 512 the camera trails west; a solid wall stands on the east side of tile 8.
+    follow({ collisionFlagAt: (_plane: number, x: number) => x === 8 ? CollisionFlag.WALL_EAST_PROJECTILE_BLOCKER : 0 });
+    assert.ok(client.camera.pos[0] > 9 && client.camera.pos[0] < 9.5, "a wall pulls the camera in front of it");
+    follow({ collisionFlagAt: (_plane: number, x: number) => x === 8 ? CollisionFlag.WALL_EAST : 0 });
+    assert.equal(client.camera.pos[0], Math.round((10 - reach) * 128) / 128, "fences that only block walking leave the view alone");
+
+    const originalFollowNow = Object.getOwnPropertyDescriptor(performance, "now");
+    let followNow = 1000;
+    Object.defineProperty(performance, "now", { configurable: true, value: () => followNow });
+    try {
+        const ecs = client.playerEcs as any;
+        ecs.isMoving = () => true;
+        ecs.isRunVisual = () => true;
+        for (let i = 0; i < 30; i++) { followNow += 50; follow(); }
+        assert.ok(Math.abs(client.camera.getViewZoomScale() - 0.9) < 0.01, "running widens the view");
+        ecs.isRunVisual = () => false;
+        for (let i = 0; i < 40; i++) { followNow += 50; follow(); }
+        assert.ok(Math.abs(client.camera.getViewZoomScale() - 1) < 0.01, "walking eases the view back");
+        delete ecs.isMoving;
+        delete ecs.isRunVisual;
+
+        follow();
+        const rest = Array.from(client.camera.pos);
+        plugin.onHitsplat({ targetType: "player", targetId: 99, damage: 20 });
+        followNow += 30;
+        follow();
+        assert.deepEqual(Array.from(client.camera.pos), rest, "another player's hitsplat leaves the camera alone");
+        plugin.onHitsplat({ targetType: "player", targetId: 10, damage: 20 });
+        followNow += 30;
+        follow();
+        assert.notDeepEqual(Array.from(client.camera.pos), rest, "taking a hit jolts the camera");
+        followNow += 400;
+        follow();
+        assert.deepEqual(Array.from(client.camera.pos), rest, "the jolt settles");
+    } finally {
+        if (originalFollowNow) Object.defineProperty(performance, "now", originalFollowNow);
+        else delete (performance as any).now;
+    }
     client.camera.setViewPitchOverride(128);
     for (const [width, height] of [[640, 480], [512, 334]]) {
         client.camera.update(width, height);

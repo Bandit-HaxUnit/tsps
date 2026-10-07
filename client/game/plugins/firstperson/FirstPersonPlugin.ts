@@ -9,6 +9,8 @@ import type { PlayerEcs } from "../../ecs/PlayerEcs";
 import type { WidgetNode } from "../../../widgets/WidgetNode";
 import type { WidgetManager } from "../../../widgets/WidgetManager";
 import { deriveMenuEntriesForWidget, getRootRenderTransform } from "../../../widgets/menu/utils";
+import { CollisionFlag } from "../../../common/CollisionFlag";
+import type { HitsplatEventPayload } from "../../GameRenderer";
 
 if (typeof document !== "undefined") require("./FirstPersonPlugin.css");
 
@@ -24,7 +26,7 @@ type FirstPersonClient = {
     menuActiveSimpleEntries?: readonly unknown[];
     controlledPlayerServerId?: number;
     playerEcs?: Pick<PlayerEcs, "getIndexForServerId" | "getX" | "getY" | "getDefaultHeightTiles" | "setRotationOverride"> &
-        { getLevel?(index: number): number };
+        Partial<Pick<PlayerEcs, "isMoving" | "isRunVisual">> & { getLevel?(index: number): number };
     runMode?: boolean;
     setKeyboardMovement?(dx: number, dy: number, running: boolean, rotation: number): void;
     stopKeyboardMovement?(deactivate?: boolean): void;
@@ -56,6 +58,22 @@ const CONTROLS_HINT = "WASD to move. Tab cycles movement, chat and inventory. Ar
 const SPACE_MENU_HOLD_MS = 450;
 const MOVEMENT_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD"];
 const ARROW_KEYS = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+// Behind-the-character camera, in tiles and RS angle units (2048 per turn, positive looks down).
+const FOLLOW_DISTANCE = 2.6;
+const PIVOT_HEIGHT = 0.9; // of the player's model height
+const DEFAULT_PITCH = 128;
+const MIN_PITCH = -192;
+const MAX_PITCH = 400;
+const WALL_MARGIN = 0.3;
+const GROUND_CLEARANCE = 0.3;
+// Running widens the view by shrinking the zoom scale: 0.9 is roughly +5 degrees.
+const RUN_FOV_KICK = 0.1;
+const HIT_SECONDS = 0.35;
+// A wall on the side of the tile the ray enters through stops the camera (bits match CollisionFlag).
+const ENTRY_WALLS = new Map([
+    ["1,0", CollisionFlag.WALL_WEST_PROJECTILE_BLOCKER], ["-1,0", CollisionFlag.WALL_EAST_PROJECTILE_BLOCKER],
+    ["0,1", CollisionFlag.WALL_SOUTH_PROJECTILE_BLOCKER], ["0,-1", CollisionFlag.WALL_NORTH_PROJECTILE_BLOCKER],
+]);
 
 
 export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyHandler, InputMouseHandler {
@@ -94,6 +112,12 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
     private spaceStartedAt = 0;
     private spaceHandled = false;
     private facingPlayerIndex?: number;
+    private zoomScale = 1;
+    private runBlend = 0;
+    private lastFollowAt = 0;
+    private hitAt = -Infinity;
+    private hitStrength = 0;
+    private hitVignette = 0;
     private dialogueOptions: WidgetNode[] = [];
     private dialogueOptionIndex = 0;
     private readonly client: FirstPersonClient;
@@ -334,7 +358,8 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
 
     handleCameraScroll({ camera, input }: CameraInputContext): boolean {
         if (!this.enabled || input.wheelDeltaY === 0) return false;
-        camera.setViewZoomScale(camera.getViewZoomScale() - input.wheelDeltaY * 0.001);
+        this.zoomScale = Math.max(0.5, Math.min(2, this.zoomScale - input.wheelDeltaY * 0.001));
+        camera.setViewZoomScale(this.zoomScale * (1 - RUN_FOV_KICK * this.runBlend));
         return true;
     }
 
@@ -391,19 +416,84 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
         this.updateReticlePosition(input, x, y);
     }
 
-    handleCameraFollow({ camera, playerX, playerY, playerZ }: CameraFollowContext): boolean {
+    handleCameraFollow({ camera, playerX, playerY, playerZ, plane = 0, groundHeightAt, collisionFlagAt }: CameraFollowContext): boolean {
         if (!this.enabled) return false;
         this.syncPlayerFacing(camera);
-        const index = this.client.playerEcs?.getIndexForServerId(this.client.controlledPlayerServerId ?? -1);
-        const height = index === undefined ? undefined : this.client.playerEcs?.getDefaultHeightTiles(index);
-        const yaw = camera.yaw * RS_TO_RADIANS;
-        // Close third-person view: keep the full player below and ahead of the camera.
-        camera.snapToPosition(
-            Math.round((playerX - Math.sin(yaw) * 2.5) * 128) / 128,
-            playerY === undefined ? undefined : playerY - (height ?? 200 / 128) - 0.75,
-            Math.round((playerZ - Math.cos(yaw) * 2.5) * 128) / 128,
-        );
+        const now = performance.now();
+        const dt = Math.min(0.1, Math.max(0, (now - this.lastFollowAt) / 1000));
+        this.lastFollowAt = now;
+        const pe = this.client.playerEcs;
+        const index = pe?.getIndexForServerId(this.client.controlledPlayerServerId ?? -1);
+        const height = (index === undefined ? undefined : pe?.getDefaultHeightTiles(index)) ?? 200 / 128;
+        // Orbit a pivot near the head: looking down raises the camera, looking up lowers it.
+        const pitchUnits = Math.max(MIN_PITCH, Math.min(MAX_PITCH, camera.getViewPitchOverride() ?? DEFAULT_PITCH));
+        if (pitchUnits !== camera.getViewPitchOverride()) camera.setViewPitchOverride(pitchUnits);
+        const pitch = pitchUnits * RS_TO_RADIANS, yaw = camera.yaw * RS_TO_RADIANS;
+        const sinYaw = Math.sin(yaw), cosYaw = Math.cos(yaw);
+        const reach = FOLLOW_DISTANCE * Math.cos(pitch);
+        // Pull in in front of walls so the view never ends up inside them.
+        const clear = collisionFlagAt ? this.clearReach(playerX, playerZ, -sinYaw, -cosYaw, reach, plane, collisionFlagAt) : reach;
+        const distance = reach > 0.01 ? FOLLOW_DISTANCE * clear / reach : FOLLOW_DISTANCE;
+        let x = playerX - sinYaw * distance * Math.cos(pitch);
+        let z = playerZ - cosYaw * distance * Math.cos(pitch);
+        let y = playerY === undefined ? undefined : playerY - height * PIVOT_HEIGHT - distance * Math.sin(pitch);
+        const ground = y === undefined ? undefined : groundHeightAt?.(x, z);
+        if (y !== undefined && ground !== undefined) y = Math.min(y, ground - GROUND_CLEARANCE);
+
+        // Taking a hit jolts the view and flashes the screen edge; both settle within HIT_SECONDS.
+        const hitAge = (now - this.hitAt) / 1000;
+        const hit = hitAge < HIT_SECONDS ? this.hitStrength * (1 - hitAge / HIT_SECONDS) ** 2 : 0;
+        if (hit > 0) {
+            const jolt = Math.sin(hitAge * 55) * hit * 0.12;
+            x += cosYaw * jolt;
+            z -= sinYaw * jolt;
+            if (y !== undefined) y += Math.sin(hitAge * 41 + 1) * hit * 0.08;
+        }
+        this.setHitVignette(hit);
+        camera.snapToPosition(Math.round(x * 128) / 128, y, Math.round(z * 128) / 128);
+
+        // Running widens the view; it eases out a little slower than it eases in.
+        const running = index !== undefined && pe?.isMoving?.(index) === true && pe.isRunVisual?.(index) === true;
+        this.runBlend += ((running ? 1 : 0) - this.runBlend) * (1 - Math.exp(-dt * (running ? 4 : 3)));
+        const zoom = this.zoomScale * (1 - RUN_FOV_KICK * this.runBlend);
+        if (Math.abs(zoom - camera.getViewZoomScale()) > 1e-4) camera.setViewZoomScale(zoom);
         return true;
+    }
+
+    onHitsplat(event: HitsplatEventPayload): void {
+        if (!this.enabled || event.targetType !== "player" || event.targetId !== this.client.controlledPlayerServerId) return;
+        // Blocks and misses still flinch a little; heavy hits up to full strength.
+        this.hitStrength = Math.min(1, 0.35 + Math.max(0, event.damage) / 25);
+        this.hitAt = performance.now();
+    }
+
+    /** How far (tiles) the camera can sit from the player along a direction before a wall or solid object. */
+    private clearReach(x: number, z: number, dx: number, dz: number, reach: number, plane: number,
+        flags: (plane: number, tileX: number, tileY: number) => number): number {
+        let tileX = Math.floor(x), tileZ = Math.floor(z);
+        const blocked = (fromX: number, fromZ: number, toX: number, toZ: number) =>
+            (flags(plane, toX, toZ) & (ENTRY_WALLS.get(`${toX - fromX},${toZ - fromZ}`)! | CollisionFlag.OBJECT_PROJECTILE_BLOCKER)) !== 0;
+        for (let travelled = 0.125; travelled <= reach + WALL_MARGIN; travelled += 0.125) {
+            const nextX = Math.floor(x + dx * travelled), nextZ = Math.floor(z + dz * travelled);
+            if (nextX === tileX && nextZ === tileZ) continue;
+            // A diagonal step is blocked only when both ways round the corner are.
+            const stop = nextX !== tileX && nextZ !== tileZ
+                ? (blocked(tileX, tileZ, nextX, tileZ) || blocked(nextX, tileZ, nextX, nextZ)) &&
+                    (blocked(tileX, tileZ, tileX, nextZ) || blocked(tileX, nextZ, nextX, nextZ))
+                : blocked(tileX, tileZ, nextX, nextZ);
+            if (stop) return Math.max(0, Math.min(reach, travelled - WALL_MARGIN));
+            tileX = nextX;
+            tileZ = nextZ;
+        }
+        return reach;
+    }
+
+    private setHitVignette(amount: number): void {
+        const rounded = Math.round(amount * 100) / 100;
+        if (rounded === this.hitVignette) return;
+        this.hitVignette = rounded;
+        (this.client.inputManager.element?.parentElement as HTMLElement | undefined)?.style
+            .setProperty("--first-person-hit", String(rounded));
     }
 
     private canMove(): boolean {
@@ -809,6 +899,10 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
         this.syncDialogueOptions();
         this.syncInventorySelection();
         this.updateReticleVisibility();
+        this.zoomScale = 1;
+        this.runBlend = 0;
+        this.hitAt = -Infinity;
+        this.setHitVignette(0);
         if (enabled) {
             if (this.updateLoginSession() && !this.controlsHintShown) {
                 this.client.addGameMessage(CONTROLS_HINT);

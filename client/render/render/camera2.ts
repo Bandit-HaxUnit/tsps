@@ -291,6 +291,13 @@ export function updateCameraFollow(host: WebGLOsrsRendererHost, deltaTime?: numb
                 playerX,
                 playerY: playerHeightSample.valid ? playerHeightSample.height : undefined,
                 playerZ,
+                plane: basePlane,
+                groundHeightAt: (x, z) => {
+                    const sample = sampleBridgeHeightForWorldTile(host.mapManager, x, z, basePlane,
+                        BridgePlaneStrategy.RENDER);
+                    return sample.valid ? sample.height : undefined;
+                },
+                collisionFlagAt: (plane, tileX, tileY) => host.osrsClient.renderer.getCollisionFlagAt(plane, tileX, tileY),
             })
         ) {
             return;

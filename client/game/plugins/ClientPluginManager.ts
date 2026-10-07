@@ -1,4 +1,5 @@
 import type { Camera } from "../Camera";
+import type { HitsplatEventPayload } from "../GameRenderer";
 import type { InputManager } from "../InputManager";
 import type { DrawCall, Program } from "picogl";
 import type { ProgramSource } from "../../render/shaders/ShaderUtil";
@@ -85,6 +86,12 @@ export type CameraFollowContext = {
     playerX: number;
     playerY?: number;
     playerZ: number;
+    /** The player's plane, for the lookups below. */
+    plane?: number;
+    /** Ground height (tiles, y down) at a world position, when loaded. */
+    groundHeightAt?(x: number, z: number): number | undefined;
+    /** Collision flags at a world tile (0 where the renderer has none). */
+    collisionFlagAt?(plane: number, tileX: number, tileY: number): number;
 };
 
 export interface ClientPlugin {
@@ -102,6 +109,8 @@ export interface ClientPlugin {
     handleCameraScroll?(context: CameraInputContext): boolean;
     updateInteractionPointer?(camera: Camera): void;
     handleCameraFollow?(context: CameraFollowContext): boolean;
+    /** A hitsplat arrived from the server (before it is drawn). */
+    onHitsplat?(event: HitsplatEventPayload): void;
     shouldKeepWorldMenuOpen?(): boolean;
     /** Supplies an alternate gameframe (e.g. the classic 317 frame). */
     gameFrame?: GameFrameProvider;
@@ -185,6 +194,10 @@ export class ClientPluginManager {
 
     handleCameraFollow(context: CameraFollowContext): boolean {
         return this.plugins.some((plugin) => plugin.handleCameraFollow?.(context) === true);
+    }
+
+    onHitsplat(event: HitsplatEventPayload): void {
+        for (const plugin of this.plugins) plugin.onHitsplat?.(event);
     }
 
     shouldKeepWorldMenuOpen(): boolean {
