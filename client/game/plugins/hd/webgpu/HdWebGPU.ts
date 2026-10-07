@@ -17,9 +17,6 @@ import {
 import { resolveWebGPURenderDistance } from "../../../../render/webgpu/frameConfig";
 import { resolveFogRange } from "../../../../render/RenderDistancePolicy";
 import { HD_AUTO_FOG_DEPTH_FACTOR } from "../../../../render/render/constants";
-
-const resolveHdFogRange = (renderDistance: number) => resolveFogRange({ renderDistance, autoFogDepth: true,
-    autoFogDepthFactor: HD_AUTO_FOG_DEPTH_FACTOR, manualFogDepth: 0, hd: true });
 import {
     SCENE_EXTENSION_FIRST_BINDING,
     type WebGPUSceneExtension,
@@ -49,6 +46,9 @@ const SHADOW_MAP_SIZE = 2048;
 const SHADER_STAGES = GPU_SHADER_STAGE.VERTEX | GPU_SHADER_STAGE.FRAGMENT;
 
 // Field offsets in the uniform buffer, matching HdUniforms in hd-lighting.wgsl.ts.
+const resolveHdFogRange = (renderDistance: number) => resolveFogRange({ renderDistance, autoFogDepth: true,
+    autoFogDepthFactor: HD_AUTO_FOG_DEPTH_FACTOR, manualFogDepth: 0, hd: true });
+
 const OFF_INVERSE_VIEW = 0;
 const OFF_SHADOW_MATRIX = 16;
 const OFF_LIGHT_DIRECTION = 32;
