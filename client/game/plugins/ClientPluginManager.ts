@@ -7,6 +7,7 @@ import type { GLRenderer } from "../../widgets/gl/renderer";
 import type { ClickRegistry } from "../../widgets/gl/click-registry";
 import type { SimpleMenuEntry } from "../../ui/menu/MenuEngine";
 import type { MenuTransformContext } from "../../ui/menu/menuTransforms";
+import type { FontLoader } from "../../widgets/components/TextRenderer";
 
 /**
  * Draw/input context handed to a plugin that supplies a custom gameframe (the
@@ -53,6 +54,22 @@ export interface GameFrameProvider {
     drawGameFrame(context: GameFrameDrawContext): void;
 }
 
+/** Draw context for a `WidgetOverlay`; coordinates are device pixels on the UI canvas. */
+export type WidgetOverlayDrawContext = {
+    renderer: GLRenderer;
+    fontLoader: FontLoader;
+    /** A cache sprite as a texture. */
+    sprite(id: number): { tex: WebGLTexture; w: number; h: number } | undefined;
+};
+
+/** UI drawn above the widgets and under the right-click menu (RuneLite's ABOVE_WIDGETS). */
+export interface WidgetOverlay {
+    /** Changes whenever the drawing would; a change redraws the UI. */
+    signature(): string;
+    /** Draws the overlay and returns the device rects it covered. */
+    draw(context: WidgetOverlayDrawContext): { x: number; y: number; w: number; h: number }[];
+}
+
 export type CameraInputContext = {
     camera: Camera;
     input: InputManager;
@@ -82,6 +99,7 @@ export interface ClientPlugin {
     shouldKeepWorldMenuOpen?(): boolean;
     /** Supplies an alternate gameframe (e.g. the classic 317 frame). */
     gameFrame?: GameFrameProvider;
+    widgetOverlay?: WidgetOverlay;
     /** Handle a client-side `::command`; return true to consume it (no server round trip). */
     handleClientCommand?(command: string): boolean;
     /** Reorders or extends a menu (top first); its first eligible entry is the left-click. */
@@ -164,6 +182,12 @@ export class ClientPluginManager {
             if (frame?.isGameFrameActive()) return frame;
         }
         return undefined;
+    }
+
+    widgetOverlays(): WidgetOverlay[] {
+        const overlays: WidgetOverlay[] = [];
+        for (const plugin of this.plugins) if (plugin.widgetOverlay) overlays.push(plugin.widgetOverlay);
+        return overlays;
     }
 
     handleClientCommand(command: string): boolean {

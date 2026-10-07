@@ -171,7 +171,12 @@ export class WeatherPlugin extends Plugin implements ClientPlugin {
     afterSceneRender(renderer: WebGLOsrsRenderer): void {
         this.rendererRef = renderer;
         if (!this.isEnabled() || this.managers.length === 0) return;
-        this.ensureRenderer()?.draw(
+        const weatherRenderer = this.ensureRenderer();
+        if (!weatherRenderer) return;
+        // sceneProgramsReady fires before the cache loaders exist, so the
+        // program is created here on first draw (a no-op once it exists).
+        weatherRenderer.sceneProgramsReady(renderer);
+        weatherRenderer.draw(
             renderer,
             this.managers.map((manager) => ({ weather: manager.weather, objects: manager.objects })),
             performance.now(),

@@ -30,6 +30,7 @@ export class NotesPlugin extends Plugin {
         name: "Notes",
         description: "Persistent local notes for client/plugin tasks.",
         tags: ["notes"],
+        enabledByDefault: false,
         configKey: "notesplugin",
     };
 
