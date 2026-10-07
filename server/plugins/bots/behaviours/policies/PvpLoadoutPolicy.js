@@ -142,12 +142,15 @@ function selectBotPreset(state, rng = Math.random) {
     return null;
   }
   pvp.presetPoolGroup = group.id;
-  if (group.id === "random") {
-    return null;
-  }
-  const presetKey = group.presetKeys.includes(pvp.presetPoolPresetKey)
+  // The "random" group means any of the player presets, not archetype fallbacks: roaming
+  // bots should wear the same members kits players run, never budget f2p-looking gear.
+  const presetKeys =
+    group.id === "random"
+      ? groups.filter((entry) => entry.id !== "random").flatMap((entry) => entry.presetKeys)
+      : group.presetKeys;
+  const presetKey = presetKeys.includes(pvp.presetPoolPresetKey)
     ? pvp.presetPoolPresetKey
-    : choose(group.presetKeys, rng);
+    : choose(presetKeys, rng);
   const preset = getGlobalPresetByKey(presetKey);
   if (!preset) {
     return null;
