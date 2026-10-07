@@ -6,10 +6,6 @@
     "smelt_bar": {"mode":"smelting","repeat":true,"requires":[{"skill":{"id":"smithing","min":"$level"}}],"setup":[],"actions":[{"type":"bank","withdraw":[{"item":"$ore1","amount":"$oreAmount"},{"item":"$ore2","amount":"$oreAmount"}]},{"type":"smelt","bar":"$bar"},{"type":"bank","until":{"inventoryFull":false}}]},
     "catch_fish": {"mode":"fishing","repeat":true,"requires":[{"skill":{"id":"fishing","min":"$level"}}],"setup":[],"produces":["fish","fishing"],"actions":[{"type":"ensureItem","item":"$tool"},{"type":"fish","tool":"$spotTool","bait":"$bait","until":{"inventoryFull":true}},{"type":"choose","options":[{"weight":2,"actions":[{"type":"bank"}]},{"weight":1,"actions":[{"type":"dropItems","itemIds":"$resources"}]},{"weight":1,"actions":[{"type":"sellItems","itemIds":"$resources"}]},{"weight":1,"actions":[{"type":"cook"},{"type":"bank","until":{"inventoryFull":false}}]},{"weight":1,"actions":[{"type":"cook"},{"type":"sellItems","itemIds":"$cooked"}]},{"weight":1,"actions":[{"type":"cook"},{"type":"dropItems","itemIds":"$cooked"}]}]}]}
   },
-  "resolvers": [
-    {"id":"withdraw_axe","resolves":"item:axe","actions":[{"type":"bank","withdraw":[{"item":"bronze_axe","amount":1}]}]},
-    {"id":"return_to_site","resolves":"area","actions":[{"type":"walkTo","x":3147,"y":3230,"z":0,"radius":6}]}
-  ],
   "tierActivities": {
     "novices": ["combat_training","normal_trees","copper_tin_rocks","burn_normal_logs","smelt_bronze","net_fishing"],
     "intermediates": ["combat_training","oak_trees","iron_rocks","burn_oak_logs","fly_fishing"],
