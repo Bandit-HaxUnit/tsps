@@ -537,6 +537,8 @@ export class ClientConnection {
               );
             } else if (actionPacket.groupId === 593 && actionPacket.childId === 39) {
               CombatSpecial.activate(this.player);
+            } else if (WeaponInterfaceManager.handleStyleButton(this.player, actionPacket.groupId, actionPacket.childId)) {
+              BonusManager.update(this.player);
             } else if (Autocasting.handleWidgetAction(
               this.player, actionPacket.groupId, actionPacket.childId, actionPacket.slot
             )) {
