@@ -37,14 +37,22 @@ function player(name, { bot = false } = {}) {
   return p;
 }
 
-function historyRows(name) {
+/** Saves are written by the writer thread: each read waits for it first. */
+async function historyRows(name) {
+  await persistence.flush();
   return persistence.database.prepare("SELECT reason FROM player_save_history WHERE username = ? ORDER BY id").all(name).map((row) => row.reason);
 }
 
 /** The coins in the saved row (read directly: load() is a login, which ends a pending rollback). */
-function savedGold(name) {
+async function savedGold(name) {
+  await persistence.flush();
   const row = persistence.database.prepare("SELECT save_json AS json FROM player_saves WHERE username = ?").get(persistence.normalizeUsername(name));
   return JSON.parse(row.json).inventory[0]?.amount ?? 0;
+}
+
+async function snapshots(name) {
+  await persistence.flush();
+  return persistence.listSnapshots(name);
 }
 
 function setGold(p, amount) {
@@ -52,25 +60,25 @@ function setGold(p, amount) {
   p.getInventory().setItem(0, new Item(995, amount));
 }
 
-test("a save adds a compressed copy with its reason; the same save again adds none; bots add none", () => {
+test("a save adds a compressed copy with its reason; the same save again adds none; bots add none", async () => {
   const p = player("Alice");
   setGold(p, 100);
   persistence.save(p, "autosave");
   persistence.save(p, "logout");
-  assert.deepEqual(historyRows("alice"), ["autosave"], "identical saves are kept once");
+  assert.deepEqual(await historyRows("alice"), ["autosave"], "identical saves are kept once");
   setGold(p, 200);
   persistence.save(p, "logout");
-  assert.deepEqual(historyRows("alice"), ["autosave", "logout"]);
-  const [newest] = persistence.listSnapshots("Alice");
+  assert.deepEqual(await historyRows("alice"), ["autosave", "logout"]);
+  const [newest] = await snapshots("Alice");
   assert.equal(newest.reason, "logout");
   assert.ok(newest.bytes < JSON.stringify(require("../dist/game/entity/impl/player/persistence/PlayerSave").PlayerSave.fromPlayer(p)).length / 3, "gzipped");
 
   persistence.save(player("Bot 1", { bot: true }), "autosave");
   assert.ok(persistence.exists("Bot 1"), "the bot's save is written");
-  assert.deepEqual(historyRows("bot_1"), [], "but it has no history");
+  assert.deepEqual(await historyRows("bot_1"), [], "but it has no history");
 });
 
-test("retention: all of the last day, the newest per hour to 7 days, per day to 30 days, nothing older", () => {
+test("retention: all of the last day, the newest per hour to 7 days, per day to 30 days, nothing older", async () => {
   const now = Date.parse("2026-10-07T12:00:00Z");
   const at = (msAgo) => new Date(now - msAgo).toISOString();
   const rows = [
@@ -86,46 +94,46 @@ test("retention: all of the last day, the newest per hour to 7 days, per day to 
   assert.deepEqual(idsToPrune(rows, now).sort(), [3, 6, 8]);
 });
 
-test("restoring a snapshot of an offline player writes it and keeps the replaced save as pre-rollback", () => {
+test("restoring a snapshot of an offline player writes it and keeps the replaced save as pre-rollback", async () => {
   const p = player("Bob");
   setGold(p, 5);
   persistence.save(p, "logout");
-  const [old] = persistence.listSnapshots("Bob");
+  const [old] = await snapshots("Bob");
   setGold(p, 999);
   persistence.save(p, "logout");
-  assert.equal(savedGold("Bob"), 999);
+  assert.equal(await savedGold("Bob"), 999);
 
   const restored = persistence.restoreSnapshot("Bob", old.id);
   assert.equal(restored.pending, false);
-  assert.equal(savedGold("Bob"), 5);
-  assert.deepEqual(historyRows("bob"), ["logout", "logout", "rollback"],
+  assert.equal(await savedGold("Bob"), 5);
+  assert.deepEqual(await historyRows("bob"), ["logout", "logout", "rollback"],
     "the replaced save is already the newest copy, so pre-rollback adds nothing new");
   assert.equal(persistence.restoreSnapshot("Bob", 123456), null, "no such snapshot");
 });
 
-test("an online player's rollback is written by their next save (their state kept as pre-rollback) until they log in", () => {
+test("an online player's rollback is written by their next save (their state kept as pre-rollback) until they log in", async () => {
   const p = player("Carol");
   setGold(p, 1);
   persistence.save(p, "logout");
-  const [old] = persistence.listSnapshots("Carol");
+  const [old] = await snapshots("Carol");
   setGold(p, 50);
   persistence.save(p, "autosave");
 
   assert.equal(persistence.restoreSnapshot("Carol", old.id, { online: true }).pending, true);
   setGold(p, 70);
   persistence.save(p, "autosave");
-  assert.equal(savedGold("Carol"), 1, "an autosave before the logout writes the snapshot");
+  assert.equal(await savedGold("Carol"), 1, "an autosave before the logout writes the snapshot");
   persistence.save(p, "logout");
-  assert.equal(savedGold("Carol"), 1, "and so does the logout save");
-  assert.deepEqual(historyRows("carol"), ["logout", "autosave", "pre-rollback", "rollback"]);
+  assert.equal(await savedGold("Carol"), 1, "and so does the logout save");
+  assert.deepEqual(await historyRows("carol"), ["logout", "autosave", "pre-rollback", "rollback"]);
 
   persistence.load("Carol");
   setGold(p, 80);
   persistence.save(p, "logout");
-  assert.equal(savedGold("Carol"), 80, "after logging back in, saves are theirs again");
+  assert.equal(await savedGold("Carol"), 80, "after logging back in, saves are theirs again");
 });
 
-test("::rollback finds a copy by id or by age", () => {
+test("::rollback finds a copy by id or by age", async () => {
   const { parseTarget } = SaveHistory._test;
   assert.deepEqual(parseTarget("#12"), { id: 12 });
   assert.deepEqual(parseTarget("12"), { id: 12 });
@@ -134,7 +142,7 @@ test("::rollback finds a copy by id or by age", () => {
   assert.equal(parseTarget("yesterday"), null);
 });
 
-test("::snapshots and ::rollback on a player who is online log them out", () => {
+test("::snapshots and ::rollback on a player who is online log them out", async () => {
   const commands = {};
   SaveHistory.register({
     core: { ...PluginManager.getCoreApi(), GameConstants: { PLAYER_PERSISTENCE: persistence } },
@@ -143,10 +151,11 @@ test("::snapshots and ::rollback on a player who is online log them out", () => 
   const p = player("Dave");
   setGold(p, 3);
   persistence.save(p, "logout");
-  const [old] = persistence.listSnapshots("Dave");
+  const [old] = await snapshots("Dave");
   setGold(p, 4);
   persistence.save(p, "logout");
 
+  await persistence.flush();
   const messages = [];
   const owner = { sendMessage: (message) => messages.push(message) };
   commands.snapshots({ player: owner, parts: ["snapshots", "Dave"] });
@@ -165,10 +174,10 @@ test("::snapshots and ::rollback on a player who is online log them out", () => 
   assert.ok(loggedOut);
   assert.match(messages.at(-1), /Dave was online and has been logged out\./);
   persistence.save(p, "logout");
-  assert.equal(savedGold("Dave"), 3);
+  assert.equal(await savedGold("Dave"), 3);
 });
 
-test("autosave: each player is due once per interval, staggered by name, within a per-tick budget", () => {
+test("autosave: each player is due once per interval, staggered by name, within a per-tick budget", async () => {
   const { saveDuePlayers: tick, schedule, forget, offsetOf, dueAt, INTERVAL_TICKS, MAX_SAVES_PER_TICK } = Autosave._test;
   const saved = [];
   Autosave.register({
@@ -213,6 +222,7 @@ test("the rollback script: a dry run changes nothing, --apply backs up and resto
   setGold(p, 20);
   persistence.save(p, "logout");
 
+  await persistence.flush();
   // This test process holds the database, as a running server would.
   assert.throws(() => run(["--before", cutoff, "--player", "Frank", "--database", DATABASE], { log() {} }), /Stop it first/);
   fs.unlinkSync(`${DATABASE}.pid`);
@@ -220,11 +230,52 @@ test("the rollback script: a dry run changes nothing, --apply backs up and resto
   const log = [];
   assert.deepEqual(run(["--before", cutoff, "--player", "Frank", "--database", DATABASE], { log: (line) => log.push(line) }), { restored: 0, planned: 1 });
   assert.ok(log.some((line) => line.startsWith("Dry run")));
-  assert.equal(savedGold("Frank"), 20);
+  assert.equal(await savedGold("Frank"), 20);
 
   const result = run(["--before", cutoff, "--player", "Frank", "--database", DATABASE, "--apply"], { log() {} });
   assert.equal(result.restored, 1);
   assert.ok(fs.existsSync(result.backup), "the database was copied first");
-  assert.equal(savedGold("Frank"), 10);
-  assert.deepEqual(historyRows("frank").slice(-2), ["logout", "rollback"]);
+  assert.equal(await savedGold("Frank"), 10);
+  assert.deepEqual((await historyRows("frank")).slice(-2), ["logout", "rollback"]);
+});
+
+test("saves are written by the writer thread; a login before it's done gets the new save", async () => {
+  const p = player("Gina");
+  setGold(p, 1);
+  persistence.save(p, "logout");
+  await persistence.flush();
+  setGold(p, 2);
+  persistence.save(p, "logout");
+  // Still the same tick: the writer can't have answered yet.
+  assert.ok(persistence.unwritten.has("gina"), "waiting for the writer");
+  assert.equal(persistence.load("Gina").getInventory()[0].getAmount(), 2, "a quick re-login loads the newest save");
+  assert.equal(await savedGold("Gina"), 2);
+  assert.ok(!persistence.unwritten.has("gina"), "written");
+  assert.ok(!JSON.stringify(persistence.findSave.get("gina").saveJson).includes("\\n  "), "stored without indentation");
+});
+
+test("a save that fails validation in the writer leaves the previous one, and flush reports it", async () => {
+  const p = player("Hank");
+  setGold(p, 7);
+  persistence.save(p, "logout");
+  await persistence.flush();
+  persistence.enqueue("hank", [{ kind: "row", json: "{\"position\":{}}" }, { kind: "history", json: "{}", reason: "logout" }]);
+  await assert.rejects(persistence.flush(), /Refusing to save hank/);
+  const stored = persistence.findSave.get("hank").saveJson;
+  assert.equal(JSON.parse(stored).inventory[0].amount, 7, "the previous save stays");
+  assert.equal(persistence.listSnapshots("Hank").length, 1, "and nothing of the bad save is in the history");
+  await assert.rejects(persistence.flush(), /Refusing/, "reported until Hank's next save succeeds");
+  persistence.save(p, "logout");
+  await persistence.flush();
+});
+
+test("a writer that dies is restarted, and the saves it hadn't written are sent again", async () => {
+  const p = player("Iris");
+  setGold(p, 11);
+  const old = persistence.writer;
+  persistence.save(p, "logout");
+  await old.terminate();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.notEqual(persistence.writer, old, "a new writer");
+  assert.equal(await savedGold("Iris"), 11);
 });

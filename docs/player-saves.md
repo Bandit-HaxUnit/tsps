@@ -21,6 +21,18 @@ A hard kill (`kill -9`, a power cut, `wsl --shutdown`) saves nothing; the autosa
 
 A shutdown save stores players where they stand, without the logout steps, so nobody leaves their area or instance. Content inside an instance must put a player right at their next login.
 
+## The writer thread
+
+The SQLite backend writes on its own thread (`plugins/persistence/SqliteSaveWorker.js`), so the game tick never waits on the disk. A WAL checkpoint's disk flush can take milliseconds on fast disks and much longer on a slow VPS, and it lands in whichever commit triggers it.
+
+- **On the tick,** `save()` only builds the save as compact JSON (about 0.05 ms) and posts it to the writer.
+- **On the writer thread:** validation, the hash, gzip, the transaction with the history copy, and pruning. It has the only connection that writes. Rollbacks go through it too, so the game thread never waits for a lock.
+- **Saves not yet written** are kept on the game thread; `load()` and `exists()` read them first, so a quick re-login can't load an older save.
+- **`flush()`** waits for the writer; shutdown awaits it. It reports a save the writer refused (failed validation) until that player's next save succeeds; the refused save writes nothing, so their previous save stays.
+- **If the writer dies,** a new one is started and gets every unanswered save again. If it dies three times in a row before it's ready, saves are written on the game thread instead, as before this change.
+- **A hard kill** loses only what's still queued for the writer: a few milliseconds of saves.
+- **Saves are stored without indentation** (loading doesn't care), about half the size.
+
 ## The autosave
 
 `plugins/persistence/Autosave.plugin.js` saves each online player every 15 minutes (1500 ticks). OSRS does the same: a crashed world puts players back to their save from up to 15 minutes before ([Server crash glitch](https://oldschool.runescape.wiki/w/Server_crash_glitch)).
@@ -40,7 +52,7 @@ The SQLite backend (`plugins/persistence/SqlitePlayerPersistence.plugin.js`, the
 | `saved_at` | ISO time (UTC) |
 | `reason` | The save's reason, or `pre-rollback` / `rollback` |
 | `save_hash` | SHA-1 of the save JSON |
-| `save_gz` | The save JSON, gzipped (about 1.5 KB against 12 KB) |
+| `save_gz` | The save JSON, gzipped (about 1.5 KB against 5–6 KB) |
 
 - **Not every save adds a copy:** a save identical to the player's newest copy adds none, and bots' saves add none.
 - **Retention**, thinned after each new copy (`SqliteSaveHistory.js`):
@@ -84,4 +96,4 @@ yarn saves:rollback --before ... --player "Some name"        # one player
 
 ## Testing
 
-`tests/player-saves.test.cjs`: copies and their reasons, identical saves and bots, retention, offline and online restores, the commands, the autosave's interval, staggering and budget, and the script (dry run, refusal under a running server, `--apply`).
+`tests/player-saves.test.cjs`: copies and their reasons, identical saves and bots, retention, offline and online restores, the commands, the autosave's interval, staggering and budget, the script (dry run, refusal under a running server, `--apply`), and the writer thread (a re-login before a write lands, a refused save, a writer that dies).
