@@ -969,8 +969,16 @@ test('idle pvp walking stays inside its hotspot and pauses for movement or comba
   assert.equal(peekMovementRequest(player), null);
 });
 
-test('each hotspot cluster uses its player-preset group within the combat band', () => {
+test('hotspot clusters match their design: preset groups, or the f2p ditch', () => {
   for (const hotspot of listWildernessHotspots()) {
+    if (hotspot.id === 'varrock_ditch') {
+      // The one free-to-play spot: f2p loadouts only, no player-preset group.
+      assert.equal(hotspot.presetGroup ?? null, null, 'the ditch is not a preset cluster');
+      for (const loadoutId of hotspot.allowedLoadouts) {
+        assert.ok(loadoutId.startsWith('f2p_'), `${hotspot.id} is free-to-play only`);
+      }
+      continue;
+    }
     assert.ok(hotspot.presetGroup, `${hotspot.id} names a preset group`);
     const band = hotspot.combatLevelRange;
     for (const loadoutId of hotspot.allowedLoadouts) {

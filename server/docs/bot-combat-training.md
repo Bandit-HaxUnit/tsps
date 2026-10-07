@@ -256,11 +256,12 @@ Configured in the same file, under `"pvp"`: `botPool` (how many `WildyBot` names
 (area, anchor, `targetBots` / `maxBots`, combat level band, allowed loadouts). The gear catalogue
 stays in `pvp-bot-loadouts.json`; hotspots refer to it by loadout id.
 
-Hotspots are members-only clusters, spread around the wilderness and level-matched to the player
-presets behind `::presets`: each names a `presetGroup` (`main_126`, `pure_1_def`, `tank_45_def`,
-`tank_70_def` in `pvp-bot-loadouts.json`), and its bots spawn wearing one of that group's actual
-player presets, so a cluster's levels and gear mirror what players run there. F2P loadouts are no
-longer part of any hotspot, so no free-to-play kits appear on a members world.
+Hotspots are clusters spread around the wilderness. All but the ditch are members-only and
+level-matched to the player presets behind `::presets`: each names a `presetGroup` (`main_126`,
+`pure_1_def`, `tank_45_def`, `tank_70_def` in `pvp-bot-loadouts.json`), and its bots spawn wearing
+one of that group's actual player presets, so a cluster's levels and gear mirror what players run
+there. Varrock Ditch is the free-to-play spot: f2p loadouts only, for the classic low-level ditch
+crowd, and it never draws a player preset.
 
 A wilderness bot's brain runs `pvp` with no rotation, so it only ever returns to `pvp`. The pvp
 loop reports progress while the bot fights or moves; before that, the brain's 3-minute stall check
