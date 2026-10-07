@@ -22,6 +22,7 @@ const {
   GROUP_ID,
   COMPONENT,
   PRESET_ROW_START,
+  PRESET_LEVEL_START,
   PRESET_ROW_COUNT,
   GLOBAL_ROW_COUNT,
   CUSTOM_ROW_COUNT,
@@ -375,6 +376,24 @@ function isPresetBlockedInWilderness(player) {
   return Wilderness.isIn(player) && !isFeroxSafeLocation(player?.getLocation?.()) && !isPlayerBot(player);
 }
 
+/** The combat level a preset's stat line would give (same formula as SkillManager). */
+function presetCombatLevel(preset) {
+  const stats = Array.isArray(preset?.getStats?.()) ? preset.getStats() : [];
+  if (stats.length < 7) {
+    return null;
+  }
+  const [attack, defence, strength, hp, ranged, prayer, magic] = stats.map((level) =>
+    Math.max(1, Math.floor(Number(level) || 1))
+  );
+  const base = Math.floor((defence + hp + Math.floor(prayer / 2)) * 0.2535) + 1;
+  const level = base + Math.max(
+    (attack + strength) * 0.325,
+    Math.floor(ranged * 1.5) * 0.325,
+    Math.floor(magic * 1.5) * 0.325
+  );
+  return Math.min(126, Math.max(3, Math.floor(level)));
+}
+
 function renderPresetLists(player) {
   const sender = player.getPacketSender();
   const pool = getGlobalPresetPool();
@@ -394,6 +413,12 @@ function renderPresetLists(player) {
           ? "<col=6f6355>Empty slot</col>"
           : "",
       uid(PRESET_ROW_START + row)
+    );
+    // The combat level sits right-aligned in its own column beside the name.
+    const combatLevel = preset ? presetCombatLevel(preset) : null;
+    sender.sendString(
+      combatLevel != null ? `<col=${isSelected ? "ffffff" : "c5b79b"}>${combatLevel}</col>` : "",
+      uid(PRESET_LEVEL_START + row)
     );
   }
 }
@@ -749,7 +774,7 @@ module.exports = {
   isEnabled: () => presetsEnabled,
   openPresetInterface,
   shouldOpenOnDeath,
-  _test: { spawnPresetItem, bankCarriedItems },
+  _test: { spawnPresetItem, bankCarriedItems, presetCombatLevel },
   register(api) {
     presetsEnabled = true;
     setPresetShopPricesEnabled(true);
