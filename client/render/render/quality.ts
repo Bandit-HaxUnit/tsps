@@ -222,22 +222,13 @@ export function getMobileGameplayUiScale(host: WebGLOsrsRendererHost,
         _bufH: number,
     ): number {
 
-        const safeCssW = Math.max(1, cssW);
-        const safeCssH = Math.max(1, cssH);
-        const shortestCssEdge = Math.max(1, Math.min(safeCssW, safeCssH));
-        const viewportT = clamp(
-            (shortestCssEdge - RENDER_CONSTANTS.MOBILE_GAMEPLAY_UI_PHONE_EDGE) /
-            (RENDER_CONSTANTS.MOBILE_GAMEPLAY_UI_TABLET_EDGE -
-                RENDER_CONSTANTS.MOBILE_GAMEPLAY_UI_PHONE_EDGE),
-            0,
-            1,
+        // Layout px per CSS px. Any screen bigger than a phone keeps the phone's layout size, so
+        // the gameframe grows with the screen instead of staying phone-sized on a tablet.
+        const shortestCssEdge = Math.max(1, Math.min(cssW, cssH));
+        const phoneEdge = RENDER_CONSTANTS.MOBILE_GAMEPLAY_UI_PHONE_EDGE;
+        return (
+            (RENDER_CONSTANTS.MOBILE_GAMEPLAY_UI_SCALE * phoneEdge) / Math.max(phoneEdge, shortestCssEdge)
         );
-        const desiredUiScale =
-            RENDER_CONSTANTS.MOBILE_GAMEPLAY_UI_MIN_SCALE +
-            (RENDER_CONSTANTS.MOBILE_GAMEPLAY_UI_MAX_SCALE -
-                RENDER_CONSTANTS.MOBILE_GAMEPLAY_UI_MIN_SCALE) *
-            viewportT;
-        return Math.max(1, desiredUiScale);
     
 }
 
