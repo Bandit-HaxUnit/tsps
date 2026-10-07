@@ -929,7 +929,7 @@ const { PvpController } = require('../plugins/bots/brain/pvp/PvpController');
 const { Location } = require('../dist/game/model/Location');
 const { peekMovementRequest, clearMovementRequest } = require('../plugins/bots/behaviours/navigation/BotNavigation');
 const { __testing: loadoutTesting } = require('../plugins/bots/behaviours/policies/PvpLoadoutPolicy');
-const { getWildernessHotspot } = require('../plugins/bots/behaviours/pvp/WildernessHotspotRegistry');
+const { getWildernessHotspot, listWildernessHotspots } = require('../plugins/bots/behaviours/pvp/WildernessHotspotRegistry');
 const { SkillManager } = require('../dist/game/content/skill/SkillManager');
 
 test('unmatched pvp bots walk between seek retries; overlays return to their activity', () => {
@@ -969,20 +969,19 @@ test('idle pvp walking stays inside its hotspot and pauses for movement or comba
   assert.equal(peekMovementRequest(player), null);
 });
 
-test('Edgeville generated and global presets remain within narrow combat bands', () => {
-  for (const hotspotId of ['edge_ditch', 'edge_south']) {
-    const hotspot = getWildernessHotspot(hotspotId);
+test('each hotspot cluster uses its player-preset group within the combat band', () => {
+  for (const hotspot of listWildernessHotspots()) {
+    assert.ok(hotspot.presetGroup, `${hotspot.id} names a preset group`);
     const band = hotspot.combatLevelRange;
-    for (const profileId of hotspot.allowedProfiles) {
-      for (const loadoutId of hotspot.allowedLoadouts) {
-        for (let i = 0; i < 5; i++) {
-          const state = { pvp: { hotspotId, loadoutId, profileId, presetPoolEnabled: true } };
-          const generated = loadoutTesting.buildGeneratedPreset(null, state);
-          assert.ok(generated, `${hotspotId}/${profileId}/${loadoutId}`);
-          const stats = generated.preset.getStats();
-          const level = SkillManager.prototype.getCombatLevel.call({ skills: { maxLevel: stats } });
-          assert.ok(level >= band.min && level <= band.max, `${generated.archetypeId}: ${level}`);
-        }
+    for (const loadoutId of hotspot.allowedLoadouts) {
+      assert.equal(loadoutId.startsWith('f2p_'), false, `${hotspot.id} is members-only`);
+      for (let i = 0; i < 3; i++) {
+        const state = { pvp: { hotspotId: hotspot.id, loadoutId, profileId: hotspot.allowedProfiles[0], presetPoolEnabled: true, presetPoolGroup: hotspot.presetGroup } };
+        const generated = loadoutTesting.buildGeneratedPreset(null, state);
+        assert.ok(generated, `${hotspot.id}/${loadoutId} generates a preset`);
+        const stats = generated.preset.getStats();
+        const level = SkillManager.prototype.getCombatLevel.call({ skills: { maxLevel: stats } });
+        assert.ok(level >= band.min && level <= band.max, `${hotspot.id} ${generated.archetypeId}: level ${level} outside ${band.min}-${band.max}`);
       }
     }
   }

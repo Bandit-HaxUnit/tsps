@@ -253,8 +253,14 @@ handler (`api.emitItemOnObject`). Food the bot's Cooking level cannot cook is le
 
 Configured in the same file, under `"pvp"`: `botPool` (how many `WildyBot` names exist),
 `activeRegionBotsPerRegion` / `activeRegionInset` (regional spread around players) and `hotspots`
-(area, anchor, `targetBots` / `maxBots`, level ranges, allowed loadouts). The gear catalogue stays
-in `pvp-bot-loadouts.json`; hotspots refer to it by loadout id.
+(area, anchor, `targetBots` / `maxBots`, combat level band, allowed loadouts). The gear catalogue
+stays in `pvp-bot-loadouts.json`; hotspots refer to it by loadout id.
+
+Hotspots are members-only clusters, spread around the wilderness and level-matched to the player
+presets behind `::presets`: each names a `presetGroup` (`main_126`, `pure_1_def`, `tank_45_def`,
+`tank_70_def` in `pvp-bot-loadouts.json`), and its bots spawn wearing one of that group's actual
+player presets, so a cluster's levels and gear mirror what players run there. F2P loadouts are no
+longer part of any hotspot, so no free-to-play kits appear on a members world.
 
 A wilderness bot's brain runs `pvp` with no rotation, so it only ever returns to `pvp`. The pvp
 loop reports progress while the bot fights or moves; before that, the brain's 3-minute stall check
