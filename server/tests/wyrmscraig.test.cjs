@@ -114,7 +114,7 @@ test("the data: every id is the cache's, under the names the captures print", ()
 });
 
 test("the shortcuts: levels and ends as the Wiki and the capture have them", () => {
-  const wyrmscraig = SHORTCUTS.filter((shortcut) => [62260, 62261, 62262, 62265, 62267].includes(shortcut.object));
+  const wyrmscraig = [62260, 62262, 62261, 62267, 62265].map((id) => SHORTCUTS.find((shortcut) => shortcut.object === id));
   assert.deepEqual(wyrmscraig.map((shortcut) => [shortcut.object, shortcut.level, shortcut.xp]),
     [[62260, 58, 5], [62262, 62, 5], [62261, 72, 5], [62267, 54, 5], [62265, 54, 5]]);
   const steps = (shortcut, x, y) => shortcut.steps({ pos: { x, y, z: 0 }, obj: { x, y, z: 0 } });

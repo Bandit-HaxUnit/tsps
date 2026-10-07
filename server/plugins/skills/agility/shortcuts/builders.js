@@ -135,6 +135,17 @@ function crawlUp(...path) {
   return [{ render: ShortcutAnim.CRAWL_UP_ROCKS }, { walk: path }, { render: null }];
 }
 
+/** Runs up to `near` and hurdles the fence onto `far`. */
+function hurdle(near, far) {
+  return [
+    { face: near },
+    { move: near, anim: Anim.RUN_UP, speed: [0, 60] },
+    { anim: Anim.JUMP_HURDLE },
+    { wait: 1 },
+    { move: far, speed: [0, 15] },
+  ];
+}
+
 /** Rope swings: the rope animates while the player swings to `to`. */
 function ropeSwing(to) {
   return [
@@ -156,4 +167,5 @@ module.exports = {
   crawlDown,
   crawlUp,
   ropeSwing,
+  hurdle,
 };
