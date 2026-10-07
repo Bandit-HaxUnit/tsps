@@ -22,6 +22,9 @@ export type { WidgetInputControllerDeps } from "./input/widgetInputTypes";
 
 const ALL_SETTINGS_GROUP = 134;
 const RESTORE_CHAT_KEYBOARD_SCRIPT = 2158;
+const MOBILE_ROOT = 601;
+/** 162:57 chatbox:chatdisplay - the messages and the input line. */
+const CHAT_DISPLAY_UID = (162 << 16) | 57;
 
 /** Per-frame widget hover/scroll/click/drag/keyboard input extracted from OsrsClient. */
 export class WidgetInputController {
@@ -113,6 +116,15 @@ export class WidgetInputController {
             );
         if (panningMap && touchDrag) input.consumeCameraDrag();
 
+        // The desktop chatbox has no keyboard button (the mobile layout's opens it through
+        // CS2), so on touch a tap on the chat brings up the soft keyboard and a tap elsewhere
+        // puts it away. A tablet on "desktop site" gets this layout.
+        if (isNewClick && input.isTouch && widgetManager.rootInterface !== MOBILE_ROOT) {
+            const keyboard = this.deps.getChatKeyboard();
+            if (hitsInclude(frame.hits, CHAT_DISPLAY_UID, widgetManager)) keyboard.show();
+            else keyboard.hide();
+        }
+
         const getPrimaryWidgetAction = createPrimaryWidgetActionResolver(
             this.deps,
             input,
@@ -140,4 +152,17 @@ export class WidgetInputController {
             isHolding,
         );
     }
+}
+
+function hitsInclude(hits: any[] | undefined, uid: number, widgetManager: { getWidgetByUid(uid: number): any }): boolean {
+    for (const hit of hits ?? []) {
+        let current = hit;
+        for (let depth = 0; current && depth < 16; depth++) {
+            if ((current.uid ?? -1) === uid) return true;
+            const parentUid = current.parentUid;
+            if (typeof parentUid !== "number" || parentUid < 0) break;
+            current = widgetManager.getWidgetByUid(parentUid);
+        }
+    }
+    return false;
 }

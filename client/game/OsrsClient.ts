@@ -1460,6 +1460,7 @@ export class OsrsClient {
             getCs2Vm: () => this.cs2Vm,
             getVarManager: () => this.varManager,
             getWorldMap: () => this.worldMap,
+            getChatKeyboard: () => this.mobileChatKeyboard,
             getCustomInterfaces: () => this.customInterfaces,
             getPlayerDesign: () => this.playerDesign,
             getObjTypeLoader: () => this.objTypeLoader,
