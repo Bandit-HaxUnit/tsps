@@ -3,7 +3,7 @@ const { Equipment } = require("../../../../src/main/typescript/elvarg/game/model
 const { Anim } = require("../constants");
 const { ShortcutAnim, between, climbOver, jump, pipe, tunnel, crevice } = require("./builders");
 
-const GRAPPLE_WALLS = [ObjectIds.WALL_59, ObjectIds.WALL_61, ObjectIds.WALL_62];
+const GRAPPLE_WALLS = [ObjectIds.ROUGH_WALL_8, ObjectIds.ROUGH_WALL_9, ObjectIds.ROUGH_WALL_10];
 const JUMP_DOWN_WALLS = [ObjectIds.WALL_60, ObjectIds.WALL_63, ObjectIds.WALL_64];
 
 /** Grapple points on the Falador and Yanille walls, and the walkway each one reaches. */

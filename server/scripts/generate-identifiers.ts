@@ -136,6 +136,15 @@ function generateEntries(
     const entries: GeneratedEntry[] = [];
     const usedNames = new Set<string>();
 
+    // A committed constant stays on its id when that id still exists but has lost its display
+    // name (rev 241 blanked Morgan, some walls...: same thing, transformed or renamed to null).
+    // Following the name instead would move the constant onto a different object.
+    for (const [name, id] of previousNameToId) {
+        if (id < 0 || id >= count || toConstName(lookup(id)?.name)) continue;
+        usedNames.add(name);
+        entries.push({ id, constName: name, rawName: "(no name in this revision)" });
+    }
+
     for (const [base, members] of groups) {
         // Pass 1: honor any id in this group that the previous file already
         // named consistently with this base (NAME, NAME_2, NAME_3, ...).
@@ -149,12 +158,14 @@ function generateEntries(
                 entries.push({ id: member.id, constName: match, rawName: member.rawName });
             }
         }
-        // Pass 2: assign fresh names (lowest free slot) to whatever's left.
+        // Pass 2: assign fresh names (lowest free slot) to whatever's left. A name the committed
+        // file gave another id is never reused: a renamed id drops its constant (a compile
+        // error to fix) rather than the constant silently pointing at something else.
         for (const member of members) {
             if (claimedIds.has(member.id)) continue;
             let constName = base;
             let suffix = 1;
-            while (usedNames.has(constName)) {
+            while (usedNames.has(constName) || previousNameToId.has(constName)) {
                 suffix++;
                 constName = `${base}_${suffix}`;
             }

@@ -30,8 +30,10 @@ module.exports = {
         FriendsChatManager.handlePrivateMessage(player, packet.recipient, packet.text);
       } else if (packet.type === "chat_filter") {
         FriendsChatManager.setChatFilters(player, packet.publicMode, packet.privateMode, packet.tradeMode);
-      } else {
+      } else if (packet.type === "chat" && packet.messageType === "friends_chat") {
         FriendsChatManager.handleChat(player, packet.text);
+      } else {
+        return; // public_chat and other packets are not ours
       }
       event.handled = true;
     });

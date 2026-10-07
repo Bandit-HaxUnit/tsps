@@ -24,11 +24,11 @@ import { Overlay, OverlayInitArgs, OverlayUpdateArgs, RenderPhase } from "./Over
 import { CLIENT_TYPE_ENHANCED, reportedClientType } from "../../rs/cs2/ClientType";
 
 /**
- * The enhanced client's "show mouseover text" setting. For clienttype 10 the game draws that
- * text itself (cache script 4726, while this is 1) and lays HUD overlays out below it (4731).
- * The server turns it on at login.
+ * The enhanced client's mouseover text setting, mouseover_text_disabled from rev 241 (it was
+ * 12377, mouseover_text_enabled). For clienttype 10 the game draws that text itself (cache
+ * script 4726, while this is 0) and lays HUD overlays out below it (4731).
  */
-const VARBIT_SHOW_MOUSEOVER_TEXT = 12377;
+const VARBIT_MOUSEOVER_TEXT_DISABLED = 10035;
 
 export interface WidgetsContext {
     getCacheSystem: () => CacheSystem;
@@ -603,7 +603,7 @@ export class WidgetsOverlay implements Overlay {
         if (reportedClientType(client.widgetManager?.rootInterface) === CLIENT_TYPE_ENHANCED) {
             return { signature: "hidden" };
         }
-        if (client.varManager?.getVarbit?.(VARBIT_SHOW_MOUSEOVER_TEXT) === 0) {
+        if (client.varManager?.getVarbit?.(VARBIT_MOUSEOVER_TEXT_DISABLED) === 1) {
             return { signature: "hidden" };
         }
 

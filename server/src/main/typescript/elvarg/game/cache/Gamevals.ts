@@ -18,8 +18,28 @@ export enum GamevalKind {
     SEQ = 7,
     SPOTANIM = 8,
     DBROW = 9,
+    /** DB tables with their column names. */
+    DBTABLE = 10,
     /** Interfaces with their components, in the format used from revision 232. */
     INTERFACE = 14,
+}
+
+export interface GamevalTable {
+    name: string;
+    /** Column names by column id. */
+    columns: string[];
+}
+
+/** A DB table file: a byte, its name, then (non-zero byte, column name) until a zero byte. */
+export function decodeGamevalTable(data: Int8Array): GamevalTable {
+    let [name, offset] = readString(data, 1);
+    const columns: string[] = [];
+    while (offset < data.length && data[offset++] !== 0) {
+        let column: string;
+        [column, offset] = readString(data, offset);
+        columns.push(column);
+    }
+    return { name, columns };
 }
 
 export interface GamevalInterface {
@@ -51,6 +71,7 @@ export function decodeGamevalInterface(data: Int8Array): GamevalInterface {
 
 export class Gamevals {
     private interfaces?: Map<number, GamevalInterface>;
+    private tables?: Map<number, GamevalTable>;
     private readonly names = new Map<GamevalKind, Map<number, string>>();
 
     constructor(private readonly store: FileStore = CachePipeline.getStore()) {}
@@ -79,6 +100,24 @@ export class Gamevals {
             if (data) this.interfaces.set(group, decodeGamevalInterface(data));
         }
         return this.interfaces;
+    }
+
+    /** Every DB table by id, with its column names. */
+    public allTables(): Map<number, GamevalTable> {
+        if (this.tables) return this.tables;
+        this.tables = new Map();
+        const archive = CacheIndexDat2.fromStore(GAMEVAL_INDEX, this.store).getArchive(GamevalKind.DBTABLE);
+        for (const id of archive.fileIds) {
+            const data = archive.getFile(id)?.data;
+            if (data) this.tables.set(id, decodeGamevalTable(data));
+        }
+        return this.tables;
+    }
+
+    /** A DB table column's id by name, or null when the table has no such column. */
+    public tableColumn(table: number, column: string): number | null {
+        const index = this.allTables().get(table)?.columns.indexOf(column) ?? -1;
+        return index >= 0 ? index : null;
     }
 
     /** `interface:component` for a packed `(group << 16) | component`, as rsprox prints it. */
