@@ -300,11 +300,6 @@ import {
 import { createBrowserSidebarPersistence } from "./sidebar/BrowserSidebarPersistence";
 import { SidebarStore } from "./sidebar/SidebarStore";
 import {
-    type ClientSidebarEntryData,
-    type SidebarPluginVisibilityOptions,
-    registerDefaultClientSidebarEntries,
-} from "./sidebar/entries";
-import {
     GameStateMachine,
     LoadingRequirement,
     LoadingTracker,
@@ -446,31 +441,6 @@ export class OsrsClient {
     // The official client never tries to "fast forward" thousands of 20ms cycles in one go.
     private static readonly MAX_CLIENT_TICKS_PER_SLICE = 50;
 
-    private syncSidebarPlugins(force = false): void {
-        const visibility: Required<SidebarPluginVisibilityOptions> = {
-            groundItemsEnabled: this.groundItemsPlugin.getConfig().enabled,
-            interactHighlightEnabled: this.interactHighlightPlugin.getConfig().enabled,
-            menuSwapperEnabled: this.menuSwapperPlugin.getState().config.enabled,
-            notesEnabled: this.notesPlugin.getConfig().enabled,
-            tileMarkersEnabled: this.tileMarkersPlugin.getConfig().enabled,
-        };
-
-        if (
-            !force &&
-            this.sidebarPluginVisibility.groundItemsEnabled === visibility.groundItemsEnabled &&
-            this.sidebarPluginVisibility.interactHighlightEnabled ===
-                visibility.interactHighlightEnabled &&
-            this.sidebarPluginVisibility.notesEnabled === visibility.notesEnabled &&
-            this.sidebarPluginVisibility.menuSwapperEnabled === visibility.menuSwapperEnabled &&
-            this.sidebarPluginVisibility.tileMarkersEnabled === visibility.tileMarkersEnabled
-        ) {
-            return;
-        }
-
-        this.sidebarPluginVisibility = visibility;
-        registerDefaultClientSidebarEntries(this.sidebar, visibility);
-    }
-
     /** Load the editor only for its opt-in URL. */
     private loadEditModePlugin(): void {
         void import("./plugins/editmode/install")
@@ -578,8 +548,8 @@ export class OsrsClient {
     /** Loading requirement tracker for login transitions */
     readonly loadingTracker: LoadingTracker = new LoadingTracker();
 
-    /** Renderer-agnostic sidebar state/registry. */
-    readonly sidebar: SidebarStore<ClientSidebarEntryData>;
+    /** Which sidebar panel is open; the buttons are `runeLite.clientToolbar`'s. */
+    readonly sidebar: SidebarStore;
     readonly runeLite: RuneLite;
     readonly groundItemsPlugin: GroundItemsPlugin;
     readonly interactHighlightPlugin: InteractHighlightPlugin;
@@ -599,13 +569,6 @@ export class OsrsClient {
     readonly hdPlugin: HdPlugin;
     readonly weatherPlugin: WeatherPlugin;
     readonly tileHighlightManager: TileHighlightManager = new TileHighlightManager();
-    private sidebarPluginVisibility: Required<SidebarPluginVisibilityOptions> = {
-        groundItemsEnabled: true,
-        interactHighlightEnabled: true,
-        menuSwapperEnabled: true,
-        notesEnabled: true,
-        tileMarkersEnabled: true,
-    };
 
     /** Current game state (getter for backwards compatibility) */
     get gameState(): GameState {
@@ -1179,10 +1142,7 @@ export class OsrsClient {
             });
         } catch {}
         this.applyDisplayDefaults();
-        this.sidebar = new SidebarStore<ClientSidebarEntryData>({
-            defaultOpen: false,
-            persistence: createBrowserSidebarPersistence("osrs.sidebar.v1"),
-        });
+        this.sidebar = new SidebarStore(createBrowserSidebarPersistence("osrs.sidebar.v1"));
         // Boots the RuneLite-shaped runtime: config, event bus, plugin manager,
         // core plugins (constructed inside the injector, enabled ones started).
         this.runeLite = RuneLite.start(this);
@@ -1207,13 +1167,9 @@ export class OsrsClient {
         setMenuTransform((entries, context) =>
             this.clientPlugins.transformMenuEntries(entries, context),
         );
-        this.syncSidebarPlugins(true);
         if (new URLSearchParams(window.location.search).has("edit")) {
             this.loadEditModePlugin();
         }
-        pluginManager.subscribe(() => {
-            this.syncSidebarPlugins();
-        });
         // If cache is provided, initialize immediately
         // Otherwise, OsrsClient stays in DOWNLOADING state until initCache() is called
         if (cache) {
