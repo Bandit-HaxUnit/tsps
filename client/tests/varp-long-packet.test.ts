@@ -18,4 +18,7 @@ assert.equal(vars.setVarpLong(5753, 806000n), true);
 assert.equal(vars.setVarpLong(5753, 806000n), false, "no change, no callback");
 assert.deepEqual([vars.varpLongs.get(5753), changed], [806000n, [5753]]);
 
+vars.resetForLogout();
+assert.equal(vars.varpLongs.has(5753), false, "logout clears long varps, as it does varps");
+
 console.log("varp long packet: ok");

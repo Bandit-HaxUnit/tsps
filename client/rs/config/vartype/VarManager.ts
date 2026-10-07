@@ -218,6 +218,9 @@ export class VarManager {
      */
     resetForLogout(): void {
         this.values.fill(0);
+        // Long varps (rev 241: the GE offer price) and long varcs have no persistence either.
+        this.varpLongs.clear();
+        this.varcLongs.clear();
         this.clearTransientVarcs();
     }
 
