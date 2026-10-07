@@ -66,12 +66,12 @@ module.exports = {
       steps: ({ pos, obj }) => {
         const crack = isWest(obj) ? west : east;
         const finish = pos.x < obj.x ? crack.eastLanding : crack.westLanding;
+        // As captured (rsprox 2952): a 2-tile run-up with sound 2464, the 2-tile hurdle a tick later.
+        const step = Math.sign(finish[0] - pos.x) * 2;
         return [
-          { face: [obj.x, obj.y] },
-          { move: [obj.x, obj.y], anim: Anim.RUN_UP, speed: [0, 60] },
-          { anim: Anim.JUMP_HURDLE },
-          { wait: 1 },
-          { move: finish, speed: [0, 15] },
+          { sound: 2464 },
+          { move: [pos.x + step, pos.y], anim: Anim.RUN_UP, speed: [8, 50], ticks: 1 },
+          { move: finish, anim: Anim.JUMP_HURDLE, speed: [8, 50], ticks: 1 },
         ];
       },
     };
