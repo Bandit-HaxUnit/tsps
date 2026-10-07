@@ -8,16 +8,18 @@
  * 112) ported from xrsps: 1 planks, 2 bronze, 3 glass, 4 mould, 5 lens, 6 telescope,
  * 7 complete, 8 wine claimed.
  *
- * Ported interactions: searching the dungeon chest for the kitchen key and lens
- * mould, casting the lens (mould + molten glass) and looking through the telescope.
+ * Ported interactions: the item hand-ins (planks/bronze/glass/lens), the dungeon
+ * chests (kitchen key), prodding the sleeping guard and the kitchen gate, the
+ * goblin stove (lens mould), casting the lens (mould + molten glass), the two
+ * dungeon stair runs and looking through the telescope.
  * Gaps: the professor's constellation is chosen from the transcript rather than the
  * player's sign, so the random reward table (Strength/Defence/Hitpoints/Attack XP,
- * runes, tuna, etc.) is not granted; the goblin dungeon gates, the assistant's wine
- * hand-out and the telescope const-build are not wired.
+ * runes, tuna, etc.) is not granted; the assistant's wine hand-out and the
+ * telescope const-build are not wired.
  */
 module.exports = function registerObservatoryQuest(api) {
-  const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
-  const { registerQuest, refreshQuestList } = require("../QuestRuntime");
+  const { Skill, Location, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
 
   const PAGE = "Observatory Quest";
 
@@ -33,6 +35,7 @@ module.exports = function registerObservatoryQuest(api) {
   const STAGE_CLAIMED_WINE = 8;
 
   const VIEWED_ATTRIBUTE = "quest.observatory_quest.viewed";
+  const GUARD_AWAKE_ATTRIBUTE = "quest.observatory_quest.guard_awake";
 
   const START_HOOK = "quest:observatory-quest:start";
 
@@ -42,9 +45,48 @@ module.exports = function registerObservatoryQuest(api) {
     "uJHYgt", "5ogiFw", "OX2wkW", "b-a96m", "AlVBZ2", "hHQ5V3",
   ]);
 
+  /** Item hand-in actions in the returning-with-* branches (stages 1-6). */
+  const PLANK_HAND_IN_ACTION = "p1dp6a";
+  const BRONZE_HAND_IN_ACTION = "7a36YD";
+  const GLASS_HAND_IN_ACTION = "Y5Z4-D";
+  const GLASS_RETURN_ACTION = "JH15Z2";
+  const LENS_HAND_IN_ACTION = "p1dzXH";
+
   const PROFESSOR_NPC_IDS = new Set([NpcIdentifiers.OBSERVATORY_PROFESSOR, NpcIdentifiers.OBSERVATORY_PROFESSOR_2]);
   const ASSISTANT_NPC_ID = NpcIdentifiers.OBSERVATORY_ASSISTANT;
   const SLEEPING_GUARD_NPC_ID = NpcIdentifiers.SLEEPING_GUARD;
+  const GOBLIN_GUARD_NPC_ID = NpcIdentifiers.GOBLIN_GUARD;
+
+  const DUNGEON_CHEST_IDS = new Set([
+    ObjectIdentifiers.CHEST_6,
+    ObjectIdentifiers.CHEST_7,
+    ObjectIdentifiers.CHEST_85, // 25391, the real Observatory Dungeon chest
+  ]);
+  const KITCHEN_GATE_IDS = new Set([ObjectIdentifiers.KITCHEN_GATE, ObjectIdentifiers.KITCHEN_GATE_2]);
+  /** 25442 is the cache transform parent of GOBLIN_STOVE/GOBLIN_STOVE_2. */
+  const GOBLIN_STOVE_IDS = new Set([
+    ObjectIdentifiers.GOBLIN_STOVE,
+    ObjectIdentifiers.GOBLIN_STOVE_2,
+    25442,
+  ]);
+  /** 25591 is the cache transform parent of TELESCOPE_8/TELESCOPE_9 (upstairs). */
+  const TELESCOPE_IDS = new Set([
+    ObjectIdentifiers.TELESCOPE,
+    ObjectIdentifiers.TELESCOPE_8,
+    ObjectIdentifiers.TELESCOPE_9,
+    25591,
+  ]);
+  const SURFACE_STAIRS_ID = ObjectIdentifiers.STAIRS_129; // 25432, east hill
+  const DUNGEON_STAIRS_ID = ObjectIdentifiers.STAIRS_127; // 25429, north + south
+
+  const DUNGEON_STAIRS_NORTH = { x: 2335, y: 9351 };
+  const DUNGEON_STAIRS_SOUTH = { x: 2355, y: 9395 };
+  const SURFACE_STAIRS_LANDING = { x: 2458, y: 3185, z: 0 };
+  const DUNGEON_NORTH_LANDING = { x: 2334, y: 9350, z: 0 };
+  const OBSERVATORY_LANDING = { x: 2443, y: 3158, z: 0 };
+  const KITCHEN_GATE_SOUTH_TILE = { x: 2327, y: 9395, z: 0 };
+  const KITCHEN_GATE_NORTH_TILE = { x: 2327, y: 9392, z: 0 };
+
 
   const PLANK = ItemIdentifiers.PLANK;
   const BRONZE_BAR = ItemIdentifiers.BRONZE_BAR;
@@ -166,10 +208,43 @@ module.exports = function registerObservatoryQuest(api) {
     if (quest.getStage(player) < STAGE_PLANKS) quest.setStage(player, STAGE_PLANKS);
   }
 
-  /** The completion action in after-viewing-the-telescope. */
-  function handleAction({ player, npcId, stepId }) {
-    if (!PROFESSOR_NPC_IDS.has(npcId) || !COMPLETE_ACTION_IDS.has(stepId)) return;
-    if (quest.getStage(player) < STAGE_TELESCOPE || quest.isComplete(player)) return;
+  /** Item hand-ins and the after-viewing completion action. */
+  function handleAction(event) {
+    const { player, npcId, stepId } = event;
+    if (!PROFESSOR_NPC_IDS.has(npcId)) return;
+    const stage = quest.getStage(player);
+    switch (stepId) {
+      case PLANK_HAND_IN_ACTION:
+        if (stage !== STAGE_PLANKS || !has(player, PLANK, 3)) return;
+        player.getInventory().deleteNumber(PLANK, 3);
+        quest.setStage(player, STAGE_BRONZE);
+        return;
+      case BRONZE_HAND_IN_ACTION:
+        if (stage !== STAGE_BRONZE || !has(player, BRONZE_BAR)) return;
+        player.getInventory().deleteNumber(BRONZE_BAR, 1);
+        quest.setStage(player, STAGE_GLASS);
+        return;
+      case GLASS_HAND_IN_ACTION:
+        if (stage !== STAGE_GLASS || !has(player, MOLTEN_GLASS)) return;
+        player.getInventory().deleteNumber(MOLTEN_GLASS, 1);
+        quest.setStage(player, STAGE_MOULD);
+        return;
+      case GLASS_RETURN_ACTION:
+        if (stage !== STAGE_MOULD || !has(player, LENS_MOULD)) return;
+        if (!has(player, MOLTEN_GLASS)) player.getInventory().adds(MOLTEN_GLASS, 1);
+        quest.setStage(player, STAGE_LENS);
+        return;
+      case LENS_HAND_IN_ACTION:
+        if (stage !== STAGE_LENS) return;
+        player.getInventory().deleteNumber(OBSERVATORY_LENS, 1);
+        player.getInventory().deleteNumber(LENS_MOULD, 1);
+        quest.setStage(player, STAGE_TELESCOPE);
+        return;
+      default:
+        break;
+    }
+    if (!COMPLETE_ACTION_IDS.has(stepId)) return;
+    if (stage < STAGE_TELESCOPE || quest.isComplete(player)) return;
     quest.complete(player);
   }
 
@@ -190,30 +265,113 @@ module.exports = function registerObservatoryQuest(api) {
     event.handled = true;
   }
 
-  /** Dungeon chest: the kitchen key, then the stolen lens mould. */
+  /** Dungeon chest: the kitchen key, then (as a fallback) the stolen lens mould. */
   function handleObjectInteraction(event) {
     const { player, objectId } = event;
     const option = String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "").toLowerCase();
 
-    if ((objectId === ObjectIdentifiers.CHEST_6 || objectId === ObjectIdentifiers.CHEST_7) && option.includes("search")) {
+    if (DUNGEON_CHEST_IDS.has(objectId) && (option.includes("search") || option.includes("open"))) {
       if (quest.getStage(player) !== STAGE_MOULD) return;
+      event.handled = true;
       if (!has(player, GOBLIN_KITCHEN_KEY)) {
         player.getInventory().adds(GOBLIN_KITCHEN_KEY, 1);
         player.sendMessage("You find a kitchen key.");
       } else if (!has(player, LENS_MOULD)) {
         player.getInventory().adds(LENS_MOULD, 1);
         player.sendMessage("You find the stolen lens mould inside the chest.");
+      } else {
+        player.sendMessage("The chest is empty.");
       }
-      event.handled = true;
       return;
     }
 
-    if (objectId === ObjectIdentifiers.TELESCOPE && option.includes("look")) {
+    /** Kitchen gate: locked until the guard is dealt with, opened with the key. */
+    if (KITCHEN_GATE_IDS.has(objectId) && option.includes("open")) {
+      if (quest.getStage(player) < STAGE_MOULD) return;
+      event.handled = true;
+      if (!has(player, GOBLIN_KITCHEN_KEY)) {
+        player.sendMessage("The kitchen gate is locked.");
+        return;
+      }
+      if (Number(player.getAttribute(GUARD_AWAKE_ATTRIBUTE)) !== 1) {
+        player.sendMessage("If you open the gate, the guard will hear you. You need to get rid of him.");
+        return;
+      }
+      player.getInventory().deleteNumber(GOBLIN_KITCHEN_KEY, 1);
+      player.sendMessage("You unlock the kitchen gate.");
+      player.sendMessage("You had better be quick, there may be more guards about.");
+      const south = player.getLocation().getY() >= KITCHEN_GATE_SOUTH_TILE.y;
+      const tile = south ? KITCHEN_GATE_NORTH_TILE : KITCHEN_GATE_SOUTH_TILE;
+      player.moveTo(new Location(tile.x, tile.y, tile.z));
+      return;
+    }
+
+    /** Goblin stove: the lens mould is hidden in the stew. */
+    if (GOBLIN_STOVE_IDS.has(objectId) && option.includes("inspect")) {
+      if (quest.getStage(player) < STAGE_MOULD) return;
+      event.handled = true;
+      if (has(player, LENS_MOULD)) {
+        player.sendMessage("Just a plain stove. Nothing here.");
+        return;
+      }
+      player.getInventory().adds(LENS_MOULD, 1);
+      player.sendMessage("The goblins appear to have been using the lens mould to cook their stew!");
+      player.sendMessage("You shake out its contents and take it with you.");
+      return;
+    }
+
+    if (TELESCOPE_IDS.has(objectId) && (option.includes("look") || option.includes("view"))) {
       if (quest.getStage(player) !== STAGE_TELESCOPE) return;
       player.setAttribute(VIEWED_ATTRIBUTE, true);
       player.sendMessage("You look through the telescope and see a constellation.");
       event.handled = true;
     }
+  }
+
+  /** Prodding the sleeping guard wakes the attackable goblin guard. */
+  function prodSleepingGuard(event) {
+    const { player, npc } = event;
+    if (!npc || quest.getStage(player) !== STAGE_MOULD) return;
+    player.setAttribute(GUARD_AWAKE_ATTRIBUTE, 1);
+    npc.setNpcTransformationId(GOBLIN_GUARD_NPC_ID);
+    startTranscript(api, player, GOBLIN_GUARD_NPC_ID, PAGE, "prodding-the-goblin-guard");
+  }
+
+  /**
+   * The two dungeon stair runs are far from anything ClimbLinks can pair, so give
+   * them explicit destinations: the north stairs lead out to the east hill, the
+   * south stairs lead up into the Observatory, and the surface stairs lead down.
+   */
+  function claimObservatoryClimb(request) {
+    if (request.handled) return;
+    const { player, object, objectId } = request;
+    if (!player || !object) return;
+    const location = object.getLocation?.();
+    if (!location) return;
+    if (objectId === SURFACE_STAIRS_ID) {
+      player.moveTo(new Location(DUNGEON_NORTH_LANDING.x, DUNGEON_NORTH_LANDING.y, DUNGEON_NORTH_LANDING.z));
+      request.handled = true;
+      return;
+    }
+    if (objectId !== DUNGEON_STAIRS_ID) return;
+    const x = location.getX();
+    const y = location.getY();
+    if (x === DUNGEON_STAIRS_NORTH.x && y === DUNGEON_STAIRS_NORTH.y) {
+      player.moveTo(new Location(SURFACE_STAIRS_LANDING.x, SURFACE_STAIRS_LANDING.y, SURFACE_STAIRS_LANDING.z));
+    } else if (x === DUNGEON_STAIRS_SOUTH.x && y === DUNGEON_STAIRS_SOUTH.y) {
+      player.moveTo(new Location(OBSERVATORY_LANDING.x, OBSERVATORY_LANDING.y, OBSERVATORY_LANDING.z));
+    } else {
+      return;
+    }
+    request.handled = true;
+  }
+
+  /** Fill the wiki transcript's "[player name]" blanks for the Observatory pair. */
+  function fillPlayerName(request) {
+    if (!request?.player || typeof request.text !== "string") return;
+    if (!PROFESSOR_NPC_IDS.has(request.npcId) && request.npcId !== ASSISTANT_NPC_ID) return;
+    if (!request.text.includes("[player name]")) return;
+    request.text = request.text.replace(/\[player name\]/gi, request.player.getUsername());
   }
 
   function handleLogin({ player }) {
@@ -236,10 +394,14 @@ module.exports = function registerObservatoryQuest(api) {
   });
 
   api.persistAttribute(VIEWED_ATTRIBUTE);
+  api.persistAttribute(GUARD_AWAKE_ATTRIBUTE);
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
+  api.onNpcInteraction("Sleeping guard", { Prod: prodSleepingGuard });
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("npc-dialogue:line", fillPlayerName);
+  api.onCustomEvent("ladders:climb", claimObservatoryClimb);
   api.onItemOnItem(handleItemOnItem);
   api.onObjectInteraction(handleObjectInteraction);
   api.onPlayerLogin(handleLogin);

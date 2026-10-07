@@ -114,7 +114,7 @@ module.exports = function registerTrollStrongholdQuest(api) {
   function selectVariant({ npcId, player }) {
     const stage = quest.getStage(player);
     if (DENULTH_NPC_IDS.has(npcId)) {
-      if (stage === 0) return "getting-started-talking-to-denulth";
+      if (stage === 0) return { page: "Troll Stronghold", variant: "getting-started-talking-to-denulth" }; // also on the Death Plateau page
       if (stage < STAGE_STARTED) return "getting-started-talking-to-denulth-after-starting-the-quest";
       if (stage < STAGE_GODRIC_FREED) {
         return "entering-the-prison-talking-to-denulth-again-before-freeing-the-prisoners";
@@ -190,15 +190,16 @@ module.exports = function registerTrollStrongholdQuest(api) {
   }
 
   /** Dad's death opens the stronghold; a Troll General drops the prison key. */
-  function handleNpcDeath({ player, npcId }) {
-    if (npcId === DAD_NPC_ID && quest.getStage(player) >= STAGE_STARTED) {
-      if (quest.getStage(player) < STAGE_DAD_KILLED) quest.setStage(player, STAGE_DAD_KILLED);
+  function handleNpcDeath({ killer, npcId }) {
+    if (!killer) return;
+    if (npcId === DAD_NPC_ID && quest.getStage(killer) >= STAGE_STARTED) {
+      if (quest.getStage(killer) < STAGE_DAD_KILLED) quest.setStage(killer, STAGE_DAD_KILLED);
       return;
     }
-    if (TROLL_GENERAL_NPC_IDS.has(npcId) && quest.getStage(player) >= STAGE_DAD_KILLED) {
-      if (quest.getStage(player) < STAGE_HAS_PRISON_KEY) {
-        player.getInventory().adds(PRISON_KEY_ITEM_ID, 1);
-        quest.setStage(player, STAGE_HAS_PRISON_KEY);
+    if (TROLL_GENERAL_NPC_IDS.has(npcId) && quest.getStage(killer) >= STAGE_DAD_KILLED) {
+      if (quest.getStage(killer) < STAGE_HAS_PRISON_KEY) {
+        killer.getInventory().adds(PRISON_KEY_ITEM_ID, 1);
+        quest.setStage(killer, STAGE_HAS_PRISON_KEY);
       }
     }
   }

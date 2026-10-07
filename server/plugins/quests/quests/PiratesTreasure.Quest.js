@@ -336,11 +336,18 @@ module.exports = function registerPiratesTreasureQuest(api) {
       event.player.sendMessage("Visit the city of the White Knights.");
       event.player.sendMessage("In the park, Saradomin points to the X that marks the spot.");
       event.handled = true;
-      return;
     }
-    if (event.itemId === SPADE_ITEM_ID && option.includes("dig") && digForTreasure(event.player)) {
-      event.handled = true;
-    }
+  }
+
+  /**
+   * Barrows registers its Spade "Dig" hook before this quest's item-action hook and
+   * always swallows the click, so the treasure dig is resolved from the can-use
+   * gate, which runs before any item-action hook.
+   */
+  function handleCanUseItem(event) {
+    if (event.itemId !== SPADE_ITEM_ID || !/dig/i.test(String(event.option ?? ""))) return;
+    if (!digForTreasure(event.player)) return;
+    event.allow = false;
   }
 
   quest = registerQuest(api, {
@@ -371,6 +378,7 @@ module.exports = function registerPiratesTreasureQuest(api) {
   api.onItemOnObject(handleItemOnObject);
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemAction(handleItemAction);
+  api.onCanUseItem(handleCanUseItem);
   function buyRum(player) {
     const inventory = player.getInventory();
     if (inventory.getAmount(COINS_ITEM_ID) < 27) return;

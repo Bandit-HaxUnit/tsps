@@ -18,7 +18,7 @@
  */
 module.exports = function registerDeathPlateauQuest(api) {
   const { Skill, ItemIdentifiers, NpcIdentifiers } = api.core;
-  const { registerQuest, refreshQuestList } = require("../QuestRuntime");
+  const { registerQuest, refreshQuestList, getRegisteredQuests } = require("../QuestRuntime");
 
   const DENULTH_NPC_IDS = new Set([NpcIdentifiers.DENULTH, NpcIdentifiers.DENULTH_2]);
   const EOHRIC_NPC_ID = NpcIdentifiers.EOHRIC;
@@ -122,9 +122,22 @@ module.exports = function registerDeathPlateauQuest(api) {
     player.getSkillManager().addExperiences(Skill.ATTACK, 3000);
   }
 
+  /** Denulth, Tenzing and Dunstan also front Troll Stronghold once Death Plateau is done. */
+  function trollStrongholdActive(player) {
+    const trollStronghold = getRegisteredQuests().find((entry) => entry.key === "troll_stronghold");
+    return Boolean(trollStronghold && trollStronghold.isStarted(player) && !trollStronghold.isComplete(player));
+  }
+
+  function sharedWithTrollStronghold(npcId) {
+    return DENULTH_NPC_IDS.has(npcId) || npcId === TENZING_NPC_ID || npcId === DUNSTAN_NPC_ID;
+  }
+
   /** Which transcript variant each speaker plays, by quest stage. */
   function selectVariant({ npcId, player }) {
     const stage = quest.getStage(player);
+    if (sharedWithTrollStronghold(npcId) && (quest.isComplete(player) || trollStrongholdActive(player))) {
+      return null;
+    }
     if (DENULTH_NPC_IDS.has(npcId)) {
       if (stage === 0) return "getting-started-talking-to-denulth";
       if (stage < STAGE_STARTED) return "getting-started-talking-to-denulth-again";
@@ -182,7 +195,11 @@ module.exports = function registerDeathPlateauQuest(api) {
   }
 
   /** Answer the page's prose conditions. */
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    // Same shared speakers as selectVariant: once Troll Stronghold owns them, its conditions are not ours.
+    if (sharedWithTrollStronghold(npcId) && (quest.isComplete(player) || trollStrongholdActive(player))) {
+      return null;
+    }
     const value = String(text).toLowerCase();
     const has = (itemId, amount = 1) => held(player, itemId, amount);
     if (value.includes("does not have an asgarnian ale")) return !has(ASGARNIAN_ALE_ITEM_ID);

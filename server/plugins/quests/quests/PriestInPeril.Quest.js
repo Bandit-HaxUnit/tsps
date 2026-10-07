@@ -220,10 +220,10 @@ module.exports = function registerPriestInPerilQuest(api) {
   }
 
   /** Killing the temple guardian advances the quest. */
-  function handleGuardianDeath({ player, npcId }) {
-    if (npcId !== TEMPLE_GUARDIAN_NPC_ID) return;
-    if (quest.getStage(player) < STAGE_GUARDIAN_KILLED) {
-      quest.setStage(player, STAGE_GUARDIAN_KILLED);
+  function handleGuardianDeath({ killer, npcId }) {
+    if (!killer || npcId !== TEMPLE_GUARDIAN_NPC_ID) return;
+    if (quest.getStage(killer) < STAGE_GUARDIAN_KILLED) {
+      quest.setStage(killer, STAGE_GUARDIAN_KILLED);
     }
   }
 

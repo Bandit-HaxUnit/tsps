@@ -49,7 +49,7 @@ export class NPCDeathTask extends Task {
                     const event: PluginNpcDeathEvent = {
                         killer: this.killer,
                         npc: this.npc,
-                        npcId: this.npc.getId(),
+                        npcId: this.npc.getContentId(this.killer),
                         location: {
                             x: this.npc.getLocation().getX(),
                             y: this.npc.getLocation().getY(),

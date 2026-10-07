@@ -150,6 +150,29 @@ module.exports = function registerFremennikTrialsQuest(api) {
   ]);
   const SWAYING_TREE_ID = ObjectIdentifiers.SWAYING_TREE;
 
+  /** NPCs whose transcripts this plugin owns; dialogue conditions from anyone else are not ours. */
+  const DIALOGUE_NPC_IDS = new Set([
+    ...BRUNDT_IDS,
+    ...OLAF_IDS,
+    ...LALLI_IDS,
+    ...MANNI_IDS,
+    ...SIGMUND_IDS,
+    ...SIGLI_IDS,
+    ...SWENSEN_IDS,
+    ...PEER_IDS,
+    ...THORVALD_IDS,
+    ...ASKELADDEN_IDS,
+    ...THORA_IDS,
+    ...YRSA_IDS,
+    ...FISHERMAN_IDS,
+    ...SKULGRIMEN_IDS,
+    ...SAILOR_IDS,
+    COUNCIL_WORKMAN_ID,
+    POISON_SALESMAN_ID,
+    LONGHALL_BOUNCER_ID,
+    FOSSEGRIMEN_ID,
+  ]);
+
   const {
     BEER,
     BEER_TANKARD,
@@ -691,7 +714,8 @@ module.exports = function registerFremennikTrialsQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (!DIALOGUE_NPC_IDS.has(npcId)) return null;
     const value = String(text ?? "").toLowerCase();
     if (!value) return null;
     const inventory = player.getInventory();
@@ -1344,7 +1368,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
 
   function searchSeerChest(event) {
     const { player } = event;
-    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return;
+    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return false;
     event.handled = true;
     if (!held(player, EMPTY_JUG) && !heldKind(player, JUG_UNITS)) {
       give(player, EMPTY_JUG, 1);
@@ -1365,7 +1389,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
 
   function searchSeerCupboard(event) {
     const { player } = event;
-    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return;
+    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return false;
     event.handled = true;
     if (!held(player, EMPTY_BUCKET) && !heldKind(player, BUCKET_UNITS)) {
       give(player, EMPTY_BUCKET, 1);
@@ -1379,7 +1403,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
 
   function searchSeerBookcase(event) {
     const { player } = event;
-    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return;
+    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return false;
     event.handled = true;
     if (!held(player, RED_HERRING)) {
       give(player, RED_HERRING, 1);
@@ -1393,7 +1417,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
 
   function searchSeerBoxes(event) {
     const { player } = event;
-    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return;
+    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return false;
     event.handled = true;
     if (!held(player, MAGNET_2)) {
       give(player, MAGNET_2, 1);
@@ -1413,7 +1437,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
 
   function searchSeerCrate(event) {
     const { player } = event;
-    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return;
+    if (trialState(player, SEER) < 1 || !inPeerHouse(player)) return false;
     event.handled = true;
     if (!held(player, TOY_SHIP)) {
       give(player, TOY_SHIP, 1);
@@ -1703,7 +1727,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
   api.onItemAction(handleItemAction);
   api.onItemOnObject("Golden fleece", "Spinning wheel", spinGoldenFleece);
   api.onItemOnObject("Lyre", "Altar", offerLyre);
-  api.onItemOnObject("Lit strange object", "Drain", placeFirecracker);
+  api.onItemOnObject("Lit strange object", "Pipe", placeFirecracker);
   api.onItemOnObject("Pet rock", "Cauldron", addToCauldron);
   api.onItemOnObject("Cabbage", "Cauldron", addToCauldron);
   api.onItemOnObject("Potato", "Cauldron", addToCauldron);

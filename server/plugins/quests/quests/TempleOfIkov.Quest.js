@@ -204,11 +204,11 @@ module.exports = function registerTempleOfIkovQuest(api) {
   }
 
   /** Killing the Fire Warrior advances the quest. */
-  function handleFireWarriorDeath({ player, npcId }) {
-    if (npcId !== FIRE_WARRIOR_NPC_ID) return;
-    if (quest.getStage(player) >= STAGE_FIRE_WARRIOR_KILLED) return;
-    if (quest.getStage(player) >= STAGE_CROSSED_LAVA) {
-      quest.setStage(player, STAGE_FIRE_WARRIOR_KILLED);
+  function handleFireWarriorDeath({ killer, npcId }) {
+    if (!killer || npcId !== FIRE_WARRIOR_NPC_ID) return;
+    if (quest.getStage(killer) >= STAGE_FIRE_WARRIOR_KILLED) return;
+    if (quest.getStage(killer) >= STAGE_CROSSED_LAVA) {
+      quest.setStage(killer, STAGE_FIRE_WARRIOR_KILLED);
     }
   }
 

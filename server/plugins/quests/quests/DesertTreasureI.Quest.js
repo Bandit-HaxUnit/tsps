@@ -23,7 +23,7 @@
  */
 module.exports = function registerDesertTreasureIQuest(api) {
   const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
-  const { registerQuest, refreshQuestList } = require("../QuestRuntime");
+  const { registerQuest, refreshQuestList, getRegisteredQuests } = require("../QuestRuntime");
 
   const ASGARNIA_IDS = new Set([
     NpcIdentifiers.ASGARNIA_SMITH,
@@ -44,6 +44,20 @@ module.exports = function registerDesertTreasureIQuest(api) {
     NpcIdentifiers.AZZANADRA_3,
     NpcIdentifiers.AZZANADRA_4,
     NpcIdentifiers.AZZANADRA_5,
+  ]);
+
+  /** NPCs whose transcripts this plugin owns; dialogue conditions from anyone else are not ours. */
+  const DIALOGUE_NPC_IDS = new Set([
+    ...ASGARNIA_IDS,
+    TERRY_NPC_ID,
+    BARTENDER_NPC_ID,
+    ...EBLIS_IDS,
+    RASOLO_NPC_ID,
+    MALAK_NPC_ID,
+    RUANTUN_NPC_ID,
+    ...HIGH_PRIEST_IDS,
+    ...TROLL_CHILD_IDS,
+    ...AZZANADRA_IDS,
   ]);
 
   const DAMIS_SECOND_NPC_ID = NpcIdentifiers.DAMIS_2;
@@ -179,8 +193,21 @@ module.exports = function registerDesertTreasureIQuest(api) {
       : "enchanting-the-mirrors-talking-to-asgarnia-without-the-required-quests";
   }
 
+  function digSiteActive(player) {
+    const digSite = getRegisteredQuests().find((entry) => entry.key === "the_dig_site");
+    return Boolean(digSite && digSite.isStarted(player) && !digSite.isComplete(player));
+  }
+
+  function holyGrailActive(player) {
+    const holyGrail = getRegisteredQuests().find((entry) => entry.key === "holy_grail");
+    return Boolean(holyGrail && holyGrail.isStarted(player) && !holyGrail.isComplete(player));
+  }
+
   function terryVariant(player) {
     const stage = quest.getStage(player);
+    // Terry is The Dig Site's expert until it is finished, and Desert Treasure
+    // only needs him once its own etchings/translation chain has started.
+    if (stage < STAGE_STARTED || digSiteActive(player)) return null;
     if (stage === STAGE_STARTED) {
       if (has(player, ETCHINGS)) {
         take(player, ETCHINGS);
@@ -274,6 +301,7 @@ module.exports = function registerDesertTreasureIQuest(api) {
       return "blood-diamond-talking-to-ruantun";
     }
     if (HIGH_PRIEST_IDS.has(npcId)) {
+      if (stage < STAGE_HUNT || holyGrailActive(player)) return null;
       if (stage >= STAGE_HUNT && has(player, SILVER_POT)) {
         take(player, SILVER_POT);
         if (!has(player, BLESSED_POT)) give(player, BLESSED_POT);
@@ -294,7 +322,8 @@ module.exports = function registerDesertTreasureIQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (!DIALOGUE_NPC_IDS.has(npcId)) return null;
     const value = String(text).toLowerCase();
     if (value.includes("without the required skill levels")) return magicLevel(player) < 50;
     if (value.includes("doesn't have the etchings") || value.includes("lost the etchings")) {

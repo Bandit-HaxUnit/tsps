@@ -138,6 +138,25 @@ module.exports = function registerUndergroundPassQuest(api) {
     [ItemIdentifiers.PALADINS_BADGE_2, BIT_THROWN_CARL],
     [ItemIdentifiers.PALADINS_BADGE_3, BIT_THROWN_HARRY],
   ]);
+  // NpcDeath reports the raw world spawn id rather than the resolved content id,
+  // so the death handlers accept both the cache ids and the live spawn ids.
+  const KALRAG_IDS = new Set([NpcIdentifiers.KALRAG, 9216]);
+  const AMULET_BY_NPC = new Map([
+    [NpcIdentifiers.OTHAINIAN, ItemIdentifiers.AMULET_OF_OTHANIAN],
+    [9217, ItemIdentifiers.AMULET_OF_OTHANIAN],
+    [NpcIdentifiers.DOOMION, ItemIdentifiers.AMULET_OF_DOOMION],
+    [9218, ItemIdentifiers.AMULET_OF_DOOMION],
+    [NpcIdentifiers.HOLTHION, ItemIdentifiers.AMULET_OF_HOLTHION],
+    [9219, ItemIdentifiers.AMULET_OF_HOLTHION],
+  ]);
+  const BADGE_BY_NPC = new Map([
+    [NpcIdentifiers.SIR_JERRO, ItemIdentifiers.PALADINS_BADGE],
+    [9210, ItemIdentifiers.PALADINS_BADGE],
+    [NpcIdentifiers.SIR_CARL, ItemIdentifiers.PALADINS_BADGE_2],
+    [9211, ItemIdentifiers.PALADINS_BADGE_2],
+    [NpcIdentifiers.SIR_HARRY, ItemIdentifiers.PALADINS_BADGE_3],
+    [9212, ItemIdentifiers.PALADINS_BADGE_3],
+  ]);
   const CATSPEAK_AMULET_IDS = new Set([
     ItemIdentifiers.CATSPEAK_AMULET,
     ItemIdentifiers.CATSPEAK_AMULET_E_,
@@ -181,13 +200,21 @@ module.exports = function registerUndergroundPassQuest(api) {
   const BLOOD_WELL = ObjectIdentifiers.WELL_4;
   const WELL_OF_VOYAGE = ObjectIdentifiers.WELL_5;
   const FURNACE = ObjectIdentifiers.FURNACE_3;
-  const UNICORN_DOOR_IDS = new Set([ObjectIdentifiers.DOOR_109, ObjectIdentifiers.DOOR_110]);
-  const TEMPLE_DOOR_IDS = new Set([
-    ObjectIdentifiers.TEMPLE_DOOR,
-    ObjectIdentifiers.DOOR_111,
-    ObjectIdentifiers.DOOR_112,
+  // Live world: the doors beside the blood well are 3220/3221; 3333/3334 are the
+  // openable Iban temple doors (3332/3335/3336 are not placed).
+  const UNICORN_DOOR_IDS = new Set([3220, 3221]);
+  const TEMPLE_DOOR_IDS = new Set([3333, 3334]);
+  const SEARCHABLE_CAGE_IDS = new Set([3267]); // 3351/3352 are not placed here.
+  const ABANDONED_EQUIPMENT = 35938;
+  // Scenery "Orb of light" objects and the item each Take yields. The fourth orb
+  // waits under the trapped flat rock (3339).
+  const ORB_OBJECT_ITEMS = new Map([
+    [37324, ItemIdentifiers.ORB_OF_LIGHT],
+    [37325, ItemIdentifiers.ORB_OF_LIGHT_2],
+    [37326, ItemIdentifiers.ORB_OF_LIGHT_3],
   ]);
-  const SEARCHABLE_CAGE_IDS = new Set([ObjectIdentifiers.CAGE_4, ObjectIdentifiers.CAGE_5]);
+  const ORB_TRAP_ROCK = 3339;
+  const ORB_TRAP_MESSAGE_IDS = new Set(["dZ4m5q"]);
   const SMASHED_CAGE = ObjectIdentifiers.SMASHED_CAGE;
   const CRATE = ObjectIdentifiers.CRATE_26;
   const WITCH_CHEST_IDS = new Set([ObjectIdentifiers.CHEST_28, ObjectIdentifiers.CHEST_29]);
@@ -840,6 +867,10 @@ module.exports = function registerUndergroundPassQuest(api) {
       if (!hasItem(player, IBANS_ASHES)) give(player, IBANS_ASHES, 1);
       return;
     }
+    if (ORB_TRAP_MESSAGE_IDS.has(stepId)) {
+      if (!hasItem(player, ORB_IDS[3])) give(player, ORB_IDS[3], 1);
+      return;
+    }
     if (WELL_DOLL_MESSAGE_IDS.has(stepId)) {
       defeatIban(player);
     }
@@ -1064,7 +1095,7 @@ module.exports = function registerUndergroundPassQuest(api) {
     if (!player || typeof player.getInventory !== "function") return;
     const stage = quest.getStage(player);
 
-    if (npcId === NpcIdentifiers.KALRAG) {
+    if (KALRAG_IDS.has(npcId)) {
       if (stage < STAGE_FOUND_DOLL) {
         player.sendMessage("Kalrag slumps to the floor...");
         return;
@@ -1081,23 +1112,59 @@ module.exports = function registerUndergroundPassQuest(api) {
       return;
     }
 
-    const amulet = npcId === NpcIdentifiers.OTHANIAN ? ItemIdentifiers.AMULET_OF_OTHANIAN
-      : npcId === NpcIdentifiers.DOOMION ? ItemIdentifiers.AMULET_OF_DOOMION
-      : npcId === NpcIdentifiers.HOLTHION ? ItemIdentifiers.AMULET_OF_HOLTHION
-      : undefined;
+    const amulet = AMULET_BY_NPC.get(npcId);
     if (amulet !== undefined && stage >= STAGE_FOUND_DOLL && !hasItem(player, amulet)) {
       give(player, amulet, 1);
       player.sendMessage("The demon leaves its amulet behind.");
       return;
     }
 
-    const badge = npcId === NpcIdentifiers.SIR_JERRO ? ItemIdentifiers.PALADINS_BADGE
-      : npcId === NpcIdentifiers.SIR_CARL ? ItemIdentifiers.PALADINS_BADGE_2
-      : npcId === NpcIdentifiers.SIR_HARRY ? ItemIdentifiers.PALADINS_BADGE_3
-      : undefined;
+    const badge = BADGE_BY_NPC.get(npcId);
     if (badge !== undefined && !hasItem(player, badge) && !quest.isComplete(player)) {
       give(player, badge, 1);
       player.sendMessage("The paladin's badge clatters to the ground and you pick it up.");
+    }
+  }
+
+  function useUnicornDoor(player) {
+    if (!unicornDoorUnlocked(player)) {
+      player.sendMessage("The door is locked.");
+      return;
+    }
+    if (quest.getStage(player) < STAGE_MAIN_AREA) {
+      quest.setStage(player, STAGE_MAIN_AREA);
+      setBit(player, BIT_KOFTIK_INSANE);
+    }
+    playVariant(player, UP + "opening-the-door");
+  }
+
+  function useTempleDoor(player) {
+    if (!testBit(player, BIT_READ_HISTORY)) {
+      player.sendMessage("You have no reason to go in there.");
+      return;
+    }
+    if (!hasFinishedDoll(player)) {
+      player.sendMessage("You should wait until you have the finished doll before going in there.");
+      return;
+    }
+    if (!wearingZamorakRobes(player)) {
+      player.sendMessage("The door refuses to open. Only followers of Zamorak may enter.");
+      return;
+    }
+    if (quest.getStage(player) < STAGE_CONFRONTED_IBAN) quest.setStage(player, STAGE_CONFRONTED_IBAN);
+    playVariant(player, UP + "entering-iban-s-temple");
+  }
+
+  /** Doors' generic name hook claims "Door" locs; claim the quest doors first. */
+  function handleDoorToggle(event) {
+    if (UNICORN_DOOR_IDS.has(event.objectId)) {
+      event.handled = true;
+      useUnicornDoor(event.player);
+      return;
+    }
+    if (TEMPLE_DOOR_IDS.has(event.objectId)) {
+      event.handled = true;
+      useTempleDoor(event.player);
     }
   }
 
@@ -1188,34 +1255,42 @@ module.exports = function registerUndergroundPassQuest(api) {
 
     if (UNICORN_DOOR_IDS.has(objectId)) {
       event.handled = true;
-      if (!unicornDoorUnlocked(player)) {
-        player.sendMessage("The door is locked.");
-        return;
-      }
-      if (stage < STAGE_MAIN_AREA) {
-        quest.setStage(player, STAGE_MAIN_AREA);
-        setBit(player, BIT_KOFTIK_INSANE);
-      }
-      playVariant(player, UP + "opening-the-door");
+      useUnicornDoor(player);
       return;
     }
 
     if (TEMPLE_DOOR_IDS.has(objectId)) {
       event.handled = true;
-      if (!testBit(player, BIT_READ_HISTORY)) {
-        player.sendMessage("You have no reason to go in there.");
+      useTempleDoor(player);
+      return;
+    }
+
+    if (ORB_OBJECT_ITEMS.has(objectId)) {
+      event.handled = true;
+      const orbItem = ORB_OBJECT_ITEMS.get(objectId);
+      if (hasItem(player, orbItem)) {
+        playVariant(player, UP + "trying-to-pick-up-duplicate-orbs-of-light");
         return;
       }
-      if (!hasFinishedDoll(player)) {
-        player.sendMessage("You should wait until you have the finished doll before going in there.");
-        return;
-      }
-      if (!wearingZamorakRobes(player)) {
-        player.sendMessage("The door refuses to open. Only followers of Zamorak may enter.");
-        return;
-      }
-      if (stage < STAGE_CONFRONTED_IBAN) quest.setStage(player, STAGE_CONFRONTED_IBAN);
-      playVariant(player, UP + "entering-iban-s-temple");
+      give(player, orbItem, 1);
+      return;
+    }
+
+    if (objectId === ORB_TRAP_ROCK) {
+      event.handled = true;
+      playVariant(player, UP + "flat-rock-beneath-an-orb");
+      return;
+    }
+
+    if (objectId === ABANDONED_EQUIPMENT) {
+      event.handled = true;
+      playVariant(player, UP + "searching-the-abandoned-equipment");
+      return;
+    }
+
+    if (PLANK_ROCK_IDS.has(objectId)) {
+      event.handled = true;
+      playVariant(player, UP + "flat-rock");
       return;
     }
 
@@ -1397,6 +1472,28 @@ module.exports = function registerUndergroundPassQuest(api) {
     }
   }
 
+  /**
+   * The bridge is shot at the guide rope from across the gap, where no adjacent
+   * tile is walkable; route the click to the player's own tile so the fire
+   * handler runs instead of "You can't reach that!". Roughly a bow's range.
+   */
+  function routeToGuideRope(event) {
+    if (event.objectId !== ObjectIdentifiers.GUIDE_ROPE) return;
+    const playerLocation = event.player.getLocation();
+    const objectLocation = event.object?.getLocation?.();
+    if (!objectLocation) return;
+    const distance = Math.max(
+      Math.abs(playerLocation.getX() - objectLocation.getX()),
+      Math.abs(playerLocation.getY() - objectLocation.getY())
+    );
+    if (distance > 10) return;
+    event.destination = {
+      x: playerLocation.getX(),
+      y: playerLocation.getY(),
+      z: playerLocation.getZ(),
+    };
+  }
+
   function handleLogin({ player }) {
     refreshQuestList(player);
   }
@@ -1429,6 +1526,8 @@ module.exports = function registerUndergroundPassQuest(api) {
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemAction(handleItemAction);
   api.onObjectInteraction(handleObjectInteraction);
+  api.onObjectRoute(routeToGuideRope);
+  api.onCustomEvent("door:toggle", handleDoorToggle);
   api.onNpcDeath(handleNpcDeath);
   api.onPlayerLogin(handleLogin);
 };

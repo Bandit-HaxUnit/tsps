@@ -60,6 +60,7 @@ const STATUS_COMPLETE = 2;
 
 const quests = [];
 let widgetsRegistered = false;
+let coreApi = null;
 
 function stageAttribute(questKey) {
   return `quest.${questKey}.stage`;
@@ -239,6 +240,46 @@ function openCompletedScroll(player, quest, questPoints) {
 }
 
 /**
+ * True while the player has a chatbox up: a running dialogue or a multi-option prompt.
+ * Stale dialogue-manager entries after a close are harmless here only because
+ * sendInterfaceRemoval resets the manager before this ever sees them.
+ */
+function chatboxOpen(player) {
+  const prompt = coreApi?.MultiChatboxPrompt?.getPending?.(player) ?? null;
+  return player.getDialogueManager?.()?.isActive?.() === true || prompt !== null;
+}
+
+/**
+ * Completion scroll entry point. Rewards, jingle and message fire immediately in
+ * complete(); the scroll has to wait when the completion happens inside an open
+ * chatbox, because the hand-in dialogue closes the interface right after the
+ * action returns (sendInterfaceRemoval) and would wipe it. Polls a tick at a time
+ * until the dialogue/prompt is gone, then opens it. A player who logs out while
+ * waiting gets no scroll.
+ */
+function showCompletedScroll(player, quest, questPoints) {
+  if (player.isRegistered?.() === false) return;
+  const { CountdownTask, TaskManager } = coreApi ?? {};
+  // Always defer at least a tick: during a hand-in action the dialogue manager already
+  // reports inactive, but NpcDialogues still sends sendInterfaceRemoval right after the
+  // action returns and would wipe a scroll opened now.
+  if (!CountdownTask || !TaskManager) {
+    openCompletedScroll(player, quest, questPoints);
+    return;
+  }
+  TaskManager.submit(
+    new CountdownTask(player, 1, () => {
+      if (player.isRegistered?.() === false) return;
+      if (chatboxOpen(player)) {
+        showCompletedScroll(player, quest, questPoints);
+        return;
+      }
+      openCompletedScroll(player, quest, questPoints);
+    })
+  );
+}
+
+/**
  * quest:is-complete / quest:is-started { player, key, complete | started }: answered for quests
  * registered here, by each quest's own stage values. An unknown key is left unanswered (null).
  */
@@ -253,6 +294,7 @@ function answerIsStarted(request) {
 }
 
 function registerQuestWidgets(api) {
+  coreApi = api.core;
   if (widgetsRegistered) return;
   widgetsRegistered = true;
 
@@ -325,7 +367,7 @@ function registerQuest(api, def) {
       if (def.rewardItemId !== undefined) player.getInventory().adds(def.rewardItemId, 1);
       player.getPacketSender().sendJingle(QUEST_COMPLETE_JINGLE, 0);
       player.sendMessage(`Congratulations, you've completed a quest: ${def.name}`);
-      openCompletedScroll(player, quest, points | 0);
+      showCompletedScroll(player, quest, points | 0);
       return true;
     },
   };

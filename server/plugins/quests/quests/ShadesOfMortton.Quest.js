@@ -502,12 +502,12 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   }
 
   /** Count the shades killed for Razmire and narrate each kill. */
-  function handleNpcDeath({ player, npcId }) {
-    if (!player || !SHADE_NPC_IDS.has(npcId)) return;
-    const stage = quest.getStage(player);
+  function handleNpcDeath({ killer, npcId }) {
+    if (!killer || !SHADE_NPC_IDS.has(npcId)) return;
+    const stage = quest.getStage(killer);
     if (stage < STAGE_KILL_SHADES || stage >= STAGE_SHADES_TO_RAZMIRE) return;
-    const kills = Math.min(5, (Number(player.getAttribute(KILLS_ATTRIBUTE)) || 0) + 1);
-    player.setAttribute(KILLS_ATTRIBUTE, kills);
+    const kills = Math.min(5, (Number(killer.getAttribute(KILLS_ATTRIBUTE)) || 0) + 1);
+    killer.setAttribute(KILLS_ATTRIBUTE, kills);
     const message = [
       "",
       "That's one Shade!",
@@ -515,9 +515,9 @@ module.exports = function registerShadesOfMorttonQuest(api) {
       "That's three Shades!",
       "That's four Shades!",
     ][kills];
-    if (message) player.sendMessage(message);
-    if (kills === 5) player.sendMessage("That's all five Shades!");
-    quest.setStage(player, STAGE_KILLED_1 + (kills - 1) * 5);
+    if (message) killer.sendMessage(message);
+    if (kills === 5) killer.sendMessage("That's all five Shades!");
+    quest.setStage(killer, STAGE_KILLED_1 + (kills - 1) * 5);
   }
 
   /** Reading the diary: first read offers the quest-start branch. */

@@ -227,12 +227,12 @@ module.exports = function registerFamilyCrestQuest(api) {
   }
 
   /** Chronozon drops Johnathon's crest piece once cured. */
-  function handleNpcDeath({ player, npcId }) {
-    if (npcId !== NpcIdentifiers.CHRONOZON) return;
-    if (quest.getStage(player) !== STAGE_CURED_JOHNATHON) return;
-    if (has(player, JOHNATHON_CREST) || has(player, FAMILY_CREST)) return;
-    player.getInventory().adds(JOHNATHON_CREST, 1);
-    player.sendMessage("You tear Johnathon's crest piece from the demon's claws.");
+  function handleNpcDeath({ killer, npcId }) {
+    if (!killer || npcId !== NpcIdentifiers.CHRONOZON) return;
+    if (quest.getStage(killer) !== STAGE_CURED_JOHNATHON) return;
+    if (has(killer, JOHNATHON_CREST) || has(killer, FAMILY_CREST)) return;
+    killer.getInventory().adds(JOHNATHON_CREST, 1);
+    killer.sendMessage("You tear Johnathon's crest piece from the demon's claws.");
   }
 
   function handleAction({ player, npcId, stepId }) {

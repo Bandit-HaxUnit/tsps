@@ -67,6 +67,14 @@ module.exports = function registerGhostsAhoyQuest(api) {
   ]);
 
   const VARP_GHOSTS_AHOY = 408;
+  /**
+   * The real quest progress varbit (bits 28-31 of varp 408) that NPC/object
+   * transforms read: Ak-Haranu (5859) and the Port Phasmatys energy barrier
+   * (57722) only resolve once it is written, which the raw stage varp never does.
+   */
+  const GHOSTS_AHOY_PROGRESS_VARBIT = 217;
+  /** 5859s cache transform resolves Ak-Haranu only for varbit values 4-8. */
+  const progressVarbitValue = (stage) => (stage >= 8 ? 8 : Math.min(8, Math.max(4, stage | 0)));
   const STAGE_STARTED = 1;
   const STAGE_PLEADED = 2;
   const STAGE_OLD_CRONE = 3;
@@ -138,6 +146,8 @@ module.exports = function registerGhostsAhoyQuest(api) {
   const COLOUR_NAMES = ["white", "red", "yellow", "blue", "orange", "green", "purple"];
 
   const MAST_OBJECT_ID = ObjectIdentifiers.MAST_6; // 16640 (Ahoy shipwreck mast)
+  /** 57722 is the cache transform parent of the Energy Barrier (16105/57723). */
+  const ENERGY_BARRIER_ID = 57722;
   const COFFIN_ID = ObjectIdentifiers.COFFIN_14; // 16644
   const COFFIN_OPEN_ID = ObjectIdentifiers.COFFIN_15; // 16645
   const ECTOFUNTUS_ID = ObjectIdentifiers.ECTOFUNTUS; // 16648
@@ -204,6 +214,20 @@ module.exports = function registerGhostsAhoyQuest(api) {
   const setAttr = (player, key, value) => player.setAttribute(key, value | 0);
   const held = (player, itemId, amount = 1) =>
     player.getInventory().getAmount(itemId) >= amount;
+
+  /** Keep the transform varbit in step with the quest stage after every write. */
+  function setStage(player, value) {
+    quest.setStage(player, value);
+    player.getPacketSender().sendVarbit(GHOSTS_AHOY_PROGRESS_VARBIT, progressVarbitValue(value));
+  }
+
+  function completeQuest(player) {
+    const completed = quest.complete(player);
+    if (completed) {
+      player.getPacketSender().sendVarbit(GHOSTS_AHOY_PROGRESS_VARBIT, STAGE_COMPLETE);
+    }
+    return completed;
+  }
 
   function freeSlots(player) {
     const inventory = player.getInventory();
@@ -468,6 +492,18 @@ module.exports = function registerGhostsAhoyQuest(api) {
         if (attr(player, TOY_ATTRIBUTE) >= 2 && attr(player, TOLD_ATTRIBUTE) !== 1) {
           return "book-of-haricanto-talking-to-the-old-crone-after-finding-the-old-man";
         }
+        // The son/model-ship branch only exists in the initial conversation; keep
+        // it reachable until the toy has changed hands and materials are in play.
+        const materialsInPlay =
+          held(player, BOOK_OF_HARICANTO) ||
+          held(player, MYSTICAL_ROBES) ||
+          held(player, TRANSLATION_MANUAL) ||
+          attr(player, GIVEN_BOOK_ATTRIBUTE) === 1 ||
+          attr(player, GIVEN_MANUAL_ATTRIBUTE) === 1 ||
+          attr(player, GIVEN_ROBES_ATTRIBUTE) === 1;
+        if (attr(player, TOY_ATTRIBUTE) < 1 && !materialsInPlay) {
+          return "talking-to-the-old-crone";
+        }
         return "talking-to-the-old-crone-with-the-materials";
       }
       if (stage >= STAGE_OLD_CRONE) return "talking-to-the-old-crone";
@@ -728,7 +764,7 @@ module.exports = function registerGhostsAhoyQuest(api) {
 
   function handleStartHook({ player, npcId, hook }) {
     if (npcId !== VELORINA_NPC_ID || hook !== START_HOOK) return;
-    if (quest.getStage(player) <= 0) quest.setStage(player, STAGE_STARTED);
+    if (quest.getStage(player) <= 0) setStage(player, STAGE_STARTED);
   }
 
   /** Chosen-condition side effects: hand-ins and stage advances. */
@@ -736,11 +772,11 @@ module.exports = function registerGhostsAhoyQuest(api) {
     const { player, npcId, stepId } = event;
     const stage = quest.getStage(player);
     if (npcId === NECROVARUS_NPC_ID && stepId === "wNrTfA") {
-      if (stage === STAGE_STARTED) quest.setStage(player, STAGE_PLEADED);
+      if (stage === STAGE_STARTED) setStage(player, STAGE_PLEADED);
       return;
     }
     if (npcId === VELORINA_NPC_ID && stepId === "TQFhQ8") {
-      if (stage === STAGE_PLEADED) quest.setStage(player, STAGE_OLD_CRONE);
+      if (stage === STAGE_PLEADED) setStage(player, STAGE_OLD_CRONE);
       return;
     }
     if (npcId !== OLD_CRONE_NPC_ID) return;
@@ -763,13 +799,30 @@ module.exports = function registerGhostsAhoyQuest(api) {
       return;
     }
     if (stepId === "BUgbCE" && stage === STAGE_CRONE_HELP) {
-      quest.setStage(player, STAGE_CRONE_RITUAL);
+      setStage(player, STAGE_CRONE_RITUAL);
     }
   }
 
   function handleChoice(event) {
     const { player, npcId, option } = event;
     const value = String(option ?? "").toLowerCase();
+    if (npcId === AK_HARANU_NPC_ID && value.includes("get you your bow")) {
+      if (attr(player, BOW_ATTRIBUTE) < 1) setAttr(player, BOW_ATTRIBUTE, 1);
+      return;
+    }
+    if (npcId === OLD_CRONE_NPC_ID && value.includes("anything i can do for you")) {
+      if (attr(player, TOY_ATTRIBUTE) < 1) setAttr(player, TOY_ATTRIBUTE, 1);
+      return;
+    }
+    if (npcId === GHOST_INNKEEPER_NPC_ID && value.includes("delighted")) {
+      // The bedsheet receive action sits after the transcript's end step and can
+      // never run, so the sheet changes hands when the option is chosen instead.
+      if (!held(player, BEDSHEET) && !held(player, GREEN_BEDSHEET)) {
+        player.getInventory().adds(BEDSHEET, 1);
+        player.sendMessage("The ghost innkeeper hands you a clean bedsheet.");
+      }
+      return;
+    }
     if (npcId === OLD_CRONE_NPC_ID && value.includes("found your son")) {
       setAttr(player, TOLD_ATTRIBUTE, 1);
       return;
@@ -781,7 +834,7 @@ module.exports = function registerGhostsAhoyQuest(api) {
     ) {
       dischargeEnchanted(player);
       setAttr(player, TOMB_ATTRIBUTE, 1);
-      quest.setStage(player, STAGE_COMMANDED);
+      setStage(player, STAGE_COMMANDED);
     }
   }
 
@@ -809,14 +862,14 @@ module.exports = function registerGhostsAhoyQuest(api) {
     switch (stepId) {
       case "xK-8eQ":
         if (stage >= STAGE_COMMANDED && !quest.isComplete(player)) {
-          quest.complete(player);
+          completeQuest(player);
           event.handled = true;
           event.end = true;
         }
         return;
       case "zy3bCu":
         becomeEnchanted(player);
-        if (stage === STAGE_CRONE_RITUAL) quest.setStage(player, STAGE_ENCHANTED);
+        if (stage === STAGE_CRONE_RITUAL) setStage(player, STAGE_ENCHANTED);
         event.handled = true;
         return;
       case "YWXokZ":
@@ -917,6 +970,9 @@ module.exports = function registerGhostsAhoyQuest(api) {
         event.handled = true;
         return;
       case "Ct4wPs":
+        if (player.getInventory().getAmount(ECTO_TOKEN) >= 25) {
+          player.getInventory().deleteNumber(ECTO_TOKEN, 25);
+        }
         sailToDragontooth(player);
         event.handled = true;
         return;
@@ -981,7 +1037,17 @@ module.exports = function registerGhostsAhoyQuest(api) {
         "As the old woman drinks the tea, enlightenment glows from within her eyes."
       );
       player.sendMessage("Ah, that's better. Now, let me see... Yes, I was once a disciple of Necrovarus.");
-      quest.setStage(player, STAGE_CRONE_HELP);
+      setStage(player, STAGE_CRONE_HELP);
+      // The tea shortcut skips the conversation that offers her son's model ship,
+      // so the toy changes hands now; without it the Book of Haricanto chain locks.
+      if (attr(player, TOY_ATTRIBUTE) < 1) {
+        setAttr(player, TOY_ATTRIBUTE, 1);
+        if (!held(player, MODEL_SHIP) && !held(player, REPAIRED_SHIP)) {
+          player.getInventory().adds(MODEL_SHIP, 1);
+          randomizeMast(player);
+          player.sendMessage("She talks fondly of her lost son and gives you his model ship.");
+        }
+      }
       event.handled = true;
     }
   }
@@ -1081,6 +1147,21 @@ module.exports = function registerGhostsAhoyQuest(api) {
     if (held(player, BOOK_OF_HARICANTO) || attr(player, GIVEN_BOOK_ATTRIBUTE) === 1) return;
     player.getInventory().adds(BOOK_OF_HARICANTO, 1);
     player.sendMessage("You unearth the Book of Haricanto.");
+  }
+
+  /**
+   * Barrows registers its global Spade "Dig" handler before this plugin and
+   * swallows every dig, so claim the Dragontooth dig through the can-use veto,
+   * which the item-action pipeline consults first.
+   */
+  function interceptDragontoothDig(event) {
+    if (event.action !== "action" || event.itemId !== SPADE) return;
+    if (!String(event.option ?? "").toLowerCase().includes("dig")) return;
+    const { player } = event;
+    if (!atDigSpot(player) || !held(player, TREASURE_MAP)) return;
+    if (held(player, BOOK_OF_HARICANTO) || attr(player, GIVEN_BOOK_ATTRIBUTE) === 1) return;
+    digForBook(player);
+    event.allow = false;
   }
 
   function emptyEctophial(player) {
@@ -1271,6 +1352,22 @@ module.exports = function registerGhostsAhoyQuest(api) {
       event.handled = true;
       return;
     }
+    /** Port Phasmatys energy barrier: 2 ecto-tokens, free once the quest is done. */
+    if (objectId === ENERGY_BARRIER_ID && (option.includes("pass") || option.includes("pay-toll"))) {
+      event.handled = true;
+      const barrierY = location?.y ?? player.getLocation().getY();
+      if (!quest.isComplete(player)) {
+        if (player.getInventory().getAmount(ECTO_TOKEN) < 2) {
+          player.sendMessage("You need 2 ecto-tokens to pass through the barrier.");
+          return;
+        }
+        player.getInventory().deleteNumber(ECTO_TOKEN, 2);
+      }
+      const destinationY = player.getLocation().getY() < barrierY ? barrierY + 1 : barrierY - 1;
+      player.moveTo(new Location(player.getLocation().getX(), destinationY, player.getLocation().getZ()));
+      player.sendMessage("You pass through the energy barrier.");
+      return;
+    }
     if (SHIPWRECK_GANGPLANKS.has(objectId)) {
       player.sendMessage("You cross the gangplank.");
       if (location) {
@@ -1323,6 +1420,9 @@ module.exports = function registerGhostsAhoyQuest(api) {
 
   function handleLogin({ player }) {
     refreshQuestList(player);
+    // The progress varbit drives NPC/object transforms and is not persisted, so
+    // replay it from the stage attribute on every login.
+    player.getPacketSender().sendVarbit(GHOSTS_AHOY_PROGRESS_VARBIT, progressVarbitValue(quest.getStage(player)));
   }
 
   quest = registerQuest(api, {
@@ -1349,6 +1449,7 @@ module.exports = function registerGhostsAhoyQuest(api) {
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemOnItem(handleItemOnItem);
   api.onItemAction(handleItemAction);
+  api.onCanUseItem(interceptDragontoothDig);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onObjectInteraction(handleObjectInteraction);
   api.onNpcDeath(handleNpcDeath);

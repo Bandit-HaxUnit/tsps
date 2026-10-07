@@ -53,7 +53,18 @@ module.exports = function registerHazeelCultQuest(api) {
     ObjectIdentifiers.SEWER_VALVE_5,
   ];
   const RAFT_ID = ObjectIdentifiers.RAFT;
+  const CAVE_ENTRANCE_ID = ObjectIdentifiers.CAVE_ENTRANCE_14; // 2852
+  const SEWER_STAIRS_ID = ObjectIdentifiers.STAIRS_14; // 2853
+  const MANSION_BASEMENT_LADDER_ID = ObjectIdentifiers.LADDER_428; // 46717
+  const BASEMENT_LADDER_ID = ObjectIdentifiers.LADDER_427; // 46716
+  const HIDEOUT_CHEST_ID = ObjectIdentifiers.CHEST_178; // 46713
   const HIDEOUT_TILE = { x: 2606, y: 9692, z: 0 };
+  const HIDEOUT_RAFT_TILE = { x: 2606, y: 9693, z: 0 };
+  const RAFT_RETURN_TILE = { x: 2568, y: 9681, z: 0 };
+  const SEWER_LANDING = { x: 2584, y: 9633, z: 0 };
+  const SEWER_STAIRS_SURFACE = { x: 2570, y: 3283, z: 0 };
+  const MANSION_BASEMENT = { x: 2544, y: 9695, z: 0 };
+  const MANSION_FROM_BASEMENT = { x: 2570, y: 3268, z: 0 };
 
   const VARP_HAZEEL_CULT = 223;
   const SIDE_CARNILLEAN = 0;
@@ -88,6 +99,8 @@ module.exports = function registerHazeelCultQuest(api) {
   const has = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
   const take = (player, itemId, amount = 1) => player.getInventory().deleteNumber(itemId, amount);
   const give = (player, itemId, amount = 1) => player.getInventory().adds(itemId, amount);
+  const actionOf = (event) =>
+    String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "").toLowerCase();
 
   function buildJournal(player, questHandle) {
     const stage = questHandle.getStage(player);
@@ -328,6 +341,58 @@ module.exports = function registerHazeelCultQuest(api) {
     player.sendMessage("Alomone falls. The Carnillean armour is now unguarded.");
   }
 
+  /**
+   * When Alomone's last line lands he turns into the attackable variant. There is
+   * no transcript action to hang this off, so watch the line itself.
+   */
+  function handleAlomoneLine(request) {
+    const { npc, npcId, text } = request;
+    if (npcId !== NpcIdentifiers.ALOMONE || !npc?.setNpcTransformationId) return;
+    if (!String(text ?? "").toLowerCase().includes("live long enough")) return;
+    npc.setNpcTransformationId(NpcIdentifiers.ALOMONE_2);
+  }
+
+  /** Cave entrance, sewer stairs and the mansion basement ladder travel. */
+  function handleTravel(event) {
+    const option = actionOf(event);
+    const { player } = event;
+    if (event.objectId === CAVE_ENTRANCE_ID && option.includes("enter")) {
+      player.moveTo(new Location(SEWER_LANDING.x, SEWER_LANDING.y, SEWER_LANDING.z));
+      player.sendMessage("You climb down into the Ardougne sewers.");
+    } else if (event.objectId === SEWER_STAIRS_ID && option.includes("climb-up")) {
+      player.moveTo(new Location(SEWER_STAIRS_SURFACE.x, SEWER_STAIRS_SURFACE.y, SEWER_STAIRS_SURFACE.z));
+      player.sendMessage("You climb up the stairs to the surface.");
+    } else if (event.objectId === MANSION_BASEMENT_LADDER_ID && option.includes("climb-down")) {
+      player.moveTo(new Location(MANSION_BASEMENT.x, MANSION_BASEMENT.y, MANSION_BASEMENT.z));
+      player.sendMessage("You climb down into the mansion basement.");
+    } else if (event.objectId === BASEMENT_LADDER_ID && option.includes("climb-up")) {
+      player.moveTo(new Location(MANSION_FROM_BASEMENT.x, MANSION_FROM_BASEMENT.y, MANSION_FROM_BASEMENT.z));
+      player.sendMessage("You climb up into the mansion.");
+    } else {
+      return;
+    }
+    event.handled = true;
+  }
+
+  /** Looting the hideout chest after Alomone's death recovers the family armour. */
+  function handleHideoutChest(event) {
+    if (event.objectId !== HIDEOUT_CHEST_ID) return;
+    const option = actionOf(event);
+    if (!option.includes("search") && !option.includes("open")) return;
+    event.handled = true;
+    const { player } = event;
+    if (
+      side(player) !== SIDE_CARNILLEAN ||
+      quest.getStage(player) < STAGE_FINISHED_SIDE_TASK ||
+      has(player, ARMOUR)
+    ) {
+      player.sendMessage("You search the chest but find nothing.");
+      return;
+    }
+    give(player, ARMOUR);
+    player.sendMessage("Inside the chest you find the Carnillean family armour.");
+  }
+
   function handleValve(event) {
     const index = VALVE_IDS.indexOf(event.objectId);
     if (index === -1) return;
@@ -354,7 +419,14 @@ module.exports = function registerHazeelCultQuest(api) {
       event.handled = true;
       return;
     }
-    player.moveTo(new Location(HIDEOUT_TILE.x, HIDEOUT_TILE.y, HIDEOUT_TILE.z));
+    const location = player.getLocation();
+    const atHideout =
+      Math.max(
+        Math.abs(location.getX() - HIDEOUT_RAFT_TILE.x),
+        Math.abs(location.getY() - HIDEOUT_RAFT_TILE.y)
+      ) <= 2;
+    const destination = atHideout ? RAFT_RETURN_TILE : HIDEOUT_TILE;
+    player.moveTo(new Location(destination.x, destination.y, destination.z));
     player.sendMessage("The raft carries you past the islands to the end of the sewer passage.");
     event.handled = true;
   }
@@ -386,10 +458,13 @@ module.exports = function registerHazeelCultQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("npc-dialogue:line", handleAlomoneLine);
   api.onItemOnObject(handlePoisonRange, { noted: false });
   api.onObjectInteraction(handleEvidenceCupboard);
   api.onObjectInteraction(handleValve);
   api.onObjectInteraction(handleRaft);
+  api.onObjectInteraction(handleTravel);
+  api.onObjectInteraction(handleHideoutChest);
   api.onNpcDeath(handleNpcDeath);
   api.onPlayerLogin(handleLogin);
 };

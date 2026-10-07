@@ -140,7 +140,11 @@ module.exports = function registerRumDealQuest(api) {
     ObjectIdentifiers.CUPBOARD_34, // 10162
     ObjectIdentifiers.OPEN_CUPBOARD_4, // 10163
   ]);
+  // The map places the unnamed multi-loc root 10096 (its resolved variant is "Blindweed
+  // Patch"); the cache has no name for the root, so ObjectIdentifiers has no constant.
+  const BLINDWEED_PATCH_ROOT_OBJECT_ID = 10096;
   const BLINDWEED_PATCH_OBJECT_IDS = new Set([
+    BLINDWEED_PATCH_ROOT_OBJECT_ID,
     ObjectIdentifiers.BLINDWEED_PATCH, // 10097
     ObjectIdentifiers.BLINDWEED_PATCH_2, // 10098
     ObjectIdentifiers.BLINDWEED_PATCH_3, // 10099
@@ -863,21 +867,21 @@ module.exports = function registerRumDealQuest(api) {
   }
 
   /** Evil Spirit death banishes it; a Fever Spider drops its body. */
-  function handleNpcDeath({ player, npcId }) {
-    if (!player) return;
+  function handleNpcDeath({ killer, npcId }) {
+    if (!killer) return;
     if (npcId === EVIL_SPIRIT_NPC_ID) {
-      player.setAttribute(SPIRIT_ATTRIBUTE, 0);
-      clearSpirit(player);
-      if (quest.getStage(player) === STAGE_BLESS_WRENCH) {
-        quest.setStage(player, STAGE_SPIRIT_BANISHED);
-        player.sendMessage("You have banished the Evil Spirit!");
+      killer.setAttribute(SPIRIT_ATTRIBUTE, 0);
+      clearSpirit(killer);
+      if (quest.getStage(killer) === STAGE_BLESS_WRENCH) {
+        quest.setStage(killer, STAGE_SPIRIT_BANISHED);
+        killer.sendMessage("You have banished the Evil Spirit!");
       }
       return;
     }
-    if (npcId === FEVER_SPIDER_NPC_ID && quest.getStage(player) === STAGE_KILL_SPIDER) {
-      if (!held(player, FEVER_SPIDER_BODY) && hasFreeSlot(player)) {
-        player.getInventory().adds(FEVER_SPIDER_BODY, 1);
-        player.sendMessage("You take the fever spider's body.");
+    if (npcId === FEVER_SPIDER_NPC_ID && quest.getStage(killer) === STAGE_KILL_SPIDER) {
+      if (!held(killer, FEVER_SPIDER_BODY) && hasFreeSlot(killer)) {
+        killer.getInventory().adds(FEVER_SPIDER_BODY, 1);
+        killer.sendMessage("You take the fever spider's body.");
       }
     }
   }

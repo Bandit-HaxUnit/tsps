@@ -20,7 +20,7 @@
  * ritual stages through the transcript.
  */
 module.exports = function registerNatureSpiritQuest(api) {
-  const { Skill, Equipment, ItemIdentifiers, NpcIdentifiers } = api.core;
+  const { Skill, Equipment, Location, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const { registerQuest, refreshQuestList } = require("../QuestRuntime");
 
   const DREZEL_NPC_ID = NpcIdentifiers.DREZEL; // 9636
@@ -56,15 +56,95 @@ module.exports = function registerNatureSpiritQuest(api) {
   const JOURNAL_ITEM_ID = ItemIdentifiers.JOURNAL;
   const DRUIDIC_SPELL_ITEM_ID = ItemIdentifiers.DRUIDIC_SPELL;
   const USED_SPELL_ITEM_ID = ItemIdentifiers.A_USED_SPELL;
+  const MEAT_PIE_ITEM_ID = ItemIdentifiers.MEAT_PIE;
+  const APPLE_PIE_ITEM_ID = ItemIdentifiers.APPLE_PIE;
 
   const START_HOOK = "quest:nature-spirit:start";
   const COMPLETE_ACTION_ID = "b8LYWU";
+  /** Drezel's "Drezel hands you some food." message step. */
+  const FOOD_MESSAGE_ID = "LAAzzo";
+
+  const SWAMP_GATE_IDS = new Set([ObjectIdentifiers.GATE_72, ObjectIdentifiers.GATE_73]); // 3506/3507
+  const GROTTO_ID = ObjectIdentifiers.GROTTO; // 3516 surface entrance
+  const GROTTO_TREE_ID = ObjectIdentifiers.GROTTO_TREE; // 3517
+  const GROTTO_EXIT_ID = ObjectIdentifiers.GROTTO_3; // 3525 cave exit
+
+  const GROTTO_INTERIOR = { x: 3441, y: 9736, z: 0 };
+  const GROTTO_SURFACE = { x: 3443, y: 3338, z: 0 };
+  const FILLIMAN_CAMP = { x: 3442, y: 3340, z: 0 };
+  const NATURE_SPIRIT_CAMP = { x: 3441, y: 9736, z: 0 };
 
   let quest;
 
   const held = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
   const wearingGhostspeak = (player) =>
     player.getEquipment().get(Equipment.AMULET_SLOT)?.getId?.() === GHOSTSPEAK_AMULET_ITEM_ID;
+  const actionOf = (event) =>
+    String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "").toLowerCase();
+
+  /** Owner-only quest NPC spawns (Filliman outside, Nature Spirit inside). */
+  const spawnedByPlayer = new Map();
+
+  function trackSpawn(player, npc) {
+    if (!npc) return npc;
+    const set = spawnedByPlayer.get(player) ?? new Set();
+    set.add(npc);
+    spawnedByPlayer.set(player, set);
+    return npc;
+  }
+
+  function clearSpawns(player) {
+    const set = spawnedByPlayer.get(player);
+    if (set) for (const npc of set) api.removeNpc(npc);
+    spawnedByPlayer.delete(player);
+  }
+
+  function despawn(player, npcId) {
+    const set = spawnedByPlayer.get(player);
+    if (!set) return;
+    for (const npc of [...set]) {
+      if (npc?.getId?.() === npcId) {
+        api.removeNpc(npc);
+        set.delete(npc);
+      }
+    }
+  }
+
+  function hasSpawn(player, npcId) {
+    const set = spawnedByPlayer.get(player);
+    if (!set) return false;
+    for (const npc of set) if (npc?.getId?.() === npcId) return true;
+    return false;
+  }
+
+  function spawnAt(player, npcId, tile) {
+    return trackSpawn(
+      player,
+      api.spawnNpc({
+        id: npcId,
+        x: tile.x,
+        y: tile.y,
+        z: tile.z,
+        wanderRadius: 0,
+        owner: player,
+        ownerOnly: true,
+      })
+    );
+  }
+
+  /** Filliman waits at his camp until the grotto ritual, then the Spirit is inside. */
+  function ensureQuestNpcs(player) {
+    if (!player) return;
+    const stage = quest.getStage(player);
+    if (stage >= STAGE_ENTERED_GROTTO) {
+      despawn(player, FILLIMAN_NPC_ID);
+      if (!hasSpawn(player, NATURE_SPIRIT_NPC_ID)) spawnAt(player, NATURE_SPIRIT_NPC_ID, NATURE_SPIRIT_CAMP);
+      return;
+    }
+    if (stage >= STAGE_ENTERED_SWAMP && !hasSpawn(player, FILLIMAN_NPC_ID)) {
+      spawnAt(player, FILLIMAN_NPC_ID, FILLIMAN_CAMP);
+    }
+  }
 
   function buildJournal(player, questHandle) {
     const stage = questHandle.getStage(player);
@@ -221,7 +301,26 @@ module.exports = function registerNatureSpiritQuest(api) {
     if (quest.getStage(player) < STAGE_STARTED) quest.setStage(player, STAGE_STARTED);
   }
 
-  function handleAction({ player, npcId, stepId }) {
+  /**
+   * The food Drezel hands over during the start conversation (3 meat pies and
+   * 3 apple pies). The message step emits the action event once as a generic
+   * step and once as `kind: "message"`; only act on the message event so the
+   * chat line still shows and the pies are handed out once.
+   */
+  function giveDrezelFood(event) {
+    if (event.stepId !== FOOD_MESSAGE_ID || event.kind !== "message") return;
+    if (event.npcId !== DREZEL_NPC_ID) return;
+    const { player } = event;
+    player.getInventory().adds(MEAT_PIE_ITEM_ID, 3);
+    player.getInventory().adds(APPLE_PIE_ITEM_ID, 3);
+  }
+
+  function handleAction(event) {
+    const { player, npcId, stepId } = event;
+    if (stepId === FOOD_MESSAGE_ID) {
+      giveDrezelFood(event);
+      return;
+    }
     if (stepId !== COMPLETE_ACTION_ID) return;
     if (npcId !== FILLIMAN_NPC_ID && npcId !== NATURE_SPIRIT_NPC_ID) return;
     if (quest.getStage(player) >= STAGE_KILLED_GHAST_3 && !quest.isComplete(player)) {
@@ -278,8 +377,54 @@ module.exports = function registerNatureSpiritQuest(api) {
     event.handled = true;
   }
 
+  /**
+   * The swamp gate is the only legitimate way into Mort Myre ("or Filliman will
+   * not appear"): passing through it writes stage 10. Doors still swings the gate.
+   */
+  function handleSwampGate(request) {
+    if (!SWAMP_GATE_IDS.has(request.objectId)) return;
+    const { player } = request;
+    const stage = quest.getStage(player);
+    if (stage < STAGE_STARTED || stage >= STAGE_ENTERED_SWAMP) return;
+    quest.setStage(player, STAGE_ENTERED_SWAMP);
+    player.sendMessage("You walk into the gloomy atmosphere of Mort Myre.");
+    ensureQuestNpcs(player);
+  }
+
+  /** The grotto cave entrance/exit and the journal hidden in the grotto tree. */
+  function handleGrotto(event) {
+    const { player, objectId } = event;
+    const option = actionOf(event);
+    if (objectId === GROTTO_ID && option.includes("enter")) {
+      event.handled = true;
+      player.moveTo(new Location(GROTTO_INTERIOR.x, GROTTO_INTERIOR.y, GROTTO_INTERIOR.z));
+      if (quest.getStage(player) >= STAGE_PERFORMED_RITUAL && quest.getStage(player) < STAGE_FULL_TRANSFORM) {
+        quest.setStage(player, STAGE_ENTERED_GROTTO);
+      }
+      ensureQuestNpcs(player);
+      return;
+    }
+    if (objectId === GROTTO_EXIT_ID && (option.includes("exit") || option.includes("leave"))) {
+      event.handled = true;
+      player.moveTo(new Location(GROTTO_SURFACE.x, GROTTO_SURFACE.y, GROTTO_SURFACE.z));
+      return;
+    }
+    if (objectId === GROTTO_TREE_ID && option.includes("search")) {
+      const stage = quest.getStage(player);
+      if (stage < STAGE_SHOWN_MIRROR || stage >= STAGE_GIVEN_JOURNAL || held(player, JOURNAL_ITEM_ID)) return;
+      event.handled = true;
+      player.getInventory().adds(JOURNAL_ITEM_ID, 1);
+      player.sendMessage("You find a journal hidden in the branches of the grotto tree.");
+    }
+  }
+
   function handleLogin({ player }) {
     refreshQuestList(player);
+    ensureQuestNpcs(player);
+  }
+
+  function handleLogout({ player }) {
+    if (player) clearSpawns(player);
   }
 
   quest = registerQuest(api, {
@@ -309,9 +454,12 @@ module.exports = function registerNatureSpiritQuest(api) {
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("door:toggle", handleSwampGate);
   api.onItemOnNpc(handleMirrorOnFilliman);
   api.onItemOnNpc(handleJournalOnFilliman);
   api.onItemAction(handleSpellAction);
   api.onItemAction(handleSickleAction);
+  api.onObjectInteraction(handleGrotto);
   api.onPlayerLogin(handleLogin);
+  api.onPlayerLogout(handleLogout);
 };

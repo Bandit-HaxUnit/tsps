@@ -122,10 +122,14 @@ module.exports = function registerDragonSlayerQuest(api) {
   ];
   const OFFERINGS = [ITEM.silk, ITEM.unfiredBowl, ITEM.lobsterPot, ITEM.wizardMindBomb];
 
+  // The Lady Lumbridge's hole is nameless in the cache (configName dragonslayer_shiphole),
+  // option Repair, at 3047,3207. The old xrsps HOLE_3 (2589) is not placed.
+  const SHIP_HOLE_ID = 25036;
+
   const LOC = {
-    magicDoor: ObjectIdentifiers.HOPPER,
+    magicDoor: ObjectIdentifiers.MAGIC_DOOR_6,
     oracleChest: [ObjectIdentifiers.CHEST_14, ObjectIdentifiers.CHEST_15],
-    shipHole: ObjectIdentifiers.HOLE_3,
+    shipHole: SHIP_HOLE_ID,
     shipGangplanks: [ObjectIdentifiers.GANGPLANK_15, ObjectIdentifiers.GANGPLANK_16],
     melzarEntrance: ObjectIdentifiers.DOOR_91,
     melzarChest: [ObjectIdentifiers.CHEST_16, ObjectIdentifiers.CHEST_17],
@@ -554,14 +558,29 @@ module.exports = function registerDragonSlayerQuest(api) {
   /** The Lady Lumbridge's gangplanks are this quest's, not the generic gangplank crossing's. */
   function claimShipGangplank(request) {
     if (!LOC.shipGangplanks.includes(request.objectId)) return;
+    const stage = quest.getStage(request.player);
+    if (stage < STAGE_BOUGHT_SHIP) {
+      request.handled = true;
+      request.player.sendMessage("The ship is not ready to sail yet.");
+      return;
+    }
+    if (stage < STAGE_NED_READY) {
+      // Boarding to repair the holes: leave it to the generic gangplank crossing.
+      return;
+    }
     request.handled = true;
-    handleGangplankClick(request);
+    sailToCrandor(request.player);
   }
 
   function handleGangplankClick(event) {
-    if (quest.getStage(event.player) !== STAGE_NED_READY) {
+    const stage = quest.getStage(event.player);
+    if (stage < STAGE_BOUGHT_SHIP) {
       event.player.sendMessage("The ship is not ready to sail yet.");
       return;
+    }
+    if (stage < STAGE_NED_READY) {
+      // Let the generic gangplank crossing board the player onto the deck.
+      return false;
     }
     sailToCrandor(event.player);
   }

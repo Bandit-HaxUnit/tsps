@@ -12,14 +12,15 @@
  *   5 sailed to Kent, 6 spoken to Kent, 7 lit torch, 8 Kennith needs escape,
  *   9 panel opened, 10 needs crane, 11 saved Kennith, 12 complete.
  *
- * Gaps: travel between shore/platform/island, the swamp-paste mixing and torch
- * lighting recipes, the loose panel and crane are not wired to objects here
- * (the transcript still plays the right words by stage; only the world edits are
- * missing). Level 30 Firemaking is only stated in the journal, not enforced.
+ * Gaps: the swamp-paste mixing and torch lighting recipes, the loose panel and
+ * crane world edits are not represented (the transcript still plays the right
+ * words by stage; only the item/object changes are missing), and the broken
+ * glass / damp sticks ground spawns the fire recipe needs are not wired here.
+ * Level 30 Firemaking is only stated in the journal, not enforced.
  */
 module.exports = function registerSeaSlugQuest(api) {
   const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
-  const { registerQuest, refreshQuestList } = require("../QuestRuntime");
+  const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
 
   const CAROLINE_NPC_ID = NpcIdentifiers.CAROLINE; // 5067
   const KENNITH_NPC_IDS = new Set([NpcIdentifiers.KENNITH, NpcIdentifiers.KENNITH_2]);
@@ -53,9 +54,28 @@ module.exports = function registerSeaSlugQuest(api) {
   const LIT_TORCH_ITEM_ID = ItemIdentifiers.LIT_TORCH;
   const UNLIT_TORCH_ITEM_ID = ItemIdentifiers.UNLIT_TORCH;
 
+  // 18168 is a shared house-door id; only the fishing platform's placements (x >= 2750)
+  // are claimed so Witchaven's houses keep the generic Doors plugin behaviour.
+  const CABIN_DOOR_OBJECT_ID = 18168;
+  const LOOSE_PANEL_OBJECT_ID = 18251;
+  const CRANE_OBJECT_ID = 18327;
+  const PLATFORM_MIN_X = 2750;
+  const PLATFORM_TILE = { x: 2784, y: 3276, z: 0 };
+  const ISLAND_TILE = { x: 2794, y: 3320, z: 0 };
+  const SHORE_TILE = { x: 2720, y: 3305, z: 0 };
+
+  const SAIL_TO_PLATFORM_STEP_ID = "46f1OE"; // "You arrive at the fishing platform."
+  const SAIL_TO_ISLAND_STEP_ID = "zUdSJX"; // "You arrive on a small island."
+  const SAIL_TO_SHORE_STEP_ID = "w8c3IN"; // "Holgart takes the player back to Witchaven."
+  const UNLIT_TORCH_RECEIVE_IDS = new Set(["G6lOss", "o9pnQL"]);
+  const TORCH_LIT_MESSAGE_ID = "mqmTA7"; // "Your torch lights."
+  const PANEL_KICK_MESSAGE_IDS = new Set(["vJ1GjP", "NgGUPy", "5u-9os"]);
+  const CRANE_MESSAGE_IDS = new Set(["utnJSh", "PGBTE0"]);
+
   const START_HOOK = "quest:sea-slug:start";
   const COMPLETE_ACTION_ID = "U0muMo";
   const KENT_ACTION_ID = "EkOxin";
+  const PAGE = "Sea Slug";
 
   let quest;
 
@@ -209,6 +229,11 @@ module.exports = function registerSeaSlugQuest(api) {
     if (value.includes("loses their unlit torch")) return !held(player, UNLIT_TORCH_ITEM_ID);
     if (value.includes("has an unlit torch")) return held(player, UNLIT_TORCH_ITEM_ID);
     if (value.includes("does not have an unlit torch")) return !held(player, UNLIT_TORCH_ITEM_ID);
+    if (value.includes("kicks the loose panel near kennith after talking to bailey")) {
+      return quest.getStage(player) >= STAGE_KENNITH_NEEDS_ESCAPE;
+    }
+    if (value.includes("too far away from the crane")) return false;
+    if (value.includes("one tile from the crane")) return true;
     return null;
   }
 
@@ -227,6 +252,41 @@ module.exports = function registerSeaSlugQuest(api) {
     }
     if (stepId === KENT_ACTION_ID && npcId === KENT_NPC_ID) {
       if (quest.getStage(player) < STAGE_SPOKEN_TO_KENT) quest.setStage(player, STAGE_SPOKEN_TO_KENT);
+      return;
+    }
+    if (stepId === SAIL_TO_PLATFORM_STEP_ID) {
+      player.moveTo(new api.core.Location(PLATFORM_TILE.x, PLATFORM_TILE.y, PLATFORM_TILE.z));
+      return;
+    }
+    if (stepId === SAIL_TO_ISLAND_STEP_ID) {
+      if (quest.getStage(player) < STAGE_SAILED_TO_KENT) quest.setStage(player, STAGE_SAILED_TO_KENT);
+      player.moveTo(new api.core.Location(ISLAND_TILE.x, ISLAND_TILE.y, ISLAND_TILE.z));
+      return;
+    }
+    if (stepId === SAIL_TO_SHORE_STEP_ID) {
+      player.moveTo(new api.core.Location(SHORE_TILE.x, SHORE_TILE.y, SHORE_TILE.z));
+      return;
+    }
+    if (UNLIT_TORCH_RECEIVE_IDS.has(stepId)) {
+      if (!held(player, UNLIT_TORCH_ITEM_ID) && !held(player, LIT_TORCH_ITEM_ID)) {
+        player.getInventory().adds(UNLIT_TORCH_ITEM_ID, 1);
+      }
+      return;
+    }
+    if (stepId === TORCH_LIT_MESSAGE_ID) {
+      if (!held(player, LIT_TORCH_ITEM_ID)) {
+        player.getInventory().deleteNumber(UNLIT_TORCH_ITEM_ID, 1);
+        player.getInventory().adds(LIT_TORCH_ITEM_ID, 1);
+      }
+      if (quest.getStage(player) === STAGE_SPOKEN_TO_KENT) quest.setStage(player, STAGE_LIT_TORCH);
+      return;
+    }
+    if (PANEL_KICK_MESSAGE_IDS.has(stepId)) {
+      if (quest.getStage(player) === STAGE_KENNITH_NEEDS_ESCAPE) quest.setStage(player, STAGE_PANEL_OPENED);
+      return;
+    }
+    if (CRANE_MESSAGE_IDS.has(stepId)) {
+      if (quest.getStage(player) === STAGE_NEEDS_CRANE) quest.setStage(player, STAGE_SAVED_KENNITH);
     }
   }
 
@@ -236,6 +296,45 @@ module.exports = function registerSeaSlugQuest(api) {
     if (!held(player, SWAMP_PASTE_ITEM_ID)) return;
     player.getInventory().deleteNumber(SWAMP_PASTE_ITEM_ID, 1);
     quest.setStage(player, STAGE_BOAT_REPAIRED);
+  }
+
+  /** Doors in north-south walls (face 0/2) are crossed in x, others in y. */
+  function crossDoor(event) {
+    const { player, location } = event;
+    const position = player.getLocation();
+    if ((Number(event.object?.getFace?.() ?? 1) & 1) === 0) {
+      const destinationX = position.getX() <= location.x ? location.x + 1 : location.x - 1;
+      player.moveTo(new api.core.Location(destinationX, position.getY(), location.z));
+      return;
+    }
+    const destinationY = position.getY() >= location.y ? location.y - 1 : location.y + 1;
+    player.moveTo(new api.core.Location(position.getX(), destinationY, location.z));
+  }
+
+  /** Doors' name hook claims most "Door" locs, so claim the platform cabin first. */
+  function handleDoorToggle(event) {
+    if (event.objectId !== CABIN_DOOR_OBJECT_ID || event.location.x < PLATFORM_MIN_X) return;
+    event.handled = true;
+    crossDoor(event);
+  }
+
+  function handleObjectInteraction(event) {
+    const { player, objectId } = event;
+    if (objectId === CABIN_DOOR_OBJECT_ID) {
+      if (event.location.x < PLATFORM_MIN_X) return;
+      event.handled = true;
+      crossDoor(event);
+      return;
+    }
+    if (objectId === LOOSE_PANEL_OBJECT_ID) {
+      event.handled = true;
+      startTranscript(api, player, BAILEY_NPC_ID, PAGE, "freeing-kennith");
+      return;
+    }
+    if (objectId === CRANE_OBJECT_ID) {
+      event.handled = true;
+      startTranscript(api, player, BAILEY_NPC_ID, PAGE, "freeing-kennith-using-the-crane");
+    }
   }
 
   function handleLogin({ player }) {
@@ -261,5 +360,7 @@ module.exports = function registerSeaSlugQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:condition", handleCondition);
+  api.onObjectInteraction(handleObjectInteraction);
+  api.onCustomEvent("door:toggle", handleDoorToggle);
   api.onPlayerLogin(handleLogin);
 };

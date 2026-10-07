@@ -141,12 +141,16 @@ module.exports = function registerCreatureOfFenkenstrainQuest(api) {
   const FLAG_GARDENER_FOLLOWING = 4;
   const FLAG_MOULD_TAKEN = 8;
 
-  /** Grave dig rewards (reference tiles). */
+  /**
+   * Grave dig rewards, keyed by the grave objects' own tiles (5168 at 3502/3504/3506,3576-7
+   * and 5169 at 3608,3491): the reference part tiles were one tile off, so nearest-grave
+   * resolution sent the middle grave's Dig to the torso instead of the arms.
+   */
   const GRAVE_PARTS = [
-    { x: 3503, y: 3576, bit: 2, itemId: ItemIdentifiers.TORSO, message: "... and you unearth a torso." },
-    { x: 3504, y: 3576, bit: 4, itemId: ItemIdentifiers.ARMS, message: "... and you unearth a pair of arms." },
-    { x: 3505, y: 3576, bit: 8, itemId: ItemIdentifiers.LEGS, message: "... and you unearth a pair of legs." },
-    { x: 3608, y: 3490, bit: 1, itemId: ItemIdentifiers.DECAPITATED_HEAD, message: "... and you unearth a decapitated head." },
+    { x: 3502, y: 3576, bit: 2, itemId: ItemIdentifiers.TORSO, message: "... and you unearth a torso." },
+    { x: 3504, y: 3577, bit: 4, itemId: ItemIdentifiers.ARMS, message: "... and you unearth a pair of arms." },
+    { x: 3506, y: 3576, bit: 8, itemId: ItemIdentifiers.LEGS, message: "... and you unearth a pair of legs." },
+    { x: 3608, y: 3491, bit: 1, itemId: ItemIdentifiers.DECAPITATED_HEAD, message: "... and you unearth a decapitated head." },
   ];
 
   /** Inscriptions keyed by the gravestone tile (reference data). */

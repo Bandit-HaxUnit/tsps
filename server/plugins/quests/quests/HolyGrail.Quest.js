@@ -22,7 +22,7 @@
  */
 module.exports = function registerHolyGrailQuest(api) {
   const { Skill, ItemIdentifiers, NpcIdentifiers, Equipment, Location } = api.core;
-  const { registerQuest } = require("../QuestRuntime");
+  const { registerQuest, getRegisteredQuests } = require("../QuestRuntime");
 
   const KING_ARTHUR_NPC_IDS = new Set([
     NpcIdentifiers.KING_ARTHUR,
@@ -54,6 +54,20 @@ module.exports = function registerHolyGrailQuest(api) {
     [NpcIdentifiers.SIR_KAY_3, "asking-the-other-knights-talking-to-sir-kay"],
   ]);
   const PEASANT_NPC_IDS = new Set([NpcIdentifiers.PEASANT, NpcIdentifiers.PEASANT_2]);
+
+  /** NPCs whose transcripts this plugin owns; dialogue conditions from anyone else are not ours. */
+  const DIALOGUE_NPC_IDS = new Set([
+    ...KING_ARTHUR_NPC_IDS,
+    ...MERLIN_NPC_IDS,
+    ...HIGH_PRIEST_NPC_IDS,
+    ...SIR_PERCIVAL_NPC_IDS,
+    ...KNIGHT_VARIANTS.keys(),
+    ...PEASANT_NPC_IDS,
+    GALAHAD_NPC_ID,
+    FISHERMAN_NPC_ID,
+    FISHER_KING_NPC_ID,
+    GRAIL_MAIDEN_NPC_ID,
+  ]);
 
   const VARP_HOLY_GRAIL = 5;
   const STAGE_STARTED = 2;
@@ -127,10 +141,21 @@ module.exports = function registerHolyGrailQuest(api) {
     return "starting-off";
   }
 
+  function merlinsCrystalIncomplete(player) {
+    const merlinsCrystal = getRegisteredQuests().find((entry) => entry.key === "merlins_crystal");
+    return Boolean(merlinsCrystal && !merlinsCrystal.isComplete(player));
+  }
+
   function selectVariant({ npcId, player }) {
     const stage = quest.getStage(player);
-    if (KING_ARTHUR_NPC_IDS.has(npcId)) return arthurVariant(stage, player);
+    if (KING_ARTHUR_NPC_IDS.has(npcId)) {
+      // Arthur's Merlin's Crystal start comes first; Holy Grail only opens once it is done.
+      if (merlinsCrystalIncomplete(player)) return null;
+      return arthurVariant(stage, player);
+    }
     if (MERLIN_NPC_IDS.has(npcId)) {
+      // Merlin's Crystal owns Merlin until it is finished; Holy Grail's chain only starts after Arthur.
+      if (merlinsCrystalIncomplete(player) || stage < STAGE_STARTED) return null;
       if (stage === STAGE_STARTED) quest.setStage(player, STAGE_SPOKEN_MERLIN);
       return "talking-to-merlin";
     }
@@ -153,12 +178,17 @@ module.exports = function registerHolyGrailQuest(api) {
       if (stage >= STAGE_FINDING_PERCIVAL) return "talking-to-sir-percival";
       return null;
     }
-    if (KNIGHT_VARIANTS.has(npcId)) return KNIGHT_VARIANTS.get(npcId);
+    if (KNIGHT_VARIANTS.has(npcId)) {
+      // The Grail round-table talk is only Holy Grail's after Merlin's Crystal and its own start.
+      if (merlinsCrystalIncomplete(player) || stage < STAGE_STARTED) return null;
+      return KNIGHT_VARIANTS.get(npcId);
+    }
     if (PEASANT_NPC_IDS.has(npcId)) return "talking-to-the-fisherman-peasant";
     return null;
   }
 
-  function answerCondition({ player, text }) {
+  function answerCondition({ player, npcId, text }) {
+    if (!DIALOGUE_NPC_IDS.has(npcId)) return null;
     const value = String(text).toLowerCase();
     const skills = player.getSkillManager();
     const combat = typeof skills.getCombatLevel === "function" ? skills.getCombatLevel() : 999;

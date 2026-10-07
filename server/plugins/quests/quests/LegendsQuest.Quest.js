@@ -922,7 +922,10 @@ module.exports = function registerLegendsQuest(api) {
     const [, label, skill] = entry;
     player.getSkillManager().addExperiences(skill, 7650);
     player.sendMessage(`The training increases your ${label} experience.`);
-    quest.setStage(player, stage + 5);
+    // The fourth claim is the quest completion: quest.complete() is the only path
+    // that grants the 4 quest points, the jingle and the completion scroll.
+    if (stage + 5 >= STAGE_TRAINING_4) quest.complete(player);
+    else quest.setStage(player, stage + 5);
     return true;
   }
 
@@ -1196,7 +1199,7 @@ module.exports = function registerLegendsQuest(api) {
       event.handled = true;
       return;
     }
-    if (itemId === RADIMUS_NOTES && text.includes("mapping")) {
+    if (itemId === RADIMUS_NOTES && (text.includes("mapping") || text.includes("complete"))) {
       mapJungle(player);
       event.handled = true;
       return;

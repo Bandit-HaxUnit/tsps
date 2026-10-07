@@ -164,11 +164,22 @@ module.exports = function registerWitchsHouseQuest(api) {
     quest.complete(player);
   }
 
-  function crossNorthSouthDoor(event) {
+  /**
+   * Doors in north-south walls (loc face 0/2) are crossed in x, doors in
+   * east-west walls (face 1/3) in y. The front (2861) and shed (2863) doors
+   * are both west-wall doors, so the old y-only crossing left the player
+   * beside the door instead of through it.
+   */
+  function crossDoor(event) {
     const { player, location } = event;
-    const y = player.getLocation().getY();
-    const destinationY = y >= location.y ? location.y - 1 : location.y + 1;
-    player.moveTo(new Location(location.x, destinationY, location.z));
+    const position = player.getLocation();
+    if ((Number(event.object?.getFace?.() ?? 1) & 1) === 0) {
+      const destinationX = position.getX() <= location.x ? location.x + 1 : location.x - 1;
+      player.moveTo(new Location(destinationX, position.getY(), location.z));
+      return;
+    }
+    const destinationY = position.getY() >= location.y ? location.y - 1 : location.y + 1;
+    player.moveTo(new Location(position.getX(), destinationY, location.z));
   }
 
   function crossElectricGate(event) {
@@ -275,9 +286,9 @@ module.exports = function registerWitchsHouseQuest(api) {
       startTranscript(api, player, BOY_NPC_ID, PAGE, "getting-past-the-witch-attempting-to-open-the-shed-door-without-the-key-or-before-using-the-key-on-it");
       return;
     }
-    const entering = player.getLocation().getY() >= event.location.y;
+    const entering = player.getLocation().getX() < event.location.x;
     if (entering && stage < STAGE_DEFEATED_EXPERIMENT) ensureExperiment(player);
-    crossNorthSouthDoor(event);
+    crossDoor(event);
   }
 
   /** All the object interactions in and around the house. */
@@ -300,7 +311,7 @@ module.exports = function registerWitchsHouseQuest(api) {
     }
     if (objectId === FRONT_DOOR_LOC_ID) {
       event.handled = true;
-      const leaving = player.getLocation().getY() < event.location.y;
+      const leaving = player.getLocation().getX() > event.location.x;
       const stage = quest.getStage(player);
       if (!leaving && (stage < STAGE_STARTED || stage >= STAGE_COMPLETE)) {
         player.sendMessage("It would be rude to break into this house.");
@@ -310,7 +321,7 @@ module.exports = function registerWitchsHouseQuest(api) {
         startTranscript(api, player, BOY_NPC_ID, PAGE, "the-witch-s-house-attempting-to-open-the-garden-door-without-unlocking-it");
         return;
       }
-      crossNorthSouthDoor(event);
+      crossDoor(event);
       return;
     }
     if (GATE_LOC_IDS.has(objectId)) {
@@ -328,7 +339,7 @@ module.exports = function registerWitchsHouseQuest(api) {
         player.sendMessage("This door is locked.");
         return;
       }
-      crossNorthSouthDoor(event);
+      crossDoor(event);
       return;
     }
     if (objectId === SHED_DOOR_LOC_ID) {

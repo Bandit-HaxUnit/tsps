@@ -189,6 +189,11 @@ module.exports = function registerWatchtowerQuest(api) {
   const LEVER_ID = ObjectIdentifiers.LEVER_17;
   const CHEST_ID = ObjectIdentifiers.CHEST_23;
   const ROCK_ID = ObjectIdentifiers.ROCK_OF_DALGROTH;
+  // The market cave entrance into the Ogre Enclave. The reference's enclave entry teleport
+  // (quest_itwatchtower enter_skavid_cave) lands on this tile; unlike the skavid caves the
+  // enclave needs neither the map nor a light source.
+  const ENCLAVE_ENTRANCE_ID = ObjectIdentifiers.CAVE_ENTRANCE_5;
+  const ENCLAVE_ENTRANCE_DESTINATION = { x: 2588, y: 9410 };
   const CAVE_ENTRANCES = new Map([
     [ObjectIdentifiers.CAVE_ENTRANCE_6, { x: 2498, y: 9418 }],
     [ObjectIdentifiers.CAVE_ENTRANCE_7, { x: 2532, y: 9469 }],
@@ -1126,6 +1131,11 @@ module.exports = function registerWatchtowerQuest(api) {
       mineRock(player);
       return;
     }
+    if (objectId === ENCLAVE_ENTRANCE_ID) {
+      event.handled = true;
+      player.moveTo(new Location(ENCLAVE_ENTRANCE_DESTINATION.x, ENCLAVE_ENTRANCE_DESTINATION.y, 0));
+      return;
+    }
     if (CAVE_ENTRANCES.has(objectId)) {
       event.handled = true;
       enterSkavidCave(player, objectId);
@@ -1361,14 +1371,14 @@ module.exports = function registerWatchtowerQuest(api) {
     }
   }
 
-  function handleNpcDeath({ player, npcId }) {
-    if (!player || npcId !== GORAD_ID) return;
-    const stage = quest.getStage(player);
+  function handleNpcDeath({ killer, npcId }) {
+    if (!killer || npcId !== GORAD_ID) return;
+    const stage = quest.getStage(killer);
     if (stage < STAGE_GIVEN_FINGERNAILS || stage >= STAGE_MADE_RELIC) return;
-    setBit(player, BIT_GORAD_DEAD);
-    if (!held(player, OGRE_TOOTH)) {
-      player.getInventory().adds(OGRE_TOOTH, 1);
-      player.sendMessage("He's dropped a tooth. You grab it quickly.");
+    setBit(killer, BIT_GORAD_DEAD);
+    if (!held(killer, OGRE_TOOTH)) {
+      killer.getInventory().adds(OGRE_TOOTH, 1);
+      killer.sendMessage("He's dropped a tooth. You grab it quickly.");
     }
   }
 
