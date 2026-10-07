@@ -345,10 +345,13 @@ function placeDroppedFlag(flagTeam, player) {
  * older sessions lingered on the floor and each new carry stacked another one.
  */
 function clearStrayDroppedFlags() {
+  // The dropped-standard ids are Castle Wars-only, so every instance goes no matter the
+  // floor: AreaManager.inside is z-gated and never matched the flag rooms upstairs, which
+  // let orphaned drops pile up there across matches.
   const ids = new Set(Object.values(data.TEAM_DATA).map((team) => team.droppedFlagObjectId));
   for (const list of [...core.MapObjects.mapObjects.values()]) {
     for (const object of [...list]) {
-      if (ids.has(object.getId()) && AreaManager.inside(object.getLocation(), game.gameArea)) {
+      if (ids.has(object.getId())) {
         ObjectManager.deregister(object, true);
       }
     }
@@ -553,7 +556,10 @@ function clearGroundItems() {
     return;
   }
   for (const item of [...World.getItems()]) {
-    if (AreaManager.inside(item.getPosition(), area)) {
+    const at = item.getPosition();
+    // The arena's boundaries carry z0; probe at z0 so items left on the upper floors
+    // (flag rooms, battlements walkways) are cleared too.
+    if (AreaManager.inside(new core.Location(at.getX(), at.getY(), 0), area)) {
       core.ItemOnGroundManager.deregister(item);
     }
   }
