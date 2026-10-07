@@ -23,6 +23,7 @@ const SCRIPTS = {
   ...require("./Fremennik"),
   ...require("./Kourend"),
   ...require("./Wilderness"),
+  ...require("./Wyrmscraig"),
 };
 
 const ANIMATIONS = { ...Anim, ...builders.ShortcutAnim };

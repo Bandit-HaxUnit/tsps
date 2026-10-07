@@ -1,13 +1,15 @@
 // Run after `yarn build`: node --test tests/agility.test.cjs
 const assert = require("node:assert/strict");
 const { test, before } = require("node:test");
+const path = require("node:path");
 
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 
 const { Location } = require("../dist/game/model/Location");
 const { Skill } = require("../dist/game/model/Skill");
-const { ObjectIdentifiers } = require("../dist/util/ObjectIdentifiers");
+const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
 const { ObjectIds } = require("../dist/util/IdEnums");
 const { PluginManager } = require("../dist/plugins/PluginManager");
 
@@ -52,12 +54,6 @@ const { COURSES } = require("../plugins/skills/agility/courses");
 const { SHORTCUTS } = require("../plugins/skills/agility/shortcuts");
 const { build } = require("../plugins/skills/agility/shortcuts/ShortcutData");
 const SHORTCUT_DATA = require("../data/definitions/agility-shortcuts.json");
-const { CachePipeline } = require("../dist/game/cache/CachePipeline");
-const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
-
-before(async () => {
-  await CachePipeline.initialize(require("node:path").resolve(__dirname, ".."));
-});
 
 function createPlayer(x, y, z, level = 99, { skills = {}, worn = [], held = [] } = {}) {
   let location = new Location(x, y, z);
@@ -97,6 +93,7 @@ function createPlayer(x, y, z, level = 99, { skills = {}, worn = [], held = [] }
       sendVarbit: (id, value) => state.varbits.set(id, value),
       sendRunEnergy: () => { state.energyUpdates = (state.energyUpdates ?? 0) + 1; },
       sendSound() {},
+      sendSoundEffect() {},
       sendObjectAnimation() {},
     }),
     getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: () => { state.hits++; } }) }),
@@ -156,13 +153,21 @@ function runLap(course, player) {
   }
 }
 
-const KNOWN_OBJECT_IDS = new Set(Object.values(ObjectIdentifiers).filter(Number.isInteger));
+before(async () => {
+  await CachePipeline.initialize(path.resolve(__dirname, ".."));
+});
+
+/** A loc the cache has: named, or a nameless multiloc (Wyrmscraig's cliff top) drawn as one. */
+function isCacheLoc(id) {
+  const loc = Number.isInteger(id) ? CacheDefinitions.getObject(id) : null;
+  return !!loc && ((loc.name && loc.name !== "null") || (loc.transforms ?? []).some((other) => other >= 0));
+}
 
 test("every obstacle and shortcut uses an object id from the cache", () => {
   for (const entry of [...COURSES.flatMap((course) => course.obstacles), ...SHORTCUTS]) {
     const ids = Array.isArray(entry.object) ? entry.object : [entry.object];
     for (const id of ids) {
-      assert.ok(KNOWN_OBJECT_IDS.has(id), `unknown object id ${id} (${entry.course?.key ?? "shortcut"})`);
+      assert.ok(isCacheLoc(id), `unknown object id ${id} (${entry.course?.key ?? "shortcut"})`);
     }
   }
 });
@@ -235,10 +240,15 @@ test("every shortcut plays out from either side without leaving the player locke
   }
 });
 
+/** A loc's first option, or (for a multiloc like Wyrmscraig's cliff top) one of the locs it shows. */
+function firstOption(id) {
+  const loc = CacheDefinitions.getObject(id);
+  return (loc?.actions ?? [])[0] ?? (loc?.transforms ?? []).filter((other) => other >= 0).map(firstOption).find(Boolean);
+}
+
 test("every shortcut in agility-shortcuts.json has a loc the player can click", () => {
   for (const entry of SHORTCUT_DATA.shortcuts) {
-    const ops = [].concat(entry.object).map((id) => (CacheDefinitions.getObject(id)?.actions ?? [])[0]);
-    assert.ok(ops.some(Boolean), `${entry.name}: no clickable loc`);
+    assert.ok([].concat(entry.object).some(firstOption), `${entry.name}: no clickable loc`);
   }
 });
 
