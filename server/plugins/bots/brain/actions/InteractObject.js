@@ -2,8 +2,9 @@
 
 const { MapObjects } = require("../../../../src/main/typescript/elvarg/game/entity/impl/object/MapObjects");
 const { resolveCatalogObjectIds } = require("../BotObjectCatalog");
-const { playerState } = require("../ActionState");
+const { playerState, stationaryFor } = require("../ActionState");
 const { canReachSpot } = require("../../behaviours/navigation/BotLongRoutes");
+const { createObjectReachChecker } = require("../../behaviours/navigation/ObjectReach");
 const {
   clearMovementRequest,
   peekMovementRequest,
@@ -43,6 +44,10 @@ const CROWDED_MOVE_ON_MS = 60000;
 // that spot and counts against its area; within ARRIVED_TILES it is just waiting.
 const NO_PROGRESS_MS = 60000;
 const ARRIVED_TILES = 20;
+// A walk with a live movement request that produces no movement at all this long
+// (the raw router cannot leave the bot's spot: a walled pen, a gate it cannot see)
+// is dropped in seconds instead of being retried every tick.
+const WALK_STALL_MS = 15000;
 const CLAIMS = new Map();
 // Past this many claims, expired ones are swept (they hold players, which would keep
 // logged-out bots in memory on a long-running server).
@@ -95,6 +100,9 @@ function createInteractObjectAction(spec, world) {
       searchTarget: null,
       // This bot's own skips (object keys and far spots it could not get to) -> until.
       skips: new Map(),
+      // Stationary-with-a-pending-walk watchdog.
+      lastPosition: null,
+      stillSince: 0,
     }));
 
   function findTarget(player, nowMs) {
@@ -151,27 +159,7 @@ function createInteractObjectAction(spec, world) {
       : null;
   }
 
-  const RouteFinder = world.core?.RsmodRouteFinding ?? null;
-  const routeFinder = RouteFinder ? new RouteFinder() : null;
-  /** Wall-aware: can the bot route to an interaction tile of this object from here? */
-  function canReach(player, object) {
-    if (!routeFinder) {
-      return true;
-    }
-    const from = player.getLocation();
-    const objectLoc = object.getLocation();
-    const definition = object.getDefinition?.();
-    return routeFinder.findRoute({
-      level: from.getZ(), srcX: from.getX(), srcY: from.getY(),
-      srcSize: Math.max(1, Math.floor(player.getSize?.() ?? 1)),
-      destX: objectLoc.getX(), destY: objectLoc.getY(),
-      destWidth: Math.max(1, definition?.getSizeX?.() ?? 1),
-      destLength: Math.max(1, definition?.getSizeY?.() ?? 1),
-      locAngle: object.getFace?.() ?? 0, locShape: object.getType?.() ?? 10,
-      moveNear: false, blockAccessFlags: 0, maxWaypoints: 25,
-      privateArea: player.getPrivateArea?.() ?? null,
-    }).success === true;
-  }
+  const canReach = createObjectReachChecker(world.core);
 
   function resolveTargetObject(player) {
     const target = stateFor(player).target;
@@ -224,6 +212,9 @@ function createInteractObjectAction(spec, world) {
         // This bot cannot get there right now: it alone tries another spot.
         bot.skips.set(spotKey(bot.searchTarget.x, bot.searchTarget.y, bot.searchTarget.z ?? here.getZ()), nowMs + SKIP_MS);
         bot.searchTarget = null;
+        // Moving on is progress: the frame stall must not fire while a bot works
+        // through far spots it cannot currently walk to.
+        bot.walkProgress = true;
       }
     }
     // The nearest spot the route planner can reach (an island is never picked).
@@ -296,7 +287,9 @@ function createInteractObjectAction(spec, world) {
       const bot = stateFor(ctx.player);
       const progressed = bot.walkProgress === true;
       bot.walkProgress = false;
-      return progressed;
+      // Walking at a live target is progress: a long approach (or retargeting
+      // across a mine) must not trip the frame stall before the bot arrives.
+      return progressed || ctx.brain?.movedSinceLastTick?.() === true;
     },
     describe(ctx) {
       const bot = stateFor(ctx.player);
@@ -307,6 +300,8 @@ function createInteractObjectAction(spec, world) {
     update(ctx) {
       const { player, state, nowMs } = ctx;
       const bot = stateFor(player);
+      const here = player.getLocation();
+      const stationaryMs = stationaryFor(bot, player, nowMs);
       if (spec.until?.inventoryFull && player.getInventory().isFull()) {
         debug(ctx, "full");
         return "success";
@@ -317,6 +312,31 @@ function createInteractObjectAction(spec, world) {
       }
       if (world.isBusy?.(player)) {
         debug(ctx, "busy");
+        return "running";
+      }
+      // A pending walk that has produced no movement at all is dropped: the router
+      // cannot get this bot anywhere from here (a walled pen, an unseen gate), so
+      // the target/spot is abandoned instead of being retried every tick.
+      if (peekMovementRequest(player) && stationaryMs >= WALK_STALL_MS) {
+        if (bot.target) {
+          bot.skips.set(
+            `${bot.target.objectId}:${bot.target.x}:${bot.target.y}:${bot.target.z}`,
+            nowMs + SKIP_MS
+          );
+        }
+        if (bot.searchTarget) {
+          bot.skips.set(
+            spotKey(bot.searchTarget.x, bot.searchTarget.y, bot.searchTarget.z ?? here.getZ()),
+            nowMs + SKIP_MS
+          );
+        }
+        bot.target = null;
+        bot.searchTarget = null;
+        bot.failedClicks = 0;
+        bot.walkProgress = true;
+        bot.stillSince = 0;
+        clearMovementRequest(player);
+        debug(ctx, "walk-stall-skip");
         return "running";
       }
 
@@ -338,6 +358,20 @@ function createInteractObjectAction(spec, world) {
 
       const target = bot.target;
       const loc = player.getLocation();
+      if (process.env.BOT_GATHER_DEBUG === "1" && nowMs - (bot.debugAt ?? 0) >= 30000) {
+        bot.debugAt = nowMs;
+        const request = peekMovementRequest(player);
+        world.log?.("bot_brain_interact_snapshot", {
+          username: player.getUsername?.(),
+          target: bot.target ? `${bot.target.objectId}@${bot.target.x},${bot.target.y}` : "none",
+          far: bot.searchTarget ? `${bot.searchTarget.x},${bot.searchTarget.y}` : "none",
+          walk: request ? `${request.x},${request.y} basic=${request.basicPather === true}` : "none",
+          queue: player.getMovementQueue?.()?.size?.() ?? 0,
+          failed: bot.failedClicks,
+          x: loc.getX(),
+          y: loc.getY(),
+        });
+      }
       const distance = Math.max(
         Math.abs(loc.getX() - target.x),
         Math.abs(loc.getY() - target.y)
@@ -378,6 +412,9 @@ function createInteractObjectAction(spec, world) {
         bot.target = null;
         bot.lastTargetKey = null;
         bot.failedClicks = 0;
+        // Repicking is the action making progress: the frame stall must not fire
+        // while a bot works through targets it cannot currently reach.
+        bot.walkProgress = true;
         debug(ctx, "unreachable-repick");
         findTarget(player, nowMs);
         return "running";

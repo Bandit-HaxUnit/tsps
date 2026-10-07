@@ -58,9 +58,6 @@ function createPvpCombatAction(spec, controller) {
       }
       return "running";
     },
-    madeProgress(ctx) {
-      return !!ctx.state?.pvp?.targetUsername;
-    },
   };
 }
 

@@ -23,6 +23,28 @@ const NS_PER_MS = 1_000_000n;
 const MOVING_MODE_DECISION_DELAY_MS = 1500;
 const BLOCKED_TILE_CHECK_INTERVAL_MS = 5000;
 
+/**
+ * Re-flags an idle bot's facing. A face update that lands on the same tick as the
+ * bot's last walk step is ignored by the client (it keeps the walk direction), and
+ * the flag is one-shot - so a bot that arrives and clicks a tree would stay facing
+ * its walk direction. Re-sending while standing keeps it facing what it uses, the
+ * way a real client does on its own.
+ */
+function refreshIdleFace(player) {
+  if (typeof player?.forcePositionToFace !== "function") {
+    return false;
+  }
+  const face = player.getPositionToFace?.();
+  if (!face || player.getForceMovement?.() != null) {
+    return false;
+  }
+  if ((player.getMovementQueue?.()?.size?.() ?? 0) > 0) {
+    return false;
+  }
+  player.forcePositionToFace(face);
+  return true;
+}
+
 class BotBehaviorTask extends Task {
   constructor(entries, decisionTicks, options = {}) {
     super(decisionTicks);
@@ -917,6 +939,12 @@ class BotBehaviorTask extends Task {
 
     const startedAtMs = Date.now();
     this.tickMetrics.beginCycle(now);
+    // Every entry each tick, not just the brain's strided turns: the face flag is
+    // one-shot, and a bot's click-face on its walk-ending tick is dropped by the
+    // client (it keeps the walk direction) - an idle bot must re-send it promptly.
+    for (let index = 0; index < totalEntries; index++) {
+      refreshIdleFace(this.entries[index]?.player);
+    }
     const urgentEntries = new Set();
     this.ServerPerf.measurePhase("task.bot_behavior.urgent_entries", () => {
       for (let index = 0; index < totalEntries; index++) {
@@ -980,4 +1008,5 @@ class BotBehaviorTask extends Task {
 
 module.exports = {
   BotBehaviorTask,
+  refreshIdleFace,
 };

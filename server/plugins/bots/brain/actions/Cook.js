@@ -2,7 +2,13 @@
 
 const { playerState } = require("../ActionState");
 const { resolveCatalogObjectIds } = require("../BotObjectCatalog");
-const { approachObject, peekMovementRequest, clearMovementRequest } = require("../../behaviours/navigation/BotNavigation");
+const { createObjectReachChecker } = require("../../behaviours/navigation/ObjectReach");
+const {
+  approachBlockedObject,
+  approachObject,
+  peekMovementRequest,
+  clearMovementRequest,
+} = require("../../behaviours/navigation/BotNavigation");
 const { createInteractObjectAction } = require("./InteractObject");
 const { createEquipToolAction } = require("./EquipTool");
 const Cooking = require("../../../skills/Cooking.plugin");
@@ -37,6 +43,7 @@ const chebyshev = (a, b) => Math.max(Math.abs(a.getX() - b.getX()), Math.abs(a.g
 function createCookAction(spec, world) {
   const rangeIds = resolveCatalogObjectIds({ catalog: "range", option: "cook" });
   const logIds = (Firemaking.LIGHTABLE_LOGS ?? []).map((log) => log.itemId);
+  const canReach = createObjectReachChecker(world.core);
   const chopLog = createInteractObjectAction({
     catalog: "tree", tier: "normal", option: "Chop down", until: { hasAnyItem: logIds }, stallSeconds: 120,
   }, world);
@@ -158,6 +165,9 @@ function createCookAction(spec, world) {
         return "running";
       }
       if (peekMovementRequest(player) || nowMs - bot.lastUseAt < INTERACT_COOLDOWN_MS) return "running";
+      if (approachBlockedObject(player, target, { nowMs, reason: "brain_cook_approach", canReach })) {
+        return "running";
+      }
       useOn(player, target, raw, nowMs);
       return "running";
     },

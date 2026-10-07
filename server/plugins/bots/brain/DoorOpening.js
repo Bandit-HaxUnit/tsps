@@ -364,9 +364,22 @@ function maybeOpenDoor({ player, state, world, request, select = false }) {
     }
   }
   // The final destination can sit beyond the route finder's window; the current
-  // segment is the yardstick for whether a door makes real progress.
-  const targetX = Number.isFinite(request.lastSegmentX) ? request.lastSegmentX : request.x;
-  const targetY = Number.isFinite(request.lastSegmentY) ? request.lastSegmentY : request.y;
+  // segment is the yardstick for whether a door makes real progress. A segment at
+  // (or on) the bot says nothing about progress - the dispatch failed before it
+  // could leave its own tile (an exhausted plan, a pen the raw router cannot see
+  // out of) - so the real destination is the yardstick instead, or the gate that
+  // traps the bot is never tested.
+  let targetX = Number.isFinite(request.lastSegmentX) ? request.lastSegmentX : request.x;
+  let targetY = Number.isFinite(request.lastSegmentY) ? request.lastSegmentY : request.y;
+  const botLoc = player.getLocation();
+  if (
+    Number.isFinite(targetX) && Number.isFinite(targetY) &&
+    Math.max(Math.abs(botLoc.getX() - targetX), Math.abs(botLoc.getY() - targetY)) <= 1 &&
+    Number.isFinite(request.x) && Number.isFinite(request.y)
+  ) {
+    targetX = request.x;
+    targetY = request.y;
+  }
   if (!Number.isFinite(targetX) || !Number.isFinite(targetY)) {
     return false;
   }
@@ -391,4 +404,6 @@ function maybeOpenDoor({ player, state, world, request, select = false }) {
 module.exports = {
   isClosedDoor,
   maybeOpenDoor,
+  sharedRouteFinder,
+  routeDistance,
 };

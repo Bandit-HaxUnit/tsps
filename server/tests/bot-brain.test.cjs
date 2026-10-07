@@ -179,6 +179,124 @@ test('fishing spots are indexed by the tools they take (from the cache option li
   assert.equal(spotKeys(spot('Goblin', ['Attack'])), null);
 });
 
+/** Fishing action scene: a spot the bot cannot route into reach, and one it can. */
+function fishingScene(reachableDestX, playerX = 2600, playerY = 3400) {
+  const { Location: Loc } = require('../dist/game/model/Location');
+  const spotNpc = (x, y) => ({
+    getLocation: () => new Loc(x, y, 0),
+    getSpawnPosition: () => new Loc(x, y, 0),
+    getDefinition: () => ({ getName: () => 'Fishing spot', getId: () => 1520, getActions: () => ['Cage'] }),
+    getId: () => 1520,
+    getSize: () => 1,
+    isRegistered: () => true,
+  });
+  const near = spotNpc(2600, 3400);
+  const far = spotNpc(2608, 3400);
+  const walked = [];
+  const world = {
+    core: {
+      World: { getNpcs: () => [near, far], getNpcsNear: () => [near, far] },
+      RsmodRouteFinding: class {
+        findRoute({ destX, destY }) { return { success: true, endX: destX, endY: destY }; }
+        reachedAbsolute({ destX }) { return destX === reachableDestX; }
+      },
+    },
+    routes: { canReachSpot: () => true },
+  };
+  const player = {
+    ...fakePlayer('fisher', playerX, playerY),
+    getPrivateArea: () => null,
+    getSize: () => 1,
+    getInventory: () => ({ isFull: () => false, getAmount: () => 0, adds: () => {}, deleteNumber: () => {} }),
+    getMovementQueue: () => ({ size: () => 0, walkToEntity: (spot) => walked.push(spot) }),
+  };
+  return { world, player, walked, near, far };
+}
+
+test('a fishing spot the bot cannot reach is skipped for a reachable one', () => {
+  const { createFishAction } = require('../plugins/bots/brain/actions/Fish');
+  const Fishing = require('../plugins/skills/Fishing.plugin');
+  const real = { spotTools: Fishing.spotTools, isFishingActive: Fishing.isFishingActive };
+  Fishing.spotTools = () => [{ tool: 'LOBSTER_POT', clickType: 1 }];
+  Fishing.isFishingActive = () => false;
+  try {
+    // Only the far spot (2608) can be routed into reach; the near one is locked away.
+    const s = fishingScene(2608);
+    const a = createFishAction({ tool: 'LOBSTER_POT' }, s.world);
+    assert.equal(a.update({ player: s.player, state: {}, nowMs: 10000 }), 'running');
+    assert.equal(s.walked.length, 0, 'never walks at the unreachable spot');
+    assert.equal(a.update({ player: s.player, state: {}, nowMs: 20000 }), 'running');
+    assert.deepEqual(s.walked, [s.far], 'walks at the reachable spot instead');
+  } finally {
+    Fishing.spotTools = real.spotTools;
+    Fishing.isFishingActive = real.isFishingActive;
+  }
+});
+
+test('a fishing cluster with no reachable spot is dropped, not idled on', () => {
+  const { createFishAction } = require('../plugins/bots/brain/actions/Fish');
+  const Fishing = require('../plugins/skills/Fishing.plugin');
+  const real = { spotTools: Fishing.spotTools, isFishingActive: Fishing.isFishingActive };
+  Fishing.spotTools = () => [{ tool: 'LOBSTER_POT', clickType: 1 }];
+  Fishing.isFishingActive = () => false;
+  try {
+    // No spot can be routed into reach: the level-locked Fishing Guild.
+    const s = fishingScene(0);
+    const a = createFishAction({ tool: 'LOBSTER_POT' }, s.world);
+    assert.equal(a.update({ player: s.player, state: {}, nowMs: 10000 }), 'running');
+    assert.equal(s.walked.length, 0, 'never walks at any of them');
+    assert.equal(a.update({ player: s.player, state: {}, nowMs: 20000 }), 'failed', 'the cluster is abandoned');
+  } finally {
+    Fishing.spotTools = real.spotTools;
+    Fishing.isFishingActive = real.isFishingActive;
+  }
+});
+
+test('a fishing site whose planning is starved is taken after a short grace, not stood on', () => {
+  const { createFishAction } = require('../plugins/bots/brain/actions/Fish');
+  const Fishing = require('../plugins/skills/Fishing.plugin');
+  const real = { spotTools: Fishing.spotTools, isFishingActive: Fishing.isFishingActive };
+  Fishing.spotTools = () => [{ tool: 'LOBSTER_POT', clickType: 1 }];
+  Fishing.isFishingActive = () => false;
+  try {
+    const s = fishingScene(2608);
+    s.world.routes.canReachSpot = () => undefined; // the planner's budget is always spent
+    const a = createFishAction({ tool: 'LOBSTER_POT' }, s.world);
+    assert.equal(a.update({ player: s.player, state: {}, nowMs: 10000 }), 'running');
+    assert.equal(s.walked.length, 0, 'waits out the short grace');
+    assert.equal(a.update({ player: s.player, state: {}, nowMs: 20000 }), 'running');
+    assert.equal(a.update({ player: s.player, state: {}, nowMs: 30000 }), 'running');
+    assert.deepEqual(s.walked, [s.far], 'then takes the best cluster and walks at a spot');
+  } finally {
+    Fishing.spotTools = real.spotTools;
+    Fishing.isFishingActive = real.isFishingActive;
+  }
+});
+
+test('a site walk that produces no movement at all is dropped quickly', () => {
+  const { createFishAction } = require('../plugins/bots/brain/actions/Fish');
+  const { peekMovementRequest: peek } =
+    require('../plugins/bots/behaviours/navigation/BotNavigation');
+  const Fishing = require('../plugins/skills/Fishing.plugin');
+  const real = { spotTools: Fishing.spotTools, isFishingActive: Fishing.isFishingActive };
+  Fishing.spotTools = () => [{ tool: 'LOBSTER_POT', clickType: 1 }];
+  Fishing.isFishingActive = () => false;
+  try {
+    const s = fishingScene(2608, 2500, 3400);
+    s.world.core.World.getNpcsNear = () => []; // none near: the bot is walking to the site
+    const a = createFishAction({ tool: 'LOBSTER_POT' }, s.world);
+    assert.equal(a.update({ player: s.player, state: {}, nowMs: 10000 }), 'running');
+    assert.notEqual(peek(s.player), null, 'walk request to the site is out');
+    assert.equal(a.update({ player: s.player, state: {}, nowMs: 20000 }), 'running');
+    assert.equal(a.update({ player: s.player, state: {}, nowMs: 30000 }), 'running');
+    assert.equal(peek(s.player), null, 'no-movement site walk is dropped and its request cleared');
+    assert.equal(a.update({ player: s.player, state: {}, nowMs: 40000 }), 'failed', 'the site is abandoned');
+  } finally {
+    Fishing.spotTools = real.spotTools;
+    Fishing.isFishingActive = real.isFishingActive;
+  }
+});
+
 for (const outcome of ['success', 'failed']) {
   test(`an overlay hands state.mode back to its parent on ${outcome}`, () => {
     const state = {};
@@ -319,6 +437,82 @@ test('re-mining a respawned rock from the same tile is not mistaken for an unrea
   assert.match(a.describe({ player: other, nowMs: 27000 }), /target=11161@3230,3145/, 'other bots still use the rock');
 });
 
+test('idle bots re-send their facing so it survives the final walk step', () => {
+  const { refreshIdleFace } = require('../plugins/bots/behaviours/task/BotBehaviorTask');
+  let forced = 0;
+  const player = {
+    getPositionToFace: () => ({ x: 1, y: 2 }),
+    getMovementQueue: () => ({ size: () => 0 }),
+    getForceMovement: () => null,
+    forcePositionToFace: () => { forced += 1; },
+  };
+  assert.equal(refreshIdleFace(player), true, 'idle with a face target re-sends it');
+  assert.equal(forced, 1);
+  player.getMovementQueue = () => ({ size: () => 1 });
+  assert.equal(refreshIdleFace(player), false, 'not while walking');
+  player.getMovementQueue = () => ({ size: () => 0 });
+  player.getPositionToFace = () => null;
+  assert.equal(refreshIdleFace(player), false, 'nothing to face');
+});
+
+test('forced facing is re-sent after walking (same-coordinate setPositionToFace no-ops)', () => {
+  const { Mobile } = require('../dist/game/entity/impl/Mobile');
+  const { UpdateFlag } = require('../dist/game/model/UpdateFlag');
+  const { Location: Loc } = require('../dist/game/model/Location');
+  const { Flag } = require('../dist/game/model/Flag');
+  const mobile = {
+    positionToFace: null,
+    updateFlag: new UpdateFlag(),
+    getUpdateFlag() { return this.updateFlag; },
+  };
+  const tree = new Loc(2, 2, 0);
+  Mobile.prototype.setPositionToFace.call(mobile, tree);
+  assert.ok(mobile.updateFlag.flagged(Flag.FACE_POSITION), 'the first set flags the face');
+  mobile.updateFlag.reset(); // the packet was sent; walking turned the visual facing
+  Mobile.prototype.setPositionToFace.call(mobile, tree);
+  assert.equal(mobile.updateFlag.flagged(Flag.FACE_POSITION), false, 'same coordinates no-op');
+  Mobile.prototype.forcePositionToFace.call(mobile, tree);
+  assert.ok(mobile.updateFlag.flagged(Flag.FACE_POSITION), 'force re-sends the face');
+});
+
+test('walking at a live gather target counts as progress for the brain stall', () => {
+  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject');
+  const world = { objectSearch: { findCandidatesByIds: () => [] }, emitObjectInteraction: () => {} };
+  const a = createInteractObjectAction({ catalog: 'rock', tier: 'tin', option: 'Mine' }, world);
+  const player = { ...fakePlayer('miner'), getPrivateArea: () => null };
+  let moved = true;
+  const ctx = { player, state: {}, nowMs: 1000, brain: { movedSinceLastTick: () => moved } };
+  assert.equal(a.madeProgress(ctx), true, 'a long approach is progress');
+  moved = false;
+  assert.equal(a.madeProgress(ctx), false, 'standing still is not');
+});
+
+test('a gather walk that produces no movement is dropped instead of retried forever', () => {
+  const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject');
+  const { Location: Loc } = require('../dist/game/model/Location');
+  const rock = { getId: () => 11361, getLocation: () => new Loc(3155, 3340, 0), getType: () => 10, getFace: () => 0 };
+  const world = {
+    core: { RsmodRouteFinding: class { findRoute() { return { success: false }; } } },
+    objectSearch: { findCandidatesByIds: () => [rock] },
+    emitObjectInteraction: () => {},
+  };
+  const a = createInteractObjectAction({ catalog: 'rock', tier: 'tin', option: 'Mine' }, world);
+  const player = {
+    ...fakePlayer('miner'), getLocation: () => new Loc(3161, 3347, 0),
+    getPrivateArea: () => ({ getObjects: () => [rock] }),
+    getInventory: () => ({ isFull: () => false }), getUpdateFlag: () => ({ flag() {} }),
+    getMovementQueue: () => ({ size: () => 0, walkToObject: () => {} }),
+  };
+  const frame = { lastProgressAt: 0 };
+  a.update({ player, state: {}, nowMs: 2000, frame });
+  assert.match(a.describe({ player, nowMs: 2000 }), /target=11361@3155,3340/, 'approaches the rock first');
+  for (let nowMs = 4000; nowMs <= 26000; nowMs += 2000) {
+    frame.lastProgressAt = nowMs; // the activity is alive; only movement is missing
+    a.update({ player, state: {}, nowMs, frame });
+  }
+  assert.match(a.describe({ player, nowMs: 26000 }), /target=none/, 'the stalled walk is dropped');
+});
+
 test('an object behind a fence is walked at with brain movement, not clicked blindly', () => {
   const { createInteractObjectAction } = require('../plugins/bots/brain/actions/InteractObject');
   const { peekMovementRequest: peek, clearMovementRequest: clear } =
@@ -344,6 +538,7 @@ test('an object behind a fence is walked at with brain movement, not clicked bli
   assert.deepEqual([peek(player)?.x, peek(player)?.y, peek(player)?.reason], [3172, 3366, 'brain_target_approach']);
   for (let nowMs = 4000; nowMs <= 16000; nowMs += 2000) a.update({ player, state: {}, nowMs, frame });
   assert.match(a.describe({ player, nowMs: 16000 }), /target=none/, 'this bot gives the rock up');
+  assert.equal(a.madeProgress({ player }), true, 'giving the rock up is progress: no frame stall');
   clear(player);
 });
 
@@ -543,6 +738,42 @@ test('a bank one bot cannot walk to is skipped by that bot only', () => {
   a.update({ player: other, state: {}, nowMs: 24000 });
   assert.equal(peek(other)?.x, 3269, 'other bots still use the nearest one');
   clear(other);
+  ObjectDefinition.forId = realForId;
+});
+
+test('a nearby bank booth across a wall is approached by brain movement, not a failed direct walk', () => {
+  const { createBankAction } = require('../plugins/bots/brain/actions/Bank');
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { peekMovementRequest: peek, clearMovementRequest: clear } =
+    require('../plugins/bots/behaviours/navigation/BotNavigation');
+  const { Location: Loc } = require('../dist/game/model/Location');
+  const boothId = 6083;
+  const realForId = ObjectDefinition.forId;
+  ObjectDefinition.forId = (id) => (id === boothId ? { getInteractions: () => ['Bank'] } : realForId.call(ObjectDefinition, id));
+  const booth = {
+    getId: () => boothId,
+    getLocation: () => new Loc(2946, 3369, 0),
+    getDefinition: () => ({ getSizeX: () => 1, getSizeY: () => 1 }),
+  };
+  const world = {
+    objectSearch: { findCandidatesByIds: () => [booth] },
+    // Every strict route fails: the Falador wall between the bot and the booth.
+    core: { RsmodRouteFinding: class { findRoute() { return { success: false }; } } },
+  };
+  const a = createBankAction({}, world);
+  const player = {
+    ...fakePlayer('chopper'), getLocation: () => new Loc(2935, 3367, 0), getPrivateArea: () => null,
+    getInventory: () => ({ isFull: () => true }), getUpdateFlag: () => ({ flag() {} }),
+    getMovementQueue: () => ({
+      size: () => 0,
+      walkToObject: () => { throw new Error('core walk used across a wall'); },
+    }),
+    getCombat: () => ({ getTarget: () => null }),
+  };
+  a.update({ player, state: {}, nowMs: 2000 });
+  assert.equal(peek(player)?.x, 2946, 'walks at the booth with brain movement');
+  assert.equal(peek(player)?.y, 3369);
+  clear(player);
   ObjectDefinition.forId = realForId;
 });
 
@@ -1107,6 +1338,28 @@ test('a long walk counts as progress for an action that reports none (a far bank
   assert.equal(brain.frames.length, 1, 'still walking after more than three minutes');
 });
 
+test('pvp combat reports seeking progress so the wait is not a stall', () => {
+  const { createPvpCombatAction } = require('../plugins/bots/brain/actions/PvpCombat');
+  const { Location: Loc } = require('../dist/game/model/Location');
+  const controller = { tick() {}, seek() {}, wanderWhileSeeking() {}, ensureLoadout() {} };
+  const a = createPvpCombatAction({ id: 'pvpCombat' }, controller);
+  let x = 3200;
+  const player = {
+    ...fakePlayer('wildy'), getLocation: () => new Loc(x, 3500, 0),
+    getCombat: () => ({ getTarget: () => null, getAttacker: () => null }),
+  };
+  const state = { pvp: { nextActionAt: Number.MAX_SAFE_INTEGER, targetUsername: null } };
+  const ctx = { player, state, nowMs: 1000 };
+  assert.equal(a.madeProgress(ctx), true, 'the first position counts as movement');
+  assert.equal(a.madeProgress(ctx), false, 'standing still with no fight is not progress');
+  x = 3201;
+  assert.equal(a.madeProgress(ctx), true, 'seeking movement is progress without a target');
+  const target = {};
+  player.getCombat = () => ({ getTarget: () => target, getAttacker: () => null });
+  a.madeProgress(ctx);
+  assert.equal(a.madeProgress(ctx), true, 'a live fight is progress while standing still');
+});
+
 test('a frame with no progress for three minutes fails and logs a stall', () => {
   const logs = [];
   const stalled = { id: 'stalled', update: () => 'running' };
@@ -1318,17 +1571,19 @@ test('sites compile their rotation and the registry only assigns their activitie
   const registry = createBotActivityRegistry({ world: { core: PluginManager.getCoreApi() } });
   const bySite = new Map(registry.sites.map((site) => [site.id, site]));
   const towns = ['lumbridge', 'varrock', 'falador', 'seers', 'east_ardougne'];
+  const bands = [[1, 19], [20, 39], [40, 59], [60, 99]];
   for (const town of towns) {
-    assert.deepEqual(registry.sites.filter((site) => site.id.startsWith(`${town}_`)).map((site) => [site.levels, site.count]),
-      [[1, 70], [20, 50], [40, 40], [60, 40]], `${town}: 200 bots over the four tiers`);
+    assert.deepEqual(registry.sites.filter((site) => site.id.startsWith(`${town}_`)).map((site) => [site.levels.all, site.count]),
+      bands.map((band, index) => [band, [70, 50, 40, 40][index]]), `${town}: 200 bots over the four tiers`);
   }
   assert.equal(registry.sites.reduce((sum, site) => sum + site.count, 0), 1000);
   const raw = JSON.parse(fs.readFileSync('data/definitions/bot-activities.json', 'utf8'));
   for (const site of registry.sites) {
     assert.deepEqual(site.rotation.switchAfterMs, { min: 900000, max: 1500000 }, site.id);
+    const lowest = Array.isArray(site.levels.all) ? site.levels.all[0] : site.levels.all;
     for (const id of site.rotation.activityIds) {
       const level = raw.activities.find((activity) => activity.id === id)?.fields?.level ?? 1;
-      assert.ok(level <= site.levels, `${site.id} can do ${id} (needs ${level})`);
+      assert.ok(level <= lowest, `${site.id} can do ${id} (needs ${level})`);
     }
   }
   assert.ok(bySite.get('lumbridge_experts').rotation.activityIds.includes('mithril_rocks'), 'higher tiers gather higher resources');
@@ -1349,9 +1604,35 @@ test('a site\'s levels are applied to every skill of a spawned bot (hitpoints at
   applyLevels(bot, 1);
   assert.equal(set.get(Skill.ATTACK.getName()), 1);
   assert.equal(set.get(Skill.HITPOINTS.getName()), 10, 'hitpoints never below 10');
+  assert.equal(set.get(Skill.AGILITY.getName()), 99, 'agility is always 99 so shortcuts are usable');
   applyLevels(bot, { all: 40, mining: 60 });
   assert.equal(set.get(Skill.ATTACK.getName()), 40);
   assert.equal(set.get(Skill.MINING.getName()), 60, 'per-skill override');
+  applyLevels(bot, { all: [30, 35] });
+  const rolled = set.get(Skill.ATTACK.getName());
+  assert.ok(rolled >= 30 && rolled <= 35, `a band rolls inside it (got ${rolled})`);
+});
+
+test('a spawned bot is dressed for its tier with real items and keeps the weapon slot free', () => {
+  const { applyOutfit, outfitTier } = require('../plugins/bots/brain/BotSiteSpawner');
+  const { Equipment } = require('../src/main/typescript/elvarg/game/model/container/impl/Equipment');
+  assert.equal(outfitTier(1), 'novice');
+  assert.equal(outfitTier({ all: [1, 19] }), 'novice');
+  assert.equal(outfitTier({ all: [20, 39] }), 'mid');
+  assert.equal(outfitTier({ all: [40, 59] }), 'advanced');
+  assert.equal(outfitTier({ all: [60, 99] }), 'elite');
+  const slots = [Equipment.HEAD_SLOT, Equipment.CAPE_SLOT, Equipment.AMULET_SLOT, Equipment.BODY_SLOT,
+    Equipment.LEG_SLOT, Equipment.HANDS_SLOT, Equipment.FEET_SLOT];
+  const worn = new Map();
+  const bot = {
+    getEquipment: () => ({ set: (slot, item) => worn.set(slot, item.getId()), refreshItems() {} }),
+    getUpdateFlag: () => ({ flag() {} }),
+  };
+  applyOutfit(bot, 'elite');
+  for (const slot of slots) {
+    assert.ok(worn.get(slot) > 0, `slot ${slot} has a real item`);
+  }
+  assert.equal(worn.has(Equipment.WEAPON_SLOT), false, 'the skill tool owns the weapon slot');
 });
 
 test('timed visits rotate between sites without requiring a level-up', () => {
@@ -1461,6 +1742,55 @@ test('a path-blocked movement request walks to and opens the door that unblocks 
     const loc = object.getLocation();
     MapObjects.mapObjects.delete(MapObjects.getHash(loc.getX(), loc.getY(), 0));
   }
+});
+
+test('a degenerate segment on the bot does not hide the gate that traps it', () => {
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  const { maybeOpenDoor } = require('../plugins/bots/brain/DoorOpening');
+  const gate = {
+    getId: () => 2,
+    getLocation: () => ({ getX: () => 109, getY: () => 108, getZ: () => 0 }),
+    getDefinition: () => ({ name: 'Gate', getInteractions: () => ['Open'] }),
+  };
+  MapObjects.mapObjects.set(MapObjects.getHash(109, 108, 0), [gate]);
+  const openClips = new Set();
+  const walked = [];
+  const world = {
+    core: {
+      RegionManager: {
+        getClipping: () => 0,
+        removeObjectClipping: (object) => { openClips.add(object.getId()); },
+        addObjectClipping: (object) => { openClips.delete(object.getId()); },
+      },
+      RsmodRouteFinding: class {
+        findRoute({ locShape, moveNear, destX, destY, srcX, srcY }) {
+          if (locShape === -2 && !moveNear) {
+            // Exact route: to the bot's own tile, or through the opened gate.
+            if (destX === srcX && destY === srcY) return { success: true };
+            return { success: openClips.has(2) };
+          }
+          if (!moveNear) return { success: true, endX: 0, endY: 0, waypoints: [] };
+          return { success: true, endX: 100, endY: 100 };
+        }
+      },
+      PathFinder: { calculateWalkRoute: (_player, x, y) => { walked.push(`${x},${y}`); return 1; } },
+    },
+    emitObjectInteraction: () => true,
+  };
+  const player = { ...fakePlayer('bot', 100, 100), getMovementQueue: () => ({ size: () => 0 }) };
+  const state = {};
+  // The failed dispatch left the segment on the bot's own tile (plan exhausted in
+  // the pen): without falling back to the real goal the gate is never tested.
+  assert.equal(
+    maybeOpenDoor({
+      player, state, world, select: true,
+      request: { x: 110, y: 110, z: 0, lastSegmentX: 100, lastSegmentY: 100 },
+    }),
+    true
+  );
+  assert.equal(state.doorAttempt?.object, gate, 'the trapping gate is found and approached');
+  assert.ok(walked.length > 0, 'walks to the gate stand tile');
+  MapObjects.mapObjects.delete(MapObjects.getHash(109, 108, 0));
 });
 
 test('a gate behind the bot is opened when it unblocks the route', () => {
@@ -1595,6 +1925,51 @@ test('a door that does not improve the route is left closed', () => {
   assert.equal(maybeOpenDoor({ player, state: {}, world, request: { x: 110, y: 110, z: 0 }, select: true }), false);
   assert.equal(walked.length, 0);
   MapObjects.mapObjects.delete(MapObjects.getHash(104, 102, 0));
+});
+
+test('a path-blocked movement request climbs the wall that unblocks the route', () => {
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  const { maybeUseShortcut } = require('../plugins/bots/brain/ShortcutCrossing');
+  const CRUMBLING_WALL_3 = 24222;
+  const wall = {
+    getId: () => CRUMBLING_WALL_3,
+    getLocation: () => ({ getX: () => 2935, getY: () => 3355, getZ: () => 0 }),
+  };
+  MapObjects.mapObjects.set(MapObjects.getHash(2935, 3355, 0), [wall]);
+  let passable = false;
+  const world = {
+    core: {
+      RegionManager: {
+        removeObjectClipping: () => { passable = true; },
+        addObjectClipping: () => { passable = false; },
+      },
+      RsmodRouteFinding: class {
+        findRoute({ locShape, moveNear }) {
+          if (locShape === -2 && !moveNear) return { success: passable };
+          if (!moveNear) return { success: true, endX: 0, endY: 0, waypoints: [] };
+          return passable
+            ? { success: true, endX: 2920, endY: 3355 }
+            : { success: true, endX: 2936, endY: 3355 };
+        }
+      },
+      PathFinder: { calculateWalkRoute: () => 1 },
+    },
+    emitObjectInteraction: (event) => { world.emitted.push(event); return true; },
+    emitted: [],
+  };
+  const player = { ...fakePlayer('bot', 2936, 3355), getMovementQueue: () => ({ size: () => 0 }) };
+  const state = {};
+  assert.equal(maybeUseShortcut({ player, state, world, request: { x: 2920, y: 3355, z: 0 }, select: true }), true);
+  assert.equal(world.emitted[0]?.objectId, CRUMBLING_WALL_3, 'clicks the wall once at its near end');
+  assert.equal(world.emitted[0]?.clickType, 1, 'first click (Climb-over)');
+  assert.equal(state.shortcutAttempt, null);
+  assert.equal(passable, false, 'simulated clipping is restored');
+  assert.equal(
+    maybeUseShortcut({ player, state, world, request: { x: 2920, y: 3355, z: 0 }, select: true }),
+    false,
+    'not retried while the attempt cooldown runs'
+  );
+  MapObjects.mapObjects.delete(MapObjects.getHash(2935, 3355, 0));
 });
 
 test('trainers do not attack a target their combat route cannot reach', () => {

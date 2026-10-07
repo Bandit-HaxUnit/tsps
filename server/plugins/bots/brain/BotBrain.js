@@ -7,6 +7,7 @@ const {
 } = require("../behaviours/navigation/BotNavigation");
 const { maybeCrossDitch } = require("./DitchCrossing");
 const { maybeOpenDoor } = require("./DoorOpening");
+const { maybeUseShortcut } = require("./ShortcutCrossing");
 const { maybeClimb } = require("./Climbing");
 
 /**
@@ -337,6 +338,9 @@ class BotBrain {
     if (maybeOpenDoor({ player, state: this.state ?? null, world: this.world, request })) {
       return;
     }
+    if (maybeUseShortcut({ player, state: this.state ?? null, world: this.world, request })) {
+      return;
+    }
     if (maybeClimb({ player, state: this.state ?? null, world: this.world, request })) {
       return;
     }
@@ -362,10 +366,17 @@ class BotBrain {
       }
     } else if (latest === request) {
       const opening = maybeOpenDoor({ player, state: this.state ?? null, world: this.world, request, select: true });
+      const shortcutting =
+        !opening &&
+        maybeUseShortcut({ player, state: this.state ?? null, world: this.world, request, select: true });
       // A walk that keeps finding no path (onto a rock or booth tile the bot already
-      // stands by, a spot cut off) and no door to open is dead: drop it, so the
-      // action re-decides instead of waiting on it forever.
-      if (!opening && !this.state?.doorAttempt && Number(request.noPathAttempts ?? 0) >= DEAD_WALK_ATTEMPTS) {
+      // stands by, a spot cut off) and no door to open or shortcut to climb is dead:
+      // drop it, so the action re-decides instead of waiting on it forever.
+      if (
+        !opening && !shortcutting &&
+        !this.state?.doorAttempt && !this.state?.shortcutAttempt &&
+        Number(request.noPathAttempts ?? 0) >= DEAD_WALK_ATTEMPTS
+      ) {
         clearMovementRequest(player);
       }
     }

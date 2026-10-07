@@ -315,15 +315,20 @@ function registerBotCommands(options) {
   // Live brain state for one bot: activity frames, the top action's own summary,
   // pending walk and combat target. For diagnosing stuck bots without a debugger.
   api.registerCommand("botinfo", ({ player, parts }) => {
-    const bot = parts[1] ? runtime.resolveControlledPlayer(parts[1]) : null;
+    let bot = parts[1] ? runtime.resolveControlledPlayer(parts[1]) : null;
+    if (!bot && parts[1]) {
+      // Bots owned by other plugins (Castle Wars, Pest Control) are not in this runtime.
+      const other = api.getWorld()?.getPlayerByName?.(parts[1]) ?? null;
+      bot = other?.isPlayerBot?.() === true ? other : null;
+    }
     const username = bot?.getUsername?.();
     const entry = username ? runtime.entriesByUsername?.get?.(username) : null;
-    if (!entry) {
+    if (!bot) {
       player.sendMessage(`botinfo: no bot ${parts[1] ?? ""}`);
       return true;
     }
     const nowMs = Date.now();
-    const brain = entry.brain;
+    const brain = entry?.brain ?? null;
     const frames = (brain?.frames ?? [])
       .map((frame) => `${frame.behaviour?.id}:${frame.state}:${frame.action()?.id ?? "-"}`).join(" > ");
     const top = brain?.frames?.at(-1);
@@ -331,10 +336,12 @@ function registerBotCommands(options) {
     const request = peekMovementRequest(bot);
     player.sendMessage(`${username} @${loc.getX()},${loc.getY()} mode=${runtime.botStatesByName.get(username)?.mode ?? "-"} ` +
       `frames=${frames || "none"} switchIn=${brain?.switchAt ? Math.round((brain.switchAt - nowMs) / 1000) : "-"}s`);
-    const detail = top?.action()?.describe?.(brain.context(top, nowMs));
+    const detail = top && brain ? top.action()?.describe?.(brain.context(top, nowMs)) : null;
     if (detail) player.sendMessage(detail);
     const door = runtime.botStatesByName.get(username)?.doorAttempt;
+    const face = bot.getPositionToFace?.();
     player.sendMessage(`walk=${request ? `${request.x},${request.y} seg=${request.lastSegmentX},${request.lastSegmentY}` : "none"} ` +
+      `face=${face ? `${face.getX()},${face.getY()}` : "none"} ` +
       `queue=${bot.getMovementQueue().size()} fighting=${bot.getCombat().getTarget()?.getDefinition?.()?.getName?.() ?? "none"} ` +
       `door=${door ? `${door.key} stand=${door.stand.x},${door.stand.y} routes=${door.routes}` : "none"} ` +
       `ticked=${brain?.lastTickAt ? Math.round((nowMs - brain.lastTickAt) / 100) / 10 : "-"}s ago`);

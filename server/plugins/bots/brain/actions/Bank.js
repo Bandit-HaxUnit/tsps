@@ -4,7 +4,12 @@ const { MapObjects } = require("../../../../src/main/typescript/elvarg/game/enti
 const { Bank } = require("../../../../src/main/typescript/elvarg/game/model/container/impl/Bank");
 const { BANK_BOOTH_IDS, isUsableBankBooth } = require("../../lib/BankBooths");
 const { playerState } = require("../ActionState");
-const { approachObject, requestMovement } = require("../../behaviours/navigation/BotNavigation");
+const { createObjectReachChecker } = require("../../behaviours/navigation/ObjectReach");
+const {
+  approachBlockedObject,
+  approachObject,
+  requestMovement,
+} = require("../../behaviours/navigation/BotNavigation");
 
 const BANK_SEARCH_REGION_RADIUS = 2;
 const MAX_DIRECT_ROUTE_TILES = 20;
@@ -33,6 +38,7 @@ function createBankAction(spec, world) {
   const withdrawSpecs = Array.isArray(spec.withdraw) ? spec.withdraw : [];
   const isWithdraw = withdrawSpecs.length > 0;
   const requireFull = !isWithdraw && spec.until?.inventoryFull !== false;
+  const canReach = createObjectReachChecker(world.core);
   const stateFor = (player) =>
     playerState(action, player, () => ({
       booth: null,
@@ -275,6 +281,9 @@ function createBankAction(spec, world) {
       bot.lastClickX = now.getX();
       bot.lastClickY = now.getY();
       bot.lastClickAt = nowMs;
+      if (approachBlockedObject(player, object, { nowMs, reason: "brain_bank_approach", canReach })) {
+        return "running";
+      }
       player.getMovementQueue().walkToObject(object, {
         execute: () => {
           world.emitObjectInteraction?.({

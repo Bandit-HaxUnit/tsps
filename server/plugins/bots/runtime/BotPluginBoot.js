@@ -72,7 +72,18 @@ function bootPlayerBotsRuntime(options = {}) {
 
   const faceTarget = (event) => {
     const target = event?.object?.getLocation?.() ?? event?.npc?.getLocation?.();
-    if (target) event.player?.setPositionToFace?.(target);
+    if (!target) {
+      return;
+    }
+    const player = event.player;
+    // forcePositionToFace: after a walk the field can already hold the target while
+    // the client shows the walk direction, and setPositionToFace short-circuits on
+    // the same coordinates - which left bots chopping without facing their tree.
+    if (typeof player?.forcePositionToFace === "function") {
+      player.forcePositionToFace(target);
+    } else {
+      player?.setPositionToFace?.(target);
+    }
   };
   const brainWorld = {
     core: botApi.core,
