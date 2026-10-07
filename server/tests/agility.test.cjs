@@ -1,6 +1,6 @@
 // Run after `yarn build`: node --test tests/agility.test.cjs
 const assert = require("node:assert/strict");
-const { test } = require("node:test");
+const { test, before } = require("node:test");
 
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
@@ -9,6 +9,7 @@ const { Location } = require("../dist/game/model/Location");
 const { Skill } = require("../dist/game/model/Skill");
 const { ObjectIdentifiers } = require("../dist/util/ObjectIdentifiers");
 const { ObjectIds } = require("../dist/util/IdEnums");
+const { PluginManager } = require("../dist/plugins/PluginManager");
 
 /** Runs submitted tasks on demand instead of on the game loop. */
 const tasks = [];
@@ -31,6 +32,7 @@ const hooks = { route: [], click: new Map(), logout: [], teleport: [], events: [
 const groundItems = [];
 const Agility = require("../plugins/skills/Agility.plugin");
 Agility.register({
+  core: PluginManager.getCoreApi(),
   getTaskManager: () => taskManager,
   getItemOnGroundManager: () => ({ registerNonGlobals: (player, item, position) => groundItems.push({ item, position }) }),
   persistAttribute() {},
@@ -45,6 +47,14 @@ Agility.register({
 
 const { COURSES } = require("../plugins/skills/agility/courses");
 const { SHORTCUTS } = require("../plugins/skills/agility/shortcuts");
+const { build } = require("../plugins/skills/agility/shortcuts/ShortcutData");
+const SHORTCUT_DATA = require("../data/definitions/agility-shortcuts.json");
+const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
+
+before(async () => {
+  await CachePipeline.initialize(require("node:path").resolve(__dirname, ".."));
+});
 
 function createPlayer(x, y, z, level = 99) {
   let location = new Location(x, y, z);
@@ -219,6 +229,31 @@ test("every shortcut plays out from either side without leaving the player locke
   } finally {
     Math.random = random;
   }
+});
+
+test("every shortcut in agility-shortcuts.json has a loc the player can click", () => {
+  for (const entry of SHORTCUT_DATA.shortcuts) {
+    const ops = [].concat(entry.object).map((id) => (CacheDefinitions.getObject(id)?.actions ?? [])[0]);
+    assert.ok(ops.some(Boolean), `${entry.name}: no clickable loc`);
+  }
+});
+
+test("the shortcut data refuses unknown kinds, scripts, animations and keys", () => {
+  const base = { name: "Test", object: ObjectIds.STILE, level: 1 };
+  assert.throws(() => build({ ...base }, 0), /needs one of/);
+  assert.throws(() => build({ ...base, script: "nope" }, 0), /unknown script "nope"/);
+  assert.throws(() => build({ ...base, steps: [{ anim: "NOT_AN_ANIM" }] }, 0)[0].steps, /unknown animation "NOT_AN_ANIM"/);
+  assert.throws(() => build({ ...base, steps: [], colour: "red" }, 0), /unknown key "colour"/);
+});
+
+test("a crossing's via tiles are walked in travel order, both ways", () => {
+  const [crossing] = build({
+    name: "Test stones", object: ObjectIds.STILE, level: 1,
+    between: { ends: [[10, 10, 0], [10, 14, 0]], via: [[10, 11], [10, 12], [10, 13]], cross: [{ use: "hops", args: ["...via", "to"] }] },
+  }, 0);
+  const moves = (pos) => crossing.steps({ pos, obj: { x: 10, y: 12, z: 0 } }).filter((step) => step.move).map((step) => step.move);
+  assert.deepEqual(moves({ x: 10, y: 10, z: 0 }), [[10, 11], [10, 12], [10, 13], [10, 14, 0]]);
+  assert.deepEqual(moves({ x: 10, y: 14, z: 0 }), [[10, 13], [10, 12], [10, 11], [10, 10, 0]]);
 });
 
 test("shortcuts sharing an object id are told apart by their tile", () => {

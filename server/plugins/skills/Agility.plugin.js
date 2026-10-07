@@ -1,7 +1,3 @@
-const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
-const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
-const { Location } = require("../../src/main/typescript/elvarg/game/model/Location");
-const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const ObstacleRunner = require("./agility/ObstacleRunner");
 const { COURSES } = require("./agility/courses");
 const { SHORTCUTS } = require("./agility/shortcuts");
@@ -28,6 +24,7 @@ const MARK_OVERLEVEL_THRESHOLD = 20;
 const OBSTACLES_BY_OBJECT = new Map();
 
 let pluginApi;
+let core;
 let ItemOnGroundManager;
 
 function indexObstacle(obstacle) {
@@ -76,6 +73,7 @@ function objectContext(player, object) {
   return {
     player,
     object,
+    core,
     obj: {
       x: location.getX(), y: location.getY(), z: location.getZ(),
       face: object.getFace?.() ?? 0, type: object.getType?.() ?? 10, id: object.getId(),
@@ -89,7 +87,7 @@ function resolve(value, context) {
 }
 
 function agilityLevel(player) {
-  return player.getSkillManager().getCurrentLevel(Skill.AGILITY);
+  return player.getSkillManager().getCurrentLevel(core.Skill.AGILITY);
 }
 
 /**
@@ -118,14 +116,14 @@ function completeLap(player, course) {
   laps[course.key] = (laps[course.key] ?? 0) + 1;
   player.setAttribute(LAPS_ATTRIBUTE, laps);
   if (course.lapBonus > 0) {
-    player.getSkillManager().addExperiences(Skill.AGILITY, course.lapBonus);
+    player.getSkillManager().addExperiences(core.Skill.AGILITY, course.lapBonus);
   }
   if (!player.getAttribute(LAP_COUNTER_OFF_ATTRIBUTE)) {
     player.sendMessage(`Your ${course.name} lap count is: <col=ff0000>${laps[course.key]}</col>.`);
   }
   pluginApi.emitCustomEvent("agility:lap", { player, course: course.key, laps: laps[course.key] });
   // The giant squirrel rolls once per completed course.
-  pluginApi.emitCustomEvent("agility:success", { player, skill: Skill.AGILITY, petBase: course.petBase });
+  pluginApi.emitCustomEvent("agility:success", { player, skill: core.Skill.AGILITY, petBase: course.petBase });
 }
 
 /** Grace's Toggle Counter: turns the lap count message off or back on. Guessed messages. */
@@ -168,8 +166,8 @@ function rollMarkOfGrace(player, course) {
   }
   if (Math.random() >= chance) return;
   const tile = marks.tiles[Math.floor(Math.random() * marks.tiles.length)];
-  const position = new Location(tile[0], tile[1], tile[2]);
-  ItemOnGroundManager.registerNonGlobals(player, new Item(ItemIds.MARK_OF_GRACE, 1), position);
+  const position = new core.Location(tile[0], tile[1], tile[2]);
+  ItemOnGroundManager.registerNonGlobals(player, new core.Item(core.ItemIds.MARK_OF_GRACE, 1), position);
 }
 
 function finishObstacle(player, obstacle, success, completed) {
@@ -179,7 +177,7 @@ function finishObstacle(player, obstacle, success, completed) {
   const reward = success ? obstacle.xp : obstacle.fail?.xp;
   const xp = typeof reward === "function" ? reward(player) : reward;
   if (xp > 0) {
-    player.getSkillManager().addExperiences(Skill.AGILITY, xp);
+    player.getSkillManager().addExperiences(core.Skill.AGILITY, xp);
   }
   const endMessage = success ? obstacle.end : obstacle.fail?.end;
   if (endMessage) {
@@ -276,6 +274,7 @@ module.exports = {
   members: true,
   register(api) {
     pluginApi = api;
+    core = api.core;
     ItemOnGroundManager = api.getItemOnGroundManager();
     ObstacleRunner.init(api);
 
