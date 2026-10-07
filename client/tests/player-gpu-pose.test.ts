@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 
+import { buildActorNormals } from "../render/buffer/ActorNormals";
+import { SceneBuffer, getModelFacesFiltered } from "../render/buffer/SceneBuffer";
 import { LabelPose, LabelRig, POSE_FLOATS_PER_LABEL } from "../render/player/LabelPose";
 import { CacheSystem } from "../rs/cache/CacheSystem";
 import { getCacheLoaderFactory } from "../rs/cache/loader/CacheLoaderFactory";
@@ -162,6 +164,31 @@ for (let id = 0; id < 3000 && interleaved < 3; id++) {
 assert.ok(interleaved > 0, "found an interleaved player sequence");
 // The integer CPU path drifts from exact by under a tenth of a tile at worst (weapon tips).
 assert.ok(worstRounding < 16, `CPU rounding drift ${worstRounding}`);
+
+// Rest meshes (PlayerRenderer.restMeshFor, WebGPU PlayerPoseGeometry.restMeshFor) label vertex
+// i*3+k with face i's corner k: unshared addModel must emit exactly that vertex there.
+for (const model of models) {
+    for (const alpha of [false, true]) {
+        const faces = getModelFacesFiltered(model, textureLoader, alpha);
+        const sceneBuf = new SceneBuffer(textureLoader, new Map(), faces.length * 3 + 16, true);
+        if (faces.length === 0) continue;
+        sceneBuf.addModel(model, faces, undefined, false, buildActorNormals(model));
+        const bytes = sceneBuf.vertexBuf.byteArray();
+        const words = new Uint32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
+        assert.equal(words.length, faces.length * 3 * 4, "one 16-byte vertex per face corner");
+        faces.forEach((face, i) => {
+            const corners = [model.indices1[face.index], model.indices2[face.index], model.indices3[face.index]];
+            corners.forEach((v, k) => {
+                const j = i * 3 + k;
+                assert.equal(sceneBuf.indices[j], j, `index ${j} is its own corner`);
+                const w = j * 4;
+                assert.equal(((words[w] >>> 17) & 0x7fff) - 0x4000, model.verticesX[v], `x of corner ${j}`);
+                assert.equal(-((words[w + 1] & 0x7fff) - 0x4000), model.verticesY[v], `y of corner ${j}`);
+                assert.equal(((words[w + 2] >>> 17) & 0x7fff) - 0x4000, model.verticesZ[v], `z of corner ${j}`);
+            });
+        });
+    }
+}
 
 console.log(
     `GPU player poses match the CPU path: ${checked} frames, ${interleaved} interleaved, ` +

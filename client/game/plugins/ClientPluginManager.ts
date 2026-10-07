@@ -8,6 +8,10 @@ import type { ClickRegistry } from "../../widgets/gl/click-registry";
 import type { SimpleMenuEntry } from "../../ui/menu/MenuEngine";
 import type { MenuTransformContext } from "../../ui/menu/menuTransforms";
 import type { FontLoader } from "../../widgets/components/TextRenderer";
+import type {
+    WebGPUSceneExtension,
+    WebGPUSceneExtensionContext,
+} from "../../render/webgpu/sceneExtension";
 
 /**
  * Draw/input context handed to a plugin that supplies a custom gameframe (the
@@ -91,6 +95,8 @@ export interface ClientPlugin {
     afterSceneRender?(renderer: WebGLOsrsRenderer): void;
     configureSceneDrawCall?(renderer: WebGLOsrsRenderer, drawCall: DrawCall): void;
     disposeRenderer?(renderer: WebGLOsrsRenderer): void;
+    /** WebGPU: extra scene pipelines, resources and passes (see render/webgpu/sceneExtension.ts). */
+    createWebGPUSceneExtension?(context: WebGPUSceneExtensionContext): WebGPUSceneExtension | undefined;
     handleCameraKeys?(context: CameraInputContext): boolean;
     handleCameraMouse?(context: CameraInputContext): boolean;
     handleCameraScroll?(context: CameraInputContext): boolean;
@@ -149,6 +155,16 @@ export class ClientPluginManager {
 
     disposeRenderer(renderer: WebGLOsrsRenderer): void {
         for (const plugin of this.plugins) plugin.disposeRenderer?.(renderer);
+    }
+
+    // ponytail: one WebGPU scene extension (the first offered); composing several needs
+    // per-extension binding/location ranges and a pipeline set per active combination.
+    createWebGPUSceneExtension(context: WebGPUSceneExtensionContext): WebGPUSceneExtension | undefined {
+        for (const plugin of this.plugins) {
+            const extension = plugin.createWebGPUSceneExtension?.(context);
+            if (extension) return extension;
+        }
+        return undefined;
     }
 
     handleCameraKeys(context: CameraInputContext): boolean {

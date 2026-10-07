@@ -103,7 +103,11 @@ import {
 import { clamp } from "../common/utils/MathUtil";
 import { ClientState } from "../game/ClientState";
 import { GameRenderer } from "../game/GameRenderer";
-import type { HitsplatEventPayload } from "../game/GameRenderer";
+import type {
+    HitsplatEventPayload,
+    NpcSpotAnimationEvent,
+    WorldSpotAnimationEvent,
+} from "../game/GameRenderer";
 import { OsrsRendererType, WEBGL } from "../game/GameRenderers";
 import { ClickMode, getMousePos } from "../game/InputManager";
 import { OsrsClient } from "../game/OsrsClient";
@@ -191,7 +195,6 @@ import { KNOWN_WATER_TEXTURE_IDS } from "./water/WaterTextureIds";
 
 import * as render from "./render";
 import { RENDER_CONSTANTS, TextureFilterMode, HD_SKY_COLOR_VEC4, HD_AUTO_FOG_DEPTH_FACTOR } from "./render/constants";
-import { gammaFromScreenBrightness, loadScreenBrightness } from "../ui/ScreenBrightness";
 import type {
     BrowserQualityProfile,
     BrowserQualityProfileKey,
@@ -559,8 +562,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     //          lum (-1=no override, 0-127), amount (0-255, 0=disabled)]
     sceneHslOverride: vec4 = vec4.fromValues(-1, -1, -1, 0);
 
-    /** OSRS's gamma exponent (lower is brighter), from the Settings "Screen brightness" slider. */
-    brightness: number = gammaFromScreenBrightness(loadScreenBrightness());
     colorBanding: number = 255;
 
     smoothTerrain: boolean = false;
@@ -1240,22 +1241,11 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render.registerSpotAnimation(this, event);
     }
 
-    registerNpcSpotAnimation(event: {
-        npcServerId: number;
-        spotId: number;
-        height: number;
-        startCycle: number;
-        slot?: number;
-    }): void {
+    override registerNpcSpotAnimation(event: NpcSpotAnimationEvent): void {
         return render.registerNpcSpotAnimation(this, event);
     }
 
-    registerWorldSpotAnimation(event: {
-        spotId: number;
-        tile: { x: number; y: number; level?: number };
-        height?: number;
-        startCycle: number;
-    }): void {
+    override registerWorldSpotAnimation(event: WorldSpotAnimationEvent): void {
         return render.registerWorldSpotAnimation(this, event);
     }
 
