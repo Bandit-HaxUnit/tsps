@@ -44,6 +44,7 @@ import {
   encodeSystemUpdate,
   encodeVarbit,
   encodeVarp,
+  encodeVarpLong,
   encodeWidgetClose,
   encodeWidgetCloseSub,
   encodeWidgetOpen,
@@ -76,7 +77,7 @@ import {
   WORLD_MAP_TARGET_UID,
 } from "../protocol/WorldMapProtocol";
 import { CacheDefinitions } from "../../game/cache/CacheDefinitions";
-const CHATBOX_MODAL_TARGET_UID = (162 << 16) | 567;
+const CHATBOX_MODAL_TARGET_UID = (162 << 16) | 568;
 const MAIN_MODAL_TARGET_UID = (161 << 16) | 16;
 const VARBIT_MULTICOMBAT_AREA = 4605;
 // Quest completion states consulted by spellbook CS2 scripts. Keep these client
@@ -229,6 +230,12 @@ export class PacketSender {
   getVarbit(id: number): number {
     const { baseVar, startBit, endBit } = CacheDefinitions.getVarbit(id);
     return (this.getVarp(baseVar) >> startBit) & BIT_MASKS[endBit - startBit];
+  }
+
+  /** A 64-bit varp; the client's scripts read it with push_var_long. */
+  sendVarpLong(id: number, value: bigint | number): this {
+    this.player.getSession().sendClientPacket(encodeVarpLong(id, BigInt(value)));
+    return this;
   }
 
   sendConfig(id: number, state: number): this {

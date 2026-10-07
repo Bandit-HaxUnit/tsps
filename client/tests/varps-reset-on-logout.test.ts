@@ -29,7 +29,7 @@ assert.equal(vars.getVarp(892), 0, "account A's home teleport minute is gone");
 assert.equal(vars.getVarp(3078), 0);
 assert.equal(vars.getVarbit(1), 0, "varbits read the cleared varps");
 assert.equal(vars.getVarcInt(1), 5, "persistent varcs (client preferences) stay");
-assert.equal(vars.getVarcInt(2), 0, "transient varcs go");
+assert.equal(vars.getVarcInt(2), -1, "transient varcs go (an unset varc int reads -1)");
 assert.deepEqual(changes, [], "no change callbacks while logged out");
 
 // Account B logs in without a cooldown: only its non-zero varps arrive, and they are changes.
