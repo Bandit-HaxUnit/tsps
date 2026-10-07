@@ -658,6 +658,25 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.ui?.registerMinimapData(mapData);
     }
 
+    /**
+     * Logout/disconnect reset (port of render/render/session.ts clearSessionCaches). Without it
+     * mapDataLoadedNotified stays set, MAP_DATA_LOADED never completes on the next login and the
+     * client sits on "Loading - please wait".
+     */
+    override clearSessionCaches(): void {
+        this.locUpdates.dispose();
+        this.locOverrides.clear();
+        this.addedLocs.clear();
+        this.locSpawns.clear();
+        this.terrainOverrides.clear();
+        this.mapRegionReplacements.clear();
+        this.mapsToLoad.clear();
+        this.followCamFocalInitialized = false;
+        this.followCamFocalLastClientCycle = -1;
+        this.mapDataLoadedNotified = false;
+        this.heightValidAtTime = undefined;
+    }
+
     override cleanUp(): void {
         this.locUpdates.dispose();
         this.actors?.dispose();

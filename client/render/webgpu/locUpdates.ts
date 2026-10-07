@@ -292,11 +292,16 @@ export class LocUpdates {
         }, RENDER_CONSTANTS.LOC_RELOAD_FLUSH_DELAY_MS);
     }
 
+    /** Drops queued work; also the per-session reset, so it must leave the instance usable. */
     dispose(): void {
         clearTimeout(this.flushTimer);
+        this.flushTimer = undefined;
         for (const timer of this.animTimers.values()) clearTimeout(timer);
         this.animTimers.clear();
         this.pending.clear();
         this.dirty.clear();
+        this.gamemodeWorldLocOverrideKeys.clear();
+        this.gamemodeWorldLocSpawnKeys.clear();
+        this.gamemodeWorldTerrainOverrideKeys.clear();
     }
 }
