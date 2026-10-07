@@ -97,10 +97,16 @@ an update. What to do with each source:
 | `item-gameplay.json` | an old export, no generator | `ItemDefinitionLoader` skips an entry whose name differs from the cache's (ignoring case), so list the entries that match the old cache's name but not the new one's and fix them by hand, checking the item against the cache (a rename can be a different item: check its params) |
 | `monsters-complete`, `npc-drops`, `npc-dialogues`, `npc-dialogue-index`, `shops` | [osrsreboxed-db](https://github.com/DayV-git/osrsreboxed-db), built from the live Wiki | Usually already on the new revision; refresh only to pick up new content |
 | `item-prices.json` | live Wiki prices | `yarn fetch:prices` if it predates the revision |
-| `npc-spawns`, `object-spawns`, plugin data | captures and hand edits | Check NPCs whose name moved into a transform (below) |
-
+| `npc-spawns`, `object-spawns`, plugin data | captures and hand edits | Check NPCs whose name moved into a transform (below); a `npc-spawns` entry may name an `NpcIdentifiers` constant with `key` instead of a raw `id`, which follows identifier regeneration |
 Data matched by name is what breaks: the loader check above, and strings in plugins. Most of 241's
 1,133 item renames are capitalisation ("Staff of the Dead"), which the loader's check ignores.
+
+When a name moves into a transform, the spawn keeps the nameless parent id (e.g. Brundt's 3926
+resolves to 9263) and the named variant ids stay in `NpcIdentifiers` and `npc-dialogue-index.json`.
+NPC interactions pass the resolved variant as `event.npcId` (`NPC.getContentId(player)`), so quest
+plugins and the dialogue index meet the spawn on the same id; an item-on-NPC event carries it as
+`npcId` too. New content should key on the named variants, and should not hardcode the parent id -
+`NpcIdentifiers` only keeps a parent constant when the old file already named it.
 
 ### 9. World map and the rest
 

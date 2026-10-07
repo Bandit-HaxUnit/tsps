@@ -96,7 +96,7 @@ function useLogOnOperator(event) {
   const plank = data().planks.find((entry) => entry.log === event.itemId);
   if (!plank || !data().operators.includes(name)) return;
   event.handled = true;
-  convert(event.player, event.target.getId(), plank, 1);
+  convert(event.player, event.npcId ?? event.target.getId(), plank, 1);
 }
 
 function buyPlank({ player, npc }) {
