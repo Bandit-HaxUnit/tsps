@@ -425,12 +425,23 @@ function buildGeneratedPreset(player, state) {
   return selectBotPreset(state) ?? buildRandomPvpPreset(player, state);
 }
 
+/** True when the bot wears nothing: a regear cannot disturb any fight. */
+function hasNoEquipment(player) {
+  const worn = player.getEquipment?.()?.getItems?.() ?? [];
+  return !worn.some((item) => (item?.getId?.() ?? -1) > 0);
+}
+
 function applyGeneratedPvpLoadout(player, state, options = {}) {
   if (!player || player.isPlayerBot?.() !== true) {
     return false;
   }
   const combat = player.getCombat?.();
-  if (combat?.getTarget?.() || combat?.getAttacker?.() || player.getCombatFollowing?.()) {
+  // A bot wearing nothing gears up even mid-fight: it has nothing to swap and would
+  // otherwise stay naked forever in a hotspot that never lets it out of combat.
+  if (
+    !hasNoEquipment(player) &&
+    (combat?.getTarget?.() || combat?.getAttacker?.() || player.getCombatFollowing?.())
+  ) {
     if (state?.pvp) state.pvp.loadoutPending = true;
     return false;
   }
