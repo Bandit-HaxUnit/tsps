@@ -10,6 +10,7 @@ const SHORTCUTS = [
   ...require("./Fremennik"),
   ...require("./Kourend"),
   ...require("./Wilderness"),
+  ...require("./Wyrmscraig"),
 ];
 
 module.exports = { SHORTCUTS };
