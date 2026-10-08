@@ -1,3 +1,4 @@
+import { isLowEndDevice } from "../common/utils/DeviceUtil";
 import { MapFileIndex, getMapSquareId } from "../rs/map/MapFileIndex";
 import { Scene } from "../rs/scene/Scene";
 import { Camera } from "./Camera";
@@ -42,6 +43,12 @@ export class MapManager<T extends MapSquare> {
     static readonly SCENE_REBASE_MIN_LOCAL_TILE = 16;
     static readonly SCENE_REBASE_MAX_LOCAL_TILE = 88;
 
+    /** Low-end devices only build squares within render distance + margin (tests flip this). */
+    static lowEnd: boolean = isLowEndDevice;
+    static readonly LOW_END_RANGE_MARGIN_TILES = 16;
+    // Re-evaluate the in-range set once the player has walked this far since the last grid build.
+    static readonly LOW_END_REBUILD_MOVE_TILES = 8;
+
     static mapIntersectBox: number[][] = [
         [0, (-Scene.UNITS_LEVEL_HEIGHT * 10) / 128, 0],
         [0, (Scene.UNITS_LEVEL_HEIGHT * 3) / 128, 0],
@@ -64,6 +71,10 @@ export class MapManager<T extends MapSquare> {
     currentMapX: number = -1;
     currentMapY: number = -1;
     currentMapRadius: number = -1;
+    // Player tile / range the last grid was culled for (low-end only).
+    private rangeBuiltX = 0;
+    private rangeBuiltZ = 0;
+    private rangeBuiltTiles = -1;
 
     // Target streaming grid (what we are currently loading toward).
     gridMapCount: number = 0;
@@ -519,6 +530,7 @@ export class MapManager<T extends MapSquare> {
         sceneBaseX?: number,
         sceneBaseY?: number,
         expandedMapLoading?: number,
+        streamRangeTiles?: number,
     ): void {
         // In instance mode, skip grid rebuild entirely — only render the instance scene
         if (ClientState.inInstance) {
@@ -550,7 +562,16 @@ export class MapManager<T extends MapSquare> {
         // Recalculate the grid when the authoritative scene base changes
         // (OSRS-style) or, when unavailable, when player map/radius changes.
         const radiusChanged = mapRadius !== this.currentMapRadius;
-        const mapSquareChanged = useSceneBaseStreaming
+        const cullRange =
+            MapManager.lowEnd && streamRangeTiles !== undefined
+                ? (streamRangeTiles | 0) + MapManager.LOW_END_RANGE_MARGIN_TILES
+                : -1;
+        const rangeStale =
+            cullRange >= 0 &&
+            (cullRange !== this.rangeBuiltTiles ||
+                Math.max(Math.abs(posX - this.rangeBuiltX), Math.abs(posZ - this.rangeBuiltZ)) >
+                    MapManager.LOW_END_REBUILD_MOVE_TILES);
+        const mapSquareChanged = rangeStale || (useSceneBaseStreaming
             ? !this.usingSceneBaseStreaming ||
               baseX !== this.currentSceneBaseX ||
               baseY !== this.currentSceneBaseY ||
@@ -558,7 +579,7 @@ export class MapManager<T extends MapSquare> {
             : this.usingSceneBaseStreaming ||
               playerMapX !== this.currentMapX ||
               playerMapY !== this.currentMapY ||
-              radiusChanged;
+              radiusChanged);
 
         if (mapSquareChanged) {
             this.gridRevision = (this.gridRevision + 1) | 0;
@@ -624,6 +645,12 @@ export class MapManager<T extends MapSquare> {
                 });
             }
 
+            this.rangeBuiltX = posX;
+            this.rangeBuiltZ = posZ;
+            this.rangeBuiltTiles = cullRange;
+            const cullSq = cullRange * cullRange;
+            const ownMapId = getMapSquareId(playerMapX, playerMapY);
+
             // Build the streaming grid.
             this.gridMapCount = 0;
             this.gridMapIdSet.clear();
@@ -643,6 +670,13 @@ export class MapManager<T extends MapSquare> {
                     }
                     const mapId = getMapSquareId(mx, my);
                     if (this.invalidMapIds.has(mapId)) {
+                        continue;
+                    }
+                    if (
+                        cullRange >= 0 &&
+                        mapId !== ownMapId &&
+                        getMapDistanceSq(posX, posZ, mx, my) > cullSq
+                    ) {
                         continue;
                     }
                     this.gridMapIds[this.gridMapCount++] = mapId;
@@ -672,7 +706,8 @@ export class MapManager<T extends MapSquare> {
             // When scene-base streaming triggers the rebuild, posX/posZ may still
             // reflect the previous frame. Use the scene base center instead — it is
             // already updated by the network layer before rendering.
-            const priorityMapId = getMapSquareId(this.currentMapX, this.currentMapY);
+            const priorityMapId =
+                cullRange >= 0 ? ownMapId : getMapSquareId(this.currentMapX, this.currentMapY);
             for (let i = 1; i < this.gridMapCount; i++) {
                 if (this.gridMapIds[i] === priorityMapId) {
                     const tmp = this.gridMapIds[0];

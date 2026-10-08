@@ -1209,6 +1209,22 @@ function collectNpcPrebakedMovementSeqs(npcType: NpcType, basTypeLoader: BasType
     return Array.from(unique.values());
 }
 
+/** The NPCs a map square draws: its own (or its world view's overlay square), up to maxLevel. */
+export function squareNpcInstances(all: NpcInstance[], mapX: number, mapY: number, maxLevel: number): NpcInstance[] {
+    const maxPlane = Math.max(0, maxLevel | 0);
+    const currentMapId = getMapSquareId(mapX, mapY);
+    return all.filter((instance) => {
+        if ((instance.level | 0) > maxPlane) return false;
+        const worldViewId = instance.worldViewId;
+        if (typeof worldViewId === "number" && worldViewId >= 0) {
+            const overlayMapX = 200 + (worldViewId | 0);
+            const overlayMapY = 200 + (worldViewId | 0);
+            return getMapSquareId(overlayMapX, overlayMapY) === currentMapId;
+        }
+        return npcOwnerMapId(instance) === currentMapId;
+    });
+}
+
 function createNpcRenderBundles(
     npcModelLoader: NpcModelLoader,
     basTypeLoader: BasTypeLoader,
@@ -1657,18 +1673,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
 
         let npcInstances: NpcInstance[] = [];
         if (!shouldLoadPartial && loadNpcs) {
-            const maxPlane = Math.max(0, maxLevel | 0);
-            const currentMapId = getMapSquareId(mapX, mapY);
-            npcInstances = state.npcInstances.filter((instance) => {
-                if ((instance.level | 0) > maxPlane) return false;
-                const worldViewId = instance.worldViewId;
-                if (typeof worldViewId === "number" && worldViewId >= 0) {
-                    const overlayMapX = 200 + (worldViewId | 0);
-                    const overlayMapY = 200 + (worldViewId | 0);
-                    return getMapSquareId(overlayMapX, overlayMapY) === currentMapId;
-                }
-                return npcOwnerMapId(instance) === currentMapId;
-            });
+            npcInstances = squareNpcInstances(state.npcInstances, mapX, mapY, maxLevel);
         }
         if (!shouldLoadPartial && extraNpcsInput) {
             for (const npc of extraNpcsInput) {

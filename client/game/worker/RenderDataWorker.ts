@@ -1,4 +1,18 @@
 import JSZip from "jszip";
+import type { SdMapData } from "../../render/loader/SdMapData";
+import type { SdMapLoaderInput } from "../../render/loader/SdMapLoaderInput";
+import {
+    cacheKey,
+    fnv,
+    isCacheable,
+    readSquare,
+    recordVarReads,
+    shouldStore,
+    trackVarReads,
+    varReadsMatch,
+    writeSquare,
+} from "./MapSquareCache";
+import { decompressStats } from "../../rs/cache/Container";
 import { loadFromPayload } from "../../common/gamemode/GamemodeContentStore";
 import { TransferDescriptor } from "threads";
 import { registerSerializer } from "threads";
@@ -41,6 +55,9 @@ import { LoadedCache } from "../Caches";
 import { NpcGeometryData } from "../../render/loader/NpcGeometryData";
 import { SdMapDataLoader } from "../../render/loader/SdMapDataLoader";
 import type { NpcInstance } from "../../render/npc/NpcRenderTemplate";
+import { createNpcData } from "../../render/npc/NpcData";
+import { squareNpcInstances } from "../../render/loader/SdMapDataLoader";
+import { Scene } from "../../rs/scene/Scene";
 import { RenderDataLoader, renderDataLoaderSerializer } from "./RenderDataLoader";
 
 registerSerializer(renderDataLoaderSerializer);
@@ -244,6 +261,15 @@ async function initWorker(cache: LoadedCache, npcInstances: NpcInstance[]): Prom
 }
 
 /**
+ * A `?map-profile=1` timing line: to the console, and to a LAN dev front's log when one serves
+ * the page (client/scripts/lan-https.mjs), since a console's worker output cannot be read.
+ */
+function mapProfileLog(text: string): void {
+    console.info(text);
+    void fetch("/__maplog", { method: "POST", body: text }).catch(() => undefined);
+}
+
+/**
  * Run a worker task with sparse-cache miss handling. A thrown miss (e.g. a
  * map group) waits for that fetch and reruns. Non-throwing misses (models,
  * anim frames render as gaps and only bump the store's miss counter) are
@@ -251,9 +277,15 @@ async function initWorker(cache: LoadedCache, npcInstances: NpcInstance[]): Prom
  * needed group, queueing all fetches, so waiting for the queue to settle and
  * rerunning converges in a few passes.
  */
-async function runWithSparseRetry<T>(workerState: WorkerState, task: () => Promise<T>, profileLabel?: string): Promise<T> {
+async function runWithSparseRetry<T>(
+    workerState: WorkerState,
+    task: () => Promise<T>,
+    profileLabel?: string,
+    outcome?: { complete: boolean },
+): Promise<T> {
     const js5 = workerState.js5;
     if (!js5) {
+        if (outcome) outcome.complete = true;
         return task();
     }
     const store = js5.store;
@@ -261,16 +293,22 @@ async function runWithSparseRetry<T>(workerState: WorkerState, task: () => Promi
     for (let attempt = 0; attempt < maxAttempts - 1; attempt++) {
         const missesBefore = store.missCount;
         const passStarted = performance.now();
+        const decompressBefore = { ...decompressStats };
         try {
             const result = await task();
-            if (profileLabel) console.info(`[map-profile] ${profileLabel} pass=${attempt + 1} build=${Math.round(performance.now() - passStarted)}ms misses=${store.missCount - missesBefore}`);
+            if (profileLabel) {
+                const gzip = `${Math.round(decompressStats.gzipMs - decompressBefore.gzipMs)}ms/${decompressStats.gzipCount - decompressBefore.gzipCount}`;
+                const bzip2 = `${Math.round(decompressStats.bzip2Ms - decompressBefore.bzip2Ms)}ms/${decompressStats.bzip2Count - decompressBefore.bzip2Count}`;
+                mapProfileLog(`[map-profile] ${profileLabel} pass=${attempt + 1} build=${Math.round(performance.now() - passStarted)}ms misses=${store.missCount - missesBefore} gzip=${gzip} bzip2=${bzip2}`);
+            }
             if (store.missCount === missesBefore) {
+                if (outcome) outcome.complete = true;
                 return result;
             }
             // Groups were missing; their fetches are queued. Wait and rerun.
             const waitStarted = performance.now();
             await js5.settled();
-            if (profileLabel) console.info(`[map-profile] ${profileLabel} pass=${attempt + 1} cacheWait=${Math.round(performance.now() - waitStarted)}ms`);
+            if (profileLabel) mapProfileLog(`[map-profile] ${profileLabel} pass=${attempt + 1} cacheWait=${Math.round(performance.now() - waitStarted)}ms`);
         } catch (e) {
             if (!isGroupMissingError(e)) {
                 throw e;
@@ -278,7 +316,7 @@ async function runWithSparseRetry<T>(workerState: WorkerState, task: () => Promi
             try {
                 const waitStarted = performance.now();
                 await js5.requestGroup(e.indexId, e.archiveId, true);
-                if (profileLabel) console.info(`[map-profile] ${profileLabel} pass=${attempt + 1} blockingGroup=${e.indexId}:${e.archiveId} cacheWait=${Math.round(performance.now() - waitStarted)}ms`);
+                if (profileLabel) mapProfileLog(`[map-profile] ${profileLabel} pass=${attempt + 1} blockingGroup=${e.indexId}:${e.archiveId} cacheWait=${Math.round(performance.now() - waitStarted)}ms`);
             } catch (fetchError) {
                 // Transient fetch failure; back off and let the next attempt
                 // re-queue it rather than failing the whole task.
@@ -288,7 +326,27 @@ async function runWithSparseRetry<T>(workerState: WorkerState, task: () => Promi
         }
     }
     // Final attempt: whatever is still missing renders as gaps.
-    return task();
+    const missesBefore = store.missCount;
+    const result = await task();
+    if (outcome) outcome.complete = store.missCount === missesBefore;
+    return result;
+}
+
+/** A stored square's NPCs are replaced by the ones in it now, with the stored per-type animations. */
+function refreshNpcs(data: SdMapData, npcs: NpcInstance[], mapX: number, mapY: number): void {
+    const templates = new Map<number, SdMapData["npcs"][number]>();
+    for (const npc of data.npcs) if (!templates.has(npc.id)) templates.set(npc.id, npc);
+    data.npcs = npcs.flatMap((instance) => {
+        const template = templates.get(instance.typeId);
+        // No template: that type has no model, and a fresh build skips it too.
+        return template ? [createNpcData({ typeId: instance.typeId, idleAnim: template.idleAnim,
+            walkAnim: template.walkAnim, extraAnims: template.extraAnims }, instance,
+            mapX * Scene.MAP_SQUARE_SIZE, mapY * Scene.MAP_SQUARE_SIZE)] : [];
+    });
+}
+
+function dropLoadedTextures(data: SdMapData, loaded: Set<number>): void {
+    for (const id of loaded) data.loadedTextures?.delete(id);
 }
 
 function clearCache(workerState: WorkerState): void {
@@ -342,10 +400,53 @@ const worker = {
         }
 
         const mapInput = input as { mapProfileEnabled?: boolean; mapX?: number; mapY?: number };
-        const { data, transferables } = await runWithSparseRetry(workerState, () =>
-            dataLoader.load(workerState, input),
-            mapInput?.mapProfileEnabled ? `${mapInput.mapX},${mapInput.mapY}` : undefined,
-        );
+        const sdInput = input as SdMapLoaderInput;
+        // Built map squares are kept in IndexedDB; see MapSquareCache for what is keyed.
+        const cacheable = dataLoader.__type === "sdMapDataLoader" && isCacheable(sdInput);
+        let key = "";
+        let squareNpcs: NpcInstance[] = [];
+        if (cacheable) {
+            trackVarReads(workerState.varManager);
+            // A square's geometry depends on which NPC types stand in it, not where: key on the
+            // types, and put the NPCs there now into a stored square (refreshNpcs).
+            squareNpcs = sdInput.loadNpcs
+                ? squareNpcInstances(workerState.npcInstances, sdInput.mapX, sdInput.mapY, sdInput.maxLevel)
+                : [];
+            const npcsHash = sdInput.loadNpcs
+                ? fnv(JSON.stringify([...new Set(squareNpcs.map((npc) => npc.typeId))].sort((a, b) => a - b)))
+                : "";
+            key = cacheKey(workerState.cache.info, sdInput, npcsHash);
+            const hit = await readSquare(key);
+            const varsMatch = !!hit && varReadsMatch(workerState.varManager, hit.reads);
+            if (sdInput.mapProfileEnabled) mapProfileLog(`[map-profile] ${sdInput.mapX},${sdInput.mapY} stored square: ${!hit ? "none" : varsMatch ? "hit" : "vars differ"} key=${key.split("|")[1]} npcs=${npcsHash || "-"}`);
+            if (hit && varsMatch) {
+                if (sdInput.loadNpcs) refreshNpcs(hit.data, squareNpcs, sdInput.mapX, sdInput.mapY);
+                dropLoadedTextures(hit.data, sdInput.loadedTextureIds);
+                return Transfer<D>(hit.data as D, []);
+            }
+        }
+
+        const outcome = { complete: false };
+        // A stored build must carry every texture, whatever this session has already uploaded.
+        const buildInput = cacheable ? { ...sdInput, loadedTextureIds: new Set<number>() } : input;
+        const run = () =>
+            runWithSparseRetry(
+                workerState,
+                () => dataLoader.load(workerState, buildInput as I),
+                mapInput?.mapProfileEnabled ? `${mapInput.mapX},${mapInput.mapY}` : undefined,
+                outcome,
+            );
+        const { result: built, reads } = cacheable
+            ? await recordVarReads(run)
+            : { result: await run(), reads: [] };
+        const { data, transferables } = built;
+        if (cacheable && shouldStore(outcome.complete, data)) {
+            await writeSquare(key, { data: data as unknown as SdMapData, reads });
+        }
+        if (cacheable && sdInput.mapProfileEnabled) {
+            mapProfileLog(`[map-profile] ${sdInput.mapX},${sdInput.mapY} store: ${shouldStore(outcome.complete, data) ? "written" : `skipped (complete=${outcome.complete})`} reads=${reads.length}`);
+        }
+        if (cacheable && data) dropLoadedTextures(data as unknown as SdMapData, sdInput.loadedTextureIds);
 
         if (dataLoader.shouldClearWorkerCacheAfterLoad?.(input) ?? true) {
             clearCache(workerState);

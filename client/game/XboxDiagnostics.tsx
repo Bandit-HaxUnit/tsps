@@ -69,6 +69,25 @@ function describeEngine(): string {
 const engine = isXbox ? describeEngine() : "";
 
 /**
+ * The same loop in a worker: the map is built in one, and a worker can run much slower than the
+ * page (less CPU given to it, or no JIT there).
+ */
+let workerLoop = "wloop:-";
+if (isXbox && typeof Worker !== "undefined") {
+    try {
+        const code = "let sum = 0; const start = performance.now(); for (let i = 0; i < 5000000; i++) sum = (sum + i * 7) | 0; postMessage([performance.now() - start, sum]);";
+        const probe = new Worker(URL.createObjectURL(new Blob([code], { type: "text/javascript" })));
+        probe.onmessage = ({ data }: MessageEvent<[number, number]>) => {
+            workerLoop = `wloop:${Math.round(data[0])}ms`;
+            probe.terminate();
+        };
+        probe.onerror = () => { workerLoop = "wloop:error"; };
+    } catch (error) {
+        workerLoop = `wloop:${String(error).slice(0, 40)}`;
+    }
+}
+
+/**
  * The render worker's cache misses: it asks the main thread for each missing group over a
  * BroadcastChannel and waits for "complete". Listening on the same channel times every round trip,
  * which shows whether map building waits on them. Reset at each report.
@@ -165,7 +184,7 @@ if (isXbox) {
     for (const kind of ["error", "warn", "info"] as const) {
         const original = console[kind].bind(console);
         console[kind] = (...parts: unknown[]) => {
-            if (kind !== "info" || String(parts[0]).startsWith("[webgpu]")) noteMessage(kind, parts);
+            if (kind !== "info" || /^\[(webgpu|map-profile)\]/.test(String(parts[0]))) noteMessage(kind, parts);
             original(...parts);
         };
     }
@@ -206,6 +225,7 @@ function describeView(osrsClient?: OsrsClient): string {
         return [
             `fps:${fps} worst:${worstFrameMs}ms`,
             engine,
+            workerLoop,
             describeJs5(),
             describeLongFrames(),
             // Map squares built / still building (the render worker's queue after a login or teleport).

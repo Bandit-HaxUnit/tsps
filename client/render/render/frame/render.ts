@@ -674,6 +674,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
             streamAroundPlayer ? -1 : ClientState.baseX | 0,
             streamAroundPlayer ? -1 : ClientState.baseY | 0,
             Math.max(host.osrsClient.expandedMapLoading | 0, sceneryPadding),
+            renderDistance,
         );
         host.syncStreamGenerationFromMapManager();
         profiler.endPhase();

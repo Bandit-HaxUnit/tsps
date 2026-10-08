@@ -106,6 +106,16 @@ proxy.on("proxyRes", (proxyRes, req) => {
 
 const server = https.createServer({ key: fs.readFileSync(keyFile), cert: fs.readFileSync(certFile) },
     (req, res) => {
+        // `?map-profile=1` render workers post their per-pass map build timings here.
+        if (req.url === "/__maplog" && req.method === "POST") {
+            let body = "";
+            req.on("data", (chunk) => { body += chunk; });
+            req.on("end", () => {
+                console.log(`[maplog] ${req.socket.remoteAddress} ${body.slice(0, 300)}`);
+                res.writeHead(204).end();
+            });
+            return;
+        }
         // The Xbox diagnostics line posts its memory breakdown here (client/game/XboxDiagnostics.tsx).
         if (req.url === "/__diag" && req.method === "POST") {
             let body = "";
