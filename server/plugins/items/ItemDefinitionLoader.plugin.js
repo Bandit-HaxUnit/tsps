@@ -157,7 +157,7 @@ function loadItemDefinitions() {
     for (const property of [
       "doubleHanded", "sellable", "bloodMoneyValue", "highAlch",
       "lowAlch", "dropValue", "blockAnim", "standAnim", "walkAnim", "runAnim",
-      "standTurnAnim", "turn180Anim", "turn90CWAnim", "turn90CCWAnim", "attackAnim", "bonuses",
+      "standTurnAnim", "turn180Anim", "turn90CWAnim", "turn90CCWAnim", "attackAnim", "equipSound", "bonuses",
       "requirements",
     ]) {
       if (rawDef[property] !== undefined) def[property] = rawDef[property];
