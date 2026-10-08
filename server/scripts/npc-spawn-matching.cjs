@@ -51,6 +51,19 @@ function parseInfoboxMaps(wikitext) {
   return maps;
 }
 
+/**
+ * An infobox's ids by version number: `|id1 = 13426` -> { 1: [13426] }, `|id = 1, 2` -> { 0: [1, 2] }.
+ * Map N belongs to version N, whose ids are id N; the data bucket lists versions in its own order.
+ */
+function versionIds(wikitext) {
+  const ids = {};
+  for (const [, number, list] of String(wikitext).matchAll(/^\|\s*id(\d*)\s*=\s*(.*?)\s*$/gim)) {
+    const values = list.split(/[,\s]+/).map(Number).filter((id) => Number.isInteger(id) && id >= 0);
+    if (values.length) ids[number === "" ? 0 : Number(number)] = values;
+  }
+  return ids;
+}
+
 /** Boxes from "minX,minY,maxX,maxY[,plane]". */
 function parseBox(text) {
   const values = String(text).split(",").map((value) => Number(value.trim()));
@@ -103,17 +116,24 @@ function planAdditions(wikiSpawns, existingSpawns, radius) {
   const report = [];
   for (const { name, level, wiki, existing } of byName.values()) {
     if (wiki.length === 0) continue;
-    const unmatchedExisting = new Set(existing);
-    const unmatchedWiki = [];
+    // Closest pairs first, so a Wiki spawn a tile off can't take the existing spawn another
+    // Wiki spawn stands exactly on (that one would then be added on top of it).
+    const pairs = [];
     for (const spawn of wiki) {
-      let best = null;
-      for (const candidate of unmatchedExisting) {
+      for (const candidate of existing) {
         const d = distance(spawn, candidate);
-        if (d <= radius && (best === null || d < distance(spawn, best))) best = candidate;
+        if (d <= radius) pairs.push({ spawn, candidate, d });
       }
-      if (best) unmatchedExisting.delete(best);
-      else unmatchedWiki.push(spawn);
     }
+    pairs.sort((a, b) => a.d - b.d);
+    const unmatchedExisting = new Set(existing);
+    const matchedWiki = new Set();
+    for (const { spawn, candidate } of pairs) {
+      if (matchedWiki.has(spawn) || !unmatchedExisting.has(candidate)) continue;
+      matchedWiki.add(spawn);
+      unmatchedExisting.delete(candidate);
+    }
+    const unmatchedWiki = wiki.filter((spawn) => !matchedWiki.has(spawn));
     const nearest = (spawn) => Math.min(Infinity, ...existing.map((other) => distance(spawn, other)));
     const leftoverBySquare = new Map();
     for (const spawn of unmatchedExisting) leftoverBySquare.set(squareOf(spawn), (leftoverBySquare.get(squareOf(spawn)) ?? 0) + 1);
@@ -225,4 +245,4 @@ function alignLayers(wikiSpawns, existingSpawns, minVotes = 2) {
   return { shiftOf, layers };
 }
 
-module.exports = { SURFACE_LAYERS, alignLayers, parsePoint, parseInfoboxMaps, parseBox, inBoxes, nameKey, distance, planAdditions, squareOf, parseLocLines, locationName };
+module.exports = { versionIds, SURFACE_LAYERS, alignLayers, parsePoint, parseInfoboxMaps, parseBox, inBoxes, nameKey, distance, planAdditions, squareOf, parseLocLines, locationName };

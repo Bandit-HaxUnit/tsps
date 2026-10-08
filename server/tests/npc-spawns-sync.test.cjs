@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { test } = require('node:test');
 
-const { parsePoint, parseInfoboxMaps, parseBox, inBoxes, planAdditions, parseLocLines, locationName } = require('../scripts/npc-spawn-matching.cjs');
+const { versionIds, parsePoint, parseInfoboxMaps, parseBox, inBoxes, planAdditions, parseLocLines, locationName } = require('../scripts/npc-spawn-matching.cjs');
 
 test("reads the Wiki's coordinate forms", () => {
   assert.deepEqual(parsePoint('x:2580,y:8589'), { x: 2580, y: 8589 });
@@ -125,4 +125,47 @@ test('open monster dungeons, without raid, minigame and quest props', () => {
   for (const name of ['Kephri', 'The Jormungand', 'Skotizo', 'Scurrius', 'Phantom Muspah', 'Abyssal Sire']) {
     assert.ok(!wiki.some((spawn) => spawn.name === name), `${name} is left to its content`);
   }
+});
+
+test("an infobox's map N belongs to its id N, whatever order the data bucket lists the versions in", () => {
+  const infobox = "|id1 = 13426\n|id2 = 12931\n|id3 = 12932, 13400\n|map1 = {{Map|x=1548|y=3048|r=4}}\n|map2 = {{Map|x=1623|y=2982}}";
+  assert.deepEqual(versionIds(infobox), { 1: [13426], 2: [12931], 3: [12932, 13400] });
+  assert.deepEqual(parseInfoboxMaps(infobox).map((map) => [map.version, map.points[0].x]), [[1, 1548], [2, 1623]]);
+  assert.deepEqual(versionIds("|id = 1, 2"), { 0: [1, 2] });
+});
+
+test("multi-version NPCs: each place has its own version, and quest stages are left out", () => {
+  const spawns = require("../data/definitions/npc-spawns.json");
+  const ids = (x, y, level = 0) => spawns.filter((spawn) => spawn.x === x && spawn.y === y && (spawn.level ?? 0) === level).map((spawn) => spawn.id).sort();
+  // The Hunter Guild has Guild Hunter Fox after At First Light, not the quest's injured hunter;
+  // in live OSRS he walks within about 2 tiles.
+  const fox = spawns.find((spawn) => spawn.x === 1548 && spawn.y === 3048);
+  assert.deepEqual([fox.id, fox.name, fox.wanderRadius], [13426, "Guild Hunter Fox", 2]);
+  assert.deepEqual(ids(1623, 2982), [], "the injured hunter in the Avium Savannah is a quest stage");
+  assert.deepEqual(ids(1647, 3093), [14241], "Forebearer Janus at home, as a civilian");
+  assert.deepEqual(ids(1435, 3124), [], "Attala moved to Cam Torum after Perilous Moons");
+  assert.deepEqual(ids(1297, 9753), [], "Shas and Etz are injured only during the quest");
+  // One Achilka per stop, each with that stop's id.
+  assert.deepEqual([ids(1389, 3075), ids(1259, 3124), ids(1399, 3245)], [[14727], [14728], [14729]]);
+  assert.deepEqual([ids(2415, 4451), ids(2410, 4456)], [[5843], [5844]], "Zanaris's grey and light-grey sheep");
+  assert.deepEqual([ids(1703, 3142), ids(3277, 3411)], [[12889], [12888]], "Primio at both ends of his route");
+});
+
+test("pairs closest first: a Wiki spawn on an existing one isn't added on top of it", () => {
+  // The Wiki's first spawn is a tile off the existing one, its second exactly on it: pairing in
+  // Wiki order let the first take it and added the second on top.
+  const wiki = [{ name: 'Spider', level: 0, x: 11, y: 10 }, { name: 'Spider', level: 0, x: 10, y: 10 }, { name: 'Spider', level: 0, x: 40, y: 40 }];
+  const { add } = planAdditions(wiki, [{ name: 'Spider', level: 0, x: 10, y: 10 }], 4);
+  assert.deepEqual(add.map((spawn) => [spawn.x, spawn.y]).sort(), [[11, 10], [40, 40]]);
+});
+
+test('no Wiki spawn stands on another spawn of its name, except the bards camping together', () => {
+  const spawns = require('../data/definitions/npc-spawns.json');
+  const tiles = new Map();
+  for (const spawn of spawns) {
+    const key = `${spawn.name}@${spawn.x},${spawn.y},${spawn.level ?? 0}`;
+    tiles.set(key, [...(tiles.get(key) ?? []), spawn]);
+  }
+  const doubled = [...tiles].filter(([, here]) => here.length > 1 && here.some((spawn) => spawn.source === 'wiki') && here[0].name !== 'Bard');
+  assert.deepEqual(doubled.map(([key]) => key), []);
 });

@@ -14,8 +14,8 @@
 //   --report <file>                    write each map square's gaps as JSON instead (nothing is written)
 //   --only <label>                     add only spawns with this label (e.g. "Sailing sea creature")
 //
-// data/definitions/npc-spawn-sync.json holds lasting decisions: cache NPC categories, NPC names
-// (exact or by pattern), Wiki page patterns and areas to label (sea creatures, doors tsps handles as objects, Leagues and
+// data/definitions/npc-spawn-sync.json holds lasting decisions: cache NPC categories, NPC ids, NPC
+// names (exact or by pattern), Wiki page patterns and areas to label (sea creatures, doors tsps handles as objects, Leagues and
 // holiday NPCs, instance templates) and, when `skip` is set, to leave out.
 //
 // Where the Wiki keeps spawns:
@@ -26,8 +26,9 @@
 // the id existing spawns of that page already use most, else the first; the report lists it.
 //
 // Add-only: per NPC name, a Wiki spawn with an existing one of that name within --radius is
-// already there, and leftover existing spawns in the same map square still count, so only the
-// difference in number is added there. Nothing is moved or removed, and a second run adds nothing.
+// already there (closest pairs first), and leftover existing spawns in the same map square still
+// count, so only the difference in number is added there. A tile the Wiki lists twice for one NPC
+// name (another map layer, another page, another LocLine) counts once. Nothing is moved or removed, and a second run adds nothing.
 // Added spawns carry "source": "wiki".
 //
 // Wander radius: what existing spawns of that NPC (by id, else by name) mostly use - 0 for fishing
@@ -43,7 +44,7 @@ import path = require("path");
 import { CachePipeline } from "../src/main/typescript/elvarg/game/cache/CachePipeline";
 import { CacheDefinitions } from "../src/main/typescript/elvarg/game/cache/CacheDefinitions";
 
-const { alignLayers, parsePoint, parseInfoboxMaps, parseBox, inBoxes, nameKey, planAdditions, squareOf, parseLocLines, locationName } = require("./npc-spawn-matching.cjs");
+const { versionIds, alignLayers, parsePoint, parseInfoboxMaps, parseBox, inBoxes, nameKey, planAdditions, squareOf, parseLocLines, locationName } = require("./npc-spawn-matching.cjs");
 
 const WIKI_API = "https://oldschool.runescape.wiki/api.php";
 const USER_AGENT = "tsps-npc-spawns (https://github.com/RSPSApp/tsps)";
@@ -95,7 +96,7 @@ async function pageLines(pages: string[]): Promise<{ maps: Record<string, string
         for (const page of Object.values<any>(result.query?.pages ?? {})) {
             const text: string = page.revisions?.[0]?.slots?.main?.["*"] ?? "";
             const title = renamed.get(page.title) ?? page.title;
-            const lines = text.split("\n").filter((line) => /^\|\s*map\d*\s*=/i.test(line));
+            const lines = text.split("\n").filter((line) => /^\|\s*(map\d*|id\d*)\s*=/i.test(line));
             if (lines.length) maps[title] = lines.join("\n");
             const templates = text.match(/\{\{\s*LocLine\s*\|[\s\S]*?\}\}/gi);
             if (templates) locLines[title] = templates.join("\n");
@@ -150,8 +151,14 @@ function wikiSpawns(wiki: Wiki): WikiSpawn[] {
     }
     for (const [page, lines] of Object.entries(wiki.npcMaps)) {
         const versions = npcVersions.get(page) ?? [];
+        const idsByVersion = versionIds(lines);
         for (const map of parseInfoboxMaps(lines)) {
-            const ofMap = map.version !== null && versions[map.version - 1] ? [versions[map.version - 1]] : versions;
+            // Map N is version N's, with the infobox's id N (the data bucket lists versions in its own
+            // order, so its rows can't be paired with maps by position).
+            const own = map.version !== null ? idsByVersion[map.version] : undefined;
+            const ofMap: Version[] = own
+                ? [{ label: `${page}#${map.version}`, ids: own.filter((id) => id < CacheDefinitions.getCounts().npcs), numbered: true }]
+                : versions;
             for (const point of map.points) spawns.push({ page, versions: ofMap, ...point, level: map.plane, mapId: map.mapId });
         }
     }
@@ -237,6 +244,7 @@ function decide(decisions: any, id: number, name: string, page: string, at: { x:
     const found: Decision[] = [];
     for (const area of decisions.boxes ?? []) if (inBoxes(at, [parseBox(area.box)])) found.push(area);
     const category = (CacheDefinitions.getNpc(id) as any)?.category;
+    if (decisions.ids?.[id]) found.push(decisions.ids[id]);
     if (decisions.categories?.[category]) found.push(decisions.categories[category]);
     if (decisions.names?.[name]) found.push(decisions.names[name]);
     for (const rule of decisions.namePatterns ?? []) if (new RegExp(rule.pattern, "i").test(name)) found.push(rule);
@@ -279,6 +287,11 @@ async function main() {
     });
     const unresolved: WikiSpawn[] = [];
     const candidates: Candidate[] = [];
+    // The Wiki can list one spawn twice: on another map layer drawing the place again (Kalrag's
+    // Lair "during Song of the Elves", which aligns onto the same tiles), on two pages of one NPC
+    // (Sheep and Sheep (Zanaris)), or in two LocLines of one page (the Stronghold's minotaurs, once
+    // per level). So a tile counts once per NPC name.
+    const listed = new Set<string>();
     for (const spawn of placed) {
         if (!inBoxes(spawn, boxes) || skipped.has(nameKey(spawn.page))) continue;
         const id = chooseId(spawn.page, spawn.versions, tags, overrides, usage);
@@ -289,6 +302,9 @@ async function main() {
         }
         const name = npcName(id) ?? spawn.page;
         if (skipped.has(nameKey(name))) continue;
+        const tile = `${nameKey(name)}@${spawn.x},${spawn.y},${spawn.level}`;
+        if (listed.has(tile)) continue;
+        listed.add(tile);
         const entry: Candidate = { level: spawn.level, name, x: spawn.x, y: spawn.y, id, source: "wiki", page: spawn.page, ...decide(decisions, id, name, spawn.page, spawn) };
         if (spawn.unaligned) {
             entry.flags.push(`${unaligned.label} (${spawn.mapId})`);

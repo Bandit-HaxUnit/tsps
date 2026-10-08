@@ -29,9 +29,11 @@ yarn sync:npc-spawns --box 2520,2170,2660,2310 --box 2560,8560,2640,8660 --tag W
 - **Single NPCs:** the infobox's `{{Map}}` in the page's wikitext, with ids from bucket `infobox_npc`. A polygon, rectangle or line outlines an area: it becomes one spawn at its centre.
 - **Not counted:** pages without an NPC infobox (LocLine also places scenery and items), and historical or event pages without real ids.
 
+**NPCs with several versions:** an infobox's `map1`, `map2`… belong to its `id1`, `id2`… (Guild Hunter Fox: `map1` the Hunter Guild with `id1` 13426, `map3` the Avium Savannah with `id3`, injured). The script pairs them by that number. It used to take the versions in the data bucket's order, which differs, so 60 spawns on 32 pages got the wrong id or a quest stage; they're fixed below.
+
 **Choosing the id:** a LocLine row has no version, so the script picks: a version whose label has a `--tag`, else the id existing spawns of that NPC already use most, else the first. The dry run prints each choice.
 
-**Add-only.** Per NPC name and plane, a Wiki spawn with an existing one of that name within `--radius` is already there, and leftover existing spawns **in the same 64×64 map square** still count, so only the difference in number is added there (the Wiki spawns furthest from any existing one). A spawn elsewhere on the map doesn't stand in for one missing here, so a whole-map run counts correctly. Nothing is moved or removed, so a second run adds nothing. In an area that already has its spawns, only real gaps show up: Lumbridge has 85 Wiki spawns and 84 existing, and the script would add 7. Added spawns carry `"source": "wiki"`, so they can be found and replaced by captured positions later.
+**Add-only.** Per NPC name and plane, a Wiki spawn with an existing one of that name within `--radius` is already there (closest pairs first), and leftover existing spawns **in the same 64×64 map square** still count, so only the difference in number is added there (the Wiki spawns furthest from any existing one). A spawn elsewhere on the map doesn't stand in for one missing here, so a whole-map run counts correctly. Nothing is moved or removed, so a second run adds nothing. In an area that already has its spawns, only real gaps show up: Lumbridge has 85 Wiki spawns and 84 existing, and the script would add 7. Added spawns carry `"source": "wiki"`, so they can be found and replaced by captured positions later.
 
 **Wander radius:**
 1. What existing spawns of that NPC mostly use (by id, else by name): 0 for fishing spots and bankers, as the old data set by hand.
@@ -111,4 +113,22 @@ yarn sync:npc-spawns --box 1216,9344,1727,9855 --tag Neypotzli --write
   - the *Defender of Varrock* zombies invading Varrock Palace (quest only).
 - **Removed by the new rule:** `<col=00ffff>Forebearer Janus</col>`, which the Varlamore batch had added in Civitas before the rule existed.
 - **Left out of the allowlist, for a later look:** raid and boss areas their plugins spawn (Tombs of Amascut, Theatre of Blood, the Nightmare, the Inferno, the Abyssal Nexus); bosses without a plugin yet (Skotizo, Yama, Scurrius, Phantom Muspah, the Headless Beast, the Jormungand); minigames (Barbarian Assault, Nightmare Zone, the Motherlode Mine); and single quest NPCs.
+
+## Multi-version NPCs
+
+The fix to the version pairing above, on the 60 spawns it affected (32 Wiki pages). Every page was checked: which version belongs in the world after its quests, where, with which id.
+- **The id corrected** (the place was right, the version wasn't): Azzanadra (730, ghostly), Maisa in Sophanem (11474), a gnome traveller, Zanaris's grey and light-grey sheep (swapped), Queen Zyanyi Arkan on her throne (14296), four of the Knights of Varlamore, Furia Tullus (the royal servant), Primio in Civitas (12889), the Darkfrost workers and seers (swapped), Ikniu, the chameleons, two Aranei scouts (swapped), Forebearer Janus at his home (the civilian, 14241).
+- **The Hunter Guild:** the *Injured hunter* (12931) is the quest's version; Guild Hunter Fox (13426) stands there after *At First Light*. In live OSRS he walks within about 2 tiles (13 recordings), so `wanderRadius` 2.
+- **Quest stages removed:** Attala and the builder at the Ralos' Rise camp (in Cam Torum after *Perilous Moons*, where they already are); Antos, Shas and Etz injured; the injured Guild Hunter Fox in the Avium Savannah; Forebearer Janus as a cultist, captured and bound; Furia Tullus as a cultist; Junior Jim's "limbo".
+- **Achilka:** one per boat stop, each with that stop's id (14727 Kastori, 14728 Tal Teklan, 14729 the Gloomthorn Trail); there had been two or three per stop with the wrong ids.
+- **Added:** Primio's Varrock end (12888), lost when the Civitas one took its id.
+- **Decisions:** the quest-stage ids are in `npc-spawn-sync.json` under `ids` (`Quest stage`, skipped), so a rerun doesn't add them back.
+
+## Doubled spawns
+
+132 Wiki spawns stood on the tile of another spawn of the same name, two NPCs where the game has one. Two faults in the sync, both fixed:
+- **Pairing in Wiki order:** a Wiki spawn a tile off an existing one could take it, leaving the Wiki spawn exactly on it unmatched, and added. Pairs now go closest first. This hit the open monster dungeons batch: spiders, blessed spiders and waterfiends in the Underground Pass, skeletons, minotaurs in the Stronghold of Security, bloodvelds in the God Wars Dungeon, enraged barbarian spirits, and Zanaris's sheep.
+- **The Wiki listing one spawn twice:** another map layer drawing the place again (Kalrag's Lair "during *Song of the Elves*"), two pages of one NPC (*Sheep* and *Sheep (Zanaris)*), two LocLines on one page (the Stronghold's minotaurs, once per level), or a map giving its centre and a pin on the same tile (the shipwrights, a jackal, the red salamanders). A tile now counts once per NPC name.
+
+The fix was applied to the data: those NPCs' Wiki spawns in the 7 affected map squares (126) were removed and synced again with the fixed script, which added back only 5 bloodvelds, where the God Wars Dungeon really lacks them; the 9 same-tile copies elsewhere were removed. The three bards at each camp stay: three different NPCs on one Wiki pin.
 
