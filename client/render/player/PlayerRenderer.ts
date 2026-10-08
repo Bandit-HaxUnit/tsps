@@ -22,7 +22,8 @@ import type { WebGLOsrsRenderer } from "../WebGLOsrsRenderer";
  * assembled by WebGLOsrsClientRenderer (dynamic or pre-baked).
  */
 const PLAYER_INTERACT_BASE = 0x8000;
-const UNANIMATED_PLAYER_COUNT = 200;
+// Low-end devices freeze idle bystanders in the default pose much sooner (crowds like Edgeville).
+const UNANIMATED_PLAYER_COUNT = isLowEndDevice ? 25 : 200;
 // Low-end devices draw only the nearest players per map square (self and combat target always kept).
 const LOW_END_MAX_PLAYERS_PER_MAP = 32;
 
