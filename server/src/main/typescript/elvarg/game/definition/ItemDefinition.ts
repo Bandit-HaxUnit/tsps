@@ -71,6 +71,8 @@ export class ItemDefinition {
     private attackAnim: number | Partial<Record<AttackTypeName, number>> = -1;
     /** The sound for wearing or removing it, recorded from live OSRS (-1: by its kind, EquipmentSounds). */
     private equipSound: number = -1;
+    /** Tradeable items it splits into when lost to a player in the Wilderness (an upgraded staff: staff and orb). */
+    private deathComponents: number[] = [];
     /** Ticks between attacks from the cache (ATTACK_SPEED_PARAM), or -1 when the cache has none. */
     private attackSpeed: number = -1;
     private weight: number;
@@ -237,6 +239,10 @@ export class ItemDefinition {
 
     public getEquipSound(): number {
         return this.equipSound;
+    }
+
+    public getDeathComponents(): number[] {
+        return this.deathComponents;
     }
 
     public getAttackSpeed(): number {

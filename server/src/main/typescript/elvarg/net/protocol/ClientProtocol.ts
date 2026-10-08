@@ -1085,13 +1085,18 @@ export function encodeGroundItemsDelta(serial: number, upserts: GroundItemView[]
   ]));
 }
 
-export function encodeLocAddChange(id: number, x: number, y: number, level: number, shape: number, rotation: number): Buffer {
-  const payload = Buffer.alloc(8);
+/**
+ * A loc added or changed. `opFlags` (live's loc_add_change_v2) shows only the ops whose bit is set
+ * (bit 0 is op1); without it the client shows every op.
+ */
+export function encodeLocAddChange(id: number, x: number, y: number, level: number, shape: number, rotation: number, opFlags?: number): Buffer {
+  const payload = Buffer.alloc(opFlags === undefined ? 8 : 9);
   payload.writeUInt16BE(id & 0xffff);
   payload.writeUInt16BE(x & 0xffff, 2);
   payload.writeUInt16BE(y & 0xffff, 4);
   payload[6] = level;
   payload[7] = (shape << 2) | (rotation & 3);
+  if (opFlags !== undefined) payload[8] = opFlags & 0xff;
   return encodeServerPacket(ServerPacketId.LOC_ADD_CHANGE, payload);
 }
 

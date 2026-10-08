@@ -826,7 +826,11 @@ export class WebGPUActors {
     private packMapWorldGfx(state: MapActorState, map: WebGPUMapSquare): void {
         const runtime = this.gfx;
         if (!runtime) return;
-        const instances = runtime.manager.listWorldInstancesForMap(map.mapX, map.mapY);
+        // A boat deck's overlay map draws the graphics on its own tiles (draw.ts addWorldGfxRenderData).
+        const overlayView = this.renderer.osrsClient?.worldViewManager?.getWorldViewByOverlayMapId?.(map.id);
+        const instances = overlayView
+            ? runtime.manager.listWorldInstancesInView(overlayView)
+            : runtime.manager.listWorldInstancesForMap(map.mapX, map.mapY);
         for (const inst of instances) {
             const world = inst.world;
             if (!world) continue;

@@ -395,7 +395,9 @@ export class MapManager<T extends MapSquare> {
 
         const staleMapIds: number[] = [];
         for (const mapId of this.mapSquares.keys()) {
-            if (!gridSet.has(mapId)) {
+            // A world entity's map (a boat deck) is never in the grid: it lives as long as the
+            // entity, or every move of the grid while sailing would drop the deck and rebuild it.
+            if (!gridSet.has(mapId) && !this.worldEntityMapIds.has(mapId)) {
                 staleMapIds.push(mapId);
             }
         }
