@@ -13,7 +13,8 @@
  * Charged with two soul runes and five chaos runes a charge, up to 20,000; uncharging returns
  * every rune.
  *
- * The cast: TOA_SOT_CAST_B (9493) with TUMEKENS_SHADOW_CASTING / _TRAVEL / _IMPACT (2125-2127).
+ * The cast (rsprox captures): TOA_SOT_CAST_B (9493) with TUMEKENS_SHADOW_CASTING / _TRAVEL /
+ * _IMPACT (2125-2127) and sound 6410.
  *
  * Whether the player is in the tombs is the raid's to answer: it emits
  * `toa:in-tombs` { player, inside: false } and the Tombs of Amascut plugin sets `inside`.
@@ -30,9 +31,10 @@ const ATTACK_SPEED = 5;
 const ATTACK_RANGE = 8;
 const LONGRANGE_EXTRA = 2;
 const MAX_MAGIC_DAMAGE = 100;
-// The projectile leaves after 56 client cycles and takes 16 more plus 10 a tile. Heights are
-// sent times four (248 and 124).
-const PROJECTILE = { DELAY: 56, LENGTH: 16, PER_TILE: 10, START_HEIGHT: 62, END_HEIGHT: 31 };
+const SOUND_CAST = 6410;
+// The projectile (rsprox captures): it leaves after 56 client cycles and takes 16 more plus 10 a
+// tile, with angle 32 and progress 40. Heights are sent times four (248 and 124; captured 250, 124).
+const PROJECTILE = { DELAY: 56, LENGTH: 16, PER_TILE: 10, START_HEIGHT: 62, END_HEIGHT: 31, ANGLE: 32, PROGRESS: 40 };
 
 const MAGIC_ATTACK = 3; // BonusManager.ATTACK_MAGIC
 const MAGIC_DAMAGE = 12; // BonusManager.MAGIC_STRENGTH among the "other" bonuses
@@ -90,7 +92,9 @@ function spellFor(player) {
     castAnimation: () => new Animation(ANIMATION_CAST),
     startGraphic: () => new Graphic(GRAPHIC.CASTING),
     castProjectile: (cast, castOn) => Projectile.createProjectile(cast, castOn, GRAPHIC.TRAVEL, PROJECTILE.DELAY,
-      travelCycles(cast, castOn), PROJECTILE.START_HEIGHT, PROJECTILE.END_HEIGHT),
+      travelCycles(cast, castOn), PROJECTILE.START_HEIGHT, PROJECTILE.END_HEIGHT)
+      .withAngle(PROJECTILE.ANGLE).withProgress(PROJECTILE.PROGRESS),
+    castSound: () => SOUND_CAST,
     endGraphic: () => new Graphic(GRAPHIC.IMPACT, GraphicHeight.HIGH),
     baseExperience: () => 0,
     levelRequired: () => 1,
