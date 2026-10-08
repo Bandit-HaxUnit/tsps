@@ -3,6 +3,7 @@
 //   yarn sync:npc-spawns --box 2530,2190,2640,2290 --tag Wyrmscraig          # print what it would add
 //   yarn sync:npc-spawns --box ... --tag ... --write                         # add them
 //   yarn sync:npc-spawns --box ... --wiki wiki.json [--save]                 # use (or write) a saved Wiki copy
+//   yarn sync:npc-spawns --report gaps.json [--box ...]                      # every area's gaps (whole map by default)
 //
 // Options:
 //   --box minX,minY,maxX,maxY[,plane]  the area (repeatable; inclusive; every plane unless given)
@@ -10,6 +11,11 @@
 //   --id <Name>=<npc id>               use this id for a Wiki page's spawns (repeatable)
 //   --skip <Name>                      leave a Wiki page's spawns out (Leagues or event NPCs; repeatable)
 //   --radius <tiles>                   how far an existing spawn may be from the Wiki's (default 4)
+//   --report <file>                    write each map square's gaps as JSON instead (nothing is written)
+//
+// data/definitions/npc-spawn-sync.json holds lasting decisions: cache NPC categories, NPC names,
+// Wiki page patterns and areas to label (sea creatures, doors tsps handles as objects, Leagues and
+// holiday NPCs, instance templates) and, when `skip` is set, to leave out.
 //
 // Where the Wiki keeps spawns:
 // - monsters: {{LocLine}} rows (bucket "locline"), one coordinate per spawn, ids per page version
@@ -19,9 +25,9 @@
 // the id existing spawns of that page already use most, else the first; the report lists it.
 //
 // Add-only: per NPC name, a Wiki spawn with an existing one of that name within --radius is
-// already there, and leftover existing spawns still count, so only the difference in number is
-// added. Nothing is moved or removed, and a second run adds nothing. Added spawns carry
-// "source": "wiki".
+// already there, and leftover existing spawns in the same map square still count, so only the
+// difference in number is added there. Nothing is moved or removed, and a second run adds nothing.
+// Added spawns carry "source": "wiki".
 //
 // Wander radius: what existing spawns of that NPC (by id, else by name) mostly use - 0 for fishing
 // spots and bankers; else 0 for an NPC without a walk animation in the cache; else the loader's
@@ -36,7 +42,7 @@ import path = require("path");
 import { CachePipeline } from "../src/main/typescript/elvarg/game/cache/CachePipeline";
 import { CacheDefinitions } from "../src/main/typescript/elvarg/game/cache/CacheDefinitions";
 
-const { parsePoint, parseInfoboxMaps, parseBox, inBoxes, nameKey, planAdditions } = require("./npc-spawn-matching.cjs");
+const { alignLayers, parsePoint, parseInfoboxMaps, parseBox, inBoxes, nameKey, planAdditions, squareOf, parseLocLines, locationName } = require("./npc-spawn-matching.cjs");
 
 const WIKI_API = "https://oldschool.runescape.wiki/api.php";
 const USER_AGENT = "tsps-npc-spawns (https://github.com/RSPSApp/tsps)";
@@ -48,8 +54,12 @@ const SPAWNS_FILE = path.join(DEFINITIONS, "npc-spawns.json");
 type Spawn = { level: number; name?: string; x: number; y: number; id?: number; key?: string; wanderRadius?: number; source?: string };
 /** `ids`: those in the cache; `numbered`: whether the Wiki gave any real id (not "hist11249"). */
 type Version = { label: string; ids: number[]; numbered: boolean };
-type WikiSpawn = { page: string; versions: Version[]; x: number; y: number; level: number };
-type Wiki = { loclines: any[]; monsters: any[]; npcs: any[]; npcMaps: Record<string, string> };
+/** `mapId`: the Wiki map layer the coordinates are on (see alignLayers). */
+type WikiSpawn = { page: string; versions: Version[]; x: number; y: number; level: number; mapId: number | null; name?: string };
+/** `npcMaps`: each NPC page's infobox map lines; `locLineText`: each page's {{LocLine}} templates. */
+type Wiki = { loclines: any[]; monsters: any[]; npcs: any[]; npcMaps: Record<string, string>; locLineText: Record<string, string> };
+type Decision = { label: string; skip: boolean; why?: string };
+type Candidate = Spawn & { page: string; flags: string[]; skip: boolean };
 
 function argValues(flag: string): string[] {
     const values: string[] = [];
@@ -72,9 +82,10 @@ async function allRows(select: string): Promise<any[]> {
     }
 }
 
-/** The infobox {{Map}} lines of each NPC page (only those, to keep a saved copy small). */
-async function npcMaps(pages: string[]): Promise<Record<string, string>> {
+/** Each page's infobox {{Map}} lines and {{LocLine}} templates (only those, to keep a saved copy small). */
+async function pageLines(pages: string[]): Promise<{ maps: Record<string, string>; locLines: Record<string, string> }> {
     const maps: Record<string, string> = {};
+    const locLines: Record<string, string> = {};
     for (let start = 0; start < pages.length; start += TITLES_PER_REQUEST) {
         const titles = pages.slice(start, start + TITLES_PER_REQUEST).join("|");
         const result = await wikiJson({ action: "query", prop: "revisions", rvprop: "content", rvslots: "main", titles, redirects: "1" });
@@ -82,24 +93,31 @@ async function npcMaps(pages: string[]): Promise<Record<string, string>> {
         for (const link of [...(result.query?.normalized ?? []), ...(result.query?.redirects ?? [])]) renamed.set(link.to, link.from);
         for (const page of Object.values<any>(result.query?.pages ?? {})) {
             const text: string = page.revisions?.[0]?.slots?.main?.["*"] ?? "";
+            const title = renamed.get(page.title) ?? page.title;
             const lines = text.split("\n").filter((line) => /^\|\s*map\d*\s*=/i.test(line));
-            if (lines.length) maps[renamed.get(page.title) ?? page.title] = lines.join("\n");
+            if (lines.length) maps[title] = lines.join("\n");
+            const templates = text.match(/\{\{\s*LocLine\s*\|[\s\S]*?\}\}/gi);
+            if (templates) locLines[title] = templates.join("\n");
         }
         process.stderr.write(`\r  NPC pages ${Math.min(start + TITLES_PER_REQUEST, pages.length)}/${pages.length}`);
     }
     process.stderr.write("\n");
-    return maps;
+    return { maps, locLines };
 }
 
 async function loadWiki(): Promise<Wiki> {
     const file = argValues("--wiki")[0];
     if (file && fs.existsSync(file) && !process.argv.includes("--save")) return JSON.parse(fs.readFileSync(file, "utf8"));
-    const loclines = await allRows("bucket('locline').select('page_name','plane','coordinates')");
+    const loclines = await allRows("bucket('locline').select('page_name','plane','mapid','coordinates')");
     const monsters = await allRows("bucket('infobox_monster').select('page_name','page_name_sub','id')");
-    const npcs = await allRows("bucket('infobox_npc').select('page_name','page_name_sub','npc_id')");
-    const withLocLines = new Set(loclines.map((row) => row.page_name));
-    const npcPages = [...new Set<string>(npcs.map((row) => row.page_name))].filter((page) => !withLocLines.has(page));
-    const wiki = { loclines, monsters, npcs, npcMaps: await npcMaps(npcPages) };
+    const npcs = await allRows("bucket('infobox_npc').select('page_name','page_name_sub','npc_id','location')");
+    const npcPages = new Set<string>([...monsters, ...npcs].map((row) => row.page_name));
+    const withLocLines = new Set(loclines.map((row) => row.page_name).filter((page) => npcPages.has(page)));
+    // NPC pages for their infobox maps; pages with LocLines for the places they name.
+    const infoboxNpcPages = new Set<string>(npcs.map((row) => row.page_name));
+    const pages = [...npcPages].filter((page) => withLocLines.has(page) || infoboxNpcPages.has(page));
+    const lines = await pageLines(pages);
+    const wiki = { loclines, monsters, npcs, npcMaps: Object.fromEntries(Object.entries(lines.maps).filter(([page]) => !withLocLines.has(page))), locLineText: lines.locLines };
     if (file) fs.writeFileSync(file, JSON.stringify(wiki));
     return wiki;
 }
@@ -126,14 +144,14 @@ function wikiSpawns(wiki: Wiki): WikiSpawn[] {
         if (!versions) continue;
         for (const coordinate of row.coordinates ?? []) {
             const point = parsePoint(coordinate);
-            if (point) spawns.push({ page: row.page_name, versions, ...point, level: Number(row.plane) || 0 });
+            if (point) spawns.push({ page: row.page_name, versions, ...point, level: Number(row.plane) || 0, mapId: row.mapid ?? null });
         }
     }
     for (const [page, lines] of Object.entries(wiki.npcMaps)) {
         const versions = npcVersions.get(page) ?? [];
         for (const map of parseInfoboxMaps(lines)) {
             const ofMap = map.version !== null && versions[map.version - 1] ? [versions[map.version - 1]] : versions;
-            for (const point of map.points) spawns.push({ page, versions: ofMap, ...point, level: map.plane });
+            for (const point of map.points) spawns.push({ page, versions: ofMap, ...point, level: map.plane, mapId: map.mapId });
         }
     }
     return spawns;
@@ -180,8 +198,54 @@ function format(spawns: Spawn[]): string {
     return `[\n${spawns.map((spawn) => `  ${JSON.stringify(spawn)}`).join(",\n")}\n]\n`;
 }
 
+/** "sx,sy,plane" of each map square -> the place names the Wiki gives spawns in it. */
+function placeNames(wiki: Wiki): Map<string, Map<string, number>> {
+    const places = new Map<string, Map<string, number>>();
+    const note = (x: number, y: number, plane: number, name: string) => {
+        if (!name) return;
+        const key = `${x >> 6},${y >> 6},${plane}`;
+        if (!places.has(key)) places.set(key, new Map());
+        places.get(key)!.set(name, (places.get(key)!.get(name) ?? 0) + 1);
+    };
+    for (const text of Object.values(wiki.locLineText ?? {})) {
+        for (const line of parseLocLines(text)) for (const point of line.points) note(point.x, point.y, line.plane, line.location);
+    }
+    const npcLocation = new Map<string, string>();
+    for (const row of wiki.npcs) if (row.location && !npcLocation.has(row.page_name)) npcLocation.set(row.page_name, locationName(row.location));
+    for (const [page, lines] of Object.entries(wiki.npcMaps)) {
+        for (const map of parseInfoboxMaps(lines)) for (const point of map.points) note(point.x, point.y, map.plane, npcLocation.get(page) ?? "");
+    }
+    return places;
+}
+
+/** A square's name: its most named place, else a neighbour's (up to two squares away). */
+function areaName(places: Map<string, Map<string, number>>, sx: number, sy: number, plane: number): string {
+    for (let reach = 0; reach <= 2; reach++) {
+        const counts = new Map<string, number>();
+        for (let dx = -reach; dx <= reach; dx++) for (let dy = -reach; dy <= reach; dy++) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== reach) continue;
+            for (const [name, count] of places.get(`${sx + dx},${sy + dy},${plane}`) ?? []) counts.set(name, (counts.get(name) ?? 0) + count);
+        }
+        if (counts.size) return [...counts].sort((a, b) => b[1] - a[1])[0][0];
+    }
+    return "";
+}
+
+/** The labels npc-spawn-sync.json gives a spawn, and whether any of them leaves it out. */
+function decide(decisions: any, id: number, name: string, page: string, at: { x: number; y: number; level: number }): { flags: string[]; skip: boolean } {
+    const found: Decision[] = [];
+    for (const area of decisions.boxes ?? []) if (inBoxes(at, [parseBox(area.box)])) found.push(area);
+    const category = (CacheDefinitions.getNpc(id) as any)?.category;
+    if (decisions.categories?.[category]) found.push(decisions.categories[category]);
+    if (decisions.names?.[name]) found.push(decisions.names[name]);
+    for (const rule of decisions.pagePatterns ?? []) if (new RegExp(rule.pattern, "i").test(page)) found.push(rule);
+    return { flags: found.map((decision) => decision.label), skip: found.some((decision) => decision.skip) };
+}
+
 async function main() {
+    const reportFile = argValues("--report")[0];
     const boxes = argValues("--box").map(parseBox);
+    if (boxes.length === 0 && reportFile) boxes.push(parseBox("0,0,16383,16383"));
     if (boxes.length === 0) throw new Error("Give the area with --box minX,minY,maxX,maxY[,plane]");
     const tags = argValues("--tag").map((tag) => tag.toLowerCase());
     const radius = Number(argValues("--radius")[0] ?? 4);
@@ -190,7 +254,8 @@ async function main() {
         return [nameKey(pair.slice(0, at)), Number(pair.slice(at + 1))] as [string, number];
     }));
     const skipped = new Set(argValues("--skip").map(nameKey));
-    const write = process.argv.includes("--write");
+    const write = process.argv.includes("--write") && !reportFile;
+    const decisions = readJson("npc-spawn-sync.json");
 
     await CachePipeline.initialize(path.resolve(__dirname, ".."));
     const source = fs.readFileSync(SPAWNS_FILE, "utf8");
@@ -200,46 +265,115 @@ async function main() {
     for (const spawn of spawns) if (spawn.id !== undefined) usage.set(spawn.id, (usage.get(spawn.id) ?? 0) + 1);
 
     const wiki = await loadWiki();
-    const unresolved = new Set<string>();
-    const candidates: Spawn[] = [];
-    for (const spawn of wikiSpawns(wiki)) {
+    const named = spawns.map((spawn) => ({ ...spawn, name: spawn.name ?? (spawn.id !== undefined ? npcName(spawn.id) : undefined) }));
+    // Bring each Wiki map layer into game coordinates (see alignLayers).
+    const all = wikiSpawns(wiki).map((spawn) => ({ ...spawn, name: spawn.page }));
+    const alignment = alignLayers(all, named);
+    const unaligned = decisions.unalignedLayers as Decision;
+    const placed: (WikiSpawn & { unaligned?: boolean })[] = all.map((spawn) => {
+        const shift = alignment.shiftOf(spawn);
+        if (!shift) return { ...spawn, unaligned: true };
+        return { ...spawn, x: spawn.x + shift.dx, y: spawn.y + shift.dy, level: spawn.level + shift.dz };
+    });
+    const unresolved: WikiSpawn[] = [];
+    const candidates: Candidate[] = [];
+    for (const spawn of placed) {
         if (!inBoxes(spawn, boxes) || skipped.has(nameKey(spawn.page))) continue;
         const id = chooseId(spawn.page, spawn.versions, tags, overrides, usage);
         if (id === null) {
             // Historical and event pages have no real ids; only newer-than-cache NPCs are worth a line.
-            if (spawn.versions.some((version) => version.numbered)) unresolved.add(spawn.page);
+            if (spawn.versions.some((version) => version.numbered)) unresolved.push(spawn);
             continue;
         }
-        const entry: Spawn = { level: spawn.level, name: npcName(id) ?? spawn.page, x: spawn.x, y: spawn.y, id, source: "wiki" };
-        if (skipped.has(nameKey(entry.name))) continue;
-        const radiusOf = wanderRadius(spawns, id, entry.name!);
+        const name = npcName(id) ?? spawn.page;
+        if (skipped.has(nameKey(name))) continue;
+        const entry: Candidate = { level: spawn.level, name, x: spawn.x, y: spawn.y, id, source: "wiki", page: spawn.page, ...decide(decisions, id, name, spawn.page, spawn) };
+        if (spawn.unaligned) {
+            entry.flags.push(`${unaligned.label} (${spawn.mapId})`);
+            entry.skip ||= unaligned.skip;
+        }
+        const radiusOf = wanderRadius(spawns, id, name);
         if (radiusOf !== undefined) entry.wanderRadius = radiusOf;
         candidates.push(entry);
     }
-    const existing = spawns.map((spawn) => ({ ...spawn, name: spawn.name ?? (spawn.id !== undefined ? npcName(spawn.id) : undefined) }))
-        .filter((spawn) => inBoxes(spawn, boxes));
-    const { add, report } = planAdditions(candidates, existing, radius);
-
-    console.log(`Wiki spawns in the area: ${candidates.length}; existing spawns: ${existing.length}; to add: ${add.length}`);
-    for (const row of report) {
-        const ids = [...new Set(add.filter((spawn: Spawn) => nameKey(spawn.name) === nameKey(row.name) && spawn.level === row.level).map((spawn: Spawn) => spawn.id))];
-        console.log(`  ${row.name}${row.level ? ` (plane ${row.level})` : ""}: Wiki ${row.wiki}, existing ${row.existing}, add ${row.added}${ids.length ? ` (id ${ids.join(", ")})` : ""}`);
-    }
-    if (unresolved.size) console.log(`Not in this cache (newer NPCs): ${[...unresolved].sort().join(", ")}`);
+    const existing = named.filter((spawn) => inBoxes(spawn, boxes));
+    const plan = planAdditions(candidates, existing, radius);
+    const add: Candidate[] = plan.add.filter((spawn: Candidate) => !spawn.skip);
 
     const drops = readJson("npc-drops.json").npcs ?? {};
     const stats = readJson("monsters-complete.json");
-    const lacking = [...new Set<number>(add.map((spawn: Spawn) => spawn.id!))].filter((id) => {
-        const level = Number((CacheDefinitions.getNpc(id) as any)?.combatLevel) || 0;
-        return level > 0 && (!drops[id] || !stats[id]);
-    });
-    for (const id of lacking) {
+    const lacksLoot = (id: number) => (Number((CacheDefinitions.getNpc(id) as any)?.combatLevel) || 0) > 0 && (!drops[id] || !stats[id]);
+
+    if (reportFile) {
+        writeReport(reportFile, wiki, plan.add, unresolved, candidates, existing, lacksLoot, alignment.layers);
+        return;
+    }
+
+    console.log(`Wiki spawns in the area: ${candidates.length}; existing spawns: ${existing.length}; to add: ${add.length}`);
+    for (const row of plan.report) {
+        const adding = add.filter((spawn) => nameKey(spawn.name) === nameKey(row.name) && spawn.level === row.level);
+        const ids = [...new Set(adding.map((spawn) => spawn.id))];
+        const left = plan.add.filter((spawn: Candidate) => spawn.skip && nameKey(spawn.name) === nameKey(row.name) && spawn.level === row.level);
+        const flags = [...new Set(plan.add.filter((spawn: Candidate) => nameKey(spawn.name) === nameKey(row.name)).flatMap((spawn: Candidate) => spawn.flags))];
+        console.log(`  ${row.name}${row.level ? ` (plane ${row.level})` : ""}: Wiki ${row.wiki}, existing ${row.existing}, add ${adding.length}`
+            + `${ids.length ? ` (id ${ids.join(", ")})` : ""}${left.length ? `, ${left.length} left out` : ""}${flags.length ? ` [${flags.join(", ")}]` : ""}`);
+    }
+    if (unresolved.length) console.log(`Not in this cache (newer NPCs): ${[...new Set(unresolved.map((spawn) => spawn.page))].sort().join(", ")}`);
+    for (const id of [...new Set<number>(add.map((spawn) => spawn.id!))].filter(lacksLoot)) {
         console.log(`  ${npcName(id)} (${id}) fights but has no ${!drops[id] ? "drop table" : ""}${!drops[id] && !stats[id] ? " or " : ""}${!stats[id] ? "stats" : ""}: rerun the drop dumper`);
     }
 
     if (!write) { console.log(add.length ? "Dry run: add --write to add them." : "Nothing to add."); return; }
-    if (add.length) fs.writeFileSync(SPAWNS_FILE, format([...spawns, ...add]));
-    console.log(`Wrote ${add.length} spawn(s) to npc-spawns.json.`);
+    const written = add.map(({ page, flags, skip, ...spawn }) => spawn);
+    if (written.length) fs.writeFileSync(SPAWNS_FILE, format([...spawns, ...written]));
+    console.log(`Wrote ${written.length} spawn(s) to npc-spawns.json.`);
+}
+
+/**
+ * Every map square with gaps: its place name, how many spawns tsps and the Wiki have, and the
+ * missing ones by NPC with their labels ("Fights without drops", "Not in this cache", and the
+ * decisions' labels; `skip` when the decisions leave them out).
+ */
+function writeReport(file: string, wiki: Wiki, missing: Candidate[], unresolved: WikiSpawn[], candidates: Candidate[], existing: Spawn[], lacksLoot: (id: number) => boolean, layers: any) {
+    const places = placeNames(wiki);
+    const squares = new Map<string, any>();
+    const squareFor = (spawn: { x: number; y: number; level: number }) => {
+        const key = `${squareOf(spawn)},${spawn.level}`;
+        if (!squares.has(key)) {
+            const [sx, sy] = [spawn.x >> 6, spawn.y >> 6];
+            squares.set(key, { square: key, x: sx << 6, y: sy << 6, plane: spawn.level, area: areaName(places, sx, sy, spawn.level), existing: 0, wiki: 0, missing: new Map() });
+        }
+        return squares.get(key);
+    };
+    const counted = (spawn: { x: number; y: number; level: number }) => squares.get(`${squareOf(spawn)},${spawn.level}`);
+    for (const spawn of missing) {
+        const entry = squareFor(spawn);
+        const key = `${spawn.id}`;
+        const flags = [...spawn.flags, ...(lacksLoot(spawn.id!) ? ["Fights without drops"] : [])];
+        const row = entry.missing.get(key) ?? { name: spawn.name, id: spawn.id, page: spawn.page, count: 0, flags, skip: spawn.skip, at: [] };
+        row.count++;
+        if (row.at.length < 12) row.at.push([spawn.x, spawn.y]);
+        entry.missing.set(key, row);
+    }
+    for (const spawn of unresolved) {
+        const entry = squareFor(spawn);
+        const row = entry.missing.get(`page:${spawn.page}`) ?? { name: spawn.page, id: null, page: spawn.page, count: 0, flags: ["Not in this cache"], skip: true, at: [] };
+        row.count++;
+        if (row.at.length < 12) row.at.push([spawn.x, spawn.y]);
+        entry.missing.set(`page:${spawn.page}`, row);
+    }
+    for (const spawn of candidates) { const entry = counted(spawn); if (entry) entry.wiki++; }
+    for (const spawn of unresolved) { const entry = counted(spawn); if (entry) entry.wiki++; }
+    for (const spawn of existing) { const entry = counted(spawn); if (entry) entry.existing++; }
+    const rows = [...squares.values()].map((entry) => ({ ...entry, missing: [...entry.missing.values()].sort((a: any, b: any) => b.count - a.count) }));
+    const report = {
+        generated: new Date().toISOString().slice(0, 10),
+        layers,
+        squares: rows.sort((a, b) => b.missing.reduce((n: number, r: any) => n + r.count, 0) - a.missing.reduce((n: number, r: any) => n + r.count, 0)),
+    };
+    fs.writeFileSync(file, JSON.stringify(report));
+    const total = (filter: (row: any) => boolean) => rows.reduce((n, entry) => n + entry.missing.filter(filter).reduce((m: number, row: any) => m + row.count, 0), 0);
+    console.log(`Wrote ${file}: ${rows.length} map squares with gaps, ${total(() => true)} missing spawns (${total((row) => !row.skip)} not left out by the decisions).`);
 }
 
 main().catch((error) => { console.error(error); process.exit(1); });
