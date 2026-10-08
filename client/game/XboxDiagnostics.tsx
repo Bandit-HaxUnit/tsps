@@ -311,8 +311,11 @@ export function XboxDiagnostics({ workers, osrsClient }: { workers: number; osrs
                     .finally(() => { profiling = false; });
             }, PROFILE_MS);
         };
-        const profileTimer = setInterval(takeProfile, 60000);
-        const firstProfile = setTimeout(takeProfile, 20000);
+        // Only on `?prof=1` pages: the profiler needs a Document-Policy header (the LAN https front
+        // adds it for those), and that header stops Edge on an Xbox passing the controller.
+        const profilingPage = new URLSearchParams(window.location.search).get("prof") === "1";
+        const profileTimer = profilingPage ? setInterval(takeProfile, 60000) : undefined;
+        const firstProfile = profilingPage ? setTimeout(takeProfile, 20000) : undefined;
 
         const measure = (performance as Performance & {
             measureUserAgentSpecificMemory?: () => Promise<MemoryMeasurement>;

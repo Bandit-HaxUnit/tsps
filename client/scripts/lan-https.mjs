@@ -38,10 +38,11 @@ if (!fs.existsSync(certFile) || fs.readFileSync(namesFile, "utf8") !== names) {
 
 const proxy = httpProxy.createProxyServer({ xfwd: true });
 // The dev server only sends an ETag; a console browser may keep reusing its copy of the bundle.
-proxy.on("proxyRes", (proxyRes) => {
+proxy.on("proxyRes", (proxyRes, req) => {
     proxyRes.headers["cache-control"] = "no-store";
-    // Lets the Xbox diagnostics take a sampled JavaScript profile (the JS Self-Profiling API).
-    proxyRes.headers["document-policy"] = "js-profiling";
+    // `?prof=1` pages may take sampled JavaScript profiles (the JS Self-Profiling API). Only then:
+    // with this header, Edge on an Xbox stops passing the controller to the page.
+    if (/[?&]prof=1(&|$)/.test(req.url ?? "")) proxyRes.headers["document-policy"] = "js-profiling";
 });
 
 /**
