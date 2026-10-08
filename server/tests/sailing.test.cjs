@@ -2205,3 +2205,28 @@ test("the helmsman using the sail cloth from the helm keeps facing the bow (rspr
     clearTasks();
   }
 });
+
+test("a courier crate withdrawn from the hold goes into the player's hands, from a click that names only the slot", () => {
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  const portTasks = require("../plugins/skills/sailing/porttasks/Common.PortTasks");
+  portTasks.init({ core: { ...PluginManager.getCoreApi(), WeaponInterfaceManager: { assign() {} } } });
+  const h = holdHarness();
+  const worn = Array.from({ length: 14 }, () => null);
+  h.player.getEquipment = () => ({
+    getItems: () => worn,
+    setItem: (slot, item) => { worn[slot] = item.getId() > 0 ? item : null; },
+    refreshItems() {},
+  });
+  h.player.getUpdateFlag = () => ({ flag() {} });
+  try {
+    const crate = 32682; // Crate of jewellery
+    h.boat().cargo[3] = { id: crate, amount: 1 };
+    h.open();
+    h.click(943, 10, 1, 3, undefined); // the client's Withdraw: slot 3, no item
+    assert.equal(portTasks.heldCrate(h.player), crate, "in both hands");
+    assert.equal(h.boat().cargo[3], null, "out of the hold");
+    assert.equal(h.sent.varbits.get(19134), 1, "sailing_carrying_cargo");
+  } finally {
+    h.done();
+  }
+});

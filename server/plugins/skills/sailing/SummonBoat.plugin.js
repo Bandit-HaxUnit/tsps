@@ -119,6 +119,7 @@ module.exports = {
   register(api) {
     core = api.core;
     content();
+    api.persistAttribute(LAST_SUMMONED_ATTRIBUTE);
     api.onItemAction("Summon boat", { Break: breakTablet, "Last boat": lastBoat });
   },
   _test: { nearbyDock, hasFocus, summon, SUMMON_RANGE, LAST_SUMMONED_ATTRIBUTE },
