@@ -14,7 +14,12 @@
     "Tempoross": {"label": "Minigame", "skip": true, "why": "The Tempoross minigame's boss."},
     "<col=00ffff>Ammunition crate</col>": {"label": "Minigame", "skip": true, "why": "A Tempoross minigame prop."},
     "<col=00ffff>Inactive spirit pool</col>": {"label": "Minigame", "skip": true, "why": "A Tempoross minigame prop."},
-    "Avatar of Creation": {"label": "Minigame", "skip": true, "why": "A Soul Wars boss."}
+    "Avatar of Creation": {"label": "Minigame", "skip": true, "why": "A Soul Wars boss."},
+    "Blood Moon": {"label": "Boss without its fight", "skip": true, "why": "A Perilous Moons boss: no plugin gives it its mechanics yet."},
+    "Blue Moon": {"label": "Boss without its fight", "skip": true, "why": "A Perilous Moons boss: no plugin gives it its mechanics yet."},
+    "Eclipse Moon": {"label": "Boss without its fight", "skip": true, "why": "A Perilous Moons boss: no plugin gives it its mechanics yet."},
+    "Amoxliatl": {"label": "Boss without its fight", "skip": true, "why": "The Ruins of Tapoyauik's boss: no plugin gives it its mechanics yet."},
+    "Araxxor": {"label": "Boss without its fight", "skip": true, "why": "The Morytania Spider Cave's boss: no plugin gives it its mechanics yet."}
   },
   "boxes": [
     {"box": "2624,2560,2687,2623,0", "label": "Spawned by a plugin", "skip": true, "why": "Pest Control's game island: PestControl.plugin.js spawns the Void Knight and the squire there."},
