@@ -1,5 +1,5 @@
 {
-  "$comment": "Decisions for scripts/sync-npc-spawns.ts (docs/npc-spawns.md): Wiki spawns it labels in its report, and leaves out of npc-spawns.json when `skip` is true. `categories` are cache NPC categories (opcode 18), `names` cache NPC names, `pagePatterns` regular expressions on the Wiki page title, `boxes` areas (\"minX,minY,maxX,maxY[,plane]\") such as instance templates a plugin spawns itself.",
+  "$comment": "Decisions for scripts/sync-npc-spawns.ts (docs/npc-spawns.md): Wiki spawns it labels in its report, and leaves out of npc-spawns.json when `skip` is true. `categories` are cache NPC categories (opcode 18), `names` cache NPC names, `namePatterns` regular expressions on them, `pagePatterns` regular expressions on the Wiki page title, `boxes` areas (\"minX,minY,maxX,maxY[,plane]\") such as instance templates a plugin spawns itself.",
   "categories": {
     "2353": {"label": "Sailing sea creature", "skip": false, "why": "Sea encounters for Sailing (sharks, rays, krakens, seabirds) in open water; reachable only by boat."}
   },
@@ -21,11 +21,15 @@
     "Amoxliatl": {"label": "Boss without its fight", "skip": true, "why": "The Ruins of Tapoyauik's boss: no plugin gives it its mechanics yet."},
     "Araxxor": {"label": "Boss without its fight", "skip": true, "why": "The Morytania Spider Cave's boss: no plugin gives it its mechanics yet."}
   },
+  "namePatterns": [
+    {"pattern": "^<col=", "label": "Minigame or scenery prop", "skip": true, "why": "Coloured names mark NPCs that are props of a minigame, raid or quest (Tempoross's crates, the Theatre of Blood's pillars, the Nightmare's totems): their content spawns them."}
+  ],
   "boxes": [
     {"box": "2624,2560,2687,2623,0", "label": "Spawned by a plugin", "skip": true, "why": "Pest Control's game island: PestControl.plugin.js spawns the Void Knight and the squire there."},
     {"box": "3072,3008,3135,3071,0", "label": "Group Ironman island", "skip": true, "why": "The Node, where Group Ironman accounts start; its tutors and fake players aren't for other accounts."}
   ],
   "pagePatterns": [
+    {"pattern": "^Armoured zombie \\(Defender of Varrock\\)$", "label": "Quest only", "skip": true, "why": "The zombies invading Varrock Palace exist only during Defender of Varrock."},
     {"pattern": "League|Leagues", "label": "Leagues", "skip": true, "why": "Only on Leagues worlds."},
     {"pattern": "Deadman", "label": "Deadman", "skip": true, "why": "Only on Deadman worlds."},
     {"pattern": "\\bevent\\b|Birthday|Halloween|Christmas|Easter", "label": "Holiday event", "skip": true, "why": "Only during a holiday event."}

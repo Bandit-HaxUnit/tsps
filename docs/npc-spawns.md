@@ -102,3 +102,13 @@ yarn sync:npc-spawns --box 1216,9344,1727,9855 --tag Neypotzli --write
 - **Left out:** the Perilous Moons bosses (Blood, Blue and Eclipse Moon) and Amoxliatl, since no plugin gives them their fights yet. Araxxor is in the same decision ahead of the dungeon batch.
 - **Not yet:** the Frost Nagua have no stats until the monster database update.
 
+## Open monster dungeons
+
+1,163 spawns in 80 map squares of open monster dungeons, from an allowlist of areas in the gap report rather than everything below ground: the Black Knight Catacombs, Underground Pass, Morytania Spider Cave (araxytes), Charred Dungeon, the Sophanem and Scabaras dungeons, Tarn's Lair, Zemouregal's Base and Fort, the God Wars Dungeon's spirituals and blood reavers, the Gryphons' cave, Ynysdail Cavern, Deepfin Mine, the Buccaneers' Laboratory, Grimstone Dungeon (frost dragons), Waterbirth, Pandemonium Cave, Brimhaven Dungeon, the Ancient Guthixian Temple (tormented demons), the Stronghold of Security's minotaurs, the Vampyrium and its realm, and smaller slayer caves.
+
+- **New decisions, left out:**
+  - `namePatterns` `^<col=`: coloured names are always props of a minigame, raid or quest (Theatre of Blood pillars, Nightmare totems, Inferno glyphs);
+  - the *Defender of Varrock* zombies invading Varrock Palace (quest only).
+- **Removed by the new rule:** `<col=00ffff>Forebearer Janus</col>`, which the Varlamore batch had added in Civitas before the rule existed.
+- **Left out of the allowlist, for a later look:** raid and boss areas their plugins spawn (Tombs of Amascut, Theatre of Blood, the Nightmare, the Inferno, the Abyssal Nexus); bosses without a plugin yet (Skotizo, Yama, Scurrius, Phantom Muspah, the Headless Beast, the Jormungand); minigames (Barbarian Assault, Nightmare Zone, the Motherlode Mine); and single quest NPCs.
+
