@@ -1397,6 +1397,8 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             const addTile = { x: reader.readShort(), y: reader.readShort() };
             const addLevel = reader.readByte();
             const shapeRot = reader.readByte();
+            // Optional op flags (loc_add_change_v2): only the ops whose bit is set are shown.
+            const opFlags = packetLength >= 9 ? reader.readByte() : undefined;
             return {
                 type: "loc_add_change",
                 payload: {
@@ -1405,6 +1407,7 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                     level: addLevel,
                     shape: shapeRot >> 2,
                     rotation: shapeRot & 3,
+                    ...(opFlags !== undefined ? { opFlags } : {}),
                 },
             };
         }
