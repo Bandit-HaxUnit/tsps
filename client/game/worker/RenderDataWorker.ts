@@ -261,15 +261,6 @@ async function initWorker(cache: LoadedCache, npcInstances: NpcInstance[]): Prom
 }
 
 /**
- * A `?map-profile=1` timing line: to the console, and to a LAN dev front's log when one serves
- * the page (client/scripts/lan-https.mjs), since a console's worker output cannot be read.
- */
-function mapProfileLog(text: string): void {
-    console.info(text);
-    void fetch("/__maplog", { method: "POST", body: text }).catch(() => undefined);
-}
-
-/**
  * Run a worker task with sparse-cache miss handling. A thrown miss (e.g. a
  * map group) waits for that fetch and reruns. Non-throwing misses (models,
  * anim frames render as gaps and only bump the store's miss counter) are
@@ -299,7 +290,7 @@ async function runWithSparseRetry<T>(
             if (profileLabel) {
                 const gzip = `${Math.round(decompressStats.gzipMs - decompressBefore.gzipMs)}ms/${decompressStats.gzipCount - decompressBefore.gzipCount}`;
                 const bzip2 = `${Math.round(decompressStats.bzip2Ms - decompressBefore.bzip2Ms)}ms/${decompressStats.bzip2Count - decompressBefore.bzip2Count}`;
-                mapProfileLog(`[map-profile] ${profileLabel} pass=${attempt + 1} build=${Math.round(performance.now() - passStarted)}ms misses=${store.missCount - missesBefore} gzip=${gzip} bzip2=${bzip2}`);
+                console.info(`[map-profile] ${profileLabel} pass=${attempt + 1} build=${Math.round(performance.now() - passStarted)}ms misses=${store.missCount - missesBefore} gzip=${gzip} bzip2=${bzip2}`);
             }
             if (store.missCount === missesBefore) {
                 if (outcome) outcome.complete = true;
@@ -308,7 +299,7 @@ async function runWithSparseRetry<T>(
             // Groups were missing; their fetches are queued. Wait and rerun.
             const waitStarted = performance.now();
             await js5.settled();
-            if (profileLabel) mapProfileLog(`[map-profile] ${profileLabel} pass=${attempt + 1} cacheWait=${Math.round(performance.now() - waitStarted)}ms`);
+            if (profileLabel) console.info(`[map-profile] ${profileLabel} pass=${attempt + 1} cacheWait=${Math.round(performance.now() - waitStarted)}ms`);
         } catch (e) {
             if (!isGroupMissingError(e)) {
                 throw e;
@@ -316,7 +307,7 @@ async function runWithSparseRetry<T>(
             try {
                 const waitStarted = performance.now();
                 await js5.requestGroup(e.indexId, e.archiveId, true);
-                if (profileLabel) mapProfileLog(`[map-profile] ${profileLabel} pass=${attempt + 1} blockingGroup=${e.indexId}:${e.archiveId} cacheWait=${Math.round(performance.now() - waitStarted)}ms`);
+                if (profileLabel) console.info(`[map-profile] ${profileLabel} pass=${attempt + 1} blockingGroup=${e.indexId}:${e.archiveId} cacheWait=${Math.round(performance.now() - waitStarted)}ms`);
             } catch (fetchError) {
                 // Transient fetch failure; back off and let the next attempt
                 // re-queue it rather than failing the whole task.
@@ -418,7 +409,7 @@ const worker = {
             key = cacheKey(workerState.cache.info, sdInput, npcsHash);
             const hit = await readSquare(key);
             const varsMatch = !!hit && varReadsMatch(workerState.varManager, hit.reads);
-            if (sdInput.mapProfileEnabled) mapProfileLog(`[map-profile] ${sdInput.mapX},${sdInput.mapY} stored square: ${!hit ? "none" : varsMatch ? "hit" : "vars differ"} key=${key.split("|")[1]} npcs=${npcsHash || "-"}`);
+            if (sdInput.mapProfileEnabled) console.info(`[map-profile] ${sdInput.mapX},${sdInput.mapY} stored square: ${!hit ? "none" : varsMatch ? "hit" : "vars differ"} key=${key.split("|")[1]} npcs=${npcsHash || "-"}`);
             if (hit && varsMatch) {
                 if (sdInput.loadNpcs) refreshNpcs(hit.data, squareNpcs, sdInput.mapX, sdInput.mapY);
                 dropLoadedTextures(hit.data, sdInput.loadedTextureIds);
@@ -444,7 +435,7 @@ const worker = {
             await writeSquare(key, { data: data as unknown as SdMapData, reads });
         }
         if (cacheable && sdInput.mapProfileEnabled) {
-            mapProfileLog(`[map-profile] ${sdInput.mapX},${sdInput.mapY} store: ${shouldStore(outcome.complete, data) ? "written" : `skipped (complete=${outcome.complete})`} reads=${reads.length}`);
+            console.info(`[map-profile] ${sdInput.mapX},${sdInput.mapY} store: ${shouldStore(outcome.complete, data) ? "written" : `skipped (complete=${outcome.complete})`} reads=${reads.length}`);
         }
         if (cacheable && data) dropLoadedTextures(data as unknown as SdMapData, sdInput.loadedTextureIds);
 

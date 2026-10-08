@@ -1,4 +1,4 @@
-import { isWebGL2Supported, isWebGPUSupported, isXbox } from "../common/utils/DeviceUtil";
+import { isWebGL2Supported, isWebGPUSupported } from "../common/utils/DeviceUtil";
 import { WebGLOsrsRenderer } from "../render/WebGLOsrsRenderer";
 import { WebGPURenderer } from "../render/webgpu/WebGPURenderer";
 import { GameRenderer } from "./GameRenderer";
@@ -52,9 +52,7 @@ export function getAvailableRenderers(): OsrsRendererType[] {
 export function getRequestedRendererType(): OsrsRendererType | undefined {
     if (typeof window === "undefined") return undefined;
     try {
-        const params = new URLSearchParams(window.location.search);
-        // `?r=gpu` / `?r=gl` are short forms, for typing on a console.
-        const requested = params.get("renderer") ?? ({ gpu: WEBGPU, gl: WEBGL } as Record<string, string>)[params.get("r") ?? ""];
+        const requested = new URLSearchParams(window.location.search).get("renderer");
         if (requested === WEBGL || requested === WEBGPU) return requested;
     } catch {}
     return undefined;
@@ -69,9 +67,7 @@ export async function pickRendererType(): Promise<OsrsRendererType | undefined> 
     const webglReady = WebGLOsrsRenderer.isSupported();
     // Only ask for a WebGPU adapter when the result can matter: WebGPU was requested,
     // WebGPU is the preferred default, or there is no WebGL to fall back to.
-    // Not on an Xbox: its Edge exposes WebGPU, but the device is removed the first time any
-    // pipeline draws ("D3D12 create graphics pipeline state failed", DXGI_ERROR_DRIVER_INTERNAL_ERROR).
-    const shouldProbe = (requested === WEBGPU || PREFER_WEBGPU_DEFAULT || !webglReady) && !(isXbox && webglReady);
+    const shouldProbe = requested === WEBGPU || PREFER_WEBGPU_DEFAULT || !webglReady;
     let webgpuReady = false;
     if (shouldProbe && isWebGPUSupported && WebGPURenderer.isSupported()) {
         try {

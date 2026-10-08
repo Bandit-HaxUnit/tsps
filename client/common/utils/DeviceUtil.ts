@@ -124,38 +124,16 @@ export const forceMobileMode =
 // explicit ?debug flag, so players never see it.
 export const isDebugMode = urlParams?.has("debug") ?? false;
 
-const XBOX_STORAGE_KEY = "xrsps.device.xbox";
-
-/**
- * Edge on an Xbox: a browser tab with a much smaller memory limit than a PC's. Current Edge on Xbox
- * sends a plain desktop Windows identification string, so `?xbox=1` turns this on, remembered for
- * the site (`?xbox=0` turns it off); older builds that say "Xbox" are still recognised.
- */
-export const isXbox = (() => {
-    if (typeof navigator === "undefined") return false;
-    if (/\bXbox\b/i.test(navigator.userAgent ?? "")) return true;
-    const requested = urlParams?.get("xbox");
-    try {
-        if (requested === "1") localStorage.setItem(XBOX_STORAGE_KEY, "1");
-        else if (requested === "0") localStorage.removeItem(XBOX_STORAGE_KEY);
-        return localStorage.getItem(XBOX_STORAGE_KEY) === "1";
-    } catch {
-        return requested === "1";
-    }
-})();
-
 // Layout/mobile UI mode should only follow actual handheld/tablet platforms (plus overrides),
-// not generic touch-capable desktop hardware. An Xbox takes the mobile layout too: the desktop
-// one is far too small on a television (`?mobile=0` opts out).
-export const isMobileMode = checkAndroid() || isIos || forceMobileMode ||
-    (isXbox && urlParams?.get("mobile") !== "0");
+// not generic touch-capable desktop hardware.
+export const isMobileMode = checkAndroid() || isIos || forceMobileMode;
 
 /**
- * Phones, tablets (including one on "desktop site": touch with a coarse main pointer), iOS and an
- * Xbox: tight tab memory and modest GPUs. They get the lean setup: one render worker, an
+ * Phones, tablets (including one on "desktop site": touch with a coarse main pointer) and iOS:
+ * tight tab memory and modest GPUs. They get the lean setup: one render worker, an
  * on-demand-only cache, no 117 HD, a reduced 3D resolution and a capped view distance.
  */
-export const isLowEndDevice = isMobileMode || isIos || isXbox ||
+export const isLowEndDevice = isMobileMode || isIos ||
     (isTouchDevice && typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches);
 
 // Hover tooltips (and the world mouseover text they feed) are a desktop-mouse feature;

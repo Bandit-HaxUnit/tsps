@@ -1,4 +1,4 @@
-import { isMobileMode, isXbox } from "../../../common/utils/DeviceUtil";
+import { isMobileMode } from "../../../common/utils/DeviceUtil";
 import * as handlers from "../../render/handlers";
 import type { WebGLOsrsRendererHost } from "../../render/hostInterface";
 import * as mobileLogin from "../../render/mobileLogin";
@@ -50,37 +50,20 @@ export function createMobileLoginInput(renderer: WebGPURenderer): MobileLoginInp
     // handlers.onCanvasTouchStart, except the field is found through the layout the title was
     // last drawn with (the one this frame's login clicks map through), not WebGL's surface layout.
     const onTouchStart = (event: TouchEvent): void => {
+        if (!renderer.osrsClient.isOnLoginScreen()) return;
         const touch = event.changedTouches[0] ?? event.touches[0];
-        if (touch && openKeyboardAt(touch)) event.preventDefault();
-    };
-    // Edge on Xbox clicks with a pointer, never a touch, and only opens its keyboard for a real text
-    // field the player selects: a transparent input follows the pointer over the login fields
-    // (mobileLogin.placeXboxLoginInput); a click that still lands on the canvas prompts instead.
-    const onClick = (event: MouseEvent): void => {
-        openKeyboardAt(event);
-    };
-    const fieldAt = (point: Touch | MouseEvent): 0 | 1 | undefined => {
-        if (!renderer.osrsClient.isOnLoginScreen()) return undefined;
-        const { x, y } = mobileLogin.getCanvasTouchPos(host, point as Touch);
+        if (!touch) return;
+        const { x, y } = mobileLogin.getCanvasTouchPos(host, touch);
         const loginRenderer = renderer.osrsClient.loginRenderer;
         loginRenderer.setMousePosition(x, y);
         const content = loginRenderer.mapPointerToContent(loginRenderer.mouseX, loginRenderer.mouseY);
-        return mobileLogin.resolveLoginFieldAt(host, content.y);
-    };
-    const onMouseMove = (event: MouseEvent): void => mobileLogin.placeXboxLoginInput(host, event, fieldAt(event));
-    const openKeyboardAt = (point: Touch | MouseEvent): boolean => {
-        const field = fieldAt(point);
-        if (field === undefined) return false;
-        if (typeof MouseEvent !== "undefined" && point instanceof MouseEvent) mobileLogin.promptLoginField(host, field);
-        else mobileLogin.requestMobileLoginKeyboard(host, field);
-        return true;
+        const field = mobileLogin.resolveLoginFieldAt(host, content.y);
+        if (field === undefined) return;
+        event.preventDefault();
+        mobileLogin.requestMobileLoginKeyboard(host, field);
     };
 
     renderer.canvas.addEventListener("touchstart", onTouchStart, { passive: false, capture: true });
-    if (isXbox) {
-        renderer.canvas.addEventListener("click", onClick);
-        renderer.canvas.addEventListener("mousemove", onMouseMove);
-    }
     if (isMobileMode) {
         host.ensureMobileLoginInput();
         host.updateMobileLoginViewportBaseline();
@@ -95,8 +78,6 @@ export function createMobileLoginInput(renderer: WebGPURenderer): MobileLoginInp
         isKeyboardOpen: () => host.isMobileLoginKeyboardOpen(),
         dispose: () => {
             renderer.canvas.removeEventListener("touchstart", onTouchStart, true);
-            renderer.canvas.removeEventListener("click", onClick);
-            renderer.canvas.removeEventListener("mousemove", onMouseMove);
             if (isMobileMode) {
                 window.removeEventListener("resize", onViewportChange);
                 window.removeEventListener("orientationchange", onViewportChange);

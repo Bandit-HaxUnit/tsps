@@ -130,7 +130,7 @@ export class Js5Persistence {
 
     /**
      * The bytes at [offset, offset + length) from a range an earlier session stored, or undefined
-     * when no stored range holds them all. A device that skips restore() (a phone's or an Xbox's
+     * when no stored range holds them all. A device that skips restore() (a phone's or a tablet's
      * tab cannot hold everything ever fetched) reads them back from disk, not the network.
      */
     async read(offset: number, length: number): Promise<Uint8Array | undefined> {

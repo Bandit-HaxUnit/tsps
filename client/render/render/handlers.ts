@@ -3,7 +3,6 @@ import type { WebGLOsrsRendererHost } from "./hostInterface";
 import {
     getActiveLoginFieldValue,
     getCanvasTouchPos,
-    promptLoginField,
     requestMobileLoginKeyboard,
     resolveLoginFieldAtCanvasPoint,
     setActiveLoginFieldValue,
@@ -12,30 +11,17 @@ import {
 } from "./mobileLogin";
 
 export function onCanvasTouchStart(host: WebGLOsrsRendererHost, event: TouchEvent): void {
+    if (!host.osrsClient.isOnLoginScreen()) return;
     // A touch here is a finger, whatever the layout: a tablet on "desktop site" sends a
     // desktop user agent but still needs the soft keyboard. Mouse clicks never fire this.
     const touch = event.changedTouches[0] ?? event.touches[0];
-    if (touch && openLoginKeyboardAt(host, touch)) event.preventDefault();
-}
-
-/** The login field (0 username, 1 password) under a touch or pointer, if any. */
-export function loginFieldAtPointer(host: WebGLOsrsRendererHost, point: Touch | MouseEvent): 0 | 1 | undefined {
-    const { x, y } = getCanvasTouchPos(host, point as Touch);
-    return resolveLoginFieldAtCanvasPoint(host, x, y);
-}
-
-/**
- * Opens the soft keyboard for the login field under a touch, or (Edge on Xbox, which only has a
- * pointer) prompts for it on a click; returns whether a field was hit.
- */
-export function openLoginKeyboardAt(host: WebGLOsrsRendererHost, point: Touch | MouseEvent): boolean {
-    if (!host.osrsClient.isOnLoginScreen()) return false;
-    const field = loginFieldAtPointer(host, point);
-    if (field === undefined) return false;
+    if (!touch) return;
+    const { x, y } = getCanvasTouchPos(host, touch);
+    const field = resolveLoginFieldAtCanvasPoint(host, x, y);
+    if (field === undefined) return;
+    event.preventDefault();
     host.osrsClient.loginState.currentLoginField = field;
-    if (typeof MouseEvent !== "undefined" && point instanceof MouseEvent) promptLoginField(host, field);
-    else requestMobileLoginKeyboard(host, field);
-    return true;
+    requestMobileLoginKeyboard(host, field);
 }
 
 export function onMobileLoginViewportChange(host: WebGLOsrsRendererHost): void {

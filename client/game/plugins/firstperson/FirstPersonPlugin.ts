@@ -12,7 +12,6 @@ import { deriveMenuEntriesForWidget, getRootRenderTransform } from "../../../wid
 import { CollisionFlag } from "../../../common/CollisionFlag";
 import type { HitsplatEventPayload } from "../../GameRenderer";
 import { NO_INTERACTION } from "../../../rs/interaction/InteractionIndex";
-import { isXbox } from "../../../common/utils/DeviceUtil";
 
 if (typeof document !== "undefined") require("./FirstPersonPlugin.css");
 
@@ -151,7 +150,6 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
     private padMoving = false;
     private padRepeatAt = 0;
     private controllerHintShown = false;
-    private xboxDefaultApplied = false;
     /** The keyboard steered last (not the mouse): with a free cursor the crosshair aims. */
     private keyboardAiming = false;
     private dialogueOptions: WidgetNode[] = [];
@@ -406,12 +404,6 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
 
     updateInteractionPointer(camera: Camera): void {
         const input = this.client.inputManager;
-        // Xbox mode plays in Backquote mode: on once per login (Backquote still turns it off).
-        if (!this.client.isLoggedIn()) this.xboxDefaultApplied = false;
-        else if (isXbox && !this.xboxDefaultApplied) {
-            this.xboxDefaultApplied = true;
-            if (!this.enabled) this.setEnabled(true);
-        }
         this.updateLoginSession();
         this.syncInterfaceSelection();
         this.syncDialogueOptions();

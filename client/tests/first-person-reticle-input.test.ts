@@ -8,7 +8,7 @@ import { createPrimaryWidgetActionResolver } from "../game/widgets/input/widgetP
 import { processWidgetClickInput } from "../game/widgets/input/widgetClickInput";
 import { processWidgetReleaseInput } from "../game/widgets/input/widgetReleaseInput";
 import { collectWidgetsAtPointAcrossRoots } from "../widgets/menu/utils";
-import { ClickMode, InputManager, isControllerKey } from "../game/InputManager";
+import { ClickMode, InputManager } from "../game/InputManager";
 import { FirstPersonPlugin, crosshairPoint, crosshairRaisePixels } from "../game/plugins/firstperson/FirstPersonPlugin";
 import { PlayerEcs } from "../game/ecs/PlayerEcs";
 import { WidgetsOverlay } from "../ui/devoverlay/WidgetsOverlay";
@@ -1148,17 +1148,3 @@ console.log("first-person reticle input ok");
 }
 console.log("crosshair aim ok");
 
-{
-    // Edge on Xbox also sends controller buttons as keys; the game must leave them to the browser
-    // (holding Menu leaves game controls) and read the controller through the Gamepad API instead.
-    assert.equal(isControllerKey({ key: "GamepadMenu", keyCode: 207 }), true);
-    assert.equal(isControllerKey({ key: "Unidentified", keyCode: 195 }), true);
-    assert.equal(isControllerKey({ key: "Enter", keyCode: 13 }), false);
-    const keys = new InputManager();
-    let cancelled = 0;
-    keys.onKeyDown({ key: "GamepadMenu", code: "", keyCode: 207, preventDefault: () => { cancelled++; } } as unknown as KeyboardEvent);
-    assert.equal(cancelled, 0, "a controller key is not cancelled, so Edge can act on it");
-    keys.onKeyDown({ key: "a", code: "KeyA", keyCode: 65, preventDefault: () => { cancelled++; } } as unknown as KeyboardEvent);
-    assert.equal(cancelled, 1, "keyboard keys are still handled by the game");
-    console.log("controller keys ok");
-}

@@ -63,7 +63,7 @@ export class HdPlugin extends Plugin {
     // HD code is compiled in only while HD is on: a GPU pays for it even behind u_hdEnabled
     // (through ANGLE's Direct3D 11 the branches compile flat: an Xbox fell to single-digit FPS,
     // then a GPU reset). beforeSceneRender recompiles the programs when the toggle changes.
-    // Never on a low-end device (phone, tablet, Xbox): its memory has no room for HD anyway.
+    // Never on a low-end device (phone, tablet): its memory has no room for HD anyway.
     transformSceneProgram(source: ProgramSource): ProgramSource {
         this.compilingHd = !isLowEndDevice && this.isEnabled();
         return this.compilingHd ? createHdProgram(source, lighting) : source;

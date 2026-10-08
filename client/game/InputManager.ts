@@ -30,14 +30,6 @@ function toOsrsKeyCode(domKeyCode: number): number {
     return -1;
 }
 
-/**
- * A key event a browser made from a controller button (Edge on Xbox: "GamepadA", "GamepadMenu",
- * key codes 195-218), rather than from a keyboard.
- */
-export function isControllerKey(event: Pick<KeyboardEvent, "key" | "keyCode">): boolean {
-    return event.key?.startsWith("Gamepad") === true || (event.keyCode >= 195 && event.keyCode <= 218);
-}
-
 export function getMousePos(container: HTMLElement, event: MouseEvent | Touch): vec2 {
     const rect = container.getBoundingClientRect();
 
@@ -1027,9 +1019,6 @@ export class InputManager {
     // === Keyboard handlers - OSRS GameApplet.keyPressed/keyReleased ===
 
     onKeyDown = (event: KeyboardEvent, prioritizeChat = false) => {
-        // Controllers are read through the Gamepad API; left alone, the browser keeps its own
-        // controller keys (Edge on Xbox: holding Menu leaves game controls).
-        if (isControllerKey(event)) return;
         event.preventDefault();
         this.idleTime = 0;
         this.lastInputTimeMs = this.nowMs();
@@ -1097,7 +1086,6 @@ export class InputManager {
     };
 
     private onKeyUp = (event: KeyboardEvent) => {
-        if (isControllerKey(event)) return;
         event.preventDefault();
         this.idleTime = 0;
         this.lastInputTimeMs = this.nowMs();

@@ -488,7 +488,7 @@ async function loadCacheFilesSparse(
     // A prior session already stored the complete dat2; the regular path
     // restores it from storage without any network traffic.
     // Not on a low-end device: the full path holds the whole dat2 in memory, past a phone's or
-    // an Xbox's tab limit.
+    // a tablet's tab limit.
     if (!isLowEndDevice && await Js5Persistence.hasFullDat2(info.name, dat2Path)) {
         return undefined;
     }

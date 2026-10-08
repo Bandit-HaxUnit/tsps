@@ -381,7 +381,7 @@ export function resolveBrowserQualityProfile(host: WebGLOsrsRendererHost, ): Bro
 
         // The platform, not touch hardware: a touchscreen laptop on the desktop layout is a
         // desktop (#358), and must not get the handheld profile's half-resolution scene. A low-end
-        // device (a tablet on "desktop site", an Xbox) gets the handheld's view distance.
+        // device (a tablet on "desktop site") gets the handheld's view distance.
         if (!isMobileMode && !isLowEndDevice) {
             return DESKTOP_QUALITY_PROFILE;
         }
