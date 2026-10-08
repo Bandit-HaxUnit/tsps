@@ -12,7 +12,7 @@ function parsePoint(text) {
 /**
  * The `{{Map}}` templates in an NPC infobox: `|map = {{Map|2576,2253|r=3}}`, or one per version
  * (`|map2 = {{Map|x=2589|y=8614|plane=0}}`). Returns { version (1-based, null when shared),
- * points, plane }. A polygon, rectangle or line outlines an area: it becomes one spawn at its
+ * points, plane, mapId (the Wiki map layer, null when not given) }. A polygon, rectangle or line outlines an area: it becomes one spawn at its
  * centre. The map's `r` only sizes the marker, so it's ignored.
  */
 function parseInfoboxMaps(wikitext) {
@@ -45,6 +45,7 @@ function parseInfoboxMaps(wikitext) {
       version: version ? Number(version) : null,
       points,
       plane: Number.isFinite(Number(named.plane)) ? Number(named.plane) : 0,
+      mapId: named.mapid !== undefined && Number.isFinite(Number(named.mapid)) ? Number(named.mapid) : null,
     });
   }
   return maps;
@@ -74,11 +75,17 @@ function distance(a, b) {
   return a.level === b.level ? Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)) : Infinity;
 }
 
+/** The 64x64 map square a spawn is in. */
+function squareOf(spawn) {
+  return `${spawn.x >> 6},${spawn.y >> 6}`;
+}
+
 /**
  * Which Wiki spawns the existing ones in the same boxes lack. Per NPC name and plane:
  * 1. each Wiki spawn takes the nearest unmatched existing spawn of that name within `radius`;
- * 2. existing spawns of that name left over still count, so only the difference in number is
- *    added (the Wiki spawns furthest from any existing one);
+ * 2. existing spawns of that name left over in the same map square still count, so only the
+ *    difference in number is added there (the Wiki spawns furthest from any existing one). A
+ *    spawn elsewhere on the map doesn't stand in for one missing here;
  * Existing spawns are never moved or removed, so a second run adds nothing.
  * Returns { add: wiki spawns to add, report: per name { wiki, existing, added } }.
  */
@@ -107,13 +114,115 @@ function planAdditions(wikiSpawns, existingSpawns, radius) {
       if (best) unmatchedExisting.delete(best);
       else unmatchedWiki.push(spawn);
     }
-    const missing = Math.max(0, unmatchedWiki.length - unmatchedExisting.size);
     const nearest = (spawn) => Math.min(Infinity, ...existing.map((other) => distance(spawn, other)));
-    const chosen = unmatchedWiki.sort((a, b) => nearest(b) - nearest(a)).slice(0, missing);
+    const leftoverBySquare = new Map();
+    for (const spawn of unmatchedExisting) leftoverBySquare.set(squareOf(spawn), (leftoverBySquare.get(squareOf(spawn)) ?? 0) + 1);
+    const wikiBySquare = new Map();
+    for (const spawn of unmatchedWiki) {
+      if (!wikiBySquare.has(squareOf(spawn))) wikiBySquare.set(squareOf(spawn), []);
+      wikiBySquare.get(squareOf(spawn)).push(spawn);
+    }
+    const chosen = [];
+    for (const [square, inSquare] of wikiBySquare) {
+      const missing = Math.max(0, inSquare.length - (leftoverBySquare.get(square) ?? 0));
+      chosen.push(...inSquare.sort((a, b) => nearest(b) - nearest(a)).slice(0, missing));
+    }
     add.push(...chosen);
     report.push({ name, level, wiki: wiki.length, existing: existing.length, added: chosen.length });
   }
   return { add, report: report.sort((a, b) => b.added - a.added || a.name.localeCompare(b.name)) };
 }
 
-module.exports = { parsePoint, parseInfoboxMaps, parseBox, inBoxes, nameKey, distance, planAdditions };
+/**
+ * The {{LocLine}} templates of a page: { location (its first link), plane, points }. Monster
+ * pages name each spawn group's place this way; the buckets don't.
+ */
+function parseLocLines(wikitext) {
+  const lines = [];
+  for (const [, body] of String(wikitext).matchAll(/\{\{\s*LocLine\s*\|([\s\S]*?)\}\}/gi)) {
+    const location = locationName(body.match(/(?:^|\|)\s*location\s*=([^|]*(?:\[\[[^\]]*\]\][^|]*)*)/i)?.[1] ?? "");
+    const plane = Number(body.match(/(?:^|\|)\s*plane\s*=\s*(\d+)/i)?.[1] ?? 0);
+    const points = [...body.matchAll(/x:\s*(\d+)\s*,\s*y:\s*(\d+)/g)].map(([, x, y]) => ({ x: Number(x), y: Number(y) }));
+    if (location && points.length) lines.push({ location, plane, points });
+  }
+  return lines;
+}
+
+/** "[[Lumbridge Castle]] kitchen" or "[[Wyrmscraig Cavern|the cavern]]" -> the linked page's name. */
+function locationName(text) {
+  const link = String(text).match(/\[\[([^\]|#]+)/);
+  return (link ? link[1] : String(text).replace(/<[^>]*>/g, "")).trim();
+}
+
+/** Layers drawn in game coordinates: the surface (0) and "not given" (-1). */
+const SURFACE_LAYERS = new Set([null, undefined, -1, 0]);
+
+/**
+ * The Wiki draws many dungeons on their own map layers (mapID), whose coordinates or plane can
+ * differ from the game's: the God Wars Dungeon is on plane 0 there and 2 in the game, and one
+ * layer can hold several places shifted differently (each Stronghold of Security floor). Each
+ * Wiki map square of a layer votes, through its spawns, for the shift that puts them on existing
+ * spawns of the same NPC name (one vote per spawn per shift); a square is aligned when at least
+ * `minVotes` spawns, and half of those with a same-name spawn anywhere, agree.
+ * - A layer whose aligned squares all agree takes that shift everywhere, its empty squares too.
+ * - A layer with different shifts uses each aligned square's own; its other squares stay unaligned.
+ * Returns { shiftOf(spawn) -> {dx, dy, dz} | null (null: unaligned), layers: per layer summary }.
+ */
+function alignLayers(wikiSpawns, existingSpawns, minVotes = 2) {
+  const existingByName = new Map();
+  for (const spawn of existingSpawns) {
+    const key = nameKey(spawn.name);
+    if (!existingByName.has(key)) existingByName.set(key, []);
+    existingByName.get(key).push(spawn);
+  }
+  const squareKey = (spawn) => `${spawn.mapId}:${spawn.x >> 6},${spawn.y >> 6},${spawn.level}`;
+  const bySquare = new Map();
+  for (const spawn of wikiSpawns) {
+    if (SURFACE_LAYERS.has(spawn.mapId)) continue;
+    if (!bySquare.has(squareKey(spawn))) bySquare.set(squareKey(spawn), []);
+    bySquare.get(squareKey(spawn)).push(spawn);
+  }
+  const squareShift = new Map();
+  for (const [key, spawns] of bySquare) {
+    const votes = new Map();
+    let matched = 0;
+    for (const spawn of spawns) {
+      const others = existingByName.get(nameKey(spawn.name)) ?? [];
+      if (others.length) matched++;
+      const seen = new Set();
+      for (const other of others) {
+        const shift = `${other.x - spawn.x},${other.y - spawn.y},${other.level - spawn.level}`;
+        if (seen.has(shift)) continue;
+        seen.add(shift);
+        votes.set(shift, (votes.get(shift) ?? 0) + 1);
+      }
+    }
+    const best = [...votes].sort((a, b) => b[1] - a[1])[0];
+    if (best && best[1] >= minVotes && best[1] >= matched / 2) squareShift.set(key, best[0]);
+  }
+  const layerShifts = new Map();
+  for (const [key, shift] of squareShift) {
+    const layer = key.slice(0, key.indexOf(":"));
+    if (!layerShifts.has(layer)) layerShifts.set(layer, new Set());
+    layerShifts.get(layer).add(shift);
+  }
+  const parse = (shift) => { const [dx, dy, dz] = shift.split(",").map(Number); return { dx, dy, dz }; };
+  const layers = [];
+  const layerIds = new Set([...bySquare.keys()].map((key) => key.slice(0, key.indexOf(":"))));
+  for (const layer of layerIds) {
+    const shifts = layerShifts.get(layer) ?? new Set();
+    const squares = [...bySquare.keys()].filter((key) => key.startsWith(`${layer}:`));
+    const aligned = squares.filter((key) => squareShift.has(key) || shifts.size === 1).length;
+    layers.push({ mapId: Number(layer), shifts: [...shifts].map(parse), squares: squares.length, aligned });
+  }
+  const shiftOf = (spawn) => {
+    if (SURFACE_LAYERS.has(spawn.mapId)) return { dx: 0, dy: 0, dz: 0 };
+    const own = squareShift.get(squareKey(spawn));
+    if (own) return parse(own);
+    const shifts = layerShifts.get(String(spawn.mapId));
+    return shifts?.size === 1 ? parse([...shifts][0]) : null;
+  };
+  return { shiftOf, layers };
+}
+
+module.exports = { SURFACE_LAYERS, alignLayers, parsePoint, parseInfoboxMaps, parseBox, inBoxes, nameKey, distance, planAdditions, squareOf, parseLocLines, locationName };
