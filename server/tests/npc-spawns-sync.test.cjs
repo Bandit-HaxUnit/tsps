@@ -116,3 +116,13 @@ test("Varlamore's underground, without the bosses that have no fight yet", () =>
   assert.ok(below.filter((spawn) => spawn.name === 'Wyrmling').every((spawn) => spawn.id === 13031), "Neypotzli's own wyrmlings");
   assert.deepEqual(spawns.filter((spawn) => ['Blood Moon', 'Blue Moon', 'Eclipse Moon', 'Amoxliatl', 'Araxxor'].includes(spawn.name) && spawn.source === 'wiki'), []);
 });
+
+test('open monster dungeons, without raid, minigame and quest props', () => {
+  const spawns = require('../data/definitions/npc-spawns.json');
+  const wiki = spawns.filter((spawn) => spawn.source === 'wiki');
+  for (const name of ['Araxyte', 'Gryphon', 'Tormented Demon', 'Elite Black Knight', 'Locust rider']) assert.ok(wiki.some((spawn) => spawn.name === name), name);
+  assert.deepEqual(wiki.filter((spawn) => spawn.name.startsWith('<col=')), [], 'coloured-name props');
+  for (const name of ['Kephri', 'The Jormungand', 'Skotizo', 'Scurrius', 'Phantom Muspah', 'Abyssal Sire']) {
+    assert.ok(!wiki.some((spawn) => spawn.name === name), `${name} is left to its content`);
+  }
+});

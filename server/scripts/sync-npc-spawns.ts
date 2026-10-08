@@ -14,8 +14,8 @@
 //   --report <file>                    write each map square's gaps as JSON instead (nothing is written)
 //   --only <label>                     add only spawns with this label (e.g. "Sailing sea creature")
 //
-// data/definitions/npc-spawn-sync.json holds lasting decisions: cache NPC categories, NPC names,
-// Wiki page patterns and areas to label (sea creatures, doors tsps handles as objects, Leagues and
+// data/definitions/npc-spawn-sync.json holds lasting decisions: cache NPC categories, NPC names
+// (exact or by pattern), Wiki page patterns and areas to label (sea creatures, doors tsps handles as objects, Leagues and
 // holiday NPCs, instance templates) and, when `skip` is set, to leave out.
 //
 // Where the Wiki keeps spawns:
@@ -239,6 +239,7 @@ function decide(decisions: any, id: number, name: string, page: string, at: { x:
     const category = (CacheDefinitions.getNpc(id) as any)?.category;
     if (decisions.categories?.[category]) found.push(decisions.categories[category]);
     if (decisions.names?.[name]) found.push(decisions.names[name]);
+    for (const rule of decisions.namePatterns ?? []) if (new RegExp(rule.pattern, "i").test(name)) found.push(rule);
     for (const rule of decisions.pagePatterns ?? []) if (new RegExp(rule.pattern, "i").test(page)) found.push(rule);
     return { flags: found.map((decision) => decision.label), skip: found.some((decision) => decision.skip) };
 }
