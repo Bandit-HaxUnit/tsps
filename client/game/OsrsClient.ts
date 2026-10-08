@@ -838,6 +838,12 @@ export class OsrsClient {
     controlledPlayerServerId: number = -1;
     /** Per-tick active world entity IDs — maintained by WORLDENTITY_INFO packets. */
     private activeWorldEntityIds: number[] = [];
+    /**
+     * Boats despawned in the same update as a new one spawned where they were (a part swapped or
+     * a facility built replaces the boat, as live does): each stays drawn until its replacement's
+     * deck is built, so the boat doesn't vanish while the new deck loads.
+     */
+    private readonly replacedWorldEntities = new Map<number, { replacements: number[]; until: number }>();
 
     // Server-provided animation sequences for the controlled player (idle/walk/run/crawl + optional directional/turn)
     serverPlayerSeqs?: {
@@ -3363,6 +3369,9 @@ export class OsrsClient {
                     } catch (err) {
                         console.warn("[OsrsClient] player sync tick failed", err);
                     }
+                    try {
+                        this.finishReplacedWorldEntities();
+                    } catch {}
                     try {
                         (this.playerEcs as any).onServerTick?.();
                     } catch {}
@@ -6997,13 +7006,27 @@ export class OsrsClient {
         }
     }
 
+    /** Op flags the server sent with added locs, by `x|y|locId`; a loc without any shows every op. */
+    private readonly locOpFlags = new Map<string, number>();
+
+    /** The op flags of the loc `locId` added at a tile, or undefined when it has none. */
+    locOpFlagsAt(x: number, y: number, locId: number): number | undefined {
+        return this.locOpFlags.get(`${x | 0}|${y | 0}|${locId | 0}`);
+    }
+
     onLocAddChange(
         locId: number,
         tile: { x: number; y: number },
         level: number,
         shape: number,
         rotation: number,
+        opFlags?: number,
     ): void {
+        const prefix = `${tile.x | 0}|${tile.y | 0}|`;
+        for (const key of this.locOpFlags.keys()) {
+            if (key.startsWith(prefix)) this.locOpFlags.delete(key);
+        }
+        if (opFlags !== undefined) this.locOpFlags.set(`${prefix}${locId | 0}`, opFlags);
         try {
             console.log(
                 `[OsrsClient] Loc add: ${locId} at (${tile.x}, ${tile.y}, ${level}) shape=${shape} rot=${rotation}`,
@@ -7017,6 +7040,10 @@ export class OsrsClient {
     }
 
     onLocDel(tile: { x: number; y: number }, level: number, shape: number, rotation: number): void {
+        const prefix = `${tile.x | 0}|${tile.y | 0}|`;
+        for (const key of this.locOpFlags.keys()) {
+            if (key.startsWith(prefix)) this.locOpFlags.delete(key);
+        }
         try {
             console.log(
                 `[OsrsClient] Loc del at (${tile.x}, ${tile.y}, ${level}) shape=${shape} rot=${rotation}`,
@@ -7820,10 +7847,19 @@ export class OsrsClient {
     private handleWorldEntityInfo(payload: WorldEntityInfoPayload): void {
         const prev = this.activeWorldEntityIds;
         const { oldCount, oldUpdates, newSpawns } = payload;
+        this.finishReplacedWorldEntities();
+        const despawn = (entityIndex: number) => {
+            const replacements = this.replacementsFor(entityIndex, newSpawns);
+            if (replacements.length > 0) {
+                this.replacedWorldEntities.set(entityIndex, { replacements, until: Date.now() + 5000 });
+            } else {
+                this.despawnWorldEntity(entityIndex);
+            }
+        };
 
         // Phase 1: Truncation — despawn entities beyond oldCount
         for (let i = oldCount; i < prev.length; i++) {
-            this.despawnWorldEntity(prev[i]);
+            despawn(prev[i]);
         }
 
         // Phase 2: Process updates for surviving old entities
@@ -7832,7 +7868,7 @@ export class OsrsClient {
             const entityId = prev[i];
             const upd = oldUpdates[i];
             if (upd.updateType === 0) {
-                this.despawnWorldEntity(entityId);
+                despawn(entityId);
                 continue;
             }
 
@@ -7862,8 +7898,10 @@ export class OsrsClient {
             }
         }
 
-        // Phase 3: Register new spawns (scene data already loaded via REBUILD_WORLDENTITY)
+        // Phase 3: Register new spawns (scene data already loaded via REBUILD_WORLDENTITY). One
+        // reusing a replaced boat's index has already rebuilt its scene in place.
         for (const spawn of newSpawns) {
+            this.replacedWorldEntities.delete(spawn.entityIndex);
             next.push(spawn.entityIndex);
 
             const entity = this.worldViewManager.getWorldEntity(spawn.entityIndex);
@@ -7902,6 +7940,35 @@ export class OsrsClient {
                     entity.configId,
                     getClientCycle(),
                 );
+            }
+        }
+    }
+
+    /** New spawns within a few tiles of where a despawned entity was: its replacements. */
+    private replacementsFor(
+        entityIndex: number,
+        newSpawns: WorldEntityInfoPayload["newSpawns"],
+    ): number[] {
+        const entity = this.worldViewManager.getWorldEntity(entityIndex);
+        if (!entity) return [];
+        const near = 8 * 128;
+        return newSpawns
+            .filter((spawn) => spawn.entityIndex !== entityIndex && spawn.position)
+            .filter((spawn) =>
+                Math.abs(spawn.position!.x - entity.position.x) <= near &&
+                Math.abs(spawn.position!.z - entity.position.z) <= near)
+            .map((spawn) => spawn.entityIndex);
+    }
+
+    /** Removes replaced boats whose replacement's deck is drawn now (or that waited too long). */
+    private finishReplacedWorldEntities(): void {
+        for (const [entityIndex, { replacements, until }] of this.replacedWorldEntities) {
+            const drawn = replacements.some(
+                (replacement) => (this.renderer as any)?.getOverlayMapForEntity?.(replacement) !== undefined,
+            );
+            if (drawn || Date.now() > until) {
+                this.replacedWorldEntities.delete(entityIndex);
+                this.despawnWorldEntity(entityIndex);
             }
         }
     }
@@ -7998,6 +8065,7 @@ export class OsrsClient {
 
         // Clear map data
         this.activeWorldEntityIds = [];
+        this.replacedWorldEntities.clear();
         try {
             (this.renderer as any)?.clearAllWorldEntities?.();
         } catch (err) {
