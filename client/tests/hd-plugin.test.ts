@@ -76,7 +76,11 @@ let shadows = 0;
 let actorShadows = 0;
 let shadowCopies = 0;
 let viewport: number[] = [];
-const resource = () => ({ delete: () => deleted++, data() {}, resize() {}, depthTarget() { return this; } });
+let created = 0;
+const resource = () => {
+    created++;
+    return { delete: () => deleted++, data() {}, resize() {}, depthTarget() { return this; } };
+};
 const values = new Map<string, unknown>();
 let programBinds = 0;
 const program = { bind() { programBinds++; }, uniform: (name: string, value: unknown) => values.set(name, value), samplers: { u_textures: 0 } as Record<string, number> };
@@ -115,6 +119,7 @@ assert.deepEqual(program.samplers, { u_textures: 0, u_hdShadowMap: 1, u_hdMateri
 plugin.beforeSceneRender(renderer, () => actorShadows++);
 assert.equal(shadows, 0);
 assert.equal(programBinds, 0, "Plain programs take no HD uniforms");
+assert.equal(created, 2, "With HD off only the two 1x1 placeholders exist: no HD materials or shadow maps");
 assert.equal(rebuilds, 0);
 plugin.setEnabledState(true);
 plugin.beforeSceneRender(renderer, () => actorShadows++);
@@ -168,7 +173,7 @@ programBinds = 0;
 plugin.beforeSceneRender(renderer, () => {});
 assert.equal(programBinds, 0);
 plugin.disposeRenderer(renderer);
-assert.equal(deleted, 8, "Dispose both shadow framebuffers/depth textures, both material arrays and lookup/placeholder textures");
+assert.equal(deleted, 9, "Dispose both shadow framebuffers/depth textures, both material arrays, the lookup and both placeholders");
 assert.equal(new HdPlugin().isEnabled(), false, "Disabled by default");
 performance.now = originalNow;
 

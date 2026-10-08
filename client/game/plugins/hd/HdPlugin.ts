@@ -1,4 +1,3 @@
-import { isLowEndDevice } from "../../../common/utils/DeviceUtil";
 import { mat4, vec3 } from "gl-matrix";
 import PicoGL, { type DrawCall, type Framebuffer, type Program, type Texture } from "picogl";
 import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
@@ -42,7 +41,9 @@ export class HdPlugin extends Plugin {
         hd: boolean;
         rebuilding: boolean;
         placeholder: Texture;
-        materials: HdMaterials;
+        placeholderArray: Texture;
+        /** Created the first frame HD is on: nothing of HD's is allocated while it is off. */
+        materials?: HdMaterials;
         shadow?: Texture;
         framebuffer?: Framebuffer;
         worldShadow?: Texture;
@@ -63,17 +64,19 @@ export class HdPlugin extends Plugin {
     // HD code is compiled in only while HD is on: a GPU pays for it even behind u_hdEnabled
     // (through ANGLE's Direct3D 11 the branches compile flat: an Xbox fell to single-digit FPS,
     // then a GPU reset). beforeSceneRender recompiles the programs when the toggle changes.
-    // Never on a low-end device (phone, tablet): its memory has no room for HD anyway.
     transformSceneProgram(source: ProgramSource): ProgramSource {
-        this.compilingHd = !isLowEndDevice && this.isEnabled();
+        this.compilingHd = this.isEnabled();
         return this.compilingHd ? createHdProgram(source, lighting) : source;
     }
 
     sceneProgramsReady(renderer: WebGLOsrsRenderer, programs: Program[]): void {
-        if (isLowEndDevice) return;
         this.disposeRenderer(renderer);
-        // A complete sampler is required even when its shader branch is disabled.
+        // A complete sampler is required even when its shader branch is disabled; one of each
+        // kind, so a draw call holds the right texture type in every HD slot before HD is on.
         const placeholder = renderer.app.createTexture2D(new Uint8Array([255, 255, 255, 255]), 1, 1, {
+            minFilter: PicoGL.NEAREST, magFilter: PicoGL.NEAREST,
+        });
+        const placeholderArray = renderer.app.createTextureArray(new Uint8Array([255, 255, 255, 255]), 1, 1, 1, {
             minFilter: PicoGL.NEAREST, magFilter: PicoGL.NEAREST,
         });
         // Draw calls built on the plain programs get the HD textures too, on units kept free for
@@ -82,7 +85,7 @@ export class HdPlugin extends Plugin {
             for (const name of HD_SAMPLERS) program.samplers[name] ??= Math.max(-1, ...Object.values(program.samplers)) + 1;
         }
         this.renderers.set(renderer, {
-            programs: programs as SceneProgram[], hd: this.compilingHd, rebuilding: false, placeholder, materials: new HdMaterials(renderer.app), shadowPass: false, shadowFrustum: new Frustum(),
+            programs: programs as SceneProgram[], hd: this.compilingHd, rebuilding: false, placeholder, placeholderArray, shadowPass: false, shadowFrustum: new Frustum(),
             lightPositions: new Float32Array(LIGHT_LIMIT * 4), lightColors: new Float32Array(LIGHT_LIMIT * 4), lightCount: 0,
         });
     }
@@ -91,9 +94,9 @@ export class HdPlugin extends Plugin {
         const state = this.renderers.get(renderer);
         if (!state || !state.programs.includes(drawCall.currentProgram as SceneProgram)) return;
         drawCall.texture("u_hdShadowMap", state.shadowPass ? state.placeholder : state.shadow ?? state.placeholder);
-        drawCall.texture("u_hdMaterials", state.materials.lookup);
-        drawCall.texture("u_hdTextures", state.materials.textures);
-        drawCall.texture("u_hdDetailTextures", state.materials.detailTextures);
+        drawCall.texture("u_hdMaterials", state.materials?.lookup ?? state.placeholder);
+        drawCall.texture("u_hdTextures", state.materials?.textures ?? state.placeholderArray);
+        drawCall.texture("u_hdDetailTextures", state.materials?.detailTextures ?? state.placeholderArray);
     }
 
     beforeSceneRender(renderer: WebGLOsrsRenderer, drawActors: () => void): void {
@@ -119,6 +122,7 @@ export class HdPlugin extends Plugin {
             flush();
             return;
         }
+        state.materials ??= new HdMaterials(renderer.app);
         state.materials.update(renderer.textureIdIndexMap);
         mat4.invert(this.inverseView, renderer.osrsClient.camera.viewMatrix);
         set("u_hdInverseView", this.inverseView);
@@ -241,7 +245,6 @@ export class HdPlugin extends Plugin {
 
     /** The WebGPU backend's equivalent of the hooks above: see ./webgpu/HdWebGPU.ts. */
     createWebGPUSceneExtension(context: WebGPUSceneExtensionContext): WebGPUSceneExtension | undefined {
-        if (isLowEndDevice) return undefined;
         return createHdWebGPUExtension(() => this.isEnabled(), context);
     }
 
@@ -252,7 +255,8 @@ export class HdPlugin extends Plugin {
         state?.worldFramebuffer?.delete();
         state?.worldShadow?.delete();
         state?.placeholder.delete();
-        state?.materials.dispose();
+        state?.placeholderArray.delete();
+        state?.materials?.dispose();
         this.renderers.delete(renderer);
     }
 }

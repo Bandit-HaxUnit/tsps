@@ -61,7 +61,9 @@ fn hdMistAmount(position: vec3<f32>) -> f32 {
     let depth = 1.0 - exp(-length(position.xz - scene.u_cameraPos) * 0.07);
     let drift = position.xz * 0.07 + ${mist}.zw * scene.u_currentTime;
     let banks = hdMistNoise(drift) * 0.65 + hdMistNoise(drift * 2.3 + 17.0) * 0.35;
-    return clamp(low * depth * mix(0.4, 1.0, banks) * ${mist}.y, 0.0, 1.0);
+    // Clear around the player: none within 4 tiles, full by 14 (mirrored in hd-lighting.glsl).
+    let clear = smoothstep(4.0, 14.0, length(position.xz - scene.u_playerPos));
+    return clamp(low * depth * clear * mix(0.4, 1.0, banks) * ${mist}.y, 0.0, 1.0);
 }
 `;
 }
