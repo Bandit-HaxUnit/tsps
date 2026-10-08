@@ -91,3 +91,14 @@ yarn sync:npc-spawns --box 1024,2752,1919,3455 --write
 - **Left out by the decisions:** Tempoross and its props (ammunition crates, spirit pools), the Soul Wars Avatar of Creation, the Wiki's Void Knight and squire on Pest Control's island (the plugin spawns its own), and The Node, the Group Ironman starting island.
 - **Left for later:** Lucien's camp (its skeletons and undead mages look quest-related) and the "Meaty Aura Logist" rows.
 
+## Varlamore's underground
+
+```sh
+yarn sync:npc-spawns --box 1216,9344,1727,9855 --tag Neypotzli --write
+```
+
+454 spawns: Cam Torum's city (guards, citizens, children, bankers, the bar and smithy, on plane 1), the Stalker Den's custodian stalkers, the Ruins of Tapoyauik (icefiends, ice giants, blue dragons, Frost Nagua, chilled jellies), the Tonali Cavern (Earthen Nagua, grimy lizards, giant rock crabs), and Neypotzli's gaps. `--tag Neypotzli` picks Neypotzli's own wyrmlings (13031) over Wyrmscraig's.
+
+- **Left out:** the Perilous Moons bosses (Blood, Blue and Eclipse Moon) and Amoxliatl, since no plugin gives them their fights yet. Araxxor is in the same decision ahead of the dungeon batch.
+- **Not yet:** the Frost Nagua have no stats until the monster database update.
+
