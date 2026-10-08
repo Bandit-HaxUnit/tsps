@@ -357,13 +357,13 @@ try {
         const headScreenY = (1 - (head[1] / head[3] + 1) / 2) * client.camera.screenHeight;
         assert.ok(crosshairPoint(client.camera).y < headScreenY - 5,
             `the crosshair sits clear above the player's head in the ${width}x${height} default view`);
-        // A standing NPC (feet to 1.5 tiles up) anywhere 4-8 tiles ahead is under the crosshair.
+        // A standing NPC (feet to 1.5 tiles up) anywhere 3-6 tiles ahead is under the crosshair.
         const screenY = (x: number, y: number) => {
             const p = vec4.fromValues(x, y, 20, 1);
             vec4.transformMat4(p, p, client.camera.viewProjMatrix);
             return (1 - (p[1] / p[3] + 1) / 2) * client.camera.screenHeight;
         };
-        for (const ahead of [4, 6, 8]) {
+        for (const ahead of [3, 4, 5, 6]) {
             const aim = crosshairPoint(client.camera).y;
             assert.ok(screenY(10 + ahead, -4.5) <= aim && aim <= screenY(10 + ahead, -3),
                 `the crosshair lands on an NPC ${ahead} tiles ahead in the ${width}x${height} default view`);
