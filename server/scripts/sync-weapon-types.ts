@@ -150,8 +150,24 @@ function cacheWeapons(): Map<number, string> {
     return weapons;
 }
 
+/** Older exports wrote 821 (walk left) for both side turns. */
+const HUMAN_TURN_90_CCW_OLD = 821;
+
 function hasHumanStance(row: ItemRow | undefined): boolean {
-    return !row || STANCE_FIELDS.every((field) => row[field] === undefined || row[field] === HUMAN_STANCE[field]);
+    return !row || STANCE_FIELDS.every((field) => row[field] === undefined || row[field] === HUMAN_STANCE[field]
+        || (field === "turn90CCWAnim" && row[field] === HUMAN_TURN_90_CCW_OLD));
+}
+
+/** The type most weapons of a name have in a category, when it's a clear majority (not `id`'s own row). */
+function commonType(namesakes: ItemRow[], id: number, category: number | undefined): string | undefined {
+    const counts = new Map<string, number>();
+    for (const row of namesakes) {
+        if (row.id === id || !row.weaponInterface) continue;
+        counts.set(row.weaponInterface, (counts.get(row.weaponInterface) ?? 0) + 1);
+    }
+    const ranked = [...counts].sort((a, b) => b[1] - a[1]);
+    if (ranked.length === 0 || (ranked.length > 1 && ranked[0][1] === ranked[1][1])) return undefined;
+    return ranked[0][0];
 }
 
 function stanceOf(row: ItemRow): Record<string, number> {
@@ -254,6 +270,20 @@ async function main() {
         const category = categoryName ? categoryNumber.get(categoryName) : undefined;
         const current = row?.weaponInterface as string | undefined;
         if (current && (category === undefined || interfaceCategory(current) === category)) {
+            // A right category, but a copy still on the human stance (an ornament "Granite maul" left
+            // a warhammer) where a weapon of the same name has its real data: that one's type and stance.
+            const namesakeType = hasHumanStance(row) ? commonType(typedByName.get(name.toLowerCase()) ?? [], id, interfaceCategory(current)) : undefined;
+            const model = namesakeType
+                ? (typedByName.get(name.toLowerCase()) ?? []).find((typed) => typed.weaponInterface === namesakeType && !hasHumanStance(typed))
+                : undefined;
+            if (row && model && namesakeType !== current) {
+                const next = { ...withInterface(row, namesakeType!), ...stanceOf(model) };
+                rows[rows.indexOf(row)] = next;
+                changes.push(`${name} (${id}): ${current} -> ${namesakeType} and stance, from ${model.name} ${model.id}`);
+                const key = name.toLowerCase();
+                typedByName.set(key, [...(typedByName.get(key) ?? []).filter((typed) => typed.id !== id), next]);
+                continue;
+            }
             // Right type already: a variant still on the human stance takes its namesake's stance.
             const namesake = hasHumanStance(row) ? sourceFor(name, interfaceCategory(current)) : undefined;
             if (row && namesake && namesake.id !== id && !hasHumanStance(namesake)) {

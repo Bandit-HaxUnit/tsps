@@ -73,6 +73,15 @@ test("every weapon type is a cache weapon category with its styles", () => {
   assert.equal(styles.weaponInterfaces.ELDER_MAUL.category, styles.weaponInterfaces.WARHAMMER.category, "the Elder maul is blunt");
 });
 
+test("a copy of a weapon has its original's type and stance", () => {
+  // Granite maul 24225 (a copy) was a warhammer on the human stance, like no Granite maul.
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  for (const id of [24225, 24227, 20557]) {
+    assert.equal(byId.get(id).weaponInterface, "GRANITE_MAUL", `${id}`);
+    assert.equal(byId.get(id).standAnim, byId.get(4153).standAnim, `${id} stance`);
+  }
+});
+
 test("attack speed is the cache's for the item, ahead of its weapon type's", () => {
   // Scythe of Vitur: 5 (cache and Wiki), not the scythe type's 4; the plain Scythe: 7.
   assert.equal(WeaponProfiles.attackSpeed(wielding(22325, WeaponInterfaces.SCYTHE), 4), 5);
