@@ -101,8 +101,7 @@ class BotBrain {
   }
 
   reset() {
-    for (const frame of [...this.frames].reverse()) {
-      frame.action()?.stop?.(this.context(frame, Date.now()));
+    for (const frame of this.frames) {
       this.releaseFrame(frame);
     }
     this.frames = [];
