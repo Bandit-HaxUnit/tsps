@@ -97,3 +97,13 @@ test('Varlamore spawns come from the Wiki, without the NPCs plugins spawn themse
   // Disguised sand crabs stand still, as the existing ones do.
   assert.ok(varlamore.filter((spawn) => spawn.name === 'Sandy rocks').every((spawn) => spawn.wanderRadius === 0));
 });
+
+test('the Sailing islands and seas, without minigame, plugin and Group Ironman NPCs', () => {
+  const spawns = require('../data/definitions/npc-spawns.json');
+  const conch = spawns.filter((spawn) => spawn.source === 'wiki' && inBoxes(spawn, [parseBox('3072,2240,3391,2623,0')]));
+  assert.ok(conch.length >= 150, `${conch.length} on The Great Conch`);
+  const left = ['Tempoross', '<col=00ffff>Ammunition crate</col>', 'Avatar of Creation', 'Group Ironman tutor', 'D3ad1i F15her'];
+  assert.deepEqual(spawns.filter((spawn) => spawn.source === 'wiki' && left.includes(spawn.name)), []);
+  // Pest Control's island is the plugin's: no Wiki Void Knight or squire there.
+  assert.deepEqual(spawns.filter((spawn) => spawn.source === 'wiki' && inBoxes(spawn, [parseBox('2624,2560,2687,2623,0')])), []);
+});

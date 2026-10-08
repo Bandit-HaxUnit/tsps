@@ -12,6 +12,7 @@
 //   --skip <Name>                      leave a Wiki page's spawns out (Leagues or event NPCs; repeatable)
 //   --radius <tiles>                   how far an existing spawn may be from the Wiki's (default 4)
 //   --report <file>                    write each map square's gaps as JSON instead (nothing is written)
+//   --only <label>                     add only spawns with this label (e.g. "Sailing sea creature")
 //
 // data/definitions/npc-spawn-sync.json holds lasting decisions: cache NPC categories, NPC names,
 // Wiki page patterns and areas to label (sea creatures, doors tsps handles as objects, Leagues and
@@ -298,7 +299,8 @@ async function main() {
     }
     const existing = named.filter((spawn) => inBoxes(spawn, boxes));
     const plan = planAdditions(candidates, existing, radius);
-    const add: Candidate[] = plan.add.filter((spawn: Candidate) => !spawn.skip);
+    const only = argValues("--only");
+    const add: Candidate[] = plan.add.filter((spawn: Candidate) => !spawn.skip && (only.length === 0 || only.some((label) => spawn.flags.includes(label))));
 
     const drops = readJson("npc-drops.json").npcs ?? {};
     const stats = readJson("monsters-complete.json");

@@ -83,3 +83,11 @@ yarn sync:npc-spawns --box 1024,2752,1919,3455 --write
 - **Left out:** the Leagues Navigator; the Gemstone Crab and Sol Heredit, which plugins spawn themselves.
 - **Not covered:** Varlamore's underground (Cam Torum, the Ruins of Tapoyauik, the Stalker Den), for a dungeon batch.
 
+## Sailing islands and seas
+
+1. **Every empty surface map square outside Varlamore** (190 squares, from the gap report, `--box` per square): 1,932 spawns. That's The Great Conch, Isle of Serpents, Cape Conch, Dognose Island, The Summer Shore, The Onyx Crest, Anglers' Retreat, The Crown Jewel, Charred Island, Sunbleak Island and the rest, with the sea around them.
+2. **Sea creatures off coasts tsps already covers:** `--box 0,0,16383,16383,0 --only "Sailing sea creature"`, 280 spawns. Narwhals, bull sharks, albatrosses, terns, vampyre krakens and orcas off Morytania, the Fremennik isles, Kourend and Karamja. Nothing else is added there.
+
+- **Left out by the decisions:** Tempoross and its props (ammunition crates, spirit pools), the Soul Wars Avatar of Creation, the Wiki's Void Knight and squire on Pest Control's island (the plugin spawns its own), and The Node, the Group Ironman starting island.
+- **Left for later:** Lucien's camp (its skeletons and undead mages look quest-related) and the "Meaty Aura Logist" rows.
+
