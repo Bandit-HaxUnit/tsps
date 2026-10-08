@@ -71,3 +71,15 @@ The existing Mad Angel matched and wasn't doubled. All of them that fight have d
 - **Standing still:** the fishing spots (as existing ones), Mortimer and the broken golem (no walk animation). Mortimer 16175, the post-quest version, has no animations at all in the cache: no `readyanim` or `walkanim` opcode, only conditional menu options (opcode 252). The other id, 16294, has `mortimer_idle`.
 - **Mountain trolls:** the Wiki lists 936–942 and 16330–16332 under one version, identical in the cache; the script used 936, which existing spawns use.
 - **Not covered by spawns:** dialogue, the two shops, Mortimer's Slayer assignments, goat hunting and golem crafting.
+
+## Varlamore (surface)
+
+```sh
+yarn sync:npc-spawns --box 1024,2752,1919,3455 --write
+```
+
+2,391 spawns across 47 areas, which had 186 before. The largest are Civitas illa Fortis (374), the Tlati Rainforest (254), the Avium Savannah (221), Aldarin (198), Auburnvale (93) and Laguna Aurorae (89).
+- **Kept:** 270 Sailing sea creatures along the coast, and 94 spawns of NPCs without drops yet (Strangled, giant mosquitoes, carnivorous chinchompas, Sunlight antelopes, a few guards); their tables come with the next monster and drop dump.
+- **Left out:** the Leagues Navigator; the Gemstone Crab and Sol Heredit, which plugins spawn themselves.
+- **Not covered:** Varlamore's underground (Cam Torum, the Ruins of Tapoyauik, the Stalker Den), for a dungeon batch.
+

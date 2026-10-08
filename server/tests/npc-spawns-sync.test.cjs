@@ -86,3 +86,14 @@ test('Wyrmscraig spawns come from the Wiki, with ids in the cache and their drop
     assert.equal(spawn.wanderRadius, 0, `${spawn.name} at ${spawn.x},${spawn.y}`);
   }
 });
+
+test('Varlamore spawns come from the Wiki, without the NPCs plugins spawn themselves', () => {
+  const spawns = require('../data/definitions/npc-spawns.json');
+  const varlamore = spawns.filter((spawn) => spawn.source === 'wiki' && inBoxes(spawn, [parseBox('1024,2752,1919,3455')]));
+  assert.ok(varlamore.length >= 2300, `${varlamore.length} Varlamore spawns`);
+  for (const name of ['Citizen', 'Guard', 'Knight of Varlamore', 'Capybara']) assert.ok(varlamore.some((spawn) => spawn.name === name), name);
+  // The Gemstone Crab plugin spawns its crab; the Colosseum run spawns Sol Heredit.
+  assert.deepEqual(varlamore.filter((spawn) => ['Gemstone Crab', 'Sol Heredit'].includes(spawn.name)), []);
+  // Disguised sand crabs stand still, as the existing ones do.
+  assert.ok(varlamore.filter((spawn) => spawn.name === 'Sandy rocks').every((spawn) => spawn.wanderRadius === 0));
+});
