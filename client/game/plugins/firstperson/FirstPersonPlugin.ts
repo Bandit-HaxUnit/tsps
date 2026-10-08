@@ -97,7 +97,7 @@ const POISON_SECONDS = 1.2;
 const POISON_PULSES = 2;
 // The camera orbits a point near the player's neck, so the view centre is on the player; aiming
 // this far above it clears the head and lands on players and NPCs about 3-5 tiles ahead.
-const CROSSHAIR_RAISE_DEGREES = 12;
+const CROSSHAIR_RAISE_DEGREES = 9;
 // How quickly the camera swings round behind a player turning to face its target (per second).
 const FACE_TARGET_RATE = 6;
 // A wall on the side of the tile the ray enters through stops the camera (bits match CollisionFlag).

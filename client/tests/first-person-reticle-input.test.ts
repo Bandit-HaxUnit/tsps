@@ -1143,7 +1143,7 @@ console.log("first-person reticle input ok");
 
 
 {
-    // Level camera looking north: a point 12 degrees above the view direction lands on the crosshair,
+    // Level camera looking north: a point 9 degrees above the view direction lands on the crosshair,
     // at any zoom (the running FOV changes the zoom scale).
     for (const zoomScale of [1, 0.82]) {
         const camera = new Camera(0, 0, 0, 0, 0);
@@ -1152,11 +1152,11 @@ console.log("first-person reticle input ok");
         camera.update(640, 480);
         const raise = crosshairRaisePixels(camera);
         assert.ok(raise > 10, "the crosshair sits clearly above the view centre");
-        const clip = vec4.fromValues(0, -Math.tan(12 * Math.PI / 180) * 10, 10, 1);
+        const clip = vec4.fromValues(0, -Math.tan(9 * Math.PI / 180) * 10, 10, 1);
         vec4.transformMat4(clip, clip, camera.viewProjMatrix);
         const screenY = (1 - (clip[1] / clip[3] + 1) / 2) * camera.screenHeight;
         assert.ok(Math.abs(screenY - (camera.viewportYOffset + camera.viewportHeight / 2 - raise)) < 0.5,
-            `the raised crosshair aims 12 degrees up at zoom scale ${zoomScale}`);
+            `the raised crosshair aims 9 degrees up at zoom scale ${zoomScale}`);
     }
 }
 console.log("crosshair aim ok");
