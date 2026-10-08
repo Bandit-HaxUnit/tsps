@@ -8,7 +8,7 @@ import { sampleBridgeHeightForWorldTile } from "../../../game/scene/BridgeHeight
 import { getMapSquareId } from "../../../rs/map/MapFileIndex";
 import type { SdMapData } from "../../loader/SdMapData";
 import { MAX_TEXTURES, RENDER_CONSTANTS } from "../../render/constants";
-import { GPU_SHADER_STAGE } from "../bindings";
+import { GPU_SHADER_STAGE, SCENE_DEPTH_FORMAT } from "../bindings";
 import type { WebGPUMapSquare } from "../WebGPUMapSquare";
 import type { WebGPURenderer } from "../WebGPURenderer";
 import type { WorldResources } from "../WorldResources";
@@ -286,11 +286,19 @@ export class WebGPUActors {
                         : {
                               module,
                               entryPoint: ACTOR_FRAGMENT_ENTRY,
-                              targets: [{ format: renderer.format, blend: alpha ? blend : undefined }],
+                              targets: [
+                                  {
+                                      format:
+                                          mode === "extended"
+                                              ? extension!.sceneColorFormat ?? renderer.format
+                                              : renderer.format,
+                                      blend: alpha ? blend : undefined,
+                                  },
+                              ],
                           },
                     primitive: { topology: "triangle-list", cullMode, frontFace: "ccw" },
                     depthStencil: {
-                        format: depth ? extension!.depthFormat ?? "depth32float" : "depth24plus",
+                        format: depth ? extension!.depthFormat ?? SCENE_DEPTH_FORMAT : SCENE_DEPTH_FORMAT,
                         depthWriteEnabled: true,
                         depthCompare: "less-equal",
                     },
