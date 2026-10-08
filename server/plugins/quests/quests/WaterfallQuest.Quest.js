@@ -187,10 +187,13 @@ module.exports = function registerWaterfallQuest(api) {
   function handleAction(event) {
     if (event.stepId === "2-d8NO") {
       const { player } = event;
-      if (quest.getStage(player) >= STAGE_READ_BOOK && !hasItem(player, GLARIALS_PEBBLE_ITEM_ID)) {
+      const stage = quest.getStage(player);
+      if (stage >= STAGE_READ_BOOK && !hasItem(player, GLARIALS_PEBBLE_ITEM_ID)) {
         if (!player.getInventory().isFull()) {
           player.getInventory().adds(GLARIALS_PEBBLE_ITEM_ID, 1);
-          quest.setStage(player, STAGE_GOT_PEBBLE);
+          // A completed player (Roving Elves) reclaims a pebble: never regress
+          // the stage past the pebble step.
+          if (stage < STAGE_GOT_PEBBLE) quest.setStage(player, STAGE_GOT_PEBBLE);
         }
       }
       event.handled = true;
