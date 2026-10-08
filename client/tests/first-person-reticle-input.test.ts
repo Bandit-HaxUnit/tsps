@@ -299,8 +299,12 @@ try {
         followNow += 30;
         follow();
         assert.deepEqual(Array.from(client.camera.pos), rest, "a block or miss neither shakes nor reddens");
-        const host = { style: { setProperty: (_name: string, value: string) => { redness = Number(value); } } };
+        const host = { style: { setProperty: (name: string, value: string) => {
+            if (name === "--first-person-poison") poison = Number(value);
+            else redness = Number(value);
+        } } };
         let redness = 0;
+        let poison = 0;
         const inputElement = input.element;
         (input as any).element = { parentElement: host };
         const peak = (damage: number) => {
@@ -322,6 +326,15 @@ try {
         assert.ok(redness > light, "hits in quick succession stack");
         followNow += 1000;
         follow();
+        plugin.onHitsplat({ targetType: "player", targetId: 10, damage: 6, style: 65 });
+        followNow += 1;
+        follow();
+        assert.ok(poison > 0 && redness === 0, "poison pulses the edge green, not red");
+        const pulse: number[] = [];
+        for (let i = 0; i < 24; i++) { followNow += 50; follow(); pulse.push(poison); }
+        assert.ok(pulse.some((value, i) => i > 1 && value > pulse[i - 1] && pulse[i - 1] < pulse[i - 2]),
+            "the green dims and brightens again (it pulses)");
+        assert.equal(poison, 0, "the poison pulse clears");
         input.element = inputElement;
         plugin.onHitsplat({ targetType: "player", targetId: 10, damage: 20 });
         followNow += 30;

@@ -19,13 +19,15 @@
     z-index: 1;
 }
 
-/* Taking a hit reddens the screen edge; the plugin sets --first-person-hit (0..1). */
+/* Taking a hit reddens the screen edge, poison pulses it green; the plugin sets
+   --first-person-hit and --first-person-poison (0..1). */
 .first-person-reticle::before {
     content: "";
     position: absolute;
     inset: 0;
-    background: radial-gradient(ellipse at center, transparent 55%, rgb(150 0 0 / 60%) 100%);
-    opacity: var(--first-person-hit, 0);
+    background:
+        radial-gradient(ellipse at center, transparent 55%, rgb(150 0 0 / calc(60% * var(--first-person-hit, 0))) 100%),
+        radial-gradient(ellipse at center, transparent 55%, rgb(20 150 40 / calc(60% * var(--first-person-poison, 0))) 100%);
     pointer-events: none;
     z-index: 1;
 }

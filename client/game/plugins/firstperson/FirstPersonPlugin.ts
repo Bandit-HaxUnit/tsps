@@ -91,6 +91,10 @@ const GROUND_CLEARANCE = 0.3;
 const RUN_FOV_KICK = 0.18;
 const HIT_SECONDS = 0.35;
 const HIT_FULL_DAMAGE = 40;
+/** Poison and venom hitsplats (yours, others', venom): a green pulse instead of the red jolt. */
+const POISON_SPLATS = new Set([65, 66, 5]);
+const POISON_SECONDS = 1.2;
+const POISON_PULSES = 2;
 // The camera orbits a point near the player's neck, so the view centre is on the player; aiming
 // this far above it clears the head and lands on players and NPCs about 3-5 tiles ahead.
 const CROSSHAIR_RAISE_DEGREES = 12;
@@ -145,6 +149,9 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
     private hitAt = -Infinity;
     private hitStrength = 0;
     private hitVignette = 0;
+    private poisonAt = -Infinity;
+    private poisonStrength = 0;
+    private poisonVignette = 0;
     private padButtons: boolean[] = [];
     private padStick = { forward: 0, right: 0 };
     private padMoving = false;
@@ -507,6 +514,7 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
             if (y !== undefined) y += Math.sin(hitAge * 41 + 1) * hit * 0.08;
         }
         this.setHitVignette(hit);
+        this.setPoisonVignette(this.poisonAmount(now));
         camera.snapToPosition(Math.round(x * 128) / 128, y, Math.round(z * 128) / 128);
 
         // Running widens the view; it eases out a little slower than it eases in.
@@ -641,15 +649,33 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
         // and a hit landing while the last one fades adds to what is left of it.
         if (!(event.damage > 0)) return;
         const now = performance.now();
+        if (POISON_SPLATS.has(event.style ?? -1)) {
+            this.poisonStrength = Math.min(1, 0.45 + 0.55 * Math.min(1, event.damage / 20));
+            this.poisonAt = now;
+            this.rumble(150, 0.15, 0.4);
+            return;
+        }
         this.hitStrength = Math.min(1, this.hitAmount(now) + 0.15 + 0.85 * Math.min(1, event.damage / HIT_FULL_DAMAGE));
         this.hitAt = now;
         // A controller rumbles with the same strength as the jolt and redness.
+        this.rumble(120 + 200 * this.hitStrength, this.hitStrength, Math.min(1, this.hitStrength + 0.2));
+    }
+
+    private rumble(durationMs: number, strong: number, weak: number): void {
         const actuator = (this.client.inputManager.getGamepad?.() as { vibrationActuator?: any } | null)?.vibrationActuator;
         void actuator?.playEffect?.("dual-rumble", {
-            duration: Math.round(120 + 200 * this.hitStrength),
-            strongMagnitude: this.hitStrength,
-            weakMagnitude: Math.min(1, this.hitStrength + 0.2),
+            duration: Math.round(durationMs),
+            strongMagnitude: strong,
+            weakMagnitude: weak,
         })?.catch?.(() => undefined);
+    }
+
+    /** The poison edge: POISON_PULSES pulses fading out over POISON_SECONDS, 0..1. */
+    private poisonAmount(now: number): number {
+        const age = (now - this.poisonAt) / 1000;
+        if (!(age >= 0 && age < POISON_SECONDS)) return 0;
+        const pulse = 0.5 + 0.5 * Math.cos(age / POISON_SECONDS * POISON_PULSES * 2 * Math.PI);
+        return this.poisonStrength * (1 - age / POISON_SECONDS) * pulse;
     }
 
     /** What remains of the last hit's jolt and redness, 0..1. */
@@ -677,6 +703,14 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
             tileZ = nextZ;
         }
         return reach;
+    }
+
+    private setPoisonVignette(amount: number): void {
+        const rounded = Math.round(amount * 100) / 100;
+        if (rounded === this.poisonVignette) return;
+        this.poisonVignette = rounded;
+        (this.client.inputManager.element?.parentElement as HTMLElement | undefined)?.style
+            .setProperty("--first-person-poison", String(rounded));
     }
 
     private setHitVignette(amount: number): void {
@@ -1093,6 +1127,8 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
         this.runBlend = 0;
         this.hitAt = -Infinity;
         this.setHitVignette(0);
+        this.poisonAt = -Infinity;
+        this.setPoisonVignette(0);
         if (enabled) {
             if (this.updateLoginSession() && !this.controlsHintShown) {
                 this.client.addGameMessage(CONTROLS_HINT);
