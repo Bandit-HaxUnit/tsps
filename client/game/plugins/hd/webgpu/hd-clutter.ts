@@ -278,9 +278,10 @@ export class HdClutterLayer {
         const tileY = map.getRenderBaseTileY() + localY;
         const tileHash = hashTile(tileX, tileY, level);
         const packed = map.getGroundColor?.(level, localX, localY) ?? 0;
-        const ground = packed
-            ? [(packed >>> 16) & 0xff, (packed >>> 8) & 0xff, packed & 0xff].map((c, i) => (c / 255) ** 2.2 * BLADE_TINT[i])
-            : FALLBACK_COLOR;
+        const soil = packed
+            ? [(packed >>> 16) & 0xff, (packed >>> 8) & 0xff, packed & 0xff].map((c) => (c / 255) ** 2.2)
+            : FALLBACK_COLOR.map((c, i) => c / BLADE_TINT[i]);
+        const ground = soil.map((c, i) => c * BLADE_TINT[i]);
         // Thin blades shimmer once they are a pixel wide; the sparse far field gets wider ones.
         const widthScale = 1 + Math.max(0, distance - DENSE_DISTANCE) / 20;
         for (let i = 0; i < count; i++) {
@@ -297,7 +298,8 @@ export class HdClutterLayer {
                 z = tileY + 0.15 + unit(clump, 8) * 0.7 + (unit(h, 16) + unit(h2, 0) - 1) * 0.2;
             }
             const height = 0.07 + unit(h, 24) * unit(h2, 8) * 0.17 + unit(tileHash, (i % CLUMPS_PER_TILE) * 8) * 0.04;
-            const halfWidth = (0.008 + unit(h2, 16) * 0.007) * widthScale;
+            // Never wider than a tenth of the height: short, wide blades read as dark spikes.
+            const halfWidth = Math.min((0.008 + unit(h2, 16) * 0.007) * widthScale, height * 0.1);
             const facing = unit(h2, 24) * Math.PI;
             const leanAngle = unit(h, 16) * Math.PI * 2;
             const lean = 0.015 + unit(h2, 8) * 0.05;
@@ -305,7 +307,8 @@ export class HdClutterLayer {
             const shade = 0.75 + unit(h, 8) * 0.4;
             const dry = unit(h2, 0) < 0.2 ? unit(h, 24) * 0.35 : 0;
             const tip = ground.map((c, k) => (c * (1 - dry) + DRY_TIP[k] * dry) * shade * 1.15);
-            const base = ground.map((c) => c * shade * 0.45);
+            // The root takes the ground's own colour so the blade grows out of it, not off it.
+            const base = soil.map((c) => c * 0.8);
             const sideX = Math.cos(facing) * halfWidth;
             const sideZ = Math.sin(facing) * halfWidth;
             const phase = unit(h2, 16) * Math.PI * 2;
