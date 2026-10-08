@@ -30,6 +30,7 @@ import { HD_GROUND_MATERIALS, HD_MATERIALS, type HdMaterial } from "../HdMateria
 import { HD_LOOKUP_WIDTH, HD_TEXTURE_FILES, HD_TEXTURE_SIZE } from "../HdMaterials";
 import { HdClutterLayer } from "./hd-clutter";
 import { HD_SCENE_SHADERS } from "./hdSceneShaders";
+import type { HdOptions } from "../HdConfig";
 import { HdMist } from "../HdMist";
 import { HdPostProcess } from "./hdPostProcess";
 
@@ -212,6 +213,7 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
 
     constructor(
         private readonly isEnabled: () => boolean,
+        private readonly options: () => HdOptions,
         { device, textureIdIndexMap }: WebGPUSceneExtensionContext,
     ) {
         this.device = device;
@@ -312,7 +314,8 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
         // Ground clutter draws into the HDR scene before it is tonemapped. Only in game: the
         // world pass has nothing to stand the blades on at the login screen.
         this.clutter ??= new HdClutterLayer(this.device);
-        if (renderer.osrsClient.isLoggedIn()) {
+        const options = this.options();
+        if (options.grass && renderer.osrsClient.isLoggedIn()) {
             try {
                 const u = this.uniforms;
                 this.clutter.setLight(
@@ -328,7 +331,7 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
                 console.warn("117 HD: ground clutter unavailable", error);
             }
         }
-        post.encode(renderer, encoder, frame);
+        post.encode(renderer, encoder, frame, options);
     }
 
     /** Port of HdPlugin.beforeSceneRender's uniform + shadow matrix block. */
@@ -354,7 +357,7 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
 
         const target = vec3.fromValues(x, renderer.sampleHeightAtExactPlane(x, z, plane), z);
         this.uniforms.set(this.mist.uniform(x, z, (mx, mz) => renderer.sampleHeightAtExactPlane(mx, mz, plane),
-            performance.now()), OFF_MIST);
+            performance.now(), this.options().surfaceFog), OFF_MIST);
         const eye = vec3.scaleAndAdd(vec3.create(), target, direction, 100);
         const view = mat4.lookAt(mat4.create(), eye, target, Math.abs(direction[1]) > 0.99 ? [0, 0, 1] : [0, -1, 0]);
         const extent = Math.min(48, fogEnd);
@@ -430,7 +433,8 @@ class HdWebGPUExtension implements WebGPUSceneExtension {
 
 export function createHdWebGPUExtension(
     isEnabled: () => boolean,
+    options: () => HdOptions,
     context: WebGPUSceneExtensionContext,
 ): WebGPUSceneExtension {
-    return new HdWebGPUExtension(isEnabled, context);
+    return new HdWebGPUExtension(isEnabled, options, context);
 }

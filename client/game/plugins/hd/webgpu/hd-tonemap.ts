@@ -126,15 +126,17 @@ export class HdTonemapPass {
         aoView: GPUTextureView | undefined,
         width: number,
         height: number,
+        hdr = true,
     ): void {
         if (this.disposed) return;
         const uniforms = this.uniforms;
-        uniforms[0] = EXPOSURE;
+        // EXPOSURE is tuned for ACES; without it the scene is shown as rendered, clipped at 1.
+        uniforms[0] = hdr ? EXPOSURE : 1;
         uniforms[1] = SATURATION;
         uniforms[2] = CONTRAST;
         uniforms[3] = BLOOM_STRENGTH;
         uniforms[4] = AO_STRENGTH;
-        uniforms[5] = 0;
+        uniforms[5] = hdr ? 1 : 0;
         uniforms[6] = 0;
         uniforms[7] = 0;
         uniforms[8] = width;

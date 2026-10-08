@@ -1,9 +1,12 @@
 import { mat4, vec3 } from "gl-matrix";
 import PicoGL, { type DrawCall, type Framebuffer, type Program, type Texture } from "picogl";
+import type { ConfigChanged } from "@runelite/api/events";
 import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
+import { inject } from "@runelite/client/plugins/PluginInjector";
 import type { WebGLOsrsRenderer } from "../../../render/WebGLOsrsRenderer";
 import type { ProgramSource } from "../../../render/shaders/ShaderUtil";
 import { environmentAt } from "../../../render/render/environment";
+import { HdConfig, type HdOptions } from "./HdConfig";
 import { createHdProgram } from "./HdShader";
 import { collectHdLights } from "./HdLights";
 import lighting from "./hd-lighting.glsl";
@@ -35,6 +38,12 @@ export class HdPlugin extends Plugin {
         configKey: "hdplugin",
     };
 
+    static config = HdConfig;
+
+    private readonly config = inject(HdConfig);
+    /** Read on config change, not per frame: the accessors go to storage. */
+    private options = this.readOptions();
+
     private readonly renderers = new Map<WebGLOsrsRenderer, {
         programs: SceneProgram[];
         /** Whether the programs have the HD code compiled in. */
@@ -60,6 +69,23 @@ export class HdPlugin extends Plugin {
     private readonly mist = new HdMist();
     private readonly inverseView = mat4.create();
     private compilingHd = false;
+
+    // Config events only reach a started plugin: pick up changes made while HD was off.
+    protected override async startUp(): Promise<void> {
+        this.options = this.readOptions();
+    }
+
+    onConfigChanged(event: ConfigChanged): void {
+        if (event.getGroup() === HdConfig.group) this.options = this.readOptions();
+    }
+
+    private readOptions(): HdOptions {
+        const c = this.config;
+        return {
+            grass: c.grass(), surfaceFog: c.surfaceFog(), hdr: c.hdr(), bloom: c.bloom(),
+            ambientOcclusion: c.ambientOcclusion(), depthOfField: c.depthOfField(),
+        };
+    }
 
     // HD code is compiled in only while HD is on: a GPU pays for it even behind u_hdEnabled
     // (through ANGLE's Direct3D 11 the branches compile flat: an Xbox fell to single-digit FPS,
@@ -152,7 +178,8 @@ export class HdPlugin extends Plugin {
             state.lightCount = collectHdLights(renderer, state.lightPositions, state.lightColors, Date.now());
             state.lastLights = { time: now, x, z, plane };
         }
-        set("u_hdMist", this.mist.uniform(x, z, (mx, mz) => renderer.sampleHeightAtExactPlane(mx, mz, plane), now));
+        set("u_hdMist", this.mist.uniform(x, z, (mx, mz) => renderer.sampleHeightAtExactPlane(mx, mz, plane), now,
+            this.options.surfaceFog));
         set("u_hdLightCount", state.lightCount);
         set("u_hdLightPositions[0]", state.lightPositions);
         set("u_hdLightColors[0]", state.lightColors);
@@ -245,7 +272,7 @@ export class HdPlugin extends Plugin {
 
     /** The WebGPU backend's equivalent of the hooks above: see ./webgpu/HdWebGPU.ts. */
     createWebGPUSceneExtension(context: WebGPUSceneExtensionContext): WebGPUSceneExtension | undefined {
-        return createHdWebGPUExtension(() => this.isEnabled(), context);
+        return createHdWebGPUExtension(() => this.isEnabled(), () => this.options, context);
     }
 
     disposeRenderer(renderer: WebGLOsrsRenderer): void {

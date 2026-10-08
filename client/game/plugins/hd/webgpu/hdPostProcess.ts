@@ -12,6 +12,7 @@ import { mat4 } from "gl-matrix";
 
 import type { WebGPUSceneFrameTargets } from "../../../../render/webgpu/sceneExtension";
 import type { WebGPURenderer } from "../../../../render/webgpu/WebGPURenderer";
+import type { HdOptions } from "../HdConfig";
 import { HdBloomPass } from "./hd-bloom";
 import { HdDepthOfFieldPass } from "./hd-dof";
 import { HdSsaoPass } from "./hd-ssao";
@@ -42,7 +43,8 @@ export class HdPostProcess {
     }
 
     /** Records the whole chain on the frame's encoder and leaves the result on the canvas. */
-    encode(renderer: WebGPURenderer, encoder: GPUCommandEncoder, frame: WebGPUSceneFrameTargets): void {
+    encode(renderer: WebGPURenderer, encoder: GPUCommandEncoder, frame: WebGPUSceneFrameTargets,
+        options: HdOptions): void {
         if (this.disposed) return;
         const width = frame.colorTexture.width;
         const height = frame.colorTexture.height;
@@ -52,11 +54,13 @@ export class HdPostProcess {
 
         // Depth is non-reverse [0,1] NDC z; the GL-style inverse projection turns it into view space.
         mat4.invert(this.inverseProjection, renderer.osrsClient.camera.projectionMatrix);
-        const aoView = this.ssao.encode(encoder, frame.depthView, this.inverseProjection);
-        const bloomView = this.bloom.encode(encoder, frame.colorView);
+        // A pass that is off records nothing; the tonemap falls back to no AO / no bloom.
+        const aoView = options.ambientOcclusion
+            ? this.ssao.encode(encoder, frame.depthView, this.inverseProjection) : undefined;
+        const bloomView = options.bloom ? this.bloom.encode(encoder, frame.colorView) : undefined;
         // Strength ramps in only once the wheel zoomed the follow camera closer than its default
         // distance multiplier: 0 at DOF_ZOOM_OFF, capped at DOF_MAX_STRENGTH by zoom ~0.7.
-        const strength = renderer.osrsClient.followPlayerCamera
+        const strength = options.depthOfField && renderer.osrsClient.followPlayerCamera
             ? Math.max(
                   0,
                   Math.min(
@@ -75,7 +79,7 @@ export class HdPostProcess {
             focusDistance,
             strength,
         );
-        this.tonemap.encode(encoder, frame.canvasView, sceneView, bloomView, aoView, width, height);
+        this.tonemap.encode(encoder, frame.canvasView, sceneView, bloomView, aoView, width, height, options.hdr);
     }
 
     dispose(): void {

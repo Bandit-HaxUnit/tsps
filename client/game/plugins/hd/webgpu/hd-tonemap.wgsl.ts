@@ -11,7 +11,7 @@
 export const HD_TONEMAP_WGSL = `
 struct TonemapUniforms {
     u_grade: vec4<f32>,   // exposure, saturation, contrast, bloomStrength
-    u_ao: vec4<f32>,      // x=aoStrength, yzw unused
+    u_ao: vec4<f32>,      // x=aoStrength, y=1 for the ACES tonemap (0: clip), zw unused
     u_screen: vec4<f32>,  // width, height, 1/width, 1/height
 };
 
@@ -54,7 +54,7 @@ fn fs_main(@builtin(position) pixel: vec4<f32>) -> @location(0) vec4<f32> {
     let bloom = textureSampleLevel(u_bloom, u_sampler, uv, 0.0).rgb;
     color += bloom * u_grade.w;
     color *= u_grade.x;
-    color = acesFilmic(color);
+    color = select(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), acesFilmic(color), u_aoParams.y > 0.5);
     let luma = dot(color, vec3<f32>(0.2126, 0.7152, 0.0722));
     color = mix(vec3<f32>(luma), color, u_grade.y);
     color = (color - 0.5) * u_grade.z + 0.5;

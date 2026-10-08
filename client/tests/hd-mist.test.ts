@@ -19,4 +19,5 @@ assert.equal(hdMistLevel(0, 0, () => 0), undefined, "unloaded ground gives no le
 assert.equal(new HdMist().uniform(0, 0, () => 0, 0)[1], 0, "and no mist");
 const teleported = mist.uniform(500, 500, () => -40, 6000);
 assert.equal(teleported[0], -40, "a teleport snaps the level instead of sweeping through");
+assert.equal(mist.uniform(500, 500, () => -40, 7000, false)[1], 0, "the Surface fog toggle turns the mist off");
 console.log("hd mist ok");

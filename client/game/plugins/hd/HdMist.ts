@@ -37,7 +37,8 @@ export class HdMist {
     private updatedAt = 0;
 
     /** u_hdMist: mist level (tiles, Y down), strength, wind x, wind z. */
-    uniform(x: number, z: number, groundAt: (x: number, z: number) => number, now: number): [number, number, number, number] {
+    uniform(x: number, z: number, groundAt: (x: number, z: number) => number, now: number,
+        enabled = true): [number, number, number, number] {
         const target = hdMistLevel(x, z, groundAt);
         if (target !== undefined) {
             const dt = Math.min(1, Math.max(0, (now - this.updatedAt) / 1000));
@@ -46,6 +47,6 @@ export class HdMist {
                 ? target : this.level + (target - this.level) * (1 - Math.exp(-dt * LEVEL_EASE));
         }
         this.updatedAt = now;
-        return [this.level ?? 0, this.level === undefined ? 0 : MIST_STRENGTH, MIST_WIND[0], MIST_WIND[1]];
+        return [this.level ?? 0, this.level === undefined || !enabled ? 0 : MIST_STRENGTH, MIST_WIND[0], MIST_WIND[1]];
     }
 }
