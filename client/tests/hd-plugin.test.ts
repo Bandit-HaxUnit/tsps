@@ -79,7 +79,9 @@ let viewport: number[] = [];
 const resource = () => ({ delete: () => deleted++, data() {}, resize() {}, depthTarget() { return this; } });
 const values = new Map<string, unknown>();
 let programBinds = 0;
-const program = { bind() { programBinds++; }, uniform: (name: string, value: unknown) => values.set(name, value) };
+const program = { bind() { programBinds++; }, uniform: (name: string, value: unknown) => values.set(name, value), samplers: { u_textures: 0 } as Record<string, number> };
+let rebuilds = 0;
+let finishRebuild = () => {};
 const app = {
     createTexture2D: resource, createTextureArray: resource, createFramebuffer: resource,
     drawFramebuffer(value: unknown) { this.target = value; return this; }, target: undefined as unknown,
@@ -95,6 +97,8 @@ const renderer = {
     mapManager: { visibleMapCount: 0 }, textureIdIndexMap: new Map(),
     sampleHeightAtExactPlane: () => 0, shouldUseDirectTextureScenePass: () => true,
     framebuffer: {}, textureFramebuffer: {},
+    // The swap lands when the test calls finishRebuild (a real compile takes frames).
+    rebuildScenePrograms: () => { rebuilds++; return { then: (done: () => void) => { finishRebuild = done; } }; },
     renderOpaquePass: () => {
         assert.deepEqual(viewport, [0, 0, 2048, 2048]);
         assert.equal(values.get("u_hdShadowPass"), true);
@@ -104,11 +108,20 @@ const renderer = {
         shadows++;
     }, renderTransparentPass() {},
 };
+assert.equal(plugin.transformSceneProgram(["vertex", "fragment"])[1], "fragment", "HD off compiles no HD code");
 plugin.sceneProgramsReady(renderer, [program]);
+assert.deepEqual(program.samplers, { u_textures: 0, u_hdShadowMap: 1, u_hdMaterials: 2, u_hdTextures: 3, u_hdDetailTextures: 4 },
+    "Keep units free for the HD samplers so draw calls already hold their textures");
 plugin.beforeSceneRender(renderer, () => actorShadows++);
 assert.equal(shadows, 0);
-assert.equal(programBinds, 1, "Batch disabled-state uniforms into one program bind");
+assert.equal(programBinds, 0, "Plain programs take no HD uniforms");
+assert.equal(rebuilds, 0);
 plugin.setEnabledState(true);
+plugin.beforeSceneRender(renderer, () => actorShadows++);
+plugin.beforeSceneRender(renderer, () => actorShadows++);
+assert.equal(rebuilds, 1, "Enabling HD recompiles the scene programs, once");
+assert.equal(shadows, 0, "No HD pass while the plain programs draw");
+finishRebuild();
 programBinds = 0;
 plugin.beforeSceneRender(renderer, () => actorShadows++);
 assert.equal(programBinds, 2, "Bind once for shadow uniforms and once to restore the scene pass");
@@ -148,7 +161,12 @@ assert.equal(values.get("u_hdShadowPass"), false, "Restore shadow state even aft
 assert.equal(app.target, renderer.textureFramebuffer);
 plugin.setEnabledState(false);
 plugin.beforeSceneRender(renderer, () => {});
-assert.equal(values.get("u_hdEnabled"), false);
+assert.equal(rebuilds, 2, "Disabling HD recompiles the plain programs");
+assert.equal(values.get("u_hdEnabled"), false, "The HD programs draw plain until the swap");
+finishRebuild();
+programBinds = 0;
+plugin.beforeSceneRender(renderer, () => {});
+assert.equal(programBinds, 0);
 plugin.disposeRenderer(renderer);
 assert.equal(deleted, 8, "Dispose both shadow framebuffers/depth textures, both material arrays and lookup/placeholder textures");
 assert.equal(new HdPlugin().isEnabled(), false, "Disabled by default");

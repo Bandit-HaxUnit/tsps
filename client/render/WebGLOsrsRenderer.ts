@@ -1279,6 +1279,11 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render.initShaders(this);
     }
 
+    /** Recompiles the world and actor programs in place from the plugins' current sources. */
+    async rebuildScenePrograms(): Promise<void> {
+        return render.rebuildScenePrograms(this);
+    }
+
     public _resolvePlayerSeqIdForMode(): number {
         return render._resolvePlayerSeqIdForMode(this);
     }

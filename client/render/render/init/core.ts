@@ -96,6 +96,7 @@ import {
     getCanvasCssSize,
     isIos,
     isMobileMode,
+    isXbox,
     isTouchDevice,
     isWebGL2Supported,
 } from "../../../common/utils/DeviceUtil";
@@ -189,7 +190,8 @@ import {
 import { KNOWN_WATER_TEXTURE_IDS } from "../../water/WaterTextureIds";
 import type { WebGLOsrsRendererHost } from "../hostInterface";
 import { RENDER_CONSTANTS, optimizeAssumingFlatsHaveSameFirstAndLastData } from "../constants";
-import { initRenderer } from "../handlers";
+import { initRenderer, loginFieldAtPointer, openLoginKeyboardAt } from "../handlers";
+import { placeXboxLoginInput } from "../mobileLogin";
 
 export async function init(host: WebGLOsrsRendererHost, ): Promise<void> {
 
@@ -198,6 +200,14 @@ export async function init(host: WebGLOsrsRendererHost, ): Promise<void> {
             passive: false,
             capture: true,
         });
+        // Edge on Xbox clicks with a pointer, never a touch, and only opens its keyboard for a real text
+        // field the player selects: a transparent input follows the pointer over the login fields
+        // (mobileLogin.placeXboxLoginInput); a click that still lands on the canvas prompts instead.
+        if (isXbox) {
+            host.canvas.addEventListener("click", (event) => openLoginKeyboardAt(host, event));
+            host.canvas.addEventListener("mousemove", (event) => placeXboxLoginInput(host, event,
+                host.osrsClient.isOnLoginScreen() ? loginFieldAtPointer(host, event) : undefined));
+        }
         if (isMobileMode) {
             host.ensureMobileLoginInput();
             host.updateMobileLoginViewportBaseline();

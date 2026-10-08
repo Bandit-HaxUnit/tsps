@@ -1,3 +1,4 @@
+import { isLowEndDevice } from "../../../common/utils/DeviceUtil";
 import { mat4, vec3 } from "gl-matrix";
 import PicoGL, { type DrawCall, type Framebuffer, type Program, type Texture } from "picogl";
 import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
@@ -8,6 +9,7 @@ import { createHdProgram } from "./HdShader";
 import { collectHdLights } from "./HdLights";
 import lighting from "./hd-lighting.glsl";
 import { HdMaterials } from "./HdMaterials";
+import { HdMist } from "./HdMist";
 import { Frustum } from "../../Frustum";
 import { resolveFogRange } from "../../../render/RenderDistancePolicy";
 import type {
@@ -16,8 +18,10 @@ import type {
 } from "../../../render/webgpu/sceneExtension";
 import { createHdWebGPUExtension } from "./webgpu/HdWebGPU";
 
-// PicoGL exposes these methods at runtime but omits them from its declarations.
-type SceneProgram = Program & { bind(): void; uniform(name: string, value: unknown): void };
+// PicoGL exposes these at runtime but omits them from its declarations.
+type SceneProgram = Program & { bind(): void; uniform(name: string, value: unknown): void; samplers: Record<string, number> };
+/** hd-lighting.glsl's samplers. */
+const HD_SAMPLERS = ["u_hdShadowMap", "u_hdMaterials", "u_hdTextures", "u_hdDetailTextures"];
 const SHADOW_MAP_SIZE = 2048;
 const LIGHT_LIMIT = 16;
 const SHADOW_INTERVAL_MS = 1000 / 15;
@@ -34,6 +38,9 @@ export class HdPlugin extends Plugin {
 
     private readonly renderers = new Map<WebGLOsrsRenderer, {
         programs: SceneProgram[];
+        /** Whether the programs have the HD code compiled in. */
+        hd: boolean;
+        rebuilding: boolean;
         placeholder: Texture;
         materials: HdMaterials;
         shadow?: Texture;
@@ -49,20 +56,33 @@ export class HdPlugin extends Plugin {
         lastShadow?: { time: number; x: number; z: number; plane: number; environment: unknown; distance: number; roof: number | undefined };
     }>();
     private readonly shadowMatrix = mat4.create();
+    private readonly mist = new HdMist();
     private readonly inverseView = mat4.create();
+    private compilingHd = false;
 
+    // HD code is compiled in only while HD is on: a GPU pays for it even behind u_hdEnabled
+    // (through ANGLE's Direct3D 11 the branches compile flat: an Xbox fell to single-digit FPS,
+    // then a GPU reset). beforeSceneRender recompiles the programs when the toggle changes.
+    // Never on a low-end device (phone, tablet, Xbox): its memory has no room for HD anyway.
     transformSceneProgram(source: ProgramSource): ProgramSource {
-        return createHdProgram(source, lighting);
+        this.compilingHd = !isLowEndDevice && this.isEnabled();
+        return this.compilingHd ? createHdProgram(source, lighting) : source;
     }
 
     sceneProgramsReady(renderer: WebGLOsrsRenderer, programs: Program[]): void {
+        if (isLowEndDevice) return;
         this.disposeRenderer(renderer);
         // A complete sampler is required even when its shader branch is disabled.
         const placeholder = renderer.app.createTexture2D(new Uint8Array([255, 255, 255, 255]), 1, 1, {
             minFilter: PicoGL.NEAREST, magFilter: PicoGL.NEAREST,
         });
+        // Draw calls built on the plain programs get the HD textures too, on units kept free for
+        // them, so they draw once the HD programs are swapped in (see rebuildScenePrograms).
+        for (const program of programs as SceneProgram[]) {
+            for (const name of HD_SAMPLERS) program.samplers[name] ??= Math.max(-1, ...Object.values(program.samplers)) + 1;
+        }
         this.renderers.set(renderer, {
-            programs: programs as SceneProgram[], placeholder, materials: new HdMaterials(renderer.app), shadowPass: false, shadowFrustum: new Frustum(),
+            programs: programs as SceneProgram[], hd: this.compilingHd, rebuilding: false, placeholder, materials: new HdMaterials(renderer.app), shadowPass: false, shadowFrustum: new Frustum(),
             lightPositions: new Float32Array(LIGHT_LIMIT * 4), lightColors: new Float32Array(LIGHT_LIMIT * 4), lightCount: 0,
         });
     }
@@ -79,6 +99,9 @@ export class HdPlugin extends Plugin {
     beforeSceneRender(renderer: WebGLOsrsRenderer, drawActors: () => void): void {
         const state = this.renderers.get(renderer);
         if (!state) return;
+        if (state.hd !== this.isEnabled()) this.rebuildPrograms(renderer, state);
+        // Plain programs: no HD uniforms to feed until the HD ones are swapped in.
+        if (!state.hd) return;
         const uniforms = new Map<string, unknown>();
         const set = (name: string, value: unknown) => uniforms.set(name, value);
         const flush = () => {
@@ -125,6 +148,7 @@ export class HdPlugin extends Plugin {
             state.lightCount = collectHdLights(renderer, state.lightPositions, state.lightColors, Date.now());
             state.lastLights = { time: now, x, z, plane };
         }
+        set("u_hdMist", this.mist.uniform(x, z, (mx, mz) => renderer.sampleHeightAtExactPlane(mx, mz, plane), now));
         set("u_hdLightCount", state.lightCount);
         set("u_hdLightPositions[0]", state.lightPositions);
         set("u_hdLightColors[0]", state.lightColors);
@@ -204,8 +228,20 @@ export class HdPlugin extends Plugin {
         }
     }
 
+    private rebuildPrograms(renderer: WebGLOsrsRenderer, state: { hd: boolean; rebuilding: boolean }): void {
+        if (state.rebuilding) return;
+        state.rebuilding = true;
+        const hd = this.isEnabled();
+        renderer.rebuildScenePrograms().then(() => {
+            state.hd = hd;
+            state.rebuilding = false;
+        // A failed compile stays rebuilding: retrying each frame would only fail again.
+        }, (error) => console.error("117 HD: scene shader rebuild failed", error));
+    }
+
     /** The WebGPU backend's equivalent of the hooks above: see ./webgpu/HdWebGPU.ts. */
-    createWebGPUSceneExtension(context: WebGPUSceneExtensionContext): WebGPUSceneExtension {
+    createWebGPUSceneExtension(context: WebGPUSceneExtensionContext): WebGPUSceneExtension | undefined {
+        if (isLowEndDevice) return undefined;
         return createHdWebGPUExtension(() => this.isEnabled(), context);
     }
 

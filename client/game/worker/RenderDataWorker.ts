@@ -11,6 +11,7 @@ import { isGroupMissingError } from "../../rs/cache/js5/GroupMissingError";
 import { Js5RangeClient } from "../../rs/cache/js5/Js5RangeClient";
 import { WorkerJs5Coordinator } from "../../rs/cache/js5/Js5Coordinator";
 import { PresenceBitset } from "../../rs/cache/js5/PresenceBitset";
+import { SparseDat2 } from "../../rs/cache/store/SparseDat2";
 import { SparseMemoryStore } from "../../rs/cache/store/SparseMemoryStore";
 import {
     CacheLoaderFactory,
@@ -119,11 +120,16 @@ async function initWorker(cache: LoadedCache, npcInstances: NpcInstance[]): Prom
     // (its bits are SAB-backed when crossOriginIsolated, so fetches by any
     // context are visible here; otherwise this worker fetches independently).
     const presence = cache.sparse ? new PresenceBitset(cache.sparse.presenceBits) : undefined;
+    // The clone shares the main thread's chunks; chunks it creates later arrive through addCacheChunk.
+    sparseDat2 = cache.sparse ? SparseDat2.from(cache.sparse.dat2) : undefined;
+    for (const [index, chunk] of earlyDat2Chunks) sparseDat2?.addChunk(index, chunk);
+    earlyDat2Chunks.clear();
     const cacheSystem = CacheSystem.fromFiles(
         cache.info,
         cache.files,
         requiredIndexIds(cache),
         presence,
+        sparseDat2,
     );
 
     let js5: Pick<Js5RangeClient, "store" | "requestGroup" | "settled"> | undefined;
@@ -133,9 +139,11 @@ async function initWorker(cache: LoadedCache, npcInstances: NpcInstance[]): Prom
             const sharedPresence =
                 typeof SharedArrayBuffer !== "undefined" &&
                 cache.sparse.presenceBits.buffer instanceof SharedArrayBuffer;
-            js5 = sharedPresence && cache.sparse.fetchChannel && typeof BroadcastChannel !== "undefined"
-                ? new WorkerJs5Coordinator(store, cache.sparse.fetchChannel)
-                : new Js5RangeClient(cache.sparse.dat2Url, store);
+            if (sharedPresence && cache.sparse.fetchChannel && typeof BroadcastChannel !== "undefined") {
+                js5 = sparseCoordinator = new WorkerJs5Coordinator(store, cache.sparse.fetchChannel);
+            } else {
+                js5 = new Js5RangeClient(cache.sparse.dat2Url, store);
+            }
         }
     }
 
@@ -295,7 +303,22 @@ function clearCache(workerState: WorkerState): void {
     workerState.idkTypeLoader.clearCache();
 }
 
+/** This worker's view of a sparse cache's dat2 and its fetch coordinator. */
+let sparseDat2: SparseDat2 | undefined;
+let sparseCoordinator: WorkerJs5Coordinator | undefined;
+/** Chunks that arrived before the cache itself. */
+const earlyDat2Chunks = new Map<number, ArrayBuffer>();
+
 const worker = {
+    addCacheChunk(index: number, chunk: ArrayBuffer): void {
+        if (!sparseDat2) {
+            earlyDat2Chunks.set(index, chunk);
+            return;
+        }
+        sparseDat2.addChunk(index, chunk);
+        // A request may have been answered before the chunk holding its data arrived.
+        sparseCoordinator?.recheck();
+    },
     setCustomContent(payload: Parameters<typeof loadFromPayload>[0]): void {
         loadFromPayload(payload);
         void workerStatePromise?.then((state) => state.objTypeLoader.clearCache());

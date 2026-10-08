@@ -1,4 +1,5 @@
 import { vec3 } from "gl-matrix";
+import { closeOpenModal } from "./widgets/input/widgetKeyboardInput";
 import { getNpcMenuActions } from "./menu/WorldMenuBuilder";
 
 import { directionToDelta } from "../common/Direction";
@@ -479,6 +480,7 @@ export class OsrsClient {
     js5?: Js5RangeClient;
     private js5Coordinator?: BroadcastChannel;
     private js5SweepTimer?: ReturnType<typeof setInterval>;
+    private unsubscribeDat2Chunks?: () => void;
     loaderFactory!: CacheLoaderFactory;
     widgetManager!: WidgetManager;
     widgetSessionManager!: WidgetSessionManager;
@@ -4151,6 +4153,15 @@ export class OsrsClient {
         this.widgetInputController.handleUiInput();
     }
 
+    handleUiHover() {
+        this.widgetInputController.handleUiHover();
+    }
+
+    /** Closes the open modal interface (bank, shop, ...); false when none is open. */
+    closeModalInterface(): boolean {
+        return closeOpenModal(this.widgetManager, this.cs2Vm);
+    }
+
     private executeWidgetOnLoad(widget: any, listener: any[]): void {
         const scriptId = listener?.[0];
         if (typeof scriptId !== "number" || scriptId <= 0) return;
@@ -6237,7 +6248,7 @@ export class OsrsClient {
         this.clientScripts.clear();
 
         const presence = cache.sparse ? new PresenceBitset(cache.sparse.presenceBits) : undefined;
-        this.cacheSystem = CacheSystem.fromFiles(cache.info, cache.files, [], presence);
+        this.cacheSystem = CacheSystem.fromFiles(cache.info, cache.files, [], presence, cache.sparse?.dat2);
 
         // On-demand group fetching over HTTP Range requests (js5-style):
         // reads of not-yet-downloaded groups queue a fetch and retry later.
@@ -6279,6 +6290,7 @@ export class OsrsClient {
                 }
                 const persistence = getSparsePersistence(cache);
                 if (persistence) {
+                    js5.readStored = (start, length) => persistence.read(start, length);
                     js5.onFetched((byteOffset, bytes) =>
                         persistence.queue(byteOffset, bytes.byteLength),
                     );
@@ -6294,6 +6306,12 @@ export class OsrsClient {
                 this.js5 = js5;
             }
         }
+
+        // New dat2 chunks reach the render workers, which read the same (shared) memory.
+        // Subscribed before initCache, so no chunk falls between its snapshot and this.
+        this.unsubscribeDat2Chunks?.();
+        this.unsubscribeDat2Chunks = cache.sparse?.dat2.onChunk((index, chunk) =>
+            this.workerPool.addCacheChunk(index, chunk));
 
         // Initialize worker pool early - it needs cache files but not indices
         this.workerPool.initCache(cache, []);

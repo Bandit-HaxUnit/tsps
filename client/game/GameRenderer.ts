@@ -216,6 +216,10 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
             // Process UI interaction BEFORE mouse input so widgets can consume scroll
             // before camera zoom uses it
             this.osrsClient.handleUiInput();
+        } else if (!this.uiHidden) {
+            // A pointer aimed at the world (the backquote crosshair) still drives widget hover,
+            // so the game's mouseover tooltip follows it; its clicks stay with the world.
+            this.osrsClient.handleUiHover();
         }
         if (!this.uiHidden) {
             // Update widget layout (CS2 positioning/sizing)
@@ -415,6 +419,10 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         const gamepad = inputManager.getGamepad();
 
         if (gamepad && gamepad.connected && gamepad.mapping === "standard") {
+            // A plugin (Backquote's controller play) takes the controller over from the debug camera.
+            if (this.osrsClient.clientPlugins.handleGamepad({ gamepad, camera, input: inputManager, deltaTime })) {
+                return;
+            }
             let cameraSpeedMult = 0.01;
             // X, R1
             if (gamepad.buttons[0].pressed || gamepad.buttons[5].pressed) {

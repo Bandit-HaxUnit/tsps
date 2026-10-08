@@ -96,6 +96,7 @@ import {
     isIos,
     isMobileMode,
     isTouchDevice,
+    isLowEndDevice,
     isWebGL2Supported,
 } from "../../common/utils/DeviceUtil";
 import { clamp } from "../../common/utils/MathUtil";
@@ -442,7 +443,7 @@ export function resolveEffectiveRenderDistanceTiles(host: WebGLOsrsRendererHost,
             return host.effectiveRenderDistanceTiles | 0;
         }
         const profile = host.syncBrowserQualityProfile();
-        const target = isTouchDevice ? Math.min(base, profile.renderDistanceCap | 0) : base;
+        const target = isTouchDevice || isLowEndDevice ? Math.min(base, profile.renderDistanceCap | 0) : base;
         host.effectiveRenderDistanceTiles = Math.max(0, target | 0);
         host.effectiveRenderDistanceFrame = frameId | 0;
         return host.effectiveRenderDistanceTiles | 0;

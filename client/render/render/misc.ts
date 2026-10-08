@@ -96,6 +96,7 @@ import {
     isIos,
     isMobileMode,
     isTouchDevice,
+    isLowEndDevice,
     isWebGL2Supported,
 } from "../../common/utils/DeviceUtil";
 import { clamp } from "../../common/utils/MathUtil";
@@ -204,7 +205,7 @@ export function resolveEffectiveLodThresholdTiles(host: WebGLOsrsRendererHost, f
             return host.effectiveLodThresholdTiles | 0;
         }
         const profile = host.syncBrowserQualityProfile();
-        const target = isTouchDevice
+        const target = isTouchDevice || isLowEndDevice
             ? Math.min(base, Math.max(0, Math.min(renderDistance, profile.lodThresholdCap | 0)))
             : base;
         host.effectiveLodThresholdTiles = Math.max(0, target | 0);

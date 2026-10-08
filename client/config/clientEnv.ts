@@ -73,13 +73,27 @@ function withPageHost(address: string): string {
     return address.replace(/^(wss?:\/\/)?(localhost|127\.0\.0\.1|\[::1\])(?=[:/]|$)/i, `$1${pageHost}`);
 }
 
+/** Where the LAN https front (scripts/lan-https.mjs) carries the game socket on the page's origin. */
+export const LAN_GAME_SOCKET_PATH = "/game-ws";
+
+/**
+ * An https page cannot open a plain ws:// game socket (mixed content). Opened over the LAN https
+ * front, a default pointing at the page's own host goes through the page's origin instead.
+ */
+function viaHttpsPage(address: string, scheme: "" | "ws://"): string {
+    const page = typeof window !== "undefined" ? window.location : undefined;
+    if (page?.protocol !== "https:" || LOOPBACK_HOST.test(page.hostname)) return address;
+    if (!address.startsWith(`${scheme}${page.hostname}:`)) return address;
+    return `${scheme ? "wss://" : ""}${page.host}${LAN_GAME_SOCKET_PATH}`;
+}
+
 /** Default WebSocket URL used before the player picks a server. */
 export function getDefaultWsUrl(): string {
-    return withPageHost(read(process.env.REACT_APP_DEFAULT_WS_URL) ?? "ws://localhost:43594");
+    return viaHttpsPage(withPageHost(read(process.env.REACT_APP_DEFAULT_WS_URL) ?? "ws://localhost:43594"), "ws://");
 }
 
 export function getDefaultServerAddress(): string {
-    return withPageHost(read(process.env.REACT_APP_DEFAULT_SERVER_ADDRESS) ?? "localhost:43594");
+    return viaHttpsPage(withPageHost(read(process.env.REACT_APP_DEFAULT_SERVER_ADDRESS) ?? "localhost:43594"), "");
 }
 
 export function getDefaultServerName(): string {

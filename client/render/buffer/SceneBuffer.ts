@@ -4,7 +4,7 @@ import { Model, computeTextureCoords } from "../../rs/model/Model";
 import { Scene } from "../../rs/scene/Scene";
 import { SceneTile } from "../../rs/scene/SceneTile";
 import { TextureLoader } from "../../rs/texture/TextureLoader";
-import { packHsl } from "../../rs/util/ColorUtil";
+import { HSL_RGB_MAP, INVALID_HSL_COLOR, packHsl } from "../../rs/util/ColorUtil";
 import { clamp } from "../../common/utils/MathUtil";
 import { addTerrainCell, addFarTerrainChunk, SCENERY_CHUNK_SIZE } from "../loader/FarScene";
 import { DrawRange, newDrawRange } from "../DrawRange";
@@ -80,6 +80,15 @@ export class SceneBuffer {
     drawCommandsInteractLodAlpha: DrawCommand[] = [];
 
     usedTextureIds = new Set<number>();
+
+    /**
+     * Full-heightmap [level][x][y] HD ground recipe grid (0 = none), border included.
+     * Populated by addTerrain; the HD terrain shader blends neighbours across tile borders.
+     */
+    groundMaterials?: Uint8Array[][];
+
+    /** [level][x][y] average colour (0xRRGGBB, 0 = none) of each tile's untextured faces, for ground clutter. */
+    groundColors?: Uint32Array[][];
 
     constructor(
         readonly textureLoader: TextureLoader,
@@ -245,6 +254,10 @@ export class SceneBuffer {
 
     addTerrain(scene: Scene, borderSize: number, maxLevel: number, coreSize: number = Scene.MAP_SQUARE_SIZE, worldTileOffset: number = borderSize): number {
         this.setHeightBounds(scene);
+        // The grid covers the whole scene (border included), not just the meshed core, so
+        // fragments at the edge of the visible core can still sample their border neighbours.
+        this.groundMaterials = buildGroundMaterialGrid(scene);
+        this.groundColors = buildGroundColorGrid(scene);
         const before = this.vertexCount(), offset = -worldTileOffset * 128;
         const endX = borderSize + coreSize, endY = borderSize + coreSize;
         for (let level = 0; level < scene.levels; level++) for (let detail = 0; detail < 2; detail++) {
@@ -646,6 +659,83 @@ export class SceneBuffer {
             if (doubleSided) this.indices.push(index2, index1, index0);
         }
     }
+}
+
+/** HD ground recipe of the tile's dominant face: overlay when it has one, else underlay. */
+function tileGroundMaterial(tile: SceneTile | undefined): number {
+    const tileModel = tile?.tileModel;
+    if (!tileModel || tile.skipRender) {
+        return 0;
+    }
+    let underlayMaterial = 0;
+    for (const face of tileModel.faces) {
+        const material = hdGroundMaterial(
+            face.isOverlay ? tileModel.overlayId : tileModel.underlayId,
+            face.isOverlay,
+            face.isOverlay ? tileModel.overlayHsl : tileModel.blendUnderlayHslSw,
+        );
+        if (face.isOverlay) {
+            if (material > 0) return material;
+        } else if (material > 0) {
+            underlayMaterial = material;
+        }
+    }
+    return underlayMaterial;
+}
+
+/**
+ * [level][x][y] HD ground recipe grid over the scene's full heightmap (border included).
+ * Same coordinate space as heightMapTextureData so the shader can look up tile borders.
+ */
+function buildGroundMaterialGrid(scene: Scene): Uint8Array[][] {
+    const grid: Uint8Array[][] = new Array(Scene.MAX_LEVELS);
+    for (let level = 0; level < Scene.MAX_LEVELS; level++) {
+        const columns: Uint8Array[] = new Array(scene.sizeX);
+        for (let x = 0; x < scene.sizeX; x++) {
+            const column = new Uint8Array(scene.sizeY);
+            for (let y = 0; y < scene.sizeY; y++) {
+                column[y] = tileGroundMaterial(scene.tiles[level]?.[x]?.[y]);
+            }
+            columns[x] = column;
+        }
+        grid[level] = columns;
+    }
+    return grid;
+}
+
+/** Average shaded colour of a tile's untextured faces (0xRRGGBB), or 0 when it has none. */
+function tileGroundColor(tile: SceneTile | undefined): number {
+    const tileModel = tile?.tileModel;
+    if (!tileModel || tile.skipRender) return 0;
+    let r = 0, g = 0, b = 0, count = 0;
+    for (const face of tileModel.faces) {
+        for (const vertex of face.vertices) {
+            if (vertex.textureId !== -1 || vertex.hsl === INVALID_HSL_COLOR || vertex.hsl < 0) continue;
+            const rgb = HSL_RGB_MAP[vertex.hsl & 0xffff];
+            r += (rgb >> 16) & 0xff;
+            g += (rgb >> 8) & 0xff;
+            b += rgb & 0xff;
+            count++;
+        }
+    }
+    if (count === 0) return 0;
+    // Never 0, which means "no colour".
+    return ((Math.round(r / count) << 16) | (Math.round(g / count) << 8) | Math.round(b / count)) || 1;
+}
+
+/** [level][x][y] tile colour grid over the scene's full heightmap, like buildGroundMaterialGrid. */
+function buildGroundColorGrid(scene: Scene): Uint32Array[][] {
+    const grid: Uint32Array[][] = new Array(Scene.MAX_LEVELS);
+    for (let level = 0; level < Scene.MAX_LEVELS; level++) {
+        const columns: Uint32Array[] = new Array(scene.sizeX);
+        for (let x = 0; x < scene.sizeX; x++) {
+            const column = new Uint32Array(scene.sizeY);
+            for (let y = 0; y < scene.sizeY; y++) column[y] = tileGroundColor(scene.tiles[level]?.[x]?.[y]);
+            columns[x] = column;
+        }
+        grid[level] = columns;
+    }
+    return grid;
 }
 
 export type ModelFace = {

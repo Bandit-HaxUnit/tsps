@@ -137,6 +137,8 @@ void main()`);
         fog = max(fog, max(hdDistanceFog, groundFog));
         fogColor = mix(u_hdFogColor, u_skyColor.rgb, hdDistanceFog);
     }
+    // Low-lying mist settles over everything in the hollow, floor water included.
+    if (u_hdEnabled) surface = mix(surface, u_hdFogColor, hdMistAmount(v_hdPosition));
     vec3 finalRgb = mix(surface, fogColor, fog);`);
     return [vertex, declarations + fragment];
 }

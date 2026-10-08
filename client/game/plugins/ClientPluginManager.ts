@@ -81,6 +81,13 @@ export type CameraInputContext = {
     deltaTime: number;
 };
 
+export type GamepadContext = {
+    gamepad: Gamepad;
+    camera: Camera;
+    input: InputManager;
+    deltaTime: number;
+};
+
 export type CameraFollowContext = {
     camera: Camera;
     playerX: number;
@@ -109,6 +116,8 @@ export interface ClientPlugin {
     handleCameraScroll?(context: CameraInputContext): boolean;
     updateInteractionPointer?(camera: Camera): void;
     handleCameraFollow?(context: CameraFollowContext): boolean;
+    /** A connected standard-mapping controller, each frame; return true to take it over. */
+    handleGamepad?(context: GamepadContext): boolean;
     /** A hitsplat arrived from the server (before it is drawn). */
     onHitsplat?(event: HitsplatEventPayload): void;
     shouldKeepWorldMenuOpen?(): boolean;
@@ -194,6 +203,10 @@ export class ClientPluginManager {
 
     handleCameraFollow(context: CameraFollowContext): boolean {
         return this.plugins.some((plugin) => plugin.handleCameraFollow?.(context) === true);
+    }
+
+    handleGamepad(context: GamepadContext): boolean {
+        return this.plugins.some((plugin) => plugin.handleGamepad?.(context) === true);
     }
 
     onHitsplat(event: HitsplatEventPayload): void {

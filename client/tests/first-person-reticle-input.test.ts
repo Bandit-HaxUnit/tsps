@@ -8,8 +8,8 @@ import { createPrimaryWidgetActionResolver } from "../game/widgets/input/widgetP
 import { processWidgetClickInput } from "../game/widgets/input/widgetClickInput";
 import { processWidgetReleaseInput } from "../game/widgets/input/widgetReleaseInput";
 import { collectWidgetsAtPointAcrossRoots } from "../widgets/menu/utils";
-import { ClickMode, InputManager } from "../game/InputManager";
-import { FirstPersonPlugin } from "../game/plugins/firstperson/FirstPersonPlugin";
+import { ClickMode, InputManager, isControllerKey } from "../game/InputManager";
+import { FirstPersonPlugin, crosshairPoint, crosshairRaisePixels } from "../game/plugins/firstperson/FirstPersonPlugin";
 import { PlayerEcs } from "../game/ecs/PlayerEcs";
 import { WidgetsOverlay } from "../ui/devoverlay/WidgetsOverlay";
 
@@ -38,6 +38,16 @@ try {
     const input = new InputManager();
     input.element = element;
     pointerLockElement = element;
+    input.setInteractionPointerOverride(320, 240);
+    (element as any).getBoundingClientRect = () => ({ left: 0, top: 0, width: 640, height: 480 });
+    const move = (movementX: number) => (input as any).onMouseMove({ clientX: 10, clientY: 10, movementX, movementY: 0, shiftKey: false });
+    move(4);
+    assert.deepEqual([input.mouseX, input.mouseY], [320, 240],
+        "looking around with a locked pointer keeps the mouse (and the game's mouseover tooltip) at the crosshair");
+    assert.equal(input.getDeltaMouseX(), -4, "the movement still turns the camera");
+    input.clearInteractionPointerOverride();
+    move(0);
+    assert.notDeepEqual([input.mouseX, input.mouseY], [320, 240], "without a crosshair the locked mouse reports its own position");
     input.setInteractionPointerOverride(320, 240);
 
     input.clickMode3 = ClickMode.LEFT;
@@ -149,6 +159,25 @@ try {
     plugin.onKeyDown({ code: "Backquote", repeat: false } as KeyboardEvent);
     assert.equal(menuCloseCount, 3, "changing Backquote mode should discard stale menus");
     assert.equal(gameMessages.length, 1, "the controls hint should appear once per login session");
+    // Free cursor (the mode Backquote starts in): steering with the keyboard parks the mouse on
+    // the crosshair so hover and the game's mouseover tooltip follow it; the real mouse takes over
+    // again as soon as it moves. No override, so mouse clicks still reach the UI.
+    client.camera.update(640, 480);
+    input.mouseX = 30;
+    input.mouseY = 40;
+    plugin.updateInteractionPointer(client.camera);
+    assert.deepEqual([input.mouseX, input.mouseY], [30, 40], "before any keyboard steering the free cursor aims");
+    plugin.onKeyDown({ code: "ArrowLeft", repeat: false } as KeyboardEvent);
+    plugin.updateInteractionPointer(client.camera);
+    const parked = crosshairPoint(client.camera);
+    assert.deepEqual([input.mouseX, input.mouseY], [parked.x, parked.y], "keyboard steering aims with the crosshair");
+    assert.equal(input.hasInteractionPointerOverride(), false, "the free cursor keeps UI clicks");
+    plugin.onMouseMove({ movementX: 3, movementY: 0 } as MouseEvent);
+    input.mouseX = 50;
+    input.mouseY = 60;
+    plugin.updateInteractionPointer(client.camera);
+    assert.deepEqual([input.mouseX, input.mouseY], [50, 60], "moving the real mouse hands aiming back to it");
+    input.keys.clear();
     assert.equal(client.renderSelf, true, "close camera mode keeps the local body visible");
     assert.equal(client.firstPersonArmsVisible, false, "close camera mode uses the full model");
     client.camera.update(640, 480);
@@ -179,7 +208,7 @@ try {
     }
     input.keys.set("ArrowUp", true);
     plugin.handleCameraKeys({ camera: client.camera, input, deltaTime: 100 });
-    assert.ok((client.camera.getViewPitchOverride() ?? 0) < 128, "Backquote mode up must be inverted");
+    assert.ok((client.camera.getViewPitchOverride() ?? 0) < 152, "Backquote mode up must be inverted");
     assert.equal(facingRotation, 1536, "vertical look does not change player facing");
     input.keys.delete("ArrowUp");
     input.keys.set("ArrowRight", true);
@@ -236,12 +265,29 @@ try {
         ecs.isMoving = () => true;
         ecs.isRunVisual = () => true;
         for (let i = 0; i < 30; i++) { followNow += 50; follow(); }
-        assert.ok(Math.abs(client.camera.getViewZoomScale() - 0.9) < 0.01, "running widens the view");
+        assert.ok(Math.abs(client.camera.getViewZoomScale() - 0.82) < 0.01, "running widens the view");
         ecs.isRunVisual = () => false;
         for (let i = 0; i < 40; i++) { followNow += 50; follow(); }
         assert.ok(Math.abs(client.camera.getViewZoomScale() - 1) < 0.01, "walking eases the view back");
         delete ecs.isMoving;
         delete ecs.isRunVisual;
+
+        // Attacking: the game turns the player to face the opponent (rotation 0 faces south),
+        // and the camera swings round behind them (looking south is camera yaw 1024).
+        const startYaw = client.camera.yaw;
+        ecs.getRotation = () => 0;
+        ecs.getInteractionIndex = () => -1;
+        for (let i = 0; i < 10; i++) { followNow += 50; follow(); }
+        assert.equal(client.camera.yaw, startYaw, "without a target the camera keeps its own heading");
+        ecs.getInteractionIndex = () => 7;
+        followNow += 50;
+        follow();
+        assert.ok(client.camera.yaw > startYaw && client.camera.yaw < 1024, "the camera eases round rather than snapping");
+        for (let i = 0; i < 40; i++) { followNow += 50; follow(); }
+        assert.ok(Math.abs(client.camera.yaw - 1024) < 1, "the camera ends up behind the player facing its target");
+        delete ecs.getRotation;
+        delete ecs.getInteractionIndex;
+        client.camera.snapToYaw(startYaw);
 
         follow();
         const rest = Array.from(client.camera.pos);
@@ -249,6 +295,34 @@ try {
         followNow += 30;
         follow();
         assert.deepEqual(Array.from(client.camera.pos), rest, "another player's hitsplat leaves the camera alone");
+        plugin.onHitsplat({ targetType: "player", targetId: 10, damage: 0 });
+        followNow += 30;
+        follow();
+        assert.deepEqual(Array.from(client.camera.pos), rest, "a block or miss neither shakes nor reddens");
+        const host = { style: { setProperty: (_name: string, value: string) => { redness = Number(value); } } };
+        let redness = 0;
+        const inputElement = input.element;
+        (input as any).element = { parentElement: host };
+        const peak = (damage: number) => {
+            plugin.onHitsplat({ targetType: "player", targetId: 10, damage });
+            followNow += 1;
+            follow();
+            const value = redness;
+            followNow += 1000;
+            follow();
+            return value;
+        };
+        const light = peak(4), heavy = peak(30);
+        assert.ok(light > 0 && heavy > light * 2, "redness grows with the damage taken");
+        assert.equal(redness, 0, "redness clears once the hit fades");
+        plugin.onHitsplat({ targetType: "player", targetId: 10, damage: 4 });
+        plugin.onHitsplat({ targetType: "player", targetId: 10, damage: 4 });
+        followNow += 1;
+        follow();
+        assert.ok(redness > light, "hits in quick succession stack");
+        followNow += 1000;
+        follow();
+        input.element = inputElement;
         plugin.onHitsplat({ targetType: "player", targetId: 10, damage: 20 });
         followNow += 30;
         follow();
@@ -260,9 +334,27 @@ try {
         if (originalFollowNow) Object.defineProperty(performance, "now", originalFollowNow);
         else delete (performance as any).now;
     }
-    client.camera.setViewPitchOverride(128);
+    client.camera.setViewPitchOverride(152);
+    follow();
     for (const [width, height] of [[640, 480], [512, 334]]) {
         client.camera.update(width, height);
+        // The model is 2 tiles tall on ground at -3 (Y down): its head top is at -5.
+        const head = vec4.fromValues(10, -5, 20, 1);
+        vec4.transformMat4(head, head, client.camera.viewProjMatrix);
+        const headScreenY = (1 - (head[1] / head[3] + 1) / 2) * client.camera.screenHeight;
+        assert.ok(crosshairPoint(client.camera).y < headScreenY - 5,
+            `the crosshair sits clear above the player's head in the ${width}x${height} default view`);
+        // A standing NPC (feet to 1.5 tiles up) anywhere 4-8 tiles ahead is under the crosshair.
+        const screenY = (x: number, y: number) => {
+            const p = vec4.fromValues(x, y, 20, 1);
+            vec4.transformMat4(p, p, client.camera.viewProjMatrix);
+            return (1 - (p[1] / p[3] + 1) / 2) * client.camera.screenHeight;
+        };
+        for (const ahead of [4, 6, 8]) {
+            const aim = crosshairPoint(client.camera).y;
+            assert.ok(screenY(10 + ahead, -4.5) <= aim && aim <= screenY(10 + ahead, -3),
+                `the crosshair lands on an NPC ${ahead} tiles ahead in the ${width}x${height} default view`);
+        }
         for (const y of [-3, -5]) {
             for (const x of [9.75, 10.25]) {
                 const clip = vec4.fromValues(x, y, 20, 1);
@@ -276,7 +368,15 @@ try {
     client.camera.setViewPitchOverride(0);
     input.deltaMouseY = 0.2;
     for (let i = 0; i < 10; i++) plugin.handleCameraMouse({ camera: client.camera, input, deltaTime: 8 });
-    assert.ok((client.camera.getViewPitchOverride() ?? 0) < -1.7, "tiny mouse motion accumulates upward pitch");
+    assert.ok((client.camera.getViewPitchOverride() ?? 0) < -1.3, "tiny mouse motion accumulates upward pitch");
+    const pitchMoved = -(client.camera.getViewPitchOverride() ?? 0);
+    const yawBefore = client.camera.yaw;
+    input.deltaMouseY = 0;
+    input.deltaMouseX = -0.2;
+    for (let i = 0; i < 10; i++) plugin.handleCameraMouse({ camera: client.camera, input, deltaTime: 8 });
+    assert.ok(Math.abs(Math.abs(client.camera.yaw - yawBefore) - pitchMoved) < 1e-6,
+        "mouse look moves the same angle per pixel up/down as left/right");
+    input.deltaMouseX = 0;
     input.deltaMouseY = 0;
     input.deltaMouseX = 20;
     plugin.handleCameraMouse({ camera: client.camera, input, deltaTime: 16 });
@@ -366,7 +466,8 @@ try {
         now += 100;
         plugin.onKeyUp({ code: "Space" } as KeyboardEvent);
         assert.equal(input.clickMode1, ClickMode.LEFT, "a short Space tap queues the usual default click");
-        assert.deepEqual([input.clickX, input.clickY], [320, 240], "Space clicks the crosshair");
+        const aim = crosshairPoint(client.camera);
+        assert.deepEqual([input.clickX, input.clickY], [aim.x, aim.y], "Space clicks the (raised) crosshair");
         input.onFrameStart();
         input.clickMode3 = ClickMode.NONE;
         input.clickMode2 = ClickMode.NONE;
@@ -442,7 +543,8 @@ try {
     assert.equal(facingRotation, undefined, "world menus release camera-controlled facing");
     plugin.updateInteractionPointer(client.camera);
     assert.equal(input.hasInteractionPointerOverride(), true, "opening a menu should keep the reticle target");
-    assert.deepEqual(input.getContextMenuAnchor(0, 0), { x: 320, y: 228 }, "the menu should open above the reticle");
+    assert.deepEqual(input.getContextMenuAnchor(0, 0), { x: 320, y: crosshairPoint(client.camera).y - 12 },
+        "the menu should open above the reticle");
     client.menuOpen = true;
     input.keys.set("KeyW", true);
     plugin.handleCameraKeys({ camera: client.camera, input, deltaTime: 100 });
@@ -453,13 +555,14 @@ try {
     assert.equal(client.firstPersonArmsVisible, false, "Insert should not toggle arms while a menu is open");
     plugin.onMouseMove({ movementX: 10, movementY: 5 } as MouseEvent);
     assert.equal(input.mouseX, 330, "the virtual cursor should move from the reticle");
-    assert.equal(input.mouseY, 245, "the virtual cursor should move from the reticle");
+    const reticleY = crosshairPoint(client.camera).y;
+    assert.equal(input.mouseY, reticleY + 5, "the virtual cursor should move from the reticle");
     input.clickX = 1;
     input.clickY = 1;
     plugin.onMouseDown({ button: 0 } as MouseEvent);
     assert.equal(client.menuOpen, true, "the menu action must receive the left click before closing");
     assert.equal(input.clickX, 330, "menu clicks should use the virtual cursor position");
-    assert.equal(input.clickY, 245, "menu clicks should use the virtual cursor position");
+    assert.equal(input.clickY, reticleY + 5, "menu clicks should use the virtual cursor position");
     assert.equal(input.isPointerLock(), true, "a left click should resume mouse look");
     client.menuOpen = false;
 
@@ -560,10 +663,12 @@ try {
     } as any;
     const primary = createPrimaryWidgetActionResolver(nativeDeps, input, nativeManager as any, interaction);
     let nativeUiCalls = 0;
+    let nativeHoverCalls = 0;
     const nativeRenderer = {
         uiHidden: false,
         osrsClient: {
             ...client, loginState: { serverListOpen: false }, updateWidgets() {},
+            handleUiHover() { nativeHoverCalls++; },
             handleUiInput() {
                 nativeUiCalls++;
                 const frame = {
@@ -587,6 +692,14 @@ try {
             input.onFrameEnd();
         }
     };
+    // Aiming at the world, the crosshair drives widget hover (the game's mouseover tooltip)
+    // but never widget clicks.
+    input.flushInput();
+    input.setInteractionPointerOverride(320, 200);
+    nativeUiCalls = 0;
+    GameRenderer.prototype.handleInput.call(nativeRenderer as any, 16);
+    assert.deepEqual([nativeUiCalls, nativeHoverCalls], [0, 1], "a world crosshair runs widget hover only");
+    input.clearInteractionPointerOverride();
     input.flushInput();
     plugin.onKeyDown({ code: "Space", repeat: false } as KeyboardEvent);
     plugin.onKeyUp({ code: "Space" } as KeyboardEvent);
@@ -890,6 +1003,60 @@ try {
     assert.equal(client.firstPersonArmsVisible, true, "exit restores the prior arms-render preference");
     assert.equal(input.isKeyDown("KeyW"), false, "exit clears movement keys before ordinary camera/chat input resumes");
     assert.equal(facingRotation, undefined, "leaving first-person restores normal movement facing");
+
+    // Controller: its first input switches Backquote on; the sticks move and look, and the
+    // buttons map onto the keyboard actions (Dragonwilds-style layout).
+    input.keys.clear();
+    const pad = { buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })), axes: [0, 0, 0, 0] } as any;
+    const padFrame = (deltaTime = 16) => plugin.handleGamepad({ gamepad: pad, camera: client.camera, input, deltaTime });
+    const padTap = (button: number) => {
+        pad.buttons[button].pressed = true;
+        padFrame();
+        pad.buttons[button].pressed = false;
+        padFrame();
+    };
+    assert.equal(padFrame(), false, "an idle controller leaves the normal camera alone");
+    const messagesBeforePad = gameMessages.length;
+    padTap(0);
+    assert.equal(client.followPlayerCamera, true, "the first controller input switches Backquote on");
+    assert.ok(gameMessages.slice(messagesBeforePad).some((message) => message.startsWith("Controller:")),
+        "the controller layout is explained once");
+    const walksBeforePad = movementCalls;
+    pad.axes[1] = -1;
+    padFrame();
+    assert.ok(movementCalls > walksBeforePad, "the left stick walks");
+    const stopsBeforePad = stoppedWalks;
+    pad.axes[1] = 0;
+    padFrame();
+    assert.ok(stoppedWalks > stopsBeforePad, "letting go of the left stick stops");
+    const yawBeforePad = client.camera.yaw;
+    pad.axes[2] = 1;
+    padFrame(100);
+    pad.axes[2] = 0;
+    assert.ok(Math.abs(client.camera.yaw - yawBeforePad - 64) < 1e-6, "the right stick turns at 640 units a second");
+    input.flushInput();
+    padTap(0);
+    assert.equal(input.clickMode1, ClickMode.LEFT, "A interacts at the crosshair, like a Space tap");
+    input.flushInput();
+    inventoryTab = -1;
+    padTap(3);
+    assert.equal(inventoryTab, 3, "Y opens the inventory");
+    padTap(1);
+    assert.equal((plugin as any).inputMode, "movement", "B leaves the inventory");
+    let closedInterfaces = 0;
+    (client as any).closeModalInterface = () => { closedInterfaces++; return true; };
+    padTap(1);
+    assert.equal(closedInterfaces, 1, "B in the world closes the open interface");
+    const special = { uid: 160 << 16 | 35, actions: ["Use <col=ff9040>Special Attack</col>"], children: [] };
+    interfaceRoots.set(-1, [{ uid: 160 << 16, actions: [], children: [special] }]);
+    const widgetActions: any[] = [];
+    (client as any).handleWidgetAction = (event: any) => widgetActions.push(event);
+    padTap(5);
+    assert.deepEqual(widgetActions.map((event) => [event.widget.uid, event.option]),
+        [[special.uid, special.actions[0]]], "RB uses the special attack orb's option");
+    interfaceRoots.delete(-1);
+    plugin.onKeyDown({ code: "Backquote", repeat: false } as KeyboardEvent);
+    console.log("controller ok");
 } finally {
     Object.defineProperty(globalThis, "document", {
         configurable: true,
@@ -960,3 +1127,38 @@ for (const [forward, right] of [[1, 1], [1, -1], [-1, 1], [-1, -1], [1, 0], [0, 
 }
 
 console.log("first-person reticle input ok");
+
+
+{
+    // Level camera looking north: a point 12 degrees above the view direction lands on the crosshair,
+    // at any zoom (the running FOV changes the zoom scale).
+    for (const zoomScale of [1, 0.82]) {
+        const camera = new Camera(0, 0, 0, 0, 0);
+        camera.setViewPitchOverride(0);
+        camera.setViewZoomScale(zoomScale);
+        camera.update(640, 480);
+        const raise = crosshairRaisePixels(camera);
+        assert.ok(raise > 10, "the crosshair sits clearly above the view centre");
+        const clip = vec4.fromValues(0, -Math.tan(12 * Math.PI / 180) * 10, 10, 1);
+        vec4.transformMat4(clip, clip, camera.viewProjMatrix);
+        const screenY = (1 - (clip[1] / clip[3] + 1) / 2) * camera.screenHeight;
+        assert.ok(Math.abs(screenY - (camera.viewportYOffset + camera.viewportHeight / 2 - raise)) < 0.5,
+            `the raised crosshair aims 12 degrees up at zoom scale ${zoomScale}`);
+    }
+}
+console.log("crosshair aim ok");
+
+{
+    // Edge on Xbox also sends controller buttons as keys; the game must leave them to the browser
+    // (holding Menu leaves game controls) and read the controller through the Gamepad API instead.
+    assert.equal(isControllerKey({ key: "GamepadMenu", keyCode: 207 }), true);
+    assert.equal(isControllerKey({ key: "Unidentified", keyCode: 195 }), true);
+    assert.equal(isControllerKey({ key: "Enter", keyCode: 13 }), false);
+    const keys = new InputManager();
+    let cancelled = 0;
+    keys.onKeyDown({ key: "GamepadMenu", code: "", keyCode: 207, preventDefault: () => { cancelled++; } } as unknown as KeyboardEvent);
+    assert.equal(cancelled, 0, "a controller key is not cancelled, so Edge can act on it");
+    keys.onKeyDown({ key: "a", code: "KeyA", keyCode: 65, preventDefault: () => { cancelled++; } } as unknown as KeyboardEvent);
+    assert.equal(cancelled, 1, "keyboard keys are still handled by the game");
+    console.log("controller keys ok");
+}

@@ -3,7 +3,7 @@ import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
 import { CLIENT_TOKEN, inject } from "@runelite/client/plugins/PluginInjector";
 import type { Camera } from "../../Camera";
 import type { InputKeyHandler, InputManager, InputMouseHandler } from "../../InputManager";
-import type { CameraFollowContext, CameraInputContext, ClientPlugin } from "../ClientPluginManager";
+import type { CameraFollowContext, CameraInputContext, ClientPlugin, GamepadContext } from "../ClientPluginManager";
 import { RS_TO_RADIANS } from "../../../rs/MathConstants";
 import type { PlayerEcs } from "../../ecs/PlayerEcs";
 import type { WidgetNode } from "../../../widgets/WidgetNode";
@@ -11,6 +11,8 @@ import type { WidgetManager } from "../../../widgets/WidgetManager";
 import { deriveMenuEntriesForWidget, getRootRenderTransform } from "../../../widgets/menu/utils";
 import { CollisionFlag } from "../../../common/CollisionFlag";
 import type { HitsplatEventPayload } from "../../GameRenderer";
+import { NO_INTERACTION } from "../../../rs/interaction/InteractionIndex";
+import { isXbox } from "../../../common/utils/DeviceUtil";
 
 if (typeof document !== "undefined") require("./FirstPersonPlugin.css");
 
@@ -26,7 +28,8 @@ type FirstPersonClient = {
     menuActiveSimpleEntries?: readonly unknown[];
     controlledPlayerServerId?: number;
     playerEcs?: Pick<PlayerEcs, "getIndexForServerId" | "getX" | "getY" | "getDefaultHeightTiles" | "setRotationOverride"> &
-        Partial<Pick<PlayerEcs, "isMoving" | "isRunVisual">> & { getLevel?(index: number): number };
+        Partial<Pick<PlayerEcs, "isMoving" | "isRunVisual" | "getInteractionIndex" | "getRotation">> &
+        { getLevel?(index: number): number };
     runMode?: boolean;
     setKeyboardMovement?(dx: number, dy: number, running: boolean, rotation: number): void;
     stopKeyboardMovement?(deactivate?: boolean): void;
@@ -41,6 +44,8 @@ type FirstPersonClient = {
         "invalidateScroll" | "ensureLayout">>;
     isLoggedIn(): boolean;
     addGameMessage(message: string): void;
+    closeModalInterface?(): boolean;
+    handleWidgetAction?(event: { widget: WidgetNode; option: string; source: "primary" }): void;
     closeMenu(): void;
 };
 
@@ -56,19 +61,42 @@ type KeyboardWidget = {
 const MENU_ANCHOR_Y_OFFSET = 12;
 const CONTROLS_HINT = "WASD to move. Tab cycles movement, chat and inventory. Arrows select items or interface options. Left/Right at an item row's edge switches panels; Tab also switches panels. Option/Alt toggles mouse look. Hold Shift to run. Tap Space to interact; hold Space for options, then Up/Down and Space to choose.";
 const SPACE_MENU_HOLD_MS = 450;
+// Controller (standard mapping) button indices.
+const PAD = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, L3: 10, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 } as const;
+const PAD_ARROWS = new Map<number, string>([
+    [PAD.UP, "ArrowUp"], [PAD.DOWN, "ArrowDown"], [PAD.LEFT, "ArrowLeft"], [PAD.RIGHT, "ArrowRight"],
+]);
+const STICK_DEADZONE = 0.18;
+/** Right stick look at full tilt, RS units per second (about 110 degrees a second). */
+const LOOK_STICK_SPEED = 640;
+const DPAD_REPEAT_DELAY_MS = 380;
+const DPAD_REPEAT_MS = 110;
+const CONTROLLER_HINT = "Controller: left stick moves (click to run), right stick looks. A or X interacts, RT uses, hold LT for options. Y inventory, B back, RB special attack, D-pad selects, bumpers switch panels.";
 const MOVEMENT_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD"];
 const ARROW_KEYS = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
 // Behind-the-character camera, in tiles and RS angle units (2048 per turn, positive looks down).
 const FOLLOW_DISTANCE = 2.6;
 const PIVOT_HEIGHT = 0.9; // of the player's model height
-const DEFAULT_PITCH = 128;
+const DEFAULT_PITCH = 152; // about 27 degrees down: a little above and looking down on the player
+// Mouse look turns the same angle per pixel both ways, as third-person shooters do
+// (RS angle units: 2048 per turn, so 0.7 is about 0.12 degrees per pixel).
+const LOOK_SENSITIVITY = 0.7;
+// Arrow keys, RS units per second: turning 90 degrees a second, looking up/down a little slower.
+const YAW_KEY_SPEED = 512;
+const PITCH_KEY_SPEED = 384;
 const MIN_PITCH = -192;
 const MAX_PITCH = 400;
 const WALL_MARGIN = 0.3;
 const GROUND_CLEARANCE = 0.3;
-// Running widens the view by shrinking the zoom scale: 0.9 is roughly +5 degrees.
-const RUN_FOV_KICK = 0.1;
+// Running widens the view by shrinking the zoom scale: 0.82 is roughly +9 degrees.
+const RUN_FOV_KICK = 0.18;
 const HIT_SECONDS = 0.35;
+const HIT_FULL_DAMAGE = 40;
+// The camera orbits a point near the player's neck, so the view centre is on the player; aiming
+// this far above it clears the head and lands on players and NPCs about 3-5 tiles ahead.
+const CROSSHAIR_RAISE_DEGREES = 12;
+// How quickly the camera swings round behind a player turning to face its target (per second).
+const FACE_TARGET_RATE = 6;
 // A wall on the side of the tile the ray enters through stops the camera (bits match CollisionFlag).
 const ENTRY_WALLS = new Map([
     ["1,0", CollisionFlag.WALL_WEST_PROJECTILE_BLOCKER], ["-1,0", CollisionFlag.WALL_EAST_PROJECTILE_BLOCKER],
@@ -118,6 +146,14 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
     private hitAt = -Infinity;
     private hitStrength = 0;
     private hitVignette = 0;
+    private padButtons: boolean[] = [];
+    private padStick = { forward: 0, right: 0 };
+    private padMoving = false;
+    private padRepeatAt = 0;
+    private controllerHintShown = false;
+    private xboxDefaultApplied = false;
+    /** The keyboard steered last (not the mouse): with a free cursor the crosshair aims. */
+    private keyboardAiming = false;
     private dialogueOptions: WidgetNode[] = [];
     private dialogueOptionIndex = 0;
     private readonly client: FirstPersonClient;
@@ -133,6 +169,9 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
         if (event.code === "Backquote" && !event.repeat) {
             this.setEnabled(!this.enabled);
             return true;
+        }
+        if (MOVEMENT_KEYS.includes(event.code) || ARROW_KEYS.includes(event.code) || event.code === "Space") {
+            this.keyboardAiming = true;
         }
         this.syncInterfaceSelection(true);
         this.syncDialogueOptions();
@@ -301,6 +340,8 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
     }
 
     onMouseMove(event: MouseEvent): void {
+        // Real mouse movement takes aiming back from the keyboard (see updateInteractionPointer).
+        if (event.movementX || event.movementY) this.keyboardAiming = false;
         if (!this.enabled || this.cursorMode !== "menu") return;
         this.useMouseMenuPointer();
         const canvas = this.client.inputManager.element as HTMLCanvasElement | undefined;
@@ -320,8 +361,8 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
             this.clearMovement();
             return true;
         }
-        const deltaPitch = (64 * 8 * deltaTime) / 1000;
-        const deltaYaw = (512 * deltaTime) / 1000;
+        const deltaPitch = (PITCH_KEY_SPEED * deltaTime) / 1000;
+        const deltaYaw = (YAW_KEY_SPEED * deltaTime) / 1000;
         // First-person arrows intentionally run opposite to the normal camera controls.
         if (input.isKeyDown("ArrowUp")) camera.setViewPitchOverride((camera.getViewPitchOverride() ?? 0) - deltaPitch);
         if (input.isKeyDown("ArrowDown")) camera.setViewPitchOverride((camera.getViewPitchOverride() ?? 0) + deltaPitch);
@@ -348,8 +389,8 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
         const deltaX = input.getDeltaMouseX();
         const deltaY = input.getDeltaMouseY();
         if (deltaX !== 0 || deltaY !== 0) {
-            camera.setViewPitchOverride((camera.getViewPitchOverride() ?? 0) - deltaY * 0.9);
-            camera.updateYaw(camera.yaw, -deltaX * 0.9);
+            camera.setViewPitchOverride((camera.getViewPitchOverride() ?? 0) - deltaY * LOOK_SENSITIVITY);
+            camera.updateYaw(camera.yaw, -deltaX * LOOK_SENSITIVITY);
             this.syncPlayerFacing(camera);
             if (deltaX !== 0) this.handleMovement(camera, input);
         }
@@ -365,6 +406,12 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
 
     updateInteractionPointer(camera: Camera): void {
         const input = this.client.inputManager;
+        // Xbox mode plays in Backquote mode: on once per login (Backquote still turns it off).
+        if (!this.client.isLoggedIn()) this.xboxDefaultApplied = false;
+        else if (isXbox && !this.xboxDefaultApplied) {
+            this.xboxDefaultApplied = true;
+            if (!this.enabled) this.setEnabled(true);
+        }
         this.updateLoginSession();
         this.syncInterfaceSelection();
         this.syncDialogueOptions();
@@ -405,10 +452,21 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
             (this.cursorMode === "none" && !input.isPointerLock())
         ) {
             input.clearInteractionPointerOverride();
+            if (this.enabled && this.cursorMode !== "menu" && !this.isMenuOpen()) {
+                // The drawn crosshair always marks where it aims, free cursor or not.
+                const { x, y } = crosshairPoint(camera);
+                this.updateReticlePosition(input, x, y);
+                // With a free cursor, steering with the keyboard aims with the crosshair: park the
+                // mouse on it, so hover and the game's mouseover tooltip follow the crosshair (as
+                // after a Space tap). No override: once the real mouse moves it takes over.
+                if (this.keyboardAiming) {
+                    input.mouseX = x;
+                    input.mouseY = y;
+                }
+            }
             return;
         }
-        const x = camera.viewportXOffset + camera.viewportWidth / 2;
-        const y = camera.viewportYOffset + camera.viewportHeight / 2;
+        const { x, y } = crosshairPoint(camera);
         input.mouseX = x;
         input.mouseY = y;
         input.setInteractionPointerOverride(x, y);
@@ -425,6 +483,13 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
         const pe = this.client.playerEcs;
         const index = pe?.getIndexForServerId(this.client.controlledPlayerServerId ?? -1);
         const height = (index === undefined ? undefined : pe?.getDefaultHeightTiles(index)) ?? 200 / 128;
+        // While the player faces something it interacts with (an opponent, an NPC it talks to), the
+        // game turns the player rather than the camera; swing the camera round behind them.
+        if (index !== undefined && pe?.getRotation && (pe.getInteractionIndex?.(index) ?? NO_INTERACTION) !== NO_INTERACTION) {
+            const behind = (pe.getRotation(index) + 1024) & 2047;
+            const delta = ((behind - camera.yaw + 3072) % 2048) - 1024;
+            if (Math.abs(delta) > 0.5) camera.updateYaw(camera.yaw, delta * (1 - Math.exp(-dt * FACE_TARGET_RATE)));
+        }
         // Orbit a pivot near the head: looking down raises the camera, looking up lowers it.
         const pitchUnits = Math.max(MIN_PITCH, Math.min(MAX_PITCH, camera.getViewPitchOverride() ?? DEFAULT_PITCH));
         if (pitchUnits !== camera.getViewPitchOverride()) camera.setViewPitchOverride(pitchUnits);
@@ -442,7 +507,7 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
 
         // Taking a hit jolts the view and flashes the screen edge; both settle within HIT_SECONDS.
         const hitAge = (now - this.hitAt) / 1000;
-        const hit = hitAge < HIT_SECONDS ? this.hitStrength * (1 - hitAge / HIT_SECONDS) ** 2 : 0;
+        const hit = this.hitAmount(now);
         if (hit > 0) {
             const jolt = Math.sin(hitAge * 55) * hit * 0.12;
             x += cosYaw * jolt;
@@ -460,11 +525,145 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
         return true;
     }
 
+    /**
+     * Controller play, on top of the keyboard controls (Dragonwilds-style layout): left stick moves
+     * (click to run), right stick looks; A/X interact (Space), RT uses, hold LT for options; Y
+     * inventory, B back, RB special attack, D-pad selects (arrows), bumpers switch panels.
+     */
+    handleGamepad({ gamepad, camera, input, deltaTime }: GamepadContext): boolean {
+        const pressed = gamepad.buttons.map((button) => button.pressed);
+        const previous = this.padButtons;
+        this.padButtons = pressed;
+        const tapped = (index: number) => pressed[index] === true && previous[index] !== true;
+        const released = (index: number) => pressed[index] !== true && previous[index] === true;
+        const [moveX, moveY, lookX, lookY] = [0, 1, 2, 3].map((index) => stickAxis(gamepad.axes[index] ?? 0));
+        const active = pressed.some(Boolean) || moveX !== 0 || moveY !== 0 || lookX !== 0 || lookY !== 0;
+        if (!this.enabled) {
+            // A controller plays in Backquote's mode: its first input switches it on.
+            if (!active || !this.client.isLoggedIn()) return false;
+            this.setEnabled(true);
+            if (!this.controllerHintShown) {
+                this.client.addGameMessage(CONTROLLER_HINT);
+                this.controllerHintShown = true;
+            }
+            return true;
+        }
+        if (active) this.keyboardAiming = true;
+
+        // Squared response: fine aim near the centre, full speed at the edge.
+        if (lookX || lookY) {
+            const speed = (LOOK_STICK_SPEED * deltaTime) / 1000;
+            camera.updateYaw(camera.yaw, lookX * Math.abs(lookX) * speed);
+            camera.setViewPitchOverride((camera.getViewPitchOverride() ?? DEFAULT_PITCH) + lookY * Math.abs(lookY) * speed);
+            this.syncPlayerFacing(camera);
+        }
+        const moving = moveX !== 0 || moveY !== 0;
+        this.padStick = { forward: -moveY, right: moveX };
+        if (moving || this.padMoving) this.handleMovement(camera, input);
+        this.padMoving = moving;
+        if (tapped(PAD.L3)) {
+            const running = !this.client.runMode;
+            this.restoreRunMode = running;
+            this.client.setKeyboardRunMode?.(running);
+        }
+
+        if (tapped(PAD.A) || tapped(PAD.X) || tapped(PAD.RT)) this.pressKey("Space");
+        if (tapped(PAD.LT)) {
+            if (this.isMenuOpen() || this.cursorMode === "menu") this.controllerBack();
+            else {
+                // Holding LT is holding Space: the options menu opens without the hold delay.
+                this.onKeyDown(keyEvent("Space"));
+                if (this.spaceDown) this.spaceStartedAt = Date.now() - SPACE_MENU_HOLD_MS;
+            }
+        }
+        if (released(PAD.LT) && this.spaceDown) this.onKeyUp(keyEvent("Space"));
+        if (tapped(PAD.B)) this.controllerBack();
+        if (tapped(PAD.Y) && this.canUseKeyboard()) {
+            this.inputMode = this.inputMode === "inventory" ? "movement" : "inventory";
+            this.applyInputFocus();
+        }
+        if (tapped(PAD.LB) || tapped(PAD.RB)) {
+            const direction = tapped(PAD.RB) ? 1 : -1;
+            if (this.inputMode === "inventory" || this.inputMode === "interface") this.switchInterfacePanel(direction);
+            else if (direction > 0) this.useSpecialAttack();
+        }
+        const arrow = [...PAD_ARROWS.keys()].find((index) => pressed[index]);
+        if (arrow !== undefined) {
+            const now = performance.now();
+            if (tapped(arrow) || now >= this.padRepeatAt) {
+                this.pressKey(PAD_ARROWS.get(arrow)!);
+                this.padRepeatAt = now + (tapped(arrow) ? DPAD_REPEAT_DELAY_MS : DPAD_REPEAT_MS);
+            }
+        }
+        return true;
+    }
+
+    private pressKey(code: string): void {
+        this.onKeyDown(keyEvent(code));
+        this.onKeyUp(keyEvent(code));
+    }
+
+    /** B: close an open menu, else leave inventory/interface focus, else close the open interface. */
+    private controllerBack(): void {
+        if (this.cursorMode === "menu") {
+            this.pressKey("Escape");
+            return;
+        }
+        if (this.isMenuOpen()) {
+            this.closeWorldMenu();
+            return;
+        }
+        if (this.inputMode !== "movement") {
+            this.inputMode = "movement";
+            this.applyInputFocus();
+            return;
+        }
+        this.client.closeModalInterface?.();
+    }
+
+    /** RB: the "Use Special Attack" option of the special attack orb (or combat tab bar), as a click sends. */
+    private useSpecialAttack(): void {
+        const manager = this.client.widgetManager;
+        if (!manager?.getAllGroupRoots || !this.client.handleWidgetAction) return;
+        const groups = new Set<number>([manager.rootInterface ?? -1]);
+        for (const parent of manager.interfaceParents.values()) if (parent.group !== undefined) groups.add(parent.group);
+        const stack: WidgetNode[] = [...groups].flatMap((group) => manager.getAllGroupRoots!(group) ?? []);
+        const seen = new Set<number>();
+        while (stack.length > 0) {
+            const widget = stack.pop()!;
+            if (!widget || seen.has(widget.uid)) continue;
+            seen.add(widget.uid);
+            const option = widget.actions?.find((action) => typeof action === "string" && /special attack/i.test(action));
+            if (option) {
+                this.client.handleWidgetAction({ widget, option, source: "primary" });
+                return;
+            }
+            stack.push(...(widget.children ?? []).filter(Boolean) as WidgetNode[],
+                ...(manager.getStaticChildrenByParentUid?.(widget.uid) ?? []));
+        }
+    }
+
     onHitsplat(event: HitsplatEventPayload): void {
         if (!this.enabled || event.targetType !== "player" || event.targetId !== this.client.controlledPlayerServerId) return;
-        // Blocks and misses still flinch a little; heavy hits up to full strength.
-        this.hitStrength = Math.min(1, 0.35 + Math.max(0, event.damage) / 25);
-        this.hitAt = performance.now();
+        // Blocks and misses do nothing. Damage scales the jolt and redness (full at HIT_FULL_DAMAGE),
+        // and a hit landing while the last one fades adds to what is left of it.
+        if (!(event.damage > 0)) return;
+        const now = performance.now();
+        this.hitStrength = Math.min(1, this.hitAmount(now) + 0.15 + 0.85 * Math.min(1, event.damage / HIT_FULL_DAMAGE));
+        this.hitAt = now;
+        // A controller rumbles with the same strength as the jolt and redness.
+        const actuator = (this.client.inputManager.getGamepad?.() as { vibrationActuator?: any } | null)?.vibrationActuator;
+        void actuator?.playEffect?.("dual-rumble", {
+            duration: Math.round(120 + 200 * this.hitStrength),
+            strongMagnitude: this.hitStrength,
+            weakMagnitude: Math.min(1, this.hitStrength + 0.2),
+        })?.catch?.(() => undefined);
+    }
+
+    /** What remains of the last hit's jolt and redness, 0..1. */
+    private hitAmount(now: number): number {
+        const age = (now - this.hitAt) / 1000;
+        return age >= 0 && age < HIT_SECONDS ? this.hitStrength * (1 - age / HIT_SECONDS) ** 2 : 0;
     }
 
     /** How far (tiles) the camera can sit from the player along a direction before a wall or solid object. */
@@ -751,9 +950,7 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
             return widget && (widget.itemId ?? -1) >= 0
                 ? this.client.renderer?.widgetsOverlay?.getWidgetInputPoint(widget) : undefined;
         }
-        const camera = this.client.camera;
-        return { x: camera.viewportXOffset + camera.viewportWidth / 2,
-            y: camera.viewportYOffset + camera.viewportHeight / 2 };
+        return crosshairPoint(this.client.camera);
     }
 
     private getWidgetMenu() {
@@ -856,8 +1053,8 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
             this.clearMovement();
             return;
         }
-        const forward = Number(input.isKeyDown("KeyW")) - Number(input.isKeyDown("KeyS"));
-        const right = Number(input.isKeyDown("KeyD")) - Number(input.isKeyDown("KeyA"));
+        const forward = Number(input.isKeyDown("KeyW")) - Number(input.isKeyDown("KeyS")) + this.padStick.forward;
+        const right = Number(input.isKeyDown("KeyD")) - Number(input.isKeyDown("KeyA")) + this.padStick.right;
         if (!forward && !right) {
             this.stopWalking();
             this.client.setKeyboardMovement?.(0, 0, false, (camera.getYaw() + 1024) & 2047);
@@ -899,6 +1096,7 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
         this.syncDialogueOptions();
         this.syncInventorySelection();
         this.updateReticleVisibility();
+        this.keyboardAiming = false;
         this.zoomScale = 1;
         this.runBlend = 0;
         this.hitAt = -Infinity;
@@ -914,7 +1112,7 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
             this.client.renderSelf = true;
             this.client.firstPersonArmsVisible = false;
             this.client.followPlayerCamera = true;
-            camera.setViewPitchOverride(128);
+            camera.setViewPitchOverride(DEFAULT_PITCH);
             return;
         }
         camera.setViewPitchOverride(undefined);
@@ -1047,4 +1245,31 @@ export class FirstPersonPlugin extends Plugin implements ClientPlugin, InputKeyH
             this.enabled && this.client.isLoggedIn() && this.inputMode === "inventory",
         );
     }
+}
+
+/** Where the crosshair aims, in canvas pixels: the view centre raised by crosshairRaisePixels. */
+export function crosshairPoint(camera: Camera): { x: number; y: number } {
+    return {
+        x: camera.viewportXOffset + camera.viewportWidth / 2,
+        y: camera.viewportYOffset + camera.viewportHeight / 2 - crosshairRaisePixels(camera),
+    };
+}
+
+/**
+ * Pixels the crosshair sits above the view centre: a fixed angle, so it keeps aiming at the same
+ * place whatever the window size, zoom or running FOV (Camera's fovY uses viewportZoom * zoom scale).
+ */
+export function crosshairRaisePixels(camera: Pick<Camera, "viewportZoom" | "getViewZoomScale">): number {
+    return Math.tan(CROSSHAIR_RAISE_DEGREES * Math.PI / 180) * camera.viewportZoom * camera.getViewZoomScale();
+}
+
+/** A stick axis with its dead zone removed, rescaled to -1..1. */
+function stickAxis(value: number): number {
+    const magnitude = Math.abs(value);
+    return magnitude < STICK_DEADZONE ? 0 : Math.sign(value) * Math.min(1, (magnitude - STICK_DEADZONE) / (1 - STICK_DEADZONE));
+}
+
+/** The key event a controller button stands in for. */
+function keyEvent(code: string): KeyboardEvent {
+    return { code, key: code === "Space" ? " " : code, repeat: false, shiftKey: false, preventDefault() {} } as KeyboardEvent;
 }

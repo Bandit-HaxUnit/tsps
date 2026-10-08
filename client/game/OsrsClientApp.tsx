@@ -19,6 +19,8 @@ import {
 import {
     checkMobile,
     isIos,
+    isLowEndDevice,
+    isXbox,
     isStandaloneDisplayMode,
     isTouchDevice,
 } from "../common/utils/DeviceUtil";
@@ -31,6 +33,7 @@ import {
 import { fetchCacheList, loadCacheFilesAuto } from "./Caches";
 import { GameContainer } from "./GameContainer";
 import { pickRendererType } from "./GameRenderers";
+import { XboxDiagnostics } from "./XboxDiagnostics";
 import { OsrsClient } from "./OsrsClient";
 import {
     getClientPreference,
@@ -189,6 +192,9 @@ function OsrsClientApp() {
     const workerPoolNonce = readWorkerPoolNonce();
     const workerCount = useMemo(() => {
         const cores = navigator.hardwareConcurrency || 2;
+        // Each worker builds scenes in its own memory: a low-end device (phone, tablet, Xbox) gets
+        // one; an Xbox tab dies near 1 GB of committed memory.
+        if (isLowEndDevice) return 1;
         return checkMobile() || isIos ? 2 : Math.max(2, Math.min(4, cores - 1));
     }, []);
 
@@ -612,6 +618,7 @@ function OsrsClientApp() {
         <div className={appClassName}>
             {bannerWrapper}
             {content}
+            {isXbox && <XboxDiagnostics workers={workerPool.size} osrsClient={osrsClient} />}
         </div>
     );
 }

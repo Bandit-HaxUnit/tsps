@@ -23,6 +23,7 @@ uniform float u_hdShadowStrength;
 uniform int u_hdLightCount;
 uniform vec4 u_hdLightPositions[16];
 uniform vec4 u_hdLightColors[16];
+uniform vec4 u_hdMist; // mist level (tiles, y down), strength, wind x, wind z (HdMist.ts)
 
 vec3 hdSaturation(vec3 color, float amount) {
     return mix(vec3(dot(color, vec3(0.299, 0.587, 0.114))), color, amount);
@@ -32,6 +33,30 @@ float hdFogAmount(vec2 position) {
     vec2 delta = abs(position - u_playerPos);
     float squareDist = max(delta.x, delta.y);
     return pow(smoothstep(u_hdFog.x, u_hdFog.y, squareDist), u_hdFog.z);
+}
+
+float hdMistHash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float hdMistNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hdMistHash(i), hdMistHash(i + vec2(1.0, 0.0)), f.x),
+        mix(hdMistHash(i + vec2(0.0, 1.0)), hdMistHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+// Low-lying mist: pools below the surrounding land's average height (u_hdMist.x, y grows
+// downwards) and thickens with how far the view travels through it, so the ground nearby stays
+// readable while a valley fills; drifts in banks with the wind. Mirrors hdMistWgsl.
+float hdMistAmount(vec3 position) {
+    if (u_hdMist.y <= 0.0) return 0.0;
+    float low = smoothstep(u_hdMist.x - 1.0, u_hdMist.x + 2.0, position.y);
+    float depth = 1.0 - exp(-length(position.xz - u_cameraPos) * 0.07);
+    vec2 drift = position.xz * 0.07 + u_hdMist.zw * u_currentTime;
+    float banks = hdMistNoise(drift) * 0.65 + hdMistNoise(drift * 2.3 + 17.0) * 0.35;
+    return clamp(low * depth * mix(0.4, 1.0, banks) * u_hdMist.y, 0.0, 1.0);
 }
 
 float hdShadow(vec3 position, vec3 normal) {
