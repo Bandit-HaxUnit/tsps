@@ -6,6 +6,7 @@ import { PlayerAppearance } from "../../rs/config/player/PlayerAppearance";
 import { Model } from "../../rs/model/Model";
 import { ModelData } from "../../rs/model/ModelData";
 import { clamp } from "../../common/utils/MathUtil";
+import { isLowEndDevice } from "../../common/utils/DeviceUtil";
 import { ActorAnimationClip } from "../../game/actor/ActorAnimation";
 import type { PlayerAnimKey } from "../../game/ecs/PlayerEcs";
 import { resolveHeightSamplePlaneForLocal } from "../../game/scene/PlaneResolver";
@@ -22,6 +23,8 @@ import type { WebGLOsrsRenderer } from "../WebGLOsrsRenderer";
  */
 const PLAYER_INTERACT_BASE = 0x8000;
 const UNANIMATED_PLAYER_COUNT = 200;
+// Low-end devices draw only the nearest players per map square (self and combat target always kept).
+const LOW_END_MAX_PLAYERS_PER_MAP = 32;
 
 export function shouldUseUnanimatedIdlePlayer(
     activePlayerCount: number,
@@ -2972,6 +2975,22 @@ export class PlayerRenderer {
             }
 
             out.push(pid | 0);
+        }
+
+        if (isLowEndDevice && out.length > LOW_END_MAX_PLAYERS_PER_MAP) {
+            const osrs = this.renderer.osrsClient;
+            const selfPid = osrs.playerEcs.getIndexForServerId(osrs.controlledPlayerServerId);
+            const targetPid = this.renderer.getCombatTargetPlayerEcsIndex() ?? -1;
+            const sx = selfPid !== undefined ? pe.getX(selfPid) : 0;
+            const sy = selfPid !== undefined ? pe.getY(selfPid) : 0;
+            const dist = (pid: number): number => {
+                if (pid === selfPid || pid === targetPid) return -1;
+                const dx = pe.getX(pid) - sx;
+                const dy = pe.getY(pid) - sy;
+                return dx * dx + dy * dy;
+            };
+            out.sort((a, b) => dist(a) - dist(b));
+            out.length = LOW_END_MAX_PLAYERS_PER_MAP;
         }
 
         this.frameRenderPlayersByMap.set(key, out);
