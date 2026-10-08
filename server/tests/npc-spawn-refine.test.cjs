@@ -52,3 +52,22 @@ test("the refined spawns: Iffie stands still, soldiers face their posts, the Gra
   assert.equal(at("Grand Exchange Clerk", 3164, 3491).direction, 6, "its north clerks face north");
   assert.equal(at("Grand Exchange Clerk", 3164, 3488).direction, undefined, "its south clerks keep south");
 });
+
+test("the Wiki-added spawns are refined too: Varlamore's guards stand still, the Hunter Guild faces north", () => {
+  const spawns = require("../data/definitions/npc-spawns.json");
+  const at = (name, x, y) => spawns.find((spawn) => spawn.name === name && spawn.x === x && spawn.y === y);
+  assert.equal(at("Guard", 1434, 3123).wanderRadius, 0);
+  assert.deepEqual([at("Pellem", 1565, 3035).direction, at("Pellem", 1565, 3035).wanderRadius], [6, 0]);
+  assert.deepEqual([at("Guildmaster Apatura", 1555, 3035).direction, at("Shipwright Scott", 1883, 3296).direction], [6, 3]);
+});
+
+test("the Shayzien drill formation stands still: the rows face north, the Drill Sergeant south", () => {
+  const spawns = require("../data/definitions/npc-spawns.json");
+  const formation = spawns.filter((spawn) => spawn.x >= 1503 && spawn.x <= 1517 && [3639, 3641, 3643, 3645].includes(spawn.y)
+    && (spawn.x - 1503) % 2 === 0 && spawn.name === "Soldier");
+  // Four rows of eight, the second missing (1505, 3641), as in live OSRS.
+  assert.equal(formation.length, 31);
+  for (const spawn of formation) assert.deepEqual([spawn.direction, spawn.wanderRadius], [6, 0], `${spawn.x},${spawn.y}`);
+  const sergeant = spawns.find((spawn) => spawn.x === 1510 && spawn.y === 3647 && spawn.id === 6882);
+  assert.deepEqual([sergeant.name, sergeant.direction, sergeant.wanderRadius], ["Drill Sergeant", undefined, 0], "faces the rows: south, the default");
+});
