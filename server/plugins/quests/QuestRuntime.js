@@ -346,7 +346,13 @@ function registerQuest(api, def) {
     },
     setStage(player, value) {
       player.setAttribute(stageKey, value | 0);
-      player.getPacketSender().sendConfig(def.varpId, value | 0);
+      // Quests whose stage lives in a varbit of a shared varp (most post-2007
+      // quests) set the varbit, so sibling bits in the same varp survive.
+      if (def.varbitId !== undefined) {
+        player.getPacketSender().sendVarbit(def.varbitId, value | 0);
+      } else {
+        player.getPacketSender().sendConfig(def.varpId, value | 0);
+      }
       refreshQuestList(player);
     },
     isStarted(player) {
