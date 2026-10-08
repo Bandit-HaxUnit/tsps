@@ -10,9 +10,16 @@
     "Oozing barrier": {"label": "Handled as an object", "skip": true, "why": "Stronghold of Security door: tsps opens it as a scenery object."},
     "Portal of Death": {"label": "Handled as an object", "skip": true, "why": "Stronghold of Security door: tsps opens it as a scenery object."},
     "Gemstone Crab": {"label": "Spawned by a plugin", "skip": true, "why": "GemstoneCrab.plugin.js spawns the timed world boss at one of its three spots itself."},
-    "Sol Heredit": {"label": "Spawned by a plugin", "skip": true, "why": "The Fortis Colosseum's final boss, spawned by the run in its arena (ColosseumRun.js)."}
+    "Sol Heredit": {"label": "Spawned by a plugin", "skip": true, "why": "The Fortis Colosseum's final boss, spawned by the run in its arena (ColosseumRun.js)."},
+    "Tempoross": {"label": "Minigame", "skip": true, "why": "The Tempoross minigame's boss."},
+    "<col=00ffff>Ammunition crate</col>": {"label": "Minigame", "skip": true, "why": "A Tempoross minigame prop."},
+    "<col=00ffff>Inactive spirit pool</col>": {"label": "Minigame", "skip": true, "why": "A Tempoross minigame prop."},
+    "Avatar of Creation": {"label": "Minigame", "skip": true, "why": "A Soul Wars boss."}
   },
-  "boxes": [],
+  "boxes": [
+    {"box": "2624,2560,2687,2623,0", "label": "Spawned by a plugin", "skip": true, "why": "Pest Control's game island: PestControl.plugin.js spawns the Void Knight and the squire there."},
+    {"box": "3072,3008,3135,3071,0", "label": "Group Ironman island", "skip": true, "why": "The Node, where Group Ironman accounts start; its tutors and fake players aren't for other accounts."}
+  ],
   "pagePatterns": [
     {"pattern": "League|Leagues", "label": "Leagues", "skip": true, "why": "Only on Leagues worlds."},
     {"pattern": "Deadman", "label": "Deadman", "skip": true, "why": "Only on Deadman worlds."},
