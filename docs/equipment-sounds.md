@@ -46,7 +46,7 @@ The rules alone give the recorded sound for 639 of the 699 captured items (91%).
 
 ## How the recordings were taken
 
-From the capture index (`/home/hax/projects/rsproxscrape`, see the osrs-captures skill). For every inventory click:
+From the [rsprox.net capture database](https://rsprox.net/database). For every inventory click:
 - **Wearing:** exactly one item went into worn equipment on ticks 0–1, with exactly one synth sound on that same tick. Gear switches put several items on at once and are left out.
 - **Removing:** the same, with one item taken off.
 - **Counting:** per recording, so one long session can't dominate.
