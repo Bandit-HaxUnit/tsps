@@ -31,16 +31,23 @@ test("PlayerBots:sites switches the named sites; the rest keep their own enabled
   assert.deepEqual(file.sites.map((site) => [site.id, site.enabled]), [["lumbridge", true], ["edge_low", false], ["seers", false]]);
 });
 
+test("an object replaces just the properties it names, each whole, and never the id", () => {
+  const file = { sites: [{ id: "lumbridge", enabled: false, x: 3222, y: 3218, bots: { woodcutting: 35, mining: 30 } }] };
+  applySiteOverrides(file, siteOverrides(sitesConfig({ lumbridge: { id: "elsewhere", enabled: true, bots: { woodcutting: 10 } } })));
+  assert.deepEqual(file.sites[0], { id: "lumbridge", enabled: true, x: 3222, y: 3218, bots: { woodcutting: 10 } });
+});
+
 test("no PlayerBots:sites leaves bot-sites.json as it ships", () => {
   assert.equal(siteOverrides({}).size, 0);
 });
 
-test("a value that isn't true/false, or an unknown site, is warned about and ignored", () => {
+test("a value that isn't true, false or an object, or an unknown site, is warned about and ignored", () => {
   const { result, warnings } = quietly(() => {
-    const overrides = siteOverrides(sitesConfig({ lumbridge: "yes", varrock: true, atlantis: true }));
-    return applySiteOverrides({ sites: [{ id: "lumbridge", enabled: false }, { id: "varrock", enabled: false }] }, overrides);
+    const overrides = siteOverrides(sitesConfig({ lumbridge: "yes", varrock: true, falador: [false], atlantis: true }));
+    return applySiteOverrides({ sites: [{ id: "lumbridge", enabled: false }, { id: "varrock", enabled: false }, { id: "falador", enabled: true }] }, overrides);
   });
-  assert.deepEqual(result.sites.map((site) => site.enabled), [false, true]);
+  assert.deepEqual(result.sites.map((site) => site.enabled), [false, true, true]);
+  assert.ok(warnings.some((line) => line.includes("PlayerBots:sites.falador")));
   assert.ok(warnings.some((line) => line.includes("PlayerBots:sites.lumbridge")));
   assert.ok(warnings.some((line) => line.includes("'atlantis'")));
   assert.equal(quietly(() => siteOverrides(sitesConfig(["lumbridge"])).size).result, 0);
