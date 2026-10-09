@@ -1,7 +1,7 @@
 /**
  * Rune Mysteries.
  *
- * Words come from data/definitions/npc-dialogues.json (page "Rune Mysteries",
+ * Words come from plugins/npcs/data/npc-dialogues.json (page "Rune Mysteries",
  * plus the "Archmage Sedridor" and "Aubury" general pages):
  *   Duke, not started    -> "Rune Mysteries" / "starting-off-talking-to-duke-horacio"
  *   Duke, in progress    -> "Rune Mysteries" / "...-talking-to-duke-horacio-again"

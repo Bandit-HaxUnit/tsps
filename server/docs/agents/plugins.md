@@ -115,6 +115,30 @@ Fall back to raw ids only when the name is genuinely ambiguous or the behaviour 
 id-specific (a single transformed variant, for example). When you do, use a named constant
 from `IdEnums` / the generated identifier files, never a bare number.
 
+## Plugin data
+
+JSON a plugin owns lives in a `data/` directory in the plugin's directory - at the level of
+its `.plugin.js`, shared by the plugins in that directory - and is read relative to the
+plugin file, never through the core definitions path:
+
+```
+plugins/world/data/spirit-trees.json
+plugins/skills/sailing/data/boats.json
+plugins/skills/data/slayer-tasks.json
+```
+
+```js
+const DATA = require("./data/spirit-trees.json");
+// or, for a file named at runtime:
+const file = path.join(__dirname, "data", name);
+JSON.parse(fs.readFileSync(file, "utf8"));
+```
+
+Names are lowercase kebab-case (`rumour-data.json`), like the core definitions. A file read
+by more than one plugin, like `npc-dialogues.json`, stays in the data directory of the plugin
+that owns its behaviour; the other readers reach it by relative path. `data/definitions/` is
+only for definitions core loads (world, shops, items, NPCs, spawns, music).
+
 ## Cross-plugin events
 
 Plugins talk to each other only through the generic custom-event API. A bespoke

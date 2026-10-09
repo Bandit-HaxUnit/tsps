@@ -486,7 +486,7 @@ module.exports = function registerErnestTheChickenQuest(api) {
   function loadFinishingUpSteps() {
     if (finishingUpSteps) return finishingUpSteps;
     try {
-      const file = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json");
+      const file = path.join(__dirname, "..", "..", "npcs", "data", "npc-dialogues.json");
       const data = JSON.parse(fs.readFileSync(file, "utf8"));
       finishingUpSteps = data?.[PAGE_ERNEST]?.variants?.[FINISHING_UP_VARIANT] ?? [];
     } catch {

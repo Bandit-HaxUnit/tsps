@@ -1,7 +1,7 @@
 /**
  * Romeo & Juliet.
  *
- * Words come from data/definitions/npc-dialogues.json. The quest's "Romeo &
+ * Words come from plugins/npcs/data/npc-dialogues.json. The quest's "Romeo &
  * Juliet" page mixes every NPC, so the branch is selected by the clicked cache
  * id plus the quest stage:
  *

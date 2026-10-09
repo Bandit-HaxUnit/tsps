@@ -50,13 +50,7 @@ const BOT_CONFIG = Object.freeze({
   // Inset by 1 to target only the true active core for regional wilderness bots.
   wildernessActiveRegionInset: 1,
   botWalkRadius: 10,
-  objectIndexCachePath: path.join(
-    process.cwd(),
-    "plugins",
-    "bots",
-    "data",
-    "object-index.json"
-  ),
+  objectIndexCachePath: path.join(__dirname, "data", "object-index.json"),
   // Run the scheduler every game tick; near-player throttling is handled by
   // LOD/budget logic so PvP bots do not move in visible waves.
   botDecisionTicks: 1,

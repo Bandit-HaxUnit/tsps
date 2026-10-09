@@ -16,12 +16,7 @@ const { createPvpCombatAction } = require("./actions/PvpCombat");
 const { createWanderAction } = require("./actions/Wander");
 const { createFollowOwnerAction } = require("./actions/FollowOwner");
 
-const DEFAULT_DEFINITIONS_PATH = path.join(
-  process.cwd(),
-  "data",
-  "definitions",
-  "bot-activities.json"
-);
+const DEFAULT_DEFINITIONS_PATH = path.join(__dirname, "..", "data", "bot-activities.json");
 
 function applyFields(value, fields) {
   if (typeof value === "string") {

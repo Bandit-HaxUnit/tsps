@@ -8,9 +8,9 @@ const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 
 const { _test } = require("../plugins/npcs/NpcDrops.plugin");
-const dump = require("../data/definitions/npc-drops.json");
-const subtables = require("../data/definitions/npc-drop-subtables.json");
-const overrides = require("../data/definitions/npc-drop-overrides.json");
+const dump = require("../plugins/npcs/data/npc-drops.json");
+const subtables = require("../plugins/npcs/data/npc-drop-subtables.json");
+const overrides = require("../plugins/npcs/data/npc-drop-overrides.json");
 
 before(() => _test.loadDrops());
 

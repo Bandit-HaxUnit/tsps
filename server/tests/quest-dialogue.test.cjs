@@ -19,10 +19,10 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 
 const serverRoot = path.join(__dirname, '..');
 const data = JSON.parse(
-  fs.readFileSync(path.join(serverRoot, 'data/definitions/npc-dialogues.json'), 'utf8')
+  fs.readFileSync(path.join(serverRoot, 'plugins/npcs/data/npc-dialogues.json'), 'utf8')
 );
 const index = JSON.parse(
-  fs.readFileSync(path.join(serverRoot, 'data/definitions/npc-dialogue-index.json'), 'utf8')
+  fs.readFileSync(path.join(serverRoot, 'plugins/npcs/data/npc-dialogue-index.json'), 'utf8')
 );
 
 const STAGES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 20, 25, 30, 35, 40, 50, 60, 70, 80, 100];

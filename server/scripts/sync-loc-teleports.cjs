@@ -1,5 +1,5 @@
 // Adds captured loc teleports (ladders, stairs, caves, holes) that tsps lacks to
-// data/definitions/loc-teleports.json, from the capture index's loc-teleports file
+// plugins/world/data/loc-teleports.json, from the capture index's loc-teleports file
 // (`python3 rsprox_index.py loc-teleports --out loc-teleports.json`).
 //
 //   yarn build
@@ -11,7 +11,7 @@
 // capture shows the player clicked from, with 99s, a multiloc set to the variant that has the
 // option) to see what tsps does now. A loc is added when tsps does nothing with it, or Ladders
 // takes it and goes nowhere or elsewhere; see scripts/loc-teleport-matching.cjs for the rules
-// and data/definitions/loc-teleport-sync.json for the lasting decisions. The LocTeleports
+// and plugins/world/data/loc-teleport-sync.json for the lasting decisions. The LocTeleports
 // plugin's own hooks are ignored while probing, so entries already added stay; nothing is
 // removed and a second run adds nothing.
 //
@@ -22,10 +22,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const SERVER = path.resolve(__dirname, "..");
-const DATA_FILE = path.join(SERVER, "data/definitions/loc-teleports.json");
-const DECISIONS_FILE = path.join(SERVER, "data/definitions/loc-teleport-sync.json");
+const PLUGIN_DATA = path.join(SERVER, "plugins", "world", "data");
+const DATA_FILE = path.join(PLUGIN_DATA, "loc-teleports.json");
+const DECISIONS_FILE = path.join(PLUGIN_DATA, "loc-teleport-sync.json");
 /** Trapdoors that open by swapping the loc: an open one is only on the map once opened. */
-const SWAPS_FILE = path.join(SERVER, "data/definitions/loc-swaps.json");
+const SWAPS_FILE = path.join(PLUGIN_DATA, "loc-swaps.json");
 /** The plugin that plays the entries; ignored while probing (see above). */
 const OWN_PLUGIN = "LocTeleports";
 /** Ticks a probe waits for the move (the slowest captured loc teleports in 9). */

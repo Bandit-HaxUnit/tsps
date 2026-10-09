@@ -33,7 +33,7 @@ const Shared = require("./ColosseumShared");
 const Patterns = require("./SolPatterns");
 const Hazards = require("./ColosseumHazards");
 const Effects = require("./ModifierEffects.Colosseum");
-const DIALOGUES = require("../../../data/definitions/npc-dialogues.json")["Sol Heredit"].variants;
+const DIALOGUES = require("../../npcs/data/npc-dialogues.json")["Sol Heredit"].variants;
 
 const SOL = 12821;
 const CRYSTAL = 12824;

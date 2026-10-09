@@ -2,10 +2,10 @@
 
 Ladders, stairs, caves, holes and tunnels that did nothing in tsps (or went the wrong way) now move the player as live OSRS does: the same destination, animation, sound, fade and timing. They come from the [rsprox capture database](https://rsprox.net/database), not from a hand-written list.
 
-- **Data:** `server/data/definitions/loc-teleports.json`, one entry per loc placement and option.
-- **Trapdoors:** `server/data/definitions/loc-swaps.json`, trapdoors whose Open and Close swap the loc for its other state.
+- **Data:** `server/plugins/world/data/loc-teleports.json`, one entry per loc placement and option.
+- **Trapdoors:** `server/plugins/world/data/loc-swaps.json`, trapdoors whose Open and Close swap the loc for its other state.
 - **Plugin:** `server/plugins/world/LocTeleports.plugin.js` plays the entries.
-- **Sync:** `server/scripts/sync-loc-teleports.cjs` writes the data from the captures. Its rules are in `server/scripts/loc-teleport-matching.cjs`, and its lasting decisions in `server/data/definitions/loc-teleport-sync.json`.
+- **Sync:** `server/scripts/sync-loc-teleports.cjs` writes the data from the captures. Its rules are in `server/scripts/loc-teleport-matching.cjs`, and its lasting decisions in `server/plugins/world/data/loc-teleport-sync.json`.
 
 ## The captures
 

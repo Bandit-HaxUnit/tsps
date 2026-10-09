@@ -8,7 +8,7 @@
  *  - Progress is a single numeric stage persisted on the player as the
  *    `tutorial.island.stage` attribute (registered with api.persistAttribute).
  *  - Words are NOT re-authored. Every instructor talk is played by the shared
- *    NpcDialogues runtime from data/definitions/npc-dialogues.json page
+ *    NpcDialogues runtime from plugins/npcs/data/npc-dialogues.json page
  *    "Learning the Ropes"; this plugin picks the variant for the player's stage
  *    (onNpcDialogueVariant), answers the wiki prose conditions
  *    (onNpcDialogueCondition) and runs the transcript's item grants

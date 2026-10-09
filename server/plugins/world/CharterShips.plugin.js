@@ -2,7 +2,7 @@
  * Charter ships (https://oldschool.runescape.wiki/w/Charter_ship).
  *
  * Trader crewmembers (and Trader Stan at Port Sarim) sell passage between the
- * ports in data/definitions/charter-ships.json. Fares are halved by a worn
+ * ports in plugins/world/data/charter-ships.json. Fares are halved by a worn
  * ring of charos(a) or by Cabin Fever; with both they are a quarter. Destination
  * quest gates only block quests that are registered here, so the ones this
  * server does not have (Cabin Fever, Song of the Elves, Great Kourend) are
@@ -28,7 +28,7 @@ let portsByName = new Map();
 let fares = null;
 
 function loadData() {
-  const file = path.join(core.GameConstants.DEFINITIONS_DIRECTORY, "charter-ships.json");
+  const file = path.join(__dirname, "data", "charter-ships.json");
   const data = JSON.parse(fs.readFileSync(file, "utf8"));
   const ports = (data.ports ?? []).map((entry) => ({
     name: entry.name,

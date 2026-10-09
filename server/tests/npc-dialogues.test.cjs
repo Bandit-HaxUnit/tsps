@@ -7,7 +7,7 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { pickVariant, aliasKeys, flatten, startDialogue } = require('../plugins/npcs/NpcDialogues.plugin');
 
-const data = JSON.parse(fs.readFileSync(path.join(__dirname, '../data/definitions/npc-dialogues.json'), 'utf8'));
+const data = JSON.parse(fs.readFileSync(path.join(__dirname, '../plugins/npcs/data/npc-dialogues.json'), 'utf8'));
 const aliases = aliasKeys(data);
 const talk = (name) => {
   const record = pickVariant(data[name]) ? data[name] : data[aliases.get(name)];

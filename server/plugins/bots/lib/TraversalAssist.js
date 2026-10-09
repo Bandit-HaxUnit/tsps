@@ -54,7 +54,7 @@ function createTraversalAssist(api, options = {}) {
   const INIT_RETRY_BACKOFF_MS = 5000;
   const persistentIndexPath =
     options.cachePath ??
-    path.join(process.cwd(), "plugins", "bots", "data", "object-index.json");
+    path.join(__dirname, "..", "data", "object-index.json");
 
   /** Sorted id list: a dump built for a different set of tracked kinds is rejected. */
   function trackedIdsFingerprint() {

@@ -414,7 +414,7 @@ test('::corpkill finishes the Beast in your room, credited to you', () => {
 });
 
 test('its drop table notes what the Wiki notes (adamantite ore, magic logs...)', () => {
-  const { tables } = require('../data/definitions/npc-drops.json');
+  const { tables } = require('../plugins/npcs/data/npc-drops.json');
   const noted = tables.corporeal_beast.entries.filter((entry) => entry.noted).map((entry) => entry.name);
   assert.deepEqual(noted, ['Raw shark', 'Pure essence', 'Adamantite bar', 'Green dragonhide', 'Adamantite ore', 'Runite ore',
     'Teak plank', 'Mahogany logs', 'Magic logs', 'White berries', 'Goat horn', 'Antidote++(4)']);

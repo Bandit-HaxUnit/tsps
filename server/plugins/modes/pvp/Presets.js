@@ -82,7 +82,7 @@ const SPELLBOOKS = { NORMAL: MagicSpellbook.NORMAL, ANCIENT: MagicSpellbook.ANCI
 const EQUIPMENT_KEYS = new Set(["head", "cape", "amulet", "weapon", "body", "shield", "legs", "hands", "feet", "ring", "ammo"]);
 
 function loadPlayerPresets() {
-  const file = path.join(GameConstants.DEFINITIONS_DIRECTORY, "pvp-presets-players.json");
+  const file = path.join(__dirname, "..", "data", "pvp-presets-players.json");
   const rows = JSON.parse(fs.readFileSync(file, "utf8"));
   if (!Array.isArray(rows) || rows.length !== GLOBAL_ROW_COUNT) throw new Error(`[presets] ${file} must contain ${GLOBAL_ROW_COUNT} presets`);
   const keys = new Set();

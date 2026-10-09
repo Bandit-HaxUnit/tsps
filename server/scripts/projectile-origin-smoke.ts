@@ -41,7 +41,7 @@ console.info("projectile origin smoke passed");
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const gwdRules = require("../plugins/bosses/godwars/GodWarsRules");
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const dropDefinitions = require("../data/definitions/npc-drops.json");
+const dropDefinitions = require("../plugins/npcs/data/npc-drops.json");
 
 // Troll Stronghold partial completion (Dad defeated) and the 60 Strength/Agility
 // boulder. A regression to any of these must fail the offline test.

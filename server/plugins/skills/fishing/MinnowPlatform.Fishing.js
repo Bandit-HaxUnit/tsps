@@ -133,7 +133,7 @@ function meetsRequirements(player) {
   return hasPlatformLevel(player) && completedFishingContest(player) && AnglerOutfit.wearsFullOutfit(player);
 }
 
-/** Plays Kylie's lines from her transcript page (data/definitions/npc-dialogues.json). */
+/** Plays Kylie's lines from her transcript page (plugins/npcs/data/npc-dialogues.json). */
 function sayAsKylie(player, npcId, steps) {
   const record = QuestRuntime.loadTranscripts(api)?.[PAGE];
   if (!Array.isArray(steps) || !record) return false;

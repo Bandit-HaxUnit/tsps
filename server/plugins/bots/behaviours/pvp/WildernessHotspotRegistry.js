@@ -44,8 +44,8 @@ function freezeHotspot(hotspot) {
 }
 
 function loadWildernessHotspots() {
-  const hotspotFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "pvp-bot-hotspots.json");
-  const loadoutFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "pvp-bot-loadouts.json");
+  const hotspotFile = path.join(__dirname, "..", "..", "data", "pvp-bot-hotspots.json");
+  const loadoutFile = path.join(__dirname, "..", "..", "data", "pvp-bot-loadouts.json");
   const definitions = JSON.parse(fs.readFileSync(hotspotFile, "utf8"));
   if (!Array.isArray(definitions?.hotspots) || definitions.hotspots.length === 0) {
     throw new Error("[pvp bot loadouts] missing hotspots");

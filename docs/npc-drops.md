@@ -17,8 +17,8 @@ The two generated files come from the OSRS Wiki's drop tables, through osrsrebox
 ```sh
 cd ../osrsreboxed-db
 python -m scripts.drops.update          # writes docs/drops-json/
-cp docs/drops-json/npc-drops.json ../tsps/server/data/definitions/npc-drops.json
-cp docs/drops-json/subtables.json ../tsps/server/data/definitions/npc-drop-subtables.json
+cp docs/drops-json/npc-drops.json ../tsps/server/plugins/npcs/data/npc-drops.json
+cp docs/drops-json/subtables.json ../tsps/server/plugins/npcs/data/npc-drop-subtables.json
 ```
 
 - **Never edit the generated files by hand:** the next dump overwrites them. Put the change in `npc-drop-overrides.json` instead.
