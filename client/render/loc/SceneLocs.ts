@@ -11,6 +11,7 @@ import { getIdFromTag } from "../../rs/scene/entity/EntityTag";
 import { LocEntity } from "../../rs/scene/entity/LocEntity";
 import { INVALID_HSL_COLOR } from "../../rs/util/ColorUtil";
 import { getBridgeAdjustedPlane, getBridgeLinkedBelow } from "../../game/scene/BridgeTiles";
+import { TILE_FLAG_UNDER_ROOF } from "../../game/scene/TileRenderFlags";
 import { clampPlane } from "../../game/utils/PlaneUtil";
 import { InteractType } from "../../render/InteractType";
 import { ContourGroundType, SceneModel } from "../buffer/SceneBuffer";
@@ -26,6 +27,25 @@ const LAST_ROOF_TYPE = LocModelType.ROOF_SLOPED_OVERHANG_HARD_OUTER_CORNER;
 
 export function isRoofLocModelType(modelType: number): boolean {
     return modelType >= FIRST_ROOF_TYPE && modelType <= LAST_ROOF_TYPE;
+}
+
+/**
+ * Whether a loc needs reversed faces so it occludes from both sides.
+ *
+ * Classic roofs use the roof shapes (12-21). Some newer buildings (Wyrmscraig's cathedral)
+ * model their roof from ordinary scenery shapes with inward-wound faces, so an upper storey
+ * on a tile the map flags under-roof is treated as a roof too - single-sided, it backface
+ * culls from outside and shows the interior.
+ */
+export function needsRoofUnderside(
+    modelType: number,
+    renderLevel: number,
+    underRoof: boolean,
+): boolean {
+    if (isRoofLocModelType(modelType)) {
+        return true;
+    }
+    return underRoof && renderLevel >= 2;
 }
 
 function getLocPlaneCullLevel(
@@ -147,7 +167,11 @@ export function createSceneModel(
 
     return {
         model,
-        doubleSided: isRoofLocModelType(type),
+        doubleSided: needsRoofUnderside(
+            type,
+            level,
+            (((scene.tileRenderFlags[0]?.[tileX]?.[tileY] ?? 0) & TILE_FLAG_UNDER_ROOF) !== 0),
+        ),
         groundConforming: locType.contourGroundType > 0,
         sceneHeight,
         lowDetail: isLowDetail(scene, level, tileX, tileY, locType, type),
