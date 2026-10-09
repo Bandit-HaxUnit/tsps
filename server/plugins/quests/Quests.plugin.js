@@ -50,6 +50,7 @@ const QUESTS = [
 
 // Free-to-play quests (OSRS wiki); the rest stay unloaded on a free-to-play world.
 const F2P_QUESTS = new Set([
+  "BelowIceMountain",
   "BlackKnightsFortress", "CooksAssistant", "CorsairCurse", "DemonSlayer", "DoricsQuest",
   "DragonSlayer", "ErnestTheChicken", "GoblinDiplomacy", "ImpCatcher", "KnightsSword",
   "MisthalinMystery", "IdesOfMilk", "PiratesTreasure", "PrinceAliRescue", "RestlessGhost", "RomeoAndJuliet",
