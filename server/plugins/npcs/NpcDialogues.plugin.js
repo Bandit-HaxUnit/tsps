@@ -32,6 +32,58 @@ const MAX_JUMPS = 100;
 const SPECIAL_NPC_DIALOGUES = new Set(["Skully", "Estate agent", "Estate Agent", "Alwyn"]);
 
 /**
+ * Wiki transcripts leave parts of a line to the reader's character: their name
+ * ("[player name]", "<player name>") and gendered alternatives ("[sir/madam]",
+ * "[Greetings, sir/Greetings, madam/Greetings]"). Resolve them from the player
+ * seeing the dialogue; alternatives without a gendered form (numbers, item
+ * picks, NPC choices) stay for quest plugins to fill.
+ */
+const PLAYER_NAME_PLACEHOLDER = /\[(?:player name|playername|player|player vampyre name)(\.?)\]|<player name>/gi;
+const PLAYER_NAME_ALTERNATIVE = /^(?:player name|playername|player vampyre name)$/i;
+const GENDERED_ALTERNATIVE = /\[([^\[\]]*\/[^\[\]]*)\]/g;
+
+/** The address words the wiki templates use for each gender. */
+const MALE_ADDRESS_WORDS = new Set([
+  "sir", "sirrah", "mister", "master", "milord", "lord", "lad", "laddie", "man", "men", "boy", "boys",
+  "brother", "fellow", "fella", "chap", "guy", "prince", "strongman", "craftsman", "monsieur",
+]);
+const FEMALE_ADDRESS_WORDS = new Set([
+  "madam", "madame", "ma'am", "m'am", "miss", "lady", "milady", "m'lady", "mistress", "lass", "lassie",
+  "woman", "women", "girl", "girls", "gal", "sister", "princess", "strongwoman", "craftswoman",
+]);
+
+/** The gender an alternative addresses, or null when it addresses neither or both. */
+function genderedForm(text) {
+  const words = String(text).toLowerCase().match(/[a-z']+/g) ?? [];
+  const male = words.some((word) => MALE_ADDRESS_WORDS.has(word));
+  const female = words.some((word) => FEMALE_ADDRESS_WORDS.has(word));
+  return male === female ? null : male ? "male" : "female";
+}
+
+/** The alternative to show a player of this gender, or null to leave the group alone. */
+function pickAlternative(parts, name, male) {
+  if (parts.some((part) => PLAYER_NAME_ALTERNATIVE.test(part))) return name ?? null;
+  const forms = parts.map((part) => ({ text: part, gender: genderedForm(part) }));
+  if (!forms.some((form) => form.gender)) return null;
+  const wanted = male ? "male" : "female";
+  const match = forms.find((form) => form.gender === wanted) ?? forms.find((form) => !form.gender);
+  return (match ?? forms[0]).text;
+}
+
+function formatPlayerText(text, player) {
+  let out = String(text ?? "");
+  const name = player?.getUsername?.();
+  // "[player.]" keeps the sentence's closing period.
+  if (name) out = out.replace(PLAYER_NAME_PLACEHOLDER, (_, period) => `${name}${period ?? ""}`);
+  if (!out.includes("/")) return out;
+  const male = player?.getAppearance?.()?.isMale?.() !== false;
+  return out.replace(GENDERED_ALTERNATIVE, (whole, body) => {
+    const parts = body.split("/").map((part) => part.trim());
+    return parts.length < 2 ? whole : pickAlternative(parts, name, male) ?? whole;
+  });
+}
+
+/**
  * Most records list several variants and name no default, which used to leave the
  * NPC silent. Prefer the standard talk transcript over overhead shouts.
  */
@@ -451,7 +503,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     // Record every option when the prompt is shown (not on selection) so that a
     // nested option's "jump above" can find its unselected sibling by text.
     visible.forEach(recordOption);
-    const pairs = visible.flatMap((option) => [option.text, () => {
+    const pairs = visible.flatMap((option) => [formatPlayerText(option.text, player), () => {
       // Quest-gated choices carry a slug like "quest:cook-s-assistant:start";
       // let the owning quest run its action, then play the branch.
       if (option.hook) {
@@ -468,7 +520,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     if (!pairs.length) return run(rest, record);
     playedAny = true;
     manager.reset();
-    if (!api.sendMultiChatboxPrompt(player, step.prompt || "Select an Option", ...pairs)) {
+    if (!api.sendMultiChatboxPrompt(player, formatPlayerText(step.prompt || "Select an Option", player), ...pairs)) {
       unavailable();
     }
   }
@@ -525,7 +577,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           continue;
         }
         // `text` is mutable too, so a plugin can fill in the wiki's "[number]"-style blanks.
-        const lines = Misc.wrapText(request.text, 53);
+        const lines = Misc.wrapText(formatPlayerText(request.text, player), 53);
         playedAny = true;
         // A typed line spoken by someone other than the NPC being talked to (a
         // paired NPC talking to them, a cutscene actor) gets that speaker's head.
@@ -570,7 +622,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           api.emitCustomEvent("npc-dialogue:action", message);
           if (message.end) return close();
           playedAny = true;
-          if (!message.handled) player.sendMessage(String(step.text ?? ""));
+          if (!message.handled) player.sendMessage(formatPlayerText(String(step.text ?? ""), player));
           return run(rest, currentRecord);
         }
         // Wiki markers for content this server does not implement.
@@ -647,6 +699,7 @@ module.exports = {
   pickVariant,
   aliasKeys,
   flatten,
+  formatPlayerText,
   startDialogue,
   collectPageLines,
   collectPageOptions,
