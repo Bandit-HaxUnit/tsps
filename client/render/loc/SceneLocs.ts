@@ -33,19 +33,46 @@ export function isRoofLocModelType(modelType: number): boolean {
  * Whether a loc needs reversed faces so it occludes from both sides.
  *
  * Classic roofs use the roof shapes (12-21). Some newer buildings (Wyrmscraig's cathedral)
- * model their roof from ordinary scenery shapes with inward-wound faces, so an upper storey
- * on a tile the map flags under-roof is treated as a roof too - single-sided, it backface
+ * model their roof, eaves included, from ordinary scenery shapes with inward-wound faces, so
+ * an upper storey over a roofed tile is treated as a roof too - single-sided, it backface
  * culls from outside and shows the interior.
  */
 export function needsRoofUnderside(
     modelType: number,
     renderLevel: number,
-    underRoof: boolean,
+    nearRoof: boolean,
 ): boolean {
     if (isRoofLocModelType(modelType)) {
         return true;
     }
-    return underRoof && renderLevel >= 2;
+    return nearRoof && renderLevel >= 2;
+}
+
+/** Tiles within this many tiles of a loc may hold the roof it is the eave of. */
+const ROOF_NEARBY_RADIUS = 4;
+
+/** Whether any tile within ROOF_NEARBY_RADIUS of (tileX, tileY) is flagged under-roof. */
+export function isNearUnderRoofTile(scene: Scene, tileX: number, tileY: number): boolean {
+    const flags = scene.tileRenderFlags[0];
+    if (!flags) {
+        return false;
+    }
+    const minX = Math.max(0, tileX - ROOF_NEARBY_RADIUS);
+    const maxX = Math.min(flags.length - 1, tileX + ROOF_NEARBY_RADIUS);
+    for (let x = minX; x <= maxX; x++) {
+        const column = flags[x];
+        if (!column) {
+            continue;
+        }
+        const minY = Math.max(0, tileY - ROOF_NEARBY_RADIUS);
+        const maxY = Math.min(column.length - 1, tileY + ROOF_NEARBY_RADIUS);
+        for (let y = minY; y <= maxY; y++) {
+            if ((column[y] & TILE_FLAG_UNDER_ROOF) !== 0) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 function getLocPlaneCullLevel(
@@ -167,11 +194,7 @@ export function createSceneModel(
 
     return {
         model,
-        doubleSided: needsRoofUnderside(
-            type,
-            level,
-            (((scene.tileRenderFlags[0]?.[tileX]?.[tileY] ?? 0) & TILE_FLAG_UNDER_ROOF) !== 0),
-        ),
+        doubleSided: needsRoofUnderside(type, level, isNearUnderRoofTile(scene, tileX, tileY)),
         groundConforming: locType.contourGroundType > 0,
         sceneHeight,
         lowDetail: isLowDetail(scene, level, tileX, tileY, locType, type),
