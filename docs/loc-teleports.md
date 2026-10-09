@@ -149,6 +149,8 @@ Locs of other kinds that are a plain move are taken by name, under `include` in 
 - **Desert Treasure II:** the war-room rubble.
 - **Zanaris's crop circle** to Puro-Puro. The wandering crop circles are hidden by a varbit on this server.
 
+**Runecrafting altars' exit portals** (11): "Use" inside an altar now leads back outside its ruins, with sound 200 and "You step through the portal...", in the Runecrafting plugin, which owns the altars. The landing tiles are its ruins tiles. They match the captured exits for the earth, fire, water, nature and cosmic altars exactly; the other six are walkable. The captures' other exits, to the Temple of the Eye, are Guardians of the Rift's.
+
 **Not taken, and why:**
 - **Owned by other systems:**
   - the cosmic altar's ruins need a talisman or tiara (Runecrafting's);
@@ -157,7 +159,17 @@ Locs of other kinds that are a plain move are taken by name, under `include` in 
 - **Boats:**
   - Fossil Island's rowboats: the barge and Digsite trips were never recorded;
   - the Myreque boat network: Burgh de Rott, Meiyerditch, Icyene Graveyard and Slepe. Three of its four boats only show at Myreque quest stages this server doesn't have. Their rides are a fade, the move 10 ticks later, and the fade back in on tick 12, for when those quests exist.
-- **Agility-style obstacles:** the 180 or so that remain (Meiyerditch's floorboards and shelves, Isafdar's tripwires and leaves, Tarn's Lair's pillars and ledges, Hunter pitfalls, Fossil Island's zip line). They need levels, xp, failure chances and damage, which belong in the agility shortcuts.
+- **What's left that does nothing** (about 160):
+  - **Agility-style obstacles (about 110):** Meiyerditch's floorboards, shelves and walls; Isafdar's tripwires, leaves and hand-holds; Tarn's Lair's pillars and ledges; the Lunar area's bridges and walls; Ghosts Ahoy's rocks; Enakhra's sand piles; God Wars' ice bridges and rock ropes; Mort Myre's tree bridges; the Agility Arena; the Fremennik rope bridges; stepping stones. They need levels, xp, failure chances and damage, which belong in the agility shortcuts.
+  - **The rest:**
+    - Hunter pitfalls (the Hunter skill);
+    - the Runecrafting ruins' Enter (a talisman or tiara);
+    - travel carts and boats (fares);
+    - Zanaris's fairy ring;
+    - Recipe for Disaster's Sq'irk trees and portal;
+    - quest one-offs (Surok's portal, the penguin base, Sins of the Father's walls, Zogre's barricade, the Holy barrier);
+    - the Wise Old Man's telescope;
+    - Sarachnis's web (needs slashing).
 
 ## Quest plugins that took every copy of a loc
 
