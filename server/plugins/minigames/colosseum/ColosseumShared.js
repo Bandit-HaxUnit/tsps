@@ -174,7 +174,7 @@ function options(player, title, ...pairs) {
   api().sendMultiChatboxPrompt(player, title, ...args);
 }
 
-/** Plays one of Minimus's transcript variants (plugins/npcs/data/npc-dialogues.json). */
+/** Plays one of Minimus's transcript variants (data/definitions/npc-dialogues.json). */
 function minimusSays(player, variant, npc = null) {
   const request = { player, npc, npcId: NPC.MINIMUS_LOBBY, variant, handled: false };
   api().emitCustomEvent("npc-dialogue:start", request);

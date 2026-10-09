@@ -1,5 +1,5 @@
 /**
- * NPCs that lie dormant until woken, from plugins/npcs/data/dormant-npcs.json. Each family has
+ * NPCs that lie dormant until woken, from data/definitions/dormant-npcs.json. Each family has
  * its dormant and awake ids, its rise and sink animations, and what wakes it:
  * - "approach": crabs disguised as scenery (Rocks, Boulder, Sandy rocks, Fossil Rock, Swampy
  *   log, Sandy Boulder). A player who steps next to one wakes it, unless the crab has become
@@ -33,7 +33,7 @@ const awake = new Map();
 const squareKey = (location) => `${location.getX() >> 6},${location.getY() >> 6},${location.getZ()}`;
 
 function readJson(file) {
-  return JSON.parse(fs.readFileSync(path.join(__dirname, "data", file), "utf8"));
+  return JSON.parse(fs.readFileSync(path.join(core.GameConstants.DEFINITIONS_DIRECTORY, file), "utf8"));
 }
 
 /** Loads the data, finds the crab squares from the spawns and starts the task. */
@@ -44,8 +44,7 @@ function start(pluginApi) {
   for (const family of DATA.families) {
     for (const id of family.dormant) dormantIds.set(id, { family, awakeId: family.awake[id] });
   }
-  const spawnFile = path.join(core.GameConstants.DEFINITIONS_DIRECTORY, "npc-spawns.json");
-  for (const spawn of JSON.parse(fs.readFileSync(spawnFile, "utf8"))) {
+  for (const spawn of readJson("npc-spawns.json")) {
     if (dormantIds.get(spawn.id)?.family.trigger !== "approach") continue;
     crabSquares.add(`${spawn.x >> 6},${spawn.y >> 6},${spawn.level ?? spawn.z ?? 0}`);
   }

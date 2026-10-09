@@ -319,7 +319,7 @@ test("Percy's real transcript reaches his unlock menu whatever has been bought",
   const path = require("node:path");
   const { PluginManager } = require("../dist/plugins/PluginManager");
   const { pickVariant, startDialogue } = require("../plugins/npcs/NpcDialogues.plugin");
-  const data = JSON.parse(fs.readFileSync(path.join(__dirname, "../plugins/npcs/data/npc-dialogues.json"), "utf8"));
+  const data = JSON.parse(fs.readFileSync(path.join(__dirname, "../data/definitions/npc-dialogues.json"), "utf8"));
   const steps = pickVariant(data["Prospector Percy"]);
   const hook = { pluginName: "MotherlodeMine", handler: hooks.conditions[0] };
   PluginManager.npcDialogueConditionHooks.unshift(hook);

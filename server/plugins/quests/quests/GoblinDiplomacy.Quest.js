@@ -1,7 +1,7 @@
 /**
  * Goblin Diplomacy.
  *
- * Words come from plugins/npcs/data/npc-dialogues.json:
+ * Words come from data/definitions/npc-dialogues.json:
  *   generals, not started -> "Goblin Diplomacy" / "starting-off-talking-to-general-wartface-or-general-bentnoze"
  *   generals, orange due  -> "Goblin Diplomacy" / "showing-the-generals-different-goblin-armours-orange-painted-goblin-armour"
  *   generals, blue due    -> "Goblin Diplomacy" / "showing-the-generals-different-goblin-armours-blue-painted-goblin-armour"

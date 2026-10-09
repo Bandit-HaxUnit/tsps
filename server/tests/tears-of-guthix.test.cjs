@@ -124,7 +124,7 @@ test("right-click Story plays only Juna's verdict", () => {
   const { verdictSteps } = Juna._test;
   const fs = require("node:fs");
   const path = require("node:path");
-  const data = JSON.parse(fs.readFileSync(path.join(__dirname, "../plugins/npcs/data/npc-dialogues.json"), "utf8"));
+  const data = JSON.parse(fs.readFileSync(path.join(__dirname, "../data/definitions/npc-dialogues.json"), "utf8"));
   const steps = verdictSteps(data.Juna.variants["standard-dialogue"]);
   assert.deepEqual(steps.map((step) => step.id), ["xVIAF8", "PlgV_M", "ZcrLIs", "gbeW2g", "OHiPEk", "xCJjUs"]);
 });

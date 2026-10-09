@@ -2,9 +2,9 @@
  * NPC drop tables, driven by the OSRS Wiki dump.
  *
  * Regenerate in ../osrsreboxed-db with `python -m scripts.drops.update`, then copy:
- *   docs/drops-json/npc-drops.json -> plugins/npcs/data/npc-drops.json
- *   docs/drops-json/subtables.json -> plugins/npcs/data/npc-drop-subtables.json
- * Hand edits live in plugins/npcs/data/npc-drop-overrides.json, applied on top of the dump, never
+ *   docs/drops-json/npc-drops.json -> data/definitions/npc-drops.json
+ *   docs/drops-json/subtables.json -> data/definitions/npc-drop-subtables.json
+ * Hand edits live in data/definitions/npc-drop-overrides.json, applied on top of the dump, never
  * in the generated files (docs/npc-drops.md).
  *
  * Shape: { tables: { "<tableId>": { label, main_max_roll, rolls?, entries[], tertiary[] } },
@@ -47,7 +47,7 @@ let unusableSubtableRows = 0;
 let conditionalTertiarySkipped = 0;
 
 function definitionPath(fileName) {
-  return path.join(__dirname, "data", fileName);
+  return path.join(GameConstants.DEFINITIONS_DIRECTORY, fileName);
 }
 
 function readJson(fileName) {

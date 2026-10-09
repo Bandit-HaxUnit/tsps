@@ -1,7 +1,7 @@
 /**
  * Prince Ali Rescue.
  *
- * Words come from plugins/npcs/data/npc-dialogues.json. The quest's
+ * Words come from data/definitions/npc-dialogues.json. The quest's
  * "Prince Ali Rescue" page mixes every NPC, so the branch is selected by the
  * clicked cache id plus the quest stage:
  *

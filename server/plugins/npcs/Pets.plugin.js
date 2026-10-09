@@ -1519,7 +1519,7 @@ function interact(player, npc) {
   // Skilling pets carry dialogue -1: Interact is a no-op rather than an empty
   // dialogue box or the generic "Nothing interesting happens." fallback.
   //
-  // The pet transcripts are genuinely absent from plugins/npcs/data/npc-dialogues.json (its
+  // The pet transcripts are genuinely absent from data/definitions/npc-dialogues.json (its
   // index maps pet NPC ids to unrelated pages), so this is the tracked task's deterministic
   // fallback: the click is consumed and the pet changes nothing. No dialogue is invented.
   return true;

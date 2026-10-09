@@ -2,7 +2,7 @@
  * Garden of Tranquillity (members).
  *
  * The words come from the "Garden of Tranquillity" transcript page in
- * plugins/npcs/data/npc-dialogues.json; this plugin supplies the NPC variant
+ * data/definitions/npc-dialogues.json; this plugin supplies the NPC variant
  * selector, the prose-condition answers, the gardener tasks, the statue/trolley
  * hauling, the Edgeville well ring recovery, the palace garden planting and the
  * completion.

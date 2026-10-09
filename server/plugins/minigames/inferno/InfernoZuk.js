@@ -1,6 +1,6 @@
 // Wave 69: TzKal-Zuk.
 // Mechanics: https://oldschool.runescape.wiki/w/TzKal-Zuk
-// Lines: plugins/npcs/data/npc-dialogues.json, TzHaar-Ket-Keh "the-inferno-upon-reaching-wave-69".
+// Lines: data/definitions/npc-dialogues.json, TzHaar-Ket-Keh "the-inferno-upon-reaching-wave-69".
 //
 // Zuk does not move and is driven from the run's tick rather than the combat engine: every
 // attack is a typeless blow at the player unless they stand behind the Ancestral Glyph, which

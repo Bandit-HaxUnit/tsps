@@ -492,7 +492,7 @@ function loadTranscripts(api) {
   if (transcriptCache) return transcriptCache;
   const fs = require("fs");
   const path = require("path");
-  const file = path.join(__dirname, "..", "npcs", "data", "npc-dialogues.json");
+  const file = path.join(api.core.GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json");
   transcriptCache = JSON.parse(fs.readFileSync(file, "utf8"));
   return transcriptCache;
 }

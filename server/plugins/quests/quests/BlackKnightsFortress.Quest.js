@@ -166,7 +166,7 @@ module.exports = function registerBlackKnightsFortressQuest(api) {
   function loadDialogueData() {
     if (!dialogueData) {
       dialogueData = JSON.parse(
-        fs.readFileSync(path.join(__dirname, "..", "..", "npcs", "data", "npc-dialogues.json"), "utf8")
+        fs.readFileSync(path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json"), "utf8")
       );
     }
     return dialogueData;

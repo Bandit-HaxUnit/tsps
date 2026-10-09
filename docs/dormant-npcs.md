@@ -1,6 +1,6 @@
 # Dormant NPCs and aggression tolerance
 
-`server/plugins/npcs/DormantNpcs.plugin.js`, with data in `server/plugins/npcs/data/dormant-npcs.json`: NPCs that lie dormant until woken, rise as their awake form, fight, and sink back after resting. Each family in the data has its dormant and awake ids, its rise and sink animations (with their lengths in ticks), and what wakes it:
+`server/plugins/npcs/DormantNpcs.plugin.js`, with data in `server/data/definitions/dormant-npcs.json`: NPCs that lie dormant until woken, rise as their awake form, fight, and sink back after resting. Each family in the data has its dormant and awake ids, its rise and sink animations (with their lengths in ticks), and what wakes it:
 - `approach`: the disguised crabs below, woken by a player stepping next to them;
 - `attacked`: wyrms and wyrmlings, woken when a player attacks them ([wyrms.md](wyrms.md)).
 

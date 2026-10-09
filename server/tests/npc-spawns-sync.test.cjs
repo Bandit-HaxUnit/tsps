@@ -70,7 +70,7 @@ test('Wyrmscraig spawns come from the Wiki, with ids in the cache and their drop
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(path.resolve(__dirname, '..'));
   const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
   const spawns = require('../data/definitions/npc-spawns.json');
-  const drops = require('../plugins/npcs/data/npc-drops.json').npcs;
+  const drops = require('../data/definitions/npc-drops.json').npcs;
   const island = spawns.filter((spawn) => spawn.source === 'wiki' && inBoxes(spawn, [parseBox('2520,2170,2660,2310'), parseBox('2560,8560,2640,8660')]));
   assert.ok(island.length >= 80, `${island.length} Wyrmscraig spawns`);
   for (const spawn of island) {

@@ -1,5 +1,5 @@
 /**
- * Talk-to dialogues from plugins/npcs/data/npc-dialogues.json (+ the osrsreboxed
+ * Talk-to dialogues from data/definitions/npc-dialogues.json (+ the osrsreboxed
  * id index, npc-dialogue-index.json).
  *
  * The cache NPC id selects the transcript page(s) and variant; quest plugins can
@@ -743,8 +743,8 @@ module.exports = {
   collectPageLines,
   collectPageOptions,
   register(api) {
-    const dialogueFile = path.join(__dirname, "data", "npc-dialogues.json");
-    const indexFile = path.join(__dirname, "data", "npc-dialogue-index.json");
+    const dialogueFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json");
+    const indexFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogue-index.json");
     // Parsed on the first Talk-to rather than at boot: the 17 MiB transcript dump expands
     // to ~35 MiB of objects, and a world where nobody talks never needs it.
     let loaded;

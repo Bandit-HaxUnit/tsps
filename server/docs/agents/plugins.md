@@ -117,9 +117,10 @@ from `IdEnums` / the generated identifier files, never a bare number.
 
 ## Plugin data
 
-JSON a plugin owns lives in a `data/` directory in the plugin's directory - at the level of
-its `.plugin.js`, shared by the plugins in that directory - and is read relative to the
-plugin file, never through the core definitions path:
+Data that only drives one plugin's own behaviour lives in a `data/` directory in the
+plugin's directory - at the level of its `.plugin.js`, shared by the plugins in that
+directory - and is read relative to the plugin file, never through the core definitions
+path:
 
 ```
 plugins/world/data/spirit-trees.json
@@ -134,10 +135,11 @@ const file = path.join(__dirname, "data", name);
 JSON.parse(fs.readFileSync(file, "utf8"));
 ```
 
-Names are lowercase kebab-case (`rumour-data.json`), like the core definitions. A file read
-by more than one plugin, like `npc-dialogues.json`, stays in the data directory of the plugin
-that owns its behaviour; the other readers reach it by relative path. `data/definitions/` is
-only for definitions core loads (world, shops, items, NPCs, spawns, music).
+World data stays in `data/definitions/`: the world and item/shop/music/equipment definitions,
+and everything about NPCs - definitions, animations, drops, dialogues, spawns and
+`dormant-npcs.json` - plus the bot population config. Core loaders, tools and several plugins
+share it, so it is not any one plugin's file. Names there and in plugin `data/` are lowercase
+kebab-case.
 
 ## Cross-plugin events
 

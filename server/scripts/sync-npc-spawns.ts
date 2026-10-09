@@ -51,8 +51,6 @@ const USER_AGENT = "tsps-npc-spawns (https://github.com/RSPSApp/tsps)";
 const PAGE = 5000;
 const TITLES_PER_REQUEST = 50;
 const DEFINITIONS = path.resolve(__dirname, "../data/definitions");
-/** Drop tables live with the owning plugin. */
-const NPC_DATA = path.resolve(__dirname, "../plugins/npcs/data");
 const SPAWNS_FILE = path.join(DEFINITIONS, "npc-spawns.json");
 
 type Spawn = { level: number; name?: string; x: number; y: number; id?: number; key?: string; wanderRadius?: number; source?: string };
@@ -321,7 +319,7 @@ async function main() {
     const only = argValues("--only");
     const add: Candidate[] = plan.add.filter((spawn: Candidate) => !spawn.skip && (only.length === 0 || only.some((label) => spawn.flags.includes(label))));
 
-    const drops = JSON.parse(fs.readFileSync(path.join(NPC_DATA, "npc-drops.json"), "utf8")).npcs ?? {};
+    const drops = readJson("npc-drops.json").npcs ?? {};
     const stats = readJson("monsters-complete.json");
     const lacksLoot = (id: number) => (Number((CacheDefinitions.getNpc(id) as any)?.combatLevel) || 0) > 0 && (!drops[id] || !stats[id]);
 
