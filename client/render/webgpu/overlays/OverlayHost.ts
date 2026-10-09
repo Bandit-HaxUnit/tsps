@@ -12,6 +12,7 @@ import type { LocModelLoader } from "../../../rs/config/loctype/LocModelLoader";
 import { Ray } from "../../../game/math/Raycast";
 import type { MapManager } from "../../../game/MapManager";
 import { SceneRaycaster } from "../../../game/scene/SceneRaycaster";
+import { getControlledPlayerWorldViewId } from "../camera";
 import type { SimpleMenuEntry } from "../../../ui/menu/MenuEngine";
 import type { MenuClickContext } from "../../../ui/menu/MenuEngine";
 import type { InteractHighlightDrawTarget } from "../../../ui/devoverlay/InteractHighlightOverlay";
@@ -96,6 +97,7 @@ import {
     trimActorHealthBars,
     trimHitsplats,
     updateHoveredTile as updateHoveredTileViaHost,
+    projectDeckToWorld,
     updateInteractHighlightHoverTarget as updateInteractHighlightHoverTargetViaHost,
     worldToScreen,
     getInteractNpcModelLoader,
@@ -250,6 +252,22 @@ export class OverlayHost {
             this.mapManager as unknown as MapManager<WebGLMapSquare>,
             renderer.osrsClient,
         );
+        // Same providers WebGLOsrsRenderer installs: deck loc triangles need the deck's
+        // placement matrix and deck hits are projected back to world coordinates; NPC hits
+        // need the default height and model triangles.
+        this.sceneRaycaster.worldEntityTransformProvider = (map) =>
+            this.renderer.worldEntityForMap(map as unknown as WebGPUMapSquare)?.transform;
+        this.sceneRaycaster.deckToWorldProvider = (entityIndex, fineX, fineY) =>
+            projectDeckToWorld(this.renderer, entityIndex, fineX, fineY);
+        this.sceneRaycaster.npcHeightProvider = (npcTypeId) => this.getNpcDefaultHeight(npcTypeId);
+        this.sceneRaycaster.npcTrianglesProvider = (ecsId, serverId) =>
+            this.buildNpcModelHighlightTriangles({
+                kind: "npc",
+                ecsId,
+                serverId,
+                npcTypeId: this.osrsClient.npcEcs.getNpcTypeId(ecsId),
+                plane: 0,
+            });
         this.boundToCssEvent = (gx?: number, gy?: number) =>
             this.toCssEvent(gx, gy, this.currentFrameCount);
     }
@@ -608,6 +626,21 @@ export class OverlayHost {
     // ── Map sampling (same math as the WebGL helpers, reading WebGPUMapSquare's public data) ─
 
     getPreferredMapForWorldTile(tileX: number, tileY: number): WebGPUMapSquare | undefined {
+        // Port of render/interact/menu.ts getPreferredMapForWorldTile: a deck tile belongs to
+        // the controlled player's world view, whose overlay map is deliberately kept out of the
+        // world-tile grid (MapManager.getMapForWorldTile skips world entity maps), so loc
+        // interaction on a boat would otherwise find no map and offer no options.
+        const worldViewId = getControlledPlayerWorldViewId(this.renderer);
+        if (worldViewId >= 0) {
+            const view = this.osrsClient.worldViewManager.getWorldView(worldViewId);
+            if (view?.containsTile(tileX | 0, tileY | 0)) {
+                const overlay = this.osrsClient.worldViewManager.getOverlayMapSquare(
+                    worldViewId,
+                    this.mapManager,
+                );
+                if (overlay) return overlay;
+            }
+        }
         return this.mapManager.getMapForWorldTile(tileX, tileY);
     }
 
