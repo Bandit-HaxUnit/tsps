@@ -248,6 +248,11 @@ class CookingTask extends Task {
 
 let TaskManager;
 let pluginApi;
+let activeSessionsRef = null;
+
+function isCookingActive(player) {
+  return activeSessionsRef?.has(player) === true;
+}
 
 function handleCook(activeSessions, event) {
   const definition = event.object.getDefinition();
@@ -308,6 +313,7 @@ module.exports = {
     pluginApi = api;
     TaskManager = api.getTaskManager();
     const activeSessions = new Map();
+    activeSessionsRef = activeSessions;
     TaskManager.submit(new CookingTask(activeSessions));
 
     api.onPlayerDisconnect(({ player }) => {
@@ -326,5 +332,9 @@ module.exports = {
       cookObjectNames: COOKABLE_OBJECT_NAMES.size,
     });
   },
+  isCookingActive,
+  COOKABLE_BY_RAW,
+  COOKABLE_OBJECT_NAMES,
+  FIRE_OBJECT_NAMES,
   _test: { isSuccess, stopBurnLevel, wearingCookingCape, GAUNTLETS_STOP_BURN, COOKABLE_BY_RAW },
 };
