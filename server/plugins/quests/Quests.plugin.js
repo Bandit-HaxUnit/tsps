@@ -28,7 +28,7 @@ const QUESTS = [
 const F2P_QUESTS = new Set([
   "BlackKnightsFortress", "CooksAssistant", "CorsairCurse", "DemonSlayer", "DoricsQuest",
   "DragonSlayer", "ErnestTheChicken", "GoblinDiplomacy", "ImpCatcher", "KnightsSword",
-  "MisthalinMystery", "PiratesTreasure", "PrinceAliRescue", "RestlessGhost", "RomeoAndJuliet",
+  "MisthalinMystery", "IdesOfMilk", "PiratesTreasure", "PrinceAliRescue", "RestlessGhost", "RomeoAndJuliet",
   "RuneMysteries", "SheepShearer", "ShieldOfArrav", "VampyreSlayer", "WitchsPotion",
   "XMarksTheSpot",
 ]);

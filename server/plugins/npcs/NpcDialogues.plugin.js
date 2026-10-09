@@ -372,6 +372,23 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
       if (after?.length && after[0] !== step && !jumpOnly(after)) return after;
     }
     const current = context.currentRecord;
+    /**
+     * True when a candidate would replay the branch the jump is in. A wiki jump
+     * whose target was lost falls back to "the most similar option", which can be
+     * the very option containing the jump (Garden of Tranquillity's retake menu,
+     * X Marks' "I'm looking for a quest."); resolving to "end" beats looping.
+     */
+    const sameBranch = (candidate) => {
+      if (!candidate || !current?.steps) return true;
+      if (candidate === current.steps) return true;
+      const signature = (steps) => (steps ?? [])
+        .map((entry) => typeof entry?.player === "string" ? `p:${entry.player}`
+          : typeof entry?.npc === "string" ? `n:${entry.npc}`
+          : entry?.type === "line" && typeof entry?.text === "string" ? `l:${entry.text}` : null)
+        .filter(Boolean).join("|");
+      const mine = signature(current.steps);
+      return mine.length > 0 && signature(candidate) === mine;
+    };
     // A random alternative ending "same as above" repeats the previous alternative's
     // continuation, not an unrelated menu elsewhere on the page.
     if (/^above/i.test(reference) && current?.randomOptions) {
@@ -418,7 +435,8 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     const fromLine = key.length >= 8 ? realBody(context.pageLines?.get(key)) : undefined;
     if (/^below/i.test(reference)) {
       const next = current ? records[current.id + 1] : records[0];
-      const pick = [realBody(sameText?.steps), realBody(fromPage), near, similar, fromLine, realBody(next?.steps)].find(Boolean);
+      const pick = [realBody(sameText?.steps), realBody(fromPage), near, similar, fromLine, realBody(next?.steps)]
+        .find((candidate) => candidate && !sameBranch(candidate));
       if (pick) return pick;
       if (!current && context.pageMenuBefore) return { menu: context.pageMenuBefore };
       const last = records[records.length - 1];
@@ -432,13 +450,14 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
       return realBody(last?.steps) ?? "end";
     }
     const prev = current.id > 0 ? records[current.id - 1] : undefined;
-    return [realBody(sameText?.steps), realBody(fromPage), near, similar, fromLine, realBody(prev?.steps)].find(Boolean) ?? "end";
+    return [realBody(sameText?.steps), realBody(fromPage), near, similar, fromLine, realBody(prev?.steps)]
+      .find((candidate) => candidate && !sameBranch(candidate)) ?? "end";
   };
 
   const flattenOptions = () => ({ resolveCondition, resolveJump,
     wrapBranch: (chosen, branch) => [{ type: "condition_chosen", id: chosen.id, text: chosen.text }, ...branch] });
 
-  function presentMenu(menu, offset = 0) {
+  function presentMenu(menu, offset = 0, tail = []) {
     const { step, rest, record } = menu;
     context.currentMenu = menu;
     if (!context.menuHistory.includes(menu)) context.menuHistory.push(menu);
@@ -451,17 +470,25 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     // Record every option when the prompt is shown (not on selection) so that a
     // nested option's "jump above" can find its unselected sibling by text.
     visible.forEach(recordOption);
-    const pairs = visible.flatMap((option) => [option.text, () => {
-      // Quest-gated choices carry a slug like "quest:cook-s-assistant:start";
-      // let the owning quest run its action, then play the branch.
-      if (option.hook) {
-        api.emitCustomEvent("npc-dialogue:hook", { player, npc: event.npc, npcId, definition, hook: option.hook, quest: option.quest, option: option.text });
-      }
-      api.emitCustomEvent("npc-dialogue:choice", { player, npc: event.npc, npcId, definition, option: option.text, stepId: option.id });
-      context.currentMenu = menu;
-      run([...(option.steps || []), ...rest], recordOption(option));
-    }]);
-    if (more) pairs.push("More...", () => presentMenu(menu, offset + 4));
+    const pairs = visible.flatMap((option) => {
+      // A dump-gap option can carry blank text (the wording lives in its condition
+      // or its first player line); fall back so the branch stays reachable.
+      const label = String(option.text ?? "").trim()
+        || String(option.condition ?? "").replace(/^if\s+.*?:\s*/i, "").trim()
+        || (option.steps ?? []).find((entry) => typeof entry?.player === "string")?.player
+        || "Continue.";
+      return [label, () => {
+        // Quest-gated choices carry a slug like "quest:cook-s-assistant:start";
+        // let the owning quest run its action, then play the branch.
+        if (option.hook) {
+          api.emitCustomEvent("npc-dialogue:hook", { player, npc: event.npc, npcId, definition, hook: option.hook, quest: option.quest, option: option.text });
+        }
+        api.emitCustomEvent("npc-dialogue:choice", { player, npc: event.npc, npcId, definition, option: option.text, stepId: option.id });
+        context.currentMenu = menu;
+        run([...(option.steps || []), ...rest, ...tail], recordOption(option));
+      }];
+    });
+    if (more) pairs.push("More...", () => presentMenu(menu, offset + 4, tail));
     if (visible.length === 1) pairs.push("Goodbye.", close);
     // A parsed menu with no options is a wiki-export gap; continue the branch
     // instead of silently closing the chat.
@@ -501,9 +528,11 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         manager.startDialogues(chain);
         return;
       }
-      // "shows other/previous options": replay a menu already shown.
+      // "shows other/previous options": replay a menu already shown, then carry
+      // on with whatever followed the jump in this queue.
       if (step.type === "gomenu" && step.menu) {
-        chain.add(new ActionDialogue(index++, { execute: () => presentMenu(step.menu) }));
+        const after = queue.slice(position + 1);
+        chain.add(new ActionDialogue(index++, { execute: () => presentMenu(step.menu, 0, after) }));
         manager.startDialogues(chain);
         return;
       }
