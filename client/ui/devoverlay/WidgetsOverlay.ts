@@ -917,7 +917,7 @@ export class WidgetsOverlay implements Overlay {
                     // frame's chrome cannot hide them; the hovered tooltip widget is then
                     // redrawn on top so it is never covered.
                     this.drawWidgetOverlays(widgetOverlays);
-                    this.redrawMousedOverWidget();
+                    this.redrawTooltip();
                     this.drawTradeAmountOverlay(widgetManager);
                     this.drawMouseOverText(mouseOverTextState);
                     this.rootSetChanged = false;
@@ -958,7 +958,7 @@ export class WidgetsOverlay implements Overlay {
                     }
                     if (redrawWidgetOverlays) {
                         this.drawWidgetOverlays(widgetOverlays);
-                        this.redrawMousedOverWidget();
+                        this.redrawTooltip();
                     }
                     this.drawTradeAmountOverlay(widgetManager);
                     const mouseOverTextRect = mouseOverTextState.rect;
@@ -1018,32 +1018,66 @@ export class WidgetsOverlay implements Overlay {
     }
 
     /**
-     * Redraws the widget the mouse is over (the tooltip widget it redirects to) on top of
-     * the widget overlays, so status bars render above the 317 frame's chrome without ever
-     * covering a hovered tooltip.
+     * Redraws the visible tooltip (the cache's tooltip interface, group 291) on top of the
+     * widget overlays, so status bars render above the 317 frame's chrome without ever
+     * covering a hovered tooltip. Falls back to the moused-over IF1 redirect widget when no
+     * tooltip interface instance is laid out.
      */
-    private redrawMousedOverWidget(): void {
+    private redrawTooltip(): void {
         const glr = this.glRenderer;
         if (!glr) return;
-        const hover = (glr.canvas as any)?.__ui?.mousedOverRect as
-            | { x: number; y: number; w: number; h: number; groupId: number }
+        const manager: any = this.ctx.getWidgetManager?.();
+        const rect = this.visibleTooltipRect(manager) ?? this.mousedOverRect();
+        if (!rect) return;
+        const clip = {
+            x0: rect.x,
+            y0: rect.y,
+            x1: rect.x + rect.w,
+            y1: rect.y + rect.h,
+        };
+        // Render the rect again in tree order: chrome first, then the tooltip on top of the
+        // bars. Only entries with visible content in the rect paint anything.
+        for (const entry of this.widgetEntries) {
+            renderWidgetTreeGL(glr, entry.root, {
+                ...entry.renderOpts,
+                rootClip: clip,
+            });
+        }
+    }
+
+    /** The cache tooltip interface's visible rect, or null when no tooltip is showing. */
+    private visibleTooltipRect(
+        manager: any,
+    ): { x: number; y: number; w: number; h: number } | null {
+        if (!manager?.getWidgetByUid) return null;
+        let best: { x: number; y: number; w: number; h: number } | null = null;
+        for (let child = 0; child < 24; child++) {
+            const uid = (WidgetsOverlay.TOOLTIP_GROUP << 16) | child;
+            const widget = manager.getWidgetByUid(uid);
+            if (!widget) continue;
+            const w = Number(widget._absWidth ?? 0);
+            const h = Number(widget._absHeight ?? 0);
+            if (!(w > 0 && h > 0)) continue;
+            if (typeof manager.isEffectivelyHidden === "function" && manager.isEffectivelyHidden(uid)) {
+                continue;
+            }
+            if (!best || w * h > best.w * best.h) {
+                best = { x: widget._absX, y: widget._absY, w, h };
+            }
+        }
+        return best;
+    }
+
+    /** The rect of the widget the mouse is over, if the tree remembered one this pass. */
+    private mousedOverRect(): { x: number; y: number; w: number; h: number } | null {
+        const hover = (this.glRenderer?.canvas as any)?.__ui?.mousedOverRect as
+            | { x: number; y: number; w: number; h: number }
             | null
             | undefined;
-        if (!hover || !(hover.w > 0) || !(hover.h > 0)) return;
-        const entry = this.widgetEntries.find(
-            (candidate) => candidate.root?.groupId === hover.groupId,
-        );
-        if (!entry) return;
-        renderWidgetTreeGL(glr, entry.root, {
-            ...entry.renderOpts,
-            rootClip: {
-                x0: hover.x,
-                y0: hover.y,
-                x1: hover.x + hover.w,
-                y1: hover.y + hover.h,
-            },
-        });
+        return hover && hover.w > 0 && hover.h > 0 ? hover : null;
     }
+
+    private static readonly TOOLTIP_GROUP = 291;
 
     private buildGameFrameContext(glr: GLRenderer): GameFrameDrawContext {
         const client = this.ctx.getGameContext?.()?.osrsClient;
