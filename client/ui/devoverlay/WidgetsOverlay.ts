@@ -894,9 +894,9 @@ export class WidgetsOverlay implements Overlay {
                         gameFrame.drawGameFrame(this.buildGameFrameContext(this.glRenderer));
                         this.glRenderer.flush();
                     }
-                    // Widget overlays (status bars) draw below the widget tree so CS2 tooltips
-                    // and the right-click menu sit on top of them.
-                    this.drawWidgetOverlays(widgetOverlays);
+                    (this.glRenderer.canvas as any).__ui =
+                        (this.glRenderer.canvas as any).__ui ?? {};
+                    (this.glRenderer.canvas as any).__ui.mousedOverRect = null;
                     try {
                         const roots = (sharedUi as any).__widgetRoots;
                         if (roots) {
@@ -913,6 +913,11 @@ export class WidgetsOverlay implements Overlay {
                             entry.renderOpts,
                         );
                     }
+                    // Widget overlays (status bars) draw above the widget tree so the 317
+                    // frame's chrome cannot hide them; the hovered tooltip widget is then
+                    // redrawn on top so it is never covered.
+                    this.drawWidgetOverlays(widgetOverlays);
+                    this.redrawMousedOverWidget();
                     this.drawTradeAmountOverlay(widgetManager);
                     this.drawMouseOverText(mouseOverTextState);
                     this.rootSetChanged = false;
@@ -923,8 +928,9 @@ export class WidgetsOverlay implements Overlay {
                     for (const dirtyRect of dirtyRects) {
                         this.clearOffscreenRect(dirtyRect);
                     }
-                    // Overlays redraw below the roots, like the full pass.
-                    if (redrawWidgetOverlays) this.drawWidgetOverlays(widgetOverlays);
+                    (this.glRenderer.canvas as any).__ui =
+                        (this.glRenderer.canvas as any).__ui ?? {};
+                    (this.glRenderer.canvas as any).__ui.mousedOverRect = null;
                     for (const dirtyRect of dirtyRects) {
                         const rootClip = {
                             x0: dirtyRect.x,
@@ -949,6 +955,10 @@ export class WidgetsOverlay implements Overlay {
                                 rootClip,
                             });
                         }
+                    }
+                    if (redrawWidgetOverlays) {
+                        this.drawWidgetOverlays(widgetOverlays);
+                        this.redrawMousedOverWidget();
                     }
                     this.drawTradeAmountOverlay(widgetManager);
                     const mouseOverTextRect = mouseOverTextState.rect;
@@ -1005,6 +1015,34 @@ export class WidgetsOverlay implements Overlay {
             }
         }
         glr.flush();
+    }
+
+    /**
+     * Redraws the widget the mouse is over (the tooltip widget it redirects to) on top of
+     * the widget overlays, so status bars render above the 317 frame's chrome without ever
+     * covering a hovered tooltip.
+     */
+    private redrawMousedOverWidget(): void {
+        const glr = this.glRenderer;
+        if (!glr) return;
+        const hover = (glr.canvas as any)?.__ui?.mousedOverRect as
+            | { x: number; y: number; w: number; h: number; groupId: number }
+            | null
+            | undefined;
+        if (!hover || !(hover.w > 0) || !(hover.h > 0)) return;
+        const entry = this.widgetEntries.find(
+            (candidate) => candidate.root?.groupId === hover.groupId,
+        );
+        if (!entry) return;
+        renderWidgetTreeGL(glr, entry.root, {
+            ...entry.renderOpts,
+            rootClip: {
+                x0: hover.x,
+                y0: hover.y,
+                x1: hover.x + hover.w,
+                y1: hover.y + hover.h,
+            },
+        });
     }
 
     private buildGameFrameContext(glr: GLRenderer): GameFrameDrawContext {
