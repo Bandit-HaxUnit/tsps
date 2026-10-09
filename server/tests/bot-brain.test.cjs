@@ -1531,9 +1531,13 @@ test('bots are given tools, never resources: inputs come from gathering or the b
   walk(raw.templates, 'templates');
   walk(raw.activities, 'activities');
   assert.deepEqual(conjured.filter((entry) => !TOOLS.has(entry.split(': ')[1])), [], 'ensureItem only for tools');
-  const smelt = raw.templates.smelt_bar.actions[0];
-  assert.equal(smelt.type, 'bank', 'smelting withdraws its ores');
-  assert.equal(raw.templates.burn_logs.actions[1].type, 'bank', 'firemaking withdraws its logs');
+  // Fresh bots have empty banks, so nothing withdraws inputs: smelting and burning only
+  // follow on from mining and woodcutting, using what the bot just gathered.
+  assert.ok(!JSON.stringify(raw).includes('"withdraw"'), 'no activity relies on a stocked bank');
+  const followOns = (template) => template.actions.find((action) => action.type === 'choose').options
+    .flatMap((option) => option.actions.map((action) => action.type));
+  assert.ok(followOns(raw.templates.chop_trees).includes('lightFire'), 'woodcutters can burn their logs');
+  assert.ok(followOns(raw.templates.mine_rocks).includes('smelt'), 'miners can smelt their ore');
 });
 
 test('combat-training activity compiles against the real plugin core API', () => {
@@ -1556,7 +1560,7 @@ test('a rotation switches activity after its time, never mid-fight or under an o
   const logs = [];
   const brain = new BotBrain({
     player, state: {}, registry, world: { log: (message) => logs.push(message) }, activity: chop, nowMs: 0,
-    rotation: { activityIds: ['chop', 'mine'], switchAfterMs: { min: 1000, max: 1000 } },
+    rotation: { activityIds: ['chop', 'mine'], weights: { chop: 2, mine: 1 }, switchAfterMs: { min: 1000, max: 1000 } },
   });
   brain.tick(500);
   assert.equal(brain.frames[0].behaviour.id, 'chop', 'not due yet');
@@ -1571,33 +1575,73 @@ test('a rotation switches activity after its time, never mid-fight or under an o
   brain.tick(1700);
   assert.equal(brain.frames.length, 1);
   assert.equal(brain.frames[0].behaviour.id, 'mine');
-  assert.deepEqual(picks.at(-1), { allowed: ['chop', 'mine'], avoid: 'chop' });
+  assert.deepEqual(picks.at(-1), { allowed: ['chop', 'mine'], weights: { chop: 2, mine: 1 }, avoid: 'chop' });
   assert.equal(registry.slots.get('chop'), 0, 'the old activity gave its slot back');
   assert.ok(logs.includes('bot_brain_activity_switch'));
 });
 
-test('sites compile their rotation and the registry only assigns their activities', () => {
+test('sites split each mode\'s count over the tiers and the registry only assigns their activities', () => {
   const { PluginManager } = require('../dist/plugins/PluginManager');
   const { createBotActivityRegistry } = require('../plugins/bots/brain/BotActivityRegistry');
   const registry = createBotActivityRegistry({ world: { core: PluginManager.getCoreApi() } });
   const bySite = new Map(registry.sites.map((site) => [site.id, site]));
   const towns = ['lumbridge', 'varrock', 'falador', 'seers', 'east_ardougne'];
-  const bands = [[1, 19], [20, 39], [40, 59], [60, 99]];
+  const configured = JSON.parse(fs.readFileSync('data/definitions/bot-sites.json', 'utf8')).sites;
+  const total = (counts) => typeof counts === 'number' ? counts : Object.values(counts).reduce((sum, count) => sum + count, 0);
   for (const town of towns) {
-    assert.deepEqual(registry.sites.filter((site) => site.id.startsWith(`${town}_`)).map((site) => [site.levels.all, site.count]),
-      bands.map((band, index) => [band, [70, 50, 40, 40][index]]), `${town}: 200 bots over the four tiers`);
+    const bots = configured.find((site) => site.id === town).bots;
+    assert.equal(registry.sites.filter((site) => site.id.startsWith(`${town}_`)).reduce((sum, site) => sum + site.count, 0),
+      Object.values(bots).reduce((sum, counts) => sum + total(counts), 0), `${town} spawns exactly its configured bots`);
   }
-  assert.equal(registry.sites.reduce((sum, site) => sum + site.count, 0), 1000);
   const raw = JSON.parse(fs.readFileSync('data/definitions/bot-activities.json', 'utf8'));
   for (const site of registry.sites) {
-    assert.deepEqual(site.rotation.switchAfterMs, { min: 900000, max: 1500000 }, site.id);
-    const lowest = Array.isArray(site.levels.all) ? site.levels.all[0] : site.levels.all;
-    for (const id of site.rotation.activityIds) {
-      const level = raw.activities.find((activity) => activity.id === id)?.fields?.level ?? 1;
-      assert.ok(level <= lowest, `${site.id} can do ${id} (needs ${level})`);
-    }
+    assert.equal(site.activities.length, 1, site.id);
+    const level = raw.activities.find((activity) => activity.id === site.activities[0].id)?.fields?.level ?? 1;
+    assert.ok(level <= site.levels.all[0], `${site.id} can do ${site.activities[0].id} (needs ${level})`);
   }
-  assert.ok(bySite.get('lumbridge_experts').rotation.activityIds.includes('mithril_rocks'), 'higher tiers gather higher resources');
+  assert.deepEqual(bySite.get('lumbridge_woodcutting_experts').levels, { all: [60, 99], combat: [90, 126] });
+  assert.equal(bySite.get('lumbridge_woodcutting_experts').activities[0].id, 'yew_trees', 'each tier takes the best activity it can do');
+  assert.equal(bySite.get('lumbridge_woodcutting_novices').activities[0].id, 'normal_trees');
+  assert.equal(bySite.get('lumbridge_mining_experts').activities[0].id, 'mithril_rocks');
+  const expertsRotation = bySite.get('varrock_woodcutting_experts').rotation;
+  assert.equal(bySite.get('varrock_mining_experts').rotation, expertsRotation, 'a site tier shares one rotation');
+  assert.deepEqual(expertsRotation.switchAfterMs, { min: 15 * 60000, max: 25 * 60000 });
+  assert.equal(expertsRotation.weights.yew_trees, bySite.get('varrock_woodcutting_experts').count, 'switches are weighted by the mode counts');
+  assert.ok(!bySite.get('varrock_mining_novices').rotation.activityIds.some((id) => id.endsWith('_trees')),
+    'Varrock novices never switch to woodcutting');
+  const os = require('node:os');
+  const path = require('node:path');
+  const sitesPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'bot-sites-')), 'bot-sites.json');
+  fs.writeFileSync(sitesPath, JSON.stringify({ sites: [{ id: 'camp', x: 3222, y: 3218, bots: { woodcutting: 30, mining: { experts: 7 } } }] }));
+  const split = new Map(createBotActivityRegistry({ world: { core: PluginManager.getCoreApi() }, sitesPath }).sites
+    .map((site) => [site.id, site.count]));
+  assert.deepEqual(['novices', 'intermediates', 'advanced', 'experts'].map((tier) => split.get(`camp_woodcutting_${tier}`)),
+    [8, 8, 7, 7], '30 woodcutters split evenly, lowest tiers take the remainder');
+  assert.deepEqual(['novices', 'intermediates', 'advanced', 'experts'].map((tier) => split.get(`camp_mining_${tier}`)),
+    [undefined, undefined, undefined, 7], 'per-tier counts: only the listed tiers spawn');
+  fs.writeFileSync(sitesPath, JSON.stringify({ sites: [{ id: 'camp', x: 3222, y: 3218, bots: { basket_weaving: 4 } }] }));
+  assert.throws(() => createBotActivityRegistry({ world: { core: PluginManager.getCoreApi() }, sitesPath }), /unknown mode 'basket_weaving'/);
+  fs.writeFileSync(sitesPath, JSON.stringify({ sites: [{ id: 'camp', x: 3222, y: 3218, bots: { woodcutting: { gods: 4 } } }] }));
+  assert.throws(() => createBotActivityRegistry({ world: { core: PluginManager.getCoreApi() }, sitesPath }), /unknown tier 'gods'/);
+  fs.writeFileSync(sitesPath, JSON.stringify({ sites: [{ id: 'camp', x: 3222, y: 3218, bots: { woodcutting: 4, mining: 4 } }] }));
+  const fixed = createBotActivityRegistry({ world: { core: PluginManager.getCoreApi() }, sitesPath });
+  assert.ok(fixed.sites.every((site) => site.rotation === null), 'no switchMinutes, no switching');
+  const weighted = new Map();
+  for (let i = 0; i < 2000; i++) {
+    const skilled = { ...fakePlayer(), getSkillManager: () => ({ getCurrentLevel: () => 99 }) };
+    const id = registry.pickActivity(skilled, 0, { allowed: ['yew_trees', 'mithril_rocks'], weights: { yew_trees: 3, mithril_rocks: 1 } })?.id;
+    weighted.set(id, (weighted.get(id) ?? 0) + 1);
+  }
+  const yewShare = weighted.get('yew_trees') / 2000;
+  assert.ok(yewShare > 0.68 && yewShare < 0.82, `weights bias the pick (yews ${yewShare})`);
+  const sitesFile = JSON.parse(fs.readFileSync('data/definitions/bot-sites.json', 'utf8'));
+  const loadouts = JSON.parse(fs.readFileSync('data/definitions/pvp-bot-loadouts.json', 'utf8')).loadouts;
+  for (const site of sitesFile.sites.filter((entry) => entry.pvp)) {
+    const tagged = loadouts.filter((loadout) => loadout.tags.includes(site.pvp.style) &&
+      (site.pvp.style === 'f2p' || !loadout.tags.includes('f2p'))).map((loadout) => loadout.id);
+    assert.deepEqual([...getWildernessHotspot(site.id).allowedLoadouts], tagged, `${site.id} gears from its '${site.pvp.style}' loadouts`);
+    assert.equal(getWildernessHotspot(site.id).targetBots, site.bots, site.id);
+  }
   const player = fakePlayer();
   assert.equal(registry.pickActivity(player, 0, { allowed: ['combat_training'] })?.id, 'combat_training');
   assert.equal(registry.pickActivity(player, 0, { allowed: ['combat_training'], avoid: 'combat_training' }), null);
@@ -1622,6 +1666,18 @@ test('a site\'s levels are applied to every skill of a spawned bot (hitpoints at
   applyLevels(bot, { all: [30, 35] });
   const rolled = set.get(Skill.ATTACK.getName());
   assert.ok(rolled >= 30 && rolled <= 35, `a band rolls inside it (got ${rolled})`);
+  const { combatLevelOf } = require('../plugins/bots/brain/BotSiteSpawner');
+  assert.equal(combatLevelOf([1, 1, 1, 10, 1, 1, 1]), 3);
+  assert.equal(combatLevelOf([99, 99, 99, 99, 99, 99, 99]), 126);
+  const combatSkills = [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE, Skill.HITPOINTS, Skill.RANGED, Skill.MAGIC, Skill.PRAYER];
+  for (const band of [[3, 30], [30, 60], [60, 90], [90, 126]]) {
+    for (let i = 0; i < 50; i++) {
+      applyLevels(bot, { all: [1, 19], combat: band });
+      const combat = combatLevelOf(combatSkills.map((skill) => set.get(skill.getName())));
+      assert.ok(combat >= band[0] && combat <= band[1], `combat ${combat} inside ${band}`);
+      assert.ok(set.get(Skill.MINING.getName()) <= 19, 'non-combat skills keep the skill band');
+    }
+  }
 });
 
 test('a spawned bot is dressed for its tier with real items and keeps the weapon slot free', () => {
@@ -2048,4 +2104,71 @@ test('magic trainers equip a staff, set autocast and carry runes', () => {
   assert.ok(s.inventory.get(ItemIdentifiers.AIR_RUNE) >= 3000, 'runes stocked for the spell');
   assert.deepEqual(s.attacks, [s.npc], 'magic bots attack through the normal engine');
   a.stop(s.ctx);
+});
+
+test('bot spawns are paced a few per game tick', (t) => {
+  const { runPaced, SPAWNS_PER_BATCH, SPAWN_BATCH_DELAY_MS } = require('../plugins/bots/runtime/BotSpawnPacing');
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let ran = 0;
+  let done = false;
+  runPaced(Array.from({ length: SPAWNS_PER_BATCH * 2 + 3 }, () => () => ran++), () => { done = true; });
+  assert.equal(ran, SPAWNS_PER_BATCH, 'first batch runs at once');
+  t.mock.timers.tick(SPAWN_BATCH_DELAY_MS);
+  assert.equal(ran, SPAWNS_PER_BATCH * 2);
+  assert.equal(done, false);
+  t.mock.timers.tick(SPAWN_BATCH_DELAY_MS);
+  assert.equal(ran, SPAWNS_PER_BATCH * 2 + 3);
+  assert.equal(done, true);
+});
+
+test('a failed step falls back down its orElse chain: bank, else sell, else drop', () => {
+  const { createOrElseAction } = require('../plugins/bots/brain/actions/OrElse');
+  const ran = [];
+  const step = (id, result) => ({ id, update: () => { ran.push(id); return result; }, stop() {} });
+  const player = fakePlayer();
+  const ctx = { player };
+  const chain = createOrElseAction(step('bank', 'failed'), createOrElseAction(step('sell', 'failed'), step('drop', 'success')));
+  assert.equal(chain.update(ctx), 'success');
+  assert.deepEqual(ran, ['bank', 'sell', 'drop']);
+  ran.length = 0;
+  assert.equal(createOrElseAction(step('bank', 'success'), step('sell', 'success')).update(ctx), 'success');
+  assert.deepEqual(ran, ['bank'], 'a working bank never sells');
+
+  const raw = JSON.parse(fs.readFileSync('data/definitions/bot-activities.json', 'utf8'));
+  for (const name of ['chop_trees', 'mine_rocks', 'catch_fish']) {
+    const options = raw.templates[name].actions.find((action) => action.type === 'choose').options;
+    for (const option of options) {
+      assert.notEqual(option.actions[0].type, 'bank', `${name}: raw resources are never banked`);
+      for (const action of option.actions.filter((entry) => entry.type === 'bank' || entry.type === 'sellItems')) {
+        assert.ok(action.orElse, `${name}: ${action.type} has a fallback`);
+      }
+    }
+  }
+});
+
+test('a bot stows a KO weapon it has held for 15-20s without finishing the fight', () => {
+  const { trackSpecWeaponHold } = require('../plugins/bots/behaviours/policies/PvpSpecialAttackPolicy');
+  const { SUPPORTED_SPEC_WEAPONS } = require('../plugins/bots/behaviours/policies/PvpCombatRuntimeCache');
+  const { Equipment } = require('../dist/game/model/container/impl/Equipment');
+
+  const specWeaponId = SUPPORTED_SPEC_WEAPONS[0];
+  const primaryWeaponId = SUPPORTED_SPEC_WEAPONS[SUPPORTED_SPEC_WEAPONS.length - 1];
+  assert.notEqual(specWeaponId, primaryWeaponId, 'need distinct spec and primary weapons');
+  const player = {
+    getEquipment: () => ({
+      get: (slot) => (slot === Equipment.WEAPON_SLOT ? { getId: () => specWeaponId } : null),
+    }),
+  };
+  const pvp = { generatedPrimaryWeaponId: primaryWeaponId };
+
+  assert.equal(trackSpecWeaponHold(pvp, player, 1000), false, 'hold starts');
+  assert.ok(pvp.specWeaponStowAt >= 16000 && pvp.specWeaponStowAt <= 21000, 'stow deadline is 15-20s out');
+  assert.equal(trackSpecWeaponHold(pvp, player, pvp.specWeaponStowAt - 1), false, 'still holding before the deadline');
+  assert.equal(trackSpecWeaponHold(pvp, player, pvp.specWeaponStowAt), true, 'stows once the hold expires');
+
+  player.getEquipment = () => ({
+    get: (slot) => (slot === Equipment.WEAPON_SLOT ? { getId: () => primaryWeaponId } : null),
+  });
+  assert.equal(trackSpecWeaponHold(pvp, player, pvp.specWeaponStowAt + 1), false, 'back on primary');
+  assert.equal(pvp.heldSpecWeaponId, 0, 'hold state cleared');
 });
