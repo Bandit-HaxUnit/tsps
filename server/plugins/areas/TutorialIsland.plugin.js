@@ -835,6 +835,46 @@ function grantNamed(player, text) {
   }
 }
 
+/**
+ * Tools a step needs that only the instructor's first talk hands out. Unlike the chef's
+ * flour or the mining hammer, the Wiki transcripts have no "lost it" branch for these, and
+ * the first talk moves the stage on before the hand-out line plays. So an interrupted first
+ * talk, or a dropped tool, would leave the player stuck. Talking to the instructor again
+ * while on the step gives back what's missing. Our behaviour; not captured.
+ * A function because Items and the NPC sets are only bound at register.
+ */
+const stepTools = () => [
+  {
+    instructor: "survival expert", npcs: survival, from: STAGE.SURVIVAL_INV, to: STAGE.SURVIVAL_FISH,
+    tools: [{ id: Items.SMALL_FISHING_NET, name: "a small fishing net" }],
+  },
+  {
+    instructor: "survival expert", npcs: survival, from: STAGE.SURVIVAL_WC, to: STAGE.SURVIVAL_COOK,
+    tools: [{ id: Items.BRONZE_AXE, name: "a bronze axe" }, { id: Items.TINDERBOX, name: "a tinderbox" }],
+  },
+  {
+    instructor: "mining instructor", npcs: mining, from: STAGE.MINE_ORES, to: STAGE.MINE_ORES,
+    tools: [{ id: Items.BRONZE_PICKAXE, name: "a bronze pickaxe" }],
+  },
+];
+
+/** Gives back the current step's missing tools (stepTools), as far as the inventory has room. */
+function replaceStepTools(player, npcId) {
+  if (!isActive(player)) return;
+  const current = stage(player);
+  const entry = stepTools().find((tools) => tools.npcs.has(npcId) && current >= tools.from && current <= tools.to);
+  if (!entry) return;
+  const inv = player.getInventory();
+  const given = [];
+  for (const tool of entry.tools) {
+    if (hasItem(player, tool.id) || inv.getFreeSlots() <= 0) continue;
+    inv.adds(tool.id, 1);
+    given.push(tool.name);
+  }
+  // The transcripts' hand-out wording ("The survival expert gives you a bronze axe and a tinderbox.").
+  if (given.length) player.sendMessage(`The ${entry.instructor} gives you ${given.join(" and ")}.`);
+}
+
 function variantFor(player, npcId) {
   if (!isActive(player)) return null;
   const current = stage(player);
@@ -1111,12 +1151,11 @@ function answerCondition(player, npcId, text) {
 function onDialogueAction(event) {
   const step = event?.step;
   if (!step || !npcSet.has(event.npcId)) return;
-  // The runtime emits action steps once, but message steps twice (once plain,
-  // once tagged kind:"message"); only act on the plain emit so grants are once.
-  if (event.kind !== undefined) return;
-  if (step.action === "receive") {
+  // The runtime emits an action step plainly and a message step once, tagged
+  // kind:"message".
+  if (step.action === "receive" && event.kind === undefined) {
     grantNamed(event.player, event.text ?? step.text);
-  } else if (step.type === "message" && typeof step.text === "string") {
+  } else if (step.type === "message" && event.kind === "message" && typeof step.text === "string") {
     const text = step.text.toLowerCase();
     // These hand-outs are only written as messages (no receive step), e.g. the
     // Magic Instructor's "doesn't have enough runes" top-up.
@@ -1613,6 +1652,8 @@ function onWelcomePlay({ player }) {
 }
 
 function onDialogueVariant({ player, npcId }) {
+  // Before variantFor, which moves the stage on as the talk starts.
+  replaceStepTools(player, npcId);
   return variantFor(player, npcId);
 }
 
