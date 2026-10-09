@@ -12,11 +12,12 @@
  *   5 sailed to Kent, 6 spoken to Kent, 7 lit torch, 8 Kennith needs escape,
  *   9 panel opened, 10 needs crane, 11 saved Kennith, 12 complete.
  *
- * Gaps: the swamp-paste mixing and torch lighting recipes, the loose panel and
- * crane world edits are not represented (the transcript still plays the right
- * words by stage; only the item/object changes are missing), and the broken
- * glass / damp sticks ground spawns the fire recipe needs are not wired here.
- * Level 30 Firemaking is only stated in the journal, not enforced.
+ * The torch chain is wired directly: broken glass on damp sticks makes dry sticks, and
+ * Dry sticks' "Rub-together" option lights the unlit torch (30 Firemaking) and advances
+ * stage 6 -> 7. The loose panel and crane play the transcript and advance 8 -> 9 and
+ * 10 -> 11. The cabin door steps through to Kennith's room: the map walls the doorway's
+ * far tile off from the room with crates, so a plain one-tile cross leaves him unreachable.
+ * Gaps: the swamp-paste mixing recipe (flour + swamp tar on a fire) is not wired here.
  */
 module.exports = function registerSeaSlugQuest(api) {
   const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
@@ -64,9 +65,30 @@ module.exports = function registerSeaSlugQuest(api) {
   const ISLAND_TILE = { x: 2794, y: 3320, z: 0 };
   const SHORE_TILE = { x: 2720, y: 3305, z: 0 };
 
+  // Kennith's cabin (z=1). Crates seal the tile behind the doorway off from the room, so the
+  // crossing steps between the corridor and the cabin floor instead of one tile west.
+  const CABIN_DOOR_TILE = { x: 2767, y: 3285, z: 1 };
+  const CABIN_ROOM_TILE = { x: 2765, y: 3288, z: 1 };
+  const CABIN_CORRIDOR_TILE = { x: 2768, y: 3285, z: 1 };
+
+  const DAMP_STICKS_ITEM_ID = ItemIdentifiers.DAMP_STICKS;
+  const DRY_STICKS_ITEM_ID = ItemIdentifiers.DRY_STICKS;
+  const DAMP_STICKS_ITEM_NAME = "Damp sticks";
+  const BROKEN_GLASS_ITEM_NAME = "Broken glass";
+  const DRY_STICKS_ITEM_NAME = "Dry sticks";
+  const RUB_TOGETHER_OPTION = "Rub-together";
+  const FIREMAKING_REQUIREMENT = 30;
+  // Wiki chart for lighting a torch: 77.34% (198/256) at level 30, 100% from level 43.
+  const TORCH_LIGHT_CHANCE_AT_30 = 198 / 256;
+  const TORCH_LIGHT_MAX_LEVEL = 43;
+
   const SAIL_TO_PLATFORM_STEP_ID = "46f1OE"; // "You arrive at the fishing platform."
   const SAIL_TO_ISLAND_STEP_ID = "zUdSJX"; // "You arrive on a small island."
   const SAIL_TO_SHORE_STEP_ID = "w8c3IN"; // "Holgart takes the player back to Witchaven."
+  const RETURN_TO_PLATFORM_STEP_ID = "Jn71UA"; // "You arrive at the fishing platform."
+  const RETURN_TO_SHORE_STEP_ID = "i9MI4w"; // "The boat arrives at Witchaven."
+  const ARRIVAL_PLATFORM_MESSAGE = "You arrive at the fishing platform.";
+  const ARRIVAL_SHORE_MESSAGE = "The boat arrives at Witchaven.";
   const UNLIT_TORCH_RECEIVE_IDS = new Set(["G6lOss", "o9pnQL"]);
   const TORCH_LIT_MESSAGE_ID = "mqmTA7"; // "Your torch lights."
   const PANEL_KICK_MESSAGE_IDS = new Set(["vJ1GjP", "NgGUPy", "5u-9os"]);
@@ -229,6 +251,8 @@ module.exports = function registerSeaSlugQuest(api) {
     if (value.includes("loses their unlit torch")) return !held(player, UNLIT_TORCH_ITEM_ID);
     if (value.includes("has an unlit torch")) return held(player, UNLIT_TORCH_ITEM_ID);
     if (value.includes("does not have an unlit torch")) return !held(player, UNLIT_TORCH_ITEM_ID);
+    if (value.includes("no sea slugs or fishermen nearby")) return true;
+    if (value.includes("sea slugs or fishermen nearby")) return false;
     if (value.includes("kicks the loose panel near kennith after talking to bailey")) {
       return quest.getStage(player) >= STAGE_KENNITH_NEEDS_ESCAPE;
     }
@@ -267,6 +291,14 @@ module.exports = function registerSeaSlugQuest(api) {
       player.moveTo(new api.core.Location(SHORE_TILE.x, SHORE_TILE.y, SHORE_TILE.z));
       return;
     }
+    if (stepId === RETURN_TO_PLATFORM_STEP_ID) {
+      player.moveTo(new api.core.Location(PLATFORM_TILE.x, PLATFORM_TILE.y, PLATFORM_TILE.z));
+      return;
+    }
+    if (stepId === RETURN_TO_SHORE_STEP_ID) {
+      player.moveTo(new api.core.Location(SHORE_TILE.x, SHORE_TILE.y, SHORE_TILE.z));
+      return;
+    }
     if (UNLIT_TORCH_RECEIVE_IDS.has(stepId)) {
       if (!held(player, UNLIT_TORCH_ITEM_ID) && !held(player, LIT_TORCH_ITEM_ID)) {
         player.getInventory().adds(UNLIT_TORCH_ITEM_ID, 1);
@@ -298,17 +330,147 @@ module.exports = function registerSeaSlugQuest(api) {
     quest.setStage(player, STAGE_BOAT_REPAIRED);
   }
 
-  /** Doors in north-south walls (face 0/2) are crossed in x, others in y. */
+  function isCabinDoor(location) {
+    const x = location?.getX?.() ?? location?.x;
+    const y = location?.getY?.() ?? location?.y;
+    const z = location?.getZ?.() ?? location?.z;
+    return Number(x) === CABIN_DOOR_TILE.x &&
+      Number(y) === CABIN_DOOR_TILE.y &&
+      Number(z) === CABIN_DOOR_TILE.z;
+  }
+
+  function insideCabin(location) {
+    return location.getZ() === CABIN_DOOR_TILE.z &&
+      location.getX() <= CABIN_DOOR_TILE.x &&
+      location.getY() >= CABIN_DOOR_TILE.y + 3;
+  }
+
+  /**
+   * Doors in north-south walls (face 0/2) are crossed in x, others in y. The walk route
+   * parks the player on the door tile, which counts as the east side, so a tie heads west,
+   * through the doorway. The cabin door skips to the cabin floor: its far tile is boxed in
+   * by crates and would leave Kennith sealed away.
+   */
   function crossDoor(event) {
     const { player, location } = event;
     const position = player.getLocation();
+    if (isCabinDoor(location)) {
+      const destination = insideCabin(position) ? CABIN_CORRIDOR_TILE : CABIN_ROOM_TILE;
+      player.moveTo(new api.core.Location(destination.x, destination.y, destination.z));
+      return;
+    }
     if ((Number(event.object?.getFace?.() ?? 1) & 1) === 0) {
-      const destinationX = position.getX() <= location.x ? location.x + 1 : location.x - 1;
+      // West of the door crosses east; the door tile itself counts as the east side.
+      const destinationX = position.getX() < location.x ? location.x + 1 : location.x - 1;
       player.moveTo(new api.core.Location(destinationX, position.getY(), location.z));
       return;
     }
     const destinationY = position.getY() >= location.y ? location.y - 1 : location.y + 1;
     player.moveTo(new api.core.Location(position.getX(), destinationY, location.z));
+  }
+
+  /**
+   * The cabin can only be left by the door, whose tile the crates put out of reach from
+   * inside; route the click to the cabin floor so the interaction still fires, then
+   * crossDoor moves the player out.
+   */
+  function routeCabinDoor(event) {
+    if (event.objectId !== CABIN_DOOR_OBJECT_ID || !event.sourceLocation) return;
+    if (!isCabinDoor(event.object?.getLocation?.())) return;
+    const from = event.sourceLocation;
+    event.destination = from.z === CABIN_DOOR_TILE.z &&
+      from.x <= CABIN_DOOR_TILE.x && from.y >= CABIN_DOOR_TILE.y + 3
+      ? { x: CABIN_ROOM_TILE.x, y: CABIN_ROOM_TILE.y, z: CABIN_ROOM_TILE.z }
+      : { x: CABIN_DOOR_TILE.x, y: CABIN_DOOR_TILE.y, z: CABIN_DOOR_TILE.z };
+  }
+
+  const within = (position, tile, radius) =>
+    Math.max(Math.abs(position.getX() - tile.x), Math.abs(position.getY() - tile.y)) <= radius;
+
+  function moveToTile(player, tile) {
+    player.moveTo(new api.core.Location(tile.x, tile.y, tile.z));
+  }
+
+  function arriveAt(player, tile, message) {
+    player.sendMessage(message);
+    moveToTile(player, tile);
+  }
+
+  function sailToIsland(player) {
+    if (quest.getStage(player) < STAGE_SAILED_TO_KENT) quest.setStage(player, STAGE_SAILED_TO_KENT);
+    moveToTile(player, ISLAND_TILE);
+  }
+
+  /** Holgart's Travel option: the trip the current stage's Talk-to offers, without words. */
+  function handleHolgartTravel({ player }) {
+    if (quest.getStage(player) < STAGE_BOAT_REPAIRED) return false;
+    const position = player.getLocation();
+    if (within(position, ISLAND_TILE, 16)) {
+      arriveAt(player, PLATFORM_TILE, ARRIVAL_PLATFORM_MESSAGE);
+      return true;
+    }
+    if (within(position, PLATFORM_TILE, 16)) {
+      if (quest.getStage(player) === STAGE_SPOKEN_TO_KENNITH) {
+        sailToIsland(player);
+      } else {
+        arriveAt(player, SHORE_TILE, ARRIVAL_SHORE_MESSAGE);
+      }
+      return true;
+    }
+    if (within(position, SHORE_TILE, 16)) {
+      arriveAt(player, PLATFORM_TILE, ARRIVAL_PLATFORM_MESSAGE);
+      return true;
+    }
+    return false;
+  }
+
+  /** Use Broken glass on Damp sticks: both are consumed, a pair of dry sticks is left. */
+  function handleGlassOnSticks(event) {
+    const inventory = event.player.getInventory();
+    inventory.deleteNumber(event.usedItemId, 1);
+    inventory.deleteNumber(event.usedWithItemId, 1);
+    inventory.adds(DRY_STICKS_ITEM_ID, 1);
+    event.handled = true;
+  }
+
+  /** OSRS torch-lighting success: 198/256 at 30, 256/256 from 43 (wiki chart). */
+  function torchLightChance(firemaking) {
+    if (firemaking >= TORCH_LIGHT_MAX_LEVEL) return 1;
+    if (firemaking <= FIREMAKING_REQUIREMENT) return TORCH_LIGHT_CHANCE_AT_30;
+    const steps = TORCH_LIGHT_MAX_LEVEL - FIREMAKING_REQUIREMENT;
+    return (198 + Math.round(((firemaking - FIREMAKING_REQUIREMENT) * 58) / steps)) / 256;
+  }
+
+  /** Dry sticks' "Rub-together": light the unlit torch (30 Firemaking), stage 6 -> 7. */
+  function handleRubSticks(event) {
+    const { player } = event;
+    const inventory = player.getInventory();
+    const firemaking = player.getSkillManager().getCurrentLevel(Skill.FIREMAKING);
+    if (firemaking < FIREMAKING_REQUIREMENT) {
+      player.sendMessage("You rub together the dry sticks but nothing happens.");
+      player.sendMessage("You need a Firemaking level of 30 or above.");
+      event.handled = true;
+      return;
+    }
+    const lit = Math.random() < torchLightChance(firemaking);
+    if (!lit) {
+      player.sendMessage("You rub together the dry sticks and the sticks smoke momentarily then die out.");
+      event.handled = true;
+      return;
+    }
+    player.sendMessage("You rub together the dry sticks and the sticks catch alight.");
+    inventory.deleteNumber(DRY_STICKS_ITEM_ID, 1);
+    if (!held(player, UNLIT_TORCH_ITEM_ID)) {
+      player.sendMessage("The sticks smoke momentarily then die out.");
+      event.handled = true;
+      return;
+    }
+    player.sendMessage("You place the smoulding twigs to your torch.");
+    player.sendMessage("Your torch lights.");
+    inventory.deleteNumber(UNLIT_TORCH_ITEM_ID, 1);
+    inventory.adds(LIT_TORCH_ITEM_ID, 1);
+    if (quest.getStage(player) === STAGE_SPOKEN_TO_KENT) quest.setStage(player, STAGE_LIT_TORCH);
+    event.handled = true;
   }
 
   /** Doors' name hook claims most "Door" locs, so claim the platform cabin first. */
@@ -361,6 +523,10 @@ module.exports = function registerSeaSlugQuest(api) {
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:condition", handleCondition);
   api.onObjectInteraction(handleObjectInteraction);
+  api.onObjectRoute(routeCabinDoor);
+  api.onItemOnItem(BROKEN_GLASS_ITEM_NAME, DAMP_STICKS_ITEM_NAME, handleGlassOnSticks, { noted: false });
+  api.onItemAction(DRY_STICKS_ITEM_NAME, { [RUB_TOGETHER_OPTION]: handleRubSticks });
+  api.onNpcInteraction("Holgart", { Travel: handleHolgartTravel });
   api.onCustomEvent("door:toggle", handleDoorToggle);
   api.onPlayerLogin(handleLogin);
 };

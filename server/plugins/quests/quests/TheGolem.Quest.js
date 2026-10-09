@@ -48,6 +48,9 @@ module.exports = function registerTheGolemQuest(api) {
     NpcIdentifiers.BROKEN_CLAY_GOLEM, // 5134
     NpcIdentifiers.DAMAGED_CLAY_GOLEM, // 5135
     NpcIdentifiers.CLAY_GOLEM_3, // 5136
+    // The world's single Uzer spawn is 6277, a nameless transform placeholder
+    // (varbit 348 -> 5134/5135/5136); interaction events can carry the raw id.
+    6277,
   ]);
   const ELISSA_NPC_ID = NpcIdentifiers.ELISSA; // 5138
   const CURATOR_NPC_ID = NpcIdentifiers.CURATOR_HAIG_HALEN; // 5214
@@ -86,8 +89,9 @@ module.exports = function registerTheGolemQuest(api) {
   // 24626 is the world's Open-able museum case; 6294/6295 are not placed.
   const DISPLAY_CASE_IDS = new Set([24626]);
   const THRONE_IDS = new Set([ObjectIdentifiers.THRONE_10, ObjectIdentifiers.THRONE_11]); // 6301/6302
-  // Uzer temple alcoves: 6303/6304/6305 are the placed statuettes (6307-6309 are not).
-  const ALCOVE_OBJECT_IDS = new Set([6303, 6304, 6305, 6307, 6308, 6309]);
+  // Uzer temple alcoves: 6303/6304/6305 hold the statuettes, 6306 is the empty
+  // one the player fills (6307-6309 are not placed).
+  const ALCOVE_OBJECT_IDS = new Set([6303, 6304, 6305, 6306, 6307, 6308, 6309]);
   const MUSHROOM_OBJECT_ID = ObjectIdentifiers.BLACK_MUSHROOMS; // 6311
   // Both states of the temple door are the same live loc (6363/6364 are not placed).
   const TEMPLE_DOOR_OBJECT_ID = 6310;
@@ -662,12 +666,12 @@ module.exports = function registerTheGolemQuest(api) {
     }
     if (objectId === SURFACE_STAIRS_OBJECT_ID) {
       event.handled = true;
-      player.moveTo(new api.core.Location(SURFACE_STAIRS_TILE.x, SURFACE_STAIRS_TILE.y, SURFACE_STAIRS_TILE.z));
+      player.moveTo(new api.core.Location(TEMPLE_STAIRS_TILE.x, TEMPLE_STAIRS_TILE.y, TEMPLE_STAIRS_TILE.z));
       return;
     }
     if (objectId === TEMPLE_STAIRS_OBJECT_ID) {
       event.handled = true;
-      player.moveTo(new api.core.Location(TEMPLE_STAIRS_TILE.x, TEMPLE_STAIRS_TILE.y, TEMPLE_STAIRS_TILE.z));
+      player.moveTo(new api.core.Location(SURFACE_STAIRS_TILE.x, SURFACE_STAIRS_TILE.y, SURFACE_STAIRS_TILE.z));
       return;
     }
     if (objectId === DEMON_PORTAL_OBJECT_ID) {
@@ -682,6 +686,17 @@ module.exports = function registerTheGolemQuest(api) {
     const { player } = event;
     const actions = event.definition?.getActions?.() ?? [];
     const action = String(actions[event.clickType - 1] ?? "").toLowerCase();
+    // The world's Uzer golem is a transform placeholder (6277 -> 5134...); when
+    // an interaction carries the raw id it is not in the dialogue index, so the
+    // Talk-to variant is replayed here for every handled golem id.
+    if (GOLEM_NPC_IDS.has(event.npcId) && action === "talk-to") {
+      const selected = selectVariant({ npcId: event.npcId, player });
+      if (selected) {
+        event.handled = true;
+        startTranscript(api, player, event.npcId, selected.page ?? PAGE, selected.variant ?? selected);
+      }
+      return;
+    }
     if (event.npcId === CURATOR_NPC_ID && action === "pickpocket") {
       event.handled = true;
       if (quest.getStage(player) < STAGE_FIND_STATUETTE) {

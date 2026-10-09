@@ -135,6 +135,18 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     ObjectIdentifiers.UNLIT_CANDLE, // 30129
     ObjectIdentifiers.CANDLE_2, // 30130, lit
   ]);
+  /**
+   * The four candles share varp 1535 bits 8-11 (varbits 4039-4042), so lighting one
+   * has to set its own varbit or the client keeps the unlit model. The placement id
+   * is the only thing that tells the four apart; the resolved 30129/30130 ids are
+   * shared.
+   */
+  const CANDLE_VARBIT_BY_PLACEMENT = new Map([
+    [29652, 4039],
+    [29653, 4040],
+    [29654, 4041],
+    [29655, 4042],
+  ]);
   const FIREPLACE_LOC_IDS = new Set([
     ObjectIdentifiers.FIREPLACE_24, // 30136
     ObjectIdentifiers.FIREPLACE_25, // 30137
@@ -382,7 +394,9 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   }
 
   /** Answer the page's prose conditions. `stepId` disambiguates repeated wording. */
-  function answerCondition({ player, text, stepId }) {
+  function answerCondition({ player, text, stepId, pages }) {
+    // Conditions on other pages that happen to share wording ("already has the key") are not ours.
+    if (Array.isArray(pages) && !pages.some((entry) => entry?.page === PAGE)) return null;
     const value = String(text).toLowerCase();
     const inventory = player.getInventory();
     const has = (itemId) => inventory.getAmount(itemId) > 0;
@@ -655,6 +669,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     }
     if (requiredKeyId === RUBY_KEY_ITEM_ID && stage === STAGE_FUSE_LIT) {
       quest.setStage(player, STAGE_WALL_BLOWN);
+      resendLitCandles(player);
       player.sendMessage("You hear a muffled explosion as the damaged wall gives way.");
       return;
     }
@@ -779,7 +794,8 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   }
 
   function searchPainting(event) {
-    const { player, objectId } = event;
+    const { player } = event;
+    const objectId = resolvedObjectId(event);
     const stage = quest.getStage(player);
     if (PAINTING_LOC_IDS.has(objectId) && stage >= STAGE_PAINTING_SLASHED) {
       startTranscript(
@@ -801,8 +817,11 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   }
 
   function slashPainting(event) {
-    const { player, objectId } = event;
-    if (objectId === ObjectIdentifiers.PAINTING_22 && quest.getStage(player) === STAGE_NOTE1_READ) {
+    const { player } = event;
+    if (
+      resolvedObjectId(event) === ObjectIdentifiers.PAINTING_22 &&
+      quest.getStage(player) === STAGE_NOTE1_READ
+    ) {
       startTranscript(
         api,
         player,
@@ -834,15 +853,18 @@ module.exports = function registerMisthalinMysteryQuest(api) {
       return;
     }
     const lit = litCandlesByPlayer.get(player) ?? new Set();
-    const tile = `${location.x},${location.y}`;
+    const varbit = CANDLE_VARBIT_BY_PLACEMENT.get(event.object?.getId?.() ?? event.objectId);
+    const tile = varbit ?? `${location.x},${location.y}`;
     if (lit.has(tile)) {
       player.sendMessage("You have already lit this candle.");
       return;
     }
     lit.add(tile);
     litCandlesByPlayer.set(player, lit);
+    if (varbit !== undefined) player.getPacketSender().sendVarbit(varbit, 1);
     if (lit.size >= 4) {
       if (stage === STAGE_RUBY_ROOM_OPEN) quest.setStage(player, STAGE_CANDLES_LIT);
+      resendLitCandles(player);
       startTranscript(
         api,
         player,
@@ -853,6 +875,13 @@ module.exports = function registerMisthalinMysteryQuest(api) {
       return;
     }
     startTranscript(api, player, NpcIdentifiers.KILLER, PAGE, "the-first-riddle-lighting-a-candle");
+  }
+
+  /** A stage write sends the whole varp, clearing the candle bits 8-11; put them back. */
+  function resendLitCandles(player) {
+    for (const id of litCandlesByPlayer.get(player) ?? []) {
+      if (typeof id === "number") player.getPacketSender().sendVarbit(id, 1);
+    }
   }
 
   function lightFuse(event) {
@@ -886,6 +915,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
       "the-first-riddle-attempting-to-light-the-fuse-once-the-candles-are-lit"
     );
     quest.setStage(player, STAGE_FUSE_LIT);
+    resendLitCandles(player);
   }
 
   function climbWall(event) {
@@ -1337,6 +1367,10 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   }
 
   function handleLogin({ player }) {
+    // The client (and this player's loc/NPC resolvers) pick the manor's multi-loc
+    // scenery and the static quest NPCs from varp 1535; without this they all fall
+    // back to their stage-0 variants after a relog.
+    player.getPacketSender().sendConfig(VARP_MISTHALIN_MYSTERY, quest.getStage(player));
     refreshQuestList(player);
     ensureMandy(player);
   }

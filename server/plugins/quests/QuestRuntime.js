@@ -168,6 +168,19 @@ function refreshQuestList(player) {
   sendQuestList(player);
 }
 
+/**
+ * The login bootstrap's sendTabInterface(6) sends the all-spells-unlocked varps
+ * after the player-login hooks, clobbering cache NPC transform varps that share
+ * storage with quest varps (e.g. Drezel's varp 302). Once the bootstrap is done,
+ * re-send the real stages so quest NPCs render the right variant.
+ */
+function syncQuestVarps(player) {
+  const packet = player.getPacketSender();
+  for (const quest of quests) {
+    packet.sendConfig(quest.varpId, quest.getStage(player));
+  }
+}
+
 function questStatus(quest, player) {
   if (quest.isComplete(player)) return STATUS_COMPLETE;
   if (quest.isStarted(player)) return STATUS_IN_PROGRESS;
@@ -317,6 +330,7 @@ function registerQuestWidgets(api) {
   api.onCustomEvent("quest:is-started", answerIsStarted);
   // The character summary shows the same header stats without opening the list.
   api.onPlayerLogin(({ player }) => sendQuestHeaderStats(player));
+  api.onCustomEvent("player:bootstrap-complete", ({ player }) => syncQuestVarps(player));
 }
 
 // ============================================================================
@@ -476,17 +490,20 @@ function flattenSpeakers(steps) {
 /**
  * Plays one variant of a transcript page for `player`. Returns false when the
  * page/variant is missing. `npcId` drives the chathead and the emitted events.
+ * `select` can narrow the variant's steps (e.g. skip a wiki continuation tail).
  */
-function startTranscript(api, player, npcId, page, variant) {
+function startTranscript(api, player, npcId, page, variant, select) {
   const data = loadTranscripts(api);
   const record = data?.[page];
   const raw = record?.variants?.[variant];
   if (!Array.isArray(raw)) return false;
+  const steps = typeof select === "function" ? select(raw) : raw;
+  if (!Array.isArray(steps) || steps.length === 0) return false;
   const { startDialogue: playDialogue } = require("../npcs/NpcDialogues.plugin.js");
   const definition = api.core.NpcDefinition.forId(npcId);
   const event = { player, npcId, npc: null, definition };
   const context = { player, npc: null, npcId, definition, pages: [{ page, variants: [variant] }] };
-  playDialogue(api, event, flattenSpeakers(raw), record.branches, context);
+  playDialogue(api, event, flattenSpeakers(steps), record.branches, context);
   return true;
 }
 
