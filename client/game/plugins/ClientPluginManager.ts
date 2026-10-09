@@ -101,6 +101,13 @@ export type CameraFollowContext = {
     collisionFlagAt?(plane: number, tileX: number, tileY: number): number;
 };
 
+/** A health bar update from the server, for a player or an NPC (by server index). */
+export type HealthBarEvent = {
+    type: "npc" | "player";
+    serverId: number;
+    bar: { id: number; health: number; health2: number; removed?: boolean };
+};
+
 export interface ClientPlugin {
     transformSceneProgram?(source: ProgramSource): ProgramSource;
     sceneProgramsReady?(renderer: WebGLOsrsRenderer, programs: Program[]): void;
@@ -120,6 +127,10 @@ export interface ClientPlugin {
     handleGamepad?(context: GamepadContext): boolean;
     /** A hitsplat arrived from the server (before it is drawn). */
     onHitsplat?(event: HitsplatEventPayload): void;
+    /** A health bar update arrived from the server. */
+    onHealthBar?(event: HealthBarEvent): void;
+    /** A clientscript finished, nested calls included (RuneLite's ScriptPostFired). */
+    onScriptFinished?(scriptId: number): void;
     shouldKeepWorldMenuOpen?(): boolean;
     /** Supplies an alternate gameframe (e.g. the classic 317 frame). */
     gameFrame?: GameFrameProvider;
@@ -211,6 +222,14 @@ export class ClientPluginManager {
 
     onHitsplat(event: HitsplatEventPayload): void {
         for (const plugin of this.plugins) plugin.onHitsplat?.(event);
+    }
+
+    onHealthBar(event: HealthBarEvent): void {
+        for (const plugin of this.plugins) plugin.onHealthBar?.(event);
+    }
+
+    onScriptFinished(scriptId: number): void {
+        for (const plugin of this.plugins) plugin.onScriptFinished?.(scriptId);
     }
 
     shouldKeepWorldMenuOpen(): boolean {
