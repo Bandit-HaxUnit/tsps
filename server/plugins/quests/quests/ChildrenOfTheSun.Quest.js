@@ -213,6 +213,8 @@ module.exports = function registerChildrenOfTheSunQuest(api) {
   const tailSessions = new WeakMap();
   /** The finished guard standing at the house until the door is used. */
   const doorGuards = new WeakMap();
+  /** One-shot "already marked enough" decision for the marking transcript. */
+  const markRejections = new WeakMap();
 
   let quest;
 
@@ -560,7 +562,9 @@ module.exports = function registerChildrenOfTheSunQuest(api) {
     if (stepId === SPOTTED_CONDITION_ID) return tailFailReason(player) === TAIL_FAIL_SPOTTED;
     if (stepId === TOO_FAR_CONDITION_ID) return tailFailReason(player) === TAIL_FAIL_FAR;
     if (stepId === FOUR_MARKED_CONDITION_ID) {
-      return GUARD_MARKABLE_IDS.has(npcId) ? markedGuardCount(player) >= CORRECT_GUARD_COUNT : null;
+      if (!GUARD_MARKABLE_IDS.has(npcId)) return null;
+      const forced = markRejections.get(player);
+      return typeof forced === "boolean" ? forced : markedGuardCount(player) >= CORRECT_GUARD_COUNT;
     }
     if (stepId === INCORRECT_CONDITION_ID) {
       return TOBYN_NPC_IDS.has(npcId) ? anyWrongGuardMarked(player) : null;
@@ -675,12 +679,17 @@ module.exports = function registerChildrenOfTheSunQuest(api) {
     if (index === -1) return false;
     const stage = quest.getStage(player);
     if (stage < STAGE_MARKING || stage >= STAGE_ROOF) return true;
-    if (markedGuardCount(player) < CORRECT_GUARD_COUNT) {
+    // Decide the message before mutating: the fourth mark must play the normal
+    // variant even though the guard count reaches four.
+    const rejected = markedGuardCount(player) >= CORRECT_GUARD_COUNT;
+    if (!rejected) {
       setGuardMarked(player, index, true);
       syncGuardNpc(player, index);
       if (correctGuardsMarked(player) === CORRECT_GUARD_COUNT) quest.setStage(player, STAGE_MARKED);
     }
+    markRejections.set(player, rejected);
     playTranscript(player, npcId, V_MARK);
+    markRejections.delete(player);
     return true;
   }
 

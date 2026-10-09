@@ -21,9 +21,8 @@
  * 3,000 coins and a free initiate sallet (initiate armour shop stock is a gap).
  *
  * Gaps / approximations:
- *   - The live Wiki page lists Black Knights' Fortress + Druidic Ritual as the
- *     requirements, but several Wiki guides (Prayer/Demonic Pacts) list 12 Quest
- *     Points; the shortlist asks for BKF + 12 QP, so that gate is used.
+ *   - Requirements are the wiki page's: Black Knights' Fortress + Druidic Ritual
+ *     (the 12 Quest Points some wiki tables list is not used).
  *   - OSRS picks 5 of 7 rooms at random and always includes Sir Kuam Ferentse.
  *     This implements the five shortlisted rooms as a fixed course (Ren, Hynn,
  *     Table, Tinley, Kuam); Miss Cheevers and Sir Spishyus are not implemented.
@@ -41,7 +40,8 @@
  *     option chatbox prompt (the dialogue runtime has no input step); riddles 3-5
  *     use the transcript's own menus.
  *   - Sir Tinley counts attacks/movement clicks only through NPC and object
- *     interactions, and auto-plays his "excellent work" line after ~10s idle.
+ *     interactions (his room's door included), and auto-plays his "excellent
+ *     work" line after ~10s idle.
  *   - Sir Kuam's death check is the Wiki rule: a steel sword/claws/battleaxe in
  *     the weapon slot fails, the steel warhammer or unarmed passes. The four
  *     weapons are laid out as owner-only ground items at the room's tables.
@@ -51,14 +51,12 @@
 module.exports = function registerRecruitmentDriveQuest(api) {
   const { Equipment, Item, ItemIdentifiers, Location, NpcIdentifiers, ObjectIdentifiers, Skill } =
     api.core;
-  const { QUEST_POINTS_ATTRIBUTE, refreshQuestList, registerQuest, startTranscript } = require(
-    "../QuestRuntime"
-  );
+  const { refreshQuestList, registerQuest, startTranscript } = require("../QuestRuntime");
 
   const PAGE = "Recruitment Drive";
   const VARP_RECRUITMENT_DRIVE = 496; // "recruitmentdrive"
-  const REQUIRED_QUEST_POINTS = 12;
   const BLOCKED_KNIGHTS_QUEST_KEY = "black_knights_fortress";
+  const DRUIDIC_RITUAL_QUEST_KEY = "druidic_ritual";
 
   const STAGE_STARTED = 1;
   const STAGE_TESTING = 2;
@@ -307,15 +305,17 @@ module.exports = function registerRecruitmentDriveQuest(api) {
     );
   }
 
-  function knightsFortressComplete(player) {
-    const request = { player, key: BLOCKED_KNIGHTS_QUEST_KEY, complete: false };
+  function questComplete(player, key) {
+    const request = { player, key, complete: false };
     api.emitCustomEvent("quest:is-complete", request);
     return request.complete === true;
   }
 
   function meetsRequirements(player) {
-    const points = Number(player.getAttribute(QUEST_POINTS_ATTRIBUTE)) || 0;
-    return knightsFortressComplete(player) && points >= REQUIRED_QUEST_POINTS;
+    return (
+      questComplete(player, BLOCKED_KNIGHTS_QUEST_KEY) &&
+      questComplete(player, DRUIDIC_RITUAL_QUEST_KEY)
+    );
   }
 
   function inGrounds(player) {
@@ -767,6 +767,7 @@ module.exports = function registerRecruitmentDriveQuest(api) {
     if (!attempt || attempt.resolved) return;
     attempt.resolved = true;
     attempt.correct = hynnAnswerCorrect(attempt.riddle, String(option));
+    if (attempt.correct) setTests(player, tests(player) | TEST_BIT_HYNN);
     afterChatbox(player, () =>
       playBranch(
         player,
@@ -786,6 +787,12 @@ module.exports = function registerRecruitmentDriveQuest(api) {
     request.handled = true;
     if (hasTest(player, room.bit)) {
       goNextRoom(player, room);
+      return;
+    }
+    // Tinley's room is failed by touching anything while the patience wait runs;
+    // the reachable exit door must count too (the exit portal sits behind it).
+    if (room.key === "tinley" && tinleyState(player) === 2) {
+      playTinleyFailure(player);
       return;
     }
     if (room.key === "ren") {
@@ -928,7 +935,7 @@ module.exports = function registerRecruitmentDriveQuest(api) {
       "on the upper floor of the <col=800000>White Knights' Castle</col>.",
       "",
       "I need to have completed <col=800000>Black Knights' Fortress</col>",
-      "and have at least <col=800000>12 Quest Points</col>.",
+      "and <col=800000>Druidic Ritual</col>.",
     ];
   }
 

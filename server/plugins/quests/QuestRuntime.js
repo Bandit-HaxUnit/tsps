@@ -168,6 +168,20 @@ function refreshQuestList(player) {
   sendQuestList(player);
 }
 
+/**
+ * The login bootstrap sends the all-spells-unlocked varps after the player-login
+ * hooks, clobbering cache NPC transform varps that share storage with quest varps.
+ * Re-send every quest's stage once the bootstrap is done, so quest NPCs render
+ * the right variant and client scripts read the saved stage after a relog.
+ */
+function syncQuestVarps(player) {
+  const packet = player.getPacketSender();
+  for (const quest of quests) {
+    if (quest.varbitId !== undefined) packet.sendVarbit(quest.varbitId, quest.getStage(player));
+    else packet.sendConfig(quest.varpId, quest.getStage(player));
+  }
+}
+
 function questStatus(quest, player) {
   if (quest.isComplete(player)) return STATUS_COMPLETE;
   if (quest.isStarted(player)) return STATUS_IN_PROGRESS;
@@ -317,6 +331,7 @@ function registerQuestWidgets(api) {
   api.onCustomEvent("quest:is-started", answerIsStarted);
   // The character summary shows the same header stats without opening the list.
   api.onPlayerLogin(({ player }) => sendQuestHeaderStats(player));
+  api.onCustomEvent("player:bootstrap-complete", ({ player }) => syncQuestVarps(player));
 }
 
 // ============================================================================

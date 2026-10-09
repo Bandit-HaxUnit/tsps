@@ -37,12 +37,14 @@
  * "interrupting the Queen of Thieves" resume variant ends in a "continues above"
  * jump the dialogue runtime cannot follow from a typed line, so a player who
  * leaves mid-reveal replays the reveal from the start. The chest has no wiki
- * dialogue, so its picklock/search messages are minimal authored text; the chest
- * can revert to locked when its region reloads, and picking it without the
- * quest's lead is refused. The graceful recolour and the letter's readable
- * transcript are not implemented, and the tent NPC keeps the name "The Queen of
- * Thieves" after completion (her post-quest talk is Lady Shauna's standard
- * transcript). The manhole stays open until closed by hand.
+ * dialogue, so its picklock/search messages are minimal authored text; picking it
+ * without the quest's lead is refused, and its picklocked/searched state is kept
+ * in a persisted per-player attribute ("quest.the_queen_of_thieves.chest") so the
+ * world chest is rebuilt on every region load instead of relying on the base
+ * nameless 10084 still being registered. The graceful recolour and the letter's
+ * readable transcript are not implemented, and the tent NPC keeps the name "The
+ * Queen of Thieves" after completion (her post-quest talk is Lady Shauna's
+ * standard transcript). The manhole stays open until closed by hand.
  */
 module.exports = function registerQueenOfThievesQuest(api) {
   const {
@@ -116,6 +118,16 @@ module.exports = function registerQueenOfThievesQuest(api) {
   const CLOSED_CHEST_OBJECT_ID = 10084;
   const CHEST_TILE = { x: 1681, y: 3677, z: 1 };
   const CHEST_REGION_ID = ((CHEST_TILE.x >> 6) << 8) | (CHEST_TILE.y >> 6);
+  // The placed 10084 chest is shape 10 rotation 0 (dump:loc); every runtime
+  // state is registered with the same pose so the client keeps seeing a chest.
+  const CHEST_TYPE = 10;
+  const CHEST_FACE = 0;
+  // Persisted per-player chest progress, so the world chest can be restored
+  // after the base 10084 has been deregistered and the region reloads.
+  const CHEST_ATTRIBUTE = "quest.the_queen_of_thieves.chest";
+  const CHEST_LOCKED = 0;
+  const CHEST_PICKLOCKED = 1;
+  const CHEST_SEARCHED = 2;
 
   const MANHOLE_TILE = { x: 1813, y: 3745, z: 0 };
   const MANHOLE_SURFACE_LANDING = { x: 1813, y: 3746, z: 0 };
@@ -351,6 +363,13 @@ module.exports = function registerQueenOfThievesQuest(api) {
       player.sendMessage("You have no reason to pick the lock on this chest.");
       return;
     }
+    if (chestState(player) >= CHEST_PICKLOCKED) {
+      // Already unlocked on an earlier visit; only make sure the world matches,
+      // so a second click cannot unlock or message twice.
+      if (object.getId?.() !== CHEST_SEARCH_OBJECT_ID) replaceObject(object, CHEST_SEARCH_OBJECT_ID);
+      return;
+    }
+    setChestState(player, CHEST_PICKLOCKED);
     replaceObject(object, CHEST_SEARCH_OBJECT_ID);
     player.sendMessage("You pick the lock on the chest.");
   }
@@ -361,6 +380,11 @@ module.exports = function registerQueenOfThievesQuest(api) {
       player.sendMessage("You have no reason to search through this chest.");
       return;
     }
+    // A second invocation for the same click (the open chest is already there)
+    // must not emit anything again.
+    if (object.getId?.() === CHEST_OPEN_OBJECT_ID && chestState(player) >= CHEST_SEARCHED) return;
+    // One letter per missing letter: hasLetter guards a second copy, and the
+    // searched state below means the open-chest message can never repeat a handout.
     if (hasLetter(player)) {
       player.sendMessage("The chest is empty.");
       return;
@@ -370,18 +394,69 @@ module.exports = function registerQueenOfThievesQuest(api) {
       return;
     }
     player.getInventory().adds(LETTER_ITEM_ID, 1);
+    setChestState(player, CHEST_SEARCHED);
     replaceObject(object, CHEST_OPEN_OBJECT_ID);
     player.sendMessage("You search the chest and find a letter.");
     advance(player, STAGE_LETTER_FOUND);
   }
 
+  function chestState(player) {
+    return Number(player.getAttribute(CHEST_ATTRIBUTE)) || CHEST_LOCKED;
+  }
+
+  function setChestState(player, state) {
+    if (chestState(player) < state) player.setAttribute(CHEST_ATTRIBUTE, state);
+  }
+
+  /** Every object currently on the chest's tile. */
+  function objectsAt(location) {
+    const hash = MapObjects.getHash(location.getX(), location.getY(), location.getZ());
+    return MapObjects.mapObjects.get(hash) ?? [];
+  }
+
+  /** The furthest-along chest state any online player has reached. */
+  function highestChestState() {
+    let state = CHEST_LOCKED;
+    const world = api.getWorld();
+    const players = world?.getPlayers?.();
+    if (players) {
+      for (const player of players) {
+        const value = chestState(player);
+        if (value > state) state = value;
+      }
+    }
+    return state;
+  }
+
+  /**
+   * Puts the right chest state back on the tile from scratch. The base nameless
+   * chest (10084) is deregistered the first time the chest is touched and the
+   * region loader does not put it back, so never wait for it: clear whatever is
+   * there and register the state object the world should show.
+   */
+  function dressChest(state) {
+    const location = new Location(CHEST_TILE.x, CHEST_TILE.y, CHEST_TILE.z);
+    for (const object of [...objectsAt(location)]) ObjectManager.deregister(object, true);
+    const objectId = state >= CHEST_SEARCHED
+      ? CHEST_OPEN_OBJECT_ID
+      : state >= CHEST_PICKLOCKED
+        ? CHEST_SEARCH_OBJECT_ID
+        : CHEST_PICKLOCK_OBJECT_ID;
+    ObjectManager.register(
+      new GameObject(objectId, location, CHEST_TYPE, CHEST_FACE, null),
+      true
+    );
+  }
+
   /** The tent doorway drops the player on the far side of its wall. */
   function goThroughTentDoor(event) {
     const { player, location } = event;
-    const doorX = location.getX();
-    const doorY = location.getY();
-    const destinationY = player.getLocation().getY() <= doorY ? doorY + 2 : doorY - 1;
-    player.moveTo(new Location(doorX, destinationY, player.getLocation().getZ()));
+    // event.location is a plain { x, y, z }; Doors.plugin.js reads it the same way.
+    const doorX = location.getX?.() ?? location.x;
+    const doorY = location.getY?.() ?? location.y;
+    const from = player.getLocation();
+    const destinationY = from.getY() <= doorY ? doorY + 2 : doorY - 1;
+    player.moveTo(new Location(doorX, destinationY, from.getZ()));
   }
 
   function handleObjectInteraction(event) {
@@ -429,15 +504,10 @@ module.exports = function registerQueenOfThievesQuest(api) {
     }
   }
 
-  /** Dress the world's nameless chest as the picklockable quest chest. */
+  /** Rebuild the quest chest on every region load, never assuming 10084 is there. */
   function handleRegionLoaded({ regionId }) {
     if (regionId !== CHEST_REGION_ID) return;
-    const chest = MapObjects.get(
-      CLOSED_CHEST_OBJECT_ID,
-      new Location(CHEST_TILE.x, CHEST_TILE.y, CHEST_TILE.z),
-      null
-    );
-    if (chest) replaceObject(chest, CHEST_PICKLOCK_OBJECT_ID);
+    dressChest(highestChestState());
   }
 
   function worldHasNpc(id) {
@@ -572,9 +642,20 @@ module.exports = function registerQueenOfThievesQuest(api) {
     player.getPacketSender().sendVarbit(VARBIT_PISCQUEST_REWARD, 1);
   }
 
+  /** A login inside the already-loaded region must still see the right chest. */
+  function syncChestFor(player) {
+    const from = player.getLocation();
+    const regionId = ((from.getX() >> 6) << 8) | (from.getY() >> 6);
+    if (regionId !== CHEST_REGION_ID) return;
+    dressChest(highestChestState());
+  }
+
   function handleLogin({ player }) {
     refreshQuestList(player);
+    syncChestFor(player);
   }
+
+  api.persistAttribute(CHEST_ATTRIBUTE);
 
   quest = registerQuest(api, {
     key: "the_queen_of_thieves",

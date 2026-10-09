@@ -3,8 +3,9 @@
  *
  * The words come from the "Roving Elves" transcript page; this plugin supplies the
  * variant selector for Islwyn and Eluned, the prose-condition answers, the start
- * hook, the tomb entry, the Moss Guardian's seed drop, Eluned's enchant hand-over
- * and the seed planting by the Chalice of Eternity.
+ * hook, the tomb entry, the seed pickup and Eluned's enchant hand-over, and the
+ * seed planting by the Chalice of Eternity. The consecration seed drop itself
+ * comes from npc-drops.json (4205 with the Roving Elves requirement).
  *
  * Stages (varp 402 "roving_elves_quest"; the cache quest table row 122 gives
  * endstate 6, and quest script 4024 reads varp 402 for quest 122):
@@ -34,12 +35,9 @@
  *    later ones continue on the "Ilfeen" page.
  *  - Talking to a player who has not completed Regicide has no Roving Elves
  *    variant (the NPCs are not spawned for them).
- *  - Waterfall Quest's Golrie pebble action still resets its stage when a
- *    completed player takes a new pebble; see the final report (shared fix).
  */
 module.exports = function registerRovingElvesQuest(api) {
   const {
-    Item,
     ItemIdentifiers,
     Location,
     NpcIdentifiers,
@@ -65,7 +63,6 @@ module.exports = function registerRovingElvesQuest(api) {
   ]);
   const ILFEEN_NPC_IDS = new Set([NpcIdentifiers.ILFEEN, NpcIdentifiers.ILFEEN_2]); // 8676, 8769
   const OWNED_NPC_IDS = new Set([...ISLWYN_NPC_IDS, ...ELUNED_NPC_IDS, ...ILFEEN_NPC_IDS]);
-  const MOSS_GUARDIAN_NPC_ID = NpcIdentifiers.MOSS_GUARDIAN; // 891
 
   const VARP_ROVING_ELVES = 402; // "roving_elves_quest"
   const STAGE_STARTED = 1;
@@ -107,7 +104,6 @@ module.exports = function registerRovingElvesQuest(api) {
   const ILFEEN_MET_ATTRIBUTE = "quest.roving_elves.ilfeen-met";
 
   let quest;
-  let groundItems;
   const rewardChoiceByPlayer = new Map();
   const rovingNpcsByPlayer = new Map();
 
@@ -324,18 +320,7 @@ module.exports = function registerRovingElvesQuest(api) {
     request.player.moveTo(new Location(TOMB_EXIT_TILE.x, TOMB_EXIT_TILE.y, TOMB_EXIT_TILE.z));
   }
 
-  /** Moss Guardians drop the consecration seed for the player fighting them. */
-  function handleMossGuardianDeath(event) {
-    const { killer, npc, npcId } = event;
-    if (npcId !== MOSS_GUARDIAN_NPC_ID || !killer || !npc || !groundItems) return;
-    const stage = quest.getStage(killer);
-    if (stage < STAGE_SPOKEN_ELUNED || stage >= STAGE_PLANTED) return;
-    if (hasOldSeed(killer) || hasEnchantedSeed(killer)) return;
-    const location = npc.getLocation?.() ?? npc.getSpawnLocation?.();
-    if (!location) return;
-    groundItems.registerLocation(killer, new Item(OLD_SEED_ITEM_ID, 1), location);
-  }
-
+  /** Moss Guardians drop the consecration seed via npc-drops.json; picking it up advances the stage. */
   function handleSeedPickup(event) {
     const { player, groundItemId } = event;
     if (!player || groundItemId !== OLD_SEED_ITEM_ID) return;
@@ -411,7 +396,6 @@ module.exports = function registerRovingElvesQuest(api) {
   }
 
   api.persistAttribute(ILFEEN_MET_ATTRIBUTE);
-  groundItems = api.getItemOnGroundManager();
 
   quest = registerQuest(api, {
     key: "roving_elves",
@@ -437,7 +421,6 @@ module.exports = function registerRovingElvesQuest(api) {
   api.onItemOnObject(handlePebbleOnTombstone, { noted: false });
   api.onItemAction(handleItemAction);
   api.onGroundItemPickup(handleSeedPickup);
-  api.onNpcDeath(handleMossGuardianDeath);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

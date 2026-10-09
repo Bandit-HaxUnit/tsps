@@ -11,8 +11,10 @@
  * from scripts/lookup-gameval.ts; the wiki publishes no numeric stage values, this
  * is the natural transcript order and fits the 6-bit field):
  *   1 started, 2 spoke to Chef Olivia, 3 spoke to Galana (book bay assigned),
- *   4 read the Envoy to Varlamore, 5 met Artur in the caves, 6 killed the Sand
- *   Snake, 7 looted the Royal Accord, 8 Artur returned home, 9 complete.
+ *   4 read the Envoy to Varlamore - the Read action alone sets this and it is
+ *   what opens the Crabclaw Caves (finding the book does not advance the stage),
+ *   5 met Artur in the caves, 6 killed the Sand Snake, 7 looted the Royal
+ *   Accord, 8 Artur returned home, 9 complete.
  * Varbit 6028 "hosidiusquest_reward" (bit 6) is set on completion; varbit 6029
  * "hosidiusquest_favour" (bit 7) is deliberately left alone (Kourend favour was
  * removed in 2024). Varbit 12153 "hosidiusquest_artur_vis" (bit 8) drives the
@@ -97,6 +99,14 @@ module.exports = function registerDepthsOfDespairQuest(api) {
   const GALANA_NPC_ID = NpcIdentifiers.GALANA; // 7902
   const CAVE_SON_NPC_ID = NpcIdentifiers.ARTUR_HOSIDIUS; // 7898 HOSIDIUSQUEST_SON
   const SAND_SNAKE_NPC_ID = NpcIdentifiers.SAND_SNAKE_2; // 7903 HOSIDIUSQUEST_SNAKE
+  const QUEST_SPEAKER_NPC_IDS = new Set([
+    ...LORD_NPC_IDS,
+    ...ELENA_NPC_IDS,
+    ...ARTUR_NPC_IDS,
+    BUTLER_NPC_ID,
+    OLIVIA_NPC_ID,
+    GALANA_NPC_ID,
+  ]);
 
   const VARLAMORE_ENVOY_ITEM_ID = ItemIdentifiers.VARLAMORE_ENVOY; // 21756
   const ROYAL_ACCORD_ITEM_ID = ItemIdentifiers.ROYAL_ACCORD_OF_TWILL; // 21758
@@ -163,6 +173,8 @@ module.exports = function registerDepthsOfDespairQuest(api) {
 
   let quest;
   const caveEncounters = new Map();
+  /** One-shot teleport per obstacle click, consumed by the message step. */
+  const pendingMoves = new WeakMap();
 
   const held = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
 
@@ -372,7 +384,11 @@ module.exports = function registerDepthsOfDespairQuest(api) {
 
   function handleDialogueLine(event) {
     const { player, npcId } = event;
-    const text = String(event.text ?? "");
+    let text = String(event.text ?? "");
+    if (QUEST_SPEAKER_NPC_IDS.has(npcId) && text.includes("[player name]")) {
+      text = text.replace(/\[player name\]/gi, String(player.getUsername()));
+      event.text = text;
+    }
     if (npcId === OLIVIA_NPC_ID) {
       if (text.includes("He's been spending a lot of time in the Arceuus Library recently") &&
         quest.getStage(player) === STAGE_STARTED) {
@@ -423,36 +439,53 @@ module.exports = function registerDepthsOfDespairQuest(api) {
     player.moveTo(new Location(tile.x, tile.y, tile.z ?? 0));
   }
 
+  /**
+   * Starts an obstacle transcript whose message step owns one teleport. The
+   * destination is captured now, at click time, and consumed once when the
+   * message is emitted (the runtime emits message steps once; the one-shot map
+   * also keeps the directional moves safe under any duplicate emission).
+   */
+  function startMoveTranscript(player, variant, destination) {
+    pendingMoves.set(player, destination);
+    if (!startTranscript(api, player, CAVE_SON_NPC_ID, PAGE, variant)) {
+      pendingMoves.delete(player);
+    }
+  }
+
+  function creviceDestination(player) {
+    return player.getLocation().getY() >= 9822 ? CREVICE_SOUTH_TILE : CREVICE_NORTH_TILE;
+  }
+
+  function stonesDestination(player) {
+    return player.getLocation().getX() > 1705 ? STONES_WEST_TILE : STONES_EAST_TILE;
+  }
+
+  function rocksDestination(player, lower) {
+    const x = player.getLocation().getX();
+    if (lower) return x > 1687 ? LOWER_ROCKS_WEST_TILE : LOWER_ROCKS_EAST_TILE;
+    return x > 1688 ? UPPER_ROCKS_WEST_TILE : UPPER_ROCKS_EAST_TILE;
+  }
+
+  /** Consumes the click's one-shot teleport; returns false when there is none. */
+  function applyPendingMove(player) {
+    const destination = pendingMoves.get(player);
+    if (!destination) return false;
+    pendingMoves.delete(player);
+    moveTo(player, destination);
+    return true;
+  }
+
   function handleAction(event) {
     const { player, stepId } = event;
     switch (stepId) {
       case "GL3IJy": // You climb down into the cave.
-        moveTo(player, CAVE_ENTRY_TILE);
-        return;
       case "liq8sV": // You squeeze through the crevice.
-        moveTo(player, player.getLocation().getY() >= 9822 ? CREVICE_SOUTH_TILE : CREVICE_NORTH_TILE);
-        return;
       case "oY3wLB": // You successfully make it to the other side.
-        moveTo(player, player.getLocation().getX() > 1705 ? STONES_WEST_TILE : STONES_EAST_TILE);
-        return;
-      case "0QAGMq": { // You climb over the rocks (upper cave or snake chamber).
-        const lower = player.getLocation().getY() < 9780;
-        if (lower) {
-          moveTo(player, player.getLocation().getX() > 1687 ? LOWER_ROCKS_WEST_TILE : LOWER_ROCKS_EAST_TILE);
-        } else {
-          moveTo(player, player.getLocation().getX() > 1688 ? UPPER_ROCKS_WEST_TILE : UPPER_ROCKS_EAST_TILE);
-        }
-        return;
-      }
+      case "0QAGMq": // You climb over the rocks.
       case "Y4ZprR": // You climb down the rope.
-        moveTo(player, LOWER_CHAMBER_TILE);
-        ensureCaveNpcs(player);
-        return;
       case "aXacAX": // You climb up the rope.
-        moveTo(player, UPPER_CAVE_TILE);
-        return;
       case "IAW0EN": // You climb up the sand pile.
-        moveTo(player, CAVE_SURFACE_TILE);
+        if (applyPendingMove(player) && stepId === "Y4ZprR") ensureCaveNpcs(player);
         return;
       case "r7iI2i": { // You take a copy.
         if (!held(player, VARLAMORE_ENVOY_ITEM_ID) && !player.getInventory().isFull()) {
@@ -495,28 +528,28 @@ module.exports = function registerDepthsOfDespairQuest(api) {
         return;
       case TUNNEL_ENTRANCE_OBJECT_ID:
         event.handled = true;
-        startTranscript(api, player, CAVE_SON_NPC_ID, PAGE, "the-envoy-to-varlamore-climbing-down-the-tunnel-entrance");
+        startMoveTranscript(player, "the-envoy-to-varlamore-climbing-down-the-tunnel-entrance", LOWER_CHAMBER_TILE);
         return;
       case ROPE_OBJECT_ID:
         event.handled = true;
-        startTranscript(api, player, CAVE_SON_NPC_ID, PAGE, "the-envoy-to-varlamore-climbing-up-the-rope");
+        startMoveTranscript(player, "the-envoy-to-varlamore-climbing-up-the-rope", UPPER_CAVE_TILE);
         return;
       case CREVICE_IN_OBJECT_ID:
       case CREVICE_OUT_OBJECT_ID:
         event.handled = true;
-        startTranscript(api, player, CAVE_SON_NPC_ID, PAGE, "the-envoy-to-varlamore-entering-the-crevice");
+        startMoveTranscript(player, "the-envoy-to-varlamore-entering-the-crevice", creviceDestination(player));
         return;
       case STEPPING_STONE_OBJECT_ID:
         event.handled = true;
-        startTranscript(api, player, CAVE_SON_NPC_ID, PAGE, "the-envoy-to-varlamore-crossing-the-stepping-stone");
+        startMoveTranscript(player, "the-envoy-to-varlamore-crossing-the-stepping-stone", stonesDestination(player));
         return;
       case UPPER_ROCKS_OBJECT_ID:
         event.handled = true;
-        startTranscript(api, player, CAVE_SON_NPC_ID, PAGE, "the-envoy-to-varlamore-climbing-the-rocks");
+        startMoveTranscript(player, "the-envoy-to-varlamore-climbing-the-rocks", rocksDestination(player, false));
         return;
       case LOWER_ROCKS_OBJECT_ID:
         event.handled = true;
-        startTranscript(api, player, CAVE_SON_NPC_ID, PAGE, "the-envoy-to-varlamore-climbing-the-rocks");
+        startMoveTranscript(player, "the-envoy-to-varlamore-climbing-the-rocks", rocksDestination(player, true));
         return;
       case CHEST_OBJECT_ID:
         event.handled = true;
@@ -531,11 +564,11 @@ module.exports = function registerDepthsOfDespairQuest(api) {
       player.sendMessage("You have no reason to go in there.");
       return;
     }
-    startTranscript(api, player, CAVE_SON_NPC_ID, PAGE, "the-envoy-to-varlamore-entering-the-cave");
+    startMoveTranscript(player, "the-envoy-to-varlamore-entering-the-cave", CAVE_ENTRY_TILE);
   }
 
   function leaveCave(player) {
-    startTranscript(api, player, CAVE_SON_NPC_ID, PAGE, "the-envoy-to-varlamore-climbing-out-of-the-caves");
+    startMoveTranscript(player, "the-envoy-to-varlamore-climbing-out-of-the-caves", CAVE_SURFACE_TILE);
   }
 
   function searchChest(player) {

@@ -35,7 +35,12 @@
  *   - Elemental metal on the workbench is claimed first by ElementalWorkshopI's handler
  *     (registered earlier in Quests.plugin.js), which auto-crafts an elemental shield, so
  *     making the crane claw hangs off using the crane schematic on the workbench instead;
- *     the metal-on-workbench path is handled too, defensively. Shared fix needed (report).
+ *     the metal-on-workbench path is handled too, defensively. This stays until Elemental
+ *     Workshop I defers to EW2 when the crane claw choice applies (shared change needed).
+ *   - The wind tunnel pins and the old crane sit in blocking scenery, so a route assist
+ *     sends the use to the player's own tile when they are already beside the footprint
+ *     (the walk-to reach check rejects every adjacent tile); the workshop stairs are
+ *     claimed through the ladders:climb event so the generic mapper cannot guess wrong.
  *   - The beaten book interface and the extractor cutscene/models are not shown; reading
  *     the book/scroll has no transcript of its own, so the search variant's own message
  *     lines are reused and the stage advances. The fan dries the bar instantly instead of
@@ -154,6 +159,9 @@ module.exports = function registerElementalWorkshopIIQuest(api) {
     PIN_HIGH, PIN_LOW, PIN_LEFT,
     ObjectIdentifiers.PIN, ObjectIdentifiers.PIN_2, ObjectIdentifiers.PIN_3, // 18664-18666
   ]);
+  // The wind tunnel pins and the crane's 5x5 base have no walkable tile of their own, and
+  // every adjacent tile fails the walk-to reach check for item use ("You can't reach that!").
+  const ROUTE_ASSIST_IDS = new Set([...PIN_IDS, OLD_CRANE]);
   const EXTRACTOR_HAT = ObjectIdentifiers.EXTRACTOR_HAT; // 18690
   const EXTRACTOR_HAT_IDS = new Set([EXTRACTOR_HAT, ObjectIdentifiers.EXTRACTOR_HAT_2]);
   const EXTRACTOR_GUN_IDS = new Set([
@@ -475,6 +483,32 @@ module.exports = function registerElementalWorkshopIIQuest(api) {
   function climbStairs(player, destination, message) {
     player.sendMessage(message);
     player.moveTo(destination);
+  }
+
+  /**
+   * The workshop's stairs are all two-way dungeon connections, so the generic
+   * Ladders mapper guesses wrong. Claim the click and hand it the explicit
+   * destination instead. The gantry stairs are placed twice (1949,5149 and
+   * 1958,5159), so theirs is the clicked tile one plane up/down.
+   */
+  function climbTile(object, fallbackX, fallbackY, z) {
+    const location = object?.getLocation?.();
+    return location ? new Location(location.getX(), location.getY(), z) : new Location(fallbackX, fallbackY, z);
+  }
+
+  function claimClimb(request) {
+    const { player, objectId } = request;
+    const destinations = new Map([
+      [STAIRS_UP_MACHINE, ["ladders:climbUp", HATCH_ARRIVAL]],
+      [STAIRWELL_DOWN, ["ladders:climbDown", BASEMENT_ARRIVAL]],
+      [STAIRS_UP_BASEMENT, ["ladders:climbUp", new Location(1948, 5157, 2)]],
+      [GANTRY_STAIRS, ["ladders:climbUp", climbTile(request.object, 1949, 5149, 3)]],
+      [GANTRY_STAIRS_TOP, ["ladders:climbDown", climbTile(request.object, 1949, 5149, 2)]],
+    ]);
+    const entry = destinations.get(objectId);
+    if (!entry) return;
+    request.handled = true;
+    api.emitCustomEvent(entry[0], { player, object: request.object, destination: entry[1] });
   }
 
   // ==========================================================================
@@ -868,6 +902,35 @@ module.exports = function registerElementalWorkshopIIQuest(api) {
     return String(actions[event.clickType - 1] ?? "").toLowerCase();
   }
 
+  /**
+   * The pins and the old crane are set into blocking scenery, so the closest walkable tile
+   * is beside them and `walkToObject` rejects every adjacent tile ("You can't reach that!").
+   * When the player is already at the object's footprint, route the use to the player's own
+   * tile so the interaction runs (the CurrentAffairs aquarium / Underground Pass guide-rope
+   * pattern). Covers both option clicks and item-on-object uses.
+   */
+  function routeAdjacentObjectUse(event) {
+    if (!ROUTE_ASSIST_IDS.has(event.objectId)) return;
+    const playerLocation = event.player.getLocation();
+    const objectLocation = event.object?.getLocation?.();
+    if (!objectLocation) return;
+    const definition = event.object.getDefinition?.();
+    const size = Math.max(definition?.getSizeX?.() ?? 1, definition?.getSizeY?.() ?? 1);
+    const reach = Math.max(
+      objectLocation.getX() - playerLocation.getX(),
+      playerLocation.getX() - (objectLocation.getX() + size - 1),
+      objectLocation.getY() - playerLocation.getY(),
+      playerLocation.getY() - (objectLocation.getY() + size - 1),
+      0
+    );
+    if (reach > 2) return;
+    event.destination = {
+      x: playerLocation.getX(),
+      y: playerLocation.getY(),
+      z: playerLocation.getZ(),
+    };
+  }
+
   function handleObjectInteraction(event) {
     const { player, objectId } = event;
     const option = objectOption(event);
@@ -974,12 +1037,12 @@ module.exports = function registerElementalWorkshopIIQuest(api) {
     }
     if (objectId === GANTRY_STAIRS && option.includes("climb")) {
       event.handled = true;
-      player.moveTo(new Location(1949, 5149, 3));
+      player.moveTo(climbTile(event.object, 1949, 5149, 3));
       return;
     }
     if (objectId === GANTRY_STAIRS_TOP && option.includes("climb")) {
       event.handled = true;
-      player.moveTo(new Location(1949, 5149, 2));
+      player.moveTo(climbTile(event.object, 1949, 5149, 2));
       return;
     }
     if (objectId === WORKBENCH && option.includes("smith")) {
@@ -1227,6 +1290,8 @@ module.exports = function registerElementalWorkshopIIQuest(api) {
 
   api.onServerStartup(spawnJigCart);
   api.onNpcDialogueCondition(answerCondition);
+  api.onCustomEvent("ladders:climb", claimClimb);
+  api.onObjectRoute(routeAdjacentObjectUse);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onObjectInteraction(handleObjectInteraction);

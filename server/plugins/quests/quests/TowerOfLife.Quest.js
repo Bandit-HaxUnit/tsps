@@ -905,14 +905,19 @@ module.exports = function registerTowerOfLifeQuest(api) {
     if (clickType !== 1 || !HOMUNCULUS_NPC_IDS.has(npcId)) return;
     const basement = (event.npc?.getLocation?.()?.getY?.() ?? 0) > 4000;
     if (basement || quest.getStage(player) !== STAGE_HOMUNCULUS || !hasFlag(player, FLAG_MIND_STARTED)) return;
-    // Repeat talks during the mind puzzle skip the lead-in and go straight to the question.
+    // Repeat talks during the mind puzzle skip the lead-in and go straight to the question;
+    // everything from the first question on stays, including the terminal MIND_FIXED action
+    // and the closing lines, so the stage-14 advance runs on any talk, not just the first.
     event.handled = true;
     api.emitCustomEvent("npc-dialogue:start", {
       player,
       npc: event.npc,
       npcId,
       variant: "finished-work-freeing-the-homunculus-returning-to-it",
-      select: (steps) => steps.filter((step) => step.type === "condition"),
+      select: (steps) => {
+        const first = steps.findIndex((step) => step.type === "condition");
+        return first === -1 ? steps : steps.slice(first);
+      },
     });
   }
 
@@ -985,16 +990,19 @@ module.exports = function registerTowerOfLifeQuest(api) {
     return true;
   }
 
-  /** Mirror the player to beside the object tile, as the door's tile itself blocks. */
-  function stepThrough(player, location) {
-    const current = player.getLocation();
-    const dx = current.getX() - location.x;
-    const dy = current.getY() - location.y;
-    const destination =
-      Math.abs(dx) >= Math.abs(dy)
-        ? new Location(location.x - (dx >= 0 ? 1 : -1), location.y, current.getZ())
-        : new Location(location.x, location.y - (dy >= 0 ? 1 : -1), current.getZ());
-    player.moveTo(destination);
+  /**
+   * The core walks the player onto the door tile before dispatch, so the destination is
+   * decided from the side of the wall the player ended on, not by mirroring the click
+   * offset: a player inside the wall (y <= 3224) lands outside, a player on or beyond the
+   * wall line (y >= 3225) lands inside.
+   */
+  function crossTowerDoor(player) {
+    const inside = player.getLocation().getY() <= TOWER_DOOR_TILE.y - 1;
+    player.moveTo(new Location(
+      TOWER_DOOR_TILE.x,
+      TOWER_DOOR_TILE.y + (inside ? 1 : -1),
+      TOWER_DOOR_TILE.z
+    ));
   }
 
   function handleTowerDoorOpen(event) {
@@ -1010,7 +1018,7 @@ module.exports = function registerTowerOfLifeQuest(api) {
       player.sendMessage("Come back to me wearin' a hard hat, some scruffy trousers, a good top and some hard boots. Yow shud fand some around 'ere.");
       return true;
     }
-    stepThrough(player, event.location);
+    crossTowerDoor(player);
     if (stage === STAGE_ADMITTED && !hasFlag(player, FLAG_ENTERED)) {
       setFlag(player, FLAG_ENTERED);
       startTranscript(api, player, EFFIGY_NPC_ID, PAGE, "unfinished-work-entering-the-tower-of-life");

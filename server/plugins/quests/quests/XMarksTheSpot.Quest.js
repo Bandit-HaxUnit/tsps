@@ -9,8 +9,8 @@
  * resolve in this cache revision (name "null", no options), so they are unusable;
  * this plugin spawns ownerOnly copies at the cache positions instead.
  *
- * Stages (varp 1566 "veos_quest", varbit 5619 "veos_progress" bits 0-5, from
- * `scripts/lookup-gameval.ts varbit veos`): 1 first clue scroll received, 2 second
+ * Stages (varp 2111 "cluequest_main", varbit 8063 "cluequest" bits 0-5, from
+ * `scripts/lookup-gameval.ts varbit cluequest`): 1 first clue scroll received, 2 second
  * (map) scroll, 3 mysterious orb, 4 third (cipher) scroll, 5 ancient casket dug up,
  * 6 complete. The wiki does not publish numeric stage values; the ordering is the
  * transcript's clue order (variants "after-receiving-the-first..fourth-clue") and the
@@ -38,6 +38,11 @@
  *    the box item is still awarded.
  *  - Digging the first three spots only swaps the scroll, with no flavour message
  *    (none exists in any transcript).
+ *  - The stage-0 shortcut "I'm looking for a quest." loops: its wiki jump (reference
+ *    "above", id yEQ3ts) is resolved by NpcDialogues' resolveJump back into the option's
+ *    own body, so Veos' two lines replay until the 100-jump cap closes the chat.
+ *    Jump resolution is not plugin-reachable (line/choice events cannot change it);
+ *    testers should use "Who are you?" -> "Can I help?". Fix belongs in resolveJump.
  *  - Quests.plugin.js F2P_QUESTS does not list XMarksTheSpot, so it only loads on
  *    members worlds here (shared change needed; this file cannot make it).
  */
@@ -82,7 +87,10 @@ module.exports = function registerXMarksTheSpotQuest(api) {
   const RETAKE_SCROLL_VARIANT =
     "starting-off-talking-to-veos-again-if-the-player-previously-did-not-have-inventory-space-for-the-treasure-scroll";
   const LOST_ITEM_VARIANT = "talking-to-veos-after-losing-an-item";
-  const FINISHING_VARIANT = "finishing-up";
+  // "finishing-up" is also a variant on the "Client of Kourend",
+  // "Client of Kourend/Historical" and "Dragon Slayer II" pages, all of which the
+  // Veos id index lists before X Marks, so it must name its page.
+  const FINISHING_VARIANT = { page: PAGE, variant: "finishing-up" };
   const POST_QUEST_VARIANT = "standard-dialogue-at-port-sarim-subsequent-dialogue";
   const CASKET_REFUSAL_VARIANT = "attempting-to-open-the-ancient-casket";
   const LAST_DIG_VARIANT = "digging-the-last-clue";
@@ -322,6 +330,23 @@ module.exports = function registerXMarksTheSpotQuest(api) {
     return null;
   }
 
+  /** Fill the wiki's "[player name]" / "[scroll/orb]" placeholders. */
+  function fillTranscriptBlanks(request) {
+    if (!request?.player || typeof request.text !== "string") return;
+    if (request.npcId !== VEOS_NPC_ID && request.npcId !== VEOS_POST_QUEST_NPC_ID) return;
+    let text = request.text;
+    if (text.includes("[player name]")) {
+      text = text.replace(/\[player name\]/gi, String(request.player.getUsername()));
+    }
+    if (text.includes("[scroll/orb]")) {
+      text = text.replace(
+        /\[scroll\/orb\]/gi,
+        lostItemId(request.player) === MYSTERIOUS_ORB ? "orb" : "scroll"
+      );
+    }
+    if (text !== request.text) request.text = text;
+  }
+
   // ==========================================================================
   // Interactions
   // ==========================================================================
@@ -510,6 +535,7 @@ module.exports = function registerXMarksTheSpotQuest(api) {
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
+  api.onCustomEvent("npc-dialogue:line", fillTranscriptBlanks);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:condition", handleCondition);
   api.onItemAction("Spade", { Dig: handleDig });

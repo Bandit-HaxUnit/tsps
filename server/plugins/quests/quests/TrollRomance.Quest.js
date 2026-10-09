@@ -27,6 +27,12 @@
  * trapped; the bucket of wax is consumed by the wax mix, as the wiki lists no
  * empty-bucket byproduct; "getting-started-talking-to-aga-again" is used from
  * stage 10 (after the love-life talk).
+ *
+ * Fidelity fixes for two dump defects: the "I need a sled!!" -> "Yes." branch's
+ * jump (b4PZnn) has no target and NpcDialogues' fallback splices Ug's start
+ * lines in, so the answer is replayed with the material lines the "No." branch
+ * shares; and a refused start (Troll Stronghold incomplete) drops Ug's
+ * acceptance lines so only the refusal message is seen.
  */
 module.exports = function registerTrollRomanceQuest(api) {
   const {
@@ -81,6 +87,15 @@ module.exports = function registerTrollRomanceQuest(api) {
   const STAGE_COMPLETE = 45;
 
   const START_HOOK = "quest:troll-romance:start";
+  /** Dunstan's first-talk variant, whose "Yes." jump lost its target in the dump. */
+  const DUNSTAN_INTRO_VARIANT = "finding-the-flowers-talking-to-dunstan";
+  /** The lines the "Yes." options play before the missing jump. */
+  const ACCEPTANCE_LINES = [
+    "Don't worry now, I'll see what I can do.",
+    "You help Ug? You nice, maybe Ug not eat you!",
+    "Errrr... thanks... I think?",
+    "I will go and talk to Aga.",
+  ];
   /** Dunstan's transcript message that hands over the sled. */
   const SLED_HANDED_OVER_MESSAGE_ID = "-LrN_g";
   /** Ug's "Congratulations! Quest complete!" transcript action. */
@@ -104,6 +119,8 @@ module.exports = function registerTrollRomanceQuest(api) {
 
   /** The arena Arrg spawned for each challenger. */
   const arenaArrgByPlayer = new Map();
+  /** Players whose quest-start refusal must drop Ug's acceptance lines. */
+  const refusingStartByPlayer = new WeakSet();
 
   let quest;
 
@@ -273,10 +290,76 @@ module.exports = function registerTrollRomanceQuest(api) {
     if (!UG_NPC_IDS.has(npcId) || hook !== START_HOOK) return;
     if (quest.getStage(player) !== 0) return;
     if (!trollStrongholdComplete(player)) {
+      refusingStartByPlayer.add(player);
       player.sendMessage("You must complete Troll Stronghold before you can help Ug.");
       return;
     }
     quest.setStage(player, STAGE_STARTED);
+  }
+
+  /** Drops the acceptance lines when the chosen "Yes." could not start the quest. */
+  function handleLine(event) {
+    const { player, npcId, text } = event;
+    if (!player || typeof text !== "string") return;
+    if (!UG_NPC_IDS.has(npcId) || !refusingStartByPlayer.has(player)) return;
+    const index = ACCEPTANCE_LINES.indexOf(text);
+    if (index === -1) return;
+    event.skip = true;
+    if (index === ACCEPTANCE_LINES.length - 1) refusingStartByPlayer.delete(player);
+  }
+
+  // ==========================================================================
+  // Dunstan's "Yes." branch (the dump's b4PZnn jump has no target)
+  // ==========================================================================
+
+  /** The first option with this text, searching nested (line-attached) steps too. */
+  function optionSteps(steps, text) {
+    for (const step of steps ?? []) {
+      for (const option of step.options ?? []) {
+        if (option.text === text) return Array.isArray(option.steps) ? option.steps : null;
+      }
+      const nested = optionSteps(step.steps, text);
+      if (nested) return nested;
+    }
+    return null;
+  }
+
+  /**
+   * What Dunstan should say after "I need a sled!!" -> "Yes.": his question, then
+   * the material request taken from the shared lines of the "No." branch, since the
+   * dump's jump target is missing and NpcDialogues' fallback lands in Ug's start.
+   */
+  function dunstanAgreementSteps(steps) {
+    const replies = optionSteps(steps, "I need a sled!!");
+    const accepted = replies && optionSteps(replies, "Yes.");
+    const declined = replies && optionSteps(replies, "No.");
+    if (!accepted || !declined) return null;
+    const question = accepted.filter((step) => step.type !== "jump");
+    const marker = "I need the sled to get to a certain location in the mountains.";
+    const index = declined.findIndex((step) => step.player === marker);
+    if (index === -1) return null;
+    return [...question, ...declined.slice(index + 1)];
+  }
+
+  /** Replays the answer a tick later, replacing the branch the broken jump starts. */
+  function fixDunstanSledAnswer({ player, npcId, option }) {
+    if (npcId !== DUNSTAN_NPC_ID || option !== "Yes.") return;
+    if (quest.getStage(player) !== STAGE_DUNSTAN_AGREED) return;
+    const { CountdownTask, TaskManager } = api.core;
+    const replay = () => {
+      if (player.isRegistered?.() === false) return;
+      api.emitCustomEvent("npc-dialogue:start", {
+        player,
+        npcId: DUNSTAN_NPC_ID,
+        variant: DUNSTAN_INTRO_VARIANT,
+        select: dunstanAgreementSteps,
+      });
+    };
+    if (!CountdownTask || !TaskManager) {
+      replay();
+      return;
+    }
+    TaskManager.submit(new CountdownTask({}, 1, replay));
   }
 
   function handleAction(event) {
@@ -491,7 +574,9 @@ module.exports = function registerTrollRomanceQuest(api) {
 
   api.onNpcDialogueVariant(selectVariant);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
+  api.onCustomEvent("npc-dialogue:line", handleLine);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
+  api.onCustomEvent("npc-dialogue:choice", fixDunstanSledAnswer);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnNpc(handleItemOnNpc);

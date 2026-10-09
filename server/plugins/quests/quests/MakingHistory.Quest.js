@@ -11,12 +11,12 @@
  * task, Dron's quiz after Blanin, the letter to King Lathas and the reward.
  *
  * Stages (varbit 1383 "makinghistory_prog" of varp 604, values 0-2): 1 started,
- * 2 complete. The finer progress lives in persisted attributes because the
- * sibling varbits (1384 trader_prog 0-5, 1385 warr_prog 0-7, 1386 ghost_prog
- * 0-15, 1387 melina_pres, 1388 droalak_pres, 1390 objloc, 1391 locstatus) are
- * not independently writable through registerQuest. Melina/Droalak presence is
- * driven through their multi-NPC transform varbits (1387/1388), so they vanish
- * for the player without touching the shared spawn.
+ * 2 complete. The finer progress lives in persisted attributes and is mirrored
+ * to the real sibling varbits with sendVarbit as it advances (1384
+ * trader_prog 0-5, 1385 warr_prog 0-7, 1386 ghost_prog 0-15); Melina/Droalak
+ * presence is driven through their multi-NPC transform varbits (1387/1388), so
+ * they vanish for the player without touching the shared spawn. 1390 objloc /
+ * 1391 locstatus stay unset (museum gap).
  *
  * Rewards per the OSRS Wiki: 3 Quest points, 1,000 Crafting XP, 1,000 Prayer XP,
  * 750 coins, the enchanted key and access to the outpost museum.
@@ -33,7 +33,10 @@
  * spawned in the Ardougne Castle throne room while the player has business with
  * him; the Droalak/Melina variants are replayed with their conditions inlined
  * because HandInTheSand's earlier global condition handler mis-answers their
- * "inventory space" branch.
+ * "inventory space" branch; the post-quest Droalak fade is also selected through
+ * the transcript selector for the indexed 3493/3494 fallback (the 6128
+ * multi-parent can resolve nameless for a player), so if a client cannot render
+ * 6128 at all after completion that is a core multi-NPC resolution issue.
  */
 module.exports = function registerMakingHistoryQuest(api) {
   const { Equipment, Item, ItemIdentifiers, NpcIdentifiers, Skill } = api.core;
@@ -49,6 +52,9 @@ module.exports = function registerMakingHistoryQuest(api) {
 
   const VARP_MAKING_HISTORY = 604; // "makinghistory"
   const VARBIT_PROGRESS = 1383; // makinghistory_prog, bits 0-2
+  const VARBIT_TRADER_PROGRESS = 1384; // makinghistory_trader_prog, bits 3-5
+  const VARBIT_WARR_PROGRESS = 1385; // makinghistory_warr_prog, bits 6-8
+  const VARBIT_GHOST_PROGRESS = 1386; // makinghistory_ghost_prog, bits 9-12
   const VARBIT_MELINA_PRESENT = 1387; // makinghistory_melina_pres
   const VARBIT_DROALAK_PRESENT = 1388; // makinghistory_droalak_pres
 
@@ -195,15 +201,29 @@ module.exports = function registerMakingHistoryQuest(api) {
   }
 
   function setTrader(player, value) {
-    if (trader(player) < value) player.setAttribute(TRADER_ATTRIBUTE, value);
+    if (trader(player) >= value) return;
+    player.setAttribute(TRADER_ATTRIBUTE, value);
+    player.getPacketSender().sendVarbit(VARBIT_TRADER_PROGRESS, value);
   }
 
   function setGhost(player, value) {
-    if (ghost(player) < value) player.setAttribute(GHOST_ATTRIBUTE, value);
+    if (ghost(player) >= value) return;
+    player.setAttribute(GHOST_ATTRIBUTE, value);
+    player.getPacketSender().sendVarbit(VARBIT_GHOST_PROGRESS, value);
   }
 
   function setWarr(player, value) {
-    if (warr(player) < value) player.setAttribute(WARR_ATTRIBUTE, value);
+    if (warr(player) >= value) return;
+    player.setAttribute(WARR_ATTRIBUTE, value);
+    player.getPacketSender().sendVarbit(VARBIT_WARR_PROGRESS, value);
+  }
+
+  /** Re-send the per-path progress varbits from the persisted attributes. */
+  function sendProgressVarbits(player) {
+    const packet = player.getPacketSender();
+    packet.sendVarbit(VARBIT_TRADER_PROGRESS, trader(player));
+    packet.sendVarbit(VARBIT_WARR_PROGRESS, warr(player));
+    packet.sendVarbit(VARBIT_GHOST_PROGRESS, ghost(player));
   }
 
   function wearingGhostspeak(player) {
@@ -431,6 +451,12 @@ module.exports = function registerMakingHistoryQuest(api) {
     if (npcId === DRON_NPC_ID) return dronVariant(player, stage);
     if (npcId === BLANIN_NPC_ID) return blaninVariant(player, stage);
     if (KING_LATHAS_NPC_IDS.has(npcId)) return lathasVariant(player, stage);
+    // Fallback for the indexed ghost ids if Talk-to ever reaches the generic
+    // handler instead of the plugin's intercept: the fade page must stay reachable.
+    if (quest.isComplete(player)) {
+      if (DROALAK_NPC_IDS.has(npcId)) return "post-quest-dialogue-talking-to-drolak";
+      if (MELINA_NPC_IDS.has(npcId)) return "talking-to-droalak-talking-to-melina";
+    }
     return null;
   }
 
@@ -622,6 +648,7 @@ module.exports = function registerMakingHistoryQuest(api) {
     player.setAttribute(WARR_ATTRIBUTE, 0);
     player.setAttribute(BITS_ATTRIBUTE, 0);
     player.setAttribute(KEY_LAST_ATTRIBUTE, -1);
+    sendProgressVarbits(player);
     player.getPacketSender().sendVarbit(VARBIT_MELINA_PRESENT, 0);
     player.getPacketSender().sendVarbit(VARBIT_DROALAK_PRESENT, 0);
     quest.setStage(player, STAGE_STARTED);
@@ -746,10 +773,14 @@ module.exports = function registerMakingHistoryQuest(api) {
     if (WRONG_ANSWER_STEP_IDS.has(stepId)) {
       event.handled = true;
       event.end = true;
+      // Play Dron's insult, then reopen the quiz so a wrong answer does not
+      // strand the player outside the conversation.
       afterDialogue(player, () => {
-        if (!quest.isComplete(player)) {
-          playVariant(player, DRON_NPC_ID, "talking-to-dron-if-the-player-chooses-the-wrong-option");
-        }
+        if (quest.isComplete(player)) return;
+        playVariant(player, DRON_NPC_ID, "talking-to-dron-if-the-player-chooses-the-wrong-option");
+        afterDialogue(player, () => {
+          if (!quest.isComplete(player)) playDronQuiz(player);
+        });
       });
     }
   }
@@ -799,6 +830,24 @@ module.exports = function registerMakingHistoryQuest(api) {
     if (KING_LATHAS_NPC_IDS.has(npcId) && text.startsWith("Very well, take another.")) {
       if (!held(player, KING_LETTER)) player.getInventory().adds(KING_LETTER, 1);
       setBit(player, BIT_KING_SEEN);
+    }
+  }
+
+  /** Fill the wiki's "[player name]" blank (as ForsakenTower's filler does). */
+  function fillTranscriptBlanks(request) {
+    if (!request?.player || typeof request.text !== "string") return;
+    const { npcId } = request;
+    const ours =
+      npcId === JORRAL_NPC_ID ||
+      npcId === DRON_NPC_ID ||
+      npcId === BLANIN_NPC_ID ||
+      SILVER_MERCHANT_NPC_IDS.has(npcId) ||
+      KING_LATHAS_NPC_IDS.has(npcId) ||
+      DROALAK_NPC_IDS.has(npcId) ||
+      MELINA_NPC_IDS.has(npcId);
+    if (!ours) return;
+    if (request.text.includes("[player name]")) {
+      request.text = request.text.replace(/\[player name\]/gi, String(request.player.getUsername()));
     }
   }
 
@@ -913,8 +962,15 @@ module.exports = function registerMakingHistoryQuest(api) {
   }
 
   function handleNpcInteraction(event) {
-    if (interactionOption(event) !== "talk-to") return;
     const { player, npcId } = event;
+    const ghostNpc = DROALAK_NPC_IDS.has(npcId) || MELINA_NPC_IDS.has(npcId);
+    if (ghostNpc) {
+      // The Port Phasmatys multi-NPCs can resolve to a nameless parent whose
+      // actions are empty; keep owning them on the Talk-to slot (slot 1).
+      if (Number(event.clickType) !== 1) return;
+    } else if (interactionOption(event) !== "talk-to") {
+      return;
+    }
     if (quest.getStage(player) < STAGE_STARTED) return;
     if (npcId === DRON_NPC_ID) {
       event.handled = true;
@@ -1026,6 +1082,7 @@ module.exports = function registerMakingHistoryQuest(api) {
 
   function handleLogin({ player }) {
     refreshQuestList(player);
+    sendProgressVarbits(player);
     ensureKingLathas(player);
   }
 
@@ -1063,6 +1120,7 @@ module.exports = function registerMakingHistoryQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
+  api.onCustomEvent("npc-dialogue:line", fillTranscriptBlanks);
   api.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
   api.onNpcInteraction(handleNpcInteraction);
   api.onItemAction("Enchanted key", { Feel: handleFeel });

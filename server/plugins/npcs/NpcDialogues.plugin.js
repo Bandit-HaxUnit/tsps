@@ -536,14 +536,8 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         }
         // Quest actions ("Quest complete!", "receive", ...) let a plugin drive
         // state through the mutable payload, then the branch continues.
-        const action = {
-          player, npc: event.npc, npcId, definition, step,
-          text: step.text, action: step.action, target: step.target, stepId: step.id, handled: false,
-        };
-        api.emitCustomEvent("npc-dialogue:action", action);
-        // A handler can also hand back `steps` to play first (a story picked from another page).
-        if (action.handled) return action.end ? close() : run([...(action.steps ?? []), ...rest], currentRecord);
-        if (step.type === "end") return close();
+        // Message steps are their own event (`kind: "message"`); emitting the
+        // generic event first made handlers keyed on step ids act twice.
         if (step.type === "message") {
           // Item hand-outs are also `message` steps; let quests hook their id.
           const message = {
@@ -556,6 +550,14 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           if (!message.handled) player.sendMessage(String(step.text ?? ""));
           return run(rest, currentRecord);
         }
+        const action = {
+          player, npc: event.npc, npcId, definition, step,
+          text: step.text, action: step.action, target: step.target, stepId: step.id, handled: false,
+        };
+        api.emitCustomEvent("npc-dialogue:action", action);
+        // A handler can also hand back `steps` to play first (a story picked from another page).
+        if (action.handled) return action.end ? close() : run([...(action.steps ?? []), ...rest], currentRecord);
+        if (step.type === "end") return close();
         // Wiki markers for content this server does not implement.
         if (step.type === "unavailable" || step.type === "reference") return unavailable();
         if (step.type === "call" && Object.hasOwn(branches, step.branch) && Array.isArray(branches[step.branch])) {

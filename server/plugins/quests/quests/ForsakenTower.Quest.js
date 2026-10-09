@@ -258,6 +258,11 @@ module.exports = function registerForsakenTowerQuest(api) {
         : 28;
   }
 
+  /** The resolved child id when multi-locs are involved (event.definition is resolved). */
+  function resolvedObjectId(event) {
+    return event.definition?.id ?? event.objectId;
+  }
+
   function sendVarbit(player, varbitId, value) {
     player.getPacketSender().sendVarbit(varbitId, value);
   }
@@ -478,7 +483,7 @@ module.exports = function registerForsakenTowerQuest(api) {
     return null;
   }
 
-  /** Fill the wiki's "[player name]" and "[laddie/lassie]" blanks. */
+  /** Fill the wiki's "[player name]" and "[laddie/lass]" / "[laddie/lassie]" blanks. */
   function fillTranscriptBlanks(request) {
     if (!request?.player || typeof request.text !== "string") return;
     if (!QUEST_NPC_IDS.has(request.npcId)) return;
@@ -486,9 +491,9 @@ module.exports = function registerForsakenTowerQuest(api) {
     if (text.includes("[player name]")) {
       text = text.replace(/\[player name\]/gi, String(request.player.getUsername()));
     }
-    if (text.toLowerCase().includes("[laddie/lassie]")) {
+    if (/\[laddie\/lass/i.test(text)) {
       const female = request.player.getAppearance?.()?.getLook?.()[GENDER_LOOK_SLOT] === 1;
-      text = text.replace(/\[laddie\/lassie\]/gi, female ? "lassie" : "laddie");
+      text = text.replace(/\[laddie\/(lass(?:ie)?)\]/gi, (_match, lassie) => (female ? lassie : "laddie"));
     }
     request.text = text;
   }
@@ -623,14 +628,14 @@ module.exports = function registerForsakenTowerQuest(api) {
   // ---------------------------------------------------------------------------
 
   function handleDisplayCaseInspect(event) {
-    if (event.definition?.getId?.() !== ObjectIdentifiers.DISPLAY_CASE_54) return false;
+    if (resolvedObjectId(event) !== ObjectIdentifiers.DISPLAY_CASE_54) return false;
     cleansingFluidId(event.player);
     startTranscript(api, event.player, LADY_VULCANA_NPC_ID, PAGE, DISPLAY_CASE_VARIANT);
     return true;
   }
 
   function handleDisplayCaseSearch(event) {
-    const childId = event.definition?.getId?.();
+    const childId = resolvedObjectId(event);
     const { player } = event;
     if (childId === ObjectIdentifiers.DISPLAY_CASE_55) {
       if (freeSlots(player) < 1) {
@@ -653,7 +658,7 @@ module.exports = function registerForsakenTowerQuest(api) {
   }
 
   function handleSteamGeneratorInspect(event) {
-    if (event.definition?.getId?.() !== ObjectIdentifiers.STEAM_GENERATOR_2) return false;
+    if (resolvedObjectId(event) !== ObjectIdentifiers.STEAM_GENERATOR_2) return false;
     startTranscript(api, event.player, LADY_VULCANA_NPC_ID, PAGE, STEAM_GENERATOR_VARIANT);
     return true;
   }
@@ -667,7 +672,7 @@ module.exports = function registerForsakenTowerQuest(api) {
   }
 
   function handlePowerGridInspect(event) {
-    if (event.definition?.getId?.() !== ObjectIdentifiers.POWER_GRID) return false;
+    if (resolvedObjectId(event) !== ObjectIdentifiers.POWER_GRID) return false;
     const { player } = event;
     if (getElectricity(player) < 2) {
       player.sendMessage("It's an old power grid. It doesn't seem to be receiving any power.");
@@ -679,20 +684,20 @@ module.exports = function registerForsakenTowerQuest(api) {
   }
 
   function handlePowerGridAlign(event) {
-    if (event.definition?.getId?.() !== ObjectIdentifiers.POWER_GRID_2) return false;
+    if (resolvedObjectId(event) !== ObjectIdentifiers.POWER_GRID_2) return false;
     setElectricity(event.player, ELECTRICITY_ALIGNED);
     event.player.sendMessage("You successfully align the power grid.");
     return true;
   }
 
   function handleFurnaceInspect(event) {
-    if (event.definition?.getId?.() !== ObjectIdentifiers.FURNACE_23) return false;
+    if (resolvedObjectId(event) !== ObjectIdentifiers.FURNACE_23) return false;
     event.player.sendMessage("It's an old furnace. There's a coolant mechanism attached to it.");
     return true;
   }
 
   function handleFurnaceLight(event) {
-    if (event.definition?.getId?.() !== ObjectIdentifiers.FURNACE_24) return false;
+    if (resolvedObjectId(event) !== ObjectIdentifiers.FURNACE_24) return false;
     const { player } = event;
     if (getFurnace(player) < FURNACE_COOLED) {
       player.sendMessage("The furnace isn't ready to be lit yet.");
@@ -708,13 +713,13 @@ module.exports = function registerForsakenTowerQuest(api) {
   }
 
   function handleCoolantDispenserFillJug(event) {
-    if (event.definition?.getId?.() !== ObjectIdentifiers.COOLANT_DISPENSER) return false;
+    if (resolvedObjectId(event) !== ObjectIdentifiers.COOLANT_DISPENSER) return false;
     fillJug(event.player);
     return true;
   }
 
   function handleCupboardSearch(event) {
-    const childId = event.definition?.getId?.();
+    const childId = resolvedObjectId(event);
     const { player } = event;
     if (JUG_CUPBOARD_OBJECT_IDS.has(childId)) {
       if (hasFlag(player, FLAG_JUGS)) {
@@ -751,7 +756,7 @@ module.exports = function registerForsakenTowerQuest(api) {
   }
 
   function handleCrateSearch(event) {
-    const childId = event.definition?.getId?.();
+    const childId = resolvedObjectId(event);
     const { player } = event;
     if (CRANK_CRATE_OBJECT_IDS.has(childId)) {
       if (!hasFlag(player, FLAG_CRANK) && getElectricity(player) === 0) {
@@ -784,13 +789,13 @@ module.exports = function registerForsakenTowerQuest(api) {
   }
 
   function handleRefineryInspect(event) {
-    if (event.definition?.getId?.() !== ObjectIdentifiers.REFINERY) return false;
+    if (resolvedObjectId(event) !== ObjectIdentifiers.REFINERY) return false;
     startTranscript(api, event.player, LADY_VULCANA_NPC_ID, PAGE, REFINERY_VARIANT);
     return true;
   }
 
   function handleRefineryCleanse(event) {
-    if (event.definition?.getId?.() !== ObjectIdentifiers.REFINERY_2) return false;
+    if (resolvedObjectId(event) !== ObjectIdentifiers.REFINERY_2) return false;
     if (cleanseRefinery(event.player)) {
       event.player.sendMessage("You pour the fluid into the refinery. The warning on the control panel disappears.");
     }
@@ -798,7 +803,7 @@ module.exports = function registerForsakenTowerQuest(api) {
   }
 
   function handleRefineryActivate(event) {
-    if (event.definition?.getId?.() !== ObjectIdentifiers.REFINERY_3) return false;
+    if (resolvedObjectId(event) !== ObjectIdentifiers.REFINERY_3) return false;
     const { player } = event;
     if (getRefinery(player) >= REFINERY_CLEANSED) {
       setRefinery(player, REFINERY_ACTIVE);
@@ -811,7 +816,7 @@ module.exports = function registerForsakenTowerQuest(api) {
   }
 
   function handleTableTakeFrom(event) {
-    if (event.definition?.getId?.() !== ObjectIdentifiers.TABLE_270) return false;
+    if (resolvedObjectId(event) !== ObjectIdentifiers.TABLE_270) return false;
     const { player } = event;
     if (quest.getStage(player) < STAGE_STARTED) return false;
     if (freeSlots(player) < 1) {

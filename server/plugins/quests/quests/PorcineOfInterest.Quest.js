@@ -23,14 +23,21 @@
  * reaches the area; the notice board (40307) and the cave rope/blockage
  * (40330/40331) are already in the map.
  *
+ * The hole: per-player locs need a PrivateArea, which the open world has none
+ * of, so 40308/40309 are not swapped. The world hole is registered once as the
+ * tied "Climb-down" form (40309) and who may tie/enter is per player, via the
+ * persisted "quest.porcine.rope-tied" attribute: Climb-down on 40308 (should it
+ * ever be present, only when the attribute is set) and on 40309 both enter;
+ * otherwise the hole runs the wiki investigate transcript (rope -> tie, no rope
+ * -> "I'll need to tie something onto the edge").
+ *
  * Gaps / approximations:
  *   - npc-spawns.json spawns Spria and Rosie with ids 10440/10441, which are
  *     name-null in this cache (no Talk-to). The plugin removes those two and
  *     spawns the real Spria 10432 / Rosie 10438 once; the canonical fix is an
  *     npc-spawns.json edit.
- *   - All cutscene lines share one chathead (startTranscript flattens speakers),
- *     so the Pig Thing's lines render with Spria's head; the Pig Thing is not
- *     spawned, its narration is shown as game messages.
+ *   - The Pig Thing is not spawned; its cutscene narration is shown as game
+ *     messages with each speaker keeping their own chathead.
  *   - The 30 Slayer reward points are written to the Slayer plugin's
  *     "slayer:points" attribute (no cross-plugin event exists); a
  *     "slayer:grant-points" event would be the shared fix. Sourhog tasks are
@@ -66,7 +73,7 @@ module.exports = function registerPorcineOfInterestQuest(api) {
   /** Spawn-file id that is name-null in this cache; replaced by the real Spria. */
   const BROKEN_SPRIA_NPC_ID = 10440;
   const BROKEN_ROSIE_NPC_ID = 10441;
-  const QUEST_SOURHOG_NPC_ID = NpcIdentifiers.SOORHOG_2; // 10436 (wiki monster id)
+  const QUEST_SOURHOG_NPC_ID = NpcIdentifiers.SOURHOG_2; // 10436 (wiki monster id)
   const PIG_THING_NPC_ID = NpcIdentifiers.PIG_THING; // 10437, cutscene speaker
 
   const NOTICE_BOARD_OBJECT_ID = ObjectIdentifiers.NOTICE_BOARD_6; // 40307 (in the map)
@@ -135,6 +142,7 @@ module.exports = function registerPorcineOfInterestQuest(api) {
   const START_HOOK = "quest:a-porcine-of-interest:start";
 
   const BITS_ATTRIBUTE = "quest.a_porcine_of_interest.bits";
+  const ROPE_TIED_ATTRIBUTE = "quest.porcine.rope-tied";
   const BIT_FOOTCUT = 1;
   const BIT_INSPECTED_CART = 2;
   const BIT_NEED_ROPE = 4;
@@ -203,8 +211,6 @@ module.exports = function registerPorcineOfInterestQuest(api) {
 
   let quest;
   let questObjectsInstalled = false;
-  let holeTied = false;
-  let holeObject = null;
   let brokenSpawnsFixed = false;
   let itemOnGroundManager = null;
 
@@ -328,26 +334,25 @@ module.exports = function registerPorcineOfInterestQuest(api) {
     for (const tile of BROKEN_TREE_TILES) registerObject(BROKEN_TREE_OBJECT_ID, tile.x, tile.y);
     registerObject(PILE_OF_ROPE_OBJECT_ID, PILE_OF_ROPE_TILE.x, PILE_OF_ROPE_TILE.y);
     registerObject(SKELETON_OBJECT_ID, SKELETON_TILE.x, SKELETON_TILE.y);
-    holeObject = holeTied
-      ? registerObject(STRANGE_HOLE_ROPE_OBJECT_ID, STRANGE_HOLE_TILE.x, STRANGE_HOLE_TILE.y)
-      : registerObject(STRANGE_HOLE_OBJECT_ID, STRANGE_HOLE_TILE.x, STRANGE_HOLE_TILE.y);
+    // Per-player locs need a PrivateArea, and the open world has none (Doors only
+    // passes one in instances). The hole is registered once in its tied
+    // "Climb-down" form and never swapped; the per-player rope-tied attribute
+    // decides who may tie/enter.
+    registerObject(STRANGE_HOLE_ROPE_OBJECT_ID, STRANGE_HOLE_TILE.x, STRANGE_HOLE_TILE.y);
   }
 
-  /** Tying the rope consumes it and swaps the hole to its Climb-down form. */
+  /** Tied state is per player (OSRS keeps it in a varbit loc; the open world cannot). */
+  function isRopeTied(player) {
+    return quest.getStage(player) >= STAGE_STARTED
+      && player.getAttribute(ROPE_TIED_ATTRIBUTE) === true;
+  }
+
+  /** Tying the rope consumes it and marks this player's hole tied; no world swap. */
   function tieRope(player) {
+    if (isRopeTied(player)) return;
     advanceStage(player, STAGE_FOUND_CAVE);
-    if (holeTied) return;
-    holeTied = true;
     if (held(player, ROPE_ITEM_ID)) player.getInventory().deleteNumber(ROPE_ITEM_ID, 1);
-    if (holeObject) {
-      ObjectManager.deregister(holeObject, true);
-      holeObject = null;
-    }
-    holeObject = registerObject(
-      STRANGE_HOLE_ROPE_OBJECT_ID,
-      STRANGE_HOLE_TILE.x,
-      STRANGE_HOLE_TILE.y
-    );
+    player.setAttribute(ROPE_TIED_ATTRIBUTE, true);
   }
 
   /** The broken spawn-file ids (10440/10441) are name-null; put the real NPCs in. */
@@ -568,9 +573,27 @@ module.exports = function registerPorcineOfInterestQuest(api) {
     return null;
   }
 
+  /**
+   * ::quest reset only clears the stage, so a fresh start (stage 0 -> 1) must drop
+   * everything a previous run left behind: side bits, the tied rope and the boss.
+   */
+  function resetQuestProgress(player) {
+    player.setAttribute(BITS_ATTRIBUTE, 0);
+    for (const varbit of VARBIT_BY_BIT.values()) player.getPacketSender().sendVarbit(varbit, 0);
+    player.setAttribute(ROPE_TIED_ATTRIBUTE, null);
+    removeSourhog(player);
+    const corpse = corpseByPlayer.get(player);
+    if (corpse) {
+      ObjectManager.deregister(corpse, true);
+      corpseByPlayer.delete(player);
+    }
+  }
+
   function handleStartHook({ player, hook, quest: questName }) {
     if (hook !== START_HOOK || questName !== "A Porcine of Interest") return;
-    if (quest.getStage(player) === 0) quest.setStage(player, STAGE_STARTED);
+    if (quest.getStage(player) !== 0) return;
+    resetQuestProgress(player);
+    quest.setStage(player, STAGE_STARTED);
   }
 
   function handleChoice({ player, npcId, option }) {
@@ -654,7 +677,6 @@ module.exports = function registerPorcineOfInterestQuest(api) {
 
   function climbBlockage(player, destination) {
     player.moveTo(destination);
-    setBit(player, BIT_STOP_WARNING);
     ensureSourhog(player);
   }
 
@@ -750,6 +772,10 @@ module.exports = function registerPorcineOfInterestQuest(api) {
     startTranscript(api, player, SARAH_NPC_ID, PAGE, variant);
   }
 
+  function startHoleTranscript(player) {
+    startTranscript(api, player, SARAH_NPC_ID, PAGE, "investigating-the-crossroads-strange-hole");
+  }
+
   function climbDownHole(player) {
     const stage = quest.getStage(player);
     if (stage === STAGE_ATTACKED) {
@@ -784,6 +810,9 @@ module.exports = function registerPorcineOfInterestQuest(api) {
       0
     );
     if (quest.getStage(player) === STAGE_HAS_GOGGLES && !hasBit(player, BIT_STOP_WARNING)) {
+      // Warned (once, goggles on): 10587 marks the warning as shown. The
+      // pre-goggles crossing below never sets it.
+      setBit(player, BIT_STOP_WARNING);
       blockageDestination.set(player, destination);
       startTranscript(api, player, SPRIA_DIALOGUE_NPC_ID, PAGE, "the-sourhog-climbing-the-blockage");
       return;
@@ -841,13 +870,22 @@ module.exports = function registerPorcineOfInterestQuest(api) {
         investigateTrail(player, "investigating-the-crossroads-broken-dead-tree");
         return;
       case STRANGE_HOLE_OBJECT_ID:
+        // Registered as 40309, so this only fires if the untied loc is ever present.
         event.handled = true;
         if (quest.getStage(player) < STAGE_STARTED || quest.isComplete(player)) return;
-        startTranscript(api, player, SARAH_NPC_ID, PAGE, "investigating-the-crossroads-strange-hole");
+        if (clickType === 2 && isRopeTied(player)) {
+          climbDownHole(player);
+          return;
+        }
+        startHoleTranscript(player);
         return;
       case STRANGE_HOLE_ROPE_OBJECT_ID:
         event.handled = true;
         if (quest.getStage(player) < STAGE_STARTED) return;
+        if (!isRopeTied(player) && !quest.isComplete(player)) {
+          startHoleTranscript(player);
+          return;
+        }
         climbDownHole(player);
         return;
       case PILE_OF_ROPE_OBJECT_ID:
@@ -877,13 +915,17 @@ module.exports = function registerPorcineOfInterestQuest(api) {
     }
   }
 
-  /** Rope on the strange hole, or any item on the dead sourhog. */
+  /** Rope on either hole form, or any item on the dead sourhog. */
   function handleItemOnObject(event) {
     const { player, itemId, objectId } = event;
-    if (objectId === STRANGE_HOLE_OBJECT_ID && itemId === ROPE_ITEM_ID) {
+    if (
+      (objectId === STRANGE_HOLE_OBJECT_ID || objectId === STRANGE_HOLE_ROPE_OBJECT_ID)
+      && itemId === ROPE_ITEM_ID
+    ) {
       event.handled = true;
       if (quest.getStage(player) < STAGE_STARTED || quest.isComplete(player)) return;
-      startTranscript(api, player, SARAH_NPC_ID, PAGE, "investigating-the-crossroads-strange-hole");
+      if (isRopeTied(player)) return;
+      startHoleTranscript(player);
       return;
     }
     if (objectId !== DEAD_SOURHOG_OBJECT_ID) return;
@@ -994,6 +1036,7 @@ module.exports = function registerPorcineOfInterestQuest(api) {
 
   itemOnGroundManager = api.getItemOnGroundManager();
   api.persistAttribute(BITS_ATTRIBUTE);
+  api.persistAttribute(ROPE_TIED_ATTRIBUTE);
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);

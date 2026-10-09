@@ -186,6 +186,7 @@ module.exports = function registerLostTribeQuest(api) {
   const DUKE_BOB_LINE = "Bob says he saw something in the cellar. Like a goblin with big eyes.";
   const DUKE_RELDO_LINE = "librarian in Varrock";
   const RELDO_BOOK_LINE = "book about ancient goblin tribes";
+  const DUKE_SILVERWARE_LINE = "Unless it is returned";
 
   let quest;
 
@@ -547,6 +548,10 @@ module.exports = function registerLostTribeQuest(api) {
       quest.setStage(player, STAGE_DIG);
       return;
     }
+    if (npcId === DUKE_HORACIO_ID && stage === STAGE_MISTAG && getContact(player) < 2 && text.includes(DUKE_SILVERWARE_LINE)) {
+      setContact(player, 2);
+      return;
+    }
     if (npcId === DUKE_HORACIO_ID && stage === STAGE_SHOW_BROOCH && text.includes(DUKE_RELDO_LINE)) {
       quest.setStage(player, STAGE_FIND_RELDO);
       return;
@@ -596,14 +601,16 @@ module.exports = function registerLostTribeQuest(api) {
     }
     if (stepId === SILVERWARE_FOUND_ACTION_ID) {
       if (getHam(player) < 2) {
-        giveItem(player, ItemIdentifiers.SILVERWARE);
+        if (!held(player, ItemIdentifiers.SILVERWARE) && !giveItem(player, ItemIdentifiers.SILVERWARE)) return;
         setHam(player, 2);
       }
       return;
     }
     if (stepId === TREATY_SIGNED_ACTION_ID) {
-      if (!held(player, ItemIdentifiers.PEACE_TREATY)) giveItem(player, ItemIdentifiers.PEACE_TREATY);
-      if (quest.getStage(player) === STAGE_MISTAG) quest.setStage(player, STAGE_TREATY);
+      if (quest.getStage(player) === STAGE_MISTAG) {
+        if (!held(player, ItemIdentifiers.PEACE_TREATY) && !giveItem(player, ItemIdentifiers.PEACE_TREATY)) return;
+        quest.setStage(player, STAGE_TREATY);
+      }
       return;
     }
     if (stepId === KAZGAR_ESCORT_ACTION_ID) {

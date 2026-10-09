@@ -34,7 +34,10 @@
  *  - The cache map's dungeon pockets are not all walkable-connected, so every
  *    door interaction moves the player across the doorway instead of swinging
  *    the leaves; the ancestral door needs the key, both robes equipped and
- *    (before completion) the ballad, and afterwards leads to the lake.
+ *    (before completion) the ballad, and afterwards leads to the lake. The
+ *    black golem door has no reachable adjacent tile at all, so quest-door
+ *    clicks are routed to the player's own tile (handleObjectRoute) and the
+ *    genie's crevice door crosses from the recorded click side.
  *  - The golems have no OSRS stab/slash/crush weakness in this server's
  *    monster data, so any weapon kills them.
  *  - The mining channel needs a usable pickaxe and 37 Mining, the thieving
@@ -203,6 +206,9 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
   const BLACK_GOLEM_ROOM = {
     golemNpcId: BLACK_GOLEM_NPC_ID,
     doorId: ObjectIdentifiers.DOOR_245, // 10419
+    // The door at (3372,9556) has no reachable neighbour on the cache collision
+    // map, so the click is routed from here (3363,9556, verified reachable) and
+    // never walks; see handleObjectRoute.
     approach: new Location(3363, 9556, 0),
     inside: new Location(3375, 9555, 0),
     spawn: new Location(3362, 9556, 0),
@@ -241,6 +247,10 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
   let shrineObject = null;
   let dungeonExitPlaced = false;
   const trackedGolems = new Map(); // "<username>:<doorId>" -> npc
+  /** Where each player clicked a quest door, captured before the walk: the black
+   * golem door and the crevice door have no walkable contact tile, and door:toggle
+   * fires after the walk (which can leave the player on the door tile itself). */
+  const doorClickSource = new WeakMap();
   const itemOnGroundManager = api.getItemOnGroundManager();
 
   // ==========================================================================
@@ -564,11 +574,14 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
       return;
     }
     if (stepId === "CqbO1I" || stepId === "UDr1XL") {
-      // "You trade the sole for the statuette."
+      // "You trade the sole for the statuette." Idempotent: only the stage 6
+      // hand-in trades, so a repeated message event cannot eat a second sole.
       event.handled = true;
-      if (held(player, SOLE_ITEM_ID)) player.getInventory().deleteNumber(SOLE_ITEM_ID, 1);
-      if (!held(player, STATUETTE_ITEM_ID)) player.getInventory().adds(STATUETTE_ITEM_ID, 1);
-      if (quest.getStage(player) === STAGE_MAYOR) quest.setStage(player, STAGE_STATUETTE);
+      if (quest.getStage(player) === STAGE_MAYOR) {
+        if (held(player, SOLE_ITEM_ID)) player.getInventory().deleteNumber(SOLE_ITEM_ID, 1);
+        if (!held(player, STATUETTE_ITEM_ID)) player.getInventory().adds(STATUETTE_ITEM_ID, 1);
+        quest.setStage(player, STAGE_STATUETTE);
+      }
       if (text) player.sendMessage(text);
       return;
     }
@@ -765,6 +778,32 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
   // Doors (the shared Doors plugin exposes door:toggle first)
   // ==========================================================================
 
+  function isQuestDoor(objectId) {
+    return KEY_DOOR_IDS.has(objectId) || GOLEM_DOOR_IDS.has(objectId) || objectId === CREVICE_DOOR_ID;
+  }
+
+  /**
+   * None of the black golem door's four neighbours is reachable on the cache
+   * collision map ((3371,9556) and (3373,9556) are standable but walled off,
+   * the two axis tiles are blocked), so walk-to-object never fires the click.
+   * Route every quest-door click to the tile the player is already on, as
+   * CurrentAffairs does for its aquariums, and remember that click position
+   * for door:toggle (which runs after the walk).
+   */
+  function handleObjectRoute(event) {
+    const { player, objectId, sourceLocation } = event;
+    if (!isQuestDoor(objectId)) return;
+    if (sourceLocation) {
+      doorClickSource.set(player, {
+        x: sourceLocation.x,
+        y: sourceLocation.y,
+        z: sourceLocation.z,
+        objectId,
+      });
+      event.destination = { x: sourceLocation.x, y: sourceLocation.y, z: sourceLocation.z };
+    }
+  }
+
   function handleDoorToggle(event) {
     const { player, objectId } = event;
     if (KEY_DOOR_IDS.has(objectId)) {
@@ -779,8 +818,13 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
     }
     if (objectId === CREVICE_DOOR_ID) {
       event.handled = true;
-      const location = player.getLocation();
-      player.moveTo(location.getY() < 9312 ? CREVICE_DOOR_NORTH_TILE : CREVICE_DOOR_SOUTH_TILE);
+      // The genie's door sits in a one-tile wall gap: crossing depends on the
+      // side the player clicked from, and the walk can leave them on the door
+      // tile (y=9312), so use the click-time tile, not the post-walk one.
+      const source = doorClickSource.get(player);
+      doorClickSource.delete(player);
+      const clickY = source?.objectId === objectId ? source.y : player.getLocation().getY();
+      player.moveTo(clickY > 9312 ? CREVICE_DOOR_SOUTH_TILE : CREVICE_DOOR_NORTH_TILE);
     }
   }
 
@@ -1076,6 +1120,7 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onGroundItemPickup(handleGroundItemPickup);
+  api.onObjectRoute(handleObjectRoute);
   api.onObjectInteraction(handleObjectInteraction);
   api.onObjectInteraction("Cupboard", {
     Open: openCupboard,

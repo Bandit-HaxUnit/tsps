@@ -467,6 +467,8 @@ module.exports = function registerCurrentAffairsQuest(api) {
     // A stage-jumped player (no stored answers) is passed rather than looped.
     const wrong = expected ? asked.filter((index) => audit.answers[index] !== expected[index]) : [];
     if (wrong.length === 0) {
+      // The form answers are only needed for the audit; the quiz is done with them.
+      player.setAttribute(FORM_ANSWERS_ATTRIBUTE, "");
       if (quest.getStage(player) < STAGE_FORM2_GIVEN) quest.setStage(player, STAGE_FORM2_GIVEN);
       playTranscriptSteps(player, auditData().passed);
       return;
@@ -518,33 +520,39 @@ module.exports = function registerCurrentAffairsQuest(api) {
 
     // Form cr-4p given (first Catherine talk, or after destroying the form).
     if (stepId === FORM_GIVEN_ACTION_ID) {
-      if (!held(player, FORM_CR_4P_ITEM_ID)) {
-        player.getInventory().adds(FORM_CR_4P_ITEM_ID, 1);
-        player.setAttribute(FORM_ANSWERS_ATTRIBUTE, "");
+      if (held(player, FORM_CR_4P_ITEM_ID)) return;
+      player.getInventory().adds(FORM_CR_4P_ITEM_ID, 1);
+      player.setAttribute(FORM_ANSWERS_ATTRIBUTE, "");
+      const stage = quest.getStage(player);
+      if (stage === STAGE_STARTED || stage === STAGE_FORM_FILLED) {
+        quest.setStage(player, STAGE_FORM_GIVEN);
       }
-      if (quest.getStage(player) < STAGE_FORM_GIVEN) quest.setStage(player, STAGE_FORM_GIVEN);
       return;
     }
     // "Mercifully, it looks like the form is finished." - save the answers.
     if (stepId === FORM_FINISHED_ACTION_ID) {
       const state = fillStates.get(player);
       fillStates.delete(player);
-      if (!state) return;
+      if (!state || !held(player, FORM_CR_4P_ITEM_ID)) return;
+      if (quest.getStage(player) >= STAGE_FORM_HANDED_IN) return;
       const complete = state.answers.filter((value) => Number.isInteger(value)).length;
       if (complete < QUESTION_COUNT) return;
       player.setAttribute(FORM_ANSWERS_ATTRIBUTE, state.answers.join(""));
       if (quest.getStage(player) < STAGE_FORM_FILLED) quest.setStage(player, STAGE_FORM_FILLED);
       return;
     }
-    // "Councillor Catherine takes the completed form."
+    // "Councillor Catherine takes the completed form." The answers stay in the
+    // persisted attribute: Catherine's audit still has to compare against them.
     if (stepId === FORM_TAKEN_ACTION_ID) {
+      if (!held(player, FORM_CR_4P_ITEM_ID)) return;
       player.getInventory().deleteNumber(FORM_CR_4P_ITEM_ID, 1);
-      player.setAttribute(FORM_ANSWERS_ATTRIBUTE, "");
       if (quest.getStage(player) < STAGE_FORM_HANDED_IN) quest.setStage(player, STAGE_FORM_HANDED_IN);
       return;
     }
     // "You buy a mayoral election kit from Harry for 50 coins."
     if (stepId === BUY_KIT_ACTION_ID) {
+      if (player.getAttribute(KIT_BOUGHT_ATTRIBUTE) === true) return;
+      if (held(player, MAYORAL_FISHBOWL_ITEM_ID) || !held(player, COINS_ITEM_ID, KIT_PRICE)) return;
       player.getInventory().deleteNumber(COINS_ITEM_ID, KIT_PRICE);
       player.getInventory().adds(MAYORAL_FISHBOWL_ITEM_ID, 1);
       player.getInventory().adds(TINY_NET_ITEM_ID, 1);
@@ -579,6 +587,7 @@ module.exports = function registerCurrentAffairsQuest(api) {
     }
     // "Councillor Catherine takes the completed form and stamps it."
     if (stepId === SIGNED_TAKEN_ACTION_ID) {
+      if (!held(player, FORM_7R4_5H_SIGNED_ITEM_ID)) return;
       player.getInventory().deleteNumber(FORM_7R4_5H_SIGNED_ITEM_ID, 1);
       if (quest.getStage(player) < STAGE_SIGNED_HANDED_IN) quest.setStage(player, STAGE_SIGNED_HANDED_IN);
       return;
@@ -591,6 +600,7 @@ module.exports = function registerCurrentAffairsQuest(api) {
     }
     // "Arhein gives you a new mayor."
     if (stepId === NEW_MAYOR_ACTION_ID) {
+      if (held(player, MAYOR_ITEM_ID)) return;
       player.getInventory().adds(MAYOR_ITEM_ID, 1);
       player.setAttribute(MAYORS_ASKED_ATTRIBUTE, mayorsAsked(player) + 1);
       return;
@@ -711,6 +721,29 @@ module.exports = function registerCurrentAffairsQuest(api) {
       return;
     }
     if (event.objectId === AQUARIUM_OBJECT_ID && event.clickType === 1) catchMayor(event);
+  }
+
+  /**
+   * The aquariums are tanks in the floor; a Fish-in click sometimes failed the
+   * walk-to-object reach check from a tile that item-on-object accepts
+   * ("You can't reach that!"). From beside a tank, route the click to the
+   * player's own tile so the handler runs, as Underground Pass' guide rope does.
+   */
+  function routeAquariumClick(event) {
+    if (event.objectId !== AQUARIUM_OBJECT_ID || event.clickType !== 1) return;
+    const playerLocation = event.player.getLocation();
+    const objectLocation = event.object?.getLocation?.();
+    if (!objectLocation) return;
+    const distance = Math.max(
+      Math.abs(playerLocation.getX() - objectLocation.getX()),
+      Math.abs(playerLocation.getY() - objectLocation.getY())
+    );
+    if (distance > 2) return;
+    event.destination = {
+      x: playerLocation.getX(),
+      y: playerLocation.getY(),
+      z: playerLocation.getZ(),
+    };
   }
 
   function handleTinyNetOnAquarium(event) {
@@ -953,6 +986,7 @@ module.exports = function registerCurrentAffairsQuest(api) {
   api.onItemOnItem("Fish food", "Mayor of Catherby", handleSignForm);
   api.onItemOnObject("Tiny net", "Aquarium", handleTinyNetOnAquarium, { noted: false });
   api.onObjectInteraction(handleObjectInteraction);
+  api.onObjectRoute(routeAquariumClick);
   api.onNpcInteraction("Councillor Catherine", { "Talk-to": catherineTalkTo });
   api.onNpcInteraction("Current duck", { Collect: collectDuck });
   api.onPlayerLogin(handleLogin);

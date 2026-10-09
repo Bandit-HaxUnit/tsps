@@ -223,7 +223,11 @@ module.exports = function registerEyesOfGlouphrieQuest(api) {
   }
 
   function normalise(text) {
-    return String(text ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    return String(text ?? "")
+      .toLowerCase()
+      .replace(/['\u2019]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
   }
 
   function grandTreeComplete(player) {
