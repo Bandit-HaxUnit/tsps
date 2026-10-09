@@ -179,9 +179,9 @@ module.exports = function registerShadowsOfCustodiaQuest(api) {
   const INJURED_BOY_TILE = { x: 1298, y: 9757, z: 0 };
   const ANTOS_TILE = { x: 1337, y: 9753, z: 0 };
   const CREATURE_TILES = [
-    { x: 1331, y: 9751 },
     { x: 1334, y: 9755 },
-    { x: 1341, y: 9752 },
+    { x: 1336, y: 9752 },
+    { x: 1335, y: 9756 },
   ];
   const AUBURNVALE_LANDING = { x: 1381, y: 3363, z: 0 };
   const LADDER_LANDING = { x: 1380, y: 3357, z: 0 };

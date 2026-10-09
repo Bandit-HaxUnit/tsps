@@ -443,6 +443,16 @@ module.exports = function registerTwilightPromiseQuest(api) {
     if (!player || player.isPlayerBot?.() === true) return;
     const stage = quest.getStage(player);
 
+    // The twins hand out the job from the palace at (1688/1686, 3139/3141);
+    // the world shells there carry no Talk-to, so spawn owner-only copies.
+    const palaceTwins = stage < STAGE_TWINS;
+    syncTracked(player, "ennius-palace", palaceTwins
+      ? { id: NpcIdentifiers.ENNIUS_TULLUS_3, x: 1688, y: 3139, z: 0, wanderRadius: 0 }
+      : null);
+    syncTracked(player, "furia-palace", palaceTwins
+      ? { id: NpcIdentifiers.FURIA_TULLUS_3, x: 1686, y: 3141, z: 0, wanderRadius: 0 }
+      : null);
+
     // The twins move inside the palace from stage 12 until the Teomat trip.
     const innerTwins = stage >= STAGE_TWINS && stage < STAGE_TRAVEL;
     syncTracked(player, "ennius-inner", innerTwins
