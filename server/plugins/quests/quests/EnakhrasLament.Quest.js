@@ -797,7 +797,8 @@ module.exports = function registerEnakhrasLamentQuest(api) {
     if (stepId === "61YBoM") return takeLimb(player, LEFT_LEG, BIT_LEFT_LEG);
     if (stepId === "osLsmW") return takeLimb(player, RIGHT_LEG, BIT_RIGHT_LEG);
 
-    if (option === "Of course!") {
+    if (option === "Of course!" || option === "Okay, I'll get on with it.") {
+      clearBit(player, BIT_DECLINED);
       if (quest.getStage(player) === STAGE_NOT_STARTED) quest.setStage(player, STAGE_STARTED);
       return;
     }

@@ -242,7 +242,7 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
   // ==========================================================================
 
   const V_START = "organised-zombies-talking-to-elias-white";
-  const V_STARTED = "organised-zombies-talking-to-elias-white-after-starting-the-quest";
+  const V_STARTED_AGAIN = "organised-zombies-talking-to-elias-white-after-starting-the-quest-talking-to-elias-again";
   const V_FOLLOWING = "organised-zombies-talking-to-elias-white-while-he-is-following-the-player";
   const V_FOLLOWING_KEY = "organised-zombies-talking-to-elias-white-while-he-is-following-the-player-after-finding-the-key";
   const V_TRAPDOOR = "organised-zombies-opening-the-trapdoor";
@@ -688,7 +688,7 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
       return V_FINISH;
     }
     if (stage < STAGE_STARTED) return V_START;
-    if (stage < STAGE_FOLLOWING) return V_STARTED;
+    if (stage < STAGE_FOLLOWING) return V_STARTED_AGAIN;
     if (stage < STAGE_ENTERED_BASE) {
       return keyHolder(player) === "" ? V_FOLLOWING : V_FOLLOWING_KEY;
     }
@@ -949,6 +949,12 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
     if (context.variant === V_TRAPDOOR) {
       dialogueContext.delete(player);
       if (String(option).startsWith("Let's do it")) descendToBase(player);
+      return;
+    }
+    // The stage-2 re-talk has no action step of its own; its "Let's get going."
+    // choice is the same as accepting the quest's initial follow action.
+    if (context.variant === V_STARTED_AGAIN && String(option).startsWith("Let's get going")) {
+      handleDialogueAction({ player, stepId: ACTION_FOLLOW });
       return;
     }
     // Ramarno's shield branch has no action step; accept it when chosen.

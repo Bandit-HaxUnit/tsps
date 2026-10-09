@@ -25,8 +25,8 @@
  *     (10638-10649, 10701-10703 are nameless). The plugin spawns the real ids at the
  *     spawn-file coordinates: Willow 10655, Checkal 10657, Marley 10656 and Burntof
  *     10659; Atlas 10658, Cook 2895 and Charlie 5209 already spawn. Ramarno uses the
- *     world spawn 10702 at the big doors (the plugin also accepts 10684 and no longer
- *     spawns a duplicate).
+ *     world spawn 10702 at the big doors (its clicks resolve to 10685; the plugin
+ *     accepts 10684/10685/10702 and no longer spawns a duplicate).
  *   - The map has no "Ruins Entrance"/"Blocked entry" placement, so "Ruins Entrance"
  *     (41439, op Enter) is registered at (2997,3492). Before all three recruits the
  *     Enter option answers the wiki examine line "The way is blocked.".
@@ -66,9 +66,11 @@ module.exports = function registerBelowIceMountainQuest(api) {
   const ATLAS_NPC_ID = NpcIdentifiers.ATLAS; // 10658
   const BURNTOF_NPC_ID = NpcIdentifiers.BURNTOF; // 10659
   const BURNTOF_2_NPC_ID = NpcIdentifiers.BURNTOF_2; // 10660
-  const RAMARNO_NPC_ID = NpcIdentifiers.RAMARNO_2; // 10684, Talk-to
+  const RAMARNO_NPC_ID = NpcIdentifiers.RAMARNO_2; // 10684, named Ramarno chathead
+  const RAMARNO_RESOLVED_NPC_ID = NpcIdentifiers.RAMARNO_3; // 10685, the world spawn's resolved click id
   const RAMARNO_WORLD_NPC_ID = 10702; // world spawn in npc-spawns.json at (2951,5779)
-  const RAMARNO_NPC_IDS = new Set([RAMARNO_NPC_ID, RAMARNO_WORLD_NPC_ID]);
+  const RAMARNO_WORLD_NPC_IDS = new Set([RAMARNO_WORLD_NPC_ID, RAMARNO_RESOLVED_NPC_ID]);
+  const RAMARNO_NPC_IDS = new Set([RAMARNO_NPC_ID, ...RAMARNO_WORLD_NPC_IDS]);
   const ANCIENT_GUARDIAN_NPC_ID = NpcIdentifiers.ANCIENT_GUARDIAN; // 10654
   const COOK_NPC_ID = NpcIdentifiers.COOK_2; // 2895, Cook (Blue Moon Inn)
   const CHARLIE_NPC_ID = NpcIdentifiers.CHARLIE_THE_TRAMP; // 5209
@@ -447,17 +449,18 @@ module.exports = function registerBelowIceMountainQuest(api) {
   }
 
   /**
-   * The world spawn 10702 is not in the dialogue id index, so NpcDialogues never
-   * asks the variant selector for it; route its Talk-to through the same selector
-   * and transcript as 10684. Before completion and after meeting him (null) the
-   * generic "Ramarno" page plays, exactly as it does for 10684.
+   * The world spawn 10702 resolves its clicks to 10685, so route both through the
+   * quest variant selector before NpcDialogues takes them, and play through the
+   * named 10684 chathead (10702 has no name for its speaker head). Before
+   * completion and after meeting him (null) the generic "Ramarno" page plays,
+   * exactly as it does for 10684.
    */
   function handleRamarnoTalk(event) {
-    if (event.npcId !== RAMARNO_WORLD_NPC_ID || event.clickType !== 1) return;
+    if (!RAMARNO_WORLD_NPC_IDS.has(event.npcId) || event.clickType !== 1) return;
     const variant = selectRamarnoVariant(event.player);
     if (!variant) return;
     event.handled = true;
-    startTranscript(api, event.player, RAMARNO_WORLD_NPC_ID, PAGE, variant);
+    startTranscript(api, event.player, RAMARNO_NPC_ID, PAGE, variant);
   }
 
   // ==========================================================================
@@ -544,11 +547,15 @@ module.exports = function registerBelowIceMountainQuest(api) {
 
   function fillRpsSigns(player, text) {
     const pick = rpsPicks.get(player) ?? "Rock";
+    // Burntof is too drunk to play properly, so the hand he actually shows is the
+    // sign the player's pick beats; both "Burntof's" blanks resolve from that sign.
+    const burntofs = LOSES[pick];
     return String(text)
       .replace(/\[winning sign\]/g, BEATS[pick])
       .replace(/\[losing sign\]/g, LOSES[pick])
       .replace(/\[chosen sign\]/g, pick)
-      .replace(/\[sign that beats Burntof's\]/g, LOSES[pick]);
+      .replace(/\[sign that gets beaten by Burntof's\]/g, LOSES[burntofs])
+      .replace(/\[sign that beats Burntof's\]/g, BEATS[burntofs]);
   }
 
   /** Fires for every quest step, scoped by the step ids on this quest's page. */
@@ -808,7 +815,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
       return;
     }
     event.handled = true;
-    startTranscript(api, event.player, RAMARNO_WORLD_NPC_ID, PAGE, "finishing-up");
+    startTranscript(api, event.player, RAMARNO_NPC_ID, PAGE, "finishing-up");
   }
 
   function handlePillarMine(event) {

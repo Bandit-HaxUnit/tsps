@@ -841,8 +841,8 @@ module.exports = function registerRoyalTroubleQuest(api) {
       return;
     }
     const name = player.getUsername?.() ?? "";
-    let line = event.text.split("[Fremennik name]").join(name);
-    line = line.split("[dear/[Fremennik name]]").join(married(player) ? "dear" : name);
+    let line = event.text.split("[dear/[Fremennik name]]").join(married(player) ? "dear" : name);
+    line = line.split("[Fremennik name]").join(name);
     line = line.split("[dear/dear friend]").join(married(player) ? "dear" : "dear friend");
     line = line.split("Dalkar").join(name);
     event.text = line;
@@ -899,7 +899,15 @@ module.exports = function registerRoyalTroubleQuest(api) {
       event.handled = true;
       if (!hasAttribute(player, COINS_ATTRIBUTE)) {
         setAttributeFlag(player, COINS_ATTRIBUTE, true);
-        giveItem(player, COINS_ITEM_ID, 20000);
+        if (held(player, COINS_ITEM_ID) || player.getInventory().getFreeSlots() > 0) {
+          giveItem(player, COINS_ITEM_ID, 20000);
+        } else {
+          api.getItemOnGroundManager().registerLocation(
+            player,
+            new Item(COINS_ITEM_ID, 20000),
+            player.getLocation()
+          );
+        }
       }
       return;
     }
@@ -934,10 +942,6 @@ module.exports = function registerRoyalTroubleQuest(api) {
     if (!player || !Number.isInteger(clickType)) return;
     const option = event.definition?.getActions?.()[clickType - 1];
     if (option !== "Talk-to") return;
-    if (npcId === HOLE_GUARD_NPC_ID) {
-      handleHoleGuardTalk(event);
-      return;
-    }
     if (!KID_NPC_IDS.has(npcId)) return;
     if (!questActive(player) || royalMisc(player) < MISC_DUNGEON) return;
     event.handled = true;
@@ -946,14 +950,14 @@ module.exports = function registerRoyalTroubleQuest(api) {
   }
 
   function handleHoleGuardTalk(event) {
-    const { player } = event;
-    if (!questActive(player) || royalMisc(player) < MISC_BOSS) return;
-    event.handled = true;
-    if (royalEtc(player) >= ETC_BOX) {
-      playVariant(player, HOLE_GUARD_NPC_ID, V_GUARD_BACK);
-      return;
-    }
-    playVariant(player, HOLE_GUARD_NPC_ID, V_GUARD_HOLE);
+    const { player, npcId } = event;
+    if (npcId !== HOLE_GUARD_NPC_ID) return false;
+    if (!questActive(player) || royalMisc(player) < MISC_BOSS) return false;
+    // npc 1100's index has no Royal Trouble page (only 1099's does), so the
+    // index cannot pick the variant; play it straight from the page instead.
+    const variant = royalEtc(player) >= ETC_BOX ? V_GUARD_BACK : V_GUARD_HOLE;
+    startTranscript(api, player, HOLE_GUARD_NPC_ID, PAGE, variant);
+    return true;
   }
 
   // ==========================================================================
@@ -1129,7 +1133,7 @@ module.exports = function registerRoyalTroubleQuest(api) {
 
   function climbCaveExit(player) {
     if (quest.getStage(player) === 0 || royalMisc(player) < MISC_BOSS) return;
-    playVariant(player, HOLE_GUARD_NPC_ID, V_GUARD_LAIR);
+    startTranscript(api, player, HOLE_GUARD_NPC_ID, PAGE, V_GUARD_LAIR);
     movePlayer(player, CAVE_EXIT_TILE);
   }
 
@@ -1559,6 +1563,7 @@ module.exports = function registerRoyalTroubleQuest(api) {
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onNpcInteraction("Guard", { "Talk-to": handleHoleGuardTalk });
   api.onNpcInteraction(handleNpcInteraction);
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemOnObject(handleItemOnObject);

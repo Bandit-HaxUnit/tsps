@@ -549,6 +549,25 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
   // NPCs
   // ==========================================================================
 
+  /**
+   * The post-quest "Yes, please." is a wiki {{tact|above}} jump, which a direct
+   * startTranscript cannot resolve; surface it as the action the handler runs.
+   */
+  function resolvePostQuestTransport(steps) {
+    return steps.map((step) => {
+      if (step.type !== "choice" || !step.options) return step;
+      return {
+        ...step,
+        options: step.options.map((option) => {
+          const transport = (option.steps ?? []).find((entry) => entry.id === "F6MVz8");
+          return transport
+            ? { ...option, steps: [{ type: "action", action: "teleport", id: transport.id, text: "The player is teleported back to Mos Le'Harmless." }] }
+            : option;
+        }),
+      };
+    });
+  }
+
   function talkToTranquility(player) {
     const stage = quest.getStage(player);
     let variant;
@@ -579,7 +598,7 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
     } else {
       variant = "starting-off";
     }
-    startTranscript(api, player, TRANQUILITY_CHAT_ID, PAGE, variant);
+    startTranscript(api, player, TRANQUILITY_CHAT_ID, PAGE, variant, stage >= STAGE_COMPLETE ? resolvePostQuestTransport : undefined);
   }
 
   function talkToRufus(player) {
@@ -1288,6 +1307,10 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
         teleport(player, HARMONY_TILE);
         return;
       case "tfWNLf":
+        event.handled = true;
+        teleport(player, MOS_TILE);
+        return;
+      case "F6MVz8":
         event.handled = true;
         teleport(player, MOS_TILE);
         return;
