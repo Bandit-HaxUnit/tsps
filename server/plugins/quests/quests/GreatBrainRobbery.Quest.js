@@ -52,6 +52,9 @@
  * - the cache maps the Harmony spawn 1955 (Dr Fenkenstrain) to a visible NPC only
  *   while varp 980 is 70-130, which this stage map does not use, so a visible
  *   Fenkenstrain (1269) is spawned per player at the mill basement from stage 15;
+ * - the cache spawns 1953/1954/1964 (Brother Tranquility at Mos Le'Harmless,
+ *   Harmony Island and the mill basement) resolve to null definitions at quest
+ *   stages, so a visible 550 is spawned per player beside each;
  * - the reward lamp is granted but its "Pray-over" XP choice is not implemented;
  * - the holy symbol (1718) stands in for the wiki's "blessed symbol of Saradomin".
  */
@@ -65,6 +68,7 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
     NpcIdentifiers,
     ObjectIdentifiers,
     ObjectManager,
+    RegionManager,
     Skill,
   } = api.core;
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
@@ -83,6 +87,7 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
   // identifier exists; confirmed against data/definitions/npc-spawns.json.
   const TRANQUILITY_MOS_NPC_ID = 1953; // Mos Le'Harmless dock
   const TRANQUILITY_HARMONY_NPC_ID = 1954; // Harmony Island windmill
+  const TRANQUILITY_BASEMENT_NPC_ID = 1964; // Harmony Island mill basement
   const FENKENSTRAIN_HARMONY_NPC_ID = 1955; // Harmony Island mill basement
 
   const TRANQUILITY_NPC_IDS = new Set([
@@ -91,6 +96,7 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
     NpcIdentifiers.BROTHER_TRANQUILITY_3,
     TRANQUILITY_MOS_NPC_ID,
     TRANQUILITY_HARMONY_NPC_ID,
+    TRANQUILITY_BASEMENT_NPC_ID,
   ]);
   const RUFUS_NPC_IDS = new Set([NpcIdentifiers.RUFUS, RUFUS_CHAT_ID]);
   const FENKENSTRAIN_NPC_IDS = new Set([FENKENSTRAIN_CHAT_ID, FENKENSTRAIN_HARMONY_NPC_ID]);
@@ -209,6 +215,13 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
   // The cache hides spawn 1955 (Harmony Dr Fenkenstrain) unless varp 980 is 70-130,
   // which our own stage map does not use, so a visible 1269 is spawned per player.
   const HARMONY_DOCTOR_TILE = new Location(3785, 9225, 0);
+  // Cache spawns 1953/1954/1964 ("null" definitions with no options at quest stages)
+  // are replaced by a visible 550 per player beside each, like the 1269 doctor.
+  const TRANQUILITY_TILES = {
+    tranquilityMos: new Location(3680, 2963, 0),
+    tranquilityHarmony: new Location(3786, 2824, 0),
+    tranquilityBasement: new Location(3787, 9224, 0),
+  };
   // brain_multi_monk (varbit 3407): turns the mill zombie monks into cured monks.
   const BRAIN_MULTI_MONK_VARBIT = 3407;
 
@@ -355,7 +368,8 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
   }
 
   function objectAction(event) {
-    const actions = event.definition?.getInteractions?.() ?? [];
+    const definition = event.definition ?? event.object?.getDefinition?.();
+    const actions = definition?.getInteractions?.() ?? [];
     return String(actions[event.clickType - 1] ?? "");
   }
 
@@ -473,6 +487,25 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
         x: HARMONY_DOCTOR_TILE.getX(),
         y: HARMONY_DOCTOR_TILE.getY(),
         z: HARMONY_DOCTOR_TILE.getZ(),
+        owner: player,
+        ownerOnly: true,
+        wanderRadius: 0,
+      });
+    }
+    npcsByPlayer.set(player, entry);
+  }
+
+  /** Visible 550 copies beside the null cache spawns 1953/1954/1964, per player. */
+  function ensureTranquility(player) {
+    if (!quest) return;
+    const entry = npcsByPlayer.get(player) ?? {};
+    for (const [key, tile] of Object.entries(TRANQUILITY_TILES)) {
+      if (entry[key]) continue;
+      entry[key] = api.spawnNpc({
+        id: TRANQUILITY_CHAT_ID,
+        x: tile.getX(),
+        y: tile.getY(),
+        z: tile.getZ(),
         owner: player,
         ownerOnly: true,
         wanderRadius: 0,
@@ -758,6 +791,21 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
     teleport(player, SECRET_ROOM_TILE);
   }
 
+  /**
+   * The cache names 22368/22369 "Stairs", so Ladders' named hook claims the click
+   * before the generic object hook. Claim the quest flow through ladders:climb
+   * (the request carries the object, not its definition).
+   */
+  function claimStairsClimb(request) {
+    if (request.objectId === BROKEN_STAIRS_OBJECT_ID) {
+      handleBrokenStairs(request, objectAction(request));
+      return;
+    }
+    if (request.objectId === FIXED_STAIRS_OBJECT_ID && objectAction(request) === "Climb") {
+      climbFixedStairs(request);
+    }
+  }
+
   function openLocker(event) {
     event.handled = true;
     swapObjectInstance(event, LOCKER_SEARCHED_OBJECT_ID);
@@ -778,6 +826,33 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
     startTranscript(api, player, FENKENSTRAIN_CHAT_ID, PAGE, "retrieving-the-items-for-dr-fenkenstrain-zombie-ship-taking-the-fuse");
   }
 
+  /**
+   * The locker sits in the ship's hull with only its own tile and the tile to the
+   * east walkable, so the generic approach lands on the object itself. Route the
+   * click to the nearest free adjacent tile instead.
+   */
+  function routeLocker(event) {
+    if (event.objectId !== LOCKER_OBJECT_ID && event.objectId !== LOCKER_SEARCHED_OBJECT_ID) return;
+    const tile = event.object?.getLocation?.();
+    if (!tile) return;
+    const position = event.player.getLocation();
+    const privateArea = event.player.getPrivateArea?.() ?? null;
+    let best = null;
+    for (const [x, y] of [
+      [tile.getX() + 1, tile.getY()],
+      [tile.getX() - 1, tile.getY()],
+      [tile.getX(), tile.getY() + 1],
+      [tile.getX(), tile.getY() - 1],
+    ]) {
+      const stand = new Location(x, y, tile.getZ());
+      if (RegionManager.blocked(stand, privateArea)) continue;
+      const distance = Math.max(Math.abs(x - position.getX()), Math.abs(y - position.getY()));
+      if (!best || distance < best.distance) best = { x, y, distance };
+    }
+    if (!best) return;
+    event.destination = { x: best.x, y: best.y, z: tile.getZ() };
+  }
+
   function searchBookcase(event) {
     if (!nearLocation(event.location, BOOKCASE_TILE, 2)) return;
     event.handled = true;
@@ -790,11 +865,30 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
     startTranscript(api, player, TRANQUILITY_CHAT_ID, PAGE, "finding-the-book-of-prayers");
   }
 
+  /**
+   * The "building-the-crate" variant lists V6O5Wk and CfTdWV as sibling conditions;
+   * NpcDialogues.flatten picks the first true one (V6O5Wk) and its branch does not
+   * continue, so the CfTdWV effect (consume 6 parts + 20 nails, swap the crate, set
+   * stage 10) never runs. Build the crate here and splice the finished branch in.
+   */
   function buildCrate(event) {
     event.handled = true;
     const player = event.player;
     if (quest.getStage(player) < STAGE_RUFUS || quest.isComplete(player)) return;
-    startTranscript(api, player, FENKENSTRAIN_CHAT_ID, PAGE, "building-the-crate");
+    const built = canBuildCrate(player);
+    if (built) {
+      player.getInventory().deleteNumber(CRATE_PART_ITEM_ID, CRATE_PART_COUNT);
+      deleteNails(player, CRATE_NAILS);
+      player.setAttribute(CATS_ATTRIBUTE, 0);
+      swapObjectAt(CRATE_TILE, new Set([CRATE_HOTSPOT_OBJECT_ID]), CRATE_BOTTOMLESS_OBJECT_ID);
+      if (quest.getStage(player) < STAGE_CRATE_BUILT) quest.setStage(player, STAGE_CRATE_BUILT);
+    }
+    startTranscript(api, player, FENKENSTRAIN_CHAT_ID, PAGE, "building-the-crate", (steps) => {
+      if (!built) return steps;
+      const started = steps.find((step) => step.id === "V6O5Wk");
+      const finished = steps.find((step) => step.id === "CfTdWV");
+      return [...(started?.steps ?? []), ...(finished?.steps ?? [])];
+    });
   }
 
   function buildFalseBottom(event) {
@@ -1134,16 +1228,6 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
     ["qNgtxQ", (player) => giveItem(player, WOLF_WHISTLE_ITEM_ID, 1)],
     ["tEPhpt", (player) => giveItem(player, CRATE_PART_ITEM_ID, CRATE_PART_COUNT)],
     [
-      "CfTdWV",
-      (player) => {
-        player.getInventory().deleteNumber(CRATE_PART_ITEM_ID, CRATE_PART_COUNT);
-        deleteNails(player, CRATE_NAILS);
-        player.setAttribute(CATS_ATTRIBUTE, 0);
-        swapObjectAt(CRATE_TILE, new Set([CRATE_HOTSPOT_OBJECT_ID]), CRATE_BOTTOMLESS_OBJECT_ID);
-        if (quest.getStage(player) < STAGE_CRATE_BUILT) quest.setStage(player, STAGE_CRATE_BUILT);
-      },
-    ],
-    [
       "VDkh8H",
       (player) => {
         player.getInventory().deleteNumber(PLANK_ITEM_ID, BOTTOM_PLANKS);
@@ -1340,12 +1424,14 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
     if (event?.key !== "great_brain_robbery" || !event.player) return;
     ensureHarmonyDoctor(event.player);
     ensureMiGor(event.player);
+    ensureTranquility(event.player);
   }
 
   function handleLogin({ player }) {
     ensureQuestObjects();
     ensureMiGor(player);
     ensureHarmonyDoctor(player);
+    ensureTranquility(player);
     if (quest.getStage(player) >= STAGE_OPERATION) {
       player.getPacketSender().sendVarbit(BRAIN_MULTI_MONK_VARBIT, 1);
     }
@@ -1355,6 +1441,7 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
   function handleZoneEnter(event) {
     ensureMiGor(event.player);
     ensureHarmonyDoctor(event.player);
+    ensureTranquility(event.player);
   }
 
   function handleLogout({ player }) {
@@ -1489,6 +1576,7 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
   api.onNpcInteraction(handleNpcInteraction);
   api.onNpcDeath(handleNpcDeath);
   api.onObjectInteraction(handleObjectInteraction);
+  api.onObjectRoute(routeLocker);
   api.onItemOnObject(handleItemOnObject);
   api.onItemOnItem(handleItemOnItem);
   api.onItemAction("Prayer book", { Read: readPrayerBook, "Recite-prayer": recitePrayerBook });
@@ -1499,6 +1587,7 @@ module.exports = function registerGreatBrainRobberyQuest(api) {
   api.onCustomEvent("npc-dialogue:condition", handleDialogueCondition);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onCustomEvent("door:toggle", handleDoorToggle);
+  api.onCustomEvent("ladders:climb", claimStairsClimb);
   api.onCustomEvent("quest:stage-changed", handleStageChanged);
   api.onZoneEnter(MONASTERY_ZONE, handleZoneEnter);
   api.onZoneEnter(HARMONY_BASEMENT_ZONE, handleZoneEnter);

@@ -66,6 +66,7 @@ module.exports = function registerCabinFeverQuest(api) {
     ObjectIdentifiers,
     Skill,
     TaskManager,
+    World,
   } = api.core;
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
 
@@ -79,14 +80,15 @@ module.exports = function registerCabinFeverQuest(api) {
 
   const BILL_PUB = NpcIdentifiers.BILL_TEACH; // 4011, The Green Ghost
   const BILL_PUB_2 = NpcIdentifiers.BILL_TEACH_2; // 4012, unplaced duplicate
-  const BILL_PORT_SHIP = 4013; // unnamed spawn on the Adventurous at Port Phasmatys (3713,3497 plane 1)
+  const BILL_PORT_SHIP_ROW = 4013; // Adventurous spawn row (3713,3497 plane 1); cache definition has no name/actions
   const BILL_SHIP = NpcIdentifiers.BILL_TEACH_3; // 4014, the battle ship
+  const BILL_PORT_SHIP = BILL_SHIP; // the port row is respawned as 4014 at startup, so Talk-to exists
   const BILL_MOS_INN = NpcIdentifiers.BILL_TEACH_4; // 4015, The Other Inn, Mos Le'Harmless
   const BILL_MOS_SHIP = NpcIdentifiers.BILL_TEACH_5; // 4016, Mos Le'Harmless ship
   const BILL_NPC_IDS = new Set([
     BILL_PUB,
     BILL_PUB_2,
-    BILL_PORT_SHIP,
+    BILL_PORT_SHIP_ROW,
     BILL_SHIP,
     BILL_MOS_INN,
     BILL_MOS_SHIP,
@@ -271,6 +273,25 @@ module.exports = function registerCabinFeverQuest(api) {
   function setVarbitValue(player, varbitId, value) {
     player.getPacketSender().sendVarbit(varbitId, value | 0);
     saveVarps(player);
+  }
+
+  /**
+   * Erases the persisted Cabin Fever state. Every gameplay varbit (1741-1765)
+   * lives inside varps 656/657/658, so zeroing those three configs resets the
+   * hull, cannon, plunder and fuse states the client renders.
+   */
+  function resetQuestState(player) {
+    const sender = player.getPacketSender();
+    sender.sendConfig(VARP_CANNON_VAR, 0);
+    sender.sendConfig(VARP_EXTRA_VAR, 0);
+    sender.sendConfig(VARP_STORAGE_VAR, 0);
+    player.setAttribute(FLAGS_ATTRIBUTE, 0);
+    player.setAttribute(VARP_CANNON_ATTRIBUTE, 0);
+    player.setAttribute(VARP_EXTRA_ATTRIBUTE, 0);
+    player.setAttribute(VARP_STORAGE_ATTRIBUTE, 0);
+    plunderOutcome.delete(player);
+    fireOutcome.delete(player);
+    lootedAt.delete(player);
   }
 
   function flags(player) {
@@ -1262,13 +1283,44 @@ module.exports = function registerCabinFeverQuest(api) {
   function restoreVarps({ player }) {
     if (!player) return;
     const sender = player.getPacketSender();
-    sender.sendConfig(VARP_CANNON_VAR, Number(player.getAttribute(VARP_CANNON_ATTRIBUTE)) || 0);
-    sender.sendConfig(VARP_EXTRA_VAR, Number(player.getAttribute(VARP_EXTRA_ATTRIBUTE)) || 0);
-    sender.sendConfig(VARP_STORAGE_VAR, Number(player.getAttribute(VARP_STORAGE_ATTRIBUTE)) || 0);
+    if (quest.getStage(player) === 0) {
+      // Stage 0 with persisted attributes (::quest reset before this handler
+      // existed, or a reset while offline) must not restore the old ship state.
+      resetQuestState(player);
+    } else {
+      sender.sendConfig(VARP_CANNON_VAR, Number(player.getAttribute(VARP_CANNON_ATTRIBUTE)) || 0);
+      sender.sendConfig(VARP_EXTRA_VAR, Number(player.getAttribute(VARP_EXTRA_ATTRIBUTE)) || 0);
+      sender.sendConfig(VARP_STORAGE_VAR, Number(player.getAttribute(VARP_STORAGE_ATTRIBUTE)) || 0);
+    }
     // Logging out respawns the plundered containers (wiki).
     sender.sendVarbit(VARBIT_CRATE, 0);
     sender.sendVarbit(VARBIT_CHEST, 0);
     sender.sendVarbit(VARBIT_BARREL, 0);
+  }
+
+  function handleStageChanged({ player, key, stage }) {
+    if (!player || key !== "cabin_fever" || (stage | 0) !== 0) return;
+    resetQuestState(player);
+  }
+
+  /**
+   * The Adventurous' Bill Teach spawn row (4013) points at a cache definition
+   * with no name or actions, so the client never offers Talk-to on it. Swap the
+   * spawned NPC for 4014 (a Bill that does have the option) once world spawns
+   * are loaded. A no-op once the row itself carries a working id.
+   */
+  function fixPortShipBill() {
+    const broken = World.getNpcs().search((npc) => npc?.getId?.() === BILL_PORT_SHIP_ROW);
+    if (!broken) return;
+    const location = broken.getLocation();
+    api.removeNpc(broken);
+    api.spawnNpc({
+      id: BILL_PORT_SHIP,
+      x: location.getX(),
+      y: location.getY(),
+      z: location.getZ(),
+      wanderRadius: 0,
+    });
   }
 
   function handleLogin({ player }) {
@@ -1317,4 +1369,6 @@ module.exports = function registerCabinFeverQuest(api) {
   api.onObjectInteraction(handleObjectInteraction);
   api.onPlayerLogin(handleLogin);
   api.onCustomEvent("player:bootstrap-complete", restoreVarps);
+  api.onCustomEvent("quest:stage-changed", handleStageChanged);
+  api.onServerStartup(fixPortShipBill);
 };
