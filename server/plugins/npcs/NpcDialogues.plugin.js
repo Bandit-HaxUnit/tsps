@@ -32,37 +32,53 @@ const MAX_JUMPS = 100;
 const SPECIAL_NPC_DIALOGUES = new Set(["Skully", "Estate agent", "Estate Agent", "Alwyn"]);
 
 /**
- * Wiki transcripts leave parts of a line to the reader's character: the player's
- * own name ("[player name]", "<player name>") and gendered alternatives
- * ("[sir/madam]", "[Greetings, sir/Greetings, madam/Greetings]"). Resolve them
- * from the player seeing the dialogue. Bracket alternatives with no gendered
- * words belong to other templates (numbers, items, NPC picks) and are left for
- * quest plugins to fill through the npc-dialogue:line payload.
+ * Wiki transcripts leave parts of a line to the reader's character: their name
+ * ("[player name]", "<player name>") and gendered alternatives ("[sir/madam]",
+ * "[Greetings, sir/Greetings, madam/Greetings]"). Resolve them from the player
+ * seeing the dialogue; alternatives without a gendered form (numbers, item
+ * picks, NPC choices) stay for quest plugins to fill.
  */
-const PLAYER_NAME_TOKEN = /\[(?:player name|playername|player|player vampyre name)\]|<player name>/gi;
-const NAME_ALTERNATIVE = /^(?:player name|playername|player vampyre name)$/i;
-const MALE_ADDRESS = /\b(?:sir|sirrah|mister|master|milord|lord|lad|laddie|man|men|boy|boys|brother|fellow|fella|chap|guy|prince|strongman|craftsman|monsieur)\b/i;
-const FEMALE_ADDRESS = /\b(?:madam|madame|ma'am|m'am|miss|lady|milady|m'lady|mistress|lass|lassie|woman|women|girl|girls|gal|sister|princess|strongwoman|craftswoman)\b/i;
+const PLAYER_NAME_PLACEHOLDER = /\[(?:player name|playername|player|player vampyre name)\]|<player name>/gi;
+const PLAYER_NAME_ALTERNATIVE = /^(?:player name|playername|player vampyre name)$/i;
 const GENDERED_ALTERNATIVE = /\[([^\[\]]*\/[^\[\]]*)\]/g;
+
+/** The address words the wiki templates use for each gender. */
+const MALE_ADDRESS_WORDS = new Set([
+  "sir", "sirrah", "mister", "master", "milord", "lord", "lad", "laddie", "man", "men", "boy", "boys",
+  "brother", "fellow", "fella", "chap", "guy", "prince", "strongman", "craftsman", "monsieur",
+]);
+const FEMALE_ADDRESS_WORDS = new Set([
+  "madam", "madame", "ma'am", "m'am", "miss", "lady", "milady", "m'lady", "mistress", "lass", "lassie",
+  "woman", "women", "girl", "girls", "gal", "sister", "princess", "strongwoman", "craftswoman",
+]);
+
+/** The gender an alternative addresses, or null when it addresses neither or both. */
+function genderedForm(text) {
+  const words = String(text).toLowerCase().match(/[a-z']+/g) ?? [];
+  const male = words.some((word) => MALE_ADDRESS_WORDS.has(word));
+  const female = words.some((word) => FEMALE_ADDRESS_WORDS.has(word));
+  return male === female ? null : male ? "male" : "female";
+}
+
+/** The alternative to show a player of this gender, or null to leave the group alone. */
+function pickAlternative(parts, name, male) {
+  if (parts.some((part) => PLAYER_NAME_ALTERNATIVE.test(part))) return name ?? null;
+  const forms = parts.map((part) => ({ text: part, gender: genderedForm(part) }));
+  if (!forms.some((form) => form.gender)) return null;
+  const wanted = male ? "male" : "female";
+  const match = forms.find((form) => form.gender === wanted) ?? forms.find((form) => !form.gender);
+  return (match ?? forms[0]).text;
+}
 
 function formatPlayerText(text, player) {
   let out = String(text ?? "");
   const name = player?.getUsername?.();
-  if (name) out = out.replace(PLAYER_NAME_TOKEN, name);
-  if (!GENDERED_ALTERNATIVE.test(out)) return out;
-  GENDERED_ALTERNATIVE.lastIndex = 0;
+  if (name) out = out.replace(PLAYER_NAME_PLACEHOLDER, name);
+  if (!out.includes("/")) return out;
   const male = player?.getAppearance?.()?.isMale?.() !== false;
   return out.replace(GENDERED_ALTERNATIVE, (whole, body) => {
     const parts = body.split("/").map((part) => part.trim());
-    if (parts.length < 2) return whole;
-    if (parts.some((part) => NAME_ALTERNATIVE.test(part))) return name ?? whole;
-    const forMale = parts.find((part) => MALE_ADDRESS.test(part) && !FEMALE_ADDRESS.test(part));
-    const forFemale = parts.find((part) => FEMALE_ADDRESS.test(part) && !MALE_ADDRESS.test(part));
-    if (forMale === undefined && forFemale === undefined) return whole;
-    const chosen = male ? forMale : forFemale;
-    if (chosen !== undefined) return chosen;
-    const neutral = parts.find((part) => !MALE_ADDRESS.test(part) && !FEMALE_ADDRESS.test(part));
-    return neutral ?? parts[0];
+    return parts.length < 2 ? whole : pickAlternative(parts, name, male) ?? whole;
   });
 }
 
