@@ -518,3 +518,28 @@ test('a random story skips alternatives a plugin rules out, and an action can sp
   assert.equal(said.filter((line) => line === 'It happened.').length, 10);
   assert.equal(said.filter((line) => line === 'Your stories have entertained me.').length, 10);
 });
+
+test('player-name and gendered placeholders resolve from the reader', () => {
+  const { formatPlayerText } = require('../plugins/npcs/NpcDialogues.plugin');
+  const male = { getUsername: () => 'Zezima', getAppearance: () => ({ isMale: () => true }) };
+  const female = { getUsername: () => 'Woox', getAppearance: () => ({ isMale: () => false }) };
+
+  assert.equal(formatPlayerText('Can I help you, [sir/madam]?', male), 'Can I help you, sir?');
+  assert.equal(formatPlayerText('Can I help you, [sir/madam]?', female), 'Can I help you, madam?');
+  assert.equal(formatPlayerText('Greetings [Madam/Sir].', male), 'Greetings Sir.');
+  assert.equal(formatPlayerText('Greetings [Madam/Sir].', female), 'Greetings Madam.');
+  assert.equal(formatPlayerText('Ah, good day to you [milady/sirrah]!', male), 'Ah, good day to you sirrah!');
+  assert.equal(formatPlayerText('[Greetings, sir/Greetings, madam/Greetings]', female), 'Greetings, madam');
+  assert.equal(formatPlayerText('A [man/woman/one] of taste.', female), 'A woman of taste.');
+  assert.equal(formatPlayerText('Iron[men/women] cannot use the bank.', male), 'Ironmen cannot use the bank.');
+  assert.equal(formatPlayerText("[That'll do nicely, sir/That'll do nicely, madam/That'll do nicely].", female), "That'll do nicely, madam.");
+  assert.equal(formatPlayerText('Good day, [Sir/Madam/ ]. Can I help you?', male), 'Good day, Sir. Can I help you?');
+  assert.equal(formatPlayerText('Look [miss/pal] I got the goods.', male), 'Look pal I got the goods.');
+  assert.equal(formatPlayerText('I am sorry [player name].', male), 'I am sorry Zezima.');
+  assert.equal(formatPlayerText('Hurry up, <player name>!', female), 'Hurry up, Woox!');
+  assert.equal(formatPlayerText('[player] reporting, sir!', female), 'Woox reporting, sir!');
+  assert.equal(formatPlayerText('Haha, you have spirit, [player name/fremennik name].', female), 'Haha, you have spirit, Woox.');
+  // Alternatives that are not about the reader stay for the owning plugin.
+  assert.equal(formatPlayerText('Kill [3/4/5] rats.', male), 'Kill [3/4/5] rats.');
+  assert.equal(formatPlayerText('Sir Amik Varze hands you 2,500 coins.', female), 'Sir Amik Varze hands you 2,500 coins.');
+});

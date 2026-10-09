@@ -32,6 +32,41 @@ const MAX_JUMPS = 100;
 const SPECIAL_NPC_DIALOGUES = new Set(["Skully", "Estate agent", "Estate Agent", "Alwyn"]);
 
 /**
+ * Wiki transcripts leave parts of a line to the reader's character: the player's
+ * own name ("[player name]", "<player name>") and gendered alternatives
+ * ("[sir/madam]", "[Greetings, sir/Greetings, madam/Greetings]"). Resolve them
+ * from the player seeing the dialogue. Bracket alternatives with no gendered
+ * words belong to other templates (numbers, items, NPC picks) and are left for
+ * quest plugins to fill through the npc-dialogue:line payload.
+ */
+const PLAYER_NAME_TOKEN = /\[(?:player name|playername|player|player vampyre name)\]|<player name>/gi;
+const NAME_ALTERNATIVE = /^(?:player name|playername|player vampyre name)$/i;
+const MALE_ADDRESS = /\b(?:sir|sirrah|mister|master|milord|lord|lad|laddie|man|men|boy|boys|brother|fellow|fella|chap|guy|prince|strongman|craftsman|monsieur)\b/i;
+const FEMALE_ADDRESS = /\b(?:madam|madame|ma'am|m'am|miss|lady|milady|m'lady|mistress|lass|lassie|woman|women|girl|girls|gal|sister|princess|strongwoman|craftswoman)\b/i;
+const GENDERED_ALTERNATIVE = /\[([^\[\]]*\/[^\[\]]*)\]/g;
+
+function formatPlayerText(text, player) {
+  let out = String(text ?? "");
+  const name = player?.getUsername?.();
+  if (name) out = out.replace(PLAYER_NAME_TOKEN, name);
+  if (!GENDERED_ALTERNATIVE.test(out)) return out;
+  GENDERED_ALTERNATIVE.lastIndex = 0;
+  const male = player?.getAppearance?.()?.isMale?.() !== false;
+  return out.replace(GENDERED_ALTERNATIVE, (whole, body) => {
+    const parts = body.split("/").map((part) => part.trim());
+    if (parts.length < 2) return whole;
+    if (parts.some((part) => NAME_ALTERNATIVE.test(part))) return name ?? whole;
+    const forMale = parts.find((part) => MALE_ADDRESS.test(part) && !FEMALE_ADDRESS.test(part));
+    const forFemale = parts.find((part) => FEMALE_ADDRESS.test(part) && !MALE_ADDRESS.test(part));
+    if (forMale === undefined && forFemale === undefined) return whole;
+    const chosen = male ? forMale : forFemale;
+    if (chosen !== undefined) return chosen;
+    const neutral = parts.find((part) => !MALE_ADDRESS.test(part) && !FEMALE_ADDRESS.test(part));
+    return neutral ?? parts[0];
+  });
+}
+
+/**
  * Most records list several variants and name no default, which used to leave the
  * NPC silent. Prefer the standard talk transcript over overhead shouts.
  */
@@ -451,7 +486,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     // Record every option when the prompt is shown (not on selection) so that a
     // nested option's "jump above" can find its unselected sibling by text.
     visible.forEach(recordOption);
-    const pairs = visible.flatMap((option) => [option.text, () => {
+    const pairs = visible.flatMap((option) => [formatPlayerText(option.text, player), () => {
       // Quest-gated choices carry a slug like "quest:cook-s-assistant:start";
       // let the owning quest run its action, then play the branch.
       if (option.hook) {
@@ -468,7 +503,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     if (!pairs.length) return run(rest, record);
     playedAny = true;
     manager.reset();
-    if (!api.sendMultiChatboxPrompt(player, step.prompt || "Select an Option", ...pairs)) {
+    if (!api.sendMultiChatboxPrompt(player, formatPlayerText(step.prompt || "Select an Option", player), ...pairs)) {
       unavailable();
     }
   }
@@ -525,7 +560,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           continue;
         }
         // `text` is mutable too, so a plugin can fill in the wiki's "[number]"-style blanks.
-        const lines = Misc.wrapText(request.text, 53);
+        const lines = Misc.wrapText(formatPlayerText(request.text, player), 53);
         playedAny = true;
         // A typed line spoken by someone other than the NPC being talked to (a
         // paired NPC talking to them, a cutscene actor) gets that speaker's head.
@@ -570,7 +605,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           api.emitCustomEvent("npc-dialogue:action", message);
           if (message.end) return close();
           playedAny = true;
-          if (!message.handled) player.sendMessage(String(step.text ?? ""));
+          if (!message.handled) player.sendMessage(formatPlayerText(String(step.text ?? ""), player));
           return run(rest, currentRecord);
         }
         // Wiki markers for content this server does not implement.
@@ -647,6 +682,7 @@ module.exports = {
   pickVariant,
   aliasKeys,
   flatten,
+  formatPlayerText,
   startDialogue,
   collectPageLines,
   collectPageOptions,
