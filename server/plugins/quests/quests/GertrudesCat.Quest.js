@@ -133,8 +133,16 @@ module.exports = function registerGertrudesCatQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, npcId, text }) {
-    if (!QUEST_NPC_IDS.has(npcId)) return null;
+  function answerCondition({ npcId, player, text }) {
+    // Gertrude's pages only; other quests share the same prose ("free inventory
+    // space") and must answer it themselves.
+    if (
+      !GERTRUDE_NPC_IDS.has(npcId) &&
+      npcId !== SHILOP_NPC_ID &&
+      npcId !== WILOUGH_NPC_ID
+    ) {
+      return null;
+    }
     const value = String(text).toLowerCase();
     if (value.includes("does not have at least 100 coins")) return !hasItem(player, COINS_ITEM_ID);
     if (value.includes("at least 100 coins")) return hasItem(player, COINS_ITEM_ID);

@@ -168,6 +168,13 @@ function refreshQuestList(player) {
   sendQuestList(player);
 }
 
+/**
+ * The login bootstrap's sendTabInterface(6) sends the all-spells-unlocked varps
+ * after the player-login hooks, clobbering cache NPC transform varps that share
+ * storage with quest varps (e.g. Drezel's varp 302). sendQuestVarps (below) is
+ * bound to player:bootstrap-complete to re-send the real stages.
+ */
+
 function questStatus(quest, player) {
   if (quest.isComplete(player)) return STATUS_COMPLETE;
   if (quest.isStarted(player)) return STATUS_IN_PROGRESS;
@@ -334,6 +341,12 @@ function registerQuestWidgets(api) {
 function sendQuestVarps({ player }) {
   const sender = player.getPacketSender();
   for (const quest of quests) {
+    // Bitfield stages must write their varbit: writing the whole parent varp
+    // clobbers sibling bits (X Marks/Client of Kourend share veos_quest).
+    if (quest.varbitId !== undefined) {
+      sender.sendVarbit(quest.varbitId, quest.getStage(player));
+      continue;
+    }
     if (!Number.isInteger(quest.varpId) || quest.varpId < 0) continue;
     sender.sendConfig(quest.varpId, quest.getStage(player));
   }
@@ -366,7 +379,13 @@ function registerQuest(api, def) {
     },
     setStage(player, value) {
       player.setAttribute(stageKey, value | 0);
-      player.getPacketSender().sendConfig(def.varpId, value | 0);
+      // Quests whose stage lives in a varbit of a shared varp (most post-2007
+      // quests) set the varbit, so sibling bits in the same varp survive.
+      if (def.varbitId !== undefined) {
+        player.getPacketSender().sendVarbit(def.varbitId, value | 0);
+      } else {
+        player.getPacketSender().sendConfig(def.varpId, value | 0);
+      }
       refreshQuestList(player);
       // Quests whose progress shows in more than their varp (a varbit the cache reads) follow it.
       api.emitCustomEvent?.("quest:stage-changed", { player, key: def.key, stage: value | 0 });

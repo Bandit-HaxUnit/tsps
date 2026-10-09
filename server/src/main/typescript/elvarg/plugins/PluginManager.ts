@@ -779,6 +779,11 @@ export class PluginManager {
     if (definition.ownerOnly) {
       npc.setOwnerOnly(true);
     }
+    if (definition.owner || definition.ownerOnly) {
+      // Owner-scoped spawns are quest/instance NPCs: when they die, the owning
+      // plugin resyncs them, so never fall back to a global unowned respawn clone.
+      (npc as any).__skipDefaultRespawn = true;
+    }
     if (!World.getNpcs().add(npc)) {
       World.getAddNPCQueue().push(npc);
     }
@@ -790,6 +795,7 @@ export class PluginManager {
     if (!npc) {
       return;
     }
+    (npc as any).__skipDefaultRespawn = true;
     const { World } = require("../game/World");
     const addQueue = World.getAddNPCQueue();
     const queued = addQueue.indexOf(npc);

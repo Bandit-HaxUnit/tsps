@@ -1287,6 +1287,9 @@ module.exports = function registerGhostsAhoyQuest(api) {
       return;
     }
     if (itemId === SPADE && option.includes("dig")) {
+      // Only claim the Dragontooth dig (treasure map in hand); other quests
+      // dig their own spots (X Marks the Spot, Making History, ...).
+      if (!held(player, TREASURE_MAP) || !atDigSpot(player)) return;
       digForBook(player);
       event.handled = true;
       return;

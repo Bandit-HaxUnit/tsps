@@ -430,9 +430,18 @@ module.exports = function registerHandInTheSandQuest(api) {
   // Prose conditions
   // ==========================================================================
 
-  /** Answers the page's prose conditions for this plugin's own NPCs. */
-  function answerCondition({ player, npcId, text }) {
-    if (!DIALOGUE_NPC_IDS.has(npcId)) return null;
+  /** Answers the page's prose conditions, scoped to the NPCs that speak it. */
+  function answerCondition({ npcId, player, text }) {
+    if (
+      !BERT_NPC_IDS.has(npcId) &&
+      npcId !== GUARD_CAPTAIN_NPC_ID &&
+      !SANDY_NPC_IDS.has(npcId) &&
+      npcId !== ZAVISTIC_NPC_ID &&
+      npcId !== BETTY_NPC_ID &&
+      npcId !== MAZION_NPC_ID
+    ) {
+      return null;
+    }
     const value = String(text).toLowerCase().replace(/[\u2018\u2019]/g, "'");
     const has = (itemId) => held(player, itemId);
     if (value.includes("inventory space")) return freeSlots(player) < 1;
