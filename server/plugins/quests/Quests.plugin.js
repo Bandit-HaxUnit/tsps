@@ -7,21 +7,23 @@
  * (King Roald, Reldo, ...) fall back to it after the other quests' handlers.
  */
 const QUESTS = [
-  "AscentOfArceuus", "AtFirstLight", "BigChompyBirdHunting", "Biohazard", "BlackKnightsFortress", "ChildrenOfTheSun", "ClientOfKourend", "ClockTower",
-  "CooksAssistant", "CorsairCurse", "CreatureOfFenkenstrain", "CurrentAffairs", "DeathPlateau", "DemonSlayer", "DepthsOfDespair", "DesertTreasureI",
-  "DigSite", "DoricsQuest", "DragonSlayer", "DruidicRitual", "DwarfCannon", "EadgarsRuse", "EaglesPeak", "ElementalWorkshopI",
-  "ElementalWorkshopII", "ErnestTheChicken", "EthicallyAcquiredAntiquities", "EyesOfGlouphrie", "FairytaleIGrowingPains", "FairytaleIICureAQueen", "FamilyCrest", "FightArena",
-  "FishingContest", "ForsakenTower", "FremennikTrials", "GardenOfDeath", "GardenOfTranquillity", "GertrudesCat", "GettingAhead", "GhostsAhoy",
-  "GoblinDiplomacy", "GrandTree", "HandInTheSand", "HazeelCult", "HeroesQuest", "HolyGrail", "HorrorFromTheDeep", "IcthlarinsLittleHelper",
-  "IdesOfMilk", "ImpCatcher", "InAidOfTheMyreque", "InSearchOfTheMyreque", "JunglePotion", "KnightsSword", "LegendsQuest", "LostCity",
-  "LostTribe", "MakingHistory", "MerlinsCrystal", "MisthalinMystery", "MonksFriend", "MurderMystery", "MyArmsBigAdventure", "NatureSpirit",
-  "ObservatoryQuest", "OlafsQuest", "PathOfGlouphrie", "PiratesTreasure", "PlagueCity", "PorcineOfInterest", "PriestInPeril", "PrinceAliRescue",
-  "PryingTimes", "QueenOfThieves", "RagAndBoneManI", "RagAndBoneManII", "RecruitmentDrive", "Regicide", "RestlessGhost", "RomeoAndJuliet",
-  "RovingElves", "RumDeal", "RuneMysteries", "ScorpionCatcher", "SeaSlug", "ShadesOfMortton", "ShadowOfTheStorm", "SheepHerder",
-  "SheepShearer", "ShiloVillage", "SoulsBane", "SpiritsOfTheElid", "TaiBwoWannaiTrio", "TaleOfTheRighteous", "TearsOfGuthix", "TempleOfIkov",
-  "TheGolem", "TouristTrap", "TowerOfLife", "TreeGnomeVillage", "TribalTotem", "TrollRomance", "TrollStronghold", "UndergroundPass",
-  "VampyreSlayer", "Wanted", "Watchtower", "WaterfallQuest", "WitchsHouse", "WitchsPotion", "XMarksTheSpot", "ZogreFleshEaters",
-  "ShieldOfArrav",
+  "AnimalMagnetism", "AscentOfArceuus", "AtFirstLight", "BigChompyBirdHunting", "Biohazard", "BlackKnightsFortress", "ChildrenOfTheSun", "ClientOfKourend",
+  "ClockTower", "ColdWar", "Contact", "CooksAssistant", "CorsairCurse", "CreatureOfFenkenstrain", "CurrentAffairs", "DeathPlateau",
+  "DemonSlayer", "DepthsOfDespair", "DesertTreasureI", "DeviousMinds", "DigSite", "DoricsQuest", "DragonSlayer", "DruidicRitual",
+  "DwarfCannon", "EadgarsRuse", "EaglesPeak", "ElementalWorkshopI", "ElementalWorkshopII", "EnlightenedJourney", "ErnestTheChicken", "EthicallyAcquiredAntiquities",
+  "EyesOfGlouphrie", "FairytaleIGrowingPains", "FairytaleIICureAQueen", "FallenFromGrace", "FamilyCrest", "FightArena", "FishingContest", "ForsakenTower",
+  "FremennikTrials", "GardenOfDeath", "GardenOfTranquillity", "GertrudesCat", "GettingAhead", "GhostsAhoy", "GoblinDiplomacy", "GrandTree",
+  "HandInTheSand", "HauntedMine", "HazeelCult", "HeroesQuest", "HolyGrail", "HorrorFromTheDeep", "IcthlarinsLittleHelper", "IdesOfMilk",
+  "ImpCatcher", "InAidOfTheMyreque", "InSearchOfTheMyreque", "JunglePotion", "KnightsSword", "LegendsQuest", "LostCity", "LostTribe",
+  "MakingHistory", "MeatAndGreet", "MerlinsCrystal", "MisthalinMystery", "MonksFriend", "MountainDaughter", "MurderMystery", "MyArmsBigAdventure",
+  "NatureSpirit", "ObservatoryQuest", "OlafsQuest", "PathOfGlouphrie", "PiratesTreasure", "PlagueCity", "PorcineOfInterest", "PriestInPeril",
+  "PrinceAliRescue", "PryingTimes", "QueenOfThieves", "RagAndBoneManI", "RagAndBoneManII", "RecruitmentDrive", "RedReef", "Regicide",
+  "RestlessGhost", "RibbitingTale", "RomeoAndJuliet", "RovingElves", "RumDeal", "RuneMysteries", "ScorpionCatcher", "Scrambled",
+  "SeaSlug", "ShadesOfMortton", "ShadowOfTheStorm", "ShadowsOfCustodia", "SheepHerder", "SheepShearer", "ShiloVillage", "SleepingGiants",
+  "SlugMenace", "SoulsBane", "SpiritsOfTheElid", "TaiBwoWannaiTrio", "TailOfTwoCats", "TaleOfTheRighteous", "TearsOfGuthix", "TempleOfIkov",
+  "TheGolem", "ThroneOfMiscellania", "TouristTrap", "TowerOfLife", "TreeGnomeVillage", "TribalTotem", "TrollRomance", "TrollStronghold",
+  "TroubledTortugans", "TwilightPromise", "UndergroundPass", "VampyreSlayer", "Wanted", "Watchtower", "WaterfallQuest", "WhatLiesBelow",
+  "WitchsHouse", "WitchsPotion", "XMarksTheSpot", "ZogreFleshEaters", "ShieldOfArrav",
 ];
 
 // Free-to-play quests (OSRS wiki); the rest stay unloaded on a free-to-play world.
