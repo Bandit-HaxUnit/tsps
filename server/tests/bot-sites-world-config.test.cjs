@@ -1,5 +1,5 @@
 // Run after `yarn build`: node --test tests/bot-sites-world-config.test.cjs
-// world.json / world.local.json pluginConfig "PlayerBots:sites" switches bot-sites.json sites on or off
+// world.json / world.local.json pluginConfig "PlayerBots:sites" overrides bot-sites.json sites and adds new ones
 // (plugins/bots/brain/BotSites.js, server/docs/bot-combat-training.md).
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -25,7 +25,7 @@ function quietly(fn) {
 
 test("PlayerBots:sites switches the named sites; the rest keep their own enabled", () => {
   const file = { sites: [{ id: "lumbridge", enabled: false }, { id: "edge_low", enabled: true }, { id: "seers", enabled: false }] };
-  applySiteOverrides(file, siteOverrides({ lumbridge: true, edge_low: false }));
+  applySiteOverrides(file, siteOverrides({ lumbridge: { enabled: true }, edge_low: { enabled: false } }));
   assert.deepEqual(file.sites.map((site) => [site.id, site.enabled]), [["lumbridge", true], ["edge_low", false], ["seers", false]]);
 });
 
@@ -35,28 +35,36 @@ test("an object replaces just the properties it names, each whole, and never the
   assert.deepEqual(file.sites[0], { id: "lumbridge", enabled: true, x: 3222, y: 3218, bots: { woodcutting: 10 } });
 });
 
+test("an id bot-sites.json doesn't have is a new site", () => {
+  const file = { sites: [{ id: "lumbridge", enabled: false }] };
+  applySiteOverrides(file, siteOverrides({ draynor: { enabled: true, x: 3093, y: 3244, bots: { fishing: 20 } } }));
+  assert.deepEqual(file.sites[1], { id: "draynor", enabled: true, x: 3093, y: 3244, bots: { fishing: 20 } });
+});
+
 test("no PlayerBots:sites leaves bot-sites.json as it ships", () => {
   assert.equal(siteOverrides({}).size, 0);
 });
 
-test("a value that isn't true, false or an object, or an unknown site, is warned about and ignored", () => {
+test("a value that isn't an object, or a new site without x and y, is warned about and ignored", () => {
   const { result, warnings } = quietly(() => {
-    const overrides = siteOverrides({ lumbridge: "yes", varrock: true, falador: [false], atlantis: true });
+    const overrides = siteOverrides({ lumbridge: true, varrock: { enabled: true }, falador: [false], atlantis: { enabled: true } });
     return applySiteOverrides({ sites: [{ id: "lumbridge", enabled: false }, { id: "varrock", enabled: false }, { id: "falador", enabled: true }] }, overrides);
   });
-  assert.deepEqual(result.sites.map((site) => site.enabled), [false, true, true]);
-  assert.ok(warnings.some((line) => line.includes("PlayerBots:sites.falador")));
+  assert.deepEqual(result.sites.map((site) => [site.id, site.enabled]), [["lumbridge", false], ["varrock", true], ["falador", true]]);
   assert.ok(warnings.some((line) => line.includes("PlayerBots:sites.lumbridge")));
-  assert.ok(warnings.some((line) => line.includes("'atlantis'")));
+  assert.ok(warnings.some((line) => line.includes("PlayerBots:sites.falador")));
+  assert.ok(warnings.some((line) => line.includes("PlayerBots:sites.atlantis") && line.includes("x and y")));
   assert.equal(quietly(() => siteOverrides(["lumbridge"]).size).result, 0);
 });
 
 test("the shipped bot-sites.json: skilling sites on and the PvP pens off, as a deployment would set it", () => {
   const ids = ["lumbridge", "varrock", "falador", "seers", "east_ardougne", "edge_low", "edge_mid", "edge_mains", "varrock_ditch", "green_drags_gate", "revs_entrance"];
-  const botSites = Object.fromEntries(ids.map((id) => [id, !id.startsWith("edge") && !["varrock_ditch", "green_drags_gate", "revs_entrance"].includes(id)]));
-  const { result, warnings } = quietly(() => readBotSites(SITES, botSites));
-  assert.deepEqual(warnings, [], "every id is a real site");
+  const on = (id) => !id.startsWith("edge") && !["varrock_ditch", "green_drags_gate", "revs_entrance"].includes(id);
+  const config = Object.fromEntries(ids.map((id) => [id, { enabled: on(id) }]));
+  const { result, warnings } = quietly(() => readBotSites(SITES, config));
+  assert.deepEqual(warnings, []);
+  assert.equal(result.sites.length, ids.length, "every id is a real site, so none was added");
   const enabled = Object.fromEntries(result.sites.map((site) => [site.id, site.enabled]));
-  assert.deepEqual(ids.map((id) => enabled[id]), ids.map((id) => botSites[id]));
+  assert.deepEqual(ids.map((id) => enabled[id]), ids.map(on));
   assert.ok(result.sites.filter((site) => site.pvp).every((site) => site.enabled === false));
 });

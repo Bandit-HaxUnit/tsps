@@ -2,15 +2,16 @@
 
 /**
  * bot-sites.json with the deployment's choices applied: world.json / world.local.json
- * `pluginConfig` "PlayerBots:sites" maps a site id to properties that replace the site's own,
- * each top-level property whole (`bots` replaces every count). `true`/`false` is short for
- * `{ "enabled": ... }`. A world can then run its own bot population (skilling sites on, the PvP
- * pens off, fewer Lumbridge woodcutters) in its gitignored world.local.json and still update
- * from main by fast-forward.
+ * `pluginConfig` "PlayerBots:sites" maps a site id to an object of site properties. For a site
+ * bot-sites.json has, they replace its own, each top-level property whole (`bots` replaces
+ * every count); any other id is a new site, which needs `x` and `y`. A world can then run its
+ * own bot population (skilling sites on, the PvP pens off, fewer Lumbridge woodcutters, a site
+ * of its own) in its gitignored world.local.json and still update from main by fast-forward.
  *
  *   "pluginConfig": { "PlayerBots:sites": {
- *     "edge_low": false,
- *     "lumbridge": { "enabled": true, "bots": { "woodcutting": 10 } }
+ *     "edge_low": { "enabled": false },
+ *     "lumbridge": { "enabled": true, "bots": { "woodcutting": 10 } },
+ *     "draynor": { "enabled": true, "x": 3093, "y": 3244, "bots": { "fishing": 20 } }
  *   } }
  *
  * Sites and properties the map doesn't name keep theirs. Read through getPluginConfig, so the
@@ -29,10 +30,9 @@ function siteOverrides(raw = PluginManager.getPluginConfig(SITES_CONFIG_KEY)) {
     return new Map();
   }
   const overrides = new Map();
-  for (const [id, value] of Object.entries(raw)) {
-    const props = typeof value === "boolean" ? { enabled: value } : value;
+  for (const [id, props] of Object.entries(raw)) {
     if (!props || typeof props !== "object" || Array.isArray(props)) {
-      console.warn(`[bot sites] world config ${SITES_CONFIG_KEY}.${id} must be true, false or an object of site properties; ignored`);
+      console.warn(`[bot sites] world config ${SITES_CONFIG_KEY}.${id} must be an object of site properties; ignored`);
       continue;
     }
     overrides.set(id, props);
@@ -40,15 +40,18 @@ function siteOverrides(raw = PluginManager.getPluginConfig(SITES_CONFIG_KEY)) {
   return overrides;
 }
 
-/** Applies `overrides` to a parsed bot-sites.json in place, warning about ids it doesn't have. */
+/** Applies `overrides` to a parsed bot-sites.json in place: known sites change, new ids are added. */
 function applySiteOverrides(sitesFile, overrides) {
-  const sites = Array.isArray(sitesFile?.sites) ? sitesFile.sites : [];
-  const known = new Set(sites.map((site) => site.id));
-  for (const id of overrides.keys()) {
-    if (!known.has(id)) console.warn(`[bot sites] world config ${SITES_CONFIG_KEY} names unknown site '${id}'`);
-  }
-  for (const site of sites) {
-    if (overrides.has(site.id)) Object.assign(site, overrides.get(site.id), { id: site.id });
+  const sites = (sitesFile.sites ??= []);
+  for (const [id, props] of overrides) {
+    const site = sites.find((entry) => entry.id === id);
+    if (site) {
+      Object.assign(site, props, { id });
+    } else if (Number.isInteger(props.x) && Number.isInteger(props.y)) {
+      sites.push({ ...props, id });
+    } else {
+      console.warn(`[bot sites] world config ${SITES_CONFIG_KEY}.${id} is a new site and needs integer x and y; ignored`);
+    }
   }
   return sitesFile;
 }
