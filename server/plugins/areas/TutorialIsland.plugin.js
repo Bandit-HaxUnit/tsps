@@ -1329,6 +1329,10 @@ function passDoor(player, location) {
 }
 
 function applyCage(player, event) {
+  // The gate on the cage's east wall (3111): west of it is the pit. Opening from
+  // inside only lets the player leave, so never block that.
+  const gateX = event.location?.getX?.() ?? event.location?.x;
+  if (typeof gateX === "number" && player.getLocation().getX() < gateX) return;
   const current = stage(player);
   if (current < STAGE.COMBAT_MELEE) {
     player.sendMessage("Oi! Get away from there. Only enter the rat cage when I say so.");
