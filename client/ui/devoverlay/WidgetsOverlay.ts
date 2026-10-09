@@ -894,6 +894,9 @@ export class WidgetsOverlay implements Overlay {
                         gameFrame.drawGameFrame(this.buildGameFrameContext(this.glRenderer));
                         this.glRenderer.flush();
                     }
+                    // Widget overlays (status bars) draw below the widget tree so CS2 tooltips
+                    // and the right-click menu sit on top of them.
+                    this.drawWidgetOverlays(widgetOverlays);
                     try {
                         const roots = (sharedUi as any).__widgetRoots;
                         if (roots) {
@@ -903,17 +906,11 @@ export class WidgetsOverlay implements Overlay {
                         }
                     } catch {}
 
-                    const lastEntry = this.widgetEntries[this.widgetEntries.length - 1];
                     for (const entry of this.widgetEntries) {
                         renderWidgetTreeGL(
                             this.glRenderer,
                             entry.root,
-                            entry === lastEntry
-                                ? {
-                                      ...entry.renderOpts,
-                                      drawAboveWidgets: () => this.drawWidgetOverlays(widgetOverlays),
-                                  }
-                                : entry.renderOpts,
+                            entry.renderOpts,
                         );
                     }
                     this.drawTradeAmountOverlay(widgetManager);
@@ -925,6 +922,10 @@ export class WidgetsOverlay implements Overlay {
                     // bounds into dirtyRects so an open menu no longer forces a full widget pass.
                     for (const dirtyRect of dirtyRects) {
                         this.clearOffscreenRect(dirtyRect);
+                    }
+                    // Overlays redraw below the roots, like the full pass.
+                    if (redrawWidgetOverlays) this.drawWidgetOverlays(widgetOverlays);
+                    for (const dirtyRect of dirtyRects) {
                         const rootClip = {
                             x0: dirtyRect.x,
                             y0: dirtyRect.y,
@@ -949,7 +950,6 @@ export class WidgetsOverlay implements Overlay {
                             });
                         }
                     }
-                    if (redrawWidgetOverlays) this.drawWidgetOverlays(widgetOverlays);
                     this.drawTradeAmountOverlay(widgetManager);
                     const mouseOverTextRect = mouseOverTextState.rect;
                     if (
