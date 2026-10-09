@@ -103,14 +103,14 @@ async function main(): Promise<void> {
     assert.ok(hub.includes('aria-checked="false" aria-label="Enable Menu Entry Swapper"'));
     assert.ok(hub.includes('aria-checked="true" aria-label="Disable Notes"'));
 
-    // Reset puts a group back to its defaults; the sidebar mode defaults to docked.
+    // Reset puts a group back to its defaults; the sidebar mode defaults to overlay.
     const runeLiteConfig = configManager.getConfig(RuneLiteConfig);
-    assert.equal(runeLiteConfig.sidebarMode(), SidebarMode.Docked);
-    configManager.setConfigValue(RuneLiteConfig, "sidebarMode", SidebarMode.Overlay);
-    assert.equal(configManager.getConfiguration("runelite", "sidebarMode"), "Overlay");
     assert.equal(runeLiteConfig.sidebarMode(), SidebarMode.Overlay);
-    configManager.setDefaultConfiguration(RuneLiteConfig, true);
+    configManager.setConfigValue(RuneLiteConfig, "sidebarMode", SidebarMode.Docked);
+    assert.equal(configManager.getConfiguration("runelite", "sidebarMode"), "Docked");
     assert.equal(runeLiteConfig.sidebarMode(), SidebarMode.Docked);
+    configManager.setDefaultConfiguration(RuneLiteConfig, true);
+    assert.equal(runeLiteConfig.sidebarMode(), SidebarMode.Overlay);
 
     // SidebarStore: a rail click opens, a second click closes, and the open panel is remembered.
     let saved: SidebarPersistedState | undefined = { open: true, selectedId: "plugin_hub" };

@@ -103,7 +103,11 @@ import {
 import { clamp } from "../common/utils/MathUtil";
 import { ClientState } from "../game/ClientState";
 import { GameRenderer } from "../game/GameRenderer";
-import type { HitsplatEventPayload } from "../game/GameRenderer";
+import type {
+    HitsplatEventPayload,
+    NpcSpotAnimationEvent,
+    WorldSpotAnimationEvent,
+} from "../game/GameRenderer";
 import { OsrsRendererType, WEBGL } from "../game/GameRenderers";
 import { ClickMode, getMousePos } from "../game/InputManager";
 import { OsrsClient } from "../game/OsrsClient";
@@ -160,6 +164,7 @@ import { InteractType } from "./InteractType";
 import { profiler } from "./PerformanceProfiler";
 import { PlayerChatheadFactory } from "./PlayerChatheadFactory";
 import { resolveFogRange } from "./RenderDistancePolicy";
+import { Frustum } from "../game/Frustum";
 import { WebGLMapSquare } from "./WebGLMapSquare";
 import { WorldEntityAnimator } from "./WorldEntityAnimator";
 import { SceneBuffer } from "./buffer/SceneBuffer";
@@ -558,7 +563,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     //          lum (-1=no override, 0-127), amount (0-255, 0=disabled)]
     sceneHslOverride: vec4 = vec4.fromValues(-1, -1, -1, 0);
 
-    brightness: number = 0.8;
     colorBanding: number = 255;
 
     smoothTerrain: boolean = false;
@@ -635,6 +639,7 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     public frameRoofFilteredRangeCount: number = 0;
     public frameRoofTotalRangeCount: number = 0;
     public roofFilteredDrawIndices: number[] = [];
+    public hdShadowFrustum?: Frustum;
 
     // OSRS raycast-all menu: SceneRaycaster for Physics.RaycastAll-like behavior
     public sceneRaycaster: SceneRaycaster | null = null;
@@ -1238,22 +1243,11 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render.registerSpotAnimation(this, event);
     }
 
-    registerNpcSpotAnimation(event: {
-        npcServerId: number;
-        spotId: number;
-        height: number;
-        startCycle: number;
-        slot?: number;
-    }): void {
+    override registerNpcSpotAnimation(event: NpcSpotAnimationEvent): void {
         return render.registerNpcSpotAnimation(this, event);
     }
 
-    registerWorldSpotAnimation(event: {
-        spotId: number;
-        tile: { x: number; y: number; level?: number };
-        height?: number;
-        startCycle: number;
-    }): void {
+    override registerWorldSpotAnimation(event: WorldSpotAnimationEvent): void {
         return render.registerWorldSpotAnimation(this, event);
     }
 
@@ -1283,6 +1277,11 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
 
     async initShaders(): Promise<Program[]> {
         return render.initShaders(this);
+    }
+
+    /** Recompiles the world and actor programs in place from the plugins' current sources. */
+    async rebuildScenePrograms(): Promise<void> {
+        return render.rebuildScenePrograms(this);
     }
 
     public _resolvePlayerSeqIdForMode(): number {
@@ -2373,8 +2372,10 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         drawRanges: DrawRange[],
         drawRangePlanes: Uint8Array | undefined,
         roofPlaneLimit: number,
+        map?: WebGLMapSquare,
+        lod: boolean = false,
     ): void {
-        return render.drawWithRoofPlaneFilter(this, drawCall, drawRanges, drawRangePlanes, roofPlaneLimit);
+        return render.drawWithRoofPlaneFilter(this, drawCall, drawRanges, drawRangePlanes, roofPlaneLimit, map, lod);
     }
 
     public getMapTileDistanceFromPoint(map: WebGLMapSquare, tileX: number, tileY: number): number {

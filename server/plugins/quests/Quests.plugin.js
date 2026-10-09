@@ -7,29 +7,30 @@
  * (King Roald, Reldo, ...) fall back to it after the other quests' handlers.
  */
 const QUESTS = [
-  "BigChompyBirdHunting", "Biohazard", "BlackKnightsFortress", "ClockTower",
-  "CooksAssistant", "CreatureOfFenkenstrain", "DeathPlateau", "DemonSlayer",
-  "DesertTreasureI", "DigSite", "DoricsQuest", "DragonSlayer", "DruidicRitual",
-  "DwarfCannon", "EadgarsRuse", "ElementalWorkshopI", "ErnestTheChicken", "FamilyCrest",
-  "FightArena", "FishingContest", "FremennikTrials", "GertrudesCat", "GhostsAhoy",
-  "GoblinDiplomacy", "GrandTree", "HandInTheSand", "HazeelCult", "HeroesQuest",
-  "HolyGrail", "HorrorFromTheDeep", "ImpCatcher", "InSearchOfTheMyreque", "JunglePotion",
-  "KnightsSword", "LegendsQuest", "LostCity", "MerlinsCrystal", "MisthalinMystery",
-  "MonksFriend", "MurderMystery", "NatureSpirit", "ObservatoryQuest", "PiratesTreasure",
-  "PlagueCity", "PriestInPeril", "PrinceAliRescue", "Regicide", "RestlessGhost",
-  "RomeoAndJuliet", "RumDeal", "RuneMysteries", "ScorpionCatcher", "SeaSlug",
-  "ShadesOfMortton", "SheepHerder", "SheepShearer", "ShiloVillage", "TaiBwoWannaiTrio",
-  "TearsOfGuthix", "TempleOfIkov", "TheGolem", "TouristTrap", "TreeGnomeVillage",
-  "TribalTotem", "TrollStronghold", "UndergroundPass", "VampyreSlayer", "Watchtower",
-  "WaterfallQuest", "WitchsHouse", "WitchsPotion", "ZogreFleshEaters", "ShieldOfArrav",
+  "AscentOfArceuus", "AtFirstLight", "BigChompyBirdHunting", "Biohazard", "BlackKnightsFortress", "ChildrenOfTheSun", "ClientOfKourend", "ClockTower",
+  "CooksAssistant", "CorsairCurse", "CreatureOfFenkenstrain", "CurrentAffairs", "DeathPlateau", "DemonSlayer", "DepthsOfDespair", "DesertTreasureI",
+  "DigSite", "DoricsQuest", "DragonSlayer", "DruidicRitual", "DwarfCannon", "EadgarsRuse", "EaglesPeak", "ElementalWorkshopI",
+  "ElementalWorkshopII", "ErnestTheChicken", "EthicallyAcquiredAntiquities", "EyesOfGlouphrie", "FairytaleIGrowingPains", "FairytaleIICureAQueen", "FamilyCrest", "FightArena",
+  "FishingContest", "ForsakenTower", "FremennikTrials", "GardenOfDeath", "GardenOfTranquillity", "GertrudesCat", "GettingAhead", "GhostsAhoy",
+  "GoblinDiplomacy", "GrandTree", "HandInTheSand", "HazeelCult", "HeroesQuest", "HolyGrail", "HorrorFromTheDeep", "IcthlarinsLittleHelper",
+  "IdesOfMilk", "ImpCatcher", "InAidOfTheMyreque", "InSearchOfTheMyreque", "JunglePotion", "KnightsSword", "LegendsQuest", "LostCity",
+  "LostTribe", "MakingHistory", "MerlinsCrystal", "MisthalinMystery", "MonksFriend", "MurderMystery", "MyArmsBigAdventure", "NatureSpirit",
+  "ObservatoryQuest", "OlafsQuest", "PathOfGlouphrie", "PiratesTreasure", "PlagueCity", "PorcineOfInterest", "PriestInPeril", "PrinceAliRescue",
+  "PryingTimes", "QueenOfThieves", "RagAndBoneManI", "RagAndBoneManII", "RecruitmentDrive", "Regicide", "RestlessGhost", "RomeoAndJuliet",
+  "RovingElves", "RumDeal", "RuneMysteries", "ScorpionCatcher", "SeaSlug", "ShadesOfMortton", "ShadowOfTheStorm", "SheepHerder",
+  "SheepShearer", "ShiloVillage", "SoulsBane", "SpiritsOfTheElid", "TaiBwoWannaiTrio", "TaleOfTheRighteous", "TearsOfGuthix", "TempleOfIkov",
+  "TheGolem", "TouristTrap", "TowerOfLife", "TreeGnomeVillage", "TribalTotem", "TrollRomance", "TrollStronghold", "UndergroundPass",
+  "VampyreSlayer", "Wanted", "Watchtower", "WaterfallQuest", "WitchsHouse", "WitchsPotion", "XMarksTheSpot", "ZogreFleshEaters",
+  "ShieldOfArrav",
 ];
 
 // Free-to-play quests (OSRS wiki); the rest stay unloaded on a free-to-play world.
 const F2P_QUESTS = new Set([
-  "BlackKnightsFortress", "CooksAssistant", "DemonSlayer", "DoricsQuest", "DragonSlayer",
-  "ErnestTheChicken", "GoblinDiplomacy", "ImpCatcher", "KnightsSword", "MisthalinMystery",
-  "PiratesTreasure", "PrinceAliRescue", "RestlessGhost", "RomeoAndJuliet", "RuneMysteries",
-  "SheepShearer", "ShieldOfArrav", "VampyreSlayer", "WitchsPotion",
+  "BlackKnightsFortress", "CooksAssistant", "CorsairCurse", "DemonSlayer", "DoricsQuest",
+  "DragonSlayer", "ErnestTheChicken", "GoblinDiplomacy", "ImpCatcher", "KnightsSword",
+  "MisthalinMystery", "IdesOfMilk", "PiratesTreasure", "PrinceAliRescue", "RestlessGhost", "RomeoAndJuliet",
+  "RuneMysteries", "SheepShearer", "ShieldOfArrav", "VampyreSlayer", "WitchsPotion",
+  "XMarksTheSpot",
 ]);
 
 function questsForWorld({ WorldDefinition }) {

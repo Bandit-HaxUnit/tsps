@@ -1,4 +1,5 @@
 import type { Camera } from "../Camera";
+import type { HitsplatEventPayload } from "../GameRenderer";
 import type { InputManager } from "../InputManager";
 import type { DrawCall, Program } from "picogl";
 import type { ProgramSource } from "../../render/shaders/ShaderUtil";
@@ -8,6 +9,10 @@ import type { ClickRegistry } from "../../widgets/gl/click-registry";
 import type { SimpleMenuEntry } from "../../ui/menu/MenuEngine";
 import type { MenuTransformContext } from "../../ui/menu/menuTransforms";
 import type { FontLoader } from "../../widgets/components/TextRenderer";
+import type {
+    WebGPUSceneExtension,
+    WebGPUSceneExtensionContext,
+} from "../../render/webgpu/sceneExtension";
 
 /**
  * Draw/input context handed to a plugin that supplies a custom gameframe (the
@@ -76,11 +81,31 @@ export type CameraInputContext = {
     deltaTime: number;
 };
 
+export type GamepadContext = {
+    gamepad: Gamepad;
+    camera: Camera;
+    input: InputManager;
+    deltaTime: number;
+};
+
 export type CameraFollowContext = {
     camera: Camera;
     playerX: number;
     playerY?: number;
     playerZ: number;
+    /** The player's plane, for the lookups below. */
+    plane?: number;
+    /** Ground height (tiles, y down) at a world position, when loaded. */
+    groundHeightAt?(x: number, z: number): number | undefined;
+    /** Collision flags at a world tile (0 where the renderer has none). */
+    collisionFlagAt?(plane: number, tileX: number, tileY: number): number;
+};
+
+/** A health bar update from the server, for a player or an NPC (by server index). */
+export type HealthBarEvent = {
+    type: "npc" | "player";
+    serverId: number;
+    bar: { id: number; health: number; health2: number; removed?: boolean };
 };
 
 export interface ClientPlugin {
@@ -91,11 +116,21 @@ export interface ClientPlugin {
     afterSceneRender?(renderer: WebGLOsrsRenderer): void;
     configureSceneDrawCall?(renderer: WebGLOsrsRenderer, drawCall: DrawCall): void;
     disposeRenderer?(renderer: WebGLOsrsRenderer): void;
+    /** WebGPU: extra scene pipelines, resources and passes (see render/webgpu/sceneExtension.ts). */
+    createWebGPUSceneExtension?(context: WebGPUSceneExtensionContext): WebGPUSceneExtension | undefined;
     handleCameraKeys?(context: CameraInputContext): boolean;
     handleCameraMouse?(context: CameraInputContext): boolean;
     handleCameraScroll?(context: CameraInputContext): boolean;
     updateInteractionPointer?(camera: Camera): void;
     handleCameraFollow?(context: CameraFollowContext): boolean;
+    /** A connected standard-mapping controller, each frame; return true to take it over. */
+    handleGamepad?(context: GamepadContext): boolean;
+    /** A hitsplat arrived from the server (before it is drawn). */
+    onHitsplat?(event: HitsplatEventPayload): void;
+    /** A health bar update arrived from the server. */
+    onHealthBar?(event: HealthBarEvent): void;
+    /** A clientscript finished, nested calls included (RuneLite's ScriptPostFired). */
+    onScriptFinished?(scriptId: number): void;
     shouldKeepWorldMenuOpen?(): boolean;
     /** Supplies an alternate gameframe (e.g. the classic 317 frame). */
     gameFrame?: GameFrameProvider;
@@ -151,6 +186,16 @@ export class ClientPluginManager {
         for (const plugin of this.plugins) plugin.disposeRenderer?.(renderer);
     }
 
+    // ponytail: one WebGPU scene extension (the first offered); composing several needs
+    // per-extension binding/location ranges and a pipeline set per active combination.
+    createWebGPUSceneExtension(context: WebGPUSceneExtensionContext): WebGPUSceneExtension | undefined {
+        for (const plugin of this.plugins) {
+            const extension = plugin.createWebGPUSceneExtension?.(context);
+            if (extension) return extension;
+        }
+        return undefined;
+    }
+
     handleCameraKeys(context: CameraInputContext): boolean {
         return this.plugins.some((plugin) => plugin.handleCameraKeys?.(context) === true);
     }
@@ -169,6 +214,22 @@ export class ClientPluginManager {
 
     handleCameraFollow(context: CameraFollowContext): boolean {
         return this.plugins.some((plugin) => plugin.handleCameraFollow?.(context) === true);
+    }
+
+    handleGamepad(context: GamepadContext): boolean {
+        return this.plugins.some((plugin) => plugin.handleGamepad?.(context) === true);
+    }
+
+    onHitsplat(event: HitsplatEventPayload): void {
+        for (const plugin of this.plugins) plugin.onHitsplat?.(event);
+    }
+
+    onHealthBar(event: HealthBarEvent): void {
+        for (const plugin of this.plugins) plugin.onHealthBar?.(event);
+    }
+
+    onScriptFinished(scriptId: number): void {
+        for (const plugin of this.plugins) plugin.onScriptFinished?.(scriptId);
     }
 
     shouldKeepWorldMenuOpen(): boolean {

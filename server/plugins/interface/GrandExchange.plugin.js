@@ -81,7 +81,7 @@ function completedOffers(player) {
 }
 
 function saveOffers(player) {
-  GameConstants.PLAYER_PERSISTENCE.save(player);
+  GameConstants.PLAYER_PERSISTENCE.save(player, "grand-exchange");
 }
 
 function scheduleCompletion(player, offer) {

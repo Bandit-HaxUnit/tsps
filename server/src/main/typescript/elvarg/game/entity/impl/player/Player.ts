@@ -238,6 +238,9 @@ export class Player extends Mobile {
 
     public appendDeath() {
         if (!this.isDying) {
+            if (PluginManager.emitPlayerBeforeDeath({ player: this, preventDeath: false })) {
+                return;
+            }
             TaskManager.submit(new PlayerDeathTask(this));
             this.isDying = true;
         }
@@ -247,9 +250,10 @@ export class Player extends Mobile {
         return this.getSkillManager().getCurrentLevel(Skill.HITPOINTS);
     }
 
-    public getAttackAnim(): number {
+    public getAttackAnim(target?: Mobile): number {
         const fightType = FightType.resolve(this.getFightType()) ?? FightType.UNARMED_KICK;
-        return WeaponProfiles.attackAnimation(this, fightType.getAnimation());
+        const againstNpc = target?.isNpc?.() === true;
+        return WeaponProfiles.attackAnimation(this, fightType.getAnimationAgainst(againstNpc), againstNpc);
     }
 
     public getAttackSound(): Sound {
@@ -552,7 +556,7 @@ export class Player extends Mobile {
         this.setHasVengeance(false);
         this.getVengeanceTimer().stop();
         if (this.getAttribute?.(ATTR_SKIP_PERSISTENCE) !== true) {
-            GameConstants.PLAYER_PERSISTENCE.save(this);
+            GameConstants.PLAYER_PERSISTENCE.save(this, "logout");
         }
 
         const ch: any = this.getSession()?.getChannel();

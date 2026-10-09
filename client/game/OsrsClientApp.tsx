@@ -19,6 +19,7 @@ import {
 import {
     checkMobile,
     isIos,
+    isLowEndDevice,
     isStandaloneDisplayMode,
     isTouchDevice,
 } from "../common/utils/DeviceUtil";
@@ -30,7 +31,7 @@ import {
 } from "../common/utils/StorageUtil";
 import { fetchCacheList, loadCacheFilesAuto } from "./Caches";
 import { GameContainer } from "./GameContainer";
-import { getAvailableRenderers } from "./GameRenderers";
+import { pickRendererType } from "./GameRenderers";
 import { OsrsClient } from "./OsrsClient";
 import {
     getClientPreference,
@@ -189,6 +190,8 @@ function OsrsClientApp() {
     const workerPoolNonce = readWorkerPoolNonce();
     const workerCount = useMemo(() => {
         const cores = navigator.hardwareConcurrency || 2;
+        // Each worker builds scenes in its own memory: a low-end device (phone, tablet) gets one.
+        if (isLowEndDevice) return 1;
         return checkMobile() || isIos ? 2 : Math.max(2, Math.min(4, cores - 1));
     }, []);
 
@@ -289,12 +292,12 @@ function OsrsClientApp() {
 
             // ========== Create OsrsClient BEFORE cache download ==========
             // This allows the LoginRenderer to display download progress via the state machine
-            const availableRenderers = getAvailableRenderers();
-            if (availableRenderers.length === 0) {
+            const rendererType = await pickRendererType();
+            if (!rendererType) {
                 setErrorMessage("No renderers available");
                 return;
             }
-            const rendererType = availableRenderers[0];
+            console.log(`[renderer] using ${rendererType}`);
 
             // Create OsrsClient without cache - starts in DOWNLOADING state
             const client = new OsrsClient(

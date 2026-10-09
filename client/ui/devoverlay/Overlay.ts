@@ -183,6 +183,7 @@ export interface OverlayUpdateArgs {
             radiusFine: number,
         ) => number;
         sampleHeightAtExactPlane: (worldX: number, worldZ: number, plane: number) => number;
+        getHeightSamplePlaneForTile?: (tileX: number, tileY: number, basePlane: number) => number;
         getEffectivePlaneForTile: (tileX: number, tileY: number, basePlane: number) => number;
         getOccupancyPlaneForTile?: (tileX: number, tileY: number, basePlane: number) => number;
         getTileRenderFlagAt: (level: number, tileX: number, tileY: number) => number;

@@ -275,6 +275,11 @@ export class ClientConnection {
         }
       }
       switch (packet.type) {
+        case "movement_input":
+          if (this.player && this.player.getStatus() !== PlayerStatus.TRADING) {
+            PluginManager.emitCustomEvent("player:movement-input", { player: this.player, packet });
+          }
+          continue;
         case "move":
           this.walk(packet.worldX, packet.worldY, packet.modifierFlags, packet.run === true);
           continue;
@@ -537,6 +542,8 @@ export class ClientConnection {
               );
             } else if (actionPacket.groupId === 593 && actionPacket.childId === 39) {
               CombatSpecial.activate(this.player);
+            } else if (WeaponInterfaceManager.handleStyleButton(this.player, actionPacket.groupId, actionPacket.childId)) {
+              BonusManager.update(this.player);
             } else if (Autocasting.handleWidgetAction(
               this.player, actionPacket.groupId, actionPacket.childId, actionPacket.slot
             )) {
@@ -757,6 +764,8 @@ export class ClientConnection {
           continue;
         case "interaction_stop":
           if (this.player) {
+            this.player.getMovementQueue().reset();
+            this.player.getMovementQueue().walkToReset();
             this.player.getCombat().reset();
             this.player.setFollowing(null);
             this.player.setMobileInteraction(null);
@@ -968,6 +977,9 @@ export class ClientConnection {
       .sendSkillsSnapshot()
       .sendRunEnergy();
     player.getQuickPrayers().sync();
+    // Plugins re-sync client state that sendTabInterface(6)'s spell-unlock varps
+    // overwrote (quest varps share storage with NPC transform varps).
+    PluginManager.emitCustomEvent("player:bootstrap-complete", { player, username: player.getUsername() });
   }
 
   private walk(x: number, y: number, modifierFlags: number, forceRun = false): void {

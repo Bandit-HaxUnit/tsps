@@ -47,8 +47,14 @@ function defineDoorData({ ObjectIdentifiers: O }) {
 
   // Single doors the pairing below can't find: the open variant is not closedId + 1 (e.g. Large
   // door 1517 -> 1520, same models), or it has no "Close" (DOOR_181, the open Keldagrim door on
-  // the way to the Blast Furnace, shares DOOR_180's model but offers no option).
-  SINGLE_DOOR_OPEN_IDS = new Map([[O.LARGE_DOOR_11, O.LARGE_DOOR_14], [O.DOOR_180, O.DOOR_181]]);
+  // the way to the Blast Furnace, shares DOOR_180's model but offers no option). Witch's House's
+  // interior doors (DOOR_499 closed -> DOOR_498 open) are inverted: the open "Close"-only leaf
+  // carries the lower id, so the ascending scan never sees the pair.
+  SINGLE_DOOR_OPEN_IDS = new Map([
+    [O.LARGE_DOOR_11, O.LARGE_DOOR_14],
+    [O.DOOR_180, O.DOOR_181],
+    [O.DOOR_499, O.DOOR_498],
+  ]);
 
   // OSRS wooden gates are two locs that pivot together around the hinge post: a hinge panel
   // and an extension panel. Opening/closing moves BOTH pieces, so the "closed id + 1 = open

@@ -136,7 +136,10 @@ function openMenu(event) {
       sail(player, port, fare);
     });
   }
-  pluginApi.sendMultiChatboxPrompt(player, "Where would you like to sail to?", ...options);
+  // Return the prompt's success: when the destination list is too long for the
+  // chatbox the click is not handled, so another plugin (a quest's Trader
+  // Crewmember) can own the Talk-to instead.
+  return pluginApi.sendMultiChatboxPrompt(player, "Where would you like to sail to?", ...options);
 }
 module.exports = {
   name: "CharterShips",

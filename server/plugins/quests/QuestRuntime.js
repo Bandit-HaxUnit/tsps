@@ -60,6 +60,7 @@ const STATUS_COMPLETE = 2;
 
 const quests = [];
 let widgetsRegistered = false;
+let coreApi = null;
 
 function stageAttribute(questKey) {
   return `quest.${questKey}.stage`;
@@ -167,6 +168,13 @@ function refreshQuestList(player) {
   sendQuestList(player);
 }
 
+/**
+ * The login bootstrap's sendTabInterface(6) sends the all-spells-unlocked varps
+ * after the player-login hooks, clobbering cache NPC transform varps that share
+ * storage with quest varps (e.g. Drezel's varp 302). sendQuestVarps (below) is
+ * bound to player:bootstrap-complete to re-send the real stages.
+ */
+
 function questStatus(quest, player) {
   if (quest.isComplete(player)) return STATUS_COMPLETE;
   if (quest.isStarted(player)) return STATUS_IN_PROGRESS;
@@ -238,7 +246,62 @@ function openCompletedScroll(player, quest, questPoints) {
   }
 }
 
+/**
+ * True while the player has a chatbox up: a running dialogue or a multi-option prompt.
+ * Stale dialogue-manager entries after a close are harmless here only because
+ * sendInterfaceRemoval resets the manager before this ever sees them.
+ */
+function chatboxOpen(player) {
+  const prompt = coreApi?.MultiChatboxPrompt?.getPending?.(player) ?? null;
+  return player.getDialogueManager?.()?.isActive?.() === true || prompt !== null;
+}
+
+/**
+ * Completion scroll entry point. Rewards, jingle and message fire immediately in
+ * complete(); the scroll has to wait when the completion happens inside an open
+ * chatbox, because the hand-in dialogue closes the interface right after the
+ * action returns (sendInterfaceRemoval) and would wipe it. Polls a tick at a time
+ * until the dialogue/prompt is gone, then opens it. A player who logs out while
+ * waiting gets no scroll.
+ */
+function showCompletedScroll(player, quest, questPoints) {
+  if (player.isRegistered?.() === false) return;
+  const { CountdownTask, TaskManager } = coreApi ?? {};
+  // Always defer at least a tick: during a hand-in action the dialogue manager already
+  // reports inactive, but NpcDialogues still sends sendInterfaceRemoval right after the
+  // action returns and would wipe a scroll opened now.
+  if (!CountdownTask || !TaskManager) {
+    openCompletedScroll(player, quest, questPoints);
+    return;
+  }
+  TaskManager.submit(
+    new CountdownTask(player, 1, () => {
+      if (player.isRegistered?.() === false) return;
+      if (chatboxOpen(player)) {
+        showCompletedScroll(player, quest, questPoints);
+        return;
+      }
+      openCompletedScroll(player, quest, questPoints);
+    })
+  );
+}
+
+/**
+ * quest:is-complete / quest:is-started { player, key, complete | started }: answered for quests
+ * registered here, by each quest's own stage values. An unknown key is left unanswered (null).
+ */
+function answerIsComplete(request) {
+  const quest = quests.find((entry) => entry.key === request?.key);
+  if (quest && request.player) request.complete = quest.isComplete(request.player);
+}
+
+function answerIsStarted(request) {
+  const quest = quests.find((entry) => entry.key === request?.key);
+  if (quest && request.player) request.started = quest.isStarted(request.player);
+}
+
 function registerQuestWidgets(api) {
+  coreApi = api.core;
   if (widgetsRegistered) return;
   widgetsRegistered = true;
 
@@ -257,8 +320,36 @@ function registerQuestWidgets(api) {
   );
   // SideJournalDefaults asks for the list when it mounts the quest tab.
   api.onCustomEvent("quest:list-refresh", ({ player }) => refreshQuestList(player));
+  api.onCustomEvent("quest:is-complete", answerIsComplete);
+  api.onCustomEvent("quest:is-started", answerIsStarted);
   // The character summary shows the same header stats without opening the list.
   api.onPlayerLogin(({ player }) => sendQuestHeaderStats(player));
+  api.onPlayerLogin(sendQuestVarps);
+  // The login bootstrap's sendTabInterface(6) runs after the login hooks and
+  // re-sends the all-spells-unlocked varps, clobbering quest varps that share
+  // storage with cache transforms (e.g. Drezel's 302). Re-send ours afterwards.
+  api.onCustomEvent("player:bootstrap-complete", ({ player }) => sendQuestVarps({ player }));
+}
+
+/**
+ * Sends each quest's saved stage in its varp on login. The client reads them for more than the
+ * quest list: the cache shows locs and NPCs by quest progress (the Grand Exchange spirit tree
+ * only has Travel once Tree Gnome Village's varp says complete). setStage sends a varp only
+ * when it changes, so without this a relog left them all at 0. Stage 0 is sent too: the login
+ * bootstrap clobbers shared varps, so unstarted quests must be reset to 0 as well.
+ */
+function sendQuestVarps({ player }) {
+  const sender = player.getPacketSender();
+  for (const quest of quests) {
+    // Bitfield stages must write their varbit: writing the whole parent varp
+    // clobbers sibling bits (X Marks/Client of Kourend share veos_quest).
+    if (quest.varbitId !== undefined) {
+      sender.sendVarbit(quest.varbitId, quest.getStage(player));
+      continue;
+    }
+    if (!Number.isInteger(quest.varpId) || quest.varpId < 0) continue;
+    sender.sendConfig(quest.varpId, quest.getStage(player));
+  }
 }
 
 // ============================================================================
@@ -288,8 +379,16 @@ function registerQuest(api, def) {
     },
     setStage(player, value) {
       player.setAttribute(stageKey, value | 0);
-      player.getPacketSender().sendConfig(def.varpId, value | 0);
+      // Quests whose stage lives in a varbit of a shared varp (most post-2007
+      // quests) set the varbit, so sibling bits in the same varp survive.
+      if (def.varbitId !== undefined) {
+        player.getPacketSender().sendVarbit(def.varbitId, value | 0);
+      } else {
+        player.getPacketSender().sendConfig(def.varpId, value | 0);
+      }
       refreshQuestList(player);
+      // Quests whose progress shows in more than their varp (a varbit the cache reads) follow it.
+      api.emitCustomEvent?.("quest:stage-changed", { player, key: def.key, stage: value | 0 });
     },
     isStarted(player) {
       return quest.getStage(player) >= (def.startedValue ?? 1);
@@ -309,7 +408,7 @@ function registerQuest(api, def) {
       if (def.rewardItemId !== undefined) player.getInventory().adds(def.rewardItemId, 1);
       player.getPacketSender().sendJingle(QUEST_COMPLETE_JINGLE, 0);
       player.sendMessage(`Congratulations, you've completed a quest: ${def.name}`);
-      openCompletedScroll(player, quest, points | 0);
+      showCompletedScroll(player, quest, points | 0);
       return true;
     },
   };
@@ -418,17 +517,20 @@ function flattenSpeakers(steps) {
 /**
  * Plays one variant of a transcript page for `player`. Returns false when the
  * page/variant is missing. `npcId` drives the chathead and the emitted events.
+ * `select` can narrow the variant's steps (e.g. skip a wiki continuation tail).
  */
-function startTranscript(api, player, npcId, page, variant) {
+function startTranscript(api, player, npcId, page, variant, select) {
   const data = loadTranscripts(api);
   const record = data?.[page];
   const raw = record?.variants?.[variant];
   if (!Array.isArray(raw)) return false;
+  const steps = typeof select === "function" ? select(raw) : raw;
+  if (!Array.isArray(steps) || steps.length === 0) return false;
   const { startDialogue: playDialogue } = require("../npcs/NpcDialogues.plugin.js");
   const definition = api.core.NpcDefinition.forId(npcId);
   const event = { player, npcId, npc: null, definition };
   const context = { player, npc: null, npcId, definition, pages: [{ page, variants: [variant] }] };
-  playDialogue(api, event, flattenSpeakers(raw), record.branches, context);
+  playDialogue(api, event, flattenSpeakers(steps), record.branches, context);
   return true;
 }
 
@@ -438,6 +540,7 @@ module.exports = {
   QUEST_COMPLETE_JINGLE,
   registerQuest,
   getRegisteredQuests: () => quests.slice(),
+  sendQuestVarps,
   refreshQuestList,
   openJournal,
   openJournalBySlot,

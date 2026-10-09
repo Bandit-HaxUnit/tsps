@@ -5,6 +5,7 @@ precision highp float;
 layout(std140, column_major) uniform;
 
 #include "./includes/scene-uniforms.glsl";
+#include "./includes/brightness.glsl";
 
 uniform highp sampler2DArray u_textures;
 uniform highp isampler2D u_textureMaterials;
@@ -321,7 +322,7 @@ void main() {
         surface =
             shadeWater(v_worldUv, v_texCoord, v_worldPos, mat, waterMask, u_currentTime) * u_brightness;
     } else {
-        surface = textureColor.rgb * paletteColor * u_brightness;
+        surface = applyBrightness(textureColor.rgb, paletteColor);
     }
 
     float fog = clamp(v_fogAmount, 0.0, 1.0);

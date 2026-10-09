@@ -6,7 +6,7 @@ import { CustomInterfaceRegistry } from "../game/interfaces/CustomInterfaceRegis
 import * as fs from "fs";
 import * as path from "path";
 import { GameConstants } from "../game/GameConstants";
-import { isMembersWorld } from "../game/definition/WorldDefinition";
+import { isMembersWorld, readWorldConfig } from "../game/definition/WorldDefinition";
 import { PlayerRights } from "../game/model/rights/PlayerRights";
 import { MapRegionReplacementManager } from "../game/collision/MapRegionReplacementManager";
 import { DefinitionLoader } from "../game/definition/loader/DefinitionLoader";
@@ -83,6 +83,7 @@ import {
   PluginShouldKeepItemOnDeathEvent,
   PluginPlayerDeathItemDropEvent,
   PluginPlayerDeathEvent,
+  PluginPlayerBeforeDeathEvent,
   PluginPlayerOptionEvent,
   PluginPlayerDealtDamageEvent,
   PluginCombatHitRollEvent,
@@ -209,6 +210,7 @@ export class PluginManager {
   }> = [];
   private static npcDeathHooks: PluginHook<PluginNpcDeathEvent>[] = [];
   private static npcBeforeDeathHooks: PluginHook<PluginNpcBeforeDeathEvent>[] = [];
+  private static playerBeforeDeathHooks: PluginHook<PluginPlayerBeforeDeathEvent>[] = [];
   private static npcHitModifyHooks: PluginHook<PluginNpcHitModifyEvent>[] = [];
   private static zoneHooks: Array<{
     pluginName: string;
@@ -779,6 +781,11 @@ export class PluginManager {
     if (definition.ownerOnly) {
       npc.setOwnerOnly(true);
     }
+    if (definition.owner || definition.ownerOnly) {
+      // Owner-scoped spawns are quest/instance NPCs: when they die, the owning
+      // plugin resyncs them, so never fall back to a global unowned respawn clone.
+      (npc as any).__skipDefaultRespawn = true;
+    }
     if (!World.getNpcs().add(npc)) {
       World.getAddNPCQueue().push(npc);
     }
@@ -790,6 +797,7 @@ export class PluginManager {
     if (!npc) {
       return;
     }
+    (npc as any).__skipDefaultRespawn = true;
     const { World } = require("../game/World");
     const addQueue = World.getAddNPCQueue();
     const queued = addQueue.indexOf(npc);
@@ -1327,6 +1335,13 @@ export class PluginManager {
     return null;
   }
 
+  public static emitPlayerBeforeDeath(event: PluginPlayerBeforeDeathEvent): boolean {
+    for (const hook of PluginManager.playerBeforeDeathHooks) {
+      PluginManager.executeHook(hook, event, "player_before_death", "player_before_death");
+    }
+    return event.preventDeath === true;
+  }
+
   public static emitPlayerDeath(event: PluginPlayerDeathEvent): boolean {
     if (!event || !event.player || event.handled) {
       return false;
@@ -1752,9 +1767,7 @@ export class PluginManager {
 
   private static loadDisabledPluginNames(): Set<string> {
     const configPath = path.join(process.cwd(), "data", "definitions", "world.json");
-    const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
-      disabledPlugins?: unknown;
-    };
+    const config = readWorldConfig() as { disabledPlugins?: unknown };
     if (!config || typeof config !== "object" || Array.isArray(config)) {
       throw new Error(`[plugins] ${configPath} must contain an object`);
     }
@@ -1779,9 +1792,7 @@ export class PluginManager {
     }
     let parsed: unknown;
     try {
-      const configPath = path.join(process.cwd(), "data", "definitions", "world.json");
-      parsed = (JSON.parse(fs.readFileSync(configPath, "utf8")) as { pluginConfig?: unknown })
-        .pluginConfig;
+      parsed = (readWorldConfig() as { pluginConfig?: unknown }).pluginConfig;
     } catch {
       parsed = undefined;
     }
@@ -2022,6 +2033,8 @@ export class PluginManager {
       Sound: require("../game/Sound").Sound,
       Sounds: require("../game/Sounds").Sounds,
       Location: require(`${model}/Location`).Location,
+      Mobile: require("../game/entity/impl/Mobile").Mobile,
+      encodeFinePosition: require("../net/protocol/ClientProtocol").encodeFinePosition,
       Boundary: require(`${model}/Boundary`).Boundary,
       PolygonalBoundary: require(`${model}/PolygonalBoundary`).PolygonalBoundary,
       Area: require(`${model}/areas/Area`).Area,
@@ -3060,6 +3073,19 @@ export class PluginManager {
               return;
             }
             handler(event);
+          },
+        });
+      },
+      onPlayerBeforeDeath: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.playerBeforeDeathHooks.push({
+          pluginName,
+          handler: (event) => {
+            if (event?.player) {
+              handler(event);
+            }
           },
         });
       },

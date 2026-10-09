@@ -12,6 +12,42 @@ import { MapManager, MapSquare } from "./MapManager";
 import { OsrsClient } from "./OsrsClient";
 import { IProjectileManager } from "./interfaces/IProjectileManager";
 import type { PlayerSpotAnimationEvent } from "./sync/PlayerSyncTypes";
+import type { WidgetsOverlay } from "../ui/devoverlay/WidgetsOverlay";
+import { gammaFromScreenBrightness, loadScreenBrightness } from "../ui/ScreenBrightness";
+
+/** Optional details of a LOC change (moves, rotations, shape changes). */
+export type LocChangeOptions = {
+    oldTile?: { x: number; y: number };
+    newTile?: { x: number; y: number };
+    oldRotation?: number;
+    newRotation?: number;
+    newShape?: number;
+};
+
+/** A server REGION replacement: new terrain/object data for one 64x64 region. */
+export type RegionReplacementEvent = {
+    regionId: number;
+    allowReload: boolean;
+    terrainData: Uint8Array;
+    objectData?: Uint8Array;
+};
+
+/** A spot animation on an NPC (e.g. ice barrage or a whip special on its target). */
+export type NpcSpotAnimationEvent = {
+    npcServerId: number;
+    spotId: number;
+    height: number;
+    startCycle: number;
+    slot?: number;
+};
+
+/** A spot animation anchored to a tile. */
+export type WorldSpotAnimationEvent = {
+    spotId: number;
+    tile: { x: number; y: number; level?: number };
+    height?: number;
+    startCycle: number;
+};
 
 export interface HitsplatEventPayload {
     targetType: "player" | "npc";
@@ -32,6 +68,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
 
     mapManager: MapManager<T>;
     uiHidden: boolean = false;
+    widgetsOverlay?: WidgetsOverlay;
 
     /** Drops any cached roof visibility state so the next frame recomputes it. */
     invalidateRoofState(): void {}
@@ -174,10 +211,15 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         this.handleKeyInput(deltaTime);
         this.handleControllerInput(deltaTime);
 
-        if (!this.uiHidden && !this.osrsClient.inputManager.hasInteractionPointerOverride()) {
+        if (!this.uiHidden && (!this.osrsClient.inputManager.hasInteractionPointerOverride() ||
+            this.osrsClient.inputManager.isWidgetInteractionPointer())) {
             // Process UI interaction BEFORE mouse input so widgets can consume scroll
             // before camera zoom uses it
             this.osrsClient.handleUiInput();
+        } else if (!this.uiHidden) {
+            // A pointer aimed at the world (the backquote crosshair) still drives widget hover,
+            // so the game's mouseover tooltip follows it; its clicks stay with the world.
+            this.osrsClient.handleUiHover();
         }
         if (!this.uiHidden) {
             // Update widget layout (CS2 positioning/sizing)
@@ -377,6 +419,10 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         const gamepad = inputManager.getGamepad();
 
         if (gamepad && gamepad.connected && gamepad.mapping === "standard") {
+            // A plugin (Backquote's controller play) takes the controller over from the debug camera.
+            if (this.osrsClient.clientPlugins.handleGamepad({ gamepad, camera, input: inputManager, deltaTime })) {
+                return;
+            }
             let cameraSpeedMult = 0.01;
             // X, R1
             if (gamepad.buttons[0].pressed || gamepad.buttons[5].pressed) {
@@ -415,9 +461,62 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         }
     }
 
+    /** OSRS's gamma exponent (lower is brighter), from the Settings "Screen brightness" slider. */
+    brightness: number = gammaFromScreenBrightness(loadScreenBrightness());
+
     registerHitsplat(_event: HitsplatEventPayload): void {}
 
     registerSpotAnimation(_event: PlayerSpotAnimationEvent): void {}
+
+    registerNpcSpotAnimation(_event: NpcSpotAnimationEvent): void {}
+
+    registerWorldSpotAnimation(_event: WorldSpotAnimationEvent): void {}
+
+    // World objects (LOC packets). Backends rebuild the affected map squares.
+    onLocChange(
+        _oldId: number,
+        _newId: number,
+        _tile: { x: number; y: number },
+        _level: number,
+        _opts?: LocChangeOptions,
+    ): void {}
+
+    onLocAddChange(
+        _locId: number,
+        _tile: { x: number; y: number },
+        _level: number,
+        _shape: number,
+        _rotation: number,
+    ): void {}
+
+    onLocDel(_tile: { x: number; y: number }, _level: number, _shape: number, _rotation: number): void {}
+
+    onLocAnim(
+        _locId: number,
+        _tile: { x: number; y: number },
+        _level: number,
+        _shape: number,
+        _rotation: number,
+        _animId: number,
+    ): void {}
+
+    refreshGamemodeWorldLocs(): void {}
+
+    onRegionReplacement(_payload: RegionReplacementEvent): void {}
+
+    // Instanced areas (REBUILD_REGION): the scene is one built map square while active.
+    /** True while an instance scene replaces normal map streaming. */
+    instanceActive: boolean = false;
+    /** The map square the drawn instance scene is built as; it owns every NPC in the scene. */
+    instanceSceneMap: { mapX: number; mapY: number } | null = null;
+
+    async loadInstanceScene(
+        _templateChunks: number[][][],
+        _regionX: number,
+        _regionY: number,
+    ): Promise<void> {}
+
+    clearInstance(): void {}
 
     abstract getProjectileManager(): IProjectileManager | undefined;
 
