@@ -60,6 +60,17 @@ type WidgetRenderEntry = {
     renderOpts: GLRenderOpts;
 };
 
+/**
+ * Side-panel widgets the widget overlays anchor to: the fixed 317 side panels, the
+ * resizable side container and the modern side background. Overlays are drawn right after
+ * one of these is drawn, so later widgets (tooltips, menus) stay on top of them.
+ */
+const WIDGET_OVERLAY_ANCHORS = new Set<number>([
+    (548 << 16) | 80, // Toplevel.SIDE_PANELS
+    (161 << 16) | 73, // ToplevelOsrsStretch.SIDE_CONTAINER
+    (164 << 16) | 70, // ToplevelPreEoc.SIDE_BACKGROUND
+]);
+
 type DirtyRect = {
     x: number;
     y: number;
@@ -91,6 +102,9 @@ export class WidgetsOverlay implements Overlay {
     private overlayScaleX: number = 1;
     private overlayScaleY: number = 1;
     private widgetEntries: WidgetRenderEntry[] = [];
+    /** Overlays for the current pass, drawn from inside the tree at an anchor widget. */
+    private currentWidgetOverlays: WidgetOverlay[] | null = null;
+    private overlayDrawnThisPass = false;
     private visible: Map<number, boolean> = new Map();
     private hasPresentedFrame: boolean = false;
 
@@ -333,6 +347,8 @@ export class WidgetsOverlay implements Overlay {
             ...baseRenderOpts,
             widgetRules: gameFrame?.widgetRules?.(),
             keepChromeUids: gameFrame?.keepChrome?.(),
+            widgetOverlayAnchors: WIDGET_OVERLAY_ANCHORS,
+            widgetOverlayAnchorDrawn: () => this.drawWidgetOverlaysAtAnchor(),
             rootOffsetX:
                 typeof (root as any).__widgetRenderOffsetX === "number"
                     ? Math.round(Number((root as any).__widgetRenderOffsetX) * this.overlayScaleX)
@@ -894,9 +910,6 @@ export class WidgetsOverlay implements Overlay {
                         gameFrame.drawGameFrame(this.buildGameFrameContext(this.glRenderer));
                         this.glRenderer.flush();
                     }
-                    (this.glRenderer.canvas as any).__ui =
-                        (this.glRenderer.canvas as any).__ui ?? {};
-                    (this.glRenderer.canvas as any).__ui.mousedOverRect = null;
                     try {
                         const roots = (sharedUi as any).__widgetRoots;
                         if (roots) {
@@ -906,6 +919,8 @@ export class WidgetsOverlay implements Overlay {
                         }
                     } catch {}
 
+                    this.currentWidgetOverlays = widgetOverlays;
+                    this.overlayDrawnThisPass = false;
                     for (const entry of this.widgetEntries) {
                         renderWidgetTreeGL(
                             this.glRenderer,
@@ -913,11 +928,9 @@ export class WidgetsOverlay implements Overlay {
                             entry.renderOpts,
                         );
                     }
-                    // Widget overlays (status bars) draw above the widget tree so the 317
-                    // frame's chrome cannot hide them; the hovered tooltip widget is then
-                    // redrawn on top so it is never covered.
-                    this.drawWidgetOverlays(widgetOverlays);
-                    this.redrawTooltip();
+                    // The anchors draw the overlays inside the tree; if this layout has no
+                    // anchor (or none was drawn), fall back to drawing them here.
+                    if (!this.overlayDrawnThisPass) this.drawWidgetOverlays(widgetOverlays);
                     this.drawTradeAmountOverlay(widgetManager);
                     this.drawMouseOverText(mouseOverTextState);
                     this.rootSetChanged = false;
@@ -928,9 +941,8 @@ export class WidgetsOverlay implements Overlay {
                     for (const dirtyRect of dirtyRects) {
                         this.clearOffscreenRect(dirtyRect);
                     }
-                    (this.glRenderer.canvas as any).__ui =
-                        (this.glRenderer.canvas as any).__ui ?? {};
-                    (this.glRenderer.canvas as any).__ui.mousedOverRect = null;
+                    this.currentWidgetOverlays = widgetOverlays;
+                    this.overlayDrawnThisPass = false;
                     for (const dirtyRect of dirtyRects) {
                         const rootClip = {
                             x0: dirtyRect.x,
@@ -956,9 +968,10 @@ export class WidgetsOverlay implements Overlay {
                             });
                         }
                     }
-                    if (redrawWidgetOverlays) {
+                    // Bar values changed: repaint them even if the panel was not the dirty
+                    // region (the anchor callback did not fire for that case).
+                    if (redrawWidgetOverlays && !this.overlayDrawnThisPass) {
                         this.drawWidgetOverlays(widgetOverlays);
-                        this.redrawTooltip();
                     }
                     this.drawTradeAmountOverlay(widgetManager);
                     const mouseOverTextRect = mouseOverTextState.rect;
@@ -1018,66 +1031,17 @@ export class WidgetsOverlay implements Overlay {
     }
 
     /**
-     * Redraws the visible tooltip (the cache's tooltip interface, group 291) on top of the
-     * widget overlays, so status bars render above the 317 frame's chrome without ever
-     * covering a hovered tooltip. Falls back to the moused-over IF1 redirect widget when no
-     * tooltip interface instance is laid out.
+     * Draws the widget overlays (status bars) as soon as a side-panel anchor widget has
+     * drawn its own content. Everything the tree draws afterwards - tab content, tooltips,
+     * menus - stays on top of the bars.
      */
-    private redrawTooltip(): void {
-        const glr = this.glRenderer;
-        if (!glr) return;
-        const manager: any = this.ctx.getWidgetManager?.();
-        const rect = this.visibleTooltipRect(manager) ?? this.mousedOverRect();
-        if (!rect) return;
-        const clip = {
-            x0: rect.x,
-            y0: rect.y,
-            x1: rect.x + rect.w,
-            y1: rect.y + rect.h,
-        };
-        // Render the rect again in tree order: chrome first, then the tooltip on top of the
-        // bars. Only entries with visible content in the rect paint anything.
-        for (const entry of this.widgetEntries) {
-            renderWidgetTreeGL(glr, entry.root, {
-                ...entry.renderOpts,
-                rootClip: clip,
-            });
-        }
+    private drawWidgetOverlaysAtAnchor(): void {
+        if (this.overlayDrawnThisPass) return;
+        const overlays = this.currentWidgetOverlays;
+        if (!overlays || overlays.length === 0) return;
+        this.overlayDrawnThisPass = true;
+        this.drawWidgetOverlays(overlays);
     }
-
-    /** The cache tooltip interface's visible rect, or null when no tooltip is showing. */
-    private visibleTooltipRect(
-        manager: any,
-    ): { x: number; y: number; w: number; h: number } | null {
-        if (!manager?.getWidgetByUid) return null;
-        let best: { x: number; y: number; w: number; h: number } | null = null;
-        for (let child = 0; child < 24; child++) {
-            const uid = (WidgetsOverlay.TOOLTIP_GROUP << 16) | child;
-            const widget = manager.getWidgetByUid(uid);
-            if (!widget) continue;
-            const w = Number(widget._absWidth ?? 0);
-            const h = Number(widget._absHeight ?? 0);
-            if (!(w > 0 && h > 0)) continue;
-            if (typeof manager.isEffectivelyHidden === "function" && manager.isEffectivelyHidden(uid)) {
-                continue;
-            }
-            if (!best || w * h > best.w * best.h) {
-                best = { x: widget._absX, y: widget._absY, w, h };
-            }
-        }
-        return best;
-    }
-
-    /** The rect of the widget the mouse is over, if the tree remembered one this pass. */
-    private mousedOverRect(): { x: number; y: number; w: number; h: number } | null {
-        const hover = (this.glRenderer?.canvas as any)?.__ui?.mousedOverRect as
-            | { x: number; y: number; w: number; h: number }
-            | null
-            | undefined;
-        return hover && hover.w > 0 && hover.h > 0 ? hover : null;
-    }
-
-    private static readonly TOOLTIP_GROUP = 291;
 
     private buildGameFrameContext(glr: GLRenderer): GameFrameDrawContext {
         const client = this.ctx.getGameContext?.()?.osrsClient;

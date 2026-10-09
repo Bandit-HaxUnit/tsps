@@ -754,29 +754,6 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
 
     const mousedOverIf1WidgetUid = resolveIf1MousedOverWidgetUid();
 
-    // Remember the moused-over widget (and its mouse-over redirect target, the tooltip)
-    // so the widget-overlay host can redraw it above status bars and other overlays.
-    if (glr?.canvas) {
-        const hoveredWidget = mousedOverIf1WidgetUid != null
-            ? widgetManager?.getWidgetByUid(mousedOverIf1WidgetUid) ??
-              findWidgetByGroupFile(
-                  root,
-                  (mousedOverIf1WidgetUid >>> 16) & 0xffff,
-                  mousedOverIf1WidgetUid & 0xffff,
-              )
-            : undefined;
-        if (hoveredWidget && (hoveredWidget._absWidth ?? 0) > 0 && (hoveredWidget._absHeight ?? 0) > 0) {
-            (glr.canvas as any).__ui = (glr.canvas as any).__ui ?? {};
-            (glr.canvas as any).__ui.mousedOverRect = {
-                x: hoveredWidget._absX,
-                y: hoveredWidget._absY,
-                w: hoveredWidget._absWidth,
-                h: hoveredWidget._absHeight,
-                groupId: ((hoveredWidget.groupId ?? (hoveredWidget.uid >>> 16)) & 0xffff) | 0,
-            };
-        }
-    }
-
     // Generic steelborder renderer (title/close/divider options)
     // Prefer shared Frame9Slice helpers via plugins/components; no local wrappers here
     function drawWrappedTextGL(
@@ -3661,6 +3638,12 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             if (profileWidgetRender) {
                 debugRectMs += performance.now() - debugRectStartMs;
             }
+        }
+
+        // Side-panel anchors draw first, then the host's widget overlays (status bars), then
+        // this widget's children and every later widget - so tooltips stay on top.
+        if (widgetUid !== 0 && opts.widgetOverlayAnchors?.has(widgetUid)) {
+            opts.widgetOverlayAnchorDrawn?.(widgetUid);
         }
 
         if (!isContainer && hasChildren) {
