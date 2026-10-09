@@ -44,6 +44,10 @@
  *     not gated on quest completion for the same reason.
  *   - Reinforced goggles are not folded into existing slayer helmets; the
  *     cleanup of the produce trail after the quest is not simulated.
+ *   - The quest sourhog spawns at (3165,9677): the cache walls off the old
+ *     (3163,9682) into an unreachable pocket, while (3165,9677) is inside the
+ *     chamber's walkable component (live-walked from the (3156,9703) landing,
+ *     all four neighbours walkable), so the kill and the corpse Cut-foot work.
  *
  * Source: https://oldschool.runescape.wiki/w/A_Porcine_of_Interest and
  * https://oldschool.runescape.wiki/w/Transcript:A_Porcine_of_Interest
@@ -199,7 +203,13 @@ module.exports = function registerPorcineOfInterestQuest(api) {
   const SCIMITAR_TILE = { x: 3162, y: 9677 };
   const CAVE_LANDING_TILE = { x: 3157, y: 9713 };
   const HOLE_RETURN_TILE = { x: 3149, y: 3347 };
-  const SOURHOG_SPAWN_TILE = { x: 3163, y: 9682 };
+  /**
+   * The skeleton chamber tile the quest sourhog spawns on. (3163,9682) is walled
+   * off from the climb-over landing; (3165,9677) is two tiles from the skeleton,
+   * was walked to from (3156,9703) and all four neighbours are walkable, so the
+   * fight and the corpse's Cut-foot are reachable.
+   */
+  const SOURHOG_SPAWN_TILE = { x: 3165, y: 9677 };
   const SPRIA_HOUSE_TILE = { x: 3092, y: 3266 };
   const SPRIA_SPAWN_TILE = { x: 3091, y: 3266 };
   const ROSIE_SPAWN_TILE = { x: 3035, y: 3296 };

@@ -679,6 +679,16 @@ module.exports = function registerDepthsOfDespairQuest(api) {
     clearCaveNpcs(player);
   }
 
+  /**
+   * The generic Ladders plugin owns objects named "Rope" and would prompt
+   * before our handler runs; claim the lower rope climb explicitly.
+   */
+  function claimRopeClimb(request) {
+    if (request.objectId !== ROPE_OBJECT_ID) return;
+    request.handled = true;
+    startMoveTranscript(request.player, "the-envoy-to-varlamore-climbing-up-the-rope", UPPER_CAVE_TILE);
+  }
+
   function handleLogin({ player }) {
     syncArturVisibility(player);
     if (inZone(CAVE_ZONE, player.getLocation())) ensureCaveNpcs(player);
@@ -781,6 +791,7 @@ module.exports = function registerDepthsOfDespairQuest(api) {
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onObjectInteraction(handleObjectInteraction);
+  api.onCustomEvent("ladders:climb", claimRopeClimb);
   api.onObjectInteraction("Bookshelf", { Search: searchBookshelf });
   api.onItemAction(handleItemAction);
   api.onNpcDeath(handleNpcDeath);

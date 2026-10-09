@@ -512,7 +512,11 @@ module.exports = function registerCurrentAffairsQuest(api) {
     if (event.action === AUDIT_RETRY_ACTION) {
       if (npcId !== CATHERINE_NPC_ID || !audits.has(player)) return;
       event.handled = true;
-      askNextQuestion(player);
+      // Starting the retry synchronously would be wiped by the transcript
+      // runtime's own close chain; close now and reopen next tick.
+      event.end = true;
+      const { CountdownTask, TaskManager } = api.core;
+      TaskManager.submit(new CountdownTask(player, 1, () => askNextQuestion(player)));
       return;
     }
     if (npcId !== ARHEIN_NPC_ID && npcId !== HARRY_NPC_ID && npcId !== CATHERINE_NPC_ID) return;

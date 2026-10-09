@@ -968,6 +968,9 @@ export class ClientConnection {
       .sendSkillsSnapshot()
       .sendRunEnergy();
     player.getQuickPrayers().sync();
+    // Bootstrap done: plugins that mirror state into varps the bootstrap
+    // clobbers (quest stage varps, e.g. Drezel's shared varp 302) can re-send it.
+    PluginManager.emitCustomEvent("player:bootstrap-complete", { player, username: player.getUsername() });
   }
 
   private walk(x: number, y: number, modifierFlags: number, forceRun = false): void {

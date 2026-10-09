@@ -353,10 +353,10 @@ module.exports = function registerXMarksTheSpotQuest(api) {
 
   /** Spade right-click Dig on the four wiki spots. */
   function handleDig(event) {
-    if (event.itemId !== SPADE) return;
+    if (event.itemId !== SPADE) return false;
     const { player } = event;
     const stage = quest.getStage(player);
-    if (stage < STAGE_FIRST_CLUE || quest.isComplete(player)) return;
+    if (stage < STAGE_FIRST_CLUE || quest.isComplete(player)) return false;
 
     const spot = DIG_SPOTS.get(stage);
     if (spot && onTile(player, spot) && held(player, CLUE_ITEM_BY_STAGE.get(stage))) {
@@ -381,7 +381,9 @@ module.exports = function registerXMarksTheSpotQuest(api) {
       player.performAnimation(new Animation(DIG_ANIMATION));
       player.getInventory().adds(ANCIENT_CASKET, 1);
       startTranscript(api, player, VEOS_NPC_ID, PAGE, LAST_DIG_VARIANT);
+      return;
     }
+    return false;
   }
 
   /** The scrolls' Read; the map scroll (23068) is an image and is left alone. */

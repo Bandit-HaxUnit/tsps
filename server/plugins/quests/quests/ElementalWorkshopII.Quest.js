@@ -161,7 +161,7 @@ module.exports = function registerElementalWorkshopIIQuest(api) {
   ]);
   // The wind tunnel pins and the crane's 5x5 base have no walkable tile of their own, and
   // every adjacent tile fails the walk-to reach check for item use ("You can't reach that!").
-  const ROUTE_ASSIST_IDS = new Set([...PIN_IDS, OLD_CRANE]);
+  const ROUTE_ASSIST_IDS = new Set([...PIN_IDS, OLD_CRANE, PIPE_REPAIR]);
   const EXTRACTOR_HAT = ObjectIdentifiers.EXTRACTOR_HAT; // 18690
   const EXTRACTOR_HAT_IDS = new Set([EXTRACTOR_HAT, ObjectIdentifiers.EXTRACTOR_HAT_2]);
   const EXTRACTOR_GUN_IDS = new Set([
