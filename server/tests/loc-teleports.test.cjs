@@ -17,8 +17,8 @@ const { MapObjects } = require("../dist/game/entity/impl/object/MapObjects");
 
 const { choose, isNetwork, refusals, toEntry, requirementFor } = require("../scripts/loc-teleport-matching.cjs");
 const LocTeleports = require("../plugins/world/LocTeleports.plugin");
-const data = require("../data/definitions/loc-teleports.json");
-const decisions = require("../data/definitions/loc-teleport-sync.json");
+const data = require("../plugins/world/data/loc-teleports.json");
+const decisions = require("../plugins/world/data/loc-teleport-sync.json");
 
 let core;
 const hooks = {};
@@ -184,7 +184,7 @@ test("a staircase used from either end takes the side the player stands on", () 
 });
 
 test("trapdoor swaps: each loc has its option, and becomes the other state", () => {
-  const swaps = require("../data/definitions/loc-swaps.json").swaps;
+  const swaps = require("../plugins/world/data/loc-swaps.json").swaps;
   for (const swap of swaps) {
     assert.equal(CacheDefinitions.getObject(swap.id)?.actions?.[swap.op - 1], swap.option, swap.name);
     assert.ok(CacheDefinitions.getObject(swap.becomes)?.name, `${swap.name} becomes ${swap.becomes}`);
