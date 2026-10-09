@@ -10,6 +10,7 @@ const { createChooseAction } = require("./actions/Choose");
 const { createSellItemsAction } = require("./actions/SellItems");
 const { createEquipToolAction } = require("./actions/EquipTool");
 const { createBankAction } = require("./actions/Bank");
+const { readBotSites } = require("./BotSites");
 const { createOrElseAction } = require("./actions/OrElse");
 const { createWalkToAction } = require("./actions/WalkTo");
 const { createEnsureItemAction } = require("./actions/EnsureItem");
@@ -331,7 +332,8 @@ function createBotActivityRegistry(options = {}) {
   // runtime site `<site>_<mode>_<tier>` whose bots only do that tier's activity for the mode.
   // A tier rolls every skill in its `skills` band and the combat stats into its `combat`
   // level band. PvP sites (with a `pvp` block) are hotspots, loaded by WildernessHotspotRegistry.
-  const sitesFile = JSON.parse(fs.readFileSync(options.sitesPath ?? DEFAULT_SITES_PATH, "utf8"));
+  // The world config's `botSites` switches sites on or off (BotSites.js).
+  const sitesFile = readBotSites(options.sitesPath ?? DEFAULT_SITES_PATH);
   const tiers = Object.entries(raw.tiers ?? {});
   for (const [tierName, tier] of tiers) {
     if (!Array.isArray(tier?.skills) || tier.skills.length !== 2 || !Array.isArray(tier.combat)) {

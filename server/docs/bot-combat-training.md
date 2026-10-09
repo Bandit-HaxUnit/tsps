@@ -17,6 +17,18 @@ tier so the mix stays near the configured one (a Varrock novice never becomes a 
 Varrock only has expert woodcutters). Switches wait for a safe point: never mid-fight or under a
 bank-trip/fight-back overlay, and a switch with no free capacity slot retries 30 s later.
 
+**Per deployment:** a world chooses its own sites in `data/definitions/world.local.json` (gitignored; or `world.json`) with `botSites`, a map of site id to `true`/`false` over the site's own `enabled` (`plugins/bots/brain/BotSites.js`). Sites it doesn't name keep theirs, so a world updates from main by fast-forward without touching `bot-sites.json`. For example, skilling and combat-training bots on and the PvP pens off:
+
+```json
+"botSites": {
+  "lumbridge": true, "varrock": true, "falador": true, "seers": true, "east_ardougne": true,
+  "edge_low": false, "edge_mid": false, "edge_mains": false,
+  "varrock_ditch": false, "green_drags_gate": false, "revs_entrance": false
+}
+```
+
+A value that isn't `true`/`false`, or an id that isn't a site, is warned about at startup and ignored.
+
 Trainers find their NPCs through the NPC cluster index (below), so they fan out across every
 nearby group of their tier's monsters. The skilling
 activities cap how many bots run each one at once (`capacity`), the rest train combat. Change the counts in `bot-sites.json`;

@@ -220,6 +220,9 @@ fast-forward:
 { "experienceMultiplier": 10, "disabledPlugins": ["VoiceChat"] }
 ```
 
+The bot population follows the same layering: `botSites` switches bot-sites.json sites on or
+off by id (`plugins/bots/brain/BotSites.js`; docs/bot-combat-training.md).
+
 ## Conventions
 
 - Do not hardcode semantic ids when a named symbol exists (rights, opcodes, states,
