@@ -83,6 +83,7 @@ import {
   PluginShouldKeepItemOnDeathEvent,
   PluginPlayerDeathItemDropEvent,
   PluginPlayerDeathEvent,
+  PluginPlayerBeforeDeathEvent,
   PluginPlayerOptionEvent,
   PluginPlayerDealtDamageEvent,
   PluginCombatHitRollEvent,
@@ -209,6 +210,7 @@ export class PluginManager {
   }> = [];
   private static npcDeathHooks: PluginHook<PluginNpcDeathEvent>[] = [];
   private static npcBeforeDeathHooks: PluginHook<PluginNpcBeforeDeathEvent>[] = [];
+  private static playerBeforeDeathHooks: PluginHook<PluginPlayerBeforeDeathEvent>[] = [];
   private static npcHitModifyHooks: PluginHook<PluginNpcHitModifyEvent>[] = [];
   private static zoneHooks: Array<{
     pluginName: string;
@@ -1325,6 +1327,13 @@ export class PluginManager {
       }
     }
     return null;
+  }
+
+  public static emitPlayerBeforeDeath(event: PluginPlayerBeforeDeathEvent): boolean {
+    for (const hook of PluginManager.playerBeforeDeathHooks) {
+      PluginManager.executeHook(hook, event, "player_before_death", "player_before_death");
+    }
+    return event.preventDeath === true;
   }
 
   public static emitPlayerDeath(event: PluginPlayerDeathEvent): boolean {
@@ -3054,6 +3063,19 @@ export class PluginManager {
               return;
             }
             handler(event);
+          },
+        });
+      },
+      onPlayerBeforeDeath: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.playerBeforeDeathHooks.push({
+          pluginName,
+          handler: (event) => {
+            if (event?.player) {
+              handler(event);
+            }
           },
         });
       },

@@ -84,6 +84,9 @@ const STAGE = Object.freeze({
 });
 const MAX_PROGRESS = STAGE.HOME_TELE;
 
+/** OSRS stops tutorial training at level 3 (Firemaking and Magic could train past it). */
+const TRAINING_LEVEL_CAP = 3;
+
 /** Tutorial Island start tile (Gielinor Guide room) and mainland destination. */
 const TUTORIAL_SPAWN = Object.freeze({ x: 3094, y: 3104, z: 0 });
 
@@ -470,6 +473,8 @@ function initialize(api) {
     Server,
     PluginManager,
     GameConstants,
+    Skill,
+    CombatType,
   } = api.core);
   npcSet = new Set(
     Object.values(IDS).filter((value) => Array.isArray(value)).flat()
@@ -1401,14 +1406,37 @@ function handleNpcDeath(event) {
       killer.sendMessage("You have defeated the giant rat!");
       advance(killer, STAGE.COMBAT_LADDER);
     }
-  } else if (event.npcId === IDS.CHICKEN) {
-    const current = stage(killer);
-    if (current >= STAGE.MAGIC_RUNES && current < STAGE.LEAVE_TALK) {
-      killer.sendMessage("The chicken is defeated by your Wind Strike!");
-      killer.sendMessage("Congratulations, you've completed a quest: Learning the Ropes");
-      advance(killer, STAGE.LEAVE_TALK);
-    }
   }
+}
+
+/** Tutorial training is capped at level 3: further experience for a maxed tutorial skill is refused. */
+function blockExperienceAboveCap(event) {
+  const player = event.player;
+  if (!player || !isActive(player)) return;
+  if (player.getSkillManager().getCurrentLevel(event.skill) >= TRAINING_LEVEL_CAP) {
+    event.allow = false;
+  }
+}
+
+/** Nothing on Tutorial Island may kill the player: prevent the death task and floor HP at 1. */
+function keepPlayerAlive(event) {
+  const player = event.player;
+  if (!player || !isActive(player)) return;
+  event.preventDeath = true;
+  player.getSkillManager().setCurrentLevel(Skill.HITPOINTS, 1, true);
+}
+
+/** The magic task completes on the first Wind Strike roll at a chicken, hit or splash. */
+function onCombatHitRoll(event) {
+  const { attacker, target, combatType } = event;
+  if (!attacker?.isPlayer?.() || !isActive(attacker)) return;
+  if (target?.getId?.() !== IDS.CHICKEN) return;
+  if (combatType !== CombatType.MAGIC) return;
+  const current = stage(attacker);
+  if (current < STAGE.MAGIC_RUNES || current >= STAGE.LEAVE_TALK) return;
+  attacker.sendMessage("You have cast the Wind Strike spell.");
+  attacker.sendMessage("Congratulations, you've completed a quest: Learning the Ropes");
+  advance(attacker, STAGE.LEAVE_TALK);
 }
 
 /** Assumes a fresh gameframe bootstrap (every tab mounted) and re-applies the tutorial HUD on top. */
@@ -1636,6 +1664,9 @@ module.exports = {
     api.onNpcClick([IDS.FISHING_SPOT], 1, handleFishing);
     api.onNpcClick([IDS.FISHING_SPOT], 2, handleFishing);
     api.onCanAttack(handleCanAttack);
+    api.onCanGainExperience(blockExperienceAboveCap);
+    api.onPlayerBeforeDeath(keepPlayerAlive);
+    api.onCombatHitRoll(onCombatHitRoll);
     api.onCanTeleport(blockTutorialTeleport);
     api.onNpcDeath(handleNpcDeath);
     api.onItemOnItem("Tinderbox", "Logs", onTinderboxLogs, { noted: false });

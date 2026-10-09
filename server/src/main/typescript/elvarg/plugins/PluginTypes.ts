@@ -407,6 +407,12 @@ export interface PluginPlayerDeathEvent {
   handled: boolean;
 }
 
+/** Fired before a player enters the death task. Set preventDeath to keep them alive (Tutorial Island). */
+export interface PluginPlayerBeforeDeathEvent {
+  player: any;
+  preventDeath: boolean;
+}
+
 export interface PluginPlayerOptionEvent {
   player: any;
   target: any;
@@ -838,6 +844,7 @@ export interface PluginApi {
   onPrayerDisabled(handler: (event: PluginPrayerDisabledEvent) => void): void;
   onCanUnequip(handler: (event: PluginCanUnequipEvent) => void): void;
   onPlayerDeath(handler: (event: PluginPlayerDeathEvent) => void): void;
+  onPlayerBeforeDeath(handler: (event: PluginPlayerBeforeDeathEvent) => void): void;
   onPlayerOption(handler: (event: PluginPlayerOptionEvent) => void): void;
   onPlayerDealtDamage(
     handler: (event: PluginPlayerDealtDamageEvent) => void
