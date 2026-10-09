@@ -425,6 +425,10 @@ export class PacketSender {
     // decoding group 162 directly from the cache. Child 9 of 161 is an
     // unrelated 0x0 icon-cluster anchor nested under the sidebar tree.
     this.chatboxGroupId = id;
+    // A (re)mounted group starts with its cache text, so resend everything written to it. The
+    // client also rewrites some itself (a dialogue's "Click here to continue" becomes "Please
+    // wait..." when clicked), which this per-player cache never sees.
+    this.player.getFrameUpdater().clearGroup(id);
     this.player.getSession().sendClientPacket(encodeWidgetSetHidden(CHATBOX_MODAL_TARGET_UID, false));
     if (this.player.getSession().sendClientPacket(encodeWidgetOpenSub(CHATBOX_MODAL_TARGET_UID, id, 0))) return this;
   }
