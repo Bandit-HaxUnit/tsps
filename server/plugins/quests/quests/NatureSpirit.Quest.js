@@ -441,7 +441,8 @@ module.exports = function registerNatureSpiritQuest(api) {
       } else {
         quest.setStage(player, STAGE_SPOKEN_FILLIMAN);
       }
-      ensureWashingBowl(player);
+      // The washing bowl is ensured on login and on entering the swamp, not in
+      // this selector (variant selection must stay side-effect-free and cacheless).
       return "finding-filliman-talking-to-filliman";
     }
     return null;
