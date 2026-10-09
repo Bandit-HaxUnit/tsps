@@ -332,7 +332,7 @@ function createBotActivityRegistry(options = {}) {
   // runtime site `<site>_<mode>_<tier>` whose bots only do that tier's activity for the mode.
   // A tier rolls every skill in its `skills` band and the combat stats into its `combat`
   // level band. PvP sites (with a `pvp` block) are hotspots, loaded by WildernessHotspotRegistry.
-  // The world config's `botSites` switches sites on or off (BotSites.js).
+  // The world config's pluginConfig "PlayerBots:sites" switches sites on or off (BotSites.js).
   const sitesFile = readBotSites(options.sitesPath ?? DEFAULT_SITES_PATH);
   const tiers = Object.entries(raw.tiers ?? {});
   for (const [tierName, tier] of tiers) {
