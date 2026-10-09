@@ -50,6 +50,12 @@ type TerrainOverride = {
     renderFlags?: number;
 };
 
+/**
+ * Surface drawn inside floor holes (ladder and trapdoor openings). The map has no floor
+ * tile there, and without this the sky clear colour shows through the opening.
+ */
+const FLOOR_HOLE_HSL = packHsl(0, 0, 0);
+
 export class SceneBuilder {
     static readonly BLEND_RADIUS = 5;
 
@@ -1475,7 +1481,9 @@ export class SceneBuilder {
                     const overlayId = (overlayIds[level][x][y] & 0x7fff) - 1;
 
                     if (underlayId === -1 && overlayId === -1) {
-                        continue;
+                        if (!this.isEnclosedFloorHole(scene, level, x, y)) {
+                            continue;
+                        }
                     }
 
                     const heightSw = heights[level][x][y];
@@ -1506,6 +1514,9 @@ export class SceneBuilder {
                         if (underlayHslNw === -1 || !smoothUnderlays) {
                             underlayHslNw = underlayHslSw;
                         }
+                    } else if (overlayId === -1) {
+                        // An enclosed hole (the tile was not skipped above): its surface is black.
+                        underlayHslSw = underlayHslSe = underlayHslNe = underlayHslNw = FLOOR_HOLE_HSL;
                     }
 
                     let underlayRgb = 0;
@@ -1612,6 +1623,24 @@ export class SceneBuilder {
                 }
             }
         }
+    }
+
+    /**
+     * True when a floor-less tile is enclosed by floor on all four sides (a ladder or
+     * trapdoor opening inside a building) rather than an unloaded map edge. Those holes
+     * get a black surface so the sky is not visible through them.
+     */
+    private isEnclosedFloorHole(scene: Scene, level: number, x: number, y: number): boolean {
+        const sizeX = scene.sizeX;
+        const sizeY = scene.sizeY;
+        const floored = (tileX: number, tileY: number): boolean =>
+            tileX >= 0 &&
+            tileY >= 0 &&
+            tileX < sizeX &&
+            tileY < sizeY &&
+            (scene.tileUnderlays[level][tileX][tileY] > 0 ||
+                (scene.tileOverlays[level][tileX][tileY] & 0x7fff) > 0);
+        return floored(x - 1, y) && floored(x + 1, y) && floored(x, y - 1) && floored(x, y + 1);
     }
 
     // ====================================================================
