@@ -928,9 +928,14 @@ export class WidgetsOverlay implements Overlay {
                             entry.renderOpts,
                         );
                     }
-                    // The anchors draw the overlays inside the tree; if this layout has no
-                    // anchor (or none was drawn), fall back to drawing them here.
-                    if (!this.overlayDrawnThisPass) this.drawWidgetOverlays(widgetOverlays);
+                    // Anchor overlays (status bars) draw inside the tree so tooltips win;
+                    // the rest (opponent info, ...) draw above the tree as before.
+                    const aboveOverlays = widgetOverlays.filter((overlay) => overlay.drawAtAnchor !== true);
+                    if (this.overlayDrawnThisPass) {
+                        if (aboveOverlays.length > 0) this.drawWidgetOverlays(aboveOverlays, false);
+                    } else {
+                        this.drawWidgetOverlays(widgetOverlays, true);
+                    }
                     this.drawTradeAmountOverlay(widgetManager);
                     this.drawMouseOverText(mouseOverTextState);
                     this.rootSetChanged = false;
@@ -970,8 +975,15 @@ export class WidgetsOverlay implements Overlay {
                     }
                     // Bar values changed: repaint them even if the panel was not the dirty
                     // region (the anchor callback did not fire for that case).
-                    if (redrawWidgetOverlays && !this.overlayDrawnThisPass) {
-                        this.drawWidgetOverlays(widgetOverlays);
+                    if (redrawWidgetOverlays) {
+                        const aboveOverlays = widgetOverlays.filter(
+                            (overlay) => overlay.drawAtAnchor !== true,
+                        );
+                        if (this.overlayDrawnThisPass) {
+                            if (aboveOverlays.length > 0) this.drawWidgetOverlays(aboveOverlays, false);
+                        } else {
+                            this.drawWidgetOverlays(widgetOverlays, true);
+                        }
                     }
                     this.drawTradeAmountOverlay(widgetManager);
                     const mouseOverTextRect = mouseOverTextState.rect;
@@ -1007,7 +1019,7 @@ export class WidgetsOverlay implements Overlay {
         }
     }
 
-    private drawWidgetOverlays(overlays: WidgetOverlay[]): void {
+    private drawWidgetOverlays(overlays: WidgetOverlay[], resetRects = true): void {
         const glr = this.glRenderer;
         if (!glr) return;
         const context = {
@@ -1015,7 +1027,7 @@ export class WidgetsOverlay implements Overlay {
             fontLoader: this.ctx.getFontLoader?.() || (() => undefined),
             sprite: (id: number) => (glr.canvas as any).__textureCache?.getSpriteById(id),
         };
-        this.widgetOverlayRects = [];
+        if (resetRects) this.widgetOverlayRects = [];
         for (const overlay of overlays) {
             for (const r of overlay.draw(context)) {
                 const rect = this.clampRectToCanvas(
@@ -1037,10 +1049,12 @@ export class WidgetsOverlay implements Overlay {
      */
     private drawWidgetOverlaysAtAnchor(): void {
         if (this.overlayDrawnThisPass) return;
-        const overlays = this.currentWidgetOverlays;
-        if (!overlays || overlays.length === 0) return;
+        const overlays = (this.currentWidgetOverlays ?? []).filter(
+            (overlay) => overlay.drawAtAnchor === true,
+        );
+        if (overlays.length === 0) return;
         this.overlayDrawnThisPass = true;
-        this.drawWidgetOverlays(overlays);
+        this.drawWidgetOverlays(overlays, true);
     }
 
     private buildGameFrameContext(glr: GLRenderer): GameFrameDrawContext {
