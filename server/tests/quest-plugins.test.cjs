@@ -91,7 +91,9 @@ test('each quest varp is sent again on login, so quest-gated locs show after a r
   varps.clear();
   sendQuestVarps({ player });
   assert.equal(varps.get(village.varpId), village.completionValue);
-  assert.equal(varps.size, 1, 'quests not started send nothing');
+  // Unstarted quests are sent as 0 too: the login bootstrap clobbers shared varps (QuestRuntime).
+  const others = getRegisteredQuests().filter((quest) => quest.varpId !== village.varpId && Number.isInteger(quest.varpId) && quest.varpId >= 0);
+  assert.ok(others.every((quest) => varps.get(quest.varpId) === 0), 'unstarted quests are reset to 0');
 });
 
 test("Tree Gnome Village sends King Bolren's orbs (varbit 598): the village's spirit tree has Travel at 2", () => {
