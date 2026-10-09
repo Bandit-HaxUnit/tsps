@@ -348,6 +348,7 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
   const CRATE_FISH_ATTRIBUTE = "quest.in_aid_of_the_myreque.crate.fish";
   const CRATE_FISH_TYPE_ATTRIBUTE = "quest.in_aid_of_the_myreque.crate.fishtype"; // 0 mackerel, 1 snail
   const CRATE_TINDER_ATTRIBUTE = "quest.in_aid_of_the_myreque.crate.tinder";
+  const CRATE_REFUSED_ATTRIBUTE = "quest.in_aid_of_the_myreque.crate.refused";
   const IVAN_FOOD_ATTRIBUTE = "quest.in_aid_of_the_myreque.ivan.food";
   const ENCOUNTER_ATTRIBUTE = "quest.in_aid_of_the_myreque.encounter";
   const FIGHT_ATTRIBUTE = "quest.in_aid_of_the_myreque.fight";
@@ -494,6 +495,16 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
   function fillTranscriptText(request) {
     if (!request?.player || typeof request.text !== "string") return;
     if (!OWN_TEXT_NPC_IDS.has(request.npcId)) return;
+    // The crate handout with a full inventory: drop the follow-up line and
+    // clear the refusal flag now that the false reassurance is gone.
+    if (
+      request.text === "There you go. You can put them in that." &&
+      request.player.getAttribute?.(CRATE_REFUSED_ATTRIBUTE)
+    ) {
+      request.player.setAttribute(CRATE_REFUSED_ATTRIBUTE, 0);
+      request.skip = true;
+      return;
+    }
     let text = request.text;
     if (text.includes("[He/She]")) {
       const male = request.player.getAppearance?.()?.isMale?.() !== false;
@@ -642,7 +653,13 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
       despawnKey(player, "drezel");
     }
     // Veliaf at the new Burgh de Rott hideout for the rod hand-in and afterwards.
-    if (stage >= STAGE_HIDEOUT_TALK) {
+    if (stage >= STAGE_COMPLETE) {
+      // Completed: make sure the Hollows hideout and store copies are gone
+      // immediately; the Burgh cellar Veliaf stays for the post-quest talk.
+      despawnKey(player, "veliaf_old");
+      despawnKey(player, "veliaf_store");
+      spawnKey(player, "veliaf_base", NpcIdentifiers.VELIAF_HURTZ_2, VELIAF_BASEMENT_TILE);
+    } else if (stage >= STAGE_HIDEOUT_TALK) {
       spawnKey(player, "veliaf_base", NpcIdentifiers.VELIAF_HURTZ_2, VELIAF_BASEMENT_TILE);
     } else {
       despawnKey(player, "veliaf_base");
@@ -1131,10 +1148,18 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
           lightFurnaceCutscene(player);
         }
         return;
-      case "A1yJWY": // first time asking what to do
-        if (!held(player, CRATE_EMPTY_ITEM_ID) && !held(player, CRATE_FULL_ITEM_ID)) {
-          if (give(player, CRATE_EMPTY_ITEM_ID, 1)) resetCrate(player);
+      case "A1yJWY": { // after fixing, first time asking
+        const alreadyHasCrate = held(player, CRATE_EMPTY_ITEM_ID) || held(player, CRATE_FULL_ITEM_ID);
+        if (!alreadyHasCrate) {
+          if (!give(player, CRATE_EMPTY_ITEM_ID, 1)) {
+            // Full inventory: stay at 160 so the offer can be retried; the
+            // handout message and its follow-up line are suppressed below.
+            player.setAttribute(CRATE_REFUSED_ATTRIBUTE, 1);
+            return;
+          }
+          resetCrate(player);
         }
+        player.setAttribute(CRATE_REFUSED_ATTRIBUTE, 0);
         if (!player.getAttribute("quest.in_aid_of_the_myreque.fishtype.set")) {
           // The store alternates between raw mackerel and snail meat per player.
           player.setAttribute(CRATE_FISH_TYPE_ATTRIBUTE, Math.random() < 0.5 ? 0 : 1);
@@ -1142,6 +1167,7 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
         }
         advance(player, STAGE_CRATE_GIVEN);
         return;
+      }
       case "RRQbon": // Polmafi told first
       case "lcbila": // Radigad told first
         setBit(player, BIT_MEMBERS_INFORMED);
@@ -1214,6 +1240,9 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
         swapObject(BROKEN_BOOTH_ID, WORKING_BOOTH_ID, BOOTH_TILE);
         advance(player, STAGE_BANKER);
         return;
+      case "LM3qbj": // "Aurel gives you a crate." - only when one was taken
+        if (player.getAttribute(CRATE_REFUSED_ATTRIBUTE)) event.handled = true;
+        return;
       case "UsJ9P-": // full crate handed to Aurel
         if (held(player, CRATE_FULL_ITEM_ID)) player.getInventory().deleteNumber(CRATE_FULL_ITEM_ID, 1);
         else if (held(player, CRATE_EMPTY_ITEM_ID)) player.getInventory().deleteNumber(CRATE_EMPTY_ITEM_ID, 1);
@@ -1235,6 +1264,9 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
           player.getInventory().deleteNumber(ROD_OF_IVANDIS_ITEM_ID, 1);
         }
         if (!quest.isComplete(player)) quest.complete(player);
+        // complete() runs onReward (which syncs spawns) but call again so the
+        // stage-420 removal is immediate even if the completion path changes.
+        applyStageSpawns(player);
         return;
       default:
         return;

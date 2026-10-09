@@ -22,12 +22,16 @@
  *
  * Gaps (documented approximations):
  * - Brutus' fight is an instance in OSRS. Without instance support the pen gate's
- *   two leaves are deregistered on the first release (the Watchtower openGate
- *   pattern), so the opening is passable, and the bull (BRUTUS_2, 15627) spawns
- *   owner-only at the boss pin (3263,3297); the quest kill is removed on death so
- *   it is one-time, while the post-quest boss (BRUTUS, 15626) keeps its default
- *   respawn and can also be released again from the same gate. The gate stays
- *   open for the server session once used.
+ *   two leaves are deregistered while a bull is out (the Watchtower openGate
+ *   pattern) so the pen is walkable, and re-registered as soon as no live quest
+ *   bull (15627) remains or a login finds the gate open without one, so the next
+ *   release can click the gate again. The gate is tied to the quest bull only: a
+ *   live post-quest boss (15626) never keeps it open. The bull (BRUTUS_2, 15627)
+ *   spawns owner-only at the boss pin (3263,3297) and is removed on death
+ *   (one-time); the post-quest boss (BRUTUS, 15626) clears its skip-respawn flag
+ *   so its owner-kept respawn clone keeps it repeatable. The pen is a 37-tile
+ *   sliver; a player still inside when the gate closes is stepped out to
+ *   (3263,3293).
  * - Brutus' telegraphed special attacks and the "cannot kill you" melee floor are
  *   not reproduced; the spawned NPC uses its cache combat stats.
  * - The milk sample's first drink applies 1 damage only when above 1 Hitpoint; the
@@ -98,6 +102,7 @@ module.exports = function registerIdesOfMilkQuest(api) {
   // npc-spawns.json, so the plugin places him by the Lumbridge pond.
   const CASSIUS_TILE = { x: 3170, y: 3279, z: 0 };
   const BULL_TILE = { x: 3263, y: 3297, z: 0 }; // wiki boss pin, north of the gate
+  const BULL_PEN_RETURN = { x: 3263, y: 3293, z: 0 }; // free tile south of the gate
   const GILLIE_TILE = { x: 3254, y: 3274, z: 0 };
   const GILLIE_TALK_RANGE = 3;
 
@@ -119,6 +124,7 @@ module.exports = function registerIdesOfMilkQuest(api) {
 
   let quest;
   let bullGateOpened = false;
+  let removedGateLeaves = [];
 
   const bullsByPlayer = new WeakMap();
   const warnedBeforeTasting = new WeakSet();
@@ -435,6 +441,11 @@ module.exports = function registerIdesOfMilkQuest(api) {
       ownerOnly: true,
     });
     if (npc) bullsByPlayer.set(player, npc);
+    if (npc && id === BOSS_BRUTUS_NPC_ID) {
+      // Owner spawns skip the default respawn centrally; the post-quest boss
+      // wants its owner-kept respawn clone back so it stays repeatable.
+      npc.__skipDefaultRespawn = false;
+    }
     if (!quest.isComplete(player) && quest.getStage(player) === STAGE_BULL_TASK) {
       quest.setStage(player, STAGE_BULL_RELEASED);
     }
@@ -451,25 +462,85 @@ module.exports = function registerIdesOfMilkQuest(api) {
   }
 
   /**
+   * True while any quest bull (15627) is alive, optionally ignoring one. The gate
+   * is tied to the quest bull only: another player's live post-quest boss (15626)
+   * must never keep it open.
+   */
+  function worldHasLiveQuestBull(exclude) {
+    const npcs = api.getWorld()?.getNpcs?.();
+    if (!npcs) return false;
+    for (const npc of npcs) {
+      if (npc === exclude) continue;
+      if (npc?.getId?.() === QUEST_BRUTUS_NPC_ID) return true;
+    }
+    return false;
+  }
+
+  /** The enclosed sliver north of the gate (flood-filled with the gate shut). */
+  function insideBullPen(player) {
+    const location = player.getLocation();
+    return (
+      location.getZ() === 0 &&
+      location.getX() >= 3259 &&
+      location.getX() <= 3267 &&
+      location.getY() >= 3295 &&
+      location.getY() <= 3300
+    );
+  }
+
+  /**
    * Opens the two-leaf pen gate for the released bull: deregistering the leaves
    * clears their clipping so the pen is walkable (Watchtower's openGate pattern).
+   * The leaves are kept so the same instances can be re-registered later.
    */
   function openBullGate() {
     if (bullGateOpened) return;
+    removedGateLeaves = [];
     let opened = false;
     for (const leaf of BULL_GATE_LEAVES) {
       const object = api.core.MapObjects.get(leaf.id, new Location(leaf.x, leaf.y, 0), null);
       if (!object) continue;
       api.core.ObjectManager.deregister(object, true);
+      removedGateLeaves.push(object);
       opened = true;
     }
     if (opened) bullGateOpened = true;
   }
 
+  /**
+   * Puts the two gate leaves back through the same MapObjects/ObjectManager path
+   * and clears the open flag, so the next release can click the gate again.
+   * A player still in the pen is stepped out first (closing would seal it in).
+   */
+  function closeBullGate(player) {
+    if (!bullGateOpened) return;
+    if (player && insideBullPen(player)) {
+      player.moveTo(new Location(BULL_PEN_RETURN.x, BULL_PEN_RETURN.y, BULL_PEN_RETURN.z));
+    }
+    for (const object of removedGateLeaves) {
+      api.core.ObjectManager.register(object, true);
+    }
+    removedGateLeaves = [];
+    bullGateOpened = false;
+  }
+
+  /** Login repair: a release whose quest bull is gone should leave the gate clickable. */
+  function restoreBullGateIfIdle(player) {
+    if (!bullGateOpened || worldHasLiveQuestBull()) return;
+    closeBullGate(player);
+  }
+
   function handleNpcDeath({ killer, npc, npcId }) {
     if (!killer || !npc) return;
     const tracked = bullsByPlayer.get(killer);
-    if (!tracked || tracked !== npc) return;
+    const isTracked = Boolean(tracked && tracked === npc);
+    const isBull = npcId === QUEST_BRUTUS_NPC_ID || npcId === BOSS_BRUTUS_NPC_ID;
+    if (!isTracked && !isBull) return;
+    // The gate is tied to the quest bull only: close it whenever no live quest
+    // bull remains, even when the death was untracked (a respawned boss clone) or
+    // another player's post-quest boss is still alive.
+    if (!worldHasLiveQuestBull(npc)) closeBullGate(killer);
+    if (!isTracked) return;
     bullsByPlayer.delete(killer);
     if (npcId !== QUEST_BRUTUS_NPC_ID) {
       // The post-quest boss keeps its default respawn (the clone keeps its owner),
@@ -651,6 +722,7 @@ module.exports = function registerIdesOfMilkQuest(api) {
 
   function handleLogin({ player }) {
     refreshQuestList(player);
+    restoreBullGateIfIdle(player);
   }
 
   api.persistAttribute(SETH_TALKED_ATTRIBUTE);

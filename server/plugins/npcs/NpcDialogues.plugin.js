@@ -531,6 +531,13 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
       // "shows other/previous options": replay a menu already shown, then carry
       // on with whatever followed the jump in this queue.
       if (step.type === "gomenu" && step.menu) {
+        // A parser-split "shows other options" jump immediately before a choice
+        // really means "show that choice" (Wanted!'s squireship offer); replaying
+        // the current menu forever would never reach it.
+        const next = queue[position + 1];
+        if (next && next.type === "choice") {
+          continue;
+        }
         const after = queue.slice(position + 1);
         chain.add(new ActionDialogue(index++, { execute: () => presentMenu(step.menu, 0, after) }));
         manager.startDialogues(chain);

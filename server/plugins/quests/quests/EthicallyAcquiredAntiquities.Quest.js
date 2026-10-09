@@ -311,6 +311,10 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
   const VISITOR_QUESTION_LINE = "I was wondering if you'd seen anything unusual around the museum lately?";
   const HERMINIUS_HANDOFF_LINE = "Thank you, iknami.";
   const CREW_FAVOUR_LINE = "Although, we could use a hand... Think you could do us a small favour?";
+  const CREW_CASE_OPTION = "Have you seen a man with a case?";
+  const CREW_ACCEPT_OPTION = "Sure. What do you need?";
+  const NON_OSF_CONDITION_ID = "LgTVfY";
+  const OSF_CONDITION_ID = "Vr0XnM";
   const ARTIMA_FAVOUR_LINE = "Oh, in that case, I'll help you out, just so long as you can do me a small favour.";
   const CREW_PORT_SARIM_LINE = "Well, we explained how it does work and he then asked us to take him to Port Sarim...";
   const SARIM_RUNES_LINE = "Wandered up north, I think. Said something about trying to get hold of some runes.";
@@ -915,11 +919,38 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
   }
 
   /**
+   * The first-time Cothon variant nests the shared sails task only inside the
+   * "has completed One Small Favour" condition (Vr0XnM); its sibling non-OSF
+   * branch ("Sure. What do you need?") ends in a wiki "continues" jump the
+   * runtime cannot resolve, so without One Small Favour the hand-over never
+   * plays. Append the shared task (Vr0XnM's wiki wording after its own OSF
+   * choice) to that option so its branch reaches the sails. The OSF-completed
+   * branch is left exactly as the transcript ships it.
+   */
+  function withNonOsfCrewHandover(player, variant, steps) {
+    if (variant !== V_FORTIS_FIRST || isQuestComplete(player, "one_small_favour")) return steps;
+    if (!Array.isArray(steps)) return steps;
+    const clone = JSON.parse(JSON.stringify(steps));
+    const menu = clone.find(
+      (step) => step.type === "choice" && step.options?.some((option) => option.text === CREW_CASE_OPTION)
+    );
+    const caseSteps = menu?.options.find((option) => option.text === CREW_CASE_OPTION)?.steps;
+    const nonOsf = caseSteps?.find((step) => step.type === "condition" && step.id === NON_OSF_CONDITION_ID);
+    const osf = caseSteps?.find((step) => step.type === "condition" && step.id === OSF_CONDITION_ID);
+    const accept = nonOsf?.steps?.find((step) => step.type === "choice")
+      ?.options?.find((option) => option.text === CREW_ACCEPT_OPTION);
+    if (!accept || !Array.isArray(osf?.steps) || osf.steps.length < 2) return steps;
+    accept.steps = [...(accept.steps ?? []), ...osf.steps.slice(1)];
+    return clone;
+  }
+
+  /**
    * CharterShips claims Trader Crewmember Talk-to, so play the quest variant first
    * while EAA needs the crew (the Cothon crew through stage 15, the Port Sarim crew
    * at 16-17). Every other crewmember and completed quests fall through to the
-   * charter menu. `npc-dialogue:start` keeps the page's jump context, which the
-   * "after having returned the sails" variant needs to reach the Port Sarim line.
+   * charter menu. `npc-dialogue:start` keeps the page's jump context (needed by the
+   * "after having returned the sails" variant) and lets the non-OSF hand-over be
+   * spliced into the first-time variant.
    */
   function talkToTraderCrewmember(event) {
     const { player, npcId } = event;
@@ -930,7 +961,12 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
         : null;
     if (!variant) return false;
     event.handled = true;
-    api.emitCustomEvent("npc-dialogue:start", { player, npcId, variant });
+    api.emitCustomEvent("npc-dialogue:start", {
+      player,
+      npcId,
+      variant,
+      select: (steps) => withNonOsfCrewHandover(player, variant, steps),
+    });
     return true;
   }
 

@@ -237,6 +237,8 @@ module.exports = function registerWantedQuest(api) {
   const solusByPlayer = new Map();
   /** Player -> "buy" | "make" for the current CommOrb purchase conversation. */
   const orbPathByPlayer = new Map();
+  /** Players whose squireship entail branch still needs the Yes/No offer. */
+  const squirePromptPlayers = new Set();
   let clueTailCache = null;
 
   function wantedVariant(variant) {
@@ -642,20 +644,79 @@ module.exports = function registerWantedQuest(api) {
     }
   }
 
+  /**
+   * The entail branch of the squireship offer is parser-split from the Yes/No
+   * node (a "shows other options" marker sits between them). The central runtime
+   * now skips that marker, but if the flattened queue ever ends before the node
+   * this fallback re-offers it once the chatbox is clear, so stage 1 -> 2 is
+   * always reachable. Picking either reply (transcript node or fallback prompt)
+   * runs through applySquireReply.
+   */
+  function applySquireReply(player, accepted) {
+    squirePromptPlayers.delete(player);
+    if (quest.getStage(player) !== STAGE_STARTED) return;
+    setSquireJoke(player, accepted);
+    quest.setStage(player, STAGE_DECLINED);
+  }
+
+  function openSquirePrompt(player) {
+    if (quest.getStage(player) !== STAGE_STARTED) return;
+    api.sendMultiChatboxPrompt(
+      player,
+      "Select an Option",
+      "Yes please!",
+      () => applySquireReply(player, true),
+      "No, not right now...",
+      () => applySquireReply(player, false)
+    );
+  }
+
+  /** Runs done once the player's chatbox is clear (no dialogue, no prompt). */
+  function waitForChatbox(player, done) {
+    if (player.isRegistered?.() === false) return;
+    const { CountdownTask, TaskManager, MultiChatboxPrompt } = api.core;
+    if (!CountdownTask || !TaskManager) {
+      done();
+      return;
+    }
+    TaskManager.submit(
+      new CountdownTask(player, 1, () => {
+        if (player.isRegistered?.() === false) return;
+        const prompt = MultiChatboxPrompt?.getPending?.(player) ?? null;
+        if (player.getDialogueManager?.()?.isActive?.() === true || prompt !== null) {
+          waitForChatbox(player, done);
+          return;
+        }
+        done();
+      })
+    );
+  }
+
+  function armSquireFallback(player) {
+    squirePromptPlayers.add(player);
+    waitForChatbox(player, () => {
+      if (!squirePromptPlayers.has(player)) return;
+      squirePromptPlayers.delete(player);
+      openSquirePrompt(player);
+    });
+  }
+
   function handleChoice(event) {
     const { player, npcId, option } = event;
     if (!player || typeof option !== "string") return;
     const text = option.toLowerCase();
     if (npcId === SIR_AMIK_VARZE_NPC_ID) {
       if (quest.getStage(player) === STAGE_STARTED) {
+        if (text.includes("what does being a squire entail")) {
+          armSquireFallback(player);
+          return;
+        }
         // The squireship offer: either reply moves on to the crisis plan (OSRS
         // loops Asgarnian ale for "Yes please!"; see the header gap).
         if (text.includes("yes please")) {
-          setSquireJoke(player, true);
-          quest.setStage(player, STAGE_DECLINED);
+          applySquireReply(player, true);
         } else if (text.includes("no, not right now")) {
-          setSquireJoke(player, false);
-          quest.setStage(player, STAGE_DECLINED);
+          applySquireReply(player, false);
         }
         return;
       }
@@ -952,6 +1013,7 @@ module.exports = function registerWantedQuest(api) {
     clearFightSpawns(player);
     clearMageSpawn(player);
     orbPathByPlayer.delete(player);
+    squirePromptPlayers.delete(player);
   }
 
   function handlePlayerDeath({ player }) {

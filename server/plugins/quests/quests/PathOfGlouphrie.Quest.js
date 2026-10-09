@@ -46,9 +46,11 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
     GameObject,
     ItemIdentifiers,
     Location,
+    MapObjects,
     NpcIdentifiers,
     ObjectIdentifiers,
     ObjectManager,
+    RegionManager,
     Skill,
   } = api.core;
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
@@ -844,9 +846,14 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
     setBit(player, BIT_GATE);
     sendVarbit(player, VARBIT_GOLRIE_RETURN, 1);
     gateUnlocked = true;
-    // Remove the gate loc outright: deregistering drops its wall clipping, while both
-    // cached gate states (49657 open / 49658) are solid walls that would keep blocking.
-    for (const object of [...ObjectManager.objectsAt(GATE_TILE)]) {
+    // The gate is a base-map loc, so it is not in ObjectManager.objectsAt (which only holds
+    // runtime objects). Pull it out of MapObjects and deregister it: that removes its wall
+    // clipping, sends the DESPAWN removal to nearby scenes, and records it in
+    // World.getRemovedObjects so ObjectManager.onRegionChange re-sends the removal on scene
+    // rebuilds (the same pattern DesertTreasureI uses for its ice cave).
+    RegionManager.loadMapFiles(GATE_TILE.getX(), GATE_TILE.getY());
+    const gateHash = MapObjects.getHash(GATE_TILE.getX(), GATE_TILE.getY(), GATE_TILE.getZ());
+    for (const object of [...(MapObjects.mapObjects.get(gateHash) ?? [])]) {
       if (
         object.getId() === STRONGROOM_GATE_OBJECT_ID ||
         object.getId() === STRONGROOM_GATE_OPEN_OBJECT_ID
@@ -854,6 +861,7 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
         ObjectManager.deregister(object, true);
       }
     }
+    MapObjects.clear(GATE_TILE, -1);
     player.sendMessage("You unlock the strongroom gate.");
   }
 

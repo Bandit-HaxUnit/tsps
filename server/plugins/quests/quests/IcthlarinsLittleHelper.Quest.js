@@ -541,32 +541,30 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
 
   /**
    * The dump nests the has-token hand-in inside the lost-token condition, so the
-   * transcript itself can never offer it. Play the "Prove it!" lead-in plus the
-   * extracted has-token branch; the 6qP-S3 action advances to stage 7.
+   * transcript itself can never offer it. `eXmHe5` there is an empty condition and
+   * the hand-in steps (`6qP-S3` and friends) are its following siblings after the
+   * no-token `end`. Play the "Prove it!" lead-in plus that sibling tail; the
+   * 6qP-S3 action consumes the token and advances to stage 7.
    */
   function selectHighPriestToken(steps) {
     const lead = [];
-    let tokenBranch;
-    for (const step of steps) {
-      if (step.type === "condition") {
-        if (step.id === "eXmHe5") {
-          tokenBranch = step.steps ?? [];
-          break;
-        }
-        if (step.id === "i6RE2X") {
-          const nested = (step.steps ?? []).find(
-            (inner) => inner.type === "condition" && inner.id === "eXmHe5"
-          );
-          if (nested) {
-            tokenBranch = nested.steps ?? [];
-            break;
-          }
-        }
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      if (step.type !== "condition") {
+        lead.push(step);
         continue;
       }
-      lead.push(step);
+      if (step.id === "eXmHe5") {
+        // Empty condition at this level: the hand-in steps follow it.
+        return [...lead, ...steps.slice(i + 1)];
+      }
+      if (step.id === "i6RE2X") {
+        const inner = step.steps ?? [];
+        const at = inner.findIndex((s) => s.type === "condition" && s.id === "eXmHe5");
+        if (at !== -1) return [...lead, ...inner.slice(at + 1)];
+      }
     }
-    return tokenBranch ? [...lead, ...tokenBranch] : steps;
+    return steps;
   }
 
   function highPriestTalkTo(event) {

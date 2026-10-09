@@ -194,6 +194,21 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
   const GIANT_ROC_DEAD_ATTRIBUTE = "my-arms-big-adventure:giant-roc-dead";
   const TOOLS_ATTRIBUTE = "my-arms-big-adventure:tools-given";
 
+  // Player-owned house location ids (native POH_HOUSE_LOCATION enum 252 order), as in
+  // In Aid of the Myreque; unset falls back to the OSRS default, Rimmington.
+  const POH_HOUSE_ATTRIBUTE = "construction:house";
+  const POH_LOCATION_NAMES = new Map([
+    [1, "Rimmington"],
+    [2, "Taverley"],
+    [3, "Pollnivneach"],
+    [8, "Hosidius"],
+    [4, "Rellekka"],
+    [13, "Aldarin"],
+    [5, "Brimhaven"],
+    [6, "Yanille"],
+    [9, "Prifddinas"],
+  ]);
+
   const MY_ARM_ROOF_TILE = { x: 2834, y: 3695, z: 0 };
   const MY_ARM_TAI_TILE = { x: 2781, y: 3123, z: 0 };
   const MURCAILY_TILE = { x: 2815, y: 3083, z: 0 };
@@ -488,14 +503,25 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
     }));
   }
 
-  /** Fills the page's "[player name]"/"<player name>" blanks (ForsakenTower pattern). */
+  /** Fills the page's "[player name]"/"[location of player-owned house]" blanks (ForsakenTower/Myreque pattern). */
   function fillTranscriptBlanks(request) {
     if (!request?.player || typeof request.text !== "string") return;
     if (!OWN_NPC_IDS.has(request.npcId)) return;
-    if (/\[player name\]|<player name>/i.test(request.text)) {
+    let text = request.text;
+    if (/\[player name\]|<player name>/i.test(text)) {
       const name = String(request.player.getUsername());
-      request.text = request.text.replace(/\[player name\]/gi, name).replace(/<player name>/gi, name);
+      text = text.replace(/\[player name\]/gi, name).replace(/<player name>/gi, name);
     }
+    if (text.includes("[location of player-owned house]")) {
+      text = text.replace(/\[location of player-owned house\]/gi, playerHouseLocation(request.player));
+    }
+    request.text = text;
+  }
+
+  function playerHouseLocation(player) {
+    const save = player.getAttribute?.(POH_HOUSE_ATTRIBUTE);
+    const id = save && typeof save === "object" ? Number(save.location) : NaN;
+    return POH_LOCATION_NAMES.get(id) ?? "Rimmington";
   }
 
   // ==========================================================================
