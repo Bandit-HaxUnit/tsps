@@ -44,6 +44,19 @@ const CUSTOM_PRESETS_ATTRIBUTE = "pvp:custom-presets";
 const CUSTOM_PRESET_SLOT_ATTRIBUTE = "pvp:selected-custom-preset-slot";
 let presetsEnabled = false;
 
+let pluginApi = null;
+
+/**
+ * "presets:can-use" { player, allow, message }: other content may keep a player from presets
+ * (an Ironman). `quiet` skips the message (the automatic opening after a death).
+ */
+function canUsePresets(player, quiet = false) {
+  const request = { player, allow: true, message: null };
+  pluginApi?.emitCustomEvent?.("presets:can-use", request);
+  if (!request.allow && !quiet && request.message) player.sendMessage(request.message);
+  return request.allow;
+}
+
 function shouldOpenOnDeath(player) {
   return player.getAttribute(OPEN_ON_DEATH_ATTRIBUTE) !== false;
 }
@@ -494,6 +507,9 @@ function openPresetInterface(player, preset = null) {
   if (!player) {
     return false;
   }
+  if (!canUsePresets(player)) {
+    return false;
+  }
 
   if (isPresetBlockedInWilderness(player)) {
     player.sendMessage("You can't open presets in the wilderness!");
@@ -515,6 +531,9 @@ function openPresetInterface(player, preset = null) {
 
 function applyPreset(player, preset) {
   if (!player || !preset) {
+    return false;
+  }
+  if (!canUsePresets(player)) {
     return false;
   }
 
@@ -774,8 +793,10 @@ module.exports = {
   isEnabled: () => presetsEnabled,
   openPresetInterface,
   shouldOpenOnDeath,
+  canUsePresets,
   _test: { spawnPresetItem, bankCarriedItems, presetCombatLevel },
   register(api) {
+    pluginApi = api;
     presetsEnabled = true;
     setPresetShopPricesEnabled(true);
     api.persistAttribute(CUSTOM_PRESETS_ATTRIBUTE);
