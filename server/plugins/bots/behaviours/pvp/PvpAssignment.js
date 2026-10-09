@@ -96,9 +96,6 @@ function resolveLoadoutId(config, hotspotId) {
   const hotspot = hotspotId ? getWildernessHotspot(hotspotId) : null;
   const filtered = configured.filter((entry) => {
     const loadout = getPvpLoadout(entry.value);
-    if (hotspotId != null && !loadout.hotspots.includes(hotspotId)) {
-      return false;
-    }
     if (Array.isArray(hotspot?.allowedLoadouts) && hotspot.allowedLoadouts.length > 0) {
       return hotspot.allowedLoadouts.includes(loadout.id);
     }
@@ -128,9 +125,6 @@ function resolveAlternativeLoadoutId(config, hotspotId, currentLoadoutId) {
   const hotspot = hotspotId ? getWildernessHotspot(hotspotId) : null;
   const filtered = configured.filter((entry) => {
     const loadout = getPvpLoadout(entry.value);
-    if (hotspotId != null && !loadout.hotspots.includes(hotspotId)) {
-      return false;
-    }
     if (Array.isArray(hotspot?.allowedLoadouts) && hotspot.allowedLoadouts.length > 0) {
       return hotspot.allowedLoadouts.includes(loadout.id);
     }

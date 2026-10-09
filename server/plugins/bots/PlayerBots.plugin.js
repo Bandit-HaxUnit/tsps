@@ -22,8 +22,6 @@ const BOT_BEHAVIOR_MODE = Object.freeze({
   ROAMING: "roaming",
   WOODCUTTING: "woodcutting",
   MINING: "mining",
-  SMELTING: "smelting",
-  FIREMAKING: "firemaking",
   BANK_RUN: "bank_run",
   PVP: "pvp",
 });
@@ -45,7 +43,7 @@ const BOT_EAT_OPTIONS = Object.freeze({
 const BOT_CONFIG = Object.freeze({
   behaviorMode: BOT_BEHAVIOR_MODE,
   botCount: 0,
-  // PvP bot pool and spread live in bot-activities.json ("pvp"), with the hotspots.
+  // PvP bot pool and spread live in bot-sites.json ("pvp"); hotspots are its PvP sites.
   // Active-region snapshots are radius=1 (3x3 around each player region); the inset
   // targets only the true active core for regional wilderness bots.
   wildernessRoamerBotCount: PVP_BOT_SETTINGS.botPool,
@@ -69,8 +67,6 @@ const BOT_CONFIG = Object.freeze({
   npcAggroBlockedModes: [
     BOT_BEHAVIOR_MODE.WOODCUTTING,
     BOT_BEHAVIOR_MODE.MINING,
-    BOT_BEHAVIOR_MODE.SMELTING,
-    BOT_BEHAVIOR_MODE.FIREMAKING,
     BOT_BEHAVIOR_MODE.BANK_RUN,
   ],
   taskProfiler: Object.freeze({

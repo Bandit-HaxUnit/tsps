@@ -10,6 +10,7 @@ const { createChooseAction } = require("./actions/Choose");
 const { createSellItemsAction } = require("./actions/SellItems");
 const { createEquipToolAction } = require("./actions/EquipTool");
 const { createBankAction } = require("./actions/Bank");
+const { createOrElseAction } = require("./actions/OrElse");
 const { createWalkToAction } = require("./actions/WalkTo");
 const { createEnsureItemAction } = require("./actions/EnsureItem");
 const { createLightFireAction } = require("./actions/LightFire");
@@ -28,20 +29,12 @@ const DEFAULT_DEFINITIONS_PATH = path.join(
   "bot-activities.json"
 );
 
-/**
- * A site's tier sets the level band its bots spawn at (each skill rolls inside the band).
- * The bands are code-owned so the JSON only carries a site's coordinates, count and
- * activity list; everything else is the same for every site.
- */
-const SITE_TIER_LEVELS = Object.freeze({
-  novices: Object.freeze({ min: 1, max: 19 }),
-  intermediates: Object.freeze({ min: 20, max: 39 }),
-  advanced: Object.freeze({ min: 40, max: 59 }),
-  experts: Object.freeze({ min: 60, max: 99 }),
-});
+const DEFAULT_SITES_PATH = path.join(process.cwd(), "data", "definitions", "bot-sites.json");
+
+// Modes a site never rotates through: PvP and roaming belong to the wilderness pool.
+const NON_SITE_MODES = new Set(["pvp", "roaming"]);
 
 const SITE_DEFAULTS = Object.freeze({
-  switchAfterSeconds: Object.freeze({ min: 900, max: 1500 }),
   spawnRadius: 6,
 });
 
@@ -134,6 +127,10 @@ function createCondition(spec) {
 }
 
 function createAction(spec, world) {
+  if (spec.orElse) {
+    const { orElse, ...primary } = spec;
+    return createOrElseAction(createAction(primary, world), createAction(orElse, world));
+  }
   if (spec.type === "interactObject") {
     return createInteractObjectAction(spec, world);
   }
@@ -159,6 +156,7 @@ function createAction(spec, world) {
     return createBankAction(
       {
         ...spec,
+        itemIds: (spec.itemIds ?? []).map(resolveItemId).filter((id) => Number.isInteger(id)),
         withdraw: (spec.withdraw ?? [])
           .map((entry) => ({
             item: resolveItemId(entry.item),
@@ -310,51 +308,91 @@ function createBotActivityRegistry(options = {}) {
     resolvers.push(resolver);
     byId.set(resolver.id, resolver);
   }
-  // Each town spawns its per-tier `counts` of bots around `anchor`: one site per tier,
-  // named `<town>_<tier>`. The tier picks the spawn level band (SITE_TIER_LEVELS) and the
-  // shared activity list (`tierActivities`); rotation timing and spawn radius are defaults.
-  const tierActivities = raw.tierActivities ?? {};
+  // A tier picks one activity per mode: the highest-level activity its
+  // weakest bot can do (a 60 woodcutter chops yews, not normal trees).
+  const siteCandidates = activities.filter(
+    (activity) => !activity.manual && !activity.ephemeral && activity.mode && !NON_SITE_MODES.has(activity.mode)
+  );
+  const requiredLevel = (activity) => Number(fieldsById.get(activity.id)?.level ?? 1);
+  function activitiesForLevel(lowest) {
+    const bestByMode = new Map();
+    for (const activity of siteCandidates) {
+      const level = requiredLevel(activity);
+      const best = bestByMode.get(activity.mode);
+      if (level <= lowest && (!best || level > requiredLevel(best))) {
+        bestByMode.set(activity.mode, activity);
+      }
+    }
+    return siteCandidates.filter((activity) => bestByMode.get(activity.mode) === activity);
+  }
+
+  // bot-sites.json: a skilling site's `bots` maps each mode to a count, split evenly over
+  // the tiers (here, in `tiers`; the lowest tiers take any remainder), or to per-tier counts. Each mode x tier is a
+  // runtime site `<site>_<mode>_<tier>` whose bots only do that tier's activity for the mode.
+  // A tier rolls every skill in its `skills` band and the combat stats into its `combat`
+  // level band. PvP sites (with a `pvp` block) are hotspots, loaded by WildernessHotspotRegistry.
+  const sitesFile = JSON.parse(fs.readFileSync(options.sitesPath ?? DEFAULT_SITES_PATH, "utf8"));
+  const tiers = Object.entries(raw.tiers ?? {});
+  for (const [tierName, tier] of tiers) {
+    if (!Array.isArray(tier?.skills) || tier.skills.length !== 2 || !Array.isArray(tier.combat)) {
+      throw new Error(`[bot activities] tier '${tierName}' needs skills and combat bands`);
+    }
+  }
+  const siteModes = new Set(siteCandidates.map((activity) => activity.mode));
   const sites = [];
-  for (const town of raw.sites ?? []) {
-    for (const [tierName, count] of Object.entries(town.counts ?? {})) {
-      const tier = SITE_TIER_LEVELS[tierName];
-      if (!tier) {
-        throw new Error(
-          `[bot activities] site '${town.id}' has unknown tier '${tierName}' (${Object.keys(SITE_TIER_LEVELS).join(", ")})`
-        );
+  for (const place of sitesFile.sites ?? []) {
+    if (place.pvp) continue;
+    const placeSites = [];
+    for (const [mode, counts] of Object.entries(place.bots ?? {})) {
+      if (!siteModes.has(mode)) {
+        throw new Error(`[bot sites] site '${place.id}' has unknown mode '${mode}' (${[...siteModes].join(", ")})`);
       }
-      const siteId = `${town.id}_${tierName}`;
-      const ids = tierActivities[tierName];
-      if (!Array.isArray(ids) || ids.length === 0) {
-        throw new Error(`[bot activities] tier '${tierName}' has no activities`);
+      // A number is split over every tier; an object gives per-tier counts (missing tiers get none).
+      const perTier = typeof counts === "object" && counts !== null;
+      const unknownTier = perTier && Object.keys(counts).find((name) => !tiers.some(([tierName]) => tierName === name));
+      if (unknownTier) {
+        throw new Error(`[bot sites] site '${place.id}' ${mode} has unknown tier '${unknownTier}'`);
       }
-      const siteActivities = ids.map((id) => {
-        const activity = byId.get(id);
-        if (!activity || activity.resolver === true) {
-          throw new Error(`[bot activities] site '${siteId}' references unknown activity '${id}'`);
-        }
-        if (activity.manual || activity.ephemeral) {
-          throw new Error(`[bot activities] site '${siteId}' cannot assign manual/overlay activity '${id}'`);
-        }
-        return activity;
-      });
-      sites.push({
-        ...SITE_DEFAULTS,
-        id: siteId,
-        tier: tierName,
-        anchor: town.anchor,
-        count: count,
-        levels: { all: [tier.min, tier.max] },
-        activities: siteActivities,
-        rotation: {
-          activityIds: siteActivities.map((activity) => activity.id),
-          switchAfterMs: {
-            min: SITE_DEFAULTS.switchAfterSeconds.min * 1000,
-            max: SITE_DEFAULTS.switchAfterSeconds.max * 1000,
-          },
-        },
+      tiers.forEach(([tierName, tier], index) => {
+        const count = perTier
+          ? Number(counts[tierName] ?? 0)
+          : Math.floor(counts / tiers.length) + (index < counts % tiers.length ? 1 : 0);
+        const activity = activitiesForLevel(tier.skills[0]).find((candidate) => candidate.mode === mode);
+        if (count === 0 || !activity) return;
+        placeSites.push({
+          ...SITE_DEFAULTS,
+          ...(place.radius != null ? { spawnRadius: place.radius } : {}),
+          id: `${place.id}_${mode}_${tierName}`,
+          tier: tierName,
+          enabled: place.enabled === true,
+          anchor: { x: place.x, y: place.y, z: place.z ?? 0 },
+          count,
+          levels: { all: [tier.skills[0], tier.skills[1]], combat: [tier.combat[0], tier.combat[1]] },
+          activities: [activity],
+          rotation: null,
+        });
       });
     }
+    // `switchMinutes: [min, max]` lets a bot change mode within its tier: each bot rolls its
+    // own timer in the range, and the next mode is weighted by the tier's counts so the
+    // mix stays near the configured one. Omitted, bots stay on their mode.
+    if (place.switchMinutes != null) {
+      const [min, max] = place.switchMinutes;
+      if (!(min > 0 && max >= min)) {
+        throw new Error(`[bot sites] site '${place.id}' switchMinutes must be [min, max] minutes`);
+      }
+      for (const [tierName] of tiers) {
+        const tierSites = placeSites.filter((site) => site.tier === tierName);
+        if (tierSites.length < 2) continue;
+        const rotation = {
+          activityIds: tierSites.map((site) => site.activities[0].id),
+          weights: Object.fromEntries(tierSites.map((site) => [site.activities[0].id, site.count])),
+          switchAfterMs: { min: min * 60000, max: max * 60000 },
+        };
+        for (const site of tierSites) site.rotation = rotation;
+      }
+    }
+    sites.push(...placeSites);
   }
   const slots = new Map();
   const lastActivityByPlayer = new WeakMap();
@@ -402,7 +440,8 @@ function createBotActivityRegistry(options = {}) {
       blocked.set(activityId, nowMs + Math.max(0, durationMs));
     },
     /** `allowed` limits the pick to those ids; `avoid` excludes one (a rotation switch). */
-    pickActivity(player, nowMs = Date.now(), { allowed = null, avoid = null, own = null } = {}) {
+    /** `weights` (id -> weight, default 1) biases a fresh pick, e.g. by a site's mode counts. */
+    pickActivity(player, nowMs = Date.now(), { allowed = null, avoid = null, own = null, weights = null } = {}) {
       if (own) {
         // A bot going back to the activity it was given: only its failure cooldown
         // holds it back (capacity and `manual` are about handing out new activities).
@@ -414,7 +453,9 @@ function createBotActivityRegistry(options = {}) {
         (activity) => activity.id !== avoid && (!allowed || allowed.includes(activity.id))
       );
       const previous = candidates.find((activity) => activity.id === previousId);
-      const picked = previous ?? candidates[Math.floor(Math.random() * candidates.length)] ?? null;
+      const weightOf = (activity) => Math.max(0, Number(weights?.[activity.id] ?? 1));
+      let roll = Math.random() * candidates.reduce((sum, activity) => sum + weightOf(activity), 0);
+      const picked = previous ?? candidates.find((activity) => (roll -= weightOf(activity)) < 0) ?? candidates[0] ?? null;
       if (picked) {
         lastActivityByPlayer.set(player, picked.id);
       }

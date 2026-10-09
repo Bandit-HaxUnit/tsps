@@ -1,60 +1,282 @@
 {
-  "templates": {
-    "chop_trees": {"mode":"woodcutting","repeat":true,"requires":[{"skill":{"id":"woodcutting","min":"$level"}}],"setup":[],"produces":["logs","woodcutting"],"actions":[{"type":"equipTool","tool":"axe"},{"type":"interactObject","catalog":"tree","tier":"$tier","option":"Chop down","until":{"inventoryFull":true},"stallSeconds":120},{"type":"choose","options":[{"weight":2,"actions":[{"type":"bank"}]},{"weight":1,"actions":[{"type":"dropItems","itemIds":["$log"]}]},{"weight":1,"actions":[{"type":"sellItems","itemIds":["$log"]}]}]}]},
-    "mine_rocks": {"mode":"mining","repeat":true,"requires":[{"skill":{"id":"mining","min":"$level"}}],"setup":[],"actions":[{"type":"equipTool","tool":"pickaxe"},{"type":"interactObject","catalog":"rock","tier":"$tier","option":"Mine","until":{"inventoryFull":true},"stallSeconds":120},{"type":"choose","options":[{"weight":2,"actions":[{"type":"bank"}]},{"weight":1,"actions":[{"type":"dropItems","itemIds":"$resources"}]},{"weight":1,"actions":[{"type":"sellItems","itemIds":"$resources"}]},{"weight":1,"actions":[{"type":"smelt","bar":"$bar"},{"type":"bank","until":{"inventoryFull":false}}]},{"weight":1,"actions":[{"type":"smelt","bar":"$bar"},{"type":"sellItems","itemIds":"$smelted"}]},{"weight":1,"actions":[{"type":"smelt","bar":"$bar"},{"type":"dropItems","itemIds":"$smelted"}]}]}]},
-    "burn_logs": {"mode":"firemaking","repeat":true,"requires":[{"skill":{"id":"firemaking","min":"$level"}}],"setup":[],"actions":[{"type":"ensureItem","item":"tinderbox"},{"type":"bank","withdraw":[{"item":"$log","amount":"$logs"}]},{"type":"lightFire"}]},
-    "smelt_bar": {"mode":"smelting","repeat":true,"requires":[{"skill":{"id":"smithing","min":"$level"}}],"setup":[],"actions":[{"type":"bank","withdraw":[{"item":"$ore1","amount":"$oreAmount"},{"item":"$ore2","amount":"$oreAmount"}]},{"type":"smelt","bar":"$bar"},{"type":"bank","until":{"inventoryFull":false}}]},
-    "catch_fish": {"mode":"fishing","repeat":true,"requires":[{"skill":{"id":"fishing","min":"$level"}}],"setup":[],"produces":["fish","fishing"],"actions":[{"type":"ensureItem","item":"$tool"},{"type":"fish","tool":"$spotTool","bait":"$bait","until":{"inventoryFull":true}},{"type":"choose","options":[{"weight":2,"actions":[{"type":"bank"}]},{"weight":1,"actions":[{"type":"dropItems","itemIds":"$resources"}]},{"weight":1,"actions":[{"type":"sellItems","itemIds":"$resources"}]},{"weight":1,"actions":[{"type":"cook"},{"type":"bank","until":{"inventoryFull":false}}]},{"weight":1,"actions":[{"type":"cook"},{"type":"sellItems","itemIds":"$cooked"}]},{"weight":1,"actions":[{"type":"cook"},{"type":"dropItems","itemIds":"$cooked"}]}]}]}
+  "tiers": {
+    "novices":       { "skills": [1, 19],  "combat": [3, 30] },
+    "intermediates": { "skills": [20, 39], "combat": [30, 60] },
+    "advanced":      { "skills": [40, 59], "combat": [60, 90] },
+    "experts":       { "skills": [60, 99], "combat": [90, 126] }
   },
-  "tierActivities": {
-    "novices": ["combat_training","normal_trees","copper_tin_rocks","burn_normal_logs","smelt_bronze","net_fishing"],
-    "intermediates": ["combat_training","oak_trees","iron_rocks","burn_oak_logs","fly_fishing"],
-    "advanced": ["combat_training","willow_trees","coal_rocks","burn_willow_logs","lobster_fishing"],
-    "experts": ["combat_training","yew_trees","mithril_rocks","burn_yew_logs","harpoon_fishing"]
+  "templates": {
+    "chop_trees": {
+      "mode": "woodcutting",
+      "repeat": true,
+      "requires": [{"skill":{"id":"woodcutting","min":"$level"}}],
+      "setup": [],
+      "produces": ["logs","woodcutting"],
+      "actions": [
+        {"type":"equipTool","tool":"axe"},
+        {
+          "type": "interactObject",
+          "catalog": "tree",
+          "tier": "$tier",
+          "option": "Chop down",
+          "until": {"inventoryFull":true},
+          "stallSeconds": 120
+        },
+        {
+          "type": "choose",
+          "options": [
+            {"weight":1,"actions":[{"type":"dropItems","itemIds":["$log"]}]},
+            {
+              "weight": 1,
+              "actions": [
+                {
+                  "type": "sellItems",
+                  "itemIds": ["$log"],
+                  "orElse": {"type":"dropItems","itemIds":["$log"]}
+                }
+              ]
+            },
+            {"weight":1,"actions":[{"type":"ensureItem","item":"tinderbox"},{"type":"lightFire"}]}
+          ]
+        }
+      ]
+    },
+    "mine_rocks": {
+      "mode": "mining",
+      "repeat": true,
+      "requires": [{"skill":{"id":"mining","min":"$level"}}],
+      "setup": [],
+      "actions": [
+        {"type":"equipTool","tool":"pickaxe"},
+        {
+          "type": "interactObject",
+          "catalog": "rock",
+          "tier": "$tier",
+          "option": "Mine",
+          "until": {"inventoryFull":true},
+          "stallSeconds": 120
+        },
+        {
+          "type": "choose",
+          "options": [
+            {"weight":1,"actions":[{"type":"dropItems","itemIds":"$resources"}]},
+            {
+              "weight": 1,
+              "actions": [
+                {
+                  "type": "sellItems",
+                  "itemIds": "$resources",
+                  "orElse": {"type":"dropItems","itemIds":"$resources"}
+                }
+              ]
+            },
+            {
+              "weight": 1,
+              "actions": [
+                {"type":"smelt","bar":"$bar"},
+                {
+                  "type": "bank",
+                  "itemIds": ["$bar"],
+                  "orElse": {
+                    "type": "sellItems",
+                    "itemIds": ["$bar"],
+                    "orElse": {"type":"dropItems","itemIds":["$bar"]}
+                  }
+                }
+              ]
+            },
+            {
+              "weight": 1,
+              "actions": [
+                {"type":"smelt","bar":"$bar"},
+                {
+                  "type": "sellItems",
+                  "itemIds": "$smelted",
+                  "orElse": {"type":"dropItems","itemIds":"$smelted"}
+                }
+              ]
+            },
+            {
+              "weight": 1,
+              "actions": [{"type":"smelt","bar":"$bar"},{"type":"dropItems","itemIds":"$smelted"}]
+            }
+          ]
+        }
+      ]
+    },
+    "catch_fish": {
+      "mode": "fishing",
+      "repeat": true,
+      "requires": [{"skill":{"id":"fishing","min":"$level"}}],
+      "setup": [],
+      "produces": ["fish","fishing"],
+      "actions": [
+        {"type":"ensureItem","item":"$tool"},
+        {"type":"fish","tool":"$spotTool","bait":"$bait","until":{"inventoryFull":true}},
+        {
+          "type": "choose",
+          "options": [
+            {"weight":1,"actions":[{"type":"dropItems","itemIds":"$resources"}]},
+            {
+              "weight": 1,
+              "actions": [
+                {
+                  "type": "sellItems",
+                  "itemIds": "$resources",
+                  "orElse": {"type":"dropItems","itemIds":"$resources"}
+                }
+              ]
+            },
+            {
+              "weight": 1,
+              "actions": [
+                {"type":"cook"},
+                {
+                  "type": "bank",
+                  "itemIds": "$dishes",
+                  "orElse": {
+                    "type": "sellItems",
+                    "itemIds": "$dishes",
+                    "orElse": {"type":"dropItems","itemIds":"$dishes"}
+                  }
+                },
+                {"type":"dropItems","itemIds":"$cooked"}
+              ]
+            },
+            {
+              "weight": 1,
+              "actions": [
+                {"type":"cook"},
+                {
+                  "type": "sellItems",
+                  "itemIds": "$cooked",
+                  "orElse": {"type":"dropItems","itemIds":"$cooked"}
+                }
+              ]
+            },
+            {"weight":1,"actions":[{"type":"cook"},{"type":"dropItems","itemIds":"$cooked"}]}
+          ]
+        }
+      ]
+    }
   },
   "activities": [
     {"id":"normal_trees","template":"chop_trees","capacity":300,"fields":{"level":1,"tier":"normal","log":"logs"}},
-    {"id":"copper_tin_rocks","template":"mine_rocks","capacity":160,"fields":{"level":1,"tier":["copper","tin"],"resources":["copper_ore","tin_ore"],"bar":"Bronze bar","smelted":["bronze_bar","copper_ore","tin_ore"]}},
-    {"id":"burn_normal_logs","template":"burn_logs","capacity":120,"fields":{"logs":27},"fieldsFrom":"normal_trees"},
-    {"id":"smelt_bronze","template":"smelt_bar","capacity":80,"fields":{"level":1,"ore1":"copper_ore","ore2":"tin_ore","oreAmount":13,"bar":"Bronze bar"}},
+    {
+      "id": "copper_tin_rocks",
+      "template": "mine_rocks",
+      "capacity": 160,
+      "fields": {
+        "level": 1,
+        "tier": ["copper","tin"],
+        "resources": ["copper_ore","tin_ore"],
+        "bar": "Bronze bar",
+        "smelted": ["bronze_bar","copper_ore","tin_ore"]
+      }
+    },
     {"id":"oak_trees","template":"chop_trees","capacity":160,"fields":{"level":15,"tier":"oak","log":"oak_logs"}},
     {"id":"willow_trees","template":"chop_trees","capacity":160,"fields":{"level":30,"tier":"willow","log":"willow_logs"}},
     {"id":"yew_trees","template":"chop_trees","capacity":160,"fields":{"level":60,"tier":"yew","log":"yew_logs"}},
     {"id":"iron_rocks","template":"mine_rocks","capacity":160,"fields":{"level":15,"tier":"iron","resources":["iron_ore"],"bar":"Iron bar","smelted":["iron_bar","iron_ore"]}},
     {"id":"coal_rocks","template":"mine_rocks","capacity":160,"fields":{"level":30,"tier":"coal","resources":["coal"],"bar":"Steel bar","smelted":["steel_bar","coal"]}},
     {"id":"mithril_rocks","template":"mine_rocks","capacity":160,"fields":{"level":50,"tier":"mithril","resources":["mithril_ore"],"bar":"Mithril bar","smelted":["mithril_bar","mithril_ore"]}},
-    {"id":"burn_oak_logs","template":"burn_logs","capacity":80,"fields":{"logs":27},"fieldsFrom":"oak_trees"},
-    {"id":"burn_willow_logs","template":"burn_logs","capacity":80,"fields":{"logs":27},"fieldsFrom":"willow_trees"},
-    {"id":"burn_yew_logs","template":"burn_logs","capacity":80,"fields":{"logs":27},"fieldsFrom":"yew_trees"},
-    {"id":"net_fishing","template":"catch_fish","capacity":160,"fields":{"level":1,"tool":"small_fishing_net","spotTool":"NET","bait":null,"resources":["raw_shrimps","raw_anchovies"],"cooked":["shrimps","anchovies","burnt_shrimp","burnt_fish","raw_shrimps","raw_anchovies"]}},
-    {"id":"fly_fishing","template":"catch_fish","capacity":160,"fields":{"level":20,"tool":"fly_fishing_rod","spotTool":"FLY_FISHING_ROD","bait":"feather","resources":["raw_trout","raw_salmon"],"cooked":["trout","salmon","burnt_fish_3","raw_trout","raw_salmon"]}},
-    {"id":"lobster_fishing","template":"catch_fish","capacity":160,"fields":{"level":40,"tool":"lobster_pot","spotTool":"LOBSTER_POT","bait":null,"resources":["raw_lobster"],"cooked":["lobster","burnt_lobster","raw_lobster"]}},
-    {"id":"harpoon_fishing","template":"catch_fish","capacity":160,"fields":{"level":60,"tool":"harpoon","spotTool":"HARPOON","bait":null,"resources":["raw_tuna","raw_swordfish"],"cooked":["tuna","swordfish","burnt_fish_7","burnt_swordfish","raw_tuna","raw_swordfish"]}},
-    {"id":"combat_training","mode":"combat_training","capacity":1000,"repeat":true,"failureCooldownSeconds":30,"produces":["attack","strength","defence","ranged","magic","hitpoints"],"actions":[{"type":"trainCombat","durationSeconds":{"min":300,"max":720},"food":"TROUT","foodAmount":16,"maxFailedTargets":6,"styles":["melee","ranged","magic"],"spreadDistance":150,"excludeNames":["Duck","Duckling"],"stages":[{"id":"beginner","minLevel":1,"npcLevels":{"min":1,"max":5}},{"id":"novice","minLevel":10,"npcLevels":{"min":2,"max":13}},{"id":"intermediate","minLevel":20,"npcLevels":{"min":9,"max":27}},{"id":"advanced","minLevel":40,"npcLevels":{"min":20,"max":45}},{"id":"expert","minLevel":60,"npcLevels":{"min":30,"max":90}}],"gearRef":"combat_training"}]},
+    {
+      "id": "net_fishing",
+      "template": "catch_fish",
+      "capacity": 160,
+      "fields": {
+        "level": 1,
+        "tool": "small_fishing_net",
+        "spotTool": "NET",
+        "bait": null,
+        "resources": ["raw_shrimps","raw_anchovies"],
+        "dishes": ["shrimps","anchovies"],
+        "cooked": ["shrimps","anchovies","burnt_shrimp","burnt_fish","raw_shrimps","raw_anchovies"]
+      }
+    },
+    {
+      "id": "fly_fishing",
+      "template": "catch_fish",
+      "capacity": 160,
+      "fields": {
+        "level": 20,
+        "tool": "fly_fishing_rod",
+        "spotTool": "FLY_FISHING_ROD",
+        "bait": "feather",
+        "resources": ["raw_trout","raw_salmon"],
+        "dishes": ["trout","salmon"],
+        "cooked": ["trout","salmon","burnt_fish_3","raw_trout","raw_salmon"]
+      }
+    },
+    {
+      "id": "lobster_fishing",
+      "template": "catch_fish",
+      "capacity": 160,
+      "fields": {
+        "level": 40,
+        "tool": "lobster_pot",
+        "spotTool": "LOBSTER_POT",
+        "bait": null,
+        "resources": ["raw_lobster"],
+        "dishes": ["lobster"],
+        "cooked": ["lobster","burnt_lobster","raw_lobster"]
+      }
+    },
+    {
+      "id": "harpoon_fishing",
+      "template": "catch_fish",
+      "capacity": 160,
+      "fields": {
+        "level": 60,
+        "tool": "harpoon",
+        "spotTool": "HARPOON",
+        "bait": null,
+        "resources": ["raw_tuna","raw_swordfish"],
+        "dishes": ["tuna","swordfish"],
+        "cooked": ["tuna","swordfish","burnt_fish_7","burnt_swordfish","raw_tuna","raw_swordfish"]
+      }
+    },
+    {
+      "id": "combat_training",
+      "mode": "combat_training",
+      "capacity": 1000,
+      "repeat": true,
+      "failureCooldownSeconds": 30,
+      "produces": ["attack","strength","defence","ranged","magic","hitpoints"],
+      "actions": [
+        {
+          "type": "trainCombat",
+          "durationSeconds": {"min":300,"max":720},
+          "food": "TROUT",
+          "foodAmount": 16,
+          "maxFailedTargets": 6,
+          "styles": ["melee","ranged","magic"],
+          "spreadDistance": 150,
+          "excludeNames": ["Duck","Duckling"],
+          "stages": [
+            {"id":"beginner","minLevel":1,"npcLevels":{"min":1,"max":5}},
+            {"id":"novice","minLevel":10,"npcLevels":{"min":2,"max":13}},
+            {"id":"intermediate","minLevel":20,"npcLevels":{"min":9,"max":27}},
+            {"id":"advanced","minLevel":40,"npcLevels":{"min":20,"max":45}},
+            {"id":"expert","minLevel":60,"npcLevels":{"min":45,"max":100}}
+          ],
+          "gearRef": "combat_training"
+        }
+      ]
+    },
     {"id":"pvp","mode":"pvp","capacity":64,"repeat":true,"failureCooldownSeconds":5,"actions":[{"type":"pvpCombat"}]},
     {"id":"pvp_engage","mode":"pvp","capacity":64,"repeat":false,"ephemeral":true,"failureCooldownSeconds":5,"actions":[{"type":"pvpCombat","exitWhenIdle":true}]},
     {"id":"roam","mode":"roaming","capacity":1024,"repeat":true,"failureCooldownSeconds":5,"actions":[{"type":"wander"}]},
     {"id":"follow_owner","mode":"follow_owner","capacity":64,"repeat":false,"ephemeral":true,"manual":true,"failureCooldownSeconds":5,"actions":[{"type":"followOwner"}]},
-    {"id":"bank_trip","mode":"bank_run","capacity":64,"repeat":false,"ephemeral":true,"manual":true,"failureCooldownSeconds":5,"actions":[{"type":"bank","until":{"inventoryFull":false},"suppressAutoRetaliate":true}]}
-  ],
-  "sites": [
-    {"id":"lumbridge","anchor":{"x":3222,"y":3218,"z":0},"counts":{"novices":70,"intermediates":50,"advanced":40,"experts":40}},
-    {"id":"varrock","anchor":{"x":3212,"y":3424,"z":0},"counts":{"novices":70,"intermediates":50,"advanced":40,"experts":40}},
-    {"id":"falador","anchor":{"x":2964,"y":3378,"z":0},"counts":{"novices":70,"intermediates":50,"advanced":40,"experts":40}},
-    {"id":"seers","anchor":{"x":2723,"y":3484,"z":0},"counts":{"novices":70,"intermediates":50,"advanced":40,"experts":40}},
-    {"id":"east_ardougne","anchor":{"x":2662,"y":3305,"z":0},"counts":{"novices":70,"intermediates":50,"advanced":40,"experts":40}}
-  ],
-  "pvp": {
-    "botPool": 845,
-    "activeRegionBotsPerRegion": 32,
-    "activeRegionInset": 1,
-    "hotspots": [
-      {"id":"edge_low","label":"Edgeville Low Pures","dangerTier":"medium","enabled":true,"targetBots":18,"maxBots":28,"roamRadius":4,"lingerMs":30000,"maxSimultaneousFights":2,"area":{"minX":3068,"maxX":3078,"minY":3526,"maxY":3536,"z":0},"anchor":{"x":3073,"y":3531,"z":0},"combatLevelRange":{"min":55,"max":85},"allowedProfiles":["novice","standard","veteran"],"allowedLoadouts":["low_level_pure","rune_pure_members","initiate_pure","void_pure","rusher"],"styleWeights":{"melee":0.3,"range":0.33,"hybrid":0.37},"activityWeights":{"seek":0.03,"bait":0.32,"fight":0.02,"escape":0.63}},
-      {"id":"edge_mid","label":"Edgeville Mid","dangerTier":"medium","enabled":true,"targetBots":14,"maxBots":22,"roamRadius":4,"lingerMs":30000,"maxSimultaneousFights":2,"area":{"minX":3085,"maxX":3095,"minY":3526,"maxY":3536,"z":0},"anchor":{"x":3090,"y":3531,"z":0},"combatLevelRange":{"min":88,"max":100},"allowedProfiles":["standard","veteran"],"allowedLoadouts":["edge_venge_zerker","edge_med_level","edge_ranged_melee","edge_void_risk","edge_void_melee","edge_barrows_venge","anti_pk_hybrid","deep_wild_budget_nh","mid_tank"],"styleWeights":{"melee":0.4,"range":0.2,"hybrid":0.4},"activityWeights":{"seek":0.03,"bait":0.32,"fight":0.02,"escape":0.63}},
-      {"id":"edge_mains","label":"Edgeville Mains","dangerTier":"medium","enabled":true,"targetBots":20,"maxBots":30,"roamRadius":4,"lingerMs":30000,"maxSimultaneousFights":2,"area":{"minX":3103,"maxX":3113,"minY":3526,"maxY":3536,"z":0},"anchor":{"x":3108,"y":3531,"z":0},"combatLevelRange":{"min":115,"max":126},"allowedProfiles":["standard","veteran","elite"],"allowedLoadouts":["edge_main_melee","edge_ranged_melee","edge_barrows_venge","mid_tank","edge_unorthodox_risk","anti_pk_hybrid","deep_wild_hybrid","edge_med_level"],"styleWeights":{"melee":0.45,"range":0.25,"hybrid":0.3},"activityWeights":{"seek":0.03,"bait":0.32,"fight":0.02,"escape":0.63}},
-      {"id":"varrock_ditch","label":"Varrock Ditch (F2P)","dangerTier":"low","enabled":true,"targetBots":80,"maxBots":112,"roamRadius":3,"lingerMs":12000,"maxSimultaneousFights":8,"area":{"minX":3228,"maxX":3262,"minY":3525,"maxY":3542,"z":0},"anchor":{"x":3243,"y":3526,"z":0},"allowedProfiles":["novice","standard","veteran","elite"],"allowedLoadouts":["f2p_strength_pure","f2p_rune_pure","f2p_range_ko","f2p_bind_pure","f2p_addy_pure","f2p_mage_pure","f2p_bind_ko"],"styleWeights":{"melee":0.48,"range":0.3,"hybrid":0.22},"activityWeights":{"seek":0.35,"bait":0.2,"fight":0.12,"escape":0.33}},
-      {"id":"green_drags_gate","label":"Green Drags Pures","dangerTier":"medium","enabled":true,"targetBots":8,"maxBots":14,"roamRadius":8,"lingerMs":15000,"maxSimultaneousFights":null,"area":{"minX":2974,"maxX":3002,"minY":3598,"maxY":3622,"z":0},"anchor":{"x":2988,"y":3610,"z":0},"combatLevelRange":{"min":55,"max":85},"allowedProfiles":["novice","standard","veteran"],"allowedLoadouts":["low_level_pure","rune_pure_members","initiate_pure","void_pure","rusher","budget_pk"],"styleWeights":{"melee":0.44,"range":0.18,"hybrid":0.38},"activityWeights":{"seek":0.25,"bait":0.3,"fight":0.08,"escape":0.37}},
-      {"id":"revs_entrance","label":"Revs Tanks","dangerTier":"high","enabled":true,"targetBots":8,"maxBots":14,"roamRadius":4,"lingerMs":15000,"maxSimultaneousFights":null,"area":{"minX":3129,"maxX":3139,"minY":3833,"maxY":3843,"z":0},"anchor":{"x":3134,"y":3838,"z":0},"combatLevelRange":{"min":115,"max":126},"allowedProfiles":["standard","veteran","elite"],"allowedLoadouts":["deep_wild_hybrid","deep_wild_nh","deep_wild_budget_nh","deep_wild_staff_spec","edge_unorthodox_risk","anti_pk_hybrid","edge_med_level"],"styleWeights":{"melee":0.12,"range":0.28,"hybrid":0.6},"activityWeights":{"seek":0.3,"bait":0.25,"fight":0.08,"escape":0.37}}
-    ]
-  }
+    {
+      "id": "bank_trip",
+      "mode": "bank_run",
+      "capacity": 64,
+      "repeat": false,
+      "ephemeral": true,
+      "manual": true,
+      "failureCooldownSeconds": 5,
+      "actions": [{"type":"bank","until":{"inventoryFull":false},"suppressAutoRetaliate":true}]
+    }
+  ]
 }

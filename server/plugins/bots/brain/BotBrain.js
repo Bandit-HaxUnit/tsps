@@ -70,7 +70,7 @@ class BotBrain {
     this.ephemeral = options.ephemeral === true;
     this.onExhausted =
       typeof options.onExhausted === "function" ? options.onExhausted : null;
-    // Optional rotation (bot-activities.json sites): { activityIds, switchAfterMs }.
+    // Optional rotation (bot-sites.json `switchMinutes`): { activityIds, weights, switchAfterMs }.
     // Only activityIds are ever assigned; with switchAfterMs ({min,max}) the bot
     // swaps to another of them at random once its activity has run that long.
     this.rotation = options.rotation ?? null;
@@ -172,7 +172,7 @@ class BotBrain {
 
   assignNext(nowMs) {
     const activity = this.registry?.pickActivity?.(this.player, nowMs, this.rotation
-      ? { allowed: this.rotation.activityIds }
+      ? { allowed: this.rotation.activityIds, weights: this.rotation.weights }
       : { own: this.rootActivityId });
     if (!activity) {
       return false;
@@ -197,6 +197,7 @@ class BotBrain {
     const frame = this.frames[0];
     const next = this.registry?.pickActivity?.(this.player, nowMs, {
       allowed: this.rotation.activityIds,
+      weights: this.rotation.weights,
       avoid: frame.behaviour.id,
     });
     if (!next) {

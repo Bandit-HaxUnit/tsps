@@ -4,22 +4,23 @@
 The existing bot activity command can also assign `combat_training` to a controlled bot.
 Commands retain their existing developer permissions.
 
-The `sites` in `bot-activities.json` are **off by default** (no skilling or combat-training
-crowd on a fresh world): set `BOT_SITES=1` to spawn them. With them on, each site spawns its
-`count` around its anchor at spawn. A site's bots only ever run its `activities`; on the shared
-`switchAfterSeconds` default each bot swaps to another of them at random once its
-current activity has run that long (between fights, never under a bank-trip/fight-back
-overlay; a switch with no free capacity slot elsewhere retries 30 s later). Without it the
-bots are dedicated: a failed activity waits out its cooldown and resumes.
-
-| Site | Bots | Activities |
-| --- | --- | --- |
-| `lumbridge_all_rounders` | 500 | combat training, woodcutting, mining (copper + tin), firemaking, smelting; switch every 15–25 min |
+Bot population lives in `data/definitions/bot-sites.json`: one `sites` array for skilling and
+PvP alike. A site is a place (`x`, `y`, optional `z`/`radius`), an `enabled` flag (temporary,
+until /host controls sites) and its `bots`. Skilling sites ship **disabled** (no skilling or
+combat-training crowd on a fresh world); set `"enabled": true` on one to spawn it. Each
+enabled skilling site spawns its bots around its anchor at startup, a few per game tick
+(`BotSpawnPacing.js`: 8 per 600 ms, round-robin over the sites, so 1000 bots take ~75 s). Without `switchMinutes` each
+bot is dedicated to one mode's activity: it never switches, and a failed activity waits out its
+cooldown and resumes. With `"switchMinutes": [15, 25]` each bot rolls its own timer in that range
+and then changes to another mode of its tier at the site, weighted by the site's counts for that
+tier so the mix stays near the configured one (a Varrock novice never becomes a woodcutter when
+Varrock only has expert woodcutters). Switches wait for a safe point: never mid-fight or under a
+bank-trip/fight-back overlay, and a switch with no free capacity slot retries 30 s later.
 
 Trainers find their NPCs through the NPC cluster index (below), so they fan out across every
-nearby group of their tier's monsters. Each bot starts on a random activity that has a free slot; the skilling
-activities have 150/80/60/40 slots (woodcutting/mining/firemaking/smelting), the rest train combat. Change `count` there; leave `BOT_SITES`
-unset for a bot-free world. `maxFailedTargets` (default 6) sets how many targets or frozen routes in a row
+nearby group of their tier's monsters. The skilling
+activities cap how many bots run each one at once (`capacity`), the rest train combat. Change the counts in `bot-sites.json`;
+leave sites disabled for a bot-free world. `maxFailedTargets` (default 6) sets how many targets or frozen routes in a row
 without landing damage fail a training site; that cluster is then skipped by the bot for 10 min.
 
 The activity uses the lowest permanent level of Attack, Strength and Defence to choose a
@@ -35,7 +36,11 @@ spells and carry the matching runes; their site and gear tiers follow the traine
 | 1–9 | `beginner` | 1–5 | rats, men, goblins, cows, chickens, spiders; swamp rats and frogs |
 | 10–19 | `novice` | 2–13 | goblins, cows, swamp frogs, big and giant frogs, giant rats |
 | 20–39 | `intermediate` | 9–27 | big/giant frogs, Al Kharid warriors, scorpions, unicorns, barbarians, guards |
-| 40+ | `advanced` | 20–45 | guards, desert wolves, skeletons, black knights, hill/moss giants |
+| 40–59 | `advanced` | 20–45 | guards, desert wolves, skeletons, black knights, hill/moss giants |
+| 60+ | `expert` | 45–100 | little nearby: East Ardougne has paladins, heroes and wolves; Seers' has ice giants and wolves |
+
+Lumbridge and Varrock have almost nothing in the expert band nearby, so their sites give
+combat training per-tier counts with no advanced or expert trainers; East Ardougne takes them.
 
 Stages give an NPC combat-level band - no names, coordinates or areas. Opponents are any
 attackable NPC in the band; `excludeNames` (`Duck`, `Duckling`) drops ones that cannot be
@@ -148,12 +153,26 @@ another player fighting a training NPC is never displaced.
 Gathering templates end with a `choose` step: each time the inventory fills, a weighted option
 is rolled and its actions run in order, then the activity repeats (back to gathering).
 
-| Option | Weight | Mining (`mine_rocks`) | Woodcutting (`chop_trees`) |
+Raw resources are never banked: bot banks are never used, so anything in them is lost to the
+economy. Only end products (bars, cooked fish) are banked, and only those items (`bank` with
+`itemIds`). Every option weighs 1:
+
+| Option | Woodcutting (`chop_trees`) | Mining (`mine_rocks`) | Fishing (`catch_fish`) |
 | --- | --- | --- | --- |
-| bank | 2 | yes | yes |
-| drop the resources and keep going | 1 | yes | yes |
-| sell to the nearest general store | 1 | yes | yes |
-| smelt, then bank / sell / drop | 1 each | yes | - (fletching/firemaking later) |
+| drop the resources and keep going | yes | yes | yes |
+| sell to the nearest general store | yes | yes | yes |
+| burn the logs | yes | - | - |
+| process, then bank the end product | - | smelt, bank bars | cook, bank fish, drop burnt |
+| process, then sell / drop | - | smelt | cook |
+
+Any step can name a fallback with `orElse`, run when it fails. Banking falls back to selling,
+and selling to dropping, so a bot with no reachable bank or store still empties its bag and goes
+back to its activity:
+
+```json
+{ "type": "bank", "itemIds": ["$bar"],
+  "orElse": { "type": "sellItems", "itemIds": ["$bar"], "orElse": { "type": "dropItems", "itemIds": ["$bar"] } } }
+```
 
 - `choose` (`actions/Choose.js`): `{ "type": "choose", "options": [{ "weight": 2, "actions": [...] }] }`,
   usable at any step of any activity.
@@ -163,20 +182,18 @@ is rolled and its actions run in order, then the activity repeats (back to gathe
 - `dropItems` / `sellItems` take `itemIds` from the activity's fields: `resources` (what it gathers)
   and, for mining, `smelted` (the bar plus leftover ores). `bar` names the smelting recipe
   (copper + tin -> `Bronze bar`); unpaired ores are what the follow-up bank/sell/drop handles.
-  Smelt-then-bank uses `"until": { "inventoryFull": false }` so the bank deposits a part-full bag.
-- Combat supplies are training-only: when combat training stops (switching to skilling, failing,
+  - Combat supplies are training-only: when combat training stops (switching to skilling, failing,
   a brain reset) the trout and runes it provisioned are taken back, so a skiller starts with a
   free inventory. The next fight re-provisions them; equipped arrows stay.
 - A walk to a bank that leaves the bot standing for 20 s makes that bot alone use the next-nearest
-  bank for 10 min; with none left the bank step fails and the next full inventory rolls again.
+  bank for 10 min; with none left the bank step fails and its `orElse` (sell, then drop) runs.
 
 ## No free resources
 
 Bots are given tools (axe, pickaxe, tinderbox, training weapons/armour) but never resources:
-smelting withdraws its ores and firemaking its logs from the bot's own bank (`bank` with
-`withdraw`), so bars and burnt logs only exist if a bot gathered and banked the inputs. A
-withdrawal that finds none of an item fails the step and the activity backs off and rotates.
-A test fails if any activity uses `ensureItem` for something other than a tool. Combat
+smelting and firemaking are only follow-ons of mining and woodcutting (above), using what the
+bot just gathered. Site bots start with an empty bank, so there are no standalone smelting or
+firemaking activities, and a test fails if any activity withdraws from the bank. A test fails if any activity uses `ensureItem` for something other than a tool. Combat
 consumables (food, runes, arrows) are still provisioned for training, taken back when training
 stops and not dropped on NPC deaths, so they never reach banks, shops or the ground.
 - Far-from-player bots think on a due-time schedule (every LOD stride since they last ran), not
@@ -229,7 +246,7 @@ floor.
 
 ## Fishing and cooking
 
-Tiered like the other skills, one activity per tier in each town's rotation (template `catch_fish`):
+Tiered like the other skills, one activity per tier (template `catch_fish`):
 
 | Activity | Level | Tool | Spots | Fish |
 | --- | --- | --- | --- | --- |
@@ -270,23 +287,46 @@ ended it and the bot was handed a random activity (WildyBots skilling in Lumbrid
 
 ## Test tiers
 
-Startup spawns 1000 bots: 200 each at Lumbridge, Varrock, Falador, Seers' Village and East
-Ardougne market, each town split over the same four tiers (sites `<town>_novices` ... `<town>_experts`).
-`bot-activities.json` lists one entry per town — `{ id, anchor, counts }` — and one shared
-`tierActivities` map; the registrar expands each town × tier into a site. A tier's level band
-is code-owned (`SITE_TIER_LEVELS` in `BotActivityRegistry.js`) and each skill rolls inside it
-at spawn (hitpoints at least 10, agility always 99); rotation timing and spawn radius are
-shared defaults in the same file. Gear — combat kit and the best usable axe/pickaxe —
+With every site enabled, startup spawns 1000 bots: 200 each at Lumbridge, Varrock, Falador,
+Seers' Village and East Ardougne market. A skilling site's `bots` maps each mode to a count:
+
+```json
+{ "id": "lumbridge", "enabled": false, "x": 3222, "y": 3218,
+  "bots": { "combat_training": 80, "woodcutting": 50, "mining": 40, "fishing": 30 } }
+```
+
+A number is split evenly over the tiers (the lowest tiers take any remainder), giving runtime
+sites `<site>_<mode>_<tier>`, e.g. 30 woodcutters are 8/8/7/7 from novices to experts. An
+object sets per-tier counts instead, and tiers it leaves out get none. Varrock's yew-only
+woodcutters are `"woodcutting": { "experts": 50 }`. Leave a mode out for none of it; an unknown
+mode or tier fails startup.
+
+The tiers themselves live in `bot-activities.json`: each has a `skills` band, which every
+non-combat skill rolls inside at spawn (agility is always 99), and a `combat` level band, which
+the combat stats are rolled to land in (hitpoints at least 10):
+
+```json
+"novices": { "skills": [1, 19], "combat": [3, 30] }
+``` 
+Sites never list content: per mode, a tier does the highest-level activity its band's lowest
+level can do (a 60 woodcutter chops yews, not normal trees). Spawn radius defaults in
+`BotActivityRegistry.js`. Gear — combat kit and the best usable axe/pickaxe —
 follows from the levels. Trees, rocks, banks, stores and NPC clusters are found from wherever
 the bot is, so the same activities work in every town. Activity capacities are global
 (shared by all towns).
 
-| Tier (per town) | Bots | Spawn levels | Rotates between |
-| --- | --- | --- | --- |
-| `novices` | 70 | 1-19 | combat (NPC lv 1-5), normal trees, copper/tin, burn logs, smelt bronze |
-| `intermediates` | 50 | 20-39 | combat (lv 9-27), oaks, iron, burn oak logs |
-| `advanced` | 40 | 40-59 | combat (lv 20-45), willows, coal, burn willow logs |
-| `experts` | 40 | 60-99 | combat (lv 30-90), yews, mithril, burn yew logs |
+A PvP site has a plain `bots` count and a `pvp` block instead; it becomes a wilderness hotspot.
+Its `style` is a loadout tag (`pure`, `mid`, `main`, `deep`, `f2p`) and every loadout in
+`pvp-bot-loadouts.json` carrying that tag is its gear. Optional: `combat` band, `profiles`,
+`weights` (seek/bait/fight/escape), `roam`, `lingerMs`, `maxFights`, and an `area` when the
+square of `radius` around x/y doesn't fit.
+
+| Tier | Skills / combat level | Activities |
+| --- | --- | --- |
+| `novices` | 1-19 / 3-30 | combat training, normal trees, copper/tin, net fishing |
+| `intermediates` | 20-39 / 30-60 | combat training, oaks, iron, fly fishing |
+| `advanced` | 40-59 / 60-90 | combat training, willows, coal, lobsters |
+| `experts` | 60-99 / 90-126 | combat training, yews, mithril, harpoon |
 
 Level 40-90 NPCs near Lumbridge are almost all past the Shantay Pass or the River Salve, which
 the route planner cannot reach, so the expert band starts at 30.

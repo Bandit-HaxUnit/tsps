@@ -2,6 +2,7 @@
 
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
 const { attachBrain } = require("./attachBrain");
+const { runPaced } = require("../runtime/BotSpawnPacing");
 const { Skill } = require("../../../src/main/typescript/elvarg/game/model/Skill");
 const { SkillManager } = require("../../../src/main/typescript/elvarg/game/content/skill/SkillManager");
 const { Flag } = require("../../../src/main/typescript/elvarg/game/model/Flag");
@@ -29,15 +30,49 @@ function rollLevel(value) {
   return Number.isFinite(number) ? Math.floor(number) : null;
 }
 
+const COMBAT_SKILLS = [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE, Skill.HITPOINTS, Skill.RANGED, Skill.MAGIC, Skill.PRAYER];
+
+/** SkillManager.getCombatLevel over [attack, strength, defence, hitpoints, ranged, magic, prayer]. */
+function combatLevelOf([attack, strength, defence, hp, ranged, magic, prayer]) {
+  const base = Math.floor((defence + hp + Math.floor(prayer / 2)) * 0.2535) + 1;
+  const best = Math.max((attack + strength) * 0.325, Math.floor(ranged * 1.5) * 0.325, Math.floor(magic * 1.5) * 0.325);
+  return Math.min(126, Math.floor(base + best));
+}
+
+/**
+ * Combat stats (COMBAT_SKILLS order) whose combat level lands in [min, max]: aim at a
+ * level in the band, find the even stat level that reaches it, then jitter each stat a
+ * little so a crowd isn't uniform. Falls back to the even stats if jitter leaves the band.
+ */
+function rollCombatStats([min, max]) {
+  const clamp = (level, floor = 1) => Math.max(floor, Math.min(99, level));
+  const even = (level) => COMBAT_SKILLS.map((skill) => clamp(level, skill === Skill.HITPOINTS ? 10 : 1));
+  const target = min + Math.floor(Math.random() * (max - min + 1));
+  let base = 1;
+  while (base < 99 && combatLevelOf(even(base)) < target) base++;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const stats = even(base).map((level, index) =>
+      clamp(level + Math.floor(Math.random() * 9) - 4, COMBAT_SKILLS[index] === Skill.HITPOINTS ? 10 : 1));
+    const combat = combatLevelOf(stats);
+    if (combat >= min && combat <= max) return stats;
+  }
+  return even(base);
+}
+
 function applyLevels(bot, levels) {
   if (levels == null) return;
   const manager = bot.getSkillManager?.();
   if (!manager) return;
+  // `combat: [min, max]` is a combat level band; the combat stats are rolled to land in it.
+  const combat = Array.isArray(levels.combat) ? rollCombatStats(levels.combat) : null;
   for (const skill of Skill.values()) {
     const name = String(skill.getName?.() ?? skill.toString?.() ?? "").toLowerCase();
+    const combatIndex = combat ? COMBAT_SKILLS.indexOf(skill) : -1;
     let level = skill === Skill.AGILITY
       ? 99
-      : rollLevel(typeof levels === "number" ? levels : levels[name] ?? levels.all);
+      : combatIndex >= 0
+        ? combat[combatIndex]
+        : rollLevel(typeof levels === "number" ? levels : levels[name] ?? levels.all);
     if (!Number.isFinite(level)) continue;
     level = Math.max(skill === Skill.HITPOINTS ? 10 : 1, Math.min(99, Math.floor(level)));
     manager.setCurrentLevel(skill, level, false).setMaxLevels(skill, level, false)
@@ -134,15 +169,11 @@ function applyOutfit(bot, tier) {
 const SPAWN_ATTEMPTS = 16;
 
 /**
- * Spawns the data-driven sites (bot-activities.json "sites") as brain-driven
- * bots. Off by default so a ship world has no skilling/combat-training crowd;
- * BOT_SITES=1 enables them.
+ * Spawns the skilling sites in bot-sites.json as brain-driven bots. Only sites with
+ * "enabled": true spawn (temporary until /host controls them).
  */
 function startBotSites(options = {}) {
   const { api, botApi, runtime, registry, world, resetMovementState } = options;
-  if ((process.env.BOT_SITES ?? "0") !== "1") {
-    return null;
-  }
   if (!runtime || !registry || !Array.isArray(registry.sites) || registry.sites.length === 0) {
     return null;
   }
@@ -194,26 +225,34 @@ function startBotSites(options = {}) {
   }
 
   function start() {
-    let spawned = 0;
-    for (const site of registry.sites) {
-      const count = Math.max(0, Math.floor(Number(site.count ?? 0)));
-      let siteSpawned = 0;
-      for (let index = 0; index < count; index++) {
-        if (spawn(site, index)) {
-          siteSpawned++;
+    // Round-robin over the sites so they all fill in together, paced a few per tick.
+    const sites = registry.sites
+      .filter((site) => site.enabled)
+      .map((site) => ({ site, requested: Math.max(0, Math.floor(Number(site.count ?? 0))), spawned: 0 }));
+    const jobs = [];
+    for (let index = 0; sites.some((entry) => index < entry.requested); index++) {
+      for (const entry of sites) {
+        if (index < entry.requested) {
+          jobs.push(() => {
+            if (spawn(entry.site, index)) entry.spawned++;
+          });
         }
       }
-      spawned += siteSpawned;
-      botApi?.log?.("bot_site_spawned", {
-        site: site.id,
-        activities: site.rotation.activityIds,
-        requested: count,
-        spawned: siteSpawned,
-      });
     }
-    if (spawned > 0) {
-      botApi?.log?.("bot_sites_started", { spawned });
-    }
+    runPaced(jobs, () => {
+      for (const { site, requested, spawned } of sites) {
+        botApi?.log?.("bot_site_spawned", {
+          site: site.id,
+          activities: site.activities.map((activity) => activity.id),
+          requested,
+          spawned,
+        });
+      }
+      const spawned = sites.reduce((sum, entry) => sum + entry.spawned, 0);
+      if (spawned > 0) {
+        botApi?.log?.("bot_sites_started", { spawned });
+      }
+    });
   }
 
   if (typeof api?.onServerStartup === "function") {
@@ -225,6 +264,7 @@ function startBotSites(options = {}) {
 module.exports = {
   applyLevels,
   applyOutfit,
+  combatLevelOf,
   outfitTier,
   startBotSites,
 };

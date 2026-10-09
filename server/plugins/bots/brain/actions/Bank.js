@@ -37,7 +37,9 @@ const MAX_PLANE = 3;
 function createBankAction(spec, world) {
   const withdrawSpecs = Array.isArray(spec.withdraw) ? spec.withdraw : [];
   const isWithdraw = withdrawSpecs.length > 0;
-  const requireFull = !isWithdraw && spec.until?.inventoryFull !== false;
+  // `itemIds` banks only those items (an activity's end products); otherwise everything.
+  const depositIds = Array.isArray(spec.itemIds) && spec.itemIds.length ? new Set(spec.itemIds) : null;
+  const requireFull = !isWithdraw && !depositIds && spec.until?.inventoryFull !== false;
   const canReach = createObjectReachChecker(world.core);
   const stateFor = (player) =>
     playerState(action, player, () => ({
@@ -202,6 +204,13 @@ function createBankAction(spec, world) {
           // the bank fails the step, so the activity backs off and rotates.
           const inventory = player.getInventory();
           return withdrawSpecs.every((entry) => inventory.getAmount(entry.item) > 0) ? "success" : "failed";
+        } else if (depositIds) {
+          player.getInventory().getItems().forEach((item, slot) => {
+            if (item && depositIds.has(item.getId())) Bank.deposit(player, item.getId(), slot, item.getAmount(), true);
+          });
+          world.log?.("bot_brain_bank_deposited", {
+            username: player.getUsername?.(),
+          });
         } else {
           Bank.depositItems(player, player.getInventory(), true);
           world.log?.("bot_brain_bank_deposited", {
@@ -212,6 +221,9 @@ function createBankAction(spec, world) {
         return "success";
       }
       if (isWithdraw && withdrawSatisfied(player)) {
+        return "success";
+      }
+      if (depositIds && !player.getInventory().getItems().some((item) => item && depositIds.has(item.getId()))) {
         return "success";
       }
       if (requireFull && !player.getInventory().isFull()) {

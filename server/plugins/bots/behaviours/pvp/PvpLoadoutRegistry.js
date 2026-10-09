@@ -14,7 +14,6 @@ function freezeLoadout(loadout) {
     ...loadout,
     tags: freezeArray(loadout.tags),
     archetypes: freezeArray(loadout.archetypes),
-    hotspots: freezeArray(loadout.hotspots),
   });
 }
 
