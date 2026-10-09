@@ -44,7 +44,9 @@ module.exports = function registerMonksFriendQuest(api) {
   const LAW_RUNE_ITEM_ID = ItemIdentifiers.LAW_RUNE;
 
   const HIDDEN_LADDER_LOC_ID = ObjectIdentifiers.LADDER_243;
+  /** The ordinary cellar ladder (ladder_from_cellar), used in many places: only this one is the cave's. */
   const CAVE_LADDER_LOC_ID = ObjectIdentifiers.LADDER_216;
+  const CAVE_LADDER_TILE = { x: 2561, y: 9622, z: 0 };
 
   // The stone circle the wiki marks with {{Map|2561,3221|r=4|mtype=square}}.
   const STONE_CIRCLE_BOUNDS = new Boundary(2557, 2565, 3217, 3225, 0);
@@ -290,13 +292,17 @@ module.exports = function registerMonksFriendQuest(api) {
     player.moveTo(CAVE_LADDER_DESTINATION.clone());
   }
 
+  function isCaveLadder(location) {
+    return location?.x === CAVE_LADDER_TILE.x && location?.y === CAVE_LADDER_TILE.y && location?.z === CAVE_LADDER_TILE.z;
+  }
+
   /** The ladders into and out of the thieves' cave. */
   function handleLadderInteraction(event) {
     const { objectId, player } = event;
     if (objectId === HIDDEN_LADDER_LOC_ID) {
       player.moveTo(CAVE_LADDER_DESTINATION.clone());
       event.handled = true;
-    } else if (objectId === CAVE_LADDER_LOC_ID) {
+    } else if (objectId === CAVE_LADDER_LOC_ID && isCaveLadder(event.location)) {
       player.moveTo(CAVE_LADDER_RETURN.clone());
       event.handled = true;
     }

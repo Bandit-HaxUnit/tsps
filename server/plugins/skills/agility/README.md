@@ -19,7 +19,7 @@ Each entry in `agility-shortcuts.json`'s `shortcuts`:
 | `route` | Optional tile the player walks to before starting |
 | `requires` | Optional: alternatives, any one of which lets the player use it (below). Without it, `level` is the Agility needed |
 | `fail` | Optional: the chance (`low`/`high`, the Wiki's success chart), `xp` and `steps` of a failure, or `cross: true` and `hit` when a failed attempt still gets across |
-| `unverified`, `note` | What has no capture behind it, or where a value comes from |
+| `unverified`, `note` | What has no capture behind it, or where a value comes from (`rsprox captures <ids>`: see `docs/agility-shortcuts.md`) |
 
 and one way to play it:
 
@@ -54,7 +54,7 @@ With `low` and `high`, success is the OSRS skilling roll the Wiki's success char
 ### Steps
 
 The runner's steps (see the top of `ObstacleRunner.js`): `anim`, `render`, `walk`, `move`, `tele`,
-`wait`, `face`, `faceDir`, `hit`, `msg`, `sound`, `gfx`, `objAnim`. In the data:
+`wait`, `face`, `faceDir`, `hit`, `msg`, `sound`, `gfx`, `objAnim`, `varbit`. In the data:
 
 - **Animations by name**, from `constants.js` (`Anim`) and `shortcuts/builders.js` (`ShortcutAnim`):
   `{ "anim": "CLIMB_ROCKS" }`; `-1` resets.
