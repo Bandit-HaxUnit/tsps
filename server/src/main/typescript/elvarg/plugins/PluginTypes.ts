@@ -172,6 +172,8 @@ export interface PluginNpcInteractionDefinition {
 
 export interface PluginNpcDeathEvent {
   killer: any;
+  /** Every player who damaged the npc recently, the killer among them. */
+  damagers?: any[];
   npc: any;
   npcId: number;
   location: { x: number; y: number; z: number };
@@ -404,6 +406,8 @@ export interface PluginCanUnequipEvent {
 export interface PluginPlayerDeathEvent {
   player: any;
   killer: any;
+  /** Whether the player lost items (a dangerous death); false for a safe one (minigames). */
+  itemsLost?: boolean;
   handled: boolean;
 }
 
