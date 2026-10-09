@@ -1,7 +1,9 @@
 // Pure movement math shared with the server; positions are in 128 units per tile.
 const RADIUS = 18;
 const WALK_SPEED = 128 / 600;
-const MAX_PREDICTION_MS = 200;
+// Unacknowledged input the client may run ahead, and the server's credit cap.
+// One game tick: covers internet round trips; a cheat gains at most a tick of steps.
+const MAX_PREDICTION_MS = 600;
 
 /**
  * @param {{x: number, y: number}} from

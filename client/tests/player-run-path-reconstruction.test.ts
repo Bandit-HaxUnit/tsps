@@ -520,6 +520,19 @@ function checkFreeMovement() {
         for (let i = 0; i < 10; i++) tick();
         assert.ok(Math.abs(ecs.getY(index) - burstStart - WALK_SPEED * 400 * 2) <= 1,
             "jittered inputs retain the same distance as evenly delivered inputs");
+        // A hosted world acknowledges each input a full internet round trip later.
+        const rttStart = ecs.getY(index);
+        const inFlight: any[][] = [];
+        delayReplies = true;
+        for (let i = 0; i < 50; i++) {
+            tick();
+            inFlight.push(delayedReplies.splice(0));
+            if (inFlight.length > 10) for (const reply of inFlight.shift()!) movement.receive(reply);
+        }
+        delayReplies = false;
+        for (const replies of inFlight.splice(0)) for (const reply of replies) movement.receive(reply);
+        assert.ok(Math.abs(ecs.getY(index) - rttStart - WALK_SPEED * 1000 * 2) <= 1,
+            "a 200ms round trip does not stall or slow movement");
         const catchUpStart = ecs.getY(index);
         delayInputs = true;
         now += 1000;
