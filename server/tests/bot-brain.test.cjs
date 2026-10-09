@@ -2172,3 +2172,18 @@ test('a bot stows a KO weapon it has held for 15-20s without finishing the fight
   assert.equal(trackSpecWeaponHold(pvp, player, pvp.specWeaponStowAt + 1), false, 'back on primary');
   assert.equal(pvp.heldSpecWeaponId, 0, 'hold state cleared');
 });
+
+test('a bot only tells the opponent to stop praying while they have an overhead up', () => {
+  const { selectChatterLine } = require('../plugins/bots/behaviours/pvp/PvpChatter');
+  const { PrayerHandler } = require('../dist/game/content/PrayerHandler');
+
+  const noPrayer = { getPrayerActive: () => ({}) };
+  for (let i = 0; i < 400; i++) {
+    assert.notEqual(selectChatterLine(noPrayer), 'stop praying');
+  }
+
+  const praying = { getPrayerActive: () => ({ [PrayerHandler.PROTECT_FROM_MELEE]: true }) };
+  let seen = false;
+  for (let i = 0; i < 400 && !seen; i++) seen = selectChatterLine(praying) === 'stop praying';
+  assert.ok(seen, 'the prayer taunt is in the pool when the opponent prays');
+});

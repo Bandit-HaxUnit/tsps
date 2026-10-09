@@ -1,5 +1,6 @@
 "use strict";
 
+const { PrayerHandler } = require("../../../../src/main/typescript/elvarg/game/content/PrayerHandler");
 const { randomInRange } = require("../navigation/BotNavigation");
 
 /**
@@ -18,7 +19,6 @@ const CHATTER_LINES = Object.freeze([
   "you're barred",
   "r u gonna eat that?",
   "thanks for the key",
-  "stop praying",
   "nice spec",
   "did you just splash?",
   "coward",
@@ -33,6 +33,30 @@ const CHATTER_LINES = Object.freeze([
 const CHAT_COOLDOWN_MIN_MS = 9000;
 const CHAT_COOLDOWN_MAX_MS = 24000;
 
+/**
+ * Lines that only make sense while the opponent is actually doing that thing. A bot
+ * telling a prayerless opponent to "stop praying" was the first of these.
+ */
+const CONTEXT_CHATTER = Object.freeze([
+  { text: "stop praying", when: hasOverheadPrayer },
+]);
+
+function hasOverheadPrayer(target) {
+  const active = target?.getPrayerActive?.();
+  if (!active) return false;
+  return PrayerHandler.OVERHEAD_PRAYERS.some((prayerId) => active[prayerId] === true);
+}
+
+function selectChatterLine(target) {
+  const lines = [...CHATTER_LINES];
+  for (const entry of CONTEXT_CHATTER) {
+    if (entry.when?.(target) === true) {
+      lines.push(entry.text);
+    }
+  }
+  return lines[Math.floor(Math.random() * lines.length)];
+}
+
 function maybeChat(player, state, nowMs) {
   const pvp = state?.pvp;
   if (!player || !pvp || player.isPlayerBot?.() !== true) {
@@ -45,11 +69,14 @@ function maybeChat(player, state, nowMs) {
   if (player.isDyingReturn?.() === true || player.isTeleportingReturn?.() === true) {
     return false;
   }
-  player.forceChat?.(CHATTER_LINES[Math.floor(Math.random() * CHATTER_LINES.length)]);
+  const target = player.getCombat?.()?.getTarget?.() ?? null;
+  player.forceChat?.(selectChatterLine(target));
   return true;
 }
 
 module.exports = {
   CHATTER_LINES,
+  CONTEXT_CHATTER,
   maybeChat,
+  selectChatterLine,
 };
