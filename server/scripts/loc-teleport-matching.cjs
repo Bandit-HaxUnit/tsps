@@ -1,7 +1,7 @@
 "use strict";
 
 // Choosing which captured loc teleports (rsprox_index.py loc-teleports) become
-// data/definitions/loc-teleports.json entries, for scripts/sync-loc-teleports.cjs
+// plugins/world/data/loc-teleports.json entries, for scripts/sync-loc-teleports.cjs
 // (docs/loc-teleports.md). Plain JS so tests can load it.
 
 /**

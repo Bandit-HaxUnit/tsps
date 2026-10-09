@@ -1507,8 +1507,8 @@ export function encodeDestination(x: number, y: number): Buffer {
 
 /**
  * Hint arrow (type: 0 clear, 1 npc/a=npcIndex, 2 tile/a=x,b=y,c=height in
- * tiles). Mirrors the OSRS 6-byte hint-arrow shape so the client can render the
- * native `headicons_hint` sprite above the target.
+ * tiles, 3 player/a=playerIndex). Mirrors the OSRS 6-byte hint-arrow shape so
+ * the client can render the native `headicons_hint` sprite above the target.
  */
 export function encodeHintArrow(type: number, a: number, b: number, c: number): Buffer {
   const payload = Buffer.alloc(6);

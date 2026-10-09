@@ -1,16 +1,16 @@
 /**
  * Ladders, stairs, caves and holes tsps had no working handler for, and trapdoors that open and
  * close, played as live OSRS does (docs/loc-teleports.md):
- * - data/definitions/loc-teleports.json: where a loc placement takes the player
+ * - plugins/world/data/loc-teleports.json: where a loc placement takes the player
  *   (scripts/sync-loc-teleports.cjs writes it from the rsprox capture database);
- * - data/definitions/loc-swaps.json: trapdoors whose Open/Close swaps the loc for its other state.
+ * - plugins/world/data/loc-swaps.json: trapdoors whose Open/Close swaps the loc for its other state.
  *
  * - A loc nobody else handles: the generic object hook takes the click when the clicked tile
  *   and option have an entry, or the loc and option have a swap.
  * - A ladder or staircase: Ladders asks other plugins first (ladders:climb), and an entry
  *   answers before Ladders guesses from the map.
  *
- * Gates (an entry's `requires`, decided in data/definitions/loc-teleport-sync.json) are checked in
+ * Gates (an entry's `requires`, decided in plugins/world/data/loc-teleport-sync.json) are checked in
  * order first: a total level, worn items (any one set), or an item used on the loc once before (a
  * rope tied to the Elid crevice). The first one the player lacks plays its captured refusal: a
  * game message, a message box, or an NPC's line.
@@ -52,7 +52,7 @@ const keyOf = (x, y, z, op) => `${x},${y},${z}:${op}`;
 const fromClick = (tick) => Math.max(0, tick - HANDLER_TICK);
 
 function readDefinitions(name) {
-  return JSON.parse(fs.readFileSync(path.join(core.GameConstants.DEFINITIONS_DIRECTORY, name), "utf8"));
+  return JSON.parse(fs.readFileSync(path.join(__dirname, "data", name), "utf8"));
 }
 
 function loadEntries() {

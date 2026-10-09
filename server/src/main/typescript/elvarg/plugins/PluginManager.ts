@@ -83,6 +83,7 @@ import {
   PluginShouldKeepItemOnDeathEvent,
   PluginPlayerDeathItemDropEvent,
   PluginPlayerDeathEvent,
+  PluginPlayerBeforeDeathEvent,
   PluginPlayerOptionEvent,
   PluginPlayerDealtDamageEvent,
   PluginCombatHitRollEvent,
@@ -209,6 +210,7 @@ export class PluginManager {
   }> = [];
   private static npcDeathHooks: PluginHook<PluginNpcDeathEvent>[] = [];
   private static npcBeforeDeathHooks: PluginHook<PluginNpcBeforeDeathEvent>[] = [];
+  private static playerBeforeDeathHooks: PluginHook<PluginPlayerBeforeDeathEvent>[] = [];
   private static npcHitModifyHooks: PluginHook<PluginNpcHitModifyEvent>[] = [];
   private static zoneHooks: Array<{
     pluginName: string;
@@ -1333,6 +1335,13 @@ export class PluginManager {
     return null;
   }
 
+  public static emitPlayerBeforeDeath(event: PluginPlayerBeforeDeathEvent): boolean {
+    for (const hook of PluginManager.playerBeforeDeathHooks) {
+      PluginManager.executeHook(hook, event, "player_before_death", "player_before_death");
+    }
+    return event.preventDeath === true;
+  }
+
   public static emitPlayerDeath(event: PluginPlayerDeathEvent): boolean {
     if (!event || !event.player || event.handled) {
       return false;
@@ -1980,6 +1989,7 @@ export class PluginManager {
       CombatMethod: require(`${combat}/method/CombatMethod`).CombatMethod,
       CombatSpecial: require(`${combat}/CombatSpecial`).CombatSpecial,
       CombatFactory: require(`${combat}/CombatFactory`).CombatFactory,
+      CombatRange: require(`${combat}/CombatRange`).CombatRange,
       CanAttackResponse: require(`${combat}/CombatFactory`).CanAttackResponse,
       CombatType: require(`${combat}/CombatType`).CombatType,
       SkullType: require(`${model}/SkullType`).SkullType,
@@ -2047,11 +2057,14 @@ export class PluginManager {
       ItemDefinition: require("../game/definition/ItemDefinition").ItemDefinition,
       CacheDefinitions: require("../game/cache/CacheDefinitions").CacheDefinitions,
       PathFinder: require(`${model}/movement/path/PathFinder`).PathFinder,
+      RsmodRouteFinding: require(`${model}/movement/path/RsmodRouteFinding`).RsmodRouteFinding,
       NpcDefinition: require("../game/definition/NpcDefinition").NpcDefinition,
       ObjectDefinition: require("../game/definition/ObjectDefinition").ObjectDefinition,
       MagicSpellbook: require(`${model}/MagicSpellbook`).MagicSpellbook,
       Spell: require(`${combat}/magic/Spell`).Spell,
       CombatNormalSpell: require(`${combat}/magic/CombatNormalSpell`).CombatNormalSpell,
+      CombatSpells: require(`${combat}/magic/CombatSpells`).CombatSpells,
+      Autocasting: require(`${combat}/magic/Autocasting`).Autocasting,
       NPC: require("../game/entity/impl/npc/NPC").NPC,
       GameConstants: require("../game/GameConstants").GameConstants,
       Music: require("../game/Music").Music,
@@ -3063,6 +3076,19 @@ export class PluginManager {
           },
         });
       },
+      onPlayerBeforeDeath: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.playerBeforeDeathHooks.push({
+          pluginName,
+          handler: (event) => {
+            if (event?.player) {
+              handler(event);
+            }
+          },
+        });
+      },
       onPlayerOption: (handler) => {
         if (typeof handler !== "function") {
           return;
@@ -3768,6 +3794,8 @@ export class PluginManager {
         PluginManager.emitShouldKeepItemOnDeath(player, item),
       emitFiremakingBlocked: (event) => PluginManager.emitFiremakingBlocked(event),
       emitObjectInteraction: (event) => PluginManager.emitObjectInteraction(event),
+      emitNpcInteraction: (event) => PluginManager.emitNpcInteraction(event),
+      emitItemOnObject: (event) => PluginManager.emitItemOnObject(event),
       emitPlayerLogin: (event) => PluginManager.emitPlayerLogin(event),
       emitCustomEvent: (eventName, payload) =>
         PluginManager.emitCustomEvent(eventName, payload),

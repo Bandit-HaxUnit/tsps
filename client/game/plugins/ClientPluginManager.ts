@@ -73,6 +73,11 @@ export interface WidgetOverlay {
     signature(): string;
     /** Draws the overlay and returns the device rects it covered. */
     draw(context: WidgetOverlayDrawContext): { x: number; y: number; w: number; h: number }[];
+    /**
+     * Draw just after the side-panel anchor widget instead of above the whole widget tree.
+     * Used by overlays that sit over the side panel (status bars) so tooltips still win.
+     */
+    drawAtAnchor?: boolean;
 }
 
 export type CameraInputContext = {
