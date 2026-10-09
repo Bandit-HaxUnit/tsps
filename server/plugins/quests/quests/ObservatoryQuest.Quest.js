@@ -12,13 +12,12 @@
  * chests (kitchen key), prodding the sleeping guard and the kitchen gate, the
  * goblin stove (lens mould), casting the lens (mould + molten glass), the two
  * dungeon stair runs and looking through the telescope.
- * Gaps: the professor's constellation is chosen from the transcript rather than the
- * player's sign, so the random reward table (Strength/Defence/Hitpoints/Attack XP,
- * runes, tuna, etc.) is not granted; the assistant's wine hand-out and the
- * telescope const-build are not wired.
+ * The telescope assigns the player a constellation (announced in the message, so
+ * text-only clients can answer the professor); the matching wiki reward table is
+ * granted alongside the sapphire, and the assistant's post-quest jug of wine is wired.
  */
 module.exports = function registerObservatoryQuest(api) {
-  const { Skill, Location, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { Skill, Location, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers, ObjectManager, MapObjects } = api.core;
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
 
   const PAGE = "Observatory Quest";
@@ -36,13 +35,24 @@ module.exports = function registerObservatoryQuest(api) {
 
   const VIEWED_ATTRIBUTE = "quest.observatory_quest.viewed";
   const GUARD_AWAKE_ATTRIBUTE = "quest.observatory_quest.guard_awake";
+  const CONSTELLATION_ATTRIBUTE = "quest.observatory_quest.constellation";
 
   const START_HOOK = "quest:observatory-quest:start";
 
-  /** Every "Quest complete!" action across the after-viewing-the-telescope choices. */
-  const COMPLETE_ACTION_IDS = new Set([
-    "RZIxJd", "42iZjm", "az5TSU", "jFQCJj", "JTTGjU", "3JvMiY",
-    "uJHYgt", "5ogiFw", "OX2wkW", "b-a96m", "AlVBZ2", "hHQ5V3",
+  /** Each "Quest complete!" action id and the constellation its branch answers for. */
+  const COMPLETION_ACTIONS = new Map([
+    ["RZIxJd", "Aquarius"],
+    ["42iZjm", "Capricorn"],
+    ["az5TSU", "Sagittarius"],
+    ["jFQCJj", "Scorpio"],
+    ["JTTGjU", "Libra"],
+    ["3JvMiY", "Virgo"],
+    ["uJHYgt", "Leo"],
+    ["5ogiFw", "Cancer"],
+    ["OX2wkW", "Gemini"],
+    ["b-a96m", "Taurus"],
+    ["AlVBZ2", "Aries"],
+    ["hHQ5V3", "Pisces"],
   ]);
 
   /** Item hand-in actions in the returning-with-* branches (stages 1-6). */
@@ -84,8 +94,6 @@ module.exports = function registerObservatoryQuest(api) {
   const SURFACE_STAIRS_LANDING = { x: 2458, y: 3185, z: 0 };
   const DUNGEON_NORTH_LANDING = { x: 2334, y: 9350, z: 0 };
   const OBSERVATORY_LANDING = { x: 2443, y: 3158, z: 0 };
-  const KITCHEN_GATE_SOUTH_TILE = { x: 2327, y: 9395, z: 0 };
-  const KITCHEN_GATE_NORTH_TILE = { x: 2327, y: 9392, z: 0 };
 
 
   const PLANK = ItemIdentifiers.PLANK;
@@ -94,6 +102,25 @@ module.exports = function registerObservatoryQuest(api) {
   const GOBLIN_KITCHEN_KEY = ItemIdentifiers.GOBLIN_KITCHEN_KEY;
   const LENS_MOULD = ItemIdentifiers.LENS_MOULD;
   const OBSERVATORY_LENS = ItemIdentifiers.OBSERVATORY_LENS;
+  const JUG_OF_WINE = ItemIdentifiers.JUG_OF_WINE;
+
+  const WINE_MESSAGE_ACTION = "3f2Vz2";
+
+  /** The wiki's per-sign reward, on top of the uncut sapphire every run gives. */
+  const CONSTELLATION_REWARDS = Object.freeze({
+    Aquarius: { items: [[ItemIdentifiers.WATER_RUNE, 25]] },
+    Aries: { xp: [Skill.ATTACK, 875] },
+    Cancer: { items: [[ItemIdentifiers.AMULET_OF_DEFENCE, 1]] },
+    Capricorn: { xp: [Skill.STRENGTH, 875] },
+    Gemini: { items: [[ItemIdentifiers.BLACK_2H_SWORD, 1]] },
+    Leo: { xp: [Skill.HITPOINTS, 875] },
+    Libra: { items: [[ItemIdentifiers.LAW_RUNE, 3]] },
+    Pisces: { items: [[ItemIdentifiers.TUNA, 3]] },
+    Sagittarius: { items: [[ItemIdentifiers.MAPLE_LONGBOW, 1]] },
+    Scorpio: { items: [[ItemIdentifiers.WEAPON_POISON, 1]] },
+    Taurus: { items: [[ItemIdentifiers.SUPER_STRENGTH_1_, 1]] },
+    Virgo: { xp: [Skill.DEFENCE, 875] },
+  });
 
   const page = (p, variant) => ({ page: p, variant });
   const has = (player, itemId, quantity = 1) => player.getInventory().getAmount(itemId) >= quantity;
@@ -156,7 +183,8 @@ module.exports = function registerObservatoryQuest(api) {
     }
 
     if (npcId === ASSISTANT_NPC_ID) {
-      if (stage >= STAGE_COMPLETE) return page("Observatory assistant", "after-observatory-quest-subsequent-dialogue");
+      if (stage >= STAGE_CLAIMED_WINE) return page("Observatory assistant", "after-observatory-quest-subsequent-dialogue");
+      if (stage >= STAGE_COMPLETE) return page("Observatory assistant", "after-observatory-quest-initial-dialogue");
       if (stage === STAGE_TELESCOPE) return page(PAGE, "returning-with-the-observatory-lens-talking-to-the-assistant-before-going-up-to-the-observatory");
       if (stage === STAGE_LENS) {
         return page(PAGE, has(player, OBSERVATORY_LENS)
@@ -194,12 +222,20 @@ module.exports = function registerObservatoryQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, text }) {
+  /** Answers the page's prose conditions; scoped so other quests' handlers are not shadowed. */
+  function answerCondition({ player, npcId, text }) {
+    if (!PROFESSOR_NPC_IDS.has(npcId) && npcId !== ASSISTANT_NPC_ID) return null;
     const value = String(text).toLowerCase();
-    if (value.includes("inventory space for the reward")) return !player.getInventory().isFull();
-    if (value.includes("does not have inventory space for the reward")) return player.getInventory().isFull();
-    if (value.includes("did not see this sign")) return false;
-    if (value.includes("did see")) return true;
+    if (value.includes("no free inventory space") || value.includes("does not have inventory space")) {
+      return player.getInventory().isFull();
+    }
+    if (value.includes("has inventory space")) return !player.getInventory().isFull();
+    if (value.includes("did not see this sign")) return true;
+    const seen = /did see ([a-z]+)/.exec(value);
+    if (seen) {
+      const observed = String(player.getAttribute(CONSTELLATION_ATTRIBUTE) ?? "").toLowerCase();
+      return observed === seen[1];
+    }
     return null;
   }
 
@@ -208,9 +244,46 @@ module.exports = function registerObservatoryQuest(api) {
     if (quest.getStage(player) < STAGE_PLANKS) quest.setStage(player, STAGE_PLANKS);
   }
 
-  /** Item hand-ins and the after-viewing completion action. */
+  /**
+   * Picks the sign a fresh telescope view shows. Since this server has no
+   * character-creation star sign, one is rolled and persisted per player, with
+   * OSRS's pure protection: no combat-XP sign for a level-1 skill.
+   */
+  function rollConstellation(player) {
+    const names = Object.keys(CONSTELLATION_REWARDS).filter((name) => {
+      const xp = CONSTELLATION_REWARDS[name].xp;
+      return !xp || player.getSkillManager().getCurrentLevel(xp[0]) > 1;
+    });
+    const pool = names.length ? names : Object.keys(CONSTELLATION_REWARDS);
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  function constellationForViewing(player) {
+    const existing = String(player.getAttribute(CONSTELLATION_ATTRIBUTE) ?? "");
+    if (CONSTELLATION_REWARDS[existing]) return existing;
+    const rolled = rollConstellation(player);
+    player.setAttribute(CONSTELLATION_ATTRIBUTE, rolled);
+    return rolled;
+  }
+
+  function grantConstellationReward(player, stepId) {
+    const reward = CONSTELLATION_REWARDS[COMPLETION_ACTIONS.get(stepId)];
+    if (!reward) return;
+    for (const [itemId, amount] of reward.items ?? []) player.getInventory().adds(itemId, amount);
+    if (reward.xp) player.getSkillManager().addExperiences(reward.xp[0], reward.xp[1]);
+  }
+
+  /** Item hand-ins, the assistant's wine and the after-viewing completion action. */
   function handleAction(event) {
-    const { player, npcId, stepId } = event;
+    const { player, npcId, stepId, kind } = event;
+    if (npcId === ASSISTANT_NPC_ID) {
+      // The initial post-quest chat's "The assistant gives you some wine." hands it over.
+      if (kind === "message" && stepId === WINE_MESSAGE_ACTION && quest.getStage(player) === STAGE_COMPLETE) {
+        player.getInventory().adds(JUG_OF_WINE, 1);
+        quest.setStage(player, STAGE_CLAIMED_WINE);
+      }
+      return;
+    }
     if (!PROFESSOR_NPC_IDS.has(npcId)) return;
     const stage = quest.getStage(player);
     switch (stepId) {
@@ -243,9 +316,10 @@ module.exports = function registerObservatoryQuest(api) {
       default:
         break;
     }
-    if (!COMPLETE_ACTION_IDS.has(stepId)) return;
+    if (!COMPLETION_ACTIONS.has(stepId)) return;
     if (stage < STAGE_TELESCOPE || quest.isComplete(player)) return;
     quest.complete(player);
+    grantConstellationReward(player, stepId);
   }
 
   /** Cast the lens from the mould and molten glass. */
@@ -263,6 +337,30 @@ module.exports = function registerObservatoryQuest(api) {
     player.getInventory().adds(OBSERVATORY_LENS, 1);
     player.sendMessage("You pour the glass into the mould and make an Observatory lens.");
     event.handled = true;
+  }
+
+  /**
+   * Opens the kitchen gate by removing both leaves, clearing their collision so the
+   * doorway is passable on foot (the old teleport dropped the player on the wrong side).
+   */
+  function openKitchenGate(object) {
+    if (!object?.getLocation) return;
+    const location = object.getLocation();
+    const partnerId = object.getId() === ObjectIdentifiers.KITCHEN_GATE
+      ? ObjectIdentifiers.KITCHEN_GATE_2
+      : ObjectIdentifiers.KITCHEN_GATE;
+    ObjectManager.deregister(object, true);
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      const partner = MapObjects.get(
+        partnerId,
+        new Location(location.getX() + dx, location.getY() + dy, location.getZ()),
+        null
+      );
+      if (partner) {
+        ObjectManager.deregister(partner, true);
+        break;
+      }
+    }
   }
 
   /** Dungeon chest: the kitchen key, then (as a fallback) the stolen lens mould. */
@@ -300,9 +398,7 @@ module.exports = function registerObservatoryQuest(api) {
       player.getInventory().deleteNumber(GOBLIN_KITCHEN_KEY, 1);
       player.sendMessage("You unlock the kitchen gate.");
       player.sendMessage("You had better be quick, there may be more guards about.");
-      const south = player.getLocation().getY() >= KITCHEN_GATE_SOUTH_TILE.y;
-      const tile = south ? KITCHEN_GATE_NORTH_TILE : KITCHEN_GATE_SOUTH_TILE;
-      player.moveTo(new Location(tile.x, tile.y, tile.z));
+      openKitchenGate(event.object);
       return;
     }
 
@@ -322,8 +418,9 @@ module.exports = function registerObservatoryQuest(api) {
 
     if (TELESCOPE_IDS.has(objectId) && (option.includes("look") || option.includes("view"))) {
       if (quest.getStage(player) !== STAGE_TELESCOPE) return;
+      const sign = constellationForViewing(player);
       player.setAttribute(VIEWED_ATTRIBUTE, true);
-      player.sendMessage("You look through the telescope and see a constellation.");
+      player.sendMessage(`You look through the telescope and see the constellation ${sign}.`);
       event.handled = true;
     }
   }
@@ -395,6 +492,7 @@ module.exports = function registerObservatoryQuest(api) {
 
   api.persistAttribute(VIEWED_ATTRIBUTE);
   api.persistAttribute(GUARD_AWAKE_ATTRIBUTE);
+  api.persistAttribute(CONSTELLATION_ATTRIBUTE);
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onNpcInteraction("Sleeping guard", { Prod: prodSleepingGuard });

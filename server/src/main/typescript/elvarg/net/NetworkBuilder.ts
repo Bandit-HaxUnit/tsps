@@ -968,8 +968,8 @@ export class ClientConnection {
       .sendSkillsSnapshot()
       .sendRunEnergy();
     player.getQuickPrayers().sync();
-    // Bootstrap done: plugins that mirror state into varps the bootstrap
-    // clobbers (quest stage varps, e.g. Drezel's shared varp 302) can re-send it.
+    // Plugins re-sync client state that sendTabInterface(6)'s spell-unlock varps
+    // overwrote (quest varps share storage with NPC transform varps).
     PluginManager.emitCustomEvent("player:bootstrap-complete", { player, username: player.getUsername() });
   }
 

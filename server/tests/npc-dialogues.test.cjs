@@ -134,6 +134,64 @@ test('a nested "jump above" reaches an unselected sibling instead of looping', (
   assert.deepEqual(prompts, ['Q1', 'Q2', 'Q3']);
 });
 
+test('a random alternative ending "same as above" repeats the previous alternative, not another menu', () => {
+  const said = [];
+  const acted = [];
+  const player = {
+    getDialogueManager: () => ({
+      reset() {},
+      startDialogues(chain) {
+        for (const entry of [...chain.getDialogues().values()].sort((a, b) => a.getIndex() - b.getIndex())) {
+          if (entry.text) said.push(String(entry.text));
+          try { entry.send(player); } catch { /* unwired dialogue entries are fine here */ }
+        }
+      },
+    }),
+    getPacketSender: () => ({ sendInterfaceRemoval() {} }),
+    sendMessage() {},
+  };
+  const api = {
+    emitCustomEvent(name, payload) {
+      if (name === 'npc-dialogue:action' && payload.stepId) {
+        acted.push(payload.stepId);
+        payload.handled = true;
+      }
+    },
+    sendMultiChatboxPrompt() { return true; },
+  };
+  const tree = [{
+    type: 'random',
+    options: [
+      {
+        text: 'Support 1',
+        steps: [
+          { type: 'line', speaker: 'Ghost villager', text: 'Most certainly, I will.' },
+          { type: 'message', text: 'The ghost signs your petition.', id: 'sign' },
+        ],
+      },
+      {
+        text: 'Support 2',
+        steps: [
+          { type: 'line', speaker: 'Ghost villager', text: "I'll do anything that annoys Necrovarus." },
+          { type: 'jump', reference: 'above' },
+        ],
+      },
+    ],
+  }];
+  const definition = { getName: () => 'Ghost villager', getId: () => 2998 };
+  const event = { player, npc: { getId: () => 2998 }, npcId: 2998, definition };
+  const originalRandom = Math.random;
+  Math.random = () => 0.99; // always pick Support 2
+  try {
+    startDialogue(api, event, tree, {}, { player, npc: event.npc, npcId: 2998, definition, pages: [] });
+  } finally {
+    Math.random = originalRandom;
+  }
+  assert.deepEqual(acted, ['sign'], "the jump lands on the previous alternative's action");
+  assert.ok(said.includes("I'll do anything that annoys Necrovarus."));
+  assert.ok(!said.includes('Most certainly, I will.'), "the previous alternative's line is not replayed");
+});
+
 test('a jump after a repeated question carries on as that question, judged when it is reached', () => {
   // Percy's unlocks: buying, then asking again, must not offer what was just bought, and the
   // branch that jumps back into itself ("That'll be 200 nuggets") must not recurse forever.
@@ -215,6 +273,50 @@ test('menu navigation jumps become replayable gomenu steps', () => {
   assert.equal(steps.length, 1);
   assert.equal(steps[0].type, 'gomenu');
   assert.deepEqual(steps[0].menu, { marker: true });
+});
+
+test('"previous" on the first menu replays it instead of ending the dialogue', () => {
+  // Ulsquire's "What did you find out about the remains?" ends in {{tact|previous}}:
+  // the player must land back on the question menu, not have the chat closed.
+  const tree = [
+    { npc: 'Hello.' },
+    {
+      type: 'choice', prompt: 'Q1', options: [
+        { text: 'Ask', steps: [{ npc: 'Answer.' }, { type: 'jump', reference: 'previous' }] },
+        { text: 'Bye', steps: [{ type: 'end' }] },
+      ],
+    },
+  ];
+  const script = ['Ask', 'Bye'];
+  const prompts = [];
+  const player = {
+    getDialogueManager: () => ({
+      reset() {},
+      startDialogues(chain) {
+        for (const entry of [...chain.getDialogues().values()].sort((a, b) => a.getIndex() - b.getIndex())) {
+          try { entry.send(player); } catch { /* unwired dialogue entries are fine here */ }
+        }
+      },
+    }),
+    getPacketSender: () => ({ sendInterfaceRemoval() {} }),
+    sendMessage() {},
+  };
+  const api = {
+    emitCustomEvent() {},
+    sendMultiChatboxPrompt(_player, title, ...pairs) {
+      assert.ok(prompts.length < 5, 'dialogue looped');
+      const options = [];
+      for (let i = 0; i < pairs.length; i += 2) options.push({ text: pairs[i], cb: pairs[i + 1] });
+      prompts.push(title);
+      const pick = options.find((option) => option.text === script[prompts.length - 1]) ?? options[0];
+      pick.cb();
+      return true;
+    },
+  };
+  const definition = { getName: () => 'Ulsquire', getId: () => 1288 };
+  const event = { player, npc: { getId: () => 1288 }, npcId: 1288, definition };
+  startDialogue(api, event, tree, {}, { player, npc: event.npc, npcId: 1288, definition, pages: [] });
+  assert.deepEqual(prompts, ['Q1', 'Q1']);
 });
 
 test('a slayer master assigns from a slugged action, not literal prose', () => {

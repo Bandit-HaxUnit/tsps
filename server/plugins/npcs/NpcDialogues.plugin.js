@@ -343,7 +343,9 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     const match = /^previous(\d*)/i.exec(reference);
     const back = match && match[1] ? Number(match[1]) : 1;
     const index = current ? history.indexOf(current) : history.length - 1;
-    const target = index - back >= 0 ? history[index - back] : undefined;
+    // "previous" on the first menu means the menu the option came from; only walk
+    // further back when the conversation actually has earlier menus.
+    const target = index - back >= 0 ? history[index - back] : current ?? history[history.length - 1];
     return target ? { menu: target } : "end";
   };
 
@@ -370,6 +372,21 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
       if (after?.length && after[0] !== step && !jumpOnly(after)) return after;
     }
     const current = context.currentRecord;
+    // A random alternative ending "same as above" repeats the previous alternative's
+    // continuation, not an unrelated menu elsewhere on the page.
+    if (/^above/i.test(reference) && current?.randomOptions) {
+      let continuation = realBody(current.randomOptions[current.randomIndex - 1]?.steps);
+      while (
+        continuation?.length &&
+        (typeof continuation[0]?.player === "string" ||
+          typeof continuation[0]?.npc === "string" ||
+          continuation[0]?.type === "line")
+      ) {
+        continuation = continuation.slice(1);
+      }
+      continuation = realBody(continuation);
+      if (continuation?.length) return continuation;
+    }
     const key = current ? normText(current.text) : "";
     // A jump never leads back into the branch it is in: that replays the branch forever.
     const elsewhere = (steps) => (steps && steps !== current?.steps ? steps : undefined);
@@ -572,9 +589,19 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           const options = (step.options ?? []).filter((option) =>
             !option.condition || resolveCondition({ text: option.condition, id: option.id }) !== false);
           if (!options.length) return run(rest, currentRecord);
-          const option = options[Math.floor(Math.random() * options.length)];
+          const index = Math.floor(Math.random() * options.length);
+          const option = options[index];
           if (option.hook) return unavailable();
-          return run([...(option.steps || []), ...rest], currentRecord);
+          // The record lets an "above" jump see the other random alternatives
+          // ({{tact|above}} = "same as the alternative above").
+          const record = {
+            id: -1,
+            text: String(option.text ?? ""),
+            steps: Array.isArray(option.steps) ? option.steps : [],
+            randomOptions: options,
+            randomIndex: index,
+          };
+          return run([...(option.steps || []), ...rest], record);
         }
         if (step.type === "action" && step.action === "open_shop") {
           const target = step.target;

@@ -169,10 +169,11 @@ function refreshQuestList(player) {
 }
 
 /**
- * The login bootstrap sends the all-spells-unlocked varps after the player-login
- * hooks, clobbering cache NPC transform varps that share storage with quest varps.
- * Re-send every quest's stage once the bootstrap is done, so quest NPCs render
- * the right variant and client scripts read the saved stage after a relog.
+ * The login bootstrap's sendTabInterface(6) sends the all-spells-unlocked varps
+ * after the player-login hooks, clobbering cache NPC transform varps that share
+ * storage with quest varps (e.g. Drezel's varp 302). Once the bootstrap is done,
+ * re-send the real stages so quest NPCs render the right variant and client
+ * scripts read the saved stage after a relog.
  */
 function syncQuestVarps(player) {
   const packet = player.getPacketSender();
@@ -497,17 +498,20 @@ function flattenSpeakers(steps) {
 /**
  * Plays one variant of a transcript page for `player`. Returns false when the
  * page/variant is missing. `npcId` drives the chathead and the emitted events.
+ * `select` can narrow the variant's steps (e.g. skip a wiki continuation tail).
  */
-function startTranscript(api, player, npcId, page, variant) {
+function startTranscript(api, player, npcId, page, variant, select) {
   const data = loadTranscripts(api);
   const record = data?.[page];
   const raw = record?.variants?.[variant];
   if (!Array.isArray(raw)) return false;
+  const steps = typeof select === "function" ? select(raw) : raw;
+  if (!Array.isArray(steps) || steps.length === 0) return false;
   const { startDialogue: playDialogue } = require("../npcs/NpcDialogues.plugin.js");
   const definition = api.core.NpcDefinition.forId(npcId);
   const event = { player, npcId, npc: null, definition };
   const context = { player, npc: null, npcId, definition, pages: [{ page, variants: [variant] }] };
-  playDialogue(api, event, flattenSpeakers(raw), record.branches, context);
+  playDialogue(api, event, flattenSpeakers(steps), record.branches, context);
   return true;
 }
 
