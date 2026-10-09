@@ -928,12 +928,16 @@ module.exports = function registerCreatureOfFenkenstrainQuest(api) {
 
   /** Spade right-click Dig while standing next to one of the quest graves. */
   function handleItemAction(event) {
-    if (!SPADE_IDS.has(event.itemId)) return;
-    if (String(event.option).toLowerCase() !== "dig") return;
+    if (!SPADE_IDS.has(event.itemId)) return false;
+    if (String(event.option).toLowerCase() !== "dig") return false;
     const grave = nearestGravePart(event.player.getLocation?.());
-    if (!grave) return;
+    // Returning false off the graves lets other quests' dig spots (X Marks the
+    // Spot, Making History, ...) run: a named hook that returns anything else
+    // claims the click.
+    if (!grave) return false;
     event.handled = true;
     digGrave(event.player, event.player.getLocation());
+    return true;
   }
 
   /** Picking the pub's pickled brain opens Roavar's sale dialogue. */
