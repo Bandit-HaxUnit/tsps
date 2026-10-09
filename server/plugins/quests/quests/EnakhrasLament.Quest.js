@@ -574,7 +574,9 @@ module.exports = function registerEnakhrasLamentQuest(api) {
       if (hasAnySandstone(player)) return "starting-out-talking-to-lazim-while-holding-sandstone-for-the-base";
       return "starting-out-talking-to-lazim-again-before-accepting-the-quest";
     }
-    if (hasAnySandstone(player)) return "starting-out-talking-to-lazim-while-holding-sandstone-for-the-base";
+    if (stage >= STAGE_STARTED && hasAnySandstone(player)) {
+      return "starting-out-talking-to-lazim-while-holding-sandstone-for-the-base";
+    }
     return hasBit(player, BIT_DECLINED)
       ? "starting-out-talking-to-lazim-again-before-accepting-the-quest"
       : "starting-out-talking-to-lazim";
@@ -716,13 +718,54 @@ module.exports = function registerEnakhrasLamentQuest(api) {
   // Dialogue events
   // ==========================================================================
 
+  /**
+   * The body hand-in transcript buries the block-size menu inside a 5-option wiki
+   * "random" flavour step, so most talks dead-end on a flavour line with no menu.
+   * Take the Talk-to over and turn that random into the choice it hides.
+   */
+  function takeOverBodyHandIn(event) {
+    const { player } = event;
+    if (quest.getStage(player) !== STAGE_BASE_PLACED || !hasAnySandstone(player)) return false;
+    const request = {
+      player,
+      npc: event.npc,
+      npcId: LAZIM_NPC_ID,
+      variant: "starting-out-talking-to-lazim-while-holding-sandstone-for-the-body",
+      select: bodyHandInSteps,
+      handled: false,
+    };
+    api.emitCustomEvent("npc-dialogue:start", request);
+    return request.handled;
+  }
+
+  /** Replace the body hand-in variant's 5-option flavour random with its Yes/No menu. */
+  function bodyHandInSteps(steps) {
+    return (steps ?? []).map((step) => {
+      if (step.type === "random" && (step.options ?? []).some((option) => option.text === "Yes, I have more stone.")) {
+        return {
+          ...step,
+          type: "choice",
+          options: (step.options ?? []).filter((option) => !/^Dialogue \d+$/i.test(String(option.text ?? "").trim())),
+        };
+      }
+      if (Array.isArray(step.options)) {
+        return { ...step, options: step.options.map((option) => ({ ...option, steps: bodyHandInSteps(option.steps) })) };
+      }
+      if (Array.isArray(step.steps)) return { ...step, steps: bodyHandInSteps(step.steps) };
+      return step;
+    });
+  }
+
   function handleDialogueLine(request) {
     if (request?.npcId !== LAZIM_NPC_ID || typeof request.text !== "string") return;
+    // "I need [X] kg more" wants what is still missing; the "carrying" flavour wants what was handed in.
     if (request.text.includes("[1-32]")) {
-      request.text = request.text.replace("[1-32]", String(attrNumber(request.player, ATTR_BASE_KG)));
+      const base = attrNumber(request.player, ATTR_BASE_KG);
+      request.text = request.text.replace("[1-32]", String(/more/i.test(request.text) ? Math.max(0, 32 - base) : base));
     }
     if (request.text.includes("[1-20]")) {
-      request.text = request.text.replace("[1-20]", String(attrNumber(request.player, ATTR_BODY_KG)));
+      const body = attrNumber(request.player, ATTR_BODY_KG);
+      request.text = request.text.replace("[1-20]", String(/more/i.test(request.text) ? Math.max(0, 20 - body) : body));
     }
   }
 
@@ -824,6 +867,7 @@ module.exports = function registerEnakhrasLamentQuest(api) {
 
   /** Take one offered sandstone block and advance the base/body hand-in. */
   function handInSandstone(player, itemId, base) {
+    if (quest.getStage(player) < STAGE_STARTED) return;
     if (!itemId || !has(player, itemId)) return;
     const key = base ? ATTR_BASE_KG : ATTR_BODY_KG;
     const target = base ? 32 : 20;
@@ -1374,7 +1418,19 @@ module.exports = function registerEnakhrasLamentQuest(api) {
 
   function handleLogin({ player }) {
     installWorld();
+    restoreSurfaceStatue(player);
     refreshQuestList(player);
+  }
+
+  /** installWorld leaves the statue as flat ground; put back the object the stage expects. */
+  function restoreSurfaceStatue(player) {
+    const stage = quest.getStage(player);
+    const id = stage >= STAGE_IN_TEMPLE ? HOLE
+      : stage >= STAGE_STATUE_CHISELLED ? HEADLESS_STATUE_3
+      : stage >= STAGE_BODY_PLACED ? HEADLESS_STATUE_2
+      : stage >= STAGE_BASE_PLACED ? HEADLESS_STATUE_1
+      : FLAT_GROUND;
+    swapSurfaceStatue(id);
   }
 
   function grantReward(player) {
@@ -1429,6 +1485,7 @@ module.exports = function registerEnakhrasLamentQuest(api) {
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnObject(handleItemOnObject);
   api.onItemOnNpc(handleItemOnNpc);
+  api.onNpcInteraction("Lazim", { "Talk-to": takeOverBodyHandIn });
   api.onSpellOnObject(handleSpellOnObject);
   api.onNpcInteraction("Crust of ice", { Melt: meltIce });
   api.onObjectInteraction("Pedestal", { "Take-sigil": takeSigil });

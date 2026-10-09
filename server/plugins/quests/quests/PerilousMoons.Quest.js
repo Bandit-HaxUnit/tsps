@@ -27,7 +27,7 @@
  *   the Moons, 30 all three Moons defeated (talk to the trio), 31 complete.
  *
  * Sibling varbits driven here: 9820-9822 pmoon_camp_1..3 (one per camp),
- * 9823 pmoon_murals_inspected (0-2, trio order), 9858-9860
+ * 9823 pmoon_murals_inspected (bitmask: 1=Attala, 2=Zuma), 9858-9860
  * pmoon_boss_blood/blue/eclipse_dead (varp 4157), 9871 pmoon_lizard_trap_set_1,
  * 16624 pmoon_eyatlalli_vis.
  *
@@ -89,7 +89,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
   const PMOON_QUEST_VARBIT = 9819; // pmoon_quest, varp 4144 bits 0-5
   const PMOON_VARP = 4144;
   const CAMP_VARBITS = [9820, 9821, 9822]; // pmoon_camp_1..3
-  const MURALS_VARBIT = 9823; // pmoon_murals_inspected, 0-2
+  const MURALS_VARBIT = 9823; // pmoon_murals_inspected, bitmask (1=Attala, 2=Zuma)
   const EYATLALLI_VIS_VARBIT = 16624; // client-side visibility of Eyatlalli
   const LIZARD_TRAP_VARBIT = 9871; // pmoon_lizard_trap_set_1
   const BOSS_DEAD_VARBITS = { blood: 9858, blue: 9859, eclipse: 9860 }; // varp 4157
@@ -426,7 +426,8 @@ module.exports = function registerPerilousMoonsQuest(api) {
   const LINE_MURALS_ATTALA = "Now where is that fool priest?";
   const LINE_MURALS_ZUMA = "Alright, calm down, both of you. Let's go see what the actual archaeologist has to say.";
   const LINE_CAMPS_TASK = "The surrounding caverns are quite large. If you could take some building supplies and set up some camps in each of them, it would make further exploration a lot easier.";
-  const LINE_INFUSED_BRIEF = "Of course, we've not tried something like this before, I imagine it will require you to do some testing.";
+  const LINE_CITY_INVITE = "Meet me inside the ruins. We need help setting up some base camps for further exploration.";
+  const LINE_INFUSED_BRIEF = "Of course, we've not tried something like this before, so I imagine it will require you to do some testing.";
   const LINE_GATHER_TASK = "Yes. Bring me scales of a bream, the tail of a moss lizard and paste made of moonlight grubs. I will begin preparing the rest of the ritual.";
   const LINE_FINISH_JESS = "I'll be sticking around here for some time I reckon. There's still so much to discover in this place. See you around.";
   const LINE_FINISH_ATTALA = "Well it's not their choice, so they'll just have to suck it up. Who knows, maybe given long enough, you might start to grow on them!";
@@ -437,6 +438,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
     [LINE_MURALS_ATTALA, handleMuralsAttalaLine],
     [LINE_MURALS_ZUMA, handleMuralsZumaLine],
     [LINE_CAMPS_TASK, handleCampsTaskLine],
+    [LINE_CITY_INVITE, handleCityInviteLine],
     [LINE_INFUSED_BRIEF, handleInfusedBriefLine],
     [LINE_GATHER_TASK, handleGatherTaskLine],
     [LINE_FINISH_JESS, handleFinishJessLine],
@@ -621,11 +623,11 @@ module.exports = function registerPerilousMoonsQuest(api) {
       wanted.add("surface-zuma");
     }
     if (stage === STAGE_CITY_OPEN || stage === STAGE_IN_CITY) wanted.add("city-jessamine");
-    if (stage >= STAGE_IN_NEY && stage < STAGE_COMPLETE) {
+    if (stage >= STAGE_IN_NEY) {
       wanted.add("ney-attala");
       wanted.add("ney-zuma");
     }
-    if (stage >= STAGE_EYAT_FOUND && stage < STAGE_COMPLETE) wanted.add("eyatlalli");
+    if (stage >= STAGE_EYAT_FOUND) wanted.add("eyatlalli");
     if (stage === STAGE_STARTED) wanted.add("nagua");
 
     const map = tracked(player);
@@ -1063,6 +1065,11 @@ module.exports = function registerPerilousMoonsQuest(api) {
     quest.setStage(player, STAGE_CAMPS);
   }
 
+  function handleCityInviteLine({ player }) {
+    if (stageOf(player) !== STAGE_IN_CITY) return;
+    quest.setStage(player, STAGE_IN_NEY);
+  }
+
   function handleInfusedBriefLine({ player }) {
     if (stageOf(player) !== STAGE_INFUSED) return;
     quest.setStage(player, STAGE_LOCATE);
@@ -1101,7 +1108,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
     if (stageOf(player) < STAGE_MOONS_DONE || quest.isComplete(player)) return;
     if ((trioMask(player) & ALL_TRIO_MASK) !== ALL_TRIO_MASK) return;
     if (!quest.complete(player)) return;
-    removeAllTracked(player);
+    syncNpcs(player);
   }
 
   // ==========================================================================
@@ -1229,8 +1236,9 @@ module.exports = function registerPerilousMoonsQuest(api) {
   }
 
   function handleEntranceInteraction(event) {
-    const { player, objectId, location, option } = event;
-    if (String(option ?? "") !== "Pass-through") return;
+    const { player, objectId, location } = event;
+    const option = String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "");
+    if (option !== "Pass-through") return;
     const key = `${objectId}:${location.x}:${location.y}:${location.z}`;
     const entrance = ENTRANCES.get(key);
     if (!entrance) return;
@@ -1309,16 +1317,17 @@ module.exports = function registerPerilousMoonsQuest(api) {
   }
 
   function handleCampSupplies(event) {
-    const { player, option } = event;
-    if (String(option ?? "") !== "Take-from") return;
+    const { player } = event;
+    const option = String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "");
+    if (option !== "Take-from") return;
     event.handled = true;
     if (!isActive(player)) return;
     startTranscript(api, player, JESSAMINE_NPC_ID, PAGE, V_TAKE_SUPPLIES);
   }
 
   function handleSupplyCrates(event) {
-    const { player, option } = event;
-    const text = String(option ?? "");
+    const { player } = event;
+    const text = String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "");
     if (!text.startsWith("Take-from")) return;
     event.handled = true;
     if (stageOf(player) < STAGE_TRIO || quest.isComplete(player)) return;
@@ -1340,8 +1349,9 @@ module.exports = function registerPerilousMoonsQuest(api) {
   }
 
   function handleGrubbySapling(event) {
-    const { player, option } = event;
-    if (String(option ?? "") !== "Collect-from") return;
+    const { player } = event;
+    const option = String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "");
+    if (option !== "Collect-from") return;
     event.handled = true;
     if (guardGathering(player)) return;
     if (
@@ -1356,8 +1366,9 @@ module.exports = function registerPerilousMoonsQuest(api) {
   }
 
   function handleLizardRock(event) {
-    const { player, option } = event;
-    if (String(option ?? "") !== "Trap") return;
+    const { player } = event;
+    const option = String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "");
+    if (option !== "Trap") return;
     event.handled = true;
     if (guardGathering(player)) return;
     const stage = stageOf(player);
@@ -1374,8 +1385,9 @@ module.exports = function registerPerilousMoonsQuest(api) {
   }
 
   function handleLizardBush(event) {
-    const { player, option, location } = event;
-    if (String(option ?? "") !== "Rustle") return;
+    const { player, location } = event;
+    const option = String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "");
+    if (option !== "Rustle") return;
     event.handled = true;
     if (guardGathering(player)) return;
     const stage = stageOf(player);
@@ -1391,8 +1403,9 @@ module.exports = function registerPerilousMoonsQuest(api) {
   }
 
   function handleFishingSpot(event) {
-    const { player, option } = event;
-    if (String(option ?? "") !== "Fish") return;
+    const { player } = event;
+    const option = String(event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "");
+    if (option !== "Fish") return;
     event.handled = true;
     if (guardGathering(player)) return;
     const stage = stageOf(player);

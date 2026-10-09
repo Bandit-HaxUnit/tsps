@@ -71,11 +71,14 @@
  */
 module.exports = function registerBeneathCursedSandsQuest(api) {
   const {
+    GameObject,
     ItemIdentifiers,
     Location,
+    MapObjects,
     NpcIdentifiers,
     ObjectDefinition,
     ObjectIdentifiers,
+    ObjectManager,
     Skill,
   } = api.core;
   const { registerQuest, startTranscript } = require("../QuestRuntime");
@@ -156,7 +159,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     NpcIdentifiers.HIGH_PRIEST_2, // 4206, the town High Priest (cache transform)
     NpcIdentifiers.HIGH_PRIEST_4, // 11502
   ]);
-  const OSMAN = NpcIdentifiers.OSMAN_10; // 11486, the camp Osman
+  const OSMAN = NpcIdentifiers.OSMAN; // 1809, the indexed Osman; 11486 has no dialogue index entry
   const MENAPHITE_AKH = NpcIdentifiers.MENAPHITE_AKH_3; // 11492, level 351
   const SCARAB_MAGE = NpcIdentifiers.SCARAB_MAGE_3; // 11508, level 119
   const CHAMPION_OF_SCABARAS = NpcIdentifiers.CHAMPION_OF_SCABARAS_2; // 11483, level 379
@@ -254,6 +257,13 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     ObjectIdentifiers.PILLAR_88, // 43996
     ObjectIdentifiers.PILLAR_89, // 43997
   ]);
+  // Both tomb levers are placed as 43968, which has no actions in this cache;
+  // swap in the "Pull" loc (43967) so they can actually be clicked.
+  const TOMB_LEVER_TILES = [
+    [3439, 9225, 0],
+    [3439, 9271, 0],
+  ];
+  let tombLeversInstalled = false;
 
   // ==========================================================================
   // Attributes
@@ -460,10 +470,23 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     return tracked;
   }
 
+  /** Drops this player's own same-id NPC copies on a tile (relog leaves them behind). */
+  function cullOwnedNpcs(player, npcId, x, y, z) {
+    for (const other of api.getWorld?.()?.getNpcs?.() ?? []) {
+      if (other?.getOwner?.() !== player || other.getId?.() !== npcId) continue;
+      const at = other.getLocation?.();
+      if (at && (at.getX?.() !== x || at.getY?.() !== y || at.getZ?.() !== z)) continue;
+      api.removeNpc(other);
+    }
+  }
+
   function spawnTracked(player, key, npcId, x, y, z, wanderRadius = 0) {
     const tracked = trackedFor(player);
     const existing = tracked.get(key);
     if (existing?.isRegistered?.()) return existing;
+    // A relog empties the tracked map but owner-only NPCs stay in the world;
+    // drop same-id copies on this tile so login cannot stack duplicates.
+    cullOwnedNpcs(player, npcId, x, y, z);
     const npc = api.spawnNpc({
       id: npcId,
       x,
@@ -487,7 +510,21 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
 
   function ensureNpc(player, key, npcId, x, y, z, wanted) {
     if (wanted) spawnTracked(player, key, npcId, x, y, z);
-    else removeTracked(player, key);
+    else {
+      cullOwnedNpcs(player, npcId, x, y, z);
+      removeTracked(player, key);
+    }
+  }
+
+  function installTombLevers() {
+    if (tombLeversInstalled) return;
+    tombLeversInstalled = true;
+    for (const [x, y, z] of TOMB_LEVER_TILES) {
+      const location = new Location(x, y, z);
+      const placed = MapObjects.get(LEVER_TOMB_OFF, location.clone(), null);
+      if (placed) ObjectManager.deregister(placed, true);
+      ObjectManager.register(new GameObject(LEVER_TOMB_ON, location, 10, 3, null), true);
+    }
   }
 
   /** Keeps the per-player quest NPCs in step with the stage. */
@@ -578,7 +615,9 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     if (stage === STAGE_GUARD_DEFEATED) {
       return "starting-off-talking-to-maisa-after-defeating-the-head-menaphite-guard";
     }
-    if (stage <= STAGE_CAMP_LEADS) return "starting-off-talking-to-maisa-at-the-necropolis";
+    // 22 is the camp-leads conversation whose last step (Jpi6NF) sends the player
+    // to the ruins, so it must play the Ruins variant, not the "still looking" line.
+    if (stage <= STAGE_CAMP_LEADS - 1) return "starting-off-talking-to-maisa-at-the-necropolis";
     if (stage <= STAGE_PRIEST_FREED + 3) return "the-ruins-of-ullek-talking-to-maisa";
     if (stage <= STAGE_LILY_PICKED + 5) return "cure-me-pox-talking-to-maisa-or-zahur";
     if (stage <= STAGE_CURE_TAKEN) {
@@ -790,6 +829,12 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
   function handleAction(event) {
     const { player, stepId } = event;
     switch (stepId) {
+      // Wiki "unavailable" continuation markers that sit before a branch's tail;
+      // letting them end the chat would strand the stage update after them.
+      case "POwEyB": // Zahur: before the equipment talk
+      case "93LAJP": // Sophanem High Priest: before the crate hand-in
+        event.handled = true;
+        return;
       // Chapter 1 - Jamila and the necropolis.
       case "BJhYfb": // Jamila slips you a message
       case "L-uj6w":
@@ -1147,9 +1192,11 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
   // ==========================================================================
 
   function resolveObject(event) {
-    const definition = ObjectDefinition.forPlayer?.(event.objectId, event.player) ?? null;
-    const objectId = definition?.getId?.() ?? event.objectId;
-    const option = String(definition?.getActions?.()?.[event.clickType - 1] ?? "");
+    // The interaction event already carries the player-resolved multi-loc
+    // definition; fall back to resolving it for item-on-object events.
+    const definition = event.definition ?? ObjectDefinition.forPlayer?.(event.objectId, event.player) ?? null;
+    const objectId = definition?.id ?? event.objectId;
+    const option = String(definition?.getInteractions?.()?.[event.clickType - 1] ?? "");
     return { definition, objectId, option };
   }
 
@@ -1246,12 +1293,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     }
     if (objectId === DOOR_LEVERS_A || objectId === DOOR_LEVERS_B) {
       event.handled = true;
-      if (stage >= STAGE_LEVERS_DONE) {
-        stepThrough(player, event.location);
-        if (stage < STAGE_URN_CHAMBER) setStage(player, STAGE_URN_CHAMBER);
-        return;
-      }
-      startTranscript(api, player, MAISA_CAMP, PAGE, "the-ruins-of-ullek-opening-the-downstairs-locked-door");
+      openLeversDoor(player, event.location);
       return;
     }
     if (objectId === DOOR_UPPER) {
@@ -1261,8 +1303,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     }
     if (objectId === DOOR_CHAMPION) {
       event.handled = true;
-      stepThrough(player, event.location);
-      if (stage >= STAGE_CHAMPION_DEAD && stage < STAGE_ALTAR) setStage(player, STAGE_ALTAR);
+      openChampionDoor(player, event.location);
       return;
     }
     if (objectId === EMBLEM_PLAQUE) {
@@ -1391,6 +1432,47 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     startTranscript(api, player, MAISA_CAMP, PAGE, "the-ruins-of-ullek-opening-the-upstairs-locked-door");
   }
 
+  /** The lever-opened downstairs door (43961/43962); both leaves route here. */
+  function openLeversDoor(player, location) {
+    if (quest.getStage(player) >= STAGE_LEVERS_DONE) {
+      stepThrough(player, location);
+      if (quest.getStage(player) < STAGE_URN_CHAMBER) setStage(player, STAGE_URN_CHAMBER);
+      return;
+    }
+    startTranscript(api, player, MAISA_CAMP, PAGE, "the-ruins-of-ullek-opening-the-downstairs-locked-door");
+  }
+
+  /** The Champion door (43960) beyond the altar. */
+  function openChampionDoor(player, location) {
+    stepThrough(player, location);
+    const stage = quest.getStage(player);
+    if (stage >= STAGE_CHAMPION_DEAD && stage < STAGE_ALTAR) setStage(player, STAGE_ALTAR);
+  }
+
+  /**
+   * Doors.plugin.js claims every "Door" and swaps 43960/43961/43962/43963 before
+   * this plugin's object hook runs. It emits door:toggle first, so claim the
+   * quest doors here and run the quest's own logic.
+   */
+  function claimQuestDoor(request) {
+    if (request.handled) return;
+    const { player, objectId, location } = request;
+    if (objectId === DOOR_LEVERS_A || objectId === DOOR_LEVERS_B) {
+      request.handled = true;
+      openLeversDoor(player, location);
+      return;
+    }
+    if (objectId === DOOR_CHAMPION) {
+      request.handled = true;
+      openChampionDoor(player, location);
+      return;
+    }
+    if (objectId === DOOR_UPPER) {
+      request.handled = true;
+      openUpperDoor(player, location);
+    }
+  }
+
   function crossSteppingStone(player) {
     const stage = quest.getStage(player);
     if (stage < STAGE_LILY_HUNT) {
@@ -1476,6 +1558,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
   // ==========================================================================
 
   function handleLogin({ player }) {
+    installTombLevers();
     syncNpcs(player);
     sendQuestBits(player);
   }
@@ -1607,6 +1690,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:line", handleLine);
+  api.onCustomEvent("door:toggle", claimQuestDoor);
   api.onItemAction(handleItemAction);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onObjectInteraction(handleObjectInteraction);

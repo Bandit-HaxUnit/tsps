@@ -691,6 +691,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
   }
 
   function sailorVariant(player) {
+    if (quest.getStage(player) < STAGE_STARTED || quest.isComplete(player)) return null;
     const step = merchantStep(player);
     if (held(player, FREMENNIK_BALLAD)) return swensenGiving("the-ballad-to-the-sailor");
     if (step === M_STARTED) {

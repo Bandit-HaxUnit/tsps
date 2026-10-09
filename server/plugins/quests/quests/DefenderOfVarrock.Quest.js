@@ -235,6 +235,7 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
   const JOLLY_BOAR_ELIAS_TILE = { x: 3283, y: 3501 };
   const PALACE_ELIAS_TILE = { x: 3208, y: 3475 };
   const LIBRARY_SCROLLS_TILE = { x: 3216, y: 3497 };
+  const SACRED_FORGE_TILE = { x: 2957, y: 5811 }; // Ruins of Camdozaal
 
   // ==========================================================================
   // Transcript variants
@@ -359,7 +360,7 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
   let quest;
   const eliasByPlayer = new Map();
   const dialogueContext = new WeakMap();
-  let scrollsInstalled = false;
+  let worldInstalled = false;
 
   function stageOf(player) {
     return quest.getStage(player);
@@ -514,14 +515,20 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
   // World install / Elias spawn
   // ==========================================================================
 
-  /** The library scrolls only exist in the quest instance in the cache, so put a
-   * searchable copy by the desks in the real Varrock Palace library. */
+  /** The library scrolls and the Sacred Forge only exist in quest-scoped cache maps,
+   * so place a copy of each in the real world: the scrolls by the desks in the
+   * Varrock Palace library, the forge at its wiki tile in the Ruins of Camdozaal. */
   function installWorld() {
-    if (scrollsInstalled) return;
-    scrollsInstalled = true;
-    const location = new Location(LIBRARY_SCROLLS_TILE.x, LIBRARY_SCROLLS_TILE.y, 0);
-    if (MapObjects.get(SCROLLS_OBJECT, location.clone(), null)) return;
-    ObjectManager.register(new GameObject(SCROLLS_OBJECT, location, 10, 0, null), true);
+    if (worldInstalled) return;
+    worldInstalled = true;
+    installQuestObject(SCROLLS_OBJECT, LIBRARY_SCROLLS_TILE);
+    installQuestObject(SACRED_FORGE_OBJECT, SACRED_FORGE_TILE);
+  }
+
+  function installQuestObject(objectId, tile) {
+    const location = new Location(tile.x, tile.y, 0);
+    if (MapObjects.get(objectId, location.clone(), null)) return;
+    ObjectManager.register(new GameObject(objectId, location, 10, 0, null), true);
   }
 
   function desiredEliasTile(stage) {
@@ -1145,14 +1152,29 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
       afterDialogue(player, () => {
         if (player.isRegistered?.() === false || !questActive(player)) return;
         stepAcross(player, location);
-        if (!gate2) {
-          ensureStage(player, STAGE_ARRAV);
-          play(player, ARRAV_CUTSCENE, V_ARRAV);
+        if (gate2) {
+          ensureStage(player, STAGE_BALCONY_2);
+          return;
         }
+        ensureStage(player, STAGE_ARRAV);
+        play(player, ARRAV_CUTSCENE, V_ARRAV);
       });
       return;
     }
     stepAcross(player, location);
+  }
+
+  /**
+   * Doors.plugin.js matches the gates by name ("Gate"/Open) and asks via door:toggle
+   * before toggling, so the mist cost and cutscene have to run from here. The object
+   * hook above stays as a fallback for when the Doors plugin is absent.
+   */
+  function claimGateToggle(request) {
+    if (request.handled) return;
+    const { objectId } = request;
+    if (objectId !== GATE_1 && objectId !== GATE_2) return;
+    request.handled = true;
+    handleGate(request);
   }
 
   function handleBalcony(event) {
@@ -1251,6 +1273,8 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
     if (objectId === SCROLLS_OBJECT) return handleScrolls(event);
   }
 
+  // Testing note: a modal interface (e.g. 90, opened by ::quest) swallows object and
+  // item clicks client-side, so close it before using the barronite on the forge.
   function handleItemOnObject(event) {
     const { player, itemId } = event;
     if (!player || itemId !== IMBUED_BARRONITE_ITEM) return;
@@ -1326,6 +1350,7 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
   api.onNpcInteraction("Romeo", { "Talk-to": talkToRomeo });
   api.onNpcInteraction("Curator Haig Halen", { "Talk-to": talkToHaig });
   api.onObjectInteraction(handleObjectInteraction);
+  api.onCustomEvent("door:toggle", claimGateToggle);
   api.onItemOnObject(handleItemOnObject);
   api.onItemOnItem(handleItemOnItem);
   api.onNpcDeath(handleNpcDeath);

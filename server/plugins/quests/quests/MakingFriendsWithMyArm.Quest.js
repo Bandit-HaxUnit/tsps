@@ -243,6 +243,7 @@ module.exports = function registerMakingFriendsWithMyArmQuest(api) {
   const ACTION_SNOWFLAKE_LEAVES = "ghM57Z";
   const ACTION_HAND_BERRIES = "maJPZY";
   const ACTION_APOTHECARY_BREWS = new Set(["C_sOnO", "z20Cm6"]);
+  const ACTION_APOTHECARY_BREW_DUPLICATE = "z20Cm6";
   const ACTION_HAND_POTION = "0l5dDl";
   const ACTION_WOM_DRINKS = "s0mVHr";
   const ACTION_MOTHER_IMPRISONS = "4VR7SQ";
@@ -502,7 +503,7 @@ module.exports = function registerMakingFriendsWithMyArmQuest(api) {
     if (stage < STAGE_LARRY) return "starting-out-talking-to-my-arm-talking-to-my-arm-again";
     if (stage < STAGE_PLAN) return "troll-diplomacy-talking-to-my-arm";
     if (stage < STAGE_WOM_TASKS) return planVariant(player);
-    if (stage < STAGE_COFFIN) {
+    if (stage < STAGE_PRISON) {
       if (!held(player, OLD_MANS_COFFIN_ITEM_ID)) return planVariant(player);
       advanceTo(player, STAGE_IMPRESS);
       return "the-wise-dead-man-impressing-mother";
@@ -606,7 +607,7 @@ module.exports = function registerMakingFriendsWithMyArmQuest(api) {
     let variant;
     if (stage >= STAGE_PRISON) {
       variant = "matricide-mother-knows-best";
-    } else if (stage >= STAGE_PLAN) {
+    } else if (stage >= STAGE_MOTHER) {
       variant = "troll-diplomacy-talking-business-with-mother";
     } else if (stage >= STAGE_MINED) {
       variant = "troll-diplomacy-meeting-with-mother";
@@ -621,7 +622,7 @@ module.exports = function registerMakingFriendsWithMyArmQuest(api) {
     const { player, npcId } = event;
     if (!SNOWFLAKE_NPC_IDS.has(npcId)) return;
     const stage = quest.getStage(player);
-    if (quest.isComplete(player)) return;
+    if (quest.isComplete(player)) return false;
     let variant;
     if (stage >= STAGE_NOTES_READ) {
       variant = "a-new-leader-talking-to-snowflake-after-reading-odd-mushroom-s-notes";
@@ -795,6 +796,7 @@ module.exports = function registerMakingFriendsWithMyArmQuest(api) {
       return;
     }
     if (ACTION_APOTHECARY_BREWS.has(stepId)) {
+      if (stepId === ACTION_APOTHECARY_BREW_DUPLICATE) event.handled = true;
       if (!potionObtained(player)) {
         setPotionObtained(player, true);
         give(player, REDUCED_CADAVA_POTION_ITEM_ID);
