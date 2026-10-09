@@ -84,7 +84,7 @@ export function projectDeckToWorld(
  * picking tiles in the boat's deck scene.
  */
 export function pickSeaPoint(
-    host: WebGLOsrsRendererHost,
+    host: Pick<WebGLOsrsRendererHost, "osrsClient" | "screenToRay" | "sampleHeightAtExactPlane">,
     entityIndex: number,
     mouseX: number,
     mouseY: number,

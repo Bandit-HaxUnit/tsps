@@ -12,6 +12,7 @@ import type {
 } from "../../game/GameRenderer";
 import { OsrsRendererType, WEBGPU } from "../../game/GameRenderers";
 import type { IProjectileManager } from "../../game/interfaces/IProjectileManager";
+import type { Ray } from "../../game/math/Raycast";
 import type { OsrsClient } from "../../game/OsrsClient";
 import type { PlayerSpotAnimationEvent } from "../../game/sync/PlayerSyncTypes";
 import { flushPackets } from "../../network/packet";
@@ -22,7 +23,7 @@ import { SdMapData } from "../loader/SdMapData";
 import { SdMapDataLoader } from "../loader/SdMapDataLoader";
 import { SdMapLoaderInput } from "../loader/SdMapLoaderInput";
 import type { WorldEntityAnimator } from "../WorldEntityAnimator";
-import { updateWorldEntityMotion } from "../render/worldEntityMotion";
+import { pickSeaPoint, projectDeckToWorld, updateWorldEntityMotion } from "../render/worldEntityMotion";
 import { getServerTickPhaseNow } from "../../network/serverConnection/timing";
 import { WebGPUMapSquare } from "./WebGPUMapSquare";
 import { resolveFogRange } from "../RenderDistancePolicy";
@@ -797,6 +798,31 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
     sampleHeightAtExactPlane(worldX: number, worldZ: number, plane: number): number {
         const map = this.mapManager.getMapForWorldTile(Math.floor(worldX), Math.floor(worldZ));
         return map ? map.sampleHeightAtExactPlane(worldX, worldZ, plane) : 0;
+    }
+
+    // ── Helm steering surface read by HelmSteering's deps ─────────────────────────────────────
+
+    /** Port of WebGLOsrsRenderer.screenToRay, through the overlay host's shared implementation. */
+    screenToRay(mouseX: number, mouseY: number): Ray | null {
+        return this.overlays?.screenToRay(mouseX, mouseY) ?? null;
+    }
+
+    /** World fine point on the sea under a screen position, around a boat (HelmSteering). */
+    pickSeaPointAt(
+        entityIndex: number,
+        mouseX: number,
+        mouseY: number,
+    ): { x: number; y: number } | undefined {
+        return pickSeaPoint(this, entityIndex, mouseX, mouseY);
+    }
+
+    /** Maps a fine position in an entity's deck scene to world fine units (HelmSteering). */
+    projectDeckToWorld(
+        entityIndex: number,
+        fineX: number,
+        fineY: number,
+    ): { x: number; y: number } | undefined {
+        return projectDeckToWorld(this, entityIndex, fineX, fineY);
     }
 
     getProjectileManager(): IProjectileManager | undefined {

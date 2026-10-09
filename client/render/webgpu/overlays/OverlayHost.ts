@@ -28,6 +28,7 @@ import {
 import { resolveGroundItemStackPlane } from "../../../game/scene/PlaneResolver";
 import { getMapSquareId } from "../../../rs/map/MapFileIndex";
 import type { WebGLOsrsRendererHost } from "../../render/hostInterface";
+import { getWorldEntityIndexForMapId } from "../worldEntity";
 import {
     addHitSplatOsrs,
     actorAddHealthBar,
@@ -654,6 +655,24 @@ export class OverlayHost {
         const localY = (tileY | 0) - (map.getRenderBaseTileY?.() ?? map.mapY * Scene.MAP_SQUARE_SIZE);
         if (localX < 0 || localY < 0 || localX >= span || localY >= span) return undefined;
         return { x: localX | 0, y: localY | 0 };
+    }
+
+    /** The world entity a deck map id belongs to (loc/NPC highlight transforms). */
+    getWorldEntityIndexForMapId(mapId: number): number | undefined {
+        return getWorldEntityIndexForMapId(this.renderer, mapId);
+    }
+
+    /**
+     * Port of render/render/worldEntity.ts getWorldEntityDeckHeight: an overlay loc's highlight
+     * model sits on the boat's deck, so its triangles are raised by the deck height.
+     */
+    getWorldEntityDeckHeight(_tileX?: number, _tileY?: number): number {
+        for (const overlay of this.renderer.worldEntityOverlays.values()) {
+            if (overlay.deckHeight !== undefined && overlay.deckHeight !== 0) {
+                return overlay.deckHeight;
+            }
+        }
+        return 0;
     }
 
     sampleHeightAtExactPlane(worldX: number, worldZ: number, plane: number): number {
