@@ -5,6 +5,7 @@ const { Location } = require("../../../../src/main/typescript/elvarg/game/model/
 const { isMembersArea, isMembersWorld } = require("../../../../src/main/typescript/elvarg/game/definition/WorldDefinition");
 const { isLoadoutAvailable } = require("./PvpLoadoutRegistry");
 const { listPvpProfiles } = require("./PvpProfileRegistry");
+const { readBotSites } = require("../../brain/BotSites");
 const fs = require("fs");
 const path = require("path");
 
@@ -47,9 +48,7 @@ function freezeHotspot(hotspot) {
  * block is a hotspot. A hotspot names a loadout `style`; the loadouts carrying that tag
  * in pvp-bot-loadouts.json are its gear.
  */
-const SITES_FILE = JSON.parse(
-  fs.readFileSync(path.join(GameConstants.DEFINITIONS_DIRECTORY, "bot-sites.json"), "utf8")
-);
+const SITES_FILE = readBotSites(path.join(GameConstants.DEFINITIONS_DIRECTORY, "bot-sites.json"));
 const PVP_BOT_CONFIG = SITES_FILE.pvp ?? {};
 
 /** How many wilderness bot names exist and how they spread over players' active regions. */

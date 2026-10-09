@@ -17,6 +17,24 @@ tier so the mix stays near the configured one (a Varrock novice never becomes a 
 Varrock only has expert woodcutters). Switches wait for a safe point: never mid-fight or under a
 bank-trip/fight-back overlay, and a switch with no free capacity slot retries 30 s later.
 
+**Per deployment:** a world chooses its own sites in `data/definitions/world.local.json` (gitignored; or `world.json`) with `pluginConfig` `"PlayerBots:sites"`, a map of site id to an object of site properties (`plugins/bots/brain/BotSites.js`). For a site `bot-sites.json` has, the properties replace its own, each top-level property whole, so `bots` sets every count at the site; sites and properties the map doesn't name keep theirs. Any other id is a new site and needs `x` and `y`. A world updates from main by fast-forward without touching `bot-sites.json`. For example, skilling and combat-training bots on, the PvP pens off, Lumbridge cut down to woodcutters, and a Draynor fishing site:
+
+```json
+"pluginConfig": {
+  "PlayerBots:sites": {
+    "varrock": { "enabled": true }, "falador": { "enabled": true }, "seers": { "enabled": true },
+    "east_ardougne": { "enabled": true },
+    "edge_low": { "enabled": false }, "edge_mid": { "enabled": false }, "edge_mains": { "enabled": false },
+    "varrock_ditch": { "enabled": false }, "green_drags_gate": { "enabled": false },
+    "revs_entrance": { "enabled": false },
+    "lumbridge": { "enabled": true, "bots": { "woodcutting": 20 } },
+    "draynor": { "enabled": true, "x": 3093, "y": 3244, "bots": { "fishing": 20 } }
+  }
+}
+```
+
+A value that isn't an object, or a new site without integer `x` and `y`, is warned about at startup and ignored.
+
 Trainers find their NPCs through the NPC cluster index (below), so they fan out across every
 nearby group of their tier's monsters. The skilling
 activities cap how many bots run each one at once (`capacity`), the rest train combat. Change the counts in `bot-sites.json`;
