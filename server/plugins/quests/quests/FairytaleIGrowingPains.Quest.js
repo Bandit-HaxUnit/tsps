@@ -50,7 +50,6 @@
 module.exports = function registerFairytaleIGrowingPainsQuest(api) {
   const {
     Equipment,
-    Item,
     ItemIdentifiers,
     Location,
     Misc,
@@ -225,7 +224,6 @@ module.exports = function registerFairytaleIGrowingPainsQuest(api) {
   };
 
   let quest;
-  let groundItems;
   const tanglefootByPlayer = new Map();
 
   const held = (player, itemId, amount = 1) => player.getInventory().getAmount(itemId) >= amount;
@@ -621,15 +619,13 @@ module.exports = function registerFairytaleIGrowingPainsQuest(api) {
     }
   }
 
-  function handleNpcDeath({ killer, npc, npcId, location }) {
+  function handleNpcDeath({ killer, npc, npcId }) {
     if (npc?.getId?.() !== TANGLEFOOT_NPC_ID && npcId !== TANGLEFOOT_NPC_ID) return;
     if (!killer || killer.isNpc?.()) return;
     if (quest.getStage(killer) !== STAGE_HAS_MAGIC_SECATEURS) return;
     tanglefootByPlayer.delete(killer);
-    const spot = npc?.getLocation?.() ?? (location ? new Location(location.x, location.y, location.z) : null);
-    if (spot && groundItems) {
-      groundItems.registerLocation(killer, new Item(QUEENS_SECATEURS_ITEM_ID, 1), spot);
-    }
+    // The Queen's secateurs come from the NPC's npc-drops.json table (always
+    // drop), so nothing is registered here.
     advance(killer, STAGE_TANGLEFOOT_DEFEATED);
   }
 
@@ -746,8 +742,6 @@ module.exports = function registerFairytaleIGrowingPainsQuest(api) {
   api.persistAttribute(GARDENERS_ATTRIBUTE);
   api.persistAttribute(MALIGNIUS_ASKED_ATTRIBUTE);
   api.persistAttribute(NATURE_ITEMS_ATTRIBUTE);
-
-  groundItems = api.getItemOnGroundManager();
 
   quest = registerQuest(api, {
     key: "fairytale_i_growing_pains",

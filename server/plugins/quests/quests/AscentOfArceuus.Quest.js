@@ -470,6 +470,7 @@ module.exports = function registerAscentOfArceuusQuest(api) {
       if (quest.getStage(player) === STAGE_DEVICE_DESTROYED && !quest.isComplete(player)) {
         quest.complete(player);
         syncNpcs(player);
+        syncVarbits(player); // clears the trail footprint varbits at stage 14
       }
       return;
     }

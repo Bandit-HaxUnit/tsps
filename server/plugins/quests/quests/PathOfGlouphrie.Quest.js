@@ -25,9 +25,10 @@
  * https://oldschool.runescape.wiki/w/Transcript:The_Path_of_Glouphrie.
  *
  * Gaps/approximations:
- * - the storeroom is not instanced: the tree/gate/bowl swaps and one player's monolith
+ * - the storeroom is not instanced: the tree/bowl swaps and one player's monolith
  *   pushes are shared world state. The monoliths push and reset but the chests are not
- *   gated on the puzzle.
+ *   gated on the puzzle. Unlocking the strongroom removes the gate loc (both cached
+ *   gate states are solid walls) instead of swapping it.
  * - the chests hand out a fixed disc set instead of random discs, and Yewnock's machine
  *   wants two discs totalling 20 (the real interface is replaced by chatbox messages).
  *   The exchanger splits discs but the two-value random puzzle is not reproduced.
@@ -196,6 +197,8 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
 
   const BITS_ATTRIBUTE = "quest.the_path_of_glouphrie.bits";
   const LAMPS_ATTRIBUTE = "quest.the_path_of_glouphrie.lamps";
+  const BIRD_ATTRIBUTE = "the-path-of-glouphrie:terrorbird";
+  const LAMP_VARBITS = [15305, 15306, 15307, 15308]; // pog_strength/slayer/thieving/magic_lamp
   const BIT_BOWL_EXAMINED = 1 << 0;
   const BIT_CHIME = 1 << 1;
   const BIT_GATE = 1 << 2;
@@ -240,6 +243,13 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
     { id: SMALL_MONOLITH_NPC_ID, x: 2787, y: 4247, destX: 2791, destY: 4247 },
     { id: SMALL_MONOLITH_NPC_ID, x: 2792, y: 4252, destX: 2792, destY: 4260 },
   ];
+
+  // Owner-scoped NPCs must exist as soon as their stage/area is reached, not only after a
+  // relog: each zone ensures the NPCs it gates.
+  const VILLAGE_ZONE = { minX: 2530, maxX: 2560, minY: 3155, maxY: 3185, levels: [0] };
+  const LONGRAMBLE_ZONE = { minX: 2320, maxX: 2360, minY: 3095, maxY: 3125, levels: [0] };
+  const STOREROOM_ZONE = { minX: 2770, maxX: 2805, minY: 4235, maxY: 4275, levels: [0] };
+  const WARPED_DEPTHS_ZONE = { minX: 2310, maxX: 2360, minY: 3140, maxY: 3165, levels: [1] };
 
   let quest;
   let treeObject = null;
@@ -400,6 +410,7 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
     sendVarbit(player, VARBIT_LONGRAMBLE_DONE, hasBit(player, BIT_LONGRAMBLE_MET) ? 1 : 0);
     sendVarbit(player, VARBIT_LONGRAMBLE_DELIVERY, hasBit(player, BIT_LONGRAMBLE_TRADED) ? 1 : 0);
     sendVarbit(player, VARBIT_KING_BOLREN_DONE, hasBit(player, BIT_BOLREN_DONE) ? 1 : 0);
+    LAMP_VARBITS.forEach((varbitId, index) => sendVarbit(player, varbitId, lampCount(player) > index ? 1 : 0));
   }
 
   // ==========================================================================
@@ -486,6 +497,7 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
         break;
       }
       inventory.adds(LAMP_ITEM_IDS[granted], 1);
+      sendVarbit(player, LAMP_VARBITS[granted], 1);
       granted += 1;
       setLampCount(player, granted);
     }
@@ -615,16 +627,19 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
     if (quest.getStage(player) !== STAGE_NOT_STARTED) return;
     if (!meetsStartRequirements(player)) return;
     quest.setStage(player, STAGE_STARTED);
+    ensureCuteCreature(player);
   }
 
   function handleChoice({ player, npcId, option }) {
     const choice = String(option ?? "").toLowerCase();
     if (isGolrie(npcId) && choice.includes(GOLRIE_DEVICE_CHOICE)) {
       if (quest.getStage(player) === STAGE_STARTED) quest.setStage(player, STAGE_GOLRIE_TOLD);
+      ensureMonoliths(player);
       return;
     }
     if (npcId === GIANNE_JNR_NPC_ID && choice.includes(GIANNE_LONGRAMBLE_CHOICE)) {
       if (quest.getStage(player) === STAGE_SENT_FOR_LONGRAMBLE) quest.setStage(player, STAGE_HAS_COORDINATES);
+      ensureLongramble(player);
     }
   }
 
@@ -645,6 +660,7 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
       if (quest.getStage(player) === STAGE_CREATURE_KILLED) quest.setStage(player, STAGE_SENT_FOR_LONGRAMBLE);
       setBit(player, BIT_BOLREN_DONE);
       sendVarbit(player, VARBIT_KING_BOLREN_DONE, 1);
+      ensureLongramble(player);
     }
   }
 
@@ -717,6 +733,7 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
     if (!treeHealed) replaceTree();
     if (quest.getStage(player) < STAGE_TREE_HEALED) quest.setStage(player, STAGE_TREE_HEALED);
     setBit(player, BIT_TREE_HEALED);
+    ensureBirds(player);
   }
 
   function handleTreeTalk(event) {
@@ -825,11 +842,18 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
       return;
     }
     setBit(player, BIT_GATE);
+    sendVarbit(player, VARBIT_GOLRIE_RETURN, 1);
     gateUnlocked = true;
-    for (const object of ObjectManager.objectsAt(GATE_TILE)) {
-      if (object.getId() === STRONGROOM_GATE_OBJECT_ID) ObjectManager.deregister(object, true);
+    // Remove the gate loc outright: deregistering drops its wall clipping, while both
+    // cached gate states (49657 open / 49658) are solid walls that would keep blocking.
+    for (const object of [...ObjectManager.objectsAt(GATE_TILE)]) {
+      if (
+        object.getId() === STRONGROOM_GATE_OBJECT_ID ||
+        object.getId() === STRONGROOM_GATE_OPEN_OBJECT_ID
+      ) {
+        ObjectManager.deregister(object, true);
+      }
     }
-    ensureObject(STRONGROOM_GATE_OPEN_OBJECT_ID, GATE_TILE, 0, 0);
     player.sendMessage("You unlock the strongroom gate.");
   }
 
@@ -1129,6 +1153,18 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
     if (npc) longrambleByPlayer.set(player, npc);
   }
 
+  /** The player's own still-alive bird for `index`, tagged on spawn (adopt after a relog). */
+  function findOwnedBird(player, index) {
+    const world = api.getWorld?.();
+    if (!world?.getNpcs) return null;
+    for (const npc of world.getNpcs()) {
+      if (npc?.getOwner?.() !== player) continue;
+      if (!WARPED_TERRORBIRD_NPC_IDS.includes(npc.getId?.())) continue;
+      if (Number(npc.getAttribute?.(BIRD_ATTRIBUTE)) === index) return npc;
+    }
+    return null;
+  }
+
   function ensureBirds(player) {
     let entries = birdsByPlayer.get(player);
     if (!entries) {
@@ -1138,6 +1174,11 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
     TERRORBIRD_TILES.forEach((tile, index) => {
       if (hasBit(player, BIRD_BITS[index])) return;
       if (entries.some((entry) => entry.index === index)) return;
+      const adopted = findOwnedBird(player, index);
+      if (adopted) {
+        entries.push({ index, npc: adopted });
+        return;
+      }
       const npc = api.spawnNpc({
         id: WARPED_TERRORBIRD_NPC_IDS[index],
         x: tile.x,
@@ -1147,7 +1188,10 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
         owner: player,
         ownerOnly: true,
       });
-      if (npc) entries.push({ index, npc });
+      if (npc) {
+        npc.setAttribute?.(BIRD_ATTRIBUTE, index);
+        entries.push({ index, npc });
+      }
     });
   }
 
@@ -1171,8 +1215,9 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
     const { npc, killer } = event;
     let owner = killer?.isPlayer?.() ? killer : null;
     if (!owner && npc?.getOwner?.()?.isPlayer?.()) owner = npc.getOwner();
-    const evil = owner ? evilByPlayer.get(owner) : null;
-    if (evil && evil === npc) {
+    if (!owner) return;
+    const evil = evilByPlayer.get(owner);
+    if (evil === npc || (npc?.getOwner?.() === owner && npc?.getId?.() === EVIL_CREATURE_NPC_ID)) {
       evilByPlayer.delete(owner);
       if (!hasBit(owner, BIT_CREATURE_KILLED)) {
         setBit(owner, BIT_CREATURE_KILLED);
@@ -1180,19 +1225,26 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
       }
       return;
     }
-    for (const [owner, entries] of birdsByPlayer) {
-      const position = entries.findIndex((entry) => entry.npc === npc);
-      if (position === -1) continue;
-      const [{ index }] = entries.splice(position, 1);
-      if (hasBit(owner, BIRD_BITS[index])) return;
-      setBit(owner, BIRD_BITS[index]);
-      const count = birdKillCount(owner);
-      if (count >= TERRORBIRD_TILES.length) {
-        if (quest.getStage(owner) === STAGE_TREE_HEALED) quest.setStage(owner, STAGE_BIRDS_DEAD);
-        ensureHeavyDoor();
-        owner.sendMessage("The last terrorbird falls. The heavy door to the east is unguarded.");
-      }
-      return;
+    if (!WARPED_TERRORBIRD_NPC_IDS.includes(npc?.getId?.())) return;
+    // The death payload can be a different instance of the NPC (clones/new indices), so
+    // match on the tag set at spawn (and identity) instead of the object reference alone.
+    const entries = birdsByPlayer.get(owner) ?? [];
+    const tag = Number(npc.getAttribute?.(BIRD_ATTRIBUTE));
+    let position = entries.findIndex((entry) => entry.npc === npc);
+    if (position === -1 && Number.isInteger(tag)) {
+      position = entries.findIndex((entry) => entry.index === tag);
+    }
+    if (position !== -1) entries.splice(position, 1);
+    let index = Number.isInteger(tag) && tag >= 0 && tag < BIRD_BITS.length ? tag : -1;
+    if (index === -1) index = BIRD_BITS.findIndex((bit) => !hasBit(owner, bit));
+    if (index === -1 || hasBit(owner, BIRD_BITS[index])) return;
+    setBit(owner, BIRD_BITS[index]);
+    const count = birdKillCount(owner);
+    if (count >= TERRORBIRD_TILES.length) {
+      const stage = quest.getStage(owner);
+      if (stage >= STAGE_TREE_HEALED && stage < STAGE_COMPLETE) quest.setStage(owner, STAGE_BIRDS_DEAD);
+      ensureHeavyDoor();
+      owner.sendMessage("The last terrorbird falls. The heavy door to the east is unguarded.");
     }
   }
 
@@ -1222,6 +1274,25 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
       longrambleByPlayer.delete(player);
       api.removeNpc(longramble);
     }
+  }
+
+  function handleVillageZone({ player }) {
+    if (quest.getStage(player) < STAGE_MACHINE_ACTIVATED) ensureCuteCreature(player);
+  }
+
+  function handleLongrambleZone({ player }) {
+    if (quest.getStage(player) >= STAGE_SENT_FOR_LONGRAMBLE) ensureLongramble(player);
+  }
+
+  function handleStoreroomZone({ player }) {
+    const stage = quest.getStage(player);
+    if (stage >= STAGE_GOLRIE_TOLD && stage < STAGE_MACHINE_ACTIVATED) ensureMonoliths(player);
+  }
+
+  function handleWarpedDepthsZone({ player }) {
+    const stage = quest.getStage(player);
+    if (stage === STAGE_TREE_HEALED) ensureBirds(player);
+    if (stage >= STAGE_BIRDS_DEAD) ensureHeavyDoor();
   }
 
   function handleLogin({ player }) {
@@ -1293,6 +1364,10 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemFirstAction(handleLampAction);
   api.onNpcDeath(handleNpcDeath);
+  api.onZoneEnter(VILLAGE_ZONE, handleVillageZone);
+  api.onZoneEnter(LONGRAMBLE_ZONE, handleLongrambleZone);
+  api.onZoneEnter(STOREROOM_ZONE, handleStoreroomZone);
+  api.onZoneEnter(WARPED_DEPTHS_ZONE, handleWarpedDepthsZone);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

@@ -43,6 +43,9 @@
  * - The journal and the dirty notes open interfaces in OSRS; this plugin has no
  *   text for them, so Read only advances the journal stage.
  * - Reading stone tablets 2 and 3 has no transcript variant, so Read is silent.
+ * - The "fully understand all of the stone tablets" line (L1cVhR) is raised once
+ *   by the Word translations scroll when all four dungeons' words are known (a
+ *   persisted flag), including after the fourth dungeon when currentDungeon is 0.
  *
  * Source: OSRS Wiki (The Garden of Death, Quick guide, Transcript:The Garden of
  * Death); ids from the cache identifier dumps.
@@ -148,6 +151,7 @@ module.exports = function registerGardenOfDeathQuest(api) {
 
   const WORDS_ATTRIBUTE = "quest.the_garden_of_death.words";
   const SEARCHED_ATTRIBUTE = "quest.the_garden_of_death.searched";
+  const FULLY_TRANSLATED_ATTRIBUTE = "quest.the_garden_of_death.fully-translated";
 
   // ==========================================================================
   // Word data (OSRS Wiki translation table)
@@ -385,6 +389,17 @@ module.exports = function registerGardenOfDeathQuest(api) {
     return DUNGEON_WORDS[dungeon - 1].every((_, index) => knowsWord(player, base + index));
   }
 
+  function allWordsDiscovered(player) {
+    return DUNGEON_WORDS.every((_, dungeon) => dungeonWordsDiscovered(player, dungeon + 1));
+  }
+
+  /** The wiki's "fully understand all of the stone tablets" line, once. */
+  function maybePlayFullyTranslated(player) {
+    if (!allWordsDiscovered(player) || player.getAttribute(FULLY_TRANSLATED_ATTRIBUTE)) return;
+    player.setAttribute(FULLY_TRANSLATED_ATTRIBUTE, 1);
+    startTranscript(api, player, TRANSCRIPT_NPC_ID, PAGE, "the-fourth-dungeon-fully-translating-stone-tablets");
+  }
+
   /** The dungeon the player is currently solving; 0 when every dungeon is done. */
   function currentDungeon(stage) {
     if (stage === STAGE_JOURNAL_READ) return 1;
@@ -491,6 +506,7 @@ module.exports = function registerGardenOfDeathQuest(api) {
   }
 
   function searchCampingEquipment(event) {
+    const { player } = event;
     event.handled = true;
     startTranscript(api, player, TRANSCRIPT_NPC_ID, PAGE, "starting-the-quest-searching-the-camping-equipment");
   }
@@ -580,15 +596,17 @@ module.exports = function registerGardenOfDeathQuest(api) {
     if (!quest.isStarted(player)) return;
     event.handled = true;
     const dungeon = currentDungeon(quest.getStage(player));
-    if (!dungeon) return;
-    const base = WORD_BASE[dungeon - 1];
-    DUNGEON_WORDS[dungeon - 1].forEach((_, index) => discoverWord(player, base + index));
-    if (!dungeonWordsDiscovered(player, dungeon)) return;
-    player.sendMessage("You feel that you've translated enough words to read some of the text on the stone tablet.");
-    if (quest.getStage(player) < STAGE_JOURNAL_READ + dungeon) {
-      quest.setStage(player, STAGE_JOURNAL_READ + dungeon);
+    if (dungeon) {
+      const base = WORD_BASE[dungeon - 1];
+      DUNGEON_WORDS[dungeon - 1].forEach((_, index) => discoverWord(player, base + index));
+      if (!dungeonWordsDiscovered(player, dungeon)) return;
+      player.sendMessage("You feel that you've translated enough words to read some of the text on the stone tablet.");
+      if (quest.getStage(player) < STAGE_JOURNAL_READ + dungeon) {
+        quest.setStage(player, STAGE_JOURNAL_READ + dungeon);
+      }
+      ensureEntrances(player);
     }
-    ensureEntrances(player);
+    maybePlayFullyTranslated(player);
   }
 
   function readTablet(event) {
@@ -750,6 +768,7 @@ module.exports = function registerGardenOfDeathQuest(api) {
 
   api.persistAttribute(WORDS_ATTRIBUTE);
   api.persistAttribute(SEARCHED_ATTRIBUTE);
+  api.persistAttribute(FULLY_TRANSLATED_ATTRIBUTE);
 
   quest = registerQuest(api, {
     key: "the_garden_of_death",

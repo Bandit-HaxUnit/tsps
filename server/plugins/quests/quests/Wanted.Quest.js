@@ -3,17 +3,20 @@
  *
  * The words come from the "Wanted!" transcript page (npc-dialogues.json); this
  * plugin supplies the variant selectors for Sir Tiffy Cashien (4687), Sir Amik
- * Varze (4771, shared - only claimed once the quest is underway, so Black
- * Knights' Fortress and Recruitment Drive keep their own dialogues), Lord
- * Daquarius (4929) and the quest's Mage of Zamorak (2580, spawned owner-only at
- * the Zamorakian chapel), the prose-condition answers, the CommOrb (item 6635)
- * Contact/Scan/Playback actions, the seven-stop trail, the Solus fight and the
- * completion hand-in.
+ * Varze (4771, shared) and Lord Daquarius (4929), the prose-condition answers,
+ * the CommOrb (item 6635) Contact/Scan/Playback actions, the seven-stop trail,
+ * the Solus fight and the completion hand-in. Sir Amik, Sir Tiffy and Lord
+ * Daquarius are all Talk-to'd through quest-scoped name hooks (the same pattern
+ * My Arm's Big Adventure uses for Burntmeat): while this quest is active the
+ * Wanted page is played explicitly with startTranscript so Black Knights'
+ * Fortress / Recruitment Drive selectors and the shared id-index pages cannot
+ * shadow it; when the quest is not active the hooks return false and those
+ * other conversations run untouched.
  *
  * Stages (varbit 1051 "wanted_main", bits 0-10 of varp 571 "quest_wanted";
  * confirmed with `ts-node scripts/lookup-gameval.ts varbit wanted`):
  *   0 not started, 1 Sir Tiffy briefed (see Sir Amik),
- *   2 declined the squireship (see Tiffy for a crisis), 3 crisis arranged,
+ *   2 squireship offer answered (see Tiffy for a crisis), 3 crisis arranged,
  *   4 deputised (see Tiffy for equipment), 5 CommOrb obtained (contact Savant),
  *   6 Savant briefed (see Lord Daquarius), 7 Daquarius refuses (kill a Black
  *   Knight), 8 fur clue (see the Zamorakian mage), 9 the mage's price (20
@@ -43,8 +46,11 @@
  *   - The second and fourth scans teleport the player to Camelot / outside
  *     Falador Castle but Solus deals no damage (no death edge case).
  *   - Solus's hat is only received when there is inventory room, per the wiki.
- *   - Sir Tiffy's squireship joke path is tracked with a per-player flag; a
- *     completed player falls through to Sir Tiffy's own transcript page.
+ *   - OSRS loops Asgarnian ale if the player accepts the squireship; here either
+ *     reply ("Yes please!" / "No, not right now...") at the offer advances to
+ *     the crisis plan, with Tiffy playing his "after agreeing to be Amik's
+ *     squire" variant when the player accepted. A completed player falls
+ *     through to Sir Tiffy's own transcript page.
  */
 module.exports = function registerWantedQuest(api) {
   const { ItemIdentifiers, Location, NpcIdentifiers, Skill } = api.core;
@@ -95,7 +101,6 @@ module.exports = function registerWantedQuest(api) {
 
   const COMMORB_ITEM_ID = ItemIdentifiers.COMMORB; // 6635
   const SOLUSS_HAT_ITEM_ID = ItemIdentifiers.SOLUSS_HAT; // 6636
-  const ASGARNIAN_ALE_ITEM_ID = ItemIdentifiers.ASGARNIAN_ALE; // 1905
   const COINS_ITEM_ID = ItemIdentifiers.COINS; // 995
   const LAW_RUNE_ITEM_ID = ItemIdentifiers.LAW_RUNE; // 563
   const ENCHANTED_GEM_ITEM_ID = ItemIdentifiers.ENCHANTED_GEM; // 4155
@@ -126,8 +131,6 @@ module.exports = function registerWantedQuest(api) {
   const V_TIFFY_DONE = "completing-the-quest-talking-to-tiffy";
   const V_AMIK_FIRST = "falador-castle-first-visit-to-sir-amik";
   const V_AMIK_REFUSED = "falador-castle-first-visit-to-sir-amik-talking-to-sir-amik-after-refusing-to-become-his-squire";
-  const V_AMIK_SQUIRE = "falador-castle-first-visit-to-sir-amik-talking-to-sir-amik-after-becoming-his-squire";
-  const V_AMIK_ALE = "falador-castle-first-visit-to-sir-amik-returning-with-asgarnian-ale";
   const V_AMIK_SECOND = "falador-castle-second-visit-to-sir-amik";
   const V_AMIK_MISSION = "falador-castle-second-visit-to-sir-amik-talking-to-sir-amik-after-agreeing-to-go-after-solus";
   const V_AMIK_DONE = "completing-the-quest-talking-to-sir-amik";
@@ -419,67 +422,78 @@ module.exports = function registerWantedQuest(api) {
   }
 
   // ==========================================================================
-  // Conversation selectors
+  // Conversation selectors and Talk-to name hooks
+  //
+  // Sir Amik, Sir Tiffy and Lord Daquarius are shared NPCs: their id-index
+  // pages and the earlier-loading Black Knights' Fortress / Recruitment Drive
+  // selectors can otherwise win. Their Talk-to is claimed by name while this
+  // quest is active and the Wanted variant is played explicitly, so the other
+  // quests' pages cannot intercept; inactive players fall through to those
+  // conversations untouched.
   // ==========================================================================
 
-  function selectAmik(player, stage) {
-    if (stage === STAGE_STARTED) {
-      if (squireJoke(player)) {
-        if (hasItem(player, ASGARNIAN_ALE_ITEM_ID)) {
-          player.getInventory().deleteNumber(ASGARNIAN_ALE_ITEM_ID, 1);
-          return wantedVariant(V_AMIK_ALE);
-        }
-        return wantedVariant(V_AMIK_SQUIRE);
-      }
-      return wantedVariant(V_AMIK_FIRST);
-    }
-    if (stage === STAGE_DECLINED) return wantedVariant(V_AMIK_REFUSED);
-    if (stage === STAGE_CRISIS) return wantedVariant(V_AMIK_SECOND);
-    if (stage >= STAGE_MISSION && stage < STAGE_DEFEATED) return wantedVariant(V_AMIK_MISSION);
-    if (stage >= STAGE_DEFEATED) return wantedVariant(V_AMIK_DONE);
-    return null;
+  function amikVariantKey(player) {
+    const stage = quest.getStage(player);
+    if (stage < STAGE_STARTED || stage >= STAGE_COMPLETE) return null;
+    if (stage === STAGE_STARTED) return V_AMIK_FIRST;
+    if (stage === STAGE_DECLINED) return V_AMIK_REFUSED;
+    if (stage === STAGE_CRISIS) return V_AMIK_SECOND;
+    if (stage < STAGE_DEFEATED) return V_AMIK_MISSION;
+    return V_AMIK_DONE;
   }
 
-  function selectTiffy(player, stage) {
-    if (stage === 0) return meetsRequirements(player) ? wantedVariant(V_TIFFY_START) : null;
-    if (stage === STAGE_STARTED) {
-      if (squireJoke(player)) {
-        setSquireJoke(player, false);
-        quest.setStage(player, STAGE_CRISIS);
-        return wantedVariant(V_TIFFY_SQUIRE_FIX);
-      }
-      return wantedVariant(V_TIFFY_CONTINUE);
-    }
+  function selectAmik(player) {
+    const variant = amikVariantKey(player);
+    return variant ? wantedVariant(variant) : null;
+  }
+
+  function tiffyVariantKey(player) {
+    const stage = quest.getStage(player);
+    if (stage >= STAGE_COMPLETE) return null;
+    if (stage === 0) return meetsRequirements(player) ? V_TIFFY_START : null;
+    if (stage === STAGE_STARTED) return V_TIFFY_CONTINUE;
     if (stage === STAGE_DECLINED) {
       quest.setStage(player, STAGE_CRISIS);
-      return wantedVariant(V_TIFFY_CRISIS);
+      if (squireJoke(player)) {
+        setSquireJoke(player, false);
+        return V_TIFFY_SQUIRE_FIX;
+      }
+      return V_TIFFY_CRISIS;
     }
-    if (stage === STAGE_CRISIS) return wantedVariant(V_TIFFY_BEFORE_AMIK);
+    if (stage === STAGE_CRISIS) return V_TIFFY_BEFORE_AMIK;
     if (stage === STAGE_MISSION) {
-      return hasItem(player, COMMORB_ITEM_ID) ? wantedVariant(V_TIFFY_BEFORE_USE) : wantedVariant(V_TIFFY_MISSION);
+      return hasItem(player, COMMORB_ITEM_ID) ? V_TIFFY_BEFORE_USE : V_TIFFY_MISSION;
     }
-    if (stage >= STAGE_COMMORB) {
-      if (!hasItem(player, COMMORB_ITEM_ID)) return wantedVariant(V_TIFFY_ORB_LOST);
-      return stage >= STAGE_DEFEATED ? wantedVariant(V_TIFFY_DONE) : wantedVariant(V_TIFFY_BEFORE_USE);
-    }
-    return null;
+    if (!hasItem(player, COMMORB_ITEM_ID)) return V_TIFFY_ORB_LOST;
+    return stage >= STAGE_DEFEATED ? V_TIFFY_DONE : V_TIFFY_BEFORE_USE;
   }
 
-  function selectDaquarius(player, stage) {
-    if (stage < STAGE_CONTACTED) return null;
+  function selectTiffy(player) {
+    const variant = tiffyVariantKey(player);
+    return variant ? wantedVariant(variant) : null;
+  }
+
+  function daquariusVariantKey(player) {
+    const stage = quest.getStage(player);
+    if (stage < STAGE_CONTACTED || stage >= STAGE_COMPLETE) return null;
     if (stage === STAGE_CONTACTED) {
       quest.setStage(player, STAGE_DAQUARIUS);
-      return wantedVariant(V_DAQUARIUS);
+      return V_DAQUARIUS;
     }
     if (stage === STAGE_DAQUARIUS) {
       if (blackKnightDead(player)) {
         ensureMageSpawned(player);
         quest.setStage(player, STAGE_FUR);
-        return wantedVariant(V_DAQUARIUS_AFTER);
+        return V_DAQUARIUS_AFTER;
       }
-      return wantedVariant(V_DAQUARIUS_BEFORE);
+      return V_DAQUARIUS_BEFORE;
     }
-    return wantedVariant(V_DAQUARIUS_LEARNED);
+    return V_DAQUARIUS_LEARNED;
+  }
+
+  function selectDaquarius(player) {
+    const variant = daquariusVariantKey(player);
+    return variant ? wantedVariant(variant) : null;
   }
 
   function selectMage(player, stage) {
@@ -489,13 +503,38 @@ module.exports = function registerWantedQuest(api) {
     return null;
   }
 
+  /** Plays a claimed Talk-to; false leaves the NPC to the other plugins. */
+  function playClaimedVariant(player, npcId, variant) {
+    if (!variant) return false;
+    if (!startTranscript(api, player, npcId, PAGE, variant)) return false;
+    return undefined;
+  }
+
+  function talkToAmik(event) {
+    const { player, npcId } = event;
+    if (!quest.isStarted(player) || quest.isComplete(player)) return false;
+    return playClaimedVariant(player, npcId, amikVariantKey(player));
+  }
+
+  function talkToTiffy(event) {
+    const { player, npcId } = event;
+    if (quest.isComplete(player)) return false;
+    if (quest.getStage(player) === 0 && !meetsRequirements(player)) return false;
+    return playClaimedVariant(player, npcId, tiffyVariantKey(player));
+  }
+
+  function talkToDaquarius(event) {
+    const { player, npcId } = event;
+    return playClaimedVariant(player, npcId, daquariusVariantKey(player));
+  }
+
   function selectVariant({ npcId, player }) {
     if (!player) return null;
     const stage = quest.getStage(player);
     if (stage >= STAGE_COMPLETE) return null;
-    if (npcId === SIR_AMIK_VARZE_NPC_ID) return selectAmik(player, stage);
-    if (npcId === SIR_TIFFY_CASHIEN_NPC_ID) return selectTiffy(player, stage);
-    if (npcId === LORD_DAQUARIUS_NPC_ID) return selectDaquarius(player, stage);
+    if (npcId === SIR_AMIK_VARZE_NPC_ID) return selectAmik(player);
+    if (npcId === SIR_TIFFY_CASHIEN_NPC_ID) return selectTiffy(player);
+    if (npcId === LORD_DAQUARIUS_NPC_ID) return selectDaquarius(player);
     if (npcId === MAGE_OF_ZAMORAK_NPC_ID) return selectMage(player, stage);
     return null;
   }
@@ -609,8 +648,15 @@ module.exports = function registerWantedQuest(api) {
     const text = option.toLowerCase();
     if (npcId === SIR_AMIK_VARZE_NPC_ID) {
       if (quest.getStage(player) === STAGE_STARTED) {
-        if (text.includes("yes please")) setSquireJoke(player, true);
-        else if (text.includes("no, not right now")) quest.setStage(player, STAGE_DECLINED);
+        // The squireship offer: either reply moves on to the crisis plan (OSRS
+        // loops Asgarnian ale for "Yes please!"; see the header gap).
+        if (text.includes("yes please")) {
+          setSquireJoke(player, true);
+          quest.setStage(player, STAGE_DECLINED);
+        } else if (text.includes("no, not right now")) {
+          setSquireJoke(player, false);
+          quest.setStage(player, STAGE_DECLINED);
+        }
         return;
       }
       if (quest.getStage(player) === STAGE_CRISIS && text.includes("sure, i'll help you")) {
@@ -1071,6 +1117,9 @@ module.exports = function registerWantedQuest(api) {
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
+  api.onNpcInteraction("Sir Tiffy Cashien", { "Talk-to": talkToTiffy });
+  api.onNpcInteraction("Sir Amik Varze", { "Talk-to": talkToAmik });
+  api.onNpcInteraction("Lord Daquarius", { "Talk-to": talkToDaquarius });
   api.onCustomEvent("npc-dialogue:hook", handleHook);
   api.onCustomEvent("npc-dialogue:line", handleLine);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);

@@ -201,6 +201,9 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
   const GIANT_ROC_TILE = { x: 2828, y: 3690, z: 0 };
   const RAKE_HEAD_TILE = new Location(2837, 3694, 0);
   const BRIMHAVEN_DOCK = new Location(2768, 3227, 0);
+  // Re-entering either area re-syncs the owner-only NPCs (My Arm, Murcaily, the Rocs).
+  const ROOF_ZONE = { minX: 2822, maxX: 2838, minY: 3665, maxY: 3701, levels: [0] };
+  const VILLAGE_ZONE = { minX: 2755, maxX: 2825, minY: 3045, maxY: 3145, levels: [0] };
 
   /** Which transcript variant each stage hands Murcaily (My Arm and Burntmeat are owned by name hooks). */
   function selectVariant({ npcId, player }) {
@@ -345,6 +348,20 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
 
   let CONDITION_ANSWERS = null;
 
+  /**
+   * True while Murcaily's tuber handout is still in flight. The wiki transcript's
+   * closing condition is flattened when the menu option is picked, before the
+   * mid-branch handout runs, so it must be answered from the pending state.
+   */
+  function pendingTuberHandout(player) {
+    return (
+      quest.getStage(player) >= STAGE_MY_ARM_TAI &&
+      quest.getStage(player) < STAGE_TUBERS &&
+      hasFavour(player) &&
+      !player.getInventory().isFull()
+    );
+  }
+
   function buildConditionAnswers() {
     CONDITION_ANSWERS = {
       // Swan Song branches (Swan Song has no plugin here).
@@ -374,8 +391,8 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
       LCzCSs: (player) => hasFavour(player),
       U9iWZr: (player) => player.getInventory().isFull(),
       "2jcnpj": (player) => !player.getInventory().isFull(),
-      JwEK4I: (player) => held(player, HARDY_GOUT_TUBERS_ITEM_ID),
-      BFSVSd: (player) => !held(player, HARDY_GOUT_TUBERS_ITEM_ID),
+      JwEK4I: (player) => held(player, HARDY_GOUT_TUBERS_ITEM_ID) || pendingTuberHandout(player),
+      BFSVSd: (player) => !held(player, HARDY_GOUT_TUBERS_ITEM_ID) && !pendingTuberHandout(player),
       qkzWXp: (player) => !hasFavour(player),
       Y3aAX6: (player) => !hasFavour(player),
       RdAYao: (player) => hasFavour(player),
@@ -451,6 +468,7 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
       case "Q3LdZt":
         event.handled = true;
         if (!quest.isComplete(player)) quest.complete(player);
+        syncNpcs(player);
         return;
       default:
         return;
@@ -468,6 +486,16 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
       if (pending.isRegistered?.() === false) return;
       TeleportHandler.teleport(pending, BRIMHAVEN_DOCK, TeleportType.NORMAL, false);
     }));
+  }
+
+  /** Fills the page's "[player name]"/"<player name>" blanks (ForsakenTower pattern). */
+  function fillTranscriptBlanks(request) {
+    if (!request?.player || typeof request.text !== "string") return;
+    if (!OWN_NPC_IDS.has(request.npcId)) return;
+    if (/\[player name\]|<player name>/i.test(request.text)) {
+      const name = String(request.player.getUsername());
+      request.text = request.text.replace(/\[player name\]/gi, name).replace(/<player name>/gi, name);
+    }
   }
 
   // ==========================================================================
@@ -703,11 +731,13 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
     if (!killer) return;
     if (event.npcId === BABY_ROC_NPC_ID && quest.getStage(killer) === STAGE_PLANTED) {
       setBabyRocDead(killer, true);
+      removeTracked(killer, "baby-roc");
       syncNpcs(killer);
       return;
     }
     if (event.npcId === GIANT_ROC_NPC_ID && quest.getStage(killer) === STAGE_GIANT_ROC) {
       setGiantRocDead(killer, true);
+      removeTracked(killer, "giant-roc");
       syncNpcs(killer);
     }
   }
@@ -717,7 +747,10 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
   function ensureTracked(player, key, definition) {
     const tracked = trackedNpcs.get(player) ?? new Map();
     trackedNpcs.set(player, tracked);
-    if (tracked.get(key)) return tracked.get(key);
+    const existing = tracked.get(key);
+    // Dead owner-only spawns stay dead; drop the stale reference so the stage can respawn one.
+    if (existing && existing.isRegistered?.() !== false) return existing;
+    tracked.delete(key);
     const npc = api.spawnNpc({ ...definition, owner: player, ownerOnly: true });
     if (npc) tracked.set(key, npc);
     return npc;
@@ -756,6 +789,10 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
     if (stage === STAGE_GIANT_ROC && !giantRocDead(player)) {
       ensureTracked(player, "giant-roc", { id: GIANT_ROC_NPC_ID, ...GIANT_ROC_TILE, wanderRadius: 0 });
     } else removeTracked(player, "giant-roc");
+  }
+
+  function handleZoneEnter({ player }) {
+    syncNpcs(player);
   }
 
   function handleLogin({ player }) {
@@ -1202,6 +1239,7 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:line", handleLine);
+  api.onCustomEvent("npc-dialogue:line", fillTranscriptBlanks);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnNpc(handleItemOnNpc);
@@ -1209,4 +1247,6 @@ module.exports = function registerMyArmsBigAdventureQuest(api) {
   api.onNpcDeath(handleNpcDeath);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
+  api.onZoneEnter(ROOF_ZONE, handleZoneEnter);
+  api.onZoneEnter(VILLAGE_ZONE, handleZoneEnter);
 };

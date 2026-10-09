@@ -119,6 +119,7 @@ module.exports = function registerPryingTimesQuest(api) {
   const STEVE_MAKING_KEY_AGAIN_VARIANT = "making-a-key-talking-to-steve-beanie-again";
   const STEVE_WITH_GROG_VARIANT = "the-grog-talking-to-steve-beanie-with-the-grog";
   const STEVE_AFTER_DRINKING_VARIANT = "the-grog-talking-to-steve-beanie-after-drinking-the-grog";
+  const STEVE_GROG_SUBSEQUENT_VARIANT = "the-grog-subsequent-dialogue-with-steve-beanie";
   const THURGO_MAKE_VARIANT = "making-a-key-talking-to-thurgo";
   const INSPECT_CROWBAR_VARIANT = "making-a-key-inspecting-the-crowbar";
   const FINAL_CRATE_NOT_READY_VARIANT = "making-a-key-attempting-to-open-the-crate-before-talking-with-steve";
@@ -260,7 +261,7 @@ module.exports = function registerPryingTimesQuest(api) {
       if (!drankStout(player)) {
         return held(player, STOUT_ITEM_ID) ? STEVE_WITH_GROG_VARIANT : STEVE_MAKING_KEY_AGAIN_VARIANT;
       }
-      return toldSteve(player) ? STEVE_SUBSEQUENT_VARIANT : STEVE_AFTER_DRINKING_VARIANT;
+      return toldSteve(player) ? STEVE_GROG_SUBSEQUENT_VARIANT : STEVE_AFTER_DRINKING_VARIANT;
     }
     if (stage >= STAGE_HAS_CROWBAR) return STEVE_WITH_SPECIAL_KEY_VARIANT;
     if (stage >= STAGE_TOLD_STEVE) return STEVE_ABOUT_CRATE_VARIANT;

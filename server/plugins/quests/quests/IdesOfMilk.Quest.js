@@ -21,9 +21,13 @@
  * "Transcript:The Ides of Milk".
  *
  * Gaps (documented approximations):
- * - Brutus' fight is an instance in OSRS. Without instance support the quest bull
- *   (BRUTUS_2, 15627) is spawned owner-only at the boss pin (3263,3297), and the
- *   repeatable post-quest boss (BRUTUS, 15626) is released from the same gate.
+ * - Brutus' fight is an instance in OSRS. Without instance support the pen gate's
+ *   two leaves are deregistered on the first release (the Watchtower openGate
+ *   pattern), so the opening is passable, and the bull (BRUTUS_2, 15627) spawns
+ *   owner-only at the boss pin (3263,3297); the quest kill is removed on death so
+ *   it is one-time, while the post-quest boss (BRUTUS, 15626) keeps its default
+ *   respawn and can also be released again from the same gate. The gate stays
+ *   open for the server session once used.
  * - Brutus' telegraphed special attacks and the "cannot kill you" melee floor are
  *   not reproduced; the spawned NPC uses its cache combat stats.
  * - The milk sample's first drink applies 1 damage only when above 1 Hitpoint; the
@@ -40,6 +44,7 @@ module.exports = function registerIdesOfMilkQuest(api) {
     HitDamage,
     HitMask,
     ItemIdentifiers,
+    Location,
     NpcIdentifiers,
     ObjectIdentifiers,
   } = api.core;
@@ -57,10 +62,12 @@ module.exports = function registerIdesOfMilkQuest(api) {
   const BOSS_BRUTUS_NPC_ID = NpcIdentifiers.BRUTUS; // 15626, the post-quest boss
 
   const SHELVES_OBJECT_ID = ObjectIdentifiers.SHELVES_180; // 60785, "Shelves" Search
-  const BULL_GATE_OBJECT_IDS = new Set([
-    ObjectIdentifiers.GATE_319, // 60760, "Gate" Release
-    ObjectIdentifiers.GATE_322, // 60763, "Gate" Release
-  ]);
+  // The pen gate's two leaves ("Gate" Release) at the north-east of the cow field.
+  const BULL_GATE_LEAVES = [
+    { id: ObjectIdentifiers.GATE_319, x: 3263, y: 3294 }, // 60760
+    { id: ObjectIdentifiers.GATE_322, x: 3262, y: 3294 }, // 60763
+  ];
+  const BULL_GATE_OBJECT_IDS = new Set(BULL_GATE_LEAVES.map((leaf) => leaf.id));
 
   const BOOK_ITEM_ID = ItemIdentifiers.THE_GROATS_PRINCIPLES; // 33126
   const FIRST_SAMPLE_ITEM_ID = ItemIdentifiers.MILK_SAMPLE; // 33128
@@ -111,6 +118,7 @@ module.exports = function registerIdesOfMilkQuest(api) {
   const GILLIE_CONFRONT_PREFIX = "Why don't you go and talk to him about it";
 
   let quest;
+  let bullGateOpened = false;
 
   const bullsByPlayer = new WeakMap();
   const warnedBeforeTasting = new WeakSet();
@@ -380,6 +388,7 @@ module.exports = function registerIdesOfMilkQuest(api) {
       return;
     }
     if (stepId === "mKQNRL" || stepId === "kaznTu") {
+      openBullGate();
       spawnBull(player);
       return;
     }
@@ -415,6 +424,7 @@ module.exports = function registerIdesOfMilkQuest(api) {
     const tracked = bullsByPlayer.get(player);
     if (tracked && tracked.isRegistered?.() !== false) return;
     const id = quest.isComplete(player) ? BOSS_BRUTUS_NPC_ID : QUEST_BRUTUS_NPC_ID;
+    if (hasOwnBull(player, id)) return;
     const npc = api.spawnNpc({
       id,
       x: BULL_TILE.x,
@@ -430,12 +440,45 @@ module.exports = function registerIdesOfMilkQuest(api) {
     }
   }
 
+  /** True when the player already has that bull in the world (a boss respawn). */
+  function hasOwnBull(player, id) {
+    const npcs = api.getWorld()?.getNpcs?.();
+    if (!npcs) return false;
+    for (const npc of npcs) {
+      if (npc?.getId?.() === id && npc.getOwner?.() === player) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Opens the two-leaf pen gate for the released bull: deregistering the leaves
+   * clears their clipping so the pen is walkable (Watchtower's openGate pattern).
+   */
+  function openBullGate() {
+    if (bullGateOpened) return;
+    let opened = false;
+    for (const leaf of BULL_GATE_LEAVES) {
+      const object = api.core.MapObjects.get(leaf.id, new Location(leaf.x, leaf.y, 0), null);
+      if (!object) continue;
+      api.core.ObjectManager.deregister(object, true);
+      opened = true;
+    }
+    if (opened) bullGateOpened = true;
+  }
+
   function handleNpcDeath({ killer, npc, npcId }) {
     if (!killer || !npc) return;
     const tracked = bullsByPlayer.get(killer);
     if (!tracked || tracked !== npc) return;
     bullsByPlayer.delete(killer);
-    if (npcId === QUEST_BRUTUS_NPC_ID && quest.getStage(killer) === STAGE_BULL_RELEASED) {
+    if (npcId !== QUEST_BRUTUS_NPC_ID) {
+      // The post-quest boss keeps its default respawn (the clone keeps its owner),
+      // so it stays repeatable at the pen.
+      return;
+    }
+    // The quest Brutus is a one-time kill: suppress the default respawn.
+    api.removeNpc(npc);
+    if (quest.getStage(killer) === STAGE_BULL_RELEASED) {
       quest.setStage(killer, STAGE_BRUTUS_DEAD);
       startTranscript(api, killer, BULL_NPC_ID, PAGE, "facing-the-bull-after-killing-brutus");
     }

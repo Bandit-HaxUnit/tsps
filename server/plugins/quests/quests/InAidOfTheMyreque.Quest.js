@@ -453,11 +453,72 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
     return player.getEquipment().get(Equipment.WEAPON_SLOT)?.getId?.() === ROD_OF_IVANDIS_ITEM_ID;
   }
 
+  /** Every NPC whose lines our page may speak; the text filler is scoped to these. */
+  const OWN_TEXT_NPC_IDS = new Set([
+    ...VELIAF_NPC_IDS,
+    ...IVAN_NPC_IDS,
+    ...GADDERANKS_NPC_IDS,
+    ...WISKIT_NPC_IDS,
+    ...JUVI_PEACEFUL_NPC_IDS,
+    ...JUVI_FIGHT_NPC_IDS,
+    NpcIdentifiers.AUREL,
+    NpcIdentifiers.FLORIN,
+    NpcIdentifiers.RAZVAN,
+    NpcIdentifiers.CORNELIUS,
+    NpcIdentifiers.POLMAFI_FERDYGRIS,
+    NpcIdentifiers.RADIGAD_PONFIT,
+    NpcIdentifiers.DREZEL,
+  ]);
+
+  /** Player-owned house location ids (native POH_HOUSE_LOCATION enum 252 order). */
+  const POH_HOUSE_ATTRIBUTE = "construction:house";
+  const POH_LOCATION_NAMES = new Map([
+    [1, "Rimmington"],
+    [2, "Taverley"],
+    [3, "Pollnivneach"],
+    [8, "Hosidius"],
+    [4, "Rellekka"],
+    [13, "Aldarin"],
+    [5, "Brimhaven"],
+    [6, "Yanille"],
+    [9, "Prifddinas"],
+  ]);
+
+  function playerHouseLocation(player) {
+    const save = player.getAttribute?.(POH_HOUSE_ATTRIBUTE);
+    const id = save && typeof save === "object" ? Number(save.location) : NaN;
+    return POH_LOCATION_NAMES.get(id) ?? "Rimmington";
+  }
+
+  /** Fills the wiki transcript's prose placeholders with live values. */
+  function fillTranscriptText(request) {
+    if (!request?.player || typeof request.text !== "string") return;
+    if (!OWN_TEXT_NPC_IDS.has(request.npcId)) return;
+    let text = request.text;
+    if (text.includes("[He/She]")) {
+      const male = request.player.getAppearance?.()?.isMale?.() !== false;
+      text = text.replace(/\[He\/She\]/g, male ? "He" : "She");
+    }
+    if (text.includes("[player name]")) {
+      text = text.replace(/\[player name\]/gi, String(request.player.getUsername()));
+    }
+    if (text.includes("[citizen name]")) {
+      const name = request.definition?.getName?.() || "Citizen";
+      text = text.replace(/\[citizen name\]/gi, name);
+    }
+    if (text.includes("[location of player-owned house]")) {
+      text = text.replace(/\[location of player-owned house\]/gi, playerHouseLocation(request.player));
+    }
+    request.text = text;
+  }
+
   // ---------------------------------------------------------------------------
   // Spawns
   // ---------------------------------------------------------------------------
 
   function spawnKey(player, key, npcId, tile) {
+    // Load-test bots run every login hook; never give them owner-only quest NPCs.
+    if (!player || player.isPlayerBot?.() === true) return;
     let map = spawnedByPlayer.get(player);
     if (!map) {
       map = new Map();
@@ -501,6 +562,7 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
 
   /** Ensures exactly the static quest NPCs the current stage needs are present. */
   function applyStageSpawns(player) {
+    if (!player || player.isPlayerBot?.() === true) return;
     const stage = quest.getStage(player);
     // Veliaf is met in the Hollows hideout at the start and again before the escort.
     if (stage < STAGE_STARTED || (stage >= STAGE_VELIAF_STORE && stage < STAGE_DREZEL)) {
@@ -579,8 +641,8 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
     } else {
       despawnKey(player, "drezel");
     }
-    // Veliaf at the new Burgh de Rott hideout for the rod hand-in.
-    if (stage >= STAGE_HIDEOUT_TALK && stage < STAGE_COMPLETE) {
+    // Veliaf at the new Burgh de Rott hideout for the rod hand-in and afterwards.
+    if (stage >= STAGE_HIDEOUT_TALK) {
       spawnKey(player, "veliaf_base", NpcIdentifiers.VELIAF_HURTZ_2, VELIAF_BASEMENT_TILE);
     } else {
       despawnKey(player, "veliaf_base");
@@ -795,6 +857,9 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
   function grantReward(player) {
     const skills = player.getSkillManager();
     for (const reward of REWARD_SKILLS) skills.addExperiences(reward.skill, REWARD_XP);
+    // Completion does not run our advance(), so sync spawns here: the hideout
+    // and store copies go, the Burgh cellar Veliaf stays for the post-quest talk.
+    applyStageSpawns(player);
   }
 
   // ---------------------------------------------------------------------------
@@ -1128,6 +1193,10 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
         despawnKey(player, "gad_wounded");
         return;
       case "p2YbVD": // Gadderanks and the juvinates attack
+        // The fight is a separate encounter: close the chatbox now so the
+        // wounded/dying branch can only play after combat.
+        event.handled = true;
+        event.end = true;
         despawnKey(player, "gad_peace");
         despawnKey(player, "juv_peace1");
         despawnKey(player, "juv_peace2");
@@ -1213,6 +1282,12 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
     const { player, npcId } = event;
     if (!VELIAF_NPC_IDS.has(npcId)) return false;
     const stage = quest.getStage(player);
+    if (quest.isComplete(player)) {
+      // The page has no post-quest variant; greet with the final conversation's
+      // opening line only (never the stale rod-handover or rod-update branch).
+      play(player, npcId, "rod-of-ivandis-talking-to-veliaf-with-the-finalized-rod", (steps) => steps.slice(0, 1));
+      return true;
+    }
     if (stage === 0) {
       // While In Search of the Myreque runs, its own Veliaf conversation must win.
       if (inSearchActive(player)) return false;
@@ -1484,12 +1559,27 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
     applyStageSpawns(player);
   }
 
+  function despawnTrackedNpc(player, npc) {
+    if (!player || !npc) return;
+    const map = spawnedByPlayer.get(player);
+    if (map) {
+      for (const [key, tracked] of map) {
+        if (tracked === npc) {
+          map.delete(key);
+          break;
+        }
+      }
+    }
+    api.removeNpc(npc);
+  }
+
   function handleNpcDeath(event) {
     const killer = event.killer;
     if (!killer || !killer.isPlayer?.()) return;
     const player = killer;
     const stage = quest.getStage(player);
     if (JUVI_FIGHT_NPC_IDS.has(event.npcId) && stage === STAGE_ESCORT) {
+      despawnTrackedNpc(player, event.npc);
       const deaths = attributeNumber(player, ENCOUNTER_ATTRIBUTE) + 1;
       player.setAttribute(ENCOUNTER_ATTRIBUTE, deaths);
       if (deaths >= 2) finishEscort(player);
@@ -1497,9 +1587,11 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
     }
     if (stage !== STAGE_FIGHT) return;
     if (JUVI_FIGHT_NPC_IDS.has(event.npcId)) {
+      // Remove the one that just died by identity so the survivor is never the
+      // one dropped (both are cleaned again by endGadderanksFight below).
+      despawnTrackedNpc(player, event.npc);
       const deaths = attributeNumber(player, FIGHT_ATTRIBUTE) + 1;
       player.setAttribute(FIGHT_ATTRIBUTE, deaths);
-      despawnKey(player, deaths === 1 ? "juv_fight1" : "juv_fight2");
       if (deaths === 1) {
         player.sendMessage("Veliaf Hurtz: Fear not my friend! I will come to your aid!");
       }
@@ -1507,7 +1599,7 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
       return;
     }
     if (event.npcId === GADDERANKS_FIGHT_ID) {
-      despawnKey(player, "gad_fight");
+      despawnTrackedNpc(player, event.npc);
       endGadderanksFight(player);
     }
   }
@@ -1983,7 +2075,7 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
       if (!held(player, CRATE_FULL_ITEM_ID)) player.getInventory().adds(CRATE_FULL_ITEM_ID, 1);
       player.sendMessage("The crate is now packed with stock. You should return it to the store.");
     } else {
-      player.sendMessage(`More still needs adding to the crate. You need to collect ${CRATE_AXES_NEEDED - attributeNumber(player, CRATE_AXES_ATTRIBUTE)} bronze axes, ${CRATE_FISH_NEEDED - attributeNumber(player, CRATE_FISH_ATTRIBUTE)} ${attributeNumber(player, CRATE_FISH_TYPE_ATTRIBUTE) === 1 ? "mackerel" : "snail meat"}, and ${CRATE_TINDER_NEEDED - attributeNumber(player, CRATE_TINDER_ATTRIBUTE)} tinderboxes.`);
+      player.sendMessage(`More still needs adding to the crate. You need to collect ${CRATE_AXES_NEEDED - attributeNumber(player, CRATE_AXES_ATTRIBUTE)} bronze axes, ${CRATE_FISH_NEEDED - attributeNumber(player, CRATE_FISH_ATTRIBUTE)} ${attributeNumber(player, CRATE_FISH_TYPE_ATTRIBUTE) === 1 ? "snail meat" : "raw mackerel"}, and ${CRATE_TINDER_NEEDED - attributeNumber(player, CRATE_TINDER_ATTRIBUTE)} tinderboxes.`);
     }
   }
 
@@ -2057,20 +2149,22 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
 
   function claimLadder(request) {
     if (request.handled || request.clickType !== 1) return;
-    const { player, objectId, location } = request;
+    // The ladders:climb payload carries the clicked object, not a location field.
+    const { player, object, objectId } = request;
+    const location = object?.getLocation?.();
     if (!player || !location) return;
     const stage = quest.getStage(player);
-    if (objectId === SHOP_LADDER_UP_ID) {
+    if (objectId === SHOP_LADDER_UP_ID && location.getZ() === 0) {
       request.handled = true;
       player.moveTo(new Location(3513, 3238, 2));
       return;
     }
-    if (objectId === SHOP_LADDER_DOWN_ID && location.z === 2) {
+    if (objectId === SHOP_LADDER_DOWN_ID && location.getZ() === 2) {
       request.handled = true;
       player.moveTo(new Location(3513, 3238, 0));
       return;
     }
-    if (objectId === HIDEOUT_LADDER_ID && location.z === 0 && stage >= STAGE_TRAPDOOR_OPEN) {
+    if (objectId === HIDEOUT_LADDER_ID && location.getZ() === 0 && stage >= STAGE_TRAPDOOR_OPEN) {
       request.handled = true;
       player.moveTo(new Location(3489, 3232, 0));
       return;
@@ -2142,6 +2236,7 @@ module.exports = function registerInAidOfTheMyrequeQuest(api) {
   api.onCustomEvent("npc-dialogue:condition", handleChosenCondition);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
+  api.onCustomEvent("npc-dialogue:line", fillTranscriptText);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("door:toggle", claimGate);
   api.onCustomEvent("ladders:climb", claimLadder);

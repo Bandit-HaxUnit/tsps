@@ -153,6 +153,12 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
   // Nameless multi id that transforms to the ceremony High Priest (11602/11603) on
   // varbit 418; spawned for the ceremony (no generated identifier exists).
   const CEREMONY_HIGH_PRIEST_MULTI_NPC_ID = 11649;
+  /** Every owner-only hostile/quest NPC this plugin spawns (dedupe + cleanup). */
+  const OWNED_QUEST_NPC_IDS = new Set([
+    ...APPARITION_NPC_IDS,
+    ...POSSESSED_PRIEST_NPC_IDS,
+    CEREMONY_HIGH_PRIEST_MULTI_NPC_ID,
+  ]);
 
   const CAT_NPC_IDS = new Set([
     NpcIdentifiers.CAT, // 1619
@@ -386,7 +392,8 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
           !(stage >= STAGE_JAR_HELD &&
             stage < STAGE_RETURN_JAR &&
             jar.key === chosen.key));
-      sender.sendVarbit(jar.varbit, visible ? 1 : 0);
+      // The jar multi transforms are [jar, -1]: 0 shows the jar, 1 hides it.
+      sender.sendVarbit(jar.varbit, visible ? 0 : 1);
     }
   }
 
@@ -416,7 +423,15 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
       tracked = {};
       trackedNpcs.set(player, tracked);
     }
-    if (tracked[key]?.isRegistered?.()) return tracked[key];
+    const existing = tracked[key];
+    if (existing?.isRegistered?.()) {
+      removeOwnedNpcs(player, new Set([spawn.id]), existing);
+      return existing;
+    }
+    delete tracked[key];
+    // Owner-only spawns no longer respawn; clear any duplicate of this spawn id
+    // (a stale copy from an earlier stage/relog) before making the new one.
+    removeOwnedNpcs(player, new Set([spawn.id]));
     const npc = api.spawnNpc({
       id: spawn.id,
       x: spawn.x,
@@ -432,15 +447,160 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
 
   function clearAllTracked(player) {
     const tracked = trackedNpcs.get(player);
-    if (!tracked) return;
-    for (const key of Object.keys(tracked)) {
-      if (tracked[key]) api.removeNpc(tracked[key]);
-      delete tracked[key];
+    if (tracked) {
+      for (const key of Object.keys(tracked)) {
+        if (tracked[key]) api.removeNpc(tracked[key]);
+        delete tracked[key];
+      }
     }
+    removeOwnedNpcs(player, OWNED_QUEST_NPC_IDS);
   }
 
   function playCutscene(player, npcId, variant, select) {
     startTranscript(api, player, npcId, PAGE, variant, select);
+  }
+
+  /** Removes this player's owner-only quest NPCs of the given spawn ids (never `keep`). */
+  function removeOwnedNpcs(player, npcIds, keep) {
+    const world = api.getWorld();
+    if (!world?.getNpcs) return;
+    for (const npc of world.getNpcs()) {
+      if (!npc || npc === keep) continue;
+      if (npc.getOwner?.() === player && npcIds.has(npc.getId())) api.removeNpc(npc);
+    }
+  }
+
+  function normText(value) {
+    return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  }
+
+  function cloneStep(step) {
+    return JSON.parse(JSON.stringify(step));
+  }
+
+  /**
+   * The wiki dump splits the riddle into a single-option "7." menu followed by the
+   * "9./12./14./I don't know." menu, so the correct answer only appears after the cat
+   * has already been lost. Rebuild the "Okay, that sounds fair." option with one menu
+   * offering every answer, reusing the transcript's own outcome steps.
+   */
+  function mergeSphinxRiddleOption(fair) {
+    const inner = Array.isArray(fair.steps) ? fair.steps : [];
+    const riddleIndex = inner.findIndex(
+      (step) => step.type === "line" && /husband and wife/i.test(step.text ?? "")
+    );
+    const wrongFlow = inner.find((step) => step.type === "line" && /are you sure/i.test(step.text ?? ""));
+    const menus = inner.filter((step) => step.type === "choice");
+    const answers = menus.length ? menus[menus.length - 1] : undefined;
+    if (riddleIndex === -1 || !wrongFlow || !answers) return fair;
+    const correct = (answers.options ?? []).find((option) => normText(option.text) === "9");
+    const dontKnow = (answers.options ?? []).find((option) => normText(option.text) === "idontknow");
+    const options = [{ text: "7.", steps: [{ player: "7." }, cloneStep(wrongFlow)] }];
+    if (correct) options.push(cloneStep(correct));
+    options.push({ text: "12.", steps: [{ player: "12." }, cloneStep(wrongFlow)] });
+    options.push({ text: "14.", steps: [{ player: "14." }, cloneStep(wrongFlow)] });
+    if (dontKnow) options.push(cloneStep(dontKnow));
+    return { ...fair, steps: [...inner.slice(0, riddleIndex + 1), { type: "choice", options }] };
+  }
+
+  function mergeSphinxRiddle(steps) {
+    if (!Array.isArray(steps)) return steps;
+    return steps.map((step) => {
+      if (step.type === "choice") {
+        return {
+          ...step,
+          options: (step.options ?? []).map((option) =>
+            normText(option.text) === "okaythatsoundsfair"
+              ? mergeSphinxRiddleOption(option)
+              : { ...option, steps: mergeSphinxRiddle(option.steps ?? []) }
+          ),
+        };
+      }
+      if (Array.isArray(step.steps)) return { ...step, steps: mergeSphinxRiddle(step.steps) };
+      return step;
+    });
+  }
+
+  /** Owns the riddle conversation; later stages fall through to the variant selector. */
+  function sphinxTalkTo(event) {
+    const { player } = event;
+    if (!SPHINX_NPC_IDS.has(event.npcId)) return false;
+    if (quest.getStage(player) !== STAGE_TALK_SPHINX) return false;
+    if (hasBit(player, BIT_RIDDLE_ANSWERED) || hasBit(player, BIT_CAT_LOST)) return false;
+    event.handled = true;
+    startTranscript(
+      api,
+      player,
+      event.npcId,
+      PAGE,
+      "figuring-out-what-on-gielinor-is-going-on-asking-the-sphinx-for-help",
+      mergeSphinxRiddle
+    );
+    return true;
+  }
+
+  /**
+   * The dump nests the has-token hand-in inside the lost-token condition, so the
+   * transcript itself can never offer it. Play the "Prove it!" lead-in plus the
+   * extracted has-token branch; the 6qP-S3 action advances to stage 7.
+   */
+  function selectHighPriestToken(steps) {
+    const lead = [];
+    let tokenBranch;
+    for (const step of steps) {
+      if (step.type === "condition") {
+        if (step.id === "eXmHe5") {
+          tokenBranch = step.steps ?? [];
+          break;
+        }
+        if (step.id === "i6RE2X") {
+          const nested = (step.steps ?? []).find(
+            (inner) => inner.type === "condition" && inner.id === "eXmHe5"
+          );
+          if (nested) {
+            tokenBranch = nested.steps ?? [];
+            break;
+          }
+        }
+        continue;
+      }
+      lead.push(step);
+    }
+    return tokenBranch ? [...lead, ...tokenBranch] : steps;
+  }
+
+  function highPriestTalkTo(event) {
+    const { player } = event;
+    if (!TOWN_HIGH_PRIEST_NPC_IDS.has(event.npcId)) return false;
+    if (quest.getStage(player) !== STAGE_TALK_HIGH_PRIEST) return false;
+    if (!held(player, SPHINX_TOKEN_ITEM_ID)) return false;
+    event.handled = true;
+    startTranscript(
+      api,
+      player,
+      event.npcId,
+      PAGE,
+      "figuring-out-what-on-gielinor-is-going-on-talking-to-the-high-priest-after-receiving-the-sphinx-s-token",
+      selectHighPriestToken
+    );
+    return true;
+  }
+
+  /**
+   * The Doors plugin pairs 44059/44060 with consecutive same-model locs and claims
+   * them before the global object hook. Claim them here instead, only when this quest
+   * owns the stage, so the generic door still opens otherwise.
+   */
+  function handleDoorToggle(request) {
+    if (request.handled) return;
+    const stage = quest.getStage(request.player);
+    if (request.objectId === WEST_DOOR_ID) {
+      handleWestDoor(request, request.player, stage);
+      return;
+    }
+    if (request.objectId === EAST_DOOR_ID) {
+      handleEastDoor(request, request.player, stage);
+    }
   }
 
   // ==========================================================================
@@ -728,7 +888,7 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
       clearBit(player, BIT_WRONG_PENDING);
       return;
     }
-    if (value === "7.") {
+    if (value === "7." || value === "12." || value === "14.") {
       setBit(player, BIT_WRONG_PENDING);
       return;
     }
@@ -1116,6 +1276,15 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
 
   function handleLadder(event, player, stage) {
     event.handled = true;
+    if (stage >= STAGE_SAVED) {
+      removeOwnedNpcs(player, POSSESSED_PRIEST_NPC_IDS);
+      removeOwnedNpcs(player, new Set([CEREMONY_HIGH_PRIEST_MULTI_NPC_ID]));
+      const tracked = trackedNpcs.get(player);
+      if (tracked) {
+        delete tracked.priest;
+        delete tracked.ceremonyPriest;
+      }
+    }
     if (stage === STAGE_FLASHBACK_1) {
       playCutscene(player, NpcIdentifiers.WANDERER_2, "figuring-out-what-on-gielinor-is-going-on-flashback-1-touching-the-door-of-klenter-s-pyramid-attempting-to-climb-up-the-ladder-during-the-flashback");
       return;
@@ -1215,6 +1384,7 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
     const tracked = trackedNpcs.get(killer);
     if (tracked?.apparition && tracked.apparition === event.npc && APPARITION_NPC_IDS.has(event.npcId)) {
       delete tracked.apparition;
+      removeOwnedNpcs(killer, APPARITION_NPC_IDS, event.npc);
       playCutscene(
         killer,
         NpcIdentifiers.WANDERER_2,
@@ -1225,6 +1395,7 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
     }
     if (tracked?.priest && tracked.priest === event.npc && POSSESSED_PRIEST_NPC_IDS.has(event.npcId)) {
       delete tracked.priest;
+      removeOwnedNpcs(killer, POSSESSED_PRIEST_NPC_IDS, event.npc);
       playCutscene(killer, NpcIdentifiers.POSSESSED_PRIEST, "the-devourer-revealed-defeating-the-posessed-priest");
     }
   }
@@ -1462,6 +1633,9 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
+  api.onNpcInteraction("Sphinx", { "Talk-to": sphinxTalkTo });
+  api.onNpcInteraction("High Priest", { "Talk-to": highPriestTalkTo });
+  api.onCustomEvent("door:toggle", handleDoorToggle);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:condition", handleCondition);

@@ -485,7 +485,7 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
 
   function selectFortisCrewVariant(player) {
     const stage = quest.getStage(player);
-    if (stage < STAGE_CREW) return null;
+    if (stage < STAGE_CREW || quest.isComplete(player)) return null;
     if (stage >= STAGE_RETURN_SAILS) return V_FORTIS_RETURNED;
     if (stage >= STAGE_REPAIR) {
       return held(player, SAILS_ITEM_ID) ? V_FORTIS_WITH_SAILS : V_FORTIS_AGREED;
@@ -495,7 +495,7 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
 
   function selectSarimCrewVariant(player) {
     const stage = quest.getStage(player);
-    if (stage < STAGE_PORT_SARIM) return null;
+    if (stage < STAGE_PORT_SARIM || quest.isComplete(player)) return null;
     return stage >= STAGE_BETTY ? V_SARIM_AGAIN : V_SARIM_FIRST;
   }
 
@@ -795,9 +795,13 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
   function searchDiademCrate(event) {
     if (event.definition?.id !== DIADEM_CRATE_OBJECT_ID) return false;
     const { player } = event;
-    if (hasFlag(player, BIT_DIADEM) || quest.getStage(player) < STAGE_STOREROOM) return false;
+    if (quest.getStage(player) < STAGE_STOREROOM) return false;
+    // Claim every later search too: the first one set the diadem flag, so repeat
+    // clicks must not replay the transcript or set any state twice.
     event.handled = true;
-    startTranscript(api, player, HAIG_NPC_ID, PAGE, V_HAIG_CRATE);
+    if (!hasFlag(player, BIT_DIADEM)) {
+      startTranscript(api, player, HAIG_NPC_ID, PAGE, V_HAIG_CRATE);
+    }
     return true;
   }
 
@@ -825,6 +829,9 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
   }
 
   function openStoreroomDoor(player, object) {
+    // A second toggle in the same tick (or a replayed door event) must not leak a
+    // second open object or overwrite the tracked one.
+    if (storeroomDoorOpen) return;
     const location = object.getLocation();
     const type = object.getType();
     const rotation = object.getFace() & 0x3;
@@ -886,6 +893,44 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
       startTranscript(api, player, HAIG_NPC_ID, PAGE, V_HAIG_PICKPOCKET);
     }
     quest.setStage(player, STAGE_SEARCH_CRATE);
+    return true;
+  }
+
+  /**
+   * Dig Site's variant hook owns Haig whenever its own quest has not started, so
+   * the EAA variants would never be selected. Claim his Talk-to while the quest
+   * needs him (stages 22-35) and play the page variant directly; every other Haig
+   * talk (and Dig Site/The Golem players) falls through unchanged.
+   */
+  function talkToCuratorHaig(event) {
+    if (event.npcId !== HAIG_NPC_ID) return false;
+    const { player } = event;
+    const stage = quest.getStage(player);
+    if (stage < STAGE_HAIG || stage >= STAGE_RETURN) return false;
+    const variant = selectHaigVariant(player);
+    if (!variant) return false;
+    event.handled = true;
+    startTranscript(api, player, HAIG_NPC_ID, PAGE, variant);
+    return true;
+  }
+
+  /**
+   * CharterShips claims Trader Crewmember Talk-to, so play the quest variant first
+   * while EAA needs the crew (the Cothon crew through stage 15, the Port Sarim crew
+   * at 16-17). Every other crewmember and completed quests fall through to the
+   * charter menu. `npc-dialogue:start` keeps the page's jump context, which the
+   * "after having returned the sails" variant needs to reach the Port Sarim line.
+   */
+  function talkToTraderCrewmember(event) {
+    const { player, npcId } = event;
+    const variant = FORTIS_CREW_IDS.has(npcId)
+      ? selectFortisCrewVariant(player)
+      : SARIM_CREW_IDS.has(npcId)
+        ? selectSarimCrewVariant(player)
+        : null;
+    if (!variant) return false;
+    event.handled = true;
+    api.emitCustomEvent("npc-dialogue:start", { player, npcId, variant });
     return true;
   }
 
@@ -1119,7 +1164,11 @@ module.exports = function registerEthicallyAcquiredAntiquitiesQuest(api) {
   api.onObjectInteraction("Crate", { Search: searchDiademCrate });
   api.onObjectInteraction("Crates", { Search: searchFlavourCrates });
   api.onCustomEvent("door:toggle", handleStoreroomDoor);
-  api.onNpcInteraction("Curator Haig Halen", { Pickpocket: pickCuratorPocket });
+  api.onNpcInteraction("Curator Haig Halen", {
+    "Talk-to": talkToCuratorHaig,
+    Pickpocket: pickCuratorPocket,
+  });
+  api.onNpcInteraction("Trader Crewmember", { "Talk-to": talkToTraderCrewmember });
   // ItemIdentifiers.BETTYS_NOTES (29905): inventory option "Read".
   api.onItemAction("Betty's notes", { Read: readBettyNotes });
   api.onItemOnNpc(handleSailsOnCrewmember, { noted: false });

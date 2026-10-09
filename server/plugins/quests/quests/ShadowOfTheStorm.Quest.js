@@ -25,11 +25,13 @@
  * Gaps: the demon throne room is the Uzer underground room (the plane-2 room is
  * sealed), like The Golem; the broken-kiln objects carry no cache option, so the
  * plugin adds "Search" to their runtime definition (MCP sees it, a stock client
- * cache does not); the rug merchant's sandstorm dialogue and reading the tome are
- * not wired; "black" clothing is recognised by item name rather than an exhaustive
- * list; OSRS randomises Denath's incantation, the wiki words are played instead;
- * cancelling the reward skill menu is recovered by talking to a surviving wizard;
- * a relog during the fight respawns Agrith-Naar.
+ * cache does not) and re-applies it after startup on login/bootstrap; the ritual
+ * page's single 5-word menu is expanded into the wiki's five picks; the rug
+ * merchant's sandstorm dialogue and reading the tome are not wired; "black"
+ * clothing is recognised by item name rather than an exhaustive list; OSRS
+ * randomises Denath's incantation, the wiki words are played instead; cancelling
+ * the reward skill menu is recovered by talking to a surviving wizard; a relog
+ * during the fight respawns Agrith-Naar.
  */
 module.exports = function registerShadowOfTheStormQuest(api) {
   const {
@@ -378,12 +380,20 @@ module.exports = function registerShadowOfTheStormQuest(api) {
     const packet = player.getPacketSender();
     const stage = quest.getStage(player);
     const bits = helperBits(player);
-    packet.sendVarbit(VARBIT_BADDEN_UZER, stage >= STAGE_STARTED ? ((bits & BIT_BADDEN) ? 2 : 1) : 0);
-    packet.sendVarbit(VARBIT_REEN_UZER, stage >= STAGE_STARTED ? ((bits & BIT_REEN) ? 2 : 1) : 0);
+    // 1381/1382 also choose the Uzer Badden/Reen transform; 2 hides them, so put
+    // them back to 1 once the quest is done and their after-killing lines matter.
+    const post = stage >= STAGE_COMPLETE;
     packet.sendVarbit(
-      VARBIT_CONVINCED_DAVE,
-      stage >= STAGE_RITUAL_DONE ? 2 : stage >= STAGE_IN_GROUP ? 1 : 0
+      VARBIT_BADDEN_UZER,
+      stage >= STAGE_STARTED ? (post || !(bits & BIT_BADDEN) ? 1 : 2) : 0
     );
+    packet.sendVarbit(
+      VARBIT_REEN_UZER,
+      stage >= STAGE_STARTED ? (post || !(bits & BIT_REEN) ? 1 : 2) : 0
+    );
+    // 1372 no longer maps the portal Dave past stage 110, so keep the passage
+    // spawn (varbit 1380) visible through the stage-90 recruitment and after.
+    packet.sendVarbit(VARBIT_CONVINCED_DAVE, stage >= STAGE_IN_GROUP ? 1 : 0);
     packet.sendVarbit(
       VARBIT_CONVINCED_GOLEM,
       bits & BIT_GOLEM ? 3 : bits & BIT_GOLEM_REPROGRAMMED ? 2 : 0
@@ -802,13 +812,35 @@ module.exports = function registerShadowOfTheStormQuest(api) {
   }
 
   /**
-   * The incantation variants hold the 5 word menus and the two outcome
-   * conditions. Conditions resolve when the dialogue is built, i.e. before any
-   * word is picked, so play the menus alone and evaluate the picks afterwards.
+   * The incantation variants hold one 5-word menu followed by five "[Word N]"
+   * echo pairs and the two outcome conditions. Conditions resolve when the
+   * dialogue is built, i.e. before any word is picked, so expand the single menu
+   * into the wiki's five selections, drop the outcomes, and evaluate afterwards.
    */
+  function ritualMenuSteps(steps, outcomeIds) {
+    const queue = withoutConditions(steps, outcomeIds);
+    const choiceIndex = queue.findIndex((step) => step.type === "choice");
+    if (choiceIndex === -1) return queue;
+    const choice = queue[choiceIndex];
+    const echoes = [];
+    const after = [];
+    for (const step of queue.slice(choiceIndex + 1)) {
+      const text = typeof step.player === "string" ? step.player : step.type === "line" ? step.text : "";
+      if (/\[Word \d/.test(String(text ?? "")) && echoes.length < 10) echoes.push(step);
+      else after.push(step);
+    }
+    if (echoes.length < 10) return queue;
+    const expanded = [];
+    for (let pick = 0; pick < 5; pick++) {
+      expanded.push({ ...choice, options: choice.options.map((option) => ({ ...option })) });
+      expanded.push(echoes[pick * 2], echoes[pick * 2 + 1]);
+    }
+    return [...queue.slice(0, choiceIndex), ...expanded, ...after];
+  }
+
   function playRitualMenus(player, npcId, variant, onDone) {
     const outcomeIds = new Set([COND_RITUAL_WRONG, COND_RITUAL_CORRECT, COND_SUMMON_BACKWARDS, COND_SUMMON_CORRECT]);
-    if (!startTranscript(api, player, npcId, PAGE, variant, (steps) => withoutConditions(steps, outcomeIds))) {
+    if (!startTranscript(api, player, npcId, PAGE, variant, (steps) => ritualMenuSteps(steps, outcomeIds))) {
       return;
     }
     afterDialogue(player, onDone);
@@ -915,6 +947,9 @@ module.exports = function registerShadowOfTheStormQuest(api) {
       quest.xpRewards = [{ skillId: skill.getIndex(), amount: COMBAT_XP, label: skill.getName() }];
     }
     quest.complete(player);
+    // complete() sets the stage itself, so repair the sibling varbits here:
+    // the post-quest Reen/Badden transforms need to come back.
+    syncShadowVarbits(player);
     removeAllWizards(player);
     removeDemon(player);
   }
@@ -1108,14 +1143,16 @@ module.exports = function registerShadowOfTheStormQuest(api) {
   // Interactions
   // ============================================================================
 
-  function dyeSilverlight(player) {
+  function dyeSilverlight(player, reagentId) {
     const stage = quest.getStage(player);
     if (stage < STAGE_STARTED || stage >= STAGE_RITUAL_DONE) {
       player.sendMessage("You have no reason to do that.");
       return;
     }
     if (!hasItem(player, SILVERLIGHT_ITEM_ID)) return;
+    if (reagentId !== undefined && !hasItem(player, reagentId)) return;
     player.getInventory().deleteNumber(SILVERLIGHT_ITEM_ID, 1);
+    if (reagentId !== undefined) player.getInventory().deleteNumber(reagentId, 1);
     player.getInventory().adds(DYED_SILVERLIGHT_ITEM_ID, 1);
     startTranscript(api, player, NpcIdentifiers.FATHER_REEN, PAGE, "to-uzer-dyeing-silverlight-black");
   }
@@ -1131,9 +1168,14 @@ module.exports = function registerShadowOfTheStormQuest(api) {
     const { player, usedItemId, usedWithItemId } = event;
     const ids = [usedItemId, usedWithItemId];
     if (!ids.includes(SILVERLIGHT_ITEM_ID)) return;
-    if (!ids.includes(BLACK_MUSHROOM_ITEM_ID) && !ids.includes(BLACK_DYE_ITEM_ID)) return;
+    const reagentId = ids.includes(BLACK_MUSHROOM_ITEM_ID)
+      ? BLACK_MUSHROOM_ITEM_ID
+      : ids.includes(BLACK_DYE_ITEM_ID)
+        ? BLACK_DYE_ITEM_ID
+        : undefined;
+    if (reagentId === undefined) return;
     event.handled = true;
-    dyeSilverlight(player);
+    dyeSilverlight(player, reagentId);
   }
 
   function smeltDemonicSigil(event) {
@@ -1172,6 +1214,7 @@ module.exports = function registerShadowOfTheStormQuest(api) {
   function handleObjectInteraction(event) {
     const { player, objectId, location } = event;
     if (!KILN_OBJECT_IDS.has(objectId)) return;
+    ensureKilnSearchActions();
     event.handled = true;
     const stage = quest.getStage(player);
     if (stage < STAGE_GOLEM_TOLD || stage >= STAGE_RITUAL) {
@@ -1270,6 +1313,7 @@ module.exports = function registerShadowOfTheStormQuest(api) {
 
   function handleLogin({ player }) {
     if (!player) return;
+    ensureKilnSearchActions();
     refreshQuestList(player);
     syncShadowVarbits(player);
     ensureWizardNpcs(player);
@@ -1278,6 +1322,7 @@ module.exports = function registerShadowOfTheStormQuest(api) {
 
   function handleBootstrapComplete({ player }) {
     if (!player) return;
+    ensureKilnSearchActions();
     syncShadowVarbits(player);
   }
 

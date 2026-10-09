@@ -27,11 +27,15 @@
  *   skeleton key opens the gate;
  * - the wall and gate are not object-swapped: after solving, searching the wall and
  *   opening the gate moves the player through, Clock Tower style;
- * - the slippery bridge fall chance is not rolled; the barrel repairs are still
- *   required and write the walkway varbits, but the cache map is already crossable;
+ * - the slippery bridge fall chance is not rolled; the two walkway repair hotspots
+ *   (23213/23214) are not reliably present for players, so they are ensured at the
+ *   wiki tiles (2722/2724, 10168) at runtime and repaired with a barrel + three
+ *   ropes, writing varbits 3547/3548 (the map is crossable either way);
  * - lighting the fire combines the planks-on-embers and tinderbox steps into one
  *   item-on-object action (both requirements are checked);
- * - Olaf's food option hands the map over without consuming a food item;
+ * - Olaf's food option hands the map over without consuming a food item; if the
+ *   central "below"-jump fix ever fails to play the confession tail, a plugin-side
+ *   guard replays it so the map and stage 60 are never lost;
  * - Ulfric is a per-player owner-only spawn; the 4505 rise NPC only provides the
  *   chathead for the wiki lines.
  */
@@ -146,6 +150,12 @@ module.exports = function registerOlafsQuestQuest(api) {
   // The rusty gate sits mid-walkway at (2725, 10168) in the cave.
   const RUSTY_GATE_OBJECT_TILE_X = 2725;
   const RUSTY_GATE_OBJECT_TILE_Y = 10168;
+  // Wiki tiles of the two barrel+rope repair hotspots (Quest Helper OLAF2_INVIS_HOTSPOT_BARREL1/2).
+  const WALKWAY_HOTSPOTS = [
+    { id: ObjectIdentifiers.WALKWAY, x: 2722, y: 10168 }, // 23213
+    { id: ObjectIdentifiers.WALKWAY_2, x: 2724, y: 10168 }, // 23214
+  ];
+  const WALKWAY_OBJECT_TYPE = 10; // scenery
   const FULL_WALKWAY_REPAIR_ROPE = 3; // 3 ropes per broken section
 
   const PAGE = "Olaf's Quest";
@@ -196,6 +206,14 @@ module.exports = function registerOlafsQuestQuest(api) {
 
   const WALL_LEVER_ORDER = ["East", "North", "West", "South", "Bottom"];
 
+  // The stage-50 "afterwards" choice: the food option's wiki jump continues into the
+  // refuse branch's tail. Used only by the plugin-side fallback replay.
+  const FOOD_OPTION_TEXT = "Alright, here, have some food. Now give me the map.";
+  const REFUSE_OPTION_TEXT = "Not a chance.";
+  const REFUSE_FOLLOW_UP_LINE = "Okay, okay, I was only asking.";
+  const MAP_CONFESSION_LINE =
+    "Well, regardless, you've more than earned this map. It was the last one my grandfather, Sven the Helmsman, ever made.";
+
   const BITS_ATTRIBUTE = "quest.olafs_quest.bits";
   const BIT_INGRID_DELIVERED = 1 << 0;
   const BIT_VOLF_DELIVERED = 1 << 1;
@@ -208,9 +226,14 @@ module.exports = function registerOlafsQuestQuest(api) {
 
   let quest;
   let groundItems = null;
+  let walkwayHotspotsEnsured = false;
   const ulfricByPlayer = new Map();
   const wallMessageSeen = new WeakSet();
   const wallProgress = new WeakMap();
+  // Food-option guard: after the confession line the wiki jump continues into the
+  // refuse branch, whose opening ("Not a chance." / "Okay, okay...") does not belong.
+  const foodTailPending = new WeakSet();
+  const foodTailArmed = new WeakSet();
 
   function bits(player) {
     return Number(player.getAttribute(BITS_ATTRIBUTE)) || 0;
@@ -474,6 +497,76 @@ module.exports = function registerOlafsQuestQuest(api) {
     });
   }
 
+  /**
+   * The tail the food option's "below" jump should reach: the shared confession line
+   * and everything after it in the refuse branch, ending in the C8kt_f map hand-over.
+   */
+  function selectMapTail(steps) {
+    for (const step of steps) {
+      if (step.type !== "choice" || !Array.isArray(step.options)) continue;
+      const refuse = step.options.find((option) => option.text === REFUSE_OPTION_TEXT);
+      if (!refuse || !Array.isArray(refuse.steps)) continue;
+      const at = refuse.steps.findIndex(
+        (candidate) =>
+          candidate.type === "line" && candidate.text === MAP_CONFESSION_LINE
+      );
+      if (at >= 0) return refuse.steps.slice(at + 1);
+      return refuse.steps.filter((candidate) => candidate.player !== REFUSE_OPTION_TEXT);
+    }
+    return [];
+  }
+
+  /**
+   * Safety net for the food option: the runtime should play the confession tail and
+   * hand the map over (stage 60). If the chat closes still at stage 50, replay the
+   * correct continuation ourselves so the quest can never stall here.
+   */
+  function handleChoice({ player, npcId, option }) {
+    if (npcId !== OLAF_NPC_ID || option !== FOOD_OPTION_TEXT) return;
+    if (quest.getStage(player) !== STAGE_FIRE_LIT) return;
+    foodTailPending.add(player);
+    afterDialogue(player, () => {
+      if (player.isRegistered?.() === false) return;
+      if (quest.getStage(player) !== STAGE_FIRE_LIT) return;
+      foodTailPending.delete(player);
+      foodTailArmed.delete(player);
+      api.emitCustomEvent("npc-dialogue:start", {
+        player,
+        npcId: OLAF_NPC_ID,
+        variant: AFTERWARDS_VARIANT,
+        select: selectMapTail,
+      });
+    });
+  }
+
+  /**
+   * The food option's "below" jump now resolves into the refuse branch body, which
+   * starts with the refuse echo and a repeated confession line. Drop those, so the
+   * food branch reads as the wiki tail. Harmless when a resolver returns the sliced
+   * tail directly (the first real tail line disarms the guard).
+   */
+  function handleDialogueLine(event) {
+    const { player, npcId, text } = event;
+    if (npcId !== OLAF_NPC_ID || !foodTailPending.has(player)) return;
+    if (text === MAP_CONFESSION_LINE) {
+      if (foodTailArmed.has(player)) {
+        event.skip = true; // the refuse branch's repeated confession line
+        foodTailPending.delete(player);
+        foodTailArmed.delete(player);
+      } else {
+        foodTailArmed.add(player); // the food branch's own confession line
+      }
+      return;
+    }
+    if (!foodTailArmed.has(player)) return;
+    if (text === REFUSE_OPTION_TEXT || text === REFUSE_FOLLOW_UP_LINE) {
+      event.skip = true;
+      return;
+    }
+    foodTailPending.delete(player);
+    foodTailArmed.delete(player);
+  }
+
   function markPresentDelivered(player) {
     if (
       hasBit(player, BIT_INGRID_DELIVERED) &&
@@ -538,6 +631,8 @@ module.exports = function registerOlafsQuestQuest(api) {
       return;
     }
     if (stepId === MAP_HANDOVER_ACTION_ID) {
+      foodTailPending.delete(player);
+      foodTailArmed.delete(player);
       if (quest.getStage(player) >= STAGE_MAP_GIVEN) return;
       if (!held(player, SVENS_LAST_MAP_ITEM_ID)) player.getInventory().adds(SVENS_LAST_MAP_ITEM_ID, 1);
       quest.setStage(player, STAGE_MAP_GIVEN);
@@ -722,6 +817,7 @@ module.exports = function registerOlafsQuestQuest(api) {
       return true;
     }
     player.performAnimation(new Animation(DIG_ANIMATION_ID));
+    ensureWalkwayHotspots();
     startTranscript(api, player, ULFRIC_RISE_NPC_ID, PAGE, DIG_VARIANT);
     player.moveTo(new Location(CAVE_ENTRY_TILE.x, CAVE_ENTRY_TILE.y, 0));
     if (quest.getStage(player) < STAGE_IN_CAVE) quest.setStage(player, STAGE_IN_CAVE);
@@ -746,6 +842,24 @@ module.exports = function registerOlafsQuestQuest(api) {
     sendVarbit(player, OLAF_FIRE_VARBIT, 0);
     startTranscript(api, player, ULFRIC_RISE_NPC_ID, PAGE, FIRE_LIT_VARIANT);
     quest.setStage(player, STAGE_FIRE_LIT);
+  }
+
+  /**
+   * Ensure the two barrel hotspot locs exist at their cache/wiki tiles and are sent
+   * to the client, so a barrel can always be used on them. The map only gains the
+   * object when it is missing; the runtime spawn is sent either way.
+   */
+  function ensureWalkwayHotspots() {
+    if (walkwayHotspotsEnsured) return;
+    walkwayHotspotsEnsured = true;
+    const { GameObject, MapObjects, ObjectManager } = api.core;
+    if (!GameObject || !MapObjects || !ObjectManager) return;
+    for (const spot of WALKWAY_HOTSPOTS) {
+      const location = new Location(spot.x, spot.y, 0);
+      const object = new GameObject(spot.id, location, WALKWAY_OBJECT_TYPE, 0, null);
+      if (!MapObjects.get(spot.id, location, null)) MapObjects.add(object);
+      ObjectManager.register(object, true);
+    }
   }
 
   function repairWalkway(player, objectId, barrelItemId) {
@@ -813,10 +927,13 @@ module.exports = function registerOlafsQuestQuest(api) {
     if (ulfric) api.removeNpc(ulfric);
     ulfricByPlayer.delete(player);
     wallProgress.delete(player);
+    foodTailPending.delete(player);
+    foodTailArmed.delete(player);
   }
 
   function handleLogin({ player }) {
     if (quest.getStage(player) <= 0 && bits(player) !== 0) player.setAttribute(BITS_ATTRIBUTE, 0);
+    ensureWalkwayHotspots();
     refreshQuestList(player);
   }
 
@@ -858,6 +975,8 @@ module.exports = function registerOlafsQuestQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:condition", handleCondition);
+  api.onCustomEvent("npc-dialogue:choice", handleChoice);
+  api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("door:toggle", claimGateToggle);
   api.onObjectInteraction("Windswept tree", { "Chop down": handleChop });
   api.onObjectInteraction("Picture wall", { Search: handlePictureWall });

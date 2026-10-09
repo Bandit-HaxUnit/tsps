@@ -40,7 +40,17 @@
  *   "Much huffing and panting later..." / "The player finally pushes the statue
  *   to the back of Varrock Castle." lines. The 1-tile/4-tile moves, obstacles
  *   and the 2-minute recapture timers (RpygAc/lPU8xm/UowjWN/CLXY_i) are not
- *   simulated.
+ *   simulated. Placement is handled directly with the transcript's exact
+ *   messages: the Saradomin variant nests its place conditions after an END
+ *   step inside the "-McVRu" branch, so they can never be reached by the
+ *   transcript runtime.
+ * - The five pay-gardeners (Elstan, Lyra, Kragen, Dantaera, Alain) are claimed
+ *   at Talk-to once the garden phase starts, because Services.Farming owns
+ *   their Talk-to for its protect menu; their Pay/Trade options still reach the
+ *   farming service. Before stage 40 the hook falls through to it.
+ * - A failed diplomacy test retakes through the initial Wise Old Man
+ *   conversation: the dedicated retake variant's lost wiki jump resolves to
+ *   "end" before the test under NpcDialogues' same-branch guard.
  * - Elstan/Lyra/Dantaera/Alain have no standard transcript page (their index
  *   pages carry no variants), so before the garden phase they play their
  *   quest first-talk variant with the "not wearing the ring" answer instead of
@@ -606,9 +616,16 @@ module.exports = function registerGardenOfTranquillityQuest(api) {
       return "talking-to-the-wise-old-man-talking-to-the-wise-old-man-again-after-he-activates-the-ring-of-charos";
     }
     if (current >= STAGE_TEST_FAILED) {
-      return "talking-to-the-wise-old-man-talking-to-the-wise-old-man-again-after-attempting-the-diplomacy-test";
+      // The retake variant's wiki jump lost its target; NpcDialogues' same-branch
+      // guard resolves it to "end" before the test, so a failed test retakes it
+      // through the initial conversation, whose ring branch still reaches the test.
+      return "talking-to-the-wise-old-man";
     }
     if (current >= STAGE_RING_WANTED) {
+      // With the ring in hand the initial conversation's ring branch reaches the
+      // diplomacy test directly, which is more reliable than the "bring the ring"
+      // variant's lost-target jump; keep that variant only for fetching the ring.
+      if (hasRingEquippedOrHeld(player)) return "talking-to-the-wise-old-man";
       return "talking-to-the-wise-old-man-talking-to-the-wise-old-man-again-after-being-told-to-bring-him-the-ring-of-charos";
     }
     if (current >= STAGE_SENT_TO_WOM) return "talking-to-the-wise-old-man";
@@ -670,6 +687,16 @@ module.exports = function registerGardenOfTranquillityQuest(api) {
     return "talking-to-dantaera";
   }
 
+  /** The gardener Talk-to variant, shared by the index path and the direct claim. */
+  function gardenerTalkVariant(player, npcId) {
+    if (npcId === ELSTAN_NPC_ID) return elstanVariant(player);
+    if (npcId === LYRA_NPC_ID) return lyraVariant(player);
+    if (npcId === KRAGEN_NPC_ID) return kragenVariant(player);
+    if (npcId === DANTAERA_NPC_ID) return dantaeraVariant(player);
+    if (npcId === ALAIN_NPC_ID) return "talking-to-alain"; // Alain has no page of his own
+    return null;
+  }
+
   function selectVariant({ npcId, player }) {
     refreshGrowth(player);
     // A new Talk-to starts with no transient interaction context.
@@ -679,13 +706,7 @@ module.exports = function registerGardenOfTranquillityQuest(api) {
     if (KING_ROALD_NPC_IDS.has(npcId)) return kingRoaldVariant(player);
     if (npcId === BERNALD_NPC_ID) return bernaldVariant(player);
     if (npcId === BROTHER_ALTHRIC_NPC_ID) return althricVariant(player);
-    if (GARDENER_NPC_IDS.has(npcId)) {
-      if (npcId === ELSTAN_NPC_ID) return elstanVariant(player);
-      if (npcId === LYRA_NPC_ID) return lyraVariant(player);
-      if (npcId === KRAGEN_NPC_ID) return kragenVariant(player);
-      if (npcId === DANTAERA_NPC_ID) return dantaeraVariant(player);
-      return "talking-to-alain"; // Alain has no page of his own
-    }
+    if (GARDENER_NPC_IDS.has(npcId)) return gardenerTalkVariant(player, npcId);
     return null;
   }
 
@@ -1178,29 +1199,52 @@ module.exports = function registerGardenOfTranquillityQuest(api) {
 
   function handleNpcInteraction(event) {
     const { player, npcId, npc } = event;
-    if (!TROLLEY_CONTENT_IDS.has(npcId)) return;
-    const definition = event.definition;
     const click = Number(event.clickType) | 0;
-    const option = String(definition?.getActions?.()?.[click - 1] ?? "").toLowerCase();
-    event.handled = true;
-    const cargo = vget(player, VARBIT_TROLLEY);
-    if (cargo === 0) return;
-    if (option === "place") {
+    const option = String(event.definition?.getActions?.()?.[click - 1] ?? "").toLowerCase();
+
+    if (TROLLEY_CONTENT_IDS.has(npcId)) {
+      event.handled = true;
+      const cargo = vget(player, VARBIT_TROLLEY);
+      if (cargo === 0) return;
+      if (option !== "place") {
+        pushTrolley(player, npc, cargo);
+        return;
+      }
+      // Placement is handled directly: the Saradomin variant nests its place
+      // conditions after an END step inside the "-McVRu" branch, so the
+      // transcript can never reach them.
       const site = STATUE_BY_VARBIT.get(cargo);
       if (!site) return;
       const location = npc.getLocation();
       const distance = (target) =>
         Math.max(Math.abs(location.getX() - target.x), Math.abs(location.getY() - target.y));
-      const correct = distance(site.plinth);
-      const other = site === STATUE_SARADOMIN ? STATUE_KING : STATUE_SARADOMIN;
-      const wrong = distance(other.plinth);
-      let result = "correct";
-      if (correct > 1) result = wrong <= 1 ? "wrong" : "too-far";
-      setCtx(player, { kind: "statue-place", result });
-      startTranscript(api, player, CUTSCENE_NPC_ID, PAGE, site.useVariant);
+      if (distance(site.plinth) > 1) {
+        const other = site === STATUE_SARADOMIN ? STATUE_KING : STATUE_SARADOMIN;
+        player.sendMessage(distance(other.plinth) <= 1
+          ? "This statue needs to go on the other plinth."
+          : "You need to move the trolley next to a plinth before you can place the statue - it's too heavy to carry very far.");
+        return;
+      }
+      placeStatueFor(player, site);
+      player.sendMessage(site === STATUE_SARADOMIN
+        ? "You place the state of Saradomin on the plinth."
+        : "You place the statue of the king on a plinth.");
       return;
     }
-    pushTrolley(player, npc, cargo);
+
+    // The Farming service claims Talk-to for every pay-gardener near a patch
+    // (Elstan, Lyra, Kragen, Dantaera and Alain all advertise Pay), so during
+    // the garden phase this quest takes the conversation first; before then the
+    // hook falls through so the farming service still owns them for everyone
+    // else.
+    if (option !== "talk-to" || !GARDENER_NPC_IDS.has(npcId)) return;
+    if (stage(player) < STAGE_BUILDING) return;
+    const variant = gardenerTalkVariant(player, npcId);
+    if (!variant) return;
+    event.handled = true;
+    interaction.delete(player);
+    refreshGrowth(player);
+    startTranscript(api, player, npcId, PAGE, variant);
   }
 
   function handleUseTrolleyOnStatue(event, site) {

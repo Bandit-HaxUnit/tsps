@@ -36,8 +36,9 @@
  *  - The lost-fur-sample replacement branches (obG97l/XRTAlW) are covered by the plain
  *    "before getting the fur sample" hand-out instead of their own lines.
  *  - Apatura completes the quest when the final variant is selected; the runtime defers
- *    the scroll until the chatbox closes. Post-quest Wolf replays his after-Verity page
- *    variant and Atza her after-quest page variant (the dump has no quest-page ones).
+ *    the scroll until the chatbox closes. Verity and Wolf fall through to Hunter.plugin.js
+ *    (their rumour hooks) once the quest no longer needs them; Atza replays her
+ *    after-quest page variant (the dump has no post-quest Apatura/Fox ones).
  */
 module.exports = function registerAtFirstLightQuest(api) {
   const { ObjectDefinition, Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } =
@@ -74,6 +75,8 @@ module.exports = function registerAtFirstLightQuest(api) {
   const FOX_NPC_ID = NpcIdentifiers.GUILD_HUNTER_FOX; // 12932, the injured Fox (wiki "Injured")
   const ATZA_NPC_NAME = "Atza";
   const KIKO_NPC_NAME = "Guild Hunter Kiko";
+  const VERITY_NPC_NAME = "Guild Scribe Verity";
+  const WOLF_NPC_NAME = "Guild Hunter Wolf (Master)";
 
   const TOY_MOUSE_ITEM_ID = ItemIdentifiers.TOY_MOUSE; // 7767
   const WOUND_TOY_MOUSE_ITEM_ID = ItemIdentifiers.TOY_MOUSE_WOUND_; // 7769
@@ -466,7 +469,9 @@ module.exports = function registerAtFirstLightQuest(api) {
   }
 
   // ==========================================================================
-  // Kiko (Pet) and Atza (Talk-to); Atza is not indexed to this transcript page
+  // Kiko (Pet) and Atza (Talk-to); Atza is not indexed to this transcript page.
+  // Verity and Wolf are claimed back from Hunter.plugin.js's rumour Talk-to
+  // hooks while the quest needs them (this plugin registers before Hunter).
   // ==========================================================================
 
   function playAtza(player, variant) {
@@ -509,6 +514,30 @@ module.exports = function registerAtFirstLightQuest(api) {
       return;
     }
     startTranscript(api, player, KIKO_NPC_ID, "Guild Hunter Kiko", "petting-kiko-without-a-catspeak-amulet");
+  }
+
+  /**
+   * Hunter.plugin.js claims Verity's and Wolf's Talk-to for rumours and always
+   * handles the click, which starves this quest's variant selector. Claim it
+   * first while a quest stage has a variant; return false on every other stage
+   * (not started, complete, stage 10 without the report) so Hunter still runs.
+   */
+  function handleVerityTalk(event) {
+    const { player, npcId } = event;
+    if (npcId !== VERITY_NPC_ID) return false;
+    const variant = selectVerityVariant(player);
+    if (typeof variant !== "string") return false;
+    startTranscript(api, player, VERITY_NPC_ID, PAGE, variant);
+    return true;
+  }
+
+  function handleWolfTalk(event) {
+    const { player, npcId } = event;
+    if (npcId !== WOLF_NPC_ID) return false;
+    const variant = selectWolfVariant(player);
+    if (typeof variant !== "string") return false;
+    startTranscript(api, player, WOLF_NPC_ID, PAGE, variant);
+    return true;
   }
 
   // ==========================================================================
@@ -895,6 +924,8 @@ module.exports = function registerAtFirstLightQuest(api) {
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onNpcInteraction(ATZA_NPC_NAME, { "Talk-to": handleAtzaTalk });
   api.onNpcInteraction(KIKO_NPC_NAME, { Pet: handlePetKiko });
+  api.onNpcInteraction(VERITY_NPC_NAME, { "Talk-to": handleVerityTalk });
+  api.onNpcInteraction(WOLF_NPC_NAME, { "Talk-to": handleWolfTalk });
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemOnObject(handleItemOnObject);
   api.onItemOnItem(handleItemOnItem);
