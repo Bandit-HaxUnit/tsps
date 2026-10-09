@@ -232,6 +232,9 @@ bot-sites.json sites by id, whole or property by property (`plugins/bots/brain/B
   `pvp:open-presets-on-death`, `blast-furnace`). Declare each key once in a `*_ATTRIBUTE`
   constant and read/write through it; item `getMetaValue`/`setMetaValue` keys follow the
   same rule.
+- world.json `pluginConfig` keys are `<plugin name>:<camelCaseOption>`, the plugin's `name`
+  as registered (`TutorialIsland:allowSkip`, `PlayerBots:sites`). Read them with
+  `api.getPluginConfig(key, defaultValue)`, and give the key one constant.
 - Derive from the cache where the cache knows the answer. A rule that reads definitions
   (`plugins/objects/Doors.plugin.js` builds its open/closed pairs this way) beats a
   hand-picked id list that only covers what someone happened to test.

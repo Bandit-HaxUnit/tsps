@@ -13,17 +13,16 @@
  *     "lumbridge": { "enabled": true, "bots": { "woodcutting": 10 } }
  *   } }
  *
- * Sites and properties the map doesn't name keep theirs. Read through readWorldConfig, so the
+ * Sites and properties the map doesn't name keep theirs. Read through getPluginConfig, so the
  * layering is pluginConfig's: world.local.json's "PlayerBots:sites" replaces world.json's.
  */
 const fs = require("fs");
-const { readWorldConfig } = require("../../../src/main/typescript/elvarg/game/definition/WorldDefinition");
+const { PluginManager } = require("../../../src/main/typescript/elvarg/plugins/PluginManager");
 
 const SITES_CONFIG_KEY = "PlayerBots:sites";
 
 /** The "PlayerBots:sites" overrides: id -> site properties. Other values are skipped with a warning. */
-function siteOverrides(config = readWorldConfig()) {
-  const raw = config.pluginConfig?.[SITES_CONFIG_KEY];
+function siteOverrides(raw = PluginManager.getPluginConfig(SITES_CONFIG_KEY)) {
   if (raw === undefined) return new Map();
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     console.warn(`[bot sites] world config pluginConfig "${SITES_CONFIG_KEY}" must be an object of site id -> properties; ignored`);
@@ -55,9 +54,9 @@ function applySiteOverrides(sitesFile, overrides) {
 }
 
 /** Reads bot-sites.json (or `file`) with the world config's "PlayerBots:sites" applied. */
-function readBotSites(file, config) {
+function readBotSites(file, raw) {
   const sitesFile = JSON.parse(fs.readFileSync(file, "utf8"));
-  return applySiteOverrides(sitesFile, siteOverrides(config));
+  return applySiteOverrides(sitesFile, siteOverrides(raw));
 }
 
 module.exports = { readBotSites, siteOverrides, applySiteOverrides };
