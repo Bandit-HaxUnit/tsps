@@ -700,11 +700,18 @@ function refreshNpcHint(player) {
   const value = stage(player);
   if (HINT_NPC[value] === undefined && value !== STAGE.COMBAT_RANGE) return;
   const state = hintFollow.get(player);
-  const npc = state ? World.getNpcs().get(state.index) : null;
-  if (!state || state.value !== value || !npc || npc.getHitpoints?.() <= 0) {
+  if (!state || state.value !== value) {
     applyHint(player, value);
     return;
   }
+  const npc = state ? World.getNpcs().get(state.index) : null;
+  if (!npc) {
+    applyHint(player, value);
+    return;
+  }
+  // A dying target keeps the arrow: re-targeting here would hop to another rat
+  // for the death animation, right before the death event advances the stage.
+  if (npc.getHitpoints?.() <= 0) return;
   const far = isFarHint(player, npc);
   const at = npc.getLocation();
   if (state.far !== far || (far && (state.x !== at.getX() || state.y !== at.getY()))) {
