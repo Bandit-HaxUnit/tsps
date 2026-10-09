@@ -38,7 +38,7 @@ const SPECIAL_NPC_DIALOGUES = new Set(["Skully", "Estate agent", "Estate Agent",
  * seeing the dialogue; alternatives without a gendered form (numbers, item
  * picks, NPC choices) stay for quest plugins to fill.
  */
-const PLAYER_NAME_PLACEHOLDER = /\[(?:player name|playername|player|player vampyre name)\]|<player name>/gi;
+const PLAYER_NAME_PLACEHOLDER = /\[(?:player name|playername|player|player vampyre name)(\.?)\]|<player name>/gi;
 const PLAYER_NAME_ALTERNATIVE = /^(?:player name|playername|player vampyre name)$/i;
 const GENDERED_ALTERNATIVE = /\[([^\[\]]*\/[^\[\]]*)\]/g;
 
@@ -73,7 +73,8 @@ function pickAlternative(parts, name, male) {
 function formatPlayerText(text, player) {
   let out = String(text ?? "");
   const name = player?.getUsername?.();
-  if (name) out = out.replace(PLAYER_NAME_PLACEHOLDER, name);
+  // "[player.]" keeps the sentence's closing period.
+  if (name) out = out.replace(PLAYER_NAME_PLACEHOLDER, (_, period) => `${name}${period ?? ""}`);
   if (!out.includes("/")) return out;
   const male = player?.getAppearance?.()?.isMale?.() !== false;
   return out.replace(GENDERED_ALTERNATIVE, (whole, body) => {

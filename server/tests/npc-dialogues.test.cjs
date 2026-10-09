@@ -538,6 +538,7 @@ test('player-name and gendered placeholders resolve from the reader', () => {
   assert.equal(formatPlayerText('I am sorry [player name].', male), 'I am sorry Zezima.');
   assert.equal(formatPlayerText('Hurry up, <player name>!', female), 'Hurry up, Woox!');
   assert.equal(formatPlayerText('[player] reporting, sir!', female), 'Woox reporting, sir!');
+  assert.equal(formatPlayerText('Good day [player.] Have you had any luck?', male), 'Good day Zezima. Have you had any luck?');
   assert.equal(formatPlayerText('Haha, you have spirit, [player name/fremennik name].', female), 'Haha, you have spirit, Woox.');
   // Alternatives that are not about the reader stay for the owning plugin.
   assert.equal(formatPlayerText('Kill [3/4/5] rats.', male), 'Kill [3/4/5] rats.');
