@@ -317,6 +317,22 @@ module.exports = function registerGiantDwarfQuest(api) {
   const BLACK_GUARD_HQ_TILE = new Location(2827, 10214, 0);
   const BLASIDAR_HOUSE_TILE = new Location(2907, 10206, 0);
 
+  // The boatman's "Play Cutscene" branch: RV7CMp starts the cutscene and the
+  // wiki marks its scene transitions unavailable. Skipping them plays the
+  // transcript's real lines through to Veldaban.
+  const BOAT_CUTSCENE_STEP_IDS = new Set([
+    "RV7CMp",
+    "bQ3UM1",
+    "Ru6HA5",
+    "ZPUkah",
+    "efDsj3",
+    "6Pr95H",
+    "dLRCT3",
+    "XggBjQ",
+    "sg2BCG",
+    "4m4OUB",
+  ]);
+
   const BETWEEN_A_ROCK = "between_a_rock";
   const KNIGHTS_SWORD = "the_knights_sword";
 
@@ -845,6 +861,17 @@ module.exports = function registerGiantDwarfQuest(api) {
   function handleLine(event) {
     const { player, npcId, text } = event;
     if (typeof text !== "string" || text.length === 0) return;
+    if (
+      npcId === VERMUNDI_NPC_ID &&
+      text.startsWith("A book, how wonderful!") &&
+      hasItem(player, BOOK_ITEM)
+    ) {
+      // The wiki's book-less ending line sits before the book hand-in branch;
+      // with the book in hand, drop it and its end step so the hand-in plays.
+      event.skip = true;
+      if (event.step) event.step.steps = [];
+      return;
+    }
     applyLineEffects(player, npcId, text);
     const filled = fillPlaceholders(player, npcId, text);
     if (filled !== text) event.text = filled;
@@ -892,7 +919,8 @@ module.exports = function registerGiantDwarfQuest(api) {
       out = out.replace("[copper ore/tin ore/clay/iron ore/silver ore/coal/gold ore/mithril ore]", task.name);
       out = out.replace("[bronze/iron/steel/silver/gold/mithril]", task.name);
     }
-    const company = companyForNpc(npcId);
+    const company =
+      companyForNpc(npcId) ?? (VELDABAN_NPC_IDS.has(npcId) ? COMPANY_BY_ID.get(companyId(player)) : null);
     if (company) out = out.split("[company name]").join(company.name);
     const chosenId = meetingCompany.get(player) ?? companyId(player);
     if (chosenId && out.includes("[chosen company name]")) {
@@ -967,6 +995,25 @@ module.exports = function registerGiantDwarfQuest(api) {
     return index === -1 ? null : steps.slice(index + 1);
   }
 
+  function transcriptTailAfter(steps, stepId) {
+    if (!Array.isArray(steps)) return null;
+    for (let index = 0; index < steps.length; index++) {
+      const step = steps[index];
+      if (step?.id === stepId) return steps.slice(index + 1);
+      for (const branch of [step?.steps, ...(step?.options ?? []).map((option) => option.steps)]) {
+        const tail = transcriptTailAfter(branch, stepId);
+        if (tail) return tail;
+      }
+    }
+    return null;
+  }
+
+  /** What follows the boat ride's arrival action: Veldaban's task offer. */
+  function veldabanOfferRemainder() {
+    const steps = loadTranscripts(api)?.[PAGE]?.variants?.[BOATMAN_START_VARIANT];
+    return transcriptTailAfter(steps, "TWPrRb");
+  }
+
   function repairAxe(player) {
     if (!hasItem(player, IRON_BAR_ITEM)) return;
     player.getInventory().deleteNumber(IRON_BAR_ITEM, 1);
@@ -984,8 +1031,18 @@ module.exports = function registerGiantDwarfQuest(api) {
 
   function handleAction(event) {
     const { player, stepId } = event;
+    if (BOAT_CUTSCENE_STEP_IDS.has(stepId)) {
+      event.handled = true;
+      return;
+    }
     switch (stepId) {
-      case "rbNSPj":
+      case "rbNSPj": {
+        event.handled = true;
+        player.moveTo(BLACK_GUARD_HQ_TILE);
+        const remainder = veldabanOfferRemainder();
+        if (remainder) event.steps = remainder;
+        return;
+      }
       case "TWPrRb":
         event.handled = true;
         player.moveTo(BLACK_GUARD_HQ_TILE);

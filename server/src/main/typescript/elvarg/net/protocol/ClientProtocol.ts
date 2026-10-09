@@ -1651,7 +1651,9 @@ export function encodeWidgetSetPosition(uid: number, x: number, y: number): Buff
 export function encodeWidgetSetItem(uid: number, itemId: number, quantity = 1): Buffer {
   const payload = Buffer.alloc(10);
   payload.writeInt32BE(uid | 0);
-  payload.writeInt16BE(itemId, 4);
+  // Item ids are an unsigned 16-bit field on the wire; ids above 32767 (newer
+  // content) must wrap instead of throwing RangeError.
+  payload.writeUInt16BE(itemId & 0xffff, 4);
   payload.writeInt32BE(quantity | 0, 6);
   return encodeServerPacket(ServerPacketId.WIDGET_SET_ITEM, payload);
 }
@@ -1659,7 +1661,7 @@ export function encodeWidgetSetItem(uid: number, itemId: number, quantity = 1): 
 export function encodeWidgetSetNpcHead(uid: number, npcId: number): Buffer {
   const payload = Buffer.alloc(6);
   payload.writeInt32BE(uid | 0);
-  payload.writeInt16BE(npcId, 4);
+  payload.writeUInt16BE(npcId & 0xffff, 4);
   return encodeServerPacket(ServerPacketId.WIDGET_SET_NPC_HEAD, payload);
 }
 

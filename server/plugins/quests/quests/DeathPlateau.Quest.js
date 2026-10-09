@@ -266,9 +266,9 @@ module.exports = function registerDeathPlateauQuest(api) {
     if (value.includes("has the map")) return hasMap(player);
     if (value.includes("doesn't have the combination")) return !hasCombination(player);
     if (value.includes("has the combination")) return hasCombination(player);
-    if (value.includes("has not turned in all the items"))
+    if (value.startsWith("If the player has not turned in all the items"))
       return !(hasMap(player) && hasCombination(player));
-    if (value.includes("has turned in all the items"))
+    if (value.startsWith("If the player has turned in all the items"))
       return hasMap(player) && hasCombination(player);
     return null;
   }

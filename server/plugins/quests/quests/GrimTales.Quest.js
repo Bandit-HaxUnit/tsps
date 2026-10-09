@@ -48,7 +48,12 @@
  * - start requirements (Witch's House and the five skills) are checked in the
  *   transcript's requirement condition;
  * - quest-scoped transcript replays all use one chathead (the transcript runner
- *   flattens multi-speaker pages), so a few cut-scene lines show the wrong head.
+ *   flattens multi-speaker pages), so a few cut-scene lines show the wrong head;
+ * - Miazrqa's pendant menu "jump above"/"previous" jumps re-enter the branch they
+ *   are in, so stage 3's variant is preprocessed (fixPendantSteps) to keep the
+ *   "I need a key for the house." branch reachable;
+ * - the finishing-up page's "Quest complete!" action sits after an end marker and
+ *   never plays, so completion is driven by Sylas's last epilogue line.
  */
 module.exports = function registerGrimTalesQuest(api) {
   const {
@@ -78,6 +83,8 @@ module.exports = function registerGrimTalesQuest(api) {
     NpcIdentifiers.RUPERT_THE_BEARD_4, // 5124
   ]);
   const MIAZRQA_NPC_ID = NpcIdentifiers.MIAZRQA; // 5125
+  const MIAZRQA_PENDANT_VARIANT = "looking-for-miazrqa-s-pendant";
+  const DWARF_OPTION_PREFIX = "I see there is an embarrassed-looking dwarf";
   const GLOD_NPC_ID = NpcIdentifiers.GLOD; // 5129
   const DRAIN_PIPE_NPC_ID = 5122; // "Drain pipe"; no generated identifier (cache dump)
   const GRIM_DIALOGUE_NPC_IDS = new Set([
@@ -322,6 +329,11 @@ module.exports = function registerGrimTalesQuest(api) {
     return location.getX() === tile.x && location.getY() === tile.y && location.getZ() === tile.z;
   }
 
+  /** Event locations are plain { x, y, z } objects (sameTile takes a Location). */
+  function atTile(location, tile) {
+    return Boolean(location) && location.x === tile.x && location.y === tile.y && location.z === tile.z;
+  }
+
   function registerQuestObject(objectId, tile, type = 10) {
     const object = new GameObject(objectId, new Location(tile.x, tile.y, tile.z), type, 0, null);
     ObjectManager.register(object, true);
@@ -426,8 +438,66 @@ module.exports = function registerGrimTalesQuest(api) {
     return "looking-for-miazrqa-s-pendant-talking-to-miazrqa-again";
   }
 
+  /**
+   * The cousin-guess menu's wiki "jump above" resolves back into the option it is
+   * in, so the runtime's jump_to replays the same wrong guess until MAX_JUMPS and
+   * "I need a key for the house." is never reached. Fold the guesses back onto
+   * the menu, let the correct guess continue into the question menu the
+   * "first-cousin" answer reaches, and make the question menu's "previous"
+   * jumps replay itself rather than the guess menu.
+   */
+  function fixPendantSteps(steps) {
+    const clone = JSON.parse(JSON.stringify(steps));
+    const walk = (list) => {
+      for (const step of list ?? []) {
+        if (step.type === "choice" && Array.isArray(step.options)) {
+          const continuation = step.options.find((option) =>
+            String(option.text ?? "").startsWith("Your first-cousin, once removed?")
+          );
+          const correct = step.options.find((option) =>
+            String(option.text ?? "").startsWith("Your second-cousin, twice removed?")
+          );
+          const questions = continuation?.steps?.[continuation.steps.length - 1];
+          if (correct && questions) {
+            for (const option of step.options) {
+              const jump = (option.steps ?? []).findIndex((entry) => entry.type === "jump");
+              if (jump === -1) continue;
+              if (option === correct) option.steps.splice(jump, 1, JSON.parse(JSON.stringify(questions)));
+              else option.steps[jump] = { type: "jump", reference: "other" };
+            }
+          }
+          for (const option of step.options) {
+            for (const entry of option.steps ?? []) {
+              if (entry.type === "jump" && entry.reference === "previous") entry.reference = "other";
+            }
+          }
+        }
+        walk(step.steps);
+        for (const option of step.options ?? []) walk(option.steps);
+      }
+    };
+    walk(clone);
+    return clone;
+  }
+
+  /** Stage 3's pendant menu needs its looping wiki jumps rewritten; other stages keep the page-context path. */
+  function talkToMiazrqa(event) {
+    const { player, npc, npcId } = event;
+    if (npcId !== MIAZRQA_NPC_ID || quest.getStage(player) !== STAGE_RUPERT_MET) return false;
+    event.handled = true;
+    api.emitCustomEvent("npc-dialogue:start", {
+      player,
+      npc,
+      npcId,
+      variant: MIAZRQA_PENDANT_VARIANT,
+      select: fixPendantSteps,
+    });
+    return true;
+  }
+
   function rupertVariant(player, stage) {
-    if (stage <= STAGE_FEATHER_GIVEN) return null; // pre-quest: the tower page's own variant
+    if (stage < STAGE_FEATHER_GIVEN) return null; // pre-quest: the tower page's own variant
+    if (stage === STAGE_FEATHER_GIVEN) return "entering-the-tower-speaking-to-rupert-in-the-tower";
     if (stage === STAGE_RUPERT_MET) return "entering-the-tower-speaking-to-rupert-again-2";
     if (stage === STAGE_PENDANT_TASK) return "looking-for-miazrqa-s-pendant-talking-to-rupert-before-looking-for-miazrqa-s-pendant";
     if (stage === STAGE_PENDANT_FOUND) return "looking-for-miazrqa-s-pendant-talking-to-rupert-the-beard-before-handing-the-pendant";
@@ -497,7 +567,7 @@ module.exports = function registerGrimTalesQuest(api) {
     }
     if (
       npcId === MIAZRQA_NPC_ID &&
-      option === "I see there is an embarrassed-looking dwarf in the tower there." &&
+      option.startsWith(DWARF_OPTION_PREFIX) &&
       quest.getStage(player) === STAGE_RUPERT_MET
     ) {
       quest.setStage(player, STAGE_PENDANT_TASK);
@@ -522,6 +592,12 @@ module.exports = function registerGrimTalesQuest(api) {
         if (!held(player, GOLDEN_GOBLIN_ITEM_ID)) return;
         player.getInventory().deleteNumber(GOLDEN_GOBLIN_ITEM_ID, 1);
         quest.setStage(player, STAGE_GOBLIN_GIVEN);
+        return;
+      }
+      // The transcript puts the "Quest complete!" action after an end marker, so
+      // it never plays; finish on Sylas's last spoken line of the epilogue.
+      if (stage === STAGE_STALK_CUT && text.startsWith("Anyway, I have removed the potion now")) {
+        quest.complete(player);
       }
       return;
     }
@@ -566,6 +642,7 @@ module.exports = function registerGrimTalesQuest(api) {
         break;
       case "Q0UzpC": // receive Door key
         if (!held(player, DOOR_KEY_ITEM_ID)) player.getInventory().adds(DOOR_KEY_ITEM_ID, 1);
+        if (quest.getStage(player) === STAGE_RUPERT_MET) quest.setStage(player, STAGE_PENDANT_TASK);
         break;
       case "1fP9ED": // receive Shrinking recipe, To-do list and 2 Shrunk ogleroot
         givePianoLoot(player);
@@ -985,12 +1062,12 @@ module.exports = function registerGrimTalesQuest(api) {
       readMoundSignpost(event);
       return;
     }
-    if (PIANO_OBJECT_IDS.has(objectId)) {
+    if (PIANO_OBJECT_IDS.has(objectId) && atTile(event.location, PIANO_TILE)) {
       if (event.clickType === 3) searchPiano(event);
       else playPiano(event);
       return;
     }
-    if (objectId === MUSIC_STAND_OBJECT_ID) {
+    if (objectId === MUSIC_STAND_OBJECT_ID && atTile(event.location, MUSIC_STAND_TILE)) {
       searchMusicStand(event);
       return;
     }
@@ -1194,6 +1271,7 @@ module.exports = function registerGrimTalesQuest(api) {
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
   api.onNpcInteraction("Grimgnash", { "Talk-To": talkToGrimgnash });
+  api.onNpcInteraction("Miazrqa", { "Talk-to": talkToMiazrqa });
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);

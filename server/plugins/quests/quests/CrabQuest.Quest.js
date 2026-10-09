@@ -158,6 +158,8 @@ module.exports = function registerCrabQuestQuest(api) {
   const NO_SPACE_TEXT = "You can't carry any more floatsam.";
   const NOTHING_LEFT_TEXT = "There is nothing left here.";
   const CRAFT_MESSAGE_TEXT = "You fashion a makeshift string instrument out of the flotsam.";
+  const SHELL_COLLECTION_RECOVERY_TEXT =
+    "As you look at the bottle, you notice familiar shells nearby. You collect them.";
   const NEED_MATERIALS_TEXT =
     "To make a string instrument, you'll also need a sound box to amplify the sound and a frame or fretboard to tense the string.";
 
@@ -339,6 +341,10 @@ module.exports = function registerCrabQuestQuest(api) {
 
   function hasItem(player, itemId) {
     return player.getInventory().getAmount(itemId) > 0;
+  }
+
+  function grantShellCollection(player) {
+    player.getInventory().adds(SHELL_COLLECTION_ITEM_ID, 1);
   }
 
   function hasAnyShell(player) {
@@ -558,6 +564,13 @@ module.exports = function registerCrabQuestQuest(api) {
 
   function drinkFromBottle(player) {
     if (quest.isComplete(player)) {
+      // The collection has no Drop option, so reclaiming it must not depend on
+      // dropping it: a missing collection is handed back on the bottle itself.
+      if (!hasItem(player, SHELL_COLLECTION_ITEM_ID)) {
+        player.sendMessage(SHELL_COLLECTION_RECOVERY_TEXT);
+        grantShellCollection(player);
+        return;
+      }
       startTranscript(api, player, MAIN_CRAB_NPC_ID, PAGE, "crab-rave-reminiscing-at-the-bottle");
       return;
     }
@@ -849,7 +862,7 @@ module.exports = function registerCrabQuestQuest(api) {
     }
     if (stepId === SHELL_COLLECTION_MESSAGE_STEP) {
       if (quest.isComplete(player) && !hasItem(player, SHELL_COLLECTION_ITEM_ID)) {
-        player.getInventory().adds(SHELL_COLLECTION_ITEM_ID, 1);
+        grantShellCollection(player);
       } else {
         // The words say you collect shells you are not actually missing.
         event.handled = true;

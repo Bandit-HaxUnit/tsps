@@ -707,9 +707,9 @@ module.exports = function registerMakingFriendsWithMyArmQuest(api) {
 
   function talkToApothecary(event) {
     const { player, npcId } = event;
-    if (npcId !== APOTHECARY_NPC_ID) return;
+    if (npcId !== APOTHECARY_NPC_ID) return false;
     const stage = quest.getStage(player);
-    if (stage < STAGE_WOM_ASKED || stage >= STAGE_COFFIN || potionObtained(player)) return;
+    if (stage < STAGE_WOM_ASKED || stage >= STAGE_COFFIN || potionObtained(player)) return false;
     event.handled = true;
     startTranscript(api, player, npcId, PAGE, "the-wise-dead-man-talking-to-the-apothecary");
   }

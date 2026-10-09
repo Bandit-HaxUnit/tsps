@@ -79,6 +79,7 @@ module.exports = function registerMourningsEndPartIQuest(api) {
     Location,
     NpcIdentifiers,
     ObjectIdentifiers,
+    RegionManager,
     Skill,
     TaskManager,
   } = api.core;
@@ -193,6 +194,16 @@ module.exports = function registerMourningsEndPartIQuest(api) {
   const HQ_TRAPDOOR = ObjectIdentifiers.TRAPDOOR_38; // 8783 at 2542,3327
   const HQ_LADDER = ObjectIdentifiers.LADDER_84; // 8785 at 2044,4650
   const DEVICE_CHEST = ObjectIdentifiers.CLOSED_CHEST_15; // 8797 at 2039,4633
+  // The torture-chamber doors have no open variant in the cache, so the quest
+  // itself walks the player through them: 8788 at 2037,4633 and 8789 at 2034,4636.
+  const HQ_TORTURE_DOORS = new Set([
+    ObjectIdentifiers.DOOR_204, // 8788
+    ObjectIdentifiers.DOOR_205, // 8789
+  ]);
+  // The rack is placed as the nameless 8794, which transforms to 8795
+  // "Gnome on a rack" (Talk-to / Release) while the gnome sits on it.
+  const GNOME_RACK = 8794;
+  const GNOME_RACK_IDS = new Set([GNOME_RACK, ObjectIdentifiers.COL_FFFF00_GNOME_ON_A_RACK_COL]);
   const APPLE_PRESS = ObjectIdentifiers.APPLE_PRESS; // 8807
   const ROTTEN_APPLE_PILE = ObjectIdentifiers.ROTTEN_APPLE_PILE; // 8809
   const SACKS = ObjectIdentifiers.SACKS_2; // 365
@@ -572,11 +583,14 @@ module.exports = function registerMourningsEndPartIQuest(api) {
         if (held(player, ROTTEN_APPLE)) take(player, ROTTEN_APPLE, 1);
         return;
       case "dSnuKD":
-        // "You hand Elena the rotten apple." then the page's continuation
-        // ("Ick... Alright then let's get started.") is the sample-return tail.
+        // "You hand Elena the rotten apple." The page's continuation ("Ick...
+        // Alright then let's get started.") lives on the sample-return variant
+        // and is replayed next tick, but that replay can be lost with the chatbox
+        // state; hand the sieve over here too (the tail's im129e is idempotent).
         event.handled = true;
         event.end = true;
         if (held(player, ROTTEN_APPLE)) take(player, ROTTEN_APPLE, 1);
+        if (!held(player, SIEVE)) give(player, SIEVE, 1);
         advance(player, STAGE_ELENA);
         deferPlay(player, ELENA_CHATHEAD, "earning-their-trust-for-the-greater-good-returning-with-the-sample", (steps) =>
           selectAfter(steps, "OiyR9-")
@@ -879,16 +893,23 @@ module.exports = function registerMourningsEndPartIQuest(api) {
     }
   }
 
+  /** The agreed bargain: hand over the device, logs, leather and crunchies. */
+  function releaseGnome(player) {
+    if (quest.getStage(player) >= STAGE_FIXED_DEVICE) return false;
+    if (gnomeState(player) < 1) return false;
+    if (!held(player, BROKEN_DEVICE)) return false;
+    if (!hasGnomeMaterials(player) || !held(player, TOAD_CRUNCHIES)) return false;
+    play(player, GNOME_CHATHEAD, "earning-their-trust-it-s-a-deal-releasing-the-gnome");
+    return true;
+  }
+
   function gnomeItem(player, itemId) {
     const stage = quest.getStage(player);
     if (stage < STAGE_RECRUIT || stage >= STAGE_COMPLETE) return false;
     const released = stage >= STAGE_FIXED_DEVICE;
 
     if (itemId === BROKEN_DEVICE && !released) {
-      if (gnomeState(player) < 1) return false;
-      if (!hasGnomeMaterials(player) || !held(player, TOAD_CRUNCHIES)) return false;
-      play(player, GNOME_CHATHEAD, "earning-their-trust-it-s-a-deal-releasing-the-gnome");
-      return true;
+      return releaseGnome(player);
     }
     if (itemId === FEATHER && !released) {
       if (gnomeState(player) < 1) return false;
@@ -1011,7 +1032,8 @@ module.exports = function registerMourningsEndPartIQuest(api) {
   function openHqTrapdoor(event) {
     const { player } = event;
     const stage = quest.getStage(player);
-    if (stage < STAGE_REPORTED || stage >= STAGE_COMPLETE) return;
+    // Basement access is a quest reward, so the completed quest keeps it.
+    if (stage < STAGE_REPORTED) return;
     event.handled = true;
     if (!wearingFullMournerGear(player)) {
       player.sendMessage("You need to be wearing the full mourner disguise to enter the headquarters.");
@@ -1049,11 +1071,70 @@ module.exports = function registerMourningsEndPartIQuest(api) {
     player.sendMessage("You take one of the broken devices from the chest.");
   }
 
+  /**
+   * The torture-chamber doors have no open variant in the cache, so Doors.plugin.js
+   * leaves Open unhandled; once Essyllt has recruited the player the quest walks
+   * them across to the first free tile on the far side (as Curse of Arrav does).
+   */
+  function passThroughTortureDoor(event) {
+    const { player, location } = event;
+    if (quest.getStage(player) < STAGE_RECRUIT) return false;
+    event.handled = true;
+    const from = player.getLocation();
+    const dx = from.getX() - location.x;
+    const dy = from.getY() - location.y;
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      const step = dx >= 0 ? -1 : 1;
+      for (let n = 1; n <= 3; n++) {
+        const tile = new Location(location.x + step * n, from.getY(), from.getZ());
+        if (!RegionManager.blocked(tile, null)) {
+          player.moveTo(tile);
+          break;
+        }
+      }
+      return true;
+    }
+    const step = dy >= 0 ? -1 : 1;
+    for (let n = 1; n <= 3; n++) {
+      const tile = new Location(from.getX(), location.y + step * n, from.getZ());
+      if (!RegionManager.blocked(tile, null)) {
+        player.moveTo(tile);
+        break;
+      }
+    }
+    return true;
+  }
+
+  /** Rack clicks talk to the gnome; Release is the same hand-in as the device. */
+  function rackGnome(event) {
+    const { player } = event;
+    const stage = quest.getStage(player);
+    if (stage < STAGE_RECRUIT || stage >= STAGE_COMPLETE) return false;
+    const option = event.definition?.getInteractions?.()?.[event.clickType - 1];
+    if (option === "Release" && releaseGnome(player)) {
+      event.handled = true;
+      return true;
+    }
+    const variant = gnomeVariant(player);
+    if (!variant) return false;
+    event.handled = true;
+    play(player, GNOME_CHATHEAD, variant);
+    return true;
+  }
+
   function handleObjectInteraction(event) {
     const { player, objectId } = event;
     if (!player) return;
     if (objectId === HQ_TRAPDOOR) {
       openHqTrapdoor(event);
+      return;
+    }
+    if (HQ_TORTURE_DOORS.has(objectId)) {
+      passThroughTortureDoor(event);
+      return;
+    }
+    if (GNOME_RACK_IDS.has(objectId)) {
+      rackGnome(event);
       return;
     }
     if (objectId === LAUNDRY_BASKET) {

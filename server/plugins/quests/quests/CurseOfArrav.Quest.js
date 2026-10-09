@@ -159,6 +159,9 @@ module.exports = function registerCurseOfArravQuest(api) {
     ObjectIdentifiers.PIPE_32, // 50543 (east side)
   ]);
   const PEDESTAL_OBJECT_ID = ObjectIdentifiers.PEDESTAL_28; // 50539 Take-from
+  // The map places the actionless 2x2 pedestal 50538 (no identifier is generated for
+  // it); the coa varbit swaps it to 50539, whose definition carries "Take-from".
+  const HEART_PEDESTAL_OBJECT_ID = 50538;
   const BASE_TRAPDOOR_OPEN_OBJECT_ID = ObjectIdentifiers.TRAPDOOR_101; // 50142 Enter
   const BASE_TRAPDOOR_OPEN_REPLACEMENT_ID = ObjectIdentifiers.TRAPDOOR_100; // 50141 Open
 
@@ -328,6 +331,18 @@ module.exports = function registerCurseOfArravQuest(api) {
       }
     }
     return false;
+  }
+
+  /** Mirror the player one tile past a blocking object (ClockTower's step-through). */
+  function stepThrough(player, location) {
+    const current = player.getLocation();
+    const dx = current.getX() - location.x;
+    const dy = current.getY() - location.y;
+    const destination =
+      Math.abs(dx) >= Math.abs(dy)
+        ? new Location(location.x - (dx >= 0 ? 1 : -1), location.y, current.getZ())
+        : new Location(location.x, location.y - (dy >= 0 ? 1 : -1), current.getZ());
+    player.moveTo(destination);
   }
 
   function startPageTranscript(player, variant, npcId = GOLEM_GUARD_NPC_ID) {
@@ -807,6 +822,14 @@ module.exports = function registerCurseOfArravQuest(api) {
     if (tile) stepAcross(player, tile);
   }
 
+  /** Doors.plugin.js opens 50514 by name before our object hook runs; mirror us through. */
+  function handleDoorToggle(request) {
+    if (request.objectId !== FORT_DOOR_OBJECT_ID || !request.player) return;
+    if (!questActive(request.player)) return;
+    const tile = request.location;
+    if (tile) stepThrough(request.player, tile);
+  }
+
   function handleBaseGate(event) {
     const { player } = event;
     event.handled = true;
@@ -853,12 +876,30 @@ module.exports = function registerCurseOfArravQuest(api) {
     startPageTranscript(player, "heart-heist-searching-the-chest");
   }
 
+  /** The two metal-door leaves (50517/50518) are solid map walls: remove them to open. */
+  function openMetalDoors(player, object) {
+    const area = player.getPrivateArea?.() ?? null;
+    const location = object.getLocation();
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const tile = new Location(location.getX() + dx, location.getY() + dy, location.getZ());
+        for (const id of METAL_DOORS_OBJECT_IDS) {
+          const leaf = MapObjects.get(id, tile, area);
+          if (leaf) ObjectManager.deregister(leaf, true);
+        }
+      }
+    }
+  }
+
   function handleMetalDoors(event) {
-    const { player } = event;
+    const { player, object } = event;
     event.handled = true;
-    const tile = objectTile(event);
     if (!questActive(player)) return;
-    if (tile) stepAcross(player, tile);
+    const tile = objectTile(event);
+    if (tile) {
+      openMetalDoors(player, object);
+      stepThrough(player, tile);
+    }
     ensureStage(player, STAGE_METAL_DOORS_OPEN);
   }
 
@@ -919,7 +960,7 @@ module.exports = function registerCurseOfArravQuest(api) {
     if (objectId === STORAGE_CHEST_OBJECT_ID) return handleStorageChest(event);
     if (METAL_DOORS_OBJECT_IDS.has(objectId)) return handleMetalDoors(event);
     if (GRAPPLE_PIPE_OBJECT_IDS.has(objectId)) return handleGrapplePipe(event);
-    if (objectId === PEDESTAL_OBJECT_ID) return handlePedestal(event);
+    if (objectId === PEDESTAL_OBJECT_ID || objectId === HEART_PEDESTAL_OBJECT_ID) return handlePedestal(event);
     if (objectId === TUNNEL_CAVE_OBJECT_ID) return handleTunnelCave(event);
     if (objectId === BASE_TRAPDOOR_OPEN_REPLACEMENT_ID) return handleBaseTrapdoorOpen(event);
     if (objectId === BASE_TRAPDOOR_OPEN_OBJECT_ID) return handleBaseTrapdoorEnter(event);
@@ -1057,6 +1098,7 @@ module.exports = function registerCurseOfArravQuest(api) {
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
   api.onCustomEvent("quest:stage-changed", handleStageChanged);
+  api.onCustomEvent("door:toggle", handleDoorToggle);
   api.onCustomEvent("ladders:climb", handleClimbRequest);
   api.onNpcInteraction("Arrav", { "Talk-to": talkToArrav });
   api.onNpcDeath(handleNpcDeath);

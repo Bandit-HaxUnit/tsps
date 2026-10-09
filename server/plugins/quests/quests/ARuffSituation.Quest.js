@@ -327,7 +327,7 @@ module.exports = function registerARuffSituationQuest(api) {
     if (stage === STAGE_GERTRUDE) return BANK_DOG_TILE;
     if (stage === STAGE_DOG) return DEN_DOG_TILE;
     if (stage === STAGE_DEN) return COOK_DOG_TILE;
-    if (stage === STAGE_FIRST_PUPPY || stage === STAGE_STUFFED_DOG) {
+    if (stage >= STAGE_FIRST_PUPPY && stage <= STAGE_SECOND_PUPPY) {
       return thirdHunt(player) ? CAMP_DOG_TILE : GOBLIN_DOG_TILE;
     }
     if (stage === STAGE_OUTLAWS) return CAMP_DOG_TILE;

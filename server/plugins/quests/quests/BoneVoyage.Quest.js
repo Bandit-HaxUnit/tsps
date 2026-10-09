@@ -57,7 +57,7 @@
  */
 module.exports = function registerBoneVoyageQuest(api) {
   const { ItemIdentifiers, Location, NpcIdentifiers, Skill } = api.core;
-  const { registerQuest, refreshQuestList, loadTranscripts } = require("../QuestRuntime");
+  const { registerQuest, refreshQuestList, loadTranscripts, startTranscript } = require("../QuestRuntime");
 
   const PAGE = "Bone Voyage";
   const START_HOOK = "quest:bone-voyage:start";
@@ -203,7 +203,9 @@ module.exports = function registerBoneVoyageQuest(api) {
   }
 
   function selectLeadNavigatorVariant(player, stage) {
-    if (stage === STAGE_SUPPLIES_SENT) return "the-cursed-voyage-talking-to-the-lead-navigator";
+    if (stage === STAGE_SUPPLIES_SENT || stage === STAGE_FOREMAN_READY) {
+      return "the-cursed-voyage-talking-to-the-lead-navigator";
+    }
     if (stage === STAGE_MET_NAVIGATOR) return "the-cursed-voyage-talking-to-the-lead-navigator-again";
     if (stage === STAGE_BAR_PATRONS) return "talking-to-bar-patrons-returning-to-the-navigators";
     if (stage !== STAGE_PLAN_AGREED) return null;
@@ -367,7 +369,10 @@ module.exports = function registerBoneVoyageQuest(api) {
 
     if (LEAD_NAVIGATOR_NPC_IDS.has(npcId)) {
       const stage = quest.getStage(player);
-      if (stage === STAGE_SUPPLIES_SENT && option === "Yep, that would be me.") {
+      if (
+        (stage === STAGE_SUPPLIES_SENT || stage === STAGE_FOREMAN_READY) &&
+        option === "Yep, that would be me."
+      ) {
         quest.setStage(player, STAGE_MET_NAVIGATOR);
         return;
       }
@@ -535,9 +540,28 @@ module.exports = function registerBoneVoyageQuest(api) {
         if (!BARGE_GUARD_NPC_IDS.has(npcId) || quest.getStage(player) < STAGE_COMPLETE) return;
         player.moveTo(new Location(ISLAND_ARRIVAL_TILE.x, ISLAND_ARRIVAL_TILE.y, ISLAND_ARRIVAL_TILE.z));
         return;
+      case "R43aKV": // the navigator's "Yes, please." row to Fossil Island
+        if (!LEAD_NAVIGATOR_NPC_IDS.has(npcId)) return;
+        player.moveTo(new Location(ISLAND_ARRIVAL_TILE.x, ISLAND_ARRIVAL_TILE.y, ISLAND_ARRIVAL_TILE.z));
+        return;
       default:
         return;
     }
+  }
+
+  /**
+   * The Apothecary's Talk-to is taken as a named hook rather than through the generic
+   * NpcDialogues handler: another quest binds "Apothecary" first and silently consumes
+   * the click while its own quest is inactive, so the generic path never runs. Bone
+   * Voyage's hook is registered earlier alphabetically; other stages fall through.
+   */
+  function talkToApothecary(event) {
+    const { player, npcId } = event;
+    if (npcId !== APOTHECARY_NPC_ID) return false;
+    const variant = selectApothecaryVariant(player, quest.getStage(player));
+    if (!variant) return false;
+    startTranscript(api, player, npcId, PAGE, variant);
+    return true;
   }
 
   // ==========================================================================
@@ -725,6 +749,7 @@ module.exports = function registerBoneVoyageQuest(api) {
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
+  api.onNpcInteraction("Apothecary", { "Talk-to": talkToApothecary });
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:line", handleLine);

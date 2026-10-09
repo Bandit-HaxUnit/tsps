@@ -455,7 +455,11 @@ module.exports = function registerBetweenARockQuest(api) {
       case "dM_N-J":
         return false;
       case "sCsZPB":
-        return hasItem(player, SCHEMATIC_ASSEMBLED_ITEM) && !hasItem(player, GOLD_HELMET_ITEM);
+        return (
+          hasItem(player, SCHEMATIC_ASSEMBLED_ITEM) &&
+          !hasItem(player, GOLD_HELMET_ITEM) &&
+          !wearingHelmet(player)
+        );
       case "MGz01q":
         return (
           !hasItem(player, SCHEMATIC_ASSEMBLED_ITEM) &&
@@ -474,8 +478,7 @@ module.exports = function registerBetweenARockQuest(api) {
       case "95tum0":
         return (
           hasItem(player, SCHEMATIC_ASSEMBLED_ITEM) &&
-          hasItem(player, GOLD_HELMET_ITEM) &&
-          wearingHelmet(player)
+          (wearingHelmet(player) || hasItem(player, GOLD_HELMET_ITEM))
         );
       // The cutscene instances do not exist here.
       case "iv_G2w":

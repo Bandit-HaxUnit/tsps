@@ -24,8 +24,9 @@
  *   - npc-spawns.json points this quest's NPCs at ids the cache no longer has
  *     (10638-10649, 10701-10703 are nameless). The plugin spawns the real ids at the
  *     spawn-file coordinates: Willow 10655, Checkal 10657, Marley 10656 and Burntof
- *     10659; Atlas 10658, Cook 2895 and Charlie 5209 already spawn. Ramarno 10684
- *     appears south of the big doors once the quest completes.
+ *     10659; Atlas 10658, Cook 2895 and Charlie 5209 already spawn. Ramarno uses the
+ *     world spawn 10702 at the big doors (the plugin also accepts 10684 and no longer
+ *     spawns a duplicate).
  *   - The map has no "Ruins Entrance"/"Blocked entry" placement, so "Ruins Entrance"
  *     (41439, op Enter) is registered at (2997,3492). Before all three recruits the
  *     Enter option answers the wiki examine line "The way is blocked.".
@@ -66,6 +67,8 @@ module.exports = function registerBelowIceMountainQuest(api) {
   const BURNTOF_NPC_ID = NpcIdentifiers.BURNTOF; // 10659
   const BURNTOF_2_NPC_ID = NpcIdentifiers.BURNTOF_2; // 10660
   const RAMARNO_NPC_ID = NpcIdentifiers.RAMARNO_2; // 10684, Talk-to
+  const RAMARNO_WORLD_NPC_ID = 10702; // world spawn in npc-spawns.json at (2951,5779)
+  const RAMARNO_NPC_IDS = new Set([RAMARNO_NPC_ID, RAMARNO_WORLD_NPC_ID]);
   const ANCIENT_GUARDIAN_NPC_ID = NpcIdentifiers.ANCIENT_GUARDIAN; // 10654
   const COOK_NPC_ID = NpcIdentifiers.COOK_2; // 2895, Cook (Blue Moon Inn)
   const CHARLIE_NPC_ID = NpcIdentifiers.CHARLIE_THE_TRAMP; // 5209
@@ -76,7 +79,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
     ATLAS_NPC_ID,
     BURNTOF_NPC_ID,
     BURNTOF_2_NPC_ID,
-    RAMARNO_NPC_ID,
+    ...RAMARNO_NPC_IDS,
     COOK_NPC_ID,
     CHARLIE_NPC_ID,
   ]);
@@ -216,10 +219,9 @@ module.exports = function registerBelowIceMountainQuest(api) {
   const CHECKAL_TILE = { x: 3087, y: 3415 };
   const MARLEY_TILE = { x: 3088, y: 3471 };
   const BURNTOF_TILE = { x: 2956, y: 3367 };
-  const RAMARNO_TILE = { x: 2956, y: 5774 };
   const ENTRANCE_OBJECT_TILE = { x: 2997, y: 3492 };
   const ENTRANCE_ARRIVAL_TILE = { x: 2996, y: 3494 };
-  const RUINS_ARRIVAL_TILE = { x: 2951, y: 5766 };
+  const RUINS_ARRIVAL_TILE = { x: 2951, y: 5770 };
   const GUARDIAN_TILE = { x: 2952, y: 5775 };
   const PILLAR_TILES = [
     { x: 2947, y: 5771, face: 3 },
@@ -242,7 +244,6 @@ module.exports = function registerBelowIceMountainQuest(api) {
   const rpsPicks = new WeakMap(); // player -> "Rock" | "Paper" | "Scissors"
   let structuralPillars = [];
   let worldInstalled = false;
-  let ramarnoSpawned = false;
   let quest;
 
   // ==========================================================================
@@ -334,7 +335,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
     if (npcId === BURNTOF_NPC_ID || npcId === BURNTOF_2_NPC_ID) return selectBurntofVariant(player);
     if (npcId === COOK_NPC_ID) return selectCookVariant(player);
     if (npcId === CHARLIE_NPC_ID) return selectCharlieVariant(player);
-    if (npcId === RAMARNO_NPC_ID) return selectRamarnoVariant(player);
+    if (RAMARNO_NPC_IDS.has(npcId)) return selectRamarnoVariant(player);
     return null;
   }
 
@@ -445,6 +446,20 @@ module.exports = function registerBelowIceMountainQuest(api) {
     return null; // Own "Ramarno" page: subsequent/forge dialogue.
   }
 
+  /**
+   * The world spawn 10702 is not in the dialogue id index, so NpcDialogues never
+   * asks the variant selector for it; route its Talk-to through the same selector
+   * and transcript as 10684. Before completion and after meeting him (null) the
+   * generic "Ramarno" page plays, exactly as it does for 10684.
+   */
+  function handleRamarnoTalk(event) {
+    if (event.npcId !== RAMARNO_WORLD_NPC_ID || event.clickType !== 1) return;
+    const variant = selectRamarnoVariant(event.player);
+    if (!variant) return;
+    event.handled = true;
+    startTranscript(api, event.player, RAMARNO_WORLD_NPC_ID, PAGE, variant);
+  }
+
   // ==========================================================================
   // Prose-condition answers
   // ==========================================================================
@@ -516,13 +531,15 @@ module.exports = function registerBelowIceMountainQuest(api) {
   function handleLine(event) {
     const { player, npcId, text } = event;
     if (typeof text !== "string") return;
-    if (npcId === RAMARNO_NPC_ID && text.startsWith("The player will automatically speak")) {
+    if (RAMARNO_NPC_IDS.has(npcId) && text.startsWith("The player will automatically speak")) {
       event.skip = true;
       return;
     }
     if (npcId === ATLAS_NPC_ID && text.includes("[times done]")) {
       event.text = text.replace("[times done]", String(attrFlag(player, ATLAS_SESSIONS_ATTRIBUTE)));
     }
+    // Burntof's RPS lines carry "[chosen sign]"-style blanks; fill them too.
+    event.text = fillRpsSigns(player, event.text);
   }
 
   function fillRpsSigns(player, text) {
@@ -640,7 +657,6 @@ module.exports = function registerBelowIceMountainQuest(api) {
     if (stepId === ACTION_BAG_RUMMAGE) {
       event.handled = true;
       if (quest.getStage(player) === STAGE_GUARDIAN_DEAD) {
-        ensureRamarno();
         quest.complete(player);
       }
       return;
@@ -686,12 +702,6 @@ module.exports = function registerBelowIceMountainQuest(api) {
     const npcs = world?.getNpcs ? [...world.getNpcs()] : [];
     if (npcs.some((npc) => npc?.getId?.() === id)) return;
     api.spawnNpc({ id, x: tile.x, y: tile.y, z: 0, wanderRadius: radius });
-  }
-
-  function ensureRamarno() {
-    if (ramarnoSpawned) return;
-    ramarnoSpawned = true;
-    ensureNpc(RAMARNO_NPC_ID, RAMARNO_TILE);
   }
 
   /** The owner-only Ancient Guardian and the mineable pillars it fights beside. */
@@ -798,7 +808,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
       return;
     }
     event.handled = true;
-    startTranscript(api, event.player, RAMARNO_NPC_ID, PAGE, "finishing-up");
+    startTranscript(api, event.player, RAMARNO_WORLD_NPC_ID, PAGE, "finishing-up");
   }
 
   function handlePillarMine(event) {
@@ -837,7 +847,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
   }
 
   function handleItemOnRamarno(event) {
-    if (event.npcId !== RAMARNO_NPC_ID) return;
+    if (!RAMARNO_NPC_IDS.has(event.npcId)) return;
     const { player } = event;
     if (quest.getStage(player) < STAGE_COMPLETE || attrFlag(player, MET_RAMARNO_ATTRIBUTE)) return;
     event.handled = true;
@@ -911,7 +921,6 @@ module.exports = function registerBelowIceMountainQuest(api) {
   function handleLogin({ player }) {
     installWorld();
     refreshQuestList(player);
-    if (quest.isComplete(player)) ensureRamarno();
   }
 
   // ==========================================================================
@@ -954,6 +963,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
   api.onPlayerLogout(handlePlayerLogout);
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
+  api.onNpcInteraction(handleRamarnoTalk);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:line", handleLine);
   api.onCustomEvent("npc-dialogue:action", handleAction);

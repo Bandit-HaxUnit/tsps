@@ -876,6 +876,11 @@ module.exports = function registerEadgarsRuseQuest(api) {
       return;
     }
     if (objectId === LAUNDRY_BASKET_LOC_ID) {
+      // Shared with Mourning's End Part I (the soap in the same basket); only
+      // claim it while this quest still needs the dirty robes.
+      const stage = quest.getStage(player);
+      if (stage < STAGE_NEEDS_ITEMS || stage >= STAGE_COMPLETE ||
+        supplies(player).clothes || held(player, DIRTY_ROBE)) return;
       event.handled = true;
       player.sendMessage("You search the laundry basket... It's full of dirty robes.");
     }

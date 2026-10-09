@@ -35,7 +35,9 @@
  * 1859,4638,0 (no identifier; the cache has no interactive Death Altar loc);
  * Pillar of Light 9973; dead guards 9763 (inside, 1910,4635,1), 9764/9765
  * (outside the entrance), slaves 9766/9767; the altar light door is the varbit
- * 1158 door 9788 at 1865,4638-4640,0.
+ * 1158 door 9788 at 1865,4638-4640,0. Thorgel's appearance is varbit 8467
+ * (varp 594 bits 27-28): the altar dwarf 6184 only transforms to Thorgel 4010
+ * when it is 1, and the plugin sets it when the player passes the light door.
  *
  * Sources: OSRS Wiki "Mourning's End Part II" page, quick guide and transcript;
  * the cache for every id, varbit, placement and reward.
@@ -134,6 +136,7 @@ module.exports = function registerMourningsEndPartIIQuest(api) {
   const VARP_MOURNINGS_END_PART_II = 574; // mourning_quest_part2
   const VARBIT_STAGE = 1103; // mourning_quest_main, base varp 574 bits 0-7
   const VARBIT_ALTAR_DOOR = 1158; // mourning_door_1_c, base varp 579 bit 9; 1 = light door open
+  const VARBIT_THORGEL_APPEARS = 8467; // varp 594 bits 27-28; 1 = altar dwarf 6184 is Thorgel
 
   const STAGE_STARTED = 1;
   const STAGE_TUNNEL_ACCESS = 2;
@@ -307,6 +310,17 @@ module.exports = function registerMourningsEndPartIIQuest(api) {
   function syncAltarDoor(player) {
     const open = stageOf(player) >= STAGE_PUZZLE ? 1 : 0;
     player.getPacketSender().sendVarbit(VARBIT_ALTAR_DOOR, open);
+  }
+
+  /**
+   * The altar dwarf only transforms to Thorgel on the client while varbit 8467
+   * is 1. Set on the door pass (re-sent on login/bootstrap so a relog after the
+   * pass keeps him talkable); never cleared, so later stages keep it.
+   */
+  function syncThorgelAppearance(player) {
+    if (stageOf(player) >= STAGE_PUZZLE) {
+      player.getPacketSender().sendVarbit(VARBIT_THORGEL_APPEARS, 1);
+    }
   }
 
   // ==========================================================================
@@ -493,7 +507,9 @@ module.exports = function registerMourningsEndPartIIQuest(api) {
       case "4mvfGW":
         return stageOf(player) >= STAGE_LIST && hasAnyOutstanding(player) && !hasAllOutstanding(player);
       case "D9BEmz":
-        return stageOf(player) >= STAGE_LIST && hasAllOutstanding(player);
+        // "After the player has turned in all the items": true on the final trip
+        // (all remaining items held) and on repeat visits once the list is done.
+        return stageOf(player) >= STAGE_LIST && (hasAllOutstanding(player) || outstandingIds(player).length === 0);
       case "ax9rpu":
         return hasItem(player, ITEM_LIST);
       case "yACKOx":
@@ -657,6 +673,7 @@ module.exports = function registerMourningsEndPartIIQuest(api) {
     }
     const fromWest = player.getLocation().getX() < location.x;
     const offset = fromWest ? ALTAR_DOOR_OFFSET : -ALTAR_DOOR_OFFSET;
+    syncThorgelAppearance(player);
     player.moveTo(new Location(location.x + offset, location.y, 0));
   }
 
@@ -876,10 +893,12 @@ module.exports = function registerMourningsEndPartIIQuest(api) {
 
   function handleLogin({ player }) {
     syncAltarDoor(player);
+    syncThorgelAppearance(player);
   }
 
   function handleBootstrap({ player }) {
     syncAltarDoor(player);
+    syncThorgelAppearance(player);
   }
 
   function handleStageChanged(event) {
