@@ -22,12 +22,18 @@ const MARK_OVERLEVEL_THRESHOLD = 20;
 
 /** objectId -> obstacle entries; entries with `at` only match that object tile. */
 const OBSTACLES_BY_OBJECT = new Map();
+/** npcId -> the course obstacle done on that NPC (Werewolf's stick hand-in). */
+const OBSTACLES_BY_NPC = new Map();
 
 let pluginApi;
 let core;
 let ItemOnGroundManager;
 
 function indexObstacle(obstacle) {
+  if (obstacle.npc != null) {
+    OBSTACLES_BY_NPC.set(obstacle.npc, obstacle);
+    return;
+  }
   const objects = Array.isArray(obstacle.object) ? obstacle.object : [obstacle.object];
   for (const objectId of objects) {
     if (!Number.isInteger(objectId)) {
@@ -50,8 +56,14 @@ function buildIndex() {
       indexObstacle(obstacle);
     }
     course.finalIndex = Math.max(...obstacleXp.keys());
-    // The lap bonus tops a full lap up to the course's published lap experience.
-    const lapTotal = [...obstacleXp.values()].reduce((sum, xp) => sum + xp, 0);
+    course.obstacleXp = obstacleXp;
+  }
+  for (const course of COURSES) {
+    // The lap bonus tops a full lap up to the course's published lap experience. A course that
+    // shares its first obstacles with another counts those too, once.
+    const shared = course.sharesWith ? COURSES.find((other) => other.key === course.sharesWith.course) : null;
+    const sharedXp = shared ? [...shared.obstacleXp].filter(([index]) => index <= course.sharesWith.through) : [];
+    const lapTotal = [...course.obstacleXp.values(), ...sharedXp.map(([, xp]) => xp)].reduce((sum, xp) => sum + xp, 0);
     course.lapBonus = Math.max(0, Math.round((course.lapXp - lapTotal) * 10) / 10);
   }
   for (const shortcut of SHORTCUTS) {
@@ -59,12 +71,33 @@ function buildIndex() {
   }
 }
 
-function findObstacle(objectId, location) {
+/**
+ * The obstacle on that tile. An object in more than one course (a shared start or finish) is the
+ * entry that continues the player's lap, else the first.
+ */
+function findObstacle(objectId, location, player = null) {
   const entries = OBSTACLES_BY_OBJECT.get(objectId);
   if (!entries || !location) return null;
-  return entries.find((entry) => !entry.at || (
+  const here = entries.filter((entry) => !entry.at || (
     entry.at[0] === location.x && entry.at[1] === location.y && (entry.at[2] ?? location.z) === location.z
-  )) ?? null;
+  ));
+  if (here.length > 1 && player) {
+    const progress = player.getAttribute(PROGRESS_ATTRIBUTE);
+    const continuing = here.find((entry) => entry.course && continuesLap(progress, entry));
+    if (continuing) return continuing;
+  }
+  return here[0] ?? null;
+}
+
+/**
+ * Whether `obstacle` is the next one of the lap in `progress`: the same course, or a course that
+ * shares its first obstacles (`sharesWith: { course, through }`) with the one the lap began on.
+ */
+function continuesLap(progress, obstacle) {
+  if (!progress || progress.index !== obstacle.index - 1) return false;
+  const course = obstacle.course;
+  if (progress.course === course.key) return true;
+  return course.sharesWith?.course === progress.course && progress.index <= course.sharesWith.through;
 }
 
 function objectContext(player, object) {
@@ -159,7 +192,7 @@ function advanceCourse(player, obstacle) {
   if (obstacle.index === 1) {
     next = { course: course.key, index: 1 };
     rollMarkOfGrace(player, course);
-  } else if (progress?.course === course.key && progress.index === obstacle.index - 1) {
+  } else if (continuesLap(progress, obstacle)) {
     next = { course: course.key, index: obstacle.index };
   }
   if (next && obstacle.index === course.finalIndex) {
@@ -206,6 +239,9 @@ function finishObstacle(player, obstacle, success, completed) {
     player.getPacketSender().sendRunEnergy();
   }
   obstacle.onSuccess?.(player);
+  if (obstacle.takes != null) {
+    takeAll(player, obstacle.takes);
+  }
   if (obstacle.course && obstacle.index != null) {
     advanceCourse(player, obstacle);
   }
@@ -294,6 +330,7 @@ function attemptObstacle(player, object, entry) {
   const success = rollSuccess(player, obstacle, level);
   const steps = resolve(success ? obstacle.steps : obstacle.fail.steps, context);
   if (!steps) return;
+  pluginApi.emitCustomEvent("agility:obstacle-start", { player, objectId: object.getId(), location: context.obj, success });
   const startMessage = success ? obstacle.start : obstacle.fail?.start ?? obstacle.start;
   if (startMessage) {
     player.sendMessage(startMessage);
@@ -314,7 +351,7 @@ function attemptObstacle(player, object, entry) {
 
 function routeToObstacle(event) {
   const location = event.object.getLocation();
-  const obstacle = findObstacle(event.objectId, { x: location.getX(), y: location.getY(), z: location.getZ() });
+  const obstacle = findObstacle(event.objectId, { x: location.getX(), y: location.getY(), z: location.getZ() }, event.player);
   if (!obstacle?.route || event.clickType !== 1) return;
   const tile = resolve(obstacle.route, objectContext(event.player, event.object));
   if (tile) {
@@ -323,11 +360,48 @@ function routeToObstacle(event) {
 }
 
 function operateObstacle(event) {
-  const obstacle = findObstacle(event.objectId, event.location);
+  const obstacle = findObstacle(event.objectId, event.location, event.player);
   if (!obstacle) return false;
   if (ObstacleRunner.isBusy(event.player)) return true;
   attemptObstacle(event.player, event.object, obstacle);
   return true;
+}
+
+/** Removes every `itemId` the player carries (Werewolf: all sticks go when one is handed in). */
+function takeAll(player, itemId) {
+  const amount = player.getInventory().getAmount(itemId);
+  if (amount > 0) {
+    player.getInventory().delete(itemId, amount);
+  }
+}
+
+/**
+ * A course obstacle done on an NPC (Werewolf's Agility Trainer, "Give-Stick"): its requirement
+ * and precondition, then XP, end message and the lap, as for an object.
+ */
+function operateNpcObstacle(event) {
+  const { player, npc } = event;
+  const obstacle = OBSTACLES_BY_NPC.get(event.npcId ?? npc.getId());
+  if (!obstacle) return false;
+  if (ObstacleRunner.isBusy(player)) return true;
+  const { refusal } = usable(player, obstacle, obstacle.level);
+  const blocked = refusal ?? obstacle.precondition?.({ player, npc, core });
+  if (blocked) {
+    player.sendMessage(blocked);
+    return true;
+  }
+  finishObstacle(player, obstacle, true, true);
+  return true;
+}
+
+/** A course's own ladder (Shayzien's start) is an obstacle, not one the Ladders plugin climbs. */
+function claimLadderObstacle(request) {
+  const location = request.object.getLocation();
+  const obstacle = findObstacle(request.objectId, { x: location.getX(), y: location.getY(), z: location.getZ() }, request.player);
+  if (!obstacle) return;
+  request.handled = true;
+  if (ObstacleRunner.isBusy(request.player)) return;
+  attemptObstacle(request.player, request.object, obstacle);
 }
 
 function blockTeleportMidObstacle(event) {
@@ -357,6 +431,8 @@ module.exports = {
     api.onNpcInteraction("Grace", { "Toggle Counter": toggleLapCounter });
     api.onObjectRoute(routeToObstacle);
     api.onObjectFirstClick([...OBSTACLES_BY_OBJECT.keys()], operateObstacle);
+    api.onCustomEvent("ladders:climb", claimLadderObstacle);
+    api.onNpcInteraction("Agility Trainer", { "Give-Stick": operateNpcObstacle });
     api.onCanTeleport(blockTeleportMidObstacle);
     api.onPlayerLogout(finishObstacleOnLogout);
 

@@ -30,7 +30,7 @@ function tick() {
   }
 }
 
-const hooks = { route: [], click: new Map(), logout: [], teleport: [], events: [], npcs: {}, answers: {} };
+const hooks = { route: [], click: new Map(), logout: [], teleport: [], events: [], npcs: {}, answers: {}, listeners: {} };
 const groundItems = [];
 const Agility = require("../plugins/skills/Agility.plugin");
 Agility.register({
@@ -43,6 +43,7 @@ Agility.register({
   onCanTeleport: (handler) => hooks.teleport.push(handler),
   onPlayerLogout: (handler) => hooks.logout.push(handler),
   onNpcInteraction: (name, actions) => { hooks.npcs[name] = actions; },
+  onCustomEvent: (name, handler) => { hooks.listeners[name] = handler; },
   emitCustomEvent: (name, payload) => {
     hooks.events.push({ name, payload });
     hooks.answers[name]?.(payload);
@@ -97,7 +98,15 @@ function createPlayer(x, y, z, level = 99, { skills = {}, worn = [], held = [] }
       sendObjectAnimation() {},
     }),
     getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: () => { state.hits++; } }) }),
-    getInventory: () => ({ isFull: () => false, addItem() {}, contains: (id) => held.includes(id) }),
+    getInventory: () => ({
+      isFull: () => false,
+      addItem() {},
+      contains: (id) => held.includes(id),
+      getAmount: (id) => held.filter((item) => item === id).length,
+      delete: (id, amount) => {
+        for (let i = 0; i < amount; i++) held.splice(held.indexOf(id), 1);
+      },
+    }),
     getEquipment: () => ({ getItems: () => worn }),
     isRegistered: () => true,
     getHitpoints: () => 99,
@@ -142,11 +151,20 @@ function operate(player, objectId, objectTile) {
 /** One lap in index order, using each index's first obstacle; the object sits beside the player. */
 function runLap(course, player) {
   const byIndex = new Map();
+  // A course that shares its first obstacles runs those from the course they belong to.
+  const shared = course.sharesWith ? COURSES.find((other) => other.key === course.sharesWith.course) : null;
+  for (const obstacle of shared?.obstacles ?? []) {
+    if (obstacle.index <= course.sharesWith.through && !byIndex.has(obstacle.index)) byIndex.set(obstacle.index, obstacle);
+  }
   for (const obstacle of course.obstacles) {
     if (obstacle.index != null && !byIndex.has(obstacle.index)) byIndex.set(obstacle.index, obstacle);
   }
   for (const index of [...byIndex.keys()].sort((a, b) => a - b)) {
     const obstacle = byIndex.get(index);
+    if (obstacle.npc != null) {
+      hooks.npcs["Agility Trainer"]["Give-Stick"]({ player, npc: { getId: () => obstacle.npc }, npcId: obstacle.npc });
+      continue;
+    }
     const objectId = Array.isArray(obstacle.object) ? obstacle.object[0] : obstacle.object;
     const [x, y, z] = obstacle.at ?? tileOf(player);
     assert.notEqual(operate(player, objectId, obstacle.at ?? [x, y + 1, z]), false, `${course.key} obstacle ${index} was not handled`);
@@ -165,6 +183,10 @@ function isCacheLoc(id) {
 
 test("every obstacle and shortcut uses an object id from the cache", () => {
   for (const entry of [...COURSES.flatMap((course) => course.obstacles), ...SHORTCUTS]) {
+    if (entry.npc != null) {
+      assert.ok(CacheDefinitions.getNpc(entry.npc)?.name, `unknown npc id ${entry.npc} (${entry.course?.key})`);
+      continue;
+    }
     const ids = Array.isArray(entry.object) ? entry.object : [entry.object];
     for (const id of ids) {
       assert.ok(isCacheLoc(id), `unknown object id ${id} (${entry.course?.key ?? "shortcut"})`);
@@ -176,7 +198,9 @@ test("course indices run 1..n without gaps", () => {
   for (const course of COURSES) {
     const indices = [...new Set(course.obstacles.map((obstacle) => obstacle.index).filter((index) => index != null))];
     indices.sort((a, b) => a - b);
-    assert.deepEqual(indices, indices.map((_, i) => i + 1), course.key);
+    // A course that shares its first obstacles with another starts after them.
+    const first = (course.sharesWith?.through ?? 0) + 1;
+    assert.deepEqual(indices, indices.map((_, i) => i + first), course.key);
   }
 });
 
@@ -191,12 +215,21 @@ const LAP_ENDS = {
   prifddinas: [3240, 6109, 0],
   barbarian: [2543, 3553, 0],
   pyramid: [3364, 2830, 0],
+  "shayzien-basic": [1554, 3639, 0],
+  "shayzien-advanced": [1522, 3626, 0],
+  "wyrm-basic": [1645, 2933, 0],
+  "wyrm-advanced": [1645, 2933, 0],
+  werewolf: [3528, 9873, 0],
 };
+/** Courses that need gear to finish a lap. */
+const LAP_GEAR = { "shayzien-advanced": () => grappleGear() };
+/** Courses that need an item carried to finish a lap: Werewolf's stick, fetched on the way. */
+const LAP_ITEMS = { werewolf: [4179] };
 
 for (const course of COURSES) {
   test(`${course.name}: a full lap counts once and pays the course's lap experience`, () => {
     groundItems.length = 0;
-    const player = createPlayer(3200, 3200, 0);
+    const player = createPlayer(3200, 3200, 0, 99, { worn: LAP_GEAR[course.key]?.() ?? [], held: [...(LAP_ITEMS[course.key] ?? [])] });
     runLap(course, player);
 
     assert.equal(player.getAttribute("agility.laps")?.[course.key], 1);
@@ -281,7 +314,7 @@ function grappleGear() {
 
 test("a grapple needs the gear and skills, or the barehanded Agility level (Wiki: Rough wall)", () => {
   const wall = [3033, 3390, 0];
-  const falls = (player) => player.state.animations.includes(4455);
+  const fires = (player) => player.state.animations.includes(1779); // fire and climb (rsprox, rev 237)
   const bare = createPlayer(3033, 3390, 0, 40, { skills: { strength: 37, ranged: 19 } });
   operate(bare, ObjectIds.ROUGH_WALL_8, wall);
   assert.deepEqual(tileOf(bare), [3033, 3390, 0], "refused: no crossbow, and short of the barehanded 52");
@@ -290,7 +323,7 @@ test("a grapple needs the gear and skills, or the barehanded Agility level (Wiki
   const geared = createPlayer(3033, 3390, 0, 11, { skills: { strength: 37, ranged: 19 }, worn: grappleGear() });
   operate(geared, ObjectIds.ROUGH_WALL_8, wall);
   assert.deepEqual(tileOf(geared), [3033, 3389, 1]);
-  assert.ok(falls(geared), "fires the grapple");
+  assert.ok(fires(geared), "fires the grapple");
 
   const weak = createPlayer(3033, 3390, 0, 11, { skills: { strength: 36, ranged: 19 }, worn: grappleGear() });
   operate(weak, ObjectIds.ROUGH_WALL_8, wall);
@@ -300,7 +333,7 @@ test("a grapple needs the gear and skills, or the barehanded Agility level (Wiki
   const climber = createPlayer(3033, 3390, 0, 52);
   operate(climber, ObjectIds.ROUGH_WALL_8, wall);
   assert.deepEqual(tileOf(climber), [3033, 3389, 1], "barehanded at 52");
-  assert.ok(!falls(climber), "no grapple fired");
+  assert.ok(!fires(climber), "no grapple fired");
 });
 
 test("a quest gate refuses only when the quest plugin says it isn't done", () => {
@@ -374,6 +407,36 @@ test("shortcuts sharing an object id are told apart by their tile", () => {
   assert.deepEqual(tileOf(player), [3033, 3390, 0]);
 });
 
+test("Shayzien: the shared start goes on into either course, and the beams need the grapple", () => {
+  const basic = COURSES.find((course) => course.key === "shayzien-basic");
+  const advanced = COURSES.find((course) => course.key === "shayzien-advanced");
+  const shared = basic.obstacles.filter((obstacle) => obstacle.index <= 3);
+  const beam = advanced.obstacles.find((obstacle) => obstacle.index === 4);
+
+  const bare = createPlayer(1554, 3630, 0);
+  for (const obstacle of shared) operate(bare, obstacle.object, [1554, 3631, 0]);
+  operate(bare, beam.object, [1512, 3637, 2]);
+  assert.ok(bare.state.messages.includes("You need a crossbow equipped to do that."));
+  assert.deepEqual(bare.getAttribute("agility.progress"), { course: "shayzien-basic", index: 3 }, "still mid-lap");
+
+  const geared = createPlayer(1554, 3630, 0, 99, { worn: grappleGear() });
+  for (const obstacle of shared) operate(geared, obstacle.object, [1554, 3631, 0]);
+  operate(geared, beam.object, [1512, 3637, 2]);
+  assert.deepEqual(geared.getAttribute("agility.progress"), { course: "shayzien-advanced", index: 4 });
+});
+
+test("Shayzien's start ladder is claimed from the Ladders plugin and climbed as the course's obstacle", () => {
+  const player = createPlayer(1554, 3630, 0);
+  const request = { player, object: gameObject(42209, 1554, 3631, 0), objectId: 42209, clickType: 1, handled: false };
+  hooks.listeners["ladders:climb"](request);
+  assert.equal(request.handled, true);
+  for (let ticks = 0; player.getAttribute("agility.obstacle") != null && ticks < 10; ticks++) tick();
+  assert.deepEqual(tileOf(player), [1554, 3632, 3]);
+  const other = { player, object: gameObject(16683, 3200, 3200, 0), objectId: 16683, clickType: 1, handled: false };
+  hooks.listeners["ladders:climb"](other);
+  assert.equal(other.handled, false, "other ladders stay the Ladders plugin's");
+});
+
 test("skipping an obstacle does not count a lap", () => {
   const course = COURSES.find((entry) => entry.key === "draynor");
   const player = createPlayer(3103, 3279, 3);
@@ -419,7 +482,7 @@ test("logging out mid-obstacle lands the player on the far side", () => {
   assert.equal(player.state.xp, 8);
 });
 
-test("a move lands after exactly its ticks (Rocks, Ralos' Rise: 10)", () => {
+test("moves land after exactly their ticks (Rocks, Ralos' Rise: three 2-tick moves, as captured)", () => {
   const player = createPlayer(1455, 3128, 0);
   hooks.click.get(ObjectIds.ROCKS_151)({ player, object: gameObject(ObjectIds.ROCKS_151, 1456, 3128, 0), objectId: ObjectIds.ROCKS_151, clickType: 1, location: { x: 1456, y: 3128, z: 0 }, handled: false });
   let ticks = 0;
@@ -427,8 +490,18 @@ test("a move lands after exactly its ticks (Rocks, Ralos' Rise: 10)", () => {
     tick();
     ticks++;
   }
-  assert.equal(ticks, 10);
+  assert.equal(ticks, 6);
   for (let more = 0; player.getAttribute("agility.obstacle") != null && more < 5; more++) tick();
+});
+
+test("the Mokhaiotl pillars swap sides: each jump sets varbit 16716 so the far pillar shows (as captured)", () => {
+  const player = createPlayer(1311, 9506, 1);
+  operate(player, 56608, [1311, 9509, 1]);
+  assert.deepEqual(tileOf(player), [1311, 9509, 1]);
+  assert.equal(player.state.varbits.get(16716), 1);
+  operate(player, 56609, [1311, 9506, 1]);
+  assert.deepEqual(tileOf(player), [1311, 9506, 1]);
+  assert.equal(player.state.varbits.get(16716), 0);
 });
 
 test("teleports are refused while crossing an obstacle", () => {

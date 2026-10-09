@@ -19,6 +19,7 @@
  *   { face: [x, y] } | { faceDir: "north" | ... }
  *   { hit: n | [min, max] }           damage the player
  *   { msg: text } | { say: text }     game message / overhead text
+ *   { varbit: [id, value] }           set a player varbit (a multiloc's side, say)
  *   { sound: id, loops?, delay? }     sound effect (delay in client cycles)
  *   { gfx: id }                       play a graphic on the player
  *   { objAnim: id }                   animate the obstacle object
@@ -217,6 +218,8 @@ function createObstacleTask(Task) {
         player.sendMessage(step.msg);
       } else if (step.say) {
         player.forceChat(step.say);
+      } else if (step.varbit) {
+        player.getPacketSender().sendVarbit(step.varbit[0], step.varbit[1]);
       } else if (step.sound != null) {
         player.getPacketSender().sendSoundEffect(step.sound, step.loops ?? 1, step.delay ?? 0);
       } else if (step.gfx != null) {

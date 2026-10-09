@@ -187,7 +187,17 @@
         ]
       },
       "unverified": "the failure's steps (no capture)",
-      "between": {"ends":[[3208,9572,0],[3204,9572,0]],"cross":[{"use":"hops","args":["object","to"]}]}
+      "between": {
+        "ends": [[3208,9572,0],[3204,9572,0]],
+        "cross": [
+          {"msg":"You leap across with a mighty leap!"},
+          {"sound":2461,"delay":35},
+          {"move":"object","anim":"STEPPING_STONE_JUMP","delay":30,"speed":[58,70],"ticks":4},
+          {"sound":2461,"delay":35},
+          {"move":"to","anim":"STEPPING_STONE_JUMP","delay":30,"speed":[58,70],"ticks":3}
+        ]
+      },
+      "note": "rsprox captures 3187"
     },
     {
       "name": "Stile (Falador road)",
@@ -285,7 +295,8 @@
       "fail": {"low":50,"high":254,"xp":6,"cross":true,"hit":[1,4]},
       "unverified": "the failure's damage (no capture)",
       "script": "zanarisJuttingWall",
-      "params": {"pivot":4403}
+      "params": {"pivot":4403},
+      "note": "rsprox captures 359, 424"
     },
     {
       "name": "Jutting wall (Zanaris, advanced)",
@@ -296,7 +307,8 @@
       "fail": {"low":50,"high":254,"xp":6,"cross":true,"hit":[1,4]},
       "unverified": "the failure's damage (no capture)",
       "script": "zanarisJuttingWall",
-      "params": {"pivot":4401}
+      "params": {"pivot":4401},
+      "note": "rsprox captures 359, 424"
     },
     {
       "name": "Crumbling wall (Falador)",
@@ -335,7 +347,7 @@
       "at": [3033,3390,0],
       "level": 11,
       "route": [3033,3390,0],
-      "unverified": "the barehanded climb's animation (no capture)",
+      "unverified": "the barehanded climb's animation (no capture); the screen fade before the teleport (no step for it yet)",
       "requires": [
         {
           "skills": {"agility":11,"strength":37,"ranged":19},
@@ -357,13 +369,14 @@
       ],
       "steps": [
         {"face":{"object":[0,0]}},
-        {"anim":"FIRE_GRAPPLE"},
-        {"gfx":"GRAPPLE_GRAPHIC"},
-        {"wait":11},
+        {"anim":"GRAPPLE_CLIMB"},
+        {"gfx":"GRAPPLE_CLIMB_GRAPHIC"},
+        {"sound":2928},
+        {"wait":7},
         {"anim":-1},
-        {"wait":1},
         {"tele":[3033,3389,1]}
-      ]
+      ],
+      "note": "rsprox captures 349, 4001"
     },
     {
       "name": "Rough wall (Falador)",
@@ -371,7 +384,7 @@
       "at": [3032,3389,0],
       "level": 11,
       "route": [3032,3388,0],
-      "unverified": "the barehanded climb's animation (no capture)",
+      "unverified": "the barehanded climb's animation (no capture); the screen fade before the teleport (no step for it yet)",
       "requires": [
         {
           "skills": {"agility":11,"strength":37,"ranged":19},
@@ -393,21 +406,22 @@
       ],
       "steps": [
         {"face":{"object":[0,0]}},
-        {"anim":"FIRE_GRAPPLE"},
-        {"gfx":"GRAPPLE_GRAPHIC"},
-        {"wait":11},
+        {"anim":"GRAPPLE_CLIMB"},
+        {"gfx":"GRAPPLE_CLIMB_GRAPHIC"},
+        {"sound":2928},
+        {"wait":7},
         {"anim":-1},
-        {"wait":1},
         {"tele":[3032,3389,1]}
-      ]
+      ],
+      "note": "rsprox captures 349, 4001"
     },
     {
       "name": "Wall (Yanille)",
       "object": [17047,17049,17050],
-      "at": [2556,3075,0],
+      "at": [2556,3074,0],
       "level": 39,
       "route": [2556,3075,0],
-      "unverified": "the barehanded climb's animation (no capture)",
+      "unverified": "the barehanded climb's animation (no capture); the screen fade before the teleport (no step for it yet)",
       "requires": [
         {
           "skills": {"agility":39,"strength":38,"ranged":21},
@@ -429,21 +443,22 @@
       ],
       "steps": [
         {"face":{"object":[0,0]}},
-        {"anim":"FIRE_GRAPPLE"},
-        {"gfx":"GRAPPLE_GRAPHIC"},
-        {"wait":11},
+        {"anim":"GRAPPLE_CLIMB"},
+        {"gfx":"GRAPPLE_CLIMB_GRAPHIC"},
+        {"sound":2928},
+        {"wait":7},
         {"anim":-1},
-        {"wait":1},
         {"tele":[2556,3074,1]}
-      ]
+      ],
+      "note": "rsprox captures 358, 4001"
     },
     {
       "name": "Wall (Yanille)",
       "object": [17047,17049,17050],
-      "at": [2556,3072,0],
+      "at": [2556,3073,0],
       "level": 39,
       "route": [2556,3072,0],
-      "unverified": "the barehanded climb's animation (no capture)",
+      "unverified": "the barehanded climb's animation (no capture); the screen fade before the teleport (no step for it yet)",
       "requires": [
         {
           "skills": {"agility":39,"strength":38,"ranged":21},
@@ -465,13 +480,14 @@
       ],
       "steps": [
         {"face":{"object":[0,0]}},
-        {"anim":"FIRE_GRAPPLE"},
-        {"gfx":"GRAPPLE_GRAPHIC"},
-        {"wait":11},
+        {"anim":"GRAPPLE_CLIMB"},
+        {"gfx":"GRAPPLE_CLIMB_GRAPHIC"},
+        {"sound":2928},
+        {"wait":7},
         {"anim":-1},
-        {"wait":1},
         {"tele":[2556,3073,1]}
-      ]
+      ],
+      "note": "rsprox captures 358, 4001"
     },
     {
       "name": "Falador (jump down)",
@@ -500,7 +516,7 @@
     {
       "name": "Yanille (jump down)",
       "object": [17048,17051,17052],
-      "at": [2556,3075,1],
+      "at": [2556,3074,1],
       "level": 1,
       "steps": [
         {"anim":"LEAP"},
@@ -512,7 +528,7 @@
     {
       "name": "Yanille (jump down)",
       "object": [17048,17051,17052],
-      "at": [2556,3072,1],
+      "at": [2556,3073,1],
       "level": 1,
       "steps": [
         {"anim":"LEAP"},
@@ -744,8 +760,18 @@
           {"msg":"You slip and fall."}
         ]
       },
-      "unverified": "the failure's steps (no capture)",
-      "between": {"ends":[[2722,3592,0],[2722,3596,0]],"cross":[{"walk":["to"]}]}
+      "unverified": "the failure's steps (no capture); the walk (the capture only shows the sounds and messages)",
+      "between": {
+        "ends": [[2722,3592,0],[2722,3596,0]],
+        "cross": [
+          {"sound":2470,"loops":2},
+          {"msg":"You attempt to walk across the slippery log."},
+          {"walk":["to"]},
+          {"sound":2470,"loops":2},
+          {"msg":"You make it across the log without any problems."}
+        ]
+      },
+      "note": "rsprox captures 359"
     },
     {
       "name": "Loose railing (Fishing Guild)",
@@ -1070,8 +1096,12 @@
       },
       "unverified": "the failure's steps (no capture)",
       "steps": [
-        {"use":"hops","args":["object"]}
-      ]
+        {"msg":"You attempt to balance on the stepping stone."},
+        {"sound":2461,"delay":30},
+        {"move":"object","anim":"STEPPING_STONE_JUMP","delay":20,"speed":[48,60],"ticks":2},
+        {"msg":"You manage to make the jump."}
+      ],
+      "note": "rsprox captures 355"
     },
     {
       "name": "Vine (Kharazi Jungle)",
@@ -1122,21 +1152,23 @@
       "at": [[2792,2978,0],[2792,2979,0],[2792,2980,0]],
       "level": 15,
       "steps": [
-        {"move":[2795,"pos.y"],"anim":"CLIMB_ROCKS","speed":[0,120],"ticks":3},
+        {"move":[2795,"pos.y"],"anim":"CLIMB_ROCKS","delay":15,"speed":[0,120],"dir":"west","ticks":3},
         {"anim":-1}
-      ]
+      ],
+      "note": "rsprox captures 352"
     },
     {
       "name": "Rock slide (Cairn Isle, heading west)",
       "fail": {"low":170,"high":253,"cross":true,"hit":[1,4]},
-      "unverified": "the failure's damage (no capture)",
+      "unverified": "the failure's damage (no capture); the reverse direction (only one direction was captured; it mirrors that one)",
       "object": 2231,
       "at": [[2794,2978,0],[2794,2979,0],[2794,2980,0]],
       "level": 15,
       "steps": [
-        {"move":[2791,"pos.y"],"anim":"CLIMB_ROCKS","speed":[0,120],"ticks":3},
+        {"move":[2791,"pos.y"],"anim":"CLIMB_ROCKS","delay":15,"speed":[0,120],"dir":"west","ticks":3},
         {"anim":-1}
-      ]
+      ],
+      "note": "rsprox captures 352"
     },
     {
       "name": "Ropeswing (Moss Giant Island, to the island)",
@@ -1568,7 +1600,8 @@
           "westLanding": [2773,10003],
           "eastLanding": [2775,10003]
         }
-      }
+      },
+      "note": "rsprox captures 2952"
     },
     {
       "name": "Little boulder (Ice Path)",
@@ -1690,12 +1723,14 @@
       "between": {
         "ends": [[2869,3671,0],[2872,3671,0]],
         "cross": [
-          {"move":"to","anim":"CLIMB_ROCKS","speed":[0,60]},
+          {"sound":2454,"loops":4,"delay":10},
+          {"move":"to","anim":"CRAWL_DOWN_ROCKS","delay":10,"speed":[0,120],"dir":"east","ticks":4},
           {"anim":-1}
         ]
       },
       "fail": {"low":170,"high":253,"cross":true,"hit":[1,4]},
-      "unverified": "the failure's damage (no capture)"
+      "unverified": "the failure's damage (no capture); the reverse direction (only one direction was captured; it mirrors that one)",
+      "note": "rsprox captures 358, 739, 1461, 1463, 2960"
     },
     {
       "name": "Rocks (Trollheim easy)",
@@ -1706,12 +1741,14 @@
       "between": {
         "ends": [[2869,3671,0],[2872,3671,0]],
         "cross": [
-          {"move":"to","anim":"CLIMB_ROCKS","speed":[0,60]},
+          {"sound":2454,"loops":4,"delay":10},
+          {"move":"to","anim":"CRAWL_DOWN_ROCKS","delay":10,"speed":[0,120],"dir":"east","ticks":4},
           {"anim":-1}
         ]
       },
       "fail": {"low":170,"high":253,"cross":true,"hit":[1,4]},
-      "unverified": "the failure's damage (no capture)"
+      "unverified": "the failure's damage (no capture); the reverse direction (only one direction was captured; it mirrors that one)",
+      "note": "rsprox captures 358, 739, 1461, 1463, 2960"
     },
     {
       "name": "Rocks (Trollheim medium)",
@@ -1722,12 +1759,14 @@
       "between": {
         "ends": [[2878,3665,0],[2878,3668,0]],
         "cross": [
-          {"move":"to","anim":"CLIMB_ROCKS","speed":[0,60]},
+          {"sound":2454,"loops":3,"delay":10},
+          {"move":"to","anim":"CRAWL_DOWN_ROCKS","delay":10,"speed":[0,120],"dir":"north","ticks":4},
           {"anim":-1}
         ]
       },
       "fail": {"low":170,"high":253,"cross":true,"hit":[1,4]},
-      "unverified": "the failure's damage (no capture)"
+      "unverified": "the failure's damage (no capture); the reverse direction (only one direction was captured; it mirrors that one)",
+      "note": "rsprox captures 739"
     },
     {
       "name": "Rocks (Trollheim medium)",
@@ -1738,12 +1777,14 @@
       "between": {
         "ends": [[2878,3665,0],[2878,3668,0]],
         "cross": [
-          {"move":"to","anim":"CLIMB_ROCKS","speed":[0,60]},
+          {"sound":2454,"loops":3,"delay":10},
+          {"move":"to","anim":"CRAWL_DOWN_ROCKS","delay":10,"speed":[0,120],"dir":"north","ticks":4},
           {"anim":-1}
         ]
       },
       "fail": {"low":170,"high":253,"cross":true,"hit":[1,4]},
-      "unverified": "the failure's damage (no capture)"
+      "unverified": "the failure's damage (no capture); the reverse direction (only one direction was captured; it mirrors that one)",
+      "note": "rsprox captures 739"
     },
     {
       "name": "Rocks (Trollheim hard)",
@@ -2174,14 +2215,17 @@
       "at": [2561,3108,0],
       "level": 5,
       "xp": 25,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
+      "unverified": "the movement (the captures only show the sound and message)",
       "between": {
         "ends": [[2561,3107,0],[2561,3110,0]],
         "cross": [
+          {"sound":2453},
+          {"msg":"You climb over the wall."},
           {"move":"to","anim":"CLIMB_ROCKS","speed":[0,90],"ticks":3},
           {"anim":-1}
         ]
-      }
+      },
+      "note": "rsprox captures 347, 358"
     },
     {
       "name": "Broken Raft",
@@ -2232,8 +2276,14 @@
       "at": [1369,3295,0],
       "level": 24,
       "xp": 6,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {"ends":[[1369,3294,0],[1369,3296,0]],"cross":[{"use":"climbOver","args":["to"]}]}
+      "between": {
+        "ends": [[1369,3294,0],[1369,3296,0]],
+        "cross": [
+          {"sound":2453,"delay":10},
+          {"move":"to","anim":"CRUMBLED_WALL","speed":[0,70],"ticks":3}
+        ]
+      },
+      "note": "rsprox captures 1098, 1100, 1105, 1108 (Leagues worlds only)"
     },
     {
       "name": "Broken wall (Nemus Retreat) (2)",
@@ -2241,8 +2291,14 @@
       "at": [1387,3302,0],
       "level": 24,
       "xp": 6,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {"ends":[[1387,3301,0],[1387,3303,0]],"cross":[{"use":"climbOver","args":["to"]}]}
+      "between": {
+        "ends": [[1387,3301,0],[1387,3303,0]],
+        "cross": [
+          {"sound":2453,"delay":10},
+          {"move":"to","anim":"CRUMBLED_WALL","speed":[0,70],"ticks":3}
+        ]
+      },
+      "note": "rsprox captures 1098, 1100, 1105, 1108 (Leagues worlds only)"
     },
     {
       "name": "Broken wall (Nemus Retreat) (3)",
@@ -2250,8 +2306,14 @@
       "at": [1390,3309,0],
       "level": 24,
       "xp": 6,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {"ends":[[1389,3309,0],[1391,3309,0]],"cross":[{"use":"climbOver","args":["to"]}]}
+      "between": {
+        "ends": [[1389,3309,0],[1391,3309,0]],
+        "cross": [
+          {"sound":2453,"delay":10},
+          {"move":"to","anim":"CRUMBLED_WALL","speed":[0,70],"ticks":3}
+        ]
+      },
+      "note": "rsprox captures 1098, 1100, 1105, 1108 (Leagues worlds only)"
     },
     {
       "name": "Rocks (Catherby)",
@@ -2293,15 +2355,30 @@
       "at": [[1368,3324,0],[1368,3326,0]],
       "level": 33,
       "xp": 7.5,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {"ends":[[1368,3323,0],[1368,3327,0]],"cross":[{"use":"tunnel","args":["to"]}]}
+      "between": {
+        "ends": [[1368,3323,0],[1368,3327,0]],
+        "cross": {
+          "forward": [
+            {"sound":2452},
+            {"move":[1368,3324,0],"anim":"DUCK","speed":[0,30],"ticks":1},
+            {"move":[1368,3326,0],"anim":"INVISIBLE","speed":[0,30],"ticks":1},
+            {"move":[1368,3327,0],"anim":"EMERGE","speed":[0,30],"ticks":1}
+          ],
+          "back": [
+            {"sound":2452},
+            {"move":[1368,3326,0],"anim":"DUCK","speed":[0,30],"ticks":1},
+            {"move":[1368,3324,0],"anim":"INVISIBLE","speed":[0,30],"ticks":1},
+            {"move":[1368,3323,0],"anim":"EMERGE","speed":[0,30],"ticks":1}
+          ]
+        }
+      },
+      "note": "rsprox captures 1098, 1102 (Leagues worlds only)"
     },
     {
       "name": "Trellis (Varrock)",
       "object": 2149,
       "at": [3228,3471,0],
       "level": 35,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
       "requires": [
         {
           "skills": {"agility":35},
@@ -2314,10 +2391,13 @@
       "between": {
         "ends": [[3228,3470,0],[3228,3472,0]],
         "cross": [
-          {"move":"to","anim":"CLIMB_ROCKS","speed":[0,60],"ticks":2},
+          {"sound":2461},
+          {"sound":2461,"delay":75},
+          {"move":"to","anim":"CLIMB_TRELLIS","speed":[99,112],"ticks":5},
           {"anim":-1}
         ]
-      }
+      },
+      "note": "rsprox captures 3220"
     },
     {
       "name": "Rocky handholds (Rellekka Hunter area) (1)",
@@ -2422,14 +2502,15 @@
       "at": [[1392,3323,0],[1395,3323,0]],
       "level": 41,
       "xp": 9.5,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
+      "unverified": "the reverse direction (only one direction was captured; it mirrors that one)",
       "between": {
         "ends": [[1391,3323,0],[1396,3323,0]],
         "cross": [
-          {"move":"to","anim":"CLIMB_ROCKS","speed":[0,150],"ticks":5},
-          {"anim":-1}
+          {"sound":2454,"loops":5,"delay":5},
+          {"move":"to","anim":"CLIMB_LOOP","speed":[0,90],"ticks":3}
         ]
-      }
+      },
+      "note": "rsprox captures 1105 (Leagues worlds only)"
     },
     {
       "name": "Log balance (Auburn Valley)",
@@ -2460,14 +2541,29 @@
       "object": 51931,
       "at": [[1456,3128,0],[1464,3128,0]],
       "level": 47,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
       "between": {
         "ends": [[1455,3128,0],[1465,3128,0]],
-        "cross": [
-          {"move":"to","anim":"CLIMB_ROCKS","speed":[0,300],"ticks":10},
-          {"anim":-1}
-        ]
-      }
+        "cross": {
+          "forward": [
+            {"sound":2454,"loops":4,"delay":5},
+            {"move":[1458,3128,0],"anim":"CLIMB_ROCKS","speed":[0,60],"dir":"west","ticks":2},
+            {"move":[1460,3128,0],"anim":"WALK_BACKWARDS","speed":[0,60],"dir":"west","ticks":2},
+            {"sound":2454,"loops":3,"delay":5},
+            {"move":[1465,3128,0],"anim":"CLIMB_ROCKS","speed":[0,60],"dir":"west","ticks":2},
+            {"anim":-1}
+          ],
+          "back": [
+            {"sound":2454,"loops":4,"delay":5},
+            {"move":[1460,3128,0],"anim":"CLIMB_LOOP","speed":[0,60],"dir":"west","ticks":2},
+            {"anim":-1},
+            {"wait":2},
+            {"sound":2454,"loops":4,"delay":5},
+            {"move":[1455,3128,0],"anim":"CLIMB_LOOP","speed":[0,90],"dir":"west","ticks":3},
+            {"anim":-1}
+          ]
+        }
+      },
+      "note": "rsprox captures 359"
     },
     {
       "name": "Broken fence (Draynor Manor)",
@@ -2497,14 +2593,22 @@
       "object": [54775,54776],
       "at": [[1342,2917,0],[1339,2917,0]],
       "level": 54,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
       "between": {
         "ends": [[1343,2917,0],[1338,2917,0]],
-        "cross": [
-          {"move":"to","anim":"CLIMB_ROCKS","speed":[0,150],"ticks":5},
-          {"anim":-1}
-        ]
-      }
+        "cross": {
+          "forward": [
+            {"sound":2454,"loops":5,"delay":5},
+            {"move":"to","anim":"CLIMB_ROCKS","speed":[0,90],"dir":"east","ticks":3},
+            {"anim":-1}
+          ],
+          "back": [
+            {"sound":2454,"loops":5,"delay":5},
+            {"move":"to","anim":"CLIMB_LOOP","speed":[0,90],"dir":"east","ticks":3},
+            {"anim":-1}
+          ]
+        }
+      },
+      "note": "rsprox captures 361"
     },
     {
       "name": "Rocks (Giants' Plateau) (1)",
@@ -2631,8 +2735,18 @@
       "object": [55988,55989],
       "at": [[2990,9546,0],[2968,9549,0]],
       "level": 60,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {"ends":[[2991,9546,0],[2967,9549,0]],"cross":[{"use":"tunnel","args":["to"]}]}
+      "between": {
+        "ends": [[2992,9547,0],[2969,9551,0]],
+        "cross": [
+          {"msg":"You scramble through the dark and dangerous tunnel..."},
+          {"sound":2454,"loops":2,"delay":4},
+          {"anim":"LONG_CRAWL"},
+          {"wait":2},
+          {"msg":"You scramble through the dark and dangerous tunnel..."},
+          {"tele":"to"}
+        ]
+      },
+      "note": "rsprox captures 362, 2283"
     },
     {
       "name": "Stepping stone (The Great Conch)",
@@ -2662,24 +2776,94 @@
       "object": 43989,
       "at": [3291,2700,0],
       "level": 62,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {"ends":[[3291,2699,0],[3291,2702,0]],"cross":[{"use":"hops","args":["object","to"]}]}
+      "unverified": "the reverse direction (only one direction was captured; it mirrors that one)",
+      "between": {
+        "ends": [[3289,2700,0],[3295,2700,0]],
+        "cross": {
+          "forward": [
+            {"msg":"You attempt to cross using the stepping stones..."},
+            {"sound":2461,"delay":15},
+            {"move":[3291,2700,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"sound":2461,"delay":15},
+            {"move":[3293,2700,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"sound":2461,"delay":15},
+            {"move":[3295,2700,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"msg":"You successfully make it to the other side."}
+          ],
+          "back": [
+            {"msg":"You attempt to cross using the stepping stones..."},
+            {"sound":2461,"delay":15},
+            {"move":[3293,2700,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"sound":2461,"delay":15},
+            {"move":[3291,2700,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"sound":2461,"delay":15},
+            {"move":[3289,2700,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"msg":"You successfully make it to the other side."}
+          ]
+        }
+      },
+      "note": "rsprox captures 581, 1750"
     },
     {
       "name": "Stepping stone (Necropolis) (2)",
       "object": 43989,
       "at": [3293,2700,0],
       "level": 62,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {"ends":[[3289,2700,0],[3295,2700,0]],"cross":[{"use":"hops","args":["object","to"]}]}
+      "unverified": "the reverse direction (only one direction was captured; it mirrors that one)",
+      "between": {
+        "ends": [[3289,2700,0],[3295,2700,0]],
+        "cross": {
+          "forward": [
+            {"msg":"You attempt to cross using the stepping stones..."},
+            {"sound":2461,"delay":15},
+            {"move":[3291,2700,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"sound":2461,"delay":15},
+            {"move":[3293,2700,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"sound":2461,"delay":15},
+            {"move":[3295,2700,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"msg":"You successfully make it to the other side."}
+          ],
+          "back": [
+            {"msg":"You attempt to cross using the stepping stones..."},
+            {"sound":2461,"delay":15},
+            {"move":[3293,2700,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"sound":2461,"delay":15},
+            {"move":[3291,2700,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"sound":2461,"delay":15},
+            {"move":[3289,2700,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"msg":"You successfully make it to the other side."}
+          ]
+        }
+      },
+      "note": "rsprox captures 581, 1750"
     },
     {
       "name": "Stepping stone (Necropolis) (3)",
       "object": 43990,
       "at": [3295,2706,0],
       "level": 62,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {"ends":[[3294,2706,0],[3296,2706,0]],"cross":[{"use":"hops","args":["object","to"]}]}
+      "between": {
+        "ends": [[3295,2704,0],[3295,2708,0]],
+        "cross": {
+          "forward": [
+            {"msg":"You attempt to cross using the stepping stone..."},
+            {"sound":2461,"delay":15},
+            {"move":[3295,2706,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"sound":2461,"delay":15},
+            {"move":[3295,2708,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"msg":"You successfully make it to the other side."}
+          ],
+          "back": [
+            {"msg":"You attempt to cross using the stepping stone..."},
+            {"sound":2461,"delay":15},
+            {"move":[3295,2706,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"sound":2461,"delay":15},
+            {"move":[3295,2704,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"msg":"You successfully make it to the other side."}
+          ]
+        }
+      },
+      "note": "rsprox captures 13, 389, 581, 1757, 1852, 3280"
     },
     {
       "name": "Slippery basalt stepping stone",
@@ -2729,36 +2913,55 @@
       "at": [2946,3439,0],
       "level": 66,
       "xp": 25,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
+      "unverified": "the movement (the captures only show the sound and message)",
       "between": {
         "ends": [[2943,3439,0],[2947,3439,0]],
         "cross": [
+          {"sound":2453},
+          {"msg":"You climb over the wall."},
           {"move":"to","anim":"CLIMB_ROCKS","speed":[0,120],"ticks":4},
           {"anim":-1}
         ]
-      }
+      },
+      "note": "rsprox captures 362, 1698, 2774, 2963"
     },
     {
       "name": "Rocks (Ice Mountain)",
       "object": [47570,47571],
       "at": [[3001,3483,0],[2998,3483,0]],
       "level": 68,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
       "between": {
         "ends": [[3002,3483,0],[2997,3483,0]],
-        "cross": [
-          {"move":"to","anim":"CLIMB_ROCKS","speed":[0,150],"ticks":5},
-          {"anim":-1}
-        ]
-      }
+        "cross": {
+          "forward": [
+            {"sound":2454,"loops":5,"delay":5},
+            {"move":"to","anim":"CLIMB_ROCKS","speed":[0,90],"dir":"east","ticks":3},
+            {"anim":-1}
+          ],
+          "back": [
+            {"sound":2454,"loops":5,"delay":5},
+            {"move":"to","anim":"CLIMB_LOOP","speed":[0,90],"dir":"east","ticks":3},
+            {"anim":-1}
+          ]
+        }
+      },
+      "note": "rsprox captures 362"
     },
     {
       "name": "Hole (Fossil Island)",
       "object": [31481,31482],
       "at": [[3714,3816,0],[3712,3828,0]],
       "level": 70,
-      "unverified": "the movement and both ends (no capture; from the map)",
-      "between": {"ends":[[3714,3815,0],[3711,3829,0]],"cross":[{"use":"tunnel","args":["to"]}]}
+      "between": {
+        "ends": [[3715,3815,0],[3713,3830,0]],
+        "cross": [
+          {"anim":"CLIMB_DOWN"},
+          {"wait":1},
+          {"msg":"You climb through the tunnel."},
+          {"tele":"to"}
+        ]
+      },
+      "note": "rsprox captures 1855"
     },
     {
       "name": "Crumbling wall (Gu'Tanoth)",
@@ -2786,8 +2989,24 @@
       "at": [3373,2957,0],
       "level": 71,
       "xp": 25,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {"ends":[[3373,2955,0],[3373,2961,0]],"cross":[{"use":"hops","args":["object","to"]}]}
+      "between": {
+        "ends": [[3373,2955,0],[3371,2958,0]],
+        "cross": {
+          "forward": [
+            {"sound":2461,"delay":15},
+            {"move":[3373,2957,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"sound":2461,"delay":15},
+            {"move":[3371,2958,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2}
+          ],
+          "back": [
+            {"sound":2461,"delay":15},
+            {"move":[3373,2957,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+            {"sound":2461,"delay":15},
+            {"move":[3373,2955,0],"anim":"JUMP","delay":15,"speed":[30,45],"ticks":2}
+          ]
+        }
+      },
+      "note": "rsprox captures 2948, 3168"
     },
     {
       "name": "Rocks (The Proudspire, upper)",
@@ -2809,16 +3028,42 @@
       "at": [3546,3282,0],
       "level": 72,
       "xp": 25,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {"ends":[[3545,3282,0],[3547,3282,0]],"cross":[{"use":"jump","args":["to"]}]}
+      "between": {
+        "ends": [[3545,3282,0],[3546,3282,0]],
+        "cross": {
+          "forward": [
+            {"move":[3543,3282,0],"anim":"WALK_BACKWARDS","speed":[0,60],"dir":"east","ticks":2},
+            {"move":[3544,3282,0],"anim":"RUN_UP","speed":[0,30],"dir":"east","ticks":1},
+            {"sound":1936},
+            {"move":[3547,3282,0],"anim":"JUMP_HURDLE","speed":[8,50],"dir":"east","ticks":1},
+            {"msg":"You jump over the wall."}
+          ],
+          "back": [
+            {"move":[3548,3282,0],"anim":"WALK_BACKWARDS","speed":[0,60],"dir":"west","ticks":2},
+            {"move":[3547,3282,0],"anim":"RUN_UP","speed":[0,30],"dir":"west","ticks":1},
+            {"sound":1936},
+            {"move":[3544,3282,0],"anim":"JUMP_HURDLE","speed":[8,50],"dir":"west","ticks":1},
+            {"msg":"You jump over the wall."}
+          ]
+        }
+      },
+      "note": "rsprox captures 1149, 1846, 2948"
     },
     {
       "name": "Stepping stone (Wilderness Chaos Temple)",
       "object": 53237,
       "at": [3268,3627,0],
       "level": 72,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {"ends":[[3268,3625,0],[3268,3629,0]],"cross":[{"use":"hops","args":["object","to"]}]}
+      "between": {
+        "ends": [[3268,3625,0],[3268,3629,0]],
+        "cross": [
+          {"sound":2461,"delay":20},
+          {"move":"object","anim":"JUMP","delay":15,"speed":[30,45],"ticks":2},
+          {"sound":2461,"delay":5},
+          {"move":"to","anim":"JUMP","speed":[15,28],"ticks":1}
+        ]
+      },
+      "note": "rsprox captures 2948"
     },
     {
       "name": "Tunnel (Asgarnian Ice Dungeon, level 72)",
@@ -2836,6 +3081,28 @@
       "xp": 2.5,
       "unverified": "the movement and both ends (no capture; ends from the map)",
       "between": {"ends":[[1442,10097,1],[1449,10097,1]],"cross":[{"use":"jump","args":["to"]}]}
+    },
+    {
+      "name": "Pillar (Ruins of Mokhaiotl)",
+      "object": [56608,56609],
+      "level": 75,
+      "unverified": "the reverse direction (only one direction was captured; it mirrors that one)",
+      "note": "rsprox captures 3128, 3340, 3343; the two pillars are multilocs on varbit 16716, and only the far one can be jumped to",
+      "between": {
+        "ends": [[1311,9506,1],[1311,9509,1]],
+        "cross": {
+          "forward": [
+            {"sound":2461,"delay":5},
+            {"move":"to","anim":"SHORT_JUMP","speed":[0,27],"ticks":1},
+            {"varbit":[16716,1]}
+          ],
+          "back": [
+            {"sound":2461,"delay":5},
+            {"move":"to","anim":"SHORT_JUMP","speed":[0,27],"ticks":1},
+            {"varbit":[16716,0]}
+          ]
+        }
+      }
     },
     {
       "name": "Cave (Meiyerditch Laboratories medium) (1)",
@@ -3001,15 +3268,38 @@
       "at": [[3221,12441,0],[3217,12441,0]],
       "level": 78,
       "xp": 1,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {"ends":[[3222,12441,0],[3216,12441,0]],"cross":[{"use":"tunnel","args":["to"]}]}
+      "unverified": "the reverse direction (only one direction was captured; it mirrors that one)",
+      "between": {
+        "ends": [[3222,12441,0],[3216,12441,0]],
+        "cross": {
+          "forward": [
+            {"msg":"You squeeze through the tight gap."},
+            {"sound":2489},
+            {"move":[3221,12441,0],"anim":"CREVICE_IN","speed":[0,30],"ticks":1},
+            {"move":[3217,12441,0],"anim":"INVISIBLE","speed":[0,300],"ticks":1},
+            {"sound":2490},
+            {"move":[3216,12441,0],"anim":"CREVICE_OUT","speed":[0,30],"ticks":1},
+            {"anim":-1}
+          ],
+          "back": [
+            {"msg":"You squeeze through the tight gap."},
+            {"sound":2489},
+            {"move":[3217,12441,0],"anim":"CREVICE_IN","speed":[0,30],"ticks":1},
+            {"move":[3221,12441,0],"anim":"INVISIBLE","speed":[0,300],"ticks":1},
+            {"sound":2490},
+            {"move":[3222,12441,0],"anim":"CREVICE_OUT","speed":[0,30],"ticks":1},
+            {"anim":-1}
+          ]
+        }
+      },
+      "note": "rsprox captures 2952"
     },
     {
       "name": "Rocks (Shilo Village)",
       "object": [53238,53240],
       "at": [[2871,3007,0],[2871,3004,0]],
       "level": 79,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
+      "unverified": "the reverse direction (only one direction was captured; it mirrors that one)",
       "requires": [
         {
           "skills": {"agility":79},
@@ -3017,12 +3307,14 @@
         }
       ],
       "between": {
-        "ends": [[2871,3008,0],[2871,3003,0]],
+        "ends": [[2871,3007,0],[2871,3004,0]],
         "cross": [
-          {"move":"to","anim":"CLIMB_ROCKS","speed":[0,150],"ticks":5},
+          {"sound":2454,"loops":4,"delay":10},
+          {"move":"to","anim":"CRAWL_DOWN_ROCKS","delay":10,"speed":[0,90],"dir":"south","ticks":3},
           {"anim":-1}
         ]
-      }
+      },
+      "note": "rsprox captures 2950, 3030"
     },
     {
       "name": "Stepping stone (north of Sophanem)",
@@ -3044,8 +3336,17 @@
       "at": [[1861,4406,1],[1853,4406,3]],
       "level": 81,
       "xp": 10,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {"ends":[[1862,4406,1],[1852,4406,3]],"cross":[{"use":"tunnel","args":["to"]}]}
+      "unverified": "the reverse direction (only one direction was captured; it mirrors that one)",
+      "between": {
+        "ends": [[1862,4406,1],[1852,4406,3]],
+        "cross": [
+          {"anim":"DARK_TUNNEL"},
+          {"wait":1},
+          {"msg":"You crawl through the narrow crevice."},
+          {"tele":"to"}
+        ]
+      },
+      "note": "rsprox captures 1057, 1851, 3433"
     },
     {
       "name": "Stepping Stone (Mos Le'Harmless, level 82)",
@@ -3060,8 +3361,42 @@
       "object": [53250,53251],
       "at": [[3014,9549,0],[3023,9553,0]],
       "level": 82,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {"ends":[[3013,9549,0],[3024,9553,0]],"cross":[{"use":"tunnel","args":["to"]}]}
+      "between": {
+        "ends": [[3012,9550,0],[3025,9554,0]],
+        "cross": {
+          "forward": [
+            {"msg":"You scramble through the dark and dangerous tunnel..."},
+            {"sound":2454,"loops":2,"delay":4},
+            {"anim":"LONG_CRAWL"},
+            {"wait":2},
+            {"msg":"You scramble through the dark and dangerous tunnel..."},
+            {"tele":[3026,9563,0]},
+            {"wait":2},
+            {"msg":"You push yourself through countless jagged rocks..."},
+            {"wait":2},
+            {"msg":"You brace yourself for the wyverns on the other side..."},
+            {"wait":2},
+            {"tele":"to"},
+            {"anim":-1}
+          ],
+          "back": [
+            {"msg":"You scramble through the dark and dangerous tunnel..."},
+            {"sound":2454,"loops":2,"delay":4},
+            {"anim":"LONG_CRAWL"},
+            {"wait":2},
+            {"msg":"You scramble through the dark and dangerous tunnel..."},
+            {"tele":[3026,9563,0]},
+            {"wait":2},
+            {"msg":"You push yourself through countless jagged rocks..."},
+            {"wait":2},
+            {"msg":"You see bright torchlight on the other side..."},
+            {"wait":2},
+            {"tele":"to"},
+            {"anim":-1}
+          ]
+        }
+      },
+      "note": "rsprox captures 362"
     },
     {
       "name": "Chain (Chasm of Fire)",
@@ -3069,14 +3404,14 @@
       "at": [1436,10075,2],
       "level": 83,
       "xp": 4,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {
-        "ends": [[1435,10075,2],[1439,10075,2]],
-        "cross": [
-          {"move":"to","anim":"CLIMB_ROCKS","speed":[0,120],"ticks":4},
-          {"anim":-1}
-        ]
-      }
+      "route": [1435,10075,2],
+      "steps": [
+        {"msg":"You deftly slide down the chain, leaping off before landing on the cage."},
+        {"sound":2461,"delay":13},
+        {"move":[1436,10075,2],"anim":"CLIMB_UP","speed":[10,29],"ticks":1},
+        {"tele":[1437,10074,0]}
+      ],
+      "note": "rsprox captures 772, 799, 817, 3340"
     },
     {
       "name": "Slope (Pollnivneach)",
@@ -3113,22 +3448,49 @@
       "at": [[3241,12420,0],[3233,12420,0]],
       "level": 84,
       "xp": 1.5,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
-      "between": {"ends":[[3242,12420,0],[3232,12420,0]],"cross":[{"use":"tunnel","args":["to"]}]}
+      "unverified": "the reverse direction (only one direction was captured; it mirrors that one)",
+      "between": {
+        "ends": [[3242,12420,0],[3232,12420,0]],
+        "cross": {
+          "forward": [
+            {"msg":"You squeeze through the tight gap."},
+            {"sound":2489},
+            {"move":[3241,12420,0],"anim":"CREVICE_IN","speed":[0,30],"ticks":1},
+            {"move":[3237,12420,0],"anim":"INVISIBLE","speed":[0,30],"ticks":1},
+            {"move":[3233,12420,0],"anim":"INVISIBLE","speed":[0,30],"ticks":1},
+            {"sound":2490},
+            {"move":[3232,12420,0],"anim":"CREVICE_OUT","speed":[0,30],"ticks":1},
+            {"anim":-1}
+          ],
+          "back": [
+            {"msg":"You squeeze through the tight gap."},
+            {"sound":2489},
+            {"move":[3233,12420,0],"anim":"CREVICE_IN","speed":[0,30],"ticks":1},
+            {"move":[3237,12420,0],"anim":"INVISIBLE","speed":[0,30],"ticks":1},
+            {"move":[3241,12420,0],"anim":"INVISIBLE","speed":[0,30],"ticks":1},
+            {"sound":2490},
+            {"move":[3242,12420,0],"anim":"CREVICE_OUT","speed":[0,30],"ticks":1},
+            {"anim":-1}
+          ]
+        }
+      },
+      "note": "rsprox captures 2952"
     },
     {
       "name": "Rocks (Crandor)",
       "object": [53234,53236],
       "at": [[2832,3248,0],[2832,3251,0]],
       "level": 84,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
+      "unverified": "the reverse direction (only one direction was captured; it mirrors that one)",
       "between": {
         "ends": [[2832,3247,0],[2832,3252,0]],
         "cross": [
-          {"move":"to","anim":"CLIMB_ROCKS","speed":[0,150],"ticks":5},
+          {"sound":2454,"loops":4,"delay":10},
+          {"move":"to","anim":"CRAWL_DOWN_ROCKS","delay":10,"speed":[0,120],"dir":"north","ticks":4},
           {"anim":-1}
         ]
-      }
+      },
+      "note": "rsprox captures 362"
     },
     {
       "name": "Crevice (Deepfin Mine)",
@@ -3143,14 +3505,16 @@
       "object": [53252,53254],
       "at": [[2547,3748,0],[2547,3745,0]],
       "level": 85,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
+      "unverified": "the reverse direction (only one direction was captured; it mirrors that one)",
       "between": {
         "ends": [[2547,3749,0],[2547,3744,0]],
         "cross": [
-          {"move":"to","anim":"CLIMB_ROCKS","speed":[0,150],"ticks":5},
+          {"sound":2454,"loops":4,"delay":10},
+          {"move":"to","anim":"CRAWL_DOWN_ROCKS","delay":10,"speed":[0,120],"dir":"south","ticks":4},
           {"anim":-1}
         ]
-      }
+      },
+      "note": "rsprox captures 1851"
     },
     {
       "name": "Rocks (Darkmeyer)",
@@ -3173,7 +3537,7 @@
       "object": [43762,43763],
       "at": [[3540,9772,0],[3542,9772,0]],
       "level": 93,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
+      "unverified": "the reverse direction (only one direction was captured; it mirrors that one)",
       "requires": [
         {
           "skills": {"agility":93},
@@ -3184,7 +3548,17 @@
           }
         }
       ],
-      "between": {"ends":[[3539,9772,0],[3543,9772,0]],"cross":[{"use":"tunnel","args":["to"]}]}
+      "between": {
+        "ends": [[3539,9772,0],[3543,9772,0]],
+        "cross": [
+          {"sound":2454,"loops":2,"delay":4},
+          {"anim":"LONG_CRAWL"},
+          {"wait":1},
+          {"tele":"to"},
+          {"anim":-1}
+        ]
+      },
+      "note": "rsprox captures 1632, 1636"
     },
     {
       "name": "Crevice (Shaman Caves)",
@@ -3192,14 +3566,23 @@
       "at": [[2764,9340,0],[2769,9340,0]],
       "level": 96,
       "xp": 7.5,
-      "unverified": "the movement and both ends (no capture; ends from the map)",
+      "unverified": "the reverse direction (only one direction was captured; it mirrors that one)",
       "requires": [
         {
           "skills": {"agility":96},
           "quest": {"key":"legends_quest","message":"You need to complete Legends' Quest to use this shortcut."}
         }
       ],
-      "between": {"ends":[[2764,9339,0],[2770,9340,0]],"cross":[{"use":"tunnel","args":["to"]}]}
+      "between": {
+        "ends": [[2764,9339,0],[2770,9340,0]],
+        "cross": [
+          {"anim":"DARK_TUNNEL"},
+          {"wait":1},
+          {"msg":"You squeeze your way through the crevice."},
+          {"tele":"to"}
+        ]
+      },
+      "note": "rsprox captures 2952"
     },
     {
       "name": "Rocks (Tirannwn easy)",
@@ -3248,14 +3631,23 @@
       "object": [57927,57928],
       "at": [[3180,2434,0],[3180,2432,0]],
       "level": 50,
-      "unverified": "the level (the Wiki's table doesn't say which rocks are which), the movement and both ends",
+      "unverified": "the level (the Wiki's table doesn't say which rocks are which)",
       "between": {
         "ends": [[3180,2435,0],[3180,2431,0]],
-        "cross": [
-          {"move":"to","anim":"CLIMB_ROCKS","speed":[0,120],"ticks":4},
-          {"anim":-1}
-        ]
-      }
+        "cross": {
+          "forward": [
+            {"sound":2454,"loops":3,"delay":5},
+            {"move":"to","anim":"CLIMB_ROCKS","speed":[0,60],"dir":"north","ticks":2},
+            {"anim":-1}
+          ],
+          "back": [
+            {"sound":2454,"loops":3,"delay":5},
+            {"move":"to","anim":"CLIMB_LOOP","speed":[0,60],"dir":"north","ticks":2},
+            {"anim":-1}
+          ]
+        }
+      },
+      "note": "rsprox captures 939, 3456, 4152"
     },
     {
       "name": "Rocks (The Great Conch, south-east)",

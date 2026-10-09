@@ -168,19 +168,6 @@ function refreshQuestList(player) {
   sendQuestList(player);
 }
 
-/**
- * The login bootstrap's sendTabInterface(6) sends the all-spells-unlocked varps
- * after the player-login hooks, clobbering cache NPC transform varps that share
- * storage with quest varps (e.g. Drezel's varp 302). Once the bootstrap is done,
- * re-send the real stages so quest NPCs render the right variant.
- */
-function syncQuestVarps(player) {
-  const packet = player.getPacketSender();
-  for (const quest of quests) {
-    packet.sendConfig(quest.varpId, quest.getStage(player));
-  }
-}
-
 function questStatus(quest, player) {
   if (quest.isComplete(player)) return STATUS_COMPLETE;
   if (quest.isStarted(player)) return STATUS_IN_PROGRESS;
@@ -330,7 +317,26 @@ function registerQuestWidgets(api) {
   api.onCustomEvent("quest:is-started", answerIsStarted);
   // The character summary shows the same header stats without opening the list.
   api.onPlayerLogin(({ player }) => sendQuestHeaderStats(player));
-  api.onCustomEvent("player:bootstrap-complete", ({ player }) => syncQuestVarps(player));
+  api.onPlayerLogin(sendQuestVarps);
+  // The login bootstrap's sendTabInterface(6) runs after the login hooks and
+  // re-sends the all-spells-unlocked varps, clobbering quest varps that share
+  // storage with cache transforms (e.g. Drezel's 302). Re-send ours afterwards.
+  api.onCustomEvent("player:bootstrap-complete", ({ player }) => sendQuestVarps({ player }));
+}
+
+/**
+ * Sends each quest's saved stage in its varp on login. The client reads them for more than the
+ * quest list: the cache shows locs and NPCs by quest progress (the Grand Exchange spirit tree
+ * only has Travel once Tree Gnome Village's varp says complete). setStage sends a varp only
+ * when it changes, so without this a relog left them all at 0. Stage 0 is sent too: the login
+ * bootstrap clobbers shared varps, so unstarted quests must be reset to 0 as well.
+ */
+function sendQuestVarps({ player }) {
+  const sender = player.getPacketSender();
+  for (const quest of quests) {
+    if (!Number.isInteger(quest.varpId) || quest.varpId < 0) continue;
+    sender.sendConfig(quest.varpId, quest.getStage(player));
+  }
 }
 
 // ============================================================================
@@ -362,6 +368,8 @@ function registerQuest(api, def) {
       player.setAttribute(stageKey, value | 0);
       player.getPacketSender().sendConfig(def.varpId, value | 0);
       refreshQuestList(player);
+      // Quests whose progress shows in more than their varp (a varbit the cache reads) follow it.
+      api.emitCustomEvent?.("quest:stage-changed", { player, key: def.key, stage: value | 0 });
     },
     isStarted(player) {
       return quest.getStage(player) >= (def.startedValue ?? 1);
@@ -513,6 +521,7 @@ module.exports = {
   QUEST_COMPLETE_JINGLE,
   registerQuest,
   getRegisteredQuests: () => quests.slice(),
+  sendQuestVarps,
   refreshQuestList,
   openJournal,
   openJournalBySlot,
