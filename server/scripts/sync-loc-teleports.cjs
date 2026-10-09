@@ -31,7 +31,7 @@ const OWN_PLUGIN = "LocTeleports";
 /** Ticks a probe waits for the move (the slowest captured loc teleports in 9). */
 const PROBE_TICKS = 15;
 
-const { choose, keyOf, toEntry } = require("./loc-teleport-matching.cjs");
+const { choose, keyOf, toEntry, requirementFor, dialogueFor } = require("./loc-teleport-matching.cjs");
 
 function argValue(flag) {
   const index = process.argv.indexOf(flag);
@@ -249,20 +249,32 @@ async function main() {
       continue;
     }
     const sequenceId = entry.sequence ? sequenceIds.get(entry.sequence) ?? null : null;
-    added.push(toEntry(entry, { display, option, sequenceId }));
+    added.push(toEntry(entry, { display, option, sequenceId, gate: requirementFor(entry, decisions), asked: dialogueFor(entry, decisions) }));
   }
 
-  console.log(`Captured locs: ${captures.length}; already in the data: ${existing.size}; to add: ${added.length}`);
+  // Gates are decisions: they apply to entries already in the data too (every placement of a name).
+  let gated = 0;
+  const gatedLocs = data.locs.map((entry) => {
+    const gate = requirementFor(entry, decisions);
+    const requires = gate?.requires;
+    const mesbox = gate?.mesbox;
+    if (JSON.stringify(entry.requires) === JSON.stringify(requires) && entry.mesbox === mesbox) return entry;
+    gated++;
+    const { requires: oldRequires, mesbox: oldMesbox, recordings, ...rest } = entry;
+    return { ...rest, ...(requires ? { requires } : {}), ...(mesbox ? { mesbox } : {}), recordings };
+  });
+
+  console.log(`Captured locs: ${captures.length}; already in the data: ${existing.size}; to add: ${added.length}; gates changed on existing entries: ${gated}`);
   for (const [reason, count] of [...reasons].sort((a, b) => b[1] - a[1])) console.log(`  left out, ${reason}: ${count}`);
   const byKind = new Map();
   for (const entry of added) byKind.set(entry.display, (byKind.get(entry.display) ?? 0) + 1);
   console.log(`  to add by name: ${[...byKind].sort((a, b) => b[1] - a[1]).map(([name, count]) => `${name} ${count}`).join(", ")}`);
   if (reportFile) fs.writeFileSync(reportFile, JSON.stringify({ generated: new Date().toISOString().slice(0, 10), locs: report }));
   if (!write) {
-    console.log(added.length ? "Dry run: add --write to add them." : "Nothing to add.");
+    console.log(added.length || gated ? "Dry run: add --write to write them." : "Nothing to add.");
     process.exit(0);
   }
-  const locs = [...data.locs, ...added].sort((a, b) => a.name.localeCompare(b.name) || a.x - b.x || a.y - b.y || a.z - b.z || a.op - b.op);
+  const locs = [...gatedLocs, ...added].sort((a, b) => a.name.localeCompare(b.name) || a.x - b.x || a.y - b.y || a.z - b.z || a.op - b.op);
   fs.writeFileSync(DATA_FILE, format({ ...data, locs }));
   console.log(`Added ${added.length} loc(s) to ${path.relative(process.cwd(), DATA_FILE)}.`);
   process.exit(0);
