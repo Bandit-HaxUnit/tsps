@@ -1132,7 +1132,13 @@ module.exports = function registerColdWarQuest(api) {
   }
 
   function handleLine(event) {
-    const { player, text } = event;
+    const { player, text, npcId } = event;
+    // The wiki export puts the "Quest complete!" action after an end marker, so
+    // it never plays; finish the quest on Larry's last line of the epilogue.
+    if (String(text ?? "").startsWith("As for our next move") && LARRY_NPC_IDS.has(npcId)) {
+      const stage = stageOf(player);
+      if (stage >= STAGE_ESCAPED && stage < STAGE_COMPLETE) quest.complete(player);
+    }
     if (!bardsRefused.has(player)) return;
     if (String(text ?? "").startsWith("Dude, good job")) event.skip = true;
   }

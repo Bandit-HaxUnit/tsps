@@ -609,6 +609,41 @@ module.exports = function registerWhatLiesBelowQuest(api) {
     if (quest.getStage(player) === 0) quest.setStage(player, STAGE_STARTED);
   }
 
+  /** The wiki dump's help branch loops back into the small-talk menu instead of
+   * reaching the acceptance choice, so stop it and ask that ourselves. */
+  const START_OPTION = "Shall I get them back for you?";
+  const startPrompting = new Set();
+
+  function startQuest(player) {
+    if (quest.getStage(player) !== 0) return;
+    quest.setStage(player, STAGE_STARTED);
+    if (!hasFolder(player)) {
+      setPapers(player, 0);
+      giveItem(player, EMPTY_FOLDER_ITEM_ID, "Rat Burgiss hands you an empty folder.");
+    }
+  }
+
+  function handleStartChoice(event) {
+    const { player, npcId, option } = event;
+    if (npcId !== RAT_NPC_ID || option !== START_OPTION) return;
+    if (quest.getStage(player) !== 0 || startPrompting.has(player)) return;
+    startPrompting.add(player);
+    const { CountdownTask, TaskManager } = api.core;
+    if (!CountdownTask || !TaskManager) {
+      startQuest(player);
+      return;
+    }
+    TaskManager.submit(new CountdownTask(player, 1, () => {
+      startPrompting.delete(player);
+      if (player.isRegistered?.() === false || quest.getStage(player) !== 0) return;
+      player.getDialogueManager()?.reset?.();
+      player.getPacketSender().sendInterfaceRemoval();
+      api.sendMultiChatboxPrompt(player, "Do you want to help Rat Burgiss?",
+        "Yes.", () => startQuest(player),
+        "No.", () => {});
+    }));
+  }
+
   function setSurokClothes(player, robed) {
     player.getPacketSender().sendVarbit(VARBIT_SUROK_CLOTHES, robed ? 1 : 0);
   }
@@ -1265,6 +1300,7 @@ module.exports = function registerWhatLiesBelowQuest(api) {
   api.onNpcDialogueCondition(answerCondition);
   api.onNpcInteraction(handleNpcInteraction);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
+  api.onCustomEvent("npc-dialogue:choice", handleStartChoice);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onItemOnItem(handleItemOnItem);

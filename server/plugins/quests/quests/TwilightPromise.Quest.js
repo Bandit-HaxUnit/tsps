@@ -447,10 +447,10 @@ module.exports = function registerTwilightPromiseQuest(api) {
     // the world shells there carry no Talk-to, so spawn owner-only copies.
     const palaceTwins = stage < STAGE_TWINS;
     syncTracked(player, "ennius-palace", palaceTwins
-      ? { id: NpcIdentifiers.ENNIUS_TULLUS_3, x: 1688, y: 3139, z: 0, wanderRadius: 0 }
+      ? { id: NpcIdentifiers.ENNIUS_TULLUS_2, x: 1688, y: 3139, z: 0, wanderRadius: 0 }
       : null);
     syncTracked(player, "furia-palace", palaceTwins
-      ? { id: NpcIdentifiers.FURIA_TULLUS_3, x: 1686, y: 3141, z: 0, wanderRadius: 0 }
+      ? { id: NpcIdentifiers.FURIA_TULLUS_2, x: 1686, y: 3141, z: 0, wanderRadius: 0 }
       : null);
 
     // The twins move inside the palace from stage 12 until the Teomat trip.
@@ -849,7 +849,7 @@ module.exports = function registerTwilightPromiseQuest(api) {
       if (quest.getStage(player) === STAGE_TEOMAT) advance(player, STAGE_LIBRARY);
       return;
     }
-    if (line.startsWith("I need you outside, now!") && METZLI_IDS.has(npcId)) {
+    if (line.includes("I need you outside, now!") && METZLI_IDS.has(npcId)) {
       if (quest.getStage(player) >= STAGE_LIBRARY && quest.getStage(player) < STAGE_CULTISTS) {
         startCultistAttack(player);
       }
