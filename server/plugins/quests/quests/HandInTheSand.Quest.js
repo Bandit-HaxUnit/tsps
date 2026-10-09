@@ -34,6 +34,16 @@ module.exports = function registerHandInTheSandQuest(api) {
   const BERT_NPC_IDS = new Set([NpcIdentifiers.BERT, NpcIdentifiers.BERT_2]);
   const BETTY_NPC_ID = NpcIdentifiers.BETTY;
 
+  /** NPCs whose transcripts this plugin owns; dialogue conditions from anyone else are not ours. */
+  const DIALOGUE_NPC_IDS = new Set([
+    ...BERT_NPC_IDS,
+    GUARD_CAPTAIN_NPC_ID,
+    ...SANDY_NPC_IDS,
+    ZAVISTIC_NPC_ID,
+    BETTY_NPC_ID,
+    MAZION_NPC_ID,
+  ]);
+
   const VARP_HAND_IN_THE_SAND = 1527; // reference quest varbit, unused as a varp in the repo
   const STAGE_INVESTIGATE_HAND = 10;
   const STAGE_ASK_WIZARDS = 20;
@@ -420,8 +430,9 @@ module.exports = function registerHandInTheSandQuest(api) {
   // Prose conditions
   // ==========================================================================
 
-  /** Answers the page's prose conditions. Deliberately not guarded by npcId. */
-  function answerCondition({ player, text }) {
+  /** Answers the page's prose conditions for this plugin's own NPCs. */
+  function answerCondition({ player, npcId, text }) {
+    if (!DIALOGUE_NPC_IDS.has(npcId)) return null;
     const value = String(text).toLowerCase().replace(/[\u2018\u2019]/g, "'");
     const has = (itemId) => held(player, itemId);
     if (value.includes("inventory space")) return freeSlots(player) < 1;
