@@ -1661,8 +1661,10 @@ export class SceneBuilder {
     /**
      * A ladder/trapdoor opening: the tile's top rim sits at the map heights and a black pit
      * drops FLOOR_HOLE_DEPTH below it, with dark walls linking the two so the opening reads
-     * as a hole instead of a painted square. Faces are added in both windings because
-     * terrain back-face culling is a client setting.
+     * as a hole instead of a painted square. Terrain y is stored negated (higher ground is
+     * more negative), so below the floor means a larger y. Faces are added in both windings
+     * because terrain back-face culling is a client setting (the constructor's flat quad is
+     * dropped).
      */
     private buildFloorHoleModel(
         x: number,
@@ -1698,7 +1700,7 @@ export class SceneBuilder {
 
         const tileX = x * 128;
         const tileY = y * 128;
-        const bottomY = Math.max(heightSw, heightSe, heightNe, heightNw) - FLOOR_HOLE_DEPTH;
+        const bottomY = Math.max(heightSw, heightSe, heightNe, heightNw) + FLOOR_HOLE_DEPTH;
         const vertex = (vx: number, vy: number, vz: number, hsl: number) => ({
             x: vx,
             y: vy,

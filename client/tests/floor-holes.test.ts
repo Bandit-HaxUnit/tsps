@@ -38,10 +38,10 @@ function floorHolesDrawDark(): void {
     const hole = scene.tiles[0][6][6]?.tileModel;
     assert.ok(hole, "an enclosed floor hole gets a tile model");
     assert.equal(hole.faces.length, 20, "pit: bottom plus four walls, drawn both windings");
-    const lowest = Math.min(
+    const deepest = Math.max(
         ...hole.faces.flatMap((face: any) => face.vertices.map((vertex: any) => vertex.y)),
     );
-    assert.ok(lowest <= -60, "the pit bottom is below the floor, so the rim shows");
+    assert.ok(deepest >= 60, "the pit bottom is below the floor in the client's y-down space");
 
     const edge = scene.tiles[0][0][6]?.tileModel;
     assert.equal(edge, undefined, "an unloaded map edge stays open");
