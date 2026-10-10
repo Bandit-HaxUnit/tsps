@@ -2007,6 +2007,7 @@ export class PluginManager {
       PrayerHandler: require("../game/content/PrayerHandler").PrayerHandler,
       DuelRule: require("../game/content/Duelling").DuelRule,
       RegionManager: require("../game/collision/RegionManager").RegionManager,
+      Wilderness: require("../game/content/wilderness/Wilderness").Wilderness,
       Animation: require(`${model}/Animation`).Animation,
       Graphic: require(`${model}/Graphic`).Graphic,
       GraphicHeight: require(`${model}/GraphicHeight`).GraphicHeight,
