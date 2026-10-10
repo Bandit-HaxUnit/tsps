@@ -1194,7 +1194,6 @@ export interface PluginCoreApi {
   PrayerHandler: any;
   DuelRule: any;
   RegionManager: any;
-  Wilderness: any;
   Animation: any;
   Graphic: any;
   GraphicHeight: any;
