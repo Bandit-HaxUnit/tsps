@@ -4,8 +4,8 @@
 // potential drains, opening chests for loot at the cost of 1% each. The reward scales with
 // total level and remaining potential. Varp 531 drives the cache's reward HUD (interface
 // 209). See SOURCES.md.
-const Flow = require("./DialogueFlow");
-const Teleports = require("./Teleports");
+const Flow = require("./DialogueFlow.RandomEvents");
+const Teleports = require("./Teleports.RandomEvents");
 
 const POTENTIAL_VARP = 531;
 const DRAIN_MS = 3_000;

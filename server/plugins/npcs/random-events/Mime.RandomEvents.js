@@ -4,8 +4,8 @@
 // buttons of cache interface 188 (macro_mime_emotes) are built by the cache's own onLoad;
 // the server only enables them and receives the "Perform" clicks. Outfit pieces in order,
 // then lamps. See SOURCES.md.
-const Flow = require("./DialogueFlow");
-const Teleports = require("./Teleports");
+const Flow = require("./DialogueFlow.RandomEvents");
+const Teleports = require("./Teleports.RandomEvents");
 
 const GROUP = 188;
 const FIRST_BUTTON = 2;

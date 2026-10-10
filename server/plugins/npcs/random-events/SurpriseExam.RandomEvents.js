@@ -4,8 +4,8 @@
 // comes next" patterns (cache interface 103) with "find three related cards" sets (cache
 // interface 559). Three wrong answers fail; passing and leaving through a door awards a Book
 // of Knowledge. See SOURCES.md.
-const Flow = require("./DialogueFlow");
-const Teleports = require("./Teleports");
+const Flow = require("./DialogueFlow.RandomEvents");
+const Teleports = require("./Teleports.RandomEvents");
 
 const NEXT_GROUP = 103;
 const CARDS_GROUP = 559;

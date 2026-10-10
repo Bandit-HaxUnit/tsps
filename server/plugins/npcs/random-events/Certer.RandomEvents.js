@@ -2,7 +2,7 @@
 
 // Question flow adapted from Void Certer.kt (BSD-3-Clause), using OSRS widgets
 // and cache presentation items instead of RS3 enums/gift bags. See SOURCES.md.
-const Gift = require("./GiftRewards");
+const Gift = require("./GiftRewards.RandomEvents");
 const GROUP = 184;
 const MODEL = (GROUP << 16) | 7;
 const FIRST_OPTION = 8;

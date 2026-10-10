@@ -4,7 +4,7 @@
 // the player passes. OSRS requires a Jagex Account and a Bank PIN; every account on this
 // server is a Jagex account and there is no bank PIN feature to check, so the check passes.
 // See SOURCES.md.
-const Flow = require("./DialogueFlow");
+const Flow = require("./DialogueFlow.RandomEvents");
 
 function definition(api) {
   return {

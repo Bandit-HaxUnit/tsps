@@ -5,7 +5,7 @@
 // match the word under the column. Two attempts, then Arnav gives up. One 1/4 roll of
 // coins/gold ring/gold necklace/gold bar. Interface 26 (pirate_combilock) drives the lock.
 // See SOURCES.md.
-const Flow = require("./DialogueFlow");
+const Flow = require("./DialogueFlow.RandomEvents");
 
 const GROUP = 26;
 const UP = { left: 5, centre: 8, right: 11 };

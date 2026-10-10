@@ -3,8 +3,8 @@
 // Gravedigger (random event, Leo): dig up the five coffins, read the gravestones and bury
 // each coffin in the grave whose headstone names its profession. Zombie outfit pieces come in
 // twos until the set is complete, then the zombie emotes and lamps. See SOURCES.md.
-const Flow = require("./DialogueFlow");
-const Teleports = require("./Teleports");
+const Flow = require("./DialogueFlow.RandomEvents");
+const Teleports = require("./Teleports.RandomEvents");
 
 const PROFESSIONS = ["cook", "farmer", "lumberjack", "miner", "potter"];
 const FILLED_GRAVES = [9364, 9365, 9366, 9367, 10049];

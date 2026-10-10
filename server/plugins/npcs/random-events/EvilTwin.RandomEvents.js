@@ -4,8 +4,8 @@
 // to grab her identical twin from a cage of innocents within two attempts. Success pays noted
 // uncut gems; two wrong grabs teleport the player to a random spot instead. The claw's target
 // rides on the cache's control interface 277. See SOURCES.md.
-const Flow = require("./DialogueFlow");
-const Teleports = require("./Teleports");
+const Flow = require("./DialogueFlow.RandomEvents");
+const Teleports = require("./Teleports.RandomEvents");
 
 const MOLLY = 342; // Molly and her twins share these appearance ids.
 const INNOCENTS = [338, 343, 353, 357];

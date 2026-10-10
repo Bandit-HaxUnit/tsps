@@ -3,8 +3,8 @@
 // Pillory (random event, Pillory Guard): locked in the pillory, pick the key that matches the
 // large lock three times; a wrong key adds another lock (up to six) and resets progress. The
 // cache's pillory interface 27 drives the locks and keys. See SOURCES.md.
-const Flow = require("./DialogueFlow");
-const Teleports = require("./Teleports");
+const Flow = require("./DialogueFlow.RandomEvents");
+const Teleports = require("./Teleports.RandomEvents");
 
 const GROUP = 27;
 const LOCK = 3;

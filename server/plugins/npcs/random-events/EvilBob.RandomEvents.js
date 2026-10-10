@@ -5,8 +5,8 @@
 // the pot and feed Bob until he sleeps, then leave by the portal for 650 Fishing (or Magic)
 // XP. Prison: Prison Pete asks for the balloon animal the lever shows; three right keys free
 // him, then he pays a reward. See SOURCES.md.
-const Flow = require("./DialogueFlow");
-const Teleports = require("./Teleports");
+const Flow = require("./DialogueFlow.RandomEvents");
+const Teleports = require("./Teleports.RandomEvents");
 
 const ISLAND = { minX: 2500, maxX: 2548, minY: 4758, maxY: 4798 };
 const FISHING_SPOT = 23114;

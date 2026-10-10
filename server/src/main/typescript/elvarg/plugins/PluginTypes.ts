@@ -790,6 +790,15 @@ export interface PluginApi {
     npcName: string,
     actions: Record<string, (event: PluginNpcInteractionEvent) => void | boolean>
   ): void;
+  /**
+   * Exact, case-sensitive option matching for a group of NPC names sharing one handler,
+   * e.g. `onNpcsInteraction(["Niles", "Miles", "Giles"], { "Talk-to": talk })`.
+   * Return false to fall through.
+   */
+  onNpcsInteraction(
+    npcNames: string[],
+    actions: Record<string, (event: PluginNpcInteractionEvent) => void | boolean>
+  ): void;
   /** Exact, case-sensitive option matching for any NPC name. Return false to fall through. */
   onAnyNpcInteraction(
     actions: Record<string, (event: PluginNpcInteractionEvent) => void | boolean>

@@ -9,11 +9,11 @@ const { NpcIdentifiers: N } = require('../dist/util/NpcIdentifiers');
 const { Skill } = require('../dist/game/model/Skill');
 const { Location } = require('../dist/game/model/Location');
 const Plugin = require('../plugins/npcs/RandomEvents.plugin');
-const Events = require('../plugins/npcs/random-events/RandomEvents');
-const Teleports = require('../plugins/npcs/random-events/Teleports');
-const Pinball = require('../plugins/npcs/random-events/Pinball');
+const Events = require('../plugins/npcs/random-events/Common.RandomEvents');
+const Teleports = require('../plugins/npcs/random-events/Teleports.RandomEvents');
+const Pinball = require('../plugins/npcs/random-events/Pinball.RandomEvents');
 const JekyllPlugin = require('../plugins/npcs/DrJekyll.plugin');
-const Gift = require('../plugins/npcs/random-events/GiftRewards');
+const Gift = require('../plugins/npcs/random-events/GiftRewards.RandomEvents');
 const PlantPlugin = require('../plugins/npcs/StrangePlant.plugin');
 const { Animation } = require('../dist/game/model/Animation');
 const { PlayerRights } = require('../dist/game/model/rights/PlayerRights');
@@ -95,6 +95,7 @@ function harness(t, members = true) {
       }
       hooks[name] = merged;
     },
+    onNpcsInteraction(names, actions) { for (const name of names) this.onNpcInteraction(name, actions); },
     onNpcClick(npcIds, clickType, handler) { (hooks[`npcClick:${[].concat(npcIds).join(',')}`] ??= new Map()).set(clickType, handler); },
     onItemAction(name, actions) { hooks[name] = actions; },
     onItemOnObject(handler) { (hooks.itemOnObject ??= []).push(handler); },
@@ -1012,7 +1013,7 @@ test('Surprise Exam fails after three wrong answers and pays nothing at the door
 });
 
 test('Mystery boxes roll the stale baguette first and the world-appropriate table', t => {
-  const MysteryBox = require('../plugins/npcs/random-events/MysteryBox');
+  const MysteryBox = require('../plugins/npcs/random-events/MysteryBox.RandomEvents');
   const h = harness(t, false);
   h.random(1 / 512);
   assert.equal(MysteryBox.roll(h.api)[0].id, I.STALE_BAGUETTE);

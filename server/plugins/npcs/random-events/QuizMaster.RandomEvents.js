@@ -4,9 +4,9 @@
 // or a mystery box. Wrong answers only restart the streak. The three items are shown on a
 // server-defined interface (the cache's macro_quizshow has no item components); the quiz
 // holds the player until it is completed. See SOURCES.md.
-const Flow = require("./DialogueFlow");
-const Teleports = require("./Teleports");
-const MysteryBox = require("./MysteryBox");
+const Flow = require("./DialogueFlow.RandomEvents");
+const Teleports = require("./Teleports.RandomEvents");
+const MysteryBox = require("./MysteryBox.RandomEvents");
 const { FLAG_OP1, TYPE_RECTANGLE, TYPE_TEXT, TYPE_MODEL, createWidgetGroup } =
   require("../../interface/widgetGroup");
 

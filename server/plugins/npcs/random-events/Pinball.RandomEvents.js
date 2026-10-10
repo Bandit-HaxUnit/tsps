@@ -3,8 +3,8 @@
 // Pinball (random event): tag the pillar whose rings are glowing ten times. Tagging a pillar
 // without rings resets the score. Leaving through the cave exit pays out noted gems.
 // The posts, cave and room ship in the world data; the glow swaps object ids. See SOURCES.md.
-const Flow = require("./DialogueFlow");
-const Teleports = require("./Teleports");
+const Flow = require("./DialogueFlow.RandomEvents");
+const Teleports = require("./Teleports.RandomEvents");
 
 // tile -> [inactive id, active id]
 const POSTS = [

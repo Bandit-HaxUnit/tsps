@@ -4,8 +4,8 @@
 // mat whose sign matches the order. Wrong mats only break the streak. Camouflage outfit
 // pieces, then lamps. The training area, mats and sign posts ship in the world data; the
 // posts are swapped to the four exercise signs after every attempt. See SOURCES.md.
-const Flow = require("./DialogueFlow");
-const Teleports = require("./Teleports");
+const Flow = require("./DialogueFlow.RandomEvents");
+const Teleports = require("./Teleports.RandomEvents");
 
 const EXERCISES = [
   { name: "star jumps", sign: 16506, animation: 870 },

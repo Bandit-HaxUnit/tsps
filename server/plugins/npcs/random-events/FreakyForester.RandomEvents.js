@@ -4,8 +4,8 @@
 // through the portal for a lederhosen piece (hat, top, shorts), or a lamp once the outfit is
 // complete. Since 2020 any pheasant carcass is accepted, so every pheasant drops the same
 // item. See SOURCES.md.
-const Flow = require("./DialogueFlow");
-const Teleports = require("./Teleports");
+const Flow = require("./DialogueFlow.RandomEvents");
+const Teleports = require("./Teleports.RandomEvents");
 
 const PHEASANTS = [373, 374, 5497, 5498, 5499, 5500, 5501, 5502];
 const OUTFIT = [6182, 6180, 6181];

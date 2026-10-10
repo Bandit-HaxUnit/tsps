@@ -164,7 +164,7 @@ event page), read directly; where a transcript sentence is reproduced, the wiki
 is the source. No new upstream code was copied, so LICENSES.txt is unchanged.
 
 Event control flow reuses the first batch's owner/follower/expiry lifecycle. An
-accepting dialogue starts a **session** (`Teleports.js`): the return tile is
+accepting dialogue starts a **session** (`Teleports.RandomEvents.js`): the return tile is
 remembered, the player is moved to the event area, the invitation NPC is removed
 without a reward, and a `RandomEventArea` per destination ends the session when
 the player leaves by any route (teleport, death, command). Teleports inside a

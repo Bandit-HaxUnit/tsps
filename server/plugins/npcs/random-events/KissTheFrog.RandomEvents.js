@@ -5,8 +5,8 @@
 // rudely turns the player into a frog and sends them to Frogland, where the royal lets them
 // leave. Tokens are traded with Thessalia for the frog mask, royal costume pieces or a lamp.
 // See SOURCES.md.
-const Flow = require("./DialogueFlow");
-const Teleports = require("./Teleports");
+const Flow = require("./DialogueFlow.RandomEvents");
+const Teleports = require("./Teleports.RandomEvents");
 
 const POSITIVE = ["Okay.", "Sure, I will.", "Very well, if a touch is all you need, I'll do it.",
   "Yes, I will touch you.", "How about if we kiss?", "May I kiss you instead?",

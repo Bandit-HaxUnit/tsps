@@ -5,8 +5,8 @@
 // lamp; until the beekeeper's outfit is complete one missing piece, then flax on members
 // worlds or 30-99 coins on free worlds. Cache interface 420 shows the example and the slots.
 // See SOURCES.md.
-const Flow = require("./DialogueFlow");
-const Teleports = require("./Teleports");
+const Flow = require("./DialogueFlow.RandomEvents");
+const Teleports = require("./Teleports.RandomEvents");
 
 const GROUP = 420;
 const CONFIRM = 22;
