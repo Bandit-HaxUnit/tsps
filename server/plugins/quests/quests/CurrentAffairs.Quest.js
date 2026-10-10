@@ -49,6 +49,7 @@ module.exports = function registerCurrentAffairsQuest(api) {
     startDialogue,
     startTranscript,
     loadTranscripts,
+    getRegisteredQuests,
   } = require("../QuestRuntime");
 
   // NPCs (cache ids; NpcIdentifiers comments).
@@ -194,14 +195,20 @@ module.exports = function registerCurrentAffairsQuest(api) {
     );
   }
 
-  /** True while another quest owns Arhein (Merlin's Crystal's boat ride). */
+  /** True while another quest owns Arhein: Merlin's Crystal's boat ride, or
+   *  One Small Favour's T.R.A.S.H. / weather-report hand-ins. */
   function otherQuestOwnsArhein(player) {
     const request = { player, key: "merlins_crystal", started: false };
     api.emitCustomEvent("quest:is-started", request);
-    if (request.started !== true) return false;
-    const complete = { player, key: "merlins_crystal", complete: false };
-    api.emitCustomEvent("quest:is-complete", complete);
-    return complete.complete !== true;
+    if (request.started === true) {
+      const complete = { player, key: "merlins_crystal", complete: false };
+      api.emitCustomEvent("quest:is-complete", complete);
+      if (complete.complete !== true) return true;
+    }
+    const osf = getRegisteredQuests().find((entry) => entry.key === "one_small_favour");
+    if (!osf || !osf.isStarted(player) || osf.isComplete(player)) return false;
+    const stage = osf.getStage(player);
+    return stage === 12 || stage === 13 || stage === 28 || stage === 29;
   }
 
   // ==========================================================================
