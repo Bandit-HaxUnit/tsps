@@ -34,6 +34,7 @@
  */
 module.exports = function registerRumDealQuest(api) {
   const {
+    Animation,
     Equipment,
     ItemIdentifiers,
     NpcIdentifiers,
@@ -79,6 +80,7 @@ module.exports = function registerRumDealQuest(api) {
   const BIG_FISHING_NET = ItemIdentifiers.BIG_FISHING_NET; // 305
   const FISHBOWL_AND_NET = ItemIdentifiers.FISHBOWL_AND_NET; // 6673
   const RAKE = ItemIdentifiers.RAKE; // 5341
+  const WEEDS = ItemIdentifiers.WEEDS; // 6055
   const SEED_DIBBER = ItemIdentifiers.SEED_DIBBER; // 5343
   const WATERING_CAN = ItemIdentifiers.WATERING_CAN; // 5331
   const SLAYER_GLOVES = ItemIdentifiers.SLAYER_GLOVES; // 6708
@@ -187,6 +189,7 @@ module.exports = function registerRumDealQuest(api) {
   const SOUTH_STAIR_LANDING = { x: 2153, y: 5110, z: 0 };
 
   const INTRO_ATTRIBUTE = "quest.rum_deal.intro";
+  const WEEDED_ATTRIBUTE = "quest.rum_deal.weeded";
   const PLANTED_ATTRIBUTE = "quest.rum_deal.planted";
   const SLUGLINGS_ATTRIBUTE = "quest.rum_deal.slugs";
   const KARAMTHULHU_ATTRIBUTE = "quest.rum_deal.karam";
@@ -232,6 +235,10 @@ module.exports = function registerRumDealQuest(api) {
 
   function plantedAt(player) {
     return Number(player.getAttribute(PLANTED_ATTRIBUTE)) || 0;
+  }
+
+  function weededPatch(player) {
+    return Number(player.getAttribute(WEEDED_ATTRIBUTE)) === 1;
   }
 
   function blindweedGrown(player) {
@@ -775,9 +782,32 @@ module.exports = function registerRumDealQuest(api) {
       smiteControls(event);
       return;
     }
+    if (BLINDWEED_PATCH_OBJECT_IDS.has(objectId) && itemId === RAKE) {
+      rakeBlindweedPatch(event);
+      return;
+    }
     if (BLINDWEED_PATCH_OBJECT_IDS.has(objectId) && itemId === BLINDWEED_SEED) {
       plantBlindweed(event);
     }
+  }
+
+  /** The patch object carries no Rake option, so the rake is used on it directly. */
+  function rakeBlindweedPatch(event) {
+    const { player } = event;
+    event.handled = true;
+    if (plantedAt(player) !== 0) {
+      player.sendMessage("This patch already has something growing in it.");
+      return;
+    }
+    if (weededPatch(player)) {
+      player.sendMessage("This patch doesn't need weeding right now.");
+      return;
+    }
+    player.setAttribute(WEEDED_ATTRIBUTE, 1);
+    player.performAnimation(new Animation(2273));
+    player.getInventory().adds(WEEDS, 1);
+    player.getSkillManager().addExperiences(Skill.FARMING, 4);
+    player.sendMessage("You rake the weeds from the patch.");
   }
 
   function stuffSeaCreature(event) {
@@ -871,12 +901,16 @@ module.exports = function registerRumDealQuest(api) {
   function plantBlindweed(event) {
     const { player } = event;
     event.handled = true;
-    if (level(player, Skill.FARMING) < 40) {
-      player.sendMessage("You must be a Level 40 Farmer to plant those.");
-      return;
-    }
     if (plantedAt(player) !== 0) {
       player.sendMessage("This patch already has something growing in it.");
+      return;
+    }
+    if (!weededPatch(player)) {
+      player.sendMessage("You need to rake the weeds out first.");
+      return;
+    }
+    if (level(player, Skill.FARMING) < 40) {
+      player.sendMessage("You must be a Level 40 Farmer to plant those.");
       return;
     }
     player.getInventory().deleteNumber(BLINDWEED_SEED, 1);
@@ -1076,6 +1110,7 @@ module.exports = function registerRumDealQuest(api) {
   }
 
   api.persistAttribute(INTRO_ATTRIBUTE);
+  api.persistAttribute(WEEDED_ATTRIBUTE);
   api.persistAttribute(PLANTED_ATTRIBUTE);
   api.persistAttribute(SLUGLINGS_ATTRIBUTE);
   api.persistAttribute(KARAMTHULHU_ATTRIBUTE);
