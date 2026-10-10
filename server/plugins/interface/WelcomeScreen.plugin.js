@@ -41,10 +41,12 @@ module.exports = {
       visible.delete(player);
     };
 
-    api.onPlayerLogin(({ player }) => {
+    api.onPlayerLogin(({ player, isNewAccount }) => {
       // OSRS mobile has no welcome screen: handheld clients skip straight from
       // login into the world (the gameframe bootstrap below is the landing).
+      // A new account doesn't get it either: OSRS takes it straight to the character design.
       if (
+        isNewAccount ||
         player.isPlayerBot?.() === true ||
         inWilderness(player) ||
         player.getAttribute(MOBILE_CLIENT_ATTRIBUTE) === true
