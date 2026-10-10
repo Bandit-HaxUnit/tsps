@@ -311,7 +311,6 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
   const DOOR_ITZLA_TILE = { x: 1607, y: 9631, z: 0 };
   const AMOX_TILE = { x: 1600, y: 9631, z: 0 };
   const BANISH_TILE = { x: 1450, y: 3174, z: 0 };
-  const SERVIUS_TALK_TILE = { x: 1450, y: 3173, z: 0 };
   const SCRAP_CHEST_TILE = { x: 1644, y: 3217, z: 1 };
   const SCRAP_CHEST_OPEN_TILE = { x: 1646, y: 3216, z: 1 };
   const TRIAL2_OFFSETS = [
@@ -338,6 +337,7 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
   const comboPicks = new WeakMap();
   const scrapChestPending = new WeakSet();
   const amoxTalked = new WeakSet();
+  const pendingServiusReport = new WeakSet();
   let objectsPlaced = false;
   let statuesSwapped = false;
   let bedSwapped = false;
@@ -507,9 +507,7 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
       ? { id: ID.AMOX, ...AMOX_TILE, wanderRadius: 0 }
       : null);
 
-    syncTracked(player, "servius", stage >= STAGE.BANISHED
-      ? { id: ID.SERVIUS_TALK, ...SERVIUS_TALK_TILE, wanderRadius: 0 }
-      : null);
+    if (stage >= STAGE.BANISHED) pendingServiusReport.add(player);
 
     if (stage === STAGE.TRIAL2_FIGHT && !hasWaves(player)) spawnWaves(player);
     if (stage === STAGE.TRIAL4_FIGHT && !trackedNpcs.get(player)?.get("itzla-fight")?.isRegistered?.()) {
@@ -599,7 +597,6 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
     if (npcId === ID.SHOPKEEPER) return selectShopkeeperVariant(player);
     if (ID.RECRUITS.has(npcId)) return selectRecruitVariant(npcId, player);
     if (npcId === ID.FIDES) return selectFidesVariant(player);
-    if (npcId === ID.SERVIUS) return selectServiusVariant(player);
     return null;
   }
 
@@ -638,12 +635,6 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
       return V.FIDES;
     }
     return V.FIDES_AGAIN;
-  }
-
-  function selectServiusVariant(player) {
-    const stage = quest.getStage(player);
-    if (stage < STAGE.BANISHED) return null;
-    return V.SERVIUS;
   }
 
   // ==========================================================================
@@ -976,8 +967,29 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
     }
     if ((option === "Yes." || option === "No.") && npcId === ID.SERVIUS && stage === STAGE.BANISHED) {
       quest.complete(player);
-      removeTracked(player, "servius");
+      pendingServiusReport.delete(player);
     }
+  }
+
+  /** True while a dialogue or multi-option prompt owns the chatbox. */
+  function chatboxOpen(player) {
+    return player.getDialogueManager?.()?.isActive?.() === true
+      || pluginApi.core.MultiChatboxPrompt?.getPending?.(player) != null;
+  }
+
+  /**
+   * The shared Servius (12652) is owned by The Final Dawn's Talk-to hook, so the
+   * completion report is auto-played once the chatbox is clear and retried if dismissed.
+   */
+  function handlePlayerProcess({ player }) {
+    if (!player || player.isPlayerBot?.() === true) return;
+    if (!pendingServiusReport.has(player)) return;
+    if (quest.isComplete(player) || quest.getStage(player) < STAGE.BANISHED) {
+      pendingServiusReport.delete(player);
+      return;
+    }
+    if (chatboxOpen(player)) return;
+    startTranscript(pluginApi, player, ID.SERVIUS, PAGE, V.SERVIUS);
   }
 
   // ==========================================================================
@@ -1002,7 +1014,6 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
     if (npcId === ID.ITZLA) itzlaTalk(player);
     else if (npcId === ID.ITZLA_LOBBY) playTranscript(player, npcId, V.ITZLA_LOBBY);
     else if (npcId === ID.JANUS) janusTalk(player);
-    else if (npcId === ID.SERVIUS_TALK) playTranscript(player, ID.SERVIUS, V.SERVIUS);
     else if (npcId === ID.VULCAN) playTranscript(player, npcId, V.VULCAN);
     else if (ID.ASCENDED.includes(npcId)) ascendedTalk(player, npcId);
     else if (ID.ACOLYTES.includes(npcId)) memberTalk(player, npcId);
@@ -1431,6 +1442,7 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
     comboPicks.delete(player);
     scrapChestPending.delete(player);
     amoxTalked.delete(player);
+    pendingServiusReport.delete(player);
   }
 
   // ==========================================================================
@@ -1630,7 +1642,6 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
     BRAWLER: NpcIdentifiers.EMISSARY_BRAWLER, // 13773, level 74
     CONJURER: NpcIdentifiers.EMISSARY_CONJURER, // 13777
     SERVIUS: NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS, // 12652
-    SERVIUS_TALK: NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS_2, // 12899
     BARTENDER: NpcIdentifiers.BARTENDER_17, // 14020
     SHOPKEEPER: NpcIdentifiers.SHOPKEEPER_7, // 14021
     NOVA: NpcIdentifiers.NOVA, // 13704
@@ -1690,7 +1701,7 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
     BARREL: ObjectIdentifiers.BARREL_200, // 54517
   });
 
-  ID.OWN_TALK = new Set([ID.ITZLA, ID.ITZLA_LOBBY, ID.JANUS, ID.VULCAN, ID.SERVIUS_TALK, ...ID.ASCENDED, ...ID.ACOLYTES]);
+  ID.OWN_TALK = new Set([ID.ITZLA, ID.ITZLA_LOBBY, ID.JANUS, ID.VULCAN, ...ID.ASCENDED, ...ID.ACOLYTES]);
   ID.TOWER_CHESTS = new Set([ID.CHEST_BOOK, ID.CHEST_POEM, ID.CHEST_SCRAP]);
   ID.RECRUITS = new Set([ID.NOVA, ID.NOVA_2, ID.CARITTA, ID.FELIUS, ID.SERGIUS, ID.SERGIUS_2]);
   ID.FIDES_TALKED = new WeakSet();
@@ -1736,4 +1747,5 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
   pluginApi.onZoneEnter(TEMPLE_ZONE, handleTempleZoneEnter);
   pluginApi.onPlayerLogin(handleLogin);
   pluginApi.onPlayerLogout(handleLogout);
+  pluginApi.onPlayerProcess(handlePlayerProcess);
 };

@@ -276,6 +276,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
   const TEMPLE_BED_TILE = { x: 1712, y: 9696, z: 0 };
   const TEMPLE_CORRIDOR_TILE = { x: 1711, y: 9704, z: 0 };
   const TEMPLE_HIDDEN_ROOM_TILE = { x: 1723, y: 9708, z: 0 };
+  const TEMPLE_ENFORCER_TILE = { x: 1723, y: 9707, z: 0 };
   const PALACE_TILE = { x: 1680, y: 3176, z: 0 };
   const CAM_TORUM_TILE = { x: 1440, y: 9560, z: 1 };
   const CAM_TORUM_MARKET_TILE = { x: 1441, y: 9550, z: 1 };
@@ -283,6 +284,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
   const TEUMO_BASEMENT_TILE = { x: 1468, y: 9572, z: 0 };
   const TEUMO_PASSAGE_TILE = { x: 1470, y: 9565, z: 0 };
   const NEYPOTZLI_TILE = { x: 1508, y: 9578, z: 0 };
+  const TWINS_ARENA_TILE = { x: 1362, y: 9520, z: 0 };
   const TONALI_CAVERN_TILE = { x: 1330, y: 9450, z: 1 };
   const MOON_ROOM_TILE = { x: 1290, y: 9447, z: 1 };
   const METZLI_CHAMBER_TILE = { x: 1310, y: 9520, z: 1 };
@@ -1282,19 +1284,17 @@ module.exports = function registerTheFinalDawnQuest(api) {
   }
 
   function spawnTwins(player) {
-    const tile = player.getLocation();
-    api.spawnNpc({ id: CHIMALLI_ID, x: tile.getX() - 1, y: tile.getY() + 1, z: tile.getZ(), wanderRadius: 0, owner: player, ownerOnly: true });
-    api.spawnNpc({ id: LUCIUS_ID, x: tile.getX() + 1, y: tile.getY() + 1, z: tile.getZ(), wanderRadius: 0, owner: player, ownerOnly: true });
+    api.spawnNpc({ id: CHIMALLI_ID, x: TWINS_ARENA_TILE.x - 1, y: TWINS_ARENA_TILE.y, z: TWINS_ARENA_TILE.z, wanderRadius: 0, owner: player, ownerOnly: true });
+    api.spawnNpc({ id: LUCIUS_ID, x: TWINS_ARENA_TILE.x + 1, y: TWINS_ARENA_TILE.y, z: TWINS_ARENA_TILE.z, wanderRadius: 0, owner: player, ownerOnly: true });
   }
 
   function spawnEnforcer(player) {
     if (tracked(player, "enforcer")) return;
-    const tile = player.getLocation();
     syncTracked(player, "enforcer", {
       id: ENFORCER_ID,
-      x: tile.getX(),
-      y: tile.getY() + 2,
-      z: tile.getZ(),
+      x: TEMPLE_ENFORCER_TILE.x,
+      y: TEMPLE_ENFORCER_TILE.y,
+      z: TEMPLE_ENFORCER_TILE.z,
       wanderRadius: 0,
     });
   }
@@ -1326,13 +1326,16 @@ module.exports = function registerTheFinalDawnQuest(api) {
   function ownedNpcAlive(player, ids) {
     const world = api.getWorld();
     if (!world?.getNpcs) return false;
+    const username = player.getUsername?.();
     for (const npc of world.getNpcs()) {
       if (!ids.has(npc?.getId?.())) continue;
       // The death event fires while the corpse is still in the world: a dying npc
       // must not count, or the last kill never clears the wave.
       if (npc.isDyingFunction?.() === true || (npc.getHitpoints?.() ?? 1) <= 0) continue;
+      // Identity fails after a relog recreates the Player, so match the name too.
+      // An ownerless npc never belongs to this wave.
       const owner = npc.getOwner?.();
-      if (!owner || owner === player || owner.getUsername?.() === player.getUsername?.()) return true;
+      if (owner === player || (username && owner?.getUsername?.() === username)) return true;
     }
     return false;
   }

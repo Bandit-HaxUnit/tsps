@@ -673,6 +673,21 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     trackedNpcs.delete(player);
   }
 
+  const OWNER_CULL_IDS = new Set([PATZI, PATZI_PICKPOCKET, HEAD_BUTLER]);
+
+  function cullLeakedSpawns(player) {
+    const world = api.getWorld?.();
+    const username = player.getUsername?.();
+    if (!world?.getNpcs || !username) return;
+    for (const npc of [...world.getNpcs()]) {
+      if (npc?.isOwnerOnly?.() !== true) continue;
+      if (!OWNER_CULL_IDS.has(npc.getId?.())) continue;
+      const owner = npc.getOwner?.();
+      if (owner === player || owner?.getUsername?.() !== username) continue;
+      api.removeNpc(npc);
+    }
+  }
+
   function handleStageChanged(event) {
     if (event?.key !== "death_on_the_isle" || !event.player) return;
     syncSpawns(event.player);
@@ -1187,7 +1202,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
       return;
     }
     if (option === "Accuse Adala.") {
-      if (stageOf(player) < STAGE_FIGHT) quest.setStage(player, STAGE_FIGHT);
+      if (allQuestioned(player) && stageOf(player) < STAGE_FIGHT) quest.setStage(player, STAGE_FIGHT);
       return;
     }
     if (option === "I am." && HEAD_BUTLER_IDS.has(npcId) && stageOf(player) >= STAGE_ENTERED) {
@@ -1274,6 +1289,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
       case "wNdlW9":
         setFlag(player, "wine");
         if (stageOf(player) < STAGE_WINE_INVESTIGATED) quest.setStage(player, STAGE_WINE_INVESTIGATED);
+        syncSpawns(player);
         return;
       case "5z2Lhi":
         addItem(player, WINE_LABELS);
@@ -1721,6 +1737,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
   // ==========================================================================
 
   function handleLogin({ player }) {
+    cullLeakedSpawns(player);
     if (hasFlag(player, "fight.active")) {
       // A logout mid-fight loses the boss; count it as a win so the story can go on.
       setFlag(player, "fight.active", false);

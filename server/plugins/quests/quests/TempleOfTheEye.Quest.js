@@ -585,7 +585,6 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
     const current = energyObjects?.[index];
     const spot = ENERGY_SPOTS[index];
     if (!current || !spot) return;
-    ObjectManager.deregister(current, true);
     const next = new GameObject(white ? spot.white : spot.id, current.getLocation(), 10, 0, null);
     ObjectManager.register(next, true);
     energyObjects[index] = next;
@@ -1590,6 +1589,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   }
 
   function grantReward(player) {
+    player.getSkillManager().addExperiences(Skill.RUNECRAFTING, 5000);
     if (!has(player, MEDIUM_POUCH_ITEM_ID) && !has(player, MEDIUM_POUCH_ITEM_ID_2)) {
       give(player, MEDIUM_POUCH_ITEM_ID);
     }
