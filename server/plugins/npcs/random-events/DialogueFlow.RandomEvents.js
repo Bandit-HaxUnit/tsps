@@ -1,7 +1,11 @@
 "use strict";
 
-// Shared builder for the event dialogue flows: NPC lines, then up to five options, then end.
-function chat(api, { player, npcId = -1, lines = [], playerLines = [], options = [], onEnd = null, end = true }) {
+// Shared builder for the event dialogue flows: NPC lines, then up to five options on the
+// multi-chatbox prompt the quest runtime and the gift events already use, then end. The
+// cache's legacy OptionDialogue chatbox menus are not wired for this client (their send
+// throws on the missing title), so options go through api.sendMultiChatboxPrompt.
+function chat(api, { player, npcId = -1, title = "Select an Option", lines = [], playerLines = [],
+  options = [], onEnd = null, end = true }) {
   const builder = new api.core.DialogueChainBuilder();
   let index = 0;
   for (const page of lines) {
@@ -10,15 +14,12 @@ function chat(api, { player, npcId = -1, lines = [], playerLines = [], options =
   }
   for (const text of playerLines) builder.add(new api.core.PlayerDialogue(index++, text));
   if (options.length) {
-    const callbacks = options.map(option => option[1]);
-    builder.add(new api.core.OptionDialogue(index++, {
-      executeOption(option) {
-        player.getPacketSender().sendInterfaceRemoval();
-        (callbacks[Number(option)] ?? (() => {}))();
-      },
-    }, ...options.map(option => option[0])));
+    // ActionDialogue runs when the player finishes the lines: show the choice prompt then.
+    builder.add(new api.core.ActionDialogue(index++, {
+      execute: () => api.sendMultiChatboxPrompt(player, title,
+        ...options.flatMap(option => [option[0], () => option[1]()])),
+    }));
   } else {
-    // ActionDialogue runs when the player reaches this page, i.e. after the last line.
     if (onEnd) builder.add(new api.core.ActionDialogue(index++, { execute: () => onEnd() }));
     if (end) builder.add(new api.core.EndDialogue(index));
   }

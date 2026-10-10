@@ -21,10 +21,10 @@ const { ItemOnGround, State } = require('../dist/game/entity/impl/grounditem/Ite
 const { DialogueChainBuilder } = require('../dist/game/model/dialogues/builders/DialogueChainBuilder');
 const { NpcDialogue } = require('../dist/game/model/dialogues/entries/impl/NpcDialogue');
 const { PlayerDialogue } = require('../dist/game/model/dialogues/entries/impl/PlayerDialogue');
-const { OptionDialogue } = require('../dist/game/model/dialogues/entries/impl/OptionDialogue');
 const { StatementDialogue } = require('../dist/game/model/dialogues/entries/impl/StatementDialogue');
 const { ItemStatementDialogue } = require('../dist/game/model/dialogues/entries/impl/ItemStatementDialogue');
 const { EndDialogue } = require('../dist/game/model/dialogues/entries/impl/EndDialogue');
+const { ActionDialogue } = require('../dist/game/model/dialogues/entries/impl/ActionDialogue');
 
 class FakeGameObject {
   constructor(id, location, type, face) { this.id = id; this.location = location; this.type = type;
@@ -55,8 +55,8 @@ function harness(t, members = true) {
   const api = {
     core: { Item, ItemIdentifiers: I, NpcIdentifiers: N, Skill, Location, Wilderness: { isPvpArea: () => false },
       WorldDefinition: { isMembersWorld: () => members }, Animation, PlayerRights,
-      DialogueChainBuilder, NpcDialogue, PlayerDialogue, OptionDialogue, StatementDialogue,
-      ItemStatementDialogue, EndDialogue, GameObject: FakeGameObject, ObjectManager,
+      DialogueChainBuilder, NpcDialogue, PlayerDialogue, StatementDialogue,
+      ItemStatementDialogue, EndDialogue, ActionDialogue, GameObject: FakeGameObject, ObjectManager,
       MapObjects: { get: () => null } },
     registerCommand(name, handler, rights, description) { hooks[name] = { handler, rights, description }; },
     onCustomEvent(name, cb) { custom.set(name, [...(custom.get(name) ?? []), cb]); },
@@ -581,15 +581,19 @@ test('Strange Plant cleans up without fruit after dismissal, expiry, distance or
 
 // --- The teleport random events ---------------------------------------------------------
 
-function openOptions(p) {
-  const entries = [...(p.dialogue?.getDialogues?.().values() ?? [])];
-  return entries.find(entry => entry instanceof OptionDialogue);
+// The flows show their choices on the multi-chatbox prompt: run any pending ActionDialogue
+// (which fires the prompt when the player finishes the NPC lines), then answer it.
+function openOptions(h, p) {
+  for (const entry of [...(p.dialogue?.getDialogues?.().values() ?? [])]) {
+    if (entry.constructor.name === 'ActionDialogue') entry.send(p);
+  }
+  return [...h.prompts].reverse().find(entry => entry.player === p) ?? null;
 }
 
 function choose(h, p, index) {
-  const option = openOptions(p);
-  assert.ok(option, 'an option dialogue is open');
-  option.execute(index);
+  const prompt = openOptions(h, p);
+  assert.ok(prompt, 'an option prompt is open');
+  prompt.options[index].cb();
 }
 
 function fireRaw(h, key, event) {
@@ -634,8 +638,8 @@ test('Kiss the frog pays a token, politely ends, or turns rude players into a fr
     assert.ok(npc, 'the royal frog');
     assert.equal(h.npcs.length - before, 5, 'the royal and a chorus of frogs');
     h.hooks.Frog['Talk-to']({ player: p, npc, handled: false });
-    const option = openOptions(p);
-    const index = option.getOptions().findIndex(text => pool.includes(text));
+    const prompt = openOptions(h, p);
+    const index = prompt.options.findIndex(entry => pool.includes(entry.label));
     assert.notEqual(index, -1);
     choose(h, p, index);
     if (expected === 'token') {
@@ -700,7 +704,7 @@ test('Beekeeper assembles the hive and rewards a lamp plus an outfit piece', t =
   const session = Teleports.sessionOf(p);
   assert.equal(session.kind, 'beekeeper');
   for (const part of ['Lid', 'Body', 'Entrance', 'Legs']) {
-    choose(h, p, openOptions(p).getOptions().indexOf(part));
+    choose(h, p, openOptions(h, p).options.findIndex(entry => entry.label === part));
   }
   h.emit('InterfaceActionClick', { player: p, buttonId: (420 << 16) | 22, action: 1 });
   assert.ok(p.rewards.includes(I.LAMP));
@@ -716,7 +720,7 @@ test('Beekeeper loses after six wrong builds', t => {
   const session = Teleports.sessionOf(p);
   for (let attempt = 0; attempt < 6 && Teleports.sessionOf(p); attempt++) {
     for (const part of ['Lid', 'Body', 'Entrance', 'Legs']) {
-      choose(h, p, openOptions(p).getOptions().indexOf(part));
+      choose(h, p, openOptions(h, p).options.findIndex(entry => entry.label === part));
     }
     // Put the wrong part in the lid slot so every build fails.
     const last = session.data.placed[0];
@@ -852,8 +856,6 @@ test('Evil Bob island fishing, uncooking and feeding pays 650 Fishing XP', t => 
   session.data.spot = 'west';
   p.slots[0] = new Item(6209, 1);
   h.hooks.Servant['Talk-to']({ player: p, npc: {}, npcId: N.SERVANT_2, handled: false });
-  const servantLine = [...openOptions(p)?.getDialogues?.().values() ?? []]
-    .find(entry => entry.constructor.name === 'NpcDialogue');
   assert.ok(p.dialogue, 'the servant speaks');
   assert.match(JSON.stringify([...p.dialogue.getDialogues().values()].map(entry => entry.getText?.() ?? '')), /west/);
   const spot = { getId: () => 23114, getLocation: () => new Location(2510, 4775, 0) };
