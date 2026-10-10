@@ -765,6 +765,8 @@ test('Drill Demon accepts four matching exercises in a row for the camo top', t 
   h.hooks['Sergeant Damien']['Talk-to']({ player: p, npc, handled: false });
   choose(h, p, 0);
   const session = Teleports.sessionOf(p);
+  assert.equal(p.location.getX(), 3163, 'drill arrival x');
+  assert.equal(p.location.getY(), 4819, 'drill arrival y');
   for (let i = 0; i < 4; i++) {
     const entry = [...session.data.matExercise.entries()].find(([, exercise]) => exercise === session.data.order);
     assert.ok(entry, 'a mat matches the order');
@@ -898,6 +900,22 @@ test('Prison Pete pays out after three correct balloon keys', t => {
   assert.notEqual(p.rewards.at(-1), 6966, 'the key was handed over, not kept');
   assert.ok(p.rewards.length >= 1);
   assert.equal(Teleports.sessionOf(p), undefined);
+});
+
+test('rewards that no longer fit drop at the return tile, not inside the event', t => {
+  const h = harness(t), p = h.player(), npc = h.spawn(p, 10);
+  h.hooks['Bee keeper']['Talk-to']({ player: p, npc, handled: false });
+  choose(h, p, 0);
+  const session = Teleports.sessionOf(p);
+  for (let slot = 0; slot < 27; slot++) p.slots[slot] = new Item(I.SHARK, 1);
+  p.free = 1;
+  Teleports.finish(session, { reward: [{ id: I.LAMP, amount: 1 }, { id: 25129, amount: 1 }] });
+  assert.equal(p.location.getX(), 3222, 'home again');
+  assert.equal(h.drops.length, 2);
+  for (const drop of h.drops) {
+    assert.ok(drop.getPosition().equals(p.location), 'dropped beside the return tile');
+  }
+  assert.deepEqual(p.rewards, [], 'nothing squeezed into the inventory');
 });
 
 test('Evil twin catches the matching suspect within two grabs and pays gems', t => {

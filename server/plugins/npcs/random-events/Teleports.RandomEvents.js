@@ -180,20 +180,21 @@ function returnToStart(session) {
 }
 
 /**
- * Ends the session. `reward` is granted before the teardown, `back` moves the player to
- * their original tile (not for events that end by death or log out).
+ * Ends the session. `back` moves the player to their original tile first (not for events
+ * that end by death or log out), then `reward` is granted there, so anything that no
+ * longer fits is dropped beside the player and not left behind in the event area.
  */
 function finish(session, { reward = null, message = null, back = true } = {}) {
   if (!session || session.finishing) return false;
   session.finishing = true;
   sessions.delete(session.player);
-  if (reward?.length) grant(session, reward, message);
-  else if (message) session.player.sendMessage(message);
   if (session.interfaceId && session.player.getInterfaceId?.() === session.interfaceId) {
     session.player.getPacketSender().sendInterfaceRemoval();
   }
   for (const cleanup of session.cleanup.splice(0)) cleanup();
   if (back) returnToStart(session);
+  if (reward?.length) grant(session, reward, message);
+  else if (message) session.player.sendMessage(message);
   return true;
 }
 

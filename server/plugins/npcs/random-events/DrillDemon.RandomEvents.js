@@ -50,7 +50,7 @@ module.exports = function attach(api, Events) {
         options: [
           ["Sir, yes sir!", () => teleport({
             kind: "drill",
-            arrive: { x: 3168, y: 4830, z: 0 },
+            arrive: { x: 3163, y: 4819, z: 0 },
             teleportRefusal: "I haven't dismissed you yet, Private!",
             onStart: start,
           })],
