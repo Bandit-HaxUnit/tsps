@@ -1,4 +1,11 @@
-const { restoreRunEnergy, curePoisonAndVenom } = require("./ConsumableEffects");
+const {
+  restoreRunEnergy,
+  curePoisonAndVenom,
+  boostSkill,
+  lowerSkillByCurrent,
+  lowerSkillByMax,
+  restoreSkillToBaseWithFormula,
+} = require("./ConsumableEffects");
 const { TimerKey } = require("../../src/main/typescript/elvarg/util/timers/TimerKey");
 const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
 const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
@@ -81,44 +88,6 @@ function getCurrentLevel(player, skill) {
 
 function setCurrentLevel(player, skill, level) {
   getSkillManager(player).setCurrentLevels(skill, level);
-}
-
-function boostSkill(player, skill, flat, percent) {
-  const max = getMaxLevel(player, skill);
-  const current = getCurrentLevel(player, skill);
-  const boost = Math.floor(max * percent) + flat;
-  const cap = max + boost;
-  if (current < cap) {
-    getSkillManager(player).increaseCurrentLevel(skill, cap - current, cap);
-  }
-}
-
-function lowerSkillByCurrent(player, skill, flat, percent, minimum = 0) {
-  const current = getCurrentLevel(player, skill);
-  const amount = Math.floor(current * percent) + flat;
-  if (amount > 0) {
-    getSkillManager(player).decreaseCurrentLevel(skill, amount, minimum);
-  }
-}
-
-function lowerSkillByMax(player, skill, flat, percent, minimum = 0) {
-  const max = getMaxLevel(player, skill);
-  const amount = Math.floor(max * percent) + flat;
-  if (amount > 0) {
-    getSkillManager(player).decreaseCurrentLevel(skill, amount, minimum);
-  }
-}
-
-function restoreSkillToBaseWithFormula(player, skill, flat, percent) {
-  const max = getMaxLevel(player, skill);
-  const current = getCurrentLevel(player, skill);
-  if (current >= max) {
-    return;
-  }
-  const amount = Math.floor(flat + max * percent);
-  if (amount > 0) {
-    getSkillManager(player).increaseCurrentLevel(skill, amount, max);
-  }
 }
 
 function heal(player, amount, extraCap = 0) {

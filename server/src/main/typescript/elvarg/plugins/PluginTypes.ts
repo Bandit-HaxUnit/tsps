@@ -1235,6 +1235,7 @@ export interface PluginCoreApi {
   ItemOnGroundManager: any;
   ItemDefinition: any;
   CacheDefinitions: any;
+  Wilderness: any;
   PathFinder: any;
   RsmodRouteFinding: any;
   NpcDefinition: any;
