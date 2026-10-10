@@ -122,9 +122,12 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
   // NPCs (cache names in NpcIdentifiers.ts).
   const GRUBFOOT_NPC_ID = NpcIdentifiers.GRUBFOOT_8; // 11255, mine entrance / lab
   const GRUBFOOT_POST_NPC_ID = NpcIdentifiers.GRUBFOOT_9; // 11259, Goblin Village after the quest
-  const OLDAK_LAB_NPC_ID = NpcIdentifiers.OLDAK; // 2303, world spawn in the lab
-  const OLDAK_RING_NPC_ID = NpcIdentifiers.OLDAK_3; // 11384, fungus ring, Buy-sphere
+  const OLDAK_LAB_NPC_ID = NpcIdentifiers.OLDAK; // 11265, lab id (no spawn; ASOH spawns 11384 there)
+  const OLDAK_ALT_NPC_ID = NpcIdentifiers.OLDAK_2; // 11266, alternate lab id
+  const OLDAK_RING_NPC_ID = NpcIdentifiers.OLDAK_3; // 11384, the lab Oldak ASOH spawns, and the fungus-ring one
   const OLDAK_YUBIUSK_NPC_ID = NpcIdentifiers.OLDAK_4; // 11385, Yu'biusk portal
+  /** Every lab Oldak id (11384 is another quest's spawn, and its own ring variant). */
+  const OLDAK_LAB_NPC_IDS = new Set([OLDAK_LAB_NPC_ID, OLDAK_ALT_NPC_ID]);
   const ZANIK_LAB_NPC_ID = NpcIdentifiers.ZANIK_17; // 11260
   const ZANIK_CAVE_NPC_ID = NpcIdentifiers.ZANIK_18; // 11261
   const ZANIK_PRISON_NPC_ID = NpcIdentifiers.ZANIK_21; // 11264
@@ -143,6 +146,8 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
     NpcIdentifiers.REDEYES, // 11272
     NpcIdentifiers.STRONGBONES, // 11273
   ];
+  const STRONGBONES_INDEX = CRYPT_ATTACKER_NPC_IDS.indexOf(NpcIdentifiers.STRONGBONES);
+  const SKOBLIN_NPC_ID = NpcIdentifiers.SKOBLIN; // 11268, summoned by Strongbones
   const CRYPT_GHOST_NPC_IDS = [
     NpcIdentifiers.SNOTHEAD_2, // 11274
     NpcIdentifiers.SNAILFEET_2, // 11275
@@ -706,7 +711,7 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
     if (npcId === GRUBFOOT_POST_NPC_ID) {
       return complete ? "post-quest-dialogue-grubfoot" : null;
     }
-    if (npcId === OLDAK_LAB_NPC_ID) return selectOldakLabVariant(player, stage);
+    if (OLDAK_LAB_NPC_IDS.has(npcId)) return selectOldakLabVariant(player, stage);
     if (npcId === ZANIK_LAB_NPC_ID) return selectZanikVariant(player, stage);
     if (npcId === ZANIK_CAVE_NPC_ID) {
       return questActive(player) && stage < STAGE_GOBLIN
@@ -722,7 +727,11 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
       return "the-temple-of-tribes-talking-to-zanik-again";
     }
     if (npcId === OLDAK_RING_NPC_ID) {
-      return stage === STAGE_MACHINE ? "path-to-yu-biusk-talking-to-oldak" : null;
+      // 11384 is both the ring Oldak and the lab one Another Slice of H.A.M.
+      // spawns; only the machine stage wants the ring conversation.
+      return stage === STAGE_MACHINE
+        ? "path-to-yu-biusk-talking-to-oldak"
+        : selectOldakLabVariant(player, stage);
     }
     if (npcId === ZANIK_RING_NPC_ID) {
       return stage === STAGE_MACHINE ? "path-to-yu-biusk-talking-to-zanik" : null;
@@ -865,7 +874,7 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
       teleport(player, TEMPLE_INSIDE_TILE);
       return;
     }
-    if (npcId === OLDAK_LAB_NPC_ID || npcId === OLDAK_RING_NPC_ID) {
+    if (OLDAK_LAB_NPC_IDS.has(npcId) || npcId === OLDAK_RING_NPC_ID) {
       if (text === "Can you teleport me to the temple again?") {
         // The stage-25 conversation pays for the trip in its own branch (condition
         // 4j8klO + action 6cDx_0); later variants lost the jump target, so pay here.
@@ -986,7 +995,7 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
       return;
     }
     if (
-      (npcId === OLDAK_LAB_NPC_ID || npcId === ZANIK_LAB_NPC_ID) &&
+      (OLDAK_LAB_NPC_IDS.has(npcId) || npcId === OLDAK_RING_NPC_ID || npcId === ZANIK_LAB_NPC_ID) &&
       value.includes("meet us by the fungus ring") &&
       quest.getStage(player) === STAGE_YUBIUSK_KNOWN
     ) {
@@ -1075,6 +1084,12 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
     { x: 3744, y: 4389 },
     { x: 3742, y: 4391 },
   ];
+  // Walkable tiles around Strongbones' grave for the Skoblins he summons.
+  const SKOBLIN_SPAWN_TILES = [
+    { x: 3741, y: 4390 },
+    { x: 3743, y: 4390 },
+    { x: 3742, y: 4392 },
+  ];
 
   function sayGraveName(player, objectId) {
     if (!questActive(player) || !hasBit(player, BIT_CRYPT_UNLOCKED)) {
@@ -1086,6 +1101,11 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
     if (tracked(player).has(`crypt-attacker-${index}`)) return;
     player.sendMessage("You say the name of the ancient high priest.");
     spawnTracked(player, `crypt-attacker-${index}`, CRYPT_ATTACKER_NPC_IDS[index], GRAVE_SPAWN_TILES[index]);
+    if (index === STRONGBONES_INDEX) {
+      SKOBLIN_SPAWN_TILES.forEach((tile, i) => {
+        spawnTracked(player, `crypt-skoblin-${i}`, SKOBLIN_NPC_ID, tile);
+      });
+    }
   }
 
   function handleNpcDeath(event) {
@@ -1096,6 +1116,9 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
     const location = npc.getLocation();
     api.removeNpc(npc);
     tracked(killer).delete(`crypt-attacker-${index}`);
+    if (index === STRONGBONES_INDEX) {
+      SKOBLIN_SPAWN_TILES.forEach((_, i) => removeTracked(killer, `crypt-skoblin-${i}`));
+    }
     setCryptBit(killer, index);
     const ghost = api.spawnNpc({
       id: CRYPT_GHOST_NPC_IDS[index],

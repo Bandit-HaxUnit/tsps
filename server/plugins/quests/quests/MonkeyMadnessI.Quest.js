@@ -1186,16 +1186,26 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     }
     if (itemId === MONKEY_TALISMAN_ITEM) {
       event.handled = true;
-      startTranscript(api, player, npcId, PAGE, flag(player, REMAINS_GIVEN_ATTRIBUTE)
-        ? "chapter-2-creating-the-monkey-gree-gree-after-using-both-items-on-zooknock"
-        : "chapter-2-creating-the-monkey-gree-gree-using-the-monkey-talisman-on-zooknock-first");
+      if (flag(player, REMAINS_GIVEN_ATTRIBUTE)) {
+        // The after-both page has no hand-over message: the talisman used here
+        // is the one Zooknock returns as the greegree, so consume it now.
+        player.getInventory().deleteNumber(MONKEY_TALISMAN_ITEM, 1);
+        startTranscript(api, player, npcId, PAGE, "chapter-2-creating-the-monkey-gree-gree-after-using-both-items-on-zooknock");
+        return;
+      }
+      startTranscript(api, player, npcId, PAGE, "chapter-2-creating-the-monkey-gree-gree-using-the-monkey-talisman-on-zooknock-first");
       return;
     }
     if (isMonkeyRemains(itemId)) {
       event.handled = true;
-      startTranscript(api, player, npcId, PAGE, flag(player, TALISMAN_GIVEN_ATTRIBUTE)
-        ? "chapter-2-creating-the-monkey-gree-gree-after-using-both-items-on-zooknock"
-        : "chapter-2-creating-the-monkey-gree-gree-using-the-monkey-remains-on-zooknock-first");
+      if (flag(player, TALISMAN_GIVEN_ATTRIBUTE)) {
+        // The after-both page has no "hand Zooknock the remains" message, so
+        // the remains just handed over have to be deleted here.
+        deleteMonkeyRemains(player);
+        startTranscript(api, player, npcId, PAGE, "chapter-2-creating-the-monkey-gree-gree-after-using-both-items-on-zooknock");
+        return;
+      }
+      startTranscript(api, player, npcId, PAGE, "chapter-2-creating-the-monkey-gree-gree-using-the-monkey-remains-on-zooknock-first");
       return;
     }
   }
@@ -1221,6 +1231,25 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
     player.getInventory().deleteNumber(MSPEAK_AMULET_UNSTRUNG_ITEM, 1);
     addItem(player, MSPEAK_AMULET_ITEM);
     startTranscript(api, player, AWOWOGEI_CHATHEAD_ID, PAGE, "chapter-2-monkey-amulet-stringing-the-monkeyspeak-amulet");
+  }
+
+  /**
+   * Core equips the sigil on a "Wear" before any item-action event fires, so the
+   * prompt is driven from the equip gate instead: block the equip, play the
+   * shake/teleport transcript (its "Yes." path spawns the demon and moves the
+   * player). After the demon is dead the sigil no longer teleports, so the wear
+   * goes through. Left-click/first-action wear still arrives via handleItemAction.
+   */
+  function handleCanEquip(event) {
+    const { player, item } = event;
+    if (item?.getId?.() !== SQUAD_SIGIL_ITEM) return;
+    if (flag(player, DEMON_KILLED_ATTRIBUTE)) return;
+    event.allow = false;
+    if (stageOf(player) < STAGE_CHAPTERS) {
+      player.sendMessage("You are not ready to use the sigil.");
+      return;
+    }
+    startTranscript(api, player, GARKOR_CHATHEAD_ID, PAGE, "chapter-4-equipping-the-sigil");
   }
 
   function handleItemAction(event) {
@@ -1383,6 +1412,21 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
   function handleNpcInteraction(event) {
     const { player, npcId } = event;
     const option = optionOf(event);
+    if (option === "Travel"
+      && (DAERO_IDS.has(npcId) || WAYDAR_IDS.has(npcId) || LUMDO_IDS.has(npcId))) {
+      event.handled = true;
+      // Daero's Travel is only the "how do I leave" quip; Waydar and Lumdo
+      // reuse their talk transcripts, whose "Yes, let's go." / "As you wish."
+      // lines do the moving.
+      const choice = DAERO_IDS.has(npcId)
+        ? "chapter-1-the-underground-hangar-selecting-travel-at-daero-when-in-the-hangar"
+        : selectVariant({ player, npcId, npc: event.npc });
+      const variant = typeof choice === "string" ? choice : choice?.variant;
+      if (variant) {
+        api.emitCustomEvent("npc-dialogue:start", { player, npc: event.npc, npcId, variant, handled: false });
+      }
+      return true;
+    }
     if (option !== "Talk-to") return false;
 
     if (NARNODE_IDS.has(npcId) && stageOf(player) === STAGE_ORDERS) {
@@ -1636,6 +1680,7 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnItem(handleItemOnItem);
   api.onItemAction(handleItemAction);
+  api.onCanEquip(handleCanEquip);
   api.onObjectInteraction(handleObjectInteraction);
   api.onNpcInteraction(handleNpcInteraction);
   api.onNpcDeath(handleNpcDeath);

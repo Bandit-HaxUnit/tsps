@@ -177,7 +177,6 @@ module.exports = function registerTheFeudQuest(api) {
   const NOTE_FIBONACCI_ITEM_ID = ItemIdentifiers.NOTE; // 4597, Note (Fibonacci)
   const NOTE_NUMBERS_ITEM_ID = ItemIdentifiers.NOTE_2; // 4598, Note (numbers)
   const OAK_BLACKJACK_ITEM_ID = ItemIdentifiers.OAK_BLACKJACK; // 4599
-  const WILLOW_BLACKJACK_ITEM_ID = ItemIdentifiers.WILLOW_BLACKJACK; // 4600
   const UGTHANKI_DUNG_ITEM_ID = ItemIdentifiers.UGTHANKI_DUNG; // 4601
   const RECEIPT_ITEM_ID = ItemIdentifiers.RECEIPT; // 4603
   const HAGS_POISON_ITEM_ID = ItemIdentifiers.HAGS_POISON; // 4604
@@ -186,7 +185,6 @@ module.exports = function registerTheFeudQuest(api) {
   const SNAKE_BASKET_FULL_ITEM_ID = ItemIdentifiers.SNAKE_BASKET_FULL; // 4607
   const RED_HOT_SAUCE_ITEM_ID = ItemIdentifiers.RED_HOT_SAUCE; // 4610
   const DESERT_DISGUISE_ITEM_ID = ItemIdentifiers.DESERT_DISGUISE; // 4611
-  const ADAMANT_SCIMITAR_ITEM_ID = ItemIdentifiers.ADAMANT_SCIMITAR; // 1331
   const BUCKET_ITEM_ID = ItemIdentifiers.BUCKET; // 1925
 
   const MONEY_POT_OBJECT_ID = ObjectIdentifiers.MONEY_POT; // 6230
@@ -992,6 +990,9 @@ module.exports = function registerTheFeudQuest(api) {
 
   function handleDialogueAction(event) {
     const { player, stepId } = event;
+    if (event.step?.type === "end" && event.npcId === BANDIT_LEADER_ID && stage(player) === STAGE_CHAMPION) {
+      spawnLeaderGuard(player, BANDIT_LEADER_ID, BANDIT_CHAMPION_ID, FLAG_CHAMPION_SPAWNED);
+    }
     switch (stepId) {
       // Camel purchase: 500 / 1,000 coins for two receipts.
       case "1JYri1":
@@ -1123,8 +1124,6 @@ module.exports = function registerTheFeudQuest(api) {
         event.handled = true;
         return;
       case "Nhv81S":
-        // registerQuest adds the final coin of the 500 on completion.
-        player.getInventory().adds(COINS_ITEM_ID, 499);
         event.handled = true;
         return;
       case "_jFbux":
@@ -1367,12 +1366,10 @@ module.exports = function registerTheFeudQuest(api) {
     const { npcId } = event;
     if (npcId === TOUGH_GUY_ID) {
       setFlag(player, FLAG_TOUGH_DEAD);
-      player.getInventory().adds(WILLOW_BLACKJACK_ITEM_ID, 1);
       return;
     }
     if (npcId === BANDIT_CHAMPION_ID) {
       setFlag(player, FLAG_CHAMPION_DEAD);
-      player.getInventory().adds(ADAMANT_SCIMITAR_ITEM_ID, 1);
       if (stage(player) === STAGE_CHAMPION) {
         quest.setStage(player, STAGE_MAYOR);
         syncVarbits(player);
@@ -1525,6 +1522,7 @@ module.exports = function registerTheFeudQuest(api) {
 
   function grantReward(player) {
     player.getSkillManager().addExperiences(Skill.THIEVING, 15000);
+    player.getInventory().adds(COINS_ITEM_ID, 499);
   }
 
   // ==========================================================================

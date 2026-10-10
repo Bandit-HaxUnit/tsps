@@ -70,6 +70,7 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
 
   const VARP_DTTD = 794; // "dttd"
   const VARBIT_DTTD_MAIN = 2258; // dttd_main, bits 0-10
+  const VARBIT_DTTD_ZANIK_IN_CELLAR = 2264; // dttd_zanik_in_cellar, varp 794 bit 16
 
   const STAGE_STARTED = 1;
   const STAGE_TOURING = 2;
@@ -247,6 +248,7 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
   let corpseSpawned = false;
   const zanikByPlayer = new Map();
   const cellarNpcsByPlayer = new Map();
+  const tourGoblinByPlayer = new Map();
 
   function bits(player) {
     return Number(player.getAttribute(BITS_ATTRIBUTE)) || 0;
@@ -306,7 +308,8 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
   }
 
   function equippedId(player, slot) {
-    return player.getEquipment().get(slot)?.getId?.();
+    const id = player.getEquipment().get(slot)?.getId?.();
+    return id && id > 0 ? id : undefined;
   }
 
   function wearingHam(player) {
@@ -314,10 +317,6 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
       const id = equippedId(player, slot);
       return id === a || id === b;
     });
-  }
-
-  function weaponWielded(player) {
-    return equippedId(player, Equipment.WEAPON_SLOT) !== undefined;
   }
 
   function handsFree(player) {
@@ -427,6 +426,43 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
       ownerOnly: true,
     });
     if (spawned) zanikByPlayer.set(player, spawned);
+  }
+
+  function despawnTourGoblin(player) {
+    const npc = tourGoblinByPlayer.get(player);
+    if (!npc) return;
+    api.removeNpc(npc);
+    tourGoblinByPlayer.delete(player);
+  }
+
+  /**
+   * The Lumbridge goblins only have an Attack action in the cache and the
+   * talkable quest goblin (11338) is unspawned, so stage 2 keeps an owner-only
+   * one at the player's side for the tour stop's Talk-to.
+   */
+  function placeTourGoblin(player) {
+    const npc = tourGoblinByPlayer.get(player);
+    if (quest.getStage(player) !== STAGE_TOURING || hasBit(player, BIT_GOBLIN)) {
+      if (npc) despawnTourGoblin(player);
+      return;
+    }
+    if (!inZone(player, LUMBRIDGE_ZONE)) return;
+    const location = player.getLocation();
+    const target = new Location(location.getX() + 2, location.getY(), location.getZ());
+    if (npc) {
+      npc.moveTo(target);
+      return;
+    }
+    const spawned = api.spawnNpc({
+      id: NpcIdentifiers.GOBLIN_104,
+      x: target.getX(),
+      y: target.getY(),
+      z: target.getZ(),
+      wanderRadius: 0,
+      owner: player,
+      ownerOnly: true,
+    });
+    if (spawned) tourGoblinByPlayer.set(player, spawned);
   }
 
   function despawnCellar(player) {
@@ -571,10 +607,10 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
 
   function talkGoblin(event) {
     const { player } = event;
-    if (quest.getStage(player) !== STAGE_TOURING) return false;
-    if (hasBit(player, BIT_GOBLIN) || !inZone(player, LUMBRIDGE_ZONE)) return false;
+    if (quest.getStage(player) !== STAGE_TOURING || hasBit(player, BIT_GOBLIN)) return false;
     placeZanik(player);
     setBit(player, BIT_GOBLIN);
+    despawnTourGoblin(player);
     playVariant(player, event.npcId, "a-tour-of-lumbridge-walking-near-the-goblins-in-the-forest");
     return true;
   }
@@ -836,9 +872,9 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
         return tearsOfGuthixDone(player);
       case KEYS.WEAPON:
       case KEYS.WEAPON_2:
-        return weaponWielded(player);
+        return !handsFree(player);
       case KEYS.HANDS_FREE:
-        return !weaponWielded(player);
+        return handsFree(player);
       case KEYS.IN_HAM:
         return wearingHam(player);
       case KEYS.NO_LIGHT:
@@ -854,6 +890,7 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
     const { player, hook } = event;
     if (hook !== START_HOOK) return;
     if (quest.getStage(player) === 0) quest.setStage(player, STAGE_STARTED);
+    syncCellarVarbit(player);
   }
 
   function handleDialogueCondition(event) {
@@ -1183,12 +1220,35 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
     if (quest.getStage(player) >= STAGE_REVIVED) placeZanik(player);
   }
 
+  function handleLumbridgeZoneEnter({ player }) {
+    placeTourGoblin(player);
+  }
+
+  /** Cache NPC 4507 (the cellar Zanik parent) only resolves once this bit is set. */
+  function syncCellarVarbit(player) {
+    player
+      .getPacketSender()
+      .sendVarbit(VARBIT_DTTD_ZANIK_IN_CELLAR, quest.getStage(player) >= STAGE_STARTED ? 1 : 0);
+  }
+
+  function handleBootstrap({ player }) {
+    syncCellarVarbit(player);
+  }
+
+  function handleQuestStageChanged({ player, key }) {
+    if (key !== quest.key) return;
+    syncCellarVarbit(player);
+    placeTourGoblin(player);
+  }
+
   function handleLogin({ player }) {
     ensureWorldObjects();
     const stage = quest.getStage(player);
+    syncCellarVarbit(player);
     if (stage >= STAGE_TOURING && !(stage >= STAGE_JAILED && stage <= STAGE_TEARS)) {
       placeZanik(player);
     }
+    placeTourGoblin(player);
     if (stage === STAGE_MILL && inZone(player, { minX: 3200, maxX: 3250, minY: 9678, maxY: 9715 })) {
       spawnCellar(player);
     }
@@ -1199,6 +1259,7 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
     if (!player) return;
     despawnCellar(player);
     despawnZanik(player);
+    despawnTourGoblin(player);
   }
 
   // ==========================================================================
@@ -1401,6 +1462,8 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleDialogueHook);
   api.onCustomEvent("npc-dialogue:condition", handleDialogueCondition);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
+  api.onCustomEvent("player:bootstrap-complete", handleBootstrap);
+  api.onCustomEvent("quest:stage-changed", handleQuestStageChanged);
   api.onCustomEvent("door:toggle", claimLargeDoor);
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemAction(ZANIK_BODY_ITEM_ID, { Drop: handleItemAction });
@@ -1409,6 +1472,7 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
   api.onZoneEnter(RUBBLE_ZONE, handleRubbleZoneEnter);
   api.onZoneEnter(STORE_ZONE, handleStoreZoneEnter);
   api.onZoneEnter(MILL_ZONE, handleMillZoneEnter);
+  api.onZoneEnter(LUMBRIDGE_ZONE, handleLumbridgeZoneEnter);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

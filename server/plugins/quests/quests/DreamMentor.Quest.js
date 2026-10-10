@@ -37,6 +37,9 @@
  *  - Cyrisus's bank is not a real container: 'Bird's-Eye' Jack hands over the
  *    chest and the player stores the armour in it (item on item). The "Using
  *    the bank" menu option does nothing.
+ *  - The world's Jack at 2099,3921 stands on the unwalkable bank counter, so the
+ *    quest spawns its own owner-only Jack on the bank floor at 2099,3919 while
+ *    stages 16-29 run (same pattern as Lunar Diplomacy's Baba Yaga/Jack).
  *  - Astral Contact is not implemented, so "gearing-up-astral-contacting-cyrisus"
  *    and "gearing-up-showing-him-gear-through-astral-contact" never play; the
  *    in-person variant carries both beats of the gear check.
@@ -191,6 +194,7 @@ module.exports = function registerDreamMentorQuest(api) {
   ];
   const ONEIROMANCER_TILE = { x: 2149, y: 3867 };
   const BRAZIER_TILE = { x: 2074, y: 3911 };
+  const JACK_BANK_TILE = { x: 2099, y: 3919 };
 
   const RANDOM_CONVO_ACTIONS = new Set(["u0G8_8", "FGAqZp", "m-cazF", "o18slu"]);
 
@@ -339,7 +343,15 @@ module.exports = function registerDreamMentorQuest(api) {
   }
 
   function isBrazierLit(player) {
-    return player.getAttribute(BRAZIER_ATTRIBUTE) === true;
+    if (player.getAttribute(BRAZIER_ATTRIBUTE) === true) return true;
+    // Death clears the attribute but leaves varbit 2430 set, so recover the
+    // attribute from the varbit here (mirrors LunarDiplomacy's isBrazierLit)
+    // or the brazier reads "already lit" while the dialogue treats it as unlit.
+    if (player.getPacketSender().getVarbit(VARBIT_BRAZIER_LIT) > 0) {
+      player.setAttribute(BRAZIER_ATTRIBUTE, true);
+      return true;
+    }
+    return false;
   }
 
   function variantSteps(variant) {
@@ -682,6 +694,47 @@ module.exports = function registerDreamMentorQuest(api) {
     startTranscript(api, player, npcId, PAGE, "gearing-up-talking-to-birds-eye-jack-2");
   }
 
+  /**
+   * The world's Jack (placeholder 6126) transforms to 3472 on the bank-counter
+   * tile 2099,3921, which is not reachable, so the gear steps spawn an
+   * owner-only 3472 on the walkable bank floor instead.
+   */
+  function ownedJack(player) {
+    const world = api.getWorld();
+    if (!world?.getNpcs) return null;
+    for (const npc of world.getNpcs()) {
+      if (npc?.getId?.() === JACK_NPC_ID && npc.getOwner?.() === player) return npc;
+    }
+    return null;
+  }
+
+  function ensureJack(player) {
+    if (quest.isComplete(player) || stageOf(player) < STAGE_ARMOUR) {
+      removeOwnedJack(player);
+      return;
+    }
+    const existing = ownedJack(player);
+    if (existing) {
+      const location = existing.getLocation?.();
+      if (location?.getX?.() === JACK_BANK_TILE.x && location?.getY?.() === JACK_BANK_TILE.y) return;
+      api.removeNpc(existing);
+    }
+    api.spawnNpc({
+      id: JACK_NPC_ID,
+      x: JACK_BANK_TILE.x,
+      y: JACK_BANK_TILE.y,
+      z: 0,
+      wanderRadius: 0,
+      owner: player,
+      ownerOnly: true,
+    });
+  }
+
+  function removeOwnedJack(player) {
+    const npc = ownedJack(player);
+    if (npc) api.removeNpc(npc);
+  }
+
   // ==========================================================================
   // Talk-to: the Oneiromancer
   // ==========================================================================
@@ -754,6 +807,24 @@ module.exports = function registerDreamMentorQuest(api) {
     }
   }
 
+  /**
+   * Removes this player's arena bosses, tracked or not. A boss left over from
+   * an earlier visit (or from before a relog, when its owner object is no
+   * longer registered) would otherwise pile up on re-entry and answer
+   * "This npc was not spawned for you".
+   */
+  function reconcileBosses(player) {
+    const world = api.getWorld();
+    if (world?.getNpcs) {
+      for (const npc of world.getNpcs()) {
+        if (!npc || !BOSS_ORDER.includes(npc.getId?.())) continue;
+        const owner = npc.getOwner?.();
+        if (owner === player || (owner && owner.isRegistered?.() === false)) api.removeNpc(npc);
+      }
+    }
+    bosses.delete(player);
+  }
+
   function spawnBoss(player, index) {
     const tile = BOSS_TILES[index] ?? BOSS_TILES[0];
     const npc = api.spawnNpc({
@@ -772,8 +843,9 @@ module.exports = function registerDreamMentorQuest(api) {
   function enterDream(player) {
     const stage = stageOf(player);
     if (stage !== STAGE_POTION && stage !== STAGE_DREAM) return;
-    despawnBosses(player);
+    reconcileBosses(player);
     removeStaticInadequacy();
+    if (held(player, DREAM_POTION_ITEM_ID)) player.getInventory().deleteNumber(DREAM_POTION_ITEM_ID, 1);
     player.moveTo(DREAM_ENTRY);
     if (stage < STAGE_DREAM) {
       setStage(player, STAGE_DREAM);
@@ -800,7 +872,7 @@ module.exports = function registerDreamMentorQuest(api) {
       restoreStaticInadequacy();
       return;
     }
-    if (bosses.has(player)) return;
+    reconcileBosses(player);
     const index = Math.max(0, Math.min(BOSS_ORDER.length - 1, numberAttribute(player, BOSS_INDEX_ATTRIBUTE)));
     spawnBoss(player, index);
   }
@@ -1111,10 +1183,12 @@ module.exports = function registerDreamMentorQuest(api) {
     refreshQuestList(player);
     syncVarbits(player);
     respawnDreamBossOnLogin(player);
+    ensureJack(player);
   }
 
   function handleBootstrap({ player }) {
     syncVarbits(player);
+    ensureJack(player);
   }
 
   /** Mirrors the sibling varbits after any stage change, including ::quest and complete(). */
@@ -1125,6 +1199,7 @@ module.exports = function registerDreamMentorQuest(api) {
       return;
     }
     syncVarbits(event.player);
+    ensureJack(event.player);
   }
 
   /** ::quest reset / a fresh start drops the recovery counters and dream spawns. */
@@ -1152,6 +1227,7 @@ module.exports = function registerDreamMentorQuest(api) {
       player.setAttribute(key, null);
     }
     despawnBosses(player);
+    removeOwnedJack(player);
     restoreStaticInadequacy();
     syncVarbits(player);
   }

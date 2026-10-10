@@ -1011,7 +1011,7 @@ export class ClientConnection {
           .findIndex((action) => action?.toLowerCase() === option) + 1
       : packet.optionIndex;
     if (optionIndex === 0) return;
-    if (/^(wield|wear|equip)$/.test(option)) {
+    if (/^(wield|wear|equip|hold)$/.test(option)) {
       EquipPacketListener.equip(player, packet.itemId, packet.slot, 3214);
     } else if (ItemActionPacketListener.isDropOption(option, optionIndex)) {
       DropItemPacketListener.drop(player, packet.itemId, 3214, packet.slot);

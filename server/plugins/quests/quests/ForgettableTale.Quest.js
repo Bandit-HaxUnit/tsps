@@ -49,7 +49,7 @@ module.exports = function registerForgettableTaleQuest(api) {
     ObjectIdentifiers,
     Skill,
   } = api.core;
-  const { registerQuest, startTranscript } = require("../QuestRuntime");
+  const { registerQuest, loadTranscripts, startTranscript } = require("../QuestRuntime");
 
   const PAGE = "Forgettable Tale...";
 
@@ -538,6 +538,27 @@ module.exports = function registerForgettableTaleQuest(api) {
     return startTranscript(api, player, npcId, PAGE, variant);
   }
 
+  // A wiki "Continues below at ..." stage direction names the line the shared tail
+  // resumes at; the tail itself is the matching branch further down the variant.
+  function continuationSteps(variant, marker) {
+    const steps = loadTranscripts(api)?.[PAGE]?.variants?.[variant];
+    const walk = (list) => {
+      for (let index = 0; index < (list?.length ?? 0); index++) {
+        const step = list[index];
+        const text = typeof step.text === "string" ? step.text : typeof step.npc === "string" ? step.npc : "";
+        if (text.startsWith(marker)) return list.slice(index);
+        const nested = walk(step.steps);
+        if (nested) return nested;
+        for (const option of step.options ?? []) {
+          const branch = walk(option.steps);
+          if (branch) return branch;
+        }
+      }
+      return null;
+    };
+    return walk(steps) ?? [];
+  }
+
   // ==========================================================================
   // Map object refresh (varbit multilocs do not re-render from the varbit alone)
   // ==========================================================================
@@ -704,7 +725,9 @@ module.exports = function registerForgettableTaleQuest(api) {
     const stage = stageOf(player);
     if (stage < STAGE_BEER_GIVEN || stage >= STAGE_RIND_ASKED) return null;
     if (hasSeed(player, SEED_ROWDY)) return null;
-    return "getting-the-seeds-talking-to-the-rowdy-dwarf";
+    return requestedItemId(player) !== null
+      ? "getting-the-seeds-talking-to-the-rowdy-dwarf-again"
+      : "getting-the-seeds-talking-to-the-rowdy-dwarf";
   }
 
   function gaussVariant(player) {
@@ -747,6 +770,7 @@ module.exports = function registerForgettableTaleQuest(api) {
     if (GAUSS_IDS.has(npcId)) return gaussVariant(player);
     if (npcId === KHORVAK) return khorvakVariant(player);
     if (npcId === BARMAID) return barmaidVariant(player);
+    if (npcId === DRUNKEN_DWARF_2 || npcId === DRUNKEN_DWARF_KELDAGRIM) return drunkDwarfVariant(player);
     if (CONDUCTOR_IDS.has(npcId)) return conductorVariant(player);
     return null;
   }
@@ -862,6 +886,13 @@ module.exports = function registerForgettableTaleQuest(api) {
   function handleAction(event) {
     const { player, stepId } = event;
     switch (stepId) {
+      case "oYdSOU": // "Continues below": resume at the shared start-prompt tail.
+        event.handled = true;
+        event.steps = continuationSteps(
+          "starting-out-talking-to-commander-veldaban",
+          "But he seems to know something about the Red Axe"
+        );
+        return;
       case "KmAed5":
         event.handled = true;
         if (stageOf(player) === 0) quest.setStage(player, STAGE_STARTED);
@@ -962,7 +993,8 @@ module.exports = function registerForgettableTaleQuest(api) {
 
   function talkDrunkenDwarf(event) {
     const { player, npcId } = event;
-    if (npcId !== DRUNKEN_DWARF_KELDAGRIM) return;
+    // Interactions carry the resolved content id (2408); 3198 is only the spawn id.
+    if (npcId !== DRUNKEN_DWARF_KELDAGRIM && npcId !== DRUNKEN_DWARF_2) return;
     // 3198's cache name is "null", so it has no indexed page: this handler owns it.
     event.handled = true;
     if (stageOf(player) === 0) {
@@ -980,7 +1012,8 @@ module.exports = function registerForgettableTaleQuest(api) {
       return; // the normal cart-conductor dialogue
     }
     event.handled = true;
-    play(player, npcId, conductorVariant(player));
+    const choice = conductorVariant(player);
+    if (choice) startTranscript(api, player, npcId, choice.page, choice.variant);
   }
 
   function talkDirector(event) {
@@ -1083,7 +1116,7 @@ module.exports = function registerForgettableTaleQuest(api) {
     event.handled = true;
     if (stageOf(player) < STAGE_TUNNEL_ENTERED || quest.isComplete(player)) return;
     const equipment = player.getEquipment();
-    if (equipment.get(Equipment.WEAPON_SLOT) || equipment.get(Equipment.SHIELD_SLOT)) {
+    if (!equipment.isSlotFree(Equipment.WEAPON_SLOT) || !equipment.isSlotFree(Equipment.SHIELD_SLOT)) {
       player.sendMessage("You need both hands free to ride the cart.");
       return;
     }
@@ -1433,6 +1466,7 @@ module.exports = function registerForgettableTaleQuest(api) {
     ) {
       return;
     }
+    event.handled = true;
     play(player, DRUNKEN_DWARF_4, "finishing-up-final-cutscene");
   }
 
