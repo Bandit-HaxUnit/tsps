@@ -23,8 +23,10 @@
  * points, 7,000 Prayer/Fishing/Farming XP and the Holy wrench.
  *
  * Gaps: the intro cutscene is a knockout teleport plus the cutscene-1/meeting
- * transcript (no camera change); the grow-cutscene and the fishing roll are
- * text/state only; the blindweed growth is a flat 60s timer instead of the real
+ * transcript (no camera change); the grow-cutscene is text/state only, while the
+ * slugling roll loops the cache's deal_bowl_fish animation with a catch every five
+ * ticks (Void's 1/3 Karamthulhu split) and stops on movement, lost gear or a full
+ * inventory rather than using the skill's success charts; the blindweed growth is a flat 60s timer instead of the real
  * farming tick cycle, and its patch stage rides varbit 1366 (children 10097-10102,
  * grown = 10102); the client only resolves that transform when it builds the scene,
  * so every stage change also sends a per-player loc swap of the child; the bailing
@@ -140,6 +142,9 @@ module.exports = function registerRumDealQuest(api) {
   const EVIL_SPIRIT_NPC_ID = NpcIdentifiers.EVIL_SPIRIT; // 625
   const FEVER_SPIDER_NPC_ID = NpcIdentifiers.FEVER_SPIDER; // 626
   const FISHING_SPOT_NPC_ID = NpcIdentifiers.FISHING_SPOT; // 635, only spawned on Braindeath
+  const FISHING_ANIMATION = 2813; // deal_bowl_fish
+  const FISHING_INTERVAL_TICKS = 5;
+  const fishingSessions = new Map();
 
   const INTAKE_HOPPER_OBJECT_ID = ObjectIdentifiers.HOPPER_2; // 10170
   const PRESSURE_BARREL_OBJECT_ID = ObjectIdentifiers.PRESSURE_BARREL; // 10171
@@ -1056,14 +1061,63 @@ module.exports = function registerRumDealQuest(api) {
       player.sendMessage("You do not have any free space for anything that you will catch!");
       return;
     }
+    startFishing(player, event.npc);
+  }
+
+  /** The bowl-and-net action loops (seq 2813 deal_bowl_fish); a catch lands every interval. */
+  function startFishing(player, npc) {
+    stopFishing(player);
     player.sendMessage("You dunk the bowl in the water...");
-    if (Math.random() < 1 / 3) {
-      player.getInventory().adds(KARAMTHULHU, 1);
-      player.sendMessage("...and you catch a Karamthulhu!");
-    } else {
-      player.getInventory().adds(SLUGLINGS, 1);
-      player.sendMessage("...and you catch some Sluglings!");
-    }
+    player.performAnimation(new Animation(FISHING_ANIMATION));
+    const session = {
+      npcIndex: npc.getIndex(),
+      npcId: npc.getId(),
+      spotX: npc.getLocation().getX(),
+      spotY: npc.getLocation().getY(),
+      task: null,
+    };
+    session.task = new (class extends api.core.Task {
+      constructor() {
+        super(FISHING_INTERVAL_TICKS, player);
+      }
+      execute() {
+        if (!stillFishing(player, session)) {
+          stopFishing(player);
+          this.stop();
+          return;
+        }
+        player.performAnimation(new Animation(FISHING_ANIMATION));
+        if (Math.random() < 1 / 3) {
+          player.getInventory().adds(KARAMTHULHU, 1);
+          player.sendMessage("...and you catch a Karamthulhu!");
+        } else {
+          player.getInventory().adds(SLUGLINGS, 1);
+          player.sendMessage("...and you catch some Sluglings!");
+        }
+        if (!hasFreeSlot(player)) stopFishing(player);
+      }
+    })();
+    fishingSessions.set(player, session);
+    api.getTaskManager().submit(session.task);
+  }
+
+  /** Movement, a lost bowl/net or a moved spot ends the action, as any fishing does. */
+  function stillFishing(player, session) {
+    if (!player.isRegistered() || player.getHitpoints() <= 0) return false;
+    if (quest.getStage(player) !== STAGE_CATCH_CREATURES) return false;
+    if (!held(player, FISHBOWL_AND_NET)) return false;
+    if (player.getMovementQueue?.()?.size?.() > 0 || player.getForceMovement?.() != null) return false;
+    const npc = api.getWorld?.()?.getNpcs?.()?.get?.(session.npcIndex);
+    if (!npc || npc.getId() !== session.npcId ||
+        npc.getLocation().getX() !== session.spotX || npc.getLocation().getY() !== session.spotY) return false;
+    return player.getLocation().isWithinDistance(npc.getLocation(), 2);
+  }
+
+  function stopFishing(player) {
+    const session = fishingSessions.get(player);
+    if (!session) return;
+    fishingSessions.delete(player);
+    session.task?.stop();
   }
 
   function handleItemOnNpc(event) {
@@ -1184,7 +1238,9 @@ module.exports = function registerRumDealQuest(api) {
   }
 
   function handleLogout({ player }) {
-    if (player) clearSpirit(player);
+    if (!player) return;
+    clearSpirit(player);
+    stopFishing(player);
   }
 
   api.persistAttribute(INTRO_ATTRIBUTE);
