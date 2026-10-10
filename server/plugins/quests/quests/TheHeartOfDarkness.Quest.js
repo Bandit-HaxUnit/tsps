@@ -81,6 +81,7 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
   const STAGE_VARBIT = 11117;
 
   const PAGE = "The Heart of Darkness";
+  const QUEST_KEY = "the_heart_of_darkness";
   const START_HOOK = "quest:the-heart-of-darkness:start";
   const TWILIGHTS_PROMISE_KEY = "twilights_promise";
   const CHILDREN_OF_THE_SUN_KEY = "children_of_the_sun";
@@ -978,6 +979,26 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
   }
 
   /**
+   * The two Perilous Moons conditional branches in the Servius report end with the
+   * dump's `end` marker, which closes the chatbox before the Final Dawn Yes./No.
+   * choice; the auto-played report would then restart from the top forever. Drop
+   * those branch terminators so the transcript flows on to the choice.
+   */
+  function withoutBranchEnds(steps) {
+    const strip = (list) => (list ?? [])
+      .filter((step) => step?.type !== "end")
+      .map((step) => {
+        const copy = { ...step };
+        if (Array.isArray(step.steps)) copy.steps = strip(step.steps);
+        if (Array.isArray(step.options)) {
+          copy.options = step.options.map((option) => ({ ...option, steps: strip(option.steps) }));
+        }
+        return copy;
+      });
+    return strip(steps);
+  }
+
+  /**
    * The shared Servius (12652) is owned by The Final Dawn's Talk-to hook, so the
    * completion report is auto-played once the chatbox is clear and retried if dismissed.
    */
@@ -989,7 +1010,14 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
       return;
     }
     if (chatboxOpen(player)) return;
-    startTranscript(pluginApi, player, ID.SERVIUS, PAGE, V.SERVIUS);
+    startTranscript(pluginApi, player, ID.SERVIUS, PAGE, V.SERVIUS, withoutBranchEnds);
+  }
+
+  /** Arms the report the moment the quest reaches BANISHED, whatever set the stage. */
+  function handleStageChanged({ player, key, stage }) {
+    if (!player || player.isPlayerBot?.() === true || key !== QUEST_KEY) return;
+    if (stage >= STAGE.COMPLETE) pendingServiusReport.delete(player);
+    else if (stage >= STAGE.BANISHED) pendingServiusReport.add(player);
   }
 
   // ==========================================================================
@@ -1712,7 +1740,7 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
   pluginApi.persistAttribute(STATUE_ATTRIBUTE);
 
   quest = registerQuest(pluginApi, {
-    key: "the_heart_of_darkness",
+    key: QUEST_KEY,
     name: "The Heart of Darkness",
     varpId: VARP_HEART_OF_DARKNESS,
     varbitId: STAGE_VARBIT,
@@ -1737,6 +1765,7 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
   pluginApi.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   pluginApi.onCustomEvent("npc-dialogue:condition", handleDialogueConditionEvent);
   pluginApi.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
+  pluginApi.onCustomEvent("quest:stage-changed", handleStageChanged);
   pluginApi.onNpcInteraction("Tenoch", { Choose: chooseTenoch });
   pluginApi.onNpcInteraction("Silia", { Choose: chooseSilia });
   pluginApi.onNpcInteraction("Adrius", { Choose: chooseAdrius });
