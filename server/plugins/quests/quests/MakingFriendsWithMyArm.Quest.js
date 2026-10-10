@@ -551,19 +551,20 @@ module.exports = function registerMakingFriendsWithMyArmQuest(api) {
 
   function talkToMyArm(event) {
     const { player, npcId } = event;
-    if (!MY_ARM_NPC_IDS.has(npcId)) return;
+    if (!MY_ARM_NPC_IDS.has(npcId)) return false;
     const stage = quest.getStage(player);
     if (npcId === MY_ARM_PRISON_NPC_ID) {
       // 8411 is My Arm's Big Adventure's spawn id too: only own it in the prison cell.
-      if (stage < STAGE_PRISON || stage >= STAGE_SNOWFLAKE_AFTER) return;
-      if (player.getLocation().getY() < 10000) return;
+      if (stage < STAGE_PRISON || stage >= STAGE_SNOWFLAKE_AFTER) return false;
+      if (player.getLocation().getY() < 10000) return false;
       event.handled = true;
       startTranscript(api, player, npcId, PAGE, myArmVariant(player, stage));
-      return;
+      return true;
     }
-    if (stage < STAGE_STARTED || quest.isComplete(player)) return;
+    if (stage < STAGE_STARTED || quest.isComplete(player)) return false;
     event.handled = true;
     startTranscript(api, player, npcId, PAGE, myArmVariant(player, stage));
+    return true;
   }
 
   function talkToLarry(event) {
