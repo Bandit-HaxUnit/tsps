@@ -11,8 +11,9 @@ const EVENT_LIFETIME_MS = 180_000;
 const NAG_INTERVAL_MS = 18_000;
 const MAX_DISTANCE = 15;
 const DEFINITIONS_EVENT = "random-events:definitions";
-const Gift = require("./GiftRewards");
-const Certer = require("./Certer");
+const Gift = require("./GiftRewards.RandomEvents");
+const Certer = require("./Certer.RandomEvents");
+const Teleports = require("./Teleports.RandomEvents");
 const players = new Map();
 const eventsByNpc = new Map();
 let api;
@@ -22,6 +23,10 @@ let foods;
 function initialize(pluginApi) {
   shutdown();
   api = pluginApi;
+  Teleports.initialize(pluginApi, { finish });
+  if (typeof api.registerArea === "function") {
+    for (const area of Teleports.createAreas()) api.registerArea(area);
+  }
   const { NpcIdentifiers: N, ItemIdentifiers: I } = api.core;
   foods = [
     [I.BAGUETTE, "baguette"], [I.TRIANGLE_SANDWICH, "triangle sandwich"],
@@ -51,10 +56,11 @@ function nextEventAt(now) {
 function login({ player }) {
   cleanup({ player });
   if (player?.isPlayerBot?.() === true) return;
+  Teleports.recover(player);
   players.set(player, { nextAt: nextEventAt(Date.now()), active: null });
 }
 
-function eligible(player) {
+function eligible(player, forCommand = false) {
   const combat = player.getCombat();
   const location = player.getLocation();
   const x = location.getX(), y = location.getY();
@@ -65,7 +71,7 @@ function eligible(player) {
     player.getHitpoints() > 0 && !player.busy() && !player.isDyingReturn?.() &&
     !player.isTeleportingReturn?.() && player.getForceMovement?.() == null &&
     player.getPrivateArea?.() == null && !tutorial &&
-    (player.getArea?.() == null || api.core.Wilderness.isPvpArea(location)) &&
+    (forCommand || player.getArea?.() == null || api.core.Wilderness.isPvpArea(location)) &&
     !player.getDueling?.().inDuel?.() &&
     !combat.getTarget() && !combat.getAttacker() && !player.getCombatFollowing?.();
 }
@@ -114,7 +120,7 @@ function spawnCommand(event) {
     player.sendMessage(`Usage: ::randevt [id] (0-${events.length - 1}; omit id for random).`);
     return;
   }
-  if (!eligible(player)) {
+  if (!eligible(player, true)) {
     player.sendMessage("Move outside combat and restricted activities before testing a random event.");
     return;
   }
@@ -156,6 +162,7 @@ function processPlayer({ player }) {
   }
   if (!state) return;
   const now = Date.now();
+  Teleports.process(player);
   if (state.active) {
     const active = state.active;
     if (!valid(active, player, now)) { finish(active); return; }
@@ -165,6 +172,7 @@ function processPlayer({ player }) {
     }
     return;
   }
+  if (Teleports.hasSession(player)) return;
   if (api.getPluginConfig("random-events:enabled", true) === false || now < state.nextAt || !eligible(player)) return;
   state.nextAt = nextEventAt(now);
   spawn(player, state, now);
@@ -197,7 +205,7 @@ function talk({ player, npc }) {
     return true;
   }
   if (active.definition.talk) {
-    active.definition.talk(active, { valid, serve, finish });
+    active.definition.talk(active, { valid, serve, finish, api, teleport: spec => Teleports.begin(active, spec) });
     return true;
   }
   if (active.definition.kind === "certer") { Certer.open(api, active); return true; }
@@ -256,15 +264,30 @@ function chooseCerter(event) {
   Certer.choose(api, players.get(event.player)?.active, event, { valid, serve, finish });
 }
 
+// Deaths and logins end a stay without moving the player again; logging out moves them
+// back to their return tile before the save so nobody is persisted inside an event area.
 function cleanup({ player }) {
   const active = players.get(player)?.active;
   if (active) finish(active);
   players.delete(player);
+  if (Teleports.hasSession(player)) Teleports.departed(player, false);
+}
+
+function logoutCleanup({ player }) {
+  const active = players.get(player)?.active;
+  if (active) finish(active);
+  players.delete(player);
+  if (Teleports.hasSession(player)) Teleports.departed(player, true);
 }
 
 function shutdown() {
   for (const active of [...eventsByNpc.values()]) finish(active);
   players.clear();
+  Teleports.shutdown();
 }
 
-module.exports = { DEFINITIONS_EVENT, initialize, login, processPlayer, spawnCommand, talk, chooseSandwich, chooseCerter, dismiss, cleanup, shutdown };
+function activeFor(player) {
+  return players.get(player)?.active ?? null;
+}
+
+module.exports = { DEFINITIONS_EVENT, initialize, login, processPlayer, spawnCommand, talk, chooseSandwich, chooseCerter, dismiss, cleanup, logoutCleanup, shutdown, activeFor, finish, serve, valid };
