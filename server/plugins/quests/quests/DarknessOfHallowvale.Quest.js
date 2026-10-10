@@ -121,6 +121,7 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
   const VARBIT_SEA_BOAT_VISIBLE = 2587;
   const VARBIT_WALL_FLOORBOARDS_DOWN = 2589;
   const VARBIT_HIDEOUT_TRAPDOOR = 2590;
+  const VARBIT_WEREWOLF_BUSH = 2591;
   const VARBIT_TAPESTRY_STATE = 2594;
   const VARBIT_PORTRAIT_STATE = 2595;
   const VARBIT_STATUE_STATE = 2596;
@@ -186,6 +187,11 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
   ]);
   const HIYLIK_MYNA_NPC_ID = NpcIdentifiers.HIYLIK_MYNA; // 1579
   const OLD_MAN_RAL_NPC_ID = NpcIdentifiers.OLD_MAN_RAL; // 3772
+  const OLD_MAN_RAL_NPC_IDS = new Set([
+    OLD_MAN_RAL_NPC_ID,
+    NpcIdentifiers.OLD_MAN_RAL_2, // 15774
+    NpcIdentifiers.OLD_MAN_RAL_3, // 15775
+  ]);
 
   /** Cache id ranges: every Meiyerditch vyrewatch that speaks this page. */
   function idRange(start, end) {
@@ -205,7 +211,7 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
   const VELIAF_SPAWN_ID = NpcIdentifiers.VELIAF_HURTZ; // 989, indexed
   const VERTIDA_SPAWN_ID = NpcIdentifiers.VERTIDA_SEFALATIS; // 8220, indexed
   const SAFALAAN_WALL_SPAWN_ID = NpcIdentifiers.SAFALAAN_HALLOW_2; // 8216, indexed
-  const SAFALAAN_BASE_SPAWN_ID = NpcIdentifiers.SAFALAAN_HALLOW_3; // 8217, indexed
+  const SAFALAAN_BASE_SPAWN_ID = NpcIdentifiers.SAFALAAN_HALLOW_2; // 8216 (8217 has no Talk-to option)
   const DREZEL_SPAWN_ID = NpcIdentifiers.DREZEL; // 9636, indexed
 
   const VELIAF_BASEMENT_TILE = { x: 3494, y: 9628, z: 0 };
@@ -281,7 +287,8 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
   const MEIYERDITCH_ARRIVAL_BOAT_ID = 17955; // "Boat" Board at 3604,3160
 
   const WALL_FLOORBOARDS_MULTI_ID = 18122; // "null" -> 18033 Floor Search / 18034 Climb-down
-  const WEREWOLF_BUSH_OBJECT_ID = 18121; // "null" myq_pt3_cutscene_werewolf_bush
+  const WEREWOLF_BUSH_OBJECT_ID = 18121; // "null" multi -> 17988 Bush / 17989 Bush Search (varbit 2591)
+  const WEREWOLF_BUSH_SEARCH_ID = 17989; // "Bush" Search
   const ROCKY_SURFACE_OBJECT_ID = 18056; // "Rocky surface" Search
   const BARRICADE_OBJECT_ID = 18054; // "Barricade" Open
   const POTS_OBJECT_ID = 18065; // "Pots" Search
@@ -516,10 +523,22 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
     if (quest.getStage(player) >= stage) return;
     quest.setStage(player, stage);
     applyStageSpawns(player);
+    syncVisuals(player);
+  }
+
+  /**
+   * A standalone transcript replay has no page context, so a leading wiki
+   * navigation jump can only resolve to "end"; skip it and play the real body.
+   */
+  function withoutLeadingJumps(steps) {
+    if (!Array.isArray(steps)) return steps;
+    let start = 0;
+    while (start < steps.length && steps[start]?.type === "jump") start++;
+    return start > 0 ? steps.slice(start) : steps;
   }
 
   function play(player, npcId, variant) {
-    return startTranscript(api, player, npcId, PAGE, variant);
+    return startTranscript(api, player, npcId, PAGE, variant, withoutLeadingJumps);
   }
 
   function teleport(player, tile) {
@@ -629,6 +648,10 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
     sender.sendVarbit(VARBIT_SEA_BOAT_VISIBLE, hasBit(player, BIT_BOAT_PUSHED) ? 1 : 0);
     sender.sendVarbit(VARBIT_WALL_FLOORBOARDS_DOWN, hasBit(player, BIT_FLOORBOARDS) ? 1 : 0);
     sender.sendVarbit(VARBIT_HIDEOUT_TRAPDOOR, field(player, TRAPDOOR_SHIFT));
+    sender.sendVarbit(
+      VARBIT_WEREWOLF_BUSH,
+      quest.getStage(player) >= STAGE_DREZEL_BRIEFED && quest.getStage(player) < STAGE_DREZEL_RUNES ? 1 : 0
+    );
     sender.sendVarbit(VARBIT_TAPESTRY_STATE, hasBit(player, BIT_TAPESTRY) ? 1 : 0);
     sender.sendVarbit(VARBIT_PORTRAIT_STATE, field(player, PORTRAIT_SHIFT));
     sender.sendVarbit(VARBIT_STATUE_STATE, hasBit(player, BIT_STATUE) ? 1 : 0);
@@ -1029,10 +1052,13 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
 
   function talkRal(event) {
     const { player, npcId } = event;
-    if (npcId !== OLD_MAN_RAL_NPC_ID) return false;
+    if (!OLD_MAN_RAL_NPC_IDS.has(npcId)) return false;
+    // 3772 carries no name in this cache revision, so this is registered by id
+    // (not the "Old Man Ral" name hook) and claims only his Talk-to.
+    if (event.definition?.getActions?.()?.[event.clickType - 1] !== "Talk-to") return false;
     const stage = quest.getStage(player);
     if (stage < STAGE_IN_MEIYERDITCH || stage >= STAGE_COMPLETE) return false;
-    if (stage >= STAGE_RAL_KNOWN && stage < STAGE_SKETCH_NORTH) {
+    if (stage >= STAGE_ROUTE_KNOWN && stage < STAGE_SKETCH_NORTH) {
       // The transcript has no post-route Ral conversation before the sketches;
       // leave him to the generic Old Man Ral page.
       return false;
@@ -1174,7 +1200,7 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
       return !TOME_ITEM_IDS.some((itemId) => held(player, itemId));
     }
     if (stepId === CONDITION_RAL_PAPYRUS_SHORT) {
-      if (npcId !== OLD_MAN_RAL_NPC_ID) return null;
+      if (!OLD_MAN_RAL_NPC_IDS.has(npcId)) return null;
       const heldPapyrus = player.getInventory().getAmount(PAPYRUS_ITEM_ID);
       return heldPapyrus + sketchCount(player) < 3;
     }
@@ -1511,7 +1537,7 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
       return;
     }
     if (option === CHOICE_RAL_SAGE) {
-      if (npcId !== OLD_MAN_RAL_NPC_ID) return;
+      if (!OLD_MAN_RAL_NPC_IDS.has(npcId)) return;
       advance(player, STAGE_ROUTE_KNOWN);
       return;
     }
@@ -1603,7 +1629,7 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
       }
       return true;
     }
-    if (objectId === WEREWOLF_BUSH_OBJECT_ID) {
+    if (objectId === WEREWOLF_BUSH_OBJECT_ID || objectId === WEREWOLF_BUSH_SEARCH_ID) {
       if (quest.getStage(player) < STAGE_DREZEL_BRIEFED || quest.getStage(player) >= STAGE_DREZEL_RUNES) {
         return false;
       }
@@ -1732,7 +1758,7 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
       return true;
     }
     if (objectId === PORTRAIT_MULTI_ID) {
-      if (quest.getStage(player) < STAGE_SKETCHES_GIVEN) return false;
+      if (quest.getStage(player) < STAGE_SKETCHES_DONE) return false;
       event.handled = true;
       const state = field(player, PORTRAIT_SHIFT);
       if (state === 1 && !held(player, ORNATE_KEY_ITEM_ID)) {
@@ -1765,7 +1791,7 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
       return true;
     }
     if (objectId === STATUE_MULTI_ID) {
-      if (quest.getStage(player) < STAGE_SKETCHES_GIVEN) return false;
+      if (quest.getStage(player) < STAGE_SKETCHES_DONE) return false;
       event.handled = true;
       play(
         player,
@@ -1777,7 +1803,7 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
       return true;
     }
     if (objectId === LAB_DOOR_OBJECT_ID) {
-      if (quest.getStage(player) < STAGE_SKETCHES_GIVEN) return false;
+      if (quest.getStage(player) < STAGE_SKETCHES_DONE) return false;
       event.handled = true;
       if (hasBit(player, BIT_STATUE)) {
         teleport(player, { x: 3641, y: 3306, z: 0 });
@@ -1898,7 +1924,7 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
       return;
     }
     if (objectId === PORTRAIT_MULTI_ID) {
-      if (quest.getStage(player) < STAGE_SKETCHES_GIVEN) return;
+      if (quest.getStage(player) < STAGE_SKETCHES_DONE) return;
       if (isKnife) {
         event.handled = true;
         play(
@@ -1938,7 +1964,7 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
       return;
     }
     if (objectId === STATUE_MULTI_ID && itemId === ORNATE_KEY_ITEM_ID) {
-      if (quest.getStage(player) < STAGE_SKETCHES_GIVEN) return;
+      if (quest.getStage(player) < STAGE_SKETCHES_DONE) return;
       event.handled = true;
       play(
         player,
@@ -2063,7 +2089,7 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
   api.onNpcInteraction("Veliaf Hurtz", { "Talk-to": talkVeliaf });
   api.onNpcInteraction("Vertida Sefalatis", { "Talk-to": talkVertida });
   api.onNpcInteraction("Safalaan Hallow", { "Talk-to": talkSafalaan });
-  api.onNpcInteraction("Old Man Ral", { "Talk-to": talkRal });
+  api.onNpcInteraction(talkRal);
   api.onNpcInteraction("Drezel", { "Talk-to": talkDrezel });
   api.onNpcInteraction("King Roald", { "Talk-to": talkKingRoald });
   api.onNpcInteraction("Hiylik Myna", { "Talk-to": talkHiylikMyna });

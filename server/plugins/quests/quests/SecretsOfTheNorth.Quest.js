@@ -60,9 +60,10 @@
  *    mirrored corner of the same map square.
  *  - No cutscenes, instancing or music: the stage directions set stage, spawn
  *    NPCs and teleport, and the transcript lines play in the chatbox.
- *  - Combat is real NPC kills (Evelot 12046, Assassin 12061, Strange Creature
- *    12063) but their specials (Evelot's prayer drain, the assassin's smoke
- *    bombs and the creature's phases) are not scripted.
+ *  - Combat is real NPC kills (Evelot 12046, Assassin 12062, Strange Creature
+ *    12073: 12061/12063 have no Attack option in this cache) but their
+ *    specials (Evelot's prayer drain, the assassin's smoke bombs and the
+ *    creature's phases) are not scripted.
  *  - The dungeon puzzles are simplified: the direction lock accepts the
  *    letter+map, the BLOOD lock accepts Duke note+strange list+strange cipher,
  *    the braziers must be lit NW, SE, NE, SW in order and the 7402/icy-chest
@@ -202,8 +203,11 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   const EVELOT = NpcIdentifiers.EVELOT; // 12046
   const BIG_FISH = NpcIdentifiers.BIG_FISH; // 12053
   const DEAD_WOLF = NpcIdentifiers.DEAD_WOLF; // 12060
-  const ASSASSIN = NpcIdentifiers.ASSASSIN_5; // 12061
-  const STRANGE_CREATURE = NpcIdentifiers.STRANGE_CREATURE; // 12063
+  // 12061 (Assassin) and 12063 (Strange Creature) are the cache's non-attackable
+  // parents; the quest spawns the monsters-complete attackable variants.
+  const ASSASSIN = NpcIdentifiers.ASSASSIN_6; // 12062
+  const STRANGE_CREATURE = NpcIdentifiers.STRANGE_CREATURE; // 12063, chathead for the conversations
+  const STRANGE_CREATURE_ATTACKABLE = NpcIdentifiers.STRANGE_CREATURE_2; // 12073
   const JHALLAN = NpcIdentifiers.JHALLAN; // 12064
   // These world-spawn ids have no generated identifier yet (NpcIdentifiers.ts).
   const SNOWFLAKE_OUTSIDE = 8432;
@@ -366,7 +370,14 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
 
   // ==========================================================================
   // NPC spawns (per player, owner-only)
+  //
+  // Hazeel and Khazard appear at three different locations over the quest, so
+  // each location owns its tracked key; sharing one key let the later
+  // wanted=false ensureNpc remove the spawn that the earlier location wanted.
   // ==========================================================================
+
+  const HAZEEL_KEYS = ["hazeel:cult", "hazeel:dungeon", "hazeel:lair"];
+  const KHAZARD_KEYS = ["khazard:cult", "khazard:dungeon", "khazard:lair"];
 
   function trackedFor(player) {
     let tracked = trackedNpcs.get(player);
@@ -377,12 +388,20 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
     return tracked;
   }
 
-  /** Drops this player's own same-id NPC copies on a tile (relog leaves them behind). */
+  /**
+   * Drops this player's own copies of an id (owner ref, or the same account name
+   * after a relog), optionally restricted to one tile.
+   */
   function cullOwnedNpcs(player, npcId, x, y, z) {
+    const name = player.getUsername?.();
     for (const other of api.getWorld?.()?.getNpcs?.() ?? []) {
-      if (other?.getOwner?.() !== player || other.getId?.() !== npcId) continue;
-      const at = other.getLocation?.();
-      if (at && (at.getX?.() !== x || at.getY?.() !== y || at.getZ?.() !== z)) continue;
+      if (other?.getId?.() !== npcId) continue;
+      const owner = other.getOwner?.();
+      if (owner !== player && (!name || owner?.getUsername?.() !== name)) continue;
+      if (x !== undefined) {
+        const at = other.getLocation?.();
+        if (at && (at.getX?.() !== x || at.getY?.() !== y || at.getZ?.() !== z)) continue;
+      }
       api.removeNpc(other);
     }
   }
@@ -391,7 +410,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
     const tracked = trackedFor(player);
     const existing = tracked.get(key);
     if (existing?.isRegistered?.()) return existing;
-    cullOwnedNpcs(player, npcId, x, y, z);
+    cullOwnedNpcs(player, npcId);
     const npc = api.spawnNpc({ id: npcId, x, y, z, wanderRadius, owner: player, ownerOnly: true });
     if (npc) tracked.set(key, npc);
     return npc;
@@ -416,11 +435,13 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   function syncNpcs(player) {
     if (!player || player.isPlayerBot?.() === true) return;
     const stage = quest.getStage(player);
-    // Hazeel cult hideout (the summoning).
+    // Hazeel cult hideout (the summoning). Hazeel first appears here once Evelot
+    // is defeated (stage 6); that conversation spawns Khazard and opens the cult.
     const inCult = stage >= STAGE_CULT && stage < STAGE_NORTH;
-    ensureNpc(player, "hazeel", NpcIdentifiers.HAZEEL_2, 2609, 9673, 0, inCult);
-    ensureNpc(player, "khazard", NpcIdentifiers.GENERAL_KHAZARD_2, 2611, 9670, 0, inCult);
-    ensureNpc(player, "alomone", NpcIdentifiers.ALOMONE, 2609, 9670, 0, inCult);
+    const hazeelAtCult = stage >= STAGE_EVELOT && stage < STAGE_NORTH;
+    ensureNpc(player, "hazeel:cult", NpcIdentifiers.HAZEEL_2, 2609, 9673, 0, hazeelAtCult);
+    ensureNpc(player, "khazard:cult", NpcIdentifiers.GENERAL_KHAZARD_2, 2611, 9670, 0, inCult);
+    ensureNpc(player, "alomone:cult", NpcIdentifiers.ALOMONE, 2609, 9670, 0, inCult);
     // The quest guard (the world 1200 spawn is a nameless parent with no Talk-to).
     ensureNpc(player, "guard", GUARD_NPC, 2571, 3275, 0, true);
     // Evelot at the rowboat.
@@ -435,15 +456,15 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
     ensureNpc(player, "my-arm-sotn", NpcIdentifiers.MY_ARM, 2857, 3961, 0, atWeiss);
     // Hazeel and Khazard at the Ghorrock Dungeon entrance room.
     const inDungeon = stage >= STAGE_ASSASSIN && stage < STAGE_FINALE;
-    ensureNpc(player, "hazeel", NpcIdentifiers.HAZEEL_2, 2901, 10335, 0, inDungeon);
-    ensureNpc(player, "khazard", NpcIdentifiers.GENERAL_KHAZARD_2, 2903, 10335, 0, inDungeon);
+    ensureNpc(player, "hazeel:dungeon", NpcIdentifiers.HAZEEL_2, 2901, 10335, 0, inDungeon);
+    ensureNpc(player, "khazard:dungeon", NpcIdentifiers.GENERAL_KHAZARD_2, 2903, 10335, 0, inDungeon);
     // The assassin waits in the fight room until he is killed.
     ensureNpc(player, "assassin", ASSASSIN, 2908, 10335, 0, stage === STAGE_ASSASSIN);
     // Hazeel and Khazard at the creature's lair for the finale.
     const atLair = stage === STAGE_FINALE;
-    ensureNpc(player, "hazeel", NpcIdentifiers.HAZEEL_2, 2844, 4252, 0, atLair);
-    ensureNpc(player, "khazard", NpcIdentifiers.GENERAL_KHAZARD_2, 2846, 4254, 0, atLair);
-    ensureNpc(player, "creature", STRANGE_CREATURE, 2850, 4258, 0, stage === STAGE_CREATURE);
+    ensureNpc(player, "hazeel:lair", NpcIdentifiers.HAZEEL_2, 2844, 4252, 0, atLair);
+    ensureNpc(player, "khazard:lair", NpcIdentifiers.GENERAL_KHAZARD_2, 2846, 4254, 0, atLair);
+    ensureNpc(player, "creature", STRANGE_CREATURE_ATTACKABLE, 2850, 4258, 0, stage === STAGE_CREATURE);
   }
 
   // ==========================================================================
@@ -472,7 +493,9 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
     placeObject(BROKEN_WINDOW, 2569, 3268, 1, 10, 0);
     placeObject(FALSE_WALL, 2566, 3268, 1, 10, 0);
     placeObject(HIDDEN_ROOM_CHEST, 2570, 3269, 1, 10, 2);
-    placeObject(KITCHEN_WALL, 2543, 9700, 0, 0, 2);
+    // (2543,9700) has no walkable neighbour in this cache, so the wall sits one
+    // step south-west where the player can reach it.
+    placeObject(KITCHEN_WALL, 2541, 9698, 0, 0, 2);
     placeObject(KITCHEN_CHEST, 2546, 9695, 0, 10, 3);
     // The Evelot trail (wiki tiles).
     placeObject(TRAIL_BARRELS_OBJ, 2568, 3152, 0, 10, 0);
@@ -510,8 +533,9 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
 
   function brazierIndex(location) {
     if (!location) return -1;
-    const x = location.getX();
-    const y = location.getY();
+    // Item-on-object hands over a plain {x,y,z}; object clicks hand over a Location.
+    const x = location.getX?.() ?? location.x;
+    const y = location.getY?.() ?? location.y;
     for (let index = 0; index < BRAZIER_TILES.length; index++) {
       const [bx, by] = BRAZIER_TILES[index];
       if (bx === x && by === y) return index;
@@ -938,11 +962,11 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
       // The Mysterious Benefactor.
       case "Ci5SW8":
       case "IWDZjw":
-        spawnTracked(player, "khazard", NpcIdentifiers.GENERAL_KHAZARD_2, 2611, 9670, 0);
+        spawnTracked(player, "khazard:cult", NpcIdentifiers.GENERAL_KHAZARD_2, 2611, 9670, 0);
         advanceTo(player, STAGE_CULT);
         return;
       case "ZFwohZ":
-        spawnTracked(player, "hazeel", NpcIdentifiers.HAZEEL_2, 2609, 9673, 0);
+        spawnTracked(player, "hazeel:cult", NpcIdentifiers.HAZEEL_2, 2609, 9673, 0);
         return;
       case "zJc3Yx":
         setFlag(player, BUTTON_ATTRIBUTE, true);
@@ -959,23 +983,25 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
       case "z_T8BY":
         give(player, DUSTY_SCROLL);
         advanceTo(player, STAGE_SCROLL);
+        readDustyScroll(player);
         return;
       case "JsBkbT":
         give(player, DUSTY_SCROLL);
         if (!hasFlag(player, SCROLL_READ_ATTRIBUTE)) advanceTo(player, STAGE_SCROLL);
+        readDustyScroll(player);
         return;
       case "tdT_B_":
-        removeTracked(player, "hazeel");
-        removeTracked(player, "khazard");
-        removeTracked(player, "alomone");
+        for (const key of HAZEEL_KEYS) removeTracked(player, key);
+        for (const key of KHAZARD_KEYS) removeTracked(player, key);
+        removeTracked(player, "alomone:cult");
         advanceTo(player, STAGE_NORTH);
         return;
 
       // In the North.
       case "qDWLCo":
         player.moveTo(new Location(2905, 10335, 0));
-        spawnTracked(player, "hazeel", NpcIdentifiers.HAZEEL_2, 2901, 10335, 0);
-        spawnTracked(player, "khazard", NpcIdentifiers.GENERAL_KHAZARD_2, 2903, 10335, 0);
+        spawnTracked(player, "hazeel:dungeon", NpcIdentifiers.HAZEEL_2, 2901, 10335, 0);
+        spawnTracked(player, "khazard:dungeon", NpcIdentifiers.GENERAL_KHAZARD_2, 2903, 10335, 0);
         advanceTo(player, STAGE_ASSASSIN);
         return;
       case "2rSlND": {
@@ -993,7 +1019,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
       // More Mahjarrat, More Problems.
       case "HWDQ6d": {
         player.moveTo(new Location(2857, 4258, 0));
-        const creature = spawnTracked(player, "creature", STRANGE_CREATURE, 2850, 4258, 0);
+        const creature = spawnTracked(player, "creature", STRANGE_CREATURE_ATTACKABLE, 2850, 4258, 0);
         if (creature) creature.getCombat?.().attack?.(player);
         advanceTo(player, STAGE_CREATURE);
         return;
@@ -1005,16 +1031,16 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
         removeTracked(player, "assassin");
         return;
       case "vvqW3S":
-        spawnTracked(player, "hazeel", NpcIdentifiers.HAZEEL_2, 2844, 4252, 0);
-        spawnTracked(player, "khazard", NpcIdentifiers.GENERAL_KHAZARD_2, 2846, 4254, 0);
+        spawnTracked(player, "hazeel:lair", NpcIdentifiers.HAZEEL_2, 2844, 4252, 0);
+        spawnTracked(player, "khazard:lair", NpcIdentifiers.GENERAL_KHAZARD_2, 2846, 4254, 0);
         return;
       case "BsyVHb":
         advanceTo(player, STAGE_FINALE);
         return;
       case "kQnPVV":
         player.moveTo(new Location(2570, 3276, 0));
-        removeTracked(player, "hazeel");
-        removeTracked(player, "khazard");
+        for (const key of HAZEEL_KEYS) removeTracked(player, key);
+        for (const key of KHAZARD_KEYS) removeTracked(player, key);
         advanceTo(player, STAGE_TELEPORTED);
         return;
       case "uUYIAn":
@@ -1217,48 +1243,10 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
         player.sendMessage("You find a jewel shard and a strange cipher hidden in the pillar.");
         return;
       case DUNGEON_GATE_DIRECTION:
+      case DUNGEON_GATE_BLOOD:
         event.handled = true;
-        if (stage >= STAGE_DIRECTION_GATE) {
-          player.sendMessage("The gate is already open.");
-          return;
-        }
-        if (!has(player, TULLIA_LETTER) || !has(player, ANCIENT_MAP)) {
-          player.sendMessage("The gate has a strange lock. You need to work out the directions first.");
-          return;
-        }
-        advanceTo(player, STAGE_DIRECTION_GATE);
-        player.sendMessage("You press the arrows: LEFT, UP, LEFT, DOWN. The gate opens.");
+        handleDungeonGate(player, objectId, event.location);
         return;
-      case DUNGEON_GATE_BLOOD: {
-        event.handled = true;
-        const location = event.location;
-        const atIcyGate = location && location.getX() === 2918 && location.getY() === 10321;
-        const atBloodGate = location && location.getX() === 2924 && location.getY() === 10329;
-        if (atIcyGate) {
-          if (!has(player, ICY_KEY)) {
-            player.sendMessage("The gate is locked. A small keyhole glints in the ice.");
-            return;
-          }
-          advanceTo(player, STAGE_ICY_GATE);
-          player.sendMessage("You unlock the gate with the icy key. A crevice lies beyond.");
-          return;
-        }
-        if (!atBloodGate) {
-          player.sendMessage("The gate is firmly locked.");
-          return;
-        }
-        if (stage >= STAGE_BLOOD_GATE) {
-          player.sendMessage("The gate is already open.");
-          return;
-        }
-        if (!has(player, DUKE_NOTE) || !has(player, STRANGE_LIST) || !has(player, STRANGE_CIPHER)) {
-          player.sendMessage("The gate has a lock with four dials. You need more information before you can open it.");
-          return;
-        }
-        advanceTo(player, STAGE_BLOOD_GATE);
-        player.sendMessage("You input the letters B-L-O-O-D. The gate opens.");
-        return;
-      }
       case DUNGEON_BRAZIER:
         event.handled = true;
         player.sendMessage("The brazier is unlit. A tinderbox could light it.");
@@ -1309,6 +1297,62 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
       default:
         return;
     }
+  }
+
+  /**
+   * Doors.plugin.js matches these gates by name ("Gate"/Open) and opens them
+   * before the catch-all object hook runs, so the LEFT/UP/LEFT/DOWN, BLOOD and
+   * icy-keyhole logic is claimed through door:toggle; the object hook above
+   * still runs it for any other click type.
+   */
+  function handleDoorToggle(request) {
+    if (request.handled) return;
+    if (request.objectId !== DUNGEON_GATE_DIRECTION && request.objectId !== DUNGEON_GATE_BLOOD) return;
+    request.handled = true;
+    handleDungeonGate(request.player, request.objectId, request.location);
+  }
+
+  function handleDungeonGate(player, objectId, location) {
+    if (objectId === DUNGEON_GATE_DIRECTION) {
+      if (quest.getStage(player) >= STAGE_DIRECTION_GATE) {
+        player.sendMessage("The gate is already open.");
+        return;
+      }
+      if (!has(player, TULLIA_LETTER) || !has(player, ANCIENT_MAP)) {
+        player.sendMessage("The gate has a strange lock. You need to work out the directions first.");
+        return;
+      }
+      advanceTo(player, STAGE_DIRECTION_GATE);
+      player.sendMessage("You press the arrows: LEFT, UP, LEFT, DOWN. The gate opens.");
+      return;
+    }
+    const x = location?.getX?.() ?? location?.x;
+    const y = location?.getY?.() ?? location?.y;
+    const atIcyGate = x === 2918 && y === 10321;
+    const atBloodGate = x === 2924 && y === 10329;
+    if (atIcyGate) {
+      if (!has(player, ICY_KEY)) {
+        player.sendMessage("The gate is locked. A small keyhole glints in the ice.");
+        return;
+      }
+      advanceTo(player, STAGE_ICY_GATE);
+      player.sendMessage("You unlock the gate with the icy key. A crevice lies beyond.");
+      return;
+    }
+    if (!atBloodGate) {
+      player.sendMessage("The gate is firmly locked.");
+      return;
+    }
+    if (quest.getStage(player) >= STAGE_BLOOD_GATE) {
+      player.sendMessage("The gate is already open.");
+      return;
+    }
+    if (!has(player, DUKE_NOTE) || !has(player, STRANGE_LIST) || !has(player, STRANGE_CIPHER)) {
+      player.sendMessage("The gate has a lock with four dials. You need more information before you can open it.");
+      return;
+    }
+    advanceTo(player, STAGE_BLOOD_GATE);
+    player.sendMessage("You input the letters B-L-O-O-D. The gate opens.");
   }
 
   function inspectTrailObject(player, objectId) {
@@ -1407,15 +1451,25 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
     }
   }
 
+  /**
+   * Item 27595 has no "Read" inventory option in this cache, so the read
+   * handler below is unreachable; reading is triggered as soon as the scroll
+   * is obtained (both chest messages) instead.
+   */
+  function readDustyScroll(player) {
+    if (hasFlag(player, SCROLL_READ_ATTRIBUTE)) return;
+    setFlag(player, SCROLL_READ_ATTRIBUTE, true);
+    if (quest.getStage(player) === STAGE_SCROLL) setStage(player, STAGE_SCROLL_READ);
+    startTranscriptDeferred(player, GUARD_NPC, "the-mysterious-benefactor-reading-the-scroll", withoutBlankLines);
+  }
+
   function handleItemAction(event) {
     const { player, itemId, option } = event;
     if (String(option ?? "").toLowerCase() !== "read") return;
     switch (itemId) {
       case DUSTY_SCROLL:
         event.handled = true;
-        startTranscript(api, player, GUARD_NPC, PAGE, "the-mysterious-benefactor-reading-the-scroll", withoutBlankLines);
-        setFlag(player, SCROLL_READ_ATTRIBUTE, true);
-        if (quest.getStage(player) === STAGE_SCROLL) setStage(player, STAGE_SCROLL_READ);
+        readDustyScroll(player);
         return;
       case TULLIA_LETTER:
         event.handled = true;
@@ -1627,6 +1681,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   api.onCustomEvent("npc-dialogue:condition", handleChosenCondition);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:line", handleLine);
+  api.onCustomEvent("door:toggle", handleDoorToggle);
   api.onNpcInteraction("Guard", { "Talk-to": talkGuard });
   api.onNpcInteraction("Claus the Chef", { "Talk-to": talkClaus });
   api.onNpcInteraction("Henryeta Carnillean", { "Talk-to": talkHenryeta });

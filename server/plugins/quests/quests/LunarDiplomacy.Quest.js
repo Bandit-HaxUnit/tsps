@@ -334,7 +334,11 @@ module.exports = function registerLunarDiplomacyQuest(api) {
   // rows only cover z1<->z2, so the quest claims these two ids.
   const SHIP_STAIRS_BOTTOM = ObjectIdentifiers.STAIRS_62; // 16945, deck -> forecastle
   const SHIP_STAIRS_TOP = ObjectIdentifiers.STAIRS_64; // 16947, forecastle -> deck
-  const STAIR_LANDING_STEPS = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+  // Land on the side the pairing stair leaves open before the far edges: on the cove
+  // galleon the down stair sits one tile south of the up stair, so the forecastle
+  // landing is two tiles south ([0,-2]); the tile north ([0,1]) is a shelf the walls
+  // cut off from the crew and the way back down.
+  const STAIR_LANDING_STEPS = [[0, -1], [0, -2], [0, 1], [0, 2], [1, 0], [-1, 0]];
   // World Bentley (3857) and Davey-boy (3860) spawns wander with the default radius
   // 5 onto bow tiles with no walk route from the deck; pin each to its deck spawn.
   const PINNED_CREW = new Map([
@@ -925,7 +929,7 @@ module.exports = function registerLunarDiplomacyQuest(api) {
 
   function selectBrundt(player) {
     const stage = stageOf(player);
-    if (stage >= STAGE_COMPLETE) return "post-quest-talking-to-brundt-the-chieftain-after-the-quest";
+    if (stage >= STAGE_COMPLETE) return null;
     if (stage >= STAGE_SEAL) {
       return held(player, SEAL_OF_PASSAGE)
         ? "getting-started-talking-to-brundt-the-chieftain-holding-the-seal-of-passage"
@@ -1172,7 +1176,6 @@ module.exports = function registerLunarDiplomacyQuest(api) {
     ensureBabaYaga(player);
     if (stage < STAGE_POTION_GIVEN) {
       if (player.getAttribute(BABA_INTRO_ATTRIBUTE) !== true) {
-        player.setAttribute(BABA_INTRO_ATTRIBUTE, true);
         return "obtaining-the-waking-sleep-potion-talking-to-baba-yaga";
       }
       return "obtaining-the-waking-sleep-potion-talking-to-baba-yaga-again";
@@ -1624,8 +1627,14 @@ module.exports = function registerLunarDiplomacyQuest(api) {
       else if (text.startsWith("Ok, here you go.")) giveSeal(player);
       return;
     }
-    if (npcId === BABA_YAGA_ID && text.startsWith("You'll also need a special vial")) {
-      giveLunarVial(player);
+    if (npcId === BABA_YAGA_ID) {
+      // Both potion variants share the recipe line; the "-again" one has no vial line,
+      // so grant from the recipe line too or a first talk that skipped the potion topic
+      // soft-locks the vial. Flag only once the recipe has actually been heard.
+      if (text.startsWith("You'll also need a special vial") || text.startsWith("You'll need 1 guam leaf")) {
+        player.setAttribute(BABA_INTRO_ATTRIBUTE, true);
+        giveLunarVial(player);
+      }
       return;
     }
     if (ONEIROMANCER_IDS.has(npcId)) {
@@ -2043,6 +2052,24 @@ module.exports = function registerLunarDiplomacyQuest(api) {
     request.player.moveTo(destination);
   }
 
+  /**
+   * The forecastle's walls make walkToObject end its route on the tile the player
+   * already stands on, which the reach check then rejects, so a "Climb" click from the
+   * z3 landing dies with "You can't reach that!" before Ladders can claim it. Claim the
+   * route as well and resolve the interaction in place; climbShipStairs moves the plane.
+   */
+  function routeShipStairs(event) {
+    const objectId = event?.objectId;
+    if (objectId !== SHIP_STAIRS_BOTTOM && objectId !== SHIP_STAIRS_TOP) return;
+    const location = event.object?.getLocation?.();
+    if (!location || !inShipBox(location)) return;
+    const z = coordZ(location);
+    const claimed = objectId === SHIP_STAIRS_BOTTOM ? z === 2 : z === 3;
+    if (!claimed) return;
+    const here = event.player.getLocation();
+    event.destination = { x: coordX(here), y: coordY(here), z: coordZ(here) };
+  }
+
   function stairLanding(x, y, z) {
     for (const [dx, dy] of STAIR_LANDING_STEPS) {
       const tile = new Location(x + dx, y + dy, z);
@@ -2368,6 +2395,7 @@ module.exports = function registerLunarDiplomacyQuest(api) {
   api.onCustomEvent("npc-dialogue:line", handleLine);
   api.onCustomEvent("npc-dialogue:hook", handleHook);
   api.onCustomEvent("ladders:climb", climbShipStairs);
+  api.onObjectRoute(routeShipStairs);
   api.onItemOnItem(handleItemOnItem, { noted: false });
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onObjectInteraction("Stalagmite", { Mine: mineStalagmite });

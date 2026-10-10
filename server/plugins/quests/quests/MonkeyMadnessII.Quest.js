@@ -105,6 +105,7 @@
 module.exports = function registerMonkeyMadnessIIQuest(api) {
   const {
     Equipment,
+    Item,
     ItemIdentifiers,
     Location,
     NpcIdentifiers,
@@ -1581,6 +1582,19 @@ module.exports = function registerMonkeyMadnessIIQuest(api) {
     skills.addExperiences(Skill.AGILITY, 60000);
     skills.addExperiences(Skill.THIEVING, 50000);
     skills.addExperiences(Skill.HUNTER, 50000);
+    giveOrDrop(player, ROYAL_SEED_POD_ITEM);
+  }
+
+  /** Reward items go on the ground rather than into the void when the inventory is full. */
+  function giveOrDrop(player, itemId, amount = 1) {
+    if (player.getInventory().getFreeSlots() > 0) {
+      addItem(player, itemId, amount);
+      return;
+    }
+    api.getItemOnGroundManager()?.registerLocation(
+      player, new Item(itemId, amount), player.getLocation()
+    );
+    player.sendMessage("You couldn't hold your reward, so it was left on the ground.");
   }
 
   function buildJournal(player, handle) {
@@ -1895,7 +1909,9 @@ module.exports = function registerMonkeyMadnessIIQuest(api) {
       { skillId: Skill.THIEVING.getIndex(), amount: 50000, label: "Thieving" },
       { skillId: Skill.HUNTER.getIndex(), amount: 50000, label: "Hunter" },
     ],
-    rewardItemId: ROYAL_SEED_POD_ITEM,
+    // The seed pod is granted in grantReward (dropped if the inventory is full);
+    // the scroll still shows it.
+    scrollItemId: ROYAL_SEED_POD_ITEM,
     rewardItemLabel: "Royal seed pod",
     otherRewards: [
       "Duke's combat training (2 x 50,000 XP) on Ape Atoll",

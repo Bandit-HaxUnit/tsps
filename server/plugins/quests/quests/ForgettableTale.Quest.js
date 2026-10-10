@@ -306,8 +306,8 @@ module.exports = function registerForgettableTaleQuest(api) {
   const BOARDING_TILE = [2926, 10158, 0];
   const DWARF_HOUSE_TILE = new Location(2913, 10224, 0);
   const ROOM1_TILE = new Location(1861, 4955, 1);
-  const LISTENING_TILE = new Location(1888, 4981, 2);
-  const LIBRARY_TILE = new Location(1913, 4964, 2);
+  const LISTENING_TILE = new Location(1888, 4982, 2); // floor beside the 8884 hole at 1889,4982
+  const LIBRARY_TILE = new Location(1913, 4965, 2); // floor beside the archive 8884 hole at 1914,4965
   const KELDAGRIM_RETURN_TILE = new Location(2922, 10161, 0);
   const EAST_PUB = { x1: 2905, y1: 10185, x2: 2932, y2: 10200 };
 
@@ -1454,11 +1454,17 @@ module.exports = function registerForgettableTaleQuest(api) {
     if (itemId === KELDA_STOUT && option === "Drink") {
       event.handled = true;
       play(player, DRUNKEN_DWARF_KELDAGRIM, "brewing-attempting-to-drink-the-kelda-stout");
-      return;
     }
-    if (stageOf(player) !== STAGE_REPORTED) return;
-    if (option !== "Eat" && option !== "Drink") return;
+  }
+
+  // Food and Potions swallow first-click Eat/Drink in onItemFirstAction (and close any open
+  // interface), so the final pub cutscene is claimed at the can-use gate that runs before
+  // them; the bite/drink is consumed here to keep it a real one.
+  function interceptPubMeal(event) {
+    const { player, itemId, option } = event;
+    if (event.action !== "action" || (option !== "Eat" && option !== "Drink")) return;
     if (itemId !== KEBAB && itemId !== BEER && itemId !== BEER_2) return;
+    if (stageOf(player) !== STAGE_REPORTED) return;
     const location = player.getLocation();
     if (
       location.getX() < EAST_PUB.x1 || location.getX() > EAST_PUB.x2 ||
@@ -1466,7 +1472,9 @@ module.exports = function registerForgettableTaleQuest(api) {
     ) {
       return;
     }
-    event.handled = true;
+    event.allow = false;
+    player.getInventory().deleteNumber(itemId, 1);
+    if (itemId === BEER || itemId === BEER_2) player.getInventory().adds(BEER_GLASS, 1);
     play(player, DRUNKEN_DWARF_4, "finishing-up-final-cutscene");
   }
 
@@ -1680,6 +1688,7 @@ module.exports = function registerForgettableTaleQuest(api) {
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemAction(handleItemAction);
+  api.onCanUseItem(interceptPubMeal);
   api.onPlayerLogin(handleLogin);
   api.onCustomEvent("player:bootstrap-complete", handleBootstrap);
 };

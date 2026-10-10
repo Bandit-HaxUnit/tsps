@@ -66,10 +66,10 @@
  *  - The wiki "-again" accusation menus are jump-only and would close under this
  *    replay, so the full accusation menu is replayed instead until it is made.
  *  - The statue activation drops its water rune into the inventory rather than on
- *    the floor, and the fountain/statue/chest rewards are gated by quest completion
- *    plus an opened-chest flag rather than the live "ates_piece_hunt" varp. The
- *    quest fountain (54738/54739) has no placement in this cache, so only the
- *    fountain-search handler is wired and the icon may be unobtainable here.
+ *    the floor; the fountain/statue/chest rewards are gated by quest completion and
+ *    the opened-chest flag, which also drives varbit 11232 (ates_piece_hunt). The
+ *    fountain ids 54738/54739 are in the cache, placed as the multi-loc 54740 at
+ *    1436,2920, which transforms to the searchable 54739 once that varbit is 1.
  */
 module.exports = function registerDeathOnTheIsleQuest(api) {
   const {
@@ -178,6 +178,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
   const CRATE_POISON = ObjectIdentifiers.CRATE_341; // 54731, Search
   const BACKSTAGE_ENTRANCE = ObjectIdentifiers.BACKSTAGE_ENTRANCE; // 54715, Enter
   const FANCY_CHEST = ObjectIdentifiers.FANCY_CHEST; // 54736, Open
+  const FOUNTAIN = ObjectIdentifiers.FOUNTAIN_22; // 54738, plain
   const FOUNTAIN_SEARCH = ObjectIdentifiers.FOUNTAIN_23; // 54739, Search
   const ENTRYWAY = ObjectIdentifiers.ENTRYWAY; // 54707, guest entryway Pass-through
   const INTERROGATION_DOOR = ObjectIdentifiers.DOOR_748; // 54706, Open
@@ -236,6 +237,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
   const VARBIT_CLOTHING_CHAT = 11256;
   const VARBIT_FINAL_ACCUSATION_INTRO = 11257;
   const VARBIT_ALDARIN_PENDANT = 11178; // pendant_of_ates_aldarin_found, drives the statue
+  const VARBIT_ATES_PIECE_HUNT = 11232; // ates_piece_hunt, transforms the placed 54740 fountain
 
   const STAGE_STARTED = 2;
   const STAGE_WINDOW = 4;
@@ -306,10 +308,10 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
   const ROOM_INSIDE = new Location(1440, 2937, 0);
   const ROOM_OUTSIDE = new Location(1446, 2938, 0);
   const TOP_FLOOR = new Location(1447, 2933, 2);
-  const CELLAR_INSIDE = new Location(1447, 9336, 0);
+  const CELLAR_INSIDE = new Location(1447, 9333, 0);
   const CELLAR_STAIR_OUT = new Location(1447, 2938, 0);
   const BACKSTAGE_INSIDE = new Location(1466, 9330, 0);
-  const THEATRE_OUTSIDE = new Location(1477, 2927, 0);
+  const THEATRE_OUTSIDE = new Location(1472, 2925, 0);
   const STAGE_LANDING = new Location(1470, 2931, 0);
   const ROCK_FIRST_TOP = new Location(1473, 2920, 0);
   const ROCK_SECOND_TOP = new Location(1477, 2925, 0);
@@ -553,7 +555,13 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
       if (varbit) sender.sendVarbit(varbit, hasFlag(player, name) ? 1 : 0);
     }
     sender.sendVarbit(VARBIT_MASK_ASSIGNMENT, maskAssignment(player));
-    if (quest.isComplete(player)) sender.sendVarbit(VARBIT_ALDARIN_PENDANT, hasFlag(player, "icon.found") ? 1 : 0);
+    if (quest.isComplete(player)) {
+      sender.sendVarbit(VARBIT_ALDARIN_PENDANT, hasFlag(player, "icon.found") ? 1 : 0);
+      sender.sendVarbit(
+        VARBIT_ATES_PIECE_HUNT,
+        hasFlag(player, "icon.found") ? 2 : hasFlag(player, "chest.opened") ? 1 : 0
+      );
+    }
   }
 
   // ==========================================================================
@@ -640,7 +648,20 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
       }
     }
     for (const [key, spawn] of wanted) {
-      if (tracked.has(key)) continue;
+      const npc = tracked.get(key);
+      if (npc) {
+        // A stage change moves Patzi/Adala and swaps ids (body, pickpocket
+        // copies), so a tracked NPC only stays if it still matches the spot.
+        const at = npc.getLocation?.();
+        const current =
+          npc.getId?.() === spawn.id &&
+          at?.getX() === spawn.tile.getX() &&
+          at?.getY() === spawn.tile.getY() &&
+          at?.getZ() === spawn.tile.getZ();
+        if (current) continue;
+        api.removeNpc(npc);
+        tracked.delete(key);
+      }
       spawnTracked(player, key, spawn);
     }
   }
@@ -668,7 +689,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     if (quest.isComplete(player)) return "post-quest-dialogue-talking-to-patzi";
     if (stage < STAGE_STARTED) return npcId === PATZI ? "starting-the-quest" : null;
     if (stage < STAGE_ADALA_INSIDE) {
-      return hasAnyUniform(player) ? UNIFORM_TALK_WITH : "getting-a-uniform-talking-to-patzi-without-a-uniform";
+      return hasAnyUniform(player) || wearingUniform(player) ? UNIFORM_TALK_WITH : "getting-a-uniform-talking-to-patzi-without-a-uniform";
     }
     if (stage < STAGE_UNIFORM_WORN) return "getting-a-uniform-talking-to-patzi-after-adala-is-gone";
     if (stage < STAGE_WINE_REQUEST) {
@@ -687,7 +708,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     const stage = stageOf(player);
     if (quest.isComplete(player)) return null;
     if (stage < STAGE_ADALA_INSIDE) {
-      return hasAnyUniform(player) ? UNIFORM_TALK_WITH : "getting-a-uniform-talking-to-adala-without-a-uniform";
+      return hasAnyUniform(player) || wearingUniform(player) ? UNIFORM_TALK_WITH : "getting-a-uniform-talking-to-adala-without-a-uniform";
     }
     if (stage >= STAGE_INTERROGATED && stage < STAGE_ACCUSATIONS) {
       return "the-investigation-talking-to-adala-or-patzi";
@@ -1298,6 +1319,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
       case "1XIQ80":
         setFlag(player, "icon.found");
         if (!hasItem(player, ICON)) addItem(player, ICON);
+        player.getPacketSender().sendVarbit(VARBIT_ATES_PIECE_HUNT, 2);
         return;
       case "Q8AJrp":
         if (!hasItem(player, WATER_RUNE)) addItem(player, WATER_RUNE);
@@ -1462,7 +1484,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     const inside =
       player.getLocation().getX() >= 1392 &&
       player.getLocation().getX() <= 1402 &&
-      player.getLocation().getY() >= 2967 &&
+      player.getLocation().getY() >= 2968 &&
       player.getLocation().getY() <= 2977;
     event.handled = true;
     if (inside) {
@@ -1593,6 +1615,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
     }
     removeItems(player, CHEST_KEY);
     setFlag(player, "chest.opened");
+    player.getPacketSender().sendVarbit(VARBIT_ATES_PIECE_HUNT, 1);
     playVariant(player, STRADIUS, "post-quest-dialogue-opening-the-chest");
   }
 
@@ -1613,7 +1636,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
   function handleObjectInteraction(event) {
     const { player } = event;
     if (!player) return;
-    const objectId = typeof event.definition?.getId === "function" ? event.definition.getId() : event.objectId;
+    const objectId = event.definition?.id ?? event.objectId;
     switch (objectId) {
       case HOUSE_WINDOW:
         return handleHouseWindow(event);
@@ -1671,6 +1694,7 @@ module.exports = function registerDeathOnTheIsleQuest(api) {
         return handleCrate(event);
       case FANCY_CHEST:
         return handleFancyChest(event);
+      case FOUNTAIN:
       case FOUNTAIN_SEARCH:
         return handleFountain(event);
       case STATUE_INACTIVE:

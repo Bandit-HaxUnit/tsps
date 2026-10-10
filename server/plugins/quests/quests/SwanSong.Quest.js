@@ -187,8 +187,10 @@ module.exports = function registerSwanSongQuest(api) {
     { x: 2331, y: 3655, z: 0 },
     { x: 2338, y: 3655, z: 0 },
     { x: 2343, y: 3657, z: 0 },
-    { x: 2349, y: 3653, z: 0 },
-    { x: 2352, y: 3648, z: 0 },
+    // These two replace 2349,3653 and 2352,3648, which had no walkable path
+    // from the landing outside the gate and soft-locked the battle.
+    { x: 2346, y: 3658, z: 0 },
+    { x: 2340, y: 3660, z: 0 },
   ];
   const SEA_TROLL_QUEEN_TILE = { x: 2345, y: 3645, z: 0 };
   const COLONY_LANDING_TILE = { x: 2345, y: 3664, z: 0 };
@@ -290,6 +292,18 @@ module.exports = function registerSwanSongQuest(api) {
 
   function hasWrongFish(player) {
     return held(player, RAW_MONKFISH_ITEM_ID) || held(player, MONKFISH_ITEM_ID);
+  }
+
+  /**
+   * Bones the "giving-bones" dialogue's action (MpGLgS) will take. The wiki
+   * conditions are pre-resolved when the transcript is flattened, before the
+   * action runs, so they must count the hand-in to pick the right branch.
+   */
+  function pendingBoneHandIn(player) {
+    return Math.min(
+      player.getInventory().getAmount(BONES_ITEM_ID),
+      Math.max(0, 7 - flag(player, BONES_GIVEN_ATTRIBUTE))
+    );
   }
 
   function hasPotAndLid(player) {
@@ -557,9 +571,9 @@ module.exports = function registerSwanSongQuest(api) {
       case "S5TuMT": // If the player already has the bones:
         return held(player, BONES_ITEM_ID);
       case "g6IK0L": // If Malignius still needs bones:
-        return flag(player, BONES_GIVEN_ATTRIBUTE) < 7;
+        return flag(player, BONES_GIVEN_ATTRIBUTE) + pendingBoneHandIn(player) < 7;
       case "s6AEM7": // After giving all seven bones:
-        return flag(player, BONES_GIVEN_ATTRIBUTE) >= 7;
+        return flag(player, BONES_GIVEN_ATTRIBUTE) + pendingBoneHandIn(player) >= 7;
       case "rk1uo7": // If the player has a brown apron:
         return held(player, BROWN_APRON_ITEM_ID);
       case "7M59Tm": // If the player does not have a brown apron:

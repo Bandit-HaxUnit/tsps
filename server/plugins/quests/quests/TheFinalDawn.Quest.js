@@ -62,6 +62,7 @@
  */
 module.exports = function registerTheFinalDawnQuest(api) {
   const {
+    CountdownTask,
     Equipment,
     GameObject,
     ItemIdentifiers,
@@ -69,6 +70,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
     NpcIdentifiers,
     ObjectManager,
     Skill,
+    TaskManager,
   } = api.core;
   const { registerQuest, startTranscript, refreshQuestList } = require("../QuestRuntime");
 
@@ -111,6 +113,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
   const STAGE_COMPLETE = 31;
 
   const START_HOOK = "quest:the-final-dawn:start";
+
+  const PHRASE_WORDS = new Set(["Suffering.", "Dark.", "Light.", "Final.", "Rise.", "Dawn.", "Sacrifice.", "Eclipse."]);
 
   // ==========================================================================
   // Ids
@@ -271,9 +275,10 @@ module.exports = function registerTheFinalDawnQuest(api) {
 
   const TEMPLE_BED_TILE = { x: 1712, y: 9696, z: 0 };
   const TEMPLE_CORRIDOR_TILE = { x: 1711, y: 9704, z: 0 };
+  const TEMPLE_HIDDEN_ROOM_TILE = { x: 1723, y: 9708, z: 0 };
   const PALACE_TILE = { x: 1680, y: 3176, z: 0 };
-  const CAM_TORUM_TILE = { x: 1440, y: 9560, z: 0 };
-  const CAM_TORUM_MARKET_TILE = { x: 1441, y: 9550, z: 0 };
+  const CAM_TORUM_TILE = { x: 1440, y: 9560, z: 1 };
+  const CAM_TORUM_MARKET_TILE = { x: 1441, y: 9550, z: 1 };
   const TEUMO_HOUSE_TILE = { x: 1466, y: 9571, z: 1 };
   const TEUMO_BASEMENT_TILE = { x: 1468, y: 9572, z: 0 };
   const TEUMO_PASSAGE_TILE = { x: 1470, y: 9565, z: 0 };
@@ -468,6 +473,27 @@ module.exports = function registerTheFinalDawnQuest(api) {
     return startTranscript(api, player, npcId, PAGE, variant);
   }
 
+  /** Runs `action` once the player's chatbox is clear, so a closing transcript cannot wipe it. */
+  function whenIdle(player, action) {
+    if (!TaskManager || !CountdownTask) {
+      action();
+      return;
+    }
+    TaskManager.submit(
+      new CountdownTask(player, 2, () => {
+        if (player.isRegistered?.() === false) return;
+        const chatting =
+          player.getDialogueManager?.()?.isActive?.() === true ||
+          api.core.MultiChatboxPrompt?.getPending?.(player) != null;
+        if (chatting) {
+          whenIdle(player, action);
+          return;
+        }
+        action();
+      })
+    );
+  }
+
   function npcIdOf(event) {
     return event.npcId ?? event.npc?.getId?.();
   }
@@ -564,13 +590,16 @@ module.exports = function registerTheFinalDawnQuest(api) {
     registerObject(TEMPLE_BED_OBJECT, TEMPLE_BED_TILE);
     registerObject(TEMPLE_DRAWER_NORTH_OBJECT, { x: 1713, y: 9714, z: 0 });
     registerObject(TEMPLE_DRAWER_SOUTH_OBJECT, { x: 1709, y: 9700, z: 0 });
-    registerObject(TEMPLE_PAINTING_OBJECT, { x: 1719, y: 9706, z: 0 });
+    // Shape 0 face 0: the cache's wall shape is only reachable from the unstandable
+    // south tile, while a straight wall is reachable from the corridor west of it.
+    registerObject(TEMPLE_PAINTING_OBJECT, { x: 1719, y: 9706, z: 0 }, 0, 0);
     registerObject(TEUMO_SHELF_OBJECT, { x: 1464, y: 9569, z: 0 });
     registerObject(SUN_ALTAR_OBJECT, { x: 1332, y: 9445, z: 1 });
     registerObject(MOON_ROOTS_OBJECT, { x: 1285, y: 9441, z: 1 });
     registerObject(MOON_TOOLS_OBJECT, { x: 1285, y: 9439, z: 1 });
     registerObject(RUINS_SKELETON_OBJECT, { x: 1307, y: 9532, z: 1 });
     registerObject(RUINS_RALOS_OBJECT, { x: 1304, y: 9527, z: 1 });
+    registerObject(RUINS_RANUL_OBJECT, { x: 1317, y: 9527, z: 1 });
     let index = 0;
     for (const barrelId of TEUMO_BARRELS) {
       registerObject(barrelId, { ...BARREL_TILES[index], z: 0 });
@@ -578,8 +607,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
     }
   }
 
-  function registerObject(objectId, tile) {
-    const object = new GameObject(objectId, new Location(tile.x, tile.y, tile.z), 10, 0, null);
+  function registerObject(objectId, tile, type = 10, face = 0) {
+    const object = new GameObject(objectId, new Location(tile.x, tile.y, tile.z), type, face, null);
     ObjectManager.register(object, true);
   }
 
@@ -989,12 +1018,20 @@ module.exports = function registerTheFinalDawnQuest(api) {
 
     if (objectId === TEMPLE_CHEST_OBJECT) {
       event.handled = true;
-      if (stage >= STAGE_ENFORCER) {
-        player.sendMessage("You already have the scroll from this chest.");
+      if (stage >= STAGE_ENFORCER || held(player, EMISSARY_SCROLL_ITEM)) {
+        play(player, ENFORCER_ID, "infiltration-ii-entering-the-backroom-searching-the-chest-again");
         return;
       }
       if (stage !== STAGE_SCROLL) return;
       play(player, ENFORCER_ID, "infiltration-ii-entering-the-backroom-searching-the-chest");
+      return;
+    }
+
+    if (objectId === TEMPLE_PAINTING_OBJECT) {
+      // The canvas opened the passage; walking through it again re-enters.
+      if (stage < STAGE_SCROLL || stage >= STAGE_ENFORCER) return;
+      event.handled = true;
+      player.moveTo(new Location(TEMPLE_HIDDEN_ROOM_TILE.x, TEMPLE_HIDDEN_ROOM_TILE.y, TEMPLE_HIDDEN_ROOM_TILE.z));
       return;
     }
 
@@ -1291,6 +1328,9 @@ module.exports = function registerTheFinalDawnQuest(api) {
     if (!world?.getNpcs) return false;
     for (const npc of world.getNpcs()) {
       if (!ids.has(npc?.getId?.())) continue;
+      // The death event fires while the corpse is still in the world: a dying npc
+      // must not count, or the last kill never clears the wave.
+      if (npc.isDyingFunction?.() === true || (npc.getHitpoints?.() ?? 1) <= 0) continue;
       const owner = npc.getOwner?.();
       if (!owner || owner === player || owner.getUsername?.() === player.getUsername?.()) return true;
     }
@@ -1308,6 +1348,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
       setStage(player, STAGE_ENFORCER);
       give(player, EMISSARY_SCROLL_ITEM, "You pick up the emissary scroll.");
       player.sendMessage("You pick up the emissary scroll and read it.");
+      // The fight happens in the walled-off room; leave it with the scroll.
+      player.moveTo(new Location(TEMPLE_CORRIDOR_TILE.x, TEMPLE_CORRIDOR_TILE.y, TEMPLE_CORRIDOR_TILE.z));
       return;
     }
     if (npcId === CULTIST_MELEE_ID || npcId === CULTIST_RANGED_ID) {
@@ -1350,10 +1392,18 @@ module.exports = function registerTheFinalDawnQuest(api) {
   function handleChoice(event) {
     const { player, npcId, option } = event;
     if (npcId === EMISSARY_TEMPLE_ID) {
-      if (["Suffering.", "Dark.", "Light.", "Final.", "Rise.", "Dawn.", "Sacrifice.", "Eclipse."].includes(option)) {
-        const words = phraseWords.get(player) ?? [];
-        words.push(option);
-        phraseWords.set(player, words.slice(-2));
+      if (PHRASE_WORDS.has(option)) {
+        const words = [...(phraseWords.get(player) ?? []), option].slice(-2);
+        phraseWords.set(player, words);
+        // The dump nests the phrase check under "Eclipse." only, so "Final." then
+        // "Dawn." would close with no verdict; award the good branch here.
+        if (words.length === 2 && words[0] === "Final." && words[1] === "Dawn.") {
+          setStage(player, STAGE_BASEMENT);
+          player.moveTo(new Location(TEMPLE_CORRIDOR_TILE.x, TEMPLE_CORRIDOR_TILE.y, TEMPLE_CORRIDOR_TILE.z));
+        }
+      }
+      if (option === "Enter the passage.") {
+        player.moveTo(new Location(TEMPLE_HIDDEN_ROOM_TILE.x, TEMPLE_HIDDEN_ROOM_TILE.y, TEMPLE_HIDDEN_ROOM_TILE.z));
       }
       return;
     }
@@ -1490,7 +1540,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
       case ACTION_TRAVEL_CAM_TORUM:
         if (npcId !== JANUS_UNCONSCIOUS_ID && !QUEEN_IDS.has(npcId)) return;
         player.moveTo(new Location(CAM_TORUM_TILE.x, CAM_TORUM_TILE.y, CAM_TORUM_TILE.z));
-        play(player, KATLO_TALK_ID, "dwarven-traitor");
+        // The consent transcript's terminal close would wipe a scene played inline.
+        whenIdle(player, () => play(player, KATLO_TALK_ID, "dwarven-traitor"));
         return;
       case ACTION_CAM_TORUM_ENDS:
         if (npcId !== KATLO_TALK_ID) return;

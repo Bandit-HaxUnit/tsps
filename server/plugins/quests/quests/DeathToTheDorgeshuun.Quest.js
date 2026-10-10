@@ -637,6 +637,15 @@ module.exports = function registerDeathToTheDorgeshuunQuest(api) {
 
   function talkZanik(event) {
     const { player, npcId } = event;
+    // 2318 is this quest's spawned Zanik; 4506 is its static Lumbridge-cellar
+    // Zanik (the 4507 map spawn) but also Land of the Goblins' fairy-ring Zanik,
+    // so only claim 4506 in the cellar and let other quests' Zaniks through.
+    if (
+      npcId !== NpcIdentifiers.ZANIK &&
+      (npcId !== NpcIdentifiers.ZANIK_6 || !inZone(player, CELLAR_ZONE))
+    ) {
+      return false;
+    }
     const stage = quest.getStage(player);
     if (stage <= 0) return false;
     if (stage === STAGE_STARTED) {

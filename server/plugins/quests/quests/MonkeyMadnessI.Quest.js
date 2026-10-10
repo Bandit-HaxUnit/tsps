@@ -1371,11 +1371,13 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
       player.moveTo(TEMPLE_SURFACE_LANDING);
       return;
     }
-    if (objectId === MOULD_ROOM_ROPE_ID && option === "Climb") {
-      event.handled = true;
-      player.moveTo(DENTURE_HOUSE_LANDING);
-      return;
-    }
+  }
+
+  /** Ladders asks who owns a climb before guessing; the cavern rope exits to the denture house. */
+  function claimMouldRoomRope(request) {
+    if (request.objectId !== MOULD_ROOM_ROPE_ID) return;
+    request.handled = true;
+    request.player.moveTo(DENTURE_HOUSE_LANDING);
   }
 
   /** The Awowogei object's Talk-to, from the wiki page's chapter 3 variants. */
@@ -1676,6 +1678,7 @@ module.exports = function registerMonkeyMadnessIQuest(api) {
   api.onCustomEvent("npc-dialogue:line", handleLine);
   api.onCustomEvent("npc-dialogue:hook", handleHook);
   api.onCustomEvent("door:toggle", handleDoorToggle);
+  api.onCustomEvent("ladders:climb", claimMouldRoomRope);
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnItem(handleItemOnItem);

@@ -479,7 +479,13 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
       player,
       "mage",
       { id: MAGE_OF_ZAMORAK_SPAWN_ID, x: MAGE_OF_ZAMORAK_TILE.x, y: MAGE_OF_ZAMORAK_TILE.y, z: MAGE_OF_ZAMORAK_TILE.z, wanderRadius: 0 },
-      stage === STAGE_AMULET || stage === STAGE_APPRAISED || stage === STAGE_TEA_GIVEN || stage === STAGE_INCANTATION
+      // Kept after completion: the post-quest Mage of Zamorak dialogue (and its
+      // MAGE_POSTQUEST_ATTRIBUTE condition) is only reachable on this owner spawn.
+      stage === STAGE_AMULET ||
+        stage === STAGE_APPRAISED ||
+        stage === STAGE_TEA_GIVEN ||
+        stage === STAGE_INCANTATION ||
+        stage === STAGE_COMPLETE
     );
     setSpawn(
       player,

@@ -311,6 +311,9 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
   const DOOR_ITZLA_TILE = { x: 1607, y: 9631, z: 0 };
   const AMOX_TILE = { x: 1600, y: 9631, z: 0 };
   const BANISH_TILE = { x: 1450, y: 3174, z: 0 };
+  const SERVIUS_TALK_TILE = { x: 1450, y: 3173, z: 0 };
+  const SCRAP_CHEST_TILE = { x: 1644, y: 3217, z: 1 };
+  const SCRAP_CHEST_OPEN_TILE = { x: 1646, y: 3216, z: 1 };
   const TRIAL2_OFFSETS = [
     [1, 0],
     [-1, 0],
@@ -338,6 +341,7 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
   let objectsPlaced = false;
   let statuesSwapped = false;
   let bedSwapped = false;
+  let chestMoved = false;
 
   // ==========================================================================
   // State helpers
@@ -422,7 +426,14 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
       if (existing) tracked.delete(key);
       return null;
     }
-    if (existing?.isRegistered?.() && existing.getId?.() === definition.id) return existing;
+    const location = existing?.getLocation?.();
+    if (
+      existing?.isRegistered?.()
+      && existing.getId?.() === definition.id
+      && location?.getX?.() === definition.x
+      && location?.getY?.() === definition.y
+      && location?.getZ?.() === (definition.z ?? 0)
+    ) return existing;
     if (existing?.isRegistered?.()) pluginApi.removeNpc(existing);
     const npc = pluginApi.spawnNpc({ ...definition, owner: player, ownerOnly: true });
     if (npc) tracked.set(key, npc);
@@ -463,7 +474,7 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
   function ensureQuestNpcs(player) {
     if (!player || player.isPlayerBot?.() === true) return;
     const stage = quest.getStage(player);
-    if (stage === 0 || quest.isComplete(player)) {
+    if (quest.isComplete(player)) {
       removeAllTracked(player);
       return;
     }
@@ -496,6 +507,10 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
       ? { id: ID.AMOX, ...AMOX_TILE, wanderRadius: 0 }
       : null);
 
+    syncTracked(player, "servius", stage >= STAGE.BANISHED
+      ? { id: ID.SERVIUS_TALK, ...SERVIUS_TALK_TILE, wanderRadius: 0 }
+      : null);
+
     if (stage === STAGE.TRIAL2_FIGHT && !hasWaves(player)) spawnWaves(player);
     if (stage === STAGE.TRIAL4_FIGHT && !trackedNpcs.get(player)?.get("itzla-fight")?.isRegistered?.()) {
       spawnItzlaFight(player);
@@ -517,6 +532,23 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
       ObjectManager.deregister(object, true);
       ObjectManager.register(
         new GameObject(ID.BED_REST, new Location(PUB_BED_TILE.x, PUB_BED_TILE.y, PUB_BED_TILE.z),
+          object.getType?.() ?? 10, object.getFace?.() ?? 0, null),
+        true
+      );
+    }
+  }
+
+  function moveScrapChest() {
+    if (chestMoved) return;
+    chestMoved = true;
+    RegionManager.loadMapFiles(SCRAP_CHEST_TILE.x, SCRAP_CHEST_TILE.y);
+    const objects = MapObjects.mapObjects.get(MapObjects.getHash(SCRAP_CHEST_TILE.x, SCRAP_CHEST_TILE.y, SCRAP_CHEST_TILE.z)) ?? [];
+    for (const object of [...objects]) {
+      if (object.getId() !== ID.CHEST_SCRAP) continue;
+      ObjectManager.deregister(object, true);
+      ObjectManager.register(
+        new GameObject(ID.CHEST_SCRAP,
+          new Location(SCRAP_CHEST_OPEN_TILE.x, SCRAP_CHEST_OPEN_TILE.y, SCRAP_CHEST_OPEN_TILE.z),
           object.getType?.() ?? 10, object.getFace?.() ?? 0, null),
         true
       );
@@ -545,6 +577,7 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
     objectsPlaced = true;
     ObjectManager.register(new GameObject(ID.ROCKS, new Location(ROCKS_TILE.x, ROCKS_TILE.y, ROCKS_TILE.z), 10, 0, null), true);
     ObjectManager.register(new GameObject(ID.FROZEN_DOOR, new Location(DOOR_TILE.x, DOOR_TILE.y, DOOR_TILE.z), 0, 1, null), true);
+    moveScrapChest();
   }
 
   function removeFrozenDoor() {
@@ -743,14 +776,75 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
   }
 
   function recordComboChoice(player, option) {
-    if (COMBO_STEP_1.has(option)) {
-      comboPicks.set(player, [option]);
+    const word = String(option ?? "").replace(/\.$/, "");
+    if (COMBO_STEP_1.has(word)) {
+      comboPicks.set(player, [word]);
       return;
     }
     const picks = comboPicksFor(player);
     if (!picks.length) return;
-    if (COMBO_STEP_2.has(option) && picks.length === 1) picks.push(option);
-    else if (COMBO_STEP_3.has(option) && picks.length === 2) picks.push(option);
+    if (COMBO_STEP_2.has(word) && picks.length === 1) picks.push(word);
+    else if (COMBO_STEP_3.has(word) && picks.length === 2) picks.push(word);
+  }
+
+  /** The steps of a nested transcript condition (searched through steps and options). */
+  function findConditionSteps(steps, stepId) {
+    for (const step of steps ?? []) {
+      if (step.type === "condition" && step.id === stepId) return step.steps ?? [];
+      const nested = findConditionSteps(step.steps, stepId)
+        ?? (step.options ?? []).map((option) => findConditionSteps(option.steps, stepId)).find(Boolean);
+      if (nested) return nested;
+    }
+    return null;
+  }
+
+  /** The first choice step with an option from `words` (searched recursively). */
+  function findChoice(steps, words) {
+    const hasWord = (option) => words.has(String(option?.text ?? "").replace(/\.$/, ""));
+    for (const step of steps ?? []) {
+      if (step.type === "choice" && (step.options ?? []).some(hasWord)) return step;
+      const nested = findChoice(step.steps, words)
+        ?? (step.options ?? []).map((option) => findChoice(option.steps, words)).find(Boolean);
+      if (nested) return nested;
+    }
+    return null;
+  }
+
+  /**
+   * Repairs the passphrase menu the transcript dump mangled: only "Kualt." carries
+   * a second menu and only "Huka." a third, so the right "Chua Chaki Iknil" combo
+   * can never be picked. Rebuilds every word option with the full ladder and hangs
+   * the right-combo branch (buried inside the wrong-combo condition) off every
+   * third word, so its condition resolves when the third correct word is chosen.
+   */
+  function withComboMenus(steps) {
+    const top = findChoice(steps, COMBO_STEP_1);
+    const second = findChoice(steps, COMBO_STEP_2);
+    const third = findChoice(steps, COMBO_STEP_3);
+    const right = findConditionSteps(steps, C.COMBO_RIGHT);
+    if (!top || !second || !third || !right?.length) return steps;
+    const thirdStep = {
+      ...third,
+      options: (third.options ?? []).map((option) => ({
+        ...option,
+        steps: [{ type: "condition", id: C.COMBO_RIGHT, steps: right }],
+      })),
+    };
+    const secondStep = {
+      ...second,
+      options: (second.options ?? []).map((option) => ({
+        ...option,
+        steps: [{ ...thirdStep }],
+      })),
+    };
+    const rebuilt = {
+      ...top,
+      options: (top.options ?? []).map((option) => ({
+        ...option,
+        steps: [{ ...secondStep }],
+      })),
+    };
+    return steps.map((step) => (step === top ? rebuilt : step));
   }
 
   // ==========================================================================
@@ -877,10 +971,12 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
         return;
       }
       recordComboChoice(player, option);
+      if (isComboComplete(player) && !isComboCorrect(player)) comboPicks.set(player, []);
       return;
     }
     if ((option === "Yes." || option === "No.") && npcId === ID.SERVIUS && stage === STAGE.BANISHED) {
       quest.complete(player);
+      removeTracked(player, "servius");
     }
   }
 
@@ -906,6 +1002,7 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
     if (npcId === ID.ITZLA) itzlaTalk(player);
     else if (npcId === ID.ITZLA_LOBBY) playTranscript(player, npcId, V.ITZLA_LOBBY);
     else if (npcId === ID.JANUS) janusTalk(player);
+    else if (npcId === ID.SERVIUS_TALK) playTranscript(player, ID.SERVIUS, V.SERVIUS);
     else if (npcId === ID.VULCAN) playTranscript(player, npcId, V.VULCAN);
     else if (ID.ASCENDED.includes(npcId)) ascendedTalk(player, npcId);
     else if (ID.ACOLYTES.includes(npcId)) memberTalk(player, npcId);
@@ -997,7 +1094,7 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
       return;
     }
     if (stage < STAGE.TRIAL1_NOTE) return playTranscript(player, ID.JANUS, V.JANUS_FIRST);
-    if (stage < STAGE.TRIAL1_DONE) return playTranscript(player, ID.JANUS, V.JANUS_NOTE);
+    if (stage < STAGE.TRIAL1_DONE) return playTranscript(player, ID.JANUS, V.JANUS_NOTE, withComboMenus);
     if (stage === STAGE.TRIAL1_DONE) return playTranscript(player, ID.JANUS, V.JANUS_AFTER_T1);
     if (stage < STAGE.TRIAL2_DONE) return playTranscript(player, ID.JANUS, V.TRIAL2);
     if (stage === STAGE.TRIAL2_DONE) {
@@ -1146,10 +1243,15 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
       return;
     }
 
-    if (event.npcId === ID.AMOX && quest.getStage(killer) === STAGE.DOOR_OPEN) {
-      removeTracked(killer, "amox");
-      advance(killer, STAGE.AMOX_DEFEATED);
-      playTranscript(killer, ID.AMOX, V.AMOX_DONE);
+    if (event.npcId === ID.AMOX) {
+      const stage = quest.getStage(killer);
+      if (stage === STAGE.DOOR_OPEN) {
+        removeTracked(killer, "amox");
+        advance(killer, STAGE.AMOX_DEFEATED);
+        playTranscript(killer, ID.AMOX, V.AMOX_DONE);
+      } else if (stage === STAGE.AMOX_DEFEATED) {
+        playTranscript(killer, ID.AMOX, V.AMOX_DONE);
+      }
     }
   }
 
@@ -1528,6 +1630,7 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
     BRAWLER: NpcIdentifiers.EMISSARY_BRAWLER, // 13773, level 74
     CONJURER: NpcIdentifiers.EMISSARY_CONJURER, // 13777
     SERVIUS: NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS, // 12652
+    SERVIUS_TALK: NpcIdentifiers.SERVIUS_TEOKAN_OF_RALOS_2, // 12899
     BARTENDER: NpcIdentifiers.BARTENDER_17, // 14020
     SHOPKEEPER: NpcIdentifiers.SHOPKEEPER_7, // 14021
     NOVA: NpcIdentifiers.NOVA, // 13704
@@ -1587,7 +1690,7 @@ module.exports = function registerTheHeartOfDarknessQuest(pluginApi) {
     BARREL: ObjectIdentifiers.BARREL_200, // 54517
   });
 
-  ID.OWN_TALK = new Set([ID.ITZLA, ID.ITZLA_LOBBY, ID.JANUS, ID.VULCAN, ...ID.ASCENDED, ...ID.ACOLYTES]);
+  ID.OWN_TALK = new Set([ID.ITZLA, ID.ITZLA_LOBBY, ID.JANUS, ID.VULCAN, ID.SERVIUS_TALK, ...ID.ASCENDED, ...ID.ACOLYTES]);
   ID.TOWER_CHESTS = new Set([ID.CHEST_BOOK, ID.CHEST_POEM, ID.CHEST_SCRAP]);
   ID.RECRUITS = new Set([ID.NOVA, ID.NOVA_2, ID.CARITTA, ID.FELIUS, ID.SERGIUS, ID.SERGIUS_2]);
   ID.FIDES_TALKED = new WeakSet();

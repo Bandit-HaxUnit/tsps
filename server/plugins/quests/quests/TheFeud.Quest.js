@@ -177,6 +177,8 @@ module.exports = function registerTheFeudQuest(api) {
   const NOTE_FIBONACCI_ITEM_ID = ItemIdentifiers.NOTE; // 4597, Note (Fibonacci)
   const NOTE_NUMBERS_ITEM_ID = ItemIdentifiers.NOTE_2; // 4598, Note (numbers)
   const OAK_BLACKJACK_ITEM_ID = ItemIdentifiers.OAK_BLACKJACK; // 4599
+  const WILLOW_BLACKJACK_ITEM_ID = ItemIdentifiers.WILLOW_BLACKJACK; // 4600
+  const ADAMANT_SCIMITAR_ITEM_ID = ItemIdentifiers.ADAMANT_SCIMITAR; // 1331
   const UGTHANKI_DUNG_ITEM_ID = ItemIdentifiers.UGTHANKI_DUNG; // 4601
   const RECEIPT_ITEM_ID = ItemIdentifiers.RECEIPT; // 4603
   const HAGS_POISON_ITEM_ID = ItemIdentifiers.HAGS_POISON; // 4604
@@ -1370,6 +1372,10 @@ module.exports = function registerTheFeudQuest(api) {
     }
     if (npcId === BANDIT_CHAMPION_ID) {
       setFlag(player, FLAG_CHAMPION_DEAD);
+      const reward = held(player, WILLOW_BLACKJACK_ITEM_ID)
+        ? ADAMANT_SCIMITAR_ITEM_ID
+        : WILLOW_BLACKJACK_ITEM_ID;
+      player.getInventory().adds(reward, 1);
       if (stage(player) === STAGE_CHAMPION) {
         quest.setStage(player, STAGE_MAYOR);
         syncVarbits(player);
