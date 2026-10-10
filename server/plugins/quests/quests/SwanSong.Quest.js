@@ -365,19 +365,27 @@ module.exports = function registerSwanSongQuest(api) {
     }
 
     if (WISE_OLD_MAN_IDS.has(npcId)) {
-      if (stage === STAGE_STARTED) return "talking-to-the-wise-old-man";
+      if (stage === STAGE_STARTED) return { page: PAGE, variant: "talking-to-the-wise-old-man" };
       if (stage === STAGE_RUNES_WANTED) {
-        return "talking-to-the-wise-old-man-talking-to-the-wise-old-man-again-if-the-player-didn-t-bring-the-runes-before";
+        return {
+          page: PAGE,
+          variant: "talking-to-the-wise-old-man-talking-to-the-wise-old-man-again-if-the-player-didn-t-bring-the-runes-before",
+        };
       }
-      if (stage === STAGE_COLONY) return "returning-to-the-colony";
+      if (stage === STAGE_COLONY) return { page: PAGE, variant: "returning-to-the-colony" };
       if (stage === STAGE_BATTLE) {
-        return flag(player, TROLLS_LEFT_ATTRIBUTE) > 0
-          ? "outside-the-colony-attempting-to-talk-to-him-during-the-battle"
-          : "outside-the-colony-speaking-to-the-wise-old-man-after-defeating-the-sea-trolls";
+        return {
+          page: PAGE,
+          variant: flag(player, TROLLS_LEFT_ATTRIBUTE) > 0
+            ? "outside-the-colony-attempting-to-talk-to-him-during-the-battle"
+            : "outside-the-colony-speaking-to-the-wise-old-man-after-defeating-the-sea-trolls",
+        };
       }
-      if (stage === STAGE_INSIDE) return "returning-to-the-colony-talking-to-the-wise-old-man-again";
+      if (stage === STAGE_INSIDE) {
+        return { page: PAGE, variant: "returning-to-the-colony-talking-to-the-wise-old-man-again" };
+      }
       if (stage >= STAGE_JOBS && stage < STAGE_COMPLETE) {
-        return "back-to-herman-talking-to-the-wise-old-man";
+        return { page: PAGE, variant: "back-to-herman-talking-to-the-wise-old-man" };
       }
       return null;
     }
@@ -431,16 +439,22 @@ module.exports = function registerSwanSongQuest(api) {
     if (npcId === MALIGNIUS_NPC_ID) {
       if (stage < STAGE_MALIGNIUS || stage >= STAGE_SEEDS) return null;
       if (flag(player, BONES_GIVEN_ATTRIBUTE) >= 7) {
-        return flag(player, CRAFTER_TOLD_ATTRIBUTE)
-          ? "back-to-malignius-mortifer"
-          : "talking-to-malignius-mortifer-talking-to-malignius-again-before-speaking-to-master-crafter";
+        return {
+          page: PAGE,
+          variant: flag(player, CRAFTER_TOLD_ATTRIBUTE)
+            ? "back-to-malignius-mortifer"
+            : "talking-to-malignius-mortifer-talking-to-malignius-again-before-speaking-to-master-crafter",
+        };
       }
       if (flag(player, MALIGNIUS_MET_ATTRIBUTE)) {
-        return held(player, BONES_ITEM_ID)
-          ? "talking-to-malignius-mortifer-giving-bones-to-malignius"
-          : "talking-to-malignius-mortifer-talking-to-malignius-again-if-bones-haven-t-been-given-yet";
+        return {
+          page: PAGE,
+          variant: held(player, BONES_ITEM_ID)
+            ? "talking-to-malignius-mortifer-giving-bones-to-malignius"
+            : "talking-to-malignius-mortifer-talking-to-malignius-again-if-bones-haven-t-been-given-yet",
+        };
       }
-      return "talking-to-malignius-mortifer";
+      return { page: PAGE, variant: "talking-to-malignius-mortifer" };
     }
 
     if (MASTER_CRAFTER_IDS.has(npcId)) {
@@ -704,6 +718,7 @@ module.exports = function registerSwanSongQuest(api) {
 
     switch (stepId) {
       // Flashback and battle stage directions: transcript text only.
+      case "u5jAzl":
       case "hNciWY":
       case "L5g_xg":
       case "rXW_xf":

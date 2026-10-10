@@ -536,9 +536,26 @@ module.exports = function registerMonkeyMadnessIIQuest(api) {
 
   function ensureAwowogei(player) {
     const state = playerState(player);
-    if (alive(state.awowogei)) return;
-    if (stageOf(player) < STAGE_GARKOR_BRIEFED || stageOf(player) >= STAGE_COMPLETE) return;
+    if (alive(state.awowogei)) {
+      removeOwnedAwowogei(player, state.awowogei);
+      return;
+    }
+    state.awowogei = null;
+    removeOwnedAwowogei(player, null);
+    const stage = stageOf(player);
+    if (stage < STAGE_GARKOR_BRIEFED || stage >= STAGE_COMPLETE) return;
     state.awowogei = spawnOwnerNpc(player, AWOWOGEI_MM2_ID, AWOWOGEI_SPAWN);
+  }
+
+  function removeOwnedAwowogei(player, keep) {
+    const npcsInWorld = api.getWorld?.()?.getNpcs?.();
+    if (!npcsInWorld) return;
+    const username = player.getUsername?.();
+    for (const npc of npcsInWorld) {
+      if (!npc || npc === keep || npc.getId?.() !== AWOWOGEI_MM2_ID) continue;
+      const owner = npc.getOwner?.();
+      if (owner === player || (username && owner?.getUsername?.() === username)) api.removeNpc(npc);
+    }
   }
 
   function spawnKruk(player) {
@@ -683,10 +700,11 @@ module.exports = function registerMonkeyMadnessIIQuest(api) {
     if (stage >= STAGE_GARKOR_LAB) return "chapter-iii-talking-to-garkor-talking-to-garkor-again";
     if (stage >= STAGE_SHIPS_SABOTAGED) return "chapter-iii-talking-to-garkor-3";
     if (stage >= STAGE_SMITH_TALKED) return "chapter-iii-talking-to-garkor-2";
-    if (stage >= STAGE_SMITH_HUNT) return "chapter-iii-talking-to-garkor";
+    if (stage >= STAGE_KEEF_DEFEATED) return "chapter-iii-talking-to-garkor";
     if (stage >= STAGE_CH2_DONE) return "chapter-ii-talking-to-garkor-talking-to-garkor-again-3";
-    if (stage >= STAGE_GREE_GREE) return "chapter-ii-talking-to-garkor-talking-to-garkor-again-2";
-    if (stage >= STAGE_ARCHER_ASKED) return "chapter-ii-talking-to-garkor-2";
+    if (stage >= STAGE_GREE_GREE) return "chapter-ii-talking-to-garkor-3";
+    if (stage >= STAGE_ARCHER_ASKED) return "chapter-ii-talking-to-garkor-talking-to-garkor-again-2";
+    if (stage >= STAGE_AWOWOGEI_ASKED) return "chapter-ii-talking-to-garkor-2";
     if (stage >= STAGE_GARKOR_BRIEFED) return "chapter-ii-talking-to-garkor-talking-to-garkor-again";
     return "chapter-ii-talking-to-garkor";
   }
@@ -1438,6 +1456,12 @@ module.exports = function registerMonkeyMadnessIIQuest(api) {
   function handleItemAction(event) {
     const { player, itemId } = event;
     const option = String(event.option ?? "").toLowerCase();
+    if (itemId === ROYAL_SEED_POD_ITEM && option === "commune") {
+      event.handled = true;
+      player.moveTo(GRAND_TREE_KING);
+      player.sendMessage("The royal seed pod carries you to the Grand Tree.");
+      return;
+    }
     if (option !== "read") return;
     if (itemId === MYSTERIOUS_NOTE_ITEM) {
       event.handled = true;

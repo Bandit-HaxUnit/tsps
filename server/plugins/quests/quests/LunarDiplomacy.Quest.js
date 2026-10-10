@@ -89,6 +89,7 @@ module.exports = function registerLunarDiplomacyQuest(api) {
     NpcIdentifiers,
     ObjectDefinition,
     ObjectIdentifiers,
+    RegionManager,
     Skill,
   } = api.core;
   const { registerQuest, startTranscript, loadTranscripts } = require("../QuestRuntime");
@@ -165,6 +166,12 @@ module.exports = function registerLunarDiplomacyQuest(api) {
     NpcIdentifiers.LOKAR_SEARUNNER_3, // 9306
     LOKAR_PLACEHOLDER,
   ]);
+  // Brundt spawns without a NpcIdentifiers constant: nameless transform parents on
+  // varbit 9459 (the Rellekka longhall, the Fremennik Exiles meeting place and the
+  // Island of Stone). npc-dialogue-index.json lists only their resolved child ids.
+  const BRUNDT_LONGHALL_SPAWN = 3926;
+  const BRUNDT_EXILE_SPAWN = 7318;
+  const BRUNDT_ISLAND_SPAWN = 9269;
   const BRUNDT_IDS = new Set([
     NpcIdentifiers.BRUNDT_THE_CHIEFTAIN, // 8048
     NpcIdentifiers.BRUNDT_THE_CHIEFTAIN_2, // 8145
@@ -178,6 +185,9 @@ module.exports = function registerLunarDiplomacyQuest(api) {
     NpcIdentifiers.BRUNDT_THE_CHIEFTAIN_10, // 9268
     NpcIdentifiers.BRUNDT_THE_CHIEFTAIN_11, // 9278
     NpcIdentifiers.BRUNDT_THE_CHIEFTAIN_12, // 9279
+    BRUNDT_LONGHALL_SPAWN,
+    BRUNDT_EXILE_SPAWN,
+    BRUNDT_ISLAND_SPAWN,
   ]);
   const BENTLEY_IDS = new Set([
     NpcIdentifiers.CAPTAIN_BENTLEY, // 6649
@@ -320,6 +330,17 @@ module.exports = function registerLunarDiplomacyQuest(api) {
     { x0: 2130, y0: 3884, x1: 2150, y1: 3920 }, // Lady Zay at Lunar Isle
     { x0: 2205, y0: 3780, x1: 2235, y1: 3820 }, // Lady Zay at Pirates' Cove
   ];
+  // The galleon's deck (z2) and forecastle (z3) stairs; the captured loc-teleport
+  // rows only cover z1<->z2, so the quest claims these two ids.
+  const SHIP_STAIRS_BOTTOM = ObjectIdentifiers.STAIRS_62; // 16945, deck -> forecastle
+  const SHIP_STAIRS_TOP = ObjectIdentifiers.STAIRS_64; // 16947, forecastle -> deck
+  const STAIR_LANDING_STEPS = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+  // World Bentley (3857) and Davey-boy (3860) spawns wander with the default radius
+  // 5 onto bow tiles with no walk route from the deck; pin each to its deck spawn.
+  const PINNED_CREW = new Map([
+    [BENTLEY_PLACEHOLDER, { cove: { x: 2222, y: 3796 }, lunar: { x: 2138, y: 3899 } }],
+    [NpcIdentifiers.FIRST_MATE_DAVEY_BOY, { cove: { x: 2225, y: 3788 }, lunar: { x: 2141, y: 3891 } }],
+  ]);
   const DREAM_BOX = { x0: 1690, y0: 5030, x1: 1860, y1: 5180 };
   const DREAM_NPC_SPAWNS = [
     { id: NpcIdentifiers.ETHEREAL_BEING, x: 1762, y: 5089 }, // 777
@@ -485,6 +506,11 @@ module.exports = function registerLunarDiplomacyQuest(api) {
   function coordY(location) {
     if (!location) return NaN;
     return typeof location.getY === "function" ? location.getY() : location.y;
+  }
+
+  function coordZ(location) {
+    if (!location) return NaN;
+    return typeof location.getZ === "function" ? location.getZ() : location.z;
   }
 
   function nearTile(location, tile, radius = 4) {
@@ -909,6 +935,22 @@ module.exports = function registerLunarDiplomacyQuest(api) {
       return "getting-started-talking-to-brundt-the-chieftain-before-getting-the-seal-of-passage";
     }
     return null;
+  }
+
+  /**
+   * Fremennik Trials registers its variant selector first and answers every Brundt
+   * id, and the raw longhall/Exiles spawns (3926/7318/9269) have no dialogue-index
+   * page at all, so NpcDialogues never reaches selectBrundt. Once this quest is
+   * running, claim Talk-to and play the Lunar page directly; before that (stage 0)
+   * the default conversation (Fremennik Trials' or the generic one) still plays.
+   */
+  function talkToBrundt(event) {
+    if (event.clickType !== 1 || !BRUNDT_IDS.has(event.npcId)) return false;
+    const variant = selectBrundt(event.player);
+    if (!variant) return false;
+    event.handled = true;
+    startTranscript(api, event.player, event.npcId, PAGE, variant);
+    return true;
   }
 
   function selectBentley(player, npc) {
@@ -1880,7 +1922,14 @@ module.exports = function registerLunarDiplomacyQuest(api) {
       return;
     }
 
-    if (itemId === LUNAR_BAR && ObjectDefinition.forId(objectId)?.getName?.() === "Anvil") {
+    // Only while this quest still needs the bars: after Lunar Diplomacy the same
+    // lunar bar on an anvil is The Fremennik Exiles' V sigil hand-in.
+    if (
+      itemId === LUNAR_BAR &&
+      quest.isStarted(player) &&
+      !quest.isComplete(player) &&
+      ObjectDefinition.forId(objectId)?.getName?.() === "Anvil"
+    ) {
       event.handled = true;
       if (!held(player, LUNAR_BAR)) return;
       if (!held(player, HAMMER)) {
@@ -1968,6 +2017,38 @@ module.exports = function registerLunarDiplomacyQuest(api) {
     event.handled = true;
     startTranscript(api, player, NpcIdentifiers.ETHEREAL_BEING, PAGE, "visiting-the-dream-world-reading-my-life");
     return true;
+  }
+
+  /**
+   * Ladders owns the "Stairs" name, so the galleon's deck/forecastle climb is claimed
+   * through its ladders:climb event. The captured loc-teleport rows only move z1<->z2,
+   * leaving Lee and the cabin boy on z3 unreachable without a teleport; step one plane
+   * and land on the nearest walkable tile.
+   */
+  function climbShipStairs(request) {
+    if (request?.handled) return;
+    const object = request?.object;
+    const location = object?.getLocation?.() ?? request?.location;
+    if (!location || !inShipBox(location)) return;
+    const objectId = request?.objectId ?? object?.getId?.();
+    const fromZ = coordZ(location);
+    const targetZ =
+      objectId === SHIP_STAIRS_BOTTOM && fromZ === 2 ? 3
+        : objectId === SHIP_STAIRS_TOP && fromZ === 3 ? 2
+          : null;
+    if (targetZ === null) return;
+    const destination = stairLanding(coordX(location), coordY(location), targetZ);
+    if (!destination) return;
+    request.handled = true;
+    request.player.moveTo(destination);
+  }
+
+  function stairLanding(x, y, z) {
+    for (const [dx, dy] of STAIR_LANDING_STEPS) {
+      const tile = new Location(x + dx, y + dy, z);
+      if (!RegionManager.blocked(tile, null)) return tile;
+    }
+    return null;
   }
 
   /** Spring platforms ferry between the centre island and a challenge island, and back. */
@@ -2166,6 +2247,26 @@ module.exports = function registerLunarDiplomacyQuest(api) {
     if (npc) api.removeNpc(npc);
   }
 
+  /**
+   * Pins the world Bentley and Davey-boy to a deck tile (see PINNED_CREW): they
+   * otherwise wander with radius 5 onto bow tiles the deck has no walk route to.
+   * Idempotent, called on login so it happens before anyone can walk up to them.
+   */
+  function pinShipCrew() {
+    const world = api.getWorld();
+    if (!world?.getNpcs) return;
+    for (const npc of world.getNpcs()) {
+      const pin = PINNED_CREW.get(npc?.getId?.());
+      if (!pin) continue;
+      const location = npc.getLocation?.();
+      if (!location || !inShipBox(location)) continue;
+      const tile = coordX(location) >= SHIP_BOXES[1].x0 ? pin.cove : pin.lunar;
+      npc.getMovementCoordinator?.().setRadius?.(0);
+      if (coordX(location) === tile.x && coordY(location) === tile.y && coordZ(location) === 2) continue;
+      npc.moveTo(new Location(tile.x, tile.y, 2));
+    }
+  }
+
   // ==========================================================================
   // Login / reset
   // ==========================================================================
@@ -2175,6 +2276,7 @@ module.exports = function registerLunarDiplomacyQuest(api) {
     reconcileDreamNpcs(player);
     ensureBabaYaga(player);
     ensureJack(player);
+    pinShipCrew();
   }
 
   function handleBootstrap({ player }) {
@@ -2259,11 +2361,13 @@ module.exports = function registerLunarDiplomacyQuest(api) {
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
+  api.onNpcInteraction(talkToBrundt);
   api.onCustomEvent("npc-dialogue:condition", handleCondition);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:line", handleLine);
   api.onCustomEvent("npc-dialogue:hook", handleHook);
+  api.onCustomEvent("ladders:climb", climbShipStairs);
   api.onItemOnItem(handleItemOnItem, { noted: false });
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onObjectInteraction("Stalagmite", { Mine: mineStalagmite });

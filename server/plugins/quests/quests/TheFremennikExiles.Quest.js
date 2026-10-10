@@ -59,14 +59,15 @@ module.exports = function registerTheFremennikExilesQuest(api) {
   const {
     Bank,
     Equipment,
-    Item,
     ItemIdentifiers,
     Location,
+    NpcDefinition,
     NpcIdentifiers,
     ObjectIdentifiers,
     Skill,
   } = api.core;
-  const { registerQuest, startTranscript } = require("../QuestRuntime");
+  const { loadTranscripts, registerQuest, startTranscript } = require("../QuestRuntime");
+  const { startDialogue } = require("../../npcs/NpcDialogues.plugin.js");
 
   const PAGE = "The Fremennik Exiles";
 
@@ -352,7 +353,7 @@ module.exports = function registerTheFremennikExilesQuest(api) {
   // Tiles (checked walkable against the cache map).
   const WATERBIRTH_LANDING = new Location(2545, 3760, 0);
   const RELLEKKA_JARVALD_PIER = new Location(2641, 3709, 0);
-  const BARDUR_LANDING = new Location(1849, 4390, 0);
+  const BARDUR_LANDING = new Location(1849, 4390, 1);
   const RELLEKKA_MARKET_TILES = [
     new Location(2660, 3648, 0),
     new Location(2665, 3652, 0),
@@ -683,14 +684,16 @@ module.exports = function registerTheFremennikExilesQuest(api) {
   function ensurePrisonScene(player) {
     syncTracked(player, "bakuna", { id: BAKUNA, x: 2458, y: 10385, z: 0, wanderRadius: 0 });
     syncTracked(player, "vritra", { id: VRITRA, x: 2452, y: 10380, z: 0, wanderRadius: 0 });
-    syncTracked(player, "typhor", { id: TYPHOR, ...PRISON_TYPHOR, z: 0, wanderRadius: 0 });
+    // 9295 is the non-attackable Typhor; 9296 carries the Attack option.
+    syncTracked(player, "typhor", { id: TYPHOR_2, ...PRISON_TYPHOR, z: 0, wanderRadius: 0 });
   }
 
   function ensureJormungand(player) {
     syncTracked(player, "bakuna", null);
     syncTracked(player, "vritra", null);
     syncTracked(player, "typhor", null);
-    syncTracked(player, "jormungand", { id: THE_JORMUNGAND, ...PRISON_JORMUNGAND, z: 0, wanderRadius: 0 });
+    // 9289 is the non-attackable Jormungand; 9291 carries the Attack option.
+    syncTracked(player, "jormungand", { id: NpcIdentifiers.THE_JORMUNGAND_3, ...PRISON_JORMUNGAND, z: 0, wanderRadius: 0 });
   }
 
   function clearMarketNpcs(player) {
@@ -830,6 +833,38 @@ module.exports = function registerTheFremennikExilesQuest(api) {
   }
 
   // ==========================================================================
+  // Prison scenes
+  //
+  // startTranscript flattens wiki speakers onto one chathead; the prison scenes
+  // swap between Typhor/Bakuna/Vritra and the Jormungand, so play them through
+  // NpcDialogues directly with the speaker -> NPC id map.
+  // ==========================================================================
+
+  const PRISON_SPEAKERS = new Map([
+    ["Typhor", TYPHOR_2],
+    ["Bakuna", BAKUNA],
+    ["Vritra", VRITRA],
+    ["The Jormungand", NpcIdentifiers.THE_JORMUNGAND_3],
+    ["Brundt the Chieftain", BRUNDT_ISLAND_PRISON],
+  ]);
+
+  function playScene(player, npcId, variant) {
+    const record = loadTranscripts(api)?.[PAGE];
+    const steps = record?.variants?.[variant];
+    if (!Array.isArray(steps) || steps.length === 0) return false;
+    const definition = NpcDefinition.forId(npcId);
+    const event = { player, npc: null, npcId, definition };
+    startDialogue(api, event, steps, record.branches, {
+      player,
+      npc: null,
+      npcId,
+      definition,
+      speakerIdByName: PRISON_SPEAKERS,
+    });
+    return true;
+  }
+
+  // ==========================================================================
   // Brundt / Peer / Askeladden / Sailor Talk-to overrides
   //
   // Fremennik Trials' variant selector claims these shared NPCs post-Trials, so the exiles
@@ -848,6 +883,11 @@ module.exports = function registerTheFremennikExilesQuest(api) {
       if (!variant) return false;
       event.handled = true;
       if (variant === "starting-out-brundt-the-chieftain") startMenu.add(player);
+      // The prison scene swaps speakers, so give each line its own chathead.
+      if (npcId === BRUNDT_ISLAND_PRISON) {
+        playScene(player, npcId, variant);
+        return true;
+      }
       api.emitCustomEvent("npc-dialogue:start", {
         player,
         npc: event.npc,
@@ -855,6 +895,16 @@ module.exports = function registerTheFremennikExilesQuest(api) {
         variant,
         select: typeof choice === "object" ? choice.select : undefined,
       });
+      return true;
+    }
+
+    if (npcId === BABA_YAGA) {
+      // Lunar Diplomacy's post-quest selector claims her; this specific hook runs
+      // before the generic transcript resolver, so the shield hunt gets its menu.
+      const variant = babaYagaVariants(player, stage);
+      if (!variant) return false;
+      event.handled = true;
+      api.emitCustomEvent("npc-dialogue:start", { player, npc: event.npc, npcId, variant });
       return true;
     }
 
@@ -914,11 +964,12 @@ module.exports = function registerTheFremennikExilesQuest(api) {
         return "making-v-s-shield-making-the-shield-brundt-with-v-s-shield-without-two-kegs-of-beer";
       }
       if (kegCount(player) >= 2) {
-        // The with-kegs variant opens on a "same as above" jump back into the hand-over
-        // menu, which cannot resolve standalone; drop it so the beer hand-over plays.
+        // The with-kegs variant opens and closes on "same as above" jumps into a
+        // menu elsewhere on the page (the last one is Fossegrimen's); neither
+        // resolves standalone, so drop them and let the beer hand-over play.
         return {
           variant: "making-v-s-shield-making-the-shield-brundt-with-v-s-shield-and-two-kegs-of-beer",
-          select: (steps) => (Array.isArray(steps) ? steps.filter((step, index) => !(index === 0 && step.type === "jump")) : steps),
+          select: (steps) => (Array.isArray(steps) ? steps.filter((step) => step.type !== "jump") : steps),
         };
       }
       return "making-v-s-shield-making-the-shield-brundt-with-v-s-shield-without-two-kegs-of-beer-bringing-the-kegs-afterwards";
@@ -1408,7 +1459,8 @@ module.exports = function registerTheFremennikExilesQuest(api) {
       return;
     }
 
-    if (BRUNDT_NPC_IDS.has(npcId) && text.startsWith("[Fremennik name]! Get to the boat")) {
+    // RoyalTrouble's line handler substitutes "[Fremennik name]" before this runs.
+    if (BRUNDT_NPC_IDS.has(npcId) && text.includes("Get to the boat")) {
       if (stageOf(player) === STAGE_MARKET_DONE) setStage(player, STAGE_BOAT);
       return;
     }
@@ -1418,7 +1470,9 @@ module.exports = function registerTheFremennikExilesQuest(api) {
       return;
     }
 
-    if (npcId === OLAF_THE_BARD && text.startsWith("Uh oh")) {
+    // The celebration ends on the player's "Uh oh..." line, spoken with Brundt's
+    // npc id (the transcript's Olaf lines belong to the cutscene).
+    if (stageOf(player) >= STAGE_CELEBRATION && text.startsWith("Uh oh")) {
       if (!quest.isComplete(player)) quest.complete(player);
       return;
     }
@@ -1591,7 +1645,7 @@ module.exports = function registerTheFremennikExilesQuest(api) {
     } else if (!jormungandDead(player)) {
       ensureJormungand(player);
     }
-    startTranscript(api, player, BRUNDT_ISLAND_PRISON, PAGE, "island-of-stone-brundt-again-after-unlocking-the-door-going-into-jormungand-s-prison");
+    playScene(player, BRUNDT_ISLAND_PRISON, "island-of-stone-brundt-again-after-unlocking-the-door-going-into-jormungand-s-prison");
   }
 
   function enterWaterbirthDungeon(player) {
@@ -1803,14 +1857,7 @@ module.exports = function registerTheFremennikExilesQuest(api) {
       if (!inInvestigationStage(player)) return;
       player.setAttribute(YOUNGLING_KILLED_ATTRIBUTE, true);
       player.getPacketSender().sendVarbit(VARBIT_YOUNGLING_KILLED, 1);
-      const location = event.npc?.getLocation?.() ?? event.location;
-      if (location) {
-        api.getItemOnGroundManager().registerLocation(
-          player,
-          new Item(UNSEALED_LETTER_ITEM, 1),
-          new Location(location.x ?? location.getX(), location.y ?? location.getY(), location.z ?? location.getZ?.() ?? 0)
-        );
-      }
+      // The youngling's drop table already always drops the unsealed letter.
       syncTracked(player, "youngling", null);
       return;
     }
@@ -1834,7 +1881,7 @@ module.exports = function registerTheFremennikExilesQuest(api) {
       if (stageOf(player) < STAGE_PRISON) return;
       player.setAttribute(TYPHOR_DEAD_ATTRIBUTE, true);
       ensureJormungand(player);
-      startTranscript(api, player, THE_JORMUNGAND, PAGE, "island-of-stone-the-jormungand");
+      playScene(player, THE_JORMUNGAND, "island-of-stone-the-jormungand");
       return;
     }
 
@@ -2038,6 +2085,7 @@ module.exports = function registerTheFremennikExilesQuest(api) {
   });
 
   api.onNpcInteraction("Brundt the Chieftain", { "Talk-to": talksToMyQuest });
+  api.onNpcInteraction("Baba Yaga", { "Talk-to": talksToMyQuest });
   api.onNpcInteraction("Peer the Seer", { "Talk-to": talksToMyQuest });
   api.onNpcInteraction("Askeladden", { "Talk-to": talksToMyQuest });
   api.onNpcInteraction("Sailor", { "Talk-to": talksToMyQuest });

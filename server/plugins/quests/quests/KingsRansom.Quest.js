@@ -376,10 +376,13 @@ module.exports = function registerKingsRansomQuest(api) {
     const position = player.getLocation();
     const dx = position.getX() - location.x;
     const dy = position.getY() - location.y;
-    if (Math.abs(dx) > Math.abs(dy)) {
-      player.moveTo(new Location(location.x - Math.sign(dx), position.getY(), location.z ?? position.getZ()));
+    const z = location.z ?? position.getZ();
+    if (dx === 0 && dy === 0) {
+      player.moveTo(new Location(location.x - 1, location.y, z));
+    } else if (Math.abs(dx) > Math.abs(dy)) {
+      player.moveTo(new Location(location.x - Math.sign(dx), position.getY(), z));
     } else {
-      player.moveTo(new Location(position.getX(), location.y - Math.sign(dy), location.z ?? position.getZ()));
+      player.moveTo(new Location(position.getX(), location.y - Math.sign(dy), z));
     }
   }
 
@@ -408,7 +411,9 @@ module.exports = function registerKingsRansomQuest(api) {
     const stage = stageOf(player);
     if (stage < STAGE_INVESTIGATE || stage >= STAGE_EVIDENCE_SHOWN) return;
     if (hasItem(player, SCRAP_PAPER_ITEM)) return;
-    api.getItemOnGroundManager().registerLocation(player, new Item(SCRAP_PAPER_ITEM, 1), SCRAP_PAPER_TILE);
+    const manager = api.getItemOnGroundManager();
+    if (manager.getGroundItem(player.getUsername(), SCRAP_PAPER_ITEM, SCRAP_PAPER_TILE, player.getPrivateArea())) return;
+    manager.registerLocation(player, new Item(SCRAP_PAPER_ITEM, 1), SCRAP_PAPER_TILE);
   }
 
   function spawnTrialAnna(player) {
@@ -518,7 +523,7 @@ module.exports = function registerKingsRansomQuest(api) {
       whenIdle(player, () => {
         witnessPending.delete(player);
         if (stageOf(player) !== stage) return;
-        play(player, fragment.npcId, `ace-detective-part-2-${fragment.variant}-testimony`);
+        play(player, fragment.npcId, fragment.variant);
       });
       return;
     }
@@ -529,12 +534,10 @@ module.exports = function registerKingsRansomQuest(api) {
   }
 
   const TRIAL_WITNESS_FRAGMENTS = new Map([
-    ["handyman", { npcId: DONOVAN_ID, variant: "donovan-s" }],
-    ["dog handler", { npcId: PIERRE_ID, variant: "pierre-s" }],
-    ["butler", { npcId: HOBBES_ID, variant: "hobbes" }],
-    ["cook", { npcId: LOUISA_ID, variant: "louisa-s" }],
-    ["maid", { npcId: MARY_ID, variant: "mary-s" }],
-    ["gardener", { npcId: STANFORD_ID, variant: "stanford-s" }],
+    ["handyman", { npcId: DONOVAN_ID, variant: "trials-and-tribulations-donovan" }],
+    ["dog handler", { npcId: PIERRE_ID, variant: "trials-and-tribulations-pierre" }],
+    ["butler", { npcId: HOBBES_ID, variant: "trials-and-tribulations-talking-to-hobbes" }],
+    ["maid", { npcId: MARY_ID, variant: "trials-and-tribulations-mary" }],
   ]);
 
   function normalizeWitness(option) {
@@ -989,9 +992,23 @@ module.exports = function registerKingsRansomQuest(api) {
     return true;
   }
 
+  function handleCellDoorToggle(request) {
+    const { player, objectId, location } = request;
+    if (request.handled || !player || objectId !== JAIL_CELL_DOOR_ID) return;
+    if (location?.x !== CELL_DOOR_TILE.x || location?.y !== CELL_DOOR_TILE.y) return;
+    const stage = stageOf(player);
+    if (stage < STAGE_JAIL || stage >= STAGE_CELL_OPEN) return;
+    request.handled = true;
+    handleCellDoor(player, "Open", stage);
+  }
+
   function handleGrailTable(player, option, stage) {
     if (option !== "Search" || stage < STAGE_CELL_OPEN || stage >= STAGE_COMPLETE) return;
     if (hasItem(player, HOLY_GRAIL_ITEM)) {
+      if (stage < STAGE_GRAIL) {
+        quest.setStage(player, STAGE_GRAIL);
+        return true;
+      }
       play(player, NpcIdentifiers.MERLIN, "prison-break-opening-the-grail-box-for-another-grail");
       return true;
     }
@@ -1015,6 +1032,15 @@ module.exports = function registerKingsRansomQuest(api) {
       return true;
     }
     return;
+  }
+
+  function handleJudgeRoute(event) {
+    if (event.objectId !== COURT_JUDGE_ID) return;
+    const option = event.definition?.getInteractions?.()?.[event.clickType - 1];
+    if (option !== "Talk-to") return;
+    const stage = stageOf(event.player);
+    if (stage < STAGE_ATTORNEY || stage >= STAGE_COMPLETE) return;
+    event.destination = { ...event.sourceLocation };
   }
 
   function handleObjectInteraction(event) {
@@ -1144,7 +1170,15 @@ module.exports = function registerKingsRansomQuest(api) {
       play(player, CAMELOT_ARTHUR_ID, "infiltrating-the-black-knights-fortress-again-trying-to-free-king-arthur-without-all-the-items");
       return true;
     }
-    play(player, CAMELOT_ARTHUR_ID, "infiltrating-the-black-knights-fortress-again-freeing-king-arthur");
+    startDialogue(api, player, { npcId: CAMELOT_ARTHUR_ID }, [
+      { npc: ["Thank you! I was afraid that would be the end of me."] },
+      {
+        player: [
+          "There's no time to explain; we need to get you out of here before the Black Knights notice. I'll find you a guard disguise.",
+        ],
+      },
+      { npc: ["Very well. I shall await you here."] },
+    ]);
     quest.setStage(player, STAGE_FREED_ARTHUR);
     return true;
   }
@@ -1153,7 +1187,7 @@ module.exports = function registerKingsRansomQuest(api) {
     const { player, objectId } = request;
     if (!player || objectId !== BKF_BASEMENT_LADDER_DOWN_ID && objectId !== BKF_BASEMENT_LADDER_UP_ID) return;
     const stage = stageOf(player);
-    if (objectId === BKF_BASEMENT_LADDER_UP_ID) {
+    if (objectId === BKF_BASEMENT_LADDER_UP_ID || inBounds(player.getLocation(), BKF_BASEMENT_BOUNDS)) {
       request.handled = true;
       player.moveTo(BKF_SECRET_ROOM_TILE);
       return;
@@ -1408,11 +1442,13 @@ module.exports = function registerKingsRansomQuest(api) {
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onNpcInteraction(handleNpcTalk);
   api.onObjectInteraction(handleObjectInteraction);
+  api.onObjectRoute(handleJudgeRoute);
   api.onItemOnObject(handleItemOnObject);
   api.onItemAction(handleItemAction);
   api.onCustomEvent("ladders:climb", handleStairsClaim);
   api.onCustomEvent("ladders:climb", handleLadderClaim);
   api.onCustomEvent("door:toggle", handleGateToggleClaim);
+  api.onCustomEvent("door:toggle", handleCellDoorToggle);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

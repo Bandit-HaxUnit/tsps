@@ -259,6 +259,8 @@ module.exports = function registerOneSmallFavourQuest(api) {
   const WEATHERVANE_MULTI = 5811; // nameless osf_weathervane multiloc at 2702,3476,3
   const WEATHERVANE_OBJECT_IDS = new Set([WEATHERVANE_MULTI, BROKEN_WEATHERVANE, FIXED_WEATHERVANE]);
   const GNOME_LANDING_LIGHT = ObjectIdentifiers.GNOME_LANDING_LIGHT; // 5815, "Gnome landing light"
+  // The map stores the four Feldip panels (one per gem) as un-named wall locs 5820-5823.
+  const LANDING_LIGHT_PANEL_IDS = new Set([5820, 5821, 5822, 5823]);
   const HOT_WATER_SOURCES = new Set(["Cooking range", "Range", "Fire", "Oven", "Clay oven", "Small oven", "Large oven"]);
   // The Seers' roof (where the weathervane sits, 2702,3476,3) has no upper end for
   // the ladder at 2715,3472,1 in this cache's maps, and the trapdoor above it has no
@@ -728,7 +730,7 @@ module.exports = function registerOneSmallFavourQuest(api) {
       return;
     }
 
-    if (CUT_GEM_IDS.has(itemId) && objectId === GNOME_LANDING_LIGHT) {
+    if (CUT_GEM_IDS.has(itemId) && (objectId === GNOME_LANDING_LIGHT || LANDING_LIGHT_PANEL_IDS.has(objectId))) {
       const location = event.location;
       const light = location ? LIGHT_BY_TILE.get(`${location.x},${location.y}`) : undefined;
       if (light && light.cut === itemId) placeLightGem(event, light);
@@ -1022,10 +1024,10 @@ module.exports = function registerOneSmallFavourQuest(api) {
 
     if (npcId === SANFEW) {
       if (stage === STAGE_HAMMERSPIKE) {
-        return "the-various-favours-are-asked-asking-sanfew-to-take-hammerspike-as-an-initiate";
+        return "the-various-favours-are-asked-asking-sanfew-to-take-hammerspike-as-an-initiate-returning-to-sanfew-without-completing-the-favour";
       }
       if (stage === STAGE_SANFEW) {
-        return "the-various-favours-are-asked-asking-sanfew-to-take-hammerspike-as-an-initiate-returning-to-sanfew-without-completing-the-favour";
+        return "the-various-favours-are-asked-asking-sanfew-to-take-hammerspike-as-an-initiate";
       }
       if (stage === STAGE_BLEEMADGE_DONE) return "heading-back-to-complete-the-favours-sanfew";
       return null;
@@ -1060,7 +1062,10 @@ module.exports = function registerOneSmallFavourQuest(api) {
       if (stage >= STAGE_SEERS && stage <= STAGE_SLAGILITH) {
         return "the-various-favours-are-asked-asking-farsight-for-a-forecast-talking-to-phantuwti-fanstuwi-farsight-again";
       }
-      if (stage === STAGE_PETRA_FREED || stage === STAGE_VANE) {
+      if (stage === STAGE_PETRA_FREED) {
+        return "heading-back-to-complete-the-favours-farsight-before-fixing-the-weather-vane";
+      }
+      if (stage === STAGE_VANE) {
         return "heading-back-to-complete-the-favours-farsight-after-freeing-petra";
       }
       if (stage === STAGE_VANE_FIXED) {
@@ -1482,6 +1487,9 @@ module.exports = function registerOneSmallFavourQuest(api) {
       case "Ok, Jimmy has to be worth more than a few scrawny chickens!":
         if (JOHANHUS_IDS.has(npcId) && stageOf(player) < STAGE_JOHANHUS) setStage(player, STAGE_JOHANHUS);
         return;
+      case "You're in luck, I've managed to swing that chicken deal for you.":
+        if (JOHANHUS_IDS.has(npcId) && stageOf(player) === STAGE_SETH_DONE) setStage(player, STAGE_JIMMY);
+        return;
       case "I need to talk to you about Jimmy.":
         if (npcId === FRED && stageOf(player) < STAGE_FRED) setStage(player, STAGE_FRED);
         return;
@@ -1526,6 +1534,9 @@ module.exports = function registerOneSmallFavourQuest(api) {
         return;
       case "Ok, I'll go and get you some T.R.A.S.H.":
         if (BLEEMADGE_IDS.has(npcId) && stageOf(player) < STAGE_BLEEMADGE) setStage(player, STAGE_BLEEMADGE);
+        return;
+      case "Hey there, did you get your T.R.A.S.H?":
+        if (BLEEMADGE_IDS.has(npcId) && stageOf(player) === STAGE_ARHEIN_DONE) setStage(player, STAGE_BLEEMADGE_DONE);
         return;
       case "Yes, Ok, I'll do it!":
         if (npcId === ARHEIN && stageOf(player) < STAGE_ARHEIN) setStage(player, STAGE_ARHEIN);
@@ -1907,7 +1918,7 @@ module.exports = function registerOneSmallFavourQuest(api) {
   }
 
   function grantReward(player) {
-    addItem(player, STEEL_KEY_RING, 1);
+    if (!hasItem(player, STEEL_KEY_RING)) addItem(player, STEEL_KEY_RING, 1);
     addItem(player, ANTIQUE_LAMP, 1);
   }
 

@@ -67,7 +67,7 @@
  *    thorkel) is not wired to consume ore; the King's hand-in is the path.
  *  - The Ice Troll King (5822) has no spawn in npc-spawns.json: he is spawned
  *    owner-only south of the cave bridge once the player has killed 10 frenzied
- *    trolls, at (2397,10246,0) (the lair tiles across the bridge); the head is
+ *    trolls, at (2392,10244,1) (the lair tiles across the bridge); the head is
  *    granted on his death rather than cut from a corpse object (21622 is not
  *    placed in this cache).
  *  - Bridges keep their broken appearance after Repair (the swap object has no
@@ -300,9 +300,11 @@ module.exports = function registerTheFremennikIslesQuest(api) {
   const JATIZSO_LANDING = new Location(2419, 3785, 0);
   const RELLEKKA_LANDING = new Location(2646, 3712, 0);
   const NEITIZNOT_LANDING = new Location(2314, 3784, 0);
-  const CAVE_LANDING = new Location(2394, 10288, 0);
-  const LAIR_LANDING = new Location(2397, 10252, 0);
-  const KING_LAIR_TILE = new Location(2397, 10246, 0);
+  const CAVE_LANDING = new Location(2394, 10288, 1);
+  // The cave and its lair only exist on plane 1. 2394,10252 is the free tile
+  // under the rope bridge; 2397,10252 was inside the surrounding ice.
+  const LAIR_LANDING = new Location(2394, 10252, 1);
+  const KING_LAIR_TILE = new Location(2392, 10244, 1);
 
   const WRONG_QUIZ1 = new Set([
     "They are ready now.",
@@ -380,7 +382,11 @@ module.exports = function registerTheFremennikIslesQuest(api) {
   }
 
   function handsFree(player) {
-    return !equipped(player, Equipment.WEAPON_SLOT) && !equipped(player, Equipment.SHIELD_SLOT);
+    const empty = (slot) => {
+      const id = equipped(player, slot);
+      return !id || id < 1;
+    };
+    return empty(Equipment.WEAPON_SLOT) && empty(Equipment.SHIELD_SLOT);
   }
 
   function performanceCount(player) {
@@ -655,7 +661,10 @@ module.exports = function registerTheFremennikIslesQuest(api) {
         : "burgher-buddy-after-relaying-the-information-talking-to-slug-again";
     }
     if (stage === STAGE_PERFORMED) return "burgher-buddy-reporting-to-slug";
-    if (stage === STAGE_JESTER_MISSION) {
+    if (
+      stage === STAGE_JESTER_MISSION ||
+      (stage === STAGE_ORES_DELIVERED && !hasFlag(player, MISSION_ATTRIBUTE, 1))
+    ) {
       return hasFlag(player, MISSION_ATTRIBUTE, 1)
         ? "your-mission-should-you-choose-to-accept-it-after-discussing-the-mission-talking-to-slug-again"
         : "your-mission-should-you-choose-to-accept-it-meeting-slug";
@@ -1028,11 +1037,12 @@ module.exports = function registerTheFremennikIslesQuest(api) {
         return false;
       case "6F5gJ8":
         return hasItem(player, ROPE, 8);
-      // Split logs and inventory space.
+      // Split logs and inventory space. The two greeting branches have no
+      // "continues" marker, so answering either true would win the run and drop
+      // the hand-in clauses below them.
       case "YFprXs":
-        return MAWNIS_IDS.has(event.npcId);
       case "_9rRGH":
-        return THAKKRAD_IDS.has(event.npcId);
+        return false;
       case "0Xwlzn":
         return !hasItem(player, SPLIT_LOG, 8);
       case "mbbV8v":
@@ -1261,6 +1271,7 @@ module.exports = function registerTheFremennikIslesQuest(api) {
         setStage(player, STAGE_ROPES_DELIVERED);
         return;
       case "ainyGK":
+        player.getInventory().deleteNumber(SPLIT_LOG, 8);
         addCoins(player, 1500);
         setStage(player, STAGE_LOGS_DELIVERED);
         return;
@@ -1502,7 +1513,7 @@ module.exports = function registerTheFremennikIslesQuest(api) {
   function crossCaveBridge(event) {
     const { player } = event;
     event.handled = true;
-    const z = event.location?.z ?? 0;
+    const z = LAIR_LANDING.z;
     const stage = stageOf(player);
     if (stage >= STAGE_HEAD_TAKEN) {
       player.moveTo(new Location(LAIR_LANDING.x, LAIR_LANDING.y, z));
@@ -1786,7 +1797,19 @@ module.exports = function registerTheFremennikIslesQuest(api) {
     skills.addExperiences(Skill.CONSTRUCTION, 5000);
     skills.addExperiences(Skill.CRAFTING, 5000);
     skills.addExperiences(Skill.WOODCUTTING, 10000);
-    offerCombatXp(player, 1);
+    // NpcDialogues sends sendInterfaceRemoval right after the final action, which
+    // would wipe a prompt opened now: open it on the next tick instead.
+    const { CountdownTask, TaskManager } = api.core;
+    if (!CountdownTask || !TaskManager) {
+      offerCombatXp(player, 1);
+      return;
+    }
+    TaskManager.submit(
+      new CountdownTask(player, 1, () => {
+        if (player.isRegistered?.() === false) return;
+        offerCombatXp(player, 1);
+      })
+    );
   }
 
   // ==========================================================================
