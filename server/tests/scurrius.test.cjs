@@ -144,7 +144,7 @@ test("Scurrius' stats and the lair's locs are the cache's", () => {
 });
 
 test("the combat definitions use his own animations, with no block", () => {
-  const defs = require("../data/definitions/npc-combat-defs.json").npcs;
+  const defs = require("../data/definitions/npc-combat/scurrius.json");
   for (const id of [Common.PUBLIC_ID, Common.SOLO_ID]) {
     assert.deepEqual(defs[id].anims, { attack: Common.ANIM.melee, block: -1, death: Common.ANIM.death });
     assert.equal(defs[id].deathTicks, 5);

@@ -1,0 +1,5 @@
+{
+  "5228": {"name":"Kharid Scorpion","anims":{"attack":6254,"block":6255,"death":6256},"sounds":{"death":512}},
+  "5229": {"name":"Kharid Scorpion","anims":{"attack":6254,"block":6255,"death":6256},"sounds":{"death":512}},
+  "5230": {"name":"Kharid Scorpion","anims":{"attack":6254,"block":6255,"death":6256},"sounds":{"death":512}}
+}

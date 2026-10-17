@@ -3,6 +3,7 @@ import path = require("path");
 import { CacheDefinitions } from "../../../cache/CacheDefinitions";
 import { GameConstants } from "../../../GameConstants";
 import { NpcDefinition } from "../../NpcDefinition";
+import { NPC_COMBAT_DIRECTORY_NAME, readNpcCombatEntries } from "../../NpcCombatDefinitionFiles";
 import { DefinitionLoader } from "../DefinitionLoader";
 import { CombatType } from "../../../content/combat/CombatType";
 
@@ -256,7 +257,8 @@ export class NpcDefinitionLoader extends DefinitionLoader {
             animations[String(id)] = { anims: { attack, block, death } };
         }
         const projectiles: Record<string, number> = {};
-        for (const [id, entry] of Object.entries((animationFile.npcs ?? {}) as Record<string, CombatAnimation>)) {
+        const combatEntries = readNpcCombatEntries(path.join(directory, NPC_COMBAT_DIRECTORY_NAME));
+        for (const [id, entry] of Object.entries(combatEntries as Record<string, CombatAnimation>)) {
             if (entry?.anims) animations[id] = entry;
             if (Number.isInteger(entry?.projectile)) projectiles[id] = entry.projectile as number;
         }
@@ -347,7 +349,7 @@ export class NpcDefinitionLoader extends DefinitionLoader {
 
         const ids = new Set([
             ...Object.keys(monsters),
-            ...Object.keys(animationFile.npcs ?? {}),
+            ...Object.keys(combatEntries),
             ...Object.keys(animations), ...Object.keys(observedAnimations),
             ...Object.keys(projectiles),
         ]);
@@ -402,7 +404,7 @@ export class NpcDefinitionLoader extends DefinitionLoader {
                 definition.projectileId = projectiles[key];
             }
 
-            const respawn = animationFile.npcs?.[key]?.respawn;
+            const respawn = combatEntries[key]?.respawn;
             if (Number.isInteger(respawn) && respawn >= 0) definition.setRespawn(respawn);
 
             const animation = animations[key];

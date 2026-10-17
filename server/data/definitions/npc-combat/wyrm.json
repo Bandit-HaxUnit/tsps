@@ -1,0 +1,4 @@
+{
+  "8610": {"name":"Wyrm","anims":{"attack":8270,"block":-1,"death":8272},"deathTicks":4},
+  "8611": {"name":"Wyrm","anims":{"attack":8270,"block":-1,"death":8272},"deathTicks":4}
+}

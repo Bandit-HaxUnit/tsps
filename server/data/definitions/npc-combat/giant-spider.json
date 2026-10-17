@@ -1,0 +1,5 @@
+{
+  "2477": {"name":"Giant spider","anims":{"attack":5319,"block":5320,"death":5321},"sounds":{"death":512}},
+  "3017": {"name":"Giant spider","anims":{"attack":5327,"block":5328,"death":5329},"sounds":{"death":538}},
+  "3018": {"name":"Giant spider","anims":{"attack":5319,"block":5320,"death":5321},"sounds":{"death":512}}
+}

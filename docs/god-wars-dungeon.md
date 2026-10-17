@@ -95,7 +95,7 @@ Animations, spot animations, projectiles and sounds are from the captures. Proje
 | K'ril Tsutsaroth | 2/3 melee (6948, sound 3866, 46), 1/3 magic (6950, spot 1224, projectile 1225, 10-30). Against Protect from Melee, one melee attack in nine is "YARRRRRRR!": 35-49 through the prayer, half the Prayer points drained (Wiki). |
 | His demons | Tstanon melee (64, sound 397); Zakl'n ranged (7077, spot 1222, projectile 1223); Balfrug magic (4630, spot 1226, projectile 1227). |
 
-`npc-combat-defs.json` had the human punch and block (422/424) for Kree'arra, Zilyana and K'ril and a generic death sound; they now have their own animations and captured death sounds (Graardor 3838, Kree'arra 3839, Zilyana 3860, K'ril 3864, the sergeants 471). Wingman Skree's attack is the cannon (6955), not Geerin's spear.
+`npc-combat/` had the human punch and block (422/424) for Kree'arra, Zilyana and K'ril and a generic death sound; they now have their own animations and captured death sounds (Graardor 3838, Kree'arra 3839, Zilyana 3860, K'ril 3864, the sergeants 471). Wingman Skree's attack is the cannon (6955), not Geerin's spear.
 
 Where sounds were played at the same moment by two bodyguards in every capture (Armadyl's and Saradomin's ranged and magic guards attack together), which sound belongs to which is a guess.
 

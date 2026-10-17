@@ -93,7 +93,7 @@ Not captured, and not built: the golem's "Investigate" and the stairs up to the 
 
 ### The kill
 
-- **The death animation** (14448) plays for 7 ticks (`deathTicks` in `npc-combat-defs.json`).
+- **The death animation** (14448) plays for 7 ticks (`deathTicks` in `npc-combat/`).
 - **Then, together:** "Your Mad Angel kill count is: N." (varp 5712), "Fight duration: … Personal best: …" (or "(new personal best)"), the drop, and the corpse (16308). 4 ticks later the HUD fades out, and 4 after that it is cleared, as captured.
 - **The drop** is the Wiki's table (`npc-drops.json`), with four corrections in `NpcDrops`:
   - the sunstone crystal is Fallen From Grace's, so it's left out;

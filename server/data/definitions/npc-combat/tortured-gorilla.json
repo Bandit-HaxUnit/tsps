@@ -1,0 +1,4 @@
+{
+  "7150": {"name":"Tortured gorilla","anims":{"attack":-1,"block":7224,"death":7229},"sounds":{"death":3351},"respawn":100},
+  "7151": {"name":"Tortured gorilla","anims":{"attack":-1,"block":7224,"death":7229},"sounds":{"death":3351},"respawn":100}
+}

@@ -1,0 +1,4 @@
+{
+  "13668": {"name":"Araxxor","anims":{"attack":11480,"block":-1,"death":11481},"projectile":2924,"deathTicks":5},
+  "13669": {"name":"Araxxor","anims":{"death":11486},"deathTicks":2}
+}

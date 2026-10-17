@@ -1,6 +1,6 @@
 /**
  * Revenant ids and visuals. Animations are each revenant's own cache sequences (the attack,
- * block and death ones are in npc-combat-defs.json); the per-style ones and every projectile,
+ * block and death ones are in npc-combat/); the per-style ones and every projectile,
  * graphic and sound below are from OSRS captures (docs/revenants.md) unless marked otherwise.
  */
 const REVENANTS = {

@@ -105,7 +105,7 @@ The orb and rock-piece columns from delve 6 on are guesses. The punish delay is 
 
 ## Attacks
 
-The Doom's own combat does nothing; the run attacks on its own timer. None of its NPCs (its three forms, the larvae, volatile earth, the earthen shield) play a block animation when hit (capture), so `npc-combat-defs.json` gives them `"block": -1` with their captured spawn and death animations; without an entry they got the default human block (424).
+The Doom's own combat does nothing; the run attacks on its own timer. None of its NPCs (its three forms, the larvae, volatile earth, the earthen shield) play a block animation when hit (capture), so `npc-combat/` gives them `"block": -1` with their captured spawn and death animations; without an entry they got the default human block (424).
 
 - **First attack:** 6 ticks after it surfaces.
 - **Tongue:** when the player stands beside it (not at a corner). Anim 12416, the hit lands the next tick, and it acts again 4 ticks later. Wiki: up to 40, halved by Protect from Melee.

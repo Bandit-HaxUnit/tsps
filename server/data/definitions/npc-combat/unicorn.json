@@ -1,0 +1,4 @@
+{
+  "2837": {"name":"Unicorn","anims":{"attack":6376,"block":6375,"death":6377},"sounds":{"death":370}},
+  "8986": {"name":"Unicorn","anims":{"attack":289,"block":290,"death":292},"sounds":{"death":3835}}
+}

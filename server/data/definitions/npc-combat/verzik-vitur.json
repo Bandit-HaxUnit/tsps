@@ -1,0 +1,9 @@
+{
+  "8369": {"name":"Verzik Vitur","anims":{"attack":-1,"block":-1,"death":-1}},
+  "8370": {"name":"Verzik Vitur","anims":{"attack":8109,"block":8110,"death":8111}},
+  "8371": {"name":"Verzik Vitur","anims":{"attack":-1,"block":-1,"death":-1}},
+  "8372": {"name":"Verzik Vitur","anims":{"attack":8114,"block":-1,"death":8118}},
+  "8373": {"name":"Verzik Vitur","anims":{"attack":-1,"block":-1,"death":-1}},
+  "8374": {"name":"Verzik Vitur","anims":{"attack":8124,"block":-1,"death":8128},"sounds":{"death":4008}},
+  "8375": {"name":"Verzik Vitur","anims":{"attack":-1,"block":-1,"death":-1}}
+}

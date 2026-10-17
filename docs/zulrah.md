@@ -79,7 +79,7 @@ The server resolves both per player, so the options are handled by name.
 
 **Animations:**
 - The cache list for Zulrah was guessed wrong: the rise was set as its block animation.
-- `npc-combat-defs.json` now gives attack 5069, block 5808 and death 5804, inferred from the sequences' lengths and priorities. For example, 5804 is 49 frames at priority 10, and 5808 is 9 frames at priority 5.
+- `npc-combat/` now gives attack 5069, block 5808 and death 5804, inferred from the sequences' lengths and priorities. For example, 5804 is 49 frames at priority 10, and 5808 is 9 frames at priority 5.
 - Snakelings: attack 1741, block 1742, death 2408, spawn 2413.
 
 ### Places
@@ -209,7 +209,7 @@ Near-Reality's sound effects are played to the player:
 
 ## Data and shared changes
 
-- `npc-combat-defs.json`: animations for Zulrah's three forms and both snakelings.
+- `npc-combat/`: animations for Zulrah's three forms and both snakelings.
 - `plugins/npcs/NpcDrops.plugin.js`:
   - tables can have `rolls`;
   - the `npc-drops:location` event lets a plugin move where loot lands;

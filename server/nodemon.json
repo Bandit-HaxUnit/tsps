@@ -5,6 +5,7 @@
     "plugins/bots/data/**",
     "data/npc-spawns*.json",
     "data/definitions/npc-spawns*.json",
-    "data/definitions/npc-combat-defs.json"
+    "data/definitions/npc-combat-defs.json",
+    "data/definitions/npc-combat/**"
   ]
 }

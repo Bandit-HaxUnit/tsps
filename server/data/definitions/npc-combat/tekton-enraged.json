@@ -1,0 +1,4 @@
+{
+  "7543": {"name":"Tekton (enraged)","anims":{"attack":7493,"block":-1,"death":7495}},
+  "7544": {"name":"Tekton (enraged)","anims":{"attack":7493,"block":7491,"death":7495}}
+}

@@ -1,0 +1,10 @@
+{
+  "86": {"name":"Ghost","anims":{"attack":5532,"block":5533,"death":5534,"spawn":5530,"walk":5531}},
+  "87": {"name":"Ghost","anims":{"attack":5532,"block":5533,"death":5534,"spawn":5530,"walk":5531}},
+  "91": {"name":"Ghost","anims":{"attack":5532,"block":5533,"death":5534,"spawn":5530,"walk":5531}},
+  "92": {"name":"Ghost","anims":{"attack":5532,"block":5533,"death":5534,"spawn":5530,"walk":5531}},
+  "2528": {"name":"Ghost","anims":{"attack":5532,"block":5533,"death":5534,"spawn":5530,"walk":5531}},
+  "2529": {"name":"Ghost","anims":{"attack":5532,"block":5533,"death":5534,"spawn":5530,"walk":5531}},
+  "2530": {"name":"Ghost","anims":{"attack":5532,"block":5533,"death":5534,"spawn":5530,"walk":5531}},
+  "11695": {"name":"Ghost","anims":{"block":5541,"death":5542}}
+}

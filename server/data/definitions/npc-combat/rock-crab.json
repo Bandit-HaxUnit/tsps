@@ -1,0 +1,4 @@
+{
+  "100": {"name":"Rock Crab","anims":{"attack":1312,"block":1313,"death":1314},"sounds":{"death":719}},
+  "102": {"name":"Rock Crab","anims":{"attack":1312,"block":1313,"death":1314},"sounds":{"death":722}}
+}

@@ -1,0 +1,19 @@
+{
+  "2510": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":512}},
+  "2511": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":512}},
+  "2512": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":512}},
+  "2856": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":711}},
+  "2857": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":512}},
+  "2858": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":512}},
+  "2859": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":711}},
+  "2860": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":711}},
+  "2861": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":711}},
+  "2862": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":512}},
+  "2863": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":711}},
+  "2864": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":711}},
+  "3313": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":512}},
+  "3314": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":512}},
+  "3315": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":512}},
+  "7223": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":512}},
+  "9483": {"name":"Giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":512}}
+}

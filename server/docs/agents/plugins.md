@@ -146,6 +146,11 @@ and everything about NPCs - definitions, animations, drops, dialogues, spawns an
 share it, so it is not any one plugin's file. Names there and in plugin `data/` are lowercase
 kebab-case.
 
+An NPC's combat animations, sounds, projectile and `deathTicks` go in `data/definitions/npc-combat/`,
+not `npc-combat-defs.json`. New content adds its own file there (`vardorvis.json`, holding the boss
+and its minions), one NPC per line, sorted by id; an id may be in only one file. Branches that add
+different NPCs then never edit the same lines.
+
 ## Cross-plugin events
 
 Plugins talk to each other only through the generic custom-event API. A bespoke

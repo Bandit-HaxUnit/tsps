@@ -1,0 +1,15 @@
+{
+  "5211": {"name":"null","anims":{"attack":390,"block":383,"death":836},"sounds":{"death":512}},
+  "6224": {"name":"null","anims":{"attack":2705,"block":2706,"death":2707},"sounds":{"death":512}},
+  "6225": {"name":"null","anims":{"attack":2705,"block":2706,"death":2707},"sounds":{"death":512}},
+  "6226": {"name":"null","anims":{"attack":2705,"block":2706,"death":2707},"sounds":{"death":512}},
+  "6227": {"name":"null","anims":{"attack":2705,"block":2706,"death":2707},"sounds":{"death":512}},
+  "6228": {"name":"null","anims":{"attack":2705,"block":2706,"death":2707},"sounds":{"death":512}},
+  "6229": {"name":"null","anims":{"attack":2705,"block":2706,"death":2707},"sounds":{"death":512}},
+  "7225": {"name":"null","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":512}},
+  "9209": {"name":"null","anims":{"attack":289,"block":290,"death":292},"sounds":{"death":3835}},
+  "9618": {"name":"null","anims":{"attack":2705,"block":2706,"death":2707},"sounds":{"death":512}},
+  "10878": {"name":"null","anims":{"attack":1437}},
+  "10879": {"name":"null","anims":{"attack":1437}},
+  "10880": {"name":"null","anims":{"attack":1437}}
+}

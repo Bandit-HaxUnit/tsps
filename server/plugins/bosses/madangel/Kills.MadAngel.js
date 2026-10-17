@@ -1,5 +1,5 @@
 /**
- * The Mad Angel's death, as captured: 7 ticks into its death animation (npc-combat-defs
+ * The Mad Angel's death, as captured: 7 ticks into its death animation (npc-combat/
  * `deathTicks`) the kill count goes up ("Your Mad Angel kill count is: N.", varp 5712), the
  * fight's length is told against the personal best, the loot drops (NpcDrops, its Wiki table),
  * and the angel lies there; the HUD goes a little later. The corpse stays for its respawn time

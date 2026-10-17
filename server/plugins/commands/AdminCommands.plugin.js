@@ -29,6 +29,13 @@ const {
   NpcSpawnDefinitionLoader,
 } = require("../../src/main/typescript/elvarg/game/definition/loader/impl/NpcSpawnDefinitionLoader");
 const { NpcDefinition } = require("../../src/main/typescript/elvarg/game/definition/NpcDefinition");
+const {
+  NPC_COMBAT_DIRECTORY_NAME,
+  findNpcCombatFile,
+  npcCombatFileName,
+  readNpcCombatFile,
+  writeNpcCombatFile,
+} = require("../../src/main/typescript/elvarg/game/definition/NpcCombatDefinitionFiles");
 const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
 const { findNpcRigAnimations, getLastSequenceId } = require("../../src/main/typescript/elvarg/game/cache/NpcAnimationScanner");
 const {
@@ -54,7 +61,7 @@ const NPC_SPAWN_FILE_CANDIDATES = [
 const NPC_ANIMATION_ROLES = ["attack", "block", "death", "spawn", "other"];
 const NPC_ANIMATION_FILES = Object.freeze({
   possible: path.resolve(GameConstants.DEFINITIONS_DIRECTORY, "npc-animations.json"),
-  combat: path.resolve(GameConstants.DEFINITIONS_DIRECTORY, "npc-combat-defs.json"),
+  combat: path.resolve(GameConstants.DEFINITIONS_DIRECTORY, NPC_COMBAT_DIRECTORY_NAME),
 });
 const NPC_FACING_BY_NAME = Object.freeze({
   NORTH_WEST: 5,
@@ -461,23 +468,24 @@ function getNpcIdsWithSamePossibleAnimations(npcId, file = NPC_ANIMATION_FILES.p
     .map(([id]) => Number(id));
 }
 
-function writeNpcCombatAnimations(npcIds, animations, file = NPC_ANIMATION_FILES.combat, name = null) {
-  const definitions = JSON.parse(fs.readFileSync(file, "utf8"));
-  if (!definitions || typeof definitions !== "object" || !definitions.npcs || typeof definitions.npcs !== "object") {
-    throw new Error("Invalid npc-combat-defs.json");
-  }
-
+/** Saves into the npc-combat/ file that already holds each NPC, or a new one named after it. */
+function writeNpcCombatAnimations(npcIds, animations, directory = NPC_ANIMATION_FILES.combat, name = null) {
+  const files = new Map();
   for (const npcId of Array.isArray(npcIds) ? npcIds : [npcIds]) {
     const key = String(npcId);
-    const current = definitions.npcs[key] ?? {};
-    const npcName = typeof name === "function" ? name(npcId) : name;
-    definitions.npcs[key] = {
+    const named = typeof name === "function" ? name(npcId) : name;
+    const npcName = typeof named === "string" && named.trim().length > 0 ? named : null;
+    const file = findNpcCombatFile(directory, key) ?? path.join(directory, npcCombatFileName(npcName ?? `NPC ${npcId}`));
+    if (!files.has(file)) files.set(file, fs.existsSync(file) ? readNpcCombatFile(file) : {});
+    const entries = files.get(file);
+    const current = entries[key] ?? {};
+    entries[key] = {
       ...current,
-      name: typeof npcName === "string" && npcName.trim().length > 0 ? npcName : current.name ?? `NPC ${npcId}`,
+      name: npcName ?? current.name ?? `NPC ${npcId}`,
       anims: { ...(current.anims ?? {}), ...animations },
     };
   }
-  fs.writeFileSync(file, `${JSON.stringify(definitions, null, 2)}\n`, "utf8");
+  for (const [file, entries] of files) writeNpcCombatFile(file, entries);
 }
 
 function applyNpcCombatAnimations(npcIds, animations, definitionForId = (id) => NpcDefinition.definitions.get(id)) {
@@ -566,7 +574,7 @@ function startNpcAnimationQuestionnaire(api, player, npcId, possibleAnimations) 
         (matchingNpcId) => NpcDefinition.forId(matchingNpcId)?.getName?.()
       );
       applyNpcCombatAnimations(matchingNpcIds, assignments);
-      player.sendMessage(`Saved animation definitions for ${matchingNpcIds.length} NPC${matchingNpcIds.length === 1 ? "" : "s"} to npc-combat-defs.json.`);
+      player.sendMessage(`Saved animation definitions for ${matchingNpcIds.length} NPC${matchingNpcIds.length === 1 ? "" : "s"} to npc-combat/.`);
       return;
     }
 

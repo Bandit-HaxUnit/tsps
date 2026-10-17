@@ -166,7 +166,7 @@ It restores prayer like a prayer potion, gives 40% run energy, and works as a st
 
 **Data sources:**
 - Stats, attack styles, aggression and sizes: `monsters-complete.json` (Wiki). Near-Reality's own numbers differ in places (the rat has 14 HP there, 12 on the Wiki), so they aren't used.
-- Animations and projectiles: `npc-combat-defs.json`, Near-Reality's ids. Each lies in the same range as that NPC's cache idle and walk animations.
+- Animations and projectiles: `npc-combat/`, Near-Reality's ids. Each lies in the same range as that NPC's cache idle and walk animations.
   - The dragon's projectile is 1701 (corrupted 1702), the dark beast's 1610 (corrupted 1606).
   - The spider has no block animation.
   - The dragon's impact graphic (1703/1704) isn't shown yet.

@@ -46,7 +46,7 @@ Being attacked doesn't stop the chopping. In the capture an Ent hit the player m
 
 Ents no longer drop 12 logs when killed: their logs only come from the trunk.
 
-**Ent animations.** Both Ents (guild 7234 and Wilderness 6594) share one rig. They now use their captured animations: attack 12506, block 12504, death 12508, and death sound 824 (`npc-combat-defs.json`). Before this they fell back to the generic human punch and block.
+**Ent animations.** Both Ents (guild 7234 and Wilderness 6594) share one rig. They now use their captured animations: attack 12506, block 12504, death 12508, and death sound 824 (`npc-combat/`). Before this they fell back to the generic human punch and block.
 
 **Which log.** The type depends on your base Woodcutting level and your axe (Wiki):
 - plain logs only below 45;

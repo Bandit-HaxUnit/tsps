@@ -55,7 +55,7 @@ Facts from `corp.txt` (games necklace, the private portal, the passage, about 25
 - **Melee swipe:** anim 1683. **Block:** anim 1677. **Health bar:** 22, 160 wide.
 - **Offline_Scape's mistake:** it swaps the splitting and draining animations (it has 1681 for the split and 1680 for the drain). By elimination, 1680 with projectile 316 is the plain magic attack.
 
-The animations in `npc-combat-defs.json` are RuneLite's names: attack 1683, block 1677, death 1676.
+The animations in `npc-combat/` are RuneLite's names: attack 1683, block 1677, death 1676.
 
 ## The Beast
 

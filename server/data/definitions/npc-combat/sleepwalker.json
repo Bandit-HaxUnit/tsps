@@ -1,0 +1,9 @@
+{
+  "9446": {"name":"Sleepwalker","anims":{"attack":-1,"block":-1,"death":8570},"sounds":{"death":4235},"deathTicks":3},
+  "9447": {"name":"Sleepwalker","anims":{"attack":-1,"block":-1,"death":8570},"sounds":{"death":4235},"deathTicks":3},
+  "9448": {"name":"Sleepwalker","anims":{"attack":-1,"block":-1,"death":8570},"sounds":{"death":4235},"deathTicks":3},
+  "9449": {"name":"Sleepwalker","anims":{"attack":-1,"block":-1,"death":8570},"sounds":{"death":4235},"deathTicks":3},
+  "9450": {"name":"Sleepwalker","anims":{"attack":-1,"block":-1,"death":8570},"sounds":{"death":4235},"deathTicks":3},
+  "9451": {"name":"Sleepwalker","anims":{"attack":-1,"block":-1,"death":8570},"sounds":{"death":4235},"deathTicks":3},
+  "9470": {"name":"Sleepwalker","anims":{"attack":-1,"block":-1,"death":8570},"sounds":{"death":4235},"deathTicks":3}
+}

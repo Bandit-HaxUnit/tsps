@@ -1,0 +1,5 @@
+{
+  "3134": {"name":"Imp","anims":{"attack":169,"block":170,"death":172},"sounds":{"death":512}},
+  "5007": {"name":"Imp","anims":{"attack":169,"block":170,"death":172},"sounds":{"death":535}},
+  "5728": {"name":"Imp","anims":{"attack":169,"block":170,"death":172},"sounds":{"death":512}}
+}

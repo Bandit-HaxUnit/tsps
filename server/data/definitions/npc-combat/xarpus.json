@@ -1,0 +1,6 @@
+{
+  "8338": {"name":"Xarpus","anims":{"attack":-1,"block":-1,"death":-1}},
+  "8339": {"name":"Xarpus","anims":{"attack":-1,"block":-1,"death":-1}},
+  "8340": {"name":"Xarpus","anims":{"attack":8059,"block":-1,"death":8062},"sounds":{"death":3549}},
+  "8341": {"name":"Xarpus","anims":{"attack":-1,"block":-1,"death":-1}}
+}

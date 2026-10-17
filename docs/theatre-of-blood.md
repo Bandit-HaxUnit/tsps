@@ -149,7 +149,7 @@ The barriers and passages are in the cache's map. Each room's Vyre Orator is a l
 
 Normal-mode numbers (Wiki) unless marked otherwise; see [Captured](#captured) and [Estimates](#estimates) for the rest.
 
-**Animations:** every theatre NPC (8338–8389, except the spectator Abigaila) has an entry in `npc-combat-defs.json`.
+**Animations:** every theatre NPC (8338–8389, except the spectator Abigaila) has an entry in `npc-combat/`.
 - Blocks are `-1`: RuneLite names no block animation for any of them except Verzik's first form (8110, `VERZIK_PHASE1_DEFEND`).
 - Attacks and deaths the engine doesn't play are `-1`. Without an entry, NPCs fall back to the player's punch, block and death (422/424/836) or to guessed animations.
 

@@ -169,7 +169,7 @@ export class MagicCombatMethod extends CombatMethod {
 
         if (spell == null && character.isNpc()) {
             // NPCs cast without a Spell object. Use the projectile configured in
-            // npc-combat-defs.json, falling back to a generic one so the cast is at
+            // npc-combat/, falling back to a generic one so the cast is at
             // least visible.
             const animation = character.getAttackAnim();
             if (animation !== -1) {

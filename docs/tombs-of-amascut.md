@@ -76,7 +76,7 @@ The OSRS Wiki and the cache weren't reachable when this was first written, so Ne
 
 ## NPC animations
 
-Each Tombs of Amascut NPC (11689-11804) has its block and death animations in `npc-combat-defs.json`. Without them, they fell back to the player's block (424) and death (836), so Zebak "blocked" like a human when hit.
+Each Tombs of Amascut NPC (11689-11804) has its block and death animations in `npc-combat/`. Without them, they fell back to the player's block (424) and death (836), so Zebak "blocked" like a human when hit.
 
 - **Block:** none of them has a block or defend animation, except Osmumten's ghosts, so a hit plays nothing.
 - **Death:** each uses its own death sequence, identified by its Jagex name in RuneLite's gameval `AnimationID`, for example `NPC_ZEBAK01_DEATH` (9634) and `NPC_KEPHRI_DEATH` (9582). The Near-Reality data gives Zebak and Kephri zombie animations (5568/5569), which aren't used.

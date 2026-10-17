@@ -65,7 +65,7 @@ export class RangedCombatMethod extends CombatMethod {
 
         if (character.isNpc()) {
             // NPCs have no ranged weapon or ammo. Give them the projectile configured
-            // in npc-combat-defs.json, falling back to a generic arrow so the shot is
+            // in npc-combat/, falling back to a generic arrow so the shot is
             // at least visible.
             const configured = character.getAsNpc().getCurrentDefinition().getProjectileId();
             const projectileId = configured >= 0 ? configured : RangedCombatMethod.DEFAULT_NPC_PROJECTILE;

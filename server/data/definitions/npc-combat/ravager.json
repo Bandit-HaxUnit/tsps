@@ -1,0 +1,4 @@
+{
+  "1705": {"name":"Ravager","anims":{"spawn":6871,"attack":3915,"block":3916,"death":3917},"sounds":{"death":512}},
+  "1706": {"name":"Ravager","anims":{"spawn":6871,"attack":3915,"block":3916,"death":3917},"sounds":{"death":512}}
+}

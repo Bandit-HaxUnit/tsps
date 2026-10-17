@@ -1,0 +1,6 @@
+{
+  "13031": {"name":"Wyrmling","anims":{"attack":8270,"block":-1,"death":8272},"deathTicks":4},
+  "13032": {"name":"Wyrmling","anims":{"attack":8270,"block":-1,"death":8272},"deathTicks":4},
+  "16296": {"name":"Wyrmling","anims":{"attack":8270,"block":-1,"death":8272},"deathTicks":4},
+  "16297": {"name":"Wyrmling","anims":{"attack":8270,"block":-1,"death":8272},"deathTicks":4}
+}

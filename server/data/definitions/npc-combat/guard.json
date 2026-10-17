@@ -1,0 +1,9 @@
+{
+  "11911": {"name":"Guard","anims":{"attack":386,"block":1156,"death":836},"sounds":{"death":512}},
+  "11912": {"name":"Guard","anims":{"attack":386,"block":1156,"death":836},"sounds":{"death":512}},
+  "11913": {"name":"Guard","anims":{"attack":386,"block":1156,"death":836},"sounds":{"death":512}},
+  "11914": {"name":"Guard","anims":{"attack":386,"block":1156,"death":836},"sounds":{"death":512}},
+  "11915": {"name":"Guard","anims":{"attack":386,"block":1156,"death":836},"sounds":{"death":512}},
+  "11916": {"name":"Guard","anims":{"attack":386,"block":1156,"death":836},"sounds":{"death":512}},
+  "11917": {"name":"Guard","anims":{"attack":386,"block":1156,"death":836},"sounds":{"death":512}}
+}

@@ -1,0 +1,4 @@
+{
+  "8060": {"name":"Vorkath","anims":{"attack":7952,"block":7948,"death":7949},"sounds":{"death":1523},"deathTicks":6},
+  "8061": {"name":"Vorkath","anims":{"attack":7952,"block":7948,"death":7949},"sounds":{"death":1523},"deathTicks":6}
+}

@@ -27,7 +27,7 @@ The captures are all from Leagues V/VI and Grid Master worlds (revisions 227-237
 | `CombatAchievements.Nightmare.js` | Kill counts and best times for Combat Achievements. |
 | `Commands.Nightmare.js` | Developer commands. |
 
-Two small generic changes outside the plugin: `api.registerNpcCombatOption(option)` makes an NPC menu option other than "Attack" start a fight (the totems' "Charge"; spells can then be cast on them too), and NpcDrops' `"npc-drops:roll-table"` takes `npcId` to roll that NPC's own table (every eligible player in a group gets a roll). `data/definitions/npc-combat-defs.json` gives every form of both bosses, the totems, husks, parasites and sleepwalkers their captured animations (none for her and the totems; the minions' deaths), so the engine's human block animation never plays on them.
+Two small generic changes outside the plugin: `api.registerNpcCombatOption(option)` makes an NPC menu option other than "Attack" start a fight (the totems' "Charge"; spells can then be cast on them too), and NpcDrops' `"npc-drops:roll-table"` takes `npcId` to roll that NPC's own table (every eligible player in a group gets a roll). `data/definitions/npc-combat/` gives every form of both bosses, the totems, husks, parasites and sleepwalkers their captured animations (none for her and the totems; the minions' deaths), so the engine's human block animation never plays on them.
 
 ## The way in
 

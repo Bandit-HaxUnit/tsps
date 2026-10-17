@@ -1,0 +1,9 @@
+{
+  "3114": {"name":"Farmer","anims":{"attack":433,"block":434,"death":836},"sounds":{"death":512}},
+  "3243": {"name":"Farmer","anims":{"attack":433,"block":434,"death":836},"sounds":{"death":512}},
+  "3244": {"name":"Farmer","anims":{"attack":433,"block":434,"death":836},"sounds":{"death":512}},
+  "11918": {"name":"Farmer","anims":{"attack":386,"block":387,"death":836},"sounds":{"death":512}},
+  "11919": {"name":"Farmer","anims":{"attack":386,"block":387,"death":836},"sounds":{"death":512}},
+  "11920": {"name":"Farmer","anims":{"attack":386,"block":387,"death":836},"sounds":{"death":512}},
+  "11921": {"name":"Farmer","anims":{"attack":433,"block":434,"death":836},"sounds":{"death":512}}
+}

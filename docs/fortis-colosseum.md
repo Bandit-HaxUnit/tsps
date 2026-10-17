@@ -164,7 +164,7 @@ While it charges, the orbs show on its body in throwing order, one a tick, in sp
 - The colossi are from Offline_Scape. Javelin: 10892 with projectile 2673. Shockwave: 10903 with projectile 2520.
 - The Minotaur's attack, 10843, also comes from Offline_Scape.
 - The jaguar's attack, 10847, is RuneLite's `NPC_JAGUAR_RANGER_CLAWS_ATTACK`.
-- Every enemy's block and death animations (and Sol's) are in `npc-combat-defs.json`, from RuneLite's gameval names. Sol, the shaman, both colossi and the Manticore have no block animation (`-1`); without an entry they fell back to the humanoid one.
+- Every enemy's block and death animations (and Sol's) are in `npc-combat/`, from RuneLite's gameval names. Sol, the shaman, both colossi and the Manticore have no block animation (`-1`); without an entry they fell back to the humanoid one.
 
 **Not done yet:**
 - Two Manticores copying each other's orb order.

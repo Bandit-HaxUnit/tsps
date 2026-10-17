@@ -1,0 +1,8 @@
+{
+  "1173": {"name":"Chicken","anims":{"attack":5387,"block":5388,"death":5389},"sounds":{"death":356}},
+  "1174": {"name":"Chicken","anims":{"attack":5387,"block":5388,"death":5389},"sounds":{"death":356}},
+  "2804": {"name":"Chicken","anims":{"attack":5387,"block":5388,"death":5389},"sounds":{"death":512}},
+  "2805": {"name":"Chicken","anims":{"attack":5387,"block":5388,"death":5389},"sounds":{"death":512}},
+  "2806": {"name":"Chicken","anims":{"attack":5387,"block":5388,"death":5389},"sounds":{"death":512}},
+  "3316": {"name":"Chicken","anims":{"attack":5387,"block":5388,"death":5389},"sounds":{"death":512}}
+}

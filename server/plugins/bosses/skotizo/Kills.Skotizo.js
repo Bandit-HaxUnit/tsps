@@ -1,5 +1,5 @@
 /**
- * Skotizo's death, as captured: on the killing blow he plays qip_ds_delrith_banished (npc-combat-defs),
+ * Skotizo's death, as captured: on the killing blow he plays qip_ds_delrith_banished (npc-combat/),
  * "Your Skotizo kill count is: N." (varp 1527, through Combat Achievements), the altars go back to
  * sleep and the HUD closes; 15 ticks later (`deathTicks`) the loot lands on his tile (NpcDrops)
  * and he is gone. Any spawns or dark ankou left fade a few ticks after him (Wiki).

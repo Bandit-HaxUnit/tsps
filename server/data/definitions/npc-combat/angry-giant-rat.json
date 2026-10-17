@@ -1,0 +1,5 @@
+{
+  "1062": {"name":"Angry giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":512}},
+  "4689": {"name":"Angry giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":512}},
+  "4690": {"name":"Angry giant rat","anims":{"attack":4933,"block":4934,"death":4935},"sounds":{"death":512}}
+}

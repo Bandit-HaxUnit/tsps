@@ -1,0 +1,5 @@
+{
+  "2790": {"name":"Cow","anims":{"attack":5849,"block":5850,"death":5851},"sounds":{"death":370}},
+  "2791": {"name":"Cow","anims":{"attack":5849,"block":5850,"death":5851},"sounds":{"death":370}},
+  "2793": {"name":"Cow","anims":{"attack":5849,"block":5850,"death":5851},"sounds":{"death":370}}
+}

@@ -81,7 +81,7 @@ The altar is `cata_altar` (28900) in the centre of the Catacombs.
 | Tick | Captured |
 | --- | --- |
 | +0 (the killing hit) | 4624 (`qip_ds_delrith_banished`) and sound 403; "Your Skotizo kill count is: N." (varp 1527 `total_cata_boss_kills`); script 1313 `[0, 0, 0, 0]` and the HUD closes. |
-| +15 | The loot on his south-west tile, and he is gone (`deathTicks` 15 in npc-combat-defs). |
+| +15 | The loot on his south-west tile, and he is gone (`deathTicks` 15 in npc-combat/). |
 
 - **Kill count:** counted through `combat-achievements:kill` (Skotizo is in `countedByEvent`), so the message comes before any task.
 - **Tasks:** Skotizo Champion and Skotizo Adept come from the count. Demonic Weakening, Demonbane Weaponry, Up for the Challenge, Demon Evasion and Precise Positioning are judged from the fight.

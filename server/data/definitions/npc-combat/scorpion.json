@@ -1,0 +1,6 @@
+{
+  "2479": {"name":"Scorpion","anims":{"attack":6254,"block":6255,"death":6256},"sounds":{"death":512}},
+  "2480": {"name":"Scorpion","anims":{"attack":6254,"block":6255,"death":6256},"sounds":{"death":512}},
+  "3024": {"name":"Scorpion","anims":{"attack":6254,"block":6255,"death":6256},"sounds":{"death":512}},
+  "5242": {"name":"Scorpion","anims":{"attack":6254,"block":6255,"death":6256},"sounds":{"death":512}}
+}

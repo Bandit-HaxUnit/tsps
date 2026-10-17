@@ -1,0 +1,7 @@
+{
+  "11728": {"name":"Egg","anims":{"block":-1,"death":-1}},
+  "11729": {"name":"Egg","anims":{"block":-1,"death":-1}},
+  "13670": {"name":"Egg","anims":{"block":-1,"death":11508},"deathTicks":2},
+  "13672": {"name":"Egg","anims":{"block":-1,"death":11508},"deathTicks":2},
+  "13674": {"name":"Egg","anims":{"block":-1,"death":11508},"deathTicks":2}
+}
