@@ -45,9 +45,8 @@
  *   to the wreck is represented by talking to them again, and arrival/deploy use the
  *   real Deploy salvaging hook. The ambient "sailing-the-boat-*" variants are not
  *   played (no moving boat to trigger them).
- * - The shipyard build is represented by a Board `Gangplank` (59721) this plugin
- *   places at (2086,2723) beside the shipyard's own berth; with hammer and saw the
- *   Board plays the wiki's cargo-hold build. The raft, cargo hold and hold contents
+ * - The shipyard build is the Board on the shipyard berth's own gangplank (multiloc
+ *   59719 at 2087,2723); with hammer and saw it plays the wiki's cargo-hold build. The raft, cargo hold and hold contents
  *   do not exist, so the crate of ship parts goes straight from the Port Sarim ledger
  *   table to the Pandemonium one (as Prying Times does), and the goods "left in the
  *   hold" are granted with the completion rewards.
@@ -246,7 +245,8 @@ module.exports = function registerPandemoniumQuest(api) {
   const OLD_GROG_SPAWN_TILE = { x: 3049, y: 2966, z: 0 };
   const PORT_SARIM_LEDGER_TILE = { x: 3049, y: 3193 };
   const PANDEMONIUM_LEDGER_TILE = { x: 3068, y: 2987 };
-  const SHIPYARD_GANGPLANK_TILE = { x: 2086, y: 2723 };
+  /** The shipyard berth's gangplank (multiloc 59719, Board while varbit 19104 is 0). */
+  const SHIPYARD_GANGPLANK_TILE = { x: 2087, y: 2723 };
   // The shipyard map square (SailingShipyard bounds), for the login recovery.
   const SHIPYARD_BOUNDS = { minX: 2048, maxX: 2111, minY: 2688, maxY: 2751 };
 
@@ -757,8 +757,16 @@ module.exports = function registerPandemoniumQuest(api) {
     startTranscript(api, player, PORT_MASTER_PANDEMONIUM_NPC_ID, PAGE, PORT_MASTER_DROP_VARIANT);
   }
 
+  function atShipyardGangplank(location) {
+    return location?.x === SHIPYARD_GANGPLANK_TILE.x && location?.y === SHIPYARD_GANGPLANK_TILE.y;
+  }
+
   function handleObjectInteraction(event) {
     if (event.clickType !== 1) return;
+    if (atShipyardGangplank(event.location)) {
+      boardQuestRaft(event);
+      return;
+    }
     switch (event.objectId) {
       case SALVAGING_HOOK_OBJECT_ID:
         deploySalvagingHook(event);
@@ -771,9 +779,6 @@ module.exports = function registerPandemoniumQuest(api) {
         return;
       case ObjectIdentifiers.BOAT_SCHEMATICS:
         modifySchematics(event);
-        return;
-      case ObjectIdentifiers.GANGPLANK_84:
-        boardQuestRaft(event);
         return;
       case ObjectIdentifiers.LEDGER_TABLE_2:
         takeCargoAtPortSarim(event);
@@ -791,13 +796,12 @@ module.exports = function registerPandemoniumQuest(api) {
     return object;
   }
 
-  /** Objects the world's maps lack: the two ledger tables and the quest gangplank. */
+  /** Objects the world's maps lack: the two ledger tables. */
   function installQuestObjects() {
     if (questObjectsInstalled) return;
     questObjectsInstalled = true;
     registerQuestObject(ObjectIdentifiers.LEDGER_TABLE_2, PORT_SARIM_LEDGER_TILE);
     registerQuestObject(ObjectIdentifiers.LEDGER_TABLE_3, PANDEMONIUM_LEDGER_TILE);
-    registerQuestObject(ObjectIdentifiers.GANGPLANK_84, SHIPYARD_GANGPLANK_TILE);
   }
 
   /** The quest's sibling varbits in varp 4959 are not stage-writable, so re-send them. */
