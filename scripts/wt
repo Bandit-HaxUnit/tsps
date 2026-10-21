@@ -53,7 +53,17 @@ EOF
     (cd "$dir" && claude mcp remove tsps -s local >/dev/null 2>&1 || true
      claude mcp add -s local --transport http tsps "http://127.0.0.1:$((49800 + n))/mcp" >/dev/null)
   fi
+  copy_dev_username "$dir"
   echo "$dir: slot $n, http://localhost:$((3100 + n))"
+}
+
+# The main checkout's developer account gets its rights in every worktree too.
+copy_dev_username() {
+  local dir=$1 name
+  name=$(env_of "$MAIN" DEV_USERNAME)
+  [ -n "$name" ] && [ -z "$(env_of "$dir" DEV_USERNAME)" ] || return 0
+  printf '\n# Account that is given developer rights on login (from the main checkout).\nDEV_USERNAME=%s\n' \
+    "$name" >>"$dir/.env"
 }
 
 # Copy-on-write clones on APFS/btrfs, so 2.5 GB of node_modules costs nothing until it changes.

@@ -26,6 +26,8 @@ Each worktree gets a slot from 1 to 99, written into a marked block in its root 
 - **`BROWSER=none`** stops `yarn start` opening a tab per worktree.
 - **The agent MCP** is registered as `tsps` for that worktree only (`claude mcp add -s local`),
   so an agent there talks to its own server.
+- **`DEV_USERNAME`** is copied from the main checkout's `.env` when the worktree has none, so
+  your account has developer rights on every branch.
 - **Your settings** in `.env` outside the block are kept. Don't copy a `.env` with
   `WEBRTC_WORLD_TOKEN` into a worktree, or every branch registers as the same public world.
 
