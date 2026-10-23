@@ -128,6 +128,49 @@ function facingFor(cx, cy, x, y) {
   return Math.abs(x - cx) > Math.abs(y - cy) ? 1 : 0;
 }
 
+/** Shapes whose footprint is the loc's own size: scenery (10, 11) and ground decoration (22). */
+const SIZED_SHAPES = new Set([10, 11, 22]);
+
+/**
+ * The tiles a loc covers at rotation `face`: its size for scenery and ground decoration
+ * (swapped on a quarter turn), one tile for walls, wall decoration and roofs.
+ */
+function footprint(shape, face, sizeX = 1, sizeY = 1) {
+  if (!SIZED_SHAPES.has(shape)) return { width: 1, height: 1 };
+  return face % 2 === 1 ? { width: sizeY, height: sizeX } : { width: sizeX, height: sizeY };
+}
+
+/**
+ * Turns a loc inside a width x height template a quarter turn clockwise, `turns` times,
+ * keeping the template's low corner at 0,0. The cache's rotation is quarter turns clockwise
+ * from west (0 west, 1 north, 2 east, 3 south), so each turn adds one to `face`; the loc's
+ * position is its low corner, so a sized loc moves by its own footprint.
+ */
+function rotateLoc(loc, turns, width, height, sizeX = 1, sizeY = 1) {
+  let out = { ...loc };
+  let w = width;
+  let h = height;
+  for (let turn = 0; turn < (((turns % 4) + 4) % 4); turn++) {
+    const { width: fw } = footprint(out.type, out.face, sizeX, sizeY);
+    out = { ...out, dx: out.dy, dy: w - out.dx - fw, face: (out.face + 1) & 3 };
+    [w, h] = [h, w];
+  }
+  return out;
+}
+
+/** A tile offset inside a width x height template, turned like rotateLoc. */
+function rotateOffset(dx, dy, turns, width, height) {
+  let x = dx;
+  let y = dy;
+  let w = width;
+  let h = height;
+  for (let turn = 0; turn < (((turns % 4) + 4) % 4); turn++) {
+    [x, y] = [y, w - 1 - x];
+    [w, h] = [h, w];
+  }
+  return { dx: x, dy: y };
+}
+
 function unique(tiles) {
   const seen = new Set();
   const out = [];
@@ -140,4 +183,6 @@ function unique(tiles) {
   return out;
 }
 
-module.exports = { line, ring, box, tower, repeated, avenue, rotate, facingFor, unique };
+module.exports = {
+  line, ring, box, tower, repeated, avenue, rotate, facingFor, unique, footprint, rotateLoc, rotateOffset,
+};

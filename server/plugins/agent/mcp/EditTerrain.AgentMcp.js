@@ -447,4 +447,11 @@ module.exports = function registerEditTerrainTools(ctx) {
       }),
     })
   );
+
+  // Templates read and write terrain through these, so a pasted floor goes through the
+  // same patching, budget check and persistence as paint_ground.
+  const tileAt = (x, y, z) => decodeTile(
+    toU8(baseBytes(regionIdFor(x, y)).terrainData), z, x & 0x3f, y & 0x3f, wideTerrain(),
+  );
+  return { applyEdits, tileAt };
 };

@@ -8,6 +8,7 @@
     "data/definitions/object-spawns*.json",
     "data/definitions/npc-combat-defs.json",
     "data/regions/**",
+    "plugins/agent/data/templates/**",
     "*.log"
   ]
 }

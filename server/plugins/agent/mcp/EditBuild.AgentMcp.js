@@ -426,4 +426,8 @@ module.exports = function registerEditBuildTools(ctx) {
       };
     }
   );
+
+  // Templates (EditTemplates.AgentMcp.js) place through the same path, so their
+  // placements validate, collapse and persist exactly like a build's.
+  return { applyPlacements };
 };

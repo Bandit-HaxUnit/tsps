@@ -89,6 +89,36 @@ material is `{ "name": { "id": <cache id>, "about": "..." } }`; a preset is a li
 that is how `tiered_city` builds four rings. Keep material ids verified (`search_objects` /
 `yarn dump:loc`); never hard-code ids in tool code.
 
+### Templates: copying real buildings
+
+The game's own buildings already get corners, door frames, roofs and floors right. Copy one
+and paste it anywhere instead of designing from scratch:
+
+| Tool | Purpose |
+| --- | --- |
+| `find_buildings` | Roofed buildings in an area (up to 256×256), each with a capture rectangle |
+| `capture_template` | Save every loc (all planes) and the terrain in a rectangle as a template |
+| `list_templates` | Templates in `plugins/agent/data/templates/` |
+| `paste_template` | Place one at a tile, rotated 0/90/180/270; `dryRun` reports first |
+
+```jsonc
+find_buildings   { "x1": 3180, "y1": 3380, "x2": 3290, "y2": 3480 }   // Varrock
+capture_template { "name": "varrock-house-west", "x1": 3190, "y1": 3400, "x2": 3200, "y2": 3408 }
+paste_template   { "name": "varrock-house-west", "x": 3416, "y": 2956, "rotation": 180 }
+```
+
+- Capture with the one-tile margin `find_buildings` suggests: walls often sit on the tile
+  just outside the roof. A building that shares a wall (with a neighbour, or a city wall)
+  loses it in a tight capture and gains that neighbour's piece in a wide one; check the
+  paste with a screenshot.
+- Rotation turns every loc's position, footprint and facing, and floor overlays with them.
+- Interactive locs (doors, ladders, stairs, furniture with options) are skipped by default
+  (`interactive: "keep"` keeps them): their handlers belong to the place they came from.
+- Terrain: `floors` (default) copies floor overlays and indoor/roof tile flags; `all` also
+  underlays and heights, shifted so the template's corner sits at `baseHeight`; `none` skips
+  it. The blocked and bridge flags are never copied.
+- Templates are one file each, one loc per line. Commit the good ones: they are the catalog.
+
 ### Clearing a site
 
 `clear_area` removes what the spawn file placed and leaves the cache map's own scenery

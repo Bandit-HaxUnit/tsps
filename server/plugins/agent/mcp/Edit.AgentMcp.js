@@ -218,6 +218,12 @@ module.exports = function registerEditTools(ctx) {
       let spawnsChanged = false;
       // Cache objects live in MapObjects, runtime ones in ObjectManager: clear both.
       // Player-owned (fires, traps) and private-area objects are left alone.
+      // Regions load lazily; one nobody has visited has no MapObjects to clear yet.
+      for (let x = minX; x <= maxX + 63; x += 64) {
+        for (let y = minY; y <= maxY + 63; y += 64) {
+          core.RegionManager?.loadMapFiles?.(Math.min(x, maxX), Math.min(y, maxY), false);
+        }
+      }
       const candidates = [];
       for (let x = minX; x <= maxX; x++) {
         for (let y = minY; y <= maxY; y++) {
