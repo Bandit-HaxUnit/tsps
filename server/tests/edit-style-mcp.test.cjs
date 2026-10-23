@@ -18,6 +18,9 @@ test("a closed rectangle walls its boundary, facing out or in whichever way the 
   assert.deepEqual(at(out.pieces, 1, -1), { x: 1, y: -1, type: 0, face: 1 }, "north edge of the tile below");
   assert.deepEqual(at(out.pieces, 3, 1), { x: 3, y: 1, type: 0, face: 0 }, "west edge of the tile to the east");
   assert.equal(at(out.pieces, 0, 0), undefined);
+  // Its outside corners get the small corner piece, turned to the corner, as Varrock's houses.
+  assert.deepEqual(out.pieces.filter((p) => p.type === 1).map((p) => [p.x, p.y, p.face]),
+    [[-1, -1, 1], [3, -1, 0], [3, 2, 3], [-1, 2, 2]]);
   const reversed = geometry.wallPath([...square].reverse(), { closed: true, facing: "out" });
   const key = (pieces) => pieces.map((p) => `${p.x},${p.y},${p.type},${p.face}`).sort();
   assert.deepEqual(key(reversed.pieces), key(out.pieces), "clockwise or not, the same wall");

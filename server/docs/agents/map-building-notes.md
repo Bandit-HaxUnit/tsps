@@ -39,6 +39,8 @@ say what changed rather than deleting it quietly. Short rows beat paragraphs.
 | Zoom is fixed and close: about 10 tiles of view | Stand within ~10 tiles of what you want to see; take several shots |
 | Yaw: 0 faces north, 512 east, 1024 south, 1536 west. Pitch 512 is straight down | Pitch 250–330 shows walls and depth; 450+ for layout |
 | Desert heat and aggressive NPCs (jackals) keep a camera in combat | Pick camera tiles away from them |
+| **Upper storeys and roofs vanish in low shots** | The game's roof removal (`client/game/roof/RoofVisibility.ts`): with the camera pitch under 310, if the camera's tile or the line from camera to player crosses any tile flagged indoors (flag 4), every plane above the player's is hidden, screen-wide. Keep buildings with indoor floors out of that line, or judge upper floors from a high camera |
+| Tall buildings do not fit | The fixed zoom cannot take in a two-storey house and its roof from any angle; check roofs on one-storey builds or from above |
 
 ## Loc sizes
 
@@ -70,6 +72,8 @@ say what changed rather than deleting it quietly. Short rows beat paragraphs.
 | Graveyard path overlay 1 in the desert | Renders light grey, not brown dirt |
 | Checked by screenshot | Two Varrock-style houses (1 and 2 storeys), a fenced graveyard, a fenced wheat farm |
 | Walls on uneven ground | Each wall piece stands on the heights of its two end corners, so the same house on ground varying by ~14 has walls stepping up and down and a bent eave line; levelled first, its walls run straight (screenshots side by side at 3424-3439, 2946). A tile's height is its south-west corner: levelling must include one row north and one column east of the footprint |
+| **Upper-plane heights are gaps** | On planes 1-3 a stored height is the gap above the plane below, in eighths of a unit (`SceneBuilder.ts`); unset, the client uses 240. Varrock's house stores 37 per storey (its walls are 293 tall) and 12 per roof ring above (a slope rises 96). With the default 240 a one-storey house's walls stuck up through its eaves and each roof ring floated ~100 above the last: the roof looked unattached. `build_house` sets both from the wall's and roof's sizes (`loc-sizes.json`); `paste_template` now always copies them |
+| **Wall corners** | Walls that sit outside the room meet only at a point at each corner. Varrock's houses fill it with a small corner piece: shape 1, the wall's own loc, on the tile diagonally outside, rotated to the corner (0 NW, 1 NE, 2 SE, 3 SW of its tile). `wallPath` adds them on outside corners; without them each corner was an open slit |
 | Tiles with no stored height | Common in the desert. Levelling sets them inside the footprint and leaves them alone in the blend ring, where the client keeps generating their height |
 
 ## Styles

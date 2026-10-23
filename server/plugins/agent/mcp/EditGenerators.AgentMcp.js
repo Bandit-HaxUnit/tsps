@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const geometry = require("./EditGeometry.AgentMcp");
+const { sizeOf } = require("./EditSizes.AgentMcp");
 
 // Generators: new structures in a captured style, laid out by rules read off real ones.
 //
@@ -122,6 +123,20 @@ module.exports = function registerEditGeneratorTools(ctx, { build, terrain, styl
       if (roof && roofId && storeys <= 3) {
         for (let tx = x; tx < x + width; tx++) {
           for (let ty = y; ty < y + height; ty++) edits.push({ kind: "flag", tileX: tx, tileY: ty, plane: storeys, locId: defaults.roofFlag });
+        }
+      }
+      // An upper plane's stored height is its gap above the plane below, in eighths of a model
+      // unit; left unset the client uses 240. Varrock's house stores its wall height for each
+      // storey (37: walls 293 tall) and a slope's rise for each roof ring above (12: slopes 96),
+      // so storeys stand on the walls and roof rings on each other. Corners are heights too, so
+      // the row and column beyond the footprint get them as well.
+      const wallGap = Math.round((sizeOf(style.wall, 0)?.height ?? 296) / 8);
+      const roofGap = Math.round(((roofId && sizeOf(roofId, 12)?.height) || 96) / 8);
+      const lastPlane = roof && roofId ? 3 : storeys;
+      for (let level = 1; level <= lastPlane; level++) {
+        const gap = level <= storeys ? wallGap : roofGap;
+        for (let tx = x; tx <= x + width; tx++) {
+          for (let ty = y; ty <= y + height; ty++) edits.push({ kind: "height", tileX: tx, tileY: ty, plane: level, locId: gap });
         }
       }
       return finish(placements, edits, {

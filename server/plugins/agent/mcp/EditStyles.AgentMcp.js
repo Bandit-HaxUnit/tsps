@@ -157,6 +157,7 @@ module.exports = function registerEditStyleTools(ctx, { build, terrain, objectsI
     const placements = [];
     const byTile = new Map();
     for (const piece of pieces) {
+      // Shape 1 corner pieces come from the wall loc, as on Varrock's houses.
       const id = piece.type === 2 ? style.corner ?? style.wall : piece.type === 9 ? style.diagonal ?? style.wall : style.wall;
       byTile.set(`${piece.x},${piece.y},${piece.type}`, { id, ...piece });
     }

@@ -255,6 +255,31 @@ function wallPath(points, options = {}) {
       y += sy;
     }
   }
+  // Where a straight run turns with its walls on the outside of the turn, the two walls only
+  // touch at the corner point: the game fills it with a small corner piece (shape 1) on the
+  // tile diagonally outside, rotated to the corner (0 north-west, 1 north-east, 2 south-east,
+  // 3 south-west of its tile), as Varrock's houses have them.
+  const posts = [];
+  if (options.corners !== false) {
+    const turnAt = closed ? points.map((_, i) => i) : points.map((_, i) => i).slice(1, -1);
+    for (const i of turnAt) {
+      const [vx, vy] = points[i];
+      const [px, py] = points[(i - 1 + points.length) % points.length];
+      const [nx, ny] = points[(i + 1) % points.length];
+      const d1 = [Math.sign(vx - px), Math.sign(vy - py)];
+      const d2 = [Math.sign(nx - vx), Math.sign(ny - vy)];
+      // Axis-aligned runs turning by a right angle only.
+      if ((d1[0] !== 0) === (d1[1] !== 0) || (d2[0] !== 0) === (d2[1] !== 0)) continue;
+      const cross = d1[0] * d2[1] - d1[1] * d2[0];
+      if (cross === 0 || (cross > 0) !== (side === "right")) continue;
+      const cx = d1[0] - d2[0];
+      const cy = d1[1] - d2[1];
+      const tile = { x: vx + (cx > 0 ? 0 : -1), y: vy + (cy > 0 ? 0 : -1) };
+      if (edges.has(`${tile.x},${tile.y}`)) continue;
+      const face = cy > 0 ? (cx > 0 ? 3 : 2) : (cx > 0 ? 0 : 1);
+      posts.push({ ...tile, type: 1, face });
+    }
+  }
   const pieces = [];
   for (const { x, y, sides } of edges.values()) {
     const corner = sides.length === 2 ? CORNER_FACE[[...sides].sort().join(",")] : undefined;
@@ -263,6 +288,7 @@ function wallPath(points, options = {}) {
     else pieces.push({ x, y, type: 0, face: EDGE_FACE[sides[0]] });
   }
   for (const piece of diagonals.values()) pieces.push({ ...piece, type: 9 });
+  pieces.push(...posts);
   return { pieces, openings };
 }
 

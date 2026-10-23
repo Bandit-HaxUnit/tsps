@@ -69,6 +69,12 @@ test("build_house: walls round the inside, a door, windows, floors, flags and a 
   // Indoor tiles: floor and indoor flag on both storeys; the roof plane carries the roof flag.
   assert.equal(t.edits.filter((e) => e.kind === "terrain" && e.plane === 0).length, 4 * 3);
   assert.equal(t.edits.filter((e) => e.kind === "flag" && e.plane === 2 && e.locId === 16).length, 6 * 5);
+  // Storeys stand on the walls and roof rings on each other: upper planes get their gaps
+  // (no sizes file here, so the defaults: 296 / 8 for walls, 96 / 8 for slopes).
+  const gap = (plane) => [...new Set(t.edits.filter((e) => e.kind === "height" && e.plane === plane).map((e) => e.locId))];
+  assert.deepEqual([gap(1), gap(2), gap(3)], [[37], [37], [12]]);
+  assert.equal(t.edits.filter((e) => e.kind === "height" && e.plane === 1).length, 7 * 6, "footprint plus the corner row and column");
+  assert.equal(t.placed.filter((p) => p.type === 1 && p.z === 0).length, 4, "four corner pieces");
   const dry = await t.call("build_house", { style: "town", x: 0, y: 0, width: 4, height: 4, dryRun: true });
   assert.equal(dry.dryRun, true);
 });

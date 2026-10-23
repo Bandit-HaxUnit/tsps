@@ -158,3 +158,14 @@ test("find_buildings groups roof tiles and adds a one-tile capture margin", asyn
   assert.deepEqual(found.buildings[1].capture, { x1: 9, y1: 9, x2: 12, y2: 12 });
   await assert.rejects(t.call("find_buildings", { x1: 0, y1: 0, x2: 300, y2: 10 }), /256/);
 });
+
+test("a floors paste keeps the upper planes' storey and roof gaps, but no ground heights", async () => {
+  const t = setup([[1, 100, 200, 0, 0, 0]], {
+    "100,200,0": { overlay: null, underlay: null, height: 30, flag: null },
+    "100,200,1": { overlay: null, underlay: null, height: 37, flag: null },
+    "100,200,3": { overlay: null, underlay: null, height: 12, flag: null },
+  });
+  await t.call("capture_template", { name: "storeys", x1: 100, y1: 200, x2: 100, y2: 200 });
+  await t.call("paste_template", { name: "storeys", x: 50, y: 50 });
+  assert.deepEqual(t.edits.filter((e) => e.kind === "height").map((e) => [e.plane, e.locId]), [[1, 37], [3, 12]]);
+});

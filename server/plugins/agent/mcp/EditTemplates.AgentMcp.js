@@ -281,6 +281,12 @@ module.exports = function registerEditTemplateTools(ctx, { build, terrain }) {
         }
         const flag = (tile.flag ?? 0) & KEPT_FLAGS;
         if (flag > 0) edits.push({ kind: "flag", ...at, locId: flag });
+        // On an upper plane a stored height is the gap above the plane below (a house's storey
+        // and roof-ring heights), not a ground height: it belongs to the building, so it always
+        // comes along. Without it storeys and roof rings sit 240 apart and come loose.
+        if (terrainMode !== "all" && tile.z > 0 && tile.height !== null) {
+          edits.push({ kind: "height", ...at, locId: tile.height });
+        }
         if (terrainMode === "all") {
           if (tile.underlay !== null) edits.push({ kind: "underlay", ...at, locId: tile.underlay });
           if (tile.height !== null) {
@@ -300,7 +306,7 @@ module.exports = function registerEditTemplateTools(ctx, { build, terrain }) {
 
   tool(
     "paste_template",
-    "Place a captured template with its low corner at (x, y), turned clockwise by rotation (0/90/180/270). Locs go live and persist like place_objects; terrain 'floors' (default) copies floor overlays and roof/indoor tile flags, 'all' also underlays and heights (shifted so the template's corner sits at baseHeight when given), 'none' skips terrain; flatten (default on) levels the footprint first so walls stand even on uneven ground. Interactive locs (doors, ladders, stairs, banks) are skipped by default: their handlers belong to the place they were captured from. dryRun reports without placing.",
+    "Place a captured template with its low corner at (x, y), turned clockwise by rotation (0/90/180/270). Locs go live and persist like place_objects; terrain 'floors' (default) copies floor overlays, roof/indoor tile flags and the upper planes' storey and roof heights, 'all' also underlays and heights (shifted so the template's corner sits at baseHeight when given), 'none' skips terrain; flatten (default on) levels the footprint first so walls stand even on uneven ground. Interactive locs (doors, ladders, stairs, banks) are skipped by default: their handlers belong to the place they were captured from. dryRun reports without placing.",
     {
       name: z.string().describe("Template name from list_templates"),
       x: z.number().int().describe("Low-corner tile x"),
