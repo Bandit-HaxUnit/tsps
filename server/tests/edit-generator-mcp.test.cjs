@@ -116,3 +116,42 @@ test("build_house levels its footprint by default; the yard and farm only when a
   const steep = await t.call("build_house", { style: "town", x: 100, y: 100, width: 12, height: 5, dryRun: true });
   assert.match(steep.flatten.note, /Steep ground/);
 });
+
+test("levelling leaves a neighbour's ground alone", () => {
+  const slope = (x) => 30 + 2 * x;
+  // A building already stands on x 7-9: those tiles are kept.
+  const plan = geometry.levelPlan((x) => slope(x), 0, 0, 4, 3, { blend: 2, keep: (x) => x >= 7 });
+  assert.ok(!plan.tiles.some((t) => t.x >= 7), "nothing on the neighbour moves");
+  assert.ok(plan.tiles.some((t) => t.x === 6), "the free ring still blends");
+});
+
+test("furniture keeps a corridor from the door, faces away from walls, and turns its footprint", () => {
+  const plan = geometry.furnishPlan(
+    { x0: 0, y0: 0, x1: 4, y1: 3, door: "south", doorX: 2, doorY: 0, ladder: 99 },
+    [{ id: 1, place: "wall", size: [1, 2] }, { id: 2, place: "centre", chairs: [3, 3] }, { id: 4, place: "corner" }],
+  );
+  assert.ok(!plan.placed.some((p) => p.x === 2), "nothing stands in the corridor up from the door");
+  const ladder = plan.placed.find((p) => p.role === "ladder");
+  assert.equal(ladder.y, 3, "the ladder is at the corridor's far end");
+  assert.equal(Math.abs(ladder.x - 2), 1);
+  assert.equal(ladder.face, ladder.x < 2 ? 1 : 3, "its usable side faces the corridor");
+  const range = plan.placed.find((p) => p.id === 1);
+  // The north wall has no room left (ladder, corridor, a corner kept for corner pieces), so it
+  // stands against the east wall, facing away from it, its 1x2 footprint along the wall.
+  assert.deepEqual([range.x, range.y, range.face], [4, 1, 0]);
+  assert.equal(plan.placed.filter((p) => p.id === 3).length, 2);
+});
+
+test("a two-storey house gets a ladder pair on one tile and furniture on both floors", async () => {
+  const t = setup();
+  const house = await t.call("build_house", { style: "town", x: 200, y: 200, width: 7, height: 6, storeys: 2, door: "south" });
+  const up = t.placed.find((p) => p.id === 11794);
+  const down = t.placed.find((p) => p.id === 11802);
+  assert.deepEqual([up.x, up.y, up.z], [down.x, down.y, 0].map((v, i) => (i === 2 ? 0 : v)));
+  assert.equal(down.z, 1);
+  assert.ok(house.furniture >= 8);
+  assert.ok(t.placed.some((p) => p.id === 7190 && p.z === 1), "the bed is upstairs");
+  t.placed.length = 0;
+  await t.call("build_house", { style: "town", x: 300, y: 300, width: 7, height: 6, furnish: false });
+  assert.ok(!t.placed.some((p) => p.type === 10), "furnish: false leaves the shell empty");
+});

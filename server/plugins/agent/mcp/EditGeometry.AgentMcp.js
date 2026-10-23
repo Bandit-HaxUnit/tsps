@@ -359,7 +359,8 @@ function hipRoof(x, y, width, height, options = {}) {
  * does not set it. Then `blend` rings round it move part of the way from their own height
  * towards the level (a third, then two thirds of the way out for blend 2), so the edge slopes
  * instead of stepping. heightAt(x, y) gives a tile's stored height, or null where the client
- * makes its own: those are set inside the footprint and left alone in the blend.
+ * makes its own: those are set inside the footprint and left alone in the blend, as are
+ * tiles options.keep(x, y) protects (a neighbouring building's ground).
  */
 function levelPlan(heightAt, x0, y0, x1, y1, options = {}) {
   const blend = Math.max(0, options.blend ?? 2);
@@ -387,12 +388,113 @@ function levelPlan(heightAt, x0, y0, x1, y1, options = {}) {
       let target;
       if (ring === 0) target = level;
       else if (height === null || height === undefined) continue;
+      // A neighbour already built on keeps its ground: blending into it would tilt its walls.
+      else if (options.keep?.(x, y)) continue;
       else target = Math.round(level + (height - level) * (ring / (blend + 1)));
       if (target !== height) moved++;
       tiles.push({ x, y, height: target });
     }
   }
   return { level, tiles, spread, unknown, moved };
+}
+
+// Furniture against a wall turns away from it, read off a Varrock house: against the south
+// wall rotation 2, west 3, north 1, east 0.
+const AWAY_FROM_WALL = { south: 2, west: 3, north: 1, east: 0 };
+
+/**
+ * Where furniture goes in a room: the inside tiles x0-x1, y0-y1, with its door on `door`
+ * (south/north/east/west) at doorX/doorY (the inside tile just through the door).
+ *
+ * A corridor from the door straight across the room stays free, so the room can always be
+ * walked into; `ladder` goes at its far end. Then items in order: `wall` items along the walls
+ * turned away from the wall (their footprint turning with them); `corner` items in free corners; a `centre`
+ * table in the middle of the larger free side, with `chair` items either side of it. Items
+ * that do not fit are left out and returned as `skipped`. Pure: no world state.
+ */
+function furnishPlan(room, items) {
+  const { x0, y0, x1, y1, door, doorX, doorY } = room;
+  const taken = new Set();
+  const key = (x, y) => `${x},${y}`;
+  const inside = (x, y) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+  const free = (x, y) => inside(x, y) && !taken.has(key(x, y));
+  // The corridor: from the door tile straight to the opposite wall.
+  const corridor = [];
+  const vertical = door === "south" || door === "north";
+  if (vertical) for (let y = y0; y <= y1; y++) corridor.push([doorX, y]);
+  else for (let x = x0; x <= x1; x++) corridor.push([x, doorY]);
+  for (const [x, y] of corridor) taken.add(key(x, y));
+  const placed = [];
+  const skipped = [];
+  const far = { south: [doorX, y1], north: [doorX, y0], west: [x1, doorY], east: [x0, doorY] }[door];
+  // The ladder stands beside the corridor's far end, so it is reached by walking straight in.
+  if (room.ladder !== undefined) {
+    const spots = vertical ? [[far[0] - 1, far[1]], [far[0] + 1, far[1]]] : [[far[0], far[1] - 1], [far[0], far[1] + 1]];
+    const spot = spots.find(([x, y]) => free(x, y));
+    if (spot) {
+      taken.add(key(...spot));
+      // A ladder is used from one side only: its access mask leaves north open at rotation 0,
+      // and each rotation turns that clockwise (east 1, south 2, west 3). Open it to the corridor.
+      const face = spot[0] < far[0] ? 1 : spot[0] > far[0] ? 3 : spot[1] < far[1] ? 0 : 2;
+      placed.push({ id: room.ladder, x: spot[0], y: spot[1], face, role: "ladder" });
+    } else skipped.push({ id: room.ladder, role: "ladder" });
+  }
+  // Wall slots, walked round the room: [x, y, wall side, direction along the wall].
+  const slots = [];
+  for (let x = x0; x <= x1; x++) slots.push([x, y1, "north", [1, 0]]);
+  for (let y = y1; y >= y0; y--) slots.push([x1, y, "east", [0, -1]]);
+  for (let x = x1; x >= x0; x--) slots.push([x, y0, "south", [-1, 0]]);
+  for (let y = y0; y <= y1; y++) slots.push([x0, y, "west", [0, 1]]);
+  const corners = [[x0, y0], [x1, y0], [x0, y1], [x1, y1]];
+  const cornerOf = (x, y) => corners.some(([cx, cy]) => cx === x && cy === y);
+  for (const item of items) {
+    const [w, h] = item.size ?? [1, 1];
+    if (item.place === "wall") {
+      // Turned away from the wall, its footprint turns with it (a 1x2 bed against the west wall
+      // lies across the room, head to the wall, as Varrock's are); it stands touching the wall.
+      let done = false;
+      for (const [x, y, side] of slots) {
+        const face = AWAY_FROM_WALL[side];
+        const { width: fw, height: fh } = footprint(10, face, w, h);
+        const lowX = side === "east" ? x - fw + 1 : x;
+        const lowY = side === "north" ? y - fh + 1 : y;
+        const cells = [];
+        for (let dx = 0; dx < fw; dx++) for (let dy = 0; dy < fh; dy++) cells.push([lowX + dx, lowY + dy]);
+        if (!cells.every(([cx, cy]) => free(cx, cy) && !cornerOf(cx, cy))) continue;
+        for (const [cx, cy] of cells) taken.add(key(cx, cy));
+        placed.push({ id: item.id, x: lowX, y: lowY, face, role: "wall" });
+        done = true;
+        break;
+      }
+      if (!done) skipped.push({ id: item.id, role: "wall" });
+    } else if (item.place === "corner") {
+      const spot = corners.find(([x, y]) => free(x, y));
+      if (spot) {
+        taken.add(key(...spot));
+        placed.push({ id: item.id, x: spot[0], y: spot[1], face: 0, role: "corner" });
+      } else skipped.push({ id: item.id, role: "corner" });
+    } else if (item.place === "centre") {
+      // The middle of the larger side of the corridor, with room for a chair either side.
+      const sideA = vertical ? [x0, doorX - 1] : [y0, doorY - 1];
+      const sideB = vertical ? [doorX + 1, x1] : [doorY + 1, y1];
+      const [lo, hi] = sideA[1] - sideA[0] >= sideB[1] - sideB[0] ? sideA : sideB;
+      // Nearer the corridor than the wall, so the table is reached and does not hug a wall.
+      const mid = lo === (vertical ? x0 : y0) ? Math.ceil((lo + hi) / 2) : Math.floor((lo + hi) / 2);
+      const other = vertical ? Math.floor((y0 + y1) / 2) : Math.floor((x0 + x1) / 2);
+      const [tx, ty] = vertical ? [mid, other] : [other, mid];
+      if (!free(tx, ty)) { skipped.push({ id: item.id, role: "centre" }); continue; }
+      taken.add(key(tx, ty));
+      placed.push({ id: item.id, x: tx, y: ty, face: 0, role: "centre" });
+      for (const chair of item.chairs ?? []) {
+        const seats = vertical ? [[tx, ty - 1, 1], [tx, ty + 1, 3]] : [[tx - 1, ty, 0], [tx + 1, ty, 2]];
+        const seat = seats.find(([x, y]) => free(x, y));
+        if (!seat) continue;
+        taken.add(key(seat[0], seat[1]));
+        placed.push({ id: chair, x: seat[0], y: seat[1], face: seat[2], role: "chair" });
+      }
+    }
+  }
+  return { placed, skipped };
 }
 
 function unique(tiles) {
@@ -408,5 +510,5 @@ function unique(tiles) {
 }
 
 module.exports = {
-  line, ring, box, tower, repeated, avenue, rotate, facingFor, unique, footprint, rotateLoc, rotateOffset, wallPath, hipRoof, levelPlan,
+  line, ring, box, tower, repeated, avenue, rotate, facingFor, unique, footprint, rotateLoc, rotateOffset, wallPath, hipRoof, levelPlan, furnishPlan,
 };

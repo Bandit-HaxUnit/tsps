@@ -171,6 +171,14 @@ build_farm      { "style": "lumbridge-fence", "x": 3440, "y": 2999, "width": 9, 
   the roof hides when a player walks in. The door is the style's own and opens.
   Storeys and roof rings get their plane gaps from the wall's and roof's sizes, so storeys stand
   on the walls and the roof sits on them; outside corners get the style's shape-1 corner piece.
+- **Furnished, with a ladder that climbs.** `furnish` (default on) keeps a corridor from the door
+  straight across, puts a ladder at its far end (two storeys: `ladderUp` below, `ladderDown`
+  above on the same tile; the generic climb handler pairs them), and sets `house.ground`,
+  `house.upstairs` or `house.single` from `edit-sets.json` along the walls (turned away from
+  them, footprint turning too), in corners and in the middle. What does not fit is reported in
+  `furnitureSkipped`.
+- **Neighbours.** Levelling never blends into tiles on or next to an indoor floor (flag 4), so a
+  house built beside another does not tilt its walls.
 - The graveyard and farm take (x, y) as the low corner *inside* the fence.
 - **Uneven ground.** A wall stands on the ground height at its two end corners, so on small
   hills a building's walls come out at different heights. `build_house` and `paste_template`

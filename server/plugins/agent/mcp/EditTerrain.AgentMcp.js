@@ -459,7 +459,14 @@ module.exports = function registerEditTerrainTools(ctx) {
    * the live terrain on plane 0. Callers apply them with their own edits, before placing.
    */
   const levelEdits = (x0, y0, x1, y1, options = {}) => {
-    const plan = geometry.levelPlan((x, y) => tileAt(x, y, 0).height, x0, y0, x1, y1, options);
+    // Tiles on or next to an indoor floor (flag 4) belong to a building already standing:
+    // its walls sit on those corners, so the blend leaves them be.
+    const indoor = (x, y) => ((tileAt(x, y, 0).flag ?? 0) & 4) !== 0;
+    const keep = (x, y) => {
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (indoor(x + dx, y + dy)) return true;
+      return false;
+    };
+    const plan = geometry.levelPlan((x, y) => tileAt(x, y, 0).height, x0, y0, x1, y1, { keep, ...options });
     const edits = plan.tiles.map((tile) => ({ kind: "height", tileX: tile.x, tileY: tile.y, plane: 0, locId: tile.height }));
     return { edits, level: plan.level, spread: plan.spread, moved: plan.moved, unknown: plan.unknown };
   };

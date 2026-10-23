@@ -66,7 +66,7 @@ module.exports = function registerEditGeneratorTools(ctx, { build, terrain, styl
 
   tool(
     "build_house",
-    "Build a house in a captured style (capture_style; it needs wall, and uses door, window, roof): walls on the ring of tiles round the inside, a door in the middle of one side, window frames every few tiles, a wooden floor indoors on each storey, and a hip roof over the whole footprint (eaves, slopes, flat ridge, as Varrock's houses are built). (x, y) is the low corner of the footprint, walls included; width and height are 4 or more. One or two storeys; the roof hides when a player walks inside. flatten (default on) levels the footprint first and blends its edge, so walls stand even on uneven ground.",
+    "Build a house in a captured style (capture_style; it needs wall, and uses door, window, roof): walls on the ring of tiles round the inside, a door in the middle of one side, window frames every few tiles, a wooden floor indoors on each storey, and a hip roof over the whole footprint (eaves, slopes, flat ridge, as Varrock's houses are built). (x, y) is the low corner of the footprint, walls included; width and height are 4 or more. One or two storeys, furnished (furnish, default on: a corridor from the door, a ladder between storeys that climbs, furniture along the walls); the roof hides when a player walks inside. flatten (default on) levels the footprint first and blends its edge, so walls stand even on uneven ground.",
     {
       style: z.string().describe("Style name from list_styles"),
       ...area,
@@ -78,9 +78,10 @@ module.exports = function registerEditGeneratorTools(ctx, { build, terrain, styl
       roof: z.boolean().default(true),
       floor: z.number().int().min(1).optional().describe("Floor overlay id (default from edit-sets.json)"),
       flatten: z.boolean().default(true).describe("Level the footprint first and blend its edge, so walls stand even"),
+      furnish: z.boolean().default(true).describe("Furniture from edit-sets.json, and a ladder between storeys"),
       dryRun: z.boolean().default(false),
     },
-    ({ style: styleName, x, y, width, height, storeys = 1, door = "south", windowEvery = 3, roof = true, floor, flatten = true, dryRun = false }) => {
+    ({ style: styleName, x, y, width, height, storeys = 1, door = "south", windowEvery = 3, roof = true, floor, flatten = true, furnish = true, dryRun = false }) => {
       checkArea(x, y, width, height, 4);
       const style = styles.styleNamed(styleName);
       const defaults = sets().house;
@@ -98,6 +99,35 @@ module.exports = function registerEditGeneratorTools(ctx, { build, terrain, styl
           if (style.window && windowEvery > 0 && piece.type === 0 && piece.id === style.wall && ++count % windowEvery === 0) {
             placements.push({ id: style.window, x: piece.x, y: piece.y, z: level, type: 4, face: piece.face });
           }
+        }
+      }
+      // Furniture: a corridor from the door stays free, a ladder at its far end climbs to the
+      // floor above (the climb handler pairs it with the ladder placed on the same tile there),
+      // and the set's pieces go along the walls, in corners and in the middle.
+      const furniture = { placed: 0, skipped: [] };
+      if (furnish) {
+        const [x0, y0, x1, y1] = [x + 1, y + 1, x + width - 2, y + height - 2];
+        const midX = Math.floor((x0 + x1 + 1) / 2);
+        const midY = Math.floor((y0 + y1 + 1) / 2);
+        const inner = { south: [midX, y0], north: [midX, y1], east: [x1, midY], west: [x0, midY] }[door];
+        const room = { x0, y0, x1, y1, door, doorX: inner[0], doorY: inner[1] };
+        const sizeOfLoc = (id) => {
+          try {
+            const definition = ctx.core.ObjectDefinition.forId(id);
+            return [definition?.getSizeX?.() ?? 1, definition?.getSizeY?.() ?? 1];
+          } catch {
+            return [1, 1];
+          }
+        };
+        const withSizes = (list) => (list ?? []).map((item) => ({ ...item, size: sizeOfLoc(item.id) }));
+        for (let level = 0; level < storeys; level++) {
+          const list = storeys === 1 ? [...withSizes(defaults.ground), ...withSizes(defaults.single)]
+            : level === 0 ? withSizes(defaults.ground) : withSizes(defaults.upstairs);
+          const ladder = storeys > 1 ? (level === 0 ? defaults.ladderUp : defaults.ladderDown) : undefined;
+          const plan = geometry.furnishPlan({ ...room, ladder }, list);
+          for (const piece of plan.placed) placements.push({ id: piece.id, x: piece.x, y: piece.y, z: level, type: 10, face: piece.face });
+          furniture.placed += plan.placed.length;
+          furniture.skipped.push(...plan.skipped.map((item) => ({ ...item, level })));
         }
       }
       const roofId = style.roof;
@@ -142,6 +172,7 @@ module.exports = function registerEditGeneratorTools(ctx, { build, terrain, styl
       return finish(placements, edits, {
         label: `house ${styleName}`, style: styleName, bounds: { x1: x, y1: y, x2: x + width - 1, y2: y + height - 1 },
         storeys, roof: roof && Boolean(roofId), windows: placements.filter((p) => p.type === 4).length,
+        furniture: furniture.placed, ...(furniture.skipped.length > 0 ? { furnitureSkipped: furniture.skipped } : {}),
         ...(level ? { flatten: level.report } : {}),
       }, dryRun);
     }
