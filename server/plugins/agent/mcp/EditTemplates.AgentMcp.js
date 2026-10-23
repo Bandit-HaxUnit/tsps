@@ -300,7 +300,7 @@ module.exports = function registerEditTemplateTools(ctx, { build, terrain }) {
 
   tool(
     "paste_template",
-    "Place a captured template with its low corner at (x, y), turned clockwise by rotation (0/90/180/270). Locs go live and persist like place_objects; terrain 'floors' (default) copies floor overlays and roof/indoor tile flags, 'all' also underlays and heights (shifted so the template's corner sits at baseHeight when given), 'none' skips terrain. Interactive locs (doors, ladders, stairs, banks) are skipped by default: their handlers belong to the place they were captured from. dryRun reports without placing.",
+    "Place a captured template with its low corner at (x, y), turned clockwise by rotation (0/90/180/270). Locs go live and persist like place_objects; terrain 'floors' (default) copies floor overlays and roof/indoor tile flags, 'all' also underlays and heights (shifted so the template's corner sits at baseHeight when given), 'none' skips terrain; flatten (default on) levels the footprint first so walls stand even on uneven ground. Interactive locs (doors, ladders, stairs, banks) are skipped by default: their handlers belong to the place they were captured from. dryRun reports without placing.",
     {
       name: z.string().describe("Template name from list_templates"),
       x: z.number().int().describe("Low-corner tile x"),
@@ -310,15 +310,27 @@ module.exports = function registerEditTemplateTools(ctx, { build, terrain }) {
       interactive: z.enum(["skip", "keep"]).default("skip").describe("Leave out interactive locs (default) or keep them"),
       terrain: z.enum(["floors", "all", "none"]).default("floors"),
       baseHeight: z.number().int().min(0).max(255).optional().describe("With terrain 'all': height of the template's corner tile"),
+      flatten: z.boolean().default(true).describe("Level the footprint first and blend its edge (not with terrain 'all', which brings its own heights)"),
       dryRun: z.boolean().default(false),
     },
-    ({ name, x, y, plane = 0, rotation = 0, interactive = "skip", terrain: terrainMode = "floors", baseHeight, dryRun = false }) => {
+    ({ name, x, y, plane = 0, rotation = 0, interactive = "skip", terrain: terrainMode = "floors", baseHeight, flatten = true, dryRun = false }) => {
       const template = readTemplate(name);
       rect(x, y, x, y);
       const plan = planPaste(template, { x, y, plane, rotation, interactive, terrainMode, baseHeight });
+      // Walls stand on the ground under their corners: on uneven ground a pasted building's
+      // walls come out at different heights, so level the footprint first.
+      let level = null;
+      if (flatten && terrainMode !== "all") {
+        const { x1, y1, x2, y2 } = plan.bounds;
+        const levelling = terrain.levelEdits(x1, y1, x2, y2, { blend: 2 });
+        plan.edits.unshift(...levelling.edits);
+        level = { level: levelling.level, tilesChanged: levelling.moved, spread: levelling.spread };
+        if (levelling.level === null) level.note = "No stored heights under the footprint; left as it is";
+      }
       const summary = {
         name, rotation, bounds: plan.bounds, placements: plan.placements.length,
         terrainEdits: plan.edits.length, skippedInteractive: plan.skippedInteractive,
+        ...(level ? { flatten: level } : {}),
       };
       if (dryRun) return { dryRun: true, ...summary };
       // Terrain first: a region over the packet budget fails here, before any loc stands.

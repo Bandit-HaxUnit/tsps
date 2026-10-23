@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const geometry = require("./EditGeometry.AgentMcp");
 
 // Ground-tile tools for the agent MCP server: inspect and repaint terrain overlays and
 // underlays, raise/lower/flatten height, and clear tiles back to base. Changes apply per
@@ -453,5 +454,14 @@ module.exports = function registerEditTerrainTools(ctx) {
   const tileAt = (x, y, z) => decodeTile(
     toU8(baseBytes(regionIdFor(x, y)).terrainData), z, x & 0x3f, y & 0x3f, wideTerrain(),
   );
-  return { applyEdits, tileAt };
+  /**
+   * Height edits that level a building's footprint and blend its edge (levelPlan), read from
+   * the live terrain on plane 0. Callers apply them with their own edits, before placing.
+   */
+  const levelEdits = (x0, y0, x1, y1, options = {}) => {
+    const plan = geometry.levelPlan((x, y) => tileAt(x, y, 0).height, x0, y0, x1, y1, options);
+    const edits = plan.tiles.map((tile) => ({ kind: "height", tileX: tile.x, tileY: tile.y, plane: 0, locId: tile.height }));
+    return { edits, level: plan.level, spread: plan.spread, moved: plan.moved, unknown: plan.unknown };
+  };
+  return { applyEdits, tileAt, levelEdits };
 };

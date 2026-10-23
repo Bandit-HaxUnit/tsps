@@ -324,6 +324,51 @@ function hipRoof(x, y, width, height, options = {}) {
   return pieces;
 }
 
+/**
+ * Heights that level a building's footprint (x0, y0)-(x1, y1) and blend it into the ground.
+ *
+ * A tile's height is its south-west corner, and a wall stands on the corners at its two ends,
+ * so the walls on the north and east sides also stand on the tiles one beyond the footprint:
+ * those are levelled too. The level is the median of the stored heights there, so one bump
+ * does not set it. Then `blend` rings round it move part of the way from their own height
+ * towards the level (a third, then two thirds of the way out for blend 2), so the edge slopes
+ * instead of stepping. heightAt(x, y) gives a tile's stored height, or null where the client
+ * makes its own: those are set inside the footprint and left alone in the blend.
+ */
+function levelPlan(heightAt, x0, y0, x1, y1, options = {}) {
+  const blend = Math.max(0, options.blend ?? 2);
+  const [cx0, cy0, cx1, cy1] = [x0, y0, x1 + 1, y1 + 1];
+  const known = [];
+  let unknown = 0;
+  for (let x = cx0; x <= cx1; x++) {
+    for (let y = cy0; y <= cy1; y++) {
+      const height = heightAt(x, y);
+      if (height === null || height === undefined) unknown++;
+      else known.push(height);
+    }
+  }
+  if (known.length === 0) return { level: null, tiles: [], spread: 0, unknown, moved: 0 };
+  const sorted = [...known].sort((a, b) => a - b);
+  const level = sorted[Math.floor(sorted.length / 2)];
+  const spread = sorted[sorted.length - 1] - sorted[0];
+  const tiles = [];
+  let moved = 0;
+  for (let x = cx0 - blend; x <= cx1 + blend; x++) {
+    for (let y = cy0 - blend; y <= cy1 + blend; y++) {
+      // Rings out from the levelled core: 0 inside it, 1 just outside, and so on.
+      const ring = Math.max(cx0 - x, x - cx1, cy0 - y, y - cy1, 0);
+      const height = heightAt(x, y);
+      let target;
+      if (ring === 0) target = level;
+      else if (height === null || height === undefined) continue;
+      else target = Math.round(level + (height - level) * (ring / (blend + 1)));
+      if (target !== height) moved++;
+      tiles.push({ x, y, height: target });
+    }
+  }
+  return { level, tiles, spread, unknown, moved };
+}
+
 function unique(tiles) {
   const seen = new Set();
   const out = [];
@@ -337,5 +382,5 @@ function unique(tiles) {
 }
 
 module.exports = {
-  line, ring, box, tower, repeated, avenue, rotate, facingFor, unique, footprint, rotateLoc, rotateOffset, wallPath, hipRoof,
+  line, ring, box, tower, repeated, avenue, rotate, facingFor, unique, footprint, rotateLoc, rotateOffset, wallPath, hipRoof, levelPlan,
 };

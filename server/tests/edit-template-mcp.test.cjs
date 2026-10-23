@@ -74,6 +74,7 @@ function setup(objects, tiles = {}) {
   const terrain = {
     tileAt: (x, y, plane) => tiles[`${x},${y},${plane}`] ?? { overlay: null, underlay: null, height: null, flag: null },
     applyEdits: (list) => { edits.push(...list); return { regions: [{ regionId: 1, terrainBytes: 100 }] }; },
+    levelEdits: () => ({ edits: [], level: null, moved: 0, spread: 0, unknown: 0 }),
   };
   registerEditTemplateTools({
     core: fakeCore(objects), z,

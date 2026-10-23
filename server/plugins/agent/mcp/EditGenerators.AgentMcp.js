@@ -38,6 +38,19 @@ module.exports = function registerEditGeneratorTools(ctx, { build, terrain, styl
     return { points, gate };
   };
 
+  // Ground more uneven than this across a footprint is a hillside: levelling it carves a
+  // terrace, which the result says rather than doing it quietly.
+  const STEEP = 16;
+  /** Levels a footprint before building on it; the edits go first so the build sits on them. */
+  const levelled = (x0, y0, x1, y1) => {
+    const plan = terrain.levelEdits(x0, y0, x1, y1, { blend: 2 });
+    const report = { level: plan.level, tilesChanged: plan.moved, spread: plan.spread };
+    if (plan.unknown > 0) report.unstoredHeights = plan.unknown;
+    if (plan.level === null) report.note = "No stored heights under the footprint; left as it is";
+    else if (plan.spread > STEEP) report.note = `Steep ground (heights vary by ${plan.spread}): the footprint is cut level into it`;
+    return { edits: plan.edits, report };
+  };
+
   const finish = (placements, edits, summary, dryRun) => {
     if (dryRun) return { dryRun: true, ...summary, placements: placements.length, terrainEdits: edits.length };
     const terrainResult = edits.length > 0 ? terrain.applyEdits(edits, summary.label) : null;
@@ -52,7 +65,7 @@ module.exports = function registerEditGeneratorTools(ctx, { build, terrain, styl
 
   tool(
     "build_house",
-    "Build a house in a captured style (capture_style; it needs wall, and uses door, window, roof): walls on the ring of tiles round the inside, a door in the middle of one side, window frames every few tiles, a wooden floor indoors on each storey, and a hip roof over the whole footprint (eaves, slopes, flat ridge, as Varrock's houses are built). (x, y) is the low corner of the footprint, walls included; width and height are 4 or more. One or two storeys; the roof hides when a player walks inside.",
+    "Build a house in a captured style (capture_style; it needs wall, and uses door, window, roof): walls on the ring of tiles round the inside, a door in the middle of one side, window frames every few tiles, a wooden floor indoors on each storey, and a hip roof over the whole footprint (eaves, slopes, flat ridge, as Varrock's houses are built). (x, y) is the low corner of the footprint, walls included; width and height are 4 or more. One or two storeys; the roof hides when a player walks inside. flatten (default on) levels the footprint first and blends its edge, so walls stand even on uneven ground.",
     {
       style: z.string().describe("Style name from list_styles"),
       ...area,
@@ -63,9 +76,10 @@ module.exports = function registerEditGeneratorTools(ctx, { build, terrain, styl
       windowEvery: z.number().int().min(0).max(10).default(3).describe("A window frame every n wall pieces; 0 for none"),
       roof: z.boolean().default(true),
       floor: z.number().int().min(1).optional().describe("Floor overlay id (default from edit-sets.json)"),
+      flatten: z.boolean().default(true).describe("Level the footprint first and blend its edge, so walls stand even"),
       dryRun: z.boolean().default(false),
     },
-    ({ style: styleName, x, y, width, height, storeys = 1, door = "south", windowEvery = 3, roof = true, floor, dryRun = false }) => {
+    ({ style: styleName, x, y, width, height, storeys = 1, door = "south", windowEvery = 3, roof = true, floor, flatten = true, dryRun = false }) => {
       checkArea(x, y, width, height, 4);
       const style = styles.styleNamed(styleName);
       const defaults = sets().house;
@@ -94,7 +108,8 @@ module.exports = function registerEditGeneratorTools(ctx, { build, terrain, styl
       // Floors and flags as Varrock's houses have them: indoor tiles carry the floor and the
       // indoor flag on every storey (the roof hides when a player is under it), the roof plane
       // the roof flag over the whole footprint.
-      const edits = [];
+      const level = flatten ? levelled(x, y, x + width - 1, y + height - 1) : null;
+      const edits = [...(level?.edits ?? [])];
       const floorId = floor ?? defaults.floor;
       for (let level = 0; level < storeys; level++) {
         for (let tx = x + 1; tx <= x + width - 2; tx++) {
@@ -112,6 +127,7 @@ module.exports = function registerEditGeneratorTools(ctx, { build, terrain, styl
       return finish(placements, edits, {
         label: `house ${styleName}`, style: styleName, bounds: { x1: x, y1: y, x2: x + width - 1, y2: y + height - 1 },
         storeys, roof: roof && Boolean(roofId), windows: placements.filter((p) => p.type === 4).length,
+        ...(level ? { flatten: level.report } : {}),
       }, dryRun);
     }
   );
@@ -129,9 +145,10 @@ module.exports = function registerEditGeneratorTools(ctx, { build, terrain, styl
       height: z.number().int().min(6).max(40),
       gate: z.enum(SIDES).default("south"),
       spacing: z.number().int().min(2).max(4).default(2).describe("Tiles between gravestones"),
+      flatten: z.boolean().default(false).describe("Level the yard first (fences on a slope look natural, so off by default)"),
       dryRun: z.boolean().default(false),
     },
-    ({ style: styleName, x, y, width, height, gate = "south", spacing = 2, dryRun = false }) => {
+    ({ style: styleName, x, y, width, height, gate = "south", spacing = 2, flatten = false, dryRun = false }) => {
       checkArea(x, y, width, height, 6);
       const style = styles.styleNamed(styleName);
       const set = sets().graveyard;
@@ -142,7 +159,8 @@ module.exports = function registerEditGeneratorTools(ctx, { build, terrain, styl
       const midX = x + Math.floor(width / 2);
       const midY = y + Math.floor(height / 2);
       const onPath = (tx, ty) => (alongY ? tx === midX : ty === midY);
-      const edits = [];
+      const level = flatten ? levelled(x, y, x + width - 1, y + height - 1) : null;
+      const edits = [...(level?.edits ?? [])];
       for (let tx = x; tx < x + width; tx++) {
         for (let ty = y; ty < y + height; ty++) {
           if (onPath(tx, ty)) {
@@ -166,6 +184,7 @@ module.exports = function registerEditGeneratorTools(ctx, { build, terrain, styl
       return finish(placements, edits, {
         label: `graveyard ${styleName}`, style: styleName, bounds: { x1: x - 1, y1: y - 1, x2: x + width, y2: y + height },
         stones: placements.filter((p) => set.stones.includes(p.id)).length,
+        ...(level ? { flatten: level.report } : {}),
       }, dryRun);
     }
   );
@@ -180,9 +199,10 @@ module.exports = function registerEditGeneratorTools(ctx, { build, terrain, styl
       height: z.number().int().min(5).max(40),
       gate: z.enum(SIDES).default("south"),
       crop: z.union([z.string(), z.number().int().min(0)]).default("wheat"),
+      flatten: z.boolean().default(false).describe("Level the field first (off by default: fields follow the land)"),
       dryRun: z.boolean().default(false),
     },
-    ({ style: styleName, x, y, width, height, gate = "south", crop = "wheat", dryRun = false }) => {
+    ({ style: styleName, x, y, width, height, gate = "south", crop = "wheat", flatten = false, dryRun = false }) => {
       checkArea(x, y, width, height, 5);
       const style = styles.styleNamed(styleName);
       const set = sets().farm;
@@ -208,9 +228,11 @@ module.exports = function registerEditGeneratorTools(ctx, { build, terrain, styl
         const near = { south: [x, y], north: [x, y + height - 1], east: [x + width - 1, y], west: [x, y] }[gate];
         placements.push({ id: hay[0], x: near[0], y: near[1], z: 0, type: 10, face: 0 });
       }
-      return finish(placements, [], {
+      const level = flatten ? levelled(x, y, x + width - 1, y + height - 1) : null;
+      return finish(placements, level?.edits ?? [], {
         label: `farm ${styleName}`, style: styleName, crop: cropId,
         bounds: { x1: x - 1, y1: y - 1, x2: x + width, y2: y + height },
+        ...(level ? { flatten: level.report } : {}),
       }, dryRun);
     }
   );

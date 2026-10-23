@@ -51,6 +51,8 @@ say what changed rather than deleting it quietly. Short rows beat paragraphs.
 | `capture_style`'s window guess for varrock-house (4501) is a small wall lamp | Real windows there may be wall variants (23826); placing a variant in place of a wall piece is not built yet |
 | Graveyard path overlay 1 in the desert | Renders light grey, not brown dirt |
 | Checked by screenshot | Two Varrock-style houses (1 and 2 storeys), a fenced graveyard, a fenced wheat farm |
+| Walls on uneven ground | Each wall piece stands on the heights of its two end corners, so the same house on ground varying by ~14 has walls stepping up and down and a bent eave line; levelled first, its walls run straight (screenshots side by side at 3424-3439, 2946). A tile's height is its south-west corner: levelling must include one row north and one column east of the footprint |
+| Tiles with no stored height | Common in the desert. Levelling sets them inside the footprint and leaves them alone in the blend ring, where the client keeps generating their height |
 
 ## Styles
 

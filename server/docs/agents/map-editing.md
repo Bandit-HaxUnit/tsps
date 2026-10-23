@@ -170,6 +170,13 @@ build_farm      { "style": "lumbridge-fence", "x": 3440, "y": 2999, "width": 9, 
   then a ring of slopes per plane, flat tops where it runs out. Floors get the indoor flag, so
   the roof hides when a player walks in. The door is the style's own and opens.
 - The graveyard and farm take (x, y) as the low corner *inside* the fence.
+- **Uneven ground.** A wall stands on the ground height at its two end corners, so on small
+  hills a building's walls come out at different heights. `build_house` and `paste_template`
+  level the footprint first by default (`flatten`): the median height over the footprint and
+  the corners its north and east walls stand on, with two rings round it blended back into the
+  ground. The result reports the level, the tiles changed and the spread; a spread over 16 adds
+  a "steep ground" note (that is a terrace cut into a hillside). Graveyards and farms leave the
+  ground alone unless `flatten: true`: fences follow the land in the game too.
 
 ### Clearing a site
 

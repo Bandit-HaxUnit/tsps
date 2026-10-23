@@ -38,7 +38,16 @@ function setup() {
   const placed = [];
   const edits = [];
   const build = { applyPlacements: (list) => { placed.push(...list); return { placed: list.length }; } };
-  const terrain = { applyEdits: (list) => { edits.push(...list); return { regions: [] }; }, tileAt: () => ({}) };
+  // Ground rising 2 per tile eastward, so levelling has something to do.
+  const heightAt = (x) => 30 + 2 * (x - 100);
+  const terrain = {
+    applyEdits: (list) => { edits.push(...list); return { regions: [] }; },
+    tileAt: (x) => ({ height: heightAt(x) }),
+    levelEdits: (x0, y0, x1, y1, options) => {
+      const plan = geometry.levelPlan((x) => heightAt(x), x0, y0, x1, y1, options);
+      return { ...plan, edits: plan.tiles.map((t) => ({ kind: "height", tileX: t.x, tileY: t.y, plane: 0, locId: t.height })) };
+    },
+  };
   const ctx = { core: { ObjectDefinition: { forId: () => null } }, z, tool: (name, _d, _s, handler) => tools.set(name, handler) };
   const styles = registerEditStyleTools(ctx, { build, terrain, objectsIn: () => [] });
   registerEditGeneratorTools(ctx, { build, terrain, styles });
@@ -75,4 +84,29 @@ test("build_graveyard and build_farm: an enclosure with a gate, filled from the 
   assert.ok(t.placed.filter((p) => p.id === 1161).length >= 15);
   assert.ok(t.placed.some((p) => p.id === 297), "a scarecrow");
   await assert.rejects(t.call("build_farm", { style: "fence", x: 30, y: 30, width: 7, height: 6, crop: "melon" }), /Unknown crop/);
+});
+
+test("the footprint and the corners its walls stand on are levelled, the edge blended", () => {
+  const slope = (x) => 30 + 2 * x;
+  const plan = geometry.levelPlan((x) => slope(x), 0, 0, 4, 3, { blend: 2 });
+  assert.equal(plan.level, 36, "the median over x 0-5 (the footprint and its east corners)");
+  const at = (x, y) => plan.tiles.find((t) => t.x === x && t.y === y).height;
+  for (let x = 0; x <= 5; x++) assert.equal(at(x, 2), 36);
+  assert.equal(at(4, 4), 36, "the row north of the footprint carries its north walls' corners");
+  assert.deepEqual([at(-1, 2), at(-2, 2), at(6, 2), at(7, 2)], [33, 29, 38, 41], "a third, then two thirds of the way back");
+  const flat = geometry.levelPlan(() => null, 0, 0, 2, 2);
+  assert.equal(flat.level, null, "no stored heights: nothing to level against");
+});
+
+test("build_house levels its footprint by default; the yard and farm only when asked", async () => {
+  const t = setup();
+  const house = await t.call("build_house", { style: "town", x: 100, y: 100, width: 5, height: 5 });
+  assert.equal(house.flatten.level, 36, "the median of columns 30-40");
+  assert.ok(t.edits.filter((e) => e.kind === "height").length > 25);
+  t.edits.length = 0;
+  const yard = await t.call("build_graveyard", { style: "fence", x: 100, y: 100, width: 6, height: 6 });
+  assert.equal(yard.flatten, undefined);
+  assert.equal(t.edits.filter((e) => e.kind === "height").length, 0);
+  const steep = await t.call("build_house", { style: "town", x: 100, y: 100, width: 12, height: 5, dryRun: true });
+  assert.match(steep.flatten.note, /Steep ground/);
 });
