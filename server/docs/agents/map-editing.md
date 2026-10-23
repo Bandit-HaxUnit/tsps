@@ -119,6 +119,35 @@ paste_template   { "name": "varrock-house-west", "x": 3416, "y": 2956, "rotation
   it. The blocked and bridge flags are never copied.
 - Templates are one file each, one loc per line. Commit the good ones: they are the catalog.
 
+### Styles and walls in a style
+
+A style is the set of wall pieces one real building uses, by role, so new structures can be
+drawn in its look:
+
+| Tool | Purpose |
+| --- | --- |
+| `capture_style` | Read a building's pieces into `plugins/agent/data/edit-styles.json`: wall, corner, post, diagonal, door, gate, floor (most common wins; `roles` overrides) |
+| `list_styles` | Captured styles, with the variants (windows, decorated walls) left to assign by hand |
+| `build_wall` | A wall in a style along a path of tile corners: city walls, palisades, enclosures |
+
+```jsonc
+// A Falador-stone fort: closed square, a gateway on the south side, 3x3 towers every 6 tiles.
+build_wall { "style": "falador-white", "closed": true, "facing": "out",
+             "points": [[3400,2992],[3412,2992],[3412,3004],[3400,3004]],
+             "gates": [[3406,2992]], "towerEvery": 6, "towerSize": 3 }
+```
+
+- Points are tile **corners**: (x, y) is the south-west corner of tile x, y. Straight runs
+  become wall pieces on tile edges, 45-degree runs diagonal pieces.
+- Many walls have a finished face on one side only. `facing` (`out`/`in`) picks it for a
+  closed wall, `side` (`left`/`right` of the walking direction) for an open one. A wall that
+  renders black in a screenshot is showing its back: flip it.
+- `gates` are corners whose next edge stays open; the style's gate or door hangs there unless
+  `gateDoors: false`.
+
+Shipped styles: `falador-white`, `varrock-city-wall`, `lumbridge-castle`, `emir-sandstone`
+(low wall), `lumbridge-fence`.
+
 ### Clearing a site
 
 `clear_area` removes what the spawn file placed and leaves the cache map's own scenery

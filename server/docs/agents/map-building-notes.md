@@ -40,6 +40,20 @@ say what changed rather than deleting it quietly. Short rows beat paragraphs.
 | Yaw: 0 faces north, 512 east, 1024 south, 1536 west. Pitch 512 is straight down | Pitch 250–330 shows walls and depth; 450+ for layout |
 | Desert heat and aggressive NPCs (jackals) keep a camera in combat | Pick camera tiles away from them |
 
+## Styles
+
+| Style | Source | Notes |
+| --- | --- | --- |
+| `falador-white` | Falador castle | Wall 24175 for every role; door 24058, gate 53281. Fort with towers checked by screenshot |
+| `varrock-city-wall` | Varrock's south wall | Wall 23780, crenellated; corner overridden to 23780 (the capture picked 4657 from a nearby house). Faces one side only |
+| `lumbridge-castle` | Lumbridge castle | Wall 1911, door 1535 |
+| `emir-sandstone` | Emir's Arena | Wall overridden to 44884 (low wall); the most common piece there is the wooden fence 3125 |
+| `lumbridge-fence` | Lumbridge cow field | Fence 980 with gate 1558; a pen with a gate checked by screenshot |
+
+A capture guesses roles from what is most common in the rectangle, so a rectangle that takes
+in a neighbour's building can pick that building's piece; check the result and override with
+`roles`.
+
 ## Templates
 
 | Finding | Detail |
@@ -57,6 +71,14 @@ say what changed rather than deleting it quietly. Short rows beat paragraphs.
   tile edges: shape 0 (straight; rotation 0 west, 1 north, 2 east, 3 south) and shape 2 for two
   edges of one tile (L corner; 0 west+north, 1 north+east, 2 east+south, 3 south+west). A tile's
   wall slot holds one wall, so two edges need the L, not two straights.
+- **A wall piece shows its finished face to the tile it sits on.** Varrock's city wall sits
+  on the tiles outside the city. Put the same piece on the tile across the edge (the opposite
+  rotation) and you see its back: Varrock's city wall renders as a black slab, Falador's white
+  stone as a plain untextured face. `build_wall` takes `facing`/`side` for this; when a wall
+  looks black or flat in a screenshot, flip it.
+- **Diagonal walls (shape 9)**: read off Falador castle, a south-west to north-east chain uses
+  rotation 0 or 2, north-west to south-east 1 or 3; the pair differ in which face is finished.
+  Joints between a diagonal run and a straight one use small shape-1 pieces (not generated yet).
 - **Edge-walling a region**: for every tile inside the shape, put a wall on each edge facing an
   outside tile (one edge → shape 0, two → shape 2). That closes ellipses and boxes with no gaps
   and leaves openings wherever you skip an edge.

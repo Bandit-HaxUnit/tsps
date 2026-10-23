@@ -9,6 +9,7 @@
     "data/definitions/npc-combat-defs.json",
     "data/regions/**",
     "plugins/agent/data/templates/**",
+    "plugins/agent/data/edit-styles.json",
     "*.log"
   ]
 }

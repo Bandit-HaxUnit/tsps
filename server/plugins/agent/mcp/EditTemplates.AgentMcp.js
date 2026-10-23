@@ -330,4 +330,7 @@ module.exports = function registerEditTemplateTools(ctx, { build, terrain }) {
       };
     }
   );
+
+  // Styles read buildings through the same region-loading object scan.
+  return { objectsIn };
 };

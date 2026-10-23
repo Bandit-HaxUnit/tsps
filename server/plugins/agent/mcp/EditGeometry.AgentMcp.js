@@ -171,6 +171,101 @@ function rotateOffset(dx, dy, turns, width, height) {
   return { dx: x, dy: y };
 }
 
+// Diagonal walls (shape 9) read off Falador castle: chains running south-west to north-east
+// use rotation 0 or 2, north-west to south-east rotation 1 or 3; the pair differ in which
+// side shows the finished face.
+const DIAGONAL_FACE = { ne: 0, nw: 1 };
+// Straight wall rotations by tile edge, and the L corner (shape 2) for two edges of one tile.
+const EDGE_FACE = { W: 0, N: 1, E: 2, S: 3 };
+const CORNER_FACE = { "N,W": 0, "E,N": 1, "E,S": 2, "S,W": 3 };
+
+/** True when a closed path of corners runs counter-clockwise (positive shoelace area). */
+function counterClockwise(points) {
+  let area = 0;
+  for (let i = 0; i < points.length; i++) {
+    const [x1, y1] = points[i];
+    const [x2, y2] = points[(i + 1) % points.length];
+    area += x1 * y2 - x2 * y1;
+  }
+  return area > 0;
+}
+
+/**
+ * Wall pieces along a path of tile corners ([[x, y], ...]; (x, y) is the south-west corner of
+ * tile x, y). Axis steps become straight walls (shape 0) on the edge they run along, two edges
+ * of one tile an L corner (shape 2), and 45-degree steps diagonal walls (shape 9) across the
+ * tile they cross; other angles step as a mix of the two.
+ *
+ * A wall piece sits on one of the two tiles beside its edge, and shows its finished face to
+ * that tile's side (Varrock's city wall is placed on the tiles outside the city): `side`
+ * picks the tile on the "left" or "right" of the walking direction. For a closed path,
+ * `facing: "out"` or `"in"` picks it whichever way the corners run.
+ *
+ * `gaps` are corners whose following edge stays open; they come back as `openings`, placed
+ * like a wall piece would be, so a caller can hang a gate in them.
+ */
+function wallPath(points, options = {}) {
+  const closed = options.closed === true && points.length > 2;
+  let side = options.side === "right" ? "right" : "left";
+  if (closed && (options.facing === "out" || options.facing === "in")) {
+    // Left of a counter-clockwise loop is its inside.
+    const insideIsLeft = counterClockwise(points);
+    side = (options.facing === "in") === insideIsLeft ? "left" : "right";
+  }
+  const gaps = new Set((options.gaps ?? []).map(([x, y]) => `${x},${y}`));
+  const corners = closed ? [...points, points[0]] : points;
+  const edges = new Map();
+  const diagonals = new Map();
+  const openings = [];
+  for (let i = 0; i + 1 < corners.length; i++) {
+    let [x, y] = corners[i];
+    const [tx, ty] = corners[i + 1];
+    while (x !== tx || y !== ty) {
+      const sx = Math.sign(tx - x);
+      const sy = Math.sign(ty - y);
+      const open = gaps.has(`${x},${y}`);
+      if (sx !== 0 && sy !== 0) {
+        const tile = { x: Math.min(x, x + sx), y: Math.min(y, y + sy) };
+        // Which finished face shows depends on the walking direction and the side asked for;
+        // walking east, rotation 0/1 showed it on the right (checked by screenshot).
+        const flip = (sx > 0) === (side === "left");
+        const face = (DIAGONAL_FACE[sx === sy ? "ne" : "nw"] + (flip ? 2 : 0)) & 3;
+        if (open) openings.push({ ...tile, type: 9, face });
+        else diagonals.set(`${tile.x},${tile.y}`, { ...tile, face });
+        x += sx;
+        y += sy;
+        continue;
+      }
+      // The tile on the left of the step, or the right; the wall goes on its edge facing the line.
+      let tile;
+      let edge;
+      const left = side === "left";
+      if (sx > 0) [tile, edge] = left ? [{ x, y }, "S"] : [{ x, y: y - 1 }, "N"];
+      else if (sx < 0) [tile, edge] = left ? [{ x: x - 1, y: y - 1 }, "N"] : [{ x: x - 1, y }, "S"];
+      else if (sy > 0) [tile, edge] = left ? [{ x: x - 1, y }, "E"] : [{ x, y }, "W"];
+      else [tile, edge] = left ? [{ x, y: y - 1 }, "W"] : [{ x: x - 1, y: y - 1 }, "E"];
+      if (open) {
+        openings.push({ ...tile, type: 0, face: EDGE_FACE[edge] });
+      } else {
+        const key = `${tile.x},${tile.y}`;
+        if (!edges.has(key)) edges.set(key, { ...tile, sides: [] });
+        if (!edges.get(key).sides.includes(edge)) edges.get(key).sides.push(edge);
+      }
+      x += sx;
+      y += sy;
+    }
+  }
+  const pieces = [];
+  for (const { x, y, sides } of edges.values()) {
+    const corner = sides.length === 2 ? CORNER_FACE[[...sides].sort().join(",")] : undefined;
+    // Two opposite edges of one tile cannot share its wall slot: the first one stays.
+    if (corner !== undefined) pieces.push({ x, y, type: 2, face: corner });
+    else pieces.push({ x, y, type: 0, face: EDGE_FACE[sides[0]] });
+  }
+  for (const piece of diagonals.values()) pieces.push({ ...piece, type: 9 });
+  return { pieces, openings };
+}
+
 function unique(tiles) {
   const seen = new Set();
   const out = [];
@@ -184,5 +279,5 @@ function unique(tiles) {
 }
 
 module.exports = {
-  line, ring, box, tower, repeated, avenue, rotate, facingFor, unique, footprint, rotateLoc, rotateOffset,
+  line, ring, box, tower, repeated, avenue, rotate, facingFor, unique, footprint, rotateLoc, rotateOffset, wallPath,
 };
