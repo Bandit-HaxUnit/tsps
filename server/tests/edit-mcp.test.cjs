@@ -372,3 +372,21 @@ test("place_object drops the entry of the object it replaced on the tile", async
   assert.equal(second.replaced, 1);
   assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).map((entry) => entry.id), [3]);
 });
+
+test("clear_area drops a wandering NPC's spawn entry by its spawn tile", async () => {
+  const core = fakeCore();
+  const { call } = setup(core);
+  fs.writeFileSync(process.env.AGENT_MCP_NPC_SPAWNS_FILE, JSON.stringify([
+    { level: 0, name: "Cow", x: 650, y: 650, id: 7, source: "agent-mcp" },
+  ]));
+  // Spawned on 650,650; it has wandered one tile east.
+  const cow = {
+    getId: () => 7, getLocation: () => new core.Location(651, 650, 0),
+    getSpawnPosition: () => new core.Location(650, 650, 0), getPrivateArea: () => null,
+  };
+  core.World.getNpcsNear = () => [cow];
+  const cleared = await call("clear_area", { x1: 649, y1: 649, x2: 652, y2: 651 });
+  assert.equal(cleared.removedNpcs, 1);
+  assert.deepEqual(cleared.unpersistedCacheNpcs, []);
+  assert.deepEqual(JSON.parse(fs.readFileSync(process.env.AGENT_MCP_NPC_SPAWNS_FILE, "utf8")), []);
+});

@@ -187,21 +187,12 @@ state on open and on **Refresh map**:
 So an agent build appears in the editor without a login, and the same edits appear in-game to
 logged-in players on scene rebuild (walk, teleport, relog).
 
-## What the cache will and will not give you
+## What looks right
 
-Verified by building with them in-game; save yourself the round trip:
-
-| Object | Verdict |
-| --- | --- |
-| `Castle wall` (16519), `Battlement` (2832) | Looks like proper grey crenellated stone |
-| `Pillar` (6283, 3×3), `Column` (5228) | Render as huge dark monoliths — avoid at scale |
-| `Marble wall` (5907) | Player-owned-house object; renders as brown wood outside |
-| `Tower` (1939) | Brown ruined wooden cone, not a stone tower |
-| `Fountain` (153) | Dark spiky shape |
-| `White Tree patch` (9210) | A black spiky bush, not a tree |
-
-Screenshot before committing to a look: the `vision_screenshot` tool captures what a headless
-client sees, which is far cheaper than rebuilding a city twice.
+Read [map-building-notes.md](map-building-notes.md) before building anything bigger than a test
+piece: which objects render well and which don't, how to place walls so they join, how terrain
+height reads in game, screenshot workflow, sites and their budgets. Add what your build teaches
+you to it.
 
 ## A worked build
 

@@ -300,10 +300,12 @@ module.exports = function registerEditTools(ctx) {
           if (dryRun) continue;
           World.getRemoveNPCQueue().push(npc);
           let covered = false;
+          // The file records the spawn tile, not where the NPC has wandered to.
+          const spawn = npc.getSpawnPosition?.() ?? at;
           for (let i = npcSpawns.length - 1; i >= 0; i--) {
             const entry = npcSpawns[i];
-            if (entry.id === npc.getId() && entry.x === at.getX() && entry.y === at.getY()
-              && (entry.level ?? 0) === at.getZ()) {
+            if (entry.id === npc.getId() && entry.x === spawn.getX() && entry.y === spawn.getY()
+              && (entry.level ?? 0) === spawn.getZ()) {
               npcSpawns.splice(i, 1);
               npcsChanged = true;
               covered = true;
