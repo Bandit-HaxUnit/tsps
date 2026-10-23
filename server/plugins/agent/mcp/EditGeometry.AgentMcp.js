@@ -266,6 +266,64 @@ function wallPath(points, options = {}) {
   return { pieces, openings };
 }
 
+// Roof shapes, read off a Varrock house (one roof loc for every shape, 15552 there): 18 eave
+// edges and 19 eave corners round the outside, 12 slopes and 16 slope corners on each ring in,
+// 17 flat tops in the middle. Every edge and corner faces outward: rotation 1 on the south
+// side, 0 east, 3 north, 2 west; corners 1 south-west, 0 south-east, 3 north-east, 2 north-west.
+const ROOF = { eave: 18, eaveCorner: 19, slope: 12, slopeCorner: 16, flat: 17 };
+
+/**
+ * A hip roof over the box x, y (low corner), width x height: one ring of eaves (optional),
+ * then one ring of slopes per plane going up from `plane`, and flat tops where the box runs
+ * out (one tile wide inside a ring) or the planes do (above 3). Pieces carry their plane.
+ */
+function hipRoof(x, y, width, height, options = {}) {
+  const pieces = [];
+  let plane = options.plane ?? 2;
+  let [x0, y0, x1, y1] = [x, y, x + width - 1, y + height - 1];
+  const ring = (edge, corner, z) => {
+    for (let tx = x0; tx <= x1; tx++) {
+      for (let ty = y0; ty <= y1; ty++) {
+        const west = tx === x0;
+        const east = tx === x1;
+        const south = ty === y0;
+        const north = ty === y1;
+        if (!west && !east && !south && !north) continue;
+        let type = edge;
+        let face;
+        if ((west || east) && (south || north)) {
+          type = corner;
+          face = south ? (west ? 1 : 0) : (west ? 2 : 3);
+        } else {
+          face = south ? 1 : north ? 3 : west ? 2 : 0;
+        }
+        pieces.push({ x: tx, y: ty, z, type, face });
+      }
+    }
+  };
+  const shrink = () => { x0++; y0++; x1--; y1--; };
+  if (options.eaves !== false && x1 - x0 >= 2 && y1 - y0 >= 2) {
+    ring(ROOF.eave, ROOF.eaveCorner, plane);
+    shrink();
+  }
+  while (x0 <= x1 && y0 <= y1) {
+    const width1 = x1 - x0 + 1;
+    const height1 = y1 - y0 + 1;
+    // One tile wide, or nothing left above: flat tops cover the rest.
+    if (width1 === 1 || height1 === 1 || plane > 3) {
+      const z = Math.min(plane, 3);
+      for (let tx = x0; tx <= x1; tx++) for (let ty = y0; ty <= y1; ty++) pieces.push({ x: tx, y: ty, z, type: ROOF.flat, face: 0 });
+      break;
+    }
+    ring(ROOF.slope, ROOF.slopeCorner, plane);
+    shrink();
+    // The flat tops of a ring that leaves one tile across sit on that ring's plane.
+    if (x0 <= x1 && y0 <= y1 && (x1 - x0 === 0 || y1 - y0 === 0)) continue;
+    plane++;
+  }
+  return pieces;
+}
+
 function unique(tiles) {
   const seen = new Set();
   const out = [];
@@ -279,5 +337,5 @@ function unique(tiles) {
 }
 
 module.exports = {
-  line, ring, box, tower, repeated, avenue, rotate, facingFor, unique, footprint, rotateLoc, rotateOffset, wallPath,
+  line, ring, box, tower, repeated, avenue, rotate, facingFor, unique, footprint, rotateLoc, rotateOffset, wallPath, hipRoof,
 };

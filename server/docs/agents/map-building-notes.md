@@ -40,12 +40,25 @@ say what changed rather than deleting it quietly. Short rows beat paragraphs.
 | Yaw: 0 faces north, 512 east, 1024 south, 1536 west. Pitch 512 is straight down | Pitch 250–330 shows walls and depth; 450+ for layout |
 | Desert heat and aggressive NPCs (jackals) keep a camera in combat | Pick camera tiles away from them |
 
+## Generators
+
+| Finding | Detail |
+| --- | --- |
+| Varrock's hip roof | One roof loc for every shape (15552, slate). Ring of eaves (18 edges, 19 corners), then a ring of slopes per plane (12, corners 16), flat tops (17) where one tile is left across or the planes run out. Every piece faces outward: south 1, east 0, north 3, west 2; corners SW 1, SE 0, NE 3, NW 2. `hipRoof` reproduces varrock-house-a's roof tile for tile |
+| Floors and flags in a house | Indoor tiles: floor overlay 81 and flag 4 on every storey (the roof hides when you are under it); flag 16 on the roof plane over the whole footprint |
+| Top-down screenshots show a hole in the middle of a roof | Real houses too (pasted varrock-house-a): the camera, not the build. Judge roofs from an angle |
+| A generated door opens | Varrock's door 11773 placed by `build_house` opens to 11774 and the player walks in |
+| `capture_style`'s window guess for varrock-house (4501) is a small wall lamp | Real windows there may be wall variants (23826); placing a variant in place of a wall piece is not built yet |
+| Graveyard path overlay 1 in the desert | Renders light grey, not brown dirt |
+| Checked by screenshot | Two Varrock-style houses (1 and 2 storeys), a fenced graveyard, a fenced wheat farm |
+
 ## Styles
 
 | Style | Source | Notes |
 | --- | --- | --- |
 | `falador-white` | Falador castle | Wall 24175 for every role; door 24058, gate 53281. Fort with towers checked by screenshot |
 | `varrock-city-wall` | Varrock's south wall | Wall 23780, crenellated; corner overridden to 23780 (the capture picked 4657 from a nearby house). Faces one side only |
+| `varrock-house` | Varrock house at 3218,3383 | Wall 23818, door 11773, roof 15552; floor overridden to 81 (the margin took in the street's 173); window guess 4501 is a wall lamp |
 | `lumbridge-castle` | Lumbridge castle | Wall 1911, door 1535 |
 | `emir-sandstone` | Emir's Arena | Wall overridden to 44884 (low wall); the most common piece there is the wooden fence 3125 |
 | `lumbridge-fence` | Lumbridge cow field | Fence 980 with gate 1558; a pen with a gate checked by screenshot |

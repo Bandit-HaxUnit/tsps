@@ -145,8 +145,31 @@ build_wall { "style": "falador-white", "closed": true, "facing": "out",
 - `gates` are corners whose next edge stays open; the style's gate or door hangs there unless
   `gateDoors: false`.
 
-Shipped styles: `falador-white`, `varrock-city-wall`, `lumbridge-castle`, `emir-sandstone`
-(low wall), `lumbridge-fence`.
+Shipped styles: `falador-white`, `varrock-city-wall`, `varrock-house` (walls, door, slate roof),
+`lumbridge-castle`, `emir-sandstone` (low wall), `lumbridge-fence`.
+
+### Generators
+
+New structures in a captured style, laid out by rules read off real ones. Decoration ids come
+from `plugins/agent/data/edit-sets.json` (hand-maintained, every id checked).
+
+| Tool | Builds |
+| --- | --- |
+| `build_house` | Walls on the ring round the inside, a door, window frames, floors and a hip roof; 1-2 storeys |
+| `build_graveyard` | A fenced or walled yard with a gate, a path up the middle, rows of gravestones, a tombstone, dead trees |
+| `build_farm` | A fenced field of crops (wheat, cabbage, potato) in rows with walkways, a scarecrow and hay |
+
+```jsonc
+build_house     { "style": "varrock-house", "x": 3440, "y": 2978, "width": 7, "height": 6, "door": "south" }
+build_graveyard { "style": "lumbridge-fence", "x": 3440, "y": 2988, "width": 9, "height": 8 }
+build_farm      { "style": "lumbridge-fence", "x": 3440, "y": 2999, "width": 9, "height": 6, "crop": "wheat" }
+```
+
+- `build_house` needs a style with `roof` (capture it round a real roofed building); its (x, y)
+  is the footprint's low corner, walls included. The roof is Varrock's hip roof rule: eaves,
+  then a ring of slopes per plane, flat tops where it runs out. Floors get the indoor flag, so
+  the roof hides when a player walks in. The door is the style's own and opens.
+- The graveyard and farm take (x, y) as the low corner *inside* the fence.
 
 ### Clearing a site
 

@@ -58,7 +58,7 @@ function setup(objects = [], overlays = {}) {
 
 test("capture_style assigns the most common piece to each role, and roles override it", async () => {
   const t = setup(
-    [[10, 0], [10, 0], [11, 0], [10, 2], [10, 9], [12, 0], [13, 0], [10, 22]],
+    [[10, 0], [10, 0], [11, 0], [10, 2], [10, 9], [12, 0], [13, 0], [10, 22], [14, 12], [14, 16], [15, 4], [15, 4]],
     { "0,0": { id: 5 }, "1,0": { id: 5 }, "2,0": { id: 6 } },
   );
   const style = await t.call("capture_style", { name: "town", x1: 0, y1: 0, x2: 5, y2: 5 });
@@ -69,11 +69,13 @@ test("capture_style assigns the most common piece to each role, and roles overri
   assert.equal(style.door, 12);
   assert.equal(style.gate, 13);
   assert.equal(style.floor, 5);
+  assert.equal(style.roof, 14);
+  assert.equal(style.window, 15);
   assert.deepEqual(style.variants, [{ id: 11, count: 1 }]);
   const overridden = await t.call("capture_style", { name: "town", x1: 0, y1: 0, x2: 5, y2: 5, roles: { wall: 11 } });
   assert.equal(overridden.wall, 11);
   assert.equal((await t.call("list_styles", {})).count, 1);
-  await assert.rejects(t.call("capture_style", { name: "town", x1: 0, y1: 0, x2: 1, y2: 1, roles: { roof: 1 } }), /Unknown role/);
+  await assert.rejects(t.call("capture_style", { name: "town", x1: 0, y1: 0, x2: 1, y2: 1, roles: { chimney: 1 } }), /Unknown role/);
 });
 
 test("build_wall places the style along the path, hangs gates, and raises towers", async () => {

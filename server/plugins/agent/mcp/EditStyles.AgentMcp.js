@@ -17,7 +17,7 @@ const geometry = require("./EditGeometry.AgentMcp");
 
 const NAME = /^[a-z0-9][a-z0-9_-]{0,47}$/;
 const MAX_PIECES = 4000;
-const ROLES = ["wall", "corner", "post", "diagonal", "door", "gate", "floor"];
+const ROLES = ["wall", "corner", "post", "diagonal", "door", "gate", "floor", "roof", "window"];
 
 module.exports = function registerEditStyleTools(ctx, { build, terrain, objectsIn }) {
   const { core, tool, z } = ctx;
@@ -60,7 +60,7 @@ module.exports = function registerEditStyleTools(ctx, { build, terrain, objectsI
 
   tool(
     "capture_style",
-    "Read a building's wall pieces by role into a style for build_wall and the generators: wall (shape 0), corner (shape 2, falls back to wall), post (shape 3), diagonal (shape 9), door and gate (interactive shape-0 locs named Door/Gate), floor (most common overlay). Most common piece wins each role; pass roles to override a guess. Other shape-0 pieces come back as variants (windows, decorated walls) to assign by hand after a screenshot.",
+    "Read a building's wall pieces by role into a style for build_wall and the generators: wall (shape 0), corner (shape 2, falls back to wall), post (shape 3), diagonal (shape 9), door and gate (interactive shape-0 locs named Door/Gate), floor (most common overlay), roof (most common roof piece, any plane), window (most common wall decoration, shape 4: usually the window frames). Most common piece wins each role; pass roles to override a guess. Other shape-0 pieces come back as variants (windows, decorated walls) to assign by hand after a screenshot.",
     {
       name: z.string().describe("Style name: lowercase letters, digits, - or _"),
       x1: z.number().int(), y1: z.number().int(), x2: z.number().int(), y2: z.number().int(),
@@ -79,7 +79,7 @@ module.exports = function registerEditStyleTools(ctx, { build, terrain, objectsI
       if ((area.maxX - area.minX + 1) * (area.maxY - area.minY + 1) > 4096) {
         throw new Error("Rectangle covers more than 4096 tiles");
       }
-      const byShape = { 0: new Map(), 2: new Map(), 3: new Map(), 9: new Map() };
+      const byShape = { 0: new Map(), 2: new Map(), 3: new Map(), 4: new Map(), 9: new Map() };
       const doors = new Map();
       const gates = new Map();
       for (const object of objectsIn(area, [plane])) {
@@ -91,6 +91,11 @@ module.exports = function registerEditStyleTools(ctx, { build, terrain, objectsI
         if (type === 0 && interactive && label.includes("door")) tally(doors, id);
         else if (type === 0 && interactive && label.includes("gate")) tally(gates, id);
         else if (!interactive) tally(byShape[type], id);
+      }
+      // Roofs sit on the planes above the walls, so look at every plane for them.
+      const roofs = new Map();
+      for (const object of objectsIn(area, [0, 1, 2, 3])) {
+        if (object.getType() >= 12 && object.getType() <= 21) tally(roofs, object.getId());
       }
       const floors = new Map();
       for (let x = area.minX; x <= area.maxX; x++) {
@@ -111,6 +116,10 @@ module.exports = function registerEditStyleTools(ctx, { build, terrain, objectsI
         door: roles.door ?? mostCommon(doors),
         gate: roles.gate ?? mostCommon(gates),
         floor: roles.floor ?? mostCommon(floors),
+        roof: roles.roof ?? mostCommon(roofs),
+        // Windows are usually a wall decoration (shape 4) hung on a plain wall piece, so the
+        // most common decoration is the guess; check it in a screenshot.
+        window: roles.window ?? mostCommon(byShape[4]),
         variants: [...byShape[0]].filter(([id]) => id !== wall).sort((a, b) => b[1] - a[1]).slice(0, 8)
           .map(([id, count]) => ({ id, count })),
       };
