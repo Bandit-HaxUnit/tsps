@@ -25,6 +25,9 @@ say what changed rather than deleting it quietly. Short rows beat paragraphs.
 5. **Screenshot the result from several sides**, then fix and repeat.
 6. Clean up test pieces with the default `clear_area` (spawn-file placements only) and
    `clear_terrain`.
+7. **Add what you learned to this file** before you report the build done: new ids that render
+   well or badly, tool quirks, a site's budget. Skipping this is how the next agent repeats
+   your mistakes.
 
 ## Screenshots (`vision_screenshot`)
 

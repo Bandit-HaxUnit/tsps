@@ -191,8 +191,9 @@ logged-in players on scene rebuild (walk, teleport, relog).
 
 Read [map-building-notes.md](map-building-notes.md) before building anything bigger than a test
 piece: which objects render well and which don't, how to place walls so they join, how terrain
-height reads in game, screenshot workflow, sites and their budgets. Add what your build teaches
-you to it.
+height reads in game, screenshot workflow, sites and their budgets. Before you report a build
+done, add anything it taught you to that file: a build isn't finished until its findings are
+written down.
 
 ## A worked build
 
