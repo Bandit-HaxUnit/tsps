@@ -12,6 +12,9 @@ say what changed rather than deleting it quietly. Short rows beat paragraphs.
 
 ## Workflow that works
 
+For a village or town: clear the sites and road strips of loose scenery first, paint the roads,
+build the houses (doors to the road) and fields, then decorate and add people last.
+
 1. **Find a site.** `observe` lists only named objects; unnamed walls, fences and ground
    decoration are invisible to it. Count what is really there with a dry run:
    `clear_area { x1, y1, x2, y2, includeCache: true, dryRun: true }`.
@@ -70,6 +73,10 @@ say what changed rather than deleting it quietly. Short rows beat paragraphs.
 | A generated door opens | Varrock's door 11773 placed by `build_house` opens to 11774 and the player walks in |
 | `capture_style`'s window guess for varrock-house (4501) is a small wall lamp | Real windows there may be wall variants (23826); placing a variant in place of a wall piece is not built yet |
 | Graveyard path overlay 1 in the desert | Renders light grey, not brown dirt |
+| Overlay 343 (Pollnivneach's street) | Renders as light sand in the desert: a good desert street. Al Kharid's 26 reads green-grey |
+| **`includeCache` clears your own placements too** | It razes everything in the rectangle. Clearing desert rubble off a road after decorating took the well, benches, crates, a signpost and a palm with it. Clear roads and sites first, then decorate |
+| Desert scenery under a village | Rubble, sand ripples and two rockslide boulders sat on the planned roads. Clear road strips and building sites (`includeCache`), then paint |
+| A small village (slot 70, around 3424, 2976) | Two crossing roads and a paved square (well, market stalls, benches, crates), seven generated houses (three two-storey) with doors to the road, a pasted Varrock house, the market tent, a fenced wheat farm, a cow pen, a graveyard, palms, villagers. About 1,000 bytes of terrain per house; the region went from 42.8 KB to under 49 KB |
 | Checked by screenshot | Two Varrock-style houses (1 and 2 storeys), a fenced graveyard, a fenced wheat farm |
 | Walls on uneven ground | Each wall piece stands on the heights of its two end corners, so the same house on ground varying by ~14 has walls stepping up and down and a bent eave line; levelled first, its walls run straight (screenshots side by side at 3424-3439, 2946). A tile's height is its south-west corner: levelling must include one row north and one column east of the footprint |
 | **Upper-plane heights are gaps** | On planes 1-3 a stored height is the gap above the plane below, in eighths of a unit (`SceneBuilder.ts`); unset, the client uses 240. Varrock's house stores 37 per storey (its walls are 293 tall) and 12 per roof ring above (a slope rises 96). With the default 240 a one-storey house's walls stuck up through its eaves and each roof ring floated ~100 above the last: the roof looked unattached. `build_house` sets both from the wall's and roof's sizes (`loc-sizes.json`); `paste_template` now always copies them |
