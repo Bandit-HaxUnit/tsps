@@ -187,9 +187,12 @@ test("search_objects matches names and ids, skipping null entries", async () => 
 
 test("describe_object reports footprint and flags; unknown ids fail", async () => {
   const { call, callRaw } = setup(fakeCore());
+  process.env.AGENT_MCP_LOC_SIZES_FILE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "edit-sizes-")), "sizes.json");
+  fs.writeFileSync(process.env.AGENT_MCP_LOC_SIZES_FILE, JSON.stringify({ locs: { 4: [[10, 96, 64, 120, 120]] } }));
   assert.deepEqual(await call("describe_object", { id: 4 }), {
     id: 4, name: "Bank booth", sizeX: 1, sizeY: 1,
     solid: true, blocksProjectiles: false, interactive: true, options: ["Bank"],
+    sizes: { 10: { width: 96, depth: 64, height: 120, top: 120 } },
   });
   const bad = await callRaw("describe_object", { id: 99 });
   assert.equal(bad.isError, true);

@@ -40,6 +40,24 @@ say what changed rather than deleting it quietly. Short rows beat paragraphs.
 | Yaw: 0 faces north, 512 east, 1024 south, 1536 west. Pitch 512 is straight down | Pitch 250–330 shows walls and depth; 450+ for layout |
 | Desert heat and aggressive NPCs (jackals) keep a camera in combat | Pick camera tiles away from them |
 
+## Loc sizes
+
+| Loc | Shape | Width × depth × height (top) | Notes |
+| --- | --- | --- | --- |
+| 44884 Emir's low wall | 0 | 36 × 128 × 96 | A third of a house wall |
+| 3152 Emir's tall wall | 0 | 32 × 128 × 240 | |
+| 23818 Varrock house wall | 0 | 28 × 128 × 293 | |
+| 24175 Falador white | 0 | 31 × 128 × 293 | Same height as Varrock's house wall |
+| 23780 Varrock city wall | 0 | 28 × 128 × 302 | |
+| 16519 "Castle wall" | 10 | 129 × 129 × 381 (top 288) | A full-tile block taller than any wall piece: the slabs of the first Colosseum |
+| 4501 (varrock-house window guess) | 4 | 52 × 26 × 48, top 184 | A small piece mounted high: the wall lamp the screenshot showed |
+| 15552 slate roof | 12-21 | slopes 128 × 128 × 96 | Flat tops (17) have no height |
+
+| Finding | Detail |
+| --- | --- |
+| Size does not catch a wrong piece of the right size | `capture_style` picked corner 4657 for the Varrock city wall from a nearby building; it is wall-sized, so no size warning. The screenshot caught it |
+| Many stand-ins share a size | 166 locs are within 16 units of the Varrock house wall in shape 0: `find_similar_locs` gives a shortlist, the screenshot picks |
+
 ## Generators
 
 | Finding | Detail |

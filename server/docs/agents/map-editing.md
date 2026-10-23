@@ -178,6 +178,24 @@ build_farm      { "style": "lumbridge-fence", "x": 3440, "y": 2999, "width": 9, 
   a "steep ground" note (that is a terrace cut into a hillside). Graveyards and farms leave the
   ground alone unless `flatten: true`: fences follow the land in the game too.
 
+### Loc sizes
+
+`plugins/agent/data/loc-sizes.json` holds every loc's model size per shape: width, depth,
+height and top (how high it reaches), in model units, 128 to a tile, after the loc's resize.
+It is generated from the cache; regenerate it after a cache update:
+
+```bash
+cd client && npx tsx scripts/cache/dump-loc-sizes.ts
+```
+
+| Tool | Purpose |
+| --- | --- |
+| `find_similar_locs` | Locs of the same shape within `tolerance` of a loc's size in every dimension, closest first: stand-ins that keep a building's proportions |
+| `describe_object` | Now also reports `sizes` per shape |
+| `capture_style` | Returns `wallSize` and `sizeWarnings` when a corner, post, diagonal, door or gate is far taller or shorter than the wall |
+
+Size narrows the candidates; it says nothing about colour or material. Screenshot the pick.
+
 ### Clearing a site
 
 `clear_area` removes what the spawn file placed and leaves the cache map's own scenery

@@ -60,6 +60,7 @@ function buildMcpServer(core) {
   const templates = require("./mcp/EditTemplates.AgentMcp")(ctx, { build, terrain });
   const styles = require("./mcp/EditStyles.AgentMcp")(ctx, { build, terrain, objectsIn: templates.objectsIn });
   require("./mcp/EditGenerators.AgentMcp")(ctx, { build, terrain, styles });
+  require("./mcp/EditSizes.AgentMcp")(ctx);
   require("./mcp/Bank.AgentMcp")(ctx);
   require("./mcp/Shop.AgentMcp")(ctx);
   require("./mcp/Social.AgentMcp")(ctx);

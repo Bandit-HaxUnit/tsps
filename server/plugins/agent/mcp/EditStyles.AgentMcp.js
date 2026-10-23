@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const geometry = require("./EditGeometry.AgentMcp");
+const { sizeOf } = require("./EditSizes.AgentMcp");
 
 // Styles: the wall pieces one real building is made of, by role, so new structures can be
 // built in that building's look. A template copies a building; a style lets a generator
@@ -126,7 +127,17 @@ module.exports = function registerEditStyleTools(ctx, { build, terrain, objectsI
       const styles = readStyles();
       styles[name] = style;
       writeStyles(styles);
-      return { name, ...style };
+      // Pieces that will stand side by side should be about as tall as the wall: a corner or a
+      // gate much taller or shorter usually means the capture picked a neighbour's piece.
+      const wallSize = sizeOf(style.wall, 0);
+      const sizeWarnings = [];
+      for (const [role, shape] of [["corner", 2], ["post", 3], ["diagonal", 9], ["door", 0], ["gate", 0]]) {
+        const size = style[role] === null || style[role] === undefined ? null : sizeOf(style[role], shape);
+        if (wallSize && size && Math.abs(size.height - wallSize.height) > 48) {
+          sizeWarnings.push(`${role} ${style[role]} is ${size.height} tall, the wall ${wallSize.height}`);
+        }
+      }
+      return { name, ...style, wallSize, sizeWarnings };
     }
   );
 

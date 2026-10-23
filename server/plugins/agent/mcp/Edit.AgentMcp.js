@@ -1,5 +1,6 @@
 const path = require("path");
 const { createObjectSpawnStore, createNpcSpawnStore } = require("./EditSpawnStore.AgentMcp");
+const { sizesOf } = require("./EditSizes.AgentMcp");
 
 // Map-editing tools for the agent MCP server: search the object (loc) cache, describe
 // definitions, and place/remove live objects.
@@ -104,7 +105,7 @@ module.exports = function registerEditTools(ctx) {
 
   tool(
     "describe_object",
-    "Object definition details for placing well: footprint (sizeX/sizeY), whether it blocks movement (solid) or projectiles, whether it is interactive and its options.",
+    "Object definition details for placing well: footprint (sizeX/sizeY), whether it blocks movement (solid) or projectiles, whether it is interactive and its options, and its model size per shape (width, depth, height, top; 128 units to a tile).",
     { id: z.number().int().min(0).describe("Object id from search_objects") },
     ({ id }) => {
       if (id >= objectCount()) throw new Error(`Unknown object id ${id}`);
@@ -119,6 +120,8 @@ module.exports = function registerEditTools(ctx) {
         blocksProjectiles: definition.isImpenetrable(),
         interactive: definition.hasActions(),
         options: definition.getInteractions() ?? [],
+        // Model size per shape, 128 units to a tile (loc-sizes.json); null if not measured.
+        sizes: sizesOf(id),
       };
     }
   );
