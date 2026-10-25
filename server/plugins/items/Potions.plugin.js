@@ -28,6 +28,9 @@ const {
 let pluginApi;
 
 const DRINK_ANIMATION = new Animation(829);
+/** Wiki (Barbarian Herblore): a mix has the eat delay and the attack delay of ordinary food. */
+const MIX_EAT_DELAY = 3;
+const MIX_ATTACK_DELAY = 3;
 const DEFAULT_EMPTY_ITEM = ItemIds.VIAL;
 const NO_EMPTY_ITEM = -1;
 const STAMINA_DURATION_MS = 2 * 60 * 1000;
@@ -480,6 +483,7 @@ function registerPotion(definition) {
     canUse: typeof definition.canUse === "function" ? definition.canUse : null,
     area: definition.area ?? null,
     requiresFoodPermission: Boolean(definition.requiresFoodPermission),
+    mix: Boolean(definition.mix),
     shareable: definition.shareable !== false,
     // Drinks with their own animation and messages: { animation, messages(itemId) } in place of
     // the potion swig and "You have finished your potion.".
@@ -882,66 +886,77 @@ registerPotion({
   name: "Antipoison mix",
   chains: [doseChain("ANTIPOISON_MIX_2_", "ANTIPOISON_MIX_1_")],
   requiresFoodPermission: true,
+  mix: true,
   effect: applyMix((player) => applyPoisonImmunity(player, 90, false), 3),
 });
 registerPotion({
   name: "Anti-poison supermix",
   chains: [doseChain("ANTI_POISON_SUPERMIX_2_", "ANTI_POISON_SUPERMIX_1_")],
   requiresFoodPermission: true,
+  mix: true,
   effect: applyMix((player) => applyPoisonImmunity(player, 360, false)),
 });
 registerPotion({
   name: "Restore mix",
   chains: [doseChain("RESTORE_MIX_2_", "RESTORE_MIX_1_")],
   requiresFoodPermission: true,
+  mix: true,
   effect: applyMix(applyRestorePotion, 3),
 });
 registerPotion({
   name: "Super energy mix",
   chains: [doseChain("SUPER_ENERGY_MIX_2_", "SUPER_ENERGY_MIX_1_")],
   requiresFoodPermission: true,
+  mix: true,
   effect: applyMix((player) => restoreRunEnergy(player, 20)),
 });
 registerPotion({
   name: "Super restore mix",
   chains: [doseChain("SUPER_RESTORE_MIX_2_", "SUPER_RESTORE_MIX_1_")],
   requiresFoodPermission: true,
+  mix: true,
   effect: applyMix(applySuperRestore),
 });
 registerPotion({
   name: "Antidote+ mix",
   chains: [doseChain("ANTIDOTE_MIX_2_", "ANTIDOTE_MIX_1_")],
   requiresFoodPermission: true,
+  mix: true,
   effect: applyMix((player) => applyPoisonImmunity(player, 540, false)),
 });
 registerPotion({
   name: "Antifire mix",
   chains: [doseChain("ANTIFIRE_MIX_2_", "ANTIFIRE_MIX_1_")],
   requiresFoodPermission: true,
+  mix: true,
   effect: applyMix((player) => applyAntifire(player, 360, DragonfireProtectionTier.ANTIFIRE, "antifire potion")),
 });
 registerPotion({
   name: "Extended antifire mix",
   chains: [doseChain("EXTENDED_ANTIFIRE_MIX_2_", "EXTENDED_ANTIFIRE_MIX_1_")],
   requiresFoodPermission: true,
+  mix: true,
   effect: applyMix((player) => applyAntifire(player, 720, DragonfireProtectionTier.ANTIFIRE, "antifire potion")),
 });
 registerPotion({
   name: "Super antifire mix",
   chains: [doseChain("SUPER_ANTIFIRE_MIX_2_", "SUPER_ANTIFIRE_MIX_1_")],
   requiresFoodPermission: true,
+  mix: true,
   effect: applyMix((player) => applyAntifire(player, 180, DragonfireProtectionTier.SUPER_ANTIFIRE, "super antifire potion")),
 });
 registerPotion({
   name: "Extended super antifire mix",
   chains: [doseChain("EXTENDED_SUPER_ANTIFIRE_MIX_2_", "EXTENDED_SUPER_ANTIFIRE_MIX_1_")],
   requiresFoodPermission: true,
+  mix: true,
   effect: applyMix((player) => applyAntifire(player, 360, DragonfireProtectionTier.SUPER_ANTIFIRE, "super antifire potion")),
 });
 registerPotion({
   name: "Stamina mix",
   chains: [doseChain("STAMINA_MIX_2_", "STAMINA_MIX_1_")],
   requiresFoodPermission: true,
+  mix: true,
   effect: applyMix(applyStamina),
 });
 
@@ -1288,7 +1303,8 @@ function handlePotionDrink(player, itemId, slot) {
     return true;
   }
 
-  if (timers.has(TimerKey.POTION)) {
+  // Wiki (Potion): a barbarian mix is drunk on the food timer, any other potion on its own.
+  if (timers.has(entry.potion.mix ? TimerKey.FOOD : TimerKey.POTION)) {
     return true;
   }
 
@@ -1297,8 +1313,12 @@ function handlePotionDrink(player, itemId, slot) {
     return true;
   }
 
-  timers.extendOrRegister(TimerKey.POTION, 3);
-  timers.extendOrRegister(TimerKey.FOOD, 3);
+  if (entry.potion.mix) {
+    timers.extendOrRegister(TimerKey.FOOD, MIX_EAT_DELAY);
+    player.getCombat().delayAttack(MIX_ATTACK_DELAY);
+  } else {
+    timers.extendOrRegister(TimerKey.POTION, 3);
+  }
 
   player.getPacketSender().sendInterfaceRemoval();
   player.performAnimation(entry.potion.drink?.animation ? new Animation(entry.potion.drink.animation) : DRINK_ANIMATION);

@@ -4,7 +4,8 @@
  *
  * Wiki (Food, Food/Fast foods): eating adds 3 ticks to the attack timer (2 for combo foods)
  * and blocks the next bite for the food's eat delay, 3 ticks unless it is a fast food. Combo
- * foods have their own timer, so one can follow ordinary food (and a potion) in the same tick.
+ * foods have their own timer, so one can follow ordinary food in the same tick. Potions have a
+ * timer of their own too (Wiki: Potion), so food and potions never block each other.
  * The messages and the food-eaten counter (varp tracking_food_eaten) follow rsprox recordings.
  */
 const DATA = require("./data/food.json");
@@ -252,10 +253,7 @@ function startTimers(player, food, bite) {
   const timers = player.getTimers();
   timers.extendOrRegister(core.TimerKey.FOOD, eatDelay(food, bite));
   player.getCombat().delayAttack(food.combo ? COMBO_ATTACK_DELAY : ATTACK_DELAY);
-  if (food.combo) {
-    timers.registers(core.TimerKey.KARAMBWAN, COMBO_DELAY);
-    timers.registers(core.TimerKey.POTION, COMBO_DELAY);
-  }
+  if (food.combo) timers.registers(core.TimerKey.KARAMBWAN, COMBO_DELAY);
 }
 
 /** Heals and applies the food's effects; returns the messages to show after the eat message. */
