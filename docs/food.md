@@ -21,10 +21,12 @@ need no id lists. Tests: `server/tests/food-effects.test.cjs` and `eat-attack-de
 - **Timers (Wiki: Food):** a bite adds 3 ticks to the attack timer and blocks the next bite for
   the food's eat delay: 3 ticks, or less for fast foods (cakes 2, 2, 3; pies and pizzas 1, 2 or
   1, 1; giant crab meat 2). Combo foods (karambwan, halibut, gnome food, crystal paddlefish) add 2
-  to the attack timer and have their own 3-tick timer, so one can follow other food in the same tick.
-- **Potions (Wiki: Potion):** an ordinary potion has a timer of its own (3 ticks), so food and
-  potions never block each other and a potion can be drunk on the tick of any food, a karambwan
-  included. Barbarian mixes are the exception: they are drunk on the food timer (eating blocks a
+  to the attack timer and have their own 3-tick timer, so one can follow other food, and a potion, in the same tick; a combo food also starts the
+  potion timer, so shark, karambwan, potion in one tick is refused at the potion (reported from
+  the live game; no recording).
+- **Potions (Wiki: Potion):** an ordinary potion has a timer of its own (3 ticks), so ordinary
+  food and potions never block each other and a potion can be drunk on the tick of any food but a
+  combo food eaten before it. Barbarian mixes are the exception: they are drunk on the food timer (eating blocks a
   mix, a mix blocks eating) and add 3 ticks to the attack timer like food.
 - **Messages (rsprox):** "You eat the <name>." unless the food has its own line, then "It heals
   some health." when it healed (not at full Hitpoints). Multi-bite foods have a line per bite
@@ -162,14 +164,14 @@ unrelated potions and the existing drink cooldown.
 Evidence: the [Potion](https://oldschool.runescape.wiki/w/Potion) page (a potion delays only the next
 potion by 3 ticks; "food and potions do not share the same timer"; one can eat and drink in a
 tick; barbarian mixes use the food timer), [Barbarian Herblore](https://oldschool.runescape.wiki/w/Barbarian_Herblore)
-(mixes carry the standard attack delay of food) and [Cooked karambwan](https://oldschool.runescape.wiki/w/Cooked_karambwan).
+(mixes carry the standard attack delay of food).
 rsprox recordings **1093** (rev 237), **3224** (rev 232) and **4288** (rev 239) each show a manta ray
 eaten and a super restore drunk on the same tick and the drink went through: recording 1093 sent
 both the eat and the drink sounds, 3224 and 4288 both sets of messages (4288 also both inventory
 changes).
 
-Before, every potion started the 3-tick food timer (so a potion blocked eating) and a combo food
-started the potion timer (so a karambwan blocked potions). Now only a barbarian mix uses the food
+Before, every potion started the 3-tick food timer, so a potion blocked eating. A combo food still
+starts the potion timer. Now only a barbarian mix uses the food
 timer, flagged `mix: true` in `Potions.plugin.js`; no recording of a mix was found, so its timing
 rests on the Wiki. `tests/potion-food-timers.test.cjs` covers the pairings through the registered
 drink and eat handlers.

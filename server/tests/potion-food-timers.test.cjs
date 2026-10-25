@@ -1,6 +1,6 @@
 // Run after `yarn build`: node --test tests/potion-food-timers.test.cjs
-// Wiki (Potion, Food, Cooked karambwan, Barbarian Herblore): potions and food run on separate
-// timers; a barbarian mix is drunk on the food timer and delays the next attack like food.
+// Wiki (Potion, Barbarian Herblore): ordinary potions and food run on separate timers (a combo
+// food still starts the potion timer); a barbarian mix is drunk on the food timer and delays the next attack like food.
 // rsprox recordings 1093, 3224 and 4288 (a manta ray and a super restore on one tick).
 const assert = require("node:assert/strict");
 const path = require("path");
@@ -76,16 +76,16 @@ test("a potion alone leaves the food timer free", () => {
   assert.equal(p.getTimers().has(TimerKey.FOOD), false);
 });
 
-test("a karambwan does not block potions, and a potion does not block a karambwan", () => {
+test("a karambwan still blocks a potion afterwards, but follows a potion", () => {
   const p = player([ItemIdentifiers.SARADOMIN_BREW_4_, ItemIdentifiers.COOKED_KARAMBWAN]);
   sip(p, 0);
   eat(p, 1);
   assert.equal(slotId(p, 1), undefined, "the karambwan was eaten after the brew");
-  const q = player([ItemIdentifiers.COOKED_KARAMBWAN, ItemIdentifiers.SUPER_RESTORE_4_]);
+  const q = player([ItemIdentifiers.SHARK, ItemIdentifiers.COOKED_KARAMBWAN, ItemIdentifiers.SUPER_RESTORE_4_]);
   eat(q, 0);
-  sip(q, 1);
-  assert.equal(slotId(q, 1), ItemIdentifiers.SUPER_RESTORE_3_, "a potion on the tick of a karambwan");
-  assert.equal(q.getTimers().has(TimerKey.KARAMBWAN), true);
+  eat(q, 1);
+  sip(q, 2);
+  assert.equal(slotId(q, 2), ItemIdentifiers.SUPER_RESTORE_4_, "shark, karambwan, potion: the potion is refused");
 });
 
 test("a barbarian mix is drunk on the food timer and delays the next attack like food", () => {
