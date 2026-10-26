@@ -15,7 +15,11 @@ const FALADOR_FARM_PATCHES = new Set(Data.CACHE.patches.filter(p => p.z === 0
     && ["ALLOTMENT", "FLOWER", "HERB"].includes(p.type)
     && p.x >= 3050 && p.x <= 3058 && p.y >= 3303 && p.y <= 3311).map(Data.patchKey));
 const ANIM = { RAKE: 2273, PLANT: 2291, SAPLING: 2272, FILL_POT: 2287, WATER: 2293, DIG: 830, HARVEST: 2282, COMPOST: 2283, CURE: 2288, PRUNE: 2275 };
-// Player -> queued rake/harvest, stepped every tick by the farming task.
+// Rev 241 gameval human_pickuptable; rsprox recording 1858 pairs it with sound 2441.
+const FILL_BIN_ANIMATION = 832;
+const FILL_BIN_SOUND = 2441;
+const TICK_MS = 600;
+// Player -> queued rake/harvest/bin filling, stepped every tick by the farming task.
 const WORK = new Map();
 const RENDERED = new WeakMap();
 const LLETYA_FRUIT_PATCH = Data.CACHE.patches.find(p => p.type === "FRUIT_TREE" && p.x === 2346 && p.y === 3161 && p.z === 0);
@@ -148,6 +152,33 @@ function startWork(player, patch, action) {
     WORK.set(player, work);
     workStep(player, work);
 }
+function startBinWork(player, patch, input) {
+    WORK.set(player, { patch, action: "fill-bin", input, nextAt: Date.now() + 2 * TICK_MS,
+        position: player.getLocation().clone(), depositing: false });
+}
+function fillBinStep(player, work) {
+    const { patch, input } = work;
+    const inventory = player.getInventory();
+    const bin = stateFor(player, patch).bin;
+    const capacity = patch.type === "BIG_COMPOST" ? 30 : 15;
+    if (bin !== input.bin || bin.closedAt || bin.open || bin.count >= capacity || !inventory.contains(input.id)) return false;
+    // Captures: animate at +2, deposit at +3, then repeat both phases every two ticks.
+    if (!work.depositing) {
+        animate(player, FILL_BIN_ANIMATION);
+        player.getPacketSender().sendSound(FILL_BIN_SOUND, 1, 0);
+    } else {
+        inventory.deleteNumber(input.id, 1);
+        bin.count++;
+        if (input.superItem) bin.super++;
+        if (input.tomato) bin.tomatoes++;
+        bin.tier = bin.super === bin.count ? 2 : bin.tomatoes === bin.count ? 4 : 1;
+        syncPatch(player, patch);
+        if (bin.count >= capacity || !inventory.contains(input.id)) return false;
+    }
+    work.depositing = !work.depositing;
+    work.nextAt = Date.now() + TICK_MS;
+    return true;
+}
 function workStep(player, work) {
     if (player.getHitpoints() <= 0 || player.busy() || !player.getLocation().equals(work.position) || player.getMovementQueue().isMovings()) {
         WORK.delete(player);
@@ -155,6 +186,10 @@ function workStep(player, work) {
     }
     if (work.levelUpPaused) return;
     if (Date.now() < work.nextAt) return;
+    if (work.action === "fill-bin") {
+        if (!fillBinStep(player, work)) WORK.delete(player);
+        return;
+    }
     const again = work.action === "rake" ? rake(player, work.patch) : harvest(player, work.patch);
     work.nextAt = Date.now() + 1800;
     if (!again) WORK.delete(player);
@@ -786,4 +821,4 @@ function attach(api) {
     api.registerNpcCombatMethodProvider(core.NpcIdentifiers.HESPORI_2, Hespori.HesporiCombat, { singleton: false });
 }
 
-Object.assign(module.exports, { FARM_ATTRIBUTE, farmFor, stateFor, hasTool, requireTool, award, give, choose, clearPatch, syncPatch, nearPatch, water, fertilize, cure, noteSeedling, advanceTime, attach, tick: farmingTick, retrievalItems });
+Object.assign(module.exports, { FARM_ATTRIBUTE, farmFor, stateFor, hasTool, requireTool, award, give, choose, clearPatch, syncPatch, nearPatch, water, fertilize, cure, noteSeedling, advanceTime, attach, tick: farmingTick, retrievalItems, startBinWork });

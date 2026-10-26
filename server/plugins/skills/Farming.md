@@ -220,3 +220,24 @@ Sources: [Bank PIN, situations requiring a PIN](https://oldschool.runescape.wiki
 and [Hosidius Rework and Deadman Beta](https://oldschool.runescape.wiki/w/Update:Hosidius_Rework_and_Deadman_Beta).
 The regression checks drive the actual shared keypad and storage handlers;
 menu rendering and scheduled ticks use the existing Bank PIN test fixture.
+
+## Compost bin filling (issue #1391)
+
+Using unnoted compostable produce on either bin starts automatic deposits of that
+same item until it runs out or the bin reaches 15 items (30 in the Farming Guild).
+The existing Farming work queue cancels pending deposits on movement, new world
+input, logout, death or a busy interface; every deposit rechecks the inventory and
+original bin state. Each deposit updates the owner's patch varbit and appearance.
+
+The [Wiki's compost-bin change history](https://oldschool.runescape.wiki/w/Compost_bin#Changes)
+confirms automatic filling. In rsprox captures, recording **1858** (revision 227,
+Leagues V), one use of pineapple on `farming_compost_bin_3` produces
+`human_pickuptable` and sound 2441 at tick +2, then consumes one pineapple at +3.
+The animation/sound and deposit repeat every two ticks (12 deposits through +25,
+the trace window limit). The rev 241 cache maps `human_pickuptable` to sequence
+832. This capture covers a regular bin on Leagues; no main-game or Farming Guild
+bin capture was found. The shared loop uses the same cadence for both bin sizes.
+
+`tests/farming-compost-inputs.test.cjs` covers automatic filling, cadence, capacity,
+selected-item exhaustion, interruption and stale bin/inventory state, alongside
+existing ingredient, tier and noted-item checks.
