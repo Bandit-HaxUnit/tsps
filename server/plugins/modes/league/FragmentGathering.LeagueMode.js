@@ -132,6 +132,8 @@ function gather(request) {
   const skills = player.getSkillManager();
   if (extra > 0 && request.xp > 0) skills.addExperiences(skill, (request.xp * extra) / amount);
   if (change?.xp > 0) skills.addExperiences(change.skill, change.xp * pieces);
+  // Burnt logs are lit logs to the other fragments (Hot On The Trail, Wiki).
+  if (change?.burnt) for (let piece = 0; piece < pieces; piece++) Common.api.emitCustomEvent("league:log-burnt", { player, itemId });
 }
 
 /** `storage:room`: with every resource banked, a full inventory keeps gathering. */

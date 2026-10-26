@@ -122,6 +122,8 @@ function successChance(player, target) {
   const bonuses = [];
   if (wornName(player, core.Equipment.HANDS_SLOT) === "gloves of silence") bonuses.push(GLOVES_OF_SILENCE_BONUS);
   if (wearsThievingCape(player)) bonuses.push(THIEVING_CAPE_BONUS);
+  // Content's bonus percent ("thieving:pickpocket-target" `chanceBonus`, a league fragment), stacking as the gloves do.
+  if (target.chanceBonus > 0) bonuses.push(100 + target.chanceBonus);
   for (const bonus of bonuses) {
     low = Math.floor((low * bonus) / 100);
     high = Math.floor((high * bonus) / 100);
@@ -285,7 +287,7 @@ function caughtTask(player, npc, target) { return new (class extends core.Task {
     }
     if (this.stunned) {
       player.sendMessage("You've been stunned!");
-      player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(roll(target.stunDamage), core.HitMask.RED)]);
+      if (!target.painless) player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(roll(target.stunDamage), core.HitMask.RED)]);
       this.stop();
       return;
     }
@@ -351,7 +353,8 @@ function samePlace(location, from) {
 function pickpocket(event) {
   const { player, npc } = event;
   const npcName = event.definition.getName();
-  const request = { ...event, target: targetFor(npcName, event.npcId), unconscious: false, alwaysSucceeds: false, pouchLimit: MAX_COIN_POUCHES };
+  const request = { ...event, target: targetFor(npcName, event.npcId), unconscious: false, alwaysSucceeds: false, pouchLimit: MAX_COIN_POUCHES,
+    chanceBonus: 0, painless: false };
   pluginApi.emitCustomEvent("thieving:pickpocket-target", request);
   const target = request.target;
   if (!target) return false;
@@ -394,8 +397,10 @@ function pickpocket(event) {
   player.sendMessage(`You attempt to pick ${name}'s pocket.`);
   player.getClickDelay().reset();
   npc.getTimers().registers(core.TimerKey.ATTACK_IMMUNITY, 10);
-  // `alwaysSucceeds` (a league relic) lands every attempt as an unconscious target does, coin pouches kept.
-  const rolled = request.unconscious ? { ...target, low: 256, high: 256, coinPouch: null } : request.alwaysSucceeds ? { ...target, low: 256, high: 256 } : target;
+  // `alwaysSucceeds` (a league relic) lands every attempt as an unconscious target does, coin pouches kept;
+  // `chanceBonus` raises the success chance by that percent and `painless` stuns without the damage (a league fragment).
+  const tuned = request.chanceBonus > 0 || request.painless ? { ...target, chanceBonus: Math.max(0, request.chanceBonus | 0), painless: request.painless === true } : target;
+  const rolled = request.unconscious ? { ...tuned, low: 256, high: 256, coinPouch: null } : request.alwaysSucceeds ? { ...tuned, low: 256, high: 256 } : tuned;
   core.TaskManager.submit(pickpocketTask(player, npc, rolled, name, { ...event, from: event.from ?? tile(player.getLocation()) }));
 }
 

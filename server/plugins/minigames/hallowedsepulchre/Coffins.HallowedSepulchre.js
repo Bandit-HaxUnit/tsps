@@ -44,9 +44,19 @@ function grandLoot() {
   return drops;
 }
 
+/** The marks a coffin gives, as content may raise them ("minigame:points", a league fragment). */
+function withPoints(player, drops) {
+  return drops.map(([id, amount]) => {
+    if (id !== Common.data.items.mark) return [id, amount];
+    const request = { player, minigame: "hallowed-sepulchre", kind: "hallowed-marks", amount };
+    Common.api.emitCustomEvent("minigame:points", request);
+    return [id, Number.isSafeInteger(request.amount) && request.amount > amount ? request.amount : amount];
+  });
+}
+
 function give(player, drops) {
   const { CacheDefinitions, Item, ItemOnGroundManager } = Common.core;
-  for (const [id, amount] of drops) {
+  for (const [id, amount] of withPoints(player, drops)) {
     const item = new Item(id, amount);
     if (player.getInventory().getAddableAmount(item) < amount) {
       ItemOnGroundManager.registers(player, item);
