@@ -14,60 +14,11 @@ import { applyNpcRowIcon } from "../spawnSearch";
 import { Opcodes } from "../Opcodes";
 import type { HandlerContext, HandlerMap } from "./HandlerTypes";
 
-// PERF: Widget lookup cache - stores recently looked up widgets to avoid repeated Map lookups
-// Cache is attached to the handler context so it's cleared between script executions
-const WIDGET_CACHE_KEY = Symbol("__widgetLookupCache");
-const WIDGET_CACHE_MAX_SIZE = 64;
-
-interface WidgetLookupCache {
-    map: Map<number, WidgetNode | null>;
-    accessOrder: number[];
-}
-
-function getWidgetLookupCache(ctx: HandlerContext): WidgetLookupCache {
-    let cache = (ctx as any)[WIDGET_CACHE_KEY] as WidgetLookupCache | undefined;
-    if (!cache) {
-        cache = { map: new Map(), accessOrder: [] };
-        (ctx as any)[WIDGET_CACHE_KEY] = cache;
-    }
-    return cache;
-}
-
-function getCachedWidget(ctx: HandlerContext, uid: number): WidgetNode | null {
-    // Skip caching for invalid UIDs
-    if (uid <= 0) {
-        return ctx.widgetManager.getWidgetByUid(uid) ?? null;
-    }
-
-    const cache = getWidgetLookupCache(ctx);
-
-    // Check cache first
-    if (cache.map.has(uid)) {
-        return cache.map.get(uid) ?? null;
-    }
-
-    // Cache miss - look up and cache
-    const widget = ctx.widgetManager.getWidgetByUid(uid) ?? null;
-
-    // Evict oldest entry if cache is full
-    if (cache.map.size >= WIDGET_CACHE_MAX_SIZE) {
-        const oldestUid = cache.accessOrder.shift();
-        if (oldestUid !== undefined) {
-            cache.map.delete(oldestUid);
-        }
-    }
-
-    cache.map.set(uid, widget);
-    cache.accessOrder.push(uid);
-
-    return widget;
-}
-
-// Helper to get widget by UID from stack
+// Helper to get widget by UID from stack. Looked up every time, never cached: a closed
+// interface is unloaded, and its next open has new widgets under the same uids.
 function getWidgetFromStack(ctx: HandlerContext): WidgetNode | null {
     const uid = ctx.intStack[--ctx.intStackSize];
-    // PERF: Use cached lookup
-    return getCachedWidget(ctx, uid);
+    return ctx.widgetManager.getWidgetByUid(uid) ?? null;
 }
 
 /**

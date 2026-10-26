@@ -50,9 +50,10 @@ This is **not a verified 1:1 implementation**. In particular:
   1/11 roll per successful log and regrows independently after 200 game ticks
   (120 seconds), including time offline. Woodcutting Guild redwoods retain
   Forestry's 440-tick depletion timer and 199-tick respawn.
-- Geomancy, storage, contracts, and Tithe rewards use existing dialogue menus;
-  their original dedicated interfaces are not reproduced. The native Tithe
-  status overlay is mounted during a run (details below).
+- Seed-vault storage, contracts, and Tithe rewards use existing
+  dialogue menus; their original dedicated interfaces are not reproduced.
+  Leprechaun storage uses the native main and side screens described below.
+  The native Tithe status overlay is mounted during a run (details below).
 - Spirit-tree travel currently links player-grown trees. The ordinary network,
   quest-specific crops/access restrictions, achievement completion, and the
   wider quest/diary progression systems are not implemented by this plugin.
@@ -70,6 +71,32 @@ This is **not a verified 1:1 implementation**. In particular:
 
 ## Verification
 
+### Native leprechaun storage
+
+Exchange opens `farming_tools` and `farming_tools_side` as main and side modals,
+matching normal-world RSProx recordings 224/00238, 227/01533, 230/02879,
+232/03121 and 238/04221/04223. In 238/04221, Exchange at tick60 opens both
+screens, enables OP1 on the four quantity selectors and runs the modal background
+script on the arrival tick. Cache125/126 and scripts1055-1064/2748-2751 supply
+the rows, quantity-dependent ops and packed varbits; enum136 maps watering cans
+and enum2193 supplies capacities. All component and varbit IDs resolve by name.
+
+The same saved `farm.tools` and `farm.toolMeta` back the interface and NPC/item
+deposits. Counts include the extra-bit fields for tools, buckets and compost.
+Magic secateurs stay separate from normal ones; watering cans and bottomless
+buckets retain cloned charge metadata. Withdrawals use the inventory's actual
+addable amount, including note-stack limits. The shared Bank PIN guard remains
+in front of storage and is checked again for native actions. Closed screens,
+walk-away, trade/death, logout and stale amount answers cannot transfer items.
+
+The [Tool Leprechaun](https://oldschool.runescape.wiki/w/Tool_Leprechaun) Wiki
+supplies storage capacities and noted deposits/withdrawals. No ordinary-world
+recording shows every quantity/Banknotes path: their op order follows the cache;
+Banknotes uses the selected quantity, and X remembers a positive amount for the
+open session. The amount prompt wording is ours. Produce noting is unchanged.
+
+### Other Farming verification
+
 Geomancy refuses casting while attacking or being attacked, before rune
 consumption, Magic XP, animation or patch updates. It retains the existing
 shared combat definition and ordinary casting checks once combat ends.
@@ -78,7 +105,7 @@ tick 5769) supplies the exact refusal text. That recording is a Leagues world;
 no League rune-restoration, timing or reward rules are imported. The
 [Geomancy article](https://oldschool.runescape.wiki/w/Geomancy) documents
 the ordinary 65 Magic, 60 XP and 3 astral/3 nature/8 earth rune cost.
-The dedicated native interface remains a separate fidelity limit above.
+Geomancy uses the native Farming browser described below.
 
 Ordinary tree stumps yield one to four roots at eight-level intervals above
 the crop's planting level: oak 15/23/31/39, willow 30/38/46/54, maple
@@ -220,6 +247,49 @@ Sources: [Bank PIN, situations requiring a PIN](https://oldschool.runescape.wiki
 and [Hosidius Rework and Deadman Beta](https://oldschool.runescape.wiki/w/Update:Hosidius_Rework_and_Deadman_Beta).
 The regression checks drive the actual shared keypad and storage handlers;
 menu rendering and scheduled ticks use the existing Bank PIN test fixture.
+
+## Native Farming menu choices
+
+The Farming chooser translates one-based native option resumes into its displayed
+action list. Its interface-action adapter also handles the legacy widget input
+before the shared fallback changes the index. The adapter owns only the exact
+options widget and a Farming-created current dialogue; other plugins' menus and
+the shared DialogueManager are unchanged.
+The action stays private to that adapter, so an unrelated widget cannot reach it
+through the shared legacy dialogue fallback.
+
+Choices validate bounds, current dialogue/chatbox ownership and player state
+before closing the interface. Repeated or stale choices cannot reuse a closed
+menu, and a busy/dead/newly placed player cannot accept a pending action. Single
+action menus include Cancel for the cache's two-row minimum; empty menus are not
+opened. Four entries per page and More options keep their existing order.
+
+`farming-dialogue-input.test.cjs` uses all plugins and real Player, Inventory,
+MovementQueue, PacketSender, DialogueManager and NPC.create objects. It sends
+native resume/widget packets, advances each player's actual walk-to task and
+checks Tithe seed/quantity choices and gardener payment, including capacity,
+range, duplicate input and stale/busy-state cases. The
+[Tithe Farm Wiki page](https://oldschool.runescape.wiki/w/Tithe_Farm) supplies the
+seed types/levels; the existing seed quantities and payment tables are unchanged.
+No applicable normal-world capture was found for these menus; option indexing
+comes from the cache's options interface and the server's native resume contract.
+
+## Native Geomancy input
+
+Geomancy's cache spellbook widget (`magic_spellbook:geomancy`, 218:150 in this
+cache) reaches the Farming handler through `onInterfaceActionClick`, as well as
+the existing legacy button hook. Only the Cast action is accepted; a busy or
+dead player cannot pay for a cast. The existing combat refusal, spellbook/level
+checks, rune consumption and XP award remain in the same handler.
+
+RSProx `238/01221` and `238/04128` identify the widget; the former records
+"You can't commune with the land while fighting." Both recordings are special
+worlds, so no League resource/timing rules are imported. The
+[Geomancy Wiki page](https://oldschool.runescape.wiki/w/Geomancy) supplies the
+ordinary 65 Magic requirement, 3 astral/3 nature/8 earth cost and 60 XP.
+`farming-geomancy-input.test.cjs` drives widget packets through the real network
+dispatcher, with all plugins and real Player/Inventory/PacketSender objects.
+The native Geomancy browser is documented in [farming-geomancy.md](../../docs/farming-geomancy.md).
 
 ## Compost bin filling (issue #1391)
 

@@ -172,6 +172,12 @@ export class CombatFactory {
     }
 
     static getHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true) {
+        return CombatFactory.applyIncomingHitDamage(entity, victim, type,
+            CombatFactory.rollHitDamage(entity, victim, type, bypassProtectionPrayer, boundsOverride, applySpecialTraits));
+    }
+
+    /** Rolls damage and protection prayers without spending or reacting with defensive equipment. */
+    public static rollHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true): HitDamage {
         const specialTraits = applySpecialTraits ? CombatSpecial.activeTraitsFor(entity) : null;
         if (specialTraits?.ignoreProtectionPrayer) {
             bypassProtectionPrayer = true;
@@ -217,6 +223,11 @@ export class CombatFactory {
                 }
             }
         }
+        return hitDamage;
+    }
+
+    /** Reacts once to the selected damage roll, before any per-hit multiplier and HP cap. */
+    public static applyIncomingHitDamage(entity: Mobile, victim: Mobile, type: CombatType, hitDamage: HitDamage): HitDamage {
         // The Elysian spirit shield cuts damage by 25% 70% of the time (Wiki).
         if (victim.isPlayer() && Math.random() < CombatConstants.ELYSIAN_ACTIVATION_CHANCE) {
             if (victim.getAsPlayer().getEquipment().getItems()[Equipment.SHIELD_SLOT].getId() == ItemIdentifiers.ELYSIAN_SPIRIT_SHIELD) {
@@ -797,10 +808,9 @@ export class CombatFactory {
 
             // Prayer effects.
             // Redemption checks after the damage lands (HitQueue -> handleRedemption).
-            if (resolvedHit.isAccurate()) {
-                if (PrayerHandler.isActivated(attacker, PrayerHandler.SMITE)) {
-                    CombatFactory.handleSmite(attacker, playerTarget, damage);
-                }
+            // Smite follows the damage dealt, so guaranteed damage on a failed roll (Hammer Blow) drains too.
+            if (damage > 0 && PrayerHandler.isActivated(attacker, PrayerHandler.SMITE)) {
+                CombatFactory.handleSmite(attacker, playerTarget, damage);
             }
         }
 
@@ -1094,13 +1104,16 @@ export class CombatFactory {
     @param target
     */
     public static handleSkull(attacker: Player, target: Player) {
-        if (attacker.isSkulled()) {
-            return;
-        }
-
         const attackerInWilderness = Wilderness.isIn(attacker);
         const targetInWilderness = Wilderness.isIn(target);
         if (!attackerInWilderness || !targetInWilderness) {
+            return;
+        }
+
+        // Wiki (Skull (status)): attacking a player while skulled restarts the 30 minutes, so
+        // the skull "cannot disappear during PvP combat". The skull keeps its colour.
+        if (attacker.isSkulled()) {
+            CombatFactory.extendSkull(attacker, CombatFactory.PVP_SKULL_SECONDS);
             return;
         }
 
@@ -1132,6 +1145,13 @@ export class CombatFactory {
     }
 
     public static readonly PVP_SKULL_SECONDS = 30 * 60;
+    /** Wiki: an amulet of avarice skull lasts 20 minutes after it comes off; a cape of skulls 20 from putting it on. */
+    public static readonly ITEM_SKULL_SECONDS = 20 * 60;
+
+    /** Keeps a skull (and its colour) for at least `seconds` more, without the skulled message. */
+    static extendSkull(player: Player, seconds: number) {
+        player.setSkullTimer(Math.max(player.getSkullTimer(), Misc.getTicks(seconds)));
+    }
 
     static skull(player: Player, type: SkullType, seconds: number) {
         player.setSkullType(type);

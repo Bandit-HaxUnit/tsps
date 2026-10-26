@@ -1534,10 +1534,20 @@ export class PluginManager {
       { player, itemId, action, option, allow: null }, "can_use_item", "allow");
   }
 
-  public static emitCanGainExperience(player: any, skill: any, experience: number): boolean | null {
-    if (PluginManager.canGainExperienceHooks.length === 0) return null;
-    return PluginManager.firstAnswer(PluginManager.canGainExperienceHooks,
-      { player, skill, experience, allow: null }, "can_gain_experience", "allow");
+  /**
+   * Whether the gain may happen (`allow` null when no hook answered) and the hooks' combined
+   * `multiplier` (1 when none set one). Every hook runs, so a rate set by one and a refusal by
+   * another are both seen; a refusal wins.
+   */
+  public static emitCanGainExperience(player: any, skill: any, experience: number): { allow: boolean | null; multiplier: number } {
+    if (PluginManager.canGainExperienceHooks.length === 0) return { allow: null, multiplier: 1 };
+    const event: PluginCanGainExperienceEvent = { player, skill, experience, allow: null, multiplier: 1 };
+    for (const hook of PluginManager.canGainExperienceHooks) {
+      PluginManager.executeHook(hook, event, "can_gain_experience", "can_gain_experience");
+      if (event.allow === false) return { allow: false, multiplier: 1 };
+    }
+    const multiplier = Number.isFinite(event.multiplier) && event.multiplier > 0 ? event.multiplier : 1;
+    return { allow: event.allow, multiplier };
   }
 
   public static emitCanSpawnNpc(npcId: number, location: any): boolean | null {
@@ -2436,6 +2446,7 @@ export class PluginManager {
       PrivateChatStatus: require(`${model}/PlayerRelations`).PrivateChatStatus,
       SpellTeleports: require(`${combat}/magic/SpellTeleports`).SpellTeleports,
       LunarSpells: require(`${combat}/magic/LunarSpells`).LunarSpells,
+      EffectSpells: require(`${combat}/magic/EffectSpells`).EffectSpells,
       ArceuusSpells: require(`${combat}/magic/ArceuusSpells`).ArceuusSpells,
       ArceuusOfferings: require(`${combat}/magic/ArceuusOfferings`),
     });
@@ -4164,6 +4175,7 @@ export class PluginManager {
           `[plugins] player persistence set by ${pluginName}: ${previousName} -> ${nextName}`;
       },
       setExperienceRate: (rate) => GameConstants.setExperienceRate(rate),
+      setWorldProfile: (profile) => GameConstants.setWorldProfile(profile),
       getActiveRegionSnapshot: () => {
         try {
           const worldModule = require("../game/World");

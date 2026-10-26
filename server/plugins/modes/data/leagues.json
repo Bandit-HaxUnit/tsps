@@ -1,0 +1,66 @@
+{
+  "$comment": "Leagues (docs/leagues.md), used by plugins/modes/LeagueMode.plugin.js and LeaguePoints.plugin.js. A league character is the account's separate save a league world logs it into (persistence/PlayerProfile); world.json pluginConfig `league:type` names the league, and `default` only stands in for a type this data does not know. Varbits, varps, scripts and texts are from rsprox Leagues V recordings (osrs-captures 227/00070, 227/00075); the leagues' own numbers (tier points, XP rates, starting levels) are the Wiki's (Trailblazer_Reloaded_League, Raging_Echoes_League and their /Relics pages). `struct` is the cache's league struct (enum 2670 by league type) whose params the client reads; `colour` is its param 2050 as an RGB int.",
+  "default": 4,
+  "varbits": {
+    "account": 10031,
+    "type": 10032,
+    "tutorialCompleted": 10037,
+    "totalTasks": 10046,
+    "journalTab": 8168
+  },
+  "varps": {
+    "pointsCompleted": 2614,
+    "pointsClaimed": 2615,
+    "pointsPrevious": 2807
+  },
+  "tutorialCompletedValue": 12,
+  "journal": {
+    "_comment": "The side journal's Leagues tab (side_journal 629:34) mounts the league side panel (656) in the journal's content container (629:43), as the other tabs do on this client; live mounted it in its own tab slot. Script 3226 fills the panel's points bar (656:23) after every award, as captured.",
+    "group": 629,
+    "leagueTab": 34,
+    "container": 43,
+    "tabIndex": 4,
+    "sidePanel": 656,
+    "sidePanelFill": 23,
+    "fillScript": 3226
+  },
+  "notifications": {
+    "taskComplete": {
+      "title": "League Task Complete!",
+      "text": "Task Completed: <col=ffffff>{name}</col><br><br>Points Earned: <col=ffffff>{points}</col>",
+      "jingle": { "id": 283, "length": 4500 },
+      "source": "capture 227/00070 (the title colour is the league's)"
+    }
+  },
+  "messages": {
+    "notLeague": { "text": "{name} is not a league character.", "source": "ours" },
+    "status": { "text": "{name}: {league}, {points} League Points from {tasks} tasks.", "source": "ours" },
+    "taskUsage": { "text": "Use ::leaguetask <id> <points> [name].", "source": "ours" },
+    "taskAwarded": { "text": "Awarded league task {id} ({points} points) to {name}.", "source": "ours" },
+    "taskRepeat": { "text": "{name} already has league task {id}.", "source": "ours" }
+  },
+  "leagues": {
+    "4": {
+      "key": "trailblazer-reloaded",
+      "name": "Leagues IV - Trailblazer Reloaded",
+      "shortName": "Trailblazer Reloaded",
+      "struct": 4699,
+      "colour": 16742144,
+      "unlockSpotanim": 2603,
+      "tiers": [0, 500, 1200, 2000, 4000, 7500, 15000, 24000],
+      "xpMultiplier": { "base": 5, "fromTier": { "2": 8, "5": 12, "7": 16 } },
+      "startingLevels": { "HERBLORE": 3, "RUNECRAFTING": 5, "AGILITY": 10 }
+    },
+    "5": {
+      "key": "raging-echoes",
+      "name": "Leagues V - Raging Echoes",
+      "shortName": "Raging Echoes",
+      "struct": 6211,
+      "colour": 2147070,
+      "unlockSpotanim": 3044,
+      "tiers": [0, 750, 1500, 2500, 5000, 8000, 16000, 25000],
+      "xpMultiplier": { "base": 5, "fromTier": { "2": 8, "5": 12, "7": 16 } },
+      "startingLevels": {}
+    }
+  }
+}

@@ -46,7 +46,7 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
   const originalChoose = C.choose;
   let startup;
   const hooks = [];
-  const api = new Proxy({ core, emitCustomEvent() {}, onServerStartup(handler) { startup = handler; } }, {
+  const api = new Proxy({ core, emitCustomEvent() {}, spawnNpc() { return null; }, onServerStartup(handler) { startup = handler; } }, {
     get(target, name) { return target[name] ?? ((...args) => hooks.push([name, ...args])); },
   });
   require("../plugins/skills/Hunter.plugin").register(api);
@@ -1251,4 +1251,34 @@ test("disconnecting before a pickpocket's outcome tick cancels it", () => {
   task.tick();
   assert.equal(task.isRunning(), false);
   assert.equal(p.counts.size, 0, "interrupted action produced no loot");
+});
+
+test("overworld implings spawn on the Wiki's 30-minute cycle, show after two minutes and stay caught", () => {
+  const { PluginManager } = require("../dist/plugins/PluginManager");
+  const { H } = require("../plugins/skills/hunter/Context.Hunter");
+  const Overworld = require("../plugins/skills/hunter/Overworld.Hunter");
+  const spawns = [], removed = [];
+  H.core = PluginManager.getCoreApi();
+  H.api = { spawnNpc: def => { const npc = { def, setVisible(v) { npc.visible = v; } }; spawns.push(npc); return npc; }, removeNpc: npc => removed.push(npc) };
+  H.tick = 1;
+  Overworld.process();
+  const crystal = spawns.filter(n => n.def.id === H.core.NpcIdentifiers.CRYSTAL_IMPLING);
+  assert.equal(crystal.length, 1, "one crystal impling in Prifddinas");
+  const others = spawns.length - 1;
+  assert.ok(others >= 4 + 5 * 3 && others <= 4 + 10 * 3, "4 high + N mid + 2N low, N in 5-10");
+  assert.ok(spawns.every(n => n.visible === false), "invisible while roaming");
+  H.tick = 1 + Overworld.MANIFEST_TICKS;
+  Overworld.process();
+  assert.ok(spawns.every(n => n.visible === true), "visible after two minutes");
+  const event = { npc: spawns[0], handled: false };
+  Overworld.caught(event);
+  assert.equal(event.handled, true);
+  H.tick += 2;
+  Overworld.process();
+  assert.deepEqual(removed, [spawns[0]], "a caught impling is removed and not replaced");
+  assert.equal(Overworld.caught({ npc: {}, handled: false }), undefined);
+  H.tick = 1 + Overworld.CYCLE_TICKS;
+  Overworld.process();
+  assert.equal(removed.length, others + 1, "the next cycle despawns the old implings and spawns new ones");
+  Overworld.clear();
 });

@@ -123,7 +123,6 @@ const SPELL_UNLOCK_VARBITS: ReadonlyArray<readonly [number, number]> = [
   [1914, 50],           // Recipe for Disaster (Ape Atoll Teleport)
   [4533, 1],           // Fremennik hard diary (Tan Leather / Recharge Dragonstone)
   [1505, 1],           // Bones to Peaches client unlock
-  [4554, 30],          // Mage Training Arena (Bones to Peaches)
   [4896, 1000],
   [6067, 6],
   [5619, 9],           // Client of Kourend
