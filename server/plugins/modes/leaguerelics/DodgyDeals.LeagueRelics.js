@@ -7,7 +7,6 @@
  */
 const Common = require("./Common.LeagueRelics");
 
-let core;
 let effect;
 
 function active(player) {
@@ -16,33 +15,22 @@ function active(player) {
 
 function pickpocketTarget(request) {
   if (!request.target || !active(request.player)) return;
-  request.target = { ...request.target, low: 256, high: 256 };
+  request.alwaysSucceeds = true;
   request.pouchLimit *= effect.pouchLimitMultiplier;
 }
 
-/** NPCs of the pickpocketed kind within reach, the target among them. */
+/** NPCs of the pickpocketed kind (the same name: a man is a man whatever his id) within reach, the target among them. */
 function crowd(player, npc) {
+  const name = npc?.getDefinition?.()?.getName?.();
+  if (!name) return 1;
   const here = player.getLocation();
-  const id = npc.getId();
-  return Math.max(1, player.getLocalNpcs().filter((other) => other.getId() === id && other.getHitpoints() > 0
+  return Math.max(1, player.getLocalNpcs().filter((other) => other.getDefinition?.()?.getName?.() === name && other.getHitpoints() > 0
     && other.getLocation().getZ() === here.getZ() && other.getLocation().isWithinDistance(here, effect.radius)).length);
 }
 
-/** Noted, and as many as the crowd: a clue stays one; coins become that many pouches. */
+/** Noted, and as many as the crowd (coins that many pouches; a clue, or an item that neither stacks nor notes, once). */
 function loot(request) {
-  if (!active(request.player)) return;
-  const times = crowd(request.player, request.npc);
-  const multiplied = [];
-  for (const entry of request.loot) {
-    if (entry.clue) {
-      multiplied.push(entry);
-    } else if (entry.id === core.ItemIdentifiers.COINS) {
-      for (let copy = 0; copy < times; copy++) multiplied.push({ ...entry });
-    } else {
-      multiplied.push({ ...entry, id: Common.noted(entry.id), amount: entry.amount * times });
-    }
-  }
-  request.loot = multiplied;
+  if (active(request.player)) request.loot = Common.multipliedLoot(request.loot, crowd(request.player, request.npc));
 }
 
 function again(request) {
@@ -54,7 +42,6 @@ function keepStall(request) {
 }
 
 module.exports = function attach(api) {
-  core = api.core;
   effect = Common.data.effects.dodgyDeals;
   api.onCustomEvent("thieving:pickpocket-target", pickpocketTarget);
   api.onCustomEvent("thieving:loot", loot);

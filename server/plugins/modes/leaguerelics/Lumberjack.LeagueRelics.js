@@ -16,14 +16,19 @@ function active(player) {
   return Common.effectActive(player, effect);
 }
 
+/** The axe's effects need the axe, carried or wielded (Wiki); the sure fires do not. */
+function withTool(player) {
+  return active(player) && EchoTool.holdsTool(core, player, effect);
+}
+
 function secondChance(request) {
-  if (!request.success && active(request.player) && Math.random() < effect.secondChance) request.success = true;
+  if (!request.success && withTool(request.player) && Math.random() < effect.secondChance) request.success = true;
 }
 
 /** A chopped log is burnt, fletched into shafts for the bank, or banked as it is. */
 function gather(request) {
   const { player, itemId, amount } = request;
-  if (request.stored >= amount || request.skill !== core.Skill.WOODCUTTING || !active(player)) return;
+  if (request.stored >= amount || request.skill !== core.Skill.WOODCUTTING || !withTool(player)) return;
   const logs = amount - request.stored;
   const current = EchoTool.mode(player, effect);
   if (current === "burn") {
@@ -48,7 +53,7 @@ function gather(request) {
 }
 
 function room(request) {
-  if (!request.room && active(request.player) && Common.bankHasRoom(request.player, request.itemId)) request.room = true;
+  if (!request.room && withTool(request.player) && Common.bankHasRoom(request.player, request.itemId)) request.room = true;
 }
 
 function lights(request) {

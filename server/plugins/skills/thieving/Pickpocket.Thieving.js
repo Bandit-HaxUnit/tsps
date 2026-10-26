@@ -332,14 +332,26 @@ function pickpocketTask(player, npc, target, name, event) { return new (class ex
     // Content may ask for another go ("thieving:done", a league relic that keeps pickpocketing): the same click, a tick later.
     const done = { player, kind: "pickpocket", npc, succeeded, again: false };
     pluginApi.emitCustomEvent("thieving:done", done);
-    if (done.again && event) core.TaskManager.submit(new core.CountdownTask(player, 1, () => pickpocket({ ...event, repeat: true })));
+    // A repeat only while neither has moved: the player on the tile they pickpocketed from, the NPC still within reach.
+    const inReach = event && samePlace(player.getLocation(), event.from) && npc.getLocation().getDistance?.(player.getLocation()) <= Math.max(1, npc.getSize?.() ?? 1);
+    if (done.again && inReach) core.TaskManager.submit(new core.CountdownTask(player, 1, () => pickpocket({ ...event, repeat: true })));
   }
 })(player, npc, target, name, event); }
+
+/** Where something stands, as plain coordinates. */
+function tile(location) {
+  return { x: location?.getX?.(), y: location?.getY?.(), z: location?.getZ?.() };
+}
+
+function samePlace(location, from) {
+  const here = tile(location);
+  return !!from && here.x !== undefined && here.x === from.x && here.y === from.y && here.z === from.z;
+}
 
 function pickpocket(event) {
   const { player, npc } = event;
   const npcName = event.definition.getName();
-  const request = { ...event, target: targetFor(npcName, event.npcId), unconscious: false, pouchLimit: MAX_COIN_POUCHES };
+  const request = { ...event, target: targetFor(npcName, event.npcId), unconscious: false, alwaysSucceeds: false, pouchLimit: MAX_COIN_POUCHES };
   pluginApi.emitCustomEvent("thieving:pickpocket-target", request);
   const target = request.target;
   if (!target) return false;
@@ -382,7 +394,9 @@ function pickpocket(event) {
   player.sendMessage(`You attempt to pick ${name}'s pocket.`);
   player.getClickDelay().reset();
   npc.getTimers().registers(core.TimerKey.ATTACK_IMMUNITY, 10);
-  core.TaskManager.submit(pickpocketTask(player, npc, request.unconscious ? { ...target, low: 256, high: 256, coinPouch: null } : target, name, event));
+  // `alwaysSucceeds` (a league relic) lands every attempt as an unconscious target does, coin pouches kept.
+  const rolled = request.unconscious ? { ...target, low: 256, high: 256, coinPouch: null } : request.alwaysSucceeds ? { ...target, low: 256, high: 256 } : target;
+  core.TaskManager.submit(pickpocketTask(player, npc, rolled, name, { ...event, from: event.from ?? tile(player.getLocation()) }));
 }
 
 /** Coins in one pouch of this kind (a range rolls per pouch). */

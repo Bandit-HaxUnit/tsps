@@ -271,9 +271,13 @@ function fillFurnaceIds() {
   }
 }
 
-/** "smithing:bar-for-ore": the bar an ore smelts into (the first furnace recipe that takes it) and its XP, for content that smelts as it mines (a league relic). */
+/**
+ * "smithing:bar-for-ore": the bar an ore smelts into and its XP, for content that smelts as it mines (a
+ * league relic): the furnace recipe whose main ore it is (its first ingredient), so coal, a steel bar's
+ * second ingredient, smelts into nothing.
+ */
 function answerBarForOre(request) {
-  const recipe = Data.SMELTING_RECIPES.find((candidate) => !candidate.furnace && candidate.ingredients.some(([id]) => id === request.oreId));
+  const recipe = Data.SMELTING_RECIPES.find((candidate) => !candidate.furnace && candidate.ingredients[0]?.[0] === request.oreId);
   if (!recipe) return;
   request.barId = recipe.barId;
   request.xp = recipe.xp;
@@ -289,6 +293,7 @@ module.exports = function attach(api) {
 };
 
 Object.assign(module.exports, {
+  answerBarForOre,
   FURNACE_OBJECT_IDS,
   SMELTING_SKILLMULTI_OP_FLAGS,
   quantityForSmeltAction,

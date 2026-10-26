@@ -8,7 +8,6 @@
  */
 const Common = require("./Common.LeagueRelics");
 
-let core;
 let effect;
 
 function active(player) {
@@ -18,24 +17,13 @@ function active(player) {
 /** The pickpocket always lands, and the pouch limit is tripled. */
 function pickpocketTarget(request) {
   if (!request.target || !active(request.player)) return;
-  request.target = { ...request.target, low: 256, high: 256 };
+  request.alwaysSucceeds = true;
   request.pouchLimit *= effect.pouchLimitMultiplier;
 }
 
-/** Doubled and noted: coins come as pouches, so a second pouch stands for their double; a clue stays one clue. */
+/** Doubled and noted (coins as a second pouch: ours; a clue, or an item that neither stacks nor notes, once). */
 function loot(request) {
-  if (!active(request.player)) return;
-  const doubled = [];
-  for (const entry of request.loot) {
-    if (entry.clue) {
-      doubled.push(entry);
-    } else if (entry.id === core.ItemIdentifiers.COINS) {
-      for (let copy = 0; copy < effect.lootMultiplier; copy++) doubled.push({ ...entry });
-    } else {
-      doubled.push({ ...entry, id: Common.noted(entry.id), amount: entry.amount * effect.lootMultiplier });
-    }
-  }
-  request.loot = doubled;
+  if (active(request.player)) request.loot = Common.multipliedLoot(request.loot, effect.lootMultiplier);
 }
 
 function pickpocketAgain(request) {
@@ -70,7 +58,6 @@ function logsPerAction(request) {
 }
 
 module.exports = function attach(api) {
-  core = api.core;
   effect = Common.data.effects.trickster;
   api.onCustomEvent("thieving:pickpocket-target", pickpocketTarget);
   api.onCustomEvent("thieving:loot", loot);

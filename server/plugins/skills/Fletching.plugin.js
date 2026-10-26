@@ -3,16 +3,18 @@
  * data/fletching.json, with menus, messages and animations from rsprox captures.
  */
 
-/** "fletching:shafts": the arrow shafts request.logId fletches into, how many and the XP, for content that fletches as it chops (a league relic). */
+const Shared = require("./fletching/Shared.Fletching");
+
+/** "fletching:shafts": the arrow shafts request.logId fletches into, how many and the XP, for content that fletches as it chops (a league relic); a log with no arrow-shaft recipe answers nothing. */
 function answerShafts(request) {
-  const recipe = Shared.getRecipes().find((candidate) => candidate.group === "logs"
+  const shaft = Shared.getCore().ItemIdentifiers.ARROW_SHAFT;
+  const recipe = Shared.getRecipes().find((candidate) => candidate.outputId === shaft
     && candidate.materials.some((material) => material.ids.includes(request.logId)));
   if (!recipe) return;
   request.itemId = recipe.outputId;
   request.amount = recipe.amount;
   request.xp = recipe.xp;
 }
-const Shared = require("./fletching/Shared.Fletching");
 
 const UNITS = [
   Shared,
@@ -22,6 +24,7 @@ const UNITS = [
 ];
 
 module.exports = {
+  answerShafts,
   name: "Fletching",
   members: true,
   register(api) {

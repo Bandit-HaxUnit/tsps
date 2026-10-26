@@ -133,6 +133,30 @@ function noted(itemId) {
   return note > 0 ? note : itemId;
 }
 
+/** Whether more than one of the item can sit in one slot: it stacks, or it has a note. */
+function multipliable(itemId) {
+  return noted(itemId) !== itemId || core.ItemDefinition.forId(itemId)?.isStackable?.() === true;
+}
+
+/**
+ * Pickpocket loot multiplied `times` and noted (league relics): coins come as coin pouches, so each
+ * copy is another pouch; a clue, and an item that neither stacks nor notes, stay as they are (Wiki:
+ * Dodgy Deals, "unstackable/unnotable items are not multiplied").
+ */
+function multipliedLoot(loot, times) {
+  const out = [];
+  for (const entry of loot) {
+    if (entry.clue || !multipliable(entry.id)) {
+      out.push(entry);
+    } else if (entry.id === core.ItemIdentifiers.COINS) {
+      for (let copy = 0; copy < times; copy++) out.push({ ...entry });
+    } else {
+      out.push({ ...entry, id: noted(entry.id), amount: entry.amount * times });
+    }
+  }
+  return out;
+}
+
 /** Restores special attack energy and redraws the bar. */
 function restoreSpecial(player, percent) {
   player.incrementSpecialPercentage(percent);
@@ -145,7 +169,7 @@ function message(key, values = {}) {
 
 module.exports = {
   init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, ids, message, maxHitFor, restoreSpecial,
-  bankHasRoom, bank, noted, derivedHit, isBuildingDerivedHit, RELICS_ATTRIBUTE,
+  bankHasRoom, bank, noted, multipliable, multipliedLoot, derivedHit, isBuildingDerivedHit, RELICS_ATTRIBUTE,
   get data() { return data; },
   get api() { return api; },
   get core() { return core; },

@@ -20,28 +20,33 @@ function active(player) {
   return Common.effectActive(player, effect);
 }
 
+/** The harpoon's fishing effects need the harpoon, carried or wielded (Wiki); the Hunter and Cooking ones do not. */
+function withTool(player) {
+  return active(player) && EchoTool.holdsTool(core, player, effect);
+}
+
 function ids(names) {
   return new Set(names.map((name) => core.ItemIdentifiers[name]).filter(Number.isInteger));
 }
 
 function secondChance(request) {
-  if (!request.success && active(request.player) && Math.random() < effect.secondChance) request.success = true;
+  if (!request.success && withTool(request.player) && Math.random() < effect.secondChance) request.success = true;
 }
 
 /** No tool for this spot? The Echo harpoon in hand is one. */
 function tool(request) {
-  if (request.variant || !active(request.player) || !EchoTool.holdsTool(core, request.player, effect)) return;
+  if (request.variant || !withTool(request.player)) return;
   request.variant = { ids: [core.ItemIdentifiers[effect.tool]], level: 1, bonus: effect.harpoonBonus };
 }
 
 function interval(request) {
-  if (active(request.player)) request.ticks -= effect.ticksFaster;
+  if (withTool(request.player)) request.ticks -= effect.ticksFaster;
 }
 
 /** The catch goes to the bank, cooked half the time when the harpoon says so. */
 function gather(request) {
   const { player, itemId, amount } = request;
-  if (request.stored >= amount || request.skill !== core.Skill.FISHING || !active(player)) return;
+  if (request.stored >= amount || request.skill !== core.Skill.FISHING || !withTool(player)) return;
   if (!unbanked) {
     unbanked = ids(effect.unbanked);
     uncooked = ids(effect.uncooked);
@@ -64,7 +69,7 @@ function gather(request) {
 }
 
 function room(request) {
-  if (!request.room && active(request.player) && Common.bankHasRoom(request.player, request.itemId)) request.room = true;
+  if (!request.room && withTool(request.player) && Common.bankHasRoom(request.player, request.itemId)) request.room = true;
 }
 
 function neverBurns(request) {

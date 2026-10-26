@@ -20,13 +20,18 @@ function active(player) {
   return Common.effectActive(player, effect);
 }
 
+/** The pickaxe's effects need the pickaxe, carried or wielded (Wiki). */
+function withTool(player) {
+  return active(player) && EchoTool.holdsTool(core, player, effect);
+}
+
 function secondChance(request) {
-  if (!request.success && active(request.player) && Math.random() < effect.secondChance) request.success = true;
+  if (!request.success && withTool(request.player) && Math.random() < effect.secondChance) request.success = true;
 }
 
 /** The rock stands until its fourth ore. */
 function keepRock(request) {
-  if (!active(request.player)) return;
+  if (!withTool(request.player)) return;
   const count = (mined.get(request.object) ?? 0) + 1;
   if (count < effect.oresPerRock) {
     mined.set(request.object, count);
@@ -55,7 +60,7 @@ function processed(player, itemId) {
 /** Mined items go to the bank, smelted or cut on the way when the pickaxe says so. */
 function gather(request) {
   const { player, amount } = request;
-  if (request.stored >= amount || request.skill !== core.Skill.MINING || !active(player)) return;
+  if (request.stored >= amount || request.skill !== core.Skill.MINING || !withTool(player)) return;
   const result = processed(player, request.itemId);
   if (!Common.bank(player, result.itemId, amount - request.stored)) return;
   request.stored = amount;
@@ -63,7 +68,7 @@ function gather(request) {
 }
 
 function room(request) {
-  if (!request.room && active(request.player) && Common.bankHasRoom(request.player, request.itemId)) request.room = true;
+  if (!request.room && withTool(request.player) && Common.bankHasRoom(request.player, request.itemId)) request.room = true;
 }
 
 module.exports = function attach(pluginApi) {

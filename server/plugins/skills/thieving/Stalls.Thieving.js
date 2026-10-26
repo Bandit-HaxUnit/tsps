@@ -209,6 +209,16 @@ function merchantInteraction(event) {
   event.handled = true;
 }
 
+/** Where something stands, as plain coordinates. */
+function tile(location) {
+  return { x: location?.getX?.(), y: location?.getY?.(), z: location?.getZ?.() };
+}
+
+function samePlace(location, from) {
+  const here = tile(location);
+  return !!from && here.x !== undefined && here.x === from.x && here.y === from.y && here.z === from.z;
+}
+
 function finishTheft(event, stall) {
   const { player, object } = event;
   if (object.getPrivateArea()?.isDestroyed()) return;
@@ -230,7 +240,8 @@ function finishTheft(event, stall) {
   if (!depletion.handled) depleteStall(object, ticks);
   const done = { player, kind: "stall", object, succeeded: true, again: false };
   pluginApi.emitCustomEvent("thieving:done", done);
-  if (done.again) core.TaskManager.submit(new core.CountdownTask(player, 1, () => handleStealFromStall({ ...event, repeat: true })));
+  // A repeat only while the player stands where they stole from.
+  if (done.again && samePlace(player.getLocation(), event.from)) core.TaskManager.submit(new core.CountdownTask(player, 1, () => handleStealFromStall({ ...event, repeat: true })));
 }
 
 function handleStealFromStall(event) {
@@ -267,7 +278,8 @@ function handleStealFromStall(event) {
   player.getClickDelay().reset();
   player.performAnimation(new core.Animation(core.CacheDefinitions.getSeqId("human_pickuptable")));
   player.getPacketSender().sendSound(THIEVING_SOUND, 10, 0);
-  core.TaskManager.submit(new core.CountdownTask(player, 1, () => finishTheft(event, stall)));
+  const from = event.from ?? tile(player.getLocation());
+  core.TaskManager.submit(new core.CountdownTask(player, 1, () => finishTheft({ ...event, from }, stall)));
   event.handled = true;
 }
 
