@@ -138,7 +138,8 @@ Tier 1 counts once the character chose its first relic.
   boosted weight grows and the pool with it, so 1/512 at 5x is 5/516 (the Wiki rounds to 1/102).
   Superior Slayer monsters' unique tables and Treasure Trails caskets' "clue uniques" rows ask the
   same over `drops:chance { player, source: "superior-slayer-monster" | "treasure-trails-casket",
-  rules }`, the pages' Global entries (a tier's "clue uniques" and mega-rare rows). Kills whose
+  rules }`, the pages' Global entries (a tier's "clue uniques" and mega-rare rows; an ordinary
+  casket's Open and the Mimic's reward share `Rolls.uniqueMultiplier`). Kills whose
   table NpcDrops rolls are covered as they are, Araxxor's and Zalcano's included (their plugins
   roll through NpcDrops with the NPC named); the giant lairs' chests pass `source` (Obor,
   Bryophyta). Sources rolled by their own plugins are in the data but inert until that plugin

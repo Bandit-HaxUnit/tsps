@@ -57,4 +57,23 @@ function roll(tier, count, random = Math.random, multiplier = () => 1) {
   return rollTable(TABLES[tier], count, random, multiplier);
 }
 
-module.exports = { roll, rollTable };
+/** The source casket rolls name on "drops:chance" { player, source, rules }. */
+const UNIQUES_SOURCE = "treasure-trails-casket";
+/** The dump's sections of a tier's unique rewards ("Hard clue uniques", "Mega-rare table - Hard clues"). */
+const UNIQUES_SECTION = /clue uniques$|^mega.?rare table/i;
+
+/**
+ * The row multiplier for one player's casket: asks "drops:chance" (a league's boosted drops
+ * answer it) and makes each unique row the matching rules' product as likely; other rows stay.
+ * Every casket roll uses it, the ordinary Open and the Mimic's alike.
+ */
+function uniqueMultiplier(api, player) {
+  const rules = [];
+  if (player && api) api.emitCustomEvent("drops:chance", { player, source: UNIQUES_SOURCE, rules });
+  if (rules.length === 0) return () => 1;
+  return (row) => (UNIQUES_SECTION.test(row.section ?? "")
+    ? rules.reduce((boost, rule) => (rule.pattern.test(row.name ?? "") ? boost * rule.multiplier : boost), 1)
+    : 1);
+}
+
+module.exports = { roll, rollTable, uniqueMultiplier, UNIQUES_SOURCE, UNIQUES_SECTION };

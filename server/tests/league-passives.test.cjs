@@ -341,6 +341,26 @@ test("the world's boss rare multiplier stays out of the main roll for everyone",
   }
 });
 
+test("an ordinary casket's roll boosts its uniques for a boosted league character, keeping Entrana's filter", () => {
+  // The ordinary Open path's roller (Caskets.TreasureTrails), attached to this api so its
+  // "drops:chance" reaches the league. Easy uniques are 8.8% of the pool, 32.6% at 5x: a roll
+  // of 0.2 lands past them unboosted and inside them boosted.
+  const Caskets = require("../plugins/treasuretrails/trails/Caskets.TreasureTrails");
+  Caskets(new Proxy({ core, onItemAction() {}, emitCustomEvent: (name, payload) => ask(name, payload) }, { get: (target, key) => target[key] ?? (() => {}) }));
+  const { byName } = require("../plugins/treasuretrails/trails/Tiers.TreasureTrails");
+  const TABLES = require("../data/definitions/clue-caskets.json").tables;
+  const uniques = new Set(TABLES.easy.entries.filter((row) => /clue uniques$/i.test(row.section)).map((row) => row.item_id));
+  const rolled = (player, entrana = false) => Caskets.roll(byName.get("easy"), { player, entrana, rolls: 2, random: () => 0.2 }).map((drop) => drop.itemId);
+  const boosted = rolled(character("tr8", "league", 8));
+  assert.equal(boosted.length, 2);
+  assert.ok(boosted.every((id) => uniques.has(id)), "both rolls are easy clue uniques at 5x");
+  assert.ok(rolled(character("main", "main")).every((id) => !uniques.has(id)), "a main character keeps the ordinary odds");
+  assert.ok(rolled(character("tr0", "league", 0)).every((id) => !uniques.has(id)), "no relic yet");
+  assert.ok(rolled(null).every((id) => !uniques.has(id)), "no player, no boost");
+  const shared = new Set(TABLES.easy.entries.filter((row) => /shared/i.test(row.section)).map((row) => row.item_id));
+  assert.ok(rolled(character("tr8b", "league", 8), true).every((id) => !uniques.has(id) || shared.has(id)), "Entrana still has no clue uniques");
+});
+
 test("the casket roller re-weights the uniques a rule names and leaves the rest", () => {
   const Rolls = require("../plugins/treasuretrails/Rolls.RewardCaskets");
   const table = {
