@@ -121,6 +121,7 @@ relics are the first askers; nothing changes when nobody answers):
 | `magic:alchemy-policy` (extended) | core alchemy | now with `high` (High Level Alchemy) |
 | `minigame:points` | the Hallowed Sepulchre's coffins | `{ player, minigame, kind, amount }` before a minigame's reward points or tokens are given: a listener may raise `amount` |
 | `thieving:pickpocket-target` (extended) | Thieving | now with `chanceBonus` (a percent more success, stacking as the gloves of silence do) and `painless` (a stun without the damage) |
+| `thieving:loot` (extended) | Thieving | now with `multiplier`, applied with the rogue outfit's doubling as the loot is handed over |
 | `prayer:bury` (extended) | Prayer | now scatters demonic ashes too (never for the bonecrusher's `crushed`) |
 | `woodcutting:nest-chance`, `woodcutting:nest-drop` | Woodcutting | `{ player, multiplier }`: a bird nest `multiplier` times as likely; `{ player, itemId, handled }` before a nest falls (handled: a listener took it) |
 | `farming:open-seed-vault` | Farming (the guild's seed vault) | `{ player, opened }`: the vault's menu from anywhere, behind the Bank PIN as at the guild |
@@ -436,15 +437,18 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
 - **Skilling effects** (`league/FragmentSkilling.LeagueMode.js`, data `skillingEffects`): the
   skilling fragments and Clued In. Praying Respects buries and scatters the remains a kill drops
   through Prayer's own `prayer:bury` (which now scatters demonic ashes too) at 50/100/200% of their
-  XP, and takes them off the drop (`npc-drops:roll`; NPC drops only: ours). Smooth Criminal raises
+  XP, and takes them off the drop (`npc-drops:roll`; NPC drops only: ours), leaving remains above
+  the player's Prayer level and the long and curved bones kept for Construction (ours). Smooth Criminal raises
   Thieving's own pickpocket chance by its percent, stacking as the gloves of silence do, and from
   level 2 stuns without the damage (`chanceBonus` and `painless` on `thieving:pickpocket-target`).
-  Deeper Pockets doubles the loot (`thieving:loot`; coins as another pouch). Hot On The Trail gives
+  Deeper Pockets doubles the loot through `thieving:loot`'s new `multiplier`, which Thieving's
+  own handover multiplies with the rogue outfit's (a pouch's coins come directly; a clue never twice). Hot On The Trail gives
   the Wiki's tier of scroll box for the log lit (`firemaking:success`, and `league:log-burnt` for
   Slash & Burn's logs) while the clue capacity allows another (`treasure-trails:can-receive`); logs
-  the league predates give none (ours). Golden Brick Road puts its coins beside a mark of grace
+  the league predates give none (ours), and Wintertodt's bruma roots and kindling, fed to its
+  brazier rather than lit, never do here. Golden Brick Road puts its coins beside a mark of grace
   (`agility:mark`). Grave Robber raises a coffin's hallowed marks, the Grand Hallowed Coffin's too
-  (ours), through the Sepulchre's new `minigame:points`. Clued In makes each clue scroll an NPC drops
+  (ours), through the Sepulchre's new `minigame:points`; a part mark is that chance of a whole one. Clued In makes each clue scroll an NPC drops
   at least 1 in 30/25/15 (`npc-drops:tertiary-chance`). The scroll box message is this server's.
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price

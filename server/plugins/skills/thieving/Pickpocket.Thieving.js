@@ -193,17 +193,20 @@ function rogueDoubleChance(player) {
   return pieces === ROGUE_PIECES.length ? 1 : pieces * ROGUE_CHANCE_PER_PIECE;
 }
 
-/** Hands the loot over: coins as the target's coin pouch; the rogue outfit may double it. */
-function giveLoot(player, target, loot, random = Math.random) {
-  const doubled = random() < rogueDoubleChance(player);
+/**
+ * Hands the loot over: coins as the target's coin pouch; the rogue outfit may double it, and
+ * content's `multiplier` (a league fragment's double loot) multiplies it again. Clues are never more.
+ */
+function giveLoot(player, target, loot, random = Math.random, multiplier = 1) {
+  const times = (random() < rogueDoubleChance(player) ? 2 : 1) * Math.max(1, multiplier | 0);
   for (const { id, amount, clue } of loot) {
     if (id === core.ItemIdentifiers.COINS && target.coinPouch) {
       player.getInventory().adds(target.coinPouch.id, 1);
       // Wiki (Coin pouch): a doubled pouch gives one pouch plus its coins directly.
-      if (doubled) player.getInventory().adds(core.ItemIdentifiers.COINS, Array.isArray(target.coinPouch.coins) ? target.coinPouch.coins[0] : target.coinPouch.coins);
+      if (times > 1) player.getInventory().adds(core.ItemIdentifiers.COINS, (times - 1) * (Array.isArray(target.coinPouch.coins) ? target.coinPouch.coins[0] : target.coinPouch.coins));
       continue;
     }
-    player.getInventory().adds(id, doubled && !clue ? amount * 2 : amount);
+    player.getInventory().adds(id, clue ? amount : amount * times);
   }
 }
 
@@ -239,10 +242,11 @@ function dodgyNecklaceProtects(player, random = Math.random) {
 
 function succeed(player, npc, target, name) {
   player.performAnimation(new core.Animation(target.pickpocketAnimation ?? THIEVING_ANIMATION));
-  // Content may change the loot before it is handed over ("thieving:loot", a league relic's doubled or noted loot).
-  const loot = { player, npc, target: target.name, loot: rollLoot(player, target) };
+  // Content may change the loot before it is handed over ("thieving:loot", a league relic's doubled or noted loot),
+  // or multiply it as the rogue outfit does (`multiplier`, a league fragment's double loot).
+  const loot = { player, npc, target: target.name, loot: rollLoot(player, target), multiplier: 1 };
   pluginApi.emitCustomEvent("thieving:loot", loot);
-  giveLoot(player, target, loot.loot);
+  giveLoot(player, target, loot.loot, Math.random, loot.multiplier);
   player.sendMessage(`You pick ${name}'s pocket.`);
   core.Sounds.sendSound(player, core.Sound.THIEVING_PICKPOCKET);
   player.getSkillManager().addExperiences(core.Skill.THIEVING, target.xp);
