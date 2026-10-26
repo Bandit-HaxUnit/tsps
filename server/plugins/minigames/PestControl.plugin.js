@@ -298,6 +298,14 @@ let AreaManager;
 let ObjectManager;
 let RegionManager;
 let World;
+let pluginApi;
+
+/** The commendations a game awards, after "minigame:points" (a league's tier passive multiplies them). */
+function commendationsFor(player, points) {
+  const award = { player, minigame: "pest-control", points };
+  pluginApi.emitCustomEvent("minigame:points", award);
+  return award.points;
+}
 
 function moveBetweenAreas(player, area, location) {
   const current = player.getArea?.();
@@ -933,11 +941,12 @@ class PestControlMatch {
     for (const player of players) {
       const state = this.players.get(player);
       if (won && state.activity >= MIN_REWARD_ACTIVITY) {
-        setPoints(player, getPoints(player) + this.boat.points);
+        const commendations = commendationsFor(player, this.boat.points);
+        setPoints(player, getPoints(player) + commendations);
         const coins = player.getSkillManager().getCombatLevel() * 10;
         player.getInventory().adds(ItemIdentifiers.COINS, coins);
         player.sendMessage(
-          `Congratulations! You receive ${this.boat.points} Void Knight commendation points and ${coins} coins.`
+          `Congratulations! You receive ${commendations} Void Knight commendation points and ${coins} coins.`
         );
       } else if (won) {
         player.sendMessage("The Void Knights noticed your lack of activity, so you receive no reward.");
@@ -1225,6 +1234,7 @@ module.exports = {
   name: "PestControl",
   members: true,
   register(api) {
+    pluginApi = api;
     AreaManager = api.getAreaManager();
     ObjectManager = api.getObjectManager();
     RegionManager = api.getRegionManager();

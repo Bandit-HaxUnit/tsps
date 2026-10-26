@@ -118,7 +118,12 @@ levels for, 3-35 kills (Wiki; in OSRS the player chooses the amount).
 A superior rolls two unique tables, each at 1 in (200 - (Slayer level + 55)² / 125) (Wiki,
 Superior slayer monster): an imbued heart (1/8), dust battlestaff (7/16) or mist battlestaff
 (7/16) from the first, an eternal gem 1/8 of the time from the second. The Wiki also says either
-table is equally likely; here each table is rolled on its own.
+table is equally likely; here each table is rolled on its own. Before the roll the plugin asks
+`drops:chance` { player, source: "superior-slayer-monster", rules } and a rule whose pattern
+matches one of a table's items multiplies that table's chance (a league's boosted drops,
+[server/docs/leagues.md](../server/docs/leagues.md)). Whether a task kill brings a superior at all
+is asked first on `slayer:superior-spawn` { player, npc, unlocked, chance }: Bigger and Badder's
+bit and 1 in 200, which a listener may unlock or shorten; the toggle-off always holds.
 
 ### Kills
 
@@ -139,6 +144,9 @@ table is equally likely; here each table is rolled on its own.
   add to the standard streak.
 - **Points:** none for the first four tasks. After that, the master's points (Turael, Aya and
   Spria give none), times 5, 15, 25, 35 or 50 on every 10th, 50th, 100th, 250th or 1,000th task.
+  Both numbers are asked first on `slayer:task-reward` { player, master, freeTasks, multiplier }
+  (Mortimer's completions ask too): a listener may lower the free tasks or multiply the points
+  (a league's tier passive, [server/docs/leagues.md](../server/docs/leagues.md)).
 
 ### Other rules
 

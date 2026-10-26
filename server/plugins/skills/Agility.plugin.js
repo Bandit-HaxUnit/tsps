@@ -218,7 +218,9 @@ function rollMarkOfGrace(player, course) {
   if (Math.random() >= chance) return;
   const tile = marks.tiles[Math.floor(Math.random() * marks.tiles.length)];
   const position = new core.Location(tile[0], tile[1], tile[2]);
-  ItemOnGroundManager.registerNonGlobals(player, new core.Item(core.ItemIds.MARK_OF_GRACE, 1), position);
+  const award = { player, minigame: "rooftop-agility", points: 1 };
+  pluginApi.emitCustomEvent("minigame:points", award);
+  ItemOnGroundManager.registerNonGlobals(player, new core.Item(core.ItemIds.MARK_OF_GRACE, award.points), position);
 }
 
 function finishObstacle(player, obstacle, success, completed, fail = obstacle.fail) {

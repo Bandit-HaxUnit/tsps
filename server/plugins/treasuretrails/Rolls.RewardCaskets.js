@@ -8,7 +8,12 @@ function randomValue(random) {
   return value;
 }
 
-function rollTable(table, count, random = Math.random) {
+/**
+ * `count` rolls on a casket table. `multiplier(row)` makes a row that many times as likely: its
+ * weight grows and the pool grows by the same, so the other rows keep their weights (a league's
+ * boosted casket uniques).
+ */
+function rollTable(table, count, random = Math.random, multiplier = () => 1) {
   if (!table || !Number.isSafeInteger(table.out_of) || table.out_of < 1 ||
       !Array.isArray(table.entries) || !table.entries.length) throw new Error("Invalid casket reward table");
   if (!Number.isInteger(count) || count < 0 || !Array.isArray(table.rolls) ||
@@ -21,10 +26,16 @@ function rollTable(table, count, random = Math.random) {
     total += row.weight;
   }
   if (!Number.isSafeInteger(total) || total !== table.out_of) throw new Error("Incomplete casket reward probability pool");
+  const weights = table.entries.map(row => {
+    const factor = Number(multiplier(row));
+    const weight = Number.isFinite(factor) && factor > 1 ? row.weight * factor : row.weight;
+    total += weight - row.weight;
+    return weight;
+  });
   const drops = [];
   for (let i = 0; i < count; i++) {
     let hit = randomValue(random) * total;
-    const row = table.entries.find(entry => (hit -= entry.weight) < 0);
+    const row = table.entries.find((entry, index) => (hit -= weights[index]) < 0);
     if (!row) throw new Error("Invalid casket reward selection");
     for (const item of Array.isArray(row.items) ? row.items : [row]) {
       const [minimum, maximum] = item.quantity;
@@ -41,9 +52,9 @@ function validItem(item) {
     item.quantity.every(value => Number.isSafeInteger(value) && value > 0) && item.quantity[0] <= item.quantity[1];
 }
 
-function roll(tier, count, random = Math.random) {
+function roll(tier, count, random = Math.random, multiplier = () => 1) {
   if (!Object.prototype.hasOwnProperty.call(TABLES, tier)) throw new Error("Unsupported casket reward tier");
-  return rollTable(TABLES[tier], count, random);
+  return rollTable(TABLES[tier], count, random, multiplier);
 }
 
 module.exports = { roll, rollTable };
