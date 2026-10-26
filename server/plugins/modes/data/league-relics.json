@@ -54,7 +54,12 @@
     "foragerNoRoom": { "text": "You don't have enough inventory space to withdraw that.", "source": "ours" },
     "foragerNothingToFill": { "text": "You have no grimy herbs your forager's pouch can take.", "source": "ours" },
     "seedKept": { "text": "You manage to keep your {seed}.", "source": "ours" },
-    "overgrownSeedKept": { "text": "Botanical allows you to keep your {seed}.", "source": "Wiki, Overgrown (trivia: the live message, from the relic's development name)" }
+    "overgrownSeedKept": { "text": "Botanical allows you to keep your {seed}.", "source": "Wiki, Overgrown (trivia: the live message, from the relic's development name)" },
+    "bonusCasket": { "text": "Your relic finds you another reward casket ({tier}).", "source": "ours" },
+    "bonusCasketUpgraded": { "text": "Your relic finds you a better reward casket ({tier}).", "source": "ours" },
+    "bloodthirstySuperior": { "text": "<col=ff0000>This superior foe is bloodthirsty...</col>", "source": "ours" },
+    "superiorPoints": { "text": "You gain {points} Slayer points for the superior foe.", "source": "ours" },
+    "slayerBonusXp": { "text": "You gain {xp} bonus Slayer XP.", "source": "Wiki, Slayer Master (Raging Echoes League)" }
   },
   "effects": {
     "_comment": "The relics with effects here (one <Relic>.LeagueRelics.js each), each gated on its league (`league`, one type or several for a relic both leagues have) and on being chosen (`key`, plus `aliases` for a catalog entry that stands in for the same relic). Numbers are the Wiki's: no rsprox recording of Trailblazer Reloaded exists (the captures start at revision 223). Superior Sorcerer's splash reach (one tile around the primary target, like a burst) and Undying Retribution's graphic (the Retribution prayer's, 437) are ours; the Wiki gives neither.",
@@ -133,7 +138,44 @@
     },
     "farmersFortune": { "league": 4, "key": "farmers-fortune", "seedSaveChance": 0.2, "harvestsPerAction": 25, "yieldMultiplier": 3 },
     "overgrown": { "league": 5, "key": "overgrown", "seedSaveChance": 0.75, "toolName": "Leprechaun's vault" },
-    "pocketKingdom": { "league": 5, "key": "pocket-kingdom", "payMultiplier": 0.5, "outputMultiplier": 2, "approval": 127, "toolName": "Pocket kingdom" }
+    "pocketKingdom": { "league": 5, "key": "pocket-kingdom", "payMultiplier": 0.5, "outputMultiplier": 2, "approval": 127, "toolName": "Pocket kingdom" },
+    "_cluesSlayerComment": "The clue and Slayer relics (docs/leagues.md). Wiki numbers unless marked ours: each of an NPC's clue scrolls comes at least 1 time in 15 (the Wiki: 'a 1/15 chance to drop one'); Treasure Seeker's bonus casket chances (bonusCasket, 1 in N by the opened tier) and its 1 in 4 upgrade are ours (the Wiki: 'more common at lower tiers', no numbers); Bloodthirsty's superior Slayer points (5 plus a fifth of the Slayer requirement) are ours; Slayer Master's bonus XP runs in a straight line from 1,000 at Slayer level 1 to 15,000 at 99 (ours).",
+    "treasureSeeker": {
+      "league": 4, "key": "treasure-seeker", "aliases": ["treasure-seeker-preview"],
+      "clueOneIn": 15, "vesselMultiplier": 10,
+      "bonusCasket": { "beginner": 5, "easy": 8, "medium": 10, "hard": 12, "elite": 15, "master": 20 }, "upgradeOneIn": 4
+    },
+    "treasureArbiter": { "league": 5, "key": "treasure-arbiter", "clueOneIn": 15, "vesselMultiplier": 10, "waived": ["emote", "falo", "charlie"] },
+    "bloodthirsty": {
+      "league": 4, "key": "bloodthirsty", "superiorOneIn": 25, "superiorRolls": 6, "variantChance": 0.25, "variantRolls": 9,
+      "variantUniqueBoost": 3, "braceletChance": 0.35, "superiorPoints": { "base": 5, "perLevels": 5 },
+      "_uniqueTable": "Wiki, Bloodthirsty Nechryarch: one roll on this table, out of 315.",
+      "uniqueTable": {
+        "outOf": 315,
+        "rows": [
+          { "item": "RAW_LOBSTER", "amount": [60, 80], "noted": true, "weight": 5 },
+          { "item": "SNAPE_GRASS", "amount": [60, 150], "noted": true, "weight": 10 },
+          { "item": "IRIT_SEED", "amount": [10, 15], "noted": false, "weight": 10 },
+          { "item": "UNICORN_HORN", "amount": [60, 150], "noted": true, "weight": 5 },
+          { "item": "LIMPWURT_ROOT", "amount": [60, 150], "noted": true, "weight": 10 },
+          { "item": "YEW_LOGS", "amount": [70, 90], "noted": true, "weight": 15 },
+          { "item": "RAW_MONKFISH", "amount": [60, 80], "noted": true, "weight": 15 },
+          { "item": "WHITE_BERRIES", "amount": [60, 150], "noted": true, "weight": 20 },
+          { "item": "KWUARM_SEED", "amount": [8, 15], "noted": false, "weight": 30 },
+          { "item": "RANARR_SEED", "amount": [8, 15], "noted": false, "weight": 30 },
+          { "item": "BLUE_DRAGON_SCALE", "amount": [20, 40], "noted": true, "weight": 25 },
+          { "item": "RAW_SHARK", "amount": [60, 80], "noted": true, "weight": 20 },
+          { "item": "RED_SPIDERS_EGGS", "amount": [40, 60], "noted": true, "weight": 25 },
+          { "item": "MAGIC_LOGS", "amount": [30, 50], "noted": true, "weight": 35 },
+          { "item": "WINE_OF_ZAMORAK", "amount": [30, 50], "noted": true, "weight": 30 },
+          { "item": "DWARF_WEED_SEED", "amount": [5, 8], "noted": false, "weight": 30 }
+        ]
+      }
+    },
+    "slayerMaster": {
+      "league": 5, "key": "slayer-master", "freeKinds": ["unlock", "extend", "cancel", "block"],
+      "freeItems": ["RUNE_POUCH", "HERB_SACK", "LOOTING_BAG"], "bonusKill": 100, "bonusXp": [1000, 15000]
+    }
   },
   "leagues": {
     "4": {

@@ -43,5 +43,9 @@ module.exports = {
     require("./leaguerelics/FarmersFortune.LeagueRelics")(api);
     require("./leaguerelics/Overgrown.LeagueRelics")(api);
     require("./leaguerelics/PocketKingdom.LeagueRelics")(api);
+    require("./leaguerelics/TreasureSeeker.LeagueRelics")(api);
+    require("./leaguerelics/TreasureArbiter.LeagueRelics")(api);
+    require("./leaguerelics/Bloodthirsty.LeagueRelics")(api);
+    require("./leaguerelics/SlayerMaster.LeagueRelics")(api);
   },
 };
