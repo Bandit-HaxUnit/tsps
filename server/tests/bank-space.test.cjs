@@ -120,7 +120,22 @@ test("a full bank still takes more of what it holds, and notes of it", () => {
   player.inventory.switchItem(player.getBank(0), new Item(SWORD, 1), false, 0, false);
   player.inventory.switchItem(player.getBank(0), new Item(SWORD_NOTE, 3), false, 1, false);
   assert.equal(player.getBank(0).getAmount(SWORD), 5);
+  assert.equal(player.inventory.getAmount(SWORD), 0, "the moved sword leaves the inventory");
+  assert.equal(player.inventory.getAmount(SWORD_NOTE), 0, "the moved notes leave the inventory");
   assert.deepEqual(player.messages, []);
+});
+
+test("a full bank deposit of an unnoted item it holds moves it, never copies it", () => {
+  capacity(1);
+  const player = createPlayer();
+  player.setInterfaceId(Bank.MAIN_INTERFACE_ID);
+  player.getBank(0).add(new Item(SWORD, 1), false);
+  player.inventory.add(new Item(SWORD, 1), false);
+  for (let i = 0; i < 3; i++) {
+    Bank.deposits(player, SWORD, player.inventory.getSlotForItemId(SWORD), 1);
+  }
+  assert.equal(player.getBank(0).getAmount(SWORD), 2);
+  assert.equal(player.inventory.getAmount(SWORD), 0);
 });
 
 test("bank:full sets the message", () => {

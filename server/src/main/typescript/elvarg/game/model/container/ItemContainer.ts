@@ -667,7 +667,8 @@ export abstract class ItemContainer {
     } else {
       let amount = item.getAmount();
       while (amount > 0) {
-        if (slot == -1 || (toContainer != null && toContainer.isFull())) {
+        // Use the same acceptance as the caller: a full bank still takes an item it holds.
+        if (slot == -1 || (toContainer != null && !toContainer.canTake(item))) {
           break;
         }
         if (!leavePlaceHolder) {
