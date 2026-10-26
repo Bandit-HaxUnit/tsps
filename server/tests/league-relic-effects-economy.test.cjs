@@ -122,7 +122,9 @@ function character(name, profile, picks = {}, leagueType = 4) {
   player.setProfile(profile);
   player.setLocation(new Location(3200, 3200, 0));
   player.setRegistered(true);
-  const sender = new Proxy({}, { get: () => () => sender });
+  player.setNeedsPlacement(false); // in the world, as after the login's first tick
+  player.interfaces = [];
+  const sender = new Proxy({}, { get: (_, key) => (key === "sendInterface" ? (id) => { player.interfaces.push(id); return sender; } : () => sender) });
   player.getPacketSender = () => sender;
   player.getSession = () => ({ sendClientPacket: () => true });
   player.messages = [];
@@ -456,9 +458,11 @@ test("Overgrown: 75% to keep the seed, crops never die; the vault opens the seed
   Model.advanceFarm(farm, Date.now() + 60 * 60 * 1000);
   assert.equal(state.status, "diseased", "the disease waits for a cure; it does not kill");
 
-  const before = who.relic.getDialogueManager().getCurrent();
+  const seedVault = core.CacheDefinitions.getInterfaceId?.("seed_vault") ?? null;
+  who.relic.setNeedsPlacement(false); // the farm's move to the patch has been placed
   itemActions.get("Leprechaun's vault").Open({ player: who.relic, slot: 0 });
-  assert.ok(who.relic.getDialogueManager().getCurrent() && who.relic.getDialogueManager().getCurrent() !== before, "the seed vault's menu, far from the guild");
+  assert.equal(who.relic.interfaces.length, 1, "the seed vault, far from the guild");
+  if (seedVault != null) assert.equal(who.relic.interfaces[0], seedVault);
 
   for (const player of others(who)) {
     const theirs = farmer(player, patch);
@@ -469,9 +473,9 @@ test("Overgrown: 75% to keep the seed, crops never die; the vault opens the seed
     Object.assign(theirs, { status: "diseased", stage: 2, nextAt: Date.now() - 1 });
     Model.advanceFarm(player.getAttribute(Patches.FARM_ATTRIBUTE), Date.now() + 60 * 60 * 1000);
     assert.equal(theirs.status, "dead", `${player.getUsername()}'s diseased herbs die`);
-    const before = player.getDialogueManager().getCurrent();
+    player.setNeedsPlacement(false);
     itemActions.get("Leprechaun's vault").Open({ player, slot: 0 });
-    assert.equal(player.getDialogueManager().getCurrent(), before, `${player.getUsername()}'s vault does nothing`);
+    assert.equal(player.interfaces.length, 0, `${player.getUsername()}'s vault does nothing`);
   }
 });
 

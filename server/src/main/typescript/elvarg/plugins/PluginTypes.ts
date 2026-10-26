@@ -1185,7 +1185,7 @@ export interface PluginApi {
   /** Register an inventory item as a shop currency, keyed by its item name and optional aliases. */
   registerItemShopCurrency(
     itemId: number,
-    options?: { name?: string; aliases?: string[] }
+    options?: { name?: string; aliases?: string[]; unit?: string }
   ): void;
   /**
    * Save and restore this player attribute; values must be JSON-compatible.

@@ -1,5 +1,5 @@
 {
-  "_sources": "OSRS Wiki (Tai Bwo Wannai Cleanup) for requirements, XP and favour; rsprox 227/01858, 237/01102 and 231/03030 for timings, messages, sounds, animations, varbits and the stick claims. Gameval names, resolved from the cache.",
+  "_sources": "OSRS Wiki (Tai Bwo Wannai Cleanup) for requirements, XP and favour; rsprox 227/01858, 237/01102 and 231/03030 for timings, messages, sounds, animations, varbits and the stick claims. Gameval names, resolved from the cache. Part 3 (rewards): the Wiki's Gabooty's Tai Bwo Wannai Cooperative, Safta Doc, Rionasta and Hardwood Grove pages; rsprox 227/01858, 237/01102, 227/01757 and 231/03030 for the shop messages, Safta's machete, the grove doors and Murcaily's warning; the cache for the parcel interface's ops (scripts 2851/2855).",
   "quest": "jungle_potion",
   "regions": [[2752, 2879, 3008, 3135]],
   "varbits": {
@@ -74,7 +74,21 @@
     "firstClaim": "Great, I saw you were fixing the fence earlier, it looks like you've got the hang of this now! Let me give you something for your effort!",
     "claim": "Hey, I've seen you working around the village. You've been doing a lot of good work around here for us. Let me give you something for your trouble.",
     "claimed": "You get {sticks} trading sticks. You are left with {favour}% favour.",
-    "noRoom": "You don't have enough inventory space."
+    "noRoom": "You don't have enough inventory space.",
+    "parcelCurrency": "You cannot send any form of currency through the parcel service",
+    "parcelRum": "The villager refuses to send this through the parcel system.",
+    "parcelNoSticks": "You don't have enough trading sticks to send that.",
+    "parcelValue": "{item}: it costs 10 trading sticks per item to send.",
+    "parcelTooFew": "It costs at least 10 trading sticks to use this service. Sorry but you don't have enough.",
+    "groveWarn": "Hey there! You can't chop those trees until you've helped out around our village!",
+    "groveAnyway": "I just want to go in anyway.",
+    "groveStayOut": "Okay, I'll stay out here.",
+    "groveFee": "You need 100 trading sticks to enter the Hardwood Grove.",
+    "groveLeave": "You don't seem to have any Teak or Mahogany logs.<br>Are you sure you wish to leave?",
+    "groveLeaveYes": "Yes, I wanna get out of here!",
+    "groveLeaveNo": "Erk! No, I want to stay in the grove.",
+    "groveChop": "You need to have helped clean up Tai Bwo Wannai village before cutting down these trees.  You should leave through the gates into the main village.",
+    "selectOption": "Select an option"
   },
   "murcaily": {
     "toldLine": "Well Bwana, if you're stuck for something to do",
@@ -86,6 +100,108 @@
       "notHacked": "If the player hasn't hacked away at jungle:",
       "hacked": "If the player has hacked away at jungle:"
     }
+  },
+  "shop": {
+    "coop": "Gabooty's Tai Bwo Wannai Cooperative.",
+    "drinks": "Gabooty's Tai Bwo Wannai Drinky Store.",
+    "versions": {"default": " (Default)", "gloves": " (Karamja gloves)"},
+    "gloves": ["atjun_gloves_easy", "atjun_gloves_med", "atjun_gloves_hard", "atjun_gloves_elite"],
+    "asked": {"option": "What do you do here?", "condition": "If the player has asked Gabooty what he does in Tai Bwo Wannai:"}
+  },
+  "safta": {
+    "tuber": "village_rare_tuber",
+    "gems": 3,
+    "jingle": 256,
+    "machetes": [
+      {
+        "item": "machette_opal",
+        "gems": ["uncut_opal", "opal"],
+        "sticks": 300,
+        "order": "Ok Bwana, if you want to order the opal machete",
+        "has": "GYBFJF",
+        "missing": "nz3gBM",
+        "done": "There you go Bwana, a nice new opal machete for you.",
+        "box": "Safta doc sells you an opal machete."
+      },
+      {
+        "item": "machette_jade",
+        "gems": ["uncut_jade", "jade"],
+        "sticks": 600,
+        "order": "Ok Bwana, if you want to order the Jade machete",
+        "has": "MKwPVC",
+        "missing": "FHVeEb",
+        "done": "There you go Bwana, a nice new jade machete for you.",
+        "box": "Safta doc sells you a jade machete."
+      },
+      {
+        "item": "machette_redtopaz",
+        "gems": ["uncut_red_topaz", "red_topaz"],
+        "sticks": 1200,
+        "order": "Ok Bwana, if you want to order the Red Topaz machete",
+        "has": "ZN8P9K",
+        "missing": "SzMRV7",
+        "done": "There you go Bwana, a nice new Red Topaz machete for you.",
+        "box": "Safta doc sells you a red topaz machete."
+      }
+    ],
+    "transcriptDone": "There you go Bwana, a nice new",
+    "diary": {"diary": "karamja", "task": "exchange-gems-for-a-machete"}
+  },
+  "parcels": {
+    "interface": "tai_bwo_wannai_post",
+    "items": "tai_bwo_wannai_post:items",
+    "_ops": "Script 2855 sets each item's ops: 1 Value, 2 Pack-1, 3 Pack-5, 4 Pack-10, 5 Pack-All, 6 Pack-X, 7 Examine.",
+    "ops": {"value": 1, "amounts": {"2": 1, "3": 5, "4": 10, "5": -1}, "x": 6, "examine": 7},
+    "perItem": 10,
+    "action": "Tai Bwo Wannai Parcel Service",
+    "condition": "If the player does not have at least 10 trading sticks in their inventory:",
+    "_currencies": "The Wiki's Rionasta 'Ineligible items' table, by item name; Karamjan rum has its own message.",
+    "currencies": [
+      "Agility arena ticket",
+      "Archery ticket",
+      "Blood money",
+      "Castle wars ticket",
+      "Coins",
+      "Ecto-token",
+      "Frog token",
+      "Glistening tear",
+      "Golden nugget",
+      "Mark of grace",
+      "Mermaid's tear",
+      "Minnow",
+      "Molch pearl",
+      "Numulite",
+      "Paramaya ticket",
+      "Pieces of eight",
+      "Platinum token",
+      "Reward token",
+      "Tokkul",
+      "Trading sticks",
+      "Unidentified minerals",
+      "Warrior guild token"
+    ],
+    "rum": "Karamjan rum"
+  },
+  "grove": {
+    "_note": "The doors are on the west edge of x=2817; inside is x >= 2817 (rsprox 231/03030, 227/01858).",
+    "doors": ["tbwcu_bamboo_door_l", "tbwcu_bamboo_door_r"],
+    "open": [
+      {"loc": "tbwcu_bamboo_door_inactive_l", "at": [2816, 3083, 0], "rotation": 3},
+      {"loc": "tbwcu_bamboo_door_inactive_r", "at": [2816, 3084, 0], "rotation": 1}
+    ],
+    "doorTiles": [[2817, 3083, 0], [2817, 3084, 0]],
+    "wall": "inviswall",
+    "insideFromX": 2817,
+    "exit": [2816, 3083, 0],
+    "bounds": [2817, 3076, 2830, 3091],
+    "fee": 100,
+    "closeTicks": 2,
+    "sounds": {"door": 40, "pay": 1283},
+    "trees": ["Teak", "Mahogany"],
+    "logs": ["teak_logs", "mahogany_logs"],
+    "murcaily": "tbwcu_murcaily",
+    "eliteVariant": "opening-hardwood-grove-doors-with-elite-karamja-diary",
+    "eliteEnter": "wl-xhL"
   },
   "events": {
     "_sources": "Wiki (Light Jungle 'Event rate', Mod Ash; Tai Bwo Wannai Cleanup event table; the monsters' pages) and rsprox 227/01858, 237/01102 (Leagues worlds: XP and favour there are boosted), 231/03030.",

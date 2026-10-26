@@ -88,3 +88,13 @@ still needed for the native journal icon (629:26): the existing client maps that
 tab to generic menu 187, rather than the Adventure Paths focus panel 644. Its
 Disable operation must also be wired. This item and the overall Clues,
 achievements & collections section are not yet certified complete.
+
+## Native journal companion (26 October2026)
+
+The Adventure Paths star now mounts644 at629:43 (the normal journal container), while642/643 keep644 as their modal side panel. Header Disable uses Yes/No and restores summary712; opting in through Jon restores participation and the journal. Selecting another journal tab cancels pending restoration and persists the AP panel preference. An unrelated main window defers restoration, and Disable refuses to close that window.
+
+The welcome screen’s raw gameframe bootstrap can replace the sidebar after login. A generic gameframe:ready notification allows a next-tick AP restore after Play, including when PacketSender still remembers the earlier mount. Native QA verified enrollment from the persisted path record with Tutorial Island disabled, Show, Disable/No, Disable/Yes, disabled relog, Jon’s canonical opt-in, and the resulting9340/8168 values (active1/tab3, disabled2/tab0). Other-tab selection survives as a preference not to force AP back in; the shared journal currently boots to summary0 after relog. The client VM sweep of629/644 reports no script errors, item0 or null text.
+
+Independent Codex reviews found and verified fixes for preserving an unrelated main window and for restoring summary after opting out of a closed modal. Native QA also produced a failing welcome-Play regression, now fixed and independently re-reviewed. The focused AP/journal/gameframe checks pass61. Full-suite evidence is recorded separately once complete.
+
+Final journal-companion full suite:8,232/8,232 pass,0 failures/skips (node --test --test-concurrency=2 tests/). The frozen native walkthrough also confirmed the panel returns after Welcome Play and another-tab preference prevents an unwanted AP restore.
