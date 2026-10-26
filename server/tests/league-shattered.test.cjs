@@ -88,15 +88,21 @@ function character(name, { league = 3, restore = null } = {}) {
   player.setUsername(name);
   player.setProfile("league");
   if (restore) restore.applyToPlayer(player);
-  const sent = { messages: [], varbits: new Map(), varps: new Map(), subs: [], flags: [] };
+  const sent = { messages: [], varbits: new Map(), varps: new Map(), varpLog: [], subs: [], flags: [] };
   const sender = new Proxy({}, {
     get: (target, key) => {
       switch (key) {
         case "sendVarbit": return (id, value) => (sent.varbits.set(id, value), sender);
-        case "sendConfig": return (id, value) => (sent.varps.set(id, value), sender);
+        case "sendConfig": return (id, value) => (sent.varps.set(id, value), sent.varpLog.push([id, value]), sender);
         case "sendInterface": return (group) => (player.setInterfaceId(group), sent.subs.push(["main", group]), sender);
         case "sendSubInterface": return (targetUid, group) => (sent.subs.push([targetUid, group]), sender);
-        case "sendInterfaceRemoval": return () => (player.setInterfaceId(-1), sent.subs.push(["closed"]), sender);
+        case "sendInterfaceRemoval": return () => {
+          const closed = player.getInterfaceId();
+          player.setInterfaceId(-1);
+          sent.subs.push(["closed"]);
+          emit("interface:closed", { player, interfaceId: closed });
+          return sender;
+        };
         case "sendInterfaceFlagsRange": return (...args) => (sent.flags.push(args), sender);
         default: return () => sender;
       }
@@ -167,8 +173,9 @@ test("the side panel's buttons open Info, the task list, fragments and unlocks",
     "53 fragments x 9 children, 7 slots x 6 children");
   click(player, SIDE_PANEL, 35);
   assert.deepEqual(player.sent.subs.at(-1), ["main", UNLOCKS]);
-  assert.deepEqual(player.sent.flags.slice(-2), [[uid(UNLOCKS, 9), 0, 26, OP1], [uid(UNLOCKS, 18), 0, 239, OP1]]);
-  assert.equal(player.sent.varps.get(TAB_VARP), 0);
+  assert.deepEqual(player.sent.flags.slice(-2), [[uid(UNLOCKS, 9), 0, 26, OP1], [uid(UNLOCKS, 18), 0, 239, OP1]],
+    "skills 20 x 12 children is the longest list (bosses 31 x 4, quests 36 x 5)");
+  assert.equal(player.sent.varps.has(TAB_VARP), false, "no varp with the open: it would show the confirm panel");
 });
 
 test("Sage's Renown is awarded, spent all or nothing, and sent as varp 3276", () => {
@@ -209,6 +216,33 @@ test("a new character chooses a class: select, decline, accept", () => {
   const again = character("warrior", { restore: PlayerSave.fromPlayer(player) });
   runTasks();
   assert.equal(again.sent.subs.some(([, group]) => group === CLASS), false, "never offered again");
+});
+
+test("the class choice waits for the welcome screen, comes back if closed, and again after a relog", () => {
+  const player = character("undecided");
+  emit("welcome-screen:shown", { player });
+  runTasks();
+  assert.equal(player.sent.subs.some(([, group]) => group === CLASS), false, "not over the welcome screen");
+  click(player, 378, 72);
+  runTasks();
+  assert.deepEqual(player.sent.subs.at(-1), ["main", CLASS], "after its Play");
+  player.getPacketSender().sendInterfaceRemoval();
+  runTasks();
+  assert.deepEqual(player.sent.subs.at(-1), ["main", CLASS], "closed without a class, it opens again");
+  const again = character("undecided", { restore: PlayerSave.fromPlayer(player) });
+  runTasks();
+  assert.deepEqual(again.sent.subs.at(-1), ["main", CLASS], "and after a relog");
+});
+
+test("class items that don't fit go to the bank", () => {
+  const player = character("packed");
+  runTasks();
+  for (let slot = 0; slot < 28; slot++) player.getInventory().adds(1511, 1);
+  click(player, CLASS, 11);
+  click(player, CLASS, 26);
+  assert.equal(player.getInventory().contains(884), false);
+  assert.equal(player.getBanks().some((bank) => bank?.getAmount?.(884) === 150), true, "150 iron arrows in the bank");
+  assert.equal(player.getBanks().some((bank) => bank?.contains?.(845)), true, "and the oak longbow");
 });
 
 test("the other classes' items, skills and fragments", () => {
@@ -263,15 +297,18 @@ test("unlocks: tabs, entries, and Accept paid in renown", () => {
     .map(([, struct]) => CacheDefinitions.getStructParams(Number(struct)));
   const agility = skills.findIndex((params) => params.get(1437) === "Agility");
   click(player, SIDE_PANEL, 35);
-  click(player, UNLOCKS, 18, { slot: 12 * agility + 9 });
+  click(player, UNLOCKS, 18, { slot: 12 * agility });
   assert.equal(player.sent.varps.get(ENTRY_VARP), agility + 1);
   click(player, UNLOCKS, 47);
   assert.equal(player.sent.varbits.get(13350), 0, "no renown, no unlock");
   emit("league:award-renown", { player, amount: 12 });
+  click(player, UNLOCKS, 18, { slot: 12 * agility });
+  const tabSends = player.sent.varpLog.filter(([id]) => id === TAB_VARP).length;
   click(player, UNLOCKS, 47);
+  assert.equal(player.sent.varpLog.filter(([id]) => id === TAB_VARP).length, tabSends + 1, "Accept sends the tab again");
   assert.equal(player.sent.varbits.get(13350), 1, "Agility unlocked (script 5830: skill 16)");
   assert.equal(emit("league:renown", { player }).renown, 7, "it cost 5 (struct param 1442)");
-  assert.equal(player.sent.varps.get(TAB_VARP), 0, "the tab varp is resent to hide the confirm panel");
+  assert.deepEqual(player.sent.varpLog.slice(-2), [[TAB_VARP, 0], [ENTRY_VARP, 0]], "as a tab click does: the tab, then no entry, which leaves the confirm panel hidden");
   click(player, UNLOCKS, 47);
   assert.equal(emit("league:renown", { player }).renown, 7, "an unlocked skill isn't bought twice");
 
@@ -281,11 +318,28 @@ test("unlocks: tabs, entries, and Accept paid in renown", () => {
   const bosses = [...CacheDefinitions.getEnumValues(4130).entries()].sort(([a], [b]) => a - b)
     .map(([, struct]) => CacheDefinitions.getStructParams(Number(struct)));
   const obor = bosses.findIndex((params) => params.get(1437) === "Obor");
-  click(player, UNLOCKS, 18, { slot: 5 * obor });
+  click(player, UNLOCKS, 18, { slot: 4 * obor });
   click(player, UNLOCKS, 47);
   assert.equal(player.sent.varbits.get(13367), 1, "Obor (NPC 7416, script 5831)");
   assert.equal(emit("league:renown", { player }).renown, 2);
   assert.deepEqual(emit("league:unlocks", { player }).bosses, [7416]);
+});
+
+test("every tab's entries are clickable where scripts 5813 / 5815 / 5817 put Select (12, 4 and 5 children apart)", () => {
+  const player = settled("rows");
+  click(player, SIDE_PANEL, 35);
+  for (const [tab, table, spacing] of [[0, 4129, 12], [1, 4130, 4], [2, 4131, 5]]) {
+    click(player, UNLOCKS, 9, { slot: 9 * tab });
+    const count = CacheDefinitions.getEnumValues(table).size;
+    for (const entry of [0, Math.floor(count / 2), count - 1]) {
+      click(player, UNLOCKS, 18, { slot: spacing * entry });
+      assert.equal(player.sent.varps.get(ENTRY_VARP), entry + 1, `tab ${tab}, entry ${entry}`);
+    }
+    const before = player.sent.varps.get(ENTRY_VARP);
+    click(player, UNLOCKS, 18, { slot: spacing * count });
+    click(player, UNLOCKS, 18, { slot: spacing + 1 });
+    assert.equal(player.sent.varps.get(ENTRY_VARP), before, "a child that isn't an entry's Select, or past the list, is ignored");
+  }
 });
 
 test("quest packs: prices include incomplete prerequisites, and a pack unlocks its prerequisites", () => {
@@ -305,7 +359,7 @@ test("quest packs: prices include incomplete prerequisites, and a pack unlocks i
   emit("league:award-renown", { player, amount: 40 });
   click(player, SIDE_PANEL, 35);
   click(player, UNLOCKS, 9, { slot: 18 });
-  click(player, UNLOCKS, 18, { slot: 6 * elf2 });
+  click(player, UNLOCKS, 18, { slot: 5 * elf2 });
   click(player, UNLOCKS, 47);
   assert.equal(emit("league:renown", { player }).renown, 9);
   assert.equal(player.sent.varbits.get(varbitOf("Elf II")), 0);
@@ -323,6 +377,13 @@ test("another league's character sees none of it", () => {
     assert.equal(echoes.sent.varps.has(RENOWN), false);
     echoes.setInterfaceId(FRAGMENTS);
     assert.equal(click(echoes, FRAGMENTS, 18, { slot: 0, opId: 2 }), false, "the click falls through");
+    echoes.setInterfaceId(UNLOCKS);
+    assert.equal(click(echoes, UNLOCKS, 18, { slot: 0 }), false);
+    assert.equal(click(echoes, UNLOCKS, 47), false);
+    echoes.setInterfaceId(CLASS);
+    assert.equal(click(echoes, CLASS, 6), false);
+    assert.equal(click(echoes, CLASS, 26), false);
+    for (const child of [21, 25, 30, 35]) assert.equal(click(echoes, SIDE_PANEL, child), false, `736:${child}`);
   } finally {
     worldLeague = 3;
   }

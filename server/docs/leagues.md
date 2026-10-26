@@ -318,7 +318,8 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
 
 Stored and drawn, not yet enforced: locked skills still give XP and locked bosses can be fought;
 fragments don't drop, gain XP or take effect (the 53 fragments and 15 set effects); quest packs
-complete no quests; fragments can be swapped anywhere, not only at a bank or the Sage; the
+complete no quests; fragments can be swapped anywhere, not only at a bank or the Sage, and only
+through Equip (dragging one into a slot isn't handled); the
 Display Fragments toggle (varbit 12383) is the client's own; the intro cutscene (734) has no
 recording or client driver, so it isn't played.
 

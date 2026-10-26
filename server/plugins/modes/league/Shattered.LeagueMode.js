@@ -24,6 +24,10 @@ const data = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "leag
 
 /** Per player: the class selected on 737 but not yet accepted (the server's copy of varp 3345). */
 const selected = new WeakMap();
+/** Players owed the class choice once nothing is in the way. */
+const awaitingChoice = new WeakSet();
+/** Players whose welcome screen is up (its Play opens the choice). */
+const welcomeShown = new WeakSet();
 
 function uid(group, child) {
   return (group << 16) | child;
@@ -109,6 +113,42 @@ function isChoiceOpen(player) {
   return player.getInterfaceId() === data.classChoice.group;
 }
 
+/** The choice opens once the welcome screen is gone and no other interface is up. */
+function openWhenReady(player) {
+  if (!awaitingChoice.has(player) || welcomeShown.has(player) || player.getInterfaceId() > 0) return;
+  awaitingChoice.delete(player);
+  showClassChoice(player);
+}
+
+function awaitChoice(player, ticks) {
+  if (!isShattered(player) || chosen(player)) return;
+  awaitingChoice.add(player);
+  Common.later(player, ticks, () => openWhenReady(player));
+}
+
+function welcomeScreenShown({ player }) {
+  if (player && isShattered(player)) welcomeShown.add(player);
+}
+
+function welcomePlay({ player }) {
+  welcomeShown.delete(player);
+  if (awaitingChoice.has(player)) Common.later(player, 1, () => openWhenReady(player));
+  return false;
+}
+
+/** 737 has no close button: closed (walking away, another interface) before a class is chosen, it comes back. */
+function interfaceClosed({ player, interfaceId }) {
+  if (!player || !isShattered(player) || chosen(player)) return;
+  if (interfaceId === data.classChoice.group || awaitingChoice.has(player)) awaitChoice(player, 1);
+}
+
+/** Into the inventory if it can take all of it, otherwise the bank tab the item belongs in. */
+function give(player, item, amount) {
+  const { Item, Bank } = Common.core;
+  if (player.getInventory().getAddableAmount(new Item(item, amount)) >= amount) player.getInventory().adds(item, amount);
+  else player.getBank(Bank.getTabForItem(player, item)).add(new Item(item, amount), false);
+}
+
 /** Select (737:6 / 11 / 16): its confirm panel shows that class. */
 function selectClass(event) {
   const { player } = event;
@@ -138,10 +178,7 @@ function acceptClass({ player }) {
   selected.delete(player);
   Common.api.emitCustomEvent("league:unlock-skill", { player, skill: row.skill });
   Common.api.emitCustomEvent("league:grant-fragment", { player, id: row.fragment });
-  for (const [item, amount] of row.items) {
-    if (player.getInventory().getFreeSlots() > 0 || Common.core.ItemDefinition.forId(item)?.isStackable?.()) player.getInventory().adds(item, amount);
-    else player.getBank(0).add(new Common.core.Item(item, amount), false);
-  }
+  for (const [item, amount] of row.items) give(player, item, amount);
   player.getPacketSender().sendInterfaceRemoval();
   return true;
 }
@@ -151,8 +188,8 @@ function acceptClass({ player }) {
 function login({ player }) {
   if (!isShattered(player)) return;
   sendRenown(player);
-  // Every login until a class is chosen, after the other units' login packets.
-  Common.later(player, 1, () => showClassChoice(player));
+  // Every login until a class is chosen, after the welcome screen and the other units' packets.
+  awaitChoice(player, data.classChoice.openDelayTicks);
 }
 
 function renownCommand({ player, parts }) {
@@ -181,6 +218,7 @@ function buttons() {
     select: Object.values(classChoice.classes).map((row) => uid(classChoice.group, row.select)),
     decline: uid(classChoice.group, classChoice.decline),
     accept: uid(classChoice.group, classChoice.accept),
+    welcomePlay: uid(classChoice.welcomePlay[0], classChoice.welcomePlay[1]),
   };
 }
 
@@ -192,6 +230,9 @@ module.exports = function attach(api) {
   api.onCustomEvent("league:spend-renown", spendRenown);
   api.onCustomEvent("league:renown", renownQuery);
   api.onCustomEvent("league:login", login);
+  api.onCustomEvent("welcome-screen:shown", welcomeScreenShown);
+  api.onCustomEvent("interface:closed", interfaceClosed);
+  api.onInterfaceActionButton(ids.welcomePlay, welcomePlay);
   api.onInterfaceActionButton(ids.info, panelInfo);
   api.onInterfaceActionButton(ids.tasks, panelTasks);
   api.onInterfaceActionButton(ids.fragments, panelFragments);

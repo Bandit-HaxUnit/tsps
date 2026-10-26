@@ -21,6 +21,9 @@
   "classChoice": {
     "group": 737,
     "varp": 3345,
+    "_open": "737 has no close button: it opens `openDelayTicks` after login, once the welcome screen's Play (welcome_screen:play 378:72, as the league tutorial waits for it) has been pressed and nothing else is open, and again whenever it closes before a class is chosen.",
+    "openDelayTicks": 2,
+    "welcomePlay": [378, 72],
     "decline": 23,
     "accept": 26,
     "classes": {
@@ -49,7 +52,7 @@
     "unequipOp": 2
   },
 
-  "_unlocks": "league_3_unlocks (733). Varp 3343 is the tab (0 Skills, 1 Bosses, 2 Quests), varp 3344 the selected entry (1-based, 0 none); the client writes neither. Tabs sit on 733:9 at 9 x tab; entries on 733:18 (per tab: children per entry and the clickable child). Unlock (733:11) and Decline (733:44) run on the client; Accept (733:47) is the server's, and resending varp 3343 hides the confirm panel (script 5826). Close is 733:21.",
+  "_unlocks": "league_3_unlocks (733). Varp 3343 is the tab (0 Skills, 1 Bosses, 2 Quests), varp 3344 the selected entry (1-based, 0 none); the client writes neither. Tabs sit on 733:9 at 9 x tab; entries on 733:18 in enum key order, each tab's entries `entryChildren` children apart with Select on the first (read from the web client's widget tree after scripts 5812-5816 ran: skills 12, bosses 4, quests 5). Unlock (733:11) and Decline (733:44) run on the client; Accept (733:47) is the server's. The confirm panel (733:40) runs script 5827, which shows it, whenever 3343 or 3344 is sent; 733:1 runs 5806, which hides it, when 3343 is. So the open sends no varp, and Accept answers as a tab click does (3343, then 3344 = 0), which ends with it hidden in the web client. Close is 733:21.",
   "unlocks": {
     "group": 733,
     "tabVarp": 3343,
@@ -60,11 +63,12 @@
     "accept": 47,
     "close": 21,
     "costParam": 1442,
+    "nameParam": 1437,
     "skills": {
       "enum": 4129,
       "skillParam": 1435,
       "entryChildren": 12,
-      "selectChild": 9,
+      "selectChild": 0,
       "_alwaysUnlocked": "Defence, Fishing and Thieving: script 5830 answers 1 for them (Wiki /Guide: every player starts with them).",
       "alwaysUnlocked": [1, 10, 17],
       "_varbits": "Script 5830: skill id -> its unlock varbit.",
@@ -73,7 +77,7 @@
     "bosses": {
       "enum": 4130,
       "npcParam": 1436,
-      "entryChildren": 5,
+      "entryChildren": 4,
       "selectChild": 0,
       "_varbits": "Script 5831: the boss's NPC id -> its unlock varbit.",
       "varbits": { "239": 13364, "5779": 13365, "963": 13366, "7416": 13367, "8195": 13368, "7849": 13369, "1673": 13370, "2265": 13371, "8583": 13372, "8713": 13373, "7286": 13374, "9049": 13375, "494": 13376, "9021": 13377, "499": 13378, "2042": 13379, "8061": 13380, "5863": 13381, "3162": 13382, "2215": 13383, "2205": 13384, "3129": 13385, "9460": 13386, "8615": 13387, "7554": 13388, "8369": 13389, "10572": 13390, "7371": 13391, "319": 13392, "5888": 13393, "11278": 13394 }
@@ -81,7 +85,7 @@
     "quests": {
       "enum": 4131,
       "indexParam": 1444,
-      "entryChildren": 6,
+      "entryChildren": 5,
       "selectChild": 0,
       "_varbits": "Script 5832: a pack's param 1444 (1-36) -> varbit 13544 + it, which holds the pack's price; 0 means unlocked (script 5816). The cache has no quest prices.",
       "varbitBase": 13544,

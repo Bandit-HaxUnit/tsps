@@ -31,10 +31,10 @@ function config() {
 function entries(tab) {
   if (!entryLists) {
     const { CacheDefinitions } = Common.core;
-    const { costParam, skills, bosses, quests } = config();
+    const { costParam, nameParam, skills, bosses, quests } = config();
     const read = (table, extra) => [...CacheDefinitions.getEnumValues(table.enum).entries()].sort(([a], [b]) => a - b).map(([key, struct]) => {
       const params = CacheDefinitions.getStructParams(Number(struct));
-      return { key: Number(key), struct: Number(struct), name: String(params?.get(1437) ?? ""), cost: Number(params?.get(costParam)) || 0, ...extra(params) };
+      return { key: Number(key), struct: Number(struct), name: String(params?.get(nameParam) ?? ""), cost: Number(params?.get(costParam)) || 0, ...extra(params) };
     });
     entryLists = {
       skills: read(skills, (params) => ({ skill: Number(params?.get(skills.skillParam)) })),
@@ -101,13 +101,16 @@ function sendUnlocks(player) {
   for (const entry of entries("quests")) sender.sendVarbit(quests.varbitBase + entry.index, questPrice(entry.name, packs));
 }
 
+/**
+ * The screen opens on the tab and entry it showed last (the client keeps varps 3343 / 3344, and so
+ * does `view`). No varp goes with the open: the confirm panel (733:40) shows itself whenever 3343 or
+ * 3344 is sent on its own (its onVarTransmit runs script 5827), and the onLoad (5806) hides it.
+ */
 function open({ player }) {
   if (!isShattered(player)) return;
-  const { group, tabVarp, selectionVarp, tabs, tabChildren, entries: list, skills, bosses, quests } = config();
+  const { group, tabs, tabChildren, entries: list, skills, bosses, quests } = config();
   sendUnlocks(player);
   const sender = player.getPacketSender();
-  sender.sendConfig(tabVarp, 0);
-  sender.sendConfig(selectionVarp, 0);
   sender.sendInterface(group);
   sender.sendInterfaceFlagsRange(uid(group, tabs), 0, TABS.length * tabChildren - 1, FLAG_OP1);
   const rows = Math.max(...[skills, bosses, quests].map((table, tab) => entries(TABS[tab]).length * table.entryChildren));
@@ -118,11 +121,19 @@ function isOpen(player) {
   return player.getInterfaceId() === config().group;
 }
 
-/** Per player: the tab and entry shown (the server's copy of varps 3343 / 3344). */
+/** Per player: the tab and entry shown (the server's copy of varps 3343 / 3344), for the session. */
 const view = new WeakMap();
 
 function viewOf(player) {
   return view.get(player) ?? { tab: 0, entry: -1 };
+}
+
+/** The tab (3343) and then no entry (3344): the redraw this sends ends with the confirm panel hidden. */
+function showTab(player, tab) {
+  view.set(player, { tab, entry: -1 });
+  const sender = player.getPacketSender();
+  sender.sendConfig(config().tabVarp, tab);
+  sender.sendConfig(config().selectionVarp, 0);
 }
 
 function pickTab({ player, slot }) {
@@ -130,10 +141,7 @@ function pickTab({ player, slot }) {
   const child = Number(slot);
   const tab = child / config().tabChildren;
   if (!Number.isInteger(tab) || tab < 0 || tab >= TABS.length) return true;
-  view.set(player, { tab, entry: -1 });
-  const sender = player.getPacketSender();
-  sender.sendConfig(config().tabVarp, tab);
-  sender.sendConfig(config().selectionVarp, 0);
+  showTab(player, tab);
   return true;
 }
 
@@ -183,8 +191,8 @@ function accept({ player }) {
       sendUnlocks(player);
     }
   }
-  // Script 5826 hides the confirm panel when the tab varp is sent again.
-  player.getPacketSender().sendConfig(config().tabVarp, tab);
+  // As a tab click does: the list redraws and the confirm panel closes.
+  showTab(player, tab);
   return true;
 }
 
@@ -209,10 +217,6 @@ function query(request) {
   Object.assign(request, isShattered(request.player) ? unlocked(request.player) : { skills: [], bosses: [], quests: [] });
 }
 
-function closed({ player, interfaceId }) {
-  if (interfaceId === config().group) view.delete(player);
-}
-
 function login({ player }) {
   if (isShattered(player)) sendUnlocks(player);
 }
@@ -229,7 +233,6 @@ module.exports = function attach(api) {
   api.onCustomEvent("league:open-unlocks", open);
   api.onCustomEvent("league:unlocks", query);
   api.onCustomEvent("league:login", login);
-  api.onCustomEvent("interface:closed", closed);
   api.onInterfaceActionButton(buttonIds.tabs, pickTab);
   api.onInterfaceActionButton(buttonIds.list, pickEntry);
   api.onInterfaceActionButton(buttonIds.accept, accept);
