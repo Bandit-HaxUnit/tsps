@@ -393,7 +393,7 @@ function complete(player, task) {
     player.sendMessage(fill(FREE_TASK, { streak, tasks: streak === 1 ? "task" : "tasks", more: freeTasks + 1 - totalTasks }));
     return;
   }
-  const points = base * multiplier(streak);
+  const points = taskPoints(player, base * multiplier(streak));
   grantPoints(player, points);
   player.sendMessage(fill(POINTS, { streak, points, total: State.varbit(player, "slayer_points") }));
 }
@@ -413,8 +413,9 @@ function completeMortimer(player, taskModifier) {
     player.sendMessage(fill(MORTIMER_NO_POINTS, { streak }));
     return;
   }
-  grantPoints(player, taskModifier.value);
-  player.sendMessage(fill(MORTIMER_POINTS, { streak, points: taskModifier.value, total: State.varbit(player, "slayer_points") }));
+  const points = taskPoints(player, taskModifier.value);
+  grantPoints(player, points);
+  player.sendMessage(fill(MORTIMER_POINTS, { streak, points, total: State.varbit(player, "slayer_points") }));
 }
 
 function multiplier(streak) {
@@ -422,6 +423,13 @@ function multiplier(streak) {
     if (streak % every === 0) return times;
   }
   return 1;
+}
+
+/** "slayer:task-points" { player, points }: a completed task's points, which content may raise (a league fragment). */
+function taskPoints(player, points) {
+  const request = { player, points };
+  api.emitCustomEvent("slayer:task-points", request);
+  return Number.isFinite(request.points) && request.points >= 0 ? Math.floor(request.points) : points;
 }
 
 /** Adds points, capped at what slayer_points can hold. */

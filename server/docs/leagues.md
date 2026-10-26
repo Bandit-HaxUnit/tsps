@@ -332,6 +332,28 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   server's, and its immunity stops new poison without curing a running one. The extra rolls are
   rolled with the hit's own spell, never a special attack, and pay XP like any hit. The per-tick
   effects run as one task per Shattered Relics character, from login.
+- **Effects (batch 2):** Tactical Duelist (melee weapon charges saved: the scythe of vitur, the
+  crystal halberd and Arclight ask `combat:melee-charge` before spending one), Livin' On A Prayer
+  (the core `registerPrayerDrainRateModifier` scales what active prayers add to the drain counter
+  each tick), Special Discount (the core `registerSpecialEnergyCostModifier`, which every energy
+  check and `CombatSpecial.drain` use; the cache's 500/400/250 are tenths of a percent; the Dragon
+  hasta's Unleash spends all energy, which isn't its cost, so it isn't capped), Thrall
+  Damage (`magic:thrall-max-hit`, asked on each thrall attack), Superior Tracking
+  (`slayer:superior-chance`; this server reads its text, which names no unlock, as working without
+  Bigger and Badder, but never once superiors are toggled off), Slay 'n' Pay (`slayer:task-points`,
+  Mortimer's too), the god-armour four, and the sets Fast Metabolism (each Hitpoints regen heals
+  four times as much, through `stats:hitpoints-regen`) and Knife's Edge (every style's max hit, in
+  permille so it stays exact). The god-armour four need four worn items of their god, counted as
+  the God Wars Dungeon counts protection (`godwars:god-items`, so a godsword counts): Bandosian
+  Might adds its number to the melee max hit per tick of the weapon's attack speed, Zamorakian
+  Sight raises magic accuracy, Armadylean Decree raises enchanted bolt chances
+  (`combat:bolt-effect-chance`, after the Kandarin diary and the Armadyl crossbow's special), and
+  Saradominist Defence adds to every style's max hit for 6 ticks after combat damage from an NPC
+  or player lands (poison isn't a hit, so it never counts; nor does a boss's scripted damage that
+  skips the combat hit). Max hit bonuses add before Knife's Edge multiplies. The god-armour count
+  is God Wars' keyword count, which misses the Wiki's protection items without a god's name (Holy
+  book, the blessings, Hallowed focus); magic specials with a fixed max hit skip both max hit
+  bonuses, as they skip every magic max hit modifier.
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price
   now, from the Wiki's Initial Cost less the prerequisite packs already unlocked, and 0 once
@@ -344,10 +366,8 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   only the fights inside. The Wiki gives no message for either lock; the boss one is this
   server's, said once per boss every few seconds.
 
-Not yet: the other fragments' effects (the skilling, production and misc ones; Tactical
-Duelist and the ranged weapons' charges, which no hook reports; Livin' On A Prayer, Special
-Discount, Thrall Damage, Superior Tracking, Slay 'n' Pay and the god-armour four) and the other
-sets (Fast Metabolism, Knife's Edge, Greedy Gatherer, Personal Banker, The Alchemist, The
+Not yet: the skilling, production and misc fragments' effects, the ranged weapons' own charges
+(no hook reports them), and the other sets (Greedy Gatherer, Personal Banker, The Alchemist, The
 Craftsman, Unchained Talent and the three that give a Sage item); quest packs complete no quests; fragments can be swapped anywhere, not only at a bank or the Sage, and only
 through Equip (dragging one into a slot isn't handled); the
 Display Fragments toggle (varbit 12383) is the client's own; the intro cutscene (734) has no

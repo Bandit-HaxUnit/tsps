@@ -65,6 +65,7 @@ Scythe.register({
     },
     getAreaManager: () => ({ inMulti: () => multi }),
     registerCombatMethodResolver: (r) => { resolver = r; },
+    emitCustomEvent: () => {},
     onServerStartup: (handler) => handler(),
     onItemAction: () => {},
     onItemOnItem: () => {},

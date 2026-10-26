@@ -11,6 +11,7 @@ export type CombatEffectiveLevelModifier = (entity: Mobile, level: number, conte
 export type RunEnergyRestoreModifier = (entity: Mobile, delayMs: number) => number;
 export type RunEnergyDrainModifier = (entity: Mobile, amount: number) => number;
 export type SpecialEnergyRestoreModifier = (entity: Mobile, delayTicks: number) => number;
+export type SpecialEnergyCostModifier = (entity: Mobile, cost: number) => number;
 export interface IncomingDamageContext {
   type?: unknown;
   attacker?: Mobile;
@@ -24,6 +25,7 @@ export interface PrayerDrainContext {
   source?: string;
 }
 export type PrayerDrainModifier = (entity: Mobile, amount: number, context: PrayerDrainContext) => number;
+export type PrayerDrainRateModifier = (entity: Mobile, drainEffect: number) => number;
 
 const meleeHitModifiers: HitModifier[] = [];
 const combatEffectiveLevelModifiers: CombatEffectiveLevelModifier[] = [];
@@ -39,8 +41,10 @@ const magicDefenseModifiers: HitModifier[] = [];
 const runEnergyRestoreModifiers: RunEnergyRestoreModifier[] = [];
 const runEnergyDrainModifiers: RunEnergyDrainModifier[] = [];
 const specialEnergyRestoreModifiers: SpecialEnergyRestoreModifier[] = [];
+const specialEnergyCostModifiers: SpecialEnergyCostModifier[] = [];
 const incomingDamageModifiers: IncomingDamageModifier[] = [];
 const prayerDrainModifiers: PrayerDrainModifier[] = [];
+const prayerDrainRateModifiers: PrayerDrainRateModifier[] = [];
 
 const applyModifiers = (modifiers: HitModifier[], entity: Mobile, baseHit: number): number =>
   modifiers.reduce((damage, modifier) => {
@@ -127,6 +131,12 @@ export function registerSpecialEnergyRestoreModifier(modifier: SpecialEnergyRest
   specialEnergyRestoreModifiers.push(modifier);
 }
 
+export function registerSpecialEnergyCostModifier(modifier: SpecialEnergyCostModifier): void {
+  if (typeof modifier === "function") {
+    specialEnergyCostModifiers.push(modifier);
+  }
+}
+
 export function registerIncomingDamageModifier(modifier: IncomingDamageModifier): void {
   if (typeof modifier !== "function") {
     return;
@@ -137,6 +147,12 @@ export function registerIncomingDamageModifier(modifier: IncomingDamageModifier)
 export function registerPrayerDrainModifier(modifier: PrayerDrainModifier): void {
   if (typeof modifier === "function") {
     prayerDrainModifiers.push(modifier);
+  }
+}
+
+export function registerPrayerDrainRateModifier(modifier: PrayerDrainRateModifier): void {
+  if (typeof modifier === "function") {
+    prayerDrainRateModifiers.push(modifier);
   }
 }
 
@@ -205,6 +221,14 @@ export function applySpecialEnergyRestoreModifiers(entity: Mobile, delayTicks: n
   }, delayTicks);
 }
 
+/** Special attack energy a special costs, after cost modifiers (a league fragment caps it). */
+export function applySpecialEnergyCostModifiers(entity: Mobile, cost: number): number {
+  return specialEnergyCostModifiers.reduce((value, modifier) => {
+    const next = modifier(entity, value);
+    return Number.isFinite(next) && next >= 0 ? next : value;
+  }, cost);
+}
+
 /** Notifies listeners of a landed hit so they can reduce it or react (charges, set effects). */
 export function applyIncomingDamageModifiers(entity: Mobile, hitDamage: HitDamage, context: IncomingDamageContext = {}): void {
   for (const modifier of incomingDamageModifiers) {
@@ -218,4 +242,12 @@ export function applyPrayerDrainModifiers(entity: Mobile, amount: number, contex
     const next = modifier(entity, value, context);
     return Number.isFinite(next) && next >= 0 ? next : value;
   }, amount);
+}
+
+/** The drain effect the active prayers add to the drain counter this tick, after rate modifiers. */
+export function applyPrayerDrainRateModifiers(entity: Mobile, drainEffect: number): number {
+  return prayerDrainRateModifiers.reduce((value, modifier) => {
+    const next = modifier(entity, value);
+    return Number.isFinite(next) && next >= 0 ? next : value;
+  }, drainEffect);
 }

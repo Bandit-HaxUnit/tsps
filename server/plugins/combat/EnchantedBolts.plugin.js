@@ -194,6 +194,10 @@ function procs(bolt, shot) {
   if (!(base > 0)) return false;
   let chance = base * (hasKandarinHard(shot.player) ? KANDARIN_HARD_CHANCE_MULTIPLIER : 1);
   if (traits?.enchantedBoltEffectChanceMultiplier > 0) chance *= traits.enchantedBoltEffectChanceMultiplier;
+  // Content may raise it further (a league fragment): "combat:bolt-effect-chance" { player, target, effect, chance }.
+  const request = { player: shot.player, target: shot.target, effect: bolt.effect, chance };
+  pluginApi.emitCustomEvent("combat:bolt-effect-chance", request);
+  if (Number.isFinite(request.chance)) chance = request.chance;
   return Math.random() < chance;
 }
 

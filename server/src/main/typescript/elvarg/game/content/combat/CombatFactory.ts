@@ -575,10 +575,7 @@ export class CombatFactory {
                     special.getTraits()?.queuedAttack === true &&
                     player.getCombat().isSpecialAttackQueued();
                 if (!queuedAttackInFlight) {
-                    const drainAmount = special.getDrainAmountForWeaponId(
-                        player.getEquipment().get(Equipment.WEAPON_SLOT).getId()
-                    );
-                    if (player.getSpecialPercentage() < drainAmount) {
+                    if (player.getSpecialPercentage() < CombatSpecial.energyCost(player, special)) {
                         return CanAttackResponse.NOT_ENOUGH_SPECIAL_ENERGY;
                     }
                 }

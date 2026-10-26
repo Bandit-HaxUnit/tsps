@@ -4,7 +4,7 @@
  * Superior Slayer monsters (data/slayer-superiors.json): with Bigger and Badder unlocked and
  * not toggled off (slayer_toggleoff_superiormobs), an on-task kill ("slayer:task-kill" from
  * Tasks.Slayer.js) spawns the monster's superior where it died, 1 time in 200, attacking the
- * player. A superior gives ten times its hitpoints in Slayer XP, on task or not (on task through
+ * player ("slayer:superior-chance" lets content change both). A superior gives ten times its hitpoints in Slayer XP, on task or not (on task through
  * the task's kill, so Mortimer's XP modifier counts it), and rolls the superior unique tables
  * (Mortimer's superior unique modifier raises their chance).
  */
@@ -84,8 +84,18 @@ function isSuperior(npc) {
   return superiorNames.has(npcName(npc).toLowerCase());
 }
 
-function enabled(player) {
-  return Tasks.hasUnlockBit(player, DATA.unlockBit) && State.varbit(player, "slayer_toggleoff_superiormobs") !== 1;
+function toggledOff(player) {
+  return State.varbit(player, "slayer_toggleoff_superiormobs") === 1;
+}
+
+/**
+ * "slayer:superior-chance" { player, npc, chance, unlocked }: content may make superiors likelier
+ * (1 in `chance`) or let them appear without Bigger and Badder (a league fragment).
+ */
+function superiorChance(player, npc) {
+  const query = { player, npc, chance: DATA.chance, unlocked: Tasks.hasUnlockBit(player, DATA.unlockBit) };
+  api.emitCustomEvent("slayer:superior-chance", query);
+  return query.unlocked && Number(query.chance) >= 1 ? Number(query.chance) : null;
 }
 
 /**
@@ -102,9 +112,10 @@ function taskKillEvent(event) {
 }
 
 function taskKill({ player, npc }, random = Math.random) {
-  if (isSuperior(npc) || !enabled(player)) return null;
+  if (isSuperior(npc) || toggledOff(player)) return null;
+  const chance = superiorChance(player, npc);
   const id = resolve().get(npcName(npc).toLowerCase());
-  if (id == null || Math.floor(random() * DATA.chance) !== 0) return null;
+  if (chance === null || id == null || Math.floor(random() * chance) !== 0) return null;
   const at = npc.getLocation();
   const superior = api.spawnNpc({ id, x: at.getX(), y: at.getY(), z: at.getZ(), owner: player });
   if (!superior) return null;

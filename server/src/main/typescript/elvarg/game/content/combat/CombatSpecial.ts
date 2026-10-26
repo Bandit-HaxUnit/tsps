@@ -8,6 +8,7 @@ import { RestoreSpecialAttackTask } from '../../task/impl/RestoreSpecialAttackTa
 import { Equipment } from "../../model/container/impl/Equipment";
 import { DuelRule } from "../Duelling";
 import { PlayerRights } from "../../model/rights/PlayerRights";
+import { applySpecialEnergyCostModifiers } from "./EquipmentEffects";
 import type { WeaponSpecialTraits, SpecialAttackTargeting } from "./WeaponSpecialTraits";
 
 /** Weapon special attacks are defined by plugins, not hardcoded here. */
@@ -96,12 +97,19 @@ export class CombatSpecial {
             player.getCombatSpecial() != null &&
             player.getCombatSpecial() == special &&
             player.isSpecialActivated() &&
-            player.getSpecialPercentage() >= special.getDrainAmount()
+            player.getSpecialPercentage() >= CombatSpecial.energyCost(player, special)
         );
     }
 
-    public static drain(character: Mobile, amount: number) {
-        character.decrementSpecialPercentage(amount);
+    /** The energy a special costs the player with its wielded weapon, after cost modifiers. */
+    public static energyCost(player: Player, special: CombatSpecial): number {
+        const weaponId = player.getEquipment().get(Equipment.WEAPON_SLOT)?.getId?.();
+        return applySpecialEnergyCostModifiers(player, special.getDrainAmountForWeaponId(weaponId));
+    }
+
+    /** `isCost` false: an amount that isn't the special's cost (Unleash spends all energy), so cost modifiers don't touch it. */
+    public static drain(character: Mobile, amount: number, isCost = true) {
+        character.decrementSpecialPercentage(isCost ? applySpecialEnergyCostModifiers(character, amount) : amount);
 
         CombatSpecial.ensureRestoreTask(character);
 
@@ -236,9 +244,8 @@ export class CombatSpecial {
             player.setSpecialActivated(true);
             CombatSpecial.updateBar(player);
 
-            const equippedWeaponId = player.getEquipment().get(Equipment.WEAPON_SLOT).getId();
             if (queuedAttack) {
-                if (!developerQueuedAttackSpam && player.getSpecialPercentage() < spec.getDrainAmountForWeaponId(equippedWeaponId)) {
+                if (!developerQueuedAttackSpam && player.getSpecialPercentage() < CombatSpecial.energyCost(player, spec)) {
                     player.sendMessage("You do not have enough special attack energy left!");
                     player.setSpecialActivated(false);
                     CombatSpecial.updateBar(player);
@@ -288,9 +295,7 @@ export class CombatSpecial {
      * energy and finishes by clearing the activated state.
      */
     private static activateUtility(player: Player, spec: CombatSpecial): void {
-        const equippedWeaponId = player.getEquipment().get(Equipment.WEAPON_SLOT).getId();
-        const drainAmount = spec.getDrainAmountForWeaponId(equippedWeaponId);
-        if (player.getSpecialPercentage() < drainAmount) {
+        if (player.getSpecialPercentage() < CombatSpecial.energyCost(player, spec)) {
             player.sendMessage("You do not have enough special attack energy left!");
             return;
         }
