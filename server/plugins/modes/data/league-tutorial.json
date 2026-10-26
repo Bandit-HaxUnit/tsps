@@ -1,6 +1,8 @@
 {
   "$comment": "The league tutorial (docs/leagues.md \"Tutorial\"), used by plugins/modes/league/Tutorial.LeagueMode.js. Every stage, interface, script and walkthrough step is from two full runs on a new character: Raging Echoes (osrs-captures 227/00196, rev 227) and Demonic Pacts (237/01098, rev 237); ids re-checked against this cache's gamevals (toplevel_osrs_stretch replaces live's toplevel_pre_eoc; chatbox:crmclose is 162:565 here). The client draws each page (title, body, buttons, picture) from the league struct's param 1033 tutorial struct, enums keyed by league_tutorial_completed; the server only moves that varbit and opens the screens.",
   "varbits": {
+    "_allowMesOverlap": "chatoverlay_allowmesoverlap: 1 from the welcome screen's Play while the tutorial's chat overlay is up, 0 when it ends (227/00196).",
+    "allowMesOverlap": 10690,
     "stage": 10037,
     "seenCutscene": 13488,
     "flashSide": 3756,
@@ -43,11 +45,8 @@
     ]
   },
   "journal": {
-    "_comment": "Stage 3 waits for the journal's side stone (toplevel_osrs_stretch:stone2, 161:61; live armed OP1 on every stone at login) with flashside = 3 flashing it; stage 4 flashes the journal's Leagues tab (script 3162 with side_journal:tab_icon_5, 629:42 in this cache; 629:27 in rev 227) until the side panel (656) mounts.",
-    "stone": [
-      161,
-      61
-    ],
+    "_comment": "Stage 3 waits for the journal's side stone, stone2 on each gameframe layout (161:61, 164:54, 548:66, as plugins/areas/tutorialisland lists them; live armed OP1 on every stone at login), with flashside = 3 flashing it; stage 4 flashes the journal's Leagues tab (script 3162 with side_journal:tab_icon_5, 629:42 in this cache; 629:27 in rev 227) until the side panel (656) mounts. The side panel mounting at stage 3 counts for both.",
+    "stones": { "161": 61, "164": 54, "548": 66 },
     "flashTabScript": [
       3162,
       [
@@ -81,6 +80,8 @@
       "hint": 1
     },
     "areas": {
+      "_unlockedVarbit": "league_area_selection_1: the first area chosen beyond the starting ones (227/00196: Karamja set it to 2), so an area unlocked before the areas page counts.",
+      "unlockedVarbit": 10663,
       "button": [
         656,
         40

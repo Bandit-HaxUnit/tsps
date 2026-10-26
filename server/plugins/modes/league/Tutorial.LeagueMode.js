@@ -6,20 +6,33 @@
  * league_tutorial_completed and opens the screens; the client draws every page from the league
  * struct's tutorial struct. The task list, the area map and the relic screen belong to their own
  * plugins: the tutorial watches them open ("interface:opened") and runs its walkthrough in them
- * (ScreenHighlight), and skips a section whose screen never opens, so it can always be finished.
+ * (ScreenHighlight). It can always be finished: a section whose screen never opens is skipped, a
+ * relic or area chosen before its page counts, and a page or screen closed mid-way comes back.
  *
  *   api.emitCustomEvent("league:tutorial-stage", { player })  -> stage (league_tutorial_completed)
- *
- * A character from before the tutorial existed has no stage and counts as finished.
  */
 const Common = require("./Common.LeagueMode");
 const data = require("../data/league-tutorial.json");
 const { FLAG_OP1 } = require("../../interface/widgetGroup");
 
-/** The tutorial's stage (league_tutorial_completed); absent for a character that joined before it existed. */
+/**
+ * The tutorial's stage (league_tutorial_completed). No starting value is declared on purpose: a
+ * character that joined before the tutorial existed has none and counts as finished, and a new
+ * one gets 0 when it joins (`league:joined`).
+ */
 const STAGE_ATTRIBUTE = "league:tutorial-stage";
 const OVERLAY = 1;
 const SECTIONS = ["tasks", "areas", "relics", "pacts"];
+
+function uid([group, child]) {
+  return (group << 16) | child;
+}
+
+const PAGE_BUTTONS = [uid([data.screens.main, data.screens.primaryButton]), uid([data.screens.main, data.screens.secondaryButton])];
+const SECTION_BUTTONS = SECTIONS.map((section) => uid(data.sections[section].button));
+/** The journal's side stone on each gameframe layout (toplevel 161, 164, 548). */
+const JOURNAL_STONES = Object.entries(data.journal.stones).map(([root, child]) => uid([Number(root), child]));
+const WELCOME_PLAY = uid(data.welcomePlay);
 
 /** Per player: the screens wait for the welcome screen or the character design to close. */
 const awaitingOpen = new WeakSet();
@@ -29,11 +42,9 @@ const welcomeShown = new WeakSet();
 const pendingSection = new WeakMap();
 /** Per player: where a section's screen was mounted, to close it after its walkthrough. */
 const sectionTarget = new WeakMap();
+/** Per player: the sections whose walkthrough was seen this session (a reopened screen skips it). */
+const walkthroughSeen = new WeakMap();
 let LaterTask = null;
-
-function uid([group, child]) {
-  return (group << 16) | child;
-}
 
 function flowOf(type) {
   const row = data.leagues[type];
@@ -57,6 +68,16 @@ function resumeStage(flow, stage) {
   return pageOf(flow, stage) ? stage : stage - 1;
 }
 
+/** The page a stage is on or after: its walkthrough stage counts as its page. */
+function sectionAt(flow, stage) {
+  return pageOf(flow, resumeStage(flow, stage));
+}
+
+/** The page after a stage: the next stage the flow lists. */
+function nextPage(flow, stage) {
+  return Object.keys(flow.stages).map(Number).filter((page) => page > stage).sort((a, b) => a - b)[0] ?? flow.final - 1;
+}
+
 function later(player, ticks, action) {
   const manager = Common.api.getTaskManager?.();
   if (typeof manager?.submit !== "function") return;
@@ -67,8 +88,9 @@ function later(player, ticks, action) {
 
 /** league_tutorial (653) with its click blocker and the chat overlay, as captured before every page. */
 function showOverlay(player) {
-  const { screens } = data;
+  const { screens, varbits } = data;
   const sender = player.getPacketSender();
+  sender.sendVarbit(varbits.allowMesOverlap, 1);
   sender.sendSubInterface(uid(screens.overlay.target), screens.overlay.group, OVERLAY);
   sender.sendInterfaceDisplayState(uid([screens.overlay.group, screens.overlay.noclick]), false);
   sender.sendSubInterface(uid(screens.mesoverlay.target), screens.mesoverlay.group, OVERLAY);
@@ -76,18 +98,18 @@ function showOverlay(player) {
 }
 
 function closeScreens(player) {
-  const { screens } = data;
+  const { screens, varbits } = data;
   const sender = player.getPacketSender();
   if (sender.isSubInterfaceOpen(screens.main)) sender.closeSubInterface(uid(screens.mainModal));
   sender.sendInterfaceDisplayState(uid([screens.overlay.group, screens.overlay.noclick]), true);
   sender.closeSubInterface(uid(screens.mesoverlay.target));
   sender.closeSubInterface(uid(screens.overlay.target));
+  sender.sendVarbit(varbits.allowMesOverlap, 0);
 }
 
 /** Moves to `stage` and, on a page, shows it: the overlay, the page's own cue, the modal. */
 function present(player, stage) {
-  const type = Common.leagueOf(player);
-  const flow = flowOf(type);
+  const flow = flowOf(Common.leagueOf(player));
   if (!flow) return;
   const { varbits, screens, journal, sections, pulse } = data;
   const sender = player.getPacketSender();
@@ -100,7 +122,7 @@ function present(player, stage) {
   showOverlay(player);
   if (page === "journal") {
     sender.sendVarbit(varbits.flashSide, data.flashJournal);
-    sender.sendInterfaceFlagsRange(uid(journal.stone), -1, -1, FLAG_OP1);
+    for (const stone of JOURNAL_STONES) sender.sendInterfaceFlagsRange(stone, -1, -1, FLAG_OP1);
   } else if (page === "leagues-tab") {
     sender.sendInterfaceScript(journal.flashTabScript[0], [uid(journal.flashTabScript[1])]);
   } else if (sections[page]) {
@@ -122,11 +144,34 @@ function award(player, task) {
   Common.api.emitCustomEvent("league:award-task", { player, id: task.id, points: task.points, name: task.name });
 }
 
-/** A section's screen opened on its page: the walkthrough runs in it. */
-function startWalkthrough(player, section, stage, opened) {
+/** A league that borrows another's walkthrough text gets its own name in it. */
+function renamed(type, steps) {
+  const rename = data.leagues[type]?.rename;
+  if (!rename) return steps;
+  return steps.map((step) => ({ ...step, text: { ...step.text, text: renameText(step.text.text, rename) } }));
+}
+
+function renameText(text, rename) {
+  return Object.keys(rename).sort((a, b) => b.length - a.length).reduce((out, from) => out.split(from).join(rename[from]), text);
+}
+
+/** Whether what the section waits for is already done: an area beyond the starting ones, or a relic. */
+function alreadyDone(player, section) {
+  if (section === "relics") {
+    const query = { player, league: null, chosen: {} };
+    Common.api.emitCustomEvent("league:relics", query);
+    return Object.keys(query.chosen ?? {}).length > 0;
+  }
+  if (section === "areas") return (player.getPacketSender().getVarbit?.(data.sections.areas.unlockedVarbit) | 0) > 0;
+  return false;
+}
+
+/** A section's screen opened on its page (or its walkthrough stage): the walkthrough runs in it. */
+function startWalkthrough(player, section, opened) {
   const type = Common.leagueOf(player);
   const flow = flowOf(type);
-  const steps = flow?.walkthroughs[section];
+  const page = resumeStage(flow, player.getAttribute(STAGE_ATTRIBUTE));
+  const steps = flow.walkthroughs[section];
   const { sections, pulse, screens } = data;
   pendingSection.delete(player);
   const sender = player.getPacketSender();
@@ -137,35 +182,24 @@ function startWalkthrough(player, section, stage, opened) {
     return;
   }
   sectionTarget.set(player, opened.targetUid);
-  player.setAttribute(STAGE_ATTRIBUTE, stage + 1);
-  sender.sendVarbit(data.varbits.stage, stage + 1);
+  player.setAttribute(STAGE_ATTRIBUTE, page + 1);
+  sender.sendVarbit(data.varbits.stage, page + 1);
+  if (walkthroughSeen.get(player)?.has(section)) {
+    // Seen this session: the screen is reopened to unlock something, not to be shown it again.
+    walkthroughFinished({ player, key: `league-tutorial:${section}` });
+    return;
+  }
   const colour = Number(Common.core.CacheDefinitions.getStructParams(Common.league(type).struct)?.get(data.colourParam)) || Common.league(type).colour;
   Common.api.emitCustomEvent("screen-highlight:show", {
     player, key: `league-tutorial:${section}`, host: uid(sections[section].host), hint: sections[section].hint, colour, steps: renamed(type, steps),
   });
 }
 
-/** A league that borrows another's walkthrough text gets its own name in it. */
-function renamed(type, steps) {
-  const rename = data.leagues[type]?.rename;
-  if (!rename) return steps;
-  return steps.map((step) => ({ ...step, text: { ...step.text, text: rename_(step.text.text, rename) } }));
-}
-
-function rename_(text, rename) {
-  return Object.keys(rename).sort((a, b) => b.length - a.length).reduce((out, from) => out.split(from).join(rename[from]), text);
-}
-
-/** The page after a section: the next stage the flow lists. */
-function nextPage(flow, stage) {
-  return Object.keys(flow.stages).map(Number).filter((page) => page > stage).sort((a, b) => a - b)[0] ?? flow.final - 1;
-}
-
 /** Its screen never opened (or it has no walkthrough): the tutorial moves on without it. */
 function skip(player, section) {
   const flow = flowOf(Common.leagueOf(player));
-  const stage = player.getAttribute(STAGE_ATTRIBUTE);
-  if (!flow || pageOf(flow, resumeStage(flow, stage)) !== section) return;
+  const stage = activeStage(player);
+  if (!flow || stage === null || sectionAt(flow, stage) !== section) return;
   pendingSection.delete(player);
   present(player, nextPage(flow, resumeStage(flow, stage)));
 }
@@ -176,16 +210,19 @@ function closeSectionScreen(player) {
   if (target !== undefined && target !== uid(data.screens.mainModal)) player.getPacketSender().closeSubInterface(target);
 }
 
-/** The walkthrough's last Continue. */
+/** The section's walkthrough is over: on to the next page, unless it waits for an unlock still to come. */
 function walkthroughFinished({ player, key }) {
   const section = /^league-tutorial:(\w+)$/.exec(String(key ?? ""))?.[1];
-  const flow = flowOf(Common.leagueOf(player));
-  const stage = player ? activeStage(player) : null;
-  if (!section || !flow || stage === null) return;
-  if (section === "areas" && flow.areasNeedUnlock) return; // an area unlock moves it on
-  if (section === "relics") return; // a relic unlock moves it on
-  closeSectionScreen(player);
-  present(player, nextPage(flow, stage));
+  const flow = player ? flowOf(Common.leagueOf(player)) : null;
+  const stage = flow ? activeStage(player) : null;
+  if (!section || stage === null || sectionAt(flow, stage) !== section) return;
+  if (!walkthroughSeen.has(player)) walkthroughSeen.set(player, new Set());
+  walkthroughSeen.get(player).add(section);
+  const waits = section === "relics" || (section === "areas" && flow.areasNeedUnlock);
+  if (waits && !alreadyDone(player, section)) return; // the unlock moves it on
+  if (section !== "relics") closeSectionScreen(player);
+  sectionTarget.delete(player);
+  present(player, nextPage(flow, resumeStage(flow, stage)));
 }
 
 /** The section a side panel button opens, by the button's uid. */
@@ -198,7 +235,7 @@ function sectionClicked({ player, buttonId }) {
   const section = sectionOfButton(buttonId);
   const flow = flowOf(Common.leagueOf(player));
   const stage = activeStage(player);
-  if (!section || !flow || stage === null || pageOf(flow, stage) !== section) return false;
+  if (!section || !flow || stage === null || sectionAt(flow, stage) !== section) return false;
   if (section === "pacts") {
     // No walkthrough: its middle step waits on a pact tree this server does not have.
     player.getPacketSender().sendInterfaceScript(data.pulse.stop, [uid(data.sections.pacts.highlight)]);
@@ -213,19 +250,27 @@ function sectionClicked({ player, buttonId }) {
   return false;
 }
 
+/** A group was mounted: the journal's Leagues tab, or a section's screen. Runs once its owner has finished opening it. */
 function interfaceOpened(event) {
-  const { player, groupId } = event ?? {};
-  const flow = player ? flowOf(Common.leagueOf(player)) : null;
-  const stage = flow ? activeStage(player) : null;
+  const player = event?.player;
+  if (!player || activeStage(player) === null) return;
+  queueMicrotask(() => reactToOpen(player, event));
+}
+
+function reactToOpen(player, { groupId, targetUid }) {
+  const flow = flowOf(Common.leagueOf(player));
+  const stage = activeStage(player);
   if (stage === null) return;
   const page = pageOf(flow, stage);
   if ((page === "journal" || page === "leagues-tab") && groupId === data.journal.sidePanel) {
     award(player, data.tasks.openMenu);
-    present(player, nextPage(flow, stage));
+    player.getPacketSender().sendVarbit(data.varbits.flashSide, 0);
+    const leaguesTab = page === "journal" ? nextPage(flow, stage) : stage;
+    present(player, nextPage(flow, leaguesTab));
     return;
   }
-  const section = data.sections[page];
-  if (section && SECTIONS.includes(page) && groupId === section.interface) startWalkthrough(player, page, stage, event);
+  const section = sectionAt(flow, stage);
+  if (SECTIONS.includes(section) && groupId === data.sections[section].interface) startWalkthrough(player, section, { groupId, targetUid });
 }
 
 function journalStone({ player }) {
@@ -276,7 +321,8 @@ function finish(player, flow) {
 function areaUnlocked({ player }) {
   const flow = player ? flowOf(Common.leagueOf(player)) : null;
   const stage = flow ? activeStage(player) : null;
-  if (stage === null || pageOf(flow, resumeStage(flow, stage)) !== "areas") return;
+  // Before the areas page it is simply counted when that page's walkthrough ends.
+  if (stage === null || sectionAt(flow, stage) !== "areas" || pageOf(flow, stage)) return;
   closeSectionScreen(player);
   present(player, nextPage(flow, resumeStage(flow, stage)));
 }
@@ -284,7 +330,7 @@ function areaUnlocked({ player }) {
 function relicUnlocked({ player }) {
   const flow = player ? flowOf(Common.leagueOf(player)) : null;
   const stage = flow ? activeStage(player) : null;
-  if (stage === null || pageOf(flow, resumeStage(flow, stage)) !== "relics") return;
+  if (stage === null || sectionAt(flow, stage) !== "relics") return;
   Common.api.emitCustomEvent("screen-highlight:close", { player });
   sectionTarget.delete(player);
   present(player, nextPage(flow, resumeStage(flow, stage)));
@@ -295,11 +341,15 @@ function joined({ player, league }) {
   if (flowOf(league)) player.setAttribute(STAGE_ATTRIBUTE, 0);
 }
 
-/** `league:tutorial-stage` { player } -> stage: the page a tutorial in progress resumes at; untouched when finished. */
+/**
+ * `league:tutorial-stage` { player } -> stage: where a tutorial in progress resumes; the league's
+ * finished value (12, Leagues VI's 14) once it is over or for a character from before it.
+ */
 function answerStage(query) {
-  if (!query?.player) return;
+  const flow = query?.player ? flowOf(Common.leagueOf(query.player)) : null;
+  if (!flow) return;
   const stage = activeStage(query.player);
-  if (stage !== null) query.stage = resumeStage(flowOf(Common.leagueOf(query.player)), stage);
+  query.stage = stage === null ? flow.final : resumeStage(flow, stage);
 }
 
 /** Opens the current page once nothing else is up (the welcome screen, the character design). */
@@ -331,8 +381,28 @@ function welcomePlay({ player }) {
   return false;
 }
 
-function interfaceClosed({ player }) {
-  if (player && awaitingOpen.has(player)) later(player, 1, () => openWhenReady(player));
+/**
+ * The page or a section's screen closed. Waiting to open: try again. Otherwise, a tick later, if
+ * nothing has replaced it (a section's screen opening is the next step), the page comes back, so
+ * a closed page or a walkthrough left half way never strands the player under the click blocker.
+ */
+function interfaceClosed({ player, interfaceId }) {
+  if (!player) return;
+  if (awaitingOpen.has(player)) {
+    later(player, 1, () => openWhenReady(player));
+    return;
+  }
+  const stage = activeStage(player);
+  const watched = interfaceId === data.screens.main || SECTIONS.some((section) => data.sections[section].interface === interfaceId);
+  if (stage === null || !watched) return;
+  later(player, 1, () => {
+    const flow = flowOf(Common.leagueOf(player));
+    const now = activeStage(player);
+    if (now === null || now !== stage || player.getInterfaceId?.() > 0 || player.getPacketSender().isSubInterfaceOpen(data.screens.main)) return;
+    Common.api.emitCustomEvent("screen-highlight:close", { player });
+    sectionTarget.delete(player);
+    present(player, resumeStage(flow, now));
+  });
 }
 
 function logout({ player }) {
@@ -340,6 +410,7 @@ function logout({ player }) {
   welcomeShown.delete(player);
   pendingSection.delete(player);
   sectionTarget.delete(player);
+  walkthroughSeen.delete(player);
 }
 
 /** Leagues II and IV borrow Leagues V's tutorial struct (747), whose pages name Leagues V: copies with their own name. */
@@ -355,7 +426,7 @@ function content(query) {
   const struct = query.base + virtualIdOffsets.struct;
   const titles = query.base + virtualIdOffsets.titles;
   const bodies = query.base + virtualIdOffsets.bodies;
-  const copy = (enumId) => [...CacheDefinitions.getEnumValues(enumId).entries()].sort(([a], [b]) => a - b).map(([key, text]) => [key, rename_(String(text), rename)]);
+  const copy = (enumId) => [...CacheDefinitions.getEnumValues(enumId).entries()].sort(([a], [b]) => a - b).map(([key, text]) => [key, renameText(String(text), rename)]);
   const titleRows = copy(source.get(titleParam));
   query.structs.push({ structId: leagueStruct, params: { [structParam]: struct } });
   query.structs.push({ structId: struct, params: { ...Object.fromEntries(source), [titleParam]: titles, [bodyParam]: bodies } });
@@ -363,6 +434,7 @@ function content(query) {
   query.enums.push({ enumId: bodies, valueType: "s", defaultValue: "", entries: copy(source.get(bodyParam)) });
 }
 
+/** The one-off task the short waits use, defined once api.core.Task is reachable (as Notifications does). */
 function bind(api) {
   LaterTask = class extends api.core.Task {
     constructor(ticks, action) {
@@ -379,9 +451,6 @@ function bind(api) {
 }
 
 module.exports = function attach(api) {
-  const { screens, journal, sections } = data;
-  const pageButtons = [uid([screens.main, screens.primaryButton]), uid([screens.main, screens.secondaryButton])];
-  const sectionButtons = SECTIONS.map((section) => uid(sections[section].button));
   bind(api);
   api.persistAttribute(STAGE_ATTRIBUTE);
   api.onCustomEvent("league:joined", joined);
@@ -395,10 +464,10 @@ module.exports = function attach(api) {
   api.onCustomEvent("screen-highlight:finished", walkthroughFinished);
   api.onCustomEvent("welcome-screen:shown", welcomeScreenShown);
   api.onPlayerLogout(logout);
-  api.onInterfaceActionButton(uid(data.welcomePlay), welcomePlay);
-  api.onInterfaceActionButton(uid(journal.stone), journalStone);
-  api.onInterfaceActionButton(pageButtons, pageButton);
-  api.onInterfaceActionButton(sectionButtons, sectionClicked);
+  api.onInterfaceActionButton(WELCOME_PLAY, welcomePlay);
+  api.onInterfaceActionButton(JOURNAL_STONES, journalStone);
+  api.onInterfaceActionButton(PAGE_BUTTONS, pageButton);
+  api.onInterfaceActionButton(SECTION_BUTTONS, sectionClicked);
 };
 
 module.exports.STAGE_ATTRIBUTE = STAGE_ATTRIBUTE;
