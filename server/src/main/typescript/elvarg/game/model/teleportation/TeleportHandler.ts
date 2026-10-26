@@ -19,7 +19,7 @@ class TeleportTask extends Task {
     private released = false;
 
     /** Where the teleport began, and whether in an instance, for "teleport:landed". */
-    private readonly from: Location;
+    private readonly from: Location | null;
     private readonly fromInstance: boolean;
 
     constructor(
@@ -30,8 +30,9 @@ class TeleportTask extends Task {
         private readonly onMiddle?: () => void
     ) {
         super(1, player, true);
-        this.from = player.getLocation().clone();
-        this.fromInstance = player.getPrivateArea() != null;
+        // A bare test entity may have no position; the event then says nothing of a start.
+        this.from = player.getLocation?.()?.clone?.() ?? null;
+        this.fromInstance = player.getPrivateArea?.() != null;
     }
 
     execute(): void {
