@@ -317,9 +317,12 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   now, from the Wiki's Initial Cost less the prerequisite packs already unlocked, and 0 once
   unlocked. Buying a pack unlocks its prerequisites. Defence, Fishing and Thieving start unlocked.
   Nex can be bought only once every God Wars general is unlocked.
-- **Locks:** a locked skill gives no XP, and a locked boss can't be attacked (its NPC names are in
-  the data, raids by their final boss). Wintertodt, Tempoross and Zalcano aren't attacked, so their
-  locks aren't enforced. The Wiki gives no message for either lock; the boss one is this server's.
+- **Locks:** a locked skill gives no XP, and a locked boss can't be attacked, by the player or its
+  thrall (its NPC names are in the data, raids by their final boss). Kraken's Disturb and Vorkath's
+  Poke ask `league:boss-locked` before waking them. Wintertodt and Tempoross aren't attacked, so
+  their locks aren't enforced, and instance entries (Zulrah, the Gauntlet, raids) aren't refused,
+  only the fights inside. The Wiki gives no message for either lock; the boss one is this
+  server's, said once per boss every few seconds.
 
 Stored and drawn, not yet enforced: fragments don't drop, gain XP or take effect (the 53 fragments and 15 set effects); quest packs
 complete no quests; fragments can be swapped anywhere, not only at a bank or the Sage, and only
