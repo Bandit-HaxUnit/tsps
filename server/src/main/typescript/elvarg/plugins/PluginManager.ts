@@ -1562,12 +1562,12 @@ export class PluginManager {
       { shopId, itemId, allow: null }, "can_stock_item", "allow");
   }
 
-  /** The plugin's refusal message when a prayer is disabled, or null when it is usable. */
-  public static emitPrayerDisabled(player: any, prayer: any): string | null {
+  /** The plugin's refusal when a prayer is disabled (its message, and how to show it), or null when it is usable. */
+  public static emitPrayerDisabled(player: any, prayer: any): { message: string; messageBox: boolean } | null {
     if (PluginManager.prayerDisabledHooks.length === 0) return null;
     const event: PluginPrayerDisabledEvent = { player, prayer, disabled: null };
     return PluginManager.firstAnswer(PluginManager.prayerDisabledHooks, event, "prayer_disabled", "disabled") === true
-      ? event.message ?? "You cannot use that prayer here."
+      ? { message: event.message ?? "You cannot use that prayer here.", messageBox: event.messageBox === true }
       : null;
   }
 
@@ -2403,6 +2403,7 @@ export class PluginManager {
       NpcSpawnDefinition: require("../game/definition/NpcSpawnDefinition").NpcSpawnDefinition,
       ObjectDefinition: require("../game/definition/ObjectDefinition").ObjectDefinition,
       MagicSpellbook: require(`${model}/MagicSpellbook`).MagicSpellbook,
+      ItemAliases: require(`${model}/ItemAliases`).ItemAliases,
       Spell: require(`${combat}/magic/Spell`).Spell,
       CombatNormalSpell: require(`${combat}/magic/CombatNormalSpell`).CombatNormalSpell,
       CombatSpells: require(`${combat}/magic/CombatSpells`).CombatSpells,

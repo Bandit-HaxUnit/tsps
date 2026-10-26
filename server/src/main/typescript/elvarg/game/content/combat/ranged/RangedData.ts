@@ -1,4 +1,5 @@
 
+import { ItemAliases } from "../../../model/ItemAliases";
 import type { Player } from '../../../entity/impl/player/Player';
 import { Graphic } from '../../../model/Graphic';
 import { GraphicHeight } from '../../../model/GraphicHeight';
@@ -244,7 +245,7 @@ export class Ammunition {
         const weapon = Number(p.getEquipment().getItems()[Equipment.WEAPON_SLOT]?.getId?.() ?? -1);
         if (isCrystalBow(weapon) || RangedWeapon.getSelfAmmo(weapon)) return false;
         if (PluginManager.resolveRangedAmmunition(p) != null) return false;
-        return !Ammunition.rangedAmmunition.has(weapon);
+        return ItemAliases.lookup(Ammunition.rangedAmmunition, weapon) === undefined;
     }
 
     public static getFor(p: Player): Ammunition {
@@ -262,12 +263,12 @@ export class Ammunition {
         if (pluginResolvedAmmo != null) {
             return pluginResolvedAmmo;
         }
-        const throwWeapon = Ammunition.rangedAmmunition.get(weapon);
+        const throwWeapon = ItemAliases.lookup(Ammunition.rangedAmmunition, weapon);
 
         // Didn't find one. Try arrows
         if (throwWeapon == null) {
             const ammoId = Number(p.getEquipment().getItems()[Equipment.AMMUNITION_SLOT].getId());
-            return Ammunition.rangedAmmunition.get(ammoId);
+            return ItemAliases.lookup(Ammunition.rangedAmmunition, ammoId);
         }
 
         return throwWeapon;
@@ -276,11 +277,11 @@ export class Ammunition {
     public static getForItem(item: number): Ammunition {
         item = Number(item);
         // First try to get a throw weapon as ammo
-        const throwWeapon = Ammunition.rangedAmmunition.get(item);
+        const throwWeapon = ItemAliases.lookup(Ammunition.rangedAmmunition, item);
 
         // Didn't find one. Try arrows
         if (throwWeapon == null) {
-            return Ammunition.rangedAmmunition.get(item);
+            return ItemAliases.lookup(Ammunition.rangedAmmunition, item);
         }
 
         return throwWeapon;
@@ -498,11 +499,11 @@ export class RangedWeapon {
 
     public static getFor(p: Player): RangedWeapon {
         const weapon = Number(p.getEquipment().getItems()[Equipment.WEAPON_SLOT].getId());
-        return RangedWeapon.rangedWeapons.get(weapon);
+        return ItemAliases.lookup(RangedWeapon.rangedWeapons, weapon);
     }
 
     public static getSelfAmmo(itemId: number): Ammunition | undefined {
-        return RangedWeapon.selfAmmoByWeapon.get(Number(itemId));
+        return ItemAliases.lookup(RangedWeapon.selfAmmoByWeapon, Number(itemId));
     }
 
     public getWeaponIds(): number[] {

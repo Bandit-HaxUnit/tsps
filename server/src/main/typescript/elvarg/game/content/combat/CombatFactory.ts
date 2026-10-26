@@ -1,3 +1,4 @@
+import { ItemAliases } from "../../model/ItemAliases";
 import { Sound } from "../../Sound";
 import { Sounds } from "../../Sounds";
 import { PrayerHandler } from "../PrayerHandler";
@@ -735,14 +736,13 @@ export class CombatFactory {
 
     /**
      * OSRS processes NPCs before players each tick, so a hit queued against an NPC lands
-     * one tick after the distance table (Wiki: Hit delay). Player melee keeps its tick too:
-     * the target's queue drains at the start of its own turn, which has already passed.
+     * one tick after the distance table (Wiki: Hit delay). Against a player, PID decides
+     * (Wiki: "In the case of PvP, PID will be the determining factor"): the target's queue
+     * drains at the start of its own turn, so a hit from a player processed before it lands
+     * this tick, and one from a player processed after it lands on the next.
      */
     public static hitProcessingDelay(hit: PendingHit): number {
-        const targetIsNpc = hit.getTarget()?.isNpc?.() === true;
-        const meleePlayerAttack = hit.getAttacker()?.isPlayer?.() === true
-            && hit.getCombatType() === CombatType.MELEE;
-        return targetIsNpc || meleePlayerAttack ? 1 : 0;
+        return hit.getTarget()?.isNpc?.() === true ? 1 : 0;
     }
 
     public static executeHit(qHit: PendingHit) {
@@ -1407,7 +1407,7 @@ export class CombatFactory {
         // BAD LOOP
         for (let d of rangedWeapon.getAmmunitionData()) {
             if (d == ammoData) {
-                if (d.getItemId() == ammoSlotItem.getId()) {
+                if (ItemAliases.same(d.getItemId(), ammoSlotItem.getId())) {
                     properReq = true;
                     break;
                 }

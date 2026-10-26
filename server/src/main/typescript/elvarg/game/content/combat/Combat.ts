@@ -227,11 +227,14 @@ export class Combat {
             state.attackBlocked = true;
         }
 
-        this.faceTarget(target);
-
         if (this.manualMovementUntilCycle >= cycle) {
+            // Walking where content sent them (a step between hits): they face where they walk,
+            // as a player who clicks a tile does, and turn back to the target once it ends.
+            if (this.character.hasFlag?.("combat:keep-facing") !== true) this.character.setMobileInteraction(null);
             return;
         }
+
+        this.faceTarget(target);
 
         // An overlapped NPC that can still reach its target (a large NPC fighting
         // underfoot) attacks in place; one that cannot steps aside below.
