@@ -447,7 +447,11 @@ function handlePair(player, usedId, usedWithId) {
     const recipe = usable[0];
     if (recipe.ticks === 0 || isInstant(player, recipe)) {
       stopFletching(player);
-      makeBatch(player, recipe, via);
+      // The instant path (darts and bolts by default) makes as many as content asks for in the one click.
+      const actions = actionsPerCycle(player, recipe);
+      for (let done = 0; done < actions && batchesAvailable(player, recipe) > 0; done++) {
+        if (!makeBatch(player, recipe, via)) break;
+      }
       return true;
     }
     if (batchesAvailable(player, recipe) === 1) {

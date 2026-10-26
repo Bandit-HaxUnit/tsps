@@ -37,11 +37,14 @@ function makeOne(player, recipe) {
   const inventory = player.getInventory();
   if (!hasIngredients(inventory, recipe)) return false;
   // Content may keep an ingredient or change the product ("herblore:mix", a league relic's saved secondaries and 4-dose potions).
-  const mix = { player, recipe, consume: recipe.ingredients.map((item) => ({ ...item })), productId: recipe.productId };
+  const mix = {
+    player, recipe, productId: recipe.productId,
+    consume: recipe.ingredients.map((item) => ({ ...item })), returns: recipe.returns.map((item) => ({ ...item })),
+  };
   Common.api.emitCustomEvent("herblore:mix", mix);
   for (const { id, count } of mix.consume) if (count > 0) inventory.deleteNumber(id, count);
   inventory.addItem(new Common.core.Item(mix.productId, 1));
-  for (const { id, count } of recipe.returns) inventory.addItem(new Common.core.Item(id, count));
+  for (const { id, count } of mix.returns) if (count > 0) inventory.addItem(new Common.core.Item(id, count));
   if (recipe.cleaned) {
     Common.spam(player, `You clean the ${Common.core.ItemDefinition.forId(recipe.cleaned.grimyId).getName()}.`);
     Common.addXp(player, recipe.cleaned.xp);

@@ -26,6 +26,7 @@ let cycle = 100;
 let realCycle;
 let I;
 let obj;
+const { POUCH_STORE_META: FORAGER_STORE } = require("../plugins/modes/leaguerelics/FriendlyForager.LeagueRelics");
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
@@ -201,7 +202,7 @@ test("Friendly Forager: the pouch finds a herb on gathering, every 9 ticks, with
   const skills = who.relic.getSkillManager();
   skills.setMaxLevels(Skill.HERBLORE, 1, false);
   skills.setCurrentLevels(Skill.HERBLORE, 1, false);
-  const held = (player) => player.getInventory().getItems().find((item) => item?.getId() === pouch).getMetaValue("league:forager-pouch") ?? {};
+  const held = (player) => player.getInventory().getItems().find((item) => item?.getId() === pouch).getMetaValue(FORAGER_STORE) ?? {};
   const total = (player) => Object.values(held(player)).reduce((sum, amount) => sum + amount, 0);
   const herbs = emit("herblore:herbs", { herbs: [] }).herbs;
   assert.ok(herbs.length > 10, "Herblore lists its herbs");
@@ -244,7 +245,7 @@ test("Friendly Forager: the pouch finds a herb on gathering, every 9 ticks, with
   const contents = { [guam]: 30 };
   const lowHerbs = herbs.filter((herb) => herb.level <= 26).map((herb) => herb.grimyId);
   for (const id of lowHerbs) contents[id] = 30;
-  who.relic.getInventory().getItems().find((item) => item?.getId() === pouch).setMetaValue("league:forager-pouch", contents);
+  who.relic.getInventory().getItems().find((item) => item?.getId() === pouch).setMetaValue(FORAGER_STORE, contents);
   cycle = 500;
   emit("mining:success", { player: who.relic });
   assert.equal(total(who.relic), lowHerbs.length * 30, "every herb it could give is full: nothing more");
@@ -264,6 +265,7 @@ test("Friendly Forager: a secondary kept 90% of the time, a 3-dose potion made w
   assert.deepEqual(attack.consume.map((item) => item.count), [1, 0], "a 20 keeps the eye of newt; the unfinished potion goes");
   assert.equal(attack.productId, obj("4dose1attack"), "4 doses");
   assert.deepEqual(mix(who.relic, "3dose1attack", [["guamvial", 1], ["eye_of_newt", 1]], 0.95).consume.map((item) => item.count), [1, 1], "a 95 uses it");
+  assert.equal(mix(who.relic, "3dosestamina", [["3dose2energy",1],["amylase",3]], 0.95).productId, obj("3dosestamina"), "an upgrade of a dosed potion keeps its doses");
   assert.deepEqual(mix(who.relic, "guamvial", [["guam_leaf", 1], ["vial_water", 1]], 0.2).consume.map((item) => item.count), [1, 1], "an unfinished potion's herb is not a secondary");
   assert.deepEqual(mix(who.relic, "4dose2combat", [["4dose2attack", 1], ["4dose2defense", 1], ["4dose2strength", 1], ["torstolvial", 1]], 0.2).consume.map((item) => item.count),
     [1, 1, 1, 0], "a super combat's torstol potion (unf) is kept (Wiki)");
@@ -294,4 +296,66 @@ test("through Herblore's own cleaning: one click cleans every grimy herb of the 
   for (const player of others(who)) {
     assert.deepEqual([player.getInventory().getAmount(clean), player.getInventory().getAmount(grimy)], [1, 2], `${player.getUsername()} cleans one`);
   }
+});
+
+test("through the skills' own loops: a smithing session, a crafting loop and a potion mix, all at once for the relic only", () => {
+  const tasks = [];
+  const loopApi = {
+    core, emitCustomEvent: (name, payload) => emit(name, payload),
+    getTaskManager: () => ({ submit: (task) => tasks.push(task) }), onServerStartup: (start) => start(),
+  };
+  require("../plugins/skills/smithing/Core.Smithing").init(loopApi);
+  const Sessions = require("../plugins/skills/smithing/Sessions.Smithing");
+  Sessions(loopApi);
+  const who = cases(MASTER, 5);
+  const everyone = Object.values(who);
+  const smithed = new Map(everyone.map((player) => [player, 0]));
+  for (const player of everyone) {
+    Sessions.start(player, { type: "smith", remaining: 5, interval: 1, step: () => { smithed.set(player, smithed.get(player) + 1); return true; } });
+  }
+  tasks[0].execute();
+  assert.equal(smithed.get(who.relic), 5, "the relic's five bars in the first cycle");
+  for (const player of others(who)) assert.equal(smithed.get(player), 1, `${player.getUsername()} one a cycle`);
+  for (const player of everyone) Sessions.stop(player, false);
+  let glass = 0;
+  Sessions.start(who.relic, { type: "smelt", skill: Skill.CRAFTING, remaining: 5, interval: 1, step: () => { glass++; return true; } });
+  tasks[0].execute();
+  Sessions.stop(who.relic, false);
+  assert.equal(glass, 1, "molten glass is Crafting, not on the list");
+
+  const Shared = require("../plugins/skills/crafting/Shared.Crafting");
+  Shared.attach(loopApi);
+  const cut = new Map(everyone.map((player) => [player, 0]));
+  const before = tasks.length;
+  for (const player of everyone) {
+    Shared.startMaking(player, {
+      amount: 6, startTick: 0, firstTick: 1, interval: 1, kind: "gems",
+      has: () => cut.get(player) < 4, make: () => { cut.set(player, cut.get(player) + 1); return true; },
+    });
+  }
+  for (const task of tasks.slice(before)) task.execute();
+  assert.equal(cut.get(who.relic), 4, "all four uncut gems, stopping when they run out");
+  for (const player of others(who)) assert.equal(cut.get(player), 1, `${player.getUsername()} one a cycle`);
+
+  let mixHandler;
+  require("../plugins/skills/herblore/Mixing.Herblore")(new Proxy({ core }, {
+    get: (target, key) => (key in target ? target[key] : (handler) => { if (key === "onItemOnItem") mixHandler = handler; }),
+  }));
+  const rolls = [];
+  Math.random = () => rolls.shift() ?? 0.5;
+  const ingredients = ["4dose2attack", "4dose2defense", "4dose2strength", "torstolvial"].map(obj);
+  const brew = (player) => {
+    const skills = player.getSkillManager();
+    skills.setMaxLevels(Skill.HERBLORE, 90, false);
+    skills.setCurrentLevels(Skill.HERBLORE, 90, false);
+    for (const id of ingredients) player.getInventory().adds(id, 1);
+    rolls.length = 0;
+    rolls.push(0.2, 0.2, 0.2, 0.2);
+    mixHandler({ player, usedItemId: obj("torstolvial"), usedWithItemId: obj("4dose2attack"), handled: false });
+    const inventory = player.getInventory();
+    return [inventory.getAmount(obj("4dose2combat")), inventory.getAmount(obj("torstolvial")), inventory.getAmount(obj("vial_empty"))];
+  };
+  const forager = cases(FORAGER, 5);
+  assert.deepEqual(brew(forager.relic), [1, 1, 2], "the torstol potion (unf) is kept with its vial: two vials back, not three");
+  for (const player of others(forager)) assert.deepEqual(brew(player), [1, 0, 3], `${player.getUsername()} as usual`);
 });

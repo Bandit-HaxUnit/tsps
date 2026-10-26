@@ -10,6 +10,9 @@
  */
 const Common = require("./Common.LeagueRelics");
 
+/** The herbs a pouch holds: item meta { grimyId: count }. */
+const POUCH_STORE_META = "league:forager-pouch";
+
 let api;
 let core;
 let effect;
@@ -34,8 +37,14 @@ function pouchOf(player) {
   return worn ?? player.getInventory().getItems().find((item) => item?.getId() === id) ?? null;
 }
 
+/** The pouch an option was clicked on (its slot), else the one carried or worn. */
+function clicked(event) {
+  const item = event.item ?? event.player.getInventory().getItems()[event.slot];
+  return item?.getId?.() === pouchId() ? item : pouchOf(event.player);
+}
+
 function stored(pouch) {
-  const value = pouch.getMetaValue?.(effect.storeKey);
+  const value = pouch.getMetaValue?.(POUCH_STORE_META);
   return value && typeof value === "object" ? { ...value } : {};
 }
 
@@ -49,9 +58,9 @@ function herbName(itemId) {
   return core.ItemDefinition.forId(itemId)?.getName?.()?.toLowerCase?.() ?? "herbs";
 }
 
-/** A gathering action: a herb the pouch has room for and the player could clean at level + 25. */
-function find({ player }) {
-  if (!player?.isPlayer?.() || !active(player)) return;
+/** A gathering action: a herb the pouch has room for and the player could clean at level + 25. A minigame's reward (a `source`, the rumour sack) is not gathering. */
+function find({ player, source, method }) {
+  if (source || method === "rumour-sack" || !player?.isPlayer?.() || !active(player)) return;
   const pouch = pouchOf(player);
   if (!pouch) return;
   const cycle = core.World.getProcessCycle();
@@ -62,14 +71,15 @@ function find({ player }) {
   if (candidates.length === 0) return;
   const herb = candidates[Math.floor(Math.random() * candidates.length)];
   contents[herb.grimyId] = (contents[herb.grimyId] ?? 0) + 1;
-  pouch.setMetaValue(effect.storeKey, contents);
+  pouch.setMetaValue(POUCH_STORE_META, contents);
   nextFind.set(player, cycle + effect.cooldownTicks);
   if (herb.xp > 0) player.getSkillManager().addExperiences(core.Skill.HERBLORE, herb.xp);
   player.getPacketSender().sendTypedMessage?.(core.ChatType.SPAM, Common.message("foragerFound", { herb: herbName(herb.grimyId) }));
 }
 
-function check({ player }) {
-  const pouch = pouchOf(player);
+function check(event) {
+  const { player } = event;
+  const pouch = clicked(event);
   if (!pouch) return;
   const contents = Object.entries(stored(pouch)).filter(([, amount]) => amount > 0);
   if (contents.length === 0) {
@@ -80,8 +90,9 @@ function check({ player }) {
 }
 
 /** Every grimy herb in the inventory the pouch knows and has room for goes in. */
-function fill({ player }) {
-  const pouch = pouchOf(player);
+function fill(event) {
+  const { player } = event;
+  const pouch = clicked(event);
   if (!pouch) return;
   const known = new Set(herbs().map((herb) => herb.grimyId));
   const contents = stored(pouch);
@@ -95,13 +106,14 @@ function fill({ player }) {
     contents[id] = (contents[id] ?? 0) + amount;
     moved += amount;
   }
-  pouch.setMetaValue(effect.storeKey, contents);
-  player.sendMessage(moved > 0 ? Common.message("foragerFilled", { amount: moved }) : Common.message("foragerEmpty"));
+  pouch.setMetaValue(POUCH_STORE_META, contents);
+  player.sendMessage(moved > 0 ? Common.message("foragerFilled", { amount: moved }) : Common.message("foragerNothingToFill"));
 }
 
 /** Every herb comes out as notes (Wiki), while the inventory has room for the stacks. */
-function withdraw({ player }) {
-  const pouch = pouchOf(player);
+function withdraw(event) {
+  const { player } = event;
+  const pouch = clicked(event);
   if (!pouch) return;
   const contents = stored(pouch);
   const inventory = player.getInventory();
@@ -115,7 +127,7 @@ function withdraw({ player }) {
     inventory.adds(note, amount);
     delete contents[id];
   }
-  pouch.setMetaValue(effect.storeKey, contents);
+  pouch.setMetaValue(POUCH_STORE_META, contents);
 }
 
 function gamevals(names) {
@@ -129,16 +141,24 @@ function mix(request) {
     alsoSaved = gamevals(effect.alsoSaved);
     neverSaved = gamevals(effect.neverSaved);
   }
-  const unfinished = /\(unf\)$/i.test(core.ItemDefinition.forId(request.productId)?.getName?.() ?? "");
+  const name = (id) => core.ItemDefinition.forId(id)?.getName?.() ?? "";
+  const unfinished = /\(unf\)$/i.test(name(request.productId));
   if (!unfinished) {
     for (const item of request.consume) {
       const secondary = alsoSaved.has(item.id) || !Common.isPotion(item.id);
-      if (!secondary || neverSaved.has(item.id)) continue;
-      if (Math.random() < effect.secondarySaveChance) item.count = 0;
+      if (!secondary || neverSaved.has(item.id) || Math.random() >= effect.secondarySaveChance) continue;
+      item.count = 0;
+      // A kept ingredient that came in a vial (the torstol potion (unf)) keeps its vial too.
+      if (Common.isPotion(item.id)) {
+        const vial = request.returns?.find((returned) => returned.count > 0 && /^vial$/i.test(name(returned.id)));
+        if (vial) vial.count--;
+      }
     }
   }
+  // Brewed with 4 doses, not 3: only a potion brewed from an unfinished one, not an upgrade of a dosed potion.
+  const upgrade = request.consume.some((item) => /\(\d\)$/.test(name(item.id)));
   const product = request.recipe?.product;
-  if (typeof product === "string" && product.startsWith("3dose")) {
+  if (!upgrade && typeof product === "string" && product.startsWith("3dose")) {
     const fourDose = core.CacheDefinitions.getObjId(`4dose${product.slice(5)}`);
     if (Number.isInteger(fourDose)) request.productId = fourDose;
   }
@@ -152,3 +172,5 @@ module.exports = function attach(pluginApi) {
   api.onItemAction(effect.toolName, { Check: check, Fill: fill, Withdraw: withdraw });
   api.onCustomEvent("herblore:mix", mix);
 };
+
+module.exports.POUCH_STORE_META = POUCH_STORE_META;

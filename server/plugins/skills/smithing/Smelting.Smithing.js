@@ -182,6 +182,8 @@ function startSmelting(player, chosen, amount, furnaceId = -1) {
   }
   Sessions.start(player, {
     type: "smelt",
+    // Molten glass is a Crafting recipe at the same furnace: its batching is Crafting's question.
+    skill: recipe.skill ?? Core.Skill.SMITHING,
     remaining: amount,
     interval: SMELT_INTERVAL_TICKS,
     finishDelay: SMELT_FINISH_TICKS,
