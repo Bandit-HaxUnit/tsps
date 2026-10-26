@@ -7,8 +7,7 @@
 const Common = require("./Common.LeagueRelics");
 const Unlock = require("./Unlock.LeagueRelics");
 
-/** if_setevents OP1 (as SideJournalDefaults sends it). */
-const FLAGS_OP1 = 1 << 1;
+const { FLAG_OP1 } = require("../../interface/widgetGroup");
 const SLOTS_PER_TIER = 3;
 
 /**
@@ -28,11 +27,11 @@ function open({ player }) {
   const { group, clickzones, clickzoneSlots, menuFrame, menuFrameSlots } = ui();
   // Read before the modal replaces the bank as the main interface.
   const bankOpen = Common.core.Bank.isOpen(player);
-  require("./Catalog.LeagueRelics").send(player, type);
+  Common.api.emitCustomEvent("league:refresh-content", { player });
   const sender = player.getPacketSender();
   sender.sendInterface(group);
-  sender.sendInterfaceFlagsRange(Unlock.uid(group, clickzones), clickzoneSlots[0], clickzoneSlots[1], FLAGS_OP1);
-  sender.sendInterfaceFlagsRange(Unlock.uid(group, menuFrame), menuFrameSlots[0], menuFrameSlots[1], FLAGS_OP1);
+  sender.sendInterfaceFlagsRange(Unlock.uid(group, clickzones), clickzoneSlots[0], clickzoneSlots[1], FLAG_OP1);
+  sender.sendInterfaceFlagsRange(Unlock.uid(group, menuFrame), menuFrameSlots[0], menuFrameSlots[1], FLAG_OP1);
   viewing.set(player, { slot: -1, bankOpen });
   return true;
 }
@@ -46,15 +45,15 @@ function view({ player, slot }) {
   const relicSlot = (index % SLOTS_PER_TIER) + 1;
   if (!Common.relic(type, tier, relicSlot)) return false;
   const { group, viewScript, viewScriptComponents, viewScriptState, toggleScript, toggleScriptComponents } = ui();
-  const ids = Common.ids(type);
+  const structs = Common.structIds(type, tier, relicSlot);
   const sender = player.getPacketSender();
   state.slot = index;
   sender.sendVarbit(Common.data.lastViewedVarbit, index);
   sender.sendInterfaceScript(viewScript, [
     ...viewScriptComponents.map((child) => Unlock.uid(group, child)),
     viewScriptState,
-    ids.relicStruct(tier, relicSlot),
-    ids.passiveStruct(tier),
+    structs.relicStruct,
+    structs.passiveStruct,
   ]);
   sender.sendInterfaceScript(toggleScript, [...toggleScriptComponents.map((child) => Unlock.uid(group, child)), 0, 1]);
   return true;

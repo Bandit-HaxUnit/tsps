@@ -63,6 +63,7 @@
     }
   },
   "leagues": {
+    "6": { "_comment": "Leagues VI - Demonic Pacts is the league this cache (rev 241) carries: its tiers, costs, passives and relics are read from the league struct (6436, enum 2670) and sent as nothing; no relic hands out an item, since the cache does not say which do.", "fromCache": true },
     "4": {
       "tiers": [
         {

@@ -1,10 +1,11 @@
 # Leagues
 
 The Leagues game mode (https://oldschool.runescape.wiki/w/Leagues) on this server: a league
-character per account, League Points, relic tiers and relics. Plugins: `plugins/modes/LeagueMode.plugin.js`
-(the profile, its league, XP rate, journal tab), `LeaguePoints.plugin.js` (points) and
-`LeagueRelics.plugin.js` (tiers and relics); data in `plugins/modes/data/leagues.json` and
-`league-relics.json`.
+character per account, League Points, ranks, relic tiers and relics, and the league screens.
+Plugins: `plugins/modes/LeagueMode.plugin.js` (the profile, its league, XP rate, journal tab, the
+side panel's Summary / Info / Rank screens, ranks, statistics, the content its screens need),
+`LeaguePoints.plugin.js` (points) and `LeagueRelics.plugin.js` (tiers and relics); data in
+`plugins/modes/data/leagues.json`, `league-ranks.json` and `league-relics.json`.
 
 ## The league character
 
@@ -15,10 +16,12 @@ world runs a league when its plugin config says so:
 "pluginConfig": { "league:type": 4 }
 ```
 
-(4 Trailblazer Reloaded, 5 Raging Echoes; `world.local.json` can set it per deployment).
-LeagueMode reads it at startup and claims the world's character profile (`api.setWorldProfile`,
-`GameConstants.WORLD_PROFILE`), so every login is the account's **league character**, a save
-kept apart from its main one (`persistence/PlayerProfile.ts`):
+(every league the cache names in enum 2670: 1 Twisted, 2 Trailblazer, 3 Shattered Relics, 4
+Trailblazer Reloaded, 5 Raging Echoes, 6 Demonic Pacts; `world.local.json` can set it per
+deployment, and `pluginConfig` `"league:start"`, an ISO date, says when the league began for the
+client's league clock). LeagueMode reads it at startup and claims the world's character profile
+(`api.setWorldProfile`, `GameConstants.WORLD_PROFILE`), so every login is the account's **league
+character**, a save kept apart from its main one (`persistence/PlayerProfile.ts`):
 
 - JSON saves: `data/saves/characters/league/<name>.json` beside the main `<name>.json`.
 - SQLite and IndexedDB: the key `league:<name>`, prefixed after the name is normalised, so no
@@ -40,8 +43,11 @@ kept apart from its main one (`persistence/PlayerProfile.ts`):
   character is online, since both share the name.
 
 The world's league is the one a new league character joins; the character keeps it in
-`league:type`. A new Trailblazer Reloaded character starts at Herblore 3, Runecraft 5 and
-Agility 10 (Wiki). A main character never has a league, whatever its attributes say.
+`league:type`. A new character starts at the league's levels (Wiki: Trailblazer and Trailblazer
+Reloaded Herblore 3, Runecraft 5, Agility 10; Raging Echoes and Demonic Pacts Herblore 3 and
+Runecraft 5; Twisted Herblore 3; Shattered Relics none, its skills being unlocked with Renown). A
+main character never has a league, whatever its attributes say. Leagues I-III have their names,
+colours and screens here but no relic, area or task catalogs yet.
 
 ## Events
 
@@ -55,6 +61,11 @@ Agility 10 (Wiki). A main character never has a league, whatever its attributes 
 | `league:points` | `{ player } -> { points, tasks }` | LeaguePoints |
 | `league:points-changed` | `{ player, points, previous, tasks }` | LeagueMode (journal), LeagueRelics listen |
 | `league:has-relic` | `{ player, relic } -> { active }` | LeagueRelics |
+| `league:relics` | `{ player } -> { league, chosen }` (tier index -> slot) | LeagueRelics |
+| `league:content` | `{ player, league, structs, enums }`: units push the rows the client lacks | LeagueRelics (Catalog), LeagueMode (Rank) answer |
+| `league:refresh-content` | `{ player }`: send the content payload again (before an interface opens) | LeagueMode (Content) |
+| `league:rank` | `{ player } -> { rank, name, next }` (ranks reached 0-7, the next threshold) | LeagueMode (Rank) |
+| `league:statistics` | `{ player } -> { counters }` (the summary's rows by name) | LeagueMode (Statistics) |
 
 ## What the client is sent
 
@@ -62,8 +73,14 @@ From the rsprox Leagues V recordings (osrs-captures 227/00070 and 227/00075; the
 same for every league):
 
 - Login: varbits `league_account` 10031 = 1, `league_type` 10032, `league_tutorial_completed`
-  10037 = 12, `league_total_tasks_completed` 10046; varps `league_points_completed` 2614,
-  `league_points_claimed` 2615, `league_points_previous` 2807; the relic selection varbits.
+  10037 = 12, `league_total_tasks_completed` 10046, `league_rank_notification` 17299 (the ranks
+  reached), `current_runeday` 9535 (whole days since 27 February 2002: live sends it with the
+  journal tabs and the Info panel's script reads it); varps `league_points_completed` 2614,
+  `league_points_claimed` 2615, `league_points_previous` 2807, the summary's tracking varps
+  (below) and, when the world's `league:start` is set, `tracking_playtime_leagues` 4523 =
+  minutes since the epoch of the league's start (the same value for every player in the Leagues V
+  captures, 27 November 2024, so it is the league's clock, not a play time); the relic selection
+  varbits.
 - A task award: 10046 and 2614 rise, then 2615; the popup (`notification:show`) "League Task
   Complete!" / "Task Completed: <col=ffffff>Name</col><br><br>Points Earned: <col=ffffff>N</col>"
   in the league's colour with jingle 283, and script 3226 refills the side panel's bar (656:23).
@@ -74,6 +91,65 @@ same for every league):
   passives) multiplies every gain after the world's rate, through the can-gain-experience
   hook's `multiplier`.
 
+## The content payload
+
+A league's screens read structs and enums the rev 241 cache only holds for the current league
+(Demonic Pacts): the relic catalog, Leagues I-III's rank thresholds. `league/Content.LeagueMode.js`
+asks every unit for its rows (`league:content`) and sends them as one `structOverrides` /
+`enumOverrides` payload (`sendContentData`; the client's `GamemodeContentStore` replaces the whole
+set on each payload, which is why no unit sends its own; rows for one struct from several units
+are merged into one) at a league login and on `league:refresh-content`. Virtual ids start at 200000 + league type x 1000; the relics use offsets
+0-199, the ranks 900-901. A league the cache carries sends an empty payload (Demonic Pacts: no
+overrides at all), which also clears whatever another league left in the client.
+
+## Panels
+
+The side panel's three top buttons, each opening its interface as the main modal with the click
+events on its menu frame, as captured (227/00075, 227/01845, 227/00579); the client draws the rest
+from varps and the league struct, so the server sends nothing else (`league/Panels.LeagueMode.js`,
+data `panels`):
+
+- **Summary** (656:7 -> `league_summary` 529): sound 2266, `if_setevents` on the stats row 2 (Time
+  Played, OP1 and the six target kinds) and script 7741 `[529:23, 2, "(Click to reveal)"]`; a click
+  on that row closes and re-opens the summary with the time played, in the captured shape (the two
+  largest non-zero units: "17 days, 2 hours", "17 days, 58 minutes", "19 hours, 46 minutes"), and
+  it stays revealed for the session. The time is the character's time online, counted here
+  (`league:play-time`, milliseconds, saved every minute and at logout) since the capture has no
+  play-time varp. Each of the three asks for the content payload again before it opens.
+  Live also ran the account summary's playtime script (3970) on the open; not sent, since that
+  panel is not mounted here. The rows read the points and task varps (LeaguePoints), the relic and
+  area selection varbits, varp 5484 `talent_points_earned` (Demonic Pacts' masteries, theirs) and
+  the statistics below. Every league type.
+- **Info** (656:2 -> `league_info` 654): `if_setevents` OP1 on `league_menu_frame` 654:17 slots
+  12-18. The panel's texts are the league struct's (the cache's, every league type).
+- **Rank** (656:10 -> `league_rank` 64): `if_setevents` OP1 on 64:16 slots 10-18; script 730 draws
+  the seven ranks from the struct's threshold enum (param 1857) and trophy enum (2041), the names
+  from enum 5201 and `league_points_completed`.
+
+### Ranks
+
+`league/Rank.LeagueMode.js`, data `league-ranks.json`: seven ranks a league (Bronze to Dragon) at
+the League Points thresholds the trophies are awarded in. Leagues IV-VI's are the cache's enums
+(5237 / 5719 / 5979; the Wiki's League_trophy tables agree, and the test checks it); Leagues
+I-III's structs carry none, so their rows are the Wiki's thresholds and the cache's trophy items
+by name, sent through the content payload. As captured, varbit `league_rank_notification` 17299 =
+the number of ranks reached, sent at login and on the award that crosses a threshold, with one
+game message per rank (`<col=229628>You've obtained Iron rank! You can claim your trophy from the
+Leagues Tutor in the main game.`); no popup. Trophies themselves (447) are not handed out yet.
+
+### Statistics
+
+`league/Statistics.LeagueMode.js`, data `statistics`: the summary's rows read the `tracking_*`
+varps 4510-4527 and varbit 11561; the server counts what its hooks see for a league character,
+one attribute `league:statistics` (name -> value), sent at login and as each changes: NPCs killed
+(`onNpcDeath`; bosses by the cache's boss param 1361, as NpcDrops reads it), deaths, players
+killed (`onPlayerDefeated`), damage dealt to NPCs and the highest hit (`onPlayerDealtDamage`),
+damage taken from NPCs (`onCombatHitResolved`), food (`food:eaten`), potions (`potions:drunk`),
+fish, ore and logs (`fishing:success`, `mining:success`, `woodcutting:success`). Stubbed at 0 for
+want of a source: echo bosses killed (none here), coins gained and lost, clues completed (no
+completion event), special attacks used (the special flag is cleared before the hit resolves) and
+the highest value item worn.
+
 ## Relics
 
 `LeagueRelics.plugin.js`, data `plugins/modes/data/league-relics.json`: eight tiers a league,
@@ -83,15 +159,23 @@ character's picks live in `league:relics` (tier index -> slot 1-3).
 - **The catalog.** The cache's relic interface (655) reads the league struct's tier enum (param
   870), tier structs (877 cost, 878 relic enum, 2045 passive struct) and relic structs (879 name,
   880 description, 885 tier, 1855 has-item), but the cache only carries the current league's.
-  The server sends a league's own as `structOverrides` / `enumOverrides` datasets
-  (`sendContentData`; `GamemodeContentStore` and the cs2 `struct_param` / `enum` ops read them
+  The server sends a league's own as `structOverrides` / `enumOverrides` datasets through the
+  content payload above (`GamemodeContentStore` and the cs2 `struct_param` / `enum` ops read them
   before the cache) at login and before the interface opens. Ids start at 200000 + league type
-  x 1000; icons are borrowed from the cache's own relic in the same tier and slot.
+  x 1000; icons are borrowed from the cache's own relic in the same tier and slot. Demonic Pacts
+  (`"6": { "fromCache": true }`) is read from the cache instead: its tiers, costs, passives and
+  relics come from struct 6436's enums, the relic keys are their names slugged, and no relic
+  hands out an item, since the cache does not say which do.
 - **The flow, as captured.** The side panel's View Relics (656:44) opens 655 as the main modal
   with `if_setevents` on its slots (655:22, 0-23) and menu (655:6, 10-20). A slot click sets
   `league_relic_last_viewed` (10048) to tier x 3 + slot and runs the client's redraw scripts 3193
   (the panel's components, the state 2 both captured clicks sent for an affordable, unchosen
-  tier (other states were not captured), the relic struct, the tier's passive struct) and 3181. Confirm (655:50) unlocks the viewed relic: its tier's selection varbit
+  tier (other states were not captured), the relic struct, the tier's passive struct) and 3181.
+  Known issue: on this web client the relic information panel stays blank after those two
+  scripts (`extra_info` 655:27 remains hidden, for data-driven and cache-native leagues alike;
+  every component id was re-checked against the rev 241 gamevals and the scripts run without a
+  cs2 error), so the pick is only reachable through `::relic` until the client's cs2 side is
+  fixed. Confirm (655:50) unlocks the viewed relic: its tier's selection varbit
   (10049-10053, 11696, 17301, 17302) = the slot, animation 8524, the league's unlock graphic
   (struct param 1021: 2603 Trailblazer Reloaded, 3044 Raging Echoes) at height 92, the modal
   closed, sounds 4215/4211/4213/4212 at 8/44/80/104. Points crossing a tier's cost show "New
@@ -148,5 +232,6 @@ Three relics have their effects (`leaguerelics/*.LeagueRelics.js`, numbers in th
 ## Not yet
 
 League tasks, area unlocks, combat masteries, the other tier passives (drop rates, run energy,
-clue boxes, minigame points, the ironman restriction), the league tutorial, trophies and
-rewards. Each is its own item on the progress tracker.
+clue boxes, minigame points, the ironman restriction), the league tutorial, the trophies,
+rankings, statistics and firsts screens, the reward and skill cape shops, and Shattered Relics'
+own panels. Each is its own item on the progress tracker.
