@@ -2,7 +2,7 @@
  * League ranks (data/league-ranks.json): Bronze to Dragon at a league's League Points thresholds,
  * the brackets the trophies are awarded in. The rank interface (64) reads the league struct's
  * threshold and trophy enums; the cache carries them for Leagues IV-VI and this unit sends
- * Leagues I-III's as overrides (league:content). As captured, varbit league_rank_notification
+ * Leagues I-III's as overrides (league:content-rows). As captured, varbit league_rank_notification
  * holds the number of ranks reached, sent at login and on the award that crosses a threshold,
  * with one game message per rank. Other plugins ask
  *
@@ -102,7 +102,7 @@ module.exports = function attach(api) {
   api.onCustomEvent("league:login", login);
   api.onCustomEvent("league:points-changed", pointsChanged);
   api.onCustomEvent("league:rank", answerRank);
-  api.onCustomEvent("league:content", content);
+  api.onCustomEvent("league:content-rows", content);
 };
 
 module.exports.thresholds = thresholds;

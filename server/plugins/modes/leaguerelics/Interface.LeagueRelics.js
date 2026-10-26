@@ -27,7 +27,7 @@ function open({ player }) {
   const { group, clickzones, clickzoneSlots, menuFrame, menuFrameSlots } = ui();
   // Read before the modal replaces the bank as the main interface.
   const bankOpen = Common.core.Bank.isOpen(player);
-  Common.api.emitCustomEvent("league:refresh-content", { player });
+  Common.api.emitCustomEvent("league:send-content", { player });
   const sender = player.getPacketSender();
   sender.sendInterface(group);
   sender.sendInterfaceFlagsRange(Unlock.uid(group, clickzones), clickzoneSlots[0], clickzoneSlots[1], FLAG_OP1);

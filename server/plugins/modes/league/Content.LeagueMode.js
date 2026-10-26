@@ -4,13 +4,14 @@
  * enumOverrides payload (GamemodeContentStore replaces the whole set on every payload, so the
  * units never send their own). Units answer
  *
- *   "league:content" { player, league, structs: [{ structId, params }], enums: [{ enumId, valueType, defaultValue, entries }] }
+ *   "league:content-rows" { player, league, structs: [{ structId, params }], enums: [{ enumId, valueType, defaultValue, entries }] }
  *
  * by pushing their rows; the payload goes out at a league login and whenever a unit asks for it
- * again with "league:refresh-content" { player } (before an interface opens, in case the client
- * reloaded). Rows for one struct from several units are merged, since the client keeps one params
- * map a struct. Virtual ids start at `base` on the query (data.content.virtualIdBase + league
- * type x 1000); each unit adds its own offsets.
+ * again with "league:send-content" { player } (before an interface opens, in case the client
+ * reloaded). The event names are the ones the areas plugin (#1352) uses for the same job.
+ * Rows for one struct from several units are merged, since the client keeps one params map a
+ * struct. Virtual ids start at `base` on the query (data.content.virtualIdBase + league type x
+ * 1000); each unit adds its own offsets.
  */
 const Common = require("./Common.LeagueMode");
 
@@ -21,7 +22,7 @@ function virtualIdBase(type) {
 
 function rows(player, type) {
   const query = { player, league: type, base: virtualIdBase(type), structs: [], enums: [] };
-  Common.api.emitCustomEvent("league:content", query);
+  Common.api.emitCustomEvent("league:content-rows", query);
   return query;
 }
 
@@ -52,7 +53,7 @@ function refresh(request) {
 
 module.exports = function attach(api) {
   api.onCustomEvent("league:login", login);
-  api.onCustomEvent("league:refresh-content", refresh);
+  api.onCustomEvent("league:send-content", refresh);
 };
 
 module.exports.send = send;

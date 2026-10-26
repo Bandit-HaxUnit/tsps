@@ -216,13 +216,13 @@ test("the time played survives a logout and the minute's save, and never counts 
   assert.equal(tasks.length, before, "no clock for a main character");
 });
 
-test("the content payload merges units' rows for one struct and goes out again on league:refresh-content", () => {
+test("the content payload merges units' rows for one struct and goes out again on league:send-content", () => {
   const echoes = character("merged");
-  custom["league:content"].push((query) => {
+  custom["league:content-rows"].push((query) => {
     if (query.league === 5) query.structs.push({ structId: 6211, params: { 999: query.base } });
   });
-  query("league:refresh-content", { player: echoes });
-  custom["league:content"].pop();
+  query("league:send-content", { player: echoes });
+  custom["league:content-rows"].pop();
   const structs = new Map(dataset(echoes, "structOverrides").map((row) => [row.structId, row.params]));
   assert.deepEqual(structs.get(6211), { 870: 205000, 999: 205000 }, "the relics' tier enum and the extra param on one row, with the league's base");
   assert.equal(dataset(echoes, "structOverrides").filter((row) => row.structId === 6211).length, 1);

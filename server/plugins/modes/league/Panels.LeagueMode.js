@@ -58,7 +58,7 @@ function startFlushing(player) {
 }
 
 function openModal(player, panel) {
-  Common.api.emitCustomEvent("league:refresh-content", { player });
+  Common.api.emitCustomEvent("league:send-content", { player });
   const sender = player.getPacketSender();
   sender.sendInterface(panel.group);
   if (panel.sound !== undefined) sender.sendSound(panel.sound, 1, 0);

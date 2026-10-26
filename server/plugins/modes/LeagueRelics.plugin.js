@@ -3,7 +3,7 @@
  * https://oldschool.runescape.wiki/w/Raging_Echoes_League/Relics): eight tiers unlocked with
  * League Points, three relics a tier, chosen for good, through the cache's relic interface. The
  * catalog (data/league-relics.json) reaches the client as structs and enums through LeagueMode's
- * `league:content`, since the cache only carries the current league's (Demonic Pacts, which is
+ * `league:content-rows`, since the cache only carries the current league's (Demonic Pacts, which is
  * read from it instead). Other plugins ask `league:has-relic` { player, relic } and
  * apply a relic's effect themselves (docs/leagues.md).
  */

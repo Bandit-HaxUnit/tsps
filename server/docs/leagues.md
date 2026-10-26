@@ -62,8 +62,8 @@ colours and screens here but no relic, area or task catalogs yet.
 | `league:points-changed` | `{ player, points, previous, tasks }` | LeagueMode (journal), LeagueRelics listen |
 | `league:has-relic` | `{ player, relic } -> { active }` | LeagueRelics |
 | `league:relics` | `{ player } -> { league, chosen }` (tier index -> slot) | LeagueRelics |
-| `league:content` | `{ player, league, structs, enums }`: units push the rows the client lacks | LeagueRelics (Catalog), LeagueMode (Rank) answer |
-| `league:refresh-content` | `{ player }`: send the content payload again (before an interface opens) | LeagueMode (Content) |
+| `league:content-rows` | `{ player, league, structs, enums }`: units push the rows the client lacks | LeagueRelics (Catalog), LeagueMode (Rank) answer |
+| `league:send-content` | `{ player }`: send the content payload again (before an interface opens) | LeagueMode (Content) |
 | `league:rank` | `{ player } -> { rank, name, next }` (ranks reached 0-7, the next threshold) | LeagueMode (Rank) |
 | `league:statistics` | `{ player } -> { counters }` (the summary's rows by name) | LeagueMode (Statistics) |
 
@@ -95,10 +95,10 @@ same for every league):
 
 A league's screens read structs and enums the rev 241 cache only holds for the current league
 (Demonic Pacts): the relic catalog, Leagues I-III's rank thresholds. `league/Content.LeagueMode.js`
-asks every unit for its rows (`league:content`) and sends them as one `structOverrides` /
+asks every unit for its rows (`league:content-rows`) and sends them as one `structOverrides` /
 `enumOverrides` payload (`sendContentData`; the client's `GamemodeContentStore` replaces the whole
 set on each payload, which is why no unit sends its own; rows for one struct from several units
-are merged into one) at a league login and on `league:refresh-content`. Virtual ids start at 200000 + league type x 1000; the relics use offsets
+are merged into one) at a league login and on `league:send-content`. Virtual ids start at 200000 + league type x 1000; the relics use offsets
 0-199, the ranks 900-901. A league the cache carries sends an empty payload (Demonic Pacts: no
 overrides at all), which also clears whatever another league left in the client.
 
