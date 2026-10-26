@@ -102,10 +102,17 @@ function sendUnlocks(player) {
 }
 
 /**
- * The screen opens on the tab and entry it showed last (the client keeps varps 3343 / 3344, and so
- * does `view`). No varp goes with the open: the confirm panel (733:40) shows itself whenever 3343 or
- * 3344 is sent on its own (its onVarTransmit runs script 5827), and the onLoad (5806) hides it.
+ * The confirm panel (733:40) shows itself from its onVarTransmit (script 5827) whenever varp 3343 or
+ * 3344 changes, and the client runs it once as the screen opens too, so the screen would open with
+ * an empty confirm up; it is hidden again a tick later, as the onLoad (5806) left it.
  */
+function hideConfirmLater(player) {
+  const { group, confirmPanel } = config();
+  Common.later(player, 1, () => {
+    if (isOpen(player)) player.getPacketSender().sendInterfaceDisplayState(uid(group, confirmPanel), true);
+  });
+}
+
 function open({ player }) {
   if (!isShattered(player)) return;
   const { group, tabs, tabChildren, entries: list, skills, bosses, quests } = config();
@@ -115,6 +122,7 @@ function open({ player }) {
   sender.sendInterfaceFlagsRange(uid(group, tabs), 0, TABS.length * tabChildren - 1, FLAG_OP1);
   const rows = Math.max(...[skills, bosses, quests].map((table, tab) => entries(TABS[tab]).length * table.entryChildren));
   sender.sendInterfaceFlagsRange(uid(group, list), 0, rows - 1, FLAG_OP1);
+  hideConfirmLater(player);
 }
 
 function isOpen(player) {
@@ -191,8 +199,11 @@ function accept({ player }) {
       sendUnlocks(player);
     }
   }
-  // As a tab click does: the list redraws and the confirm panel closes.
-  showTab(player, tab);
+  // No entry selected: the list redraws (733:18 runs on 3344) with the unlock, and the confirm
+  // panel that the same change shows is hidden again.
+  view.set(player, { tab, entry: -1 });
+  player.getPacketSender().sendConfig(config().selectionVarp, 0);
+  hideConfirmLater(player);
   return true;
 }
 

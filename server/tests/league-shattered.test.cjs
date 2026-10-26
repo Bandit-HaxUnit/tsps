@@ -88,7 +88,7 @@ function character(name, { league = 3, restore = null } = {}) {
   player.setUsername(name);
   player.setProfile("league");
   if (restore) restore.applyToPlayer(player);
-  const sent = { messages: [], varbits: new Map(), varps: new Map(), varpLog: [], subs: [], flags: [] };
+  const sent = { messages: [], varbits: new Map(), varps: new Map(), varpLog: [], subs: [], flags: [], hidden: [] };
   const sender = new Proxy({}, {
     get: (target, key) => {
       switch (key) {
@@ -104,6 +104,7 @@ function character(name, { league = 3, restore = null } = {}) {
           return sender;
         };
         case "sendInterfaceFlagsRange": return (...args) => (sent.flags.push(args), sender);
+        case "sendInterfaceDisplayState": return (target, hide) => (sent.hidden.push([target, hide]), sender);
         default: return () => sender;
       }
     },
@@ -175,7 +176,9 @@ test("the side panel's buttons open Info, the task list, fragments and unlocks",
   assert.deepEqual(player.sent.subs.at(-1), ["main", UNLOCKS]);
   assert.deepEqual(player.sent.flags.slice(-2), [[uid(UNLOCKS, 9), 0, 26, OP1], [uid(UNLOCKS, 18), 0, 239, OP1]],
     "skills 20 x 12 children is the longest list (bosses 31 x 4, quests 36 x 5)");
-  assert.equal(player.sent.varps.has(TAB_VARP), false, "no varp with the open: it would show the confirm panel");
+  assert.equal(player.sent.varps.has(TAB_VARP), false, "nothing with the open itself");
+  runTasks();
+  assert.deepEqual(player.sent.hidden.at(-1), [uid(UNLOCKS, 40), true], "a tick later the confirm panel the open showed is hidden");
 });
 
 test("Sage's Renown is awarded, spent all or nothing, and sent as varp 3276", () => {
@@ -303,12 +306,13 @@ test("unlocks: tabs, entries, and Accept paid in renown", () => {
   assert.equal(player.sent.varbits.get(13350), 0, "no renown, no unlock");
   emit("league:award-renown", { player, amount: 12 });
   click(player, UNLOCKS, 18, { slot: 12 * agility });
-  const tabSends = player.sent.varpLog.filter(([id]) => id === TAB_VARP).length;
+  tasks.length = 0;
   click(player, UNLOCKS, 47);
-  assert.equal(player.sent.varpLog.filter(([id]) => id === TAB_VARP).length, tabSends + 1, "Accept sends the tab again");
   assert.equal(player.sent.varbits.get(13350), 1, "Agility unlocked (script 5830: skill 16)");
   assert.equal(emit("league:renown", { player }).renown, 7, "it cost 5 (struct param 1442)");
-  assert.deepEqual(player.sent.varpLog.slice(-2), [[TAB_VARP, 0], [ENTRY_VARP, 0]], "as a tab click does: the tab, then no entry, which leaves the confirm panel hidden");
+  assert.deepEqual(player.sent.varpLog.at(-1), [ENTRY_VARP, 0], "no entry: the list redraws with the unlock");
+  runTasks();
+  assert.deepEqual(player.sent.hidden.at(-1), [uid(UNLOCKS, 40), true], "and the confirm panel is hidden a tick later");
   click(player, UNLOCKS, 47);
   assert.equal(emit("league:renown", { player }).renown, 7, "an unlocked skill isn't bought twice");
 
