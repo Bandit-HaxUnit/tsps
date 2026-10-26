@@ -47,5 +47,11 @@ module.exports = {
     require("./leaguerelics/TreasureArbiter.LeagueRelics")(api);
     require("./leaguerelics/Bloodthirsty.LeagueRelics")(api);
     require("./leaguerelics/SlayerMaster.LeagueRelics")(api);
+    require("./leaguerelics/FairysFlight.LeagueRelics")(api);
+    require("./leaguerelics/Globetrotter.LeagueRelics")(api);
+    require("./leaguerelics/BankersNote.LeagueRelics")(api);
+    require("./leaguerelics/ClueCompass.LeagueRelics")(api);
+    require("./leaguerelics/TotalRecall.LeagueRelics")(api);
+    require("./leaguerelics/Grimoire.LeagueRelics")(api);
   },
 };

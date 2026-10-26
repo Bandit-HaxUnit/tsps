@@ -101,6 +101,10 @@ relics are the first askers; nothing changes when nobody answers):
 | `slayer:always-on-task` | Slayer, for a Slayer monster the task does not cover | `{ player, npc, npcId, name, onTask }`: counted as on task everywhere `slayer:on-task` is asked, and a kill gives its Slayer XP and superior chance without counting down the task (`offTask` on `slayer:task-kill`; no keys) |
 | `slayer:superior-chance`, `slayer:superior-spawned`, `slayer:superior-rewards` | Slayer's superiors | `{ player, npc, oneIn }`; `{ player, npc, superior }`; `{ player, npc, normalId, drops, uniqueBoost, extraRolls }` as a superior drops: more rolls on the normal monster's table, a higher unique chance, drops of its own |
 | `slayer:reward-cost` | Slayer's reward shop | `{ player, kind, cost, bit?, itemId? }` for an unlock, extension, cancel, block or purchase; never below 0 |
+| `fairy-rings:destinations`, `spirit-trees:destinations` | FairyRings, SpiritTrees | `{ list }` -> `{ code, name, location }` for every ring with a destination; `{ player, list }` -> `{ name, location }` for the trees the player could travel to now |
+| `construction:jewellery-box-destinations` | Construction's jewellery box | `{ player, list }` -> `{ label, location, wildernessLevel }` for the ornate box's destinations (its jewellery's Wilderness level: 30 for dragonstone pieces) |
+| `treasure-trails:stashes`, `treasure-trails:current-step` | Treasure Trails | `{ list }` -> `{ tier, location }` for every STASH unit; `{ player, location, target }`: where the clue read last leads, while that trail is carried; `requirement-waived` now carries `itemId` (Falo's item) |
+| `magic:spell-unlocked` | the Mage Arena's god spells | `{ player, spellId, unlocked }` asked before a locked spell is refused |
 | `slayer:bracelet`, `slayer:remote-task` | Slayer | `{ player, npc, bracelet, chance, consumeCharge }` for the bracelet of slaughter; `{ player, allowed }` after a gem, ring or helmet check: a new task from the last master or a cancel, from anywhere |
 
 ## What the client is sent
@@ -451,6 +455,47 @@ Animal Wrangler's Hunter and cooking ones) do not.
   Not here: Brimstone and Larran's keys anywhere (they follow the league's areas; off-task kills
   drop no keys).
 
+### The item and teleport relics
+
+Their teleports share the standard animation, their item's Wilderness limit, and the league's
+areas: a destination in an area the character has not unlocked is refused (`league:area-at`
+and `league:areas`, answered by the league's area unlocks; with nobody answering, everywhere is
+open). Each item remembers its last destination. The menus' grouping and wording are ours.
+
+- **Fairy's Flight** (Trailblazer Reloaded tier 2, Raging Echoes tier 3): the fairy mushroom's
+  Teleport (or, worn, Fairy-Ring, Spirit-tree, Tool-leprechauns) goes to any fairy ring by its
+  code, any spirit tree the character could travel to by tree, and any tool leprechaun (named
+  after their nearest fairy ring: ours); from any Wilderness level except to a spirit tree (level
+  20, Wiki). Not here: the Tree Gnome Village autocompletion (the quest's own).
+- **Globetrotter** (Trailblazer Reloaded tier 2): the pendant's Nexus goes to the spellbooks'
+  teleports (standard, ancient, lunar, Arceuus, and the house when the character owns one: not
+  a Last-destination, which could not enter it), its
+  Jewellery to the ornate jewellery box's 27 destinations, up to level 20 Wilderness, 30 for a
+  dragonstone piece's destination and its last destination (Wiki, 6 December 2023). No runes.
+- **Banker's Note** (Trailblazer Reloaded tier 3, Raging Echoes tier 6): an item used on the note
+  is noted, a note unnoted (as many as the inventory and the stack's limit hold); Activate repeats
+  the last item;
+  Note-Quantity and Un-note-Quantity set how many each use converts (all until set: ours); Toggle
+  switches Activate between noting and unnoting (ours: the Wiki does not say). Not here: Guardians
+  of the Rift's essence rule.
+- **Clue Compass** (Raging Echoes tier 3): the compass goes to any STASH unit, built or not, and
+  to Falo the Bard; Current-step to where the clue read last leads (not a step that asks for a
+  kill, nor a hot-cold step's spot: ours), from any Wilderness level, onto the nearest open tile
+  when the spot is solid; used on Falo it is the item he asks for. The Wiki's three Varlamore
+  units left out near the Twilight Temple count here. Not here: beginner clues' Current-step
+  (their trails are kept apart).
+- **Total Recall** (Raging Echoes tier 6): the Crystal of Echoes' Save-memory keeps the place,
+  Hitpoints (up to 127, as live), Prayer and special attack energy; Teleport-back returns there
+  from any Wilderness level and sets the three back; Check-memories says what is kept (ours). Not
+  in an instance, nor underwater at Fossil Island. No cooldown; the memory outlasts death.
+- **Grimoire** (Raging Echoes tier 7): spells' area, quest and diary requirements are lifted
+  (`magic:spell-unlocked`; here the Mage Arena's god spells without their 100 casts); the Prayer
+  level still counts, and no prayer here is gated by a quest. The Arcane grimoire's spellbook
+  swap is the item's own plugin (Leagues polish).
+- **Reloaded** (Raging Echoes tier 4): one more relic of tiers 1-3, a different one from that
+  tier's own pick, chosen with the same click on it (`league:relics-extra`; any item it hands out
+  is given). The relic interface shows only each tier's own pick: ours.
+
 ### Equilibrium (both leagues)
 
 Trailblazer Reloaded's tier 6 and Raging Echoes' tier 4: every gain of experience
@@ -472,6 +517,6 @@ it is a plain XP drop.
 
 League tasks, area unlocks, combat masteries, the other tier passives (drop rates, run energy,
 clue boxes, minigame points, the ironman restriction), the league tutorial, trophies and
-rewards. Each is its own item on the progress tracker. Of the relics, the item and teleport ones
-follow in their own PR (the plan in the relic effects PR); Overgrown's automatic harvest and
-replanting and Pocket Kingdom's hourly cycle are their own items.
+rewards. Each is its own item on the progress tracker. Of the relics, Bank Heist follows in its
+own PR (it needs a list of the world's banks); Overgrown's automatic harvest and replanting and
+Pocket Kingdom's hourly cycle are their own items.

@@ -63,7 +63,21 @@ function hasRelic(player, key) {
   const type = leagueOf(player);
   if (type === null) return false;
   const picks = chosen(player);
-  return catalog(type).tiers.some((tier, tierIndex) => tier.relics[picks[tierIndex] - 1]?.key === key);
+  if (catalog(type).tiers.some((tier, tierIndex) => tier.relics[picks[tierIndex] - 1]?.key === key)) return true;
+  return reloadedPick(player, type, picks)?.key === key;
+}
+
+/** The extra pick Reloaded gives (Raging Echoes' tier 4): { tier, slot } saved beside the tiers' picks. */
+const RELOADED_ATTRIBUTE = "league:relics-extra";
+
+/** The relic of the extra pick, while the character holds Reloaded itself; else null. */
+function reloadedPick(player, type = leagueOf(player), picks = chosen(player)) {
+  const effect = data.effects.reloaded;
+  if (!effect || ![].concat(effect.league).includes(type)) return null;
+  const holds = catalog(type).tiers.some((tier, tierIndex) => tier.relics[picks[tierIndex] - 1]?.key === effect.key);
+  const extra = player.getAttribute(RELOADED_ATTRIBUTE);
+  if (!holds || !extra || !effect.tiers.includes(extra.tier)) return null;
+  return relic(type, extra.tier, extra.slot);
 }
 
 /**
@@ -194,7 +208,7 @@ function message(key, values = {}) {
 }
 
 module.exports = {
-  init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, ids, message, maxHitFor, restoreSpecial,
+  init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, reloadedPick, RELOADED_ATTRIBUTE, ids, message, maxHitFor, restoreSpecial,
   bankHasRoom, bank, noted, multipliable, multipliedLoot, isPotion, hasStackableSecondary, batchActions, derivedHit, isBuildingDerivedHit, RELICS_ATTRIBUTE,
   get data() { return data; },
   get api() { return api; },

@@ -113,8 +113,8 @@ function trailLength(tier, random = Math.random, player = null) {
  * requirement (a league relic): `kind` is "emote" (what to wear), "falo" (the item to show) or
  * "charlie" (the item to bring).
  */
-function requirementWaived(player, kind) {
-  const request = { player, kind, waived: false };
+function requirementWaived(player, kind, itemId = null) {
+  const request = { player, kind, itemId, waived: false };
   api?.emitCustomEvent?.("treasure-trails:requirement-waived", request);
   return request.waived === true;
 }
@@ -223,6 +223,7 @@ function read(event) {
     return true;
   }
   const trail = stateOf(event.player, event.slot);
+  event.player.setAttribute(LAST_READ_ATTRIBUTE, { tier: trail.tier.name, token: trail.state.token });
   if (trail.step.family === "map" && trail.step.interfaceId != null) {
     sender.sendInterface(trail.step.interfaceId);
     return true;
@@ -650,8 +651,28 @@ function readActions() {
   return { Read: read, "Check steps": checkSteps };
 }
 
+/** The trail whose clue the player read last ("treasure-trails:current-step"). */
+const LAST_READ_ATTRIBUTE = "treasure-trails:last-read";
+
+/**
+ * "treasure-trails:current-step" { player, location, target }: where the clue the player read last
+ * leads (a league relic's clue compass), while that trail is still carried; `target` is the step's
+ * kind of goal ("npc", "loc", "kill", "coord", ...) and `family` its step's ("hotcold", "emote", ...).
+ */
+function currentStep(request) {
+  if (!request?.player) return;
+  const last = request.player.getAttribute(LAST_READ_ATTRIBUTE);
+  const trail = last && trails(request.player).find((entry) => entry.tier.name === last.tier && entry.state.token === last.token);
+  if (!trail?.step?.location) return;
+  request.location = trail.step.location;
+  request.target = trail.step.target ?? null;
+  request.family = trail.step.family ?? null;
+}
+
 module.exports = function attachTreasureTrails(pluginApi) {
   api = pluginApi;
+  api.persistAttribute?.(LAST_READ_ATTRIBUTE, null);
+  api.onCustomEvent("treasure-trails:current-step", currentStep);
   core = api.core;
   // Build before gameplay so the first object/NPC click cannot stall a game tick.
   catalogues = new Map(TIERS.map(tier => [tier.name, loadCatalogue(tier)]));
