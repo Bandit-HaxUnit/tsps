@@ -152,6 +152,17 @@ test("Ghommal: the rewards variant, the lowest tier's condition, the claim after
   assert.equal(Rewards.dialogueVariant({ player, definition }), null, "nothing left to claim");
 });
 
+test("combat-achievements:tier: unlocked once reached, claimed only after Ghommal", () => {
+  const player = createPlayer();
+  for (const task of Data.tiers()[0].tasks) Progress.complete(player, task, { silent: true });
+  const request = { player, tier: "Easy" };
+  Ca._test.onTier(request);
+  assert.deepEqual([request.unlocked, request.claimed], [true, false]);
+  Progress.setClaimed(player, Data.tiers()[0]);
+  Ca._test.onTier(request);
+  assert.deepEqual([request.unlocked, request.claimed], [true, true]);
+});
+
 test("Ghommal: no claim without the inventory space", () => {
   const player = createPlayer({ freeSlots: 1 });
   for (const task of Data.tiers()[0].tasks) Progress.complete(player, task, { silent: true });

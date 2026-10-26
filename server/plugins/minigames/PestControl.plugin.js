@@ -16,7 +16,6 @@ const { HitDamage } = require("../../src/main/typescript/elvarg/game/content/com
 const { HitMask } = require("../../src/main/typescript/elvarg/game/content/combat/hit/HitMask");
 const { LocModelType } = require("../../src/main/typescript/elvarg/game/cache/codec/rs/config/loctype/LocModelType");
 const { PathFinder } = require("../../src/main/typescript/elvarg/game/model/movement/path/PathFinder");
-const { ActionNode, BotController, SelectorNode } = require("../../src/main/typescript/elvarg/game/bot/BehaviorTree");
 const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
 const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
 const { NpcIdentifiers } = require("../../src/main/typescript/elvarg/util/NpcIdentifiers");
@@ -26,6 +25,7 @@ const { buildRoamingPvpMetadata } = require("../bots/behaviours/pvp/PvpAssignmen
 const { applyGeneratedPvpLoadout } = require("../bots/behaviours/policies/PvpLoadoutPolicy.PlayerBots");
 const { ATTR_SKIP_PERSISTENCE } = require("../bots/runtime/PersistenceConstants.PlayerBots");
 const { ShopManager } = require("../../src/main/typescript/elvarg/game/model/container/shop/ShopManager");
+const Bots = require("./pestcontrol/Bots.PestControl");
 
 const CURRENT_PET_ATTRIBUTE = "pets:current";
 
@@ -63,11 +63,6 @@ function setPoints(player, points) {
 const ATTR_WAITING_BOAT = "pest-control:waiting-boat";
 const PEST_CONTROL_POINTS = "PEST_CONTROL_POINTS";
 const VOID_KNIGHT_SHOP = 11;
-const BOT_DEFEND_OFFSETS = [
-  [-2, 1], [-1, 1], [0, 1], [1, 1], [2, 1],
-  [-2, 0], [-1, 0], [1, 0], [2, 0],
-  [-2, -1], [-1, -1], [0, -1], [1, -1], [2, -1],
-];
 
 const BOATS = [
   {
@@ -344,30 +339,6 @@ function adoptPendingBots(state, players) {
   }
 }
 
-function chooseDefenceTarget(knight, npcs, random = Math.random) {
-  const combat = knight.getCombat();
-  const attacker = combat.getAttacker?.();
-  const hitQueue = combat.getHitQueue();
-  const engaged = [];
-  for (const npc of npcs) {
-    if (!npc.__pcType
-      || npc.getHitpoints() <= 0
-      || npc.isRegistered?.() === false
-      || npc.getPrivateArea?.() !== knight.getPrivateArea?.()
-      || npc.getCombat?.().getTarget?.() !== knight
-      || (npc !== attacker && !hitQueue.hasPendingHitFrom(npc))) continue;
-    engaged.push(npc);
-  }
-  return engaged[Math.floor(random() * engaged.length)] ?? null;
-}
-
-function createDefenderTree(match) {
-  return new SelectorNode([
-    new ActionNode(({ player }) => match.defendKnight(player)),
-    new ActionNode((context) => match.holdDefencePosition(context)),
-  ]);
-}
-
 function gateGroupKey(location) {
   if (location.getX() === 2643) return "west";
   if (location.getX() === 2670) return "east";
@@ -437,11 +408,7 @@ class PestControlMatchArea extends PrivateArea {
       if (npc !== this.match.knight) npc.getCombat().getLastAttack().reset();
       this.match.processPest(npc);
     }
-    if (mobile.isPlayer?.()) {
-      const player = mobile.getAsPlayer();
-      if (player.isPlayerBot?.() === true) this.match.processBot(player);
-      this.match.updatePlayerOverlay(player);
-    }
+    if (mobile.isPlayer?.()) this.match.updatePlayerOverlay(mobile.getAsPlayer());
   }
 }
 
@@ -455,7 +422,7 @@ class PestControlMatch {
     this.portalByNpc = new Map();
     this.portals = new Map();
     this.structures = new Map();
-    this.botControllers = new Map();
+    this.bots = new Map();
     this.elapsedTicks = 0;
     this.lastCycle = -1;
     this.ended = false;
@@ -485,49 +452,27 @@ class PestControlMatch {
       this.portalByNpc.set(npc, state);
     });
 
-    let defenderIndex = 0;
+    const bots = players.filter((player) => player.isPlayerBot?.() === true);
+    const assignments = Bots.assignRoles(bots.length);
+    bots.forEach((bot, index) => {
+      if (assignments[index].role === Bots.ROLES.REPAIRER) Bots.equipRepairer(bot);
+      this.bots.set(bot, Bots.createBot(this, pluginApi, bot, assignments[index]));
+    });
     for (const player of players) {
       this.players.set(player, { activity: 100, damage: 0, sent: new Map() });
-      if (player.isPlayerBot?.() === true) {
-        const [offsetX, offsetY] = BOT_DEFEND_OFFSETS[defenderIndex++ % BOT_DEFEND_OFFSETS.length];
-        const defendAt = KNIGHT_LOCATION.clone().add(offsetX, offsetY);
-        this.botControllers.set(player, new BotController(
-          player,
-          defendAt.getX(),
-          defendAt.getY(),
-          defendAt.getZ(),
-          createDefenderTree(this)
-        ));
-      }
       moveBetweenAreas(player, this.area, GAME_START.clone());
     }
   }
 
-  defendKnight(player) {
-    const combat = player.getCombat();
-    const current = combat.getTarget?.();
-    const target = chooseDefenceTarget(this.knight, current ? [current] : [])
-      ?? chooseDefenceTarget(this.knight, this.npcs);
-    if (!target) {
-      if (current?.__pcType) combat.reset();
-      return "failure";
-    }
-    if (current !== target) combat.attack(target);
-    return "running";
+  knightLocation() {
+    return [KNIGHT_LOCATION.getX(), KNIGHT_LOCATION.getY()];
   }
 
-  holdDefencePosition({ player, spawnX, spawnY, spawnZ }) {
-    if (player.getHitpoints() <= 0 || player.getPrivateArea?.() !== this.area) return "failure";
-    const destination = new Location(spawnX, spawnY, spawnZ);
-    if (player.getLocation().getDistance(destination) <= 1) return "running";
-    if (player.getMovementQueue().size() === 0) {
-      PathFinder.calculateWalkRoute(player, spawnX, spawnY);
-    }
-    return "running";
-  }
-
-  processBot(player) {
-    this.botControllers.get(player)?.tick(Date.now());
+  /** Every bot thinks once a tick, from the match's own tick: the world strides idle bots. */
+  processBots() {
+    if (this.bots.size === 0) return;
+    const nowMs = Date.now();
+    for (const bot of this.bots.values()) bot.tick(nowMs);
   }
 
   spawnNpc(id, location) {
@@ -641,6 +586,7 @@ class PestControlMatch {
     player.setAttribute("pest-control:match", null);
     if (!this.players.has(player)) return;
     this.players.delete(player);
+    this.bots.delete(player);
     if (logout) player.setLocation(OUTPOST_RETURN.clone());
     if (!this.ended && this.players.size === 0) this.finish(false, "All players left the island.");
   }
@@ -671,6 +617,7 @@ class PestControlMatch {
     if (this.elapsedTicks % 5 === 0) {
       for (const state of this.players.values()) state.activity = clampActivity(state.activity - 1);
     }
+    this.processBots();
   }
 
   dropNextShield() {
@@ -959,6 +906,7 @@ class PestControlMatch {
       this.players.delete(player);
       releaseMatchPlayer(player, this.area);
     }
+    this.bots.clear();
     this.cleanupStructures();
     this.area.destroy();
     this.cleanupNpcs();
@@ -1234,11 +1182,11 @@ module.exports = {
   name: "PestControl",
   members: true,
   register(api) {
-    pluginApi = api;
     AreaManager = api.getAreaManager();
     ObjectManager = api.getObjectManager();
     RegionManager = api.getRegionManager();
     World = api.getWorld();
+    pluginApi = api;
     api.registerNpcCombatMethodProvider(DEFILER_IDS, DefilerCombatMethod);
     api.registerNpcCombatMethodProvider(TORCHER_IDS, TorcherCombatMethod);
     createPestControl(api);
@@ -1252,7 +1200,9 @@ module.exports = {
     botsNeeded,
     moveBetweenAreas,
     adoptPendingBots,
-    chooseDefenceTarget,
+    chooseDefenceTarget: Bots.chooseDefenceTarget,
+    Bots,
+    PestControlMatch,
     gateGroupKey,
     releaseMatchPlayer,
     cleanupMatchNpcs,

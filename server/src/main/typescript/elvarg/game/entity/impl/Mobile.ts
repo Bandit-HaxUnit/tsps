@@ -35,6 +35,8 @@ const getWorld = () =>
   require("../../World").World as typeof import("../../World").World;
 const getPlayerRights = () =>
   require("../../model/rights/PlayerRights").PlayerRights as typeof import("../../model/rights/PlayerRights").PlayerRights;
+const getPluginManager = () =>
+  require("../../../plugins/PluginManager").PluginManager as typeof import("../../../plugins/PluginManager").PluginManager;
 
 class MobileTask extends Task {
     constructor(ticks: number, private readonly execFunc: Function) {
@@ -675,6 +677,9 @@ export abstract class Mobile extends Entity {
             if (hit.getDamage() < 0) hit.setDamage(0);
             return hit;
         }
+        // Final damage includes direct hits (poison, recoil, scripted hazards) as well as
+        // ordinary combat impacts. Plugins mutate the HitDamage before the HP cap.
+        getPluginManager().emitCustomEvent("combat:damage-apply", { target: this, hit });
         const PlayerRights = getPlayerRights();
         // Developers take no damage unless they turned it on (::mortal, for this session).
         const protectedDeveloper =

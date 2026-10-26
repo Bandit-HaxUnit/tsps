@@ -7719,7 +7719,7 @@ export class OsrsClient {
             if (block.seq) {
                 const seqId = block.seq.id | 0;
                 if (seqId >= 0) {
-                    this.npcEcs.handleServerSequence(ecsId, seqId, block.seq.delay | 0);
+                    this.npcEcs.handleServerSequence(ecsId, seqId, block.seq.delay | 0, getClientCycle() | 0);
                 } else {
                     this.npcEcs.clearSeq(ecsId);
                 }
