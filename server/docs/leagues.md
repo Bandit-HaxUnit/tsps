@@ -332,7 +332,8 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   its level gives in the cache (params 1456-1458; Venomaster's are poison severities 15/25/35,
   hitting 3/5/7); the sets' numbers are only in their texts. Venomaster's chance (25%) is this
   server's, and its immunity stops new poison without curing a running one. The extra rolls are
-  rolled with the hit's own spell, never a special attack, and pay XP like any hit. The per-tick
+  rolled with the hit's own spell, never a special attack, and pay XP like any hit, for no more
+  than the hitpoints left after the damage already queued (none after a killing blow). The per-tick
   effects run as one task per Shattered Relics character, from login.
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price
