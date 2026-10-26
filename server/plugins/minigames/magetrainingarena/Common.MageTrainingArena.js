@@ -83,8 +83,16 @@ function points(player, type) {
   return Math.max(0, Number(player.getAttribute(POINTS_ATTRIBUTE(type))) || 0);
 }
 
-/** Adds (or with a negative amount, spends) points, up to the type's cap; returns what changed. */
-function addPoints(player, type, amount) {
+/**
+ * Adds (or with a negative amount, spends) points, up to the type's cap; returns what changed.
+ * Points `earned` in a room may be raised by content ("minigame:points", a league fragment).
+ */
+function addPoints(player, type, amount, earned = false) {
+  if (earned && amount > 0) {
+    const paid = { player, minigame: "mage-training-arena", kind: type, amount };
+    api?.emitCustomEvent?.("minigame:points", paid);
+    if (Number.isFinite(paid.amount) && paid.amount > amount) amount = paid.amount;
+  }
   const cap = data.points.caps[type];
   const before = points(player, type);
   const after = Math.max(0, Math.min(cap, before + Math.floor(amount)));

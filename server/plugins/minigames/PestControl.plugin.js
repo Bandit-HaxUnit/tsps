@@ -284,6 +284,13 @@ let RegionManager;
 let World;
 let pluginApi;
 
+/** A win's commendation points, as content may raise them ("minigame:points", a league fragment). */
+function rewardPoints(player, points) {
+  const request = { player, minigame: "pest-control", kind: "commendation", amount: points };
+  pluginApi?.emitCustomEvent?.("minigame:points", request);
+  return Number.isSafeInteger(request.amount) && request.amount > points ? request.amount : points;
+}
+
 function moveBetweenAreas(player, area, location) {
   const current = player.getArea?.();
   if (current && current !== area) {
@@ -870,11 +877,12 @@ class PestControlMatch {
     for (const player of players) {
       const state = this.players.get(player);
       if (won && state.activity >= MIN_REWARD_ACTIVITY) {
-        setPoints(player, getPoints(player) + this.boat.points);
+        const points = rewardPoints(player, this.boat.points);
+        setPoints(player, getPoints(player) + points);
         const coins = player.getSkillManager().getCombatLevel() * 10;
         player.getInventory().adds(ItemIdentifiers.COINS, coins);
         player.sendMessage(
-          `Congratulations! You receive ${this.boat.points} Void Knight commendation points and ${coins} coins.`
+          `Congratulations! You receive ${points} Void Knight commendation points and ${coins} coins.`
         );
       } else if (won) {
         player.sendMessage("The Void Knights noticed your lack of activity, so you receive no reward.");

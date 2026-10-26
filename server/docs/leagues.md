@@ -119,7 +119,9 @@ relics are the first askers; nothing changes when nobody answers):
 | `construction:materials` | Construction, before a build's materials go | `{ player, buildable, materials }`: a listener may lower an amount |
 | `magic:enchant-pieces`, `magic:spell-batch` | the jewellery enchantments; the Lunar crafting spells | `{ player, spellName, itemId, pieces }` pieces a cast enchants, each with its XP; `{ player, spellName, batch }` items a cast converts |
 | `magic:alchemy-policy` (extended) | core alchemy | now with `high` (High Level Alchemy) |
-| `minigame:points` | the Hallowed Sepulchre's coffins | `{ player, minigame, kind, amount }` before a minigame's reward points or tokens are given: a listener may raise `amount` |
+| `minigame:points` | the Hallowed Sepulchre's coffins (`hallowed-marks`), Pest Control (`commendation`), Soul Wars (`zeal-tokens`), the Tithe Farm (`tithe-points`), the Mage Training Arena's rooms (each pizazz type) | `{ player, minigame, kind, amount }` before a minigame's reward points or tokens are given: a listener may raise `amount` |
+| `minigame:chance` | the Motherlode Mine (`golden-nugget`), Hunter's drift nets (`fossil-island` `fossil`) | `{ player, minigame, kind, multiplier }`: the find `multiplier` times as likely |
+| `big-chompy-bird-hunting:kill-credit` | Big Chompy Bird Hunting's kill count | `{ player, kills }` a chompy kill counts for |
 | `thieving:pickpocket-target` (extended) | Thieving | now with `chanceBonus` (a percent more success, stacking as the gloves of silence do) and `painless` (a stun without the damage) |
 | `prayer:bury` (extended) | Prayer | now scatters demonic ashes too (never for the bonecrusher's `crushed`) |
 | `woodcutting:nest-chance`, `woodcutting:nest-drop` | Woodcutting | `{ player, multiplier }`: a bird nest `multiplier` times as likely; `{ player, itemId, handled }` before a nest falls (handled: a listener took it) |
@@ -446,6 +448,14 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   (`agility:mark`). Grave Robber raises a coffin's hallowed marks, the Grand Hallowed Coffin's too
   (ours), through the Sepulchre's new `minigame:points`. Clued In makes each clue scroll an NPC drops
   at least 1 in 30/25/15 (`npc-drops:tertiary-chance`). The scroll box message is this server's.
+- **Minigame effects** (`league/FragmentMinigames.LeagueMode.js`, data `minigameEffects`):
+  Barbarian Pest Wars (Pest Control's commendation points and Soul Wars' zeal tokens), Rogues'
+  Chompy Farm (the Tithe Farm's points; a chompy kill counted 2-4 times on the ogre bow's count)
+  and Mother's Magic Fossils (the Mage Training Arena's pizazz points earned in its rooms; the
+  Motherlode Mine's golden nuggets and Fossil Island's fossils likelier) pay x2/x3/x4, through the
+  minigames' new `minigame:points` and `minigame:chance` and the quest's
+  `big-chompy-bird-hunting:kill-credit`. Soul Wars' zeal itself (the ranking total) is not raised,
+  only the tokens paid.
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price
   now, from the Wiki's Initial Cost less the prerequisite packs already unlocked, and 0 once
@@ -458,8 +468,9 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   only the fights inside. The Wiki gives no message for either lock; the boss one is this
   server's, said once per boss every few seconds.
 
-Not yet: the other fragments' effects (Barbarian Pest Wars, Rogues' Chompy Farm and Mother's
-Magic Fossils; Rune Escape, which needs the
+Not yet: the other fragments' effects (Barbarian Assault's honour points and the Rogues' Den
+safe, which this server doesn't have; Fossil Island's fossils other than the drift nets', which no
+other activity here gives; Rune Escape, which needs the
 Ourania Altar this server doesn't have; Plank Stretcher outside a house build, as Mahogany Homes; Tactical
 Duelist and the ranged weapons' charges, which no hook reports; Livin' On A Prayer, Special
 Discount, Thrall Damage, Superior Tracking, Slay 'n' Pay and the god-armour four) and the other

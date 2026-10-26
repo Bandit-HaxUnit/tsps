@@ -209,8 +209,12 @@ function rewards(player, count) {
   const boost = { player, vessel: "bottle", tier: "medium", multiplier: 1 };
   H.api.emitCustomEvent("treasure-trails:vessel-chance", boost);
   const bottleOneIn = Math.max(1, Math.floor(600 / (boost.multiplier > 1 ? boost.multiplier : 1)));
+  // Content may make fossils commoner ("minigame:chance", a league fragment): `multiplier` times.
+  const fossils = { player, minigame: "fossil-island", kind: "fossil", multiplier: 1 };
+  H.api.emitCustomEvent("minigame:chance", fossils);
+  const fossilOneIn = Math.max(1, Math.floor(25 / (fossils.multiplier > 1 ? fossils.multiplier : 1)));
   for (let i = 0; i < count; i++) {
-    if (C.roll(1, 25) === 1) { const f = fossil(); if (f) result.push(f); }
+    if (C.roll(1, fossilOneIn) === 1) { const f = fossil(); if (f) result.push(f); }
     else if (C.roll(1, bottleOneIn) === 1 && !C.ownsClue(player, "MEDIUM") && !result.some(([id]) => id === clueId)) result.push([clueId, 1]);
     else result.push([fish[C.roll(0, fish.length - 1)], 1]);
   }

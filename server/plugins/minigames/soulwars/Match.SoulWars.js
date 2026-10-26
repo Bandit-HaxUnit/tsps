@@ -289,7 +289,10 @@ class Game {
     const first = Common.getVarp(player, "zeal") === 0;
     const zeal = this.zealFor(player, result);
     Common.addVarp(player, "zeal", zeal);
-    const tokens = Common.addVarp(player, "zeal_tokens", zeal);
+    // Content may raise the tokens a game pays ("minigame:points", a league fragment); the zeal itself stays.
+    const paid = { player, minigame: "soul-wars", kind: "zeal-tokens", amount: zeal };
+    Common.api.emitCustomEvent?.("minigame:points", paid);
+    const tokens = Common.addVarp(player, "zeal_tokens", Number.isSafeInteger(paid.amount) && paid.amount > zeal ? paid.amount : zeal);
     if (result === "win") Common.addVarp(player, "total_wins", 1);
     player.sendMessage(first ? Common.message("zealFirst", { zeal }) : Common.message("zeal", { zeal, tokens }));
     this.endScreen(player, zeal, tokens);
