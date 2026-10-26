@@ -61,6 +61,12 @@ colours and screens here but no relic, area or task catalogs yet.
 | `league:points` | `{ player } -> { points, tasks }` | LeaguePoints |
 | `league:saved-points` | `{ save } -> { points, tasks }` (an offline league character's save) | LeaguePoints |
 | `league:account-points` | `{ player } -> { leagues, total }` (a main character's league points, by type) | LeagueMode (Records) |
+| `league:award-renown` / `league:spend-renown` | `{ player, amount } -> { awarded }` / `{ spent }` (Shattered Relics' Sage's Renown) | LeagueMode (Shattered) |
+| `league:renown` | `{ player } -> { renown }` | LeagueMode (Shattered) |
+| `league:grant-fragment` | `{ player, id, xp? }` owns a Shattered Relics fragment | LeagueMode (Fragments) |
+| `league:unlock-skill` | `{ player, skill }` unlocks a Shattered Relics skill for free | LeagueMode (Unlocks) |
+| `league:unlocks` | `{ player } -> { skills, bosses, quests }` | LeagueMode (Unlocks) |
+| `league:open-tasks` / `league:open-fragments` / `league:open-unlocks` | `{ player }` from Shattered Relics' side panel | LeagueTasks (#1358) / Fragments / Unlocks |
 | `league:points-changed` | `{ player, points, previous, tasks }` | LeagueMode (journal), LeagueRelics listen |
 | `league:has-relic` | `{ player, relic } -> { active }` | LeagueRelics |
 | `league:relics` | `{ player } -> { league, chosen }` (tier index -> slot) | LeagueRelics |
@@ -284,6 +290,38 @@ character played. On this server's NPC spawns only `::leagueshop` reaches the sh
 Tutor spawned (315, Lumbridge) has neither Trade nor Rewards, and `npc-interactions.json` binds its
 Talk-to to a custom shop, so its conversation never runs.
 
+## Shattered Relics
+
+Leagues III's own screens (`league/Shattered.LeagueMode.js`, `Fragments.LeagueMode.js`,
+`Unlocks.LeagueMode.js`, data `league-shattered.json`). No recording exists (the league ended in
+March 2022, before the captures' rev 223), so every packet is from the cache's scripts and every
+rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (varbit 10032).
+
+- **Side panel (736):** the journal's Leagues tab mounts it instead of 656
+  (`journal.sidePanelByLeague`). It draws points, tasks and Sage's Renown from varps. Its Info
+  button opens the Info panel, Tasks emits `league:open-tasks` for the task list, and Fragments and
+  Unlocks open their screens.
+- **Sage's Renown:** `league:renown`, sent as varp 3276. `::renown <amount> [player]` grants it.
+  The Wiki's renown per task tier is in the data for the task catalog to pay later.
+- **Class choice (737):** at the first login, and every login until chosen. Select sets varp 3345
+  so the client shows that class's confirm panel. Accept unlocks its combat skill (script 5830's
+  varbit), gives its fragment at level 1 and its items. 737 names the items; their amounts are this
+  server's choice.
+- **Fragments (735):** owned fragments (fragment XP, varbits 13403-13455) and the seven slots
+  (varbits 13395-13399, 13401, 13402) are saved. Slots open at the points enum 4127 gives. Equip
+  puts an owned fragment in the first open empty slot, never twice; Unequip and Unequip all clear
+  them.
+- **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
+  skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price
+  now, from the Wiki's Initial Cost less the prerequisite packs already unlocked, and 0 once
+  unlocked. Buying a pack unlocks its prerequisites. Defence, Fishing and Thieving start unlocked.
+
+Stored and drawn, not yet enforced: locked skills still give XP and locked bosses can be fought;
+fragments don't drop, gain XP or take effect (the 53 fragments and 15 set effects); quest packs
+complete no quests; fragments can be swapped anywhere, not only at a bank or the Sage; the
+Display Fragments toggle (varbit 12383) is the client's own; the intro cutscene (734) has no
+recording or client driver, so it isn't played.
+
 ## Relics
 
 `LeagueRelics.plugin.js`, data `plugins/modes/data/league-relics.json`: eight tiers a league,
@@ -367,12 +405,13 @@ Three relics have their effects (`leaguerelics/*.LeagueRelics.js`, numbers in th
 - `::relic [tier 1-8] [slot 1-3]` - list your relics, or choose one through the usual checks.
 - `::leaguerecords <trophies|statistics|rankings|firsts>` - open a main-game record screen.
 - `::leagueshop` - open the Leagues Reward Shop.
+- `::renown <amount> [player]` - grant Shattered Relics' Sage's Renown.
 
 ## Not yet
 
 League tasks, area unlocks, combat masteries, the other tier passives (drop rates, run energy,
-clue boxes, minigame points, the ironman restriction), and Shattered Relics' own panels. Each is
-its own item on the progress tracker. The records have no POH league hall to stand in: its trophy
+clue boxes, minigame points, the ironman restriction), and Shattered Relics' rules (see its
+section). Each is its own item on the progress tracker. The records have no POH league hall to stand in: its trophy
 case, pedestals and scroll need the house's league hall, which this server doesn't build yet, so
 the scroll's options answer only where the loc exists.
 
