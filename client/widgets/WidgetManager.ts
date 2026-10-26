@@ -1022,6 +1022,11 @@ export class WidgetManager {
         }
     }
 
+    /** The component an interface is mounted in (an if_opensub target), if any. */
+    getContainerUidForGroup(groupId: number): number | undefined {
+        return this.groupToContainerUid.get(groupId);
+    }
+
     getGroup(groupId: number): WidgetGroupInstance | undefined {
         const existing = this.groups.get(groupId);
         if (existing) {
