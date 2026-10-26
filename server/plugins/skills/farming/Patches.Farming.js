@@ -3,10 +3,14 @@ const Data = require("./Data.Farming");
 const Model = require("./Model.Farming");
 const Services = require("./Services.Farming");
 const Spells = require("./Spells.Farming");
+const Geomancy = require("./Geomancy.Farming");
 const Tithe = require("./Tithe.Farming");
+const Rewards = require("./Rewards.Farming");
 const Guild = require("./Guild.Farming");
+const Vault = require("./Vault.Farming");
 const Hespori = require("./Hespori.Farming");
 const Redwood = require("./Redwood.Farming");
+const Tools = require("./Tools.Farming");
 const { pauseForLevelUp } = require("../SkillActions");
 
 const FARM_ATTRIBUTE = "farming:state";
@@ -84,15 +88,35 @@ function give(player, id, count = 1) {
     inventory.addItem(new core.Item(id, count));
     return true;
 }
+const farmingMenus = new WeakMap();
 function choose(player, entries, page = 0) {
     const shown = entries.slice(page * 4, page * 4 + 4);
+    if (!shown.length) return;
     if (entries.length > 4) shown.push(["More options", () => choose(player, entries, (page + 1) * 4 >= entries.length ? 0 : page + 1)]);
-    player.getDialogueManager().startDialogues(new core.DialogueChainBuilder().add(new core.OptionDialogue(0, {
-        executeOption(option) {
-            player.getPacketSender().sendInterfaceRemoval();
-            shown[Number(option)]?.[1]();
-        },
-    }, ...shown.map(([text]) => text))));
+    if (shown.length === 1) shown.push(["Cancel", () => {}]);
+    // Generic legacy dialogue callbacks do not identify the widget that sent them.
+    // Keep the action private to the exact-widget adapter below instead.
+    const menu = new core.OptionDialogue(0, null, ...shown.map(([text]) => text));
+    farmingMenus.set(menu, option => {
+        // Native option resumes are one-based, including the fifth pagination choice.
+        const number = Number(option);
+        if (!Number.isInteger(number) || !shown[number - 1]
+            || player.getDialogueManager().getCurrent() !== menu
+            || !player.getPacketSender().isChatboxInterface(core.OptionDialogue.OPTIONS_WIDGET_ID >>> 16)
+            || player.busy()) return;
+        farmingMenus.delete(menu);
+        player.getPacketSender().sendInterfaceRemoval();
+        shown[number - 1][1]();
+    });
+    player.getDialogueManager().startDialogues(new core.DialogueChainBuilder().add(menu));
+}
+function farmingOptionClick(event) {
+    const menu = event.player.getDialogueManager().getCurrent();
+    const select = farmingMenus.get(menu);
+    if (event.buttonId !== core.OptionDialogue.OPTIONS_WIDGET_ID || !select) return;
+    // Handle both resume and widget inputs before the legacy button fallback changes their index.
+    event.handled = true;
+    select(event.slot === undefined || event.slot === -1 ? event.action : event.slot);
 }
 function clearPatch(player, patch) {
     if (patch.type === "REDWOOD") redwoodRegrowth.delete(player);
@@ -155,7 +179,14 @@ function workStep(player, work) {
     }
     if (work.levelUpPaused) return;
     if (Date.now() < work.nextAt) return;
-    const again = work.action === "rake" ? rake(player, work.patch) : harvest(player, work.patch);
+    let again = work.action === "rake" ? rake(player, work.patch) : harvest(player, work.patch);
+    // Content may pick several times an action ("farming:harvests-per-action", a league relic's faster harvests).
+    if (again && work.action !== "rake") {
+        const request = { player, patch: work.patch, crop: stateFor(player, work.patch).crop, harvests: 1 };
+        core.PluginManager.emitCustomEvent("farming:harvests-per-action", request);
+        const harvests = Number.isInteger(request.harvests) ? Math.min(100, request.harvests) : 1;
+        for (let more = 1; more < harvests && again && !work.levelUpPaused; more++) again = harvest(player, work.patch);
+    }
     work.nextAt = Date.now() + 1800;
     if (!again) WORK.delete(player);
     syncPatch(player, work.patch);
@@ -195,8 +226,13 @@ function plant(player, patch, id) {
         player.getInventory().deleteNumber(id, crop.seedCount);
         player.sendMessage("You crush the seeds while trying to plant them bare-handed."); return;
     }
+    // Content may keep the seed, grow the crop at once or keep it from disease and death ("farming:plant-rules", a league relic);
+    // `message` is said after the planting's own.
+    const rules = { player, crop: crop.key, seedId: id, patch, keepSeed: false, grown: false, diseaseFree: false, undying: false, message: null };
+    core.PluginManager.emitCustomEvent("farming:plant-rules", rules);
+    const keepSeed = rules.keepSeed === true;
     let seedCount = crop.seedCount;
-    if (patch.type === "ALLOTMENT" && player.getEquipment().contains(Data.itemId("Amulet of bounty")) && Math.random() < 0.25) {
+    if (!keepSeed && patch.type === "ALLOTMENT" && player.getEquipment().contains(Data.itemId("Amulet of bounty")) && Math.random() < 0.25) {
         seedCount = 1;
         const farm = farmFor(player);
         farm.bountyCharges = (farm.bountyCharges ?? 10) - 1;
@@ -207,8 +243,8 @@ function plant(player, patch, id) {
             player.sendMessage("Your amulet of bounty crumbles to dust.");
         } else player.sendMessage("Your amulet of bounty saves two seeds.");
     }
-    player.getInventory().deleteNumber(id, seedCount);
-    if (crop.sapling) {
+    if (!keepSeed) player.getInventory().deleteNumber(id, seedCount);
+    if (crop.sapling && !keepSeed) {
         if (barbarian?.smashing && barbarian.autoSmash) {
             player.sendMessage("You smash the empty plant pot to dust.");
             if (barbarian.smashing === 1 && crop.type !== "SPIRIT_TREE") barbarian.smashing = 2;
@@ -219,11 +255,18 @@ function plant(player, patch, id) {
         player.sendMessage("You feel you have learned more of barbarian ways. Otto might wish to talk to you more.");
     }
     Object.assign(state, { crop: crop.key, stage: 0, status: "growing", checked: false, protected: false, watered: false,
-        lives: 0, plantedAt: Date.now(), nextAt: Model.nextGrowth(Date.now(), crop.minutes, farmFor(player).offset) });
+        lives: 0, plantedAt: Date.now(), nextAt: Model.nextGrowth(Date.now(), crop.minutes, farmFor(player).offset),
+        diseaseFree: rules.diseaseFree === true, undying: rules.undying === true });
+    // Fully grown at once, as the growth model leaves a crop on its last stage (an anima plant's last stage is its end).
+    if (rules.grown === true && crop.type !== "ANIMA") {
+        Object.assign(state, { stage: crop.stages, status: "grown", lives: Model.startingLives(crop, state.compost) });
+        if (crop.regrow) state.nextAt = Model.nextGrowth(Date.now(), crop.regrow, farmFor(player).offset);
+    }
     // Herbs award their planting XP only after the final herb is picked.
     if (crop.type !== "HERB") award(player, crop.plant, patch);
     animate(player, crop.sapling ? ANIM.SAPLING : ANIM.PLANT);
     player.sendMessage(`You plant the ${crop.name.toLowerCase()}.`);
+    if (typeof rules.message === "string") player.sendMessage(rules.message);
     core.PluginManager.emitCustomEvent("farming:planted", { player, crop: crop.key, seedId: id, patch });
 }
 function water(player, id, slot) {
@@ -335,8 +378,13 @@ function harvest(player, patch) {
     let produce = crop.produce;
     const blessing = crop.type === "GRAPES" && player.getInventory().contains(Data.itemId("Bologa's blessing"));
     if (blessing) produce = Data.itemId("Zamorak's grapes");
-    const sack = crop.type === "HERB" && player.getInventory().getItems().find(i => i.getId() === Data.itemId("Open herb sack"));
-    if (!(sack && Guild.storeCrop(player, sack, produce, amount)) && !give(player, produce, amount)) return false;
+    // Content may change what one pick yields ("farming:pick", a league relic's triple, noted harvests).
+    const pick = { player, crop: crop.key, patch, itemId: produce, amount };
+    core.PluginManager.emitCustomEvent("farming:pick", pick);
+    const picked = Number.isInteger(pick.itemId) && pick.itemId > 0 ? pick.itemId : produce;
+    const pickedAmount = Number.isSafeInteger(pick.amount) && pick.amount > 0 ? pick.amount : amount;
+    const sack = crop.type === "HERB" && picked === produce && player.getInventory().getItems().find(i => i.getId() === Data.itemId("Open herb sack"));
+    if (!(sack && Guild.storeCrop(player, sack, produce, pickedAmount)) && !give(player, picked, pickedAmount)) return false;
     if (blessing) player.getInventory().deleteNumber(Data.itemId("Bologa's blessing"), 1);
     animate(player, ANIM.HARVEST);
     award(player, crop.harvest * (["FLOWER", "BELLADONNA"].includes(crop.type) ? 1 : amount), patch);
@@ -659,6 +707,7 @@ function refresh(player) {
     else redwoodRegrowth.delete(player);
 }
 function farmingTick() {
+    Geomancy.tick();
     for (const [player, due] of redwoodRegrowth) if (due <= Date.now()) refresh(player);
     for (const [player, work] of WORK) workStep(player, work);
     for (const player of dirty) schedule(player);
@@ -745,11 +794,24 @@ function attach(api) {
     api.onServerStartup(startTicking);
     api.onPlayerLogin(login);
     api.onPlayerLogin(Tithe.titheLogin);
+    api.onPlayerLogin(Rewards.login);
+    api.onCanShop(Rewards.canShop);
     api.onPlayerMapSquareChange(mapSquareChanged);
     api.onPlayerLogout(logout);
+    api.onPlayerLogout(Vault.logout);
+    api.onInterfaceActionClick(Vault.click);
+    api.onCustomEvent("player:widget-action", Vault.drag);
+    api.onPlayerLogout(Geomancy.logout);
     api.onPlayerLogout(Tithe.titheLogout);
+    api.onPlayerLogout(Rewards.logout);
+    api.onPlayerLogout(Tools.logout);
+    api.onCustomEvent("omnishop:currency", Rewards.currency);
+    api.onCustomEvent("omnishop:describe", Rewards.describe);
+    api.onCustomEvent("omnishop:can-buy", Rewards.canBuy);
+    api.onCustomEvent("omnishop:purchase", Rewards.purchase);
     api.onCustomEvent("level-up:popup-opened", pauseWork);
     api.onObjectInteraction(objectInteraction);
+    api.onInterfaceActionClick(farmingOptionClick);
     api.onItemOnObject(itemOnObject, { noted: false });
     api.onItemOnItem(itemOnItem, { noted: false });
     api.onNpcInteraction(npcInteraction);
@@ -760,10 +822,14 @@ function attach(api) {
     api.onCustomEvent(core.Bank.INVENTORY_OP_EVENT, Guild.bankStorageOp);
     api.onSpellOnObject(spellOnObject);
     api.onButtonClick(Spells.farmingButton);
+    api.onInterfaceActionClick(Tools.click);
+    api.onInterfaceActionClick(Spells.farmingButton);
+    api.onInterfaceActionClick(Geomancy.tab);
     api.onCustomEvent("woodcutting:validate-tree", validateTree);
     api.onCustomEvent("spirit-trees:grown", grownSpiritTrees);
     api.onCustomEvent("farming:check-health", Guild.completeContract);
     api.onCustomEvent("farming:harvest", Guild.harvestContract);
+    api.onCustomEvent("farming:open-seed-vault", Guild.openSeedVault);
     api.onCustomEvent("woodcutting:deplete-tree", depleteTree);
     api.onCustomEvent("magic:water-containers", Services.waterContainers);
     api.onCustomEvent("magic:humidified", Services.humidified);

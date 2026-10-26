@@ -84,8 +84,41 @@ function present(player, type, tier) {
  * callers with no interface pass nothing and the bank as it is now counts.
  * Returns true when the relic was unlocked.
  */
+/**
+ * Reloaded's extra pick (Raging Echoes' tier 4, Wiki): with Reloaded chosen, one more relic of
+ * tiers 1-3, a different one from the tier's own pick, through the same click. Null when this
+ * click is not one, else the refusal's message key or "" when it may go ahead.
+ */
+function reloadedRefusal(player, type, tier, slot, bankOpen) {
+  const effect = Common.data.effects.reloaded;
+  const picks = Common.chosen(player);
+  if (!effect || ![].concat(effect.league).includes(type) || picks[tier] === undefined) return null;
+  const holds = Common.catalog(type).tiers.some((entry, index) => entry.relics[picks[index] - 1]?.key === effect.key);
+  if (!holds || !effect.tiers.includes(tier) || player.getAttribute(Common.RELOADED_ATTRIBUTE)) return null;
+  const relic = Common.relic(type, tier, slot);
+  if (!relic) return "noSuchRelic";
+  if (picks[tier] === slot) return "alreadyChosen";
+  if (relic.requiresBank && grantedItems(relic).length > 0 && !bankOpen) return "needsBank";
+  if (!canDeliver(player, relic)) return "noRoom";
+  return "";
+}
+
 function unlock(player, tier, slot, { bankOpen = Common.core.Bank.isOpen(player) } = {}) {
   const type = Common.leagueOf(player);
+  const reloaded = reloadedRefusal(player, type, tier, slot, bankOpen);
+  if (reloaded !== null) {
+    if (reloaded) {
+      player.sendMessage(Common.message(reloaded));
+      return false;
+    }
+    const extra = Common.relic(type, tier, slot);
+    player.setAttribute(Common.RELOADED_ATTRIBUTE, { tier, slot });
+    present(player, type, tier);
+    grant(player, extra);
+    player.sendMessage(Common.message("reloadedChosen", { relic: extra.name }));
+    Common.api.emitCustomEvent("league:relic-unlocked", { player, league: type, tier, slot, relic: extra.key, reloaded: true });
+    return true;
+  }
   const why = refusal(player, type, tier, slot, bankOpen);
   if (why) {
     player.sendMessage(Common.message(why));
@@ -139,10 +172,13 @@ function answerRelics(query) {
   const type = query.player ? Common.leagueOf(query.player) : null;
   query.league = type;
   query.chosen = type === null ? {} : { ...Common.chosen(query.player) };
+  // Reloaded's extra pick, { tier, slot }, while it counts.
+  query.extra = type !== null && Common.reloadedPick(query.player) ? { ...query.player.getAttribute(Common.RELOADED_ATTRIBUTE) } : null;
 }
 
 module.exports = function attach(api) {
   api.persistAttribute(Common.RELICS_ATTRIBUTE, {});
+  api.persistAttribute(Common.RELOADED_ATTRIBUTE, null);
   api.onCustomEvent("league:login", login);
   api.onCustomEvent("league:points-changed", pointsChanged);
   api.onCustomEvent("league:highest-tier", answerHighestTier);

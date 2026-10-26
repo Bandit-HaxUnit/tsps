@@ -45,7 +45,7 @@ function pendingFor(player, kingdom) {
   const key = rollKey(kingdom);
   const held = pending.get(player);
   if (held && held.key === key) return held.items;
-  const items = Common.gather(kingdom);
+  const items = Common.gather(kingdom, Math.random, Common.rules(player).outputMultiplier);
   pending.set(player, { key, items });
   return items;
 }
@@ -226,6 +226,25 @@ function collectOption({ player }) {
   return true;
 }
 
+/**
+ * "miscellania:collect" and "miscellania:check": Ghrim's collection, and the kingdom's approval and
+ * coffers, asked from elsewhere (content that manages the kingdom remotely, a league relic's item).
+ * The check's wording is ours.
+ */
+function collectRequest(request) {
+  if (!request?.player || request.handled) return;
+  request.handled = collectOption({ player: request.player }) === true;
+}
+
+function checkRequest(request) {
+  if (!request?.player || request.handled) return;
+  const kingdom = Common.catchUp(request.player);
+  if (!kingdom) return;
+  request.handled = true;
+  request.player.sendMessage(`Your kingdom's approval rating is ${Common.approvalPercent(Common.favour(request.player))}%`
+    + ` and its coffers hold ${kingdom.coffer.toLocaleString("en-GB")} coins.`);
+}
+
 module.exports = function registerGhrim(api) {
   Common.bind(api);
   api.onNpcDialogueCondition(onDialogueCondition);
@@ -233,7 +252,9 @@ module.exports = function registerGhrim(api) {
   api.onCustomEvent("npc-dialogue:action", onDialogueAction);
   api.onCustomEvent("npc-dialogue:choice", onDialogueChoice);
   api.onNpcInteraction(PAGE, { Collect: collectOption });
+  api.onCustomEvent("miscellania:collect", collectRequest);
+  api.onCustomEvent("miscellania:check", checkRequest);
   api.onPlayerLogout(onLogout);
 };
 
-module.exports._test = { COND, ACTION, pending, pendingFor, spaceShort, collect, onDialogueCondition, onDialogueLine, onDialogueAction, onDialogueChoice, answerKingdomQuestion, collectOption };
+module.exports._test = { COND, ACTION, pending, pendingFor, spaceShort, collect, onDialogueCondition, onDialogueLine, onDialogueAction, onDialogueChoice, answerKingdomQuestion, collectOption, collectRequest, checkRequest };

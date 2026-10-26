@@ -172,6 +172,12 @@ export class CombatFactory {
     }
 
     static getHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true) {
+        return CombatFactory.applyIncomingHitDamage(entity, victim, type,
+            CombatFactory.rollHitDamage(entity, victim, type, bypassProtectionPrayer, boundsOverride, applySpecialTraits));
+    }
+
+    /** Rolls damage and protection prayers without spending or reacting with defensive equipment. */
+    public static rollHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true): HitDamage {
         const specialTraits = applySpecialTraits ? CombatSpecial.activeTraitsFor(entity) : null;
         if (specialTraits?.ignoreProtectionPrayer) {
             bypassProtectionPrayer = true;
@@ -217,6 +223,11 @@ export class CombatFactory {
                 }
             }
         }
+        return hitDamage;
+    }
+
+    /** Reacts once to the selected damage roll, before any per-hit multiplier and HP cap. */
+    public static applyIncomingHitDamage(entity: Mobile, victim: Mobile, type: CombatType, hitDamage: HitDamage): HitDamage {
         // The Elysian spirit shield cuts damage by 25% 70% of the time (Wiki).
         if (victim.isPlayer() && Math.random() < CombatConstants.ELYSIAN_ACTIVATION_CHANCE) {
             if (victim.getAsPlayer().getEquipment().getItems()[Equipment.SHIELD_SLOT].getId() == ItemIdentifiers.ELYSIAN_SPIRIT_SHIELD) {
@@ -578,7 +589,7 @@ export class CombatFactory {
                     const drainAmount = special.getDrainAmountForWeaponId(
                         player.getEquipment().get(Equipment.WEAPON_SLOT).getId()
                     );
-                    if (player.getSpecialPercentage() < drainAmount) {
+                    if (!CombatSpecial.affordable(player, special, drainAmount)) {
                         return CanAttackResponse.NOT_ENOUGH_SPECIAL_ENERGY;
                     }
                 }
@@ -797,10 +808,9 @@ export class CombatFactory {
 
             // Prayer effects.
             // Redemption checks after the damage lands (HitQueue -> handleRedemption).
-            if (resolvedHit.isAccurate()) {
-                if (PrayerHandler.isActivated(attacker, PrayerHandler.SMITE)) {
-                    CombatFactory.handleSmite(attacker, playerTarget, damage);
-                }
+            // Smite follows the damage dealt, so guaranteed damage on a failed roll (Hammer Blow) drains too.
+            if (damage > 0 && PrayerHandler.isActivated(attacker, PrayerHandler.SMITE)) {
+                CombatFactory.handleSmite(attacker, playerTarget, damage);
             }
         }
 
@@ -1001,6 +1011,13 @@ export class CombatFactory {
             if (isVenom ? protection.isVenomImmune() : !protection.finished()) {
                 return;
             }
+            // Content may make the player immune outright (a league relic): the same question
+            // for every status the server applies.
+            const status = { target: player, kind: isVenom ? "venom" : "poison", allow: true };
+            PluginManager.emitCustomEvent("combat:status-apply", status);
+            if (status.allow === false) {
+                return;
+            }
             // An accepted venom replaces the ordinary negative poison counter.
             if (isVenom) protection.clearCounter();
             if (!alreadyPoisoned) {
@@ -1094,13 +1111,16 @@ export class CombatFactory {
     @param target
     */
     public static handleSkull(attacker: Player, target: Player) {
-        if (attacker.isSkulled()) {
-            return;
-        }
-
         const attackerInWilderness = Wilderness.isIn(attacker);
         const targetInWilderness = Wilderness.isIn(target);
         if (!attackerInWilderness || !targetInWilderness) {
+            return;
+        }
+
+        // Wiki (Skull (status)): attacking a player while skulled restarts the 30 minutes, so
+        // the skull "cannot disappear during PvP combat". The skull keeps its colour.
+        if (attacker.isSkulled()) {
+            CombatFactory.extendSkull(attacker, CombatFactory.PVP_SKULL_SECONDS);
             return;
         }
 
@@ -1132,6 +1152,13 @@ export class CombatFactory {
     }
 
     public static readonly PVP_SKULL_SECONDS = 30 * 60;
+    /** Wiki: an amulet of avarice skull lasts 20 minutes after it comes off; a cape of skulls 20 from putting it on. */
+    public static readonly ITEM_SKULL_SECONDS = 20 * 60;
+
+    /** Keeps a skull (and its colour) for at least `seconds` more, without the skulled message. */
+    static extendSkull(player: Player, seconds: number) {
+        player.setSkullTimer(Math.max(player.getSkullTimer(), Misc.getTicks(seconds)));
+    }
 
     static skull(player: Player, type: SkullType, seconds: number) {
         player.setSkullType(type);
@@ -1455,6 +1482,12 @@ export class CombatFactory {
                 : 0;
             let currentWeaponId = weaponId;
             for (let shot = 0; shot < amount; shot++) {
+                // Content may spare the charge (a league relic): the question every charged weapon asks.
+                const consume = { player, itemId: currentWeaponId, skip: false };
+                PluginManager.emitCustomEvent("combat:consume-charge", consume);
+                if (consume.skip) {
+                    continue;
+                }
                 shotsInStage += 1;
                 if (shotsInStage < CRYSTAL_BOW_SHOTS_PER_STAGE) {
                     continue;
@@ -1490,11 +1523,16 @@ export class CombatFactory {
 
         // Per shot: 20% break, (80 - recovery)% land on the floor where the target stood,
         // the rest is recovered by a plugin (Ava's devices).
+        // Content may keep some shots out of the roll altogether (a league relic): `saved` of
+        // `amount` are neither broken nor dropped. The device's recovery applies to the rest.
+        const saving = { player, itemId: ammoItem.getId(), amount, saved: 0 };
+        PluginManager.emitCustomEvent("ranged:ammo-saving", saving);
+        const rolled = amount - Math.min(amount, Math.max(0, saving.saved | 0));
         const recovery = CombatFactory.ammoRecovery(player);
         const dropChance = 80 - recovery;
         let lost = 0;
         let dropped = 0;
-        for (let shot = 0; shot < amount; shot++) {
+        for (let shot = 0; shot < rolled; shot++) {
             const roll = Misc.getRandom(99); // 0..99
             if (roll < CombatFactory.AMMO_BREAK_CHANCE) {
                 lost++;

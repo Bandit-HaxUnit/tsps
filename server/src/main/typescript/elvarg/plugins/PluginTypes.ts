@@ -1194,7 +1194,7 @@ export interface PluginApi {
   /** Register an inventory item as a shop currency, keyed by its item name and optional aliases. */
   registerItemShopCurrency(
     itemId: number,
-    options?: { name?: string; aliases?: string[] }
+    options?: { name?: string; aliases?: string[]; unit?: string }
   ): void;
   /**
    * Save and restore this player attribute; values must be JSON-compatible.
@@ -1508,6 +1508,7 @@ export interface PluginCoreApi {
   PrivateChatStatus: typeof import("../game/model/PlayerRelations").PrivateChatStatus;
   SpellTeleports: typeof import("../game/content/combat/magic/SpellTeleports").SpellTeleports;
   LunarSpells: typeof import("../game/content/combat/magic/LunarSpells").LunarSpells;
+  EffectSpells: typeof import("../game/content/combat/magic/EffectSpells").EffectSpells;
   ArceuusSpells: typeof import("../game/content/combat/magic/ArceuusSpells").ArceuusSpells;
   ArceuusOfferings: typeof import("../game/content/combat/magic/ArceuusOfferings");
 }

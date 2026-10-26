@@ -48,6 +48,8 @@ const COMBAT_TARGET_PLAYER_VARP = 1075;
 export class Combat {
     private readonly hitQueue = new HitQueue(this.character);
     private damageMap: Map<Player, HitDamageCache> | null = null;
+    /** The player whose damage `addDamage` recorded last. */
+    private lastDamager: Player | null = null;
     private readonly lastAttack = new TickStopwatch();
     // Most NPCs never use these; each SecondsTimer also holds a Stopwatch, so allocate on first use.
     private poisonImmunityTimer: SecondsTimer | null = null;
@@ -490,9 +492,16 @@ export class Combat {
     public addDamage(entity: Mobile, amount: number): void {
         if (amount <= 0 || entity.isNpc()) return;
         const player = entity as Player;
+        this.lastDamager = player;
         const cached = this.damageMap?.get(player);
         if (cached) cached.incrementDamage(amount);
         else (this.damageMap ??= new Map()).set(player, new HitDamageCache(amount));
+    }
+
+    /** The player who damaged this character most recently, while that damage still counts. */
+    public getLastDamager(): Player | null {
+        const player = this.lastDamager;
+        return player && player.isRegistered() && this.damageMapContains(player) ? player : null;
     }
 
     public getKiller(clearMap: boolean): Player | null {

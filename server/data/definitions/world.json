@@ -16,6 +16,7 @@
     { "minX": 2986, "maxX": 3012, "minY": 10338, "maxY": 10366, "z": 0, "tags": ["pvp"] },
     { "minX": 3061, "maxX": 3074, "minY": 10253, "maxY": 10262, "z": 0, "tags": ["pvp"] },
     { "_description": "Revenant Caves (singles-plus in OSRS)", "minX": 3136, "maxX": 3271, "minY": 10036, "maxY": 10249, "z": 0, "tags": ["pvp"] },
+    { "_description": "Wilderness Slayer Cave (Wilderness levels 17-32, multi-combat)", "minX": 3328, "maxX": 3455, "minY": 10048, "maxY": 10175, "z": 0, "tags": ["pvp", "multi-combat"] },
     { "_description": "Callisto's Den (Wilderness level 40, multi-combat)", "minX": 3328, "maxX": 3391, "minY": 10304, "maxY": 10367, "z": 0, "tags": ["pvp", "multi-combat"] },
     { "_description": "Vet'ion's Rest (Wilderness level 35, multi-combat)", "minX": 3264, "maxX": 3327, "minY": 10176, "maxY": 10239, "z": 1, "tags": ["pvp", "multi-combat"] },
     { "_description": "Silk Chasm, Venenatis's lair (Wilderness level 35, multi-combat)", "minX": 3392, "maxX": 3455, "minY": 10176, "maxY": 10239, "z": 2, "tags": ["pvp", "multi-combat"] },
