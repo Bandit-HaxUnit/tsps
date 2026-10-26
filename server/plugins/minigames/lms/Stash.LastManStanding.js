@@ -24,6 +24,10 @@ function skillsOf(player) {
   });
 }
 
+/** Captured: 0 -> 2 as a player steps into a waiting area, 2 -> 0 as their things come back. */
+const HOLDING = "holding_inventory_location";
+const HOLDING_LMS = 2;
+
 function stashed(player) {
   return player.getAttribute(Common.ATTRIBUTES.stash) ?? null;
 }
@@ -40,6 +44,7 @@ function save(player) {
     run: player.getRunEnergy(),
   });
   clear(player);
+  Common.varbit(player, HOLDING, HOLDING_LMS);
 }
 
 function spellbookName(player) {
@@ -84,6 +89,7 @@ function restore(player) {
   CombatSpecial.updateBar(player);
   player.setRunEnergy(stash.run ?? 100);
   player.setAttribute(Common.ATTRIBUTES.stash, null);
+  Common.varbit(player, HOLDING, 0);
   WeaponInterfaceManager.assign(player);
   BonusManager.update(player);
   player.getUpdateFlag().flag(Flag.APPEARANCE);

@@ -1175,7 +1175,8 @@
     "forfeited": "You have forfeited too many games today to play {mode} games.",
     "claimed": "You claim {amount} coins.",
     "prize": "{amount} coins have been put into the reward chest for you.",
-    "noRoomCoins": "You don't have enough inventory space to claim your coins."
+    "noRoomCoins": "You don't have enough inventory space to claim your coins.",
+    "useDoor": "Please use the door if you need to leave."
   },
   "modes": [
     {

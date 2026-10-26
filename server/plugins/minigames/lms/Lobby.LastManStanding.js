@@ -388,6 +388,13 @@ function forget({ player }) {
   nearby.delete(player);
 }
 
+/** Captured: a teleport cast in a waiting area is refused, "Please use the door if you need to leave." */
+function canTeleport(event) {
+  if (!waiting(event.player)) return;
+  event.allow = false;
+  event.player.sendMessage(Common.message("useDoor"));
+}
+
 function attachLobby(api) {
   api.persistAttribute(Common.ATTRIBUTES.forfeits, null);
   api.onPlayerMapSquareChange(follow);
@@ -395,12 +402,14 @@ function attachLobby(api) {
   api.onNpcFirstClick(lisaIds(), talkToLisa);
   api.onNpcThirdClick(lisaIds(), joinLisa);
   api.onObjectFirstClick(entranceIds(), barrier);
+  api.onCanTeleport(canTeleport);
   api.onObjectFirstClick([Common.locId("br_scoreboard")], scoreboard);
   api.onPlayerLogout(forget);
   Common.every(tick);
 }
 
 module.exports = {
+  canTeleport,
   attachLobby, follow, openOverlay, closeOverlay, refreshOverlay, queued, minPlayers, talk, source, bots, waiting, waitingMode,
   modeOf, refusal, forfeited, forfeitsToday, tick,
 };

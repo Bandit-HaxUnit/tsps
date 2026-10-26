@@ -54,9 +54,11 @@ in `server/plugins/minigames/lms/`, and its data in
   upstairs waiting areas' extent.
 
 Everyone waits empty-handed: entering a waiting area stashes the player's things (as a game does),
-and leaving it through the barrier gives them back, as does the end of their game; leaving any
-other way (a teleport) gives them back too. Bots wait the same way, standing still with no brain
-until their game starts (the PvP brain would wander to the Wilderness and re-gear an empty bot).
+and leaving it through the barrier gives them back, as does the end of their game. Varbit
+`holding_inventory_location` is 2 while they are held and 0 once they are back. A teleport cast in a
+waiting area is refused with "Please use the door if you need to leave." (captured); anyone who
+leaves some other way (a staff teleport) gets them back on their next login. Bots wait the same way,
+standing still with no brain until their game starts (the PvP brain would wander to the Wilderness and re-gear an empty bot).
 
 ## Load-outs
 

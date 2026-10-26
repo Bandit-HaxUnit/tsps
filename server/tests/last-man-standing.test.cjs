@@ -263,3 +263,37 @@ test('the waiting rooms run right up to their barriers (the row beside it is ins
   assert.equal(at(3141, 3639, 1), 'casual');
   assert.equal(at(3141, 3639, 2), 'highstakes');
 });
+
+test('a teleport from a waiting area is refused, as captured; the lobby lets it through', (t) => {
+  const { Location } = require('../dist/game/model/Location');
+  const p = realPlayer(t);
+  p.setLocation(new Location(3142, 3640, 0));
+  const inside = { player: p, allow: null };
+  Lobby.canTeleport(inside);
+  assert.equal(inside.allow, false);
+  assert.deepEqual(p.messages, ['Please use the door if you need to leave.']);
+  p.setLocation(new Location(3142, 3638, 0));
+  const lobby = { player: p, allow: null };
+  Lobby.canTeleport(lobby);
+  assert.equal(lobby.allow, null);
+});
+
+test('holding_inventory_location is 2 while belongings are held and 0 once they are back', (t) => {
+  const p = realPlayer(t);
+  const id = Common.varbitId('holding_inventory_location');
+  assert.ok(id != null, 'the varbit resolves');
+  Stash.save(p);
+  assert.equal(p.varbits.get(id), 2);
+  Stash.restore(p);
+  assert.equal(p.varbits.get(id), 0);
+});
+
+test('belongings come back on a closed session (logging out mid-game) without throwing', (t) => {
+  const p = realPlayer(t);
+  p.getSession.mock.mockImplementation(() => ({ sendClientPacket: () => false, write: () => false }));
+  p.getInventory().add(new (require('../dist/game/model/Item').Item)(id('coins'), 5), false);
+  Stash.save(p);
+  assert.doesNotThrow(() => Stash.restore(p));
+  assert.equal(p.getInventory().getAmount(id('coins')), 5);
+  assert.equal(Stash.stashed(p), null);
+});
