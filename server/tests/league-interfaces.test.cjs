@@ -14,6 +14,8 @@ const { CachePipeline } = require("../dist/game/cache/CachePipeline");
 const { PluginManager } = require("../dist/plugins/PluginManager");
 const { Player } = require("../dist/game/entity/impl/player/Player");
 const { GameConstants } = require("../dist/game/GameConstants");
+const { HitDamage } = require("../dist/game/content/combat/hit/HitDamage");
+const { HitMask } = require("../dist/game/content/combat/hit/HitMask");
 
 const SIDE_PANEL = 656;
 const SUMMARY = 529;
@@ -294,19 +296,52 @@ test("Demonic Pacts' relics come from the cache: nothing is sent and the catalog
   assert.equal(query("league:has-relic", { player: pacts, relic: first.key }).active, true);
 });
 
+test("damage dealt and the highest hit count only what lands, through the real hit queue", (t) => {
+  const { NPC } = require("../dist/game/entity/impl/npc/NPC");
+  const { Location } = require("../dist/game/model/Location");
+  const { World } = require("../dist/game/World");
+  const league = character("landing");
+  const chicken = new NPC(core.NpcIdentifiers.CHICKEN ?? 1173, new Location(3235, 3295, 0));
+  t.mock.method(chicken, "isRegistered", () => true);
+  chicken.setHitpoints(3);
+  const parts = [new HitDamage(8, HitMask.RED)];
+  const melee = { getCombatType: () => core.CombatType.MELEE, isAccurate: () => true };
+  const resolved = { ...melee, getTotalDamage: () => 8, getHits: () => parts };
+  hooks.onCombatHitResolved({ attacker: league, target: chicken, hit: resolved });
+  const counters = () => query("league:statistics", { player: league }).counters;
+  assert.equal(counters().damageDealt, undefined, "nothing before the hitsplat lands");
+  const queue = chicken.getCombat().getHitQueue();
+  queue.addPendingDamage(parts);
+  queue.process(World.getProcessCycle() + 1);
+  assert.equal(chicken.getHitpoints(), 0);
+  assert.equal(counters().damageDealt, 3, "only the 3 hitpoints the chicken had");
+  assert.equal(counters().highestHit, 3);
+  const cancelled = new HitDamage(8, HitMask.RED);
+  hooks.onCombatHitResolved({ attacker: league, target: chicken, hit: { ...melee, getTotalDamage: () => 8, getHits: () => [cancelled] } });
+  queue.addPendingDamage([cancelled]);
+  queue.process(World.getProcessCycle() + 2);
+  assert.equal(counters().damageDealt, 3, "a queue dropped with its dead owner counts nothing");
+  assert.equal(hooks.onPlayerDealtDamage, undefined, "nothing counts at launch");
+});
+
 test("the summary's statistics count what the hooks see and are sent as their varps", () => {
   const league = character("stats");
   const npc = { isPlayer: () => false, isNpc: () => true };
   const main = character("stats-main", { profile: "main" });
   const hit = (damage) => ({ getTotalDamage: () => damage, getCombatType: () => core.CombatType.MELEE, isAccurate: () => damage > 0 });
+  /** A hit on the NPC that resolves and lands for all of its damage. */
+  const landed = (damage) => {
+    const part = new HitDamage(damage, HitMask.RED);
+    hooks.onCombatHitResolved({ attacker: league, target: npc, hit: { ...hit(damage), getHits: () => [part] } });
+    part.notifyApplied(damage);
+  };
   hooks.onNpcDeath({ killer: league, npcId: core.NpcIdentifiers.CHICKEN ?? 1173, npc });
   hooks.onNpcDeath({ killer: league, npcId: core.NpcIdentifiers.ZULRAH, npc });
   hooks.onNpcDeath({ killer: main, npcId: core.NpcIdentifiers.ZULRAH, npc });
-  hooks.onPlayerDealtDamage({ player: league, target: npc, hit: hit(12) });
-  hooks.onPlayerDealtDamage({ player: league, target: npc, hit: hit(30) });
-  hooks.onPlayerDealtDamage({ player: league, target: npc, hit: hit(5) });
+  landed(12);
+  landed(30);
+  landed(5);
   hooks.onCombatHitResolved({ attacker: npc, target: league, hit: hit(7) });
-  hooks.onCombatHitResolved({ attacker: league, target: npc, hit: hit(9) });
   hooks.onPlayerDeath({ player: league, killer: npc, handled: false });
   hooks.onPlayerDefeated({ killer: league, victim: main });
   query("food:eaten", { player: league, itemId: 379, heal: 12 });
