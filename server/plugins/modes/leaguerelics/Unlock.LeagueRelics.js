@@ -122,23 +122,22 @@ function login({ player, league }) {
   require("./Catalog.LeagueRelics").send(player, league);
 }
 
-function highestTier(query) {
+/** `league:highest-tier` { player } -> tier: the highest tier index chosen (LeagueMode's XP rate reads it). */
+function answerHighestTier(query) {
   if (!query?.player || Common.leagueOf(query.player) === null) return;
   query.tier = Common.highestTier(query.player);
 }
 
 /** `league:has-relic` { player, relic: key } -> active: the character's league has that relic and chose it. */
-function hasRelic(query) {
-  query.active = false;
-  const type = query?.player ? Common.leagueOf(query.player) : null;
-  if (type === null) return;
-  const picks = Common.chosen(query.player);
-  query.active = Common.catalog(type).tiers.some((tier, tierIndex) =>
-    tier.relics[picks[tierIndex] - 1]?.key === query.relic);
+function answerHasRelic(query) {
+  if (!query) return;
+  query.active = query.player ? Common.hasRelic(query.player, query.relic) : false;
 }
 
-function relics(query) {
-  const type = query?.player ? Common.leagueOf(query.player) : null;
+/** `league:relics` { player } -> league, chosen (tier index -> slot). */
+function answerRelics(query) {
+  if (!query) return;
+  const type = query.player ? Common.leagueOf(query.player) : null;
   query.league = type;
   query.chosen = type === null ? {} : { ...Common.chosen(query.player) };
 }
@@ -147,9 +146,9 @@ module.exports = function attach(api) {
   api.persistAttribute(Common.RELICS_ATTRIBUTE, {});
   api.onCustomEvent("league:login", login);
   api.onCustomEvent("league:points-changed", pointsChanged);
-  api.onCustomEvent("league:highest-tier", highestTier);
-  api.onCustomEvent("league:has-relic", hasRelic);
-  api.onCustomEvent("league:relics", relics);
+  api.onCustomEvent("league:highest-tier", answerHighestTier);
+  api.onCustomEvent("league:has-relic", answerHasRelic);
+  api.onCustomEvent("league:relics", answerRelics);
 };
 
 module.exports.unlock = unlock;

@@ -59,6 +59,17 @@ test('allow hooks: first answer wins, no answer is null', () => {
   assert.equal(PluginManager.emitPrayerDisabled({}, { requirement: 1 }), null);
 });
 
+test('attack speed hooks: the resolved speed passes through every hook, never below 1', () => {
+  const api = PluginManager.createApi('AttackSpeedHookTest');
+  const attacker = { isPlayer: () => true };
+  assert.equal(PluginManager.emitAttackSpeed(attacker, {}, 'magic', 5), 5, 'no hook: the speed is what the method said');
+  api.onAttackSpeed((event) => { if (event.combatType === 'magic') event.speed = 2; });
+  api.onAttackSpeed((event) => { event.speed -= 3; });
+  assert.equal(PluginManager.emitAttackSpeed(attacker, {}, 'magic', 5), 1, 'both hooks ran, floored at 1');
+  assert.equal(PluginManager.emitAttackSpeed(attacker, {}, 'melee', 4), 1);
+  assert.equal(PluginManager.emitAttackSpeed(null, {}, 'melee', 4), 4, 'nothing to ask about');
+});
+
 test('isMembersArea map-square index matches a scan of every f2p zone', () => {
   const fs = require('node:fs');
   const os = require('node:os');

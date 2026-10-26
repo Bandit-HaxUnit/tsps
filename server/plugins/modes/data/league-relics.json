@@ -46,6 +46,22 @@
     "relicList": { "text": "{league} relics: {relics}", "source": "ours" },
     "relicNone": { "text": "none chosen", "source": "ours" }
   },
+  "effects": {
+    "_comment": "The relics with effects here (SuperiorSorcerer / Berserker / UndyingRetribution.LeagueRelics.js), each gated on its league and on being chosen. Numbers are the Wiki's: no rsprox recording of Trailblazer Reloaded exists (the captures start at revision 223). Superior Sorcerer's splash reach (one tile around the primary target, like a burst) and Undying Retribution's graphic (the Retribution prayer's, 437) are ours; the Wiki gives neither.",
+    "superiorSorcerer": {
+      "league": 4, "key": "superior-sorcerer",
+      "attackSpeed": 2, "accuracyMultiplier": 2.75, "damageBonusPermille": 200, "saveChance": 0.9,
+      "splashTargets": 5, "splashFraction": 0.25, "splashRadius": 1,
+      "bindSpells": ["BIND", "SNARE", "ENTANGLE", "ICE_RUSH", "ICE_BURST", "ICE_BLITZ", "ICE_BARRAGE"]
+    },
+    "berserker": { "league": 4, "key": "berserker", "damagePerMissingHitpoint": 0.004 },
+    "undyingRetribution": {
+      "league": 4, "key": "undying-retribution",
+      "radius": 3, "npcDamagePerPrayerLevel": 2, "playerDamagePerPrayerLevel": 0.5, "cooldownMs": 180000, "graphic": 437,
+      "_recoilImmuneExceptions": "Wiki: it still works on these though they are immune to recoil damage (Nex, the Hespori, Vorkath and every Wilderness boss).",
+      "recoilImmuneExceptions": ["Nex", "Hespori", "Vorkath", "Callisto", "Artio", "Vet'ion", "Calvar'ion", "Venenatis", "Spindel", "Scorpia", "Chaos Elemental", "Chaos Fanatic", "Crazy archaeologist", "King Black Dragon"]
+    }
+  },
   "leagues": {
     "4": {
       "tiers": [

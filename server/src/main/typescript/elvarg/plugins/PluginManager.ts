@@ -99,6 +99,7 @@ import {
   PluginCombatHitRollEvent,
   PluginCombatHitDamageEvent,
   PluginAttackTimingEvent,
+  PluginAttackSpeedEvent,
   PluginCombatHitResolvedEvent,
   PluginCombatAttackDistanceEvent,
   PluginCanUnequipEvent,
@@ -321,6 +322,7 @@ export class PluginManager {
   private static combatHitRollHooks: PluginHook<PluginCombatHitRollEvent>[] = [];
   private static combatHitDamageHooks: PluginHook<PluginCombatHitDamageEvent>[] = [];
   private static attackTimingHooks: PluginHook<PluginAttackTimingEvent>[] = [];
+  private static attackSpeedHooks: PluginHook<PluginAttackSpeedEvent>[] = [];
   private static combatHitResolvedHooks: PluginHook<PluginCombatHitResolvedEvent>[] = [];
   private static combatAttackDistanceHooks: PluginHook<PluginCombatAttackDistanceEvent>[] = [];
   private static spellDisabledHooks: PluginHook<PluginSpellDisabledEvent>[] = [];
@@ -1643,6 +1645,16 @@ export class PluginManager {
     for (const hook of PluginManager.attackTimingHooks) {
       PluginManager.executeHook(hook, event, "attack_timing", "attack_timing");
     }
+  }
+
+  /** The ticks until the attacker's next attack after the hooks had their say (at least 1). */
+  public static emitAttackSpeed(attacker: any, target: any, combatType: any, speed: number): number {
+    if (PluginManager.attackSpeedHooks.length === 0 || !attacker) return speed;
+    const event: PluginAttackSpeedEvent = { attacker, target, combatType, speed };
+    for (const hook of PluginManager.attackSpeedHooks) {
+      PluginManager.executeHook(hook, event, "attack_speed", "attack_speed");
+    }
+    return Number.isFinite(event.speed) ? Math.max(1, event.speed | 0) : speed;
   }
 
   public static emitCombatHitRoll(event: PluginCombatHitRollEvent): void {
@@ -3568,6 +3580,10 @@ export class PluginManager {
       onAttackTiming: (handler) => {
         if (typeof handler !== "function") return;
         PluginManager.attackTimingHooks.push({ ...hookProfile(handler), handler });
+      },
+      onAttackSpeed: (handler) => {
+        if (typeof handler !== "function") return;
+        PluginManager.attackSpeedHooks.push({ ...hookProfile(handler), handler });
       },
       onCombatHitResolved: (handler) => {
         if (typeof handler !== "function") return;

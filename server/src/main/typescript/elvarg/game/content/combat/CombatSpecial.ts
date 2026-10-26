@@ -262,7 +262,9 @@ export class CombatSpecial {
                         // A special swing is the player's attack for the cycle and is
                         // followed by the weapon's normal cooldown; `bypassDelay`
                         // (performNewAttack(true)) skips that reset, so do it here.
-                        const speed = spec.getTraits()?.attackSpeedTicks ?? method.attackSpeed(player);
+                        const { PluginManager } = require("../../../plugins/PluginManager");
+                        const speed = PluginManager.emitAttackSpeed(player, target, method.type(),
+                            spec.getTraits()?.attackSpeedTicks ?? method.attackSpeed(player));
                         player.getCombat().setAttackDelay(speed);
                     } else {
                         player.getCombat().setSpecialAttackQueued(true);

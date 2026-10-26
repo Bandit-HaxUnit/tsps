@@ -514,6 +514,17 @@ export interface PluginAttackTimingEvent {
   newTarget: boolean;
 }
 
+/**
+ * Asked for the ticks until an attacker's next attack, after the weapon's or spell's own speed
+ * (and a special's) is known; handlers may change `speed` (a relic's magic speed). Never below 1.
+ */
+export interface PluginAttackSpeedEvent {
+  attacker: any;
+  target: any;
+  combatType: any;
+  speed: number;
+}
+
 export interface PluginCombatHitRollEvent {
   attacker: any;
   target: any;
@@ -1006,6 +1017,8 @@ export interface PluginApi {
   onCombatHitDamage(handler: (event: PluginCombatHitDamageEvent) => void): void;
   /** Lets an attack ignore the attack timer, or leave it untouched (see PluginAttackTimingEvent). */
   onAttackTiming(handler: (event: PluginAttackTimingEvent) => void): void;
+  /** Lets a plugin change the ticks until the next attack (see PluginAttackSpeedEvent). */
+  onAttackSpeed(handler: (event: PluginAttackSpeedEvent) => void): void;
   onCombatHitResolved(handler: (event: PluginCombatHitResolvedEvent) => void): void;
   onCombatAttackDistance(handler: (event: PluginCombatAttackDistanceEvent) => void): void;
   onSpellDisabled(handler: (event: PluginSpellDisabledEvent) => void): void;
