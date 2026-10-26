@@ -38,7 +38,7 @@ before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
   await new NpcDefinitionLoader().load();
   core = PluginManager.getCoreApi();
-  GameConstants.LEAGUE_WORLD_TYPE = RAGING_ECHOES; // a Raging Echoes world
+  GameConstants.setWorldProfile("league"); // a league world
   const lists = {};
   const on = (name) => (handler) => {
     (lists[name] ??= []).push(handler);
@@ -54,6 +54,8 @@ before(async () => {
   const api = new Proxy({
     core,
     persistAttribute() {},
+    getPluginConfig: (key, fallback) => (key === "league:type" ? RAGING_ECHOES : fallback), // a Raging Echoes world
+    setWorldProfile: (profile) => GameConstants.setWorldProfile(profile),
     getSkillManager: () => require("../dist/game/content/skill/SkillManager").SkillManager,
     registerCommand: (name, handler) => (hooks[`command:${name}`] = handler),
     registerMeleeAttackAccuracyModifier: (modifier) => (modifiers.meleeAccuracy = modifier),
