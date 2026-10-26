@@ -16,10 +16,24 @@ const LEAGUE_TYPE_CONFIG = "league:type";
 let api = null;
 let core = null;
 let data = null;
+/** The one-off task `later` submits, defined once api.core.Task is reachable (as Notifications does). */
+let LaterTask = null;
 
 function init(pluginApi) {
   api = pluginApi;
   core = pluginApi.core;
+  if (core?.Task) LaterTask = class extends core.Task {
+    constructor(ticks, action) {
+      // Not keyed to the player: a click must not cancel it.
+      super(ticks);
+      this.action = action;
+    }
+
+    execute() {
+      this.stop();
+      this.action();
+    }
+  };
   data = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "leagues.json"), "utf8"));
   // A world whose plugin config names a league runs it: every login is the league character.
   if (worldLeague() !== null) api.setWorldProfile(LEAGUE_PROFILE);
@@ -80,8 +94,17 @@ function message(key, values = {}) {
   return data.messages[key].text.replace(/\{(\w+)\}/g, (match, name) => values[name] ?? match);
 }
 
+/** Runs `action` after `ticks` ticks if the player is still online. */
+function later(player, ticks, action) {
+  const manager = api.getTaskManager?.();
+  if (!LaterTask || typeof manager?.submit !== "function") return;
+  manager.submit(new LaterTask(ticks, () => {
+    if (player.isRegistered?.() !== false) action();
+  }));
+}
+
 module.exports = {
-  init, isLeagueProfile, leagueOf, league, worldLeague, configuredType, highestTier, xpMultiplier, runeday, message,
+  init, later, isLeagueProfile, leagueOf, league, worldLeague, configuredType, highestTier, xpMultiplier, runeday, message,
   LEAGUE_TYPE_ATTRIBUTE, LEAGUE_PROFILE, LEAGUE_TYPE_CONFIG,
   get data() { return data; },
   get api() { return api; },

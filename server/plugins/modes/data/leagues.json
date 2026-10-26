@@ -82,6 +82,27 @@
     "taskAwarded": { "text": "Awarded league task {id} ({points} points) to {name}.", "source": "ours" },
     "taskRepeat": { "text": "{name} already has league task {id}.", "source": "ours" }
   },
+  "records": {
+    "_comment": "The main game's league records (osrs-captures 229/00690, 00691, 00693, 00700-00702). Each screen opens as the main modal after script 2524 (-1, -1). Trophies (league_trophies 447; the Leagues Tutor's Claim-trophies, its dialogue's open_interface 'League trophies' and the POH trophy case open it): if_setevents 447:3 OP1 OP10 from slot 0 to the number of trophies (0-35 with rev 229's 35; this cache lists 42), then script 1128 with the title and five 32-bit masks over enum 2778's trophies. A set bit shows 'Take', a clear one 'Store' (scripts 1128, 1130). The client hides a trophy the character hasn't earned: script 1129 compares the trophy's param 917 (the points it needs) with the varp script 9462 reads for its league (param 916). Each click resends the masks through script 1130. The accomplishment scroll's League-statistics opens 449 with script 1110: header, statistics, scrollbar and close components, the owner's name, then one points total per league in league order. League-rankings opens 445 and nothing else. League-firsts opens 676 with script 3698 (nine components and the league shown) and if_setevents 676:22 OP1 over one slot per league; a pick in that dropdown (676:22, sub = the league) sends both again.",
+    "modalSize": [-1, -1],
+    "_pointsVarps": "Script 9462: each league's points as the main game knows them, by league type.",
+    "pointsVarps": { "1": 2771, "2": 2772, "3": 3275, "4": 4032, "5": 4556, "6": 5507 },
+    "trophies": {
+      "group": 447,
+      "items": 3,
+      "flags": ["OP1", "OP10"],
+      "openScript": 1128,
+      "updateScript": 1130,
+      "title": "League Trophies",
+      "enum": 2778,
+      "leagueParam": 916,
+      "pointsParam": 917,
+      "masks": 5
+    },
+    "statistics": { "group": 449, "script": 1110, "components": [5, 7, 8, 3] },
+    "rankings": { "group": 445 },
+    "firsts": { "group": 676, "script": 3698, "components": [1, 9, 10, 11, 16, 17, 18, 12, 7], "dropdown": 22 }
+  },
   "leagues": {
     "1": {
       "key": "twisted",

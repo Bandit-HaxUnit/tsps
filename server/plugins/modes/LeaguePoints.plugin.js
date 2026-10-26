@@ -4,6 +4,7 @@
  *
  *   api.emitCustomEvent("league:award-task", { player, id, points, name })  -> awarded (once per id)
  *   api.emitCustomEvent("league:points", { player })                        -> points, tasks
+ *   api.emitCustomEvent("league:saved-points", { save })                    -> points, tasks
  *   "league:points-changed" { player, points, previous, tasks }             after an award
  *
  * As captured (227/00070): an award raises league_total_tasks_completed (10046) and
@@ -83,6 +84,15 @@ function query(request) {
   request.tasks = Object.keys(tasks).length;
 }
 
+/** The same totals from a league character's save while it is offline (the main game's records read them). */
+function savedQuery(request) {
+  if (!request) return;
+  const tasks = request.save?.attributes?.[TASKS_ATTRIBUTE];
+  const valid = tasks && typeof tasks === "object" && !Array.isArray(tasks) ? tasks : {};
+  request.points = sum(valid);
+  request.tasks = Object.keys(valid).length;
+}
+
 /** The totals the client shows come from the saved tasks every login. */
 function login({ player }) {
   sendPoints(player, tasksOf(player));
@@ -98,6 +108,7 @@ module.exports = {
     api.persistAttribute(TASKS_ATTRIBUTE, {});
     api.onCustomEvent("league:award-task", award);
     api.onCustomEvent("league:points", query);
+    api.onCustomEvent("league:saved-points", savedQuery);
     api.onCustomEvent("league:login", login);
   },
 };

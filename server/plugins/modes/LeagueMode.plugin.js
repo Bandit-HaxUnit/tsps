@@ -3,9 +3,10 @@
  * `"pluginConfig": { "league:type": 4 }`) logs every account into its league character, a save
  * of its own (docs/leagues.md). This plugin gives that character its league (data/leagues.json), its XP
  * rate, the journal's Leagues tab and its Summary / Info / Rank panels, its rank and the
- * summary's statistics, and sends the structs and enums its screens need (Content). Points are
+ * summary's statistics, and sends the structs and enums its screens need (Content). A main
+ * character gets the main game's records: trophies, statistics, rankings and firsts. Points are
  * LeaguePoints.plugin.js, relics LeagueRelics.plugin.js; they talk over the `league:*` events
- * listed in the docs. A plain world's characters see none of it.
+ * listed in the docs. Apart from those records, a plain world's characters see none of it.
  */
 const Common = require("./league/Common.LeagueMode");
 
@@ -22,6 +23,7 @@ module.exports = {
     require("./league/Statistics.LeagueMode")(api);
     require("./league/Tutorial.LeagueMode")(api);
     require("./league/Welcome.LeagueMode")(api);
+    require("./league/Records.LeagueMode")(api);
     require("./league/Commands.LeagueMode")(api);
   },
 };
