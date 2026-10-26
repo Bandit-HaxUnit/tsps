@@ -3,10 +3,13 @@ const Data = require("./Data.Farming");
 const Model = require("./Model.Farming");
 const Services = require("./Services.Farming");
 const Spells = require("./Spells.Farming");
+const Geomancy = require("./Geomancy.Farming");
 const Tithe = require("./Tithe.Farming");
+const Rewards = require("./Rewards.Farming");
 const Guild = require("./Guild.Farming");
 const Hespori = require("./Hespori.Farming");
 const Redwood = require("./Redwood.Farming");
+const Tools = require("./Tools.Farming");
 const { pauseForLevelUp } = require("../SkillActions");
 
 const FARM_ATTRIBUTE = "farming:state";
@@ -84,15 +87,35 @@ function give(player, id, count = 1) {
     inventory.addItem(new core.Item(id, count));
     return true;
 }
+const farmingMenus = new WeakMap();
 function choose(player, entries, page = 0) {
     const shown = entries.slice(page * 4, page * 4 + 4);
+    if (!shown.length) return;
     if (entries.length > 4) shown.push(["More options", () => choose(player, entries, (page + 1) * 4 >= entries.length ? 0 : page + 1)]);
-    player.getDialogueManager().startDialogues(new core.DialogueChainBuilder().add(new core.OptionDialogue(0, {
-        executeOption(option) {
-            player.getPacketSender().sendInterfaceRemoval();
-            shown[Number(option)]?.[1]();
-        },
-    }, ...shown.map(([text]) => text))));
+    if (shown.length === 1) shown.push(["Cancel", () => {}]);
+    // Generic legacy dialogue callbacks do not identify the widget that sent them.
+    // Keep the action private to the exact-widget adapter below instead.
+    const menu = new core.OptionDialogue(0, null, ...shown.map(([text]) => text));
+    farmingMenus.set(menu, option => {
+        // Native option resumes are one-based, including the fifth pagination choice.
+        const number = Number(option);
+        if (!Number.isInteger(number) || !shown[number - 1]
+            || player.getDialogueManager().getCurrent() !== menu
+            || !player.getPacketSender().isChatboxInterface(core.OptionDialogue.OPTIONS_WIDGET_ID >>> 16)
+            || player.busy()) return;
+        farmingMenus.delete(menu);
+        player.getPacketSender().sendInterfaceRemoval();
+        shown[number - 1][1]();
+    });
+    player.getDialogueManager().startDialogues(new core.DialogueChainBuilder().add(menu));
+}
+function farmingOptionClick(event) {
+    const menu = event.player.getDialogueManager().getCurrent();
+    const select = farmingMenus.get(menu);
+    if (event.buttonId !== core.OptionDialogue.OPTIONS_WIDGET_ID || !select) return;
+    // Handle both resume and widget inputs before the legacy button fallback changes their index.
+    event.handled = true;
+    select(event.slot === undefined || event.slot === -1 ? event.action : event.slot);
 }
 function clearPatch(player, patch) {
     if (patch.type === "REDWOOD") redwoodRegrowth.delete(player);
@@ -659,6 +682,7 @@ function refresh(player) {
     else redwoodRegrowth.delete(player);
 }
 function farmingTick() {
+    Geomancy.tick();
     for (const [player, due] of redwoodRegrowth) if (due <= Date.now()) refresh(player);
     for (const [player, work] of WORK) workStep(player, work);
     for (const player of dirty) schedule(player);
@@ -745,11 +769,21 @@ function attach(api) {
     api.onServerStartup(startTicking);
     api.onPlayerLogin(login);
     api.onPlayerLogin(Tithe.titheLogin);
+    api.onPlayerLogin(Rewards.login);
+    api.onCanShop(Rewards.canShop);
     api.onPlayerMapSquareChange(mapSquareChanged);
     api.onPlayerLogout(logout);
+    api.onPlayerLogout(Geomancy.logout);
     api.onPlayerLogout(Tithe.titheLogout);
+    api.onPlayerLogout(Rewards.logout);
+    api.onPlayerLogout(Tools.logout);
+    api.onCustomEvent("omnishop:currency", Rewards.currency);
+    api.onCustomEvent("omnishop:describe", Rewards.describe);
+    api.onCustomEvent("omnishop:can-buy", Rewards.canBuy);
+    api.onCustomEvent("omnishop:purchase", Rewards.purchase);
     api.onCustomEvent("level-up:popup-opened", pauseWork);
     api.onObjectInteraction(objectInteraction);
+    api.onInterfaceActionClick(farmingOptionClick);
     api.onItemOnObject(itemOnObject, { noted: false });
     api.onItemOnItem(itemOnItem, { noted: false });
     api.onNpcInteraction(npcInteraction);
@@ -760,6 +794,9 @@ function attach(api) {
     api.onCustomEvent(core.Bank.INVENTORY_OP_EVENT, Guild.bankStorageOp);
     api.onSpellOnObject(spellOnObject);
     api.onButtonClick(Spells.farmingButton);
+    api.onInterfaceActionClick(Tools.click);
+    api.onInterfaceActionClick(Spells.farmingButton);
+    api.onInterfaceActionClick(Geomancy.tab);
     api.onCustomEvent("woodcutting:validate-tree", validateTree);
     api.onCustomEvent("spirit-trees:grown", grownSpiritTrees);
     api.onCustomEvent("farming:check-health", Guild.completeContract);

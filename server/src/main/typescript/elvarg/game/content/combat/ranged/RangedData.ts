@@ -70,6 +70,15 @@ export class Ammunition {
     public static readonly ENCHANTED_ONYX_BOLT = new Ammunition(9245, new Graphic(955, 0, GraphicHeight.HIGH), 27, 120)
     public static readonly ENCHANTED_DRAGONSTONE_DRAGON_BOLT = new Ammunition(ItemIdentifiers.DRAGONSTONE_DRAGON_BOLTS_E_, new Graphic(955, 0, GraphicHeight.HIGH), 27, 122)
 
+    // Ascension bolts (Wiki: Ascension bolts, Diamond/Onyx ascension bolts): +53 ranged strength, +58 gem-tipped.
+    // Travel spotanims from the cache: ascension_crossbowbolt_travel 4437, _onyx_ 4438, _diamond_ 4439. The cache has
+    // no launch spotanim for them. The enchanted bolts use their gem's travel spotanim.
+    public static readonly ASCENSION_BOLT = new Ammunition(ItemIdentifiers.ASCENSION_BOLTS, null, 4437, 53)
+    public static readonly DIAMOND_ASCENSION_BOLT = new Ammunition(ItemIdentifiers.DIAMOND_ASCENSION_BOLTS, null, 4439, 58)
+    public static readonly ENCHANTED_DIAMOND_ASCENSION_BOLT = new Ammunition(ItemIdentifiers.DIAMOND_ASCENSION_BOLTS_E_, null, 4439, 58)
+    public static readonly ONYX_ASCENSION_BOLT = new Ammunition(ItemIdentifiers.ONYX_ASCENSION_BOLTS, null, 4438, 58)
+    public static readonly ENCHANTED_ONYX_ASCENSION_BOLT = new Ammunition(ItemIdentifiers.ONYX_ASCENSION_BOLTS_E_, null, 4438, 58)
+
     // Dragon bolts, plain and gem-tipped: +122 ranged strength (Wiki), for a dragon crossbow or better.
     public static readonly DRAGON_BOLTS = Ammunition.dragonBolt(ItemIdentifiers.DRAGON_BOLTS_2)
     public static readonly OPAL_DRAGON_BOLT = Ammunition.dragonBolt(ItemIdentifiers.OPAL_DRAGON_BOLTS)
@@ -176,6 +185,8 @@ export class Ammunition {
     public static readonly TOKTZ_XIL_UL = new Ammunition(6522, null, 442, 58)
 
     public static readonly BOLT_RACK = new Ammunition(4740, null, 27, 55)
+    // Cache spotanim dttd_bone_crossbowbolt_travel; fired only by the Dorgeshuun crossbow (Wiki: Bone bolts).
+    public static readonly BONE_BOLT = new Ammunition(ItemIdentifiers.BONE_BOLTS, new Graphic(955, 0, GraphicHeight.HIGH), 696, 49)
     public static readonly CRYSTAL_BOW = new Ammunition(ItemIdentifiers.CRYSTAL_BOW_FULL, null, CRYSTAL_BOW_PROJECTILE_ID, 0)
     // The Gauntlet's crystal and corrupted bows: no ammunition, the strength is on the bow.
     public static readonly GAUNTLET_BOW = new Ammunition(ItemIdentifiers.CRYSTAL_BOW_BASIC_, null, CRYSTAL_BOW_PROJECTILE_ID, 0)
@@ -210,14 +221,14 @@ export class Ammunition {
     public static readonly IRIT_TAR = new Ammunition(ItemIdentifiers.IRIT_TAR, null, 33, 36)
     public static readonly TONALZTICS_OF_RALOS = new Ammunition(ItemIdentifiers.TONALZTICS_OF_RALOS, null, 2729, 0) // PROJANIM_GLAIVE_01_REGULAR
 
-    private readonly startGfx: Graphic;
+    private readonly startGfx: Graphic | null;
     private readonly doubleStartGfx: Graphic | null;
     private readonly itemId: number;
     private readonly projectileId: number;
     private readonly strength: number;
 
 
-    constructor(itemId: number, startGfx: Graphic, projectileId: number, strength: number, doubleStartGfx: Graphic | null = null) {
+    constructor(itemId: number, startGfx: Graphic | null, projectileId: number, strength: number, doubleStartGfx: Graphic | null = null) {
         this.itemId = itemId;
         this.startGfx = startGfx;
         this.doubleStartGfx = doubleStartGfx;
@@ -281,12 +292,12 @@ export class Ammunition {
         return this.itemId;
     }
 
-    public getStartGraphic(): Graphic {
+    public getStartGraphic(): Graphic | null {
         return this.startGfx;
     }
 
     /** The launch graphic with two arrows drawn (a weapon that fires two), or the usual one. */
-    public getDoubleStartGraphic(): Graphic {
+    public getDoubleStartGraphic(): Graphic | null {
         return this.doubleStartGfx ?? this.startGfx;
     }
 
@@ -329,6 +340,8 @@ export class RangedWeaponType {
     static get CRYSTAL_BOW() { const FT: any = getFightType(); return new RangedWeaponType(10, 10, FT?.SHORTBOW_LONGRANGE ?? null); }
     static get GAUNTLET_BOW() { const FT: any = getFightType(); return new RangedWeaponType(10, 10, FT?.LONGBOW_LONGRANGE ?? null); }
     static get CROSSBOW() { const FT: any = getFightType(); return new RangedWeaponType(7, 9, FT?.CROSSBOW_LONGRANGE ?? null); }
+    /** Wiki (and cache param 13): attack range 6 - one less than other crossbows - and 8 on Longrange. */
+    static get ASCENSION_CROSSBOWS() { const FT: any = getFightType(); return new RangedWeaponType(6, 8, FT?.CROSSBOW_LONGRANGE ?? null); }
     static get BALLISTA() { const FT: any = getFightType(); return new RangedWeaponType(7, 9, FT?.BALLISTA_LONGRANGE ?? null); }
 
     public getDefaultDistance(): number {
@@ -399,7 +412,10 @@ export class RangedWeapon {
         ItemIdentifiers.DRAGON_HUNTER_CROSSBOW_T_, ItemIdentifiers.DRAGON_HUNTER_CROSSBOW_T__2,
         ItemIdentifiers.DRAGON_HUNTER_CROSSBOW_B_, ItemIdentifiers.DRAGON_HUNTER_CROSSBOW_B__2,
     ], [Ammunition.BRONZE_BOLT, Ammunition.OPAL_BOLT, Ammunition.ENCHANTED_OPAL_BOLT, Ammunition.IRON_BOLT, Ammunition.JADE_BOLT, Ammunition.ENCHANTED_JADE_BOLT, Ammunition.STEEL_BOLT, Ammunition.PEARL_BOLT, Ammunition.ENCHANTED_PEARL_BOLT, Ammunition.MITHRIL_BOLT, Ammunition.TOPAZ_BOLT, Ammunition.ENCHANTED_TOPAZ_BOLT, Ammunition.ADAMANT_BOLT, Ammunition.SAPPHIRE_BOLT, Ammunition.ENCHANTED_SAPPHIRE_BOLT, Ammunition.EMERALD_BOLT, Ammunition.ENCHANTED_EMERALD_BOLT, Ammunition.RUBY_BOLT, Ammunition.ENCHANTED_RUBY_BOLT, Ammunition.RUNITE_BOLT, Ammunition.BROAD_BOLT, Ammunition.DIAMOND_BOLT, Ammunition.ENCHANTED_DIAMOND_BOLT, Ammunition.ONYX_BOLT, Ammunition.ENCHANTED_ONYX_BOLT, Ammunition.DRAGON_BOLT, Ammunition.ENCHANTED_DRAGON_BOLT, Ammunition.ENCHANTED_DRAGONSTONE_DRAGON_BOLT, ...Ammunition.ALL_DRAGON_BOLTS], RangedWeaponType.CROSSBOW)
-    public static readonly DORGESHUUN_CROSSBOW = new RangedWeapon([ItemIdentifiers.DORGESHUUN_CROSSBOW], [Ammunition.BRONZE_BOLT, Ammunition.IRON_BOLT, Ammunition.STEEL_BOLT, Ammunition.MITHRIL_BOLT, Ammunition.ADAMANT_BOLT, Ammunition.RUNITE_BOLT, Ammunition.BROAD_BOLT, Ammunition.DRAGON_BOLT], RangedWeaponType.CROSSBOW)
+    // Wiki: "metal bolts up to iron, except silver bolts", no tipped or (e) bolts, and bone bolts.
+    public static readonly DORGESHUUN_CROSSBOW = new RangedWeapon([ItemIdentifiers.DORGESHUUN_CROSSBOW], [Ammunition.BRONZE_BOLT, Ammunition.IRON_BOLT, Ammunition.BONE_BOLT], RangedWeaponType.CROSSBOW)
+    /** Fires only ascension bolts (Wiki: Ascension crossbows). */
+    public static readonly ASCENSION_CROSSBOWS = new RangedWeapon([ItemIdentifiers.ASCENSION_CROSSBOWS], [Ammunition.ASCENSION_BOLT, Ammunition.DIAMOND_ASCENSION_BOLT, Ammunition.ENCHANTED_DIAMOND_ASCENSION_BOLT, Ammunition.ONYX_ASCENSION_BOLT, Ammunition.ENCHANTED_ONYX_ASCENSION_BOLT], RangedWeaponType.ASCENSION_CROSSBOWS)
     public static readonly ARMADYL_CROSSBOW = new RangedWeapon([ItemIdentifiers.ARMADYL_CROSSBOW], [Ammunition.BRONZE_BOLT, Ammunition.OPAL_BOLT, Ammunition.ENCHANTED_OPAL_BOLT, Ammunition.IRON_BOLT, Ammunition.JADE_BOLT, Ammunition.ENCHANTED_JADE_BOLT, Ammunition.STEEL_BOLT, Ammunition.PEARL_BOLT, Ammunition.ENCHANTED_PEARL_BOLT, Ammunition.MITHRIL_BOLT, Ammunition.TOPAZ_BOLT, Ammunition.ENCHANTED_TOPAZ_BOLT, Ammunition.ADAMANT_BOLT, Ammunition.SAPPHIRE_BOLT, Ammunition.ENCHANTED_SAPPHIRE_BOLT, Ammunition.EMERALD_BOLT, Ammunition.ENCHANTED_EMERALD_BOLT, Ammunition.RUBY_BOLT, Ammunition.ENCHANTED_RUBY_BOLT, Ammunition.RUNITE_BOLT, Ammunition.BROAD_BOLT, Ammunition.DIAMOND_BOLT, Ammunition.ENCHANTED_DIAMOND_BOLT, Ammunition.ONYX_BOLT, Ammunition.ENCHANTED_ONYX_BOLT, Ammunition.DRAGON_BOLT, Ammunition.ENCHANTED_DRAGON_BOLT, Ammunition.ENCHANTED_DRAGONSTONE_DRAGON_BOLT, ...Ammunition.ALL_DRAGON_BOLTS], RangedWeaponType.CROSSBOW)
     public static readonly ZARYTE_CROSSBOW = new RangedWeapon([ItemIdentifiers.ZARYTE_CROSSBOW], [Ammunition.BRONZE_BOLT, Ammunition.OPAL_BOLT, Ammunition.ENCHANTED_OPAL_BOLT, Ammunition.IRON_BOLT, Ammunition.JADE_BOLT, Ammunition.ENCHANTED_JADE_BOLT, Ammunition.STEEL_BOLT, Ammunition.PEARL_BOLT, Ammunition.ENCHANTED_PEARL_BOLT, Ammunition.MITHRIL_BOLT, Ammunition.TOPAZ_BOLT, Ammunition.ENCHANTED_TOPAZ_BOLT, Ammunition.ADAMANT_BOLT, Ammunition.SAPPHIRE_BOLT, Ammunition.ENCHANTED_SAPPHIRE_BOLT, Ammunition.EMERALD_BOLT, Ammunition.ENCHANTED_EMERALD_BOLT, Ammunition.RUBY_BOLT, Ammunition.ENCHANTED_RUBY_BOLT, Ammunition.RUNITE_BOLT, Ammunition.BROAD_BOLT, Ammunition.DIAMOND_BOLT, Ammunition.ENCHANTED_DIAMOND_BOLT, Ammunition.ONYX_BOLT, Ammunition.ENCHANTED_ONYX_BOLT, Ammunition.DRAGON_BOLT, Ammunition.ENCHANTED_DRAGON_BOLT, Ammunition.ENCHANTED_DRAGONSTONE_DRAGON_BOLT, ...Ammunition.ALL_DRAGON_BOLTS], RangedWeaponType.CROSSBOW)
 

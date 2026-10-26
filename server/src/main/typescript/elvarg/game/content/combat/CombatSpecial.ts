@@ -209,7 +209,9 @@ export class CombatSpecial {
         // whose (legacy) interface entry omitted a bar, e.g. all staves.
         const equippedWeaponId = player.getEquipment().get(Equipment.WEAPON_SLOT).getId();
         const specialBar = player.getWeapon().getSpecialBar();
-        const special = CombatSpecial.getForWeaponId(equippedWeaponId);
+        // A shield can carry a special too (Rondache); a weapon's own comes first.
+        const special = CombatSpecial.getForWeaponId(equippedWeaponId)
+            ?? CombatSpecial.getForWeaponId(player.getEquipment().get(Equipment.SHIELD_SLOT).getId());
 
         if (special) {
             if (specialBar != -1) {

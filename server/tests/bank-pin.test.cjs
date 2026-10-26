@@ -435,6 +435,22 @@ function farmingStorage(t, { pin = true } = {}) {
   owner.getPacketSender = () => sender;
   const inventory = owner.getInventory();
   const player = pin ? withPin('2468') : fakePlayer();
+  const mounted = new Set(), nativeSender = player.getPacketSender();
+  Object.assign(nativeSender, {
+    sendInterface(id) { player.interface = id; mounted.add(id); return this; },
+    sendInterfaceRemoval() { player.interface = -1; mounted.clear(); return this; },
+    sendSubInterface(_target, id) { mounted.add(id); return this; },
+    sendVarbit() { return this; }, sendInterfaceFlagsRange() { return this; }, sendInterfaceScript() { return this; },
+    isSubInterfaceOpen: id => mounted.has(id),
+  });
+  player.getPacketSender = () => nativeSender;
+  player.getHitpoints = () => owner.getHitpoints();
+  player.getStatus = () => core.PlayerStatus.NONE;
+  player.isNeedsPlacement = () => false;
+  player.isTeleportingReturn = () => false;
+  player.getForceMovement = () => null;
+  player.busy = () => false;
+  player.setInterfaceId = id => { player.interface = id; return player; };
   let location = new core.Location(1240, 3720, 0);
   player.getLocation = () => location;
   player.getInventory = () => inventory;
@@ -482,7 +498,7 @@ for (const action of ['Exchange', 'Deposit-all']) test(`Tool Leprechaun ${action
   if (action === 'Deposit-all') {
     assert.equal(f.inventory.getAmount(f.spade), 0);
     assert.equal(f.Patches.farmFor(f.player).tools[f.spade], 1);
-  } else assert.match(f.player.messages.at(-1), /Use farming tools/);
+  } else assert.equal(f.player.interface, 125, 'the native equipment store opens after the PIN');
 });
 
 test('using a tool on the leprechaun cannot bypass the PIN', t => {
