@@ -5,6 +5,7 @@ const Services = require("./Services.Farming");
 const Spells = require("./Spells.Farming");
 const Tithe = require("./Tithe.Farming");
 const Guild = require("./Guild.Farming");
+const Vault = require("./Vault.Farming");
 const Hespori = require("./Hespori.Farming");
 const Redwood = require("./Redwood.Farming");
 const { pauseForLevelUp } = require("../SkillActions");
@@ -747,6 +748,9 @@ function attach(api) {
     api.onPlayerLogin(Tithe.titheLogin);
     api.onPlayerMapSquareChange(mapSquareChanged);
     api.onPlayerLogout(logout);
+    api.onPlayerLogout(Vault.logout);
+    api.onInterfaceActionClick(Vault.click);
+    api.onCustomEvent("player:widget-action", Vault.drag);
     api.onPlayerLogout(Tithe.titheLogout);
     api.onCustomEvent("level-up:popup-opened", pauseWork);
     api.onObjectInteraction(objectInteraction);
