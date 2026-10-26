@@ -2,9 +2,10 @@
  * Last Stand (https://oldschool.runescape.wiki/w/Last_Stand_(Raging_Echoes_League)), Raging
  * Echoes' tier 8 relic (the catalog's tier 6 copy is an alias): damage that would kill leaves the
  * player at 1 hitpoint, boosts Attack, Strength, Defence, Ranged and Magic to 255, draining 16 a
- * tick back to base + 15, and for 16 ticks no hit can finish them and no food or potion heals
- * them. When the window closes they are healed by the damage they dealt in it, up to their max
- * (ours: the Wiki shows a bar and gives no formula). Once every three minutes or death.
+ * tick back to base + 15, and for 16 ticks no hit can finish them and nothing heals them above
+ * 1 (food is refused; any other heal is undone on the next tick: ours, the Wiki names no means).
+ * When the window closes they are healed by the damage they dealt in it, up to their max (ours:
+ * the Wiki shows a bar and gives no formula). Once every three minutes or death.
  */
 const Common = require("./Common.LeagueRelics");
 
@@ -38,6 +39,8 @@ function tick(player) {
   const stand = stands.get(player);
   if (!stand || !player.isRegistered()) return false;
   const manager = player.getSkillManager();
+  // Nothing heals above 1 during the stand (the Wiki); a heal that slipped through is undone.
+  if (core.World.getProcessCycle() < stand.until && player.getHitpoints() > 1) player.setHitpoints(1);
   let draining = false;
   for (const skill of stand.boosted) {
     const floor = manager.getMaxLevel(skill) + effect.drainFloorAboveBase;
@@ -96,11 +99,11 @@ function dealtDamage({ player, hit }) {
   if (stand) stand.dealt += Math.max(0, hit.getTotalDamage());
 }
 
-/** No food or potion heals during the stand (the Wiki: nothing raises the player above 1). */
-function refuseHealing(event) {
+/** Food is refused during the stand (the Wiki: nothing raises the player above 1). */
+function refuseFood(event) {
   if (!standing(event.player)) return;
   event.allow = false;
-  event.player.sendMessage(effect.healRefused);
+  event.player.sendMessage(Common.message("lastStandNoFood"));
 }
 
 /** A real death ends the cooldown (Wiki). */
@@ -116,7 +119,6 @@ module.exports = function attach(pluginApi) {
   api.persistAttribute(READY_AT_ATTRIBUTE, 0);
   api.onPlayerBeforeDeath(beforeDeath);
   api.onPlayerDealtDamage(dealtDamage);
-  api.onCanEat(refuseHealing);
-  api.onCanDrink(refuseHealing);
+  api.onCanEat(refuseFood);
   api.onPlayerDeath(death);
 };

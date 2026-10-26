@@ -184,9 +184,10 @@ test("Archer's Embrace: ranged speed halved, accuracy doubled, an extra projecti
   const rolls = [];
   Math.random = () => rolls.shift() ?? 0.5;
   rolls.push(0.5, 0.95, 0.1);
-  assert.equal(emit("ranged:ammo-saving", { player: who.relic, itemId: 892, amount: 3, saved: 0 }).saved, 2, "two of three shots kept");
+  const arrows = core.ItemIdentifiers.RUNE_ARROW;
+  assert.equal(emit("ranged:ammo-saving", { player: who.relic, itemId: arrows, amount: 3, saved: 0 }).saved, 2, "two of three shots kept");
   for (const player of others(who)) {
-    assert.equal(emit("ranged:ammo-saving", { player, itemId: 892, amount: 3, saved: 0 }).saved, 0);
+    assert.equal(emit("ranged:ammo-saving", { player, itemId: arrows, amount: 3, saved: 0 }).saved, 0);
   }
 
   wield(who.relic, core.ItemIdentifiers.RUNE_THROWNAXE);
@@ -196,12 +197,17 @@ test("Archer's Embrace: ranged speed halved, accuracy doubled, an extra projecti
   core.CombatFactory.getMethod(who.relic);
   rolls.push(0.2);
   assert.equal(emit("combat:consume-charge", { player: who.relic, itemId: 1, skip: false }).skip, false, "not a melee weapon's");
-  wield(who.other, core.ItemIdentifiers.RUNE_THROWNAXE);
-  rolls.push(0.2);
-  assert.equal(emit("combat:consume-charge", { player: who.other, itemId: 1, skip: false }).skip, false);
+  for (const player of others(who)) {
+    wield(player, core.ItemIdentifiers.RUNE_THROWNAXE);
+    rolls.push(0.2);
+    assert.equal(emit("combat:consume-charge", { player, itemId: 1, skip: false }).skip, false, `${player.getUsername()} spends the charge`);
+  }
 
-  assert.equal(emit("combat:bolt-proc-chance", { player: who.relic, target: who.main, itemId: 9242, chance: 0.06 }).chance, 0.12);
-  assert.equal(emit("combat:bolt-proc-chance", { player: who.without, target: who.main, itemId: 9242, chance: 0.06 }).chance, 0.06);
+  const bolts = core.ItemIdentifiers.RUBY_BOLTS_E_;
+  assert.equal(emit("combat:bolt-proc-chance", { player: who.relic, target: who.main, itemId: bolts, chance: 0.06 }).chance, 0.12);
+  for (const player of others(who)) {
+    assert.equal(emit("combat:bolt-proc-chance", { player, target: who.main, itemId: bolts, chance: 0.06 }).chance, 0.06);
+  }
 
   wield(who.relic, core.ItemIdentifiers.RUNE_THROWNAXE);
   const queued = [];
@@ -221,9 +227,12 @@ test("Archer's Embrace: ranged speed halved, accuracy doubled, an extra projecti
   assert.equal(queued.length, 1, "the extra projectile fires no extra of its own");
   hooks.onCombatHitResolved({ attacker: who.relic, target: who.main, hit: fakeHit({ ...hit, isAccurate: () => false }) });
   assert.equal(queued.length, 1, "only a landed hit");
-  rolls.push(0.05);
-  hooks.onCombatHitResolved({ attacker: who.other, target: who.main, hit });
-  assert.equal(queued.length, 1);
+  for (const player of others(who)) {
+    rolls.length = 0;
+    rolls.push(0.05);
+    hooks.onCombatHitResolved({ attacker: player, target: who.main, hit });
+    assert.equal(queued.length, 1, `${player.getUsername()} fires no extra`);
+  }
 });
 
 test("Brawler's Resolve: melee speed halved, +50% accuracy and defences, double damage, charges saved, status immunity", () => {
@@ -267,8 +276,10 @@ test("Brawler's Resolve: melee speed halved, +50% accuracy and defences, double 
   wield(who.relic, core.ItemIdentifiers.RUNE_THROWNAXE);
   rolls.push(0.2);
   assert.equal(emit("combat:consume-charge", { player: who.relic, itemId: 1, skip: false }).skip, false, "not a ranged weapon's");
-  rolls.push(0.2);
-  assert.equal(emit("combat:consume-charge", { player: who.without, itemId: 1, skip: false }).skip, false);
+  for (const player of others(who)) {
+    rolls.push(0.2);
+    assert.equal(emit("combat:consume-charge", { player, itemId: 1, skip: false }).skip, false, `${player.getUsername()} spends the charge`);
+  }
 
   for (const kind of ["poison", "venom", "dragonfire"]) {
     assert.equal(emit("combat:status-apply", { target: who.relic, kind, allow: true }).allow, false, `immune to ${kind}`);
@@ -351,7 +362,7 @@ test("Weapon Master: specials land on NPCs for at least 20% of the max, 30% ener
   assert.equal(struck(who.relic, npc, true, true), floor);
   assert.equal(struck(who.relic, npc, true, false), 0);
   assert.equal(struck(who.relic, npc, false, true), 0);
-  assert.equal(struck(who.relic, who.main, true, true), 0);
+  assert.equal(struck(who.relic, who.main, true, true), floor, "the floor holds against players too; only the sure hit is NPC-only");
   for (const player of others(who)) assert.equal(struck(player, npc, true, true), 0);
   for (const player of Object.values(who)) player.setSpecialActivated(false);
 
@@ -368,10 +379,11 @@ test("Weapon Master: specials land on NPCs for at least 20% of the max, 30% ener
   skills.setCurrentLevel(Skill.HITPOINTS, 25, false);
   assert.equal(ask(who.relic, "check", 20).allow, false, "not with 25 hitpoints or fewer (ours)");
   skills.setCurrentLevel(Skill.HITPOINTS, 99, false);
-  ask(who.relic, "drain", 20);
+  const drained = ask(who.relic, "drain", 20);
   assert.equal(who.relic.getHitpoints(), 74, "the drain costs 25 hitpoints");
-  ask(who.relic, "drain", 25);
-  assert.equal(who.relic.getHitpoints(), 74, "a drain with the energy costs nothing");
+  assert.equal(drained.cost, 0, "and no energy (the Wiki's instead)");
+  assert.equal(ask(who.relic, "drain", 25).cost, 25, "a drain with the energy costs the energy");
+  assert.equal(who.relic.getHitpoints(), 74, "and no hitpoints");
   for (const player of others(who)) {
     player.getSkillManager().setMaxLevels(Skill.HITPOINTS, 99, false);
     player.getSkillManager().setCurrentLevel(Skill.HITPOINTS, 99, false);
@@ -383,8 +395,8 @@ test("Weapon Master: specials land on NPCs for at least 20% of the max, 30% ener
 
 test("Specialist: specials cost a fifth with double accuracy, a miss refunds 10%, a kill restores 15%", () => {
   const who = cases(SPECIALIST, 5);
-  assert.equal(emit("combat-special:cost", { player: who.relic, specialId: "x", cost: 50, available: 100, allow: false, phase: "check" }).cost, 10);
-  assert.equal(emit("combat-special:cost", { player: who.relic, specialId: "x", cost: 55, available: 100, allow: false, phase: "drain" }).cost, 11);
+  assert.equal(emit("combat-special:cost", { player: who.relic, specialId: "x", cost: 50, available: 100, allow: false, phase: "check" }).cost, 20, "a 50% special costs 20");
+  assert.equal(emit("combat-special:cost", { player: who.relic, specialId: "x", cost: 25, available: 100, allow: false, phase: "drain" }).cost, 20, "so does a 25% one (Wiki: all specials cost 20%)");
   for (const player of others(who)) {
     assert.equal(emit("combat-special:cost", { player, specialId: "x", cost: 50, available: 100, allow: false, phase: "check" }).cost, 50);
   }
@@ -392,9 +404,11 @@ test("Specialist: specials cost a fifth with double accuracy, a miss refunds 10%
   for (const kind of ["meleeAccuracy", "rangedAccuracy", "magicAccuracy"]) assert.equal(modify(kind, who.relic, 1000), 2000, kind);
   who.relic.setSpecialActivated(false);
   assert.equal(modify("meleeAccuracy", who.relic, 1000), 1000, "only while a special is active");
-  who.other.setSpecialActivated(true);
-  assert.equal(modify("meleeAccuracy", who.other, 1000), 1000);
-  who.other.setSpecialActivated(false);
+  for (const player of others(who)) {
+    player.setSpecialActivated(true);
+    assert.equal(modify("meleeAccuracy", player, 1000), 1000, `${player.getUsername()} rolls as usual`);
+    player.setSpecialActivated(false);
+  }
 
   const dealt = (player, special, accurate) => {
     player.setSpecialPercentage(50);
@@ -442,12 +456,15 @@ test("Last Stand: a lethal hit leaves 1 hitpoint, boosts to 255 draining to base
     assert.equal(tasks.length, 1, "the stand's tick task");
     assert.ok(Number(who.relic.getAttribute("league:last-stand-ready-at")) > Date.now() + 170000);
 
-    const eat = { player: who.relic, itemId: 385, allow: null };
+    const eat = { player: who.relic, itemId: core.ItemIdentifiers.SHARK, allow: null };
     hooks.onCanEat(eat);
     assert.equal(eat.allow, false, "no food during the stand");
-    const drink = { player: who.relic, itemId: 2434, allow: null };
-    hooks.onCanDrink(drink);
-    assert.equal(drink.allow, false, "no potion either");
+    assert.equal(hooks.onCanDrink, undefined, "potions are not refused (no relic hooks drinking)");
+    who.relic.heal(20);
+    assert.equal(who.relic.getHitpoints(), 21, "a heal lands");
+    cycle = 101;
+    tasks[0].execute();
+    assert.equal(who.relic.getHitpoints(), 1, "and is undone on the next tick");
 
     hooks.onPlayerDealtDamage({ player: who.relic, target: who.main, hit: fakeHit({ getTotalDamage: () => 30 }) });
     hooks.onPlayerDealtDamage({ player: who.relic, target: who.main, hit: fakeHit({ getTotalDamage: () => 20 }) });
@@ -467,7 +484,7 @@ test("Last Stand: a lethal hit leaves 1 hitpoint, boosts to 255 draining to base
     assert.equal(skills.getCurrentLevel(Skill.ATTACK), 85, "drained 16 a tick down to base + 15");
     assert.equal(skills.getCurrentLevel(Skill.STRENGTH), 1 + 15);
     assert.equal(who.relic.getHitpoints(), 51, "healed by the 50 damage dealt");
-    const later = { player: who.relic, itemId: 385, allow: null };
+    const later = { player: who.relic, itemId: core.ItemIdentifiers.SHARK, allow: null };
     hooks.onCanEat(later);
     assert.equal(later.allow, null, "food again once the stand is over");
 

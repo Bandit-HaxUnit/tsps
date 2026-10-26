@@ -140,12 +140,21 @@ test("Superior Sorcerer: a 90% roll a cast keeps the runes, and a powered staff'
   assert.equal(already.message, "Your staff saved the runes.", "another saver's answer stands");
 
   rolls.push(0.2);
+  who.relic.getCombat().setCastSpell(core.CombatSpells.FIRE_STRIKE); // a cast in progress, as when a powered staff asks
   const charge = { player: who.relic, itemId: 12899, skip: false };
   for (const handler of custom["combat:consume-charge"]) handler(charge);
   assert.equal(charge.skip, true, "the trident keeps its charge");
+  who.relic.getCombat().setCastSpell(null);
   const other = { player: who.echoes, itemId: 12899, skip: false };
   for (const handler of custom["combat:consume-charge"]) handler(other);
   assert.equal(other.skip, false);
+  who.relic.getEquipment().set(core.Equipment.WEAPON_SLOT, new core.Item(core.ItemIdentifiers.RUNE_THROWNAXE, 1));
+  core.CombatFactory.getMethod(who.relic);
+  rolls.push(0.2);
+  const thrown = { player: who.relic, itemId: core.ItemIdentifiers.RUNE_THROWNAXE, skip: false };
+  for (const handler of custom["combat:consume-charge"]) handler(thrown);
+  assert.equal(thrown.skip, false, "a ranged weapon's charge is not a powered staff's");
+  who.relic.getEquipment().set(core.Equipment.WEAPON_SLOT, new core.Item(-1, 0));
 });
 
 test("Superior Sorcerer: binding spells always land unless the target is frozen or immune", () => {

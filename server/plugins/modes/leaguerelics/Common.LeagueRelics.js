@@ -106,12 +106,26 @@ function isBuildingDerivedHit() {
   return buildingDerivedHit;
 }
 
+/** The attacker's max hit as combat computes it for a hit (the formulas, the ranged modifiers, a spell's bounds). */
+function maxHitFor(attacker, target, combatType) {
+  const { CombatType, DamageFormulas, PluginManager } = core;
+  if (combatType === CombatType.MAGIC) return DamageFormulas.sourceHitBounds(attacker, combatType, target).maximum;
+  const max = DamageFormulas.sourceMaxHit(attacker, combatType);
+  return combatType === CombatType.RANGED ? PluginManager.modifyRangedMaxHit(attacker, target, max) : max;
+}
+
+/** Restores special attack energy and redraws the bar. */
+function restoreSpecial(player, percent) {
+  player.incrementSpecialPercentage(percent);
+  core.CombatSpecial.updateBar(player);
+}
+
 function message(key, values = {}) {
   return data.messages[key].text.replace(/\{(\w+)\}/g, (match, name) => values[name] ?? match);
 }
 
 module.exports = {
-  init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, ids, message, RELICS_ATTRIBUTE,
+  init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, ids, message, maxHitFor, restoreSpecial, RELICS_ATTRIBUTE,
   derivedHit, isBuildingDerivedHit,
   get data() { return data; },
   get api() { return api; },

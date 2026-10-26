@@ -1,11 +1,11 @@
 /**
  * Weapon Master (https://oldschool.runescape.wiki/w/Weapon_Master), Trailblazer Reloaded's tier 7
- * relic: special attacks always land on NPCs and deal at least 20% of the max hit, special energy
- * restores 30% a cycle (the cycle is the usual 30 seconds, 15 with a lightbearer), and a player
- * short of energy may use a special anyway for 25 hitpoints (only with more than 25 left: ours).
+ * relic: special attacks always land on NPCs and deal at least 20% of the max hit (on any target),
+ * special energy restores 30% a cycle (the cycle is the usual 30 seconds, 15 with a lightbearer),
+ * and a player short of energy may use a special anyway for 25 hitpoints instead of the energy
+ * (only with more than 25 left: ours).
  */
 const Common = require("./Common.LeagueRelics");
-const { maxHitFor } = require("./Hits.LeagueRelics");
 
 let core;
 let effect;
@@ -23,8 +23,8 @@ function landsOnNpcs(roll) {
 }
 
 function minimumHit({ attacker, target, combatType, damage, accurate }) {
-  if (!accurate || !specialAgainstNpc(attacker, target)) return;
-  const minimum = Math.floor(maxHitFor(core, attacker, target, combatType) * effect.minimumHitFraction);
+  if (!accurate || !attacker.isSpecialActivated() || !active(attacker)) return;
+  const minimum = Math.floor(Common.maxHitFor(attacker, target, combatType) * effect.minimumHitFraction);
   if (damage.getDamage() < minimum) damage.setDamage(minimum);
 }
 
@@ -34,7 +34,7 @@ function regenerate(request) {
 
 /**
  * `combat-special:cost`: a player short of energy may still use the special; the drain then costs
- * 25 hitpoints instead of the missing energy.
+ * 25 hitpoints instead of energy (the Wiki's "instead": none is taken).
  */
 function cost(request) {
   const { player } = request;
@@ -45,6 +45,7 @@ function cost(request) {
   }
   const hitpoints = player.getHitpoints();
   if (hitpoints <= 1) return;
+  request.cost = 0;
   player.setHitpoints(hitpoints - Math.min(effect.sacrificeHitpoints, hitpoints - 1));
 }
 

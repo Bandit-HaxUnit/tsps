@@ -34,7 +34,7 @@ const ammo = {
 function execute(event) {
   const { attacker, target, combatType, damage } = event;
   if (combatType !== core.CombatType.RANGED || !target?.isNpc?.() || !wieldsAxe(attacker) || !active(attacker)) return;
-  const hitpoints = target.getHitpoints();
+  const hitpoints = target.getHitpointsAfterPendingDamage?.() ?? target.getHitpoints();
   if (hitpoints <= 0 || hitpoints >= target.getMaxHitpoints() * effect.executeBelowFraction) return;
   damage.setDamage(hitpoints);
   event.accurate = true;

@@ -30,10 +30,12 @@ const ANTIFIRE_MESSAGE = "Your antifire potion helps to protect you from the dra
 const SUPER_ANTIFIRE_MESSAGE = "Your super antifire potion completely protects you from the dragon fire!";
 
 let core;
+let pluginApi;
 
 /** Called from each plugin that uses this module, before any dragonfire logic runs. */
 function initDragonfireProtectionCoreAccess(api) {
   core = api.core;
+  pluginApi = api;
 }
 
 /**
@@ -131,7 +133,9 @@ function processDragonfireProtection(player) {
  */
 function getDragonfireProtectionTier(player) {
   const status = { target: player, kind: "dragonfire", allow: true };
-  core?.PluginManager?.emitCustomEvent?.("combat:status-apply", status);
+  // Through the plugin api this module was given; a caller that only handed it `core` goes through core.
+  const emitter = pluginApi?.emitCustomEvent ? pluginApi : core?.PluginManager;
+  emitter?.emitCustomEvent?.("combat:status-apply", status);
   if (status.allow === false) {
     return DragonfireProtectionTier.SUPER_ANTIFIRE;
   }

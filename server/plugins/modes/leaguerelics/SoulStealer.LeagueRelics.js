@@ -6,7 +6,6 @@
  * counts; an enchanted bolt's effect is part of its hit, so it counts too).
  */
 const Common = require("./Common.LeagueRelics");
-const { maxHitFor } = require("./Hits.LeagueRelics");
 
 let core;
 let effect;
@@ -31,7 +30,7 @@ function onDamage({ attacker, target, combatType, hit, damage, accurate }) {
   launch.targets.add(target);
   launches.set(hit, launch);
   if (!accurate) return;
-  const minimum = Math.floor(maxHitFor(core, attacker, target, combatType) * effect.minimumHitFraction);
+  const minimum = Math.floor(Common.maxHitFor(attacker, target, combatType) * effect.minimumHitFraction);
   if (damage.getDamage() < minimum) damage.setDamage(minimum);
 }
 

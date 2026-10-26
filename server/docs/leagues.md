@@ -169,7 +169,8 @@ These relics have their effects (`leaguerelics/*.LeagueRelics.js`, numbers in th
 - **Archer's Embrace** (tier 4): ranged speed halved (`onAttackSpeed`: above 4 rounded down,
   below 3 rounded up, so 3, 4 and 5 all become 2 as the Wiki's notes say), ranged accuracy x2,
   on a landed ranged hit a 10% chance of an extra `PendingHit` at the same target with a roll of
-  its own (no ammunition spent for it: ours; the extra never fires another), 90% of each volley's
+  its own (no ammunition spent and no projectile shown for it, a second hitsplat: ours; the extra
+  never fires another), 90% of each volley's
   shots kept (`ranged:ammo-saving`, so an Ava's device recovers its share of the rest, the
   Wiki's 98%), the same 90% for a ranged weapon's charge (`combat:consume-charge` while the
   player's combat method is ranged: the crystal bow, venator bow, blowpipe scales and
@@ -181,7 +182,8 @@ These relics have their effects (`leaguerelics/*.LeagueRelics.js`, numbers in th
   (`onCombatHitDamage`), 90% of a melee weapon's charges kept (scythe, crystal halberd,
   Arclight), and immunity to poison, venom and dragonfire (`combat:status-apply`). Stuns and
   freezes still take, as the Wiki says roots and stuns do. Not done: "icy breath" and the other
-  NPC-specific statuses the Wiki does not name.
+  NPC-specific statuses the Wiki does not name. Superior Sorcerer's charge saving now checks the
+  attack is a magic one, since every charge weapon asks the same question.
 - **Soul Stealer** (tier 7): the minimum hit rises to 10% of the max hit (the max as combat
   computes it for that hit, floored, applied to every accurate hit), and a landed hit has a 50%
   chance to restore hitpoints and prayer by 10% of its damage rounded up. The restore skips
@@ -190,30 +192,32 @@ These relics have their effects (`leaguerelics/*.LeagueRelics.js`, numbers in th
   it counts; a venator bow's bounces make its first hit a multi-target launch here, where the
   Wiki lets the first hit heal).
 - **Weapon Master** (tier 7): special attacks against NPCs are forced accurate
-  (`onCombatHitRoll`) and floored at 20% of the max hit, every restore cycle gives 30% energy
-  (`combat-special:regenerate`; the cycle stays the usual 30 seconds, 15 with a lightbearer), and
-  a player short of energy may still use a special (`combat-special:cost` "check": `allow`),
-  whose drain then costs 25 hitpoints instead ("drain"). Ours: the sacrifice needs more than 25
-  hitpoints, so it cannot kill.
+  (`onCombatHitRoll`) and every special's hit is floored at 20% of the max hit, every restore
+  cycle gives 30% energy (`combat-special:regenerate`; the cycle stays the usual 30 seconds, 15
+  with a lightbearer), and a player short of energy may still use a special (`combat-special:cost`
+  "check": `allow`), whose drain then costs 25 hitpoints and no energy ("drain": `cost` 0). Ours:
+  the sacrifice needs more than 25 hitpoints, so it cannot kill.
 - **Executioner** (tier 8): the Sage's axe is a ranged weapon in core's table
   (`RangedData.SAGES_AXE`, a dart-interface thrown weapon with +0 bonuses; the cache has no
-  spotanim of its own for it, so it flies as a rune thrown axe: ours), with the Wiki's 5 tiles of
-  reach (7 on long range) from a weapon profile and never used up (a ranged ammo handler). Its
-  requirement in item-gameplay.json is 0 (Wiki: no requirements). A hit on an NPC under 20% of
-  its hitpoints deals the rest of them (`onCombatHitDamage`), for the relic's owner only. The
+  spotanim of its own for it, so it flies as a rune thrown axe: ours), with the relic page's 5
+  tiles of reach (7 on long range; the item page's 6/8 is the later Demonic Pacts version) from a
+  weapon profile and never used up (a ranged ammo handler). Its requirement in item-gameplay.json
+  is 0 (Wiki: no requirements). A ranged hit on an NPC under 20% of its hitpoints (after the hits
+  already queued) deals the rest of them (`onCombatHitDamage`), for the relic's owner only. The
   Kraken's ranged reduction applies afterwards as to any hit.
 
 ### Raging Echoes' combat relics
 
-- **Specialist** (tier 8): specials cost a fifth (`combat-special:cost`, floored), roll accuracy
+- **Specialist** (tier 8): every special costs 20% (`combat-special:cost`), rolls accuracy
   x2 while a special is active (the three accuracy modifiers), a special that misses refunds 10%
   (`onPlayerDealtDamage`, one refund a missed `PendingHit`), and any NPC kill restores 15%
   (`onNpcDeath`).
 - **Last Stand** (tier 8; the catalog's tier 6 copy is an alias): a lethal hit from any source
   (`onPlayerBeforeDeath`) leaves the player at 1 hitpoint, boosts Attack, Strength, Defence,
-  Ranged and Magic to 255 and opens a 16-tick window in which every lethal hit again leaves 1 and
-  food and potions are refused (`onCanEat`, `onCanDrink`: the Wiki forbids healing above 1). A
-  tick task drains each boost 16 a tick down to base + 15; when the window closes the player is
+  Ranged and Magic to 255 and opens a 16-tick window in which every lethal hit again leaves 1,
+  food is refused (`onCanEat`) and any other heal is undone on the next tick (the Wiki forbids
+  healing above 1 by any means and names no mechanism: ours). A tick task drains each boost 16 a
+  tick down to base + 15; when the window closes the player is
   healed by the damage they dealt in it, capped at their max (ours: the Wiki shows a bar over the
   head and gives no formula; no bar here). Once every three minutes, reset by a real death
   (`league:last-stand-ready-at`). Not done: the Wiki's instant-kill exceptions (they are not
@@ -226,8 +230,9 @@ Trailblazer Reloaded's tier 6 and Raging Echoes' tier 4: every gain of experienc
 (`skills:experience-gained`, emitted after the gain) adds a bonus in the same skill of 10% of
 the total level, 20% when the skill is the one with the least experience, added with the
 multipliers off (neither the world's nor the league's rate) and floored to tenths like any
-gain; the bonus's own gain brings no bonus. Live tracks and shows the relic's XP; here it is a
-plain XP drop.
+gain; the bonus's own gain brings no bonus. Several skills tied for least experience (a fresh
+character) resolve to the first in skill order: ours. Live tracks and shows the relic's XP; here
+it is a plain XP drop.
 
 ## Developer commands
 
