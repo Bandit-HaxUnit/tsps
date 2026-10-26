@@ -117,9 +117,8 @@ function pointsChanged({ player, points, previous }) {
   });
 }
 
-function login({ player, league }) {
+function login({ player }) {
   sendSelections(player);
-  require("./Catalog.LeagueRelics").send(player, league);
 }
 
 /** `league:highest-tier` { player } -> tier: the highest tier index chosen (LeagueMode's XP rate reads it). */
@@ -145,6 +144,7 @@ function answerRelics(query) {
 module.exports = function attach(api) {
   api.persistAttribute(Common.RELICS_ATTRIBUTE, {});
   api.onCustomEvent("league:login", login);
+  api.onCustomEvent("league:content-rows", require("./Catalog.LeagueRelics").contribute);
   api.onCustomEvent("league:points-changed", pointsChanged);
   api.onCustomEvent("league:highest-tier", answerHighestTier);
   api.onCustomEvent("league:has-relic", answerHasRelic);
