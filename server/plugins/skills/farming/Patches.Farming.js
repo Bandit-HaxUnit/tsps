@@ -7,6 +7,7 @@ const Geomancy = require("./Geomancy.Farming");
 const Tithe = require("./Tithe.Farming");
 const Rewards = require("./Rewards.Farming");
 const Guild = require("./Guild.Farming");
+const Vault = require("./Vault.Farming");
 const Hespori = require("./Hespori.Farming");
 const Redwood = require("./Redwood.Farming");
 const Tools = require("./Tools.Farming");
@@ -773,6 +774,9 @@ function attach(api) {
     api.onCanShop(Rewards.canShop);
     api.onPlayerMapSquareChange(mapSquareChanged);
     api.onPlayerLogout(logout);
+    api.onPlayerLogout(Vault.logout);
+    api.onInterfaceActionClick(Vault.click);
+    api.onCustomEvent("player:widget-action", Vault.drag);
     api.onPlayerLogout(Geomancy.logout);
     api.onPlayerLogout(Tithe.titheLogout);
     api.onPlayerLogout(Rewards.logout);
