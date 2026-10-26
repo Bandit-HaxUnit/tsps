@@ -2,8 +2,9 @@
 // Shattered Relics' production fragments, The Alchemist, The Craftsman and Unchained Talent
 // (docs/leagues.md "Shattered Relics"), with real players: a Shattered Relics character with the
 // fragment equipped, the same character with it owned but not equipped, and a main character.
-// Herblore's own cleaning and mixing, and Smithing's own session loop, run as they do in game; the
-// other skills' events are sent as those skills send them.
+// Herblore's own cleaning and mixing, Smithing's own session loop and Construction's own use of a
+// build's materials run as they do in game; the other events are built by hand in the shape the
+// skills send them (the enchant loop, the Lunar batch and the alchemy policy are checked live).
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { test, before, afterEach } = require("node:test");
@@ -385,6 +386,7 @@ test("through Herblore's own mixing: Mixologist makes the 4-dose potion and keep
 
 test("Rooty Tooty 2x Runeys: each rune crafted has its chance of another", () => {
   const { owner, others } = cases(F.rootyTooty);
+  assert.equal(emit("runecrafting:success", { player: shattered("rootyNoAmount"), rolls: 3, runeId: I.AIR_RUNE }).amountPerEssence, undefined);
   const rolls = [0.1, 0.9, 0.1, 0.9, 0.9, 0.9];
   Math.random = () => rolls.shift() ?? 0.9;
   emit("runecrafting:success", { player: owner, rolls: 3, amountPerEssence: 2, runeId: I.AIR_RUNE });
@@ -397,15 +399,25 @@ test("Rooty Tooty 2x Runeys: each rune crafted has its chance of another", () =>
 });
 
 test("Plank Stretcher, Enchanted Jeweler, Rumple-Bow-String and Alchemaniac", () => {
+  // Construction's own use of a build's materials (getBuildMaterials' map), as a hotspot, the stairs and the workbench use it.
+  require("../plugins/skills/construction/Core.Construction").init({ core, emitCustomEvent: (name, payload) => emit(name, payload) });
+  const House = require("../plugins/skills/construction/House.Construction");
+  const build = (player) => {
+    player.getInventory().adds(I.OAK_PLANK, 4).adds(I.STEEL_NAILS, 2);
+    House.useMaterials(player, { key: "test" }, new Map([[I.OAK_PLANK, 4], [I.STEEL_NAILS, 2]]));
+    return [player.getInventory().getAmount(I.OAK_PLANK), player.getInventory().getAmount(I.STEEL_NAILS)];
+  };
   const planks = cases(F.plankStretcher);
   Math.random = () => 0.05;
-  const build = emit("construction:materials", { player: planks.owner, materials: [[I.OAK_PLANK, 4], [I.STEEL_NAILS, 2]] });
-  assert.deepEqual(build.materials, [[I.OAK_PLANK, 0], [I.STEEL_NAILS, 2]], "planks kept, nails used");
-  assert.deepEqual(emit("construction:materials", { player: planks.others[1], materials: [[I.OAK_PLANK, 4]] }).materials, [[I.OAK_PLANK, 4]]);
+  assert.deepEqual(build(planks.owner), [4, 0], "planks kept, nails used");
+  for (const player of planks.others) assert.deepEqual(build(player), [0, 0], player.getUsername());
+  Math.random = () => 0.5;
+  assert.deepEqual(build(shattered("plankslevel1")), [0, 0], "no fragment, no saving");
 
   const jeweler = cases(F.enchantedJeweler);
-  assert.equal(emit("magic:enchant-pieces", { player: jeweler.owner, pieces: 1 }).pieces, 5);
-  assert.equal(emit("magic:enchant-pieces", { player: jeweler.others[0], pieces: 1 }).pieces, 1);
+  assert.equal(emit("magic:enchant-pieces", { player: jeweler.owner, itemId: I.SAPPHIRE_RING, pieces: 1 }).pieces, 5);
+  assert.equal(emit("magic:enchant-pieces", { player: jeweler.owner, itemId: obj("silvthrill_rod"), pieces: 1 }).pieces, 1, "a quest's rod is no jewellery");
+  assert.equal(emit("magic:enchant-pieces", { player: jeweler.others[0], itemId: I.SAPPHIRE_RING, pieces: 1 }).pieces, 1);
 
   const spinner = cases(F.rumpleBowString, 3);
   assert.equal(emit("magic:spell-batch", { player: spinner.owner, spellName: "Spin Flax", batch: 5 }).batch, 27);

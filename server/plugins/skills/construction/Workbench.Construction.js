@@ -57,7 +57,7 @@ function makeFlatpack(player, bench, buildable) {
   if (buildable.level > bench.limit) return player.sendMessage(`This workbench can only make furniture up to level ${bench.limit}.`);
   const materials = House.getBuildMaterials(player, bench.house, null, buildable);
   if (typeof materials === "string") return player.sendMessage(materials);
-  for (const [itemId, amount] of materials) House.useMaterial(player, itemId, amount);
+  House.useMaterials(player, buildable, materials);
   player.performAnimation(new Animation(BUILD_ANIMATION));
   player.getInventory().adds(FLATPACK_OF.get(buildable.key), 1);
   player.getSkillManager().addExperiences(Skill.CONSTRUCTION, buildable.experience);

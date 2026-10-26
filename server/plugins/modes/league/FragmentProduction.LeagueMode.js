@@ -165,7 +165,10 @@ function keepPlanks(request) {
   request.materials = request.materials.map(([itemId, amount]) => [itemId, itemName(itemId).toLowerCase().endsWith(material) ? 0 : amount]);
 }
 
+/** More pieces of jewellery a cast (not a quest's enchanted items). */
 function enchantPieces(request) {
+  const name = itemName(request.itemId).toLowerCase();
+  if (!effects().enchantedJeweler.jewellery.some((kind) => name.includes(kind))) return;
   const pieces = value(request.player, "enchantedJeweler");
   if (pieces !== null) request.pieces = Math.max(request.pieces, pieces);
 }

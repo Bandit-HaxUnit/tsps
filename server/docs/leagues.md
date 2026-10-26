@@ -413,8 +413,8 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   the production fragments, The Alchemist, The Craftsman and Unchained Talent. The two
   all-at-once sets answer `skills:actions-per-cycle` with the inventory (28) for the Wiki's
   activities only (The Alchemist: cooking, cleaning, mixing; The Craftsman: smelting, smithing,
-  cannonballs, leather, glass, uncut gems, pottery, battlestaves, spinning, fletching logs and bolt
-  tips). Unchained Talent keeps the non-combat skills 8 over their level, checked every tick
+  cannonballs, leather, glass, uncut gems, pottery, battlestaves, spinning, fletching logs (bows
+  and shields) and bolt tips). Unchained Talent keeps the non-combat skills 8 over their level, checked every tick
   (`league:fragment-tick` from the fragment task), and takes the boost off with the set; Sailing,
   which the league predates, is left out (ours). The fragments hear `skills:produced`, which now
   carries the loop's `kind` (and `materials` for leather and jewellery): Smithing Double (an anvil's
@@ -424,8 +424,10 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   instance), Profletchional and Just Druid! (more XP for logs and stringing, and for cleaning),
   Pro Tips (more bolt tips a gem, rounded down: ours). Mixologist answers `herblore:mix` (a potion
   from an unfinished one with four doses; its secondary kept at the Wiki's 20/50/100%), Rooty Tooty
-  2x Runeys `runecrafting:success` (each rune its chance of another), Plank Stretcher
-  `construction:materials` (a build's planks kept), Enchanted Jeweler `magic:enchant-pieces`,
+  2x Runeys `runecrafting:success` (each rune its chance of another, Guardians of the Rift's altars
+  too), Plank Stretcher `construction:materials` (a build's planks kept: hotspots, staircases and
+  the workbench's flatpacks, through House's `useMaterials`), Enchanted Jeweler
+  `magic:enchant-pieces` (jewellery only, not a quest's enchanted rod or sickle),
   Rumple-Bow-String `magic:spell-batch` (Spin Flax) and Alchemaniac `magic:alchemy-policy` (High
   Alchemy only, by the policy's new `high`).
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
