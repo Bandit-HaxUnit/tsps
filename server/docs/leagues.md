@@ -182,19 +182,23 @@ progress in `league:mastery-progress`.
   the style, a point to spend. Refusals are game messages of ours. Unlocks are permanent.
 - **The masteries** (the Wiki's numbers in the data; `leaguemasteries/Melee|Ranged|Magic|AttackRate.LeagueCombatMasteries.js`):
   - Melee I: a quarter of landed hits roll again and keep the higher (a second roll of the max
-    hit, scaled as the first was when the target prays against melee). Melee II: a tenth of
-    melee attacks on an NPC queue an echo a tick later, a melee hit of its own accuracy rolled
-    from half the max hit, with the captured echo projectile (3186/3187, alternating). Melee IV:
+    hit, scaled as the first was when the target prays against melee; a player target's own
+    damage reductions, Elysian, Justiciar, the tier 4 passive, do not reach the second roll, nor
+    Ranged I's floor or Magic I's threshold). Melee II: a tenth of melee attacks on an NPC queue
+    an echo a tick later, a melee hit of its own accuracy rolled from half the max hit, queued as
+    any hit (its guards and XP), with the captured echo projectile (3186/3187, alternating). Melee IV:
     a twentieth of landed hits heal 40% of their damage. Melee VI: echoes on a fifth, and an
     echo may echo in turn, up to eight in a row.
-  - Ranged I: a landed roll below 30% of the max hit becomes 30%. Ranged II: each attack after
-    the first raises the max hit another 5%, back to nothing after +20% (counted as the attack is
-    made, through `onAttackSpeed`, so an attack that keeps its timer is not counted). Ranged IV:
+  - Ranged I: a landed roll below 30% of the max hit (with Ranged II's bonus on it) becomes 30%.
+    Ranged II: each attack after the first raises the max hit another 5%, back to nothing after
+    +20% (counted on the attack's first accuracy roll of a cycle, which comes before the max hit
+    is asked for a normal attack and for a special alike). Ranged IV:
     every fifth landed hit heals 5 a hitsplat. Ranged VI: a ranged roll against an NPC is forced
     accurate (an immune target still takes nothing).
   - Magic I: a landed roll above 90% of the max hit deals 50% more. Magic II: +5% max hit for
     every idle tick between two magic attacks, up to +40% (our reading: the gap less the attack's
-    own tick; the Wiki does not say). Magic IV: a roll above 90% heals 10% of the damage when it
+    own tick, noted on the cast's first accuracy roll; the first cast since login takes the cap;
+    the Wiki does not say). Magic IV: a roll above 90% heals 10% of the damage when it
     lands. Magic VI: +1% max hit for every 100 hitpoints the target has, up to +10%, added to
     Magic II's, and a target with fewer hitpoints than the max hit (before Magic I, Wiki) takes
     the max hit. The max-hit changes ride the core's `combat:magic-max-hit` request.
@@ -207,7 +211,10 @@ progress in `league:mastery-progress`.
   whenever hitpoints rise: a raised heal reaches full hitpoints at most, an overheal keeps its own
   target); 3 the three attack rolls x2 (the accuracy modifiers); 4 damage taken x0.85 (the
   incoming-damage modifier); 5 Prayer restores x1.25 (the core's new `skills:restore`, emitted by
-  `SkillManager.increaseCurrentLevel`, whose cap stays the caller's); 6 60% Prayer penetration:
+  `SkillManager.increaseCurrentLevel`, whose cap stays the caller's: prayer and restore potions,
+  the Prayer plugin's bone restores, Doom's holy water and the Theatre's entry go
+  through it; enchanted bolts, a few specials and the Falador shield set the level directly and
+  are not raised); 6 60% Prayer penetration:
   the roll bypasses the target's protection prayer and the damage then takes 40% of the usual
   reduction (0.6 + 0.4 x the core's constant).
 

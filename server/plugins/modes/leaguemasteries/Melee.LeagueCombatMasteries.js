@@ -2,7 +2,8 @@
  * The Melee masteries (https://oldschool.runescape.wiki/w/Melee_I .. Melee_VI): I a 25% chance to
  * roll the damage twice and keep the higher; II a 10% chance that a melee attack on an NPC is
  * followed by an echo hit, a melee hit of its own accuracy rolled from half the max hit, a tick
- * later, with the captured echo projectile; IV a 5% chance that a landed hit heals 40% of its
+ * later, queued as any hit (its guards and XP; the Wiki does not say whether an echo pays XP), with
+ * the captured echo projectile; IV a 5% chance that a landed hit heals 40% of its
  * damage; VI echoes on 20% of attacks and lets an echo echo in turn, up to eight in a row. The
  * attack rates (III, V) are AttackRate.LeagueCombatMasteries.js.
  */
@@ -15,7 +16,8 @@ let core;
 const echoes = new WeakMap();
 /** The echo being built: its depth, while its PendingHit rolls (the damage hook runs inside the constructor). */
 let building = null;
-let side = 0;
+/** Which of the two echo projectiles each attacker sent last. */
+const side = new WeakMap();
 
 const MELEE = () => core.CombatType.MELEE;
 
@@ -52,8 +54,10 @@ function queueEcho(attacker, target, depth) {
     building = null;
   }
   echoes.set(echo, depth + 1);
-  target.getCombat().getHitQueue().addPendingHit(echo, core.World.getProcessCycle());
-  const projectile = second.echoProjectiles[side++ % second.echoProjectiles.length];
+  core.CombatFactory.addPendingHit(echo);
+  const turn = side.get(attacker) ?? 0;
+  side.set(attacker, turn + 1);
+  const projectile = second.echoProjectiles[turn % second.echoProjectiles.length];
   core.Projectile.createProjectile(attacker, target, projectile, second.echoProjectileDelay, second.echoProjectileSpeed,
     second.echoProjectileHeights[0], second.echoProjectileHeights[1]).sendProjectile();
 }

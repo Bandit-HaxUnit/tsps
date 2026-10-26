@@ -22,9 +22,9 @@ function sendProgress(player) {
 function refusal(player, styleKey, tierNumber) {
   if (!Common.isEchoes(player)) return "notLeague";
   if (!Common.mastery(styleKey, tierNumber)) return "noSuchMastery";
-  const current = Common.tier(player, styleKey);
-  if (current >= tierNumber) return "alreadyUnlocked";
-  if (current < tierNumber - 1) return "needsPrevious";
+  if (Common.tier(player, styleKey) >= tierNumber) return "alreadyUnlocked";
+  const required = Common.required(styleKey, tierNumber);
+  if (required && Common.tier(player, required.styleKey) < required.tier) return "needsPrevious";
   if (Common.available(player) < 1) return "noPoints";
   return null;
 }
@@ -45,7 +45,7 @@ function present(player, styleKey) {
 function unlock(player, styleKey, tierNumber) {
   const why = refusal(player, styleKey, tierNumber);
   if (why) {
-    player.sendMessage(Common.message(why, { previous: Common.mastery(styleKey, tierNumber - 1)?.name ?? "" }));
+    player.sendMessage(Common.message(why, { previous: Common.required(styleKey, tierNumber)?.name ?? "" }));
     return false;
   }
   const passiveBefore = Common.passiveTier(player);

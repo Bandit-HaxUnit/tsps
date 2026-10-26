@@ -2,7 +2,7 @@
  * The Magic masteries (https://oldschool.runescape.wiki/w/Magic_I .. Magic_VI): I a landed roll
  * above 90% of the max hit deals 50% more; II the max hit rises 5% for every idle tick between two
  * magic attacks, up to +40% (our reading of "per tick in-between": the gap less the attack's own
- * tick); IV a roll above 90% heals 10% of the damage when the hit lands; VI the max hit rises 1%
+ * tick, and the cap for the first cast since login); IV a roll above 90% heals 10% of the damage when the hit lands; VI the max hit rises 1%
  * for every 100 hitpoints the target has, up to +10%, and a target with fewer hitpoints than the
  * max hit (before Magic I, Wiki) takes the max hit. The max hit changes ride the core's
  * `combat:magic-max-hit` request, so every magic max hit (and Magic I's threshold) includes them.
@@ -21,17 +21,24 @@ const highRolls = new WeakSet();
 
 const MAGIC = () => core.CombatType.MAGIC;
 
-function attackSpeed({ attacker, combatType }) {
-  if (combatType !== MAGIC()) return;
-  const cycle = core.World.getProcessCycle();
+/**
+ * Magic II notes a cast on its first accuracy roll of a cycle (before the max hit is asked; a
+ * special rolls before the attack-speed hook, a normal cast after it). With no cast known since
+ * login the idle ticks are taken as the cap.
+ */
+function noteCast(attacker) {
   const second = Common.effect(attacker, "magic", 2);
-  if (second) {
-    const previous = lastCast.get(attacker);
-    const idle = previous === undefined ? 0 : Math.max(0, cycle - previous - 1);
-    bonus.set(attacker, Math.min(Math.round(second.cap * 100), idle * Math.round(second.perTick * 100)));
-  } else {
+  if (!second) {
     bonus.delete(attacker);
+    lastCast.delete(attacker);
+    return;
   }
+  const cycle = core.World.getProcessCycle();
+  const previous = lastCast.get(attacker);
+  if (previous === cycle) return;
+  const cap = Math.round(second.cap * 100);
+  const idle = previous === undefined ? Infinity : Math.max(0, cycle - previous - 1);
+  bonus.set(attacker, Math.min(cap, idle * Math.round(second.perTick * 100)));
   lastCast.set(attacker, cycle);
 }
 
@@ -68,17 +75,18 @@ function resolved({ attacker, hit }) {
   if (fourth && hit.isAccurate()) attacker.heal(Math.floor(hit.getTotalDamage() * fourth.healFraction));
 }
 
-/** Magic VI's execute: a target with fewer hitpoints than the max hit takes it (on an accurate roll). */
-function execute(roll) {
-  if (roll.combatType !== MAGIC() || !Common.effect(roll.attacker, "magic", 6)?.execute) return;
-  if (roll.target.getHitpoints() < Common.maxHit(roll.attacker, MAGIC())) roll.forceMaxHit = true;
+/** A magic roll: Magic II's cast, then Magic VI's execute (a target with fewer hitpoints than the max hit takes it, on an accurate roll). */
+function roll(event) {
+  if (event.combatType !== MAGIC() || !Common.isEchoes(event.attacker)) return;
+  noteCast(event.attacker);
+  if (!Common.effect(event.attacker, "magic", 6)?.execute) return;
+  if (event.target.getHitpoints() < Common.maxHit(event.attacker, MAGIC())) event.forceMaxHit = true;
 }
 
 module.exports = function attach(api) {
   core = api.core;
-  api.onAttackSpeed(attackSpeed);
   api.onCustomEvent("combat:magic-max-hit", maxHit);
   api.onCombatHitDamage(damage);
   api.onCombatHitResolved(resolved);
-  api.onCombatHitRoll(execute);
+  api.onCombatHitRoll(roll);
 };

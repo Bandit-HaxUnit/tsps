@@ -94,8 +94,12 @@ afterEach(() => {
   Math.random = realRandom;
   core.Misc.randomInclusive = realRandomInclusive;
   core.PrayerHandler.isActivated = realIsActivated;
+  core.World.processCycle = 0;
   emitted.length = 0;
 });
+
+const cycle = (value) => (core.World.processCycle = value);
+const rollEvent = (attacker, target, combatType) => ({ attacker, target, combatType, forceAccurate: false, forceMaxHit: false, bypassProtectionPrayer: false });
 
 /** Math.random answers from a queue, then `rest`. */
 function randoms(values, rest = 0.5) {
@@ -266,7 +270,9 @@ test("an unlock needs a point and the previous tier, once; the first tier reache
   command("point", "1");
   assert.equal(player.sent.messages.at(-1), "You already have combat mastery challenge giant.");
   command("melee", "2");
-  assert.equal(player.sent.messages.at(-1), "You need to unlock Melee I first.");
+  assert.equal(player.sent.messages.at(-1), "You need to unlock Melee I first.", "the data's `requires`");
+  command("magic", "6");
+  assert.equal(player.sent.messages.at(-1), "You need to unlock Magic V first.");
   command("melee", "7");
   assert.equal(player.sent.messages.at(-1), "Use ::mastery, ::mastery <melee|ranged|magic> <tier 1-6> or ::mastery point <1-10>.");
   player.sent.sounds.length = 0;
@@ -333,6 +339,9 @@ test("the interface as captured: the panel's button opens it, a tab and a node a
   assert.equal(click(311, 76), true, "close");
   assert.equal(player.sent.removals, 2);
   assert.equal(click(311, 76), false);
+  click(656, 32);
+  query("interface:closed", { player, interfaceId: 311 });
+  assert.equal(click(311, 36, 7), false, "the modal closed another way: the button must open it again");
   const trailblazer = character("trailblazer-viewer", { league: TRAILBLAZER });
   assert.equal(hooks[`button:${uid(656, 32)}`]({ player: trailblazer }), false);
 });
@@ -402,7 +411,8 @@ test("Melee II echoes a tenth of melee attacks on NPCs with a half-max-hit melee
   randoms([0.15]);
   hooks.onCombatHitResolved({ attacker: second, target, hit });
   assert.equal(queued.length, 0, "a 15 misses the 10%");
-  randoms([0.05]);
+  randoms([0.05], 0.01); // the echo roll, then an accurate echo
+  core.Misc.randomInclusive = (low, high) => high;
   hooks.onCombatHitResolved({ attacker: second, target, hit });
   assert.equal(queued.length, 1);
   const echo = queued[0];
@@ -410,7 +420,9 @@ test("Melee II echoes a tenth of melee attacks on NPCs with a half-max-hit melee
   assert.equal(echo.getAttacker(), second);
   assert.equal(echo.getTarget(), target);
   assert.equal(echo.getCombatType(), CombatType.MELEE);
-  assert.ok(echo.getTotalDamage() <= Math.floor(max / 2), `rolled from half the max hit (${max}): ${echo.getTotalDamage()}`);
+  assert.ok(echo.isAccurate());
+  assert.equal(echo.getTotalDamage(), Math.floor(max / 2), `rolled from half the max hit (${max})`);
+  core.Misc.randomInclusive = realRandomInclusive;
   randoms([0.05]);
   hooks.onCombatHitResolved({ attacker: second, target, hit: echo });
   assert.equal(queued.length, 1, "an echo does not echo without Melee VI");
@@ -457,15 +469,22 @@ test("Ranged I lifts low rolls to 30%; Ranged II stacks 5% a shot to 20%; Ranged
   assert.equal(roll(player, floor + 1), floor + 1);
   assert.equal(roll(player, 0, false), 0, "a miss stays a miss");
 
-  const shoot = () => hooks.onAttackSpeed({ attacker: player, target, combatType: CombatType.RANGED, speed: 5 });
+  const shoot = (tick) => {
+    cycle(tick);
+    hooks.onCombatHitRoll(rollEvent(player, target, CombatType.RANGED));
+  };
   const maxHit = () => modifiers.rangedCombat.modifyMaxHit(player, target, 100);
   const seen = [];
   for (let i = 0; i < 7; i++) {
-    shoot();
+    shoot(100 + i * 4);
     seen.push(maxHit());
   }
   assert.deepEqual(seen, [100, 105, 110, 115, 120, 100, 105], "+5% a subsequent shot, back to nothing after +20%");
+  hooks.onCombatHitRoll(rollEvent(player, target, CombatType.RANGED));
+  assert.equal(maxHit(), 105, "a second hitsplat's roll in the same cycle is the same attack");
+  assert.equal(roll(player, 1), Math.floor(Math.floor(max * 1.05) * 0.3), "Ranged I's floor is 30% of the boosted max hit");
   assert.equal(modifiers.rangedCombat.modifyAttackRoll(player, target, 100), null);
+  cycle(0);
 
   player.setHitpoints(50);
   const hit = { getCombatType: () => CombatType.RANGED, isAccurate: () => true, getTotalDamage: () => 10, getHits: () => [1] };
@@ -520,27 +539,26 @@ test("Magic I and IV act on rolls above 90% of the max hit; Magic II grows the m
   assert.equal(player.getHitpoints(), 53, "a low roll heals nothing");
 
   const magicMaxHit = (attacker, victim, base) => query("combat:magic-max-hit", { attacker, target: victim, maxHit: base }).maxHit;
-  const cycle = (value) => (core.World.processCycle = value);
-  const cast = () => hooks.onAttackSpeed({ attacker: player, target, combatType: CombatType.MAGIC, speed: 5 });
+  const cast = (tick) => {
+    cycle(tick);
+    hooks.onCombatHitRoll(rollEvent(player, target, CombatType.MAGIC));
+  };
   const lowHp = { getHitpoints: () => 50 };
-  cycle(100);
-  cast();
-  assert.equal(magicMaxHit(player, lowHp, 100), 100, "the first cast has no idle ticks before it");
-  cycle(105);
-  cast();
+  cast(100);
+  assert.equal(magicMaxHit(player, lowHp, 100), 140, "the first cast since login takes the cap");
+  cast(105);
   assert.equal(magicMaxHit(player, lowHp, 100), 120, "four idle ticks: +20%");
-  cycle(106);
-  cast();
+  cast(106);
   assert.equal(magicMaxHit(player, lowHp, 100), 100, "a cast the next tick: nothing");
-  cycle(130);
-  cast();
+  cast(130);
   assert.equal(magicMaxHit(player, lowHp, 100), 140, "capped at +40%");
+  cast(130);
+  assert.equal(magicMaxHit(player, lowHp, 100), 140, "another roll of the same cast changes nothing");
   assert.equal(magicMaxHit(player, { getHitpoints: () => 550 }, 100), 145, "Magic VI: 5% for 550 hitpoints, added to Magic II's 40%");
   assert.equal(magicMaxHit(player, { getHitpoints: () => 2000 }, 100), 150, "capped at +10%");
-  cycle(0);
 
   const rollHit = (attacker, victim) => {
-    const event = { attacker, target: victim, combatType: CombatType.MAGIC, forceAccurate: false, forceMaxHit: false, bypassProtectionPrayer: false };
+    const event = rollEvent(attacker, victim, CombatType.MAGIC);
     hooks.onCombatHitRoll(event);
     return event.forceMaxHit;
   };

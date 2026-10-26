@@ -572,7 +572,7 @@ export class SkillManager {
             // passive's Prayer gain); `max` stays the caller's cap.
             const restore = { player: this.player, skill, amount, max };
             PluginManager.emitCustomEvent("skills:restore", restore);
-            if (Number.isFinite(restore.amount) && restore.amount >= 0) amount = Math.floor(restore.amount);
+            if (restore.amount !== amount && Number.isFinite(restore.amount) && restore.amount >= 0) amount = Math.floor(restore.amount);
         }
         const curr = this.getCurrentLevel(skill);
         if ((curr + amount) > max) {

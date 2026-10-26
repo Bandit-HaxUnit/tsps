@@ -59,6 +59,17 @@ function mastery(styleKey, tier) {
   return style(styleKey)?.masteries[tier - 1] ?? null;
 }
 
+/** The mastery a tier's data says it `requires` ({ styleKey, tier, name }), or null for a first tier. */
+function required(styleKey, tierNumber) {
+  const key = mastery(styleKey, tierNumber)?.requires;
+  if (!key) return null;
+  for (const otherStyle of STYLE_KEYS) {
+    const found = style(otherStyle).masteries.find((entry) => entry.key === key);
+    if (found) return { styleKey: otherStyle, tier: found.tier, name: found.name };
+  }
+  return null;
+}
+
 /** The unlocked tier (0-6) of a style. */
 function tier(player, styleKey) {
   return masteries(player)[styleKey] ?? 0;
@@ -126,7 +137,7 @@ function message(key, values = {}) {
 }
 
 module.exports = {
-  init, isEchoes, emptyMasteries, masteries, style, styleOfCombatType, mastery, tier, has, effect,
+  init, isEchoes, emptyMasteries, masteries, style, styleOfCombatType, mastery, required, tier, has, effect,
   passiveTier, passive, passiveEffect, pointsEarned, earned, spent, available, progress, maxHit, uid, message,
   MASTERIES_ATTRIBUTE, POINTS_ATTRIBUTE, PROGRESS_ATTRIBUTE, STYLE_KEYS,
   get data() { return data; },

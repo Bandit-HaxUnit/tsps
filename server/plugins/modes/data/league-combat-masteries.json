@@ -37,10 +37,10 @@
   "passiveStructs": [1153, 1154, 1156, 1155, 1157, 1158],
   "styles": {
     "melee": {
-      "name": "Melee", "combatType": "MELEE", "progressVarbit": 11580, "slotBase": 0, "tabIndex": 0,
+      "name": "Melee", "combatType": "MELEE", "progressVarbit": 11580, "slotBase": 0,
       "masteries": [
-        { "key": "melee-1", "tier": 1, "struct": 1165, "name": "Melee I", "requires": null, "description": "Melee hits have a 25% chance to roll damage twice and take the highest result.", "effect": { "rerollChance": 0.25 } },
-        { "key": "melee-2", "tier": 2, "struct": 1166, "name": "Melee II", "requires": "melee-1", "description": "Melee hits have a 10% chance to generate an echo hit (additional melee hit, 50% max-hit, respects Accuracy, PvM only).", "effect": { "echoChance": 0.1, "echoMaxHitFraction": 0.5, "echoDelay": 1, "_echoProjectiles": "vfx_league_5_melee_mastery_left / right (3186 / 3187) as other players' echoes travelled in the capture: start 0, end 42, heights 6 to 10; which side is ours (alternating).", "echoProjectiles": [3186, 3187], "echoProjectileDelay": 0, "echoProjectileSpeed": 42, "echoProjectileHeights": [6, 10] } },
+        { "key": "melee-1", "tier": 1, "struct": 1165, "name": "Melee I", "requires": null, "description": "Melee hits have a 25% chance to roll damage twice and take the highest result.", "effect": { "rerollChance": 0.25, "_ours": "The second roll is scaled by the target's protection prayer as the first was, but not by a player target's own damage reductions (Elysian, Justiciar, the tier 4 passive)." } },
+        { "key": "melee-2", "tier": 2, "struct": 1166, "name": "Melee II", "requires": "melee-1", "description": "Melee hits have a 10% chance to generate an echo hit (additional melee hit, 50% max-hit, respects Accuracy, PvM only).", "effect": { "echoChance": 0.1, "echoMaxHitFraction": 0.5, "echoDelay": 1, "_xp": "An echo is queued as any hit, so it pays combat XP; the Wiki does not say.", "_echoProjectiles": "vfx_league_5_melee_mastery_left / right (3186 / 3187) as other players' echoes travelled in the capture: start 0, end 42, heights 6 to 10; which side is ours (alternating).", "echoProjectiles": [3186, 3187], "echoProjectileDelay": 0, "echoProjectileSpeed": 42, "echoProjectileHeights": [6, 10] } },
         { "key": "melee-3", "tier": 3, "struct": 1167, "name": "Melee III", "requires": "melee-2", "description": "Melee attack rate set to 80%, rounding down.", "effect": { "attackRate": 0.8 } },
         { "key": "melee-4", "tier": 4, "struct": 1168, "name": "Melee IV", "requires": "melee-3", "description": "Melee hits have a 5% chance to heal 40% of damage dealt.", "effect": { "healChance": 0.05, "healFraction": 0.4 } },
         { "key": "melee-5", "tier": 5, "struct": 1169, "name": "Melee V", "requires": "melee-4", "description": "Melee attack rate set to 50%, rounded down for 5t and above, rounded up below 4t.", "effect": { "attackRate": 0.5, "roundDownFrom": 5 } },
@@ -48,7 +48,7 @@
       ]
     },
     "ranged": {
-      "name": "Ranged", "combatType": "RANGED", "progressVarbit": 11581, "slotBase": 6, "tabIndex": 1,
+      "name": "Ranged", "combatType": "RANGED", "progressVarbit": 11581, "slotBase": 6,
       "masteries": [
         { "key": "ranged-1", "tier": 1, "struct": 1171, "name": "Ranged I", "requires": null, "description": "Damage rolls beneath 30% of max hit with Ranged are increased to 30%.", "effect": { "minimumFraction": 0.3 } },
         { "key": "ranged-2", "tier": 2, "struct": 1172, "name": "Ranged II", "requires": "ranged-1", "description": "Each subsequent Ranged attack has its max hit increased by an additional 5%. Resets after +20%.", "effect": { "maxHitStep": 0.05, "maxHitCap": 0.2 } },
@@ -59,10 +59,10 @@
       ]
     },
     "magic": {
-      "name": "Magic", "combatType": "MAGIC", "progressVarbit": 11582, "slotBase": 12, "tabIndex": 2,
+      "name": "Magic", "combatType": "MAGIC", "progressVarbit": 11582, "slotBase": 12,
       "masteries": [
         { "key": "magic-1", "tier": 1, "struct": 1159, "name": "Magic I", "requires": null, "description": "When you roll above 90% of your max hit with Magic, damage is increased by 50%.", "effect": { "highRollFraction": 0.9, "damageMultiplier": 1.5 } },
-        { "key": "magic-2", "tier": 2, "struct": 1160, "name": "Magic II", "requires": "magic-1", "description": "Magic max hit is increased by 5% per tick in-between your attacks (Up to +40%).", "effect": { "perTick": 0.05, "cap": 0.4, "_ours": "The ticks in-between two magic attacks are the idle ticks (the gap less one); the Wiki does not say whether the attack's own tick counts." } },
+        { "key": "magic-2", "tier": 2, "struct": 1160, "name": "Magic II", "requires": "magic-1", "description": "Magic max hit is increased by 5% per tick in-between your attacks (Up to +40%).", "effect": { "perTick": 0.05, "cap": 0.4, "_ours": "The ticks in-between two magic attacks are the idle ticks (the gap less one); the Wiki does not say whether the attack's own tick counts. The first cast since login, with no previous cast known, takes the cap." } },
         { "key": "magic-3", "tier": 3, "struct": 1161, "name": "Magic III", "requires": "magic-2", "description": "Magic attack rate set to 80%, rounding down.", "effect": { "attackRate": 0.8 } },
         { "key": "magic-4", "tier": 4, "struct": 1162, "name": "Magic IV", "requires": "magic-3", "description": "When you roll above 90% of your max hit with Magic, heal 10% of damage dealt.", "effect": { "highRollFraction": 0.9, "healFraction": 0.1 } },
         { "key": "magic-5", "tier": 5, "struct": 1163, "name": "Magic V", "requires": "magic-4", "description": "Magic attack rate set to 50%, rounded down for 5t and above, rounded up below 4t.", "effect": { "attackRate": 0.5, "roundDownFrom": 5 } },
@@ -80,7 +80,8 @@
   ],
   "challenges": {
     "_comment": "The ten Combat Mastery points (Wiki: Unlocking; cache structs 1177-1186, varbits league_combat_mastery_point_unlock_1..10 in the same order). A `kill` rule matches the NPC's name (`names`), its combat level (`minCombatLevel`) or its Slayer level requirement (`minSlayerLevel`); `solo` wants the killer as the only damager; `count` is kills of matching monsters, `unique` distinct names, both kept in league:mastery-progress under `track` (the challenge key unless given). `combatLevel` is the character's. Giants are the Wiki's Giant page (the giant race). No Echo boss is in this cache (no NPC is named so), so the three echo challenges can only be awarded with ::mastery point; the names are the Wiki's pages.",
-    "giants": ["Hill Giant", "Obor", "Cyclops", "Giant Champion", "Black Knight Titan", "Reanimated giant", "Fire giant", "Branda the Fire Queen", "Ice giant", "Eldric the Ice King", "Moss giant", "Bryophyta", "Moss Guardian", "Glod", "Cloud Titan"],
+    "_giants": "The Wiki's giant race by NPC name as this cache spells it (both Moss giant and Moss Giant exist); Cloud Titan is the Wiki's but not in this cache.",
+    "giants": ["Hill Giant", "Obor", "Cyclops", "Giant Champion", "Black Knight Titan", "Reanimated giant", "Fire giant", "Branda the Fire Queen", "Ice giant", "Eldric the Ice King", "Moss giant", "Moss Giant", "Bryophyta", "Moss Guardian", "Glod", "Cloud Titan"],
     "echoBosses": ["Kalphite Queen (Echo)", "Cerberus (Echo)", "King Black Dragon (Echo)", "Grotesque Guardians (Echo)", "Dagannoth Kings (Echo)", "Thermonuclear smoke devil (Echo)", "Corrupted Hunllef (Echo)", "Hespori (Echo)", "Sol Heredit (Echo)"],
     "list": [
       { "key": "giant", "struct": 1177, "text": "Defeat a Giant.", "rule": { "kill": { "names": "giants" } } },
