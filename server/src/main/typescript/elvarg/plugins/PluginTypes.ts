@@ -67,7 +67,7 @@ export interface PluginPlayerLevelUpEvent {
   newLevel: number;
 }
 
-/** XP a player was just granted (after rates; not sent when the gain was refused or capped). */
+/** XP that just landed in a skill: after rates and the experience cap; not sent when refused, XP-locked or already at the cap. */
 export interface PluginExperienceGainedEvent {
   player: any;
   skill: any;

@@ -108,8 +108,8 @@ function character(name, { league = 3 } = {}) {
   worldLeague = league;
   hooks.onPlayerLogin({ player, username: name, isNewAccount: true, profile: "league" });
   worldLeague = previous;
-  tasks.length = 0;
-  return Object.assign(player, { sent });
+  const loginTasks = tasks.splice(0);
+  return Object.assign(player, { sent, loginTasks });
 }
 
 function click(player, group, child, extra = {}) {
@@ -146,6 +146,29 @@ function setXp(player, id, xp) {
 
 function gain(player, skill = "ATTACK", experience = 10) {
   hooks.onExperienceGained({ player, skill: core.Skill[skill], experience });
+}
+
+/** The inventory slot of the first item with this id. */
+function slotOf(player, itemId) {
+  return player.getInventory().getItems().findIndex((item) => item?.getId?.() === itemId);
+}
+
+/** Break on the first item with this id, as the client's inventory option sends it. */
+function breakItem(player, itemId) {
+  const slot = slotOf(player, itemId);
+  const item = player.getInventory().getItems()[slot];
+  return itemActions[core.CacheDefinitions.getItem(itemId).name].Break({ player, itemId, item, slot });
+}
+
+/** Swaps an object's members for the length of `action`. */
+function stubbing(owner, stubs, action) {
+  const saved = Object.fromEntries(Object.keys(stubs).map((key) => [key, owner[key]]));
+  Object.assign(owner, stubs);
+  try {
+    return action();
+  } finally {
+    Object.assign(owner, saved);
+  }
 }
 
 // ---- Fragment XP, levels, sets ----
@@ -214,25 +237,25 @@ test("skilling XP may turn up its category's Unidentified fragment; combat kills
   const graardor = core.NpcDefinition.forId(2215);
   hooks.onNpcDeath({ killer: player, npc: { getCurrentDefinition: () => graardor, getDefinition: () => graardor } });
   assert.equal(player.getInventory().contains(ITEMS.combat), true);
-  assert.deepEqual(player.getAttribute(Drops.PENDING_ATTRIBUTE), [4], "General Graardor drops tier 4");
+  const dropped = player.getInventory().getItems()[slotOf(player, ITEMS.combat)];
+  assert.equal(dropped.getMetaValue(Drops.TIER_META), 4, "General Graardor drops tier 4, kept on the item");
   assert.equal(Drops.tierOf("Goblin"), 1, "any other NPC is tier 1");
 });
 
 test("Break opens a fragment of the item's kind; a known one gains 500 XP instead", () => {
   const player = warrior("breaker");
   hooks["command:fragment"]({ player, parts: ["fragment", "combat", "4"] });
-  const name = core.CacheDefinitions.getItem(ITEMS.combat).name;
   Math.random = () => 0;
-  itemActions[name].Break({ player, itemId: ITEMS.combat });
+  breakItem(player, ITEMS.combat);
   assert.equal(player.getInventory().contains(ITEMS.combat), false, "the item is used");
   assert.equal(Fragments._test.owned(player)[17], 1, "a tier 4 fragment: Bandosian Might");
   assert.match(player.sent.messages.at(-1), /Bandosian Might/);
   hooks["command:fragment"]({ player, parts: ["fragment", "combat", "4"] });
-  itemActions[name].Break({ player, itemId: ITEMS.combat });
+  breakItem(player, ITEMS.combat);
   assert.equal(Fragments._test.owned(player)[17], 501, "a duplicate gives 500 XP");
   for (const id of [17, 18, 19, 20]) setXp(player, id, 8000);
   hooks["command:fragment"]({ player, parts: ["fragment", "combat", "4"] });
-  itemActions[name].Break({ player, itemId: ITEMS.combat });
+  breakItem(player, ITEMS.combat);
   assert.equal(Fragments.findable(player, 17), false);
   assert.equal(Fragments._test.owned(player)[8], 1, "a mastered tier falls to the nearest other (tier 3: Livin' On A Prayer)");
   for (const [category, item] of Object.entries(ITEMS)) {
@@ -244,10 +267,34 @@ test("when every fragment of a kind is mastered, Break keeps the item", () => {
   const player = warrior("master");
   for (const id of [49, 50, 51, 52, 53]) setXp(player, id, 8000);
   hooks["command:fragment"]({ player, parts: ["fragment", "misc"] });
-  const name = core.CacheDefinitions.getItem(ITEMS.misc).name;
-  itemActions[name].Break({ player, itemId: ITEMS.misc });
+  breakItem(player, ITEMS.misc);
   assert.equal(player.getInventory().contains(ITEMS.misc), true);
   assert.match(player.sent.messages.at(-1), /mastered every fragment/);
+});
+
+test("each item opens into its own fragments and tiers, from the cache (params 1462 / 1454)", () => {
+  const player = warrior("pools");
+  const production = Drops.pool(player, ITEMS.production, 0);
+  assert.ok(production.includes(35) && production.includes(36), "Enchanted Jeweler and Alchemaniac are production fragments");
+  assert.deepEqual(Drops.pool(player, ITEMS.misc, 0).sort((a, b) => a - b), [49, 50, 51, 52, 53]);
+  assert.deepEqual(Drops.pool(player, ITEMS.combat, 2).sort((a, b) => a - b), [2, 7, 12, 14], "tier 2");
+  assert.deepEqual(Drops.pool(player, ITEMS.combat, 4).sort((a, b) => a - b), [17, 18, 19, 20], "tier 4");
+  const all = [...Fragments.allDefinitions().values()];
+  assert.equal(all.length, 53);
+  assert.ok(all.every((row) => Object.values(ITEMS).includes(row.item)), "every fragment has an Unidentified fragment item");
+  assert.ok(all.filter((row) => row.item === ITEMS.combat).every((row) => row.tier >= 1 && row.tier <= 4), "every combat fragment has a tier");
+});
+
+test("each combat item keeps its own tier: a destroyed one doesn't shift the next", () => {
+  const player = warrior("destroyer");
+  hooks["command:fragment"]({ player, parts: ["fragment", "combat", "2"] });
+  hooks["command:fragment"]({ player, parts: ["fragment", "combat", "4"] });
+  assert.equal(player.getInventory().getAmount(ITEMS.combat), 2, "two items");
+  player.getInventory().deleteAtSlot(slotOf(player, ITEMS.combat), 1);
+  Math.random = () => 0;
+  breakItem(player, ITEMS.combat);
+  assert.equal(Fragments._test.owned(player)[17], 1, "the tier 4 item still opens into tier 4");
+  assert.equal(player.getInventory().contains(ITEMS.combat), false);
 });
 
 // ---- Effects ----
@@ -291,13 +338,17 @@ test("Bottomless Quiver and Arcane Conduit save ammunition, runes and charges", 
 test("Larger Recharger, Divine Restoration and Slay All Day", () => {
   const player = warrior("restorer", 300);
   equip(player, 11, 9, 14);
-  assert.equal(Effects.specialRestore(player, 50), 42, "special energy every 25 s at level 1");
+  assert.equal(Effects.specialRestore(player, 50), 41, "special energy every 41 ticks at level 1 (param 1456)");
   const skills = player.getSkillManager();
-  skills.setMaxLevel?.(core.Skill.PRAYER, 10, false);
+  skills.setMaxLevels(core.Skill.PRAYER, 10, false);
   skills.setCurrentLevel(core.Skill.PRAYER, 0, false);
-  const max = skills.getMaxLevel(core.Skill.PRAYER);
+  assert.equal(skills.getMaxLevel(core.Skill.PRAYER), 10);
+  for (let tick = 0; tick < 24; tick++) Effects.perTick({ player });
+  assert.equal(skills.getCurrentLevel(core.Skill.PRAYER), 0, "not before 25 ticks");
+  Effects.perTick({ player });
+  assert.equal(skills.getCurrentLevel(core.Skill.PRAYER), 1, "a prayer point every 15 s (25 ticks) at level 1");
   for (let tick = 0; tick < 25; tick++) Effects.perTick({ player });
-  assert.equal(skills.getCurrentLevel(core.Skill.PRAYER), Math.min(1, max), "a prayer point every 15 s (25 ticks) at level 1");
+  assert.equal(skills.getCurrentLevel(core.Skill.PRAYER), 2);
   skills.setCurrentLevel(core.Skill.HITPOINTS, 5, false);
   Effects.slayerKill({ player });
   assert.equal(skills.getCurrentLevel(core.Skill.HITPOINTS), 6, "an on-task kill heals 1");
@@ -324,6 +375,122 @@ test("Absolute Unit and Drakan's Touch at their set tiers", () => {
     hit: { getTotalDamage: () => 40, isAccurate: () => false, getCombatType: () => core.CombatType.MAGIC },
   });
   assert.equal(skills.getCurrentLevel(core.Skill.HITPOINTS), 7, "5% of 40 healed");
+});
+
+test("Venomaster poisons with its level's severity and gives poison, then venom, immunity", () => {
+  const { CombatPoisonEffect } = require("../dist/game/task/impl/CombatPoisonEffect");
+  const player = warrior("venom", 10);
+  equip(player, 13);
+  const poisoned = [];
+  const target = { isPlayer: () => false, isNpc: () => true };
+  const hit = { getTotalDamage: () => 10, isAccurate: () => false, getCombatType: () => core.CombatType.MELEE };
+  Math.random = () => 0;
+  stubbing(core.CombatFactory, { poisonEntity: (entity, severity) => poisoned.push(severity) }, () => {
+    Effects.hitResolved({ attacker: player, target, hit });
+    setXp(player, 13, 8000);
+    Effects.hitResolved({ attacker: player, target, hit });
+    Math.random = () => 0.5;
+    Effects.hitResolved({ attacker: player, target, hit });
+  });
+  assert.deepEqual(poisoned, [15, 35], "severity 15 at level 1, 35 at level 3; a 50 roll misses the 25% chance");
+  assert.deepEqual([15, 25, 35].map((severity) => CombatPoisonEffect.damageFromSeverity(severity)), [3, 5, 7], "which hit for 3 / 5 / 7");
+  const immune = warrior("immune", 10);
+  equip(immune, 13);
+  const clock = immune.getCombat().getPoisonImmunityTimer();
+  Effects.perTick({ player: immune });
+  assert.equal(clock.finished(), true, "no immunity at level 1");
+  setXp(immune, 13, 2000);
+  Effects.perTick({ player: immune });
+  assert.equal(clock.finished(), false, "poison immunity at level 2");
+  assert.equal(clock.isVenomImmune(), false);
+  setXp(immune, 13, 8000);
+  Effects.perTick({ player: immune });
+  assert.equal(clock.isVenomImmune(), true, "venom immunity at level 3");
+});
+
+test("a Shattered Relics character's per-tick effects run as one task from login", () => {
+  const ticking = (list) => list.filter((task) => task.constructor.name === "TickTask");
+  const player = character("ticker");
+  assert.equal(ticking(player.loginTasks).length, 1, "started at login");
+  emit("league:login", { player });
+  assert.equal(ticking(tasks).length, 0, "and never twice");
+  const echoes = character("ticker-echoes", { league: 5 });
+  assert.equal(ticking(echoes.loginTasks).length, 0, "none for another league");
+});
+
+test("the extra rolls re-roll the hit with its spell, never chain, and go through the hit queue", () => {
+  const player = warrior("chain", 300);
+  equip(player, 5, 7);
+  assert.equal(Fragments.setTier(player, 3), 1, "Unholy Wizard and Thrall Damage: two pieces of Chain Magic");
+  const spell = { name: "Fire Blast" };
+  const combat = player.getCombat();
+  combat.setCastSpell(null);
+  player.setSpecialActivated(true);
+  const built = [];
+  const queued = [];
+  // The roll itself is the combat formulas' (tested with them); what it is rolled with is recorded here.
+  const prepareHits = core.PendingHit.prototype.prepareHits;
+  core.PendingHit.prototype.prepareHits = function recordRoll() {
+    built.push({ castSpell: combat.getCastSpell(), special: player.isSpecialActivated() });
+    return [];
+  };
+  const context = { spell, tick: 0, data: new Map() };
+  const hit = {
+    getTotalDamage: () => 5, isAccurate: () => true, getCombatType: () => core.CombatType.MAGIC,
+    getCombatMethod: () => ({ type: () => core.CombatType.MAGIC }), getSpell: () => spell, getSpellContext: () => context,
+  };
+  const target = { isPlayer: () => false, isNpc: () => true };
+  Math.random = () => 0;
+  try {
+    stubbing(core.CombatFactory, { addPendingHit: (extra) => queued.push(extra), poisonEntity() {} }, () => {
+      Effects.hitResolved({ attacker: player, target, hit });
+      Effects.hitResolved({ attacker: player, target, hit: queued[0] });
+    });
+  } finally {
+    core.PendingHit.prototype.prepareHits = prepareHits;
+  }
+  assert.equal(queued.length, 1, "one extra roll, through CombatFactory.addPendingHit, and it doesn't chain");
+  assert.equal(built[0].castSpell, spell, "rolled with the hit's spell");
+  assert.equal(built[0].special, false, "never a special attack's traits");
+  assert.equal(queued[0].getSpellContext(), context, "and its cast");
+  assert.equal(queued[0].getSpell(), spell);
+  assert.equal(combat.getCastSpell(), null, "the cast spell is put back");
+  assert.equal(player.isSpecialActivated(), true, "and the special bar");
+});
+
+test("Bottomless Quiver saves before plugin-owned ammunition, and never chinchompas", () => {
+  const { CombatFactory } = require("../dist/game/content/combat/CombatFactory");
+  const player = warrior("quiver", 10);
+  equip(player, 4);
+  const owned = [];
+  const shoot = (weaponId) => {
+    player.getEquipment().setItem(core.Equipment.WEAPON_SLOT, new core.Item(weaponId, 1));
+    stubbing(PluginManager, {
+      emitCustomEvent: (name, payload) => (name === "combat:ammo-saving" ? Effects.ammoSaving(payload) : undefined),
+      decrementRangedAmmo: () => (owned.push(weaponId), true),
+    }, () => CombatFactory.decrementAmmo(player, null, 1));
+  };
+  Math.random = () => 0;
+  shoot(12926);
+  assert.deepEqual(owned, [], "a blowpipe's dart and scales saved before its plugin consumes them");
+  shoot(10033);
+  assert.deepEqual(owned, [10033], "a chinchompa is thrown as usual");
+});
+
+test("onExperienceGained sends what landed: after the cap, never when locked or at the cap", () => {
+  const { SkillManager } = require("../dist/game/content/skill/SkillManager");
+  const events = [];
+  const player = warrior("hooked");
+  const skills = player.getSkillManager();
+  stubbing(PluginManager, { emitExperienceGained: (event) => events.push(event.experience) }, () => {
+    skills.addExperience(core.Skill.FISHING, 100, false);
+    skills.setExperience(core.Skill.FISHING, SkillManager.MAX_EXPERIENCE - 30);
+    skills.addExperience(core.Skill.FISHING, 100, false);
+    skills.addExperience(core.Skill.FISHING, 100, false);
+    player.setAttribute(SkillManager.XP_LOCKED_ATTRIBUTE, true);
+    skills.addExperience(core.Skill.COOKING, 100, false);
+  });
+  assert.deepEqual(events, [100, 30], "100, then the 30 left under the cap; nothing at the cap or while locked");
 });
 
 test("another league's character gets none of it", () => {

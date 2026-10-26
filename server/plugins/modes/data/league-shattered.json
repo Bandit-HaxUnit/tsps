@@ -39,6 +39,9 @@
     "enum": 4136,
     "idParam": 1455,
     "nameParam": 1448,
+    "itemParam": 1462,
+    "tierParam": 1454,
+    "levelParams": [1456, 1457, 1458],
     "setParams": [1459, 1460],
     "setsEnum": 4137,
     "setIdParam": 1464,
@@ -176,42 +179,30 @@
   "_fragmentXp": "Wiki /Fragments: \"Gaining any experience in any unlocked skill while the fragment is equipped will gain 1 XP, at a maximum of one per 4 ticks\"; a duplicate gives 500 XP even unequipped. Levels from client script 5789: 1 from 1 XP, 2 from 2,000, 3 from 8,000; a fragment stops at 8,000 and then leaves the drop pool (Wiki).",
   "fragmentXp": { "everyTicks": 4, "perGain": 1, "levels": [1, 2000, 8000], "duplicate": 500 },
 
-  "_fragmentDrops": "Wiki /Fragments: drops are \"based on activity and scaled by the amount of XP acquired\", the activity picks the pool, and combat fragments are tiered by the NPC. They come as the cache's Unidentified fragment items (26544-26548), which Break opens (Wiki Unidentified_fragment_(combat)). The Wiki gives no rates: `xpPerDrop` (a skilling gain of that much XP is a sure drop; less is that share of a chance) and `hitpointsPerDrop` (the same for a kill, by the NPC's hitpoints) are this server's. Categories are the Wiki's (the cache's param 1453 folds misc into skilling). Combat tiers by NPC name are the Wiki's lists; every other NPC is tier 1, and a tier's drop opens into a fragment of that tier. Misc fragments have no listed source, so only ::fragment gives their item.",
+  "_fragmentDrops": "Wiki /Fragments: drops are \"based on activity and scaled by the amount of XP acquired\", the activity picks the pool, and combat fragments are tiered by the NPC. They come as the cache's Unidentified fragment items (26544-26548), which Break opens (Wiki Unidentified_fragment_(combat)) into a fragment whose own item (enum 4136 param 1462) it is, and for combat of the item's tier (param 1454). The Wiki gives no rates: `xpPerDrop` (a skilling gain of that much XP is a sure drop; less is that share of a chance) and `hitpointsPerDrop` (the same for a kill, by the NPC's hitpoints) are this server's. Combat tiers by NPC name are the Wiki's lists; every other NPC is tier 1. Misc fragments have no listed source, so only ::fragment gives their item.",
   "fragmentDrops": {
     "items": { "harvesting": 26544, "production": 26545, "skilling": 26546, "combat": 26547, "misc": 26548 },
-    "categories": {
-      "combat": [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
-      "harvesting": [21, 22, 25, 26, 29, 30, 39, 41, 42],
-      "production": [28, 31, 32, 33, 34, 37, 38, 40, 43, 44, 47, 48],
-      "skilling": [10, 23, 24, 27, 35, 36, 45, 46],
-      "misc": [49, 50, 51, 52, 53]
-    },
     "_skills": "Skill (client stat id) -> the category its XP rolls for. Combat skills and Magic roll on kills instead.",
     "skills": { "10": "harvesting", "8": "harvesting", "14": "harvesting", "19": "harvesting", "21": "harvesting", "7": "production", "13": "production", "12": "production", "9": "production", "15": "production", "20": "production", "22": "production", "17": "skilling", "16": "skilling", "11": "skilling", "5": "skilling" },
     "xpPerDrop": { "harvesting": 30000, "production": 30000, "skilling": 20000 },
     "hitpointsPerDrop": 1500,
-    "_combatTiers": "Wiki /Fragments combat tiers: the fragments each tier holds and the NPCs (by name) that drop that tier.",
+    "_combatTiers": "Wiki /Fragments combat tiers: the NPCs (by name) that drop tiers 2-4.",
     "combatTiers": {
-      "1": { "fragments": [1, 3, 4, 5, 6, 13, 16] },
-      "2": { "fragments": [2, 7, 12, 14], "npcs": ["Ahrim the Blighted", "Dharok the Wretched", "Guthan the Infested", "Karil the Tainted", "Torag the Corrupted", "Verac the Defiled", "Dagannoth Prime", "Dagannoth Rex", "Dagannoth Supreme", "Hespori", "Sarachnis", "Skotizo"] },
-      "3": { "fragments": [8, 9, 11, 15], "npcs": ["Abyssal Sire", "Cerberus", "Crystalline Hunllef", "Corrupted Hunllef", "Kalphite Queen", "Kraken", "Vorkath", "Zulrah"] },
-      "4": { "fragments": [17, 18, 19, 20], "npcs": ["Alchemical Hydra", "Great Olm", "Corporeal Beast", "TzTok-Jad", "TzKal-Zuk", "General Graardor", "Commander Zilyana", "Kree'arra", "K'ril Tsutsaroth", "Nex", "The Nightmare", "Phosani's Nightmare", "Verzik Vitur"] }
+      "2": ["Ahrim the Blighted", "Dharok the Wretched", "Guthan the Infested", "Karil the Tainted", "Torag the Corrupted", "Verac the Defiled", "Dagannoth Prime", "Dagannoth Rex", "Dagannoth Supreme", "Hespori", "Sarachnis", "Skotizo"],
+      "3": ["Abyssal Sire", "Cerberus", "Crystalline Hunllef", "Corrupted Hunllef", "Kalphite Queen", "Kraken", "Vorkath", "Zulrah"],
+      "4": ["Alchemical Hydra", "Great Olm", "Corporeal Beast", "TzTok-Jad", "TzKal-Zuk", "General Graardor", "Commander Zilyana", "Kree'arra", "K'ril Tsutsaroth", "Nex", "The Nightmare", "Phosani's Nightmare", "Verzik Vitur"]
     }
   },
 
-  "_fragmentEffects": "Batch 1 of the fragments' effects, the ones existing hooks carry; numbers per level from each fragment's own cache text (enum 4136 params 1450-1452). Venomaster's chance isn't given anywhere, so `chancePercent` is this server's. Sets (enum 4137): a set's tiers need `pieces` equipped fragments that list it (params 1459/1460), from params 1468 / 1470; the numbers are params 1467 / 1469.",
+  "_fragmentEffects": "Batch 1 of the fragments' effects, the ones existing hooks carry. Each works with the number its equipped level gives in the cache (enum 4136 params 1456-1458, the numbers its level texts 1450-1452 quote): a percent, a heal, ticks between restores (Larger Recharger 41/33/17, Divine Restoration 25/15/6), or Venomaster's poison severity (15/25/35, which hits for 3/5/7). Venomaster's chance isn't given anywhere, so `chancePercent` is this server's. Sets (enum 4137): a set's tiers need the pieces params 1468 / 1470 give of equipped fragments that list it (params 1459 / 1460); their numbers are only in their texts (params 1467 / 1469), copied here.",
   "fragmentEffects": {
-    "accuracy": {
-      "1": { "style": "melee", "percent": [12, 20, 30] },
-      "3": { "style": "ranged", "percent": [30, 60, 100] },
-      "5": { "style": "magic", "percent": [40, 70, 125] }
-    },
-    "ammoSaving": { "fragment": 4, "percent": [40, 60, 90], "excluded": "chinchompa" },
-    "runeSaving": { "fragment": 6, "percent": [40, 60, 90] },
-    "specialRestore": { "fragment": 11, "everyTicks": [42, 33, 17] },
-    "prayerRestore": { "fragment": 9, "everyTicks": [25, 15, 6] },
-    "venom": { "fragment": 13, "damage": [3, 5, 7], "chancePercent": 25, "poisonImmuneFrom": 2, "venomImmuneFrom": 3 },
-    "slayerHeal": { "fragment": 14, "heal": [1, 2, 3] },
+    "accuracy": { "1": "melee", "3": "ranged", "5": "magic" },
+    "ammoSaving": { "fragment": 4, "excluded": "chinchompa" },
+    "runeSaving": { "fragment": 6 },
+    "specialRestore": { "fragment": 11 },
+    "prayerRestore": { "fragment": 9 },
+    "venom": { "fragment": 13, "chancePercent": 25, "poisonImmuneFrom": 2, "venomImmuneFrom": 3 },
+    "slayerHeal": { "fragment": 14 },
     "sets": {
       "absoluteUnit": { "set": 1, "reductionPercent": [30, 50], "reflectPercent": [50, 100] },
       "drakansTouch": { "set": 6, "chancePercent": 50, "healPercent": [5, 10] },

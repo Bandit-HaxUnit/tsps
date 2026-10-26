@@ -317,16 +317,21 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   at 2,000 and 8,000 XP (script 5789), where a fragment stops. A set's tier counts the equipped
   fragments that list it (enum 4137: 2 or 3 pieces).
 - **Drops:** a skill's XP may turn up its category's Unidentified fragment, the likelier the more
-  XP; a kill may turn up the combat one, by the NPC's hitpoints, at the NPC's tier (the Wiki's
-  boss lists; any other NPC tier 1). Break opens it into a fragment of its kind not yet mastered:
-  new at level 1, or 500 XP for one already owned (Wiki). The rates are this server's; misc
-  fragments have no listed source, so only `::fragment` gives their item.
+  XP; a kill may turn up the combat one, by the NPC's hitpoints, carrying the NPC's tier on the
+  item (the Wiki's boss lists; any other NPC tier 1). Break opens it into a fragment not yet
+  mastered whose own item it is (enum 4136 param 1462), for combat of its tier (param 1454) or the
+  nearest with one left: new at level 1, or 500 XP for one already owned (Wiki). The rates are this
+  server's; misc fragments have no listed source, so only `::fragment` gives their item.
 - **Effects (batch 1):** Unholy Warrior / Ranger / Wizard (accuracy at 0 Prayer points),
   Bottomless Quiver (ammunition and bow charges saved, through the core `combat:ammo-saving`),
   Arcane Conduit (runes and powered-staff charges), Larger Recharger, Divine Restoration,
   Venomaster (poison on hit, poison and venom immunity), Slay All Day, and the sets Absolute Unit,
-  Drakan's Touch, Twin Strikes, Double Tap and Chain Magic. The numbers are each fragment's own
-  cache text; Venomaster's chance (25%) is this server's.
+  Drakan's Touch, Twin Strikes, Double Tap and Chain Magic. Each fragment works with the number
+  its level gives in the cache (params 1456-1458; Venomaster's are poison severities 15/25/35,
+  hitting 3/5/7); the sets' numbers are only in their texts. Venomaster's chance (25%) is this
+  server's, and its immunity stops new poison without curing a running one. The extra rolls are
+  rolled with the hit's own spell, never a special attack, and pay XP like any hit. The per-tick
+  effects run as one task per Shattered Relics character, from login.
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price
   now, from the Wiki's Initial Cost less the prerequisite packs already unlocked, and 0 once

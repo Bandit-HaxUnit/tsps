@@ -24,8 +24,12 @@ const SLOTS_ATTRIBUTE = "league:fragment-slots";
 let fragmentIds = null;
 /** The points each slot opens at (enum 4127), read once. */
 let slotThresholds = null;
-/** Fragment id -> the set ids it belongs to (params 1459 / 1460), read once. */
-let fragmentSets = null;
+/**
+ * Fragment id -> its cache row (enum 4136's struct), read once: name (param 1448), its
+ * Unidentified fragment item (1462), combat tier (1454; 0 = not combat), the number each level
+ * works with (1456-1458, the numbers in its level texts 1450-1452) and its sets (1459 / 1460).
+ */
+let definitions = null;
 /** Set id -> the pieces its first and second tiers need (params 1468 / 1470; 0 = no second tier), read once. */
 let setPieces = null;
 /** Per player: the world cycle its equipped fragments last gained XP (Wiki: at most once per 4 ticks). */
@@ -130,15 +134,43 @@ function equippedLevel(player, id) {
   return ownedLevel(player, Number(id));
 }
 
-function readSets() {
-  if (fragmentSets) return;
+function readDefinitions() {
+  if (definitions) return definitions;
   const { CacheDefinitions } = Common.core;
-  fragmentSets = new Map();
+  const number = (params, param) => Number(params?.get(param)) || 0;
+  definitions = new Map();
   for (const struct of CacheDefinitions.getEnumValues(config().enum).values()) {
     const params = CacheDefinitions.getStructParams(Number(struct));
-    const id = Number(params?.get(config().idParam));
-    fragmentSets.set(id, config().setParams.map((param) => Number(params?.get(param))).filter((set) => set > 0));
+    definitions.set(number(params, config().idParam), {
+      name: String(params?.get(config().nameParam) ?? ""),
+      item: number(params, config().itemParam),
+      tier: number(params, config().tierParam),
+      values: config().levelParams.map((param) => number(params, param)),
+      sets: config().setParams.map((param) => number(params, param)).filter((set) => set > 0),
+    });
   }
+  return definitions;
+}
+
+/** A fragment's cache row (readDefinitions), or null for an unknown id. */
+function definition(id) {
+  return readDefinitions().get(Number(id)) ?? null;
+}
+
+/** Every fragment's cache row, by id. */
+function allDefinitions() {
+  return readDefinitions();
+}
+
+/** The number an equipped fragment works with at its level (params 1456-1458), or null when it isn't equipped. */
+function equippedValue(player, id) {
+  const level = equippedLevel(player, id);
+  return level > 0 ? definition(id)?.values[level - 1] ?? null : null;
+}
+
+function readSetPieces() {
+  if (setPieces) return;
+  const { CacheDefinitions } = Common.core;
   setPieces = new Map();
   for (const struct of CacheDefinitions.getEnumValues(config().setsEnum).values()) {
     const params = CacheDefinitions.getStructParams(Number(struct));
@@ -149,8 +181,8 @@ function readSets() {
 /** A set's tier from the equipped fragments that list it: 0, 1 or 2 (enum 4137). */
 function setTier(player, set) {
   if (!isShattered(player)) return 0;
-  readSets();
-  const pieces = slots(player).filter((id) => id > 0 && (fragmentSets.get(id) ?? []).includes(Number(set))).length;
+  readSetPieces();
+  const pieces = slots(player).filter((id) => id > 0 && (definition(id)?.sets ?? []).includes(Number(set))).length;
   const [first, second] = setPieces.get(Number(set)) ?? [0, 0];
   if (second > 0 && pieces >= second) return 2;
   return first > 0 && pieces >= first ? 1 : 0;
@@ -285,6 +317,9 @@ module.exports = function attach(api) {
 };
 
 module.exports.equippedLevel = equippedLevel;
+module.exports.equippedValue = equippedValue;
+module.exports.definition = definition;
+module.exports.allDefinitions = allDefinitions;
 module.exports.ownedLevel = ownedLevel;
 module.exports.setTier = setTier;
 module.exports.award = award;

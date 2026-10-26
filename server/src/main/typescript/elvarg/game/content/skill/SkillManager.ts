@@ -186,7 +186,8 @@ export class SkillManager {
             this.player.getUpdateFlag().flag(Flag.APPEARANCE);
         }
         if (newLevel <= startingLevel) this.updateSkill(skill);
-        PluginManager.emitExperienceGained({ player: this.player, skill, experience });
+        // What landed: the gain less anything over the experience cap.
+        PluginManager.emitExperienceGained({ player: this.player, skill, experience: this.skills.experience[skillIndex] - currentExperience });
         return this;
     }
 
