@@ -864,7 +864,13 @@ function buildFurniture(player, house, target, buildable) {
   if (houseFor(player) !== house || !isBuildingMode(player)) return;
   const materials = getBuildMaterials(player, house, target, buildable);
   if (typeof materials === "string") return player.sendMessage(materials);
-  for (const [itemId, amount] of materials) useMaterial(player, itemId, amount);
+  // Content may keep some of a build's materials ("construction:materials", a league fragment's planks kept).
+  const request = { player, buildable, materials: materials.map(([itemId, amount]) => [itemId, amount]) };
+  api.emitCustomEvent("construction:materials", request);
+  for (const [itemId, amount] of request.materials) {
+    const used = Math.min(amount, materials.find(([id]) => id === itemId)?.[1] ?? 0);
+    if (used > 0) useMaterial(player, itemId, used);
+  }
   if (buildable.buildAnimationId >= 0) player.performAnimation(new Animation(buildable.buildAnimationId));
   house.setFurniture(target, buildable);
   player.getSkillManager().addExperiences(Skill.CONSTRUCTION, buildable.experience);

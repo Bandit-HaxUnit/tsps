@@ -230,6 +230,38 @@
     "personalBanker": { "set": 12, "skills": ["MINING", "WOODCUTTING", "FISHING", "FARMING"], "chancePercent": [50, 100] }
   },
 
+  "_productionEffects": "The production fragments and The Alchemist, The Craftsman and Unchained Talent (Wiki /Fragments), used by plugins/modes/league/FragmentProduction.LeagueMode.js. Each fragment works with its level's number in the cache (params 1456-1458): a percent chance (Plank Stretcher, Smithing Double, Dragon On A Bit, Imcando's Apprentice, Dine & Dash, Rooty Tooty 2x Runeys, Mixologist's 4-dose potion), a count (Rumple-Bow-String's flax a Spin Flax, Enchanted Jeweler's pieces a cast) or a percent more (Alchemaniac's High Alchemy coins, Profletchional's and Just Druid!'s XP, Pro Tips' bolt tips, rounded down: ours). `kinds` are the skills' make-X loops (`skills:produced` / `skills:actions-per-cycle`). Mixologist's secondary-saving chance is only in the Wiki (20/50/100%), so it is here. Rune Escape needs the Ourania Altar, which this server doesn't have. The sets' numbers are only in their texts (enum 4137 param 1467): The Alchemist's and The Craftsman's activities all at once (`actions` a cycle: the inventory), Unchained Talent's `boost` to the non-combat skills (Sailing, which the league predates, left out: ours).",
+  "productionEffects": {
+    "plankStretcher": { "fragment": 28, "material": "plank" },
+    "smithingDouble": { "fragment": 31, "kinds": ["smith"] },
+    "rumpleBowString": { "fragment": 32, "spell": "Spin Flax" },
+    "dragonOnABit": { "fragment": 33, "kinds": ["leather"], "product": "d'hide" },
+    "imcandosApprentice": { "fragment": 34, "kinds": ["jewellery"] },
+    "enchantedJeweler": { "fragment": 35 },
+    "alchemaniac": { "fragment": 36 },
+    "profletchional": { "fragment": 37, "kinds": ["logs", "stringing"] },
+    "proTips": { "fragment": 38, "kinds": ["chisel"], "product": "bolt tips" },
+    "dineAndDash": { "fragment": 40, "kinds": ["cook"] },
+    "mixologist": { "fragment": 43, "secondarySavePercent": [20, 50, 100] },
+    "justDruid": { "fragment": 44, "kinds": ["clean"] },
+    "rootyTooty": { "fragment": 47 },
+    "theAlchemist": { "set": 2, "actions": 28, "batch": { "COOKING": ["cook"], "HERBLORE": ["clean", "mix"] } },
+    "theCraftsman": {
+      "set": 4,
+      "actions": 28,
+      "batch": {
+        "SMITHING": ["smelt", "smith", "cannonballs"],
+        "CRAFTING": ["leather", "glassblowing", "gems", "pottery", "battlestaves", "spinning"],
+        "FLETCHING": ["logs", "chisel"]
+      }
+    },
+    "unchainedTalent": {
+      "set": 15,
+      "boost": 8,
+      "skills": ["COOKING", "WOODCUTTING", "FLETCHING", "FISHING", "FIREMAKING", "CRAFTING", "SMITHING", "MINING", "HERBLORE", "AGILITY", "THIEVING", "SLAYER", "FARMING", "RUNECRAFTING", "CONSTRUCTION", "HUNTER"]
+    }
+  },
+
   "messages": {
     "_lockedBoss": "The Wiki gives no message for a locked boss; this wording is this server's.",
     "lockedBoss": "You need to unlock {name} with Sage's Renown before you can fight it.",

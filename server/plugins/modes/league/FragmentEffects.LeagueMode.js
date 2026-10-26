@@ -86,7 +86,7 @@ function specialRestore(entity, delayTicks) {
   return ticks === null ? delayTicks : Math.min(delayTicks, ticks);
 }
 
-// ---- Every tick for a Shattered Relics character: Divine Restoration, Venomaster's immunity ----
+// ---- Every tick for a Shattered Relics character: Divine Restoration, Venomaster's immunity, `league:fragment-tick` ----
 
 function perTick({ player }) {
   const restore = Fragments.equippedValue(player, effects().prayerRestore.fragment);
@@ -102,6 +102,8 @@ function perTick({ player }) {
   const venom = effects().venom;
   const level = Fragments.equippedLevel(player, venom.fragment);
   if (level >= venom.poisonImmuneFrom) player.getCombat?.()?.getPoisonImmunityTimer?.()?.protectBriefly(2, level >= venom.venomImmuneFrom);
+  // The other fragment units' per-tick effects (Unchained Talent) ride the same task.
+  Common.api.emitCustomEvent("league:fragment-tick", { player });
 }
 
 function tickTask() {

@@ -115,6 +115,10 @@ relics are the first askers; nothing changes when nobody answers):
 | `bone-altars:offering` | BoneAltars | `{ player, itemId, boneItemId, cost, anyAltar }`: an item that is not a bone offered as `boneItemId`, `cost` of it an offering, and with `anyAltar` on any altar one prays at (the bone's burying XP; a private area's altars, a house's, stay its own) |
 | `farming:plant-rules` | Farming, as a seed or sapling is planted | `{ player, crop, seedId, patch, keepSeed, grown, diseaseFree, undying, message }`: a line said after the planting's own; keep the seed, grow the crop at once (not anima plants), keep it from disease, or keep a diseased crop from dying (it waits for a cure); the last two are kept on the patch's state |
 | `farming:harvests-per-action`, `farming:pick` | Farming | `{ player, patch, crop, harvests }` picks an action; `{ player, crop, patch, itemId, amount, experience, stored }` before a pick is handed over (`experience` is the pick's Farming XP; `stored` what a listener took itself, as the bank) |
+| `skills:produced` (extended) | the production skills | now with `kind` (the loop, as `skills:actions-per-cycle` names it) and, for leather and jewellery, `materials` (`[id, amount]` one product used) |
+| `construction:materials` | Construction, before a build's materials go | `{ player, buildable, materials }`: a listener may lower an amount |
+| `magic:enchant-pieces`, `magic:spell-batch` | the jewellery enchantments; the Lunar crafting spells | `{ player, spellName, itemId, pieces }` pieces a cast enchants, each with its XP; `{ player, spellName, batch }` items a cast converts |
+| `magic:alchemy-policy` (extended) | core alchemy | now with `high` (High Level Alchemy) |
 | `woodcutting:nest-chance`, `woodcutting:nest-drop` | Woodcutting | `{ player, multiplier }`: a bird nest `multiplier` times as likely; `{ player, itemId, handled }` before a nest falls (handled: a listener took it) |
 | `farming:open-seed-vault` | Farming (the guild's seed vault) | `{ player, opened }`: the vault's menu from anywhere, behind the Bank PIN as at the guild |
 | `miscellania:rules` | Managing Miscellania | `{ player, ruler, royalTrouble, payMultiplier, outputMultiplier, approval, visiting }`: who rules the kingdom (the quests), what the workers' pay costs, how much they gather (clues as rolled), an approval held fixed, whether a catch-up away from the islands counts as a visit |
@@ -405,6 +409,25 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   NpcDrops' rare drop table once (`npc-drops:roll-table`) on a 1-in-N catch; Chinchonkers adds
   Hunter XP for a chinchompa and two of them at level 3 (`hunter:rewards`). The banked nest and
   rare catch messages are this server's.
+- **Production effects** (`league/FragmentProduction.LeagueMode.js`, data `productionEffects`):
+  the production fragments, The Alchemist, The Craftsman and Unchained Talent. The two
+  all-at-once sets answer `skills:actions-per-cycle` with the inventory (28) for the Wiki's
+  activities only (The Alchemist: cooking, cleaning, mixing; The Craftsman: smelting, smithing,
+  cannonballs, leather, glass, uncut gems, pottery, battlestaves, spinning, fletching logs and bolt
+  tips). Unchained Talent keeps the non-combat skills 8 over their level, checked every tick
+  (`league:fragment-tick` from the fragment task), and takes the boost off with the set; Sailing,
+  which the league predates, is left out (ours). The fragments hear `skills:produced`, which now
+  carries the loop's `kind` (and `materials` for leather and jewellery): Smithing Double (an anvil's
+  product again with its XP, falling when the inventory is full), Imcando's Apprentice (gemmed
+  jewellery again with its XP, only with room), Dragon On A Bit (dragonhide armour's leather back
+  to the bank), Dine & Dash (another cooked food to the bank, no XP, never untradeable food or in an
+  instance), Profletchional and Just Druid! (more XP for logs and stringing, and for cleaning),
+  Pro Tips (more bolt tips a gem, rounded down: ours). Mixologist answers `herblore:mix` (a potion
+  from an unfinished one with four doses; its secondary kept at the Wiki's 20/50/100%), Rooty Tooty
+  2x Runeys `runecrafting:success` (each rune its chance of another), Plank Stretcher
+  `construction:materials` (a build's planks kept), Enchanted Jeweler `magic:enchant-pieces`,
+  Rumple-Bow-String `magic:spell-batch` (Spin Flax) and Alchemaniac `magic:alchemy-policy` (High
+  Alchemy only, by the policy's new `high`).
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price
   now, from the Wiki's Initial Cost less the prerequisite packs already unlocked, and 0 once
@@ -417,11 +440,12 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   only the fights inside. The Wiki gives no message for either lock; the boss one is this
   server's, said once per boss every few seconds.
 
-Not yet: the other fragments' effects (the production, skilling and misc ones; Tactical
+Not yet: the other fragments' effects (the skilling and misc ones; Rune Escape, which needs the
+Ourania Altar this server doesn't have; Plank Stretcher outside a house build, as Mahogany Homes; Tactical
 Duelist and the ranged weapons' charges, which no hook reports; Livin' On A Prayer, Special
 Discount, Thrall Damage, Superior Tracking, Slay 'n' Pay and the god-armour four) and the other
-sets (Fast Metabolism, Knife's Edge, The Alchemist, The Craftsman, Unchained Talent and the
-three that give a Sage item); Fishing has no clue bottles of its own, so Message In A Bottle
+sets (Fast Metabolism, Knife's Edge and the three that give a Sage item); The Alchemist's jugs of
+wine (no wine making here); Fishing has no clue bottles of its own, so Message In A Bottle
 reaches only Hunter's aerial fishing and drift nets for bottles; quest packs complete no quests; fragments can be swapped anywhere, not only at a bank or the Sage, and only
 through Equip (dragging one into a slot isn't handled); the
 Display Fragments toggle (varbit 12383) is the client's own; the intro cutscene (734) has no
