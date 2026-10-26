@@ -1,5 +1,5 @@
 {
-  "$comment": "Relic tiers and relics per league (docs/leagues.md), used by plugins/modes/LeagueRelics.plugin.js. Costs, names, effects and granted items are the Wiki's (Trailblazer_Reloaded_League/Relics, Raging_Echoes_League/Relics); the descriptions condense the Wiki's bullets in the cache's own style. `grants` names ItemIdentifiers; a relic whose item is no longer in this cache (Trailblazer Reloaded's Sage's greaves, Trailblazer tools, crystal of memories and guardian horn; Raging Echoes' Sage's greaves and guardian horn) grants nothing and says so in `_missing`. The client draws the catalog from structs and enums the server sends (structOverrides/enumOverrides, GamemodeContentStore): `virtualIdBase` + leagueType x 1000 is where this league's ids start, and `iconStructs` are the rev 241 cache's own relic structs (enums 5703-5710, the current league's), whose icon params (881-884, 1853, 1854) are reused per tier and slot since older leagues' icons are not in the cache. Params: 870 tier enum on the league struct, 877 cost, 878 relic enum and 2045 passive struct on a tier struct, 1020 passive text, 879 name, 880 description, 885 tier index, 1855 has-item on a relic struct.",
+  "$comment": "Relic tiers and relics per league (docs/leagues.md), used by plugins/modes/LeagueRelics.plugin.js. Costs, names, effects and granted items are the Wiki's (Trailblazer_Reloaded_League/Relics, Raging_Echoes_League/Relics), and `requiresBank` is set only where the Wiki says the relic must be unlocked in a bank (every Trailblazer Reloaded item relic; Raging Echoes' Clue Compass, Bank Heist and Fairy's Flight, while its tier-1 tools are handed out anywhere, as the Leagues V tutorial's Animal Wrangler unlock in osrs-captures 227/00196 shows); the descriptions condense the Wiki's bullets in the cache's own style. `grants` names ItemIdentifiers; a relic whose item is no longer in this cache (Trailblazer Reloaded's Sage's greaves, Trailblazer tools, crystal of memories and guardian horn; Raging Echoes' Sage's greaves and guardian horn) grants nothing and says so in `_missing`. The client draws the catalog from structs and enums the server sends (structOverrides/enumOverrides, GamemodeContentStore): `virtualIdBase` + leagueType x 1000 is where this league's ids start, and `iconStructs` are the rev 241 cache's own relic structs (enums 5703-5710, the current league's), whose icon params (881-884, 1853, 1854) are reused per tier and slot since older leagues' icons are not in the cache. Params: 870 tier enum on the league struct, 877 cost, 878 relic enum and 2045 passive struct on a tier struct, 1020 passive text, 879 name, 880 description, 885 tier index, 1855 has-item on a relic struct.",
   "virtualIdBase": 200000,
   "params": { "tiersEnum": 870, "tierCost": 877, "tierRelics": 878, "tierPassive": 2045, "passiveText": 1020, "relicName": 879, "relicDescription": 880, "relicTier": 885, "relicHasItem": 1855, "iconParams": [881, 882, 883, 884, 1853, 1854] },
   "_iconStructs": "The cache's tier 7 enum (5709) holds only two relics, so its third slot borrows the first's icon.",
@@ -178,9 +178,9 @@
           "cost": 0,
           "passive": "- League XP multiplier is 5x.<br><br>- Items from eligible sources will be 2x as common.<br><br>- Farming ticks will occur every minute instead of every five minutes.<br><br>- Minigame points received are boosted by 4x.<br><br>- Run energy is never drained whilst running.<br><br>- All clue scrolls will drop as stackable scroll boxes, and clue-step progress is saved between clues.",
           "relics": [
-            { "key": "power-miner", "name": "Power Miner", "description": "- Grants the Echo pickaxe.<br><br>- Failed mining swings get a second 50% chance, ore goes to your bank, and rocks last for four ores.<br><br>- Ore can be smelted and gems cut as you mine.", "grants": ["ECHO_PICKAXE"], "requiresBank": true },
-            { "key": "lumberjack", "name": "Lumberjack", "description": "- Grants the Echo axe.<br><br>- Failed chops get a second 50% chance and logs go to your bank.<br><br>- Logs can be burnt or fletched into arrow shafts as you chop.", "grants": ["ECHO_AXE"], "requiresBank": true },
-            { "key": "animal-wrangler", "name": "Animal Wrangler", "description": "- Grants the Echo harpoon, which fishes a tick faster and acts as every fishing tool.<br><br>- Failed catches get a second 50% chance, fish go to your bank and half are cooked on the spot.<br><br>- Traps never fail, box traps catch double and impling jars never break. You never burn food.", "grants": ["ECHO_HARPOON"], "requiresBank": true }
+            { "key": "power-miner", "name": "Power Miner", "description": "- Grants the Echo pickaxe.<br><br>- Failed mining swings get a second 50% chance, ore goes to your bank, and rocks last for four ores.<br><br>- Ore can be smelted and gems cut as you mine.", "grants": ["ECHO_PICKAXE"], "requiresBank": false },
+            { "key": "lumberjack", "name": "Lumberjack", "description": "- Grants the Echo axe.<br><br>- Failed chops get a second 50% chance and logs go to your bank.<br><br>- Logs can be burnt or fletched into arrow shafts as you chop.", "grants": ["ECHO_AXE"], "requiresBank": false },
+            { "key": "animal-wrangler", "name": "Animal Wrangler", "description": "- Grants the Echo harpoon, which fishes a tick faster and acts as every fishing tool.<br><br>- Failed catches get a second 50% chance, fish go to your bank and half are cooked on the spot.<br><br>- Traps never fail, box traps catch double and impling jars never break. You never burn food.", "grants": ["ECHO_HARPOON"], "requiresBank": false }
           ]
         },
         {
@@ -188,7 +188,7 @@
           "passive": "- League XP multiplier increased from 5x to 8x.",
           "relics": [
             { "key": "corner-cutter", "name": "Corner Cutter", "description": "- Agility actions always succeed, courses count twice with 25% bonus XP, and marks of grace come with 10,000 coins.<br><br>- Grants Sage's greaves, which give Agility XP while you run.", "grants": [], "_missing": "Sage's greaves are not in this cache." },
-            { "key": "friendly-forager", "name": "Friendly Forager", "description": "- Grants the forager's pouch: gathering may find a grimy herb within your Herblore level + 25.<br><br>- Secondary ingredients have a 90% chance not to be used, and potions are made with 4 doses.", "grants": ["FORAGERS_POUCH"], "requiresBank": true },
+            { "key": "friendly-forager", "name": "Friendly Forager", "description": "- Grants the forager's pouch: gathering may find a grimy herb within your Herblore level + 25.<br><br>- Secondary ingredients have a 90% chance not to be used, and potions are made with 4 doses.", "grants": ["FORAGERS_POUCH"], "requiresBank": false },
             { "key": "dodgy-deals", "name": "Dodgy Deals", "description": "- Pickpocketing hits every matching NPC within 5 tiles, always succeeds, repeats itself and notes the loot.<br><br>- Your coin pouch holds three times as much and stalls never run out.", "grants": [] }
           ]
         },
@@ -223,8 +223,8 @@
           "cost": 8000,
           "passive": "There are no passive unlocks for this tier.",
           "relics": [
-            { "key": "total-recall", "name": "Total Recall", "description": "- Grants the Crystal of Echoes: store a place with your hitpoints, prayer and special attack energy, and return to it later with them restored.", "grants": ["CRYSTAL_OF_ECHOES"], "requiresBank": true },
-            { "key": "bankers-note", "name": "Banker's Note", "description": "- Grants a banker's note: use an item on it to note or unnote it, in the quantity you choose.", "grants": ["BANKERS_NOTE"], "requiresBank": true },
+            { "key": "total-recall", "name": "Total Recall", "description": "- Grants the Crystal of Echoes: store a place with your hitpoints, prayer and special attack energy, and return to it later with them restored.", "grants": ["CRYSTAL_OF_ECHOES"], "requiresBank": false },
+            { "key": "bankers-note", "name": "Banker's Note", "description": "- Grants a banker's note: use an item on it to note or unnote it, in the quantity you choose.", "grants": ["BANKERS_NOTE"], "requiresBank": false },
             { "key": "last-stand-preview", "name": "Last Stand", "description": "- Damage that would reduce you to 0 hitpoints leaves you at 1 instead, boosts your combat stats to 255 and shields you for 16 ticks, once every three minutes or death.", "grants": [], "_note": "Tier 8's Last Stand, shown here as the third choice to keep three a tier; the Wiki lists only two tier 6 relics." }
           ]
         },
@@ -232,9 +232,9 @@
           "cost": 16000,
           "passive": "- League XP multiplier increased from 12x to 16x.",
           "relics": [
-            { "key": "pocket-kingdom", "name": "Pocket Kingdom", "description": "- Grants the Pocket kingdom: Managing Miscellania anywhere, with cheaper, fully approved workers producing twice as much every hour.", "grants": ["POCKET_KINGDOM"], "requiresBank": true },
-            { "key": "grimoire", "name": "Grimoire", "description": "- Grants the Arcane grimoire: swap spellbooks freely, with every prayer and spell unlocked.", "grants": ["ARCANE_GRIMOIRE"], "requiresBank": true },
-            { "key": "overgrown", "name": "Overgrown", "description": "- Grants the Leprechaun's vault: Seed Vault access anywhere.<br><br>- Crops never die, seeds have a 75% chance to be kept, and grown patches harvest and replant themselves.", "grants": ["LEPRECHAUNS_VAULT"], "requiresBank": true }
+            { "key": "pocket-kingdom", "name": "Pocket Kingdom", "description": "- Grants the Pocket kingdom: Managing Miscellania anywhere, with cheaper, fully approved workers producing twice as much every hour.", "grants": ["POCKET_KINGDOM"], "requiresBank": false },
+            { "key": "grimoire", "name": "Grimoire", "description": "- Grants the Arcane grimoire: swap spellbooks freely, with every prayer and spell unlocked.", "grants": ["ARCANE_GRIMOIRE"], "requiresBank": false },
+            { "key": "overgrown", "name": "Overgrown", "description": "- Grants the Leprechaun's vault: Seed Vault access anywhere.<br><br>- Crops never die, seeds have a 75% chance to be kept, and grown patches harvest and replant themselves.", "grants": ["LEPRECHAUNS_VAULT"], "requiresBank": false }
           ]
         },
         {
