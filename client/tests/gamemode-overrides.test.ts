@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { Opcodes } from "../rs/cs2/Opcodes";
 import { createHandlerMap } from "../rs/cs2/handlers";
-import { getEnumOverride, getStructOverride, loadFromPayload } from "../common/gamemode/GamemodeContentStore";
+import { getDbRowOverride, getEnumOverride, getStructOverride, loadFromPayload } from "../common/gamemode/GamemodeContentStore";
 
 /** Server-sent structs and enums (a league's relic catalog) stand in for the cache's in the cs2 config ops. */
 function context(extra: Record<string, unknown> = {}) {
@@ -103,11 +103,69 @@ test("struct overrides replace a cache struct's params or define a new struct", 
     assert.equal(ctx.popString(), "Magic weapons attack at speed 2.");
 });
 
+test("db row overrides stand in for a table's rows in the db ops, typed by the table's columns", () => {
+    loadFromPayload({
+        gamemodeId: "test",
+        datasets: [{
+            key: "dbRowOverrides",
+            rows: [
+                { rowId: 340000, tableId: 118, columns: { 0: ["Defeat a Goblin"], 1: ["Defeat a Goblin."], 32: [1], 34: [1], 35: [2], 36: [0] } },
+                { rowId: 340001, tableId: 118, columns: { 0: ["Reach Total Level 100"], 32: [1] } },
+            ],
+        }],
+    });
+    assert.equal(getDbRowOverride(340000)?.tableId, 118);
+    const tableDef = { getColumn: (id: number) => ({ 0: { types: [36] }, 1: { types: [36] }, 32: { types: [0] }, 34: { types: [0] }, 35: { types: [0] }, 36: { types: [0] } } as Record<number, any>)[id] };
+    const ctx = context({ dbRepository: { getTables: () => new Map([[118, tableDef]]), getRows: () => [], getRowById: () => undefined } });
+    const field = (column: number) => (118 << 12) | (column << 4);
+    ctx.pushInt(340000); ctx.pushInt(field(0)); ctx.pushInt(0);
+    run(Opcodes.DB_GETFIELD, ctx);
+    assert.equal(ctx.popString(), "Defeat a Goblin", "action_name");
+    ctx.pushInt(340000); ctx.pushInt(field(32)); ctx.pushInt(0);
+    run(Opcodes.DB_GETFIELD, ctx);
+    assert.equal(ctx.popInt(), 1, "action_difficulty");
+    ctx.pushInt(340001); ctx.pushInt(field(35)); ctx.pushInt(0);
+    run(Opcodes.DB_GETFIELD, ctx);
+    assert.equal(ctx.popInt(), 0, "a column the row lacks reads the type's default, not a cache row");
+    ctx.pushInt(340000); ctx.pushInt(field(0));
+    run(Opcodes.DB_GETFIELDCOUNT, ctx);
+    assert.equal(ctx.popInt(), 1);
+    ctx.pushInt(340000);
+    run(Opcodes.DB_GETROWTABLE, ctx);
+    assert.equal(ctx.popInt(), 118);
+    // Without a table definition (no cache), the values type themselves.
+    const bare = context({});
+    bare.pushInt(340000); bare.pushInt(field(1)); bare.pushInt(0);
+    run(Opcodes.DB_GETFIELD, bare);
+    assert.equal(bare.popString(), "Defeat a Goblin.");
+});
+
+test("each override dataset sent replaces the whole set: the server sends one complete payload", () => {
+    // The server's single sender (LeagueMode's content payload) carries every unit's rows at once.
+    loadFromPayload({
+        gamemodeId: "test",
+        datasets: [
+            { key: "structOverrides", rows: [{ structId: 300001, params: { 879: "Berserker" } }] },
+            { key: "enumOverrides", rows: [{ enumId: 5950, valueType: "J", defaultValue: -1, entries: [[0, 340000], [1, 340001]] }] },
+            { key: "dbRowOverrides", rows: [{ rowId: 340001, tableId: 118, columns: { 0: ["Reach Total Level 200"] } }] },
+        ],
+    });
+    assert.equal(getEnumOverride(5950)?.outputCount, 2);
+    assert.equal(getEnumOverride(200100), undefined, "an enum the new payload lacks is gone");
+    assert.equal(getStructOverride(300001, 879), "Berserker");
+    assert.equal(getStructOverride(300001, 880), undefined, "whole row, not merged params");
+    assert.equal(getStructOverride(1136, 877), undefined, "a struct the new payload lacks is gone");
+    assert.deepEqual(getDbRowOverride(340001)?.columns[0], ["Reach Total Level 200"]);
+    assert.equal(getDbRowOverride(340000), undefined, "a row the new payload lacks is gone");
+});
+
 test("a payload without the datasets keeps them; an empty dataset clears them", () => {
     loadFromPayload({ gamemodeId: "test", datasets: [{ key: "worldMapPlayers", rows: [] }] });
-    assert.equal(getStructOverride(300001, 879), "Superior Sorcerer");
-    assert.equal(getEnumOverride(200100)?.outputCount, 3);
-    loadFromPayload({ gamemodeId: "test", datasets: [{ key: "structOverrides", rows: [] }, { key: "enumOverrides", rows: [] }] });
+    assert.equal(getStructOverride(300001, 879), "Berserker");
+    assert.equal(getEnumOverride(5950)?.outputCount, 2);
+    assert.equal(getDbRowOverride(340001)?.tableId, 118);
+    loadFromPayload({ gamemodeId: "test", datasets: [{ key: "structOverrides", rows: [] }, { key: "enumOverrides", rows: [] }, { key: "dbRowOverrides", rows: [] }] });
     assert.equal(getStructOverride(300001, 879), undefined);
-    assert.equal(getEnumOverride(200100), undefined);
+    assert.equal(getEnumOverride(5950), undefined);
+    assert.equal(getDbRowOverride(340001), undefined);
 });
