@@ -34,12 +34,24 @@ function value(player, effect) {
 
 // ---- Praying Respects ----
 
+/**
+ * Remains the player may bury: not those needing more Prayer than they have, nor the bones kept for
+ * other uses (long and curved bones, which the bonecrusher leaves too).
+ */
+function buryable(player, itemId) {
+  const row = { itemId, bone: null };
+  Common.api.emitCustomEvent("prayer:bone", row);
+  if (!row.bone) return true;
+  return row.bone.crush !== false && (Number(row.bone.level) || 1) <= player.getSkillManager().getMaxLevel(core().Skill.PRAYER);
+}
+
 /** `npc-drops:roll`: remains the kill drops are buried or scattered at once, at the fragment's percent of their XP. */
 function buryDrops({ player, drops }) {
   const percent = value(player, "prayingRespects");
   if (percent === null || !Array.isArray(drops)) return;
   for (let index = drops.length - 1; index >= 0; index--) {
     const { itemId, amount } = drops[index];
+    if (!buryable(player, itemId)) continue;
     const bury = { player, itemId, scale: percent / 100, handled: false };
     for (let piece = 0; piece < amount; piece++) {
       bury.handled = false;
@@ -59,11 +71,11 @@ function pickpocketTarget(request) {
   if (Fragments.equippedLevel(request.player, effects().smoothCriminal.fragment) >= effects().smoothCriminal.painlessFrom) request.painless = true;
 }
 
-/** Double loot: each item again (coins come as another pouch). */
+/** Double loot, multiplied with the rogue outfit's by Thieving's own handover (a pouch's coins come directly; clues never twice). */
 function doubleLoot(request) {
   const percent = value(request.player, "deeperPockets");
-  if (percent === null || !Array.isArray(request.loot) || !chance(percent)) return;
-  request.loot = request.loot.flatMap((entry) => [entry, { ...entry }]);
+  if (percent === null || !chance(percent)) return;
+  request.multiplier = (Number(request.multiplier) || 1) * 2;
 }
 
 // ---- Hot On The Trail ----
@@ -99,7 +111,10 @@ function markCoins(request) {
 function moreMarks(request) {
   if (request.kind !== effects().graveRobber.kind) return;
   const percent = value(request.player, "graveRobber");
-  if (percent !== null) request.amount = Math.floor((request.amount * (100 + percent)) / 100);
+  if (percent === null) return;
+  // A part mark is a chance of a whole one, so 50% more of one mark is a mark half the time.
+  const marks = (request.amount * (100 + percent)) / 100;
+  request.amount = Math.floor(marks) + (Math.random() < marks - Math.floor(marks) ? 1 : 0);
 }
 
 function clueChance(request) {

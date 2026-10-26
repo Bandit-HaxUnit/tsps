@@ -174,6 +174,8 @@ test("Praying Respects: a kill's bones and ashes are buried and scattered throug
     assert.equal(kept.drops.length, 3, player.getUsername());
   }
   assert.equal(emit("prayer:bury", { player: plain, itemId: I.VILE_ASHES, crushed: true, handled: false }).handled, false, "the bonecrusher still leaves ashes alone");
+  const kept = emit("npc-drops:roll", { player: owner, drops: [{ itemId: I.SUPERIOR_DRAGON_BONES, amount: 1, noted: false }, { itemId: I.LONG_BONE, amount: 1, noted: false }] });
+  assert.deepEqual(kept.drops.map((drop) => drop.itemId), [I.SUPERIOR_DRAGON_BONES, I.LONG_BONE], "not above the Prayer level, and not the long bone kept for Construction");
 });
 
 // ---- Smooth Criminal, Deeper Pockets ----
@@ -193,15 +195,22 @@ test("Smooth Criminal: Thieving's own success chance rises by its percent, stack
   assert.deepEqual([two.chanceBonus, two.painless], [25, true]);
 });
 
-test("Deeper Pockets: the pickpocket's loot twice at its chance, coins as another pouch", () => {
+test("Deeper Pockets: Thieving's own handover gives the loot twice at its chance: a pouch and its coins, never a second clue", () => {
   const { owner, others } = cases(F.deeperPockets);
+  const target = Pickpocket.TARGETS.find((entry) => entry.coinPouch && !Array.isArray(entry.coinPouch.coins));
+  const loot = [{ id: I.COINS, amount: 3 }, { id: I.BREAD, amount: 1 }, { id: I.SCROLL_BOX_EASY_, amount: 1, clue: true }];
+  const pick = (player) => {
+    const request = emit("thieving:loot", { player, loot, multiplier: 1 });
+    Pickpocket._test.giveLoot(player, target, request.loot, () => 0.99, request.multiplier); // no rogue outfit
+    const inventory = player.getInventory();
+    return [inventory.getAmount(target.coinPouch.id), inventory.getAmount(I.COINS), inventory.getAmount(I.BREAD), inventory.getAmount(I.SCROLL_BOX_EASY_)];
+  };
   Math.random = () => 0.1;
-  const loot = [{ id: I.COINS, amount: 3 }, { id: I.BREAD, amount: 1 }];
-  assert.deepEqual(emit("thieving:loot", { player: owner, loot }).loot.map((entry) => entry.id), [I.COINS, I.COINS, I.BREAD, I.BREAD]);
+  assert.deepEqual(pick(owner), [1, target.coinPouch.coins, 2, 1], "one pouch and its coins, two breads, one clue");
   Math.random = () => 0.5;
-  assert.equal(emit("thieving:loot", { player: owner, loot }).loot.length, 2, "past 20%");
+  assert.deepEqual(pick(shattered("pocketslevel1")), [1, 0, 1, 1], "no fragment");
   Math.random = () => 0.1;
-  for (const player of others) assert.equal(emit("thieving:loot", { player, loot }).loot.length, 2, player.getUsername());
+  for (const player of others) assert.deepEqual(pick(player), [1, 0, 1, 1], player.getUsername());
 });
 
 // ---- Hot On The Trail ----
@@ -214,8 +223,9 @@ test("Hot On The Trail: a lit log's tier of scroll box at its chance, Slash & Bu
   assert.match(owner.messages.at(-1), /medium scroll box/);
   emit("league:log-burnt", { player: owner, itemId: I.REDWOOD_LOGS });
   assert.equal(owner.getInventory().getAmount(I.SCROLL_BOX_MASTER_), 1, "a burnt redwood: master");
+  const boxes = () => ["BEGINNER", "EASY", "MEDIUM", "HARD", "ELITE", "MASTER"].reduce((sum, tier) => sum + owner.getInventory().getAmount(I[`SCROLL_BOX_${tier}_`]), 0);
   emit("firemaking:success", { player: owner, itemId: I.JATOBA_LOGS });
-  assert.equal(owner.getInventory().getAmount(I.SCROLL_BOX_EASY_) + owner.getInventory().getAmount(I.SCROLL_BOX_MEDIUM_), 1, "no tier for a log the league predates");
+  assert.equal(boxes(), 2, "no tier for a log the league predates");
   mayReceive = false;
   emit("firemaking:success", { player: owner, itemId: I.YEW_LOGS });
   assert.equal(owner.getInventory().getAmount(I.SCROLL_BOX_HARD_), 0, "not past the clue capacity");
@@ -249,7 +259,10 @@ test("Golden Brick Road: coins beside a mark of grace; Grave Robber: more hallow
   assert.equal(emit("agility:mark", { player: road.others[0], items: [[I.MARK_OF_GRACE, 1]] }).items.length, 1);
 
   const robber = cases(F.graveRobber);
-  assert.equal(emit("minigame:points", { player: robber.owner, minigame: "hallowed-sepulchre", kind: "hallowed-marks", amount: 5 }).amount, 7, "150% of 5, rounded down");
+  Math.random = () => 0.6;
+  assert.equal(emit("minigame:points", { player: robber.owner, minigame: "hallowed-sepulchre", kind: "hallowed-marks", amount: 5 }).amount, 7, "7.5 marks: the half mark missed");
+  Math.random = () => 0.4;
+  assert.equal(emit("minigame:points", { player: robber.owner, minigame: "hallowed-sepulchre", kind: "hallowed-marks", amount: 1 }).amount, 2, "1.5 marks: the half mark hit");
   assert.equal(emit("minigame:points", { player: robber.owner, minigame: "pest-control", kind: "commendation", amount: 5 }).amount, 5, "not another reward");
   assert.equal(emit("minigame:points", { player: robber.others[1], minigame: "hallowed-sepulchre", kind: "hallowed-marks", amount: 5 }).amount, 5);
 
