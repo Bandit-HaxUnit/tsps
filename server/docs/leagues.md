@@ -140,6 +140,8 @@ relics are the first askers; nothing changes when nobody answers):
 | `thieving:pickpocket-target` (extended) | Thieving | now with `chanceBonus` (a percent more success, stacking as the gloves of silence do) and `painless` (a stun without the damage) |
 | `thieving:loot` (extended) | Thieving | now with `multiplier`, applied with the rogue outfit's doubling as the loot is handed over |
 | `prayer:bury` (extended) | Prayer | now scatters demonic ashes too (never for the bonecrusher's `crushed`) |
+| `teleport:landed` | core `TeleportHandler`, as a teleport lands | `{ player, from, fromInstance, to }`: where it began, whether in an instance, and where it landed |
+| `league:fragments-changed` | LeagueMode (Fragments) | `{ player }` after Equip, Unequip or Unequip all changes the fragment slots |
 | `woodcutting:nest-chance`, `woodcutting:nest-drop` | Woodcutting | `{ player, multiplier }`: a bird nest `multiplier` times as likely; `{ player, itemId, handled }` before a nest falls (handled: a listener took it) |
 | `farming:open-seed-vault` | Farming (the guild's seed vault) | `{ player, opened }`: the vault's menu from anywhere, behind the Bank PIN as at the guild |
 | `miscellania:rules` | Managing Miscellania | `{ player, ruler, royalTrouble, payMultiplier, outputMultiplier, approval, visiting }`: who rules the kingdom (the quests), what the workers' pay costs, how much they gather (clues as rolled), an approval held fixed, whether a catch-up away from the islands counts as a visit |
@@ -478,6 +480,19 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   minigames' new `minigame:points` and `minigame:chance` and the quest's
   `big-chompy-bird-hunting:kill-credit`. Soul Wars' zeal itself (the ranking total) is not raised,
   only the tokens paid.
+- **The Sage's items** (`league/FragmentSage.LeagueMode.js`, data `sageEffects`): Endless
+  Knowledge, Last Recall and Trailblazer give the item their set struct names (param 1471: the
+  Arcane grimoire, the Crystal of memories, which this cache calls Crystal of Echoes, and the
+  Portable waystone), handed over when the set becomes active (`league:fragments-changed`, from the
+  fragments screen, and at login) to a character holding none in the inventory, worn or banked; the
+  Wiki has the Sage give it (ours). As with the grimoire's own unit (Leagues polish), holding it is
+  the token, so it keeps working when the set comes off. The crystal's Teleport-back returns to
+  where the character's last teleport began, from the core's new `teleport:landed` (`from`,
+  `fromInstance`), unless that was in an instance, Fossil Island's underwater area, Entrana or the
+  rune essence mine (the Wiki's exclusions this server has; boxes ours), up to Wilderness level 20
+  (ours); Check-memories says whether one is kept. The waystone's Teleport lists the league's twelve
+  waystones in pages, not past Wilderness level 20, Canifis needing Priest in Peril and Prifddinas
+  Song of the Elves; the tiles are this server's (the Wiki names only the towns).
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price
   now, from the Wiki's Initial Cost less the prerequisite packs already unlocked, and 0 once
@@ -495,7 +510,8 @@ safe, which this server doesn't have; Rune Escape, which needs the
 Ourania Altar this server doesn't have; Plank Stretcher outside a house build, as Mahogany Homes; Tactical
 Duelist and the ranged weapons' charges, which no hook reports; Livin' On A Prayer, Special
 Discount, Thrall Damage, Superior Tracking, Slay 'n' Pay and the god-armour four) and the other
-sets (Fast Metabolism, Knife's Edge and the three that give a Sage item); The Alchemist's jugs of
+sets (Fast Metabolism, Knife's Edge); the league's waystone objects themselves (only the portable
+one's teleports are here); The Alchemist's jugs of
 wine (no wine making here); Fishing has no clue bottles of its own, so Message In A Bottle
 reaches only Hunter's aerial fishing and drift nets for bottles; quest packs complete no quests; fragments can be swapped anywhere, not only at a bank or the Sage, and only
 through Equip (dragging one into a slot isn't handled); the
