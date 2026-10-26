@@ -42,9 +42,18 @@ An rsprox capture (rev 241) of a members account on a Jagex Account, with 2 bloc
 | 10M coins in the bank, none carried | `Oh... I don't seem to have enough money for that. Never mind.`: no Yes/No. Bank coins don't pay, although the Wiki transcript says they do |
 | 5M coins carried | Chat menu `Buy 50 bank slots for 5,000,000 coins?` with `Yes.\|No.`; `Yes, I'm happy with that.`; on continuing, the coins leave the inventory, `bank_extra_blocks_purchased` (varbit 13119) goes 2 -> 3, sound 2114 plays and the Banker says `Your additional bank slots have been added.` |
 
-Not in the capture, so these follow the Wiki transcript or are guesses:
+A second capture (3 blocks bought, a PIN just set and pending):
 
-- "Do I have any other options...", "(Cancel)" and "No." use the Wiki transcript's lines.
+| What | Live |
+| --- | --- |
+| "Do I have any other options for extra bank space?" | The player says it (face 554), the Banker `I'm not supposed to tell you this, but you can obtain more bank space by setting up a PIN.` (593), then the offer again (568) and the list reopens |
+| "(Cancel)" | The player says `Actually, I've changed my mind.` (575) and the conversation ends |
+| The list's numbering | The client numbers only the lines with text (script 9143), so with 6 options "other options" resumes 6 and "(Cancel)" 7. Live's server counts the blank spacer, so it answers 6 with Cancel and 7 with "other options": the two swap. We number as the client does, so each line does what it says |
+| Bank open, PIN pending (7 days) | Capacity `1090` and `Set a PIN for 20 more.`: a pending PIN doesn't count yet |
+
+Not in the captures, so these follow the Wiki transcript or are guesses:
+
+- "No." at the Yes/No uses the Wiki transcript's line.
 - About half the generated Banker transcripts still offer slots "in sets of 40" (an older Wiki
   transcript). The plugin replaces that whole line with the captured one, which also fills in
   the slots for sale; `npc-dialogues.json` is unchanged.

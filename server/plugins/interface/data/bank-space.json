@@ -1,5 +1,5 @@
 {
-  "_source": "OSRS Wiki: Bank (bank space, the purchase table) and Banker (\"I'd like to buy more bank slots.\"); rsprox capture of a members account with 2 blocks bought, no PIN, on a Jagex Account (rev 241): the bank's capacity text \"1040\" and tooltip (script 1495), \"Set a Bank PIN to unlock more bank space.\" depositing into the full bank, the menu_new purchase list (script 9142), the purchase (varbit bank_extra_blocks_purchased 2 -> 3, sound 2114) and the refusal with only bank coins.",
+  "_source": "OSRS Wiki: Bank (bank space, the purchase table) and Banker (\"I'd like to buy more bank slots.\"); rsprox capture of a members account with 2 blocks bought, no PIN, on a Jagex Account (rev 241): the bank's capacity text \"1040\" and tooltip (script 1495), \"Set a Bank PIN to unlock more bank space.\" depositing into the full bank, the menu_new purchase list (script 9142), the purchase (varbit bank_extra_blocks_purchased 2 -> 3, sound 2114) and the refusal with only bank coins; a second capture (3 blocks, a PIN pending) of \"other options\", \"(Cancel)\" and the tooltip while the PIN is pending.",
   "capacity": {
     "members": 900,
     "freeToPlay": 400,
@@ -46,6 +46,9 @@
     "cost": 569,
     "tooPoor": 576,
     "accept": 567,
-    "added": 567
+    "added": 567,
+    "otherOptions": 554,
+    "pinHint": 593,
+    "changedMind": 575
   }
 }

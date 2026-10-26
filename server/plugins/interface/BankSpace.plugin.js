@@ -23,7 +23,10 @@ const ULTIMATE_IRONMAN_CONDITION = "If the player is an Ultimate Ironman:";
 /** toplevel mainmodal and the chatbox, where menu_new and the conversation sit. */
 const MAIN_MODAL = (161 << 16) | 16;
 const CHATBOX_MODAL = (162 << 16) | 568;
-/** menu_new: a scrolling list of options; script 9142 fills it, each pick resumes text (947:9) with its index. */
+/**
+ * menu_new: a scrolling list of options; script 9142 fills it, each pick resumes text (947:9) with
+ * its index. Blank lines are spacers the client doesn't number (script 9143).
+ */
 const MENU_GROUP = 947;
 const MENU_TEXT_CHILD = 9;
 const MENU_SCRIPT = 9142;
@@ -148,8 +151,9 @@ function openMenu(player, npc) {
   }
   if (lines.length) lines.push(["", null]);
   lines.push([dialogue.otherOptions, () => otherOptions(player, npc)]);
-  lines.push([dialogue.cancel, () => say(player, npc, [player, dialogue.changedMind])]);
-  menus.set(player, { actions: lines.map(([, act]) => act) });
+  lines.push([dialogue.cancel, () => say(player, npc, [player, dialogue.changedMind, DATA.expressions.changedMind])]);
+  // Live numbers the spacer too, so its "other options" and "(Cancel)" answer each other's pick.
+  menus.set(player, { actions: lines.filter(([text]) => text).map(([, act]) => act) });
   player.setInterfaceId(MENU_GROUP);
   player.getPacketSender()
     .sendInterfaceScript(MAINMODAL_OPEN_SCRIPT, [-1, -1])
@@ -219,7 +223,7 @@ function choose(player, npc, slots, cost) {
       new OptionDialogue(0, {
         executeOption(option) {
           if (Number(option) === 1) accept(player, npc, slots, cost);
-          else say(player, npc, [player, dialogue.changedMind]);
+          else say(player, npc, [player, dialogue.changedMind, DATA.expressions.changedMind]);
         },
       }, dialogue.yes, dialogue.no).setTitle(fill(dialogue.confirmTitle, values)),
     ));
@@ -252,7 +256,8 @@ function purchase(player, count, cost) {
 function otherOptions(player, npc) {
   const { dialogue, expressions } = DATA;
   chain(player, npc, [
-    [npc, hasPin(player) ? dialogue.allFree : dialogue.pinHint],
+    [player, dialogue.otherOptions, expressions.otherOptions],
+    hasPin(player) ? [npc, dialogue.allFree] : [npc, dialogue.pinHint, expressions.pinHint],
     [npc, fill(dialogue.offer, { slots: slotsForSale(player) }), expressions.offer],
   ], () => openMenu(player, npc));
 }

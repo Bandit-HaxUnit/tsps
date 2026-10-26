@@ -298,11 +298,28 @@ test("other options: the PIN hint, then the offer and the list again; all blocks
   const [, , options] = openPurchase(p, player);
   assert.equal(options, "Do I have any other options for extra bank space?|(Cancel)");
   pick(p, player, 0);
-  assert.equal(shown(player), DATA.dialogue.pinHint);
+  assert.equal(shown(player), "Do I have any other options for extra bank space?");
+  assert.equal(next(player), DATA.dialogue.pinHint);
   assert.equal(next(player), "I can sell you up to 0 additional bank slots in sets of 50. How many are you interested in buying?");
   player.dialogues.advance();
   assert.ok(player.dialogues.getCurrent() instanceof ActionDialogue);
   assert.equal(player.getInterfaceId(), 947);
+});
+
+test("picks number the lines the client shows, skipping the spacer: 6 is other options, 7 is Cancel", () => {
+  // Second capture: with 3 blocks bought, live answered 6 with "(Cancel)" and 7 with "other options",
+  // as its numbering counts the spacer; script 9143 only numbers lines with text.
+  const p = plugin();
+  const player = createPlayer();
+  player.setAttribute("bank-space:blocks", 3);
+  const [, , options] = openPurchase(p, player);
+  assert.equal(options.split("|").length, 9);
+  pick(p, player, 6);
+  assert.equal(shown(player), "Do I have any other options for extra bank space?");
+  openPurchase(p, player);
+  pick(p, player, 7);
+  assert.equal(shown(player), "Actually, I've changed my mind.");
+  assert.equal(player.dialogues.getCurrent().expression, 575);
 });
 
 test("the Ultimate Ironman condition is answered from the player's mode", () => {
