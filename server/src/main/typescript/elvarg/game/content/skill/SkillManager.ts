@@ -186,6 +186,7 @@ export class SkillManager {
             this.player.getUpdateFlag().flag(Flag.APPEARANCE);
         }
         if (newLevel <= startingLevel) this.updateSkill(skill);
+        PluginManager.emitExperienceGained({ player: this.player, skill, experience });
         return this;
     }
 

@@ -28,6 +28,8 @@ module.exports = {
     require("./league/Rewards.LeagueMode")(api);
     require("./league/Shattered.LeagueMode")(api);
     require("./league/Fragments.LeagueMode")(api);
+    require("./league/FragmentDrops.LeagueMode")(api);
+    require("./league/FragmentEffects.LeagueMode")(api);
     require("./league/Unlocks.LeagueMode")(api);
     require("./league/Commands.LeagueMode")(api);
   },

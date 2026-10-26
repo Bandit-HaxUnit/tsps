@@ -1427,6 +1427,14 @@ export class CombatFactory {
             return;
         }
 
+        // Plugins may save the shot's ammunition or weapon charge outright (a league perk), as
+        // `magic:rune-saving` does a spell's runes.
+        const ammoSaving = { player, weaponId: player.getEquipment().getItems()[Equipment.WEAPON_SLOT]?.getId?.() ?? -1, saved: false };
+        PluginManager.emitCustomEvent("combat:ammo-saving", ammoSaving);
+        if (ammoSaving.saved) {
+            return;
+        }
+
         if (
             rangedWeapon === RangedWeapon.WEBWEAVER_BOW ||
             rangedWeapon === RangedWeapon.CRAWS_BOW ||
