@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 
 import { setCustomInterface } from "../common/gamemode/GamemodeContentStore";
+import { SMITHING_BAR_MODAL_GROUP_ID } from "../common/ui/widgets";
+import { Cs2Vm } from "../rs/cs2/Cs2Vm";
+import { Opcodes } from "../rs/cs2/Opcodes";
+import { createHandlerMap } from "../rs/cs2/handlers";
 import { loadCustomWidgetGroup } from "../widgets/custom/CustomWidgetGroups";
+import { WidgetLoader } from "../widgets/WidgetLoader";
 import { WidgetManager } from "../widgets/WidgetManager";
 
 // The real client unloads a closed interface (closeInterface -> unloadInterface), so the next
@@ -106,6 +111,34 @@ manager.closeSubInterface(MAIN_MODAL);
 assert.equal(manager.isGroupLoaded(OTHER), false, "a nested interface is unloaded with its parent");
 assert.equal(manager.isGroupLoaded(ROOT), true, "the root interface stays loaded");
 assert.equal(decodes.get(ROOT), 1);
+
+// CS2 ops after a reopen reach the new widgets, not the ones the close dropped.
+const vm = new Cs2Vm({ widgetManager: manager, loadScript: () => undefined } as any);
+const handlers = createHandlerMap();
+const context = (vm as any).createHandlerContext();
+function setHide(uid: number, hidden: boolean): void {
+    vm.intStackSize = 0;
+    vm.pushInt(hidden ? 1 : 0);
+    vm.pushInt(uid);
+    handlers.get(Opcodes.IF_SETHIDE)!(context, 0, null);
+}
+manager.openSubInterface(MAIN_MODAL, SHOP);
+setHide(loadingLayer, false);
+assert.equal(manager.getWidgetByUid(loadingLayer)!.hidden, false);
+manager.closeSubInterface(MAIN_MODAL);
+setHide(loadingLayer, false);
+manager.openSubInterface(MAIN_MODAL, SHOP);
+assert.equal(manager.getWidgetByUid(loadingLayer)!.hidden, true, "if_sethide on a closed interface does not reach its next open");
+setHide(loadingLayer, false);
+assert.equal(manager.getWidgetByUid(loadingLayer)!.hidden, false, "if_sethide after a reopen changes the reopened widget");
+manager.closeSubInterface(MAIN_MODAL);
+
+// The real loader hands out its decoded group until the group unloads.
+const loader = new WidgetLoader({ getIndex: () => { throw new Error("no cache"); } } as never);
+const smithing = loader.loadWidgetGroup(SMITHING_BAR_MODAL_GROUP_ID);
+assert.equal(loader.loadWidgetGroup(SMITHING_BAR_MODAL_GROUP_ID), smithing);
+loader.unloadGroup(SMITHING_BAR_MODAL_GROUP_ID);
+assert.notEqual(loader.loadWidgetGroup(SMITHING_BAR_MODAL_GROUP_ID), smithing, "an unloaded group decodes again");
 
 // A server-defined interface reopens from its definition, not from the last open's widgets.
 setCustomInterface({ groupId: 30_000, widgets: [{ ...widget(30_000, 0), parentUid: -1 }, widget(30_000, 1, 30_000 << 16, true)] });

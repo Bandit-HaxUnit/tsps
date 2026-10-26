@@ -1520,7 +1520,9 @@ export class WidgetManager {
         this.clearGroupIndex(groupId);
         // CC_CREATE children are registered by uid only, outside the group's index.
         for (const uid of this.widgetByUid.keys()) {
-            if ((uid >>> 16) === groupId) this.widgetByUid.delete(uid);
+            if ((uid >>> 16) !== groupId) continue;
+            this.widgetByUid.delete(uid);
+            this.dynamicChildrenByParent.delete(uid);
         }
         for (const uid of this.serverOwnedWidgets) {
             if ((uid >>> 16) === groupId) this.serverOwnedWidgets.delete(uid);
