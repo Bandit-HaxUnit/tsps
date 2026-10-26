@@ -120,7 +120,7 @@ relics are the first askers; nothing changes when nobody answers):
 | `magic:enchant-pieces`, `magic:spell-batch` | the jewellery enchantments; the Lunar crafting spells | `{ player, spellName, itemId, pieces }` pieces a cast enchants, each with its XP; `{ player, spellName, batch }` items a cast converts |
 | `magic:alchemy-policy` (extended) | core alchemy | now with `high` (High Level Alchemy) |
 | `minigame:points` | the Hallowed Sepulchre's coffins (`hallowed-marks`), Pest Control (`commendation`), Soul Wars (`zeal-tokens`), the Tithe Farm (`tithe-points`), the Mage Training Arena's rooms (each pizazz type) | `{ player, minigame, kind, amount }` before a minigame's reward points or tokens are given: a listener may raise `amount` |
-| `minigame:chance` | the Motherlode Mine (`golden-nugget`), Hunter's drift nets (`fossil-island` `fossil`) | `{ player, minigame, kind, multiplier }`: the find `multiplier` times as likely |
+| `minigame:chance` | the Motherlode Mine (`golden-nugget`), Hunter's drift nets and the Volcanic Mine (`fossil-island` `fossil`) | `{ player, minigame, kind, multiplier }`: the find `multiplier` times as likely |
 | `big-chompy-bird-hunting:kill-credit` | Big Chompy Bird Hunting's kill count | `{ player, kills }` a chompy kill counts for |
 | `thieving:pickpocket-target` (extended) | Thieving | now with `chanceBonus` (a percent more success, stacking as the gloves of silence do) and `painless` (a stun without the damage) |
 | `thieving:loot` (extended) | Thieving | now with `multiplier`, applied with the rogue outfit's doubling as the loot is handed over |
@@ -456,7 +456,8 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   Barbarian Pest Wars (Pest Control's commendation points and Soul Wars' zeal tokens), Rogues'
   Chompy Farm (the Tithe Farm's points; a chompy kill counted 2-4 times on the ogre bow's count)
   and Mother's Magic Fossils (the Mage Training Arena's pizazz points earned in its rooms; the
-  Motherlode Mine's golden nuggets and Fossil Island's fossils likelier) pay x2/x3/x4, through the
+  Motherlode Mine's golden nuggets and Fossil Island's unidentified fossils, from drift nets and
+  the Volcanic Mine, likelier) pay x2/x3/x4, through the
   minigames' new `minigame:points` and `minigame:chance` and the quest's
   `big-chompy-bird-hunting:kill-credit`. Soul Wars' zeal itself (the ranking total) is not raised,
   only the tokens paid.
@@ -473,8 +474,7 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   server's, said once per boss every few seconds.
 
 Not yet: the other fragments' effects (Barbarian Assault's honour points and the Rogues' Den
-safe, which this server doesn't have; Fossil Island's fossils other than the drift nets', which no
-other activity here gives; Rune Escape, which needs the
+safe, which this server doesn't have; Rune Escape, which needs the
 Ourania Altar this server doesn't have; Plank Stretcher outside a house build, as Mahogany Homes; Tactical
 Duelist and the ranged weapons' charges, which no hook reports; Livin' On A Prayer, Special
 Discount, Thrall Damage, Superior Tracking, Slay 'n' Pay and the god-armour four) and the other

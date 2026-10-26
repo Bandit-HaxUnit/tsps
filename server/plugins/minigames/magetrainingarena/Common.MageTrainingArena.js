@@ -83,16 +83,16 @@ function points(player, type) {
   return Math.max(0, Number(player.getAttribute(POINTS_ATTRIBUTE(type))) || 0);
 }
 
-/**
- * Adds (or with a negative amount, spends) points, up to the type's cap; returns what changed.
- * Points `earned` in a room may be raised by content ("minigame:points", a league fragment).
- */
-function addPoints(player, type, amount, earned = false) {
-  if (earned && amount > 0) {
-    const paid = { player, minigame: "mage-training-arena", kind: type, amount };
-    api?.emitCustomEvent?.("minigame:points", paid);
-    if (Number.isFinite(paid.amount) && paid.amount > amount) amount = paid.amount;
-  }
+/** The points a room pays for `amount` earned, as content may raise them ("minigame:points", a league fragment). */
+function earnedPoints(player, type, amount) {
+  if (!(amount > 0)) return amount;
+  const paid = { player, minigame: "mage-training-arena", kind: type, amount };
+  api?.emitCustomEvent?.("minigame:points", paid);
+  return Number.isSafeInteger(paid.amount) && paid.amount > amount ? paid.amount : amount;
+}
+
+/** Adds (or with a negative amount, spends) points, up to the type's cap; returns what changed. */
+function addPoints(player, type, amount) {
   const cap = data.points.caps[type];
   const before = points(player, type);
   const after = Math.max(0, Math.min(cap, before + Math.floor(amount)));
@@ -183,7 +183,7 @@ function attach(api) {
 }
 
 module.exports = {
-  init, later, attach, registerRoom, message, toLocation, inBox, points, addPoints, hatFor, hatIds, refreshHat, ownsHat, sendOverlay, closeOverlay,
+  init, later, attach, registerRoom, message, toLocation, inBox, points, addPoints, earnedPoints, hatFor, hatIds, refreshHat, ownsHat, sendOverlay, closeOverlay,
   POINT_TYPES, POINTS_ATTRIBUTE, HAT_GIVEN_ATTRIBUTE, PEACHES_UNLOCKED_ATTRIBUTE,
   get api() { return api; },
   get core() { return core; },

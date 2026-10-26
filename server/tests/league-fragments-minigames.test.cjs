@@ -152,9 +152,9 @@ test("Mother's Magic Fossils: the Mage Training Arena's own points x2; the Mothe
   const { owner, others } = cases(F.mothersMagicFossils);
   const Arena = require("../plugins/minigames/magetrainingarena/Common.MageTrainingArena");
   Arena.init({ core, emitCustomEvent: (name, payload) => emit(name, payload) });
-  assert.equal(Arena.addPoints(owner, "alchemist", 10, true), 20, "earned in a room");
+  assert.equal(Arena.earnedPoints(owner, "alchemist", 10), 20, "earned in a room");
   assert.equal(Arena.addPoints(owner, "alchemist", 10), 10, "not raised when bought back or set");
-  for (const player of others) assert.equal(Arena.addPoints(player, "alchemist", 10, true), 10, player.getUsername());
+  for (const player of others) assert.equal(Arena.earnedPoints(player, "alchemist", 10), 10, player.getUsername());
 
   assert.equal(chance(owner, "motherlode-mine", "golden-nugget"), 2);
   assert.equal(chance(owner, "fossil-island", "fossil"), 2);
@@ -164,4 +164,16 @@ test("Mother's Magic Fossils: the Mage Training Arena's own points x2; the Mothe
   const between = () => nugget * 1.5;
   assert.equal(Mine.rollOre(60, between).key !== "nugget", true, "past the usual nugget chance");
   assert.equal(Mine.rollOre(60, between, chance(owner, "motherlode-mine", "golden-nugget")).key, "nugget", "inside twice that chance");
+
+  // Hunter's own drift-net fossil roll: the unidentified fossils twice as likely, numulite as usual.
+  const DriftNets = require("../plugins/skills/hunter/DriftNets.Hunter");
+  require("../plugins/skills/hunter/Context.Hunter").H.core = core;
+  const numulite = (9 * 3) / 175;
+  const fossils = 3 / 350 + 3 / 700 + 3 / 875 + 3 / 3500;
+  Math.random = () => numulite + 1.5 * fossils;
+  assert.equal(DriftNets.fossil(3, 14), null, "past every fossil's usual chance");
+  assert.ok([core.ItemIdentifiers.UNIDENTIFIED_SMALL_FOSSIL, core.ItemIdentifiers.UNIDENTIFIED_MEDIUM_FOSSIL, core.ItemIdentifiers.UNIDENTIFIED_LARGE_FOSSIL,
+    core.ItemIdentifiers.UNIDENTIFIED_RARE_FOSSIL].includes(DriftNets.fossil(3, 14, 2)?.[0]), "inside twice them");
+  Math.random = () => numulite * 1.5;
+  assert.equal(DriftNets.fossil(3, 14, 2), null, "numulite's chance is not raised");
 });
