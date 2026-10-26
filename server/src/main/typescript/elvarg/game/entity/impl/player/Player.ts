@@ -303,6 +303,16 @@ export class Player extends Mobile {
             }
         }
 
+        const previous = this.getSkillManager().getCurrentLevel(Skill.HITPOINTS);
+        if (hitpoints > previous) {
+            // A heal, whatever its source: plugins may change `amount` (a league passive). A raised
+            // heal reaches full hitpoints at most; an overheal (a brew) keeps its own target.
+            const heal = { player: this, previous, amount: hitpoints - previous, hitpoints };
+            PluginManager.emitCustomEvent("stats:heal", heal);
+            const amount = Number.isFinite(heal.amount) ? Math.max(0, Math.floor(heal.amount)) : hitpoints - previous;
+            hitpoints = Math.min(previous + amount, Math.max(hitpoints, this.getSkillManager().getMaxLevel(Skill.HITPOINTS)));
+        }
+
         this.getSkillManager().setCurrentLevels(Skill.HITPOINTS, hitpoints);
         this.getPacketSender().sendSkill(Skill.HITPOINTS);
         if (this.getHitpoints() <= 0 && !this.isDying)
