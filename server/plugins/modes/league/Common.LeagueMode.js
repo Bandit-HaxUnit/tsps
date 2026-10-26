@@ -108,10 +108,11 @@ function bankHasRoom(player, itemId) {
   return container.getFreeSlots() > 0 || container.contains(itemId);
 }
 
-/** Puts an item straight in the bank when it has room; false leaves it to the caller. */
+/** Puts an item straight in the bank, a note as its item, when it has room; false leaves it to the caller. */
 function bank(player, itemId, amount) {
-  if (amount <= 0 || !bankHasRoom(player, itemId)) return false;
-  player.getBank(core.Bank.getTabForItem(player, itemId)).add(new core.Item(itemId, amount), true);
+  const id = core.ItemDefinition.forId(itemId)?.unNote?.() ?? itemId;
+  if (amount <= 0 || !bankHasRoom(player, id)) return false;
+  player.getBank(core.Bank.getTabForItem(player, id)).add(new core.Item(id, amount), true);
   return true;
 }
 

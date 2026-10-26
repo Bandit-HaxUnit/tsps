@@ -392,8 +392,11 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   Gatherer brings two or three of each Mining, Woodcutting, Fishing and Farming resource with the
   XP of each, and Personal Banker banks them at 50% or always (then a full inventory gathers on).
   They compose on one resource: the fragment's change to every piece, the extras, then the bank or
-  the inventory; extras that don't fit fall to the floor (ours), and what an open coal bag or log
-  basket took stays there. Farming's harvest (`farming:pick`, now with the pick's `experience` and
+  the inventory; extras go to an open container (a fish barrel, a log basket) first and fall to the
+  floor when nothing has room (ours). What a container took of the resource itself stays as it was
+  gathered (the containers hear `storage:gather` first), and a changed item the bank has no room
+  for is banked as gathered, without the change's XP. Farming's extras never take the room the pick
+  itself needs; a Fishing Trawler trip is no catch for Catch Of The Day. Farming's harvest (`farming:pick`, now with the pick's `experience` and
   a `stored` count) is noted and maybe doubled by Certified Farmer; Seedy Business keeps a seed
   (`farming:plant-rules`); Rock Solid keeps iron, sandstone and granite standing
   (`mining:deplete-rock`); Homewrecker makes Woodcutting's bird nests 2-4 times likelier and banks

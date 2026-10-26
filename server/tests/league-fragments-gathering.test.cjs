@@ -249,13 +249,26 @@ test("Greedy Gatherer: two pieces double each resource, three triple it, with th
   assert.equal(one.getInventory().getAmount(I.IRON_ORE), 1, "one piece is no set");
 });
 
-test("Greedy Gatherer: an open container keeps what it took; the extras still come", () => {
-  const player = shattered("greedybag");
-  equip(player, F.messageInABottle, F.justDruid);
-  const request = { player, itemId: I.COAL, amount: 1, stored: 1, skill: core.Skill.MINING, xp: 50 };
-  emit("storage:gather", request);
-  assert.equal(request.stored, 1);
-  assert.equal(player.getInventory().getAmount(I.COAL), 1, "the coal bag kept one, the extra is in the inventory");
+test("Greedy Gatherer: an open container hears the gather first and takes the extras too, before the inventory", () => {
+  // A stand-in fish barrel with room for 2, heard before the fragments as the storage items plugin is (it loads first).
+  const barrel = { player: null, held: 0 };
+  const container = (request) => {
+    if (request.player !== barrel.player || request.itemId !== I.RAW_TROUT) return;
+    const took = Math.min(2 - barrel.held, request.amount - request.stored);
+    barrel.held += took;
+    request.stored += took;
+  };
+  custom["storage:gather"].unshift(container);
+  try {
+    const player = shattered("greedybag");
+    barrel.player = player;
+    equip(player, F.messageInABottle, F.justDruid, F.rockSolid);
+    gather(player, "FISHING", I.RAW_TROUT, 50);
+    assert.equal(barrel.held, 2, "the catch and one extra in the barrel");
+    assert.equal(player.getInventory().getAmount(I.RAW_TROUT), 1, "the extra the barrel had no room for");
+  } finally {
+    custom["storage:gather"].splice(custom["storage:gather"].indexOf(container), 1);
+  }
 });
 
 test("Personal Banker: half the resources at two pieces, all of them at three, to the bank; a full inventory gathers on", () => {
@@ -348,6 +361,20 @@ test("Farming's harvest: Certified Farmer notes the produce; Greedy Gatherer mor
   assert.equal(banked(banker, crop.produce), 1);
   assert.equal(banker.getInventory().getAmount(crop.produce), 0);
   assert.equal(xp(banker, "FARMING"), xp(plain, "FARMING"));
+
+  const notedBanker = shattered("notedbanker");
+  equip(notedBanker, F.certifiedFarmer, F.smithingDouble, F.alchemaniac, F.deeperPockets);
+  harvest(notedBanker);
+  assert.equal(banked(notedBanker, crop.produce), 1, "the bank keeps the item, not its note");
+  assert.equal(banked(notedBanker, note), 0);
+
+  t.mock.method(core.ItemOnGroundManager, "registers", (player, item) => ground.push([player, item.getId(), item.getAmount()]));
+  const cramped = shattered("crampedfarmer");
+  equip(cramped, F.messageInABottle, F.justDruid, F.rockSolid);
+  cramped.getInventory().adds(I.BRONZE_BAR, 26); // with the class's sword, one slot left
+  harvest(cramped);
+  assert.equal(cramped.getInventory().getAmount(crop.produce), 1, "the pick itself fits, so the harvest goes on");
+  assert.deepEqual(ground.map(([, id, amount]) => [id, amount]), [[crop.produce, 2]], "the extras fall");
 });
 
 test("Seedy Business: a seed kept at its chance", () => {
@@ -390,11 +417,17 @@ test("Message In A Bottle: clue vessels x3 at level 1; Catch Of The Day rolls th
   assert.equal(emit("treasure-trails:vessel-chance", { player: bottle.main, vessel: "nest", multiplier: 1 }).multiplier, 1);
 
   const fisher = cases(F.catchOfTheDay);
+  const held = (player) => player.getInventory().getItems().filter((item) => item && item.getId() > 0).length;
+  const before = new Map([fisher.owner, fisher.unequipped].map((player) => [player, held(player)]));
+  const loot = (player) => ({ length: held(player) - before.get(player) });
   Math.random = () => 0; // 1 in 300, and the table's first slot
   emit("fishing:success", { player: fisher.owner, itemId: I.RAW_SHRIMPS });
   emit("fishing:success", { player: fisher.unequipped, itemId: I.RAW_SHRIMPS });
-  assert.ok(fisher.owner.getInventory().getItems().some((item) => item && item.getId() > 0), "a rare drop table item");
-  assert.equal(fisher.unequipped.getInventory().getItems().filter((item) => item && item.getId() > 0).length, 1, "only the fragment item");
+  assert.equal(loot(fisher.owner).length, 1, "a rare drop table item");
+  assert.match(fisher.owner.messages.at(-1), /while fishing/);
+  assert.equal(loot(fisher.unequipped).length, 0);
+  emit("fishing:success", { player: fisher.owner, itemId: null, source: "fishing-trawler" });
+  assert.equal(loot(fisher.owner).length, 1, "a Fishing Trawler trip is no catch");
 
   const hunter = cases(F.chinchonkers);
   const chin = core.NpcIdentifiers.CHINCHOMPA;

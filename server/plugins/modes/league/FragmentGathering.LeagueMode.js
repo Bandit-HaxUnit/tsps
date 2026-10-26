@@ -90,16 +90,25 @@ function changed(player, skill, itemId) {
   return null;
 }
 
+/** What open containers (a fish barrel, a log basket) take of `amount` more: a `storage:gather` with no skill, so no fragment hears it. */
+function intoContainers(player, itemId, amount) {
+  const request = { player, itemId, amount, stored: 0 };
+  Common.api.emitCustomEvent("storage:gather", request);
+  return Math.min(amount, Math.max(0, Number(request.stored) || 0));
+}
+
 /**
  * `storage:gather`: the resource as the fragments and sets have it. What an open container took
- * stays there; the rest, and Greedy Gatherer's extras (with their XP), are changed by the fragment,
- * then banked (Personal Banker) or put in the inventory, falling to the floor when it is full.
+ * stays as it is (the containers hear the event first); the rest, and Greedy Gatherer's extras with
+ * their XP, are changed by the fragment, then banked (Personal Banker), or offered to the open
+ * containers and put in the inventory, falling to the floor when it is full. A changed item the
+ * bank has no room for is banked as it was gathered, without the change or its XP.
  */
 function gather(request) {
   const { player, itemId, amount, skill } = request;
-  if (!Number.isSafeInteger(amount) || amount <= 0) return;
+  if (!Number.isSafeInteger(amount) || amount <= 0 || skill === undefined) return;
   const times = resources(player, skill);
-  const change = changed(player, skill, itemId);
+  let change = changed(player, skill, itemId);
   const toBank = banks(player, skill);
   if (times === 1 && !change && !toBank) return;
   const left = Math.max(0, amount - (Number(request.stored) || 0));
@@ -107,13 +116,22 @@ function gather(request) {
   const pieces = left + extra;
   if (pieces <= 0) return;
   request.stored = amount;
+  if (!change?.burnt) {
+    let item = change?.itemId ?? itemId;
+    let banked = toBank && Common.bank(player, item, pieces);
+    if (toBank && !banked && change && Common.bank(player, itemId, pieces)) {
+      change = null;
+      item = itemId;
+      banked = true;
+    }
+    if (!banked) {
+      const loose = left + extra - (change ? 0 : intoContainers(player, item, extra));
+      if (loose > 0) player.getInventory().forceAdd(player, new (core().Item)(item, loose));
+    }
+  }
   const skills = player.getSkillManager();
   if (extra > 0 && request.xp > 0) skills.addExperiences(skill, (request.xp * extra) / amount);
   if (change?.xp > 0) skills.addExperiences(change.skill, change.xp * pieces);
-  if (change?.burnt) return;
-  const item = change?.itemId ?? itemId;
-  if (toBank && Common.bank(player, item, pieces)) return;
-  player.getInventory().forceAdd(player, new (core().Item)(item, pieces));
 }
 
 /** `storage:room`: with every resource banked, a full inventory keeps gathering. */
@@ -123,20 +141,40 @@ function room(request) {
 
 // ---- Farming: Certified Farmer, Seedy Business and the sets ----
 
-/** `farming:pick`: noted and maybe doubled (Certified Farmer), more of it with its XP, maybe banked. */
+/**
+ * `farming:pick`: noted and maybe doubled (Certified Farmer), more of it with its XP, maybe banked.
+ * Farming hands over the pick's own amount, which must fit; the extras fall to the floor when
+ * they don't, and none come when the pick itself doesn't fit.
+ */
 function pick(request) {
   const { player } = request;
   const { Skill } = core();
+  const base = request.amount;
   const times = resources(player, Skill.FARMING);
-  let amount = request.amount * times;
+  let amount = base * times;
   const farmer = value(player, "certifiedFarmer");
   if (farmer !== null) {
     request.itemId = Common.noted(request.itemId);
     if (chance(farmer)) amount *= 2;
   }
-  request.amount = amount;
+  const toBank = banks(player, Skill.FARMING);
+  if (amount === base && !toBank) return;
   request.experience *= times;
-  if (banks(player, Skill.FARMING) && Common.bank(player, request.itemId, amount - request.stored)) request.stored = amount;
+  if (toBank && Common.bank(player, request.itemId, amount)) {
+    request.amount = amount;
+    request.stored = amount;
+    return;
+  }
+  const { Item, ItemOnGroundManager } = core();
+  const inventory = player.getInventory();
+  if (amount === base || inventory.getAddableAmount(new Item(request.itemId, base)) < base) return;
+  // The extras take only the room the pick itself leaves.
+  const extras = amount - base;
+  const inside = Math.min(extras, Math.max(0, inventory.getAddableAmount(new Item(request.itemId, amount)) - base));
+  if (inside > 0) inventory.add(new Item(request.itemId, inside), true);
+  if (extras > inside) ItemOnGroundManager.registers(player, new Item(request.itemId, extras - inside));
+  request.amount = amount;
+  request.stored = extras;
 }
 
 function planting(rules) {
@@ -171,8 +209,9 @@ function vesselChance(request) {
 
 // ---- Catch Of The Day, Chinchonkers ----
 
-/** `fishing:success`: a 1-in-N chance of one roll on the rare drop table. */
-function rareCatch({ player }) {
+/** `fishing:success`: a 1-in-N chance of one roll on the rare drop table (not a Fishing Trawler trip's reward). */
+function rareCatch({ player, source }) {
+  if (source === "fishing-trawler") return;
   const odds = value(player, "catchOfTheDay");
   if (odds === null || odds <= 0 || Math.random() * odds >= 1) return;
   const roll = { player, table: { entries: [{ shared_table: effects().catchOfTheDay.table, weight: 1 }] }, drops: [] };
