@@ -221,6 +221,15 @@ test("Krystilia's kills only count in the Wilderness", () => {
   assert.equal(varp(player, "slayer_count"), 4);
 });
 
+test("Krystilia's kills count in the Wilderness Slayer Cave (#1351)", () => {
+  const CAVE_HELLHOUND = 7877; // the Hellhound npc-spawns.json places in the cave
+  const player = createPlayer();
+  giveTask(player, 7, "Hellhounds", 5);
+  kill(player, npc(CAVE_HELLHOUND, { getX: () => 3439, getY: () => 10082, getZ: () => 0 }));
+  assert.equal(varp(player, "slayer_count"), 4);
+  assert.deepEqual(player.xp.map(([skill]) => skill), [Skill.SLAYER]);
+});
+
 test("kills give Slayer XP equal to the monster's hitpoints and count down", () => {
   const player = createPlayer();
   giveTask(player, 3, "Bloodveld", 3);

@@ -9,6 +9,9 @@
 /** Where the player's browser opens a prefilled issue. */
 export const BUG_REPORT_ISSUE_URL = "https://github.com/RSPSApp/tsps/issues/new";
 
+/** The issue form the button fills; its field ids are `description` and `diagnostics`. */
+export const BUG_REPORT_TEMPLATE = "bug_report.yml";
+
 /**
  * GitHub and browsers stop handling very long `issues/new` URLs (around 8 KB), so the
  * whole URL is capped. The body shrinks to fit; nothing else grows to fill it.
@@ -51,6 +54,26 @@ function codePoints(text: string): number {
     return Array.from(text).length;
 }
 
+/**
+ * Which frame a Copy click puts on the clipboard.
+ *
+ * A click captures again (`fresh`). When that capture yields no frame, the frame from before
+ * the click may stand in — but only while the session it belongs to still exists: a logout or
+ * a newer capture moves the capture generation on, and that frame then belongs to a session
+ * that no longer exists.
+ */
+export function resolveCopyFrame<T>(frame: {
+    fresh: T | undefined;
+    previous: T | undefined;
+    expectedGeneration: number;
+    generation: number;
+    loggedIn: boolean;
+}): T | undefined {
+    if (frame.fresh !== undefined) return frame.fresh;
+    const sameSession = frame.loggedIn && frame.generation === frame.expectedGeneration;
+    return sameSession ? frame.previous : undefined;
+}
+
 /** What the panel says after the issue tab is opened. */
 export const ISSUE_TAB_NOTICE = "The issue page should be open in a new tab. Paste the screenshot in with Ctrl+V.";
 
@@ -69,21 +92,19 @@ export function openIssueTab(url: string, open: (url: string) => unknown): strin
 }
 
 /**
- * The prefilled issue link: `title` plus the markdown `body`.
- *
- * `body` is the only prefill GitHub applies without an issue form on the default branch.
- * Form-field parameters (`description`, `diagnostics`) are ignored while
- * `.github/ISSUE_TEMPLATE/bug_report.yml` is not merged yet, which is what a link built
- * from them did: it opened an empty issue with only the title. `body` keeps working
- * either way, so it carries the whole report and the template only serves manual filing.
+ * The prefilled issue link: `template` selects the issue form, then `title`, `description`
+ * and `diagnostics` fill its fields by id. The markdown `body` parameter does not apply to
+ * issue forms, so the report is split across the form's own fields instead of one body.
  */
 export function buildIssueUrl(title: string, description: string, diagnostics: string): string {
     const safeTitle = truncateCodePoints(title.trim(), 80);
-    const base = `${BUG_REPORT_ISSUE_URL}?title=${encodeURIComponent(safeTitle)}`;
+    const base =
+        `${BUG_REPORT_ISSUE_URL}?template=${BUG_REPORT_TEMPLATE}` +
+        `&title=${encodeURIComponent(safeTitle)}`;
     let safeDesc = description.trim();
     let safeDiag = diagnostics;
     const url = () =>
-        `${base}&body=${encodeURIComponent([safeDesc, "", "---", safeDiag].join("\n"))}`;
+        `${base}&description=${encodeURIComponent(safeDesc)}&diagnostics=${encodeURIComponent(safeDiag)}`;
     let built = url();
     while (built.length > MAX_ISSUE_URL_LENGTH) {
         // Diagnostics shrink first; the player's own words are only cut when nothing else is left.

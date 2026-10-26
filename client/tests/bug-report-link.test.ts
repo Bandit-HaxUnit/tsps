@@ -10,6 +10,7 @@ import {
     formatErrorLines,
     openIssueTab,
     redactAddresses,
+    resolveCopyFrame,
     resolvePlayer,
     truncateCodePoints,
 } from "../game/plugins/bugreport/bugReportLink";
@@ -90,6 +91,31 @@ function testCoarseBrowser(): void {
     assert.equal(coarseBrowser("经过"), "Other");
 }
 
+function testResolveCopyFrame(): void {
+    const previous = "old-session-frame";
+    const fresh = "fresh-frame";
+    // A fresh capture always wins.
+    assert.equal(
+        resolveCopyFrame({ fresh, previous, expectedGeneration: 2, generation: 2, loggedIn: true }),
+        fresh,
+    );
+    // A capture that produced nothing falls back to the pre-click frame within the same session.
+    assert.equal(
+        resolveCopyFrame({ fresh: undefined, previous, expectedGeneration: 2, generation: 2, loggedIn: true }),
+        previous,
+    );
+    // Logout while Copy awaited a frame bumps the generation: the old frame must not come back.
+    assert.equal(
+        resolveCopyFrame({ fresh: undefined, previous, expectedGeneration: 2, generation: 3, loggedIn: false }),
+        undefined,
+    );
+    // Same for a logout that was observed even if the generation happened to match.
+    assert.equal(
+        resolveCopyFrame({ fresh: undefined, previous, expectedGeneration: 2, generation: 2, loggedIn: false }),
+        undefined,
+    );
+}
+
 function testOpenIssueTab(): void {
     // window.open with `noopener` returns null on success (Chrome hides the handle), so a
     // null return must never be reported as a blocked popup.
@@ -105,15 +131,15 @@ function testOpenIssueTab(): void {
 
 function testFormUrl(): void {
     const url = buildIssueUrl("door won't open", "The door won't open", "---\nWorld: w");
-    assert.ok(url.startsWith(`${BUG_REPORT_ISSUE_URL}?title=`), "starts with the title field");
+    assert.ok(
+        url.startsWith(`${BUG_REPORT_ISSUE_URL}?template=bug_report.yml`),
+        "selects the issue form",
+    );
     assert.ok(url.includes("title=door"), "title comes from the first line");
-    assert.ok(url.includes("body="), "body carries the report");
-    // Form-field params do nothing without the template on the default branch; only body prefills.
-    assert.ok(!url.includes("description=") && !url.includes("diagnostics="), "no form-field params");
-    assert.ok(!url.includes("template="), "no template param");
-    const body = decodeURIComponent(url.split("&body=")[1] ?? "");
-    assert.ok(body.startsWith("The door won't open"), "description leads the body");
-    assert.ok(body.includes("World: w"), "diagnostics follow it");
+    // Issue forms ignore `body`; the report goes into the form's own field ids.
+    assert.ok(url.includes("description=The%20door"), "description fills its field");
+    assert.ok(url.includes("diagnostics="), "diagnostics fill their field");
+    assert.ok(!url.includes("&body="), "no body param, which the form ignores");
 }
 
 function testUrlCap(): void {
@@ -194,6 +220,7 @@ testRedaction();
 testResolvePlayer();
 testCoarseBrowser();
 testOpenIssueTab();
+testResolveCopyFrame();
 testFormUrl();
 testUrlCap();
 testDiagnosticsAllowlist();

@@ -24,8 +24,10 @@ const { createBotPlayer } = require("../bots/behaviours/spawn/PlayerFactory.Play
 const { buildRoamingPvpMetadata } = require("../bots/behaviours/pvp/PvpAssignment.PlayerBots");
 const { applyGeneratedPvpLoadout } = require("../bots/behaviours/policies/PvpLoadoutPolicy.PlayerBots");
 const { ATTR_SKIP_PERSISTENCE } = require("../bots/runtime/PersistenceConstants.PlayerBots");
-const { ShopManager } = require("../../src/main/typescript/elvarg/game/model/container/shop/ShopManager");
 const Bots = require("./pestcontrol/Bots.PestControl");
+const Rewards = require("./pestcontrol/Rewards.PestControl");
+
+const { getPoints, setPoints } = Rewards;
 
 const CURRENT_PET_ATTRIBUTE = "pets:current";
 
@@ -49,20 +51,7 @@ const PEST_SPAWN_INTERVAL_TICKS = 10;
 const MAX_PESTS = 100;
 const MIN_REWARD_ACTIVITY = 1;
 const MAX_ACTIVITY = 100;
-const MAX_COMMENDATIONS = 4000;
-const POINTS_ATTRIBUTE = "pest-control:points";
-
-function getPoints(player) {
-  const points = Number(player?.getAttribute?.(POINTS_ATTRIBUTE));
-  return Number.isFinite(points) ? points : 0;
-}
-
-function setPoints(player, points) {
-  player.setAttribute(POINTS_ATTRIBUTE, Math.max(0, Math.min(MAX_COMMENDATIONS, Math.trunc(points))));
-}
 const ATTR_WAITING_BOAT = "pest-control:waiting-boat";
-const PEST_CONTROL_POINTS = "PEST_CONTROL_POINTS";
-const VOID_KNIGHT_SHOP = 11;
 
 const BOATS = [
   {
@@ -975,32 +964,6 @@ class PestControlOutpostArea extends Area {
 }
 
 function createPestControl(api) {
-  api.registerShopCurrency(PEST_CONTROL_POINTS, {
-    name: "Void Knight commendation points",
-    amount: getPoints,
-    add: (player, amount) => setPoints(player, getPoints(player) + amount),
-    remove: (player, amount) => setPoints(player, getPoints(player) - amount),
-  });
-  api.registerDefinitionSource("shops", {
-    name: "pest-control",
-    load: () => [{
-      id: VOID_KNIGHT_SHOP,
-      name: "Void Knight commendation shop",
-      currency: PEST_CONTROL_POINTS,
-      originalStock: [
-        [ItemIdentifiers.VOID_KNIGHT_MACE, 250],
-        [ItemIdentifiers.VOID_KNIGHT_TOP, 250],
-        [ItemIdentifiers.VOID_KNIGHT_ROBE, 250],
-        [ItemIdentifiers.VOID_KNIGHT_GLOVES, 150],
-        [ItemIdentifiers.VOID_MELEE_HELM, 200],
-        [ItemIdentifiers.VOID_MAGE_HELM, 200],
-        [ItemIdentifiers.VOID_RANGER_HELM, 200],
-        [ItemIdentifiers.VOID_SEAL_8_, 10],
-        [ItemIdentifiers.ELITE_VOID_TOP, 200],
-        [ItemIdentifiers.ELITE_VOID_ROBE, 200],
-      ].map(([id, price]) => ({ id, amount: 1000, price })),
-    }],
-  });
   const matches = new Set();
   const stateByBoat = new Map();
   let botSerial = 0;
@@ -1101,6 +1064,7 @@ function createPestControl(api) {
   });
 
   api.onNpcInteraction("Void Knight", { Exchange: exchangeRewards });
+  api.onInterfaceActionButton(Rewards.CONFIRM_UID, Rewards.confirmReward);
   api.onNpcInteraction("Squire", { "Talk-to": talkToMatchSquire, Leave: leaveMatch });
 
   api.onCanAttack((event) => {
@@ -1161,7 +1125,7 @@ function createPestControl(api) {
 
 function exchangeRewards({ player }) {
   if (!OUTPOST.inside(player.getLocation())) return false;
-  ShopManager.open(player, VOID_KNIGHT_SHOP);
+  Rewards.openRewards(player);
 }
 
 function talkToMatchSquire({ player, npc }) {
@@ -1187,6 +1151,7 @@ module.exports = {
     RegionManager = api.getRegionManager();
     World = api.getWorld();
     pluginApi = api;
+    Rewards.initRewards(api);
     api.registerNpcCombatMethodProvider(DEFILER_IDS, DefilerCombatMethod);
     api.registerNpcCombatMethodProvider(TORCHER_IDS, TorcherCombatMethod);
     createPestControl(api);

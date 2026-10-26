@@ -13,7 +13,10 @@ const { World } = require("../dist/game/World");
 const { Player } = require("../dist/game/entity/impl/player/Player");
 const { Location } = require("../dist/game/model/Location");
 const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
+const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
+const { Skill } = require("../dist/game/model/Skill");
 const plugin = require("../plugins/minigames/PestControl.plugin");
+const Rewards = require("../plugins/minigames/pestcontrol/Rewards.PestControl");
 const Bots = require("../plugins/minigames/pestcontrol/Bots.PestControl");
 
 const { ROLES, assignRoles, equipRepairer } = Bots;
@@ -28,8 +31,11 @@ const SHIELD_ORDER = ["blue", "red", "yellow", "purple"];
 const PORTAL_SPAWNS = { purple: [2631, 2592], blue: [2679, 2589], yellow: [2670, 2573], red: [2646, 2572] };
 
 let objectHandler = null;
+const npcHandlers = {};
+const buttonHandlers = new Map();
 const emitted = [];
 const api = {
+  core: { ItemDefinition, ItemIdentifiers, Skill },
   registerShopCurrency() {},
   registerDefinitionSource() {},
   registerNpcCombatMethodProvider() {},
@@ -39,7 +45,8 @@ const api = {
   getWorld: () => World,
   onPlayerLogin() {},
   onObjectInteraction(handler) { objectHandler = handler; },
-  onNpcInteraction() {},
+  onNpcInteraction(name, options) { npcHandlers[name] = options; },
+  onInterfaceActionButton(uid, handler) { buttonHandlers.set(uid, handler); },
   onCanAttack() {},
   onPlayerDealtDamage() {},
   onNpcDeath() {},
@@ -560,4 +567,126 @@ test("a real match assigns roles, ticks every bot from its own tick, and drops a
     match.finish(false, "test over");
   }
   assert.equal(match.bots.size, 0, "finishing forgets every controller");
+});
+
+// --- Void Knights' Reward Options ---------------------------------------------------------
+
+const REWARD_INTERFACE = 243;
+const CONFIRM_UID = (REWARD_INTERFACE << 16) | 6;
+const POINTS_VARP = 261;
+
+function rewardPlayer({ points = 1000, level = 99 } = {}) {
+  const player = new Player(null);
+  const calls = [];
+  // Records every send; sendInterface also marks the modal open, as the real PacketSender does.
+  const sender = new Proxy({}, { get: (_, name) => (...args) => {
+    calls.push([name, ...args]);
+    if (name === "sendInterface") player.setInterfaceId(args[0]);
+    return sender;
+  } });
+  player.getPacketSender = () => sender;
+  player.setLocation(new Location(2656, 2650, 0));
+  for (const skill of Skill.values()) {
+    player.getSkillManager().setMaxLevels(skill, level, false);
+    player.getSkillManager().setCurrentLevel(skill, level, false);
+  }
+  player.setAttribute(Rewards.POINTS_ATTRIBUTE, points);
+  return { player, calls };
+}
+
+function exchangeAndConfirm(player, option) {
+  npcHandlers["Void Knight"].Exchange({ player });
+  buttonHandlers.get(CONFIRM_UID)({ player, buttonId: CONFIRM_UID, slot: option });
+}
+
+test("Exchange opens the cache's reward interface with the points varp and Confirm transmitting", () => {
+  const { player, calls } = rewardPlayer({ points: 123 });
+  npcHandlers["Void Knight"].Exchange({ player });
+  assert.equal(player.getInterfaceId(), REWARD_INTERFACE);
+  assert.deepEqual(calls.find(([name, id]) => name === "sendConfig" && id === POINTS_VARP), ["sendConfig", POINTS_VARP, 123]);
+  assert.deepEqual(calls.find(([name]) => name === "sendInterfaceFlagsRange"), ["sendInterfaceFlagsRange", CONFIRM_UID, 0, 31, 1 << 1]);
+});
+
+test("XP rewards: floor(level^2/600) x 35/32/18 per point, +1% for 10 and +10% for 100", () => {
+  const { xpPerPoint } = Rewards._test;
+  assert.equal(xpPerPoint(0, 25), 35);
+  assert.equal(xpPerPoint(4, 25), 32);
+  assert.equal(xpPerPoint(5, 25), 18);
+  assert.equal(xpPerPoint(0, 99), 560);
+
+  const { player } = rewardPlayer({ points: 200 });
+  const before = player.getSkillManager().getExperience(Skill.ATTACK);
+  exchangeAndConfirm(player, 2); // Attack XP (+10%): 100 points
+  assert.equal(player.getSkillManager().getExperience(Skill.ATTACK) - before, 61600);
+  assert.equal(Rewards.getPoints(player), 100);
+
+  const low = rewardPlayer({ points: 20, level: 25 }).player;
+  const prayer = low.getSkillManager().getExperience(Skill.PRAYER);
+  exchangeAndConfirm(low, 19); // Prayer XP (+1%): 10 points at level 25 is 181.8 XP
+  exchangeAndConfirm(low, 19);
+  assert.equal(low.getSkillManager().getExperience(Skill.PRAYER) - prayer, 363, "the tenths are kept, 2 x 181.8");
+  assert.equal(Rewards.getPoints(low), 0);
+});
+
+test("XP rewards refuse skills under 25 and rewards the player cannot afford", () => {
+  const { player } = rewardPlayer({ points: 50, level: 24 });
+  exchangeAndConfirm(player, 0);
+  assert.equal(Rewards.getPoints(player), 50);
+  const rich = rewardPlayer({ points: 50 }).player;
+  exchangeAndConfirm(rich, 5); // 100 points
+  assert.equal(Rewards.getPoints(rich), 50);
+});
+
+test("XP rewards preserve points while the ordinary lockxp command has locked experience", () => {
+  const commands = new Map();
+  require("../plugins/commands/PlayerCommands.plugin").register({
+    getWorld() {}, getItemOnGroundManager() {}, getCombatFactory() {}, getPlayerPunishment() {},
+    registerCommand: (name, handler) => commands.set(name, handler),
+  });
+  const { player, calls } = rewardPlayer({ points: 100 });
+  const before = player.getSkillManager().getExperience(Skill.ATTACK);
+  commands.get("lockxp")({ player });
+  exchangeAndConfirm(player, 2);
+  assert.equal(Rewards.getPoints(player), 100);
+  assert.equal(player.getSkillManager().getExperience(Skill.ATTACK), before);
+  assert.equal(calls.some(([name]) => name === "sendExpDrop"), false);
+  commands.get("lockxp")({ player });
+  exchangeAndConfirm(player, 2);
+  assert.equal(Rewards.getPoints(player), 0);
+  assert.equal(player.getSkillManager().getExperience(Skill.ATTACK) - before, 61600);
+});
+
+test("packs: herbs and minerals noted, seeds three rolls on the 1,061 table", () => {
+  const { player } = rewardPlayer({ points: 60 });
+  const inventory = player.getInventory();
+  const noted = (id) => ItemDefinition.forId(id).getNoteId();
+  exchangeAndConfirm(player, 22); // Mineral pack, 15 points
+  assert.equal(inventory.getAmount(noted(ItemIdentifiers.COAL)), 25);
+  assert.equal(inventory.getAmount(noted(ItemIdentifiers.IRON_ORE)), 18);
+  exchangeAndConfirm(player, 21); // Herb pack, 30 points
+  for (const [herb, min, max] of [[ItemIdentifiers.GRIMY_RANARR_WEED, 2, 3], [ItemIdentifiers.GRIMY_KWUARM, 1, 5]]) {
+    const amount = inventory.getAmount(noted(herb));
+    assert.ok(amount >= min && amount <= max, `herb ${herb}: ${amount}`);
+  }
+  exchangeAndConfirm(player, 23); // Seed pack, 15 points
+  assert.equal(Rewards.getPoints(player), 0);
+  const table = Rewards._test.seedTable();
+  assert.equal(table.reduce((sum, [, , weight]) => sum + weight, 0) / 2, 1061);
+  const seeds = table.reduce((sum, [id, amount]) => sum + inventory.getAmount(id) / amount, 0);
+  assert.equal(seeds, 3);
+});
+
+test("void equipment needs 42 combat stats and 22 Prayer; Confirm does nothing once the interface closes", () => {
+  const weak = rewardPlayer({ points: 250, level: 41 }).player;
+  exchangeAndConfirm(weak, 25); // Void Knight Top
+  assert.equal(weak.getInventory().getAmount(ItemIdentifiers.VOID_KNIGHT_TOP), 0);
+  assert.equal(Rewards.getPoints(weak), 250);
+
+  const { player } = rewardPlayer({ points: 260 });
+  exchangeAndConfirm(player, 25);
+  assert.equal(player.getInventory().getAmount(ItemIdentifiers.VOID_KNIGHT_TOP), 1);
+  assert.equal(Rewards.getPoints(player), 10);
+  player.setInterfaceId(-1);
+  buttonHandlers.get(CONFIRM_UID)({ player, buttonId: CONFIRM_UID, slot: 31 });
+  assert.equal(Rewards.getPoints(player), 10, "no seal without the interface open");
 });

@@ -8,7 +8,13 @@ import type { OsrsClient } from "../../OsrsClient";
 import type { WidgetActionEvent } from "../../widgets/widgetActionPayload";
 import { createBugReportNavigationButton } from "./BugReportPanel";
 import { ClientLogBuffer, captureConsole } from "./ClientLogBuffer";
-import { buildIssueUrl, openIssueTab, redactAddresses, formatDiagnosticsSection } from "./bugReportLink";
+import {
+    buildIssueUrl,
+    openIssueTab,
+    redactAddresses,
+    formatDiagnosticsSection,
+    resolveCopyFrame,
+} from "./bugReportLink";
 import { collectBugDiagnostics } from "./clientDiagnostics";
 import { composeGameFrame, frameToPngBlob } from "./gameScreenshot";
 
@@ -107,13 +113,23 @@ export class BugReportPlugin extends Plugin {
         }
     }
 
-    /** Copies the game screenshot to the clipboard, waiting for an in-flight capture. */
+    /** Takes a fresh screenshot and copies it; never copies the frame the panel opened with. */
     async copyScreenshotToClipboard(): Promise<void> {
         await this.captureFlight;
-        if (!this.state.screenshot && !this.state.capturing) {
-            await this.takeScreenshot();
-        }
-        const screenshot = this.state.screenshot;
+        const previous = this.state.screenshot;
+        // takeScreenshot() bumps the generation as its first act, so this is the one the click owns.
+        const expectedGeneration = this.captures + 1;
+        // Always capture again: a copy on click is "the game as it is now", not the frame the
+        // panel opened with. `resolveCopyFrame` only falls back to that older frame while the
+        // session is still the one the click started in.
+        await this.takeScreenshot();
+        const screenshot = resolveCopyFrame({
+            fresh: this.state.screenshot,
+            previous,
+            expectedGeneration,
+            generation: this.captures,
+            loggedIn: this.client.isLoggedIn(),
+        });
         if (!screenshot) {
             this.update({ notice: "No screenshot to copy: log in to take one, or paste your own." });
             return;
