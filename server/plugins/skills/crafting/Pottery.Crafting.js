@@ -92,6 +92,7 @@ function makePottery(player, recipe, firing) {
   }
   inventory.addItem(new Item(firing ? recipe.firedId : recipe.unfiredId, firing ? 1 : recipe.shaped ?? 1));
   Shared.addCraftingXp(player, firing ? recipe.firingXp : recipe.shapingXp);
+  Shared.produced(player, firing ? recipe.firedId : recipe.unfiredId, firing ? 1 : recipe.shaped ?? 1, firing ? recipe.firingXp : recipe.shapingXp);
   const message = firing ? recipe.removeMessage : recipe.shapeMessage;
   if (message) player.sendMessage(message);
   return true;
@@ -129,8 +130,15 @@ function startPottery(player, station, recipe, amount, firing) {
       const tick = ++this.ticks;
       if (firing && tick % interval === 0) animate();
       if (tick % interval !== delay) return;
-      if (!makePottery(player, recipe, firing) || --this.remaining <= 0 || !has()) this.stop();
-      else if (!firing) animate();
+      // Content may make several pieces in the one cycle ("skills:actions-per-cycle").
+      const actions = Shared.actionsPerCycle(player, "pottery");
+      for (let done = 0; done < actions; done++) {
+        if (!makePottery(player, recipe, firing) || --this.remaining <= 0 || !has()) {
+          this.stop();
+          return;
+        }
+      }
+      if (!firing) animate();
     }
     stop() {
       super.stop();

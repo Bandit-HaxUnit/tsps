@@ -1,0 +1,154 @@
+/**
+ * Friendly Forager (https://oldschool.runescape.wiki/w/Friendly_Forager_(Raging_Echoes_League)),
+ * Raging Echoes' tier 2 relic: the Forager's pouch, carried or worn, finds a grimy herb (one the
+ * player could clean at their Herblore level + 25, of a kind it has room for, 30 of each) when
+ * they gather with Woodcutting, Fishing, Mining or Hunter, at most once every 9 ticks, with the
+ * herb's cleaning XP (ours: the Wiki says "a small amount"). Its Check, Fill and Withdraw (as
+ * notes) options manage the herbs, which it keeps itself (live shares them with the herb sack).
+ * In Herblore, a secondary ingredient has a 90% chance not to be used and a potion is made with
+ * four doses instead of three.
+ */
+const Common = require("./Common.LeagueRelics");
+
+let api;
+let core;
+let effect;
+let alsoSaved;
+let neverSaved;
+
+/** When each player's pouch may find its next herb (a process cycle). */
+const nextFind = new WeakMap();
+
+function active(player) {
+  return Common.effectActive(player, effect);
+}
+
+function pouchId() {
+  return core.ItemIdentifiers[effect.tool];
+}
+
+/** The pouch the player carries or wears, or null. */
+function pouchOf(player) {
+  const id = pouchId();
+  const worn = player.getEquipment().getItems().find((item) => item?.getId() === id);
+  return worn ?? player.getInventory().getItems().find((item) => item?.getId() === id) ?? null;
+}
+
+function stored(pouch) {
+  const value = pouch.getMetaValue?.(effect.storeKey);
+  return value && typeof value === "object" ? { ...value } : {};
+}
+
+function herbs() {
+  const request = { herbs: [] };
+  api.emitCustomEvent("herblore:herbs", request);
+  return request.herbs;
+}
+
+function herbName(itemId) {
+  return core.ItemDefinition.forId(itemId)?.getName?.()?.toLowerCase?.() ?? "herbs";
+}
+
+/** A gathering action: a herb the pouch has room for and the player could clean at level + 25. */
+function find({ player }) {
+  if (!player?.isPlayer?.() || !active(player)) return;
+  const pouch = pouchOf(player);
+  if (!pouch) return;
+  const cycle = core.World.getProcessCycle();
+  if (cycle < (nextFind.get(player) ?? 0)) return;
+  const level = player.getSkillManager().getCurrentLevel(core.Skill.HERBLORE) + effect.levelRange;
+  const contents = stored(pouch);
+  const candidates = herbs().filter((herb) => herb.level <= level && (contents[herb.grimyId] ?? 0) < effect.herbCap);
+  if (candidates.length === 0) return;
+  const herb = candidates[Math.floor(Math.random() * candidates.length)];
+  contents[herb.grimyId] = (contents[herb.grimyId] ?? 0) + 1;
+  pouch.setMetaValue(effect.storeKey, contents);
+  nextFind.set(player, cycle + effect.cooldownTicks);
+  if (herb.xp > 0) player.getSkillManager().addExperiences(core.Skill.HERBLORE, herb.xp);
+  player.getPacketSender().sendTypedMessage?.(core.ChatType.SPAM, Common.message("foragerFound", { herb: herbName(herb.grimyId) }));
+}
+
+function check({ player }) {
+  const pouch = pouchOf(player);
+  if (!pouch) return;
+  const contents = Object.entries(stored(pouch)).filter(([, amount]) => amount > 0);
+  if (contents.length === 0) {
+    player.sendMessage(Common.message("foragerEmpty"));
+    return;
+  }
+  player.sendMessage(Common.message("foragerHolds", { herbs: contents.map(([id, amount]) => `${amount} x ${herbName(Number(id))}`).join(", ") }));
+}
+
+/** Every grimy herb in the inventory the pouch knows and has room for goes in. */
+function fill({ player }) {
+  const pouch = pouchOf(player);
+  if (!pouch) return;
+  const known = new Set(herbs().map((herb) => herb.grimyId));
+  const contents = stored(pouch);
+  const inventory = player.getInventory();
+  let moved = 0;
+  for (const id of known) {
+    const room = effect.herbCap - (contents[id] ?? 0);
+    const amount = Math.min(room, inventory.getAmount(id));
+    if (amount <= 0) continue;
+    inventory.deleteNumber(id, amount);
+    contents[id] = (contents[id] ?? 0) + amount;
+    moved += amount;
+  }
+  pouch.setMetaValue(effect.storeKey, contents);
+  player.sendMessage(moved > 0 ? Common.message("foragerFilled", { amount: moved }) : Common.message("foragerEmpty"));
+}
+
+/** Every herb comes out as notes (Wiki), while the inventory has room for the stacks. */
+function withdraw({ player }) {
+  const pouch = pouchOf(player);
+  if (!pouch) return;
+  const contents = stored(pouch);
+  const inventory = player.getInventory();
+  for (const [id, amount] of Object.entries(contents)) {
+    if (amount <= 0) continue;
+    const note = Common.noted(Number(id));
+    if (inventory.getAddableAmount(new core.Item(note, amount)) < amount) {
+      player.sendMessage(Common.message("foragerNoRoom"));
+      break;
+    }
+    inventory.adds(note, amount);
+    delete contents[id];
+  }
+  pouch.setMetaValue(effect.storeKey, contents);
+}
+
+function gamevals(names) {
+  return new Set(names.map((name) => core.CacheDefinitions.getObjId(name)).filter(Number.isInteger));
+}
+
+/** A secondary ingredient (not a potion or a vial, or the Wiki's torstol potion) is kept 90% of the time; a 3-dose potion comes as a 4-dose one. */
+function mix(request) {
+  if (!active(request.player)) return;
+  if (!alsoSaved) {
+    alsoSaved = gamevals(effect.alsoSaved);
+    neverSaved = gamevals(effect.neverSaved);
+  }
+  const unfinished = /\(unf\)$/i.test(core.ItemDefinition.forId(request.productId)?.getName?.() ?? "");
+  if (!unfinished) {
+    for (const item of request.consume) {
+      const secondary = alsoSaved.has(item.id) || !Common.isPotion(item.id);
+      if (!secondary || neverSaved.has(item.id)) continue;
+      if (Math.random() < effect.secondarySaveChance) item.count = 0;
+    }
+  }
+  const product = request.recipe?.product;
+  if (typeof product === "string" && product.startsWith("3dose")) {
+    const fourDose = core.CacheDefinitions.getObjId(`4dose${product.slice(5)}`);
+    if (Number.isInteger(fourDose)) request.productId = fourDose;
+  }
+}
+
+module.exports = function attach(pluginApi) {
+  api = pluginApi;
+  core = api.core;
+  effect = Common.data.effects.friendlyForager;
+  for (const name of effect.triggers) api.onCustomEvent(name, find);
+  api.onItemAction(effect.toolName, { Check: check, Fill: fill, Withdraw: withdraw });
+  api.onCustomEvent("herblore:mix", mix);
+};

@@ -17,7 +17,8 @@
 const Core = require("./Core.Smithing");
 const Data = require("./Data.Smithing");
 const Sessions = require("./Sessions.Smithing");
-const { animation } = require("./Common.Smithing");
+const Common = require("./Common.Smithing");
+const { animation } = Common;
 
 // Wiki: goldsmith gauntlets (or the Smithing or max cape) raise gold bar XP from 22.5 to 56.2.
 const GOLDSMITH_GAUNTLETS_BONUS_XP = 33.7;
@@ -108,7 +109,8 @@ function statement(player, text) {
 }
 
 function levelOf(player, recipe) {
-  return player.getSkillManager().getCurrentLevel(recipe.skill ?? Core.Skill.SMITHING);
+  if (!recipe.skill || recipe.skill === Core.Skill.SMITHING) return Common.smithingLevel(player);
+  return player.getSkillManager().getCurrentLevel(recipe.skill);
 }
 
 /**
@@ -155,6 +157,7 @@ function finishSmelt(player, chosen, furnaceId) {
   player.getSkillManager().addExperiences(skill, smeltingXp(player, recipe) + extraXp);
   if (recipe.retrieveMessage) player.sendMessage(recipe.retrieveMessage);
   Core.api.emitCustomEvent("smelting:success", { player, skill, itemId: recipe.barId });
+  Common.produced(player, skill, recipe.barId, outcome.bars, smeltingXp(player, recipe) + extraXp);
   return true;
 }
 

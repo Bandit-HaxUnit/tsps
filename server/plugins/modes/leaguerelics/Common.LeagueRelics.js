@@ -157,6 +157,29 @@ function multipliedLoot(loot, times) {
   return out;
 }
 
+/** A potion or an unfinished one, by its name ("Attack potion(3)", "Guam potion (unf)"). */
+function isPotion(itemId) {
+  const name = core.ItemDefinition.forId(itemId)?.getName?.() ?? "";
+  return /\(\d\)$/.test(name) || /\(unf\)$/i.test(name) || /^vial of water$/i.test(name);
+}
+
+/** Whether a potion recipe's secondary (its ingredient that is not a potion or a vial) stacks: the production relics leave those alone (Wiki). */
+function hasStackableSecondary(recipe) {
+  return (recipe?.ingredients ?? []).some(({ id }) => !isPotion(id) && core.ItemDefinition.forId(id)?.isStackable?.() === true);
+}
+
+/**
+ * A production relic's answer to `skills:actions-per-cycle`: the loop's kind in the relic's
+ * `batch` list for that skill makes up to `maxActions` at once (a capped kind, `capped`), else
+ * nothing changes. A potion with a stackable secondary is made one at a time.
+ */
+function batchActions(effect, request) {
+  const skill = Object.keys(effect.batch).find((name) => core.Skill[name] === request.skill);
+  if (!skill || !effect.batch[skill].includes(request.kind)) return null;
+  if (request.kind === "mix" && hasStackableSecondary(request.recipe)) return null;
+  return effect.capped?.[request.kind] ?? effect.maxActions;
+}
+
 /** Restores special attack energy and redraws the bar. */
 function restoreSpecial(player, percent) {
   player.incrementSpecialPercentage(percent);
@@ -169,7 +192,7 @@ function message(key, values = {}) {
 
 module.exports = {
   init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, ids, message, maxHitFor, restoreSpecial,
-  bankHasRoom, bank, noted, multipliable, multipliedLoot, derivedHit, isBuildingDerivedHit, RELICS_ATTRIBUTE,
+  bankHasRoom, bank, noted, multipliable, multipliedLoot, isPotion, hasStackableSecondary, batchActions, derivedHit, isBuildingDerivedHit, RELICS_ATTRIBUTE,
   get data() { return data; },
   get api() { return api; },
   get core() { return core; },

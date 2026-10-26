@@ -936,7 +936,7 @@ test("a shared Smithing task holds only the levelled player's remaining work unt
   const Sessions = require("../plugins/skills/smithing/Sessions.Smithing");
   const core = PluginManager.getCoreApi();
   const tasks = [];
-  const api = { core, getTaskManager: () => ({ submit: (task) => tasks.push(task) }), onServerStartup: (start) => start() };
+  const api = { core, emitCustomEvent() {}, getTaskManager: () => ({ submit: (task) => tasks.push(task) }), onServerStartup: (start) => start() };
   Core.init(api);
   Sessions(api);
   const p = levelledPlayer(core), other = levelledPlayer(core);
