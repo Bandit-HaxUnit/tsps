@@ -243,15 +243,17 @@ in this League.` WelcomeScreen emits `welcome-screen:shown`.
   447:3, and script 1128 takes the title and five masks over enum 2778's trophies. A set bit shows
   Take, a clear one Store. The client hides a trophy above the league's points (script 1129).
 - **Take and Store:** a trophy is the Tutor's to hand out while the character holds none of it in
-  the inventory, equipment or bank, so a lost one can be taken again (Wiki "League trophy"). Take
-  hands out an earned one; Store takes it back from the inventory. Each click resends the masks
-  through script 1130, and op10 examines.
+  the inventory, equipment or bank (a bank placeholder doesn't count), so a lost one can be taken
+  again (Wiki "League trophy"). Take hands out an earned one; Store takes it back from the
+  inventory. Each click resends the masks through script 1130, and op10 examines. A click with
+  the screen closed does nothing.
 - **Accomplishment scroll (41182):** League-statistics opens 449 with script 1110 (the owner's
   name and each league's points). League-rankings opens 445 and nothing else. League-firsts opens
   676 with script 3698 on the newest league, with OP1 on one dropdown slot per league; a pick
   redraws that league. Rankings and firsts are the cache's own tables.
 
-On a league world none of this applies: the Tutor's Claim-trophies falls through to the default.
+On a league world none of this applies: the Tutor's Claim-trophies and the scroll's options fall
+through to their defaults. Bots and agent players never read a league save.
 
 ## Relics
 

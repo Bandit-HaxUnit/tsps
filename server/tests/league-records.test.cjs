@@ -35,12 +35,17 @@ let worldLeague = 0; // the world's pluginConfig league:type; 0 is the main game
 const tasks = [];
 /** The persistence the records read: saves by "name/profile". */
 const saves = new Map();
+/** When set, the persistence stand-in's load throws this. */
+let loadError = null;
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
   core = PluginManager.getCoreApi();
   GameConstants.setPlayerPersistence({
-    load: (name, profile = "main") => saves.get(`${name}/${profile}`) ?? null,
+    load: (name, profile = "main") => {
+      if (loadError) throw loadError;
+      return saves.get(`${name}/${profile}`) ?? null;
+    },
     exists: (name, profile = "main") => saves.has(`${name}/${profile}`),
     save() {},
   });
@@ -64,8 +69,18 @@ before(async () => {
     getTaskManager: () => ({ submit: (task) => tasks.push(task) }),
     getSkillManager: () => require("../dist/game/content/skill/SkillManager").SkillManager,
     registerCommand: (name, handler) => (hooks[`command:${name}`] = handler),
+    // As PluginManager runs them: the first handler that doesn't return false takes the click.
     onInterfaceActionButton: (ids, handler) => {
-      for (const id of [].concat(ids)) on(`button:${id}`)(handler);
+      for (const id of [].concat(ids)) {
+        const key = `button:${id}`;
+        (lists[key] ??= []).push(handler);
+        hooks[key] = (event) => {
+          for (const attached of lists[key]) {
+            if (attached(event) !== false) return (event.handled = true);
+          }
+          return false;
+        };
+      }
     },
     onNpcInteraction: (name, actions) => Object.assign((npcOptions[name] ??= {}), actions),
     onObjectInteraction: (name, actions) => Object.assign((objectOptions[name] ??= {}), actions),
@@ -95,6 +110,7 @@ function character(name, { profile = "main", league = 0 } = {}) {
           return sender;
         };
         case "sendInterface": return (group) => (player.setInterfaceId(group), sent.subs.push(["main", group]), sender);
+        case "sendInterfaceRemoval": return () => (player.setInterfaceId(-1), sender);
         case "sendInterfaceFlagsRange": return (...args) => (sent.flags.push(args), sender);
         default: return () => sender;
       }
@@ -194,6 +210,14 @@ test("a trophy in the bank shows Store, and a full inventory is refused", () => 
   click(main, bronze);
   assert.equal(main.getInventory().contains(trophies[bronze].item), false, "Store doesn't reach into the bank");
 
+  const placeholder = veteran("placeholder", 2500);
+  const bank = placeholder.getBank(0);
+  bank.add(new core.Item(trophies[bronze].item, 1), false);
+  bank.getItems().find((entry) => entry?.getId() === trophies[bronze].item).setAmount(0);
+  claim(placeholder);
+  click(placeholder, bronze);
+  assert.equal(placeholder.getInventory().contains(trophies[bronze].item), true, "a bank placeholder isn't the trophy: a lost one can be taken again");
+
   const full = veteran("full", 2500);
   for (let slot = 0; slot < 28; slot++) full.getInventory().adds(1511, 1); // logs, one per slot
   assert.equal(full.getInventory().getFreeSlots(), 0);
@@ -201,6 +225,38 @@ test("a trophy in the bank shows Store, and a full inventory is refused", () => 
   click(full, bronze);
   assert.equal(full.getInventory().contains(trophies[bronze].item), false);
   assert.equal(full.sent.messages.at(-1), "You don't have enough inventory space.");
+});
+
+test("a click without the trophy screen open does nothing", () => {
+  const trophies = cacheTrophies();
+  const bronze = slotOf((trophy) => trophy.league === 5 && trophy.points > 0 && trophy.points <= 2500);
+  const main = veteran("crafty", 2500);
+  assert.equal(click(main, bronze), true, "the click is still taken");
+  assert.equal(main.getInventory().contains(trophies[bronze].item), false, "no trophy without the Tutor's screen");
+  claim(main);
+  main.getPacketSender().sendInterfaceRemoval();
+  click(main, bronze);
+  assert.equal(main.getInventory().contains(trophies[bronze].item), false, "nor after it closed");
+});
+
+test("a league save that can't be read, and a bot, leave the points at 0", () => {
+  const league = character("unreadable", { profile: "league", league: 5 });
+  hooks["command:leaguetask"]({ player: league, parts: ["leaguetask", "task-unreadable", "2500"] });
+  saves.set("unreadable/league", PlayerSave.fromPlayer(league));
+  loadError = new Error("backend down");
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const main = character("unreadable");
+    assert.equal(main.sent.varps.has(RAGING_ECHOES_POINTS), false);
+  } finally {
+    loadError = null;
+    console.warn = warn;
+  }
+  const bot = new Player(null);
+  bot.setUsername("unreadable");
+  bot.setAttribute("bot-skip-persistence", true);
+  assert.deepEqual(require("../plugins/modes/league/Records.LeagueMode")._test.readSavedPoints(bot), {}, "bots never read a save");
 });
 
 test("Examine on a trophy sends its examine text", () => {
@@ -216,13 +272,18 @@ test("Examine on a trophy sends its examine text", () => {
 
 test("the Tutor's conversation opens the trophies a tick after it ends", () => {
   const main = veteran("talker", 0);
+  tasks.length = 0; // the login's own repeating tasks
   const action = { player: main, action: "open_interface", target: "League trophies" };
   for (const handler of custom["npc-dialogue:action"]) handler(action);
   assert.equal(action.handled, true);
   assert.equal(action.end, true);
   assert.notEqual(main.sent.subs.at(-1)?.[1], TROPHIES, "not while the conversation is still closing");
+  assert.equal(tasks.length, 1, "one delayed open waits for the next tick");
   runTasks();
   assert.deepEqual(main.sent.subs.at(-1), ["main", TROPHIES]);
+  const taken = { player: main, action: "open_interface", target: "League trophies", handled: true };
+  for (const handler of custom["npc-dialogue:action"]) handler(taken);
+  assert.equal(tasks.length, 0, "an action another plugin handled is left alone");
   const other = { player: main, action: "open_interface", target: "Bank" };
   for (const handler of custom["npc-dialogue:action"]) handler(other);
   assert.equal(other.handled, undefined, "another target is left to its own plugin");
@@ -237,6 +298,20 @@ test("a league character can't claim trophies on a league world", () => {
     for (const handler of custom["npc-dialogue:action"]) handler(action);
     assert.equal(action.handled, undefined);
     assert.equal(click(league, 0), false);
+  } finally {
+    worldLeague = 0;
+  }
+});
+
+test("on a league world the scroll's options fall through", () => {
+  const league = character("scroll-leaguer", { profile: "league", league: 5 });
+  const scroll = objectOptions["League Accomplishment Scroll"];
+  worldLeague = 5;
+  try {
+    for (const option of ["League-statistics", "League-rankings", "League-firsts"]) {
+      assert.equal(scroll[option]({ player: league }), false, option);
+    }
+    assert.equal(league.sent.subs.length, 0, "nothing opens");
   } finally {
     worldLeague = 0;
   }

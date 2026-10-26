@@ -21,6 +21,8 @@ const EXAMINE_OP = 10;
 const TROPHIES_TARGET = "League trophies";
 const TUTOR = "Leagues Tutor";
 const SCROLL = "League Accomplishment Scroll";
+/** Set on bots and agent players, whose saves are never read or written. */
+const SKIP_PERSISTENCE_ATTRIBUTE = "bot-skip-persistence";
 
 /** Per main character: its league save's points, by league type. */
 const savedPoints = new WeakMap();
@@ -53,9 +55,12 @@ function trophies() {
 
 /** The account's league save's points: { [type]: points }, empty with no league save. */
 function readSavedPoints(player) {
+  if (player.getAttribute?.(SKIP_PERSISTENCE_ATTRIBUTE) === true) return {};
+  const persistence = Common.core.GameConstants.PLAYER_PERSISTENCE;
+  const name = player.getUsername();
   let save = null;
   try {
-    save = Common.core.GameConstants.PLAYER_PERSISTENCE?.load?.(player.getUsername(), Common.LEAGUE_PROFILE) ?? null;
+    if (persistence?.exists?.(name, Common.LEAGUE_PROFILE)) save = persistence.load(name, Common.LEAGUE_PROFILE) ?? null;
   } catch (error) {
     console.warn(`[LeagueMode] could not read ${player.getUsername()}'s league save: ${error?.message ?? error}`);
   }
@@ -90,10 +95,15 @@ function logout({ player }) {
   savedPoints.delete(player);
 }
 
+/** A bank placeholder keeps the id at amount 0: only a real item counts. */
+function banked(bank, item) {
+  return (bank?.getItems?.() ?? []).some((entry) => entry?.getId?.() === item && entry.getAmount() > 0);
+}
+
 function holds(player, item) {
   const { Bank } = Common.core;
   return player.getInventory().contains(item) || player.getEquipment().contains(item) ||
-    player.getBanks().some((bank, tab) => tab !== Bank.BANK_SEARCH_TAB_INDEX && bank?.contains?.(item));
+    player.getBanks().some((bank, tab) => tab !== Bank.BANK_SEARCH_TAB_INDEX && banked(bank, item));
 }
 
 function earned(player, trophy) {
@@ -136,6 +146,8 @@ function examine(player, item) {
 function clickTrophy(event) {
   const { player } = event;
   if (!isMainGame(player)) return false;
+  // A click reaches the server only from the open screen; a crafted one elsewhere does nothing.
+  if (player.getInterfaceId() !== records().trophies.group) return true;
   const trophy = trophies()[Number(event.slot)];
   if (!trophy) return true;
   if (Number(event.opId ?? event.action) === EXAMINE_OP) {
@@ -165,7 +177,7 @@ function claimTrophies({ player }) {
 
 /** The Leagues Tutor's conversation ends in open_interface "League trophies". */
 function dialogueAction(event) {
-  if (event.action !== "open_interface" || event.target !== TROPHIES_TARGET || !isMainGame(event.player)) return;
+  if (event.handled || event.action !== "open_interface" || event.target !== TROPHIES_TARGET || !isMainGame(event.player)) return;
   event.handled = true;
   event.end = true;
   // The conversation closes its window as it ends; the trophies open on the next tick.
@@ -173,6 +185,7 @@ function dialogueAction(event) {
 }
 
 function openStatistics(player) {
+  if (!isMainGame(player)) return false;
   const { group, script, components } = records().statistics;
   const sender = openModal(player, group);
   sender.sendInterfaceScript(script, [
@@ -184,6 +197,7 @@ function openStatistics(player) {
 }
 
 function openRankings(player) {
+  if (!isMainGame(player)) return false;
   openModal(player, records().rankings.group);
   return true;
 }
@@ -197,12 +211,14 @@ function showFirsts(player, league) {
 }
 
 function openFirsts(player) {
+  if (!isMainGame(player)) return false;
   openModal(player, records().firsts.group);
   showFirsts(player, leagueTypes().at(-1));
   return true;
 }
 
 function pickFirsts({ player, slot }) {
+  if (player.getInterfaceId() !== records().firsts.group) return true;
   const league = Number(slot);
   if (!leagueTypes().includes(league)) return true;
   showFirsts(player, league);
@@ -229,19 +245,25 @@ function recordsCommand({ player, parts }) {
     player.sendMessage(`Use ::leaguerecords <${Object.keys(SCREENS).join("|")}>.`);
     return true;
   }
-  if (open(player) === false) player.sendMessage("League trophies are claimed on a main character in the main game.");
+  if (open(player) === false) player.sendMessage("League records open on a main character in the main game.");
   return true;
 }
 
+/** The trophy list's and the firsts dropdown's components. */
+function buttons() {
+  const { trophies: trophyScreen, firsts } = records();
+  return { trophyItems: uid(trophyScreen.group, trophyScreen.items), firstsDropdown: uid(firsts.group, firsts.dropdown) };
+}
+
 module.exports = function attach(api) {
-  const { trophies: trophyScreen, firsts } = Common.data.records;
+  const { trophyItems, firstsDropdown } = buttons();
   api.onPlayerLogin(login);
   api.onPlayerLogout(logout);
   api.onNpcInteraction(TUTOR, { "Claim-trophies": claimTrophies });
   api.onCustomEvent("npc-dialogue:action", dialogueAction);
   api.onObjectInteraction(SCROLL, { "League-statistics": scrollStatistics, "League-rankings": scrollRankings, "League-firsts": scrollFirsts });
-  api.onInterfaceActionButton(uid(trophyScreen.group, trophyScreen.items), clickTrophy);
-  api.onInterfaceActionButton(uid(firsts.group, firsts.dropdown), pickFirsts);
+  api.onInterfaceActionButton(trophyItems, clickTrophy);
+  api.onInterfaceActionButton(firstsDropdown, pickFirsts);
   api.registerCommand("leaguerecords", recordsCommand, api.core.PlayerRights.DEVELOPER,
     "Open a league record screen: ::leaguerecords <trophies|statistics|rankings|firsts>");
 };
