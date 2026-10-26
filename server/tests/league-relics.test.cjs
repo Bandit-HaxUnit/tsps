@@ -270,6 +270,16 @@ test("a full inventory sends the item to the bank; no room anywhere leaves the t
   assert.equal(crammed.getAttribute("league:relics"), undefined, "the permanent pick is not saved without its item");
 });
 
+test("a Raging Echoes tier-1 tool is handed out without a bank, as the Leagues V tutorial unlock was", () => {
+  worldLeague = 5;
+  const echoes = character("wrangler");
+  worldLeague = 4;
+  const { ItemIdentifiers } = core;
+  hooks["command:relic"]({ player: echoes, parts: ["relic", "1", "3"] }); // Animal Wrangler (osrs-captures 227/00196)
+  assert.deepEqual(echoes.getAttribute("league:relics"), { 0: 3 });
+  assert.equal(echoes.getInventory().contains(ItemIdentifiers.ECHO_HARPOON), true, "the Echo harpoon lands in the inventory");
+});
+
 test("points crossing a tier's cost show the captured popup, once, for tiers still open", () => {
   const league = character("thresholds");
   emitted.length = 0;
