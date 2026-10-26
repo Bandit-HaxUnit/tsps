@@ -51,6 +51,15 @@ test('identity reconciliation retains correct variants, explicit cache keys and 
   assert.deepEqual(matching.reconcileIdentities(rows, wiki, name, 4).spawns, rows);
 });
 
+test('identity reconciliation keeps a nameless multinpc parent whose variant has the name', () => {
+  // Live spawns the Leagues Tutor as multinpc 317 (cache name "null"), shown as 316.
+  const parent = { name: 'Leagues Tutor', id: 317, x: 3226, y: 3215, level: 0 };
+  const wiki = [{ name: 'Leagues Tutor', id: 316, x: 3226, y: 3215, level: 0, page: 'Leagues Tutor', skip: false }];
+  const names = id => ({ 316: ['Leagues Tutor'], 317: ['null', 'Leagues Tutor'] }[id]);
+  const result = matching.reconcileIdentities([parent], wiki, names, 4);
+  assert.deepEqual(result.spawns, [parent]); assert.equal(result.repairs.length, 0);
+});
+
 test('the actual sync CLI preserves LF/CRLF and all other bytes, then regenerates identically', t => {
   const fs = require('node:fs'), os = require('node:os'), cp = require('node:child_process');
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'npc-spawn-sync-'));
