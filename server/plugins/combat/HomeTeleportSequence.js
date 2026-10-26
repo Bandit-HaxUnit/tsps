@@ -104,7 +104,11 @@ function startHomeTeleport(core, player, destination, onArrival) {
         player.getPacketSender().sendVarbit(BUSY_VARBIT, 0);
         player.setTeleporting(false);
         player.getMovementQueue().setBlockMovement(false).reset();
+        const from = player.getLocation?.()?.clone?.() ?? null;
+        const fromInstance = player.getPrivateArea?.() != null;
         player.moveTo(destination);
+        // As the core's teleports do ("teleport:landed"): where it began, for content that remembers it.
+        core.PluginManager?.emitCustomEvent?.("teleport:landed", { player, from, fromInstance, to: destination });
         reset(core, player);
         onArrival?.();
       }

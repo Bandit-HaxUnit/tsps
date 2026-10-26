@@ -140,7 +140,7 @@ relics are the first askers; nothing changes when nobody answers):
 | `thieving:pickpocket-target` (extended) | Thieving | now with `chanceBonus` (a percent more success, stacking as the gloves of silence do) and `painless` (a stun without the damage) |
 | `thieving:loot` (extended) | Thieving | now with `multiplier`, applied with the rogue outfit's doubling as the loot is handed over |
 | `prayer:bury` (extended) | Prayer | now scatters demonic ashes too (never for the bonecrusher's `crushed`) |
-| `teleport:landed` | core `TeleportHandler`, as a teleport lands | `{ player, from, fromInstance, to }`: where it began, whether in an instance, and where it landed |
+| `teleport:landed` | core `TeleportHandler`, as a teleport lands; the home teleport, fairy rings, spirit trees and Wilderness obelisks, which move the player themselves | `{ player, from, fromInstance, to }`: where it began, whether in an instance, and where it landed |
 | `league:fragments-changed` | LeagueMode (Fragments) | `{ player }` after Equip, Unequip or Unequip all changes the fragment slots |
 | `woodcutting:nest-chance`, `woodcutting:nest-drop` | Woodcutting | `{ player, multiplier }`: a bird nest `multiplier` times as likely; `{ player, itemId, handled }` before a nest falls (handled: a listener took it) |
 | `farming:open-seed-vault` | Farming (the guild's seed vault) | `{ player, opened }`: the vault's menu from anywhere, behind the Bank PIN as at the guild |
@@ -484,13 +484,17 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   Knowledge, Last Recall and Trailblazer give the item their set struct names (param 1471: the
   Arcane grimoire, the Crystal of memories, which this cache calls Crystal of Echoes, and the
   Portable waystone), handed over when the set becomes active (`league:fragments-changed`, from the
-  fragments screen, and at login) to a character holding none in the inventory, worn or banked; the
-  Wiki has the Sage give it (ours). As with the grimoire's own unit (Leagues polish), holding it is
+  fragments screen, and at login) to a character holding none (in the inventory, worn, banked
+  rather than a placeholder, in its grave or at Death's Office), into the inventory, else the bank,
+  else the floor; the Wiki has the Sage give it (ours). As with the grimoire's own unit (Leagues polish), holding it is
   the token, so it keeps working when the set comes off. The crystal's Teleport-back returns to
   where the character's last teleport began, from the core's new `teleport:landed` (`from`,
-  `fromInstance`), unless that was in an instance, Fossil Island's underwater area, Entrana or the
-  rune essence mine (the Wiki's exclusions this server has; boxes ours), up to Wilderness level 20
-  (ours); Check-memories says whether one is kept. The waystone's Teleport lists the league's twelve
+  `fromInstance`), unless that was in an instance, Fossil Island's underwater area, Entrana, the
+  rune essence mine, Pyramid Plunder or the Agility Pyramid's upper floors (the Wiki's exclusions
+  this server has; boxes ours), up to Wilderness level 20 (ours); Check-memories says whether one
+  is kept, and Save-memory that it keeps itself. Every teleport counts, the crystal's own too, so a
+  second Teleport-back returns to where the first was used. Home teleports, fairy rings, spirit
+  trees and Wilderness obelisks move the player themselves and send the same event. The waystone's Teleport lists the league's twelve
   waystones in pages, not past Wilderness level 20, Canifis needing Priest in Peril and Prifddinas
   Song of the Elves; the tiles are this server's (the Wiki names only the towns).
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for

@@ -71,7 +71,8 @@ before(async () => {
         };
       }
     },
-    onItemAction: (name, actions) => (itemActions[name] = { ...(itemActions[name] ?? {}), ...actions }),
+    // Item actions chain as the core's do: a handler returning false passes the click on.
+    onItemAction: (name, actions) => (itemActions[name] ??= []).push(actions),
     onCustomEvent: (name, handler) => (custom[name] = (custom[name] ?? []).concat(handler)),
     emitCustomEvent: (name, payload) => emit(name, payload),
   }, { get: (target, key) => (key in target ? target[key] : on(String(key))) });
@@ -125,10 +126,13 @@ function unequipAll(player) {
   player.setInterfaceId(-1);
 }
 
-/** Clicks an item option through the item-action handlers the units registered (by cache name). */
+/** Clicks an item option through the item-action handlers the units registered (by cache name); false when none took it. */
 function click(player, itemId, option) {
   const name = core.CacheDefinitions.getItem(itemId).name;
-  return itemActions[name]?.[option]?.({ player, itemId });
+  for (const actions of itemActions[name] ?? []) {
+    if (actions[option] && actions[option]({ player, itemId }) !== false) return true;
+  }
+  return false;
 }
 
 /** Stands in for TeleportHandler's run (the world's task loop): where it would go, and its requirement check. */
@@ -151,6 +155,29 @@ test("each set's item from the cache: the grimoire, the crystal and the waystone
   assert.equal(player.getInventory().getAmount(GRIMOIRE), 1, "the item stays when the set comes off");
   equip(player, ...ENDLESS_KNOWLEDGE);
   assert.equal(player.getInventory().getAmount(GRIMOIRE), 1, "never a second while one is held");
+
+  const placeholder = shattered("sageplaceholder");
+  placeholder.getBank(core.Bank.getTabForItem(placeholder, GRIMOIRE)).add(new core.Item(GRIMOIRE, 0), false);
+  equip(placeholder, ...ENDLESS_KNOWLEDGE);
+  assert.equal(placeholder.getInventory().getAmount(GRIMOIRE), 1, "a bank placeholder is no grimoire");
+
+  const graved = shattered("sagegrave");
+  custom["gravestones:state"] = [(request) => { if (request.player === graved) request.grave = { items: [{ id: GRIMOIRE, amount: 1 }] }; }];
+  equip(graved, ...ENDLESS_KNOWLEDGE);
+  delete custom["gravestones:state"];
+  assert.equal(graved.getInventory().getAmount(GRIMOIRE), 0, "one waiting in the grave counts");
+
+  const loggedIn = shattered("sagelogin");
+  equip(loggedIn, ...TRAILBLAZER);
+  loggedIn.getInventory().delete(WAYSTONE, 1);
+  emit("league:login", { player: loggedIn });
+  assert.equal(loggedIn.getInventory().getAmount(WAYSTONE), 1, "handed over again at login once it is gone");
+
+  const full = shattered("sagefull");
+  full.getInventory().adds(core.ItemIdentifiers.BRONZE_BAR, 27);
+  equip(full, ...TRAILBLAZER);
+  assert.equal(full.getBank(core.Bank.getTabForItem(full, WAYSTONE)).getAmount(WAYSTONE), 1, "to the bank when the inventory is full");
+  assert.match(full.messages.at(-1), /sent to your bank/);
 
   const banker = shattered("sagebank");
   banker.getBank(core.Bank.getTabForItem(banker, CRYSTAL)).add(new core.Item(CRYSTAL, 1), false);
@@ -175,8 +202,15 @@ test("Last Recall's crystal: back to where the last teleport began, not from an 
   emit("teleport:landed", { player, from: new core.Location(2900, 4830, 0), fromInstance: false, to: new core.Location(3253, 3401, 0) });
   click(player, CRYSTAL, "Check-memories");
   assert.match(player.messages.at(-1), /remembers/);
+  emit("teleport:landed", { player, from: new core.Location(3360, 2840, 2), fromInstance: false });
   click(player, CRYSTAL, "Teleport-back");
-  assert.deepEqual([...went], [[3165, 3485, 0]], "the Grand Exchange, not the instance nor the essence mine");
+  assert.deepEqual([...went], [[3165, 3485, 0]], "the Grand Exchange, not the instance, the essence mine nor the Agility Pyramid");
+  // The crystal's own teleport is a teleport too: it lands having begun in Lumbridge.
+  emit("teleport:landed", { player, from: new core.Location(3222, 3218, 0), fromInstance: false });
+  click(player, CRYSTAL, "Teleport-back");
+  assert.deepEqual(went.at(-1), [3222, 3218, 0], "a second use returns to where the first was used");
+  click(player, CRYSTAL, "Save-memory");
+  assert.match(player.messages.at(-1), /on its own/);
 
   const main = character("recallmain", { profile: "main" });
   emit("teleport:landed", { player: main, from: new core.Location(3165, 3485, 0), fromInstance: false });
@@ -232,4 +266,21 @@ test("the core's own teleport tells content where it began as it lands (teleport
   for (let tick = 0; tick < 10 && player.getLocation().getX() !== 3222; tick++) task.execute();
   assert.deepEqual([player.getLocation().getX(), player.getLocation().getY()], [3222, 3218], "landed");
   assert.deepEqual(player.getAttribute("league:last-recall"), { x: 3165, y: 3485, z: 0 }, "the crystal remembers the start");
+});
+
+test("a home teleport, which moves the player itself, reports where it began too", () => {
+  const Home = require("../plugins/combat/HomeTeleportSequence");
+  const tasks = [];
+  const homeCore = {
+    ...core,
+    PluginManager: { emitCustomEvent: (name, payload) => emit(name, payload) },
+    TaskManager: { submit: (task) => tasks.push(task) },
+  };
+  const player = shattered("homeward");
+  player.setRegistered(true);
+  player.setLocation(new core.Location(3165, 3485, 0));
+  Home.startHomeTeleport(homeCore, player, new core.Location(3222, 3218, 0));
+  for (let tick = 0; tick <= Home.LAND_TICK + 1 && tasks.length; tick++) tasks[0].execute();
+  assert.deepEqual([player.getLocation().getX(), player.getLocation().getY()], [3222, 3218], "landed");
+  assert.deepEqual(player.getAttribute("league:last-recall"), { x: 3165, y: 3485, z: 0 });
 });

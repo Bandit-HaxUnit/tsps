@@ -30,21 +30,35 @@ function itemName(itemId) {
 
 // ---- The items, handed over ----
 
-/** Whether the character holds the item anywhere: inventory, worn or banked. */
+/**
+ * Whether the character holds the item anywhere: inventory, worn, banked (not a placeholder), or
+ * in its grave or Death's Office (`gravestones:state`).
+ */
 function holds(player, itemId) {
   const containers = [player.getInventory(), player.getEquipment()];
   for (let tab = 0; tab < core().Bank.TOTAL_BANK_TABS; tab++) containers.push(player.getBank(tab));
-  return containers.some((container) => container?.contains?.(itemId));
+  const held = (id, amount) => id === itemId && amount > 0;
+  if (containers.some((container) => container?.getItems?.().some((item) => item && held(item.getId(), item.getAmount())))) return true;
+  const storage = { player, grave: null, office: [] };
+  Common.api.emitCustomEvent("gravestones:state", storage);
+  return [...(storage.grave?.items ?? []), ...(storage.office ?? [])].some((entry) => entry && held(entry.id, entry.amount));
 }
 
-/** Each active set's item, to a character who holds none. */
+/** Each active set's item, to a character who holds none: into the inventory, else the bank, else the floor. */
 function grantItems({ player }) {
   if (!isShattered(player)) return;
   for (const set of effects().sets) {
     const itemId = Fragments.setItem(set);
     if (!itemId || Fragments.setTier(player, set) === 0 || holds(player, itemId)) continue;
-    player.getInventory().forceAdd(player, new (core().Item)(itemId, 1));
-    player.sendMessage(data.messages.sageItem.replace("{item}", itemName(itemId)));
+    const item = new (core().Item)(itemId, 1);
+    let message = data.messages.sageItem;
+    if (player.getInventory().getAddableAmount(item) > 0) player.getInventory().add(item, true);
+    else if (Common.bank(player, itemId, 1)) message = data.messages.sageItemBanked;
+    else {
+      player.getInventory().forceAdd(player, item);
+      message = data.messages.sageItemFloor;
+    }
+    player.sendMessage(message.replace("{item}", itemName(itemId)));
   }
 }
 
@@ -53,10 +67,15 @@ function grantItems({ player }) {
 function inBox(location, box) {
   const x = location.getX();
   const y = location.getY();
-  return x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY && (box.z === undefined || location.getZ() === box.z);
+  const z = location.getZ();
+  return x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY && (box.z === undefined || z === box.z) && (box.minZ === undefined || z >= box.minZ);
 }
 
-/** `teleport:landed`: a Shattered character remembers where a teleport began, unless in an instance or a place the crystal can't return to. */
+/**
+ * `teleport:landed`: a Shattered character remembers where a teleport began, unless in an instance or
+ * a place the crystal can't return to. The crystal's own teleport counts too, so a second
+ * Teleport-back returns to where the first was used.
+ */
 function rememberTeleport({ player, from, fromInstance }) {
   if (!isShattered(player) || fromInstance || !from || effects().noRecall.some((box) => inBox(from, box))) return;
   player.setAttribute(RECALL_ATTRIBUTE, { x: from.getX(), y: from.getY(), z: from.getZ() });
@@ -87,6 +106,13 @@ function checkMemory(event) {
   const { player } = event;
   if (!isShattered(player)) return false;
   player.sendMessage(recalled(player) ? data.messages.recallMemory : data.messages.recallNothing);
+  return true;
+}
+
+/** Save-memory: the league's crystal remembers on its own. */
+function saveMemory(event) {
+  if (!isShattered(event.player)) return false;
+  event.player.sendMessage(data.messages.recallAutomatic);
   return true;
 }
 
@@ -129,7 +155,7 @@ module.exports = function attach(api) {
   api.onCustomEvent("league:fragments-changed", grantItems);
   api.onCustomEvent("league:login", grantItems);
   api.onCustomEvent("teleport:landed", rememberTeleport);
-  api.onItemAction("Crystal of Echoes", { "Teleport-back": teleportBack, "Check-memories": checkMemory });
+  api.onItemAction("Crystal of Echoes", { "Teleport-back": teleportBack, "Check-memories": checkMemory, "Save-memory": saveMemory });
   api.onItemAction("Portable waystone", { Teleport: waystone });
 };
 
