@@ -270,6 +270,36 @@ test("a full inventory sends the item to the bank; no room anywhere leaves the t
   assert.equal(crammed.getAttribute("league:relics"), undefined, "the permanent pick is not saved without its item");
 });
 
+test("the room check is item-aware: an item already banked joins its stack and needs no slot", () => {
+  const { Item, Bank, ItemIdentifiers } = core;
+  /** A full inventory, the rune pouch already banked, and exactly `slots` empty bank slots. */
+  const squeeze = (name, slots) => {
+    const player = character(name);
+    givePoints(player, 2000);
+    for (let slot = 0; slot < 28; slot++) player.getInventory().add(new Item(1965, 1), false);
+    player.getBank(0).add(new Item(ItemIdentifiers.RUNE_POUCH, 1), false);
+    let filler = 1;
+    for (let tab = 0; tab < Bank.TOTAL_BANK_TABS; tab++) {
+      if (tab === Bank.BANK_SEARCH_TAB_INDEX) continue;
+      const bank = player.getBank(tab);
+      const keep = tab === 0 ? slots : 0;
+      while (bank.getFreeSlots() > keep) bank.add(new Item(filler++, 1), false);
+    }
+    openBank(player);
+    hooks["command:relic"]({ player, parts: ["relic", "4", "3"] }); // Superior Sorcerer: an arcane grimoire and a rune pouch
+    return player;
+  };
+  const fits = squeeze("squeezed", 1);
+  assert.deepEqual(fits.getAttribute("league:relics"), { 3: 3 }, "both items fit: the grimoire takes the slot, the pouch joins its stack");
+  assert.equal(fits.getBank(0).getAmount(ItemIdentifiers.RUNE_POUCH), 2);
+  assert.equal(Bank.contains(fits, new Item(ItemIdentifiers.ARCANE_GRIMOIRE, 1)), true);
+
+  const none = squeeze("squeezedout", 0);
+  assert.equal(none.sent.messages.at(-1), "You need room in your inventory or bank for this relic's items.");
+  assert.equal(none.getAttribute("league:relics"), undefined, "no slot for the grimoire: refused, nothing saved");
+  assert.equal(none.getBank(0).getAmount(ItemIdentifiers.RUNE_POUCH), 1, "and nothing handed out");
+});
+
 test("a Raging Echoes tier-1 tool is handed out without a bank, as the Leagues V tutorial unlock was", () => {
   worldLeague = 5;
   const echoes = character("wrangler");
