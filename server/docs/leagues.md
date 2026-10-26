@@ -37,10 +37,25 @@ character**, a save kept apart from its main one (`persistence/PlayerProfile.ts`
 - A "Stay logged in" token belongs to the character it was issued on (each save keeps its own),
   and the world decides the character, so a token from one world's character never opens the
   other's.
+- Every league character plays as a standard Ironman (Wiki "Player restrictions": all players
+  are Ironmen). Every league login sets a character that is anything else (new, made before this
+  rule, or changed with `::ironman`) through the Ironman plugin's `ironman:set-mode`; the Ironman
+  plugin's trading, loot, shop and Grand Exchange rules then apply as to any Ironman. The mode
+  stays: the Ironman tutor's and Adam's setup ask `ironman:change-mode` before a change, and
+  LeagueMode refuses it for a league character ("As a league character, you are always an
+  Ironman.", ours). `::ironman` overrides it only until the next login. A main character's mode is
+  its own. The rule needs the Ironman plugin enabled; with it disabled in world.json a league
+  character is not an Ironman and nothing says so.
+- Admin and save commands that look a save up by name address the character this world logs in:
+  the league character on a league world (`GameConstants.WORLD_PROFILE`), the main one elsewhere, so a plain world is unchanged. That is
+  `::snapshots`, `::rollback` and `::reprocorruptsave`, and the save-exists check of `::mute`,
+  `::unmute`, `::ban` and `::unban` (those four are still stubs that punish nobody).
 - Known limits: the SQLite backend's one-time import of legacy JSON saves reads only the main
-  files; admin commands that address saves by name reach the main profile only; an offline
-  update to either save (an external store purchase) is refused while the account's other
-  character is online, since both share the name.
+  files; an offline update to either save (an external store purchase) is refused while the
+  account's other character is online, since both share the name; the friends chat's offline
+  owner lookup (`FriendsChatManager.js`) and the AI bots' name checks (`RegisterAiBots`,
+  `PlayerFactory`) still read the main save only, so on a league world an offline owner's channel
+  is the main character's and a name held only by a league character counts as free for a bot.
 
 The world's league is the one a new league character joins; the character keeps it in
 `league:type`. A new character starts at the league's levels (Wiki: Trailblazer and Trailblazer
@@ -143,6 +158,8 @@ relics are the first askers; nothing changes when nobody answers):
 | `treasure-trails:stashes`, `treasure-trails:current-step` | Treasure Trails | `{ list }` -> `{ tier, location }` for every STASH unit; `{ player, location, target }`: where the clue read last leads, while that trail is carried; `requirement-waived` now carries `itemId` (Falo's item) |
 | `magic:spell-unlocked` | the Mage Arena's god spells | `{ player, spellId, unlocked }` asked before a locked spell is refused |
 | `slayer:bracelet`, `slayer:remote-task` | Slayer | `{ player, npc, bracelet, chance, consumeCharge }` for the bracelet of slaughter; `{ player, allowed }` after a gem, ring or helmet check: a new task from the last master or a cancel, from anywhere |
+| `ironman:set-mode` | `{ player, mode } -> { handled }` (the Ironman plugin's) | LeagueMode emits at a league login |
+| `ironman:change-mode` | `{ player, from, to, allowed, reason }` (the Ironman plugin asks before a setup choice) | LeagueMode refuses for a league character |
 
 ## What the client is sent
 
@@ -859,10 +876,23 @@ open). Each item remembers its last destination. The menus' grouping and wording
 - **Grimoire** (Raging Echoes tier 7): spells' area, quest and diary requirements are lifted
   (`magic:spell-unlocked`; here the Mage Arena's god spells without their 100 casts); the Prayer
   level still counts, and no prayer here is gated by a quest. The Arcane grimoire's spellbook
-  swap is the item's own plugin (Leagues polish).
+  swap is the item's own plugin (below).
 - **Reloaded** (Raging Echoes tier 4): one more relic of tiers 1-3, a different one from that
   tier's own pick, chosen with the same click on it (`league:relics-extra`; any item it hands out
   is given). The relic interface shows only each tier's own pick: ours.
+- **The Arcane grimoire** (`ArcaneGrimoire.LeagueRelics.js`), the item Superior Sorcerer and Raging
+  Echoes' Grimoire relic grant: for a league character its cache options, from the inventory or
+  worn, are Change Spellbook (a chat choice of the other three books), Previous Spellbook (back
+  to the book the last change left; it toggles) and Check Previous (ours: "Your previous
+  spellbook was the Ancient spellbook."). The swap is the altars' (`MagicSpellbook.changeSpellbook`:
+  Lunar's 40 Defence, autocast cleared, the tab, "You have changed your magic spellbook."); this
+  server's altars gate the books on nothing else, so neither does the grimoire where the
+  Trailblazer Reloaded relics page says "providing players have unlocked them". The previous book
+  is the attribute `league:grimoire-previous-spellbook`, remembered only when a swap went through.
+  Holding the item is the only check (it is untradeable and only a relic grants it; a spawned one
+  works for any league character). Not covered: its Book of the Dead role (the resurrection
+  spells' requirement, checked in core), and Raging Echoes' Grimoire unlocking every prayer and
+  spell.
 
 ### Equilibrium (both leagues)
 

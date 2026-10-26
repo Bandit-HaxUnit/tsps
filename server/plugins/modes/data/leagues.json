@@ -1,5 +1,5 @@
 {
-  "$comment": "Leagues (docs/leagues.md), used by plugins/modes/LeagueMode.plugin.js and LeaguePoints.plugin.js. A league character is the account's separate save a league world logs it into (persistence/PlayerProfile); world.json pluginConfig `league:type` names the league, and `default` only stands in for a type this data does not know. Varbits, varps, scripts and texts are from rsprox Leagues V recordings (osrs-captures 227/00070, 227/00075, 227/00579); the leagues' own numbers (XP rates, starting levels; the relic tiers are league-relics.json) are the Wiki's (each league's page). `struct` is the cache's league struct (enum 2670 by league type) whose params the client reads; `colour` is its param 2050 as an RGB int; `unlockSpotanim` its param 1021; `name` its param 858.",
+  "$comment": "Leagues (docs/leagues.md), used by plugins/modes/LeagueMode.plugin.js and LeaguePoints.plugin.js. A league character is the account's separate save a league world logs it into (persistence/PlayerProfile); world.json pluginConfig `league:type` names the league, and `default` only stands in for a type this data does not know. `ironmanMode` is the Ironman mode every league character plays as (the Wiki's 'Player restrictions'). Varbits, varps, scripts and texts are from rsprox Leagues V recordings (osrs-captures 227/00070, 227/00075, 227/00579); the leagues' own numbers (XP rates, starting levels; the relic tiers are league-relics.json) are the Wiki's (each league's page). `struct` is the cache's league struct (enum 2670 by league type) whose params the client reads; `colour` is its param 2050 as an RGB int; `unlockSpotanim` its param 1021; `name` its param 858.",
   "default": 4,
   "varbits": {
     "account": 10031,
@@ -23,6 +23,7 @@
     "leagueWorld": 1073741824
   },
   "tutorialCompletedValue": 12,
+  "ironmanMode": "ironman",
   "journal": {
     "_comment": "The side journal's Leagues tab (side_journal 629:34) mounts the league side panel (656) in the journal's content container (629:43), as the other tabs do on this client; live mounted it in its own tab slot. Script 3226 fills the panel's points bar (656:23) after every award, as captured.",
     "group": 629,
@@ -82,7 +83,8 @@
     "status": { "text": "{name}: {league}, {points} League Points from {tasks} tasks.", "source": "ours" },
     "taskUsage": { "text": "Use ::leaguetask <id> <points> [name].", "source": "ours" },
     "taskAwarded": { "text": "Awarded league task {id} ({points} points) to {name}.", "source": "ours" },
-    "taskRepeat": { "text": "{name} already has league task {id}.", "source": "ours" }
+    "taskRepeat": { "text": "{name} already has league task {id}.", "source": "ours" },
+    "ironmanLocked": { "text": "As a league character, you are always an Ironman.", "source": "ours (Wiki: every league player is an Ironman)" }
   },
   "records": {
     "_comment": "The main game's league records (osrs-captures 229/00690, 00691, 00693, 00700-00702). Each screen opens as the main modal after script 2524 (-1, -1). Trophies (league_trophies 447; the Leagues Tutor's Claim-trophies, its dialogue's open_interface 'League trophies' and the POH trophy case open it): if_setevents 447:3 OP1 OP10 from slot 0 to the number of trophies (0-35 with rev 229's 35; this cache lists 42), then script 1128 with the title and five 32-bit masks over enum 2778's trophies. A set bit shows 'Take', a clear one 'Store' (scripts 1128, 1130). The client hides a trophy the character hasn't earned: script 1129 compares the trophy's param 917 (the points it needs) with the varp script 9462 reads for its league (param 916). Each click resends the masks through script 1130. The accomplishment scroll's League-statistics opens 449 with script 1110: header, statistics, scrollbar and close components, the owner's name, then one points total per league in league order. League-rankings opens 445 and nothing else. League-firsts opens 676 with script 3698 (nine components and the league shown) and if_setevents 676:22 OP1 over one slot per league; a pick in that dropdown (676:22, sub = the league) sends both again.",
