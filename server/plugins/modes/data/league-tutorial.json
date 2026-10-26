@@ -130,7 +130,7 @@
     }
   },
   "tasks": {
-    "_comment": "Awarded through league:award-task as live does (the ids are the task catalog's, #1358).",
+    "_comment": "Completed through the task catalog's league:complete-task (#1358: tier 1, 10 points each in Trailblazer Reloaded and Raging Echoes); with no catalog on the server, paid through league:award-task with these points.",
     "openMenu": {
       "id": "open-the-leagues-menu",
       "points": 10,

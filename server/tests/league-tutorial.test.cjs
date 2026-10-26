@@ -307,6 +307,29 @@ test("the tutorial waits for the welcome screen's Play, or for the character des
   assertPage(designing, 0);
 });
 
+test("the tutorial's tasks go through the task catalog when there is one, and pay directly only when there is none", () => {
+  const asked = [];
+  const catalog = (request) => {
+    asked.push(request.id);
+    request.found = request.id === "open-the-leagues-menu";
+    request.completed = request.found;
+  };
+  custom["league:complete-task"] = [catalog];
+  try {
+    const league = character("catalogued", { stage: 4, isNewAccount: false });
+    tick();
+    emit("interface:opened", { player: league, groupId: 656, targetUid: uid(629, 43), type: 1 });
+    assert.deepEqual(asked, ["open-the-leagues-menu"], "the catalog is asked");
+    assert.equal(points(league), 0, "and it pays (here a stub that records no points), not LeaguePoints directly");
+    league.setAttribute("league:tutorial-stage", 11);
+    click(league, uid(MAIN, 8));
+    assert.deepEqual(asked, ["open-the-leagues-menu", "complete-the-leagues-tutorial"]);
+    assert.equal(points(league), 0, "a task the league's catalog lacks pays nothing");
+  } finally {
+    delete custom["league:complete-task"];
+  }
+});
+
 test("Exit Leagues logs the character out", () => {
   const leaving = character("leaving");
   tick();

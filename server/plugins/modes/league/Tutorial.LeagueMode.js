@@ -110,7 +110,15 @@ function present(player, stage) {
   sender.sendInterface(screens.main);
 }
 
+/**
+ * The task catalog (LeagueTasks' `league:complete-task`) pays the task: its points, its list bit
+ * and its message. With no catalog on the server nobody answers, and the points go straight to
+ * LeaguePoints; a catalog that answers `found: false` (a league without the task) pays nothing.
+ */
 function award(player, task) {
+  const request = { player, id: task.id, found: undefined, completed: false };
+  Common.api.emitCustomEvent("league:complete-task", request);
+  if (request.found !== undefined) return;
   Common.api.emitCustomEvent("league:award-task", { player, id: task.id, points: task.points, name: task.name });
 }
 
