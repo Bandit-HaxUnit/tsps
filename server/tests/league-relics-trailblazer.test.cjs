@@ -46,8 +46,8 @@ before(async () => {
     getSkillManager: () => require("../dist/game/content/skill/SkillManager").SkillManager,
     getAreaManager: () => ({ inMulti: () => inMulti }),
     registerCommand: (name, handler) => (hooks[`command:${name}`] = handler),
-    registerMagicAttackAccuracyModifier: (modifier) => (modifiers.magicAccuracy = modifier),
-    registerMagicDamageBonusModifier: (modifier) => (modifiers.magicDamageBonus = modifier),
+    registerMagicAttackAccuracyModifier: (modifier) => (modifiers.magicAccuracy ??= []).push(modifier),
+    registerMagicDamageBonusModifier: (modifier) => (modifiers.magicDamageBonus ??= []).push(modifier),
     onInterfaceActionButton: (ids, handler) => {
       for (const id of [].concat(ids)) on(`button:${id}`)(handler);
     },
@@ -60,6 +60,11 @@ before(async () => {
   require("../plugins/modes/LeaguePoints.plugin").register(api);
   require("../plugins/modes/LeagueRelics.plugin").register(api);
 });
+
+/** Applies every registered modifier of a kind in turn, as EquipmentEffects does (other relics register some too). */
+function modify(name, entity, value) {
+  return (modifiers[name] ?? []).reduce((current, fn) => fn(entity, current), value);
+}
 
 afterEach(() => {
   Math.random = realRandom;
@@ -108,10 +113,10 @@ test("Superior Sorcerer: magic speed 2, +175% accuracy and +20% damage, for the 
   assert.equal(speed(who.without, core.CombatType.MAGIC), 5, "a Trailblazer character without the relic");
   assert.equal(speed(who.echoes, core.CombatType.MAGIC), 5, "the same slot in Raging Echoes is another relic");
   assert.equal(speed(who.main, core.CombatType.MAGIC), 5, "a main character");
-  assert.equal(modifiers.magicAccuracy(who.relic, 1000), 2750);
-  assert.equal(modifiers.magicAccuracy(who.without, 1000), 1000);
-  assert.equal(modifiers.magicDamageBonus(who.relic, 100), 300, "+200 permille on top of gear");
-  assert.equal(modifiers.magicDamageBonus(who.main, 100), 100);
+  assert.equal(modify("magicAccuracy", who.relic, 1000), 2750);
+  assert.equal(modify("magicAccuracy", who.without, 1000), 1000);
+  assert.equal(modify("magicDamageBonus", who.relic, 100), 300, "+200 permille on top of gear");
+  assert.equal(modify("magicDamageBonus", who.main, 100), 100);
 });
 
 test("Superior Sorcerer: a 90% roll a cast keeps the runes, and a powered staff's charge", () => {

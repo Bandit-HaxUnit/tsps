@@ -20,5 +20,13 @@ module.exports = {
     require("./leaguerelics/SuperiorSorcerer.LeagueRelics")(api);
     require("./leaguerelics/Berserker.LeagueRelics")(api);
     require("./leaguerelics/UndyingRetribution.LeagueRelics")(api);
+    require("./leaguerelics/ArchersEmbrace.LeagueRelics")(api);
+    require("./leaguerelics/BrawlersResolve.LeagueRelics")(api);
+    require("./leaguerelics/SoulStealer.LeagueRelics")(api);
+    require("./leaguerelics/WeaponMaster.LeagueRelics")(api);
+    require("./leaguerelics/Executioner.LeagueRelics")(api);
+    require("./leaguerelics/Specialist.LeagueRelics")(api);
+    require("./leaguerelics/LastStand.LeagueRelics")(api);
+    require("./leaguerelics/Equilibrium.LeagueRelics")(api);
   },
 };

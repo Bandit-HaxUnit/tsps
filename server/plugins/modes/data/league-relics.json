@@ -47,7 +47,7 @@
     "relicNone": { "text": "none chosen", "source": "ours" }
   },
   "effects": {
-    "_comment": "The relics with effects here (SuperiorSorcerer / Berserker / UndyingRetribution.LeagueRelics.js), each gated on its league and on being chosen. Numbers are the Wiki's: no rsprox recording of Trailblazer Reloaded exists (the captures start at revision 223). Superior Sorcerer's splash reach (one tile around the primary target, like a burst) and Undying Retribution's graphic (the Retribution prayer's, 437) are ours; the Wiki gives neither.",
+    "_comment": "The relics with effects here (one <Relic>.LeagueRelics.js each), each gated on its league (`league`, one type or several for a relic both leagues have) and on being chosen (`key`, plus `aliases` for a catalog entry that stands in for the same relic). Numbers are the Wiki's: no rsprox recording of Trailblazer Reloaded exists (the captures start at revision 223). Superior Sorcerer's splash reach (one tile around the primary target, like a burst) and Undying Retribution's graphic (the Retribution prayer's, 437) are ours; the Wiki gives neither.",
     "superiorSorcerer": {
       "league": 4, "key": "superior-sorcerer",
       "attackSpeed": 2, "accuracyMultiplier": 2.75, "damageBonusPermille": 200, "saveChance": 0.9,
@@ -60,7 +60,21 @@
       "radius": 3, "npcDamagePerPrayerLevel": 2, "playerDamagePerPrayerLevel": 0.5, "cooldownMs": 180000, "graphic": 437,
       "_recoilImmuneExceptions": "Wiki: it still works on these though they are immune to recoil damage (Nex, the Hespori, Vorkath and every Wilderness boss).",
       "recoilImmuneExceptions": ["Nex", "Hespori", "Vorkath", "Callisto", "Artio", "Vet'ion", "Calvar'ion", "Venenatis", "Spindel", "Scorpia", "Chaos Elemental", "Chaos Fanatic", "Crazy archaeologist", "King Black Dragon"]
-    }
+    },
+    "_combatComment": "The combat and XP relics (docs/leagues.md). Wiki numbers unless marked ours: Archer's Embrace and Brawler's Resolve halve the weapon's speed (above 4 rounded down, below 3 rounded up, so 3, 4 and 5 all become 2); Last Stand's heal (the damage dealt in its window, capped at the max) and Weapon Master's 25-hitpoint sacrifice needing more than 25 hitpoints are ours; Specialist's cost is floored.",
+    "archersEmbrace": { "league": 4, "key": "archers-embrace", "accuracyMultiplier": 2, "extraProjectileChance": 0.1, "ammoSaveChance": 0.9, "boltProcMultiplier": 2 },
+    "brawlersResolve": { "league": 4, "key": "brawlers-resolve", "accuracyMultiplier": 1.5, "defenceMultiplier": 1.5, "doubleDamageChance": 0.1, "chargeSaveChance": 0.9, "immuneStatuses": ["poison", "venom", "dragonfire"] },
+    "soulStealer": { "league": 4, "key": "soul-stealer", "minimumHitFraction": 0.1, "restoreChance": 0.5, "restoreFraction": 0.1 },
+    "weaponMaster": { "league": 4, "key": "weapon-master", "minimumHitFraction": 0.2, "regenPercent": 30, "sacrificeHitpoints": 25 },
+    "executioner": { "league": 4, "key": "executioner", "items": ["SAGES_AXE", "SAGES_AXE_2"], "executeBelowFraction": 0.2, "attackDistance": 5, "longRangeDistance": 7 },
+    "specialist": { "league": 5, "key": "specialist", "costMultiplier": 0.2, "accuracyMultiplier": 2, "missRefundPercent": 10, "killRestorePercent": 15 },
+    "lastStand": {
+      "league": 5, "key": "last-stand", "aliases": ["last-stand-preview"],
+      "boostedLevel": 255, "drainPerTick": 16, "drainFloorAboveBase": 15, "windowTicks": 16, "cooldownMs": 180000,
+      "skills": ["ATTACK", "STRENGTH", "DEFENCE", "RANGED", "MAGIC"],
+      "healRefused": "You cannot heal while making your last stand."
+    },
+    "equilibrium": { "league": [4, 5], "key": "equilibrium", "bonusFraction": 0.1, "leastExperiencedFraction": 0.2 }
   },
   "leagues": {
     "4": {

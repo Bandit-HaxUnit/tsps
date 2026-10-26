@@ -71,6 +71,10 @@ function spellFor(player) {
 
 function useCharge(player) {
   const staff = Common.wielded(player);
+  // Content may spare the charge (a league relic): the question every powered staff asks.
+  const consume = { player, itemId: staff.getId(), skip: false };
+  api.emitCustomEvent("combat:consume-charge", consume);
+  if (consume.skip) return;
   const left = chargesOf(staff) - 1;
   setCharges(staff, left);
   player.sendMessage(`Your weapon has ${Math.max(0, left).toLocaleString("en-US")} charges remaining.`);

@@ -13,6 +13,7 @@ const CHARGES_WARPED_SCEPTRE_QUANTITY_VARBIT = 16155; // client gameval VarbitID
 const MAGIC_LEVEL_REQUIRED = 62; // OSRS Wiki item page
 
 let core = null;
+let pluginApi;
 let ItemIdentifiers = null;
 let chargedIds = new Set();
 let unchargedByCharged = new Map();
@@ -71,6 +72,10 @@ function spellFor(player) {
 }
 
 function useCharge(player, item) {
+  // Content may spare the charge (a league relic): the question every powered staff asks.
+  const consume = { player, itemId: item.getId(), skip: false };
+  pluginApi.emitCustomEvent("combat:consume-charge", consume);
+  if (consume.skip) return;
   const left = charges(item) - 1;
   if (left < 0) return;
   if (left > 0) {
@@ -261,6 +266,7 @@ module.exports = {
   },
   register(api) {
     core = api.core;
+    pluginApi = api;
     ItemIdentifiers = core.ItemIdentifiers;
     const I = ItemIdentifiers;
     chargedIds = new Set([I.WARPED_SCEPTRE, I.WARPED_SCEPTRE_2]);

@@ -66,9 +66,15 @@ function hasRelic(player, key) {
   return catalog(type).tiers.some((tier, tierIndex) => tier.relics[picks[tierIndex] - 1]?.key === key);
 }
 
-/** An effect applies to a player character in the effect's league who chose its relic. */
+/**
+ * An effect applies to a player character in one of the effect's leagues (`league`: a type, or
+ * several for a relic both leagues have) who chose its relic (`key`, or one of its `aliases`).
+ */
 function effectActive(player, effect) {
-  return player?.isPlayer?.() === true && leagueOf(player) === effect.league && hasRelic(player, effect.key);
+  if (player?.isPlayer?.() !== true) return false;
+  const league = leagueOf(player);
+  if (league === null || ![].concat(effect.league).includes(league)) return false;
+  return [effect.key, ...(effect.aliases ?? [])].some((key) => hasRelic(player, key));
 }
 
 /** Virtual struct and enum ids for a league's catalog: the client reads them as if from the cache. */

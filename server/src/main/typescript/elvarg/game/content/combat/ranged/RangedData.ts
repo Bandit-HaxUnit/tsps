@@ -193,6 +193,8 @@ export class Ammunition {
     public static readonly RUNE_THROWNAXE = new Ammunition(ItemIdentifiers.RUNE_THROWNAXE, new Graphic(48, 0, GraphicHeight.HIGH), 41, 36) // RUNE_TAXE_LAUNCH/TRAVEL
     public static readonly DRAGON_THROWNAXE = new Ammunition(ItemIdentifiers.DRAGON_THROWNAXE, new Graphic(1320, 0, GraphicHeight.HIGH), 1319, 47) // DRAGON_TAXE_LAUNCH/TRAVEL
     public static readonly MORRIGANS_THROWING_AXE = new Ammunition(ItemIdentifiers.MORRIGANS_THROWING_AXE_BH_, new Graphic(1624, 0, GraphicHeight.HIGH), 1623, 0) // MORRIGANS_TAXE_LAUNCH/TRAVEL
+    // The league's Sage's axe (Wiki: +0 bonuses). The cache has no spotanim of its own for it, so it flies as a rune thrown axe (RUNE_TAXE_LAUNCH/TRAVEL).
+    public static readonly SAGES_AXE = new Ammunition(ItemIdentifiers.SAGES_AXE, new Graphic(48, 0, GraphicHeight.HIGH), 41, 0)
     public static readonly BOW_OF_FAERDHINEN: Ammunition[] = BOW_OF_FAERDHINEN_ARROWS.map(
         ({ bow, travel, launch }) => new Ammunition(bow, new Graphic(launch, 0, GraphicHeight.HIGH), travel, 0)
     );
@@ -452,6 +454,8 @@ export class RangedWeapon {
     public static readonly BLACK_SALAMANDER = new RangedWeapon([10148], [Ammunition.HARRALANDER_TAR], RangedWeaponType.SALAMANDER)
     public static readonly DRAGON_THROWNAXE = new RangedWeapon([ItemIdentifiers.DRAGON_THROWNAXE, ItemIdentifiers.DRAGON_THROWNAXE_2, ItemIdentifiers.DRAGON_THROWNAXE_3], [Ammunition.DRAGON_THROWNAXE], RangedWeaponType.THROWNAXE)
     public static readonly MORRIGANS_THROWING_AXE = new RangedWeapon([ItemIdentifiers.MORRIGANS_THROWING_AXE, ItemIdentifiers.MORRIGANS_THROWING_AXE_2, ItemIdentifiers.MORRIGANS_THROWING_AXE_BH_, ItemIdentifiers.MORRIGANS_THROWING_AXE_BH__2], [Ammunition.MORRIGANS_THROWING_AXE], RangedWeaponType.THROWNAXE)
+    // The league's Sage's axe: a dart-interface thrown weapon (item-gameplay.json), 3 ticks, 2 on Rapid (Wiki).
+    public static readonly SAGES_AXE = new RangedWeapon([ItemIdentifiers.SAGES_AXE, ItemIdentifiers.SAGES_AXE_2], [Ammunition.SAGES_AXE], RangedWeaponType.DART)
     public static readonly TONALZTICS_OF_RALOS = new RangedWeapon([ItemIdentifiers.TONALZTICS_OF_RALOS, ItemIdentifiers.TONALZTICS_OF_RALOS_2], [Ammunition.TONALZTICS_OF_RALOS], RangedWeaponType.GLAIVE)
     public static readonly MORRIGANS_JAVELIN = new RangedWeapon([
         ItemIdentifiers.MORRIGANS_JAVELIN, ItemIdentifiers.MORRIGANS_JAVELIN_2, ItemIdentifiers.MORRIGANS_JAVELIN_3,

@@ -17,6 +17,7 @@ let combatResolver;
 const customEvents = new Map();
 let loginHandler;
 WarpedSceptre.register({
+    emitCustomEvent: () => {},
   core: PluginManager.getCoreApi(),
   onItemAction: (name, actions) => itemActions.set(name, actions),
   onItemOnItem: (handler) => { itemOnItemHandler = handler; },
