@@ -123,7 +123,7 @@ test("login sends the selection varbits and the league's catalog as structs and 
   const structs = dataset(league, "structOverrides");
   const enums = dataset(league, "enumOverrides");
   const byId = new Map(structs.map((row) => [row.structId, row.params]));
-  assert.deepEqual(byId.get(4699), { 870: 204000 }, "the Trailblazer Reloaded league struct's tier enum is ours");
+  assert.equal(byId.get(4699)[870], 204000, "the Trailblazer Reloaded league struct's tier enum is ours (its tutorial pages share the row: league-tutorial.test.cjs)");
   const tiers = enums.find((row) => row.enumId === 204000);
   assert.equal(tiers.entries.length, 8);
   const costs = tiers.entries.map(([, structId]) => byId.get(structId)[877]);

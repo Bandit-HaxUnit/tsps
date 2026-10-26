@@ -29,6 +29,7 @@ function open({ player }) {
   const bankOpen = Common.core.Bank.isOpen(player);
   Common.api.emitCustomEvent("league:send-content", { player });
   const sender = player.getPacketSender();
+  sender.sendInterfaceScript(ui().modalSize[0], ui().modalSize[1]);
   sender.sendInterface(group);
   sender.sendInterfaceFlagsRange(Unlock.uid(group, clickzones), clickzoneSlots[0], clickzoneSlots[1], FLAG_OP1);
   sender.sendInterfaceFlagsRange(Unlock.uid(group, menuFrame), menuFrameSlots[0], menuFrameSlots[1], FLAG_OP1);

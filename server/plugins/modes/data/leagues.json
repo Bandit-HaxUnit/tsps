@@ -39,7 +39,10 @@
   },
   "panels": {
     "_comment": "The side panel's Summary / Info / Rank buttons (656:7, 656:2, 656:10), as captured (227/00075 sub 88831, 227/01845, 227/00579): each opens its interface as the main modal with if_setevents OP1 on its menu frame; the Summary also plays sound 2266 and runs script 7741 on its stats row 2 (Time Played) with '(Click to reveal)' until the row (529:23 slot 2) is clicked, then with the time played in the captured shape ('17 days, 2 hours', '19 hours, 46 minutes', '17 days, 58 minutes'). Every other row the panels draw comes from varps and the league struct.",
+    "_modalSize": "Script 2524 sizes the next modal; live ran it before each panel opened: (-1, -1) for the Summary and Rank, (-1, -3) for the Info panel (227/00579, 227/01845).",
+    "modalSizeScript": 2524,
     "summary": {
+      "modalSize": [-1, -1],
       "group": 529,
       "button": [656, 7],
       "sound": 2266,
@@ -49,8 +52,8 @@
       "revealScript": 7741,
       "hiddenText": "(Click to reveal)"
     },
-    "info": { "group": 654, "button": [656, 2], "menuFrame": 17, "menuFrameSlots": [12, 18] },
-    "rank": { "group": 64, "button": [656, 10], "menuFrame": 16, "menuFrameSlots": [10, 18] }
+    "info": { "modalSize": [-1, -3], "group": 654, "button": [656, 2], "menuFrame": 17, "menuFrameSlots": [12, 18] },
+    "rank": { "modalSize": [-1, -1], "group": 64, "button": [656, 10], "menuFrame": 16, "menuFrameSlots": [10, 18] }
   },
   "statistics": {
     "_comment": "The League Summary's rows (script 7719) read these varps; the server counts what its hooks see (Statistics.LeagueMode.js) and sends each at login and when it changes. Rows the server cannot count yet stay 0: echoBossesKilled (no echo bosses), coinsGained / coinsLost, cluesCompleted (no completion event), specialAttacks (the special flag is cleared before the hit resolves), highestValueWorn.",

@@ -1297,7 +1297,18 @@ export class PacketSender {
         encodeWidgetSetFlagsRange(MAIN_INVENTORY_WIDGET_UID, 0, 27, MAIN_INVENTORY_SLOT_FLAGS)
       );
     }
+    this.emitInterfaceOpened(targetUid, groupId, type);
     return this;
+  }
+
+  /**
+   * "interface:opened" { player, groupId, targetUid, type }: a group was mounted, by whichever
+   * plugin, so content that follows another's interface (a tutorial pointing at a screen as it
+   * opens) needs no hook in that plugin. The counterpart of "interface:closed".
+   */
+  private emitInterfaceOpened(targetUid: number, groupId: number, type: number): void {
+    const { PluginManager } = require("../../plugins/PluginManager") as typeof import("../../plugins/PluginManager");
+    PluginManager.emitCustomEvent("interface:opened", { player: this.player, groupId, targetUid, type });
   }
 
   isWorldMapOpen(): boolean {
