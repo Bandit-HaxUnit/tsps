@@ -114,7 +114,8 @@ relics are the first askers; nothing changes when nobody answers):
 | `magic:alchemy-policy` (extended) | core `MagicOnItemPacketListener` | asked before the level check (the zone rules still follow it), now with `requiredLevel`, `freeRunes`, `keepItem` and `recast` (cast again on the slot once this cast ends while it holds the same item); a plugin that turns the cast into something else (Mage Training Arena, While Guthix Sleeps) clears `confirm`, `keepItem` and `recast` |
 | `bone-altars:offering` | BoneAltars | `{ player, itemId, boneItemId, cost, anyAltar }`: an item that is not a bone offered as `boneItemId`, `cost` of it an offering, and with `anyAltar` on any altar one prays at (the bone's burying XP; a private area's altars, a house's, stay its own) |
 | `farming:plant-rules` | Farming, as a seed or sapling is planted | `{ player, crop, seedId, patch, keepSeed, grown, diseaseFree, undying, message }`: a line said after the planting's own; keep the seed, grow the crop at once (not anima plants), keep it from disease, or keep a diseased crop from dying (it waits for a cure); the last two are kept on the patch's state |
-| `farming:harvests-per-action`, `farming:pick` | Farming | `{ player, patch, crop, harvests }` picks an action; `{ player, crop, patch, itemId, amount }` before a pick is handed over |
+| `farming:harvests-per-action`, `farming:pick` | Farming | `{ player, patch, crop, harvests }` picks an action; `{ player, crop, patch, itemId, amount, experience, stored }` before a pick is handed over (`experience` is the pick's Farming XP; `stored` what a listener took itself, as the bank) |
+| `woodcutting:nest-chance`, `woodcutting:nest-drop` | Woodcutting | `{ player, multiplier }`: a bird nest `multiplier` times as likely; `{ player, itemId, handled }` before a nest falls (handled: a listener took it) |
 | `farming:open-seed-vault` | Farming (the guild's seed vault) | `{ player, opened }`: the vault's menu from anywhere, behind the Bank PIN as at the guild |
 | `miscellania:rules` | Managing Miscellania | `{ player, ruler, royalTrouble, payMultiplier, outputMultiplier, approval, visiting }`: who rules the kingdom (the quests), what the workers' pay costs, how much they gather (clues as rolled), an approval held fixed, whether a catch-up away from the islands counts as a visit |
 | `miscellania:open` (extended), `miscellania:check`, `miscellania:collect` | Managing Miscellania | `{ player, opened }` opens the kingdom's interface; `{ player, handled }` reports the approval and coffers, or collects as Advisor Ghrim's Collect does |
@@ -383,6 +384,24 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   server's, and its immunity stops new poison without curing a running one. The extra rolls are
   rolled with the hit's own spell, never a special attack, and pay XP like any hit. The per-tick
   effects run as one task per Shattered Relics character, from login.
+- **Gathering effects** (`league/FragmentGathering.LeagueMode.js`, data `gatheringEffects`): the
+  harvesting fragments, Message In A Bottle, Greedy Gatherer and Personal Banker, through the
+  skills' own events. Chef's Catch cooks a caught fish (`cooking:cooked`), Molten Miner smelts an
+  ore into the bar whose main ore it is (`smithing:bar-for-ore`; coal makes nothing) and Slash &
+  Burn burns a log (`firemaking:log-xp`), each with that skill's XP whatever its level. Greedy
+  Gatherer brings two or three of each Mining, Woodcutting, Fishing and Farming resource with the
+  XP of each, and Personal Banker banks them at 50% or always (then a full inventory gathers on).
+  They compose on one resource: the fragment's change to every piece, the extras, then the bank or
+  the inventory; extras that don't fit fall to the floor (ours), and what an open coal bag or log
+  basket took stays there. Farming's harvest (`farming:pick`, now with the pick's `experience` and
+  a `stored` count) is noted and maybe doubled by Certified Farmer; Seedy Business keeps a seed
+  (`farming:plant-rules`); Rock Solid keeps iron, sandstone and granite standing
+  (`mining:deplete-rock`); Homewrecker makes Woodcutting's bird nests 2-4 times likelier and banks
+  them (`woodcutting:nest-chance`, `woodcutting:nest-drop`); Message In A Bottle multiplies the
+  clue nests, geodes and bottles (`treasure-trails:vessel-chance`); Catch Of The Day rolls
+  NpcDrops' rare drop table once (`npc-drops:roll-table`) on a 1-in-N catch; Chinchonkers adds
+  Hunter XP for a chinchompa and two of them at level 3 (`hunter:rewards`). The banked nest and
+  rare catch messages are this server's.
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price
   now, from the Wiki's Initial Cost less the prerequisite packs already unlocked, and 0 once
@@ -395,11 +414,12 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   only the fights inside. The Wiki gives no message for either lock; the boss one is this
   server's, said once per boss every few seconds.
 
-Not yet: the other fragments' effects (the skilling, production and misc ones; Tactical
+Not yet: the other fragments' effects (the production, skilling and misc ones; Tactical
 Duelist and the ranged weapons' charges, which no hook reports; Livin' On A Prayer, Special
 Discount, Thrall Damage, Superior Tracking, Slay 'n' Pay and the god-armour four) and the other
-sets (Fast Metabolism, Knife's Edge, Greedy Gatherer, Personal Banker, The Alchemist, The
-Craftsman, Unchained Talent and the three that give a Sage item); quest packs complete no quests; fragments can be swapped anywhere, not only at a bank or the Sage, and only
+sets (Fast Metabolism, Knife's Edge, The Alchemist, The Craftsman, Unchained Talent and the
+three that give a Sage item); Fishing has no clue bottles of its own, so Message In A Bottle
+reaches only Hunter's aerial fishing and drift nets for bottles; quest packs complete no quests; fragments can be swapped anywhere, not only at a bank or the Sage, and only
 through Equip (dragging one into a slot isn't handled); the
 Display Fragments toggle (varbit 12383) is the client's own; the intro cutscene (734) has no
 recording or client driver, so it isn't played.

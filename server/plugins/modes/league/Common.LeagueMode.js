@@ -103,8 +103,29 @@ function later(player, ticks, action) {
   }));
 }
 
+function bankHasRoom(player, itemId) {
+  const container = player.getBank(core.Bank.getTabForItem(player, itemId));
+  return container.getFreeSlots() > 0 || container.contains(itemId);
+}
+
+/** Puts an item straight in the bank when it has room; false leaves it to the caller. */
+function bank(player, itemId, amount) {
+  if (amount <= 0 || !bankHasRoom(player, itemId)) return false;
+  player.getBank(core.Bank.getTabForItem(player, itemId)).add(new core.Item(itemId, amount), true);
+  return true;
+}
+
+/** The item's noted form, or the item itself when it has none (or is a note already). */
+function noted(itemId) {
+  const definition = core.ItemDefinition.forId(itemId);
+  if (definition?.isNoted?.()) return itemId;
+  const note = definition?.getNoteId?.() ?? -1;
+  return note > 0 ? note : itemId;
+}
+
 module.exports = {
   init, later, isLeagueProfile, leagueOf, league, worldLeague, configuredType, highestTier, xpMultiplier, runeday, message,
+  bankHasRoom, bank, noted,
   LEAGUE_TYPE_ATTRIBUTE, LEAGUE_PROFILE, LEAGUE_TYPE_CONFIG,
   get data() { return data; },
   get api() { return api; },
