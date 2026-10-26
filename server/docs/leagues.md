@@ -153,7 +153,8 @@ Leagues Tutor in the main game.`); no popup. Trophies themselves (447) are not h
 varps 4510-4527 and varbit 11561; the server counts what its hooks see for a league character,
 one attribute `league:statistics` (name -> value), sent at login and as each changes: NPCs killed
 (`onNpcDeath`; bosses by the cache's boss param 1361, as NpcDrops reads it), deaths, players
-killed (`onPlayerDefeated`), damage dealt to NPCs and the highest hit (`onPlayerDealtDamage`),
+killed (`onPlayerDefeated`), damage dealt to NPCs and the highest hit (each hitsplat's `onApplied` as it lands, attached in
+`onCombatHitResolved`, so a cancelled projectile counts nothing),
 damage taken from NPCs (`onCombatHitResolved`), food (`food:eaten`), potions (`potions:drunk`),
 fish, ore and logs (`fishing:success`, `mining:success`, `woodcutting:success`). Stubbed at 0 for
 want of a source: echo bosses killed (none here), coins gained and lost, clues completed (no
