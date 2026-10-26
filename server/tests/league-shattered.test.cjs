@@ -248,6 +248,49 @@ test("class items that don't fit go to the bank", () => {
   assert.equal(player.getBanks().some((bank) => bank?.contains?.(845)), true, "and the oak longbow");
 });
 
+test("with no room in the inventory or bank, Accept gives nothing and the class stays unchosen", () => {
+  const { Bank } = core;
+  const player = character("hoarder");
+  runTasks();
+  for (let slot = 0; slot < 28; slot++) player.getInventory().adds(1511, 1);
+  let filler = 2000;
+  for (let tab = 0; tab < Bank.TOTAL_BANK_TABS; tab++) {
+    if (tab === Bank.BANK_SEARCH_TAB_INDEX) continue;
+    const bank = player.getBank(tab);
+    while (bank.getFreeSlots() > 0) bank.add(new core.Item(filler++, 1), false);
+  }
+  click(player, CLASS, 6);
+  click(player, CLASS, 26);
+  assert.equal(player.getAttribute("league:class") ?? 0, 0, "no class saved");
+  assert.equal(player.getInventory().contains(1325), false);
+  assert.equal(player.getBanks().some((bank) => bank?.contains?.(1325)), false, "no scimitar anywhere");
+  assert.equal(Number(player.getAttribute("league:fragments")?.[1]) || 0, 0, "no fragment");
+  assert.match(player.sent.messages.at(-1), /more space/);
+  assert.equal(player.getInterfaceId(), CLASS, "the choice stays open");
+  const bank = player.getBank(Bank.getTabForItem(player, 1325));
+  bank.delete(bank.getValidItems()[0].getId(), 1);
+  click(player, CLASS, 26);
+  assert.equal(player.getAttribute("league:class"), 1, "with a bank slot free, it goes through");
+  assert.equal(player.getBanks().some((bank) => bank?.contains?.(1325)), true, "the scimitar in the bank");
+});
+
+test("a kit that needs more bank slots than are free is refused as a whole", () => {
+  const { Bank } = core;
+  const player = character("tight");
+  runTasks();
+  for (let slot = 0; slot < 28; slot++) player.getInventory().adds(1511, 1);
+  let filler = 2000;
+  for (let tab = 0; tab < Bank.TOTAL_BANK_TABS; tab++) {
+    if (tab === Bank.BANK_SEARCH_TAB_INDEX) continue;
+    const bank = player.getBank(tab);
+    while (bank.getFreeSlots() > (tab === 0 ? 1 : 0)) bank.add(new core.Item(filler++, 1), false);
+  }
+  click(player, CLASS, 11);
+  click(player, CLASS, 26);
+  assert.equal(player.getAttribute("league:class") ?? 0, 0, "the longbow and arrows need 2 slots: 1 is free");
+  assert.equal(player.getBanks().some((bank) => bank?.contains?.(845) || bank?.contains?.(884)), false, "nothing half-given");
+});
+
 test("the other classes' items, skills and fragments", () => {
   for (const [select, skillVarbit, fragment, items] of [[11, 13346, 4, [845, 884]], [16, 13347, 6, [1379, 556, 558]]]) {
     const player = character(`class-${select}`);

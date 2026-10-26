@@ -307,7 +307,8 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
 - **Class choice (737):** at the first login, and every login until chosen. Select sets varp 3345
   so the client shows that class's confirm panel. Accept unlocks its combat skill (script 5830's
   varbit), gives its fragment at level 1 and its items. 737 names the items; their amounts are this
-  server's choice.
+  server's choice. Items that don't fit the inventory go to a bank tab with room; with no room for
+  the whole kit, Accept gives nothing and the class stays unchosen.
 - **Fragments (735):** owned fragments (fragment XP, varbits 13403-13455) and the seven slots
   (varbits 13395-13399, 13401, 13402) are saved. Slots open at the points enum 4127 gives. Equip
   puts an owned fragment in the first open empty slot, never twice; Unequip and Unequip all clear

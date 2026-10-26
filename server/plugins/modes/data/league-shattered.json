@@ -133,6 +133,8 @@
   },
 
   "messages": {
+    "_classNoRoom": "No message is recorded for this; it is this server's.",
+    "classNoRoom": "You need more space in your inventory or bank to accept this class.",
     "renownGranted": "Granted {amount} Sage's Renown to {name} ({renown} now).",
     "renownUsage": "Use ::renown <amount> [player].",
     "notShattered": "{name} is not in Leagues III - Shattered Relics."
