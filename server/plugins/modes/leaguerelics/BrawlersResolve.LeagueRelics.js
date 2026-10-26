@@ -34,7 +34,7 @@ function defence(entity, level) {
 }
 
 function doubleDamage(event) {
-  if (event.combatType !== core.CombatType.MELEE || !event.accurate || !active(event.attacker)) return;
+  if (Common.isBuildingDerivedHit() || event.combatType !== core.CombatType.MELEE || !event.accurate || !active(event.attacker)) return;
   if (Math.random() < effect.doubleDamageChance) event.damage.setDamage(event.damage.getDamage() * 2);
 }
 

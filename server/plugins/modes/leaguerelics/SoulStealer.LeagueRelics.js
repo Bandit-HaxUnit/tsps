@@ -20,7 +20,8 @@ function active(player) {
 
 /** Records the launch and raises the hit to the relic's minimum. */
 function onDamage({ attacker, target, combatType, hit, damage, accurate }) {
-  if (!active(attacker)) return;
+  // A hit derived from another (Superior Sorcerer's splash) carries its parent's damage already; it is not raised again.
+  if (Common.isBuildingDerivedHit() || !active(attacker)) return;
   const cycle = core.World.getProcessCycle();
   let launch = current.get(attacker);
   if (!launch || launch.cycle !== cycle) {

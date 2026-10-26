@@ -30,7 +30,7 @@ let cycle = 1000;
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
   core = PluginManager.getCoreApi();
-  GameConstants.LEAGUE_WORLD_TYPE = 4;
+  GameConstants.setWorldProfile("league"); // a Trailblazer Reloaded world (the league type is the plugin config below)
   realCycle = core.World.getProcessCycle;
   core.World.getProcessCycle = () => cycle;
   const lists = {};
@@ -49,6 +49,8 @@ before(async () => {
   const api = new Proxy({
     core,
     persistAttribute() {},
+    getPluginConfig: (key, fallback) => (key === "league:type" ? 4 : fallback),
+    setWorldProfile: (profile) => GameConstants.setWorldProfile(profile),
     getSkillManager: () => require("../dist/game/content/skill/SkillManager").SkillManager,
     getAreaManager: () => ({ inMulti: () => false }),
     registerCommand: (name, handler) => (hooks[`command:${name}`] = handler),

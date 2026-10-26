@@ -33,7 +33,7 @@ const ammo = {
 /** An NPC under a fifth of its hitpoints loses the rest. */
 function execute(event) {
   const { attacker, target, combatType, damage } = event;
-  if (combatType !== core.CombatType.RANGED || !target?.isNpc?.() || !wieldsAxe(attacker) || !active(attacker)) return;
+  if (Common.isBuildingDerivedHit() || combatType !== core.CombatType.RANGED || !target?.isNpc?.() || !wieldsAxe(attacker) || !active(attacker)) return;
   const hitpoints = target.getHitpointsAfterPendingDamage?.() ?? target.getHitpoints();
   if (hitpoints <= 0 || hitpoints >= target.getMaxHitpoints() * effect.executeBelowFraction) return;
   damage.setDamage(hitpoints);

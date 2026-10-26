@@ -23,7 +23,7 @@ function landsOnNpcs(roll) {
 }
 
 function minimumHit({ attacker, target, combatType, damage, accurate }) {
-  if (!accurate || !attacker.isSpecialActivated() || !active(attacker)) return;
+  if (Common.isBuildingDerivedHit() || !accurate || !attacker.isSpecialActivated() || !active(attacker)) return;
   const minimum = Math.floor(Common.maxHitFor(attacker, target, combatType) * effect.minimumHitFraction);
   if (damage.getDamage() < minimum) damage.setDamage(minimum);
 }
