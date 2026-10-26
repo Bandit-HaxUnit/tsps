@@ -34,10 +34,25 @@ kept apart from its main one (`persistence/PlayerProfile.ts`):
 - A "Stay logged in" token belongs to the character it was issued on (each save keeps its own),
   and the world decides the character, so a token from one world's character never opens the
   other's.
+- Every league character plays as a standard Ironman (Wiki "Player restrictions": all players
+  are Ironmen). Every league login sets a character that is anything else (new, made before this
+  rule, or changed with `::ironman`) through the Ironman plugin's `ironman:set-mode`; the Ironman
+  plugin's trading, loot, shop and Grand Exchange rules then apply as to any Ironman. The mode
+  stays: the Ironman tutor's and Adam's setup ask `ironman:change-mode` before a change, and
+  LeagueMode refuses it for a league character ("As a league character, you are always an
+  Ironman.", ours). `::ironman` overrides it only until the next login. A main character's mode is
+  its own. The rule needs the Ironman plugin enabled; with it disabled in world.json a league
+  character is not an Ironman and nothing says so.
+- Admin and save commands that look a save up by name address the character this world logs in:
+  the league character on a league world (`GameConstants.WORLD_PROFILE`), the main one elsewhere, so a plain world is unchanged. That is
+  `::snapshots`, `::rollback` and `::reprocorruptsave`, and the save-exists check of `::mute`,
+  `::unmute`, `::ban` and `::unban` (those four are still stubs that punish nobody).
 - Known limits: the SQLite backend's one-time import of legacy JSON saves reads only the main
-  files; admin commands that address saves by name reach the main profile only; an offline
-  update to either save (an external store purchase) is refused while the account's other
-  character is online, since both share the name.
+  files; an offline update to either save (an external store purchase) is refused while the
+  account's other character is online, since both share the name; the friends chat's offline
+  owner lookup (`FriendsChatManager.js`) and the AI bots' name checks (`RegisterAiBots`,
+  `PlayerFactory`) still read the main save only, so on a league world an offline owner's channel
+  is the main character's and a name held only by a league character counts as free for a bot.
 
 The world's league is the one a new league character joins; the character keeps it in
 `league:type`. A new Trailblazer Reloaded character starts at Herblore 3, Runecraft 5 and
@@ -55,6 +70,9 @@ Agility 10 (Wiki). A main character never has a league, whatever its attributes 
 | `league:points` | `{ player } -> { points, tasks }` | LeaguePoints |
 | `league:points-changed` | `{ player, points, previous, tasks }` | LeagueMode (journal), LeagueRelics listen |
 | `league:has-relic` | `{ player, relic } -> { active }` | LeagueRelics |
+| `league:relic-triggered` | `{ player, relic }` when a relic's effect fired (Undying Retribution) | nobody yet |
+| `ironman:set-mode` | `{ player, mode } -> { handled }` (the Ironman plugin's) | LeagueMode emits at a league login |
+| `ironman:change-mode` | `{ player, from, to, allowed, reason }` (the Ironman plugin asks before a setup choice) | LeagueMode refuses for a league character |
 
 ## What the client is sent
 
@@ -132,11 +150,63 @@ Three relics have their effects (`leaguerelics/*.LeagueRelics.js`, numbers in th
   Retribution prayer's graphic 437 (ours), and a reflected hit of 0 to 2 x Prayer level on every
   attackable NPC within three tiles that is not attack-immune and that the area's policy lets
   the player fight (recoil-immune ones only if Nex, the Hespori, Vorkath or a Wilderness boss)
-  and 0 to half the Prayer level on each player fighting them. The cooldown is a timestamp
-  attribute (0 when ready), reset by a real death (`onPlayerDefeated`, which fires only once
-  the death went ahead). A plugin that already prevented
-  the death on this hook is honoured; one attached after this plugin would see the relic fire
-  first, since every before-death hook runs. Raid death penalties are not exempted yet.
+  and 0 to half the Prayer level on each player fighting them. The cooldown is
+  a timestamp attribute (0 when ready), reset by a real death (the defeated hook, which every
+  death reaches; the death hook stops at the first plugin that handles the death, as the raids
+  do, so a death inside one would never have reset it). A plugin that already prevented the
+  death on this hook is honoured; one attached after this plugin would see the relic fire first,
+  since every before-death hook runs. A prevented death counts for nothing in a raid (Wiki: no
+  raid death penalties): core never starts the death task, so the Chambers, Theatre, Tombs and
+  Archive death handlers, which take points, count deaths, jail, ghost and check wipes, never run.
+- **The Arcane grimoire** (`ArcaneGrimoire.LeagueRelics.js`), the item Superior Sorcerer and Raging
+  Echoes' Grimoire relic grant: for a league character its cache options, from the inventory or
+  worn, are Change Spellbook (a chat choice of the other three books), Previous Spellbook (back
+  to the book the last change left; it toggles) and Check Previous (ours: "Your previous
+  spellbook was the Ancient spellbook."). The swap is the altars' (`MagicSpellbook.changeSpellbook`:
+  Lunar's 40 Defence, autocast cleared, the tab, "You have changed your magic spellbook."); this
+  server's altars gate the books on nothing else, so neither does the grimoire where the
+  Trailblazer Reloaded relics page says "providing players have unlocked them". The previous book
+  is the attribute `league:grimoire-previous-spellbook`, remembered only when a swap went through.
+  Holding the item is the only check (it is untradeable and only a relic grants it; a spawned one
+  works for any league character). Not covered: its Book of the Dead role (the resurrection
+  spells' requirement, checked in core), and Raging Echoes' Grimoire unlocking every prayer and
+  spell.
+
+## The league tutorial
+
+Not implemented; what it takes, from the Leagues V recordings (osrs-captures 227/00196 and
+227/01718 are full runs, 227/00546 a logout at stage 0) and this cache. A league character is
+sent `league_tutorial_completed` 10037 = 12 (finished) at login until it exists.
+
+- **A stage machine on varbit 10037** (0 to 12; Leagues VI has two more). The server only sets
+  the varbit and (re)opens the interfaces: `league_tutorial` 653 as an overlay in 164:1 with its
+  click-blocker 653:1 unhidden, `mesoverlay` 263 in the chatbox (162:564), scripts 1974 "" and
+  2524 (-1, -1), then the modal `league_tutorial_main` 677 in 164:16; every stage change repeats
+  that block. The client draws each stage's title, body, buttons and graphic itself from the
+  league struct's param 1033 tutorial struct (enums keyed by 10037: Raging Echoes' struct 6211
+  points at struct 747 and enums 3379-3383). Check that Trailblazer Reloaded's struct 4699 still
+  carries them; if not, send them as `structOverrides` / `enumOverrides` like the relic catalog.
+- **First login** (00196): `orbs_disabled` 4084 = 1, `minimap_toggle` 0, a teleport to Lumbridge
+  (3221, 3216, 0), and the starting kit as the inventory (a dramen staff, bronze axe, pickaxe,
+  tinderbox, net, shrimp, bronze dagger and sword, wooden shield, shortbow, 25 bronze arrows, 25
+  air, 15 mind, 6 water, 4 earth and 2 body runes, a bucket, a pot, bread); the tutorial opens
+  after the welcome screen's Play (378:72). The dramen staff is simply in the kit; The Sage
+  (14143/14144 at 3222, 3213) talks only about combat achievement rewards and echo items in these
+  recordings (the Wiki's "claim a free dramen staff from The Sage" is Trailblazer Reloaded's).
+- **The stages:** 0->3 "Get Started" (677:9; sets `league_3_has_seen_cutscene` 13488 = 1); 3->4
+  the quest tab (164:54, script 3162 flashes the journal's Leagues tab); 4->5 the journal's
+  Leagues tab, which also awards "Open the Leagues Menu" (+10) and mounts the side panel (script
+  3185 highlights 656:35); 5->6 the panel's Tasks button (656:36) opens `league_tasks` 657 and a
+  `screenhighlight` 664 walkthrough (scripts 3408/3409/3413/2463/2465, continue 664:31); 6->7 its
+  last continue; 7->8 Areas (656:40) opens `trailblazer_areas` 512 with a walkthrough; 8->9 an
+  area unlocked; 9->10 Relics (656:44) opens 655 with a walkthrough; 10->11 the first relic's
+  item box; 11->12 "End Tutorial" (677:8), which awards "Complete the Leagues Tutorial" (+10), sets
+  `orbs_disabled` back to 0 and closes 677 then 653. "Exit Leagues" (677:8 at stage 0) was never
+  pressed in a recording.
+- **What it waits on:** the task list (657) and the area interface (512) with their walkthroughs,
+  and the tasks it awards; a tutorial that starts but cannot be finished is worse than none. A
+  new league character also skips Tutorial Island on live; this server sends every new account
+  there.
 
 ## Developer commands
 
@@ -148,5 +218,5 @@ Three relics have their effects (`leaguerelics/*.LeagueRelics.js`, numbers in th
 ## Not yet
 
 League tasks, area unlocks, combat masteries, the other tier passives (drop rates, run energy,
-clue boxes, minigame points, the ironman restriction), the league tutorial, trophies and
-rewards. Each is its own item on the progress tracker.
+clue boxes, minigame points), the league tutorial (see above), trophies and rewards. Each is its
+own item on the progress tracker.
