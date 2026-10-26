@@ -1,9 +1,9 @@
 /**
  * Shattered Relics' unlocks screen (league_3_unlocks 733, data/league-shattered.json `unlocks`):
  * skills, bosses and quest packs bought with Sage's Renown (Wiki /Unlocks). What a character has
- * unlocked is saved and sent as the varbits the screen draws from. The unlocks are recorded only:
- * locked skills still give XP, locked bosses can be fought and quest packs complete no quests yet
- * (follow-ups in docs/leagues.md).
+ * unlocked is saved and sent as the varbits the screen draws from. A locked skill gives no XP and
+ * a locked boss can't be attacked (Wiki: "Locked skills can be trained, but no experience will be
+ * granted"); quest packs complete no quests yet (a follow-up in docs/leagues.md).
  *
  *   "league:unlock-skill" { player, skill }   unlocks a skill for free (the starting class)
  *   "league:open-unlocks" { player }          opens the screen
@@ -172,7 +172,15 @@ function price(player, tab, entry) {
     if (config().skills.alwaysUnlocked.includes(entry.skill) || state.skills.includes(entry.skill)) return null;
     return entry.cost;
   }
-  if (TABS[tab] === "bosses") return state.bosses.includes(entry.npc) ? null : entry.cost;
+  if (TABS[tab] === "bosses") {
+    if (state.bosses.includes(entry.npc)) return null;
+    const needed = config().bosses.requires[entry.npc] ?? [];
+    if (needed.some((npc) => !state.bosses.includes(npc))) {
+      player.sendMessage(data.messages.needsGodWars);
+      return null;
+    }
+    return entry.cost;
+  }
   const cost = questPrice(entry.name, new Set(state.quests));
   return cost > 0 ? cost : null;
 }
@@ -223,6 +231,46 @@ function unlockSkill({ player, skill }) {
   sendUnlocks(player);
 }
 
+// ---- The locks ----
+
+/** A skill (its stat id) the character can't gain XP in yet; a skill outside the unlock list never is. */
+function skillLocked(player, statId) {
+  const { skills } = config();
+  if (skills.varbits[statId] === undefined || skills.alwaysUnlocked.includes(statId)) return false;
+  return !unlocked(player).skills.includes(statId);
+}
+
+/** onCanGainExperience: no XP in a locked skill (Wiki /Unlocks). */
+function lockedSkillExperience(event) {
+  const { player, skill } = event;
+  if (!isShattered(player)) return;
+  if (skillLocked(player, Number(skill?.getClientId?.()))) event.allow = false;
+}
+
+/** NPC name -> the boss unlock (its NPC id) that covers it, read once from the data. */
+let bossByName = null;
+
+function bossOf(name) {
+  if (!bossByName) {
+    bossByName = new Map();
+    for (const [npc, names] of Object.entries(config().bosses.names)) {
+      for (const each of names) bossByName.set(each.toLowerCase(), Number(npc));
+    }
+  }
+  return bossByName.get(String(name ?? "").toLowerCase()) ?? null;
+}
+
+/** onCanAttack: a locked boss can't be fought (Wiki /Unlocks). */
+function lockedBossAttack(event) {
+  const { attacker, target } = event;
+  if (!attacker?.isPlayer?.() || !target?.isNpc?.() || !isShattered(attacker)) return;
+  const name = target.getCurrentDefinition?.(attacker)?.getName?.() ?? target.getDefinition?.()?.getName?.();
+  const boss = bossOf(name);
+  if (boss === null || unlocked(attacker).bosses.includes(boss)) return;
+  event.allow = false;
+  attacker.sendMessage(data.messages.lockedBoss.replace("{name}", entries("bosses").find((entry) => entry.npc === boss)?.name ?? name));
+}
+
 function query(request) {
   if (!request) return;
   Object.assign(request, isShattered(request.player) ? unlocked(request.player) : { skills: [], bosses: [], quests: [] });
@@ -244,10 +292,12 @@ module.exports = function attach(api) {
   api.onCustomEvent("league:open-unlocks", open);
   api.onCustomEvent("league:unlocks", query);
   api.onCustomEvent("league:login", login);
+  api.onCanGainExperience(lockedSkillExperience);
+  api.onCanAttack(lockedBossAttack);
   api.onInterfaceActionButton(buttonIds.tabs, pickTab);
   api.onInterfaceActionButton(buttonIds.list, pickEntry);
   api.onInterfaceActionButton(buttonIds.accept, accept);
   api.onInterfaceActionButton(buttonIds.close, close);
 };
 
-module.exports._test = { questPrice, entries, unlocked, UNLOCKS_ATTRIBUTE };
+module.exports._test = { questPrice, entries, unlocked, skillLocked, bossOf, UNLOCKS_ATTRIBUTE };
