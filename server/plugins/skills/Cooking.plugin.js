@@ -318,6 +318,15 @@ function handleRangeCook(activeSessions, event) {
   );
 }
 
+/** "cooking:cooked": what request.rawId cooks into and the XP, for content that cooks as it gathers (a league relic). */
+function answerCooked(request) {
+  const cookable = COOKABLE_BY_RAW.get(request.rawId);
+  if (cookable) {
+    request.cookedId = cookable.cooked;
+    request.xp = cookable.xp;
+  }
+}
+
 /** "cooking:raw-xp": the Cooking XP for cooking request.rawId, e.g. for the infernal harpoon. */
 function answerRawXp(request) {
   const cookable = COOKABLE_BY_RAW.get(request.rawId);
@@ -350,6 +359,7 @@ module.exports = {
     api.onObjectInteraction("Stove", { Cook: handleRangeCook.bind(null, activeSessions) });
     api.onObjectInteraction("Fancy range", { Cook: handleRangeCook.bind(null, activeSessions) });
     api.onCustomEvent("cooking:raw-xp", answerRawXp);
+    api.onCustomEvent("cooking:cooked", answerCooked);
 
     api.log("registered", {
       cookables: COOKABLES.length,

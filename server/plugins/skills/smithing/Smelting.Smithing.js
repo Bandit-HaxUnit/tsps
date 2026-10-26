@@ -271,8 +271,17 @@ function fillFurnaceIds() {
   }
 }
 
+/** "smithing:bar-for-ore": the bar an ore smelts into (the first furnace recipe that takes it) and its XP, for content that smelts as it mines (a league relic). */
+function answerBarForOre(request) {
+  const recipe = Data.SMELTING_RECIPES.find((candidate) => !candidate.furnace && candidate.ingredients.some(([id]) => id === request.oreId));
+  if (!recipe) return;
+  request.barId = recipe.barId;
+  request.xp = recipe.xp;
+}
+
 module.exports = function attach(api) {
   api.onServerStartup(fillFurnaceIds);
+  api.onCustomEvent("smithing:bar-for-ore", answerBarForOre);
   // Some furnaces (e.g. Tutorial Island 10082) only offer "Use".
   api.onObjectInteraction("Furnace", { Smelt: smelt, Use: smelt });
   api.onObjectInteraction("Small furnace", { Smelt: smelt });

@@ -224,7 +224,13 @@ function finishTheft(event, stall) {
   pluginApi.emitCustomEvent("thieving:success", { player, skill: core.Skill.THIEVING, petBase: stall.petBase, method: "stall",
     stall: event.definition.getName(), itemId: reward.getId(), location: object.getLocation() });
   const ticks = object.getId() === core.ObjectIdentifiers.BAKERY_STALL_2 ? 16 : stall.respawnTicks;
-  depleteStall(object, ticks);
+  // Content may keep the stall stocked ("thieving:deplete-stall", a league relic) and ask for another go ("thieving:done").
+  const depletion = { player, object, handled: false };
+  pluginApi.emitCustomEvent("thieving:deplete-stall", depletion);
+  if (!depletion.handled) depleteStall(object, ticks);
+  const done = { player, kind: "stall", object, succeeded: true, again: false };
+  pluginApi.emitCustomEvent("thieving:done", done);
+  if (done.again) core.TaskManager.submit(new core.CountdownTask(player, 1, () => handleStealFromStall({ ...event, repeat: true })));
 }
 
 function handleStealFromStall(event) {
@@ -244,7 +250,7 @@ function handleStealFromStall(event) {
     event.handled = true;
     return;
   }
-  if (!player.getClickDelay().elapsedTime(1000)) {
+  if (!event.repeat && !player.getClickDelay().elapsedTime(1000)) {
     event.handled = true;
     return;
   }

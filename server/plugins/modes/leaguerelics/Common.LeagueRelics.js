@@ -114,6 +114,25 @@ function maxHitFor(attacker, target, combatType) {
   return combatType === CombatType.RANGED ? PluginManager.modifyRangedMaxHit(attacker, target, max) : max;
 }
 
+/** Whether the bank would take this item (a free slot, or a stack of it already). */
+function bankHasRoom(player, itemId) {
+  const container = player.getBank(core.Bank.getTabForItem(player, itemId));
+  return container.getFreeSlots() > 0 || container.contains(itemId);
+}
+
+/** Puts a gathered item straight in the bank when it has room; false leaves it with the player. */
+function bank(player, itemId, amount) {
+  if (amount <= 0 || !bankHasRoom(player, itemId)) return false;
+  player.getBank(core.Bank.getTabForItem(player, itemId)).add(new core.Item(itemId, amount), true);
+  return true;
+}
+
+/** The item's noted form, or the item itself when it has none. */
+function noted(itemId) {
+  const note = core.ItemDefinition.forId(itemId)?.getNoteId?.() ?? -1;
+  return note > 0 ? note : itemId;
+}
+
 /** Restores special attack energy and redraws the bar. */
 function restoreSpecial(player, percent) {
   player.incrementSpecialPercentage(percent);
@@ -125,8 +144,8 @@ function message(key, values = {}) {
 }
 
 module.exports = {
-  init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, ids, message, maxHitFor, restoreSpecial, RELICS_ATTRIBUTE,
-  derivedHit, isBuildingDerivedHit,
+  init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, ids, message, maxHitFor, restoreSpecial,
+  bankHasRoom, bank, noted, derivedHit, isBuildingDerivedHit, RELICS_ATTRIBUTE,
   get data() { return data; },
   get api() { return api; },
   get core() { return core; },

@@ -63,9 +63,12 @@ const PICKAXES = [
   { id: ItemIds.DRAGON_PICKAXE, requiredLevel: 61, attemptIntervalTicks: 3, fastRollChance: 1 / 6, animation: new Animation(7139) },
   { id: ItemIds.CRYSTAL_PICKAXE, requiredLevel: 71, attemptIntervalTicks: 3, fastRollChance: 1 / 4, animation: new Animation(8347) },
   { id: ItemIds.INFERNAL_PICKAXE, requiredLevel: 61, attemptIntervalTicks: 3, fastRollChance: 1 / 6, animation: new Animation(4482) },
+  // The league's Echo pickaxe (Wiki): a crystal pickaxe with no requirement that always rolls every 2 ticks; `rank` places it above the crystal one.
+  { id: ItemIds.ECHO_PICKAXE, requiredLevel: 1, rank: 72, attemptIntervalTicks: 2, animation: new Animation(8347) },
 ];
 
-const PICKAXES_DESC = [...PICKAXES].sort((a, b) => b.requiredLevel - a.requiredLevel);
+/** Best first: by the level they need, a `rank` standing in for a tool whose requirement understates it. */
+const PICKAXES_DESC = [...PICKAXES].sort((a, b) => (b.rank ?? b.requiredLevel) - (a.rank ?? a.requiredLevel));
 
 // Wiki rock pages: level, XP, respawn, and each rock's skilling success chart (`chance`: its low and
 // high values). Rocks with `gems` roll the mining gem table before each ore roll.
@@ -271,7 +274,11 @@ function sendRespawnTimer(player, depleted, ticks) {
     .sendClientScript(RESPAWN_TIMER_SCRIPT, coordinate, depleted.getId(), SCENERY_SHAPE, RESPAWN_TIMER_ID, ticks, RESPAWN_TIMER_COLOUR, 0);
 }
 
+/** Depletes the rock unless content keeps it standing ("mining:deplete-rock", a league relic's four ores a rock); true when it went. */
 function depleteRock(player, rockObject, rock) {
+  const event = { player, object: rockObject, rock: rock.objectName, handled: false };
+  pluginApi.emitCustomEvent("mining:deplete-rock", event);
+  if (event.handled) return false;
   const depleted = new GameObject(
     depletedRockId(rockObject.getId(), rock),
     rockObject.getLocation().clone(),
@@ -283,6 +290,7 @@ function depleteRock(player, rockObject, rock) {
   ObjectManager.register(depleted, true);
   TaskManager.submit(new RockRespawnTask(rock.respawnTicks, rockObject, depleted));
   sendRespawnTimer(player, depleted, rock.respawnTicks);
+  return true;
 }
 
 /** Failures are message boxes in live OSRS (rsprox recordings). */
@@ -445,20 +453,24 @@ class MiningTask extends Task {
       ROLL_READY_TICKS.set(player, state.nextRollTick);
 
       const result = rollAttempt(player, state.rock);
-      if (!result) continue;
-      if (result.gem) {
-        giveGem(player, result.gem);
+      // Content may turn a miss into a hit ("mining:attempt", a league relic's second chance); a gem roll is never a miss.
+      const attempt = { player, object: rockObject, oreId: state.rock.oreId, success: result !== null };
+      pluginApi.emitCustomEvent("mining:attempt", attempt);
+      const landed = result ?? (attempt.success ? { outcome: state.rock.outcomes ? rollOutcome(state.rock) : null } : null);
+      if (!landed) continue;
+      if (landed.gem) {
+        giveGem(player, landed.gem);
         continue;
       }
 
-      const { outcome } = result;
+      const { outcome } = landed;
       const oreId = outcome?.itemId ?? state.rock.oreId;
       const amount = outcome?.min !== undefined ? outcomeAmount(outcome) : 1;
       if (InfernalPickaxe.tryCombustOre(player, state.pickaxe.id, oreId)) {
         player.performGraphic(new pluginApi.core.Graphic(SMOKEPUFF_GRAPHIC, 0, SMOKEPUFF_HEIGHT));
         player.getPacketSender().sendSoundEffect(SMELT_SOUND, 1, 0, 1);
       } else {
-        giveOre(player, oreId, amount);
+        giveOre(player, oreId, amount, outcome?.xp ?? state.rock.xp);
         countOre(player, state.rock);
       }
       if (!state.rock.infinite) {
@@ -477,7 +489,7 @@ class MiningTask extends Task {
         }
         continue;
       }
-      depleteRock(player, rockObject, state.rock);
+      if (!depleteRock(player, rockObject, state.rock)) continue;
       stopMining(this.activeSessions, player);
     }
   }
@@ -498,8 +510,8 @@ function inventoryBlocks(player, oreId) {
 }
 
 /** An open container takes the ore first ("storage:gather"); the rest goes to the inventory. */
-function giveOre(player, oreId, amount) {
-  const request = { player, itemId: oreId, amount, stored: 0 };
+function giveOre(player, oreId, amount, xp = 0) {
+  const request = { player, itemId: oreId, amount, stored: 0, skill: Skill.MINING, xp };
   pluginApi.emitCustomEvent("storage:gather", request);
   if (amount > request.stored) {
     player.getInventory().adds(oreId, amount - request.stored);
@@ -519,7 +531,7 @@ function mineExtraOre(player, rock) {
   if (!request.extra || inventoryBlocks(player, rock.oreId)) {
     return;
   }
-  giveOre(player, rock.oreId, 1);
+  giveOre(player, rock.oreId, 1, rock.xp);
   player.getSkillManager().addExperiences(Skill.MINING, rock.xp);
 }
 

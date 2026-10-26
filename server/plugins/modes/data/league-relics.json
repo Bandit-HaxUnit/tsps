@@ -45,7 +45,8 @@
     "relicUsage": { "text": "Use ::relic <tier 1-8> <slot 1-3>.", "source": "ours" },
     "relicList": { "text": "{league} relics: {relics}", "source": "ours" },
     "relicNone": { "text": "none chosen", "source": "ours" },
-    "lastStandNoFood": { "text": "You cannot eat while making your last stand.", "source": "ours" }
+    "lastStandNoFood": { "text": "You cannot eat while making your last stand.", "source": "ours" },
+    "echoToggle": { "text": "Your {tool} will now {mode}.", "source": "ours" }
   },
   "effects": {
     "_comment": "The relics with effects here (one <Relic>.LeagueRelics.js each), each gated on its league (`league`, one type or several for a relic both leagues have) and on being chosen (`key`, plus `aliases` for a catalog entry that stands in for the same relic). Numbers are the Wiki's: no rsprox recording of Trailblazer Reloaded exists (the captures start at revision 223). Superior Sorcerer's splash reach (one tile around the primary target, like a burst) and Undying Retribution's graphic (the Retribution prayer's, 437) are ours; the Wiki gives neither.",
@@ -74,7 +75,25 @@
       "boostedLevel": 255, "drainPerTick": 16, "drainFloorAboveBase": 15, "windowTicks": 16, "cooldownMs": 180000,
       "skills": ["ATTACK", "STRENGTH", "DEFENCE", "RANGED", "MAGIC"]
     },
-    "equilibrium": { "league": [4, 5], "key": "equilibrium", "bonusFraction": 0.1, "leastExperiencedFraction": 0.2 }
+    "equilibrium": { "league": [4, 5], "key": "equilibrium", "bonusFraction": 0.1, "leastExperiencedFraction": 0.2 },
+    "_gatheringComment": "The gathering relics (docs/leagues.md). Wiki numbers unless marked ours: Trickster's and Animal Wrangler's faster box-trap lure (the trap's 5-tick look for prey halved to 2 ticks: the Wiki gives no figure); the Echo tools' toggles cycle through their modes with our messages; Power Miner's auto-smelt takes the first furnace recipe that uses the ore and waives its other ingredients (a tin ore alone makes a bronze bar: ours), its four ores a rock do not count mining gloves (not modelled here); the Sage's greaves of Trickster and Corner Cutter are not in this cache.",
+    "endlessHarvest": { "league": 4, "key": "endless-harvest", "skills": ["MINING", "WOODCUTTING", "FISHING"], "multiplier": 2 },
+    "trickster": { "league": 4, "key": "trickster", "pouchLimitMultiplier": 3, "lootMultiplier": 2, "boxTrapMultiplier": 2, "boxTrapLureTicks": 2, "logsPerAction": 9 },
+    "powerMiner": {
+      "league": 5, "key": "power-miner", "tool": "ECHO_PICKAXE", "toolName": "Echo pickaxe", "secondChance": 0.5, "oresPerRock": 4,
+      "modes": ["smelt and cut", "smelt", "cut", "off"], "modeText": { "smelt and cut": "smelt the ore and cut the gems you mine", "smelt": "smelt the ore you mine", "cut": "cut the gems you mine", "off": "leave what you mine as it is" }
+    },
+    "lumberjack": {
+      "league": 5, "key": "lumberjack", "tool": "ECHO_AXE", "toolName": "Echo axe", "secondChance": 0.5,
+      "modes": ["burn", "fletch", "off"], "modeText": { "burn": "burn the logs you chop", "fletch": "fletch the logs you chop into arrow shafts", "off": "leave the logs as they are" }
+    },
+    "animalWrangler": {
+      "league": 5, "key": "animal-wrangler", "tool": "ECHO_HARPOON", "toolName": "Echo harpoon", "harpoonBonus": 135, "secondChance": 0.5, "cookChance": 0.5, "ticksFaster": 1,
+      "unbanked": ["RAW_KARAMBWANJI"], "uncooked": ["BIG_SHARK", "BIG_SWORDFISH", "BIG_BASS"], "boxTrapMultiplier": 2, "boxTrapLureTicks": 2,
+      "modes": ["cook", "off"], "modeText": { "cook": "cook half of what you catch", "off": "leave your catch raw" }
+    },
+    "cornerCutter": { "league": 5, "key": "corner-cutter", "lapCount": 2, "lapXpMultiplier": 1.25, "markCoins": 10000 },
+    "dodgyDeals": { "league": 5, "key": "dodgy-deals", "pouchLimitMultiplier": 3, "radius": 5 }
   },
   "leagues": {
     "4": {
