@@ -262,20 +262,27 @@ through to their defaults. Bots and agent players never read a league save.
 league worlds (osrs-captures 227/00100, 02120, 237/01098).
 
 - **Stock:** the cache's. Each league struct lists its reward structs in param 87, with the name
-  (363), item (150) and cost (151). The client draws every league's rewards, rows running across
-  the leagues in order; this cache has 65, as rev 237 did.
+  (363), item (150) and cost (151). A set (the Relic Hunter outfits, six ornament kits) lists every
+  item it gives in the enum param 915 names; param 2068 is how many of the item a set-less reward
+  gives. The client draws every league's rewards, rows running across the leagues in order; this
+  cache has 65, as rev 237 did.
 - **Opening:** the Leagues Tutor's Trade (main game) and Rewards (league world) options, the
   conversations' open_shop "Leagues Reward Shop", and `::leagueshop`. It sends script 2524 (-1, -1),
   the modal, and OP1 on 658:9 over one slot per reward. The Bank PIN guards it first.
 - **Buying:** a row click sets `league_rewards_shopselection` (10110) to the row. Confirm (658:22)
-  sells the selected reward in the main game, if the points left cover it and the inventory has
-  room. The points left are the account's league points (Records) less what the character spent
-  (`league:reward-points-spent`), sent as varp 2613; the client redraws when they change.
+  sells the selected reward in the main game, if the points left cover it and the inventory has a
+  slot for each piece. The points left are each league's points (Records) less what the character
+  spent of them (`league:reward-points-spent`, by league type), sent as varp 2613. Confirm's click
+  shows a loading layer (658:24) no script hides, so the shop closes and opens afresh a tick later.
+  Closing the shop forgets the selection.
 - **League worlds:** the shop opens to browse. Live sends no points there, and the client hides
-  Confirm where the league struct's param 2053 says so; the server sells nothing.
+  Confirm where the league struct's param 2053 says so. A Confirm that reaches the server gets the
+  client's own line, "You can purchase these rewards on a Non-Leagues world."
 
 The Wiki pools every league's points. This server knows one league per account, the one its league
-character played.
+character played. On this server's NPC spawns only `::leagueshop` reaches the shop: the one Leagues
+Tutor spawned (315, Lumbridge) has neither Trade nor Rewards, and `npc-interactions.json` binds its
+Talk-to to a custom shop, so its conversation never runs.
 
 ## Relics
 

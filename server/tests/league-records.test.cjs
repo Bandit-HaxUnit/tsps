@@ -113,6 +113,7 @@ function character(name, { profile = "main", league = 0 } = {}) {
         case "sendInterface": return (group) => (player.setInterfaceId(group), sent.subs.push(["main", group]), sender);
         case "sendInterfaceRemoval": return () => (player.setInterfaceId(-1), sender);
         case "sendInterfaceFlagsRange": return (...args) => (sent.flags.push(args), sender);
+        case "sendInterfaceDisplayState": return (target, hide) => ((sent.hidden ??= []).push([target, hide]), sender);
         default: return () => sender;
       }
     },
@@ -415,15 +416,25 @@ test("a row click selects it; Confirm buys it for its points", () => {
   trade(main);
   pick(main, banner);
   assert.equal(main.sent.varbits.get(SELECTION), banner, "captured: league_rewards_shopselection follows the click (227/02120)");
+  tasks.length = 0;
   confirm(main);
+  assert.equal(main.getInterfaceId(), -1, "the shop closes at once");
+  runTasks();
   assert.equal(main.getInventory().contains(item), true);
   assert.equal(main.sent.varps.get(REWARD_POINTS), 5000 - cost, "the points left drop by its cost");
-  assert.equal(main.getAttribute("league:reward-points-spent"), cost);
+  assert.deepEqual(main.getAttribute("league:reward-points-spent"), { 5: cost }, "spent from the league that earned it");
+  assert.deepEqual(main.sent.subs.at(-1), ["main", REWARDS], "and opens afresh a tick later: its loading layer has no other way out");
+  assert.deepEqual(main.sent.flags.at(-1), [uid(REWARDS, 9), 0, 64, OP1]);
+  assert.deepEqual(main.sent.hidden.slice(-2), [[uid(REWARDS, 5), true], [uid(REWARDS, 24), true]], "the dialog and loading layer are hidden again");
   confirm(main);
   assert.equal(main.getInventory().getAmount(item), 1, "Confirm needs a new selection");
-  // A relog keeps what was spent.
-  hooks.onPlayerLogin({ player: main, username: "buyer", isNewAccount: false, profile: "main" });
-  assert.equal(main.sent.varps.get(REWARD_POINTS), 5000 - cost);
+  // A relog through a real save keeps what was spent.
+  saves.set("buyer/main", PlayerSave.fromPlayer(main));
+  const again = character("buyer");
+  PlayerSave.fromPlayer(main).applyToPlayer(again);
+  hooks.onPlayerLogin({ player: again, username: "buyer", isNewAccount: false, profile: "main" });
+  assert.deepEqual(again.getAttribute("league:reward-points-spent"), { 5: cost });
+  assert.equal(again.sent.varps.get(REWARD_POINTS), 5000 - cost);
 });
 
 test("too few points, a full inventory, a bad row or a closed shop buy nothing", () => {
@@ -434,6 +445,7 @@ test("too few points, a full inventory, a bad row or a closed shop buy nothing",
   trade(main);
   pick(main, dear);
   confirm(main);
+  runTasks();
   assert.equal(main.getInventory().contains(rows[dear].item), false, "too few points");
   pick(main, 999);
   assert.equal(main.sent.varbits.get(SELECTION), dear, "a row past the stock is ignored");
@@ -442,7 +454,7 @@ test("too few points, a full inventory, a bad row or a closed shop buy nothing",
   confirm(main);
   assert.equal(main.getInventory().contains(rows[cheap].item), false);
   assert.equal(main.sent.messages.at(-1), "You don't have enough inventory space.");
-  assert.equal(main.getAttribute("league:reward-points-spent") ?? 0, 0, "nothing was spent");
+  assert.deepEqual(main.getAttribute("league:reward-points-spent") ?? {}, {}, "nothing was spent");
 
   const closed = veteran("closed", 5000);
   trade(closed);
@@ -450,6 +462,52 @@ test("too few points, a full inventory, a bad row or a closed shop buy nothing",
   closed.getPacketSender().sendInterfaceRemoval();
   confirm(closed);
   assert.equal(closed.getInventory().contains(rows[cheap].item), false, "no purchase with the shop closed");
+});
+
+test("a set gives every piece and needs a slot for each; a quantity reward gives them all", () => {
+  const setRow = rowWhere((row) => row.name === "Leagues V Relic Hunter (T1)");
+  const set = [...CacheDefinitions.getEnumValues(Number(CacheDefinitions.getStructParams(
+    Number(require("../plugins/modes/league/Rewards.LeagueMode")._test.stock()[setRow].struct)).get(915))).values()].map(Number);
+  assert.equal(set.length, 4, "boots, hat, robeskirt and top");
+  const cost = cacheRewards()[setRow].cost;
+
+  const tight = veteran("tight", cost);
+  for (let slot = 0; slot < 25; slot++) tight.getInventory().adds(1511, 1);
+  trade(tight);
+  pick(tight, setRow);
+  confirm(tight);
+  runTasks();
+  assert.equal(tight.sent.messages.at(-1), "You don't have enough inventory space.", "three free slots can't take four pieces");
+  assert.equal(set.some((item) => tight.getInventory().contains(item)), false);
+
+  const dressed = veteran("dressed", cost);
+  trade(dressed);
+  pick(dressed, setRow);
+  confirm(dressed);
+  runTasks();
+  for (const item of set) assert.equal(dressed.getInventory().contains(item), true, `piece ${item}`);
+  assert.equal(dressed.sent.varps.get(REWARD_POINTS), 0);
+
+  const kits = rowWhere((row) => row.name === "Echo Ahrim's Pieces Orn Kit");
+  const kit = cacheRewards()[kits];
+  const tailor = veteran("tailor", kit.cost);
+  trade(tailor);
+  pick(tailor, kits);
+  confirm(tailor);
+  runTasks();
+  assert.equal(tailor.getInventory().getAmount(kit.item), 4, "param 2068: four kits");
+});
+
+test("closing the shop forgets the selection", () => {
+  const cheap = rowWhere((row) => row.cost <= 5000 && row.item >= 0);
+  const main = veteran("forgetful", 5000);
+  trade(main);
+  pick(main, cheap);
+  main.getPacketSender().sendInterfaceRemoval();
+  for (const handler of custom["interface:closed"] ?? []) handler({ player: main, interfaceId: REWARDS });
+  trade(main);
+  confirm(main);
+  assert.equal(main.getInventory().contains(cacheRewards()[cheap].item), false, "a Confirm after closing buys nothing");
 });
 
 test("on a league world the shop opens to browse and sells nothing", () => {
@@ -464,6 +522,7 @@ test("on a league world the shop opens to browse and sells nothing", () => {
     pick(league, cheap);
     confirm(league);
     assert.equal(league.getInventory().contains(cacheRewards()[cheap].item), false);
+    assert.equal(league.sent.messages.at(-1), "You can purchase these rewards on a Non-Leagues world.", "the client's own line (script 503)");
   } finally {
     worldLeague = 0;
   }

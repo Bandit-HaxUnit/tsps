@@ -6,7 +6,8 @@
  *
  * Points: the Wiki pools every league's points and sells every league's rewards in the main game.
  * A main character's points are its league character's (Records' `league:account-points`), less
- * what it has spent here (`league:reward-points-spent`); what is left goes out as varp 2613. On a
+ * what it has spent of each league's here (`league:reward-points-spent`); what is left goes out as
+ * varp 2613. A reward gives its set's pieces (param 915) when it has a set, else its item. On a
  * league world the shop opens to browse: live sends no points there, and the client hides Confirm
  * where the league struct says so. The Bank PIN guards the shop.
  *
@@ -16,13 +17,13 @@
 const Common = require("./Common.LeagueMode");
 const { FLAG_OP1 } = require("../../interface/widgetGroup");
 
-/** Points this main character has spent in the shop. */
+/** Points this main character has spent in the shop, by league type: { [type]: points }. */
 const SPENT_ATTRIBUTE = "league:reward-points-spent";
 const TUTOR = "Leagues Tutor";
 
 /** Per player: the row selected (the server's copy of varbit 10110). */
 const selection = new WeakMap();
-/** The cache's rewards, one per row: { league, struct, name, item, cost }; read once. */
+/** The cache's rewards, one per row: { league, struct, name, item, cost, items: [{ item, amount }] }; read once. */
 let stockList = null;
 
 function uid(group, child) {
@@ -46,12 +47,19 @@ function stock() {
     if (list === undefined || list === -1) continue;
     for (const [, struct] of entries(Number(list))) {
       const row = CacheDefinitions.getStructParams(Number(struct));
+      const item = Number(row?.get(params.item) ?? -1);
+      const set = row?.get(params.set);
+      // A set (a Relic Hunter outfit, six kits) lists what it gives; otherwise the item, `quantity` of it.
+      const items = set !== undefined
+        ? entries(Number(set)).map(([, piece]) => ({ item: Number(piece), amount: 1 }))
+        : [{ item, amount: Number(row?.get(params.quantity)) || 1 }];
       stockList.push({
         league: Number(league),
         struct: Number(struct),
         name: String(row?.get(params.name) ?? ""),
-        item: Number(row?.get(params.item) ?? -1),
+        item,
         cost: Number(row?.get(params.cost)) || 0,
+        items: items.filter((entry) => entry.item >= 0),
       });
     }
   }
@@ -63,36 +71,61 @@ function isMainGame(player) {
   return !Common.isLeagueProfile(player) && Common.worldLeague() === null;
 }
 
+/** The account's league points, by league type (Records). */
 function earned(player) {
   const query = { player, leagues: {}, total: 0 };
   Common.api.emitCustomEvent("league:account-points", query);
-  return Number(query.total) || 0;
+  return query.leagues ?? {};
 }
 
 function spent(player) {
-  return Number(player.getAttribute(SPENT_ATTRIBUTE)) || 0;
+  const value = player.getAttribute(SPENT_ATTRIBUTE);
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
-/** The points left to spend. */
+/** Each league's points left: what it earned less what was spent of it. */
+function left(player) {
+  const spentBy = spent(player);
+  return Object.entries(earned(player)).map(([type, points]) => [type, Math.max(0, (Number(points) || 0) - (Number(spentBy[type]) || 0))]);
+}
+
+/** The points left to spend, pooled across the leagues as the Wiki says. */
 function available(player) {
-  return Math.max(0, earned(player) - spent(player));
+  return left(player).reduce((sum, [, points]) => sum + points, 0);
+}
+
+/** Spends `cost` from the leagues' points left, the lowest league type first. */
+function spend(player, cost) {
+  const spentBy = { ...spent(player) };
+  let owed = cost;
+  for (const [type, points] of left(player).sort(([a], [b]) => Number(a) - Number(b))) {
+    const take = Math.min(points, owed);
+    spentBy[type] = (Number(spentBy[type]) || 0) + take;
+    owed -= take;
+    if (owed <= 0) break;
+  }
+  player.setAttribute(SPENT_ATTRIBUTE, spentBy);
 }
 
 function sendPoints(player) {
   if (isMainGame(player)) player.getPacketSender().sendConfig(rewards().pointsVarp, available(player));
 }
 
-function open(player) {
-  const { group, rows, modalSize, pinFeature } = rewards();
-  const guard = { player, feature: pinFeature, resume: () => open(player) };
-  Common.api.emitCustomEvent("bank-pin:guard", guard);
-  if (guard.locked) return true;
+/** The screen as captured, fresh: the list, no selection, the points left. */
+function show(player) {
+  const { group, rows, modalSize } = rewards();
   selection.delete(player);
   sendPoints(player);
   const sender = player.getPacketSender();
   sender.sendInterfaceScript(Common.data.panels.modalSizeScript, modalSize);
   sender.sendInterface(group);
   sender.sendInterfaceFlagsRange(uid(group, rows), 0, stock().length - 1, FLAG_OP1);
+}
+
+function open(player) {
+  const guard = { player, feature: rewards().pinFeature, resume: () => open(player) };
+  Common.api.emitCustomEvent("bank-pin:guard", guard);
+  if (!guard.locked) show(player);
   return true;
 }
 
@@ -110,27 +143,58 @@ function select({ player, slot }) {
   return true;
 }
 
-function hasRoom(player, item) {
+/** The free slots the reward's items take: one per unstackable item, one per stack not yet held. */
+function slotsNeeded(player, items) {
   const inventory = player.getInventory();
-  if (inventory.getFreeSlots() > 0) return true;
-  return Common.core.ItemDefinition.forId(item)?.isStackable?.() === true && inventory.contains(item);
+  const stacks = new Set();
+  let slots = 0;
+  for (const { item, amount } of items) {
+    if (Common.core.ItemDefinition.forId(item)?.isStackable?.() === true) {
+      if (!inventory.contains(item) && !stacks.has(item)) slots++;
+      stacks.add(item);
+    } else {
+      slots += amount;
+    }
+  }
+  return slots;
 }
 
-/** Confirm: the selected reward, paid for with the points left. */
+/** Sells the selected reward if the world, the points left and the inventory allow it. */
+function buy(player) {
+  const reward = stock()[selection.get(player)];
+  if (!reward || !reward.items.length) return;
+  if (!isMainGame(player)) {
+    player.sendMessage(rewards().messages.leagueWorld);
+    return;
+  }
+  if (available(player) < reward.cost) return;
+  if (player.getInventory().getFreeSlots() < slotsNeeded(player, reward.items)) {
+    player.sendMessage(rewards().messages.noSpace);
+    return;
+  }
+  spend(player, reward.cost);
+  for (const { item, amount } of reward.items) player.getInventory().adds(item, amount);
+}
+
+/** The shop after a Confirm: open afresh, with the layers the cache hides by default hidden again. */
+function reopen(player) {
+  show(player);
+  const { group, hiddenLayers } = rewards();
+  for (const child of hiddenLayers) player.getPacketSender().sendInterfaceDisplayState(uid(group, child), true);
+}
+
+/**
+ * The dialog's Confirm (658:22). Its click shows a loading layer (658:24, script 3288) that no
+ * script hides again, so the shop closes and opens afresh a tick later, with the points left. A
+ * fresh load hides that layer and the dialog (658:5); this web client keeps a closed group's
+ * state, so they are hidden again by hand.
+ */
 function confirm({ player }) {
   if (!isOpen(player)) return true;
-  const reward = stock()[selection.get(player)];
-  if (!reward || reward.item < 0 || !isMainGame(player)) return true;
-  if (available(player) < reward.cost) return true;
-  if (!hasRoom(player, reward.item)) {
-    player.sendMessage("You don't have enough inventory space.");
-    return true;
-  }
-  player.setAttribute(SPENT_ATTRIBUTE, spent(player) + reward.cost);
-  player.getInventory().adds(reward.item, 1);
+  buy(player);
   selection.delete(player);
-  // The client redraws the list (and clears its selection) when the points change.
-  sendPoints(player);
+  player.getPacketSender().sendInterfaceRemoval();
+  Common.later(player, 1, () => reopen(player));
   return true;
 }
 
@@ -151,6 +215,11 @@ function login({ player }) {
   sendPoints(player);
 }
 
+/** The shop closed: its selection goes with it, as the client's does. */
+function closed({ player, interfaceId }) {
+  if (interfaceId === rewards().group) selection.delete(player);
+}
+
 function shopCommand({ player }) {
   open(player);
   return true;
@@ -167,14 +236,15 @@ function buttons() {
 
 module.exports = function attach(api) {
   const { rowsButton, confirmButton } = buttons();
-  api.persistAttribute(SPENT_ATTRIBUTE, 0);
+  api.persistAttribute(SPENT_ATTRIBUTE, {});
   // After Records' login, which reads the league save these points come from.
   api.onPlayerLogin(login);
   api.onNpcInteraction(TUTOR, npcOptions());
   api.onCustomEvent("npc-dialogue:action", dialogueAction);
+  api.onCustomEvent("interface:closed", closed);
   api.onInterfaceActionButton(rowsButton, select);
   api.onInterfaceActionButton(confirmButton, confirm);
   api.registerCommand("leagueshop", shopCommand, api.core.PlayerRights.DEVELOPER, "Open the Leagues Reward Shop: ::leagueshop");
 };
 
-module.exports._test = { stock, available, SPENT_ATTRIBUTE };
+module.exports._test = { stock, available, slotsNeeded, SPENT_ATTRIBUTE };
