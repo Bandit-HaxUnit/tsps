@@ -219,9 +219,17 @@ function guildObject(event) {
     if (event.definition?.getName()?.toLowerCase() !== "seed vault") return;
     event.handled = true;
     const { player, object } = event;
-    const near = () => player.getLocation().isWithinDistance(object.getLocation(), 5);
+    openVault(player, () => player.getLocation().isWithinDistance(object.getLocation(), 5), () => guildObject(event));
+}
+/** "farming:open-seed-vault": the seed vault from anywhere (content that carries it, a league relic's vault). */
+function openSeedVault(event) {
+    if (!event?.player || event.opened) return;
+    event.opened = true;
+    openVault(event.player, () => true, () => openSeedVault({ player: event.player }));
+}
+function openVault(player, near, resume) {
     if (!near()) return;
-    const pin = { player, feature: "seed-vault", resume: () => guildObject(event) };
+    const pin = { player, feature: "seed-vault", resume };
     core.PluginManager.emitCustomEvent("bank-pin:guard", pin);
     if (pin.locked) return;
     const farm = Patches.farmFor(player), vault = farm.vault ??= {};
@@ -245,4 +253,4 @@ function guildObject(event) {
     Patches.choose(player, entries);
 }
 
-Object.assign(module.exports, { CONTRACTS, guildNpc, completeContract, harvestContract, giveSeedPack, guildItemOnNpc, rewardItem, storeCrop, storagePair, storageAction, bankStorageOp, guildObject });
+Object.assign(module.exports, { CONTRACTS, guildNpc, completeContract, harvestContract, giveSeedPack, guildItemOnNpc, rewardItem, storeCrop, storagePair, storageAction, bankStorageOp, guildObject, openSeedVault });

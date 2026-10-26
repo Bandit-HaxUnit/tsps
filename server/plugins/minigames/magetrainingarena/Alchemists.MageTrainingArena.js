@@ -140,6 +140,8 @@ function alchemyPolicy(policy) {
   policy.coins = 0;
   policy.castTicks = Common.data.alchemists.alchemyTicks;
   policy.confirm = false;
+  policy.keepItem = false;
+  policy.recast = false;
   player.__mtaAlch = { itemId, coins: playground.values[key] ?? 0, free: key === playground.free, spellId: policy.spellId, cycle };
 }
 

@@ -83,6 +83,15 @@ relics are the first askers; nothing changes when nobody answers):
 | `herblore:mix` | Herblore, before a potion's ingredients go | `{ player, recipe, consume, returns, productId }`: a listener may lower a `consume` or `returns` count or change the product |
 | `herblore:herbs` | Herblore | lookup: every herb `{ grimyId, cleanId, level, xp }` |
 | `firemaking:light-roll`, `firemaking:logs-per-action` | Firemaking | `{ player, success }` after the lighting roll; `{ player, logId, amount }` for the logs one action burns |
+| `shop:buy-price`, `shop:delivery` | core `ShopManager` (the price shown, the value check and the purchase; the purchase) | `{ player, shopId, shopName, currency, itemId, price }`: a priced item may become free (0), never below; `{ player, shopId, currency, itemId, deliverId }`: the purchase is handed over as `deliverId` (a note), whose own stacking decides the room it needs |
+| `shop:can-sell`, `shop:sell-price` (extended) | core `ShopManager` | the existing payloads now carry `player` (when a player is selling) and `currency` |
+| `magic:alchemy-policy` (extended) | core `MagicOnItemPacketListener` | asked before the level check (the zone rules still follow it), now with `requiredLevel`, `freeRunes`, `keepItem` and `recast` (cast again on the slot once this cast ends while it holds the same item); a plugin that turns the cast into something else (Mage Training Arena, While Guthix Sleeps) clears `confirm`, `keepItem` and `recast` |
+| `bone-altars:offering` | BoneAltars | `{ player, itemId, boneItemId, cost, anyAltar }`: an item that is not a bone offered as `boneItemId`, `cost` of it an offering, and with `anyAltar` on any altar one prays at (the bone's burying XP; a private area's altars, a house's, stay its own) |
+| `farming:plant-rules` | Farming, as a seed or sapling is planted | `{ player, crop, seedId, patch, keepSeed, grown, diseaseFree, undying, message }`: a line said after the planting's own; keep the seed, grow the crop at once (not anima plants), keep it from disease, or keep a diseased crop from dying (it waits for a cure); the last two are kept on the patch's state |
+| `farming:harvests-per-action`, `farming:pick` | Farming | `{ player, patch, crop, harvests }` picks an action; `{ player, crop, patch, itemId, amount }` before a pick is handed over |
+| `farming:open-seed-vault` | Farming (the guild's seed vault) | `{ player, opened }`: the vault's menu from anywhere, behind the Bank PIN as at the guild |
+| `miscellania:rules` | Managing Miscellania | `{ player, ruler, royalTrouble, payMultiplier, outputMultiplier, approval, visiting }`: who rules the kingdom (the quests), what the workers' pay costs, how much they gather (clues as rolled), an approval held fixed, whether a catch-up away from the islands counts as a visit |
+| `miscellania:open` (extended), `miscellania:check`, `miscellania:collect` | Managing Miscellania | `{ player, opened }` opens the kingdom's interface; `{ player, handled }` reports the approval and coffers, or collects as Advisor Ghrim's Collect does |
 
 ## What the client is sent
 
@@ -345,6 +354,54 @@ Animal Wrangler's Hunter and cooking ones) do not.
   Raging Echoes page does not tie them to it). Not here: the Menaphite remedy (no recipe in this
   server).
 
+### The economy and farming relics
+
+- **Fire Sale** (Trailblazer Reloaded tier 3): every shop with the standard shop interface that
+  takes coins sells for nothing (`shop:buy-price`; the stock still limits what can be bought, so a
+  shop with one left sells one a click), what it sells comes noted when the item has a note
+  (`shop:delivery`), and it buys nothing for coins (`shop:can-sell`). The Wiki's noting is a
+  player's toggle; this shop interface has no button for it, so it is always on: ours. Tokkul and
+  the other currencies are untouched (selling to a Tokkul shop works), as are costs outside shops
+  (sawmills, servants). The Grand Exchange and the reward shops (Omnishop) are not this interface.
+- **Golden God** (Raging Echoes tier 4): High and Low Level Alchemy need no runes and no Magic
+  level, give 15% more coins (rounded down), keep the item 65% of the time (a kept item frees no
+  slot, so a full inventory without coins refuses the cast rather than lose them), and cast again on what
+  is left in the slot once each cast ends, until the stack is gone or moved (walking and attacking
+  do not stop it; logging out does), with the usual XP and speed (`magic:alchemy-policy`). A cast
+  another plugin has turned into something else (Mage Training Arena's coins, While Guthix Sleeps'
+  explosive) keeps only the free runes and the level. 20,000 coins are offered on an altar as one
+  dragon bone (`bone-altars:offering`): the Chaos Temple's and a house's altar give their own
+  experience and keep the coins as they keep bones; any other altar one prays at gives the bone's
+  burying experience (Wiki); the offering repeats while the coins last, at the altars' own pace,
+  stopped by a walk or click (the Wiki: until logout). The Ectofuntus and the Libation bowl take no
+  coins. What a coin shop sells comes noted (as Fire Sale; always on: ours). Not here: the casting's
+  pause during production skilling (the Wiki's), which needs a skilling state this server does not
+  keep; the Wiki's other chaos altars that take coins (Ourania, the Asgarnian and Black Knights'
+  temples, Underground Pass) are plain altars here.
+- **Farmer's Fortune** (Trailblazer Reloaded tier 6): a 20% chance to keep the seed or sapling
+  planted (with its pot, and no Amulet of bounty charge; the message is ours), patches grown the moment they are planted and never
+  diseased (`farming:plant-rules`; anima plants still grow, their last stage is their end),
+  harvesting 25 times faster (25 picks an action, `farming:harvests-per-action`), and each pick
+  three times the produce, noted (`farming:pick`; the herb sack takes only unnoted herbs, so these
+  go to the inventory). The usual Farming XP a pick, not tripled: ours, the Wiki gives no XP rule.
+  Wood trees, which are chopped and not picked, give the usual logs.
+- **Overgrown** (Raging Echoes tier 7): the Leprechaun's vault opens the seed vault anywhere
+  (`farming:open-seed-vault`); crops never die (a diseased crop waits for a cure instead,
+  `farming:plant-rules` `undying`); planting keeps the seed 75% of the time, with live's message
+  ("Botanical allows you to keep your ...", Wiki trivia). These need only the relic (Wiki). Both
+  rules are kept on what is planted from then on. Not here: the automatic harvest and replanting
+  of a grown patch from the vault's seeds (with its ultracompost memory, contract, pet and Hespori
+  rules), which needs a Farming replant path of its own.
+- **Pocket Kingdom** (Raging Echoes tier 7): the Pocket kingdom's Check (the approval and coffers;
+  the wording is ours), Collect (Advisor Ghrim's collection, to the bank) and Manage-kingdom (the
+  kingdom's interface) work anywhere, without Throne of Miscellania and with Royal Trouble's
+  enhancements (`miscellania:rules`); the workers cost half the coins for the same work, gather
+  twice as much (every resource doubled; the easy clue stays as rolled: ours), and approval is held
+  at its maximum (127, 100%). Managing it anywhere counts as a visit (`visiting`), so the subjects'
+  30 days without a visit run from the last login or use of the item. Not here:
+  the hourly cycle and its 37,500 coins an hour once the coffers hold 375,000; the kingdom keeps
+  its daily cycle.
+
 ### Equilibrium (both leagues)
 
 Trailblazer Reloaded's tier 6 and Raging Echoes' tier 4: every gain of experience
@@ -366,6 +423,6 @@ it is a plain XP drop.
 
 League tasks, area unlocks, combat masteries, the other tier passives (drop rates, run energy,
 clue boxes, minigame points, the ironman restriction), the league tutorial, trophies and
-rewards. Each is its own item on the progress tracker. Of the relics, the economy and farming
-(Fire Sale, Golden God, Farmer's Fortune, Overgrown, Pocket Kingdom), clue, slayer and item ones
-follow in their own PRs (the plan in the relic effects PR).
+rewards. Each is its own item on the progress tracker. Of the relics, the clue, slayer and item
+ones follow in their own PRs (the plan in the relic effects PR); Overgrown's automatic harvest and
+replanting and Pocket Kingdom's hourly cycle are their own items.

@@ -38,5 +38,10 @@ module.exports = {
     require("./leaguerelics/ProductionProdigy.LeagueRelics")(api);
     require("./leaguerelics/ProductionMaster.LeagueRelics")(api);
     require("./leaguerelics/FriendlyForager.LeagueRelics")(api);
+    require("./leaguerelics/FireSale.LeagueRelics")(api);
+    require("./leaguerelics/GoldenGod.LeagueRelics")(api);
+    require("./leaguerelics/FarmersFortune.LeagueRelics")(api);
+    require("./leaguerelics/Overgrown.LeagueRelics")(api);
+    require("./leaguerelics/PocketKingdom.LeagueRelics")(api);
   },
 };

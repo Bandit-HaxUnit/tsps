@@ -129,7 +129,10 @@ function bank(player, itemId, amount) {
 
 /** The item's noted form, or the item itself when it has none. */
 function noted(itemId) {
-  const note = core.ItemDefinition.forId(itemId)?.getNoteId?.() ?? -1;
+  const definition = core.ItemDefinition.forId(itemId);
+  // A note's own link leads back to the item: a note is already noted.
+  if (definition?.isNoted?.()) return itemId;
+  const note = definition?.getNoteId?.() ?? -1;
   return note > 0 ? note : itemId;
 }
 
