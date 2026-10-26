@@ -35,10 +35,17 @@ const hooks = {};
 const custom = {};
 let worldLeague = 3;
 const tasks = [];
+const spawned = [];
+/** Quests a quest pack completes (Elf I), registered as the quest plugins register them. */
+const ELF_I_QUESTS = ["PlagueCity", "Biohazard", "UndergroundPass"];
+/** Inside Catherby's bank (booths at 2807-2812, 3442) and the Sage's tile (Wiki, 34 tiles west). */
+const CATHERBY_BANK = [2809, 3440, 0];
+const SAGE_TILE = [2774, 3433, 0];
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
   core = PluginManager.getCoreApi();
+  core.RegionManager.init();
   GameConstants.setWorldProfile("league");
   const lists = {};
   const on = (name) => (handler) => {
@@ -60,6 +67,19 @@ before(async () => {
     getTaskManager: () => ({ submit: (task) => tasks.push(task) }),
     getSkillManager: () => require("../dist/game/content/skill/SkillManager").SkillManager,
     registerCommand: (name, handler) => (hooks[`command:${name}`] = handler),
+    spawnNpc: (definition) => (spawned.push(definition), null),
+    onNpcInteraction: (name, actions) => (hooks[`npc:${name}`] = { ...hooks[`npc:${name}`], ...actions }),
+    // As PluginManager.emitNpcDialogueCondition: the first boolean answer, else null.
+    onNpcDialogueCondition: (handler) => {
+      (lists.condition ??= []).push(handler);
+      hooks.onNpcDialogueCondition = (event) => {
+        for (const attached of lists.condition) {
+          const answer = attached(event);
+          if (typeof answer === "boolean") return answer;
+        }
+        return null;
+      };
+    },
     // As PluginManager runs them: the first handler that doesn't return false takes the click.
     onInterfaceActionButton: (ids, handler) => {
       for (const id of [].concat(ids)) {
@@ -80,7 +100,15 @@ before(async () => {
   }, { get: (target, key) => (key in target ? target[key] : on(String(key))) });
   require("../plugins/modes/LeagueMode.plugin").register(api);
   require("../plugins/modes/LeaguePoints.plugin").register(api);
+  for (const quest of ELF_I_QUESTS) require(`../plugins/quests/quests/${quest}.Quest`)(api);
+  // The real SkillManager asks PluginManager's own hooks before XP lands; give it the league's.
+  PluginManager.canGainExperienceHooks.push({ pluginName: "LeagueMode", profileName: "test", handlerName: "onCanGainExperience",
+    handler: (event) => hooks.onCanGainExperience(event) });
 });
+
+function at(player, [x, y, z]) {
+  player.setLocation(new core.Location(x, y, z));
+}
 
 /** A real league character whose packets are recorded, logged in on a world running `league`. */
 function character(name, { league = 3, restore = null } = {}) {
@@ -267,6 +295,7 @@ test("fragments: equip owned ones into open slots, unequip, unequip all, and kee
   emit("league:grant-fragment", { player, id: 4 });
   emit("league:grant-fragment", { player, id: 6 });
   click(player, SIDE_PANEL, 30);
+  at(player, CATHERBY_BANK);
   const equip = (id) => click(player, FRAGMENTS, 18, { slot: 9 * (id - 1), opId: 2 });
   equip(1);
   assert.equal(player.sent.varbits.get(SLOT_VARBITS[0]), 1, "Unholy Warrior in slot 1");
@@ -292,6 +321,150 @@ test("fragments: equip owned ones into open slots, unequip, unequip all, and kee
   player.getPacketSender().sendInterfaceRemoval();
   equip(1);
   assert.equal(player.sent.varbits.get(SLOT_VARBITS[0]), 0, "nothing with the screen closed");
+});
+
+test("fragments change only in a bank, near a bank chest or near the Sage (Wiki /Fragments)", () => {
+  const player = settled("swapper");
+  emit("league:grant-fragment", { player, id: 4 });
+  points(player, 10);
+  click(player, SIDE_PANEL, 30);
+  const equip = (id) => click(player, FRAGMENTS, 18, { slot: 9 * (id - 1), opId: 2 });
+  const swapAway = "You can only change your fragments in a bank, near a bank chest or near the Sage.";
+  const Fragments = require("../plugins/modes/league/Fragments.LeagueMode");
+  assert.equal(Fragments._test.nearBank(player), false, "the login tile (3089, 3524) has no bank in reach");
+  equip(1);
+  assert.equal(player.sent.varbits.get(SLOT_VARBITS[0]) ?? 0, 0, "no equip away from a bank");
+  assert.equal(player.sent.messages.at(-1), swapAway);
+
+  at(player, CATHERBY_BANK);
+  assert.equal(Fragments._test.nearBank(player), true, "Catherby's bank booths are map locs a few tiles away");
+  equip(1);
+  equip(4);
+  assert.deepEqual(SLOT_VARBITS.slice(0, 2).map((varbit) => player.sent.varbits.get(varbit)), [1, 4], "in the bank");
+
+  at(player, [2809, 3420, 0]);
+  click(player, FRAGMENTS, 36, { slot: 1, opId: 2 });
+  click(player, FRAGMENTS, 16);
+  assert.deepEqual(SLOT_VARBITS.slice(0, 2).map((varbit) => player.sent.varbits.get(varbit)), [1, 4], "Unequip and Unequip all refused 20 tiles out");
+  assert.equal(player.sent.messages.at(-1), swapAway);
+
+  const sage = new core.NPC(11232, new core.Location(...SAGE_TILE));
+  player.getLocalNpcs().push(sage);
+  at(player, [2776, 3434, 0]);
+  click(player, FRAGMENTS, 36, { slot: 1, opId: 2 });
+  assert.equal(player.sent.varbits.get(SLOT_VARBITS[0]), 0, "next to the Sage");
+  at(player, [2774, 3450, 0]);
+  equip(1);
+  assert.equal(player.sent.varbits.get(SLOT_VARBITS[0]), 0, "17 tiles from the Sage is too far");
+  player.getLocalNpcs().splice(player.getLocalNpcs().indexOf(sage), 1);
+
+  const gnome = new core.NPC(core.NpcIdentifiers.GNOME_BANKER, new core.Location(2774, 3452, 0));
+  player.getLocalNpcs().push(gnome);
+  assert.equal(Fragments._test.nearBank(player), true, "a banker of any name (its Bank option) is a bank");
+  player.getLocalNpcs().splice(player.getLocalNpcs().indexOf(gnome), 1);
+  const { banksAt } = Fragments._test;
+  const loc = (id) => new core.GameObject(id, new core.Location(2806, 3442, 0), 10, 0, null);
+  assert.equal(banksAt(loc(10355)), true, "Catherby's Bank booth");
+  assert.equal(banksAt(loc(8142)), false, "a Closed bank booth, with no options, isn't");
+});
+
+test("a quest pack bought completes its quests as the quests do, with no XP (Wiki /Unlocks)", () => {
+  const QuestRuntime = require("../plugins/quests/QuestRuntime");
+  const { packQuests } = require("../plugins/modes/league/Unlocks.LeagueMode")._test;
+  assert.deepEqual(packQuests("Elf I").map((quest) => quest.name), ["Plague City", "Biohazard", "Underground Pass"],
+    "the Wiki's list back to front: prerequisites before the main quest");
+  assert.deepEqual(packQuests("Elf II").map((quest) => quest.name), ["Plague City", "Biohazard", "Underground Pass"],
+    "a prerequisite pack's quests too; a name with no registered quest is left out (this file registers only Elf I's three)");
+
+  const player = settled("elf-one");
+  const quests = ["Plague City", "Biohazard", "Underground Pass"].map((name) => QuestRuntime.questNamed(name));
+  assert.ok(quests.every(Boolean), "the quest plugins registered them");
+  const attack = player.getSkillManager().getExperience(core.Skill.ATTACK);
+  const packs = [...CacheDefinitions.getEnumValues(4131).entries()].sort(([a], [b]) => a - b)
+    .map(([, struct]) => CacheDefinitions.getStructParams(Number(struct)));
+  emit("league:award-renown", { player, amount: 8 });
+  click(player, SIDE_PANEL, 35);
+  click(player, UNLOCKS, 9, { slot: 18 });
+  click(player, UNLOCKS, 18, { slot: 5 * packs.findIndex((params) => params.get(1437) === "Elf I") });
+  click(player, UNLOCKS, 47);
+  assert.equal(emit("league:renown", { player }).renown, 0, "Elf I cost 8");
+  for (const quest of quests) assert.equal(quest.isComplete(player), true, quest.name);
+  assert.deepEqual(player.sent.messages.filter((text) => text.startsWith("Congratulations")),
+    quests.map((quest) => `Congratulations, you've completed a quest: <col=081190>${quest.name}</col>`), "each as the quest itself completes");
+  assert.equal(player.getInterfaceId(), UNLOCKS, "no completion scroll closes the unlocks screen");
+  assert.equal(player.getInventory().getAmount(1505), 1, "final rewards stay: Plague City's Ardougne teleport scroll");
+  assert.equal(player.getAttribute(QuestRuntime.QUEST_POINTS_ATTRIBUTE), quests.reduce((sum, quest) => sum + quest.questPoints, 0));
+  assert.equal(player.getSkillManager().getExperience(core.Skill.ATTACK), attack,
+    "Underground Pass's 3,000 Attack XP isn't given, though the Warrior has Attack unlocked");
+  assert.equal(gainXp(player, "ATTACK"), true, "after the pack, XP lands again");
+});
+
+test("the Sage hands over the items a pack lets its owner claim, each it owns none of", () => {
+  const { UNLOCKS_ATTRIBUTE } = require("../plugins/modes/league/Unlocks.LeagueMode")._test;
+  const player = settled("collector");
+  const SAGE = 11232;
+  const nothing = "If the player does not have any items to collect:";
+  const owed = "If the player has an item to collect from The Sage:";
+  const condition = (text) => hooks.onNpcDialogueCondition({ player, npcId: SAGE, text });
+  const receive = () => emit("npc-dialogue:action", { player, npcId: SAGE, text: "You receive an item from the Sage.", handled: false });
+  const transcript = JSON.stringify(require("../data/definitions/npc-dialogues.json")["The Sage (Shattered Relics League)"]);
+  for (const text of [nothing, owed, "You receive an item from the Sage."]) assert.ok(transcript.includes(JSON.stringify(text)), `the transcript says ${text}`);
+
+  assert.equal(condition(owed), false, "no pack, nothing to collect");
+  assert.equal(condition(nothing), true);
+  player.setAttribute(UNLOCKS_ATTRIBUTE, { skills: [], bosses: [], quests: ["Elf I"] });
+  assert.equal(condition(owed), true, "Elf I's Iban's staff");
+  const action = receive();
+  assert.equal(action.handled && action.end, true, "the conversation ends with the hand-out");
+  assert.equal(player.getInventory().getAmount(1409), 1);
+  assert.equal(player.sent.messages.at(-1), "You receive an item from the Sage: Iban's staff.");
+  assert.equal(condition(owed), false, "one is enough");
+
+  player.getInventory().delete(1409, 1);
+  player.getBank(0).add(new core.Item(1409, 1), false);
+  assert.equal(player.getInventory().getAmount(1409), 0);
+  assert.equal(condition(owed), false, "a banked staff is owned");
+  player.getBank(0).getItems().find((item) => item?.getId() === 1409).setAmount(0);
+  assert.equal(condition(owed), true, "a bank placeholder isn't owning it: a lost one can be collected again");
+  receive();
+
+  player.setAttribute(UNLOCKS_ATTRIBUTE, { skills: [], bosses: [], quests: ["Elf II", "Elf I"] });
+  assert.equal(hooks["npc:The Sage"]["Collect-items"]({ player, npcId: SAGE }), true);
+  const menu = player.getDialogueManager().getCurrent();
+  assert.ok(menu instanceof core.OptionDialogue, "Elf II's crystal bow or shield is a choice");
+  assert.deepEqual(menu.getOptions(), ["New crystal bow", "New crystal shield"]);
+  player.getDialogueManager().handleResume(core.OptionDialogue.OPTIONS_WIDGET_ID, 2);
+  assert.equal(player.getInventory().getAmount(4224), 1, "the shield");
+  assert.equal(player.getInventory().getAmount(4212), 0);
+  assert.equal(condition(owed), false, "either one settles it");
+
+  hooks["npc:The Sage"]["Collect-items"]({ player, npcId: SAGE });
+  assert.equal(player.getDialogueManager().getCurrent().getText(), "It doesn't look like you need any League items right now. I'll be here if you ever do.");
+
+  player.setAttribute(UNLOCKS_ATTRIBUTE, { skills: [], bosses: [], quests: ["Fairy I"] });
+  while (player.getInventory().getFreeSlots() > 1) player.getInventory().adds(1, 1);
+  receive();
+  assert.equal(player.getInventory().getAmount(7409), 1, "magic secateurs fit");
+  assert.equal(player.getInventory().getAmount(772), 0, "the Dramen staff waits for room");
+  assert.equal(player.sent.messages.at(-1), "You don't have enough inventory space for the Sage's items.");
+
+  assert.equal(hooks["npc:The Sage"]["Collect-items"]({ player, npcId: 315 }), false, "another league's Sage isn't this one");
+  const echoes = character("collector-5", { league: 5 });
+  assert.equal(hooks.onNpcDialogueCondition({ player: echoes, npcId: SAGE, text: owed }), null, "no answer outside Shattered Relics");
+});
+
+test("a world running Shattered Relics spawns the Sage at Catherby", () => {
+  spawned.length = 0;
+  hooks.onServerStartup({});
+  assert.deepEqual(spawned.filter((definition) => definition.id === 11232), [{ id: 11232, x: 2774, y: 3433, z: 0, wanderRadius: 0 }]);
+  spawned.length = 0;
+  worldLeague = 5;
+  try {
+    hooks.onServerStartup({});
+    assert.equal(spawned.some((definition) => definition.id === 11232), false, "not on another league's world");
+  } finally {
+    worldLeague = 3;
+  }
 });
 
 test("unlocks: tabs, entries, and Accept paid in renown", () => {

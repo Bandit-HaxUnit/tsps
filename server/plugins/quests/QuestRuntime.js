@@ -504,7 +504,12 @@ function registerQuest(api, def) {
     isComplete(player) {
       return quest.getStage(player) >= (def.completionValue ?? 2);
     },
-    complete(player) {
+    /**
+     * `options` for a completion the quest wasn't played through (Shattered Relics' quest packs):
+     * `experience: false` asks onReward (its third argument) to hold back experience it would hand
+     * out later, such as a prompt a tick on; `scroll: false` skips the jingle and the scroll.
+     */
+    complete(player, options = {}) {
       if (quest.isComplete(player)) return false;
       quest.setStage(player, def.completionValue ?? 2);
 
@@ -512,15 +517,15 @@ function registerQuest(api, def) {
       player.setAttribute(QUEST_POINTS_ATTRIBUTE, points | 0);
       player.getPacketSender().sendConfig(QUEST_POINTS_VARP, points | 0);
 
-      if (def.onReward) def.onReward(player, quest);
+      if (def.onReward) def.onReward(player, quest, options);
       if (def.rewardItemId !== undefined) {
         const inventory = player.getInventory();
         if (inventory.isFull()) inventory.forceAdd(player, new coreApi.Item(def.rewardItemId, 1));
         else inventory.adds(def.rewardItemId, 1);
       }
-      player.getPacketSender().sendJingle(def.completionJingleId ?? QUEST_COMPLETE_JINGLE, 0);
+      if (options.scroll !== false) player.getPacketSender().sendJingle(def.completionJingleId ?? QUEST_COMPLETE_JINGLE, 0);
       player.sendMessage(`Congratulations, you've completed a quest: <col=081190>${def.name}</col>`);
-      showCompletedScroll(player, quest, points | 0);
+      if (options.scroll !== false) showCompletedScroll(player, quest, points | 0);
       api.emitCustomEvent?.("quest:completed", { player, key: def.key, quest });
       return true;
     },
@@ -647,6 +652,7 @@ module.exports = {
   registerQuestWidgets,
   registerQuest,
   getRegisteredQuests: () => quests.slice(),
+  questNamed,
   pickQuestShopVersion,
   sendQuestVarps,
   refreshQuestList,
