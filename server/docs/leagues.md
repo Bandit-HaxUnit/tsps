@@ -74,11 +74,47 @@ same for every league):
   passives) multiplies every gain after the world's rate, through the can-gain-experience
   hook's `multiplier`.
 
+## Relics
+
+`LeagueRelics.plugin.js`, data `plugins/modes/data/league-relics.json`: eight tiers a league,
+each with a point cost, a passive and three relics (Wiki); a tier's pick is permanent. A
+character's picks live in `league:relics` (tier index -> slot 1-3).
+
+- **The catalog.** The cache's relic interface (655) reads the league struct's tier enum (param
+  870), tier structs (877 cost, 878 relic enum, 2045 passive struct) and relic structs (879 name,
+  880 description, 885 tier, 1855 has-item), but the cache only carries the current league's.
+  The server sends a league's own as `structOverrides` / `enumOverrides` datasets
+  (`sendContentData`; `GamemodeContentStore` and the cs2 `struct_param` / `enum` ops read them
+  before the cache) at login and before the interface opens. Ids start at 200000 + league type
+  x 1000; icons are borrowed from the cache's own relic in the same tier and slot.
+- **The flow, as captured.** The side panel's View Relics (656:44) opens 655 as the main modal
+  with `if_setevents` on its slots (655:22, 0-23) and menu (655:6, 10-20). A slot click sets
+  `league_relic_last_viewed` (10048) to tier x 3 + slot and runs the client's redraw scripts 3193
+  (the panel's components, the state 2 both captured clicks sent for an affordable, unchosen
+  tier (other states were not captured), the relic struct, the tier's passive struct) and 3181. Confirm (655:50) unlocks the viewed relic: its tier's selection varbit
+  (10049-10053, 11696, 17301, 17302) = the slot, animation 8524, the league's unlock graphic
+  (struct param 1021: 2603 Trailblazer Reloaded, 3044 Raging Echoes) at height 92, the modal
+  closed, sounds 4215/4211/4213/4212 at 8/44/80/104. Points crossing a tier's cost show "New
+  Relic Available!" / "You've gained enough points to unlock a tier N Relic!" with jingle 281, in
+  the orange the capture shows on a Raging Echoes world (the task popup, by contrast, uses the
+  league's colour). Slot and confirm clicks count only after View Relics opened the interface.
+- **The checks.** A league character, a real slot, no pick in that tier, the tier's points, a
+  bank open when the relic hands out an item (the Wiki's reason for unlocking those in one; the
+  modal replaces the bank as the main interface, so what was open when View Relics was clicked
+  counts), and room for every item in the inventory or a bank tab, so a permanent pick is never
+  saved without its items; each item goes to the inventory if it fits, else to its bank tab, else
+  to any tab with room. Refusals are game messages of ours. Items no longer in this cache (Sage's greaves, the Trailblazer tools, the crystal of
+  memories, the guardian horn) are not granted; the data says so.
+- **Effects** are other plugins' business: they ask `league:has-relic { player, relic }`, true
+  only when the character's league has that relic and chose it. The tier passives' XP rates are
+  LeagueMode's (`league:highest-tier`); the other passives are not implemented.
+
 ## Developer commands
 
 - `::league [player]` - the character's league and points.
 - `::leaguetask <id> <points> [name]` - award yourself a task through the real award path (the
   task catalog, LeagueTasks, does not exist yet).
+- `::relic [tier 1-8] [slot 1-3]` - list your relics, or choose one through the usual checks.
 
 ## Not yet
 
