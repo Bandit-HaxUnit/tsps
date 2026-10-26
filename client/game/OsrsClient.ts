@@ -4670,7 +4670,7 @@ export class OsrsClient {
                     const key = pa.getCacheKey?.();
                     if (key && key !== this._lastLocalAppearanceKey) {
                         this._lastLocalAppearanceKey = key;
-                        const w = this.widgetManager.findWidget(679, 73);
+                        const w = this.widgetManager.findLoadedWidget(679, 73);
                         if (
                             w &&
                             ((((w as any).contentType ?? 0) | 0) === 328 ||
