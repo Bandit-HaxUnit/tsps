@@ -18,8 +18,10 @@ export interface PluginPlayerMapSquareChangeEvent {
 export interface PluginPlayerLoginEvent {
   player: any;
   username: string;
-  /** True only when login created a player because no saved account exists. */
+  /** True only when login created a player because no saved account exists (or no save for this profile). */
   isNewAccount?: boolean;
+  /** "main", or "league" for the league character chosen at login (persistence/PlayerProfile). */
+  profile?: string;
 }
 
 export interface PluginPlayerDisconnectEvent {
@@ -291,6 +293,11 @@ export interface PluginCanGainExperienceEvent {
   skill: any;
   experience: number;
   allow: boolean | null;
+  /**
+   * Multiplies the gain after the world's rate (1 leaves it alone); a hook that sets a rate
+   * multiplies what it finds, so several stack. A league profile's rate lives here.
+   */
+  multiplier: number;
 }
 
 /** Fired per npc-spawns definition at load; allow=false skips the spawn. */
@@ -1165,7 +1172,7 @@ export interface PluginApi {
   /** Register an inventory item as a shop currency, keyed by its item name and optional aliases. */
   registerItemShopCurrency(
     itemId: number,
-    options?: { name?: string; aliases?: string[] }
+    options?: { name?: string; aliases?: string[]; unit?: string }
   ): void;
   /**
    * Save and restore this player attribute; values must be JSON-compatible.
@@ -1174,6 +1181,11 @@ export interface PluginApi {
   persistAttribute(key: string, defaultValue?: unknown): void;
   setPlayerPersistence(persistence: PlayerPersistence): void;
   setExperienceRate(rate: number): void;
+  /**
+   * Names the character profile every login on this world gets ("main" by default): a game mode
+   * with characters of its own (Leagues) calls it from its plugin config at startup.
+   */
+  setWorldProfile(profile: "main" | "league"): void;
   getActiveRegionSnapshot(): PluginActiveRegionsEvent;
   log(message: string, extra?: Record<string, unknown>): void;
   /**
@@ -1474,6 +1486,7 @@ export interface PluginCoreApi {
   PrivateChatStatus: typeof import("../game/model/PlayerRelations").PrivateChatStatus;
   SpellTeleports: typeof import("../game/content/combat/magic/SpellTeleports").SpellTeleports;
   LunarSpells: typeof import("../game/content/combat/magic/LunarSpells").LunarSpells;
+  EffectSpells: typeof import("../game/content/combat/magic/EffectSpells").EffectSpells;
   ArceuusSpells: typeof import("../game/content/combat/magic/ArceuusSpells").ArceuusSpells;
   ArceuusOfferings: typeof import("../game/content/combat/magic/ArceuusOfferings");
 }

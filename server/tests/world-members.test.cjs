@@ -37,12 +37,13 @@ test('the shipped world.json has f2p zones covering the spawn', () => {
 
 test('allow hooks: first answer wins, no answer is null', () => {
   const api = PluginManager.createApi('MembersHookTest');
-  assert.equal(PluginManager.emitCanGainExperience({}, 'agility', 10), null);
+  // Experience gains also carry a multiplier (a league profile's rate), so the answer is a pair.
+  assert.deepEqual(PluginManager.emitCanGainExperience({}, 'agility', 10), { allow: null, multiplier: 1 });
   api.onCanGainExperience(() => {});
   api.onCanGainExperience((event) => { event.allow = event.skill !== 'agility'; });
-  api.onCanGainExperience((event) => { event.allow = true; });
-  assert.equal(PluginManager.emitCanGainExperience({}, 'agility', 10), false);
-  assert.equal(PluginManager.emitCanGainExperience({}, 'mining', 10), true);
+  api.onCanGainExperience((event) => { event.allow = true; event.multiplier *= 5; });
+  assert.deepEqual(PluginManager.emitCanGainExperience({}, 'agility', 10), { allow: false, multiplier: 1 }, 'a refusal wins');
+  assert.deepEqual(PluginManager.emitCanGainExperience({}, 'mining', 10), { allow: true, multiplier: 5 }, 'every hook runs, so a rate set by a later one counts');
 
   api.onCanUseItem((event) => { if (event.option !== 'Drop') event.allow = false; });
   assert.equal(PluginManager.emitCanUseItem({}, 1, 'action', 'Wield'), false);

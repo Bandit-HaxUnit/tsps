@@ -90,6 +90,95 @@ const deposit = (f) => click(f, "seed_vault:deposit_all");
 const withdraw = (f, op = 7, slot = 0, id = seed()) =>
     click(f, "seed_vault:obj_list", op, slot, id);
 
+// The pre-native Guild.guildObject deposit producer: use its accepted crop set and
+// actual Inventory operations, so this represents a balance that really could exist.
+function legacyDeposit(f) {
+    const vault = f.farm.vault ??= {};
+    for (const item of [...f.p.getInventory().getValidItems()]) {
+        const def = core.CacheDefinitions.getItem(item.getId());
+        const id = def.noteTemplate >= 0 ? def.note : item.getId();
+        if (![...Data.CROPS.values()].some(c => c.seed === id || c.sapling === id)) continue;
+        const amount = Math.min(item.getAmount(), 2147483647 - (vault[id] ?? 0));
+        if (amount > 0) {
+            f.p.getInventory().deleteNumber(item.getId(), amount);
+            vault[id] = (vault[id] ?? 0) + amount;
+        }
+    }
+}
+
+test("old producer Gout tubers recover once and cannot be deposited again", async (t) => {
+    const f = actor(t), id = Data.itemId("Gout tuber"), inv = f.p.getInventory();
+    const emit = PluginManager.emitCustomEvent.bind(PluginManager), saves = [];
+    t.mock.method(PluginManager, "emitCustomEvent", (name, event) => {
+        if (name === "persistence:save" && event.player === f.p) saves.push(event.reason);
+        return emit(name, event);
+    });
+    assert.equal(core.CacheDefinitions.getItem(id).params?.get(709), undefined);
+    inv.add(new core.Item(id, 3), false);
+    legacyDeposit(f);
+    assert.equal(f.farm.vault[id], 3);
+    assert.equal(inv.getAmount(id), 0);
+    f.open();
+    assert.equal(inv.getAmount(id), 3);
+    assert.equal(f.farm.vault[id], 0);
+    assert.ok(saves.includes("seed-vault-legacy-recovery"));
+    f.open();
+    await deposit(f);
+    assert.equal(inv.getAmount(id), 3);
+    assert.equal(f.farm.vault[id], 0);
+    assert.ok(f.messages.some(m => m.includes("returned") && m.includes("Gout tuber")));
+});
+
+test("legacy recovery retains full-bag balance and partial remainder across reload", (t) => {
+    const f = actor(t), id = Data.itemId("Gout tuber"), inv = f.p.getInventory();
+    inv.add(new core.Item(id, 3), false);
+    legacyDeposit(f);
+    while (inv.getFreeSlots()) inv.add(new core.Item(Data.itemId("Rake")), false);
+    f.open();
+    assert.equal(f.farm.vault[id], 3);
+    assert.equal(inv.getAmount(id), 0);
+    assert.ok(f.messages.some(m => m.includes("Make room") && m.includes("reopen")));
+    inv.deleteAtSlot(27);
+    f.open();
+    assert.equal(inv.getAmount(id), 1);
+    assert.equal(f.farm.vault[id], 2);
+    f.p.getPacketSender().sendInterfaceRemoval();
+    PluginManager.emitPlayerLogout({ player: f.p, username: f.p.getUsername() });
+    const relog = actor(t), restored = relog.p.getInventory();
+    relog.p.setAttribute(Patches.FARM_ATTRIBUTE, JSON.parse(JSON.stringify(f.farm)));
+    restored.getItems().splice(0, 28, ...inv.getItems().map(item => item.clone()));
+    restored.deleteAtSlot(26);
+    relog.open();
+    assert.equal(restored.getAmount(id), 2);
+    assert.equal(Patches.farmFor(relog.p).vault[id], 1);
+});
+
+test("recovery does not turn malformed or unrelated saved balances into items", (t) => {
+    const id = Data.itemId("Gout tuber");
+    for (const balance of [-1, 1.5, "3", 2147483648]) {
+        const f = actor(t);
+        f.farm.vault = { [id]: balance, [Data.itemId("Rake")]: 3, [-10]: 2 };
+        f.open();
+        assert.equal(f.p.getInventory().getValidItems().length, 0);
+        assert.equal(f.farm.vault[id], balance);
+    }
+});
+
+test("legacy recovery obeys PIN, range, life and trade gates", (t) => {
+    for (const mode of ["pin", "remote", "dead", "trade"]) {
+        const f = actor(t), id = Data.itemId("Gout tuber");
+        f.p.getInventory().add(new core.Item(id, 2), false);
+        legacyDeposit(f);
+        if (mode === "pin") Pin.set(f.p, "hash", Pin.hash(f.p, "2468"));
+        if (mode === "remote") f.p.setLocation(new core.Location(3200, 3200));
+        if (mode === "dead") f.p.setHitpoints(0);
+        if (mode === "trade") f.p.setStatus(core.PlayerStatus.TRADING);
+        f.open();
+        assert.equal(f.p.getInventory().getAmount(id), 0, mode);
+        assert.equal(f.farm.vault[id], 2, mode);
+    }
+});
+
 test("opens native main and side modal with existing saved seeds", (t) => {
     const f = actor(t);
     f.farm.vault = { [seed()]: 20 };

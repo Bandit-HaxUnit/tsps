@@ -94,3 +94,20 @@ test('a Seed pack retains an entire stacked reward that will not fit, then resum
     assert.equal(f.bank.getAmount(seed), MAX_STACK);
     assert.equal(f.inventory.getAmount(Data.itemId('Seed pack')), 0);
 });
+test('each reward taken is announced with its quantity and name', () => {
+    const f = prepare(), seed = Data.CROPS.get('MARIGOLD').seed;
+    f.box.setId(Data.itemId('Seed pack'));
+    f.box.setMetaValue('farming:rewards', [{ id: seed, count: 5 }, { id: f.herb, count: 1 }]);
+    f.take('Take');
+    assert.deepEqual(f.messages, ['You receive 5 x marigold seed.']);
+    assert.equal(f.rewards().length, 1);
+});
+test('Bank-all announces every herb sent to the bank, and nothing when the bank is full', () => {
+    const f = prepare();
+    f.take();
+    assert.deepEqual(f.messages, Array(7).fill('You put 1 x grimy guam leaf into your bank.'));
+    const g = prepare();
+    g.bank.add(new core.Item(g.herb, MAX_STACK), false);
+    g.take();
+    assert.deepEqual(g.messages, ['Your bank is full.']);
+});

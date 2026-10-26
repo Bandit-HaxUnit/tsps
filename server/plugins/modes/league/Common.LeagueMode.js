@@ -1,0 +1,84 @@
+/**
+ * Shared by the LeagueMode units: the data, which league a player's profile is in, and the
+ * league's rates. A league character is the account's separate save a league world logs it
+ * into (`player.getProfile() === "league"`, docs/leagues.md); a main character is never in a
+ * league, whatever attributes it carries.
+ */
+const fs = require("fs");
+const path = require("path");
+
+/** Which league the profile joined, set on its first login (a league type: 4 Trailblazer Reloaded, 5 Raging Echoes). */
+const LEAGUE_TYPE_ATTRIBUTE = "league:type";
+const LEAGUE_PROFILE = "league";
+/** world.json pluginConfig key naming the league this world runs (4 Trailblazer Reloaded, 5 Raging Echoes); absent on a plain world. */
+const LEAGUE_TYPE_CONFIG = "league:type";
+
+let api = null;
+let core = null;
+let data = null;
+
+function init(pluginApi) {
+  api = pluginApi;
+  core = pluginApi.core;
+  data = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "leagues.json"), "utf8"));
+  // A world whose plugin config names a league runs it: every login is the league character.
+  if (worldLeague() !== null) api.setWorldProfile(LEAGUE_PROFILE);
+}
+
+/** The league this world runs (pluginConfig `league:type`), or null for a plain world. */
+function worldLeague() {
+  const type = Number(api.getPluginConfig(LEAGUE_TYPE_CONFIG, 0));
+  return data.leagues[type] ? type : null;
+}
+
+function isLeagueProfile(player) {
+  return player?.getProfile?.() === LEAGUE_PROFILE;
+}
+
+/** The league a player is in (its type), or null for a main character or an unknown league. */
+function leagueOf(player) {
+  if (!isLeagueProfile(player)) return null;
+  const type = Number(player.getAttribute?.(LEAGUE_TYPE_ATTRIBUTE));
+  return data.leagues[type] ? type : null;
+}
+
+function league(type) {
+  return data.leagues[type] ?? null;
+}
+
+/** The league a new league character joins: the world's, or the data's default if the config named a type the data does not know. */
+function configuredType() {
+  return worldLeague() ?? Number(data.default);
+}
+
+/** The highest relic tier (0-based) the player has unlocked, or -1; LeagueRelics answers. */
+function highestTier(player) {
+  const query = { player, tier: -1 };
+  api.emitCustomEvent("league:highest-tier", query);
+  return Number.isInteger(query.tier) ? query.tier : -1;
+}
+
+/** The profile's XP rate: the league's base, raised by the relic tiers reached (Wiki tier passives). */
+function xpMultiplier(player) {
+  const type = leagueOf(player);
+  if (type === null) return 1;
+  const { base, fromTier } = league(type).xpMultiplier;
+  const tier = highestTier(player);
+  let rate = base;
+  for (const [from, value] of Object.entries(fromTier ?? {})) {
+    if (tier >= Number(from) - 1) rate = Math.max(rate, value);
+  }
+  return rate;
+}
+
+function message(key, values = {}) {
+  return data.messages[key].text.replace(/\{(\w+)\}/g, (match, name) => values[name] ?? match);
+}
+
+module.exports = {
+  init, isLeagueProfile, leagueOf, league, worldLeague, configuredType, highestTier, xpMultiplier, message,
+  LEAGUE_TYPE_ATTRIBUTE, LEAGUE_PROFILE, LEAGUE_TYPE_CONFIG,
+  get data() { return data; },
+  get api() { return api; },
+  get core() { return core; },
+};

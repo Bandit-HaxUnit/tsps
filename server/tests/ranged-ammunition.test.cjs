@@ -41,7 +41,8 @@ test('Blisterwood stakes resolve as stackable self-ammunition with their capture
   const { WeaponInterfaces } = require('../dist/game/content/combat/WeaponInterfaces');
   const { FightType } = require('../dist/game/content/combat/FightType');
   const items = Array.from({ length: 14 }, () => ({ getId: () => -1 }));
-  items[3] = { getId: () => Items.BLISTERWOOD_STAKE };
+  const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
+  items[3] = { getId: () => Items.BLISTERWOOD_STAKE, getDefinition: () => ItemDefinition.forId(Items.BLISTERWOOD_STAKE) };
   const player = {
     getEquipment: () => ({ getItems: () => items }),
     getWeapon: () => WeaponInterfaces.DART,

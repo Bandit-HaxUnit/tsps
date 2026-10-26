@@ -128,13 +128,14 @@ export class SkillManager {
         if (!Number.isFinite(experience) || experience <= 0) {
             return this;
         }
-        if (PluginManager.emitCanGainExperience(this.player, skill, experience) === false) {
+        const gate = PluginManager.emitCanGainExperience(this.player, skill, experience);
+        if (gate.allow === false) {
             return this;
         }
 
-        // Multipliers...
+        // Multipliers: the world's rate, then the player's own (a league profile's rate).
         if (multipliers) {
-            experience *= GameConstants.EXPERIENCE_MULTIPLIER;
+            experience *= GameConstants.EXPERIENCE_MULTIPLIER * gate.multiplier;
         }
         // OSRS counts experience in tenths: a gain keeps its tenths and drops the rest
         // (4/3 per damage is 1.3 for one damage). The epsilon keeps 3.3 from reading as 3.29999.

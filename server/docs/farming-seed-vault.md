@@ -27,3 +27,38 @@ Legacy Vault menu assertions in the shared Bank PIN test are replaced with nativ
 Independent Codex review identified the missing canonical contract bits; fixed, tested and re-reviewed clear. Native MCP opened 631+630, deposited 12 potato seeds, withdrew 1, opened 906 on 631:4 and set slot-mask bit 0. The test server saved and stopped gracefully. Client cache sweeps 630/631/906 report no VM errors, zero item ids or null text. Final full-suite counts are in the PR.
 
 Final full suite: 8,208/8,208 passed, no failures or skips. All51 assignable Guild crop keys also resolve a valid native contract parameter.
+
+## Review follow-up: existing balances
+
+The previous dialogue producer accepted every crop seed/sapling in Data.CROPS, including
+Gout tuber. That item lacks native seed-category parameter 709, so the native list cannot
+display it. Positive saved balances must remain recoverable without allowing new deposits.
+
+After PIN, range, life/status and busy checks, opening the Vault now returns previously
+accepted crop items excluded by the native filter to inventory. Recovery uses the real
+inventory's addable amount. Full inventories leave balances untouched; partial recovery
+subtracts only the amount returned, requests a save, and explains that the player should
+make room and reopen. Other items and invalid balances are not recovered. This is a
+compatibility migration chosen to preserve old saves, not behaviour from an OSRS recording.
+
+Four new real-object regressions cover the old deposit producer's crop acceptance,
+single recovery, strict new deposits, full/last-slot inventory, a fresh Player restored
+from saved state, save-event dispatch, PIN/range/life/trade guards and malformed balances.
+The updated Vault/PIN suites pass 49/49. Independent Codex review and re-review are clear.
+
+The isolated slot-72 MCP walkthrough used only a new QA profile: three old stored Gout
+tubers and a full inventory produced the make-room message without transferring anything.
+One free slot recovered one and saved two; a later login with two free slots recovered
+the remainder. Repeated native opens left exactly three in inventory and zero stored.
+The test server saved and stopped, and its ports closed. No live-game or Claude worktree
+changes were made. Upstream Geomancy logout and the Vault hooks are both retained in
+the merge conflict resolution. Full-suite results are recorded in the updated PR.
+
+Merged-upstream full suite: 8,829/8,836 passed, zero skips. Six unrelated door fixtures
+fail because their stub API lacks onCustomEvent; each reproduces with upstream
+8a487c9d6 production modules restored in memory from Git. The unchanged save-worker
+test also failed its assumption that Lina's write was still pending at termination.
+The whole save file passes 28/28 in isolation on the PR and in eight ordinary upstream
+reruns. A controlled upstream run awaiting the real write before terminating its worker
+reproduces that exact unwritten.has("lina") assertion. This schedule check establishes
+the race; it is not an unmodified baseline full-suite run. Those fixtures were not edited.

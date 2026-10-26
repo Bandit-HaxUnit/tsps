@@ -36,6 +36,31 @@ function held(farm, id) {
     const n = farm.vault?.[id];
     return Number.isSafeInteger(n) && n >= 0 && n <= MAX_AMOUNT ? n : 0;
 }
+function recoverLegacy(player, farm) {
+    const inventory = player.getInventory();
+    let moved = false, remaining = false;
+    for (const key of Object.keys(farm.vault ?? {})) {
+        const id = Number(key), balance = held(farm, id);
+        // Only recover plain crop seeds/saplings accepted by the old deposit producer.
+        // Category-less items cannot be displayed by the native cache scripts.
+        if (!balance || eligible(id) || plain(id) !== id ||
+            ![...Data.CROPS.values()].some(c => c.seed === id || c.sapling === id)) continue;
+        const item = new core.Item(id, balance);
+        const amount = Math.min(balance, inventory.getAddableAmount(item));
+        if (amount > 0) {
+            inventory.add(item.setAmount(amount), false);
+            farm.vault[id] = balance - amount;
+            moved = true;
+            player.sendMessage(`${amount} ${core.CacheDefinitions.getItem(id).name} returned from your old Seed Vault storage.`);
+        }
+        remaining ||= held(farm, id) > 0;
+    }
+    if (moved) {
+        inventory.refreshItems();
+        core.PluginManager.emitCustomEvent("persistence:save", { player, reason: "seed-vault-legacy-recovery" });
+    }
+    if (remaining) player.sendMessage("Make room in your inventory and reopen the Seed Vault to recover the remaining old items.");
+}
 function prepare(farm) {
     farm.vault ??= {};
     farm.vaultSettings ??= { quantity: 1, custom: 0, favourites: [] };
@@ -147,6 +172,7 @@ function open(event) {
     core.PluginManager.emitCustomEvent("bank-pin:guard", request);
     if (request.locked || !near(player, object) || (player.busy() && !current(player))) return;
     const farm = Patches.farmFor(player);
+    recoverLegacy(player, farm);
     SESSIONS.set(player, { farm, object, event });
     player.setEnteredAmountAction(null);
     sync(player);
