@@ -194,7 +194,7 @@
     }
   },
 
-  "_fragmentEffects": "Batch 1 of the fragments' effects, the ones existing hooks carry. Each works with the number its equipped level gives in the cache (enum 4136 params 1456-1458, the numbers its level texts 1450-1452 quote): a percent, a heal, ticks between restores (Larger Recharger 41/33/17, Divine Restoration 25/15/6), or Venomaster's poison severity (15/25/35, which hits for 3/5/7). Venomaster's chance isn't given anywhere, so `chancePercent` is this server's. Sets (enum 4137): a set's tiers need the pieces params 1468 / 1470 give of equipped fragments that list it (params 1459 / 1460); their numbers are only in their texts (params 1467 / 1469), copied here.",
+  "_fragmentEffects": "The combat fragments' and sets' effects. Each fragment works with the number its equipped level gives in the cache (enum 4136 params 1456-1458, the numbers its level texts 1450-1452 quote): a percent, a heal, ticks between restores (Larger Recharger 41/33/17, Divine Restoration 25/15/6), Venomaster's poison severity (15/25/35, which hits for 3/5/7), Superior Tracking's 1-in-N (150/100/30), or a max hit bonus (Bandosian Might per tick of attack speed, Saradominist Defence flat). Venomaster's chance isn't given anywhere, so `chancePercent` is this server's. Sets (enum 4137): a set's tiers need the pieces params 1468 / 1470 give of equipped fragments that list it (params 1459 / 1460); their numbers are only in their texts (params 1467 / 1469), copied here.",
   "fragmentEffects": {
     "accuracy": { "1": "melee", "3": "ranged", "5": "magic" },
     "ammoSaving": { "fragment": 4, "excluded": "chinchompa" },
@@ -203,6 +203,21 @@
     "prayerRestore": { "fragment": 9 },
     "venom": { "fragment": 13, "chancePercent": 25, "poisonImmuneFrom": 2, "venomImmuneFrom": 3 },
     "slayerHeal": { "fragment": 14 },
+    "meleeChargeSaving": { "fragment": 2 },
+    "prayerDrain": { "fragment": 8 },
+    "_specialCost": "Special Discount's numbers are tenths of a percent of energy (500/400/250 = 50/40/25%).",
+    "specialCost": { "fragment": 12, "perPercent": 10 },
+    "thrallMaxHit": { "fragment": 7 },
+    "superiorChance": { "fragment": 15 },
+    "slayerPoints": { "fragment": 16 },
+    "_godArmour": "Four worn items of the god, counted as the God Wars Dungeon counts them (godwars:god-items). Saradominist Defence: damage taken from an NPC or player in the last 6 ticks (3.6 seconds).",
+    "godArmour": {
+      "items": 4,
+      "bandos": { "fragment": 17 },
+      "armadyl": { "fragment": 18 },
+      "zamorak": { "fragment": 19 },
+      "saradomin": { "fragment": 20, "withinTicks": 6 }
+    },
     "sets": {
       "absoluteUnit": { "set": 1, "reductionPercent": [30, 50], "reflectPercent": [50, 100] },
       "drakansTouch": { "set": 6, "chancePercent": 50, "healPercent": [5, 10] },
@@ -210,7 +225,9 @@
         "14": { "style": "melee", "chancePercent": [30, 60] },
         "5": { "style": "ranged", "chancePercent": [30, 60] },
         "3": { "style": "magic", "chancePercent": [30, 60] }
-      }
+      },
+      "fastMetabolism": { "set": 8, "regenMultiplier": [4] },
+      "knifesEdge": { "set": 10, "permillePerHitpoint": [3, 6] }
     }
   },
 

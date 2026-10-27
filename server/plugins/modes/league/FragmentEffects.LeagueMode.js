@@ -1,8 +1,8 @@
 /**
- * Shattered Relics' fragment effects, batch 1 (data/league-shattered.json `fragmentEffects`): the
- * fragments and sets that the server's existing combat hooks carry. Each works with the number its
- * equipped level gives in the cache (Fragments.equippedValue) or the tier of the set
- * (Fragments.setTier). The rest are follow-ups listed in docs/leagues.md.
+ * Shattered Relics' fragment effects (data/league-shattered.json `fragmentEffects`): the combat
+ * fragments and sets. Each works with the number its equipped level gives in the cache
+ * (Fragments.equippedValue) or the tier of the set (Fragments.setTier). The skilling and misc
+ * ones are follow-ups listed in docs/leagues.md.
  */
 const Common = require("./Common.LeagueMode");
 const Fragments = require("./Fragments.LeagueMode");
@@ -16,6 +16,8 @@ const prayerTicks = new WeakMap();
 const ticking = new WeakSet();
 /** The per-tick task, defined once api.core.Task is reachable. */
 let TickTask = null;
+/** Per player: the world cycle it last took damage from an NPC or player (Saradominist Defence). */
+const lastDamaged = new WeakMap();
 
 function effects() {
   return data.fragmentEffects;
@@ -218,6 +220,7 @@ function hitResolved({ attacker, target, hit }) {
     drakansTouch(attacker, damage);
     extraRoll(attacker, target, hit);
   }
+  if (target?.isPlayer?.()) tookDamage(attacker, target.getAsPlayer?.() ?? target, damage);
   if (target?.isPlayer?.() && attacker?.isNpc?.()) reflect(attacker, target.getAsPlayer?.() ?? target, damage);
 }
 
@@ -237,6 +240,128 @@ function slayerKill({ player }) {
   if (heal !== null) player.heal(heal);
 }
 
+// ---- Slay 'n' Pay, Superior Tracking: more Slayer points, likelier superiors ----
+
+/** `slayer:task-reward`: a completed task's points raised by the fragment's percent (Slayer rounds down). */
+function slayerPoints(reward) {
+  const percent = Fragments.equippedValue(reward.player, effects().slayerPoints.fragment);
+  if (percent !== null) reward.multiplier *= (100 + percent) / 100;
+}
+
+/** `slayer:superior-spawn`: 1 in the fragment's number, Bigger and Badder or not (its text names no unlock); the toggle-off still holds. */
+function superiorChance(query) {
+  const oneIn = Fragments.equippedValue(query.player, effects().superiorChance.fragment);
+  if (oneIn === null || oneIn < 1) return;
+  query.chance = Math.min(query.chance, oneIn);
+  query.unlocked = true;
+}
+
+// ---- Tactical Duelist, Livin' On A Prayer, Special Discount, Thrall Damage ----
+
+/** `combat:melee-charge`: a melee weapon's charge saved. */
+function meleeChargeSaving(request) {
+  if (request.skip) return;
+  const save = Fragments.equippedValue(request.player, effects().meleeChargeSaving.fragment);
+  if (save !== null && chance(save)) request.skip = true;
+}
+
+/** Active prayers drain the fragment's percent slower. */
+function prayerDrainRate(entity, drainEffect) {
+  if (!entity?.isPlayer?.()) return drainEffect;
+  const percent = Fragments.equippedValue(entity, effects().prayerDrain.fragment);
+  return percent === null ? drainEffect : drainEffect * (100 - percent) / 100;
+}
+
+/** A special costing more than the fragment's share of energy costs that share instead. */
+function specialCost(entity, cost) {
+  if (!entity?.isPlayer?.()) return cost;
+  const { fragment, perPercent } = effects().specialCost;
+  const cap = Fragments.equippedValue(entity, fragment);
+  return cap === null ? cost : Math.min(cost, cap / perPercent);
+}
+
+/** `magic:thrall-max-hit`: the thrall's max hit raised by the fragment's percent, rounded up. */
+function thrallMaxHit(request) {
+  const percent = Fragments.equippedValue(request.player, effects().thrallMaxHit.fragment);
+  if (percent !== null) request.maxHit = Math.ceil(request.maxHit * (100 + percent) / 100);
+}
+
+// ---- The god-armour four: their number while four of the god's items are worn ----
+
+function godItems(player, god) {
+  const query = { player, god, count: 0 };
+  Common.api.emitCustomEvent("godwars:god-items", query);
+  return Number(query.count) || 0;
+}
+
+/** The god's fragment's number, or null unless it is equipped and enough of the god's items are worn. */
+function godValue(entity, god) {
+  if (!entity?.isPlayer?.()) return null;
+  const armour = effects().godArmour;
+  const value = Fragments.equippedValue(entity, armour[god].fragment);
+  return value !== null && godItems(entity, god) >= armour.items ? value : null;
+}
+
+/** Bandosian Might: the melee max hit, plus its number for each tick of the weapon's attack speed. */
+function bandosianMight(entity, maxHit) {
+  const perTick = godValue(entity, "bandos");
+  return perTick === null ? maxHit : maxHit + perTick * entity.getBaseAttackSpeed();
+}
+
+/** Zamorakian Sight: magic accuracy raised by its percent. */
+function zamorakianSight(entity, roll) {
+  const percent = godValue(entity, "zamorak");
+  return percent === null ? roll : roll * (100 + percent) / 100;
+}
+
+/** Armadylean Decree: `combat:bolt-effect-chance`, raised by its percent. */
+function armadyleanDecree(request) {
+  const percent = godValue(request.player, "armadyl");
+  if (percent !== null) request.chance *= (100 + percent) / 100;
+}
+
+/** Saradominist Defence remembers when combat damage from an NPC or player landed (never poison, which isn't a hit). */
+function tookDamage(attacker, target, damage) {
+  if (attacker && damage > 0 && isShattered(target)) lastDamaged.set(target, core().World.getProcessCycle());
+}
+
+/** Saradominist Defence: every style's max hit, plus its number, within 6 ticks of taking damage. */
+function saradoministDefence(entity, maxHit) {
+  const bonus = godValue(entity, "saradomin");
+  if (bonus === null) return maxHit;
+  const last = lastDamaged.get(entity);
+  const recent = last !== undefined && core().World.getProcessCycle() - last <= effects().godArmour.saradomin.withinTicks;
+  return recent ? maxHit + bonus : maxHit;
+}
+
+// ---- Knife's Edge, Fast Metabolism ----
+
+/** Knife's Edge: every style's max hit raised by 0.3% / 0.6% (in permille, so it stays exact) for each hitpoint missing. */
+function knifesEdge(entity, maxHit) {
+  if (!entity?.isPlayer?.()) return maxHit;
+  const set = effects().sets.knifesEdge;
+  const permille = atTier(entity, set.set, set.permillePerHitpoint);
+  if (permille === null) return maxHit;
+  const skills = entity.getSkillManager();
+  const missing = Math.max(0, skills.getMaxLevel(core().Skill.HITPOINTS) - skills.getCurrentLevel(core().Skill.HITPOINTS));
+  return maxHit * (1000 + permille * missing) / 1000;
+}
+
+/** Fast Metabolism: `stats:hitpoints-regen`, each regen heals four times as much. */
+function hitpointsRegen(regen) {
+  const set = effects().sets.fastMetabolism;
+  const multiplier = atTier(regen.player, set.set, set.regenMultiplier);
+  if (multiplier !== null) regen.amount *= multiplier;
+}
+
+function meleeMaxHit(entity, maxHit) {
+  return knifesEdge(entity, saradoministDefence(entity, bandosianMight(entity, maxHit)));
+}
+
+function otherMaxHit(entity, maxHit) {
+  return knifesEdge(entity, saradoministDefence(entity, maxHit));
+}
+
 module.exports = function attach(api) {
   api.registerMeleeAttackAccuracyModifier(accuracy("melee"));
   api.registerRangedAttackAccuracyModifier(accuracy("ranged"));
@@ -249,6 +374,22 @@ module.exports = function attach(api) {
   api.onCombatHitResolved(hitResolved);
   api.registerIncomingDamageModifier(incomingDamage);
   api.onCustomEvent("slayer:task-kill", slayerKill);
+  api.onCustomEvent("slayer:task-reward", slayerPoints);
+  api.onCustomEvent("slayer:superior-spawn", superiorChance);
+  api.onCustomEvent("combat:melee-charge", meleeChargeSaving);
+  api.registerPrayerDrainRateModifier(prayerDrainRate);
+  api.registerSpecialEnergyCostModifier(specialCost);
+  api.onCustomEvent("magic:thrall-max-hit", thrallMaxHit);
+  api.registerMeleeHitModifier(meleeMaxHit);
+  api.registerRangedHitModifier(otherMaxHit);
+  api.registerMagicHitModifier(otherMaxHit);
+  api.registerMagicAttackAccuracyModifier(zamorakianSight);
+  api.onCustomEvent("combat:bolt-effect-chance", armadyleanDecree);
+  api.onCustomEvent("stats:hitpoints-regen", hitpointsRegen);
 };
 
-module.exports._test = { accuracy, ammoSaving, runeSaving, chargeSaving, specialRestore, perTick, startTicking, hitResolved, incomingDamage, slayerKill, followUpHit, extraHits };
+module.exports._test = {
+  accuracy, ammoSaving, runeSaving, chargeSaving, specialRestore, perTick, startTicking, hitResolved, incomingDamage, slayerKill, followUpHit, extraHits,
+  slayerPoints, superiorChance, meleeChargeSaving, prayerDrainRate, specialCost, thrallMaxHit, bandosianMight, zamorakianSight, armadyleanDecree,
+  saradoministDefence, knifesEdge, hitpointsRegen, lastDamaged,
+};

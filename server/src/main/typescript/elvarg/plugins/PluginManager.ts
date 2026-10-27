@@ -4334,12 +4334,20 @@ export class PluginManager {
         require("../game/content/combat/EquipmentEffects").registerSpecialEnergyRestoreModifier(
           modifier
         ),
+      registerSpecialEnergyCostModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerSpecialEnergyCostModifier(
+          modifier
+        ),
       registerIncomingDamageModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerIncomingDamageModifier(
           modifier
         ),
       registerPrayerDrainModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerPrayerDrainModifier(
+          modifier
+        ),
+      registerPrayerDrainRateModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerPrayerDrainRateModifier(
           modifier
         ),
       setCombatEngine: (engine) => {
