@@ -321,8 +321,8 @@ class Game {
       this.release(winner, 1, "won");
     }
     // The time ran out: everyone left shares the place they're in.
+    const place = this.alive.size;
     for (const player of [...this.alive]) {
-      const place = this.alive.size;
       this.alive.delete(player);
       this.release(player, place, "time");
     }
@@ -349,7 +349,7 @@ class Game {
     sender.sendEntityHintRemoval(false);
     sender.closeSubInterface(Common.component("toplevel_osrs_stretch:overlay_atmosphere"));
     sender.closeSubInterface(Common.component("toplevel_osrs_stretch:pvp_icons"));
-    player.getCombat?.().reset?.();
+    clearCombat(player);
     player.getMovementQueue().setBlockMovement(false);
     Common.core.PrayerHandler.deactivatePrayers(player);
     Stash.restore(player);
@@ -372,6 +372,22 @@ class Game {
     }
     require("./Lobby.LastManStanding").openOverlay(player);
   }
+}
+
+/**
+ * What a fight leaves on a player: hits still queued (Combat.reset does not clear them), poison,
+ * venom and freeze. Cleared before their own things come back, as DuelArena's end does, so an
+ * arena hit cannot land on them once they are in the lobby.
+ */
+function clearCombat(player) {
+  const { TimerKey } = Common.core;
+  const combat = player.getCombat();
+  combat.reset();
+  combat.getHitQueue().clear();
+  player.setPoisonDamage(0);
+  player.setVenomed(false);
+  player.getTimers().cancel(TimerKey.FREEZE);
+  player.getTimers().cancel(TimerKey.FREEZE_IMMUNITY);
 }
 
 /**

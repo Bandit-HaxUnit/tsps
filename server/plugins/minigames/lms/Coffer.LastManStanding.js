@@ -47,8 +47,13 @@ function withdraw(player) {
   const stored = Profile.coffer(player);
   amountPrompt(player, Common.message("withdraw", { max: stored.toLocaleString("en-GB") }), (amount) => {
     const inventory = player.getInventory();
-    const coins = Math.min(Profile.coffer(player), Math.floor(amount / STEP) * STEP);
-    if (coins < STEP) return;
+    // What the coin stack can still hold, in steps of 1,000; the coffer keeps the rest.
+    const room = Math.floor((MAX_STACK - inventory.getAmount(coinId())) / STEP) * STEP;
+    const coins = Math.min(stored, Math.floor(amount / STEP) * STEP, room);
+    if (coins < STEP) {
+      if (room < STEP && amount >= STEP) player.sendMessage(Common.message("noRoom"));
+      return;
+    }
     if (!inventory.contains(coinId()) && inventory.getFreeSlots() <= 0) {
       player.sendMessage(Common.message("noRoom"));
       return;
@@ -159,4 +164,4 @@ function attachCoffer(api) {
   api.onObjectFirstClick([Common.locId("br_reward_chest")], claim);
 }
 
-module.exports = { attachCoffer, use, menu, claim, canPay, pay, award, grantFreeEntry, freeEntry };
+module.exports = { attachCoffer, use, menu, withdraw, claim, canPay, pay, award, grantFreeEntry, freeEntry };

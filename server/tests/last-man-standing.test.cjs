@@ -297,3 +297,60 @@ test('belongings come back on a closed session (logging out mid-game) without th
   assert.equal(p.getInventory().getAmount(id('coins')), 5);
   assert.equal(Stash.stashed(p), null);
 });
+
+test('the time runs out: survivors all take the place they are in, not one each', (t) => {
+  t.mock.method(Common, 'later', () => {});
+  const survivors = [{}, {}, {}];
+  const released = [];
+  const game = Object.assign(Object.create(Match.Game.prototype), {
+    over: false,
+    begun: true,
+    alive: new Set(survivors),
+    area: { isDestroyed: () => true },
+    release: (player, place, how) => released.push([player, place, how]),
+  });
+  game.finish();
+  assert.deepEqual(released.map(([, place, how]) => [place, how]), [[3, 'time'], [3, 'time'], [3, 'time']]);
+});
+
+test('leaving the arena drops hits still queued, and poison and venom, before belongings come back', (t) => {
+  t.mock.method(Common, 'later', () => {});
+  t.mock.method(require('../plugins/minigames/lms/Lobby.LastManStanding'), 'openOverlay', () => {});
+  const p = realPlayer(t);
+  p.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(10, core.HitMask.RED)]);
+  p.setPoisonDamage(5);
+  p.setVenomed(true);
+  const game = { area: {}, immuneUntil: new Map(), mode: { ranked: false } };
+  Match.Game.prototype.release.call(game, p, 1, 'dead');
+  assert.equal(p.getCombat().getHitQueue().hasPendingWork(), false);
+  assert.equal(p.isPoisoned(), false);
+  assert.equal(p.isVenomed(), false);
+});
+
+test('a withdrawal fills only what the coin stack can hold, and the coffer keeps the rest', (t) => {
+  const Coffer = require('../plugins/minigames/lms/Coffer.LastManStanding');
+  const p = realPlayer(t);
+  // The coffer's menu reopens after each withdrawal; its prompt is the plugin api's.
+  const initWith = (extra) => Common.init({
+    core,
+    getPluginConfig: (_key, fallback) => fallback,
+    getSkillManager: () => require('../dist/game/content/skill/SkillManager').SkillManager,
+    ...extra,
+  });
+  initWith({ sendMultiChatboxPrompt: () => {} });
+  t.after(() => initWith({}));
+  let entered;
+  t.mock.method(p, 'setEnteredAmountAction', (action) => { entered = action; });
+  const withdrawing = (amount) => {
+    Coffer.withdraw(p);
+    entered.execute(amount);
+  };
+  p.getInventory().add(new (require('../dist/game/model/Item').Item)(id('coins'), 2147482000), false);
+  Profile.setCoffer(p, 5000);
+  withdrawing(5000);
+  assert.equal(p.getInventory().getAmount(id('coins')), 2147483000);
+  assert.equal(Profile.coffer(p), 4000);
+  withdrawing(5000);
+  assert.equal(p.getInventory().getAmount(id('coins')), 2147483000, 'the stack has no room for a whole 1,000');
+  assert.equal(Profile.coffer(p), 4000, 'nothing taken, nothing deducted');
+});
