@@ -5,6 +5,13 @@
  * inventory, not the slot used (Wiki, 22 February 2023), and the offering repeats every 4 ticks
  * while that kind of bone lasts, as captured on a house altar. The bones and their experience
  * come from the Prayer plugin ("prayer:bone").
+ *
+ *   api.emitCustomEvent("bone-altars:offer", { player, object, itemId, altar, handled: false })
+ *     -> offers `itemId` on another plugin's altar (Construction's house altars) with the same
+ *        offering loop, and sets `handled` when `itemId` is a bone. `altar.blessing(bone)` gives
+ *        `{ experience, message }` for each offering, or null once the altar is gone; it is asked
+ *        again for every bone, so a house's incense burners going out show at once.
+ *        `altar.spareChance` (default 0) and `spareMessage` keep a bone as the Chaos altar does.
  */
 const DATA = require("./data/bone-altars.json");
 const { pauseForLevelUp } = require("./SkillActions");
@@ -26,7 +33,11 @@ function resolved() {
     seq: id("seq", DATA.seq, (name) => CacheDefinitions.getSeqId(name)),
     spotanim: id("spotanim", DATA.spotanim, (name) => CacheDefinitions.getSpotanimId(name)),
     zealot: new Set(DATA.zealot.pieces.map((name) => id("obj", name, (n) => CacheDefinitions.getObjId(n)))),
-    altars: DATA.altars.map((altar) => ({ ...altar, id: id("loc", altar.loc, (name) => CacheDefinitions.getLocId(name)) })),
+    altars: DATA.altars.map((altar) => ({
+      ...altar,
+      id: id("loc", altar.loc, (name) => CacheDefinitions.getLocId(name)),
+      blessing: dataBlessing(altar),
+    })),
   };
   return ids;
 }
@@ -49,7 +60,7 @@ function zealotPieces(player) {
 
 /** The altar keeps the bone, or failing that the Zealot's robes do (Wiki: two rolls). */
 function spared(player, altar) {
-  if (Math.random() < altar.spareChance) return "altar";
+  if (Math.random() < (altar.spareChance ?? 0)) return "altar";
   return Math.random() < zealotPieces(player) * DATA.zealot.chancePerPiece ? "robes" : null;
 }
 
@@ -65,18 +76,25 @@ function graphicTile(player, object) {
   return new core.Location(clamp(at.getX(), location.getX(), sizeX), clamp(at.getY(), location.getY(), sizeY), location.getZ());
 }
 
-/** One offering of the first `boneId` carried; false when there is none left. */
+/** A data-file altar's offering: its scale of the burying experience, rounded up as burying is. */
+function dataBlessing(altar) {
+  return (bone) => ({ experience: Math.ceil(bone.xp * altar.xpScale), message: DATA.message });
+}
+
+/** One offering of the first `boneId` carried; false when there is none left or the altar is gone. */
 function offer(player, object, altar, boneId, bone) {
   const inventory = player.getInventory();
   const slot = inventory.getSlotForItemId(boneId);
   if (slot < 0) return false;
+  const blessing = altar.blessing(bone);
+  if (!blessing) return false;
   const kept = spared(player, altar);
   if (!kept) inventory.deleteAtSlot(slot, 1);
-  const message = kept === "altar" ? altar.spareMessage : DATA.message;
+  const message = kept === "altar" ? altar.spareMessage : blessing.message;
   player.getPacketSender().sendTypedMessage(core.ChatType.SPAM, message);
   // Experience first: a level-up pop-up resets the player's animation, and this offering's
   // animation still plays over it.
-  player.getSkillManager().addExperiences(core.Skill.PRAYER, Math.ceil(bone.xp * altar.xpScale));
+  player.getSkillManager().addExperiences(core.Skill.PRAYER, blessing.experience);
   const tile = graphicTile(player, object);
   const { seq, spotanim } = resolved();
   player.setPositionToFace(tile);
@@ -116,21 +134,35 @@ function pauseOffering(event) {
   pauseForLevelUp(event, offerings, (player) => stopOffering({ player }));
 }
 
-function useBoneOnAltar(event) {
-  const { player, object, objectId, itemId, location } = event;
-  const altar = altarAt(objectId, location);
-  if (!altar) return;
+/**
+ * Offers at once and then every few ticks. Using a bone again restarts the loop with an immediate
+ * offering, so offering by hand is faster than letting it repeat (Wiki: Pay-to-play Prayer training).
+ */
+function startOffering(player, object, altar, itemId) {
   const bone = boneFor(itemId);
-  if (!bone) return;
-  event.handled = true;
+  if (!bone) return false;
   if (bone.level && player.getSkillManager().getMaxLevel(core.Skill.PRAYER) < bone.level) {
     player.sendMessage(`You need a Prayer level of ${bone.level} to offer these bones.`);
-    return;
+    return true;
   }
   stopOffering({ player });
   // Register the loop before the immediate offering so its first XP drop can pause it too.
   keepOffering(player, object, altar, itemId, bone);
   if (!offer(player, object, altar, itemId, bone)) stopOffering({ player });
+  return true;
+}
+
+function useBoneOnAltar(event) {
+  const { player, object, objectId, itemId, location } = event;
+  const altar = altarAt(objectId, location);
+  if (!altar) return;
+  if (startOffering(player, object, altar, itemId)) event.handled = true;
+}
+
+/** "bone-altars:offer": another plugin's altar, offered on with this loop. */
+function offerOnAltar(request) {
+  const { player, object, itemId, altar } = request;
+  if (startOffering(player, object, altar, itemId)) request.handled = true;
 }
 
 module.exports = {
@@ -142,5 +174,6 @@ module.exports = {
     core = pluginApi.core;
     api.onItemOnObject(useBoneOnAltar, { noted: false });
     api.onCustomEvent("level-up:popup-opened", pauseOffering);
+    api.onCustomEvent("bone-altars:offer", offerOnAltar);
   },
 };
