@@ -186,9 +186,8 @@ function pointsChanged({ player, points, previous }) {
   });
 }
 
-function login({ player, league }) {
+function login({ player }) {
   sendSelections(player);
-  require("./Catalog.LeagueRelics").send(player, league);
 }
 
 /** `league:highest-tier` { player } -> tier: the highest tier index chosen (LeagueMode's XP rate reads it). */
