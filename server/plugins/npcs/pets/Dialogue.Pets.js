@@ -20,7 +20,9 @@ const slug = value => String(value).toLowerCase().replace(/[^a-z0-9]+/g, "-").re
 const SHARED_FORM_SECTIONS = new Map([["Enraged Tektiny", "Tektiny"], ["Flying Vespina", "Vespina"]]);
 function ordinaryVariant(row, name) {
   const form = slug(SHARED_FORM_SECTIONS.get(name) ?? name);
-  const variants = row.variants ?? [];
+  // Dated pre-update transcripts are retained as history, not current forms.
+  const variants = (row.variants ?? [])
+    .filter(key => !/^standard-dialogue-before-\d{1,2}-[a-z]+-\d{4}$/.test(key));
   const matching = [`${form}-standard-dialogue`, `pet-${form}-standard-dialogue`, `standard-dialogue-${form}`, `${form}-dialogue`, form]
     .filter(key => variants.includes(key));
   if (matching.length === 1) return matching[0];

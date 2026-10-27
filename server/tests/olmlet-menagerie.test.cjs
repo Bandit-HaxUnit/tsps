@@ -63,3 +63,14 @@ for (const obj of ['smokepet','smokepet_old']) test('native menagerie storage/Ta
   await send(f,{type:'widget_action',widgetId:(211<<16)|7,groupId:211,childId:7,slot,buttonNum:1});
   assert.equal(f.p.getInventory().getAmount(f.itemId),1);assert.deepEqual(f.p.getAttribute('construction:menagerie'),[]);
 });
+
+for (const obj of ['snakepet','snakepet_orange','snakepet_blue']) test('native menagerie storage/Take retains '+obj,async t=>{
+  const f=await store(t,obj),base=core.CacheDefinitions.getObjId('snakepet');
+  const slot=[...core.CacheDefinitions.getEnumValues(985)].find(([,id])=>id===base)[0];
+  assert.equal(f.p.getInventory().getAmount(f.itemId),0);
+  assert.deepEqual(f.p.getAttribute('construction:menagerie'),[slot]);
+  await send(f,{type:'object_option',id:f.object.getId(),x:f.object.getLocation().getX(),y:f.object.getLocation().getY(),action:'View'});
+  assert.equal(f.p.getInterfaceId(),211);
+  await send(f,{type:'widget_action',widgetId:(211<<16)|7,groupId:211,childId:7,slot,buttonNum:1});
+  assert.equal(f.p.getInventory().getAmount(f.itemId),1);assert.deepEqual(f.p.getAttribute('construction:menagerie'),[]);
+});

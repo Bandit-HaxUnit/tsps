@@ -207,3 +207,39 @@ test('native stale Talk-to after pickup and another pet summon cannot bypass the
   assert.equal(text(f),'How you doing, Smol Heredit?');
   assert.equal(f.p.getInventory().getAmount(core.ItemIdentifiers.YAMI),1);
 });
+
+
+test('linked Kraken follower source opens its actual native conversation',async t=>{
+  const f=actor(t),n=await summon(f,core.ItemIdentifiers.PET_KRAKEN);await talk(f,n);
+  assert.equal(text(f),"What's Kraken?");
+  await input(f,{type:'dialogue_continue',widgetId:(217<<16)|5,childIndex:-1});
+  assert.equal(text(f),'Not heard that one before.');assert.equal(f.p.getAttribute('pets:current'),n);
+});
+
+test('both current Smoke Devil forms select current text rather than its dated archival section',async t=>{
+  const f=actor(t),n=await summon(f,core.ItemIdentifiers.PET_SMOKE_DEVIL);
+  for(let i=0;i<2;i++){
+    await talk(f,n);assert.equal(text(f),'Are you safe to keep as a pet?');
+    await input(f,{type:'dialogue_continue',widgetId:(217<<16)|5,childIndex:-1});assert.equal(text(f),'Yes, human.');
+    await input(f,{type:'dialogue_continue',widgetId:(231<<16)|5,childIndex:-1});
+    const choices=MultiChatboxPrompt.getPending(f.p)?.options;assert.ok(choices?.includes("So where's the fire?"));
+    await input(f,{type:'dialogue_continue',widgetId:(219<<16)|1,childIndex:choices.indexOf("So where's the fire?")+1});
+    assert.equal(text(f),"So where's the fire?");
+    await input(f,{type:'dialogue_continue',widgetId:(217<<16)|5,childIndex:-1});assert.equal(text(f),"I don't have a fire.");
+    const morph=n.getCurrentDefinition(f.p).getActions().findIndex(x=>x==='Metamorphosis')+1;assert.ok(morph>0);
+    await input(f,{type:'npc_option',index:n.getIndex(),clickType:morph});assert.equal(f.p.getDialogueManager().isActive(),false);
+  }
+  assert.equal(f.p.getAttribute('pets:current'),n);
+});
+
+test('all three real Snakeling forms retain canonical speech through native metamorphosis',async t=>{
+  const f=actor(t),n=await summon(f,core.ItemIdentifiers.PET_SNAKELING),seen=new Set();
+  for(let i=0;i<3;i++){
+    seen.add(n.getCurrentDefinition(f.p).getId());await talk(f,n);assert.equal(text(f),'Hey little snake!');
+    await input(f,{type:'dialogue_continue',widgetId:(217<<16)|5,childIndex:-1});
+    assert.equal(text(f),'Soon, Zulrah shall establish dominion over this plane.');
+    const morph=n.getCurrentDefinition(f.p).getActions().findIndex(x=>x==='Metamorphosis')+1;assert.ok(morph>0);
+    await input(f,{type:'npc_option',index:n.getIndex(),clickType:morph});assert.equal(f.p.getDialogueManager().isActive(),false);
+  }
+  assert.equal(seen.size,3);assert.equal(f.p.getAttribute('pets:current'),n);
+});

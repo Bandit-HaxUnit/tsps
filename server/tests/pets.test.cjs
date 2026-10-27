@@ -261,8 +261,9 @@ test("a pet with no metamorphosis cycle refuses to morph", () => {
   assert.equal(player.getAttribute("pets:variant"), undefined);
 });
 
-test("the stored variant is re-applied to a freshly summoned follower", () => {
+test("the legacy base-item ownership re-applies its stored variant to a freshly summoned follower", () => {
   const player = createPlayer();
+  player.setAttribute("pets.owned", [SNAKELING_ITEM]);
   player.setAttribute("pets:variant", { "item:12921": 2132 });
   const pet = Pets.__internals.PET_BY_ITEM_ID.get(SNAKELING_ITEM);
   const npc = createPetNpc(player, 2130);
