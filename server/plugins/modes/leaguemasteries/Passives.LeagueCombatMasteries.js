@@ -66,9 +66,9 @@ function praysAgainst(target, combatType) {
 }
 
 /**
- * What a protection prayer leaves of a player's hit on `target`: 1 when it does not pray against
- * the style, the core's constant when it does, and with the penetration passive 60% of the hit
- * plus 40% of the reduced rest.
+ * What a protection prayer leaves of a player's hit on `target` once the roll bypassed it: 1 when
+ * it does not pray against the style, the core's constant when it does, and with the penetration
+ * passive 60% of the hit plus 40% of the reduced rest.
  */
 function damageFactor(attacker, target, combatType) {
   if (!praysAgainst(target, combatType)) return 1;
@@ -104,4 +104,4 @@ module.exports = function attach(api) {
   api.onCombatHitDamage(penetrateDamage);
 };
 
-module.exports.damageFactor = damageFactor;
+

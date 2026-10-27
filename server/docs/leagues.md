@@ -61,6 +61,7 @@ Agility 10 (Wiki). A main character never has a league, whatever its attributes 
 | `league:mastery-unlocked` | `{ player, style, tier, key, passiveUnlocked }` after an unlock | - |
 | `stats:heal` | `{ player, previous, amount, hitpoints }` before any heal (core); `amount` may change | LeagueCombatMasteries |
 | `skills:restore` | `{ player, skill, amount, max }` before a stat restore or boost (core); `amount` may change | LeagueCombatMasteries |
+| `combat:hit-rolled` | `{ attacker, target, combatType, damage, minimum, maximum }` after a hit's damage roll, before defences (core); `damage` may change | LeagueCombatMasteries |
 
 ## What the client is sent
 
@@ -181,12 +182,14 @@ progress in `league:mastery-progress`.
 - **The checks.** A Raging Echoes character, a real tier, not yet unlocked, the previous tier of
   the style, a point to spend. Refusals are game messages of ours. Unlocks are permanent.
 - **The masteries** (the Wiki's numbers in the data; `leaguemasteries/Melee|Ranged|Magic|AttackRate.LeagueCombatMasteries.js`):
-  - Melee I: a quarter of landed hits roll again and keep the higher (a second roll of the max
-    hit, scaled as the first was when the target prays against melee; a player target's own
-    damage reductions, Elysian, Justiciar, the tier 4 passive, do not reach the second roll, nor
-    Ranged I's floor or Magic I's threshold). Melee II: a tenth of melee attacks on an NPC queue
-    an echo a tick later, a melee hit of its own accuracy rolled from half the max hit, queued as
-    any hit (its guards and XP), with the captured echo projectile (3186/3187, alternating). Melee IV:
+  - The roll effects (Melee I, an echo's roll, Ranged I, Magic I and IV) act on the core's new
+    `combat:hit-rolled`: the undefended roll and the range it came from, before protection
+    prayers, shields and incoming-damage modifiers reduce it, which then apply to the result.
+  - Melee I: a quarter of landed hits roll again and keep the higher. Melee II: a tenth of melee
+    attacks on an NPC queue an echo a tick later, an ordinary melee hit of its own accuracy
+    rolled from half the max hit (a special armed since the swing neither shapes it nor is spent
+    on it, and stays armed), queued as any hit (its guards and XP), with the captured echo
+    projectile (3186/3187, alternating). Melee IV:
     a twentieth of landed hits heal 40% of their damage. Melee VI: echoes on a fifth, and an
     echo may echo in turn, up to eight in a row.
   - Ranged I: a landed roll below 30% of the max hit (with Ranged II's bonus on it) becomes 30%.
@@ -195,7 +198,8 @@ progress in `league:mastery-progress`.
     is asked for a normal attack and for a special alike). Ranged IV:
     every fifth landed hit heals 5 a hitsplat. Ranged VI: a ranged roll against an NPC is forced
     accurate (an immune target still takes nothing).
-  - Magic I: a landed roll above 90% of the max hit deals 50% more. Magic II: +5% max hit for
+  - Magic I: a landed roll above 90% of its max hit (the target's own: a barrage's secondary
+    targets have theirs) deals 50% more. Magic II: +5% max hit for
     every idle tick between two magic attacks, up to +40% (our reading: the gap less the attack's
     own tick, noted on the cast's first accuracy roll; the first cast since login takes the cap;
     the Wiki does not say). Magic IV: a roll above 90% heals 10% of the damage when it

@@ -123,9 +123,16 @@ function progress(player) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
-/** The attacker's current max hit for a combat type (DamageFormulas, the number a hit is rolled from). */
-function maxHit(attacker, combatType) {
-  return Math.max(0, Math.floor(core.DamageFormulas.sourceMaxHit(attacker, combatType)));
+/**
+ * The attacker's max hit for a combat type against `target`: magic through the target-aware hit
+ * bounds a cast is rolled from (a barrage's secondary target has its own), the rest from the
+ * formulas' source max hit.
+ */
+function maxHit(attacker, combatType, target) {
+  const max = combatType === core.CombatType.MAGIC
+    ? core.DamageFormulas.sourceHitBounds(attacker, combatType, target ?? undefined).maximum
+    : core.DamageFormulas.sourceMaxHit(attacker, combatType);
+  return Math.max(0, Math.floor(max));
 }
 
 function uid(group, child) {

@@ -1,12 +1,11 @@
 /**
  * The Ranged masteries (https://oldschool.runescape.wiki/w/Ranged_I .. Ranged_VI): I a landed
- * roll below 30% of the max hit becomes 30%; II every ranged attack after the first raises the max
+ * roll below 30% of the max hit becomes 30% (on the core's `combat:hit-rolled`, before defences); II every ranged attack after the first raises the max
  * hit another 5%, back to nothing after +20% (counted on the attack's first accuracy roll, so the
  * max hit rolled next sees it); IV every fifth landed ranged hit heals 5 hitpoints a hitsplat; VI a ranged
  * attack on an NPC never misses. The attack rates (III, V) are AttackRate.LeagueCombatMasteries.js.
  */
 const Common = require("./Common.LeagueCombatMasteries");
-const Passives = require("./Passives.LeagueCombatMasteries");
 
 let core;
 
@@ -58,14 +57,13 @@ const maxHitModifier = {
   },
 };
 
-/** Ranged I: a landed roll below 30% of the max hit (what a protection prayer leaves of it) is raised to it. */
-function damage(event) {
-  if (event.combatType !== RANGED() || !event.accurate) return;
+/** Ranged I: a landed roll below 30% of its max hit (Ranged II's bonus on it) is raised to it, before the target's defences. */
+function rolled(event) {
+  if (event.combatType !== RANGED()) return;
   const first = Common.effect(event.attacker, "ranged", 1);
   if (!first) return;
-  const max = boostedMaxHit(event.attacker, Common.maxHit(event.attacker, RANGED()));
-  const floor = Math.floor(Math.floor(max * first.minimumFraction) * Passives.damageFactor(event.attacker, event.target, RANGED()));
-  if (event.damage.getDamage() < floor) event.damage.setDamage(floor);
+  const floor = Math.floor(event.maximum * first.minimumFraction);
+  if (event.damage < floor) event.damage = floor;
 }
 
 function resolved({ attacker, hit }) {
@@ -94,7 +92,7 @@ function roll(event) {
 module.exports = function attach(api) {
   core = api.core;
   api.registerRangedCombatModifier(maxHitModifier);
-  api.onCombatHitDamage(damage);
+  api.onCustomEvent("combat:hit-rolled", rolled);
   api.onCombatHitResolved(resolved);
   api.onCombatHitRoll(roll);
 };

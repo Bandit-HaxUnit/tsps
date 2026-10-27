@@ -18,6 +18,7 @@ const { GameConstants } = require("../dist/game/GameConstants");
 const { Skill } = require("../dist/game/model/Skill");
 const { Location } = require("../dist/game/model/Location");
 const Melee = require("../plugins/modes/leaguemasteries/Melee.LeagueCombatMasteries");
+const EquipmentEffects = require("../dist/game/content/combat/EquipmentEffects");
 
 let core;
 const hooks = {};
@@ -28,6 +29,8 @@ const realRandom = Math.random;
 let realRandomInclusive;
 let realIsActivated;
 let realEmitCustomEvent;
+/** Real PendingHits in these tests land when this is set (a roll hook of the test's own). */
+let forceAccurate = false;
 
 const RAGING_ECHOES = 5;
 const TRAILBLAZER = 4;
@@ -61,7 +64,10 @@ before(async () => {
     registerMeleeAttackAccuracyModifier: (modifier) => (modifiers.meleeAccuracy = modifier),
     registerRangedAttackAccuracyModifier: (modifier) => (modifiers.rangedAccuracy = modifier),
     registerMagicAttackAccuracyModifier: (modifier) => (modifiers.magicAccuracy = modifier),
-    registerIncomingDamageModifier: (modifier) => (modifiers.incoming = modifier),
+    registerIncomingDamageModifier: (modifier) => {
+      modifiers.incoming = modifier;
+      EquipmentEffects.registerIncomingDamageModifier(modifier); // so CombatFactory.getHitDamage applies it to real hits
+    },
     registerRangedAmmoHandler: (handler) => (modifiers.ammo = handler),
     registerRangedCombatModifier: (modifier) => (modifiers.rangedCombat = modifier),
     onInterfaceActionButton: (ids, handler) => {
@@ -82,7 +88,15 @@ before(async () => {
     for (const handler of custom[name] ?? []) handler(payload);
     return realEmitCustomEvent.call(PluginManager, name, payload);
   };
-  // A real PendingHit (an echo) rolls through the core's hit damage hook: route it to the handlers above.
+  // Real PendingHits roll through the core's roll and hit damage hooks: route them to the handlers above.
+  const realEmitCombatHitRoll = PluginManager.emitCombatHitRoll;
+  PluginManager.emitCombatHitRoll = (event) => {
+    hooks.onCombatHitRoll?.(event);
+    if (forceAccurate) event.forceAccurate = true;
+    return realEmitCombatHitRoll.call(PluginManager, event);
+  };
+  // The dragon claws special, registered as the SpecialAttacks plugin does.
+  require("../plugins/combat/specials/DragonClaw.SpecialAttack")({ core, registerCombatSpecial: (definition) => core.CombatSpecial.register(definition) });
   const realEmitCombatHitDamage = PluginManager.emitCombatHitDamage;
   PluginManager.emitCombatHitDamage = (event) => {
     hooks.onCombatHitDamage?.(event);
@@ -97,8 +111,14 @@ afterEach(() => {
   core.Misc.randomInclusive = realRandomInclusive;
   core.PrayerHandler.isActivated = realIsActivated;
   core.World.processCycle = 0;
+  forceAccurate = false;
   emitted.length = 0;
 });
+
+/** The core's `combat:hit-rolled` for a roll of `damage` out of [minimum, maximum]; returns the damage it leaves. */
+function hitRolled(attacker, target, combatType, damage, maximum, minimum = 0) {
+  return query("combat:hit-rolled", { attacker, target, combatType, damage, minimum, maximum }).damage;
+}
 
 const cycle = (value) => (core.World.processCycle = value);
 const rollEvent = (attacker, target, combatType) => ({ attacker, target, combatType, forceAccurate: false, forceMaxHit: false, bypassProtectionPrayer: false });
@@ -368,7 +388,7 @@ test("attack rates: tier 3 is 80% rounded down, tier 5 is 50% rounded down from 
 });
 
 test("Melee I rolls twice on a quarter of hits and keeps the higher; Melee IV heals 40% of a hit on a twentieth", () => {
-  const { HitDamage, HitMask, CombatType } = core;
+  const { CombatType } = core;
   const player = character("melee-1-4", { masteries: { melee: 4, ranged: 0, magic: 0 } });
   const target = npc(HILL_GIANT);
   const max = core.DamageFormulas.sourceMaxHit(player, CombatType.MELEE);
@@ -376,9 +396,7 @@ test("Melee I rolls twice on a quarter of hits and keeps the higher; Melee IV he
   core.Misc.randomInclusive = (min, high) => high;
   const roll = (attacker, base, chance) => {
     randoms([chance]);
-    const damage = new HitDamage(base, HitMask.RED);
-    hooks.onCombatHitDamage({ attacker, target, combatType: CombatType.MELEE, hit: null, damage, accurate: true });
-    return damage.getDamage();
+    return hitRolled(attacker, target, CombatType.MELEE, base, max);
   };
   assert.equal(roll(player, 1, 0.1), max, "a second roll of the max hit replaces a 1");
   assert.equal(roll(player, 1, 0.3), 1, "no second roll on the other three quarters");
@@ -456,20 +474,15 @@ test("Melee II echoes a tenth of melee attacks on NPCs with a half-max-hit melee
 });
 
 test("Ranged I lifts low rolls to 30%; Ranged II stacks 5% a shot to 20%; Ranged IV heals on the fifth hit; Ranged VI never misses NPCs", () => {
-  const { HitDamage, HitMask, CombatType } = core;
+  const { CombatType } = core;
   const player = character("ranged-6", { masteries: { melee: 0, ranged: 6, magic: 0 } });
   const target = npc(HILL_GIANT);
   const max = core.DamageFormulas.sourceMaxHit(player, CombatType.RANGED);
   const floor = Math.floor(max * 0.3);
   assert.ok(floor >= 2, `a ranged max hit to work from: ${max}`);
-  const roll = (attacker, base, accurate = true) => {
-    const damage = new HitDamage(base, HitMask.RED);
-    hooks.onCombatHitDamage({ attacker, target, combatType: CombatType.RANGED, hit: null, damage, accurate });
-    return damage.getDamage();
-  };
+  const roll = (attacker, base, maximum = max) => hitRolled(attacker, target, CombatType.RANGED, base, maximum);
   assert.equal(roll(player, 1), floor);
   assert.equal(roll(player, floor + 1), floor + 1);
-  assert.equal(roll(player, 0, false), 0, "a miss stays a miss");
 
   const shoot = (tick) => {
     cycle(tick);
@@ -484,7 +497,8 @@ test("Ranged I lifts low rolls to 30%; Ranged II stacks 5% a shot to 20%; Ranged
   assert.deepEqual(seen, [100, 105, 110, 115, 120, 100, 105], "+5% a subsequent shot, back to nothing after +20%");
   hooks.onCombatHitRoll(rollEvent(player, target, CombatType.RANGED));
   assert.equal(maxHit(), 105, "a second hitsplat's roll in the same cycle is the same attack");
-  assert.equal(roll(player, 1), Math.floor(Math.floor(max * 1.05) * 0.3), "Ranged I's floor is 30% of the boosted max hit");
+  assert.equal(roll(player, 1, modifiers.rangedCombat.modifyMaxHit(player, target, max)), Math.floor(Math.floor(max * 1.05) * 0.3),
+    "Ranged I's floor is 30% of the roll's own max hit, Ranged II's bonus on it");
   assert.equal(modifiers.rangedCombat.modifyAttackRoll(player, target, 100), null);
   cycle(0);
 
@@ -515,17 +529,18 @@ test("Ranged I lifts low rolls to 30%; Ranged II stacks 5% a shot to 20%; Ranged
 
 test("Magic I and IV act on rolls above 90% of the max hit; Magic II grows the max hit with idle ticks; Magic VI scales with the target's hitpoints and executes", () => {
   const { HitDamage, HitMask, CombatType, CombatSpells } = core;
+  const rollMagic = (attacker, base, hit = null) => {
+    const damage = hitRolled(attacker, target, CombatType.MAGIC, base, max);
+    hooks.onCombatHitDamage({ attacker, target, combatType: CombatType.MAGIC, hit, damage: new HitDamage(damage, HitMask.RED), accurate: true });
+    return damage;
+  };
   const player = character("magic-6", { masteries: { melee: 0, ranged: 0, magic: 6 } });
   player.getCombat().setCastSpell(CombatSpells.FIRE_STRIKE);
   const target = npc(HILL_GIANT);
   const max = core.DamageFormulas.sourceMaxHit(player, CombatType.MAGIC);
   assert.ok(max >= 5, `fire strike's max hit: ${max}`);
   const threshold = Math.floor(max * 0.9);
-  const roll = (attacker, base, hit = null) => {
-    const damage = new HitDamage(base, HitMask.RED);
-    hooks.onCombatHitDamage({ attacker, target, combatType: CombatType.MAGIC, hit, damage, accurate: true });
-    return damage.getDamage();
-  };
+  const roll = rollMagic;
   assert.equal(roll(player, max), Math.floor(max * 1.5), "a max roll is above 90%: +50%");
   assert.equal(roll(player, threshold), threshold, "90% itself is not above it");
   player.setHitpoints(50);
@@ -663,4 +678,75 @@ test("the passives: saved runes, charges and ammunition; bigger heals; double ac
   assert.deepEqual(strike(archer, 100, CombatType.MELEE), [false, 100], "not praying against melee");
   assert.deepEqual(strike(one, 100), [false, 100], "tier 6 not reached: the core's own reduction applies later");
   assert.deepEqual(strike(trailblazer, 100), [false, 100]);
+});
+
+test("an echo is an ordinary hit: dragon claws armed between the swing and the landing neither shape it nor are spent", () => {
+  const { CombatType, CombatSpecial, ItemIdentifiers } = core;
+  const player = character("echo-claws", { masteries: { melee: 2, ranged: 0, magic: 0 } });
+  const target = npc(HILL_GIANT);
+  target.setHitpoints(500);
+  const queued = [];
+  target.getCombat().getHitQueue().addPendingHit = (hit) => queued.push(hit);
+  const ordinaryMax = core.DamageFormulas.sourceMaxHit(player, CombatType.MELEE);
+  player.setCombatSpecial(CombatSpecial.getForWeaponId(ItemIdentifiers.DRAGON_CLAWS));
+  player.setSpecialActivated(true);
+  forceAccurate = true;
+  core.Misc.randomInclusive = (low, high) => high;
+  const armed = new core.PendingHit(player, target, core.CombatFactory.MELEE_COMBAT, { delay: 0 });
+  assert.equal(armed.getHits().length, 4, "an armed claws hit is the four-hit special");
+  const swing = { getCombatType: () => CombatType.MELEE, isAccurate: () => true, getTotalDamage: () => 10 };
+  randoms([0.05]);
+  hooks.onCombatHitResolved({ attacker: player, target, hit: swing });
+  assert.equal(queued.length, 1, "the echo procs");
+  const echo = queued[0];
+  assert.equal(echo.getHits().length, 1, "one hitsplat, not the claws' four");
+  assert.equal(echo.getTotalDamage(), Math.floor(ordinaryMax / 2), `half the ordinary max hit (${ordinaryMax})`);
+  assert.equal(player.isSpecialActivated(), true, "the special stays armed for the next attack");
+  assert.equal(player.getSpecialPercentage(), 100, "and no energy is spent on the echo");
+});
+
+test("a barrage's secondary target: Magic I, IV and VI use its own max hit, not the primary's", () => {
+  const { CombatType, CombatSpells } = core;
+  const player = character("barrage", { masteries: { melee: 0, ranged: 0, magic: 6 } });
+  player.getCombat().setCastSpell(CombatSpells.ICE_BARRAGE);
+  const primary = npc(HILL_GIANT);
+  primary.setHitpoints(1000);
+  const secondary = npc(HILL_GIANT);
+  secondary.setHitpoints(200);
+  player.getCombat().target = primary; // the cast's main target, which MagicCombatMethod.hits() keeps for every secondary hit
+  forceAccurate = true;
+  cycle(50);
+  hooks.onCombatHitRoll(rollEvent(player, primary, CombatType.MAGIC)); // the cast's first roll notes it (Magic II)
+  const primaryMax = core.DamageFormulas.sourceHitBounds(player, CombatType.MAGIC, primary).maximum;
+  const secondaryMax = core.DamageFormulas.sourceHitBounds(player, CombatType.MAGIC, secondary).maximum;
+  assert.ok(primaryMax > secondaryMax, `Magic VI gives the 1000-hitpoint primary more (${primaryMax}) than the 200-hitpoint secondary (${secondaryMax})`);
+  const roll = Math.floor(secondaryMax * 0.9) + 1;
+  assert.ok(roll <= Math.floor(primaryMax * 0.9), "a roll above 90% of the secondary's max but not the primary's");
+  core.Misc.randomInclusive = (low, high) => Math.min(high, roll);
+  const hit = new core.PendingHit(player, secondary, core.CombatFactory.MAGIC_COMBAT, { delay: 0 });
+  assert.equal(hit.getTotalDamage(), Math.floor(roll * 1.5), "Magic I raises it");
+  player.setHitpoints(50);
+  hooks.onCombatHitResolved({ attacker: player, target: secondary, hit });
+  assert.equal(player.getHitpoints(), 50 + Math.floor(Math.floor(hit.getTotalDamage() * 0.1) * 1.2), "Magic IV marked it, and the tier 2 passive adds its 20%");
+  const execute = rollEvent(player, Object.assign(npc(HILL_GIANT), { getHitpoints: () => secondaryMax }), CombatType.MAGIC);
+  hooks.onCombatHitRoll(execute);
+  assert.equal(execute.forceMaxHit, false, "a target with exactly its own max hit in hitpoints is not executed");
+});
+
+test("Magic I and IV judge the undefended roll: a defender's damage reduction applies to the raised hit", () => {
+  const { CombatType, CombatSpells } = core;
+  const caster = character("caster", { masteries: { melee: 0, ranged: 0, magic: 4 } });
+  caster.getCombat().setCastSpell(CombatSpells.FIRE_STRIKE);
+  const defender = character("defender", { masteries: { melee: 4, ranged: 0, magic: 0 } });
+  forceAccurate = true;
+  core.Misc.randomInclusive = (low, high) => high;
+  Math.random = () => 0.99; // no Elysian or other chance effects on the defender
+  cycle(70);
+  const hit = new core.PendingHit(caster, defender, core.CombatFactory.MAGIC_COMBAT, { delay: 0 });
+  const max = core.DamageFormulas.sourceHitBounds(caster, CombatType.MAGIC, defender).maximum;
+  assert.ok(Math.floor(max * 0.85) <= Math.floor(max * 0.9), "the reduced max roll would fail the 90% test");
+  assert.equal(hit.getTotalDamage(), Math.floor(Math.floor(max * 1.5) * 0.85), "Magic I's +50% first, then the defender's -15%");
+  caster.setHitpoints(50);
+  hooks.onCombatHitResolved({ attacker: caster, target: defender, hit });
+  assert.equal(caster.getHitpoints(), 50 + Math.floor(Math.floor(hit.getTotalDamage() * 0.1) * 1.2), "Magic IV heals 10% of the damage dealt");
 });

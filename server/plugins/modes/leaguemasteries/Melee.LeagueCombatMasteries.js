@@ -1,39 +1,39 @@
 /**
  * The Melee masteries (https://oldschool.runescape.wiki/w/Melee_I .. Melee_VI): I a 25% chance to
  * roll the damage twice and keep the higher; II a 10% chance that a melee attack on an NPC is
- * followed by an echo hit, a melee hit of its own accuracy rolled from half the max hit, a tick
- * later, queued as any hit (its guards and XP; the Wiki does not say whether an echo pays XP), with
- * the captured echo projectile; IV a 5% chance that a landed hit heals 40% of its
+ * followed by an echo hit, an ordinary melee hit of its own accuracy rolled from half the max hit,
+ * a tick later, queued as any hit (its guards and XP; the Wiki does not say whether an echo pays
+ * XP), with the captured echo projectile; IV a 5% chance that a landed hit heals 40% of its
  * damage; VI echoes on 20% of attacks and lets an echo echo in turn, up to eight in a row. The
+ * rolls act on the core's `combat:hit-rolled`, before the target's defences reduce the hit. The
  * attack rates (III, V) are AttackRate.LeagueCombatMasteries.js.
  */
 const Common = require("./Common.LeagueCombatMasteries");
-const Passives = require("./Passives.LeagueCombatMasteries");
 
 let core;
 
 /** Echo hits this unit queued, and how many echoes deep they are (1 for an echo of a real hit). */
 const echoes = new WeakMap();
-/** The echo being built: its depth, while its PendingHit rolls (the damage hook runs inside the constructor). */
+/** The attacker whose echo is being built (its PendingHit rolls inside the constructor). */
 let building = null;
 /** Which of the two echo projectiles each attacker sent last. */
 const side = new WeakMap();
 
 const MELEE = () => core.CombatType.MELEE;
 
-/** Melee I's second roll, and an echo's own roll from half the max hit. */
-function damage(event) {
-  if (event.combatType !== MELEE() || !event.accurate || !Common.isEchoes(event.attacker)) return;
-  let max = Common.maxHit(event.attacker, MELEE());
-  const factor = Passives.damageFactor(event.attacker, event.target, MELEE());
-  if (building && building.attacker === event.attacker) {
-    max = Math.floor(max * Common.mastery("melee", 2).effect.echoMaxHitFraction);
-    event.damage.setDamage(Math.floor(core.Misc.randomInclusive(0, max) * factor));
+/** An echo's own roll from half the max hit, then Melee I's second roll, both on the undefended roll. */
+function rolled(event) {
+  if (event.combatType !== MELEE() || !Common.isEchoes(event.attacker)) return;
+  let { minimum, maximum } = event;
+  if (building === event.attacker) {
+    maximum = Math.floor(maximum * Common.mastery("melee", 2).effect.echoMaxHitFraction);
+    minimum = Math.min(minimum, maximum);
+    event.damage = core.Misc.randomInclusive(minimum, maximum);
   }
   const first = Common.effect(event.attacker, "melee", 1);
   if (!first || Math.random() >= first.rerollChance) return;
-  const second = Math.floor(core.Misc.randomInclusive(0, max) * factor);
-  if (second > event.damage.getDamage()) event.damage.setDamage(second);
+  const second = core.Misc.randomInclusive(minimum, maximum);
+  if (second > event.damage) event.damage = second;
 }
 
 function echoChance(attacker, depth) {
@@ -44,15 +44,25 @@ function echoChance(attacker, depth) {
   return sixth?.echoChance ?? second.echoChance;
 }
 
-function queueEcho(attacker, target, depth) {
-  const second = Common.mastery("melee", 2).effect;
-  building = { attacker };
-  let echo;
+/**
+ * Builds an echo as an ordinary melee attack: a special armed since the parent swing neither
+ * shapes it (hit count, accuracy, max hit) nor is spent on it, and stays armed for the next attack.
+ */
+function ordinaryHit(attacker, build) {
+  const armed = attacker.isSpecialActivated();
+  building = attacker;
+  if (armed) attacker.setSpecialActivated(false);
   try {
-    echo = new core.PendingHit(attacker, target, core.CombatFactory.MELEE_COMBAT, { delay: second.echoDelay });
+    return build();
   } finally {
+    if (armed) attacker.setSpecialActivated(true);
     building = null;
   }
+}
+
+function queueEcho(attacker, target, depth) {
+  const second = Common.mastery("melee", 2).effect;
+  const echo = ordinaryHit(attacker, () => new core.PendingHit(attacker, target, core.CombatFactory.MELEE_COMBAT, { delay: second.echoDelay }));
   echoes.set(echo, depth + 1);
   core.CombatFactory.addPendingHit(echo);
   const turn = side.get(attacker) ?? 0;
@@ -76,7 +86,7 @@ function resolved({ attacker, target, hit }) {
 
 module.exports = function attach(api) {
   core = api.core;
-  api.onCombatHitDamage(damage);
+  api.onCustomEvent("combat:hit-rolled", rolled);
   api.onCombatHitResolved(resolved);
 };
 
