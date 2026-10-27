@@ -55,6 +55,7 @@ module.exports = {
     require("./leaguerelics/ClueCompass.LeagueRelics")(api);
     require("./leaguerelics/TotalRecall.LeagueRelics")(api);
     require("./leaguerelics/Grimoire.LeagueRelics")(api);
+    require("./leaguerelics/BankHeist.LeagueRelics")(api);
     require("./leaguerelics/ArcaneGrimoire.LeagueRelics")(api);
   },
 };

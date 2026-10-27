@@ -89,7 +89,8 @@
     "bankersNoteFirst": { "text": "Use an item on the banker's note first.", "source": "ours (Wiki: an item must first be used on it)" },
     "bankersNoteToggleNote": { "text": "Activate will now note.", "source": "ours" },
     "bankersNoteToggleUnnote": { "text": "Activate will now unnote.", "source": "ours" },
-    "reloadedChosen": { "text": "Reloaded: you also have {relic}.", "source": "ours" }
+    "reloadedChosen": { "text": "Reloaded: you also have {relic}.", "source": "ours" },
+    "bankHeistTitle": { "text": "Which bank?", "source": "ours" }
   },
   "effects": {
     "_comment": "The relics with effects here (one <Relic>.LeagueRelics.js each), each gated on its league (`league`, one type or several for a relic both leagues have) and on being chosen (`key`, plus `aliases` for a catalog entry that stands in for the same relic). Numbers are the Wiki's: no rsprox recording of Trailblazer Reloaded exists (the captures start at revision 223). Superior Sorcerer's splash reach (one tile around the primary target, like a burst) and Undying Retribution's graphic (the Retribution prayer's, 437) are ours; the Wiki gives neither.",
@@ -213,6 +214,8 @@
     "clueCompass": { "league": 5, "key": "clue-compass", "toolName": "Clue compass" },
     "totalRecall": { "league": 5, "key": "total-recall", "toolName": "Crystal of Echoes" },
     "grimoire": { "league": 5, "key": "grimoire" },
+    "bankHeist": { "league": 5, "key": "bank-heist", "toolName": "Banker's briefcase" },
+    "reloaded": { "league": 5, "key": "reloaded", "tiers": [0, 1, 2] },
     "reloaded": { "league": 5, "key": "reloaded", "tiers": [0, 1, 2] },
     "arcaneGrimoire": {
       "item": "Arcane grimoire",
