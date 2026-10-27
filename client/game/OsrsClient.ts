@@ -13,7 +13,12 @@ import {
     INTERFACE_QUEST_LIST_ID,
     SIDE_JOURNAL_GROUP_ID,
 } from "../common/ui/sideJournal";
-import { isMobileMode, isTouchDevice, tooltipsEnabledByDefault } from "../common/utils/DeviceUtil";
+import {
+    isMobileChatKeyboardFocused,
+    isMobileMode,
+    isTouchDevice,
+    tooltipsEnabledByDefault,
+} from "../common/utils/DeviceUtil";
 import { clamp } from "../common/utils/MathUtil";
 import {
     TRANSMIT_VARPS,
@@ -8071,7 +8076,8 @@ export class OsrsClient {
         this.menuFrozenSimpleEntriesVersion = 0;
         this.menuActiveSimpleEntries = [];
         this.menuState.reset();
-        this.renderer.canvas.focus();
+        // Menu cleanup also runs after the touch that focuses the mobile chat input.
+        if (!isMobileChatKeyboardFocused()) this.renderer.canvas.focus();
         this.widgetManager?.invalidateAll?.();
     };
 
