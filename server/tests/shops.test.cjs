@@ -279,11 +279,12 @@ function customShopHarness(t, steelStock = 50) {
     : readFileSync(file, ...args));
   const { Wilderness } = require("../dist/game/content/wilderness/Wilderness");
   t.mock.method(Wilderness, "isIn", () => false);
-  let command, definition, delivery;
+  let command, definition, delivery, startup;
   const buttons = new Map();
   const persisted = new Map();
   CustomShops.register({
     core: { ItemDefinition },
+    onServerStartup: (handler) => { startup = handler; },
     getCombatFactory: () => ({ inCombat: () => false }),
     persistAttribute: (key, value) => {
       persisted.set(key, value);
@@ -299,6 +300,7 @@ function customShopHarness(t, steelStock = 50) {
   t.mock.method(PluginManager, "emitCustomEvent", (name, request) => {
     if (name === "shop:delivery") delivery(request);
   });
+  startup();
   loadShops(steelStock);
   const texts = new Map();
   const player = createPlayer();

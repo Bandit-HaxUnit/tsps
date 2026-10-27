@@ -219,11 +219,15 @@ function selectShopButton({ player, buttonId }) {
   return selectShop(player, LEFT_ROW_UIDS.indexOf(buttonId));
 }
 
+function initialize(api) {
+  CombatFactory = api.getCombatFactory();
+  ItemDefinition = api.core.ItemDefinition;
+}
+
 module.exports = {
   name: "CustomShops",
   register(api) {
-    CombatFactory = api.getCombatFactory();
-    ItemDefinition = api.core.ItemDefinition;
+    api.onServerStartup(initialize.bind(null, api));
     api.persistAttribute(BUY_NOTED_ATTRIBUTE, false);
     api.registerCustomInterface(INTERFACE_DEFINITION);
     api.registerCommand("shops", openShops, undefined, "Browse custom shops");
