@@ -53,7 +53,8 @@ const PETS = [
   { enumName: "RAX", petId: 13684, morphId: 13683, itemId: 29836, dialogue: -1,
     morphUnlock: { itemId: ItemIdentifiers.COAGULATED_VENOM, consume: true, name: "coagulated venom" } },
   { enumName: "SCURRY", petId: 7219, morphId: 0, itemId: 28801, dialogue: -1 },
-  { enumName: "LIL_ZIK", petId: NpcIdentifiers.LIL_ZIK, morphId: 0, itemId: 22473, dialogue: -1 },
+  // Cache241:8336 is poh_verzik_pet;8337 verzik_pet is the normal follower.
+  { enumName: "LIL_ZIK", petId: NpcIdentifiers.LIL_ZIK_2, morphId: 0, itemId: 22473, dialogue: -1 },
   // Tombs of Amascut: each form uses its boss remnant (Wiki, Metamorphosis).
   { enumName: "TUMEKENS_GUARDIAN", petId: 11812, morphId: 11813, itemId: 27352, dialogue: -1 },
   { enumName: "ELIDINIS_GUARDIAN", petId: 11813, morphId: 11849, itemId: 27352, dialogue: -1,
