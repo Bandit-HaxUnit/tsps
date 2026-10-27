@@ -244,6 +244,32 @@ test('all three real Snakeling forms retain canonical speech through native meta
   assert.equal(seen.size,3);assert.equal(f.p.getAttribute('pets:current'),n);
 });
 
+for(const [mobile,phrase] of [[false,'high gamble'],[true,'lucky dip']])test(`Penance native Talk-to selects ${mobile?'mobile':'desktop'} current platform conversation`,async t=>{
+  const {MOBILE_CLIENT_ATTRIBUTE}=require('../dist/net/protocol/ClientProtocol');
+  const f=actor(t);f.p.setAttribute(MOBILE_CLIENT_ATTRIBUTE,mobile);
+  const n=await summon(f,core.ItemIdentifiers.PET_PENANCE_QUEEN);await talk(f,n);
+  assert.equal(text(f),`Of all the ${phrase} rewards I could have won, I won you...`);
+  await input(f,{type:'dialogue_continue',widgetId:(217<<16)|5,childIndex:-1});
+  assert.equal(text(f),"Keep trying, human. You'll never win that Dragon Chainbody.");
+  await input(f,{type:'dialogue_continue',widgetId:(231<<16)|5,childIndex:-1});assert.equal(f.p.getDialogueManager().isActive(),false);
+});
+
+test('Penance dialogue follows fresh platform across actual saved logins without persisting mobile preference',async t=>{
+  const {MOBILE_CLIENT_ATTRIBUTE}=require('../dist/net/protocol/ClientProtocol');
+  const f=actor(t);f.p.setAttribute(MOBILE_CLIENT_ATTRIBUTE,true);const n=await summon(f,core.ItemIdentifiers.PET_PENANCE_QUEEN);await talk(f,n);
+  assert.equal(text(f),'Of all the lucky dip rewards I could have won, I won you...');
+  const save=PlayerSave.fromPlayer(f.p);PM.emitPlayerLogout({player:f.p,username:f.p.getUsername()});
+  const g=actor(t);save.applyToPlayer(g.p);assert.notEqual(g.p.getAttribute(MOBILE_CLIENT_ATTRIBUTE),true);
+  PM.emitPlayerLogin({player:g.p,username:g.p.getUsername(),isNewAccount:false});g.p.needsPlacement=false;
+  const current=g.p.getAttribute('pets:current');assert.ok(current?.isRegistered());await talk(g,current);
+  assert.equal(text(g),'Of all the high gamble rewards I could have won, I won you...');
+  assert.equal(g.p.getInventory().getAmount(core.ItemIdentifiers.PET_PENANCE_QUEEN),0);
+  const desktopSave=PlayerSave.fromPlayer(g.p);PM.emitPlayerLogout({player:g.p,username:g.p.getUsername()});
+  const h=actor(t);h.p.setAttribute(MOBILE_CLIENT_ATTRIBUTE,true);desktopSave.applyToPlayer(h.p);
+  PM.emitPlayerLogin({player:h.p,username:h.p.getUsername(),isNewAccount:false});h.p.needsPlacement=false;
+  await talk(h,h.p.getAttribute('pets:current'));assert.equal(text(h),'Of all the lucky dip rewards I could have won, I won you...');
+});
+
 test('normal Beaver native Talk-to runs its ordinary form question and reply',async t=>{
   const f=actor(t),n=await summon(f,core.ItemIdentifiers.BEAVER);await talk(f,n);
   assert.equal(text(f),'How much wood would a woodchuck chuck if a woodchuck could chuck wood?');

@@ -1448,6 +1448,7 @@ export interface PluginCoreApi {
   Location: any;
   Mobile: any;
   encodePluginMessage: typeof import("../net/protocol/ClientProtocol").encodePluginMessage;
+  MOBILE_CLIENT_ATTRIBUTE: typeof import("../net/protocol/ClientProtocol").MOBILE_CLIENT_ATTRIBUTE;
   encodeFinePosition: typeof import("../net/protocol/ClientProtocol").encodeFinePosition;
   Boundary: any;
   PolygonalBoundary: any;
