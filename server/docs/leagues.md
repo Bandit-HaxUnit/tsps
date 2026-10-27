@@ -411,6 +411,27 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   (varbits 13395-13399, 13401, 13402) are saved. Slots open at the points enum 4127 gives. Equip
   puts an owned fragment in the first open empty slot, never twice; Unequip and Unequip all clear
   them.
+- **Fragment XP:** each equipped fragment gains 1 XP for any XP gained in an unlocked skill, at
+  most once every 4 ticks (Wiki), through the core `onExperienceGained` hook. Levels 2 and 3 come
+  at 2,000 and 8,000 XP (script 5789), where a fragment stops. A set's tier counts the equipped
+  fragments that list it (enum 4137: 2 or 3 pieces).
+- **Drops:** a skill's XP may turn up its category's Unidentified fragment, the likelier the more
+  XP; a kill may turn up the combat one, by the NPC's hitpoints, carrying the NPC's tier on the
+  item (the Wiki's boss lists; any other NPC tier 1). Break opens it into a fragment not yet
+  mastered whose own item it is (enum 4136 param 1462), for combat of its tier (param 1454) or the
+  nearest with one left: new at level 1, or 500 XP for one already owned (Wiki). The rates are this
+  server's; misc fragments have no listed source, so only `::fragment` gives their item.
+- **Effects (batch 1):** Unholy Warrior / Ranger / Wizard (accuracy at 0 Prayer points),
+  Bottomless Quiver (ammunition and bow charges saved, through the core `combat:ammo-saving`),
+  Arcane Conduit (runes and powered-staff charges), Larger Recharger, Divine Restoration,
+  Venomaster (poison on hit, poison and venom immunity), Slay All Day, and the sets Absolute Unit,
+  Drakan's Touch, Twin Strikes, Double Tap and Chain Magic. Each fragment works with the number
+  its level gives in the cache (params 1456-1458; Venomaster's are poison severities 15/25/35,
+  hitting 3/5/7); the sets' numbers are only in their texts. Venomaster's chance (25%) is this
+  server's, and its immunity stops new poison without curing a running one. The extra rolls are
+  rolled with the hit's own spell, never a special attack, and pay XP like any hit, for no more
+  than the hitpoints left after the damage already queued (none after a killing blow). The per-tick
+  effects run as one task per Shattered Relics character, from login.
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price
   now, from the Wiki's Initial Cost less the prerequisite packs already unlocked, and 0 once
@@ -423,8 +444,11 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   only the fights inside. The Wiki gives no message for either lock; the boss one is this
   server's, said once per boss every few seconds.
 
-Stored and drawn, not yet enforced: fragments don't drop, gain XP or take effect (the 53 fragments and 15 set effects); quest packs
-complete no quests; fragments can be swapped anywhere, not only at a bank or the Sage, and only
+Not yet: the other fragments' effects (the skilling, production and misc ones; Tactical
+Duelist and the ranged weapons' charges, which no hook reports; Livin' On A Prayer, Special
+Discount, Thrall Damage, Superior Tracking, Slay 'n' Pay and the god-armour four) and the other
+sets (Fast Metabolism, Knife's Edge, Greedy Gatherer, Personal Banker, The Alchemist, The
+Craftsman, Unchained Talent and the three that give a Sage item); quest packs complete no quests; fragments can be swapped anywhere, not only at a bank or the Sage, and only
 through Equip (dragging one into a slot isn't handled); the
 Display Fragments toggle (varbit 12383) is the client's own; the intro cutscene (734) has no
 recording or client driver, so it isn't played.

@@ -67,6 +67,13 @@ export interface PluginPlayerLevelUpEvent {
   newLevel: number;
 }
 
+/** XP that just landed in a skill: after rates and the experience cap; not sent when refused, XP-locked or already at the cap. */
+export interface PluginExperienceGainedEvent {
+  player: any;
+  skill: any;
+  experience: number;
+}
+
 export type PluginCustomEventName = `${string}:${string}`;
 
 export interface PluginRegionLoadedEvent {
@@ -914,6 +921,8 @@ export interface PluginApi {
   spawnNpc(definition: PluginNpcSpawnDefinition): any;
   removeNpc(npc: any): void;
   onPlayerLevelUp(handler: (event: PluginPlayerLevelUpEvent) => void): void;
+  /** After XP lands in a skill (onCanGainExperience is the check before it). */
+  onExperienceGained(handler: (event: PluginExperienceGainedEvent) => void): void;
   /** Subscribes to an exact namespaced plugin event, such as `mining:success`. */
   onCustomEvent(
     eventName: PluginCustomEventName,

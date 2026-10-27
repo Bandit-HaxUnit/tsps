@@ -3,10 +3,13 @@
  * `fragments`): which fragments a character owns (their fragment XP) and which sit in its seven
  * slots, saved and sent as the varbits the screen draws from. A slot opens at the points the
  * cache's enum 4127 gives (Wiki /Fragments: one to seven slots). Equip and Unequip work anywhere
- * for now; fragments don't drop and have no effect yet (follow-ups in docs/leagues.md).
+ * for now. Equipped fragments gain XP and levels as the character gains XP (data `fragmentXp`);
+ * FragmentDrops hands them out and FragmentEffects gives them effects, through `equippedLevel`,
+ * `setTier` and `award`.
  *
  *   "league:grant-fragment" { player, id, xp? }   owns a fragment (1 XP, level 1, unless more is given)
  *   "league:open-fragments" { player }            opens the screen
+ *   "league:fragment-level" { player, id } -> level   (0 unless equipped)
  */
 const Common = require("./Common.LeagueMode");
 const { FLAG_OP1, FLAG_OP2 } = require("../../interface/widgetGroup");
@@ -21,6 +24,16 @@ const SLOTS_ATTRIBUTE = "league:fragment-slots";
 let fragmentIds = null;
 /** The points each slot opens at (enum 4127), read once. */
 let slotThresholds = null;
+/**
+ * Fragment id -> its cache row (enum 4136's struct), read once: name (param 1448), its
+ * Unidentified fragment item (1462), combat tier (1454; 0 = not combat), the number each level
+ * works with (1456-1458, the numbers in its level texts 1450-1452) and its sets (1459 / 1460).
+ */
+let definitions = null;
+/** Set id -> the pieces its first and second tiers need (params 1468 / 1470; 0 = no second tier), read once. */
+let setPieces = null;
+/** Per player: the world cycle its equipped fragments last gained XP (Wiki: at most once per 4 ticks). */
+const lastGain = new WeakMap();
 
 function uid(group, child) {
   return (group << 16) | child;
@@ -86,8 +99,138 @@ function grant(request) {
   const id = Number(request?.id);
   if (!isShattered(player) || !ids().has(id)) return;
   const xp = owned(player);
-  player.setAttribute(FRAGMENTS_ATTRIBUTE, { ...xp, [id]: Math.max(Number(xp[id]) || 0, Number(request.xp) || 1) });
+  player.setAttribute(FRAGMENTS_ATTRIBUTE, { ...xp, [id]: Math.min(maxXp(), Math.max(Number(xp[id]) || 0, Number(request.xp) || 1)) });
   sendFragments(player);
+}
+
+// ---- Fragment XP, levels and sets ----
+
+function maxXp() {
+  return data.fragmentXp.levels.at(-1);
+}
+
+/** Script 5789: level 1, 2 or 3 by XP; 0 = not owned. */
+function levelOf(xp) {
+  const levels = data.fragmentXp.levels;
+  let level = 0;
+  levels.forEach((needed, index) => {
+    if (xp >= needed) level = index + 1;
+  });
+  return level;
+}
+
+function xpOf(player, id) {
+  return Number(owned(player)[id]) || 0;
+}
+
+/** An owned fragment's level, equipped or not (0 = not owned). */
+function ownedLevel(player, id) {
+  return levelOf(xpOf(player, id));
+}
+
+/** The level an equipped fragment works at; 0 when it isn't equipped (or the character isn't in Shattered Relics). */
+function equippedLevel(player, id) {
+  if (!isShattered(player) || !slots(player).includes(Number(id))) return 0;
+  return ownedLevel(player, Number(id));
+}
+
+function readDefinitions() {
+  if (definitions) return definitions;
+  const { CacheDefinitions } = Common.core;
+  const number = (params, param) => Number(params?.get(param)) || 0;
+  definitions = new Map();
+  for (const struct of CacheDefinitions.getEnumValues(config().enum).values()) {
+    const params = CacheDefinitions.getStructParams(Number(struct));
+    definitions.set(number(params, config().idParam), {
+      name: String(params?.get(config().nameParam) ?? ""),
+      item: number(params, config().itemParam),
+      tier: number(params, config().tierParam),
+      values: config().levelParams.map((param) => number(params, param)),
+      sets: config().setParams.map((param) => number(params, param)).filter((set) => set > 0),
+    });
+  }
+  return definitions;
+}
+
+/** A fragment's cache row (readDefinitions), or null for an unknown id. */
+function definition(id) {
+  return readDefinitions().get(Number(id)) ?? null;
+}
+
+/** Every fragment's cache row, by id. */
+function allDefinitions() {
+  return readDefinitions();
+}
+
+/** The number an equipped fragment works with at its level (params 1456-1458), or null when it isn't equipped. */
+function equippedValue(player, id) {
+  const level = equippedLevel(player, id);
+  return level > 0 ? definition(id)?.values[level - 1] ?? null : null;
+}
+
+function readSetPieces() {
+  if (setPieces) return;
+  const { CacheDefinitions } = Common.core;
+  setPieces = new Map();
+  for (const struct of CacheDefinitions.getEnumValues(config().setsEnum).values()) {
+    const params = CacheDefinitions.getStructParams(Number(struct));
+    setPieces.set(Number(params?.get(config().setIdParam)), config().setPiecesParams.map((param) => Number(params?.get(param)) || 0));
+  }
+}
+
+/** A set's tier from the equipped fragments that list it: 0, 1 or 2 (enum 4137). */
+function setTier(player, set) {
+  if (!isShattered(player)) return 0;
+  readSetPieces();
+  const pieces = slots(player).filter((id) => id > 0 && (definition(id)?.sets ?? []).includes(Number(set))).length;
+  const [first, second] = setPieces.get(Number(set)) ?? [0, 0];
+  if (second > 0 && pieces >= second) return 2;
+  return first > 0 && pieces >= first ? 1 : 0;
+}
+
+/**
+ * A fragment found: new, it is owned at the first level's XP; owned already, it gains the
+ * duplicate XP (Wiki: even unequipped). Answers whether it was a duplicate.
+ */
+function award(player, id) {
+  const xp = owned(player);
+  const had = Number(xp[id]) || 0;
+  const now = had > 0 ? Math.min(maxXp(), had + data.fragmentXp.duplicate) : data.fragmentXp.levels[0];
+  player.setAttribute(FRAGMENTS_ATTRIBUTE, { ...xp, [id]: now });
+  sendFragments(player);
+  return { duplicate: had > 0 };
+}
+
+/** Whether a fragment can still be found: not owned yet, or owned below the last level. */
+function findable(player, id) {
+  return xpOf(player, id) < maxXp();
+}
+
+/** onExperienceGained: each equipped fragment gains XP, at most once per `everyTicks` (Wiki). */
+function experienceGained({ player }) {
+  if (!isShattered(player)) return;
+  const equipped = slots(player).filter((id) => id > 0);
+  if (!equipped.length) return;
+  const cycle = Common.core.World.getProcessCycle();
+  const last = lastGain.get(player);
+  if (last !== undefined && cycle - last < data.fragmentXp.everyTicks) return;
+  lastGain.set(player, cycle);
+  const xp = { ...owned(player) };
+  let changed = false;
+  for (const id of equipped) {
+    const before = Number(xp[id]) || 0;
+    if (before <= 0 || before >= maxXp()) continue;
+    xp[id] = Math.min(maxXp(), before + data.fragmentXp.perGain);
+    changed = true;
+  }
+  if (!changed) return;
+  player.setAttribute(FRAGMENTS_ATTRIBUTE, xp);
+  const sender = player.getPacketSender();
+  for (const id of equipped) sender.sendVarbit(config().xpVarbitBase + id - 1, Math.min(0xffff, Number(xp[id]) || 0));
+}
+
+function levelQuery(request) {
+  if (request?.player) request.level = equippedLevel(request.player, Number(request.id));
 }
 
 function open({ player }) {
@@ -165,10 +308,20 @@ module.exports = function attach(api) {
   api.onCustomEvent("league:grant-fragment", grant);
   api.onCustomEvent("league:open-fragments", open);
   api.onCustomEvent("league:login", login);
+  api.onCustomEvent("league:fragment-level", levelQuery);
+  api.onExperienceGained(experienceGained);
   api.onInterfaceActionButton(buttonIds.list, equip);
   api.onInterfaceActionButton(buttonIds.loadout, unequip);
   api.onInterfaceActionButton(buttonIds.all, unequipAll);
   api.onInterfaceActionButton(buttonIds.close, close);
 };
 
-module.exports._test = { openSlots, slots, owned, ids, FRAGMENTS_ATTRIBUTE, SLOTS_ATTRIBUTE };
+module.exports.equippedLevel = equippedLevel;
+module.exports.equippedValue = equippedValue;
+module.exports.definition = definition;
+module.exports.allDefinitions = allDefinitions;
+module.exports.ownedLevel = ownedLevel;
+module.exports.setTier = setTier;
+module.exports.award = award;
+module.exports.findable = findable;
+module.exports._test = { openSlots, slots, owned, ids, levelOf, FRAGMENTS_ATTRIBUTE, SLOTS_ATTRIBUTE };

@@ -39,6 +39,13 @@
     "enum": 4136,
     "idParam": 1455,
     "nameParam": 1448,
+    "itemParam": 1462,
+    "tierParam": 1454,
+    "levelParams": [1456, 1457, 1458],
+    "setParams": [1459, 1460],
+    "setsEnum": 4137,
+    "setIdParam": 1464,
+    "setPiecesParams": [1468, 1470],
     "xpVarbitBase": 13403,
     "slotVarbits": [13395, 13396, 13397, 13398, 13399, 13401, 13402],
     "slotsEnum": 4127,
@@ -169,11 +176,54 @@
     }
   },
 
+  "_fragmentXp": "Wiki /Fragments: \"Gaining any experience in any unlocked skill while the fragment is equipped will gain 1 XP, at a maximum of one per 4 ticks\"; a duplicate gives 500 XP even unequipped. Levels from client script 5789: 1 from 1 XP, 2 from 2,000, 3 from 8,000; a fragment stops at 8,000 and then leaves the drop pool (Wiki).",
+  "fragmentXp": { "everyTicks": 4, "perGain": 1, "levels": [1, 2000, 8000], "duplicate": 500 },
+
+  "_fragmentDrops": "Wiki /Fragments: drops are \"based on activity and scaled by the amount of XP acquired\", the activity picks the pool, and combat fragments are tiered by the NPC. They come as the cache's Unidentified fragment items (26544-26548), which Break opens (Wiki Unidentified_fragment_(combat)) into a fragment whose own item (enum 4136 param 1462) it is, and for combat of the item's tier (param 1454). The Wiki gives no rates: `xpPerDrop` (a skilling gain of that much XP is a sure drop; less is that share of a chance) and `hitpointsPerDrop` (the same for a kill, by the NPC's hitpoints) are this server's. Combat tiers by NPC name are the Wiki's lists; every other NPC is tier 1. Misc fragments have no listed source, so only ::fragment gives their item.",
+  "fragmentDrops": {
+    "items": { "harvesting": 26544, "production": 26545, "skilling": 26546, "combat": 26547, "misc": 26548 },
+    "_skills": "Skill (client stat id) -> the category its XP rolls for. Combat skills and Magic roll on kills instead.",
+    "skills": { "10": "harvesting", "8": "harvesting", "14": "harvesting", "19": "harvesting", "21": "harvesting", "7": "production", "13": "production", "12": "production", "9": "production", "15": "production", "20": "production", "22": "production", "17": "skilling", "16": "skilling", "11": "skilling", "5": "skilling" },
+    "xpPerDrop": { "harvesting": 30000, "production": 30000, "skilling": 20000 },
+    "hitpointsPerDrop": 1500,
+    "_combatTiers": "Wiki /Fragments combat tiers: the NPCs (by name) that drop tiers 2-4.",
+    "combatTiers": {
+      "2": ["Ahrim the Blighted", "Dharok the Wretched", "Guthan the Infested", "Karil the Tainted", "Torag the Corrupted", "Verac the Defiled", "Dagannoth Prime", "Dagannoth Rex", "Dagannoth Supreme", "Hespori", "Sarachnis", "Skotizo"],
+      "3": ["Abyssal Sire", "Cerberus", "Crystalline Hunllef", "Corrupted Hunllef", "Kalphite Queen", "Kraken", "Vorkath", "Zulrah"],
+      "4": ["Alchemical Hydra", "Great Olm", "Corporeal Beast", "TzTok-Jad", "TzKal-Zuk", "General Graardor", "Commander Zilyana", "Kree'arra", "K'ril Tsutsaroth", "Nex", "The Nightmare", "Phosani's Nightmare", "Verzik Vitur"]
+    }
+  },
+
+  "_fragmentEffects": "Batch 1 of the fragments' effects, the ones existing hooks carry. Each works with the number its equipped level gives in the cache (enum 4136 params 1456-1458, the numbers its level texts 1450-1452 quote): a percent, a heal, ticks between restores (Larger Recharger 41/33/17, Divine Restoration 25/15/6), or Venomaster's poison severity (15/25/35, which hits for 3/5/7). Venomaster's chance isn't given anywhere, so `chancePercent` is this server's. Sets (enum 4137): a set's tiers need the pieces params 1468 / 1470 give of equipped fragments that list it (params 1459 / 1460); their numbers are only in their texts (params 1467 / 1469), copied here.",
+  "fragmentEffects": {
+    "accuracy": { "1": "melee", "3": "ranged", "5": "magic" },
+    "ammoSaving": { "fragment": 4, "excluded": "chinchompa" },
+    "runeSaving": { "fragment": 6 },
+    "specialRestore": { "fragment": 11 },
+    "prayerRestore": { "fragment": 9 },
+    "venom": { "fragment": 13, "chancePercent": 25, "poisonImmuneFrom": 2, "venomImmuneFrom": 3 },
+    "slayerHeal": { "fragment": 14 },
+    "sets": {
+      "absoluteUnit": { "set": 1, "reductionPercent": [30, 50], "reflectPercent": [50, 100] },
+      "drakansTouch": { "set": 6, "chancePercent": 50, "healPercent": [5, 10] },
+      "extraRolls": {
+        "14": { "style": "melee", "chancePercent": [30, 60] },
+        "5": { "style": "ranged", "chancePercent": [30, 60] },
+        "3": { "style": "magic", "chancePercent": [30, 60] }
+      }
+    }
+  },
+
   "messages": {
     "_lockedBoss": "The Wiki gives no message for a locked boss; this wording is this server's.",
     "lockedBoss": "You need to unlock {name} with Sage's Renown before you can fight it.",
     "_needsGodWars": "The Wiki footnotes Nex as requiring every God Wars boss; this wording is this server's.",
     "needsGodWars": "You need to unlock every God Wars Dungeon general before you can unlock Nex.",
+    "_fragmentFound": "No message is recorded for breaking a fragment; these are this server's.",
+    "fragmentFound": "You break the fragment open and find {name}.",
+    "fragmentDuplicate": "You break the fragment open and find {name} again: it gains {xp} experience.",
+    "fragmentsMastered": "You have mastered every fragment this could hold.",
+    "fragmentUsage": "Use ::fragment <id|harvesting|production|skilling|combat|misc> [tier].",
     "_classNoRoom": "No message is recorded for this; it is this server's.",
     "classNoRoom": "You need more space in your inventory or bank to accept this class.",
     "renownGranted": "Granted {amount} Sage's Renown to {name} ({renown} now).",

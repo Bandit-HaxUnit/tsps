@@ -67,6 +67,7 @@ import {
   PluginPathBlockedEvent,
   PluginPlayerProcessEvent,
   PluginPlayerLevelUpEvent,
+  PluginExperienceGainedEvent,
   PluginCustomEventName,
   PluginPlayerPathBlockedEvent,
   PluginCommandEvent,
@@ -246,6 +247,7 @@ export class PluginManager {
   private static friendRemoveHooks: PluginHook<PluginFriendEvent>[] = [];
   private static playerProcessHooks: PluginHook<PluginPlayerProcessEvent>[] = [];
   private static playerLevelUpHooks: PluginHook<PluginPlayerLevelUpEvent>[] = [];
+  private static experienceGainedHooks: PluginHook<PluginExperienceGainedEvent>[] = [];
   private static customEventHooks = new Map<
     PluginCustomEventName,
     PluginHook<any>[]
@@ -993,6 +995,13 @@ export class PluginManager {
     }
     if (typeof npc.isRegistered === "function" && npc.isRegistered()) {
       World.getNpcs().remove(npc);
+    }
+  }
+
+  public static emitExperienceGained(event: PluginExperienceGainedEvent): void {
+    if (PluginManager.experienceGainedHooks.length === 0) return;
+    for (const hook of PluginManager.experienceGainedHooks) {
+      PluginManager.executeHook(hook, event, "experience_gained", "experience_gained");
     }
   }
 
@@ -2969,6 +2978,9 @@ export class PluginManager {
       },
       spawnNpc: (definition) => PluginManager.spawnNpc(definition, pluginName),
       removeNpc: (npc) => PluginManager.removeNpc(npc),
+      onExperienceGained: (handler) => {
+        if (typeof handler === "function") PluginManager.experienceGainedHooks.push({ ...hookProfile(handler), handler });
+      },
       onPlayerLevelUp: (handler) => {
         if (typeof handler !== "function") {
           return;
