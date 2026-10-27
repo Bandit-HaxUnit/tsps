@@ -18,7 +18,10 @@ function loadCandidates() {
 const slug = value => String(value).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 // These two cache241 physical forms share the Tektiny/Vespina transcript sections.
 const SHARED_FORM_SECTIONS = new Map([["Enraged Tektiny", "Tektiny"], ["Flying Vespina", "Vespina"]]);
-function ordinaryVariant(row, name) {
+function ordinaryVariant(row, name, explicitVariant) {
+  // Content rows can name a canonical ordinary section when cache names do not
+  // distinguish transcript forms. An invalid selector must not pick a fallback.
+  if (explicitVariant !== undefined) return row.variants?.includes(explicitVariant) ? explicitVariant : undefined;
   const form = slug(SHARED_FORM_SECTIONS.get(name) ?? name);
   // Dated pre-update transcripts are retained as history, not current forms.
   const variants = (row.variants ?? [])

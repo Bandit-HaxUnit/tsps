@@ -269,3 +269,37 @@ test('Penance dialogue follows fresh platform across actual saved logins without
   PM.emitPlayerLogin({player:h.p,username:h.p.getUsername(),isNewAccount:false});h.p.needsPlacement=false;
   await talk(h,h.p.getAttribute('pets:current'));assert.equal(text(h),'Of all the lucky dip rewards I could have won, I won you...');
 });
+
+test('normal Beaver native Talk-to runs its ordinary form question and reply',async t=>{
+  const f=actor(t),n=await summon(f,core.ItemIdentifiers.BEAVER);await talk(f,n);
+  assert.equal(text(f),'How much wood would a woodchuck chuck if a woodchuck could chuck wood?');
+  await input(f,{type:'dialogue_continue',widgetId:(217<<16)|5,childIndex:-1});
+  assert.equal(text(f),'Approximately 32,768 depending on his woodcutting level.');
+  await input(f,{type:'dialogue_continue',widgetId:(231<<16)|5,childIndex:-1});
+  assert.equal(f.p.getDialogueManager().isActive(),false);await talk(f,n);
+  assert.equal(text(f),'How much wood would a woodchuck chuck if a woodchuck could chuck wood?');
+});
+
+test('normal Beaver selector survives native Pickup, real Bank and saved login without authorizing foreign or queued pets',async t=>{
+  const f=actor(t),n=await summon(f,core.ItemIdentifiers.BEAVER);await talk(f,n);
+  const pick=n.getCurrentDefinition(f.p).getActions().findIndex(x=>x==='Pick-up')+1;
+  await input(f,{type:'npc_option',index:n.getIndex(),clickType:pick});assert.equal(f.p.getDialogueManager().isActive(),false);
+  f.p.getBank(0).open();core.Bank.deposit(f.p,core.ItemIdentifiers.BEAVER,f.p.getInventory().getSlotForItemId(core.ItemIdentifiers.BEAVER),1,false);
+  core.Bank.withdraw(f.p,core.ItemIdentifiers.BEAVER,f.p.getBank(0).getSlotForItemId(core.ItemIdentifiers.BEAVER),1,0);
+  PM.emitPlayerLogout({player:f.p,username:f.p.getUsername()});const g=actor(t);PlayerSave.fromPlayer(f.p).applyToPlayer(g.p);PM.emitPlayerLogin({player:g.p,username:g.p.getUsername(),isNewAccount:false});g.p.needsPlacement=false;
+  const restored=await summon(g,core.ItemIdentifiers.BEAVER);await talk(g,restored);
+  assert.equal(text(g),'How much wood would a woodchuck chuck if a woodchuck could chuck wood?');
+  const stranger=actor(t);await talk(stranger,restored);assert.equal(text(stranger),undefined);
+  g.p.getPacketSender().sendInterfaceRemoval();core.World.getRemoveNPCQueue().push(restored);await talk(g,restored);assert.equal(text(g),undefined);
+});
+
+test('an invalid explicit ordinary selector cannot fall back to another form or generic conversation',async t=>{
+  const pets=require('../plugins/npcs/Pets.plugin').__internals;
+  const row=pets.PETS.find(p=>p.enumName==='BEAVER'),previous=row.dialogueVariant;
+  t.after(()=>{row.dialogueVariant=previous;});
+  const f=actor(t),n=await summon(f,core.ItemIdentifiers.BEAVER);
+  row.dialogueVariant='nonexistent-ordinary-variant';await talk(f,n);
+  assert.equal(text(f),undefined);assert.equal(f.p.getDialogueManager().isActive(),false);
+  row.dialogueVariant=previous;await talk(f,n);
+  assert.equal(text(f),'How much wood would a woodchuck chuck if a woodchuck could chuck wood?');
+});
