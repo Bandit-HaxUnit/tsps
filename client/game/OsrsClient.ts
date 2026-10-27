@@ -2306,20 +2306,6 @@ export class OsrsClient {
                     return;
                 }
                 sendBankCustomQuantity(amount);
-
-                // If there's a pending widget action (e.g., Withdraw-X), send it now
-                if (this.pendingInputDialogAction) {
-                    const { payload, option } = this.pendingInputDialogAction;
-                    this.pendingInputDialogAction = null;
-                    console.log(
-                        `[InputDialog] Sending deferred ${option} action with quantity ${amount}`,
-                    );
-                    try {
-                        sendWidgetAction(payload);
-                    } catch (err) {
-                        console.warn("[InputDialog] Deferred widget action failed", err);
-                    }
-                }
             } else if (type === "name" || type === "obj") {
                 const text = String(value ?? "");
                 sendResumeNameDialog(text);
@@ -2358,6 +2344,10 @@ export class OsrsClient {
         // which calls toplevel_sidebuttons_enable to show/hide tab icons based on if_hassub
         this.widgetManager.onSubChangeInvoker = (widget) => {
             this.cs2Vm.invokeEventHandler(widget, "onSubChange");
+        };
+
+        this.widgetManager.onDialogAbortInvoker = (widget) => {
+            this.cs2Vm.invokeEventHandler(widget, "onDialogAbort");
         };
 
         // Cache-loaded onSubChange handler arrays (Object[] in Java).
@@ -2688,6 +2678,8 @@ export class OsrsClient {
                         });
                     }
                 }
+            } else if (payload?.action === "trigger_ondialogabort") {
+                this.widgetManager?.triggerOnDialogAbort();
             } else if (payload?.action === "close_sub") {
                 const standardTargetUid = Number(payload.targetUid) | 0;
                 this.cancelPendingInterfaceOpen(standardTargetUid);
