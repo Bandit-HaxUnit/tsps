@@ -1,11 +1,11 @@
 /**
  * A league character on login (every login on a league world): joins the world's league the
  * first time (starting levels from the Wiki), gets the league varbits the client's journal and
- * panels read, its XP rate, plays as a standard Ironman (Wiki "Player restrictions": every league
- * player is one; set through the Ironman plugin's `ironman:set-mode` at every login the character
- * is anything else, and kept, since `ironman:change-mode` is refused for a league character), and answers
- * `league:profile` ({ player } -> { league }) for every other plugin. A main character (a plain
- * world) gets nothing.
+ * panels read, its XP rate, the league content every plugin contributes (Content.LeagueMode),
+ * plays as a standard Ironman (Wiki "Player restrictions": every league player is one; set through
+ * the Ironman plugin's `ironman:set-mode` at every login the character is anything else, and kept,
+ * since `ironman:change-mode` is refused for a league character), and answers `league:profile`
+ * ({ player } -> { league }) for every other plugin. A main character (a plain world) gets nothing.
  */
 const Common = require("./Common.LeagueMode");
 
@@ -62,6 +62,8 @@ function login({ player, isNewAccount }) {
   sendVarbits(player, type);
   applyIronman(player);
   Common.api.emitCustomEvent("league:login", { player, league: type });
+  // Every plugin's struct and enum overrides, in one packet (Content.LeagueMode).
+  Common.api.emitCustomEvent("league:send-content", { player });
 }
 
 /** A league character's mode cannot be changed in game (the Ironman tutor, Adam): `ironman:change-mode` is refused. */

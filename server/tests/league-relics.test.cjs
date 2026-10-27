@@ -270,6 +270,58 @@ test("a full inventory sends the item to the bank; no room anywhere leaves the t
   assert.equal(crammed.getAttribute("league:relics"), undefined, "the permanent pick is not saved without its item");
 });
 
+test("the room check is item-aware: a banked item joins its stack, a new stack takes one slot of the bank's shared space", () => {
+  const { Item, Bank, ItemIdentifiers } = core;
+  /** A full inventory, the rune pouch banked (or not), and exactly `slots` of bank space left across the tabs. */
+  const squeeze = (name, slots, { pouchBanked }) => {
+    const player = character(name);
+    givePoints(player, 2000);
+    for (let slot = 0; slot < 28; slot++) player.getInventory().add(new Item(1965, 1), false);
+    if (pouchBanked) player.getBank(0).add(new Item(ItemIdentifiers.RUNE_POUCH, 1), false);
+    let filler = 1;
+    for (let tab = 0; Bank.freeSlots(player) > slots; tab = (tab + 1) % Bank.BANK_SEARCH_TAB_INDEX) {
+      player.getBank(tab).add(new Item(filler++, 1), false); // distinct ids spread over the tabs
+    }
+    assert.equal(Bank.freeSlots(player), slots);
+    openBank(player);
+    hooks["command:relic"]({ player, parts: ["relic", "4", "3"] }); // Superior Sorcerer: an arcane grimoire and a rune pouch
+    return player;
+  };
+  const fits = squeeze("squeezed", 1, { pouchBanked: true });
+  assert.deepEqual(fits.getAttribute("league:relics"), { 3: 3 }, "both items fit: the grimoire takes the slot, the pouch joins its stack");
+  assert.equal(fits.getBank(0).getAmount(ItemIdentifiers.RUNE_POUCH), 2);
+  assert.equal(Bank.contains(fits, new Item(ItemIdentifiers.ARCANE_GRIMOIRE, 1)), true);
+  assert.equal(Bank.freeSlots(fits), 0);
+
+  const none = squeeze("squeezedout", 0, { pouchBanked: true });
+  assert.equal(none.sent.messages.at(-1), "You need room in your inventory or bank for this relic's items.");
+  assert.equal(none.getAttribute("league:relics"), undefined, "no slot for the grimoire: refused, nothing saved");
+  assert.equal(none.getBank(0).getAmount(ItemIdentifiers.RUNE_POUCH), 1, "and nothing handed out");
+
+  // Two new stacks with one slot of bank space: every tab reports that same slot, but it is one slot.
+  const shared = squeeze("sharedspace", 1, { pouchBanked: false });
+  assert.equal(shared.sent.messages.at(-1), "You need room in your inventory or bank for this relic's items.");
+  assert.equal(shared.getAttribute("league:relics"), undefined, "the second item has no slot: refused, nothing saved");
+  assert.equal(Bank.contains(shared, new Item(ItemIdentifiers.ARCANE_GRIMOIRE, 1)), false, "and nothing handed out");
+  assert.equal(Bank.freeSlots(shared), 1);
+
+  const two = squeeze("twoslots", 2, { pouchBanked: false });
+  assert.deepEqual(two.getAttribute("league:relics"), { 3: 3 });
+  assert.equal(Bank.contains(two, new Item(ItemIdentifiers.ARCANE_GRIMOIRE, 1)), true);
+  assert.equal(Bank.contains(two, new Item(ItemIdentifiers.RUNE_POUCH, 1)), true);
+  assert.equal(Bank.freeSlots(two), 0);
+});
+
+test("a Raging Echoes tier-1 tool is handed out without a bank, as the Leagues V tutorial unlock was", () => {
+  worldLeague = 5;
+  const echoes = character("wrangler");
+  worldLeague = 4;
+  const { ItemIdentifiers } = core;
+  hooks["command:relic"]({ player: echoes, parts: ["relic", "1", "3"] }); // Animal Wrangler (osrs-captures 227/00196)
+  assert.deepEqual(echoes.getAttribute("league:relics"), { 0: 3 });
+  assert.equal(echoes.getInventory().contains(ItemIdentifiers.ECHO_HARPOON), true, "the Echo harpoon lands in the inventory");
+});
+
 test("points crossing a tier's cost show the captured popup, once, for tiers still open", () => {
   const league = character("thresholds");
   emitted.length = 0;
