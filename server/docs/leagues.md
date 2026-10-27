@@ -364,8 +364,8 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   Saradominist Defence adds to every style's max hit for 6 ticks after combat damage from an NPC
   or player lands (poison isn't a hit, so it never counts; nor does a boss's scripted damage that
   skips the combat hit). Max hit bonuses add before Knife's Edge multiplies. The god-armour count
-  is God Wars' keyword count, which misses the Wiki's protection items without a god's name (Holy
-  book, the blessings, Hallowed focus); magic specials with a fixed max hit skip both max hit
+  is God Wars' protection count (the Wiki's tables, so god books, symbols and blessings count too);
+  magic specials with a fixed max hit skip both max hit
   bonuses, as they skip every magic max hit modifier.
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price

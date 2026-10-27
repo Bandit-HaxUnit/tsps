@@ -238,7 +238,7 @@ function setRespawns() {
 /** "godwars:god-items" { player, god, count }: how many worn items are the god's ("bandos", "armadyl", "saradomin", "zamorak"). */
 function godItemsQuery(request) {
   const faction = Common.factionByKey(String(request?.god ?? ""));
-  if (request?.player && faction?.itemKeywords) request.count = Common.godItemCount(request.player, faction);
+  if (request?.player && faction?.protection) request.count = Common.godItemCount(request.player, faction);
 }
 
 function attachDungeon(api) {
