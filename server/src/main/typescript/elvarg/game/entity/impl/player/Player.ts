@@ -262,10 +262,11 @@ export class Player extends Mobile {
 
     public appendDeath() {
         if (!this.isDying) {
-            if (PluginManager.emitPlayerBeforeDeath({ player: this, preventDeath: false })) {
+            const beforeDeath = { player: this, preventDeath: false, announce: true };
+            if (PluginManager.emitPlayerBeforeDeath(beforeDeath)) {
                 return;
             }
-            TaskManager.submit(new PlayerDeathTask(this));
+            TaskManager.submit(new PlayerDeathTask(this, beforeDeath.announce !== false));
             this.isDying = true;
         }
     }
@@ -301,6 +302,16 @@ export class Player extends Mobile {
             if (this.getSkillManager().getCurrentLevel(Skill.HITPOINTS) > hitpoints) {
                 return this;
             }
+        }
+
+        const previous = this.getSkillManager().getCurrentLevel(Skill.HITPOINTS);
+        if (hitpoints > previous) {
+            // A heal, whatever its source: plugins may change `amount` (a league passive). A raised
+            // heal reaches full hitpoints at most; an overheal (a brew) keeps its own target.
+            const heal = { player: this, previous, amount: hitpoints - previous, hitpoints };
+            PluginManager.emitCustomEvent("stats:heal", heal);
+            const amount = Number.isFinite(heal.amount) ? Math.max(0, Math.floor(heal.amount)) : hitpoints - previous;
+            hitpoints = Math.min(previous + amount, Math.max(hitpoints, this.getSkillManager().getMaxLevel(Skill.HITPOINTS)));
         }
 
         this.getSkillManager().setCurrentLevels(Skill.HITPOINTS, hitpoints);
@@ -460,12 +471,7 @@ export class Player extends Mobile {
             timed("area", () => AreaManager.process(this));
         }
 
-        // Updates appearance if an update
-        // has been requested
-        // or if skull timer hits 0.
-        if (this.isSkulled() && this.getAndDecrementSkullTimer() == 0 && !isBot) {
-            this.getUpdateFlag().flag(Flag.APPEARANCE);
-        }
+        this.processSkullTimer();
 
         // Increase run energy
         if (!isBot && this.runEnergy < 100 && (!this.getMovementQueue().isMovings() || !this.isRunning)) {
@@ -1118,8 +1124,14 @@ export class Player extends Mobile {
         return this.skullTimer > 0;
     }
 
-    public getAndDecrementSkullTimer(): number {
-        return this.skullTimer--;
+    /** Counts the skull down a tick; the appearance drops the skull icon on the tick it runs out. */
+    public processSkullTimer(): void {
+        if (!this.isSkulled()) {
+            return;
+        }
+        if (--this.skullTimer === 0) {
+            this.getUpdateFlag().flag(Flag.APPEARANCE);
+        }
     }
 
     public getSkullTimer(): number {
