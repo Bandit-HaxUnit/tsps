@@ -23,6 +23,8 @@ const Dust = require("./pets/Dust.Pets");
 const CURRENT_PET_ATTRIBUTE = "pets:current";
 /** The item of the follower the player logged out with; re-summoned on login. */
 const LAST_PET_ATTRIBUTE = "pets:last";
+/** Durable active follower, independent of physical inventory/bank item copies. */
+const ACTIVE_PET_ATTRIBUTE = "pets:active-item";
 const VARIANT_ATTRIBUTE = "pets:variant";
 /** Pet families whose Metamorphosis forms the player has permanently unlocked. */
 const MORPH_UNLOCK_ATTRIBUTE = "pets:morph-unlocks";
@@ -652,6 +654,7 @@ function releasePet(request) {
   despawnPetNpc(npc);
   player.setAttribute(CURRENT_PET_ATTRIBUTE, null);
   player.setAttribute(LAST_PET_ATTRIBUTE, null);
+  player.setAttribute(ACTIVE_PET_ATTRIBUTE, null);
   syncFollowerIndex(player, null);
   request.released = true;
 }
@@ -993,6 +996,7 @@ function replaceFollowerNpc(player, npc, npcId, itemId) {
   spawnPetNpc(replacement);
   player.setAttribute(CURRENT_PET_ATTRIBUTE, replacement);
   player.setAttribute(LAST_PET_ATTRIBUTE, itemId);
+  player.setAttribute(ACTIVE_PET_ATTRIBUTE, itemId);
   syncFollowerIndex(player, replacement);
 }
 
@@ -1015,6 +1019,7 @@ function runAwayCat(player) {
   if (npc) despawnPetNpc(npc);
   player.setAttribute?.(CURRENT_PET_ATTRIBUTE, null);
   player.setAttribute?.(LAST_PET_ATTRIBUTE, null);
+  player.setAttribute?.(ACTIVE_PET_ATTRIBUTE, null);
   clearCatState(player);
   stopCatTask(player);
   syncFollowerIndex(player, null);
@@ -1025,6 +1030,7 @@ function shooCat(player, npc) {
   despawnPetNpc(npc);
   player.setAttribute?.(CURRENT_PET_ATTRIBUTE, null);
   player.setAttribute?.(LAST_PET_ATTRIBUTE, null);
+  player.setAttribute?.(ACTIVE_PET_ATTRIBUTE, null);
   clearCatState(player);
   stopCatTask(player);
   syncFollowerIndex(player, null);
@@ -1215,6 +1221,7 @@ function onCatOwnerDeath({ player }) {
   despawnPetNpc(npc);
   player.setAttribute?.(CURRENT_PET_ATTRIBUTE, null);
   player.setAttribute?.(LAST_PET_ATTRIBUTE, null);
+  player.setAttribute?.(ACTIVE_PET_ATTRIBUTE, null);
   clearCatState(player);
   stopCatTask(player);
   syncFollowerIndex(player, null);
@@ -1401,6 +1408,7 @@ function drop(player, itemId, reward, { silent = false } = {}) {
 
     player.setAttribute(CURRENT_PET_ATTRIBUTE, npc);
     player.setAttribute(LAST_PET_ATTRIBUTE, pet.itemId);
+    player.setAttribute(ACTIVE_PET_ATTRIBUTE, pet.itemId);
     syncFollowerIndex(player, npc);
     setTimeout(() => {
       const index = npc.getIndex?.() ?? -1;
@@ -1504,6 +1512,8 @@ function pickup(player, npc, { auto = false } = {}) {
   if (!pet.puppy) player.sendMessage("You pick up your pet..");
   if (pet.puppy) player.getPacketSender().sendSoundEffect(2582, 1, 20);
   else Sounds.sendSound(player, Sound.PICK_UP_ITEM);
+  // The physical item now represents the pet; snapshots must not also restore a follower.
+  player.setAttribute(ACTIVE_PET_ATTRIBUTE, null);
   // The item now in hand is the current form; a cross-item morph replaces the record.
   recordOwnership(player, pet);
   if (catInfoOf(pet)) stopCatTask(player);
@@ -1513,12 +1523,17 @@ function pickup(player, npc, { auto = false } = {}) {
   return true;
 }
 
-/** Logout/disconnect: remember the follower, then pick it up (bank if the backpack is full). */
+/** Logout/disconnect detaches the runtime NPC; the active descriptor needs no storage slot. */
 function returnFollowerOnLogout(player) {
   const npc = player.getAttribute?.(CURRENT_PET_ATTRIBUTE);
   const pet = npc ? getPetByNpcId(npc.getId()) : null;
-  if (pet) player.setAttribute(LAST_PET_ATTRIBUTE, pet.itemId);
-  pickup(player, npc, { auto: true });
+  if (!pet || npc.getOwner?.() !== player) return;
+  player.setAttribute(LAST_PET_ATTRIBUTE, pet.itemId);
+  player.setAttribute(ACTIVE_PET_ATTRIBUTE, pet.itemId);
+  despawnPetNpc(npc);
+  if (catInfoOf(pet)) stopCatTask(player);
+  player.setAttribute(CURRENT_PET_ATTRIBUTE, null);
+  syncFollowerIndex(player, null);
 }
 
 function morph(player, npc) {
@@ -1549,6 +1564,8 @@ function morph(player, npc) {
   }
   npc.setNpcTransformationId(pet.morphId);
   setStoredVariant(player, pet, pet.morphId);
+  player.setAttribute(ACTIVE_PET_ATTRIBUTE, next.itemId);
+  player.setAttribute(LAST_PET_ATTRIBUTE, next.itemId);
   if (unlock.consume && unlock.itemIds) {
     for (const itemId of unlock.itemIds) player.getInventory().deleteNumber(itemId, 1);
     if (unlock.permanent) unlockMorphFamily(player, petFamily(next));
@@ -1630,6 +1647,13 @@ function restoreFollowerOnLogin(player) {
   }
   if (player.getAttribute?.(CURRENT_PET_ATTRIBUTE)) return false;
 
+  const activeItem = player.getAttribute?.(ACTIVE_PET_ATTRIBUTE);
+  if (Number.isInteger(activeItem) && getPetForItemId(activeItem)) {
+    // An existing duplicate item is separate property, not a temporary logout copy.
+    return drop(player, activeItem, true, { silent: true });
+  }
+  if (activeItem != null) player.setAttribute(ACTIVE_PET_ATTRIBUTE, null);
+  // Legacy saves represented the follower as pets:last plus a temporary physical item.
   const last = player.getAttribute?.(LAST_PET_ATTRIBUTE);
   const itemId = Number.isInteger(last) ? last : null;
   if (itemId && player.getInventory?.().contains?.(itemId)) {
@@ -1778,6 +1802,7 @@ module.exports = {
     fillSkillPetVariants(api.core);
     api.persistAttribute(OWNED_ATTRIBUTE);
     api.persistAttribute(LAST_PET_ATTRIBUTE);
+    api.persistAttribute(ACTIVE_PET_ATTRIBUTE, null);
     api.persistAttribute(VARIANT_ATTRIBUTE);
     api.persistAttribute(MORPH_UNLOCK_ATTRIBUTE);
     api.persistAttribute(CAT_ATTRIBUTE);
