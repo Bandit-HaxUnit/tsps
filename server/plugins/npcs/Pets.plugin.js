@@ -1823,6 +1823,10 @@ function onSkill(player, skill, { petBase, petChance, rolls = 1, runeId, npcId, 
     SKILL_PET_VARIANTS.get(`npc:${npcId}`) ??
     SKILLING_PETS.find((candidate) => candidate.skill === skill);
   if (!pet || !player) return false;
+  // Activity plugins may exclude a source even if a generic gatherer emitted a rate.
+  const eligibility = {player, skill, eligible: true};
+  pluginApi?.emitCustomEvent?.("pets:skilling-eligibility", eligibility);
+  if (eligibility.eligible !== true) return false;
   let chance = petChance;
   if (!(Number.isFinite(chance) && chance > 0) && Number.isFinite(petBase) && petBase > 0) {
     const skills = player.getSkillManager();
