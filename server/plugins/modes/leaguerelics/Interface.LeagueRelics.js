@@ -27,7 +27,7 @@ function open({ player }) {
   const { group, clickzones, clickzoneSlots, menuFrame, menuFrameSlots } = ui();
   // Read before the modal replaces the bank as the main interface.
   const bankOpen = Common.core.Bank.isOpen(player);
-  Common.api.emitCustomEvent("league:send-content", { player });
+  require("./Catalog.LeagueRelics").send(player);
   const sender = player.getPacketSender();
   sender.sendInterfaceScript(ui().modalSize[0], ui().modalSize[1]);
   sender.sendInterface(group);

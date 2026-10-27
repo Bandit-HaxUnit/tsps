@@ -84,7 +84,7 @@ Ticks count from the action named; captured gamevals are in brackets.
 - **The bone staff** holds the 1,000 chaos runes it was made with as charges, up to 20,000, one a cast.
   - Chaos runes on it ask "How many chaos runes do you wish to add? (0 - N)"; when full, "Your Bone staff is already fully charged.".
   - Check: "Your Bone staff has N charges remaining.". Uncharge: "You uncharge your Bone staff." in an item box, returning the runes, or "Your Bone staff has no charges to remove.".
-  - Its spell (Wiki): max hit floor(Magic / 3) + 5, plus the +10; attack speed 4; 8 tiles; 35 base Magic experience on a successful hit. That experience is added by the plugin, since the engine doesn't add combat spells' base experience.
+  - Its spell (Wiki): max hit floor(Magic / 3) + 5, plus the +10; attack speed 4; 8 tiles, 10 on Longrange ([Attack range](https://oldschool.runescape.wiki/w/Attack_range)); 35 base Magic experience on a successful hit. That experience is added by the plugin, since the engine doesn't add combat spells' base experience.
   - Captured cast: animation 393, graphic 2645, area sound 7617, and projectile 2647 (cycles 46 to 46 + 10 a tile, height 45 to 23, angle 10, progress 64). The impact is 2646 at height 124. Every cast also sends "Your weapon has N charges remaining.". That was captured on a Leagues world that never used up charges (always 20,000), so how often live sends it is unconfirmed.
   - "Your Bone staff has no charges left." for an empty staff was not captured.
 
