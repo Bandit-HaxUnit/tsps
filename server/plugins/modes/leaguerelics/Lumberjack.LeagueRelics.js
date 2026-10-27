@@ -52,8 +52,28 @@ function gather(request) {
   if (Common.bank(player, itemId, logs)) request.stored = amount;
 }
 
+/** Woodcutting's room (`storage:room` for Woodcutting only): burnt logs need none; fletched ones the shafts' or the logs'. */
 function room(request) {
-  if (!request.room && withTool(request.player) && Common.bankHasRoom(request.player, request.itemId)) request.room = true;
+  const { player, itemId } = request;
+  if (request.room || request.skill !== core.Skill.WOODCUTTING || !withTool(player)) return;
+  const current = EchoTool.mode(player, effect);
+  if (current === "burn") {
+    const fire = { logId: itemId, xp: null };
+    api.emitCustomEvent("firemaking:log-xp", fire);
+    if (fire.xp > 0) {
+      request.room = true;
+      return;
+    }
+  }
+  if (current === "fletch") {
+    const shafts = { logId: itemId, itemId: null, amount: 0, xp: null };
+    api.emitCustomEvent("fletching:shafts", shafts);
+    if (shafts.itemId && Common.bankHasRoom(player, shafts.itemId)) {
+      request.room = true;
+      return;
+    }
+  }
+  if (Common.bankHasRoom(player, itemId)) request.room = true;
 }
 
 function lights(request) {

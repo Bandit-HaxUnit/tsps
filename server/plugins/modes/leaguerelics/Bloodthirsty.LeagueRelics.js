@@ -27,7 +27,7 @@ function active(player) {
 }
 
 function superiorChance(request) {
-  if (active(request.player)) request.oneIn = Math.min(request.oneIn, effect.superiorOneIn);
+  if (active(request?.player)) request.chance = Math.min(request.chance, effect.superiorOneIn);
 }
 
 function spawned({ player, superior }) {
@@ -95,7 +95,7 @@ module.exports = function attach(pluginApi) {
   api = pluginApi;
   core = api.core;
   effect = Common.data.effects.bloodthirsty;
-  api.onCustomEvent("slayer:superior-chance", superiorChance);
+  api.onCustomEvent("slayer:superior-spawn", superiorChance);
   api.onCustomEvent("slayer:superior-spawned", spawned);
   api.onCustomEvent("npc-drops:tertiary-chance", clueChance);
   api.onCustomEvent("slayer:superior-rewards", superiorRewards);

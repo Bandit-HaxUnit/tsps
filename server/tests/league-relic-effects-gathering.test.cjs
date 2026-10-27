@@ -241,6 +241,30 @@ test("Power Miner: with the pickaxe, a second chance, four ores a rock, ore bank
   assert.deepEqual([deplete(who.relic), deplete(who.relic), deplete(who.relic), deplete(who.relic)], [true, true, true, false], "the fourth ore takes the rock");
   assert.equal(deplete(who.relic), true, "and the count starts again");
   for (const player of others(who)) assert.equal(deplete(player, {}), false);
+  // Another miner depletes a rock the relic has taken three from: the respawned rock starts afresh.
+  const shared = {};
+  deplete(who.relic, shared);
+  deplete(who.relic, shared);
+  deplete(who.relic, shared);
+  assert.equal(deplete(who.without, shared), false, "the other miner's ore takes it");
+  assert.deepEqual([deplete(who.relic, shared), deplete(who.relic, shared), deplete(who.relic, shared), deplete(who.relic, shared)], [true, true, true, false],
+    "four ores again from the respawned rock, not one");
+
+  // Room (storage:room), for Mining only: a full inventory with a full bank but an iron bar stack mines on (smelt mode).
+  const room = (player, itemId, skill) => emit("storage:room", { player, itemId, skill, room: false }).room;
+  assert.equal(room(who.relic, I.LOGS, Skill.WOODCUTTING), false, "not another skill's resource");
+  const full = cases(POWER_MINER, 5, "ECHO_PICKAXE").relic;
+  const tab = full.getBank(core.Bank.getTabForItem(full, I.IRON_BAR));
+  tab.add(new core.Item(I.IRON_BAR, 1), false);
+  for (let id = 2000; tab.getFreeSlots() > 0 && id < 30000; id++) {
+    const definition = core.ItemDefinition.forId(id);
+    if (definition?.getName?.() && !definition.isNoted?.() && id !== I.IRON_ORE && id !== I.IRON_BAR) tab.add(new core.Item(id, 1), false);
+  }
+  assert.equal(tab.getFreeSlots(), 0, "the bank tab is full");
+  assert.equal(tab.contains(I.IRON_ORE), false);
+  assert.equal(room(full, I.IRON_ORE, Skill.MINING), true, "the ore becomes a bar in the stack the bank already has");
+  assert.equal(gather(full, I.IRON_ORE, 1, Skill.MINING, 35).stored, 1, "and is delivered there");
+  assert.equal(banked(full, I.IRON_BAR), 2);
 
   const smithing = xp(who.relic, Skill.SMITHING);
   assert.equal(gather(who.relic, I.IRON_ORE, 1, Skill.MINING, 35).stored, 1);
@@ -279,6 +303,10 @@ test("Power Miner: with the pickaxe, a second chance, four ores a rock, ore bank
 
 test("Lumberjack: with the axe, a second chance, logs burnt, fletched or banked by its toggle; fires that always light", () => {
   const who = cases(LUMBERJACK, 5, "ECHO_AXE");
+  // Room (storage:room) for Woodcutting only: a Lumberjack carrying a pickaxe too can't mine into a full inventory.
+  const room = (player, itemId, skill) => emit("storage:room", { player, itemId, skill, room: false }).room;
+  assert.equal(room(who.relic, I.IRON_ORE, Skill.MINING), false, "Mining's ore is not the axe's to store");
+  assert.equal(room(who.relic, I.LOGS, Skill.WOODCUTTING), true);
   const rolls = [];
   Math.random = () => rolls.shift() ?? 0.5;
   const attempt = (player) => {
