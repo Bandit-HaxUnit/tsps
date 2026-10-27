@@ -106,7 +106,8 @@ character's picks live in `league:relics` (tier index -> slot 1-3).
   what was open when View Relics was clicked counts), and room for every item in the inventory
   or a bank tab, so a permanent pick is never saved without its items; the room check is
   item-aware (a stackable item joins its inventory stack, an item already banked joins its bank
-  stack and needs no slot, and a slot one item takes is not counted for the next), and each item
+  stack and needs no slot, a new bank stack takes one slot of the player's bank space, which
+  every tab shares, and a slot one item takes is not counted for the next), and each item
   goes where that check placed it: the inventory if it fits, else the bank tab holding it, else
   its tab or any tab with room. Refusals are game messages of ours. Items no longer in this cache (Sage's greaves, the Trailblazer tools, the crystal of
   memories, the guardian horn) are not granted; the data says so.
