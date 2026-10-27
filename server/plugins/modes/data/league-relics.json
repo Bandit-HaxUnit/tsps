@@ -9,6 +9,8 @@
   "interface": {
     "_comment": "league_relics (655) and the league side panel's relics button (656:44), as captured (227/00070, 227/00075): open as the main modal with if_setevents on clickzones 655:22 slots 0-23 and league_menu_frame 655:6 slots 10-20; a clickzone sets league_relic_last_viewed (tier x 3 + slot) and runs 3193 (the panel's components, the state the captures show, the relic struct, the tier's passive struct) and 3181; confirm_text 655:50 unlocks: the selection varbit, human_relic_unlock 8524, the league's unlock spotanim at height 92, the modal closed, sounds 4215/4211/4213/4212 at 8/44/80/104.",
     "group": 655,
+    "_modalSize": "Script 2524 (-1, -3), which live ran before opening the interface (227/00196), sizes the modal.",
+    "modalSize": [2524, [-1, -3]],
     "openButton": [656, 44],
     "clickzones": 22,
     "clickzoneSlots": [0, 23],
@@ -93,9 +95,27 @@
       "modes": ["cook", "off"], "modeText": { "cook": "cook half of what you catch", "off": "leave your catch raw" }
     },
     "cornerCutter": { "league": 5, "key": "corner-cutter", "lapCount": 2, "lapXpMultiplier": 1.25, "markCoins": 10000 },
-    "dodgyDeals": { "league": 5, "key": "dodgy-deals", "pouchLimitMultiplier": 3, "radius": 5 }
+    "dodgyDeals": { "league": 5, "key": "dodgy-deals", "pouchLimitMultiplier": 3, "radius": 5 },
+    "arcaneGrimoire": {
+      "item": "Arcane grimoire",
+      "options": { "change": "Change Spellbook", "previous": "Previous Spellbook", "check": "Check Previous" },
+      "spellbooks": [
+        { "key": "NORMAL", "name": "Standard" },
+        { "key": "ANCIENT", "name": "Ancient" },
+        { "key": "LUNAR", "name": "Lunar" },
+        { "key": "ARCEUUS", "name": "Arceuus" }
+      ],
+      "messages": {
+        "choose": { "text": "Choose a spellbook", "source": "ours" },
+        "cancel": { "text": "Cancel", "source": "ours" },
+        "notLeague": { "text": "Only a league character can use the grimoire.", "source": "ours" },
+        "noPrevious": { "text": "You haven't changed spellbook with the grimoire yet.", "source": "ours" },
+        "checkPrevious": { "text": "Your previous spellbook was the {book} spellbook.", "source": "ours" }
+      }
+    }
   },
   "leagues": {
+    "6": { "_comment": "Leagues VI - Demonic Pacts is the league this cache (rev 241) carries: its tiers, costs, passives and relics are read from the league struct (6436, enum 2670) and sent as nothing; no relic hands out an item, since the cache does not say which do.", "fromCache": true },
     "4": {
       "tiers": [
         {
