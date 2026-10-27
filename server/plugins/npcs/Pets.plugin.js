@@ -16,6 +16,7 @@ const { Bank } = require("../../src/main/typescript/elvarg/game/model/container/
 const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
 const { NpcIdentifiers } = require("../../src/main/typescript/elvarg/util/NpcIdentifiers");
 const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
+const Recovery = require("./pets/Recovery.Pets");
 
 const CURRENT_PET_ATTRIBUTE = "pets:current";
 /** The item of the follower the player logged out with; re-summoned on login. */
@@ -656,23 +657,7 @@ function reclaimPets(event) {
   }
   event.handled = true;
   event.end = true;
-  const { player } = event;
-  // Pets are automatically, freely insured (Wiki, Probita); generic pets are excluded.
-  const lost = getOwnedPetItems(player).filter((itemId) => !holdsPetItem(player, itemId));
-  if (lost.length === 0) {
-    player.sendMessage("You don't have any pets to reclaim.");
-    return;
-  }
-  for (const itemId of lost) {
-    if (player.getInventory().isFull()) {
-      player.sendMessage("You need more inventory space to reclaim the rest of your pets.");
-      return;
-    }
-    player.getInventory().adds(itemId, 1);
-    player.sendMessage(`Probita returns your ${getPetDisplayName(getPetForItemId(itemId))}.`);
-    pluginApi.emitCustomEvent("persistence:save", { player, reason: "pet-retrieval" });
-  }
-  syncCollectionLog(player);
+  Recovery.open(event);
 }
 
 /** Boss pets come straight to the killer instead of landing on the floor. */
@@ -1778,6 +1763,7 @@ module.exports = {
     RegionManager = api.getRegionManager();
     ItemOnGroundManager = api.getItemOnGroundManager();
     pluginApi = api;
+    Recovery.attach(api, {pets: PETS, getOwnedPetItems, getPetForItemId, petFamily, getPetDisplayName, syncCollectionLog});
     TaskClass = api.core?.Task ?? null;
     TaskManagerRef = api.core?.TaskManager ?? null;
     NPCRespawnTaskRef = api.core?.NPCRespawnTask ?? null;
