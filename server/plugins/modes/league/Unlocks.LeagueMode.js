@@ -3,7 +3,9 @@
  * skills, bosses and quest packs bought with Sage's Renown (Wiki /Unlocks). What a character has
  * unlocked is saved and sent as the varbits the screen draws from. A locked skill gives no XP and
  * a locked boss can't be attacked (Wiki: "Locked skills can be trained, but no experience will be
- * granted"); quest packs complete no quests yet (a follow-up in docs/leagues.md).
+ * granted"). A quest pack, bought in a bank, completes its quests and its prerequisite packs' through
+ * the quest runtime, with no XP (Wiki: "Auto-completing quests will not grant the experience"); the
+ * Sage (Sage.LeagueMode) hands out the items a pack lets its owner claim.
  *
  *   "league:unlock-skill" { player, skill }   unlocks a skill for free (the starting class)
  *   "league:open-unlocks" { player }          opens the screen
@@ -11,8 +13,10 @@
  *   "league:boss-locked" { player, name, notify? } -> locked   (a boss fight started without Attack: Disturb, Poke)
  */
 const Common = require("./Common.LeagueMode");
+const QuestRuntime = require("../../quests/QuestRuntime");
 const { FLAG_OP1 } = require("../../interface/widgetGroup");
 const { data, isShattered } = require("./Shattered.LeagueMode");
+const { nearBank } = require("./NearBank.LeagueMode");
 
 /** { skills: [skill id], bosses: [npc id], quests: [pack name] }. */
 const UNLOCKS_ATTRIBUTE = "league:unlocks";
@@ -88,6 +92,104 @@ function questPrice(name, unlockedPacks) {
   const outer = done.filter((required) => !done.some((other) => other !== required && prerequisites(other).has(required)));
   const paid = outer.reduce((sum, required) => sum + (pack(required)?.cost ?? 0), 0);
   return Math.max(1, row.cost - paid);
+}
+
+// ---- Quest packs' quests ----
+
+/** Players whose pack's quests are completing: their rewards give no XP (Wiki /Unlocks). */
+const completing = new WeakSet();
+
+/**
+ * The quests a pack completes, its prerequisite packs' too, each once and earliest first (the
+ * Wiki lists a pack's main quest first). Names this server registers no quest for (Recipe for
+ * Disaster's subquests, miniquests) are left out.
+ */
+function packQuests(name) {
+  const names = new Set([name, ...prerequisites(name)].flatMap((each) => pack(each)?.quests ?? []));
+  return [...names].reverse().map((quest) => QuestRuntime.questNamed(quest)).filter(Boolean);
+}
+
+function banks(player) {
+  return player.getBanks().filter((bank, tab) => bank && tab !== Common.core.Bank.BANK_SEARCH_TAB_INDEX);
+}
+
+function isExperienceItem(id) {
+  return config().quests.experienceItems.includes(id);
+}
+
+/** How many of each experience reward item (data `experienceItems`) the character has banked. */
+function bankedExperienceItems(player) {
+  return new Map(config().quests.experienceItems.map((id) => [id, banks(player).reduce((sum, bank) => sum + bank.getAmount(id), 0)]));
+}
+
+/**
+ * As much as the inventory takes, the rest into the bank tab the item belongs in, counting what the
+ * bank really took (a full bank or a capped stack takes less), and anything left on the floor, as
+ * a quest reward past a full inventory goes (`forceAdd`).
+ */
+function give(player, item) {
+  const { Bank } = Common.core;
+  const inventory = player.getInventory();
+  let rest = item.getAmount();
+  const carried = Math.min(rest, inventory.getAddableAmount(item));
+  if (carried > 0) {
+    inventory.add(item.clone().setAmount(carried), false);
+    rest -= carried;
+  }
+  if (rest > 0) {
+    const bank = player.getBank(Bank.getTabForItem(player, item.getId()));
+    const before = bank.getAmount(item.getId());
+    bank.add(item.clone().setAmount(rest), false);
+    rest -= Math.max(0, bank.getAmount(item.getId()) - before);
+  }
+  if (rest > 0) inventory.forceAdd(player, item.clone().setAmount(rest));
+}
+
+/**
+ * One quest completed as the quest itself does but without the XP: its own, a prompt it offers
+ * later, or an item that gives it (a lamp, a tome; Wiki /Unlocks), and without a scroll. It runs
+ * against an empty inventory, so many rewards in a row are never lost to a full one; then the
+ * inventory comes back and the rewards go into it, or the bank where they don't fit.
+ */
+function completeQuest(player, quest) {
+  const inventory = player.getInventory();
+  const carried = inventory.getCopiedItems();
+  const banked = bankedExperienceItems(player);
+  inventory.resetItems();
+  try {
+    quest.complete(player, { experience: false, scroll: false });
+  } catch (error) {
+    console.warn(`[LeagueMode] ${quest.name} failed to complete for ${player.getUsername?.()}: ${error?.message ?? error}`);
+  } finally {
+    const rewards = inventory.getValidItems().map((item) => item.clone());
+    inventory.setItems(carried);
+    // A reward that went straight to the bank (a full inventory's forceAdd) comes back out of it.
+    for (const [id, now] of bankedExperienceItems(player)) {
+      let extra = now - (banked.get(id) ?? 0);
+      for (const bank of banks(player)) {
+        if (extra <= 0) break;
+        const taken = Math.min(extra, bank.getAmount(id));
+        if (taken > 0) bank.delete(id, taken);
+        extra -= taken;
+      }
+    }
+    for (const item of rewards) {
+      if (!isExperienceItem(item.getId())) give(player, item);
+    }
+    inventory.refreshItems();
+  }
+}
+
+/** Completes the pack's quests not complete yet (completeQuest); one quest's failure doesn't stop the rest. */
+function completeQuests(player, name) {
+  completing.add(player);
+  try {
+    for (const quest of packQuests(name)) {
+      if (!quest.isComplete(player)) completeQuest(player, quest);
+    }
+  } finally {
+    completing.delete(player);
+  }
 }
 
 // ---- What the client is sent ----
@@ -194,6 +296,7 @@ function unlock(player, tab, entry) {
   else if (TABS[tab] === "bosses") state.bosses.push(entry.npc);
   else state.quests = [...new Set([...state.quests, entry.name, ...prerequisites(entry.name)])];
   save(player, state);
+  if (TABS[tab] === "quests") completeQuests(player, entry.name);
 }
 
 /** Accept (733:47): the entry shown, paid in Sage's Renown. */
@@ -201,7 +304,10 @@ function accept({ player }) {
   if (!isShattered(player) || !isOpen(player)) return false;
   const { tab, entry: index } = viewOf(player);
   const entry = entries(TABS[tab])[index];
-  const { cost, refusal } = entry ? price(player, tab, entry) : { cost: null };
+  const priced = entry ? price(player, tab, entry) : { cost: null };
+  // Quest packs auto-complete only in a bank (the launch news), checked before any renown is spent.
+  const away = priced.cost !== null && TABS[tab] === "quests" && !nearBank(player);
+  const { cost, refusal } = away ? { cost: null, refusal: data.messages.questsAway } : priced;
   if (refusal) player.sendMessage(refusal);
   if (cost !== null) {
     const spend = { player, amount: cost };
@@ -244,11 +350,11 @@ function skillLocked(player, statId) {
   return !unlocked(player).skills.includes(statId);
 }
 
-/** onCanGainExperience: no XP in a locked skill (Wiki /Unlocks). */
+/** onCanGainExperience: no XP in a locked skill, nor from a bought pack's quests (Wiki /Unlocks). */
 function lockedSkillExperience(event) {
   const { player, skill } = event;
   if (!isShattered(player)) return;
-  if (skillLocked(player, Number(skill?.getClientId?.()))) event.allow = false;
+  if (completing.has(player) || skillLocked(player, Number(skill?.getClientId?.()))) event.allow = false;
 }
 
 /** NPC name -> the boss unlock (its NPC id) that covers it, read once from the data. */
@@ -342,4 +448,5 @@ module.exports = function attach(api) {
   api.onInterfaceActionButton(buttonIds.close, close);
 };
 
-module.exports._test = { questPrice, entries, unlocked, skillLocked, bossOf, UNLOCKS_ATTRIBUTE };
+module.exports.unlocked = unlocked;
+module.exports._test = { questPrice, packQuests, completeQuests, entries, unlocked, skillLocked, bossOf, UNLOCKS_ATTRIBUTE };

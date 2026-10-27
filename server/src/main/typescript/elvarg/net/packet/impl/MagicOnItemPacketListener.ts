@@ -236,7 +236,7 @@ export class MagicOnItemPacketListener {
    * now queued up"); a later click replaces the waiting one. An untradeable item asks first, as
    * live does (rsprox 3215): "That item cannot be traded." beside it, then Proceed/Cancel.
    */
-  private castAlchemy(player: any, spellId: number, slot: number, itemId: number, confirmed = false): void {
+  private castAlchemy(player: any, spellId: number, slot: number, itemId: number, confirmed = false, source?: unknown): void {
     const inventory = player.getInventory();
     const item = inventory.getItems()[slot];
     if (!item || item.getId() !== itemId) {
@@ -281,16 +281,25 @@ export class MagicOnItemPacketListener {
     const runes = policy.freeRunes === true ? [] : this.runeCosts(player, spellId, [
       new Item(ItemIdentifiers.NATURE_RUNE, 1), new Item(ItemIdentifiers.FIRE_RUNE, fireRunesRequired)
     ]);
-    if (!this.hasRunes(player, runes)) {
+    // Content can fund a cast through a validated alternative source. Resolve again
+    // after a confirmation/queue; no payment is committed until the item is converted.
+    const payment = { player, item, itemId, slot, spellId, source, high: isHighAlch, coins: policy.coins,
+      hasRunes: this.hasRunes(player, runes), allowed: source === undefined,
+      free: false, experience, allowAnySpellbook: false, keepTab: false,
+      validate: undefined as (() => boolean) | undefined,
+      commit: undefined as (() => void) | undefined };
+    PluginManager.emitCustomEvent("magic:alchemy-payment", payment);
+    if (!payment.allowed || payment.validate?.() === false) return;
+    if (!payment.free && !payment.hasRunes) {
       player.sendMessage("You do not have the required items to cast this spell.");
       return;
     }
-    if (player.getSpellbook()?.getInterfaceId?.() !== MagicSpellbook.NORMAL.getInterfaceId()) {
+    if (!payment.allowAnySpellbook && player.getSpellbook()?.getInterfaceId?.() !== MagicSpellbook.NORMAL.getInterfaceId()) {
       return;
     }
     // The coins need somewhere to go: their stack, a free slot, the slot the item leaves, or a rune
     // stack the cast uses up (consumeRunes takes the inventory's runes first).
-    const freesRuneSlot = runes.some(rune => {
+    const freesRuneSlot = !payment.free && runes.some(rune => {
       const held = inventory.getAmount?.(rune.getId()) ?? 0;
       return held > 0 && held <= rune.getAmount();
     });
@@ -303,19 +312,20 @@ export class MagicOnItemPacketListener {
       return;
     }
     if (!confirmed && policy.confirm) {
-      this.confirmUntradeableAlchemy(player, spellId, slot, itemId, definition.getName());
+      this.confirmUntradeableAlchemy(player, spellId, slot, itemId, definition.getName(), item, source);
       return;
     }
     const now = World.getProcessCycle();
     const nextCast = Number(player.getAttribute(MagicOnItemPacketListener.ALCH_NEXT_CAST_ATTRIBUTE) ?? 0);
     if (now < nextCast) {
-      this.queueAlchemy(player, { spellId, slot, itemId }, nextCast - now);
+      this.queueAlchemy(player, { spellId, slot, itemId, item, source }, nextCast - now);
       return;
     }
 
     // The clicked slot, not the first of that id: a preset-protected copy may sit earlier.
+    if (inventory.getItems()[slot] !== item || payment.validate?.() === false) return;
     if (policy.keepItem !== true) inventory.deleteAtSlot(slot, 1);
-    this.consumeRunes(player, runes);
+    if (!payment.free) this.consumeRunes(player, runes);
     player.setAttribute(MagicOnItemPacketListener.ALCH_NEXT_CAST_ATTRIBUTE, now + policy.castTicks);
 
     player.performAnimation(new Animation(isHighAlch
@@ -323,20 +333,21 @@ export class MagicOnItemPacketListener {
       : MagicOnItemPacketListener.LOW_ALCH_ANIMATION));
     Sounds.sendSound(player, isHighAlch ? Sound.HIGH_ALCHEMY : Sound.LOW_ALCHEMY);
     if (policy.coins > 0) inventory.adds(ItemIdentifiers.COINS, policy.coins);
+    payment.commit?.();
     PluginManager.emitCustomEvent("magic:alchemy-completed", { player, itemId, spellId });
     player.performGraphic(new Graphic(isHighAlch
       ? MagicOnItemPacketListener.HIGH_ALCH_GRAPHIC
       : MagicOnItemPacketListener.LOW_ALCH_GRAPHIC, GraphicHeight.HIGH));
-    player.getSkillManager().addExperiences(Skill.MAGIC, experience);
-    player.getPacketSender().sendTab(6);
+    if (payment.experience > 0) player.getSkillManager().addExperiences(Skill.MAGIC, payment.experience);
+    if (!payment.keepTab) player.getPacketSender().sendTab(6);
     // Cast again on what is left in the slot, once this cast ends (a league relic's automatic alchemy).
     if (policy.recast === true && inventory.getItems()[slot]?.getId() === itemId) {
-      this.queueAlchemy(player, { spellId, slot, itemId }, policy.castTicks);
+      this.queueAlchemy(player, { spellId, slot, itemId, item: inventory.getItems()[slot], source }, policy.castTicks);
     }
   }
 
   /** The waiting cast is cast once the current one ends; only one waits at a time. */
-  private queueAlchemy(player: any, cast: { spellId: number; slot: number; itemId: number }, ticks: number): void {
+  private queueAlchemy(player: any, cast: { spellId: number; slot: number; itemId: number; item: any; source?: unknown }, ticks: number): void {
     const waiting = player.getAttribute(MagicOnItemPacketListener.ALCH_QUEUED_ATTRIBUTE);
     player.setAttribute(MagicOnItemPacketListener.ALCH_QUEUED_ATTRIBUTE, cast);
     if (waiting) {
@@ -352,12 +363,13 @@ export class MagicOnItemPacketListener {
         if (!queued || !player.isRegistered?.() || player.getHitpoints?.() <= 0) {
           return;
         }
-        listener.castAlchemy(player, queued.spellId, queued.slot, queued.itemId, true);
+        if (player.getInventory().getItems()[queued.slot] !== queued.item) return;
+        listener.castAlchemy(player, queued.spellId, queued.slot, queued.itemId, true, queued.source);
       }
     });
   }
 
-  private confirmUntradeableAlchemy(player: any, spellId: number, slot: number, itemId: number, itemName: string): void {
+  private confirmUntradeableAlchemy(player: any, spellId: number, slot: number, itemId: number, itemName: string, item: any, source?: unknown): void {
     const spellName = spellId === MagicOnItemPacketListener.HIGH_ALCH_SPELL_ID ? "High Level Alchemy" : "Low Level Alchemy";
     const warning = `That item cannot be traded.<br>Really cast ${spellName} on it?`;
     player.sendMessage(warning.replace("<br>", " "));
@@ -366,7 +378,8 @@ export class MagicOnItemPacketListener {
       .add(new OptionDialogue(1, {
         executeOption: (option: DialogueOption) => {
           player.getPacketSender().sendInterfaceRemoval();
-          if ((option as number) === 1) this.castAlchemy(player, spellId, slot, itemId, true);
+          if ((option as number) === 1 && player.getInventory().getItems()[slot] === item)
+            this.castAlchemy(player, spellId, slot, itemId, true, source);
         },
       }, `Proceed to cast ${spellName} on it.`, "Cancel the alchemy spell.").setTitle(itemName));
     player.getDialogueManager().startDialogues(chain);
@@ -400,7 +413,7 @@ export class MagicOnItemPacketListener {
     return null;
   }
 
-  public castOnItem(player: any, spellId: number, itemId: number, slot: number): boolean {
+  public castOnItem(player: any, spellId: number, itemId: number, slot: number, source?: unknown): boolean {
     if (PluginManager.emitCanUseItem(player, itemId, "magic") === false) {
       return true;
     }
@@ -419,7 +432,7 @@ export class MagicOnItemPacketListener {
     if (!item || item.getId() !== itemId) {
       return false;
     }
-    this.castAlchemy(player, spellId, slot, itemId);
+    this.castAlchemy(player, spellId, slot, itemId, false, source);
     return true;
   }
 
