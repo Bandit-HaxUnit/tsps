@@ -20,5 +20,6 @@ module.exports = {
     require("./leaguerelics/SuperiorSorcerer.LeagueRelics")(api);
     require("./leaguerelics/Berserker.LeagueRelics")(api);
     require("./leaguerelics/UndyingRetribution.LeagueRelics")(api);
+    require("./leaguerelics/ArcaneGrimoire.LeagueRelics")(api);
   },
 };
