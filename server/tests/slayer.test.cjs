@@ -230,6 +230,22 @@ test("Krystilia's kills count in the Wilderness Slayer Cave (#1351)", () => {
   assert.deepEqual(player.xp.map(([skill]) => skill), [Skill.SLAYER]);
 });
 
+test("Krystilia's kills count in the Wilderness dungeons (#1381)", () => {
+  const player = createPlayer();
+  giveTask(player, 7, "Fire Giants", 5);
+  kill(player, npc(2078, { getX: () => 3049, getY: () => 10338, getZ: () => 0 })); // Deep Wilderness Dungeon
+  assert.equal(varp(player, "slayer_count"), 4);
+  giveTask(player, 7, "Black Dragons", 5);
+  kill(player, npc(255, { getX: () => 3048, getY: () => 10266, getZ: () => 0 })); // Lava Maze Dungeon
+  assert.equal(varp(player, "slayer_count"), 4);
+  giveTask(player, 7, "Black Demons", 5);
+  kill(player, npcNamed("Black demon", { getX: () => 3090, getY: () => 9950, getZ: () => 0 })); // Edgeville Dungeon
+  assert.equal(varp(player, "slayer_count"), 4);
+  giveTask(player, 7, "Bloodveld", 5);
+  kill(player, npcNamed("Bloodveld", { getX: () => 3040, getY: () => 10150, getZ: () => 0 })); // Wilderness God Wars Dungeon
+  assert.equal(varp(player, "slayer_count"), 4);
+});
+
 test("kills give Slayer XP equal to the monster's hitpoints and count down", () => {
   const player = createPlayer();
   giveTask(player, 3, "Bloodveld", 3);
