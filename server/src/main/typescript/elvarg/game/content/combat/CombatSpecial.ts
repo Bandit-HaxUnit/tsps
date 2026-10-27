@@ -1,3 +1,4 @@
+import { ItemAliases } from "../../model/ItemAliases";
 import { Mobile } from "../../entity/impl/Mobile";
 import type { Player } from "../../entity/impl/player/Player";
 import { CombatFactory } from "./CombatFactory";
@@ -64,7 +65,7 @@ export class CombatSpecial {
     }
 
     public static getForWeaponId(itemId: number): CombatSpecial | null {
-        return CombatSpecial.byItemId.get(itemId) ?? null;
+        return ItemAliases.lookup(CombatSpecial.byItemId, itemId) ?? null;
     }
 
     constructor(definition: CombatSpecialDefinition){
@@ -185,7 +186,9 @@ export class CombatSpecial {
         // whose (legacy) interface entry omitted a bar, e.g. all staves.
         const equippedWeaponId = player.getEquipment().get(Equipment.WEAPON_SLOT).getId();
         const specialBar = player.getWeapon().getSpecialBar();
-        const special = CombatSpecial.getForWeaponId(equippedWeaponId);
+        // A shield can carry a special too (Rondache); a weapon's own comes first.
+        const special = CombatSpecial.getForWeaponId(equippedWeaponId)
+            ?? CombatSpecial.getForWeaponId(player.getEquipment().get(Equipment.SHIELD_SLOT).getId());
 
         if (special) {
             if (specialBar != -1) {
@@ -315,7 +318,7 @@ export class CombatSpecial {
     /** Energy cost for a specific weapon variant (defaults to the base cost). */
     public getDrainAmountForWeaponId(itemId?: number): number {
         if (itemId !== undefined) {
-            const override = this.drainAmountByItemId[itemId];
+            const override = this.drainAmountByItemId[itemId] ?? this.drainAmountByItemId[ItemAliases.baseOf(itemId) ?? -1];
             if (typeof override === "number") {
                 return override;
             }

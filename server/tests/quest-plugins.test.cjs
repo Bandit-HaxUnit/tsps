@@ -20134,6 +20134,7 @@ test('Dragon Slayer II crypt uses canonical template locs and reachable native-v
   };
   const doorApi = {
     core: doorCore,
+    onCustomEvent: () => {},
     emitCustomEvent: () => {},
     onObjectInteraction: (name, actions) => doorActions.set(name, actions),
     onRegionLoaded: () => {},

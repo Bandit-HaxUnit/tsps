@@ -16,7 +16,6 @@ module.exports = {
   register(api) {
     Common.init(api);
     require("./leaguerelics/Unlock.LeagueRelics")(api);
-    require("./leaguerelics/Catalog.LeagueRelics")(api);
     require("./leaguerelics/Interface.LeagueRelics")(api);
     require("./leaguerelics/Commands.LeagueRelics")(api);
     require("./leaguerelics/SuperiorSorcerer.LeagueRelics")(api);
