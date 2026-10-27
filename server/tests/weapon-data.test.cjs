@@ -132,15 +132,29 @@ test("issue #461: scimitars stab on Lunge, and the Colossal blade has the giant 
 
 test("Tumeken's shadow is held two-handed, all four variants", () => {
   // The wiki's equipped image holds the staff in both hands; the cache's TOA_SOT_READY
-  // sits with its cast anims (TOA_SOT_CAST_A/B), like the godsword's DH_SWORD_UPDATE_READY.
-  // No TOA_SOT run exists in the cache, so running uses the generic double-handed run
-  // (human_dh_weapon_run, as the 2h swords do) to keep both hands on the staff; the walk
-  // stays human 819.
+  // sits with its cast anims (TOA_SOT_CAST_A/B). The cache has no TOA_SOT gait, so it
+  // moves with the staff's own walk/run (the same pair the staff uses one-handed).
   for (const id of [27275, 27277, 28547, 28549]) {
     const shadow = rows.find((row) => row.id === id);
     assert.equal(shadow.standAnim, 9494, `${id} toa_sot_ready`);
-    assert.equal(shadow.walkAnim, 819, `${id} human walk`);
-    assert.equal(shadow.runAnim, 2563, `${id} human_dh_weapon_run`);
-    assert.equal(shadow.doubleHanded, true, `${id} two-handed`);
+    assert.equal(shadow.walkAnim, 1146, `${id} staff walk`);
+    assert.equal(shadow.runAnim, 1210, `${id} staff run`);
+    assert.equal(ItemDefinition.forId(id).isDoubleHanded(), true, `${id} two-handed`);
+  }
+});
+
+test("a weapon is two-handed when the cache also wears it in the shield slot", () => {
+  for (let id = 0; id < CacheDefinitions.getCounts().items; id++) {
+    const cached = CacheDefinitions.getItem(id);
+    if (cached.wearPos !== WEAPON_SLOT) continue;
+    assert.equal(ItemDefinition.forId(id).isDoubleHanded(), cached.wearPos2 === Equipment.SHIELD_SLOT, `${id} ${cached.name}`);
+  }
+  // Reported in-game: the Soulreaper axe and a Noxious halberd were worn with an Avernic defender.
+  for (const id of [25484, 28338, 33335, 29796, 33178]) {
+    assert.equal(ItemDefinition.forId(id).isDoubleHanded(), true, `${id} ${ItemDefinition.forId(id).getName()}`);
+  }
+  // The Keris partisans are one-handed (Wiki), though the old export had them two-handed.
+  for (const id of [27287, 27291, 22322]) {
+    assert.equal(ItemDefinition.forId(id).isDoubleHanded(), false, `${id} ${ItemDefinition.forId(id).getName()}`);
   }
 });

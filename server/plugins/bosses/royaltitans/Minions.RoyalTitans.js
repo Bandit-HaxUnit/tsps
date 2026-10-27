@@ -187,16 +187,17 @@ function wearingVoidMage(player) {
 function elementalAccuracy(roll) {
   const { attacker, target } = roll;
   if (!attacker.isPlayer() || !target.isNpc()) return;
+  // Every player's roll on every NPC comes through here: leave anything not a row or elemental first.
+  const targetId = target.getId();
+  if (!Shared.isRowHitbox(targetId) && !Shared.isMinion(targetId)) return;
   const spell = selectedSpell(attacker);
   if (!spell) return;
   recentCasts.set(attacker, { spell, tick: core.World.getProcessCycle() });
-  const targetId = target.getId();
   if (Shared.isRowHitbox(targetId)) {
     const need = targetId === Shared.FIRE_ROW_ID ? "water" : "fire";
     if (spellElement(spell) === need) roll.forceAccurate = true;
     return;
   }
-  if (!Shared.isMinion(targetId)) return;
   if (spellName(spell) === "WIND_STRIKE") {
     roll.forceAccurate = true;
     return;
@@ -208,38 +209,6 @@ function elementalAccuracy(roll) {
   roll.forceAccurate = true;
   const weakTo = Shared.minionKind(targetId) === "fire" ? "water" : "fire";
   if (spellElement(spell) === weakTo) roll.forceMaxHit = true;
-}
-
-/** The titan or elemental a player's spell is aimed at, and the element it is weak to. */
-function weakTarget(entity) {
-  if (!entity.isPlayer()) return null;
-  const target = entity.getCombat().getTarget();
-  if (!target?.isNpc()) return null;
-  const id = target.getId();
-  if (id === Shared.BRANDA_ID || id === Shared.FIRE_MINION_ID) return { id, weakTo: "water" };
-  if (id === Shared.ELDRIC_ID || id === Shared.ICE_MINION_ID) return { id, weakTo: "fire" };
-  return null;
-}
-
-/**
- * Elemental weakness damage (Wiki): opposite-element spells deal double to elementals
- * (100%) and +50% to titans (50%), rounded down like demonbane.
- */
-function weaknessDamage(entity, baseHit) {
-  const weak = weakTarget(entity);
-  const spell = weak ? selectedSpell(entity) : null;
-  if (!spell || spellElement(spell) !== weak.weakTo) return baseHit;
-  if (Shared.isMinion(weak.id)) return baseHit * 2;
-  return baseHit + Math.floor(baseHit / 2);
-}
-
-/** Elemental weakness accuracy: opposite-element spells roll +50% against the titans. */
-function weaknessAccuracy(entity, roll) {
-  const weak = weakTarget(entity);
-  if (!weak || !Shared.isLiveTitan(weak.id)) return roll;
-  const spell = selectedSpell(entity);
-  if (!spell || spellElement(spell) !== weak.weakTo) return roll;
-  return roll + Math.floor(roll / 2);
 }
 
 /** The element of the spell the player has in hand (or just cast), else "other". */
@@ -344,8 +313,8 @@ function attach(api) {
   api.onNpcHitModify(rowClearingHit);
   api.onNpcDeath(minionDied);
   api.onCombatHitResolved(hitResolved);
-  api.registerMagicHitModifier(weaknessDamage);
-  api.registerMagicAttackAccuracyModifier(weaknessAccuracy);
+
+
   api.registerNpcCombatMethodProvider(
     [core.NpcIdentifiers.FIRE_ELEMENTAL_2, core.NpcIdentifiers.ICE_ELEMENTAL],
     combatClass(),
@@ -355,5 +324,5 @@ function attach(api) {
 
 module.exports = {
   attach, spawnTrio, tickSession, explodeTrio, spellElementOf, clearsRow,
-  _test: { spellTier, spellElement, elementalAccuracy, rowClearingHit, clearsRow, weaknessDamage, weaknessAccuracy },
+  _test: { spellTier, spellElement, elementalAccuracy, rowClearingHit, clearsRow },
 };

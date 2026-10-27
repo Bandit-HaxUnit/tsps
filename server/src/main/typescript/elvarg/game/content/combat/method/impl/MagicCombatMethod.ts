@@ -12,11 +12,16 @@ import { Mobile } from "../../../../entity/impl/Mobile";
 import { Player } from "../../../../entity/impl/player/Player";
 import { GraphicHeight } from "../../../../model/GraphicHeight";
 import { MagicSpellbook } from "../../../../model/MagicSpellbook";
+import { Skill } from "../../../../model/Skill";
+import type { CombatSpell } from "../../magic/CombatSpell";
+import { Spell } from "../../magic/Spell";
 
 
 export class MagicCombatMethod extends CombatMethod {
 
     public static SPLASH_GRAPHIC = new Graphic(85, GraphicHeight.MIDDLE);
+    /** Casters whose current cast has not paid its base XP yet: set by start(), paid by hits(). */
+    private static readonly baseExperienceOwed = new WeakSet<Mobile>();
     /** Wind strike; used when an npc has no projectile configured. */
     private static readonly DEFAULT_NPC_PROJECTILE = 91;
     private static readonly MAGIC_CAST_DEBUG =
@@ -91,7 +96,8 @@ export class MagicCombatMethod extends CombatMethod {
 
     public hits(character: Mobile, target: Mobile): PendingHit[] {
         let spell = character.getCombat().getSelectedSpell();
-        let hits: PendingHit[] = [new PendingHit(character, target, this, MagicCombatMethod.hitDelay(character, target, spell)).setSpell(spell)];
+        const context = Spell.getCastContext(character, spell);
+        let hits: PendingHit[] = [new PendingHit(character, target, this, MagicCombatMethod.hitDelay(character, target, spell), true, context).setSpell(spell)];
 
 
         if (!spell) {
@@ -127,15 +133,29 @@ export class MagicCombatMethod extends CombatMethod {
                 if (!CombatFactory.canAttackSecondaryTarget(character, target, next, spellRadius)) {
                     continue;
                 }
-                let pendingHit: PendingHit = new PendingHit(character, next, this, MagicCombatMethod.hitDelay(character, next, spell), false).setSpell(spell);
+                let pendingHit: PendingHit = new PendingHit(character, next, this, MagicCombatMethod.hitDelay(character, next, spell), false, context).setSpell(spell);
                 multiCombatHits.push(pendingHit);
                 spell.onHitCalc(pendingHit);
             }
         }
+        MagicCombatMethod.payBaseExperience(character, spell, hits[0].isAccurate());
         if (multiCombatHits.length > 0) {
             return hits.concat(multiCombatHits);
         }
         return hits;
+    }
+
+    /**
+     * OSRS pays a spell's base XP once per cast, however many targets it hits: the hit value, or
+     * the splash value when the main target splashes (lower for the binding spells and Tele Block).
+     * rewardExp adds the per-damage XP. Powered staves' built-in spells have none.
+     */
+    private static payBaseExperience(character: Mobile, spell: CombatSpell, accurate: boolean): void {
+        if (!MagicCombatMethod.baseExperienceOwed.delete(character)) return;
+        const experience = accurate ? spell.baseExperience() : spell.splashExperience();
+        if (experience > 0) {
+            character.getAsPlayer().getSkillManager().addExperience(Skill.MAGIC, experience, true);
+        }
     }
 
     public canAttack(character: Mobile, target: Mobile): boolean {
@@ -199,6 +219,10 @@ export class MagicCombatMethod extends CombatMethod {
                 );
             }
             spell.startCast(character, target);
+            // The cast's base XP waits for hits(), where the main target's hit or splash is rolled.
+            if ((spell.baseExperience() > 0 || spell.splashExperience() > 0) && !character.isNpc()) {
+                MagicCombatMethod.baseExperienceOwed.add(character);
+            }
         }
     }
 
@@ -265,7 +289,7 @@ export class MagicCombatMethod extends CombatMethod {
                 target.performGraphic(MagicCombatMethod.SPLASH_GRAPHIC);
                 Sounds.sendSound(attacker, Sound.SPELL_FAIL_SPLASH);
             }
-            previousSpell.finishCast(attacker, target, accurate, damage);
+            previousSpell.finishCast(attacker, target, accurate, damage, hit.getSpellContext());
         }
     }
 

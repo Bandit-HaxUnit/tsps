@@ -1,15 +1,43 @@
-import { Misc } from "../../../../util/Misc";
 import { Mobile } from "../../../entity/impl/Mobile";
 import { Player } from "../../../entity/impl/player/Player";
-import { Equipment } from "../../../model/container/impl/Equipment";
 import { Item } from "../../../model/Item";
 import { MagicSpellbook } from "../../../model/MagicSpellbook";
 import { Skill } from "../../../model/Skill";
+import { GameConstants } from "../../../GameConstants";
+import { World } from "../../../World";
 import { PluginManager } from "../../../../plugins/PluginManager";
 
+/** Runtime-only, per-paid-cast plugin snapshots; never shared with later casts or saves. */
+export interface SpellCastContext {
+    readonly spell: Spell;
+    readonly tick: number;
+    readonly data: Map<string, unknown>;
+}
+
 export abstract class Spell {
+    private static readonly castContexts = new WeakMap<Mobile, SpellCastContext>();
+    private static readonly calculationContexts = new WeakMap<Mobile, SpellCastContext>();
+    public static getCastContext(caster: Mobile, spell: Spell | null): SpellCastContext | null {
+        const context = Spell.castContexts.get(caster);
+        return context && context.spell === spell && context.tick === World.getProcessCycle() ? context : null;
+    }
+    /** Explicit synchronous roll scope keeps paid-cast snapshots out of later previews. */
+    public static withCastContext<T>(caster: Mobile, context: SpellCastContext | null, action: () => T): T {
+        const previous = Spell.calculationContexts.get(caster);
+        if (context) Spell.calculationContexts.set(caster, context);
+        else Spell.calculationContexts.delete(caster);
+        try { return action(); }
+        finally {
+            if (previous) Spell.calculationContexts.set(caster, previous);
+            else Spell.calculationContexts.delete(caster);
+        }
+    }
+    public static getCalculationContext(caster: Mobile, spell: Spell | null): SpellCastContext | null {
+        const context = Spell.calculationContexts.get(caster);
+        return context && context.spell === spell ? context : null;
+    }
     private static readonly NEXT_CAST_AT = "magic:next-cast-at";
-    private static readonly CAST_DELAY_MS = 600;
+    private static readonly CAST_DELAY_TICKS = 1;
 
     abstract spellId(): number;
     abstract levelRequired(): number;
@@ -126,15 +154,20 @@ export abstract class Spell {
             return true;
         }
 
-        const now = Date.now();
+        const now = World.getProcessCycle();
         const cooldown = this.getCastCooldown();
         if ((this.usesSharedCastDelay() && Number(player.getAttribute(Spell.NEXT_CAST_AT) ?? 0) > now) ||
             (cooldown != null && Number(player.getAttribute(cooldown.attribute) ?? 0) > now)) {
             return false;
         }
 
-        if (player.getEquipment().getItems()[Equipment.WEAPON_SLOT].getId() == 11791 && Misc.getRandom(7) == 1) {
-            player.sendMessage("Your Staff of the dead negated your runes for this cast.");
+        // Plugins (staff of the dead, Kodai wand) may negate the rune cost of a combat spell.
+        const runeSaving = { player, offensive: typeof (this as any).maximumHit === "function", saved: false, message: null as string | null };
+        PluginManager.emitCustomEvent("magic:rune-saving", runeSaving);
+        if (runeSaving.saved) {
+            if (runeSaving.message) {
+                player.sendMessage(runeSaving.message);
+            }
         } else {
             for (const item of itemsToConsume) {
                 player.getInventory().deletes(item);
@@ -150,11 +183,18 @@ export abstract class Spell {
         }
 
         if (this.usesSharedCastDelay()) {
-            player.setAttribute(Spell.NEXT_CAST_AT, now + Spell.CAST_DELAY_MS);
+            player.setAttribute(Spell.NEXT_CAST_AT, now + Spell.CAST_DELAY_TICKS);
         }
         if (cooldown != null) {
-            player.setAttribute(cooldown.attribute, now + cooldown.duration);
+            player.setAttribute(
+                cooldown.attribute,
+                now + Math.ceil(cooldown.duration / GameConstants.GAME_ENGINE_PROCESSING_CYCLE_RATE)
+            );
         }
+
+        const context: SpellCastContext = { spell: this, tick: World.getProcessCycle(), data: new Map() };
+        Spell.castContexts.set(player, context);
+        PluginManager.emitCustomEvent("magic:cast-committed", { player, spell: this, context, runesSaved: runeSaving.saved });
 
         return true;
     }

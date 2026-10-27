@@ -6,7 +6,6 @@ import { GraphicHeight } from "../../../model/GraphicHeight";
 import { Item } from "../../../model/Item";
 import { Location } from "../../../model/Location";
 import { MagicSpellbook } from "../../../model/MagicSpellbook";
-import { EffectTimer } from "../../../model/EffectTimer";
 import { Skill } from "../../../model/Skill";
 import { TeleportHandler } from "../../../model/teleportation/TeleportHandler";
 import { TeleportType } from "../../../model/teleportation/TeleportType";
@@ -17,10 +16,37 @@ import { OptionDialogue } from "../../../model/dialogues/entries/impl/OptionDial
 import { DialogueOption } from "../../../model/dialogues/DialogueOption";
 import { PluginManager } from "../../../../plugins/PluginManager";
 
-type SpellData = { level: number; experience: number; runes: Item[] };
+/** A cast's animation and graphic on the caster (cache ids). */
+type CastVisuals = { animation: number; graphic?: number };
+/**
+ * `cast` is what the caster plays, as in rsprox captures of live OSRS; null for a teleport, whose
+ * TeleportType animates it. Spells no capture shows yet keep the summon animation (4413) with the
+ * Lunar teleport graphic (747).
+ */
+type SpellData = { level: number; experience: number; runes: Item[]; cast?: CastVisuals | null };
 type TeleportData = SpellData & { destination: Location };
 
 const rune = (id: number, amount = 1) => new Item(id, amount);
+const UNCAPTURED: CastVisuals = { animation: 4413, graphic: 747 };
+/** The Lunar spells rsprox captures show, by cache name: the caster's animation, then graphic. */
+const CASTS = {
+    // lunar_human_magic_summon2, quest_lunar_bakepie_spotanim
+    "bake pie": { animation: 4413, graphic: 746 },
+    // dream_player_humidify_spell, dream_humidify_spell_spotanim
+    "humidify": { animation: 6294, graphic: 1061 },
+    // dream_player_hunter_box_spell, dream_hunter_spell_spotanim
+    "hunter kit": { animation: 6303, graphic: 1074 },
+    // dream_player_make_plank_spell, dream_plank_make_spell_spotanim
+    "plank make": { animation: 6298, graphic: 1063 },
+    // dream_player_spellbook_swap, dream_spellbook_spotanim
+    "spellbook swap": { animation: 6299, graphic: 1062 },
+    // lunar_human_magic_summon1, quest_lunar_spellbook_string_jewelery_spot_anim
+    "string jewellery": { animation: 4412, graphic: 730 },
+    // quest_lunar_pushing_magic_animation; the target shows the Vengeance graphic (725)
+    "vengeance other": { animation: 4411 },
+} satisfies Record<string, CastVisuals>;
+/** A captured spell's cast: a misspelt name fails to compile instead of falling back to UNCAPTURED. */
+const castOf = (spell: keyof typeof CASTS): CastVisuals => CASTS[spell];
 
 class LunarSpell extends Spell {
     constructor(readonly data: SpellData) { super(); }
@@ -37,8 +63,11 @@ class LunarSpell extends Spell {
             return true;
         }
         if (!this.canCast(player, false) || !this.canCast(player, true)) return true;
-        player.performAnimation(new Animation(4413));
-        player.performGraphic(new Graphic(747));
+        const cast = this.data.cast === undefined ? UNCAPTURED : this.data.cast;
+        if (cast) {
+            player.performAnimation(new Animation(cast.animation));
+            if (cast.graphic !== undefined) player.performGraphic(new Graphic(cast.graphic));
+        }
         effect();
         player.getSkillManager().addExperiences(Skill.MAGIC, this.data.experience);
         return true;
@@ -46,7 +75,7 @@ class LunarSpell extends Spell {
 }
 
 class LunarTeleport extends LunarSpell {
-    constructor(readonly teleport: TeleportData) { super(teleport); }
+    constructor(readonly teleport: TeleportData) { super({ ...teleport, cast: null }); }
     castTeleport(player: Player): boolean {
         if (!TeleportHandler.checkReqs(player, this.teleport.destination)) return true;
         return this.cast(player, () => TeleportHandler.teleport(player, this.teleport.destination, TeleportType.LUNAR, false));
@@ -58,13 +87,12 @@ const teleport = (level: number, experience: number, runes: Item[], x: number, y
 
 /** Lunar spells that can be fulfilled by the current server primitives. */
 export class LunarSpells {
+    public static readonly CASTS = CASTS;
     private static readonly SELF = new Map<string, LunarSpell>([
-        ["cure me", new LunarSpell({ level: 71, experience: 69, runes: [rune(9075, 2), rune(564, 2), rune(563)] })],
-        ["cure group", new LunarSpell({ level: 74, experience: 74, runes: [rune(9075, 2), rune(564, 2), rune(563, 2)] })],
         ["vengeance", new LunarSpell({ level: 94, experience: 112, runes: [rune(9075, 4), rune(557, 10), rune(560, 2)] })],
         ["dream", new LunarSpell({ level: 79, experience: 82, runes: [rune(9075, 2), rune(556, 5), rune(563)] })],
         ["heal group", new LunarSpell({ level: 95, experience: 124, runes: [rune(9075, 4), rune(557, 15), rune(565, 3)] })],
-        ["spellbook swap", new LunarSpell({ level: 96, experience: 130, runes: [rune(9075, 3), rune(563, 2), rune(560)] })],
+        ["spellbook swap", new LunarSpell({ level: 96, experience: 130, runes: [rune(9075, 3), rune(563, 2), rune(560)], cast: castOf("spellbook swap") })],
     ]);
 
     private static readonly TELEPORTS = new Map<string, LunarTeleport>([
@@ -101,12 +129,6 @@ export class LunarSpells {
         if (this.handleUtility(player, key)) return true;
         const spell = this.SELF.get(key);
         if (!spell) return false;
-        if (key === "cure me") {
-            return spell.cast(player, () => this.curePoison(player));
-        }
-        if (key === "cure group") {
-            return spell.cast(player, () => this.forNearbyPlayers(player, target => this.curePoison(target)));
-        }
         if (key === "dream") return spell.cast(player, () => {
             for (const skill of Skill.values()) {
                 const current = player.getSkillManager().getCurrentLevel(skill);
@@ -140,10 +162,10 @@ export class LunarSpells {
     private static handleUtility(player: Player, key: string): boolean {
         if (key === "astral contact") key = "npc contact";
         const definitions: Record<string, SpellData> = {
-            "bake pie": { level: 65, experience: 60, runes: [rune(9075), rune(554, 5), rune(555, 4)] },
-            "humidify": { level: 68, experience: 65, runes: [rune(9075), rune(555, 3), rune(563)] },
-            "hunter kit": { level: 71, experience: 70, runes: [rune(9075, 2), rune(554, 2), rune(563)] },
-            "plank make": { level: 86, experience: 90, runes: [rune(9075, 2), rune(557, 15), rune(561)] },
+            "bake pie": { level: 65, experience: 60, runes: [rune(9075), rune(554, 5), rune(555, 4)], cast: castOf("bake pie") },
+            "humidify": { level: 68, experience: 65, runes: [rune(9075), rune(555, 3), rune(563)], cast: castOf("humidify") },
+            "hunter kit": { level: 71, experience: 70, runes: [rune(9075, 2), rune(554, 2), rune(563)], cast: castOf("hunter kit") },
+            "plank make": { level: 86, experience: 90, runes: [rune(9075, 2), rune(557, 15), rune(561)], cast: castOf("plank make") },
             "magic imbue": { level: 82, experience: 86, runes: [rune(9075, 2), rune(554, 7), rune(556, 7)] },
             "npc contact": { level: 67, experience: 63, runes: [rune(9075), rune(564), rune(556, 2)] },
         };
@@ -200,7 +222,7 @@ export class LunarSpells {
             } else if (key === "hunter kit") {
                 inventory.adds(946, 1).adds(303, 1).adds(954, 2).adds(10029, 1).adds(10008, 1);
             } else if (key === "magic imbue") {
-                player.setAttribute("lunar:magic-imbue-until", Date.now() + 12 * 60_000);
+                player.setAttribute("lunar:magic-imbue-until", World.getProcessCycle() + 720);
             } else {
                 for (const item of [...inventory.getValidItems()]) {
                     const plank = planks.get(item.getId());
@@ -216,10 +238,9 @@ export class LunarSpells {
     public static handlePlayerTarget(player: Player, target: Player, name: string | undefined): boolean {
         const key = name?.trim().toLowerCase() ?? "";
         const definitions: Record<string, SpellData> = {
-            "cure other": { level: 68, experience: 65, runes: [rune(9075), rune(557, 10), rune(563)] },
             "energy transfer": { level: 91, experience: 100, runes: [rune(9075, 3), rune(557, 2), rune(563)] },
             "heal other": { level: 92, experience: 101, runes: [rune(9075, 3), rune(557), rune(565, 3)] },
-            "vengeance other": { level: 93, experience: 108, runes: [rune(9075, 3), rune(557, 10), rune(560, 2)] },
+            "vengeance other": { level: 93, experience: 108, runes: [rune(9075, 3), rune(557, 10), rune(560, 2)], cast: castOf("vengeance other") },
             "stat spy": { level: 75, experience: 76, runes: [rune(9075, 2), rune(557, 5), rune(563)] },
             "stat restore pot share": { level: 81, experience: 84, runes: [rune(9075, 2), rune(555, 10), rune(561, 2)] },
             "boost potion share": { level: 84, experience: 88, runes: [rune(9075, 3), rune(555, 12), rune(557, 10)] },
@@ -227,7 +248,6 @@ export class LunarSpells {
         const data = definitions[key];
         if (!data || target === player || !this.acceptsAid(target) || !player.getLocation().isWithinDistance(target.getLocation(), 10)) return false;
         const spell = new LunarSpell(data);
-        if (key === "cure other") return spell.cast(player, () => this.curePoison(target));
         if (key === "energy transfer") {
             if (player.getSpecialPercentage() < 100) {
                 player.sendMessage("You need a full special attack bar to cast Energy Transfer.");
@@ -253,21 +273,21 @@ export class LunarSpells {
         });
         if (key === "stat restore pot share" || key === "boost potion share") {
             return spell.cast(player, () => {
-                player.setAttribute("lunar:potion-share", { target, type: key === "stat restore pot share" ? "restore" : "boost", expiresAt: Date.now() + 30_000 });
+                player.setAttribute("lunar:potion-share", { target, type: key === "stat restore pot share" ? "restore" : "boost", expiresAt: World.getProcessCycle() + 50 });
                 player.sendMessage("Drink a matching potion within 30 seconds to share its effect.");
             });
         }
-        if (target.hasVengeanceReturn() || !target.getVengeanceTimer().finished()) {
+        // The cooldown is the caster's, shared with Vengeance; the target's own doesn't matter (Wiki: Vengeance_Other).
+        if (EffectSpells.vengeanceOnCooldown(player)) return true;
+        if (target.hasVengeanceReturn()) {
             player.sendMessage("That player cannot receive Vengeance right now.");
             return true;
         }
         return spell.cast(player, () => {
             target.setHasVengeance(true);
-            target.getVengeanceTimer().start(30);
-            target.performAnimation(new Animation(4411));
+            EffectSpells.startVengeanceCooldown(player);
             target.performGraphic(new Graphic(725, GraphicHeight.HIGH));
-            target.getPacketSender().sendEffectTimer(30, EffectTimer.VENGEANCE)
-                .sendMessage("You now have Vengeance's effect.");
+            target.sendMessage("You have the power of vengeance!");
         });
     }
 
@@ -285,40 +305,21 @@ export class LunarSpells {
     }
 
     public static handleItemTarget(player: Player, itemId: number, slot: number, name: string | undefined): boolean {
+        // Recharge Dragonstone has no target; the Jewellery plugin casts it.
         const key = name?.trim().toLowerCase() ?? "";
         const definitions: Record<string, SpellData> = {
-            "string jewellery": { level: 80, experience: 83, runes: [rune(9075, 2), rune(556, 5), rune(563)] },
-            "recharge dragonstone": { level: 89, experience: 97.5, runes: [rune(9075, 4), rune(557, 10), rune(563, 4)] },
+            "string jewellery": { level: 80, experience: 83, runes: [rune(9075, 2), rune(556, 5), rune(563)], cast: castOf("string jewellery") },
         };
         const data = definitions[key];
         const item = player.getInventory().getItems()[slot];
         if (!data || !item || item.getId() !== itemId) return false;
-        if (key === "string jewellery") {
-            const unstrung = new Map<number, number>([[1635, 1656], [1637, 1658], [1639, 1660], [1641, 1662], [6571, 6573]]);
-            const result = unstrung.get(itemId);
-            if (!result) {
-                player.sendMessage("This spell can only be cast on an unstrung amulet.");
-                return true;
-            }
-            return new LunarSpell(data).cast(player, () => { item.setId(result); player.getInventory().refreshItems(); });
-        }
-        const charged = new Map<number, number>([
-            [1712, 1710], [1710, 1708], [1708, 1706], [1706, 1704],
-            [2552, 2554], [2554, 2556], [2556, 2558], [2558, 2560],
-            [11118, 11120], [11120, 11122], [11122, 11124], [11124, 11126],
-        ]);
-        const result = charged.get(itemId);
+        const unstrung = new Map<number, number>([[1635, 1656], [1637, 1658], [1639, 1660], [1641, 1662], [6571, 6573]]);
+        const result = unstrung.get(itemId);
         if (!result) {
-            player.sendMessage("This spell can only recharge dragonstone jewellery.");
+            player.sendMessage("This spell can only be cast on an unstrung amulet.");
             return true;
         }
         return new LunarSpell(data).cast(player, () => { item.setId(result); player.getInventory().refreshItems(); });
-    }
-
-    private static curePoison(player: Player): void {
-        player.setPoisonDamage(0);
-        player.setVenomed(false);
-        player.getCombat().getPoisonImmunityTimer().start(12);
     }
 
     private static forNearbyPlayers(player: Player, effect: (target: Player) => void): void {
@@ -333,7 +334,7 @@ export class LunarSpells {
 
     public static expireSpellbookSwap(player: Player): void {
         const swap: any = player.getAttribute("lunar:spellbook-swap");
-        if (swap && Date.now() >= swap.expiresAt) {
+        if (swap && World.getProcessCycle() >= swap.expiresAt) {
             player.setAttribute("lunar:spellbook-swap", null);
             MagicSpellbook.changeSpellbook(player, MagicSpellbook.LUNAR, true);
         }
@@ -369,7 +370,7 @@ export class LunarSpells {
             const book = books[(option as number) - 1];
             player.getPacketSender().sendInterfaceRemoval();
             if (!book) return;
-            player.setAttribute("lunar:spellbook-swap", { expiresAt: Date.now() + 120_000 });
+            player.setAttribute("lunar:spellbook-swap", { expiresAt: World.getProcessCycle() + 200 });
             MagicSpellbook.changeSpellbook(player, book, true);
         } }, "Standard", "Ancient", "Arceuus"));
         player.getDialogueManager().startDialogues(builder);

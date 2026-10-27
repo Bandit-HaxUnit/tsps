@@ -1,3 +1,4 @@
+import { LocAnimated } from "../loc/LocAnimated";
 import Denque from "denque";
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { button, folder } from "leva";
@@ -250,7 +251,7 @@ export async function doInstanceSceneBuild(host: WebGLOsrsRendererHost,
             maxLevel: Math.max(0, Math.min(Scene.MAX_LEVELS - 1, host.maxLevel | 0)),
             loadNpcs: host.loadNpcs,
             smoothTerrain: host.smoothTerrain,
-            ...host.osrsClient.animationSmoothingPlugin?.objectSettings(),
+            ...host.osrsClient.clientPlugins.objectSettings(),
             minimizeDrawCalls: !host.hasMultiDraw,
             loadedTextureIds: host.loadedTextureIds,
             instance: { templateChunks, regionX, regionY },
@@ -260,11 +261,17 @@ export async function doInstanceSceneBuild(host: WebGLOsrsRendererHost,
             extraLocs,
         };
 
-        const mapData = await host.osrsClient.workerPool.queueLoad<
-            SdMapLoaderInput,
-            SdMapData | undefined,
-            SdMapDataLoader
-        >(host.dataLoader, input);
+        let mapData: SdMapData | undefined;
+        host.instanceBuildsInFlight++;
+        try {
+            mapData = await host.osrsClient.workerPool.queueLoad<
+                SdMapLoaderInput,
+                SdMapData | undefined,
+                SdMapDataLoader
+            >(host.dataLoader, input);
+        } finally {
+            host.instanceBuildsInFlight--;
+        }
 
         if (build !== host.instanceBuildSeq || !host.instanceActive) return;
 
@@ -277,6 +284,7 @@ export async function doInstanceSceneBuild(host: WebGLOsrsRendererHost,
                 } border=${mapData.borderSize} extraLocs=${extraLocs?.length ?? 0}`,
             );
             // Clear any in-flight normal map loads that arrived during the async instance build
+            WebGLMapSquare.cancelPreparedLoads(host.app);
             host.mapsToLoad.clear();
             host.pendingStreamMapsByGeneration.clear();
             // Bypass grid/generation checks — instance scenes are always valid
@@ -299,8 +307,14 @@ export function replaceSceneWithInstance(host: WebGLOsrsRendererHost, mapData: S
 
         host.pendingInstanceScene = null;
         host.osrsClient.clearMinimapImageUrls();
+        // The scene's loc animations go on in the new one (LocAnimated.carryOver), as a square
+        // rebuilt in place keeps them: a held animation (a collapsed floor) would replay otherwise.
+        host.carriedLocAnimations = [];
+        for (const square of host.mapManager.mapSquares.values()) {
+            const animated = (square as any).locsAnimated as LocAnimated[] | undefined;
+            if (animated) host.carriedLocAnimations.push(...animated);
+        }
         host.clearMaps();
-        host.skipMapFadeIn = true;
         host.mapManager.loadingMapIds.add(getMapSquareId(mapData.mapX, mapData.mapY));
         // Its NPCs belong to this one square now, wherever in the scene they stand.
         host.instanceSceneMap = { mapX: mapData.mapX | 0, mapY: mapData.mapY | 0 };
@@ -361,6 +375,31 @@ export function scheduleInstanceLocRebuild(host: WebGLOsrsRendererHost, ): void 
             );
         }, 100);
     
+}
+
+/**
+ * A loc change in the instance. One that only touches doors, or only other locs, rebuilds just
+ * that geometry of the drawn scene, as a map square does (scheduleLocGeometryUpdate): rebuilding
+ * the whole scene made a house door open a second after its click. Anything else, or a change
+ * while a whole-scene build is still on its way, rebuilds the scene.
+ */
+export function scheduleInstanceLocUpdate(
+    host: WebGLOsrsRendererHost,
+    group: "loc" | "door" | "full",
+): void {
+    const scene = host.instanceSceneMap;
+    if (
+        group === "full" ||
+        !scene ||
+        !host.mapManager.getMap(scene.mapX, scene.mapY) ||
+        host.instanceLocRebuildTimer !== null ||
+        host.pendingInstanceScene !== null ||
+        host.instanceBuildsInFlight > 0
+    ) {
+        host.scheduleInstanceLocRebuild();
+        return;
+    }
+    host.scheduleLocGeometryUpdate(scene.mapX, scene.mapY, group);
 }
 
 export function clearInstance(host: WebGLOsrsRendererHost, ): void {

@@ -2,7 +2,8 @@
  * Vorkath, post-quest form (https://oldschool.runescape.wiki/w/Vorkath): poke her awake on
  * Ungael and fight her with melee, magic, ranged, three dragonfire tiers and the deadly
  * fireball, alternating acid/rapid-fire and freeze/zombified-spawn specials every six
- * standards, with the boss health bar. Drops roll automatically from
+ * standards, with the boss health bar. A death in the crater leaves the items with Torfinn
+ * (Retrieval.Vorkath). Drops roll automatically from
  * data/definitions/npc-drops.json.
  */
 const Wake = require("./vorkath/Wake.Vorkath");
@@ -11,6 +12,7 @@ const Specials = require("./vorkath/Specials.Vorkath");
 const Area = require("./vorkath/Area.Vorkath");
 const Hud = require("./vorkath/Hud.Vorkath");
 const CombatAchievements = require("./vorkath/CombatAchievements.Vorkath");
+const Retrieval = require("./vorkath/Retrieval.Vorkath");
 
 module.exports = {
   name: "Vorkath",
@@ -22,5 +24,6 @@ module.exports = {
     Area.attach(api);
     Hud.attach(api);
     CombatAchievements.attach(api);
+    Retrieval.attach(api);
   },
 };

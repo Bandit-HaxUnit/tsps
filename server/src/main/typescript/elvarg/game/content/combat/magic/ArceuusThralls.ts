@@ -5,17 +5,21 @@ import { Skill } from "../../../model/Skill";
 import { HitDamage } from "../hit/HitDamage";
 import { HitMask } from "../hit/HitMask";
 import { Animation } from "../../../model/Animation";
+import { Graphic } from "../../../model/Graphic";
 import { CombatRange } from "../CombatRange";
 import { PathFinder } from "../../../model/movement/path/PathFinder";
 import { Task } from "../../../task/Task";
 import { TaskManager } from "../../../task/TaskManager";
 import { Location } from "../../../model/Location";
+import { Misc } from "../../../../util/Misc";
+import { PluginManager } from "../../../../plugins/PluginManager";
 
 const THRALL_KEY = "arceuus:thrall";
 const THRALL_PURSUIT_KEY = "arceuus:thrall-pursuit";
 
 export class ArceuusThralls {
-    public static summon(player: Player, npcId: number, prayerCost: number, maxHit: number, attackDistance: number): void {
+    /** `spawn` is the thrall's rising animation and the graphic it appears with. */
+    public static summon(player: Player, npcId: number, prayerCost: number, maxHit: number, attackDistance: number, spawn?: { rise: number; impact: number }): void {
         const previous = player.getAttribute(THRALL_KEY) as NPC | null;
         if (previous?.isRegistered()) World.getRemoveNPCQueue().push(previous);
 
@@ -32,8 +36,14 @@ export class ArceuusThralls {
         (thrall as any).__skipDefaultRespawn = true;
         player.setAttribute(THRALL_KEY, thrall);
         World.getAddNPCQueue().push(thrall);
+        if (spawn) {
+            thrall.performAnimation(new Animation(spawn.rise));
+            thrall.performGraphic(new Graphic(spawn.impact));
+        }
 
-        let ticks = player.getSkillManager().getCurrentLevel(Skill.MAGIC);
+        const duration = { player, ticks: player.getSkillManager().getCurrentLevel(Skill.MAGIC) };
+        PluginManager.emitCustomEvent("magic:thrall-duration", duration);
+        let ticks = duration.ticks;
         let attackTicks = 0;
         TaskManager.submit(new class extends Task {
             constructor() { super(1); }
@@ -82,8 +92,12 @@ export class ArceuusThralls {
 
                 if (++attackTicks % 4 === 0) {
                     thrall.performAnimation(new Animation(thrall.getAttackAnim()));
-                    target.getCombat().getHitQueue().addPendingDamage([new HitDamage(maxHit, HitMask.RED)]);
-                    target.getCombat().addDamage(player, maxHit);
+                    // Content may raise each attack's max hit (a league fragment), as for the duration.
+                    const max = { player, thrall, target, maxHit };
+                    PluginManager.emitCustomEvent("magic:thrall-max-hit", max);
+                    const hit = new HitDamage(Misc.getRandom(Math.max(0, Math.floor(Number(max.maxHit) || 0))), HitMask.RED).setSource(player)
+                        .onApplied(damage => target.getCombat().addDamage(player, damage));
+                    target.getCombat().getHitQueue().addPendingDamage([hit]);
                 }
             }
         });

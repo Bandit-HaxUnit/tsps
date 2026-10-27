@@ -1,21 +1,23 @@
 /**
  * Smithing's make-X loops (smelting, anvil work, cannonballs): one task ticks every player's
  * session. Each cycle starts `firstDelay` ticks after the session (then every `interval`
- * ticks): `begin(player)` runs the cycle's opening (a message, the animation), and
+ * ticks, or `interval(player)` read as each cycle opens): `begin(player)` runs the cycle's
+ * opening (a message, the animation), and
  * `step(player)` makes the item `finishDelay` ticks later. Either returning false ends the
  * session, as do `remaining` running out and the player moving, dying or logging out.
  */
 const Core = require("./Core.Smithing");
+const { pauseForLevelUp } = require("../SkillActions");
 
 const SESSIONS = new Map();
 /** Other per-tick work (closing menus a player walked away from). */
 const EVERY_TICK = [];
 let tick = 0;
 
-function start(player, { type, remaining, interval, firstDelay = 0, finishDelay = 0, begin, step, onStop }) {
+function start(player, { type, skill = null, remaining, interval, firstDelay = 0, finishDelay = 0, begin, step, onStop }) {
   stop(player, false);
   SESSIONS.set(player, {
-    type, remaining, interval, finishDelay, begin, step, onStop,
+    type, skill, remaining, interval, finishDelay, begin, step, onStop,
     // The task's next run is the tick the session started on (offset 0).
     nextCycle: tick + 1 + firstDelay,
     finishAt: null,
@@ -57,22 +59,34 @@ function typeOf(player) {
   return SESSIONS.get(player)?.type ?? null;
 }
 
+function pause(event) {
+  pauseForLevelUp(event, SESSIONS, (player) => stop(player, false));
+}
+
 function everyTick(fn) {
   EVERY_TICK.push(fn);
 }
 
 function advance(player, session) {
   if (session.finishAt == null && tick >= session.nextCycle) {
-    session.nextCycle = tick + session.interval;
+    session.nextCycle = tick + (typeof session.interval === "function" ? session.interval(player) : session.interval);
     if (session.begin && !session.begin(player)) return false;
     session.finishAt = tick + session.finishDelay;
   }
   if (session.finishAt == null || tick < session.finishAt) return true;
   session.finishAt = null;
-  if (!session.step(player)) return false;
-  if (--session.remaining <= 0) {
-    stop(player, false);
-    return true;
+  // Content may make several items in the one cycle ("skills:actions-per-cycle", a league relic's all at once).
+  const actions = require("./Common.Smithing").actionsPerCycle(player, session.skill ?? Core.Skill.SMITHING, session.type);
+  for (let done = 0; done < actions; done++) {
+    if (!session.step(player)) {
+      if (done === 0) return false;
+      stop(player, false);
+      return true;
+    }
+    if (--session.remaining <= 0) {
+      stop(player, false);
+      return true;
+    }
   }
   return true;
 }
@@ -90,6 +104,7 @@ function process() {
       stop(player);
       continue;
     }
+    if (session.levelUpPaused) continue;
     if (!advance(player, session)) stop(player);
   }
 }
@@ -115,4 +130,4 @@ module.exports = function attach(api) {
   api.onServerStartup(startTask);
 };
 
-Object.assign(module.exports, { start, stop, typeOf, everyTick, timeline });
+Object.assign(module.exports, { start, stop, pause, typeOf, everyTick, timeline });

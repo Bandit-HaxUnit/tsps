@@ -11,6 +11,7 @@ const DATA = require("./data/food.json");
 const {
   restoreRunEnergy,
   curePoisonAndVenom,
+  curePoison,
   boostSkill,
   lowerSkillByMax,
   restoreSkillToBaseWithFormula,
@@ -81,6 +82,10 @@ function idsFor(name) {
 
 function isFoodItem(itemId) {
   return Number.isInteger(itemId) && itemId > 0 && foodBite(itemId) !== undefined;
+}
+
+function isComboFoodItem(itemId) {
+  return foodBite(itemId)?.food.combo === true;
 }
 
 /** Every item id that is food. */
@@ -174,7 +179,8 @@ function applyStats(player, effect) {
   }
   if (effect.runEnergy) restoreRunEnergy(player, effect.runEnergy);
   if (effect.stamina) pluginApi.emitCustomEvent("potions:apply-stamina", { player, energy: 20 });
-  if (effect.curePoison) curePoisonAndVenom(player);
+  if (effect.cureVenom) curePoisonAndVenom(player);
+  else if (effect.curePoison) curePoison(player);
 }
 
 /** Wiki (Kebab): a random skill but Hitpoints, never drained below 1 nor when 2 or lower. */
@@ -282,7 +288,7 @@ function applyFood(player, food, random = Math.random) {
   applyStats(player, food);
   if (food.poisonImmunity) {
     const immunity = player.getCombat().getPoisonImmunityTimer();
-    if (immunity.secondsRemaining() < food.poisonImmunity) immunity.start(food.poisonImmunity);
+    immunity.protectBriefly(food.poisonImmunity, food.cureVenom === true);
   }
   if (food.then) scheduleSecondHeal(player, food.then);
   const healMessage = food.healMessage === undefined ? HEAL_MESSAGE : food.healMessage;
@@ -336,6 +342,7 @@ module.exports = {
   ATTACK_DELAY,
   COMBO_ATTACK_DELAY,
   isFoodItem,
+  isComboFoodItem,
   foodItemIds,
   _test: {
     getAnglerfishHeal, canAnglerfishOverheal, healAmount, rollOutcome, foodBite, leftover, eatDelay, applyFood,

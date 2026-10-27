@@ -28,6 +28,9 @@ function secondsToTicks(seconds: number, character: Mobile): number {
     return Math.max(1, Math.ceil((normalizedSeconds * 1000) / TICK_RATE_MS));
 }
 
+/** The restore task running for each character, so its timer can be read or restarted. */
+const runningTasks = new WeakMap<Mobile, RestoreSpecialAttackTask>();
+
 export class RestoreSpecialAttackTask extends Task {
     constructor(private character: Mobile, initialDelayTicks?: number) {
     const restoreDelayTicks = resolveRestoreDelayTicks(character);
@@ -35,12 +38,20 @@ export class RestoreSpecialAttackTask extends Task {
     super(firstDelayTicks);
     this.setDelay(restoreDelayTicks);
     this.character = character;
+    runningTasks.set(character, this);
     character.setRecoveringSpecialAttack(true);
     if (character.isPlayer()) {
         character.getAsPlayer().getSpecialAttackRestore().start(ticksToSeconds(firstDelayTicks));
     }
     }
-    
+
+    public stop() {
+        super.stop();
+        if (runningTasks.get(this.character) === this) {
+            runningTasks.delete(this.character);
+        }
+    }
+
     public execute() {
         if (this.character == null || !this.character.isRegistered() || this.character.getSpecialPercentage() >= 100 || !this.character.isRecoveringSpecialAttack()) {
             this.character.setRecoveringSpecialAttack(false);
@@ -50,7 +61,11 @@ export class RestoreSpecialAttackTask extends Task {
             this.stop();
             return;
         }
-        let amount = this.character.getSpecialPercentage() + 10;
+        // Content may change how much a cycle restores (a league relic); the cycle's length is the modifiers'.
+        const regen = { player: this.character, amount: 10 };
+        const { PluginManager } = require("../../../plugins/PluginManager");
+        PluginManager.emitCustomEvent("combat-special:regenerate", regen);
+        let amount = this.character.getSpecialPercentage() + Math.max(0, regen.amount | 0);
         if (amount >= 100) {
             amount = 100;
             this.character.setRecoveringSpecialAttack(false);
@@ -74,5 +89,16 @@ export class RestoreSpecialAttackTask extends Task {
 
     public static initialDelayTicksFromSeconds(seconds: number, character: Mobile): number {
         return secondsToTicks(seconds, character);
+    }
+
+    /** Ticks one 10% restore takes for this character now, with modifiers (the Lightbearer) applied. */
+    public static restoreDelayTicks(character: Mobile): number {
+        return resolveRestoreDelayTicks(character);
+    }
+
+    /** The restore task running for this character, or null when its energy isn't restoring. */
+    public static running(character: Mobile): RestoreSpecialAttackTask | null {
+        const task = runningTasks.get(character);
+        return task?.isRunning() ? task : null;
     }
 }

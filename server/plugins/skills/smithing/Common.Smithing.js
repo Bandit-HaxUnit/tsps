@@ -1,8 +1,10 @@
 /**
  * Helpers shared by the Smithing units: message boxes (optionally running `then` on continue),
- * hammers, the Smithing level, and cache lookups by gameval name.
+ * hammers, the Smithing level, the Smiths' uniform, and cache lookups by gameval name.
  */
 const Core = require("./Core.Smithing");
+// Read directly, not through Core: the Giants' Foundry asks for the uniform too.
+const { ItemIdentifiers: Items } = require("../../../src/main/typescript/elvarg/util/ItemIdentifiers");
 
 function show(player, entry, then) {
   const { DialogueChainBuilder, ActionDialogue } = Core;
@@ -29,8 +31,35 @@ function hasHammer(player) {
   return hammers.some((id) => player.getInventory().contains(id) || wielded.includes(id));
 }
 
+/**
+ * The Smiths' uniform (https://oldschool.runescape.wiki/w/Smiths%27_Uniform): "Each piece gives
+ * a 20% chance", "up to a 100% chance with the full set" (tunic, trousers, boots and either
+ * gloves). Used for anvil work and the Giants' Foundry's preform progress.
+ */
+function smithsUniformChance(player) {
+  const equipment = player.getEquipment();
+  const pieces = [Items.SMITHS_TUNIC, Items.SMITHS_TROUSERS, Items.SMITHS_BOOTS].filter((id) => equipment.contains(id)).length
+    + ([Items.SMITHS_GLOVES, Items.SMITHS_GLOVES_I_].some((id) => equipment.contains(id)) ? 1 : 0);
+  return pieces === 4 ? 1 : pieces * 0.2;
+}
+
+/** The Smithing level the skill checks: the current level, raised by content ("skills:level-boost", a league relic's invisible +12). */
 function smithingLevel(player) {
-  return player.getSkillManager().getCurrentLevel(Core.Skill.SMITHING);
+  const request = { player, skill: Core.Skill.SMITHING, boost: 0 };
+  Core.api.emitCustomEvent("skills:level-boost", request);
+  return player.getSkillManager().getCurrentLevel(Core.Skill.SMITHING) + Math.max(0, request.boost | 0);
+}
+
+/** How many items one cycle of a make-X loop makes ("skills:actions-per-cycle", a league relic's all at once); 1 unless content says more. */
+function actionsPerCycle(player, skill, kind) {
+  const request = { player, skill, kind, actions: 1 };
+  Core.api.emitCustomEvent("skills:actions-per-cycle", request);
+  return Math.max(1, request.actions | 0);
+}
+
+/** A product made, with its amount and XP ("skills:produced", for content that adds to it: a league relic's extra product); `kind` names the loop. */
+function produced(player, skill, itemId, amount, xp, kind = null) {
+  Core.api.emitCustomEvent("skills:produced", { player, skill, itemId, amount, xp, kind });
 }
 
 function required(kind, name, id) {
@@ -61,4 +90,4 @@ function hammering() {
   return animation("human_smithing");
 }
 
-module.exports = { messageBox, itemBox, hasHammer, smithingLevel, obj, varbit, varp, animation, hammering };
+module.exports = { messageBox, itemBox, hasHammer, smithsUniformChance, smithingLevel, actionsPerCycle, produced, obj, varbit, varp, animation, hammering };

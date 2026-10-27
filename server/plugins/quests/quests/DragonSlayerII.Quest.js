@@ -45,7 +45,7 @@ module.exports = function registerDragonSlayerII(api) {
   // DS2's native main-progress varbit uses the milestones consumed by cache NPC/loc
   // transforms and the client journal. Keep the plugin's compact stage enum private.
   const NATIVE_STAGE = { 0: 0, 1: 5, 2: 10, 3: 15, 4: 30, 5: 40, 6: 55, 7: 90,
-    8: 125, 9: 130, 10: 135, 11: 140, 12: 170, 13: 200, 14: 210 };
+    8: 125, 9: 130, 10: 135, 11: 140, 12: 170, 13: 200, 14: 215 };
   // QuestHelper maps the repair phase and each earned wave to these cache-visible milestones.
   const ASSAULT_NATIVE_STAGE = [180, 181, 182, 183, 184, 185, 186, 190, 191, 191, 195, 196, 196];
   const KEY_PARTS = [I.DRAGON_KEY_PIECE, I.DRAGON_KEY_PIECE_2, I.DRAGON_KEY_PIECE_3, I.DRAGON_KEY_PIECE_4];
@@ -1093,15 +1093,18 @@ module.exports = function registerDragonSlayerII(api) {
       p.setAttribute(ATTR_GALVEK_DEFEATED, false);
     }
   }
+  /** Ellen's four 25,000 XP rewards are spent, or the quest was completed without experience (a league quest pack). */
+  function ellenTrainingDone(p) {
+    return Number(p.getAttribute(ATTR_TRAINING_REWARDS)) >= 4 || quest.experienceWithheld(p);
+  }
   function talkEllenTraining({ player: p, npcId }) {
     if (!quest.isComplete(p)) return false;
-    startTranscript(api, p, npcId, "Ellen", Number(p.getAttribute(ATTR_TRAINING_REWARDS)) >= 4
+    startTranscript(api, p, npcId, "Ellen", ellenTrainingDone(p)
       ? "after-claiming-experience-rewards" : "standard-dialogue");
   }
   function handleEllenTrainingAction(event) {
     const { player, npcId, stepId } = event;
-    if (npcId !== N.ELLEN || stepId !== "P2tord" || !quest.isComplete(player)
-      || Number(player.getAttribute(ATTR_TRAINING_REWARDS)) >= 4) return;
+    if (npcId !== N.ELLEN || stepId !== "P2tord" || !quest.isComplete(player) || ellenTrainingDone(player)) return;
     event.handled = true;
     // The transcript tail immediately closes its chatbox after this action. If
     // the reward modal opens in the same callback, that close removes the modal
@@ -2276,10 +2279,11 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function syncUngaelExit(player) {
     // Cache loc 25337 at the north crater wall transforms to climbable loc
-    // 31992 at varbit 6108 value 30.
+    // 31992 at varbit 6108 value 30, and the Rellekka boat (29917) shows Travel from 20.
+    // A completed quest counts too (live OSRS is at 45 by then, rsprox 229/2334; 30 is enough for both).
     player.getPacketSender?.().sendVarbit?.(VARBIT_UNGAEL_EXIT,
       // The final transform is the default child after transform value 29.
-      player.getAttribute(ATTR_VORKATH_DEFEATED) ? 30 : 0);
+      player.getAttribute(ATTR_VORKATH_DEFEATED) || stage(player) >= S.COMPLETE ? 30 : 0);
   }
   function handleObject(event) {
     const handled = handleObjectAction(event);

@@ -1,4 +1,4 @@
-# Thieving: pickpocketing
+# Thieving: stalls, pickpocketing and blackjacking
 
 Pickpocketing is built from the OSRS Wiki: the [Thieving](https://oldschool.runescape.wiki/w/Thieving#Pickpocketing) page, each target's own page (its skilling success chart, Thieving info and loot), and the [Coin pouch](https://oldschool.runescape.wiki/w/Coin_pouch), [Rogue equipment](https://oldschool.runescape.wiki/w/Rogue_equipment), [Gloves of silence](https://oldschool.runescape.wiki/w/Gloves_of_silence), [Dodgy necklace](https://oldschool.runescape.wiki/w/Dodgy_necklace) and [Thieving cape](https://oldschool.runescape.wiki/w/Thieving_cape) pages. Item and NPC ids come from the cache.
 
@@ -7,9 +7,51 @@ Pickpocketing is built from the OSRS Wiki: the [Thieving](https://oldschool.rune
 | File | What it owns |
 | --- | --- |
 | `server/plugins/skills/data/pickpocketing.json` | Every target: its NPCs, level, experience, success chart, stun damage, coin pouch, quest, pet rate and loot. |
-| `server/plugins/skills/Thieving.plugin.js` | Stalls, and registering the two modules below. |
+| `server/plugins/skills/Thieving.plugin.js` | Module registration. |
+| `server/plugins/skills/thieving/Stalls.Thieving.js` | Stall attempts, rewards, depletion and merchant memory. |
+| `server/plugins/skills/thieving/Blackjacking.Thieving.js` | Pollnivnian bandit/thug lure, knockout and the shared pickpocket target event. |
 | `server/plugins/skills/thieving/Pickpocket.Thieving.js` | The pickpocket itself: checks, timing, success, loot, failure and the equipment effects. |
 | `server/plugins/skills/thieving/CoinPouch.Thieving.js` | Opening coin pouches ("Open-all" and "Open"). |
+
+## Stalls
+
+`server/plugins/skills/thieving/Stalls.Thieving.js` owns stall theft, alongside the pickpocket modules.
+
+### Sources
+
+- [Thieving: stalls](https://oldschool.runescape.wiki/w/Thieving#Stalls): success is guaranteed outside an owner's/guard's line of sight; multiple players may steal during the same tick. Current restock times are bakery/tea/seed 4 ticks, silk/wine 8, fur 12, silver 32, spice 10 and gem 100. Keldagrim bakery is 16 ticks.
+- [Wine stall](https://oldschool.runescape.wiki/w/Market_stall_(wine)): level 22, 27 XP; bottle of wine/grapes/jug/jug of water/jug of wine weights 11/17/39/20/13 out of 100.
+- [Silver ore](https://oldschool.runescape.wiki/w/Silver_ore#Item_sources), [silver bar](https://oldschool.runescape.wiki/w/Silver_bar#Item_sources), [tiara](https://oldschool.runescape.wiki/w/Tiara#Item_sources): ordinary silver-stall weights 16/3/1 out of 20. Level 50 and 205 XP; spice is level 65 and 92 XP.
+- [Thieving training](https://oldschool.runescape.wiki/w/Thieving_training#Levels_5%E2%80%9325:_Bakery_stalls): standing under the baker is a safe spot, so an owner sharing the thief's tile does not spot them.
+- [Prifddinas marketplace](https://oldschool.runescape.wiki/w/Prifddinas#Meilyr_district), [Keldagrim](https://oldschool.runescape.wiki/w/Keldagrim#Shops): named owners supplement the generic merchant names.
+- [Port Roberts](https://oldschool.runescape.wiki/w/Port_Roberts#Marketplace_thieving): its stalls never deplete. Their automatic stealing and timed guard/jail activity is separate content and is not implemented here.
+
+IDs and actions were checked in cache `osrs-241_2026-10-20` with `dump:loc`, `CacheDefinitions` and the cache's LOC gamevals. Ardougne silver/spice are 11734/11733. Draynor wine is 14011 (`Market stall`, `Steal-From`); its empty 14012 retains the same action, so it must not grant loot. Other empty models are 634 (ordinary), 6944 (Hosidius bakery), 6984 (Keldagrim), 36568 (Prifddinas) and 51932 (Fortis).
+
+### Captured attempt and outcome
+
+Rsprox recording **3220** shows the tea attempt message, `human_pickuptable` and sound 2581 together, followed one tick later by the success message, one cup of tea, the empty stall and `marketthief_tea = 1`. Recording **1554** shows the same one-tick separation for bread, silver ore and an uncut sapphire, setting `marketthief_cake`, `marketthief_silver` and `marketthief_gem` respectively. Caught silver and gem attempts in 1554 show the attempt message and an owner warning, without a success animation, reward or an extra caught-stealing chat message. Silver attempts repeat on consecutive ticks before succeeding; failed attempts therefore do not start the success cooldown. The gem owner also catches a thief sharing his tile; the documented bakery safe spot is not a general owner exemption. The captures' XP deltas are not used to set reward amounts; the Wiki supplies those amounts.
+
+The attempt now faces the stall and checks its lookouts. On success it plays cache animation `human_pickuptable` (**832**, rather than pickpocket animation 881), with sound 2581. Loot, XP, the recorded success message, theft state and depletion follow on the next tick. Restocking counts from depletion. Attempts begun together can both complete; later clicks cannot steal from the empty stall. A full inventory at completion prevents both loot and XP.
+
+### Merchant memory
+
+The [Thieving stalls section](https://oldschool.runescape.wiki/w/Thieving#Stalls) says successful theft prevents interaction with owners of that stall type for ten consecutive in-game minutes. [Silk merchant](https://oldschool.runescape.wiki/w/Silk_merchant) confirms the ten-minute wait restarts after logging back in. Specific NPC pages give different waits: [Baker](https://oldschool.runescape.wiki/w/Baker) says fifteen minutes, and [Spice seller](https://oldschool.runescape.wiki/w/Spice_seller) says six. The implementation follows those specific durations for bakery and spice, with ten minutes for the other supported types. No recording measured expiration; the disagreement between the general and specific Wiki pages remains an evidence limitation.
+
+Successful theft now sets a saved, namespaced merchant-memory attribute and the corresponding cache theft varbit, including the separate Keldagrim, Fremennik and Prifddinas keys. A new theft resets that type's timer. Logout cancels its timer; login starts a full consecutive wait again. Expiry clears the memory and varbit. Idle players with no recent theft have no theft timer.
+
+Named Talk-to/Trade hooks stop recent thieves reaching ordinary dialogue or a shop. Refusal speech is shown in [Transcript:Tea Seller](https://oldschool.runescape.wiki/w/Transcript:Tea_Seller), [Transcript:Baker](https://oldschool.runescape.wiki/w/Transcript:Baker), [Transcript:Silk merchant](https://oldschool.runescape.wiki/w/Transcript:Silk_merchant), [Transcript:Spice seller](https://oldschool.runescape.wiki/w/Transcript:Spice_seller), [Transcript:Olivia](https://oldschool.runescape.wiki/w/Transcript:Olivia) and [Transcript:Fortunato](https://oldschool.runescape.wiki/w/Transcript:Fortunato). They identify the thief and call guards; Fortunato uses a different first line. The Baker, Tea Seller, Spice seller, Olivia and Fortunato transcripts also give the owner's warning when catching an attempt. Recording **1554** also confirms both Talk-to and Trade refusal by the gem merchant and Trade refusal by the silver merchant: the guard call follows the initial overhead line by **two ticks**. A nearby idle guard responds to a remembered thief's interaction.
+
+### Validation and limits
+
+Earlier validation of the previous stall implementation recorded an Ardougne knight catching silver theft without loot/XP; unseen Kourend silver gave 205 XP and restocked after 32 ticks; Fortis spice and Draynor wine dispatched their cache options and could be caught. Those are historical checks, separate from the current checks below.
+
+
+The stall regressions cover attempt/outcome separation, cache animation and sound, reward/XP, captured varbits, merchant refusal and expiration, consecutive caught attempts, the non-bakery same-tile catch, repeated theft, logout/login, simultaneous thieves, stale clicks, restock, inventory changes during an attempt and private-area destruction. The original handler fails the new timing, state, refusal and caught-attempt assertions. The adjacent pickpocket tests retain their existing gameplay coverage; their registration fixture includes the new lifecycle hooks.
+
+Live checks confirmed a level-one player cannot steal tea. With the skill requirement supplied, an unseen Varrock theft grants one cup of tea and **16 XP**, sets varbit **170**, empties/restocks the stall, and prevents trading with the Tea Seller, who calls guards. Logout/login preserved the item, theft flag and refusal on Talk-to. Timer boundary checks use deterministic regressions rather than a captured expiration measurement.
+
+Five tiles remains a provisional lookout radius. The available stall captures do not establish exact guard detection range or facing. Merchant overhead-line timing is calibrated against the gem and silver refusals in 1554. The existing visibility ray and busy-guard exclusion are retained. Port Roberts' automatic stealing/jail activity belongs to a separate mechanic and remains unimplemented. Other uncaptured reward messages retain their existing wording. No generated data changes are required.
 
 ## Targets
 
@@ -82,9 +124,22 @@ Quest requirements are checked with the `quest:is-complete` event, falling back 
 
 TzHaar-Hur need a fire or infernal cape (including their max-cape versions), worn or carried. That's the Wiki's requirement for entering Mor Ul Rek, which has no entrance check here.
 
+## Blackjacking
+
+Sources: [Blackjack](https://oldschool.runescape.wiki/w/Blackjack?action=raw), [Thieving training](https://oldschool.runescape.wiki/w/Thieving_training?action=raw), [Pollnivnian bandits](https://oldschool.runescape.wiki/w/Bandit_(Pollnivneach)?action=raw), [Menaphite Thug](https://oldschool.runescape.wiki/w/Menaphite_Thug?action=raw), and [Coin pouch](https://oldschool.runescape.wiki/w/Coin_pouch?action=raw). The Blackjacking page redirects to Thieving training.
+
+- Lure and Knock-Out require learning the technique during The Feud (stage 9), an equipped blackjack, and 45/55/65 Thieving for bearded bandits/unbearded bandits/thugs. Lure makes the target follow, allowing the player to take it behind a closed door.
+- The cache's bearded bandits are 736/737 (65 XP); unbearded bandits are 734/735 (84.3 XP). The Feud keeps the unlocked NPC transforms after completion, so the client still offers Lure and Knock-Out after relogging.
+- Knock-Out is refused during combat or when another blackjacking target can see the player. The Wiki does not require standing behind the target.
+- All blackjacks and target types use the Blackjack page's chart: low 80, high 240, interpolated by Thieving level. Its cited Jagex explanation explicitly says the rate is independent of target type. The Menaphite Thug subpage instead lists low 78; the main Blackjack page wins here.
+- Success gives 10 Thieving XP and holds the NPC unconscious for six ticks, with two guaranteed pickpockets. Those reuse the normal pickpocket cooldown, loot, rogue equipment, XP and pet path, using the bending animation and direct coins. A full inventory permits them if coins already have a stack; the coin-pouch cap does not stop them.
+- Failure makes the NPC aggressive after three ticks. A quick retry or pickpocket cancels that pending aggression, including a pickpocket with a full inventory. An attempt with a different weapon stops the target attacking, matching the documented reset method.
+- Awake bandits give coin pouches (40/50 coins); thugs give 60. The Wiki has no awake Pollnivnian success chart, so those two targets follow this module's established estimated-chart policy using the awake thug's 50/160 chart. Their stun damage is also estimated from the thug. These awake-only values need an OSRS capture before claiming exact parity.
+- The Wiki guarantees two pickpockets but gives no exact knockout/failure/lure tick counts. The six-tick unconscious window, three-tick aggression delay and ten-tick lure window are implementation timings needing a capture; no other RSPS was used.
+
 ## Not modelled
 
-- **Blackjacking:** knocking out and luring Pollnivneach villagers, bandits and thugs. The villagers and Pollnivneach bandits are left out, since the Wiki gives no plain pickpocket rate for them. Menaphite thugs can be pickpocketed normally.
+- **Villagers after The Feud:** the quest retains its own tutorial lure and knockout; generic post-quest villagers are not implemented.
 - **Wealthy citizen:** the street urchin distraction, which lets them be pickpocketed repeatedly with one click.
 - **The Ardougne diary:** no diary system exists yet. Its effects would be +10% success (medium: in Ardougne; hard: everywhere), the gloves of silence becoming ineffective, and coin pouch limits of 56, 84 and 140.
 - **Location- or quest-only loot:** the Pirate's medallion fragment (The Onyx Crest only), the Pirate's very rare medium clue (no rate given), and the H.A.M. robe table during Death to the Dorgeshuun.
@@ -95,7 +150,7 @@ TzHaar-Hur need a fire or infernal cape (including their max-cape versions), wor
 ## Cache NPCs with a Pickpocket option that this doesn't cover
 
 - **Quest plugins:** Twig and Berry (Troll Stronghold), Curator Haig Halen (The Golem), Dr Fenkenstrain (Creature of Fenkenstrain) and Sandy (The Hand in the Sand) handle their own.
-- **Blackjacking (not modelled):** Villager, and the Pollnivneach bandits (NPC ids 734–737, which share the name "Bandit" with the Bandit Camp's 690 and 695).
+- **Villagers:** generic post-quest pickpocketing is not implemented; The Feud owns its tutorial interaction.
 - **No Wiki pickpocket data:** Anja, Hengel, Drunken man, Head Guard, Student, Tourist, Priest, Zealot, Salvager, Adala, Constantinius, Cozyac, Istoria, Movario, Patzi, Pavo, Xocotla, Emissary Ascended, Cuffs, Jeff, Narf, Rusty, 'Black-eye', 'Gummy', 'No fingers' and 'The Guns'.
 
 ## Unverified details

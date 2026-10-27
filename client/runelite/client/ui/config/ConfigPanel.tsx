@@ -6,6 +6,7 @@ import {
     type ConfigSectionDef,
 } from "@runelite/client/config/ConfigItem";
 import { parseConfigValue } from "@runelite/client/config/ConfigManager";
+import { Keybind } from "@runelite/client/config/Keybind";
 import type { ConfigManager } from "@runelite/client/config/ConfigManager";
 
 const DEFAULT_SECTION = "";
@@ -106,10 +107,19 @@ function ConfigField({
                 >
                     {enumEntries.map(([name]) => (
                         <option key={name} value={name}>
-                            {name}
+                            {item.enumLabels?.[name] ?? name}
                         </option>
                     ))}
                 </select>
+            </label>
+        );
+    }
+
+    if (item.keybind) {
+        return (
+            <label className="rl-sidebar-field">
+                {label}
+                <KeybindButton value={value instanceof Keybind ? value : Keybind.NOT_SET} onChange={update} />
             </label>
         );
     }
@@ -128,18 +138,35 @@ function ConfigField({
     }
 
     if (item.color) {
+        // RuneLite's @Alpha colours: no alpha bits means opaque.
+        const argb = Number(value) >>> 0;
+        const alpha = item.alpha ? (argb >>> 24) || 255 : 255;
+        const withAlpha = (rgb: number, a: number) =>
+            item.alpha ? ((a & 0xff) << 24 | (rgb & 0xffffff)) >>> 0 : rgb & 0xffffff;
         return (
             <div className="rl-sidebar-row rl-sidebar-value-row">
                 <label className="rl-sidebar-field">{label}</label>
                 <input
                     className="rl-sidebar-color-input"
                     type="color"
-                    value={toColorInput(value)}
+                    value={toColorInput(argb & 0xffffff)}
                     onChange={(event) => {
                         const color = parseInt(event.target.value.slice(1), 16) || 0;
-                        update(color);
+                        update(withAlpha(color, alpha));
                     }}
                 />
+                {item.alpha && (
+                    <input
+                        className="rl-sidebar-alpha-input"
+                        type="range"
+                        min={1}
+                        max={255}
+                        aria-label={`${label} alpha`}
+                        title={`Alpha ${alpha}`}
+                        value={alpha}
+                        onChange={(event) => update(withAlpha(argb, Number(event.target.value)))}
+                    />
+                )}
             </div>
         );
     }
@@ -187,6 +214,39 @@ function ConfigField({
                 onChange={(event) => update(event.target.value)}
             />
         </label>
+    );
+}
+
+/**
+ * RuneLite's HotkeyButton: click, then press the key (with any modifiers) to bind it. Escape
+ * cancels; Backspace or Delete clears it to "Not set".
+ */
+function KeybindButton({ value, onChange }: { value: Keybind; onChange: (next: Keybind) => void }): JSX.Element {
+    const [listening, setListening] = useState(false);
+    return (
+        <button
+            type="button"
+            className="rl-sidebar-keybind"
+            onClick={() => setListening(true)}
+            onBlur={() => setListening(false)}
+            onKeyDown={(event) => {
+                if (!listening) return;
+                event.preventDefault();
+                event.stopPropagation();
+                if (event.key === "Escape") {
+                    setListening(false);
+                    return;
+                }
+                if (event.key === "Backspace" || event.key === "Delete") {
+                    onChange(Keybind.NOT_SET);
+                } else {
+                    onChange(Keybind.fromEvent(event.nativeEvent));
+                }
+                setListening(false);
+            }}
+        >
+            {listening ? "Press a key…" : value.describe()}
+        </button>
     );
 }
 

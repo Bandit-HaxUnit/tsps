@@ -7,10 +7,17 @@ import {
     type SidebarModeValue,
 } from "@runelite/client/config/RuneLiteConfig";
 
-/** The game view's minimum width (GameContainer.css), the rail and a docked panel. */
+/** The game view's minimum width (GameContainer.css), the icon strip and a docked panel (Sidebar.css). */
 const MIN_GAME_WIDTH = 765;
-const RAIL_WIDTH = 36;
-const PANEL_WIDTH = 250;
+const RAIL_WIDTH = 26;
+const PANEL_WIDTH = 242;
+
+/** Sidebar.css's retina zoom on the icon strip. */
+function railZoom(): number {
+    return typeof window !== "undefined" && window.matchMedia("(min-resolution: 2dppx) and (pointer: fine)").matches
+        ? 1.5
+        : 1;
+}
 
 function windowWidth(): number {
     return typeof window === "undefined" ? Infinity : window.innerWidth;
@@ -38,6 +45,6 @@ export function useSidebarMode(configManager: ConfigManager, mobile: boolean): S
         return () => window.removeEventListener("resize", onResize);
     }, []);
 
-    if (mobile || width < MIN_GAME_WIDTH + RAIL_WIDTH + PANEL_WIDTH) return SidebarMode.Overlay;
+    if (mobile || width < MIN_GAME_WIDTH + RAIL_WIDTH * railZoom() + PANEL_WIDTH) return SidebarMode.Overlay;
     return setting;
 }

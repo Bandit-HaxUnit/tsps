@@ -1169,6 +1169,8 @@ module.exports = function registerAKingdomDividedQuest(api) {
     if (!held(player, BOOK_OF_THE_DEAD_ITEM_ID)) {
       give(player, BOOK_OF_THE_DEAD_ITEM_ID, 1, "Lydia gives you the Book of the Dead.");
     }
+    // A quest completed without experience (a league quest pack) has no lamps to claim.
+    if (quest.experienceWithheld(player)) return;
     // Lamps can be destroyed and reclaimed until they have been rubbed (wiki), so
     // the claim count is rubbed lamps plus any still carried.
     let claimed = countAttribute(player, LAMPS_ATTRIBUTE) + player.getInventory().getAmount(ANTIQUE_LAMP_ITEM_ID);
@@ -1695,7 +1697,12 @@ module.exports = function registerAKingdomDividedQuest(api) {
     const stage = stageOf(player);
     const sender = player.getPacketSender();
     sender.sendVarbit(VARBIT_TOMAS_LOCATION, stage === STAGE_HOUSE ? 2 : 0);
-    sender.sendVarbit(VARBIT_QUEEN_VISIBLE, stage >= STAGE_HOUSES ? 1 : 0);
+    // Queen of Thieves earns Shauna's sewer form before AKD starts; never remask her.
+    const queen = { player, key: "the_queen_of_thieves", stage: null };
+    api.emitCustomEvent("quest:get-stage", queen);
+    const queenStage = queen.stage ?? Number(player.getAttribute("quest.the_queen_of_thieves.stage") ?? 0);
+    const appearance = stage >= STAGE_HOUSES || queenStage >= 8 ? 1 : 0;
+    sender.sendVarbit(VARBIT_QUEEN_VISIBLE, Math.max(sender.getVarbit(VARBIT_QUEEN_VISIBLE), appearance));
     sender.sendVarbit(VARBIT_ORSON_LOOKOUT, stage >= STAGE_MEETING && stage < STAGE_ACCORD ? 1 : 0);
   }
 

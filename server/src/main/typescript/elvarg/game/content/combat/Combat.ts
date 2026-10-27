@@ -5,8 +5,9 @@ import type { Mobile } from "../../entity/impl/Mobile";
 import type { Player } from "../../entity/impl/player/Player";
 import { CoordinateState } from "../../entity/impl/npc/NPCMovementCoordinator";
 import { SecondsTimer } from "../../model/SecondsTimer";
+import { PoisonClock } from "./PoisonClock";
 import { StatementDialogue } from "../../model/dialogues/entries/impl/StatementDialogue";
-import { Stopwatch } from "../../../util/Stopwatch";
+import { TickStopwatch } from "../../../util/TickStopwatch";
 import { ServerPerf } from "../../../util/ServerPerf";
 import { World } from "../../World";
 import { CombatConstants } from "./CombatConstants";
@@ -14,6 +15,7 @@ import { CombatFactory, CanAttackResponse } from "./CombatFactory";
 import { CombatRange } from "./CombatRange";
 import { CombatSpecial } from "./CombatSpecial";
 import { SpecialAttackTargetingResolver } from "./SpecialAttackTargeting";
+import { AccuracyFormulasDpsCalc } from "./formula/AccuracyFormulasDpsCalc";
 import { CombatType } from "./CombatType";
 import type { CombatSpell } from "./magic/CombatSpell";
 import type { CombatMethod } from "./method/CombatMethod";
@@ -27,6 +29,7 @@ import type { MovementQueue } from "../../model/movement/MovementQueue";
 import type { Location } from "../../model/Location";
 import { Misc } from "../../../util/Misc";
 import { TaskManager } from "../../task/TaskManager";
+import { TimerKey } from "../../../util/timers/TimerKey";
 
 type CombatCycleState = {
     cycle: number;
@@ -51,9 +54,12 @@ const MAX_ANIMATION_STALL_TICKS = 5;
 export class Combat {
     private readonly hitQueue = new HitQueue(this.character);
     private damageMap: Map<Player, HitDamageCache> | null = null;
-    private readonly lastAttack = new Stopwatch();
+    /** The player whose damage `addDamage` recorded last. */
+    private lastDamager: Player | null = null;
+    private readonly lastAttack = new TickStopwatch();
     // Most NPCs never use these; each SecondsTimer also holds a Stopwatch, so allocate on first use.
     private poisonImmunityTimer: SecondsTimer | null = null;
+    private poisonClock: PoisonClock | null = null;
     private fireImmunityTimer: SecondsTimer | null = null;
     private teleblockTimer: SecondsTimer | null = null;
     private prayerBlockTimer: SecondsTimer | null = null;
@@ -314,11 +320,14 @@ export class Combat {
             state.attackBlocked = true;
         }
 
-        this.faceTarget(target);
-
         if (this.manualMovementUntilCycle >= cycle) {
+            // Walking where content sent them (a step between hits): they face where they walk,
+            // as a player who clicks a tile does, and turn back to the target once it ends.
+            if (this.character.hasFlag?.("combat:keep-facing") !== true) this.character.setMobileInteraction(null);
             return;
         }
+
+        this.faceTarget(target);
 
         // An overlapped NPC that can still reach its target (a large NPC fighting
         // underfoot) attacks in place; one that cannot steps aside below.
@@ -344,6 +353,13 @@ export class Combat {
         if (!movement.getMobility().canMove()) {
             this.trace(`bail=immobile:${movement.getMobility().constructor.name}`, target);
             state.mobilityBlocked = true;
+            // A frozen player's attack on a target out of reach ends there, as live answers it.
+            if (this.character.isPlayer() && this.character.getTimers().has(TimerKey.FREEZE)) {
+                if (this.character.getAsPlayer().isPlayerBot?.() !== true) {
+                    this.character.getAsPlayer().sendMessage("I can't reach that!");
+                }
+                this.cancelIfCurrent(target, state.generation);
+            }
             return;
         }
 
@@ -576,9 +592,16 @@ export class Combat {
     public addDamage(entity: Mobile, amount: number): void {
         if (amount <= 0 || entity.isNpc()) return;
         const player = entity as Player;
+        this.lastDamager = player;
         const cached = this.damageMap?.get(player);
         if (cached) cached.incrementDamage(amount);
         else (this.damageMap ??= new Map()).set(player, new HitDamageCache(amount));
+    }
+
+    /** The player who damaged this character most recently, while that damage still counts. */
+    public getLastDamager(): Player | null {
+        const player = this.lastDamager;
+        return player && player.isRegistered() && this.damageMapContains(player) ? player : null;
     }
 
     public getKiller(clearMap: boolean): Player | null {
@@ -663,16 +686,24 @@ export class Combat {
     public setAmmunition(ammunition: Ammunition | null): void { this.ammunition = ammunition; }
     public getRangeAmmoData(): RangedData { return this.ammunition as unknown as RangedData; }
     public setRangeAmmoData(data: RangedData): void { this.ammunition = data as unknown as Ammunition; }
-    public getPoisonImmunityTimer(): SecondsTimer { return this.poisonImmunityTimer ??= new SecondsTimer(); }
+    public getPoisonImmunityTimer(): SecondsTimer {
+        return this.character.isPlayer() ? this.getPoisonClock() : (this.poisonImmunityTimer ??= new SecondsTimer());
+    }
+    public getPoisonClock(): PoisonClock {
+        return this.poisonClock ??= new PoisonClock(() => {
+            const { CombatPoisonEffect } = require("../../task/impl/CombatPoisonEffect") as typeof import("../../task/impl/CombatPoisonEffect");
+            CombatPoisonEffect.resume(this.character);
+        });
+    }
     public getFireImmunityTimer(): SecondsTimer { return this.fireImmunityTimer ??= new SecondsTimer(); }
     public getTeleblockTimer(): SecondsTimer { return this.teleblockTimer ??= new SecondsTimer(); }
     public getPrayerBlockTimer(): SecondsTimer { return this.prayerBlockTimer ??= new SecondsTimer(); }
-    public getLastAttack(): Stopwatch { return this.lastAttack; }
+    public getLastAttack(): TickStopwatch { return this.lastAttack; }
 
     private shouldRetreat(): boolean {
         if (!this.character.isNpc()) return false;
         const npc = this.character.getAsNpc();
-        if (Number(npc.getAttribute("arceuus:dark-lure-until") ?? 0) > Date.now()) return false;
+        if (Number(npc.getAttribute("arceuus:dark-lure-until") ?? 0) > World.getProcessCycle()) return false;
         if (!npc.getCurrentDefinition().doesRetreat()) return false;
         const coordinator = npc.getMovementCoordinator();
         if (coordinator.getCoordinateState() === CoordinateState.RETREATING ||
@@ -731,7 +762,8 @@ export class Combat {
             CombatFactory.getMethod(target).onCombatBegan(target, this.character);
         }
         if (!bypass && !timing.keepDelay) {
-            const speed = specialTraits?.attackSpeedTicks ?? method.attackSpeed(this.character);
+            const speed = PluginManager.emitAttackSpeed(this.character, target, method.type(),
+                specialTraits?.attackSpeedTicks ?? method.attackSpeed(this.character));
             this.nextAttackCycle = cycle + Math.max(1, speed | 0);
             this.sendAttackTimer();
         } else if (!bypass && timing.minimumDelay > 0) {
@@ -762,8 +794,9 @@ export class Combat {
         if (targeting) {
             const resolved = SpecialAttackTargetingResolver.resolve(this.character, target, targeting);
             if (resolved.largeTargetExtraHit) {
-                // TODO: reduced (0.75) accuracy for the large-target second hit.
-                const extra = method.hits(this.character, target);
+                // Wiki: the large-target second hit has 25% reduced accuracy.
+                const scale = targeting.largeTargetExtraHit?.accuracyMultiplier ?? 1;
+                const extra = AccuracyFormulasDpsCalc.withAccuracyScale(scale, () => method.hits(this.character, target));
                 if (extra) for (const hit of extra) CombatFactory.addPendingHit(hit);
             } else {
                 for (const secondary of resolved.secondaryTargets) {

@@ -10,6 +10,8 @@ data/saves/characters
 data/saves/*.sqlite*
 data/saves/gauntlet-scoreboard.json
 data/saves/nex-scoreboard.json
+data/saves/shooting-stars.json
+data/saves/abuse-reports.jsonl
 logs/
 caches/
 Function
@@ -17,3 +19,8 @@ Server
 
 # AI bots roster (plugins/bots/ai/AiBotRoster.js)
 data/saves/ai-bots.json
+data/saves/colosseum-scoreboard.json
+data/saves/araxxor-scoreboard.json
+# Every boss/minigame scoreboard keeps its world records here (and a .tmp while saving).
+data/saves/*-scoreboard.json
+data/saves/*-scoreboard.json.tmp

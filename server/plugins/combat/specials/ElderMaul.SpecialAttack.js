@@ -1,7 +1,10 @@
 // TODO: ported from xrsps-typescript; untested.
-module.exports = function registerElderMaulSpecialAttack(api) {
+// A Pulverize that misses asks "combat-special:missed-drain" whether the target still loses some
+// Defence (Tekton: 5%, https://oldschool.runescape.wiki/w/Elder_maul).
+function buildSpecial(api) {
   const { Animation, CombatSpecial, Graphic, ItemIdentifiers, MeleeCombatMethod, Skill } = api.core;
 
+  const ID = "elder_maul";
   const DRAIN = 50;
   const DEFENCE_DRAIN_FRACTION = 0.35;
   // Pulverize: dedicated player animation + self VFX + target impact (RuneLite
@@ -11,18 +14,20 @@ module.exports = function registerElderMaulSpecialAttack(api) {
   const IMPACT_GRAPHIC = new Graphic(2805);
 
   function pulverize(hit) {
-    if (!hit.isAccurate() || Math.floor(hit.getTotalDamage()) <= 0) {
+    if (hit.isAccurate()) {
+      drainDefence(hit.getTarget(), DEFENCE_DRAIN_FRACTION);
       return;
     }
-    const target = hit.getTarget();
-    if (!target.isPlayer()) {
-      // TODO: NPC combat-stat drain is not exposed by our core NPC state.
-      return;
-    }
-    const skillManager = target.getAsPlayer().getSkillManager();
+    const missed = { hit, specialId: ID, fraction: 0, levels: 0 };
+    api.emitCustomEvent("combat-special:missed-drain", missed);
+    if (missed.fraction > 0) drainDefence(hit.getTarget(), missed.fraction);
+  }
+
+  function drainDefence(target, fraction) {
+    const skillManager = target.isPlayer() ? target.getAsPlayer().getSkillManager() : target.getAsNpc();
     const current = skillManager.getCurrentLevel(Skill.DEFENCE);
-    const drainAmount = Math.floor(current * DEFENCE_DRAIN_FRACTION);
-    skillManager.setCurrentLevels(Skill.DEFENCE, Math.max(1, current - drainAmount));
+    const drainAmount = Math.floor(current * fraction);
+    skillManager.setCurrentLevels(Skill.DEFENCE, Math.max(target.isPlayer() ? 1 : 0, current - drainAmount));
   }
 
   class ElderMaulCombatMethod extends MeleeCombatMethod {
@@ -40,8 +45,8 @@ module.exports = function registerElderMaulSpecialAttack(api) {
     }
   }
 
-  api.registerCombatSpecial({
-    id: "elder_maul",
+  return {
+    id: ID,
     itemIds: [ItemIdentifiers.ELDER_MAUL, ItemIdentifiers.ELDER_MAUL_OR_],
     drainAmount: DRAIN,
     strengthMultiplier: 1,
@@ -49,5 +54,9 @@ module.exports = function registerElderMaulSpecialAttack(api) {
     // Pulverize's animation runs a tick slower than a normal elder maul attack.
     traits: { hitCount: 1, accuracyMultiplier: 1.25, attackSpeedTicks: 7 },
     combatMethod: new ElderMaulCombatMethod(),
-  });
+  };
+}
+
+module.exports = function registerElderMaulSpecialAttack(api) {
+  api.registerCombatSpecial(buildSpecial(api));
 };

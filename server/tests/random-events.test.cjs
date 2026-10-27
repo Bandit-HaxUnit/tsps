@@ -11,11 +11,13 @@ const { Location } = require('../dist/game/model/Location');
 const Plugin = require('../plugins/npcs/RandomEvents.plugin');
 const Events = require('../plugins/npcs/random-events/Common.RandomEvents');
 const Teleports = require('../plugins/npcs/random-events/Teleports.RandomEvents');
+const Locations = require('../plugins/npcs/random-events/Locations.RandomEvents');
 const Pinball = require('../plugins/npcs/random-events/Pinball.RandomEvents');
 const JekyllPlugin = require('../plugins/npcs/DrJekyll.plugin');
 const Gift = require('../plugins/npcs/random-events/GiftRewards.RandomEvents');
 const PlantPlugin = require('../plugins/npcs/StrangePlant.plugin');
 const { Animation } = require('../dist/game/model/Animation');
+const { Task } = require('../dist/game/task/Task');
 const { PlayerRights } = require('../dist/game/model/rights/PlayerRights');
 const { ItemOnGround, State } = require('../dist/game/entity/impl/grounditem/ItemOnGround');
 const { DialogueChainBuilder } = require('../dist/game/model/dialogues/builders/DialogueChainBuilder');
@@ -37,14 +39,30 @@ class FakeGameObject {
   getPrivateArea() { return this.privateArea; }
 }
 
+const ITEM_NAMES = { [I.LAMP]: 'Lamp', [I.BEER]: 'Beer', [I.KEBAB]: 'Kebab', [I.COINS]: 'Coins',
+  [I.MEAT_PIE]: 'Meat pie', [I.STRANGE_FRUIT]: 'Strange fruit', [I.CAMO_TOP]: 'Camo top' };
+const UNTRADEABLE = new Set([I.CAMO_TOP]);
+// Coins plus the runes, feathers and arrows the Maze pays: rewards that stack live.
+const STACKABLE = new Set([I.COINS, I.FEATHER, I.IRON_ARROW, I.STEEL_ARROW, I.DEATH_RUNE,
+  I.CHAOS_RUNE, I.NATURE_RUNE, I.AIR_RUNE, I.WATER_RUNE, I.EARTH_RUNE, I.FIRE_RUNE, I.BRONZE_DART_TIP, I.BRONZE_BOLTS]);
+
+const REWARD = (amount, name) => `Your reward is: <col=ff0000>${amount}</col> x <col=ff0000>${name}</col>.`;
+const PLACED = (amount, name) =>
+  `Your reward is: <col=ff0000>${amount}</col> x <col=ff0000>${name}</col> - it has been placed <col=ff0000>on the ground</col>.`;
+const npcLines = p => [...(p.dialogue?.getDialogues?.().values() ?? [])].map(entry => entry.getText?.()).filter(Boolean);
+
 function harness(t, members = true) {
   let now = 1_000, random = 0.5;
   t.mock.method(Date, 'now', () => now);
   t.mock.method(Math, 'random', () => random);
-  t.mock.method(Item.prototype, 'getDefinition', function () { return { isStackable: () => this.getId() === I.COINS }; });
+  t.mock.method(Item.prototype, 'getDefinition', function () {
+    return { isStackable: () => STACKABLE.has(this.getId()), getName: () => ITEM_NAMES[this.getId()] ?? `Item ${this.getId()}`,
+      isTradeable: () => !UNTRADEABLE.has(this.getId()) };
+  });
   const hooks = {}, npcs = [], prompts = [], drops = [], objects = [], interfaces = [];
   const custom = new Map();
-  let enabled = true, blocked = () => false, movable = () => true;
+  let enabled = true, blocked = () => false, movable = () => true, roof = () => false;
+  const mapObjects = new Map();
   const ObjectManager = {
     register(object) { objects.push(object); },
     deregister(object) { object.deregistered = true; },
@@ -53,23 +71,28 @@ function harness(t, members = true) {
     existsLocation(location) { return this.objectsAt(location).length > 0; },
   };
   const persistedAttributes = new Map();
+  const tasks = [];
   const api = {
     core: { Item, ItemIdentifiers: I, NpcIdentifiers: N, Skill, Location, Wilderness: { isPvpArea: () => false },
-      WorldDefinition: { isMembersWorld: () => members }, Animation, PlayerRights,
+      WorldDefinition: { isMembersWorld: () => members }, World: { getProcessCycle: () => Math.floor(now / 600) },
+      Animation, Task, PlayerRights,
       DialogueChainBuilder, NpcDialogue, PlayerDialogue, StatementDialogue,
       ItemStatementDialogue, EndDialogue, ActionDialogue, GameObject: FakeGameObject, ObjectManager,
-      MapObjects: { get: () => null } },
+      MapObjects: { get: () => null, mapObjects, getHash: (x, y, z) => `${x},${y},${z}` } },
     registerCommand(name, handler, rights, description) { hooks[name] = { handler, rights, description }; },
     onCustomEvent(name, cb) { custom.set(name, [...(custom.get(name) ?? []), cb]); },
     emitCustomEvent(name, event) { custom.get(name)?.forEach(cb => cb(event)); },
     getPluginConfig: () => enabled,
     persistAttribute(key, defaultValue) { persistedAttributes.set(key, defaultValue); },
-    getItemOnGroundManager: () => ({ DESPAWN_DELAY: 300, registerLocation(player, item, position) {
-      const drop = new ItemOnGround(State.SEEN_BY_PLAYER, player.getUsername(), position, item, true, -1, null);
+    getItemOnGroundManager: () => ({ DESPAWN_DELAY: 300, registerLocation(player, item, position, privateArea, options = {}) {
+      const drop = new ItemOnGround(State.SEEN_BY_PLAYER, player.getUsername(), position, item, options.goesGlobal ?? true, -1, null);
+      if (options.despawnDelay != null) drop.setDespawnDelay(options.despawnDelay);
       drops.push(drop); return drop;
     } }),
-    getRegionManager: () => ({ blocked: (...args) => blocked(...args), canMovestart: (...args) => movable(...args) }),
+    getRegionManager: () => ({ blocked: (...args) => blocked(...args), canMovestart: (...args) => movable(...args),
+      getRegion: () => ({ isUnderRoof: (...args) => roof(...args) }) }),
     getWorld: () => ({ getNpcsNear: () => npcs }),
+    getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
     registerCustomInterface(definition) { interfaces.push(definition); },
     spawnNpc(definition) {
       const npc = { definition, owner: definition.owner, location: new Location(definition.x, definition.y, definition.z),
@@ -127,7 +150,7 @@ function harness(t, members = true) {
   function player() {
     const slots = [], rewards = [], rewardItems = [], messages = [], xp = new Map(), levels = new Map();
     const p = { slots, rewards, rewardItems, messages, xp, levels, free: 28, online: true, hp: 10,
-      location: new Location(3222, 3222, 0), interfaceId: -1,
+      location: new Location(3222, 3222, 0), interfaceId: -1, chatboxGroupId: -1,
       attributes: new Map(),
       isRegistered: () => p.online, isPlayerBot: () => !!p.bot, getHitpoints: () => p.hp,
       getAttribute: key => p.attributes.get(key), setAttribute(key, value) {
@@ -151,7 +174,16 @@ function harness(t, members = true) {
       }),
       getInventory: () => ({ get: slot => slots[slot], getItems: () => slots, getFreeSlots: () => p.free,
         containsNumber: id => slots.some(item => item?.getId() === id && item.getAmount() > 0),
-        addItem(item) { rewards.push(item.getId()); rewardItems.push(item); },
+        getAddableAmount(item) {
+          if (!item.getDefinition().isStackable()) return Math.min(item.getAmount(), p.free);
+          const stack = slots.find(slot => slot?.getId() === item.getId());
+          if (stack) return Math.min(item.getAmount(), Math.max(0, 2_147_483_647 - stack.getAmount()));
+          return p.free > 0 ? item.getAmount() : 0;
+        },
+        addItem(item) {
+          rewards.push(item.getId()); rewardItems.push(item);
+          if (!item.getDefinition().isStackable() || !slots.some(slot => slot?.getId() === item.getId())) p.free--;
+        },
         delete(id, amount = 1) { const index = slots.findIndex(item => item?.getId() === id);
           if (index < 0) return; const item = slots[index]; if (item.getAmount() > amount) item.amount -= amount;
           else { slots[index] = undefined; p.free++; } },
@@ -163,13 +195,14 @@ function harness(t, members = true) {
           if (!p.blockXp) xp.set(skill, Math.min(200_000_000, (xp.get(skill) ?? 0) + amount));
         } }),
       getPacketSender: () => ({ sendInterface(id) { p.interfaceId = id; },
-        sendInterfaceRemoval() { p.interfaceId = -1; }, sendString(text, uid) {
+        sendInterfaceRemoval() { p.interfaceId = -1; p.chatboxGroupId = -1; }, sendString(text, uid) {
           p.trayTitle = text; (p.strings ??= new Map()).set(uid, text);
         },
         sendItemOnInterfaces(uid, id) { (p.tray ??= []).push([uid, id]); },
         sendInterfaceRawModel(uid, model) { (p.models ??= new Map()).set(uid, model); },
         sendInterfaceDisplayState() {}, sendSubInterface() {}, sendConfig() {},
-        sendInterfaceScript() {}, sendChatboxInterface() {}, sendClientScript() {},
+        sendInterfaceScript() {}, sendChatboxInterface(id) { p.chatboxGroupId = id; }, sendClientScript() {},
+        isChatboxInterface(id) { return p.chatboxGroupId === id; },
         sendInterfaceAnimation() {},
         sendInterfaceFlagsRange(uid, from, to, flags) { (p.flags ??= []).push([uid, from, to, flags]); } }),
     };
@@ -185,7 +218,11 @@ function harness(t, members = true) {
     return npcs.at(-1);
   }
   return { api, hooks, emit, npcs, prompts, drops, xpRewards, persistedAttributes, player, spawn,
+    tasks, ticks(count) { for (let i = 0; i < count; i++) {
+      for (const task of [...tasks]) if (task.isRunning()) task.tick();
+    } },
     advance: ms => { now += ms; }, random: value => { random = value; },
+    roof: value => { roof = value; }, mapObjects,
     collision: (b, m) => { blocked = b; movable = m; }, disable: () => { enabled = false; } };
 }
 
@@ -300,10 +337,194 @@ test('transformed players stall and Wilderness selection excludes teleporting ev
 
 test('managed non-Wilderness areas defer the schedule instead of spawning in an unknown zone', t => {
   const h = harness(t), p = h.player();
-  p.area = {};
+  p.area = { getName: () => 'UnknownArea' };
   h.emit('PlayerLogin', { player: p }); h.advance(121 * 60_000); h.emit('PlayerProcess', { player: p });
   assert.equal(h.npcs.length, 0);
   assert.ok(p.getAttribute('random-events:next-at') > Date.now());
+});
+
+test('bank roof footprints block natural spawns, leave the street eligible, and respect plane and roof gaps', t => {
+  const h = harness(t);
+  h.roof(() => true);
+  for (const [x, y, z, blocked] of [[3093, 3244, 0, true], [3085, 3244, 0, false],
+    [3209, 3219, 2, true], [3209, 3219, 0, false]]) {
+    const p = h.player(); p.location = new Location(x, y, z);
+    h.emit('PlayerLogin', { player: p }); h.advance(121 * 60_000);
+    const before = h.npcs.length;
+    h.emit('PlayerProcess', { player: p });
+    assert.equal(h.npcs.length > before, !blocked, `${x},${y},${z}`);
+    assert.ok(p.getAttribute('random-events:next-at') > Date.now(), 'a blocked due opportunity rearms the clock');
+  }
+  h.roof(() => false);
+  const p = h.player(); p.location = new Location(3093, 3244, 0);
+  assert.equal(Locations.bank(h.api, p), false, 'a bounding box does not classify unroofed gaps as indoors');
+});
+
+test('Grand Exchange paving blocks invitations, with grass corners and other floors left eligible', t => {
+  const h = harness(t), p = h.player();
+  for (const [x, y, z, allowed] of [[3164, 3487, 0, false], [3145, 3489, 0, false],
+    [3144, 3489, 0, true], [3145, 3506, 0, true], [3164, 3487, 1, true]]) {
+    p.location = new Location(x, y, z);
+    assert.equal(Locations.available(h.api, { kind: 'genie' }, p), allowed, `${x},${y},${z}`);
+  }
+  p.location = new Location(3164, 3487, 0);
+  h.emit('PlayerLogin', { player: p }); h.advance(121 * 60_000);
+  h.emit('PlayerProcess', { player: p });
+  assert.equal(h.npcs.length, 0);
+  assert.ok(p.getAttribute('random-events:next-at') > Date.now());
+});
+
+test('bank chest standing tiles block spawns while named bank exceptions remain eligible', t => {
+  const h = harness(t), p = h.player();
+  const chest = { getDefinition: () => ({ getName: () => 'Bank chest' }) };
+  for (const [x, y, z, expected] of [[3308, 3120, 0, true], [3374, 11493, 0, false],
+    [2465, 2848, 1, false], [3043, 4970, 1, false]]) {
+    p.location = new Location(x, y, z);
+    h.mapObjects.set(`${x + 1},${y},${z}`, [chest]);
+    assert.equal(Locations.bank(h.api, p), expected, `${x},${y},${z}`);
+  }
+  p.location = new Location(3306, 3120, 0);
+  assert.equal(Locations.bank(h.api, p), false, 'the chest does not suppress the surrounding settlement');
+});
+
+test('only Genie, Count Check and Jekyll follow into an ordinary bank, and invalidated invitations cannot reward', t => {
+  const h = harness(t);
+  h.roof(() => true);
+  for (const [index, name, survives] of [[0, 'Genie', true], [7, 'Count Check', true],
+    [6, 'Dr Jekyll', true], [2, 'Drunken Dwarf', false], [20, 'Mysterious Old Man', false]]) {
+    const p = h.player(); p.location = new Location(3085, 3244, 0);
+    const npc = h.spawn(p, index);
+    p.location = new Location(3087, 3244, 0);
+    assert.equal(Events.valid(Events.activeFor(p), p), survives, name);
+    if (!survives) {
+      h.hooks[name]['Talk-to']({ player: p, npc });
+      assert.deepEqual(p.rewards, []);
+    }
+    h.emit('PlayerProcess', { player: p });
+    assert.equal(!!npc.removed, !survives, name);
+    const before = h.npcs.length;
+    h.hooks.randevt.handler({ player: p, parts: ['randevt', String(index)] });
+    assert.equal(h.npcs.length, before, 'the testing command also refuses a new bank invitation');
+  }
+});
+
+test('the four original Hunter biomes exclude teleport events without suppressing harmless events or later hunting grounds', t => {
+  const h = harness(t), p = h.player();
+  for (const [x, y] of [[2556, 2914], [2315, 3545], [2714, 3765], [3402, 3095]]) {
+    p.location = new Location(x, y, 0);
+    assert.equal(Locations.available(h.api, { kind: 'mime' }, p), false);
+    assert.equal(Locations.available(h.api, { kind: 'genie' }, p), true);
+    h.hooks.randevt.handler({ player: p, parts: ['randevt', '20'] });
+    assert.equal(h.npcs.length, 0, 'a forbidden invitation cannot be forced by the command');
+  }
+  for (const [x, y] of [[1565, 3030], [2269, 3413], [3287, 2739]]) {
+    p.location = new Location(x, y, 0);
+    assert.equal(Locations.available(h.api, { kind: 'mime' }, p), true, 'later Hunter areas retain teleport events');
+  }
+  p.location = new Location(2556, 2914, 1);
+  assert.equal(Locations.available(h.api, { kind: 'mime' }, p), true, 'Hunter ground restrictions are per plane');
+});
+
+test('safe managed areas allow events; underwater and Kalphite Lair use their reduced pools', t => {
+  const h = harness(t), p = h.player();
+  for (const name of ['GiantsFoundry', 'DarkArea', 'DogQuestArea']) {
+    p.area = { getName: () => name };
+    assert.equal(Locations.available(h.api, { kind: 'mime' }, p), true, name);
+  }
+  p.area = { pluginName: 'Quests', getName: () => 'DogQuestArea' };
+  p.location = new Location(3185, 3440, 0);
+  h.roof(() => true);
+  assert.equal(Locations.available(h.api, { kind: 'genie' }, p), false, 'a passive quest Area does not bypass its bank exclusion');
+  p.area = { pluginName: 'Quests', getName: () => 'VanstromArena' };
+  p.location = new Location(3222, 3218, 0);
+  assert.equal(Locations.available(h.api, { kind: 'genie' }, p), false, 'the shared Quests owner does not permit an unrelated arena');
+  p.area = undefined;
+  for (const [x, y, z, kinds] of [[3732, 10281, 1, ['genie', 'countcheck', 'jekyll', 'certer', 'gift']],
+    [3480, 9500, 0, ['genie', 'countcheck', 'jekyll', 'certer', 'gift', 'dwarf', 'drill', 'plant']]]) {
+    p.location = new Location(x, y, z);
+    for (const kind of ['genie', 'countcheck', 'jekyll', 'certer', 'gift', 'dwarf', 'drill', 'plant', 'sandwich', 'mime', 'maze']) {
+      assert.equal(Locations.available(h.api, { kind }, p), kinds.includes(kind), `${x},${y},${z}: ${kind}`);
+    }
+  }
+});
+
+test('real Slayer Tower and Creature Creation Areas permit natural invitations, commands and followers', t => {
+  const h = harness(t);
+  const { Area } = require('../dist/game/model/areas/Area');
+  const { Boundary } = require('../dist/game/model/Boundary');
+  const areas = [], startup = [];
+  const areaApi = new Proxy({
+    core: { Area, Boundary },
+    registerArea(area) { areas.push(area); },
+    onServerStartup(handler) { startup.push(handler); },
+  }, { get(target, name) { return target[name] ?? (() => {}); } });
+  require('../plugins/areas/SlayerTower.plugin').register(areaApi);
+  require('../plugins/minigames/CreatureCreation.plugin').register(areaApi);
+  startup.forEach(handler => handler());
+  assert.equal(areas.length, 2);
+  for (const area of areas) {
+    const p = h.player(), bounds = area.getBoundaries()[0];
+    p.location = new Location(Math.floor((bounds.getX() + bounds.getX2()) / 2),
+      Math.floor((bounds.getY() + bounds.getY2()) / 2), bounds.height);
+    const follower = h.spawn(p, 0);
+    p.area = area;
+    h.emit('PlayerProcess', { player: p });
+    assert.equal(follower.removed, undefined, `${area.getName()} retains its owned invitation`);
+    h.hooks.Genie.Dismiss({ player: p, npc: follower });
+    const before = h.npcs.length;
+    const natural = h.spawn(p, 0);
+    assert.equal(h.npcs.length, before + 1, `${area.getName()} creates a fresh invitation`);
+    assert.equal(natural?.getId(), N.GENIE, `${area.getName()} permits natural scheduling`);
+    h.hooks.randevt.handler({ player: p, parts: ['randevt', '20'] });
+    assert.match(p.messages.at(-1), /Spawned random event 20/, `${area.getName()} permits the test command`);
+  }
+});
+
+test('advance_time reaches the real scheduler and expires its invitation', t => {
+  const h = harness(t), p = h.player();
+  h.emit('PlayerLogin', { player: p });
+  const request = { player: p, ms: 121 * 60_000, handledBy: [] };
+  h.api.emitCustomEvent('agent:advance-time', request);
+  assert.deepEqual(request.handledBy, ['RandomEvents']);
+  h.emit('PlayerProcess', { player: p });
+  assert.equal(h.npcs.length, 1);
+  h.api.emitCustomEvent('agent:advance-time', { player: p, ms: 60_000, handledBy: [] });
+  h.emit('PlayerProcess', { player: p });
+  assert.equal(h.npcs[0].removed, true);
+});
+
+test('bank footprint classification matches the active cache, including the street and Lumbridge floor', async () => {
+  const path = require('node:path');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  if (!CachePipeline.isInitialized()) await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  RegionManager.init();
+  const api = { core: { MapObjects }, getRegionManager: () => RegionManager };
+  for (const [x, y, z, expected] of [[3093, 3244, 0, true], [3085, 3244, 0, false],
+    [3185, 3440, 0, true], [3192, 3440, 0, false], [3209, 3219, 2, true],
+    [3209, 3219, 0, false], [3308, 3120, 0, true], [2465, 2848, 1, false]]) {
+    RegionManager.loadMapFiles(x, y);
+    assert.equal(Locations.bank(api, { getLocation: () => new Location(x, y, z) }), expected, `${x},${y},${z}`);
+  }
+});
+
+test('Grand Exchange footprint samples use the active cache plaza and paving, excluding grass', async () => {
+  const path = require('node:path');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { CacheMaps } = require('../dist/game/cache/CacheMaps');
+  if (!CachePipeline.isInitialized()) await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  const terrain = require('../plugins/agent/mcp/EditTerrain.AgentMcp')({
+    core: { CachePipeline, CacheMaps, MapRegionReplacementManager: { getReplacementMapData: () => null } },
+    z: require('zod').z, tool() {},
+  });
+  assert.equal(terrain.tileAt(3164, 3487, 0).underlay, 55);
+  assert.equal(terrain.tileAt(3145, 3489, 0).overlay.id, 173);
+  for (const [x, y] of [[3144, 3489], [3145, 3506]]) {
+    const tile = terrain.tileAt(x, y, 0);
+    assert.equal(tile.overlay, null);
+    assert.notEqual(tile.underlay, 55, 'the grass corners are outside the plaza');
+  }
 });
 
 test('randevt is described and owner-only, selects each index immediately and replaces the owned event', t => {
@@ -314,7 +535,7 @@ test('randevt is described and owner-only, selects each index immediately and re
   const ids = [N.GENIE, N.SANDWICH_LADY, N.DRUNKEN_DWARF, N.RICK_TURPENTINE,
     N.MILES, N.MYSTERIOUS_OLD_MAN_2, N.DR_JEKYLL, N.COUNT_CHECK_2, null, N.CAPT_ARNAV,
     N.BEE_KEEPER_2, N.QUIZ_MASTER_2, N.SERGEANT_DAMIEN_2, N.FREAKY_FORESTER_2, N.LEO_2,
-    N.FLIPPA, N.EVIL_BOB, N.EVIL_BOB, N.POSTIE_PETE_2, N.MYSTERIOUS_OLD_MAN_4,
+    N.FLIPPA_2, N.EVIL_BOB, N.EVIL_BOB, N.POSTIE_PETE_2, N.MYSTERIOUS_OLD_MAN_4,
     N.MYSTERIOUS_OLD_MAN_5, N.PILLORY_GUARD, N.DUNCE_2, N.STRANGE_PLANT];
   let previous;
   ids.forEach((id, index) => {
@@ -359,17 +580,29 @@ test('randevt rejects malformed/unavailable indices and ineligible players witho
   h.emit('PlayerProcess', { player: p }); assert.equal(h.npcs.length, 2, 'failed test retains the cooldown');
 });
 
-test('Genie and dwarf deny other players, retain full-inventory events and grant only once', t => {
+test('Genie and dwarf deny other players, put what does not fit on the ground and grant only once', t => {
   const h = harness(t);
-  for (const [kind, name, expected] of [[0, 'Genie', [I.LAMP]], [2, 'Drunken Dwarf', [I.KEBAB, I.BEER]]]) {
+  // Live, the dwarf with one free slot: the beer goes in, the kebab is placed on the ground.
+  for (const [kind, name, expected, line] of [
+    [0, 'Genie', [I.LAMP], "Ah, so you are there, Master Player. I'm so glad you summoned me. Please take this lamp and make your wish."],
+    [2, 'Drunken Dwarf', [I.BEER, I.KEBAB], "I 'new it were you matey! I remember your kebab stories! 'Ere, have some ob the good stuff!"]]) {
     const p = h.player(), other = h.player(), npc = h.spawn(p, kind);
     assert.equal(npc.definition.id, kind === 0 ? N.GENIE : N.DRUNKEN_DWARF);
     h.hooks[name]['Talk-to']({ player: other, npc }); h.hooks[name].Dismiss({ player: other, npc });
     assert.deepEqual(other.rewards, []); assert.equal(npc.removed, undefined);
     npc.owner = other; h.hooks[name]['Talk-to']({ player: p, npc }); assert.deepEqual(p.rewards, []); npc.owner = p;
-    p.free = expected.length - 1; h.hooks[name]['Talk-to']({ player: p, npc }); assert.equal(npc.removed, undefined);
-    p.free = 28; h.hooks[name]['Talk-to']({ player: p, npc });
-    h.hooks[name]['Talk-to']({ player: p, npc }); assert.deepEqual(p.rewards, expected); assert.equal(npc.removed, true);
+    const dropsBefore = h.drops.length; p.messages.length = 0;
+    p.free = expected.length - 1; h.hooks[name]['Talk-to']({ player: p, npc });
+    h.hooks[name]['Talk-to']({ player: p, npc });
+    assert.equal(npc.removed, true);
+    assert.deepEqual(p.rewards, expected.slice(0, -1));
+    assert.equal(h.drops.length, dropsBefore + 1, 'only the item that did not fit is dropped');
+    const drop = h.drops.at(-1), last = ITEM_NAMES[expected.at(-1)];
+    assert.equal(drop.getItem().getId(), expected.at(-1)); assert.equal(drop.getOwner(), p.getUsername());
+    assert.equal(drop.getDespawnDelay(), 18_000); assert.equal(drop.getgoesGlobal(), true);
+    assert.ok(drop.getPosition().equals(p.location));
+    assert.deepEqual(p.messages, [...expected.slice(0, -1).map(id => REWARD(1, ITEM_NAMES[id])), PLACED(1, last)]);
+    assert.deepEqual(npcLines(p), [line]);
   }
 });
 
@@ -379,7 +612,7 @@ test('every event delivers real inventory items and refreshes the container exac
   const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
   t.mock.method(ItemDefinition, 'forId', id => ({ isStackable: () => id === I.COINS }));
   for (const [index, name, expected] of [[0, 'Genie', [[I.LAMP, 1]]],
-    [1, 'Sandwich lady', [[I.BAGUETTE, 1]]], [2, 'Drunken Dwarf', [[I.KEBAB, 1], [I.BEER, 1]]],
+    [1, 'Sandwich lady', [[I.BAGUETTE, 1]]], [2, 'Drunken Dwarf', [[I.BEER, 1], [I.KEBAB, 1]]],
     [3, 'Rick Turpentine', [[I.COINS, 80]]], [4, 'Niles', [[I.COINS, 80]]],
     [5, 'Mysterious Old Man', [[I.COINS, 80]]], [6, 'Dr Jekyll', [[I.STRENGTH_POTION_2_, 1]]],
     [23, 'Strange plant', [[I.STRANGE_FRUIT, 1]]]]) {
@@ -393,6 +626,7 @@ test('every event delivers real inventory items and refreshes the container exac
     if (index === 23) h.advance(27_000);
     const interact = () => h.hooks[name][index === 23 ? 'Pick' : 'Talk-to']({ player: p, npc });
     interact();
+    if (index === 1) openOptions(h, p);
     if (index === 1) h.emit('InterfaceActionClick', { player: p, buttonId: (297 << 16) | 6, action: 1 });
     if (index === 4) certerChoice(h, p, 'Fish');
     interact();
@@ -423,16 +657,27 @@ test('Sandwich tray validates owner, selection and open interface, with harmless
   const click = (player, index, action = 1) => h.emit('InterfaceActionClick', { player, buttonId: (297 << 16) | (6 + index), action });
   click(p, 0); assert.deepEqual(p.rewards, []);
   h.hooks['Sandwich lady']['Talk-to']({ player: p, npc });
+  // Live offers the food in a dialogue first; the tray opens when it is continued.
+  assert.equal(p.tray, undefined);
+  assert.deepEqual(npcLines(p), ['You look hungry to me. I tell you what - have a baguette on me.']);
+  openOptions(h, p);
   assert.equal(p.tray.length, 7); assert.match(p.trayTitle, /baguette/);
   assert.deepEqual(p.flags, Array.from({ length: 7 }, (_, index) => [(297 << 16) | (6 + index), -1, -1, 2]));
   click(p, 0, 2); assert.deepEqual(p.rewards, []);
   other.interfaceId = 297; click(other, 0); click(p, 1); assert.deepEqual(p.rewards, []); assert.equal(npc.removed, undefined);
-  p.free = 0; click(p, 0); assert.equal(npc.removed, undefined);
-  p.free = 1; h.random(0); click(p, 0); click(p, 0);
+  h.random(0); click(p, 0); click(p, 0);
   assert.deepEqual(p.rewards, [I.STALE_BAGUETTE]); assert.equal(p.interfaceId, -1);
+  assert.deepEqual(npcLines(p), ['Hope that fills you up!']);
   const normal = h.player(), npc2 = h.spawn(normal, 1, 0);
-  h.hooks['Sandwich lady']['Talk-to']({ player: normal, npc: npc2 }); h.random(1 / 64); click(normal, 0);
+  h.hooks['Sandwich lady']['Talk-to']({ player: normal, npc: npc2 }); openOptions(h, normal);
+  h.random(1 / 64); click(normal, 0);
   assert.deepEqual(normal.rewards, [I.BAGUETTE]);
+  // Live: a pie that doesn't fit is placed on the ground for three hours.
+  const full = h.player(), npc3 = h.spawn(full, 1, 4); full.free = 0;
+  h.hooks['Sandwich lady']['Talk-to']({ player: full, npc: npc3 }); openOptions(h, full); click(full, 4);
+  assert.deepEqual(full.rewards, []); assert.equal(npc3.removed, true);
+  assert.equal(h.drops.at(-1).getItem().getId(), I.MEAT_PIE); assert.equal(h.drops.at(-1).getDespawnDelay(), 18_000);
+  assert.deepEqual(full.messages, [PLACED(1, 'Meat pie')]);
 });
 
 test('dismissal, expiry, distance, plane, instances, logout, death and shutdown clean owned NPCs', t => {
@@ -491,15 +736,14 @@ test('lamp keeps blocked/maxed XP and rejects changed slot, replay, replacement 
   assert.equal(maxed.xp.get(skill), 200_000_000); assert.equal(maxed.slots[3], lamp);
 });
 
-test('Rick retains the first gift when full, denies strangers and cannot reward twice', t => {
+test('Rick places a gift that does not fit on the ground, denies strangers and cannot reward twice', t => {
   const h = harness(t), p = h.player(), npc = h.spawn(p, 3);
   assert.equal(npc.definition.id, N.RICK_TURPENTINE);
   h.hooks['Rick Turpentine']['Talk-to']({ player: h.player(), npc });
   p.free = 0; h.random(0.6); h.hooks['Rick Turpentine']['Talk-to']({ player: p, npc });
-  assert.deepEqual(p.rewards, []); assert.equal(npc.removed, undefined);
-  p.free = 1; h.random(0.99); h.hooks['Rick Turpentine']['Talk-to']({ player: p, npc });
-  h.hooks['Rick Turpentine']['Talk-to']({ player: p, npc });
-  assert.deepEqual(p.rewards, [I.UNCUT_SAPPHIRE]); assert.equal(npc.removed, true);
+  h.random(0.99); h.hooks['Rick Turpentine']['Talk-to']({ player: p, npc });
+  assert.deepEqual(p.rewards, []); assert.equal(npc.removed, true);
+  assert.deepEqual(h.drops.map(drop => drop.getItem().getId()), [I.UNCUT_SAPPHIRE]);
 });
 
 test('gift amounts and key halves follow the 150-entry table and F2P replacement', t => {
@@ -555,9 +799,9 @@ test('all Certer brothers use cache models, distinct answers, owner/op/interface
     assert.deepEqual(p.rewards, []); assert.equal(npc.removed, undefined);
     h.hooks[name]['Talk-to']({ player: p, npc });
     p.free = 0; h.random(0.6); certerChoice(h, p, 'Fish');
-    assert.deepEqual(p.rewards, []); assert.equal(npc.removed, undefined);
-    p.free = 1; h.random(0.99); certerChoice(h, p, 'Fish'); certerChoice(h, p, 'Fish');
-    assert.deepEqual(p.rewards, [I.UNCUT_SAPPHIRE]); assert.equal(npc.removed, true); assert.equal(p.interfaceId, -1);
+    h.random(0.99); certerChoice(h, p, 'Fish');
+    assert.deepEqual(p.rewards, []); assert.equal(npc.removed, true); assert.equal(p.interfaceId, -1);
+    assert.equal(h.drops.at(-1).getItem().getId(), I.UNCUT_SAPPHIRE);
   }
 });
 
@@ -591,9 +835,10 @@ test('Jekyll ignores noted/grimy/huasca, offers a fallback and preserves refused
   const h = harness(t), p = h.player(), npc = h.spawn(p, 6);
   p.slots[0] = new Item(I.GRIMY_TORSTOL, 1); p.slots[1] = new Item(I.TORSTOL_2, 1);
   p.slots[2] = new Item(I.HUASCA, 1); p.free = 0;
-  h.hooks['Dr Jekyll']['Talk-to']({ player: p, npc }); assert.deepEqual(p.rewards, []);
-  p.free = 1; h.hooks['Dr Jekyll']['Talk-to']({ player: p, npc });
-  assert.deepEqual(p.rewards, [I.STRENGTH_POTION_2_]); assert.equal(p.slots.filter(Boolean).length, 3);
+  h.hooks['Dr Jekyll']['Talk-to']({ player: p, npc }); h.hooks['Dr Jekyll']['Talk-to']({ player: p, npc });
+  assert.deepEqual(p.rewards, []); assert.equal(npc.removed, true);
+  assert.deepEqual(h.drops.map(drop => drop.getItem().getId()), [I.STRENGTH_POTION_2_]);
+  assert.equal(p.slots.filter(Boolean).length, 3);
   const q = h.player(), refused = h.spawn(q, 6), herb = new Item(I.TORSTOL, 1); q.slots[2] = herb;
   h.hooks['Dr Jekyll']['Talk-to']({ player: q, npc: refused }); h.prompts.at(-1).options[1].cb();
   assert.equal(q.slots[2], herb); assert.deepEqual(q.rewards, [I.STRENGTH_POTION_2_]);
@@ -621,18 +866,36 @@ test('Jekyll rejects strangers, moved/replaced herbs, stale prompts and replies 
   assert.deepEqual(p.rewards, [I.STAMINA_POTION_4_]);
 });
 
-test('Mysterious Old Man gives a single owned gift, retains it when full and can be dismissed', t => {
+test('Mysterious Old Man gives a single owned gift, places it on the ground when full and can be dismissed', t => {
   const h = harness(t), p = h.player(), npc = h.spawn(p, 5);
   assert.equal(npc.definition.id, N.MYSTERIOUS_OLD_MAN_2);
   h.hooks['Mysterious Old Man']['Talk-to']({ player: h.player(), npc });
   p.free = 0; h.random(0.6); h.hooks['Mysterious Old Man']['Talk-to']({ player: p, npc });
-  assert.deepEqual(p.rewards, []); assert.equal(npc.removed, undefined);
-  p.free = 1; h.random(0); h.hooks['Mysterious Old Man']['Talk-to']({ player: p, npc });
   h.hooks['Mysterious Old Man']['Talk-to']({ player: p, npc });
-  assert.deepEqual(p.rewards, [I.UNCUT_SAPPHIRE]); assert.equal(npc.removed, true);
+  assert.deepEqual(p.rewards, []); assert.equal(npc.removed, true);
+  assert.deepEqual(h.drops.map(drop => drop.getItem().getId()), [I.UNCUT_SAPPHIRE]);
+  const coins = h.player(), giver = h.spawn(coins, 5); h.random(0);
+  h.hooks['Mysterious Old Man']['Talk-to']({ player: coins, npc: giver });
+  assert.deepEqual(coins.rewards, [I.COINS]);
+  assert.deepEqual(coins.messages, [REWARD(80, 'Coins')]);
+  assert.deepEqual(npcLines(coins),
+    ['Ah, so you are there. I hoped you would talk to me, I get so lonely. Here, have a present! I must be going now though.']);
   const q = h.player(), dismissed = h.spawn(q, 5);
   h.hooks['Mysterious Old Man'].Dismiss({ player: q, npc: dismissed });
   assert.equal(dismissed.removed, true); assert.deepEqual(q.rewards, []);
+});
+
+test('a reward too big for a nearly full stack goes to the ground whole instead of being clamped', t => {
+  const h = harness(t), p = h.player(), npc = h.spawn(p, 5);
+  p.free = 0; p.slots[0] = new Item(I.COINS, 2_147_483_646); h.random(0);
+  h.hooks['Mysterious Old Man']['Talk-to']({ player: p, npc });
+  assert.deepEqual(p.rewards, []);
+  assert.deepEqual(h.drops.map(drop => [drop.getItem().getId(), drop.getItem().getAmount()]), [[I.COINS, 80]]);
+  assert.deepEqual(p.messages, [PLACED(80, 'Coins')]);
+  const q = h.player(), giver = h.spawn(q, 5);
+  q.free = 0; q.slots[0] = new Item(I.COINS, 2_147_483_647 - 80); h.random(0);
+  h.hooks['Mysterious Old Man']['Talk-to']({ player: q, npc: giver });
+  assert.deepEqual(q.rewards, [I.COINS]); assert.deepEqual(q.messages, [REWARD(80, 'Coins')]);
 });
 
 test('Strange Plant stays planted, grows before picking, denies strangers and rewards only once', t => {
@@ -656,6 +919,8 @@ test('full-inventory fruit remains private on the ground for exactly three hours
   assert.equal(drop.getItem().getId(), I.STRANGE_FRUIT); assert.equal(drop.getOwner(), p.getUsername());
   assert.equal(drop.getgoesGlobal(), false); assert.equal(drop.getState(), State.SEEN_BY_PLAYER);
   assert.ok(drop.getPosition().equals(p.location)); assert.notEqual(drop.getPosition(), p.location);
+  assert.equal(drop.getDespawnDelay(), 18_000);
+  assert.deepEqual(p.messages.slice(-2), [PLACED(1, 'Strange fruit'), 'You pick the fruit from the plant.']);
   const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
   let removed = 0; t.mock.method(ItemOnGroundManager, 'deregister', item => { assert.equal(item, drop); removed++; });
   for (let tick = 1; tick < 18_000; tick++) drop.process();
@@ -825,6 +1090,7 @@ test('Beekeeper assembles the hive and rewards a lamp plus an outfit piece', t =
   assert.equal(p.location.getX(), 1926);
   const session = Teleports.sessionOf(p);
   assert.equal(session.kind, 'beekeeper');
+  assert.ok(session.keeper.getLocation().equals(new Location(1927, 5044, 0)), 'keeper spawns beside arrival, not invitation');
   for (const part of ['Lid', 'Body', 'Entrance', 'Legs']) {
     choose(h, p, openOptions(h, p).options.findIndex(entry => entry.label === part));
   }
@@ -954,6 +1220,54 @@ test('Gravedigger buries the five right coffins for zombie pieces', t => {
   assert.equal(Teleports.sessionOf(p), undefined);
 });
 
+test('Pinball inviter supports the cache Talk-to and Dismiss actions through real dispatch', async t => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  await CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
+  const h = harness(t), p = h.player(), npc = h.spawn(p, 15);
+  t.mock.method(PluginManager, 'getCoreApi', () => h.api.core);
+  const previousHooks = PluginManager.npcInteractionHooks;
+  PluginManager.npcInteractionHooks = [];
+  t.after(() => { PluginManager.npcInteractionHooks = previousHooks; });
+  PluginManager.createApi('RandomEvents').onNpcInteraction('Flippa', h.hooks.Flippa);
+  const definition = NpcDefinition.forId(npc.getId());
+  const operate = clickType => PluginManager.emitNpcInteraction({
+    player: p, npc, definition, npcId: npc.getId(), clickType, handled: false,
+  });
+  assert.equal(operate(1), true, 'the spawned cache variant dispatches Talk-to');
+  assert.ok(p.dialogue);
+  choose(h, p, 1);
+  assert.equal(Teleports.hasSession(p), false, 'declining keeps the invitation');
+  assert.equal(npc.removed, undefined);
+  assert.equal(operate(1), true, 'the invitation can be reopened');
+  assert.equal(definition.getActions()[4], 'Dismiss', 'the client exposes Dismiss');
+  assert.equal(operate(5), true);
+  assert.equal(npc.removed, true);
+  assert.equal(Events.activeFor(p), null);
+  assert.equal(Teleports.hasSession(p), false);
+});
+
+test('Pinball awards noted gems with the Wiki 3/3/3/1 weights at roll boundaries', t => {
+  const h = harness(t);
+  const cases = [[0, 1608, 5], [0.299999, 1608, 5], [0.3, 1606, 5],
+    [0.599999, 1606, 5], [0.6, 1604, 5], [0.899999, 1604, 5],
+    [0.9, 1602, 2], [0.999999, 1602, 2]];
+  for (const [roll, id, amount] of cases) {
+    const p = h.player(), origin = p.location.clone(), npc = h.spawn(p, 15);
+    h.hooks.Flippa['Talk-to']({ player: p, npc, handled: false });
+    choose(h, p, 0);
+    const session = Teleports.sessionOf(p);
+    session.data.done = true;
+    h.random(roll);
+    h.hooks['object:Cave Exit'].Use({ player: p, handled: false,
+      object: { getId: () => 9293, getLocation: () => new Location(1971, 5036, 0) } });
+    assert.deepEqual(p.rewardItems.map(item => [item.getId(), item.getAmount()]), [[id, amount]], `roll ${roll}`);
+    assert.ok(p.location.equals(origin));
+    assert.equal(Teleports.hasSession(p), false);
+  }
+});
+
 test('Pinball scores the glowing post, resets on others and pays at the cave exit', t => {
   const h = harness(t), p = h.player(), npc = h.spawn(p, 15);
   h.hooks.Flippa['Talk-to']({ player: p, npc, handled: false });
@@ -1010,6 +1324,10 @@ test('Prison Pete pays out after three correct balloon keys', t => {
   for (let round = 0; round < 3; round++) {
     assert.equal(fireRaw(h, 'objectRaw', { player: p,
       object: { getId: () => 24296, getLocation: () => new Location(2094, 4464, 0) } }), true);
+    h.ticks(6);
+    assert.equal(p.interfaceId, 273, 'lever preview remains visible for six ticks');
+    h.ticks(1);
+    assert.equal(p.interfaceId, -1, 'session timer still closes the lever preview at seven ticks');
     const needed = session.data.required;
     const balloon = session.data.balloons.find(entry => entry.shape === needed.shape);
     assert.equal(fireNpcClick(h, balloon.id, 1, { player: p, npc: balloon.npc, npcId: balloon.id }), true);
@@ -1024,20 +1342,23 @@ test('Prison Pete pays out after three correct balloon keys', t => {
   assert.equal(Teleports.sessionOf(p), undefined);
 });
 
-test('rewards that no longer fit drop at the return tile, not inside the event', t => {
+test('rewards go one at a time at the return tile: what fits is kept, the rest is placed there', t => {
   const h = harness(t), p = h.player(), npc = h.spawn(p, 10);
   h.hooks['Bee keeper']['Talk-to']({ player: p, npc, handled: false });
   choose(h, p, 0);
   const session = Teleports.sessionOf(p);
   for (let slot = 0; slot < 27; slot++) p.slots[slot] = new Item(I.SHARK, 1);
-  p.free = 1;
-  Teleports.finish(session, { reward: [{ id: I.LAMP, amount: 1 }, { id: 25129, amount: 1 }] });
+  p.free = 1; p.messages.length = 0;
+  Teleports.finish(session, { reward: [{ id: I.LAMP, amount: 1 }, { id: I.CAMO_TOP, amount: 1 }] });
   assert.equal(p.location.getX(), 3222, 'home again');
-  assert.equal(h.drops.length, 2);
-  for (const drop of h.drops) {
-    assert.ok(drop.getPosition().equals(p.location), 'dropped beside the return tile');
-  }
-  assert.deepEqual(p.rewards, [], 'nothing squeezed into the inventory');
+  assert.deepEqual(p.rewards, [I.LAMP]);
+  assert.equal(h.drops.length, 1);
+  const [drop] = h.drops;
+  assert.ok(drop.getPosition().equals(p.location), 'dropped beside the return tile');
+  assert.equal(drop.getItem().getId(), I.CAMO_TOP);
+  // Live: an untradeable reward stays owner-only for its three hours.
+  assert.equal(drop.getgoesGlobal(), false); assert.equal(drop.getDespawnDelay(), 18_000);
+  assert.deepEqual(p.messages, [REWARD(1, 'Lamp'), PLACED(1, 'Camo top')]);
 });
 
 test('Evil twin catches the matching suspect within two grabs and pays gems', t => {
@@ -1091,16 +1412,109 @@ test('Mime copies four performances, crying on the wrong emote', t => {
   h.hooks['Mysterious Old Man']['Talk-to']({ player: p, npc, handled: false });
   choose(h, p, 0);
   const session = Teleports.sessionOf(p);
-  assert.equal(p.interfaceId, 188);
+  assert.notEqual(p.chatboxGroupId, 188, 'watch the performance before choosing');
+  const early = MIME_EMOTES.indexOf(session.data.emote.name);
+  h.emit('InterfaceActionClick', { player: p, buttonId: (188 << 16) | (2 + early), action: 1 });
+  assert.equal(session.data.correct, 0, 'early packets cannot answer');
+  h.ticks(3); // Cry: cache sequence 860 is 88 client cycles, rounded to 3 game ticks.
+  assert.equal(p.chatboxGroupId, 188);
+  assert.notEqual(p.interfaceId, 188, 'emote choices belong in the chatbox');
   const wrong = MIME_EMOTES.findIndex(name => name !== session.data.emote.name);
   h.emit('InterfaceActionClick', { player: p, buttonId: (188 << 16) | (2 + wrong), action: 1 });
   assert.equal(session.data.correct, 0);
+  assert.equal(p.animation, 860);
+  assert.notEqual(p.chatboxGroupId, 188, 'hide choices during the reaction');
+  h.ticks(3);
   for (let i = 0; i < 4; i++) {
     const index = MIME_EMOTES.indexOf(session.data.emote.name);
     h.emit('InterfaceActionClick', { player: p, buttonId: (188 << 16) | (2 + index), action: 1 });
+    h.emit('InterfaceActionClick', { player: p, buttonId: (188 << 16) | (2 + index), action: 1 });
+    assert.equal(session.data.correct, i + 1, 'one accepted answer per performance');
+    assert.equal(p.animation, 862);
+    assert.notEqual(p.chatboxGroupId, 188);
+    h.ticks(4); // Client advances after cycle > frame length, including at the final frame.
+    assert.equal(p.rewards.length, 0, 'finish waits until Cheer has ended');
+    assert.notEqual(p.chatboxGroupId, 188);
+    h.ticks(1);
+    if (i < 3) { assert.notEqual(p.chatboxGroupId, 188); h.ticks(3); }
   }
   assert.ok(p.rewards.includes(3057) || p.rewards.includes(I.LAMP));
   assert.equal(Teleports.sessionOf(p), undefined);
+  assert.equal(p.rewards.length, 1);
+  h.ticks(100);
+  assert.equal(p.rewards.length, 1);
+});
+
+test('Mime finds the stage NPC after arrival and waits for each cache animation', t => {
+  const h = harness(t), p = h.player();
+  const mime = h.api.spawnNpc({ id: N.MIME, x: 2011, y: 4762, z: 0 });
+  h.api.getWorld = () => ({ getNpcsNear(location, radius) {
+    return location.getDistance(mime.getLocation()) <= radius ? [mime] : [];
+  } });
+  // Cache 241 lengths in component order, rounded up from 30 client cycles per game tick.
+  for (const [index, animation, ticks] of [[0,857,4], [1,861,3], [2,1130,6], [3,1131,3],
+    [4,860,3], [5,866,7], [6,1129,6], [7,1128,7]]) {
+    const npc = h.spawn(p, 20);
+    h.random((index + 0.1) / 8);
+    h.hooks['Mysterious Old Man']['Talk-to']({ player: p, npc, handled: false });
+    choose(h, p, 0);
+    assert.ok(p.location.equals(new Location(2008, 4762, 0)), 'arrive on the stage spotlight, opposite the mime');
+    assert.equal(mime.animation, animation, 'real stage NPC performs the chosen emote');
+    assert.ok(!p.messages.some(message => /The mime performs:/.test(message)));
+    h.ticks(ticks - 1);
+    assert.notEqual(p.chatboxGroupId, 188, 'prompt stays hidden until the final tick');
+    h.ticks(1);
+    assert.equal(p.chatboxGroupId, 188);
+    Teleports.finish(Teleports.sessionOf(p));
+  }
+});
+
+for (const exit of ['depart', 'logout', 'replacement', 'shutdown']) {
+  test(`Mime cancels a pending demonstration on ${exit}`, t => {
+    const h = harness(t), p = h.player(), npc = h.spawn(p, 20);
+    h.hooks['Mysterious Old Man']['Talk-to']({ player: p, npc, handled: false });
+    choose(h, p, 0);
+    const session = Teleports.sessionOf(p);
+    assert.equal(h.tasks.filter(task => task.isRunning()).length, 1, 'demonstration owns a pending completion');
+    if (exit === 'depart') Teleports.departed(p, false);
+    if (exit === 'logout') h.emit('PlayerLogout', { player: p });
+    if (exit === 'shutdown') h.emit('ServerShutdown');
+    if (exit === 'replacement') {
+      Teleports.begin({ player: p, npc, definition: {} }, { kind: 'quiz', arrive: { x: 1953, y: 4768 } });
+    }
+    h.ticks(100);
+    assert.notEqual(p.chatboxGroupId, 188, 'stale task never reopens the prompt');
+    assert.ok(h.tasks.every(task => task.isStopped()), 'session stops its scheduled tasks');
+    assert.equal(session.data.correct, 0);
+    assert.deepEqual(p.rewards, []);
+  });
+}
+
+test('Mime closes an open answer on departure and cancels the final reward on logout', t => {
+  const h = harness(t), p = h.player(), npc = h.spawn(p, 20);
+  h.hooks['Mysterious Old Man']['Talk-to']({ player: p, npc, handled: false });
+  choose(h, p, 0);
+  h.ticks(3);
+  assert.equal(p.chatboxGroupId, 188);
+  Teleports.departed(p, false);
+  assert.equal(p.chatboxGroupId, -1);
+
+  const q = h.player(), invitation = h.spawn(q, 20);
+  h.hooks['Mysterious Old Man']['Talk-to']({ player: q, npc: invitation, handled: false });
+  choose(h, q, 0);
+  const session = Teleports.sessionOf(q);
+  for (let round = 0; round < 4; round++) {
+    h.ticks(3);
+    const index = MIME_EMOTES.indexOf(session.data.emote.name);
+    h.emit('InterfaceActionClick', { player: q, buttonId: (188 << 16) | (2 + index), action: 1 });
+    if (round < 3) h.ticks(5);
+  }
+  assert.equal(session.data.correct, 4);
+  h.emit('PlayerLogout', { player: q });
+  h.ticks(100);
+  assert.equal(Teleports.sessionOf(q), undefined);
+  assert.deepEqual(q.rewards, [], 'logging out during the final reaction does not grant a stale reward');
+  assert.equal(q.chatboxGroupId, -1);
 });
 
 test('Pillory picks the matching key three times, wrong picks add locks', t => {

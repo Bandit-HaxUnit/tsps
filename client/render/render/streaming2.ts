@@ -168,7 +168,7 @@ import { GfxRenderer } from "../gfx/GfxRenderer";
 import { buildGroundItemGeometry } from "../ground/GroundItemMeshBuilder";
 import { type MinimapIcon, SdMapData } from "../loader/SdMapData";
 import { SdMapDataLoader } from "../loader/SdMapDataLoader";
-import { SdMapLoaderInput } from "../loader/SdMapLoaderInput";
+import { SdMapLoaderInput, snapshotMapInput } from "../loader/SdMapLoaderInput";
 import { isDoorLocType } from "../loc/SceneLocs";
 import {
     DynamicNpcAnimLoader,
@@ -221,25 +221,40 @@ export async function queueLoadMap(host: WebGLOsrsRendererHost,
             !host.pendingLocUpdates.has(mapId) &&
             !host.pendingDoorLocUpdates.has(mapId) &&
             host.pendingLocGeometryUpdates.has(mapId);
-        const input: SdMapLoaderInput = {
+        // A loc reload of the drawn instance scene builds it from its template chunks.
+        const scene = host.instanceSceneMap;
+        const instance =
+            host.instanceActive && host.instanceTemplateChunks &&
+            scene?.mapX === mapX && scene.mapY === mapY
+                ? {
+                      templateChunks: host.instanceTemplateChunks,
+                      regionX: host.instanceRegionX,
+                      regionY: host.instanceRegionY,
+                  }
+                : undefined;
+        const input: SdMapLoaderInput = snapshotMapInput({
             mapProfileEnabled: isMapProfileEnabled(),
             persistentCache: isLowEndDevice,
+            minimapLevel: host.getPlayerRawPlane(),
             mapX,
             mapY,
             maxLevel: Math.max(0, Math.min(Scene.MAX_LEVELS - 1, host.maxLevel | 0)),
             loadNpcs: host.loadNpcs,
             smoothTerrain: host.smoothTerrain,
-            ...host.osrsClient.animationSmoothingPlugin?.objectSettings(),
+            ...host.osrsClient.clientPlugins.objectSettings(),
             minimizeDrawCalls: !host.hasMultiDraw,
             doorOnly,
             locOnly,
             loadedTextureIds: host.loadedTextureIds,
             locOverrides: host.locOverrides,
-            extraLocs: host.getExtraLocsForMap(mapX, mapY),
-            locSpawns: host.locSpawns,
+            instance,
+            extraLocs: instance
+                ? host.getInstanceExtraLocs(mapX, mapY)
+                : host.getExtraLocsForMap(mapX, mapY),
+            locSpawns: instance ? undefined : host.locSpawns,
             terrainOverrides: host.terrainOverrides,
             mapRegionReplacements: regionReplacements,
-        };
+        });
 
         let mapData: SdMapData | undefined;
         try {
@@ -276,6 +291,7 @@ export async function queueLoadMap(host: WebGLOsrsRendererHost,
         }
 
         if (mapData && host.isValidMapData(mapData)) {
+            mapData.minimapInput = input;
             markMapWorkerReady(mapData, queuedAt);
             if (typeof locReloadBatchId === "number") {
                 host.resolveLocReloadBatchMap(locReloadBatchId, mapId, mapData);

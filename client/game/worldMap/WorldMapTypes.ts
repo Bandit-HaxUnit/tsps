@@ -25,6 +25,18 @@ export type WorldMapRenderedIcon = {
     y1: number;
 };
 
+/** Where the world map was last drawn: its device rect, the centred display tile and its scale. */
+export type WorldMapViewport = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    displayX: number;
+    displayY: number;
+    pixelsPerTileX: number;
+    pixelsPerTileY: number;
+};
+
 export type WorldMapImageTile = {
     key: string;
     pixels?: Uint8Array;

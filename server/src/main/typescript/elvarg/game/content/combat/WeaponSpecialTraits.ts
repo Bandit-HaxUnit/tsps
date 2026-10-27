@@ -16,16 +16,18 @@ export type SpecialAttackMaximumHitSource =
 /** Attack kind a special roll is built with; CombatType or its lower-case name. */
 export type SpecialAttackType = CombatType | "melee" | "ranged" | "magic";
 
-export type SpecialAttackTargetPattern = "forward_line";
+export type SpecialAttackTargetPattern = "forward_line" | "surrounding";
 
 /** Engagement-level target selection for area/footprint-aware specials. */
 export interface SpecialAttackTargeting {
     readonly pattern: SpecialAttackTargetPattern;
-    /** Odd number of tiles across the forward line, centred on the primary target. */
+    /** Odd number of tiles across the forward line, centred on the primary target. Unused by "surrounding". */
     readonly width: number;
     /** Total target cap, including the primary target. */
     readonly maxTargets: number;
     readonly requiresMultiCombat?: boolean;
+    /** Cap on players struck, including a player primary target. Absent: players are never swept. */
+    readonly maxPlayerTargets?: number;
     /** Replaces area targeting when the primary NPC footprint meets the size. */
     readonly largeTargetExtraHit?: {
         readonly minimumSize: number;
@@ -86,6 +88,8 @@ export interface WeaponSpecialTraits {
     readonly guaranteedHit?: boolean;
     /** Guarantees only the first accuracy roll of the first hitsplat. */
     readonly guaranteedFirstAccuracyRoll?: boolean;
+    /** Guarantees the hit unless the attacker is the player who last damaged the target. */
+    readonly guaranteedHitOnUnsuspectingTarget?: boolean;
     /**
      * When the target's current hitpoints are at or below this hit's maximum
      * damage, resolves accuracy with one fixed percentage of the max attack roll.

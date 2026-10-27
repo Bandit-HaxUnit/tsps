@@ -4,6 +4,7 @@ import { Player } from "../player/Player";
 import { Location } from "../../../model/Location";
 import { GameObject } from "./GameObject";
 import { MapObjects } from "./MapObjects";
+import { PluginContext } from "../../../../plugins/PluginContext";
 
 import type { PrivateArea } from "../../../model/areas/impl/PrivateArea";
 export class ObjectManager {
@@ -17,9 +18,59 @@ export class ObjectManager {
      */
     private static readonly objectsByTile = new Map<string, GameObject[]>();
     private static readonly objectsByRegion = new Map<string, Set<GameObject>>();
+    /**
+     * Shared-world objects each player's client was sent and still shows, by tile and shape (the
+     * client's own key), and the ones among them that were removed while the tile was outside
+     * that player's scene. The client keeps a sent loc until told otherwise, so a door that
+     * closed while its opener was away would otherwise still stand open when they come back.
+     */
+    private static readonly shownObjects = new WeakMap<Player, Map<string, GameObject>>();
+    private static readonly missedRemovals = new WeakMap<Player, Map<string, GameObject>>();
 
     private static tileKey(location: Location): string {
         return `${location.getX()},${location.getY()},${location.getZ()}`;
+    }
+
+    private static shownKey(object: GameObject): string {
+        return `${ObjectManager.tileKey(object.getLocation())},${object.getType()}`;
+    }
+
+    private static playerMap(maps: WeakMap<Player, Map<string, GameObject>>, player: Player): Map<string, GameObject> {
+        let map = maps.get(player);
+        if (!map) {
+            map = new Map();
+            maps.set(player, map);
+        }
+        return map;
+    }
+
+    private static sendShown(player: Player, object: GameObject): void {
+        player.getPacketSender().sendObject(object);
+        if (object.getPrivateArea()) return;
+        const key = ObjectManager.shownKey(object);
+        ObjectManager.playerMap(ObjectManager.shownObjects, player).set(key, object);
+        ObjectManager.missedRemovals.get(player)?.delete(key);
+    }
+
+    /** Removals of objects this player was shown that happened while they were away, in the new scene. */
+    private static sendMissedRemovals(player: Player, baseX: number, baseY: number): void {
+        const missed = ObjectManager.missedRemovals.get(player);
+        if (!missed?.size) return;
+        for (const [key, object] of missed) {
+            const location = object.getLocation();
+            if (location.getX() < baseX || location.getX() >= baseX + this.SCENE_SIZE
+                || location.getY() < baseY || location.getY() >= baseY + this.SCENE_SIZE) {
+                continue;
+            }
+            missed.delete(key);
+            // A removal also hides the map's own loc there, so put that back instead.
+            const standing = MapObjects.getType(location.clone(), object.getType(), null);
+            if (standing && !World.getRemovedObjects().some((removed) => ObjectManager.sameObjectIdentity(removed, standing))) {
+                player.getPacketSender().sendObject(standing);
+            } else {
+                player.getPacketSender().sendObjectRemoval(object);
+            }
+        }
     }
 
     private static regionKey(x: number, y: number): string {
@@ -59,6 +110,26 @@ export class ObjectManager {
         }
     }
 
+    /** The runtime objects registered in one 64x64 region (all planes, any private area). */
+    public static objectsInRegion(regionX: number, regionY: number): readonly GameObject[] {
+        const objects = ObjectManager.objectsByRegion.get(`${regionX},${regionY}`);
+        return objects ? [...objects] : ObjectManager.NONE;
+    }
+
+    /**
+     * Takes out every object a plugin registered, as the server shuts down: plugins never
+     * reload, so nothing else would. A stand-in for a map object (a door closed again) stays.
+     */
+    public static removePluginObjects(): number {
+        let removed = 0;
+        for (const object of [...World.getObjects()]) {
+            if (!object.getSpawnedBy() || object.isBaseMap()) continue;
+            ObjectManager.deregister(object, true);
+            removed++;
+        }
+        return removed;
+    }
+
     /** The runtime objects registered on a tile (any private area). */
     public static objectsAt(location: Location): readonly GameObject[] {
         return ObjectManager.objectsByTile.get(ObjectManager.tileKey(location)) ?? ObjectManager.NONE;
@@ -91,6 +162,7 @@ export class ObjectManager {
 
     public static onRegionChange(player: Player, baseX: number, baseY: number) {
         const viewedArea = this.viewedArea(player);
+        if (!viewedArea) this.sendMissedRemovals(player, baseX, baseY);
         // Region sync should only target the requesting player.
         // Broadcasting every object spawn globally here causes redundant updates.
         // Apply base-map removals before additions, including replacements with a different shape.
@@ -129,7 +201,7 @@ export class ObjectManager {
                         || location.getY() < baseY || location.getY() >= baseY + this.SCENE_SIZE) {
                         continue;
                     }
-                    player.getPacketSender().sendObject(object);
+                    this.sendShown(player, object);
                 }
             }
         }
@@ -139,6 +211,7 @@ export class ObjectManager {
     }
 
     public static register(object: GameObject, playerUpdate: boolean) {
+        if (object.getSpawnedBy() === null) object.setSpawnedBy(PluginContext.current());
         // Check for matching object on this tile.
         for (const o of [...ObjectManager.objectsAt(object.getLocation())]) {
             if (o.getType() === object.getType() && object.getPrivateArea() == o.getPrivateArea()
@@ -256,12 +329,18 @@ export class ObjectManager {
                     if (!object.getPrivateArea() && !player.getSession().isTileInScene(
                         location.getX(), location.getY(), location.getZ()
                     )) {
+                        if (type == OperationType.DESPAWN) this.recordMissedRemoval(player, object);
                         return;
                     }
                     if (type == OperationType.SPAWN) {
-                        player.getPacketSender().sendObject(object);
+                        this.sendShown(player, object);
                     } else {
                         player.getPacketSender().sendObjectRemoval(object);
+                        if (!object.getPrivateArea()) {
+                            const key = this.shownKey(object);
+                            this.shownObjects.get(player)?.delete(key);
+                            this.missedRemovals.get(player)?.delete(key);
+                        }
                     }
                 });
                 break;
@@ -274,6 +353,15 @@ export class ObjectManager {
      * @param position
      * @return
      */
+
+    private static recordMissedRemoval(player: Player, object: GameObject): void {
+        const key = ObjectManager.shownKey(object);
+        const shown = ObjectManager.shownObjects.get(player);
+        const sent = shown?.get(key);
+        if (!sent || !ObjectManager.sameObjectIdentity(sent, object)) return;
+        shown!.delete(key);
+        ObjectManager.playerMap(ObjectManager.missedRemovals, player).set(key, object);
+    }
 
     public static exists(id: number, position: Location): boolean {
         // As before: any runtime object on the tile counts, whatever its id.

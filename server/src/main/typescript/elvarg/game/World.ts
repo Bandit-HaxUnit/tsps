@@ -21,6 +21,7 @@ import { ShopManager } from './model/container/shop/ShopManager';
 import { BoatManager } from "./content/sailing/BoatManager";
 import type { Mobile } from "./entity/impl/Mobile";
 import { HitQueue } from './content/combat/hit/HitQueue';
+import { NpcSpawnDefinitionLoader } from './definition/loader/impl/NpcSpawnDefinitionLoader';
 
 const ATTR_SKIP_PERSISTENCE = "bot-skip-persistence";
 
@@ -130,7 +131,8 @@ export class World {
     }
 
     public static getPlayerByName(username: string): Player | undefined {
-        return this.players.search(p => p && p.getUsername && p.getUsername() === Misc.formatText(username));
+        const name = Misc.formatNameForProtocol(Misc.formatDisplayName(username));
+        return this.players.search(p => p && p.getUsername && Misc.formatNameForProtocol(p.getUsername()) === name);
     }
 
     public static isPlayerSessionConnected(player: Player): boolean {
@@ -291,6 +293,7 @@ export class World {
     }
 
     public static registerPlayerPosition(player: Player, location: Location | null | undefined = player?.getLocation?.()): void {
+        if (location) NpcSpawnDefinitionLoader.activateNear(location, player.getNpcViewDistance?.());
         World.addPlayerToTileOccupants(player, location);
     }
 
@@ -309,6 +312,11 @@ export class World {
         if ((previousLocation.getX() >> 6) !== (nextLocation.getX() >> 6)
             || (previousLocation.getY() >> 6) !== (nextLocation.getY() >> 6)
             || previousLocation.getZ() !== nextLocation.getZ()) {
+            NpcSpawnDefinitionLoader.activateNear(nextLocation, player.getNpcViewDistance?.());
+            if (player.isPlayerBot?.() !== true) {
+                World.refreshActiveRegions();
+                World.activeNpcsForUpdate = World.collectActiveNpcsForUpdate();
+            }
             PluginManager.emitPlayerMapSquareChange({ player, previous: previousLocation, location: nextLocation });
         }
     }
@@ -713,11 +721,12 @@ export class World {
     // Maintains player.getLocalNpcs() - the per-tick sync path (PlayerSession.flushClient)
     // reads this list directly to know which NPCs to include in the player's view.
     /**
-     * A teleported NPC leaves the local list for its teleport tick, except one gliding there
-     * (npc.exactMove): the glide has to reach clients in that very tick, with the teleport.
+     * A teleported NPC stays in view the tick it moves when that tick's update has to reach the
+     * client with it: an exact move (its glide), or a fade (its fade in where it lands); otherwise
+     * it is dropped and added back the next tick, and the update would be lost.
      */
-    private static isExactMoving(npc: NPC): boolean {
-        return npc.getExactMove?.() != null;
+    private static staysInViewWhenPlaced(npc: NPC): boolean {
+        return npc.getExactMove?.() != null || npc.getTransparency?.() != null;
     }
 
     /** How far the player sees NPCs (15 unless an area widens it). */
@@ -740,7 +749,7 @@ export class World {
                 npc.isRegistered() &&
                 npc.isVisible() &&
                 origin.isViewableFromWithin(BoatManager.rootLocation(npc), viewDistance) &&
-                (!npc.isNeedsPlacement() || World.isExactMoving(npc)) &&
+                (!npc.isNeedsPlacement() || World.staysInViewWhenPlaced(npc)) &&
                 BoatManager.syncArea(npc) === privateArea &&
                 BoatManager.canSeeAboard(player, npc) &&
                 (!npc.isOwnerOnly?.() || npc.getOwner?.() === player)
@@ -759,7 +768,7 @@ export class World {
             World.getNpcs().get(currentPet.getIndex()) === currentPet &&
             currentPet.isRegistered() && currentPet.isVisible() &&
             currentPet.getOwner() === player &&
-            (!currentPet.isNeedsPlacement() || World.isExactMoving(currentPet)) &&
+            (!currentPet.isNeedsPlacement() || World.staysInViewWhenPlaced(currentPet)) &&
             BoatManager.syncArea(currentPet) === privateArea &&
             BoatManager.canSeeAboard(player, currentPet) &&
             BoatManager.rootLocation(currentPet).isViewableFromWithin(origin, viewDistance)) {
@@ -774,7 +783,7 @@ export class World {
             if (localNpcs.length >= World.MAX_LOCAL_NPCS) break;
             if (npc == null || localIndexes.has(npc.getIndex()) || !npc.isVisible()) continue;
             if (!npc.isRegistered() || World.getNpcs().get(npc.getIndex()) !== npc) continue;
-            if (npc.isNeedsPlacement() && !World.isExactMoving(npc)) continue;
+            if (npc.isNeedsPlacement() && !World.staysInViewWhenPlaced(npc)) continue;
             if (BoatManager.syncArea(npc) !== privateArea) continue;
             if (!BoatManager.canSeeAboard(player, npc)) continue;
             if (npc.isOwnerOnly?.() && npc.getOwner?.() !== player) continue;
@@ -1105,6 +1114,7 @@ export class World {
                 }
                 // Bots must not be dropped by a host-imposed human player cap: they
                 // share the list but never take a human slot.
+                NpcSpawnDefinitionLoader.activateNear(player.getLocation(), player.getNpcViewDistance());
                 World.players.add(player, player.isPlayerBot?.() === true);
                 if (
                     player.isPlayerBot?.() !== true &&
@@ -1237,6 +1247,7 @@ export class World {
             }
         });
 
+        for (const player of World.players) NpcSpawnDefinitionLoader.activateNear(BoatManager.rootLocation(player), player.getNpcViewDistance());
         World.rebuildRealPlayerObserverBuckets();
         timed("process_npcs", () => {
             // One pass per cycle: the collection scans every occupied bucket,

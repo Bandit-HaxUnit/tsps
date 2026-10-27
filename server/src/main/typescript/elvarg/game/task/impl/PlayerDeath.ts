@@ -1,7 +1,6 @@
 import { GameConstants } from "../../GameConstants";
 import { MORTAL_DEVELOPER_ATTRIBUTE } from "../../entity/impl/Mobile";
 import { CombatFactory } from "../../content/combat/CombatFactory";
-import { ItemDefinition } from "../../definition/ItemDefinition";
 import { ItemOnGroundManager } from "../../entity/impl/grounditem/ItemOnGroundManager";
 import { Player } from "../../entity/impl/player/Player";
 import { PlayerRights } from "../../model/rights/PlayerRights";
@@ -11,7 +10,6 @@ import { SkullType } from "../../model/SkullType";
 import { PrayerData, PrayerHandler } from "../../content/PrayerHandler";
 import { Skill } from "../../model/Skill";
 import { Location } from "../../model/Location";
-import { BrokenItem } from "../../model/BrokenItem";
 import { Animation } from "../../model/Animation";
 import { PluginManager } from "../../../plugins/PluginManager";
 import { ItemIdentifiers } from "../../../util/ItemIdentifiers";
@@ -24,11 +22,14 @@ export class PlayerDeathTask extends Task {
     private loseItems = true;
     private itemsToKeep: Item[] = [];
     private ticks = 2;
+    /** False when a plugin says "Oh dear, you are dead!" itself (onPlayerBeforeDeath's announce). */
+    private announce: boolean;
 
 
-    constructor(player: Player) {
+    constructor(player: Player, announce = true) {
         super(1, false);
         this.player = player;
+        this.announce = announce;
         (this.player as any).__recentDeathDamagerEntries =
             this.player.getCombat().getRecentDamagerEntries();
         this.killer = player.getCombat().getKiller(true);
@@ -97,8 +98,13 @@ export class PlayerDeathTask extends Task {
                     });
 
                     if (!handledDeath) {
-                        const botRespawn = this.resolveBotRespawnLocation();
-                        this.player.moveTo(botRespawn ?? GameConstants.DEFAULT_LOCATION);
+                        // Respawn policies run after every dangerous-death observer, including Hardcore.
+                        const respawn = { player: this.player, killer: this.killer ?? null, handled: false };
+                        PluginManager.emitCustomEvent("player:respawn", respawn);
+                        if (!respawn.handled) {
+                            const botRespawn = this.resolveBotRespawnLocation();
+                            this.player.moveTo(botRespawn ?? GameConstants.DEFAULT_LOCATION);
+                        }
                     }
                     GameConstants.PLAYER_PERSISTENCE.requestSave(this.player, "respawn");
 
@@ -130,7 +136,7 @@ export class PlayerDeathTask extends Task {
                     this.player.getPacketSender().sendInterfaceRemoval();
 
                     // Send death message..
-                    this.player.sendMessage("Oh dear, you are dead!");
+                    if (this.announce) this.player.sendMessage("Oh dear, you are dead!");
 
                     // Perform death animation..
                     this.player.performAnimation(new Animation(836));
@@ -180,6 +186,7 @@ export class PlayerDeathTask extends Task {
                 player,
                 killer: killer ?? null,
                 item,
+                kept: itemsToKeep.includes(item),
                 location: position,
                 shouldDropItems: true,
                 dropEligible,
@@ -247,16 +254,10 @@ export class PlayerDeathTask extends Task {
         return itemsToKeep;
     }
 
-    /** The items a death let the player keep, back in the inventory (broken where they break). */
+    /** The items a death let the player keep, back in the inventory. */
     public static returnKeptItems(player: Player, items: Item[]): void {
         for (const it of items) {
-            let id = it.getId();
-            const brokenItem = BrokenItem.get(id);
-            if (brokenItem != null) {
-                id = brokenItem.getBrokenItem();
-                player.sendMessage(`Your ${ItemDefinition.forId(it.getId()).getName()} has been broken. You can fix it by talking to Perdu.`);
-            }
-            player.getInventory().addItem(it.clone().setId(id));
+            player.getInventory().addItem(it.clone());
         }
     }
 
@@ -313,8 +314,21 @@ export class PlayerDeathTask extends Task {
         });
     }
 
-    /** The items a death lets the player keep: the three most valuable (four with Protect Item, none skulled). */
-    public static getItemsToKeep(player: Player): Item[] {
+    /**
+     * What an item is worth when a death picks the kept ones: its Grand Exchange guide price, or its
+     * high alchemy value when it has none (Wiki: Items Kept on Death; rsprox recording 430). Never
+     * the store value: a 35m pair of ranger boots has a store value of 200.
+     */
+    public static keepValue(item: Item): number {
+        const definition = item.getDefinition();
+        return definition.hasGrandExchangeValue() ? definition.getGrandExchangeValue() : definition.getHighAlchValue();
+    }
+
+    /**
+     * The items a death lets the player keep: the three most valuable (four with Protect Item, none
+     * skulled). The Items Kept on Death interface passes the count its own toggles give.
+     */
+    public static getItemsToKeep(player: Player, amountToKeep = PlayerDeathTask.getAmountToKeep(player)): Item[] {
         const items: Item[] = [];
         const alwaysKept: Item[] = [];
         for (const item of [...player.getInventory().getItems(), ...player.getEquipment().getItems()]) {
@@ -340,7 +354,7 @@ export class PlayerDeathTask extends Task {
             items.push(item);
         }
 
-        items.sort((a: Item, b: Item) => b.getDefinition().getValue() - a.getDefinition().getValue());
-        return [...items.slice(0, PlayerDeathTask.getAmountToKeep(player)), ...alwaysKept];
+        items.sort((a: Item, b: Item) => PlayerDeathTask.keepValue(b) - PlayerDeathTask.keepValue(a));
+        return [...items.slice(0, amountToKeep), ...alwaysKept];
     }
 }

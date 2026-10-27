@@ -11,7 +11,7 @@
  * returning the materials - in OSRS only the vyre well returns them, and the
  * well is not modelled here.
  *
- * Not modelled: the 1x3 arc that hits three 1x1 targets side by side in multi.
+ * In multicombat the remaining hits can cleave adjacent targets in the forward 1x3 arc.
  */
 const MAX_CHARGES = 20000;
 const CHARGES_PER_VIAL = 100;
@@ -21,6 +21,9 @@ const MAX_HITS = 3;
 const SCYTHES = new Set(["scythe of vitur", "holy scythe of vitur", "sanguine scythe of vitur"]);
 
 let core;
+let pluginApi;
+/** The area registry, for multicombat (api.getAreaManager(): api.core has no AreaManager). */
+let areas;
 let scytheMethod = null;
 let chargedIds = new Set();
 let unchargedByCharged = new Map();
@@ -86,6 +89,13 @@ function consumeSwingCharge(player, hits) {
   if (!dealtDamage) {
     return;
   }
+  // Content may spare the charge (a league fragment): the same question every melee weapon with charges asks.
+  const consume = { player, itemId: item.getId(), skip: false };
+  pluginApi?.emitCustomEvent("combat:melee-charge", consume);
+  pluginApi?.emitCustomEvent("combat:consume-charge", consume);
+  if (consume.skip) {
+    return;
+  }
   const left = charges(item) - 1;
   if (left <= 0) {
     swapToUncharged(player, item);
@@ -95,14 +105,45 @@ function consumeSwingCharge(player, hits) {
   item.setMetaValue(CHARGE_META_KEY, left);
 }
 
+/** The facing tile and its two neighbours form the scythe's forward arc. */
+function cleaveTargets(character, target) {
+  if (!character.getLocation || !target.getLocation || !areas.inMulti(character) || !areas.inMulti(target)) return [];
+  const origin = character.getLocation();
+  const location = target.getLocation();
+  const dx = Math.sign(location.getX() - origin.getX());
+  const dy = Math.sign(location.getY() - origin.getY());
+  const directions = [[0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1], [-1, 0], [-1, 1]];
+  const facing = directions.findIndex(([x, y]) => x === dx && y === dy);
+  if (facing < 0) return [];
+  const tiles = [-1, 0, 1].map((offset) => directions[(facing + offset + 8) % 8]);
+  const found = [];
+  const candidates = [];
+  core.World.getNpcs().forEach((npc) => candidates.push(npc));
+  core.World.getPlayers().forEach((player) => candidates.push(player));
+  for (const candidate of candidates) {
+    if (found.length >= MAX_HITS - hitCount(target)) break;
+    if (candidate === target || candidate === character) continue;
+    const at = candidate.getLocation();
+    const size = candidate.isNpc() ? candidate.getAsNpc().getSize() : 1;
+    if (at.getZ() !== origin.getZ() || !tiles.some(([x, y]) =>
+      origin.getX() + x >= at.getX() && origin.getX() + x < at.getX() + size &&
+      origin.getY() + y >= at.getY() && origin.getY() + y < at.getY() + size)) continue;
+    if (core.CombatFactory.canAttackSecondaryTarget(character, target, candidate, 2)) found.push(candidate);
+  }
+  return found;
+}
+
 function createMethod() {
   const { MeleeCombatMethod, PendingHit, CombatFactory, DamageFormulas } = core;
   return new (class ScytheCombatMethod extends MeleeCombatMethod {
     hits(character, target) {
       const maxHit = DamageFormulas.calculateMaxMeleeHit(character);
       const hits = [];
-      for (let index = 0; index < hitCount(target); index++) {
-        const hit = new PendingHit(character, target, this);
+      const budgets = new Map();
+      const targets = [...Array(hitCount(target)).fill(target), ...cleaveTargets(character, target)];
+      for (const [index, victim] of targets.entries()) {
+        if (!budgets.has(victim)) budgets.set(victim, { remaining: victim.getHitpoints() });
+        const hit = new PendingHit(character, victim, this, { damageBudget: budgets.get(victim) });
         if (index > 0) CombatFactory.applyStyleDamage(hit, hitMax(maxHit, index));
         hits.push(hit);
       }
@@ -175,21 +216,27 @@ function uncharge({ player, item }) {
   return true;
 }
 
+function initializeIds() {
+  const I = core.ItemIdentifiers;
+  bloodRuneId = I.BLOOD_RUNE;
+  vialOfBloodId = I.VIAL_OF_BLOOD_2;
+  unchargedByCharged = new Map([
+    [I.SCYTHE_OF_VITUR, I.SCYTHE_OF_VITUR_UNCHARGED_],
+    [I.HOLY_SCYTHE_OF_VITUR, I.HOLY_SCYTHE_OF_VITUR_UNCHARGED_],
+    [I.SANGUINE_SCYTHE_OF_VITUR, I.SANGUINE_SCYTHE_OF_VITUR_UNCHARGED_],
+  ]);
+  chargedIds = new Set(unchargedByCharged.keys());
+  chargedByUncharged = new Map([...unchargedByCharged].map(([charged, uncharged]) => [uncharged, charged]));
+}
+
 module.exports = {
   name: "ScytheOfVitur",
   members: true,
   register(api) {
     core = api.core;
-    const I = core.ItemIdentifiers;
-    bloodRuneId = I.BLOOD_RUNE;
-    vialOfBloodId = I.VIAL_OF_BLOOD_2;
-    unchargedByCharged = new Map([
-      [I.SCYTHE_OF_VITUR, I.SCYTHE_OF_VITUR_UNCHARGED_],
-      [I.HOLY_SCYTHE_OF_VITUR, I.HOLY_SCYTHE_OF_VITUR_UNCHARGED_],
-      [I.SANGUINE_SCYTHE_OF_VITUR, I.SANGUINE_SCYTHE_OF_VITUR_UNCHARGED_],
-    ]);
-    chargedIds = new Set(unchargedByCharged.keys());
-    chargedByUncharged = new Map([...unchargedByCharged].map(([charged, uncharged]) => [uncharged, charged]));
+    pluginApi = api;
+    areas = api.getAreaManager();
+    api.onServerStartup(initializeIds);
     api.onItemAction("Scythe of Vitur", { Check: checkCharges, Uncharge: uncharge });
     api.onItemAction("Holy Scythe of Vitur", { Check: checkCharges, Uncharge: uncharge });
     api.onItemAction("Sanguine Scythe of Vitur", { Check: checkCharges, Uncharge: uncharge });
@@ -198,6 +245,7 @@ module.exports = {
   },
   _test: {
     hitCount,
+    cleaveTargets,
     hitMax,
     charges,
     consumeSwingCharge,

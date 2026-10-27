@@ -11,14 +11,19 @@ function parsePoint(text) {
 
 /**
  * The `{{Map}}` templates in an NPC infobox: `|map = {{Map|2576,2253|r=3}}`, or one per version
- * (`|map2 = {{Map|x=2589|y=8614|plane=0}}`). Returns { version (1-based, null when shared),
- * points, plane, mapId (the Wiki map layer, null when not given) }. A polygon, rectangle or line outlines an area: it becomes one spawn at its
+ * (`|map2 = {{Map|x=2589|y=8614|plane=0}}`). Every `{{Map}}` on a map line counts, labelled or not
+ * (Cabin Boy Herbert: `|map = Port Sarim Docks {{Map|…}} Port Piscarilius {{Map|…}}`). Returns
+ * { version (1-based, null when shared), points, plane, mapId (the Wiki map layer, null when not given) }.
+ * A polygon, rectangle or line outlines an area: it becomes one spawn at its
  * centre. The map's `r` only sizes the marker, so it's ignored.
  */
 function parseInfoboxMaps(wikitext) {
   const maps = [];
-  const pattern = /\|\s*map(\d*)\s*=\s*\{\{\s*Map\s*\|([^{}]*)\}\}/gi;
-  for (const [, version, body] of String(wikitext).matchAll(pattern)) {
+  const bodies = [];
+  for (const [, version, line] of String(wikitext).matchAll(/\|\s*map(\d*)\s*=([^\n]*)/gi)) {
+    for (const [, body] of line.matchAll(/\{\{\s*Map\s*\|([^{}]*)\}\}/gi)) bodies.push([version, body]);
+  }
+  for (const [version, body] of bodies) {
     const named = {};
     const points = [];
     for (const part of body.split("|")) {
@@ -91,6 +96,34 @@ function distance(a, b) {
 /** The 64x64 map square a spawn is in. */
 function squareOf(spawn) {
   return `${spawn.x >> 6},${spawn.y >> 6}`;
+}
+
+/**
+ * Reconcile literal IDs whose cache name contradicts the authored spawn name.
+ * Only one nearby, same-plane Wiki/cache-confirmed identity is sufficient evidence.
+ * Correct variants and explicit cache keys are retained; inputs are never mutated.
+ * `cacheName(id)` may give several names: a nameless multinpc parent answers with its variants'.
+ */
+function reconcileIdentities(existingSpawns, wikiSpawns, cacheName, radius, inScope = () => true) {
+  const repairs = [], unresolved = [];
+  const cached = id => { try { return [cacheName(id)].flat().map(nameKey); } catch { return []; } };
+  const spawns = existingSpawns.map(spawn => {
+    const expected = nameKey(spawn.name);
+    if (!inScope(spawn) || !expected || spawn.key != null || !Number.isInteger(spawn.id) ||
+        cached(spawn.id).includes(expected)) return spawn;
+    const evidence = wikiSpawns.filter(candidate => !candidate.skip && nameKey(candidate.name) === expected &&
+      Number.isInteger(candidate.id) && cached(candidate.id).includes(expected) && distance(spawn, candidate) <= radius);
+    const ids = [...new Set(evidence.map(candidate => candidate.id))];
+    if (ids.length !== 1) {
+      unresolved.push({ name: spawn.name, id: spawn.id, x: spawn.x, y: spawn.y, level: spawn.level,
+        candidates: ids, reason: ids.length ? 'ambiguous Wiki identities' : 'no matching Wiki/cache evidence' });
+      return spawn;
+    }
+    repairs.push({ name: spawn.name, previousId: spawn.id, id: ids[0], x: spawn.x, y: spawn.y,
+      level: spawn.level, page: evidence[0].page });
+    return { ...spawn, id: ids[0] };
+  });
+  return { spawns, repairs, unresolved };
 }
 
 /**
@@ -245,4 +278,4 @@ function alignLayers(wikiSpawns, existingSpawns, minVotes = 2) {
   return { shiftOf, layers };
 }
 
-module.exports = { versionIds, SURFACE_LAYERS, alignLayers, parsePoint, parseInfoboxMaps, parseBox, inBoxes, nameKey, distance, planAdditions, squareOf, parseLocLines, locationName };
+module.exports = { versionIds, SURFACE_LAYERS, alignLayers, parsePoint, parseInfoboxMaps, parseBox, inBoxes, nameKey, distance, planAdditions, reconcileIdentities, squareOf, parseLocLines, locationName };

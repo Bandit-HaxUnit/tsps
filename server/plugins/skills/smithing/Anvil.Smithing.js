@@ -4,20 +4,26 @@
  * varbit smithing_bar_type (client scripts 415 -> 430), so the server only sets the varbit.
  *
  * Captured (rsprox, docs/smithing.md): opening sets smithing_bar_type and varp makexcrafting
- * (the bars held); a click sets smithing_bar_lasttype/smithing_item_lasttype, closes the
- * interface and plays human_smithing (898) on the same tick, then each item comes 3 ticks later
- * and every 5 after, with "You hammer the steel and make ten dart tips." Smith with no bar: a
- * message box "You should select an item from your inventory and use it on the anvil."
+ * (the remembered quantity, All when none has been chosen yet); a click sets
+ * smithing_bar_lasttype/smithing_item_lasttype, closes the interface and plays human_smithing
+ * (898) on the same tick, then each item comes 3 ticks later and every 5 after, with "You hammer
+ * the steel and make ten dart tips." Smith with no bar: a message box "You should select an item
+ * from your inventory and use it on the anvil."
+ *
+ * The Smiths' uniform (Wiki): each piece is a 20% chance (the full set 100%) that an item takes
+ * 4 ticks instead of 5.
  */
 const Core = require("./Core.Smithing");
 const Data = require("./Data.Smithing");
 const Sessions = require("./Sessions.Smithing");
 const Godswords = require("./Godswords.Smithing");
 const DragonShields = require("./DragonShields.Smithing");
-const { hasHammer, messageBox, varbit, varp, hammering } = require("./Common.Smithing");
+const Common = require("./Common.Smithing");
+const { hasHammer, messageBox, varbit, varp, hammering, smithsUniformChance } = Common;
 
 const MAIN_MODAL = "toplevel_osrs_stretch:mainmodal";
 const SMITHING_INTERVAL_TICKS = 5;
+const UNIFORM_INTERVAL_TICKS = 4;
 const FIRST_DELAY_TICKS = 3;
 const NO_BAR_MESSAGE = "You should select an item from your inventory and use it on the anvil.";
 const ALL_QUANTITY_CAP = 28;
@@ -37,8 +43,10 @@ const buttonId = (component) => (Data.smithingInterface() << 16) | component;
 const mainModal = () => Core.CacheDefinitions.getComponentId(MAIN_MODAL);
 const range = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
 
+const selectedQuantity = (player) => SELECTED_QUANTITY.get(player) ?? "all";
+
 function smithingLevel(player) {
-  return player.getSkillManager().getCurrentLevel(Core.Skill.SMITHING);
+  return Common.smithingLevel(player);
 }
 
 /** Members products on a free world, and products behind a quest the client greys out. */
@@ -80,7 +88,13 @@ function smithOnce(player, product) {
   player.getSkillManager().addExperiences(Core.Skill.SMITHING, product.xp);
   player.sendMessage(`You hammer the ${product.metal} and make ${product.phrase}.`);
   Core.api.emitCustomEvent("smithing:success", { player, skill: Core.Skill.SMITHING, itemId: product.itemId });
+  Common.produced(player, Core.Skill.SMITHING, product.itemId, product.amount, product.xp, "smith");
   return true;
+}
+
+/** The ticks to the next item: 4 on a Smiths' uniform roll, otherwise 5. */
+function smithingInterval(player) {
+  return Math.random() < smithsUniformChance(player) ? UNIFORM_INTERVAL_TICKS : SMITHING_INTERVAL_TICKS;
 }
 
 function startSmithing(player, product, amount) {
@@ -90,7 +104,7 @@ function startSmithing(player, product, amount) {
   Sessions.start(player, {
     type: "smith",
     remaining: Math.min(amount, most),
-    interval: SMITHING_INTERVAL_TICKS,
+    interval: smithingInterval,
     firstDelay: FIRST_DELAY_TICKS,
     step: (smith) => smithOnce(smith, product),
   });
@@ -137,11 +151,15 @@ function openInterface(player, preferredBarId = null) {
     return false;
   }
   OPEN_MENUS.set(player, bar);
+  const selected = selectedQuantity(player);
+  const highlight = selected === "all"
+    ? Math.min(ALL_QUANTITY_CAP, player.getInventory().getAmount(bar))
+    : selected;
   player.setInterfaceId(Data.smithingInterface());
   player
     .getPacketSender()
     .sendVarbit(varbit("smithing_bar_type"), Data.BAR_TYPE_BY_BAR.get(bar))
-    .sendConfig(varp("makexcrafting"), player.getInventory().getAmount(bar))
+    .sendConfig(varp("makexcrafting"), highlight)
     .sendSubInterface(mainModal(), Data.smithingInterface(), 0);
   for (const component of range(FIRST_PRODUCT_COMPONENT, LAST_PRODUCT_COMPONENT)) {
     player.getPacketSender().sendInterfaceFlags(buttonId(component), 2);
@@ -187,7 +205,7 @@ function chooseProduct({ player, buttonId: id }) {
   const product = Data.productsFor(bar).find((candidate) => candidate.component === (id & 0xffff));
   if (!product) return false;
 
-  const selected = SELECTED_QUANTITY.get(player) ?? 1;
+  const selected = selectedQuantity(player);
   const started = startSmithing(player, product, selected === "all" ? ALL_QUANTITY_CAP : selected);
   if (!started) return false;
   player
@@ -252,4 +270,4 @@ module.exports = function attach(api) {
   api.onInterfaceActionButton(range(FIRST_PRODUCT_COMPONENT, LAST_PRODUCT_COMPONENT).map(buttonId), chooseProduct);
 };
 
-Object.assign(module.exports, { ANVIL_NAMES: ["Anvil", "An experimental anvil", "Rusted anvil"], useOnAnvil, forget });
+Object.assign(module.exports, { ANVIL_NAMES: ["Anvil", "An experimental anvil", "Rusted anvil"], useOnAnvil, forget, smithingInterval });

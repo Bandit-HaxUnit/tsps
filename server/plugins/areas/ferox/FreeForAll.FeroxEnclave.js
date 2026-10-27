@@ -41,14 +41,16 @@ const inArena = (location) => location?.getZ?.() === 0
 /** Past the line: where players may fight. */
 const inFightingArea = (location) => inArena(location) && location.getY() > SAFE_MAX_Y;
 
+const SAFE_ZONE_NOTICE_TICKS = 5;
 const savedSkulls = new WeakMap();
 const lastSafeZoneNotice = new WeakMap();
 let meteorTick = 0;
 
 /** Ours (not captured); attack checks repeat while pursuing, so at most every 3 seconds. */
 function tellSafeZone(player) {
-  const now = Date.now();
-  if (now - (lastSafeZoneNotice.get(player) ?? 0) < 3000) return;
+  const now = Ferox.core.World.getProcessCycle();
+  const last = lastSafeZoneNotice.get(player);
+  if (last !== undefined && now - last < SAFE_ZONE_NOTICE_TICKS) return;
   lastSafeZoneNotice.set(player, now);
   player.sendMessage("You can't fight in the safe zone.");
 }
@@ -157,6 +159,13 @@ function blockXp(event) {
   if (event.player?.getAttribute?.(XP_DISABLE_ATTRIBUTE) === true && inArena(event.player.getLocation())) event.allow = false;
 }
 
+function allowBountyHunterWeapons(event) {
+  if (!event.attacker.getPrivateArea() && !event.target.getPrivateArea()
+    && inFightingArea(event.attacker.getLocation()) && inFightingArea(event.target.getLocation())) {
+    event.allowed = true;
+  }
+}
+
 /** Safe: nothing is dropped; the skull is kept through the death reset (Wiki). */
 function keepItems(event) {
   if (!inArena(event.player?.getLocation?.())) return;
@@ -212,6 +221,7 @@ module.exports = function attachFreeForAll(api) {
   api.onObjectInteraction("Portal", { Exit: exit });
   api.onObjectFirstClick([MYSTERIOUS_PORTAL], mysteriousPortal);
   api.onCanGainExperience(blockXp);
+  api.onCustomEvent("bounty-hunter:weapon-area", allowBountyHunterWeapons);
   api.onShouldDropItemsOnDeath(keepItems);
   api.onPlayerDeath(respawn);
   api.onPlayerLogin(sendXpSetting);

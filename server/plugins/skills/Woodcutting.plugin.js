@@ -15,6 +15,8 @@ const CrystalAxe = require("./woodcutting/CrystalAxe.Woodcutting");
 const EntTrunk = require("./woodcutting/EntTrunk.Woodcutting");
 const ThickVines = require("./woodcutting/ThickVines.Woodcutting");
 const Shrine = require("./woodcutting/Shrine.Woodcutting");
+const FarmedRedwood = require("./farming/Redwood.Farming");
+const { pauseForLevelUp } = require("./SkillActions");
 
 const DEFAULT_TREE_STUMP_ID = ObjectIds.TREE_STUMP_2;
 // Older trees share models but not stumps, and some sit next to an unrelated stump id; key their
@@ -60,14 +62,15 @@ let pluginApi;
 /** A full inventory stops chopping unless an open log basket has room ("storage:room"). */
 function inventoryBlocks(player, logId) {
   if (!player.getInventory().isFull()) return false;
-  const request = { player, itemId: logId, room: false };
+  // `skill`: the skill gathering it, so content storing one skill's resources answers only for those.
+  const request = { player, itemId: logId, skill: pluginApi.core.Skill.WOODCUTTING, room: false };
   pluginApi.emitCustomEvent("storage:room", request);
   return !request.room;
 }
 
 /** An open log basket takes the log first ("storage:gather"); otherwise it goes to the inventory. */
-function giveLog(player, logId) {
-  const request = { player, itemId: logId, amount: 1, stored: 0 };
+function giveLog(player, logId, xp = 0) {
+  const request = { player, itemId: logId, amount: 1, stored: 0, skill: Skill.WOODCUTTING, xp };
   pluginApi.emitCustomEvent("storage:gather", request);
   if (request.stored === 0) player.getInventory().adds(logId, 1);
 }
@@ -173,6 +176,8 @@ const AXES = [
   axe(ItemIds.INFERNAL_AXE, 61, 7, 2117, { requiredFiremaking: 85, speed: 0.3 }),
   axe(ItemIds.INFERNAL_AXE_OR_, 61, 7, 8778, { requiredFiremaking: 85, speed: 0.3 }),
   axe(ItemIds.INFERNAL_AXE_OR__3, 61, 7, 8778, { requiredFiremaking: 85, speed: 0.3 }),
+  // The league's Echo axe (Wiki): a crystal axe with no requirement.
+  axe(ItemIds.ECHO_AXE, 1, 7, 8324),
 ];
 
 // OSRS Wiki "cut chance" charts: [low, high] per axe tier (bronze, iron, steel, black, mithril,
@@ -581,6 +586,12 @@ const FARMED_HARDWOODS = ["camphor", "ironwood", "rosewood"].map((name) => ({
   ...TREES.find((tree) => tree.name === name),
   respawnTicks: 150,
 }));
+const FARMED_TREES = [...FARMED_HARDWOODS, {
+  ...TREES.find((tree) => tree.name === "redwood"),
+  despawnTicks: 0,
+  depleteChance: FarmedRedwood.DEPLETION_ROLL,
+  respawnTicks: FarmedRedwood.REGROW_TICKS,
+}];
 
 
 
@@ -769,14 +780,22 @@ function maybeDropBirdNest(player) {
   if (!player) {
     return;
   }
-  const chance = wearsWoodcuttingCape(player)
+  // Content may make nests commoner ("woodcutting:nest-chance", a league fragment): `multiplier` times.
+  const boost = { player, multiplier: 1 };
+  pluginApi?.emitCustomEvent("woodcutting:nest-chance", boost);
+  const multiplier = Number(boost.multiplier) > 1 ? Number(boost.multiplier) : 1;
+  const chance = (wearsWoodcuttingCape(player)
     ? WOODCUTTING_CAPE_NEST_MULTIPLIER / BIRD_NEST_DROP_CHANCE
-    : 1 / BIRD_NEST_DROP_CHANCE;
+    : 1 / BIRD_NEST_DROP_CHANCE) * multiplier;
   if (Math.random() >= chance) {
     return;
   }
 
   const nestId = rollBirdNestId(player);
+  // Content may take the nest before it falls ("woodcutting:nest-drop", a league fragment's banked nests).
+  const drop = { player, itemId: nestId, handled: false };
+  pluginApi?.emitCustomEvent("woodcutting:nest-drop", drop);
+  if (drop.handled) return;
   ItemOnGroundManager.registers(player, new Item(nestId, 1));
   player.sendMessage("<col=ff0000>A bird's nest falls out of the tree.");
 }
@@ -992,6 +1011,7 @@ function processWoodcuttingTick(activeSessions, currentTick) {
       stopWoodcutting(activeSessions, player);
       continue;
     }
+    if (state.levelUpPaused) continue;
 
     const activeTree = MapObjects.get(
       state.objectId,
@@ -1059,13 +1079,16 @@ function processWoodcuttingTick(activeSessions, currentTick) {
       continue;
     }
     state.nextActionTick = currentTick + WOODCUTTING_ACTION_INTERVAL_TICKS;
-    if (!rollLog(player, state.tree, state.axe)) {
+    // Content may turn a miss into a hit ("woodcutting:attempt", a league relic's second chance).
+    const attempt = { player, object: activeTree, logId: state.tree.logId, success: rollLog(player, state.tree, state.axe) };
+    pluginApi.emitCustomEvent("woodcutting:attempt", attempt);
+    if (!attempt.success) {
       continue;
     }
 
     if (state.tree.logId >= 0) {
       if (!InfernalAxe.tryBurnLog(player, state.axe.id, state.tree.logId)) {
-        giveLog(player, state.tree.logId);
+        giveLog(player, state.tree.logId, state.tree.xpReward * lumberjackXpMultiplier(player));
         player.sendMessage(logMessage(state.tree));
       }
       CrystalAxe.tryUseCharge(player);
@@ -1130,13 +1153,18 @@ function handleChop(event) {
 
 function requestedChop(event) {
   // Patch hardwoods share log ids with the wild trees but regrow on farming's own timer.
-  let tree = [...FARMED_HARDWOODS, ...TREES].find(tree => tree.logId === event.logId);
+  let tree = [...FARMED_TREES, ...TREES].find(tree => tree.logId === event.logId);
   if (tree && event.removeOnly) tree = { ...tree, logId: -1, xpReward: 0, multi: false };
   if (tree) event.handled = startWoodcutting(event.player, event.object, tree, activeSessionsRef);
 }
 
 function requestedAxe(event) {
-  event.axe = findBestUsableAxe(event.player);
+  const candidate = event.itemId == null ? null : AXES.find((axe) => axe.id === event.itemId);
+  event.axe = event.itemId == null ? findBestUsableAxe(event.player) : candidate && canUseAxe(event.player, candidate) ? candidate : null;
+}
+
+function pauseWoodcutting(event) {
+  pauseForLevelUp(event, activeSessionsRef, (player) => stopWoodcutting(activeSessionsRef, player, false));
 }
 
 module.exports = {
@@ -1163,9 +1191,7 @@ module.exports = {
     api.onPlayerDisconnect(({ player }) => {
       stopWoodcutting(activeSessions, player, false);
     });
-    api.onCustomEvent("level-up:popup-opened", ({ player }) => {
-      stopWoodcutting(activeSessions, player, false);
-    });
+    api.onCustomEvent("level-up:popup-opened", pauseWoodcutting);
 
     api.onItemFirstAction((event) => {
       if (searchBirdNest(event.player, event.itemId)) {
@@ -1196,4 +1222,8 @@ module.exports = {
   findBestUsableAxe,
   findBestUsableAxeByLevel,
   isWoodcuttingActive,
+  calculateCutChance,
+  /** Stops the player's chopping (a Forestry event spawning beside them). */
+  stopWoodcutting: (player) => activeSessionsRef && stopWoodcutting(activeSessionsRef, player),
+  _test: { maybeDropBirdNest, setApi: (api) => { pluginApi = api; ItemOnGroundManager = api.getItemOnGroundManager(); } },
 };

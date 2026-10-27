@@ -1,4 +1,5 @@
 import { CacheDefinitions } from "../../game/cache/CacheDefinitions";
+import { CachePipeline } from "../../game/cache/CachePipeline";
 
 export const WORLD_MAP_GROUP_ID = 595;
 export const WORLD_MAP_TARGET_UID = (161 << 16) | 18;
@@ -9,6 +10,8 @@ let worldMapOrbWidgetIds: number[] | undefined;
 
 /** Whether a clicked component is a world map orb (looked up by gameval name, once). */
 export function isWorldMapOrbWidget(widgetId: number): boolean {
+  // A widget click before the cache is up (a test harness, or an early packet) cannot be an orb.
+  if (!CachePipeline.isInitialized()) return false;
   worldMapOrbWidgetIds ??= WORLD_MAP_ORB_COMPONENTS
     .map((name) => CacheDefinitions.getComponentId(name))
     .filter((id): id is number => id !== null);

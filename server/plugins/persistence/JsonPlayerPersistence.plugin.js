@@ -4,9 +4,9 @@ const path = require("path");
 const { promisify } = require("util");
 const { isBrowserHost } = require("./IndexedDbPersistenceHandoff");
 const { PrayerData } = require("../../src/main/typescript/elvarg/game/content/PrayerHandler");
-const { FightType } = require("../../src/main/typescript/elvarg/game/content/combat/FightType");
 const { Skills } = require("../../src/main/typescript/elvarg/game/content/skill/SkillManager");
 const { PlayerPersistence } = require("../../src/main/typescript/elvarg/game/entity/impl/player/persistence/PlayerPersistence");
+const { MAIN_PROFILE } = PlayerPersistence;
 const { PlayerSave } = require("../../src/main/typescript/elvarg/game/entity/impl/player/persistence/PlayerSave");
 const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { Location } = require("../../src/main/typescript/elvarg/game/model/Location");
@@ -87,6 +87,8 @@ async function writeFileAtomicallyAsync(filePath, content) {
 }
 
 class JsonPlayerPersistence extends PlayerPersistence {
+  /** The profile helpers, for the IndexedDb subclass. */
+  static PROFILES = { MAIN_PROFILE: PlayerPersistence.MAIN_PROFILE, profileStorageKey: PlayerPersistence.profileStorageKey };
   static SAVE_DIRECTORY = path.join(
     process.cwd(),
     "data",
@@ -106,8 +108,8 @@ class JsonPlayerPersistence extends PlayerPersistence {
     }
   }
 
-  load(username) {
-    const filePath = this.resolveFilePath(username);
+  load(username, profile = MAIN_PROFILE) {
+    const filePath = this.resolveFilePath(username, profile);
     const pendingWrite = this.pendingSerializedSaves.get(filePath);
     if (pendingWrite) {
       const parsed = JSON.parse(pendingWrite.serialized, this.reviver.bind(this));
@@ -126,18 +128,18 @@ class JsonPlayerPersistence extends PlayerPersistence {
       return;
     }
 
-    this.saveOffline(player.getUsername(), PlayerSave.fromPlayer(player));
+    this.saveOffline(player.getUsername(), PlayerSave.fromPlayer(player), undefined, player.getProfile?.() ?? MAIN_PROFILE);
   }
 
-  saveOffline(username, save) {
+  saveOffline(username, save, _reason, profile = MAIN_PROFILE) {
     const serialized = JSON.stringify(save, this.replacer.bind(this), 2);
     this.validateSerializedSave(serialized, username);
-    const filePath = this.resolveFilePath(username);
+    const filePath = this.resolveFilePath(username, profile);
     this.enqueueSerializedWrite(filePath, serialized, username);
   }
 
-  exists(username) {
-    const filePath = this.resolveFilePath(username);
+  exists(username, profile = MAIN_PROFILE) {
+    const filePath = this.resolveFilePath(username, profile);
     return this.pendingSerializedSaves.has(filePath) || fs.existsSync(filePath);
   }
 
@@ -149,9 +151,12 @@ class JsonPlayerPersistence extends PlayerPersistence {
     }
   }
 
-  resolveFilePath(username) {
+  /** The main profile's file sits in the characters directory; another profile's in a subdirectory named after it (`league/<name>.json`). */
+  resolveFilePath(username, profile = MAIN_PROFILE) {
     const normalized = this.normalizeUsername(username);
-    return path.join(JsonPlayerPersistence.SAVE_DIRECTORY, `${normalized}.json`);
+    return profile === MAIN_PROFILE
+      ? path.join(JsonPlayerPersistence.SAVE_DIRECTORY, `${normalized}.json`)
+      : path.join(JsonPlayerPersistence.SAVE_DIRECTORY, profile, `${normalized}.json`);
   }
 
   normalizeUsername(username) {
@@ -227,7 +232,6 @@ class JsonPlayerPersistence extends PlayerPersistence {
         poisonImmunityTimer: 0,
         fireImmunityTimer: 0,
         teleblockTimer: 0,
-        specialAttackRestoreTimer: 0,
         skullTimer: 0,
         running: false,
         runEnergy: 100,
@@ -245,10 +249,10 @@ class JsonPlayerPersistence extends PlayerPersistence {
     save.rights = this.hydrateRights(parsed.rights);
     save.donatorRights = this.hydrateDonatorRights(parsed.donatorRights);
     save.spellBook = this.hydrateSpellbook(parsed.spellBook);
-    save.fightType = FightType.UNARMED_KICK;
     save.skullType = this.hydrateSkullType(parsed.skullType);
     save.inventory = this.hydrateItems(parsed.inventory, 28);
     save.equipment = this.hydrateItems(parsed.equipment, 14);
+    save.fightType = PlayerSave.resolveSavedFightType(parsed.fightType, save.equipment);
     save.skills = this.hydrateSkills(parsed.skills);
     save.quickPrayers = this.hydrateQuickPrayers(parsed.quickPrayers);
     save.friends = this.hydrateRelationArray(parsed.friends, { max: 200 });

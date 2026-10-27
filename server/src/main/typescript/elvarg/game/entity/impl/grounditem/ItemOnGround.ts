@@ -16,11 +16,17 @@ export class ItemOnGround {
     goesGlobal: boolean;
     pendingRemoval: boolean;
     respawnTimer: number = -1;
+    /** World cycle in which this item last aged in {@link process}. */
+    agedCycle: number = -1;
     oldAmount: number;
     privateArea: PrivateArea;
     /** A static world spawn: never despawns on its own and is visible to everyone.
      * Respawning after a pickup still comes from the respawn timer. */
     staticSpawn: boolean;
+    /** Ticks this stack lasts on the floor; null keeps {@link ItemOnGroundManager.DESPAWN_DELAY}. */
+    despawnDelay: number | null = null;
+    /** While set, the stack neither ages nor goes public (a mark of grace while its owner is logged out). */
+    agingPaused: boolean = false;
 
     constructor(state: State, owner: string | undefined, position: Location, item: Item, goesGlobal: boolean, respawnTimer: number, privateArea: PrivateArea, staticSpawn: boolean = false) {
         this.state = state;
@@ -37,6 +43,10 @@ export class ItemOnGround {
     }
 
     process() {
+        this.agedCycle = World.getProcessCycle();
+        if (this.agingPaused) {
+            return;
+        }
         this.incrementTick();
         switch (this.state) {
             case State.SEEN_BY_EVERYONE:
@@ -73,13 +83,21 @@ export class ItemOnGround {
                 // Item needs to be deleted after its full lifetime expires.
                 // However, there's no point in deleting items that will just respawn,
                 // nor static world spawns that persist until picked up.
-                if (this.getTick() >= ItemOnGroundManager.DESPAWN_DELAY && !this.respawns() && !this.staticSpawn) {
+                if (this.getTick() >= this.getDespawnDelay() && !this.respawns() && !this.staticSpawn) {
                     ItemOnGroundManager.deregister(this);
                 }
                 break;
             default:
                 break;
         }
+    }
+
+    public getAgedCycle(): number {
+        return this.agedCycle;
+    }
+
+    public getTiming() {
+        return ItemOnGroundManager.getTiming(this);
     }
 
     public getPosition(): Location {
@@ -132,6 +150,22 @@ export class ItemOnGround {
         return this.respawnTimer > 0;
     }
 
+    public getDespawnDelay(): number {
+        return this.despawnDelay ?? ItemOnGroundManager.DESPAWN_DELAY;
+    }
+
+    public setDespawnDelay(ticks: number): ItemOnGround {
+        this.despawnDelay = ticks;
+        return this;
+    }
+
+    public isAgingPaused(): boolean {
+        return this.agingPaused;
+    }
+    public setAgingPaused(paused: boolean): ItemOnGround {
+        this.agingPaused = paused;
+        return this;
+    }
     public isStaticSpawn(): boolean {
         return this.staticSpawn;
     }
@@ -156,7 +190,9 @@ export class ItemOnGround {
         this.pendingRemoval = pendingRemoval;
     }
     public clone(): ItemOnGround {
-        return new ItemOnGround(this.state, this.owner, this.getPosition(), this.item.clone(), this.goesGlobal, this.respawnTimer, this.privateArea, this.staticSpawn);
+        const copy = new ItemOnGround(this.state, this.owner, this.getPosition(), this.item.clone(), this.goesGlobal, this.respawnTimer, this.privateArea, this.staticSpawn);
+        copy.despawnDelay = this.despawnDelay;
+        return copy;
     }
 
     public equals(o: object): boolean {

@@ -51,13 +51,17 @@ const FLOATER_OVERLAY_UID = (161 << 16) | 18;
 const QUEST_POINTS_VARP = 101;
 const QUEST_COMPLETE_JINGLE = 238;
 const QUEST_POINTS_ATTRIBUTE = "quest.points";
+/** Keys of the quests completed with `experience: false`, whose later XP claims pay nothing. */
+const EXPERIENCE_WITHHELD_ATTRIBUTE = "quest.experience-withheld";
 
 // Client quest list statuses.
 const STATUS_IN_PROGRESS = 0;
 const STATUS_NOT_STARTED = 1;
 const STATUS_COMPLETE = 2;
 
+const { questListGroups } = require("./QuestList.QuestRuntime");
 const quests = [];
+const sentQuestSlots = new WeakMap();
 const openBooks = new WeakMap();
 const BOOK_GROUP = 392;
 const BOOK_CLOSE = (BOOK_GROUP << 16) | 7;
@@ -72,32 +76,6 @@ function stageAttribute(questKey) {
 
 function orderedQuests() {
   return quests.slice().sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/**
- * OSRS sorts the quest list alphabetically with a leading "The" ignored, and
- * renders a single-letter header ("A", "B", ...) before each group.
- */
-function questSortName(quest) {
-  return String(quest.name).replace(/^the\s+/i, "");
-}
-
-function questGroups() {
-  const sorted = quests
-    .slice()
-    .sort((a, b) => questSortName(a).localeCompare(questSortName(b)));
-  const groups = [];
-  for (const quest of sorted) {
-    const letter = questSortName(quest).charAt(0).toUpperCase();
-    const title = letter >= "A" && letter <= "Z" ? letter : "#";
-    const last = groups[groups.length - 1];
-    if (last && last.title === title) {
-      last.quests.push(quest);
-    } else {
-      groups.push({ title, quests: [quest] });
-    }
-  }
-  return groups;
 }
 
 // ============================================================================
@@ -115,14 +93,13 @@ function questRows(player) {
   const slotQuests = [];
   const ranges = [];
   let slot = 0;
-  for (const group of questGroups()) {
-    slotQuests[slot] = null; // header row
-    slot++;
+  for (const group of questListGroups(quests, player, coreApi?.CacheDefinitions, questStatus, coreApi?.Skill)) {
+    if (group.title) { slotQuests[slot] = null; slot++; }
     const start = slot;
-    const entries = group.quests.map((quest) => {
+    const entries = group.quests.map(({ quest, status }) => {
       const row = {
         slot,
-        status: questStatus(quest, player),
+        status,
         key: quest.key,
         displayName: quest.name,
       };
@@ -137,8 +114,11 @@ function questRows(player) {
 }
 
 function sendQuestList(player) {
-  const { groups, ranges } = questRows(player);
+  const { groups, ranges, slotQuests } = questRows(player);
+  const previous = sentQuestSlots.get(player);
+  sentQuestSlots.set(player, slotQuests);
   const packet = player.getPacketSender();
+  if (previous?.length) packet.sendInterfaceFlagsRange(QUEST_LIST_ENTRY_UID, 0, previous.length - 1, 0);
   packet.sendQuestList(groups);
   for (const [start, end] of ranges) {
     if (end >= start) {
@@ -162,9 +142,41 @@ function sendQuestHeaderStats(player) {
   packet.sendVarbit(QUESTS_TOTAL_VARBIT, list.length);
 }
 
+/**
+ * Players whose login hooks are running: player -> whether a refresh was asked for. Nearly
+ * every quest refreshes the list from its login hook, so a login rebuilt and sent the whole
+ * list about 140 times; it is sent once instead, after the login bootstrap.
+ */
+const loginQuestLists = new WeakMap();
+
 /** Sends the quest list and its row flags; call when the quest tab (re)mounts. */
 function refreshQuestList(player) {
+  if (loginQuestLists.has(player)) {
+    loginQuestLists.set(player, true);
+    return;
+  }
   sendQuestList(player);
+}
+
+/** Login started: hold quest list refreshes until the bootstrap completes. */
+function holdLoginQuestList({ player }) {
+  loginQuestLists.set(player, false);
+}
+
+/** Login bootstrap done: send the held quest list once, if anything asked for it. */
+function sendLoginQuestList({ player }) {
+  const requested = loginQuestLists.get(player);
+  loginQuestLists.delete(player);
+  if (requested) sendQuestList(player);
+}
+
+/** A login that ends before its bootstrap leaves no hold behind. */
+function releaseLoginQuestList({ player }) {
+  loginQuestLists.delete(player);
+}
+
+function refreshQuestRequirements({ player }) {
+  refreshQuestList(player);
 }
 
 /**
@@ -186,7 +198,7 @@ function journalLines(quest, player) {
 
 function openJournalBySlot(player, slot) {
   // Quest rows sit in the same slots questRows() sent, after each letter header.
-  const quest = questRows(player).slotQuests[slot | 0];
+  const quest = (sentQuestSlots.get(player) ?? questRows(player).slotQuests)[slot | 0];
   if (quest) openJournal(player, quest);
 }
 
@@ -234,7 +246,9 @@ function openCompletedScroll(player, quest, questPoints) {
   packet.sendInterfaceFlagsRange((COMPLETED_GROUP << 16) | COMPLETED_CLOSE_CHILD, -1, -1, 1 << 1);
   setText((COMPLETED_GROUP << 16) | COMPLETED_TITLE_CHILD, "Congratulations!");
   setText((COMPLETED_GROUP << 16) | COMPLETED_NAME_CHILD, `You have completed ${quest.name}!`);
-  const scrollItemId = quest.scrollItemId ?? quest.rewardItemId;
+  const scrollItemId = typeof quest.scrollItemId === "function"
+    ? quest.scrollItemId(player)
+    : quest.scrollItemId ?? quest.rewardItemId;
   if (scrollItemId !== undefined) {
     packet.sendItemOnInterfaces((COMPLETED_GROUP << 16) | COMPLETED_REWARD_ITEM_CHILD, scrollItemId, 1);
   }
@@ -286,22 +300,52 @@ function showCompletedScroll(player, quest, questPoints) {
 }
 
 /**
- * quest:is-complete / quest:is-started { player, key, complete | started }: answered for quests
- * registered here, by each quest's own stage values. An unknown key is left unanswered (null).
+ * quest:is-complete / quest:is-started { player, key | name, complete | started }: answered for
+ * quests registered here, by each quest's own stage values, looked up by key or (as the cache's
+ * music unlock hints name them) by name. An unknown quest is left unanswered (null).
  */
+function requestedQuest(request) {
+  if (request?.key !== undefined) return quests.find((entry) => entry.key === request.key);
+  return request?.name === undefined ? undefined : questNamed(request.name);
+}
+
 function answerIsComplete(request) {
-  const quest = quests.find((entry) => entry.key === request?.key);
+  const quest = requestedQuest(request);
   if (quest && request.player) request.complete = quest.isComplete(request.player);
 }
 
 function answerIsStarted(request) {
-  const quest = quests.find((entry) => entry.key === request?.key);
+  const quest = requestedQuest(request);
   if (quest && request.player) request.started = quest.isStarted(request.player);
 }
 
 function answerGetStage(request) {
-  const quest = quests.find((entry) => entry.key === request?.key);
+  const quest = requestedQuest(request);
   if (quest && request.player) request.stage = quest.getStage(request.player);
+}
+
+/** A shop version named after a quest: "Fremennik Isles", "After Lunar Diplomacy", "Before Contact!". */
+const QUEST_SHOP_VERSION = /\((?:(After|During|Before) )?([^()]+)\)$/;
+
+/** Case, a leading "The" and punctuation don't count: "Another Slice of H.A.M" is "Another Slice of H.A.M.". */
+function questNamed(name) {
+  const plain = (text) => String(text).toLowerCase().replace(/^the\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();
+  return quests.find((quest) => plain(quest.name) === plain(name));
+}
+
+function questShopVersionApplies(name, player) {
+  const match = QUEST_SHOP_VERSION.exec(name);
+  const quest = match && questNamed(match[2]);
+  if (!quest) return false;
+  if (match[1] === "Before") return !quest.isComplete(player);
+  if (match[1] === "During") return quest.isStarted(player) && !quest.isComplete(player);
+  return quest.isComplete(player);
+}
+
+/** npc-dialogue:shop: picks the version of a shop that the player's quest progress unlocks. */
+function pickQuestShopVersion(request) {
+  if (request.shop || !request.player) return;
+  request.shop = request.shops.find((name) => questShopVersionApplies(name, request.player)) ?? null;
 }
 
 function registerQuestWidgets(api) {
@@ -329,9 +373,15 @@ function registerQuestWidgets(api) {
   );
   // SideJournalDefaults asks for the list when it mounts the quest tab.
   api.onCustomEvent("quest:list-refresh", ({ player }) => refreshQuestList(player));
+  api.onPlayerLevelUp?.(refreshQuestRequirements);
   api.onCustomEvent("quest:is-complete", answerIsComplete);
   api.onCustomEvent("quest:is-started", answerIsStarted);
   api.onCustomEvent("quest:get-stage", answerGetStage);
+  api.onCustomEvent("npc-dialogue:shop", pickQuestShopVersion);
+  // Registered before the quests, so this runs before every quest's own login hook.
+  api.onPlayerLogin(holdLoginQuestList);
+  api.onCustomEvent("player:bootstrap-complete", sendLoginQuestList);
+  api.onPlayerLogout?.(releaseLoginQuestList);
   // The character summary shows the same header stats without opening the list.
   api.onPlayerLogin(({ player }) => sendQuestHeaderStats(player));
   api.onPlayerLogin(sendQuestVarps);
@@ -413,6 +463,7 @@ function sendQuestVarps({ player }) {
  * @param api  the plugin api
  * @param def  { key, name, varpId, varbitId, varbitValue, startedValue, completionValue, questPoints,
  *               xpRewards?, rewardItemId?, rewardItemLabel?, otherRewards?,
+ *               scrollItemId? (item id or function of player),
  *               buildJournal?(player, quest), onReward?(player, quest),
  *               varpValue?(stage, player) }
  */
@@ -421,6 +472,7 @@ function registerQuest(api, def) {
   registerQuestWidgets(api);
   api.persistAttribute(stageAttribute(def.key), 0);
   api.persistAttribute(QUEST_POINTS_ATTRIBUTE, 0);
+  api.persistAttribute(EXPERIENCE_WITHHELD_ATTRIBUTE, []);
 
   const stageKey = stageAttribute(def.key);
   const quest = {
@@ -455,23 +507,38 @@ function registerQuest(api, def) {
     isComplete(player) {
       return quest.getStage(player) >= (def.completionValue ?? 2);
     },
-    complete(player) {
+    /** Completed with `experience: false`: a post-quest XP claim (a trainer, a lamp reclaimed) pays nothing. Saved. */
+    experienceWithheld(player) {
+      const keys = player.getAttribute(EXPERIENCE_WITHHELD_ATTRIBUTE);
+      return Array.isArray(keys) && keys.includes(def.key);
+    },
+    /**
+     * `options` for a completion the quest wasn't played through (Shattered Relics' quest packs):
+     * `experience: false` asks onReward (its third argument) to hold back experience it would hand
+     * out later, such as a prompt a tick on, and is saved for the quest's post-quest claims
+     * (`experienceWithheld`); `scroll: false` skips the jingle and the scroll.
+     */
+    complete(player, options = {}) {
       if (quest.isComplete(player)) return false;
+      if (options.experience === false && !quest.experienceWithheld(player)) {
+        const keys = player.getAttribute(EXPERIENCE_WITHHELD_ATTRIBUTE);
+        player.setAttribute(EXPERIENCE_WITHHELD_ATTRIBUTE, [...(Array.isArray(keys) ? keys : []), def.key]);
+      }
       quest.setStage(player, def.completionValue ?? 2);
 
       const points = (Number(player.getAttribute(QUEST_POINTS_ATTRIBUTE)) || 0) + (def.questPoints || 0);
       player.setAttribute(QUEST_POINTS_ATTRIBUTE, points | 0);
       player.getPacketSender().sendConfig(QUEST_POINTS_VARP, points | 0);
 
-      if (def.onReward) def.onReward(player, quest);
+      if (def.onReward) def.onReward(player, quest, options);
       if (def.rewardItemId !== undefined) {
         const inventory = player.getInventory();
         if (inventory.isFull()) inventory.forceAdd(player, new coreApi.Item(def.rewardItemId, 1));
         else inventory.adds(def.rewardItemId, 1);
       }
-      player.getPacketSender().sendJingle(def.completionJingleId ?? QUEST_COMPLETE_JINGLE, 0);
+      if (options.scroll !== false) player.getPacketSender().sendJingle(def.completionJingleId ?? QUEST_COMPLETE_JINGLE, 0);
       player.sendMessage(`Congratulations, you've completed a quest: <col=081190>${def.name}</col>`);
-      showCompletedScroll(player, quest, points | 0);
+      if (options.scroll !== false) showCompletedScroll(player, quest, points | 0);
       api.emitCustomEvent?.("quest:completed", { player, key: def.key, quest });
       return true;
     },
@@ -594,9 +661,13 @@ module.exports = {
   openBook,
   QUEST_POINTS_VARP,
   QUEST_POINTS_ATTRIBUTE,
+  EXPERIENCE_WITHHELD_ATTRIBUTE,
   QUEST_COMPLETE_JINGLE,
+  registerQuestWidgets,
   registerQuest,
   getRegisteredQuests: () => quests.slice(),
+  questNamed,
+  pickQuestShopVersion,
   sendQuestVarps,
   refreshQuestList,
   openJournal,

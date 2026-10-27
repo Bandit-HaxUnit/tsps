@@ -50,24 +50,32 @@ export function getTitleBackgroundLayout(host: LoginRendererHost) {
     
 }
 
-export function getLogicalFirePositions(host: LoginRendererHost) {
+/**
+ * Where the classic 765x503 scene lies in the drawn title art: its middle 765 columns (from the
+ * top), (1089 - 765) / 2 = 162 in for the cache's titlewide art and the bundled image, none for
+ * title.jpg. What is painted on the art (the flames, the logo) goes through this, so it stays
+ * on the art and grows with it on large viewports.
+ */
+export function getTitleArtScene(host: LoginRendererHost) {
 
-        // Classic 765-scene fire edges (-22 and 765 - 128 + 22) in the title art, whose middle
-        // 765 columns (from the top) are the scene: (1089 - 765) / 2 = 162 in for the cache's
-        // titlewide art and the bundled image, none for title.jpg. Track those art-space values
-        // through the background's transform.
         const bg = getTitleBackgroundLayout(host);
         const artW = host.titleBackgroundImage?.width || LOGIN_LAYOUT.TITLE_BG_WIDTH;
         const cropX = Math.max(0, Math.floor((artW - host.SCENE_WIDTH) / 2));
-        const leftSrcX = cropX - 22;
-        const rightSrcX = cropX + host.SCENE_WIDTH - 128 + 22;
-        // Scale fire sprites with the background so bowl size matches the art.
-        const fireScale = bg.drawW / artW;
+        const scale = bg.drawW / artW;
+        return { x: bg.drawX + cropX * scale, y: bg.drawY, scale };
+
+}
+
+export function getLogicalFirePositions(host: LoginRendererHost) {
+
+        // Classic 765-scene fire edges (-22 and 765 - 128 + 22), scaled with the art so the
+        // bowl size matches it.
+        const scene = getTitleArtScene(host);
         return {
-            leftX: bg.drawX + (leftSrcX / artW) * bg.drawW,
-            rightX: bg.drawX + (rightSrcX / artW) * bg.drawW,
-            y: bg.drawY,
-            scale: fireScale,
+            leftX: scene.x - 22 * scene.scale,
+            rightX: scene.x + (host.SCENE_WIDTH - 128 + 22) * scene.scale,
+            y: scene.y,
+            scale: scene.scale,
         };
     
 }

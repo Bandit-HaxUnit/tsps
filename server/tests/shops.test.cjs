@@ -184,6 +184,20 @@ test("notes sell as the item they stand for", () => {
   assert.deepEqual(stockOf(), [[BRONZE_AXE, 2], [STEEL_AXE, 4]]);
 });
 
+test("invalid shop:sell-price responses preserve the default refund", (t) => {
+  let override;
+  t.mock.method(PluginManager, "emitCustomEvent", (name, request) => {
+    if (name === "shop:sell-price") request.price = override;
+  });
+  for (const price of [NaN, Infinity, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    override = price;
+    const player = openShop(0);
+    player.getInventory().add(new Item(STEEL_AXE, 1), false);
+    sell(player, 0);
+    assert.equal(player.getInventory().getAmount(COINS), Math.floor(200 * 0.85));
+  }
+});
+
 test("a sale whose payment wouldn't fit is refused, unless selling frees the slot", () => {
   const player = openShop(0);
   player.getInventory().add(new Item(STEEL_AXE_NOTE, 5), false);
@@ -225,4 +239,28 @@ test("the quantity buttons set what an item's left-click buys, and the choice is
     groupId: ShopManager.MAIN_INTERFACE_ID, childId: 16, buttonNum: 1, slot: 1, itemId: BRONZE_AXE,
   });
   assert.equal(player.getInventory().getAmount(BRONZE_AXE), 2, "buys up to 5, capped at the 2 in stock");
+});
+
+test("a currency with a unit uses OSRS's wording: costs, buy-back and too few", () => {
+  const STICKS = 6306;
+  DEFINITIONS[STICKS] = { name: "Trading sticks", stackable: true, value: 1 };
+  ShopManager.registerItemCurrency(STICKS, { name: "Trading sticks", unit: "trade sticks" });
+  ShopDefinition.replace([
+    new ShopDefinition(902, "Stick shop", "TRADING STICKS", [
+      { id: STEEL_AXE, amount: 5, restockTicks: null, price: null },
+    ], 100, 100, 100, "test"),
+  ]);
+  ShopManager.initialize();
+  const player = createPlayer();
+  player.getInventory().add(new Item(STICKS, 100), false);
+  player.getInventory().add(new Item(STEEL_AXE, 1), false);
+  ShopManager.open(player, 902);
+  ShopManager.handleItemContainerAction(player, { kind: "value", containerId: ShopManager.ITEMS_INTERFACE_ID, slot: 0, itemId: STEEL_AXE, amount: 0 });
+  ShopManager.handleItemContainerAction(player, { kind: "value", containerId: ShopManager.INVENTORY_INTERFACE_ID, slot: 1, itemId: STEEL_AXE, amount: 0 });
+  buy(player, 0, STEEL_AXE);
+  assert.deepEqual(player.messages, [
+    "Steel axe: currently costs 200 trade sticks.",
+    "Steel axe: shop will buy for 170 trade sticks.",
+    "You don't have enough trade sticks.",
+  ]);
 });

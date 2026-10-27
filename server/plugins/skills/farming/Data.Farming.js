@@ -95,6 +95,34 @@ const CROPS = new Map();
 const SEEDS = new Map();
 const WATERED_SEEDLINGS = new Map();
 const ITEMS = new Map();
+// Published protective families, not a name/armour-stat heuristic. Matching cache variants
+// (for example Graceful recolours) are resolved below; decorative gloves are not implied safe.
+// https://oldschool.runescape.wiki/w/Belladonna#Gloves
+const BELLADONNA_HANDWEAR_NAMES = new Set([
+    "Grey gloves", "Purple gloves", "Red gloves", "Teal gloves", "Yellow gloves",
+    "Hardleather gloves", "Bronze gloves", "Iron gloves", "Steel gloves", "Black gloves",
+    "Mithril gloves", "Adamant gloves", "Rune gloves", "Dragon gloves", "Barrows gloves",
+    "Steel gauntlets", "Chaos gauntlets", "Cooking gauntlets", "Goldsmith gauntlets",
+    "Fremennik gloves", "Rock-shell gloves", "Skeletal gloves", "Spined gloves",
+    "Karamja gloves 1", "Karamja gloves 2", "Karamja gloves 3", "Karamja gloves 4",
+    "Moonclan gloves", "Ghostly gloves", "Mystic gloves", "Mystic gloves (dark)",
+    "Mystic gloves (dusk)", "Mystic gloves (light)", "Mystic gloves (or)", "Gloves of darkness",
+    "Splitbark gauntlets", "Infinity gloves", "Swampbark gauntlets", "Bloodbark gauntlets", "Lunar gloves",
+    "Shayzien gloves (1)", "Shayzien gloves (2)", "Shayzien gloves (3)", "Shayzien gloves (4)", "Shayzien gloves (5)",
+    "Expert mining gloves", "Gloves of silence", "Graceful gloves", "Mining gloves", "Rogue gloves",
+    "Slayer gloves", "Smiths gloves", "Superior mining gloves",
+    "Leather vambraces", "Group ironman bracers", "Group ironman bracers (unranked)",
+    "Hardcore group ironman bracers", "Spiky vambraces", "Snakeskin vambraces",
+    "Green d'hide vambraces", "Green spiky vambraces", "Blue d'hide vambraces", "Blue spiky vambraces",
+    "Gilded d'hide vambraces", "Red d'hide vambraces", "Red spiky vambraces", "3rd age vambraces",
+    "Black d'hide vambraces", "Black spiky vambraces", "Ancient bracers", "Armadyl bracers", "Bandos bracers",
+    "Guthix bracers", "Saradomin bracers", "Zamorak bracers", "Hueycoatl hide vambraces", "Zaryte vambraces",
+    "Clue hunter gloves", "Crab claw", "Crabclaw hook", "Dragonstone gauntlets", "Ferocious gloves",
+    "Granite gloves", "Ham gloves", "Ice gloves", "Klank's gauntlets", "Leather gloves", "Mourner gloves",
+    "Mummy's hands", "Ornate gloves", "Penance gloves", "Pirate's hook", "Ranger gloves", "Regen bracelet",
+    "Samurai gloves", "Twitcher's gloves", "Void knight gloves", "Void knight gloves (or)", "White gloves",
+].map(name => name.toLowerCase()));
+const BELLADONNA_HANDWEAR = new Set();
 function itemId(name) {
     if (!name) return -1;
     const id = ITEMS.get(name.toLowerCase());
@@ -106,6 +134,7 @@ function initializeFarmingData() {
     for (let id = 0; id < core.CacheDefinitions.getCounts().items; id++) {
         const item = core.CacheDefinitions.getItem(id);
         if (item.noteTemplate >= 0 || item.placeholderTemplate >= 0 || !item.name || item.name === "null") continue;
+        if (item.wearPos === core.Equipment.HANDS_SLOT && BELLADONNA_HANDWEAR_NAMES.has(item.name.toLowerCase())) BELLADONNA_HANDWEAR.add(id);
         if (!ITEMS.has(item.name.toLowerCase())) ITEMS.set(item.name.toLowerCase(), id);
     }
     for (const [key, seed, produce, level, plant, harvest, check = 0, payment = [], seedCount = 1] of ROWS) {
@@ -135,7 +164,7 @@ const PET_RATES = {
     HERB: 98364, CORAL: 98364, FLOWER: 281040, ALLOTMENT: 281040, FRUIT_TREE: 9000, HARDWOOD_TREE: 5000,
     SWEETCORN: 224832, STRAWBERRY: 187360, WATERMELON: 160594, SNAPE_GRASS: 173977,
     BARLEY: 112416, HAMMERSTONE: 112416, ASGARNIAN: 89933, JUTE: 89933, YANILLIAN: 74944,
-    FLAX: 89933, KRANDORIAN: 64238, WILDBLOOD: 56208, HEMP: 64238, COTTON: 56208,
+    FLAX: 89933, KRANDORIAN: 64238, WILDBLOOD: 56208, HEMP: 56208, COTTON: 56208,
     REDBERRIES: 44966, CADAVABERRIES: 37472, DWELLBERRIES: 32119, JANGERBERRIES: 28104, WHITEBERRIES: 28104, POISON_IVY: 28104,
     OAK: 22483, WILLOW: 16059, MAPLE: 14052, YEW: 11242, MAGIC: 9368,
     SEAWEED: 7500, MUSHROOM: 7500, BELLADONNA: 8000, CACTUS: 7000, POTATO_CACTUS: 160594,
@@ -143,4 +172,4 @@ const PET_RATES = {
 };
 const petRate = (crop) => PET_RATES[crop.key] ?? PET_RATES[crop.type];
 
-Object.assign(module.exports, { CACHE, CROPS, SEEDS, WATERED_SEEDLINGS, itemId, initializeFarmingData, patchKey, WATERABLE, COMPOSTABLE_YIELD, WOOD_TREES, petRate });
+Object.assign(module.exports, { CACHE, CROPS, SEEDS, WATERED_SEEDLINGS, BELLADONNA_HANDWEAR, itemId, initializeFarmingData, patchKey, WATERABLE, COMPOSTABLE_YIELD, WOOD_TREES, petRate });

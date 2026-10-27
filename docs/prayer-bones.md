@@ -12,11 +12,38 @@
 | `crush: false` | the bonecrusher leaves it (tertiary drops: long and curved bones) | Wiki, Bonecrusher |
 | `level` | Prayer needed to bury or worship with it (superior dragon bones, 70) | Wiki |
 
-The `bonemeal` list holds the worship experience per pot (four times the bones'). tsps experience is
-whole, so tenths round up, as the old table did (bones 4.5 → 5, bat bones 5.3 → 6).
+The `bonemeal` list holds the worship experience per pot (four times the bones'). Burial and
+bonecrusher rewards pass fractional XP to SkillManager, which stores tenths and sends whole totals
+to the client. Bones give 4.5 XP when buried; hard-diary crushing gives 2.2 XP per bone, and big
+bones give 7.5 XP. Elite-diary crushing gives the full burial reward.
 
 The core's `ArceuusOfferings.BONE_XP` (Sinister Offering, Construction altars) is separate and
 unchanged.
+
+Burying sends "You dig a hole in the ground..." and "You bury the bones." for every bone, never the
+bone's name. Live OSRS answers the Bury click on its own tick with the dig message, the bone's
+removal, the Prayer experience, the sequence (827, `human_pickupfloor`) and synth 2738, then sends
+"You bury the bones." on the next tick (rsprox captures, for example recordings 901, 3455 and 3461,
+revision 235; the transcripts hold no variant naming a bone). tsps does the same, so walking away
+after the click does not give the bone back.
+
+### Sequential burial (opt-in)
+
+By default **Bury** buries one bone per click, as OSRS. A custom world can let one click continue
+through the inventory with the `pluginConfig` key `Prayer:sequentialBurying`, in `world.json`
+or layered over it from the gitignored `world.local.json`:
+
+```json
+{ "pluginConfig": { "Prayer:sequentialBurying": true } }
+```
+
+With it on, **Bury** starts with the clicked bone, then continues through eligible unnoted bones in
+inventory slot order, including mixed types. Each bone resolves after two game ticks; consumption
+and experience happen together. Nonbones, members-only bones on a free world, and bones above the
+player's Prayer level are left alone. Movement, another item action, logout/death or an enabled
+level-up popup stops the sequence without consuming its unresolved bone. The flag does not change
+ash scattering, bonecrusher rewards or altar offerings. Anything but the boolean `true` leaves the
+default.
 
 ## Demonic ashes
 
@@ -71,7 +98,8 @@ No capture shows the effect, so it follows the Wiki.
 
 ## Bonecrusher
 
-`server/plugins/items/Bonecrusher.plugin.js`. The ghost disciples hand it over after the hard
+`server/plugins/items/Bonecrusher.plugin.js` attaches the charge and crushing units in
+`server/plugins/items/bonecrusher/`. The ghost disciples hand it over after the hard
 Morytania diary ([ectofuntus.md](ectofuntus.md)). In the inventory, with charges and active, it
 crushes the bones a kill drops on `npc-drops:generated`, one charge each, for half their burying
 experience. With the elite Morytania diary it gives all of it.
@@ -98,9 +126,58 @@ Charges are saved in `bonecrusher:charges`, up to 2,147,483,647 (the cache's
 ## Not built
 
 - The bonecrusher necklace (bonecrusher + dragonbone necklace + hydra tail).
-- Destroying the bonecrusher (the Wiki says its tokens fall out).
 - Bones placed in the inventory by Hunter creatures (the Wiki says the bonecrusher takes them).
 - The Zealot's robes' chance to save bones and bonemeal (only the Chaos Temple altar has it;
   docs/bone-altars.md).
 - The message for burying superior dragon bones below 70 Prayer is ours: "You need a Prayer level
   of 70 to bury these bones."
+
+## Charge lifecycle and fractional XP parity
+
+Checked against [Bonecrusher](https://oldschool.runescape.wiki/w/Bonecrusher),
+[Configure-Charges](https://oldschool.runescape.wiki/w/Configure-Charges),
+[Remains](https://oldschool.runescape.wiki/w/Remains) and
+[Burnt bones](https://oldschool.runescape.wiki/w/Burnt_bones) on 27 October 2026.
+
+- Confirmed destruction drops one ecto-token per 25 stored charges under the player and
+  clears all charges, including a remainder under 25. Cancelling the confirmation preserves
+  the item and its charges. Previously destruction had no charge cleanup or refund handler,
+  so a replacement inherited the old charges.
+- Manual charging now permits the last token to reach the 2,147,483,647-charge cap. Previously
+  the whole-token capacity calculation stopped at 2,147,483,625. The last token adds only the
+  remaining room; charging an already-full crusher spends nothing.
+- The bank's existing Configure-Charges option now records a withdrawal target. It does not
+  withdraw or charge the item immediately. Withdrawal adds charges using banked ecto-tokens,
+  bounded by available supplies and the cap; zero disables the setting. Tokens add 25 charges
+  each, so a target between token boundaries rounds up to the next token. Pending prompts
+  reject moved items and closed banks. Prompt wording and token-boundary rounding have no
+  capture comparison; the Wiki establishes automatic top-up and the conversion rate.
+- The shared bone-award function no longer rounds rewards up to whole XP. SkillManager has
+  retained tenths since the fractional-XP change, while this plugin still used its older whole-XP
+  assumption. This corrects crushing and ordinary burial through the same award path, without
+  changing burial timing, Prayer restoration or diary scaling.
+
+Recording 1857 (Leagues V, revision 227) was rechecked for charging and Activity. Charging
+consumes all supplied tokens and sends sound 1413 and the charge-status message on the action
+tick; Activity sends the existing on/off messages with sounds 975/974. These responses are
+preserved. No captured Destroy, Uncharge or Configure-Charges action was available in the
+indexed bonecrusher actions; the changes to those branches follow the Wiki.
+
+Regressions exercise real inventory/bank containers and the real fractional-XP storage, plus
+existing burial and bone-drop hooks. They cover refunds/remainders, unrelated destruction,
+charge cap, bank top-up supplies/disable, stale prompts, fractional rewards, diary scaling,
+excluded bones, restoration and burial cancellation.
+
+In-game checks used supplied ordinary items and combat levels. Destroying 75 charges dropped
+three tokens; a replacement was empty. Charging reached 2,147,483,625 then the exact cap with
+one final token. Configuring a banked crusher to 50 spent no tokens until withdrawal, which
+used two of four banked tokens and reported 50 charges. An ordinary cow kill consumed one
+charge, removed its bone drop and advanced displayed Prayer XP from 0 to 2; two subsequent
+burials advanced it to 6 then 11. Cancelling destruction preserved 49 charges; confirming it
+then dropped one token, discarded the remainder and left a replacement empty. After logout/login,
+the saved 50-charge withdrawal setting still used the remaining two banked tokens; Uncharge
+returned two tokens and left zero charges, and Activity retained both captured toggle messages.
+
+Hunter bone integration is deferred because the relevant Hunter modules are changed by open
+PRs #1362 and #1373. Necklace assembly is a separate item-combination mechanic. Ectofuntus
+worship's independent rounding is outside this charge/burial path.

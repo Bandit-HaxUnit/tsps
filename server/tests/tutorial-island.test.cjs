@@ -49,11 +49,12 @@ function tutorialPlayer(progress, x = 3102, y = 3095) {
   const player = new Player(null);
   player.setUsername("tutorial");
   player.setLocation(new core.Location(x, y, 0));
-  const sent = { messages: [], varps: new Map(), scripts: [] };
+  const sent = { messages: [], varps: new Map(), varbits: new Map(), scripts: [] };
   const sender = new Proxy({}, {
     get: (_, key) => (...args) => {
       if (key === "sendMessage") sent.messages.push(args[0]);
       if (key === "sendConfig") sent.varps.set(args[0], args[1]);
+      if (key === "sendVarbit") sent.varbits.set(args[0], args[1]);
       if (key === "sendClientScript") sent.scripts.push(args);
       return sender;
     },
@@ -290,6 +291,15 @@ test("a new account skips the welcome screen, designs its character, then gets t
   ticks(1);
   assert.equal(interfaceId, 929);
   assert.ok(sent.scripts.some(([id, text]) => id === 1974 && String(text).includes("Past Experience")));
+});
+
+test("a newly built chatbox doesn't show the login messages over the step text", () => {
+  const ALLOW_MES_OVERLAP = 10690;
+  const { player, sent } = tutorialPlayer(30);
+  PluginManager.emitPlayerProcess({ player }); // the UI goes up on a new gameframe
+  assert.equal(sent.varbits.get(ALLOW_MES_OVERLAP), 0, "not while the chatbox loads");
+  ticks(1);
+  assert.equal(sent.varbits.get(ALLOW_MES_OVERLAP), 1, "messages show over the step from the next tick");
 });
 
 test("an existing player still gets the welcome screen", async () => {

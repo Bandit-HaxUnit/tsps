@@ -151,6 +151,16 @@ test("an Ultimate Ironman can't bank and keeps nothing on death; a standard Iron
   assert.equal(im.allow, null);
 });
 
+test('only Ultimate Ironmen are refused item-set packing', () => {
+  for (const mode of [null, 'ironman', 'hardcore', 'ultimate']) {
+    const p = account('set-trader', mode);
+    const request = { player: p, allow: true };
+    custom['item-sets:can-pack'](request);
+    assert.equal(request.allow, mode !== 'ultimate');
+    assert.deepEqual(p.messages, mode === 'ultimate' ? ['Ultimate Ironmen cannot pack item sets.'] : []);
+  }
+});
+
 test("a Hardcore Ironman's dangerous death makes them a standard Ironman; a safe death doesn't", () => {
   const safe = account("safe", "hardcore");
   hooks.onPlayerDeath({ player: safe, killer: null, itemsLost: false, handled: false });
@@ -221,4 +231,60 @@ test("no presets for an Ironman (they hand out items); normal accounts keep them
   const main = { player: account("main"), allow: true, message: null };
   custom["presets:can-use"](main);
   assert.equal(main.allow, true);
+});
+
+for (const source of ["pickup", "telegrab"]) {
+  for (const mode of ["ironman", "ultimate", "hardcore"]) {
+    test(`real ${source} cannot bypass ${mode} ground-item ownership`, t => {
+      const player = account("GroundIron", mode), manager = core.ItemOnGroundManager;
+      const {State} = require("../dist/game/entity/impl/grounditem/ItemOnGround");
+      const {MagicOnItemPacketListener} = require("../dist/net/packet/impl/MagicOnItemPacketListener");
+      const listener = new MagicOnItemPacketListener();
+      player.setLocation(new core.Location(3222, 3218));
+      t.mock.method(player, "isRegistered", () => true);
+      t.mock.method(PluginManager, "emitCustomEvent", (name, event) => custom[name]?.(event));
+      t.mock.method(PluginManager, "emitGroundItemPickup", event => {
+        hooks.onGroundItemPickup(event); return event.handled;
+      });
+      const items = core.World.getItems(), previous = items.splice(0);
+      t.after(() => items.splice(0, items.length, ...previous));
+      const take = pile => source === "pickup" ? manager.pickup(player, pile)
+        : listener.landGroundItemGrab(player, pile.getItem().getId(), pile.getPosition());
+      const pile = manager.registers(player, new core.Item(995, 5));
+      pile.owner = "OtherPlayer"; pile.setState(State.SEEN_BY_EVERYONE);
+      take(pile);
+      assert.equal(player.getInventory().getAmount(995), 0); assert.equal(pile.isPendingRemoval(), false);
+      assert.deepEqual(player.messages, ["You're an Ironman, so you can't take items that other players have dropped."]);
+      pile.owner = player.getUsername(); take(pile);
+      assert.equal(player.getInventory().getAmount(995), 5, "own items remain available");
+      const spawn = manager.registers(player, new core.Item(995, 7));
+      spawn.owner = null; spawn.setState(State.SEEN_BY_EVERYONE); spawn.staticSpawn = true;
+      take(spawn);
+      assert.equal(player.getInventory().getAmount(995), 12, "unowned world spawns remain available");
+    });
+  }
+}
+
+test("Ironman Telegrab refuses other-owned loot before spending runes or scheduling a projectile", t => {
+  const player = account("CastingIron", "ironman"), manager = core.ItemOnGroundManager;
+  const {State} = require("../dist/game/entity/impl/grounditem/ItemOnGround");
+  const {MagicOnItemPacketListener} = require("../dist/net/packet/impl/MagicOnItemPacketListener");
+  const {TaskManager} = require("../dist/game/task/TaskManager");
+  const listener = new MagicOnItemPacketListener(); let spent = 0, scheduled = 0;
+  player.setLocation(new core.Location(3222, 3218));
+  t.mock.method(player, "getClickDelay", () => ({elapsedTime: () => true}));
+  t.mock.method(player.getSkillManager(), "getCurrentLevel", () => 99);
+  t.mock.method(listener, "runeCosts", () => []);
+  t.mock.method(listener, "hasRunes", () => true);
+  t.mock.method(listener, "consumeRunes", () => { spent++; });
+  t.mock.method(TaskManager, "submit", () => { scheduled++; });
+  t.mock.method(PluginManager, "emitCustomEvent", (name, event) => custom[name]?.(event));
+  const items = core.World.getItems(), previous = items.splice(0);
+  t.after(() => items.splice(0, items.length, ...previous));
+  const pile = manager.registers(player, new core.Item(995, 5));
+  pile.owner = "OtherPlayer"; pile.setState(State.SEEN_BY_EVERYONE);
+  listener.castGroundItem(player, 995, 3222, 3218, 1168);
+  assert.deepEqual(player.messages, ["You're an Ironman, so you can't take items that other players have dropped."]);
+  assert.equal(spent, 0); assert.equal(scheduled, 0);
+  assert.equal(pile.isPendingRemoval(), false); assert.equal(player.getInventory().getAmount(995), 0);
 });

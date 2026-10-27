@@ -8,6 +8,7 @@ const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
 const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
 const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const { Equipment } = require("../../src/main/typescript/elvarg/game/model/container/impl/Equipment");
+const { pauseForLevelUp } = require("./SkillActions");
 
 const FIRE_COOK_ANIMATION = new Animation(896);
 const RANGE_COOK_ANIMATION = new Animation(897);
@@ -126,8 +127,22 @@ function wearingCookingCape(player) {
   return request.result === true;
 }
 
+/** The Cooking level the skill checks: the current level, raised by content ("skills:level-boost", a league relic's invisible +12). */
+function cookingLevelOf(player) {
+  const request = { player, skill: Skill.COOKING, boost: 0 };
+  pluginApi?.emitCustomEvent("skills:level-boost", request);
+  return player.getSkillManager().getCurrentLevel(Skill.COOKING) + Math.max(0, request.boost | 0);
+}
+
+/** How many items one cooking cycle cooks ("skills:actions-per-cycle", a league relic's all at once); 1 unless content says more. */
+function actionsPerCycle(player) {
+  const request = { player, skill: Skill.COOKING, kind: "cook", actions: 1 };
+  pluginApi?.emitCustomEvent("skills:actions-per-cycle", request);
+  return Math.max(1, request.actions | 0);
+}
+
 function isSuccess(player, cookable, objectId) {
-  const cookingLevel = player.getSkillManager().getCurrentLevel(Skill.COOKING);
+  const cookingLevel = cookingLevelOf(player);
   if (wearingCookingCape(player)) {
     return true;
   }
@@ -166,7 +181,7 @@ function startCooking(player, object, cookable, activeSessions) {
       return false;
     }
   }
-  if (player.getSkillManager().getCurrentLevel(Skill.COOKING) < cookable.level) {
+  if (cookingLevelOf(player) < cookable.level) {
     player.sendMessage(`You need a Cooking level of at least ${cookable.level} to cook this.`);
     return false;
   }
@@ -208,6 +223,7 @@ class CookingTask extends Task {
         stopCooking(this.activeSessions, player);
         continue;
       }
+      if (session.levelUpPaused) continue;
 
       if (!player.getInventory().contains(session.cookable.raw)) {
         stopCooking(this.activeSessions, player);
@@ -236,6 +252,9 @@ class CookingTask extends Task {
       Sounds.sendSound(player, Sound.COOKING_COOK);
       player.performAnimation(session.animation);
 
+      // Content may cook several in the one cycle ("skills:actions-per-cycle", a league relic's all at once).
+      const actions = actionsPerCycle(player);
+      for (let done = 0; done < actions && player.getInventory().contains(session.cookable.raw); done++) {
       const cookable = cookedResult(player, session.cookable);
       player.getInventory().deleteNumber(session.cookable.raw, 1);
       const burnRequest = {
@@ -253,23 +272,15 @@ class CookingTask extends Task {
           skill: Skill.COOKING,
           itemId: cookable.cooked,
         });
-        const levelBefore = player
-          .getSkillManager()
-          .getMaxLevel(Skill.COOKING);
         player.getSkillManager().addExperiences(Skill.COOKING, cookable.xp);
-        const levelAfter = player
-          .getSkillManager()
-          .getMaxLevel(Skill.COOKING);
-        if (levelAfter > levelBefore) {
-          stopCooking(this.activeSessions, player);
-          continue;
-        }
+        pluginApi.emitCustomEvent("skills:produced", { player, skill: Skill.COOKING, itemId: cookable.cooked, amount: 1, xp: cookable.xp, kind: "cook" });
       } else {
         player.getInventory().addItem(new Item(session.cookable.burnt, 1));
         const rawName =
           ItemDefinition.forId(session.cookable.raw)?.getName?.()?.toLowerCase?.() ||
           session.cookable.name;
         player.sendMessage(`You burn the ${rawName}.`);
+      }
       }
     }
   }
@@ -326,12 +337,25 @@ function handleRangeCook(activeSessions, event) {
   );
 }
 
+/** "cooking:cooked": what request.rawId cooks into and the XP, for content that cooks as it gathers (a league relic). */
+function answerCooked(request) {
+  const cookable = COOKABLE_BY_RAW.get(request.rawId);
+  if (cookable) {
+    request.cookedId = cookable.cooked;
+    request.xp = cookable.xp;
+  }
+}
+
 /** "cooking:raw-xp": the Cooking XP for cooking request.rawId, e.g. for the infernal harpoon. */
 function answerRawXp(request) {
   const cookable = COOKABLE_BY_RAW.get(request.rawId);
   if (cookable) {
     request.xp = cookable.xp;
   }
+}
+
+function pauseCooking(event) {
+  pauseForLevelUp(event, activeSessionsRef, (player) => stopCooking(activeSessionsRef, player, false));
 }
 
 module.exports = {
@@ -346,9 +370,7 @@ module.exports = {
     api.onPlayerDisconnect(({ player }) => {
       stopCooking(activeSessions, player, false);
     });
-    api.onCustomEvent("level-up:popup-opened", ({ player }) => {
-      stopCooking(activeSessions, player, false);
-    });
+    api.onCustomEvent("level-up:popup-opened", pauseCooking);
 
     api.onItemOnObject(handleCook.bind(null, activeSessions), { noted: false });
     api.onObjectInteraction("Range", { Cook: handleRangeCook.bind(null, activeSessions) });
@@ -356,6 +378,7 @@ module.exports = {
     api.onObjectInteraction("Stove", { Cook: handleRangeCook.bind(null, activeSessions) });
     api.onObjectInteraction("Fancy range", { Cook: handleRangeCook.bind(null, activeSessions) });
     api.onCustomEvent("cooking:raw-xp", answerRawXp);
+    api.onCustomEvent("cooking:cooked", answerCooked);
 
     api.log("registered", {
       cookables: COOKABLES.length,

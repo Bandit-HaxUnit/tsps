@@ -1,3 +1,4 @@
+import { ItemAliases } from "../../model/ItemAliases";
 import { Sound } from "../../Sound";
 import { Sounds } from "../../Sounds";
 import { PrayerHandler } from "../PrayerHandler";
@@ -98,6 +99,7 @@ const isDeveloperQueuedAttackSpec = (entity: Mobile): entity is Player => {
 export class CombatFactory {
     private static readonly RANDOM = new RandomGen();
     public static readonly RECOIL_DAMAGE_ATTRIBUTE = "ring-of-recoil:damage";
+    public static readonly RECOIL_IMMUNE_ATTRIBUTE = "combat:recoil-immune";
     public static readonly CRYSTAL_BOW_SHOTS_ATTRIBUTE = "crystal-bow:shots-in-stage";
     public static readonly CRYSTAL_BOW_ITEM_ATTRIBUTE = "crystal-bow:tracked-item";
     /**
@@ -170,36 +172,40 @@ export class CombatFactory {
         return CombatFactory.MELEE_COMBAT;
     }
 
-    static getHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds) {
-        const specialTraits = CombatSpecial.activeTraitsFor(entity);
+    static getHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true) {
+        return CombatFactory.applyIncomingHitDamage(entity, victim, type,
+            CombatFactory.rollHitDamage(entity, victim, type, bypassProtectionPrayer, boundsOverride, applySpecialTraits));
+    }
+
+    /** Rolls damage and protection prayers without spending or reacting with defensive equipment. */
+    public static rollHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true): HitDamage {
+        const specialTraits = applySpecialTraits ? CombatSpecial.activeTraitsFor(entity) : null;
         if (specialTraits?.ignoreProtectionPrayer) {
             bypassProtectionPrayer = true;
         }
         const prayerType = resolveSpecialAttackType(specialTraits?.damageType) ?? type;
-        let damage = 0;
+        let maxHit = 0;
+        let minimumFloor = 0;
         if (type == CombatType.MELEE) {
-            damage = CombatFactory.rollSpecialDamage(entity, DamageFormulas.sourceMaxHit(entity, CombatType.MELEE), boundsOverride);
+            maxHit = DamageFormulas.sourceMaxHit(entity, CombatType.MELEE);
         } else if (type == CombatType.RANGED) {
-            let maxHit = DamageFormulas.sourceMaxHit(entity, CombatType.RANGED);
-            maxHit = PluginManager.modifyRangedMaxHit(entity, victim, maxHit);
-            damage = CombatFactory.rollSpecialDamage(entity, maxHit, boundsOverride);
-
-            // Do ranged effects with the calculated damage..
-            if (entity.isPlayer()) {
-
-                let player = entity.getAsPlayer();
-
-                const profile = WeaponProfiles.get(player);
-                const damageRange = player.isSpecialActivated() && getPlayerCombatSpecial(player)
-                    ? profile?.specialDamage
-                    : undefined;
-                if (damageRange) {
-                    damage = Math.max(damageRange.minimum, Math.min(damageRange.maximum, damage));
-                }
-            }
+            maxHit = PluginManager.modifyRangedMaxHit(entity, victim, DamageFormulas.sourceMaxHit(entity, CombatType.RANGED));
         } else if (type == CombatType.MAGIC) {
-            damage = CombatFactory.rollSpecialDamage(entity, DamageFormulas.sourceMaxHit(entity, CombatType.MAGIC), boundsOverride);
+            const bounds = DamageFormulas.sourceHitBounds(entity, CombatType.MAGIC, victim);
+            maxHit = bounds.maximum;
+            minimumFloor = bounds.minimum;
         }
+        const rolls = type == CombatType.MELEE || type == CombatType.RANGED || type == CombatType.MAGIC;
+        const range = rolls
+            ? CombatFactory.specialDamageRange(entity, maxHit, boundsOverride, applySpecialTraits, minimumFloor)
+            : { minimum: 0, maximum: 0 };
+        let damage = rolls ? CombatFactory.rollSpecialDamage(entity, maxHit, boundsOverride, applySpecialTraits, minimumFloor) : 0;
+
+        // The roll itself, before any defence (protection prayers, shields, incoming-damage
+        // modifiers) reduces it: plugins may change `damage` against the roll's own range.
+        const rolled = { attacker: entity, target: victim, combatType: type, damage, minimum: range.minimum, maximum: range.maximum };
+        PluginManager.emitCustomEvent("combat:hit-rolled", rolled);
+        if (rolled.damage !== damage && Number.isFinite(rolled.damage)) damage = Math.max(0, Math.floor(rolled.damage));
 
         // Wiki (Ward of Arceuus): demons hit 10% less, that 10% rounded down first.
         if (entity.isNpc() && victim.isPlayer() && ArceuusSpells.hasWard(victim)) {
@@ -229,9 +235,14 @@ export class CombatFactory {
                 }
             }
         }
+        return hitDamage;
+    }
+
+    /** Reacts once to the selected damage roll, before any per-hit multiplier and HP cap. */
+    public static applyIncomingHitDamage(entity: Mobile, victim: Mobile, type: CombatType, hitDamage: HitDamage): HitDamage {
         // The Elysian spirit shield cuts damage by 25% 70% of the time (Wiki).
         if (victim.isPlayer() && Math.random() < CombatConstants.ELYSIAN_ACTIVATION_CHANCE) {
-            if (victim.getAsPlayer().getEquipment().getItems()[Equipment.SHIELD_SLOT].getId() == 12817) {
+            if (victim.getAsPlayer().getEquipment().getItems()[Equipment.SHIELD_SLOT].getId() == ItemIdentifiers.ELYSIAN_SPIRIT_SHIELD) {
                 hitDamage.multiplyDamage(CombatConstants.ELYSIAN_DAMAGE_REDUCTION);
                 victim.performGraphic(new Graphic(321, 40)); // Elysian spirit shield effect gfx
             }
@@ -288,15 +299,21 @@ export class CombatFactory {
         hit.updateTotalDamage();
     }
 
+    /** Rolls one hit's damage from its range (specialDamageRange). */
+    private static rollSpecialDamage(entity: Mobile, maxHit: number, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true, minimumFloor = 0): number {
+        const range = CombatFactory.specialDamageRange(entity, maxHit, boundsOverride, applySpecialTraits, minimumFloor);
+        return Misc.randomInclusive(range.minimum, range.maximum);
+    }
+
     /**
-     * Rolls one hit's damage. With no active special traits this is the ordinary
+     * The range one hit's damage is rolled from. With no active special traits this is the ordinary
      * 0..maxHit roll; with traits it honours per-hit min/max multipliers, flat
      * bonuses and a maximum cap.
      */
-    private static rollSpecialDamage(entity: Mobile, maxHit: number, boundsOverride?: SpecialDamageBounds): number {
-        const traits = CombatSpecial.activeTraitsFor(entity);
+    private static specialDamageRange(entity: Mobile, maxHit: number, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true, minimumFloor = 0): { minimum: number; maximum: number } {
+        const traits = applySpecialTraits ? CombatSpecial.activeTraitsFor(entity) : null;
         if (!traits && !boundsOverride) {
-            return Misc.randomInclusive(0, maxHit);
+            return { minimum: Math.min(maxHit, Math.max(0, minimumFloor)), maximum: maxHit };
         }
         let minimum = Math.floor(
             maxHit * (boundsOverride?.minimumMultiplier ?? traits?.minimumDamageMultiplier ?? 0)
@@ -321,7 +338,8 @@ export class CombatFactory {
             minimum = maximum;
             maximum = swap;
         }
-        return Misc.randomInclusive(Math.max(0, minimum), Math.max(0, maximum));
+        minimum = Math.max(minimum, Math.min(maximum, Math.max(0, minimumFloor)));
+        return { minimum: Math.max(0, minimum), maximum: Math.max(0, maximum) };
     }
 
     /**
@@ -561,7 +579,8 @@ export class CombatFactory {
 
         // Check plugin and area attack policy.
         const areaResponse = duelActive
-            ? CanAttackResponse.CAN_ATTACK
+            ? (PluginManager.emitCanAttack(attacker, target, method) === false
+                ? CanAttackResponse.CANT_ATTACK_IN_AREA : CanAttackResponse.CAN_ATTACK)
             : ServerPerf.measurePhase(
                 "combat.process.can_attack.policy",
                 () => CombatFactory.canAttackByPolicy(attacker, target, method)
@@ -588,7 +607,7 @@ export class CombatFactory {
                     const drainAmount = special.getDrainAmountForWeaponId(
                         player.getEquipment().get(Equipment.WEAPON_SLOT).getId()
                     );
-                    if (player.getSpecialPercentage() < drainAmount) {
+                    if (!CombatSpecial.affordable(player, special, drainAmount)) {
                         return CanAttackResponse.NOT_ENOUGH_SPECIAL_ENERGY;
                     }
                 }
@@ -627,9 +646,15 @@ export class CombatFactory {
         }
         const attackerArea = attacker.getArea();
         const targetArea = target.getArea();
-        const pluginCanAttack = (attackerArea ? PluginManager.callArea(attackerArea, "canAttack", attacker, target, method) : null)
-            ?? (targetArea && targetArea !== attackerArea ? PluginManager.callArea(targetArea, "canAttack", attacker, target, method) : null)
-            ?? PluginManager.emitCanAttack(attacker, target, method);
+        const attackerCanAttack = attackerArea ? PluginManager.callArea(attackerArea, "canAttack", attacker, target, method) : null;
+        if (attackerCanAttack === false) return CanAttackResponse.CANT_ATTACK_IN_AREA;
+        const targetCanAttack = targetArea && targetArea !== attackerArea
+            ? PluginManager.callArea(targetArea, "canAttack", attacker, target, method) : null;
+        if (targetCanAttack === false) return CanAttackResponse.CANT_ATTACK_IN_AREA;
+        const areaCanAttack = attackerCanAttack ?? targetCanAttack;
+        const globalCanAttack = PluginManager.emitCanAttack(attacker, target, method);
+        if (globalCanAttack === false) return CanAttackResponse.CANT_ATTACK_IN_AREA;
+        const pluginCanAttack = areaCanAttack ?? globalCanAttack;
         if (pluginCanAttack === true) {
             return CanAttackResponse.CAN_ATTACK;
         }
@@ -642,14 +667,15 @@ export class CombatFactory {
     }
 
     /**
-     * Ancient spells evaluate possible splash victims outside the main attack start flow.
-     * Keep those secondary-target checks centralized here so magic doesn't duplicate policy checks.
+     * Area attacks evaluate secondary targets outside the main attack start flow.
+     * Keep their permission checks centralized without consuming resources again.
      */
     public static canAttackSecondaryTarget(
         attacker: Mobile,
         primaryTarget: Mobile,
         candidate: Mobile,
-        spellRadius: number
+        /** Max distance from the primary target; omit when the caller already shaped the area. */
+        spellRadius?: number
     ): boolean {
         if (!candidate || candidate === attacker || candidate === primaryTarget) {
             return false;
@@ -667,7 +693,7 @@ export class CombatFactory {
         if (candidate.getHitpoints() <= 0) {
             return false;
         }
-        if (!candidate.getLocation().isWithinDistance(primaryTarget.getLocation(), spellRadius)) {
+        if (spellRadius !== undefined && !candidate.getLocation().isWithinDistance(primaryTarget.getLocation(), spellRadius)) {
             return false;
         }
         if (!AreaManager.inMulti(candidate)) {
@@ -676,7 +702,10 @@ export class CombatFactory {
         if (candidate.isNpc() && !candidate.getAsNpc().getCurrentDefinition().isAttackable()) {
             return false;
         }
-        if (candidate.isPlayer() && CombatFactory.canAttackByPolicy(attacker, candidate) !== CanAttackResponse.CAN_ATTACK) {
+        if (candidate.isNpc() && candidate.getTimers().has(TimerKey.ATTACK_IMMUNITY)) {
+            return false;
+        }
+        if (CombatFactory.canAttackByPolicy(attacker, candidate) !== CanAttackResponse.CAN_ATTACK) {
             return false;
         }
         return true;
@@ -700,7 +729,11 @@ export class CombatFactory {
                 target,
                 hit: qHit,
             });
+        }
 
+        qHit.capDamageToBudget();
+
+        if (attacker.isPlayer()) {
             // Reward the player experience after plugins have finalized this hit.
             if (qHit.rewardsExperience()) CombatFactory.rewardExp(attacker.getAsPlayer(), qHit);
 
@@ -720,14 +753,13 @@ export class CombatFactory {
 
     /**
      * OSRS processes NPCs before players each tick, so a hit queued against an NPC lands
-     * one tick after the distance table (Wiki: Hit delay). Player melee keeps its tick too:
-     * the target's queue drains at the start of its own turn, which has already passed.
+     * one tick after the distance table (Wiki: Hit delay). Against a player, PID decides
+     * (Wiki: "In the case of PvP, PID will be the determining factor"): the target's queue
+     * drains at the start of its own turn, so a hit from a player processed before it lands
+     * this tick, and one from a player processed after it lands on the next.
      */
     public static hitProcessingDelay(hit: PendingHit): number {
-        const targetIsNpc = hit.getTarget()?.isNpc?.() === true;
-        const meleePlayerAttack = hit.getAttacker()?.isPlayer?.() === true
-            && hit.getCombatType() === CombatType.MELEE;
-        return targetIsNpc || meleePlayerAttack ? 1 : 0;
+        return hit.getTarget()?.isNpc?.() === true ? 1 : 0;
     }
 
     public static executeHit(qHit: PendingHit) {
@@ -793,10 +825,9 @@ export class CombatFactory {
 
             // Prayer effects.
             // Redemption checks after the damage lands (HitQueue -> handleRedemption).
-            if (resolvedHit.isAccurate()) {
-                if (PrayerHandler.isActivated(attacker, PrayerHandler.SMITE)) {
-                    CombatFactory.handleSmite(attacker, playerTarget, damage);
-                }
+            // Smite follows the damage dealt, so guaranteed damage on a failed roll (Hammer Blow) drains too.
+            if (damage > 0 && PrayerHandler.isActivated(attacker, PrayerHandler.SMITE)) {
+                CombatFactory.handleSmite(attacker, playerTarget, damage);
             }
         }
 
@@ -896,34 +927,26 @@ export class CombatFactory {
             hit.getCombatType() === CombatType.MAGIC &&
             hitSkills.length > 1 &&
             hitSkills.includes(Skill.MAGIC.getIndex()) &&
-            hitSkills.includes(Skill.DEFENCE.getIndex());
+            hitSkills.includes(Skill.DEFENCE.getIndex()) &&
+            hit.getCombatMethod()?.splitsDefensiveMagicExperience() !== false;
 
         // OSRS pays 4 XP per damage to a melee or ranged style, and the other
         // hit skills are fixed fractions of that same 4 XP: magic 2 (4/2),
         // hitpoints 1.33 (4/3), defensive-autocast magic 1.33 (4/3) and
-        // defensive-autocast defence 1 (4/4). Multiply by the base before
-        // dividing so low hits are not floored away.
+        // defensive-autocast defence 1 (4/4). addExperience keeps the tenths
+        // (1 damage is 1.3 hitpoints XP), so nothing is floored here.
         // Some NPCs give less (the Gemstone Crab 87.5%: 3.5 per damage).
         const target = hit.getTarget?.();
         const OSRS_DAMAGE_XP = 4 * (target?.isNpc?.() ? target.getAsNpc().getCombatXpMultiplier?.() ?? 1 : 1);
-        // Add magic exp, even if total damage is 0.
-        // Since spells have a base exp reward
+        // A spell's base XP is paid once per cast by MagicCombatMethod.hits (a splash
+        // gets only that), so each target's hit adds just its per-damage Magic XP.
         if (hit.getCombatType() === CombatType.MAGIC) {
             // The hit is queued before MagicCombatMethod.finished() moves the
             // active cast into previousCast, so the first cast of a session
             // must read castSpell or it would award no Magic XP at all.
             if ((player.getCombat().getCastSpell() ?? player.getCombat().getPreviousCast()) != null) {
-                if (hit.isAccurate()) {
-                    if (!defensiveMagicSplit) {
-                        player.getSkillManager().addExperience(
-                            Skill.MAGIC,
-                            Math.floor((hitDamage * OSRS_DAMAGE_XP) / 2)/* + player.getCombat().getPreviousCast().baseExperience() */,
-                            true
-                        );
-                    }
-                } else {
-                    // Splash should only give 52 exp..
-                    player.getSkillManager().addExperience(Skill.MAGIC, 52, false);
+                if (hit.isAccurate() && !defensiveMagicSplit) {
+                    player.getSkillManager().addExperience(Skill.MAGIC, (hitDamage * OSRS_DAMAGE_XP) / 2, true);
                 }
             }
         }
@@ -934,7 +957,7 @@ export class CombatFactory {
         }
 
         // Add hp xp (1.33/damage)
-        player.getSkillManager().addExperience(Skill.HITPOINTS, Math.floor((hitDamage * OSRS_DAMAGE_XP) / 3), true);
+        player.getSkillManager().addExperience(Skill.HITPOINTS, (hitDamage * OSRS_DAMAGE_XP) / 3, true);
 
         // Magic xp was already added
         if (hit.getCombatType() === CombatType.MAGIC) {
@@ -942,7 +965,7 @@ export class CombatFactory {
                 return;
             }
             // Defensive casting is not an even split: 1.33 magic / 1.0 defence.
-            player.getSkillManager().addExperience(Skill.MAGIC, Math.floor((hitDamage * OSRS_DAMAGE_XP) / 3), true);
+            player.getSkillManager().addExperience(Skill.MAGIC, (hitDamage * OSRS_DAMAGE_XP) / 3, true);
             player.getSkillManager().addExperience(Skill.DEFENCE, hitDamage, true);
             return;
         }
@@ -954,7 +977,7 @@ export class CombatFactory {
             if (!skill) {
                 continue;
             }
-            player.getSkillManager().addExperience(skill, Math.floor((hitDamage * OSRS_DAMAGE_XP) / exp.length), true);
+            player.getSkillManager().addExperience(skill, (hitDamage * OSRS_DAMAGE_XP) / exp.length, true);
         }
     }
 
@@ -981,7 +1004,19 @@ export class CombatFactory {
             return;
         }
 
-        const isVenom = poisonOrbType === 2;
+        let isVenom = poisonOrbType === 2;
+        if (entity.isNpc()) {
+            const definition = entity.getAsNpc().getCurrentDefinition();
+            if (isVenom && definition.isVenomImmune()) {
+                isVenom = false;
+                // Venom stores damage; ordinary poison stores five severity
+                // points per starting damage. Keep the converted poison's hit.
+                poisonSeverity *= 5;
+            }
+            if (!isVenom && definition.isPoisonImmune()) {
+                return;
+            }
+        }
 
         // If the entity is a player, we check for poison immunity. If they have
         // no immunity then we send them a message telling them that they are
@@ -989,9 +1024,19 @@ export class CombatFactory {
         const alreadyPoisoned = entity.isPoisoned();
         if (entity.isPlayer()) {
             let player = (entity as Player);
-            if (!player.getCombat().getPoisonImmunityTimer().finished()) {
+            const protection = player.getCombat().getPoisonClock();
+            if (isVenom ? protection.isVenomImmune() : !protection.finished()) {
                 return;
             }
+            // Content may make the player immune outright (a league relic): the same question
+            // for every status the server applies.
+            const status = { target: player, kind: isVenom ? "venom" : "poison", allow: true };
+            PluginManager.emitCustomEvent("combat:status-apply", status);
+            if (status.allow === false) {
+                return;
+            }
+            // An accepted venom replaces the ordinary negative poison counter.
+            if (isVenom) protection.clearCounter();
             if (!alreadyPoisoned) {
                 player.sendMessage("You have been poisoned!");
             }
@@ -1032,11 +1077,17 @@ export class CombatFactory {
         return damage > 0 ? Math.floor(damage / 10) + 1 : 0;
     }
 
+    /** Content may disable ring recoil without suppressing other reflected damage. */
+    public static canReceiveRecoil(target: Mobile): boolean {
+        return target.getAttribute?.(CombatFactory.RECOIL_IMMUNE_ATTRIBUTE) !== true;
+    }
+
     /**
      * Rebounds ring of recoil damage to the attacker. The ring's 40 charges are
      * tracked per player and its last recoil deals only what is left.
      */
     public static handleRecoil(player: Player, attacker: Mobile, damage: number) {
+        if (!CombatFactory.canReceiveRecoil(attacker)) return;
         let returnDmg = CombatFactory.recoilDamage(damage);
         if (returnDmg <= 0) {
             return;
@@ -1077,13 +1128,16 @@ export class CombatFactory {
     @param target
     */
     public static handleSkull(attacker: Player, target: Player) {
-        if (attacker.isSkulled()) {
-            return;
-        }
-
         const attackerInWilderness = Wilderness.isIn(attacker);
         const targetInWilderness = Wilderness.isIn(target);
         if (!attackerInWilderness || !targetInWilderness) {
+            return;
+        }
+
+        // Wiki (Skull (status)): attacking a player while skulled restarts the 30 minutes, so
+        // the skull "cannot disappear during PvP combat". The skull keeps its colour.
+        if (attacker.isSkulled()) {
+            CombatFactory.extendSkull(attacker, CombatFactory.PVP_SKULL_SECONDS);
             return;
         }
 
@@ -1115,6 +1169,13 @@ export class CombatFactory {
     }
 
     public static readonly PVP_SKULL_SECONDS = 30 * 60;
+    /** Wiki: an amulet of avarice skull lasts 20 minutes after it comes off; a cape of skulls 20 from putting it on. */
+    public static readonly ITEM_SKULL_SECONDS = 20 * 60;
+
+    /** Keeps a skull (and its colour) for at least `seconds` more, without the skulled message. */
+    static extendSkull(player: Player, seconds: number) {
+        player.setSkullTimer(Math.max(player.getSkullTimer(), Misc.getTicks(seconds)));
+    }
 
     static skull(player: Player, type: SkullType, seconds: number) {
         player.setSkullType(type);
@@ -1238,7 +1299,16 @@ export class CombatFactory {
     }
 
     /** `message` is what a frozen player is told (some bosses send their own, coloured). */
-    static freeze(character: Mobile, seconds: number, message: string = "You have been frozen!") {
+    static freeze(character: Mobile, seconds: number, message: string = "You have been frozen!", source: Mobile | null = null) {
+        CombatFactory.freezeTicks(character, Misc.getTicks(seconds), message, source);
+    }
+
+    /**
+     * `source` is who froze them and `kind` names the freeze ("ice", "bind") for the
+     * `combat:frozen` listeners, which own the rules that depend on either. A null `message`
+     * sends nothing here.
+     */
+    static freezeTicks(character: Mobile, ticks: number, message: string | null = "You have been frozen!", source: Mobile | null = null, kind: string | null = null) {
         if (character.getTimers().has(TimerKey.FREEZE) || character.getTimers().has(TimerKey.FREEZE_IMMUNITY)) {
             return;
         }
@@ -1248,15 +1318,17 @@ export class CombatFactory {
             return;
         }
 
-        const ticks = Misc.getTicks(seconds);
         character.getTimers().registers(TimerKey.FREEZE, ticks);
         character.getTimers().registers(TimerKey.FREEZE_IMMUNITY, ticks + Misc.getTicks(3));
         character.getMovementQueue().reset();
 
         if (character.isPlayer()) {
-            character.getAsPlayer().sendMessage(message);
-            character.getAsPlayer().getPacketSender().sendEffectTimer(seconds, EffectTimer.FREEZE);
+            if (message != null) {
+                character.getAsPlayer().sendMessage(message);
+            }
+            character.getAsPlayer().getPacketSender().sendEffectTimer(Misc.getSeconds(ticks), EffectTimer.FREEZE);
         }
+        PluginManager.emitCustomEvent("combat:frozen", { target: character, source, ticks, kind });
     }
 
     /**
@@ -1359,7 +1431,7 @@ export class CombatFactory {
         // BAD LOOP
         for (let d of rangedWeapon.getAmmunitionData()) {
             if (d == ammoData) {
-                if (d.getItemId() == ammoSlotItem.getId()) {
+                if (ItemAliases.same(d.getItemId(), ammoSlotItem.getId())) {
                     properReq = true;
                     break;
                 }
@@ -1380,6 +1452,11 @@ export class CombatFactory {
     /** Fired ammunition has a 20% chance to break on impact; the rest lands on the floor. */
     private static readonly AMMO_BREAK_CHANCE = 20;
 
+    /** Percentage (0-100) of the ammunition this player fires that is recovered, e.g. by an Ava's device. */
+    public static ammoRecovery(player: Player): number {
+        return PluginManager.rangedAmmoRecovery(player);
+    }
+
     /**
      * @param delayTicks the shot's flight time in ticks. The outcome is rolled now but the
      *   count and the floor drop only apply when the projectile lands, so the quiver matches
@@ -1388,6 +1465,14 @@ export class CombatFactory {
     public static decrementAmmo(player: Player, pos: Location, amount: number, delayTicks = 0) {
         // Get the ranged weapon data
         const rangedWeapon = player.getCombat().getRangedWeapon();
+
+        // Plugins may save the shot's ammunition or weapon charge outright (a league perk), as
+        // `magic:rune-saving` does a spell's runes; plugin-owned ammunition included.
+        const ammoSaving = { player, weaponId: player.getEquipment().get(Equipment.WEAPON_SLOT)?.getId?.() ?? -1, saved: false };
+        PluginManager.emitCustomEvent("combat:ammo-saving", ammoSaving);
+        if (ammoSaving.saved) {
+            return;
+        }
 
         // Plugin-owned ammunition (toxic blowpipe scales, the Gauntlet's bows) consumes itself.
         if (PluginManager.decrementRangedAmmo(player, pos, amount, delayTicks)) {
@@ -1414,6 +1499,12 @@ export class CombatFactory {
                 : 0;
             let currentWeaponId = weaponId;
             for (let shot = 0; shot < amount; shot++) {
+                // Content may spare the charge (a league relic): the question every charged weapon asks.
+                const consume = { player, itemId: currentWeaponId, skip: false };
+                PluginManager.emitCustomEvent("combat:consume-charge", consume);
+                if (consume.skip) {
+                    continue;
+                }
                 shotsInStage += 1;
                 if (shotsInStage < CRYSTAL_BOW_SHOTS_PER_STAGE) {
                     continue;
@@ -1449,11 +1540,16 @@ export class CombatFactory {
 
         // Per shot: 20% break, (80 - recovery)% land on the floor where the target stood,
         // the rest is recovered by a plugin (Ava's devices).
-        const recovery = PluginManager.rangedAmmoRecovery(player);
+        // Content may keep some shots out of the roll altogether (a league relic): `saved` of
+        // `amount` are neither broken nor dropped. The device's recovery applies to the rest.
+        const saving = { player, itemId: ammoItem.getId(), amount, saved: 0 };
+        PluginManager.emitCustomEvent("ranged:ammo-saving", saving);
+        const rolled = amount - Math.min(amount, Math.max(0, saving.saved | 0));
+        const recovery = CombatFactory.ammoRecovery(player);
         const dropChance = 80 - recovery;
         let lost = 0;
         let dropped = 0;
-        for (let shot = 0; shot < amount; shot++) {
+        for (let shot = 0; shot < rolled; shot++) {
             const roll = Misc.getRandom(99); // 0..99
             if (roll < CombatFactory.AMMO_BREAK_CHANCE) {
                 lost++;

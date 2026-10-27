@@ -53,6 +53,7 @@ import { scaleLogicalPixels } from "./scaleLogicalPixels";
 import { ps } from "./profilingState";
 import { FONT_VERDANA_11, FONT_VERDANA_13, FONT_VERDANA_15 } from "../../../ui/fonts";
 import type { WorldMapLabelDraw, WorldMapLabelMetrics } from "./worldMapLabels";
+import { hasSpriteOverride } from "../spriteOverrides";
 
 export type { WidgetNode };
 type Widget = WidgetNode;
@@ -331,6 +332,10 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                 typeof osrsClientRef.widgetManager.getWidgetFlags === "function"
                     ? (w: any) => getCachedWidgetFlags(w)
                     : undefined;
+            // Transmit bits for ops 11-32 (IF_SETEVENTS_V2), such as a bank item's Examine.
+            const getWidgetOpMask = osrsClientRef?.widgetManager
+                ? (w: any) => osrsClientRef.widgetManager.getWidgetOpMask(w)
+                : undefined;
             const openWorldMapIconMenu = (entries: any[]) => {
                 const menuState = new MenuState();
                 for (const entry of entries) {
@@ -412,6 +417,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                                         hasCustom,
                                         getWidgetFlags,
                                         getByUid,
+                                        getWidgetOpMask,
                                     ) || [];
                                 // Widget menu entries are already in OSRS display order (top-to-bottom).
                                 // Do not apply normalizeMenuEntries here; it expects OSRS insertion order and
@@ -493,6 +499,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                             hasCustom,
                             getWidgetFlags,
                             getByUid,
+                            getWidgetOpMask,
                         ) || [];
                     // Widget menu entries are already in OSRS display order (top-to-bottom).
                     // Do not apply normalizeMenuEntries here; it expects OSRS insertion order and
@@ -700,7 +707,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             if (!icon) return undefined;
             return { canvas: icon, width: icon.width, height: icon.height };
         };
-        UI_drawWrappedTextGL(
+        return UI_drawWrappedTextGL(
             glr,
             opts.fontLoader,
             text,
@@ -896,176 +903,10 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
         }
     };
 
-    function getWidgetEventHandler(
-        w: Widget | null | undefined,
-        eventType: "onClick" | "onScroll" | "onHold" | "onDrag" | "onDragComplete",
-    ): { intArgs?: number[] } | null {
-        const handlers = (w as any)?.eventHandlers;
-        if (handlers instanceof Map) {
-            const handler = handlers.get(eventType);
-            return handler && typeof handler === "object" ? handler : null;
-        }
-        if (handlers && typeof handlers === "object") {
-            const handler = handlers[eventType];
-            return handler && typeof handler === "object" ? handler : null;
-        }
-        return null;
-    }
-
-    function getScrollbarTargetUidFromHandler(
-        parentUid: number,
-        handler: { intArgs?: number[] } | null,
-    ): number | null {
-        const intArgs = handler?.intArgs;
-        if (!Array.isArray(intArgs) || intArgs.length < 2) {
-            return null;
-        }
-        const sourceUid = intArgs[0];
-        const targetUid = intArgs[1];
-        if (!Number.isFinite(sourceUid) || !Number.isFinite(targetUid)) {
-            return null;
-        }
-        if ((sourceUid | 0) !== (parentUid | 0)) {
-            return null;
-        }
-        const normalizedTargetUid = targetUid | 0;
-        if (normalizedTargetUid <= 0 || normalizedTargetUid === (parentUid | 0)) {
-            return null;
-        }
-        return normalizedTargetUid;
-    }
-
-    function inferScrollbarAxis(
-        w: Widget,
-        startArrow: Widget | null | undefined,
-        endArrow: Widget | null | undefined,
-    ): "x" | "y" | null {
-        const explicitAxis = (w as any).scrollBarAxis;
-        if (explicitAxis === "x" || explicitAxis === "y") {
-            return explicitAxis;
-        }
-
-        const arrowWidth = Math.max(startArrow?.width ?? 0, endArrow?.width ?? 0);
-        const arrowHeight = Math.max(startArrow?.height ?? 0, endArrow?.height ?? 0);
-        if (arrowWidth > 0 || arrowHeight > 0) {
-            if (arrowHeight === 16 && arrowWidth !== 16) {
-                return "y";
-            }
-            if (arrowWidth === 16 && arrowHeight !== 16) {
-                return "x";
-            }
-            if (arrowWidth > arrowHeight) {
-                return "y";
-            }
-            if (arrowHeight > arrowWidth) {
-                return "x";
-            }
-        }
-
-        const width = w.width ?? 0;
-        const height = w.height ?? 0;
-        if (height > width) {
-            return "y";
-        }
-        if (width > height) {
-            return "x";
-        }
-        return null;
-    }
-
-    // CS2 scrollbar procs wire the parent scrollbar component and scroll target into
-    // the child handlers they create, so recover the linkage from that child pattern.
-    function resolveScrollbarLink(w: Widget): {
-        targetUid: number;
-        axis: "x" | "y";
-    } | null {
-        const anyW = w as any;
-        if (typeof anyW.scrollBarTargetUid === "number") {
-            return {
-                targetUid: anyW.scrollBarTargetUid | 0,
-                axis: (anyW.scrollBarAxis as "x" | "y" | undefined) ?? "y",
-            };
-        }
-
-        const children = Array.isArray(w.children) ? w.children : null;
-        if (!children || children.length < 6) {
-            return null;
-        }
-
-        const track = children[0] as Widget | null | undefined;
-        const dragger = children[1] as Widget | null | undefined;
-        const startArrow = children[4] as Widget | null | undefined;
-        const endArrow = children[5] as Widget | null | undefined;
-        if (!track || !dragger || !startArrow || !endArrow) {
-            return null;
-        }
-
-        const candidateTargets = [
-            getScrollbarTargetUidFromHandler(w.uid, getWidgetEventHandler(track, "onClick")),
-            getScrollbarTargetUidFromHandler(w.uid, getWidgetEventHandler(track, "onScroll")),
-            getScrollbarTargetUidFromHandler(w.uid, getWidgetEventHandler(dragger, "onDrag")),
-            getScrollbarTargetUidFromHandler(
-                w.uid,
-                getWidgetEventHandler(dragger, "onDragComplete"),
-            ),
-            getScrollbarTargetUidFromHandler(w.uid, getWidgetEventHandler(startArrow, "onHold")),
-            getScrollbarTargetUidFromHandler(w.uid, getWidgetEventHandler(endArrow, "onHold")),
-        ];
-
-        let targetUid: number | null = null;
-        let bestCount = 0;
-        const counts = new Map<number, number>();
-        for (const candidate of candidateTargets) {
-            if (candidate === null) {
-                continue;
-            }
-            const count = (counts.get(candidate) ?? 0) + 1;
-            counts.set(candidate, count);
-            if (count > bestCount) {
-                bestCount = count;
-                targetUid = candidate;
-            }
-        }
-        if (targetUid === null || bestCount < 2) {
-            return null;
-        }
-
-        const axis = inferScrollbarAxis(w, startArrow, endArrow);
-        if (!axis) {
-            return null;
-        }
-
-        return { targetUid, axis };
-    }
-
-    /**
-     * Check if widget is hidden.
-     *
-     * Note: Parent visibility propagates naturally through the recursive rendering -
-     * if a parent is hidden, drawNode returns early and children are never visited.
-     * This matches OSRS behavior where isComponentHidden doesn't recurse.
-     */
+    /** Cache scripts own visibility, including scrollbars with no scrollable range. */
     function isComponentHidden(w: Widget): boolean {
-        // Only check this widget's visibility, not parents
-        if (opts.visible.get(w.uid) === false) return true;
-        if (w.hidden) return true;
-
-        // Auto-hide CS2 scrollbars when their linked scroll target
-        // has no scrollable range (maxScroll <= 0).
-        const scrollbarLink = widgetManager ? resolveScrollbarLink(w) : null;
-        if (scrollbarLink && widgetManager) {
-            const target = widgetManager.getWidgetByUid(scrollbarLink.targetUid);
-            if (target) {
-                widgetManager.ensureLayout(target);
-                const maxScroll =
-                    scrollbarLink.axis === "x"
-                        ? Math.max(0, (target.scrollWidth ?? 0) - (target.width ?? 0))
-                        : Math.max(0, (target.scrollHeight ?? 0) - (target.height ?? 0));
-                if (maxScroll <= 0) return true;
-            }
-        }
-
-        return false;
+        // Parent visibility propagates through traversal: hidden parents skip descendants.
+        return opts.visible.get(w.uid) === false || !!w.hidden;
     }
     function drawNode(
         w: Widget,
@@ -1370,9 +1211,12 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                 // Use widgetManager.getWidgetFlags for IF_SETEVENTS override lookup.
                 // Without this, equipment slots won't show "Remove" if flags are only set via IF_SETEVENTS.
                 const getWidgetFlagsLocal = widgetManager ? getCachedWidgetFlags : undefined;
+                const getWidgetOpMaskLocal = widgetManager
+                    ? (x: any) => widgetManager.getWidgetOpMask(x)
+                    : undefined;
                 const clickDeriveStartMs = profileWidgetRender ? performance.now() : 0;
                 const entries = interaction.shouldDeriveEntries
-                    ? deriveMenuEntriesForWidgetCached(w as any, getWidgetFlagsLocal)
+                    ? deriveMenuEntriesForWidgetCached(w as any, getWidgetFlagsLocal, getWidgetOpMaskLocal)
                     : [];
                 if (profileWidgetRender) {
                     clickDeriveMs += performance.now() - clickDeriveStartMs;
@@ -2131,6 +1975,39 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                     glr.drawRect(dot.x - dotSize / 2, dot.y - dotSize / 2, dotSize, dotSize,
                         isBot ? [1, 1, 1, 1] : [1, 1, 0, 1]);
                 }
+                // Plugin WorldMapPoints (e.g. Quest Helper's step location), edge-snapped when asked.
+                const pluginPoints: any[] = worldMapRenderHost?.pluginWorldMapPoints ?? [];
+                const pointSize = 16 * renderScale;
+                for (const point of pluginPoints) {
+                    const displayPos = currentArea.position(point.plane, point.x, point.y);
+                    if (!displayPos) continue;
+                    const at = projectDisplayToScreen(displayPos.x + 0.5, displayPos.y + 0.5);
+                    const inside = at.x >= x && at.y >= y && at.x <= x + width && at.y <= y + height;
+                    if (!inside && !point.snapToEdge) continue;
+                    const half = pointSize / 2;
+                    const px = Math.min(Math.max(at.x, x + half), x + width - half);
+                    const py = Math.min(Math.max(at.y, y + half), y + height - half);
+                    const texture = point.texture ? glr.getTexture(point.texture) : undefined;
+                    if (texture) glr.drawTexture(texture, px - half, py - half, pointSize, pointSize);
+                    else {
+                        const c = point.color >>> 0;
+                        glr.drawRect(px - half / 2, py - half / 2, half, half,
+                            [((c >>> 16) & 0xff) / 255, ((c >>> 8) & 0xff) / 255, (c & 0xff) / 255, 1]);
+                    }
+                }
+                osrsClient?.setWorldMapViewport?.({
+                    x, y, width, height, displayX, displayY, pixelsPerTileX, pixelsPerTileY,
+                });
+                osrsClient?.clientPlugins?.drawWorldMap?.({
+                    renderer: glr,
+                    bounds: { x, y, w: width, h: height },
+                    pixelsPerTileX,
+                    pixelsPerTileY,
+                    worldToScreen: (worldX: number, worldY: number, plane: number) => {
+                        const displayPos = currentArea.position(plane, worldX, worldY);
+                        return displayPos ? projectDisplayToScreen(displayPos.x, displayPos.y) : undefined;
+                    },
+                });
                 for (const labelDraw of worldMapLabelDraws) {
                     if (labelDraw.font && !/<(?!br\s*\/?\s*>)/i.test(labelDraw.text)) {
                         drawWorldMapLabelGL(
@@ -2433,6 +2310,20 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                         width: maskW,
                         height: maskH,
                     });
+                    // For plugins marking things on the minimap (RuneLite's localToMinimap,
+                    // which gives up 80 minimap pixels out).
+                    osrsClient.minimapGeometry = {
+                        drawnAt: performance.now(),
+                        plane: playerLevel,
+                        scale: minimapRenderScale,
+                        worldToMinimap: (wx: number, wy: number) => {
+                            const relX = (wx - worldX) * 4;
+                            const relY = (worldY - wy) * 4;
+                            if (relX * relX + relY * relY >= 6400) return undefined;
+                            const p = minimapRenderer.relativeToScreen(relX, relY);
+                            return [p.x, p.y] as const;
+                        },
+                    };
 
                     // Instances have one combined image, located at the scene origin.
                     const minimapMaps = getMinimapMaps(osrsClient.renderer, playerTileX, playerTileY);
@@ -2688,7 +2579,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                                 (playerFineY - targetFineY) / 32,
                             );
                             const distSq = dx * dx + dy * dy;
-                            if (distSq > 4225 && distSq < 90000) {
+                            if (distSq > 4225) {
                                 // Off the map: rotated edge arrow pinned inside the rim.
                                 const edgeTex = tc.getByNameToken("mapedge,0");
                                 if (edgeTex) {
@@ -2992,7 +2883,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             }
 
             const effectiveSpriteId = isIf3
-                ? typeof w.spriteId === "number" && w.spriteId >= 0
+                ? typeof w.spriteId === "number" && (w.spriteId >= 0 || hasSpriteOverride(w.spriteId))
                     ? w.spriteId | 0
                     : -1
                 : cs1Result
@@ -3024,7 +2915,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             const itemId = typeof w.itemId === "number" ? (w.itemId as number) | 0 : -1;
             const renderItemSprite = isIf3 && itemId >= 0;
 
-            if (!renderItemSprite && effectiveSpriteId >= 0) {
+            if (!renderItemSprite && (effectiveSpriteId >= 0 || hasSpriteOverride(effectiveSpriteId))) {
                 const tex = tc.getWidgetSpriteById(effectiveSpriteId, {
                     borderType,
                     shadowColor: spriteShadow,
@@ -3567,6 +3458,8 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                 effectiveText = "Please wait...";
             }
 
+            // Where the text landed, so wheel input can tell text from the empty box around it.
+            w._textBounds = undefined;
             if (effectiveText.length) {
                 const normalized = effectiveText.replace(/<br\s*\/?\s*>/gi, "\n");
                 // OSRS type-4 widgets use drawLines(), but short widgets disable automatic
@@ -3578,7 +3471,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                     ((resolvedFont as any)?.lineHeight as number) ||
                     ((resolvedFont as any)?.ascent as number) ||
                     12;
-                drawWrappedTextGL(
+                w._textBounds = drawWrappedTextGL(
                     normalized,
                     x,
                     y,

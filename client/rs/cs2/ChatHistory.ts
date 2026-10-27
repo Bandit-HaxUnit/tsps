@@ -13,6 +13,8 @@
  *   etc.
  */
 
+import { getClientClock } from "../../game/TransmitCycles";
+
 export interface ChatMessage {
     uid: number;
     type: number;
@@ -21,12 +23,34 @@ export interface ChatMessage {
     text: string;
     timestamp: number;
     runeLiteFormatMessage?: string | null;
-    /** Cycle counter (used by OSRS for message ordering) */
+    /** Client clock when the message arrived (OSRS Message.cycle); scripts age messages by it. */
     cycle: number;
     /** True if sender is on friend list */
     isFromFriend?: boolean;
     /** True if sender is on ignore list */
     isFromIgnored?: boolean;
+}
+
+/** Chat timestamp modes of setting 119 "Chat timestamps" (varbit 12384, chat_settimestamps). */
+export const CHAT_TIMESTAMPS_OFF = 0;
+export const CHAT_TIMESTAMPS_SERVER_TIME = 1;
+export const CHAT_TIMESTAMPS_LOCAL_TIME = 2;
+
+/**
+ * The timestamp string the chatbox scripts prefix to a line (proc 4742 affixes it when
+ * chat_gettimestamps != 0): "[HH:MM:SS]" in UTC for server time, in the device's zone for
+ * local time, and "" when timestamps are off. The exact text of the native client is not
+ * documented; this is the format assumed.
+ */
+export function formatChatTimestamp(timestampMs: number, mode: number): string {
+    if (mode !== CHAT_TIMESTAMPS_SERVER_TIME && mode !== CHAT_TIMESTAMPS_LOCAL_TIME) return "";
+    const date = new Date(timestampMs);
+    const [hours, minutes, seconds] =
+        mode === CHAT_TIMESTAMPS_SERVER_TIME
+            ? [date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds()]
+            : [date.getHours(), date.getMinutes(), date.getSeconds()];
+    const two = (n: number) => String(n).padStart(2, "0");
+    return `[${two(hours)}:${two(minutes)}:${two(seconds)}]`;
 }
 
 // Max messages per type to avoid unbounded growth
@@ -60,8 +84,6 @@ export class ChatHistoryStore {
     private messagesByType = new Map<number, ChatMessage[]>();
     // Global UID counter for messages
     private nextUid = 1;
-    // Global cycle counter (increments each message)
-    private cycle = 0;
     // Callback fired when a message is added (used to trigger chat transmit cycle)
     onMessageAdded: ((msg: ChatMessage) => void) | null = null;
     // PERF: Cached sorted list of all messages to avoid O(n log n) sort on every getNextUid/getPrevUid call
@@ -90,7 +112,7 @@ export class ChatHistoryStore {
             prefix,
             text,
             timestamp: Date.now(),
-            cycle: this.cycle++,
+            cycle: getClientClock() | 0,
             isFromFriend,
             isFromIgnored,
         };
@@ -174,6 +196,8 @@ export class ChatHistoryStore {
         prefix: string;
         text: string;
         friendStatus: number;
+        /** Arrival time in ms since the epoch, for the chat timestamp setting. */
+        timestamp: number;
     } | null {
         const list = this.messagesByType.get(type);
         if (!list || list.length === 0) return null;
@@ -189,6 +213,7 @@ export class ChatHistoryStore {
             prefix: msg.prefix,
             text: msg.runeLiteFormatMessage ?? msg.text,
             friendStatus: msg.isFromFriend ? 1 : msg.isFromIgnored ? 2 : 0,
+            timestamp: msg.timestamp,
         };
     }
 
@@ -275,8 +300,8 @@ export class ChatHistoryStore {
             }
         }
 
-        // Sort by cycle (chronological order)
-        allMessages.sort((a, b) => a.cycle - b.cycle);
+        // Chronological: uids rise with every message, cycles can tie within a frame.
+        allMessages.sort((a, b) => a.uid - b.uid);
 
         // Cache the result
         this.sortedMessagesCache.messages = allMessages;

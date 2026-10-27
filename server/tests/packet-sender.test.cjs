@@ -67,6 +67,7 @@ test("a dialogue box opened again resends its texts: the client turns 'Click her
   const updater = new FrameUpdater();
   const fake = {
     chatboxGroupId: -1,
+    emitInterfaceClosed() {},
     player: {
       getSession: () => ({ sendClientPacket: (frame) => { frames.push(Buffer.from(frame)); return true; } }),
       getFrameUpdater: () => updater,
@@ -84,6 +85,33 @@ test("a dialogue box opened again resends its texts: the client turns 'Click her
   assert.equal(sent(), 2);
 });
 
+test('chatbox replacement, explicit close and interface removal notify their previous group', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const original = PluginManager.emitCustomEvent;
+  const closed = [];
+  const fake = Object.assign(Object.create(PacketSender.prototype), {
+    chatboxGroupId: -1,
+    subInterfaceTargets: new Map(),
+    player: {
+      getSession: () => ({ sendClientPacket: () => true }),
+      getFrameUpdater: () => ({ clearGroup() {} }),
+      getInterfaceId: () => -1,
+    },
+  });
+  PluginManager.emitCustomEvent = (name, event) => {
+    if (name === 'interface:closed') closed.push([event.interfaceId, fake.getChatboxGroupId()]);
+  };
+  try {
+    fake.sendChatboxInterface(233);
+    fake.sendChatboxInterface(231);
+    fake.sendChatboxInterface(231);
+    fake.closeInterface(231);
+    fake.sendChatboxInterface(233);
+    fake.closeTrackedInterfaces();
+    assert.deepEqual(closed, [[233, 231], [231, -1], [233, -1]]);
+  } finally { PluginManager.emitCustomEvent = original; }
+});
+
 
 test('interface script packets preserve 64-bit price totals', () => {
   const { encodeWidgetRunScript } = require('../dist/net/protocol/ClientProtocol');
@@ -92,7 +120,7 @@ test('interface script packets preserve 64-bit price totals', () => {
   assert.equal(frame.readBigInt64BE(9), 12345678901n);
 });
 
-test('replacing a main interface emits its close event before changing its id', () => {
+test('interface transitions emit close before replacement and changed after assignment', () => {
   const { Player } = require('../dist/game/entity/impl/player/Player');
   const { PluginManager } = require('../dist/plugins/PluginManager');
   const original = PluginManager.emitCustomEvent;
@@ -103,7 +131,11 @@ test('replacing a main interface emits its close event before changing its id', 
     Player.prototype.setInterfaceId.call(player, 465);
     Player.prototype.setInterfaceId.call(player, 465);
     Player.prototype.setInterfaceId.call(player, -1);
-    assert.deepEqual(events, [['interface:closed', 464, 464]]);
+    assert.deepEqual(events, [
+      ['interface:closed', 464, 464],
+      ['interface:changed', 465, 465],
+      ['interface:changed', -1, -1],
+    ]);
     assert.equal(player.interfaceId, -1);
   } finally { PluginManager.emitCustomEvent = original; }
 });

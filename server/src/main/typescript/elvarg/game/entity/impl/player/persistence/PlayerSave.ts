@@ -4,6 +4,8 @@ import { CREATION_MENU_LAST_ITEM_ATTRIBUTE } from "../../../../../net/packet/Pac
 import { LOGIN_TOKENS_ATTRIBUTE } from "../../../../../net/login/LoginTokens";
 import { normalizeSailingState, type SailingState } from "../../../../content/sailing/SailingState";
 import { FightType } from "../../../../content/combat/FightType";
+import { WeaponInterfaces } from "../../../../content/combat/WeaponInterfaces";
+import { Equipment } from "../../../../model/container/impl/Equipment";
 import { CombatSpells } from "../../../../content/combat/magic/CombatSpells";
 import { SkillManager, Skills } from "../../../../content/skill/SkillManager";
 import { Player } from "../Player";
@@ -127,6 +129,9 @@ export class PlayerSave {
         [0, 5],  // feet
         [0, 7],  // skin
     ];
+    /** The name as the player first typed it, capitals included; later logins keep it. */
+    private displayName: string;
+    private creationDate: number;
     private passwordHashWithSalt: string;
     private isDiscordLogin: boolean;
     private cachedDiscordAccessToken: string;
@@ -144,10 +149,11 @@ export class PlayerSave {
     private poisonDamage: number;
     /** Whether poisonDamage represents an active venom (vs. ordinary poison) affliction. */
     private venomed: boolean;
+    private lastVenomDamage?: number;
     private poisonImmunityTimer: number;
+    private poisonClock?: import("../../../../content/combat/PoisonClock").PoisonClockState;
     private fireImmunityTimer: number;
     private teleblockTimer: number;
-    private specialAttackRestoreTimer: number;
     private skullTimer: number;
     private skullType;
     private running: boolean;
@@ -169,6 +175,9 @@ export class PlayerSave {
     private flags: string[];
     public sailing?: SailingState;
 
+    public getDisplayName(): string {
+        return this.displayName;
+    }
     public getPasswordHashWithSalt(): string {
         return this.passwordHashWithSalt;
     }
@@ -202,6 +211,14 @@ export class PlayerSave {
 
     public setSpellBook(spellBook: MagicSpellbook): void {
         this.spellBook = spellBook;
+    }
+
+    /** Legacy saves contain style fields shared by several weapon families. Resolve in the saved weapon's family. */
+    public static resolveSavedFightType(value: unknown, equipment: Item[]): FightType {
+        const item = equipment[Equipment.WEAPON_SLOT];
+        const weapon = item?.getId() > 0 ? item.getDefinition()?.getWeaponInterface() : null;
+        const availableTypes = (weapon ?? WeaponInterfaces.UNARMED).getFightType();
+        return FightType.resolve(value, availableTypes) ?? FightType.UNARMED_KICK;
     }
 
     public getFightType(): FightType {
@@ -282,14 +299,6 @@ export class PlayerSave {
 
     public setTeleblockTimer(teleblockTimer: number): void {
         this.teleblockTimer = teleblockTimer;
-    }
-
-    public getSpecialAttackRestoreTimer(): number {
-        return this.specialAttackRestoreTimer;
-    }
-
-    public setSpecialAttackRestoreTimer(specialAttackRestoreTimer: number): void {
-        this.specialAttackRestoreTimer = specialAttackRestoreTimer;
     }
 
     public getSkullTimer(): number {
@@ -552,6 +561,7 @@ export class PlayerSave {
     }
 
     applyToPlayer(player: Player) {
+        player.setCreationDate(this.creationDate);
         player.setPasswordHashWithSalt(this.passwordHashWithSalt);
         player.setDiscordLogin(this.isDiscordLogin);
         player.setCachedDiscordAccessToken(this.cachedDiscordAccessToken);
@@ -575,11 +585,13 @@ export class PlayerSave {
         player.setSpecialPercentage(this.specPercentage);
         player.setPoisonDamage(this.poisonDamage);
         player.setVenomed(this.venomed);
+        player.setLastVenomDamage(this.lastVenomDamage);
 
-        player.getCombat().getPoisonImmunityTimer().start(this.poisonImmunityTimer);
+        player.getCombat().getPoisonClock().restore(this.poisonClock, this.poisonImmunityTimer);
         player.getCombat().getFireImmunityTimer().start(this.fireImmunityTimer);
         player.getCombat().getTeleblockTimer().start(this.teleblockTimer);
-        player.getSpecialAttackRestore().start(this.specialAttackRestoreTimer);
+        // The special attack restore timer is not saved: logging out restarts it, so the
+        // first 10% after login takes the full 50 ticks.
 
         player.setSkullTimer(this.skullTimer);
         player.setSkullType(this.skullType);
@@ -647,7 +659,8 @@ export class PlayerSave {
             }
             let bankItems = this.banks.get(i);
             if (bankItems != null) {
-                player.setBank(i, new Bank(player)).getBank(i).addItems(bankItems, false);
+                // A save holding more than the player's space still loads whole.
+                Bank.withoutLimit(player, () => player.setBank(i, new Bank(player)).getBank(i).addItems(bankItems, false));
             }
         }
     }
@@ -657,6 +670,8 @@ export class PlayerSave {
         }
         let playerSave = new PlayerSave();
 
+        playerSave.displayName = player.getUsername();
+        playerSave.creationDate = player.getCreationDate().getTime();
         playerSave.passwordHashWithSalt = (player.getPasswordHashWithSalt() || "").trim();
         playerSave.isDiscordLogin = player.isDiscordLoginReturn();
         playerSave.cachedDiscordAccessToken = player.getCachedDiscordAccessToken();
@@ -675,12 +690,15 @@ export class PlayerSave {
         playerSave.specPercentage = player.getSpecialPercentage();
         playerSave.poisonDamage = player.getPoisonDamage();
         playerSave.venomed = player.isVenomed();
+        playerSave.lastVenomDamage = player.isVenomed() ? player.getLastVenomDamage() : undefined;
 
         playerSave.poisonImmunityTimer = player.getCombat().getPoisonImmunityTimer().secondsRemaining();
+        const poisonClock = player.getCombat().getPoisonClock();
+        playerSave.poisonClock = player.isPoisoned() || !poisonClock.finished()
+            ? poisonClock.snapshot() : undefined;
         playerSave.fireImmunityTimer = player.getCombat().getFireImmunityTimer().secondsRemaining();
 
         playerSave.teleblockTimer = player.getCombat().getTeleblockTimer().secondsRemaining();
-        playerSave.specialAttackRestoreTimer = player.getSpecialAttackRestore().secondsRemaining();
 
         playerSave.skullTimer = player.getSkullTimer();
         playerSave.skullType = player.getSkullType();

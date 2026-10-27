@@ -18,8 +18,10 @@ export interface PluginPlayerMapSquareChangeEvent {
 export interface PluginPlayerLoginEvent {
   player: any;
   username: string;
-  /** True only when login created a player because no saved account exists. */
+  /** True only when login created a player because no saved account exists (or no save for this profile). */
   isNewAccount?: boolean;
+  /** "main", or "league" for the league character chosen at login (persistence/PlayerProfile). */
+  profile?: string;
 }
 
 export interface PluginPlayerDisconnectEvent {
@@ -40,8 +42,9 @@ export type PluginSocialPacketEvent = {
     | { type: "friends_chat_action"; action: FriendsChatAction }
     | { type: "private_message"; recipient: string; text: string }
     | { type: "chat_filter"; publicMode: number; privateMode: number; tradeMode: number }
+    | { type: "report_abuse"; name: string; ruleId: number; mute: boolean }
     | { type: "chat"; text: string; messageType: "friends_chat" }
-    | { type: "public_chat"; text: string };
+    | { type: "public_chat"; text: string; autoChat: boolean };
 };
 
 export interface PluginServerLifecycleEvent {
@@ -62,6 +65,13 @@ export interface PluginPlayerLevelUpEvent {
   skill: any;
   oldLevel: number;
   newLevel: number;
+}
+
+/** XP that just landed in a skill: after rates and the experience cap; not sent when refused, XP-locked or already at the cap. */
+export interface PluginExperienceGainedEvent {
+  player: any;
+  skill: any;
+  experience: number;
 }
 
 export type PluginCustomEventName = `${string}:${string}`;
@@ -136,6 +146,8 @@ export interface PluginNpcInteractionEvent {
 
 export interface PluginNpcRouteEvent extends PluginNpcInteractionEvent {
   range: number;
+  /** Inventory item used when the route was requested by item-on-NPC. */
+  itemId?: number;
   /** A plugin-owned interaction that ignores the normal projectile clip within `range`. */
   ignoreProjectileClip?: boolean;
 }
@@ -219,6 +231,12 @@ export interface PluginNpcHitModifyEvent {
   hit: any;
 }
 
+/** A hit about to land on a player; handlers may change `hit` (e.g. setTotalDamage) as for NPCs. */
+export interface PluginPlayerHitModifyEvent {
+  player: any;
+  hit: any;
+}
+
 /** Rectangular player zone for onZoneEnter/onZoneExit; omit `levels` for all planes. */
 export interface PluginZone {
   minX: number;
@@ -243,6 +261,11 @@ export interface PluginNpcSpawnDefinition {
   owner?: any;
   /** Hide the NPC from everyone except `owner` (quest instances). */
   ownerOnly?: boolean;
+  /**
+   * A key only one live NPC may hold (a shared or instanced boss): while one holding it is
+   * in the world, queued to join it or dying, spawning another returns null.
+   */
+  unique?: string;
 }
 
 export interface PluginCanAttackEvent {
@@ -277,6 +300,11 @@ export interface PluginCanGainExperienceEvent {
   skill: any;
   experience: number;
   allow: boolean | null;
+  /**
+   * Multiplies the gain after the world's rate (1 leaves it alone); a hook that sets a rate
+   * multiplies what it finds, so several stack. A league profile's rate lives here.
+   */
+  multiplier: number;
 }
 
 /** Fired per npc-spawns definition at load; allow=false skips the spawn. */
@@ -299,6 +327,17 @@ export interface PluginPrayerDisabledEvent {
   disabled: boolean | null;
   /** Shown to the player when disabled is true. */
   message?: string;
+  /** Show the message in a messagebox rather than the chatbox. */
+  messageBox?: boolean;
+}
+
+export interface PluginSpecialAttackDisabledEvent {
+  player: any;
+  disabled: boolean | null;
+  /** Shown to the player when disabled is true. */
+  message?: string;
+  /** Show the message in a messagebox rather than the chatbox. */
+  messageBox?: boolean;
 }
 
 export interface PluginCanLogoutEvent {
@@ -368,6 +407,8 @@ export interface PluginPlayerAttackEvent {
 export interface PluginCanBankEvent {
   player: any;
   allow: boolean | null;
+  /** Who asks: "open" (Bank.open), "deposit-box", or undefined for any other check. */
+  source?: string;
 }
 
 /** Called immediately before one item is deposited into a bank. */
@@ -399,6 +440,8 @@ export interface PluginPlayerDeathItemDropEvent {
   player: any;
   killer: any;
   item: any;
+  /** Whether the item is one the death keeps (protected), rather than one it loses. */
+  kept: boolean;
   location: any;
   shouldDropItems: boolean;
   /** Whether core would create a normal floor item for this item. */
@@ -450,6 +493,8 @@ export interface PluginPlayerDeathEvent {
 export interface PluginPlayerBeforeDeathEvent {
   player: any;
   preventDeath: boolean;
+  /** Set false when the plugin says "Oh dear, you are dead!" itself (at the moment it chooses). */
+  announce?: boolean;
 }
 
 export interface PluginPlayerOptionEvent {
@@ -498,6 +543,17 @@ export interface PluginAnimationStallEvent {
   kind: "none" | "partial" | "full";
   /** Stack incoming hits until the stall releases (false for a teleport, Wiki: Animation stall). */
   holdsHits: boolean;
+}
+
+/**
+ * Asked for the ticks until an attacker's next attack, after the weapon's or spell's own speed
+ * (and a special's) is known; handlers may change `speed` (a relic's magic speed). Never below 1.
+ */
+export interface PluginAttackSpeedEvent {
+  attacker: any;
+  target: any;
+  combatType: any;
+  speed: number;
 }
 
 export interface PluginCombatHitRollEvent {
@@ -614,6 +670,12 @@ export interface PluginItemOnPlayerEvent {
 export interface PluginItemOnNpcEvent {
   player: any;
   target: any;
+  /**
+   * The definition this player sees (the transform-resolved form, as NPC options get).
+   * Match names on this: `target.getDefinition()` is the spawned parent, nameless for many
+   * revision 241 NPCs such as the second Lumbridge banker.
+   */
+  definition?: any;
   /** The target NPC's content id (its varbit-resolved cache variant), for quest id sets. */
   npcId: number;
   targetIndex: number;
@@ -633,6 +695,20 @@ export interface PluginSpellOnObjectEvent {
   spellItemId: number;
   spellId: number;
   location: { x: number; y: number; z: number };
+  handled: boolean;
+}
+
+/** A combat spell aimed at a non-attackable NPC for a scripted interaction. */
+export interface PluginSpellOnNpcEvent {
+  player: any;
+  npc: any;
+  npcId: number;
+  npcIndex: number;
+  spell: any;
+  spellId: number;
+  location: { x: number; y: number; z: number };
+  /** Consume validated runes/cooldown and play the accepted cast once. */
+  consumeRunes: () => boolean;
   handled: boolean;
 }
 
@@ -763,6 +839,8 @@ export interface PluginCombatSpecialDefinition {
   metadata?: Record<string, unknown>;
   /** Roll overrides applied by core while this special is active. */
   traits?: Record<string, unknown>;
+  /** Roll overrides that depend on the attacker at the swing; replaces `traits` there. */
+  traitsFor?: (player: any) => Record<string, unknown> | undefined;
   /** Per-variant energy cost override, keyed by item id. */
   drainAmountByItemId?: Record<number, number>;
 }
@@ -835,6 +913,8 @@ export interface PluginRangedCombatModifier {
 }
 
 export interface PluginApi {
+  /** Attributes registered hook/area timings to this label while retaining plugin ownership. */
+  withProfileLabel(label: string): PluginApi;
   onPlayerLogin(handler: (event: PluginPlayerLoginEvent) => void): void;
   /** Fires per map square crossed, not per tile: content spread over the map (patches, bird
    * houses) syncs here instead of checking every player every tick. */
@@ -853,11 +933,14 @@ export interface PluginApi {
   onZoneExit(zone: PluginZone, handler: (event: PluginZoneEvent) => void): void;
   /**
    * Spawns an NPC from a plugin. `ownerOnly` keeps it visible (and aggressive)
-   * only for `owner`, for instanced/quest spawns. Returns the NPC or null.
+   * only for `owner`, for instanced/quest spawns; `unique` keeps a boss single. The NPC
+   * remembers the plugin that spawned it. Returns the NPC or null.
    */
   spawnNpc(definition: PluginNpcSpawnDefinition): any;
   removeNpc(npc: any): void;
   onPlayerLevelUp(handler: (event: PluginPlayerLevelUpEvent) => void): void;
+  /** After XP lands in a skill (onCanGainExperience is the check before it). */
+  onExperienceGained(handler: (event: PluginExperienceGainedEvent) => void): void;
   /** Subscribes to an exact namespaced plugin event, such as `mining:success`. */
   onCustomEvent(
     eventName: PluginCustomEventName,
@@ -875,7 +958,11 @@ export interface PluginApi {
     objectName: string,
     actions: Record<string, (event: PluginObjectInteractionEvent) => void | boolean>
   ): void;
+  /** Conditional interaction ownership before normal object handlers. Leave unclaimed events untouched. */
+  onBeforeObjectInteraction(handler: (event: PluginObjectInteractionEvent) => void): void;
   onNpcInteraction(handler: (event: PluginNpcInteractionEvent) => void): void;
+  /** Conditional interaction ownership before normal NPC handlers. Leave unclaimed events untouched. */
+  onBeforeNpcInteraction(handler: (event: PluginNpcInteractionEvent) => void): void;
   /** World entity (static ship/boat) options, by op number (1-6). */
   onWorldEntityInteraction(handler: (event: PluginWorldEntityInteractionEvent) => void): void;
   /** Set a non-combat NPC option's approach range before movement starts. */
@@ -919,6 +1006,7 @@ export interface PluginApi {
   onNpcDeath(handler: (event: PluginNpcDeathEvent) => void): void;
   onNpcBeforeDeath(handler: (event: PluginNpcBeforeDeathEvent) => void): void;
   onNpcHitModify(handler: (event: PluginNpcHitModifyEvent) => void): void;
+  onPlayerHitModify(handler: (event: PluginPlayerHitModifyEvent) => void): void;
   onCanAttack(handler: (event: PluginCanAttackEvent) => void): void;
   onCanTeleport(handler: (event: PluginCanTeleportEvent) => void): void;
   onCanLogout(handler: (event: PluginCanLogoutEvent) => void): void;
@@ -951,6 +1039,8 @@ export interface PluginApi {
   onCanSpawnNpc(handler: (event: PluginCanSpawnNpcEvent) => void): void;
   onCanStockItem(handler: (event: PluginCanStockItemEvent) => void): void;
   onPrayerDisabled(handler: (event: PluginPrayerDisabledEvent) => void): void;
+  /** Refuse turning the special attack bar on (a duel or minigame rule); set `disabled` and a `message`. */
+  onSpecialAttackDisabled(handler: (event: PluginSpecialAttackDisabledEvent) => void): void;
   onCanUnequip(handler: (event: PluginCanUnequipEvent) => void): void;
   onPlayerDeath(handler: (event: PluginPlayerDeathEvent) => void): void;
   onPlayerBeforeDeath(handler: (event: PluginPlayerBeforeDeathEvent) => void): void;
@@ -964,6 +1054,8 @@ export interface PluginApi {
   onAttackTiming(handler: (event: PluginAttackTimingEvent) => void): void;
   /** Says how much a swing's animation holds the attacker, if at all (see PluginAnimationStallEvent). */
   onAnimationStall(handler: (event: PluginAnimationStallEvent) => void): void;
+  /** Lets a plugin change the ticks until the next attack (see PluginAttackSpeedEvent). */
+  onAttackSpeed(handler: (event: PluginAttackSpeedEvent) => void): void;
   onCombatHitResolved(handler: (event: PluginCombatHitResolvedEvent) => void): void;
   onCombatAttackDistance(handler: (event: PluginCombatAttackDistanceEvent) => void): void;
   onSpellDisabled(handler: (event: PluginSpellDisabledEvent) => void): void;
@@ -1014,6 +1106,7 @@ export interface PluginApi {
   onItemOnNpc(handler: (event: PluginItemOnNpcEvent) => void, filter?: PluginItemUseFilter): void;
   onItemOnGroundItem(handler: (event: PluginItemOnGroundItemEvent) => void, filter?: PluginItemUseFilter): void;
   onSpellOnObject(handler: (event: PluginSpellOnObjectEvent) => void): void;
+  onSpellOnNpc(handler: (event: PluginSpellOnNpcEvent) => void): void;
   onSpellOnItem(handler: (event: PluginSpellOnItemEvent) => void): void;
   /** A spellbook spell cast on nothing, before the core spellbooks handle it. Set `handled` to own it. */
   onSpellCast(handler: (event: PluginSpellCastEvent) => void): void;
@@ -1129,7 +1222,7 @@ export interface PluginApi {
   /** Register an inventory item as a shop currency, keyed by its item name and optional aliases. */
   registerItemShopCurrency(
     itemId: number,
-    options?: { name?: string; aliases?: string[] }
+    options?: { name?: string; aliases?: string[]; unit?: string }
   ): void;
   /**
    * Save and restore this player attribute; values must be JSON-compatible.
@@ -1138,6 +1231,11 @@ export interface PluginApi {
   persistAttribute(key: string, defaultValue?: unknown): void;
   setPlayerPersistence(persistence: PlayerPersistence): void;
   setExperienceRate(rate: number): void;
+  /**
+   * Names the character profile every login on this world gets ("main" by default): a game mode
+   * with characters of its own (Leagues) calls it from its plugin config at startup.
+   */
+  setWorldProfile(profile: "main" | "league"): void;
   getActiveRegionSnapshot(): PluginActiveRegionsEvent;
   log(message: string, extra?: Record<string, unknown>): void;
   /**
@@ -1170,7 +1268,7 @@ export interface PluginApi {
    */
   emitCanEat(player: any, itemId: number): boolean | null;
   emitCanDrink(player: any, itemId: number): boolean | null;
-  emitCanBank(player: any): boolean | null;
+  emitCanBank(player: any, source?: string): boolean | null;
   emitCanBankItem(player: any, item: any): boolean | null;
   emitShouldKeepItemOnDeath(player: any, item: any): boolean | null;
   emitFiremakingBlocked(event: PluginFiremakingBlockedEvent): boolean;
@@ -1193,6 +1291,13 @@ export interface PluginApi {
   /** Adjusts effective levels after prayers/stance, before equipment bonuses and special multipliers. */
   registerCombatEffectiveLevelModifier(
     modifier: (entity: any, level: number, context: import("../game/content/combat/EquipmentEffects").CombatEffectiveLevelContext) => number
+  ): void;
+  /**
+   * Adds to the melee Strength prayer percentage (100 without a prayer, 123 with Piety), for
+   * boosts the Wiki says stack additively with the prayers, like the Soulreaper axe's soul stacks.
+   */
+  registerMeleeStrengthPercentModifier(
+    modifier: (entity: any, percent: number) => number
   ): void;
   registerMeleeHitModifier(
     modifier: (entity: any, baseHit: number) => number
@@ -1244,12 +1349,20 @@ export interface PluginApi {
   registerSpecialEnergyRestoreModifier(
     modifier: (entity: any, delayTicks: number) => number
   ): void;
+  /** Special attack energy a special costs, checked and drained; return the cost. */
+  registerSpecialEnergyCostModifier(
+    modifier: (entity: any, cost: number) => number
+  ): void;
   registerIncomingDamageModifier(
     modifier: (entity: any, hitDamage: any) => void
   ): void;
   /** Reduces an NPC/environmental Prayer drain; return the points actually drained. */
   registerPrayerDrainModifier(
     modifier: (entity: any, amount: number, context: any) => number
+  ): void;
+  /** Scales the drain effect a player's active prayers add each tick; return the new effect. */
+  registerPrayerDrainRateModifier(
+    modifier: (entity: any, drainEffect: number) => number
   ): void;
   setCombatEngine(engine: PluginCombatEngine): void;
   setCombatDamageProvider(provider: PluginCombatDamageProvider): void;
@@ -1297,6 +1410,8 @@ export interface PluginCoreApi {
   CombatMethod: any;
   CombatSpecial: any;
   CombatFactory: any;
+  BonusManager: any;
+  WeaponInterfaces: any;
   Barrows: any;
   applyPrayerDrainModifiers(entity: any, amount: number, context?: any): number;
   CombatEquipment: any;
@@ -1315,6 +1430,10 @@ export interface PluginCoreApi {
   FightStyle: any;
   WeaponInterfaceManager: any;
   PrayerHandler: any;
+  PrayerData: any;
+  ItemActionPacketListener: any;
+  /** Run shared item alchemy; plugins authorize opaque alternate payment sources via magic:alchemy-payment. */
+  castAlchemy: (player: any, spellId: number | string, itemId: number, slot: number, source?: unknown) => boolean;
   ChatType: any;
   DuelRule: any;
   RegionManager: any;
@@ -1329,6 +1448,8 @@ export interface PluginCoreApi {
   Direction: any;
   Equipment: any;
   Bank: any;
+  Inventory: any;
+  PlayerStatus: any;
   Task: any;
   CountdownTask: any;
   ForceMovement: any;
@@ -1377,14 +1498,19 @@ export interface PluginCoreApi {
   PlayerDeathTask: any;
   /** Which items poison, and how strongly. */
   CombatPoisonData: any;
+  CombatPoisonEffect: any;
   CacheDefinitions: any;
+  CacheMaps: any;
+  MapRegionReplacementManager: any;
   readTemplateRegion: typeof import("../game/collision/TemplateRegionData").readTemplateRegion;
   Wilderness: any;
   PathFinder: any;
   RsmodRouteFinding: any;
   NpcDefinition: any;
+  NpcSpawnDefinition: any;
   ObjectDefinition: any;
   MagicSpellbook: any;
+  ItemAliases: any;
   Spell: any;
   CombatNormalSpell: any;
   CombatSpells: any;
@@ -1428,6 +1554,7 @@ export interface PluginCoreApi {
   PrivateChatStatus: typeof import("../game/model/PlayerRelations").PrivateChatStatus;
   SpellTeleports: typeof import("../game/content/combat/magic/SpellTeleports").SpellTeleports;
   LunarSpells: typeof import("../game/content/combat/magic/LunarSpells").LunarSpells;
+  EffectSpells: typeof import("../game/content/combat/magic/EffectSpells").EffectSpells;
   ArceuusSpells: typeof import("../game/content/combat/magic/ArceuusSpells").ArceuusSpells;
   ArceuusOfferings: typeof import("../game/content/combat/magic/ArceuusOfferings");
 }

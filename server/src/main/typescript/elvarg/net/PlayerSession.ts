@@ -88,6 +88,11 @@ export class PlayerSession {
   private lastMusicRegion = -1;
   private lastMusicTrack = -1;
   private lastMusicMode = -1;
+
+  /** The region track last started for this player, or -1: what a jingle is sent with, for the client to resume. */
+  public getCurrentMusicTrack(): number {
+    return this.lastMusicTrack;
+  }
   private lastGroundItemRegion = -1;
   private lastGroundItemLevel = -1;
   // The first tick after login sends encodeInitialPlayerSync (no appearance/anim data at
@@ -387,6 +392,8 @@ export class PlayerSession {
             : undefined),
           crawl: npc.isCrawling?.() || undefined,
           modelCustomisation: npc.getModelCustomisationForUpdate?.() ?? undefined,
+          baseAnimations: npc.getBaseAnimationsForUpdate?.() ?? undefined,
+          transparency: npc.getTransparency?.() ?? undefined,
         };
       })
     );
@@ -507,7 +514,7 @@ export class PlayerSession {
           npcTransformationId,
           equipQty: equipment.map((item) => item?.getAmount?.() ?? 0),
           headIcons: {
-            skull: player.isSkulled() ? player.getSkullIconId() : -1,
+            skull: player.getHeadSkullIcon(),
             prayer: player.getAppearance().getHeadHint(),
           },
         },

@@ -195,12 +195,62 @@ import { KNOWN_WATER_TEXTURE_IDS } from "../../water/WaterTextureIds";
 import type { WebGLOsrsRendererHost } from "../hostInterface";
 import { RENDER_CONSTANTS, formatPlayerCombatLabel } from "../constants";
 
-export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
+/** What the last world interaction pass saw, per renderer host. */
+type InteractionPassInputs = {
+    mouseX: number;
+    mouseY: number;
+    clientCycle: number;
+    menuOpen: boolean;
+    camera: Float32Array;
+};
+const lastPassInputs = new WeakMap<object, InteractionPassInputs>();
 
-        const frameCount = host.stats.frameCount;
-        host.lastInteractionRaycastHitCount = 0;
-        host.lastInteractionMenuOptionCount = 0;
-        let raycastHitCount = 0;
+/**
+ * True when nothing the world menu depends on changed since the last pass: the pointer, the
+ * camera, the client cycle (the world itself only changes on cycles) and the menu. Without this
+ * the scene is raycast at the display's frame rate under a still pointer.
+ */
+function isInteractionPassUnchanged(
+    host: WebGLOsrsRendererHost,
+    mouseX: number,
+    mouseY: number,
+    clicked: boolean,
+): boolean {
+    const camera = host.osrsClient.camera;
+    const clientCycle = getClientCycle() | 0;
+    const menuOpen = !!host.osrsClient.menuOpen;
+    let last = lastPassInputs.get(host);
+    let unchanged =
+        !clicked &&
+        !!last &&
+        last.mouseX === mouseX &&
+        last.mouseY === mouseY &&
+        last.clientCycle === clientCycle &&
+        last.menuOpen === menuOpen;
+    if (!last) {
+        last = { mouseX, mouseY, clientCycle, menuOpen, camera: new Float32Array(18) };
+        lastPassInputs.set(host, last);
+    }
+    const cam = last.camera;
+    for (let i = 0; i < 16; i++) {
+        if (cam[i] !== camera.viewMatrix[i]) {
+            cam[i] = camera.viewMatrix[i];
+            unchanged = false;
+        }
+    }
+    if (cam[16] !== camera.projectionMatrix[0] || cam[17] !== camera.projectionMatrix[5]) {
+        cam[16] = camera.projectionMatrix[0];
+        cam[17] = camera.projectionMatrix[5];
+        unchanged = false;
+    }
+    last.mouseX = mouseX;
+    last.mouseY = mouseY;
+    last.clientCycle = clientCycle;
+    last.menuOpen = menuOpen;
+    return unchanged;
+}
+
+export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
 
         const inputManager = host.osrsClient.inputManager;
         const mouseX = inputManager.getInteractionMouseX();
@@ -210,6 +260,14 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
         const pickY = inputManager.pickY;
         const picked = pickX !== -1 && pickY !== -1;
         const leftClicked = inputManager.leftClickX !== -1 && inputManager.leftClickY !== -1;
+        if (isInteractionPassUnchanged(host, mouseX, mouseY, picked || leftClicked || isMouseDown)) {
+            return;
+        }
+
+        const frameCount = host.stats.frameCount;
+        host.lastInteractionRaycastHitCount = 0;
+        host.lastInteractionMenuOptionCount = 0;
+        let raycastHitCount = 0;
 
         // If the click is inside the bottom-right UI tabs region, consume it (don't interact with world).
         if (leftClicked) {
@@ -235,6 +293,9 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
         ) {
             if (mouseX === -1 || mouseY === -1) {
                 host.clearInteractHighlightHoverTarget();
+            } else {
+                // Nothing was built during the cooldown: run again as soon as it ends.
+                lastPassInputs.delete(host);
             }
             return;
         }
@@ -329,6 +390,8 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
             });
         }
 
+        // RuneLite's getSelectedSceneTile: the scene tile under the mouse (kept while a menu is open).
+        if (!usingPinnedMenu) host.osrsClient.selectedSceneTile = undefined;
         if (!usingPinnedMenu && !mouseInUIRegion && !mouseOverWidget && anchorInSceneViewport) {
             // PERF: Reuse cached arrays/sets instead of allocating new ones each frame
             const locIds = host.cachedLocIds;
@@ -346,6 +409,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
             const baseX = (ClientState.baseX | 0) as number;
             const baseY = (ClientState.baseY | 0) as number;
             const anchorTile = host.computeTileAt(anchorX, anchorY);
+            host.osrsClient.selectedSceneTile = anchorTile ?? undefined;
             let walkHereEntry: OsrsMenuEntry | undefined = undefined;
             if (ClientState.isItemSelected === 0 && !ClientState.isSpellSelected) {
                 const walkTile = anchorTile ?? host.osrsClient.menuTile ?? hoveredTile;
@@ -944,7 +1008,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                         plane,
                     );
                     if (!stacks || stacks.length === 0) continue;
-                    const groundItemsPlugin = host.osrsClient.groundItemsPlugin;
+                    const plugins = host.osrsClient.clientPlugins;
 
                     const tileKey = `${localX}:${localY}`;
                     if (objIds.has(tileKey)) continue;
@@ -957,7 +1021,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                         for (const stack of stacks) {
                             const objType = host.osrsClient.objTypeLoader.load(stack.itemId);
                             if (!objType || objType.name === "null") continue;
-                            const menuName = groundItemsPlugin.getMenuTargetName(
+                            const menuName = plugins.groundItemMenuName(
                                 stack,
                                 objType.name,
                             );
@@ -990,7 +1054,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                             for (const stack of stacks) {
                                 const objType = host.osrsClient.objTypeLoader.load(stack.itemId);
                                 if (!objType || objType.name === "null") continue;
-                                const menuName = groundItemsPlugin.getMenuTargetName(
+                                const menuName = plugins.groundItemMenuName(
                                     stack,
                                     objType.name,
                                 );
@@ -1020,12 +1084,13 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                     for (const stack of stacks) {
                         const objType = host.osrsClient.objTypeLoader.load(stack.itemId);
                         if (!objType || objType.name === "null") continue;
-                        const menuName = groundItemsPlugin.getMenuTargetName(stack, objType.name);
-                        const menuTarget = groundItemsPlugin.getMenuTargetColorized(
+                        const menuName = plugins.groundItemMenuName(stack, objType.name);
+                        const menuTarget = plugins.groundItemMenuTarget(
                             stack,
                             menuName,
                         );
-                        const deprioritized = groundItemsPlugin.shouldDeprioritizeInMenu(stack);
+                        // Only Take (the third option) is deprioritized, as RuneLite's Ground Items does.
+                        const deprioritized = plugins.deprioritizeGroundItem(stack);
 
                         const actions = objType.groundActions ?? [];
                         for (let actionIdx = 4; actionIdx >= 0; actionIdx--) {
@@ -1041,7 +1106,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                                     mapX: localX,
                                     mapY: localY,
                                     actionIndex: actionIdx,
-                                    deprioritized,
+                                    deprioritized: deprioritized && actionIdx === 2,
                                     onClick:
                                         option.toLowerCase() === "take"
                                             ? () => host.osrsClient.takeGroundItem(capturedStack)

@@ -25,6 +25,9 @@ export type WidgetServerPayload =
           postScripts?: Array<{ scriptId: number; args: (number | string)[] }>;
       }
     | {
+          action: "trigger_ondialogabort";
+      }
+    | {
           action: "close_sub";
           targetUid: number;
       }
@@ -69,6 +72,8 @@ export type WidgetServerPayload =
           fromSlot: number;
           toSlot: number;
           flags: number;
+          /** IF_SETEVENTS_V2's transmit mask for ops 1-32 (bit N for op N+1). */
+          opMask?: number;
       }
     | {
           action: "run_script";
@@ -88,6 +93,14 @@ export type WidgetServerPayload =
           action: "set_colour";
           uid: number;
           colour: number;
+      }
+    | {
+          /** IF_SETANGLE: a model component's x and y angles and zoom. */
+          action: "set_angle";
+          uid: number;
+          angleX: number;
+          angleY: number;
+          zoom: number;
       }
     | {
           action: "set_model";

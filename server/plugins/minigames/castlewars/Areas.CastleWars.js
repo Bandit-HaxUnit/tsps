@@ -2,9 +2,9 @@
 
 /**
  * Castle Wars areas - the lobby, the two waiting rooms and the game itself - and the rules that
- * hold inside them: team colours stay on, no friendly fire, no teleporting out, deaths respawn
- * in the team's start room, and anyone logging in inside is sent back to the lobby stripped of
- * game items.
+ * hold inside them: the arena is multi-combat, team colours stay on, no friendly fire, no
+ * teleporting out, deaths respawn in the team's start room, and anyone logging in inside is sent
+ * back to the lobby stripped of game items.
  */
 
 let game;
@@ -91,6 +91,15 @@ function defineAreas() {
 
     getName() {
       return "Castle Wars";
+    }
+
+    /**
+     * The whole arena (both castles on every floor, the field and the tunnels) is a
+     * multi-combat zone, as the Wiki's Multicombat area list has it; the lobby and the
+     * waiting rooms stay out of it, since nobody fights there.
+     */
+    isMulti() {
+      return true;
     }
 
     postEnter(character) {
@@ -255,23 +264,20 @@ function respawnInStartRoom(event) {
     return;
   }
   game.dropCarriedFlag(player);
+  game.clearCastleWarsItems(player, data.DEATH_REMOVE_ITEM_IDS);
   game.resetIdleTicks(player);
   player.smartMoves(game.getTeamData(teamId).respawnBounds);
   event.handled = true;
 }
 
-/** Game items vanish on death instead of dropping; a carried banner falls as the flag. */
-function keepGameItemsOffTheFloor(event) {
-  const player = event?.player;
-  const itemId = event?.item?.getId?.();
-  if (!player || !itemId || !game.castleWarsAreas.has(player.getArea()) || !data.DEATH_REMOVE_ITEM_IDS.has(itemId)) {
-    return;
+function keepItemsOnDeath(event) {
+  if (game.castleWarsAreas.has(event.player?.getArea?.())) {
+    event.shouldDrop = false;
   }
-  const { SARADOMIN_BANNER, ZAMORAK_BANNER } = core.ItemIdentifiers;
-  if (itemId === SARADOMIN_BANNER || itemId === ZAMORAK_BANNER) {
-    game.dropCarriedFlag(player);
-  }
-  event.handled = true;
+}
+
+function allowBountyHunterWeapons(event) {
+  if (event.attacker?.getArea?.() === game.gameArea && event.target?.getArea?.() === game.gameArea) event.allowed = true;
 }
 
 module.exports = function attachCastleWarsAreas(api, castleWars) {
@@ -279,10 +285,11 @@ module.exports = function attachCastleWarsAreas(api, castleWars) {
   core = api.core;
   data = castleWars.data;
   registerAreas(api);
+  api.onCustomEvent("bounty-hunter:weapon-area", allowBountyHunterWeapons);
   api.onServerStartup(setUpCastle);
   api.onPlayerLogin(restoreLoginInsideCastleWars);
   api.onCanEquip(protectTeamColours);
   api.onCanUnequip(protectTeamColours);
   api.onPlayerDeath(respawnInStartRoom);
-  api.onPlayerDeathItemDrop(keepGameItemsOffTheFloor);
+  api.onShouldDropItemsOnDeath(keepItemsOnDeath);
 };

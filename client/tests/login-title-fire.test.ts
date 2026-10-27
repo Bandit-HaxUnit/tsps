@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 
 import type { LoginRendererHost } from "../game/login/renderer/host";
-import { getLogicalFirePositions, getTitleBackgroundLayout } from "../game/login/renderer/layout/geometry";
+import { getLogicalFirePositions, getTitleArtScene, getTitleBackgroundLayout } from "../game/login/renderer/layout/geometry";
 
 const close = (a: number, b: number) => Math.abs(a - b) < 1e-9;
 
@@ -40,6 +40,8 @@ for (const art of [TITLEWIDE, TITLE]) {
         assert.ok(close(fire.leftX, bg.drawX + (crop - 22) * bg.scale), `${label}: left flame on the art`);
         assert.ok(close(fire.rightX, bg.drawX + (crop + 659) * bg.scale), `${label}: right flame on the art`);
         assert.ok(close(fire.y, bg.drawY), `${label}: flames at the art's top`);
+        const scene = getTitleArtScene(view);
+        assert.ok(close(scene.scale, bg.scale) && close(scene.x, bg.drawX + crop * bg.scale), `${label}: the logo grows with the art`);
     }
 }
 
@@ -55,6 +57,8 @@ for (const art of [TITLEWIDE, TITLE, BUNDLED]) {
     assert.equal(fire.rightX, 659, `${art.w}x${art.h}: right flame`);
     assert.equal(fire.y, 0, `${art.w}x${art.h}: flames at the scene's top`);
     assert.equal(fire.scale, 1, `${art.w}x${art.h}: flames drawn 1:1`);
+    const scene = getTitleArtScene(host(art, 765, 503));
+    assert.deepEqual([scene.x, scene.y, scene.scale], [0, 0, 1], `${art.w}x${art.h}: the logo stays on the scene`);
 }
 
 console.log("login-title-fire: ok");

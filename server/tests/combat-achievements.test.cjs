@@ -135,7 +135,7 @@ test("crossing a threshold unlocks the tier: status 1 and the unlock message", (
   assert.deepEqual(Progress.claimableTiers(player).map((tier) => tier.name), ["Easy"]);
 });
 
-test("Ghommal: the rewards variant, the lowest tier's condition, the claim after \"Yes please!\"", () => {
+test("Ghommal: reward eligibility does not grant items without a live NPC context", () => {
   const player = createPlayer();
   for (const task of Data.tiers()[0].tasks) Progress.complete(player, task, { silent: true });
   const definition = { getName: () => "Ghommal" };
@@ -146,10 +146,22 @@ test("Ghommal: the rewards variant, the lowest tier's condition, the claim after
   const line = { player, definition, text: "Yes please!" };
   Rewards.dialogueLine(line);
   player.log.length = 0;
-  line.after();
-  assert.deepEqual(player.log, ["varbit 12863=2", "varbit 12869=1"], "as captured: claimed, lamp claimed");
-  assert.deepEqual(player.added, [25920, 25926], "antique lamp and Ghommal's hilt 1");
-  assert.equal(Rewards.dialogueVariant({ player, definition }), null, "nothing left to claim");
+  assert.equal(line.after,undefined,'a synthetic line cannot acquire a live NPC claim callback');
+  Rewards.claim(player,Data.tiers()[0]);
+  assert.deepEqual(player.log,[]);
+  assert.deepEqual(player.added,[]);
+  assert.equal(Progress.tierStatus(player,Data.tiers()[0]),1);
+});
+
+test("combat-achievements:tier: unlocked once reached, claimed only after Ghommal", () => {
+  const player = createPlayer();
+  for (const task of Data.tiers()[0].tasks) Progress.complete(player, task, { silent: true });
+  const request = { player, tier: "Easy" };
+  Ca._test.onTier(request);
+  assert.deepEqual([request.unlocked, request.claimed], [true, false]);
+  Progress.setClaimed(player, Data.tiers()[0]);
+  Ca._test.onTier(request);
+  assert.deepEqual([request.unlocked, request.claimed], [true, true]);
 });
 
 test("Ghommal: no claim without the inventory space", () => {
@@ -298,6 +310,21 @@ test("derived rules: \"without taking any damage\" fails on any hit taken", () =
   Fights.onHitResolved({ attacker: skotizo, target: player, hit: { getCombatType: () => "MELEE", getTotalDamage: () => 3 } });
   Fights.onNpcDeath({ npc: skotizo, killer: player, damagers: [player] });
   assert.equal(Progress.isComplete(player, named("Demon Evasion").id), false);
+});
+
+test("fights: hits on and from NPCs no rule reads are not kept (issue #748)", () => {
+  const player = fighter();
+  player.isPlayer = () => true;
+  const man = fightNpc("Man", 7);
+  const hit = { getCombatType: () => "MELEE", getTotalDamage: () => 1 };
+  for (processCycle = 20000; processCycle < 26000; processCycle += 4) {
+    Fights.onDealt({ player, target: man, hit });
+    Fights.onHitResolved({ attacker: man, target: player, hit });
+  }
+  assert.equal(Fights._test.taken.get(player), undefined, "an hour tanking men keeps no history");
+  Fights.onDealt({ player, target: fightNpc("Alchemical Hydra", 100), hit });
+  Fights.onHitResolved({ attacker: man, target: player, hit });
+  assert.equal(Fights._test.taken.get(player).length, 1, "in a fight a rule reads, every NPC's hits count");
 });
 
 test("Dagannoth Kings: all three within 9 seconds, Rex with another on one tick", () => {

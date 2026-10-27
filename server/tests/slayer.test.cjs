@@ -31,16 +31,17 @@ const handlers = { events: new Map(), death: [], canAttack: [] };
 const emitted = [];
 const spawned = [];
 const commands = {};
+const persistedAttributes = new Map();
 Slayer.register({
   core,
-  persistAttribute() {},
+  persistAttribute: (key, initial) => persistedAttributes.set(key, initial),
   onPlayerLogin() {},
   onNpcDeath: (fn) => handlers.death.push(fn),
   onCanAttack: (fn) => handlers.canAttack.push(fn),
   onNpcInteraction() {},
   onAnyNpcInteraction() {},
   onNpcDialogueCondition() {},
-  onItemAction() {},
+  onItemAction: (...args) => PluginManager.createApi("SlayerTest").onItemAction(...args),
   onInterfaceActionButton() {},
   onCombatHitRoll() {},
   onCombatHitResolved() {},
@@ -86,6 +87,7 @@ function createPlayer({ combat = 126, slayer = 99, levels = {}, points = 0 } = {
       getCombatLevel: () => combat,
       addExperiences: (skill, amount) => xp.push([skill, amount]),
     }),
+    getEquipment: () => ({ getItems: () => [] }),
     getInventory: () => ({
       getFreeSlots: () => 28 - inventory.length,
       contains: (id) => inventory.some(([item]) => item === id),
@@ -219,6 +221,31 @@ test("Krystilia's kills only count in the Wilderness", () => {
   assert.equal(varp(player, "slayer_count"), 4);
 });
 
+test("Krystilia's kills count in the Wilderness Slayer Cave (#1351)", () => {
+  const CAVE_HELLHOUND = 7877; // the Hellhound npc-spawns.json places in the cave
+  const player = createPlayer();
+  giveTask(player, 7, "Hellhounds", 5);
+  kill(player, npc(CAVE_HELLHOUND, { getX: () => 3439, getY: () => 10082, getZ: () => 0 }));
+  assert.equal(varp(player, "slayer_count"), 4);
+  assert.deepEqual(player.xp.map(([skill]) => skill), [Skill.SLAYER]);
+});
+
+test("Krystilia's kills count in the Wilderness dungeons (#1381)", () => {
+  const player = createPlayer();
+  giveTask(player, 7, "Fire Giants", 5);
+  kill(player, npc(2078, { getX: () => 3049, getY: () => 10338, getZ: () => 0 })); // Deep Wilderness Dungeon
+  assert.equal(varp(player, "slayer_count"), 4);
+  giveTask(player, 7, "Black Dragons", 5);
+  kill(player, npc(255, { getX: () => 3048, getY: () => 10266, getZ: () => 0 })); // Lava Maze Dungeon
+  assert.equal(varp(player, "slayer_count"), 4);
+  giveTask(player, 7, "Black Demons", 5);
+  kill(player, npcNamed("Black demon", { getX: () => 3090, getY: () => 9950, getZ: () => 0 })); // Edgeville Dungeon
+  assert.equal(varp(player, "slayer_count"), 4);
+  giveTask(player, 7, "Bloodveld", 5);
+  kill(player, npcNamed("Bloodveld", { getX: () => 3040, getY: () => 10150, getZ: () => 0 })); // Wilderness God Wars Dungeon
+  assert.equal(varp(player, "slayer_count"), 4);
+});
+
 test("kills give Slayer XP equal to the monster's hitpoints and count down", () => {
   const player = createPlayer();
   giveTask(player, 3, "Bloodveld", 3);
@@ -230,6 +257,76 @@ test("kills give Slayer XP equal to the monster's hitpoints and count down", () 
   assert.equal(player.xp[0][1], bloodveld.getDefinition().getHitpoints());
   kill(player, npcNamed("Goblin"));
   assert.equal(varp(player, "slayer_count"), 1, "not on task");
+});
+
+test("content can exclude an exact NPC from both on-task queries and task kill credit", t => {
+  const player = createPlayer();
+  giveTask(player, 3, "Bloodveld", 3);
+  const excluded = npcNamed("Bloodveld");
+  const regular = npcNamed("Bloodveld");
+  const prior = handlers.events.get("slayer:target-eligible");
+  let queries = 0;
+  handlers.events.set("slayer:target-eligible", [(request) => {
+    assert.equal(request.eligible, true, "eligible by default");
+    if (request.npc === excluded) {
+      assert.equal(request.player, player);
+      request.eligible = false;
+      queries++;
+    }
+  }]);
+  t.after(() => prior ? handlers.events.set("slayer:target-eligible", prior) : handlers.events.delete("slayer:target-eligible"));
+  const onTask = npc => {
+    const request = { player, npc, onTask: false };
+    for (const fn of handlers.events.get("slayer:on-task")) fn(request);
+    return request.onTask;
+  };
+  assert.equal(onTask(excluded), false);
+  kill(player, excluded);
+  assert.equal(varp(player, "slayer_count"), 3);
+  assert.equal(player.xp.length, 0);
+  assert.equal(onTask(regular), true, "same cache ID in another instance stays eligible");
+  kill(player, regular);
+  assert.equal(varp(player, "slayer_count"), 2);
+  assert.equal(player.xp.length, 1);
+  assert.ok(queries >= 2, "query and authoritative death handling both consult content");
+});
+
+test("a target eligibility veto removes black-mask and imbued helmet accuracy and damage bonuses", t => {
+  const player = createPlayer();
+  giveTask(player, 3, "Bloodveld", 3);
+  const target = npcNamed("Bloodveld");
+  target.getAsNpc = () => target;
+  player.getAsPlayer = () => player;
+  player.getCombat = () => ({ getTarget: () => target });
+  let head = core.ItemIdentifiers.SLAYER_HELMET_I_;
+  player.getEquipment = () => ({ getItems: () => [new core.Item(head)] });
+  const modifiers = {};
+  const api = new Proxy({
+    core,
+    emitCustomEvent(name, payload) { for (const fn of handlers.events.get(name) ?? []) fn(payload); },
+    registerMeleeAttackAccuracyModifier: fn => { modifiers.meleeAccuracy = fn; },
+    registerMeleeHitModifier: fn => { modifiers.meleeDamage = fn; },
+    registerRangedAttackAccuracyModifier: fn => { modifiers.rangedAccuracy = fn; },
+    registerRangedHitModifier: fn => { modifiers.rangedDamage = fn; },
+    registerMagicAttackAccuracyModifier: fn => { modifiers.magicAccuracy = fn; },
+    registerMagicHitModifier: fn => { modifiers.magicDamage = fn; },
+  }, { get: (api, key) => api[key] ?? (() => {}) });
+  require("../plugins/items/SlayerHelmet.plugin").register(api);
+  let eligible = true;
+  const prior = handlers.events.get("slayer:target-eligible");
+  handlers.events.set("slayer:target-eligible", [request => { if (request.npc === target) request.eligible = eligible; }]);
+  t.after(() => prior ? handlers.events.set("slayer:target-eligible", prior) : handlers.events.delete("slayer:target-eligible"));
+  for (const [kind, boosted] of [["meleeAccuracy", 140], ["meleeDamage", 140], ["rangedAccuracy", 138],
+    ["rangedDamage", 138], ["magicAccuracy", 138], ["magicDamage", 138]]) {
+    eligible = true;
+    assert.equal(modifiers[kind](player, 120), boosted, kind);
+    eligible = false;
+    assert.equal(modifiers[kind](player, 120), 120, `${kind} veto`);
+  }
+  head = core.ItemIdentifiers.BLACK_MASK;
+  eligible = false;
+  assert.equal(modifiers.meleeAccuracy(player, 120), 120);
+  assert.equal(modifiers.meleeDamage(player, 120), 120);
 });
 
 test("no points for the first four tasks, then the master's points and the streak multipliers", () => {
@@ -429,6 +526,27 @@ test("a gargoyle waits at 0 hitpoints for the rock hammer", () => {
   const auto = { npc: fresh, preventDeath: false };
   Finishers.beforeDeath(auto);
   assert.equal(auto.preventDeath, false, "Gargoyle Smasher with a hammer finishes it");
+});
+
+test("the rock hammer also finishes the Grotesque Guardians, each with its own line ('Dusk cracks apart.')", () => {
+  const player = createPlayer();
+  player.inventory.push([4162, 1]);
+  player.performAnimation = () => {};
+  const finishers = require("../plugins/skills/data/slayer-finishers.json").finishers;
+  for (const name of ["Dusk", "Dawn"]) {
+    const guardian = npcNamed(name);
+    let hitpoints = 6;
+    Object.assign(guardian, {
+      getAttribute: () => undefined, setAttribute() {},
+      getHitpoints: () => hitpoints, setHitpoints: (value) => { hitpoints = value; },
+      getCombat: () => ({ getKiller: () => player }),
+    });
+    const event = { player, target: guardian, itemId: 4162, handled: false };
+    Finishers.itemOnNpc(event);
+    assert.equal(event.handled, true, name);
+    assert.equal(player.messages.at(-1), finishers.find((f) => f.names.includes(name)).finished, name);
+    assert.equal(player.messages.at(-1), `${name} cracks apart.`, name);
+  }
 });
 
 test("superiors: Bigger and Badder spawns one 1 time in 200, worth ten times its hitpoints", () => {
@@ -655,6 +773,7 @@ test("picking a task sets it with its modifier, as live does", () => {
   setVarbit(player, "slayer_choose_task_2", taskId("Aberrant Spectres"));
   setVarbit(player, "slayer_choose_task_2_modifier_id", Data.MODIFIER.QUANTITY);
   setVarbit(player, "slayer_choose_task_2_modifier_value", 75);
+  setVarbit(player, "slayer_choose_task_2_modifier_negative", 0);
   const before = emitted.length;
   Choice.pick({ player, action: 10 });
   const task = Tasks.current(player);
@@ -736,4 +855,191 @@ test("superiors roll the unique tables, more often with Mortimer's modifier", ()
   setVarbit(player, "slayer_modifier_id", Data.MODIFIER.SUPERIOR_UNIQUES);
   setVarbit(player, "slayer_modifier_value", 50);
   assert.equal(Tasks.killBoost(player, hand, Data.MODIFIER.SUPERIOR_UNIQUES), 1.5);
+});
+
+
+function braceletPlayer() {
+  const player = createPlayer();
+  const items = Array.from({ length: 14 }, () => new core.Item(-1));
+  const bag = [new core.Item(core.ItemIdentifiers.BRACELET_OF_SLAUGHTER)];
+  items[core.Equipment.HANDS_SLOT] = new core.Item(core.ItemIdentifiers.BRACELET_OF_SLAUGHTER);
+  const equipment = {
+    get: slot => items[slot], getItems: () => items,
+    set: (slot, item) => { items[slot] = item; return equipment; },
+    refreshItems() { player.equipmentRefreshes++; return equipment; },
+  };
+  const inventory = {
+    get: slot => bag[slot], getItems: () => bag,
+    deleteAtSlot(slot) { bag[slot] = new core.Item(-1); return inventory; },
+    refreshItems() { return inventory; },
+  };
+  player.equipmentRefreshes = 0;
+  player.getEquipment = () => equipment;
+  player.getInventory = () => inventory;
+  // Keep the real PacketSender, but capture typed messages too.
+  player.getSession = () => ({ sendClientPacket() { return true; }, write() {} });
+  const sender = player.getPacketSender();
+  const typed = sender.sendTypedMessage.bind(sender);
+  player.typedMessages = [];
+  sender.sendTypedMessage = (type, message) => { player.typedMessages.push([type, message]); return typed(type, message); };
+  return player;
+}
+
+function braceletAction(player, worn, clickType) {
+  const slot = worn ? core.Equipment.HANDS_SLOT : 0;
+  const item = (worn ? player.getEquipment() : player.getInventory()).get(slot);
+  return PluginManager.emitItemAction({ player, item, itemId: item.getId(), slot, clickType,
+    interfaceId: worn ? core.Equipment.INVENTORY_INTERFACE_ID : 149, handled: false });
+}
+
+test("slaughter activation preserves the last task kill and XP, using the captured spam message", t => {
+  const player = braceletPlayer();
+  giveTask(player, 3, "Bloodveld", 1);
+  t.mock.method(Math, "random", () => 0);
+  const target = npcNamed("Bloodveld");
+  kill(player, target);
+  assert.equal(varp(player, "slayer_count"), 1);
+  assert.equal(player.xp[0][1], target.getDefinition().getHitpoints());
+  assert.deepEqual(player.typedMessages, [[core.ChatType.SPAM,
+    "Your bracelet of slaughter prevents your slayer count from decreasing. It has 29 charges left."]]);
+  assert.equal(varbit(player, "slayer_tasks_completed"), 0);
+});
+
+test("slaughter rolls only on qualifying kills while worn and has a 25% boundary", t => {
+  const player = braceletPlayer();
+  giveTask(player, 3, "Bloodveld", 4);
+  const random = t.mock.method(Math, "random", () => 0.25);
+  kill(player, npcNamed("Bloodveld"));
+  assert.equal(varp(player, "slayer_count"), 3);
+  assert.equal(player.typedMessages.length, 0);
+  random.mock.mockImplementation(() => 0.249999);
+  kill(player, npcNamed("Bloodveld"));
+  assert.equal(varp(player, "slayer_count"), 3);
+  const rolls = random.mock.callCount();
+  kill(player, npcNamed("Goblin"));
+  player.getEquipment().set(core.Equipment.HANDS_SLOT, new core.Item(-1));
+  kill(player, npcNamed("Bloodveld"));
+  assert.equal(random.mock.callCount(), rolls, "off-task and inventory bracelets never roll");
+  assert.equal(varp(player, "slayer_count"), 2);
+});
+
+test("slaughter charges are shared by replacement bracelets and Check works worn and in inventory", t => {
+  const player = braceletPlayer();
+  giveTask(player, 3, "Bloodveld", 2);
+  t.mock.method(Math, "random", () => 0);
+  kill(player, npcNamed("Bloodveld"));
+  assert.equal(braceletAction(player, false, 3), true);
+  assert.match(player.messages.at(-1), /29 charges/);
+  // A distinct item has the same remaining charges; no per-item metadata.
+  player.getEquipment().set(core.Equipment.HANDS_SLOT, new core.Item(core.ItemIdentifiers.BRACELET_OF_SLAUGHTER));
+  assert.equal(braceletAction(player, true, 2), true);
+  assert.match(player.messages.at(-1), /29 charges/);
+});
+
+test("the thirtieth activation removes only the worn bracelet and resets shared charges", t => {
+  const player = braceletPlayer();
+  giveTask(player, 3, "Bloodveld", 1);
+  t.mock.method(Math, "random", () => 0);
+  for (let n = 0; n < 30; n++) kill(player, npcNamed("Bloodveld"));
+  assert.equal(player.getEquipment().get(core.Equipment.HANDS_SLOT).getId(), -1);
+  assert.equal(player.equipmentRefreshes, 1);
+  assert.equal(varp(player, "slayer_count"), 1);
+  assert.equal(braceletAction(player, false, 3), true);
+  assert.match(player.messages.at(-1), /30 charges/);
+  kill(player, npcNamed("Bloodveld"));
+  assert.equal(varp(player, "slayer_count"), 0, "a subsequent kill completes normally");
+  assert.equal(varbit(player, "slayer_tasks_completed"), 1);
+});
+
+test("Break sacrifices the selected inventory bracelet and resets the worn bracelet's shared pool", t => {
+  const player = braceletPlayer();
+  giveTask(player, 3, "Bloodveld", 1);
+  t.mock.method(Math, "random", () => 0);
+  kill(player, npcNamed("Bloodveld"));
+  assert.equal(braceletAction(player, false, 4), true);
+  assert.equal(player.getInventory().get(0).getId(), -1);
+  assert.equal(player.getEquipment().get(core.Equipment.HANDS_SLOT).getId(), core.ItemIdentifiers.BRACELET_OF_SLAUGHTER);
+  assert.equal(braceletAction(player, true, 2), true);
+  assert.match(player.messages.at(-1), /30 charges/);
+});
+
+
+test("slaughter charges survive an attribute save/load and do not leak between players", t => {
+  const Bracelet = require("../plugins/skills/slayer/SlaughterBracelet.Slayer");
+  assert.equal(persistedAttributes.get(Bracelet.CHARGES_ATTRIBUTE), 30);
+  const player = braceletPlayer();
+  giveTask(player, 3, "Bloodveld", 2);
+  t.mock.method(Math, "random", () => 0);
+  kill(player, npcNamed("Bloodveld"));
+  const saved = JSON.parse(JSON.stringify(Object.fromEntries(
+    [...persistedAttributes.keys()].map(key => [key, player.getAttribute(key)]))));
+  const restored = braceletPlayer();
+  for (const [key, value] of Object.entries(saved)) restored.setAttribute(key, value);
+  assert.equal(braceletAction(restored, true, 2), true);
+  assert.match(restored.messages.at(-1), /29 charges/);
+  const other = braceletPlayer();
+  braceletAction(other, true, 2);
+  assert.match(other.messages.at(-1), /30 charges/);
+});
+
+test("Jad and Zuk never consume slaughter charges or roll the effect", () => {
+  const Bracelet = require("../plugins/skills/slayer/SlaughterBracelet.Slayer");
+  const player = braceletPlayer();
+  for (const name of ["TzTok-Jad", "TzKal-Zuk"]) {
+    assert.equal(Bracelet.preventsDecrement(player, npcNamed(name), () => { throw Error("excluded boss rolled"); }), false);
+  }
+  assert.equal(Bracelet.charges(player), 30);
+});
+
+test("claimed elite Combat Achievements regenerate on a roll below 10%, otherwise the bracelet disappears", t => {
+  const Bracelet = require("../plugins/skills/slayer/SlaughterBracelet.Slayer");
+  const previous = handlers.events.get("combat-achievements:tier");
+  let claimed = true;
+  handlers.events.set("combat-achievements:tier", [request => {
+    assert.equal(request.tier, "Elite");
+    request.unlocked = true;
+    request.claimed = claimed;
+  }]);
+  t.after(() => previous ? handlers.events.set("combat-achievements:tier", previous) : handlers.events.delete("combat-achievements:tier"));
+  for (const [roll, isClaimed] of [[0.099999, true], [0.1, true], [0, false]]) {
+    claimed = isClaimed;
+    const player = braceletPlayer();
+    giveTask(player, 3, "Bloodveld", 1);
+    player.setAttribute(Bracelet.CHARGES_ATTRIBUTE, 1);
+    let n = 0;
+    const mock = t.mock.method(Math, "random", () => n++ === 0 ? 0 : roll);
+    kill(player, npcNamed("Bloodveld"));
+    mock.mock.restore();
+    assert.equal(varp(player, "slayer_count"), 1);
+    assert.equal(player.xp.length, 1);
+    assert.equal(Bracelet.charges(player), 30);
+    const regenerates = isClaimed && roll < 0.1;
+    assert.equal(player.getEquipment().get(core.Equipment.HANDS_SLOT).getId(), regenerates ? core.ItemIdentifiers.BRACELET_OF_SLAUGHTER : -1);
+    assert.match(player.typedMessages.at(-1)[1], regenerates ? /regenerates/ : /crumbles/);
+  }
+});
+
+test("notes and placeholders cannot Check or Break the shared slaughter charges", () => {
+  for (const itemId of [core.ItemIdentifiers.BRACELET_OF_SLAUGHTER_2, core.ItemIdentifiers.BRACELET_OF_SLAUGHTER_3]) {
+    const player = braceletPlayer();
+    const item = new core.Item(itemId);
+    for (const clickType of [3, 4]) {
+      assert.equal(PluginManager.emitItemAction({ player, item, itemId, slot: 0, clickType, interfaceId: 149, handled: false }), false);
+    }
+    assert.equal(player.messages.length, 0);
+  }
+});
+
+test("leaving the Fight Cave clears a Jad task, with the Wiki's message and the streak kept", () => {
+  const player = createPlayer();
+  const jad = npcNamed("TzTok-Jad");
+  const leave = (who, npcId) => handlers.events.get("slayer:leave-task-area").forEach((fn) => fn({ player: who, npcId, message: "the fight cave" }));
+  giveTask(player, MORTIMER, "TzTok-Jad", 2);
+  setVarbit(player, "slayer_tasks_completed", 7);
+  leave(player, npcNamed("Bloodveld").getId());
+  assert.equal(varp(player, "slayer_count"), 2, "another monster's area leaves it be");
+  leave(player, jad.getId());
+  assert.equal(varp(player, "slayer_count"), 0);
+  assert.equal(player.messages.at(-1), "You no longer have a slayer task as you left the fight cave.");
+  assert.equal(varbit(player, "slayer_tasks_completed"), 7, "the streak is not reset");
 });

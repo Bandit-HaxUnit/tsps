@@ -8,11 +8,17 @@
  * the XP come 4 ticks later, and the next ore starts on the 5th. Iron fails half the time:
  * "The ore is too impure and you fail to refine it." With no ore at all the furnace says "You
  * don't have any ore to smelt." in a message box.
+ *
+ * Smithing catalyst (https://oldschool.runescape.wiki/w/Smithing_catalyst): carried while
+ * smelting a bar that uses coal, at a furnace or with Superheat Item, one catalyst per bar
+ * halves the bar's coal and doubles its experience. Without enough catalysts or coal for that,
+ * the bar is smelted normally. The Wiki gives no message for it.
  */
 const Core = require("./Core.Smithing");
 const Data = require("./Data.Smithing");
 const Sessions = require("./Sessions.Smithing");
-const { animation } = require("./Common.Smithing");
+const Common = require("./Common.Smithing");
+const { animation } = Common;
 
 // Wiki: goldsmith gauntlets (or the Smithing or max cape) raise gold bar XP from 22.5 to 56.2.
 const GOLDSMITH_GAUNTLETS_BONUS_XP = 33.7;
@@ -50,9 +56,31 @@ function hasIngredients(player, recipe) {
   return recipe.ingredients.every(([itemId, amount]) => available(player, itemId) >= amount);
 }
 
-/** How many of a recipe the player's ore (and coal bag) covers. */
+/** How many of a recipe the player's ore (and coal bag) covers: the catalysed bars first, then the rest. */
 function batches(player, recipe) {
-  return Math.min(...recipe.ingredients.map(([itemId, amount]) => Math.floor(available(player, itemId) / amount)));
+  const left = new Map();
+  const have = (itemId) => (left.has(itemId) ? left.get(itemId) : available(player, itemId));
+  const covered = (candidate) => Math.min(...candidate.ingredients.map(([itemId, amount]) => Math.floor(have(itemId) / amount)));
+  const catalysed = withCatalyst(player, recipe);
+  if (catalysed === recipe) return covered(recipe);
+  const first = covered(catalysed);
+  for (const [itemId, amount] of catalysed.ingredients) left.set(itemId, have(itemId) - amount * first);
+  return first + covered(recipe);
+}
+
+/** The recipe with a catalyst: half the coal, one catalyst, double XP. Unchanged for bars without coal. */
+function withCatalyst(player, recipe) {
+  const { COAL, SMITHING_CATALYST } = Core.ItemIdentifiers;
+  if (recipe.catalysed || !recipe.ingredients.some(([itemId]) => itemId === COAL)) return recipe;
+  if (!player.getInventory().contains(SMITHING_CATALYST)) return recipe;
+  const ingredients = recipe.ingredients.map(([itemId, amount]) => [itemId, itemId === COAL ? Math.ceil(amount / 2) : amount]);
+  return { ...recipe, ingredients: [...ingredients, [SMITHING_CATALYST, 1]], catalysed: true };
+}
+
+/** The catalyst's recipe when the player has its ingredients, otherwise the recipe itself. */
+function resolveCatalyst(player, recipe) {
+  const catalysed = withCatalyst(player, recipe);
+  return catalysed !== recipe && hasIngredients(player, catalysed) ? catalysed : recipe;
 }
 
 /** Wiki (Coal bag): the inventory's coal goes first, then the bag's ("storage:take"). */
@@ -66,6 +94,7 @@ function consumeIngredients(player, recipe) {
 }
 
 function smeltingXp(player, recipe) {
+  if (recipe.catalysed) return recipe.xp * 2;
   if (recipe.barId !== Core.ItemIdentifiers.GOLD_BAR) return recipe.xp;
   const gloves = player.getEquipment().get(Core.Equipment.HANDS_SLOT)?.getId?.();
   const cape = { player, skill: "SMITHING", result: false };
@@ -80,7 +109,8 @@ function statement(player, text) {
 }
 
 function levelOf(player, recipe) {
-  return player.getSkillManager().getCurrentLevel(recipe.skill ?? Core.Skill.SMITHING);
+  if (!recipe.skill || recipe.skill === Core.Skill.SMITHING) return Common.smithingLevel(player);
+  return player.getSkillManager().getCurrentLevel(recipe.skill);
 }
 
 /**
@@ -95,7 +125,7 @@ function resolveRecipe(player, recipe) {
 
 /** Opens the cycle: the message, animation and sound; the ore goes in on the finish tick. */
 function beginSmelt(player, recipe) {
-  if (!hasIngredients(player, recipe)) {
+  if (!hasIngredients(player, resolveCatalyst(player, recipe))) {
     player.sendMessage(recipe.missingMessage);
     return false;
   }
@@ -105,7 +135,8 @@ function beginSmelt(player, recipe) {
   return true;
 }
 
-function finishSmelt(player, recipe, furnaceId) {
+function finishSmelt(player, chosen, furnaceId) {
+  const recipe = resolveCatalyst(player, chosen);
   if (!hasIngredients(player, recipe)) {
     player.sendMessage(recipe.missingMessage);
     return false;
@@ -113,7 +144,8 @@ function finishSmelt(player, recipe, furnaceId) {
   consumeIngredients(player, recipe);
   const inventory = player.getInventory();
   for (const [itemId, amount] of recipe.byproducts ?? []) inventory.addItem(new Core.Item(itemId, amount));
-  const outcome = { player, recipe, furnaceId, success: Math.random() < (recipe.successChance ?? 1), bars: 1 };
+  // A second bar (Varrock armour) sets `secondRecipe`, the recipe its ingredients were taken by.
+  const outcome = { player, recipe, base: chosen, furnaceId, success: Math.random() < (recipe.successChance ?? 1), bars: 1 };
   Core.api.emitCustomEvent("smithing:smelt-outcome", outcome);
   if (!outcome.success) {
     player.sendMessage(recipe.failMessage);
@@ -121,14 +153,20 @@ function finishSmelt(player, recipe, furnaceId) {
   }
   const skill = recipe.skill ?? Core.Skill.SMITHING;
   inventory.addItem(new Core.Item(recipe.barId, outcome.bars));
-  player.getSkillManager().addExperiences(skill, smeltingXp(player, recipe) * outcome.bars);
+  const extraXp = (outcome.bars - 1) * smeltingXp(player, outcome.secondRecipe ?? recipe);
+  player.getSkillManager().addExperiences(skill, smeltingXp(player, recipe) + extraXp);
   if (recipe.retrieveMessage) player.sendMessage(recipe.retrieveMessage);
   Core.api.emitCustomEvent("smelting:success", { player, skill, itemId: recipe.barId });
+  Common.produced(player, skill, recipe.barId, outcome.bars, smeltingXp(player, recipe) + extraXp, "smelt");
   return true;
 }
 
 function startSmelting(player, chosen, amount, furnaceId = -1) {
   if (!chosen || !Number.isInteger(amount) || amount <= 0) return false;
+  if (chosen.members && !Core.WorldDefinition.isMembersWorld()) {
+    player.sendMessage("You need to be on a members world to smelt that bar.");
+    return false;
+  }
   const recipe = resolveRecipe(player, chosen);
   if (recipe.quest && !Core.questComplete(player, recipe.quest)) {
     player.sendMessage(`You need to complete ${Data.questName(recipe.quest)} to smelt ${recipe.barPhrase}.`);
@@ -138,12 +176,14 @@ function startSmelting(player, chosen, amount, furnaceId = -1) {
     statement(player, `You need a Smithing level of ${recipe.level} to smelt ${recipe.barPhrase}.`);
     return false;
   }
-  if (!hasIngredients(player, recipe)) {
+  if (!hasIngredients(player, resolveCatalyst(player, recipe))) {
     player.sendMessage(recipe.missingMessage);
     return false;
   }
   Sessions.start(player, {
     type: "smelt",
+    // Molten glass is a Crafting recipe at the same furnace: its batching is Crafting's question.
+    skill: recipe.skill ?? Core.Skill.SMITHING,
     remaining: amount,
     interval: SMELT_INTERVAL_TICKS,
     finishDelay: SMELT_FINISH_TICKS,
@@ -236,8 +276,21 @@ function fillFurnaceIds() {
   }
 }
 
+/**
+ * "smithing:bar-for-ore": the bar an ore smelts into and its XP, for content that smelts as it mines (a
+ * league relic): the furnace recipe whose main ore it is (its first ingredient), so coal, a steel bar's
+ * second ingredient, smelts into nothing.
+ */
+function answerBarForOre(request) {
+  const recipe = Data.SMELTING_RECIPES.find((candidate) => !candidate.furnace && candidate.ingredients[0]?.[0] === request.oreId);
+  if (!recipe) return;
+  request.barId = recipe.barId;
+  request.xp = recipe.xp;
+}
+
 module.exports = function attach(api) {
   api.onServerStartup(fillFurnaceIds);
+  api.onCustomEvent("smithing:bar-for-ore", answerBarForOre);
   // Some furnaces (e.g. Tutorial Island 10082) only offer "Use".
   api.onObjectInteraction("Furnace", { Smelt: smelt, Use: smelt });
   api.onObjectInteraction("Small furnace", { Smelt: smelt });
@@ -245,11 +298,15 @@ module.exports = function attach(api) {
 };
 
 Object.assign(module.exports, {
+  answerBarForOre,
   FURNACE_OBJECT_IDS,
   SMELTING_SKILLMULTI_OP_FLAGS,
   quantityForSmeltAction,
   hasIngredients,
   consumeIngredients,
+  batches,
+  withCatalyst,
+  resolveCatalyst,
   smeltingXp,
   startSmelting,
   isSmeltingActive,

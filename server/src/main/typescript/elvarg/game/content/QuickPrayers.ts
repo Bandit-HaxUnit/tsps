@@ -1,13 +1,19 @@
 import { CacheDefinitions } from "../cache/CacheDefinitions";
 import { Player } from "../entity/impl/player/Player";
 import { Skill } from "../model/Skill";
-import { PrayerHandler } from "./PrayerHandler";
-import { PrayerData } from "./PrayerHandler";
+import type { PrayerData } from "./PrayerHandler";
 
 export class QuickPrayers {
-    private static readonly PRAYER_VALUES: PrayerData[] = Array.from(PrayerData.values());
-    private static get PRAYER_HANDLER() {
-        return PrayerHandler;
+    private static prayerValues: PrayerData[] | null = null;
+    private static get PRAYER_VALUES(): PrayerData[] {
+        return this.prayerValues ??= Array.from(this.PRAYER_DATA.values());
+    }
+    private static get PRAYER_HANDLER(): typeof import("./PrayerHandler").PrayerHandler {
+        // Loaded lazily: Player -> QuickPrayers -> PrayerHandler -> Player is a load-time cycle.
+        return require("./PrayerHandler").PrayerHandler;
+    }
+    private static get PRAYER_DATA(): typeof import("./PrayerHandler").PrayerData {
+        return require("./PrayerHandler").PrayerData;
     }
     public static get THICK_SKIN() {
         return QuickPrayers.PRAYER_HANDLER.THICK_SKIN;
@@ -104,19 +110,19 @@ export class QuickPrayers {
     }
 
     public static canUse(player: Player, prayer: PrayerData, msg: boolean): boolean {
-        return PrayerHandler.canUse(player, prayer, msg);
+        return QuickPrayers.PRAYER_HANDLER.canUse(player, prayer, msg);
     }
 
     public static isActivated(player: Player, prayerId: number): boolean {
-        return PrayerHandler.isActivated(player, prayerId);
+        return QuickPrayers.PRAYER_HANDLER.isActivated(player, prayerId);
     }
 
     public static activatePrayerPrayerId(player: Player, prayerId: number): void {
-        PrayerHandler.activatePrayerPrayerId(player, prayerId);
+        QuickPrayers.PRAYER_HANDLER.activatePrayerPrayerId(player, prayerId);
     }
 
     public static deactivatePrayer(player: Player, prayerId: number): void {
-        PrayerHandler.deactivatePrayer(player, prayerId);
+        QuickPrayers.PRAYER_HANDLER.deactivatePrayer(player, prayerId);
     }
     private static readonly TOGGLE_QUICK_PRAYERS = 1500;
     private static readonly SETUP_BUTTON = 1506;
@@ -166,7 +172,9 @@ export class QuickPrayers {
     private selectedPrayerMask(): number {
         let selected = 0;
         for (const [prayerId, prayer] of this.prayers.entries()) {
-            if (prayer != null) selected |= 1 << QuickPrayers.QUICK_PRAYER_SLOT_BY_ID[prayerId];
+            const slot = QuickPrayers.QUICK_PRAYER_SLOT_BY_ID[prayerId];
+            // Prayers without a slot in the mask (Zeal) can't be shown as selected.
+            if (prayer != null && slot !== undefined) selected |= 1 << slot;
         }
         return selected;
     }
@@ -285,7 +293,7 @@ export class QuickPrayers {
             .sendInterfaceFlagsRange(
                 (QuickPrayers.SETUP_WIDGET_GROUP_ID << 16) | QuickPrayers.SETUP_WIDGET_CHILD_ID,
                 0,
-                QuickPrayers.PRAYER_VALUES.length - 1,
+                QuickPrayers.QUICK_PRAYER_SLOT_BY_ID.length - 1,
                 1 << 1,
             );
         this.selectingPrayers = true;
@@ -297,7 +305,7 @@ export class QuickPrayers {
             return;
         }
         if (this.enabled) {
-            PrayerHandler.deactivatePrayers(this.player);
+            QuickPrayers.PRAYER_HANDLER.deactivatePrayers(this.player);
             this.player.getPacketSender().sendVarbit(QuickPrayers.PRAYER_ALL_ACTIVE_VARBIT, 0);
             this.enabled = false;
         } else {
@@ -310,7 +318,7 @@ export class QuickPrayers {
                 QuickPrayers.canUse(this.player, blocked, true);
                 this.enabled = false;
             } else {
-                PrayerHandler.deactivatePrayers(this.player);
+                QuickPrayers.PRAYER_HANDLER.deactivatePrayers(this.player);
                 this.player.getPacketSender().sendVarbit(
                     QuickPrayers.PRAYER_ALL_ACTIVE_VARBIT,
                     this.selectedPrayerMask(),
@@ -328,7 +336,7 @@ export class QuickPrayers {
         if (groupId === QuickPrayers.PRAYER_WIDGET_GROUP_ID && childId === QuickPrayers.QUICK_PRAYER_WIDGET_CHILD_ID) {
             if (buttonNum === 2) {
                 this.setPrayers(QuickPrayers.PRAYER_VALUES.map((prayer, prayerId) =>
-                    QuickPrayers.isActivated(this.player, prayerId) ? prayer : null,
+                    QuickPrayers.isActivated(this.player, prayerId) && prayerId < QuickPrayers.QUICK_PRAYER_SLOT_BY_ID.length ? prayer : null,
                 ));
                 this.sync();
             } else this.toggleQuickPrayers();

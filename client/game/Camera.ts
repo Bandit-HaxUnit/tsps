@@ -60,6 +60,8 @@ export class Camera {
 
     pitch: number;
     yaw: number;
+    /** Bumped each time the angle is forced (snapToPitch/snapToYaw): a script or the server turned it. */
+    forcedAngleChanges = 0;
 
     private targetPos: vec3;
     private targetPitch: number;
@@ -148,7 +150,7 @@ export class Camera {
 
     static rawPitchToScenePitchAngle(rawPitch: number): number {
         const normalizedPitch = clamp(Number(rawPitch) || 0, 0, 512);
-        return 128 + Math.floor((normalizedPitch * 255) / 512);
+        return 128 + (normalizedPitch * 255) / 512;
     }
 
     snapToPosition(x?: number, y?: number, z?: number): void {
@@ -410,7 +412,7 @@ export class Camera {
 
     setScenePitchOverride(pitch: number | undefined): void {
         this.scenePitchOverride =
-            pitch === undefined ? undefined : clamp(Math.trunc(pitch), 0, 512);
+            pitch === undefined ? undefined : clamp(pitch, 0, 512);
         this.updated = true;
     }
 
@@ -457,12 +459,14 @@ export class Camera {
     }
 
     snapToPitch(pitch: number): void {
+        this.forcedAngleChanges++;
         this.targetPitch = clamp(pitch, 0, 512);
         this.pitch = this.targetPitch;
         this.updated = true;
     }
 
     snapToYaw(yaw: number): void {
+        this.forcedAngleChanges++;
         const wrapped = this.wrapYawInternal(yaw);
         this.targetYaw = wrapped;
         this.yaw = this.targetYaw;

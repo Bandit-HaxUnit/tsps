@@ -75,6 +75,8 @@ export type SequenceDefinition = {
     priority: number;
     /** SeqType.precedenceAnimating (opcode 9); -1 when unset. */
     movementPriority: number;
+    /** SeqType.forcedPriority (opcode 5); -1 when unset. */
+    forcedPriority: number;
     /** Opcode 3 or 17 present: the client derives 2 for unset priorities instead of 0. */
     masked: boolean;
     /** Client cycles one pass of the animation takes; 0 when the sequence has no frames. */
@@ -116,6 +118,7 @@ function decodeSequence(id: number): SequenceDefinition {
     const definition: SequenceDefinition = {
         priority: -1,
         movementPriority: -1,
+        forcedPriority: -1,
         masked: false,
         clientCycles: 0,
     };
@@ -144,9 +147,10 @@ function decodeSequence(id: number): SequenceDefinition {
                 definition.masked = true;
                 continue;
             }
-            if (opcode === 9 || opcode === 10) {
+            if (opcode === 5 || opcode === 9 || opcode === 10) {
                 const value = buffer.readUnsignedByte();
-                if (opcode === 9) definition.movementPriority = value;
+                if (opcode === 5) definition.forcedPriority = value;
+                else if (opcode === 9) definition.movementPriority = value;
                 else definition.priority = value;
                 continue;
             }
@@ -191,6 +195,15 @@ function decodeSequence(id: number): SequenceDefinition {
  */
 export function getSequencePriority(id: number): number {
     return decodeSequence(id).priority;
+}
+
+/**
+ * SeqType.forcedPriority (opcode 5; 5 when unset): a sequence can't replace one with a higher
+ * value (attacks are 6, blocks 5, so a block never cuts a swing short).
+ */
+export function getSequenceForcedPriority(id: number): number {
+    const forced = decodeSequence(id).forcedPriority;
+    return forced === -1 ? 5 : forced;
 }
 
 /**

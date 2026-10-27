@@ -14,6 +14,8 @@ export type WorldMapIconDeps = {
     loadMapElement: (elementId: number) => any;
     runCs2Script: (script: Cs2Script, intArgs: number[]) => void;
     invalidateAllWidgets: () => void;
+    /** Plugin entries for the map tile under the mouse (RuneLite plugins' MenuEntryAdded on the map). */
+    pluginMenuEntries?: (screenX: number, screenY: number) => SimpleMenuEntry[];
 };
 
 export function getWorldMapIconKey(icon: WorldMapRenderedIcon): string {
@@ -157,6 +159,20 @@ export function updateWorldMapIconHover(
 }
 
 export function getWorldMapMenuEntriesAt(
+    state: WorldMapStateHolder,
+    deps: WorldMapIconDeps,
+    screenX: number,
+    screenY: number,
+): SimpleMenuEntry[] {
+    const entries = getWorldMapIconMenuEntriesAt(state, deps, screenX, screenY);
+    const plugin = deps.pluginMenuEntries?.(screenX | 0, screenY | 0) ?? [];
+    if (plugin.length === 0) return entries;
+    if (entries.length === 0) return [...plugin, { option: "Cancel", opcode: MenuOpcode.Cancel }];
+    // Above Cancel, under the icon's own options.
+    return [...entries.slice(0, -1), ...plugin, entries[entries.length - 1]];
+}
+
+function getWorldMapIconMenuEntriesAt(
     state: WorldMapStateHolder,
     deps: WorldMapIconDeps,
     screenX: number,

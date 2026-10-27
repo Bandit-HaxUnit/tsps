@@ -899,6 +899,9 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             };
         }
 
+        case ServerPacketId.TRIGGER_ONDIALOGABORT:
+            return { type: "widget", payload: { action: "trigger_ondialogabort" } };
+
         case ServerPacketId.WIDGET_CLOSE_SUB:
             return {
                 type: "widget",
@@ -942,6 +945,19 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             return { type: "widget", payload: { action: "set_colour", uid, colour } };
         }
 
+        case ServerPacketId.WIDGET_SET_ANGLE:
+            // IF_SETANGLE: the model's x and y angles and zoom, as the cs2 op sets them.
+            return {
+                type: "widget",
+                payload: {
+                    action: "set_angle",
+                    uid: reader.readInt(),
+                    angleX: reader.readShort(),
+                    angleY: reader.readShort(),
+                    zoom: reader.readShort(),
+                },
+            };
+
         case ServerPacketId.WIDGET_SET_POSITION:
             return {
                 type: "widget",
@@ -983,6 +999,19 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                     fromSlot: reader.readShort(),
                     toSlot: reader.readShort(),
                     flags: reader.readInt(),
+                },
+            };
+
+        case ServerPacketId.WIDGET_SET_FLAGS_RANGE_V2:
+            return {
+                type: "widget",
+                payload: {
+                    action: "set_flags_range",
+                    uid: reader.readInt(),
+                    fromSlot: reader.readShort(),
+                    toSlot: reader.readShort(),
+                    flags: reader.readInt(),
+                    opMask: reader.readInt(),
                 },
             };
 
@@ -1559,6 +1588,11 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                 const flags = reader.readByte();
                 if (!easing) return null;
                 return { type: "camera", payload: { mode: "arc", centreX, centreY, x, y, height, cycles, easing, ignoreTerrain: (flags & 2) !== 0 } };
+            }
+            if (mode === 12) {
+                if (reader.readByte() === 1) return { type: "camera", payload: { mode: "target", player: reader.readShort() } };
+                const x = reader.readShort(), y = reader.readShort();
+                return { type: "camera", payload: { mode: "target", x, y, level: reader.readByte() } };
             }
             if (mode === 6) {
                 return { type: "camera", payload: { mode: "unlock", unlock: reader.readBoolean() } };

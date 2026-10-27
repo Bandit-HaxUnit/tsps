@@ -64,11 +64,24 @@ function interrupted(core, player, start) {
   );
 }
 
+/** The standard cast; a league's own animation set (LeagueAreaUnlocks) passes another. */
+const DEFAULT_CAST = { steps: STEPS, lockTick: LOCK_TICK, landTick: LAND_TICK };
+
+/** { steps: [{ tick, animation, graphic?, height?, sound? }], lockTick, landTick } as a cast. */
+function castOf(definition) {
+  if (!definition) return DEFAULT_CAST;
+  const steps = new Map();
+  for (const step of definition.steps ?? []) steps.set(step.tick, step);
+  return { steps, lockTick: definition.lockTick ?? LOCK_TICK, landTick: definition.landTick ?? LAND_TICK };
+}
+
 /**
  * Starts the cast toward `destination`; `onArrival` runs on landing (where the spell starts its
- * cooldown). Returns the task, which is stopped early if the cast is interrupted.
+ * cooldown). Returns the task, which is stopped early if the cast is interrupted. `cast` is the
+ * animation set to play, the standard one unless given (see castOf).
  */
-function startHomeTeleport(core, player, destination, onArrival) {
+function startHomeTeleport(core, player, destination, onArrival, cast = DEFAULT_CAST) {
+  const { steps: STEPS, lockTick: LOCK_TICK, landTick: LAND_TICK } = cast;
   const start = player.getLocation().clone();
   reset(core, player);
   player.getPacketSender().sendVarbit(BUSY_VARBIT, 0);
@@ -104,7 +117,11 @@ function startHomeTeleport(core, player, destination, onArrival) {
         player.getPacketSender().sendVarbit(BUSY_VARBIT, 0);
         player.setTeleporting(false);
         player.getMovementQueue().setBlockMovement(false).reset();
+        const from = player.getLocation?.()?.clone?.() ?? null;
+        const fromInstance = player.getPrivateArea?.() != null;
         player.moveTo(destination);
+        // As the core's teleports do ("teleport:landed"): where it began, for content that remembers it.
+        core.PluginManager?.emitCustomEvent?.("teleport:landed", { player, from, fromInstance, to: destination });
         reset(core, player);
         onArrival?.();
       }
@@ -132,4 +149,4 @@ function dateMinutes(nowMs = Date.now()) {
   return Math.floor(nowMs / 60_000);
 }
 
-module.exports = { startHomeTeleport, dateMinutes, LAND_TICK, LOCK_TICK, BUSY_VARBIT };
+module.exports = { startHomeTeleport, castOf, dateMinutes, LAND_TICK, LOCK_TICK, BUSY_VARBIT };

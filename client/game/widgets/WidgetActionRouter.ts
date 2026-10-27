@@ -3,7 +3,6 @@ import type { WidgetActionClientPayload } from "../../network/ServerConnection";
 import { sendWidgetActionMessage } from "../../network/ServerConnection";
 import { spawnSearchPick } from "../../rs/cs2/spawnSearch";
 import type { ScriptEvent } from "../../rs/cs2/Cs2Vm";
-import { createScriptEvent } from "../../rs/cs2/Cs2Vm";
 import type { WidgetManager } from "../../widgets/WidgetManager";
 import { shouldTransmitAction } from "../../widgets/WidgetFlags";
 import type { InputManager } from "../InputManager";
@@ -109,6 +108,22 @@ export class WidgetActionRouter {
                   : w?.uid & 0xffff;
 
         if (this.deps.getCustomInterfaces().handleWidgetClick(groupId | 0, childId | 0)) {
+            return;
+        }
+
+        // A row of a server-declared list: the slot component is reused while scrolling and
+        // filtering, so the row's own id goes back as the slot.
+        const customRowId = this.deps.getCustomInterfaces().rowIdAt(groupId | 0, childId | 0);
+        if (customRowId !== undefined) {
+            if (customRowId === null) return;
+            const payload = buildWidgetActionPayload(widgetManager, event);
+            const opId = payload?.opId ?? 0;
+            const flags = widgetManager?.getWidgetFlags?.(w) ?? w?.flags ?? 0;
+            const opMask = widgetManager?.getWidgetOpMask?.(w) ?? 0;
+            if (!payload || (opId > 0 && !shouldTransmitAction(flags, opId - 1, opMask))) return;
+            payload.slot = customRowId;
+            sendWidgetAction(payload);
+            this.deps.getCustomInterfaces().handleRowOp(customRowId, opId);
             return;
         }
 
@@ -267,38 +282,7 @@ export class WidgetActionRouter {
             return;
         }
 
-        const optionLower = event.option?.toLowerCase() ?? "";
-        const isQuantityDialog = optionLower === "withdraw-x" || optionLower === "deposit-x";
-        const widgetGroupId = event.widget?.groupId ?? event.widget?.uid >>> 16;
-        const isBankInterface = widgetGroupId === 12 || widgetGroupId === 15;
-
-        if (isQuantityDialog && isBankInterface) {
-            const payload = buildWidgetActionPayload(widgetManager, event);
-            if (payload) {
-                this.deps.setPendingInputDialogAction({
-                    payload,
-                    option: optionLower,
-                });
-                const scriptEvent = createScriptEvent({
-                    args: [2251],
-                    widget: event.widget,
-                });
-                console.log(`[handleWidgetAction] Invoking chatbox_open_input for ${optionLower}`);
-                const result = cs2Vm?.runScriptEvent(scriptEvent);
-                console.log(`[handleWidgetAction] Script execution result: ${result}`);
-
-                if (cs2Vm) {
-                    cs2Vm.inputDialogType = 0;
-                    cs2Vm.inputDialogString = "";
-                }
-                this.deps.getVarManager()?.setVarcString(335, "");
-                console.log(
-                    `[handleWidgetAction] inputDialogType set to: ${cs2Vm?.inputDialogType}`,
-                );
-            }
-            return;
-        }
-
+        // Bank Withdraw-X/Deposit-X go to the server like any op; it opens the "Enter amount:" prompt.
         try {
             const payload = buildWidgetActionPayload(widgetManager, event);
             if (!payload) return;
@@ -314,11 +298,12 @@ export class WidgetActionRouter {
                     widgetManager?.getWidgetFlags?.(transmitFlagWidget) ??
                     transmitFlagWidget?.flags ??
                     0;
+                const opMask = widgetManager?.getWidgetOpMask?.(transmitFlagWidget) ?? 0;
                 const opId = payload.opId ?? 0;
                 const actionIndex = opId > 0 ? opId - 1 : -1;
 
-                if (actionIndex >= 0 && actionIndex <= 9) {
-                    if (!shouldTransmitAction(flags, actionIndex)) {
+                if (actionIndex >= 0) {
+                    if (!shouldTransmitAction(flags, actionIndex, opMask)) {
                         const wId = (widget as any).id ?? widget.uid;
                         const wChildIndex = (widget as any).childIndex ?? -1;
                         const wGroupId = (wId >> 16) & 0xffff;
@@ -333,6 +318,7 @@ export class WidgetActionRouter {
             }
 
             sendWidgetAction(payload);
+            this.deps.getCustomInterfaces().handleWidgetOp(groupId | 0, childId | 0);
         } catch (err) {
             console.warn("[OsrsClient] widget action dispatch failed", err);
         }

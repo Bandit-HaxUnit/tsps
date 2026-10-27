@@ -1,5 +1,6 @@
 import type { MenuTargetType } from "../../rs/MenuEntry";
 import type { SimpleMenuEntry } from "./MenuEngine";
+import { BANKMAIN, STATS } from "../../runelite/api/gameval/InterfaceID";
 import { buildPluginMenu, preparePluginMenu } from "./menuEvents";
 
 /**
@@ -25,10 +26,29 @@ export type MenuTransform = (
 ) => SimpleMenuEntry[];
 
 let transform: MenuTransform | undefined;
+let managedMenus: MenuTransform | undefined;
 
 /** Installed once by the client: the client plugins' transformMenuEntries chain. */
 export function setMenuTransform(next: MenuTransform | undefined): void {
     transform = next;
+}
+
+/** Installed once by the client: RuneLite's MenuManager, which adds options to given widgets. */
+export function setManagedMenus(next: MenuTransform | undefined): void {
+    managedMenus = next;
+}
+
+/**
+ * Plugins see world and inventory menus, the opened right-click menu of an item in any other
+ * interface (worn equipment, the bank's inventory side, a shop's inventory side...), as
+ * RuneLite's MenuOpened does, and the opened menu of a skill on the stats tab or of anything in
+ * the bank (RuneLite's MenuEntryAdded, which Bank Tags uses for the deposit buttons and its tag
+ * tabs). Other widget menus, and their left-click/hover order, stay with the widget layer.
+ */
+function reachesPlugins(context: MenuTransformContext): boolean {
+    if (context.surface !== "widget") return true;
+    const group = context.widgetId >>> 16;
+    return context.menu && (context.itemId > 0 || group === STATS || group === BANKMAIN);
 }
 
 /**
@@ -41,7 +61,15 @@ export function applyMenuTransform(
     prepared: boolean = false,
 ): SimpleMenuEntry[] {
     if (!prepared) entries = preparePluginMenu(entries, context);
-    if (!transform || context.surface === "widget") return buildPluginMenu(entries, context);
+    // MenuManager adds its options as the entries are added, before plugins see the menu.
+    if (managedMenus && context.surface !== "world") {
+        try {
+            entries = managedMenus(entries, context);
+        } catch (err) {
+            console.warn?.("[menu] managed menus failed", err);
+        }
+    }
+    if (!transform || !reachesPlugins(context)) return buildPluginMenu(entries, context);
     try {
         return buildPluginMenu(transform(entries, context), context);
     } catch (err) {

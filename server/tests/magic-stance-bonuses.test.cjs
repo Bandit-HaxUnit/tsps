@@ -22,7 +22,7 @@ function caster(fightType, { autocasting = false } = {}) {
         getPrayerActive: () => new Array(40).fill(false),
         getSkillManager: () => ({ getCurrentLevel: () => 99 }),
         getFightType: () => fightType,
-        getCombat: () => ({ getAutocastSpell: () => (autocasting ? {} : null), getSelectedSpell: () => null }),
+        getCombat: () => ({ getAutocastSpell: () => (autocasting ? {} : null), getSelectedSpell: () => null, getTarget: () => null }),
         getEquipment: () => ({ getItems: () => new Array(14).fill({ getId: () => -1 }) }),
         getBonusManager: () => ({
             getAttackBonus: () => [0, 0, 0, 0, 0],
@@ -102,8 +102,9 @@ test('the Slayer\'s staff (e) is a staff, as the plain one is', () => {
 function arceuusPlayer({ magic = 99, prayer = 50, energy = 40, weapon = -1 } = {}) {
     const attributes = new Map();
     const player = {
-        attributes, graphics: [], animations: [], messages: [], freezes: [], prayer, energy,
-        isPlayer: () => true, isNpc: () => false, isRegistered: () => true, getAsPlayer: () => player,
+        attributes, graphics: [], animations: [], messages: [], freezes: [], prayer, energy, hitpoints: 99, registered: true,
+        isPlayer: () => true, isNpc: () => false, isRegistered: () => player.registered, getAsPlayer: () => player,
+        getHitpoints: () => player.hitpoints,
         getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
         performGraphic: (graphic) => player.graphics.push(graphic?.getId?.() ?? null),
         performAnimation: (animation) => player.animations.push(animation.getId()),
@@ -151,10 +152,10 @@ test('grasps: the bind is rolled at the cast (doubled by the Mark) and shown 30 
         assert.deepEqual([target.graphics.at(-1), delays.at(-1), freezes.at(-1)], [1863, 30, 4 * 0.6], '50%: bound for 4 ticks, the bind graphic 30 cycles on');
         cast(spell, caster, target, true, 0.51);
         assert.deepEqual([target.graphics.at(-1), freezes.length], [1864, 1], 'not bound: the plain impact');
-        caster.setAttribute('arceuus:mark-until', Date.now() + 60_000);
+        caster.setAttribute('arceuus:mark-until', World.getProcessCycle() + 100);
         cast(spell, caster, target, true, 0.99);
         assert.equal(freezes.length, 2, 'the Mark makes 50% into 100%');
-        target.setAttribute('arceuus:ward-until', Date.now() + 60_000);
+        target.setAttribute('arceuus:ward-until', World.getProcessCycle() + 100);
         cast(CombatSpells.GHOSTLY_GRASP, caster, target, true, 0);
         assert.equal(freezes.at(-1), 0.6, 'warded: 1 tick');
         const missed = arceuusPlayer();
@@ -178,10 +179,10 @@ test('demonbanes: +20% accuracy, +40% and +25% damage with the Mark, doubled wit
     assert.deepEqual([spell.castAnimation().getId(), spell.startGraphic().getId(), spell.endGraphic().getId()], [8977, 1869, 1870]);
     const plain = arceuusPlayer();
     assert.deepEqual([spell.demonbaneAccuracyMultiplier(plain), spell.demonbaneDamageMultiplier(plain)], [1.2, 1]);
-    plain.setAttribute('arceuus:mark-until', Date.now() + 60_000);
+    plain.setAttribute('arceuus:mark-until', World.getProcessCycle() + 100);
     assert.deepEqual([spell.demonbaneAccuracyMultiplier(plain), spell.demonbaneDamageMultiplier(plain)], [1.4, 1.25]);
     const purging = arceuusPlayer({ weapon: 29594 });
-    purging.setAttribute('arceuus:mark-until', Date.now() + 60_000);
+    purging.setAttribute('arceuus:mark-until', World.getProcessCycle() + 100);
     assert.deepEqual([spell.demonbaneAccuracyMultiplier(purging), spell.demonbaneDamageMultiplier(purging)], [1.8, 1.5]);
     assert.equal(CombatSpells.UNDEAD_GRASP.demonbaneAccuracyMultiplier(plain), 1, 'not a demonbane spell');
 });
@@ -191,7 +192,7 @@ test('demonbanes against a more vulnerable demon: the bonus scales with it (Wiki
     const spell = CombatSpells.DARK_DEMONBANE;
     const flare = { getAttribute: (key) => (key === 'combat:demonbane-vulnerability' ? 2 : undefined) };
     const purging = arceuusPlayer({ weapon: 29594 });
-    purging.setAttribute('arceuus:mark-until', Date.now() + 60_000);
+    purging.setAttribute('arceuus:mark-until', World.getProcessCycle() + 100);
     purging.getCombat = () => ({ getTarget: () => flare });
     assert.deepEqual([spell.demonbaneAccuracyMultiplier(purging), spell.demonbaneDamageMultiplier(purging)], [2.6, 2]);
 });
@@ -200,9 +201,9 @@ test('Mark of Darkness: 3 ticks per base Magic level (x5 with a purging staff), 
     const { ArceuusSpells } = require('../dist/game/content/combat/magic/ArceuusSpells');
     const { TaskManager } = require('../dist/game/task/TaskManager');
     const player = arceuusPlayer({ magic: 20 });
-    const start = Date.now();
+    const start = World.getProcessCycle();
     ArceuusSpells.placeMark(player);
-    const ticks = (player.getAttribute('arceuus:mark-until') - start) / 600;
+    const ticks = player.getAttribute('arceuus:mark-until') - start;
     assert.ok(Math.abs(ticks - 60) < 1, `${ticks} ticks for level 20`);
     for (let i = 0; i < 50; i++) TaskManager.process();
     assert.deepEqual(player.messages, ['Your Mark of Darkness is about to run out.']);
@@ -211,7 +212,7 @@ test('Mark of Darkness: 3 ticks per base Magic level (x5 with a purging staff), 
     assert.equal(player.graphics.at(-1), 1886);
     const purging = arceuusPlayer({ magic: 20, weapon: 29595 });
     ArceuusSpells.placeMark(purging);
-    assert.ok(Math.abs((purging.getAttribute('arceuus:mark-until') - Date.now()) / 600 - 300) < 1, 'x5');
+    assert.equal(purging.getAttribute('arceuus:mark-until') - World.getProcessCycle(), 300, 'x5');
 });
 
 test('Vile Vigour spends only the prayer that fills run energy; Death Charge restores once per cast (Wiki)', () => {
@@ -228,7 +229,7 @@ test('Vile Vigour spends only the prayer that fills run energy; Death Charge res
         ArceuusSpells.handleSpell(player, 'Vile Vigour');
         assert.equal(player.messages.at(-1), "You're already at maximum run energy.");
         player.energy = 10;
-        player.setAttribute('arceuus:vile-vigour-cooldown', Date.now() + 10_200); // as the cast's rune check sets it
+        player.setAttribute('arceuus:vile-vigour-cooldown', World.getProcessCycle() + 17); // as the cast's rune check sets it
         ArceuusSpells.handleSpell(player, 'Vile Vigour');
         assert.equal(player.messages.at(-1), 'You can only cast Vile Vigour every 10 seconds.');
 
@@ -249,17 +250,104 @@ test('corruption: certain with the Mark at casting (50% without), with its hit g
     Spell.prototype.canCast = () => true;
     try {
         const caster = arceuusPlayer();
-        caster.setAttribute('arceuus:mark-until', Date.now() + 60_000);
+        caster.setAttribute('arceuus:mark-until', World.getProcessCycle() + 100);
         ArceuusSpells.handleSpell(caster, 'Greater Corruption');
         const target = arceuusPlayer();
         withRandom(0.99, () => ArceuusSpells.applyCorruption(caster, target));
         assert.equal(target.graphics.at(-1), 1880, 'corrupted though the roll was high');
-        caster.setAttribute('arceuus:corruption-cooldown', Date.now() + 30_000); // as the cast's rune check sets it
+        caster.setAttribute('arceuus:corruption-cooldown', World.getProcessCycle() + 50); // as the cast's rune check sets it
         ArceuusSpells.handleSpell(caster, 'Lesser Corruption');
         assert.equal(caster.messages.at(-1), 'You can only cast corruption spells every 30 seconds.');
     } finally {
         Spell.prototype.canCast = canCast;
     }
+});
+
+function corruptionTask(t, total, marked) {
+    const { ArceuusSpells } = require('../dist/game/content/combat/magic/ArceuusSpells');
+    const { TaskManager } = require('../dist/game/task/TaskManager');
+    const { Task } = require('../dist/game/task/Task');
+    const tasks = [], caster = arceuusPlayer(), target = arceuusPlayer(), drains = [];
+    let tick = 0;
+    t.mock.method(TaskManager, 'submit', task => { task.setRunning(true); tasks.push(task); });
+    const skills = target.getSkillManager();
+    skills.decreaseCurrentLevel = (_skill, amount) => { target.prayer -= amount; drains.push([tick, amount]); };
+    target.getSkillManager = () => skills;
+    caster.setAttribute('arceuus:corruption', total);
+    caster.setAttribute('arceuus:corruption-marked', marked);
+    withRandom(0, () => ArceuusSpells.applyCorruption(caster, target));
+    assert.equal(tasks.length, 1);
+    const task = tasks[0];
+    assert.ok(task instanceof Task, 'exercise the real scheduled task countdown and onTick');
+    return { caster, target, task, drains, advance(count) { for (let i = 0; i < count; i++) { tick++; task.tick(); } } };
+}
+
+test('corruption drains retain their exact 5/10-tick schedule and amounts after the caster dies or leaves', t => {
+    for (const [total, amounts] of [[6, [1,2,3]], [12, [2,4,6]]]) {
+        for (const marked of [false, true]) {
+            const h = corruptionTask(t, total, marked), interval = marked ? 5 : 10;
+            h.caster.hitpoints = 0; h.caster.registered = false;
+            h.advance(interval * 3 + 2);
+            assert.deepEqual(h.drains, amounts.map((amount, index) => [interval * (index + 1), amount]));
+            assert.equal(h.target.prayer, 50 - total);
+            assert.equal(h.task.isRunning(), false, 'no fourth drain');
+        }
+    }
+});
+
+test('corruption cannot resume after target death and respawn between its drain ticks', t => {
+    for (const marked of [false, true]) {
+        const h = corruptionTask(t, 12, marked), interval = marked ? 5 : 10;
+        h.advance(1); h.target.hitpoints = 0;
+        h.advance(1); h.target.hitpoints = 99;
+        h.advance(interval * 3);
+        assert.deepEqual(h.drains, [], 'the dead tick ends this effect even if respawn precedes its first drain');
+        assert.equal(h.task.isRunning(), false);
+    }
+});
+
+test('corruption does not drain a target dead on the scheduled drain tick', t => {
+    for (const marked of [false, true]) {
+        const h = corruptionTask(t, 6, marked), interval = marked ? 5 : 10;
+        h.advance(interval - 1); h.target.hitpoints = 0; h.advance(1);
+        assert.deepEqual(h.drains, []);
+        assert.equal(h.task.isRunning(), false);
+    }
+});
+
+test('corruption cannot resume after its target unregisters and returns between drains', t => {
+    const h = corruptionTask(t, 12, false);
+    h.advance(10); h.target.registered = false;
+    h.advance(1); h.target.registered = true; h.advance(30);
+    assert.deepEqual(h.drains, [[10,2]]);
+    assert.equal(h.task.isRunning(), false);
+});
+
+test('Ward nullifies an active corruption effect between drains', t => {
+    const h = corruptionTask(t, 12, true);
+    h.advance(1); h.target.setAttribute('arceuus:ward-until', Number.MAX_SAFE_INTEGER);
+    h.advance(1); h.target.setAttribute('arceuus:ward-until', null); h.advance(20);
+    assert.deepEqual(h.drains, []);
+    assert.equal(h.task.isRunning(), false);
+});
+
+test('corruption refuses initially dead or unregistered targets without consuming the prepared spell', t => {
+    const { ArceuusSpells } = require('../dist/game/content/combat/magic/ArceuusSpells');
+    const { TaskManager } = require('../dist/game/task/TaskManager');
+    const tasks = [];
+    t.mock.method(TaskManager, 'submit', task => tasks.push(task));
+    for (const invalid of ['dead', 'unregistered', 'warded']) {
+        const caster = arceuusPlayer(), target = arceuusPlayer();
+        caster.setAttribute('arceuus:corruption', 12); caster.setAttribute('arceuus:corruption-marked', true);
+        if (invalid === 'dead') target.hitpoints = 0;
+        else if (invalid === 'unregistered') target.registered = false;
+        else target.setAttribute('arceuus:ward-until', Number.MAX_SAFE_INTEGER);
+        withRandom(0, () => ArceuusSpells.applyCorruption(caster, target));
+        assert.deepEqual(target.graphics, []);
+        assert.equal(caster.getAttribute('arceuus:corruption'), 12);
+        assert.equal(caster.getAttribute('arceuus:corruption-marked'), true);
+    }
+    assert.deepEqual(tasks, []);
 });
 
 test("a manual cast keeps its cast animation: the combat reset after it doesn't replace it", () => {
@@ -292,7 +380,7 @@ test('magic impact effects use the launched spell after another spell has been c
  const {Sounds}=require('../dist/game/Sounds');const old=Sounds.sendSound,calls=[];Sounds.sendSound=()=>{};
  const launched={spellId:()=>-1,endGraphic:()=>null,impactSound:()=>null,finishCast:(a,t,accurate,damage)=>calls.push([accurate,damage])};
  const attacker={getHitpoints:()=>99,getCombat:()=>({getPreviousCast:()=>({finishCast:()=>assert.fail('a later spell cannot replace the launched bind')})})};
- const target={getHitpoints:()=>99};const hit={getAttacker:()=>attacker,getTarget:()=>target,isAccurate:()=>true,getTotalDamage:()=>7,getSpell:()=>launched};
+ const target={getHitpoints:()=>99};const hit={getAttacker:()=>attacker,getTarget:()=>target,isAccurate:()=>true,getTotalDamage:()=>7,getSpell:()=>launched,getSpellContext:()=>null};
  try{new MagicCombatMethod().handleAfterHitEffects(hit);assert.deepEqual(calls,[[true,7]]);hit.getSpell=()=>null;new MagicCombatMethod().handleAfterHitEffects(hit);assert.equal(calls.length,1);}finally{Sounds.sendSound=old;}
 });
 
@@ -307,13 +395,81 @@ test('accurate combat spells expose a typed generic hit-effects event to plugins
         const target = {};
         const hit = { isAccurate: () => true, getAttacker: () => attacker, getTarget: () => target, getTotalDamage: () => 9 };
         CombatSpells.FIRE_WAVE.onHitCalc(hit);
-        assert.equal(events.length, 1);
+        assert.equal(events.length, 2);
         assert.equal(events[0][0], 'magic:hit-effects');
-        assert.deepEqual(events[0][1], { attacker, target, spell: CombatSpells.FIRE_WAVE, hit, allowed: true });
+        assert.deepEqual(events[0][1], { attacker, target, spell: CombatSpells.FIRE_WAVE, hit, allowed: true, effectMultiplier: 1 });
+        assert.equal(events[1][0], 'magic:hit-effects-applied');
+        assert.equal(events[1][1], events[0][1], 'post-effect handlers see the final shared context');
 
         CombatSpells.FIRE_WAVE.onHitCalc({ ...hit, isAccurate: () => false });
-        assert.equal(events.length, 1, 'misses do not trigger spell-specific effects');
+        assert.equal(events.length, 2, 'misses do not trigger spell-specific effects');
     } finally {
         PluginManager.emitCustomEvent = emit;
     }
+});
+
+test('a combat cast pays its Wiki base XP once, at the XP rate: splashes pay the splash value, powered staves have none', (t) => {
+    const { MagicCombatMethod } = require('../dist/game/content/combat/method/impl/MagicCombatMethod');
+    const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
+    const { CombatSpells } = require('../dist/game/content/combat/magic/CombatSpells');
+    const { CombatType } = require('../dist/game/content/combat/CombatType');
+    const { SkillManager } = require('../dist/game/content/skill/SkillManager');
+    const { GameConstants } = require('../dist/game/GameConstants');
+    const { Skill } = require('../dist/game/model/Skill');
+    const { Sounds } = require('../dist/game/Sounds');
+    t.mock.method(Sounds, 'sendSound', () => {});
+    const rate = GameConstants.EXPERIENCE_MULTIPLIER;
+    GameConstants.setExperienceRate(2);
+    t.after(() => GameConstants.setExperienceRate(rate));
+
+    const sender = new Proxy({}, { get: (_, name) => (name === 'then' ? undefined : () => sender) });
+    const skills = new SkillManager({ getPacketSender: () => sender, getAttribute: () => undefined });
+    let spell = null;
+    const player = {
+        isPlayer: () => true, isNpc: () => false, getAsPlayer: () => player, getSkillManager: () => skills,
+        getCombat: () => ({ getSelectedSpell: () => spell, getCastSpell: () => spell, getPreviousCast: () => null }),
+    };
+    const hit = (accurate, damage) => ({
+        getTotalDamage: () => damage, getSkills: () => [Skill.MAGIC.getIndex()], getCombatType: () => CombatType.MAGIC,
+        isAccurate: () => accurate, getTarget: () => ({ isNpc: () => false }),
+    });
+    /** One cast and the hits it queues; returns the Magic XP gained. */
+    const cast = (castSpell, ...hits) => {
+        spell = castSpell;
+        t.mock.method(castSpell, 'startCast', () => {});
+        skills.setMaxLevel(Skill.MAGIC, 99).setExperience(Skill.MAGIC, 13_034_431);
+        new MagicCombatMethod().start(player, {});
+        // What hits() does once the main target is rolled; a second call (a special's extra
+        // target) must not pay again.
+        MagicCombatMethod.payBaseExperience(player, castSpell, hits[0].isAccurate());
+        MagicCombatMethod.payBaseExperience(player, castSpell, hits[0].isAccurate());
+        for (const queued of hits) CombatFactory.rewardExp(player, queued);
+        return skills.getExperience(Skill.MAGIC) - 13_034_431;
+    };
+
+    assert.equal(cast(CombatSpells.WIND_STRIKE, hit(false, 0)), 11, 'a Wind Strike splash: 5.5 base only, doubled');
+    assert.equal(cast(CombatSpells.WIND_STRIKE, hit(true, 2)), 11 + 8, '5.5 base + 2 per damage, doubled');
+    assert.equal(cast(CombatSpells.ICE_BARRAGE, hit(true, 10), hit(true, 10)), 104 + 80, 'one 52 base for two targets');
+    assert.equal(cast(CombatSpells.TRIDENT_OF_THE_SEAS, hit(true, 10)), 40, 'a powered staff: 2 per damage, no base');
+    // Wiki: the binding spells and Tele Block pay less on a splash.
+    assert.equal(cast(CombatSpells.ENTANGLE, hit(true, 0)), 178, 'Entangle hit: 89');
+    assert.equal(cast(CombatSpells.ENTANGLE, hit(false, 0)), 140, 'Entangle splash: 70');
+    assert.equal(cast(CombatSpells.BIND, hit(false, 0)), 60, 'Bind splash: 30');
+    assert.equal(cast(CombatSpells.SNARE, hit(false, 0)), 120, 'Snare splash: 60');
+    assert.equal(cast(CombatSpells.TELEBLOCK, hit(true, 0)), 190, 'Tele Block hit: 95');
+    assert.equal(cast(CombatSpells.TELEBLOCK, hit(false, 0)), 168, 'Tele Block splash: 84');
+});
+
+test('tick stopwatch: gameplay delays are whole game cycles, and a fresh one has elapsed', () => {
+    const { TickStopwatch } = require('../dist/util/TickStopwatch');
+    const stopwatch = new TickStopwatch();
+    assert.equal(stopwatch.elapsedTime(1800), true, 'never started: every delay has elapsed');
+    stopwatch.reset();
+    const start = World.getProcessCycle();
+    assert.equal(stopwatch.elapsedTime(1800), false);
+    World.processCycle = start + 2;
+    assert.equal(stopwatch.elapsedTime(1800), false, 'two ticks are 1200ms');
+    World.processCycle = start + 3;
+    assert.equal(stopwatch.elapsed(), 1800);
+    assert.equal(stopwatch.elapsedTime(1800), true, 'three ticks are 1800ms');
 });

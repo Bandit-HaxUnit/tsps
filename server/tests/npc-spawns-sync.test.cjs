@@ -6,6 +6,150 @@ const path = require('node:path');
 const { test } = require('node:test');
 
 const { versionIds, parsePoint, parseInfoboxMaps, parseBox, inBoxes, planAdditions, parseLocLines, locationName } = require('../scripts/npc-spawn-matching.cjs');
+const matching = require('../scripts/npc-spawn-matching.cjs');
+
+test('identity reconciliation repairs a named mismatch from Wiki/cache evidence without changing its pose', () => {
+  const old = { name: 'Key Master', id: 5870, x: 1310, y: 1251, level: 0, wanderRadius: 2, direction: 'NORTH' };
+  const patchy = { name: 'Patchy', id: 5870, x: 3677, y: 2978, level: 0 };
+  const wiki = [{ name: 'Key Master', id: 12599, x: 1310, y: 1251, level: 0, page: 'Key Master', skip: false }];
+  const name = id => ({ 5870: 'Patchy', 12599: 'Key Master' }[id]);
+  const result = matching.reconcileIdentities([old, patchy], wiki, name, 4);
+  assert.deepEqual(result.spawns, [{ ...old, id: 12599 }, patchy]);
+  assert.equal(old.id, 5870, 'inputs stay untouched');
+  assert.equal(result.repairs.length, 1); assert.equal(result.unresolved.length, 0);
+  assert.equal(matching.reconcileIdentities(result.spawns, wiki, name, 4).repairs.length, 0);
+});
+
+test('identity reconciliation requires one nearby cache-confirmed Wiki id and respects scope', () => {
+  const old = { name: 'Keeper', id: 10, x: 100, y: 100, level: 0 };
+  const candidate = { ...old, id: 20, page: 'Keeper', skip: false };
+  const names = id => ({ 10: 'Stranger', 20: 'Keeper', 21: 'Keeper', 22: 'Wrong' }[id]);
+  for (const [label, wiki, scope] of [
+    ['no evidence', [], () => true],
+    ['far', [{ ...candidate, x: 110 }], () => true],
+    ['plane', [{ ...candidate, level: 1 }], () => true],
+    ['skipped', [{ ...candidate, skip: true }], () => true],
+    ['cache disagrees', [{ ...candidate, id: 22 }], () => true],
+    ['ambiguous', [candidate, { ...candidate, id: 21 }], () => true],
+    ['outside box', [candidate], () => false],
+  ]) {
+    const result = matching.reconcileIdentities([old], wiki, names, 4, scope);
+    assert.deepEqual(result.spawns, [old], label); assert.equal(result.repairs.length, 0, label);
+  }
+  const repeated = matching.reconcileIdentities([old], [candidate, candidate], names, 4);
+  assert.equal(repeated.repairs.length, 1, 'duplicate Wiki markers for one id are not ambiguous');
+});
+
+test('identity reconciliation retains correct variants, explicit cache keys and unnamed rows', () => {
+  const rows = [
+    { name: 'Keeper', id: 20, x: 100, y: 100, level: 0 },
+    { name: 'Keeper', id: 10, key: 'KEEPER_PARENT', x: 100, y: 100, level: 0 },
+    { id: 10, x: 100, y: 100, level: 0 },
+  ];
+  const wiki = [{ name: 'Keeper', id: 21, x: 100, y: 100, level: 0 }];
+  const name = id => ({ 10: 'Stranger', 20: 'Keeper', 21: 'Keeper' }[id]);
+  assert.deepEqual(matching.reconcileIdentities(rows, wiki, name, 4).spawns, rows);
+});
+
+test('identity reconciliation keeps a nameless multinpc parent whose variant has the name', () => {
+  // Live spawns the Leagues Tutor as multinpc 317 (cache name "null"), shown as 316.
+  const parent = { name: 'Leagues Tutor', id: 317, x: 3226, y: 3215, level: 0 };
+  const wiki = [{ name: 'Leagues Tutor', id: 316, x: 3226, y: 3215, level: 0, page: 'Leagues Tutor', skip: false }];
+  const names = id => ({ 316: ['Leagues Tutor'], 317: ['null', 'Leagues Tutor'] }[id]);
+  const result = matching.reconcileIdentities([parent], wiki, names, 4);
+  assert.deepEqual(result.spawns, [parent]); assert.equal(result.repairs.length, 0);
+});
+
+test('the actual sync CLI preserves LF/CRLF and all other bytes, then regenerates identically', t => {
+  const fs = require('node:fs'), os = require('node:os'), cp = require('node:child_process');
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'npc-spawn-sync-'));
+  assert.equal(path.dirname(temp), path.resolve(os.tmpdir()), 'cleanup stays in this test temp directory');
+  t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
+  const rows = [{ level: 0, name: 'Key Master', x: 1310, y: 1251, id: 5870 },
+    { level: 0, name: 'Patchy', x: 3677, y: 2978, id: 5870 }];
+  const args = [require.resolve('ts-node/dist/bin.js'), 'scripts/sync-npc-spawns.ts',
+    '--wiki', 'tests/fixtures/npc-spawn-identity-wiki.json', '--box', '1310,1251,1310,1251,0',
+    '--repair-identities', '--write'];
+  for (const eol of ['\n', '\r\n']) {
+    const file = path.join(temp, eol.length === 1 ? 'lf.json' : 'crlf.json');
+    const input = `[${eol}${rows.map((row, index) => '  ' + (index ? JSON.stringify(row).replaceAll(':', ': ') : JSON.stringify(row))).join(',' + eol)}${eol}]${eol}`;
+    fs.writeFileSync(file, input);
+    const run = () => cp.execFileSync(process.execPath, [...args, '--spawns', file], {
+      cwd: path.resolve(__dirname, '..'), encoding: 'utf8',
+      env: { ...process.env, TS_NODE_COMPILER_OPTIONS: '{"target":"es2020"}' },
+    });
+    run(); const first = fs.readFileSync(file, 'utf8');
+    assert.equal(first, input.replace('"id":5870', '"id":12599'));
+    assert.match(run(), /Repaired 0 spawn identity/);
+    assert.equal(fs.readFileSync(file, 'utf8'), first);
+    const patchyLine = '  ' + JSON.stringify(rows[1]).replaceAll(':', ': ');
+    fs.writeFileSync(file, `[${eol}${patchyLine}${eol}]${eol}`);
+    run(); const appended = fs.readFileSync(file, 'utf8');
+    assert.equal(appended.split(eol)[1], patchyLine + ',', 'appending preserves the existing row');
+    assert.deepEqual(JSON.parse(appended).map(row => [row.name, row.id]), [['Patchy', 5870], ['Key Master', 12599]]);
+    assert.match(run(), /to add: 0/); assert.equal(fs.readFileSync(file, 'utf8'), appended);
+  }
+});
+
+test('the Key Master spawn uses his current-cache identity while the real Patchy stays in Mos Le Harmless', async () => {
+  const { Server } = require('../dist/Server'); Server.installProductionPathResolver();
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(path.resolve(__dirname, '..'));
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const spawns = require('../data/definitions/npc-spawns.json');
+  const keeper = spawns.find(s => s.name === 'Key Master' && s.x === 1310 && s.y === 1251 && s.level === 0);
+  assert.ok(keeper); assert.equal(keeper.id, 12599);
+  assert.equal(CacheDefinitions.getNpc(keeper.id).name, 'Key Master');
+  const patchy = spawns.find(s => s.name === 'Patchy' && s.x === 3677 && s.y === 2978);
+  assert.equal(patchy.id, 5870); assert.equal(CacheDefinitions.getNpc(patchy.id).name, 'Patchy');
+});
+
+test('the actual CLI refuses ambiguous raw Wiki variants before its add-only heuristic picks an id', async t => {
+  const { Server } = require('../dist/Server'); Server.installProductionPathResolver();
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(path.resolve(__dirname, '..'));
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const ids = [];
+  for (let id = 0; id < CacheDefinitions.getCounts().npcs && ids.length < 2; id++) {
+    if (CacheDefinitions.getNpc(id)?.name === 'Man') ids.push(id);
+  }
+  assert.equal(ids.length, 2, 'two real cache variants provide ambiguity');
+  const fs = require('node:fs'), os = require('node:os'), cp = require('node:child_process');
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'npc-spawn-ambiguity-'));
+  assert.equal(path.dirname(temp), path.resolve(os.tmpdir()));
+  t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
+  const wiki = { loclines: [], monsters: [], npcs: [{ page_name: 'Man', npc_id: ids }],
+    npcMaps: { Man: `|id = ${ids.join(', ')}\n|map = {{Map|1310,1251}}` }, locLineText: {} };
+  const source = '[\n  {"level":0,"name":"Man","x":1310,"y":1251,"id":5870}\n]\n';
+  const file = path.join(temp, 'spawns.json'), wikiFile = path.join(temp, 'wiki.json');
+  fs.writeFileSync(file, source); fs.writeFileSync(wikiFile, JSON.stringify(wiki));
+  const output = cp.execFileSync(process.execPath, [require.resolve('ts-node/dist/bin.js'),
+    'scripts/sync-npc-spawns.ts', '--spawns', file, '--wiki', wikiFile,
+    '--box', '1310,1251,1310,1251,0', '--repair-identities', '--write'], {
+    cwd: path.resolve(__dirname, '..'), encoding: 'utf8',
+    env: { ...process.env, TS_NODE_COMPILER_OPTIONS: '{"target":"es2020"}' },
+  });
+  assert.equal(fs.readFileSync(file, 'utf8'), source);
+  assert.match(output, /ambiguous Wiki identities/);
+});
+
+test("the actual CLI leaves out the Wiki's quest-form Eyatlalli at the Ancient Shrine (npc-spawn-sync.json)", t => {
+  const fs = require('node:fs'), os = require('node:os'), cp = require('node:child_process');
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'npc-spawn-eyatlalli-'));
+  assert.equal(path.dirname(temp), path.resolve(os.tmpdir()));
+  t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
+  const wiki = { loclines: [], monsters: [], npcs: [{ page_name: 'Eyatlalli', npc_id: [12869] }],
+    npcMaps: { Eyatlalli: '|id = 12869\n|map = {{Map|1525,9580|1512,9580}}' }, locLineText: {} };
+  const source = '[\n  {"level":0,"name":"Eyatlalli","x":1523,"y":9578,"id":12868,"direction":3,"source":"rsprox","wanderRadius":0}\n]\n';
+  const file = path.join(temp, 'spawns.json'), wikiFile = path.join(temp, 'wiki.json');
+  fs.writeFileSync(file, source); fs.writeFileSync(wikiFile, JSON.stringify(wiki));
+  const output = cp.execFileSync(process.execPath, [require.resolve('ts-node/dist/bin.js'),
+    'scripts/sync-npc-spawns.ts', '--spawns', file, '--wiki', wikiFile,
+    '--box', '1500,9570,1530,9590,0', '--write'], {
+    cwd: path.resolve(__dirname, '..'), encoding: 'utf8',
+    env: { ...process.env, TS_NODE_COMPILER_OPTIONS: '{"target":"es2020"}' },
+  });
+  assert.equal(fs.readFileSync(file, 'utf8'), source, 'nothing re-added');
+  assert.match(output, /to add: 0/);
+});
 
 test("reads the Wiki's coordinate forms", () => {
   assert.deepEqual(parsePoint('x:2580,y:8589'), { x: 2580, y: 8589 });
@@ -19,6 +163,21 @@ test("reads the Wiki's coordinate forms", () => {
   // Muriel: a polygon outlining an area is one spawn at its centre.
   assert.deepEqual(parseInfoboxMaps('|map = {{Map|2584,2255|2589,2255|2589,2264|2586,2264|2586,2261|2584,2261|mtype=polygon|r=3|zoom=3}}'),
     [{ version: null, points: [{ x: 2587, y: 2260 }], plane: 0, mapId: null }]);
+  // Cabin Boy Herbert: labels before each map, and two maps on one line, both read.
+  assert.deepEqual(parseInfoboxMaps('|map = Port Sarim Docks {{Map|name=Cabin Boy Herbert|x=3054|y=3245|r=3|mtype=square}} '
+    + 'Port Piscarilius {{Map|name=Cabin Boy Herbert|x=1824|y=3690|r=3|mtype=square}}\n|id = 10932,10933,10934'), [
+    { version: null, points: [{ x: 3054, y: 3245 }], plane: 0, mapId: null },
+    { version: null, points: [{ x: 1824, y: 3690 }], plane: 0, mapId: null },
+  ]);
+  // Several maps on a numbered line all belong to that version; the next line's maps to its own.
+  assert.deepEqual(parseInfoboxMaps('|map1 = {{Map|10,20}} or {{Map|30,40|plane=1}}\n|map2 = Upstairs {{Map|x=50|y=60|plane=2}}')
+    .map(({ version, points, plane }) => ({ version, points, plane })), [
+    { version: 1, points: [{ x: 10, y: 20 }], plane: 0 },
+    { version: 1, points: [{ x: 30, y: 40 }], plane: 1 },
+    { version: 2, points: [{ x: 50, y: 60 }], plane: 2 },
+  ]);
+  // A {{Map}} outside a map line (prose, another parameter) isn't a spawn.
+  assert.deepEqual(parseInfoboxMaps('|location = Near {{Map|1,2}}\nSee {{Map|3,4}}.\n|map = No'), []);
   const box = parseBox('2640,2290,2530,2190');
   assert.ok(inBoxes({ x: 2576, y: 2253, level: 2 }, [box]), 'every plane unless given');
   assert.ok(!inBoxes({ x: 2576, y: 2253, level: 2 }, [parseBox('2530,2190,2640,2290,0')]));
@@ -111,7 +270,8 @@ test('the Sailing islands and seas, without minigame, plugin and Group Ironman N
 test("Varlamore's underground, without the bosses that have no fight yet", () => {
   const spawns = require('../data/definitions/npc-spawns.json');
   const below = spawns.filter((spawn) => (spawn.source === 'wiki' || spawn.source === 'capture-1693') && inBoxes(spawn, [parseBox('1216,9344,1727,9855')]));
-  assert.ok(below.length >= 450, `${below.length} spawns`);
+  // 448: the shrine's two Wiki Eyatlallis are now the one rsprox 237/01104 records (source rsprox).
+  assert.ok(below.length >= 448, `${below.length} spawns`);
   assert.ok(below.some((spawn) => spawn.name === 'Banker' && spawn.level === 1), "Cam Torum's bank");
   assert.ok(below.filter((spawn) => spawn.name === 'Wyrmling').every((spawn) => spawn.id === 13031), "Neypotzli's own wyrmlings");
   assert.deepEqual(spawns.filter((spawn) => ['Blood Moon', 'Blue Moon', 'Eclipse Moon', 'Amoxliatl', 'Araxxor'].includes(spawn.name) && spawn.source === 'wiki'), []);

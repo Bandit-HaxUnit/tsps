@@ -44,9 +44,8 @@
  *   - the golden pedestal sends a plain game message while the puzzle is unsolved;
  *   - the spawned quest kebbit has no combat definition in this cache, so the
  *     Threaten -> Taunt path is the reliable one; the death drop is wired anyway;
- *   - the eagle transport system (eagles 1487-1489, rope lasso and the
- *     jungle/desert nest unlocks) is not implemented - no plugin owns it, so the
- *     eyrie is left empty and the "attempting to travel" transcript is unreachable;
+ *   - the eagle transport system (the eagles, rope lasso and the jungle/desert
+ *     nest access) is plugins/world/EagleTransport.plugin.js;
  *   - extra eagle costumes (5 feathers, swamp tar, yellow dye, 25 gp) are
  *     described by Asyff's repeat dialogue but not sold;
  *   - the dungeon tunnel pairs are inferred (the real partners are not in this
@@ -203,7 +202,22 @@ module.exports = function registerEaglesPeakQuest(api) {
   const COSTUME_FEATHER_COST = 10;
   const COSTUME_COIN_COST = 50;
   const GOLD_FEEDERS_NEEDED = 6;
-  const EAGLE_DAMAGE = 10;
+  /**
+   * The eagle's swipe without the disguise, from rsprox 2821 (rev 230): on the walk-past the player
+   * stumbles back two tiles facing the eagle while it attacks, with synths 421 and 2455; a tick later
+   * a 0 hit, synth 511 and the message box. The recording's exactmove has two segments (one tile by
+   * cycle 20, the second by 46); ForceMovement has one, so this slides both tiles by cycle 46.
+   */
+  const EAGLE_SWIPE = {
+    message: "As you approach the eagle it takes a swipe at you with its beak. It seems to object to you trying to get past.",
+    playerSeq: "human_priority_stumble_back",
+    playerSeqDelay: 24,
+    eagleSeq: "giant_eagle_attack",
+    back: 2,
+    endCycle: 46,
+    sounds: [[421, 0], [2455, 5]],
+    hitSound: [511, 20],
+  };
 
   const PAGE = "Eagles' Peak";
   /** Chathead anchor for the page's message-only variants (no NPC lines). */
@@ -934,8 +948,34 @@ module.exports = function registerEaglesPeakQuest(api) {
       playVariant(player, "saving-nickolaus-passing-the-eagle");
       return true;
     }
-    damage(player, EAGLE_DAMAGE);
+    eagleSwipe(player, event.npc);
     return true;
+  }
+
+  function eagleSwipe(player, eagle) {
+    const { Animation, CacheDefinitions, ForceMovement, ForceMovementTask, TaskManager, Task } = api.core;
+    const sender = player.getPacketSender();
+    const eagleSeq = CacheDefinitions.getSeqId(EAGLE_SWIPE.eagleSeq);
+    if (eagleSeq != null) eagle?.performAnimation?.(new Animation(eagleSeq));
+    const playerSeq = CacheDefinitions.getSeqId(EAGLE_SWIPE.playerSeq);
+    if (playerSeq != null) player.performAnimation(new Animation(playerSeq, EAGLE_SWIPE.playerSeqDelay));
+    TaskManager.submit(new ForceMovementTask(player, 2,
+      new ForceMovement(player.getLocation().clone(), new Location(0, -EAGLE_SWIPE.back), 0, EAGLE_SWIPE.endCycle, 0, -1)));
+    for (const [id, delay] of EAGLE_SWIPE.sounds) sender.sendSound(id, 1, delay);
+    TaskManager.submit(new (class extends Task {
+      constructor() { super(1, player, false); }
+      execute() {
+        this.stop();
+        damage(player, 0);
+        sender.sendSound(EAGLE_SWIPE.hitSound[0], 1, EAGLE_SWIPE.hitSound[1]);
+        statement(player, EAGLE_SWIPE.message);
+      }
+    })());
+  }
+
+  function statement(player, text) {
+    const { DialogueChainBuilder, StatementDialogue } = api.core;
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, text)));
   }
 
   function threatenKebbit(event) {
@@ -1208,6 +1248,7 @@ module.exports = function registerEaglesPeakQuest(api) {
   api.onNpcDeath(handleNpcDeath);
   api.onZoneEnter(CAMP_ZONE, handleZoneEnter);
   api.onZoneEnter(DUNGEON_ZONE, handleZoneEnter);
+  api.onServerStartup(installCampObjects);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handlePlayerGone);
   api.onPlayerDeath(handlePlayerGone);

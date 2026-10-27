@@ -7,7 +7,9 @@ Server.installProductionPathResolver();
 const { Sounds } = require('../dist/game/Sounds');
 const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
 const { ItemIdentifiers: I } = require('../dist/util/ItemIdentifiers');
+const { NpcIdentifiers: N } = require('../dist/util/NpcIdentifiers');
 const { Equipment } = require('../dist/game/model/container/impl/Equipment');
+const { World } = require('../dist/game/World');
 const Thieving = require('../plugins/skills/Thieving.plugin');
 const Pickpocket = require('../plugins/skills/thieving/Pickpocket.Thieving');
 const CoinPouch = require('../plugins/skills/thieving/CoinPouch.Thieving');
@@ -15,19 +17,25 @@ const DATA = require('../plugins/skills/data/pickpocketing.json');
 
 const log = [];
 const submitted = [];
+/** Whether content asks for another pickpocket ("thieving:done", a league relic's repeat). */
+let repeatAgain = false;
 const interactions = [];
 const combat = {
     inCombat: () => false,
     stunTicks: (_player, ticks, _force, options) => log.push(`stun ${ticks} ticks, graphic ${options?.graphic?.id}/${options?.graphic?.height}, message ${options?.message}`),
 };
+const { PluginManager } = require("../dist/plugins/PluginManager");
 Thieving.register({
-    getTaskManager: () => ({ submit: (task) => { task.setRunning(true); submitted.push(task); } }),
-    getCombatFactory: () => combat,
+    core: { ...PluginManager.getCoreApi(), CombatFactory: combat, TaskManager: { submit: (task) => { task.setRunning(true); submitted.push(task); } } },
+    onCustomEvent: () => {},
+    persistAttribute() {}, onPlayerLogin() {}, onPlayerLogout() {},
+    onNpcsInteraction: (names, actions) => names.forEach((name) => Object.keys(actions).forEach((action) => interactions.push([name, action]))),
     onNpcInteraction: (name, actions) => interactions.push([name, Object.keys(actions)[0]]),
     onObjectInteraction: () => {},
     onItemAction: () => {},
     emitCustomEvent: (name, request) => {
         if (name === 'thieving:success') log.push(name);
+        if (name === 'thieving:done' && repeatAgain) request.again = true;
         // The Skillcapes plugin answers this; a worn Thieving cape is all these tests need.
         if (name === 'skillcape:has-perk' && request.skill === 'THIEVING') {
             request.result = request.player.getEquipment().get(Equipment.CAPE_SLOT)?.getId() === I.THIEVING_CAPE;
@@ -56,6 +64,8 @@ function container(entries = {}, full = false) {
         full: () => log.push('inventory full'),
         getAmount: (id) => amounts.get(id) ?? 0,
         adds: (id, n) => { amounts.set(id, (amounts.get(id) ?? 0) + n); log.push(`add ${NAMES.get(id) ?? id} x${n}`); },
+        // This stand-in never runs out of room, so a forced add is an add.
+        forceAdd: (player, item) => { const id = item.getId(), n = item.getAmount(); amounts.set(id, (amounts.get(id) ?? 0) + n); log.push(`add ${NAMES.get(id) ?? id} x${n}`); },
         delete: (id, n) => amounts.set(id, (amounts.get(id) ?? 0) - n),
         getItems: () => [...amounts].filter(([, n]) => n > 0).map(([id, n]) => ({ getId: () => id, getAmount: () => n })),
     };
@@ -221,16 +231,17 @@ test('a caught player cannot start another pickpocket before the stun lands', (t
 test("a new click can't cancel a pending outcome or stun, and a lost stun never locks pickpocketing", (t) => {
     const who = player({ level: 1 });
     const original = Math.random;
-    const now = Date.now;
+    const originalCycle = World.getProcessCycle;
+    let cycle = World.getProcessCycle();
     Math.random = () => 0.99;
-    t.after(() => { Math.random = original; Date.now = now; });
+    World.getProcessCycle = () => cycle;
+    t.after(() => { Math.random = original; World.getProcessCycle = originalCycle; });
     submitted.length = 0;
     Thieving._test.pickpocket({ player: who, npc: npc(), npcId: 0, definition: { getName: () => 'Man' } });
     submitted[0].execute();
     assert.ok(submitted.every((task) => task.key !== who.getIndex()), "not keyed to the player, whose tasks a click cancels (walkToReset)");
     // The stun task lost anyway: once the hold has passed, pickpocketing goes ahead.
-    const start = Date.now();
-    Date.now = () => start + 2000;
+    cycle += 3;
     log.length = 0;
     Thieving._test.pickpocket({ player: who, npc: npc(), npcId: 0, definition: { getName: () => 'Man' } });
     assert.deepEqual(log, ["You attempt to pick the man's pocket."]);
@@ -312,10 +323,11 @@ test('gloves of silence wear out after 62 failed pickpockets', () => {
 test('NPC ids pick between targets that share a name; anything else falls through', (t) => {
     const { targetFor } = Pickpocket._test;
     assert.equal(targetFor('Bandit', 695).key, 'desert_bandit');
-    assert.equal(targetFor('Bandit', 735), null, 'a Pollnivneach bandit is left to blackjacking');
-    const result = attempt(t, { name: 'Bandit', npcId: 735 });
-    assert.equal(result.result, false);
-    assert.notEqual(result.handled, true);
+    assert.equal(targetFor('Bandit', N.BANDIT_8).key, 'pollnivnian_bandit');
+    assert.equal(targetFor('Bandit', N.BANDIT_10).key, 'pollnivnian_bearded_bandit');
+    const result = attempt(t, { name: 'Bandit', npcId: N.BANDIT_10 });
+    assert.equal(result.handled, true);
+    assert.ok(result.click.some((line) => line.includes('level of at least 45')));
 });
 
 test('loot: Master Farmer herb seeds follow Farming level; the workman pays coins after The Dig Site', () => {
@@ -368,4 +380,29 @@ test('stunTicks lasts exactly its ticks; stun in seconds is unchanged', () => {
     CombatFactory.stunTicks(playerMobile, 9, true);
     CombatFactory.stunTicks(playerMobile, 9, true, { graphic: new Graphic(245, 0, 124), message: false });
     assert.deepEqual(shown, ['graphic 348/100', "You've been stunned!", 'graphic 245/124'], 'defaults unchanged; options replace them');
+});
+
+test("a repeat asked for after the outcome is the player's action: walking cancels it, and it checks the place again", (t) => {
+    const original = Math.random;
+    Math.random = () => 0;
+    repeatAgain = true;
+    t.after(() => { Math.random = original; repeatAgain = false; });
+    let at = { x: 3200, y: 3200, z: 0 };
+    const place = () => ({ getX: () => at.x, getY: () => at.y, getZ: () => at.z, getDistance: () => 1 });
+    const who = player({ level: 1 });
+    who.getLocation = place;
+    const target = { ...npc(), getLocation: () => ({ ...place(), getDistance: () => 1 }) };
+    submitted.length = 0;
+    Thieving._test.pickpocket({ player: who, npc: target, npcId: 0, definition: { getName: () => 'Man' } });
+    submitted[0].execute();
+    const repeat = submitted[1];
+    assert.ok(repeat, 'the repeat waits a tick');
+    assert.equal(repeat.key, who.getIndex(), "keyed by the player's index, which MovementQueue.walkToReset cancels");
+    // The player walked off before it fired: it checks again and does nothing.
+    at = { x: 3201, y: 3200, z: 0 };
+    log.length = 0;
+    submitted.length = 0;
+    repeat.execute();
+    assert.deepEqual(log, [], 'no new pickpocket from the old place');
+    assert.equal(submitted.length, 0);
 });

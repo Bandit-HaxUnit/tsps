@@ -55,12 +55,14 @@ export class UseItemPacketListener {
       return;
     }
 
-    const object = MapObjects.getPrivateArea(player, objectId, new Location(objectX, objectY, player.getLocation().getZ()));
+    const objectLocation = new Location(objectX, objectY, player.getLocation().getZ());
+    const object = MapObjects.getPrivateArea(player, objectId, objectLocation);
     if (!object) {
       return;
     }
 
     const useItem = () => {
+      if (!MapObjects.stillStands(player, objectId, objectLocation, object)) return;
       player.getMovementQueue().reset();
       player.getMovementQueue().walkToReset();
       player.setPositionToFace(object.getLocation());
@@ -162,6 +164,7 @@ export class UseItemPacketListener {
       npcId: target.getContentId(player),
       npcIndex: targetIndex,
       clickType: 0,
+      itemId,
       location: {
         x: target.getLocation().getX(),
         y: target.getLocation().getY(),
@@ -169,13 +172,19 @@ export class UseItemPacketListener {
       },
       handled: false,
       range: 1,
+      ignoreProjectileClip: false,
     };
     PluginManager.emitNpcRoute(routeEvent);
+    // Item use can target an NPC occupying the player's tile; route geometry governs approach.
     player.getMovementQueue().walkToEntity(target, () => {
+      // Inventory rearrangement and NPC removal can happen while walking to the target.
+      if (player.getInventory().getItems()[slot] !== item || item.getId() !== itemId ||
+          item.getAmount() <= 0 || World.getNpcs().get(targetIndex) !== target) return;
       player.setPositionToFace(target.getLocation());
       PluginManager.emitItemOnNpc({
         player,
         target,
+        definition: target.getCurrentDefinition(player),
         npcId: target.getContentId(player),
         targetIndex,
         interfaceId,
@@ -184,7 +193,7 @@ export class UseItemPacketListener {
         slot,
         handled: false,
       });
-    }, routeEvent.range);
+    }, routeEvent.range, routeEvent.ignoreProjectileClip === true, true);
   }
 
   public static spellOnObject(
@@ -204,6 +213,7 @@ export class UseItemPacketListener {
     }
     player.getMovementQueue().walkToObject(object, {
       execute: () => {
+        if (!MapObjects.stillStands(player, objectId, location, object)) return;
         player.getMovementQueue().reset();
         player.getMovementQueue().walkToReset();
         player.setPositionToFace(object.getLocation());

@@ -156,7 +156,7 @@ export async function loadWorldEntityScene(
         // As for every WebGPU map, NPCs are drawn from the live ECS, not baked.
         loadNpcs: false,
         smoothTerrain: true,
-        ...renderer.osrsClient.animationSmoothingPlugin?.objectSettings(),
+        ...renderer.osrsClient.clientPlugins.objectSettings(),
         minimizeDrawCalls: true,
         instance: { templateChunks, regionX, regionY },
         overrideRenderPos: { x: entityWorldBaseX, y: entityWorldBaseY },
@@ -166,9 +166,9 @@ export async function loadWorldEntityScene(
 
     let mapData;
     try {
-        mapData = await renderer.loadSceneData(input);
+        mapData = await renderer.loadSceneData(input, () => renderer.worldEntityLoadTokens.get(entityIndex) === loadToken);
     } catch (error) {
-        console.error(`[webgpu] world entity scene load failed for entity ${entityIndex}`, error);
+        if ((error as Error)?.name !== "AbortError") console.error(`[webgpu] world entity scene load failed for entity ${entityIndex}`, error);
         mapData = undefined;
     }
 

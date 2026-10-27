@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
 import { RenderStatsOverlay } from "../components/RenderStatsOverlay";
 import { OsrsLoadingBar } from "../components/OsrsLoadingBar";
@@ -13,11 +13,11 @@ import "./GameContainer.css";
 import { GameRenderer } from "./GameRenderer";
 import { GameState } from "./login/GameState";
 import { OsrsClient } from "./OsrsClient";
-import { SplitPrivateChatOverlay } from "./plugins/splitprivatechat/SplitPrivateChatOverlay";
-import { VengeanceTimerOverlay } from "./plugins/vengeancetimer/VengeanceTimerOverlay";
-import { FreezeTimerOverlay, PoisonTimerOverlay } from "./plugins/statustimer/StatusTimerOverlay";
-import { WeatherOverlay } from "./plugins/weather/WeatherOverlay";
 import { Sidebar } from "./sidebar/Sidebar";
+import { SidebarToggleArrow } from "./sidebar/SidebarToggleArrow";
+import { ControlsHelp } from "./controls/ControlsHelp";
+import "./controls/ControlsHelp.css";
+import { FirstPersonPlugin } from "./plugins/firstperson/FirstPersonPlugin";
 
 interface OsrsContainerProps {
     osrsClient: OsrsClient;
@@ -98,6 +98,8 @@ function resolvePointerCoordinate(
 }
 
 export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
+    const closeCamera = osrsClient.runeLite.pluginManager.getPlugin(FirstPersonPlugin);
+    const [closeCameraActive, setCloseCameraActive] = useState(() => closeCamera?.isActive() ?? false);
     const [renderer, setRenderer] = useState<GameRenderer>(osrsClient.renderer);
 
     const [downloadProgress, setDownloadProgress] = useState<DownloadProgress>();
@@ -129,6 +131,7 @@ export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
             if (now - fpsUiLastMs.current >= 250) {
                 fpsUiLastMs.current = now;
                 setFps(Math.round(renderer.stats.frameTimeFps));
+                setCloseCameraActive(osrsClient.runeLite.pluginManager.getPlugin(FirstPersonPlugin)?.isActive() ?? false);
                 if (!hideUi && osrsClient.hoverOverlayEnabled) {
                     forceStatsOverlayRefresh(renderer.stats.frameCount | 0);
                 }
@@ -369,15 +372,17 @@ export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
                     <div className="game-canvas-stage">
                         {loadingBarOverlay}
 
-                        {!hideUi && <VengeanceTimerOverlay osrsClient={osrsClient} />}
+                        {!hideUi && osrsClient.isLoggedIn() && <ControlsHelp
+                            configManager={osrsClient.runeLite.configManager}
+                            closeCameraActive={closeCameraActive}
+                            onExitCloseCamera={() => closeCamera?.exitCameraMode()}
+                        />}
 
-                        {!hideUi && <PoisonTimerOverlay osrsClient={osrsClient} />}
-
-                        {!hideUi && <FreezeTimerOverlay osrsClient={osrsClient} />}
-
-                        {!hideUi && <WeatherOverlay plugin={osrsClient.weatherPlugin} />}
-
-                        {!hideUi && <SplitPrivateChatOverlay osrsClient={osrsClient} />}
+                        {!hideUi && (
+                            <Suspense fallback={null}>
+                                {osrsClient.clientPlugins.renderHud(osrsClient)}
+                            </Suspense>
+                        )}
 
                         <div className="hud right-top">
                             <div className="fps-counter content-text">{fps}</div>
@@ -426,6 +431,11 @@ export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
                         <Canvas renderer={renderer} />
                     </div>
                 </div>
+
+                {/* RuneLite's open/close arrow at the game's right edge (Ctrl+F11 does the same). */}
+                {!hideUi && osrsClient.gameState >= GameState.LOGIN_SCREEN && (
+                    <SidebarToggleArrow store={osrsClient.sidebar} />
+                )}
 
                 {!hideUi && (
                     <span>

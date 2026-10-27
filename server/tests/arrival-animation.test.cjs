@@ -36,6 +36,7 @@ test('a skilling seq started on a step is held a tick; combat seqs are not', asy
   assert.equal(player.arrivalAnimation, null, 'a newer animation replaces the held one');
 
   stepped = false;
+  player.animation = null; // a later tick: this one's punch would keep its place (interrupt priority)
   player.performAnimation(new Animation(621));
   assert.deepEqual(played, [422, 621], 'standing still plays at once');
 });
@@ -117,6 +118,7 @@ function swingTarget() {
 test('a swing through Combat arms the measurement and holds the player where they stand', async (t) => {
   const { CombatFactory, CanAttackResponse } = require('../dist/game/content/combat/CombatFactory');
   const { CombatRange } = require('../dist/game/content/combat/CombatRange');
+  const { CombatType } = require('../dist/game/content/combat/CombatType');
   const { MovementQueue } = require('../dist/game/model/movement/MovementQueue');
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
   World.processCycle = 200;
@@ -125,6 +127,7 @@ test('a swing through Combat arms the measurement and holds the player where the
   player.getMovementQueue = () => queue;
 
   const method = {
+    type: () => CombatType.RANGED,
     attackSpeed: () => 4,
     onCombatBegan: () => {},
     onCombatEnded: () => {},
@@ -161,12 +164,14 @@ test('a swing is measured from its own animation, and a click does not cut it aw
   assert.deepEqual(sent, [4230], 'the swing plays out');
   assert.equal(combat.getAnimationStallTicks(), 3, 'its 81 cycles hold the player 3 ticks');
 
-  // Only the armed swing is measured: a flinch or an overhead effect stalls nobody.
+  // Only the armed swing is measured: a flinch or an overhead effect stalls nobody. The block
+  // does not even reach the screen here - the cache gives an attack interrupt priority 6 and a
+  // block 5, so it cannot replace the swing it lands on (Wiki: Animation interrupt priority).
   player.performAnimation(new Animation(424));
   assert.equal(combat.getAnimationStallTicks(), 3, 'the block anim that followed is not a stall');
 
   combat.clearInteraction();
-  assert.deepEqual(sent, [4230, 424], 'the click that dropped the target left the animation playing');
+  assert.deepEqual(sent, [4230], 'the click that dropped the target left the animation playing');
 
   World.processCycle = 103;
   assert.equal(combat.getAnimationStallTicks(), 0, 'the stall releases with the animation');

@@ -20,6 +20,7 @@ The client only reports the click. The server sets the variable and sends it bac
 
 | Setting | Id | Variable |
 | --- | --- | --- |
+| Hide roofs | 7 | varbit 12378 `option_hide_rooftops` |
 | Hitsplat tinting | 5 | varbit 10236 `hitsplat_tint_disabled` |
 | Max hit hitsplats | 279 | varbit 14196 `hitsplat_maxhit_disabled` |
 | Show boss health overlay | 10 | varbit 12389 `hpbar_hud_boss_disabled` |
@@ -33,6 +34,7 @@ The client only reports the click. The server sets the variable and sends it bac
 | Update clan 'last seen' records | 431 | varbit 16118 `clan_disable_lastseen` |
 | Show chat effects | 34 | varp 171 `option_chat` |
 | Split friends private chat | 35 | varp 287 `option_pm`, then script 83 `splitpm_changed` |
+| Chat timestamps (dropdown: Off, On (Server time), On (Local time)) | 119 | varbit 12384 `settings_chat_timestamps` = option, then script 4586 `settings_chat_timestamps`; a fresh account starts Off (live sends 1, server time, at login in 532 of 540 rsprox recordings) |
 | Enable precise timing | 82 | varbit 11866 `option_precise_timing` |
 | Combat Achievement Tasks - Repeat completion | 160 | varbit 12456 |
 | Player Trade options | 312 | varbit 6580 `tradeoption_disabled` |
@@ -69,7 +71,7 @@ All on the tick the level is gained:
 4. **Total level:** on passing a multiple of 25, `Congratulations, you've reached a total level of <n>.`
 5. **Pop-up**, unless set to Disabled: script 2379 (`toplevel_chatbox_resetbackground`), then `levelup_display` (233) in the chatbox modal with `<col=000080>Congratulations, you just advanced a <Skill> level.`, `Your <Skill> level is now <n>.`, `Click here to continue`, and only that skill's icon shown.
 
-With pop-ups disabled, players kept skilling and fighting straight through their level-ups (one recording has 539 in a row). So skilling stops only when the pop-up opens: SkillLevelUp emits `level-up:popup-opened` `{ player, skill }` and the skilling plugins (Cooking, Farming, Firemaking, Fishing, Fletching, Mining, Smithing, Woodcutting) stop on it.
+With pop-ups disabled, players kept skilling and fighting straight through their level-ups (one recording has 539 in a row). With pop-ups enabled, SkillLevelUp emits `level-up:popup-opened` `{ player, skill, pause }`; skilling plugins retain their current session and pause its progress. Continuing the last queued skill/combat notification resumes that session with its remaining resources and work. Moving, starting another action, closing/replacing the popup, dying or logging out cancels it. Resume-on-Continue follows issue #1071's requested behavior; the captured popup packets remain unchanged.
 
 **Combat level.** A tick after the skill's level-up: `Congratulations, you've just advanced your Combat level. You are now level <n>.` with the same graphic and sounds. With pop-ups on, its pop-up comes when the skill's is continued: `<col=000080>Congratulations, you just advanced a combat level.` (or `<n> combat levels.`), `Your combat level is now <n>.`, with the combat icon (233:55 in rev 241).
 
@@ -80,4 +82,39 @@ With pop-ups disabled, players kept skilling and fighting straight through their
 - **Jingles.** Live plays `midi_jingle` per skill, two per skill (Attack 29/30, Defence 37/38, Magic 51/52, combat 299 …). Which one plays depends on the level: Magic's second plays at levels that unlock a spell, while Hitpoints and Strength switch to it at 50. The rule per skill still needs working out.
 - **Player Trade and Report options**: live also sends `set_player_op` (4 "Trade with", 8 "Report") or removes them. The tsps client builds those menu entries itself, so only the varbits are set.
 - **Sailing side panel**: live also sets `sailing_sidepanel_visible_from_combat_tab` (19153) from the option. Sailing sets that varbit itself when boarding and leaving.
-- **Colour pickers** (type 9, for example Public chat colour) are not handled.
+- **Other colour pickers** (type 9, for example Public chat colour) are not handled; quest-list colours are supported below.
+
+## Quest list preferences (cache 241)
+
+Settings at `399:11` opens native All Settings (`134`) on Interfaces (category6,
+struct3621 / enum4025). Quest List occupies rows38–55. Button scripts5996 →3944
+→3945 only play a sound; the server owns opening the modal. Authored mappings in
+Settings.plugin.js are independent of generated JSON. Cache structs3107/3108/3110/
+3599/3744/3751–3755/4286/2735 and reader6716 establish setting ids214–223,239,240
+and varbits13772–13781,13889–13890. Enums4244/4245/4246 define twelve sorting
+modes, three requirement choices and Small/Large.
+
+Quest DB table0 supplies metadata through named gameval columns. Regression tests
+verify every registered quest has a cache record. Requirements use registered quest
+completion, cache stat pairs, quest points and combat level. Recommended stats and
+combat are a separate filter. Quest stages and level-ups refresh active filters.
+Classic separates Free Quests, Members' Quests and Miniquests. All twelve sorting
+modes rebuild the same server slot mapping; tied names use quest keys. Hidden
+headers reserve no slots. Old flags are cleared and clicks use the last sent snapshot.
+
+The renderer reads text/shadow settings and colour varps, recomputes row heights,
+scroll extents and dragger bounds, and preserves the native scrollbar. CS2 2633 uses
+fonts494/495 for small/large. Reader4181 maps settings224/225/226/227 to varps
+3410/3409/3411/3412, stored as RGB+1; zero selects the struct default. The server
+mounts native colour modal288 in134:2 and calls4185. Scripts4208 →4209 →614
+return RGB via resume_countdialog;2147483647 cancels and -1 selects default.
+Amount replies allow zero/negative only when the prompt opts in; plugin validation
+accepts -1..0xffffff. Setting228 resets all four colours. Preferences persist through
+the existing settings:values framework and restore on login/remount.
+
+Verification: settings/quest suites412passed, existing quest-list/runtime smokes,
+client rendering/scrollbar tests, server build, client typecheck/production build.
+Native acceptance: at the isolated worktree URL open Quests →Settings, scroll
+Interfaces to Quest List, change sorting/filter, close and open row journals. Choose
+Large, disable shadows, choose a colour (including black), reset and relog. Use the
+worktree ports; leave the main play world running.

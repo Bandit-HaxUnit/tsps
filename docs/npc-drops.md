@@ -14,6 +14,10 @@ Loot that depends on where or what the NPC was rather than its table is added by
 
 Tertiary drops can be made likelier per kill on `npc-drops:tertiary-chance` { player, npc, npcId, rules }, emitted once per kill before the tertiary rolls (only when the table has any): a listener pushes `{ pattern, multiplier }`, and each entry whose name matches is that many times as likely. An imbued ring of wealth adds ×2 for clue scrolls in the Wilderness; Mortimer's clue tasks add theirs ([slayer.md](slayer.md)).
 
+Any entry can be made likelier per kill on `npc-drops:chance` { player, npc, npcId, source, rules }, emitted once per roll before anything is rolled: a listener pushes `{ pattern, multiplier }` as above (`pattern` needs only a `test(name)`), and every entry whose name matches - pre-roll, main roll, separate rolls, tertiary - is that many times as likely. `source` is the NPC's name, or what a `npc-drops:roll-table` request passed as `source` (a chest has no NPC). In the weighted rolls the entry's weight is multiplied and the pool grows by what was added, so w/N becomes mw/(N + (m-1)w) and the other entries keep their weights (1/512 at 5x is 5/516); the boss rare multiplier below still stays out of the weighted rolls. A league's boosted drops answer this ([server/docs/leagues.md](../server/docs/leagues.md)); rollers outside NpcDrops (superior Slayer monsters' uniques, Treasure Trails caskets) ask the same shape as `drops:chance` { player, source, rules }.
+
+A boss's rare drops can be made likelier world-wide with `pluginConfig` `"NpcDrops:bossRareMultiplier"` ([world-configuration.md](world-configuration.md)). Tables of NPCs the cache marks as bosses (param 1361) get `boss: true` on load, and their pre-roll, separate and tertiary entries rarer than 1/100 roll that many times likelier, on top of any tertiary multiplier. The main weighted roll is left alone. Raid and other reward chests roll their own loot and are not affected.
+
 ## Regenerating
 
 The two generated files come from the OSRS Wiki's drop tables, through osrsreboxed-db:
@@ -25,9 +29,21 @@ cp docs/drops-json/npc-drops.json ../tsps/server/data/definitions/npc-drops.json
 cp docs/drops-json/subtables.json ../tsps/server/data/definitions/npc-drop-subtables.json
 ```
 
-- **Never edit the generated files by hand:** the next dump overwrites them. Put the change in `npc-drop-overrides.json` instead.
+- **Never edit generated files or repair them through an override:** fix the canonical source/parser, add a regression, regenerate twice, and import exact output. Generated conflicts are resolved by regeneration.
 - **The drop dumper reads monster pages** already fetched by the monster updater (`scripts.monsters.update`), and takes NPC ids from osrsreboxed-db's monster database. A monster that's new since the last monster update gets no table until that runs.
 - **Noted drops:** the dump marks entries the Wiki shows as "(noted)" (`noted: true`), which needs osrsreboxed-db's `fix/drops-noted` branch until it's merged.
+
+## God Wars variant loot
+
+The four generals use `gwdRareDrop`, `gwdGem` and nested `gwdMegaRare`, exported from their own Wiki source page. Their 128-slot variant tables have no empty outcomes and do not respond to ring of wealth. The main accesses preserve the source 8/127 and 2/127 chances.
+
+All main uniques and supplies are one exclusive loot outcome. Exact source fractions use a common pool of 1,524 integer subslots (127×12): armour 1/381, hilt 1/508 and shard 1/762 rates remain exact, and unique-table Coins 1.25/127 are preserved. The ordinary coin remainders are 330/336/396/480 over 1,524 for Zilyana/Graardor/K'ril/Kree; adding the exact nested variant coin routes reproduces displayed inclusive rates 31.2/31.7/36.7/43.7 over 127. The earlier local 29/30/34/42 remainder model was incorrect because it omitted unique probabilities and rounded fractional coins.
+
+Imported output is from [canonical God Wars #15](https://github.com/RSPSApp/osrsreboxed-db/pull/15), built on canonical #14; this branch also retains the safe import/reward ownership from TSPS #882. Full NPC mapping and non-God-Wars data are unchanged. The generated hashes are `cecdb21e757007a75893b721ae9a81d283ba62c6cc409cfe808dd9af8120068f` (NPCs) and `70cfdff188712ed9321f6bfaed89de16e352b81ac7ffb2cb0dffbc13fa8203f3` (subtables).
+
+The existing drop-import preservation suite checks every variant slot with and without wealth, exact pool weights and supply bundles, and the real roller's single unique outcome. Guaranteed/tertiary loot, Nex pairs, quest-only empty mappings and the Mimic/Feud reward paths retain their previous ownership.
+
+Verification for this import: TypeScript build and 26 focused integration tests pass. The full server suite has 4,945 passes and two unrelated browser/network environment failures; the complete affected files pass 44/44 outside the sandbox, including the ephemeral localhost connection the sandbox denied. Those results are disclosed separately from a green full-suite run.
 
 ## The overrides
 

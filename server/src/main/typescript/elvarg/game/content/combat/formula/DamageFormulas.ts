@@ -7,9 +7,11 @@ import { Mobile } from "../../../entity/impl/Mobile";
 import type { Player } from "../../../entity/impl/player/Player";
 import type { NPC } from "../../../entity/impl/npc/NPC";
 import type { CombatSpell } from "../magic/CombatSpell";
-import { applyCombatEffectiveLevelModifiers, applyMagicDamageBonusModifiers, applyMagicHitModifiers, applyMeleeHitModifiers, applyRangedHitModifiers } from "../EquipmentEffects";
+import { applyCombatEffectiveLevelModifiers, applyMagicDamageBonusModifiers, applyMeleeStrengthPercentModifiers, applyMagicHitModifiers, applyMeleeHitModifiers, applyRangedHitModifiers } from "../EquipmentEffects";
 import { CombatSpecial } from "../CombatSpecial";
 import { SpecialAttackMaximumHitSource, WeaponSpecialTraits } from "../WeaponSpecialTraits";
+import { PluginManager } from "../../../../plugins/PluginManager";
+import { Spell } from "../magic/Spell";
 
 const getPlayerCombatSpecial = (player: Player): any | null => {
     const accessor = (player as any)?.getCombatSpecial;
@@ -23,6 +25,12 @@ const getPlayerCombatSpecial = (player: Player): any | null => {
 };
 
 export class DamageFormulas {
+    public static sourceHitBounds(entity: Mobile, attackType: CombatType, target?: Mobile): { minimum: number; maximum: number } {
+        if (attackType === CombatType.MAGIC && CombatSpecial.activeTraitsFor(entity)?.maximumHitSource === undefined) {
+            return DamageFormulas.getMagicHitBounds(entity, undefined, target);
+        }
+        return { minimum: 0, maximum: DamageFormulas.sourceMaxHit(entity, attackType) };
+    }
     private static scaleRatio(value: number, numerator: number, denominator: number): number {
         return Math.floor((value * numerator) / denominator);
     }
@@ -105,6 +113,8 @@ export class DamageFormulas {
             return 118;
         } else if (PrayerHandler.isActivated(player, PrayerHandler.PIETY)) {
             return 123;
+        } else if (PrayerHandler.isActivated(player, PrayerHandler.ZEAL)) {
+            return 128; // Wiki: Zeal
         }
         return 100;
     }
@@ -128,7 +138,7 @@ export class DamageFormulas {
                 player.getSkillManager().getCurrentLevel(Skill.STRENGTH),
                 visibleLevelMultiplier
             ),
-            DamageFormulas.meleeStrengthPrayerPercent(player)
+            applyMeleeStrengthPercentModifiers(player, DamageFormulas.meleeStrengthPrayerPercent(player))
         );
 
         let styleBonus = 0;
@@ -171,26 +181,41 @@ export class DamageFormulas {
             }
 
         } else {
-            maxHit = entity.getAsNpc().getCurrentDefinition().getMaxHit();
+            maxHit = entity.getAsNpc().getCurrentMaxHit(CombatType.MELEE);
         }
         const adjusted = applyMeleeHitModifiers(entity, maxHit);
         return Math.floor(adjusted);
     }
 
-    public static getMagicMaxhit(c: Mobile, spellOverride?: CombatSpell | null): number {
+    public static getMagicMaxhit(c: Mobile, spellOverride?: CombatSpell | null, targetOverride?: Mobile): number {
+        return DamageFormulas.getMagicHitBounds(c, spellOverride, targetOverride).maximum;
+    }
+
+    public static getMagicHitBounds(c: Mobile, spellOverride?: CombatSpell | null, targetOverride?: Mobile): { minimum: number; maximum: number } {
         let maxHit = 0;
         const spell = spellOverride ?? c.getCombat().getSelectedSpell();
+        const declaredMaximum = spell?.maximumHit();
 
-        if (spell && spell.maximumHit() > 0) {
-            maxHit = spell.maximumHit();
+        // Non-damaging spells must stay harmless through flat damage bonuses too.
+        if (declaredMaximum === 0) return { minimum: 0, maximum: 0 };
+        if (Number.isFinite(declaredMaximum) && declaredMaximum > 0) {
+            maxHit = declaredMaximum;
         } else if (c.isNpc()) {
-            maxHit = c.getAsNpc().getDefinition().getMaxHit();
+            maxHit = c.getAsNpc().getCurrentMaxHit(CombatType.MAGIC);
         } else {
             maxHit = 1;
         }
 
+        // Generic stages retain the actual spell override and original base.
+        // Gameplay additions/multipliers belong to registered plugin handlers.
+        const target = targetOverride ?? c.getCombat().getTarget();
+        const context = Spell.getCalculationContext(c, spell);
+        const baseRequest = { attacker: c, target, spell, context, originalMaxHit: maxHit, maxHit };
+        PluginManager.emitCustomEvent("combat:magic-base-max-hit", baseRequest);
+        if (Number.isFinite(baseRequest.maxHit) && baseRequest.maxHit >= 0) maxHit = Math.floor(baseRequest.maxHit);
         const { CombatSpells } = require("../magic/CombatSpells") as typeof import("../magic/CombatSpells");
         maxHit = CombatSpells.applyChargeMaxHit(c, maxHit, spell);
+        const baseMaxHit = maxHit;
 
         maxHit = DamageFormulas.applyMagicDamageBonus(c, maxHit);
 
@@ -199,7 +224,15 @@ export class DamageFormulas {
             maxHit = DamageFormulas.scaleSpecial(maxHit, demonbaneMultiplier);
         }
 
-        return Math.floor(applyMagicHitModifiers(c, maxHit));
+        maxHit = Math.floor(applyMagicHitModifiers(c, maxHit));
+        const request = { attacker: c, target, spell, context, baseMaxHit, maxHit };
+        PluginManager.emitCustomEvent("combat:magic-max-hit", request);
+        maxHit = Number.isFinite(request.maxHit) && request.maxHit >= 0 ? Math.floor(request.maxHit) : maxHit;
+        const bounds = { attacker: c, target, spell, context, baseMaxHit, maxHit, minHit: 0 };
+        PluginManager.emitCustomEvent("combat:magic-hit-bounds", bounds);
+        const maximum = Number.isFinite(bounds.maxHit) && bounds.maxHit >= 0 ? Math.floor(bounds.maxHit) : maxHit;
+        const minimum = Number.isFinite(bounds.minHit) && bounds.minHit >= 0 ? Math.min(maximum, Math.floor(bounds.minHit)) : 0;
+        return { minimum, maximum };
     }
 
     public static getVolatileNightmareStaffBaseMaxHit(player: Player): number {
@@ -314,7 +347,7 @@ export class DamageFormulas {
     public static calculateMaxRangedHit(entity: Mobile, includeSpecial?: boolean) {
         if (entity.isNpc()) {
             let npc = entity as unknown as NPC;
-            return npc.getCurrentDefinition().getMaxHit();
+            return npc.getCurrentMaxHit(CombatType.RANGED);
         }
 
         let player = entity as Player;

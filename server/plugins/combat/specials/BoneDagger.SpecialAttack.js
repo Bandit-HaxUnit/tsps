@@ -1,6 +1,8 @@
-// TODO: ported from xrsps-typescript; untested.
-module.exports = function registerBoneDaggerSpecialAttack(api) {
-  const { CombatSpecial, ItemIdentifiers, MeleeCombatMethod, Skill } = api.core;
+// Backstab (https://oldschool.runescape.wiki/w/Bone_dagger): never misses a target nobody, or
+// another player, damaged last, and lowers the Defence of a player or NPC by the damage dealt
+// when it is at (or above) its base level.
+function buildSpecial(core) {
+  const { CombatSpecial, ItemIdentifiers, MeleeCombatMethod, Skill } = core;
 
   const DRAIN = 75;
 
@@ -19,17 +21,14 @@ module.exports = function registerBoneDaggerSpecialAttack(api) {
         return;
       }
       const target = hit.getTarget();
-      if (!target.isPlayer()) {
-        // TODO: NPC combat-stat drain is not exposed by our core NPC state.
-        return;
-      }
-      const skillManager = target.getAsPlayer().getSkillManager();
+      const skillManager = target.isPlayer() ? target.getAsPlayer().getSkillManager() : target.getAsNpc();
       const current = skillManager.getCurrentLevel(Skill.DEFENCE);
-      skillManager.setCurrentLevels(Skill.DEFENCE, Math.max(1, current - damage));
+      if (current < skillManager.getMaxLevel(Skill.DEFENCE)) return;
+      skillManager.setCurrentLevels(Skill.DEFENCE, Math.max(target.isPlayer() ? 1 : 0, current - damage));
     }
   }
 
-  api.registerCombatSpecial({
+  return {
     id: "bone_dagger",
     itemIds: [
       ItemIdentifiers.BONE_DAGGER,
@@ -40,9 +39,11 @@ module.exports = function registerBoneDaggerSpecialAttack(api) {
     drainAmount: DRAIN,
     strengthMultiplier: 1,
     accuracyMultiplier: 1,
-    // TODO: OSRS guarantees accuracy only when the wielder was not the target's
-    // most recent attacker; that combat-relationship check is not exposed here.
-    traits: { hitCount: 1 },
+    traits: { hitCount: 1, guaranteedHitOnUnsuspectingTarget: true },
     combatMethod: new BoneDaggerCombatMethod(),
-  });
+  };
+}
+
+module.exports = function registerBoneDaggerSpecialAttack(api) {
+  api.registerCombatSpecial(buildSpecial(api.core));
 };

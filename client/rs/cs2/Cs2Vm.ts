@@ -47,6 +47,15 @@ export const ScriptArgMagic = {
     OP_SUBINDEX: -2147483638, // Integer.MIN_VALUE + 10
 } as const;
 
+/** The plugin listener (widgets/custom/dynamicWidgets.ts) a script's listener of each type replaces. */
+const JS_LISTENER_FOR_EVENT: Partial<Record<WidgetEventType, string>> = {
+    onOp: "onOp",
+    onMouseOver: "onMouseOver",
+    onMouseLeave: "onMouseLeave",
+    onScroll: "onScrollWheel",
+    onDragComplete: "onDragComplete",
+};
+
 /** Magic string for target name substitution */
 export const EVENT_OPBASE = "event_opbase";
 
@@ -226,6 +235,11 @@ export interface Cs2Context {
      * () sends IF_CLOSE when deferred close executes.
      */
     sendIfClose?: () => void;
+    /**
+     * Sends a component op the server owns (an entry in its `actions`) as the IF_BUTTON a
+     * click would: if_triggerop / cc_triggerop are clicks, not just onOp listeners.
+     */
+    sendWidgetOp?: (widget: WidgetNode, opIndex: number) => void;
 
     // Player weight in kg (can be negative)
     getWeight?: () => number;
@@ -531,7 +545,6 @@ export class Cs2Vm {
     private cachedHandlerContext: HandlerContext | null = null;
 
     // Symbols used for caches attached to handler context
-    private static readonly WIDGET_CACHE_KEY = Symbol("__widgetLookupCache");
     private static readonly SET_OBJECT_QTY_MODE_CACHE_KEY = "__setObjectQtyModeCache";
 
     // PERF: Object pool for local arrays to reduce allocations
@@ -656,15 +669,6 @@ export class Cs2Vm {
         if (!this.cachedHandlerContext) return;
 
         const ctx = this.cachedHandlerContext as any;
-
-        // Clear widget lookup cache
-        const widgetCache = ctx[Cs2Vm.WIDGET_CACHE_KEY];
-        if (widgetCache) {
-            widgetCache.map?.clear();
-            if (widgetCache.accessOrder) {
-                widgetCache.accessOrder.length = 0;
-            }
-        }
 
         // Clear object quantity mode cache
         const qtyModeCache = ctx[Cs2Vm.SET_OBJECT_QTY_MODE_CACHE_KEY];
@@ -945,7 +949,7 @@ export class Cs2Vm {
             },
             getViewportZoomRange: vm.context.getViewportZoomRange,
             setViewportZoomRange: vm.context.setViewportZoomRange,
-            getViewportFovValues: vm.context.getViewportFovValues,
+            getViewportFovValues: () => vm.context.getViewportFovValues(),
             setViewportFovValues: vm.context.setViewportFovValues,
             setViewportClampFov: vm.context.setViewportClampFov,
 
@@ -1379,6 +1383,11 @@ export class Cs2Vm {
             if (this.executionState === ExecutionState.ABORTED) {
                 return;
             }
+            // A triggered op is a click: an op the server owns goes to it as well (the report
+            // form's submit triggers its own Close, which live's server answers).
+            if ((entry.widget as any).actions?.[entry.opIndex - 1]) {
+                this.context.sendWidgetOp?.(entry.widget, entry.opIndex);
+            }
         }
 
         if (this.pendingIfClose) {
@@ -1728,6 +1737,9 @@ export class Cs2Vm {
                             break;
                         }
 
+                        // RuneLite's ScriptPreFired: the args are still on the stacks, where a listener
+                        // may read or change them (intStack[intStackSize - n]).
+                        for (const listener of this.scriptPreListeners) listener(subScript.id, null);
                         const subFrame = allocateFrameLocals(subScript);
                         for (let i = subScript.intArgCount - 1; i >= 0; i--) {
                             subFrame.localInts[i] = this.intStack[--this.intStackSize];
@@ -1770,7 +1782,6 @@ export class Cs2Vm {
                         pc = 0;
                         this.currentScriptId = currentScript.id;
                         this.currentLocalStrings = localStrings;
-                        for (const listener of this.scriptPreListeners) listener(currentScript.id, null);
                         this.traceScriptEnter(currentScript);
                         continue;
                     }
@@ -1778,6 +1789,11 @@ export class Cs2Vm {
                     case Opcodes.RUNELITE_CALLBACK: {
                         const eventName = this.popString();
                         if (typeof eventName !== "string") throw new Error("RuneLite callback name must be a string");
+                        if (eventName === "debug") {
+                            // RuneLite's client logs and pops the message (TriggerBankLayout uses it).
+                            console.debug(`[cs2] ${this.popString()}`);
+                            break;
+                        }
                         for (const listener of this.scriptCallbackListeners) listener(currentScript, eventName);
                         break;
                     }
@@ -2005,6 +2021,10 @@ export class Cs2Vm {
         // setting/clearing any listener marks the widget as having listeners
         widget.hasListener = true;
 
+        // A plugin's JavaScriptCallback was the widget's listener of this type: a script's replaces it.
+        const jsListener = JS_LISTENER_FOR_EVENT[eventType];
+        if (jsListener) delete (widget as any).jsListeners?.[jsListener];
+
         if (isClear) {
             delete widget.eventHandlers[eventType];
             // Shadow any cache-loaded listener of the same type (OSRS overwrites the field).
@@ -2025,6 +2045,7 @@ export class Cs2Vm {
         } else if (eventType === "onVarTransmit") {
             (widget as any).varTransmitTriggers = transmitTriggers ?? undefined;
         }
+        if (eventType === "onTimer") this.context.widgetManager.updateTimerWidget(widget);
         markWidgetInteractionDirty(widget);
     }
 
@@ -2080,6 +2101,7 @@ export class Cs2Vm {
         } else if (eventType === "onVarTransmit") {
             (widget as any).varTransmitTriggers = transmitTriggers ?? undefined;
         }
+        if (eventType === "onTimer") this.context.widgetManager.updateTimerWidget(widget);
         markWidgetInteractionDirty(widget);
     }
 

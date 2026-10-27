@@ -219,6 +219,7 @@ class RewardsRoom extends Raid.Room {
       return true;
     }
     this.opened.add(slot);
+    claimPetLoot(player);
     const { Animation, ObjectManager } = Shared.core();
     player.performAnimation(new Animation(OPEN_ANIMATION));
     const chest = CHESTS[slot];
@@ -234,6 +235,8 @@ class RewardsRoom extends Raid.Room {
 // ------------------------------------------------------------------ the loot interface
 
 function openLoot(player) {
+  // Includes persisted rewards recovered outside the Theatre, not only this raid's chest.
+  claimPetLoot(player);
   const loot = lootOf(player);
   if (loot.length === 0) {
     player.sendMessage("Your reward chest is empty.");
@@ -244,6 +247,23 @@ function openLoot(player) {
   sender.sendInterface(INTERFACE);
   sender.sendClientScript(SCRIPT_ITEM_OPS, ITEMS_UID, LOOT_INVENTORY, 2, 3, 0, -1, "Take", "", "", "", "");
   sender.sendInterfaceFlagsRange(ITEMS_UID, 0, LOOT_SLOTS - 1, OPS);
+}
+
+/** The pet follows on looting; Pets owns insurance, duplicates and full-backpack delivery. */
+function claimPetLoot(player) {
+  const consumed = new Set();
+  for (const entry of lootOf(player)) {
+    if (entry.id !== Shared.core().ItemIdentifiers.LIL_ZIK || entry.amount <= 0) continue;
+    const drops = [{itemId: entry.id, amount: 1}];
+    Shared.api().emitCustomEvent("npc-drops:roll", {player, drops});
+    if (drops.length === 0) consumed.add(entry);
+  }
+  if (consumed.size > 0) {
+    setLoot(player, lootOf(player).filter(entry => !consumed.has(entry)));
+    Shared.api().emitCustomEvent("persistence:save", {player, reason: "tob-pet-claim"});
+  }
+  // Without the Pets plugin, leave the item in the ordinary chest fallback.
+  return consumed;
 }
 
 function sendLoot(player, loot) {
@@ -265,6 +285,8 @@ function bankFor(player, id) {
 
 /** Moves one loot entry into the inventory or bank; returns how many moved. */
 function take(player, entry, destination) {
+  // Also protect a saved pet reached through a transfer click without reopening the UI.
+  if (entry.id === Shared.core().ItemIdentifiers.LIL_ZIK && claimPetLoot(player).has(entry)) return entry.amount;
   const { Item, ItemDefinition } = Shared.core();
   if (destination === "bank") {
     const bank = bankFor(player, entry.id);
@@ -375,6 +397,13 @@ function countCompletion(player) {
   const completions = (Number(player.getAttribute(ATTR_COMPLETIONS)) || 0) + 1;
   player.setAttribute(ATTR_COMPLETIONS, completions);
   player.sendMessage(`Your completed Theatre of Blood count is: <col=ff0000>${completions}</col>.`);
+  // The raid is over for normal mode too, so the quests waiting on a clear hear it.
+  Shared.api()?.emitCustomEvent("tob:completed", { player, mode: "normal" });
+}
+
+/** A normal-mode clear counts as a Theatre of Blood completion. */
+function hasCompletion(request) {
+  if ((Number(request.player.getAttribute(ATTR_COMPLETIONS)) || 0) > 0) request.complete = true;
 }
 
 module.exports = function registerTheatreRewards(api) {
@@ -390,6 +419,7 @@ module.exports = function registerTheatreRewards(api) {
   api.onInterfaceActionButton((INTERFACE << 16) | COMPONENT.TAKE_ALL, clickTakeAll);
   api.onInterfaceActionButton((INTERFACE << 16) | COMPONENT.DISCARD_ALL, clickDiscardAll);
   api.onInterfaceActionButton(ITEMS_UID, clickLootItem);
+  api.onCustomEvent("tob:has-completion", hasCompletion);
 };
 
 Object.assign(module.exports, { RewardsRoom, rollRaid, standing, lootOf, setLoot, countCompletion, CHESTS, ATTR_LOOT, ATTR_COMPLETIONS });

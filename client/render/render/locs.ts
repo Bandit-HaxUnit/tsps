@@ -415,7 +415,7 @@ export function getExtraLocsForMap(host: WebGLOsrsRendererHost,
  * the loaded scenery. The first call only records the state the loaded squares were built with.
  */
 export function syncLocAnimationSmoothing(host: WebGLOsrsRendererHost): void {
-        const settings = host.osrsClient.animationSmoothingPlugin?.objectSettings();
+        const settings = host.osrsClient.clientPlugins.objectSettings();
         const smooth = settings?.smoothLocAnimations ? settings.smoothLocAnimationSteps : -1;
         if (host.smoothLocAnimations === smooth) return;
         const first = host.smoothLocAnimations === undefined;
@@ -504,17 +504,12 @@ export function onLocAddChange(host: WebGLOsrsRendererHost,
             const deckView = host.osrsClient?.worldViewManager?.findWorldViewAt(tile.x, tile.y);
             if (deckView && host.worldEntityOverlays?.has(deckView.id)) {
                 host.scheduleWorldEntityLocRebuild(deckView.id);
-            } else if (host.instanceActive) {
-                // In instance mode, schedule a deferred instance scene rebuild
-                // that includes the new loc via extraLocs.
-                host.scheduleInstanceLocRebuild();
             } else {
                 const locType = host.osrsClient.locTypeLoader.load(locId | 0);
-                host.scheduleLocGeometryUpdate(
-                    mapX,
-                    mapY,
-                    locType && isDoorLocType(locType) ? "door" : "loc",
-                );
+                const group = locType && isDoorLocType(locType) ? "door" : "loc";
+                // An instance builds the new loc from extraLocs.
+                if (host.instanceActive) host.scheduleInstanceLocUpdate(group);
+                else host.scheduleLocGeometryUpdate(mapX, mapY, group);
             }
             console.log(
                 `[WebGLRenderer] Loc add: ${locId} at (${tile.x}, ${tile.y}, ${level}) shape=${shape} -> map (${mapX}, ${mapY})`,

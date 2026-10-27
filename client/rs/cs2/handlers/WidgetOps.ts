@@ -6,6 +6,7 @@ import {
     markWidgetsLoaded,
 } from "../../../game/TransmitCycles";
 import { markWidgetInteractionDirty } from "../../../widgets/WidgetInteraction";
+import { MAX_WIDGET_OPS } from "../../../widgets/WidgetFlags";
 import { SCRIPT_LAYOUT, type WidgetNode } from "../../../widgets/WidgetManager";
 import { getViewportSize } from "../../../common/utils/DeviceUtil";
 import { Cs2ArrayObject } from "../Cs2ArrayObject";
@@ -13,60 +14,11 @@ import { applyNpcRowIcon } from "../spawnSearch";
 import { Opcodes } from "../Opcodes";
 import type { HandlerContext, HandlerMap } from "./HandlerTypes";
 
-// PERF: Widget lookup cache - stores recently looked up widgets to avoid repeated Map lookups
-// Cache is attached to the handler context so it's cleared between script executions
-const WIDGET_CACHE_KEY = Symbol("__widgetLookupCache");
-const WIDGET_CACHE_MAX_SIZE = 64;
-
-interface WidgetLookupCache {
-    map: Map<number, WidgetNode | null>;
-    accessOrder: number[];
-}
-
-function getWidgetLookupCache(ctx: HandlerContext): WidgetLookupCache {
-    let cache = (ctx as any)[WIDGET_CACHE_KEY] as WidgetLookupCache | undefined;
-    if (!cache) {
-        cache = { map: new Map(), accessOrder: [] };
-        (ctx as any)[WIDGET_CACHE_KEY] = cache;
-    }
-    return cache;
-}
-
-function getCachedWidget(ctx: HandlerContext, uid: number): WidgetNode | null {
-    // Skip caching for invalid UIDs
-    if (uid <= 0) {
-        return ctx.widgetManager.getWidgetByUid(uid) ?? null;
-    }
-
-    const cache = getWidgetLookupCache(ctx);
-
-    // Check cache first
-    if (cache.map.has(uid)) {
-        return cache.map.get(uid) ?? null;
-    }
-
-    // Cache miss - look up and cache
-    const widget = ctx.widgetManager.getWidgetByUid(uid) ?? null;
-
-    // Evict oldest entry if cache is full
-    if (cache.map.size >= WIDGET_CACHE_MAX_SIZE) {
-        const oldestUid = cache.accessOrder.shift();
-        if (oldestUid !== undefined) {
-            cache.map.delete(oldestUid);
-        }
-    }
-
-    cache.map.set(uid, widget);
-    cache.accessOrder.push(uid);
-
-    return widget;
-}
-
-// Helper to get widget by UID from stack
+// Helper to get widget by UID from stack. Looked up every time, never cached: a closed
+// interface is unloaded, and its next open has new widgets under the same uids.
 function getWidgetFromStack(ctx: HandlerContext): WidgetNode | null {
     const uid = ctx.intStack[--ctx.intStackSize];
-    // PERF: Use cached lookup
-    return getCachedWidget(ctx, uid);
+    return ctx.widgetManager.getWidgetByUid(uid) ?? null;
 }
 
 /**
@@ -806,6 +758,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
             params: new Map(),
         };
         // Place at the specified index - this matches OSRS behavior
+        if (parent.children[childIndex]) ctx.widgetManager.unregisterWidgetTree(parent.children[childIndex]!);
         parent.children[childIndex] = child;
         ctx.widgetManager.invalidateDynamicChildrenCache(parent);
         ctx.widgetManager.registerWidget(child);
@@ -1014,6 +967,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
 
         if (!parent.children) parent.children = [];
         while (parent.children.length <= childIndex) parent.children.push(null);
+        if (parent.children[childIndex]) ctx.widgetManager.unregisterWidgetTree(parent.children[childIndex]!);
         parent.children[childIndex] = child;
         ctx.widgetManager.invalidateDynamicChildrenCache(parent);
         ctx.widgetManager.registerWidget(child);
@@ -1114,6 +1068,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
 
         if (!parent.children) parent.children = [];
         while (parent.children.length <= childIndex) parent.children.push(null);
+        if (parent.children[childIndex]) ctx.widgetManager.unregisterWidgetTree(parent.children[childIndex]!);
         parent.children[childIndex] = sibling;
         ctx.widgetManager.invalidateDynamicChildrenCache(parent);
         ctx.widgetManager.registerWidget(sibling);
@@ -1821,6 +1776,26 @@ export function registerWidgetOps(handlers: HandlerMap): void {
                 w.fillMode = mode;
                 invalidateWidgetRender(ctx, w);
             }
+        }
+    });
+
+    // Opcode 2124: CC_SETTRANSBOT on a component by uid (the LMS fog: script 1346).
+    handlers.set(Opcodes.IF_SETTRANSBOT, (ctx) => {
+        const w = getWidgetFromStack(ctx);
+        const transBot = ctx.intStack[--ctx.intStackSize];
+        if (w && w.transparencyBot !== transBot) {
+            w.transparencyBot = transBot;
+            invalidateWidgetRender(ctx, w);
+        }
+    });
+
+    // Opcode 2125: CC_SETFILLMODE on a component by uid (the LMS fog: script 386).
+    handlers.set(Opcodes.IF_SETFILLMODE, (ctx) => {
+        const w = getWidgetFromStack(ctx);
+        const mode = ctx.intStack[--ctx.intStackSize];
+        if (w && (mode === 0 || mode === 1 || mode === 2) && w.fillMode !== mode) {
+            w.fillMode = mode;
+            invalidateWidgetRender(ctx, w);
         }
     });
 
@@ -2704,13 +2679,15 @@ export function registerWidgetOps(handlers: HandlerMap): void {
     });
 
     // === Operations/Actions ===
+    // Ops 1-32, as the client's op transmit mask (IF_SETEVENTS_V2) has a bit for each.
+    // The bank's ~bankmain_drawitem sets op 11 "Examine" on every item.
     handlers.set(Opcodes.CC_SETOP, (ctx, intOp) => {
         const text = ctx.stringStack[--ctx.stringStackSize];
         const index = ctx.intStack[--ctx.intStackSize];
         const w = getTargetWidget(ctx, intOp);
         if (w) {
             if (!w.actions) w.actions = [];
-            if (index >= 1 && index <= 10) {
+            if (index >= 1 && index <= MAX_WIDGET_OPS) {
                 w.actions[index - 1] = text;
                 markWidgetInteractionDirty(w);
             }
@@ -2724,7 +2701,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         const text = ctx.stringStack[--ctx.stringStackSize];
         if (w) {
             if (!w.actions) w.actions = [];
-            if (index >= 1 && index <= 10) {
+            if (index >= 1 && index <= MAX_WIDGET_OPS) {
                 w.actions[index - 1] = text;
                 markWidgetInteractionDirty(w);
             }
@@ -3342,13 +3319,21 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         ctx.queueTriggerOp(w, opIndex);
     });
 
+    // if_triggerop(component, slot, op): clicks op `op` of the component, or of its child at
+    // `slot` when slot is not -1 (the report form's submit clicks its own Close this way).
     handlers.set(Opcodes.IF_TRIGGEROP, (ctx) => {
-        const uid = ctx.intStack[--ctx.intStackSize];
-        const opIndex = ctx.intStack[--ctx.intStackSize];
+        ctx.intStackSize -= 3;
+        const uid = ctx.intStack[ctx.intStackSize];
+        const slot = ctx.intStack[ctx.intStackSize + 1];
+        const opIndex = ctx.intStack[ctx.intStackSize + 2];
         if (opIndex < 1 || opIndex > 10) {
             throw new Error("RuntimeException");
         }
-        const w = ctx.widgetManager.getWidgetByUid(uid);
+        const parent = ctx.widgetManager.getWidgetByUid(uid);
+        const w =
+            slot === -1 || !parent
+                ? parent
+                : (parent.children?.[slot] ?? findNestedDynamicChild(parent, slot));
         if (!w) {
             throw new Error("RuntimeException");
         }

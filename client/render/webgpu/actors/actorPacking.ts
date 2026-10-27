@@ -227,14 +227,10 @@ export function shouldLayerNpcMovementSequence(
     }
 }
 
-/** Port of render/render/anim/npc2.ts resolveUnbatchedNpcGeometry (including animation smoothing). */
-export function resolveUnbatchedNpcGeometry(
+export function getNpcGeometryRequest(
     client: OsrsClient,
-    loader: DynamicNpcAnimLoader,
     ecsId: number,
-): DynamicNpcFrameGeometry | undefined {
-    if (!loader.isReady()) return undefined;
-
+): Parameters<DynamicNpcAnimLoader["getFrameGeometry"]> {
     const ecs = client.npcEcs;
     const npcTypeId = ecs.getNpcTypeId(ecsId) | 0;
     const actionSeqId = ecs.getSeqId(ecsId) | 0;
@@ -251,17 +247,26 @@ export function resolveUnbatchedNpcGeometry(
         : ecs.getMovementFrameIndex?.(ecsId) | 0;
     const overlayFrameId = overlaySeqId >= 0 ? ecs.getMovementFrameIndex?.(ecsId) | 0 : -1;
 
+    return [npcTypeId, renderSeqId, frameId, overlaySeqId, overlayFrameId,
+        renderSeqId >= 0 ? npcInterpolation(client, ecsId, renderSeqId, frameId, overlaySeqId, overlayFrameId) : undefined];
+}
+
+/** Port of render/render/anim/npc2.ts resolveUnbatchedNpcGeometry (including animation smoothing). */
+export function resolveUnbatchedNpcGeometry(
+    client: OsrsClient,
+    loader: DynamicNpcAnimLoader,
+    ecsId: number,
+    request?: Parameters<DynamicNpcAnimLoader["getFrameGeometry"]>,
+): DynamicNpcFrameGeometry | undefined {
+    if (!loader.isReady()) return undefined;
+
+    const npcTypeId = client.npcEcs.getNpcTypeId(ecsId) | 0;
+
     let geometry: DynamicNpcFrameGeometry | undefined;
     try {
-        if (renderSeqId >= 0) {
-            geometry = loader.getFrameGeometry(
-                npcTypeId,
-                renderSeqId,
-                frameId,
-                overlaySeqId,
-                overlayFrameId,
-                npcInterpolation(client, ecsId, renderSeqId, frameId, overlaySeqId, overlayFrameId),
-            );
+        request ??= getNpcGeometryRequest(client, ecsId);
+        if (request[1] >= 0) {
+            geometry = loader.getFrameGeometry(...request);
         }
         const hasGraphics =
             !!geometry &&
@@ -368,6 +373,8 @@ export function packNpcActorData(
     writer.data[offset + 2] = renderPlane | (ecs.getRotation(ecsId) << 2);
     writer.data[offset + 3] = ecs.getServerId(ecsId);
     packActorColorOverride(writer, index, ecs.getColorOverride(ecsId));
+    // Its fade (OSRS npc transparency): 0 opaque to 255 invisible.
+    writer.data[index * 8 + 6] = ecs.getTransparency?.(ecsId, getClientCycle() | 0) ?? 0;
     return index;
 }
 
@@ -683,7 +690,11 @@ export function updateNpcClientAnimations(
     const ids = ecs.queryByMap(map.mapX, map.mapY);
     if (ids.length === 0) return;
 
+    // The client cycle each step of this batch stands for, so a sequence that arrived partway
+    // through it only steps from its own start (NpcEcs.hasSeqStartedBy).
+    const batchEndCycle = getClientCycle() | 0;
     for (let t = 0; t < clientTicksElapsed; t++) {
+        const stepCycle = batchEndCycle - (clientTicksElapsed - 1 - t);
         for (let j = 0; j < ids.length; j++) {
             const id = ids[j] | 0;
             if (!shouldStepNpcOnMap(client, map, id)) continue;
@@ -782,7 +793,7 @@ export function updateNpcClientAnimations(
                 } catch {}
             }
 
-            if (seqId >= 0 && seqDelay === 0) {
+            if (seqId >= 0 && seqDelay === 0 && ecs.hasSeqStartedBy(id, stepCycle)) {
                 const actionInfo = resolveNpcSequenceFrameInfo(client, seqId);
                 const actionStep = stepNpcSequenceTrack(
                     ecs.getFrameIndex(id) | 0,

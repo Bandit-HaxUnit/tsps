@@ -5,6 +5,7 @@
 // Maze, Mime, Pillory, Quiz Master, Surprise Exam, Beekeeper). The areas, NPCs and scenery
 // ship in the world/cache data; a session only owns the player's stay, the dynamic pieces
 // it spawns, the return tile and the teleport refusal inside the area.
+const Rewards = require("./Rewards.RandomEvents");
 const LUMBRIDGE = { x: 3222, y: 3218 };
 const RETURN_LOCATION_ATTRIBUTE = "random-events:return-location";
 const sessions = new Map();
@@ -82,8 +83,8 @@ function begin(active, spec) {
   active.session = session;
   // The invitation lifecycle ends here: the follower NPC is removed without rewarding.
   Hook?.finish?.(active);
-  (spec.onStart ?? active.definition.enter)?.(session);
   player.moveTo(new Location(spec.arrive.x, spec.arrive.y, spec.arrive.z ?? 0));
+  (spec.onStart ?? active.definition.enter)?.(session);
   return session;
 }
 
@@ -111,13 +112,18 @@ function later(session, ticks, action) {
   const TaskManager = api.getTaskManager?.();
   const Task = api.core.Task;
   if (!TaskManager || !Task) return;
-  TaskManager.submit(new (class extends Task {
+  const task = new (class extends Task {
     constructor() { super(Math.max(1, ticks), session.player); }
     execute() {
-      if (!this.stopped) action();
+      const index = session.cleanup.indexOf(cancel);
+      if (index !== -1) session.cleanup.splice(index, 1);
       this.stop();
+      if (sessions.get(session.player) === session && !session.finishing && session.player.isRegistered()) action();
     }
-  })());
+  })();
+  const cancel = () => task.stop();
+  onEnd(session, cancel);
+  TaskManager.submit(task);
 }
 
 /** Swaps a registry/map object for another id at the same tile, as quests do. */
@@ -143,31 +149,12 @@ function owns(player, itemId) {
   return false;
 }
 
-/** Gives rewards, dropping anything that no longer fits at the player's feet. */
+/** Gives rewards at the player's tile through the shared reward path, then `message`. */
 function grant(session, rewards, message = null) {
   const player = session.player;
   if (!player.isRegistered()) return;
-  const inventory = player.getInventory();
-  const items = rewards.map(reward => new api.core.Item(
-    typeof reward === "number" ? reward : reward.id,
-    typeof reward === "number" ? 1 : reward.amount));
-  const slots = items.filter(item => !item.getDefinition().isStackable() ||
-    !inventory.containsNumber(item.getId())).length;
-  if (inventory.getFreeSlots() >= slots) {
-    for (const item of items) inventory.addItem(item);
-  } else {
-    dropAtFeet(session, items);
-    player.sendMessage("Your inventory is too full, so your reward was placed on the floor.");
-  }
+  Rewards.give(api, player, rewards);
   if (message) player.sendMessage(message);
-}
-
-function dropAtFeet(session, items) {
-  const manager = api.getItemOnGroundManager?.();
-  if (!manager) return;
-  for (const item of items) {
-    manager.registerLocation(session.player, item, session.player.getLocation().clone());
-  }
 }
 
 /** Sends the player home. A blocked return tile falls back to Lumbridge, as OSRS does. */

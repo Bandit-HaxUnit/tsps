@@ -6,9 +6,10 @@
  * - Check: "Your Bone staff has N charges remaining."; Uncharge: "You uncharge your Bone staff." in
  *   an item box, or "Your Bone staff has no charges to remove.".
  * - Its spell: max hit floor(Magic / 3) + 5, and the rat bone +10 (it can only attack rats), 4-tick
- *   attack speed, 8 tiles, 35 base experience. Captured cast: animation 393, graphic 2645, area sound
- *   7617, projectile 2647 (cycles 46 to 46 + 10 a tile, height 45 to 23, angle 10, progress 64), impact
- *   2646 (height 124), and "Your weapon has N charges remaining." with each cast.
+ *   attack speed, 8 tiles (10 on Longrange, Wiki: Attack range), 35 base experience. Captured cast:
+ *   animation 393, graphic 2645, area sound 7617, projectile 2647 (cycles 46 to 46 + 10 a tile, height
+ *   45 to 23, angle 10, progress 64), impact 2646 (height 124), and "Your weapon has N charges
+ *   remaining." with each cast.
  */
 const Common = require("./Common.RatBoneWeapons");
 
@@ -16,6 +17,7 @@ const MAX_CHARGES = 20000;
 const CHARGES_META_KEY = "bone-staff-charges";
 const ATTACK_SPEED = 4;
 const ATTACK_RANGE = 8;
+const LONGRANGE_EXTRA = 2;
 const BASE_EXPERIENCE = 35;
 const CAST = Object.freeze({ anim: 393, gfx: 2645, projectile: 2647, impact: 2646, sound: 7617 });
 const PROJECTILE = Object.freeze({ start: 46, perTile: 10, startHeight: 45, endHeight: 23, angle: 10, progress: 64 });
@@ -60,8 +62,8 @@ function spellFor(player) {
       flightCycles(cast, castOn), PROJECTILE.startHeight, PROJECTILE.endHeight, cast.getPrivateArea(),
     ).withSource(cast).withAngle(PROJECTILE.angle).withProgress(PROJECTILE.progress),
     endGraphic: () => new Graphic(CAST.impact, 0, IMPACT_HEIGHT),
-    // Awarded on a successful hit by onHitResolved: combat spells' base experience isn't added by
-    // the engine (CombatFactory), and the Wiki gives the bone staff its 35 unlike other powered staves.
+    // Awarded on a successful hit by onHitResolved, not per cast like a spellbook spell's: the Wiki
+    // gives the bone staff 35 base XP unlike other powered staves, but none on a splash.
     baseExperience: () => 0,
     levelRequired: () => 1,
   });
@@ -71,6 +73,10 @@ function spellFor(player) {
 
 function useCharge(player) {
   const staff = Common.wielded(player);
+  // Content may spare the charge (a league relic): the question every powered staff asks.
+  const consume = { player, itemId: staff.getId(), skip: false };
+  api.emitCustomEvent("combat:consume-charge", consume);
+  if (consume.skip) return;
   const left = chargesOf(staff) - 1;
   setCharges(staff, left);
   player.sendMessage(`Your weapon has ${Math.max(0, left).toLocaleString("en-US")} charges remaining.`);
@@ -110,8 +116,9 @@ function staffMethod() {
       return ATTACK_SPEED;
     }
 
-    attackDistance() {
-      return ATTACK_RANGE;
+    attackDistance(character) {
+      // Longrange is the powered staff's defensive style.
+      return ATTACK_RANGE + (character.getFightType?.()?.getStyle?.() === core.FightStyle.DEFENSIVE ? LONGRANGE_EXTRA : 0);
     }
 
     finished(character) {

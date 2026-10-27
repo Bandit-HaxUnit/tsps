@@ -12,12 +12,15 @@ const { RegionManager } = require("../dist/game/collision/RegionManager");
 const { MapObjects } = require("../dist/game/entity/impl/object/MapObjects");
 const { Location } = require("../dist/game/model/Location");
 const { TaskManager } = require("../dist/game/task/TaskManager");
+const { AreaManager } = require("../dist/game/model/areas/AreaManager");
+const { CombatFactory } = require("../dist/game/content/combat/CombatFactory");
 const Bounds = require("../plugins/areas/ferox/Bounds.FeroxEnclave");
 const Ferox = require("../plugins/areas/ferox/Common.FeroxEnclave");
 const Barriers = require("../plugins/areas/ferox/Barriers.FeroxEnclave");
 const Pool = require("../plugins/areas/ferox/Pool.FeroxEnclave");
 const FFA = require("../plugins/areas/ferox/FreeForAll.FeroxEnclave");
 const Portal = require("../plugins/areas/ferox/CastleWarsPortal.FeroxEnclave");
+const FeroxPlugin = require("../plugins/areas/FeroxEnclave.plugin");
 
 let prompt = null;
 let barrier = null;
@@ -93,6 +96,25 @@ function runTicks(p, count) {
   return p.ticks;
 }
 
+test("random events use the captured enclave polygon, leaving the buffer and arena restricted", () => {
+  let eligibility;
+  const api = new Proxy({
+    core: PluginManager.getCoreApi(), sendMultiChatboxPrompt: recordPrompt,
+    onCustomEvent(name, handler) { if (name === "random-events:eligibility") eligibility = handler; },
+  }, { get(target, name) { return target[name] ?? (() => {}); } });
+  FeroxPlugin.register(api);
+  assert.equal(typeof eligibility, "function");
+  for (const [x, y, z, expected] of [[3130, 3631, 0, true], [3123, 3629, 0, true],
+    [3122, 3629, 0, null], [3123, 3617, 0, null], [3130, 3631, 1, null], [3320, 4750, 0, null]]) {
+    const request = { player: player({ at: new Location(x, y, z) }), kind: "mime", following: false, allowed: null };
+    eligibility(request);
+    assert.equal(request.allowed, expected, `${x},${y},${z}`);
+  }
+  const blocked = { player: player({ at: new Location(3130, 3631, 0) }), allowed: false };
+  eligibility(blocked);
+  assert.equal(blocked.allowed, false, "an active activity's exclusion wins over Ferox's general permission");
+});
+
 test("the barrier in this cache crosses between the town and the buffer (captured tiles)", () => {
   assert.ok(barrier, "barrier 39652 at 3123,3629");
   const out = Bounds.crossingTarget(new Location(3123, 3629, 0), barrier);
@@ -102,6 +124,15 @@ test("the barrier in this cache crosses between the town and the buffer (capture
   assert.equal(Bounds.isInsideEnclave(new Location(3123, 3629, 0)), true);
   assert.equal(Bounds.isInBuffer(new Location(3122, 3629, 0)), true);
   assert.equal(Bounds.isInBuffer(new Location(3123, 3629, 0)), false, "inside is not the buffer");
+  for (const objects of MapObjects.mapObjects.values()) {
+    for (const object of objects) {
+      if (!Bounds.BARRIER_IDS.includes(object.getId())) continue;
+      const tile = object.getLocation();
+      assert.ok(tile.getX() - 1 >= Bounds.AREA.minX && tile.getX() + 1 <= Bounds.AREA.maxX
+        && tile.getY() - 1 >= Bounds.AREA.minY && tile.getY() + 1 <= Bounds.AREA.maxY,
+      `local area includes barrier ${tile.getX()},${tile.getY()} and its buffer`);
+    }
+  }
 });
 
 test("leaving warns once: the warning, the three options, then the drag and a step through", () => {
@@ -174,6 +205,113 @@ test("players can't attack each other in the town unless one is teleblocked", ()
   const allowed = { attacker: a, target: tb, allow: null };
   Barriers.denySafeZoneAttack(allowed);
   assert.equal(allowed.allow, null);
+});
+
+function enclaveWorld(t) {
+  const core = { ...PluginManager.getCoreApi(), AreaManager, CombatFactory };
+  const saved = { areas: AreaManager.areas, index: AreaManager.areaSearchIndex,
+    api: Ferox.api, stats: PluginManager.pluginPerfStats,
+    enabled: PluginManager.isPluginPerformanceProfilingEnabled() };
+  AreaManager.areas = [];
+  AreaManager.areaSearchIndex = null;
+  PluginManager.pluginPerfStats = new Map();
+  PluginManager.setPluginPerformanceProfilingEnabled(true);
+  t.after(() => {
+    AreaManager.areas = saved.areas;
+    AreaManager.areaSearchIndex = saved.index;
+    Ferox.init(saved.api);
+    PluginManager.pluginPerfStats = saved.stats;
+    PluginManager.setPluginPerformanceProfilingEnabled(saved.enabled);
+  });
+  const custom = new Map(), startup = [], global = { attack: [], process: [] };
+  const apiFor = (name) => new Proxy({
+    core, sendMultiChatboxPrompt: recordPrompt,
+    registerArea(area) { area.pluginName = name; AreaManager.areas.push(area); },
+    onCustomEvent(name, handler) { custom.set(name, [...(custom.get(name) ?? []), handler]); },
+    emitCustomEvent(name, event) { for (const handler of custom.get(name) ?? []) handler(event); },
+    onServerStartup(handler) { startup.push(handler); },
+    onCanAttack(handler) { global.attack.push(handler); },
+    onPlayerProcess(handler) { global.process.push(handler); },
+  }, { get(target, name) { return target[name] ?? (() => {}); } });
+  require('../plugins/areas/Wilderness.plugin').register(apiFor('Wilderness'));
+  FeroxPlugin.register(apiFor('FeroxEnclave'));
+  for (const handler of startup) handler({});
+  let index = 0;
+  function actor(at, teleblocked = false) {
+    const p = player({ at, teleblocked });
+    let area = null, multi = 0;
+    const id = ++index;
+    Object.assign(p, {
+      isPlayerBot: () => true, isNpc: () => false, getAsPlayer: () => p, getIndex: () => id,
+      getArea: () => area, setArea: (value) => { area = value; }, getPrivateArea: () => null,
+      getMultiIcon: () => multi, setMultiIcon: (value) => { multi = value; },
+    });
+    AreaManager.process(p);
+    return p;
+  }
+  return { core, actor, global, area: AreaManager.areas.find((area) => area.getName() === 'FeroxEnclaveArea') };
+}
+
+test('Ferox has no global combat/process hooks and does no work for distant players', (t) => {
+  const { core, actor, global, area } = enclaveWorld(t);
+  assert.ok(area);
+  assert.deepEqual(global, { attack: [], process: [] });
+  const a = actor(new Location(3100, 3600, 0)), b = actor(new Location(3101, 3600, 0));
+  assert.equal(a.getArea().getName(), 'WildernessArea');
+  core.CombatFactory.canAttackByPolicy(a, b);
+  assert.equal(PluginManager.getPluginPerformanceSnapshot().some((row) => row.pluginName === 'FeroxEnclave'), false);
+  const lookup = t.mock.method(MapObjects.mapObjects, 'get');
+  assert.equal(Bounds.isSafeLocation(a.getLocation()), false);
+  assert.equal(Bounds.isInBuffer(a.getLocation()), false);
+  assert.equal(lookup.mock.callCount(), 0, 'shared Ferox bounds reject remote tiles before map queries');
+});
+
+test('walking from Wilderness into Ferox updates town/buffer varbits and clears them on departure', (t) => {
+  const { core, actor, area } = enclaveWorld(t);
+  const p = actor(new Location(3109, 3629, 0));
+  assert.equal(p.getArea().getName(), 'WildernessArea');
+  p.moveTo(new Location(3122, 3629, 0));
+  core.AreaManager.process(p);
+  assert.equal(p.getArea(), area, 'specific area replaces the overlapping Wilderness area');
+  assert.deepEqual([p.varbits.get(6549), p.varbits.get(10530)], [0, 1]);
+  p.moveTo(new Location(3123, 3629, 0));
+  core.AreaManager.process(p);
+  assert.deepEqual([p.varbits.get(6549), p.varbits.get(10530)], [1, 0]);
+  p.moveTo(new Location(3109, 3629, 0));
+  core.AreaManager.process(p);
+  assert.equal(p.getArea().getName(), 'WildernessArea');
+  assert.deepEqual([p.varbits.get(6549), p.varbits.get(10530)], [0, 0]);
+  p.moveTo(new Location(3130, 3630, 0));
+  core.AreaManager.process(p);
+  p.moveTo(new Location(3130, 3630, 1));
+  core.AreaManager.process(p);
+  assert.notEqual(p.getArea(), area);
+  assert.deepEqual([p.varbits.get(6549), p.varbits.get(10530)], [0, 0], 'changing plane clears both bits');
+});
+
+test('local Ferox combat protects either actor across its edge and preserves Wilderness fallback', (t) => {
+  const { core, actor, area } = enclaveWorld(t);
+  const denied = core.CanAttackResponse.CANT_ATTACK_IN_AREA;
+  const inside = actor(new Location(3130, 3630, 0));
+  const buffer = actor(new Location(3122, 3629, 0));
+  const outside = actor(new Location(3109, 3629, 0));
+  for (const safe of [inside, buffer]) {
+    assert.equal(core.CombatFactory.canAttackByPolicy(outside, safe), denied);
+    assert.equal(core.CombatFactory.canAttackByPolicy(safe, outside), denied);
+  }
+  const teleblocked = actor(new Location(3122, 3629, 0), true);
+  assert.equal(area.canAttack(teleblocked, outside), false, 'teleblock does not bypass the existing Wilderness rule');
+  assert.equal(area.canAttack(outside, teleblocked), false);
+  assert.equal(area.canAttack(inside, { isPlayer: () => false }), null, 'NPC combat is unchanged');
+});
+
+test('Ferox clears state when another area claims a player before moving them', (t) => {
+  const { core, actor, area } = enclaveWorld(t);
+  const p = actor(new Location(3130, 3630, 0));
+  assert.equal(p.varbits.get(6549), 1);
+  const instance = new (class extends core.Area {})(area.getBoundaries());
+  instance.enter(p);
+  assert.deepEqual([p.varbits.get(6549), p.varbits.get(10530)], [0, 0]);
 });
 
 // ------------------------------------------------------------------ the Castle Wars portal

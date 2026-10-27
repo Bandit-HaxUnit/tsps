@@ -1,6 +1,7 @@
 const {
   restoreRunEnergy,
   curePoisonAndVenom,
+  curePoison,
   boostSkill,
   lowerSkillByCurrent,
   lowerSkillByMax,
@@ -48,11 +49,18 @@ const PRAYER_ENHANCE_INTERVAL_MS = 6 * 600;
 const AREA_MESSAGES = { "chambers-of-xeric": "You can only sip this potion while inside the Chambers of Xeric." };
 /** Shared 60-second cycle that decays every temporary skill boost by one (Wiki). */
 const ATTR_BOOST_CYCLE = "potions:boost-cycle";
+/** Whether Preserve has already stretched the current boost cycle. */
+const ATTR_BOOST_CYCLE_PRESERVED = "potions:boost-cycle-preserved";
+/** When Preserve was last switched on. */
+const ATTR_PRESERVE_SINCE = "potions:preserve-since";
 /** When the player logged out; timed effects are paused while offline. */
 const ATTR_PAUSED_AT = "potions:paused-at";
 const PERSISTED_ATTRIBUTES = [ATTR_STAMINA_END, ATTR_STAMINA_ACC, ATTR_DIVINE_STATE, ATTR_OVERLOAD_STATE, ATTR_MENAPHITE_STATE, ATTR_PRAYER_REGEN_STATE, ATTR_PRAYER_ENHANCE, ATTR_BOOST_CYCLE, ATTR_PAUSED_AT];
 
 const BOOST_DECAY_MS = 60 * 1000;
+/** Wiki (Temporary skill boost): Preserve stretches the cycle to 90 seconds once it has been on 15. */
+const PRESERVE_EXTENSION_MS = 30 * 1000;
+const PRESERVE_WARMUP_MS = 15 * 1000;
 const MENAPHITE_DURATION_MS = 5 * 60 * 1000;
 const MENAPHITE_RESTORE_INTERVAL_MS = 15 * 1000;
 const PRAYER_REGEN_DURATION_MS = 8 * 60 * 1000;
@@ -108,7 +116,12 @@ function damageButKeepAlive(player, amount) {
   player.setHitpoints(next);
 }
 
-function applyPoisonImmunity(player, seconds, message = true) {
+function applyPoisonImmunity(player, seconds, message = true, fullVenomCure = false) {
+  if (player.isVenomed() && !fullVenomCure) {
+    curePoison(player);
+    if (message) player.sendMessage("The potion weakens the venom to poison.");
+    return;
+  }
   curePoisonAndVenom(player);
   // Wiki (7 April 2016): drinking any kind of antipoison will no longer
   // decrease your poison immunity, so a weaker dose never shortens the timer.
@@ -240,9 +253,12 @@ function applyZamorakBrew(player) {
 }
 
 function applyGuthixRest(player) {
-  heal(player, 5);
+  const current = getCurrentLevel(player, Skill.HITPOINTS);
+  const base = getMaxLevel(player, Skill.HITPOINTS);
+  const extraCap = current >= base ? 5 : 0;
+  if (current < base + extraCap) heal(player, 5, extraCap);
   restoreRunEnergy(player, 5);
-  curePoisonAndVenom(player);
+  curePoison(player, 1);
 }
 
 /** Prayer restore that may over-heal by up to `overPercent` above base (ancient/forgotten brew). */
@@ -356,8 +372,10 @@ function timedEffectSkillIndexes(player) {
 }
 
 /**
- * Wiki: temporary boosts and drains move one point toward base every minute on a
- * continuous cycle. Prayer points and Hitpoints are not covered.
+ * Wiki: temporary boosts drop one point toward base every minute on a continuous cycle, which
+ * Preserve stretches to 90 seconds. Prayer points are not covered, and Hitpoints above base
+ * drop on the core's Hitpoints timer; lowered stats are restored by the core
+ * (Player.processStatRestoration).
  */
 function processBoostDecay(player) {
   const now = Date.now();
@@ -369,6 +387,12 @@ function processBoostDecay(player) {
   if (now < nextDecayAt) {
     return;
   }
+  if (preserveStretchesCycle(player, now)) {
+    player.setAttribute(ATTR_BOOST_CYCLE, nextDecayAt + PRESERVE_EXTENSION_MS);
+    player.setAttribute(ATTR_BOOST_CYCLE_PRESERVED, true);
+    return;
+  }
+  player.setAttribute(ATTR_BOOST_CYCLE_PRESERVED, false);
   const elapsed = now - nextDecayAt;
   player.setAttribute(ATTR_BOOST_CYCLE, nextDecayAt + BOOST_DECAY_MS * (Math.floor(elapsed / BOOST_DECAY_MS) + 1));
 
@@ -382,10 +406,20 @@ function processBoostDecay(player) {
     const base = getMaxLevel(player, skill);
     if (current > base) {
       setCurrentLevel(player, skill, current - 1);
-    } else if (current < base) {
-      setCurrentLevel(player, skill, current + 1);
     }
   }
+}
+
+/** Preserve stretches a cycle once, when it has been on for 15 seconds as the cycle ends. */
+function preserveStretchesCycle(player, now) {
+  if (player.getAttribute(ATTR_BOOST_CYCLE_PRESERVED)) return false;
+  const { PrayerHandler } = pluginApi.core;
+  if (!PrayerHandler.isActivated(player, PrayerHandler.PRESERVE)) return false;
+  return now - Number(player.getAttribute(ATTR_PRESERVE_SINCE)) >= PRESERVE_WARMUP_MS;
+}
+
+function notePreserveActivated({ player, prayerId }) {
+  if (prayerId === pluginApi.core.PrayerHandler.PRESERVE) player.setAttribute(ATTR_PRESERVE_SINCE, Date.now());
 }
 
 function startStamina(player) {
@@ -484,43 +518,59 @@ function registerPotion(definition) {
     entries: [],
   };
 
-  for (const chain of definition.chains || []) {
-    if (!Array.isArray(chain) || chain.length === 0) {
-      continue;
-    }
-
-    for (let index = 0; index < chain.length; index++) {
-      const itemId = chain[index];
-      if (!isItemId(itemId)) {
-        continue;
-      }
-
-      const replacementId = index + 1 < chain.length
-        ? chain[index + 1]
-        : normalized.emptyItemId;
-
-      const entry = {
-        potion: normalized,
-        itemId,
-        chain,
-        doses: chain.length - index,
-        replacementId: isItemId(replacementId)
-          ? replacementId
-          : normalized.emptyItemId,
-      };
-
-      POTION_BY_ITEM_ID.set(itemId, entry);
-      normalized.entries.push(entry);
-    }
-  }
+  for (const chain of definition.chains || []) addChain(normalized, chain, normalized.emptyItemId);
 
   if (normalized.entries.length > 0) {
     REGISTERED_POTIONS.push(normalized);
   }
 }
 
+/** One dose chain (most doses first) of a potion; the last dose leaves `emptyItemId`. */
+function addChain(potion, chain, emptyItemId) {
+  if (!Array.isArray(chain) || chain.length === 0) {
+    return;
+  }
+
+  for (let index = 0; index < chain.length; index++) {
+    const itemId = chain[index];
+    if (!isItemId(itemId)) {
+      continue;
+    }
+
+    const replacementId = index + 1 < chain.length
+      ? chain[index + 1]
+      : emptyItemId;
+
+    const entry = {
+      potion,
+      itemId,
+      chain,
+      doses: chain.length - index,
+      replacementId: isItemId(replacementId)
+        ? replacementId
+        : emptyItemId,
+    };
+
+    POTION_BY_ITEM_ID.set(itemId, entry);
+    potion.entries.push(entry);
+  }
+}
+
+/**
+ * "potions:register-copy" `{ name, chain, emptyItemId? }`: a minigame's own copies of a potion's
+ * doses (Last Man Standing's), drunk as the potion called `name`, each dose leading to the copy's
+ * next and the last to `emptyItemId` (the potion's own vessel when left out). Sets `registered`.
+ */
+function registerCopy(request) {
+  const potion = REGISTERED_POTIONS.find((candidate) => candidate.name === request?.name);
+  if (!potion || !Array.isArray(request.chain) || request.chain.some((id) => POTION_BY_ITEM_ID.has(id))) return;
+  addChain(potion, request.chain, isItemId(request.emptyItemId) ? request.emptyItemId : potion.emptyItemId);
+  request.registered = true;
+}
+
 // https://oldschool.runescape.wiki/w/Free-to-play_Ironman_guide#Boosts
 registerPotion({ name: "Beer", chains: [[Items.BEER]], emptyItemId: Items.BEER_GLASS,
+  drink: { messages: () => ["You drink the beer. You feel slightly reinvigorated...", "...and slightly dizzy too."] },
   requiresFoodPermission: true, shareable: false, effect: (player) => {
     heal(player, 1);
     boostSkill(player, Skill.STRENGTH, 1, 0.02);
@@ -835,12 +885,17 @@ registerPotion({
 registerPotion({
   name: "Anti-venom",
   chains: [doseChain("ANTI_VENOM_4_", "ANTI_VENOM_3_", "ANTI_VENOM_2_", "ANTI_VENOM_1_")],
-  effect: (player) => applyPoisonImmunity(player, 720),
+  effect: (player) => applyPoisonImmunity(player, 738, true, true),
 });
 registerPotion({
   name: "Anti-venom+",
   chains: [doseChain("ANTI_VENOM_4__3", "ANTI_VENOM_3__3", "ANTI_VENOM_2__3", "ANTI_VENOM_1__3")],
-  effect: (player) => applyPoisonImmunity(player, 900),
+  effect: (player) => applyPoisonImmunity(player, 900, true, true),
+});
+registerPotion({
+  name: "Extended anti-venom+",
+  chains: [doseChain("EXTENDED_ANTI_VENOM_4_", "EXTENDED_ANTI_VENOM_3_", "EXTENDED_ANTI_VENOM_2_", "EXTENDED_ANTI_VENOM_1_")],
+  effect: (player) => applyPoisonImmunity(player, 1062, true, true),
 });
 
 registerPotion({
@@ -869,6 +924,12 @@ registerPotion({
   chains: [doseChain("ANTIPOISON_MIX_2_", "ANTIPOISON_MIX_1_")],
   requiresFoodPermission: true,
   effect: applyMix((player) => applyPoisonImmunity(player, 90, false), 3),
+});
+registerPotion({
+  name: "Anti-poison supermix",
+  chains: [doseChain("ANTI_POISON_SUPERMIX_2_", "ANTI_POISON_SUPERMIX_1_")],
+  requiresFoodPermission: true,
+  effect: applyMix((player) => applyPoisonImmunity(player, 360, false)),
 });
 registerPotion({
   name: "Restore mix",
@@ -1019,12 +1080,7 @@ registerPotion({
       [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE]
     ),
 });
-registerPotion({
-  name: "Overload",
-  chains: [doseChain("OVERLOAD_4_", "OVERLOAD_3_", "OVERLOAD_2_", "OVERLOAD_1_")],
-  canUse: (player) => getCurrentLevel(player, Skill.HITPOINTS) > 50,
-  effect: applyOverload,
-});
+// Nightmare Zone's Overload (11730-11733) is drunk only in a dream: NightmareZone.plugin.js owns it.
 registerPotion({
   name: "Overload (+)",
   chains: [doseChain("OVERLOAD_4__5", "OVERLOAD_3__5", "OVERLOAD_2__5", "OVERLOAD_1__5")],
@@ -1253,6 +1309,15 @@ function handlePotionDrink(player, itemId, slot) {
     return true;
   }
 
+  // Quest and content plugins can explain an item-specific unlock before a
+  // drink consumes a dose, starts a cooldown or applies any effect.
+  const permission = { player, itemId, allowed: true, message: null };
+  pluginApi.emitCustomEvent("potions:validate-drink", permission);
+  if (permission.allowed === false) {
+    if (permission.message) player.sendMessage(permission.message);
+    return true;
+  }
+
   const timers = player.getTimers();
   if (timers.has(TimerKey.STUN)) {
     player.sendMessage("You're currently stunned and cannot use potions.");
@@ -1279,7 +1344,7 @@ function handlePotionDrink(player, itemId, slot) {
   entry.potion.effect(player);
 
   const share = player.getAttribute("lunar:potion-share");
-  if (share && entry.potion.shareable && Date.now() < share.expiresAt) {
+  if (share && entry.potion.shareable && pluginApi.core.World.getProcessCycle() < share.expiresAt) {
     const restorative = /restore|prayer|energy|stamina|antipoison|antidote|antifire|guthix rest/i.test(entry.potion.name);
     if ((share.type === "restore") === restorative) {
       entry.potion.effect(share.target);
@@ -1412,30 +1477,55 @@ function componentIds(api, names) {
   return names.map((name) => api.core.CacheDefinitions.getComponentId(name)).filter(Number.isInteger);
 }
 
-/** The potions it can drink: those that cure poison or venom. */
-const CURE_POTIONS = new Set([
-  "Antipoison", "Superantipoison", "Antidote+", "Antidote++", "Sanfew serum",
-  "Anti-venom", "Anti-venom+", "Antipoison mix", "Antidote+ mix",
+/** Wiki Poison/Venom: prefer stronger treatment, including partial Guthix rest. */
+const CURE_POTIONS = new Map([
+  ["Guthix rest", 0],
+  ["Antipoison", 1], ["Antipoison mix", 1],
+  ["Superantipoison", 2], ["Sanfew serum", 2], ["Anti-poison supermix", 2],
+  ["Antidote+", 3], ["Antidote+ mix", 3],
+  ["Antidote++", 4], ["Anti-venom", 5], ["Anti-venom+", 6],
+  ["Extended anti-venom+", 7],
 ]);
 
 /**
- * "Cure" on the hitpoints orb drinks the first such potion in the inventory, as drinking it
- * does (rsprox captures: the drink's animation, sound and messages); with none, "You haven't
- * got anything capable of curing your poison.".
+ * Prefer the strongest potion, then the least-dosed vessel of that family,
+ * keeping the first slot for a dose tie. Different equally strong families
+ * retain their existing inventory order pending captured priority evidence.
+ * Consumption still uses the ordinary drink handler and its restrictions.
  */
 function cureFromHealthOrb({ player }) {
   if (!player || (!player.isPoisoned?.() && !player.isVenomed?.())) return;
   const items = player.getInventory().getItems();
+  let selected = null;
   for (let slot = 0; slot < items.length; slot++) {
     const itemId = items[slot]?.getId?.() ?? -1;
     if (itemId <= 0) continue;
     const entry = POTION_BY_ITEM_ID.get(itemId);
-    if (entry && CURE_POTIONS.has(entry.potion.name)) {
-      handlePotionDrink(player, itemId, slot);
-      return;
+    const strength = entry && CURE_POTIONS.get(entry.potion.name);
+    if (strength === undefined || !entry) continue;
+    if (!selected || strength > selected.strength ||
+        (entry.potion === selected.entry.potion && entry.doses < selected.entry.doses)) {
+      selected = { entry, strength, itemId, slot };
     }
   }
-  player.sendMessage("You haven't got anything capable of curing your poison.");
+  if (selected) {
+    handlePotionDrink(player, selected.itemId, selected.slot);
+    return;
+  }
+  const fallback = { player, handled: false };
+  pluginApi.emitCustomEvent("poison:cure-from-orb", fallback);
+  if (!fallback.handled) player.sendMessage("You haven't got anything capable of curing your poison.");
+}
+
+/**
+ * "potions:dose-family" `{ itemId, family }`: an unnoted potion's family for decanting, from the cache's
+ * dose enum where it has one (`doseFamily`): `{ byDose, doses, max }`, `byDose[0]` the empty vessel.
+ * Left null for anything else.
+ */
+function answerDoseFamily(request) {
+  const family = request?.itemId > 0 ? doseFamily(request.itemId) : null;
+  if (!family || family.doses <= 0) return;
+  request.family = { byDose: [...family.byDose], doses: family.doses, max: family.max };
 }
 
 module.exports = {
@@ -1447,8 +1537,9 @@ module.exports = {
     applyPrayerRestore, applySanfewRestore, applyAncientBrew, restorePrayerOverheal, applyDivine, processDivine,
     applyMenaphiteRemedy, processMenaphite, applyPrayerRegeneration, processPrayerRegeneration, clearPrayerRegeneration,
     applyRankFrothyPotion, applyFoulChunkyPotion, applyRancidSlimyPotion, applyJarOfCongealedBlood,
-    processBoostDecay, curePoisonAndVenom, pauseTimedEffects, resumeTimedEffects,
+    processBoostDecay, notePreserveActivated, curePoisonAndVenom, pauseTimedEffects, resumeTimedEffects,
     findPotionEntry: (itemId) => POTION_BY_ITEM_ID.get(itemId) ?? null,
+    registerCopy,
     cureFromHealthOrb,
   },
   getPotionName(itemId) {
@@ -1456,6 +1547,9 @@ module.exports = {
   },
   register(api) {
     api.onCustomEvent("potions:apply-stamina", applyStaminaRequest);
+    api.onCustomEvent("potions:dose-family", answerDoseFamily);
+    api.onCustomEvent("potions:register-copy", registerCopy);
+    api.onCustomEvent("prayer:activated", notePreserveActivated);
     pluginApi = api;
     initDragonfireProtectionCoreAccess(api);
     PERSISTED_ATTRIBUTES.forEach((key) => api.persistAttribute(key));

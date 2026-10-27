@@ -13,6 +13,7 @@ const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../src/main/typescript/elvarg/game/task/TaskManager");
 const { FLAG_OP1, TYPE_GRAPHIC, TYPE_TEXT, createWidgetGroup } = require("../interface/widgetGroup");
 const { EQUIPMENT_SLOTS, addEquipmentWidgets } = require("../modes/pvp/PresetsWidget.PvpMode");
+const Scoreboard = require("./duelarena/Scoreboard.DuelArena");
 
 // Cache 237: confirmation group 756 and rule config varp 286.
 const ARENA = new Boundary(3326, 3383, 3197, 3295, 0);
@@ -73,6 +74,7 @@ const CACHE_RULE_BUTTONS = new Map([
 const sessions = new Map();
 const requests = new WeakMap();
 const requestDelay = new WeakMap();
+const DUEL_REQUEST_DELAY_TICKS = 4;
 const menuState = new WeakMap();
 const presets = new WeakMap();
 const lastRules = new WeakMap();
@@ -319,6 +321,9 @@ function end(session, loser) {
   const fought = session.stage === "fight";
   // Remove both links before resetting players: death/close/disconnect may re-enter.
   for (const player of session.players) sessions.delete(player);
+  // A duel that reached the arena and has a loser: its record (the Emir's Arena scoreboards hear it).
+  const winner = fought && loser ? session.players.find(player => player !== loser) : null;
+  if (winner) pluginApi.emitCustomEvent("duelarena:duel-won", { winner, loser });
   for (const player of session.players) {
     if (fought && player.getHitpoints() <= 0) pendingSafeDeaths.add(player);
     resetState(player);
@@ -420,8 +425,8 @@ function request({ player, target }) {
     return;
   }
   const reciprocal = requests.get(target) === player;
-  if (!reciprocal && Date.now() < (requestDelay.get(player) ?? 0)) return;
-  requestDelay.set(player, Date.now() + 2000);
+  if (!reciprocal && World.getProcessCycle() < (requestDelay.get(player) ?? 0)) return;
+  requestDelay.set(player, World.getProcessCycle() + DUEL_REQUEST_DELAY_TICKS);
   requests.set(player, target);
   player.getDueling().setState(DuelState.REQUESTED_DUEL);
   if (reciprocal) {
@@ -778,5 +783,8 @@ module.exports = {
     api.onCanEquip(canEquip);
     api.onCanUnequip(canUnequip);
     api.onServerShutdown(shutdown);
+    Scoreboard.attach(api);
   },
+  /** For server/tests/pvp-arena-scoreboard.test.cjs. */
+  _test: { end, sessions },
 };

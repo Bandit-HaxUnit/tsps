@@ -23,10 +23,12 @@ yarn sync:npc-spawns --box 2520,2170,2660,2310 --box 2560,8560,2640,8660 --tag W
 | `--radius <tiles>` | How far an existing spawn may be from the Wiki's and still match (default 4). |
 | `--report <file>` | Write every map square's gaps as JSON instead: area name, spawn counts, missing NPCs with their labels. Nothing is written to the spawn file; without `--box`, the whole map. |
 | `--wiki <file> [--save]` | Read a saved copy of the Wiki data, or (with `--save`) fetch and write one. A full fetch is about 90 requests. |
+| `--repair-identities` | Also reconcile literal IDs whose current-cache name contradicts the authored name, using unique nearby Wiki/cache evidence. Opt-in; dry run unless `--write` is supplied. Not combined with `--report`. |
+| `--spawns <file>` | Alternate spawn input/output, useful for isolated regeneration checks. Defaults to `server/data/definitions/npc-spawns.json`. |
 
 **Where the Wiki keeps spawns:**
 - **Monsters:** `{{LocLine}}` coordinates, one per spawn (bucket `locline`), with ids per page version from bucket `infobox_monster`.
-- **Single NPCs:** the infobox's `{{Map}}` in the page's wikitext, with ids from bucket `infobox_npc`. A polygon, rectangle or line outlines an area: it becomes one spawn at its centre.
+- **Single NPCs:** the infobox's `{{Map}}` in the page's wikitext, with ids from bucket `infobox_npc`. A polygon, rectangle or line outlines an area: it becomes one spawn at its centre. Every `{{Map}}` on a `|map =` line counts, labelled or not (`|map = Port Sarim Docks {{Map|…}} Port Piscarilius {{Map|…}}`).
 - **Not counted:** pages without an NPC infobox (LocLine also places scenery and items), and historical or event pages without real ids.
 
 **NPCs with several versions:** an infobox's `map1`, `map2`… belong to its `id1`, `id2`… (Guild Hunter Fox: `map1` the Hunter Guild with `id1` 13426, `map3` the Avium Savannah with `id3`, injured). The script pairs them by that number. It used to take the versions in the data bucket's order, which differs, so 60 spawns on 32 pages got the wrong id or a quest stage; they're fixed below.
@@ -41,6 +43,49 @@ yarn sync:npc-spawns --box 2520,2170,2660,2310 --box 2560,8560,2640,8660 --tag W
 3. Otherwise the loader's default (5).
 
 The Wiki map's `r` only sizes its marker, so it isn't used: Mortimer's map has `r=4`, and he wanders one tile (rsprox captures).
+
+### Repairing mismatched identities
+
+Add-only matching uses the authored NPC name, so it cannot notice an imported row
+whose numeric id now refers to a different NPC. `--repair-identities` reconciles
+that mismatch before planning additions. It requires one unique ID among nearby
+Wiki candidates on the same plane, with both the Wiki name and the cache name
+agreeing with the authored name. The area boxes, skip decisions and `--only`
+labels still apply. Ambiguity or missing evidence is reported without changing
+the row. Correct variants, explicit cache `key` entries and unnamed rows remain
+unchanged, as does a nameless multinpc parent one of whose variants has the name: live
+spawns the Leagues Tutor at 3226, 3215 as 317 (cache name `null`), which `league_account`
+(varbit 10031) shows as the main game's 316 and hides from a league character, so it is not
+"repaired" to the Wiki's 316. Coordinates, facing, wandering and other metadata are retained.
+Repair evidence retains every plausible Wiki ID before the normal add-only
+`--tag`/`--id`/most-used choice and name/tile deduplication; those choices cannot
+make an ambiguous source pin appear unique.
+
+The writer accepts valid one-record-per-line JSON with LF or CRLF. It retains the
+original bytes of untouched records, including their spacing, and the existing
+line ending. This avoids reformatting older imported/captured rows while making
+a focused identity correction. Malformed or multi-record lines are rejected.
+
+On 24 October 2026, the [Key Master](https://oldschool.runescape.wiki/w/Key_Master)
+row at1310,1251,0 still used5870, which cache241 names Patchy; the current Wiki
+and cache identify the Key Master as12599. The real Patchy at3677,2978 keeps5870.
+`server/tests/fixtures/npc-spawn-identity-wiki.json` preserves original infobox
+id/map lines extracted from the canonical Wiki authoring cache
+`osrsreboxed-db/data/dialogues/npc-pages.json`, rather than a repaired output or
+per-NPC override. This spawn file is owned by the TSPS sync pipeline;
+osrsreboxed-db has no spawn exporter.
+
+Reproduce the correction, then repeat the command to verify zero repairs and
+identical file bytes:
+
+```sh
+cd server
+TS_NODE_COMPILER_OPTIONS='{"target":"es2020"}' node node_modules/ts-node/dist/bin.js scripts/sync-npc-spawns.ts --wiki tests/fixtures/npc-spawn-identity-wiki.json --box 1310,1251,1310,1251,0 --repair-identities --write
+```
+
+Validation uses `tests/npc-spawns-sync.test.cjs` and
+`tests/npc-spawn-refine.test.cjs`, including the actual CLI on isolated LF/CRLF
+fixtures, unchanged unrelated bytes, repeated regeneration and cache identity.
 
 **Wiki map layers.** The Wiki draws many dungeons on their own map layers (`mapID`), whose coordinates or plane can differ from the game's: the God Wars Dungeon is on plane 0 there and 2 in the game, and the Stronghold of Security's floors are each shifted (the Sepulchre of Death by +352, +288). Before comparing, each Wiki map square on a layer votes, through its spawns, for the shift that puts them on existing spawns of the same NPC:
 - **A square is aligned** when at least 2 spawns, and half of those with a same-name spawn anywhere, agree on one shift.
@@ -124,6 +169,12 @@ The fix to the version pairing above, on the 60 spawns it affected (32 Wiki page
 - **Achilka:** one per boat stop, each with that stop's id (14727 Kastori, 14728 Tal Teklan, 14729 the Gloomthorn Trail); there had been two or three per stop with the wrong ids.
 - **Added:** Primio's Varrock end (12888), lost when the Civitas one took its id.
 - **Decisions:** the quest-stage ids are in `npc-spawn-sync.json` under `ids` (`Quest stage`, skipped), so a rerun doesn't add them back.
+
+## Labelled and several maps on one line
+
+The sync read a map line only when it began with `{{Map}}`, and only its first map. Pages that label their places, or give several on one line, lost some or all of their spawns: 35 pages in the Wiki authoring cache gain maps (Cabin Boy Herbert, Veos, Zanik, Captain Barnaby, Jenny Blade, the Gamer and others). They show up on their next sync; none was synced with the fix.
+
+**Cabin Boy Herbert** at Port Sarim, placed from rsprox captures instead (26 recordings): `cabin_boy_herbert_sarim` (11126) at 3053, 3245, facing north, standing still. The Wiki lists only his visible ids (10932-10934), so a sync would pick the wrong one. 11126 shows as 10933 (Talk-to, Port Piscarilius, Land's End) once varbit 12296 `akd` reaches 12, when Fuggy names Veos' ship in *A Kingdom Divided*. Veos (1063) keeps his spawn beside him, but from the same stage *X Marks the Spot* sends his visibility (`veos_sarim_vis`, 12148) as 0, so he's gone: captures at `akd` 150 have it at 0 and never add him.
 
 ## Doubled spawns
 

@@ -2,6 +2,7 @@ import { PlayerPunishment } from "../../../util/PlayerPunishment";
 import { Misc } from "../../../util/Misc";
 import { World } from "../../../game/World";
 import { PluginManager } from "../../../plugins/PluginManager";
+import { ChatType } from "../../protocol/ClientProtocol";
 import { CommandPacketListener } from "./CommandPacketListener";
 
 export class ChatPacketListener {
@@ -23,7 +24,8 @@ export class ChatPacketListener {
     return true;
   }
 
-  public static handleText(player: any, value: string): void {
+  /** `autoChat`: the client's autochat timer sent it (shown as type 90/91; the "Autochat" public filter shows only these). */
+  public static handleText(player: any, value: string, autoChat = false): void {
     const text = String(value ?? "").replace(/[<>]/g, "").trim().slice(0, 80);
     if (text.startsWith("::")) {
       CommandPacketListener.execute(player, text.slice(2));
@@ -34,7 +36,7 @@ export class ChatPacketListener {
     // systems). A plugin that marks the event handled suppresses the broadcast.
     const intercepted = PluginManager.emitSocialPacket({
       player,
-      packet: { type: "public_chat", text },
+      packet: { type: "public_chat", text, autoChat },
       handled: false,
     });
     if (intercepted) return;
@@ -57,13 +59,14 @@ export class ChatPacketListener {
       if (
         !recipient ||
         sent.has(recipient.getIndex()) ||
-        (recipient !== player && !recipient.getRelations?.().canReceivePublicChatFrom?.(player))
+        (recipient !== player && !recipient.getRelations?.().canReceivePublicChatFrom?.(player, autoChat))
       ) continue;
       sent.add(recipient.getIndex());
       recipient.getPacketSender().sendPublicChat(
         text,
         `${iconPrefix}${player.getUsername()}`,
-        player.getIndex()
+        player.getIndex(),
+        autoChat ? (iconPrefix ? ChatType.MODAUTOTYPER : ChatType.AUTOTYPER) : undefined
       );
     }
   }

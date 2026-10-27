@@ -198,8 +198,51 @@ export function getInteractHighlightDrawTargets(host: WebGLOsrsRendererHost, ): 
         const out = host.interactHighlightDrawTargets;
         out.length = 0;
 
-        const config = host.osrsClient.interactHighlightPlugin.getConfig();
-        if (!config.enabled) return out;
+        // Plugin loc outlines (Object Markers), drawn whatever Interact Highlight says.
+        for (const outline of host.osrsClient.clientPlugins.locOutlines?.() ?? []) {
+            const { loc } = outline;
+            const trianglePoints = host.buildLocModelHighlightTriangles({
+                kind: "loc",
+                locId: loc.id,
+                tileX: loc.tileX,
+                tileY: loc.tileY,
+                plane: loc.plane,
+                locModelType: loc.shape,
+                locRotation: loc.rotation,
+            });
+            if (!trianglePoints || trianglePoints.length < 3) continue;
+            out.push({
+                trianglePoints,
+                color: outline.color,
+                alpha: outline.alpha,
+                outlineRadius: Math.max(0.5, outline.width * 0.95),
+            });
+        }
+
+        // Plugin NPC outlines (NPC Indicators), drawn whatever Interact Highlight says.
+        for (const outline of host.osrsClient.clientPlugins.npcOutlines?.() ?? []) {
+            const npcEcs = host.osrsClient.npcEcs;
+            const trianglePoints = host.buildNpcModelHighlightTriangles({
+                kind: "npc",
+                ecsId: outline.ecsId,
+                serverId: outline.serverId,
+                npcTypeId: npcEcs.getNpcTypeId(outline.ecsId) | 0,
+                plane: npcEcs.getLevel(outline.ecsId) | 0,
+            });
+            if (!trianglePoints || trianglePoints.length < 3) continue;
+            const wvId = npcEcs.getWorldViewId?.(outline.ecsId) ?? -1;
+            out.push({
+                trianglePoints,
+                color: outline.color,
+                alpha: outline.alpha,
+                // The shader's default radius (1.9 texels) draws about a 2 pixel outline.
+                outlineRadius: Math.max(0.5, outline.width * 0.95),
+                worldEntityTransform: wvId >= 0 ? host.worldEntityAnimator?.getTransform(wvId) : undefined,
+            });
+        }
+
+        const config = host.osrsClient.clientPlugins.interactHighlightConfig();
+        if (!config?.enabled) return out;
 
         host.syncInteractHighlightActiveTargetFromLocalInteraction();
         host.maybeExpireInteractHighlightTarget();

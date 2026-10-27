@@ -9,7 +9,15 @@ export type InlineImageResolver = (
 ) => { canvas: HTMLCanvasElement; width: number; height: number } | undefined;
 
 /** Parsed text segment with styling information */
-interface TextSegment {
+/** The area a text draw covered, in the same pixels as its x/y/w/h arguments. */
+export interface TextBounds {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
+export interface TextSegment {
     text: string;
     color: number; // RGB color
     shadow: number; // Shadow color (-1 = default black, -2 = no shadow)
@@ -18,17 +26,35 @@ interface TextSegment {
     imgId?: number; // Sprite ID for inline images
 }
 
+/** The styles in force while parsing markup: a colour, shadow, underline and strikethrough. */
+export interface MarkupState {
+    color: number;
+    shadow: number;
+    underline: number;
+    strikethrough: number;
+}
+
+function newMarkupState(defaultColor: number): MarkupState {
+    // shadow -1 = default (black if shadow enabled); underline/strikethrough -1 = none
+    return { color: defaultColor, shadow: -1, underline: -1, strikethrough: -1 };
+}
+
 /**
  * Parse OSRS text markup tags like <col=808080>text</col>
- * Returns an array of text segments with their styling
+ * Returns an array of text segments with their styling. With `state`, parsing starts from those
+ * styles and leaves them as the text ends them.
  */
-export function parseOsrsMarkup(text: string, defaultColor: number): TextSegment[] {
+export function parseOsrsMarkup(
+    text: string,
+    defaultColor: number,
+    state: MarkupState = newMarkupState(defaultColor),
+): TextSegment[] {
     text = resolveTextTemplates(text);
     const segments: TextSegment[] = [];
-    let currentColor = defaultColor;
-    let currentShadow = -1; // -1 = default (black if shadow enabled)
-    let currentUnderline = -1; // -1 = no underline
-    let currentStrikethrough = -1; // -1 = no strikethrough
+    let currentColor = state.color;
+    let currentShadow = state.shadow;
+    let currentUnderline = state.underline;
+    let currentStrikethrough = state.strikethrough;
     let i = 0;
 
     const makeSegment = (t: string, imgId?: number): TextSegment => ({
@@ -185,7 +211,24 @@ export function parseOsrsMarkup(text: string, defaultColor: number): TextSegment
         }
     }
 
+    state.color = currentColor;
+    state.shadow = currentShadow;
+    state.underline = currentUnderline;
+    state.strikethrough = currentStrikethrough;
     return segments;
+}
+
+/**
+ * The lines of one wrapped text, parsed as the OSRS client draws them: AbstractFont sets the
+ * colour and styles once (reset) and draws every line (draw0) without resetting them, so a tag
+ * opened on one line still applies on the next until it is closed.
+ */
+export function parseWrappedOsrsMarkup(
+    lines: readonly string[],
+    defaultColor: number,
+): TextSegment[][] {
+    const state = newMarkupState(defaultColor);
+    return lines.map((line) => parseOsrsMarkup(line, defaultColor, state));
 }
 
 /** Check if text contains OSRS markup tags */
@@ -533,7 +576,7 @@ export function drawTextGL(
     inlineImageResolver?: InlineImageResolver,
     renderScaleX: number = 1,
     renderScaleY: number = 1,
-) {
+): TextBounds | undefined {
     text = resolveTextTemplates(text);
     // Early exit for empty text
     if (!text || w <= 0 || h <= 0) return;
@@ -692,15 +735,18 @@ export function drawWrappedTextGL(
     const maxDescent = (font.maxDescent ?? 0) | 0;
     const autoWrap = shouldAutoWrapText(logicalH, resolvedLineHeight, maxAscent, maxDescent);
     // short text widgets disable automatic wrapping and only honor explicit <br>.
-    const lines = autoWrap
-        ? wrapTextToWidth(text, Math.max(1, logicalW), measure)
-        : splitExplicitLineBreaks(text);
+    const paragraphs = splitExplicitLineBreaks(text).map((paragraph) => autoWrap
+        ? wrapTextToWidth(paragraph, Math.max(1, logicalW), measure)
+        : [paragraph]);
+    const lines = paragraphs.flat();
 
     const lineSegments: (TextSegment[] | null)[] = new Array(lines.length);
     const lineWidths: number[] = new Array(lines.length);
+    // Automatic wraps carry styles; explicit breaks reset them, as AbstractFont does.
+    const wrappedSegments = useMarkup ? paragraphs.flatMap((lines) => parseWrappedOsrsMarkup(lines, color)) : null;
     for (let i = 0; i < lines.length; i++) {
-        if (useMarkup) {
-            const segs = parseOsrsMarkup(lines[i], color);
+        if (wrappedSegments) {
+            const segs = wrappedSegments[i];
             lineSegments[i] = segs;
             let width = 0;
             for (const seg of segs) {
@@ -771,6 +817,21 @@ export function drawWrappedTextGL(
             inlineImageResolver,
         );
     }
+
+    let left = Infinity;
+    let right = -Infinity;
+    for (let i = 0; i < lines.length; i++) {
+        left = Math.min(left, lineOffsetsRaw[i] | 0);
+        right = Math.max(right, (lineOffsetsRaw[i] | 0) + (lineWidths[i] ?? 0));
+    }
+    const top = baseY0 - ascent;
+    const bottom = baseY0 + resolvedLineHeight * (lines.length - 1) + descent;
+    return {
+        x: (x | 0) + left * safeScaleX,
+        y: (y | 0) + top * safeScaleY,
+        width: Math.max(0, right - left) * safeScaleX,
+        height: Math.max(0, bottom - top) * safeScaleY,
+    };
 }
 
 export function drawRichTextGL(

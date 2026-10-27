@@ -17,25 +17,34 @@ const WARNED_ATTRIBUTE = "ironman:kill-credit-warned";
 const COMBAT_SKILLS = new Set(["ATTACK", "STRENGTH", "DEFENCE", "RANGED", "MAGIC", "HITPOINTS"]);
 
 function pickup(event) {
+  if (cannotTake(event)) event.handled = true;
+}
+
+function telegrab(event) {
+  if (event.allow !== false && cannotTake(event)) event.allow = false;
+}
+
+function cannotTake(event) {
   const { player, groundItem } = event;
-  if (!Common.isIron(player)) return;
+  if (!Common.isIron(player)) return false;
   const owner = groundItem?.getOwner?.();
-  if (!owner || owner.toLowerCase() === player.getUsername().toLowerCase()) return;
+  if (!owner || owner.toLowerCase() === player.getUsername().toLowerCase()) return false;
   player.sendMessage(Common.message("pickup"));
-  event.handled = true;
+  return true;
 }
 
 /**
  * A shared kill's loot is lost, except what the monster's plugin keeps for Ironmen
- * (`ironman:shared-kill-keeps` { player, npc, npcId, keep }: item ids pushed onto `keep`).
+ * (`ironman:shared-kill-keeps` { player, npc, npcId, drops, keep }: item ids pushed onto `keep`).
  */
 function rolledDrops(event) {
   const { player, drops, damagers } = event;
   if (!Common.isIron(player)) return;
   if (!(damagers ?? []).some((other) => other && other !== player)) return;
-  const request = { player, npc: event.npc, npcId: event.npcId, keep: [] };
+  const request = { player, npc: event.npc, npcId: event.npcId, drops, keep: [] };
   Common.api.emitCustomEvent("ironman:shared-kill-keeps", request);
   const kept = drops.filter((drop) => request.keep.includes(drop.itemId));
+  if (kept.length === drops.length) return;
   drops.splice(0, drops.length, ...kept);
   player.sendMessage(Common.message("sharedKill"));
 }
@@ -67,6 +76,7 @@ function experience(event) {
 
 module.exports = function attach(api) {
   api.onGroundItemPickup(pickup);
+  api.onCustomEvent("magic:can-telekinetic-grab", telegrab);
   api.onCustomEvent("npc-drops:roll", rolledDrops);
   api.onCanAttack(attacking);
   api.onPlayerDeathItemDrop(playerLoot);

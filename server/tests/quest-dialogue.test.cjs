@@ -6,14 +6,19 @@
 //  - every prose condition on a page the quest drives must be answerable without
 //    throwing (catches typo'd condition text / broken inventory reads).
 //
-// This is the "all dialogue branches work" check: a quest whose start/report/hand-in
-// variant names drifted from npc-dialogues.json fails here.
+// This checks variant references in the surveyed fixture states; it does not prove
+// that all dialogue branches are playable or replace registered-runner/native tests.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { test } = require('node:test');
+const { test, before } = require('node:test');
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
+// Quest stage updates render cache-backed quest-list metadata. Keep one live store
+// for the whole file so cached definitions and RegionManager share its lifetime.
+before(async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
+});
 
 const { PluginManager } = require('../dist/plugins/PluginManager');
 
@@ -42,25 +47,27 @@ for (const [npcId, entries] of Object.entries(index)) {
   if (pages.length) npcPages.set(Number(npcId), pages);
 }
 
-function fakePlayer(stage) {
+function fakePlayer(stage, attributes = {}) {
   const amount = () => 0;
   const equipmentItem = { getId: () => -1, getName: () => '' };
   const target = {
-    // Cross-quest probes (a quest reading another quest's stage to defer a shared
-    // NPC) read as "not started"; the quest under test reads the injected stage.
+    // Stage proxies below supply the quest under test and completed prerequisites;
+    // optional attributes activate selectors with an additional sub-state gate.
     getAttribute: (key) =>
-      String(key) === 'quest.shield_of_arrav.stage' ? 0 : String(key).endsWith('.stage') ? stage : undefined,
+      String(key) === 'quest.shield_of_arrav.stage' ? 0 : String(key).endsWith('.stage') ? stage : attributes[key],
     setAttribute: () => {},
     getInventory: () => ({
       getAmount: amount,
+      getFreeSlots: () => 28,
       isFull: () => false,
       contains: () => false,
       adds: () => true,
       deleteNumber: () => true,
       addItem: () => true,
     }),
-    getEquipment: () => ({ get: () => equipmentItem, hasItem: () => false }),
-    getSkillManager: () => ({ getCurrentLevel: () => 99, getMaxLevel: () => 99 }),
+    getEquipment: () => ({ get: () => equipmentItem, getItems: () => [], hasItem: () => false }),
+    getBanks: () => [],
+    getSkillManager: () => ({ getCurrentLevel: () => 99, getMaxLevel: () => 99, getCombatLevel: () => 126 }),
     getLocation: () => ({ getX: () => 0, getY: () => 0, getZ: () => 0 }),
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
     getDialogueManager: () => ({ reset: () => {}, startDialogues: () => {} }),
@@ -116,8 +123,20 @@ function loadQuest(name) {
   return {
     name,
     targetStageKey,
-    selectVariant: handlers.variant.at(-1),
-    answerCondition: handlers.condition.at(-1),
+    selectVariant: handlers.variant.length ? (event) => {
+      for (const handler of handlers.variant) {
+        const result = handler(event);
+        if (result) return result;
+      }
+      return null;
+    } : undefined,
+    answerCondition: handlers.condition.length ? (event) => {
+      for (const handler of handlers.condition) {
+        const result = handler(event);
+        if (typeof result === 'boolean') return result;
+      }
+      return null;
+    } : undefined,
   };
 }
 
@@ -144,7 +163,10 @@ for (const name of questFiles()) {
     const quest = loadQuest(name);
     if (!quest.selectVariant) return; // transcript-only quests use NpcDialogues defaults
     const pagesUsed = new Set();
-    const player = fakePlayer(0);
+    // DS2's only variant selector serves the Oneiromancer after Bob's dream
+    // briefing. Its ordinary quest stage alone cannot activate that selector.
+    const player = fakePlayer(0, name === 'DragonSlayerII'
+      ? { 'dragon-slayer-ii:dream-progress': 2 } : {});
     let selections = 0;
 
     for (const [npcId, pages] of npcPages) {
@@ -156,7 +178,7 @@ for (const name of questFiles()) {
               return (key) => {
                 if (key === quest.targetStageKey) return stage;
                 if (String(key) === 'quest.shield_of_arrav.stage') return 0;
-                return String(key).endsWith('.stage') ? 1000 : undefined;
+                return String(key).endsWith('.stage') ? 1000 : player.getAttribute(key);
               };
             }
             return obj[prop];
@@ -203,7 +225,7 @@ for (const name of questFiles()) {
             return (key) => {
               if (key === quest.targetStageKey) return 0;
               if (String(key) === 'quest.shield_of_arrav.stage') return 0;
-              return String(key).endsWith('.stage') ? 1000 : undefined;
+              return String(key).endsWith('.stage') ? 1000 : player.getAttribute(key);
             };
           }
           return obj[prop];
@@ -218,3 +240,20 @@ for (const name of questFiles()) {
     }
   });
 }
+
+test('FremennikTrials: Olaf repeats the boots request after the Sailor until he has them', () => {
+  const quest = loadQuest('FremennikTrials');
+  const { NpcIdentifiers } = PluginManager.getCoreApi();
+  const attributes = { 'quest.fremennik_trials.merchant': 1 }; // Sigmund's task accepted
+  const player = fakePlayer(1, attributes);
+  player.setAttribute = (key, value) => { attributes[key] = value; };
+  const talk = (npcId) => quest.selectVariant({ npcId, player });
+  const sailorFavor = 'the-council-members-sigmund-the-merchant-s-small-favour-the-sailor-s-favor-';
+
+  assert.equal(talk(NpcIdentifiers.SAILOR_2), `${sailorFavor}talking-to-the-sailor`);
+  // The first talk can close without the player hearing it; the request must survive.
+  assert.equal(talk(NpcIdentifiers.OLAF_THE_BARD), `${sailorFavor}talking-to-olaf-the-bard`);
+  assert.equal(talk(NpcIdentifiers.OLAF_THE_BARD), `${sailorFavor}talking-to-olaf-the-bard`);
+  assert.equal(talk(NpcIdentifiers.YRSA_2), `${sailorFavor}talking-to-yrsa`);
+  assert.equal(talk(NpcIdentifiers.OLAF_THE_BARD), `${sailorFavor}talking-to-olaf-the-bard`);
+});

@@ -1,0 +1,435 @@
+// Run after `yarn build`: node --test tests/grand-exchange.test.cjs
+const assert = require('node:assert/strict');
+const { test } = require('node:test');
+
+const { Server } = require('../dist/Server');
+Server.installProductionPathResolver();
+
+const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
+const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+const { GameConstants } = require('../dist/game/GameConstants');
+const { Item } = require('../dist/game/model/Item');
+const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+const plugin = require('../plugins/interface/GrandExchange.plugin');
+const {
+  price,
+  sellPrice,
+  changePrice,
+  collectionOutputId,
+  fillDelayMs,
+  remainingLimit,
+  recordLimit,
+  setMarketData,
+  LIMITS_ATTRIBUTE,
+  LIMIT_WINDOW_MS,
+  OFFERS_ATTRIBUTE,
+} = plugin._test;
+
+const definitions = new Map();
+const market = {};
+
+function define(id, values = {}) {
+  const definition = {
+    id,
+    unNote: () => id,
+    isNoted: () => false,
+    isTradeable: () => true,
+    isStackable: () => true,
+    getExamine: () => '',
+    getName: () => `Item ${id}`,
+    getGrandExchangeValue: () => 1,
+    getGrandExchangeSellValue: () => 1,
+    getNoteId: () => -1,
+    ...values,
+  };
+  definitions.set(id, definition);
+  return definition;
+}
+
+ItemDefinition.forId = (id) => definitions.get(id) ?? define(id);
+
+const INVERTED = 1001;
+define(INVERTED, { getGrandExchangeValue: () => 67, getGrandExchangeSellValue: () => 18 });
+const NO_SELL_QUOTE = 1002;
+define(NO_SELL_QUOTE, { getGrandExchangeValue: () => 42, getGrandExchangeSellValue: undefined });
+const NOTEABLE = 1003;
+const NOTE = 1004;
+define(NOTEABLE, { getNoteId: () => NOTE });
+define(NOTE, { getNoteId: () => NOTEABLE, isNoted: () => true });
+const NO_NOTE = 1005;
+
+test('buy offers pay the high price and sell offers receive the low price', () => {
+  assert.equal(price(INVERTED), 67);
+  assert.equal(sellPrice(INVERTED), 18);
+  assert.ok(price(INVERTED) > sellPrice(INVERTED));
+  assert.ok(price(INVERTED) - sellPrice(INVERTED) > 0);
+  assert.equal(sellPrice(NO_SELL_QUOTE), 42);
+});
+
+test('collection menus collect the item or its note they name', () => {
+  // A single noteable item: op 1 Collect-item, op 2 Collect-note.
+  assert.equal(collectionOutputId(NOTEABLE, 1, 1), NOTEABLE);
+  assert.equal(collectionOutputId(NOTEABLE, 1, 2), NOTE);
+  // A noteable stack: op 1 Collect-notes, op 2 Collect-items.
+  assert.equal(collectionOutputId(NOTEABLE, 5, 1), NOTE);
+  assert.equal(collectionOutputId(NOTEABLE, 5, 2), NOTEABLE);
+  // Bank always takes the base item, and Collect-all notes when it can.
+  assert.equal(collectionOutputId(NOTEABLE, 1, 3), NOTEABLE);
+  assert.equal(collectionOutputId(NOTEABLE, 1, 1, true), NOTE);
+  // Items without a noted form are never converted.
+  assert.equal(collectionOutputId(NO_NOTE, 1, 1), NO_NOTE);
+  assert.equal(collectionOutputId(NO_NOTE, 1, 2), NO_NOTE);
+});
+
+test('price controls step by one, five percent and the guide', () => {
+  const offer = { itemId: INVERTED, sell: true, price: 100 };
+  assert.equal(changePrice(offer, 8), 99);
+  assert.equal(changePrice(offer, 9), 101);
+  assert.equal(changePrice(offer, 10), 95);
+  assert.equal(changePrice(offer, 13), 105);
+  assert.equal(changePrice(offer, 11), sellPrice(INVERTED));
+  assert.equal(changePrice({ ...offer, sell: false }, 11), price(INVERTED));
+  // Offers saved before adjustable prices fall back to the guide.
+  assert.equal(changePrice({ itemId: INVERTED, sell: true }, 9), sellPrice(INVERTED) + 1);
+});
+
+test('price controls stay within one coin and the maximum', () => {
+  assert.equal(changePrice({ itemId: INVERTED, price: 1 }, 8), 1);
+  assert.equal(changePrice({ itemId: INVERTED, price: 1 }, 10), 1);
+  assert.equal(changePrice({ itemId: INVERTED, price: 0x7ffffffe }, 9), 0x7fffffff);
+  assert.equal(changePrice({ itemId: INVERTED, price: 0x7fffffff }, 13), 0x7fffffff);
+});
+
+const HIGH_VOLUME = 2001;
+define(HIGH_VOLUME);
+market[HIGH_VOLUME] = { volume: 20_000_000 };
+const SLOW = 2002;
+define(SLOW);
+market[SLOW] = { volume: 900 };
+const PRICED = 2006;
+define(PRICED, { getGrandExchangeValue: () => 100, getGrandExchangeSellValue: () => 90 });
+market[PRICED] = { volume: 1440 };
+const ILLIQUID = 2003;
+const BROKEN_VOLUME = 2004;
+define(BROKEN_VOLUME);
+market[BROKEN_VOLUME] = { volume: NaN };
+const NEGATIVE_VOLUME = 2005;
+define(NEGATIVE_VOLUME);
+market[NEGATIVE_VOLUME] = { volume: -10 };
+const half = () => 0.5;
+
+test('fill delay follows volume and quantity', () => {
+  assert.equal(fillDelayMs({ itemId: HIGH_VOLUME, quantity: 1 }, half), 5_000);
+  assert.equal(fillDelayMs({ itemId: SLOW, quantity: 150 }, half), 27 * 60_000);
+  assert.equal(fillDelayMs({ itemId: SLOW, quantity: 1_000 }, half), 60 * 60_000);
+  const single = fillDelayMs({ itemId: SLOW, quantity: 1 }, half);
+  assert.ok(single > 0 && single < 60 * 60_000);
+
+  let previous = 0;
+  for (const quantity of [1, 10, 100, 1_000, 100_000]) {
+    const delay = fillDelayMs({ itemId: SLOW, quantity }, half);
+    assert.ok(delay >= previous, `quantity ${quantity}: ${delay} < ${previous}`);
+    previous = delay;
+  }
+});
+
+test('crossing the guide fills fast, resting away from it waits', () => {
+  const atGuide = fillDelayMs({ itemId: PRICED, quantity: 1, price: 100 }, half);
+  const over = fillDelayMs({ itemId: PRICED, quantity: 1, price: 110 }, half);
+  const under = fillDelayMs({ itemId: PRICED, quantity: 1, price: 90 }, half);
+  assert.ok(over <= 5_000, `overpaying took ${over}ms`);
+  assert.ok(under > 10 * 60_000 && under < 60 * 60_000, `resting buy took ${under}ms`);
+  assert.ok(atGuide > 5_000 && atGuide < 60_000, `guide took ${atGuide}ms`);
+
+  const sellUnder = fillDelayMs({ itemId: PRICED, sell: true, quantity: 1, price: 81 }, half);
+  const sellAbove = fillDelayMs({ itemId: PRICED, sell: true, quantity: 1, price: 99 }, half);
+  assert.ok(sellUnder <= 5_000, `undercutting sell took ${sellUnder}ms`);
+  assert.ok(sellAbove > 10 * 60_000 && sellAbove < 60 * 60_000, `resting sell took ${sellAbove}ms`);
+});
+
+test('successful buys and sells wait at most one hour', () => {
+  assert.equal(fillDelayMs({ itemId: PRICED, quantity: 1, price: 50 }, () => 0.49), 60 * 60_000);
+  assert.equal(fillDelayMs({ itemId: PRICED, sell: true, quantity: 1, price: 180 }, () => 0.49), 60 * 60_000);
+});
+
+test('selling the same quantity takes longer at lower market volume', () => {
+  const fast = fillDelayMs({ itemId: HIGH_VOLUME, sell: true, quantity: 100 }, half);
+  const slow = fillDelayMs({ itemId: SLOW, sell: true, quantity: 100 }, half);
+  assert.equal(fast, 5_000);
+  assert.ok(slow > fast);
+});
+
+test('worse margins increase delays even for high-volume and unquoted items', () => {
+  for (const volume of [20_000_000, 0]) {
+    market[PRICED].volume = volume;
+    for (const sell of [false, true]) {
+      const prices = sell ? [90, 91, 92] : [100, 99, 98];
+      const delays = prices.map(price => fillDelayMs({ itemId: PRICED, sell, quantity: 1, price }, half));
+      assert.ok(delays[1] > delays[0], `${sell}/${volume}: ${delays}`);
+      assert.ok(delays[2] > delays[1], `${sell}/${volume}: ${delays}`);
+    }
+  }
+  market[PRICED].volume = 1440;
+});
+
+test('worse margins raise the chance of never filling on either side', () => {
+  for (const sell of [false, true]) {
+    const guide = sell ? 90 : 100;
+    const offer = { itemId: PRICED, sell, quantity: 1 };
+    const halfway = { ...offer, price: sell ? guide * 2 : guide / 2 };
+    assert.ok(Number.isFinite(fillDelayMs(halfway, () => 0.49)));
+    assert.equal(fillDelayMs(halfway, half), null);
+    assert.equal(fillDelayMs({ ...offer, price: sell ? guide * 4 : guide / 4 }, () => 0.3), null);
+    assert.ok(Number.isFinite(fillDelayMs(halfway, () => 0.3)));
+    assert.ok(Number.isFinite(fillDelayMs({ ...offer, price: guide }, () => 0.999)));
+    assert.ok(Number.isFinite(fillDelayMs({ ...offer, price: sell ? guide / 2 : guide * 2 }, () => 0.999)));
+  }
+});
+
+test('unknown, zero, broken and negative volume is illiquid', () => {
+  for (const itemId of [ILLIQUID, BROKEN_VOLUME, NEGATIVE_VOLUME]) {
+    for (const random of [() => 0, half, () => 1]) {
+      const delay = fillDelayMs({ itemId, quantity: 100 }, random);
+      assert.ok(delay >= 60_000 && delay <= 5 * 60_000, `${itemId}: ${delay}`);
+    }
+  }
+});
+
+const LIMITED = 3001;
+define(LIMITED);
+market[LIMITED] = { limit: 150 };
+const UNLIMITED = 3002;
+define(UNLIMITED);
+market[UNLIMITED] = { limit: 0 };
+const NO_LIMIT_GETTER = 3003;
+define(NO_LIMIT_GETTER);
+
+function player() {
+  const attributes = new Map();
+  return {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+  };
+}
+
+test('buy limits reset after four hours', () => {
+  const p = player();
+  const start = 1_000_000;
+  assert.equal(remainingLimit(p, LIMITED, start), 150);
+  recordLimit(p, LIMITED, 100, start);
+  assert.equal(remainingLimit(p, LIMITED, start), 50);
+  recordLimit(p, LIMITED, 60, start + 1_000);
+  assert.equal(remainingLimit(p, LIMITED, start + 1_000), 0);
+  assert.equal(remainingLimit(p, LIMITED, start + LIMIT_WINDOW_MS - 1), 0);
+  assert.equal(remainingLimit(p, LIMITED, start + LIMIT_WINDOW_MS), 150);
+  recordLimit(p, LIMITED, 20, start + LIMIT_WINDOW_MS);
+  assert.equal(remainingLimit(p, LIMITED, start + LIMIT_WINDOW_MS), 130);
+});
+
+test('an unlimited item never runs out', () => {
+  const p = player();
+  assert.equal(remainingLimit(p, UNLIMITED, 0), Infinity);
+  assert.equal(remainingLimit(p, NO_LIMIT_GETTER, 0), Infinity);
+  recordLimit(p, UNLIMITED, 1_000_000, 0);
+  assert.equal(remainingLimit(p, UNLIMITED, 0), Infinity);
+});
+
+function exchange(t, config = {}) {
+  const hooks = {};
+  const buttons = [];
+  const messages = [];
+  const timers = [];
+  const sender = new Proxy({}, { get: (_, key) => (...args) => {
+    if (key === 'sendMessage') messages.push(args[0]);
+    return sender;
+  } });
+  const p = {
+    ...player(),
+    getUsername: () => 'ge-test',
+    getInterfaceId: () => 465,
+    getPacketSender: () => sender,
+    sendMessage: message => messages.push(message),
+    setEnteredAmountAction: action => { p.amountAction = action; },
+    setEnteredSyntaxAction: action => { p.syntaxAction = action; },
+  };
+  const inventory = new Inventory(p);
+  p.getInventory = () => inventory;
+  t.mock.method(CacheDefinitions, 'hasItem', id => definitions.has(id));
+  t.mock.method(CacheDefinitions, 'getItem', id => ({ name: `Item ${id}` }));
+  t.mock.method(GameConstants.PLAYER_PERSISTENCE, 'save', () => {});
+  t.mock.method(global, 'setTimeout', (callback, delay) => {
+    timers.push({ callback, delay });
+    return timers.length;
+  });
+  plugin.register(new Proxy({
+    core: { WorldDefinition: { isMembersWorld: () => true } },
+    getPluginConfig: (key, defaultValue) => Object.hasOwn(config, key) ? config[key] : defaultValue,
+    onInterfaceActionButton: (ids, handler) => buttons.push({ ids, handler }),
+  }, { get: (api, key) => api[key] ?? (handler => { hooks[key] = handler; }) }));
+
+  const click = (child, slot = 0) => {
+    const buttonId = (465 << 16) | child;
+    const { handler } = buttons.find(({ ids }) => Array.isArray(ids) && ids.includes(buttonId));
+    handler({ player: p, buttonId, slot, action: 1 });
+  };
+  const place = (sell, itemId, quantity, price, slot = 0) => {
+    click(7 + slot, sell ? 4 : 3);
+    if (sell) hooks.onItemFirstAction({ player: p, itemId, slot: inventory.getSlotForItemId(itemId) });
+    else p.syntaxAction.execute(String(itemId));
+    click(34, 7);
+    p.amountAction.execute(quantity);
+    if (price !== undefined) {
+      click(34, 12);
+      p.amountAction.execute(price);
+    }
+    click(30);
+    return p.getAttribute(OFFERS_ATTRIBUTE)[slot];
+  };
+  return { p, inventory, place, click, hooks, messages, timers };
+}
+
+test('maxTradeDelay overrides volume and price caps for newly placed buys and sells', t => {
+  const now = 1_000_000;
+  t.mock.method(Date, 'now', () => now);
+  t.mock.method(Math, 'random', () => 0.49);
+  for (const maxDelay of [5_000, 60_000, 2 * 60 * 60_000, 0x7fffffff]) {
+    for (const sell of [false, true]) {
+      const { inventory, place, timers } = exchange(t, { 'GrandExchange:maxTradeDelay': maxDelay });
+      assert.equal(fillDelayMs({ itemId: SLOW, quantity: 1_000_000 }, half), maxDelay);
+      const price = sell ? 180 : 50;
+      inventory.add(new Item(sell ? PRICED : 995, sell ? 1 : price), false);
+      const offer = place(sell, PRICED, 1, price);
+      assert.equal(offer.completesAt, now + maxDelay);
+      assert.equal(timers[0].delay, maxDelay);
+      assert.equal(fillDelayMs(offer, () => 0.99), null);
+    }
+  }
+});
+
+test('invalid maxTradeDelay values fall back to one hour', t => {
+  for (const value of [undefined, null, 0, -1, 4_999, NaN, Infinity, 0x80000000, 'invalid']) {
+    exchange(t, { 'GrandExchange:maxTradeDelay': value });
+    assert.equal(fillDelayMs({ itemId: PRICED, quantity: 1, price: 50 }, () => 0.49), 60 * 60_000);
+  }
+});
+
+test('selling above the buy limit succeeds and leaves the buy allowance unchanged', t => {
+  const { p, inventory, place } = exchange(t);
+  recordLimit(p, LIMITED, 100);
+  inventory.add(new Item(LIMITED, 1_000), false);
+  assert.equal(place(true, LIMITED, 1_000).quantity, 1_000);
+  assert.equal(inventory.getAmount(LIMITED), 0);
+  assert.equal(remainingLimit(p, LIMITED), 50);
+});
+
+test('selling still succeeds after the buy limit is exhausted', t => {
+  const { p, inventory, place } = exchange(t);
+  recordLimit(p, LIMITED, 150);
+  inventory.add(new Item(LIMITED, 200), false);
+  assert.equal(place(true, LIMITED, 200).quantity, 200);
+  assert.equal(remainingLimit(p, LIMITED), 0);
+});
+
+test('buying enforces and consumes the remaining four-hour allowance', t => {
+  const { p, inventory, place, messages } = exchange(t);
+  recordLimit(p, LIMITED, 100);
+  inventory.add(new Item(995, 1_000), false);
+  assert.equal(place(false, LIMITED, 51), undefined);
+  assert.equal(inventory.getAmount(995), 1_000);
+  assert.match(messages.at(-1), /only buy 150.*50 remaining/);
+  assert.equal(place(false, LIMITED, 50).quantity, 50);
+  assert.equal(inventory.getAmount(995), 950);
+  assert.equal(remainingLimit(p, LIMITED), 0);
+});
+
+test('unfillable offers survive saving and relogging, and abort refunds their input', t => {
+  t.mock.method(Math, 'random', () => 0.99);
+  for (const sell of [false, true]) {
+    const { p, inventory, place, click, hooks, timers } = exchange(t);
+    const inputId = sell ? PRICED : 995;
+    const unitPrice = sell ? 180 : 50;
+    const amount = sell ? 1 : unitPrice;
+    inventory.add(new Item(inputId, amount), false);
+    const offer = place(sell, PRICED, 1, unitPrice);
+    assert.equal(offer.finished, false);
+    assert.equal(offer.completesAt, null);
+    assert.equal(inventory.getAmount(inputId), 0);
+    assert.equal(timers.length, 0);
+    const saved = JSON.parse(JSON.stringify(p.getAttribute(OFFERS_ATTRIBUTE)));
+    p.setAttribute(OFFERS_ATTRIBUTE, saved);
+    hooks.onPlayerLogin({ player: p });
+    assert.equal(timers.length, 0);
+    assert.equal(saved[0].finished, false);
+    click(23);
+    click(24);
+    assert.equal(inventory.getAmount(inputId), amount);
+    assert.deepEqual(p.getAttribute(OFFERS_ATTRIBUTE), {});
+  }
+});
+
+test('offers with saved completion times still finish after relogging', t => {
+  const { p, hooks, timers } = exchange(t);
+  const offer = { itemId: PRICED, sell: false, slot: 0, quantity: 1, total: 100, completesAt: Date.now() - 1 };
+  p.setAttribute(OFFERS_ATTRIBUTE, { 0: offer });
+  hooks.onPlayerLogin({ player: p });
+  assert.equal(timers.length, 1);
+  assert.equal(timers[0].delay, 0);
+  timers[0].callback();
+  assert.equal(offer.finished, true);
+});
+
+test('register persists both attributes', () => {
+  const persisted = new Map();
+  const api = new Proxy({}, {
+    get: (_, key) => key === 'persistAttribute'
+      ? (attribute, value) => persisted.set(attribute, value)
+      : () => {},
+  });
+  plugin.register(api);
+  assert.deepEqual([...persisted.keys()], [OFFERS_ATTRIBUTE, LIMITS_ATTRIBUTE]);
+  assert.deepEqual(persisted.get(OFFERS_ATTRIBUTE), {});
+  assert.deepEqual(persisted.get(LIMITS_ATTRIBUTE), {});
+});
+
+setMarketData(market);
+
+test('buys use coins first, then platinum tokens with change in coins', t => {
+  const { inventory, place, messages } = exchange(t);
+  inventory.add(new Item(995, 10), false);
+  inventory.add(new Item(13204, 1), false);
+  assert.equal(place(false, PRICED, 1, 1_100), undefined);
+  assert.match(messages.at(-1), /enough coins/);
+  assert.equal(place(false, PRICED, 1, 500).total, 500);
+  assert.equal(inventory.getAmount(995), 510);
+  assert.equal(inventory.getAmount(13204), 0);
+  inventory.add(new Item(13204, 2), false);
+  assert.equal(place(false, PRICED, 1, 400, 1).total, 400);
+  assert.equal(inventory.getAmount(995), 110);
+  assert.equal(inventory.getAmount(13204), 2);
+});
+
+test('a token payment whose change has no free slot is refused and takes nothing', t => {
+  const { inventory, place, messages } = exchange(t);
+  inventory.add(new Item(13204, 5), false);
+  for (let slot = 1; slot < 28; slot++) inventory.add(new Item(5000 + slot, 1), false);
+  assert.equal(place(false, PRICED, 1, 500), undefined);
+  assert.match(messages.at(-1), /inventory space/);
+  assert.equal(inventory.getAmount(13204), 5);
+  assert.equal(place(false, PRICED, 1, 1_000).total, 1_000);
+  assert.equal(inventory.getAmount(13204), 4);
+  assert.equal(inventory.getAmount(995), 0);
+});
+
+test('trades above the coin stack pay with tokens and collect as tokens plus coins', t => {
+  const { MAX_TRADE, payout } = plugin._test;
+  assert.equal(MAX_TRADE, 2_149_631_130_647);
+  assert.deepEqual(payout({ sell: true, total: 3_000_000_123 }), [{ itemId: 13204, amount: 3_000_000 }, { itemId: 995, amount: 123 }]);
+  assert.deepEqual(payout({ sell: true, total: MAX_TRADE }), [{ itemId: 13204, amount: 2_147_483_647 }, { itemId: 995, amount: 2_147_483_647 }]);
+  assert.deepEqual(payout({ sell: true, total: 500 }), [{ itemId: 995, amount: 500 }]);
+  const { inventory, place } = exchange(t);
+  inventory.add(new Item(995, 2_000_000_000), false);
+  inventory.add(new Item(13204, 1_500_000), false);
+  assert.equal(place(false, UNLIMITED, 1_000, 3_000_000).total, 3_000_000_000);
+  assert.equal(inventory.getAmount(995), 0);
+  assert.equal(inventory.getAmount(13204), 500_000);
+});

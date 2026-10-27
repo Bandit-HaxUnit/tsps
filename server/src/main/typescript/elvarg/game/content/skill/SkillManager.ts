@@ -102,15 +102,19 @@ export class SkillManager {
         return 99;
     }
 
+    /**
+     * Stored experience keeps tenths, as OSRS does (oak logs are 37.5, a hitpoints drop 1.3).
+     * Rounding (not flooring) only clears float noise from adding tenths; flooring the stored
+     * total threw the fraction away on every gain, so rate 1 ran slower than OSRS.
+     */
     private static sanitizeExperienceValue(value: number): number {
         if (!Number.isFinite(value) || value <= 0) {
             return 0;
         }
-        const floored = Math.floor(value);
-        if (floored >= SkillManager.MAX_EXPERIENCE) {
+        if (value >= SkillManager.MAX_EXPERIENCE) {
             return SkillManager.MAX_EXPERIENCE;
         }
-        return floored;
+        return Math.round(value * 10) / 10;
     }
 
     addExperiences(skill: Skill, experience: number): SkillManager {
@@ -124,13 +128,20 @@ export class SkillManager {
         if (!Number.isFinite(experience) || experience <= 0) {
             return this;
         }
-        if (PluginManager.emitCanGainExperience(this.player, skill, experience) === false) {
+        const gate = PluginManager.emitCanGainExperience(this.player, skill, experience);
+        if (gate.allow === false) {
             return this;
         }
 
-        // Multipliers...
+        // Multipliers: the world's rate, then the player's own (a league profile's rate).
         if (multipliers) {
-            experience *= GameConstants.EXPERIENCE_MULTIPLIER;
+            experience *= GameConstants.EXPERIENCE_MULTIPLIER * gate.multiplier;
+        }
+        // OSRS counts experience in tenths: a gain keeps its tenths and drops the rest
+        // (4/3 per damage is 1.3 for one damage). The epsilon keeps 3.3 from reading as 3.29999.
+        experience = Math.floor(experience * 10 + 1e-6) / 10;
+        if (experience <= 0) {
+            return this;
         }
 
         // Send exp drop..
@@ -154,9 +165,7 @@ export class SkillManager {
         this.skills.maxLevel[skillIndex] = startingLevel;
 
         // Add experience to the selected skill..
-        this.skills.experience[skillIndex] = this.skills.experience[skillIndex] + experience > SkillManager.MAX_EXPERIENCE
-            ? SkillManager.MAX_EXPERIENCE
-            : this.skills.experience[skillIndex] + experience;
+        this.skills.experience[skillIndex] = SkillManager.sanitizeExperienceValue(this.skills.experience[skillIndex] + experience);
 
         // Get the skill's new level after experience has been added..
         let newLevel = SkillManager.getLevelForExperience(this.skills.experience[skillIndex]);
@@ -177,6 +186,11 @@ export class SkillManager {
             this.player.getUpdateFlag().flag(Flag.APPEARANCE);
         }
         if (newLevel <= startingLevel) this.updateSkill(skill);
+        // What landed: the gain less anything over the experience cap.
+        PluginManager.emitExperienceGained({ player: this.player, skill, experience: this.skills.experience[skillIndex] - currentExperience });
+        // The gain as it was added (after the rates and the tenths), for content that reacts to
+        // experience itself (a league relic's bonus XP). `multiplied` says whether the rates applied.
+        PluginManager.emitCustomEvent("skills:experience-gained", { player: this.player, skill, experience, multiplied: multipliers });
         return this;
     }
 
@@ -488,7 +502,8 @@ export class SkillManager {
         if (this.skills.experience[idx] !== sanitized) {
             this.skills.experience[idx] = sanitized;
         }
-        return sanitized;
+        // Whole experience, as the skills packet and the client show it; the tenths stay stored.
+        return Math.floor(sanitized);
     }
 
     /**
@@ -500,7 +515,15 @@ export class SkillManager {
      * @return The Skills instance.
      */
     public setCurrentLevel(skill: Skill, level: number, refresh: boolean): SkillManager {
-        this.skills.level[skill.getIndex()] = level < 0 ? 0 : level;
+        const index = skill.getIndex();
+        const previous = this.skills.level[index];
+        const current = level < 0 ? 0 : level;
+        this.skills.level[index] = current;
+        if (previous !== current) {
+            PluginManager.emitCustomEvent("skills:current-level-changed", {
+                player: this.player, skill, previous, current,
+            });
+        }
         if (refresh) {
             this.updateSkill(skill);
         }
@@ -528,12 +551,7 @@ export class SkillManager {
     setCurrentLevels(skill: Skill, level: number, refresh = true) {
         // Java parity: this method updates the temporary/current level only.
         // Max/real level is managed through setMaxLevels/setMaxLevel.
-        this.skills.level[skill.getIndex()] = level < 0 ? 0 : level;
-
-        if (refresh) {
-            this.updateSkill(skill);
-        }
-        return this;
+        return this.setCurrentLevel(skill, level, refresh);
     }
 
     public setCurrentLevelCombat(skill: Skill, level: number) {
@@ -554,6 +572,13 @@ export class SkillManager {
     }
 
     increaseCurrentLevel(skill: Skill, amount: number, max: number) {
+        if (amount > 0) {
+            // A restore or boost, whatever its source: plugins may change `amount` (a league
+            // passive's Prayer gain); `max` stays the caller's cap.
+            const restore = { player: this.player, skill, amount, max };
+            PluginManager.emitCustomEvent("skills:restore", restore);
+            if (restore.amount !== amount && Number.isFinite(restore.amount) && restore.amount >= 0) amount = Math.floor(restore.amount);
+        }
         const curr = this.getCurrentLevel(skill);
         if ((curr + amount) > max) {
             this.setCurrentLevels(skill, max);
