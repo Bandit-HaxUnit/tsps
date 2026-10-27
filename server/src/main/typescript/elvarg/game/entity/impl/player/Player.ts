@@ -262,10 +262,11 @@ export class Player extends Mobile {
 
     public appendDeath() {
         if (!this.isDying) {
-            if (PluginManager.emitPlayerBeforeDeath({ player: this, preventDeath: false })) {
+            const beforeDeath = { player: this, preventDeath: false, announce: true };
+            if (PluginManager.emitPlayerBeforeDeath(beforeDeath)) {
                 return;
             }
-            TaskManager.submit(new PlayerDeathTask(this));
+            TaskManager.submit(new PlayerDeathTask(this, beforeDeath.announce !== false));
             this.isDying = true;
         }
     }

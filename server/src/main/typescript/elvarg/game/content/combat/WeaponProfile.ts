@@ -1,3 +1,4 @@
+import { ItemAliases } from "../../model/ItemAliases";
 import { Sound } from "../../Sound";
 import type { Player } from "../../entity/impl/player/Player";
 import { Equipment } from "../../model/container/impl/Equipment";
@@ -73,7 +74,7 @@ export class WeaponProfiles {
     public static get(player: Player): WeaponCombatProfile | undefined {
         const itemId = player.getEquipment().getItems()[Equipment.WEAPON_SLOT].getId();
         const weaponProfile = this.byWeapon.get(player.getWeapon());
-        const itemProfile = this.byItem.get(itemId);
+        const itemProfile = ItemAliases.lookup(this.byItem, itemId);
         return itemProfile ? { ...weaponProfile, ...itemProfile } : weaponProfile;
     }
 
@@ -92,7 +93,7 @@ export class WeaponProfiles {
         const itemAnimation = weapon.getId() > 0 ? weapon.getDefinition().getAttackAnim(attackType) : -1;
         const fromProfile = (profile: WeaponCombatProfile | undefined) =>
             (againstNpc ? profile?.npcAttackAnimation : undefined) ?? profile?.attackAnimation;
-        return fromProfile(this.byItem.get(weapon.getId()))
+        return fromProfile(ItemAliases.lookup(this.byItem, weapon.getId()))
             ?? (itemAnimation > 0 ? itemAnimation : undefined)
             ?? fromProfile(this.byWeapon.get(player.getWeapon()))
             ?? fallback;
@@ -105,7 +106,7 @@ export class WeaponProfiles {
     public static attackSpeed(player: Player, fallback: number): number {
         const weapon = this.equippedWeapon(player);
         const cacheSpeed = weapon.getId() > 0 ? weapon.getDefinition().getAttackSpeed() : -1;
-        return this.byItem.get(weapon.getId())?.attackSpeed
+        return ItemAliases.lookup(this.byItem, weapon.getId())?.attackSpeed
             ?? (cacheSpeed > 0 ? cacheSpeed : undefined)
             ?? this.byWeapon.get(player.getWeapon())?.attackSpeed
             ?? fallback;
@@ -123,7 +124,7 @@ export class WeaponProfiles {
     public static attackDistance(player: Player, fallback: number): number {
         const weapon = this.equippedWeapon(player);
         const cacheRange = weapon.getId() > 0 ? weapon.getDefinition().getAttackRange() : -1;
-        const range = this.byItem.get(weapon.getId())?.attackDistance
+        const range = ItemAliases.lookup(this.byItem, weapon.getId())?.attackDistance
             ?? (cacheRange > 0 ? cacheRange : undefined)
             ?? this.byWeapon.get(player.getWeapon())?.attackDistance
             ?? fallback;
