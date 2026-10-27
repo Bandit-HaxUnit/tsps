@@ -30,8 +30,60 @@ function leagueOf(player) {
   return type !== null && data.leagues[type] && leagues[type] ? Number(type) : null;
 }
 
+/** Catalogs built from the cache (data `fromCache`), by league type. */
+const cacheCatalogs = new Map();
+
+function slug(name) {
+  return String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+function enumEntries(id) {
+  return [...core.CacheDefinitions.getEnumValues(id).entries()].sort(([a], [b]) => a - b);
+}
+
+/**
+ * The current league's catalog as the cache holds it: the league struct's tier enum, each tier's
+ * cost, passive struct and relic enum, each relic's name and description (the params the relic
+ * interface reads). Relics granting items are not known from the cache, so none hands out items.
+ */
+function catalogFromCache(type) {
+  const { params } = data;
+  const { CacheDefinitions } = core;
+  const leagueParams = CacheDefinitions.getStructParams(league(type).struct);
+  const tiers = enumEntries(leagueParams.get(params.tiersEnum)).map(([, tierStruct]) => {
+    const tierParams = CacheDefinitions.getStructParams(tierStruct);
+    const passiveStruct = tierParams.get(params.tierPassive);
+    const relics = enumEntries(tierParams.get(params.tierRelics)).map(([, relicStruct]) => {
+      const relicParams = CacheDefinitions.getStructParams(relicStruct);
+      const name = String(relicParams.get(params.relicName) ?? "");
+      return { key: slug(name), name, description: String(relicParams.get(params.relicDescription) ?? ""), grants: [], struct: relicStruct };
+    });
+    return {
+      cost: Number(tierParams.get(params.tierCost)) || 0,
+      passive: String(CacheDefinitions.getStructParams(passiveStruct)?.get(params.passiveText) ?? ""),
+      relics, struct: tierStruct, passiveStruct,
+    };
+  });
+  return { fromCache: true, tiers };
+}
+
+/** A league's tiers and relics: the data's, or the cache's own for a league marked `fromCache`. */
 function catalog(type) {
-  return data.leagues[type] ?? null;
+  const row = data.leagues[type];
+  if (!row) return null;
+  if (!row.fromCache) return row;
+  if (!cacheCatalogs.has(type)) cacheCatalogs.set(type, catalogFromCache(type));
+  return cacheCatalogs.get(type);
+}
+
+/** The struct ids the relic interface's scripts take for a relic and its tier's passive. */
+function structIds(type, tier, slot) {
+  const tierRow = catalog(type)?.tiers[tier];
+  if (tierRow?.struct !== undefined) {
+    return { relicStruct: tierRow.relics[slot - 1]?.struct, passiveStruct: tierRow.passiveStruct };
+  }
+  const id = ids(type);
+  return { relicStruct: id.relicStruct(tier, slot), passiveStruct: id.passiveStruct(tier) };
 }
 
 function league(type) {
@@ -125,7 +177,7 @@ function message(key, values = {}) {
 }
 
 module.exports = {
-  init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, ids, message, maxHitFor, restoreSpecial, RELICS_ATTRIBUTE,
+  init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, ids, structIds, message, maxHitFor, restoreSpecial, RELICS_ATTRIBUTE,
   derivedHit, isBuildingDerivedHit,
   get data() { return data; },
   get api() { return api; },

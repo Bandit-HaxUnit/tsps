@@ -95,6 +95,8 @@ import {
 import { CacheDefinitions } from "../../game/cache/CacheDefinitions";
 const CHATBOX_MODAL_TARGET_UID = (162 << 16) | 568;
 const MAIN_MODAL_TARGET_UID = (161 << 16) | 16;
+/** PluginManager, loaded on first use (it imports this module, so not at load time). */
+let pluginManager: typeof import("../../plugins/PluginManager").PluginManager | null = null;
 const VARBIT_MULTICOMBAT_AREA = 4605;
 // Quest completion states consulted by spellbook CS2 scripts. Keep these client
 // flags separate from server-side spell casting so quests can be enforced later.
@@ -1310,7 +1312,18 @@ export class PacketSender {
         encodeWidgetSetFlagsRange(MAIN_INVENTORY_WIDGET_UID, 0, 27, MAIN_INVENTORY_SLOT_FLAGS)
       );
     }
+    this.emitInterfaceOpened(targetUid, groupId, type);
     return this;
+  }
+
+  /**
+   * "interface:opened" { player, groupId, targetUid, type }: a group was mounted, by whichever
+   * plugin, so content that follows another's interface (a tutorial pointing at a screen as it
+   * opens) needs no hook in that plugin. The counterpart of "interface:closed".
+   */
+  private emitInterfaceOpened(targetUid: number, groupId: number, type: number): void {
+    pluginManager ??= (require("../../plugins/PluginManager") as typeof import("../../plugins/PluginManager")).PluginManager;
+    pluginManager.emitCustomEvent("interface:opened", { player: this.player, groupId, targetUid, type });
   }
 
   isWorldMapOpen(): boolean {

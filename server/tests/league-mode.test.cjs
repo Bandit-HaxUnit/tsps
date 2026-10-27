@@ -108,7 +108,7 @@ test("a new league character joins the configured league with its starting level
   assert.equal(league.getAttribute("league:type"), 4, "the world's league");
   assert.equal(league.varbits.get(10031), 1, "league_account");
   assert.equal(league.varbits.get(10032), 4, "league_type");
-  assert.equal(league.varbits.get(10037), 12, "league_tutorial_completed, as captured");
+  assert.equal(league.varbits.get(10037), 0, "a new character starts the league tutorial (227/00196); league-tutorial.test.cjs covers the rest");
   const skills = league.getSkillManager();
   assert.deepEqual(
     [Skill.HERBLORE, Skill.RUNECRAFTING, Skill.AGILITY].map((skill) => skills.getMaxLevel(skill)),
