@@ -309,6 +309,27 @@
     }
   },
 
+  "_skillingEffects": "The skilling fragments and Clued In (Wiki /Fragments and each fragment's page), used by plugins/modes/league/FragmentSkilling.LeagueMode.js. Each works with its level's number in the cache (params 1456-1458): Praying Respects' percent of the usual Prayer XP for remains buried or scattered as they drop (NPC drops: ours, the Wiki names no source), Smooth Criminal's percent more pickpocket success (stacking as the gloves of silence do; no stun damage from level `painlessFrom`), Deeper Pockets' and Hot On The Trail's percent chances, Golden Brick Road's coins with a mark of grace, Grave Robber's percent more hallowed marks (the Grand Hallowed Coffin's too: ours), and Clued In's 1-in-N, the least chance of each clue scroll an NPC drops. Hot On The Trail's `logs` are the Wiki's table: the scroll box tier a burnt log gives (logs the league predates give none: ours); logs Slash & Burn burns count too.",
+  "skillingEffects": {
+    "prayingRespects": { "fragment": 10 },
+    "smoothCriminal": { "fragment": 23, "painlessFrom": 2 },
+    "deeperPockets": { "fragment": 24 },
+    "hotOnTheTrail": {
+      "fragment": 27,
+      "logs": {
+        "LOGS": "beginner", "ACHEY_TREE_LOGS": "beginner", "OAK_LOGS": "beginner", "WHITE_LOGS": "beginner",
+        "WILLOW_LOGS": "easy", "TEAK_LOGS": "easy", "GREEN_LOGS": "easy",
+        "MAPLE_LOGS": "medium", "MAHOGANY_LOGS": "medium", "BLUE_LOGS": "medium",
+        "BRUMA_ROOT": "hard", "BRUMA_KINDLING": "hard", "ARCTIC_PINE_LOGS": "hard", "YEW_LOGS": "hard", "PURPLE_LOGS": "hard",
+        "BLISTERWOOD_LOGS": "elite", "MAGIC_LOGS": "elite",
+        "RED_LOGS": "master", "REDWOOD_LOGS": "master"
+      }
+    },
+    "goldenBrickRoad": { "fragment": 45 },
+    "graveRobber": { "fragment": 46, "minigame": "hallowed-sepulchre" },
+    "cluedIn": { "fragment": 49 }
+  },
+
   "messages": {
     "_lockedBoss": "The Wiki gives no message for a locked boss; this wording is this server's.",
     "lockedBoss": "You need to unlock {name} with Sage's Renown before you can fight it.",
@@ -334,6 +355,8 @@
     "notShattered": "{name} is not in Leagues III - Shattered Relics.",
     "_nestBanked": "The Wiki gives no messages for Homewrecker's banked nests or Catch Of The Day's rare catch; these are this server's.",
     "nestBanked": "<col=ff0000>A bird's nest falls out of the tree and is sent to your bank.",
-    "rareCatch": "<col=ff0000>You find {item} while fishing."
+    "rareCatch": "<col=ff0000>You find {item} while fishing.",
+    "_scrollBoxFound": "The Wiki gives no message for Hot On The Trail's scroll box; this is this server's.",
+    "scrollBoxFound": "<col=ef1020>You find a {tier} scroll box in the ashes."
   }
 }

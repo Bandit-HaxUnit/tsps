@@ -159,6 +159,9 @@ relics are the first askers; nothing changes when nobody answers):
 | `construction:materials` | Construction, before a build's materials go | `{ player, buildable, materials }`: a listener may lower an amount |
 | `magic:enchant-pieces`, `magic:spell-batch` | the jewellery enchantments; the Lunar crafting spells | `{ player, spellName, itemId, pieces }` pieces a cast enchants, each with its XP; `{ player, spellName, batch }` items a cast converts |
 | `magic:alchemy-policy` (extended) | core alchemy | now with `high` (High Level Alchemy) |
+| `thieving:pickpocket-target` (extended) | Thieving | now with `chanceBonus` (a percent more success, stacking as the gloves of silence do) and `painless` (a stun without the damage) |
+| `thieving:loot` (extended) | Thieving | now with `multiplier`, applied with the rogue outfit's doubling as the loot is handed over |
+| `prayer:bury` (extended) | Prayer | now scatters demonic ashes too (never for the bonecrusher's `crushed`) |
 | `woodcutting:nest-chance`, `woodcutting:nest-drop` | Woodcutting | `{ player, multiplier }`: a bird nest `multiplier` times as likely; `{ player, itemId, handled }` before a nest falls (handled: a listener took it) |
 | `farming:open-seed-vault` | Farming (the guild's seed vault) | `{ player, opened }`: the vault's menu from anywhere, behind the Bank PIN as at the guild |
 | `miscellania:rules` | Managing Miscellania | `{ player, ruler, royalTrouble, payMultiplier, outputMultiplier, approval, visiting }`: who rules the kingdom (the quests), what the workers' pay costs, how much they gather (clues as rolled), an approval held fixed, whether a catch-up away from the islands counts as a visit |
@@ -508,6 +511,23 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   Rumple-Bow-String `magic:spell-batch` (Spin Flax) and Alchemaniac `magic:alchemy-policy` (High
   Alchemy only, by the policy's new `high`).
 
+- **Skilling effects** (`league/FragmentSkilling.LeagueMode.js`, data `skillingEffects`): the
+  skilling fragments and Clued In. Praying Respects buries and scatters the remains a kill drops
+  through Prayer's own `prayer:bury` (which now scatters demonic ashes too) at 50/100/200% of their
+  XP, and takes them off the drop (`npc-drops:roll`; NPC drops only: ours), leaving remains above
+  the player's Prayer level and the long and curved bones kept for Construction (ours). Smooth Criminal raises
+  Thieving's own pickpocket chance by its percent, stacking as the gloves of silence do, and from
+  level 2 stuns without the damage (`chanceBonus` and `painless` on `thieving:pickpocket-target`).
+  Deeper Pockets doubles the loot through `thieving:loot`'s new `multiplier`, which Thieving's
+  own handover multiplies with the rogue outfit's (a pouch's coins come directly; a clue never twice). Hot On The Trail gives
+  the Wiki's tier of scroll box for the log lit (`firemaking:success`, and `league:log-burnt` for
+  Slash & Burn's logs) while the clue capacity allows another (`treasure-trails:can-receive`); logs
+  the league predates give none (ours), and Wintertodt's bruma roots and kindling, fed to its
+  brazier rather than lit, never do here. Golden Brick Road puts its coins beside a mark of grace
+  (`agility:mark`). Grave Robber raises a coffin's hallowed marks, the Grand Hallowed Coffin's too
+  (ours), through the minigames' `minigame:points` (tier passives, below); a part mark is that chance of a whole one. Clued In makes each clue scroll an NPC drops
+  at least 1 in 30/25/15 (`npc-drops:tertiary-chance`). The scroll box message is this server's.
+
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price
   now, from the Wiki's Initial Cost less the prerequisite packs already unlocked, and 0 once
@@ -563,8 +583,10 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   only the fights inside. The Wiki gives no message for either lock; the boss one is this
   server's, said once per boss every few seconds.
 
-Not yet: the other fragments' effects (the skilling and misc ones; Rune Escape, which needs the
-Ourania Altar this server doesn't have; Plank Stretcher outside a house build, as Mahogany Homes; the ranged weapons' own charges, which no hook reports) and the three sets that give a Sage item; The Alchemist's jugs of
+Not yet: the other fragments' effects (Barbarian Pest Wars, Rogues' Chompy Farm and Mother's
+Magic Fossils; Rune Escape, which needs the
+Ourania Altar this server doesn't have; Plank Stretcher outside a house build, as Mahogany Homes; the ranged weapons' own charges, which no hook reports) and the three sets that give a Sage item; The Alchemist's jugs of Unlocking Herblore doesn't yet complete Druidic Ritual and set the skill to 174 XP (Wiki /Unlocks footnote); the Sage's Check-pets remains unimplemented. A quest the character had started keeps its quest items when a pack completes it.
+
 wine (no wine making here); Fishing has no clue bottles of its own, so Message In A Bottle
 reaches only Hunter's aerial fishing and drift nets for bottles; fragments change only through Equip (dragging one into a slot isn't handled); the
 Display Fragments toggle (varbit 12383) is the client's own; the intro cutscene (734) has no
