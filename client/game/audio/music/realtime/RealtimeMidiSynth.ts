@@ -509,16 +509,16 @@ class MusicWorkletProcessor extends AudioWorkletProcessor {
     }
 
     handleNoteOff(channel, key) {
-        // Channel 10 (index 9) is Percussion. Vanilla OSRS deliberately ignores Note-Off here
-        // so cymbals/drum samples ring out naturally; cutting them early sounds wrong.
-        // IMPORTANT: keep this behavior unless you also re-author percussion patches/tracks.
-        if (channel === 9) return;
-
         const ch = this.channels[channel];
         const noteKey = channel + ":" + key;
         const note = this.noteMap.get(noteKey);
 
         if (!note || note.releaseProgress >= 0) return;
+
+        // Channel 10 (index 9) is usually percussion: its one-shot drum samples ignore Note-Off and
+        // ring out. Tracks also put melodic instruments there (Getting Down to Business: a flute),
+        // whose looped samples would then sound forever, so those are released as usual.
+        if (channel === 9 && !note.looped) return;
 
         // Mark that note-off was received (for pedal release logic)
         note.noteOffReceived = true;
