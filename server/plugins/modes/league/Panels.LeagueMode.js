@@ -60,6 +60,7 @@ function startFlushing(player) {
 function openModal(player, panel) {
   Common.api.emitCustomEvent("league:send-content", { player });
   const sender = player.getPacketSender();
+  sender.sendInterfaceScript(Common.data.panels.modalSizeScript, panel.modalSize);
   sender.sendInterface(panel.group);
   if (panel.sound !== undefined) sender.sendSound(panel.sound, 1, 0);
   if (panel.menuFrame !== undefined) {

@@ -13,7 +13,7 @@ const START_CONFIG = "league:start";
 
 /**
  * The varbits a league account carries (capture 227/00070 login): account, type, the tutorial's
- * done state the journal tab needs, the client's date (current_runeday, which live sends with the
+ * stage (Tutorial's `league:tutorial-stage`, else the finished value the journal tab needs), the client's date (current_runeday, which live sends with the
  * journal and the Info panel reads) and, when the world says when its league began, that start.
  */
 function sendVarbits(player, type) {
@@ -21,7 +21,9 @@ function sendVarbits(player, type) {
   const sender = player.getPacketSender();
   sender.sendVarbit(varbits.account, 1);
   sender.sendVarbit(varbits.type, type);
-  sender.sendVarbit(varbits.tutorialCompleted, tutorialCompletedValue);
+  const tutorial = { player, stage: tutorialCompletedValue };
+  Common.api.emitCustomEvent("league:tutorial-stage", tutorial);
+  sender.sendVarbit(varbits.tutorialCompleted, tutorial.stage);
   sender.sendVarbit(varbits.runeday, Common.runeday());
   const start = Date.parse(String(Common.api.getPluginConfig(START_CONFIG, "")));
   if (Number.isFinite(start)) sender.sendConfig(varps.leagueStart, Math.floor(start / 60000));
@@ -67,6 +69,7 @@ function login({ player, isNewAccount }) {
     type = Common.configuredType();
     player.setAttribute(Common.LEAGUE_TYPE_ATTRIBUTE, type);
     if (isNewAccount) applyStartingLevels(player, type);
+    Common.api.emitCustomEvent("league:joined", { player, league: type });
   }
   sendVarbits(player, type);
   applyIronman(player);

@@ -20,6 +20,8 @@ module.exports = {
     require("./league/Panels.LeagueMode")(api);
     require("./league/Rank.LeagueMode")(api);
     require("./league/Statistics.LeagueMode")(api);
+    require("./league/Tutorial.LeagueMode")(api);
+    require("./league/Welcome.LeagueMode")(api);
     require("./league/Passives.LeagueMode")(api);
     require("./league/BoostedDrops.LeagueMode")(api);
     require("./league/Commands.LeagueMode")(api);

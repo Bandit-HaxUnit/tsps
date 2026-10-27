@@ -200,8 +200,8 @@ test("every cache-known league's thresholds: the Wiki's (League_trophy) for I-II
 test("the time played survives a logout and the minute's save, and never counts a main character", () => {
   const Panels = require("../plugins/modes/league/Panels.LeagueMode");
   const league = character("clock");
-  const task = tasks.at(-1);
-  assert.ok(task && task.player === league, "a repeating save was submitted for the league character");
+  const task = tasks.filter((queued) => queued.player === league).at(-1);
+  assert.ok(task, "a repeating save was submitted for the league character");
   assert.equal(league.getAttribute("league:play-time"), undefined, "nothing saved yet");
   task.execute();
   assert.ok(Number.isInteger(league.getAttribute("league:play-time")), "the minute's save wrote the session so far");
@@ -269,7 +269,8 @@ test("Leagues I-III get their rank thresholds and trophies as overrides, in the 
   assert.equal(enums.get(201901).entries[6][1], core.ItemIdentifiers.TWISTED_DRAGON_TROPHY);
   const reloaded = character("reloaded", { league: 4 });
   const reloadedStructs = new Map(dataset(reloaded, "structOverrides").map((row) => [row.structId, row.params]));
-  assert.deepEqual(reloadedStructs.get(4699), { 870: 204000 }, "Trailblazer Reloaded's ranks are the cache's; only its relic catalog is sent");
+  assert.equal(reloadedStructs.get(4699)[870], 204000, "its relic catalog travels in the payload");
+  assert.equal(reloadedStructs.get(4699)[1857], undefined, "Trailblazer Reloaded's ranks are the cache's");
   assert.ok(reloadedStructs.has(204010), "the relic catalog travels in the same payload");
 });
 

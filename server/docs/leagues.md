@@ -93,9 +93,14 @@ colours and screens here but no relic, area or task catalogs yet.
 | `league:send-content` | `{ player }`: send the content payload again (before an interface opens) | LeagueMode (Content) |
 | `league:rank` | `{ player } -> { rank, name, next }` (ranks reached 0-7, the next threshold) | LeagueMode (Rank) |
 | `league:statistics` | `{ player } -> { counters }` (the summary's rows by name) | LeagueMode (Statistics) |
+| `league:joined` | `{ player, league }` the first time a character joins its league | LeagueMode (Tutorial) listens |
+| `league:area-unlocked` | `{ player, league, area, slot }` when an area is unlocked | LeagueAreaUnlocks (#1352) emits; Tutorial listens |
+| `league:tutorial-stage` | `{ player } -> { stage }` (league_tutorial_completed while a tutorial runs) | LeagueMode (Tutorial) |
+| `screen-highlight:show` / `:close` / `:finished` | a walkthrough in an interface (see Tutorial) | ScreenHighlight |
+| `interface:opened` | `{ player, groupId, targetUid, type }` whenever a group is mounted (core, PacketSender) | Tutorial listens |
+| `welcome-screen:shown` | `{ player }` when the welcome screen is up | Tutorial, Welcome listen |
 | `league:areas` | `{ player } -> { league, unlocked: [area ids], next: { slot, tasks } \| null, available }` | LeagueAreaUnlocks |
 | `league:area-at` | `{ x, y, player \| league } -> { area: id \| null, name }` | LeagueAreaUnlocks |
-| `league:area-unlocked` | `{ player, league, area, slot }` the moment an unlock is saved | LeagueAreaUnlocks emits |
 | `league:relic-triggered` | `{ player, relic }` when a relic's effect fired (Undying Retribution) | nobody yet |
 | `ironman:set-mode` | `{ player, mode } -> { handled }` (the Ironman plugin's) | LeagueMode emits at a league login |
 | `ironman:change-mode` | `{ player, from, to, allowed, reason }` (the Ironman plugin asks before a setup choice) | LeagueMode refuses for a league character |
@@ -157,6 +162,8 @@ events on its menu frame, as captured (227/00075, 227/01845, 227/00579); the cli
 from varps and the league struct, so the server sends nothing else (`league/Panels.LeagueMode.js`,
 data `panels`):
 
+- Before each, script 2524 sizes the modal, as live ran it: (-1, -1) for the Summary and Rank,
+  (-1, -3) for the Info panel and the relic interface.
 - **Summary** (656:7 -> `league_summary` 529): sound 2266, `if_setevents` on the stats row 2 (Time
   Played, OP1 and the six target kinds) and script 7741 `[529:23, 2, "(Click to reveal)"]`; a click
   on that row closes and re-opens the summary with the time played, in the captured shape (the two
@@ -198,6 +205,75 @@ fish, ore and logs (`fishing:success`, `mining:success`, `woodcutting:success`).
 want of a source: echo bosses killed (none here), coins gained and lost, clues completed (no
 completion event), special attacks used (the special flag is cleared before the hit resolves) and
 the highest value item worn.
+
+## Tutorial
+
+`league/Tutorial.LeagueMode.js`, data `league-tutorial.json` (generated from the two recorded runs
+on new characters: osrs-captures 227/00196 Raging Echoes and 237/01098 Demonic Pacts). A new
+league character starts at `league_tutorial_completed` 0; the client draws every page (title,
+body, buttons, picture) from the league struct's param 1033 tutorial struct, with enums keyed by
+that varbit, so the server only moves the varbit and opens the screens. A character that joined
+before the tutorial existed has no stage and counts as finished: the login sends the league's
+finished value, 12 (every Raging Echoes capture's login) or Leagues VI's 14 (243 logins sent it).
+
+- **Screens, as captured before every page:** `league_tutorial` (653) in the toplevel's
+  `overlay_atmosphere` (161:1) with its click blocker 653:1 shown, `mesoverlay` (263) in
+  `chatbox:crmclose` (162:565 in this cache), script 1974 with an empty line, script 2524 (-1, -1)
+  and `league_tutorial_main` (677) as the main modal, closed and reopened at each stage so the
+  client draws the new page. `orbs_disabled` (4084) and `chatoverlay_allowmesoverlap` (10690) are 1
+  while it runs. It opens once the welcome screen's Play is clicked, or the new character's design
+  closes. Not sent, though captured: `minimap_toggle` (no such packet here), `side_journal_tab` = 1
+  with the quest list mounted on Get Started (this client mounts journal tabs on their click), and
+  the orbs interface reopened at the end (this client keeps it).
+- **Stages** (Raging Echoes; Demonic Pacts adds 11-13 and finishes at 14): 0 the welcome page, Get
+  Started (677:9) sets `league_3_has_seen_cutscene` and jumps to 3; 3 flashes the journal stone
+  (`flashside` 3, OP1 armed on stone2 of every gameframe layout: 161:61, 164:54, 548:66) until it is
+  clicked; 4 flashes the journal's Leagues tab (script 3162 on 629:42) until the side panel (656)
+  mounts, which awards "Open the Leagues Menu" (`open-the-leagues-menu`; a mount at stage 3 counts
+  for both steps); 5 / 7 / 9 pulse the Tasks / Areas /
+  Relics buttons (script 3185 on 656:35 / 39 / 43, 3186 stops it) and, when the section's screen
+  opens, run its walkthrough (6 / 8 / 10); Raging Echoes then waits for an area unlock
+  (`league:area-unlocked`) and every league for a relic pick (`league:relic-unlocked`); 11 (13 for
+  Demonic Pacts) is Finishing Up, whose End Tutorial (677:8) awards "Complete the Leagues
+  Tutorial" (`complete-the-leagues-tutorial`), restores the orbs and closes the screens. Both tasks
+  go through the task catalog's `league:complete-task` (its points, list bit and message); with no
+  catalog on the server they pay 10 points each through `league:award-task`. Exit
+  Leagues (677:8 on the first page) logs the character out (ours: never pressed in a recording).
+- **Other plugins' screens:** the task list (657) and the area map (512) belong to their own
+  plugins. The tutorial never handles their buttons; it watches for their screen to open through
+  the core's `interface:opened` (reacting once the opening plugin has finished, a microtask
+  later), and a section whose screen has not opened two ticks after its button was clicked is
+  skipped (on a server without the
+  tasks and areas plugins, 5 goes to 7 and 7 to 9). Demonic Pacts' pacts section (stage 11, the
+  tree 647) runs no walkthrough: its middle step waits for a pact point to be spent in an interface
+  this server does not have, so its button goes straight to 13.
+- **Always finishable:** besides the skip, a relic picked or an area unlocked before its page counts
+  when that page's walkthrough ends (the relics' `league:relic-unlocked` state, the area selection
+  varbit 10663); the page or a section's screen closed half way (Escape, walking away) brings the
+  page back a tick later unless another screen replaced it, and the walkthrough starts again when
+  the screen is reopened (a walkthrough already seen this session is not shown twice); a relog
+  resumes at the page of a walkthrough stage.
+- **Walkthroughs** (`plugins/interface/ScreenHighlight.plugin.js`, usable by any content): the
+  cache's `screenhighlight` (664) in the screen's `tutorial_highlight` layer (657:14, 512:13,
+  655:13) with OP1 on Continue (664:31) and Previous (664:32) slot 9, script 3408, the varbits
+  `hnt_selected_hint` / `hnt_hint_step` / `hnt_hint_max_step`, and per step a box (3409) or a
+  framed component (2463) and its text (3413 or 2465), with the arguments, texts and colour (the
+  league struct's param 1027) each recording shows. The pause button live also arms (664:9) is not:
+  its resume packet reaches this server as a dialogue continue. On this web client the first click
+  after a step redraws can go to the component that was under the pointer before; a second click
+  (or any mouse move first) reaches Continue.
+- **Per league:** Raging Echoes and Demonic Pacts are as recorded. Trailblazer Reloaded and
+  Trailblazer use Leagues V's tutorial struct (747), whose text this cache writes for Leagues V, so
+  they get copies of its title and body enums with their own name through the content payload, and
+  Raging Echoes' walkthroughs with their name. Twisted's struct has no tutorial and Shattered Relics'
+  is a different flow (its class choice), so neither starts one.
+
+## Welcome screen
+
+`league/Welcome.LeagueMode.js`: on a league world the welcome screen's message of the week
+(`welcome_screen:motw`, 378:6) reads, as captured, `Welcome to Old School RuneScape: <league>!`
+and, when world.json's pluginConfig `league:end` (an ISO date) is set, `There are N days remaining
+in this League.` WelcomeScreen emits `welcome-screen:shown`.
 
 ## Relics
 
@@ -640,6 +716,6 @@ of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's
 
 Most task triggers (see Tasks), the Echo bosses (and so three of the mastery points), the tier passives left out
 above (clue-step progress and farming ticks), the boosted sources their own plugins have yet to
-ask about, the league tutorial (see above), main-game records and reward shops, and Shattered
+ask about, main-game records and reward shops, and Shattered
 Relics' own panels. Each is its own item on the
 progress tracker.
