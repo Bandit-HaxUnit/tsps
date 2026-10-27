@@ -191,6 +191,35 @@ test("one queued free cast succeeds once when its cooldown ends",async t=>{
   assert.equal(used(f),2);assert.equal(f.p.getInventory().getAmount(x.itemId),0);
   tasks[0].execute();assert.equal(used(f),2);
 });
+
+test("queued item-on-ring alchemy rejects a real bank remove-and-return stack",async t=>{
+  const f=actor(t),tasks=[];t.mock.method(core.TaskManager,"submit",task=>tasks.push(task));
+  t.mock.method(core.World,"getProcessCycle",()=>1000);
+  const arrows=id("rune_arrow"),inv=f.p.getInventory();inv.add(new core.Item(arrows,11),false);
+  const slot=inv.getSlotForItemId(arrows);
+  f.p.getPacketSender().sendVarbit(core.CacheDefinitions.getVarbitId("alchemy_warning_forinventory_disabled"),1);
+  const use=async()=>{await f.c.dispatch([{type:"inventory_use_on",slot,itemId:arrows,target:{kind:"inventory",slot:0,itemId:id("lumbridge_ring_elite")}}]);f.c.processTurnPackets();};
+  await use();await use();assert.equal(used(f),1);assert.equal(inv.getAmount(arrows),10);assert.equal(tasks.length,1);
+  const retained=inv.forSlot(slot);f.p.getBank(0).open();assert.equal(core.Bank.isOpen(f.p),true);
+  core.Bank.deposit(f.p,arrows,slot,10,false);assert.equal(inv.getAmount(arrows),0);
+  const tab=core.Bank.getTabForItem(f.p,arrows),bank=f.p.getBank(tab);
+  core.Bank.withdraw(f.p,arrows,bank.getSlotForItemId(arrows),10,tab);
+  assert.equal(inv.getAmount(arrows),10);assert.equal(inv.getSlotForItemId(arrows),slot);
+  f.p.getPacketSender().sendInterfaceRemoval();
+  t.mock.method(core.World,"getProcessCycle",()=>1005);tasks[0].execute();
+  assert.equal(used(f),1,"replacement stack must not spend another daily charge");assert.equal(inv.getAmount(arrows),10);
+  assert.notEqual(inv.forSlot(slot),retained,"a newly filled empty stack has a fresh identity");
+});
+
+test("confirmed item-on-ring cast rejects actual emptied/refilled stack; existing stack merges retain identity",async t=>{
+  const f=actor(t),arrows=id("rune_arrow"),inv=f.p.getInventory();inv.add(new core.Item(arrows,10),false);
+  const slot=inv.getSlotForItemId(arrows),original=inv.forSlot(slot);
+  inv.add(new core.Item(arrows,5),false);assert.equal(inv.forSlot(slot),original);assert.equal(inv.getAmount(arrows),15);
+  await f.c.dispatch([{type:"inventory_use_on",slot,itemId:arrows,target:{kind:"inventory",slot:0,itemId:id("lumbridge_ring_elite")}}]);f.c.processTurnPackets();
+  assert.equal(f.p.getPacketSender().isChatboxInterface(219),true);
+  inv.deleteNumber(arrows,15);inv.add(new core.Item(arrows,15),false);
+  await resume(f,(219<<16)|1,1);assert.equal(used(f),0);assert.equal(inv.getAmount(arrows),15);
+});
 test("real save restores both shared charges and selected spell into a fresh player",async t=>{
   const f=actor(t);await f.open();await click(f,"high");const x=target(f);await cast(f,x);
   const {PlayerSave}=require("../dist/game/entity/impl/player/persistence/PlayerSave");

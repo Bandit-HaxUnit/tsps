@@ -48,3 +48,16 @@ Full-suite results are recorded in the PR.
 Full suite on frozen production code: 9,052/9,052 passed, no failures/skips (498s).
 The final strengthened worn-option assertion uses native equipment387:24 op4, the
 cache's third worn option, and is rechecked in the focused suite after the full run.
+
+## Replacement-stack review (27 October2026)
+
+The real bank transfer path emptied a stack by mutating its Item, then refilled that
+same empty object. Retained-reference guards therefore accepted replacement arrows.
+ItemContainer.add now clones new contents into an empty stack slot; live stack merges
+retain their identity. Existing queued and confirmed target guards remain unchanged.
+Two real-object native regressions reproduce bank open/deposit/withdraw/close during
+a queued item-on-ring cast, and inventory removal/refill during confirmation. Both
+failed before the change (charges2vs1 and1vs0), then passed. Normal stack merging is
+also checked. Fresh build/focused84/84 and independent Codex review clear; final
+full suite9,124/9,124 passes without failures/skips (373 seconds). No service or live game was started for this
+follow-up; the regression uses real Bank/Inventory/Player/ClientConnection paths.
