@@ -1,6 +1,6 @@
 "use strict";
 
-const { api, CacheDefinitions, PluginManager, MapObjects, Item, PlayerStatus } = require("./Core.Construction");
+const { api, CacheDefinitions, PluginManager, MapObjects, Item, ItemDefinition, PlayerStatus } = require("./Core.Construction");
 const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 
@@ -74,6 +74,10 @@ function sendStored(player) {
     const form = [...CacheDefinitions.getEnumValues(pet.enumId)].find(([, id]) => id === itemId)?.[0] ?? 0;
     player.getPacketSender().sendVarbit(pet.formVarbit, form);
   }
+  if (player.getInterfaceId() === MENAGERIE_INTERFACE) {
+    // Script641 creates children by enum slot; script2266's onOp is only cosmetic.
+    player.getPacketSender().sendInterfaceFlagsRange((MENAGERIE_INTERFACE << 16) | LIST, 0, 71, (1 << 1) | (1 << 10));
+  }
 }
 
 function inMenagerie(event) {
@@ -85,8 +89,8 @@ function inMenagerie(event) {
 
 function view(event) {
   if (!inMenagerie(event)) return false;
-  sendStored(event.player);
   event.player.getPacketSender().sendInterface(MENAGERIE_INTERFACE);
+  sendStored(event.player);
   return true;
 }
 
@@ -142,6 +146,7 @@ function interfaceClick(event) {
       player.getInterfaceId() !== MENAGERIE_INTERFACE ||
       !player.getPacketSender().isSubInterfaceOpen(MENAGERIE_INTERFACE)) return;
   if (event.childId === ROAM_TOGGLE) {
+    if ((event.opId ?? event.action ?? 1) !== 1) return;
     player.setAttribute(CLOSED_ATTRIBUTE, !player.getAttribute(CLOSED_ATTRIBUTE));
     sendStored(player);
     refreshPets(house);
@@ -149,6 +154,10 @@ function interfaceClick(event) {
   }
   const slot = event.slot;
   const slots = stored(player);
+  if (event.childId === LIST && slots.has(slot) && (event.opId ?? event.action) === 10) {
+    player.sendMessage(ItemDefinition.forId(storedPet(player, slot).itemId).getExamine());
+    return;
+  }
   if (event.childId !== LIST || !slots.has(slot) || (event.opId ?? event.action ?? 1) > 1) return;
   const context = {player, house, slot, itemId: storedPet(player, slot).itemId, origin: player.getLocation().clone()};
   pending.set(player, context);
@@ -159,6 +168,7 @@ function resumeWithdrawal(context) {
   const {player} = context;
   if (pending.get(player) !== context || !safe(context) || player.busy()) return;
   player.getPacketSender().sendInterface(MENAGERIE_INTERFACE);
+  sendStored(player);
   withdrawNow(context);
 }
 

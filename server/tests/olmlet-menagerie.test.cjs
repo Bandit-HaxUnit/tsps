@@ -22,6 +22,13 @@ function olmSlot(){return [...core.CacheDefinitions.getEnumValues(985)].find(([,
 async function view(f){await send(f,{type:'object_option',id:f.object.getId(),x:f.object.getLocation().getX(),y:f.object.getLocation().getY(),action:'View'});assert.equal(f.p.getInterfaceId(),211)}
 async function withdraw(f){await send(f,{type:'widget_action',widgetId:(211<<16)|7,groupId:211,childId:7,slot:olmSlot(),buttonNum:1})}
 
+test('native View grants Take and Examine on the actual cache-created child slot',async t=>{
+  const f=await store(t,'vespulaflyingpet'),flags=[],sender=f.p.getPacketSender(),original=sender.sendInterfaceFlagsRange.bind(sender);
+  t.mock.method(sender,'sendInterfaceFlagsRange',(...args)=>{flags.push(args);return original(...args);});
+  await view(f);
+  assert.ok(flags.some(([uid,start,end,mask])=>uid===((211<<16)|7)&&start<=olmSlot()&&end>=olmSlot()&&(mask&(1<<1))&&(mask&(1<<10))));
+});
+
 for (const [obj,npc,form] of [['tektonenragedpet','tekton_enraged_pet',6],['vespulaflyingpet','vespula_flying_pet',7]]) {
   test(`real ${obj} storage retains the icon, roaming form and item through full inventory and save/load`,async t=>{
     const f=await store(t,obj),id=core.CacheDefinitions.getNpcId(npc);

@@ -114,3 +114,13 @@ test('Probita retains a legacy lost form before the first summon after migration
   for(const child of [11,37])await send(f,{type:'widget_action',widgetId:(148<<16)|child,groupId:148,childId:child,slot:child===11?6+5*row:0,buttonNum:1});
   assert.equal(f.p.getInventory().getAmount(item('dogadilepet')),1);assert.equal(f.p.getInventory().getAmount(item('olmpet')),0);
 });
+
+test('legacy migrated follower records its resolved physical form through actual shutdown and fresh login',async t=>{
+  const f=actor(t);f.p.setRegistered(false);assert.equal(core.World.getPlayers().add(f.p),true);f.p.needsPlacement=false;
+  f.p.setAttribute('pets.owned',[item('olmpet')]);f.p.setAttribute('pets:variant',{['item:'+item('olmpet')]:npcId('dogadile_pet')});unlock(f);
+  const n=await summon(f);assert.equal(n.getId(),npcId('dogadile_pet'));assert.equal(f.p.getAttribute('pets:active-item'),item('dogadilepet'));
+  PM.emitServerShutdown({timestamp:Date.now()});const g=actor(t);PlayerSave.fromPlayer(f.p).applyToPlayer(g.p);
+  PM.emitPlayerLogin({player:g.p,username:g.p.getUsername(),isNewAccount:false});g.p.needsPlacement=false;
+  assert.equal(g.p.getAttribute('pets:current')?.getId(),npcId('dogadile_pet'));assert.equal(g.p.getAttribute('pets:active-item'),item('dogadilepet'));
+  assert.equal(g.p.getInventory().getAmount(item('olmpet')),0);assert.equal(g.p.getInventory().getAmount(item('dogadilepet')),0);
+});
