@@ -19,6 +19,7 @@ const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemI
 const Recovery = require("./pets/Recovery.Pets");
 const Acquisition = require("./pets/Acquisition.Pets");
 const Dust = require("./pets/Dust.Pets");
+const Call = require("./pets/Call.Pets");
 const CatchUp = require("./pets/CatchUp.Pets");
 const Dialogue = require("./pets/Dialogue.Pets");
 
@@ -1021,8 +1022,7 @@ function stagePetIds(stage, colour) {
 }
 
 /** Swaps the follower for the next stage in place, keeping owner, area and variant. */
-function replaceFollowerNpc(player, npc, npcId, itemId) {
-  const location = npc.getLocation().clone();
+function replaceFollowerNpc(player, npc, npcId, itemId, location = npc.getLocation().clone()) {
   despawnPetNpc(npc);
   const replacement = NPC.create(npcId, location);
   replacement.setPet(true);
@@ -1238,13 +1238,24 @@ function chaseVermin(player, npc, pet) {
 function openCatInteract(player, npc, pet) {
   if (!catInfoOf(pet)) return false;
   if (typeof pluginApi?.sendMultiChatboxPrompt !== "function") return true;
+  // Recall and growth replace the NPC while this non-interrupting prompt stays
+  // open. Keep the logical cat session, then resolve its live follower per choice.
+  const state = getCatState(player);
+  const withCurrentCat = (action) => () => {
+    const current = player.getAttribute?.(CURRENT_PET_ATTRIBUTE);
+    const entry = getPetByNpcId(current?.getId?.());
+    if (!current?.isRegistered?.() || !current.isPet?.() || current.getOwner?.() !== player
+        || World.getRemoveNPCQueue().includes(current) || !catInfoOf(entry)
+        || getCatState(player) !== state || (!state && current !== npc)) return;
+    action(current, entry);
+  };
   const opened = pluginApi.sendMultiChatboxPrompt(
     player,
     "Interact",
-    "Stroke", () => strokeCat(player, npc),
-    "Chase vermin", () => chaseVermin(player, npc, pet),
-    "Guess age", () => guessCatAge(player),
-    "Shoo away", () => shooCat(player, npc)
+    "Stroke", withCurrentCat(current => strokeCat(player, current)),
+    "Chase vermin", withCurrentCat((current, entry) => chaseVermin(player, current, entry)),
+    "Guess age", withCurrentCat(() => guessCatAge(player)),
+    "Shoo away", withCurrentCat(current => shooCat(player, current))
   );
   return opened !== false;
 }
@@ -1835,6 +1846,7 @@ module.exports = {
     Recovery.attach(api, {pets: PETS, getOwnedPetItems, getPetForItemId, petFamily, getPetDisplayName, syncCollectionLog});
     Acquisition.attach(api);
     Dust.attach(api, {getPetByNpcId, petFamily, getMorphUnlocks, unlockMorphFamily});
+    Call.attach(api, {currentAttribute: CURRENT_PET_ATTRIBUTE, getPetByNpcId, canSummonPetHere, replaceFollowerNpc});
     CatchUp.attach(api, {currentAttribute: CURRENT_PET_ATTRIBUTE, getPetByNpcId, canSummonPetHere});
     Dialogue.attach(api, {currentAttribute: CURRENT_PET_ATTRIBUTE, catInfoOf});
     TaskClass = api.core?.Task ?? null;
