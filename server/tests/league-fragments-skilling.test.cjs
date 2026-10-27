@@ -156,8 +156,9 @@ function xp(player, skill) {
 
 test("Praying Respects: a kill's bones and ashes are buried and scattered through Prayer's own burial, at 50% of their XP", () => {
   const { owner, others } = cases(F.prayingRespects);
+  // What two bones at half their XP pay, through Prayer's own burial (fractional XP, as Prayer gives it).
   const plain = shattered("plainprayer");
-  plain.getSkillManager().addExperiences(core.Skill.PRAYER, 3 * 2);
+  for (let bone = 0; bone < 2; bone++) emit("prayer:bury", { player: plain, itemId: I.BONES, scale: 0.5 });
   const drops = [{ itemId: I.BONES, amount: 2, noted: false }, { itemId: I.COINS, amount: 50, noted: false }, { itemId: I.VILE_ASHES, amount: 1, noted: false }];
   const roll = emit("npc-drops:roll", { player: owner, drops: drops.map((drop) => ({ ...drop })) });
   assert.deepEqual(roll.drops.map((drop) => drop.itemId), [I.COINS], "the remains are gone from the drop");
@@ -168,7 +169,7 @@ test("Praying Respects: a kill's bones and ashes are buried and scattered throug
     return xp(ashes, "PRAYER") - before;
   })();
   assert.ok(ashXp > 0, "ashes scatter through prayer:bury too");
-  assert.equal(xp(owner, "PRAYER"), xp(plain, "PRAYER") + ashXp, "two bones at half their 4.5 XP (3 each, rounded up) and the ashes at half");
+  assert.equal(xp(owner, "PRAYER"), xp(plain, "PRAYER") + ashXp, "two bones and the ashes at half their XP");
   for (const player of others) {
     const kept = emit("npc-drops:roll", { player, drops: drops.map((drop) => ({ ...drop })) });
     assert.equal(kept.drops.length, 3, player.getUsername());
