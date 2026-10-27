@@ -34,6 +34,7 @@ module.exports = {
     require("./league/FragmentEffects.LeagueMode")(api);
     require("./league/FragmentGathering.LeagueMode")(api);
     require("./league/Unlocks.LeagueMode")(api);
+    require("./league/Sage.LeagueMode")(api);
     require("./league/Commands.LeagueMode")(api);
   },
 };
