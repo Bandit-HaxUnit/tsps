@@ -33,6 +33,11 @@ type PendingHitConfig = {
     bestOf?: number;
     /** Scales the kept roll's damage before the hook and the HP cap (a size bonus). */
     damageMultiplier?: number;
+    /**
+     * An ordinary attack whatever is armed when it is built: no special attack's traits (a hit
+     * derived from an earlier one, which must not borrow a special armed since).
+     */
+    ordinary?: boolean;
 };
 
 export class PendingHit {
@@ -49,6 +54,8 @@ export class PendingHit {
     private damageBudget?: { remaining: number };
     private bestOf = 1;
     private damageMultiplier = 1;
+    /** No special attack's traits apply (PendingHitConfig.ordinary). */
+    private ordinary = false;
     /** Optional per-hitsplat extra reveal delays (from `hitDelayTicks`). */
     private hitDelays?: number[];
     /** Spell selected when this hit was launched; the caster may clear it before impact. */
@@ -79,6 +86,7 @@ export class PendingHit {
             this.damageBudget = delayOrConfig.damageBudget;
             this.bestOf = Math.max(1, Math.trunc(delayOrConfig.bestOf ?? 1));
             this.damageMultiplier = delayOrConfig.damageMultiplier ?? 1;
+            this.ordinary = delayOrConfig.ordinary === true;
             if (Number.isInteger(delayOrConfig.delay)) {
                 resolvedDelay = delayOrConfig.delay as number;
             }
@@ -204,7 +212,7 @@ export class PendingHit {
 
         // Utility-only specials (e.g. stat boosts that resolve outside the hit
         // pipeline) declare skipAttack and produce no hitsplat.
-        const traits = fixedDamage === undefined ? CombatSpecial.activeTraitsFor(this.attacker) : null;
+        const traits = fixedDamage === undefined && !this.ordinary ? CombatSpecial.activeTraitsFor(this.attacker) : null;
         if (traits?.skipAttack === true) {
             this.totalDamage = 0;
             return [];

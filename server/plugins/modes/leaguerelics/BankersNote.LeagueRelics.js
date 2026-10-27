@@ -13,6 +13,8 @@
 const Common = require("./Common.LeagueRelics");
 
 const STATE_ATTRIBUTE = "league:bankers-note";
+/** A stack's limit (the client's 32-bit amount). */
+const MAX_STACK = 2147483647;
 
 let core;
 let effect;
@@ -46,7 +48,11 @@ function name(itemId) {
 /** How many of `itemId` the inventory takes, counting a slot that `freed` frees first. */
 function room(inventory, itemId, count, freed) {
   if (core.ItemDefinition.forId(itemId)?.isStackable?.() === true) {
-    if (!inventory.contains(itemId) && inventory.getFreeSlots() <= 0 && !freed) return 0;
+    if (!inventory.contains(itemId) && inventory.getFreeSlots() <= 0) {
+      // A new stack in the slot the conversion frees: up to a stack's limit (getAddableAmount, asked
+      // before the deletion, would see no room).
+      return freed ? Math.min(count, MAX_STACK) : 0;
+    }
     return Math.min(count, inventory.getAddableAmount(new core.Item(itemId, count)));
   }
   return Math.min(count, inventory.getFreeSlots() + (freed ? 1 : 0));

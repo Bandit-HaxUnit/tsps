@@ -36,11 +36,15 @@ function rangedAccuracy(entity, roll) {
   return active(entity) ? roll * effect.accuracyMultiplier : roll;
 }
 
-/** A landed ranged hit has a 10% chance of an extra projectile, rolled on its own and queued as any hit (XP, hooks); no ammunition spent for it (ours). */
+/**
+ * A landed ranged hit has a 10% chance of an extra projectile, rolled on its own and queued as any
+ * hit (XP, hooks); no ammunition spent for it (ours). It is an ordinary shot: a special armed after
+ * the original shot left stays armed for the next attack, not borrowed for nothing.
+ */
 function extraProjectile({ attacker, target, hit }) {
   if (extraHits.has(hit) || hit.getCombatType() !== core.CombatType.RANGED || !hit.isAccurate() || !active(attacker)) return;
   if (Math.random() >= effect.extraProjectileChance) return;
-  const extra = new core.PendingHit(attacker, target, hit.getCombatMethod(), { delay: 0 });
+  const extra = new core.PendingHit(attacker, target, hit.getCombatMethod(), { delay: 0, ordinary: true });
   extraHits.add(extra);
   core.CombatFactory.addPendingHit(extra);
 }

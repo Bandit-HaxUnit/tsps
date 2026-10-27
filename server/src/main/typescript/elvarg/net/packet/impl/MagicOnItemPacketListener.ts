@@ -288,10 +288,16 @@ export class MagicOnItemPacketListener {
     if (player.getSpellbook()?.getInterfaceId?.() !== MagicSpellbook.NORMAL.getInterfaceId()) {
       return;
     }
-    // The coins need somewhere to go: their stack, a free slot, or the slot the item leaves.
+    // The coins need somewhere to go: their stack, a free slot, the slot the item leaves, or a rune
+    // stack the cast uses up (consumeRunes takes the inventory's runes first).
+    const freesRuneSlot = runes.some(rune => {
+      const held = inventory.getAmount?.(rune.getId()) ?? 0;
+      return held > 0 && held <= rune.getAmount();
+    });
     const noRoom = policy.coins > 0 && (inventory.getFreeSlots?.() ?? 1) <= 0
       && !inventory.contains?.(ItemIdentifiers.COINS)
-      && !(policy.keepItem !== true && (item.getAmount?.() ?? 1) === 1);
+      && !(policy.keepItem !== true && (item.getAmount?.() ?? 1) === 1)
+      && !freesRuneSlot;
     if (noRoom) {
       player.sendMessage("You don't have enough inventory space.");
       return;

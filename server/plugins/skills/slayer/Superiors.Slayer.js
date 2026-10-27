@@ -21,6 +21,8 @@ let superiorIds = null;
 let normalIds = null;
 /** Superiors whose XP the task's kill gave (Tasks.Slayer.js runs before npcKilled). */
 const onTaskKills = new WeakSet();
+/** The NPC id each spawned superior came from, so its bonus rolls use that monster's own table. */
+const spawnedFrom = new WeakMap();
 const UNIQUE_TABLE_SIZE = 16;
 const superiorNames = new Set(Object.values(DATA.superiors).map((name) => name.toLowerCase()));
 
@@ -113,6 +115,7 @@ function taskKill({ player, npc }, random = Math.random) {
   const at = npc.getLocation();
   const superior = api.spawnNpc({ id, x: at.getX(), y: at.getY(), z: at.getZ(), owner: player });
   if (!superior) return null;
+  if (Number.isInteger(npc.getId?.())) spawnedFrom.set(superior, npc.getId());
   player.sendMessage(DATA.message);
   superior.getCombat?.()?.attack?.(player);
   api.emitCustomEvent("slayer:superior-spawned", { player, npc, superior });
@@ -165,7 +168,8 @@ function addUniques({ player, npc, drops }) {
   if (!player || !npc || !Array.isArray(drops) || !isSuperior(npc)) return;
   // Content may add rolls on the normal monster's table and raise the unique chance
   // ("slayer:superior-rewards", a league relic); it may also add drops of its own.
-  const rewards = { player, npc, normalId: normalIdOf(npc), drops, uniqueBoost: 1, extraRolls: 0 };
+  // The monster it spawned from (a Turoth's own id, which has the drop table), else the first of its name.
+  const rewards = { player, npc, normalId: spawnedFrom.get(npc) ?? normalIdOf(npc), drops, uniqueBoost: 1, extraRolls: 0 };
   api.emitCustomEvent("slayer:superior-rewards", rewards);
   const boost = Tasks.killBoost(player, npc, Data.MODIFIER.SUPERIOR_UNIQUES) * (rewards.uniqueBoost > 0 ? rewards.uniqueBoost : 1);
   for (const itemId of rollUniques(npc, boost)) drops.push({ itemId, amount: 1, noted: false });
