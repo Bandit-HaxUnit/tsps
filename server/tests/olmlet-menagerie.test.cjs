@@ -52,3 +52,14 @@ test('real PIN withdrawal resumes exactly once and retains Flying Vespina',async
 test('closed native211 actions cannot withdraw the stored form',async t=>{const f=await store(t,'tektonenragedpet');await view(f);f.p.getPacketSender().sendInterfaceRemoval();await withdraw(f);assert.equal(f.p.getInventory().getAmount(f.itemId),0);assert.deepEqual(f.p.getAttribute('construction:menagerie'),[olmSlot()])});
 test('real PIN delayed withdrawal cannot resume after leaving the house',async t=>{const f=await store(t,'tektonenragedpet');await view(f);const pin=require(root+'/plugins/interface/bankpin/Common.BankPin');f.p.setAttribute(pin.ATTRIBUTES.hash,pin.hash(f.p,'1234'));await withdraw(f);assert.equal(f.p.getInventory().getAmount(f.itemId),0);await f.c.dispatch([{type:'dialogue_amount',amount:1234}]);f.c.processTurnPackets();assert.equal(pin.isUnlocked(f.p),true);House.releaseHouse(f.p,true);for(let i=0;i<3;i++)core.TaskManager.process();assert.equal(f.p.getInventory().getAmount(f.itemId),0);assert.deepEqual(f.p.getAttribute('construction:menagerie'),[olmSlot()])});
 test('real PIN delayed storage preserves an item legitimately banked after unlock',async t=>{const f=await store(t,'vespulaflyingpet',false,true),pin=require(root+'/plugins/interface/bankpin/Common.BankPin');await f.c.dispatch([{type:'dialogue_amount',amount:1234}]);f.c.processTurnPackets();assert.equal(pin.isUnlocked(f.p),true);f.p.getBank(0).open();core.Bank.deposit(f.p,f.itemId,f.p.getInventory().getSlotForItemId(f.itemId),1,false);f.p.getPacketSender().sendInterfaceRemoval();for(let i=0;i<3;i++)core.TaskManager.process();assert.equal(f.p.getBank(0).getAmount(f.itemId),1);assert.deepEqual(f.p.getAttribute('construction:menagerie')??[],[])});
+
+for (const obj of ['snakepet','snakepet_orange','snakepet_blue']) test('native menagerie storage/Take retains '+obj,async t=>{
+  const f=await store(t,obj),base=core.CacheDefinitions.getObjId('snakepet');
+  const slot=[...core.CacheDefinitions.getEnumValues(985)].find(([,id])=>id===base)[0];
+  assert.equal(f.p.getInventory().getAmount(f.itemId),0);
+  assert.deepEqual(f.p.getAttribute('construction:menagerie'),[slot]);
+  await send(f,{type:'object_option',id:f.object.getId(),x:f.object.getLocation().getX(),y:f.object.getLocation().getY(),action:'View'});
+  assert.equal(f.p.getInterfaceId(),211);
+  await send(f,{type:'widget_action',widgetId:(211<<16)|7,groupId:211,childId:7,slot,buttonNum:1});
+  assert.equal(f.p.getInventory().getAmount(f.itemId),1);assert.deepEqual(f.p.getAttribute('construction:menagerie'),[]);
+});
