@@ -33,6 +33,13 @@ type PendingHitConfig = {
     bestOf?: number;
     /** Scales the kept roll's damage before the hook and the HP cap (a size bonus). */
     damageMultiplier?: number;
+    /**
+     * An ordinary attack whatever is armed when it is built: while its rolls are made the attacker
+     * counts as having no special armed, so no special's traits, accuracy or damage formulas apply
+     * (a hit derived from an earlier one, which must not borrow a special armed since). The armed
+     * special stays armed, with its energy, for the attacker's next attack.
+     */
+    ordinary?: boolean;
 };
 
 export class PendingHit {
@@ -49,6 +56,8 @@ export class PendingHit {
     private damageBudget?: { remaining: number };
     private bestOf = 1;
     private damageMultiplier = 1;
+    /** No special attack's traits apply (PendingHitConfig.ordinary). */
+    private ordinary = false;
     /** Optional per-hitsplat extra reveal delays (from `hitDelayTicks`). */
     private hitDelays?: number[];
     /** Spell selected when this hit was launched; the caster may clear it before impact. */
@@ -79,6 +88,7 @@ export class PendingHit {
             this.damageBudget = delayOrConfig.damageBudget;
             this.bestOf = Math.max(1, Math.trunc(delayOrConfig.bestOf ?? 1));
             this.damageMultiplier = delayOrConfig.damageMultiplier ?? 1;
+            this.ordinary = delayOrConfig.ordinary === true;
             if (Number.isInteger(delayOrConfig.delay)) {
                 resolvedDelay = delayOrConfig.delay as number;
             }
@@ -96,10 +106,19 @@ export class PendingHit {
             }
         }
 
-        this.hits = Spell.withCastContext(attacker, this.spellContext, () =>
-            this.prepareHits(resolvedHitAmount, resolvedRollAccuracy,
-                typeof delayOrConfig === "object" ? delayOrConfig?.damage : undefined,
-                typeof delayOrConfig === "object" && delayOrConfig?.bypassProtectionPrayer === true));
+        // An ordinary hit is rolled as if no special were armed: every formula reads the armed
+        // special through isSpecialActivated (CombatSpecial.activeTraitsFor, the accuracy and damage
+        // formulas), so the flag is lowered for the rolls and put back after.
+        const armed = this.ordinary && attacker?.isSpecialActivated?.() === true;
+        if (armed) attacker.setSpecialActivated(false);
+        try {
+            this.hits = Spell.withCastContext(attacker, this.spellContext, () =>
+                this.prepareHits(resolvedHitAmount, resolvedRollAccuracy,
+                    typeof delayOrConfig === "object" ? delayOrConfig?.damage : undefined,
+                    typeof delayOrConfig === "object" && delayOrConfig?.bypassProtectionPrayer === true));
+        } finally {
+            if (armed) attacker.setSpecialActivated(true);
+        }
         this.delay = Math.max(0, resolvedDelay);
         this.handleAfterHitEffects = resolvedHandleAfterHitEffects;
     }
@@ -204,7 +223,7 @@ export class PendingHit {
 
         // Utility-only specials (e.g. stat boosts that resolve outside the hit
         // pipeline) declare skipAttack and produce no hitsplat.
-        const traits = fixedDamage === undefined ? CombatSpecial.activeTraitsFor(this.attacker) : null;
+        const traits = fixedDamage === undefined && !this.ordinary ? CombatSpecial.activeTraitsFor(this.attacker) : null;
         if (traits?.skipAttack === true) {
             this.totalDamage = 0;
             return [];

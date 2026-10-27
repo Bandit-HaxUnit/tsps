@@ -27,6 +27,8 @@ export interface CombatSpecialDefinition {
     metadata?: Record<string, unknown>;
     /** Roll overrides applied by core while this special is active. */
     traits?: WeaponSpecialTraits;
+    /** Roll overrides that depend on the attacker at the swing (soul stacks); replaces `traits` there. */
+    traitsFor?: (player: Player) => WeaponSpecialTraits | undefined;
     /** Per-variant energy cost override, keyed by item id (e.g. granite maul (or)). */
     drainAmountByItemId?: Record<number, number>;
 }
@@ -78,6 +80,7 @@ export class CombatSpecial {
         this.weaponType = definition.weaponInterface;
         this.metadata = definition.metadata ?? {};
         this.traits = definition.traits;
+        this.traitsFor = definition.traitsFor;
         this.drainAmountByItemId = definition.drainAmountByItemId ?? {};
     }
 
@@ -90,6 +93,7 @@ export class CombatSpecial {
     private readonly identifiers: number[];
     private readonly metadata: Record<string, unknown>;
     private readonly traits: WeaponSpecialTraits | undefined;
+    private readonly traitsFor: ((player: Player) => WeaponSpecialTraits | undefined) | undefined;
     private readonly drainAmountByItemId: Record<number, number>;
 
     public static checkSpecial(player: Player, special: CombatSpecial): boolean {
@@ -97,12 +101,36 @@ export class CombatSpecial {
             player.getCombatSpecial() != null &&
             player.getCombatSpecial() == special &&
             player.isSpecialActivated() &&
-            player.getSpecialPercentage() >= special.getDrainAmount()
+            CombatSpecial.affordable(player, special, special.getDrainAmount())
         );
     }
 
+    /**
+     * What a special costs this character, as content may change it (a league relic): asked with
+     * the special's own cost when the energy is checked (`phase` "check") and again when it is
+     * drained ("drain"). A listener may lower `cost`, or set `allow` so a character short of energy
+     * may use the special anyway; the drain then takes what there is.
+     */
+    public static cost(character: Mobile, special: CombatSpecial | null, base: number, phase: "check" | "drain"): { cost: number; allow: boolean } {
+        const request = {
+            player: character, specialId: special?.getId() ?? null, cost: base,
+            available: character.getSpecialPercentage(), allow: false, phase,
+        };
+        const { PluginManager } = require("../../../plugins/PluginManager");
+        PluginManager.emitCustomEvent("combat-special:cost", request);
+        const cost = Number(request.cost);
+        return { cost: Number.isFinite(cost) ? Math.max(0, cost) : base, allow: request.allow === true };
+    }
+
+    /** Whether the character has the energy for a special costing `base`, as content prices it. */
+    public static affordable(character: Mobile, special: CombatSpecial | null, base: number): boolean {
+        const { cost, allow } = CombatSpecial.cost(character, special, base, "check");
+        return allow || character.getSpecialPercentage() >= cost;
+    }
+
     public static drain(character: Mobile, amount: number) {
-        character.decrementSpecialPercentage(amount);
+        const special: CombatSpecial | null = character.isPlayer?.() ? ((character as any).getAsPlayer?.()?.getCombatSpecial?.() ?? null) : null;
+        character.decrementSpecialPercentage(CombatSpecial.cost(character, special, amount, "drain").cost);
 
         CombatSpecial.ensureRestoreTask(character);
 
@@ -241,7 +269,7 @@ export class CombatSpecial {
 
             const equippedWeaponId = player.getEquipment().get(Equipment.WEAPON_SLOT).getId();
             if (queuedAttack) {
-                if (!developerQueuedAttackSpam && player.getSpecialPercentage() < spec.getDrainAmountForWeaponId(equippedWeaponId)) {
+                if (!developerQueuedAttackSpam && !CombatSpecial.affordable(player, spec, spec.getDrainAmountForWeaponId(equippedWeaponId))) {
                     player.sendMessage("You do not have enough special attack energy left!");
                     player.setSpecialActivated(false);
                     CombatSpecial.updateBar(player);
@@ -293,7 +321,7 @@ export class CombatSpecial {
     private static activateUtility(player: Player, spec: CombatSpecial): void {
         const equippedWeaponId = player.getEquipment().get(Equipment.WEAPON_SLOT).getId();
         const drainAmount = spec.getDrainAmountForWeaponId(equippedWeaponId);
-        if (player.getSpecialPercentage() < drainAmount) {
+        if (!CombatSpecial.affordable(player, spec, drainAmount)) {
             player.sendMessage("You do not have enough special attack energy left!");
             return;
         }
@@ -369,7 +397,8 @@ export class CombatSpecial {
         if (!player.isSpecialActivated()) {
             return null;
         }
-        return player.getCombatSpecial()?.getTraits() ?? null;
+        const special = player.getCombatSpecial();
+        return (special?.traitsFor ? special.traitsFor(player) : special?.getTraits()) ?? null;
     }
 
 }

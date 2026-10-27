@@ -31,7 +31,15 @@ function preventsDecrement(player, npc, random = Math.random) {
   const equipment = player.getEquipment();
   if (!isBracelet(equipment.getItems()[core.Equipment.HANDS_SLOT])) return false;
   const name = (npc.getCurrentDefinition?.() ?? npc.getDefinition()).getName();
-  if (EXCLUDED_MONSTERS.has(name) || random() >= ACTIVATION_CHANCE) return false;
+  if (EXCLUDED_MONSTERS.has(name)) return false;
+  // Content may change how often the bracelet works and whether it uses a charge ("slayer:bracelet", a league relic).
+  const proc = { player, npc, bracelet: "slaughter", chance: ACTIVATION_CHANCE, consumeCharge: true };
+  api.emitCustomEvent("slayer:bracelet", proc);
+  if (random() >= (Number.isFinite(proc.chance) ? proc.chance : ACTIVATION_CHANCE)) return false;
+  if (proc.consumeCharge === false) {
+    player.getPacketSender().sendTypedMessage(core.ChatType.SPAM, ACTIVATION_MESSAGE);
+    return true;
+  }
 
   const remaining = charges(player) - 1;
   player.setAttribute(CHARGES_ATTRIBUTE, remaining || MAX_CHARGES);

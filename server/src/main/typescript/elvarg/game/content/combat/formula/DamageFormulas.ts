@@ -7,7 +7,7 @@ import { Mobile } from "../../../entity/impl/Mobile";
 import type { Player } from "../../../entity/impl/player/Player";
 import type { NPC } from "../../../entity/impl/npc/NPC";
 import type { CombatSpell } from "../magic/CombatSpell";
-import { applyCombatEffectiveLevelModifiers, applyMagicDamageBonusModifiers, applyMagicHitModifiers, applyMeleeHitModifiers, applyRangedHitModifiers } from "../EquipmentEffects";
+import { applyCombatEffectiveLevelModifiers, applyMagicDamageBonusModifiers, applyMeleeStrengthPercentModifiers, applyMagicHitModifiers, applyMeleeHitModifiers, applyRangedHitModifiers } from "../EquipmentEffects";
 import { CombatSpecial } from "../CombatSpecial";
 import { SpecialAttackMaximumHitSource, WeaponSpecialTraits } from "../WeaponSpecialTraits";
 import { PluginManager } from "../../../../plugins/PluginManager";
@@ -138,7 +138,7 @@ export class DamageFormulas {
                 player.getSkillManager().getCurrentLevel(Skill.STRENGTH),
                 visibleLevelMultiplier
             ),
-            DamageFormulas.meleeStrengthPrayerPercent(player)
+            applyMeleeStrengthPercentModifiers(player, DamageFormulas.meleeStrengthPrayerPercent(player))
         );
 
         let styleBonus = 0;

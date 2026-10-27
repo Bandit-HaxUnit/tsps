@@ -215,7 +215,14 @@ function workStep(player, work) {
         return;
     }
     if (Date.now() < work.nextAt) return;
-    const again = work.action === "rake" ? rake(player, work.patch) : harvest(player, work.patch);
+    let again = work.action === "rake" ? rake(player, work.patch) : harvest(player, work.patch);
+    // Content may pick several times an action ("farming:harvests-per-action", a league relic's faster harvests).
+    if (again && work.action !== "rake") {
+        const request = { player, patch: work.patch, crop: stateFor(player, work.patch).crop, harvests: 1 };
+        core.PluginManager.emitCustomEvent("farming:harvests-per-action", request);
+        const harvests = Number.isInteger(request.harvests) ? Math.min(100, request.harvests) : 1;
+        for (let more = 1; more < harvests && again && !work.levelUpPaused; more++) again = harvest(player, work.patch);
+    }
     work.nextAt = Date.now() + 1800;
     if (!again) WORK.delete(player);
     syncPatch(player, work.patch);
@@ -255,8 +262,13 @@ function plant(player, patch, id) {
         player.getInventory().deleteNumber(id, crop.seedCount);
         player.sendMessage("You crush the seeds while trying to plant them bare-handed."); return;
     }
+    // Content may keep the seed, grow the crop at once or keep it from disease and death ("farming:plant-rules", a league relic);
+    // `message` is said after the planting's own.
+    const rules = { player, crop: crop.key, seedId: id, patch, keepSeed: false, grown: false, diseaseFree: false, undying: false, message: null };
+    core.PluginManager.emitCustomEvent("farming:plant-rules", rules);
+    const keepSeed = rules.keepSeed === true;
     let seedCount = crop.seedCount;
-    if (patch.type === "ALLOTMENT" && player.getEquipment().contains(Data.itemId("Amulet of bounty")) && Math.random() < 0.25) {
+    if (!keepSeed && patch.type === "ALLOTMENT" && player.getEquipment().contains(Data.itemId("Amulet of bounty")) && Math.random() < 0.25) {
         seedCount = 1;
         const farm = farmFor(player);
         farm.bountyCharges = (farm.bountyCharges ?? 10) - 1;
@@ -267,8 +279,8 @@ function plant(player, patch, id) {
             player.sendMessage("Your amulet of bounty crumbles to dust.");
         } else player.sendMessage("Your amulet of bounty saves two seeds.");
     }
-    player.getInventory().deleteNumber(id, seedCount);
-    if (crop.sapling) {
+    if (!keepSeed) player.getInventory().deleteNumber(id, seedCount);
+    if (crop.sapling && !keepSeed) {
         if (barbarian?.smashing && barbarian.autoSmash) {
             player.sendMessage("You smash the empty plant pot to dust.");
             if (barbarian.smashing === 1 && crop.type !== "SPIRIT_TREE") barbarian.smashing = 2;
@@ -279,11 +291,18 @@ function plant(player, patch, id) {
         player.sendMessage("You feel you have learned more of barbarian ways. Otto might wish to talk to you more.");
     }
     Object.assign(state, { crop: crop.key, stage: 0, status: "growing", checked: false, protected: false, watered: false,
-        lives: 0, plantedAt: Date.now(), nextAt: Model.nextGrowth(Date.now(), crop.minutes, farmFor(player).offset) });
+        lives: 0, plantedAt: Date.now(), nextAt: Model.nextGrowth(Date.now(), crop.minutes, farmFor(player).offset),
+        diseaseFree: rules.diseaseFree === true, undying: rules.undying === true });
+    // Fully grown at once, as the growth model leaves a crop on its last stage (an anima plant's last stage is its end).
+    if (rules.grown === true && crop.type !== "ANIMA") {
+        Object.assign(state, { stage: crop.stages, status: "grown", lives: Model.startingLives(crop, state.compost) });
+        if (crop.regrow) state.nextAt = Model.nextGrowth(Date.now(), crop.regrow, farmFor(player).offset);
+    }
     // Herbs award their planting XP only after the final herb is picked.
     if (crop.type !== "HERB") award(player, crop.plant, patch);
     animate(player, crop.sapling ? ANIM.SAPLING : ANIM.PLANT);
     player.sendMessage(`You plant the ${crop.name.toLowerCase()}.`);
+    if (typeof rules.message === "string") player.sendMessage(rules.message);
     core.PluginManager.emitCustomEvent("farming:planted", { player, crop: crop.key, seedId: id, patch });
 }
 function water(player, id, slot) {
@@ -395,8 +414,13 @@ function harvest(player, patch) {
     let produce = crop.produce;
     const blessing = crop.type === "GRAPES" && player.getInventory().contains(Data.itemId("Bologa's blessing"));
     if (blessing) produce = Data.itemId("Zamorak's grapes");
-    const sack = crop.type === "HERB" && player.getInventory().getItems().find(i => i.getId() === Data.itemId("Open herb sack"));
-    if (!(sack && Guild.storeCrop(player, sack, produce, amount)) && !give(player, produce, amount)) return false;
+    // Content may change what one pick yields ("farming:pick", a league relic's triple, noted harvests).
+    const pick = { player, crop: crop.key, patch, itemId: produce, amount };
+    core.PluginManager.emitCustomEvent("farming:pick", pick);
+    const picked = Number.isInteger(pick.itemId) && pick.itemId > 0 ? pick.itemId : produce;
+    const pickedAmount = Number.isSafeInteger(pick.amount) && pick.amount > 0 ? pick.amount : amount;
+    const sack = crop.type === "HERB" && picked === produce && player.getInventory().getItems().find(i => i.getId() === Data.itemId("Open herb sack"));
+    if (!(sack && Guild.storeCrop(player, sack, produce, pickedAmount)) && !give(player, picked, pickedAmount)) return false;
     if (blessing) player.getInventory().deleteNumber(Data.itemId("Bologa's blessing"), 1);
     animate(player, ANIM.HARVEST);
     award(player, crop.harvest * (["FLOWER", "BELLADONNA"].includes(crop.type) ? 1 : amount), patch);
@@ -842,6 +866,7 @@ function attach(api) {
     api.onCustomEvent("spirit-trees:grown", grownSpiritTrees);
     api.onCustomEvent("farming:check-health", Guild.completeContract);
     api.onCustomEvent("farming:harvest", Guild.harvestContract);
+    api.onCustomEvent("farming:open-seed-vault", Guild.openSeedVault);
     api.onCustomEvent("woodcutting:deplete-tree", depleteTree);
     api.onCustomEvent("magic:water-containers", Services.waterContainers);
     api.onCustomEvent("magic:humidified", Services.humidified);

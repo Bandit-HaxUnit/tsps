@@ -257,6 +257,8 @@ test("NpcDrops applies the rule to every form of roll, and only to the matching 
     tertiary: [{ item_id: 6, name: "Abyssal whip", weight: 1, out_of: 400 }, { item_id: 7, name: "Clue scroll (hard)", weight: 1, out_of: 400 }],
   };
   const boosted = character("tr8", "league", 8); // 5x
+  // Its tier 5 pick is Bloodthirsty, not Treasure Seeker, whose clue scrolls come at least 1 in 15.
+  boosted.setAttribute("league:relics", { ...boosted.getAttribute("league:relics"), 4: 2 });
   const main = character("main", "main");
   // Independent rolls: a roll of 0.003 is 1.5/512, inside 5/512 but not 1/512; 1.2/400 for the tertiary
   // (and 0.3/100 for the pre-roll, which hits either way).

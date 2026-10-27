@@ -255,28 +255,30 @@ export class MagicOnItemPacketListener {
       : MagicOnItemPacketListener.LOW_ALCH_XP;
     const definition = item.getDefinition?.();
 
-    if (player.getSkillManager().getCurrentLevel(Skill.MAGIC) < requiredLevel) {
-      player.sendMessage(`You need a Magic level of ${requiredLevel} to cast this spell.`);
+    // Untradeable items alch too, after a warning (rsprox 3215: Iban's staff for 12 coins); only
+    // the server's own untradeable flag (PvP preset items) keeps an item out. A plugin that turns
+    // the cast into something else clears `confirm`, `keepItem` and `recast`.
+    const policy = { player, itemId, spellId, allowed: !item.isUntradeable?.()
+      && definition.getHighAlchValue() > 0 && definition.getLowAlchValue() > 0,
+      coins: isHighAlch ? definition.getHighAlchValue() : definition.getLowAlchValue(),
+      castTicks: isHighAlch ? MagicOnItemPacketListener.HIGH_ALCH_CAST_TICKS : MagicOnItemPacketListener.LOW_ALCH_CAST_TICKS,
+      confirm: !definition.isTradeable?.(),
+      // Content may lower the level, waive the runes, keep the item or cast again on what is left (a league relic).
+      requiredLevel, freeRunes: false, keepItem: false, recast: false };
+    PluginManager.emitCustomEvent("magic:alchemy-policy", policy);
+    if (player.getSkillManager().getCurrentLevel(Skill.MAGIC) < policy.requiredLevel) {
+      player.sendMessage(`You need a Magic level of ${policy.requiredLevel} to cast this spell.`);
       return;
     }
     // Zone rules (Pest Control) ride the same hook as every other spell.
     if (PluginManager.emitSpellDisabled(player, MagicSpellbook.NORMAL, spellId, spell) === true) {
       return;
     }
-    // Untradeable items alch too, after a warning (rsprox 3215: Iban's staff for 12 coins); only
-    // the server's own untradeable flag (PvP preset items) keeps an item out. A plugin that turns
-    // the cast into something else clears `confirm`.
-    const policy = { player, itemId, spellId, allowed: !item.isUntradeable?.()
-      && definition.getHighAlchValue() > 0 && definition.getLowAlchValue() > 0,
-      coins: isHighAlch ? definition.getHighAlchValue() : definition.getLowAlchValue(),
-      castTicks: isHighAlch ? MagicOnItemPacketListener.HIGH_ALCH_CAST_TICKS : MagicOnItemPacketListener.LOW_ALCH_CAST_TICKS,
-      confirm: !definition.isTradeable?.() };
-    PluginManager.emitCustomEvent("magic:alchemy-policy", policy);
     if (itemId === ItemIdentifiers.COINS || !policy.allowed || !Number.isSafeInteger(policy.coins) || policy.coins < 0) {
       player.sendMessage("This spell can not be cast on this item.");
       return;
     }
-    const runes = this.runeCosts(player, spellId, [
+    const runes = policy.freeRunes === true ? [] : this.runeCosts(player, spellId, [
       new Item(ItemIdentifiers.NATURE_RUNE, 1), new Item(ItemIdentifiers.FIRE_RUNE, fireRunesRequired)
     ]);
     if (!this.hasRunes(player, runes)) {
@@ -284,6 +286,20 @@ export class MagicOnItemPacketListener {
       return;
     }
     if (player.getSpellbook()?.getInterfaceId?.() !== MagicSpellbook.NORMAL.getInterfaceId()) {
+      return;
+    }
+    // The coins need somewhere to go: their stack, a free slot, the slot the item leaves, or a rune
+    // stack the cast uses up (consumeRunes takes the inventory's runes first).
+    const freesRuneSlot = runes.some(rune => {
+      const held = inventory.getAmount?.(rune.getId()) ?? 0;
+      return held > 0 && held <= rune.getAmount();
+    });
+    const noRoom = policy.coins > 0 && (inventory.getFreeSlots?.() ?? 1) <= 0
+      && !inventory.contains?.(ItemIdentifiers.COINS)
+      && !(policy.keepItem !== true && (item.getAmount?.() ?? 1) === 1)
+      && !freesRuneSlot;
+    if (noRoom) {
+      player.sendMessage("You don't have enough inventory space.");
       return;
     }
     if (!confirmed && policy.confirm) {
@@ -298,7 +314,7 @@ export class MagicOnItemPacketListener {
     }
 
     // The clicked slot, not the first of that id: a preset-protected copy may sit earlier.
-    inventory.deleteAtSlot(slot, 1);
+    if (policy.keepItem !== true) inventory.deleteAtSlot(slot, 1);
     this.consumeRunes(player, runes);
     player.setAttribute(MagicOnItemPacketListener.ALCH_NEXT_CAST_ATTRIBUTE, now + policy.castTicks);
 
@@ -313,6 +329,10 @@ export class MagicOnItemPacketListener {
       : MagicOnItemPacketListener.LOW_ALCH_GRAPHIC, GraphicHeight.HIGH));
     player.getSkillManager().addExperiences(Skill.MAGIC, experience);
     player.getPacketSender().sendTab(6);
+    // Cast again on what is left in the slot, once this cast ends (a league relic's automatic alchemy).
+    if (policy.recast === true && inventory.getItems()[slot]?.getId() === itemId) {
+      this.queueAlchemy(player, { spellId, slot, itemId }, policy.castTicks);
+    }
   }
 
   /** The waiting cast is cast once the current one ends; only one waits at a time. */
