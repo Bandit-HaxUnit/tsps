@@ -36,6 +36,9 @@ const GULL_FED_ATTRIBUTE = "pets:gull-fed";
 const OWNED_ATTRIBUTE = "pets.owned";
 
 const INTERACTION_ANIM = new Animation(827);
+// RSProx229/2783 and239/4288: Lil' Zik pickup queues synth2582 with delay20.
+// Keep the delay local to pet pickup; other uses of PICK_UP_ITEM are unchanged.
+const PET_PICKUP_SOUND = new Sound(Sound.PICK_UP_ITEM.getId(), Sound.PICK_UP_ITEM.getVolume(), 20, Sound.PICK_UP_ITEM.getLoopType());
 const FOLLOWER_INDEX_VARP = 447;
 const FOLLOWER_ITEM_VARP = 448;
 const MAX_XP = 200000000;
@@ -691,6 +694,8 @@ function getPetDisplayName(pet) {
   if (!pet) {
     return "pet";
   }
+  const name = ItemDefinitionClass?.forId?.(pet.itemId)?.getName?.();
+  if (typeof name === "string" && name.trim() && name.toLowerCase() !== "null") return name;
   return Misc.capitalizeWords(pet.enumName.toLowerCase().replace(/_/g, " "));
 }
 
@@ -1511,7 +1516,7 @@ function pickup(player, npc, { auto = false } = {}) {
 
   if (!pet.puppy) player.sendMessage("You pick up your pet..");
   if (pet.puppy) player.getPacketSender().sendSoundEffect(2582, 1, 20);
-  else Sounds.sendSound(player, Sound.PICK_UP_ITEM);
+  else Sounds.sendSound(player, PET_PICKUP_SOUND);
   // The physical item now represents the pet; snapshots must not also restore a follower.
   player.setAttribute(ACTIVE_PET_ATTRIBUTE, null);
   // The item now in hand is the current form; a cross-item morph replaces the record.
