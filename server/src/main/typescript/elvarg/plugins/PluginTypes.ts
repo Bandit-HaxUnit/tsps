@@ -1329,12 +1329,20 @@ export interface PluginApi {
   registerSpecialEnergyRestoreModifier(
     modifier: (entity: any, delayTicks: number) => number
   ): void;
+  /** Special attack energy a special costs, checked and drained; return the cost. */
+  registerSpecialEnergyCostModifier(
+    modifier: (entity: any, cost: number) => number
+  ): void;
   registerIncomingDamageModifier(
     modifier: (entity: any, hitDamage: any) => void
   ): void;
   /** Reduces an NPC/environmental Prayer drain; return the points actually drained. */
   registerPrayerDrainModifier(
     modifier: (entity: any, amount: number, context: any) => number
+  ): void;
+  /** Scales the drain effect a player's active prayers add each tick; return the new effect. */
+  registerPrayerDrainRateModifier(
+    modifier: (entity: any, drainEffect: number) => number
   ): void;
   setCombatEngine(engine: PluginCombatEngine): void;
   setCombatDamageProvider(provider: PluginCombatDamageProvider): void;
@@ -1404,6 +1412,8 @@ export interface PluginCoreApi {
   PrayerHandler: any;
   PrayerData: any;
   ItemActionPacketListener: any;
+  /** Run shared item alchemy; plugins authorize opaque alternate payment sources via magic:alchemy-payment. */
+  castAlchemy: (player: any, spellId: number | string, itemId: number, slot: number, source?: unknown) => boolean;
   ChatType: any;
   DuelRule: any;
   RegionManager: any;

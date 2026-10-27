@@ -300,6 +300,27 @@ test("Golden God: High Alchemy with no runes or level, 15% more coins, a 65% cha
   }
 });
 
+test("Golden God: automatic recasts execute with the original item and reject a replaced copy", (t) => {
+  const tasks = [];
+  t.mock.method(core.TaskManager, "submit", (task) => tasks.push(task));
+  const player = character("autorecast", "league", GOLDEN_GOD, 5);
+  const value = Math.floor(core.ItemDefinition.forId(I.RUNE_PLATEBODY).getHighAlchValue() * 115 / 100);
+  player.getInventory().add(new Item(I.RUNE_PLATEBODY, 1), false);
+  Math.random = () => 0.5;
+  alch(player, I.RUNE_PLATEBODY);
+  const queued = player.getAttribute("magic:alchemy-queued");
+  assert.equal(queued.item, player.getInventory().getItems()[queued.slot]);
+  const firstRecast = tasks.at(-1);
+  cycle += 5;
+  firstRecast.execute();
+  assert.equal(amount(player, I.COINS), value * 2, "the automatic cast runs after the cooldown");
+  const replacementRecast = tasks.at(-1);
+  player.getInventory().setItem(queued.slot, new Item(I.RUNE_PLATEBODY, 1));
+  cycle += 5;
+  replacementRecast.execute();
+  assert.equal(amount(player, I.COINS), value * 2, "a same-id replacement is never borrowed by a stale cast");
+});
+
 test("Golden God: another plugin's alchemy (a cast worth no coins) keeps only the free runes and the level", () => {
   const who = cases(GOLDEN_GOD, 5);
   const policy = { player: who.relic, itemId: I.RUNE_PLATEBODY, allowed: true, coins: 0, requiredLevel: 55, freeRunes: false, keepItem: false, recast: false };

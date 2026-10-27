@@ -2,8 +2,9 @@
  * Shattered Relics' fragments screen (league_3_fragments 735, data/league-shattered.json
  * `fragments`): which fragments a character owns (their fragment XP) and which sit in its seven
  * slots, saved and sent as the varbits the screen draws from. A slot opens at the points the
- * cache's enum 4127 gives (Wiki /Fragments: one to seven slots). Equip and Unequip work anywhere
- * for now. Equipped fragments gain XP and levels as the character gains XP (data `fragmentXp`);
+ * cache's enum 4127 gives (Wiki /Fragments: one to seven slots). Equip and Unequip work only in a
+ * bank, near a bank chest or near the Sage (Wiki /Fragments, NearBank and Sage); the screen
+ * opens anywhere. Equipped fragments gain XP and levels as the character gains XP (data `fragmentXp`);
  * FragmentDrops hands them out and FragmentEffects gives them effects, through `equippedLevel`,
  * `setTier` and `award`.
  *
@@ -15,6 +16,8 @@
 const Common = require("./Common.LeagueMode");
 const { FLAG_OP1, FLAG_OP2 } = require("../../interface/widgetGroup");
 const { data, isShattered } = require("./Shattered.LeagueMode");
+const { nearSage } = require("./Sage.LeagueMode");
+const { nearBank } = require("./NearBank.LeagueMode");
 
 /** Fragment id -> fragment XP (absent = not owned). */
 const FRAGMENTS_ATTRIBUTE = "league:fragments";
@@ -260,6 +263,13 @@ function isOpen(player) {
   return player.getInterfaceId() === config().group;
 }
 
+/** Fragments change only in a bank, near a bank chest or near the Sage (Wiki /Fragments); said otherwise. */
+function canSwap(player) {
+  if (nearBank(player) || nearSage(player)) return true;
+  player.sendMessage(data.messages.swapAway);
+  return false;
+}
+
 /** Equip (735:18 op2): an owned fragment into the first empty open slot; never twice. */
 function equip(event) {
   const { player } = event;
@@ -269,6 +279,7 @@ function equip(event) {
   const id = slot / config().listChildren + 1;
   const current = slots(player);
   if (!ids().has(id) || !(Number(owned(player)[id]) > 0) || current.includes(id)) return true;
+  if (!canSwap(player)) return true;
   const free = current.findIndex((entry, index) => entry === 0 && index < openSlots(player));
   if (free < 0) return true;
   current[free] = id;
@@ -286,7 +297,7 @@ function unequip(event) {
   if (Number(event.opId ?? event.action) !== config().unequipOp || child < 0 || child % config().loadoutChildren !== 0) return true;
   const slot = child / config().loadoutChildren;
   const current = slots(player);
-  if (slot >= current.length || current[slot] === 0) return true;
+  if (slot >= current.length || current[slot] === 0 || !canSwap(player)) return true;
   current[slot] = 0;
   player.setAttribute(SLOTS_ATTRIBUTE, current);
   sendSlots(player);
@@ -296,6 +307,7 @@ function unequip(event) {
 
 function unequipAll({ player }) {
   if (!isShattered(player) || !isOpen(player)) return false;
+  if (slots(player).every((id) => id === 0) || !canSwap(player)) return true;
   player.setAttribute(SLOTS_ATTRIBUTE, config().slotVarbits.map(() => 0));
   sendSlots(player);
   Common.api.emitCustomEvent("league:fragments-changed", { player });

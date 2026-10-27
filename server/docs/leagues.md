@@ -403,7 +403,8 @@ Talk-to to a custom shop, so its conversation never runs.
 ## Shattered Relics
 
 Leagues III's own screens (`league/Shattered.LeagueMode.js`, `Fragments.LeagueMode.js`,
-`Unlocks.LeagueMode.js`, data `league-shattered.json`). No recording exists (the league ended in
+`Unlocks.LeagueMode.js`, `Sage.LeagueMode.js`, `NearBank.LeagueMode.js`, data
+`league-shattered.json`). No recording exists (the league ended in
 March 2022, before the captures' rev 223), so every packet is from the cache's scripts and every
 rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (varbit 10032).
 
@@ -422,7 +423,11 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
 - **Fragments (735):** owned fragments (fragment XP, varbits 13403-13455) and the seven slots
   (varbits 13395-13399, 13401, 13402) are saved. Slots open at the points enum 4127 gives. Equip
   puts an owned fragment in the first open empty slot, never twice; Unequip and Unequip all clear
-  them.
+  them. The screen opens anywhere, but fragments change only in a bank, near a bank chest or near
+  the Sage (Wiki /Fragments): within 8 tiles of a loc with a Bank option (booths, counters, tables;
+  a closed booth has none), a usable bank chest or an NPC with a Bank option (bankers of any name),
+  or of the Sage. The Wiki gives no distances, and no message for elsewhere; both are this
+  server's.
 - **Fragment XP:** each equipped fragment gains 1 XP for any XP gained in an unlocked skill, at
   most once every 4 ticks (Wiki), through the core `onExperienceGained` hook. Levels 2 and 3 come
   at 2,000 and 8,000 XP (script 5789), where a fragment stops. A set's tier counts the equipped
@@ -444,6 +449,28 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   rolled with the hit's own spell, never a special attack, and pay XP like any hit, for no more
   than the hitpoints left after the damage already queued (none after a killing blow). The per-tick
   effects run as one task per Shattered Relics character, from login.
+- **Effects (batch 2):** Tactical Duelist (melee weapon charges saved: the scythe of vitur, the
+  crystal halberd and Arclight ask `combat:melee-charge` before spending one), Livin' On A Prayer
+  (the core `registerPrayerDrainRateModifier` scales what active prayers add to the drain counter
+  each tick), Special Discount (the core `registerSpecialEnergyCostModifier`, which every energy
+  check and `CombatSpecial.drain` use; the cache's 500/400/250 are tenths of a percent; the Dragon
+  hasta's Unleash spends all energy, which isn't its cost, so it isn't capped), Thrall
+  Damage (`magic:thrall-max-hit`, asked on each thrall attack), Superior Tracking
+  (`slayer:superior-spawn`; this server reads its text, which names no unlock, as working without
+  Bigger and Badder, but never once superiors are toggled off), Slay 'n' Pay (`slayer:task-reward`'s multiplier,
+  Mortimer's too), the god-armour four, and the sets Fast Metabolism (each Hitpoints regen heals
+  four times as much, through `stats:hitpoints-regen`) and Knife's Edge (every style's max hit, in
+  permille so it stays exact). The god-armour four need four worn items of their god, counted as
+  the God Wars Dungeon counts protection (`godwars:god-items`, so a godsword counts): Bandosian
+  Might adds its number to the melee max hit per tick of the weapon's attack speed, Zamorakian
+  Sight raises magic accuracy, Armadylean Decree raises enchanted bolt chances
+  (`combat:bolt-effect-chance`, after the Kandarin diary and the Armadyl crossbow's special), and
+  Saradominist Defence adds to every style's max hit for 6 ticks after combat damage from an NPC
+  or player lands (poison isn't a hit, so it never counts; nor does a boss's scripted damage that
+  skips the combat hit). Max hit bonuses add before Knife's Edge multiplies. The god-armour count
+  is God Wars' protection count (the Wiki's tables, so god books, symbols and blessings count too);
+  magic specials with a fixed max hit skip both max hit
+  bonuses, as they skip every magic max hit modifier.
 - **Gathering effects** (`league/FragmentGathering.LeagueMode.js`, data `gatheringEffects`): the
   harvesting fragments, Message In A Bottle, Greedy Gatherer and Personal Banker, through the
   skills' own events. Chef's Catch cooks a caught fish (`cooking:cooked`), Molten Miner smelts an
@@ -465,6 +492,7 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   NpcDrops' rare drop table once (`npc-drops:roll-table`) on a 1-in-N catch; Chinchonkers adds
   Hunter XP for a chinchompa and two of them at level 3 (`hunter:rewards`). The banked nest and
   rare catch messages are this server's.
+
 - **Production effects** (`league/FragmentProduction.LeagueMode.js`, data `productionEffects`):
   the production fragments, The Alchemist, The Craftsman and Unchained Talent. The two
   all-at-once sets answer `skills:actions-per-cycle` with the inventory (28) for the Wiki's
@@ -486,6 +514,7 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   `magic:enchant-pieces` (jewellery only, not a quest's enchanted rod or sickle),
   Rumple-Bow-String `magic:spell-batch` (Spin Flax) and Alchemaniac `magic:alchemy-policy` (High
   Alchemy only, by the policy's new `high`).
+
 - **Skilling effects** (`league/FragmentSkilling.LeagueMode.js`, data `skillingEffects`): the
   skilling fragments and Clued In. Praying Respects buries and scatters the remains a kill drops
   through Prayer's own `prayer:bury` (which now scatters demonic ashes too) at 50/100/200% of their
@@ -502,6 +531,7 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   (`agility:mark`). Grave Robber raises a coffin's hallowed marks, the Grand Hallowed Coffin's too
   (ours), through the minigames' `minigame:points` (tier passives, below); a part mark is that chance of a whole one. Clued In makes each clue scroll an NPC drops
   at least 1 in 30/25/15 (`npc-drops:tertiary-chance`). The scroll box message is this server's.
+
 - **Minigame effects** (`league/FragmentMinigames.LeagueMode.js`, data `minigameEffects`):
   Barbarian Pest Wars (Pest Control's commendation points and Soul Wars' zeal tokens), Rogues'
   Chompy Farm (the Tithe Farm's points; a chompy kill counted 2-4 times on the ogre bow's count)
@@ -527,11 +557,55 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   trees and Wilderness obelisks move the player themselves and send the same event. The waystone's Teleport lists the league's twelve
   waystones in pages, not past Wilderness level 20, Canifis needing Priest in Peril and Prifddinas
   Song of the Elves; the tiles are this server's (the Wiki names only the towns).
+
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price
   now, from the Wiki's Initial Cost less the prerequisite packs already unlocked, and 0 once
   unlocked. Buying a pack unlocks its prerequisites. Defence, Fishing and Thieving start unlocked.
   Nex can be bought only once every God Wars general is unlocked.
+- **Quest packs:** bought only in a bank (the launch news: "you can only auto-complete quests while
+  in a Bank"; the same check as the fragments', `NearBank.LeagueMode.js`, before any renown is
+  spent; the message is the news's wording). Buying one completes the quests the Wiki's /Unlocks
+  table lists for it (main and additional quests) and for its prerequisite packs, each through its
+  own `quest.complete` (quest points, final rewards, the message, `quest:completed`), prerequisites
+  first. The Wiki: "Auto-completing quests will not grant the experience", so `complete(player, {
+  experience: false, scroll: false })`: no XP lands while they complete, a reward's later XP prompt
+  is held back (The Fremennik Isles reads the option), and the rewards that are XP in an item (the
+  lamps and Tomes of Experience in `experienceItems`, found by completing every pack) are taken
+  back. The quest runtime saves which quests were completed so (`quest.experienceWithheld`, the
+  attribute `quest.experience-withheld`), and their post-quest XP claims pay nothing: Ellen's
+  training (Dragon Slayer II), Daero's (Monkey Madness I; the Wiki: "No post-quest XP from Daero"),
+  Lydia's lamps (A Kingdom Divided), Veos's lamp (X Marks the Spot) and Ivan's tome (Sins of the
+  Father). There is no jingle or scroll per quest, so the unlocks screen stays open. Each quest
+  runs against an empty inventory; the character's own comes back, and the rewards go into it,
+  then the bank (counting what the bank really takes: a full bank or a capped stack takes less),
+  and what neither takes is dropped at the character's feet, as a quest reward past a full
+  inventory is (`forceAdd`). The other final rewards stay (Plague City's Ardougne teleport scroll,
+  Monkey Madness II's royal seed pod, Roving Elves' crystal bow, Drakan's medallion). A quest that
+  fails to complete is logged and the rest go on. Names this server registers no quest for are
+  skipped: Recipe for Disaster's subquests (its plugin keeps them internally, with no completion
+  API) and the miniquests (Alfred Grimhand's Barcrawl, Enter the Abyss, The Frozen Door,
+  Architectural Alliance). The packs' other content (Kourend favour, the Camelot training room's
+  waves, Troll III's fire pits) isn't given.
+- **The Sage (NPC 11232):** a world running Shattered Relics spawns it at Catherby (2774, 3433,
+  the Wiki's map; the main world's spawns don't have it). Talk-to plays its transcript. Its "Do I
+  have any League items to collect?" (the transcript's two conditions and its "You receive an item
+  from the Sage." action) and Collect-items hand over what the unlocked packs let a character
+  claim (Wiki /Unlocks): Gnome I the Karamjan monkey greegree, Elf I Iban's staff, Elf II a new
+  crystal bow or shield (a menu), Morytania II Drakan's medallion, Fairy I magic secateurs and a
+  Dramen staff, Heroes ice gloves. Only what the character owns none of, carried, worn or banked
+  (a bank placeholder doesn't count): a lost one can be collected again, as the transcript's "I'll
+  be here if you ever do" has it, and one a quest's own reward already gave (Drakan's medallion,
+  Roving Elves' crystal bow or shield) isn't given twice. Collecting again after alching or
+  selling one works too (Iban's staff alchs for 25,500); live's rule there isn't recorded.
+  Check-pets and the transcript's "League Intro cutscene replays." do nothing.
+- **Intro cutscene (734):** not built, because the cache can't drive it. 734 is a layer of static
+  models (43335, five of 43342, 43334), an empty text, a rectangle and a Mute / Unmute Music
+  toggle (scripts 5836-5838, which only set game option 7 and swap the two buttons). No script
+  animates or moves the models except 5835, which nothing in the cache calls and which only places
+  734:12 and turns 734:5 once; no script reads `league_3_has_seen_cutscene` (varbit 13488). The
+  sequence (the River of Souls, the Sage's lines, model animations and camera) was the server's,
+  and no recording of it exists, so playing it would mean inventing it.
 - **Locks:** a locked skill gives no XP, and a locked boss can't be attacked, by the player or its
   thrall (its NPC names are in the data, raids by their final boss). Kraken's Disturb and Vorkath's
   Poke ask `league:boss-locked` before waking them. Wintertodt and Tempoross aren't attacked, so
@@ -539,18 +613,18 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   only the fights inside. The Wiki gives no message for either lock; the boss one is this
   server's, said once per boss every few seconds.
 
-Not yet: the other fragments' effects (Barbarian Assault's honour points and the Rogues' Den
-safe, which this server doesn't have; Rune Escape, which needs the
-Ourania Altar this server doesn't have; Plank Stretcher outside a house build, as Mahogany Homes; Tactical
-Duelist and the ranged weapons' charges, which no hook reports; Livin' On A Prayer, Special
-Discount, Thrall Damage, Superior Tracking, Slay 'n' Pay and the god-armour four) and the other
-sets (Fast Metabolism, Knife's Edge); the league's waystone objects themselves (only the portable
-one's teleports are here); The Alchemist's jugs of
-wine (no wine making here); Fishing has no clue bottles of its own, so Message In A Bottle
-reaches only Hunter's aerial fishing and drift nets for bottles; quest packs complete no quests; fragments can be swapped anywhere, not only at a bank or the Sage, and only
-through Equip (dragging one into a slot isn't handled); the
-Display Fragments toggle (varbit 12383) is the client's own; the intro cutscene (734) has no
-recording or client driver, so it isn't played.
+Not yet: Barbarian Assault's honour points and the Rogues' Den safe, which this server
+doesn't have; Rune Escape, which needs the Ourania Altar this server doesn't have; Plank
+Stretcher outside a house build, as Mahogany Homes; the ranged weapons' own charges, which
+no hook reports; the league's waystone objects themselves (only the portable one's teleports
+are here); The Alchemist's jugs of wine (no wine making here). Fishing has no clue bottles of
+its own, so Message In A Bottle reaches only Hunter's aerial fishing and drift nets for bottles.
+Fragments change only through Equip (dragging one into a slot isn't handled); the Display
+Fragments toggle (varbit 12383) is the client's own. The intro cutscene (734) has no recording
+or client driver, so it isn't played. Unlocking Herblore doesn't yet complete Druidic Ritual
+and set the skill to 174 XP (Wiki /Unlocks footnote); the Sage's Check-pets remains unimplemented.
+A quest the character had started keeps its quest items when a pack completes it.
+
 
 ## Relics
 

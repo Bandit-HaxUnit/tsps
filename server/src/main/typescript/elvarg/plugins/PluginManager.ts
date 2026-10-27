@@ -2351,6 +2351,11 @@ export class PluginManager {
       PrayerHandler: require("../game/content/PrayerHandler").PrayerHandler,
       PrayerData: require("../game/content/PrayerHandler").PrayerData,
       ItemActionPacketListener: require("../net/packet/impl/ItemActionPacketListener").ItemActionPacketListener,
+      castAlchemy: (player, spellId, itemId, slot, source) => {
+        const { MagicOnItemPacketListener } = require("../net/packet/impl/MagicOnItemPacketListener");
+        const listener = new MagicOnItemPacketListener();
+        return listener.castOnItem(player, typeof spellId === "string" ? listener.resolveSpellId(spellId) : spellId, itemId, slot, source);
+      },
       ChatType: require("../net/protocol/ClientProtocol").ChatType,
       DuelRule: require("../game/content/Duelling").DuelRule,
       RegionManager: require("../game/collision/RegionManager").RegionManager,
@@ -4329,12 +4334,20 @@ export class PluginManager {
         require("../game/content/combat/EquipmentEffects").registerSpecialEnergyRestoreModifier(
           modifier
         ),
+      registerSpecialEnergyCostModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerSpecialEnergyCostModifier(
+          modifier
+        ),
       registerIncomingDamageModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerIncomingDamageModifier(
           modifier
         ),
       registerPrayerDrainModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerPrayerDrainModifier(
+          modifier
+        ),
+      registerPrayerDrainRateModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerPrayerDrainRateModifier(
           modifier
         ),
       setCombatEngine: (engine) => {

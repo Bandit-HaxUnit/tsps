@@ -1,6 +1,7 @@
 // Run after `yarn build`: node --test tests/league-fragments.test.cjs
 // Shattered Relics' fragments (docs/leagues.md "Shattered Relics"): fragment XP and levels, set
-// tiers, the Unidentified fragment drops and Break, and batch 1 of the effects, with real players.
+// tiers, the Unidentified fragment drops and Break, and the combat fragments' and sets' effects,
+// with real players.
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { test, before, afterEach } = require("node:test");
@@ -14,6 +15,8 @@ const { Player } = require("../dist/game/entity/impl/player/Player");
 const { PlayerSave } = require("../dist/game/entity/impl/player/persistence/PlayerSave");
 const { GameConstants } = require("../dist/game/GameConstants");
 const { World } = require("../dist/game/World");
+const EquipmentEffects = require("../dist/game/content/combat/EquipmentEffects");
+const { PacketSender } = require("../dist/net/packet/PacketSender");
 
 const uid = (group, child) => (group << 16) | child;
 const CLASS = 737;
@@ -31,11 +34,13 @@ const custom = {};
 const itemActions = {};
 let worldLeague = 3;
 const tasks = [];
+const spawned = [];
 const realRandom = Math.random;
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
   core = PluginManager.getCoreApi();
+  core.RegionManager.init();
   GameConstants.setWorldProfile("league");
   const lists = {};
   const on = (name) => (handler) => {
@@ -70,6 +75,10 @@ before(async () => {
       }
     },
     onItemAction: (name, actions) => Object.assign((itemActions[name] ??= {}), actions),
+    // The core modifiers batch 2 added are wired as PluginManager wires them, so core runs them.
+    registerSpecialEnergyCostModifier: (modifier) => EquipmentEffects.registerSpecialEnergyCostModifier(modifier),
+    registerPrayerDrainRateModifier: (modifier) => EquipmentEffects.registerPrayerDrainRateModifier(modifier),
+    spawnNpc: (definition) => (spawned.push(definition), { getCombat: () => ({ attack() {} }) }),
     onCustomEvent: (name, handler) => (custom[name] = (custom[name] ?? []).concat(handler)),
     emitCustomEvent: (name, payload) => {
       for (const handler of custom[name] ?? []) handler(payload);
@@ -77,6 +86,12 @@ before(async () => {
   }, { get: (target, key) => (key in target ? target[key] : on(String(key))) });
   require("../plugins/modes/LeagueMode.plugin").register(api);
   require("../plugins/modes/LeaguePoints.plugin").register(api);
+  // The plugins batch 2 asks only answer its events here; their own hooks go nowhere.
+  const eventsOnly = new Proxy({ core, onCustomEvent: api.onCustomEvent, emitCustomEvent: api.emitCustomEvent, spawnNpc: api.spawnNpc, persistAttribute() {} },
+    { get: (target, key) => (key in target ? target[key] : () => undefined) });
+  require("../plugins/skills/Slayer.plugin").register(eventsOnly);
+  require("../plugins/bosses/GodWars.plugin").register(eventsOnly);
+  require("../plugins/items/CrystalHalberd.plugin").register(eventsOnly);
   Fragments = require("../plugins/modes/league/Fragments.LeagueMode");
   Effects = require("../plugins/modes/league/FragmentEffects.LeagueMode")._test;
   Drops = require("../plugins/modes/league/FragmentDrops.LeagueMode")._test;
@@ -131,13 +146,17 @@ function warrior(name, points = 0) {
   return player;
 }
 
+/** Equips in Catherby's bank, where fragments can change (Wiki /Fragments), and steps back out. */
 function equip(player, ...ids) {
+  const before = player.getLocation();
+  player.setLocation(new core.Location(2809, 3440, 0));
   player.setInterfaceId(FRAGMENTS);
   for (const id of ids) {
     if (!(Number(Fragments._test.owned(player)[id]) > 0)) emit("league:grant-fragment", { player, id });
     click(player, FRAGMENTS, 18, { slot: 9 * (id - 1), opId: 2 });
   }
   player.setInterfaceId(-1);
+  player.setLocation(before);
 }
 
 function setXp(player, id, xp) {
@@ -536,6 +555,238 @@ test("onExperienceGained sends what landed: after the cap, never when locked or 
     skills.addExperience(core.Skill.COOKING, 100, false);
   });
   assert.deepEqual(events, [100, 30], "100, then the 30 left under the cap; nothing at the cap or while locked");
+});
+
+// ---- Effects, batch 2 ----
+
+const GEAR = {
+  bandos: [11832, 11834, 11836],
+  bandosGodsword: 11804,
+  armadyl: [11826, 11828, 11830, 11785],
+  zamorak: [2657, 2653, 2655, 2659],
+  saradomin: [2665, 2661, 2663, 2667],
+};
+const WORN_SLOTS = ["HEAD_SLOT", "BODY_SLOT", "LEG_SLOT", "SHIELD_SLOT"];
+
+/** Wears the items, the weapon in its slot and the rest one to a slot. */
+function wear(player, items, weapon = null) {
+  const equipment = player.getEquipment();
+  items.forEach((id, index) => equipment.setItem(core.Equipment[WORN_SLOTS[index]], new core.Item(id, 1)));
+  if (weapon) equipment.setItem(core.Equipment.WEAPON_SLOT, new core.Item(weapon, 1));
+}
+
+/** A real packet sender, for plugins (Slayer) that read back the varps they set. */
+function withVars(player) {
+  player.getSession = () => ({ sendClientPacket() {}, write() {} });
+  const sender = new PacketSender(player);
+  player.getPacketSender = () => sender;
+  return player;
+}
+
+function npcNamed(name) {
+  const count = core.CacheDefinitions.getCounts().npcs;
+  for (let id = 0; id < count; id++) {
+    const type = core.CacheDefinitions.getNpc(id);
+    if (type?.name !== name || !(type.actions ?? []).includes("Attack")) continue;
+    const definition = core.NpcDefinition.forId(id);
+    return { getId: () => id, getCurrentDefinition: () => definition, getDefinition: () => definition, getLocation: () => new core.Location(3200, 3200, 0) };
+  }
+  throw new Error(`no attackable NPC named ${name}`);
+}
+
+test("Tactical Duelist saves a melee weapon's charge (combat:melee-charge from the crystal halberd)", () => {
+  const CrystalHalberd = require("../plugins/items/CrystalHalberd.plugin");
+  const player = warrior("duelist", 10);
+  equip(player, 2);
+  const halberd = new core.Item(CrystalHalberd._test.buildIdMaps(core.ItemIdentifiers).keys().next().value, 1);
+  halberd.setMetaValue("crystal-halberd", { charges: 100 });
+  Math.random = () => 0;
+  CrystalHalberd.useCharge(player, halberd);
+  assert.equal(CrystalHalberd.charges(halberd), 100, "saved");
+  Math.random = () => 0.5;
+  CrystalHalberd.useCharge(player, halberd);
+  assert.equal(CrystalHalberd.charges(halberd), 99, "20% at level 1: a 50 roll spends it");
+  setXp(player, 2, 8000);
+  Math.random = () => 0.79;
+  CrystalHalberd.useCharge(player, halberd);
+  assert.equal(CrystalHalberd.charges(halberd), 99, "80% at level 3");
+  const staff = { player, itemId: 11905, skip: false };
+  Effects.chargeSaving(staff);
+  assert.equal(staff.skip, false, "never a powered staff's charge: that is Arcane Conduit's");
+});
+
+test("Arcane Conduit does not save a crystal halberd charge through the shared charge event", () => {
+  const CrystalHalberd = require("../plugins/items/CrystalHalberd.plugin");
+  const player = warrior("conduit-melee", 10);
+  equip(player, 6);
+  const halberd = new core.Item(CrystalHalberd._test.buildIdMaps(core.ItemIdentifiers).keys().next().value, 1);
+  player.getEquipment().setItem(core.Equipment.WEAPON_SLOT, halberd);
+  halberd.setMetaValue("crystal-halberd", { charges: 100 });
+  Math.random = () => 0;
+  CrystalHalberd.useCharge(player, halberd);
+  assert.equal(CrystalHalberd.charges(halberd), 99, "Arcane Conduit saves magic charges only");
+});
+
+test("Livin' On A Prayer: active prayers drain 15/30/60% slower (PrayerHandler)", () => {
+  const { PrayerHandler, PrayerData } = require("../dist/game/content/PrayerHandler");
+  PrayerData.initializeMaps();
+  const piety = PrayerData.PIETY.prayerId;
+  const drained = (player, ticks) => {
+    const skills = player.getSkillManager();
+    skills.setMaxLevels(core.Skill.PRAYER, 99, false);
+    skills.setCurrentLevel(core.Skill.PRAYER, 99, false);
+    player.getPrayerActive()[piety] = true;
+    player.setDrainingPrayer(true);
+    for (let tick = 0; tick < ticks; tick++) PrayerHandler.processDrain(player);
+    return 99 - skills.getCurrentLevel(core.Skill.PRAYER);
+  };
+  assert.equal(drained(warrior("pious"), 100), 40, "Piety: 24 a tick against 60 resistance, 40 points in 100 ticks");
+  const player = warrior("prayerful", 300);
+  equip(player, 8);
+  assert.equal(drained(player, 100), 34, "15% slower: 20.4 a tick, 34 points");
+  setXp(player, 8, 8000);
+  player.setPrayerPointDrain(0);
+  assert.equal(drained(player, 100), 16, "60% slower at level 3");
+});
+
+test("Special Discount caps what a special costs and drains (CombatSpecial)", () => {
+  const { CombatSpecial } = require("../dist/game/content/combat/CombatSpecial");
+  const special = (cost) => ({ getId: () => "fragment-cost-test", getDrainAmountForWeaponId: () => cost });
+  const plain = warrior("full-price");
+  assert.equal(CombatSpecial.energyCost(plain, special(55)), 55);
+  const player = warrior("discount", 10);
+  equip(player, 12);
+  assert.equal(CombatSpecial.energyCost(player, special(55)), 50, "more than 50% costs 50% at level 1 (param 1456: 500 tenths)");
+  assert.equal(CombatSpecial.energyCost(player, special(25)), 25, "a cheaper one is unchanged");
+  player.setSpecialPercentage(100);
+  CombatSpecial.drain(player, 55);
+  assert.equal(player.getSpecialPercentage(), 50, "and drains only that");
+  setXp(player, 12, 8000);
+  assert.equal(CombatSpecial.energyCost(player, special(50)), 25, "25% at level 3");
+  player.setSpecialPercentage(100);
+  CombatSpecial.drain(player, 100, false);
+  assert.equal(player.getSpecialPercentage(), 0, "an amount that isn't a cost (the Dragon hasta's Unleash) is never capped");
+});
+
+test("Thrall Damage multiplies a thrall's max hit (magic:thrall-max-hit)", () => {
+  const player = warrior("necromancer", 10);
+  const max = (maxHit) => emit("magic:thrall-max-hit", { player, maxHit }).maxHit;
+  assert.equal(max(3), 3);
+  equip(player, 7);
+  assert.equal(max(3), 6, "x2 at level 1");
+  setXp(player, 7, 8000);
+  assert.equal(max(3), 12, "x4 at level 3");
+});
+
+test("Superior Tracking: 1 in 150/100/30, without Bigger and Badder; never when toggled off", () => {
+  const Superiors = require("../plugins/skills/slayer/Superiors.Slayer");
+  const State = require("../plugins/skills/slayer/State.Slayer");
+  const bloodveld = npcNamed("Bloodveld");
+  const plain = withVars(warrior("no-tracking"));
+  assert.equal(Superiors.taskKill({ player: plain, npc: bloodveld }, () => 0), null, "locked without the fragment");
+  const player = withVars(warrior("tracker", 300));
+  equip(player, 15);
+  assert.equal(Superiors.taskKill({ player, npc: bloodveld }, () => 0.0067), null, "a 1-in-150 miss");
+  assert.ok(Superiors.taskKill({ player, npc: bloodveld }, () => 0.006), "1 in 150 at level 1");
+  assert.equal(core.CacheDefinitions.getNpc(spawned.at(-1).id).name, "Insatiable Bloodveld");
+  setXp(player, 15, 8000);
+  assert.ok(Superiors.taskKill({ player, npc: bloodveld }, () => 0.033), "1 in 30 at level 3");
+  State.setVarbit(player, "slayer_toggleoff_superiormobs", 1);
+  assert.equal(Superiors.taskKill({ player, npc: bloodveld }, () => 0), null, "toggled off");
+});
+
+test("Slay 'n' Pay: a task's points raised by 10/20/50%", () => {
+  const Tasks = require("../plugins/skills/slayer/Tasks.Slayer");
+  const State = require("../plugins/skills/slayer/State.Slayer");
+  const complete = (player) => {
+    State.setVarbit(player, "slayer_points", 0);
+    State.setVarbit(player, "slayer_tasks_completed", 5);
+    Tasks.complete(player, { masterId: 2, original: 10, task: { displayName: "bats" } });
+    return State.varbit(player, "slayer_points");
+  };
+  assert.equal(complete(withVars(warrior("unpaid"))), 6, "Mazchna's 6 points");
+  const player = withVars(warrior("paid", 10));
+  equip(player, 16);
+  setXp(player, 16, 8000);
+  assert.equal(complete(player), 9, "50% more at level 3");
+});
+
+test("Bandosian Might: melee max hit +1/2/4 per tick of attack speed, with four Bandos items", () => {
+  const player = warrior("bandosian", 10);
+  equip(player, 17);
+  wear(player, GEAR.bandos);
+  player.getEquipment().setItem(core.Equipment.WEAPON_SLOT, new core.Item(4151, 1));
+  assert.equal(Effects.bandosianMight(player, 40), 40, "three Bandos items and a whip: not four");
+  wear(player, GEAR.bandos, GEAR.bandosGodsword);
+  assert.equal(Effects.bandosianMight(player, 40), 46, "the godsword is the fourth (God Wars counts it); 6 ticks x 1");
+  setXp(player, 17, 8000);
+  assert.equal(Effects.bandosianMight(player, 40), 64, "x 4 at level 3");
+  const npc = { isPlayer: () => false };
+  assert.equal(Effects.bandosianMight(npc, 40), 40, "never an NPC");
+});
+
+test("Zamorakian Sight and Armadylean Decree, with four of their god's items", () => {
+  const zamorakian = warrior("zamorakian", 10);
+  equip(zamorakian, 19);
+  wear(zamorakian, GEAR.zamorak.slice(0, 3));
+  assert.equal(Effects.zamorakianSight(zamorakian, 1000), 1000, "three items");
+  wear(zamorakian, GEAR.zamorak);
+  assert.equal(Effects.zamorakianSight(zamorakian, 1000), 1500, "+50% magic accuracy at level 1");
+  const armadylean = warrior("armadylean", 10);
+  equip(armadylean, 18);
+  wear(armadylean, GEAR.armadyl.slice(0, 3), GEAR.armadyl[3]);
+  const bolt = emit("combat:bolt-effect-chance", { player: armadylean, effect: "lucky-lightning", chance: 0.1 });
+  assert.equal(bolt.chance, 0.125, "bolt effects 25% likelier at level 1");
+});
+
+test("Saradominist Defence: max hit +2/5/10 within 6 ticks of combat damage landing", () => {
+  const player = warrior("saradominist", 10);
+  equip(player, 20);
+  wear(player, GEAR.saradomin);
+  const npc = { isPlayer: () => false, isNpc: () => true };
+  const landed = (attacker, damage) => Effects.hitResolved({ attacker, target: player, hit: { getTotalDamage: () => damage } });
+  World.processCycle = 5000;
+  assert.equal(Effects.saradoministDefence(player, 30), 30, "not hit yet");
+  landed(npc, 0);
+  assert.equal(Effects.saradoministDefence(player, 30), 30, "a 0 isn't damage");
+  landed(null, 4);
+  assert.equal(Effects.saradoministDefence(player, 30), 30, "nor is damage with no attacker (poison)");
+  landed(npc, 4);
+  World.processCycle = 5006;
+  assert.equal(Effects.saradoministDefence(player, 30), 32, "+2 at level 1, 6 ticks on");
+  World.processCycle = 5007;
+  assert.equal(Effects.saradoministDefence(player, 30), 30, "gone after 3.6 seconds");
+});
+
+test("Knife's Edge: +0.3% / 0.6% damage per hitpoint missing", () => {
+  const player = warrior("knife", 300);
+  const skills = player.getSkillManager();
+  skills.setMaxLevels(core.Skill.HITPOINTS, 99, false);
+  skills.setCurrentLevel(core.Skill.HITPOINTS, 49, false);
+  equip(player, 8, 20);
+  assert.equal(Fragments.setTier(player, 10), 1, "Livin' On A Prayer and Saradominist Defence list Knife's Edge");
+  assert.equal(Effects.knifesEdge(player, 100), 115, "50 missing x 0.3%");
+  equip(player, 1);
+  assert.equal(Fragments.setTier(player, 10), 2, "Unholy Warrior makes three");
+  assert.equal(Effects.knifesEdge(player, 100), 130, "50 missing x 0.6%");
+});
+
+test("Fast Metabolism: each Hitpoints regen heals 4 (stats:hitpoints-regen from Player)", () => {
+  const regen = (player) => {
+    const skills = player.getSkillManager();
+    skills.setMaxLevels(core.Skill.HITPOINTS, 50, false);
+    skills.setCurrentLevel(core.Skill.HITPOINTS, 10, false);
+    stubbing(PluginManager, { emitCustomEvent: (name, payload) => emit(name, payload) }, () => {
+      player.processStatRestoration(10000);
+      player.processStatRestoration(10100);
+    });
+    return skills.getCurrentLevel(core.Skill.HITPOINTS);
+  };
+  assert.equal(regen(warrior("slow")), 11, "a point a minute");
+  const player = warrior("metabolic", 300);
+  equip(player, 11, 13);
+  assert.equal(Fragments.setTier(player, 8), 1, "Larger Recharger and Venomaster list Fast Metabolism");
+  assert.equal(regen(player), 14, "four times as much");
 });
 
 test("another league's character gets none of it", () => {

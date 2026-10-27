@@ -6,31 +6,11 @@ import type { BugReportPlugin, BugReportState } from "./BugReportPlugin";
 function BugIcon({ label }: { label: string }): JSX.Element {
     return (
         <svg className="rl-sidebar-icon-svg" viewBox="0 0 24 24" role="img" aria-label={label}>
-            <text
-                x="12"
-                y="9.5"
-                textAnchor="middle"
-                fontSize="12"
-                fontWeight={800}
-                letterSpacing="0"
-                textLength="22"
-                lengthAdjust="spacingAndGlyphs"
-                fill="#ef5350"
-                style={{ fontFamily: "var(--rl-font-bold, Arial, sans-serif)" }}
-            >
-                BUG
-            </text>
-            <text
-                x="12"
-                y="20"
-                textAnchor="middle"
-                fontSize="9"
-                fontWeight={800}
-                fill="#ef5350"
-                style={{ fontFamily: "var(--rl-font-bold, Arial, sans-serif)" }}
-            >
-                ?
-            </text>
+            <g stroke="#ef5350">
+                <path d="M9 7V6a3 3 0 0 1 6 0v1M9 3 7 1M15 3l2-2" />
+                <rect x="7" y="7" width="10" height="14" rx="5" />
+                <path d="M12 11v10M7 10 3 8M7 14H2M7 18l-4 3M17 10l4-2M17 14h5M17 18l4 3" />
+            </g>
         </svg>
     );
 }
