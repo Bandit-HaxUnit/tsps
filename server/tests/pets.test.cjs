@@ -51,7 +51,9 @@ Pets.register({
   onItemDropPolicy() {},
   onItemOnNpc() {},
   onAnyNpcInteraction() {},
+  onInterfaceActionClick() {},
   onNpcClick() {},
+  onNpcInteraction() {},
   onPlayerLogout: (handler) => logoutHooks.push(handler),
   onPlayerDisconnect() {},
   onPlayerLogin: (handler) => loginHooks.push(handler),
@@ -209,21 +211,8 @@ test("every owned pet reaches the collection log; only the new one announces its
   assert.ok(collectionLogObtains.every((request) => request.player === player));
 });
 
-test("Probita returns owned pets the player no longer has, once", () => {
-  const player = createPlayer();
-  player.setAttribute("pets.owned", [HELLPUPPY, GIANT_SQUIRREL]);
-  player.inventory.push(GIANT_SQUIRREL);
-  const reclaim = () => {
-    const event = { player, npcId: NpcIdentifiers.PROBITA, action: "open_interface", target: "Pet Insurance" };
-    events.get("npc-dialogue:action")(event);
-    return event;
-  };
-  assert.equal(reclaim().handled, true);
-  assert.deepEqual(player.inventory, [GIANT_SQUIRREL, HELLPUPPY]);
-  reclaim();
-  assert.deepEqual(player.inventory, [GIANT_SQUIRREL, HELLPUPPY]);
-  assert.equal(player.messages.at(-1), "You don't have any pets to reclaim.");
-});
+// Probita's old immediate-return shortcut is replaced by native selection/Confirm.
+// Its stronger real-object coverage lives in pet-recovery-interface.test.cjs.
 
 test("every skilling-pet collection log item has a roll source", () => {
   const ClogData = require("../plugins/achievements/collectionlog/Data.CollectionLog");
