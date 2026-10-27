@@ -8,6 +8,8 @@
  *     -> sets `completed` true when the task was newly done
  *   api.emitCustomEvent("diary:is-complete", { player, diary: "ardougne", tier: "hard" })
  *     -> sets `complete`
+ *   api.emitCustomEvent("diary:is-reward-claimed", { player, diary: "western", tier: "elite" })
+ *     -> sets `claimed` from the canonical claimed-tier record, not task completion
  *   api.emitCustomEvent("diary:all-complete", { player })
  *     -> sets `complete` when every tier of every diary is done
  *   api.emitCustomEvent("diary:tokkul", { player, amount })
@@ -46,6 +48,12 @@ function onIsComplete(request) {
   if (diary && request.player && TIERS.includes(request.tier)) {
     request.complete = Progress.isTierComplete(request.player, diary, request.tier);
   }
+}
+/** Claimed rewards are distinct from completed tasks (e.g. pet eligibility). */
+function onIsRewardClaimed(request) {
+  const diary = BY_KEY.get(request.diary);
+  if (diary && request.player && TIERS.includes(request.tier))
+    request.claimed = Progress.claimedTiers(request.player, diary).has(request.tier);
 }
 
 /** The Elite Karamja Diary doubles the Tokkul from the Fight Cave, the Inferno and Ket-Rak's Challenges. */
@@ -102,6 +110,7 @@ module.exports = {
     Lamps(api);
     api.onCustomEvent("diary:task", onTask);
     api.onCustomEvent("diary:is-complete", onIsComplete);
+    api.onCustomEvent("diary:is-reward-claimed", onIsRewardClaimed);
     api.onCustomEvent("diary:all-complete", onAllComplete);
     api.onCustomEvent("diary:tokkul", onTokkul);
     api.registerCommand("diary", diaryCommand, api.core.PlayerRights.ADMINISTRATOR, "Show or set achievement diary progress: ::diary <name> [tier|all] [complete|reset]");

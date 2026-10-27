@@ -17,6 +17,7 @@ const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
 const { NpcIdentifiers } = require("../../src/main/typescript/elvarg/util/NpcIdentifiers");
 const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
 const Recovery = require("./pets/Recovery.Pets");
+const Acquisition = require("./pets/Acquisition.Pets");
 
 const CURRENT_PET_ATTRIBUTE = "pets:current";
 /** The item of the follower the player logged out with; re-summoned on login. */
@@ -192,10 +193,9 @@ const PETS = [
   { enumName: "GULL", petId: NpcIdentifiers.GULL_7, morphId: 14932, itemId: 31285, dialogue: -1 },
   { enumName: "GULLIVER", petId: 14932, morphId: NpcIdentifiers.GULL_7, itemId: 31285, dialogue: -1,
     morphUnlock: { attribute: "pets:gull-fed", path: [], min: 50, name: "to feed Gull 50 raw or cooked fish" } },
-  // The Wiki pets the Chompy chick behind the elite Western Provinces Diary; no diary content
-  // exists yet, so the flag stays unset until an achievement-diary plugin creates it.
+  // The Wiki requires claiming the elite Western Provinces reward, not just task completion.
   { enumName: "CHOMPY_CHICK", petId: NpcIdentifiers.CHOMPY_CHICK_2, morphId: 0, itemId: 13071, dialogue: -1,
-    requiresFlag: "achievement-diary:western-provinces:elite" },
+    requiredDiaryReward: { diary: "western", tier: "elite" } },
   { enumName: "BLOODHOUND", petId: NpcIdentifiers.BLOODHOUND_2, morphId: 0, itemId: 19730, dialogue: -1 },
 
   // Wintertodt's reward cart (followers are 7370, as in live captures). The four colour
@@ -578,7 +578,7 @@ function awardPet(player, itemId) {
   if (!pet) return false;
   // Conditions the drop table cannot express (a diary gate) are enforced here; the roll is
   // consumed without a pet so the source can never grant it early.
-  if (pet.requiresFlag && player.getAttribute?.(pet.requiresFlag) !== true) return false;
+  if (!Acquisition.eligible(player, pet)) return false;
   if (ownsPetFamily(player, pet)) {
     if (pet.mainDrop) {
       deliverPetItem(player, pet.itemId);
@@ -638,6 +638,9 @@ function answerOwnsPet(request) {
 
 function answerPetDefinitions(request) {
   request.pets = PETS;
+}
+function answerPetEligibility(request) {
+  request.eligible = Acquisition.eligible(request.player, getPetForItemId(request.itemId));
 }
 
 function releasePet(request) {
@@ -1764,6 +1767,7 @@ module.exports = {
     ItemOnGroundManager = api.getItemOnGroundManager();
     pluginApi = api;
     Recovery.attach(api, {pets: PETS, getOwnedPetItems, getPetForItemId, petFamily, getPetDisplayName, syncCollectionLog});
+    Acquisition.attach(api);
     TaskClass = api.core?.Task ?? null;
     TaskManagerRef = api.core?.TaskManager ?? null;
     NPCRespawnTaskRef = api.core?.NPCRespawnTask ?? null;
@@ -1784,6 +1788,7 @@ module.exports = {
     api.onCustomEvent("pets:current", answerCurrentPet);
     api.onCustomEvent("pets:owns", answerOwnsPet);
     api.onCustomEvent("pets:definitions", answerPetDefinitions);
+    api.onCustomEvent("pets:eligible", answerPetEligibility);
     api.onCustomEvent("pets:release", releasePet);
     api.onItemDropPolicy(onPetItemDropPolicy);
     api.onItemOnNpc(handleItemOnCat);
