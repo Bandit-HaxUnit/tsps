@@ -251,8 +251,10 @@ function rollMarkOfGrace(player, course) {
   player.setAttribute(MARK_COOLDOWN_ATTRIBUTE, minute + (short ? MARK_SHORT_COOLDOWN_MINUTES : MARK_COOLDOWN_MINUTES));
   const tile = marks.tiles[Math.floor(Math.random() * marks.tiles.length)];
   const position = new core.Location(tile[0], tile[1], tile[2]);
+  const award = { player, minigame: "rooftop-agility", points: 1 };
+  pluginApi.emitCustomEvent("minigame:points", award);
   // Content may add to what spawns with the mark ("agility:mark", a league relic's coins).
-  const spawn = { player, location: position, items: [[core.ItemIds.MARK_OF_GRACE, 1]] };
+  const spawn = { player, location: position, items: [[core.ItemIds.MARK_OF_GRACE, award.points]] };
   pluginApi.emitCustomEvent("agility:mark", spawn);
   for (const [itemId, amount] of spawn.items) {
     ItemOnGroundManager.registerLocation(player, new core.Item(itemId, amount), position,
