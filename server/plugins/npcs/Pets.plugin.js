@@ -1662,6 +1662,12 @@ function handlePetClick(event) {
   if (!event?.player || !event.npc || !getPetByNpcId(event.npcId)) {
     return false;
   }
+  // Pickup queues removal until the World tick; late native clicks can still
+  // resolve that NPC. Consume them here instead of falling through to generic
+  // NPC dialogue. Ordinary non-pet world NPCs keep their existing handlers.
+  if (event.npc.isPet?.() && (event.player.getAttribute(CURRENT_PET_ATTRIBUTE) !== event.npc
+      || event.npc.getOwner?.() !== event.player || !event.npc.isRegistered?.()
+      || World.getRemoveNPCQueue().includes(event.npc))) return true;
   const action = String(event.definition?.getActions?.()?.[event.clickType - 1] ?? "");
   const lower = action.toLowerCase();
   if (lower === "pick-up") return pickup(event.player, event.npc);
