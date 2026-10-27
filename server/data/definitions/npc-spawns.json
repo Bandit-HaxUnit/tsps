@@ -4023,7 +4023,7 @@
   {"level":0,"name":"Rat","x":3269,"y":9869,"id":2854},
   {"level":0,"name":"Skeleton","x":3270,"y":9914,"id":74},
   {"level":0,"name":"Rat","x":3274,"y":9873,"id":2854},
-  {"level":0,"name":"Historian Aldo","x":3275,"y":9871,"id":7615,"direction":1,"wanderRadius":0,"source":"rsprox:3279"},
+  {"level":0,"name":"Historian Aldo","x":3275,"y":9871,"id":12606,"direction":1,"wanderRadius":0,"source":"rsprox:3279"},
   {"level":0,"name":"Skeleton","x":3274,"y":9913,"id":75},
   {"level":0,"name":"Rat","x":3275,"y":9865,"id":2854},
   {"level":0,"name":"Skeleton","x":3275,"y":9909,"id":74},
