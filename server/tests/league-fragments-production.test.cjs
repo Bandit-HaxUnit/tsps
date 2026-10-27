@@ -40,6 +40,7 @@ const realRandom = Math.random;
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
   core = PluginManager.getCoreApi();
+  core.RegionManager.init();
   I = core.ItemIdentifiers;
   obj = (name) => core.CacheDefinitions.getObjId(name);
   GameConstants.setWorldProfile("league");
@@ -123,16 +124,23 @@ function own(player, ...ids) {
 }
 
 function equip(player, ...ids) {
+  const previousLocation = player.getLocation();
+  player.setLocation(new core.Location(2809, 3440, 0)); // Catherby's bank, as fragment swapping requires.
   own(player, ...ids);
   player.setInterfaceId(FRAGMENTS);
   for (const id of ids) hooks[`button:${uid(FRAGMENTS, 18)}`]({ player, buttonId: uid(FRAGMENTS, 18), slot: 9 * (id - 1), opId: 2 });
   player.setInterfaceId(-1);
+  player.setLocation(previousLocation);
 }
 
 function unequipAll(player) {
+  const previousLocation = player.getLocation();
+  player.setLocation(new core.Location(2809, 3440, 0));
   player.setInterfaceId(FRAGMENTS);
   hooks[`button:${uid(FRAGMENTS, 16)}`]({ player, buttonId: uid(FRAGMENTS, 16) });
   player.setInterfaceId(-1);
+  player.setLocation(previousLocation);
+  assert.ok(player.getAttribute("league:fragment-slots").every((id) => id === 0), "native Unequip all cleared the loadout");
 }
 
 /** Level 3 (8,000 fragment XP, script 5789). */
