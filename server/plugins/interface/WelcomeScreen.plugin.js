@@ -74,6 +74,7 @@ module.exports = {
       }
       visible.delete(player);
       showGameframe(player);
+      api.emitCustomEvent("gameframe:ready", { player });
       // Let post-welcome content react after the normal gameframe is restored.
       return false;
     });
