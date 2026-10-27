@@ -341,7 +341,6 @@ test("Bottomless Quiver and Arcane Conduit save ammunition, runes and charges", 
   Effects.runeSaving(runes);
   assert.equal(runes.saved, true);
   const charge = { player, itemId: 11905, skip: false };
-  player.getCombat().setCastSpell(core.CombatSpells.WIND_STRIKE);
   Effects.chargeSaving(charge);
   assert.equal(charge.skip, false, "Arcane Conduit never saves a melee charge through the shared event");
   player.getCombat().setCastSpell(core.CombatSpells.WIND_STRIKE);
