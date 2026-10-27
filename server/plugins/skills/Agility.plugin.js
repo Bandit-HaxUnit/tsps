@@ -248,7 +248,9 @@ function rollMarkOfGrace(player, course) {
   player.setAttribute(MARK_COOLDOWN_ATTRIBUTE, minute + (short ? MARK_SHORT_COOLDOWN_MINUTES : MARK_COOLDOWN_MINUTES));
   const tile = marks.tiles[Math.floor(Math.random() * marks.tiles.length)];
   const position = new core.Location(tile[0], tile[1], tile[2]);
-  ItemOnGroundManager.registerLocation(player, new core.Item(core.ItemIds.MARK_OF_GRACE, 1), position,
+  const award = { player, minigame: "rooftop-agility", points: 1 };
+  pluginApi.emitCustomEvent("minigame:points", award);
+  ItemOnGroundManager.registerLocation(player, new core.Item(core.ItemIds.MARK_OF_GRACE, award.points), position,
     player.getPrivateArea(), { goesGlobal: false, despawnDelay: MARK_DESPAWN_TICKS });
 }
 

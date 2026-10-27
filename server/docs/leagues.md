@@ -2,10 +2,10 @@
 
 The Leagues game mode (https://oldschool.runescape.wiki/w/Leagues) on this server: a league
 character per account, League Points, relic tiers and relics, area unlocks. Plugins:
-`plugins/modes/LeagueMode.plugin.js` (the profile, its league, XP rate, journal tab, the league
+`plugins/modes/LeagueMode.plugin.js` (the profile, its league, XP rate, the tiers' passives, journal tab, the league
 content the client reads), `LeaguePoints.plugin.js` (points), `LeagueRelics.plugin.js` (tiers and
 relics) and `LeagueAreaUnlocks.plugin.js` (areas); data in `plugins/modes/data/leagues.json`,
-`league-relics.json` and `league-areas.json`.
+`league-relics.json`, `league-areas.json` and `league-boosted-drops.json`.
 
 ## The league character
 
@@ -68,6 +68,10 @@ every dataset (`GamemodeContentStore`), so no plugin sends them itself: LeagueMo
 at login and whenever a plugin emits `league:send-content` (before its interface opens), after
 collecting every plugin's rows with `league:content-rows`.
 
+The tier passives answer other plugins' questions rather than events of their own (below):
+`npc-drops:chance` and `drops:chance`, `minigame:points`, `slayer:task-reward`,
+`slayer:superior-spawn` and `treasure-trails:scroll-boxes`.
+
 ## What the client is sent
 
 From the rsprox Leagues V recordings (osrs-captures 227/00070 and 227/00075; the packets are the
@@ -84,7 +88,7 @@ same for every league):
   8168 = 4, the way this client mounts its other journal tabs (live mounted it in its own slot).
 - XP: the league's rate (5x; 8x from relic tier 2, 12x from tier 5, 16x from tier 7, Wiki tier
   passives) multiplies every gain after the world's rate, through the can-gain-experience
-  hook's `multiplier`.
+  hook's `multiplier`; the other tier passives are under "Tier passives" below.
 
 ## Relics
 
@@ -124,8 +128,71 @@ character's picks live in `league:relics` (tier index -> slot 1-3).
   its tab or any tab with room. Refusals are game messages of ours. Items no longer in this cache (Sage's greaves, the Trailblazer tools, the crystal of
   memories, the guardian horn) are not granted; the data says so.
 - **Effects** are other plugins' business: they ask `league:has-relic { player, relic }`, true
-  only when the character's league has that relic and chose it. The tier passives' XP rates are
-  LeagueMode's (`league:highest-tier`); the other passives are not implemented.
+  only when the character's league has that relic and chose it. The tier passives are
+  LeagueMode's (`league:highest-tier`), below.
+
+## Tier passives
+
+Each tier's passive text is the Wiki's (`league-relics.json`); the effects are
+`leagues.json` `passives`, per league, each from the 1-based tier its `fromTier` names (a map
+picks the highest tier reached), applied by `league/Passives.LeagueMode.js` and
+`league/BoostedDrops.LeagueMode.js` to a league character of that league and to nobody else.
+Tier 1 counts once the character chose its first relic.
+
+- **XP rate** (both: 5x, 8x from tier 2, 12x from tier 5, 16x from tier 7): the
+  can-gain-experience hook's `multiplier`, as above.
+- **Combat XP** (Raging Echoes tier 3): Attack, Strength, Defence, Ranged, Magic, Hitpoints and
+  Prayer gains x2 on top of the league rate (multiplicative, as the Wiki says; Slayer is not
+  listed and not included).
+- **Run energy** (tier 1): the run energy drain modifier (`api.registerRunEnergyDrainModifier`)
+  returns 0 for the character, so running never drains.
+- **Boosted drops** (Trailblazer Reloaded 2x/3x/4x/5x from tiers 1/4/6/8; Raging Echoes 2x then
+  5x from tier 4): `league-boosted-drops.json` is each league's Boosted drops page (fetched
+  2026-10-26), a source per Wiki row group with the NPC names it covers and the item names it
+  boosts (group rows expanded by hand; N/A rows left out; rows one page lists carry `leagues`).
+  NpcDrops asks `npc-drops:chance { player, npc, npcId, source, rules }` once per roll and the
+  league pushes one rule `{ pattern, multiplier }` matching that source's items, which NpcDrops
+  applies to every form of roll ([docs/npc-drops.md](../../docs/npc-drops.md)): a weighted roll's
+  boosted weight grows and the pool with it, so 1/512 at 5x is 5/516 (the Wiki rounds to 1/102).
+  Superior Slayer monsters' unique tables and Treasure Trails caskets' "clue uniques" rows ask the
+  same over `drops:chance { player, source: "superior-slayer-monster" | "treasure-trails-casket",
+  rules }`, the pages' Global entries (a tier's "clue uniques" and mega-rare rows; an ordinary
+  casket's Open and the Mimic's reward share `Rolls.uniqueMultiplier`). Kills whose
+  table NpcDrops rolls are covered as they are, Araxxor's and Zalcano's included (their plugins
+  roll through NpcDrops with the NPC named); the giant lairs' chests pass `source` (Obor,
+  Bryophyta). Sources rolled by their own plugins are in the data but inert until that plugin
+  asks `drops:chance` with the source's name: Revenants, the Grotesque Guardians, Corporeal
+  Beast's sigils (not on its table here), the raids' unique chests, Barrows, the Gauntlet,
+  Wintertodt, Tempoross, Guardians of the Rift, Fishing Trawler, the Grand Hallowed Coffin, Moons
+  of Peril, the Colosseum, Hunter rumours, the Shrine, the seed pack, aerial fishing, the
+  Fountain of Rune, Larran's and the brimstone chest, the Zombie Pirate's Locker, chewed bones,
+  the Volcanic Mine ore pack, Pyramid Plunder, Tai Bwo Wannai, Shades of Mort'ton, and the
+  pickpocketed blood shards (vyres) and teleport seeds (elves).
+- **Minigame points** (Trailblazer Reloaded 3x/5x/8x from tiers 2/5/7; Raging Echoes 4x/8x from
+  tiers 1/4): a minigame asks `minigame:points { player, minigame, points }` as it awards and
+  the league multiplies `points` (floored). Wired, from the Raging Echoes League page's "Boosted
+  minigame points" section (https://oldschool.runescape.wiki/w/Raging_Echoes_League; the
+  Trailblazer Reloaded pages give no list, so both leagues use it): Pest Control
+  commendations, Soul Wars zeal, Castle Wars tickets, Guardians of the Rift points, Mage Training
+  Arena pizazz points, Volcanic Mine points, Giants' Foundry reputation, Mastering Mixology resin,
+  Mahogany Homes points, Tithe Farm points, Brimhaven Agility Arena tickets and vouchers,
+  Warriors' Guild tokens, Hallowed marks, marks of grace, stardust. Not on this server: Barbarian
+  Assault, Rogues' Den, Trouble Brewing, Tai Bwo Wannai favour, Motherlode nuggets, molch
+  pearls, Mining Guild minerals, chompy kills.
+- **Slayer** (Trailblazer Reloaded tier 4, Raging Echoes tier 3): the Slayer plugin asks
+  `slayer:task-reward { player, master, freeTasks, multiplier }` as a task completes (the league
+  sets `freeTasks` 0 and x5 the points; every master's, Mortimer's and Krystilia's included, the
+  Wiki naming none) and `slayer:superior-spawn { player, npc, unlocked, chance }` on a task kill
+  (the league unlocks Bigger and Badder and makes the chance 1 in 50; the Slayer rewards'
+  toggle-off still holds; a better chance from elsewhere stands).
+- **Scroll boxes** (tier 1): ClueCapacity asks `treasure-trails:scroll-boxes { player, unlocked,
+  capacity }` and the league answers unlocked with no limit, so every clue drops as a stackable
+  box (the Wiki says stackable; live Leagues had no cap) before X Marks the Spot.
+
+Left out, with why: Raging Echoes' clue-step progress saved between clues (the trail runtime has
+no per-step save to carry across scrolls); Raging Echoes' one-minute farming ticks (Farming's
+growth model has no tick-length seam, and Farming is under active work elsewhere); the
+Trailblazer Reloaded ironman restriction and the crystal of memories (not in this cache).
 
 ### Trailblazer Reloaded's combat relics
 
@@ -237,6 +304,7 @@ locked for good.
 
 ## Not yet
 
-League tasks, combat masteries, the other tier passives (drop rates, run energy, clue boxes,
-minigame points, the ironman restriction), the league tutorial, trophies and rewards. Each is its
-own item on the progress tracker.
+League tasks, combat masteries, the tier passives left out above (clue-step
+progress, farming ticks, the ironman restriction), the boosted sources their own plugins have yet
+to ask about, the league tutorial, trophies and rewards. Each is its own item on the progress
+tracker.
