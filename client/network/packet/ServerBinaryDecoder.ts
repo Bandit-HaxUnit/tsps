@@ -899,6 +899,9 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             };
         }
 
+        case ServerPacketId.TRIGGER_ONDIALOGABORT:
+            return { type: "widget", payload: { action: "trigger_ondialogabort" } };
+
         case ServerPacketId.WIDGET_CLOSE_SUB:
             return {
                 type: "widget",

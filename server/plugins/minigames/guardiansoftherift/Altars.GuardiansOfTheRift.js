@@ -238,7 +238,7 @@ function craft(event) {
   Shared.sound(player, CRAFT_SOUND);
   Shared.addXp(player, "RUNECRAFTING", essence * rune.xp);
   Shared.api().emitCustomEvent("runecrafting:success", {
-    player, skill: Shared.core().Skill.RUNECRAFTING, petBase: rune.petBase, rolls: essence, runeId: rune.runeId,
+    player, skill: Shared.core().Skill.RUNECRAFTING, petBase: rune.petBase, rolls: essence, runeId: rune.runeId, amountPerEssence: rune.amount,
   });
   return true;
 }

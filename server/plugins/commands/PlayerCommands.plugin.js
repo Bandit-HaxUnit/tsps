@@ -23,7 +23,7 @@ function parseIntArg(value) {
 function sendOnlinePlayers(player) {
   const connectedNames = [];
   for (const worldPlayer of World.getPlayers()) {
-    if (!worldPlayer || !World.isPlayerSessionConnected(worldPlayer)) {
+    if (!worldPlayer || worldPlayer.isPlayerBot?.() === true || !World.isPlayerSessionConnected(worldPlayer)) {
       continue;
     }
     connectedNames.push(worldPlayer.getUsername());
@@ -172,8 +172,8 @@ module.exports = {
       }
       try {
         const passwordHash = await PasswordUtil.generatePasswordHashWithSalt(pass);
-        player.setPasswordHashWithSalt(passwordHash);
-        api.emitCustomEvent("persistence:save", { player, reason: "password-change" });
+        // The account's credential: this character, its save, and its other character's save.
+        await api.core.GameConstants.PLAYER_PERSISTENCE.changePassword(player, passwordHash);
         player.sendMessage(`Your password is now: ${pass}`);
       } catch (err) {
         console.error(err);

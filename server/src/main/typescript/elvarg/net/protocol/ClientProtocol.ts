@@ -1022,6 +1022,8 @@ export const ChatType = {
   AUTOTYPER: 90,
   /** Autochat from a player with a mod crown. */
   MODAUTOTYPER: 91,
+  /** A server broadcast ("Lethal fog will soon fill the island! ..." in Last Man Standing). */
+  BROADCAST: 14,
   /** Filtered out with "Filter: on" (the Game tab's filter). */
   SPAM: 105,
   /** An NPC's overhead line, shown as "Name: text"; the NPC's name goes in `from`. */
@@ -1859,6 +1861,10 @@ function widgetIntPacket(opcode: ServerPacketId, uid: number, value?: number): B
 
 export function encodeWidgetCloseSub(uid: number): Buffer {
   return widgetIntPacket(ServerPacketId.WIDGET_CLOSE_SUB, uid);
+}
+
+export function encodeTriggerOnDialogAbort(): Buffer {
+  return encodeServerPacket(ServerPacketId.TRIGGER_ONDIALOGABORT, Buffer.alloc(0));
 }
 
 export function encodeWidgetSetText(uid: number, text: string): Buffer {

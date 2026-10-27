@@ -89,7 +89,12 @@ function sound(name) {
 
 function resolveMaterial([name, amount]) {
   const names = DATA.alternatives[name] ?? [name];
-  return { ids: names.map(itemId), amount };
+  return {
+    ids: names.map((entry) => itemId(typeof entry === "string" ? entry : entry.item)),
+    // The Wiki documents alternatives that work only as the used item, not the target.
+    usedOnlyIds: names.filter((entry) => entry.usedOnly).map((entry) => itemId(entry.item)),
+    amount,
+  };
 }
 
 /** The recipe with its group's defaults filled in and every name turned into an id. */
@@ -174,11 +179,22 @@ function registerVirtualMaterial(materialId, source) {
 }
 
 function recipesFor(a, b) {
-  return recipesByPair.get(pairKey(a, b)) ?? [];
+  return (recipesByPair.get(pairKey(a, b)) ?? [])
+    .filter((recipe) => !recipe.materials.some((material) => material.usedOnlyIds.includes(b)));
 }
 
+/** The Fletching level the skill checks: the current level, raised by content ("skills:level-boost", a league relic's invisible +12). */
 function fletchingLevel(player) {
-  return player.getSkillManager().getCurrentLevel(core.Skill.FLETCHING);
+  const request = { player, skill: core.Skill.FLETCHING, boost: 0 };
+  api.emitCustomEvent("skills:level-boost", request);
+  return player.getSkillManager().getCurrentLevel(core.Skill.FLETCHING) + Math.max(0, request.boost | 0);
+}
+
+/** How many batches one cycle makes ("skills:actions-per-cycle", a league relic's all at once); 1 unless content says more. */
+function actionsPerCycle(player, recipe) {
+  const request = { player, skill: core.Skill.FLETCHING, kind: recipe.group, actions: 1 };
+  api.emitCustomEvent("skills:actions-per-cycle", request);
+  return Math.max(1, request.actions | 0);
 }
 
 function carries(player, ids) {
@@ -290,6 +306,7 @@ function makeBatch(player, recipe, via) {
   if (recipe.message) player.sendMessage(formatMessage(recipe.message, amount));
   if (recipe.xp > 0) player.getSkillManager().addExperiences(core.Skill.FLETCHING, recipe.xp);
   api.emitCustomEvent("fletching:made", { player, itemId: recipe.outputId, amount });
+  api.emitCustomEvent("skills:produced", { player, skill: core.Skill.FLETCHING, itemId: recipe.outputId, amount, xp: recipe.xp, kind: recipe.group });
   return true;
 }
 
@@ -341,11 +358,17 @@ function createTask(player, recipe, batches, via) {
       if (this.levelUpPaused) return;
       if (++this.ticks < this.nextTick) return;
       this.nextTick = this.ticks + interval(player, recipe);
-      if (!makeBatch(player, recipe, via)) {
-        stopFletching(player, true);
-        return;
+      const actions = actionsPerCycle(player, recipe);
+      for (let done = 0; done < actions; done++) {
+        if (!makeBatch(player, recipe, via)) {
+          stopFletching(player, done === 0);
+          return;
+        }
+        if (--this.remaining <= 0 || batchesAvailable(player, recipe) <= 0) {
+          stopFletching(player);
+          return;
+        }
       }
-      if (--this.remaining <= 0 || batchesAvailable(player, recipe) <= 0) stopFletching(player);
     }
   }
   return new FletchingTask();
@@ -410,7 +433,11 @@ function missingToolMessage(recipe) {
  */
 function handlePair(player, usedId, usedWithId) {
   const all = recipesFor(usedId, usedWithId);
-  if (all.length === 0) return false;
+  if (all.length === 0) {
+    if (!recipesByPair.has(pairKey(usedId, usedWithId))) return false;
+    player.sendMessage("Nothing interesting happens.");
+    return true;
+  }
   const choices = all.filter((recipe) => unlocked(player, recipe));
   if (choices.length === 0) {
     player.sendMessage("Nothing interesting happens.");
@@ -430,7 +457,11 @@ function handlePair(player, usedId, usedWithId) {
     const recipe = usable[0];
     if (recipe.ticks === 0 || isInstant(player, recipe)) {
       stopFletching(player);
-      makeBatch(player, recipe, via);
+      // The instant path (darts and bolts by default) makes as many as content asks for in the one click.
+      const actions = actionsPerCycle(player, recipe);
+      for (let done = 0; done < actions && batchesAvailable(player, recipe) > 0; done++) {
+        if (!makeBatch(player, recipe, via)) break;
+      }
       return true;
     }
     if (batchesAvailable(player, recipe) === 1) {

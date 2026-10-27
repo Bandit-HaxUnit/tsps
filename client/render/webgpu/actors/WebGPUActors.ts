@@ -52,7 +52,7 @@ import { PlayerPoseGeometry, type PosedActorGeometry } from "./actorPlayers";
 import { NpcPoseGeometry } from "./actorNpcs";
 import { DynamicNpcAnimLoader } from "../../npc/DynamicNpcAnimLoader";
 import { AsyncNpcPoseCache } from "../../npc/AsyncNpcPoseCache";
-import type { GfxInstance, GfxManager } from "../../gfx/GfxManager";
+import { TILE_GFX_LIFT_UNITS, type GfxInstance, type GfxManager } from "../../gfx/GfxManager";
 import type { GfxCache } from "../../gfx/GfxCache";
 
 /**
@@ -1029,7 +1029,8 @@ export class WebGPUActors {
             if (!world) continue;
             const dataIndex = packWorldGfxActorData(this.writer, map, world);
             if (dataIndex < 0) continue;
-            this.pushInstanceGeometry(state, map, inst, dataIndex);
+            // Drawn over the floor's flat decorations, as the WebGL renderer does (GfxRenderer).
+            this.pushInstanceGeometry(state, map, inst, dataIndex, TILE_GFX_LIFT_UNITS);
         }
     }
 
@@ -1061,6 +1062,7 @@ export class WebGPUActors {
         map: WebGPUMapSquare,
         inst: GfxInstance,
         dataIndex: number,
+        liftUnits = 0,
     ): void {
         const runtime = this.gfx;
         if (!runtime || inst.startTimeMs == null) return;
@@ -1072,7 +1074,7 @@ export class WebGPUActors {
             inst.anchor === "offset"
                 ? inst.yOffsetTiles ?? inst.world?.heightOffsetTiles ?? 0
                 : 0;
-        const modelYOffset = Math.round(tiles * 128);
+        const modelYOffset = Math.round(tiles * 128) + liftUnits;
         this.pushSpotGeometry(
             state,
             map,

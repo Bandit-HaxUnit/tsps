@@ -26,6 +26,17 @@ owner-authorized reviewed batches. Unverified cases stay explicit.
 
 ## Current checkpoint — 2026-10-25
 
+### Community-tested quests: skip full manual replay
+
+The user accepted the 21 completion reports in [issue #1257](https://github.com/RSPSApp/tsps/issues/1257)
+for queue decisions. Read the [community completion exclusions](quest-helper-728-community-completions.md) before selecting any new full
+playthrough. Preserve the report’s caveats and use targeted checks for known bugs;
+these passes do not certify complete Quest Helper or recovery/cutscene parity.
+None of the 21 names belongs to the original 106 active job roster, so that scope
+and its independently audited count are unchanged by this exemption. Unlisted quests
+remain eligible; Scorpion Catcher/Velrak issue #1204 is still being fixed.
+
+
 The owner authorized the 108-PR split merge batch. The [independent PR index](quest-helper-728-prs.md)
 links live publication state and integration repairs; merging changes does not accept
 additional natural routes or certify deferred, recovery, alternate or visual branches.
@@ -47,8 +58,8 @@ MCP `plan_route` reuses the existing long-distance collision planner to identify
 waypoints and closed doors. Internal timed dialogue actions must finish automatically.
 
 The [native verification ledger](quest-helper-728-verification.md) is the current source
-of accepted route counts: **25/106 active scoped main routes (23.58%)**. The count
-is 25/128 against the original inventory; the increase in percentage comes only
+of accepted route counts: **26/106 active scoped main routes (24.53%)**. The count
+is 26/128 against the original inventory; the increase in percentage comes only
 from the approved scope reduction plus the newly accepted Depths of Despair, Death Plateau, Client of Kourend, Lost City, Tree Gnome Village, Hazeel Cult, Elemental Workshop I, Observatory Quest and Queen of Thieves routes. Supplemental issue-809 evidence
 is recorded separately. Source fixes and passing regression tests do not count as native
 completion. The [independent PRs](quest-helper-728-prs.md) are updated in reviewed batches; historical figures below remain
@@ -422,6 +433,16 @@ reported crossing and cave entrance, not cave entry or whole-quest completion. T
 artifacts are `/tmp/tsps-728/native/jobs/q131-epoch3.report.json` and
 `/tmp/tsps-728/native/jobs/q131-riverswim.report.json`; source-only tests do not substitute
 for this route evidence.
+
+Issue #1262 adds a source-level regression for the upstairs south-east bookcase and book-read
+step at varp 65 stages 2→3. It covers the full-bag refusal and retry, cancelling the item
+message, recovery after book loss, and the production dispatch handoff from Tourist Trap's
+generic `Bookcase → Search` hook to Waterfall's object-specific handler. This is separate from
+the prior raft/rope/River Swim proof. A bounded native review on the isolated worktree now
+confirms the real upstairs bookcase Search and inventory Read packets, stage-1 refusal, full-bag
+refusal/retry, cancellation, lost-book recovery by Drop/Search, and varp 65 changing from 2 to 3
+and surviving logout/relogin. Quest stages, starting position and inventory were arranged with
+developer commands; this does not claim a whole-quest route, completion, or reward evidence.
 
 ## Evidence and limits
 

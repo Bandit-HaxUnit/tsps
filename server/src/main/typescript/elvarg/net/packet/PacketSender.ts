@@ -60,6 +60,7 @@ import {
   encodeVarp,
   encodeVarpLong,
   encodeWidgetClose,
+  encodeTriggerOnDialogAbort,
   encodeWidgetCloseSub,
   encodeWidgetOpen,
   encodeWidgetOpenSub,
@@ -95,6 +96,8 @@ import {
 import { CacheDefinitions } from "../../game/cache/CacheDefinitions";
 const CHATBOX_MODAL_TARGET_UID = (162 << 16) | 568;
 const MAIN_MODAL_TARGET_UID = (161 << 16) | 16;
+/** PluginManager, loaded on first use (it imports this module, so not at load time). */
+let pluginManager: typeof import("../../plugins/PluginManager").PluginManager | null = null;
 const VARBIT_MULTICOMBAT_AREA = 4605;
 // Quest completion states consulted by spellbook CS2 scripts. Keep these client
 // flags separate from server-side spell casting so quests can be enforced later.
@@ -123,7 +126,6 @@ const SPELL_UNLOCK_VARBITS: ReadonlyArray<readonly [number, number]> = [
   [1914, 50],           // Recipe for Disaster (Ape Atoll Teleport)
   [4533, 1],           // Fremennik hard diary (Tan Leather / Recharge Dragonstone)
   [1505, 1],           // Bones to Peaches client unlock
-  [4554, 30],          // Mage Training Arena (Bones to Peaches)
   [4896, 1000],
   [6067, 6],
   [5619, 9],           // Client of Kourend
@@ -165,7 +167,8 @@ export class PacketSender {
   }
 
   sendSystemUpdate(remainingCentis: number): this {
-    if (this.player.getSession().sendClientPacket(encodeSystemUpdate(remainingCentis))) return this;
+    this.player.getSession().sendClientPacket(encodeSystemUpdate(remainingCentis));
+    return this;
     return this;
   }
 
@@ -337,19 +340,23 @@ export class PacketSender {
   }
 
   sendWalkableInterface(interfaceId: number): this {
-    if (this.player.getSession().sendClientPacket(encodeWidgetOpen(interfaceId, false))) return this;
+    this.player.getSession().sendClientPacket(encodeWidgetOpen(interfaceId, false));
+    return this;
   }
 
   sendInterfaceDisplayState(interfaceId: number, hide: boolean): this {
-    if (this.player.getSession().sendClientPacket(encodeWidgetSetHidden(interfaceId, hide))) return this;
+    this.player.getSession().sendClientPacket(encodeWidgetSetHidden(interfaceId, hide));
+    return this;
   }
 
   public sendPlayerHeadOnInterface(id: number): PacketSender {
-    if (this.player.getSession().sendClientPacket(encodeWidgetSetPlayerHead(id))) return this;
+    this.player.getSession().sendClientPacket(encodeWidgetSetPlayerHead(id));
+    return this;
   }
 
   public sendNpcHeadOnInterface(id: number, interfaceId: number): PacketSender {
-    if (this.player.getSession().sendClientPacket(encodeWidgetSetNpcHead(interfaceId, id))) return this;
+    this.player.getSession().sendClientPacket(encodeWidgetSetNpcHead(interfaceId, id));
+    return this;
   }
 
   // Real OSRS clientscript IDs (mesLayerMode7/mesLayerMode9), confirmed against
@@ -384,7 +391,8 @@ export class PacketSender {
   }
 
   public sendInterfaceAnimation(interfaceId: number, animationId: number) {
-    if (this.player.getSession().sendClientPacket(encodeWidgetSetAnimation(interfaceId, animationId))) return this;
+    this.player.getSession().sendClientPacket(encodeWidgetSetAnimation(interfaceId, animationId));
+    return this;
   }
 
   public sendInterfaceRawModel(interfaceId: number, modelId: number): this {
@@ -404,7 +412,8 @@ export class PacketSender {
   }
 
   public sendInterfaceModel(interfaceId: number, itemId: number, zoom: number) {
-    if (this.player.getSession().sendClientPacket(encodeWidgetSetItem(interfaceId, itemId, 1))) return this;
+    this.player.getSession().sendClientPacket(encodeWidgetSetItem(interfaceId, itemId, 1));
+    return this;
   }
 
   public sendTabInterface(tabId: number, interfaceId: number) {
@@ -442,7 +451,8 @@ export class PacketSender {
   }
 
   public sendSidebarInterface(interfaceId: number): PacketSender {
-    if (this.player.getSession().sendClientPacket(encodeWidgetOpen(interfaceId, false))) return this;
+    this.player.getSession().sendClientPacket(encodeWidgetOpen(interfaceId, false));
+    return this;
   }
 
   public sendTab(id: number): PacketSender {
@@ -470,7 +480,8 @@ export class PacketSender {
     // wait..." when clicked), which this per-player cache never sees.
     this.player.getFrameUpdater().clearGroup(id);
     this.player.getSession().sendClientPacket(encodeWidgetSetHidden(CHATBOX_MODAL_TARGET_UID, false));
-    if (this.player.getSession().sendClientPacket(encodeWidgetOpenSub(CHATBOX_MODAL_TARGET_UID, id, 0))) return this;
+    this.player.getSession().sendClientPacket(encodeWidgetOpenSub(CHATBOX_MODAL_TARGET_UID, id, 0));
+    return this;
   }
 
   public sendInterfaceSet(interfaceId: number, sidebarInterfaceId: number) {
@@ -484,7 +495,8 @@ export class PacketSender {
     item: number,
     amount: number
   ) {
-    if (this.player.getSession().sendClientPacket(encodeWidgetSetItem(interfaceId, item, amount))) return this;
+    this.player.getSession().sendClientPacket(encodeWidgetSetItem(interfaceId, item, amount));
+    return this;
   }
 
   public sendItemOnInterface(
@@ -493,11 +505,13 @@ export class PacketSender {
     slot: number,
     amount: number
   ) {
-    if (this.player.getSession().sendClientPacket(encodeWidgetSetItem(frame, item, amount))) return this;
+    this.player.getSession().sendClientPacket(encodeWidgetSetItem(frame, item, amount));
+    return this;
   }
 
   public clearItemOnInterface(frame: number): PacketSender {
-    if (this.player.getSession().sendClientPacket(encodeWidgetSetItem(frame, -1, 0))) return this;
+    this.player.getSession().sendClientPacket(encodeWidgetSetItem(frame, -1, 0));
+    return this;
   }
 
   public sendPlayerOption(slot: number, option: string, priority = false): this {
@@ -528,7 +542,8 @@ export class PacketSender {
     if (!this.player.getFrameUpdater().shouldUpdate(safeText, id)) {
       return this;
     }
-    if (this.player.getSession().sendClientPacket(encodeWidgetSetText(id, safeText))) return this;
+    this.player.getSession().sendClientPacket(encodeWidgetSetText(id, safeText));
+    return this;
   }
 
   public sendInterfaceActions(
@@ -662,7 +677,8 @@ export class PacketSender {
   }
 
   sendMessage(message: string): this {
-    if (this.player.getSession().sendClientPacket(encodeChatMessage("game", message ?? ""))) return this;
+    this.player.getSession().sendClientPacket(encodeChatMessage("game", message ?? ""));
+    return this;
   }
 
   /** A game message on one of the chatbox's channels (`ChatType`): spam, or an NPC's line with its name as `from`. */
@@ -717,6 +733,11 @@ export class PacketSender {
     // A no-op here can leave stale inventory context active client-side, which
     // affects default left-click item actions (e.g. "Drop" appearing as primary).
     this.player.setStatus?.(PlayerStatus.NONE);
+    // Capture: closing the bank under an unanswered "Enter amount:" sends trigger_ondialogabort
+    // first, so the client's meslayer_ondialogabort drops the prompt along with its answer.
+    if (this.player.getEnteredAmountAction?.()) {
+      this.player.getSession().sendClientPacket(encodeTriggerOnDialogAbort());
+    }
     this.player.setEnteredAmountAction?.(null);
     this.player.setEnteredSyntaxAction?.(null);
     this.player.getDialogueManager?.()?.reset?.();
@@ -1297,7 +1318,18 @@ export class PacketSender {
         encodeWidgetSetFlagsRange(MAIN_INVENTORY_WIDGET_UID, 0, 27, MAIN_INVENTORY_SLOT_FLAGS)
       );
     }
+    this.emitInterfaceOpened(targetUid, groupId, type);
     return this;
+  }
+
+  /**
+   * "interface:opened" { player, groupId, targetUid, type }: a group was mounted, by whichever
+   * plugin, so content that follows another's interface (a tutorial pointing at a screen as it
+   * opens) needs no hook in that plugin. The counterpart of "interface:closed".
+   */
+  private emitInterfaceOpened(targetUid: number, groupId: number, type: number): void {
+    pluginManager ??= (require("../../plugins/PluginManager") as typeof import("../../plugins/PluginManager")).PluginManager;
+    pluginManager.emitCustomEvent("interface:opened", { player: this.player, groupId, targetUid, type });
   }
 
   isWorldMapOpen(): boolean {

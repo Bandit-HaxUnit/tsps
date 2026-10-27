@@ -688,11 +688,15 @@ export function updateNpcClientAnimations(
     const ids = client.npcEcs.queryByMap(map.mapX, map.mapY);
     if (ids.length === 0) return;
 
+    // The client cycle each step of this batch stands for, so a sequence that arrived partway
+    // through it only steps from its own start (NpcEcs.hasSeqStartedBy).
+    const batchEndCycle = getClientCycle() | 0;
     for (let t = 0; t < clientTicksElapsed; t++) {
+        const stepCycle = batchEndCycle - (clientTicksElapsed - 1 - t);
         for (let j = 0; j < ids.length; j++) {
             const id = ids[j] | 0;
             if (!shouldStepNpcOnMap(client, map, id)) continue;
-            stepNpcClient(client, id);
+            stepNpcClient(client, id, stepCycle);
         }
     }
 }
@@ -710,13 +714,18 @@ export function updateDeckNpcClientAnimations(client: OsrsClient, clientTicksEla
         if (ecs.isLinked(id) && (ecs.getWorldViewId(id) | 0) >= 0) deckIds.push(id | 0);
     });
     if (deckIds.length === 0) return;
+    const batchEndCycle = getClientCycle() | 0;
     for (let t = 0; t < clientTicksElapsed; t++) {
-        for (const id of deckIds) stepNpcClient(client, id);
+        const stepCycle = batchEndCycle - (clientTicksElapsed - 1 - t);
+        for (const id of deckIds) stepNpcClient(client, id, stepCycle);
     }
 }
 
-/** One client tick of an NPC: facing and rotation, its movement track and its action track. */
-function stepNpcClient(client: OsrsClient, id: number): void {
+/**
+ * One client tick of an NPC: facing and rotation, its movement track and its action track.
+ * `stepCycle` is the client cycle the step stands for (see updateNpcClientAnimations).
+ */
+function stepNpcClient(client: OsrsClient, id: number, stepCycle: number): void {
     const ecs = client.npcEcs;
     const pe = client.playerEcs;
     const walkingNow = ecs.shouldUseWalkAnim(id);
@@ -813,7 +822,7 @@ function stepNpcClient(client: OsrsClient, id: number): void {
         } catch {}
     }
 
-    if (seqId >= 0 && seqDelay === 0) {
+    if (seqId >= 0 && seqDelay === 0 && ecs.hasSeqStartedBy(id, stepCycle)) {
         const actionInfo = resolveNpcSequenceFrameInfo(client, seqId);
         const actionStep = stepNpcSequenceTrack(
             ecs.getFrameIndex(id) | 0,

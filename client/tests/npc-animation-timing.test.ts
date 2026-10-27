@@ -79,3 +79,38 @@ test("NPCs aboard a boat turn and animate like any other, once a client tick (We
     updateDeckNpcClientAnimations(client, 4);
     assert.equal(ecs.getRotation(crew), 128, "turned 32 a client tick towards where they face");
 });
+
+test("a server sequence steps only through the client cycles after the one it arrived in", async () => {
+    const { setClientCycleProvider } = await import("../network/ServerConnection");
+    const ecs = new NpcEcs();
+    const seq = new SeqType(2, { game: "oldschool", revision: 241 } as any);
+    seq.frameIds = [1, 2];
+    seq.frameLengths = [3, 3];
+    const client = {
+        npcEcs: ecs,
+        playerEcs: {},
+        npcTypeLoader: { load: () => ({ getMovementSeqSet: () => ({ idle: 1, walk: 1 }) }) },
+        seqTypeLoader: { load: () => seq },
+    } as any;
+    (ecs as any).seqTypeLoader = client.seqTypeLoader;
+    const id = ecs.createNpc(50, 50, 1, 1, 64, 64, 0, 0, 0, 0);
+    ecs.setServerMapping(id, 1);
+    const map = { mapX: 50, mapY: 50 } as any;
+    try {
+        // A render frame covering cycles 101..105; the sequence arrived during cycle 103.
+        ecs.handleServerSequence(id, 2, 0, 103);
+        setClientCycleProvider(() => 105);
+        updateNpcClientAnimations(client, map, 5);
+        assert.equal(ecs.getFrameIndex(id), 0, "stepped twice (104, 105): still on its first frame");
+        assert.equal(ecs.getAnimTick(id), 2);
+        // It lasts its full 3 + 3 + 1 cycles from arrival, not cut short by the earlier ones.
+        setClientCycleProvider(() => 109);
+        updateNpcClientAnimations(client, map, 4);
+        assert.equal(ecs.getSeqId(id), 2, "still playing at 109");
+        setClientCycleProvider(() => 110);
+        updateNpcClientAnimations(client, map, 1);
+        assert.equal(ecs.getSeqId(id), -1, "done after 7 cycles");
+    } finally {
+        setClientCycleProvider(undefined);
+    }
+});
