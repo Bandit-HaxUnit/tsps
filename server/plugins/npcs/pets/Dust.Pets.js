@@ -5,7 +5,7 @@ function useDust(event) {
   const { ItemIdentifiers, Item, DialogueChainBuilder, ItemStatementDialogue } = api.core;
   if (event.handled || itemId !== ItemIdentifiers.METAMORPHIC_DUST || !player || !npc) return;
   const pet = services.getPetByNpcId(npc.getId());
-  if (pet?.itemId !== ItemIdentifiers.OLMLET || player.getAttribute("pets:current") !== npc
+  if (pet?.familyItemId !== ItemIdentifiers.OLMLET || player.getAttribute("pets:current") !== npc
       || npc.getOwner() !== player || !npc.isRegistered()) return;
   event.handled = true;
   // The walk-to callback can outlive the action's original life/interface state.

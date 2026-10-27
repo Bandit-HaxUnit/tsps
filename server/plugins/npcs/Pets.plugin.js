@@ -160,12 +160,15 @@ const PETS = [
   { enumName: "SMOKE_DEVIL_NORMAL", petId: 8483, morphId: 6639, itemId: 12648, dialogue: 288 },
   { enumName: "KRAKEN", petId: 6640, morphId: 0, itemId: 12655, dialogue: 291 },
   { enumName: "PENANCE_PRINCESS", petId: 6642, morphId: 0, itemId: 12703, dialogue: 296 },
-  { enumName: "OLMLET", petId: 7520, morphId: 8201, itemId: 20851, dialogue: 298 },
-  { enumName: "PUPPADILE", petId: 8201, morphId: 8202, itemId: 20851, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
-  { enumName: "TEKTINY", petId: 8202, morphId: 8203, itemId: 20851, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
-  { enumName: "VANGUARD_PET", petId: 8203, morphId: 8204, itemId: 20851, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
-  { enumName: "VASA_MINIRIO", petId: 8204, morphId: 8205, itemId: 20851, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
-  { enumName: "VESPINA", petId: 8205, morphId: 7520, itemId: 20851, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
+  // Cache241 enum1711 identifies the physical items; keep the legacy family key for dust/saves.
+  { enumName: "OLMLET", petId: NpcIdentifiers.OLMLET_2, morphId: NpcIdentifiers.PUPPADILE_2, itemId: ItemIdentifiers.OLMLET, familyItemId: ItemIdentifiers.OLMLET, dialogue: 298 },
+  { enumName: "PUPPADILE", petId: NpcIdentifiers.PUPPADILE_2, morphId: NpcIdentifiers.TEKTINY_2, itemId: ItemIdentifiers.PUPPADILE, familyItemId: ItemIdentifiers.OLMLET, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
+  { enumName: "TEKTINY", petId: NpcIdentifiers.TEKTINY_2, morphId: NpcIdentifiers.ENRAGED_TEKTINY_2, itemId: ItemIdentifiers.TEKTINY, familyItemId: ItemIdentifiers.OLMLET, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
+  { enumName: "ENRAGED_TEKTINY", petId: NpcIdentifiers.ENRAGED_TEKTINY_2, morphId: NpcIdentifiers.VANGUARD_7, itemId: ItemIdentifiers.ENRAGED_TEKTINY, familyItemId: ItemIdentifiers.OLMLET, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
+  { enumName: "VANGUARD_PET", petId: NpcIdentifiers.VANGUARD_7, morphId: NpcIdentifiers.VASA_MINIRIO_2, itemId: ItemIdentifiers.VANGUARD, familyItemId: ItemIdentifiers.OLMLET, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
+  { enumName: "VASA_MINIRIO", petId: NpcIdentifiers.VASA_MINIRIO_2, morphId: NpcIdentifiers.VESPINA_2, itemId: ItemIdentifiers.VASA_MINIRIO, familyItemId: ItemIdentifiers.OLMLET, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
+  { enumName: "VESPINA", petId: NpcIdentifiers.VESPINA_2, morphId: NpcIdentifiers.FLYING_VESPINA_2, itemId: ItemIdentifiers.VESPINA, familyItemId: ItemIdentifiers.OLMLET, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
+  { enumName: "FLYING_VESPINA", petId: NpcIdentifiers.FLYING_VESPINA_2, morphId: NpcIdentifiers.OLMLET_2, itemId: ItemIdentifiers.FLYING_VESPINA, familyItemId: ItemIdentifiers.OLMLET, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
   { enumName: "SKOTOS", petId: 425, morphId: 0, itemId: 21273, dialogue: 298 },
   { enumName: "IKKLE_HYDRA", petId: NpcIdentifiers.IKKLE_HYDRA, morphId: NpcIdentifiers.IKKLE_HYDRA_2, itemId: 22746, dialogue: -1 },
   { enumName: "IKKLE_HYDRA_ELECTRIC", petId: NpcIdentifiers.IKKLE_HYDRA_2, morphId: NpcIdentifiers.IKKLE_HYDRA_3, itemId: 22746, dialogue: -1 },
@@ -509,12 +512,20 @@ const SKILLING_PETS = [
 /** A skill has one pet whatever its colour; a morph group one pet across items; otherwise its item. */
 function petFamily(pet) {
   if (pet.morphGroup) return `group:${pet.morphGroup}`;
-  return pet.skill != null ? `skill:${normalizeSkillName(pet.skill)}` : `item:${pet.itemId}`;
+  return pet.skill != null ? `skill:${normalizeSkillName(pet.skill)}` : `item:${pet.familyItemId ?? pet.itemId}`;
 }
 
 function getOwnedPetItems(player) {
   const owned = player.getAttribute(OWNED_ATTRIBUTE);
-  return Array.isArray(owned) ? owned.filter((itemId) => getPetForItemId(itemId)) : [];
+  return Array.isArray(owned) ? owned.filter((itemId) => getPetForItemId(itemId)).map((itemId) => {
+    const pet = getPetForItemId(itemId);
+    // Legacy ownership only stored the base item, even when the lost pet had a form.
+    if (pet.familyItemId === itemId) {
+      const variant = getPetByNpcId(getStoredVariant(player, pet));
+      if (variant) return variant.itemId;
+    }
+    return itemId;
+  }) : [];
 }
 
 function ownsPetFamily(player, pet) {
@@ -543,6 +554,7 @@ function recordOwnership(player, pet) {
 
 /** The collection log lists one item per pet: a skilling pet's base colour, never a morph. */
 function collectionLogItemId(pet) {
+  if (pet?.familyItemId) return pet.familyItemId;
   if (pet?.skill == null) return pet?.itemId;
   const base = SKILLING_PETS.find((candidate) => candidate.skill === pet.skill);
   return base?.itemId ?? pet.itemId;
@@ -737,6 +749,16 @@ function setStoredVariant(player, pet, npcId) {
 
 /** Re-applies the chosen form to a freshly summoned follower. */
 function applyStoredVariant(player, npc, pet) {
+  if (pet.familyItemId) {
+    // Old saves encoded every form as the base item plus a variant. Once ownership
+    // records the real item, physical item identity wins over a family's later preference.
+    const owned = player.getAttribute(OWNED_ATTRIBUTE);
+    const legacy = pet.itemId === pet.familyItemId && Array.isArray(owned) && owned.includes(pet.familyItemId);
+    const chosen = legacy ? getStoredVariant(player, pet) || pet.petId : pet.petId;
+    setStoredVariant(player, pet, chosen);
+    if (chosen !== npc.getRealId?.()) npc.setNpcTransformationId(chosen);
+    return;
+  }
   const variant = getStoredVariant(player, pet);
   if (variant && variant !== npc.getRealId?.()) {
     npc.setNpcTransformationId(variant);
@@ -1400,7 +1422,7 @@ function drop(player, itemId, reward, { silent = false } = {}) {
     });
 
     player.setAttribute(CURRENT_PET_ATTRIBUTE, npc);
-    player.setAttribute(LAST_PET_ATTRIBUTE, pet.itemId);
+    player.setAttribute(LAST_PET_ATTRIBUTE, getPetByNpcId(npc.getId())?.itemId ?? pet.itemId);
     syncFollowerIndex(player, npc);
     setTimeout(() => {
       const index = npc.getIndex?.() ?? -1;
@@ -1421,7 +1443,7 @@ function drop(player, itemId, reward, { silent = false } = {}) {
       }
     }, 1200);
 
-    recordOwnership(player, pet);
+    recordOwnership(player, getPetByNpcId(npc.getId()) ?? pet);
     trackCatFollower(player, npc, pet);
     if (reward) {
       if (!silent) player.sendMessage("You have a funny feeling like you're being followed.");
@@ -1535,6 +1557,8 @@ function morph(player, npc) {
     return false;
   }
 
+  if (npc.getOwner?.() !== player || player.isRegistered?.() === false || player.busy?.()) return true;
+
   const next = getPetByNpcId(pet.morphId);
   if (!next || petFamily(next) !== petFamily(pet)) {
     // A cycle must stay within the pet's family so the item and ownership never change.
@@ -1549,6 +1573,11 @@ function morph(player, npc) {
   }
   npc.setNpcTransformationId(pet.morphId);
   setStoredVariant(player, pet, pet.morphId);
+  if (pet.familyItemId) {
+    player.setAttribute(LAST_PET_ATTRIBUTE, next.itemId);
+    recordOwnership(player, next);
+    syncFollowerIndex(player, npc);
+  }
   if (unlock.consume && unlock.itemIds) {
     for (const itemId of unlock.itemIds) player.getInventory().deleteNumber(itemId, 1);
     if (unlock.permanent) unlockMorphFamily(player, petFamily(next));
