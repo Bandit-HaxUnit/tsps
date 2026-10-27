@@ -322,7 +322,10 @@ test("damage dealt and the highest hit count only what lands, through the real h
   queue.addPendingDamage([cancelled]);
   queue.process(World.getProcessCycle() + 2);
   assert.equal(counters().damageDealt, 3, "a queue dropped with its dead owner counts nothing");
-  assert.equal(hooks.onPlayerDealtDamage, undefined, "nothing counts at launch");
+  // Other plugins may listen at launch (league relics do); a launch alone counts nothing.
+  const launched = new HitDamage(8, HitMask.RED);
+  hooks.onPlayerDealtDamage?.({ player: league, target: chicken, hit: { ...melee, getTotalDamage: () => 8, getHits: () => [launched] } });
+  assert.equal(counters().damageDealt, 3, "nothing counts at launch");
 });
 
 test("the summary's statistics count what the hooks see and are sent as their varps", () => {

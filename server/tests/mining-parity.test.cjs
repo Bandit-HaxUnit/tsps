@@ -245,7 +245,7 @@ test("each pickaxe swings its own animation", () => {
     [ItemIds.BRONZE_PICKAXE]: 625, [ItemIds.IRON_PICKAXE]: 626, [ItemIds.STEEL_PICKAXE]: 627,
     [ItemIds.BLACK_PICKAXE]: 3873, [ItemIds.MITHRIL_PICKAXE]: 629, [ItemIds.ADAMANT_PICKAXE]: 628,
     [ItemIds.RUNE_PICKAXE]: 624, [ItemIds.DRAGON_PICKAXE]: 7139, [ItemIds.CRYSTAL_PICKAXE]: 8347,
-    [ItemIds.INFERNAL_PICKAXE]: 4482,
+    [ItemIds.INFERNAL_PICKAXE]: 4482, [ItemIds.ECHO_PICKAXE]: 8347,
   };
   for (const pickaxe of Mining.PICKAXES) {
     assert.equal(pickaxe.animation.getId(), expected[pickaxe.id], `pickaxe ${pickaxe.id}`);
