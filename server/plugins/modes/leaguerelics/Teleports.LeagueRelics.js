@@ -27,20 +27,51 @@ function areaOpen(player, location) {
   return !Array.isArray(areas.unlocked) || areas.unlocked.includes(at.area);
 }
 
-/** The tile itself, or the nearest open one within 3 tiles when it is blocked (a STASH unit, a clue's loc). */
+/** Enough open floor to walk from (tiles): not a pocket behind a counter. */
+const LANDING_REACH = 30;
+const LANDING_RADIUS = 4;
+/** Cardinal steps in RegionManager.canMoveIsBlocked's directions: north, west, east, south. */
+const STEPS = [[1, 0, 1], [3, -1, 0], [4, 1, 0], [6, 0, -1]];
+
+/** How many tiles can be walked to from `tile`, up to `limit` (walls and solid locs block). */
+function reach(tile, limit) {
+  const { RegionManager, Location } = Common.core;
+  const seen = new Set([`${tile.getX()},${tile.getY()}`]);
+  const queue = [tile];
+  while (queue.length > 0 && seen.size < limit) {
+    const at = queue.shift();
+    for (const [direction, dx, dy] of STEPS) {
+      const key = `${at.getX() + dx},${at.getY() + dy}`;
+      if (seen.has(key) || !RegionManager.canMoveIsBlocked(at, direction, null)) continue;
+      seen.add(key);
+      queue.push(new Location(at.getX() + dx, at.getY() + dy, at.getZ()));
+    }
+  }
+  return seen.size;
+}
+
+/**
+ * Where to land for `location`: the tile itself when it is open floor, else the nearest open tile
+ * within 4 from which 30 tiles can be walked (a STASH unit, a clue's loc, a bank booth: not the
+ * banker's side of the counter), else the open tile that reaches furthest.
+ */
 function landing(location) {
   const { RegionManager, Location } = Common.core;
-  if (!RegionManager?.blocked || !RegionManager.blocked(location, null)) return location;
-  for (let radius = 1; radius <= 3; radius++) {
+  if (!RegionManager?.blocked || !RegionManager.canMoveIsBlocked) return location;
+  let best = null;
+  for (let radius = 0; radius <= LANDING_RADIUS; radius++) {
     for (let dx = -radius; dx <= radius; dx++) {
       for (let dy = -radius; dy <= radius; dy++) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
-        const tile = new Location(location.getX() + dx, location.getY() + dy, location.getZ());
-        if (!RegionManager.blocked(tile, null)) return tile;
+        const tile = radius === 0 ? location : new Location(location.getX() + dx, location.getY() + dy, location.getZ());
+        if (RegionManager.blocked(tile, null)) continue;
+        const tiles = reach(tile, LANDING_REACH);
+        if (tiles >= LANDING_REACH) return tile;
+        if (!best || tiles > best.tiles) best = { tile, tiles };
       }
     }
   }
-  return location;
+  return best?.tile ?? location;
 }
 
 /**
@@ -119,4 +150,4 @@ function spawnsNamed(name) {
   });
 }
 
-module.exports = { areaOpen, landing, go, goLast, menu, destinations, ask, spawnsNamed, lastAttribute, ANY_WILDERNESS_LEVEL };
+module.exports = { areaOpen, landing, reach, go, goLast, menu, destinations, ask, spawnsNamed, lastAttribute, ANY_WILDERNESS_LEVEL };

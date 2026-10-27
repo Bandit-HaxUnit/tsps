@@ -821,6 +821,8 @@ export interface PluginCombatSpecialDefinition {
   metadata?: Record<string, unknown>;
   /** Roll overrides applied by core while this special is active. */
   traits?: Record<string, unknown>;
+  /** Roll overrides that depend on the attacker at the swing; replaces `traits` there. */
+  traitsFor?: (player: any) => Record<string, unknown> | undefined;
   /** Per-variant energy cost override, keyed by item id. */
   drainAmountByItemId?: Record<number, number>;
 }
@@ -1269,6 +1271,13 @@ export interface PluginApi {
   /** Adjusts effective levels after prayers/stance, before equipment bonuses and special multipliers. */
   registerCombatEffectiveLevelModifier(
     modifier: (entity: any, level: number, context: import("../game/content/combat/EquipmentEffects").CombatEffectiveLevelContext) => number
+  ): void;
+  /**
+   * Adds to the melee Strength prayer percentage (100 without a prayer, 123 with Piety), for
+   * boosts the Wiki says stack additively with the prayers, like the Soulreaper axe's soul stacks.
+   */
+  registerMeleeStrengthPercentModifier(
+    modifier: (entity: any, percent: number) => number
   ): void;
   registerMeleeHitModifier(
     modifier: (entity: any, baseHit: number) => number
