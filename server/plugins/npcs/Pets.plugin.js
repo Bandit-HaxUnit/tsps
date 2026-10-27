@@ -18,6 +18,7 @@ const { NpcIdentifiers } = require("../../src/main/typescript/elvarg/util/NpcIde
 const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
 const Recovery = require("./pets/Recovery.Pets");
 const Acquisition = require("./pets/Acquisition.Pets");
+const Dust = require("./pets/Dust.Pets");
 
 const CURRENT_PET_ATTRIBUTE = "pets:current";
 /** The item of the follower the player logged out with; re-summoned on login. */
@@ -159,11 +160,11 @@ const PETS = [
   { enumName: "KRAKEN", petId: 6640, morphId: 0, itemId: 12655, dialogue: 291 },
   { enumName: "PENANCE_PRINCESS", petId: 6642, morphId: 0, itemId: 12703, dialogue: 296 },
   { enumName: "OLMLET", petId: 7520, morphId: 8201, itemId: 20851, dialogue: 298 },
-  { enumName: "PUPPADILE", petId: 8201, morphId: 8202, itemId: 20851, dialogue: 298, morphUnlock: { itemId: ItemIdentifiers.METAMORPHIC_DUST, permanent: true, name: "metamorphic dust" } },
-  { enumName: "TEKTINY", petId: 8202, morphId: 8203, itemId: 20851, dialogue: 298, morphUnlock: { itemId: ItemIdentifiers.METAMORPHIC_DUST, permanent: true, name: "metamorphic dust" } },
-  { enumName: "VANGUARD_PET", petId: 8203, morphId: 8204, itemId: 20851, dialogue: 298, morphUnlock: { itemId: ItemIdentifiers.METAMORPHIC_DUST, permanent: true, name: "metamorphic dust" } },
-  { enumName: "VASA_MINIRIO", petId: 8204, morphId: 8205, itemId: 20851, dialogue: 298, morphUnlock: { itemId: ItemIdentifiers.METAMORPHIC_DUST, permanent: true, name: "metamorphic dust" } },
-  { enumName: "VESPINA", petId: 8205, morphId: 7520, itemId: 20851, dialogue: 298, morphUnlock: { itemId: ItemIdentifiers.METAMORPHIC_DUST, permanent: true, name: "metamorphic dust" } },
+  { enumName: "PUPPADILE", petId: 8201, morphId: 8202, itemId: 20851, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
+  { enumName: "TEKTINY", petId: 8202, morphId: 8203, itemId: 20851, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
+  { enumName: "VANGUARD_PET", petId: 8203, morphId: 8204, itemId: 20851, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
+  { enumName: "VASA_MINIRIO", petId: 8204, morphId: 8205, itemId: 20851, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
+  { enumName: "VESPINA", petId: 8205, morphId: 7520, itemId: 20851, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
   { enumName: "SKOTOS", petId: 425, morphId: 0, itemId: 21273, dialogue: 298 },
   { enumName: "IKKLE_HYDRA", petId: NpcIdentifiers.IKKLE_HYDRA, morphId: NpcIdentifiers.IKKLE_HYDRA_2, itemId: 22746, dialogue: -1 },
   { enumName: "IKKLE_HYDRA_ELECTRIC", petId: NpcIdentifiers.IKKLE_HYDRA_2, morphId: NpcIdentifiers.IKKLE_HYDRA_3, itemId: 22746, dialogue: -1 },
@@ -1768,6 +1769,7 @@ module.exports = {
     pluginApi = api;
     Recovery.attach(api, {pets: PETS, getOwnedPetItems, getPetForItemId, petFamily, getPetDisplayName, syncCollectionLog});
     Acquisition.attach(api);
+    Dust.attach(api, {getPetByNpcId, petFamily, getMorphUnlocks, unlockMorphFamily});
     TaskClass = api.core?.Task ?? null;
     TaskManagerRef = api.core?.TaskManager ?? null;
     NPCRespawnTaskRef = api.core?.NPCRespawnTask ?? null;
