@@ -384,18 +384,19 @@ function complete(player, task) {
   const streakVarbit = task.masterId === KRYSTILIA ? "slayer_wilderness_tasks_completed" : "slayer_tasks_completed";
   const streak = State.varbit(player, streakVarbit) + 1;
   State.setVarbit(player, streakVarbit, streak);
-  const { freeTasks } = Data.config;
   const base = master?.points ?? 0;
   if (base === NO_POINTS) {
     player.sendMessage(fill(NO_POINTS_MASTER, { streak }));
     return;
   }
+  const reward = taskReward(player, task.masterId);
   const totalTasks = State.varbit(player, "slayer_tasks_completed") + State.varbit(player, "slayer_wilderness_tasks_completed");
-  if (totalTasks <= freeTasks) {
-    player.sendMessage(fill(FREE_TASK, { streak, tasks: streak === 1 ? "task" : "tasks", more: freeTasks + 1 - totalTasks }));
+  if (totalTasks <= reward.freeTasks) {
+    player.sendMessage(fill(FREE_TASK, { streak, tasks: streak === 1 ? "task" : "tasks", more: reward.freeTasks + 1 - totalTasks }));
     return;
   }
-  const points = taskPoints(player, base * multiplier(streak));
+  // Whole points, as the message shows them: a multiplier may be fractional (a league fragment's +10%).
+  const points = Math.floor(base * multiplier(streak) * reward.multiplier);
   grantPoints(player, points);
   player.sendMessage(fill(POINTS, { streak, points, total: State.varbit(player, "slayer_points") }));
 }
@@ -415,9 +416,19 @@ function completeMortimer(player, taskModifier) {
     player.sendMessage(fill(MORTIMER_NO_POINTS, { streak }));
     return;
   }
-  const points = taskPoints(player, taskModifier.value);
+  const points = Math.floor(taskModifier.value * taskReward(player, MORTIMER).multiplier);
   grantPoints(player, points);
   player.sendMessage(fill(MORTIMER_POINTS, { streak, points, total: State.varbit(player, "slayer_points") }));
+}
+
+/**
+ * "slayer:task-reward" { player, master, freeTasks, multiplier }, asked as a task completes:
+ * plugins lower the tasks that pay nothing or multiply the points (a league's tier passive).
+ */
+function taskReward(player, master) {
+  const reward = { player, master, freeTasks: Data.config.freeTasks, multiplier: 1 };
+  api.emitCustomEvent("slayer:task-reward", reward);
+  return reward;
 }
 
 function multiplier(streak) {
@@ -425,13 +436,6 @@ function multiplier(streak) {
     if (streak % every === 0) return times;
   }
   return 1;
-}
-
-/** "slayer:task-points" { player, points }: a completed task's points, which content may raise (a league fragment). */
-function taskPoints(player, points) {
-  const request = { player, points };
-  api.emitCustomEvent("slayer:task-points", request);
-  return Number.isFinite(request.points) && request.points >= 0 ? Math.floor(request.points) : points;
 }
 
 /** Adds points, capped at what slayer_points can hold. */

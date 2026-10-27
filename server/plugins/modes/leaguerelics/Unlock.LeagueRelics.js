@@ -180,7 +180,6 @@ function answerRelics(query) {
 module.exports = function attach(api) {
   api.persistAttribute(Common.RELICS_ATTRIBUTE, {});
   api.onCustomEvent("league:login", login);
-  api.onCustomEvent("league:content-rows", require("./Catalog.LeagueRelics").contribute);
   api.onCustomEvent("league:points-changed", pointsChanged);
   api.onCustomEvent("league:highest-tier", answerHighestTier);
   api.onCustomEvent("league:has-relic", answerHasRelic);

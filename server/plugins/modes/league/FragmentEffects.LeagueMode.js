@@ -241,13 +241,13 @@ function slayerKill({ player }) {
 
 // ---- Slay 'n' Pay, Superior Tracking: more Slayer points, likelier superiors ----
 
-/** `slayer:task-points`: a completed task's points raised by the fragment's percent. */
-function slayerPoints(request) {
-  const percent = Fragments.equippedValue(request.player, effects().slayerPoints.fragment);
-  if (percent !== null) request.points = Math.floor(request.points * (100 + percent) / 100);
+/** `slayer:task-reward`: a completed task's points raised by the fragment's percent (Slayer rounds down). */
+function slayerPoints(reward) {
+  const percent = Fragments.equippedValue(reward.player, effects().slayerPoints.fragment);
+  if (percent !== null) reward.multiplier *= (100 + percent) / 100;
 }
 
-/** `slayer:superior-chance`: 1 in the fragment's number, Bigger and Badder or not (its text names no unlock). */
+/** `slayer:superior-spawn`: 1 in the fragment's number, Bigger and Badder or not (its text names no unlock); the toggle-off still holds. */
 function superiorChance(query) {
   const oneIn = Fragments.equippedValue(query.player, effects().superiorChance.fragment);
   if (oneIn === null || oneIn < 1) return;
@@ -373,8 +373,8 @@ module.exports = function attach(api) {
   api.onCombatHitResolved(hitResolved);
   api.registerIncomingDamageModifier(incomingDamage);
   api.onCustomEvent("slayer:task-kill", slayerKill);
-  api.onCustomEvent("slayer:task-points", slayerPoints);
-  api.onCustomEvent("slayer:superior-chance", superiorChance);
+  api.onCustomEvent("slayer:task-reward", slayerPoints);
+  api.onCustomEvent("slayer:superior-spawn", superiorChance);
   api.onCustomEvent("combat:melee-charge", meleeChargeSaving);
   api.registerPrayerDrainRateModifier(prayerDrainRate);
   api.registerSpecialEnergyCostModifier(specialCost);

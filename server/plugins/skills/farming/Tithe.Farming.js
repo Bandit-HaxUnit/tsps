@@ -143,7 +143,9 @@ function titheObject(event) {
         const result = Model.titheDeposit(score.score, player.getInventory().getAmount(fruit), crop.xp);
         player.getInventory().deleteNumber(fruit, result.count);
         score.score = result.score;
-        score.points = Math.min(16000, score.points + result.points);
+        const award = { player, minigame: "tithe-farm", points: result.points };
+        core.PluginManager.emitCustomEvent("minigame:points", award);
+        score.points = Math.min(16000, score.points + award.points);
         Patches.award(player, result.xp);
         player.getSkillManager().addExperiences(core.Skill.FARMING, result.bonus);
         sync(player);

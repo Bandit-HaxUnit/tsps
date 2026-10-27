@@ -1,14 +1,14 @@
 /**
- * The structs and enums a league's screens need that the cache does not carry (another league's
- * relic catalog, Leagues I-III's rank thresholds), sent to the client as one structOverrides /
- * enumOverrides payload (GamemodeContentStore replaces the whole set on every payload, so the
- * units never send their own). Units answer
+ * The structs, enums and DB rows a league's screens need that the cache does not carry (another
+ * league's relic catalog and task list, Leagues I-III's rank thresholds), sent to the client as one
+ * structOverrides / enumOverrides / dbRowOverrides payload (GamemodeContentStore replaces the whole
+ * set on every payload, so the units never send their own). Units answer
  *
- *   "league:content-rows" { player, league, structs: [{ structId, params }], enums: [{ enumId, valueType, defaultValue, entries }] }
+ *   "league:content-rows" { player, league, base, structs: [{ structId, params }], enums: [{ enumId, valueType, defaultValue, entries }], dbRows: [{ rowId, tableId, columns: { "<column>": [values] } }] }
  *
- * by pushing their rows; the payload goes out whenever a unit asks for it with
- * "league:send-content" { player }: Account at a league login, the others before an interface
- * opens (in case the client reloaded).
+ * by pushing their rows; the payload goes out at a league login and whenever a unit asks for it
+ * again with "league:send-content" { player } (before an interface opens, in case the client
+ * reloaded). The event names are the ones the areas plugin (#1352) uses for the same job.
  * Rows for one struct from several units are merged, since the client keeps one params map a
  * struct. Virtual ids start at `base` on the query (data.content.virtualIdBase + league type x
  * 1000); each unit adds its own offsets.
@@ -21,7 +21,7 @@ function virtualIdBase(type) {
 }
 
 function rows(player, type) {
-  const query = { player, league: type, base: virtualIdBase(type), structs: [], enums: [] };
+  const query = { player, league: type, base: virtualIdBase(type), structs: [], enums: [], dbRows: [] };
   Common.api.emitCustomEvent("league:content-rows", query);
   return query;
 }
@@ -35,11 +35,16 @@ function mergeStructs(rows) {
 
 /** Sent even when empty: the client keeps the last payload's overrides until the next replaces them. */
 function send(player, type) {
-  const { structs, enums } = rows(player, type);
+  const { structs, enums, dbRows } = rows(player, type);
   player.getPacketSender().sendContentData("server", [
     { key: "structOverrides", rows: mergeStructs(structs) },
     { key: "enumOverrides", rows: enums },
+    { key: "dbRowOverrides", rows: dbRows },
   ]);
+}
+
+function login({ player, league }) {
+  send(player, league);
 }
 
 function refresh(request) {
@@ -48,6 +53,7 @@ function refresh(request) {
 }
 
 module.exports = function attach(api) {
+  api.onCustomEvent("league:login", login);
   api.onCustomEvent("league:send-content", refresh);
 };
 
