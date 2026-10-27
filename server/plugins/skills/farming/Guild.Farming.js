@@ -221,5 +221,11 @@ function guildObject(event) {
     event.handled = true;
     Vault.open(event);
 }
+/** "farming:open-seed-vault": the seed vault from anywhere (content that carries it, a league relic's vault). */
+function openSeedVault(event) {
+    if (!event?.player || event.opened) return;
+    event.opened = true;
+    Vault.open({ player: event.player, object: null, anywhere: true });
+}
 
-Object.assign(module.exports, { CONTRACTS, guildNpc, completeContract, harvestContract, giveSeedPack, guildItemOnNpc, rewardItem, storeCrop, storagePair, storageAction, bankStorageOp, guildObject });
+Object.assign(module.exports, { CONTRACTS, guildNpc, completeContract, harvestContract, giveSeedPack, guildItemOnNpc, rewardItem, storeCrop, storagePair, storageAction, bankStorageOp, guildObject, openSeedVault });
