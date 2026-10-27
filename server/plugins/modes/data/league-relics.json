@@ -48,7 +48,13 @@
     "relicList": { "text": "{league} relics: {relics}", "source": "ours" },
     "relicNone": { "text": "none chosen", "source": "ours" },
     "lastStandNoFood": { "text": "You cannot eat while making your last stand.", "source": "ours" },
-    "echoToggle": { "text": "Your {tool} will now {mode}.", "source": "ours" }
+    "echoToggle": { "text": "Your {tool} will now {mode}.", "source": "ours" },
+    "foragerFound": { "text": "Your forager's pouch finds some {herb}.", "source": "ours" },
+    "foragerHolds": { "text": "Your forager's pouch holds: {herbs}.", "source": "ours" },
+    "foragerEmpty": { "text": "Your forager's pouch is empty.", "source": "ours" },
+    "foragerFilled": { "text": "You put {amount} herbs into your forager's pouch.", "source": "ours" },
+    "foragerNoRoom": { "text": "You don't have enough inventory space to withdraw that.", "source": "ours" },
+    "foragerNothingToFill": { "text": "You have no grimy herbs your forager's pouch can take.", "source": "ours" }
   },
   "effects": {
     "_comment": "The relics with effects here (one <Relic>.LeagueRelics.js each), each gated on its league (`league`, one type or several for a relic both leagues have) and on being chosen (`key`, plus `aliases` for a catalog entry that stands in for the same relic). Numbers are the Wiki's: no rsprox recording of Trailblazer Reloaded exists (the captures start at revision 223). Superior Sorcerer's splash reach (one tile around the primary target, like a burst) and Undying Retribution's graphic (the Retribution prayer's, 437) are ours; the Wiki gives neither.",
@@ -96,6 +102,29 @@
     },
     "cornerCutter": { "league": 5, "key": "corner-cutter", "lapCount": 2, "lapXpMultiplier": 1.25, "markCoins": 10000 },
     "dodgyDeals": { "league": 5, "key": "dodgy-deals", "pouchLimitMultiplier": 3, "radius": 5 },
+    "_productionComment": "The production relics (docs/leagues.md). Wiki numbers unless marked ours: 'all at once' is up to 28 a cycle (the inventory's slots: ours) and the ammunition kinds 10 (Production Master, Wiki); the +12 is invisible (it counts where the skills check their level; the Wiki does not say); the extra product is the same amount the action made; the fletching 'chisel' group also cuts kebbit and antler bolts and wolfbone arrowtips, batched with the bolt tips (ours); the Forager's pouch keeps its own herbs (live shares the herb sack's), pays the herb's cleaning XP for a find (the Wiki: 'a small amount'), and its Herblore perks need only the relic, not the pouch carried (the Raging Echoes page does not tie them to it).",
+    "productionProdigy": {
+      "league": 4, "key": "production-prodigy", "skills": ["CRAFTING", "SMITHING", "HERBLORE", "FLETCHING", "COOKING"], "levelBoost": 12, "extraChance": 0.25, "maxActions": 28,
+      "batch": {
+        "SMITHING": ["smelt", "smith", "cannonballs"], "FLETCHING": ["logs", "shields", "stringing", "chisel"], "HERBLORE": ["clean", "mix"], "COOKING": ["cook"],
+        "CRAFTING": ["leather", "jewellery", "battlestaves", "pottery", "gems", "glassblowing", "spinning"]
+      }
+    },
+    "productionMaster": {
+      "league": 5, "key": "production-master", "maxActions": 28,
+      "batch": {
+        "SMITHING": ["smelt", "smith", "cannonballs"], "FLETCHING": ["logs", "shields", "stringing", "chisel", "arrows", "bolts", "tipped", "darts"], "HERBLORE": ["clean", "mix"], "COOKING": ["cook"],
+        "CRAFTING": ["leather", "jewellery", "battlestaves", "pottery", "gems", "amethyst", "glassblowing", "spinning"]
+      },
+      "capped": { "arrows": 10, "bolts": 10, "tipped": 10, "darts": 10 }
+    },
+    "friendlyForager": {
+      "league": 5, "key": "friendly-forager", "tool": "FORAGERS_POUCH", "toolName": "Forager's pouch",
+      "cooldownTicks": 9, "levelRange": 25, "herbCap": 30, "secondarySaveChance": 0.9,
+      "triggers": ["mining:success", "woodcutting:success", "fishing:success", "hunter:success"],
+      "_saving": "Wiki: the torstol potion (unf) of super combat potions and anti-venom+ is saved like a secondary; crystal dust (divine potions) never is.",
+      "alsoSaved": ["torstolvial"], "neverSaved": ["prif_crystal_shard_crushed"]
+    },
     "arcaneGrimoire": {
       "item": "Arcane grimoire",
       "options": { "change": "Change Spellbook", "previous": "Previous Spellbook", "check": "Check Previous" },

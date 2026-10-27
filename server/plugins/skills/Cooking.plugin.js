@@ -127,8 +127,22 @@ function wearingCookingCape(player) {
   return request.result === true;
 }
 
+/** The Cooking level the skill checks: the current level, raised by content ("skills:level-boost", a league relic's invisible +12). */
+function cookingLevelOf(player) {
+  const request = { player, skill: Skill.COOKING, boost: 0 };
+  pluginApi?.emitCustomEvent("skills:level-boost", request);
+  return player.getSkillManager().getCurrentLevel(Skill.COOKING) + Math.max(0, request.boost | 0);
+}
+
+/** How many items one cooking cycle cooks ("skills:actions-per-cycle", a league relic's all at once); 1 unless content says more. */
+function actionsPerCycle(player) {
+  const request = { player, skill: Skill.COOKING, kind: "cook", actions: 1 };
+  pluginApi?.emitCustomEvent("skills:actions-per-cycle", request);
+  return Math.max(1, request.actions | 0);
+}
+
 function isSuccess(player, cookable, objectId) {
-  const cookingLevel = player.getSkillManager().getCurrentLevel(Skill.COOKING);
+  const cookingLevel = cookingLevelOf(player);
   if (wearingCookingCape(player)) {
     return true;
   }
@@ -167,7 +181,7 @@ function startCooking(player, object, cookable, activeSessions) {
       return false;
     }
   }
-  if (player.getSkillManager().getCurrentLevel(Skill.COOKING) < cookable.level) {
+  if (cookingLevelOf(player) < cookable.level) {
     player.sendMessage(`You need a Cooking level of at least ${cookable.level} to cook this.`);
     return false;
   }
@@ -238,6 +252,9 @@ class CookingTask extends Task {
       Sounds.sendSound(player, Sound.COOKING_COOK);
       player.performAnimation(session.animation);
 
+      // Content may cook several in the one cycle ("skills:actions-per-cycle", a league relic's all at once).
+      const actions = actionsPerCycle(player);
+      for (let done = 0; done < actions && player.getInventory().contains(session.cookable.raw); done++) {
       const cookable = cookedResult(player, session.cookable);
       player.getInventory().deleteNumber(session.cookable.raw, 1);
       const burnRequest = {
@@ -256,12 +273,14 @@ class CookingTask extends Task {
           itemId: cookable.cooked,
         });
         player.getSkillManager().addExperiences(Skill.COOKING, cookable.xp);
+        pluginApi.emitCustomEvent("skills:produced", { player, skill: Skill.COOKING, itemId: cookable.cooked, amount: 1, xp: cookable.xp });
       } else {
         player.getInventory().addItem(new Item(session.cookable.burnt, 1));
         const rawName =
           ItemDefinition.forId(session.cookable.raw)?.getName?.()?.toLowerCase?.() ||
           session.cookable.name;
         player.sendMessage(`You burn the ${rawName}.`);
+      }
       }
     }
   }

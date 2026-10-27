@@ -137,6 +137,11 @@ relics are the first askers; nothing changes when nobody answers):
 | `hunter:catch-chance`, `hunter:rewards`, `hunter:lure-interval`, `hunter:jar-kept` | Hunter | `{ player, npcId, chance }` in the shared roll; `{ player, kind, npcId, rewards, xp }` for a trap's catch; `{ player, kind, ticks }` between an idle trap's looks; `{ player, kept }` for an impling jar |
 | `thieving:loot`, `thieving:done`, `thieving:deplete-stall`; `pouchLimit` and `alwaysSucceeds` on `thieving:pickpocket-target` | Thieving | `{ player, npc, target, loot }` before the loot is handed over; `{ player, kind, npc \| object, succeeded, again }` after a pickpocket or theft (again repeats the click a tick later, while neither the player nor the NPC has moved); `{ player, object, handled }` before a stall empties |
 | `agility:roll`, `agility:lap-reward`, `agility:mark` | Agility | `{ player, objectId, success }` after the obstacle roll; `{ player, course, count, xp }` before a lap is recorded; `{ player, location, items }` as a mark spawns |
+| `skills:level-boost` | Crafting, Smithing, Herblore, Fletching and Cooking, where they check their own level | `{ player, skill, boost }`: an invisible boost |
+| `skills:actions-per-cycle` | every make-X loop of those five skills (smithing sessions, fletching, mixing, cleaning, the crafting loops, pottery, cooking) | `{ player, skill, kind, recipe?, actions }`: how many items one cycle makes; `kind` names the loop (`smelt`, `smith`, `cannonballs`, the fletching group, `mix`, `clean`, `gems`, `leather`, ...) |
+| `skills:produced` | each product of those loops | `{ player, skill, itemId, amount, xp }` once it is made |
+| `herblore:mix` | Herblore, before a potion's ingredients go | `{ player, recipe, consume, returns, productId }`: a listener may lower a `consume` or `returns` count or change the product |
+| `herblore:herbs` | Herblore | lookup: every herb `{ grimyId, cleanId, level, xp }` |
 | `firemaking:light-roll`, `firemaking:logs-per-action` | Firemaking | `{ player, success }` after the lighting roll; `{ player, logId, amount }` for the logs one action burns |
 
 ## What the client is sent
@@ -592,6 +597,43 @@ Animal Wrangler's Hunter and cooking ones) do not.
   (`thieving:done`; chests have no repeat here either), and a stall never empties for the owner
   (`thieving:deplete-stall`; another player's theft still empties it for everyone, as on live).
 
+### The production relics
+
+- **Production Prodigy** (Trailblazer Reloaded tier 1): Crafting, Smithing, Herblore, Fletching
+  and Cooking boosted by 12 (`skills:level-boost`; invisible, wherever those skills check their
+  own level, Superheat Item included, so requirements and success charts both see it: the Wiki
+  does not say which; the Blast Furnace's own Smithing check is not boosted), the
+  Wiki's activities all at once with full XP (`skills:actions-per-cycle`: smelting, smithing,
+  cannonballs; fletching logs (shafts, shields and unstrung bows), stringing, bolt tips (the
+  group also cuts kebbit and antler bolts and wolfbone arrowtips: batched too, ours); cleaning herbs
+  and mixing potions whose secondary does not stack; cooking; leather, jewellery, battlestaves,
+  pottery, gems, glassblowing, spinning), and a 25% chance of the same product again, banked with
+  its XP (`skills:produced`; only when the bank has room). "All at once" is up to 28 a cycle, the
+  inventory's slots: ours. Molten glass, smelted at a furnace, is Crafting and not on either
+  list. Not here: jugs of wine (no wine making in this server); Guardians of the Rift's essence is
+  not a Crafting loop here, so the Wiki's exclusion holds.
+- **Production Master** (Raging Echoes tier 5): the same list all at once, plus arrow shafts,
+  headless arrows, arrows, bolts and gem-tipped bolts, and darts (10 times the usual a cycle,
+  Wiki; darts and bolts by default fletch in one click, and that click makes 10 too), and amethyst
+  (10 December 2024). No boost and no extra product. Pies and pizzas exist only in The Mess here
+  and are not batched.
+- **Friendly Forager** (Raging Echoes tier 2): the Forager's pouch, carried or worn, finds a
+  grimy herb when the player mines, chops, fishes or hunts (their success events), at most once
+  every 9 ticks, one the player could clean at Herblore level + 25 and of a kind the pouch holds
+  fewer than 30 of (`herblore:herbs` lists them); a minigame's reward (the Fishing Trawler, the
+  rumour sack) is not gathering. The herb's cleaning XP for each find is ours (the Wiki: "a small
+  amount"). Check, Fill and Withdraw (as notes) are the cache's options, on the pouch clicked; the
+  pouch keeps its own herbs, where live shares them with the herb sack. In Herblore
+  (`herblore:mix`), a secondary ingredient (any after the recipe's first, its primary, that is
+  not a potion or a vial, so a haemostatic dressing's poultice is always used; and a
+  super combat's or anti-venom+'s torstol potion (unf), Wiki, whose vial is kept with it) is
+  kept 90% of the time, never crystal dust (Wiki), and a potion brewed from an unfinished one
+  comes with 4 doses instead of 3, whatever the recipe calls its product (Compost potion(4) from
+  supercompost; an upgrade of a dosed potion keeps its doses). Unfinished
+  potions keep their herb. These Herblore perks need only the relic, not the pouch (ours: the
+  Raging Echoes page does not tie them to it). Not here: the Menaphite remedy (no recipe in this
+  server).
+
 ### Equilibrium (both leagues)
 
 Trailblazer Reloaded's tier 6 and Raging Echoes' tier 4: every gain of experience
@@ -954,8 +996,8 @@ above (clue-step progress and farming ticks), the boosted sources their own plug
 ask about, Shattered
 Relics' own panels. Each is its own item on the
 progress tracker.
-Of the relics, the production, clue, slayer and item ones follow in their own
-PRs (the plan in the relic effects PR).
+Of the relics, the economy and farming (Fire Sale, Golden God, Farmer's Fortune, Overgrown, Pocket
+Kingdom), clue, slayer and item ones follow in their own PRs (the plan in the relic effects PR).
 
 The records have no POH league hall to stand in: its trophy case, pedestals and scroll need
 the house's league hall, which this server doesn't build yet, so the scroll's options answer

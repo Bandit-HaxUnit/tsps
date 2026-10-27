@@ -37,6 +37,9 @@ module.exports = {
     require("./leaguerelics/AnimalWrangler.LeagueRelics")(api);
     require("./leaguerelics/CornerCutter.LeagueRelics")(api);
     require("./leaguerelics/DodgyDeals.LeagueRelics")(api);
+    require("./leaguerelics/ProductionProdigy.LeagueRelics")(api);
+    require("./leaguerelics/ProductionMaster.LeagueRelics")(api);
+    require("./leaguerelics/FriendlyForager.LeagueRelics")(api);
     require("./leaguerelics/ArcaneGrimoire.LeagueRelics")(api);
   },
 };
