@@ -3,6 +3,7 @@
 const core = require("./Core.Farming");
 const Data = require("./Data.Farming");
 const Patches = require("./Patches.Farming");
+const Vault = require("./Vault.Farming");
 // Native bank-side item op labelled by cache param 595, shared with StorageItems.
 const BANK_STORAGE_OP = 9;
 const CONTRACTS = [
@@ -218,31 +219,7 @@ function withdrawalEntries(stored, kind) {
 function guildObject(event) {
     if (event.definition?.getName()?.toLowerCase() !== "seed vault") return;
     event.handled = true;
-    const { player, object } = event;
-    const near = () => player.getLocation().isWithinDistance(object.getLocation(), 5);
-    if (!near()) return;
-    const pin = { player, feature: "seed-vault", resume: () => guildObject(event) };
-    core.PluginManager.emitCustomEvent("bank-pin:guard", pin);
-    if (pin.locked) return;
-    const farm = Patches.farmFor(player), vault = farm.vault ??= {};
-    const entries = [["Deposit all seeds and saplings", () => {
-        if (!near()) return;
-        for (const item of [...player.getInventory().getValidItems()]) {
-            const def = core.CacheDefinitions.getItem(item.getId()), id = def.noteTemplate >= 0 ? def.note : item.getId();
-            if (![...Data.CROPS.values()].some(c => c.seed === id || c.sapling === id)) continue;
-            const amount = Math.min(item.getAmount(), 2147483647 - (vault[id] ?? 0));
-            if (amount > 0) { player.getInventory().deleteNumber(item.getId(), amount); vault[id] = (vault[id] ?? 0) + amount; }
-        }
-    }]];
-    for (const [id, count] of Object.entries(vault)) if (count > 0) entries.push([`${core.CacheDefinitions.getItem(+id).name} (${count})`, () => {
-        if (!near()) return;
-        Patches.choose(player, [1, 5, 10, 2147483647].map(requested => [`Withdraw ${requested === 2147483647 ? "all" : requested}`, () => {
-            if (!near()) return;
-            const amount = Math.min(vault[id] ?? 0, requested, core.CacheDefinitions.getItem(+id).stackability ? 2147483647 : player.getInventory().getFreeSlots());
-            if (amount && Patches.give(player, +id, amount)) vault[id] -= amount;
-        }]));
-    }]);
-    Patches.choose(player, entries);
+    Vault.open(event);
 }
 
 Object.assign(module.exports, { CONTRACTS, guildNpc, completeContract, harvestContract, giveSeedPack, guildItemOnNpc, rewardItem, storeCrop, storagePair, storageAction, bankStorageOp, guildObject });

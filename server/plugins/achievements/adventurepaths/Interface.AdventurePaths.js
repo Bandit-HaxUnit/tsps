@@ -1,3 +1,4 @@
+const Journal = require("./Journal.AdventurePaths");
 const Items = require("./Items.AdventurePaths");
 const Common = require("./Common.AdventurePaths");
 const Progress = require("./Progress.AdventurePaths");
@@ -10,6 +11,7 @@ function open(player) {
     const out = player.getPacketSender();
     out.sendInterfaceRemoval();
     Progress.update({ player });
+    Journal.prefer(player, true);
     out.sendConfig(
         Common.core.CacheDefinitions.getVarpId("adventurepath_selected_path"),
         Common.state(player).settings[
