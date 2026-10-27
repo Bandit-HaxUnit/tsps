@@ -58,6 +58,19 @@ function highestTier(player) {
   return Object.keys(chosen(player)).reduce((highest, tier) => Math.max(highest, Number(tier)), -1);
 }
 
+/** Whether the character chose relic `key` in its own league's catalog. */
+function hasRelic(player, key) {
+  const type = leagueOf(player);
+  if (type === null) return false;
+  const picks = chosen(player);
+  return catalog(type).tiers.some((tier, tierIndex) => tier.relics[picks[tierIndex] - 1]?.key === key);
+}
+
+/** An effect applies to a player character in the effect's league who chose its relic. */
+function effectActive(player, effect) {
+  return player?.isPlayer?.() === true && leagueOf(player) === effect.league && hasRelic(player, effect.key);
+}
+
 /** Virtual struct and enum ids for a league's catalog: the client reads them as if from the cache. */
 function ids(type) {
   const base = data.virtualIdBase + Number(type) * 1000;
@@ -70,12 +83,30 @@ function ids(type) {
   };
 }
 
+/** True while a relic builds a hit derived from another (a splash), so relics that scale hits leave it alone. */
+let buildingDerivedHit = false;
+
+/** Runs `build` (which constructs a PendingHit) as a derived hit; see `isBuildingDerivedHit`. */
+function derivedHit(build) {
+  buildingDerivedHit = true;
+  try {
+    return build();
+  } finally {
+    buildingDerivedHit = false;
+  }
+}
+
+function isBuildingDerivedHit() {
+  return buildingDerivedHit;
+}
+
 function message(key, values = {}) {
   return data.messages[key].text.replace(/\{(\w+)\}/g, (match, name) => values[name] ?? match);
 }
 
 module.exports = {
-  init, leagueOf, catalog, league, relic, chosen, points, highestTier, ids, message, RELICS_ATTRIBUTE,
+  init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, ids, message, RELICS_ATTRIBUTE,
+  derivedHit, isBuildingDerivedHit,
   get data() { return data; },
   get api() { return api; },
   get core() { return core; },

@@ -115,6 +115,35 @@ character's picks live in `league:relics` (tier index -> slot 1-3).
   only when the character's league has that relic and chose it. The tier passives' XP rates are
   LeagueMode's (`league:highest-tier`); the other passives are not implemented.
 
+### Trailblazer Reloaded's combat relics
+
+Three relics have their effects (`leaguerelics/*.LeagueRelics.js`, numbers in the data's
+`effects`; the Wiki's, as no recording of Trailblazer Reloaded exists):
+
+- **Superior Sorcerer** (tier 4): magic attacks every 2 ticks (the new `onAttackSpeed` hook, asked
+  after the weapon's, spell's or special's own speed), magic accuracy x2.75 and +200 permille
+  magic damage (the equipment-effect modifiers), a 90% roll a cast that keeps the runes (the
+  existing `magic:rune-saving`, asked once the cast has checked the player has them, so they are
+  required but not spent) or the staff's charge (`combat:consume-charge`, asked by the trident in
+  core and by the Sanguinesti staff and Tumeken's shadow before a charge is spent), in multicombat
+  a landed spell also hits up to five attackable targets within a tile of its target for 0 to 25%
+  of its damage (fixed-damage hits that pay no XP, never splash themselves and are not scaled
+  again by Berserker, since the hit they derive from already was), and the standard
+  binds and Ancient ice spells always land unless the target is frozen or still freeze-immune.
+- **Berserker** (tier 7): every hit is multiplied by 1 + 0.004 x missing hitpoints (floored), and a
+  hit on an NPC at full health is forced accurate at its max.
+- **Undying Retribution** (tier 8): when a death would go ahead (`onPlayerBeforeDeath`, after any
+  other content kept the player alive) and three minutes have passed since it last fired:
+  hitpoints and prayer to their max, poison, venom and the poison immunity cleared, the
+  Retribution prayer's graphic 437 (ours), and a reflected hit of 0 to 2 x Prayer level on every
+  attackable NPC within three tiles that is not attack-immune and that the area's policy lets
+  the player fight (recoil-immune ones only if Nex, the Hespori, Vorkath or a Wilderness boss)
+  and 0 to half the Prayer level on each player fighting them. The cooldown is a timestamp
+  attribute (0 when ready), reset by a real death (`onPlayerDefeated`, which fires only once
+  the death went ahead). A plugin that already prevented
+  the death on this hook is honoured; one attached after this plugin would see the relic fire
+  first, since every before-death hook runs. Raid death penalties are not exempted yet.
+
 ## Developer commands
 
 - `::league [player]` - the character's league and points.
