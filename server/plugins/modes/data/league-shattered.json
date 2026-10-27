@@ -236,7 +236,7 @@
     "plankStretcher": { "fragment": 28, "material": "plank" },
     "smithingDouble": { "fragment": 31, "kinds": ["smith"] },
     "rumpleBowString": { "fragment": 32, "spell": "Spin Flax" },
-    "dragonOnABit": { "fragment": 33, "kinds": ["leather"], "product": "d'hide" },
+    "dragonOnABit": { "fragment": 33, "kinds": ["leather"], "product": "d'hide", "material": "dragon leather" },
     "imcandosApprentice": { "fragment": 34, "kinds": ["jewellery"] },
     "enchantedJeweler": { "fragment": 35, "jewellery": ["ring", "necklace", "amulet", "bracelet"] },
     "alchemaniac": { "fragment": 36 },

@@ -196,17 +196,20 @@ function rogueDoubleChance(player) {
 /**
  * Hands the loot over: coins as the target's coin pouch; the rogue outfit may double it, and
  * content's `multiplier` (a league fragment's double loot) multiplies it again. Clues are never more.
+ * What the inventory has no room for (a doubled pouch's coins, a doubled item) falls to the floor.
  */
 function giveLoot(player, target, loot, random = Math.random, multiplier = 1) {
   const times = (random() < rogueDoubleChance(player) ? 2 : 1) * Math.max(1, multiplier | 0);
+  const inventory = player.getInventory();
   for (const { id, amount, clue } of loot) {
     if (id === core.ItemIdentifiers.COINS && target.coinPouch) {
-      player.getInventory().adds(target.coinPouch.id, 1);
+      inventory.adds(target.coinPouch.id, 1);
       // Wiki (Coin pouch): a doubled pouch gives one pouch plus its coins directly.
-      if (times > 1) player.getInventory().adds(core.ItemIdentifiers.COINS, (times - 1) * (Array.isArray(target.coinPouch.coins) ? target.coinPouch.coins[0] : target.coinPouch.coins));
+      const coins = (times - 1) * (Array.isArray(target.coinPouch.coins) ? target.coinPouch.coins[0] : target.coinPouch.coins);
+      if (coins > 0) inventory.forceAdd(player, new core.Item(core.ItemIdentifiers.COINS, coins));
       continue;
     }
-    player.getInventory().adds(id, clue ? amount : amount * times);
+    inventory.forceAdd(player, new core.Item(id, clue ? amount : amount * times));
   }
 }
 

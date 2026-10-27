@@ -87,12 +87,14 @@ function imcandosApprentice(request) {
   if (request.xp > 0) player.getSkillManager().addExperiences(request.skill, request.xp);
 }
 
-/** Dragonhide armour: its materials come back, to the bank (Wiki). */
+/** Dragonhide armour: its dragon leather comes back, to the bank (Wiki); a shield's frame and nails stay used. */
 function dragonOnABit(request) {
   const effect = effects().dragonOnABit;
   const percent = forKind(request, "dragonOnABit");
   if (percent === null || !itemName(request.itemId).toLowerCase().includes(effect.product) || !chance(percent)) return;
-  for (const [itemId, amount] of request.materials ?? []) Common.bank(request.player, itemId, amount);
+  for (const [itemId, amount] of request.materials ?? []) {
+    if (itemName(itemId).toLowerCase().includes(effect.material)) Common.bank(request.player, itemId, amount);
+  }
 }
 
 /** Another of the cooked food, to the bank and with no XP; never untradeable food, never in an instance (Wiki). */
@@ -134,9 +136,11 @@ function mix(request) {
   if (percent === null || /\(unf\)$/i.test(itemName(request.productId))) return;
   const level = Fragments.equippedLevel(player, effects().mixologist.fragment);
   const save = effects().mixologist.secondarySavePercent[level - 1];
-  for (const item of request.consume) {
-    if (!isPotion(item.id) && chance(save)) item.count = 0;
-  }
+  // The recipe's first ingredient is what the potion is mixed from (a potion, or a base such as the
+  // haemostatic poultice); only the others are secondaries, and a dosed or unfinished one never is.
+  request.consume.forEach((item, index) => {
+    if (index > 0 && !isPotion(item.id) && chance(save)) item.count = 0;
+  });
   const upgrade = request.consume.some((item) => /\(\d\)$/.test(itemName(item.id)));
   const product = request.recipe?.product;
   if (upgrade || typeof product !== "string" || !product.startsWith("3dose") || !chance(percent)) return;

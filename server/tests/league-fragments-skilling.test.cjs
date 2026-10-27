@@ -211,6 +211,24 @@ test("Deeper Pockets: Thieving's own handover gives the loot twice at its chance
   assert.deepEqual(pick(shattered("pocketslevel1")), [1, 0, 1, 1], "no fragment");
   Math.random = () => 0.1;
   for (const player of others) assert.deepEqual(pick(player), [1, 0, 1, 1], player.getUsername());
+
+  // A full inventory holding a pouch stack and no coins: the pickpocket goes ahead (pouch loot only),
+  // and the doubled pouch's coins fall to the floor rather than being lost.
+  const fell = [];
+  const registers = core.ItemOnGroundManager.registers;
+  core.ItemOnGroundManager.registers = (player, item) => fell.push([item.getId(), item.getAmount()]);
+  try {
+    const full = shattered("pocketsfull");
+    equip(full, F.deeperPockets);
+    full.getInventory().adds(target.coinPouch.id, 1).adds(I.BRONZE_BAR, 26); // with the class's scimitar, 28 slots
+    Math.random = () => 0.1;
+    const request = emit("thieving:loot", { player: full, loot: [{ id: I.COINS, amount: 3 }], multiplier: 1 });
+    Pickpocket._test.giveLoot(full, target, request.loot, () => 0.99, request.multiplier);
+    assert.equal(full.getInventory().getAmount(target.coinPouch.id), 2, "the pouch stacks");
+    assert.deepEqual(fell, [[I.COINS, target.coinPouch.coins]], "the bonus coins on the floor");
+  } finally {
+    core.ItemOnGroundManager.registers = registers;
+  }
 });
 
 // ---- Hot On The Trail ----
