@@ -290,3 +290,39 @@ ordinary 65 Magic requirement, 3 astral/3 nature/8 earth cost and 60 XP.
 `farming-geomancy-input.test.cjs` drives widget packets through the real network
 dispatcher, with all plugins and real Player/Inventory/PacketSender objects.
 The native Geomancy browser is documented in [farming-geomancy.md](../../docs/farming-geomancy.md).
+
+## Compost bin filling (issue #1391)
+
+Using unnoted compostable produce on either bin starts automatic deposits of that
+same item until it runs out or the bin reaches 15 items (30 in the Farming Guild).
+The existing Farming work queue cancels pending deposits on movement, new world
+input, logout, death or a busy interface; every deposit rechecks the inventory and
+original bin state. Bin phases count Farming task ticks rather than milliseconds,
+so scheduler jitter cannot stretch the two-tick cadence. Each deposit updates the owner's patch varbit and appearance.
+
+The [Wiki's compost-bin change history](https://oldschool.runescape.wiki/w/Compost_bin#Changes)
+confirms automatic filling. In rsprox captures, recording **1858** (revision 227,
+Leagues V), one use of pineapple on `farming_compost_bin_3` produces
+`human_pickuptable` and sound 2441 at tick +2, then consumes one pineapple at +3.
+The animation/sound and deposit repeat every two ticks (12 deposits through +25,
+the trace window limit). The rev 241 cache maps `human_pickuptable` to sequence
+832. This capture covers a regular bin on Leagues; no main-game or Farming Guild
+bin capture was found. The shared loop uses the same cadence for both bin sizes.
+
+`tests/farming-compost-inputs.test.cjs` covers automatic filling, cadence, capacity,
+selected-item exhaustion, interruption and stale bin/inventory state, alongside
+existing ingredient, tier and noted-item checks.
+
+The only production callers of `Services.binAction` are the object and item-on-object
+handlers in `Patches.Farming.js`; only item use supplies an ingredient and starts
+filling. `UseItemPacketListener.itemOnObject` first validates the selected item and
+map object, then calls `MovementQueue.walkToObject`. Its arrival callback checks
+`MapObjects.stillStands` before dispatching the Farming item-use hook. Thus bin work
+starts after the normal object-reach check; it does not expose a remote command or
+endpoint. The work entry retains the arrival position and cancels if the player
+moves. Filling awards no XP and needs no separate level-up pause mechanism.
+
+The compost regression fixture advances Farming ticks without advancing the wall
+clock. An additional regression varies elapsed milliseconds across early, delayed
+and catch-up ticks and verifies the animation/deposit phases remain at +2/+3 and
+every two ticks thereafter.
