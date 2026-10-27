@@ -96,6 +96,16 @@ function grownPatches(player) {
   return request.patches;
 }
 
+/** "spirit-trees:destinations" { player, list }: the trees the player can travel to now, as { name, location } (a league relic's fairy mushroom). */
+function destinationsEvent(request) {
+  if (!request?.player || !Array.isArray(request.list)) return;
+  const grown = grownPatches(request.player);
+  for (const tree of trees) {
+    const tile = destination(request.player, tree, grown);
+    if (tile) request.list.push({ name: tree.name, location: new core.Location(tile[0], tile[1], tile[2] ?? 0) });
+  }
+}
+
 /** Where a tree puts the player, or null when they can't travel there now. */
 function destination(player, tree, grown) {
   if (tree.house) return null;
@@ -162,7 +172,12 @@ function travel(player, tree, to) {
     constructor() { super(MOVE_TICKS, player, false); }
     execute() {
       if (player.isRegistered() && player.getHitpoints() > 0) {
-        player.moveTo(new Location(to[0], to[1], to[2]));
+        const from = player.getLocation?.()?.clone?.() ?? null;
+        const fromInstance = player.getPrivateArea?.() != null;
+        const destination = new Location(to[0], to[1], to[2]);
+        player.moveTo(destination);
+        // As the core's teleports do ("teleport:landed"): where it began, for content that remembers it.
+        pluginApi?.emitCustomEvent?.("teleport:landed", { player, from, fromInstance, to: destination });
         sender.closeSubInterface(CHATBOX_MODAL);
       }
       this.stop();
@@ -281,6 +296,7 @@ module.exports = {
     api.onInterfaceActionClick(chooseTree);
     api.onCustomEvent("spirit-trees:open", openFromPatch);
     api.onCustomEvent("spirit-trees:last-destination", lastDestinationFrom);
+    api.onCustomEvent("spirit-trees:destinations", destinationsEvent);
     api.onCustomEvent("interface:closed", menuClosed);
   },
 };

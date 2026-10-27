@@ -184,17 +184,28 @@ export class CombatFactory {
             bypassProtectionPrayer = true;
         }
         const prayerType = resolveSpecialAttackType(specialTraits?.damageType) ?? type;
-        let damage = 0;
+        let maxHit = 0;
+        let minimumFloor = 0;
         if (type == CombatType.MELEE) {
-            damage = CombatFactory.rollSpecialDamage(entity, DamageFormulas.sourceMaxHit(entity, CombatType.MELEE), boundsOverride, applySpecialTraits);
+            maxHit = DamageFormulas.sourceMaxHit(entity, CombatType.MELEE);
         } else if (type == CombatType.RANGED) {
-            let maxHit = DamageFormulas.sourceMaxHit(entity, CombatType.RANGED);
-            maxHit = PluginManager.modifyRangedMaxHit(entity, victim, maxHit);
-            damage = CombatFactory.rollSpecialDamage(entity, maxHit, boundsOverride, applySpecialTraits);
+            maxHit = PluginManager.modifyRangedMaxHit(entity, victim, DamageFormulas.sourceMaxHit(entity, CombatType.RANGED));
         } else if (type == CombatType.MAGIC) {
             const bounds = DamageFormulas.sourceHitBounds(entity, CombatType.MAGIC, victim);
-            damage = CombatFactory.rollSpecialDamage(entity, bounds.maximum, boundsOverride, applySpecialTraits, bounds.minimum);
+            maxHit = bounds.maximum;
+            minimumFloor = bounds.minimum;
         }
+        const rolls = type == CombatType.MELEE || type == CombatType.RANGED || type == CombatType.MAGIC;
+        const range = rolls
+            ? CombatFactory.specialDamageRange(entity, maxHit, boundsOverride, applySpecialTraits, minimumFloor)
+            : { minimum: 0, maximum: 0 };
+        let damage = rolls ? CombatFactory.rollSpecialDamage(entity, maxHit, boundsOverride, applySpecialTraits, minimumFloor) : 0;
+
+        // The roll itself, before any defence (protection prayers, shields, incoming-damage
+        // modifiers) reduces it: plugins may change `damage` against the roll's own range.
+        const rolled = { attacker: entity, target: victim, combatType: type, damage, minimum: range.minimum, maximum: range.maximum };
+        PluginManager.emitCustomEvent("combat:hit-rolled", rolled);
+        if (rolled.damage !== damage && Number.isFinite(rolled.damage)) damage = Math.max(0, Math.floor(rolled.damage));
 
         // Wiki (Ward of Arceuus): demons hit 10% less, that 10% rounded down first.
         if (entity.isNpc() && victim.isPlayer() && ArceuusSpells.hasWard(victim)) {
@@ -288,15 +299,21 @@ export class CombatFactory {
         hit.updateTotalDamage();
     }
 
+    /** Rolls one hit's damage from its range (specialDamageRange). */
+    private static rollSpecialDamage(entity: Mobile, maxHit: number, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true, minimumFloor = 0): number {
+        const range = CombatFactory.specialDamageRange(entity, maxHit, boundsOverride, applySpecialTraits, minimumFloor);
+        return Misc.randomInclusive(range.minimum, range.maximum);
+    }
+
     /**
-     * Rolls one hit's damage. With no active special traits this is the ordinary
+     * The range one hit's damage is rolled from. With no active special traits this is the ordinary
      * 0..maxHit roll; with traits it honours per-hit min/max multipliers, flat
      * bonuses and a maximum cap.
      */
-    private static rollSpecialDamage(entity: Mobile, maxHit: number, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true, minimumFloor = 0): number {
+    private static specialDamageRange(entity: Mobile, maxHit: number, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true, minimumFloor = 0): { minimum: number; maximum: number } {
         const traits = applySpecialTraits ? CombatSpecial.activeTraitsFor(entity) : null;
         if (!traits && !boundsOverride) {
-            return Misc.randomInclusive(Math.min(maxHit, Math.max(0, minimumFloor)), maxHit);
+            return { minimum: Math.min(maxHit, Math.max(0, minimumFloor)), maximum: maxHit };
         }
         let minimum = Math.floor(
             maxHit * (boundsOverride?.minimumMultiplier ?? traits?.minimumDamageMultiplier ?? 0)
@@ -322,7 +339,7 @@ export class CombatFactory {
             maximum = swap;
         }
         minimum = Math.max(minimum, Math.min(maximum, Math.max(0, minimumFloor)));
-        return Misc.randomInclusive(Math.max(0, minimum), Math.max(0, maximum));
+        return { minimum: Math.max(0, minimum), maximum: Math.max(0, maximum) };
     }
 
     /**
@@ -590,7 +607,7 @@ export class CombatFactory {
                     const drainAmount = special.getDrainAmountForWeaponId(
                         player.getEquipment().get(Equipment.WEAPON_SLOT).getId()
                     );
-                    if (player.getSpecialPercentage() < drainAmount) {
+                    if (!CombatSpecial.affordable(player, special, drainAmount)) {
                         return CanAttackResponse.NOT_ENOUGH_SPECIAL_ENERGY;
                     }
                 }
@@ -1009,6 +1026,13 @@ export class CombatFactory {
             let player = (entity as Player);
             const protection = player.getCombat().getPoisonClock();
             if (isVenom ? protection.isVenomImmune() : !protection.finished()) {
+                return;
+            }
+            // Content may make the player immune outright (a league relic): the same question
+            // for every status the server applies.
+            const status = { target: player, kind: isVenom ? "venom" : "poison", allow: true };
+            PluginManager.emitCustomEvent("combat:status-apply", status);
+            if (status.allow === false) {
                 return;
             }
             // An accepted venom replaces the ordinary negative poison counter.
@@ -1442,6 +1466,14 @@ export class CombatFactory {
         // Get the ranged weapon data
         const rangedWeapon = player.getCombat().getRangedWeapon();
 
+        // Plugins may save the shot's ammunition or weapon charge outright (a league perk), as
+        // `magic:rune-saving` does a spell's runes; plugin-owned ammunition included.
+        const ammoSaving = { player, weaponId: player.getEquipment().get(Equipment.WEAPON_SLOT)?.getId?.() ?? -1, saved: false };
+        PluginManager.emitCustomEvent("combat:ammo-saving", ammoSaving);
+        if (ammoSaving.saved) {
+            return;
+        }
+
         // Plugin-owned ammunition (toxic blowpipe scales, the Gauntlet's bows) consumes itself.
         if (PluginManager.decrementRangedAmmo(player, pos, amount, delayTicks)) {
             return;
@@ -1467,6 +1499,12 @@ export class CombatFactory {
                 : 0;
             let currentWeaponId = weaponId;
             for (let shot = 0; shot < amount; shot++) {
+                // Content may spare the charge (a league relic): the question every charged weapon asks.
+                const consume = { player, itemId: currentWeaponId, skip: false };
+                PluginManager.emitCustomEvent("combat:consume-charge", consume);
+                if (consume.skip) {
+                    continue;
+                }
                 shotsInStage += 1;
                 if (shotsInStage < CRYSTAL_BOW_SHOTS_PER_STAGE) {
                     continue;
@@ -1502,11 +1540,16 @@ export class CombatFactory {
 
         // Per shot: 20% break, (80 - recovery)% land on the floor where the target stood,
         // the rest is recovered by a plugin (Ava's devices).
+        // Content may keep some shots out of the roll altogether (a league relic): `saved` of
+        // `amount` are neither broken nor dropped. The device's recovery applies to the rest.
+        const saving = { player, itemId: ammoItem.getId(), amount, saved: 0 };
+        PluginManager.emitCustomEvent("ranged:ammo-saving", saving);
+        const rolled = amount - Math.min(amount, Math.max(0, saving.saved | 0));
         const recovery = CombatFactory.ammoRecovery(player);
         const dropChance = 80 - recovery;
         let lost = 0;
         let dropped = 0;
-        for (let shot = 0; shot < amount; shot++) {
+        for (let shot = 0; shot < rolled; shot++) {
             const roll = Misc.getRandom(99); // 0..99
             if (roll < CombatFactory.AMMO_BREAK_CHANCE) {
                 lost++;

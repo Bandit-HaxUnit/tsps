@@ -581,7 +581,8 @@ test('normal defaults reach and open both Baxtorian 2002 doors through the real 
       if (name === 'Large door') names.large = actions;
       if (name === 'Door') names.door = actions;
     },
-    onRegionLoaded() {}, onServerStartup() {}, onObjectRoute() {}, onCustomEvent() {},
+    onRegionLoaded() {}, onServerStartup() {}, onObjectRoute() {},
+    onCustomEvent: (event, handler) => q.api.onCustomEvent(event, handler),
     emitCustomEvent: (event, payload) => q.emit(event, payload),
   });
   const finder = new RsmodRouteFinding();

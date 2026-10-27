@@ -107,6 +107,16 @@ function loadRings() {
   return byCode;
 }
 
+/** "fairy-rings:destinations" { list }: every combination with a destination, as { code, name, location } (a league relic's fairy mushroom). */
+function destinationsEvent(request) {
+  if (!Array.isArray(request?.list)) return;
+  for (const ring of rings.values()) {
+    if (!ring.destination) continue;
+    const name = String(ring.logText).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    request.list.push({ code: ring.code, name, location: ring.destination });
+  }
+}
+
 function codeList(player, attribute) {
   return String(player.getAttribute(attribute) ?? "").split(",").filter((code) => rings.has(code));
 }
@@ -262,7 +272,11 @@ function fairyTeleport(player, ring, from, fromClick) {
       if (tick === delay) vanish();
       if (tick === delay + 3) {
         if (!sameRing) {
+          const from = player.getLocation?.()?.clone?.() ?? null;
+          const fromInstance = player.getPrivateArea?.() != null;
           player.moveTo(ring.destination);
+          // As the core's teleports do ("teleport:landed"): where it began, for content that remembers it.
+          core.PluginManager?.emitCustomEvent?.("teleport:landed", { player, from, fromInstance, to: ring.destination });
           rememberUse(player, ring);
         }
         player.performAnimation(new core.Animation(APPEAR_ANIMATION));
@@ -470,6 +484,7 @@ module.exports = {
     api.onCustomEvent("fairy-rings:configure", openDial);
     api.onCustomEvent("fairy-rings:zanaris", zanaris);
     api.onCustomEvent("fairy-rings:last-destination", lastDestination);
+    api.onCustomEvent("fairy-rings:destinations", destinationsEvent);
     api.onPlayerLogin(sendLastOnLogin);
     api.log("registered", { rings: rings.size });
   },

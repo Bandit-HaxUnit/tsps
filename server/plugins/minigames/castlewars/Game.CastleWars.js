@@ -493,7 +493,9 @@ function rewardPlayer(player) {
   // OSRS Wiki, non-dedicated worlds: shut-out win 3, win 2, loss 1, 0-0 draw 1, scoring draw 2.
   const own = score[teamId];
   const other = score[opposingTeam(teamId)];
-  const tickets = own === other ? (own === 0 ? 1 : 2) : own < other ? 1 : other === 0 ? 3 : 2;
+  const award = { player, minigame: "castle-wars", points: own === other ? (own === 0 ? 1 : 2) : own < other ? 1 : other === 0 ? 3 : 2 };
+  api.emitCustomEvent("minigame:points", award);
+  const tickets = award.points;
   const result = own === other ? "Tie game!" : own > other ? "You won the game." : "You lost the game.";
   if (player.getAttribute(BOT_KEY) !== true) {
     api.emitCustomEvent("castlewars:player-result", { player, result: own === other ? "tie" : own > other ? "win" : "loss" });

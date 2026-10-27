@@ -7,7 +7,7 @@
 const fs = require("fs");
 const path = require("path");
 
-/** Which league the profile joined, set on its first login (a league type: 4 Trailblazer Reloaded, 5 Raging Echoes). */
+/** Which league the profile joined, set on its first login (a league type, 1-6: enum 2670 in the cache, data/leagues.json). */
 const LEAGUE_TYPE_ATTRIBUTE = "league:type";
 const LEAGUE_PROFILE = "league";
 /** world.json pluginConfig key naming the league this world runs (4 Trailblazer Reloaded, 5 Raging Echoes); absent on a plain world. */
@@ -16,10 +16,24 @@ const LEAGUE_TYPE_CONFIG = "league:type";
 let api = null;
 let core = null;
 let data = null;
+/** The one-off task `later` submits, defined once api.core.Task is reachable (as Notifications does). */
+let LaterTask = null;
 
 function init(pluginApi) {
   api = pluginApi;
   core = pluginApi.core;
+  if (core?.Task) LaterTask = class extends core.Task {
+    constructor(ticks, action) {
+      // Not keyed to the player: a click must not cancel it.
+      super(ticks);
+      this.action = action;
+    }
+
+    execute() {
+      this.stop();
+      this.action();
+    }
+  };
   data = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "leagues.json"), "utf8"));
   // A world whose plugin config names a league runs it: every login is the league character.
   if (worldLeague() !== null) api.setWorldProfile(LEAGUE_PROFILE);
@@ -44,6 +58,11 @@ function leagueOf(player) {
 
 function league(type) {
   return data.leagues[type] ?? null;
+}
+
+/** A league's tier passives (leagues.json `passives`, by key; Passives.LeagueMode.js applies them). */
+function passives(type) {
+  return league(type)?.passives ?? {};
 }
 
 /** The league a new league character joins: the world's, or the data's default if the config named a type the data does not know. */
@@ -71,12 +90,48 @@ function xpMultiplier(player) {
   return rate;
 }
 
+/** The client's date varbit: whole days since 27 February 2002 (data.runedayEpoch). */
+function runeday(now = Date.now()) {
+  return Math.floor((now - Date.parse(data.runedayEpoch)) / 86400000);
+}
+
 function message(key, values = {}) {
   return data.messages[key].text.replace(/\{(\w+)\}/g, (match, name) => values[name] ?? match);
 }
 
+/** Runs `action` after `ticks` ticks if the player is still online. */
+function later(player, ticks, action) {
+  const manager = api.getTaskManager?.();
+  if (!LaterTask || typeof manager?.submit !== "function") return;
+  manager.submit(new LaterTask(ticks, () => {
+    if (player.isRegistered?.() !== false) action();
+  }));
+}
+
+function bankHasRoom(player, itemId) {
+  const container = player.getBank(core.Bank.getTabForItem(player, itemId));
+  return container.getFreeSlots() > 0 || container.contains(itemId);
+}
+
+/** Puts an item straight in the bank, a note as its item, when it has room; false leaves it to the caller. */
+function bank(player, itemId, amount) {
+  const id = core.ItemDefinition.forId(itemId)?.unNote?.() ?? itemId;
+  if (amount <= 0 || !bankHasRoom(player, id)) return false;
+  player.getBank(core.Bank.getTabForItem(player, id)).add(new core.Item(id, amount), true);
+  return true;
+}
+
+/** The item's noted form, or the item itself when it has none (or is a note already). */
+function noted(itemId) {
+  const definition = core.ItemDefinition.forId(itemId);
+  if (definition?.isNoted?.()) return itemId;
+  const note = definition?.getNoteId?.() ?? -1;
+  return note > 0 ? note : itemId;
+}
+
 module.exports = {
-  init, isLeagueProfile, leagueOf, league, worldLeague, configuredType, highestTier, xpMultiplier, message,
+  init, later, isLeagueProfile, leagueOf, league, passives, worldLeague, configuredType, highestTier, xpMultiplier, runeday, message,
+  bankHasRoom, bank, noted,
   LEAGUE_TYPE_ATTRIBUTE, LEAGUE_PROFILE, LEAGUE_TYPE_CONFIG,
   get data() { return data; },
   get api() { return api; },

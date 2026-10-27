@@ -67,6 +67,13 @@ export interface PluginPlayerLevelUpEvent {
   newLevel: number;
 }
 
+/** XP that just landed in a skill: after rates and the experience cap; not sent when refused, XP-locked or already at the cap. */
+export interface PluginExperienceGainedEvent {
+  player: any;
+  skill: any;
+  experience: number;
+}
+
 export type PluginCustomEventName = `${string}:${string}`;
 
 export interface PluginRegionLoadedEvent {
@@ -520,6 +527,17 @@ export interface PluginAttackTimingEvent {
   newTarget: boolean;
 }
 
+/**
+ * Asked for the ticks until an attacker's next attack, after the weapon's or spell's own speed
+ * (and a special's) is known; handlers may change `speed` (a relic's magic speed). Never below 1.
+ */
+export interface PluginAttackSpeedEvent {
+  attacker: any;
+  target: any;
+  combatType: any;
+  speed: number;
+}
+
 export interface PluginCombatHitRollEvent {
   attacker: any;
   target: any;
@@ -803,6 +821,8 @@ export interface PluginCombatSpecialDefinition {
   metadata?: Record<string, unknown>;
   /** Roll overrides applied by core while this special is active. */
   traits?: Record<string, unknown>;
+  /** Roll overrides that depend on the attacker at the swing; replaces `traits` there. */
+  traitsFor?: (player: any) => Record<string, unknown> | undefined;
   /** Per-variant energy cost override, keyed by item id. */
   drainAmountByItemId?: Record<number, number>;
 }
@@ -901,6 +921,8 @@ export interface PluginApi {
   spawnNpc(definition: PluginNpcSpawnDefinition): any;
   removeNpc(npc: any): void;
   onPlayerLevelUp(handler: (event: PluginPlayerLevelUpEvent) => void): void;
+  /** After XP lands in a skill (onCanGainExperience is the check before it). */
+  onExperienceGained(handler: (event: PluginExperienceGainedEvent) => void): void;
   /** Subscribes to an exact namespaced plugin event, such as `mining:success`. */
   onCustomEvent(
     eventName: PluginCustomEventName,
@@ -1012,6 +1034,8 @@ export interface PluginApi {
   onCombatHitDamage(handler: (event: PluginCombatHitDamageEvent) => void): void;
   /** Lets an attack ignore the attack timer, or leave it untouched (see PluginAttackTimingEvent). */
   onAttackTiming(handler: (event: PluginAttackTimingEvent) => void): void;
+  /** Lets a plugin change the ticks until the next attack (see PluginAttackSpeedEvent). */
+  onAttackSpeed(handler: (event: PluginAttackSpeedEvent) => void): void;
   onCombatHitResolved(handler: (event: PluginCombatHitResolvedEvent) => void): void;
   onCombatAttackDistance(handler: (event: PluginCombatAttackDistanceEvent) => void): void;
   onSpellDisabled(handler: (event: PluginSpellDisabledEvent) => void): void;
@@ -1248,6 +1272,13 @@ export interface PluginApi {
   registerCombatEffectiveLevelModifier(
     modifier: (entity: any, level: number, context: import("../game/content/combat/EquipmentEffects").CombatEffectiveLevelContext) => number
   ): void;
+  /**
+   * Adds to the melee Strength prayer percentage (100 without a prayer, 123 with Piety), for
+   * boosts the Wiki says stack additively with the prayers, like the Soulreaper axe's soul stacks.
+   */
+  registerMeleeStrengthPercentModifier(
+    modifier: (entity: any, percent: number) => number
+  ): void;
   registerMeleeHitModifier(
     modifier: (entity: any, baseHit: number) => number
   ): void;
@@ -1298,12 +1329,20 @@ export interface PluginApi {
   registerSpecialEnergyRestoreModifier(
     modifier: (entity: any, delayTicks: number) => number
   ): void;
+  /** Special attack energy a special costs, checked and drained; return the cost. */
+  registerSpecialEnergyCostModifier(
+    modifier: (entity: any, cost: number) => number
+  ): void;
   registerIncomingDamageModifier(
     modifier: (entity: any, hitDamage: any) => void
   ): void;
   /** Reduces an NPC/environmental Prayer drain; return the points actually drained. */
   registerPrayerDrainModifier(
     modifier: (entity: any, amount: number, context: any) => number
+  ): void;
+  /** Scales the drain effect a player's active prayers add each tick; return the new effect. */
+  registerPrayerDrainRateModifier(
+    modifier: (entity: any, drainEffect: number) => number
   ): void;
   setCombatEngine(engine: PluginCombatEngine): void;
   setCombatDamageProvider(provider: PluginCombatDamageProvider): void;
@@ -1373,6 +1412,8 @@ export interface PluginCoreApi {
   PrayerHandler: any;
   PrayerData: any;
   ItemActionPacketListener: any;
+  /** Run shared item alchemy; plugins authorize opaque alternate payment sources via magic:alchemy-payment. */
+  castAlchemy: (player: any, spellId: number | string, itemId: number, slot: number, source?: unknown) => boolean;
   ChatType: any;
   DuelRule: any;
   RegionManager: any;

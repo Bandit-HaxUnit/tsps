@@ -67,6 +67,7 @@ import {
   PluginPathBlockedEvent,
   PluginPlayerProcessEvent,
   PluginPlayerLevelUpEvent,
+  PluginExperienceGainedEvent,
   PluginCustomEventName,
   PluginPlayerPathBlockedEvent,
   PluginCommandEvent,
@@ -99,6 +100,7 @@ import {
   PluginCombatHitRollEvent,
   PluginCombatHitDamageEvent,
   PluginAttackTimingEvent,
+  PluginAttackSpeedEvent,
   PluginCombatHitResolvedEvent,
   PluginCombatAttackDistanceEvent,
   PluginCanUnequipEvent,
@@ -245,6 +247,7 @@ export class PluginManager {
   private static friendRemoveHooks: PluginHook<PluginFriendEvent>[] = [];
   private static playerProcessHooks: PluginHook<PluginPlayerProcessEvent>[] = [];
   private static playerLevelUpHooks: PluginHook<PluginPlayerLevelUpEvent>[] = [];
+  private static experienceGainedHooks: PluginHook<PluginExperienceGainedEvent>[] = [];
   private static customEventHooks = new Map<
     PluginCustomEventName,
     PluginHook<any>[]
@@ -321,6 +324,7 @@ export class PluginManager {
   private static combatHitRollHooks: PluginHook<PluginCombatHitRollEvent>[] = [];
   private static combatHitDamageHooks: PluginHook<PluginCombatHitDamageEvent>[] = [];
   private static attackTimingHooks: PluginHook<PluginAttackTimingEvent>[] = [];
+  private static attackSpeedHooks: PluginHook<PluginAttackSpeedEvent>[] = [];
   private static combatHitResolvedHooks: PluginHook<PluginCombatHitResolvedEvent>[] = [];
   private static combatAttackDistanceHooks: PluginHook<PluginCombatAttackDistanceEvent>[] = [];
   private static spellDisabledHooks: PluginHook<PluginSpellDisabledEvent>[] = [];
@@ -994,6 +998,13 @@ export class PluginManager {
     }
   }
 
+  public static emitExperienceGained(event: PluginExperienceGainedEvent): void {
+    if (PluginManager.experienceGainedHooks.length === 0) return;
+    for (const hook of PluginManager.experienceGainedHooks) {
+      PluginManager.executeHook(hook, event, "experience_gained", "experience_gained");
+    }
+  }
+
   public static emitPlayerLevelUp(event: PluginPlayerLevelUpEvent): void {
     if (PluginManager.playerLevelUpHooks.length === 0) {
       return;
@@ -1643,6 +1654,16 @@ export class PluginManager {
     for (const hook of PluginManager.attackTimingHooks) {
       PluginManager.executeHook(hook, event, "attack_timing", "attack_timing");
     }
+  }
+
+  /** The ticks until the attacker's next attack after the hooks had their say (at least 1). */
+  public static emitAttackSpeed(attacker: any, target: any, combatType: any, speed: number): number {
+    if (PluginManager.attackSpeedHooks.length === 0 || !attacker) return speed;
+    const event: PluginAttackSpeedEvent = { attacker, target, combatType, speed };
+    for (const hook of PluginManager.attackSpeedHooks) {
+      PluginManager.executeHook(hook, event, "attack_speed", "attack_speed");
+    }
+    return Number.isFinite(event.speed) ? Math.max(1, event.speed | 0) : speed;
   }
 
   public static emitCombatHitRoll(event: PluginCombatHitRollEvent): void {
@@ -2330,6 +2351,11 @@ export class PluginManager {
       PrayerHandler: require("../game/content/PrayerHandler").PrayerHandler,
       PrayerData: require("../game/content/PrayerHandler").PrayerData,
       ItemActionPacketListener: require("../net/packet/impl/ItemActionPacketListener").ItemActionPacketListener,
+      castAlchemy: (player, spellId, itemId, slot, source) => {
+        const { MagicOnItemPacketListener } = require("../net/packet/impl/MagicOnItemPacketListener");
+        const listener = new MagicOnItemPacketListener();
+        return listener.castOnItem(player, typeof spellId === "string" ? listener.resolveSpellId(spellId) : spellId, itemId, slot, source);
+      },
       ChatType: require("../net/protocol/ClientProtocol").ChatType,
       DuelRule: require("../game/content/Duelling").DuelRule,
       RegionManager: require("../game/collision/RegionManager").RegionManager,
@@ -2952,6 +2978,9 @@ export class PluginManager {
       },
       spawnNpc: (definition) => PluginManager.spawnNpc(definition, pluginName),
       removeNpc: (npc) => PluginManager.removeNpc(npc),
+      onExperienceGained: (handler) => {
+        if (typeof handler === "function") PluginManager.experienceGainedHooks.push({ ...hookProfile(handler), handler });
+      },
       onPlayerLevelUp: (handler) => {
         if (typeof handler !== "function") {
           return;
@@ -3570,6 +3599,10 @@ export class PluginManager {
       onAttackTiming: (handler) => {
         if (typeof handler !== "function") return;
         PluginManager.attackTimingHooks.push({ ...hookProfile(handler), handler });
+      },
+      onAttackSpeed: (handler) => {
+        if (typeof handler !== "function") return;
+        PluginManager.attackSpeedHooks.push({ ...hookProfile(handler), handler });
       },
       onCombatHitResolved: (handler) => {
         if (typeof handler !== "function") return;
@@ -4247,6 +4280,8 @@ export class PluginManager {
         PluginManager.isPluginPerformanceProfilingEnabled(),
       registerCombatEffectiveLevelModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerCombatEffectiveLevelModifier(modifier),
+      registerMeleeStrengthPercentModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerMeleeStrengthPercentModifier(modifier),
       registerMeleeHitModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerMeleeHitModifier(
           modifier
@@ -4299,12 +4334,20 @@ export class PluginManager {
         require("../game/content/combat/EquipmentEffects").registerSpecialEnergyRestoreModifier(
           modifier
         ),
+      registerSpecialEnergyCostModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerSpecialEnergyCostModifier(
+          modifier
+        ),
       registerIncomingDamageModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerIncomingDamageModifier(
           modifier
         ),
       registerPrayerDrainModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerPrayerDrainModifier(
+          modifier
+        ),
+      registerPrayerDrainRateModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerPrayerDrainRateModifier(
           modifier
         ),
       setCombatEngine: (engine) => {

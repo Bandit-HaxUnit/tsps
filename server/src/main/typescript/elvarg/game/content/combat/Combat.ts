@@ -665,7 +665,8 @@ export class Combat {
             CombatFactory.getMethod(target).onCombatBegan(target, this.character);
         }
         if (!bypass && !timing.keepDelay) {
-            const speed = specialTraits?.attackSpeedTicks ?? method.attackSpeed(this.character);
+            const speed = PluginManager.emitAttackSpeed(this.character, target, method.type(),
+                specialTraits?.attackSpeedTicks ?? method.attackSpeed(this.character));
             this.nextAttackCycle = cycle + Math.max(1, speed | 0);
             this.sendAttackTimer();
         } else if (!bypass && timing.minimumDelay > 0) {

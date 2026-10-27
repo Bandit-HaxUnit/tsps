@@ -438,8 +438,11 @@ Issue #1262 adds a source-level regression for the upstairs south-east bookcase 
 step at varp 65 stages 2→3. It covers the full-bag refusal and retry, cancelling the item
 message, recovery after book loss, and the production dispatch handoff from Tourist Trap's
 generic `Bookcase → Search` hook to Waterfall's object-specific handler. This is separate from
-the prior raft/rope/River Swim proof. The bookcase/read interaction remains **native-pending**;
-the regression does not claim a live route, quest completion, or reward evidence.
+the prior raft/rope/River Swim proof. A bounded native review on the isolated worktree now
+confirms the real upstairs bookcase Search and inventory Read packets, stage-1 refusal, full-bag
+refusal/retry, cancellation, lost-book recovery by Drop/Search, and varp 65 changing from 2 to 3
+and surviving logout/relogin. Quest stages, starting position and inventory were arranged with
+developer commands; this does not claim a whole-quest route, completion, or reward evidence.
 
 ## Evidence and limits
 
