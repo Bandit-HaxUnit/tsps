@@ -160,20 +160,25 @@ function slotsNeeded(player, container, item, amount) {
 
 /**
  * Where each of a class's items goes: the inventory when it has room, otherwise a bank tab with
- * room, counting the slots the kit's earlier items take. Null when an item has nowhere to go.
+ * room, reserving both tab space and the bank-wide slots the kit's earlier items take.
+ * Null when an item has nowhere to go.
  */
 function placeKit(player, items) {
-  const { Item } = Common.core;
+  const { Bank, Item } = Common.core;
   const taken = new Map();
+  let bankSlots = Bank.freeSlots(player);
   const places = [];
   for (const [item, amount] of items) {
     const fits = (container) => {
       const needed = slotsNeeded(player, container, item, amount);
+      if (container !== player.getInventory() && needed > bankSlots) return false;
       return container.getAddableAmount(new Item(item, amount)) >= amount && container.getFreeSlots() - (taken.get(container) ?? 0) >= needed;
     };
     const container = [player.getInventory(), ...bankTabs(player, item)].find(fits);
     if (!container) return null;
-    taken.set(container, (taken.get(container) ?? 0) + slotsNeeded(player, container, item, amount));
+    const needed = slotsNeeded(player, container, item, amount);
+    taken.set(container, (taken.get(container) ?? 0) + needed);
+    if (container !== player.getInventory()) bankSlots -= needed;
     places.push(container);
   }
   return places;
