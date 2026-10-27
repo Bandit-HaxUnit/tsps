@@ -600,25 +600,42 @@ test("a crewmate on a hook won't salvage a wreck above the captain's level, and 
   }
 });
 
-test("Bank-cargo moves what fits from the hold to the bank, and the conversation knows if all of it did", () => {
+test("Bank-cargo moves what fits from the hold to the bank, keeping the rest in the hold", () => {
   const bankCargo = require("../plugins/skills/sailing/crew/BankCargo.Crew");
-  const banked = [];
-  const bank = { contains: () => false, getFreeSlots: () => 1, add: (item) => { banked.push([item.getId(), item.getAmount()]); return bank; } };
-  const player = { getBank: () => bank, getCurrentBankTab: () => 0 };
-  const boat = { cargo: [{ id: 2, amount: 50 }, null, { id: 385, amount: 1 }] };
+  const MAX = 2147483647;
+  /** A bank holding `held` (id -> amount) with `free` empty slots, capped at the max stack as the real one. */
+  const bankOf = (held, free) => {
+    const bank = {
+      held: new Map(Object.entries(held).map(([id, amount]) => [Number(id), amount])),
+      getAddableAmount: (item) => bank.held.has(item.getId())
+        ? Math.min(item.getAmount(), MAX - bank.held.get(item.getId()))
+        : free > 0 ? item.getAmount() : 0,
+      add: (item) => { bank.held.set(item.getId(), (bank.held.get(item.getId()) ?? 0) + item.getAmount()); return bank; },
+    };
+    return bank;
+  };
   const core = PluginManager.getCoreApi();
   const isOpen = core.Bank.isOpen;
   const tabFor = core.Bank.getTabForItem;
   core.Bank.isOpen = () => false;
   core.Bank.getTabForItem = () => 0;
   try {
-    assert.equal(bankCargo.moveToBank(player, boat), true);
-    assert.deepEqual(banked, [[2, 50], [385, 1]]);
+    const bank = bankOf({}, 10);
+    const boat = { cargo: [{ id: 2, amount: 50 }, null, { id: 385, amount: 1 }] };
+    assert.equal(bankCargo.moveToBank({ getBank: () => bank }, boat), true);
+    assert.deepEqual([...bank.held], [[2, 50], [385, 1]]);
     assert.deepEqual(boat.cargo, [null, null, null], "the hold is empty");
-    const full = { contains: () => false, getFreeSlots: () => 0, add: () => full };
+
     const crowded = { cargo: [{ id: 2, amount: 5 }] };
-    assert.equal(bankCargo.moveToBank({ getBank: () => full }, crowded), false, "no room: it stays in the hold");
+    assert.equal(bankCargo.moveToBank({ getBank: () => bankOf({}, 0) }, crowded), false, "no room: it stays in the hold");
     assert.deepEqual(crowded.cargo, [{ id: 2, amount: 5 }]);
+
+    // Review: a stack one short of the maximum takes 1 of 10 fishing bait; 9 stay in the hold.
+    const nearlyFull = bankOf({ 313: MAX - 1 }, 10);
+    const bait = { cargo: [{ id: 313, amount: 10 }] };
+    assert.equal(bankCargo.moveToBank({ getBank: () => nearlyFull }, bait), false, "not all of it went");
+    assert.equal(nearlyFull.held.get(313), MAX);
+    assert.deepEqual(bait.cargo, [{ id: 313, amount: 9 }], "the rest stays in the hold");
   } finally {
     core.Bank.isOpen = isOpen;
     core.Bank.getTabForItem = tabFor;
@@ -713,4 +730,58 @@ test("courier crates: Deckhandiness 3 or 4 carries 2, the rest 1 (Wiki), shared 
   assert.deepEqual(courier.shareOut([jenkins, jim], 3).map((part) => [part.crew.id, part.amount]), [[JENKINS, 2], [JIM, 1]],
     "and two of three at delivery, Jim the last (rsprox)");
   assert.deepEqual(jenkins.cargoNpcs, [15346, 15347, 15348], "his carrying forms, by crates held (table 173 cargo_npc)");
+});
+
+/** Jenkins on the Pandemonium's dock, carrying a courier task's crates for the player (Courier.Crew.js). */
+function crewPickup(player, taskId) {
+  const portTasks = require("../plugins/skills/sailing/porttasks/Common.PortTasks");
+  recruited(player, JENKINS);
+  common.update(player, (crew) => { crew.slots[0] = JENKINS; });
+  Sailing.giveBoat(player, "skiff", "the_pandemonium");
+  portTasks.setSlots(player, [{ id: taskId, taken: 1, delivered: 0 }, null, null, null, null]);
+  const task = portTasks.taskById(taskId);
+  const event = { player, index: 0, task, dock: { id: "the_pandemonium" }, left: task.amount - 1, helped: 0 };
+  PluginManager.emitCustomEvent("port-tasks:cargo-taken", event);
+  return { portTasks, task, event };
+}
+
+/** The NPCs carrying for the player: the crewmates' carrying forms, still in the world. */
+function carriers(player) {
+  return [...World.getNpcs()].filter((npc) => npc?.isRegistered?.() && [15346, 15347, 15348].includes(npc.getId()));
+}
+
+test("cancelling a courier task the crew carry for drops their crates, and a reused slot isn't credited (review)", () => {
+  const player = captain({ level: 99 });
+  player.getPrivateArea = () => null;
+  const { portTasks, event } = crewPickup(player, 31);
+  assert.equal(event.helped, 2, "Jenkins carries the two left");
+  assert.equal(carriers(player).length, 1);
+  PluginManager.emitCustomEvent("port-tasks:cancelled", { player, index: 0, task: portTasks.taskById(31) });
+  assert.equal(carriers(player).length, 0, "he goes");
+  assert.equal(portTasks.crewAmount(player, 0), 0);
+
+  // A slot reused without the event (as before the fix): boarding packs nothing for the new task.
+  crewPickup(player, 31);
+  portTasks.setSlots(player, [{ id: 20, taken: 0, delivered: 0 }, null, null, null, null]);
+  assert.equal(Sailing.board(player, "the_pandemonium"), null);
+  tick(2);
+  try {
+    const owned = Sailing.activeBoat(player);
+    assert.deepEqual(owned.cargo.filter(Boolean), [], "no cancelled crates in the hold");
+    assert.equal(portTasks.slots(player)[0].taken, 0, "the new task isn't credited");
+    assert.equal(carriers(player).length, 0);
+  } finally {
+    Sailing.disembark(player, "the_pandemonium");
+  }
+});
+
+test("logging out with crew carrying crates removes them (review)", () => {
+  const player = captain({ level: 99 });
+  player.getPrivateArea = () => null;
+  const { portTasks } = crewPickup(player, 31);
+  assert.equal(carriers(player).length, 1);
+  PluginManager.emitPlayerLogout({ player, username: "captain" });
+  tick(5);
+  assert.equal(carriers(player).length, 0, "no carrier left behind");
+  assert.equal(portTasks.crewAmount(player, 0), 0);
 });

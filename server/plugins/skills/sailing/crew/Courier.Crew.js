@@ -136,14 +136,22 @@ function spawnCarriers(player, parts) {
   return npcs;
 }
 
-function despawn(player, job, { smokeAt } = {}) {
+function despawn(player, job, { smokeAt, send = true } = {}) {
   for (const npc of job.npcs) {
     if (smokeAt) smoke(player, npc.getLocation());
     pluginApi.removeNpc(npc);
   }
   job.npcs = [];
   carrying.delete(player);
-  common.sendVarbits(player);
+  if (send) common.sendVarbits(player);
+}
+
+/** The crew put their crates down and go: the task was cancelled, or the player left. */
+function drop(player, { send = true } = {}) {
+  const job = carrying.get(player);
+  if (!job) return;
+  portTasks.setCrewCargo(player, job.index, null);
+  despawn(player, job, { send });
 }
 
 /** Crew that wandered off with the player gone: the crates go back where they came from. */
@@ -167,7 +175,9 @@ function start(player, kind, index, dockId, parts, entry) {
   const amount = parts.reduce((total, part) => total + part.amount, 0);
   portTasks.setCrewCargo(player, index, { ...entry, amount });
   player.sendMessage(COME);
-  const job = { index, kind, dockId, npcs: spawnCarriers(player, parts) };
+  // The task they carry for: a slot freed and taken by another task isn't theirs.
+  const taskId = portTasks.slots(player)[index]?.id;
+  const job = { index, kind, dockId, taskId, npcs: spawnCarriers(player, parts) };
   carrying.set(player, job);
   watch(player, job);
   return amount;
@@ -189,13 +199,12 @@ function boarded({ player, owned }) {
   const job = carrying.get(player);
   if (!job || job.kind !== "pickup" || !owned) return;
   const entry = portTasks.crewCargo(player)[job.index];
+  const held = portTasks.slots(player);
+  if (held[job.index]?.id !== job.taskId) return drop(player);
   const stored = entry ? cargo.store(owned, entry.crate, entry.amount) : 0;
   if (stored > 0) {
-    const held = portTasks.slots(player);
-    if (held[job.index]) {
-      held[job.index] = { ...held[job.index], taken: held[job.index].taken + stored };
-      portTasks.setSlots(player, held);
-    }
+    held[job.index] = { ...held[job.index], taken: held[job.index].taken + stored };
+    portTasks.setSlots(player, held);
     player.sendMessage(PACKED);
   }
   portTasks.setCrewCargo(player, job.index, null);
@@ -241,6 +250,11 @@ function attach(api) {
   portTasks.init(api);
   api.onCustomEvent("port-tasks:cargo-taken", cargoTaken);
   api.onCustomEvent("port-tasks:crew-delivered", crewDelivered);
+  api.onCustomEvent("port-tasks:cancelled", ({ player, index }) => {
+    if (carrying.get(player)?.index === index) drop(player);
+  });
+  // Before the player's tasks are cancelled (Player.onLogout), which would leave the watcher idle.
+  api.onPlayerLogout(({ player }) => drop(player, { send: false }));
   api.onCustomEvent("sailing:boarded", ({ player, boat, owned }) => {
     const { CountdownTask, TaskManager, Sailing } = common.core();
     if (!owned || Sailing.instanceAboard(player) !== boat) return;

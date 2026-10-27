@@ -42,7 +42,10 @@ function holdEmpty(boat) {
   return !boat || boat.cargo.every((slot) => !slot || slot.amount <= 0);
 }
 
-/** Moves a boat's cargo into the bank, as much as fits; true if all of it did. */
+/**
+ * Moves a boat's cargo into the bank, as much as fits: a full bank, or a stack at its maximum,
+ * leaves the rest in the hold. True if all of it went.
+ */
 function moveToBank(player, boat) {
   const { Bank, Item } = cache();
   let all = true;
@@ -50,12 +53,14 @@ function moveToBank(player, boat) {
     if (!slot || slot.amount <= 0) return;
     const tab = Bank.getTabForItem(player, slot.id);
     const bank = player.getBank(tab);
-    if (!bank.contains(slot.id) && bank.getFreeSlots() <= 0) {
-      all = false;
+    const moving = bank.getAddableAmount(new Item(slot.id, slot.amount));
+    if (moving > 0) bank.add(new Item(slot.id, moving), false);
+    if (moving >= slot.amount) {
+      boat.cargo[index] = null;
       return;
     }
-    bank.add(new Item(slot.id, slot.amount), false);
-    boat.cargo[index] = null;
+    slot.amount -= moving;
+    all = false;
   });
   if (Bank.isOpen(player)) player.getBank(player.getCurrentBankTab()).refreshItems();
   return all;
