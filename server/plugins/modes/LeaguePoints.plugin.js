@@ -5,7 +5,7 @@
  *   api.emitCustomEvent("league:award-task", { player, id, points, name })  -> awarded (once per id)
  *   api.emitCustomEvent("league:points", { player })                        -> points, tasks
  *   api.emitCustomEvent("league:saved-points", { save })                    -> points, tasks
- *   "league:points-changed" { player, points, previous, tasks }             after an award
+ *   "league:points-changed" { player, points, previous, tasks, previousTasks } after an award
  *
  * As captured (227/00070): an award raises league_total_tasks_completed (10046) and
  * league_points_completed (2614), then league_points_claimed (2615), and shows the
@@ -70,7 +70,9 @@ function award(request) {
     colour: data.leagues[league].colour,
     jingle: popup.jingle,
   });
-  api.emitCustomEvent("league:points-changed", { player, points: total, previous, tasks: Object.keys(updated).length });
+  api.emitCustomEvent("league:points-changed", {
+    player, points: total, previous, tasks: Object.keys(updated).length, previousTasks: Object.keys(tasks).length,
+  });
 }
 
 function query(request) {

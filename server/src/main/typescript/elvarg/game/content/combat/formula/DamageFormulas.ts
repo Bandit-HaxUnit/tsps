@@ -113,6 +113,8 @@ export class DamageFormulas {
             return 118;
         } else if (PrayerHandler.isActivated(player, PrayerHandler.PIETY)) {
             return 123;
+        } else if (PrayerHandler.isActivated(player, PrayerHandler.ZEAL)) {
+            return 128; // Wiki: Zeal
         }
         return 100;
     }

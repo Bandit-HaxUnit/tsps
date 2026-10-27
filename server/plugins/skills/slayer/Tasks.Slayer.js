@@ -26,6 +26,7 @@
  */
 const Data = require("./Data.Slayer");
 const State = require("./State.Slayer");
+const SlaughterBracelet = require("./SlaughterBracelet.Slayer");
 
 const COMPLETE = "<col=ef1020>You have completed your task! You killed</col> {amount} {name}<col=ef1020>. You gained</col> {xp} xp<col=ef1020>.";
 const FREE_TASK = "<col=ef1020>You've completed </col>{streak} {tasks}<col=ef1020> and will need </col>{more} more<col=ef1020> before you start receiving Slayer points; return to a Slayer master.</col>";
@@ -364,6 +365,7 @@ function npcKilled({ killer, npc }) {
   if (xp > 0) player.getSkillManager().addExperiences(core.Skill.SLAYER, xp);
   player.setAttribute(TASK_XP_ATTRIBUTE, (Number(player.getAttribute(TASK_XP_ATTRIBUTE)) || 0) + (kill.taskXp ?? kill.xp) * boost);
   if (task.modifier) killModifiers.set(npc, { player, modifier: task.modifier });
+  if (SlaughterBracelet.preventsDecrement(player, npc)) return;
   const remaining = task.count - 1;
   State.setVarp(player, "slayer_count", remaining);
   if (remaining > 0) return;
@@ -474,6 +476,18 @@ function clueChance(request) {
   if (boost > 1) request.rules.push({ pattern: CLUE_SCROLL, multiplier: boost });
 }
 
+/**
+ * "slayer:leave-task-area" { player, npcId, message }: the player left a place where `npcId` is fought for
+ * good ("the fight cave"), so a task of that monster is cleared without resetting the streak
+ * (Wiki: TzTok-Jad, Slayer).
+ */
+function leaveTaskAreaEvent({ player, npcId, message }) {
+  const name = core.NpcDefinition.forId(npcId)?.getName?.() ?? "";
+  if (!player || !countsForTarget(current(player), { id: npcId, name, location: null })) return;
+  clear(player);
+  player.sendMessage(`You no longer have a slayer task as you left ${message ?? "the area"}.`);
+}
+
 /** "slayer:grant-points" { player, points }: a quest or reward adding points. */
 function grantPointsEvent({ player, points }) {
   if (player && Number.isFinite(points)) grantPoints(player, points);
@@ -488,6 +502,7 @@ function attach(pluginApi) {
   pluginApi.onCustomEvent("slayer:current-task", currentTaskEvent);
   pluginApi.onCustomEvent("slayer:has-unlock", hasUnlockEvent);
   pluginApi.onCustomEvent("npc-drops:tertiary-chance", clueChance);
+  pluginApi.onCustomEvent("slayer:leave-task-area", leaveTaskAreaEvent);
 }
 
 module.exports = {
