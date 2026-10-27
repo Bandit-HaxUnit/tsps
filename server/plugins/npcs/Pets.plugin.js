@@ -234,7 +234,7 @@ const PETS = [
   { enumName: "GREAT_BLUE_HERON", petId: 10636, morphId: 6722, itemId: 13320, dialogue: -1, skill: Skill.FISHING, chance: 5000, morphUnlock: { itemId: ItemIdentifiers.SPIRIT_FLAKES, permanent: true, name: "spirit flakes" } },
   {
     enumName: "BEAVER",
-    petId: 6717,
+    petId: NpcIdentifiers.BEAVER_11,
     morphId: 0,
     itemId: 13322,
     dialogue: -1,

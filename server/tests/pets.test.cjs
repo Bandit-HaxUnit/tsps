@@ -254,7 +254,7 @@ test("metamorphosis cycles one step and stores the chosen variant", () => {
 
 test("a pet with no metamorphosis cycle refuses to morph", () => {
   const player = createPlayer();
-  const npc = createPetNpc(player, 6717);
+  const npc = createPetNpc(player, Pets.__internals.PETS.find(pet => pet.enumName === "BEAVER").petId);
   player.setAttribute("pets:current", npc);
   assert.equal(Pets.__internals.morph(player, npc), false);
   assert.equal(npc.transformed, undefined);
