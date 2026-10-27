@@ -261,6 +261,22 @@
     }
   },
 
+  "_gatheringEffects": "The harvesting fragments and Message In A Bottle (Wiki /Fragments), used by plugins/modes/league/FragmentGathering.LeagueMode.js. Each works with its level's number in the cache (params 1456-1458): a percent chance (Chef's Catch, Slash & Burn, Rock Solid, Molten Miner, Seedy Business), a 1-in-N chance (Catch Of The Day, one roll on NpcDrops' shared `table`), a chance multiplier (Homewrecker, Message In A Bottle), the extra Hunter XP percent (Chinchonkers; two chinchompas a catch from level `doubleFrom`) or the percent chance of a doubled harvest (Certified Farmer). `rocks` are Rock Solid's (Wiki: iron, sandstone and granite). The sets' numbers are only in their texts (enum 4137 params 1467 / 1469): Greedy Gatherer's resources and Personal Banker's chance at tiers 1 / 2. Where several apply to one resource they compose: the fragment's change (cooked, smelted, burnt) to every piece, Greedy Gatherer's extra pieces with their XP, then Personal Banker's bank or the inventory; extras that do not fit fall to the floor (ours: the Wiki does not say).",
+  "gatheringEffects": {
+    "chefsCatch": { "fragment": 21 },
+    "catchOfTheDay": { "fragment": 22, "table": "rareDrop" },
+    "slashAndBurn": { "fragment": 25 },
+    "homewrecker": { "fragment": 26 },
+    "rockSolid": { "fragment": 29, "rocks": ["Iron rocks", "Sandstone rocks", "Granite rocks"] },
+    "moltenMiner": { "fragment": 30 },
+    "chinchonkers": { "fragment": 39, "creature": "chinchompa", "doubleFrom": 3 },
+    "certifiedFarmer": { "fragment": 41 },
+    "seedyBusiness": { "fragment": 42 },
+    "messageInABottle": { "fragment": 50 },
+    "greedyGatherer": { "set": 9, "skills": ["MINING", "WOODCUTTING", "FISHING", "FARMING"], "resources": [2, 3] },
+    "personalBanker": { "set": 12, "skills": ["MINING", "WOODCUTTING", "FISHING", "FARMING"], "chancePercent": [50, 100] }
+  },
+
   "messages": {
     "_lockedBoss": "The Wiki gives no message for a locked boss; this wording is this server's.",
     "lockedBoss": "You need to unlock {name} with Sage's Renown before you can fight it.",
@@ -283,6 +299,9 @@
     "classNoRoom": "You need more space in your inventory or bank to accept this class.",
     "renownGranted": "Granted {amount} Sage's Renown to {name} ({renown} now).",
     "renownUsage": "Use ::renown <amount> [player].",
-    "notShattered": "{name} is not in Leagues III - Shattered Relics."
+    "notShattered": "{name} is not in Leagues III - Shattered Relics.",
+    "_nestBanked": "The Wiki gives no messages for Homewrecker's banked nests or Catch Of The Day's rare catch; these are this server's.",
+    "nestBanked": "<col=ff0000>A bird's nest falls out of the tree and is sent to your bank.",
+    "rareCatch": "<col=ff0000>You find {item} while fishing."
   }
 }

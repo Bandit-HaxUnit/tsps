@@ -780,14 +780,22 @@ function maybeDropBirdNest(player) {
   if (!player) {
     return;
   }
-  const chance = wearsWoodcuttingCape(player)
+  // Content may make nests commoner ("woodcutting:nest-chance", a league fragment): `multiplier` times.
+  const boost = { player, multiplier: 1 };
+  pluginApi?.emitCustomEvent("woodcutting:nest-chance", boost);
+  const multiplier = Number(boost.multiplier) > 1 ? Number(boost.multiplier) : 1;
+  const chance = (wearsWoodcuttingCape(player)
     ? WOODCUTTING_CAPE_NEST_MULTIPLIER / BIRD_NEST_DROP_CHANCE
-    : 1 / BIRD_NEST_DROP_CHANCE;
+    : 1 / BIRD_NEST_DROP_CHANCE) * multiplier;
   if (Math.random() >= chance) {
     return;
   }
 
   const nestId = rollBirdNestId(player);
+  // Content may take the nest before it falls ("woodcutting:nest-drop", a league fragment's banked nests).
+  const drop = { player, itemId: nestId, handled: false };
+  pluginApi?.emitCustomEvent("woodcutting:nest-drop", drop);
+  if (drop.handled) return;
   ItemOnGroundManager.registers(player, new Item(nestId, 1));
   player.sendMessage("<col=ff0000>A bird's nest falls out of the tree.");
 }
@@ -1217,4 +1225,5 @@ module.exports = {
   calculateCutChance,
   /** Stops the player's chopping (a Forestry event spawning beside them). */
   stopWoodcutting: (player) => activeSessionsRef && stopWoodcutting(activeSessionsRef, player),
+  _test: { maybeDropBirdNest, setApi: (api) => { pluginApi = api; ItemOnGroundManager = api.getItemOnGroundManager(); } },
 };
