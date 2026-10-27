@@ -1,14 +1,15 @@
 # Leagues
 
 The Leagues game mode (https://oldschool.runescape.wiki/w/Leagues) on this server: a league
-character per account, League Points, ranks, relic tiers and relics, area unlocks, combat
+character per account, League Points, tasks, ranks, relic tiers and relics, area unlocks, combat
 masteries and the league screens. Plugins: `plugins/modes/LeagueMode.plugin.js` (the profile,
 its league, XP rate, the tiers' passives, journal tab, Summary / Info / Rank, ranks, statistics
-and shared content), `LeaguePoints.plugin.js` (points), `LeagueRelics.plugin.js` (tiers and
+and shared content), `LeaguePoints.plugin.js` (points), `LeagueTasks.plugin.js` (the task catalog, triggers and list), `LeagueRelics.plugin.js` (tiers and
 relics), `LeagueAreaUnlocks.plugin.js` (areas) and `LeagueCombatMasteries.plugin.js` (Raging
 Echoes' combat masteries); data in `plugins/modes/data/leagues.json`, `league-ranks.json`,
 `league-relics.json`, `league-areas.json`, `league-boosted-drops.json` and
-`league-combat-masteries.json`.
+`league-combat-masteries.json`, `league-tasks.json` (generated), `league-task-list.json` and
+`league-task-triggers.json`.
 
 ## The league character
 
@@ -77,7 +78,9 @@ colours and screens here but no relic, area or task catalogs yet.
 | `league:highest-tier` | `{ player } -> { tier }` (0-based, -1 none) | LeagueRelics |
 | `league:award-task` | `{ player, id, points, name } -> { awarded }` | LeaguePoints (once per id) |
 | `league:points` | `{ player } -> { points, tasks }` | LeaguePoints |
-| `league:points-changed` | `{ player, points, previous, tasks, previousTasks }` | LeagueMode (journal), LeagueRelics, LeagueAreaUnlocks listen |
+| `league:completed-tasks` | `{ player } -> { ids }` | LeaguePoints |
+| `league:complete-task` | `{ player, id } -> { found, completed }` (a catalog task, by id) | LeagueTasks |
+| `league:points-changed` | `{ player, points, previous, tasks, previousTasks }` | LeagueMode (journal), LeagueTasks, LeagueRelics, LeagueAreaUnlocks listen |
 | `league:has-relic` | `{ player, relic } -> { active }` | LeagueRelics |
 | `league:masteries` | `{ player } -> { league, masteries: { melee, ranged, magic }, passiveTier, points: { earned, spent, available }, challenges }` | LeagueCombatMasteries |
 | `league:mastery-point` | `{ player, challenge, earned }` after a Combat Mastery point | - |
@@ -86,7 +89,7 @@ colours and screens here but no relic, area or task catalogs yet.
 | `skills:restore` | `{ player, skill, amount, max }` before a stat restore or boost (core); `amount` may change | LeagueCombatMasteries |
 | `combat:hit-rolled` | `{ attacker, target, combatType, damage, minimum, maximum }` after a hit's damage roll, before defences (core); `damage` may change | LeagueCombatMasteries |
 | `league:relics` | `{ player } -> { league, chosen }` (tier index -> slot) | LeagueRelics |
-| `league:content-rows` | `{ player, league, structs, enums }`: units push the rows the client lacks | LeagueRelics (Catalog), LeagueMode (Rank), LeagueAreaUnlocks answer |
+| `league:content-rows` | `{ player, league, base, structs, enums, dbRows }`: units push the rows the client lacks | LeagueRelics (Catalog), LeagueTasks (Catalog), LeagueMode (Rank), LeagueAreaUnlocks answer |
 | `league:send-content` | `{ player }`: send the content payload again (before an interface opens) | LeagueMode (Content) |
 | `league:rank` | `{ player } -> { rank, name, next }` (ranks reached 0-7, the next threshold) | LeagueMode (Rank) |
 | `league:statistics` | `{ player } -> { counters }` (the summary's rows by name) | LeagueMode (Statistics) |
@@ -122,7 +125,10 @@ same for every league):
   varbits.
 - A task award: 10046 and 2614 rise, then 2615; the popup (`notification:show`) "League Task
   Complete!" / "Task Completed: <col=ffffff>Name</col><br><br>Points Earned: <col=ffffff>N</col>"
-  in the league's colour with jingle 283, and script 3226 refills the side panel's bar (656:23).
+  in the league's colour with jingle 283, the game message "Congratulations, you've completed an
+  easy task: <col=20C2FE>Name</col>." (the league's colour), and script 3226 refills the side
+  panel's bar (656:23). `league_reward_points_buffer` (13341) then goes 10 and back to 0 for the
+  bar's animation; not sent.
 - The journal's Leagues tab (side_journal 629:34) shows once the varbits are set; a click mounts
   the league side panel (656) in the journal's content container (629:43) with the tab varbit
   8168 = 4, the way this client mounts its other journal tabs (live mounted it in its own slot).
@@ -132,14 +138,17 @@ same for every league):
 
 ## The content payload
 
-A league's screens read structs and enums the rev 241 cache only holds for the current league
-(Demonic Pacts): the relic catalog, Leagues I-III's rank thresholds. `league/Content.LeagueMode.js`
-asks every unit for its rows (`league:content-rows`) and sends them as one `structOverrides` /
-`enumOverrides` payload (`sendContentData`; the client's `GamemodeContentStore` replaces the whole
-set on each payload, which is why no unit sends its own; rows for one struct from several units
-are merged into one) at a league login and on `league:send-content`. Virtual ids start at 200000 + league type x 1000; the relics use offsets
-0-199, the ranks 900-901. A league the cache carries sends an empty payload (Demonic Pacts: no
-overrides at all), which also clears whatever another league left in the client.
+A league's screens read structs, enums and DB rows the rev 241 cache only holds for the current
+league (Demonic Pacts): the relic catalog, the task list, Leagues I-III's rank thresholds.
+`league/Content.LeagueMode.js` asks every unit for its rows (`league:content-rows`) and sends them
+as one `structOverrides` / `enumOverrides` / `dbRowOverrides` payload (`sendContentData`; the
+client's `GamemodeContentStore` replaces the whole set on each payload, which is why no unit sends
+its own; rows for one struct from several units are merged into one) at a league login and on
+`league:send-content`. Virtual struct and enum ids start at 200000 + league type x 1000; the relics
+use offsets 0-199, the ranks 900-901. The tasks' DB rows are their own id space (300000 + league
+type x 10000 + position) and replace the cache's task enums 5950 and 2671. A league the cache
+carries sends an empty payload (Demonic Pacts: no overrides at all), which also clears whatever
+another league left in the client.
 
 ## Panels
 
@@ -530,11 +539,96 @@ locked for good.
 - **Not covered**: the world map's greying of locked areas (client-side), the league tutorial's
   guided first unlock, and slayer or transport content that should read `league:areas` itself.
 
+## Tasks
+
+`LeagueTasks.plugin.js` with its units in `plugins/modes/leaguetasks/`: the catalog of each league's
+tasks, the triggers that award them and the cache's task list interface. A completed task is a key
+of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's.
+
+- **The catalog** is `data/league-tasks.json`, **generated** by `scripts/generate-league-tasks.ts`
+  (`yarn generate:league-tasks [--from <dir>] [--save <dir>] [--check]`) from the Wiki's
+  Trailblazer_Reloaded_League/Tasks and Raging_Echoes_League/Tasks pages (one `{{TRLTaskRow}}` /
+  `{{RELTaskRow}}` template per task in the raw wikitext: name, description, requirements, tier,
+  region, the Wiki's id) and the rev 241 cache; never edit it by hand, change the generator and
+  re-run it (same inputs, identical file; `--check` fails when the committed file is stale). A
+  task has a stable string id (its name's slug; saves hold ids, so the list order is free to
+  change), `wikiId`, tier 1-5, points (Easy 10, Medium 40 Trailblazer Reloaded / 30 Raging
+  Echoes, Hard 80, Elite 200, Master 400: the Wiki rows show the first two, the pages' per-area
+  totals reproduce the rest, and Raging Echoes' match cache enum 2671), the client's area id
+  (enum 3412: Global 0, Misthalin 1 ... Kourend 10, Wilderness 11, Varlamore 21), a category (enum
+  3411: 1 Skill, 2 Combat, 3 Quest, 4 Achievement, 5 Minigame, 6 Other) and, where derivable, a
+  `trigger`. The Wiki has no category: a task the cache's own list has by name (enum 5950's rows
+  of DB table 118 `action`, column 35: most of Raging Echoes and the Trailblazer Reloaded tasks
+  that share a name) takes the cache's, the rest a rule in the generator (`categorySource:
+  "rule"`, ours). The Wiki's Trailblazer Reloaded id 1522 is on two tasks (The Frozen Door,
+  Defeat Vardorvis); kept as the Wiki has it.
+- **The list** (`league_tasks`, 657; `data/league-task-list.json` holds every id below). As the
+  cache's scripts read it (3202 -> 3204 -> 9428): the rows come from enum 5950 (position -> a row
+  of DB table 118: 0 name, 1 description, 32 tier, 34 "in this league", 35 category, 36 area),
+  a tier's points from enum 2671, and a task's **completion** from bit `position % 32` of varps
+  2616-2631 (positions 0-511), 2808-2835 (512-1407), 3339-3342 (1408-1535) and 4036-4049
+  (1536-1983) (script 9470). The cache only carries the current league's rows, so a league's own
+  catalog goes in the content payload (see above) as `enumOverrides` (5950 and 2671) and
+  `dbRowOverrides` (rows 300000 + league type x 10000 + position), at login and again before the
+  list opens (`Catalog.LeagueTasks.js` answers `league:content-rows`; `GamemodeContentStore` and the
+  cs2 `db_getfield` / `db_getfieldcount` / `db_getrowtable` ops read the rows before the cache, the
+  only table reads the list's scripts make). The
+  recordings never carry the completion varps, the scripts read them, so they are sent at login
+  and whenever the points change (`Complete.LeagueTasks.js`, only the varps that changed). The
+  task's position in its league's list is its bit.
+- **The flow, as captured** (227/00070, 00067, 00068, 01710): View Tasks (656:36) opens 657 in
+  the toplevel floater as an overlay (the main modal closed first) with `if_setevents` OP1 on the
+  five dropdowns' option lists (7, 8, 15, 7 and 4 slots from 1: the tier, type, area, skill and
+  completed enums 2676, 3413, 3414, 4105, 2677), the task rows (0 to the task count) and the menu
+  frame 657:6 (10-18). A dropdown option slot N sets its filter varbit to N - 1: the tier
+  (`league_task_filter_tier` 10033: slot 3 -> 2, 5 -> 4, 1 -> 0) and type (11689: slot 2 -> 1)
+  picks are captured, the area (11692), skill (13340) and completed (10034) ones follow. The
+  recordings are revision 227, where the lists were 657:35-39 and the rows 657:17; in this cache
+  (241) the lists are the components the filter rows' scripts (3207) build each one in,
+  `dropdown_tier` 657:37, `_type` 38, `_area` 39, `_skill` 40 and `_completed` 42, and the rows'
+  Expand ops sit on `tasks_background` 657:18, so those take the events (the cache wins on ids;
+  the recordings' components would never reach the server from this client). The client's
+  scripts filter the rows from the varbits (3699; the area filter's "Unlocked" reads the area
+  varbits, the areas plugin's), plus a client-side search. The filters are kept in
+  `league:task-filters` and re-sent at login, as the recordings show (10034 = 1, 11692 = 13). A
+  row click is the client's expand/collapse and gets no reply; the close button (657:3) closes
+  the floater. Clicks count only after View Tasks opened the list.
+- **Completing** a task (`Complete.LeagueTasks.js`, `league:complete-task { player, id }`): a league
+  character, a task of its league, not yet done; the completion bit goes out first (the points
+  varp's redraw then shows the tick), `league:award-task` pays the points and shows the popup,
+  then the captured game message in the league's colour with the tier's name.
+- **Triggers** (`Triggers.LeagueTasks.js`) are data: a task's `trigger` from the generator, or from
+  the hand-maintained overlay `data/league-task-triggers.json` (by league type and task id; it
+  wins). Kinds: `kill { npcs, count }`, kills of any of the NPCs (by name) added up per task in
+  `league:task-kills` (task id -> kills); `level { skill, level }`, `any-level { level,
+  excluding }`, `total-level`, `base-level` (Sailing left out, it came after both leagues) and
+  `combat-level { level }` on `onPlayerLevelUp` and at login; `level-up` on any level gained;
+  `quest { name }` on `quest:completed` and at login (`quest:is-complete`). A kill is credited
+  from an NPC's death (`onNpcDeath`, to its killer) and from the shared credited-kill event
+  `combat-achievements:kill { player, monster, amount? }` that scripted encounters emit for each
+  rewarded player when no NPC dies (the Nightmare's ending transforms her) and some bosses emit
+  beside the death, a singles boss under its main boss's name (Artio as Callisto); within one
+  tick a task takes the larger of the two counts, so one kill reported both ways counts once and
+  several kills in a tick all count. The generator derives a kill only when every NPC the task
+  accepts is a cache NPC of that exact name and the description adds no place or condition
+  ("Defeat a Goblin", "Defeat Cerberus 50 times", "Kill 5 Sand Crabs"; the alternatives its
+  description lists join it: "Defeat Callisto or Artio 50 times", "Defeat The Nightmare or
+  Phosani's Nightmare 50 times combined"; "in the Fremennik Province", "on Ungael", "without
+  leaving" or Raging Echoes' "must be of one difficulty" leave the task unmapped, the places
+  until the area unlocks exist, even for a boss with one home), a quest only when
+  `plugins/quests/quests` registers that name, and a level only for a known skill; its report
+  lists the kill tasks it could not map. To map more: add a kind (a trigger kind is a few lines in Triggers.LeagueTasks),
+  a rule in the generator, or an entry in the overlay; or have the plugin that knows the deed emit
+  `league:complete-task`. Everything else in the catalog is visible and counts once mapped.
+- **Not mapped yet:** kills with a place or a condition, equipment, skilling counts, clue
+  scrolls, minigames, the Leagues tutorial task, and the Raging Echoes pacts (league 6's rows).
+
 ## Developer commands
 
 - `::league [player]` - the character's league and points.
-- `::leaguetask <id> <points> [name]` - award yourself a task through the real award path (the
-  task catalog, LeagueTasks, does not exist yet).
+- `::leaguetask <id> [points] [name]` - complete a catalog task by its id, or award an ad-hoc task
+  with the points given, through the real award path.
+- `::leaguetasks <search>` - find a league's tasks by name or id, with tier, points and whether done.
 - `::relic [tier 1-8] [slot 1-3]` - list your relics, or choose one through the usual checks.
 - `::mastery` - your combat masteries, points and challenges; `::mastery <melee|ranged|magic>
   <tier 1-6>` unlocks one through the usual checks; `::mastery point <1-10>` awards a challenge's
@@ -544,7 +638,7 @@ locked for good.
 
 ## Not yet
 
-League tasks, the Echo bosses (and so three of the mastery points), the tier passives left out
+Most task triggers (see Tasks), the Echo bosses (and so three of the mastery points), the tier passives left out
 above (clue-step progress and farming ticks), the boosted sources their own plugins have yet to
 ask about, the league tutorial (see above), main-game records and reward shops, and Shattered
 Relics' own panels. Each is its own item on the

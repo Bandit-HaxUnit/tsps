@@ -35,7 +35,7 @@
     "fillScript": 3226
   },
   "content": {
-    "_comment": "The structs and enums a league needs that the cache does not carry are sent together as one structOverrides / enumOverrides payload (GamemodeContentStore replaces the whole set on each payload). Virtual ids start at virtualIdBase + league type x 1000; each unit keeps its own offsets (relics 0-199, ranks 900-901).",
+    "_comment": "The structs, enums and DB rows a league needs that the cache does not carry are sent together as one structOverrides / enumOverrides / dbRowOverrides payload (GamemodeContentStore replaces the whole set on each payload). Virtual struct and enum ids start at virtualIdBase + league type x 1000; each unit keeps its own offsets (relics 0-199, ranks 900-901). The tasks' DB rows have their own ids (league-task-list.json virtualRowBase) and replace the cache's task enums 5950 and 2671.",
     "virtualIdBase": 200000
   },
   "panels": {
@@ -76,8 +76,9 @@
   "messages": {
     "notLeague": { "text": "{name} is not a league character.", "source": "ours" },
     "status": { "text": "{name}: {league}, {points} League Points from {tasks} tasks.", "source": "ours" },
-    "taskUsage": { "text": "Use ::leaguetask <id> <points> [name].", "source": "ours" },
+    "taskUsage": { "text": "Use ::leaguetask <task id>, or ::leaguetask <id> <points> [name] for an ad-hoc task.", "source": "ours" },
     "taskAwarded": { "text": "Awarded league task {id} ({points} points) to {name}.", "source": "ours" },
+    "taskCompleted": { "text": "Completed league task {id} for {name}.", "source": "ours" },
     "taskRepeat": { "text": "{name} already has league task {id}.", "source": "ours" },
     "ironmanLocked": { "text": "As a league character, you are always an Ironman.", "source": "ours (Wiki: every league player is an Ironman)" }
   },

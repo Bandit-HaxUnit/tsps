@@ -4,6 +4,7 @@
  *
  *   api.emitCustomEvent("league:award-task", { player, id, points, name })  -> awarded (once per id)
  *   api.emitCustomEvent("league:points", { player })                        -> points, tasks
+ *   api.emitCustomEvent("league:completed-tasks", { player })               -> ids (the task ids)
  *   "league:points-changed" { player, points, previous, tasks, previousTasks } after an award
  *
  * As captured (227/00070): an award raises league_total_tasks_completed (10046) and
@@ -85,6 +86,13 @@ function query(request) {
   request.tasks = Object.keys(tasks).length;
 }
 
+/** The completed task ids, for the task list's completion bits (LeagueTasks). */
+function completedTasks(request) {
+  if (!request) return;
+  const { player } = request;
+  request.ids = player && leagueOf(player) !== null ? Object.keys(tasksOf(player)) : [];
+}
+
 /** The totals the client shows come from the saved tasks every login. */
 function login({ player }) {
   sendPoints(player, tasksOf(player));
@@ -100,6 +108,7 @@ module.exports = {
     api.persistAttribute(TASKS_ATTRIBUTE, {});
     api.onCustomEvent("league:award-task", award);
     api.onCustomEvent("league:points", query);
+    api.onCustomEvent("league:completed-tasks", completedTasks);
     api.onCustomEvent("league:login", login);
   },
 };
