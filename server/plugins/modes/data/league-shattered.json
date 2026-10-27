@@ -1,0 +1,142 @@
+{
+  "$comment": "Leagues III - Shattered Relics' own screens (docs/leagues.md 'Shattered Relics'), used by plugins/modes/league/Shattered.LeagueMode.js, Fragments.LeagueMode.js and Unlocks.LeagueMode.js. No recording exists (the league ran from January to March 2022, before osrs-captures' rev 223), so every id is from the cache's own scripts and every rule from the Wiki's Shattered_Relics_League pages (/Guide, /Fragments, /Unlocks). Each screen draws only for league type 3 (varbit 10032), which LeagueMode already sends.",
+  "league": 3,
+
+  "_sidePanel": "The journal's Leagues tab mounts 736 for this league instead of 656 (script 5798 draws it from varp 2615 points, varbit 10046 tasks and varp 3276 renown). Its buttons only play a sound on the client (script 1601); the server opens the screen behind each.",
+  "sidePanel": {
+    "group": 736,
+    "info": 21,
+    "tasks": 25,
+    "fragments": 30,
+    "unlocks": 35
+  },
+
+  "_renown": "Sage's Renown (Wiki /Unlocks): earned by tasks, spent on unlocks. Varp 3276 holds it for the side panel and the unlocks screen. `perTaskTier` is the Wiki's renown per task tier, kept for the task catalog to pay it (not wired yet).",
+  "renown": {
+    "varp": 3276,
+    "perTaskTier": { "beginner": 1, "easy": 1, "medium": 2, "hard": 3, "elite": 4, "master": 5 }
+  },
+
+  "_classChoice": "league_3_class (737), from its own text: Select (737:6 / 11 / 16) sets varp 3345 to the class (script 5805 shows its confirm panel 737:20), Decline (737:23) sets it back to 0, Accept (737:26) applies it. `skill` is the skill id (Attack 0, Ranged 4, Magic 6) whose unlock varbit script 5830 reads; `fragment` is enum 4136's fragment id. 737 names the items but not their amounts; the amounts here are this server's choice (the Wiki: 'a few starter items').",
+  "classChoice": {
+    "group": 737,
+    "varp": 3345,
+    "_open": "737 has no close button: it opens `openDelayTicks` after login, once the welcome screen's Play (welcome_screen:play 378:72, as the league tutorial waits for it) has been pressed and nothing else is open, and again whenever it closes before a class is chosen.",
+    "openDelayTicks": 2,
+    "welcomePlay": [378, 72],
+    "decline": 23,
+    "accept": 26,
+    "classes": {
+      "1": { "name": "Unwavering Warrior", "select": 6, "skill": 0, "fragment": 1, "items": [[1325, 1]] },
+      "2": { "name": "Focused Ranger", "select": 11, "skill": 4, "fragment": 4, "items": [[845, 1], [884, 150]] },
+      "3": { "name": "Masterful Wizard", "select": 16, "skill": 6, "fragment": 6, "items": [[1379, 1], [556, 300], [558, 150]] }
+    }
+  },
+
+  "_fragments": "league_3_fragments (735). Enum 4136 lists the 53 fragments (struct params 1448 name, 1455 id); a fragment's XP is varbit 13403 + id - 1 (0 = not owned; script 5789: level 1 below 2,000, level 2 below 8,000, level 3 from 8,000). The seven equipped slots are `slotVarbits`, each holding a fragment id. Enum 4127 gives the points (varp 2614) each slot opens at (script 5786: 0, 10, 300, 1,500, 3,000, 7,500, 15,000). The list (735:18) has 9 children per fragment, the clickable one at 9 x (id - 1) with View (client) and Equip (op2); the loadout (735:36) has 6 per slot, the clickable one at 6 x slot + 1 with Unequip (op2).",
+  "fragments": {
+    "group": 735,
+    "enum": 4136,
+    "idParam": 1455,
+    "nameParam": 1448,
+    "xpVarbitBase": 13403,
+    "slotVarbits": [13395, 13396, 13397, 13398, 13399, 13401, 13402],
+    "slotsEnum": 4127,
+    "list": 18,
+    "listChildren": 9,
+    "loadout": 36,
+    "loadoutChildren": 6,
+    "close": 7,
+    "unequipAll": 16,
+    "equipOp": 2,
+    "unequipOp": 2
+  },
+
+  "_unlocks": "league_3_unlocks (733). Varp 3343 is the tab (0 Skills, 1 Bosses, 2 Quests), varp 3344 the selected entry (1-based, 0 none); the client writes neither. Tabs sit on 733:9 at 9 x tab; entries on 733:18 in enum key order, each tab's entries `entryChildren` children apart with Select on the first (read from the web client's widget tree after scripts 5812-5816 ran: skills 12, bosses 4, quests 5). Unlock (733:11) and Decline (733:44) run on the client; Accept (733:47) is the server's. The confirm panel (733:40) runs script 5827, which shows it, whenever 3343 or 3344 is sent; 733:1 runs 5806, which hides it, when 3343 is. The web client runs those handlers once as the screen opens too, and the list (733:18) redraws only when 3343 or 3344 changes; so the open, and Accept (which clears the entry to redraw the list), hide the confirm panel again a tick later. Close is 733:21.",
+  "unlocks": {
+    "group": 733,
+    "tabVarp": 3343,
+    "selectionVarp": 3344,
+    "tabs": 9,
+    "tabChildren": 9,
+    "entries": 18,
+    "accept": 47,
+    "confirmPanel": 40,
+    "close": 21,
+    "costParam": 1442,
+    "nameParam": 1437,
+    "skills": {
+      "enum": 4129,
+      "skillParam": 1435,
+      "entryChildren": 12,
+      "selectChild": 0,
+      "_alwaysUnlocked": "Defence, Fishing and Thieving: script 5830 answers 1 for them (Wiki /Guide: every player starts with them).",
+      "alwaysUnlocked": [1, 10, 17],
+      "_varbits": "Script 5830: skill id -> its unlock varbit.",
+      "varbits": { "0": 13344, "2": 13345, "4": 13346, "6": 13347, "3": 13348, "5": 13349, "16": 13350, "15": 13351, "12": 13352, "20": 13353, "14": 13354, "13": 13355, "7": 13356, "11": 13357, "8": 13358, "9": 13359, "18": 13360, "19": 13361, "22": 13362, "21": 13363 }
+    },
+    "bosses": {
+      "enum": 4130,
+      "npcParam": 1436,
+      "entryChildren": 4,
+      "selectChild": 0,
+      "_varbits": "Script 5831: the boss's NPC id -> its unlock varbit.",
+      "varbits": { "239": 13364, "5779": 13365, "963": 13366, "7416": 13367, "8195": 13368, "7849": 13369, "1673": 13370, "2265": 13371, "8583": 13372, "8713": 13373, "7286": 13374, "9049": 13375, "494": 13376, "9021": 13377, "499": 13378, "2042": 13379, "8061": 13380, "5863": 13381, "3162": 13382, "2215": 13383, "2205": 13384, "3129": 13385, "9460": 13386, "8615": 13387, "7554": 13388, "8369": 13389, "10572": 13390, "7371": 13391, "319": 13392, "5888": 13393, "11278": 13394 }
+    },
+    "quests": {
+      "enum": 4131,
+      "indexParam": 1444,
+      "entryChildren": 5,
+      "selectChild": 0,
+      "_varbits": "Script 5832: a pack's param 1444 (1-36) -> varbit 13544 + it, which holds the pack's price; 0 means unlocked (script 5816). The cache has no quest prices.",
+      "varbitBase": 13544,
+      "_packs": "Wiki /Unlocks 'Storyline breakdown' (Initial Cost) and each pack's 'all content from' packs (the same as the cache's param 1446). The Wiki: a price includes its prerequisites while they are incomplete, and unlocking one unlocks its prerequisites; so a pack's price drops by the price of each prerequisite pack already unlocked (the largest only, where one includes another).",
+      "packs": {
+        "Camelot I": { "cost": 6 },
+        "Camelot II": { "cost": 27, "requires": ["Camelot I"] },
+        "Champions": { "cost": 12 },
+        "Desert I": { "cost": 8 },
+        "Desert II": { "cost": 43, "requires": ["Desert I", "Troll I"] },
+        "Dorgeshuun": { "cost": 24 },
+        "Druid": { "cost": 10, "requires": ["Troll I"] },
+        "Elemental": { "cost": 5 },
+        "Elf I": { "cost": 8 },
+        "Elf II": { "cost": 31, "requires": ["Elf I"] },
+        "Elf III": { "cost": 60, "requires": ["Elf II"] },
+        "Fairy I": { "cost": 12 },
+        "Fairy II": { "cost": 16, "requires": ["Fairy I"] },
+        "Fremennik I": { "cost": 28, "requires": ["Heroes"] },
+        "Fremennik II": { "cost": 49, "requires": ["Fremennik I"] },
+        "Fremennik III": { "cost": 74, "requires": ["Fremennik II"] },
+        "Gnome I": { "cost": 13 },
+        "Gnome II": { "cost": 44, "requires": ["Gnome I", "Troll I"] },
+        "Heroes": { "cost": 16 },
+        "Karamja I": { "cost": 7 },
+        "Karamja II": { "cost": 16, "requires": ["Karamja I"] },
+        "Kourend I": { "cost": 4 },
+        "Kourend II": { "cost": 13, "requires": ["Kourend I"] },
+        "Kourend III": { "cost": 47, "requires": ["Kourend II"] },
+        "Legends": { "cost": 47, "requires": ["Heroes", "Karamja I", "Elf I"] },
+        "Morytania I": { "cost": 17 },
+        "Morytania II": { "cost": 28, "requires": ["Morytania I"] },
+        "Morytania III": { "cost": 37, "requires": ["Morytania II"] },
+        "Myths": { "cost": 114, "requires": ["Legends", "Champions"] },
+        "Pirate I": { "cost": 18 },
+        "Pirate II": { "cost": 35, "requires": ["Pirate I"] },
+        "Temple Knight I": { "cost": 9 },
+        "Temple Knight II": { "cost": 26, "requires": ["Temple Knight I"] },
+        "Troll I": { "cost": 5 },
+        "Troll II": { "cost": 19, "requires": ["Troll I"] },
+        "Troll III": { "cost": 57, "requires": ["Troll II", "Karamja I"] }
+      }
+    }
+  },
+
+  "messages": {
+    "_classNoRoom": "No message is recorded for this; it is this server's.",
+    "classNoRoom": "You need more space in your inventory or bank to accept this class.",
+    "renownGranted": "Granted {amount} Sage's Renown to {name} ({renown} now).",
+    "renownUsage": "Use ::renown <amount> [player].",
+    "notShattered": "{name} is not in Leagues III - Shattered Relics."
+  }
+}
