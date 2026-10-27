@@ -34,14 +34,19 @@ function bankTabs() {
 /**
  * Where each item the relic hands out would go, in the order `grant` delivers them, or null when
  * one has nowhere to go (so a permanent pick is never saved without its items). Item-aware: a
- * stackable item joins its stack in the inventory, the bank stacks everything so an item already
- * banked takes no slot, and a slot this plan reserves is not counted twice.
+ * stackable item joins its stack in the inventory; the bank stacks everything, so an item already
+ * banked takes no slot; a new bank stack takes one slot of the player's bank space, which every
+ * tab shares (`Bank.freeSlots`), and a slot in its tab; nothing this plan reserves is counted twice.
  */
 function deliveryPlan(player, relic) {
   const { Item, Bank } = Common.core;
   const inventory = player.getInventory();
   const tabs = bankTabs();
-  const free = { inventory: inventory.getFreeSlots(), bank: new Map(tabs.map((tab) => [tab, player.getBank(tab).getFreeSlots()])) };
+  const free = {
+    inventory: inventory.getFreeSlots(),
+    bank: Bank.freeSlots(player),
+    tab: new Map(tabs.map((tab) => [tab, player.getBank(tab).getFreeSlots()])),
+  };
   const placed = { inventory: new Set(), bank: new Map(tabs.map((tab) => [tab, new Set()])) };
   const steps = [];
   for (const id of grantedItems(relic)) {
@@ -62,9 +67,11 @@ function deliveryPlan(player, relic) {
       steps.push({ item, tab: held });
       continue;
     }
-    const tab = [Bank.getTabForItem(player, id), ...tabs].find((candidate) => free.bank.get(candidate) > 0);
+    if (free.bank <= 0) return null;
+    const tab = [Bank.getTabForItem(player, id), ...tabs].find((candidate) => free.tab.get(candidate) > 0);
     if (tab === undefined) return null;
-    free.bank.set(tab, free.bank.get(tab) - 1);
+    free.bank--;
+    free.tab.set(tab, free.tab.get(tab) - 1);
     placed.bank.get(tab).add(id);
     steps.push({ item, tab });
   }
