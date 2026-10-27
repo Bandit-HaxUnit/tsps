@@ -21,10 +21,13 @@ const SHARED_FORM_SECTIONS = new Map([["Enraged Tektiny", "Tektiny"], ["Flying V
 function ordinaryVariant(row, name) {
   const form = slug(SHARED_FORM_SECTIONS.get(name) ?? name);
   const variants = row.variants ?? [];
-  const matching = [`${form}-standard-dialogue`, `standard-dialogue-${form}`, `${form}-dialogue`, form]
+  const matching = [`${form}-standard-dialogue`, `pet-${form}-standard-dialogue`, `standard-dialogue-${form}`, `${form}-dialogue`, form]
     .filter(key => variants.includes(key));
   if (matching.length === 1) return matching[0];
   if (matching.length > 1) return undefined;
+  // converse has already verified the actual current follower belongs to this
+  // player. Other-player and Menagerie sections are separate interaction paths.
+  if (variants.includes("standard-dialogue-owner")) return "standard-dialogue-owner";
   // A generic standard section applies to all indexed forms only when no separate
   // ordinary form section would need a selector. Never fall through to an overhead.
   const ordinary = variants.filter(key => !key.startsWith("rare-") && (key === "standard-dialogue"

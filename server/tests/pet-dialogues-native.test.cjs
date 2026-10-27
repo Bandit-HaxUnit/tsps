@@ -107,6 +107,65 @@ test('native metamorphosis uses the current form and cancels a pending conversat
   await talk(f,n);assert.equal(text(f),'What lovely teeth you have!');
 });
 
+
+test('owner hatchlings select their owner branches rather than other-player or menagerie text', async t => {
+  for (const [id, first] of [[core.ItemIdentifiers.PET_DAGANNOTH_SUPREME, 'Hey, so err... I kind of own you now.'], [core.ItemIdentifiers.PET_DAGANNOTH_PRIME, "So despite there being three kings, you're clearly the leader, right?"]]) {
+    assert.ok(id > 0); const f = actor(t), n = await summon(f, id); await talk(f, n);
+    assert.equal(text(f), first, n.getDefinition().getName());
+    assert.equal(f.p.getAttribute('pets:current'), n);
+  }
+});
+
+test('native Dark core metamorphosis selects the current Pet-prefixed source section', async t => {
+  const f = actor(t), n = await summon(f, core.ItemIdentifiers.PET_DARK_CORE);
+  await talk(f, n); assert.equal(text(f), 'Got any sigils for me?');
+  const op = n.getCurrentDefinition(f.p).getActions().findIndex(x => x === 'Metamorphosis') + 1;
+  assert.ok(op > 0); await input(f, {type:'npc_option',index:n.getIndex(),clickType:op});
+  assert.equal(n.getCurrentDefinition(f.p).getName(), 'Corporeal Critter');
+  assert.equal(f.p.getDialogueManager().isActive(), false);
+  await input(f, {type:'dialogue_continue',widgetId:(217<<16)|5,childIndex:-1});
+  assert.equal(f.p.getDialogueManager().isActive(), false);
+  await talk(f, n); assert.equal(text(f), "I'm hungry!");
+  assert.equal(f.p.getAttribute('pets:current'), n);
+});
+
+
+
+test('owner-only sections reject a foreign player and a removal-queued current follower', async t => {
+  const f = actor(t), g = actor(t), n = await summon(f, core.ItemIdentifiers.PET_DAGANNOTH_SUPREME);
+  await talk(g, n); assert.equal(text(g), undefined);
+  core.World.getRemoveNPCQueue().push(n); await talk(f, n); assert.equal(text(f), undefined);
+  assert.equal(f.p.getAttribute('pets:current'), n);
+});
+
+test('native pickup, Bank deposit/withdraw and saved login retain the Critter conversation', async t => {
+  const f = actor(t), id = core.ItemIdentifiers.PET_DARK_CORE, n = await summon(f, id);
+  const morphOp = n.getCurrentDefinition(f.p).getActions().findIndex(x => x === 'Metamorphosis') + 1;
+  await input(f, {type:'npc_option',index:n.getIndex(),clickType:morphOp});
+  const pick = n.getCurrentDefinition(f.p).getActions().findIndex(x => x === 'Pick-up') + 1;
+  await input(f, {type:'npc_option',index:n.getIndex(),clickType:pick});
+  f.p.getBank(0).open(); core.Bank.deposit(f.p,id,f.p.getInventory().getSlotForItemId(id),1,false);
+  core.Bank.withdraw(f.p,id,f.p.getBank(0).getSlotForItemId(id),1,0);
+  PM.emitPlayerLogout({player:f.p,username:f.p.getUsername()});
+  const g = actor(t); PlayerSave.fromPlayer(f.p).applyToPlayer(g.p);
+  PM.emitPlayerLogin({player:g.p,username:g.p.getUsername(),isNewAccount:false}); g.p.needsPlacement=false;
+  const restored = await summon(g,id); await talk(g,restored);
+  assert.equal(restored.getCurrentDefinition(g.p).getName(),'Corporeal Critter');
+  assert.equal(text(g),"I'm hungry!"); assert.equal(g.p.getInventory().getAmount(id),0);
+});
+
+test('queued-removal owned pet clicks cannot fall through to generic NPC speech after another summon',async t=>{
+  const f=actor(t), old=await summon(f,core.ItemIdentifiers.YAMI);
+  const pick=old.getCurrentDefinition(f.p).getActions().findIndex(x=>x==='Pick-up')+1;
+  await input(f,{type:'npc_option',index:old.getIndex(),clickType:pick});
+  const current=await summon(f,core.ItemIdentifiers.PET_DAGANNOTH_SUPREME);
+  await talk(f,old);assert.equal(f.p.getDialogueManager().isActive(),false);
+  assert.equal(f.p.getAttribute('pets:current'),current);await talk(f,current);
+  assert.equal(text(f),'Hey, so err... I kind of own you now.');
+  assert.equal(f.p.getInventory().getAmount(core.ItemIdentifiers.YAMI),1);
+});
+
+
 test('actual Yami follower uses its canonical NPC-typed ordinary conversation', async t => {
   const f=actor(t), n=await summon(f,core.ItemIdentifiers.YAMI); t.mock.method(Math,'random',()=>0);
   await talk(f,n); assert.equal(text(f),'Yes, you fool?');
