@@ -27,6 +27,8 @@ export interface CombatSpecialDefinition {
     metadata?: Record<string, unknown>;
     /** Roll overrides applied by core while this special is active. */
     traits?: WeaponSpecialTraits;
+    /** Roll overrides that depend on the attacker at the swing (soul stacks); replaces `traits` there. */
+    traitsFor?: (player: Player) => WeaponSpecialTraits | undefined;
     /** Per-variant energy cost override, keyed by item id (e.g. granite maul (or)). */
     drainAmountByItemId?: Record<number, number>;
 }
@@ -78,6 +80,7 @@ export class CombatSpecial {
         this.weaponType = definition.weaponInterface;
         this.metadata = definition.metadata ?? {};
         this.traits = definition.traits;
+        this.traitsFor = definition.traitsFor;
         this.drainAmountByItemId = definition.drainAmountByItemId ?? {};
     }
 
@@ -90,6 +93,7 @@ export class CombatSpecial {
     private readonly identifiers: number[];
     private readonly metadata: Record<string, unknown>;
     private readonly traits: WeaponSpecialTraits | undefined;
+    private readonly traitsFor: ((player: Player) => WeaponSpecialTraits | undefined) | undefined;
     private readonly drainAmountByItemId: Record<number, number>;
 
     public static checkSpecial(player: Player, special: CombatSpecial): boolean {
@@ -393,7 +397,8 @@ export class CombatSpecial {
         if (!player.isSpecialActivated()) {
             return null;
         }
-        return player.getCombatSpecial()?.getTraits() ?? null;
+        const special = player.getCombatSpecial();
+        return (special?.traitsFor ? special.traitsFor(player) : special?.getTraits()) ?? null;
     }
 
 }

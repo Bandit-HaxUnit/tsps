@@ -74,6 +74,7 @@ module.exports = {
     require("./specials/Seercull.SpecialAttack")(api);
     require("./specials/Shove.SpecialAttack")(api);
     require("./specials/SoulflameHorn.SpecialAttack")(api);
+    require("./specials/SoulreaperAxe.SpecialAttack")(api);
     require("./specials/StaffOfBalance.SpecialAttack")(api);
     require("./specials/StaffOfLight.SpecialAttack")(api);
     require("./specials/StaffOfTheDead.SpecialAttack")(api);
