@@ -23,8 +23,11 @@ const SMOKE = 2902;
 const SMOKE_HEIGHT = 30;
 /** Tiles from the dock the crew follow the player before giving up (a guess). */
 const PORT_RANGE = 32;
-/** Where carrying crewmates appear, around the player (rsprox: 2 west and 1 south, then 1 north). */
+/** Where carrying crewmates appear, around the player (rsprox: 2 west and 1 south, then 1 north), first walkable first. */
 const OFFSETS = [[-2, -1], [0, 1], [-1, -1], [1, 1], [-1, 1]];
+/** How far from the player a crewmate may appear, in steps. */
+const APPEAR_STEPS = 2;
+const STEPS = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]];
 
 let pluginApi;
 /** Per player: the crewmates carrying for them, `{ index, kind, dockId, npcs, task }`. */
@@ -68,16 +71,58 @@ function smoke(player, location) {
   player.getPacketSender().sendGraphic(new Graphic(SMOKE, 0, SMOKE_HEIGHT), location);
 }
 
+/**
+ * Tiles the player could walk to within a couple of steps, by the same collision as movement: a
+ * crewmate appears on the dock, never in the water or behind a wall.
+ */
+function reachableTiles(player) {
+  const { RegionManager } = common.core();
+  const here = player.getLocation();
+  const z = here.getZ();
+  const area = player.getPrivateArea?.() ?? null;
+  const key = (x, y) => `${x},${y}`;
+  const seen = new Map([[key(here.getX(), here.getY()), [here.getX(), here.getY()]]]);
+  let frontier = [[here.getX(), here.getY()]];
+  for (let step = 0; step < APPEAR_STEPS; step++) {
+    const next = [];
+    for (const [x, y] of frontier) {
+      for (const [dx, dy] of STEPS) {
+        const to = [x + dx, y + dy];
+        if (seen.has(key(...to)) || !RegionManager.canMove(x, y, to[0], to[1], z, 1, 1, area)) continue;
+        seen.set(key(...to), to);
+        next.push(to);
+      }
+    }
+    frontier = next;
+  }
+  seen.delete(key(here.getX(), here.getY()));
+  return seen;
+}
+
+/** Where the n-th carrier appears: the recorded spots first, else any tile in reach, else with the player. */
+function appearAt(player, reachable, taken, i) {
+  const here = player.getLocation();
+  const free = (x, y) => reachable.has(`${x},${y}`) && !taken.has(`${x},${y}`);
+  const offsets = [...OFFSETS.slice(i), ...OFFSETS.slice(0, i)];
+  const spot = offsets.map(([dx, dy]) => [here.getX() + dx, here.getY() + dy]).find(([x, y]) => free(x, y))
+    ?? [...reachable.values()].find(([x, y]) => free(x, y))
+    ?? [here.getX(), here.getY()];
+  taken.add(`${spot[0]},${spot[1]}`);
+  return spot;
+}
+
 /** Each carrying crewmate appears beside the player; the first follows them, the rest the one before (rsprox). */
 function spawnCarriers(player, parts) {
   const { Location } = common.core();
   const here = player.getLocation();
+  const reachable = reachableTiles(player);
+  const taken = new Set();
   const npcs = [];
   parts.forEach(({ crew, amount }, i) => {
     const form = crew.cargoNpcs[Math.min(amount, crew.cargoNpcs.length) - 1];
     if (form === undefined) return;
-    const [dx, dy] = OFFSETS[i % OFFSETS.length];
-    const at = new Location(here.getX() + dx, here.getY() + dy, here.getZ());
+    const [x, y] = appearAt(player, reachable, taken, i);
+    const at = new Location(x, y, here.getZ());
     const npc = pluginApi.spawnNpc({ id: form, x: at.getX(), y: at.getY(), z: at.getZ(), owner: player });
     if (!npc) return;
     smoke(player, at);
