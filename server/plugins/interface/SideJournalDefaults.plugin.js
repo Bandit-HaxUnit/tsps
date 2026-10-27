@@ -74,6 +74,16 @@ function mountSideJournalContent(player, groupId, tabIndex) {
     player.getPacketSender().sendInterfaceFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ROW_COLLECTION_LOG, ROW_COLLECTION_LOG, FLAGS_OP1_2);
     player.getPacketSender().sendInterfaceFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ROW_PLAYTIME, ROW_PLAYTIME, FLAGS_OP1);
   }
+  pluginApi?.emitCustomEvent("side-journal:mounted", { player, groupId, tabIndex });
+}
+
+function mountRequested(event) {
+  const { player, groupId, tabIndex } = event;
+  const validGroup = Number.isInteger(groupId) && groupId >= 0 && groupId <= 65535;
+  const validTab = Number.isInteger(tabIndex) && tabIndex >= 0 && tabIndex <= 4;
+  if (!player || !validGroup || !validTab) return;
+  mountSideJournalContent(player, groupId, tabIndex);
+  event.mounted = true;
 }
 
 function sessionMinutes(player) {
@@ -85,6 +95,7 @@ module.exports = {
   name: "SideJournalDefaults",
   register(api) {
     pluginApi = api;
+    api.onCustomEvent("side-journal:mount", mountRequested);
     api.onPlayerLogin(({ player }) => {
       sessionStartByPlayer.set(player, Date.now());
     });
