@@ -49,7 +49,7 @@ test('Bank-all keeps remaining rewards and opens the box after a partial transfe
 });
 test('a full bank with metadata-incompatible herbs cannot consume a reward', () => {
     const f = prepare(), spade = Data.itemId('Spade');
-    const items = Array.from({ length: f.bank.capacity() }, (_, slot) => new core.Item(spade, 1, { slot }));
+    const items = Array.from({ length: core.Bank.MAX_SLOTS }, (_, slot) => new core.Item(spade, 1, { slot }));
     items[0] = new core.Item(f.herb, MAX_STACK, { source: 'fixture' });
     f.bank.setItems(items);
     f.take();
