@@ -339,10 +339,12 @@ Animal Wrangler's Hunter and cooking ones) do not.
   rumour sack) is not gathering. The herb's cleaning XP for each find is ours (the Wiki: "a small
   amount"). Check, Fill and Withdraw (as notes) are the cache's options, on the pouch clicked; the
   pouch keeps its own herbs, where live shares them with the herb sack. In Herblore
-  (`herblore:mix`), a secondary ingredient (any ingredient that is not a potion or a vial, and a
+  (`herblore:mix`), a secondary ingredient (any after the recipe's first, its primary, that is
+  not a potion or a vial, so a haemostatic dressing's poultice is always used; and a
   super combat's or anti-venom+'s torstol potion (unf), Wiki, whose vial is kept with it) is
   kept 90% of the time, never crystal dust (Wiki), and a potion brewed from an unfinished one
-  comes with 4 doses instead of 3 (an upgrade of a dosed potion keeps its doses). Unfinished
+  comes with 4 doses instead of 3, whatever the recipe calls its product (Compost potion(4) from
+  supercompost; an upgrade of a dosed potion keeps its doses). Unfinished
   potions keep their herb. These Herblore perks need only the relic, not the pouch (ours: the
   Raging Echoes page does not tie them to it). Not here: the Menaphite remedy (no recipe in this
   server).
