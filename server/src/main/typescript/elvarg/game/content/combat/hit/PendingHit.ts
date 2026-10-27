@@ -34,8 +34,10 @@ type PendingHitConfig = {
     /** Scales the kept roll's damage before the hook and the HP cap (a size bonus). */
     damageMultiplier?: number;
     /**
-     * An ordinary attack whatever is armed when it is built: no special attack's traits (a hit
-     * derived from an earlier one, which must not borrow a special armed since).
+     * An ordinary attack whatever is armed when it is built: while its rolls are made the attacker
+     * counts as having no special armed, so no special's traits, accuracy or damage formulas apply
+     * (a hit derived from an earlier one, which must not borrow a special armed since). The armed
+     * special stays armed, with its energy, for the attacker's next attack.
      */
     ordinary?: boolean;
 };
@@ -104,10 +106,19 @@ export class PendingHit {
             }
         }
 
-        this.hits = Spell.withCastContext(attacker, this.spellContext, () =>
-            this.prepareHits(resolvedHitAmount, resolvedRollAccuracy,
-                typeof delayOrConfig === "object" ? delayOrConfig?.damage : undefined,
-                typeof delayOrConfig === "object" && delayOrConfig?.bypassProtectionPrayer === true));
+        // An ordinary hit is rolled as if no special were armed: every formula reads the armed
+        // special through isSpecialActivated (CombatSpecial.activeTraitsFor, the accuracy and damage
+        // formulas), so the flag is lowered for the rolls and put back after.
+        const armed = this.ordinary && attacker?.isSpecialActivated?.() === true;
+        if (armed) attacker.setSpecialActivated(false);
+        try {
+            this.hits = Spell.withCastContext(attacker, this.spellContext, () =>
+                this.prepareHits(resolvedHitAmount, resolvedRollAccuracy,
+                    typeof delayOrConfig === "object" ? delayOrConfig?.damage : undefined,
+                    typeof delayOrConfig === "object" && delayOrConfig?.bypassProtectionPrayer === true));
+        } finally {
+            if (armed) attacker.setSpecialActivated(true);
+        }
         this.delay = Math.max(0, resolvedDelay);
         this.handleAfterHitEffects = resolvedHandleAfterHitEffects;
     }
