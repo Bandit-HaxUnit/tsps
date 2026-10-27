@@ -4,8 +4,43 @@ const Common = require("./Common.AdventurePaths");
 const Progress = require("./Progress.AdventurePaths");
 const Rewards = require("./Rewards.AdventurePaths");
 const Data = require("./Data.AdventurePaths");
+// Cache241 CS2 2974 creates a stone button's label at start+9. CS2 2946
+// allocates 39 children per path, with its op4 eye as the final child (38/77).
+const REWARD_BACK_CHILD = 9;
+const PATH_ROW_CHILDREN = 39;
+const PATH_FOCUS_OP = 4;
+const CLIENT_SETTINGS = [
+    "path_in_focus", "combat_task_focus", "gatherer_task_focus",
+    "settings_selected", "main_if_tab", "disable_task_message",
+    "disable_path_message", "disable_task_focus_message",
+    "disable_path_focus_message", "disable_notification",
+];
 const group = (name) => Common.core.CacheDefinitions.getInterfaceId(name);
 const uid = (name) => Common.core.CacheDefinitions.getComponentId(name);
+const focusSlot = (index) => (index + 1) * PATH_ROW_CHILDREN - 1;
+function settingsMask(varpId) {
+    const C = Common.core.CacheDefinitions;
+    let mask = 0;
+    for (const name of CLIENT_SETTINGS) {
+        const b = C.getVarbit(C.getVarbitId("adventurepath_" + name));
+        if (b.baseVar === varpId)
+            mask |= ((1 << (b.endBit - b.startBit + 1)) - 1) << b.startBit;
+    }
+    return mask;
+}
+function focusPath(player, path) {
+    const C = Common.core.CacheDefinitions,
+        out = player.getPacketSender(),
+        id = C.getVarbitId("adventurepath_path_in_focus"),
+        b = C.getVarbit(id),
+        none = (1 << (b.endBit - b.startBit + 1)) - 1,
+        value = out.getVarbit(id) === path.id ? none : path.id;
+    out.sendVarbit(id, value);
+    Common.state(player).settings[b.baseVar] = out.getVarp(b.baseVar) & settingsMask(b.baseVar);
+    const trigger = C.getVarpId("adventurepath_focus_trigger");
+    out.sendConfig(trigger, (out.getVarp(trigger) + 1) | 0);
+    Common.save(player);
+}
 function open(player) {
     if (!Progress.active(player)) return;
     const out = player.getPacketSender();
@@ -24,7 +59,7 @@ function open(player) {
             Common.core.CacheDefinitions.getVarpId("adventurepath_selected_task")
         ] ?? 0,
     );
-    out.sendInterfaceScript(917, [-1, -2]);
+    out.sendInterfaceScript(917, [-1, -1]);
     out.sendInterface(group("adventurepath"));
     out.sendSubInterface(uid("toplevel_osrs_stretch:sidemodal"), group("adventurepath_side"), 0);
     for (const name of [
@@ -38,6 +73,10 @@ function open(player) {
         "extra_back_button",
     ])
         out.sendInterfaceFlagsRange(uid("adventurepath:" + name), -1, 100, 6);
+    for (const [index] of Data.paths().entries())
+        out.sendInterfaceFlagsRange(
+            uid("adventurepath:paths"), focusSlot(index), focusSlot(index), 1 << PATH_FOCUS_OP,
+        );
 }
 function interact(event) {
     if (event.definition?.getName() !== "Adventurer Jon") return;
@@ -167,10 +206,20 @@ function click(event) {
     if (
         !Progress.active(player) ||
         player.getHitpoints() <= 0 ||
-        player.getStatus() !== Common.core.PlayerStatus.NONE ||
-        ![1, 2].includes(action)
+        player.getStatus() !== Common.core.PlayerStatus.NONE
     )
         return;
+    if (
+        main === group("adventurepath") &&
+        buttonId === uid("adventurepath:paths") && action === PATH_FOCUS_OP
+    ) {
+        const path = Data.paths().find((_, index) => event.slot === focusSlot(index));
+        if (!path || path.tasks.every((task) => Common.state(player).completed.includes(task.id))) return;
+        event.handled = true;
+        focusPath(player, path);
+        return;
+    }
+    if (![1, 2].includes(action)) return;
     if (buttonId >>> 16 === group("adventurepath_side")) {
         if (!player.getPacketSender().isSubInterfaceOpen(group("adventurepath_side"))) return;
         if (
@@ -205,7 +254,7 @@ function click(event) {
     if (
         main === group("adventurepath_reward") &&
         buttonId === uid("adventurepath_reward:item_holder") &&
-        event.slot === 0 &&
+        event.slot === REWARD_BACK_CHILD &&
         action === 1
     ) {
         event.handled = true;
@@ -243,7 +292,7 @@ function click(event) {
     player.getPacketSender().sendInterface(group("adventurepath_reward"));
     player
         .getPacketSender()
-        .sendInterfaceFlagsRange(uid("adventurepath_reward:item_holder"), 0, 0, 2);
+        .sendInterfaceFlagsRange(uid("adventurepath_reward:item_holder"), REWARD_BACK_CHILD, REWARD_BACK_CHILD, 2);
     player.getPacketSender().sendClientScript(2843, path.struct);
 }
 function logout({ player }) {
@@ -273,25 +322,7 @@ function transmit(event) {
     else if (varpId === C.getVarpId("adventurepath_selected_task"))
         valid = value === 0 || Data.tasks().some((t) => t.id === value);
     else {
-        let mask = 0;
-        for (const name of [
-            "path_in_focus",
-            "combat_task_focus",
-            "gatherer_task_focus",
-            "settings_selected",
-            "main_if_tab",
-            "disable_task_message",
-            "disable_path_message",
-            "disable_task_focus_message",
-            "disable_path_focus_message",
-            "disable_notification",
-        ]) {
-            const b = Common.core.CacheDefinitions.getVarbit(
-                C.getVarbitId("adventurepath_" + name),
-            );
-            if (b.baseVar === varpId)
-                mask |= ((1 << (b.endBit - b.startBit + 1)) - 1) << b.startBit;
-        }
+        const mask = settingsMask(varpId);
         valid =
             mask !== 0 && (value & ~mask) === (player.getPacketSender().getVarp(varpId) & ~mask);
         writable = value & mask;

@@ -3,11 +3,11 @@
  * times a day (ring 4: 100%, three times), and Check reports the day's charges, as captured on
  * ring 4: "You have # out of # alchemy charges left and # of your # energy restores left for
  * today." Rings 2-4 carry Energy in their Functions submenu. The cabbage patch teleport is in
- * Teleports.DiaryRewards.js; the free alchemy isn't implemented yet, so Check always reports all
- * of its charges.
+ * Teleports.DiaryRewards.js; Alchemy.DiaryRewards.js supplies the native free-casting panel.
  */
 const Rewards = require("./Common.DiaryRewards");
 const Daily = require("./DailyRing.DiaryRewards");
+const Alchemy = require("./Alchemy.DiaryRewards");
 
 const ENERGY_KEY = Daily.ENERGY_KEY;
 const ALCHEMY_KEY = Daily.ALCHEMY_KEY;
@@ -80,6 +80,7 @@ function functions(event, tier) {
     index >= 0 && event.subOpId > 0
       ? definition.subops?.[index]?.[event.subOpId - 1]
       : null;
+  if (entry === "Alchemy") { Alchemy.open(event, tier); return true; }
   if (entry !== ENERGY_SUBOP) return false;
   restoreEnergy(event.player, tier);
   return true;
@@ -102,12 +103,14 @@ function actionsFor(tier) {
   return {
     Energy: ({ player }) => restoreEnergy(player, tier),
     Check: ({ player }) => check(player, tier),
+    Alchemy: (event) => Alchemy.open(event, tier),
     [FUNCTIONS_OPTION]: (event) => functions(event, tier),
   };
 }
 
 module.exports = function attachExplorersRing(api) {
   Daily.attach(api);
+  Alchemy.attach(api);
   for (const { name, tier } of Rewards.tierNames(ring().objs))
     api.onItemAction(name, actionsFor(tier));
   api.onPlayerLogin(syncOnLogin);
