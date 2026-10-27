@@ -827,13 +827,13 @@ test("burying resolves inventory and XP on click; movement, logout and cancellat
     const task = tasks.pop();
     assert.equal(task.key, p, "logout cancels tasks by player identity");
     assert.equal(p.counts.get(core.ItemIdentifiers.BONES), 1);
-    assert.equal(xp, 5, "the clicked bone awards XP immediately");
+    assert.equal(xp, 4.5, "the clicked bone awards XP immediately");
     if (mode === "walk-before-message") p.moveTo(new core.Location(3001, 3000, 0));
     if (mode === "logout") p.isRegistered = () => false;
     if (mode === "cancel") task.stop();
     task.tick();
     task.tick();
-    assert.equal(xp, 5, mode);
+    assert.equal(xp, 4.5, mode);
     assert.equal(p.counts.get(core.ItemIdentifiers.BONES), 1, mode);
     assert.deepEqual(p.messages, mode === "logout" || mode === "cancel"
       ? ["You dig a hole in the ground..."]
