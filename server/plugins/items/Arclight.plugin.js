@@ -62,6 +62,7 @@ function hitResolved({ attacker, hit }) {
   // Content may spare the charge (a league fragment): the same question every melee weapon with charges asks.
   const consume = { player, itemId: sword.getId(), skip: false };
   pluginApi?.emitCustomEvent('combat:melee-charge', consume);
+  pluginApi?.emitCustomEvent('combat:consume-charge', consume);
   if (consume.skip) return;
   const current = state(sword);
   current.charges = Math.max(0, current.charges - 1);

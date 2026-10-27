@@ -46,10 +46,54 @@
     "noRoom": { "text": "You need room in your inventory or bank for this relic's items.", "source": "ours" },
     "relicUsage": { "text": "Use ::relic <tier 1-8> <slot 1-3>.", "source": "ours" },
     "relicList": { "text": "{league} relics: {relics}", "source": "ours" },
-    "relicNone": { "text": "none chosen", "source": "ours" }
+    "relicNone": { "text": "none chosen", "source": "ours" },
+    "lastStandNoFood": { "text": "You cannot eat while making your last stand.", "source": "ours" },
+    "echoToggle": { "text": "Your {tool} will now {mode}.", "source": "ours" },
+    "foragerFound": { "text": "Your forager's pouch finds some {herb}.", "source": "ours" },
+    "foragerHolds": { "text": "Your forager's pouch holds: {herbs}.", "source": "ours" },
+    "foragerEmpty": { "text": "Your forager's pouch is empty.", "source": "ours" },
+    "foragerFilled": { "text": "You put {amount} herbs into your forager's pouch.", "source": "ours" },
+    "foragerNoRoom": { "text": "You don't have enough inventory space to withdraw that.", "source": "ours" },
+    "foragerNothingToFill": { "text": "You have no grimy herbs your forager's pouch can take.", "source": "ours" },
+    "seedKept": { "text": "You manage to keep your {seed}.", "source": "ours" },
+    "overgrownSeedKept": { "text": "Botanical allows you to keep your {seed}.", "source": "Wiki, Overgrown (trivia: the live message, from the relic's development name)" },
+    "bonusCasket": { "text": "Your relic finds you another reward casket ({tier}).", "source": "ours" },
+    "bonusCasketUpgraded": { "text": "Your relic finds you a better reward casket ({tier}).", "source": "ours" },
+    "bloodthirstySuperior": { "text": "<col=ff0000>This superior foe is bloodthirsty...</col>", "source": "ours" },
+    "superiorPoints": { "text": "You gain {points} Slayer points for the superior foe.", "source": "ours" },
+    "slayerBonusXp": { "text": "You gain {xp} bonus Slayer XP.", "source": "Wiki, Slayer Master (Raging Echoes League)" },
+    "areaLocked": { "text": "You haven't unlocked the area that leads to.", "source": "ours" },
+    "noLastDestination": { "text": "You haven't teleported anywhere with it yet.", "source": "ours" },
+    "noDestinations": { "text": "There is nowhere to teleport to.", "source": "ours" },
+    "fairyMushroomTitle": { "text": "Where would you like to go?", "source": "ours" },
+    "fairyRingsTitle": { "text": "Which fairy ring?", "source": "ours" },
+    "spiritTreesTitle": { "text": "Which spirit tree?", "source": "ours" },
+    "leprechaunsTitle": { "text": "Which tool leprechaun?", "source": "ours" },
+    "leprechaunNear": { "text": "Near {place}", "source": "ours" },
+    "nexusTitle": { "text": "Which teleport?", "source": "ours" },
+    "jewelleryTitle": { "text": "Where would you like to teleport to?", "source": "Jewellery's own menu" },
+    "clueCompassTitle": { "text": "Where would you like to go?", "source": "ours" },
+    "stashTitle": { "text": "Which STASH unit?", "source": "ours" },
+    "stashUnit": { "text": "{tier} STASH {number} ({x}, {y})", "source": "ours" },
+    "noClueStep": { "text": "You haven't read a clue you still carry.", "source": "ours" },
+    "clueStepKill": { "text": "The compass can't lead you to something you must kill.", "source": "ours" },
+    "clueStepHidden": { "text": "The compass can't find where this clue's treasure lies.", "source": "ours" },
+    "recallSaved": { "text": "The crystal remembers this moment.", "source": "ours" },
+    "recallCannotSave": { "text": "The crystal can't remember this place.", "source": "ours" },
+    "recallNothing": { "text": "The crystal remembers nothing yet.", "source": "ours" },
+    "recallMemory": { "text": "The crystal remembers {x}, {y} (plane {z}): {hitpoints} Hitpoints, {prayer} Prayer and {special}% special attack.", "source": "ours" },
+    "bankersNoteNoted": { "text": "You note {amount} x {item}.", "source": "ours" },
+    "bankersNoteUnnoted": { "text": "You unnote {amount} x {item}.", "source": "ours" },
+    "bankersNoteNothing": { "text": "You have none of that to note.", "source": "ours" },
+    "bankersNoteCannot": { "text": "That item can't be noted.", "source": "ours" },
+    "bankersNoteFirst": { "text": "Use an item on the banker's note first.", "source": "ours (Wiki: an item must first be used on it)" },
+    "bankersNoteToggleNote": { "text": "Activate will now note.", "source": "ours" },
+    "bankersNoteToggleUnnote": { "text": "Activate will now unnote.", "source": "ours" },
+    "reloadedChosen": { "text": "Reloaded: you also have {relic}.", "source": "ours" },
+    "bankHeistTitle": { "text": "Which bank?", "source": "ours" }
   },
   "effects": {
-    "_comment": "The relics with effects here (SuperiorSorcerer / Berserker / UndyingRetribution.LeagueRelics.js), each gated on its league and on being chosen. Numbers are the Wiki's: no rsprox recording of Trailblazer Reloaded exists (the captures start at revision 223). Superior Sorcerer's splash reach (one tile around the primary target, like a burst) and Undying Retribution's graphic (the Retribution prayer's, 437) are ours; the Wiki gives neither. The Arcane grimoire (ArcaneGrimoire.LeagueRelics.js) is the item two relics grant; its options are the cache's, its texts ours (the Wiki lists the options, not what they say).",
+    "_comment": "The relics with effects here (one <Relic>.LeagueRelics.js each), each gated on its league (`league`, one type or several for a relic both leagues have) and on being chosen (`key`, plus `aliases` for a catalog entry that stands in for the same relic). Numbers are the Wiki's: no rsprox recording of Trailblazer Reloaded exists (the captures start at revision 223). Superior Sorcerer's splash reach (one tile around the primary target, like a burst) and Undying Retribution's graphic (the Retribution prayer's, 437) are ours; the Wiki gives neither.",
     "superiorSorcerer": {
       "league": 4, "key": "superior-sorcerer",
       "attackSpeed": 2, "accuracyMultiplier": 2.75, "damageBonusPermille": 200, "saveChance": 0.9,
@@ -63,6 +107,116 @@
       "_recoilImmuneExceptions": "Wiki: it still works on these though they are immune to recoil damage (Nex, the Hespori, Vorkath and every Wilderness boss).",
       "recoilImmuneExceptions": ["Nex", "Hespori", "Vorkath", "Callisto", "Artio", "Vet'ion", "Calvar'ion", "Venenatis", "Spindel", "Scorpia", "Chaos Elemental", "Chaos Fanatic", "Crazy archaeologist", "King Black Dragon"]
     },
+    "_combatComment": "The combat and XP relics (docs/leagues.md). Wiki numbers unless marked ours: Archer's Embrace and Brawler's Resolve halve the weapon's speed (above 4 rounded down, below 3 rounded up, so 3, 4 and 5 all become 2). Ours: Archer's extra projectile spends no ammunition and shows no projectile (a second hitsplat); Soul Stealer's venator bow bounces make its first hit a multi-target launch (the Wiki lets the first hit restore); Weapon Master's 25-hitpoint sacrifice needs more than 25 hitpoints; Executioner's reach is the relic page's 5/7 (the Sage's axe item page says 6/8, the later Demonic Pacts version) and the axe flies as a rune thrown axe (no spotanim of its own in the cache); Last Stand refuses food and undoes any other heal a tick later, and its closing heal is the damage dealt in the window capped at the max; Equilibrium's 20% goes to the first of equally least-experienced skills.",
+    "archersEmbrace": { "league": 4, "key": "archers-embrace", "accuracyMultiplier": 2, "extraProjectileChance": 0.1, "ammoSaveChance": 0.9, "boltProcMultiplier": 2 },
+    "brawlersResolve": { "league": 4, "key": "brawlers-resolve", "accuracyMultiplier": 1.5, "defenceMultiplier": 1.5, "doubleDamageChance": 0.1, "chargeSaveChance": 0.9, "immuneStatuses": ["poison", "venom", "dragonfire"] },
+    "soulStealer": { "league": 4, "key": "soul-stealer", "minimumHitFraction": 0.1, "restoreChance": 0.5, "restoreFraction": 0.1 },
+    "weaponMaster": { "league": 4, "key": "weapon-master", "minimumHitFraction": 0.2, "regenPercent": 30, "sacrificeHitpoints": 25 },
+    "executioner": { "league": 4, "key": "executioner", "items": ["SAGES_AXE", "SAGES_AXE_2"], "executeBelowFraction": 0.2, "attackDistance": 5, "longRangeDistance": 7 },
+    "specialist": { "league": 5, "key": "specialist", "cost": 20, "accuracyMultiplier": 2, "missRefundPercent": 10, "killRestorePercent": 15 },
+    "lastStand": {
+      "league": 5, "key": "last-stand", "aliases": ["last-stand-preview"],
+      "boostedLevel": 255, "drainPerTick": 16, "drainFloorAboveBase": 15, "windowTicks": 16, "cooldownMs": 180000,
+      "skills": ["ATTACK", "STRENGTH", "DEFENCE", "RANGED", "MAGIC"]
+    },
+    "equilibrium": { "league": [4, 5], "key": "equilibrium", "bonusFraction": 0.1, "leastExperiencedFraction": 0.2 },
+    "_gatheringComment": "The gathering relics (docs/leagues.md). Wiki numbers unless marked ours: Trickster's and Animal Wrangler's faster box-trap lure (the trap's 5-tick look for prey halved to 2 ticks: the Wiki gives no figure); the Echo tools' toggles cycle through their modes with our messages; Power Miner's auto-smelt takes the furnace recipe whose main ore it is and waives its other ingredients (a copper ore alone makes a bronze bar; coal makes nothing), its four ores a rock are counted per rock for everyone who mines it and do not count mining gloves (not modelled here); a Fishing second chance lands the best fish the player can catch at the spot; Trickster's and Dodgy Deals' coins are multiplied as coin pouches; Corner Cutter's 25% is on the lap's completion bonus; the Sage's greaves of Trickster and Corner Cutter are not in this cache.",
+    "endlessHarvest": { "league": 4, "key": "endless-harvest", "skills": ["MINING", "WOODCUTTING", "FISHING"], "multiplier": 2 },
+    "trickster": { "league": 4, "key": "trickster", "pouchLimitMultiplier": 3, "lootMultiplier": 2, "boxTrapMultiplier": 2, "boxTrapLureTicks": 2, "logsPerAction": 9 },
+    "powerMiner": {
+      "league": 5, "key": "power-miner", "tool": "ECHO_PICKAXE", "toolName": "Echo pickaxe", "secondChance": 0.5, "oresPerRock": 4,
+      "modes": ["smelt and cut", "smelt", "cut", "off"], "modeText": { "smelt and cut": "smelt the ore and cut the gems you mine", "smelt": "smelt the ore you mine", "cut": "cut the gems you mine", "off": "leave what you mine as it is" }
+    },
+    "lumberjack": {
+      "league": 5, "key": "lumberjack", "tool": "ECHO_AXE", "toolName": "Echo axe", "secondChance": 0.5,
+      "modes": ["burn", "fletch", "off"], "modeText": { "burn": "burn the logs you chop", "fletch": "fletch the logs you chop into arrow shafts", "off": "leave the logs as they are" }
+    },
+    "animalWrangler": {
+      "league": 5, "key": "animal-wrangler", "tool": "ECHO_HARPOON", "toolName": "Echo harpoon", "harpoonBonus": 135, "secondChance": 0.5, "cookChance": 0.5, "ticksFaster": 1,
+      "unbanked": ["RAW_KARAMBWANJI"], "uncooked": ["BIG_SHARK", "BIG_SWORDFISH", "BIG_BASS"], "boxTrapMultiplier": 2, "boxTrapLureTicks": 2,
+      "modes": ["cook", "off"], "modeText": { "cook": "cook half of what you catch", "off": "leave your catch raw" }
+    },
+    "cornerCutter": { "league": 5, "key": "corner-cutter", "lapCount": 2, "lapXpMultiplier": 1.25, "markCoins": 10000 },
+    "dodgyDeals": { "league": 5, "key": "dodgy-deals", "pouchLimitMultiplier": 3, "radius": 5 },
+    "_productionComment": "The production relics (docs/leagues.md). Wiki numbers unless marked ours: 'all at once' is up to 28 a cycle (the inventory's slots: ours) and the ammunition kinds 10 (Production Master, Wiki); the +12 is invisible (it counts where the skills check their level; the Wiki does not say); the extra product is the same amount the action made; the fletching 'chisel' group also cuts kebbit and antler bolts and wolfbone arrowtips, batched with the bolt tips (ours); the Forager's pouch keeps its own herbs (live shares the herb sack's), pays the herb's cleaning XP for a find (the Wiki: 'a small amount'), and its Herblore perks need only the relic, not the pouch carried (the Raging Echoes page does not tie them to it).",
+    "productionProdigy": {
+      "league": 4, "key": "production-prodigy", "skills": ["CRAFTING", "SMITHING", "HERBLORE", "FLETCHING", "COOKING"], "levelBoost": 12, "extraChance": 0.25, "maxActions": 28,
+      "batch": {
+        "SMITHING": ["smelt", "smith", "cannonballs"], "FLETCHING": ["logs", "shields", "stringing", "chisel"], "HERBLORE": ["clean", "mix"], "COOKING": ["cook"],
+        "CRAFTING": ["leather", "jewellery", "battlestaves", "pottery", "gems", "glassblowing", "spinning"]
+      }
+    },
+    "productionMaster": {
+      "league": 5, "key": "production-master", "maxActions": 28,
+      "batch": {
+        "SMITHING": ["smelt", "smith", "cannonballs"], "FLETCHING": ["logs", "shields", "stringing", "chisel", "arrows", "bolts", "tipped", "darts"], "HERBLORE": ["clean", "mix"], "COOKING": ["cook"],
+        "CRAFTING": ["leather", "jewellery", "battlestaves", "pottery", "gems", "amethyst", "glassblowing", "spinning"]
+      },
+      "capped": { "arrows": 10, "bolts": 10, "tipped": 10, "darts": 10 }
+    },
+    "friendlyForager": {
+      "league": 5, "key": "friendly-forager", "tool": "FORAGERS_POUCH", "toolName": "Forager's pouch",
+      "cooldownTicks": 9, "levelRange": 25, "herbCap": 30, "secondarySaveChance": 0.9,
+      "triggers": ["mining:success", "woodcutting:success", "fishing:success", "hunter:success"],
+      "_saving": "Wiki: the torstol potion (unf) of super combat potions and anti-venom+ is saved like a secondary; crystal dust (divine potions) never is.",
+      "alsoSaved": ["torstolvial"], "neverSaved": ["prif_crystal_shard_crushed"]
+    },
+    "_economyComment": "The economy and farming relics (docs/leagues.md). Wiki numbers unless marked ours: what a coin shop sells comes noted whenever it can be (the Wiki's toggle has no button in this shop interface: ours, always on); the coins offering repeats at the bone altars' own pace; Farmer's Fortune's 25 times faster harvesting is 25 picks an action, its tripled yield keeps the usual Farming XP per pick (the Wiki gives no XP rule), and its kept seed's message is ours; Pocket Kingdom's approval is held at the kingdom's maximum (127, 100%), and its Check wording is ours.",
+    "fireSale": { "league": 4, "key": "fire-sale", "currency": "COINS" },
+    "goldenGod": {
+      "league": 5, "key": "golden-god", "currency": "COINS", "coinMultiplier": 1.15, "keepChance": 0.65,
+      "offeringCost": 20000, "offeringBone": "DRAGON_BONES"
+    },
+    "farmersFortune": { "league": 4, "key": "farmers-fortune", "seedSaveChance": 0.2, "harvestsPerAction": 25, "yieldMultiplier": 3 },
+    "overgrown": { "league": 5, "key": "overgrown", "seedSaveChance": 0.75, "toolName": "Leprechaun's vault" },
+    "pocketKingdom": { "league": 5, "key": "pocket-kingdom", "payMultiplier": 0.5, "outputMultiplier": 2, "approval": 127, "toolName": "Pocket kingdom" },
+    "_cluesSlayerComment": "The clue and Slayer relics (docs/leagues.md). Wiki numbers unless marked ours: each of an NPC's clue scrolls comes at least 1 time in 15 (the Wiki: 'a 1/15 chance to drop one'); Treasure Seeker's bonus casket chances (bonusCasket, 1 in N by the opened tier) and its 1 in 4 upgrade are ours (the Wiki: 'more common at lower tiers', no numbers); Bloodthirsty's superior Slayer points (5 plus a fifth of the Slayer requirement) are ours; Slayer Master's bonus XP runs in a straight line from 1,000 at Slayer level 1 to 15,000 at 99 (ours).",
+    "treasureSeeker": {
+      "league": 4, "key": "treasure-seeker", "aliases": ["treasure-seeker-preview"],
+      "clueOneIn": 15, "vesselMultiplier": 10,
+      "bonusCasket": { "beginner": 5, "easy": 8, "medium": 10, "hard": 12, "elite": 15, "master": 20 }, "upgradeOneIn": 4
+    },
+    "treasureArbiter": { "league": 5, "key": "treasure-arbiter", "clueOneIn": 15, "vesselMultiplier": 10, "waived": ["emote", "falo", "charlie"] },
+    "bloodthirsty": {
+      "league": 4, "key": "bloodthirsty", "superiorOneIn": 25, "superiorRolls": 6, "variantChance": 0.25, "variantRolls": 9,
+      "variantUniqueBoost": 3, "braceletChance": 0.35, "superiorPoints": { "base": 5, "perLevels": 5 },
+      "_uniqueTable": "Wiki, Bloodthirsty Nechryarch: one roll on this table, out of 315.",
+      "uniqueTable": {
+        "outOf": 315,
+        "rows": [
+          { "item": "RAW_LOBSTER", "amount": [60, 80], "noted": true, "weight": 5 },
+          { "item": "SNAPE_GRASS", "amount": [60, 150], "noted": true, "weight": 10 },
+          { "item": "IRIT_SEED", "amount": [10, 15], "noted": false, "weight": 10 },
+          { "item": "UNICORN_HORN", "amount": [60, 150], "noted": true, "weight": 5 },
+          { "item": "LIMPWURT_ROOT", "amount": [60, 150], "noted": true, "weight": 10 },
+          { "item": "YEW_LOGS", "amount": [70, 90], "noted": true, "weight": 15 },
+          { "item": "RAW_MONKFISH", "amount": [60, 80], "noted": true, "weight": 15 },
+          { "item": "WHITE_BERRIES", "amount": [60, 150], "noted": true, "weight": 20 },
+          { "item": "KWUARM_SEED", "amount": [8, 15], "noted": false, "weight": 30 },
+          { "item": "RANARR_SEED", "amount": [8, 15], "noted": false, "weight": 30 },
+          { "item": "BLUE_DRAGON_SCALE", "amount": [20, 40], "noted": true, "weight": 25 },
+          { "item": "RAW_SHARK", "amount": [60, 80], "noted": true, "weight": 20 },
+          { "item": "RED_SPIDERS_EGGS", "amount": [40, 60], "noted": true, "weight": 25 },
+          { "item": "MAGIC_LOGS", "amount": [30, 50], "noted": true, "weight": 35 },
+          { "item": "WINE_OF_ZAMORAK", "amount": [30, 50], "noted": true, "weight": 30 },
+          { "item": "DWARF_WEED_SEED", "amount": [5, 8], "noted": false, "weight": 30 }
+        ]
+      }
+    },
+    "slayerMaster": {
+      "league": 5, "key": "slayer-master", "freeKinds": ["unlock", "extend", "cancel", "block"],
+      "freeItems": ["RUNE_POUCH", "HERB_SACK", "LOOTING_BAG"], "bonusKill": 100, "bonusXp": [1000, 15000]
+    },
+    "_itemsComment": "The item and teleport relics (docs/leagues.md). Wiki numbers unless marked ours: the menus' grouping and wording, the tool leprechauns named after their nearest fairy ring, the banker's note's default quantities (all) and its Toggle (Activate between noting and unnoting) are ours; Reloaded's extra pick comes from tiers 1-3 (tier indexes 0-2).",
+    "fairysFlight": { "league": [4, 5], "key": "fairys-flight", "toolName": "Fairy mushroom" },
+    "globetrotter": { "league": 4, "key": "globetrotter", "toolName": "Globetrotter pendant" },
+    "bankersNote": { "league": [4, 5], "key": "bankers-note", "toolName": "Banker's note" },
+    "clueCompass": { "league": 5, "key": "clue-compass", "toolName": "Clue compass" },
+    "totalRecall": { "league": 5, "key": "total-recall", "toolName": "Crystal of Echoes" },
+    "grimoire": { "league": 5, "key": "grimoire" },
+    "bankHeist": { "league": 5, "key": "bank-heist", "toolName": "Banker's briefcase" },
+    "reloaded": { "league": 5, "key": "reloaded", "tiers": [0, 1, 2] },
+    "reloaded": { "league": 5, "key": "reloaded", "tiers": [0, 1, 2] },
     "arcaneGrimoire": {
       "item": "Arcane grimoire",
       "options": { "change": "Change Spellbook", "previous": "Previous Spellbook", "check": "Check Previous" },

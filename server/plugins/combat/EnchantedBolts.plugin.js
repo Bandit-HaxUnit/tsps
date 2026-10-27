@@ -199,7 +199,10 @@ function procs(bolt, shot) {
   const request = { player: shot.player, target: shot.target, effect: bolt.effect, chance };
   pluginApi.emitCustomEvent("combat:bolt-effect-chance", request);
   if (Number.isFinite(request.chance)) chance = request.chance;
-  return Math.random() < chance;
+  // Content may scale the chance (a league relic), after the gear and the special have had their say.
+  const proc = { player: shot.player, target: shot.event.target, itemId: shot.player.getCombat().getAmmunition()?.getItemId?.() ?? -1, chance };
+  pluginApi.emitCustomEvent("combat:bolt-proc-chance", proc);
+  return Math.random() < proc.chance;
 }
 
 /** Live sends both on the shot, delayed by the hit's flight time in ticks (rsprox captures). */

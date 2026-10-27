@@ -341,6 +341,7 @@ test("Bottomless Quiver and Arcane Conduit save ammunition, runes and charges", 
   Effects.runeSaving(runes);
   assert.equal(runes.saved, true);
   const charge = { player, itemId: 11905, skip: false };
+  player.getCombat().setCastSpell(core.CombatSpells.WIND_STRIKE);
   Effects.chargeSaving(charge);
   assert.equal(charge.skip, true, "a powered staff's charge too");
   Math.random = () => 0.5;
@@ -607,6 +608,18 @@ test("Tactical Duelist saves a melee weapon's charge (combat:melee-charge from t
   assert.equal(staff.skip, false, "never a powered staff's charge: that is Arcane Conduit's");
 });
 
+test("Arcane Conduit does not save a crystal halberd charge through the shared charge event", () => {
+  const CrystalHalberd = require("../plugins/items/CrystalHalberd.plugin");
+  const player = warrior("conduit-melee", 10);
+  equip(player, 6);
+  const halberd = new core.Item(CrystalHalberd._test.buildIdMaps(core.ItemIdentifiers).keys().next().value, 1);
+  player.getEquipment().setItem(core.Equipment.WEAPON_SLOT, halberd);
+  halberd.setMetaValue("crystal-halberd", { charges: 100 });
+  Math.random = () => 0;
+  CrystalHalberd.useCharge(player, halberd);
+  assert.equal(CrystalHalberd.charges(halberd), 99, "Arcane Conduit saves magic charges only");
+});
+
 test("Livin' On A Prayer: active prayers drain 15/30/60% slower (PrayerHandler)", () => {
   const { PrayerHandler, PrayerData } = require("../dist/game/content/PrayerHandler");
   PrayerData.initializeMaps();
@@ -631,7 +644,7 @@ test("Livin' On A Prayer: active prayers drain 15/30/60% slower (PrayerHandler)"
 
 test("Special Discount caps what a special costs and drains (CombatSpecial)", () => {
   const { CombatSpecial } = require("../dist/game/content/combat/CombatSpecial");
-  const special = (cost) => ({ getDrainAmountForWeaponId: () => cost });
+  const special = (cost) => ({ getId: () => "fragment-cost-test", getDrainAmountForWeaponId: () => cost });
   const plain = warrior("full-price");
   assert.equal(CombatSpecial.energyCost(plain, special(55)), 55);
   const player = warrior("discount", 10);
