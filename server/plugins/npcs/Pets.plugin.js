@@ -272,7 +272,9 @@ const PETS = [
   },
   {
     enumName: "ROCK_GOLEM",
-    petId: NpcIdentifiers.ROCK_GOLEM_25,
+    petId: NpcIdentifiers.ROCK_GOLEM_20,
+    houseNpcId: NpcIdentifiers.ROCK_GOLEM_8,
+    dialogueVariant: "standard-dialogue-normal-variant",
     morphId: 0,
     itemId: 13321,
     dialogue: -1,
