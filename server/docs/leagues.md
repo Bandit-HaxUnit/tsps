@@ -950,7 +950,7 @@ open). Each item remembers its last destination. The menus' grouping and wording
 - **Grimoire** (Raging Echoes tier 7): spells' area, quest and diary requirements are lifted
   (`magic:spell-unlocked`; here the Mage Arena's god spells without their 100 casts); the Prayer
   level still counts, and no prayer here is gated by a quest. The Arcane grimoire's spellbook
-  swap is the item's own plugin (below).
+  swap is the item's own plugin (above).
 - **Reloaded** (Raging Echoes tier 4): one more relic of tiers 1-3, a different one from that
   tier's own pick, chosen with the same click on it (`league:relics-extra`; any item it hands out
   is given). The relic interface shows only each tier's own pick: ours.
