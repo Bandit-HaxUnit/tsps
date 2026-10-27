@@ -159,7 +159,6 @@ relics are the first askers; nothing changes when nobody answers):
 | `construction:materials` | Construction, before a build's materials go | `{ player, buildable, materials }`: a listener may lower an amount |
 | `magic:enchant-pieces`, `magic:spell-batch` | the jewellery enchantments; the Lunar crafting spells | `{ player, spellName, itemId, pieces }` pieces a cast enchants, each with its XP; `{ player, spellName, batch }` items a cast converts |
 | `magic:alchemy-policy` (extended) | core alchemy | now with `high` (High Level Alchemy) |
-| `minigame:points` | the Hallowed Sepulchre's coffins | `{ player, minigame, kind, amount }` before a minigame's reward points or tokens are given: a listener may raise `amount` |
 | `thieving:pickpocket-target` (extended) | Thieving | now with `chanceBonus` (a percent more success, stacking as the gloves of silence do) and `painless` (a stun without the damage) |
 | `thieving:loot` (extended) | Thieving | now with `multiplier`, applied with the rogue outfit's doubling as the loot is handed over |
 | `prayer:bury` (extended) | Prayer | now scatters demonic ashes too (never for the bonecrusher's `crushed`) |
@@ -497,7 +496,7 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   the league predates give none (ours), and Wintertodt's bruma roots and kindling, fed to its
   brazier rather than lit, never do here. Golden Brick Road puts its coins beside a mark of grace
   (`agility:mark`). Grave Robber raises a coffin's hallowed marks, the Grand Hallowed Coffin's too
-  (ours), through the Sepulchre's new `minigame:points`; a part mark is that chance of a whole one. Clued In makes each clue scroll an NPC drops
+  (ours), through the minigames' `minigame:points` (tier passives, below); a part mark is that chance of a whole one. Clued In makes each clue scroll an NPC drops
   at least 1 in 30/25/15 (`npc-drops:tertiary-chance`). The scroll box message is this server's.
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price

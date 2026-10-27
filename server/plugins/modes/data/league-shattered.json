@@ -279,7 +279,7 @@
       }
     },
     "goldenBrickRoad": { "fragment": 45 },
-    "graveRobber": { "fragment": 46, "kind": "hallowed-marks" },
+    "graveRobber": { "fragment": 46, "minigame": "hallowed-sepulchre" },
     "cluedIn": { "fragment": 49 }
   },
 
