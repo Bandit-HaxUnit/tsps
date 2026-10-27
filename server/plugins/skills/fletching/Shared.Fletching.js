@@ -300,7 +300,7 @@ function makeBatch(player, recipe, via) {
   if (recipe.message) player.sendMessage(formatMessage(recipe.message, amount));
   if (recipe.xp > 0) player.getSkillManager().addExperiences(core.Skill.FLETCHING, recipe.xp);
   api.emitCustomEvent("fletching:made", { player, itemId: recipe.outputId, amount });
-  api.emitCustomEvent("skills:produced", { player, skill: core.Skill.FLETCHING, itemId: recipe.outputId, amount, xp: recipe.xp });
+  api.emitCustomEvent("skills:produced", { player, skill: core.Skill.FLETCHING, itemId: recipe.outputId, amount, xp: recipe.xp, kind: recipe.group });
   return true;
 }
 

@@ -55,7 +55,7 @@ function makeOne(player, recipe) {
   Common.spam(player, message(recipe));
   Common.addXp(player, recipe.xp);
   Common.api.emitCustomEvent("herblore:made", { player, itemId: mix.productId });
-  Common.api.emitCustomEvent("skills:produced", { player, skill: Common.core.Skill.HERBLORE, itemId: mix.productId, amount: 1, xp: recipe.xp });
+  Common.api.emitCustomEvent("skills:produced", { player, skill: Common.core.Skill.HERBLORE, itemId: mix.productId, amount: 1, xp: recipe.xp, kind: "mix" });
   return true;
 }
 
