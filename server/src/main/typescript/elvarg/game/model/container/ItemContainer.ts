@@ -164,6 +164,12 @@ export abstract class ItemContainer {
     return this;
   }
 
+  /** Whether `item` fits: a free slot, or a stack of it to join. */
+  public canTake(item: Item): boolean {
+    return this.getFreeSlots() > 0 ||
+      (this.containsNumber(item.getId()) && item.getDefinition().isStackable());
+  }
+
   public getFreeSlots(): number {
     let space = 0;
     for (let item of this.items) {
@@ -301,10 +307,7 @@ export abstract class ItemContainer {
       return this;
     }
 
-    if (
-      to.getFreeSlots() <= 0 &&
-      !(to.containsNumber(item.getId()) && item.getDefinition().isStackable())
-    ) {
+    if (!to.canTake(item)) {
       to.full();
       return this;
     }
@@ -364,10 +367,7 @@ export abstract class ItemContainer {
     refresh?: boolean
   ): ItemContainer {
     ensureContainersLoaded();
-    if (
-      to.getFreeSlots() <= 0 &&
-      !(to.containsNumber(item.getId()) && item.getDefinition().isStackable())
-    ) {
+    if (!to.canTake(item)) {
       to.full();
       return this;
     }
@@ -667,7 +667,8 @@ export abstract class ItemContainer {
     } else {
       let amount = item.getAmount();
       while (amount > 0) {
-        if (slot == -1 || (toContainer != null && toContainer.isFull())) {
+        // Use the same acceptance as the caller: a full bank still takes an item it holds.
+        if (slot == -1 || (toContainer != null && !toContainer.canTake(item))) {
           break;
         }
         if (!leavePlaceHolder) {

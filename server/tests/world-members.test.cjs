@@ -55,7 +55,7 @@ test('allow hooks: first answer wins, no answer is null', () => {
   assert.equal(PluginManager.emitCanStockItem(1, 9), false);
 
   api.onPrayerDisabled((event) => { if (event.prayer.requirement > 45) { event.disabled = true; event.message = 'no'; } });
-  assert.equal(PluginManager.emitPrayerDisabled({}, { requirement: 70 }), 'no');
+  assert.deepEqual(PluginManager.emitPrayerDisabled({}, { requirement: 70 }), { message: 'no', messageBox: false });
   assert.equal(PluginManager.emitPrayerDisabled({}, { requirement: 1 }), null);
 });
 

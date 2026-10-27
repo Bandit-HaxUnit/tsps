@@ -102,11 +102,7 @@ function binAction(player, patch, action, usedId, usedSlot) {
         if (!superItem && !COMPOST.has(name) && !herb) {
             player.sendMessage("That cannot be composted."); return;
         }
-        inventory.deleteNumber(usedId, 1);
-        bin.count++;
-        if (superItem) bin.super++;
-        if (name === "Tomato") bin.tomatoes++;
-        bin.tier = bin.super === bin.count ? 2 : bin.tomatoes === bin.count ? 4 : 1;
+        Patches.startBinWork(player, patch, { id: usedId, superItem, tomato: name === "Tomato", bin });
         return;
     }
     player.sendMessage(`The compost bin contains ${bin.count}/${capacity} items${bin.closedAt && !bin.open ? ", rotting" : ""}.`);
