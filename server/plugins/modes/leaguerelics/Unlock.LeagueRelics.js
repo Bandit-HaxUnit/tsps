@@ -1,0 +1,193 @@
+/**
+ * Choosing a relic: the checks (a league character, a real slot, the tier's points, no pick in
+ * that tier yet, a bank when the relic hands out an item), the save, the captured presentation
+ * and the items. Also the "New Relic Available!" popup when points cross a tier's cost, and the
+ * selection varbits at login. Relics are permanent (Wiki: a tier's choice cannot be changed).
+ */
+const Common = require("./Common.LeagueRelics");
+
+function uid(group, child) {
+  return (group << 16) | child;
+}
+
+function sendSelections(player) {
+  const sender = player.getPacketSender();
+  const picks = Common.chosen(player);
+  Common.data.selectionVarbits.forEach((varbit, tier) => sender.sendVarbit(varbit, picks[tier] | 0));
+  sender.sendVarbit(Common.data.lastViewedVarbit, 0);
+}
+
+/** The items a relic hands out, by id (names the cache no longer has are skipped; the data says which). */
+function grantedItems(relic) {
+  const { ItemIdentifiers } = Common.core;
+  return (relic.grants ?? []).map((name) => ItemIdentifiers[name]).filter((id) => Number.isInteger(id));
+}
+
+/** The bank tabs that hold items (the search tab holds none). */
+function bankTabs() {
+  const { Bank } = Common.core;
+  const tabs = [];
+  for (let tab = 0; tab < Bank.TOTAL_BANK_TABS; tab++) if (tab !== Bank.BANK_SEARCH_TAB_INDEX) tabs.push(tab);
+  return tabs;
+}
+
+/**
+ * Where each item the relic hands out would go, in the order `grant` delivers them, or null when
+ * one has nowhere to go (so a permanent pick is never saved without its items). Item-aware: a
+ * stackable item joins its stack in the inventory; the bank stacks everything, so an item already
+ * banked takes no slot; a new bank stack takes one slot of the player's bank space, which every
+ * tab shares (`Bank.freeSlots`), and a slot in its tab; nothing this plan reserves is counted twice.
+ */
+function deliveryPlan(player, relic) {
+  const { Item, Bank } = Common.core;
+  const inventory = player.getInventory();
+  const tabs = bankTabs();
+  const free = {
+    inventory: inventory.getFreeSlots(),
+    bank: Bank.freeSlots(player),
+    tab: new Map(tabs.map((tab) => [tab, player.getBank(tab).getFreeSlots()])),
+  };
+  const placed = { inventory: new Set(), bank: new Map(tabs.map((tab) => [tab, new Set()])) };
+  const steps = [];
+  for (const id of grantedItems(relic)) {
+    const item = new Item(id, 1);
+    const stackable = item.getDefinition().isStackable();
+    if (stackable && (placed.inventory.has(id) || (inventory.contains(id) && inventory.getAddableAmount(item) >= 1))) {
+      steps.push({ item, tab: -1 });
+      continue;
+    }
+    if (free.inventory > 0) {
+      free.inventory--;
+      placed.inventory.add(id);
+      steps.push({ item, tab: -1 });
+      continue;
+    }
+    const held = tabs.find((tab) => placed.bank.get(tab).has(id) || (player.getBank(tab).contains(id) && player.getBank(tab).getAddableAmount(item) >= 1));
+    if (held !== undefined) {
+      steps.push({ item, tab: held });
+      continue;
+    }
+    if (free.bank <= 0) return null;
+    const tab = [Bank.getTabForItem(player, id), ...tabs].find((candidate) => free.tab.get(candidate) > 0);
+    if (tab === undefined) return null;
+    free.bank--;
+    free.tab.set(tab, free.tab.get(tab) - 1);
+    placed.bank.get(tab).add(id);
+    steps.push({ item, tab });
+  }
+  return steps;
+}
+
+function canDeliver(player, relic) {
+  return deliveryPlan(player, relic) !== null;
+}
+
+/** Why a pick is refused (a message key), or null when it may go ahead. `bankOpen` is the bank as it was when the relic interface opened. */
+function refusal(player, type, tier, slot, bankOpen) {
+  if (type === null) return "notLeague";
+  const relic = Common.relic(type, tier, slot);
+  if (!relic) return "noSuchRelic";
+  if (Common.chosen(player)[tier] !== undefined) return "alreadyChosen";
+  if (Common.points(player) < Common.catalog(type).tiers[tier].cost) return "notEnoughPoints";
+  if (relic.requiresBank && grantedItems(relic).length > 0 && !bankOpen) return "needsBank";
+  if (!canDeliver(player, relic)) return "noRoom";
+  return null;
+}
+
+/** Delivers the plan `canDeliver` approved: each item to the inventory, else to the bank tab that holds or has room for it. */
+function grant(player, relic) {
+  for (const { item, tab } of deliveryPlan(player, relic) ?? []) {
+    if (tab < 0) player.getInventory().add(item, true);
+    else player.getBank(tab).add(item, true);
+  }
+}
+
+/** The captured unlock: the tier's selection varbit, the animation, the league's graphic, the modal closed, four sounds. */
+function present(player, type, tier) {
+  const { Animation, Graphic } = Common.core;
+  const { interface: ui, selectionVarbits } = Common.data;
+  const sender = player.getPacketSender();
+  sender.sendVarbit(selectionVarbits[tier], Common.chosen(player)[tier]);
+  player.performAnimation(new Animation(ui.unlockAnimation));
+  player.performGraphic(new Graphic(Common.league(type).unlockSpotanim, 0, ui.unlockGraphicHeight));
+  sender.sendInterfaceRemoval();
+  for (const [sound, delay] of ui.unlockSounds) sender.sendSound(sound, 1, delay);
+}
+
+/**
+ * Chooses relic `slot` (1-3) of `tier` (0-7) for the player, or tells them why not.
+ * `bankOpen` is the bank as it was when the relic interface opened (the modal replaces it);
+ * callers with no interface pass nothing and the bank as it is now counts.
+ * Returns true when the relic was unlocked.
+ */
+function unlock(player, tier, slot, { bankOpen = Common.core.Bank.isOpen(player) } = {}) {
+  const type = Common.leagueOf(player);
+  const why = refusal(player, type, tier, slot, bankOpen);
+  if (why) {
+    player.sendMessage(Common.message(why));
+    return false;
+  }
+  const relic = Common.relic(type, tier, slot);
+  player.setAttribute(Common.RELICS_ATTRIBUTE, { ...Common.chosen(player), [tier]: slot });
+  present(player, type, tier);
+  grant(player, relic);
+  Common.api.emitCustomEvent("league:relic-unlocked", { player, league: type, tier, slot, relic: relic.key });
+  return true;
+}
+
+/** Points crossing a tier's cost show the popup once, for each tier still open (capture 227/00070). */
+function pointsChanged({ player, points, previous }) {
+  const type = Common.leagueOf(player);
+  if (type === null) return;
+  const picks = Common.chosen(player);
+  const popup = Common.data.notifications.relicAvailable;
+  Common.catalog(type).tiers.forEach((tier, tierIndex) => {
+    if (picks[tierIndex] !== undefined || tier.cost <= previous || tier.cost > points) return;
+    Common.api.emitCustomEvent("notification:show", {
+      player,
+      title: popup.title,
+      text: popup.text.replace("{tier}", String(tierIndex + 1)),
+      colour: popup.colour,
+      jingle: popup.jingle,
+    });
+  });
+}
+
+function login({ player, league }) {
+  sendSelections(player);
+  require("./Catalog.LeagueRelics").send(player, league);
+}
+
+function highestTier(query) {
+  if (!query?.player || Common.leagueOf(query.player) === null) return;
+  query.tier = Common.highestTier(query.player);
+}
+
+/** `league:has-relic` { player, relic: key } -> active: the character's league has that relic and chose it. */
+function hasRelic(query) {
+  query.active = false;
+  const type = query?.player ? Common.leagueOf(query.player) : null;
+  if (type === null) return;
+  const picks = Common.chosen(query.player);
+  query.active = Common.catalog(type).tiers.some((tier, tierIndex) =>
+    tier.relics[picks[tierIndex] - 1]?.key === query.relic);
+}
+
+function relics(query) {
+  const type = query?.player ? Common.leagueOf(query.player) : null;
+  query.league = type;
+  query.chosen = type === null ? {} : { ...Common.chosen(query.player) };
+}
+
+module.exports = function attach(api) {
+  api.persistAttribute(Common.RELICS_ATTRIBUTE, {});
+  api.onCustomEvent("league:login", login);
+  api.onCustomEvent("league:points-changed", pointsChanged);
+  api.onCustomEvent("league:highest-tier", highestTier);
+  api.onCustomEvent("league:has-relic", hasRelic);
+  api.onCustomEvent("league:relics", relics);
+};
+
+module.exports.unlock = unlock;
+module.exports.refusal = refusal;
+module.exports.uid = uid;
