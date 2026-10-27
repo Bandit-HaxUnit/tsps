@@ -28,6 +28,12 @@ export interface ShopCurrencyHandler {
     name: string;
     /** The inventory item the currency is paid in, if it is one. */
     itemId?: number;
+    /**
+     * How live shop messages name an amount of it ("trade sticks"). When set, price checks and
+     * refusals use OSRS's wording: "Red topaz: currently costs 240 trade sticks.", "... shop will
+     * buy for 120 trade sticks.", "You don't have enough trade sticks.".
+     */
+    unit?: string;
 }
 
 interface RuntimeShop {
@@ -96,7 +102,7 @@ export class ShopManager {
 
     public static registerItemCurrency(
         itemId: number,
-        options?: { name?: string; aliases?: string[] }
+        options?: { name?: string; aliases?: string[]; unit?: string }
     ): void {
         if (!Number.isInteger(itemId) || itemId <= 0) {
             throw new Error(`Invalid item shop currency: ${itemId}`);
@@ -108,6 +114,7 @@ export class ShopManager {
         const handler: ShopCurrencyHandler = {
             name,
             itemId,
+            unit: options?.unit,
             amount: (player) =>
                 Number(player?.getInventory?.()?.getAmount?.(itemId) ?? 0),
             add: (player, amount) => player?.getInventory?.()?.adds?.(itemId, amount),
@@ -553,6 +560,14 @@ export class ShopManager {
             player.sendMessage("This item has no value.");
             return;
         }
+        const unit = this.currencyUnit(shop.definition.getCurrency());
+        if (unit) {
+            player.sendMessage(
+                `${definition.getName()}: ${fromShop ? "currently costs" : "shop will buy for"} ` +
+                `${Misc.insertCommasToNumber(String(price))} ${unit}.`
+            );
+            return;
+        }
         player.sendMessage(
             `${definition.getName()}${fromShop ? " currently costs " : ": shop will buy for "}` +
             `${Misc.insertCommasToNumber(String(price))} x ` +
@@ -605,7 +620,8 @@ export class ShopManager {
             available
         );
         if (quantity <= 0) {
-            player.sendMessage("You can't afford that.");
+            const unit = this.currencyUnit(shop.definition.getCurrency());
+            player.sendMessage(unit ? `You don't have enough ${unit}.` : "You can't afford that.");
             return;
         }
 
@@ -873,6 +889,10 @@ export class ShopManager {
         return shop.definition.getCurrency() === "BLOOD_MONEY"
             ? Number(definition.getBloodMoneyValue?.() ?? 0)
             : Number(definition.getValue?.() ?? 0);
+    }
+
+    private static currencyUnit(currency: ShopCurrency): string | null {
+        return this.currencyHandlers.get(currency)?.unit ?? null;
     }
 
     private static currencyAmount(player: any, currency: ShopCurrency): number {

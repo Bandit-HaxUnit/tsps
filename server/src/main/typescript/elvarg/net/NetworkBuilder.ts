@@ -826,6 +826,9 @@ export class ClientConnection {
           continue;
         case "varp_transmit":
           if (this.player) {
+            const transmission = { player: this.player, varpId: packet.varpId, value: packet.value, handled: false };
+            PluginManager.emitCustomEvent("player:varp-transmit", transmission);
+            if (transmission.handled) continue;
             if (packet.varpId === 43) {
               WeaponInterfaceManager.changeCombatStyle(this.player, packet.value);
               BonusManager.update(this.player);
