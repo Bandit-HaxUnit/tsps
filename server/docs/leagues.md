@@ -85,7 +85,7 @@ colours and screens here but no relic, area or task catalogs yet.
 | `league:grant-fragment` | `{ player, id, xp? }` owns a Shattered Relics fragment | LeagueMode (Fragments) |
 | `league:unlock-skill` | `{ player, skill }` unlocks a Shattered Relics skill for free | LeagueMode (Unlocks) |
 | `league:unlocks` | `{ player } -> { skills, bosses, quests }` | LeagueMode (Unlocks) |
-| `league:open-tasks` / `league:open-fragments` / `league:open-unlocks` | `{ player }` from Shattered Relics' side panel | LeagueTasks / Fragments / Unlocks |
+| `league:open-tasks` / `league:open-fragments` / `league:open-unlocks` | `{ player }` from Shattered Relics' side panel | LeagueTasks (#1358) / Fragments / Unlocks |
 | `league:completed-tasks` | `{ player } -> { ids }` | LeaguePoints |
 | `league:complete-task` | `{ player, id } -> { found, completed }` (a catalog task, by id) | LeagueTasks |
 | `league:points-changed` | `{ player, points, previous, tasks, previousTasks }` | LeagueMode (journal), LeagueTasks, LeagueRelics, LeagueAreaUnlocks listen |
@@ -884,23 +884,23 @@ of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's
 - `::relic [tier 1-8] [slot 1-3]` - list your relics, or choose one through the usual checks.
 - `::leaguerecords <trophies|statistics|rankings|firsts>` - open a main-game record screen.
 - `::leagueshop` - open the Leagues Reward Shop.
-- `::renown <amount> [player]` - grant Shattered Relics' Sage's Renown.
 - `::mastery` - your combat masteries, points and challenges; `::mastery <melee|ranged|magic>
   <tier 1-6>` unlocks one through the usual checks; `::mastery point <1-10>` awards a challenge's
   point through the real path (the only way to the Echo boss challenges here).
 - `::areas [id or name]` - list your areas, the next unlock and the area you stand in, or unlock
   one through the usual checks (`::area` is AdminCommands' Area-class debug).
+- `::renown <amount> [player]` - grant Shattered Relics' Sage's Renown.
 
 ## Not yet
 
-Most task triggers (see Tasks), the Echo bosses (and so three of the mastery points), the tier passives left out
-above (clue-step progress and farming ticks), the boosted sources their own plugins have yet to
-ask about, and what Shattered Relics' section lists as not done. Each is its own item on the
-progress tracker.
+Most task triggers (see Tasks), the Echo bosses (and so three of the mastery points), the tier
+passives left out above (clue-step progress and farming ticks), the boosted sources their own
+plugins have yet to ask about, and Shattered Relics' rules (see its section). Each is its own item
+on the progress tracker.
 
-The records have no POH league hall to stand in: its trophy case, pedestals and scroll need
-the house's league hall, which this server doesn't build yet, so the scroll's options answer
-only where the loc exists.
+The records have no POH league hall to stand in: its trophy case, pedestals and scroll need the
+house's league hall, which this server doesn't build yet, so the scroll's options answer only where
+the loc exists.
 
 The cache's "League Skill Cape Shop" (652) is not a shop: its only script (3201) creates 22 tiny
 cape items and prints "Loading: <cape>" for each, a model preloader. Nothing sells through it, and
