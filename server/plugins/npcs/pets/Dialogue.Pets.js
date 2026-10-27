@@ -1,4 +1,5 @@
-// Canonical Pet sources only. NPC-index candidate order is not a dialogue policy.
+// Canonical NPC/Pet sources, guarded by the actual owned follower below.
+// Source templates describe text provenance, not whether an NPC is a follower.
 const fs = require("fs");
 const path = require("path");
 let api, services, candidates;
@@ -7,9 +8,9 @@ function loadCandidates() {
   if (candidates) return candidates;
   const directory = api.core.GameConstants.DEFINITIONS_DIRECTORY;
   const types = JSON.parse(fs.readFileSync(path.join(directory, "dialogue-types.json"), "utf8"));
-  const pets = new Set(types.pet);
+  const speakers = new Set([...types.pet, ...types.npc]);
   const index = JSON.parse(fs.readFileSync(path.join(directory, "npc-dialogue-index.json"), "utf8"));
-  candidates = new Map(Object.entries(index).map(([id, rows]) => [Number(id), rows.filter(row => pets.has(row.page))])
+  candidates = new Map(Object.entries(index).map(([id, rows]) => [Number(id), rows.filter(row => speakers.has(row.page))])
     .filter(([, rows]) => rows.length));
   return candidates;
 }
@@ -26,9 +27,9 @@ function ordinaryVariant(row, name) {
   if (matching.length > 1) return undefined;
   // A generic standard section applies to all indexed forms only when no separate
   // ordinary form section would need a selector. Never fall through to an overhead.
-  const ordinary = variants.filter(key => key === "standard-dialogue"
+  const ordinary = variants.filter(key => !key.startsWith("rare-") && (key === "standard-dialogue"
     || key.endsWith("-standard-dialogue") || key.startsWith("standard-dialogue-")
-    || key.endsWith("-dialogue"));
+    || key.endsWith("-dialogue")));
   return ordinary.length === 1 && ordinary[0] === "standard-dialogue" ? ordinary[0] : undefined;
 }
 
