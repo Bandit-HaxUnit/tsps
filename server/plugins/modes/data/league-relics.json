@@ -54,7 +54,9 @@
     "foragerEmpty": { "text": "Your forager's pouch is empty.", "source": "ours" },
     "foragerFilled": { "text": "You put {amount} herbs into your forager's pouch.", "source": "ours" },
     "foragerNoRoom": { "text": "You don't have enough inventory space to withdraw that.", "source": "ours" },
-    "foragerNothingToFill": { "text": "You have no grimy herbs your forager's pouch can take.", "source": "ours" }
+    "foragerNothingToFill": { "text": "You have no grimy herbs your forager's pouch can take.", "source": "ours" },
+    "seedKept": { "text": "You manage to keep your {seed}.", "source": "ours" },
+    "overgrownSeedKept": { "text": "Botanical allows you to keep your {seed}.", "source": "Wiki, Overgrown (trivia: the live message, from the relic's development name)" }
   },
   "effects": {
     "_comment": "The relics with effects here (one <Relic>.LeagueRelics.js each), each gated on its league (`league`, one type or several for a relic both leagues have) and on being chosen (`key`, plus `aliases` for a catalog entry that stands in for the same relic). Numbers are the Wiki's: no rsprox recording of Trailblazer Reloaded exists (the captures start at revision 223). Superior Sorcerer's splash reach (one tile around the primary target, like a burst) and Undying Retribution's graphic (the Retribution prayer's, 437) are ours; the Wiki gives neither.",
@@ -125,6 +127,15 @@
       "_saving": "Wiki: the torstol potion (unf) of super combat potions and anti-venom+ is saved like a secondary; crystal dust (divine potions) never is.",
       "alsoSaved": ["torstolvial"], "neverSaved": ["prif_crystal_shard_crushed"]
     },
+    "_economyComment": "The economy and farming relics (docs/leagues.md). Wiki numbers unless marked ours: what a coin shop sells comes noted whenever it can be (the Wiki's toggle has no button in this shop interface: ours, always on); the coins offering repeats at the bone altars' own pace; Farmer's Fortune's 25 times faster harvesting is 25 picks an action, its tripled yield keeps the usual Farming XP per pick (the Wiki gives no XP rule), and its kept seed's message is ours; Pocket Kingdom's approval is held at the kingdom's maximum (127, 100%), and its Check wording is ours.",
+    "fireSale": { "league": 4, "key": "fire-sale", "currency": "COINS" },
+    "goldenGod": {
+      "league": 5, "key": "golden-god", "currency": "COINS", "coinMultiplier": 1.15, "keepChance": 0.65,
+      "offeringCost": 20000, "offeringBone": "DRAGON_BONES"
+    },
+    "farmersFortune": { "league": 4, "key": "farmers-fortune", "seedSaveChance": 0.2, "harvestsPerAction": 25, "yieldMultiplier": 3 },
+    "overgrown": { "league": 5, "key": "overgrown", "seedSaveChance": 0.75, "toolName": "Leprechaun's vault" },
+    "pocketKingdom": { "league": 5, "key": "pocket-kingdom", "payMultiplier": 0.5, "outputMultiplier": 2, "approval": 127, "toolName": "Pocket kingdom" },
     "arcaneGrimoire": {
       "item": "Arcane grimoire",
       "options": { "change": "Change Spellbook", "previous": "Previous Spellbook", "check": "Check Previous" },

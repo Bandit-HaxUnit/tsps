@@ -142,14 +142,15 @@ function sync(player) {
         sender.sendVarbit(bit("fave" + (i + 1)), slot < 0 ? 255 : slot);
     }
 }
-function near(player, object) {
+/** Able to use the vault: standing, and within 5 tiles of it (`anywhere`: content that carries it, a league relic's vault). */
+function near(player, object, anywhere = false) {
     return (
         player.getHitpoints() > 0 &&
         player.getStatus() === core.PlayerStatus.NONE &&
         !player.isNeedsPlacement() &&
         !player.isTeleportingReturn() &&
         !player.getForceMovement() &&
-        player.getLocation().isWithinDistance(object.getLocation(), 5)
+        (anywhere || player.getLocation().isWithinDistance(object.getLocation(), 5))
     );
 }
 function current(player) {
@@ -157,23 +158,25 @@ function current(player) {
         sender = player.getPacketSender();
     return session &&
         session.farm === Patches.farmFor(player) &&
-        near(player, session.object) &&
+        near(player, session.object, session.anywhere) &&
         player.getInterfaceId() === group("seed_vault") &&
         sender.isSubInterfaceOpen(group("seed_vault")) &&
         sender.isSubInterfaceOpen(group("seed_vault_deposit"))
         ? session
         : null;
 }
+/** Opens the vault at `object`, or anywhere with `event.anywhere`. */
 function open(event) {
     const { player, object } = event;
-    if (!player.getLocation().isWithinDistance(object.getLocation(), 5)) return;
+    const anywhere = event.anywhere === true;
+    if (!anywhere && !player.getLocation().isWithinDistance(object.getLocation(), 5)) return;
     // Do not create storage state or expose its contents until the shared PIN guard succeeds.
     const request = { player, feature: "seed-vault", resume: () => open(event) };
     core.PluginManager.emitCustomEvent("bank-pin:guard", request);
-    if (request.locked || !near(player, object) || (player.busy() && !current(player))) return;
+    if (request.locked || !near(player, object, anywhere) || (player.busy() && !current(player))) return;
     const farm = Patches.farmFor(player);
     recoverLegacy(player, farm);
-    SESSIONS.set(player, { farm, object, event });
+    SESSIONS.set(player, { farm, object, event, anywhere });
     player.setEnteredAmountAction(null);
     sync(player);
     const sender = player.getPacketSender();
@@ -207,7 +210,7 @@ function guarded(player, session) {
             if (
                 SESSIONS.get(player) === session &&
                 session.farm === Patches.farmFor(player) &&
-                near(player, session.object)
+                near(player, session.object, session.anywhere)
             )
                 open(session.event);
         },
