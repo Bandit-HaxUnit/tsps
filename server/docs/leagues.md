@@ -1026,7 +1026,8 @@ Tier 1 counts once the character chose its first relic.
 Left out, with why: Raging Echoes' clue-step progress saved between clues (the trail runtime has
 no per-step save to carry across scrolls); Raging Echoes' one-minute farming ticks (Farming's
 growth model has no tick-length seam, and Farming is under active work elsewhere); the
-Trailblazer Reloaded ironman restriction and the crystal of memories (not in this cache).
+crystal of memories (not in this cache). The ironman restriction is under "The league character"
+above: every league character is a standard Ironman.
 
 ## The league tutorial
 
@@ -1059,8 +1060,10 @@ sent `league_tutorial_completed` 10037 = 12 (finished) at login until it exists.
   item box; 11->12 "End Tutorial" (677:8), which awards "Complete the Leagues Tutorial" (+10), sets
   `orbs_disabled` back to 0 and closes 677 then 653. "Exit Leagues" (677:8 at stage 0) was never
   pressed in a recording.
-- **What it waits on:** the task list (657) and the area interface (512) with their walkthroughs,
-  and the tasks it awards; a tutorial that starts but cannot be finished is worse than none. A
+- **What it waits on:** the task list (657) and the tasks it awards (league tasks, #1358), and
+  the walkthroughs over the task list and the area interface (512, LeagueAreaUnlocks); a tutorial
+  that starts but cannot be finished is worse than none. Its guided first unlock is the area
+  plugin's "Not covered" item. A
   new league character also skips Tutorial Island on live; this server sends every new account
   there.
 
