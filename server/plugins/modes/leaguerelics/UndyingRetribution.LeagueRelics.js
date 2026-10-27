@@ -8,6 +8,9 @@
  * minutes, reset by a real death. Works wherever a death would otherwise go ahead: a plugin that already
  * kept the player alive on this hook is honoured (and the cooldown kept), but every before-death
  * hook runs, so one that is attached later than this plugin would see the relic fire first.
+ * A prevented death counts for nothing anywhere (Wiki: no raid death penalties): core never
+ * starts the death task, so the raids' death handlers, which count deaths, take points, jail and
+ * check wipes, never run for it.
  */
 const Common = require("./Common.LeagueRelics");
 
