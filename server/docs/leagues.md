@@ -406,7 +406,8 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
 - **Class choice (737):** at the first login, and every login until chosen. Select sets varp 3345
   so the client shows that class's confirm panel. Accept unlocks its combat skill (script 5830's
   varbit), gives its fragment at level 1 and its items. 737 names the items; their amounts are this
-  server's choice.
+  server's choice. Items that don't fit the inventory go to a bank tab with room; with no room for
+  the whole kit, Accept gives nothing and the class stays unchosen.
 - **Fragments (735):** owned fragments (fragment XP, varbits 13403-13455) and the seven slots
   (varbits 13395-13399, 13401, 13402) are saved. Slots open at the points enum 4127 gives. Equip
   puts an owned fragment in the first open empty slot, never twice; Unequip and Unequip all clear
@@ -429,7 +430,8 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   its level gives in the cache (params 1456-1458; Venomaster's are poison severities 15/25/35,
   hitting 3/5/7); the sets' numbers are only in their texts. Venomaster's chance (25%) is this
   server's, and its immunity stops new poison without curing a running one. The extra rolls are
-  rolled with the hit's own spell, never a special attack, and pay XP like any hit. The per-tick
+  rolled with the hit's own spell, never a special attack, and pay XP like any hit, for no more
+  than the hitpoints left after the damage already queued (none after a killing blow). The per-tick
   effects run as one task per Shattered Relics character, from login.
 - **Gathering effects** (`league/FragmentGathering.LeagueMode.js`, data `gatheringEffects`): the
   harvesting fragments, Message In A Bottle, Greedy Gatherer and Personal Banker, through the
@@ -1226,26 +1228,23 @@ of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's
 - `::relic [tier 1-8] [slot 1-3]` - list your relics, or choose one through the usual checks.
 - `::leaguerecords <trophies|statistics|rankings|firsts>` - open a main-game record screen.
 - `::leagueshop` - open the Leagues Reward Shop.
-- `::renown <amount> [player]` - grant Shattered Relics' Sage's Renown.
 - `::mastery` - your combat masteries, points and challenges; `::mastery <melee|ranged|magic>
   <tier 1-6>` unlocks one through the usual checks; `::mastery point <1-10>` awards a challenge's
   point through the real path (the only way to the Echo boss challenges here).
 - `::areas [id or name]` - list your areas, the next unlock and the area you stand in, or unlock
   one through the usual checks (`::area` is AdminCommands' Area-class debug).
+- `::renown <amount> [player]` - grant Shattered Relics' Sage's Renown.
 
 ## Not yet
 
-Most task triggers (see Tasks), the Echo bosses (and so three of the mastery points), the tier passives left out
-above (clue-step progress and farming ticks), the boosted sources their own plugins have yet to
-ask about, and Shattered Relics' rules (see its section). Each is its own item on the
-progress tracker.
-Of the relics, Bank Heist follows in its own PR (it needs a list of the world's banks);
-Overgrown's automatic harvest and replanting and Pocket Kingdom's hourly cycle are their own
-items.
+Most task triggers (see Tasks), the Echo bosses (and so three of the mastery points), the tier
+passives left out above (clue-step progress and farming ticks), the boosted sources their own
+plugins have yet to ask about, and Shattered Relics' rules (see its section). Each is its own item
+on the progress tracker.
 
-The records have no POH league hall to stand in: its trophy case, pedestals and scroll need
-the house's league hall, which this server doesn't build yet, so the scroll's options answer
-only where the loc exists.
+The records have no POH league hall to stand in: its trophy case, pedestals and scroll need the
+house's league hall, which this server doesn't build yet, so the scroll's options answer only where
+the loc exists.
 
 The cache's "League Skill Cape Shop" (652) is not a shop: its only script (3201) creates 22 tiny
 cape items and prints "Loading: <cape>" for each, a model preloader. Nothing sells through it, and
