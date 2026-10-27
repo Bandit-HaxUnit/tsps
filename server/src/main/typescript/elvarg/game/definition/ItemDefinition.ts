@@ -5,6 +5,8 @@ import { ObjStackability } from "../cache/codec/rs/config/objtype/ObjStackabilit
 import { ItemIdentifiers } from "../../util/ItemIdentifiers";
 
 const EQUIPMENT_SLOTS = new Set([0, 1, 2, 3, 4, 5, 7, 9, 10, 12, 13]);
+const WEAPON_WEAR_POS = 3;
+const SHIELD_WEAR_POS = 5;
 
 export type AttackTypeName = "stab" | "slash" | "crush" | "magic" | "range";
 
@@ -159,6 +161,8 @@ export class ItemDefinition {
         if (this.equipmentType.getSlot() === -1 && EQUIPMENT_SLOTS.has(cached.wearPos)) {
             this.equipmentType = new EquipmentType(cached.wearPos);
         }
+        // A two-handed weapon also takes the shield slot (its second wear position).
+        this.doubleHanded = cached.wearPos === WEAPON_WEAR_POS && cached.wearPos2 === SHIELD_WEAR_POS;
         this.cacheHydrated = true;
     }
 
