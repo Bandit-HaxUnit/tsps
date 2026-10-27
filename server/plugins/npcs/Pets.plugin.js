@@ -172,8 +172,8 @@ const PETS = [
   // The cache's Kalphite princess item is 12647; 12654 is the duplicate id drops never use.
   { enumName: "KALPHITE_PRINCESS", petId: 6637, morphId: 6638, itemId: 12647, dialogue: 271 },
   { enumName: "MORPHED_KALPHITE_PRINCESS", petId: 6638, morphId: 6637, itemId: 12647, dialogue: 279 },
-  { enumName: "SMOKE_DEVIL", petId: 6639, morphId: 8483, itemId: 12648, dialogue: 288 },
-  { enumName: "SMOKE_DEVIL_NORMAL", petId: 8483, morphId: 6639, itemId: 12648, dialogue: 288 },
+  { enumName: "SMOKE_DEVIL", petId: NpcIdentifiers.SMOKE_DEVIL_2, morphId: NpcIdentifiers.SMOKE_DEVIL_5, itemId: ItemIdentifiers.PET_SMOKE_DEVIL, familyItemId: ItemIdentifiers.PET_SMOKE_DEVIL, dialogue: 288 },
+  { enumName: "SMOKE_DEVIL_NORMAL", petId: NpcIdentifiers.SMOKE_DEVIL_5, morphId: NpcIdentifiers.SMOKE_DEVIL_2, itemId: ItemIdentifiers.PET_SMOKE_DEVIL_2, familyItemId: ItemIdentifiers.PET_SMOKE_DEVIL, dialogue: 288 },
   { enumName: "KRAKEN", petId: 6640, morphId: 0, itemId: 12655, dialogue: 291 },
   { enumName: "PENANCE_PRINCESS", petId: 6642, morphId: 0, itemId: 12703, dialogue: 296 },
   // Cache241 enum1711 identifies the physical items; keep the legacy family key for dust/saves.
