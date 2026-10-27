@@ -74,3 +74,9 @@ for (const obj of ['snakepet','snakepet_orange','snakepet_blue']) test('native m
   await send(f,{type:'widget_action',widgetId:(211<<16)|7,groupId:211,childId:7,slot,buttonNum:1});
   assert.equal(f.p.getInventory().getAmount(f.itemId),1);assert.deepEqual(f.p.getAttribute('construction:menagerie'),[]);
 });
+
+const followerHouseCases=[["WISP","whisperer_pet","poh_whisperer_pet"],["BUTCH","vardorvis_pet","poh_vardorvis_pet"],["BARON","duke_sucellus_pet","poh_duke_sucellus_pet"],["LILVIATHAN","leviathan_pet","poh_leviathan_pet"],["SCURRY","scurrius_pet","poh_scurrius_pet"],["NEXLING","nex_pet","poh_nex_pet"],["VORKI","vorkath_pet","poh_vorkath_pet"],["HERBI","herbiboar_pet","poh_herbiboar_pet"],["HELLPUPPY","hellpet","poh_hellpet"],["SKOTOS","skotizo_pet","poh_skotizo_pet"],["QUETZIN","quetzal_pet","poh_quetzal_pet"],["PET_PENANCE_QUEEN","penance_pet","poh_penance_pet"]];
+
+for(const [key,world,house]of followerHouseCases)test('native '+key+' menagerie uses its house definition and Take keeps its item',async t=>{
+ const id=core.ItemIdentifiers[key],f=await store(t,core.CacheDefinitions.getObjNames().get(id));assert.equal(f.p.getInventory().getAmount(id),0);const slot=[...core.CacheDefinitions.getEnumValues(985)].find(([,itemId])=>itemId===id)[0];assert.ok(f.h.getNpcs().some(n=>n.getId()===core.CacheDefinitions.getNpcId(house)));await send(f,{type:'object_option',id:f.object.getId(),x:f.object.getLocation().getX(),y:f.object.getLocation().getY(),action:'View'});assert.equal(f.p.getInterfaceId(),211);await send(f,{type:'widget_action',widgetId:(211<<16)|7,groupId:211,childId:7,slot,buttonNum:1});assert.equal(f.p.getInventory().getAmount(id),1);
+});

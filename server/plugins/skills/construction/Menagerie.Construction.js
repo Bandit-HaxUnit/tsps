@@ -35,10 +35,10 @@ function pets() {
   if (petsBySlot) return petsBySlot;
   const request = { pets: [] };
   api.emitCustomEvent("pets:definitions", request);
-  const npcByItem = new Map(request.pets.map(pet => [pet.itemId, pet.petId]));
+  const npcByItem = new Map(request.pets.map(pet => [pet.itemId, pet.houseNpcId ?? pet.petId]));
   petsBySlot = new Map([...CacheDefinitions.getEnumValues(PET_ENUM)].map(([slot, itemId]) => {
     const forms = new Map(request.pets.filter(pet => pet.familyItemId === itemId)
-      .map(pet => [pet.itemId, {itemId: pet.itemId, npcId: pet.petId}]));
+      .map(pet => [pet.itemId, {itemId: pet.itemId, npcId: pet.houseNpcId ?? pet.petId}]));
     const enumId = CacheDefinitions.getItem(itemId).params?.get(MULTIFORM_ENUM_PARAM);
     const formVarbit = CacheDefinitions.getVarbitId("poh_menagerie_multiform_" + CacheDefinitions.getObjNames().get(itemId));
     return [slot, { itemId, npcId: npcByItem.get(itemId) ?? -1, forms, enumId, formVarbit }];
