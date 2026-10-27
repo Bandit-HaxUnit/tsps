@@ -11,6 +11,7 @@
  *   "league:grant-fragment" { player, id, xp? }   owns a fragment (1 XP, level 1, unless more is given)
  *   "league:open-fragments" { player }            opens the screen
  *   "league:fragment-level" { player, id } -> level   (0 unless equipped)
+ *   "league:fragments-changed" { player }        after Equip, Unequip or Unequip all changes the slots
  */
 const Common = require("./Common.LeagueMode");
 const { FLAG_OP1, FLAG_OP2 } = require("../../interface/widgetGroup");
@@ -35,6 +36,8 @@ let slotThresholds = null;
 let definitions = null;
 /** Set id -> the pieces its first and second tiers need (params 1468 / 1470; 0 = no second tier), read once. */
 let setPieces = null;
+/** Set id -> the item the set grants (param 1471; the Sage's items), read once. */
+let setItems = null;
 /** Per player: the world cycle its equipped fragments last gained XP (Wiki: at most once per 4 ticks). */
 const lastGain = new WeakMap();
 
@@ -175,10 +178,20 @@ function readSetPieces() {
   if (setPieces) return;
   const { CacheDefinitions } = Common.core;
   setPieces = new Map();
+  setItems = new Map();
   for (const struct of CacheDefinitions.getEnumValues(config().setsEnum).values()) {
     const params = CacheDefinitions.getStructParams(Number(struct));
-    setPieces.set(Number(params?.get(config().setIdParam)), config().setPiecesParams.map((param) => Number(params?.get(param)) || 0));
+    const set = Number(params?.get(config().setIdParam));
+    setPieces.set(set, config().setPiecesParams.map((param) => Number(params?.get(param)) || 0));
+    const item = Number(params?.get(config().setItemParam));
+    if (item > 0) setItems.set(set, item);
   }
+}
+
+/** The item a set grants (param 1471), or null for a set that grants none. */
+function setItem(set) {
+  readSetPieces();
+  return setItems.get(Number(set)) ?? null;
 }
 
 /** A set's tier from the equipped fragments that list it: 0, 1 or 2 (enum 4137). */
@@ -272,6 +285,7 @@ function equip(event) {
   current[free] = id;
   player.setAttribute(SLOTS_ATTRIBUTE, current);
   sendSlots(player);
+  Common.api.emitCustomEvent("league:fragments-changed", { player });
   return true;
 }
 
@@ -287,6 +301,7 @@ function unequip(event) {
   current[slot] = 0;
   player.setAttribute(SLOTS_ATTRIBUTE, current);
   sendSlots(player);
+  Common.api.emitCustomEvent("league:fragments-changed", { player });
   return true;
 }
 
@@ -295,6 +310,7 @@ function unequipAll({ player }) {
   if (slots(player).every((id) => id === 0) || !canSwap(player)) return true;
   player.setAttribute(SLOTS_ATTRIBUTE, config().slotVarbits.map(() => 0));
   sendSlots(player);
+  Common.api.emitCustomEvent("league:fragments-changed", { player });
   return true;
 }
 
@@ -334,6 +350,7 @@ module.exports.definition = definition;
 module.exports.allDefinitions = allDefinitions;
 module.exports.ownedLevel = ownedLevel;
 module.exports.setTier = setTier;
+module.exports.setItem = setItem;
 module.exports.award = award;
 module.exports.findable = findable;
 module.exports._test = { openSlots, slots, owned, ids, levelOf, FRAGMENTS_ATTRIBUTE, SLOTS_ATTRIBUTE };

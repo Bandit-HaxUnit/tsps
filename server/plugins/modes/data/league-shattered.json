@@ -46,6 +46,7 @@
     "setsEnum": 4137,
     "setIdParam": 1464,
     "setPiecesParams": [1468, 1470],
+    "setItemParam": 1471,
     "xpVarbitBase": 13403,
     "slotVarbits": [13395, 13396, 13397, 13398, 13399, 13401, 13402],
     "slotsEnum": 4127,
@@ -341,6 +342,37 @@
     }
   },
 
+  "_sageEffects": "The three sets that give an item (Wiki /Fragments and each set's page), used by plugins/modes/league/FragmentSage.LeagueMode.js. The item is the set struct's param 1471 (the Arcane grimoire, the Crystal of memories, which this cache names Crystal of Echoes, and the Portable waystone). The Wiki says the Sage gives it; here it is handed over when the set becomes active and the character holds none (in the inventory, worn, banked, in its grave or at Death's Office), into the inventory, else the bank, else the floor (ours). Like the Arcane grimoire (Leagues polish), holding the item is the token: it keeps working when the set comes off (the Wiki doesn't say). The Crystal of memories' Teleport-back returns to where the character's last teleport began, unless that was in an instance or `noRecall` (the Wiki's exclusions this server has: Fossil Island's underwater area, Entrana, the rune essence mine, Pyramid Plunder and the Agility Pyramid's upper floors; the boxes are ours). Every teleport counts, the crystal's own too (so a second Teleport-back returns to where the first was used), and home teleports, fairy rings, spirit trees and Wilderness obelisks, which move the player themselves, send the same `teleport:landed`, up to Wilderness level 20 (ours). The Portable waystone teleports to any of the league's twelve waystones (Wiki: Waystone (Shattered Relics League)), not past Wilderness level 20 (Wiki), with the quest a place needs; the Wiki names only the towns, so every tile is this server's (city teleport landings where one exists).",
+  "sageEffects": {
+    "sets": [7, 11, 13],
+    "crystal": { "wildernessLevel": 20 },
+    "noRecall": [
+      { "name": "Fossil Island underwater", "minX": 3712, "maxX": 3839, "minY": 10240, "maxY": 10367, "z": 1 },
+      { "name": "Entrana", "minX": 2798, "maxX": 2878, "minY": 3315, "maxY": 3395, "z": 0 },
+      { "name": "Rune essence mine", "minX": 2880, "maxX": 2943, "minY": 4800, "maxY": 4863 },
+      { "name": "Pyramid Plunder", "minX": 1918, "maxX": 1985, "minY": 4416, "maxY": 4482 },
+      { "name": "Agility Pyramid", "minX": 3354, "maxX": 3378, "minY": 2826, "maxY": 2856, "minZ": 1 },
+      { "name": "Agility Pyramid's top floor", "minX": 3034, "maxX": 3058, "minY": 4686, "maxY": 4709, "z": 2 }
+    ],
+    "waystone": {
+      "wildernessLevel": 20,
+      "places": [
+        { "name": "Al Kharid", "tile": [3293, 3163, 0] },
+        { "name": "Ardougne", "tile": [2661, 3301, 0] },
+        { "name": "Brimhaven", "tile": [2758, 3178, 0] },
+        { "name": "Canifis", "tile": [3494, 3485, 0], "quest": "priest_in_peril", "questName": "Priest in Peril" },
+        { "name": "Catherby", "tile": [2809, 3436, 0] },
+        { "name": "Falador", "tile": [2964, 3378, 0] },
+        { "name": "Ferox Enclave", "tile": [3151, 3636, 0] },
+        { "name": "Rellekka", "tile": [2670, 3632, 0] },
+        { "name": "Kourend", "tile": [1643, 3672, 0] },
+        { "name": "Lumbridge", "tile": [3222, 3218, 0] },
+        { "name": "Prifddinas", "tile": [3239, 6076, 0], "quest": "song_of_the_elves", "questName": "Song of the Elves" },
+        { "name": "Varrock", "tile": [3213, 3424, 0] }
+      ]
+    }
+  },
+
   "messages": {
     "_lockedBoss": "The Wiki gives no message for a locked boss; this wording is this server's.",
     "lockedBoss": "You need to unlock {name} with Sage's Renown before you can fight it.",
@@ -368,6 +400,16 @@
     "nestBanked": "<col=ff0000>A bird's nest falls out of the tree and is sent to your bank.",
     "rareCatch": "<col=ff0000>You find {item} while fishing.",
     "_scrollBoxFound": "The Wiki gives no message for Hot On The Trail's scroll box; this is this server's.",
-    "scrollBoxFound": "<col=ef1020>You find a {tier} scroll box in the ashes."
+    "scrollBoxFound": "<col=ef1020>You find a {tier} scroll box in the ashes.",
+    "_sageItem": "The Wiki gives no messages for the Sage's items; these are this server's.",
+    "sageItem": "The Sage's power reaches you: you receive {item}.",
+    "recallNothing": "The crystal holds no memory of a teleport yet.",
+    "recallMemory": "The crystal remembers where your last teleport began.",
+    "recallAutomatic": "The crystal remembers where each teleport begins on its own.",
+    "sageItemBanked": "The Sage's power reaches you: {item} is sent to your bank.",
+    "sageItemFloor": "The Sage's power reaches you: {item} falls to the floor.",
+    "waystoneChoose": "Choose a waystone",
+    "waystoneMore": "More...",
+    "waystoneQuest": "You need to complete {quest} to use that waystone."
   }
 }

@@ -36,6 +36,7 @@ module.exports = {
     require("./league/FragmentProduction.LeagueMode")(api);
     require("./league/FragmentSkilling.LeagueMode")(api);
     require("./league/FragmentMinigames.LeagueMode")(api);
+    require("./league/FragmentSage.LeagueMode")(api);
     require("./league/Unlocks.LeagueMode")(api);
     require("./league/Sage.LeagueMode")(api);
     require("./league/Commands.LeagueMode")(api);

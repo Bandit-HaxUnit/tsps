@@ -164,6 +164,8 @@ relics are the first askers; nothing changes when nobody answers):
 | `thieving:pickpocket-target` (extended) | Thieving | now with `chanceBonus` (a percent more success, stacking as the gloves of silence do) and `painless` (a stun without the damage) |
 | `thieving:loot` (extended) | Thieving | now with `multiplier`, applied with the rogue outfit's doubling as the loot is handed over |
 | `prayer:bury` (extended) | Prayer | now scatters demonic ashes too (never for the bonecrusher's `crushed`) |
+| `teleport:landed` | core `TeleportHandler`, as a teleport lands; the home teleport, fairy rings, spirit trees and Wilderness obelisks, which move the player themselves | `{ player, from, fromInstance, to }`: where it began, whether in an instance, and where it landed |
+| `league:fragments-changed` | LeagueMode (Fragments) | `{ player }` after Equip, Unequip or Unequip all changes the fragment slots |
 | `woodcutting:nest-chance`, `woodcutting:nest-drop` | Woodcutting | `{ player, multiplier }`: a bird nest `multiplier` times as likely; `{ player, itemId, handled }` before a nest falls (handled: a listener took it) |
 | `farming:open-seed-vault` | Farming (the guild's seed vault) | `{ player, opened }`: the vault's menu from anywhere, behind the Bank PIN as at the guild |
 | `miscellania:rules` | Managing Miscellania | `{ player, ruler, royalTrouble, payMultiplier, outputMultiplier, approval, visiting }`: who rules the kingdom (the quests), what the workers' pay costs, how much they gather (clues as rolled), an approval held fixed, whether a catch-up away from the islands counts as a visit |
@@ -538,6 +540,23 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   the Volcanic Mine, likelier) pay x2/x3/x4, through the
   minigames' `minigame:points` (tier passives, below) and new `minigame:chance`, and the quest's
   `big-chompy-bird-hunting:kill-credit`.
+- **The Sage's items** (`league/FragmentSage.LeagueMode.js`, data `sageEffects`): Endless
+  Knowledge, Last Recall and Trailblazer give the item their set struct names (param 1471: the
+  Arcane grimoire, the Crystal of memories, which this cache calls Crystal of Echoes, and the
+  Portable waystone), handed over when the set becomes active (`league:fragments-changed`, from the
+  fragments screen, and at login) to a character holding none (in the inventory, worn, banked
+  rather than a placeholder, in its grave or at Death's Office), into the inventory, else the bank,
+  else the floor; the Wiki has the Sage give it (ours). As with the grimoire's own unit (Leagues polish), holding it is
+  the token, so it keeps working when the set comes off. The crystal's Teleport-back returns to
+  where the character's last teleport began, from the core's new `teleport:landed` (`from`,
+  `fromInstance`), unless that was in an instance, Fossil Island's underwater area, Entrana, the
+  rune essence mine, Pyramid Plunder or the Agility Pyramid's upper floors (the Wiki's exclusions
+  this server has; boxes ours), up to Wilderness level 20 (ours); Check-memories says whether one
+  is kept, and Save-memory that it keeps itself. Every teleport counts, the crystal's own too, so a
+  second Teleport-back returns to where the first was used. Home teleports, fairy rings, spirit
+  trees and Wilderness obelisks move the player themselves and send the same event. The waystone's Teleport lists the league's twelve
+  waystones in pages, not past Wilderness level 20, Canifis needing Priest in Peril and Prifddinas
+  Song of the Elves; the tiles are this server's (the Wiki names only the towns).
 
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price
@@ -594,14 +613,17 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   only the fights inside. The Wiki gives no message for either lock; the boss one is this
   server's, said once per boss every few seconds.
 
-Not yet: the other fragments' effects (Barbarian Assault's honour points and the Rogues' Den
-safe, which this server doesn't have; Rune Escape, which needs the
-Ourania Altar this server doesn't have; Plank Stretcher outside a house build, as Mahogany Homes; the ranged weapons' own charges, which no hook reports) and the three sets that give a Sage item; The Alchemist's jugs of Unlocking Herblore doesn't yet complete Druidic Ritual and set the skill to 174 XP (Wiki /Unlocks footnote); the Sage's Check-pets remains unimplemented. A quest the character had started keeps its quest items when a pack completes it.
-
-wine (no wine making here); Fishing has no clue bottles of its own, so Message In A Bottle
-reaches only Hunter's aerial fishing and drift nets for bottles; fragments change only through Equip (dragging one into a slot isn't handled); the
-Display Fragments toggle (varbit 12383) is the client's own; the intro cutscene (734) has no
-recording or client driver, so it isn't played. Unlocking Herblore doesn't yet complete Druidic Ritual and set the skill to 174 XP (Wiki /Unlocks footnote); the Sage's Check-pets remains unimplemented. A quest the character had started keeps its quest items when a pack completes it.
+Not yet: Barbarian Assault's honour points and the Rogues' Den safe, which this server
+doesn't have; Rune Escape, which needs the Ourania Altar this server doesn't have; Plank
+Stretcher outside a house build, as Mahogany Homes; the ranged weapons' own charges, which
+no hook reports; the league's waystone objects themselves (only the portable one's teleports
+are here); The Alchemist's jugs of wine (no wine making here). Fishing has no clue bottles of
+its own, so Message In A Bottle reaches only Hunter's aerial fishing and drift nets for bottles.
+Fragments change only through Equip (dragging one into a slot isn't handled); the Display
+Fragments toggle (varbit 12383) is the client's own. The intro cutscene (734) has no recording
+or client driver, so it isn't played. Unlocking Herblore doesn't yet complete Druidic Ritual
+and set the skill to 174 XP (Wiki /Unlocks footnote); the Sage's Check-pets remains unimplemented.
+A quest the character had started keeps its quest items when a pack completes it.
 
 
 ## Relics
@@ -1015,7 +1037,7 @@ open). Each item remembers its last destination. The menus' grouping and wording
 - **Grimoire** (Raging Echoes tier 7): spells' area, quest and diary requirements are lifted
   (`magic:spell-unlocked`; here the Mage Arena's god spells without their 100 casts); the Prayer
   level still counts, and no prayer here is gated by a quest. The Arcane grimoire's spellbook
-  swap is the item's own plugin (Leagues polish).
+  swap is the item's own plugin (above).
 - **Reloaded** (Raging Echoes tier 4): one more relic of tiers 1-3, a different one from that
   tier's own pick, chosen with the same click on it (`league:relics-extra`; any item it hands out
   is given). The relic interface shows only each tier's own pick: ours.
@@ -1091,7 +1113,8 @@ Tier 1 counts once the character chose its first relic.
 Left out, with why: Raging Echoes' clue-step progress saved between clues (the trail runtime has
 no per-step save to carry across scrolls); Raging Echoes' one-minute farming ticks (Farming's
 growth model has no tick-length seam, and Farming is under active work elsewhere); the
-Trailblazer Reloaded ironman restriction and the crystal of memories (not in this cache).
+crystal of memories (not in this cache). The ironman restriction is under "The league character"
+above: every league character is a standard Ironman.
 
 ## The league tutorial
 
@@ -1124,8 +1147,10 @@ sent `league_tutorial_completed` 10037 = 12 (finished) at login until it exists.
   item box; 11->12 "End Tutorial" (677:8), which awards "Complete the Leagues Tutorial" (+10), sets
   `orbs_disabled` back to 0 and closes 677 then 653. "Exit Leagues" (677:8 at stage 0) was never
   pressed in a recording.
-- **What it waits on:** the task list (657) and the area interface (512) with their walkthroughs,
-  and the tasks it awards; a tutorial that starts but cannot be finished is worse than none. A
+- **What it waits on:** the task list (657) and the tasks it awards (league tasks, #1358), and
+  the walkthroughs over the task list and the area interface (512, LeagueAreaUnlocks); a tutorial
+  that starts but cannot be finished is worse than none. Its guided first unlock is the area
+  plugin's "Not covered" item. A
   new league character also skips Tutorial Island on live; this server sends every new account
   there.
 
