@@ -8,13 +8,23 @@
  */
 const Common = require("./Common.LeagueMode");
 
-/** The varbits a league account carries (capture 227/00070 login): account, type, and the tutorial's done state the journal tab needs. */
+/** world.json pluginConfig: when the league started (an ISO date), for the client's league clock; beside `league:type`. */
+const START_CONFIG = "league:start";
+
+/**
+ * The varbits a league account carries (capture 227/00070 login): account, type, the tutorial's
+ * done state the journal tab needs, the client's date (current_runeday, which live sends with the
+ * journal and the Info panel reads) and, when the world says when its league began, that start.
+ */
 function sendVarbits(player, type) {
-  const { varbits, tutorialCompletedValue } = Common.data;
+  const { varbits, varps, tutorialCompletedValue } = Common.data;
   const sender = player.getPacketSender();
   sender.sendVarbit(varbits.account, 1);
   sender.sendVarbit(varbits.type, type);
   sender.sendVarbit(varbits.tutorialCompleted, tutorialCompletedValue);
+  sender.sendVarbit(varbits.runeday, Common.runeday());
+  const start = Date.parse(String(Common.api.getPluginConfig(START_CONFIG, "")));
+  if (Number.isFinite(start)) sender.sendConfig(varps.leagueStart, Math.floor(start / 60000));
 }
 
 /** A new league character starts with the league's levels (Wiki: Trailblazer Reloaded starts at Herblore 3, Runecraft 5, Agility 10). */
@@ -61,8 +71,16 @@ function login({ player, isNewAccount }) {
   sendVarbits(player, type);
   applyIronman(player);
   Common.api.emitCustomEvent("league:login", { player, league: type });
-  // Every plugin's struct and enum overrides, in one packet (Content.LeagueMode).
-  Common.api.emitCustomEvent("league:send-content", { player });
+}
+
+/**
+ * The client tells a league world by the world flags it caches (varp map_flags_cached, script 206:
+ * bit 30 set and bit 29 clear), not by the league varbits: the journal's Leagues tab, the summary
+ * and the trophies all check it. The Wilderness plugin owns that varp and asks for extra bits.
+ */
+function mapFlags(request) {
+  if (!request?.player || !Common.isLeagueProfile(request.player)) return;
+  request.flags = (request.flags | 0) | Common.data.mapFlags.leagueWorld;
 }
 
 /** A league character's mode cannot be changed in game (the Ironman tutor, Adam): `ironman:change-mode` is refused. */
@@ -87,6 +105,7 @@ module.exports = function attach(api) {
   api.persistAttribute(Common.LEAGUE_TYPE_ATTRIBUTE);
   api.onPlayerLogin(login);
   api.onCustomEvent("league:profile", profile);
+  api.onCustomEvent("world:map-flags", mapFlags);
   api.onCustomEvent("ironman:change-mode", refuseModeChange);
   api.onCanGainExperience(experienceRate);
 };

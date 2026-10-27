@@ -7,7 +7,7 @@
 const fs = require("fs");
 const path = require("path");
 
-/** Which league the profile joined, set on its first login (a league type: 4 Trailblazer Reloaded, 5 Raging Echoes). */
+/** Which league the profile joined, set on its first login (a league type, 1-6: enum 2670 in the cache, data/leagues.json). */
 const LEAGUE_TYPE_ATTRIBUTE = "league:type";
 const LEAGUE_PROFILE = "league";
 /** world.json pluginConfig key naming the league this world runs (4 Trailblazer Reloaded, 5 Raging Echoes); absent on a plain world. */
@@ -76,12 +76,17 @@ function xpMultiplier(player) {
   return rate;
 }
 
+/** The client's date varbit: whole days since 27 February 2002 (data.runedayEpoch). */
+function runeday(now = Date.now()) {
+  return Math.floor((now - Date.parse(data.runedayEpoch)) / 86400000);
+}
+
 function message(key, values = {}) {
   return data.messages[key].text.replace(/\{(\w+)\}/g, (match, name) => values[name] ?? match);
 }
 
 module.exports = {
-  init, isLeagueProfile, leagueOf, league, passives, worldLeague, configuredType, highestTier, xpMultiplier, message,
+  init, isLeagueProfile, leagueOf, league, passives, worldLeague, configuredType, highestTier, xpMultiplier, runeday, message,
   LEAGUE_TYPE_ATTRIBUTE, LEAGUE_PROFILE, LEAGUE_TYPE_CONFIG,
   get data() { return data; },
   get api() { return api; },
