@@ -434,6 +434,13 @@ artifacts are `/tmp/tsps-728/native/jobs/q131-epoch3.report.json` and
 `/tmp/tsps-728/native/jobs/q131-riverswim.report.json`; source-only tests do not substitute
 for this route evidence.
 
+Issue #1262 adds a source-level regression for the upstairs south-east bookcase and book-read
+step at varp 65 stages 2→3. It covers the full-bag refusal and retry, cancelling the item
+message, recovery after book loss, and the production dispatch handoff from Tourist Trap's
+generic `Bookcase → Search` hook to Waterfall's object-specific handler. This is separate from
+the prior raft/rope/River Swim proof. The bookcase/read interaction remains **native-pending**;
+the regression does not claim a live route, quest completion, or reward evidence.
+
 ## Evidence and limits
 
 Worker raw logs, captures, accounts and temporary drivers stay outside Git. Accepted

@@ -688,7 +688,7 @@ module.exports = function registerTouristTrapQuest(api) {
 
   function searchBookcase(event) {
     const { player, objectId } = event;
-    if (objectId !== BOOKCASE_OBJECT_ID) return;
+    if (objectId !== BOOKCASE_OBJECT_ID) return false;
     event.handled = true;
     if (stageOf(player) < STAGE_SHABIM_TASK) return;
     player.setAttribute(SEARCHED_BOOKCASE_ATTRIBUTE, true);
