@@ -19,6 +19,7 @@ const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemI
 const Recovery = require("./pets/Recovery.Pets");
 const Acquisition = require("./pets/Acquisition.Pets");
 const Dust = require("./pets/Dust.Pets");
+const CatchUp = require("./pets/CatchUp.Pets");
 
 const CURRENT_PET_ATTRIBUTE = "pets:current";
 /** The item of the follower the player logged out with; re-summoned on login. */
@@ -1837,6 +1838,7 @@ module.exports = {
     Recovery.attach(api, {pets: PETS, getOwnedPetItems, getPetForItemId, petFamily, getPetDisplayName, syncCollectionLog});
     Acquisition.attach(api);
     Dust.attach(api, {getPetByNpcId, petFamily, getMorphUnlocks, unlockMorphFamily});
+    CatchUp.attach(api, {currentAttribute: CURRENT_PET_ATTRIBUTE, getPetByNpcId, canSummonPetHere});
     TaskClass = api.core?.Task ?? null;
     TaskManagerRef = api.core?.TaskManager ?? null;
     NPCRespawnTaskRef = api.core?.NPCRespawnTask ?? null;
