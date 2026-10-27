@@ -574,6 +574,35 @@ test("the Mokhaiotl pillars swap sides: each jump sets varbit 16716 so the far p
   assert.equal(player.state.varbits.get(16716), 0);
 });
 
+test("the Chasm of Fire gaps land where the captures do: one long jump, then two hops", () => {
+  // rsprox captures 817, 819: 1440,10098 -> 1446; 1448 -> 1453 -> 1456 a tick apart.
+  const player = createPlayer(1440, 10098, 1);
+  operate(player, 56372, [1443, 10097, 1]);
+  assert.deepEqual(tileOf(player), [1446, 10097, 1]);
+  operate(player, 56372, [1450, 10097, 1]);
+  assert.deepEqual(tileOf(player), [1456, 10097, 1]);
+  operate(player, 56372, [1450, 10097, 1]);
+  assert.deepEqual(tileOf(player), [1448, 10097, 1], "the way back mirrors it");
+  operate(player, 56372, [1443, 10097, 1]);
+  assert.deepEqual(tileOf(player), [1440, 10098, 1]);
+});
+
+test("the Prifddinas course's second half is played south-west of the city, as captured", () => {
+  // rsprox capture 1149: the first dark hole drops to 2269,3389, the last climbs back to the city.
+  const course = COURSES.find((entry) => entry.key === "prifddinas");
+  const darkHole = course.obstacles.find((entry) => entry.index === 5);
+  const player = createPlayer(3269, 6117, 0);
+  operate(player, darkHole.object, [3269, 6118, 0]);
+  assert.deepEqual(tileOf(player), [2269, 3389, 0]);
+  const ladder = course.obstacles.find((entry) => entry.index === 6);
+  operate(player, ladder.object, [2270, 3393, 0]);
+  assert.deepEqual(tileOf(player), [2269, 3393, 2]);
+  const lastRope = course.obstacles.find((entry) => entry.index === 11);
+  const roper = createPlayer(2253, 3418, 2);
+  operate(roper, lastRope.object, [2253, 3418, 2]);
+  assert.deepEqual(tileOf(roper), [2260, 3425, 0]);
+});
+
 test("teleports are refused while crossing an obstacle", () => {
   const rope = COURSES.find((entry) => entry.key === "draynor").obstacles.find((entry) => entry.index === 2);
   const player = createPlayer(3099, 3277, 3);

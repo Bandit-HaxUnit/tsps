@@ -3,8 +3,9 @@
 /**
  * The arena's clickable obstacles. They are one-tile-thick lines between the pillars, so a click
  * crosses one step: the animation plays, the player is force-moved past the clicked tile and the
- * Wiki's XP is paid when they land. Blade and trap obstacles have no click option; the Area unit
- * handles those.
+ * Wiki's XP is paid when they land. The rope swing is the exception: it swings the player from
+ * two tiles before the rope to three past it, as rsprox captures show. Blade and trap obstacles
+ * have no click option; the Area unit handles those.
  */
 
 const Shared = require("./Shared.BrimhavenAgilityArena");
@@ -20,6 +21,8 @@ const ANIM = {
   JUMP: 741,
   HANG_SWING: 1122,
 };
+/** The rope swing's own animation, sound and how far past the rope it lands (rsprox captures). */
+const ROPE_SWING = { ROPE_ANIM: 497, SOUND: 2494, PAST: 3, BEFORE: 2 };
 /** 0 west, 1 north, 2 east, 3 south, as the agility steps' wall facings. */
 const ROTATION_VECTORS = [[-1, 0], [0, 1], [1, 0], [0, -1]];
 
@@ -49,15 +52,15 @@ function obstacleXp(kind) {
   return Shared.OBSTACLE_XP[kind] ?? 0;
 }
 
-/** One step past the clicked tile, away from where the player stood. */
-function crossingTarget(player, object) {
+/** `past` steps beyond the clicked tile, away from where the player stood. */
+function crossingTarget(player, object, past = 1) {
   const at = object.getLocation();
   const pos = player.getLocation();
   let dx = at.getX() - pos.getX();
   let dy = at.getY() - pos.getY();
   if (dx === 0 && dy === 0) {
     const [fx, fy] = ROTATION_VECTORS[(object.getFace?.() ?? 0) & 3];
-    return { x: at.getX() + fx, y: at.getY() + fy, z: at.getZ() };
+    return { x: at.getX() + fx * past, y: at.getY() + fy * past, z: at.getZ() };
   }
   if (Math.abs(dx) >= Math.abs(dy)) {
     dx = Math.sign(dx);
@@ -66,7 +69,17 @@ function crossingTarget(player, object) {
     dx = 0;
     dy = Math.sign(dy);
   }
-  return { x: at.getX() + dx, y: at.getY() + dy, z: at.getZ() };
+  return { x: at.getX() + dx * past, y: at.getY() + dy * past, z: at.getZ() };
+}
+
+/** One swing, the tick after arriving: a 5-tile exact move, the rope animating with it. */
+function ropeSwingSteps(target) {
+  return [
+    { anim: ANIM.ROPE_SWING, delay: 5 },
+    { objAnim: ROPE_SWING.ROPE_ANIM },
+    { sound: ROPE_SWING.SOUND, delay: 5 },
+    { move: [target.x, target.y, target.z], speed: [30, 55], ticks: 2 },
+  ];
 }
 
 function useObstacle(event) {
@@ -77,7 +90,7 @@ function useObstacle(event) {
   const object = event.object;
   const at = object.getLocation();
   const spec = SPECS[kind];
-  const target = crossingTarget(player, object);
+  const target = crossingTarget(player, object, kind === "ROPE_SWING" ? ROPE_SWING.PAST : 1);
   const context = {
     player,
     object,
@@ -92,7 +105,7 @@ function useObstacle(event) {
     })(),
   };
   // ponytail: a click crosses one tile; repeated clicks walk a long rope/log, each paying XP.
-  const steps = [
+  const steps = kind === "ROPE_SWING" ? ropeSwingSteps(target) : [
     { anim: spec.anim },
     { wait: 1 },
     { move: [target.x, target.y, target.z], anim: spec.anim, ticks: 1 },
@@ -106,10 +119,18 @@ function useObstacle(event) {
   return true;
 }
 
-/** Clicks from far away walk to the obstacle first; the obstacle claims only its own tiles. */
+/**
+ * Clicks from far away walk to the obstacle first; the obstacle claims only its own tiles. The
+ * rope hangs over a gap nobody can stand in, so the rope swing is walked to two tiles before it
+ * on the player's side, where the captures show players arriving.
+ */
 function routeToObstacle(event) {
   if (event.clickType !== 1 || !familyAt(event.objectId)) return;
   const at = event.object.getLocation();
+  if (familyAt(event.objectId) === "ROPE_SWING") {
+    event.destination = crossingTarget(event.player, event.object, -ROPE_SWING.BEFORE);
+    return;
+  }
   event.destination = { x: at.getX(), y: at.getY(), z: at.getZ() };
 }
 
@@ -130,5 +151,6 @@ module.exports = (api) => {
 module.exports.useObstacle = useObstacle;
 module.exports.routeToObstacle = routeToObstacle;
 module.exports.crossingTarget = crossingTarget;
+module.exports.ropeSwingSteps = ropeSwingSteps;
 module.exports.familyAt = familyAt;
 module.exports.obstacleXp = obstacleXp;
