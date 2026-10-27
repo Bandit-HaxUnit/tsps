@@ -126,6 +126,7 @@ function spawnCarriers(player, parts) {
     const npc = pluginApi.spawnNpc({ id: form, x: at.getX(), y: at.getY(), z: at.getZ(), owner: player });
     if (!npc) return;
     smoke(player, at);
+    npc.setFlag?.(common.core().NPC.WALK_THROUGH_ENTITIES_FLAG, true);
     npc.setMovementSteps(2);
     npc.setFollowing(npcs.at(-1) ?? player);
     npcs.push(npc);

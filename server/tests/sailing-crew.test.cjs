@@ -327,6 +327,7 @@ test("boarding brings the first slots' crew aboard, as many as the boat holds, b
     const spec = BoatManager.getSpec(boat);
     for (const { npc } of aboard) {
       assert.equal(BoatManager.getBoatAboard(npc), boat, "on the deck");
+      assert.ok(npc.canWalkThroughNPCs(), "players and other crew don't hold them off their jobs");
       assert.deepEqual([npc.getLocation().getX(), npc.getLocation().getY()],
         [boat.deckBaseX + spec.boardingTile.x, boat.deckBaseY + spec.boardingTile.y], "on the boarding tile (rsprox)");
     }

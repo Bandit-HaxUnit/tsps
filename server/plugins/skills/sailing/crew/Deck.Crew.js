@@ -58,6 +58,9 @@ function bringAboard(player, boat, owned) {
       owner: player,
     });
     if (!npc) continue;
+    // Crew walk through the players and each other on a crowded deck, as followers do, or one
+    // standing in the way would hold them off their job until it moved.
+    npc.setFlag?.(common.core().NPC.WALK_THROUGH_ENTITIES_FLAG, true);
     deck.enter(npc);
     members.push({ slot, crew, npc, position: state.positions[slot] });
   }
