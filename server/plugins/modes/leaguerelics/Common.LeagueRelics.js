@@ -115,12 +115,32 @@ function hasRelic(player, key) {
   const type = leagueOf(player);
   if (type === null) return false;
   const picks = chosen(player);
-  return catalog(type).tiers.some((tier, tierIndex) => tier.relics[picks[tierIndex] - 1]?.key === key);
+  if (catalog(type).tiers.some((tier, tierIndex) => tier.relics[picks[tierIndex] - 1]?.key === key)) return true;
+  return reloadedPick(player, type, picks)?.key === key;
 }
 
-/** An effect applies to a player character in the effect's league who chose its relic. */
+/** The extra pick Reloaded gives (Raging Echoes' tier 4): { tier, slot } saved beside the tiers' picks. */
+const RELOADED_ATTRIBUTE = "league:relics-extra";
+
+/** The relic of the extra pick, while the character holds Reloaded itself; else null. */
+function reloadedPick(player, type = leagueOf(player), picks = chosen(player)) {
+  const effect = data.effects.reloaded;
+  if (!effect || ![].concat(effect.league).includes(type)) return null;
+  const holds = catalog(type).tiers.some((tier, tierIndex) => tier.relics[picks[tierIndex] - 1]?.key === effect.key);
+  const extra = player.getAttribute(RELOADED_ATTRIBUTE);
+  if (!holds || !extra || !effect.tiers.includes(extra.tier)) return null;
+  return relic(type, extra.tier, extra.slot);
+}
+
+/**
+ * An effect applies to a player character in one of the effect's leagues (`league`: a type, or
+ * several for a relic both leagues have) who chose its relic (`key`, or one of its `aliases`).
+ */
 function effectActive(player, effect) {
-  return player?.isPlayer?.() === true && leagueOf(player) === effect.league && hasRelic(player, effect.key);
+  if (player?.isPlayer?.() !== true) return false;
+  const league = leagueOf(player);
+  if (league === null || ![].concat(effect.league).includes(league)) return false;
+  return [effect.key, ...(effect.aliases ?? [])].some((key) => hasRelic(player, key));
 }
 
 /** Virtual struct and enum ids for a league's catalog: the client reads them as if from the cache. */
@@ -152,13 +172,98 @@ function isBuildingDerivedHit() {
   return buildingDerivedHit;
 }
 
+/** The attacker's max hit as combat computes it for a hit (the formulas, the ranged modifiers, a spell's bounds). */
+function maxHitFor(attacker, target, combatType) {
+  const { CombatType, DamageFormulas, PluginManager } = core;
+  if (combatType === CombatType.MAGIC) return DamageFormulas.sourceHitBounds(attacker, combatType, target).maximum;
+  const max = DamageFormulas.sourceMaxHit(attacker, combatType);
+  return combatType === CombatType.RANGED ? PluginManager.modifyRangedMaxHit(attacker, target, max) : max;
+}
+
+/** Whether the bank would take this item (a free slot, or a stack of it already). */
+function bankHasRoom(player, itemId) {
+  const container = player.getBank(core.Bank.getTabForItem(player, itemId));
+  return container.getFreeSlots() > 0 || container.contains(itemId);
+}
+
+/** Puts a gathered item straight in the bank when it has room; false leaves it with the player. */
+function bank(player, itemId, amount) {
+  if (amount <= 0 || !bankHasRoom(player, itemId)) return false;
+  player.getBank(core.Bank.getTabForItem(player, itemId)).add(new core.Item(itemId, amount), true);
+  return true;
+}
+
+/** The item's noted form, or the item itself when it has none. */
+function noted(itemId) {
+  const definition = core.ItemDefinition.forId(itemId);
+  // A note's own link leads back to the item: a note is already noted.
+  if (definition?.isNoted?.()) return itemId;
+  const note = definition?.getNoteId?.() ?? -1;
+  return note > 0 ? note : itemId;
+}
+
+/** Whether more than one of the item can sit in one slot: it stacks, or it has a note. */
+function multipliable(itemId) {
+  return noted(itemId) !== itemId || core.ItemDefinition.forId(itemId)?.isStackable?.() === true;
+}
+
+/**
+ * Pickpocket loot multiplied `times` and noted (league relics): coins come as coin pouches, so each
+ * copy is another pouch; a clue, and an item that neither stacks nor notes, stay as they are (Wiki:
+ * Dodgy Deals, "unstackable/unnotable items are not multiplied").
+ */
+function multipliedLoot(loot, times) {
+  const out = [];
+  for (const entry of loot) {
+    if (entry.clue || !multipliable(entry.id)) {
+      out.push(entry);
+    } else if (entry.id === core.ItemIdentifiers.COINS) {
+      for (let copy = 0; copy < times; copy++) out.push({ ...entry });
+    } else {
+      out.push({ ...entry, id: noted(entry.id), amount: entry.amount * times });
+    }
+  }
+  return out;
+}
+
+/** A potion or an unfinished one, by its name ("Attack potion(3)", "Guam potion (unf)"). */
+function isPotion(itemId) {
+  const name = core.ItemDefinition.forId(itemId)?.getName?.() ?? "";
+  return /\(\d\)$/.test(name) || /\(unf\)$/i.test(name) || /^vial of water$/i.test(name);
+}
+
+/** Whether a potion recipe's secondary (its ingredient that is not a potion or a vial) stacks: the production relics leave those alone (Wiki). */
+function hasStackableSecondary(recipe) {
+  return (recipe?.ingredients ?? []).some(({ id }) => !isPotion(id) && core.ItemDefinition.forId(id)?.isStackable?.() === true);
+}
+
+/**
+ * A production relic's answer to `skills:actions-per-cycle`: the loop's kind in the relic's
+ * `batch` list for that skill makes up to `maxActions` at once (a capped kind, `capped`), else
+ * nothing changes. A potion with a stackable secondary is made one at a time.
+ */
+function batchActions(effect, request) {
+  const skill = Object.keys(effect.batch).find((name) => core.Skill[name] === request.skill);
+  if (!skill || !effect.batch[skill].includes(request.kind)) return null;
+  if (request.kind === "mix" && hasStackableSecondary(request.recipe)) return null;
+  return effect.capped?.[request.kind] ?? effect.maxActions;
+}
+
+/** Restores special attack energy and redraws the bar. */
+function restoreSpecial(player, percent) {
+  player.incrementSpecialPercentage(percent);
+  core.CombatSpecial.updateBar(player);
+}
+
 function message(key, values = {}) {
   return data.messages[key].text.replace(/\{(\w+)\}/g, (match, name) => values[name] ?? match);
 }
 
 module.exports = {
-  init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, ids, structIds, message, RELICS_ATTRIBUTE,
-  derivedHit, isBuildingDerivedHit,
+  init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, reloadedPick,
+  RELOADED_ATTRIBUTE, ids, message, maxHitFor, restoreSpecial, bankHasRoom, bank, noted, multipliable,
+  multipliedLoot, isPotion, hasStackableSecondary, batchActions, derivedHit, isBuildingDerivedHit,
+  RELICS_ATTRIBUTE, structIds,
   get data() { return data; },
   get api() { return api; },
   get core() { return core; },

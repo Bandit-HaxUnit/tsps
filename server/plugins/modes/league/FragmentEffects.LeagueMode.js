@@ -75,7 +75,8 @@ function runeSaving(request) {
 function chargeSaving(request) {
   if (request.skip) return;
   const save = Fragments.equippedValue(request.player, effects().runeSaving.fragment);
-  if (save !== null && chance(save)) request.skip = true;
+  if (save === null || core().CombatFactory.getMethod(request.player).type() !== core().CombatType.MAGIC) return;
+  if (chance(save)) request.skip = true;
 }
 
 // ---- Larger Recharger: special energy back sooner ----

@@ -11,6 +11,8 @@ function relicCommand({ player, parts }) {
   if (parts.length < 3) {
     const picks = Common.chosen(player);
     const names = Object.entries(picks).map(([tier, slot]) => `T${Number(tier) + 1} ${Common.relic(type, Number(tier), slot)?.name ?? "?"}`);
+    const extra = Common.reloadedPick(player);
+    if (extra) names.push(`(Reloaded) ${extra.name}`);
     player.sendMessage(Common.message("relicList", {
       league: Common.league(type).shortName, relics: names.length ? names.join(", ") : Common.message("relicNone"),
     }));
