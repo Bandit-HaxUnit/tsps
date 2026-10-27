@@ -358,4 +358,38 @@ test("through the skills' own loops: a smithing session, a crafting loop and a p
   const forager = cases(FORAGER, 5);
   assert.deepEqual(brew(forager.relic), [1, 1, 2], "the torstol potion (unf) is kept with its vial: two vials back, not three");
   for (const player of others(forager)) assert.deepEqual(brew(player), [1, 0, 3], `${player.getUsername()} as usual`);
+
+  // The haemostatic dressing's primary is the poultice: always used; only the cotton yarn may be kept.
+  const dress = (player, roll) => {
+    const skills = player.getSkillManager();
+    skills.setMaxLevels(Skill.HERBLORE, 90, false);
+    skills.setCurrentLevels(Skill.HERBLORE, 90, false);
+    const inventory = player.getInventory();
+    inventory.resetItems();
+    inventory.adds(obj("haemostatic_poultice"), 1).adds(obj("cotton_yarn"), 1);
+    rolls.length = 0;
+    rolls.push(roll, roll, roll, roll);
+    mixHandler({ player, usedItemId: obj("cotton_yarn"), usedWithItemId: obj("haemostatic_poultice"), handled: false });
+    return [inventory.getAmount(obj("haemostatic_poultice")), inventory.getAmount(obj("cotton_yarn")),
+      inventory.getAmount(obj("4dosehaemostaticdressing")), inventory.getAmount(obj("3dosehaemostaticdressing"))];
+  };
+  assert.deepEqual(dress(forager.relic, 0.2), [0, 1, 1, 0], "a 20 keeps the yarn; the poultice is used; four doses");
+  assert.deepEqual(dress(forager.relic, 0.95), [0, 0, 1, 0], "a 95 uses both");
+  for (const player of others(forager)) assert.deepEqual(dress(player, 0.2), [0, 0, 0, 1], `${player.getUsername()} as usual`);
+
+  // Supercompost ("supercompost_potion_3" in the data) comes as Compost potion(4).
+  const compost = (player) => {
+    const skills = player.getSkillManager();
+    skills.setMaxLevels(Skill.HERBLORE, 90, false);
+    skills.setCurrentLevels(Skill.HERBLORE, 90, false);
+    const inventory = player.getInventory();
+    inventory.resetItems();
+    inventory.adds(obj("harralandervial"), 1).adds(obj("fossil_volcanic_ash"), 1);
+    rolls.length = 0;
+    rolls.push(0.95, 0.95);
+    mixHandler({ player, usedItemId: obj("fossil_volcanic_ash"), usedWithItemId: obj("harralandervial"), handled: false });
+    return [inventory.getAmount(obj("supercompost_potion_4")), inventory.getAmount(obj("supercompost_potion_3"))];
+  };
+  assert.deepEqual(compost(forager.relic), [1, 0], "the fourth dose");
+  for (const player of others(forager)) assert.deepEqual(compost(player), [0, 1], `${player.getUsername()} as usual`);
 });
