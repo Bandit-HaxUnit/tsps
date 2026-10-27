@@ -1150,6 +1150,11 @@ progress tracker.
 Of the relics, Bank Heist follows in its own PR (it needs a list of the world's banks);
 Overgrown's automatic harvest and replanting and Pocket Kingdom's hourly cycle are their own
 items.
+
+The records have no POH league hall to stand in: its trophy case, pedestals and scroll need
+the house's league hall, which this server doesn't build yet, so the scroll's options answer
+only where the loc exists.
+
 The cache's "League Skill Cape Shop" (652) is not a shop: its only script (3201) creates 22 tiny
 cape items and prints "Loading: <cape>" for each, a model preloader. Nothing sells through it, and
 the Wiki names no such shop.
