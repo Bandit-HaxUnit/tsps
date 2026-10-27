@@ -2306,20 +2306,6 @@ export class OsrsClient {
                     return;
                 }
                 sendBankCustomQuantity(amount);
-
-                // If there's a pending widget action (e.g., Withdraw-X), send it now
-                if (this.pendingInputDialogAction) {
-                    const { payload, option } = this.pendingInputDialogAction;
-                    this.pendingInputDialogAction = null;
-                    console.log(
-                        `[InputDialog] Sending deferred ${option} action with quantity ${amount}`,
-                    );
-                    try {
-                        sendWidgetAction(payload);
-                    } catch (err) {
-                        console.warn("[InputDialog] Deferred widget action failed", err);
-                    }
-                }
             } else if (type === "name" || type === "obj") {
                 const text = String(value ?? "");
                 sendResumeNameDialog(text);
