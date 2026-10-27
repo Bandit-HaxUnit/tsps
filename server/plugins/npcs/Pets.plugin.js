@@ -57,15 +57,15 @@ let ItemDefinitionClass = null;
 const CAT_TASK_KEY = new WeakMap();
 
 const PETS = [
-  { enumName: "WISP", petId: NpcIdentifiers.WISP, morphId: 0, itemId: 28246, dialogue: -1 },
-  { enumName: "BUTCH", petId: NpcIdentifiers.BUTCH, morphId: 0, itemId: 28248, dialogue: -1 },
-  { enumName: "BARON", petId: NpcIdentifiers.BARON, morphId: 0, itemId: 28250, dialogue: -1 },
-  { enumName: "LILVIATHAN", petId: NpcIdentifiers.LILVIATHAN, morphId: 0, itemId: 28252, dialogue: -1 },
+  { enumName: "WISP", petId: NpcIdentifiers.WISP_2, houseNpcId: NpcIdentifiers.WISP, morphId: 0, itemId: 28246, dialogue: -1 },
+  { enumName: "BUTCH", petId: NpcIdentifiers.BUTCH_2, houseNpcId: NpcIdentifiers.BUTCH, morphId: 0, itemId: 28248, dialogue: -1 },
+  { enumName: "BARON", petId: NpcIdentifiers.BARON_2, houseNpcId: NpcIdentifiers.BARON, morphId: 0, itemId: 28250, dialogue: -1 },
+  { enumName: "LILVIATHAN", petId: NpcIdentifiers.LILVIATHAN_2, houseNpcId: NpcIdentifiers.LILVIATHAN, morphId: 0, itemId: 28252, dialogue: -1 },
   // Araxxor: coagulated venom metamorphoses Nid into Rax (Wiki).
   { enumName: "NID", petId: 13683, morphId: 13684, itemId: 29836, dialogue: -1 },
   { enumName: "RAX", petId: 13684, morphId: 13683, itemId: 29836, dialogue: -1,
     morphUnlock: { itemId: ItemIdentifiers.COAGULATED_VENOM, consume: true, name: "coagulated venom" } },
-  { enumName: "SCURRY", petId: 7219, morphId: 0, itemId: 28801, dialogue: -1 },
+  { enumName: "SCURRY", petId: NpcIdentifiers.SCURRY_2, houseNpcId: NpcIdentifiers.SCURRY, morphId: 0, itemId: 28801, dialogue: -1 },
   // Cache241:8336 is poh_verzik_pet;8337 verzik_pet is the normal follower.
   { enumName: "LIL_ZIK", petId: NpcIdentifiers.LIL_ZIK_2, morphId: NpcIdentifiers.LIL_MAIDEN_2, itemId: ItemIdentifiers.LIL_ZIK, familyItemId: ItemIdentifiers.LIL_ZIK, dialogue: -1 },
   { enumName: "LIL_MAIDEN", petId: NpcIdentifiers.LIL_MAIDEN_2, morphId: NpcIdentifiers.LIL_BLOAT_2, itemId: ItemIdentifiers.LIL_MAIDEN, familyItemId: ItemIdentifiers.LIL_ZIK, dialogue: -1, morphUnlock: SANGUINE_DUST_UNLOCK },
@@ -87,8 +87,8 @@ const PETS = [
     morphUnlock: { itemId: ItemIdentifiers.REMNANT_OF_AKKHA, consume: true, name: "a remnant of Akkha" } },
   { enumName: "TUMEKENS_DAMAGED_GUARDIAN", petId: 11850, morphId: 11812, itemId: 27352, dialogue: -1 },
   { enumName: "SMOL_HEREDIT", petId: NpcIdentifiers.SMOL_HEREDIT_2, morphId: 0, itemId: 28960, dialogue: -1, mainDrop: true },
-  { enumName: "NEXLING", petId: NpcIdentifiers.NEXLING, morphId: 0, itemId: 26348, dialogue: -1 },
-  { enumName: "VORKI", petId: NpcIdentifiers.VORKI, morphId: 0, itemId: 21992, dialogue: -1 },
+  { enumName: "NEXLING", petId: NpcIdentifiers.NEXLING_2, houseNpcId: NpcIdentifiers.NEXLING, morphId: 0, itemId: 26348, dialogue: -1 },
+  { enumName: "VORKI", petId: NpcIdentifiers.VORKI_2, houseNpcId: NpcIdentifiers.VORKI, morphId: 0, itemId: 21992, dialogue: -1 },
   // Phantom Muspah: each form change uses charged ice (Wiki, Metamorphosis).
   { enumName: "MUPHIN", petId: 12014, morphId: 12015, itemId: 27590, dialogue: -1,
     morphUnlock: { itemId: ItemIdentifiers.CHARGED_ICE, consume: true, name: "charged ice" } },
@@ -104,7 +104,7 @@ const PETS = [
   // Noon and Midnight are separate items but one free metamorphosis (Wiki).
   { enumName: "MIDNIGHT", petId: 7893, morphId: 7892, itemId: 21750, dialogue: -1, morphGroup: "noon" },
   { enumName: "NOON", petId: 7892, morphId: 7893, itemId: 21748, dialogue: -1, morphGroup: "noon" },
-  { enumName: "HERBI", petId: NpcIdentifiers.HERBI, morphId: 0, itemId: 21509, dialogue: -1 },
+  { enumName: "HERBI", petId: NpcIdentifiers.HERBI_2, houseNpcId: NpcIdentifiers.HERBI, morphId: 0, itemId: 21509, dialogue: -1 },
   { enumName: "ABYSSAL_ORPHAN", petId: 5884, morphId: 0, itemId: 13262, dialogue: 202, mainDrop: true,
     getDialogue(player) {
       if (!player?.getAppearance?.()?.isMale?.()) return 206;
@@ -119,8 +119,9 @@ const PETS = [
   { enumName: "CALLISTO_CUB_LEGACY", petId: 11986, morphId: 5558, itemId: 13178, dialogue: 130 },
   {
     enumName: "HELLPUPPY",
-    // Cache id 964 is the real follower; 1625 is the Hellcat, which needs its own entry.
-    petId: NpcIdentifiers.HELLPUPPY,
+    // Cache241 distinguishes the world follower from its menagerie definition.
+    petId: NpcIdentifiers.HELLPUPPY_2,
+    houseNpcId: NpcIdentifiers.HELLPUPPY,
     morphId: 0,
     itemId: 13247,
     dialogue: 138,
@@ -175,7 +176,7 @@ const PETS = [
   { enumName: "SMOKE_DEVIL", petId: NpcIdentifiers.SMOKE_DEVIL_2, morphId: NpcIdentifiers.SMOKE_DEVIL_5, itemId: ItemIdentifiers.PET_SMOKE_DEVIL, familyItemId: ItemIdentifiers.PET_SMOKE_DEVIL, dialogue: 288 },
   { enumName: "SMOKE_DEVIL_NORMAL", petId: NpcIdentifiers.SMOKE_DEVIL_5, morphId: NpcIdentifiers.SMOKE_DEVIL_2, itemId: ItemIdentifiers.PET_SMOKE_DEVIL_2, familyItemId: ItemIdentifiers.PET_SMOKE_DEVIL, dialogue: 288 },
   { enumName: "KRAKEN", petId: 6640, morphId: 0, itemId: 12655, dialogue: 291 },
-  { enumName: "PENANCE_PRINCESS", petId: 6642, morphId: 0, itemId: 12703, dialogue: 296 },
+  { enumName: "PENANCE_PRINCESS", petId: NpcIdentifiers.PENANCE_PET_2, houseNpcId: NpcIdentifiers.PENANCE_PET, morphId: 0, itemId: 12703, dialogue: 296 },
   // Cache241 enum1711 identifies the physical items; keep the legacy family key for dust/saves.
   { enumName: "OLMLET", petId: NpcIdentifiers.OLMLET_2, morphId: NpcIdentifiers.PUPPADILE_2, itemId: ItemIdentifiers.OLMLET, familyItemId: ItemIdentifiers.OLMLET, dialogue: 298 },
   { enumName: "PUPPADILE", petId: NpcIdentifiers.PUPPADILE_2, morphId: NpcIdentifiers.TEKTINY_2, itemId: ItemIdentifiers.PUPPADILE, familyItemId: ItemIdentifiers.OLMLET, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
@@ -185,7 +186,7 @@ const PETS = [
   { enumName: "VASA_MINIRIO", petId: NpcIdentifiers.VASA_MINIRIO_2, morphId: NpcIdentifiers.VESPINA_2, itemId: ItemIdentifiers.VASA_MINIRIO, familyItemId: ItemIdentifiers.OLMLET, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
   { enumName: "VESPINA", petId: NpcIdentifiers.VESPINA_2, morphId: NpcIdentifiers.FLYING_VESPINA_2, itemId: ItemIdentifiers.VESPINA, familyItemId: ItemIdentifiers.OLMLET, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
   { enumName: "FLYING_VESPINA", petId: NpcIdentifiers.FLYING_VESPINA_2, morphId: NpcIdentifiers.OLMLET_2, itemId: ItemIdentifiers.FLYING_VESPINA, familyItemId: ItemIdentifiers.OLMLET, dialogue: 298, morphUnlock: { permanent: true, name: "metamorphic dust" } },
-  { enumName: "SKOTOS", petId: 425, morphId: 0, itemId: 21273, dialogue: 298 },
+  { enumName: "SKOTOS", petId: NpcIdentifiers.SKOTOS_2, houseNpcId: NpcIdentifiers.SKOTOS, morphId: 0, itemId: 21273, dialogue: 298 },
   { enumName: "IKKLE_HYDRA", petId: NpcIdentifiers.IKKLE_HYDRA, morphId: NpcIdentifiers.IKKLE_HYDRA_2, itemId: 22746, dialogue: -1 },
   { enumName: "IKKLE_HYDRA_ELECTRIC", petId: NpcIdentifiers.IKKLE_HYDRA_2, morphId: NpcIdentifiers.IKKLE_HYDRA_3, itemId: 22746, dialogue: -1 },
   { enumName: "IKKLE_HYDRA_FIRE", petId: NpcIdentifiers.IKKLE_HYDRA_3, morphId: NpcIdentifiers.IKKLE_HYDRA_4, itemId: 22746, dialogue: -1 },
@@ -500,11 +501,13 @@ for (let npcId = FIRST_PUPPY_NPC_ID; npcId <= LAST_PUPPY_NPC_ID; npcId++) {
 }
 
 const PET_BY_ID = new Map();
+const PET_BY_HOUSE_ID = new Map();
 const PET_BY_ITEM_ID = new Map();
 const PET_BY_NAME = new Map();
 
 for (const pet of PETS) {
   PET_BY_ID.set(pet.petId, pet);
+  if (Number.isInteger(pet.houseNpcId)) PET_BY_HOUSE_ID.set(pet.houseNpcId, pet);
   PET_BY_NAME.set(pet.enumName, pet);
   if (Number.isInteger(pet.itemId) && !PET_BY_ITEM_ID.has(pet.itemId)) {
     PET_BY_ITEM_ID.set(pet.itemId, pet);
@@ -758,8 +761,10 @@ function getVariantMap(player) {
 /** The stored npc id of the chosen metamorphosis form for this pet's family. */
 function getStoredVariant(player, pet) {
   const variant = getVariantMap(player)[petFamily(pet)];
-  const variantPet = Number.isInteger(variant) ? getPetByNpcId(variant) : null;
-  return variantPet && petFamily(variantPet) === petFamily(pet) ? variant : 0;
+  // Older saves used the house definition as the follower. Resolve that legacy
+  // form without registering actual menagerie NPCs as owned world pets.
+  const variantPet = Number.isInteger(variant) ? getPetByNpcId(variant) ?? PET_BY_HOUSE_ID.get(variant) : null;
+  return variantPet && petFamily(variantPet) === petFamily(pet) ? variantPet.petId : 0;
 }
 
 function setStoredVariant(player, pet, npcId) {
@@ -1831,8 +1836,9 @@ function rollSkillingPet(event) {
 
 function fillSkillPetVariants({ ItemIdentifiers, NpcIdentifiers: Npcs }) {
   if (!PET_BY_NAME.has("QUETZIN")) {
-    const pet = { enumName: "QUETZIN", petId: Npcs.QUETZIN, morphId: 0, itemId: ItemIdentifiers.QUETZIN, dialogue: -1 };
+    const pet = { enumName: "QUETZIN", petId: Npcs.QUETZIN_2, houseNpcId: Npcs.QUETZIN, morphId: 0, itemId: ItemIdentifiers.QUETZIN, dialogue: -1 };
     PETS.push(pet); PET_BY_ID.set(pet.petId, pet); PET_BY_NAME.set(pet.enumName, pet); PET_BY_ITEM_ID.set(pet.itemId, pet);
+    PET_BY_HOUSE_ID.set(pet.houseNpcId, pet);
   }
   for (const pet of PETS) {
     if (!pet.enumName.endsWith("_RIFT_GUARDIAN")) continue;
