@@ -161,9 +161,18 @@ function handleAmethyst(event) {
   });
 }
 
+/** "crafting:cut-gem": the cut gem request.uncutId gives and its XP, for content that cuts as it mines (a league relic). */
+function answerCutGem(request) {
+  const gem = data().gems.get(request.uncutId);
+  if (!gem) return;
+  request.cutId = gem.cut;
+  request.xp = gem.xp;
+}
+
 module.exports = function attach(api) {
   api.onItemOnItem(cutGem, { noted: false });
   api.onItemOnItem(handleAmethyst, { noted: false });
+  api.onCustomEvent("crafting:cut-gem", answerCutGem);
 };
 
 module.exports.cutChance = cutChance;

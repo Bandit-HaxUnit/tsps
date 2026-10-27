@@ -129,6 +129,15 @@ relics are the first askers; nothing changes when nobody answers):
 | `combat-special:cost` | core `CombatSpecial` (the energy check and the drain) | `{ player, specialId, cost, available, allow, phase }`; `phase` is "check" or "drain"; `allow` lets a short player use it |
 | `combat-special:regenerate` | core `RestoreSpecialAttackTask` | `{ player, amount }` a restore cycle (the cycle length is the lightbearer modifier's) |
 | `skills:experience-gained` | core `SkillManager.addExperience`, after the gain | `{ player, skill, experience, multiplied }` |
+| `storage:gather`, `storage:room` (extended) | Mining, Woodcutting, Fishing | the existing `{ player, itemId, amount, stored }` now carries `skill` and the resource's `xp`, so a listener can bank or double what a skill gathered; `storage:room` carries `skill` too, so a relic answers room only for its own skill's resource (and for what its tool's mode turns it into) |
+| `mining:attempt`, `woodcutting:attempt`, `fishing:attempt` | the skill, after its success roll | `{ player, ..., success }`: a listener may turn a miss into a hit (Fishing then lands the best fish the player can) |
+| `mining:deplete-rock` | Mining | `{ player, object, rock, handled }`: handled keeps the rock standing |
+| `fishing:tool`, `fishing:interval` | Fishing | `{ player, variants, variant }` when no tool was found; `{ player, ticks }` before each catch roll |
+| `cooking:cooked`, `smithing:bar-for-ore`, `crafting:cut-gem`, `fletching:shafts` | Cooking, Smelting, Gems, Fletching | lookups: what a raw item, ore, uncut gem or log turns into and the XP |
+| `hunter:catch-chance`, `hunter:rewards`, `hunter:lure-interval`, `hunter:jar-kept` | Hunter | `{ player, npcId, chance }` in the shared roll; `{ player, kind, npcId, rewards, xp }` for a trap's catch; `{ player, kind, ticks }` between an idle trap's looks; `{ player, kept }` for an impling jar |
+| `thieving:loot`, `thieving:done`, `thieving:deplete-stall`; `pouchLimit` and `alwaysSucceeds` on `thieving:pickpocket-target` | Thieving | `{ player, npc, target, loot }` before the loot is handed over; `{ player, kind, npc \| object, succeeded, again }` after a pickpocket or theft (again repeats the click a tick later, while neither the player nor the NPC has moved); `{ player, object, handled }` before a stall empties |
+| `agility:roll`, `agility:lap-reward`, `agility:mark` | Agility | `{ player, objectId, success }` after the obstacle roll; `{ player, course, count, xp }` before a lap is recorded; `{ player, location, items }` as a mark spawns |
+| `firemaking:light-roll`, `firemaking:logs-per-action` | Firemaking | `{ player, success }` after the lighting roll; `{ player, logId, amount }` for the logs one action burns |
 
 ## What the client is sent
 
@@ -514,6 +523,75 @@ These relics have their effects (`leaguerelics/*.LeagueRelics.js`, numbers in th
   hits here either), and the skills packet carries a boost as a byte, so the client's boost
   overlay for a 255 may read oddly while the level itself shows.
 
+### Trailblazer Reloaded's gathering relics
+
+- **Endless Harvest** (tier 1): what Mining, Woodcutting and Fishing gather is doubled and banked
+  (`storage:gather` with the skill: two go to the bank and the inventory gets nothing; an open
+  container such as a coal bag keeps what it took and the rest goes to the bank; when the bank
+  has no room the extra goes to the inventory if it fits), the extra pays the resource's XP again
+  only when it was placed, and `storage:room` says the bank's room counts so a full inventory
+  keeps gathering.
+  Forestry bark, Volcanic Mine fragments and sulliusceps never pass through `storage:gather`, so
+  the Wiki's exclusions hold by construction.
+- **Trickster** (tier 1): pickpockets always land and the pouch limit is tripled
+  (`thieving:pickpocket-target`), the loot is doubled and noted (`thieving:loot`; coins come as
+  pouches, so a second pouch stands for the double: ours; a clue, and an item that neither
+  stacks nor notes, once), the pickpocket repeats itself while neither the player nor the NPC
+  has moved (`thieving:done`), Agility rolls and fire lighting succeed (`agility:roll`,
+  `firemaking:light-roll`), Hunter catches never fail (`hunter:catch-chance`), box traps give
+  double loot and XP (`hunter:rewards`) and look for prey every 2 ticks instead of 5
+  (`hunter:lure-interval`: the Wiki says "faster" and no more, so the number is ours), impling
+  jars never break (`hunter:jar-kept`), and up to nine logs burn in one action
+  (`firemaking:logs-per-action`, one fire, XP for each). Not here: the Sage's greaves (not in
+  this cache) and the barbarian firemaking hotfix. "Always succeed" covers what the Agility,
+  Hunter, Thieving and Firemaking plugins roll themselves: the Werewolf course, the Brimhaven
+  arena, the Hallowed Sepulchre and the Chambers of Xeric tightrope roll on their own and still
+  can fail.
+
+### Raging Echoes' gathering relics
+
+The Echo pickaxe, axe and harpoon sit in Mining's, Woodcutting's and Fishing's own tool tables as
+crystal tools with no requirement (the Echo pickaxe page: always a 2-tick cycle, quicker than
+this server's crystal pickaxe, which rolls every 3 ticks with a 1 in 4 chance of 2), and their
+Toggle option cycles the relic's modes (`league:<relic>-mode`, our messages). Each tool's own
+effects need the tool carried or wielded (Wiki); a relic's other effects (Lumberjack's sure fires,
+Animal Wrangler's Hunter and cooking ones) do not.
+
+- **Power Miner** (tier 1): a failed swing's second 50% chance (`mining:attempt`), ore straight
+  to the bank (`storage:gather`), a rock that stands until its fourth ore
+  (`mining:deplete-rock`; counted per rock for everyone who mines it: ours; the Wiki's
+  mining-glove stacking is not modelled, gloves are not here), and the toggles: ore smelted into
+  its bar (`smithing:bar-for-ore`: the furnace recipe whose main ore it is, its other ingredients
+  waived, so a copper ore alone makes a bronze bar: ours) with the Smithing XP whatever the
+  level, and gems cut (`crafting:cut-gem`) with the Crafting XP. Coal, never a recipe's main
+  ore, is banked as it is.
+- **Lumberjack** (tier 1): a failed chop's second 50% chance (`woodcutting:attempt`), logs
+  straight to the bank, the toggles (logs burnt for their Firemaking XP, the default, through
+  `firemaking:log-xp`; or fletched into arrow shafts for the bank with the Fletching XP, through
+  `fletching:shafts`, which answers arrow shafts only, so a teak or mahogany log is banked as
+  it is), and fires that never fail to light (`firemaking:light-roll`). The Wintertodt kindling
+  variant is not here.
+- **Animal Wrangler** (tier 1): the harpoon stands in for any fishing tool when none is held
+  (`fishing:tool`; bait is still needed), catches come a tick sooner (`fishing:interval`), a
+  failed catch's second 50% chance (`fishing:attempt`; it lands the best fish the player can
+  catch at the spot: ours), fish straight to the bank (not
+  karambwanji, which stay with the player as on live), half of them cooked on the way when the
+  harpoon says so (`cooking:cooked`, the Cooking XP whatever the level; never the big shark,
+  swordfish or bass), food that never burns (`cooking:burn`), and the box-trap, catch and jar
+  effects Trickster has.
+- **Corner Cutter** (tier 2): Agility rolls always succeed (`agility:roll`), a lap counts twice
+  and its completion bonus pays 25% more (`agility:lap-reward`; the obstacles' own XP is not
+  raised: ours), and a mark of grace spawns with 10,000 coins
+  (`agility:mark`). Not here: the Sage's greaves, and the doubled pyramid tops, hallowed marks,
+  Brimhaven vouchers and crystal shards (their plugins hand them out without a seam).
+- **Dodgy Deals** (tier 2): every pickpocket lands (`alwaysSucceeds` on
+  `thieving:pickpocket-target`) and the pouch limit is tripled, the loot is noted and multiplied
+  by the NPCs of the same name alive within 5 tiles of the player (the Wiki's 11x11; coins a pouch
+  each: ours; a clue, and an item that neither stacks nor notes, once, as the Wiki says),
+  pickpockets and stall thefts repeat themselves while neither the player nor the NPC has moved
+  (`thieving:done`; chests have no repeat here either), and a stall never empties for the owner
+  (`thieving:deplete-stall`; another player's theft still empties it for everyone, as on live).
+
 ### Equilibrium (both leagues)
 
 Trailblazer Reloaded's tier 6 and Raging Echoes' tier 4: every gain of experience
@@ -876,7 +954,7 @@ above (clue-step progress and farming ticks), the boosted sources their own plug
 ask about, Shattered
 Relics' own panels. Each is its own item on the
 progress tracker.
-Of the relics, the gathering, production, clue, slayer and item ones follow in their own
+Of the relics, the production, clue, slayer and item ones follow in their own
 PRs (the plan in the relic effects PR).
 
 The records have no POH league hall to stand in: its trophy case, pedestals and scroll need

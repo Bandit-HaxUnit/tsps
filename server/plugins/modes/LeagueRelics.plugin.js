@@ -30,6 +30,13 @@ module.exports = {
     require("./leaguerelics/Specialist.LeagueRelics")(api);
     require("./leaguerelics/LastStand.LeagueRelics")(api);
     require("./leaguerelics/Equilibrium.LeagueRelics")(api);
+    require("./leaguerelics/EndlessHarvest.LeagueRelics")(api);
+    require("./leaguerelics/Trickster.LeagueRelics")(api);
+    require("./leaguerelics/PowerMiner.LeagueRelics")(api);
+    require("./leaguerelics/Lumberjack.LeagueRelics")(api);
+    require("./leaguerelics/AnimalWrangler.LeagueRelics")(api);
+    require("./leaguerelics/CornerCutter.LeagueRelics")(api);
+    require("./leaguerelics/DodgyDeals.LeagueRelics")(api);
     require("./leaguerelics/ArcaneGrimoire.LeagueRelics")(api);
   },
 };
