@@ -177,6 +177,7 @@ const CLUE_COMPASS = { 2: 1 };
 const TOTAL_RECALL = { 5: 1 };
 const GRIMOIRE = { 6: 2 };
 const RELOADED = { 3: 2 };
+const BANK_HEIST = { 2: 2 };
 
 const at = (teleport) => [teleport.location.getX(), teleport.location.getY(), teleport.location.getZ()];
 
@@ -413,4 +414,58 @@ test("Reloaded: a second relic of tiers 1 to 3, a different one from the tier's 
   assert.equal(Unlock.unlock(without, 2, 2, { bankOpen: true }), false, "without Reloaded: the tier is taken");
   const tr = character("trreload", "league", { 0: 1, 2: 1, 3: 2 }, 4);
   assert.equal(Unlock.unlock(tr, 2, 2, { bankOpen: true }), false, "Trailblazer Reloaded's same slot is not Reloaded");
+});
+
+test("Bank Heist: every bank, bank chest and deposit box in the cache's map, named after the nearest place, grouped; only unlocked areas", () => {
+  const DATA = require("../plugins/modes/data/league-bank-heist.json");
+  assert.ok(DATA.banks.length > 100, "the generated list");
+  for (const bank of DATA.banks) assert.ok(["bank", "bank chest", "deposit box"].includes(bank.kind));
+  const tiles = new Set(DATA.banks.map((bank) => `${bank.x},${bank.y},${bank.z}`));
+  assert.equal(tiles.size, DATA.banks.length, "no bank twice");
+  const who = cases(BANK_HEIST, 5);
+  click("Banker's briefcase", "Teleport", who.relic);
+  const runs = prompts.at(-1).options.map(([text]) => text);
+  assert.ok(runs.length >= 2, runs.join(", "));
+  const Heist = require("../plugins/modes/leaguerelics/BankHeist.LeagueRelics");
+  const list = Heist._test.banks(who.relic);
+  assert.equal(list.length, DATA.banks.length, "one destination a bank");
+  assert.ok(list.some((bank) => bank.label === "Lumbridge bank"), "Lumbridge's, by its place");
+  assert.ok(list.some((bank) => bank.label === "Edgeville bank"));
+  const edgeville = list.find((bank) => bank.label === "Edgeville bank");
+  choose(Heist._test.groups(who.relic, list).find(([, run]) => run.includes(edgeville))[0]);
+  choose("Edgeville bank");
+  const [x, y] = at(teleports.at(-1));
+  assert.ok(Math.abs(x - edgeville.location.getX()) <= 4 && Math.abs(y - edgeville.location.getY()) <= 4, "at the bank");
+
+  // With the map's clipping: a booth's own tile is solid, and the landing is the customers' side.
+  const { RegionManager } = require("../dist/game/collision/RegionManager");
+  RegionManager.init();
+  const Teleports = require("../plugins/modes/leaguerelics/Teleports.LeagueRelics");
+  const draynor = list.find((bank) => bank.label === "Draynor Village bank");
+  const landed = Teleports.landing(draynor.location);
+  assert.ok(Teleports.reach(landed, 30) >= 30, "open floor to walk from");
+  assert.ok(landed.getX() >= 3092, "not behind the counter (the bankers stand west of x 3092)");
+  click("Banker's briefcase", "Last-destination", who.relic);
+  assert.equal(teleports.length, 2);
+
+  // With the league's areas answering, the banks are grouped by area.
+  const area = (query) => {
+    if (query.y > 4500) return; // no league area: Other
+    query.area = query.x < 3000 ? "kandarin" : "misthalin";
+    query.name = query.x < 3000 ? "Kandarin" : "Misthalin";
+  };
+  custom["league:area-at"] = [area, ...(custom["league:area-at"] ?? [])];
+  click("Banker's briefcase", "Teleport", who.relic);
+  assert.deepEqual(prompts.at(-1).options.map(([text]) => text), ["Kandarin", "Misthalin", "Other"]);
+  const locked = (query) => { query.unlocked = ["misthalin"]; };
+  custom["league:areas"] = [locked, ...(custom["league:areas"] ?? [])];
+  click("Banker's briefcase", "Teleport", who.relic);
+  assert.deepEqual(prompts.at(-1).options.map(([text]) => text), ["Misthalin", "Other"], "a locked area's banks are not offered");
+  custom["league:areas"] = custom["league:areas"].filter((handler) => handler !== locked);
+  custom["league:area-at"] = custom["league:area-at"].filter((handler) => handler !== area);
+  for (const player of others(who)) {
+    const before = prompts.length;
+    click("Banker's briefcase", "Teleport", player);
+    assert.equal(prompts.length, before, `${player.getUsername()}'s briefcase does nothing`);
+  }
 });
