@@ -40,6 +40,7 @@ const realRandom = Math.random;
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
   core = PluginManager.getCoreApi();
+  core.RegionManager.init();
   GameConstants.setWorldProfile("league");
   const lists = {};
   const on = (name) => (handler) => {
@@ -145,13 +146,17 @@ function warrior(name, points = 0) {
   return player;
 }
 
+/** Equips in Catherby's bank, where fragments can change (Wiki /Fragments), and steps back out. */
 function equip(player, ...ids) {
+  const before = player.getLocation();
+  player.setLocation(new core.Location(2809, 3440, 0));
   player.setInterfaceId(FRAGMENTS);
   for (const id of ids) {
     if (!(Number(Fragments._test.owned(player)[id]) > 0)) emit("league:grant-fragment", { player, id });
     click(player, FRAGMENTS, 18, { slot: 9 * (id - 1), opId: 2 });
   }
   player.setInterfaceId(-1);
+  player.setLocation(before);
 }
 
 function setXp(player, id, xp) {
