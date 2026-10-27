@@ -16,3 +16,6 @@ rotation. Login fields keep their stable layout while the keyboard is open.
 The keyboard button focuses the input synchronously inside the tap's `touchend` event: WebKit
 [grants user activation on touchend](https://webkit.org/blog/13862/the-user-activation-api/),
 and the later clientscript frame cannot summon the iOS keyboard on its own.
+Menu cleanup preserves focus on that input so subsequent frames cannot dismiss the keyboard.
+The bridge initializes an unset chat-keyboard toggle to closed before the tap's script runs and
+clears it on explicit hide, so the first tap and taps after closing both open chat.
