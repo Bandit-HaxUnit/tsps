@@ -3,7 +3,7 @@
  * `fragments`): which fragments a character owns (their fragment XP) and which sit in its seven
  * slots, saved and sent as the varbits the screen draws from. A slot opens at the points the
  * cache's enum 4127 gives (Wiki /Fragments: one to seven slots). Equip and Unequip work only in a
- * bank, near a bank chest or near the Sage (Wiki /Fragments, data `fragments.swap`); the screen
+ * bank, near a bank chest or near the Sage (Wiki /Fragments, NearBank and Sage); the screen
  * opens anywhere. Equipped fragments gain XP and levels as the character gains XP (data `fragmentXp`);
  * FragmentDrops hands them out and FragmentEffects gives them effects, through `equippedLevel`,
  * `setTier` and `award`.
@@ -16,6 +16,7 @@ const Common = require("./Common.LeagueMode");
 const { FLAG_OP1, FLAG_OP2 } = require("../../interface/widgetGroup");
 const { data, isShattered } = require("./Shattered.LeagueMode");
 const { nearSage } = require("./Sage.LeagueMode");
+const { nearBank } = require("./NearBank.LeagueMode");
 
 /** Fragment id -> fragment XP (absent = not owned). */
 const FRAGMENTS_ATTRIBUTE = "league:fragments";
@@ -249,33 +250,6 @@ function isOpen(player) {
   return player.getInterfaceId() === config().group;
 }
 
-/** A loc that banks: one with a Bank option (booths, counters, tables), or a bank chest you can use. */
-function banksAt(object) {
-  const definition = object.getDefinition?.();
-  const actions = definition?.getActions?.() ?? [];
-  const { bankAction, bankChests } = config().swap;
-  return actions.includes(bankAction) || (bankChests.includes(definition?.getName?.()) && actions.some(Boolean));
-}
-
-/** A loc that banks, or an NPC with a Bank option, within `swap.bankDistance` on the character's plane. */
-function nearBank(player) {
-  const { bankAction, bankDistance } = config().swap;
-  const { MapObjects, RegionManager } = Common.core;
-  const here = player.getLocation();
-  const [x, y, z] = [here.getX(), here.getY(), here.getZ()];
-  RegionManager.loadMapFiles(x, y);
-  for (let dx = -bankDistance; dx <= bankDistance; dx++) {
-    for (let dy = -bankDistance; dy <= bankDistance; dy++) {
-      const objects = MapObjects.mapObjects.get(MapObjects.getHash(x + dx, y + dy, z)) ?? [];
-      if (objects.some(banksAt)) return true;
-    }
-  }
-  const list = player.getLocalNpcs?.();
-  const npcs = Array.isArray(list) ? list : list ? [...list.values()] : [];
-  return npcs.some((npc) => (npc?.getDefinition?.()?.getActions?.() ?? []).includes(bankAction)
-    && npc.getLocation().getZ() === z && here.getDistance(npc.getLocation()) <= bankDistance);
-}
-
 /** Fragments change only in a bank, near a bank chest or near the Sage (Wiki /Fragments); said otherwise. */
 function canSwap(player) {
   if (nearBank(player) || nearSage(player)) return true;
@@ -362,4 +336,4 @@ module.exports.ownedLevel = ownedLevel;
 module.exports.setTier = setTier;
 module.exports.award = award;
 module.exports.findable = findable;
-module.exports._test = { openSlots, slots, owned, ids, levelOf, nearBank, banksAt, FRAGMENTS_ATTRIBUTE, SLOTS_ATTRIBUTE };
+module.exports._test = { openSlots, slots, owned, ids, levelOf, FRAGMENTS_ATTRIBUTE, SLOTS_ATTRIBUTE };

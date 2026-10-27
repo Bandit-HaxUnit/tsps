@@ -57,12 +57,14 @@
     "unequipAll": 16,
     "equipOp": 2,
     "unequipOp": 2,
-    "_swap": "Wiki /Fragments: fragments \"can be exchanged while inside a bank, near a bank chest, or near The Sage\". A bank is a loc with the `bankAction` option (booths, counters and tables, whatever their name), a bank chest (`bankChests`, whose option is Use) that has an option at all, or an NPC with the option (bankers of every name); a closed or decorative booth has none. The Wiki gives no distances: `bankDistance` and the Sage's `sage.nearDistance` are this server's, a bank's inside being a few tiles from its booths. Equip, Unequip and Unequip all are refused elsewhere with `messages.swapAway`.",
-    "swap": {
-      "bankAction": "Bank",
-      "bankChests": ["Bank chest", "Bank Chest"],
-      "bankDistance": 8
-    }
+    "_swap": "Wiki /Fragments: fragments \"can be exchanged while inside a bank, near a bank chest, or near The Sage\" (`bank`, `sage.nearDistance`). Equip, Unequip and Unequip all are refused elsewhere with `messages.swapAway`."
+  },
+
+  "_bank": "In a bank, for fragments (Wiki /Fragments: \"inside a bank, near a bank chest\") and quest packs (the launch news: \"you can only auto-complete quests while in a Bank\"): a loc with the `bankAction` option (booths, counters and tables, whatever their name), a bank chest (`bankChests`, whose option is Use) that has an option at all, or an NPC with the option (bankers of every name), within `distance`; a closed or decorative booth has none. Neither source gives a distance; this one is this server's, a bank's inside being a few tiles from its booths.",
+  "bank": {
+    "bankAction": "Bank",
+    "bankChests": ["Bank chest", "Bank Chest"],
+    "distance": 8
   },
 
   "_sage": "The Sage (Wiki The_Sage_(Shattered_Relics_League)): NPC 11232 (Talk-to, Check-pets, Collect-items) at Catherby, 2774, 3433, the league's Leagues Tutor. No spawn is recorded and the main world's spawns don't have it, so a world running this league spawns it there. Talk-to plays its transcript; its \"Do I have any League items to collect?\" and Collect-items hand over `items`: per quest pack, what the Wiki's /Unlocks table says can be claimed from the Sage (Gnome I the Karamjan monkey greegree, Elf I Iban's staff, Elf II a crystal shield or a crystal bow, Morytania II Drakan's medallion, Fairy I magic secateurs and a Dramen staff, Heroes ice gloves), for every pack unlocked, its prerequisites too. An inner list is a choice of one. The Sage gives what the character owns none of (carried, worn or banked; the transcript: \"It doesn't look like you need any League items right now\"), so a lost one can be collected again, and one a quest's own reward gave (A Taste of Hope's medallion, Roving Elves' crystal bow or shield) isn't given twice. The crystal pair is the new crystal bow / shield Roving Elves gives.",
@@ -250,6 +252,8 @@
     "_fragmentFound": "No message is recorded for breaking a fragment; these are this server's.",
     "_swapAway": "No message is recorded for changing fragments away from a bank or the Sage; this one is this server's.",
     "swapAway": "You can only change your fragments in a bank, near a bank chest or near the Sage.",
+    "_questsAway": "The launch news's own words for the rule (\"you can only auto-complete quests while in a Bank\"); no in-game message is recorded.",
+    "questsAway": "You can only auto-complete quests while in a bank.",
     "_sageReceive": "The transcript's action says \"You receive an item from the Sage.\"; this names the item after it. The full-inventory line is this server's.",
     "sageReceive": "You receive an item from the Sage: {item}.",
     "sageNothing": "It doesn't look like you need any League items right now. I'll be here if you ever do.",

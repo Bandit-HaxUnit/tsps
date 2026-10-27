@@ -3,8 +3,8 @@
  * skills, bosses and quest packs bought with Sage's Renown (Wiki /Unlocks). What a character has
  * unlocked is saved and sent as the varbits the screen draws from. A locked skill gives no XP and
  * a locked boss can't be attacked (Wiki: "Locked skills can be trained, but no experience will be
- * granted"). A quest pack bought completes its quests and its prerequisite packs' through the
- * quest runtime, with no XP (Wiki: "Auto-completing quests will not grant the experience"); the
+ * granted"). A quest pack, bought in a bank, completes its quests and its prerequisite packs' through
+ * the quest runtime, with no XP (Wiki: "Auto-completing quests will not grant the experience"); the
  * Sage (Sage.LeagueMode) hands out the items a pack lets its owner claim.
  *
  *   "league:unlock-skill" { player, skill }   unlocks a skill for free (the starting class)
@@ -16,6 +16,7 @@ const Common = require("./Common.LeagueMode");
 const QuestRuntime = require("../../quests/QuestRuntime");
 const { FLAG_OP1 } = require("../../interface/widgetGroup");
 const { data, isShattered } = require("./Shattered.LeagueMode");
+const { nearBank } = require("./NearBank.LeagueMode");
 
 /** { skills: [skill id], bosses: [npc id], quests: [pack name] }. */
 const UNLOCKS_ATTRIBUTE = "league:unlocks";
@@ -121,11 +122,27 @@ function bankedExperienceItems(player) {
   return new Map(config().quests.experienceItems.map((id) => [id, banks(player).reduce((sum, bank) => sum + bank.getAmount(id), 0)]));
 }
 
-/** Into the inventory if it can take all of it, otherwise the bank tab the item belongs in. */
+/**
+ * As much as the inventory takes, the rest into the bank tab the item belongs in, counting what the
+ * bank really took (a full bank or a capped stack takes less), and anything left on the floor, as
+ * a quest reward past a full inventory goes (`forceAdd`).
+ */
 function give(player, item) {
   const { Bank } = Common.core;
-  if (player.getInventory().getAddableAmount(item) >= item.getAmount()) player.getInventory().add(item, false);
-  else player.getBank(Bank.getTabForItem(player, item.getId())).add(item, false);
+  const inventory = player.getInventory();
+  let rest = item.getAmount();
+  const carried = Math.min(rest, inventory.getAddableAmount(item));
+  if (carried > 0) {
+    inventory.add(item.clone().setAmount(carried), false);
+    rest -= carried;
+  }
+  if (rest > 0) {
+    const bank = player.getBank(Bank.getTabForItem(player, item.getId()));
+    const before = bank.getAmount(item.getId());
+    bank.add(item.clone().setAmount(rest), false);
+    rest -= Math.max(0, bank.getAmount(item.getId()) - before);
+  }
+  if (rest > 0) inventory.forceAdd(player, item.clone().setAmount(rest));
 }
 
 /**
@@ -287,7 +304,10 @@ function accept({ player }) {
   if (!isShattered(player) || !isOpen(player)) return false;
   const { tab, entry: index } = viewOf(player);
   const entry = entries(TABS[tab])[index];
-  const { cost, refusal } = entry ? price(player, tab, entry) : { cost: null };
+  const priced = entry ? price(player, tab, entry) : { cost: null };
+  // Quest packs auto-complete only in a bank (the launch news), checked before any renown is spent.
+  const away = priced.cost !== null && TABS[tab] === "quests" && !nearBank(player);
+  const { cost, refusal } = away ? { cost: null, refusal: data.messages.questsAway } : priced;
   if (refusal) player.sendMessage(refusal);
   if (cost !== null) {
     const spend = { player, amount: cost };

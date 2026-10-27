@@ -11,12 +11,14 @@ Server.installProductionPathResolver();
 const { CachePipeline } = require("../dist/game/cache/CachePipeline");
 const { PluginManager } = require("../dist/plugins/PluginManager");
 const { Player } = require("../dist/game/entity/impl/player/Player");
+const { PlayerSave } = require("../dist/game/entity/impl/player/persistence/PlayerSave");
 
 let core;
 let Unlocks;
 let QuestRuntime;
 const prompts = [];
 const tasks = [];
+const custom = {};
 const data = require("../plugins/modes/data/league-shattered.json").unlocks.quests;
 
 before(async () => {
@@ -26,9 +28,13 @@ before(async () => {
   core.TaskManager.submit = (task) => tasks.push(task);
   const api = new Proxy({
     core,
-    persistAttribute() {},
+    persistAttribute: (key, value) => PlayerSave.persistAttribute(key, value),
     getPluginConfig: (key, fallback) => fallback,
     sendMultiChatboxPrompt: (player, title) => prompts.push(title),
+    onCustomEvent: (name, handler) => (custom[name] = (custom[name] ?? []).concat(handler)),
+    emitCustomEvent: (name, payload) => {
+      for (const handler of custom[name] ?? []) handler(payload);
+    },
   }, { get: (target, key) => (key in target ? target[key] : () => {}) });
   require("../plugins/modes/league/Common.LeagueMode").init(api);
   require("../plugins/quests/Quests.plugin").register(api);
@@ -73,6 +79,89 @@ test("completing every pack hands out the final rewards but no experience item, 
     assert.equal(held(id) > 0, true, `${label}: rewards past a full inventory go to the bank`);
   }
   assert.equal(player.getInventory().getFreeSlots(), 0, "the inventory filled up on the way");
+});
+
+/** A real player whose packets go nowhere. */
+function fresh(name) {
+  const player = new Player(null);
+  player.setUsername(name);
+  const sender = new Proxy({}, { get: () => () => sender });
+  player.getPacketSender = () => sender;
+  player.sendMessage = () => {};
+  return player;
+}
+
+function emit(name, payload) {
+  for (const handler of custom[name] ?? []) handler(payload);
+  return payload;
+}
+
+test("rewards neither the inventory nor a full bank can take go to the floor, not nowhere", () => {
+  const { Item, Bank, ItemOnGroundManager } = core;
+  const player = fresh("bank-full");
+  player.setLocation(new core.Location(2809, 3440, 0));
+  for (let slot = 0; slot < 28; slot++) player.getInventory().adds(1511, 1);
+  for (let tab = 0; tab < Bank.TOTAL_BANK_TABS; tab++) {
+    if (tab === Bank.BANK_SEARCH_TAB_INDEX) continue;
+    const bank = player.getBank(tab);
+    bank.setItems(Array.from({ length: bank.capacity() }, (_, slot) => new Item(4000 + tab * 400 + slot, 1)));
+  }
+  assert.equal(player.getBank(Bank.getTabForItem(player, 1458)).getFreeSlots(), 0, "every tab full");
+  Unlocks._test.completeQuests(player, "Troll I");
+  assert.equal(QuestRuntime.questNamed("Troll Stronghold").isComplete(player), true);
+  assert.equal(player.getInventory().getAmount(1511), 28, "its own logs");
+  const ground = ItemOnGroundManager.getGroundItem(player.getUsername(), 1458, player.getLocation(), player.getPrivateArea());
+  assert.equal(ground?.getItem().getAmount(), 1, "Troll Stronghold's law talisman lies at its feet");
+});
+
+test("a capped coin stack keeps the part it can take and the rest goes to the floor", () => {
+  const { Item, Bank, ItemOnGroundManager } = core;
+  const MAX = 2147483647;
+  const player = fresh("capped");
+  player.setLocation(new core.Location(2810, 3440, 0));
+  player.getInventory().adds(995, MAX - 50);
+  player.getBank(Bank.getTabForItem(player, 995)).add(new Item(995, MAX), false);
+  Unlocks._test.completeQuests(player, "Kourend I");
+  assert.equal(QuestRuntime.questNamed("X Marks the Spot").isComplete(player), true);
+  assert.equal(player.getInventory().getAmount(995), MAX, "50 of X Marks the Spot's 200 coins fit the stack");
+  const ground = ItemOnGroundManager.getGroundItem(player.getUsername(), 995, player.getLocation(), player.getPrivateArea());
+  assert.equal(ground?.getItem().getAmount(), 150, "the bank's stack is capped, so the other 150 are dropped");
+});
+
+test("a pack's quests pay no post-quest XP, even after a save and reload: Ellen's and Daero's training", async () => {
+  const { Skill, NpcIdentifiers: N } = core;
+  const player = fresh("withheld");
+  Unlocks._test.completeQuests(player, "Myths");
+  Unlocks._test.completeQuests(player, "Gnome I");
+  const again = fresh("withheld");
+  PlayerSave.fromPlayer(player).applyToPlayer(again);
+  const ds2 = QuestRuntime.questNamed("Dragon Slayer II");
+  const mm1 = QuestRuntime.questNamed("Monkey Madness I");
+  assert.equal(ds2.isComplete(again) && ds2.experienceWithheld(again), true, "the marker survives the reload");
+  assert.equal(mm1.experienceWithheld(again), true);
+
+  const opened = [];
+  custom["xpreward:open"] = [(request) => opened.push(request)];
+  const ellen = (who) => emit("npc-dialogue:action", { player: who, npcId: N.ELLEN, stepId: "P2tord", handled: false });
+  const daero = (who) => emit("npc-dialogue:action", { player: who, npcId: N.DAERO, stepId: "KpGxV1", handled: false });
+  const before = [Skill.ATTACK, Skill.STRENGTH].map((skill) => again.getSkillManager().getExperience(skill));
+  ellen(again);
+  daero(again);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(opened, [], "Ellen offers no 25,000 XP reward");
+  assert.deepEqual([Skill.ATTACK, Skill.STRENGTH].map((skill) => again.getSkillManager().getExperience(skill)), before, "Daero's training pays nothing");
+
+  const played = fresh("played");
+  ds2.complete(played);
+  mm1.complete(played);
+  ellen(played);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(opened.length, 1, "a quest actually played still has Ellen's reward");
+  opened[0].onConfirm(Skill.ATTACK, "Attack");
+  assert.ok(played.getSkillManager().getExperience(Skill.ATTACK) >= 25000);
+  const strength = played.getSkillManager().getExperience(Skill.STRENGTH);
+  daero(played);
+  assert.ok(played.getSkillManager().getExperience(Skill.STRENGTH) >= strength + 35000, "and Daero's training");
 });
 
 test("a character's own inventory is kept through a pack's completion", () => {

@@ -293,7 +293,8 @@ Talk-to to a custom shop, so its conversation never runs.
 ## Shattered Relics
 
 Leagues III's own screens (`league/Shattered.LeagueMode.js`, `Fragments.LeagueMode.js`,
-`Unlocks.LeagueMode.js`, `Sage.LeagueMode.js`, data `league-shattered.json`). No recording exists (the league ended in
+`Unlocks.LeagueMode.js`, `Sage.LeagueMode.js`, `NearBank.LeagueMode.js`, data
+`league-shattered.json`). No recording exists (the league ended in
 March 2022, before the captures' rev 223), so every packet is from the cache's scripts and every
 rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (varbit 10032).
 
@@ -341,16 +342,24 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   now, from the Wiki's Initial Cost less the prerequisite packs already unlocked, and 0 once
   unlocked. Buying a pack unlocks its prerequisites. Defence, Fishing and Thieving start unlocked.
   Nex can be bought only once every God Wars general is unlocked.
-- **Quest packs:** buying one completes the quests the Wiki's /Unlocks table lists for it (main and
-  additional quests) and for its prerequisite packs, each through its own `quest.complete` (quest
-  points, final rewards, the message, `quest:completed`), prerequisites first. The Wiki:
-  "Auto-completing quests will not grant the experience", so `complete(player, { experience:
-  false, scroll: false })`: no XP lands while they complete, a reward's later XP prompt is held
-  back (The Fremennik Isles reads the option), and the rewards that are XP in an item (the lamps
-  and Tomes of Experience in `experienceItems`, found by completing every pack) are taken back.
-  There is no jingle or scroll per quest, so the unlocks screen stays open. Each quest runs
-  against an empty inventory; the character's own comes back, and the rewards go into it or, past
-  a full one, the bank. The other final rewards stay (Plague City's Ardougne teleport scroll,
+- **Quest packs:** bought only in a bank (the launch news: "you can only auto-complete quests while
+  in a Bank"; the same check as the fragments', `NearBank.LeagueMode.js`, before any renown is
+  spent; the message is the news's wording). Buying one completes the quests the Wiki's /Unlocks
+  table lists for it (main and additional quests) and for its prerequisite packs, each through its
+  own `quest.complete` (quest points, final rewards, the message, `quest:completed`), prerequisites
+  first. The Wiki: "Auto-completing quests will not grant the experience", so `complete(player, {
+  experience: false, scroll: false })`: no XP lands while they complete, a reward's later XP prompt
+  is held back (The Fremennik Isles reads the option), and the rewards that are XP in an item (the
+  lamps and Tomes of Experience in `experienceItems`, found by completing every pack) are taken
+  back. The quest runtime saves which quests were completed so (`quest.experienceWithheld`, the
+  attribute `quest.experience-withheld`), and their post-quest XP claims pay nothing: Ellen's
+  training (Dragon Slayer II), Daero's (Monkey Madness I; the Wiki: "No post-quest XP from Daero"),
+  Lydia's lamps (A Kingdom Divided), Veos's lamp (X Marks the Spot) and Ivan's tome (Sins of the
+  Father). There is no jingle or scroll per quest, so the unlocks screen stays open. Each quest
+  runs against an empty inventory; the character's own comes back, and the rewards go into it,
+  then the bank (counting what the bank really takes: a full bank or a capped stack takes less),
+  and what neither takes is dropped at the character's feet, as a quest reward past a full
+  inventory is (`forceAdd`). The other final rewards stay (Plague City's Ardougne teleport scroll,
   Monkey Madness II's royal seed pod, Roving Elves' crystal bow, Drakan's medallion). A quest that
   fails to complete is logged and the rest go on. Names this server registers no quest for are
   skipped: Recipe for Disaster's subquests (its plugin keeps them internally, with no completion
@@ -390,9 +399,8 @@ sets (Fast Metabolism, Knife's Edge, Greedy Gatherer, Personal Banker, The Alche
 Craftsman, Unchained Talent and the three that give a Sage item); fragments change only through
 Equip (dragging one into a slot isn't handled); the Display Fragments toggle (varbit 12383) is the
 client's own; unlocking Herblore doesn't yet complete Druidic Ritual and set the skill to 174 XP
-(Wiki /Unlocks footnote); the Sage's Check-pets. A Kingdom Divided's antique lamps come later
-from Commander Fullore's dialogue, outside the pack's completion, so they still give XP; and a
-quest the character had started keeps its quest items when a pack completes it.
+(Wiki /Unlocks footnote); the Sage's Check-pets. A quest the character had started keeps its
+quest items when a pack completes it.
 
 ## Relics
 

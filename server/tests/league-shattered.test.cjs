@@ -330,14 +330,14 @@ test("fragments change only in a bank, near a bank chest or near the Sage (Wiki 
   click(player, SIDE_PANEL, 30);
   const equip = (id) => click(player, FRAGMENTS, 18, { slot: 9 * (id - 1), opId: 2 });
   const swapAway = "You can only change your fragments in a bank, near a bank chest or near the Sage.";
-  const Fragments = require("../plugins/modes/league/Fragments.LeagueMode");
-  assert.equal(Fragments._test.nearBank(player), false, "the login tile (3089, 3524) has no bank in reach");
+  const { nearBank, banksAt } = require("../plugins/modes/league/NearBank.LeagueMode");
+  assert.equal(nearBank(player), false, "the login tile (3089, 3524) has no bank in reach");
   equip(1);
   assert.equal(player.sent.varbits.get(SLOT_VARBITS[0]) ?? 0, 0, "no equip away from a bank");
   assert.equal(player.sent.messages.at(-1), swapAway);
 
   at(player, CATHERBY_BANK);
-  assert.equal(Fragments._test.nearBank(player), true, "Catherby's bank booths are map locs a few tiles away");
+  assert.equal(nearBank(player), true, "Catherby's bank booths are map locs a few tiles away");
   equip(1);
   equip(4);
   assert.deepEqual(SLOT_VARBITS.slice(0, 2).map((varbit) => player.sent.varbits.get(varbit)), [1, 4], "in the bank");
@@ -360,9 +360,8 @@ test("fragments change only in a bank, near a bank chest or near the Sage (Wiki 
 
   const gnome = new core.NPC(core.NpcIdentifiers.GNOME_BANKER, new core.Location(2774, 3452, 0));
   player.getLocalNpcs().push(gnome);
-  assert.equal(Fragments._test.nearBank(player), true, "a banker of any name (its Bank option) is a bank");
+  assert.equal(nearBank(player), true, "a banker of any name (its Bank option) is a bank");
   player.getLocalNpcs().splice(player.getLocalNpcs().indexOf(gnome), 1);
-  const { banksAt } = Fragments._test;
   const loc = (id) => new core.GameObject(id, new core.Location(2806, 3442, 0), 10, 0, null);
   assert.equal(banksAt(loc(10355)), true, "Catherby's Bank booth");
   assert.equal(banksAt(loc(8142)), false, "a Closed bank booth, with no options, isn't");
@@ -385,9 +384,17 @@ test("a quest pack bought completes its quests as the quests do, with no XP (Wik
   emit("league:award-renown", { player, amount: 8 });
   click(player, SIDE_PANEL, 35);
   click(player, UNLOCKS, 9, { slot: 18 });
-  click(player, UNLOCKS, 18, { slot: 5 * packs.findIndex((params) => params.get(1437) === "Elf I") });
+  const elf1 = 5 * packs.findIndex((params) => params.get(1437) === "Elf I");
+  at(player, [3100, 3600, 0]);
+  click(player, UNLOCKS, 18, { slot: elf1 });
   click(player, UNLOCKS, 47);
-  assert.equal(emit("league:renown", { player }).renown, 0, "Elf I cost 8");
+  assert.equal(emit("league:renown", { player }).renown, 8, "in the Wilderness, away from a bank, nothing is spent");
+  assert.equal(quests.some((quest) => quest.isComplete(player)), false, "and nothing completes");
+  assert.equal(player.sent.messages.at(-1), "You can only auto-complete quests while in a bank.");
+  at(player, CATHERBY_BANK);
+  click(player, UNLOCKS, 18, { slot: elf1 });
+  click(player, UNLOCKS, 47);
+  assert.equal(emit("league:renown", { player }).renown, 0, "in Catherby's bank Elf I costs 8");
   for (const quest of quests) assert.equal(quest.isComplete(player), true, quest.name);
   assert.deepEqual(player.sent.messages.filter((text) => text.startsWith("Congratulations")),
     quests.map((quest) => `Congratulations, you've completed a quest: <col=081190>${quest.name}</col>`), "each as the quest itself completes");
@@ -534,6 +541,7 @@ test("quest packs: prices include incomplete prerequisites, and a pack unlocks i
   const varbitOf = (name) => 13544 + packs.find((params) => params.get(1437) === name).get(1444);
   assert.equal(player.sent.varbits.get(varbitOf("Elf II")), 31, "prices go out at login");
   emit("league:award-renown", { player, amount: 40 });
+  at(player, CATHERBY_BANK);
   click(player, SIDE_PANEL, 35);
   click(player, UNLOCKS, 9, { slot: 18 });
   click(player, UNLOCKS, 18, { slot: 5 * elf2 });
