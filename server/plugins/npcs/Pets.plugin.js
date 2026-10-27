@@ -19,6 +19,7 @@ const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemI
 const Recovery = require("./pets/Recovery.Pets");
 const Acquisition = require("./pets/Acquisition.Pets");
 const Dust = require("./pets/Dust.Pets");
+const Call = require("./pets/Call.Pets");
 
 const CURRENT_PET_ATTRIBUTE = "pets:current";
 /** The item of the follower the player logged out with; re-summoned on login. */
@@ -1019,8 +1020,7 @@ function stagePetIds(stage, colour) {
 }
 
 /** Swaps the follower for the next stage in place, keeping owner, area and variant. */
-function replaceFollowerNpc(player, npc, npcId, itemId) {
-  const location = npc.getLocation().clone();
+function replaceFollowerNpc(player, npc, npcId, itemId, location = npc.getLocation().clone()) {
   despawnPetNpc(npc);
   const replacement = NPC.create(npcId, location);
   replacement.setPet(true);
@@ -1837,6 +1837,7 @@ module.exports = {
     Recovery.attach(api, {pets: PETS, getOwnedPetItems, getPetForItemId, petFamily, getPetDisplayName, syncCollectionLog});
     Acquisition.attach(api);
     Dust.attach(api, {getPetByNpcId, petFamily, getMorphUnlocks, unlockMorphFamily});
+    Call.attach(api, {currentAttribute: CURRENT_PET_ATTRIBUTE, getPetByNpcId, canSummonPetHere, replaceFollowerNpc});
     TaskClass = api.core?.Task ?? null;
     TaskManagerRef = api.core?.TaskManager ?? null;
     NPCRespawnTaskRef = api.core?.NPCRespawnTask ?? null;
