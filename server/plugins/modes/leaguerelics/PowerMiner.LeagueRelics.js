@@ -29,9 +29,13 @@ function secondChance(request) {
   if (!request.success && withTool(request.player) && Math.random() < effect.secondChance) request.success = true;
 }
 
-/** The rock stands until its fourth ore. */
+/** The rock stands until its fourth ore; a rock depleted by anyone else starts its count afresh. */
 function keepRock(request) {
-  if (!withTool(request.player)) return;
+  if (!withTool(request.player)) {
+    // Another miner's last ore really depletes it; the respawned rock is the same object.
+    if (!request.handled) mined.delete(request.object);
+    return;
+  }
   const count = (mined.get(request.object) ?? 0) + 1;
   if (count < effect.oresPerRock) {
     mined.set(request.object, count);
@@ -62,13 +66,20 @@ function gather(request) {
   const { player, amount } = request;
   if (request.stored >= amount || request.skill !== core.Skill.MINING || !withTool(player)) return;
   const result = processed(player, request.itemId);
-  if (!Common.bank(player, result.itemId, amount - request.stored)) return;
-  request.stored = amount;
-  if (result.skill && result.xp > 0) player.getSkillManager().addExperiences(result.skill, result.xp * amount);
+  if (Common.bank(player, result.itemId, amount - request.stored)) {
+    request.stored = amount;
+    if (result.skill && result.xp > 0) player.getSkillManager().addExperiences(result.skill, result.xp * amount);
+    return;
+  }
+  // The processed item has no room: the ore itself, as it is.
+  if (result.itemId !== request.itemId && Common.bank(player, request.itemId, amount - request.stored)) request.stored = amount;
 }
 
+/** Mining's room (`storage:room` for Mining only): the bank takes what the pickaxe's mode makes of the ore, or the ore. */
 function room(request) {
-  if (!request.room && withTool(request.player) && Common.bankHasRoom(request.player, request.itemId)) request.room = true;
+  if (request.room || request.skill !== core.Skill.MINING || !withTool(request.player)) return;
+  const result = processed(request.player, request.itemId);
+  if (Common.bankHasRoom(request.player, result.itemId) || Common.bankHasRoom(request.player, request.itemId)) request.room = true;
 }
 
 module.exports = function attach(pluginApi) {
