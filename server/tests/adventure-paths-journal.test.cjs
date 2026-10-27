@@ -44,10 +44,16 @@ function actor(t, { experience = "new", iron = false } = {}) {
         return p.getPacketSender();
     });
     const mounts = [],
+        scripts = [],
         flags = [],
         out = p.getPacketSender(),
         mount = out.sendSubInterface.bind(out),
-        flag = out.sendInterfaceFlagsRange.bind(out);
+        flag = out.sendInterfaceFlagsRange.bind(out),
+        script = out.sendInterfaceScript.bind(out);
+    t.mock.method(out, "sendInterfaceScript", (...args) => {
+        scripts.push(args);
+        return script(...args);
+    });
     t.mock.method(
         out,
         "sendSubInterface",
@@ -67,7 +73,7 @@ function actor(t, { experience = "new", iron = false } = {}) {
         });
         p.setRegistered(false);
     });
-    return { p, connection, messages, mounts, flags };
+    return { p, connection, messages, mounts, flags, scripts };
 }
 
 const C = () => core.CacheDefinitions;
@@ -471,4 +477,101 @@ test("welcome Play restores the preferred journal after the raw gameframe bootst
         before + 1,
     );
     assert.equal(state(f).journal, true);
+});
+
+async function nativeWidget(f, name, slot, action = 1) {
+    const widgetId = uid(name);
+    await f.connection.dispatch([{
+        type: "widget_action", widgetId, groupId: widgetId >>> 16,
+        childId: widgetId & 65535, slot, itemId: -1, buttonNum: action,
+    }]);
+    f.connection.processTurnPackets();
+}
+
+test("native overview uses the centered 334px modal and enables only the cache path-eye op4 slots", (t) => {
+    const f = actor(t);
+    login(f);
+    jon(f);
+    assert.deepEqual(f.scripts.find(([id]) => id === 917)?.[1], [-1, -1]);
+    for (const slot of [38, 77]) {
+        const range = f.flags.filter(([id, from, to]) =>
+            id === uid("adventurepath:paths") && slot >= from && slot <= to).at(-1);
+        assert.equal(range?.[3] & (1 << 4), 1 << 4);
+    }
+    const ordinary = f.flags.filter(([id, from, to]) =>
+        id === uid("adventurepath:paths") && 49 >= from && 49 <= to).at(-1);
+    assert.equal(ordinary?.[3] & (1 << 4), 0);
+});
+
+test("native reward Back is child9 and child0 cannot impersonate it", async (t) => {
+    const f = actor(t);
+    login(f);
+    jon(f);
+    f.p.getPacketSender().sendConfig(C().getVarpId("adventurepath_selected_path"), 1);
+    await nativeWidget(f, "adventurepath:path_reward", 9);
+    assert.equal(f.p.getInterfaceId(), group("adventurepath_reward"));
+    const range = f.flags.filter(([id]) => id === uid("adventurepath_reward:item_holder")).at(-1);
+    assert.deepEqual(range?.slice(1), [9, 9, 2]);
+    await nativeWidget(f, "adventurepath_reward:item_holder", 0);
+    assert.equal(f.p.getInterfaceId(), group("adventurepath_reward"));
+    await nativeWidget(f, "adventurepath_reward:item_holder", 9);
+    assert.equal(f.p.getInterfaceId(), group("adventurepath"));
+});
+
+test("native path focus sets and drops both paths, preserves task/recommendation bits and survives state reload", async (t) => {
+    const f = actor(t);
+    login(f);
+    jon(f);
+    const out = f.p.getPacketSender(),
+        focus = C().getVarbitId("adventurepath_path_in_focus"),
+        task = C().getVarbitId("adventurepath_gatherer_task_focus"),
+        base = C().getVarpId("adventurepath_in_focus"),
+        trigger = C().getVarpId("adventurepath_focus_trigger"),
+        before = out.getVarp(base),
+        beforeTrigger = out.getVarp(trigger);
+    out.sendVarbit(task, 1);
+    await nativeWidget(f, "adventurepath:paths", 77, 4);
+    assert.equal(out.getVarbit(focus), 1);
+    assert.equal(out.getVarbit(task), 1);
+    assert.equal(out.getVarp(base) & (31 << 16), before & (31 << 16));
+    assert.equal(state(f).settings[base] & (31 << 16), 0, "recommendation is server-owned");
+    assert.notEqual(out.getVarp(trigger), beforeTrigger, "native panel listeners must redraw");
+    const g = actor(t);
+    g.p.setAttribute("adventure-paths:state", JSON.parse(JSON.stringify(state(f))));
+    login(g);
+    assert.equal(g.p.getPacketSender().getVarbit(focus), 1);
+    const def = C().getVarbit(focus), none = (1 << (def.endBit - def.startBit + 1)) - 1;
+    await nativeWidget(f, "adventurepath:paths", 77, 4);
+    assert.equal(out.getVarbit(focus), none);
+    await nativeWidget(f, "adventurepath:paths", 38, 4);
+    assert.equal(out.getVarbit(focus), 0);
+    await nativeWidget(f, "adventurepath:paths", 38, 4);
+    assert.equal(out.getVarbit(focus), none);
+});
+
+test("native focus rejects forged rows, wrong operations, closed windows, dead and trading players", async (t) => {
+    for (const mode of ["forged", "operation", "closed", "dead", "trading"]) {
+        const f = actor(t);
+        login(f);
+        jon(f);
+        const out = f.p.getPacketSender(), id = C().getVarbitId("adventurepath_path_in_focus"),
+            before = out.getVarbit(id);
+        if (mode === "closed") out.sendInterfaceRemoval();
+        if (mode === "dead") f.p.setHitpoints(0);
+        if (mode === "trading") f.p.setStatus(core.PlayerStatus.TRADING);
+        await nativeWidget(f, "adventurepath:paths", mode === "forged" ? 76 : 77, mode === "operation" ? 1 : 4);
+        assert.equal(out.getVarbit(id), before, mode);
+    }
+});
+
+test("a completed path's noninteractive tick cannot be forged into a focus action", async (t) => {
+    const f = actor(t);
+    for (const skill of [core.Skill.FISHING, core.Skill.MINING, core.Skill.WOODCUTTING])
+        f.p.getSkillManager().setMaxLevels(skill, 5, false);
+    login(f);
+    jon(f);
+    assert.ok([16, 17, 18].every(id => state(f).completed.includes(id)));
+    const id = C().getVarbitId("adventurepath_path_in_focus"), before = f.p.getPacketSender().getVarbit(id);
+    await nativeWidget(f, "adventurepath:paths", 77, 4);
+    assert.equal(f.p.getPacketSender().getVarbit(id), before);
 });
