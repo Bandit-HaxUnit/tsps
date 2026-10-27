@@ -420,8 +420,13 @@ locked for good.
 - `::leaguetask <id> <points> [name]` - award yourself a task through the real award path (the
   task catalog, LeagueTasks, does not exist yet).
 - `::relic [tier 1-8] [slot 1-3]` - list your relics, or choose one through the usual checks.
-- `::leaguerecords <trophies|statistics|rankings|firsts>` - open a main-game record screen. ## Not
-yet League tasks, combat masteries, the other tier passives (drop rates, run energy, clue boxes,
+- `::areas [id or name]` - list your areas, the next unlock and the area you stand in, or unlock
+  one through the usual checks (`::area` is AdminCommands' Area-class debug).
+- `::leaguerecords <trophies|statistics|rankings|firsts>` - open a main-game record screen.
+
+## Not yet
+
+League tasks, combat masteries, the other tier passives (drop rates, run energy, clue boxes,
 minigame points, the ironman restriction), the reward and skill cape shops, and Shattered Relics'
 own panels. Each is its own item on the progress tracker. The records have no POH league hall to
 stand in: its trophy case, pedestals and scroll need the house's league hall, which this server
