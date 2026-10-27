@@ -30,11 +30,16 @@ function probability(text) {
   return match && Number(match[2]) > 0 ? Number(match[1]) / Number(match[2]) : null;
 }
 
-/** Base rolls plus the table's chance-based tertiaries (milestone tertiaries belong to ClueCapacity). */
-function roll(tier, { entrana = false, random = Math.random, rolls = null } = {}) {
+/**
+ * Base rolls plus the table's chance-based tertiaries (milestone tertiaries belong to ClueCapacity).
+ * With a `player`, the uniques left after Entrana's filter are as likely as "drops:chance" makes
+ * them (Rolls.uniqueMultiplier, shared with the Mimic's roll).
+ */
+function roll(tier, { entrana = false, random = Math.random, rolls = null, player = null } = {}) {
   const table = TABLES[tier.name];
   if (!table) throw new Error(`No ${tier.name} reward table`);
-  const drops = Rolls.rollTable(entrana ? entranaTable(table) : table, rolls ?? between(table.rolls, random), random);
+  const drops = Rolls.rollTable(entrana ? entranaTable(table) : table, rolls ?? between(table.rolls, random), random,
+    Rolls.uniqueMultiplier(api, player));
   for (const tertiary of table.tertiary ?? []) {
     const chance = probability(tertiary.probability);
     if (chance != null && random() < chance) drops.push({ itemId: tertiary.item_id, amount: between(tertiary.quantity, random), noted: tertiary.noted });
@@ -148,7 +153,7 @@ function open(event) {
       mimic = mimicCasket(player, tier, rolls, count);
       if (mimic) drops = milestoneDrops(player, tier, count);
       else {
-        const request = { player, completed: count, milestones: TABLES[tier.name]?.milestones ?? [], drops: roll(tier, { entrana: onEntrana(player), rolls }), handled: false, error: null };
+        const request = { player, completed: count, milestones: TABLES[tier.name]?.milestones ?? [], drops: roll(tier, { entrana: onEntrana(player), rolls, player }), handled: false, error: null };
         api.emitCustomEvent("treasure-trails:milestone-rewards", request);
         if (!request.handled || request.error) throw request.error ?? new Error("Treasure Trails milestone service unavailable");
         drops = prepareDrops(clueRewards(player, [...request.drops, ...itemMilestones(player, tier, count)]), tier);

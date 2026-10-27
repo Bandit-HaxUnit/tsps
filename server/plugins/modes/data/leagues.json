@@ -1,5 +1,5 @@
 {
-  "$comment": "Leagues (docs/leagues.md), used by plugins/modes/LeagueMode.plugin.js and LeaguePoints.plugin.js. A league character is the account's separate save a league world logs it into (persistence/PlayerProfile); world.json pluginConfig `league:type` names the league, and `default` only stands in for a type this data does not know. Varbits, varps, scripts and texts are from rsprox Leagues V recordings (osrs-captures 227/00070, 227/00075, 227/00579); the leagues' own numbers (XP rates, starting levels; the relic tiers are league-relics.json) are the Wiki's (each league's page). `struct` is the cache's league struct (enum 2670 by league type) whose params the client reads; `colour` is its param 2050 as an RGB int; `unlockSpotanim` its param 1021; `name` its param 858.",
+  "$comment": "Leagues (docs/leagues.md), used by plugins/modes/LeagueMode.plugin.js and LeaguePoints.plugin.js. A league character is the account's separate save a league world logs it into (persistence/PlayerProfile); world.json pluginConfig `league:type` names the league, and `default` only stands in for a type this data does not know. `ironmanMode` is the Ironman mode every league character plays as (the Wiki's 'Player restrictions'). Varbits, varps, scripts and texts are from rsprox Leagues V recordings (osrs-captures 227/00070, 227/00075, 227/00579); the leagues' own numbers (XP rates, starting levels; the relic tiers are league-relics.json) are the Wiki's (Trailblazer_Reloaded_League, Raging_Echoes_League and their /Relics pages). `struct` is the cache's league struct (enum 2670 by league type) whose params the client reads; `colour` is its param 2050 as an RGB int; `unlockSpotanim` is param 1021 and `name` param 858. `passives` are the relic tiers' passive effects (the Relics pages' Tier N bullets), each from the 1-based tier named by `fromTier` (a map picks the highest tier reached): `dropRate` multiplies the boosted drops (league-boosted-drops.json), `runEnergy` stops running from draining energy, `scrollBoxes` drops clue scrolls as scroll boxes without a limit, `minigamePoints` multiplies points asked over `minigame:points`, `slayer` gives Bigger and Badder, superiors 1 in `superiorChance`, task points x `pointsMultiplier` after `freeTasks` tasks, and `combatXp` multiplies the listed skills' XP (Raging Echoes only). Applied by league/Passives.LeagueMode.js and league/BoostedDrops.LeagueMode.js.",
   "default": 4,
   "varbits": {
     "account": 10031,
@@ -23,6 +23,7 @@
     "leagueWorld": 1073741824
   },
   "tutorialCompletedValue": 12,
+  "ironmanMode": "ironman",
   "journal": {
     "_comment": "The side journal's Leagues tab (side_journal 629:34) mounts the league side panel (656) in the journal's content container (629:43), as the other tabs do on this client; live mounted it in its own tab slot. Script 3226 fills the panel's points bar (656:23) after every award, as captured.",
     "group": 629,
@@ -36,7 +37,7 @@
     "sidePanelByLeague": { "3": 736 }
   },
   "content": {
-    "_comment": "The structs and enums a league needs that the cache does not carry are sent together as one structOverrides / enumOverrides payload (GamemodeContentStore replaces the whole set on each payload). Virtual ids start at virtualIdBase + league type x 1000; each unit keeps its own offsets (relics 0-199, ranks 900-901).",
+    "_comment": "The structs, enums and DB rows a league needs that the cache does not carry are sent together as one structOverrides / enumOverrides / dbRowOverrides payload (GamemodeContentStore replaces the whole set on each payload). Virtual struct and enum ids start at virtualIdBase + league type x 1000; each unit keeps its own offsets (relics 0-199, ranks 900-901). The tasks' DB rows have their own ids (league-task-list.json virtualRowBase) and replace the cache's task enums 5950 and 2671.",
     "virtualIdBase": 200000
   },
   "panels": {
@@ -80,9 +81,11 @@
   "messages": {
     "notLeague": { "text": "{name} is not a league character.", "source": "ours" },
     "status": { "text": "{name}: {league}, {points} League Points from {tasks} tasks.", "source": "ours" },
-    "taskUsage": { "text": "Use ::leaguetask <id> <points> [name].", "source": "ours" },
+    "taskUsage": { "text": "Use ::leaguetask <task id>, or ::leaguetask <id> <points> [name] for an ad-hoc task.", "source": "ours" },
     "taskAwarded": { "text": "Awarded league task {id} ({points} points) to {name}.", "source": "ours" },
-    "taskRepeat": { "text": "{name} already has league task {id}.", "source": "ours" }
+    "taskCompleted": { "text": "Completed league task {id} for {name}.", "source": "ours" },
+    "taskRepeat": { "text": "{name} already has league task {id}.", "source": "ours" },
+    "ironmanLocked": { "text": "As a league character, you are always an Ironman.", "source": "ours (Wiki: every league player is an Ironman)" }
   },
   "records": {
     "_comment": "The main game's league records (osrs-captures 229/00690, 00691, 00693, 00700-00702). Each screen opens as the main modal after script 2524 (-1, -1). Trophies (league_trophies 447; the Leagues Tutor's Claim-trophies, its dialogue's open_interface 'League trophies' and the POH trophy case open it): if_setevents 447:3 OP1 OP10 from slot 0 to the number of trophies (0-35 with rev 229's 35; this cache lists 42), then script 1128 with the title and five 32-bit masks over enum 2778's trophies. A set bit shows 'Take', a clear one 'Store' (scripts 1128, 1130). The client hides a trophy the character hasn't earned: script 1129 compares the trophy's param 917 (the points it needs) with the varp script 9462 reads for its league (param 916). Each click resends the masks through script 1130. The accomplishment scroll's League-statistics opens 449 with script 1110: header, statistics, scrollbar and close components, the owner's name, then one points total per league in league order. League-rankings opens 445 and nothing else. League-firsts opens 676 with script 3698 (nine components and the league shown) and if_setevents 676:22 OP1 over one slot per league; a pick in that dropdown (676:22, sub = the league) sends both again.",
@@ -167,7 +170,14 @@
       "colour": 16742144,
       "unlockSpotanim": 2603,
       "xpMultiplier": { "base": 5, "fromTier": { "2": 8, "5": 12, "7": 16 } },
-      "startingLevels": { "HERBLORE": 3, "RUNECRAFTING": 5, "AGILITY": 10 }
+      "startingLevels": { "HERBLORE": 3, "RUNECRAFTING": 5, "AGILITY": 10 },
+      "passives": {
+        "dropRate": { "fromTier": { "1": 2, "4": 3, "6": 4, "8": 5 } },
+        "runEnergy": { "fromTier": 1 },
+        "scrollBoxes": { "fromTier": 1 },
+        "minigamePoints": { "fromTier": { "2": 3, "5": 5, "7": 8 } },
+        "slayer": { "fromTier": 4, "pointsMultiplier": 5, "freeTasks": 0, "biggerAndBadder": true, "superiorChance": 50 }
+      }
     },
     "5": {
       "key": "raging-echoes",
@@ -178,7 +188,15 @@
       "unlockSpotanim": 3044,
       "xpMultiplier": { "base": 5, "fromTier": { "2": 8, "5": 12, "7": 16 } },
       "_startingLevels": "Wiki Raging_Echoes_League: level 3 Herblore and level 5 Runecraft.",
-      "startingLevels": { "HERBLORE": 3, "RUNECRAFTING": 5 }
+      "startingLevels": { "HERBLORE": 3, "RUNECRAFTING": 5 },
+      "passives": {
+        "dropRate": { "fromTier": { "1": 2, "4": 5 } },
+        "runEnergy": { "fromTier": 1 },
+        "scrollBoxes": { "fromTier": 1 },
+        "minigamePoints": { "fromTier": { "1": 4, "4": 8 } },
+        "slayer": { "fromTier": 3, "pointsMultiplier": 5, "freeTasks": 0, "biggerAndBadder": true, "superiorChance": 50 },
+        "combatXp": { "fromTier": 3, "multiplier": 2, "skills": ["ATTACK", "STRENGTH", "DEFENCE", "RANGED", "MAGIC", "HITPOINTS", "PRAYER"] }
+      }
     },
     "6": {
       "key": "demonic-pacts",
