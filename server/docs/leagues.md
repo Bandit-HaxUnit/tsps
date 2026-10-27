@@ -69,7 +69,7 @@ relics are the first askers; nothing changes when nobody answers):
 | `combat-special:cost` | core `CombatSpecial` (the energy check and the drain) | `{ player, specialId, cost, available, allow, phase }`; `phase` is "check" or "drain"; `allow` lets a short player use it |
 | `combat-special:regenerate` | core `RestoreSpecialAttackTask` | `{ player, amount }` a restore cycle (the cycle length is the lightbearer modifier's) |
 | `skills:experience-gained` | core `SkillManager.addExperience`, after the gain | `{ player, skill, experience, multiplied }` |
-| `storage:gather` (extended) | Mining, Woodcutting, Fishing | the existing `{ player, itemId, amount, stored }` now carries `skill` and the resource's `xp`, so a listener can bank or double what a skill gathered |
+| `storage:gather`, `storage:room` (extended) | Mining, Woodcutting, Fishing | the existing `{ player, itemId, amount, stored }` now carries `skill` and the resource's `xp`, so a listener can bank or double what a skill gathered; `storage:room` carries `skill` too, so a relic answers room only for its own skill's resource (and for what its tool's mode turns it into) |
 | `mining:attempt`, `woodcutting:attempt`, `fishing:attempt` | the skill, after its success roll | `{ player, ..., success }`: a listener may turn a miss into a hit (Fishing then lands the best fish the player can) |
 | `mining:deplete-rock` | Mining | `{ player, object, rock, handled }`: handled keeps the rock standing |
 | `fishing:tool`, `fishing:interval` | Fishing | `{ player, variants, variant }` when no tool was found; `{ player, ticks }` before each catch roll |
@@ -187,7 +187,8 @@ These relics have their effects (`leaguerelics/*.LeagueRelics.js`, numbers in th
   below 3 rounded up, so 3, 4 and 5 all become 2 as the Wiki's notes say), ranged accuracy x2,
   on a landed ranged hit a 10% chance of an extra `PendingHit` at the same target with a roll of
   its own (no ammunition spent and no projectile shown for it, a second hitsplat: ours; the extra
-  never fires another), 90% of each volley's
+  never fires another, and is an ordinary shot: a special armed after the original shot stays
+  armed, `PendingHitConfig.ordinary`), 90% of each volley's
   shots kept (`ranged:ammo-saving`, so an Ava's device recovers its share of the rest, the
   Wiki's 98%), the same 90% for a ranged weapon's charge (`combat:consume-charge` while the
   player's combat method is ranged: the crystal bow, venator bow, blowpipe scales and
@@ -235,7 +236,8 @@ These relics have their effects (`leaguerelics/*.LeagueRelics.js`, numbers in th
   food is refused (`onCanEat`) and any other heal is undone on the next tick (the Wiki forbids
   healing above 1 by any means and names no mechanism: ours). A tick task drains each boost 16 a
   tick down to base + 15; when the window closes the player is
-  healed by the damage they dealt in it, capped at their max (ours: the Wiki shows a bar over the
+  healed by the damage their hits did as they landed in it (`HitDamage.onApplied`: an impact
+  cancelled before it lands counts nothing), capped at their max (ours: the Wiki shows a bar over the
   head and gives no formula; no bar here). Once every three minutes, reset by a real death
   (`league:last-stand-ready-at`). Not done: the Wiki's instant-kill exceptions (they are not
   hits here either), and the skills packet carries a boost as a byte, so the client's boost
