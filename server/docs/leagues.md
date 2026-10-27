@@ -152,6 +152,16 @@ relics are the first askers; nothing changes when nobody answers):
 | `farming:open-seed-vault` | Farming (the guild's seed vault) | `{ player, opened }`: the vault's menu from anywhere, behind the Bank PIN as at the guild |
 | `miscellania:rules` | Managing Miscellania | `{ player, ruler, royalTrouble, payMultiplier, outputMultiplier, approval, visiting }`: who rules the kingdom (the quests), what the workers' pay costs, how much they gather (clues as rolled), an approval held fixed, whether a catch-up away from the islands counts as a visit |
 | `miscellania:open` (extended), `miscellania:check`, `miscellania:collect` | Managing Miscellania | `{ player, opened }` opens the kingdom's interface; `{ player, handled }` reports the approval and coffers, or collects as Advisor Ghrim's Collect does |
+| `npc-drops:tertiary-chance` (extended) | NpcDrops | a rule may give `outOf` (each matching entry at least 1 in that many) or `guarantee` (the rarest matching entry when none hit) instead of `multiplier` |
+| `hunter:impling-clue-chance` | Hunter, opening an impling jar | `{ player, impling, tier, oneIn }` for each clue the jar can hold |
+| `treasure-trails:vessel-chance` | Woodcutting and Hunter (clue nests), Mining (geodes), Hunter's drift nets and aerial fishing (bottles) | `{ player, vessel, tier, multiplier }`: the vessel `multiplier` times as likely |
+| `treasure-trails:trail-length`, `treasure-trails:casket-rolls` | Treasure Trails (both trail kinds) | `{ player, tier, length, minimum, maximum }` as a trail starts; `{ player, tier, rolls, minimum, maximum }` as a casket opens; both kept within the tier's range |
+| `treasure-trails:casket-opened` | Treasure Trails' caskets | `{ player, tier }` after a casket's rewards are handed over (not the Mimic's) |
+| `treasure-trails:requirement-waived` | Treasure Trails | `{ player, kind, waived }`: `kind` "emote" (what to wear), "falo" (the item to show) or "charlie" (the item to bring) |
+| `slayer:always-on-task` | Slayer, for a Slayer monster the task does not cover | `{ player, npc, npcId, name, onTask }`: counted as on task everywhere `slayer:on-task` is asked, and a kill gives its Slayer XP and superior chance without counting down the task (`offTask` on `slayer:task-kill`; no keys) |
+| `slayer:superior-spawned`, `slayer:superior-rewards` | Slayer's superiors | `{ player, npc, superior }`; `{ player, npc, normalId, drops, uniqueBoost, extraRolls }` as a superior drops: more rolls on the normal monster's table, a higher unique chance, drops of its own |
+| `slayer:reward-cost` | Slayer's reward shop | `{ player, kind, cost, bit?, itemId? }` for an unlock, extension, cancel, block or purchase; never below 0 |
+| `slayer:bracelet`, `slayer:remote-task` | Slayer | `{ player, npc, bracelet, chance, consumeCharge }` for the bracelet of slaughter; `{ player, allowed }` after a gem, ring or helmet check: a new task from the last master or a cancel, from anywhere |
 
 ## What the client is sent
 
@@ -691,6 +701,45 @@ Animal Wrangler's Hunter and cooking ones) do not.
   the hourly cycle and its 37,500 coins an hour once the coffers hold 375,000; the kingdom keeps
   its daily cycle.
 
+### The clue and Slayer relics
+
+- **Treasure Seeker** (Trailblazer Reloaded tier 5, and the catalog's tier 3 preview of it) and
+  **Treasure Arbiter** (Raging Echoes tier 5) share their clue perks: each clue scroll an NPC
+  drops comes at least 1 time in 15 (the Wiki's "a 1/15 chance to drop one", read per clue:
+  ours), and an impling jar's too; clue nests (trees, birdhouses), geodes and bottles (drift nets,
+  aerial fishing) come 10 times as often (Fishing has no clue bottles here); every trail has its
+  tier's fewest steps (1 to 6) and every casket its tier's most rolls (3 to 7; the data's ranges
+  are the Wiki's).
+- **Treasure Seeker** also brings another reward casket from an opened one (not the Mimic's), at
+  times a tier higher (never above master), to the inventory or else the bank. The Wiki gives
+  no numbers ("more common at lower tiers"): ours, 1 in 5 for a beginner casket down to 1 in 20
+  for a master one, a quarter of them upgraded. The messages are ours; with neither inventory nor
+  bank room the casket is not given, and a message says so.
+- **Treasure Arbiter** also lifts the item requirements of emote steps (what to wear; the elite
+  and master steps' Uri outfits are part of the step, not lifted), Falo the Bard's songs (any item
+  shown is right, but something must still be shown to him: ours, his steps answer only to an item
+  used on him) and Charlie the Tramp's errands (he is thanked without it).
+- **Bloodthirsty** (Trailblazer Reloaded tier 5): the enchanted gem, slayer ring and slayer
+  helmet's check offers a new task from the last master or a cancel at the usual price
+  (`slayer:remote-task`; not Mortimer's tasks, a choice with modifiers made in person: ours); the bracelet of slaughter works 35% of the time and uses no charge;
+  superiors come 1 time in 25; each gives Slayer points (ours: 5 plus a fifth of its Slayer
+  requirement, the Wiki says only "based on" it) and six more rolls on its normal monster's table;
+  a quarter spawn bloodthirsty (a message of ours says so): nine rolls, a clue scroll for sure when
+  its table has one (the rarest the player can take now, by its chance), three times the unique chance and a roll on the bloodthirsty
+  table (Wiki, Bloodthirsty Nechryarch). Not here: the expeditious bracelet (not in this server);
+  the variants' stronger stats, names and icon (no NPCs of their own in this cache).
+- **Slayer Master** (Raging Echoes tier 5): every Slayer monster counts as on task
+  (`slayer:always-on-task`; a monster some task counts, not one only a boss task gives): its Slayer
+  XP, its superior (with Bigger and Badder), the slayer helmet's bonus and every "on task" check,
+  without counting down the real task. So combat achievements done "without a Slayer task" cannot
+  be done on those monsters with the relic (ours: the Wiki does not say); the reward
+  shop's unlocks, extensions, cancels and blocks and its rune pouch, herb sack and looting bag cost
+  no points (`slayer:reward-cost`; unlocks still take a click: ours); and the 100th kill of each
+  Slayer monster (by name) gives bonus Slayer XP, "You gain [X] bonus Slayer XP." (Wiki), from
+  1,000 at Slayer level 1 to 15,000 at 99 in a straight line (ours), with the usual multipliers.
+  Not here: Brimstone and Larran's keys anywhere (they follow the league's areas; off-task kills
+  drop no keys).
+
 ### Equilibrium (both leagues)
 
 Trailblazer Reloaded's tier 6 and Raging Echoes' tier 4: every gain of experience
@@ -1053,9 +1102,9 @@ above (clue-step progress and farming ticks), the boosted sources their own plug
 ask about, Shattered
 Relics' own panels. Each is its own item on the
 progress tracker.
-Of the relics, the clue, slayer and item ones follow in their own PRs (the plan in the relic
-effects PR); Overgrown's automatic harvest and replanting and Pocket Kingdom's hourly cycle are
-their own items.
+Of the relics, the item and teleport ones follow in their own PR (the plan in the relic effects
+PR); Overgrown's automatic harvest and replanting and Pocket Kingdom's hourly cycle are their own
+items.
 
 The records have no POH league hall to stand in: its trophy case, pedestals and scroll need
 the house's league hall, which this server doesn't build yet, so the scroll's options answer

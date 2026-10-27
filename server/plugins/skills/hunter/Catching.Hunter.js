@@ -249,7 +249,11 @@ function rewards(player, def) {
     MAGPIE: [["HARD", 50]], NINJA: [["HARD", 25]], DRAGON: [["ELITE", 50]], CRYSTAL: [["ELITE", 50]] };
   for (const [tier, denominator] of clues[def.key] ?? []) {
     const id = I[`${C.questComplete(player, "x_marks_the_spot") ? "SCROLL_BOX" : "CLUE_SCROLL"}_${tier}_`];
-    if (roll(1, denominator) === 1 && !C.ownsClue(player, tier)) result.push([id, 1]);
+    // Content may make the jar's clue likelier ("hunter:impling-clue-chance", a league relic): 1 in `oneIn`.
+    const chance = { player, impling: def.key, tier: tier.toLowerCase(), oneIn: denominator };
+    H.api.emitCustomEvent("hunter:impling-clue-chance", chance);
+    const oneIn = Number.isInteger(chance.oneIn) && chance.oneIn > 0 ? chance.oneIn : denominator;
+    if (roll(1, oneIn) === 1 && !C.ownsClue(player, tier)) result.push([id, 1]);
   }
   return result;
 }

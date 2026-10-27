@@ -98,9 +98,25 @@ function tierOfItem(id) {
   return TIERS.find(tier => data(tier).byItem.has(id)) ?? null;
 }
 
-function trailLength(tier, random = Math.random) {
+function trailLength(tier, random = Math.random, player = null) {
   const [minimum, maximum] = tier.length;
-  return minimum + Math.floor(random() * (maximum - minimum + 1));
+  const length = minimum + Math.floor(random() * (maximum - minimum + 1));
+  if (!player) return length;
+  // Content may set a new trail's length within its tier's ("treasure-trails:trail-length", a league relic's shortest trails).
+  const request = { player, tier: tier.name, length, minimum, maximum };
+  api?.emitCustomEvent?.("treasure-trails:trail-length", request);
+  return Number.isInteger(request.length) ? Math.max(minimum, Math.min(maximum, request.length)) : length;
+}
+
+/**
+ * "treasure-trails:requirement-waived" { player, kind, waived }: content may lift a step's item
+ * requirement (a league relic): `kind` is "emote" (what to wear), "falo" (the item to show) or
+ * "charlie" (the item to bring).
+ */
+function requirementWaived(player, kind) {
+  const request = { player, kind, waived: false };
+  api?.emitCustomEvent?.("treasure-trails:requirement-waived", request);
+  return request.waived === true;
 }
 
 function validState(tier, item, state) {
@@ -128,7 +144,7 @@ function stateOf(player, slot, random = Math.random) {
   if (validState(tier, item, current)) return { tier, item, slot, state: current, step: data(tier).byRow.get(current.row) };
   // A clue without a trail (a drop, box or vessel) starts one on a random step of its tier.
   const step = pick(data(tier).rollable, random);
-  const state = { version: 1, token: randomUUID(), revision: 0, completed: 0, length: trailLength(tier, random), row: step.row, ...stepState(tier, step, random) };
+  const state = { version: 1, token: randomUUID(), revision: 0, completed: 0, length: trailLength(tier, random, player), row: step.row, ...stepState(tier, step, random) };
   const replacement = stepItem(tier, step, state);
   inventory.setItem(slot, replacement);
   inventory.refreshItems();
@@ -572,7 +588,7 @@ function wearing(player, requirement) {
 
 function emoteReady(player, step) {
   return step.family === "emote" && distance(location(player), step.location) <= EMOTE_RADIUS &&
-    step.equipment.every(requirement => wearing(player, requirement));
+    (step.equipment.every(requirement => wearing(player, requirement)) || (step.equipment.length > 0 && requirementWaived(player, "emote")));
 }
 
 function emote({ player, slot }) {
@@ -660,4 +676,4 @@ module.exports = function attachTreasureTrails(pluginApi) {
 
 Object.assign(module.exports, { META_PREFIX, EMOTE_RADIUS, MUSIC_RADIUS, data, tierOfItem, trailLength, stateOf, trails, read, checkSteps,
   advance, nextItem, puzzleSlot, lightSlot, boxSlot, auxiliarySlot, handOutPuzzle, summon, liveEncounter, partsText, wearing, TORN_PARTS, MASTER_PARTS, startedTrails, stillHeld, rollable, talk, search, keyDrop, killDrop, dig, emote, encounterDied,
-  songPlayed, emoteReady, answered, clueText, restore, categoryCount, completedAttribute, metaKey });
+  songPlayed, emoteReady, answered, clueText, restore, categoryCount, completedAttribute, metaKey, requirementWaived });

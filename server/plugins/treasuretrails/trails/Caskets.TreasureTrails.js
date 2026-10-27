@@ -149,7 +149,14 @@ function open(event) {
       const completed = Number(player.getAttribute(Runtime.completedAttribute(tier)) ?? 0);
       if (!Number.isSafeInteger(completed) || completed < 0 || completed >= Number.MAX_SAFE_INTEGER) throw new Error(`Invalid ${tier.name} completion count`);
       count = completed + 1;
-      const rolls = TABLES[tier.name] ? between(TABLES[tier.name].rolls, Math.random) : null;
+      let rolls = TABLES[tier.name] ? between(TABLES[tier.name].rolls, Math.random) : null;
+      if (rolls != null) {
+        // Content may change how many times the casket rolls, within its tier's ("treasure-trails:casket-rolls", a league relic).
+        const [minimum, maximum] = TABLES[tier.name].rolls;
+        const request = { player, tier: tier.name, rolls, minimum, maximum };
+        api?.emitCustomEvent?.("treasure-trails:casket-rolls", request);
+        if (Number.isInteger(request.rolls)) rolls = Math.max(minimum, Math.min(maximum, request.rolls));
+      }
       mimic = mimicCasket(player, tier, rolls, count);
       if (mimic) drops = milestoneDrops(player, tier, count);
       else {
@@ -188,6 +195,8 @@ function open(event) {
       [Runtime.data(tier).rewardInventory]: { capacity: Math.max(3, slots.length), slots },
     });
     player.sendMessage(`<col=ef1020>Your treasure is worth around ${worth(drops).toLocaleString("en-US")} coins!</col>`);
+    // "treasure-trails:casket-opened" { player, tier }: a casket was opened for its rewards (a league relic's bonus casket).
+    api?.emitCustomEvent?.("treasure-trails:casket-opened", { player, tier: tier.name });
   } finally {
     player.setAttribute(OPENING_ATTRIBUTE, false);
   }

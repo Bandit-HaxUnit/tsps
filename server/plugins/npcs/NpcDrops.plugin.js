@@ -463,7 +463,9 @@ const WILDERNESS_CLUE = /^clue scroll \((?!beginner\))/i;
  * What makes tertiary drops likelier for this kill, asked once per kill: rules
  * { pattern, multiplier } matched against each entry's name. An imbued ring of wealth doubles
  * clue scrolls in the Wilderness, and plugins answer npc-drops:tertiary-chance
- * { player, npc, npcId, rules } by pushing their own (Mortimer's clue tasks).
+ * { player, npc, npcId, rules } by pushing their own (Mortimer's clue tasks). A rule may instead
+ * give `outOf`, a chance of at least 1 in that many for each matching entry, or `guarantee`, one
+ * matching entry (the rarest of those `accept(entry)` allows) when none hit (league relics' clue scrolls).
  */
 function tertiaryRules(player, npc) {
   const rules = [];
@@ -477,10 +479,14 @@ function tertiaryRules(player, npc) {
 /** The product of the rules whose pattern matches the entry's name (tertiary rules, chance rules). */
 function rulesMultiplier(entry, rules) {
   let multiplier = 1;
+  let floor = 0;
   for (const rule of rules) {
-    if (rule.pattern.test(entry.name || "")) multiplier *= rule.multiplier;
+    if (!rule.pattern.test(entry.name || "")) continue;
+    if (Number.isFinite(rule.multiplier)) multiplier *= rule.multiplier;
+    // At least 1 in `outOf`: the multiplier that brings this entry's weight/out_of up to it.
+    if (rule.outOf > 0) floor = Math.max(floor, Number(entry.out_of) / ((Number.isInteger(entry.weight) ? entry.weight : 1) * rule.outOf));
   }
-  return multiplier;
+  return Math.max(multiplier, floor);
 }
 
 function rollSharedTable(name, player, depth = 0) {
@@ -645,6 +651,7 @@ function rollTable(table, player, npc, context = killContext(player, npc), sourc
     const entry = OrderedRewards.group(group.entries, row => rulesMultiplier(row, rules) * entryMultiplier(table, row, chance));
     if (entry) drops.push(...resolveEntry(entry, player, context));
   }
+  const hitNames = new Set();
   for (const entry of table.tertiary || []) {
     // A tertiary at 1/1 is a conditional drop, not a guaranteed one: the wiki writes
     // "Always" for things that always drop *given* a condition (an active clue step, a quest,
@@ -658,7 +665,20 @@ function rollTable(table, player, npc, context = killContext(player, npc), sourc
     if (entry.name === LOOTING_BAG && !lootingBagDrops(npc)) continue;
     if (hits(entry, rulesMultiplier(entry, rules) * entryMultiplier(table, entry, chance))) {
       drops.push(...resolveEntry(entry, player, context));
+      hitNames.add(entry.name || "");
     }
+  }
+  for (const rule of rules) {
+    if (rule.guarantee !== true) continue;
+    const matching = (table.tertiary || []).filter((entry) => Number(entry.out_of) > 1 && rule.pattern.test(entry.name || "")
+      && (entry.name !== LOOTING_BAG || lootingBagDrops(npc)));
+    // Only an entry the rule accepts satisfies it: a natural drop of one it refuses (a clue tier already held) does not.
+    const allowed = typeof rule.accept === "function" ? matching.filter((entry) => rule.accept(entry)) : matching;
+    if (allowed.length === 0 || allowed.some((entry) => hitNames.has(entry.name || ""))) continue;
+    // The rarest by its chance (weight / out_of), not its denominator alone.
+    const chance = (entry) => (Number.isInteger(entry.weight) ? entry.weight : 1) / Number(entry.out_of);
+    const rarest = allowed.reduce((best, entry) => chance(entry) < chance(best) ? entry : best);
+    drops.push(...resolveEntry(rarest, player, context));
   }
 
   selected.commit?.();
