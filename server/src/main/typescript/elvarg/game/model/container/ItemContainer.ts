@@ -520,6 +520,12 @@ export abstract class ItemContainer {
         }
         return this;
       }
+      // Refilling an empty slot creates new contents. Do not revive its old Item
+      // identity: delayed actions may still retain that removed stack reference.
+      // Ordinary merges into a nonempty stack keep their existing identity.
+      if (this.items[slot].getId() < 0 || this.items[slot].getAmount() <= 0) {
+        this.items[slot] = item.clone().setAmount(0);
+      }
       let totalAmount = this.items[slot].getAmount() + item.getAmount();
       this.items[slot].setId(item.getId());
       this.items[slot].setMeta(item.getMeta());
