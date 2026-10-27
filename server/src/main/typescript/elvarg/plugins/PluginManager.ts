@@ -4268,6 +4268,8 @@ export class PluginManager {
         PluginManager.isPluginPerformanceProfilingEnabled(),
       registerCombatEffectiveLevelModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerCombatEffectiveLevelModifier(modifier),
+      registerMeleeStrengthPercentModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerMeleeStrengthPercentModifier(modifier),
       registerMeleeHitModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerMeleeHitModifier(
           modifier

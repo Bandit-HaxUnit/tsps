@@ -45,9 +45,10 @@ function runeSaving(request) {
   if (saves()) request.saved = true;
 }
 
-/** `combat:consume-charge`, asked once a cast by a powered staff: the same 90% roll for its charge. */
+/** `combat:consume-charge`: a powered staff's charge (every charge weapon asks; only a magic attack's counts here) has the same 90% roll. */
 function consumeCharge(request) {
   if (request.skip || !active(request.player)) return;
+  if (core.CombatFactory.getMethod(request.player).type() !== core.CombatType.MAGIC) return;
   if (saves()) request.skip = true;
 }
 

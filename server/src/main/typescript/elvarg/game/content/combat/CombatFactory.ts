@@ -607,7 +607,7 @@ export class CombatFactory {
                     const drainAmount = special.getDrainAmountForWeaponId(
                         player.getEquipment().get(Equipment.WEAPON_SLOT).getId()
                     );
-                    if (player.getSpecialPercentage() < drainAmount) {
+                    if (!CombatSpecial.affordable(player, special, drainAmount)) {
                         return CanAttackResponse.NOT_ENOUGH_SPECIAL_ENERGY;
                     }
                 }
@@ -1026,6 +1026,13 @@ export class CombatFactory {
             let player = (entity as Player);
             const protection = player.getCombat().getPoisonClock();
             if (isVenom ? protection.isVenomImmune() : !protection.finished()) {
+                return;
+            }
+            // Content may make the player immune outright (a league relic): the same question
+            // for every status the server applies.
+            const status = { target: player, kind: isVenom ? "venom" : "poison", allow: true };
+            PluginManager.emitCustomEvent("combat:status-apply", status);
+            if (status.allow === false) {
                 return;
             }
             // An accepted venom replaces the ordinary negative poison counter.
@@ -1484,6 +1491,12 @@ export class CombatFactory {
                 : 0;
             let currentWeaponId = weaponId;
             for (let shot = 0; shot < amount; shot++) {
+                // Content may spare the charge (a league relic): the question every charged weapon asks.
+                const consume = { player, itemId: currentWeaponId, skip: false };
+                PluginManager.emitCustomEvent("combat:consume-charge", consume);
+                if (consume.skip) {
+                    continue;
+                }
                 shotsInStage += 1;
                 if (shotsInStage < CRYSTAL_BOW_SHOTS_PER_STAGE) {
                     continue;
@@ -1519,11 +1532,16 @@ export class CombatFactory {
 
         // Per shot: 20% break, (80 - recovery)% land on the floor where the target stood,
         // the rest is recovered by a plugin (Ava's devices).
+        // Content may keep some shots out of the roll altogether (a league relic): `saved` of
+        // `amount` are neither broken nor dropped. The device's recovery applies to the rest.
+        const saving = { player, itemId: ammoItem.getId(), amount, saved: 0 };
+        PluginManager.emitCustomEvent("ranged:ammo-saving", saving);
+        const rolled = amount - Math.min(amount, Math.max(0, saving.saved | 0));
         const recovery = CombatFactory.ammoRecovery(player);
         const dropChance = 80 - recovery;
         let lost = 0;
         let dropped = 0;
-        for (let shot = 0; shot < amount; shot++) {
+        for (let shot = 0; shot < rolled; shot++) {
             const roll = Misc.getRandom(99); // 0..99
             if (roll < CombatFactory.AMMO_BREAK_CHANCE) {
                 lost++;

@@ -169,12 +169,15 @@ function getLaps(player) {
 }
 
 function completeLap(player, course) {
+  // Content may change what a lap counts for and pays ("agility:lap-reward", a league relic's double laps and bonus XP).
+  const reward = { player, course: course.key, count: 1, xp: course.lapBonus };
+  pluginApi.emitCustomEvent("agility:lap-reward", reward);
   const laps = { ...getLaps(player) };
-  laps[course.key] = (laps[course.key] ?? 0) + 1;
+  laps[course.key] = (laps[course.key] ?? 0) + Math.max(1, reward.count | 0);
   player.setAttribute(LAPS_ATTRIBUTE, laps);
   rollMarkOfGrace(player, course);
-  if (course.lapBonus > 0) {
-    player.getSkillManager().addExperiences(core.Skill.AGILITY, course.lapBonus);
+  if (reward.xp > 0) {
+    player.getSkillManager().addExperiences(core.Skill.AGILITY, reward.xp);
   }
   if (!player.getAttribute(LAP_COUNTER_OFF_ATTRIBUTE)) {
     player.sendMessage(`Your ${course.name} lap count is: <col=ff0000>${laps[course.key]}</col>.`);
@@ -250,8 +253,13 @@ function rollMarkOfGrace(player, course) {
   const position = new core.Location(tile[0], tile[1], tile[2]);
   const award = { player, minigame: "rooftop-agility", points: 1 };
   pluginApi.emitCustomEvent("minigame:points", award);
-  ItemOnGroundManager.registerLocation(player, new core.Item(core.ItemIds.MARK_OF_GRACE, award.points), position,
-    player.getPrivateArea(), { goesGlobal: false, despawnDelay: MARK_DESPAWN_TICKS });
+  // Content may add to what spawns with the mark ("agility:mark", a league relic's coins).
+  const spawn = { player, location: position, items: [[core.ItemIds.MARK_OF_GRACE, award.points]] };
+  pluginApi.emitCustomEvent("agility:mark", spawn);
+  for (const [itemId, amount] of spawn.items) {
+    ItemOnGroundManager.registerLocation(player, new core.Item(itemId, amount), position,
+      player.getPrivateArea(), { goesGlobal: false, despawnDelay: MARK_DESPAWN_TICKS });
+  }
 }
 
 /** The player's course marks on the floor; dropped marks go public and age as usual. */
@@ -382,7 +390,10 @@ function attemptObstacle(player, object, entry) {
   // `forceFail` gives the failure the player gets whatever they roll (Ape Atoll without a greegree).
   const forced = obstacle.forceFail?.(context) ?? null;
   const fail = forced ?? obstacle.fail;
-  const success = !forced && rollSuccess(player, obstacle, level);
+  // Content may make the roll succeed ("agility:roll", a league relic); a forced failure stays one.
+  const roll = { player, objectId: object.getId(), success: !forced && rollSuccess(player, obstacle, level) };
+  if (!forced) pluginApi.emitCustomEvent("agility:roll", roll);
+  const success = roll.success;
   const steps = resolve(success ? obstacle.steps : fail.steps, context);
   if (!steps) return;
   pluginApi.emitCustomEvent("agility:obstacle-start", { player, objectId: object.getId(), location: context.obj, success });

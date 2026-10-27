@@ -18,6 +18,7 @@ const customEvents = new Map();
 let loginHandler;
 let canEquipHandler;
 WarpedSceptre.register({
+    emitCustomEvent: () => {},
   core: PluginManager.getCoreApi(),
   onServerStartup: (handler) => handler(),
   onPlayerLogout() {},
