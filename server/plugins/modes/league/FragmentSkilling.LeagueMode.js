@@ -108,13 +108,14 @@ function markCoins(request) {
   if (coins !== null && coins > 0) request.items.push([core().ItemIdentifiers.COINS, coins]);
 }
 
+/** `minigame:points` { player, minigame, points }: the Hallowed Sepulchre's marks, raised. */
 function moreMarks(request) {
-  if (request.kind !== effects().graveRobber.kind) return;
+  if (request.minigame !== effects().graveRobber.minigame || !(request.points > 0)) return;
   const percent = value(request.player, "graveRobber");
   if (percent === null) return;
   // A part mark is a chance of a whole one, so 50% more of one mark is a mark half the time.
-  const marks = (request.amount * (100 + percent)) / 100;
-  request.amount = Math.floor(marks) + (Math.random() < marks - Math.floor(marks) ? 1 : 0);
+  const marks = (request.points * (100 + percent)) / 100;
+  request.points = Math.floor(marks) + (Math.random() < marks - Math.floor(marks) ? 1 : 0);
 }
 
 function clueChance(request) {

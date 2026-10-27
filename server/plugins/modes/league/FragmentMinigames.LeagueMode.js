@@ -13,23 +13,25 @@ function effects() {
   return data.minigameEffects;
 }
 
-/** The percent more an equipped fragment gives this minigame's `kind` from its `list` (points or chances), or null. */
-function percentFor(player, list, minigame, kind) {
+/** The percent more an equipped fragment gives, the first whose `covers(effect)` is true, or null. */
+function percentFor(player, covers) {
   for (const effect of Object.values(effects())) {
-    if (!effect[list]?.[minigame]?.includes(kind)) continue;
+    if (!covers(effect)) continue;
     const percent = Fragments.equippedValue(player, effect.fragment);
     if (percent !== null) return percent;
   }
   return null;
 }
 
+/** `minigame:points` { player, minigame, points }: the points a minigame is about to award, raised. */
 function morePoints(request) {
-  const percent = percentFor(request.player, "points", request.minigame, request.kind);
-  if (percent !== null) request.amount = Math.floor((request.amount * (100 + percent)) / 100);
+  if (!(request.points > 0)) return;
+  const percent = percentFor(request.player, (effect) => effect.points?.includes(request.minigame));
+  if (percent !== null) request.points = Math.floor((request.points * (100 + percent)) / 100);
 }
 
 function likelier(request) {
-  const percent = percentFor(request.player, "chances", request.minigame, request.kind);
+  const percent = percentFor(request.player, (effect) => effect.chances?.[request.minigame]?.includes(request.kind));
   if (percent !== null) request.multiplier *= (100 + percent) / 100;
 }
 

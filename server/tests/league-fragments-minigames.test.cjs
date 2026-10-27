@@ -126,22 +126,22 @@ function cases(id) {
   return { owner, others: [unequipped, character(`main${id}`, { profile: "main" })] };
 }
 
-const points = (player, minigame, kind, amount) => emit("minigame:points", { player, minigame, kind, amount }).amount;
+const points = (player, minigame, amount) => emit("minigame:points", { player, minigame, points: amount }).points;
 const chance = (player, minigame, kind) => emit("minigame:chance", { player, minigame, kind, multiplier: 1 }).multiplier;
 
 test("Barbarian Pest Wars: Pest Control's commendation points and Soul Wars' zeal tokens x2, x3 and x4", () => {
   const { owner, others } = cases(F.barbarianPestWars);
-  assert.equal(points(owner, "pest-control", "commendation", 4), 8);
-  assert.equal(points(owner, "soul-wars", "zeal-tokens", 5), 10);
-  assert.equal(points(owner, "tithe-farm", "tithe-points", 5), 5, "Rogues' Chompy Farm's");
+  assert.equal(points(owner, "pest-control", 4), 8);
+  assert.equal(points(owner, "soul-wars", 5), 10);
+  assert.equal(points(owner, "tithe-farm", 5), 5, "Rogues' Chompy Farm's");
   level(owner, F.barbarianPestWars, 3);
-  assert.equal(points(owner, "pest-control", "commendation", 4), 16);
-  for (const player of others) assert.equal(points(player, "pest-control", "commendation", 4), 4);
+  assert.equal(points(owner, "pest-control", 4), 16);
+  for (const player of others) assert.equal(points(player, "pest-control", 4), 4);
 });
 
 test("Rogues' Chompy Farm: the Tithe Farm's points x2-x4, a chompy kill counted 2-4 times", () => {
   const { owner, others } = cases(F.roguesChompyFarm);
-  assert.equal(points(owner, "tithe-farm", "tithe-points", 50), 100);
+  assert.equal(points(owner, "tithe-farm", 50), 100);
   assert.equal(emit("big-chompy-bird-hunting:kill-credit", { player: owner, kills: 1 }).kills, 2);
   level(owner, F.roguesChompyFarm, 2);
   assert.equal(emit("big-chompy-bird-hunting:kill-credit", { player: owner, kills: 1 }).kills, 3);
@@ -152,9 +152,9 @@ test("Mother's Magic Fossils: the Mage Training Arena's own points x2; the Mothe
   const { owner, others } = cases(F.mothersMagicFossils);
   const Arena = require("../plugins/minigames/magetrainingarena/Common.MageTrainingArena");
   Arena.init({ core, emitCustomEvent: (name, payload) => emit(name, payload) });
-  assert.equal(Arena.earnedPoints(owner, "alchemist", 10), 20, "earned in a room");
+  assert.equal(Arena.awardPoints(owner, "alchemist", 10), 20, "earned in a room");
   assert.equal(Arena.addPoints(owner, "alchemist", 10), 10, "not raised when bought back or set");
-  for (const player of others) assert.equal(Arena.earnedPoints(player, "alchemist", 10), 10, player.getUsername());
+  for (const player of others) assert.equal(Arena.awardPoints(player, "alchemist", 10), 10, player.getUsername());
 
   assert.equal(chance(owner, "motherlode-mine", "golden-nugget"), 2);
   assert.equal(chance(owner, "fossil-island", "fossil"), 2);

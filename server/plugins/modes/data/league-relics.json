@@ -213,7 +213,24 @@
     "clueCompass": { "league": 5, "key": "clue-compass", "toolName": "Clue compass" },
     "totalRecall": { "league": 5, "key": "total-recall", "toolName": "Crystal of Echoes" },
     "grimoire": { "league": 5, "key": "grimoire" },
-    "reloaded": { "league": 5, "key": "reloaded", "tiers": [0, 1, 2] }
+    "reloaded": { "league": 5, "key": "reloaded", "tiers": [0, 1, 2] },
+    "arcaneGrimoire": {
+      "item": "Arcane grimoire",
+      "options": { "change": "Change Spellbook", "previous": "Previous Spellbook", "check": "Check Previous" },
+      "spellbooks": [
+        { "key": "NORMAL", "name": "Standard" },
+        { "key": "ANCIENT", "name": "Ancient" },
+        { "key": "LUNAR", "name": "Lunar" },
+        { "key": "ARCEUUS", "name": "Arceuus" }
+      ],
+      "messages": {
+        "choose": { "text": "Choose a spellbook", "source": "ours" },
+        "cancel": { "text": "Cancel", "source": "ours" },
+        "notLeague": { "text": "Only a league character can use the grimoire.", "source": "ours" },
+        "noPrevious": { "text": "You haven't changed spellbook with the grimoire yet.", "source": "ours" },
+        "checkPrevious": { "text": "Your previous spellbook was the {book} spellbook.", "source": "ours" }
+      }
+    }
   },
   "leagues": {
     "6": { "_comment": "Leagues VI - Demonic Pacts is the league this cache (rev 241) carries: its tiers, costs, passives and relics are read from the league struct (6436, enum 2670) and sent as nothing; no relic hands out an item, since the cache does not say which do.", "fromCache": true },

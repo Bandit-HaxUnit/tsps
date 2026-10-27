@@ -36,6 +36,16 @@ function coffinLoot(floor) {
   return drops;
 }
 
+/** The loot's Hallowed marks after "minigame:points" (a league's tier passive multiplies them). */
+function boostMarks(player, loot) {
+  return loot.map(([id, amount]) => {
+    if (id !== Common.data.items.mark) return [id, amount];
+    const award = { player, minigame: "hallowed-sepulchre", points: amount };
+    Common.api.emitCustomEvent("minigame:points", award);
+    return [id, award.points];
+  });
+}
+
 /** The Grand Hallowed Coffin (Wiki): 8-10 marks, the high table, the ring at 1/200. */
 function grandLoot() {
   const { grand } = Common.data.loot;
@@ -44,19 +54,9 @@ function grandLoot() {
   return drops;
 }
 
-/** The marks a coffin gives, as content may raise them ("minigame:points", a league fragment). */
-function withPoints(player, drops) {
-  return drops.map(([id, amount]) => {
-    if (id !== Common.data.items.mark) return [id, amount];
-    const request = { player, minigame: "hallowed-sepulchre", kind: "hallowed-marks", amount };
-    Common.api.emitCustomEvent("minigame:points", request);
-    return [id, Number.isSafeInteger(request.amount) && request.amount > amount ? request.amount : amount];
-  });
-}
-
 function give(player, drops) {
   const { CacheDefinitions, Item, ItemOnGroundManager } = Common.core;
-  for (const [id, amount] of withPoints(player, drops)) {
+  for (const [id, amount] of drops) {
     const item = new Item(id, amount);
     if (player.getInventory().getAddableAmount(item) < amount) {
       ItemOnGroundManager.registers(player, item);
@@ -111,7 +111,7 @@ function open(event) {
     run.schedule(3, () => {
       if (run.looted.has(slot)) return;
       run.looted.add(slot);
-      give(player, grand ? grandLoot() : coffinLoot(run.floorNumber));
+      give(player, boostMarks(player, grand ? grandLoot() : coffinLoot(run.floorNumber)));
       if (which === "a") Common.varbit(player, "hallowed_current_floor_looted", 1);
       if (which === "b") Common.varbit(player, "hallowed_current_floor_looted_b", 1);
       if (grand) Common.varbit(player, "hallowed_final_chest_looted", 1);

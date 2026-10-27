@@ -177,8 +177,8 @@ function depositCoins(player, random = Math.random) {
   player.getInventory().deleteNumber(items.arenaCoins, coins);
   const whole = Math.floor(coins / alchemists.coinsPerPoint);
   const rest = coins % alchemists.coinsPerPoint;
-  const points = Common.earnedPoints(player, "alchemist", whole + (random() < rest / alchemists.coinsPerPoint ? 1 : 0));
-  Common.addPoints(player, "alchemist", points);
+  const points = whole + (random() < rest / alchemists.coinsPerPoint ? 1 : 0);
+  Common.awardPoints(player, "alchemist", points);
   player.getSkillManager().addExperiences(Common.core.Skill.MAGIC, coins * alchemists.depositXp);
   const real = whole * alchemists.coinsBack;
   if (real > 0) payCoins(player, real);
