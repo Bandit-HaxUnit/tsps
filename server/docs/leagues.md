@@ -465,9 +465,12 @@ character's picks live in `league:relics` (tier index -> slot 1-3).
   while its tier-1 tools are handed out anywhere, as the Leagues V tutorial's Animal Wrangler
   unlock in osrs-captures 227/00196 shows; the modal replaces the bank as the main interface, so
   what was open when View Relics was clicked counts), and room for every item in the inventory
-  or a bank tab, so a permanent pick is never saved without its items; each item goes to the
-  inventory if it fits, else to its bank tab, else to any tab with room. Refusals are game
-  messages of ours. Items no longer in this cache (Sage's greaves, the Trailblazer tools, the crystal of
+  or a bank tab, so a permanent pick is never saved without its items; the room check is
+  item-aware (a stackable item joins its inventory stack, an item already banked joins its bank
+  stack and needs no slot, a new bank stack takes one slot of the player's bank space, which
+  every tab shares, and a slot one item takes is not counted for the next), and each item
+  goes where that check placed it: the inventory if it fits, else the bank tab holding it, else
+  its tab or any tab with room. Refusals are game messages of ours. Items no longer in this cache (Sage's greaves, the Trailblazer tools, the crystal of
   memories, the guardian horn) are not granted; the data says so.
 - **Effects** are other plugins' business: they ask `league:has-relic { player, relic }`, true
   only when the character's league has that relic and chose it. The tier passives' XP rates are
