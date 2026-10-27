@@ -59,10 +59,8 @@ function spaceShort(player, collected) {
   const { Bank, Item } = Common.getCore();
   let needed = 0;
   let capped = 0;
-  let free = 0;
-  for (let tab = 0; tab < Bank.TOTAL_BANK_TABS; tab++) {
-    if (tab !== Bank.BANK_SEARCH_TAB_INDEX) free += player.getBank(tab).getFreeSlots();
-  }
+  // The tabs share one capacity, so the main tab's free slots are the bank's.
+  const free = player.getBank(0).getFreeSlots();
   for (const [key, count] of collected) {
     const itemId = key === "clue" ? clueItemId(player) : key;
     if (itemId == null) continue;
