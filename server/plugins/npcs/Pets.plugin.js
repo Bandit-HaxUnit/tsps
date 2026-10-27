@@ -42,6 +42,9 @@ const PET_PICKUP_SOUND = new Sound(Sound.PICK_UP_ITEM.getId(), Sound.PICK_UP_ITE
 const FOLLOWER_INDEX_VARP = 447;
 const FOLLOWER_ITEM_VARP = 448;
 const MAX_XP = 200000000;
+// RSProx229/2783 and239/4288: locked Lil' Zik Metamorphosis, on arrival.
+const SANGUINE_DUST_UNLOCK = {permanent: true, name: "sanguine dust",
+  message: "You need to earn sanguine dust from the Theatre of Blood Challenge Mode to do that."};
 let pluginApi = null;
 let TaskClass = null;
 let TaskManagerRef = null;
@@ -61,7 +64,12 @@ const PETS = [
     morphUnlock: { itemId: ItemIdentifiers.COAGULATED_VENOM, consume: true, name: "coagulated venom" } },
   { enumName: "SCURRY", petId: 7219, morphId: 0, itemId: 28801, dialogue: -1 },
   // Cache241:8336 is poh_verzik_pet;8337 verzik_pet is the normal follower.
-  { enumName: "LIL_ZIK", petId: NpcIdentifiers.LIL_ZIK_2, morphId: 0, itemId: 22473, dialogue: -1 },
+  { enumName: "LIL_ZIK", petId: NpcIdentifiers.LIL_ZIK_2, morphId: NpcIdentifiers.LIL_MAIDEN_2, itemId: ItemIdentifiers.LIL_ZIK, familyItemId: ItemIdentifiers.LIL_ZIK, dialogue: -1 },
+  { enumName: "LIL_MAIDEN", petId: NpcIdentifiers.LIL_MAIDEN_2, morphId: NpcIdentifiers.LIL_BLOAT_2, itemId: ItemIdentifiers.LIL_MAIDEN, familyItemId: ItemIdentifiers.LIL_ZIK, dialogue: -1, morphUnlock: SANGUINE_DUST_UNLOCK },
+  { enumName: "LIL_BLOAT", petId: NpcIdentifiers.LIL_BLOAT_2, morphId: NpcIdentifiers.LIL_NYLO_2, itemId: ItemIdentifiers.LIL_BLOAT, familyItemId: ItemIdentifiers.LIL_ZIK, dialogue: -1, morphUnlock: SANGUINE_DUST_UNLOCK },
+  { enumName: "LIL_NYLO", petId: NpcIdentifiers.LIL_NYLO_2, morphId: NpcIdentifiers.LIL_SOT_2, itemId: ItemIdentifiers.LIL_NYLO, familyItemId: ItemIdentifiers.LIL_ZIK, dialogue: -1, morphUnlock: SANGUINE_DUST_UNLOCK },
+  { enumName: "LIL_SOT", petId: NpcIdentifiers.LIL_SOT_2, morphId: NpcIdentifiers.LIL_XARP_2, itemId: ItemIdentifiers.LIL_SOT, familyItemId: ItemIdentifiers.LIL_ZIK, dialogue: -1, morphUnlock: SANGUINE_DUST_UNLOCK },
+  { enumName: "LIL_XARP", petId: NpcIdentifiers.LIL_XARP_2, morphId: NpcIdentifiers.LIL_ZIK_2, itemId: ItemIdentifiers.LIL_XARP, familyItemId: ItemIdentifiers.LIL_ZIK, dialogue: -1, morphUnlock: SANGUINE_DUST_UNLOCK },
   // Tombs of Amascut: each form uses its boss remnant (Wiki, Metamorphosis).
   { enumName: "TUMEKENS_GUARDIAN", petId: 11812, morphId: 11813, itemId: 27352, dialogue: -1 },
   { enumName: "ELIDINIS_GUARDIAN", petId: 11813, morphId: 11849, itemId: 27352, dialogue: -1,
@@ -816,7 +824,7 @@ function checkMorphUnlock(player, next) {
     }
     return { ok: false, message: `You need ${req.name} to metamorphose your pet like that.` };
   }
-  return { ok: false, message: `You need to unlock ${req.name} first.` };
+  return { ok: false, message: req.message ?? `You need to unlock ${req.name} first.` };
 }
 
 // ---------------------------------------------------------------- cats
