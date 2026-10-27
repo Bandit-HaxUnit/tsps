@@ -2,11 +2,11 @@
 
 The Leagues game mode (https://oldschool.runescape.wiki/w/Leagues) on this server: a league
 character per account, League Points, relic tiers and relics, area unlocks and combat masteries.
-Plugins: `plugins/modes/LeagueMode.plugin.js` (the profile, its league, XP rate, journal tab,
+Plugins: `plugins/modes/LeagueMode.plugin.js` (the profile, its league, XP rate, the tiers' passives, journal tab,
 the league content the client reads), `LeaguePoints.plugin.js` (points), `LeagueRelics.plugin.js`
 (tiers and relics), `LeagueAreaUnlocks.plugin.js` (areas) and `LeagueCombatMasteries.plugin.js`
 (Raging Echoes' combat masteries); data in `plugins/modes/data/leagues.json`, `league-relics.json`,
-`league-areas.json` and `league-combat-masteries.json`.
+`league-areas.json`, `league-boosted-drops.json` and `league-combat-masteries.json`.
 
 ## The league character
 
@@ -36,10 +36,25 @@ kept apart from its main one (`persistence/PlayerProfile.ts`):
 - A "Stay logged in" token belongs to the character it was issued on (each save keeps its own),
   and the world decides the character, so a token from one world's character never opens the
   other's.
+- Every league character plays as a standard Ironman (Wiki "Player restrictions": all players
+  are Ironmen). Every league login sets a character that is anything else (new, made before this
+  rule, or changed with `::ironman`) through the Ironman plugin's `ironman:set-mode`; the Ironman
+  plugin's trading, loot, shop and Grand Exchange rules then apply as to any Ironman. The mode
+  stays: the Ironman tutor's and Adam's setup ask `ironman:change-mode` before a change, and
+  LeagueMode refuses it for a league character ("As a league character, you are always an
+  Ironman.", ours). `::ironman` overrides it only until the next login. A main character's mode is
+  its own. The rule needs the Ironman plugin enabled; with it disabled in world.json a league
+  character is not an Ironman and nothing says so.
+- Admin and save commands that look a save up by name address the character this world logs in:
+  the league character on a league world (`GameConstants.WORLD_PROFILE`), the main one elsewhere, so a plain world is unchanged. That is
+  `::snapshots`, `::rollback` and `::reprocorruptsave`, and the save-exists check of `::mute`,
+  `::unmute`, `::ban` and `::unban` (those four are still stubs that punish nobody).
 - Known limits: the SQLite backend's one-time import of legacy JSON saves reads only the main
-  files; admin commands that address saves by name reach the main profile only; an offline
-  update to either save (an external store purchase) is refused while the account's other
-  character is online, since both share the name.
+  files; an offline update to either save (an external store purchase) is refused while the
+  account's other character is online, since both share the name; the friends chat's offline
+  owner lookup (`FriendsChatManager.js`) and the AI bots' name checks (`RegisterAiBots`,
+  `PlayerFactory`) still read the main save only, so on a league world an offline owner's channel
+  is the main character's and a name held only by a league character counts as free for a bot.
 
 The world's league is the one a new league character joins; the character keeps it in
 `league:type`. A new Trailblazer Reloaded character starts at Herblore 3, Runecraft 5 and
@@ -69,11 +84,18 @@ Agility 10 (Wiki). A main character never has a league, whatever its attributes 
 | `league:areas` | `{ player } -> { league, unlocked: [area ids], next: { slot, tasks } \| null, available }` | LeagueAreaUnlocks |
 | `league:area-at` | `{ x, y, player \| league } -> { area: id \| null, name }` | LeagueAreaUnlocks |
 | `league:area-unlocked` | `{ player, league, area, slot }` the moment an unlock is saved | LeagueAreaUnlocks emits |
+| `league:relic-triggered` | `{ player, relic }` when a relic's effect fired (Undying Retribution) | nobody yet |
+| `ironman:set-mode` | `{ player, mode } -> { handled }` (the Ironman plugin's) | LeagueMode emits at a league login |
+| `ironman:change-mode` | `{ player, from, to, allowed, reason }` (the Ironman plugin asks before a setup choice) | LeagueMode refuses for a league character |
 
 The client keeps one `structOverrides` and one `enumOverrides` set and replaces each whole on
 every dataset (`GamemodeContentStore`), so no plugin sends them itself: LeagueMode sends the lot
 at login and whenever a plugin emits `league:send-content` (before its interface opens), after
 collecting every plugin's rows with `league:content-rows`.
+
+The tier passives answer other plugins' questions rather than events of their own (below):
+`npc-drops:chance` and `drops:chance`, `minigame:points`, `slayer:task-reward`,
+`slayer:superior-spawn` and `treasure-trails:scroll-boxes`.
 
 ## What the client is sent
 
@@ -91,7 +113,7 @@ same for every league):
   8168 = 4, the way this client mounts its other journal tabs (live mounted it in its own slot).
 - XP: the league's rate (5x; 8x from relic tier 2, 12x from tier 5, 16x from tier 7, Wiki tier
   passives) multiplies every gain after the world's rate, through the can-gain-experience
-  hook's `multiplier`.
+  hook's `multiplier`; the other tier passives are under "Tier passives" below.
 
 ## Relics
 
@@ -131,8 +153,71 @@ character's picks live in `league:relics` (tier index -> slot 1-3).
   its tab or any tab with room. Refusals are game messages of ours. Items no longer in this cache (Sage's greaves, the Trailblazer tools, the crystal of
   memories, the guardian horn) are not granted; the data says so.
 - **Effects** are other plugins' business: they ask `league:has-relic { player, relic }`, true
-  only when the character's league has that relic and chose it. The tier passives' XP rates are
-  LeagueMode's (`league:highest-tier`); the other passives are not implemented.
+  only when the character's league has that relic and chose it. The tier passives are
+  LeagueMode's (`league:highest-tier`), below.
+
+## Tier passives
+
+Each tier's passive text is the Wiki's (`league-relics.json`); the effects are
+`leagues.json` `passives`, per league, each from the 1-based tier its `fromTier` names (a map
+picks the highest tier reached), applied by `league/Passives.LeagueMode.js` and
+`league/BoostedDrops.LeagueMode.js` to a league character of that league and to nobody else.
+Tier 1 counts once the character chose its first relic.
+
+- **XP rate** (both: 5x, 8x from tier 2, 12x from tier 5, 16x from tier 7): the
+  can-gain-experience hook's `multiplier`, as above.
+- **Combat XP** (Raging Echoes tier 3): Attack, Strength, Defence, Ranged, Magic, Hitpoints and
+  Prayer gains x2 on top of the league rate (multiplicative, as the Wiki says; Slayer is not
+  listed and not included).
+- **Run energy** (tier 1): the run energy drain modifier (`api.registerRunEnergyDrainModifier`)
+  returns 0 for the character, so running never drains.
+- **Boosted drops** (Trailblazer Reloaded 2x/3x/4x/5x from tiers 1/4/6/8; Raging Echoes 2x then
+  5x from tier 4): `league-boosted-drops.json` is each league's Boosted drops page (fetched
+  2026-10-26), a source per Wiki row group with the NPC names it covers and the item names it
+  boosts (group rows expanded by hand; N/A rows left out; rows one page lists carry `leagues`).
+  NpcDrops asks `npc-drops:chance { player, npc, npcId, source, rules }` once per roll and the
+  league pushes one rule `{ pattern, multiplier }` matching that source's items, which NpcDrops
+  applies to every form of roll ([docs/npc-drops.md](../../docs/npc-drops.md)): a weighted roll's
+  boosted weight grows and the pool with it, so 1/512 at 5x is 5/516 (the Wiki rounds to 1/102).
+  Superior Slayer monsters' unique tables and Treasure Trails caskets' "clue uniques" rows ask the
+  same over `drops:chance { player, source: "superior-slayer-monster" | "treasure-trails-casket",
+  rules }`, the pages' Global entries (a tier's "clue uniques" and mega-rare rows; an ordinary
+  casket's Open and the Mimic's reward share `Rolls.uniqueMultiplier`). Kills whose
+  table NpcDrops rolls are covered as they are, Araxxor's and Zalcano's included (their plugins
+  roll through NpcDrops with the NPC named); the giant lairs' chests pass `source` (Obor,
+  Bryophyta). Sources rolled by their own plugins are in the data but inert until that plugin
+  asks `drops:chance` with the source's name: Revenants, the Grotesque Guardians, Corporeal
+  Beast's sigils (not on its table here), the raids' unique chests, Barrows, the Gauntlet,
+  Wintertodt, Tempoross, Guardians of the Rift, Fishing Trawler, the Grand Hallowed Coffin, Moons
+  of Peril, the Colosseum, Hunter rumours, the Shrine, the seed pack, aerial fishing, the
+  Fountain of Rune, Larran's and the brimstone chest, the Zombie Pirate's Locker, chewed bones,
+  the Volcanic Mine ore pack, Pyramid Plunder, Tai Bwo Wannai, Shades of Mort'ton, and the
+  pickpocketed blood shards (vyres) and teleport seeds (elves).
+- **Minigame points** (Trailblazer Reloaded 3x/5x/8x from tiers 2/5/7; Raging Echoes 4x/8x from
+  tiers 1/4): a minigame asks `minigame:points { player, minigame, points }` as it awards and
+  the league multiplies `points` (floored). Wired, from the Raging Echoes League page's "Boosted
+  minigame points" section (https://oldschool.runescape.wiki/w/Raging_Echoes_League; the
+  Trailblazer Reloaded pages give no list, so both leagues use it): Pest Control
+  commendations, Soul Wars zeal, Castle Wars tickets, Guardians of the Rift points, Mage Training
+  Arena pizazz points, Volcanic Mine points, Giants' Foundry reputation, Mastering Mixology resin,
+  Mahogany Homes points, Tithe Farm points, Brimhaven Agility Arena tickets and vouchers,
+  Warriors' Guild tokens, Hallowed marks, marks of grace, stardust. Not on this server: Barbarian
+  Assault, Rogues' Den, Trouble Brewing, Tai Bwo Wannai favour, Motherlode nuggets, molch
+  pearls, Mining Guild minerals, chompy kills.
+- **Slayer** (Trailblazer Reloaded tier 4, Raging Echoes tier 3): the Slayer plugin asks
+  `slayer:task-reward { player, master, freeTasks, multiplier }` as a task completes (the league
+  sets `freeTasks` 0 and x5 the points; every master's, Mortimer's and Krystilia's included, the
+  Wiki naming none) and `slayer:superior-spawn { player, npc, unlocked, chance }` on a task kill
+  (the league unlocks Bigger and Badder and makes the chance 1 in 50; the Slayer rewards'
+  toggle-off still holds; a better chance from elsewhere stands).
+- **Scroll boxes** (tier 1): ClueCapacity asks `treasure-trails:scroll-boxes { player, unlocked,
+  capacity }` and the league answers unlocked with no limit, so every clue drops as a stackable
+  box (the Wiki says stackable; live Leagues had no cap) before X Marks the Spot.
+
+Left out, with why: Raging Echoes' clue-step progress saved between clues (the trail runtime has
+no per-step save to carry across scrolls); Raging Echoes' one-minute farming ticks (Farming's
+growth model has no tick-length seam, and Farming is under active work elsewhere); the
+Trailblazer Reloaded ironman restriction and the crystal of memories (not in this cache).
 
 ### Trailblazer Reloaded's combat relics
 
@@ -157,11 +242,63 @@ Three relics have their effects (`leaguerelics/*.LeagueRelics.js`, numbers in th
   Retribution prayer's graphic 437 (ours), and a reflected hit of 0 to 2 x Prayer level on every
   attackable NPC within three tiles that is not attack-immune and that the area's policy lets
   the player fight (recoil-immune ones only if Nex, the Hespori, Vorkath or a Wilderness boss)
-  and 0 to half the Prayer level on each player fighting them. The cooldown is a timestamp
-  attribute (0 when ready), reset by a real death (`onPlayerDefeated`, which fires only once
-  the death went ahead). A plugin that already prevented
-  the death on this hook is honoured; one attached after this plugin would see the relic fire
-  first, since every before-death hook runs. Raid death penalties are not exempted yet.
+  and 0 to half the Prayer level on each player fighting them. The cooldown is
+  a timestamp attribute (0 when ready), reset by a real death (the defeated hook, which every
+  death reaches; the death hook stops at the first plugin that handles the death, as the raids
+  do, so a death inside one would never have reset it). A plugin that already prevented the
+  death on this hook is honoured; one attached after this plugin would see the relic fire first,
+  since every before-death hook runs. A prevented death counts for nothing in a raid (Wiki: no
+  raid death penalties): core never starts the death task, so the Chambers, Theatre, Tombs and
+  Archive death handlers, which take points, count deaths, jail, ghost and check wipes, never run.
+- **The Arcane grimoire** (`ArcaneGrimoire.LeagueRelics.js`), the item Superior Sorcerer and Raging
+  Echoes' Grimoire relic grant: for a league character its cache options, from the inventory or
+  worn, are Change Spellbook (a chat choice of the other three books), Previous Spellbook (back
+  to the book the last change left; it toggles) and Check Previous (ours: "Your previous
+  spellbook was the Ancient spellbook."). The swap is the altars' (`MagicSpellbook.changeSpellbook`:
+  Lunar's 40 Defence, autocast cleared, the tab, "You have changed your magic spellbook."); this
+  server's altars gate the books on nothing else, so neither does the grimoire where the
+  Trailblazer Reloaded relics page says "providing players have unlocked them". The previous book
+  is the attribute `league:grimoire-previous-spellbook`, remembered only when a swap went through.
+  Holding the item is the only check (it is untradeable and only a relic grants it; a spawned one
+  works for any league character). Not covered: its Book of the Dead role (the resurrection
+  spells' requirement, checked in core), and Raging Echoes' Grimoire unlocking every prayer and
+  spell.
+
+## The league tutorial
+
+Not implemented; what it takes, from the Leagues V recordings (osrs-captures 227/00196 and
+227/01718 are full runs, 227/00546 a logout at stage 0) and this cache. A league character is
+sent `league_tutorial_completed` 10037 = 12 (finished) at login until it exists.
+
+- **A stage machine on varbit 10037** (0 to 12; Leagues VI has two more). The server only sets
+  the varbit and (re)opens the interfaces: `league_tutorial` 653 as an overlay in 164:1 with its
+  click-blocker 653:1 unhidden, `mesoverlay` 263 in the chatbox (162:564), scripts 1974 "" and
+  2524 (-1, -1), then the modal `league_tutorial_main` 677 in 164:16; every stage change repeats
+  that block. The client draws each stage's title, body, buttons and graphic itself from the
+  league struct's param 1033 tutorial struct (enums keyed by 10037: Raging Echoes' struct 6211
+  points at struct 747 and enums 3379-3383). Check that Trailblazer Reloaded's struct 4699 still
+  carries them; if not, send them as `structOverrides` / `enumOverrides` like the relic catalog.
+- **First login** (00196): `orbs_disabled` 4084 = 1, `minimap_toggle` 0, a teleport to Lumbridge
+  (3221, 3216, 0), and the starting kit as the inventory (a dramen staff, bronze axe, pickaxe,
+  tinderbox, net, shrimp, bronze dagger and sword, wooden shield, shortbow, 25 bronze arrows, 25
+  air, 15 mind, 6 water, 4 earth and 2 body runes, a bucket, a pot, bread); the tutorial opens
+  after the welcome screen's Play (378:72). The dramen staff is simply in the kit; The Sage
+  (14143/14144 at 3222, 3213) talks only about combat achievement rewards and echo items in these
+  recordings (the Wiki's "claim a free dramen staff from The Sage" is Trailblazer Reloaded's).
+- **The stages:** 0->3 "Get Started" (677:9; sets `league_3_has_seen_cutscene` 13488 = 1); 3->4
+  the quest tab (164:54, script 3162 flashes the journal's Leagues tab); 4->5 the journal's
+  Leagues tab, which also awards "Open the Leagues Menu" (+10) and mounts the side panel (script
+  3185 highlights 656:35); 5->6 the panel's Tasks button (656:36) opens `league_tasks` 657 and a
+  `screenhighlight` 664 walkthrough (scripts 3408/3409/3413/2463/2465, continue 664:31); 6->7 its
+  last continue; 7->8 Areas (656:40) opens `trailblazer_areas` 512 with a walkthrough; 8->9 an
+  area unlocked; 9->10 Relics (656:44) opens 655 with a walkthrough; 10->11 the first relic's
+  item box; 11->12 "End Tutorial" (677:8), which awards "Complete the Leagues Tutorial" (+10), sets
+  `orbs_disabled` back to 0 and closes 677 then 653. "Exit Leagues" (677:8 at stage 0) was never
+  pressed in a recording.
+- **What it waits on:** the task list (657) and the area interface (512) with their walkthroughs,
+  and the tasks it awards; a tutorial that starts but cannot be finished is worse than none. A
+  new league character also skips Tutorial Island on live; this server sends every new account
+  there.
 
 ## Combat masteries (Raging Echoes)
 
@@ -324,6 +461,7 @@ locked for good.
 
 ## Not yet
 
-League tasks, the Echo bosses (and so three of the mastery points), the other tier passives
-(drop rates, run energy, clue boxes, minigame points, the ironman restriction), the league
-tutorial, trophies and rewards. Each is its own item on the progress tracker.
+League tasks, the Echo bosses (and so three of the mastery points), the tier passives left out
+above (clue-step progress and farming ticks), the boosted sources their own plugins have yet to
+ask about, the league tutorial (see above), trophies and rewards. Each is its own item on the
+progress tracker.
