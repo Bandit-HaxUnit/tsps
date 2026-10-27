@@ -169,7 +169,14 @@
         {"met": true, "sailing40": false, "variant": "speaking-to-jenkins-again-before-sailing-level-40"},
         {"variant": "initial-dialogue-with-ghostspeak"}
       ],
-      "markers": {"Bu7A94": "skip", "w-L7IV": "skip"}
+      "markers": {"Bu7A94": "skip", "w-L7IV": "skip"},
+      "noBoat": {
+        "ghostspeak": [{"npc": "This some 'ghost ship' joke? If not, I reckon yer boat ain't here."}],
+        "withoutGhostspeak": [
+          {"npc": "Woooo wooo wooooo woooo."},
+          {"message": "You think Jenkins is either trying to tell you that your boat isn't at this dock, or he's telling you to go swim to Crandor. Could be either."}
+        ]
+      }
     }
   ]
 }

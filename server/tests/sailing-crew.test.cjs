@@ -113,7 +113,7 @@ function captain({ level = 99 } = {}) {
       getMaxLevel: (skill) => levels.get(skill.getName?.() ?? skill) ?? 1,
       addExperiences: (skill, amount) => xp.push(amount),
     }),
-    getEquipment: () => ({ get: () => undefined }),
+    getEquipment: () => ({ get: () => undefined, getItems: () => [] }),
     getDialogueManager: () => ({
       startDialogues: (chain) => { dialogue = chain; current = [...chain.getDialogues().values()][0]; },
       getCurrent: () => current,
@@ -697,4 +697,19 @@ test("a crewmate works a hook from its own tile, facing out over the side (rspro
       Sailing.disembark(player, "the_pandemonium");
     }
   }
+});
+
+test("courier crates: Deckhandiness 3 or 4 carries 2, the rest 1 (Wiki), shared out in slot order", () => {
+  const courier = require("../plugins/skills/sailing/crew/Courier.Crew");
+  const crates = Object.fromEntries(common.all().map((crew) => [crew.name, courier.capacityOf(crew)]));
+  assert.deepEqual(crates, {
+    "Jobless Jim": 2, "Adventurer Ada": 1, "Jittery Jim": 1, "Jolly Jim": 2, "Sailor Jakob": crates["Sailor Jakob"],
+    "Oarswoman Olga": 1, "Bosun Zarah": 1, "Spotter Virginia": 1, "Ex-Captain Siad": 2, "Cabin Boy Jenkins": 2,
+  });
+  const [jenkins, jim] = [common.byId(JENKINS), common.byId(JIM)];
+  assert.deepEqual(courier.shareOut([jenkins, jim], 2).map((part) => [part.crew.id, part.amount]), [[JENKINS, 2]],
+    "Jenkins alone takes the two left at pickup (rsprox)");
+  assert.deepEqual(courier.shareOut([jenkins, jim], 3).map((part) => [part.crew.id, part.amount]), [[JENKINS, 2], [JIM, 1]],
+    "and two of three at delivery, Jim the last (rsprox)");
+  assert.deepEqual(jenkins.cargoNpcs, [15346, 15347, 15348], "his carrying forms, by crates held (table 173 cargo_npc)");
 });

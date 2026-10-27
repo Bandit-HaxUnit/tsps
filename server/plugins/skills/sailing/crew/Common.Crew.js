@@ -50,18 +50,22 @@ function init(api) {
   core = api.core;
 }
 
-/** The crewmates, each with their cache row's ship NPC and stats. */
+/**
+ * The crewmates, each with their cache row's ship NPC, the forms they carry 1-3 courier crates in
+ * (`cargo_npc`) and their stats.
+ */
 function all() {
   if (crewmates) return crewmates;
   const rows = core.CacheDefinitions.getDbTableRows(CREW_TABLE);
   const column = (name) => core.CacheDefinitions.getDbColumn(CREW_TABLE, name);
-  const [uniqueId, boatNpc, helm, privateering, deckhand] = ["unique_id", "boat_npc", "stat_helmsmanship",
-    "stat_privateering", "stat_deckhandiness"].map(column);
+  const [uniqueId, boatNpc, cargoNpc, helm, privateering, deckhand] = ["unique_id", "boat_npc", "cargo_npc",
+    "stat_helmsmanship", "stat_privateering", "stat_deckhandiness"].map(column);
   crewmates = DATA.crew.map((crew) => {
     const row = rows.find((candidate) => candidate.int(uniqueId, -1) === crew.id);
     return {
       ...crew,
       shipNpc: row?.int(boatNpc, -1) ?? -1,
+      cargoNpcs: (cargoNpc === null ? [] : row?.column(cargoNpc) ?? []).map(Number),
       stats: {
         [STAT.HELMSMANSHIP]: row?.int(helm, 0) ?? 0,
         [STAT.PRIVATEERING]: row?.int(privateering, 0) ?? 0,
@@ -82,6 +86,7 @@ function byNpc(npcId) {
     const { npcs } = crew;
     if (npcId === npcs.dock) return { crew, at: "dock" };
     if (npcId === crew.shipNpc) return { crew, at: "ship" };
+    if (crew.cargoNpcs.includes(npcId)) return { crew, at: "cargo" };
     if (npcId === npcs.recruitTalk || npcId === npcs.recruit) return { crew, at: "recruit" };
     if (npcId === npcs.pandemonium) return { crew, at: "pandemonium" };
     if (npcId === npcs.world) return { crew, at: "world" };

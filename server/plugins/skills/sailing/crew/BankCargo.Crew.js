@@ -1,24 +1,33 @@
-// A dock crewmate banking a boat's cargo hold. Live (rsprox, Cabin Boy Jenkins on the
-// Pandemonium's dock): "Can you help bank my cargo hold contents?" opens the boat selection in
-// its bank cargo mode (11) with the dock's row; the Bank-cargo option does the same at once.
-// After the choice the crewmate's transcript carries on from there (not captured: the Wiki's
-// "Move all available items from your cargo hold to your bank?", their lines, "Your crew start
-// moving the contents of the cargo hold...", and whether the bank had room). Everything in the
-// chosen boat's hold that fits goes to the bank.
+// A dock crewmate banking a boat's cargo hold, as live (rsprox, Cabin Boy Jenkins at Port Sarim
+// and the Pandemonium):
+//   Bank-cargo, or "Can you help bank my cargo hold contents?": with no boat at this dock, the
+//   crewmate says so (only Jenkins' lines are captured); with every hold empty, their "nothing to
+//   move" line; otherwise "Move all available items from your cargo hold to your bank?" (Yes/No),
+//   after the boat selection in its bank cargo mode (11) when more than one boat is docked here.
+//   Yes: their first line without "Click here to continue" as the screen fades; 3 ticks later the
+//   box "Your crew start moving the contents of the cargo hold..." (no continue either); at 7 the
+//   cargo goes to the bank and the screen fades back in; at 10 their closing line, by whether the
+//   bank had room. The lines are the crewmate's transcript's.
+// The Wiki's Deckhandiness 2 for banking isn't enforced: its refusal was never captured.
 const common = require("./Common.Crew");
 const lines = require("./Lines.Crew");
-const cargo = require("../Cargo.Sailing");
 const { openBoatSelection, MODE } = require("../BoatSelection.plugin");
-const { dockNear } = require("../SailingContent.Sailing");
+const { dockNear, fade } = require("../SailingContent.Sailing");
 
 const MOVE_CARGO = "Move Cargo to Bank";
+const PROMPT = "Move all available items from your cargo hold to your bank?";
 /** Where the dock crewmates stand: next to the boat's dock. */
 const DOCK_RANGE = 16;
-/** The message steps that start the move (Jenkins, without a ghostspeak amulet, has his own). */
-const MOVING = /^(Your crew start moving the contents of the cargo hold|With a confusing mixture of flailing and hand gestures)/;
+/** No boat here, for a crewmate whose lines weren't captured. */
+const NO_BOAT = "Your boat isn't docked here.";
+const FADE_CYCLES = 50;
+const MOVING_TICKS = 3;
+const MOVED_TICKS = 7;
+const DONE_TICKS = 10;
+/** chat_left: its continue line, cleared for a line the player can't click past. */
+const CHAT_LEFT_CONTINUE = (231 << 16) | 5;
 
-/** Per player: the dock, the boat chosen and whether everything fitted, for the conversation's conditions. */
-const banking = new WeakMap();
+let pluginApi;
 
 function cache() {
   return common.core();
@@ -52,96 +61,157 @@ function moveToBank(player, boat) {
   return all;
 }
 
-/** The crewmate's at-port variant: where their bank-cargo conversation lives, if they have one. */
-function portVariant(player, crew) {
-  return crew.variants.find((rule) => rule.at === "dock"
+/** The crewmate's at-port variant: where their bank-cargo conversation lives. */
+function portSteps(player, crew) {
+  const variant = crew.variants.find((rule) => rule.at === "dock"
     && (rule.ghostspeak === undefined || rule.ghostspeak === common.hearsGhosts(player)))?.variant;
+  return variant ? lines.variantSteps(crew.page, variant) : undefined;
+}
+
+/** The NPC lines under a transcript condition, in order. */
+function linesUnder(steps, condition) {
+  const found = lines.findStep(steps, (step) => step?.type === "condition" && condition.test(String(step.text ?? "")));
+  return (found?.steps ?? []).filter((step) => typeof step.npc === "string").map((step) => step.npc);
+}
+
+/** What the transcript says once Yes is chosen: the first line, the message, and the result lines. */
+function yesBranch(player, crew) {
+  const steps = portSteps(player, crew);
+  const choice = lines.findStep(steps, (step) => step?.type === "choice" && /move all available items/i.test(String(step.prompt ?? "")));
+  const yes = (choice?.options ?? []).find((option) => /^yes/i.test(String(option.text ?? "")))?.steps ?? [];
+  return {
+    prompt: choice?.prompt ?? PROMPT,
+    working: yes.find((step) => typeof step.npc === "string")?.npc,
+    moving: yes.find((step) => step.type === "message")?.text,
+    fitted: linesUnder(yes, /(bank has space|there is sufficient room)/i)[0],
+    full: linesUnder(yes, /(doesn't have space|insufficient room)/i)[0],
+  };
+}
+
+function headOf(npc, crew) {
+  return npc?.getId?.() ?? crew.npcs.dock;
+}
+
+function say(player, npcId, crew, text, { canContinue = true } = {}) {
+  const { DialogueChainBuilder, NpcDialogue, ActionDialogue } = cache();
+  if (canContinue) {
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new NpcDialogue(0, npcId, text, crew.name)));
+    return undefined;
+  }
+  // Shown without "Click here to continue", and kept as the current dialogue so nothing closes it.
+  const waiting = new ActionDialogue(0, {
+    execute: () => {
+      new NpcDialogue(0, npcId, text, crew.name).send(player);
+      player.getPacketSender().sendString("", CHAT_LEFT_CONTINUE).sendInterfaceFlagsRange(CHAT_LEFT_CONTINUE, -1, -1, 0);
+    },
+  });
+  player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(waiting));
+  return waiting;
+}
+
+/** No boat at this dock: Jenkins' captured lines, or a plain message for the others. */
+function noBoat(player, npcId, crew) {
+  const said = crew.noBoat?.[common.hearsGhosts(player) ? "ghostspeak" : "withoutGhostspeak"];
+  if (!said) {
+    player.sendMessage(NO_BOAT);
+    return;
+  }
+  const { DialogueChainBuilder, NpcDialogue, StatementDialogue } = cache();
+  const chain = new DialogueChainBuilder();
+  said.forEach((step, i) => chain.add(step.npc ? new NpcDialogue(i, npcId, step.npc, crew.name) : new StatementDialogue(i, step.message)));
+  player.getDialogueManager().startDialogues(chain);
+}
+
+/** Yes: the crew move the cargo, timed as live. */
+function bankBoat(player, npcId, crew, boat) {
+  const { CountdownTask, StatementDialogue, TaskManager } = cache();
+  const branch = yesBranch(player, crew);
+  const waiting = say(player, npcId, crew, branch.working ?? "", { canContinue: false });
+  const busy = () => player.getDialogueManager().getCurrent?.() === waiting;
+  fade(player, true, FADE_CYCLES, { minimap: false });
+  player.getPacketSender().sendVarbit(common.VARBIT.BUSY, 1);
+  let fitted = true;
+  TaskManager.submit(new CountdownTask(player, MOVING_TICKS, () => {
+    if (busy() && branch.moving) StatementDialogue.send(player, branch.moving, false);
+  }));
+  TaskManager.submit(new CountdownTask(player, MOVED_TICKS, () => {
+    fitted = moveToBank(player, boat);
+    fade(player, false, FADE_CYCLES, { minimap: false });
+  }));
+  TaskManager.submit(new CountdownTask(player, DONE_TICKS, () => {
+    player.getPacketSender().sendVarbit(common.VARBIT.BUSY, 0);
+    const result = fitted ? branch.fitted : branch.full;
+    if (!busy()) return;
+    if (result) say(player, npcId, crew, result);
+    else player.getPacketSender().sendInterfaceRemoval();
+  }));
+}
+
+function confirm(player, npcId, crew, boat) {
+  pluginApi.sendMultiChatboxPrompt(player, yesBranch(player, crew).prompt,
+    "Yes.", () => bankBoat(player, npcId, crew, boat),
+    "No.", () => {});
 }
 
 /**
- * Opens the boat selection for banking. The chosen boat's cargo is moved once the conversation
- * reaches its "moving the contents" message; a crewmate with no such conversation moves it at once.
+ * Banking from the dock: the boat docked here (or the one chosen when there are several), then
+ * the confirmation. `checked`: the transcript has already answered whether the hold is empty.
  */
-function chooseBoat(player, npc, crew) {
+function startBanking(player, npc, crew, { checked = false } = {}) {
+  const npcId = headOf(npc, crew);
   const dock = dockNear(player, DOCK_RANGE);
-  if (!dock) return;
-  openBoatSelection(player, MODE.BANK_CARGO, dock, (slot) => {
-    const boat = player.getSailing().boats.find((candidate) => candidate.slot === slot);
-    if (!boat || !boatsAt(player, dock).includes(boat)) return;
-    banking.set(player, { dock, boat, fitted: undefined });
-    if (!continueConversation(player, npc, crew)) moved(player);
+  const boats = dock ? boatsAt(player, dock) : [];
+  if (!boats.length) return noBoat(player, npcId, crew);
+  const loaded = boats.filter((boat) => !holdEmpty(boat));
+  if (!loaded.length) {
+    if (checked) return undefined;
+    const empty = linesUnder(portSteps(player, crew), /cargo hold is already empty/i)[0];
+    return empty ? say(player, npcId, crew, empty) : undefined;
+  }
+  if (boats.length === 1) return confirm(player, npcId, crew, boats[0]);
+  return openBoatSelection(player, MODE.BANK_CARGO, dock, (slot) => {
+    const boat = boats.find((candidate) => candidate.slot === slot);
+    if (boat) confirm(player, npcId, crew, boat);
   });
 }
 
-/** Plays the crewmate's conversation from after the "Move Cargo to Bank" interface. */
-function continueConversation(player, npc, crew) {
-  const variant = portVariant(player, crew);
-  const steps = variant && lines.variantSteps(crew.page, variant);
-  const opens = lines.findStep(steps, (step) => step?.action === "open_interface" && step?.target === MOVE_CARGO);
-  if (!opens) return false;
-  const request = {
-    player, npc, npcId: crew.npcs.dock, variant, exact: true, handled: false,
-    select: (all) => lines.stepsAfter(all, opens.id),
-  };
-  cache().PluginManager.emitCustomEvent("npc-dialogue:start", request);
-  return request.handled;
-}
-
-function moved(player) {
-  const state = banking.get(player);
-  if (!state || state.fitted !== undefined) return;
-  state.fitted = moveToBank(player, state.boat);
-}
-
-function crewOnDock(player, npcId) {
+function crewOnDock(npcId) {
   const found = common.byNpc(npcId);
   return found?.at === "dock" ? found.crew : undefined;
 }
 
-/** The transcript's "Move Cargo to Bank" interface: the boat selection, a tick later (the chat closes first). */
+/** The transcript's "Move Cargo to Bank" interface: the rest is this unit's, a tick later (the chat closes first). */
 function onAction(event) {
-  const crew = crewOnDock(event.player, event.npcId);
-  if (!crew) return;
-  if (event.action === "open_interface" && event.target === MOVE_CARGO) {
-    event.handled = true;
-    event.end = true;
-    const { player, npc } = event;
-    const { CountdownTask, TaskManager } = cache();
-    TaskManager.submit(new CountdownTask(player, 1, () => chooseBoat(player, npc, crew)));
-    return;
-  }
-  if (event.kind === "message" && MOVING.test(String(event.text ?? ""))) moved(event.player);
+  const crew = crewOnDock(event.npcId);
+  if (!crew || event.action !== "open_interface" || event.target !== MOVE_CARGO) return;
+  event.handled = true;
+  event.end = true;
+  const { player, npc } = event;
+  const { CountdownTask, TaskManager } = cache();
+  TaskManager.submit(new CountdownTask(player, 1, () => startBanking(player, npc, crew, { checked: true })));
 }
 
-/** "If cargo hold is already empty:" (every boat docked here) and whether the bank had room. */
+/** "If cargo hold is already empty:" / "If there are items in the cargo hold:", over the boats docked here. */
 function answerCondition({ player, npcId, text }) {
-  if (!crewOnDock(player, npcId)) return null;
+  if (!crewOnDock(npcId)) return null;
   const condition = String(text ?? "").toLowerCase();
-  if (/cargo hold is already empty/.test(condition)) {
-    const dock = dockNear(player, DOCK_RANGE);
-    return dock ? boatsAt(player, dock).every(holdEmpty) : true;
-  }
-  if (/items in the cargo hold/.test(condition)) {
-    const dock = dockNear(player, DOCK_RANGE);
-    return dock ? !boatsAt(player, dock).every(holdEmpty) : false;
-  }
-  if (/bank (has|doesn't have) space|(sufficient|insufficient) room in your bank/.test(condition)) {
-    const fitted = banking.get(player)?.fitted;
-    if (fitted === undefined) return null;
-    return /doesn't have|insufficient/.test(condition) ? !fitted : fitted;
-  }
+  const dock = dockNear(player, DOCK_RANGE);
+  const empty = !dock || boatsAt(player, dock).every(holdEmpty);
+  if (/cargo hold is already empty/.test(condition)) return empty;
+  if (/items in the cargo hold/.test(condition)) return !empty;
   return null;
 }
 
-/** The Bank-cargo option: the boat selection straight away. */
+/** The Bank-cargo option: straight to banking (rsprox). */
 function bankCargo({ player, npc, npcId }) {
-  const crew = crewOnDock(player, npcId);
+  const crew = crewOnDock(npcId);
   if (!crew) return false;
-  chooseBoat(player, npc, crew);
+  startBanking(player, npc, crew);
   return true;
 }
 
 function attach(api) {
+  pluginApi = api;
   common.init(api);
   api.onNpcsInteraction(common.all().map((crew) => crew.name), { "Bank-cargo": bankCargo });
   api.onNpcDialogueCondition(answerCondition);
@@ -151,3 +221,4 @@ function attach(api) {
 module.exports = attach;
 module.exports.moveToBank = moveToBank;
 module.exports.answerCondition = answerCondition;
+module.exports.startBanking = startBanking;
