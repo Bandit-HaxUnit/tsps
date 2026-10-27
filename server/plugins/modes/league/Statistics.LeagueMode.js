@@ -61,14 +61,27 @@ function npcDeath({ killer, npcId }) {
   if (isBoss(npcId)) add(player, "bossesKilled");
 }
 
-function dealtDamage({ player, target, hit }) {
-  if (!target?.isNpc?.()) return;
-  const damage = damageOf(hit);
-  add(player, "damageDealt", damage);
-  raise(player, "highestHit", damage);
+/** Damage dealt to an NPC and the highest hit, from what each hitsplat took off it once it landed. */
+function countLanded(player, hit) {
+  for (const part of hit?.getHits?.() ?? []) {
+    part?.onApplied?.((damage) => {
+      add(player, "damageDealt", damage);
+      raise(player, "highestHit", damage);
+    });
+  }
 }
 
+/**
+ * A hit that reaches its target has its damage queued: a player's on an NPC is counted as each
+ * hitsplat lands (a projectile cancelled by its shooter's death, or damage the NPC no longer has
+ * hitpoints for, counts nothing); an NPC's on a player counts as it resolves.
+ */
 function hitResolved({ attacker, target, hit }) {
+  if (attacker?.isPlayer?.() && target?.isNpc?.()) {
+    const player = attacker.getAsPlayer?.() ?? attacker;
+    if (Common.isLeagueProfile(player)) countLanded(player, hit);
+    return;
+  }
   if (!attacker?.isNpc?.() || !target?.isPlayer?.()) return;
   add(target.getAsPlayer?.() ?? target, "damageTaken", damageOf(hit));
 }
@@ -104,7 +117,6 @@ module.exports = function attach(api) {
   api.onCustomEvent("league:login", login);
   api.onCustomEvent("league:statistics", answer);
   api.onNpcDeath(npcDeath);
-  api.onPlayerDealtDamage(dealtDamage);
   api.onCombatHitResolved(hitResolved);
   api.onPlayerDeath(playerDeath);
   api.onPlayerDefeated(playerDefeated);

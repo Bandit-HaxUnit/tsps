@@ -1,8 +1,10 @@
 /**
  * A league character on login (every login on a league world): joins the world's league the
  * first time (starting levels from the Wiki), gets the league varbits the client's journal and
- * panels read, its XP rate, and answers `league:profile` ({ player } -> { league }) for every
- * other plugin. A main character (a plain world) gets nothing.
+ * panels read, its XP rate, the league content every plugin contributes (Content.LeagueMode), and
+ * plays as a standard Ironman (Wiki "Player restrictions") through `ironman:set-mode`. It answers
+ * `league:profile` ({ player } -> { league }) for every other plugin. A main character (a plain
+ * world) gets nothing.
  */
 const Common = require("./Common.LeagueMode");
 
@@ -40,6 +42,24 @@ function applyStartingLevels(player, type) {
   }
 }
 
+/** The mode the Ironman plugin reports ("none" without one), or undefined when that plugin is not loaded. */
+function ironmanMode(player) {
+  const query = { player };
+  Common.api.emitCustomEvent("ironman:mode", query);
+  return query.mode;
+}
+
+/**
+ * Every league player is a standard Ironman (Wiki): any other mode (none, or one an admin or an
+ * earlier save gave it) is set right at every login, so characters made before this rule get it
+ * too. Nothing happens when the Ironman plugin is not loaded (its `ironman:mode` goes unanswered).
+ */
+function applyIronman(player) {
+  const mode = ironmanMode(player);
+  if (mode === undefined || mode === Common.data.ironmanMode) return;
+  Common.api.emitCustomEvent("ironman:set-mode", { player, mode: Common.data.ironmanMode, handled: false });
+}
+
 function login({ player, isNewAccount }) {
   if (!Common.isLeagueProfile(player)) return;
   let type = Common.leagueOf(player);
@@ -49,6 +69,7 @@ function login({ player, isNewAccount }) {
     if (isNewAccount) applyStartingLevels(player, type);
   }
   sendVarbits(player, type);
+  applyIronman(player);
   Common.api.emitCustomEvent("league:login", { player, league: type });
 }
 
@@ -60,6 +81,13 @@ function login({ player, isNewAccount }) {
 function mapFlags(request) {
   if (!request?.player || !Common.isLeagueProfile(request.player)) return;
   request.flags = (request.flags | 0) | Common.data.mapFlags.leagueWorld;
+}
+
+/** A league character's mode cannot be changed in game (the Ironman tutor, Adam): `ironman:change-mode` is refused. */
+function refuseModeChange(change) {
+  if (!Common.isLeagueProfile(change?.player)) return;
+  change.allowed = false;
+  change.reason = Common.message("ironmanLocked");
 }
 
 function profile(query) {
@@ -78,5 +106,6 @@ module.exports = function attach(api) {
   api.onPlayerLogin(login);
   api.onCustomEvent("league:profile", profile);
   api.onCustomEvent("world:map-flags", mapFlags);
+  api.onCustomEvent("ironman:change-mode", refuseModeChange);
   api.onCanGainExperience(experienceRate);
 };
