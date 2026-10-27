@@ -103,7 +103,7 @@ colours and screens here but no relic, area or task catalogs yet.
 | `welcome-screen:shown` | `{ player }` when the welcome screen is up | Tutorial, Welcome listen |
 | `league:areas` | `{ player } -> { league, unlocked: [area ids], next: { slot, tasks } \| null, available }` | LeagueAreaUnlocks |
 | `league:area-at` | `{ x, y, player \| league } -> { area: id \| null, name }` | LeagueAreaUnlocks |
-| `league:relic-triggered` | `{ player, relic }` when a relic's effect fired (Undying Retribution) | nobody yet |
+| `league:relic-triggered` | `{ player, relic }` when a once-in-a-while relic fires (Undying Retribution, Last Stand) | LeagueRelics emits |
 | `ironman:set-mode` | `{ player, mode } -> { handled }` (the Ironman plugin's) | LeagueMode emits at a league login |
 | `ironman:change-mode` | `{ player, from, to, allowed, reason }` (the Ironman plugin asks before a setup choice) | LeagueMode refuses for a league character |
 
@@ -115,6 +115,20 @@ collecting every plugin's rows with `league:content-rows`.
 The tier passives answer other plugins' questions rather than events of their own (below):
 `npc-drops:chance` and `drops:chance`, `minigame:points`, `slayer:task-reward`,
 `slayer:superior-spawn` and `treasure-trails:scroll-boxes`.
+
+
+The relics also answer these generic questions, which their owners ask of any content (the
+relics are the first askers; nothing changes when nobody answers):
+
+| Event | Owner | Payload |
+| --- | --- | --- |
+| `ranged:ammo-saving` | core `CombatFactory.decrementAmmo`, the blowpipe and chinchompa handlers | `{ player, itemId, amount, saved }`: `saved` shots are neither broken nor dropped |
+| `combat:consume-charge` | the powered staves (already), the crystal bow, venator bow, scythe, crystal halberd, Arclight, warped sceptre, bone staff | `{ player, itemId, skip }` |
+| `combat:bolt-proc-chance` | EnchantedBolts | `{ player, target, itemId, chance }` after the gear's and the special's multipliers |
+| `combat:status-apply` | core `CombatFactory.poisonEntity` (poison, venom), DragonfireProtection (dragonfire) | `{ target, kind, allow }`; `allow = false` and the status never takes |
+| `combat-special:cost` | core `CombatSpecial` (the energy check and the drain) | `{ player, specialId, cost, available, allow, phase }`; `phase` is "check" or "drain"; `allow` lets a short player use it |
+| `combat-special:regenerate` | core `RestoreSpecialAttackTask` | `{ player, amount }` a restore cycle (the cycle length is the lightbearer modifier's) |
+| `skills:experience-gained` | core `SkillManager.addExperience`, after the gain | `{ player, skill, experience, multiplied }` |
 
 ## What the client is sent
 
@@ -378,7 +392,137 @@ character's picks live in `league:relics` (tier index -> slot 1-3).
   memories, the guardian horn) are not granted; the data says so.
 - **Effects** are other plugins' business: they ask `league:has-relic { player, relic }`, true
   only when the character's league has that relic and chose it. The tier passives are
-  LeagueMode's (`league:highest-tier`), below.
+  LeagueMode's (`league:highest-tier`), under Tier passives below. The relics this
+  plugin implements itself are units `leaguerelics/<Relic>.LeagueRelics.js`, gated by
+  `Common.effectActive(player, effect)`: the effect's `league` (a type, or several for a relic
+  both leagues have) and its `key` (or an alias: the catalog's `last-stand-preview` and
+  `treasure-seeker-preview` stand in for relics the Wiki lists once; #1324 pads those tiers).
+- **The catalog's padding.** The Wiki gives Trailblazer Reloaded's tiers 2 and 3 and Raging
+  Echoes' tier 6 two relics each; the catalog fills the third slot (`crystal-of-memories`,
+  `treasure-seeker-preview`, `last-stand-preview`). The previews get the real relic's effect.
+
+### Not in this cache
+
+No unit, and the data says so: the **Guardian** of both leagues (no guardian horn, and a thrall
+with its own combat would be a feature of its own), **Infernal Gathering** (no Trailblazer tools),
+the **Crystal of Memories** entry (no item), **Ruinous Powers** beyond the book it grants (the
+server has no Ruinous Powers prayer book), and the Sage's greaves of **Trickster** and **Corner
+Cutter** (the rest of those relics is another PR's).
+
+### Trailblazer Reloaded's combat relics
+
+These relics have their effects (`leaguerelics/*.LeagueRelics.js`, numbers in the data's
+`effects`; the Wiki's, as no recording of Trailblazer Reloaded exists):
+
+- **Superior Sorcerer** (tier 4): magic attacks every 2 ticks (the new `onAttackSpeed` hook, asked
+  after the weapon's, spell's or special's own speed), magic accuracy x2.75 and +200 permille
+  magic damage (the equipment-effect modifiers), a 90% roll a cast that keeps the runes (the
+  existing `magic:rune-saving`, asked once the cast has checked the player has them, so they are
+  required but not spent) or the staff's charge (`combat:consume-charge`, asked by the trident in
+  core and by the Sanguinesti staff and Tumeken's shadow before a charge is spent), in multicombat
+  a landed spell also hits up to five attackable targets within a tile of its target for 0 to 25%
+  of its damage (fixed-damage hits that pay no XP, never splash themselves and are not scaled
+  again by Berserker, since the hit they derive from already was), and the standard
+  binds and Ancient ice spells always land unless the target is frozen or still freeze-immune.
+- **Berserker** (tier 7): every hit is multiplied by 1 + 0.004 x missing hitpoints (floored), and a
+  hit on an NPC at full health is forced accurate at its max.
+- **Undying Retribution** (tier 8): when a death would go ahead (`onPlayerBeforeDeath`, after any
+  other content kept the player alive) and three minutes have passed since it last fired:
+  hitpoints and prayer to their max, poison, venom and the poison immunity cleared, the
+  Retribution prayer's graphic 437 (ours), and a reflected hit of 0 to 2 x Prayer level on every
+  attackable NPC within three tiles that is not attack-immune and that the area's policy lets
+  the player fight (recoil-immune ones only if Nex, the Hespori, Vorkath or a Wilderness boss)
+  and 0 to half the Prayer level on each player fighting them. The cooldown is
+  a timestamp attribute (0 when ready), reset by a real death (the defeated hook, which every
+  death reaches; the death hook stops at the first plugin that handles the death, as the raids
+  do, so a death inside one would never have reset it). A plugin that already prevented the
+  death on this hook is honoured; one attached after this plugin would see the relic fire first,
+  since every before-death hook runs. A prevented death counts for nothing in a raid (Wiki: no
+  raid death penalties): core never starts the death task, so the Chambers, Theatre, Tombs and
+  Archive death handlers, which take points, count deaths, jail, ghost and check wipes, never run.
+- **The Arcane grimoire** (`ArcaneGrimoire.LeagueRelics.js`), the item Superior Sorcerer and Raging
+  Echoes' Grimoire relic grant: for a league character its cache options, from the inventory or
+  worn, are Change Spellbook (a chat choice of the other three books), Previous Spellbook (back
+  to the book the last change left; it toggles) and Check Previous (ours: "Your previous
+  spellbook was the Ancient spellbook."). The swap is the altars' (`MagicSpellbook.changeSpellbook`:
+  Lunar's 40 Defence, autocast cleared, the tab, "You have changed your magic spellbook."); this
+  server's altars gate the books on nothing else, so neither does the grimoire where the
+  Trailblazer Reloaded relics page says "providing players have unlocked them". The previous book
+  is the attribute `league:grimoire-previous-spellbook`, remembered only when a swap went through.
+  Holding the item is the only check (it is untradeable and only a relic grants it; a spawned one
+  works for any league character). Not covered: its Book of the Dead role (the resurrection
+  spells' requirement, checked in core), and Raging Echoes' Grimoire unlocking every prayer and
+  spell.
+- **Archer's Embrace** (tier 4): ranged speed halved (`onAttackSpeed`: above 4 rounded down,
+  below 3 rounded up, so 3, 4 and 5 all become 2 as the Wiki's notes say), ranged accuracy x2,
+  on a landed ranged hit a 10% chance of an extra `PendingHit` at the same target with a roll of
+  its own (no ammunition spent and no projectile shown for it, a second hitsplat: ours; the extra
+  never fires another, and is an ordinary shot: it is rolled as if no special were armed, its
+  accuracy and damage included, and a special armed after the original shot stays armed with its
+  energy, `PendingHitConfig.ordinary`), 90% of each volley's
+  shots kept (`ranged:ammo-saving`, so an Ava's device recovers its share of the rest, the
+  Wiki's 98%), the same 90% for a ranged weapon's charge (`combat:consume-charge` while the
+  player's combat method is ranged: the crystal bow, venator bow, blowpipe scales and
+  chinchompas), and enchanted bolts' chance x2 (`combat:bolt-proc-chance`). Not done: a bow of
+  Faerdhinen's charges, which this server does not model.
+- **Brawler's Resolve** (tier 4): melee speed halved the same way, melee accuracy x1.5, every
+  defence x1.5 (the melee defence modifier, whose effective level the ranged roll shares too, and
+  the magic one), a landed melee hit has a 10% chance to deal double damage
+  (`onCombatHitDamage`), 90% of a melee weapon's charges kept (scythe, crystal halberd,
+  Arclight), and immunity to poison, venom and dragonfire (`combat:status-apply`). Stuns and
+  freezes still take, as the Wiki says roots and stuns do. Not done: "icy breath" and the other
+  NPC-specific statuses the Wiki does not name. Superior Sorcerer's charge saving now checks the
+  attack is a magic one, since every charge weapon asks the same question.
+- **Soul Stealer** (tier 7): the minimum hit rises to 10% of the max hit (the max as combat
+  computes it for that hit, floored, applied to every accurate hit), and a landed hit has a 50%
+  chance to restore hitpoints and prayer by 10% of its damage rounded up. The restore skips
+  special attacks and launches that struck more than one target in the same cycle (a scythe
+  whose three hits land on one target counts; an enchanted bolt's effect is part of its hit, so
+  it counts; a venator bow's bounces make its first hit a multi-target launch here, where the
+  Wiki lets the first hit heal).
+- **Weapon Master** (tier 7): special attacks against NPCs are forced accurate
+  (`onCombatHitRoll`) and every special's hit is floored at 20% of the max hit, every restore
+  cycle gives 30% energy (`combat-special:regenerate`; the cycle stays the usual 30 seconds, 15
+  with a lightbearer), and a player short of energy may still use a special (`combat-special:cost`
+  "check": `allow`), whose drain then costs 25 hitpoints and no energy ("drain": `cost` 0). Ours:
+  the sacrifice needs more than 25 hitpoints, so it cannot kill.
+- **Executioner** (tier 8): the Sage's axe is a ranged weapon in core's table
+  (`RangedData.SAGES_AXE`, a dart-interface thrown weapon with +0 bonuses; the cache has no
+  spotanim of its own for it, so it flies as a rune thrown axe: ours), with the relic page's 5
+  tiles of reach (7 on long range; the item page's 6/8 is the later Demonic Pacts version) from a
+  weapon profile and never used up (a ranged ammo handler). Its requirement in item-gameplay.json
+  is 0 (Wiki: no requirements). A ranged hit on an NPC under 20% of its hitpoints (after the hits
+  already queued) deals the rest of them (`onCombatHitDamage`), for the relic's owner only. The
+  Kraken's ranged reduction applies afterwards as to any hit.
+
+### Raging Echoes' combat relics
+
+- **Specialist** (tier 8): every special costs 20% (`combat-special:cost`), rolls accuracy
+  x2 while a special is active (the three accuracy modifiers), a special that misses refunds 10%
+  (`onPlayerDealtDamage`, one refund a missed `PendingHit`), and any NPC kill restores 15%
+  (`onNpcDeath`).
+- **Last Stand** (tier 8; the catalog's tier 6 copy is an alias): a lethal hit from any source
+  (`onPlayerBeforeDeath`) leaves the player at 1 hitpoint, boosts Attack, Strength, Defence,
+  Ranged and Magic to 255 and opens a 16-tick window in which every lethal hit again leaves 1,
+  food is refused (`onCanEat`) and any other heal is undone on the next tick (the Wiki forbids
+  healing above 1 by any means and names no mechanism: ours). A tick task drains each boost 16 a
+  tick down to base + 15; when the window closes the player is
+  healed by the damage their hits did as they landed in it (`HitDamage.onApplied`: an impact
+  cancelled before it lands counts nothing), capped at their max (ours: the Wiki shows a bar over the
+  head and gives no formula; no bar here). Once every three minutes, reset by a real death
+  (`league:last-stand-ready-at`). Not done: the Wiki's instant-kill exceptions (they are not
+  hits here either), and the skills packet carries a boost as a byte, so the client's boost
+  overlay for a 255 may read oddly while the level itself shows.
+
+### Equilibrium (both leagues)
+
+Trailblazer Reloaded's tier 6 and Raging Echoes' tier 4: every gain of experience
+(`skills:experience-gained`, emitted after the gain) adds a bonus in the same skill of 10% of
+the total level, 20% when the skill is the one with the least experience, added with the
+multipliers off (neither the world's nor the league's rate) and floored to tenths like any
+gain; the bonus's own gain brings no bonus. Several skills tied for least experience (a fresh
+character) resolve to the first in skill order: ours. Live tracks and shows the relic's XP; here
+it is a plain XP drop.
 
 ## Tier passives
 
@@ -442,51 +586,6 @@ Left out, with why: Raging Echoes' clue-step progress saved between clues (the t
 no per-step save to carry across scrolls); Raging Echoes' one-minute farming ticks (Farming's
 growth model has no tick-length seam, and Farming is under active work elsewhere); the
 Trailblazer Reloaded ironman restriction and the crystal of memories (not in this cache).
-
-### Trailblazer Reloaded's combat relics
-
-Three relics have their effects (`leaguerelics/*.LeagueRelics.js`, numbers in the data's
-`effects`; the Wiki's, as no recording of Trailblazer Reloaded exists):
-
-- **Superior Sorcerer** (tier 4): magic attacks every 2 ticks (the new `onAttackSpeed` hook, asked
-  after the weapon's, spell's or special's own speed), magic accuracy x2.75 and +200 permille
-  magic damage (the equipment-effect modifiers), a 90% roll a cast that keeps the runes (the
-  existing `magic:rune-saving`, asked once the cast has checked the player has them, so they are
-  required but not spent) or the staff's charge (`combat:consume-charge`, asked by the trident in
-  core and by the Sanguinesti staff and Tumeken's shadow before a charge is spent), in multicombat
-  a landed spell also hits up to five attackable targets within a tile of its target for 0 to 25%
-  of its damage (fixed-damage hits that pay no XP, never splash themselves and are not scaled
-  again by Berserker, since the hit they derive from already was), and the standard
-  binds and Ancient ice spells always land unless the target is frozen or still freeze-immune.
-- **Berserker** (tier 7): every hit is multiplied by 1 + 0.004 x missing hitpoints (floored), and a
-  hit on an NPC at full health is forced accurate at its max.
-- **Undying Retribution** (tier 8): when a death would go ahead (`onPlayerBeforeDeath`, after any
-  other content kept the player alive) and three minutes have passed since it last fired:
-  hitpoints and prayer to their max, poison, venom and the poison immunity cleared, the
-  Retribution prayer's graphic 437 (ours), and a reflected hit of 0 to 2 x Prayer level on every
-  attackable NPC within three tiles that is not attack-immune and that the area's policy lets
-  the player fight (recoil-immune ones only if Nex, the Hespori, Vorkath or a Wilderness boss)
-  and 0 to half the Prayer level on each player fighting them. The cooldown is
-  a timestamp attribute (0 when ready), reset by a real death (the defeated hook, which every
-  death reaches; the death hook stops at the first plugin that handles the death, as the raids
-  do, so a death inside one would never have reset it). A plugin that already prevented the
-  death on this hook is honoured; one attached after this plugin would see the relic fire first,
-  since every before-death hook runs. A prevented death counts for nothing in a raid (Wiki: no
-  raid death penalties): core never starts the death task, so the Chambers, Theatre, Tombs and
-  Archive death handlers, which take points, count deaths, jail, ghost and check wipes, never run.
-- **The Arcane grimoire** (`ArcaneGrimoire.LeagueRelics.js`), the item Superior Sorcerer and Raging
-  Echoes' Grimoire relic grant: for a league character its cache options, from the inventory or
-  worn, are Change Spellbook (a chat choice of the other three books), Previous Spellbook (back
-  to the book the last change left; it toggles) and Check Previous (ours: "Your previous
-  spellbook was the Ancient spellbook."). The swap is the altars' (`MagicSpellbook.changeSpellbook`:
-  Lunar's 40 Defence, autocast cleared, the tab, "You have changed your magic spellbook."); this
-  server's altars gate the books on nothing else, so neither does the grimoire where the
-  Trailblazer Reloaded relics page says "providing players have unlocked them". The previous book
-  is the attribute `league:grimoire-previous-spellbook`, remembered only when a swap went through.
-  Holding the item is the only check (it is untradeable and only a relic grants it; a spawned one
-  works for any league character). Not covered: its Book of the Dead role (the resurrection
-  spells' requirement, checked in core), and Raging Echoes' Grimoire unlocking every prayer and
-  spell.
 
 ## The league tutorial
 
@@ -777,6 +876,8 @@ above (clue-step progress and farming ticks), the boosted sources their own plug
 ask about, Shattered
 Relics' own panels. Each is its own item on the
 progress tracker.
+Of the relics, the gathering, production, clue, slayer and item ones follow in their own
+PRs (the plan in the relic effects PR).
 
 The records have no POH league hall to stand in: its trophy case, pedestals and scroll need
 the house's league hall, which this server doesn't build yet, so the scroll's options answer

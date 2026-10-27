@@ -118,9 +118,15 @@ function hasRelic(player, key) {
   return catalog(type).tiers.some((tier, tierIndex) => tier.relics[picks[tierIndex] - 1]?.key === key);
 }
 
-/** An effect applies to a player character in the effect's league who chose its relic. */
+/**
+ * An effect applies to a player character in one of the effect's leagues (`league`: a type, or
+ * several for a relic both leagues have) who chose its relic (`key`, or one of its `aliases`).
+ */
 function effectActive(player, effect) {
-  return player?.isPlayer?.() === true && leagueOf(player) === effect.league && hasRelic(player, effect.key);
+  if (player?.isPlayer?.() !== true) return false;
+  const league = leagueOf(player);
+  if (league === null || ![].concat(effect.league).includes(league)) return false;
+  return [effect.key, ...(effect.aliases ?? [])].some((key) => hasRelic(player, key));
 }
 
 /** Virtual struct and enum ids for a league's catalog: the client reads them as if from the cache. */
@@ -152,12 +158,26 @@ function isBuildingDerivedHit() {
   return buildingDerivedHit;
 }
 
+/** The attacker's max hit as combat computes it for a hit (the formulas, the ranged modifiers, a spell's bounds). */
+function maxHitFor(attacker, target, combatType) {
+  const { CombatType, DamageFormulas, PluginManager } = core;
+  if (combatType === CombatType.MAGIC) return DamageFormulas.sourceHitBounds(attacker, combatType, target).maximum;
+  const max = DamageFormulas.sourceMaxHit(attacker, combatType);
+  return combatType === CombatType.RANGED ? PluginManager.modifyRangedMaxHit(attacker, target, max) : max;
+}
+
+/** Restores special attack energy and redraws the bar. */
+function restoreSpecial(player, percent) {
+  player.incrementSpecialPercentage(percent);
+  core.CombatSpecial.updateBar(player);
+}
+
 function message(key, values = {}) {
   return data.messages[key].text.replace(/\{(\w+)\}/g, (match, name) => values[name] ?? match);
 }
 
 module.exports = {
-  init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, ids, structIds, message, RELICS_ATTRIBUTE,
+  init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, ids, structIds, message, maxHitFor, restoreSpecial, RELICS_ATTRIBUTE,
   derivedHit, isBuildingDerivedHit,
   get data() { return data; },
   get api() { return api; },

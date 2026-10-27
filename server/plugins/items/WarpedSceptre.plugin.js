@@ -14,6 +14,7 @@ const BUSY_VARBIT = 12393; // cache gameval busy
 const MAGIC_LEVEL_REQUIRED = 62; // OSRS Wiki item page
 
 let core = null;
+let pluginApi;
 let ItemIdentifiers = null;
 let chargedIds = new Set();
 let unchargedByCharged = new Map();
@@ -74,6 +75,10 @@ function spellFor(player) {
 }
 
 function useCharge(player, item) {
+  // Content may spare the charge (a league relic): the question every powered staff asks.
+  const consume = { player, itemId: item.getId(), skip: false };
+  pluginApi.emitCustomEvent("combat:consume-charge", consume);
+  if (consume.skip) return;
   const left = charges(item) - 1;
   if (left < 0) return;
   if (left > 0) {
@@ -347,6 +352,7 @@ module.exports = {
     syncWornCharges,
   },
   register(api) {
+    pluginApi = api;
     api.onServerStartup(initialize.bind(null, api.core));
     api.onCanEquip(canEquip);
     // Named actions resolve the inventory option from the item definition.

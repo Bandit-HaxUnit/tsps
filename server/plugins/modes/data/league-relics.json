@@ -46,10 +46,11 @@
     "noRoom": { "text": "You need room in your inventory or bank for this relic's items.", "source": "ours" },
     "relicUsage": { "text": "Use ::relic <tier 1-8> <slot 1-3>.", "source": "ours" },
     "relicList": { "text": "{league} relics: {relics}", "source": "ours" },
-    "relicNone": { "text": "none chosen", "source": "ours" }
+    "relicNone": { "text": "none chosen", "source": "ours" },
+    "lastStandNoFood": { "text": "You cannot eat while making your last stand.", "source": "ours" }
   },
   "effects": {
-    "_comment": "The relics with effects here (SuperiorSorcerer / Berserker / UndyingRetribution.LeagueRelics.js), each gated on its league and on being chosen. Numbers are the Wiki's: no rsprox recording of Trailblazer Reloaded exists (the captures start at revision 223). Superior Sorcerer's splash reach (one tile around the primary target, like a burst) and Undying Retribution's graphic (the Retribution prayer's, 437) are ours; the Wiki gives neither. The Arcane grimoire (ArcaneGrimoire.LeagueRelics.js) is the item two relics grant; its options are the cache's, its texts ours (the Wiki lists the options, not what they say).",
+    "_comment": "The relics with effects here (one <Relic>.LeagueRelics.js each), each gated on its league (`league`, one type or several for a relic both leagues have) and on being chosen (`key`, plus `aliases` for a catalog entry that stands in for the same relic). Numbers are the Wiki's: no rsprox recording of Trailblazer Reloaded exists (the captures start at revision 223). Superior Sorcerer's splash reach (one tile around the primary target, like a burst) and Undying Retribution's graphic (the Retribution prayer's, 437) are ours; the Wiki gives neither.",
     "superiorSorcerer": {
       "league": 4, "key": "superior-sorcerer",
       "attackSpeed": 2, "accuracyMultiplier": 2.75, "damageBonusPermille": 200, "saveChance": 0.9,
@@ -63,6 +64,19 @@
       "_recoilImmuneExceptions": "Wiki: it still works on these though they are immune to recoil damage (Nex, the Hespori, Vorkath and every Wilderness boss).",
       "recoilImmuneExceptions": ["Nex", "Hespori", "Vorkath", "Callisto", "Artio", "Vet'ion", "Calvar'ion", "Venenatis", "Spindel", "Scorpia", "Chaos Elemental", "Chaos Fanatic", "Crazy archaeologist", "King Black Dragon"]
     },
+    "_combatComment": "The combat and XP relics (docs/leagues.md). Wiki numbers unless marked ours: Archer's Embrace and Brawler's Resolve halve the weapon's speed (above 4 rounded down, below 3 rounded up, so 3, 4 and 5 all become 2). Ours: Archer's extra projectile spends no ammunition and shows no projectile (a second hitsplat); Soul Stealer's venator bow bounces make its first hit a multi-target launch (the Wiki lets the first hit restore); Weapon Master's 25-hitpoint sacrifice needs more than 25 hitpoints; Executioner's reach is the relic page's 5/7 (the Sage's axe item page says 6/8, the later Demonic Pacts version) and the axe flies as a rune thrown axe (no spotanim of its own in the cache); Last Stand refuses food and undoes any other heal a tick later, and its closing heal is the damage dealt in the window capped at the max; Equilibrium's 20% goes to the first of equally least-experienced skills.",
+    "archersEmbrace": { "league": 4, "key": "archers-embrace", "accuracyMultiplier": 2, "extraProjectileChance": 0.1, "ammoSaveChance": 0.9, "boltProcMultiplier": 2 },
+    "brawlersResolve": { "league": 4, "key": "brawlers-resolve", "accuracyMultiplier": 1.5, "defenceMultiplier": 1.5, "doubleDamageChance": 0.1, "chargeSaveChance": 0.9, "immuneStatuses": ["poison", "venom", "dragonfire"] },
+    "soulStealer": { "league": 4, "key": "soul-stealer", "minimumHitFraction": 0.1, "restoreChance": 0.5, "restoreFraction": 0.1 },
+    "weaponMaster": { "league": 4, "key": "weapon-master", "minimumHitFraction": 0.2, "regenPercent": 30, "sacrificeHitpoints": 25 },
+    "executioner": { "league": 4, "key": "executioner", "items": ["SAGES_AXE", "SAGES_AXE_2"], "executeBelowFraction": 0.2, "attackDistance": 5, "longRangeDistance": 7 },
+    "specialist": { "league": 5, "key": "specialist", "cost": 20, "accuracyMultiplier": 2, "missRefundPercent": 10, "killRestorePercent": 15 },
+    "lastStand": {
+      "league": 5, "key": "last-stand", "aliases": ["last-stand-preview"],
+      "boostedLevel": 255, "drainPerTick": 16, "drainFloorAboveBase": 15, "windowTicks": 16, "cooldownMs": 180000,
+      "skills": ["ATTACK", "STRENGTH", "DEFENCE", "RANGED", "MAGIC"]
+    },
+    "equilibrium": { "league": [4, 5], "key": "equilibrium", "bonusFraction": 0.1, "leastExperiencedFraction": 0.2 },
     "arcaneGrimoire": {
       "item": "Arcane grimoire",
       "options": { "change": "Change Spellbook", "previous": "Previous Spellbook", "check": "Check Previous" },
