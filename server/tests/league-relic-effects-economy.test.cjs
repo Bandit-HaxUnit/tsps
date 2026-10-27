@@ -273,6 +273,18 @@ test("Golden God: High Alchemy with no runes or level, 15% more coins, a 65% cha
   assert.equal(amount(full, I.RUNE_PLATEBODY), 0, "a used item's slot holds the coins");
   assert.equal(amount(full, I.COINS), Math.floor((value * 115) / 100));
 
+  // Any character: a full inventory, no coins, two noted platebodies and exactly the last runes. The
+  // runes' slots come free as the cast uses them, so the coins have a place.
+  const ordinary = character("lastrunes", "main");
+  const notedPlate = core.ItemDefinition.forId(I.RUNE_PLATEBODY).getNoteId();
+  ordinary.getSkillManager().setCurrentLevel(Skill.MAGIC, 99, false);
+  ordinary.getInventory().add(new Item(notedPlate, 2), false).add(new Item(I.NATURE_RUNE, 1), false).add(new Item(I.FIRE_RUNE, 5), false);
+  while (ordinary.getInventory().getFreeSlots() > 0) ordinary.getInventory().add(new Item(I.BRONZE_DAGGER, 1), false);
+  alch(ordinary, notedPlate);
+  assert.equal(amount(ordinary, notedPlate), 1, "cast with the last runes");
+  assert.equal(amount(ordinary, I.COINS), value);
+  assert.equal(amount(ordinary, I.NATURE_RUNE) + amount(ordinary, I.FIRE_RUNE), 0);
+
   for (const player of others(who)) {
     player.getInventory().add(new Item(I.RUNE_PLATEBODY, 1), false);
     alch(player, I.RUNE_PLATEBODY);

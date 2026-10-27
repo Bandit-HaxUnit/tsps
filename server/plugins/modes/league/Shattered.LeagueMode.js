@@ -150,11 +150,49 @@ function interfaceClosed({ player, interfaceId }) {
   if (interfaceId === data.classChoice.group || awaitingChoice.has(player)) awaitChoice(player, 1);
 }
 
-/** Into the inventory if it can take all of it, otherwise the bank tab the item belongs in. */
-function give(player, item, amount) {
-  const { Item, Bank } = Common.core;
-  if (player.getInventory().getAddableAmount(new Item(item, amount)) >= amount) player.getInventory().adds(item, amount);
-  else player.getBank(Bank.getTabForItem(player, item)).add(new Item(item, amount), false);
+/** The bank tabs an item can go to: one already holding it, then its own tab, then any other. */
+function bankTabs(player, item) {
+  const { Bank } = Common.core;
+  const tabs = [];
+  for (let tab = 0; tab < Bank.TOTAL_BANK_TABS; tab++) if (tab !== Bank.BANK_SEARCH_TAB_INDEX) tabs.push(player.getBank(tab));
+  const holding = tabs.filter((bank) => bank.contains(item));
+  return [...new Set([...holding, player.getBank(Bank.getTabForItem(player, item)), ...tabs])];
+}
+
+/** The free slots a container needs for an item: none to top up a stack it holds, one for a new stack, one each otherwise (a bank stacks everything). */
+function slotsNeeded(player, container, item, amount) {
+  const stacks = container !== player.getInventory() || Common.core.ItemDefinition.forId(item).isStackable();
+  if (!stacks) return amount;
+  return container.contains(item) ? 0 : 1;
+}
+
+/**
+ * Where each of a class's items goes: the inventory when it has room, otherwise a bank tab with
+ * room, counting the slots the kit's earlier items take. Null when an item has nowhere to go.
+ */
+function placeKit(player, items) {
+  const { Item } = Common.core;
+  const taken = new Map();
+  const places = [];
+  for (const [item, amount] of items) {
+    const fits = (container) => {
+      const needed = slotsNeeded(player, container, item, amount);
+      return container.getAddableAmount(new Item(item, amount)) >= amount && container.getFreeSlots() - (taken.get(container) ?? 0) >= needed;
+    };
+    const container = [player.getInventory(), ...bankTabs(player, item)].find(fits);
+    if (!container) return null;
+    taken.set(container, (taken.get(container) ?? 0) + slotsNeeded(player, container, item, amount));
+    places.push(container);
+  }
+  return places;
+}
+
+function give(player, items, places) {
+  const { Item } = Common.core;
+  items.forEach(([item, amount], index) => {
+    if (places[index] === player.getInventory()) player.getInventory().adds(item, amount);
+    else places[index].add(new Item(item, amount), false);
+  });
 }
 
 /** Select (737:6 / 11 / 16): its confirm panel shows that class. */
@@ -176,17 +214,26 @@ function declineClass({ player }) {
   return true;
 }
 
-/** Accept: the class's skill, items and fragment; the choice closes for good. */
+/**
+ * Accept: the class's skill, items and fragment; the choice closes for good. Its items are placed
+ * first: with no room for all of them in the inventory and bank, nothing is given and the class
+ * stays unchosen.
+ */
 function acceptClass({ player }) {
   if (!isShattered(player) || !isChoiceOpen(player)) return false;
   const choice = selected.get(player);
   const row = data.classChoice.classes[choice];
   if (!row || chosen(player)) return true;
+  const places = placeKit(player, row.items);
+  if (!places) {
+    player.sendMessage(data.messages.classNoRoom);
+    return true;
+  }
   player.setAttribute(CLASS_ATTRIBUTE, choice);
   selected.delete(player);
   Common.api.emitCustomEvent("league:unlock-skill", { player, skill: row.skill });
   Common.api.emitCustomEvent("league:grant-fragment", { player, id: row.fragment });
-  for (const [item, amount] of row.items) give(player, item, amount);
+  give(player, row.items, places);
   player.getPacketSender().sendInterfaceRemoval();
   return true;
 }

@@ -279,11 +279,11 @@ test("Golden Brick Road: coins beside a mark of grace; Grave Robber: more hallow
 
   const robber = cases(F.graveRobber);
   Math.random = () => 0.6;
-  assert.equal(emit("minigame:points", { player: robber.owner, minigame: "hallowed-sepulchre", kind: "hallowed-marks", amount: 5 }).amount, 7, "7.5 marks: the half mark missed");
+  assert.equal(emit("minigame:points", { player: robber.owner, minigame: "hallowed-sepulchre", points: 5 }).points, 7, "7.5 marks: the half mark missed");
   Math.random = () => 0.4;
-  assert.equal(emit("minigame:points", { player: robber.owner, minigame: "hallowed-sepulchre", kind: "hallowed-marks", amount: 1 }).amount, 2, "1.5 marks: the half mark hit");
-  assert.equal(emit("minigame:points", { player: robber.owner, minigame: "pest-control", kind: "commendation", amount: 5 }).amount, 5, "not another reward");
-  assert.equal(emit("minigame:points", { player: robber.others[1], minigame: "hallowed-sepulchre", kind: "hallowed-marks", amount: 5 }).amount, 5);
+  assert.equal(emit("minigame:points", { player: robber.owner, minigame: "hallowed-sepulchre", points: 1 }).points, 2, "1.5 marks: the half mark hit");
+  assert.equal(emit("minigame:points", { player: robber.owner, minigame: "pest-control", points: 5 }).points, 5, "not another reward");
+  assert.equal(emit("minigame:points", { player: robber.others[1], minigame: "hallowed-sepulchre", points: 5 }).points, 5);
 
   const clued = cases(F.cluedIn);
   const rules = emit("npc-drops:tertiary-chance", { player: clued.owner, rules: [] }).rules;

@@ -143,10 +143,9 @@ function titheObject(event) {
         const result = Model.titheDeposit(score.score, player.getInventory().getAmount(fruit), crop.xp);
         player.getInventory().deleteNumber(fruit, result.count);
         score.score = result.score;
-        // Content may raise the points a deposit pays ("minigame:points", a league fragment).
-        const paid = { player, minigame: "tithe-farm", kind: "tithe-points", amount: result.points };
-        core.PluginManager.emitCustomEvent("minigame:points", paid);
-        score.points = Math.min(16000, score.points + (Number.isSafeInteger(paid.amount) && paid.amount > result.points ? paid.amount : result.points));
+        const award = { player, minigame: "tithe-farm", points: result.points };
+        core.PluginManager.emitCustomEvent("minigame:points", award);
+        score.points = Math.min(16000, score.points + award.points);
         Patches.award(player, result.xp);
         player.getSkillManager().addExperiences(core.Skill.FARMING, result.bonus);
         sync(player);

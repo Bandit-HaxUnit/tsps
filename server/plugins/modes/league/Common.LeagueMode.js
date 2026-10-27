@@ -60,6 +60,11 @@ function league(type) {
   return data.leagues[type] ?? null;
 }
 
+/** A league's tier passives (leagues.json `passives`, by key; Passives.LeagueMode.js applies them). */
+function passives(type) {
+  return league(type)?.passives ?? {};
+}
+
 /** The league a new league character joins: the world's, or the data's default if the config named a type the data does not know. */
 function configuredType() {
   return worldLeague() ?? Number(data.default);
@@ -125,7 +130,7 @@ function noted(itemId) {
 }
 
 module.exports = {
-  init, later, isLeagueProfile, leagueOf, league, worldLeague, configuredType, highestTier, xpMultiplier, runeday, message,
+  init, later, isLeagueProfile, leagueOf, league, passives, worldLeague, configuredType, highestTier, xpMultiplier, runeday, message,
   bankHasRoom, bank, noted,
   LEAGUE_TYPE_ATTRIBUTE, LEAGUE_PROFILE, LEAGUE_TYPE_CONFIG,
   get data() { return data; },

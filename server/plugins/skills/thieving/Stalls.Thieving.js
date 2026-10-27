@@ -241,7 +241,10 @@ function finishTheft(event, stall) {
   const done = { player, kind: "stall", object, succeeded: true, again: false };
   pluginApi.emitCustomEvent("thieving:done", done);
   // A repeat only while the player stands where they stole from.
-  if (done.again && samePlace(player.getLocation(), event.from)) core.TaskManager.submit(new core.CountdownTask(player, 1, () => handleStealFromStall({ ...event, repeat: true })));
+  // Keyed by the player's index, as their other actions: walking off cancels it; and checked again when it fires.
+  if (done.again && samePlace(player.getLocation(), event.from)) core.TaskManager.submit(new core.CountdownTask(player.getIndex(), 1, () => {
+    if (samePlace(player.getLocation(), event.from) && player.getMovementQueue?.()?.isMovings?.() !== true) handleStealFromStall({ ...event, repeat: true });
+  }));
 }
 
 function handleStealFromStall(event) {
