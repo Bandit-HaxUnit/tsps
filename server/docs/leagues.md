@@ -78,6 +78,7 @@ colours and screens here but no relic, area or task catalogs yet.
 | `league:highest-tier` | `{ player } -> { tier }` (0-based, -1 none) | LeagueRelics |
 | `league:award-task` | `{ player, id, points, name } -> { awarded }` | LeaguePoints (once per id) |
 | `league:points` | `{ player } -> { points, tasks }` | LeaguePoints |
+| `league:saved-points` | `{ save } -> { points, tasks }` (an offline league character's save) | LeaguePoints |
 | `league:completed-tasks` | `{ player } -> { ids }` | LeaguePoints |
 | `league:complete-task` | `{ player, id } -> { found, completed }` (a catalog task, by id) | LeagueTasks |
 | `league:points-changed` | `{ player, points, previous, tasks, previousTasks }` | LeagueMode (journal), LeagueTasks, LeagueRelics, LeagueAreaUnlocks listen |
@@ -274,6 +275,32 @@ finished value, 12 (every Raging Echoes capture's login) or Leagues VI's 14 (243
 (`welcome_screen:motw`, 378:6) reads, as captured, `Welcome to Old School RuneScape: <league>!`
 and, when world.json's pluginConfig `league:end` (an ISO date) is set, `There are N days remaining
 in this League.` WelcomeScreen emits `welcome-screen:shown`.
+
+## Records
+
+`league/Records.LeagueMode.js`: the main game's league screens, as captured on rev 229
+(osrs-captures 229/00690-00702). Each opens as the main modal after script 2524 (-1, -1).
+
+- **Points:** at a main character's login on a plain world, the account's league save is read
+  through the persistence backend. LeaguePoints totals its tasks (`league:saved-points`), and the
+  total goes out as that league's main-game varp (2771, 2772, 3275, 4032, 4556 or 5507, the ones
+  script 9462 reads). An account keeps one league character, so the other leagues read 0.
+- **Trophies (447):** the Leagues Tutor's Claim-trophies, its conversation's open_interface
+  "League trophies", and `::leaguerecords trophies` open it. The setevents cover OP1 and OP10 on
+  447:3, and script 1128 takes the title and five masks over enum 2778's trophies. A set bit shows
+  Take, a clear one Store. The client hides a trophy above the league's points (script 1129).
+- **Take and Store:** a trophy is the Tutor's to hand out while the character holds none of it in
+  the inventory, equipment or bank (a bank placeholder doesn't count), so a lost one can be taken
+  again (Wiki "League trophy"). Take hands out an earned one; Store takes it back from the
+  inventory. Each click resends the masks through script 1130, and op10 examines. A click with
+  the screen closed does nothing.
+- **Accomplishment scroll (41182):** League-statistics opens 449 with script 1110 (the owner's
+  name and each league's points). League-rankings opens 445 and nothing else. League-firsts opens
+  676 with script 3698 on the newest league, with OP1 on one dropdown slot per league; a pick
+  redraws that league. Rankings and firsts are the cache's own tables.
+
+On a league world none of this applies: the Tutor's Claim-trophies and the scroll's options fall
+through to their defaults. Bots and agent players never read a league save.
 
 ## Relics
 
@@ -706,6 +733,7 @@ of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's
   with the points given, through the real award path.
 - `::leaguetasks <search>` - find a league's tasks by name or id, with tier, points and whether done.
 - `::relic [tier 1-8] [slot 1-3]` - list your relics, or choose one through the usual checks.
+- `::leaguerecords <trophies|statistics|rankings|firsts>` - open a main-game record screen.
 - `::mastery` - your combat masteries, points and challenges; `::mastery <melee|ranged|magic>
   <tier 1-6>` unlocks one through the usual checks; `::mastery point <1-10>` awards a challenge's
   point through the real path (the only way to the Echo boss challenges here).
@@ -716,6 +744,10 @@ of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's
 
 Most task triggers (see Tasks), the Echo bosses (and so three of the mastery points), the tier passives left out
 above (clue-step progress and farming ticks), the boosted sources their own plugins have yet to
-ask about, main-game records and reward shops, and Shattered
+ask about, reward shops, and Shattered
 Relics' own panels. Each is its own item on the
 progress tracker.
+
+The records have no POH league hall to stand in: its trophy case, pedestals and scroll need
+the house's league hall, which this server doesn't build yet, so the scroll's options answer
+only where the loc exists.

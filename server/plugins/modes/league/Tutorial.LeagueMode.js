@@ -44,7 +44,6 @@ const pendingSection = new WeakMap();
 const sectionTarget = new WeakMap();
 /** Per player: the sections whose walkthrough was seen this session (a reopened screen skips it). */
 const walkthroughSeen = new WeakMap();
-let LaterTask = null;
 
 function flowOf(type) {
   const row = data.leagues[type];
@@ -76,14 +75,6 @@ function sectionAt(flow, stage) {
 /** The page after a stage: the next stage the flow lists. */
 function nextPage(flow, stage) {
   return Object.keys(flow.stages).map(Number).filter((page) => page > stage).sort((a, b) => a - b)[0] ?? flow.final - 1;
-}
-
-function later(player, ticks, action) {
-  const manager = Common.api.getTaskManager?.();
-  if (typeof manager?.submit !== "function") return;
-  manager.submit(new LaterTask(ticks, () => {
-    if (player.isRegistered?.() !== false) action();
-  }));
 }
 
 /** league_tutorial (653) with its click blocker and the chat overlay, as captured before every page. */
@@ -243,7 +234,7 @@ function sectionClicked({ player, buttonId }) {
     return false;
   }
   pendingSection.set(player, section);
-  later(player, data.sections.waitTicks, () => {
+  Common.later(player, data.sections.waitTicks, () => {
     if (pendingSection.get(player) === section) skip(player, section);
   });
   // Not handled: the section's own plugin opens its screen.
@@ -368,7 +359,7 @@ function login({ player }) {
   player.getPacketSender().sendVarbit(data.varbits.orbsDisabled, 1);
   player.setAttribute(STAGE_ATTRIBUTE, resumeStage(flow, stage));
   awaitingOpen.add(player);
-  later(player, 2, () => openWhenReady(player));
+  Common.later(player, 2, () => openWhenReady(player));
 }
 
 function welcomeScreenShown({ player }) {
@@ -377,7 +368,7 @@ function welcomeScreenShown({ player }) {
 
 function welcomePlay({ player }) {
   welcomeShown.delete(player);
-  later(player, 1, () => openWhenReady(player));
+  Common.later(player, 1, () => openWhenReady(player));
   return false;
 }
 
@@ -389,13 +380,13 @@ function welcomePlay({ player }) {
 function interfaceClosed({ player, interfaceId }) {
   if (!player) return;
   if (awaitingOpen.has(player)) {
-    later(player, 1, () => openWhenReady(player));
+    Common.later(player, 1, () => openWhenReady(player));
     return;
   }
   const stage = activeStage(player);
   const watched = interfaceId === data.screens.main || SECTIONS.some((section) => data.sections[section].interface === interfaceId);
   if (stage === null || !watched) return;
-  later(player, 1, () => {
+  Common.later(player, 1, () => {
     const flow = flowOf(Common.leagueOf(player));
     const now = activeStage(player);
     if (now === null || now !== stage || player.getInterfaceId?.() > 0 || player.getPacketSender().isSubInterfaceOpen(data.screens.main)) return;
@@ -434,24 +425,7 @@ function content(query) {
   query.enums.push({ enumId: bodies, valueType: "s", defaultValue: "", entries: copy(source.get(bodyParam)) });
 }
 
-/** The one-off task the short waits use, defined once api.core.Task is reachable (as Notifications does). */
-function bind(api) {
-  LaterTask = class extends api.core.Task {
-    constructor(ticks, action) {
-      // Not keyed to the player: a click must not cancel it.
-      super(ticks);
-      this.action = action;
-    }
-
-    execute() {
-      this.stop();
-      this.action();
-    }
-  };
-}
-
 module.exports = function attach(api) {
-  bind(api);
   api.persistAttribute(STAGE_ATTRIBUTE);
   api.onCustomEvent("league:joined", joined);
   api.onCustomEvent("league:tutorial-stage", answerStage);
