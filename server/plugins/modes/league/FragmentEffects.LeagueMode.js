@@ -155,9 +155,10 @@ const STYLES = { melee: "MELEE", ranged: "RANGED", magic: "MAGIC" };
 
 /**
  * Another roll of the hit it follows: with that hit's spell and cast (a manual cast is over by
- * now) and never a special attack's traits, both put back as they were once it is rolled.
+ * now) and never a special attack's traits, both put back as they were once it is rolled. It can
+ * take at most `hitpointsLeft`, which addPendingHit applies before paying its XP.
  */
-function followUpHit(attacker, target, hit) {
+function followUpHit(attacker, target, hit, hitpointsLeft) {
   const combat = attacker.getCombat();
   const castSpell = combat.getCastSpell();
   const special = attacker.isSpecialActivated();
@@ -166,7 +167,8 @@ function followUpHit(attacker, target, hit) {
   attacker.setSpecialActivated(false);
   try {
     const extra = new (core().PendingHit)(attacker, target, hit.getCombatMethod(),
-      { delay: 0, rollAccuracy: true, handleAfterHitEffects: false }, undefined, hit.getSpellContext?.() ?? null);
+      { delay: 0, rollAccuracy: true, handleAfterHitEffects: false, damageBudget: { remaining: hitpointsLeft } },
+      undefined, hit.getSpellContext?.() ?? null);
     return spell ? extra.setSpell(spell) : extra;
   } finally {
     combat.setCastSpell(castSpell);
@@ -174,14 +176,25 @@ function followUpHit(attacker, target, hit) {
   }
 }
 
-/** Twin Strikes / Double Tap / Chain Magic: after a landed hit of the set's style, a chance of another roll. */
+/** The target's hitpoints once the damage already queued against it (the hit just resolved) lands. */
+function hitpointsLeft(target) {
+  const queued = Number(target.getCombat?.()?.getHitQueue?.()?.getQueuedDamage?.()) || 0;
+  return Math.max(0, (Number(target.getHitpoints?.()) || 0) - queued);
+}
+
+/**
+ * Twin Strikes / Double Tap / Chain Magic: after a landed hit of the set's style, a chance of
+ * another roll, for no more than the hitpoints the target has left (none after a killing blow).
+ */
 function extraRoll(attacker, target, hit) {
   if (extraHits.has(hit) || !hit.isAccurate?.()) return;
   for (const [set, row] of Object.entries(effects().sets.extraRolls)) {
     if (hit.getCombatType?.() !== core().CombatType[STYLES[row.style]]) continue;
     const percent = atTier(attacker, Number(set), row.chancePercent);
     if (percent === null || !chance(percent)) continue;
-    const extra = followUpHit(attacker, target, hit);
+    const left = hitpointsLeft(target);
+    if (left <= 0) return;
+    const extra = followUpHit(attacker, target, hit, left);
     extraHits.add(extra);
     core().CombatFactory.addPendingHit(extra);
   }
