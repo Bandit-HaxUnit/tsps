@@ -234,15 +234,25 @@ export class PrayerHandler {
         }
     }
 
+    /** A refusal in the chatbox's messagebox ("<col=000080>Redemption</col> is currently disabled here."). */
+    private static messageBox(player: Player, text: string): void {
+        const { DialogueChainBuilder } = require("../model/dialogues/builders/DialogueChainBuilder");
+        const { StatementDialogue } = require("../model/dialogues/entries/impl/StatementDialogue");
+        const builder = new DialogueChainBuilder();
+        builder.add(new StatementDialogue(0, text));
+        player.getDialogueManager().startDialogues(builder);
+    }
+
     public static canUse(player: Player, prayer: PrayerData, msg: boolean): boolean {
         // Loaded lazily: PluginManager imports Player, and QuickPrayers -> PrayerHandler -> Player
         // is already a cycle at module load.
         const { PluginManager } = require("../../plugins/PluginManager");
-        const disabledMessage = PluginManager.emitPrayerDisabled(player, prayer);
-        if (disabledMessage !== null) {
+        const disabled = PluginManager.emitPrayerDisabled(player, prayer);
+        if (disabled !== null) {
             if (msg) {
                 player.getPacketSender().sendVarbit(prayer.configId, 0);
-                player.sendMessage(disabledMessage);
+                if (disabled.messageBox) PrayerHandler.messageBox(player, disabled.message);
+                else player.sendMessage(disabled.message);
             }
             return false;
         }

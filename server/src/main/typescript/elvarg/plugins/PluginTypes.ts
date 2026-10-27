@@ -327,6 +327,8 @@ export interface PluginPrayerDisabledEvent {
   disabled: boolean | null;
   /** Shown to the player when disabled is true. */
   message?: string;
+  /** Show the message in a messagebox rather than the chatbox. */
+  messageBox?: boolean;
 }
 
 export interface PluginSpecialAttackDisabledEvent {
@@ -334,6 +336,8 @@ export interface PluginSpecialAttackDisabledEvent {
   disabled: boolean | null;
   /** Shown to the player when disabled is true. */
   message?: string;
+  /** Show the message in a messagebox rather than the chatbox. */
+  messageBox?: boolean;
 }
 
 export interface PluginCanLogoutEvent {
@@ -489,6 +493,8 @@ export interface PluginPlayerDeathEvent {
 export interface PluginPlayerBeforeDeathEvent {
   player: any;
   preventDeath: boolean;
+  /** Set false when the plugin says "Oh dear, you are dead!" itself (at the moment it chooses). */
+  announce?: boolean;
 }
 
 export interface PluginPlayerOptionEvent {
@@ -1465,6 +1471,7 @@ export interface PluginCoreApi {
   NpcSpawnDefinition: any;
   ObjectDefinition: any;
   MagicSpellbook: any;
+  ItemAliases: any;
   Spell: any;
   CombatNormalSpell: any;
   CombatSpells: any;
