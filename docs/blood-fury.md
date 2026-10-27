@@ -39,9 +39,11 @@ The old combat-method wrapper delegated hit construction to the underlying melee
 method. Its pending hits therefore retained the base method, bypassing the
 wrapper's after-hit callback. Ordinary melee could deal damage without spending
 charges or rolling the healing effect. The effect now listens to the existing
-resolved-hit event, checks the hit's melee type and the worn amulet, and applies
-charge use/healing to each damaging hitsplat. It preserves the 20% roll, 30%
-rounded-down heal, charge exhaustion and normal-fury reversion.
+resolved-hit event, checks the hit's melee type and the worn amulet, and spends
+one charge on each damaging hitsplat. The heal is rolled and calculated when each
+hitsplat lands (`HitDamage.onApplied`) from the HP actually removed, so damage
+queued earlier in the same cycle and overkill never heal. It preserves the 20%
+roll, 30% rounded-down heal, charge exhaustion and normal-fury reversion.
 
 ## Validation
 

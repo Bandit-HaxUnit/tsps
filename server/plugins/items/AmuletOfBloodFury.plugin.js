@@ -137,6 +137,16 @@ function revertBloodFury(player, item) {
   player.sendMessage("You remove the blood magic from the amulet.");
 }
 
+function healFromLandedHit(player, damageTaken) {
+  if (Misc.getRandom(4) !== 0) {
+    return;
+  }
+  const heal = Math.floor(damageTaken * 0.3);
+  if (heal > 0) {
+    player.heal(heal);
+  }
+}
+
 function applyBloodFuryEffect(hit) {
   const player = asPlayer(hit?.getAttacker?.());
   const amuletItem = getBloodFury(player);
@@ -153,12 +163,9 @@ function applyBloodFuryEffect(hit) {
     }
 
     charges -= 1;
-    if (Misc.getRandom(4) === 0) {
-      const heal = Math.floor(damage * 0.3);
-      if (heal > 0) {
-        player.heal(heal);
-      }
-    }
+    // Resolution happens before the hit reaches the target's HP. Heal from the health
+    // actually lost on landing, so earlier same-cycle damage and overkill do not count.
+    resolvedHit.onApplied((damageTaken) => healFromLandedHit(player, damageTaken));
   }
 
   if (charges === startingCharges) {

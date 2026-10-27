@@ -218,33 +218,45 @@ for (const change of ["remove amulet", "remove shard", "replace amulet", "change
   });
 }
 
+// Mirrors PendingHit's hitsplats: each one reports the HP it actually removes once it lands.
 function resolvedAttack(player, damages, type = CombatType.MELEE) {
+  const hits = damages.map(damage => {
+    const observers = [];
+    return {
+      getDamage: () => damage,
+      onApplied(observer) { observers.push(observer); return this; },
+      land: (taken) => observers.splice(0).forEach(observer => observer(taken)),
+    };
+  });
   const hit = {
     getAttacker: () => player,
     getCombatType: () => type,
-    getHits: () => damages.map(damage => ({ getDamage: () => damage })),
+    getHits: () => hits,
   };
   // The ordinary melee method constructs PendingHits with itself, so dispatch its
   // after-hit callback, then the resolved-hit event as CombatFactory.executeHit does.
   baseMethod.handleAfterHitEffects(hit);
   combatHitResolved?.({ attacker: player, hit });
+  return hits;
 }
 
-test("ordinary resolved melee hits spend charges and heal at 20% for 30% damage", () => {
+test("ordinary resolved melee hits spend charges on resolution and heal 30% of HP lost on landing", () => {
   const player = createPlayer();
   const amulet = new Item(ItemIdentifiers.AMULET_OF_BLOOD_FURY, 1, { "blood-fury": { charges: 5 } });
   player.equipment.set(Equipment.AMULET_SLOT, amulet);
   const originalRandom = Misc.getRandom;
   try {
     Misc.getRandom = (maximum) => { assert.equal(maximum, 4, "inclusive 0..4 gives one chance in five"); return 1; };
-    resolvedAttack(player, [20]);
+    resolvedAttack(player, [20])[0].land(20);
     assert.equal(charges(amulet), 4, "one damaging hit spends one charge");
     assert.equal(player.healed, 0);
     resolvedAttack(player, [0]);
     assert.equal(charges(amulet), 4, "a zero hit spends nothing");
     Misc.getRandom = () => 0;
-    resolvedAttack(player, [20]);
+    const [landing] = resolvedAttack(player, [20]);
     assert.equal(charges(amulet), 3);
+    assert.equal(player.healed, 0, "no heal before the hit lands");
+    landing.land(20);
     assert.equal(player.healed, 6);
     amulet.setMetaValue("blood-fury", { charges: 1 });
     resolvedAttack(player, [10]);
@@ -260,8 +272,9 @@ test("multi-hit melee spends one charge per damaging hit, bounded by charges rem
   const originalRandom = Misc.getRandom;
   try {
     Misc.getRandom = () => 0;
-    resolvedAttack(player, [10, 0, 20, 30]);
+    const hits = resolvedAttack(player, [10, 0, 20, 30]);
     assert.equal(amulet.getId(), ItemIdentifiers.AMULET_OF_FURY);
+    hits.forEach(hit => hit.land(hit.getDamage()));
     assert.equal(player.healed, 9, "the exhausted third damaging hit cannot heal");
   } finally { Misc.getRandom = originalRandom; }
 });
@@ -273,8 +286,11 @@ test("ranged, magic and inventory-only amulets neither heal nor consume charges"
   const originalRandom = Misc.getRandom;
   try {
     Misc.getRandom = () => { throw Error("must not roll healing"); };
-    resolvedAttack(player, [20], CombatType.RANGED);
-    resolvedAttack(player, [20], CombatType.MAGIC);
+    resolvedAttack(player, [20], CombatType.RANGED).forEach(hit => hit.land(20));
+    resolvedAttack(player, [20], CombatType.MAGIC).forEach(hit => hit.land(20));
+    player.equipment.set(Equipment.AMULET_SLOT, null);
+    player.inventory.setItem(0, amulet);
+    resolvedAttack(player, [20]).forEach(hit => hit.land(20));
     player.equipment.set(Equipment.AMULET_SLOT, null);
     player.inventory.setItem(0, amulet);
     resolvedAttack(player, [20]);
@@ -302,4 +318,50 @@ test("Check and Revert still operate through the named item actions", () => {
   else itemAction({ ...event, clickType: 3 });
   assert.equal(amulet.getId(), ItemIdentifiers.AMULET_OF_FURY);
   assert.equal(charges(amulet), undefined);
+});
+
+test("melee healing counts only HP lost on landing, not damage queued before a same-cycle hit", () => {
+  const { HitQueue } = require("../dist/game/content/combat/hit/HitQueue");
+  const { HitDamage } = require("../dist/game/content/combat/hit/HitDamage");
+  const { HitMask } = require("../dist/game/content/combat/hit/HitMask");
+  const { CombatFactory } = require("../dist/game/content/combat/CombatFactory");
+  const player = createPlayer();
+  const amulet = new Item(ItemIdentifiers.AMULET_OF_BLOOD_FURY, 1, { "blood-fury": { charges: 5 } });
+  player.equipment.set(Equipment.AMULET_SLOT, amulet);
+  const target = {
+    hp: 20,
+    isRegistered: () => true,
+    isPlayer: () => false,
+    getHitpoints: () => target.hp,
+    decrementHealth(hit) {
+      hit.setDamage(Math.min(hit.getDamage(), target.hp));
+      target.hp -= hit.getDamage();
+      return hit;
+    },
+    addTickHit() {},
+  };
+  const queue = new HitQueue(target);
+  const originalRandom = Misc.getRandom;
+  const originalRedemption = CombatFactory.handleRedemption;
+  try {
+    Misc.getRandom = () => 0;
+    CombatFactory.handleRedemption = () => {};
+    queue.addPendingDamage([new HitDamage(19, HitMask.RED)]);
+    const attack = new HitDamage(20, HitMask.RED);
+    const hit = {
+      getAttacker: () => player,
+      getCombatType: () => CombatType.MELEE,
+      getHits: () => [attack],
+    };
+    baseMethod.handleAfterHitEffects(hit);
+    combatHitResolved({ attacker: player, hit });
+    queue.addPendingDamage([attack]);
+    queue.process(1);
+    assert.equal(target.hp, 0, "the earlier hit leaves 1 HP and the 20 hit removes only that");
+    assert.equal(charges(amulet), 4, "the charge is still spent on resolution");
+    assert.equal(player.healed, 0, "30% of the 1 HP actually lost rounds down to nothing");
+  } finally {
+    Misc.getRandom = originalRandom;
+    CombatFactory.handleRedemption = originalRedemption;
+  }
 });
