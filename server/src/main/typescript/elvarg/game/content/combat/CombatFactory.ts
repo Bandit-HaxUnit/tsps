@@ -1,3 +1,4 @@
+import { ItemAliases } from "../../model/ItemAliases";
 import { Sound } from "../../Sound";
 import { Sounds } from "../../Sounds";
 import { PrayerHandler } from "../PrayerHandler";
@@ -172,22 +173,39 @@ export class CombatFactory {
     }
 
     static getHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true) {
+        return CombatFactory.applyIncomingHitDamage(entity, victim, type,
+            CombatFactory.rollHitDamage(entity, victim, type, bypassProtectionPrayer, boundsOverride, applySpecialTraits));
+    }
+
+    /** Rolls damage and protection prayers without spending or reacting with defensive equipment. */
+    public static rollHitDamage(entity: Mobile, victim: Mobile, type: CombatType, bypassProtectionPrayer = false, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true): HitDamage {
         const specialTraits = applySpecialTraits ? CombatSpecial.activeTraitsFor(entity) : null;
         if (specialTraits?.ignoreProtectionPrayer) {
             bypassProtectionPrayer = true;
         }
         const prayerType = resolveSpecialAttackType(specialTraits?.damageType) ?? type;
-        let damage = 0;
+        let maxHit = 0;
+        let minimumFloor = 0;
         if (type == CombatType.MELEE) {
-            damage = CombatFactory.rollSpecialDamage(entity, DamageFormulas.sourceMaxHit(entity, CombatType.MELEE), boundsOverride, applySpecialTraits);
+            maxHit = DamageFormulas.sourceMaxHit(entity, CombatType.MELEE);
         } else if (type == CombatType.RANGED) {
-            let maxHit = DamageFormulas.sourceMaxHit(entity, CombatType.RANGED);
-            maxHit = PluginManager.modifyRangedMaxHit(entity, victim, maxHit);
-            damage = CombatFactory.rollSpecialDamage(entity, maxHit, boundsOverride, applySpecialTraits);
+            maxHit = PluginManager.modifyRangedMaxHit(entity, victim, DamageFormulas.sourceMaxHit(entity, CombatType.RANGED));
         } else if (type == CombatType.MAGIC) {
             const bounds = DamageFormulas.sourceHitBounds(entity, CombatType.MAGIC, victim);
-            damage = CombatFactory.rollSpecialDamage(entity, bounds.maximum, boundsOverride, applySpecialTraits, bounds.minimum);
+            maxHit = bounds.maximum;
+            minimumFloor = bounds.minimum;
         }
+        const rolls = type == CombatType.MELEE || type == CombatType.RANGED || type == CombatType.MAGIC;
+        const range = rolls
+            ? CombatFactory.specialDamageRange(entity, maxHit, boundsOverride, applySpecialTraits, minimumFloor)
+            : { minimum: 0, maximum: 0 };
+        let damage = rolls ? CombatFactory.rollSpecialDamage(entity, maxHit, boundsOverride, applySpecialTraits, minimumFloor) : 0;
+
+        // The roll itself, before any defence (protection prayers, shields, incoming-damage
+        // modifiers) reduces it: plugins may change `damage` against the roll's own range.
+        const rolled = { attacker: entity, target: victim, combatType: type, damage, minimum: range.minimum, maximum: range.maximum };
+        PluginManager.emitCustomEvent("combat:hit-rolled", rolled);
+        if (rolled.damage !== damage && Number.isFinite(rolled.damage)) damage = Math.max(0, Math.floor(rolled.damage));
 
         // Wiki (Ward of Arceuus): demons hit 10% less, that 10% rounded down first.
         if (entity.isNpc() && victim.isPlayer() && ArceuusSpells.hasWard(victim)) {
@@ -217,6 +235,11 @@ export class CombatFactory {
                 }
             }
         }
+        return hitDamage;
+    }
+
+    /** Reacts once to the selected damage roll, before any per-hit multiplier and HP cap. */
+    public static applyIncomingHitDamage(entity: Mobile, victim: Mobile, type: CombatType, hitDamage: HitDamage): HitDamage {
         // The Elysian spirit shield cuts damage by 25% 70% of the time (Wiki).
         if (victim.isPlayer() && Math.random() < CombatConstants.ELYSIAN_ACTIVATION_CHANCE) {
             if (victim.getAsPlayer().getEquipment().getItems()[Equipment.SHIELD_SLOT].getId() == ItemIdentifiers.ELYSIAN_SPIRIT_SHIELD) {
@@ -276,15 +299,21 @@ export class CombatFactory {
         hit.updateTotalDamage();
     }
 
+    /** Rolls one hit's damage from its range (specialDamageRange). */
+    private static rollSpecialDamage(entity: Mobile, maxHit: number, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true, minimumFloor = 0): number {
+        const range = CombatFactory.specialDamageRange(entity, maxHit, boundsOverride, applySpecialTraits, minimumFloor);
+        return Misc.randomInclusive(range.minimum, range.maximum);
+    }
+
     /**
-     * Rolls one hit's damage. With no active special traits this is the ordinary
+     * The range one hit's damage is rolled from. With no active special traits this is the ordinary
      * 0..maxHit roll; with traits it honours per-hit min/max multipliers, flat
      * bonuses and a maximum cap.
      */
-    private static rollSpecialDamage(entity: Mobile, maxHit: number, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true, minimumFloor = 0): number {
+    private static specialDamageRange(entity: Mobile, maxHit: number, boundsOverride?: SpecialDamageBounds, applySpecialTraits = true, minimumFloor = 0): { minimum: number; maximum: number } {
         const traits = applySpecialTraits ? CombatSpecial.activeTraitsFor(entity) : null;
         if (!traits && !boundsOverride) {
-            return Misc.randomInclusive(Math.min(maxHit, Math.max(0, minimumFloor)), maxHit);
+            return { minimum: Math.min(maxHit, Math.max(0, minimumFloor)), maximum: maxHit };
         }
         let minimum = Math.floor(
             maxHit * (boundsOverride?.minimumMultiplier ?? traits?.minimumDamageMultiplier ?? 0)
@@ -310,7 +339,7 @@ export class CombatFactory {
             maximum = swap;
         }
         minimum = Math.max(minimum, Math.min(maximum, Math.max(0, minimumFloor)));
-        return Misc.randomInclusive(Math.max(0, minimum), Math.max(0, maximum));
+        return { minimum: Math.max(0, minimum), maximum: Math.max(0, maximum) };
     }
 
     /**
@@ -724,14 +753,13 @@ export class CombatFactory {
 
     /**
      * OSRS processes NPCs before players each tick, so a hit queued against an NPC lands
-     * one tick after the distance table (Wiki: Hit delay). Player melee keeps its tick too:
-     * the target's queue drains at the start of its own turn, which has already passed.
+     * one tick after the distance table (Wiki: Hit delay). Against a player, PID decides
+     * (Wiki: "In the case of PvP, PID will be the determining factor"): the target's queue
+     * drains at the start of its own turn, so a hit from a player processed before it lands
+     * this tick, and one from a player processed after it lands on the next.
      */
     public static hitProcessingDelay(hit: PendingHit): number {
-        const targetIsNpc = hit.getTarget()?.isNpc?.() === true;
-        const meleePlayerAttack = hit.getAttacker()?.isPlayer?.() === true
-            && hit.getCombatType() === CombatType.MELEE;
-        return targetIsNpc || meleePlayerAttack ? 1 : 0;
+        return hit.getTarget()?.isNpc?.() === true ? 1 : 0;
     }
 
     public static executeHit(qHit: PendingHit) {
@@ -797,10 +825,9 @@ export class CombatFactory {
 
             // Prayer effects.
             // Redemption checks after the damage lands (HitQueue -> handleRedemption).
-            if (resolvedHit.isAccurate()) {
-                if (PrayerHandler.isActivated(attacker, PrayerHandler.SMITE)) {
-                    CombatFactory.handleSmite(attacker, playerTarget, damage);
-                }
+            // Smite follows the damage dealt, so guaranteed damage on a failed roll (Hammer Blow) drains too.
+            if (damage > 0 && PrayerHandler.isActivated(attacker, PrayerHandler.SMITE)) {
+                CombatFactory.handleSmite(attacker, playerTarget, damage);
             }
         }
 
@@ -1094,13 +1121,16 @@ export class CombatFactory {
     @param target
     */
     public static handleSkull(attacker: Player, target: Player) {
-        if (attacker.isSkulled()) {
-            return;
-        }
-
         const attackerInWilderness = Wilderness.isIn(attacker);
         const targetInWilderness = Wilderness.isIn(target);
         if (!attackerInWilderness || !targetInWilderness) {
+            return;
+        }
+
+        // Wiki (Skull (status)): attacking a player while skulled restarts the 30 minutes, so
+        // the skull "cannot disappear during PvP combat". The skull keeps its colour.
+        if (attacker.isSkulled()) {
+            CombatFactory.extendSkull(attacker, CombatFactory.PVP_SKULL_SECONDS);
             return;
         }
 
@@ -1132,6 +1162,13 @@ export class CombatFactory {
     }
 
     public static readonly PVP_SKULL_SECONDS = 30 * 60;
+    /** Wiki: an amulet of avarice skull lasts 20 minutes after it comes off; a cape of skulls 20 from putting it on. */
+    public static readonly ITEM_SKULL_SECONDS = 20 * 60;
+
+    /** Keeps a skull (and its colour) for at least `seconds` more, without the skulled message. */
+    static extendSkull(player: Player, seconds: number) {
+        player.setSkullTimer(Math.max(player.getSkullTimer(), Misc.getTicks(seconds)));
+    }
 
     static skull(player: Player, type: SkullType, seconds: number) {
         player.setSkullType(type);
@@ -1387,7 +1424,7 @@ export class CombatFactory {
         // BAD LOOP
         for (let d of rangedWeapon.getAmmunitionData()) {
             if (d == ammoData) {
-                if (d.getItemId() == ammoSlotItem.getId()) {
+                if (ItemAliases.same(d.getItemId(), ammoSlotItem.getId())) {
                     properReq = true;
                     break;
                 }

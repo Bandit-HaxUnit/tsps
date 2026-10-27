@@ -234,4 +234,4 @@ function patchValue(patch, state) {
     return (state.watered ? visual.WATERED?.[state.stage] : undefined) ?? visual.GROWING[state.stage];
 }
 
-Object.assign(module.exports, { MINUTE, advanceTithe, titheDeposit, nextGrowth, emptyPatch, startingLives, diseaseChance, saveLifeChance, activeAnima, advanceFarm, nextDue, patchValue });
+Object.assign(module.exports, { MINUTE, advanceTithe, titheDeposit, nextGrowth, emptyPatch, startingLives, diseaseChance, saveLifeChance, activeAnima, advanceFarm, diseaseFree, nextDue, patchValue });
