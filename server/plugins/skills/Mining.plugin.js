@@ -504,7 +504,8 @@ function inventoryBlocks(player, oreId) {
   if (!player.getInventory().isFull()) {
     return false;
   }
-  const request = { player, itemId: oreId, room: false };
+  // `skill`: the skill gathering it, so content storing one skill's resources answers only for those.
+  const request = { player, itemId: oreId, skill: pluginApi.core.Skill.MINING, room: false };
   pluginApi.emitCustomEvent("storage:room", request);
   return !request.room;
 }

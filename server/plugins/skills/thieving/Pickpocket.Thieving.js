@@ -334,7 +334,13 @@ function pickpocketTask(player, npc, target, name, event) { return new (class ex
     pluginApi.emitCustomEvent("thieving:done", done);
     // A repeat only while neither has moved: the player on the tile they pickpocketed from, the NPC still within reach.
     const inReach = event && samePlace(player.getLocation(), event.from) && npc.getLocation().getDistance?.(player.getLocation()) <= Math.max(1, npc.getSize?.() ?? 1);
-    if (done.again && inReach) core.TaskManager.submit(new core.CountdownTask(player, 1, () => pickpocket({ ...event, repeat: true })));
+    // Keyed by the player's index, as their other actions: walking off (MovementQueue.walkToReset) cancels it; and
+    // checked again when it fires, in case they moved another way.
+    if (done.again && inReach) core.TaskManager.submit(new core.CountdownTask(player.getIndex(), 1, () => {
+      const stillThere = samePlace(player.getLocation(), event.from) && npc.isRegistered()
+        && npc.getLocation().getDistance?.(player.getLocation()) <= Math.max(1, npc.getSize?.() ?? 1);
+      if (stillThere && player.getMovementQueue?.()?.isMovings?.() !== true) pickpocket({ ...event, repeat: true });
+    }));
   }
 })(player, npc, target, name, event); }
 

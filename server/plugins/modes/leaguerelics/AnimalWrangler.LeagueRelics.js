@@ -63,13 +63,23 @@ function gather(request) {
     }
   }
   const fish = amount - request.stored;
-  if (!Common.bank(player, banked, fish)) return;
-  request.stored = amount;
-  if (cooking > 0) player.getSkillManager().addExperiences(core.Skill.COOKING, cooking * fish);
+  if (Common.bank(player, banked, fish)) {
+    request.stored = amount;
+    if (cooking > 0) player.getSkillManager().addExperiences(core.Skill.COOKING, cooking * fish);
+    return;
+  }
+  // The cooked fish has no room: the catch itself, as it is.
+  if (banked !== itemId && Common.bank(player, itemId, fish)) request.stored = amount;
 }
 
+/** Fishing's room (`storage:room` for Fishing only): the bank takes the catch (a cooked one falls back to it). */
 function room(request) {
-  if (!request.room && withTool(request.player) && Common.bankHasRoom(request.player, request.itemId)) request.room = true;
+  if (request.room || request.skill !== core.Skill.FISHING || !withTool(request.player)) return;
+  if (!unbanked) {
+    unbanked = ids(effect.unbanked);
+    uncooked = ids(effect.uncooked);
+  }
+  if (!unbanked.has(request.itemId) && Common.bankHasRoom(request.player, request.itemId)) request.room = true;
 }
 
 function neverBurns(request) {

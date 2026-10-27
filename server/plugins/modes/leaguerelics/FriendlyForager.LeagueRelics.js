@@ -134,7 +134,33 @@ function gamevals(names) {
   return new Set(names.map((name) => core.CacheDefinitions.getObjId(name)).filter(Number.isInteger));
 }
 
-/** A secondary ingredient (not a potion or a vial, or the Wiki's torstol potion) is kept 90% of the time; a 3-dose potion comes as a 4-dose one. */
+/**
+ * The 4-dose form of a 3-dose product, for each of the recipes' naming forms (`3dose…`,
+ * `…_3`, `…3`), checked by the item's own name: "Compost potion(3)" -> "Compost potion(4)".
+ */
+function fourDoseOf(product) {
+  if (typeof product !== "string") return null;
+  const productId = core.CacheDefinitions.getObjId(product);
+  const name = core.ItemDefinition.forId(productId)?.getName?.() ?? "";
+  if (!/\(3\)$/.test(name)) return null;
+  const wanted = name.replace(/\(3\)$/, "(4)");
+  const candidates = [
+    product.startsWith("3dose") ? `4dose${product.slice(5)}` : null,
+    /_3$/.test(product) ? product.replace(/_3$/, "_4") : null,
+    /3$/.test(product) ? product.replace(/3$/, "4") : null,
+  ];
+  for (const candidate of candidates) {
+    const id = candidate && core.CacheDefinitions.getObjId(candidate);
+    if (Number.isInteger(id) && core.ItemDefinition.forId(id)?.getName?.() === wanted) return id;
+  }
+  return null;
+}
+
+/**
+ * A secondary ingredient is kept 90% of the time: one after the recipe's first (its primary, the
+ * potion being made: a haemostatic poultice, an unfinished potion) that is not a potion or a vial,
+ * or the Wiki's torstol potion (unf) in an upgrade; a 3-dose potion comes as a 4-dose one.
+ */
 function mix(request) {
   if (!active(request.player)) return;
   if (!alsoSaved) {
@@ -144,24 +170,21 @@ function mix(request) {
   const name = (id) => core.ItemDefinition.forId(id)?.getName?.() ?? "";
   const unfinished = /\(unf\)$/i.test(name(request.productId));
   if (!unfinished) {
-    for (const item of request.consume) {
-      const secondary = alsoSaved.has(item.id) || !Common.isPotion(item.id);
-      if (!secondary || neverSaved.has(item.id) || Math.random() >= effect.secondarySaveChance) continue;
+    request.consume.forEach((item, index) => {
+      const secondary = index > 0 && (alsoSaved.has(item.id) || !Common.isPotion(item.id));
+      if (!secondary || neverSaved.has(item.id) || Math.random() >= effect.secondarySaveChance) return;
       item.count = 0;
       // A kept ingredient that came in a vial (the torstol potion (unf)) keeps its vial too.
       if (Common.isPotion(item.id)) {
         const vial = request.returns?.find((returned) => returned.count > 0 && /^vial$/i.test(name(returned.id)));
         if (vial) vial.count--;
       }
-    }
+    });
   }
   // Brewed with 4 doses, not 3: only a potion brewed from an unfinished one, not an upgrade of a dosed potion.
   const upgrade = request.consume.some((item) => /\(\d\)$/.test(name(item.id)));
-  const product = request.recipe?.product;
-  if (!upgrade && typeof product === "string" && product.startsWith("3dose")) {
-    const fourDose = core.CacheDefinitions.getObjId(`4dose${product.slice(5)}`);
-    if (Number.isInteger(fourDose)) request.productId = fourDose;
-  }
+  const fourDose = upgrade ? null : fourDoseOf(request.recipe?.product);
+  if (Number.isInteger(fourDose)) request.productId = fourDose;
 }
 
 module.exports = function attach(pluginApi) {
