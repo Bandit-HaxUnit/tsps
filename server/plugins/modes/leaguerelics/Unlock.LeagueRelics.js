@@ -31,12 +31,55 @@ function bankTabs() {
   return tabs;
 }
 
-/** Whether every item the relic hands out has a slot in the inventory or the bank, so a permanent pick is never saved without its items. */
+/**
+ * Where each item the relic hands out would go, in the order `grant` delivers them, or null when
+ * one has nowhere to go (so a permanent pick is never saved without its items). Item-aware: a
+ * stackable item joins its stack in the inventory; the bank stacks everything, so an item already
+ * banked takes no slot; a new bank stack takes one slot of the player's bank space, which every
+ * tab shares (`Bank.freeSlots`), and a slot in its tab; nothing this plan reserves is counted twice.
+ */
+function deliveryPlan(player, relic) {
+  const { Item, Bank } = Common.core;
+  const inventory = player.getInventory();
+  const tabs = bankTabs();
+  const free = {
+    inventory: inventory.getFreeSlots(),
+    bank: Bank.freeSlots(player),
+    tab: new Map(tabs.map((tab) => [tab, player.getBank(tab).getFreeSlots()])),
+  };
+  const placed = { inventory: new Set(), bank: new Map(tabs.map((tab) => [tab, new Set()])) };
+  const steps = [];
+  for (const id of grantedItems(relic)) {
+    const item = new Item(id, 1);
+    const stackable = item.getDefinition().isStackable();
+    if (stackable && (placed.inventory.has(id) || (inventory.contains(id) && inventory.getAddableAmount(item) >= 1))) {
+      steps.push({ item, tab: -1 });
+      continue;
+    }
+    if (free.inventory > 0) {
+      free.inventory--;
+      placed.inventory.add(id);
+      steps.push({ item, tab: -1 });
+      continue;
+    }
+    const held = tabs.find((tab) => placed.bank.get(tab).has(id) || (player.getBank(tab).contains(id) && player.getBank(tab).getAddableAmount(item) >= 1));
+    if (held !== undefined) {
+      steps.push({ item, tab: held });
+      continue;
+    }
+    if (free.bank <= 0) return null;
+    const tab = [Bank.getTabForItem(player, id), ...tabs].find((candidate) => free.tab.get(candidate) > 0);
+    if (tab === undefined) return null;
+    free.bank--;
+    free.tab.set(tab, free.tab.get(tab) - 1);
+    placed.bank.get(tab).add(id);
+    steps.push({ item, tab });
+  }
+  return steps;
+}
+
 function canDeliver(player, relic) {
-  const items = grantedItems(relic);
-  if (items.length === 0) return true;
-  const room = player.getInventory().getFreeSlots() + bankTabs().reduce((free, tab) => free + player.getBank(tab).getFreeSlots(), 0);
-  return items.length <= room;
+  return deliveryPlan(player, relic) !== null;
 }
 
 /** Why a pick is refused (a message key), or null when it may go ahead. `bankOpen` is the bank as it was when the relic interface opened. */
@@ -51,18 +94,11 @@ function refusal(player, type, tier, slot, bankOpen) {
   return null;
 }
 
-/** Each item goes to the inventory if it fits, else to its bank tab, else to any tab with room (canDeliver found one). */
+/** Delivers the plan `canDeliver` approved: each item to the inventory, else to the bank tab that holds or has room for it. */
 function grant(player, relic) {
-  const { Item, Bank } = Common.core;
-  for (const id of grantedItems(relic)) {
-    const item = new Item(id, 1);
-    if (player.getInventory().getAddableAmount(item) >= 1) {
-      player.getInventory().add(item, true);
-      continue;
-    }
-    const preferred = Bank.getTabForItem(player, id);
-    const tab = [preferred, ...bankTabs()].find((candidate) => player.getBank(candidate).getFreeSlots() > 0);
-    if (tab !== undefined) player.getBank(tab).add(item, true);
+  for (const { item, tab } of deliveryPlan(player, relic) ?? []) {
+    if (tab < 0) player.getInventory().add(item, true);
+    else player.getBank(tab).add(item, true);
   }
 }
 
@@ -144,6 +180,7 @@ function answerRelics(query) {
 module.exports = function attach(api) {
   api.persistAttribute(Common.RELICS_ATTRIBUTE, {});
   api.onCustomEvent("league:login", login);
+  api.onCustomEvent("league:content-rows", require("./Catalog.LeagueRelics").contribute);
   api.onCustomEvent("league:points-changed", pointsChanged);
   api.onCustomEvent("league:highest-tier", answerHighestTier);
   api.onCustomEvent("league:has-relic", answerHasRelic);
