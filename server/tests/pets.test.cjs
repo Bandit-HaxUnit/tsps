@@ -43,7 +43,11 @@ Pets.register({
   getItemOnGroundManager: () => ({ registerNonGlobal() {}, registerLocation() {} }),
   persistAttribute() {},
   onCustomEvent: (name, handler) => events.set(name, handler),
-  emitCustomEvent: (name, request) => { if (name === "collection-log:obtain") collectionLogObtains.push(request); },
+  emitCustomEvent: (name, request) => {
+    if (name === "collection-log:obtain") collectionLogObtains.push(request);
+    // Stub the public diary query here; real service coverage is in chompy-pet-acquisition.
+    if (name === "diary:is-reward-claimed") request.claimed = request.player.getAttribute("achievement-diaries:rewards")?.western?.includes("elite") === true;
+  },
   onItemDropPolicy() {},
   onItemOnNpc() {},
   onAnyNpcInteraction() {},
@@ -470,13 +474,14 @@ test("the Rift guardian needs its talisman, which is not consumed", () => {
   assert.deepEqual(player.inventory, [ItemIdentifiers.AIR_TALISMAN]);
 });
 
-test("the Chompy chick waits for the Western Provinces elite diary flag", () => {
+test("the Chompy chick requires a claimed elite reward rather than the old synthetic flag", () => {
   const player = createPlayer();
+  player.setAttribute("achievement-diary:western-provinces:elite", true);
   events.get("npc-drops:roll")({ player, drops: [{ itemId: 13071, amount: 1 }] });
   assert.deepEqual(player.inventory, []);
   assert.equal(player.getAttribute("pets.owned"), undefined);
 
-  player.setAttribute("achievement-diary:western-provinces:elite", true);
+  player.setAttribute("achievement-diaries:rewards", { western: ["elite"] });
   events.get("npc-drops:roll")({ player, drops: [{ itemId: 13071, amount: 1 }] });
   assert.deepEqual(player.inventory, [13071]);
 });
