@@ -636,9 +636,9 @@ function rollTable(table, player, npc, context = killContext(player, npc)) {
     if (rule.guarantee !== true) continue;
     const matching = (table.tertiary || []).filter((entry) => Number(entry.out_of) > 1 && rule.pattern.test(entry.name || "")
       && (entry.name !== LOOTING_BAG || lootingBagDrops(npc)));
-    if (matching.some((entry) => hitNames.has(entry.name || ""))) continue;
+    // Only an entry the rule accepts satisfies it: a natural drop of one it refuses (a clue tier already held) does not.
     const allowed = typeof rule.accept === "function" ? matching.filter((entry) => rule.accept(entry)) : matching;
-    if (allowed.length === 0) continue;
+    if (allowed.length === 0 || allowed.some((entry) => hitNames.has(entry.name || ""))) continue;
     // The rarest by its chance (weight / out_of), not its denominator alone.
     const chance = (entry) => (Number.isInteger(entry.weight) ? entry.weight : 1) / Number(entry.out_of);
     const rarest = allowed.reduce((best, entry) => chance(entry) < chance(best) ? entry : best);

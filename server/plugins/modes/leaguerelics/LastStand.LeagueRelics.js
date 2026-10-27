@@ -4,7 +4,7 @@
  * player at 1 hitpoint, boosts Attack, Strength, Defence, Ranged and Magic to 255, draining 16 a
  * tick back to base + 15, and for 16 ticks no hit can finish them and nothing heals them above
  * 1 (food is refused; any other heal is undone on the next tick: ours, the Wiki names no means).
- * When the window closes they are healed by the damage they dealt in it, up to their max (ours:
+ * When the window closes they are healed by the damage their hits did as they landed in it, up to their max (ours:
  * the Wiki shows a bar and gives no formula). Once every three minutes or death.
  */
 const Common = require("./Common.LeagueRelics");
@@ -94,9 +94,20 @@ function beforeDeath(event) {
   begin(player, now);
 }
 
+/**
+ * Each of the player's hits counts when it lands (HitDamage.onApplied), for the damage it did, and
+ * only while a stand is open then: an impact cancelled before it lands (the target teleported)
+ * counts nothing, a shot launched before the stand counts if it lands in it, one landing after
+ * the window does not.
+ */
 function dealtDamage({ player, hit }) {
-  const stand = standing(player);
-  if (stand) stand.dealt += Math.max(0, hit.getTotalDamage());
+  if (!active(player)) return;
+  for (const damage of hit?.getHits?.() ?? []) {
+    damage?.onApplied?.((taken) => {
+      const stand = standing(player);
+      if (stand) stand.dealt += Math.max(0, Number(taken) || 0);
+    });
+  }
 }
 
 /** Food is refused during the stand (the Wiki: nothing raises the player above 1). */

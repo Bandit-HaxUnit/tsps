@@ -62,7 +62,8 @@ let pluginApi;
 /** A full inventory stops chopping unless an open log basket has room ("storage:room"). */
 function inventoryBlocks(player, logId) {
   if (!player.getInventory().isFull()) return false;
-  const request = { player, itemId: logId, room: false };
+  // `skill`: the skill gathering it, so content storing one skill's resources answers only for those.
+  const request = { player, itemId: logId, skill: pluginApi.core.Skill.WOODCUTTING, room: false };
   pluginApi.emitCustomEvent("storage:room", request);
   return !request.room;
 }
