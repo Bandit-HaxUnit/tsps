@@ -38,6 +38,17 @@ function ordinaryVariant(row, name) {
   return ordinary.length === 1 && ordinary[0] === "standard-dialogue" ? ordinary[0] : undefined;
 }
 
+function conversationVariant(row, npc, pet, player) {
+  const variants = row.variants ?? [];
+  if (variants.includes("standard-dialogue-desktop-client") || variants.includes("standard-dialogue-mobile-client")) {
+    // This flag belongs to the current login handshake, not saved preferences.
+    const platform = player.getAttribute(api.core.MOBILE_CLIENT_ATTRIBUTE) === true ? "mobile" : "desktop";
+    const key = `standard-dialogue-${platform}-client`;
+    return variants.includes(key) ? key : undefined;
+  }
+  return ordinaryVariant(row, npc.getCurrentDefinition(player).getName(), pet.dialogueVariant);
+}
+
 function converse(request) {
   const {player, npc, pet, action} = request;
   if (request.handled || !["talk-to", "interact"].includes(String(action).toLowerCase())
@@ -47,7 +58,7 @@ function converse(request) {
       || api.core.World.getRemoveNPCQueue().includes(npc)) return;
   const options = (loadCandidates().get(npc.getId()) ?? []).map(row => ({
     page: row.page.replace(/^Transcript:/, ""),
-    variant: ordinaryVariant(row, npc.getCurrentDefinition(player).getName()),
+    variant: conversationVariant(row, npc, pet, player),
   })).filter(choice => choice.variant);
   if (options.length !== 1) return;
   const start = {player, npc, npcId: npc.getId(), variant: options[0], exact: true, handled: false};
