@@ -39,3 +39,17 @@ The full suite emits existing AdventurePaths fixture warnings from Hunter/Warped
 Own server/client/browser stopped,3107/43707/49807 closed, own slot7 cleared/backed up. Claude and live checkout untouched. Full-suite final total is recorded in the PR after the run completes.
 
 Final full suite: node --test --test-concurrency=4 tests/,9428/9428, no failures/skips/cancellations, exit0; frozen product/test hashes unchanged.
+
+## Review repair: open cat menu after NPC replacement (2026-10-27)
+
+Review comment6446879285 reproduced a real lifetime gap: Call preserves the Interact prompt but its callbacks captured the removed NPC. Native Shoo could clear ownership while leaving the recalled cat alive; Chase also retained the removed target. Three regression cases failed before the repair (10 passes), retained in the local RED log.
+
+Interact now captures the logical cat-care session, resolves the actual current owned registered cat when each choice executes, and rejects pending removal or a different session. Stroke, Chase, Guess age and Shoo share this guard. Recall and natural growth keep the session, while hunger runaway/death/release invalidate it; a new reward cannot be affected by the old prompt. No new state, cache data or core/client change.
+
+Path: native NPCInteract -> Pets.openCatInteract -> actual MultiChatboxPrompt219 callback -> current follower/session guard -> existing care/chase/shoo services -> World removal and current/active/cat state + follower varps. MultiChatboxPrompt consumes the callback before invoking it. Real reward acquisition, hunger runaway, growth and save/load are exercised rather than simulated replacement objects.
+
+Frozen Pets SHA256DDA2DA27C01A9BAE38160F1E783D451C43C582682B6E721E7F5ADF6CB0D81072; test87C152D0D4856CD0D0F351E5160D14C89A2862CC6D1C765270012A95F5478A73. TypeScript build passed after upstream merge2affe6fc03a5a0247ae2318329ea1b4e04099588. Focused71/71; full9505/9505, no failures/skips/cancellations. Independent Codex review86 foundations + independently chosen1 lifecycle test: native Interact -> Call -> natural growth -> Call -> Stroke -> PlayerSave/fresh login -> Shoo and repeated stale choice. No findings in inspected paths.
+
+Actual rendering client: disposable kitten dropped via native inventory action; Interact opened through QA MCP. Controlled fixture held the actual cat's movement six tiles away using the isolated server inspector. Native equipment Call replaced NPC1203 with1204, kept Interact open and published varps447=366412980/448=1555. Native Shoo removed the recalled cat; observe returned no cats, both varps=-1, and 'You shoo your pet away.' Screenshots/state retained locally. Fixture placement is not evidence for official destination RNG/timing.
+
+Own server/client/tab/helper stopped; fresh query confirms3107/43707/49807/9229 closed; own slot7 cleared. No live or Claude changes.

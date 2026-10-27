@@ -7,6 +7,7 @@ const { Player } = require('../dist/game/entity/impl/player/Player');
 const { PlayerSession } = require('../dist/net/PlayerSession');
 const { ClientConnection } = require('../dist/net/NetworkBuilder');
 const { PlayerSave } = require('../dist/game/entity/impl/player/persistence/PlayerSave');
+const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
 let core, next = 1800;
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..')); PM.loadFromDirectory(path.resolve(__dirname, '../plugins'));
@@ -35,6 +36,36 @@ function pet(f, item = core.ItemIdentifiers.OLMLET, offset = 6) {
   const n = f.p.getAttribute('pets:current'); assert.ok(n?.isRegistered()); n.setLocation(f.p.getLocation().clone().add(offset, 0)); return n;
 }
 const current = f => f.p.getAttribute('pets:current');
+async function catMenu(f,n) {
+  const op=n.getCurrentDefinition(f.p).getActions().findIndex(action=>action==='Interact')+1;assert.ok(op>0);
+  await packet(f,{type:'npc_option',index:n.getIndex(),clickType:op});
+  for(let i=0;i<4;i++){core.TaskManager.processWalkTo(f.p.getIndex());f.p.getMovementQueue().process();core.TaskManager.process();}
+  assert.deepEqual(MultiChatboxPrompt.getPending(f.p)?.options,['Stroke','Chase vermin','Guess age','Shoo away']);
+}
+async function catChoice(f,option) {await packet(f,{type:'dialogue_continue',widgetId:(219<<16)|1,childIndex:option});}
+
+for(const replacement of ['recall','growth'])test(`native cat Interact Shoo removes the actual follower after ${replacement}`,async t=>{
+  const f=actor(t),n=pet(f,core.CacheDefinitions.getObjId('kittenobject'),1);await catMenu(f,n);
+  if(replacement==='recall'){n.setLocation(f.p.getLocation().clone().add(6,0));await call(f);}
+  else{f.p.getAttribute('pets:cat').growth=119;require('../plugins/npcs/Pets.plugin').__internals.catTick(f.p);}
+  const recalled=current(f);assert.notEqual(recalled,n);assert.ok(MultiChatboxPrompt.getPending(f.p));
+  await catChoice(f,4);assert.equal(current(f),null);assert.equal(f.p.getAttribute('pets:active-item'),null);assert.equal(f.p.getAttribute('pets:cat'),null);
+  assert.ok(core.World.getRemoveNPCQueue().includes(recalled),'the current replacement must be removed, not left following without ownership state');
+  assert.equal([...core.World.getNpcs()].filter(pet=>pet?.getOwner?.()===f.p&&!core.World.getRemoveNPCQueue().includes(pet)).length,0);
+});
+test('native preserved Chase vermin uses the recalled current cat and keeps its ownership',async t=>{
+  const f=actor(t),n=pet(f,core.CacheDefinitions.getObjId('kittenobject'),1);await catMenu(f,n);n.setLocation(f.p.getLocation().clone().add(6,0));await call(f);const recalled=current(f);
+  const rat=core.NPC.create(core.NpcIdentifiers.RAT,f.p.getLocation().clone());core.World.getNpcs().add(rat);t.after(()=>core.World.getNpcs().remove(rat));
+  t.mock.method(Math,'random',()=>0);await catChoice(f,2);
+  assert.ok(core.World.getRemoveNPCQueue().includes(rat),'the real current cat must catch the real nearby rat');assert.equal(current(f),recalled);assert.ok(f.p.getAttribute('pets:active-item')>0);
+});
+test('a preserved menu from a runaway kitten cannot release a newly awarded logical cat',async t=>{
+  const f=actor(t),item=core.CacheDefinitions.getObjId('kittenobject'),n=pet(f,item,1);await catMenu(f,n);
+  const state=f.p.getAttribute('pets:cat');state.hungerAt=Date.now()-1;state.hungerStage=2;
+  assert.equal(require('../plugins/npcs/Pets.plugin').__internals.catTick(f.p),false);assert.equal(current(f),null);
+  const replacement=pet(f,item,1),newState=f.p.getAttribute('pets:cat');assert.notEqual(newState,state);assert.ok(MultiChatboxPrompt.getPending(f.p));
+  await catChoice(f,4);assert.equal(current(f),replacement);assert.equal(f.p.getAttribute('pets:cat'),newState);assert.ok(!core.World.getRemoveNPCQueue().includes(replacement));
+});
 test('native Call follower without an active follower matches RSProx229/2785', async t => {
   const f = actor(t); await call(f); assert.ok(f.messages.includes('You do not have a follower.'));
 });
