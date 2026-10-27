@@ -68,11 +68,17 @@ function inventoryBlocks(player, logId) {
   return !request.room;
 }
 
-/** An open log basket takes the log first ("storage:gather"); otherwise it goes to the inventory. */
-function giveLog(player, logId, xp = 0) {
+/** Storage takes the log first; retain an unstored yield until the pet opportunity resolves. */
+function prepareLog(player, logId, xp = 0) {
   const request = { player, itemId: logId, amount: 1, stored: 0, skill: Skill.WOODCUTTING, xp };
   pluginApi.emitCustomEvent("storage:gather", request);
-  if (request.stored === 0) player.getInventory().adds(logId, 1);
+  return request.stored === 0 ? new Item(logId, 1) : null;
+}
+
+function deliverLog(player, log) {
+  if (!log) return;
+  if (player.getInventory().getAddableAmount(log) >= log.getAmount()) player.getInventory().add(log, true);
+  else ItemOnGroundManager.registers(player, log);
 }
 
 const BIRD_NESTS = Object.freeze({
@@ -1087,18 +1093,25 @@ function processWoodcuttingTick(activeSessions, currentTick) {
     }
 
     if (state.tree.logId >= 0) {
+      let pendingLog = null;
       if (!InfernalAxe.tryBurnLog(player, state.axe.id, state.tree.logId)) {
-        giveLog(player, state.tree.logId, state.tree.xpReward * lumberjackXpMultiplier(player));
+        pendingLog = prepareLog(player, state.tree.logId, state.tree.xpReward * lumberjackXpMultiplier(player));
         player.sendMessage(logMessage(state.tree));
       }
       CrystalAxe.tryUseCharge(player);
       player
         .getSkillManager()
         .addExperiences(Skill.WOODCUTTING, state.tree.xpReward * lumberjackXpMultiplier(player));
+      // OSRS gives a winning pet the last backpack slot before the resource.
+      // Keep storage/XP before this roll and the ordinary success consumers after delivery.
+      const petRoll = { player, skill: Skill.WOODCUTTING, petBase: state.tree.petBase, handled: false };
+      pluginApi.emitCustomEvent("pets:skilling-roll", petRoll);
+      deliverLog(player, pendingLog);
       pluginApi.emitCustomEvent("woodcutting:success", {
         player,
         skill: Skill.WOODCUTTING,
         petBase: state.tree.petBase,
+        petRolled: petRoll.handled,
         logId: state.tree.logId,
       });
       maybeDropBirdNest(player);

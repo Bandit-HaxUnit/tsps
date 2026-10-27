@@ -1795,7 +1795,8 @@ function onPetPlayerLogin({ player }) {
  * petChance), how many rolls it earned (rift guardians roll per essence), and the
  * runeId / npcId that picks the pet's colour. No rate means the action can't roll.
  */
-function onSkill(player, skill, { petBase, petChance, rolls = 1, runeId, npcId } = {}) {
+function onSkill(player, skill, { petBase, petChance, rolls = 1, runeId, npcId, petRolled = false } = {}) {
+  if (petRolled) return false;
   const pet =
     SKILL_PET_VARIANTS.get(`rune:${runeId}`) ??
     SKILL_PET_VARIANTS.get(`npc:${npcId}`) ??
@@ -1819,6 +1820,13 @@ function onSkill(player, skill, { petBase, petChance, rolls = 1, runeId, npcId }
   }
   awardPet(player, pet.itemId);
   return true;
+}
+
+/** A gatherer may resolve its normal pet opportunity before delivering the resource. */
+function rollSkillingPet(event) {
+  if (event.handled) return;
+  event.handled = true;
+  onSkill(event.player, event.skill, event);
 }
 
 function fillSkillPetVariants({ ItemIdentifiers, NpcIdentifiers: Npcs }) {
@@ -1872,6 +1880,7 @@ module.exports = {
       api.onCustomEvent(`${normalizeSkillName(skill)}:success`, skillPetHandler(skill));
     }
     api.onCustomEvent("npc-drops:roll", awardDroppedPets);
+    api.onCustomEvent("pets:skilling-roll", rollSkillingPet);
     api.onCustomEvent("npc-dialogue:action", reclaimPets);
     api.onCustomEvent("pets:current", answerCurrentPet);
     api.onCustomEvent("pets:owns", answerOwnsPet);
