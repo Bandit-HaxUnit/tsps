@@ -16,6 +16,7 @@ const DriftNets = require("./hunter/DriftNets.Hunter");
 const Dungeon = require("./hunter/Dungeon.Hunter");
 const Rumours = require("./hunter/Rumours.Hunter");
 const Broavs = require("./hunter/Broavs.Hunter");
+const Overworld = require("./hunter/Overworld.Hunter");
 const Ceto = require("./hunter/Ceto.Hunter");
 const Annette = require("./hunter/Annette.Hunter");
 
@@ -36,6 +37,7 @@ module.exports = {
     api.persistAttribute(Aerial.ATTRIBUTE);
     api.persistAttribute("hunter.herbiboars");
     api.onCustomEvent("hunter:success", Rumours.success);
+    api.onCustomEvent("hunter:impling-caught", Overworld.caught);
     api.onCustomEvent("hunter:rumours-completed", Rumours.completedCount);
     api.onPlayerLogin(Runtime.login);
     api.onCustomEvent("agent:advance-time", Birdhouses.advanceTime);
