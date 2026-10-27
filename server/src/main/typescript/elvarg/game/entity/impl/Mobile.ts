@@ -1,4 +1,5 @@
 import { Entity } from "../Entity";
+import { getSequenceForcedPriority } from "../../cache/NpcAnimationScanner";
 import { Sound } from "../../Sound";
 import type { CombatType } from "../../content/combat/CombatType";
 import { HitDamage } from "../../content/combat/hit/HitDamage";
@@ -333,6 +334,13 @@ export abstract class Mobile extends Entity {
         }
         if (this.animation != null && animation != null) {
             if (this.animation.getPriority() > animation.getPriority()) {
+                return;
+            }
+            // Two on one tick at the same priority: the cache's interrupt priority decides, as the
+            // client does for one already playing, so a block never replaces this tick's swing.
+            if (this.animation.getPriority() === animation.getPriority() && animation.getId() >= 0 &&
+                this.animation.getId() >= 0 &&
+                getSequenceForcedPriority(animation.getId()) < getSequenceForcedPriority(this.animation.getId())) {
                 return;
             }
         }
