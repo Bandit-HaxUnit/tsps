@@ -41,6 +41,10 @@ tracker Storage & reclamation note that Probita returns items without opening he
   packs, Examine, real initial PIN and confirmation-time PIN, and stale PIN resumes.
 - Focused recovery/Pets/Bank PIN tests74/74; TypeScript build passes. Final full suite
  9,120/9,120, no failures/skips (413 seconds), concurrency4. Git diff whitespace check clear.
+- Main integration10c75c689 retains merged Chompy acquisition alongside Recovery. Combined
+  recovery/Pets/Bank PIN/Chompy focused85/85 and full9,131/9,131 pass with no skips
+  (687 seconds, concurrency2); independent integration review clear. Production code unchanged
+  after that run. Own slot2 reservation was backed up and cleared after native shutdown.
 - Independent Codex review found a real confirmation-time PIN resume issue: keypad closure
   removed the old modal session. Reproduced, fixed with a pending identity-bound reopen,
   and covered through native PIN submission. Final source/delta re-reviews clear.

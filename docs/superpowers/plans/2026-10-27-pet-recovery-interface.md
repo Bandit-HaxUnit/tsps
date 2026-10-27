@@ -26,8 +26,8 @@ pets:held-elsewhere. No pet transcripts invented; generated dialogue remains can
 - [x] Implement focused recovery unit and minimal Pets delegation/registration.
 - [x] Replace obsolete immediate-reclaim fake assertion with native real coverage.
 - [x] Build, focused/full suite; own MCP walkthrough and client script/render checks.
-- [ ] Independent Codex review; fix findings, re-test, push separate ready PR.
-- [ ] Release claim; stop own services and clear new slot reservation after testing.
+- [x] Independent Codex review; fix findings, re-test, push separate ready PR1410.
+- [x] Release claim; stop own services and clear new slot reservation after testing.
 
 User authorizes inline planning/implementation and separate reviewed PRs. Preserve Claude's
 clue/League work and all active worktrees. New own worktree uses slot2, the first free slot;
