@@ -330,6 +330,17 @@
     "cluedIn": { "fragment": 49 }
   },
 
+  "_minigameEffects": "The minigame fragments (Wiki /Fragments and each fragment's page), used by plugins/modes/league/FragmentMinigames.LeagueMode.js. Each level's number in the cache (params 1456-1458: 100/200/300) is the percent more of a minigame's points (`minigame:points`) or chance (`minigame:chance`): x2/x3/x4. `points` names the minigames whose `minigame:points` { player, minigame, points } a fragment raises (the tier passives' event), `chances` the minigame and kind of each find. Rogues' Chompy Farm's chompy kills a kill counts for are only in its level texts (2/3/4). Not here: Barbarian Assault's honour points and the Rogues' Den safe (this server has neither). Fossil Island's fossils here are Hunter's drift nets' and the Volcanic Mine's side finds; numulite is no fossil.",
+  "minigameEffects": {
+    "barbarianPestWars": { "fragment": 51, "points": ["pest-control", "soul-wars"] },
+    "roguesChompyFarm": { "fragment": 52, "points": ["tithe-farm"], "chompyKills": [2, 3, 4] },
+    "mothersMagicFossils": {
+      "fragment": 53,
+      "points": ["mage-training-arena"],
+      "chances": { "motherlode-mine": ["golden-nugget"], "fossil-island": ["fossil"] }
+    }
+  },
+
   "messages": {
     "_lockedBoss": "The Wiki gives no message for a locked boss; this wording is this server's.",
     "lockedBoss": "You need to unlock {name} with Sage's Renown before you can fight it.",

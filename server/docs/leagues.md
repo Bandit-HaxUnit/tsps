@@ -159,6 +159,8 @@ relics are the first askers; nothing changes when nobody answers):
 | `construction:materials` | Construction, before a build's materials go | `{ player, buildable, materials }`: a listener may lower an amount |
 | `magic:enchant-pieces`, `magic:spell-batch` | the jewellery enchantments; the Lunar crafting spells | `{ player, spellName, itemId, pieces }` pieces a cast enchants, each with its XP; `{ player, spellName, batch }` items a cast converts |
 | `magic:alchemy-policy` (extended) | core alchemy | now with `high` (High Level Alchemy) |
+| `minigame:chance` | the Motherlode Mine (`golden-nugget`), Hunter's drift nets and the Volcanic Mine (`fossil-island` `fossil`) | `{ player, minigame, kind, multiplier }`: the find `multiplier` times as likely |
+| `big-chompy-bird-hunting:kill-credit` | Big Chompy Bird Hunting's kill count | `{ player, kills }` a chompy kill counts for |
 | `thieving:pickpocket-target` (extended) | Thieving | now with `chanceBonus` (a percent more success, stacking as the gloves of silence do) and `painless` (a stun without the damage) |
 | `thieving:loot` (extended) | Thieving | now with `multiplier`, applied with the rogue outfit's doubling as the loot is handed over |
 | `prayer:bury` (extended) | Prayer | now scatters demonic ashes too (never for the bonecrusher's `crushed`) |
@@ -528,6 +530,15 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   (ours), through the minigames' `minigame:points` (tier passives, below); a part mark is that chance of a whole one. Clued In makes each clue scroll an NPC drops
   at least 1 in 30/25/15 (`npc-drops:tertiary-chance`). The scroll box message is this server's.
 
+- **Minigame effects** (`league/FragmentMinigames.LeagueMode.js`, data `minigameEffects`):
+  Barbarian Pest Wars (Pest Control's commendation points and Soul Wars' zeal tokens), Rogues'
+  Chompy Farm (the Tithe Farm's points; a chompy kill counted 2-4 times on the ogre bow's count)
+  and Mother's Magic Fossils (the Mage Training Arena's pizazz points earned in its rooms; the
+  Motherlode Mine's golden nuggets and Fossil Island's unidentified fossils, from drift nets and
+  the Volcanic Mine, likelier) pay x2/x3/x4, through the
+  minigames' `minigame:points` (tier passives, below) and new `minigame:chance`, and the quest's
+  `big-chompy-bird-hunting:kill-credit`.
+
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price
   now, from the Wiki's Initial Cost less the prerequisite packs already unlocked, and 0 once
@@ -583,8 +594,8 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   only the fights inside. The Wiki gives no message for either lock; the boss one is this
   server's, said once per boss every few seconds.
 
-Not yet: the other fragments' effects (Barbarian Pest Wars, Rogues' Chompy Farm and Mother's
-Magic Fossils; Rune Escape, which needs the
+Not yet: the other fragments' effects (Barbarian Assault's honour points and the Rogues' Den
+safe, which this server doesn't have; Rune Escape, which needs the
 Ourania Altar this server doesn't have; Plank Stretcher outside a house build, as Mahogany Homes; the ranged weapons' own charges, which no hook reports) and the three sets that give a Sage item; The Alchemist's jugs of Unlocking Herblore doesn't yet complete Druidic Ritual and set the skill to 174 XP (Wiki /Unlocks footnote); the Sage's Check-pets remains unimplemented. A quest the character had started keeps its quest items when a pack completes it.
 
 wine (no wine making here); Fishing has no clue bottles of its own, so Message In A Bottle
