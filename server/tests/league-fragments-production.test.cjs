@@ -281,6 +281,9 @@ test("Dragon On A Bit: dragonhide armour's leather back to the bank; other leath
   assert.equal(banked(owner, I.GREEN_DRAGON_LEATHER), 3);
   produce(owner, "CRAFTING", "leather", I.LEATHER_BODY, 1, 25, [[I.LEATHER, 1]]);
   assert.equal(banked(owner, I.LEATHER), 0);
+  // A d'hide shield, as Leather's combine sends it: the leather back, the maple shield and nails used.
+  produce(owner, "CRAFTING", "leather", I.GREEN_DHIDE_SHIELD, 1, 124, [[I.GREEN_DRAGON_LEATHER, 2], [I.MAPLE_SHIELD, 1], [I.STEEL_NAILS, 15]]);
+  assert.deepEqual([banked(owner, I.GREEN_DRAGON_LEATHER), banked(owner, I.MAPLE_SHIELD), banked(owner, I.STEEL_NAILS)], [5, 0, 0]);
   for (const player of others) {
     produce(player, "CRAFTING", "leather", I.GREEN_DHIDE_BODY, 1, 186, [[I.GREEN_DRAGON_LEATHER, 3]]);
     assert.equal(banked(player, I.GREEN_DRAGON_LEATHER), 0, player.getUsername());
@@ -380,6 +383,19 @@ test("through Herblore's own mixing: Mixologist makes the 4-dose potion and keep
   equip(level1, F.mixologist);
   Math.random = () => 0.22; // under 25% for the doses, over 20% for the secondary
   assert.deepEqual(brew(level1), [1, 0, 0]);
+
+  // A recipe whose first ingredient is no potion (the haemostatic poultice): it is still used up; only the cotton yarn is kept.
+  const poultice = obj("haemostatic_poultice");
+  const yarn = obj("cotton_yarn");
+  const skills = owner.getSkillManager();
+  skills.setMaxLevels(core.Skill.HERBLORE, 60, false);
+  skills.setCurrentLevels(core.Skill.HERBLORE, 60, false);
+  owner.getInventory().adds(poultice, 1).adds(yarn, 1);
+  Math.random = () => 0.99;
+  mix({ player: owner, usedItemId: yarn, usedWithItemId: poultice, handled: false });
+  assert.equal(owner.getInventory().getAmount(obj("4dosehaemostaticdressing")), 1, "level 3: four doses");
+  assert.equal(owner.getInventory().getAmount(poultice), 0, "the poultice is used");
+  assert.equal(owner.getInventory().getAmount(yarn), 1, "the cotton yarn is kept");
 });
 
 // ---- Runes, planks, enchanting, Spin Flax, High Alchemy ----
@@ -413,6 +429,29 @@ test("Plank Stretcher, Enchanted Jeweler, Rumple-Bow-String and Alchemaniac", ()
   for (const player of planks.others) assert.deepEqual(build(player), [0, 0], player.getUsername());
   Math.random = () => 0.5;
   assert.deepEqual(build(shattered("plankslevel1")), [0, 0], "no fragment, no saving");
+
+  // The workbench's own flatpack build with a full inventory: the planks kept free no slot, so the flatpack falls.
+  const Workbench = require("../plugins/skills/construction/Workbench.Construction")._test;
+  const [key, flatpack] = [...Workbench.FLATPACK_OF.entries()][0];
+  const bench = { house: {}, limit: 99 };
+  const fell = [];
+  const saved = { houseFor: House.houseFor, getBuildMaterials: House.getBuildMaterials };
+  const registers = core.ItemOnGroundManager.registers;
+  House.houseFor = () => bench.house;
+  House.getBuildMaterials = () => new Map([[I.OAK_PLANK, 2]]);
+  core.ItemOnGroundManager.registers = (player, item) => fell.push(item.getId());
+  try {
+    const crafter = cases(F.plankStretcher).owner;
+    crafter.performAnimation = () => {};
+    crafter.getInventory().adds(I.OAK_PLANK, 27); // with the class's scimitar, a full inventory
+    Math.random = () => 0.05;
+    Workbench.makeFlatpack(crafter, bench, { key, level: 1, experience: 60 });
+    assert.equal(crafter.getInventory().getAmount(I.OAK_PLANK), 27, "the planks kept");
+    assert.deepEqual(fell, [flatpack], "the flatpack on the floor, not lost");
+  } finally {
+    Object.assign(House, saved);
+    core.ItemOnGroundManager.registers = registers;
+  }
 
   const jeweler = cases(F.enchantedJeweler);
   assert.equal(emit("magic:enchant-pieces", { player: jeweler.owner, itemId: I.SAPPHIRE_RING, pieces: 1 }).pieces, 5);
