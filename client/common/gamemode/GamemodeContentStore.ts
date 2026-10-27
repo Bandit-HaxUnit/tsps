@@ -67,6 +67,16 @@ export type EnumOverrideRow = {
     entries: Array<[number, number | string]>;
 };
 
+/**
+ * A server-defined DB row (a new id, or a cache row replaced whole), read by the db ops before the
+ * cache: `columns` maps a column id to its values, typed by the table's column definition.
+ */
+export type DbRowOverrideRow = {
+    rowId: number;
+    tableId: number;
+    columns: Record<string, Array<number | string>>;
+};
+
 /** The shape the cs2 enum handlers read from a cache EnumType. */
 export type EnumOverride = {
     keys: number[];
@@ -79,6 +89,7 @@ export type EnumOverride = {
 
 let structOverrides: Map<number, Record<string, number | string>> | null = null;
 let enumOverrides: Map<number, EnumOverride> | null = null;
+let dbRowOverrides: Map<number, DbRowOverrideRow> | null = null;
 
 let dynamicWidgetGroups: Map<number, { root: any; widgets: Map<number, any> }> | null = null;
 // Behaviour declarations for server-defined interfaces, keyed by group id. See
@@ -131,12 +142,21 @@ export function loadFromPayload(payload: {
                     masteryChallengesByStructId.set(row.structId | 0, row);
                 }
                 break;
+            // The override datasets are replaced whole when sent: the server sends one complete payload
+            // (a league's relics, ranks and tasks together), so a payload without the dataset keeps
+            // the last set and an empty one clears it.
             case "structOverrides":
-                // Replaced only when sent, so a later payload without it keeps the catalog.
                 structOverrides = new Map();
                 for (const row of dataset.rows as StructOverrideRow[]) {
                     if (row?.structId == null || !row.params || typeof row.params !== "object") continue;
                     structOverrides.set(row.structId | 0, row.params);
+                }
+                break;
+            case "dbRowOverrides":
+                dbRowOverrides = new Map();
+                for (const row of dataset.rows as DbRowOverrideRow[]) {
+                    if (row?.rowId == null || row.tableId == null || !row.columns || typeof row.columns !== "object") continue;
+                    dbRowOverrides.set(row.rowId | 0, row);
                 }
                 break;
             case "enumOverrides":
@@ -294,6 +314,11 @@ export function getStructOverride(structId: number, paramId: number): number | s
 /** A server-sent enum, or undefined to read the cache. */
 export function getEnumOverride(enumId: number): EnumOverride | undefined {
     return enumOverrides?.get(enumId | 0);
+}
+
+/** A server-sent DB row, or undefined to read the cache. */
+export function getDbRowOverride(rowId: number): DbRowOverrideRow | undefined {
+    return dbRowOverrides?.get(rowId | 0);
 }
 
 export function getLeagueTaskStructParam(

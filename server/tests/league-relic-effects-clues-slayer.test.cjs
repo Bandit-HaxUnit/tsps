@@ -264,9 +264,11 @@ test("Treasure Arbiter: the shared clue perks, and emote, Falo and Charlie steps
 
 test("Bloodthirsty: superiors 1 in 25, a quarter bloodthirsty; points and six (nine) more rolls; a sure clue; the bracelet and remote tasks", () => {
   const who = cases(BLOODTHIRSTY, 4);
-  const chance = (player) => emit("slayer:superior-chance", { player, oneIn: 200 }).oneIn;
+  const chance = (player) => emit("slayer:superior-spawn", { player, npc: null, unlocked: true, chance: 200 }).chance;
   assert.equal(chance(who.relic), 25);
-  for (const player of others(who)) assert.equal(chance(player), 200, player.getUsername());
+  // The others keep what the league's tier passive gives (Raging Echoes tier 3: 1 in 50), else 200.
+  const { passive } = require("../plugins/modes/league/Passives.LeagueMode");
+  for (const player of others(who)) assert.equal(chance(player), passive(player, "slayer")?.superiorChance ?? 200, player.getUsername());
 
   const nechryarch = npcOf("Nechryarch");
   // The extra rolls Superiors asks of the drop table, recorded.

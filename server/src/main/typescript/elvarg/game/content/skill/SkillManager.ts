@@ -570,6 +570,13 @@ export class SkillManager {
     }
 
     increaseCurrentLevel(skill: Skill, amount: number, max: number) {
+        if (amount > 0) {
+            // A restore or boost, whatever its source: plugins may change `amount` (a league
+            // passive's Prayer gain); `max` stays the caller's cap.
+            const restore = { player: this.player, skill, amount, max };
+            PluginManager.emitCustomEvent("skills:restore", restore);
+            if (restore.amount !== amount && Number.isFinite(restore.amount) && restore.amount >= 0) amount = Math.floor(restore.amount);
+        }
         const curr = this.getCurrentLevel(skill);
         if ((curr + amount) > max) {
             this.setCurrentLevels(skill, max);
