@@ -627,8 +627,7 @@ function itemOnNpc(event) {
 function spellOnObject(event) {
     WORK.delete(event.player);
     const patch = findPatch(event.object.getId(), event.location);
-    if (!patch) return;
-    if (!canUsePatch(event.player, patch)) { event.handled = true; return; }
+    if (patch && !canUsePatch(event.player, patch)) { event.handled = true; return; }
     Spells.farmingSpell(event, patch);
 }
 /** A grown tree's Travel opens the spirit tree network's menu (SpiritTrees). */
