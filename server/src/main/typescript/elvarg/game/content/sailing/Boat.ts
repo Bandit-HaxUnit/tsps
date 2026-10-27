@@ -1,3 +1,4 @@
+import type { Mobile } from "../../entity/impl/Mobile";
 import { PACKED_HEADING_SCALE, angleFromCoordDelta, normalizeAngle } from "./HeadingUtils";
 
 /** A wooden hull's base speed (the raft's), 1.5 tiles a tick: the default full sail speed. */
@@ -82,6 +83,8 @@ export class Boat {
     moveMode: BoatMoveMode = BoatMoveMode.Stopped;
     /** Player steering from the helm; their world clicks set the heading. */
     helmPlayerId: number | undefined;
+    /** A crewmate holding the helm for the owner, whose world clicks then set the heading. */
+    helmCrew: Mobile | undefined;
     speedMultiplier = 1;
     /** While the sails are trimmed: the speed that replaces the base speed (the hull's cap). */
     boostSpeed: number | undefined;

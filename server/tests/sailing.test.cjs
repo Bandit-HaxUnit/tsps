@@ -894,7 +894,8 @@ function shipwrightHarness(bankCoins) {
   });
   player.getPacketSender = () => sender;
   const recover = () => shipwright.npcs["Junior Jim"]["Recover-boat"]({
-    player, npc: { getDefinition: () => ({ getName: () => "Junior Jim" }) },
+    // As the interaction resolves it: the spawned parent (14972) is nameless, its form is Junior Jim.
+    player, npc: { getDefinition: () => ({ getName: () => "null" }) }, definition: { getName: () => "Junior Jim" },
   });
   const choose = (slot) => chooseBoat({ player, groupId: 934, childId: 5, action: slot + 1, handled: false });
   return { player, bank, varbits, scripts, recover, choose, shipwright };
@@ -981,7 +982,9 @@ function boatShopHarness({ sailingLevel = 1, coins = 0 } = {}) {
   }));
   return {
     player, varps, varbits, scripts, sounds, dialogues,
-    open: () => npcs["Junior Jim"]["Buy-boat"]({ player, npc: { getDefinition: () => ({ getName: () => "Junior Jim" }) } }),
+    open: () => npcs["Junior Jim"]["Buy-boat"]({
+      player, npc: { getDefinition: () => ({ getName: () => "null" }) }, definition: { getName: () => "Junior Jim" },
+    }),
     select: (entry) => click("omnishop_main:list", { slot: entry * 12, action: 1 }),
     requestInfo: (shop, entry) => click("omnishop_main:trigger_request_info", { action: 0, scriptTrigger: true, argsData: zigzag([shop, entry]) }),
     buy: () => click("omnishop_main:button_1", { action: 1 }),
@@ -2147,6 +2150,7 @@ test("gusts and trimming follow live's timing (rsprox): a gust, Trim, the boost 
   const log = [];
   const player = {
     getIndex: () => 7,
+    getArea: () => null,
     getLocalPlayers: () => [],
     sendMessage: (text) => log.push(`message ${text}`),
     performAnimation: (anim) => log.push(`seq ${anim.getId()}`),

@@ -1307,8 +1307,16 @@ export class OverlayHost {
                 const mid = ne.getMapId(ecsId) | 0;
                 const mapX = (mid >> 8) & 0xff;
                 const mapY = mid & 0xff;
-                const baseWorldX = mapX * 64 + localX / 128.0;
-                const baseWorldZ = mapY * 64 + localY / 128.0;
+                let baseWorldX = mapX * 64 + localX / 128.0;
+                let baseWorldZ = mapY * 64 + localY / 128.0;
+                // A crewmate on a boat stands in deck coordinates: place the text where the deck is drawn.
+                const worldViewId = ne.getWorldViewId(ecsId) | 0;
+                if (worldViewId >= 0) {
+                    const projected = projectDeckToWorld(this.renderer, worldViewId, baseWorldX * 128, baseWorldZ * 128);
+                    if (!projected) return;
+                    baseWorldX = projected.x / 128;
+                    baseWorldZ = projected.y / 128;
+                }
                 const plane = ne.getLevel(ecsId) | 0;
                 // Same anchor as hitsplats and health bars: the posed model's
                 // height, not the static model bounds. A few NPC models (Araxxor)
