@@ -235,6 +235,7 @@ const PETS = [
   {
     enumName: "BEAVER",
     petId: NpcIdentifiers.BEAVER_11,
+    dialogueVariant: "standard-dialogue-normal-variant",
     morphId: 0,
     itemId: 13322,
     dialogue: -1,
