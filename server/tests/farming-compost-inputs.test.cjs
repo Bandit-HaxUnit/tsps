@@ -21,8 +21,6 @@ before(async () => {
     } }));
 });
 function prepare(t, type = 'COMPOST') {
-    let now = Date.now();
-    t.mock.method(Date, 'now', () => now);
     const player = new Player(null), animations = [], sounds = [], varbits = [];
     const sender = new Proxy({
         sendSound: (...args) => { sounds.push(args); return sender; },
@@ -36,7 +34,7 @@ function prepare(t, type = 'COMPOST') {
     player.getPacketSender = () => sender; player.sendMessage = () => {};
     const patch = Data.CACHE.patches.find(p => p.type === type);
     const state = Patches.stateFor(player, patch), inventory = player.getInventory();
-    const tick = (count = 1) => { for (let i = 0; i < count; i++) { now += 600; Patches.tick(); } };
+    const tick = (count = 1) => { for (let i = 0; i < count; i++) { Patches.tick(); } };
     const stock = (name, count) => {
         const id = Data.itemId(name);
         for (let i = 0; i < count; i++) inventory.add(new core.Item(id), false);
@@ -181,4 +179,19 @@ test('removed ingredients and closed or replaced bins cannot receive a queued de
         interrupt(f); f.tick(20);
         assert.equal(f.bin().count, 0);
     }
+});
+
+test('bin phases count game ticks even with early, delayed or catch-up ticks', t => {
+    let now = Date.now();
+    t.mock.method(Date, 'now', () => now);
+    const f = prepare(t), id = f.stock('Orange', 4);
+    f.use(id);
+    for (const [index, elapsed] of [599, 1, 1400, 0, 599, 1, 2000, 0, 1].entries()) {
+        now += elapsed;
+        f.tick();
+        const tick = index + 1;
+        assert.equal(f.bin().count, Math.min(4, Math.floor((tick - 1) / 2)), `deposit tick ${tick}`);
+        assert.equal(f.animations.length, Math.min(4, Math.floor(tick / 2)), `animation tick ${tick}`);
+    }
+    assert.equal(f.inventory.getAmount(id), 0);
 });

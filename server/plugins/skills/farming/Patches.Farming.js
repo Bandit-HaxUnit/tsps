@@ -22,9 +22,9 @@ const ANIM = { RAKE: 2273, PLANT: 2291, SAPLING: 2272, FILL_POT: 2287, WATER: 22
 // Rev 241 gameval human_pickuptable; rsprox recording 1858 pairs it with sound 2441.
 const FILL_BIN_ANIMATION = 832;
 const FILL_BIN_SOUND = 2441;
-const TICK_MS = 600;
 // Player -> queued rake/harvest/bin filling, stepped every tick by the farming task.
 const WORK = new Map();
+let workTick = 0;
 const RENDERED = new WeakMap();
 const LLETYA_FRUIT_PATCH = Data.CACHE.patches.find(p => p.type === "FRUIT_TREE" && p.x === 2346 && p.y === 3161 && p.z === 0);
 // A patch can be visible from its own 64-tile region or one of its neighbours.
@@ -177,7 +177,7 @@ function startWork(player, patch, action) {
     workStep(player, work);
 }
 function startBinWork(player, patch, input) {
-    WORK.set(player, { patch, action: "fill-bin", input, nextAt: Date.now() + 2 * TICK_MS,
+    WORK.set(player, { patch, action: "fill-bin", input, nextTick: workTick + 2,
         position: player.getLocation().clone(), depositing: false });
 }
 function fillBinStep(player, work) {
@@ -200,7 +200,7 @@ function fillBinStep(player, work) {
         if (bin.count >= capacity || !inventory.contains(input.id)) return false;
     }
     work.depositing = !work.depositing;
-    work.nextAt = Date.now() + TICK_MS;
+    work.nextTick = workTick + 1;
     return true;
 }
 function workStep(player, work) {
@@ -209,11 +209,12 @@ function workStep(player, work) {
         return;
     }
     if (work.levelUpPaused) return;
-    if (Date.now() < work.nextAt) return;
     if (work.action === "fill-bin") {
+        if (workTick < work.nextTick) return;
         if (!fillBinStep(player, work)) WORK.delete(player);
         return;
     }
+    if (Date.now() < work.nextAt) return;
     const again = work.action === "rake" ? rake(player, work.patch) : harvest(player, work.patch);
     work.nextAt = Date.now() + 1800;
     if (!again) WORK.delete(player);
@@ -718,6 +719,7 @@ function refresh(player) {
     else redwoodRegrowth.delete(player);
 }
 function farmingTick() {
+    workTick++;
     Geomancy.tick();
     for (const [player, due] of redwoodRegrowth) if (due <= Date.now()) refresh(player);
     for (const [player, work] of WORK) workStep(player, work);

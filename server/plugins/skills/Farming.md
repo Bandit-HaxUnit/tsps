@@ -297,7 +297,8 @@ Using unnoted compostable produce on either bin starts automatic deposits of tha
 same item until it runs out or the bin reaches 15 items (30 in the Farming Guild).
 The existing Farming work queue cancels pending deposits on movement, new world
 input, logout, death or a busy interface; every deposit rechecks the inventory and
-original bin state. Each deposit updates the owner's patch varbit and appearance.
+original bin state. Bin phases count Farming task ticks rather than milliseconds,
+so scheduler jitter cannot stretch the two-tick cadence. Each deposit updates the owner's patch varbit and appearance.
 
 The [Wiki's compost-bin change history](https://oldschool.runescape.wiki/w/Compost_bin#Changes)
 confirms automatic filling. In rsprox captures, recording **1858** (revision 227,
@@ -311,3 +312,17 @@ bin capture was found. The shared loop uses the same cadence for both bin sizes.
 `tests/farming-compost-inputs.test.cjs` covers automatic filling, cadence, capacity,
 selected-item exhaustion, interruption and stale bin/inventory state, alongside
 existing ingredient, tier and noted-item checks.
+
+The only production callers of `Services.binAction` are the object and item-on-object
+handlers in `Patches.Farming.js`; only item use supplies an ingredient and starts
+filling. `UseItemPacketListener.itemOnObject` first validates the selected item and
+map object, then calls `MovementQueue.walkToObject`. Its arrival callback checks
+`MapObjects.stillStands` before dispatching the Farming item-use hook. Thus bin work
+starts after the normal object-reach check; it does not expose a remote command or
+endpoint. The work entry retains the arrival position and cancels if the player
+moves. Filling awards no XP and needs no separate level-up pause mechanism.
+
+The compost regression fixture advances Farming ticks without advancing the wall
+clock. An additional regression varies elapsed milliseconds across early, delayed
+and catch-up ticks and verifies the animation/deposit phases remain at +2/+3 and
+every two ticks thereafter.
