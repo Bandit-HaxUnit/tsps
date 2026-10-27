@@ -69,8 +69,20 @@ function converse(request) {
   request.handled = start.handled;
 }
 
+/** Canonical random conversations may restrict a branch to a physical pet form. */
+function formCondition({player, npc, text}) {
+  const form = /^(.+?) variant only:\s*$/i.exec(String(text ?? ""));
+  if (!form || !player?.isRegistered?.() || !npc?.isRegistered?.()
+      || !npc.isPet() || !npc.isVisible() || npc.getOwner() !== player
+      || player.getAttribute(services.currentAttribute) !== npc
+      || api.core.World.getRemoveNPCQueue().includes(npc)) return null;
+  const pet = services.getPetByNpcId(npc.getId());
+  return typeof pet?.dialogueForm === "string" ? slug(form[1]) === pet.dialogueForm : null;
+}
+
 function attach(pluginApi, helpers) {
   api = pluginApi; services = helpers; candidates = null;
   api.onCustomEvent("pets:interact", converse);
+  api.onNpcDialogueCondition(formCondition);
 }
 module.exports = {attach};
