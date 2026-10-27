@@ -47,3 +47,62 @@ test('hits after a lethal one take nothing more off', () => {
     assert.equal(target.hp, 0);
     assert.deepEqual(target.shown, [10, 5, 0]);
 });
+
+// Wiki: Animation stall. "A full stall does not allow the player to move independently or
+// perform actions. Hits are usually queued up on the player, and received only after the
+// action is complete."
+test('hits due during a full animation stall are kept until it releases', () => {
+    const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
+    const target = buildTarget(100);
+    target.isPlayer = () => true;
+    target.isUntargetable = () => false;
+    const RELEASE = 7; // the cycle the stalled player is free again
+    target.getCombat = () => ({ getIncomingHitCycle: () => RELEASE });
+
+    const attacker = { isRegistered: () => true, getHitpoints: () => 50 };
+    const swing = (damage) => ({
+        getTarget: () => target,
+        getAttacker: () => attacker,
+        getTotalDamage: () => damage,
+    });
+
+    const landed = [];
+    const executeHit = CombatFactory.executeHit;
+    CombatFactory.executeHit = (hit) => landed.push(hit);
+    try {
+        const queue = new HitQueue(target);
+        queue.addPendingHit(swing(9), 5); // due inside the window: waits for cycle 7
+        queue.addPendingHit(swing(4), 6); // also inside it
+        queue.addPendingHit(swing(3), 9); // already past it: keeps its own tick
+
+        queue.process(5);
+        queue.process(6);
+        assert.deepEqual(landed, [], 'nothing lands while the animation still holds them');
+        queue.process(7);
+        assert.deepEqual(landed.map((hit) => hit.getTotalDamage()), [9, 4], 'the burst lands together');
+        queue.process(9);
+        assert.deepEqual(landed.map((hit) => hit.getTotalDamage()), [9, 4, 3]);
+    } finally {
+        CombatFactory.executeHit = executeHit;
+    }
+});
+
+test('an unmoving target is not stalled, so an NPC takes its hits on the dot', () => {
+    const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
+    const target = buildTarget(100);
+    target.isUntargetable = () => false;
+    const attacker = { isRegistered: () => true, getHitpoints: () => 50 };
+    const hit = { getTarget: () => target, getAttacker: () => attacker, getTotalDamage: () => 5 };
+
+    const landed = [];
+    const executeHit = CombatFactory.executeHit;
+    CombatFactory.executeHit = (pending) => landed.push(pending);
+    try {
+        const queue = new HitQueue(target);
+        queue.addPendingHit(hit, 5);
+        queue.process(5);
+        assert.equal(landed.length, 1, 'the monster is hit on the scheduled tick');
+    } finally {
+        CombatFactory.executeHit = executeHit;
+    }
+});

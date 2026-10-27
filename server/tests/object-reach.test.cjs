@@ -218,7 +218,7 @@ test('clipped type-10 crate 16560 uses its real wall sides without unmasked thro
     getInventory: () => ({ capacity: () => 28, getItems: () => [] }),
     getPacketSender: () => ({ getVarbit: () => 0, getVarp: () => 0, sendDestination: noop }),
     getFollowing: () => null, getTimers: () => ({ has: () => false }), getHitpoints: () => 10,
-    getCombat: () => ({ setCastSpell: noop, reset: noop }), getSkillManager: () => ({ stopSkillable: noop }),
+    getCombat: () => ({ setCastSpell: noop, reset: noop, isAnimationStalled: () => false }), getSkillManager: () => ({ stopSkillable: noop }),
     getDueling: () => ({ getButtonDelay: () => ({ finished: () => true }), inDuel: () => false }),
     getTrading: () => ({ getButtonDelay: () => ({ finished: () => true }) }),
     setPositionToFace: noop, setDirection: noop, setWalkingDirection: noop, setRunningDirection: noop,
@@ -306,7 +306,7 @@ test('stage 6 canvas dispatches on the painting through the real item-on-object 
     getInventory: () => ({ capacity: () => 28, getItems: () => [new Item(30950, 1)] }),
     getPacketSender: () => ({ getVarbit: () => 0, getVarp: () => 0, sendDestination: noop }),
     getFollowing: () => null, getTimers: () => ({ has: () => false }), getHitpoints: () => 10,
-    getCombat: () => ({ setCastSpell: noop, reset: noop }), getSkillManager: () => ({ stopSkillable: noop }),
+    getCombat: () => ({ setCastSpell: noop, reset: noop, isAnimationStalled: () => false }), getSkillManager: () => ({ stopSkillable: noop }),
     getDueling: () => ({ getButtonDelay: () => ({ finished: () => true }), inDuel: () => false }),
     getTrading: () => ({ getButtonDelay: () => ({ finished: () => true }) }),
     setPositionToFace: noop, setDirection: noop, setWalkingDirection: noop, setRunningDirection: noop,
@@ -526,7 +526,7 @@ test('ladder click waits for arrival before animating and changes plane one tick
     getTimers: () => ({ has: () => false }), getFollowing: () => null,
     getDueling: () => ({ getButtonDelay: () => ({ finished: () => true }), inDuel: () => false }),
     getTrading: () => ({ getButtonDelay: () => ({ finished: () => true }) }),
-    getCombat: () => ({ setCastSpell: noop, reset: noop }),
+    getCombat: () => ({ setCastSpell: noop, reset: noop, isAnimationStalled: () => false }),
     getSkillManager: () => ({ stopSkillable: noop }),
     setFollowing: noop, setCombatFollowing: noop, setPositionToFace: noop,
     setDirection: noop, setWalkingDirection: noop, setRunningDirection: noop,
@@ -612,7 +612,7 @@ test('an inventory item action cancels the queued object op but keeps the walk',
   const events = [];
   let location = new Location(100, 97, 0);
   const noop = () => {};
-  const combat = { clearInteraction: () => events.push('clear-interaction'), setCastSpell: noop, reset: noop };
+  const combat = { clearInteraction: () => events.push('clear-interaction'), setCastSpell: noop, reset: noop, isAnimationStalled: () => false };
   const player = {
     isPlayer: () => true, isNpc: () => false, isPlayerBot: () => true, getAsPlayer() { return this; },
     getIndex: () => 1, getUsername: () => 'tester', getSize: () => 1,

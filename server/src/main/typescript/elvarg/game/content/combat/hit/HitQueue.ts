@@ -78,10 +78,18 @@ export class HitQueue {
     }
 
     addPendingHit(hit: PendingHit, revealCycle: number): void {
-        const scheduled = { hit, revealCycle: Math.max(0, revealCycle | 0) };
+        // Wiki: Animation stall. A full stall queues hits up on the player and delivers them
+        // once the action completes, so a hit due inside the window moves to the cycle it
+        // releases on - and one already due later keeps its own tick. Only players are stalled,
+        // so an NPC's hits keep landing on the dot.
+        let scheduled = Math.max(0, revealCycle | 0);
+        if (this.character.isPlayer()) {
+            scheduled = Math.max(scheduled, this.character.getCombat().getIncomingHitCycle());
+        }
+        const entry = { hit, revealCycle: scheduled };
         let index = this.pendingHits.length;
-        while (index > 0 && this.pendingHits[index - 1].revealCycle > scheduled.revealCycle) index--;
-        this.pendingHits.splice(index, 0, scheduled);
+        while (index > 0 && this.pendingHits[index - 1].revealCycle > scheduled) index--;
+        this.pendingHits.splice(index, 0, entry);
         HitQueue.active.add(this);
     }
 

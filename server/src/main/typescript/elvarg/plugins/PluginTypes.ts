@@ -482,6 +482,24 @@ export interface PluginAttackTimingEvent {
   newTarget: boolean;
 }
 
+/**
+ * Raised once per attack to say how much the swing's animation holds the attacker
+ * (Wiki: Animation stall). Core measures it from the cache's own seq config: an animation
+ * with no masks and no priority of its own withholds the actor's steps in the client, which
+ * is a `full` stall when they were standing still; one they started mid-path is `partial`,
+ * because their true tile keeps moving under the animation (the PvP rubber band).
+ */
+export interface PluginAnimationStallEvent {
+  player: any;
+  /** The seq id the character just started playing; core has already measured it. */
+  animationId: number;
+  /** Ticks the client keeps it playing (cache frame lengths / 30), capped by core at 5. */
+  ticks: number;
+  kind: "none" | "partial" | "full";
+  /** Stack incoming hits until the stall releases (false for a teleport, Wiki: Animation stall). */
+  holdsHits: boolean;
+}
+
 export interface PluginCombatHitRollEvent {
   attacker: any;
   target: any;
@@ -944,6 +962,8 @@ export interface PluginApi {
   onCombatHitDamage(handler: (event: PluginCombatHitDamageEvent) => void): void;
   /** Lets an attack ignore the attack timer, or leave it untouched (see PluginAttackTimingEvent). */
   onAttackTiming(handler: (event: PluginAttackTimingEvent) => void): void;
+  /** Says how much a swing's animation holds the attacker, if at all (see PluginAnimationStallEvent). */
+  onAnimationStall(handler: (event: PluginAnimationStallEvent) => void): void;
   onCombatHitResolved(handler: (event: PluginCombatHitResolvedEvent) => void): void;
   onCombatAttackDistance(handler: (event: PluginCombatAttackDistanceEvent) => void): void;
   onSpellDisabled(handler: (event: PluginSpellDisabledEvent) => void): void;
