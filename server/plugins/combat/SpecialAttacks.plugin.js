@@ -64,6 +64,7 @@ module.exports = {
     require("./specials/NoxiousHalberd.SpecialAttack")(api);
     require("./specials/OsmumtensFang.SpecialAttack")(api);
     require("./specials/PurgingStaff.SpecialAttack")(api);
+    require("./specials/Rondache.SpecialAttack")(api);
     require("./specials/RosewoodBlowpipe.SpecialAttack")(api);
     require("./specials/RuneClaws.SpecialAttack")(api);
     require("./specials/RuneThrownaxe.SpecialAttack")(api);

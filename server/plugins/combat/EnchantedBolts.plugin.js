@@ -193,6 +193,7 @@ function procs(bolt, shot) {
   const base = shot.pvp ? bolt.chance.player : bolt.chance.npc;
   if (!(base > 0)) return false;
   let chance = base * (hasKandarinHard(shot.player) ? KANDARIN_HARD_CHANCE_MULTIPLIER : 1);
+  chance *= core.WeaponProfiles.get(shot.player)?.boltEffectChanceMultiplier ?? 1;
   if (traits?.enchantedBoltEffectChanceMultiplier > 0) chance *= traits.enchantedBoltEffectChanceMultiplier;
   return Math.random() < chance;
 }
