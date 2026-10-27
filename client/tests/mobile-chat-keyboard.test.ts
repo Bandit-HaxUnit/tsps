@@ -12,6 +12,7 @@ test("mobile chat keeps its native caret above the keyboard and preserves chat i
     dom.window.HTMLCanvasElement.prototype.getContext = (() => null) as any;
     try {
         const { MobileChatKeyboard } = await import("../game/chat/MobileChatKeyboard");
+        const { InputManager } = await import("../game/InputManager");
         const typed: number[] = [];
         const keys: number[] = [];
         let varc = "seed";
@@ -36,7 +37,32 @@ test("mobile chat keeps its native caret above the keyboard and preserves chat i
             nativeFocus.call(this);
         };
 
-        keyboard.show("Chat", 1);
+        const canvas = document.createElement("canvas");
+        canvas.width = 800;
+        canvas.height = 400;
+        canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 400 }) as DOMRect;
+        document.body.appendChild(canvas);
+        const inputManager = new InputManager();
+        inputManager.init(canvas);
+        let touchEvent = "";
+        inputManager.onCanvasTouchTap = () => {
+            assert.equal(touchEvent, "touchend", "iOS focus runs inside the activation event, before a frame");
+            keyboard.show("Chat", 1);
+        };
+        const dispatchTouch = (type: string) => {
+            touchEvent = type;
+            const event = new dom.window.Event(type, { cancelable: true });
+            Object.assign(event, {
+                touches: type === "touchstart" ? [{ clientX: 100, clientY: 100 }] : [],
+                changedTouches: [{ clientX: 100, clientY: 100 }],
+            });
+            canvas.dispatchEvent(event);
+            touchEvent = "";
+        };
+        dispatchTouch("touchstart");
+        assert.equal(document.querySelector("input"), null, "touchstart has no iOS activation yet");
+        dispatchTouch("touchend");
+        inputManager.cleanUp();
         const input = document.querySelector("input")!;
         assert.equal(document.activeElement, input);
         assert.deepEqual(focusArgs, [{ preventScroll: true }]);
