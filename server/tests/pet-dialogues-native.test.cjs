@@ -107,6 +107,7 @@ test('native metamorphosis uses the current form and cancels a pending conversat
   await talk(f,n);assert.equal(text(f),'What lovely teeth you have!');
 });
 
+
 test('owner hatchlings select their owner branches rather than other-player or menagerie text', async t => {
   for (const [id, first] of [[core.ItemIdentifiers.PET_DAGANNOTH_SUPREME, 'Hey, so err... I kind of own you now.'], [core.ItemIdentifiers.PET_DAGANNOTH_PRIME, "So despite there being three kings, you're clearly the leader, right?"]]) {
     assert.ok(id > 0); const f = actor(t), n = await summon(f, id); await talk(f, n);
@@ -161,5 +162,48 @@ test('queued-removal owned pet clicks cannot fall through to generic NPC speech 
   await talk(f,old);assert.equal(f.p.getDialogueManager().isActive(),false);
   assert.equal(f.p.getAttribute('pets:current'),current);await talk(f,current);
   assert.equal(text(f),'Hey, so err... I kind of own you now.');
+  assert.equal(f.p.getInventory().getAmount(core.ItemIdentifiers.YAMI),1);
+});
+
+
+test('actual Yami follower uses its canonical NPC-typed ordinary conversation', async t => {
+  const f=actor(t), n=await summon(f,core.ItemIdentifiers.YAMI); t.mock.method(Math,'random',()=>0);
+  await talk(f,n); assert.equal(text(f),'Yes, you fool?');
+  await input(f,{type:'dialogue_continue',widgetId:(231<<16)|5,childIndex:-1});
+  assert.equal(text(f),'Excuse me?'); assert.equal(f.p.getAttribute('pets:current'),n);
+});
+
+test('actual Smol Heredit follower selects ordinary text without falling into the rare or overhead section', async t => {
+  const f=actor(t), n=await summon(f,core.ItemIdentifiers.SMOL_HEREDIT); await talk(f,n);
+  assert.equal(text(f),'How you doing, Smol Heredit?');
+  await input(f,{type:'dialogue_continue',widgetId:(217<<16)|5,childIndex:-1});
+  assert.match(text(f),/^I'm still disappointed that my father failed against you\./);
+  assert.equal(f.p.getAttribute('pets:current'),n);
+});
+
+test('NPC-typed pet speech retains actual reward ownership through Bank and fresh login',async t=>{
+  const f=actor(t), id=core.ItemIdentifiers.YAMI;
+  PM.emitCustomEvent('npc-drops:roll',{player:f.p,drops:[{itemId:id,amount:1}]});
+  const n=f.p.getAttribute('pets:current'); assert.ok(n?.isPet());
+  const foreign=actor(t); await talk(foreign,n); assert.equal(text(foreign),undefined);
+  const pick=n.getCurrentDefinition(f.p).getActions().findIndex(x=>x==='Pick-up')+1;
+  await input(f,{type:'npc_option',index:n.getIndex(),clickType:pick});
+  f.p.getBank(0).open(); core.Bank.deposit(f.p,id,f.p.getInventory().getSlotForItemId(id),1,false);
+  core.Bank.withdraw(f.p,id,f.p.getBank(0).getSlotForItemId(id),1,0);
+  PM.emitPlayerLogout({player:f.p,username:f.p.getUsername()});const g=actor(t);
+  PlayerSave.fromPlayer(f.p).applyToPlayer(g.p);PM.emitPlayerLogin({player:g.p,username:g.p.getUsername(),isNewAccount:false});g.p.needsPlacement=false;
+  const restored=await summon(g,id);t.mock.method(Math,'random',()=>0);await talk(g,restored);
+  assert.equal(text(g),'Yes, you fool?');assert.equal(g.p.getInventory().getAmount(id),0);
+});
+
+
+test('native stale Talk-to after pickup and another pet summon cannot bypass the current follower gate',async t=>{
+  const f=actor(t), old=await summon(f,core.ItemIdentifiers.YAMI);t.mock.method(Math,'random',()=>0);await talk(f,old);
+  const pick=old.getCurrentDefinition(f.p).getActions().findIndex(x=>x==='Pick-up')+1;
+  await input(f,{type:'npc_option',index:old.getIndex(),clickType:pick});
+  const current=await summon(f,core.ItemIdentifiers.SMOL_HEREDIT);
+  await talk(f,old);assert.equal(f.p.getDialogueManager().isActive(),false);
+  assert.equal(f.p.getAttribute('pets:current'),current);await talk(f,current);
+  assert.equal(text(f),'How you doing, Smol Heredit?');
   assert.equal(f.p.getInventory().getAmount(core.ItemIdentifiers.YAMI),1);
 });
