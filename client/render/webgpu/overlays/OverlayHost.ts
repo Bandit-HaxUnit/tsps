@@ -150,6 +150,8 @@ export class OverlayHost {
     pendingControlledPlayerServerId: number | undefined;
 
     // ── Interaction host state (checkInteractions / SceneRaycaster) ─────────────────────────
+    private roofPlaneLimitFrame = -1;
+    private roofPlaneLimit = 3;
     sceneRaycaster: SceneRaycaster | null = null;
     readonly cachedMenuEntries: OsrsMenuEntry[] = [];
     readonly cachedClientMenuEntries: OsrsMenuEntry[] = [];
@@ -906,8 +908,17 @@ export class OverlayHost {
         return new Ray(newOrigin, newDir);
     }
 
+    /**
+     * The roof limit, worked out once a frame as WebGL caches it: the frame and the hover
+     * (computeTileAt) ask for it, and each walk checks roof flags tile by tile.
+     */
     getRoofPlaneLimit(): number {
-        return computeWebGPURoofPlaneLimit(this.renderer);
+        const frame = this.renderer.stats.frameCount;
+        if (this.roofPlaneLimitFrame !== frame) {
+            this.roofPlaneLimitFrame = frame;
+            this.roofPlaneLimit = computeWebGPURoofPlaneLimit(this.renderer);
+        }
+        return this.roofPlaneLimit;
     }
 
     getNpcWorldTile(ecsId: number): { x: number; y: number } {
