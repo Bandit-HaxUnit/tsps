@@ -87,6 +87,7 @@ export class BoatManager {
             deckCentreX: spec.deckCentreX,
             deckCentreY: spec.deckCentreY,
             baseSpeed: spec.stats?.baseSpeed,
+            acceleration: spec.stats?.acceleration,
             ...placement,
         });
         BoatManager.boats.set(entityIndex, { boat, spec, deck: new BoatDeckArea(boat, spec), locChanges: [] });
@@ -203,17 +204,27 @@ export class BoatManager {
      */
     public static steerToward(player: Mobile, x: number, y: number): boolean {
         const boat = BoatManager.getBoatAboard(player);
-        if (!boat || boat.helmPlayerId !== player.getIndex()) return false;
-        if (boat.containsDeckTile(x, y)) return true;
+        if (!boat || !BoatManager.steers(player, boat)) return false;
+        // A captain whose crewmate holds the helm walks the deck as usual (rsprox).
+        if (boat.containsDeckTile(x, y)) return boat.helmPlayerId === player.getIndex();
         const heading = boat.helmHeadingToward(x, y);
         if (heading !== undefined) BoatManager.applyHelmHeading(player, boat, heading);
         return true;
     }
 
+    /**
+     * Whether a player steers the boat: from its helm, or as its owner while a crewmate holds the
+     * helm (rsprox: the owner's clicks on the sea set the heading then, from anywhere on deck).
+     */
+    public static steers(player: Mobile, boat: Boat): boolean {
+        if (boat.helmPlayerId === player.getIndex()) return true;
+        return boat.helmCrew !== undefined && boat.ownerPlayerId === player.getIndex();
+    }
+
     /** OSRS SetHeading (0-15), sent by the client in place of a click while steering. */
     public static setHelmHeading(player: Mobile, packedHeading: number): void {
         const boat = BoatManager.getBoatAboard(player);
-        if (!boat || boat.helmPlayerId !== player.getIndex()) return;
+        if (!boat || !BoatManager.steers(player, boat)) return;
         if (!(packedHeading >= 0 && packedHeading <= 15)) return;
         BoatManager.applyHelmHeading(player, boat, packedHeadingToAngle(packedHeading));
     }

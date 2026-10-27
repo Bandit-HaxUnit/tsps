@@ -1,7 +1,10 @@
+import type { Mobile } from "../../entity/impl/Mobile";
 import { PACKED_HEADING_SCALE, angleFromCoordDelta, normalizeAngle } from "./HeadingUtils";
 
 /** A wooden hull's base speed (the raft's), 1.5 tiles a tick: the default full sail speed. */
 const WOODEN_HULL_SPEED = 192;
+/** Speed gained or lost a tick without camphor-or-better sails: half a tile (rsprox). */
+const BASE_ACCELERATION = 64;
 
 /** Fine units per tile: world entity positions use 1/128-tile precision. */
 export const FINE_UNITS_PER_TILE = 128;
@@ -43,6 +46,8 @@ export interface BoatInit {
     deckCentreY: number;
     /** Full sail speed in fine units a tick. */
     baseSpeed?: number;
+    /** Speed gained or lost a tick, in fine units. */
+    acceleration?: number;
     /** World position of the boat's centre in fine units. */
     fineX: number;
     fineY: number;
@@ -71,6 +76,8 @@ export class Boat {
     readonly deckCentreY: number;
     /** Full sail speed in fine units a tick (the hull's base speed); half sail is half. */
     readonly baseSpeed: number;
+    /** Speed gained or lost a tick in fine units: half a tile, more with camphor sails or better. */
+    readonly acceleration: number;
 
     fineX: number;
     fineY: number;
@@ -80,8 +87,15 @@ export class Boat {
     /** Heading the helm is steering toward. */
     heading: number;
     moveMode: BoatMoveMode = BoatMoveMode.Stopped;
+    /**
+     * Speed along the bow in fine units a tick, negative backing up. It eases toward the sails'
+     * speed (BoatMovement.ts), so the boat gathers way when the sails go up and drifts when stopped.
+     */
+    velocity = 0;
     /** Player steering from the helm; their world clicks set the heading. */
     helmPlayerId: number | undefined;
+    /** A crewmate holding the helm for the owner, whose world clicks then set the heading. */
+    helmCrew: Mobile | undefined;
     speedMultiplier = 1;
     /** While the sails are trimmed: the speed that replaces the base speed (the hull's cap). */
     boostSpeed: number | undefined;
@@ -99,6 +113,7 @@ export class Boat {
         this.deckCentreX = init.deckCentreX;
         this.deckCentreY = init.deckCentreY;
         this.baseSpeed = init.baseSpeed ?? WOODEN_HULL_SPEED;
+        this.acceleration = init.acceleration ?? BASE_ACCELERATION;
         this.fineX = init.fineX;
         this.fineY = init.fineY;
         this.level = init.level;

@@ -1,0 +1,108 @@
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { before, after, test } = require('node:test');
+require('../dist/Server').Server.installProductionPathResolver();
+const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+const { PluginManager: PM } = require('../dist/plugins/PluginManager');
+const { Player } = require('../dist/game/entity/impl/player/Player');
+const { PlayerSession } = require('../dist/net/PlayerSession');
+const { ClientConnection } = require('../dist/net/NetworkBuilder');
+const { PlayerSave } = require('../dist/game/entity/impl/player/persistence/PlayerSave');
+const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
+let core, next = 2000;
+before(async () => {
+  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  PM.loadFromDirectory(path.resolve(__dirname, '../plugins')); core = PM.getCoreApi();
+  core.RegionManager.init(); core.RegionManager.loadMapFiles(3222, 3218); PM.emitServerStartup({});
+});
+after(() => PM.emitServerShutdown({}));
+function actor(t) {
+  const channel = {kind:'test',remoteAddress:'127.0.0.1',isOpen:()=>true,send:()=>true,close(){},onData(){},onError(){},onClose(){}};
+  const p = new Player(new PlayerSession(channel)); p.setIndex(next++); p.setUsername('pettalk'+next);
+  p.setRegistered(true); p.setLocation(new core.Location(3222,3218,0)); p.needsPlacement = false;
+  const c = new ClientConnection(channel); c.player = p;
+  t.after(() => { PM.emitPlayerLogout({player:p,username:p.getUsername()}); p.setRegistered(false); core.TaskManager.cancelTasks(p.getIndex());
+    for (const n of [...core.World.getNpcs()]) if (n?.getOwner?.() === p) core.World.getNpcs().remove(n); });
+  return {p,c};
+}
+async function input(f,message) {
+  await f.c.dispatch([message]); f.c.processTurnPackets();
+  for(let i=0;i<4;i++){core.TaskManager.processWalkTo(f.p.getIndex());f.p.getMovementQueue().process();core.TaskManager.process();}
+}
+async function summon(f,id) {
+  f.p.getPacketSender().sendInterfaceRemoval(); if(!f.p.getInventory().contains(id))f.p.getInventory().add(new core.Item(id),true);
+  await input(f,{type:'inventory_action',itemId:id,slot:f.p.getInventory().getSlotForItemId(id),widgetId:149<<16,option:'Drop',optionIndex:5});
+  const n=f.p.getAttribute('pets:current'); assert.ok(n?.isRegistered()); return n;
+}
+async function talk(f,n) {
+  const op=n.getCurrentDefinition(f.p).getActions().findIndex(x=>x==='Talk-to')+1; assert.ok(op>0,n.getCurrentDefinition(f.p).getName());
+  await input(f,{type:'npc_option',index:n.getIndex(),clickType:op});
+}
+const text=f=>f.p.getDialogueManager().getCurrent()?.getText?.()?.replace(/\s+/g,' ');
+test('native owned Olmlet Talk-to opens its canonical menu and returns after an answer',async t=>{
+  const f=actor(t),n=await summon(f,core.ItemIdentifiers.OLMLET);await talk(f,n);
+  assert.equal(text(f),'Hee hee! What shall we talk about, human?');
+  await input(f,{type:'dialogue_continue',widgetId:(231<<16)|5,childIndex:-1});
+  assert.deepEqual(MultiChatboxPrompt.getPending(f.p)?.options,['Where do creatures like you come from?','You look like a dragon.','Can you tell me secrets about your home?','Maybe another time.']);
+  await input(f,{type:'dialogue_continue',widgetId:(219<<16)|1,childIndex:1});
+  assert.equal(text(f),'Where do creatures like you come from?');
+  await input(f,{type:'dialogue_continue',widgetId:(217<<16)|5,childIndex:-1});
+  assert.equal(text(f),"From eggs, of course! You can't make an olmlet without breaking an egg.");
+  assert.equal(f.p.getAttribute('pets:current'),n);assert.equal(f.p.getInventory().getAmount(core.ItemIdentifiers.OLMLET),0);
+});
+test('all eight physical Olmlet items select the matching form, including shared enraged and flying dialogue',async t=>{
+  t.mock.method(Math,'random',()=>0);
+  const expected = new Map([
+    ['Olmlet','Hee hee! What shall we talk about, human?'],['Puppadile','What lovely teeth you have!'],['Tektiny','You look hot.'],
+    ['Enraged Tektiny','You look hot.'],['Vanguard','Learn ye of the Judgement of the Vanguard. The form we have taken.'],
+    ['Vasa Minirio','The Dark Altar! The power it has given. Xeric, you cannot comprehend!'],['Vespina','Hello'],['Flying Vespina','Hello']]);
+  const pets=require('../plugins/npcs/Pets.plugin').__internals;
+  const forms=pets.PETS.filter(p=>pets.petFamily(p)===`item:${core.ItemIdentifiers.OLMLET}`);assert.equal(forms.length,8);
+  for(const pet of forms){const f=actor(t),n=await summon(f,pet.itemId);await talk(f,n);assert.equal(text(f),expected.get(n.getDefinition().getName()),n.getDefinition().getName());}
+});
+test('Puppadile random alternatives remain random conversations rather than a choice menu',async t=>{
+  const f=actor(t),id=core.ItemIdentifiers.PUPPADILE,n=await summon(f,id);
+  const rng=t.mock.method(Math,'random',()=>0);
+  for(const [value,expected]of [[0,'What lovely teeth you have!'],[0.5,'Want to play fetch?'],[0.999,'Om nom nom good meat.']]){
+    rng.mock.mockImplementation(()=>value);await talk(f,n);assert.equal(text(f),expected);assert.equal(f.p.getDialogueManager().getCurrent()?.getOptions,undefined);
+  }
+});
+test('exact page and variant starts refuse missing flat variants and unrelated indexed pages',async t=>{
+  const f=actor(t),n=await summon(f,core.ItemIdentifiers.OLMLET);
+  for(const variant of [{page:'Cook',variant:'standard-dialogue'},{page:'Olmlet',variant:'does-not-exist'}]){
+    const r={player:f.p,npc:n,npcId:n.getId(),variant,exact:true,handled:false};PM.emitCustomEvent('npc-dialogue:start',r);assert.equal(r.handled,false);assert.equal(f.p.getDialogueManager().isActive(),false);
+  }
+  const id=require('../plugins/npcs/Pets.plugin').__internals.PETS.find(p=>p.enumName==='BUTCH').petId;
+  assert.ok(id>0);
+  const r={player:f.p,npcId:id,variant:'does-not-exist',exact:true,handled:false};PM.emitCustomEvent('npc-dialogue:start',r);assert.equal(r.handled,false);
+  r.variant={page:'Butch',variant:'standard-dialogue'};PM.emitCustomEvent('npc-dialogue:start',r);assert.equal(r.handled,true);assert.ok(text(f));
+});
+test('pickup, real bank transfer and fresh saved login retain physical form and restore its conversation',async t=>{
+  const f=actor(t),id=core.ItemIdentifiers.TEKTINY,n=await summon(f,id);
+  const pick=n.getDefinition().getActions().findIndex(x=>x==='Pick-up')+1;await input(f,{type:'npc_option',index:n.getIndex(),clickType:pick});
+  f.p.getBank(0).open();core.Bank.deposit(f.p,id,f.p.getInventory().getSlotForItemId(id),1,false);core.Bank.withdraw(f.p,id,f.p.getBank(0).getSlotForItemId(id),1,0);
+  PM.emitPlayerLogout({player:f.p,username:f.p.getUsername()});const g=actor(t);PlayerSave.fromPlayer(f.p).applyToPlayer(g.p);PM.emitPlayerLogin({player:g.p,username:g.p.getUsername(),isNewAccount:false});g.p.needsPlacement=false;
+  const restored=await summon(g,id);t.mock.method(Math,'random',()=>0);await talk(g,restored);assert.equal(text(g),'You look hot.');assert.equal(g.p.getInventory().getAmount(id),0);
+});
+test('all six Theatre physical pet forms use their own ordinary conversation',async t=>{
+  t.mock.method(Math,'random',()=>0);
+  const expected=new Map([["Lil' Zik","Hey Lil' Zik."],["Lil' Maiden",'Have you seen my brother?'],["Lil' Bloat",'Maaasteeer?'],["Lil' Nylo",'How are you doing little guy?'],["Lil' Sot",'Hello my angry little monster.'],["Lil' Xarp","We're not in the Theatre anymore, so no poisoning anyone, got that?"]]);
+  const pets=require('../plugins/npcs/Pets.plugin').__internals;
+  const forms=pets.PETS.filter(p=>pets.petFamily(p)===`item:${core.ItemIdentifiers.LIL_ZIK}`);assert.equal(forms.length,6);
+  for(const pet of forms){const f=actor(t),n=await summon(f,pet.itemId);await talk(f,n);assert.equal(text(f),expected.get(n.getDefinition().getName()),n.getDefinition().getName());}
+});
+test('a foreign owned follower cannot fall through into generic self-owner or overhead dialogue',async t=>{
+  const f=actor(t),g=actor(t),n=await summon(f,core.ItemIdentifiers.OLMLET);await talk(g,n);
+  assert.equal(g.p.getDialogueManager().isActive(),false);assert.equal(MultiChatboxPrompt.getPending(g.p),null);assert.equal(f.p.getAttribute('pets:current'),n);
+});
+test('native metamorphosis uses the current form and cancels a pending conversation menu',async t=>{
+  t.mock.method(Math,'random',()=>0);
+  const f=actor(t),n=await summon(f,core.ItemIdentifiers.OLMLET);await talk(f,n);
+  await input(f,{type:'dialogue_continue',widgetId:(231<<16)|5,childIndex:-1});assert.ok(MultiChatboxPrompt.getPending(f.p));
+  f.p.setAttribute('pets:morph-unlocks',[`item:${core.ItemIdentifiers.OLMLET}`]);
+  const op=n.getCurrentDefinition(f.p).getActions().findIndex(x=>x==='Metamorphosis')+1;assert.ok(op>0);
+  await input(f,{type:'npc_option',index:n.getIndex(),clickType:op});assert.equal(n.getId(),core.NpcIdentifiers.PUPPADILE_2);
+  assert.equal(MultiChatboxPrompt.getPending(f.p),null);
+  await input(f,{type:'dialogue_continue',widgetId:(219<<16)|1,childIndex:1});assert.equal(f.p.getDialogueManager().isActive(),false);
+  await talk(f,n);assert.equal(text(f),'What lovely teeth you have!');
+});

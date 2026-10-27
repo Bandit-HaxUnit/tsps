@@ -6,7 +6,6 @@ const { BoatManager } = require("../../../src/main/typescript/elvarg/game/conten
 const { BoatMoveMode } = require("../../../src/main/typescript/elvarg/game/content/sailing/Boat");
 const { Animation } = require("../../../src/main/typescript/elvarg/game/model/Animation");
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
-const { World } = require("../../../src/main/typescript/elvarg/game/World");
 const {
   VARBIT,
   MOVE_MODE,
@@ -26,7 +25,7 @@ const {
   boatAnim,
   boatType,
 } = require("./SailingContent.Sailing");
-const { windFor, canTrim, trimSails, isTrimmed } = require("./Trim.Helm");
+const { windFor, canTrim, trimSails, isTrimmed, helmOperator } = require("./Trim.Helm");
 const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/TaskManager");
 const {
@@ -36,12 +35,16 @@ const {
 } = require("../../../src/main/typescript/elvarg/net/protocol/InteractionMode");
 
 const HELM_LOCKED_IN = 3;
+/** sailing_sidepanel_helm_status while a crewmate holds the helm (rsprox). */
+const HELM_STATUS_CREW = 3;
 /** While navigating, the helm and the helmsman replay their loop every 10 ticks (rsprox). */
 const HELM_LOOP_TICKS = 10;
 const SOUND_HELM_ENTER = 10792;
 const SOUND_HELM_EXIT = 10793;
 const SOUND_SAIL_RAISE = 10831;
 const SOUND_SAIL_LOWER = 10833;
+
+let pluginApi = null;
 
 const SAIL_MODES = {
   full: { varbit: MOVE_MODE.FULL, boat: BoatMoveMode.Full },
@@ -92,7 +95,8 @@ function sailState(moveMode) {
   return "down";
 }
 
-function setSailMode(player, boat, mode) {
+/** Sets the sails for whoever steers; `raiseSound` replaces the raise sound (a crewmate's, rsprox 11089). */
+function setSailMode(player, boat, mode, { raiseSound = SOUND_SAIL_RAISE } = {}) {
   const previous = getVarbit(player, VARBIT.SIDEPANEL_BOAT_MOVE_MODE);
   boat.moveMode = SAIL_MODES[mode].boat;
   setVarbit(player, VARBIT.SIDEPANEL_BOAT_MOVE_MODE, SAIL_MODES[mode].varbit);
@@ -101,7 +105,7 @@ function setSailMode(player, boat, mode) {
   setSailClothOps(player, boat, mode !== "stop", canTrim(boat));
   animateSails(player, boat, sailState(previous), sailState(SAIL_MODES[mode].varbit));
   if (mode === "full" || mode === "half") {
-    playSound(player, SOUND_SAIL_RAISE);
+    playSound(player, raiseSound);
   } else if (mode === "stop") {
     playSound(player, SOUND_SAIL_LOWER);
   }
@@ -112,10 +116,10 @@ function setSailMode(player, boat, mode) {
  * and sloop): taking it plays `active` on the helmsman and the helm loc, and every 10 ticks after
  * both replay `loop` for as long as they navigate, except while the sails are trimmed.
  */
-function playHelm(player, boat, name) {
+function playHelm(player, boat, name, actor = player) {
   const helm = boatAnim(boat, "helm");
   if (!helm) return;
-  if (helm.player?.[name] !== undefined) player.performAnimation(new Animation(helm.player[name]));
+  if (helm.player?.[name] !== undefined) actor.performAnimation(new Animation(helm.player[name]));
   if (helm[name] !== undefined) animateDeckLocs(player, boat, isHelm, helm[name]);
 }
 
@@ -137,9 +141,9 @@ function loopHelm(player, boat) {
  * At the helm the helmsman faces the bow, three tiles ahead (rsprox: on the skiff's helm tile
  * 4,5 the player faces 4,2), not the wheel they clicked.
  */
-function faceBow(player) {
-  const at = player.getLocation();
-  player.setPositionToFace(new Location(at.getX(), at.getY() - 3, at.getZ()));
+function faceBow(actor) {
+  const at = actor.getLocation();
+  actor.setPositionToFace(new Location(at.getX(), at.getY() - 3, at.getZ()));
 }
 
 /**
@@ -163,6 +167,8 @@ function walkByClicks(player, boat) {
 }
 
 function takeHelm(player, boat) {
+  // A crewmate at the helm stands aside for the captain, sails as they are (rsprox).
+  if (boat.helmCrew) pluginApi?.emitCustomEvent("sailing:helm-taken", { player, boat });
   boat.helmPlayerId = player.getIndex();
   boat.heading = boat.angle;
   const sender = player.getPacketSender();
@@ -183,23 +189,45 @@ function takeHelm(player, boat) {
 }
 
 function leaveHelm(player, boat) {
-  const moveMode = getVarbit(player, VARBIT.SIDEPANEL_BOAT_MOVE_MODE);
   boat.helmPlayerId = undefined;
+  setVarbit(player, VARBIT.FACILITY_LOCKEDIN, 0);
+  stopNavigating(player, boat);
+  player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
+  playSound(player, SOUND_HELM_EXIT);
+  setVarbit(player, VARBIT.SIDEPANEL_PLAYER_AT_HELM, 0);
+}
+
+/**
+ * Nobody steers any more (the helmsman let go, or the crewmate at the helm was given another
+ * job): the boat stops, its sails come down and the captain's clicks walk again.
+ */
+function stopNavigating(player, boat) {
+  const moveMode = getVarbit(player, VARBIT.SIDEPANEL_BOAT_MOVE_MODE);
   boat.moveMode = BoatMoveMode.Stopped;
   boat.heading = boat.angle;
   walkByClicks(player, boat);
-  setVarbit(player, VARBIT.FACILITY_LOCKEDIN, 0);
   const inactive = boatAnim(boat, "helm")?.inactive;
   if (inactive !== undefined) animateDeckLocs(player, boat, isHelm, inactive);
   setSailClothOps(player, boat, false);
   animateSails(player, boat, sailState(moveMode), "down");
-  player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
-  playSound(player, SOUND_HELM_EXIT);
   setVarbit(player, VARBIT.SIDEPANEL_BOAT_MOVE_MODE, MOVE_MODE.STOPPED);
-  setVarbit(player, VARBIT.SIDEPANEL_PLAYER_AT_HELM, 0);
   setVarbit(player, VARBIT.SIDEPANEL_HELM_STATUS, HELM_STATUS.FREE);
   setVarbit(player, VARBIT.SIDEPANEL_SAIL_BUTTON_TOGGLED, 0);
   player.getPacketSender().sendInterfaceScript(SCRIPT_HELM_UPDATE, ["", 0, "", 1]);
+}
+
+/**
+ * A crewmate takes the helm for the captain (rsprox, on the order): the captain's clicks on the
+ * sea steer from then on, the sidepanel shows the crew at the helm, and a captain at the helm
+ * lets go of it first.
+ */
+function crewTakesHelm(player, boat, npc) {
+  if (boat.helmPlayerId === player.getIndex()) leaveHelm(player, boat);
+  boat.helmCrew = npc;
+  boat.heading = boat.angle;
+  steerByClicks(player, boat);
+  setVarbit(player, VARBIT.SIDEPANEL_HELM_STATUS, HELM_STATUS_CREW);
+  player.getPacketSender().sendInterfaceScript(SCRIPT_HELM_UPDATE, ["", 0, player.getUsername(), 1]);
 }
 
 /**
@@ -316,12 +344,14 @@ function escapeBoat(api, { player }) {
   );
 }
 
+/** The sail row's three buttons (937:25 slots 0-2), for whoever steers: the helmsman, or the captain while a crewmate holds the helm. */
 function clickSailButton(event) {
   if (event.groupId !== SIDEPANEL_GROUP || event.childId !== SIDEPANEL_FACILITIES_CHILD) return;
+  if ((event.slot ?? -1) > 2) return;
   event.handled = true;
   const { player } = event;
   const boat = Sailing.instanceAboard(player);
-  if (!boat || boat.helmPlayerId !== player.getIndex()) return;
+  if (!boat || !BoatManager.steers(player, boat)) return;
   const moveMode = getVarbit(player, VARBIT.SIDEPANEL_BOAT_MOVE_MODE);
   const mode = sailButtonTransition(event.slot ?? -1, moveMode);
   if (mode) {
@@ -340,7 +370,7 @@ function adjustSails(mode) {
     const boat = Sailing.instanceAboard(player);
     if (!boat) return;
     keepFacingBow(player, boat);
-    const helmsman = boat.helmPlayerId === undefined ? undefined : World.getPlayers().get(boat.helmPlayerId);
+    const helmsman = helmOperator(boat)?.player;
     if (!helmsman || Sailing.instanceAboard(helmsman) !== boat) {
       player.sendMessage("You or a crewmate must be navigating at the helm to adjust the sails.");
       return;
@@ -365,12 +395,13 @@ function trim({ player }) {
   const boat = Sailing.instanceAboard(player);
   if (!boat) return;
   keepFacingBow(player, boat);
-  const helmsman = boat.helmPlayerId === undefined ? undefined : World.getPlayers().get(boat.helmPlayerId);
-  if (!helmsman || Sailing.instanceAboard(helmsman) !== boat) {
+  const operator = helmOperator(boat);
+  if (!operator || Sailing.instanceAboard(operator.player) !== boat) {
     player.sendMessage("You or a crewmate must be navigating at the helm to adjust the sails.");
     return;
   }
-  if (!trimSails(helmsman, boat)) player.sendMessage("The sails are already catching the wind well.");
+  // The helm's trim animation plays on whoever holds it, a crewmate too.
+  if (!trimSails(operator.player, boat, { actor: operator.actor })) player.sendMessage("The sails are already catching the wind well.");
 }
 
 /** rsmod `enableSailIfNeededForHeading`: the first heading while moored raises full sail. */
@@ -384,7 +415,14 @@ module.exports = {
   members: true,
   sailButtonTransition,
   sailState,
+  setSailMode,
+  playHelm,
+  faceBow,
+  stopNavigating,
+  crewTakesHelm,
+  HELM_LOOP_TICKS,
   register(api) {
+    pluginApi = api;
     content();
     api.onObjectInteraction("Helm", {
       Navigate: toggleHelm,

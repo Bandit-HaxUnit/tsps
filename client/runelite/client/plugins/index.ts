@@ -26,6 +26,7 @@ import { StatusBarsPlugin } from "../../../game/plugins/statusbars/StatusBarsPlu
 import { StretchedModePlugin } from "../../../game/plugins/stretchedmode/StretchedModePlugin";
 import { OpponentInfoPlugin } from "../../../game/plugins/opponentinfo/OpponentInfoPlugin";
 import { PrayerPlugin } from "../../../game/plugins/tabreorder/PrayerPlugin";
+import { PestControlPlugin } from "../../../game/plugins/pestcontrol/PestControlPlugin";
 import { SpellbookPlugin } from "../../../game/plugins/tabreorder/SpellbookPlugin";
 import {
     FreezeTimerPlugin,
@@ -75,6 +76,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     OpponentInfoPlugin,
     SpellbookPlugin,
     PrayerPlugin,
+    PestControlPlugin,
     StretchedModePlugin,
     GpuPlugin,
     CameraPlugin,

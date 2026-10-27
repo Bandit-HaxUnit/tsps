@@ -80,15 +80,65 @@ test("a stopped boat stays put", () => {
   assert.deepEqual(tickBoat(boat, openSea), { moved: false, turned: false, blocked: false });
 });
 
+/** How far the boat moves on each of `ticks` ticks, in fine units. */
+function steps(boat, ticks, isSailable = openSea) {
+  const moved = [];
+  for (let i = 0; i < ticks; i++) {
+    const before = boat.fineY;
+    tickBoat(boat, isSailable);
+    moved.push(boat.fineY - before);
+  }
+  return moved;
+}
+
 test("full sail moves 1.5 tiles a tick, half sail 0.75", () => {
   const boat = makeRaft(NORTH);
   boat.moveMode = BoatMoveMode.Full;
+  boat.velocity = 192;
   const startY = boat.fineY;
   tickBoat(boat, openSea);
   assert.equal(boat.fineY - startY, 192);
   boat.moveMode = BoatMoveMode.Half;
+  boat.velocity = 96;
   tickBoat(boat, openSea);
   assert.equal(boat.fineY - startY, 288);
+});
+
+test("the boat gathers way half a tile a tick up to its sail speed (rsprox: 0.5, 1, 1.5, 2)", () => {
+  const boat = makeRaft(NORTH);
+  boat.moveMode = BoatMoveMode.Full;
+  assert.deepEqual(steps(boat, 4), [64, 128, 192, 192]);
+  boat.moveMode = BoatMoveMode.Half;
+  assert.deepEqual(steps(boat, 3), [128, 96, 96], "and slows to half sail the same way");
+});
+
+test("sails with extra acceleration gather way faster (table 164)", () => {
+  const boat = new Boat({ ...makeRaft(NORTH), acceleration: 96 });
+  boat.moveMode = BoatMoveMode.Full;
+  assert.deepEqual(steps(boat, 3), [96, 192, 192]);
+});
+
+test("a stopped boat drifts on, losing half a tile a tick (rsprox: 2.5, 2, 1.5, 1, 0.5, 0)", () => {
+  const boat = makeRaft(NORTH);
+  boat.moveMode = BoatMoveMode.Full;
+  boat.boostSpeed = 320;
+  boat.velocity = 320;
+  boat.moveMode = BoatMoveMode.Stopped;
+  assert.deepEqual(steps(boat, 6), [256, 192, 128, 64, 0, 0]);
+  assert.equal(boat.velocity, 0);
+  assert.deepEqual(tickBoat(boat, openSea), { moved: false, turned: false, blocked: false }, "then stays put");
+});
+
+test("running aground loses all way at once", () => {
+  const coast = (_x, y) => y < 102;
+  const boat = makeRaft(NORTH);
+  boat.fineY = 100 * 128 + 64 - 128;
+  boat.moveMode = BoatMoveMode.Full;
+  boat.velocity = 192;
+  let blocked = false;
+  for (let i = 0; i < 10 && !blocked; i++) blocked = tickBoat(boat, coast).blocked;
+  assert.ok(blocked);
+  assert.equal(boat.velocity, 0);
 });
 
 test("a fast boat stops at a one-tile strip of land instead of hopping it", () => {
@@ -105,10 +155,10 @@ test("a fast boat stops at a one-tile strip of land instead of hopping it", () =
 test("reverse keeps the bow on the heading and backs up at half speed", () => {
   const boat = makeRaft(NORTH);
   boat.moveMode = BoatMoveMode.Reverse;
-  const startY = boat.fineY;
-  tickBoat(boat, openSea);
+  assert.deepEqual(steps(boat, 3), [-64, -96, -96]);
   assert.equal(boat.angle, NORTH);
-  assert.equal(boat.fineY - startY, -96);
+  boat.moveMode = BoatMoveMode.Full;
+  assert.deepEqual(steps(boat, 4), [-32, 32, 96, 160], "and gathers way forward again through a stop");
 });
 
 test("a quarter turn takes 4 ticks at 128 units a tick", () => {
@@ -127,6 +177,7 @@ test("a turning boat keeps sailing at its sail speed", () => {
   const boat = makeRaft(SOUTH);
   boat.moveMode = BoatMoveMode.Full;
   boat.heading = WEST;
+  boat.velocity = 192;
   const startX = boat.fineX;
   const startY = boat.fineY;
   assert.ok(tickBoat(boat, openSea).turned);
@@ -679,6 +730,7 @@ test("the boat's position is recorded every tick, so a save at sea restores it",
   Sailing.board(player, DOCK.id);
   const boat = BoatManager.getBoatAboard(player);
   boat.moveMode = BoatMoveMode.Full;
+  boat.velocity = 192;
   const sailable = BoatManager.isSailable;
   BoatManager.isSailable = () => true;
   try {
@@ -894,7 +946,8 @@ function shipwrightHarness(bankCoins) {
   });
   player.getPacketSender = () => sender;
   const recover = () => shipwright.npcs["Junior Jim"]["Recover-boat"]({
-    player, npc: { getDefinition: () => ({ getName: () => "Junior Jim" }) },
+    // As the interaction resolves it: the spawned parent (14972) is nameless, its form is Junior Jim.
+    player, npc: { getDefinition: () => ({ getName: () => "null" }) }, definition: { getName: () => "Junior Jim" },
   });
   const choose = (slot) => chooseBoat({ player, groupId: 934, childId: 5, action: slot + 1, handled: false });
   return { player, bank, varbits, scripts, recover, choose, shipwright };
@@ -981,7 +1034,9 @@ function boatShopHarness({ sailingLevel = 1, coins = 0 } = {}) {
   }));
   return {
     player, varps, varbits, scripts, sounds, dialogues,
-    open: () => npcs["Junior Jim"]["Buy-boat"]({ player, npc: { getDefinition: () => ({ getName: () => "Junior Jim" }) } }),
+    open: () => npcs["Junior Jim"]["Buy-boat"]({
+      player, npc: { getDefinition: () => ({ getName: () => "null" }) }, definition: { getName: () => "Junior Jim" },
+    }),
     select: (entry) => click("omnishop_main:list", { slot: entry * 12, action: 1 }),
     requestInfo: (shop, entry) => click("omnishop_main:trigger_request_info", { action: 0, scriptTrigger: true, argsData: zigzag([shop, entry]) }),
     buy: () => click("omnishop_main:button_1", { action: 1 }),
@@ -1434,6 +1489,7 @@ test("the skiff and sloop moor at their own spot and board onto the captured dec
       assert.equal(boat.fineX, 3075 * 128 + 64, `${type} moors one tile east of the raft, as captured`);
       assert.equal(boat.baseSpeed, speed, `${type}'s wooden hull sails 1.5 tiles a tick`);
       boat.moveMode = BoatMoveMode.Full;
+      boat.velocity = boat.baseSpeed;
       const startY = boat.fineY;
       tickBoat(boat, () => true);
       assert.equal(boat.fineY - startY, speed);
@@ -2147,6 +2203,7 @@ test("gusts and trimming follow live's timing (rsprox): a gust, Trim, the boost 
   const log = [];
   const player = {
     getIndex: () => 7,
+    getArea: () => null,
     getLocalPlayers: () => [],
     sendMessage: (text) => log.push(`message ${text}`),
     performAnimation: (anim) => log.push(`seq ${anim.getId()}`),

@@ -226,3 +226,49 @@ console.log("House camera heights and interaction scene bounds regression passed
     assert.deepEqual([hits[0].tileX, hits[0].tileY], [3069, 2987]);
     console.log("Scene raycaster deck player regression passed");
 }
+
+// An NPC aboard a boat (a crewmate) stands in deck coordinates of its world view: its pick box
+// must sit where the deck is drawn too, keeping the deck tile the server knows it by.
+{
+    const DECK_MAP_ID = 822400;
+    const npcs = [
+        { x: 3070, y: 2990, worldView: -1 },
+        { x: 9604, y: 9603, worldView: 3000 },
+    ];
+    const deckPicker = new SceneRaycaster(
+        { visibleMapCount: 0, visibleMaps: [], getMapForWorldTile: () => undefined },
+        {
+            npcEcs: {
+                forEachActive: (fn: (id: number) => void) => npcs.forEach((_, i) => fn(i + 1)),
+                getWorldViewId: (id: number) => npcs[id - 1].worldView,
+                isLinked: () => true,
+                getLevel: () => 0,
+                getNpcTypeId: () => 15255,
+                getWorldX: (id: number) => npcs[id - 1].x * 128 + 64,
+                getWorldY: (id: number) => npcs[id - 1].y * 128 + 64,
+                getSize: () => 1,
+                getServerId: (id: number) => 500 + id,
+            },
+            npcTypeLoader: { load: (id: number) => ({ id, modelIds: [1] }) },
+            varManager: {},
+            worldViewManager: {
+                getWorldView: (id: number) => (id === 3000 ? { overlayMapId: DECK_MAP_ID } : undefined),
+            },
+        },
+    );
+    deckPicker.sampleHeightAt = () => 0;
+    deckPicker.deckToWorldProvider = (entity: number, fineX: number, fineY: number) =>
+        entity === 3000
+            ? { x: fineX - (9604 - 3069) * 128, y: fineY - (9603 - 2987) * 128 }
+            : undefined;
+    const hits: any[] = [];
+    deckPicker.collectDeckNpcHits(
+        { origin: [3069.5, -10, 2987.5], direction: [0, 1, 0] },
+        100, hits, 0,
+    );
+    assert.equal(hits.length, 1, "the deck NPC is hit where its deck is drawn");
+    assert.equal(hits[0].npcServerId, 502);
+    assert.equal(hits[0].mapId, DECK_MAP_ID);
+    assert.deepEqual([hits[0].tileX, hits[0].tileY], [9604, 9603], "its own deck tile");
+    console.log("Scene raycaster deck NPC regression passed");
+}
