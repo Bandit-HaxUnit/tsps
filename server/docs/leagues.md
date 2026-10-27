@@ -160,7 +160,8 @@ Leagues Tutor in the main game.`); no popup. Trophies themselves (447) are not h
 varps 4510-4527 and varbit 11561; the server counts what its hooks see for a league character,
 one attribute `league:statistics` (name -> value), sent at login and as each changes: NPCs killed
 (`onNpcDeath`; bosses by the cache's boss param 1361, as NpcDrops reads it), deaths, players
-killed (`onPlayerDefeated`), damage dealt to NPCs and the highest hit (`onPlayerDealtDamage`),
+killed (`onPlayerDefeated`), damage dealt to NPCs and the highest hit (each hitsplat's `onApplied` as it lands, attached in
+`onCombatHitResolved`, so a cancelled projectile counts nothing),
 damage taken from NPCs (`onCombatHitResolved`), food (`food:eaten`), potions (`potions:drunk`),
 fish, ore and logs (`fishing:success`, `mining:success`, `woodcutting:success`). Stubbed at 0 for
 want of a source: echo bosses killed (none here), coins gained and lost, clues completed (no
@@ -308,7 +309,8 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
 - **Class choice (737):** at the first login, and every login until chosen. Select sets varp 3345
   so the client shows that class's confirm panel. Accept unlocks its combat skill (script 5830's
   varbit), gives its fragment at level 1 and its items. 737 names the items; their amounts are this
-  server's choice.
+  server's choice. Items that don't fit the inventory go to a bank tab with room; with no room for
+  the whole kit, Accept gives nothing and the class stays unchosen.
 - **Fragments (735):** owned fragments (fragment XP, varbits 13403-13455) and the seven slots
   (varbits 13395-13399, 13401, 13402) are saved. Slots open at the points enum 4127 gives. Equip
   puts an owned fragment in the first open empty slot, never twice; Unequip and Unequip all clear
@@ -335,7 +337,8 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   its level gives in the cache (params 1456-1458; Venomaster's are poison severities 15/25/35,
   hitting 3/5/7); the sets' numbers are only in their texts. Venomaster's chance (25%) is this
   server's, and its immunity stops new poison without curing a running one. The extra rolls are
-  rolled with the hit's own spell, never a special attack, and pay XP like any hit. The per-tick
+  rolled with the hit's own spell, never a special attack, and pay XP like any hit, for no more
+  than the hitpoints left after the damage already queued (none after a killing blow). The per-tick
   effects run as one task per Shattered Relics character, from login.
 - **Unlocks (733):** skills, bosses and quest packs bought with renown, at the cache's prices for
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price
