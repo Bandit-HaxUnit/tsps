@@ -3,6 +3,7 @@
 const { api, CacheDefinitions, PluginManager, MapObjects, Item, ItemDefinition, PlayerStatus } = require("./Core.Construction");
 const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
+const PetForms = require("./PetForms.Construction");
 
 // The menagerie (rsprox captures, cache scripts 639-643): using a pet on menagerie furniture
 // stores it; the pet house's View opens interface 211, whose list shows slot i of enum 985 when
@@ -40,7 +41,7 @@ function pets() {
     const forms = new Map(request.pets.filter(pet => pet.familyItemId === itemId)
       .map(pet => [pet.itemId, {itemId: pet.itemId, npcId: pet.houseNpcId ?? pet.petId}]));
     const enumId = CacheDefinitions.getItem(itemId).params?.get(MULTIFORM_ENUM_PARAM);
-    const formVarbit = CacheDefinitions.getVarbitId("poh_menagerie_multiform_" + CacheDefinitions.getObjNames().get(itemId));
+    const formVarbit = PetForms.varbitForEnum(enumId);
     return [slot, { itemId, npcId: npcByItem.get(itemId) ?? -1, forms, enumId, formVarbit }];
   }));
   return petsBySlot;

@@ -245,8 +245,11 @@ const PETS = [
   },
   {
     enumName: "GREY_CHINCHOMPA",
-    petId: 6719,
-    morphId: 6720,
+    petId: NpcIdentifiers.BABY_CHINCHOMPA_6,
+    houseNpcId: NpcIdentifiers.BABY_CHINCHOMPA_2,
+    morphId: NpcIdentifiers.BABY_CHINCHOMPA_7,
+    familyItemId: ItemIdentifiers.BABY_CHINCHOMPA,
+    dialogueVariant: "standard-dialogue-black-grey-red",
     itemId: 13324,
     dialogue: -1,
     skill: Skill.HUNTER,
@@ -254,8 +257,11 @@ const PETS = [
   },
   {
     enumName: "RED_CHINCHOMPA",
-    petId: 6718,
-    morphId: 6719,
+    petId: NpcIdentifiers.BABY_CHINCHOMPA_5,
+    houseNpcId: NpcIdentifiers.BABY_CHINCHOMPA,
+    morphId: NpcIdentifiers.BABY_CHINCHOMPA_6,
+    familyItemId: ItemIdentifiers.BABY_CHINCHOMPA,
+    dialogueVariant: "standard-dialogue-black-grey-red",
     itemId: 13323,
     dialogue: -1,
     skill: Skill.HUNTER,
@@ -263,8 +269,11 @@ const PETS = [
   },
   {
     enumName: "BLACK_CHINCHOMPA",
-    petId: 6720,
-    morphId: 6718,
+    petId: NpcIdentifiers.BABY_CHINCHOMPA_7,
+    houseNpcId: NpcIdentifiers.BABY_CHINCHOMPA_3,
+    morphId: NpcIdentifiers.BABY_CHINCHOMPA_5,
+    familyItemId: ItemIdentifiers.BABY_CHINCHOMPA,
+    dialogueVariant: "standard-dialogue-black-grey-red",
     itemId: 13325,
     dialogue: -1,
     skill: Skill.HUNTER,
@@ -576,10 +585,13 @@ function recordOwnership(player, pet) {
 
 /** The collection log lists one item per pet: a skilling pet's base colour, never a morph. */
 function collectionLogItemId(pet) {
-  if (pet?.familyItemId) return pet.familyItemId;
-  if (pet?.skill == null) return pet?.itemId;
-  const base = SKILLING_PETS.find((candidate) => candidate.skill === pet.skill);
-  return base?.itemId ?? pet.itemId;
+  // A physical family's insurance/menagerie base need not be its Collection Log
+  // item: chinchompas store under red, but the log lists grey.
+  if (pet?.skill != null) {
+    const base = SKILLING_PETS.find((candidate) => candidate.skill === pet.skill);
+    return base?.itemId ?? pet.familyItemId ?? pet.itemId;
+  }
+  return pet?.familyItemId ?? pet?.itemId;
 }
 
 /**
