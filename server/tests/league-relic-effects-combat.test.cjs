@@ -224,9 +224,23 @@ test("Archer's Embrace: ranged speed halved, accuracy doubled, an extra projecti
   assert.equal(queued.length, 1, "a 5 fires another");
   assert.equal(queued[0].getAttacker(), who.relic);
   assert.equal(queued[0].getTarget(), who.main);
+  assert.equal(queued[0].getHits().length, 1, "one ordinary projectile");
   rolls.push(0.05);
   hooks.onCombatHitResolved({ attacker: who.relic, target: who.main, hit: queued[0] });
   assert.equal(queued.length, 1, "the extra projectile fires no extra of its own");
+  // A special armed between the shot and its impact (Webweaver's four hits) is not borrowed.
+  const activeTraitsFor = core.CombatSpecial.activeTraitsFor;
+  core.CombatSpecial.activeTraitsFor = () => ({ hitCount: 4, hitDelayTicks: [0, 0, 1, 1] });
+  try {
+    rolls.push(0.05);
+    hooks.onCombatHitResolved({ attacker: who.relic, target: who.main, hit });
+    assert.equal(queued.length, 2);
+    assert.equal(queued[1].getHits().length, 1, "still one ordinary projectile, not the special's four hits");
+    assert.equal(queued[1].getHitDelays(), undefined, "nor its delays");
+  } finally {
+    core.CombatSpecial.activeTraitsFor = activeTraitsFor;
+  }
+  queued.length = 1;
   hooks.onCombatHitResolved({ attacker: who.relic, target: who.main, hit: fakeHit({ ...hit, isAccurate: () => false }) });
   assert.equal(queued.length, 1, "only a landed hit");
   for (const player of others(who)) {
@@ -468,8 +482,17 @@ test("Last Stand: a lethal hit leaves 1 hitpoint, boosts to 255 draining to base
     tasks[0].execute();
     assert.equal(who.relic.getHitpoints(), 1, "and is undone on the next tick");
 
-    hooks.onPlayerDealtDamage({ player: who.relic, target: who.main, hit: fakeHit({ getTotalDamage: () => 30 }) });
-    hooks.onPlayerDealtDamage({ player: who.relic, target: who.main, hit: fakeHit({ getTotalDamage: () => 20 }) });
+    // Damage counts as each hit lands, while the stand is open (HitDamage.onApplied).
+    const landed = (damage) => new core.HitDamage(damage, core.HitMask.RED);
+    const thirty = landed(30);
+    const twenty = landed(20);
+    const cancelled = landed(40);
+    hooks.onPlayerDealtDamage({ player: who.relic, target: who.main, hit: fakeHit({ getHits: () => [thirty] }) });
+    hooks.onPlayerDealtDamage({ player: who.relic, target: who.main, hit: fakeHit({ getHits: () => [twenty] }) });
+    hooks.onPlayerDealtDamage({ player: who.relic, target: who.main, hit: fakeHit({ getHits: () => [cancelled] }) });
+    thirty.notifyApplied(30);
+    twenty.notifyApplied(20);
+    // `cancelled` never lands: its target teleported before the impact.
 
     cycle = 105;
     skills.setCurrentLevel(Skill.HITPOINTS, 0, false);
@@ -483,6 +506,9 @@ test("Last Stand: a lethal hit leaves 1 hitpoint, boosts to 255 draining to base
       cycle = 100 + tick;
       task.execute();
     }
+    const late = landed(25);
+    hooks.onPlayerDealtDamage({ player: who.relic, target: who.main, hit: fakeHit({ getHits: () => [late] }) });
+    late.notifyApplied(25); // lands after the window
     assert.equal(skills.getCurrentLevel(Skill.ATTACK), 85, "drained 16 a tick down to base + 15");
     assert.equal(skills.getCurrentLevel(Skill.STRENGTH), 1 + 15);
     assert.equal(who.relic.getHitpoints(), 51, "healed by the 50 damage dealt");
