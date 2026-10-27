@@ -354,3 +354,35 @@ test('a withdrawal fills only what the coin stack can hold, and the coffer keeps
   assert.equal(p.getInventory().getAmount(id('coins')), 2147483000, 'the stack has no room for a whole 1,000');
   assert.equal(Profile.coffer(p), 4000, 'nothing taken, nothing deducted');
 });
+
+test('Justine\'s purchase: a stack that cannot take the whole set refuses it and keeps the points', (t) => {
+  const Rewards = require('../plugins/minigames/lms/Rewards.LastManStanding');
+  const slot = Common.data.shop.stock.findIndex((entry) => entry && entry[0] === 'rune_arrow');
+  const p = realPlayer(t);
+  let entered;
+  t.mock.method(p, 'setEnteredAmountAction', (action) => { entered = action; });
+  p.setAttribute(Common.ATTRIBUTES.wins, 1);
+  p.setAttribute(Common.POINTS_ATTRIBUTE, 10);
+  const Item = require('../dist/game/model/Item').Item;
+  p.getInventory().add(new Item(id('rune_arrow'), 2147483637), false);
+  Rewards.confirm({ player: p, slot });
+  entered.execute(1);
+  assert.equal(Common.points(p), 10, 'no points taken for arrows that do not fit');
+  assert.equal(p.getInventory().getAmount(id('rune_arrow')), 2147483637, 'the stack keeps what it had');
+});
+
+test('Justine\'s purchase: the set is added in full when the stack has the room, and costs its points', (t) => {
+  const Rewards = require('../plugins/minigames/lms/Rewards.LastManStanding');
+  const slot = Common.data.shop.stock.findIndex((entry) => entry && entry[0] === 'rune_arrow');
+  const p = realPlayer(t);
+  let entered;
+  t.mock.method(p, 'setEnteredAmountAction', (action) => { entered = action; });
+  p.setAttribute(Common.ATTRIBUTES.wins, 1);
+  p.setAttribute(Common.POINTS_ATTRIBUTE, 10);
+  const Item = require('../dist/game/model/Item').Item;
+  p.getInventory().add(new Item(id('rune_arrow'), 2147483000), false);
+  Rewards.confirm({ player: p, slot });
+  entered.execute(1);
+  assert.equal(Common.points(p), 7);
+  assert.equal(p.getInventory().getAmount(id('rune_arrow')), 2147483300);
+});

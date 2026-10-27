@@ -14,6 +14,8 @@ const Common = require("./Common.LastManStanding");
 
 const SHOP_ID = 1449;
 const OP1 = 1 << 1;
+/** The most of one item a stack holds. */
+const MAX_STACK = 2147483647;
 const JUSTINE_HEAD = "br_reward_shopkeeper";
 
 function wins(player) {
@@ -64,7 +66,10 @@ function buy(player, entry, count) {
   const amount = count * set;
   const inventory = player.getInventory();
   const stackable = Common.core.ItemDefinition.forId(id)?.isStackable() === true;
-  const room = stackable ? inventory.contains(id) || inventory.getFreeSlots() > 0 : inventory.getFreeSlots() >= amount;
+  // A stack takes the whole purchase or none of it: points are only taken if it all fits.
+  const room = stackable
+    ? amount <= MAX_STACK - inventory.getAmount(id) && (inventory.contains(id) || inventory.getFreeSlots() > 0)
+    : inventory.getFreeSlots() >= amount;
   if (!room) {
     player.sendMessage(Common.message("noRoom"));
     return;
