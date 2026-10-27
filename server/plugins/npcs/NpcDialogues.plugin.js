@@ -1072,6 +1072,7 @@ module.exports = {
       // option texts so resolveJump can reach a real answer without replaying it.
       const withOptions = (page, result) => {
         if (page && data[page]) {
+          result.page = page;
           const pageOptions = collectPageOptions(data[page]);
           result.context.pageOptions = pageOptions.byText;
           result.context.pageOptionList = pageOptions.list;
@@ -1096,7 +1097,8 @@ module.exports = {
           if (page) {
             const record = data[page.page];
             // Flat pages hold `steps` directly (no variants); use their default.
-            const steps = wanted && record?.variants ? record.variants[wanted] : pickVariant(record);
+            const steps = wanted ? (record?.variants ? record.variants[wanted]
+              : wanted === "standard-dialogue" ? record?.steps : undefined) : pickVariant(record);
             if (Array.isArray(steps)) return withOptions(page.page, { steps, branches: record?.branches, context, variant: wanted });
           }
         }
@@ -1128,7 +1130,9 @@ module.exports = {
       if (!request.player || !definition) return;
       const event = { player: request.player, npc: request.npc, npcId: request.npcId, definition, variant: request.variant };
       const resolved = resolveTranscript(event);
-      if (request.exact && resolved?.variant !== request.variant) return;
+      const wanted = typeof request.variant === "string" ? request.variant : request.variant?.variant;
+      const wantedPage = typeof request.variant === "object" ? request.variant?.page : undefined;
+      if (request.exact && (resolved?.variant !== wanted || (wantedPage && resolved?.page !== wantedPage))) return;
       const steps = typeof request.select === "function" && resolved?.steps ? request.select(resolved.steps) : resolved?.steps;
       if (!steps?.length) return;
       startDialogue(api, event, steps, resolved.branches, resolved.context);

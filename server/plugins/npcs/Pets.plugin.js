@@ -20,6 +20,7 @@ const Recovery = require("./pets/Recovery.Pets");
 const Acquisition = require("./pets/Acquisition.Pets");
 const Dust = require("./pets/Dust.Pets");
 const CatchUp = require("./pets/CatchUp.Pets");
+const Dialogue = require("./pets/Dialogue.Pets");
 
 const CURRENT_PET_ATTRIBUTE = "pets:current";
 /** The item of the follower the player logged out with; re-summoned on login. */
@@ -1640,12 +1641,8 @@ function interact(player, npc, action = "Interact") {
     return openCatInteract(player, npc, pet);
   }
 
-  // Skilling pets carry dialogue -1: Interact is a no-op rather than an empty
-  // dialogue box or the generic "Nothing interesting happens." fallback.
-  //
-  // The pet transcripts are genuinely absent from data/definitions/npc-dialogues.json (its
-  // index maps pet NPC ids to unrelated pages), so this is the tracked task's deterministic
-  // fallback: the click is consumed and the pet changes nothing. No dialogue is invented.
+  // Missing or ambiguous source variants remain a no-op; never guess a quest,
+  // item-use or Menagerie overhead branch from an NPC-index candidate.
   return true;
 }
 
@@ -1660,7 +1657,7 @@ function handlePetClick(event) {
   if (lower === "pet") return interact(event.player, event.npc, "Pet");
   if (lower === "metamorphosis" || lower === "metamorph") return morph(event.player, event.npc);
   if (lower === "talk-to" || lower === "interact" || lower === "stroke") {
-    return interact(event.player, event.npc);
+    return interact(event.player, event.npc, action);
   }
   if (lower === "chase") {
     const pet = getPetByNpcId(event.npcId);
@@ -1839,6 +1836,7 @@ module.exports = {
     Acquisition.attach(api);
     Dust.attach(api, {getPetByNpcId, petFamily, getMorphUnlocks, unlockMorphFamily});
     CatchUp.attach(api, {currentAttribute: CURRENT_PET_ATTRIBUTE, getPetByNpcId, canSummonPetHere});
+    Dialogue.attach(api, {currentAttribute: CURRENT_PET_ATTRIBUTE, catInfoOf});
     TaskClass = api.core?.Task ?? null;
     TaskManagerRef = api.core?.TaskManager ?? null;
     NPCRespawnTaskRef = api.core?.NPCRespawnTask ?? null;
