@@ -53,6 +53,7 @@ Pets.register({
   onAnyNpcInteraction() {},
   onInterfaceActionClick() {},
   onNpcClick() {},
+  onNpcDialogueCondition() {},
   onNpcInteraction() {},
   onPlayerLogout: (handler) => logoutHooks.push(handler),
   onPlayerDisconnect() {},

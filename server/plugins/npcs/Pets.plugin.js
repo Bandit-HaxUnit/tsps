@@ -281,7 +281,9 @@ const PETS = [
   },
   {
     enumName: "ROCK_GOLEM",
-    petId: NpcIdentifiers.ROCK_GOLEM_25,
+    petId: NpcIdentifiers.ROCK_GOLEM_20,
+    houseNpcId: NpcIdentifiers.ROCK_GOLEM_8,
+    dialogueVariant: "standard-dialogue-normal-variant",
     morphId: 0,
     itemId: 13321,
     dialogue: -1,
@@ -290,7 +292,8 @@ const PETS = [
   },
   {
     enumName: "GIANT_SQUIRREL",
-    petId: 7334,
+    petId: NpcIdentifiers.GIANT_SQUIRREL_2,
+    houseNpcId: NpcIdentifiers.GIANT_SQUIRREL,
     morphId: 0,
     itemId: 20659,
     dialogue: -1,
@@ -299,10 +302,13 @@ const PETS = [
   },
   {
     enumName: "TANGLEROOT",
-    petId: 7335,
+    petId: NpcIdentifiers.TANGLEROOT_2,
+    houseNpcId: NpcIdentifiers.TANGLEROOT,
     morphId: 0,
     itemId: 20661,
     dialogue: -1,
+    dialogueVariant: "standard-dialogue",
+    dialogueForm: "normal",
     skill: Skill.FARMING,
     chance: 5000,
   },
@@ -1910,7 +1916,7 @@ module.exports = {
     Dust.attach(api, {getPetByNpcId, petFamily, getMorphUnlocks, unlockMorphFamily});
     Call.attach(api, {currentAttribute: CURRENT_PET_ATTRIBUTE, getPetByNpcId, canSummonPetHere, replaceFollowerNpc});
     CatchUp.attach(api, {currentAttribute: CURRENT_PET_ATTRIBUTE, getPetByNpcId, canSummonPetHere});
-    Dialogue.attach(api, {currentAttribute: CURRENT_PET_ATTRIBUTE, catInfoOf});
+    Dialogue.attach(api, {currentAttribute: CURRENT_PET_ATTRIBUTE, catInfoOf, getPetByNpcId});
     TaskClass = api.core?.Task ?? null;
     TaskManagerRef = api.core?.TaskManager ?? null;
     NPCRespawnTaskRef = api.core?.NPCRespawnTask ?? null;

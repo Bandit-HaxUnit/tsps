@@ -16,12 +16,21 @@ test("mobile chat keeps its native caret above the keyboard and preserves chat i
         const typed: number[] = [];
         const keys: number[] = [];
         let varc = "seed";
+        let chatKeyboardState = -1;
         const keyboard = new MobileChatKeyboard({
             inputManager: {
                 enqueueTypedChar: (char: number) => typed.push(char),
                 enqueueOsrsKeyPress: (key: number) => keys.push(key),
             },
             varManager: {
+                getVarcInt: (id: number) => {
+                    assert.equal(id, 1226);
+                    return chatKeyboardState;
+                },
+                setVarcInt: (id: number, value: number) => {
+                    assert.equal(id, 1226);
+                    chatKeyboardState = value;
+                },
                 getVarcString: (id: number) => {
                     assert.equal(id, 335);
                     return varc;
@@ -76,6 +85,10 @@ test("mobile chat keeps its native caret above the keyboard and preserves chat i
         assert.equal(input.inputMode, "numeric");
         assert.equal(input.value, "seed");
         assert.equal(keyboard.isOpen, true);
+        assert.equal(chatKeyboardState, 0, "the first tap initializes the script toggle before it runs");
+        chatKeyboardState = 1;
+        keyboard.show("Chat", 1);
+        assert.equal(chatKeyboardState, 1, "the later script show preserves its open state");
 
         input.value += "a".repeat(1024);
         input.dispatchEvent(new dom.window.Event("input"));
@@ -91,6 +104,7 @@ test("mobile chat keeps its native caret above the keyboard and preserves chat i
         keyboard.hide();
         assert.notEqual(document.activeElement, input);
         assert.equal(keyboard.isOpen, false);
+        assert.equal(chatKeyboardState, 0, "explicit hide lets the next tap open chat again");
         input.value += "ignored";
         input.dispatchEvent(new dom.window.Event("input"));
         assert.equal(typed.length, 1024, "a closed keyboard cannot enqueue input");
