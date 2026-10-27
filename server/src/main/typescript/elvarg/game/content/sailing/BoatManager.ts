@@ -87,6 +87,7 @@ export class BoatManager {
             deckCentreX: spec.deckCentreX,
             deckCentreY: spec.deckCentreY,
             baseSpeed: spec.stats?.baseSpeed,
+            acceleration: spec.stats?.acceleration,
             ...placement,
         });
         BoatManager.boats.set(entityIndex, { boat, spec, deck: new BoatDeckArea(boat, spec), locChanges: [] });
