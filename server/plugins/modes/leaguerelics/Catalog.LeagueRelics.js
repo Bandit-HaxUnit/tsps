@@ -1,8 +1,10 @@
 /**
  * The relic catalog the client draws. The cache's relic interface reads its league struct's tier
- * enum, tier structs and relic structs, but the cache only carries the current league's, so this
- * sends a league's own as structOverrides / enumOverrides (GamemodeContentStore) at login and
- * before the interface opens. Icons are the cache's current relics', per tier and slot.
+ * enum, tier structs and relic structs, but the cache only carries the current league's, so a
+ * league's own go to the client as structOverrides / enumOverrides (GamemodeContentStore): this
+ * answers LeagueMode's `league:content-rows` with them, and asks for a resend
+ * (`league:send-content`) before the interface opens. Icons are the cache's current relics',
+ * per tier and slot.
  */
 const Common = require("./Common.LeagueRelics");
 
@@ -59,8 +61,16 @@ function datasets(type) {
   ];
 }
 
-function send(player, type) {
-  player.getPacketSender().sendContentData("server", datasets(type));
+/** `league:content-rows` { player, league, structs, enums }: the league's catalog joins the packet. */
+function contribute(rows) {
+  if (!rows || !Common.catalog(rows.league)) return;
+  rows.structs.push(...structRows(rows.league));
+  rows.enums.push(...enumRows(rows.league));
 }
 
-module.exports = { datasets, structRows, enumRows, send };
+/** Asks LeagueMode to send every plugin's content again (before the interface opens). */
+function send(player) {
+  Common.api.emitCustomEvent("league:send-content", { player });
+}
+
+module.exports = { datasets, structRows, enumRows, contribute, send };

@@ -15,6 +15,7 @@ module.exports = {
     Common.init(api);
     require("./league/Account.LeagueMode")(api);
     require("./league/Journal.LeagueMode")(api);
+    require("./league/Content.LeagueMode")(api);
     require("./league/Commands.LeagueMode")(api);
   },
 };
