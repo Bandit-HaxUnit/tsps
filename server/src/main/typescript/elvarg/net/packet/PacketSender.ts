@@ -60,6 +60,7 @@ import {
   encodeVarp,
   encodeVarpLong,
   encodeWidgetClose,
+  encodeTriggerOnDialogAbort,
   encodeWidgetCloseSub,
   encodeWidgetOpen,
   encodeWidgetOpenSub,
@@ -732,6 +733,11 @@ export class PacketSender {
     // A no-op here can leave stale inventory context active client-side, which
     // affects default left-click item actions (e.g. "Drop" appearing as primary).
     this.player.setStatus?.(PlayerStatus.NONE);
+    // Capture: closing the bank under an unanswered "Enter amount:" sends trigger_ondialogabort
+    // first, so the client's meslayer_ondialogabort drops the prompt along with its answer.
+    if (this.player.getEnteredAmountAction?.()) {
+      this.player.getSession().sendClientPacket(encodeTriggerOnDialogAbort());
+    }
     this.player.setEnteredAmountAction?.(null);
     this.player.setEnteredSyntaxAction?.(null);
     this.player.getDialogueManager?.()?.reset?.();

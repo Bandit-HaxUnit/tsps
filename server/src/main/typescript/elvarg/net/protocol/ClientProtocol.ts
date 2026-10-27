@@ -1863,6 +1863,10 @@ export function encodeWidgetCloseSub(uid: number): Buffer {
   return widgetIntPacket(ServerPacketId.WIDGET_CLOSE_SUB, uid);
 }
 
+export function encodeTriggerOnDialogAbort(): Buffer {
+  return encodeServerPacket(ServerPacketId.TRIGGER_ONDIALOGABORT, Buffer.alloc(0));
+}
+
 export function encodeWidgetSetText(uid: number, text: string): Buffer {
   const id = Buffer.alloc(4);
   id.writeInt32BE(uid | 0);

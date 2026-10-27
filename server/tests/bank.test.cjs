@@ -649,6 +649,41 @@ test("as captured: closing the bank by any route ends a bank search; closing any
   }
 });
 
+test("as captured: closing the bank under an unanswered Enter amount prompt aborts the prompt first", () => {
+  const { PacketSender } = require("../dist/net/packet/PacketSender");
+  // ServerPacketId is a const enum, inlined at build time.
+  const ServerPacketId = { WIDGET_CLOSE_SUB: 104, TRIGGER_ONDIALOGABORT: 123 };
+  for (const route of ["sendInterfaceRemoval", "closeInterruptibleInterfaces"]) {
+    const sent = (answered) => {
+      const opcodes = [];
+      const player = createPlayer();
+      player.getSession = () => ({ sendClientPacket: (packet) => opcodes.push(packet[0]), write: () => {} });
+      player.getEnteredAmountAction = () => player.amountAction;
+      player.setEnteredSyntaxAction = () => {};
+      // Real interface reset; the bank's if_closesub stands in for the tracked-interface close.
+      const sender = Object.assign(Object.create(PacketSender.prototype), {
+        player,
+        closeTrackedInterfaces: () => opcodes.push(ServerPacketId.WIDGET_CLOSE_SUB) > 0,
+        sendConfig() { return this; },
+        sendVarbit() { return this; },
+        sendSubInterface: () => {},
+        endBankSearch: () => {},
+        emitInterfaceClosed: () => {},
+      });
+      Bank.promptAmount(player);
+      if (answered) player.amountAction.execute(5), player.setEnteredAmountAction(null);
+      opcodes.length = 0;
+      sender[route]();
+      assert.equal(player.amountAction, null, route);
+      return opcodes;
+    };
+    const aborted = sent(false);
+    assert.equal(aborted.filter((op) => op === ServerPacketId.TRIGGER_ONDIALOGABORT).length, 1, route);
+    assert.ok(aborted.indexOf(ServerPacketId.TRIGGER_ONDIALOGABORT) < aborted.indexOf(ServerPacketId.WIDGET_CLOSE_SUB), route);
+    assert.ok(!sent(true).includes(ServerPacketId.TRIGGER_ONDIALOGABORT), `${route}: no prompt left to abort`);
+  }
+});
+
 const bankTabsSent = (player) => player.varbits.filter(([id]) => id === 4150);
 
 // These exercise the registered gameplay handlers with real inventory/dialogue classes.

@@ -2346,6 +2346,10 @@ export class OsrsClient {
             this.cs2Vm.invokeEventHandler(widget, "onSubChange");
         };
 
+        this.widgetManager.onDialogAbortInvoker = (widget) => {
+            this.cs2Vm.invokeEventHandler(widget, "onDialogAbort");
+        };
+
         // Cache-loaded onSubChange handler arrays (Object[] in Java).
         // Critical for tab visibility/highlight logic (toplevel_subchange is cache-defined).
         this.widgetManager.onSubChangeListener = (_scriptId, widget) => {
@@ -2674,6 +2678,8 @@ export class OsrsClient {
                         });
                     }
                 }
+            } else if (payload?.action === "trigger_ondialogabort") {
+                this.widgetManager?.triggerOnDialogAbort();
             } else if (payload?.action === "close_sub") {
                 const standardTargetUid = Number(payload.targetUid) | 0;
                 this.cancelPendingInterfaceOpen(standardTargetUid);
