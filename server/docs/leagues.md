@@ -295,17 +295,25 @@ of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's
   then the captured game message in the league's colour with the tier's name.
 - **Triggers** (`Triggers.LeagueTasks.js`) are data: a task's `trigger` from the generator, or from
   the hand-maintained overlay `data/league-task-triggers.json` (by league type and task id; it
-  wins). Kinds: `kill { npc, count }` on `onNpcDeath` by the NPC's name (counts in
-  `league:kill-counts`, only names a task needs); `level { skill, level }`, `any-level { level,
+  wins). Kinds: `kill { npcs, count }`, kills of any of the NPCs (by name) added up per task in
+  `league:task-kills` (task id -> kills); `level { skill, level }`, `any-level { level,
   excluding }`, `total-level`, `base-level` (Sailing left out, it came after both leagues) and
   `combat-level { level }` on `onPlayerLevelUp` and at login; `level-up` on any level gained;
-  `quest { name }` on `quest:completed` and at login (`quest:is-complete`). The generator derives
-  a kill only when a cache NPC has that exact name and the description adds no place or
-  condition ("Defeat a Goblin", "Defeat Cerberus 50 times", "Kill 5 Sand Crabs"; "in the
-  Fremennik Province", "on Ungael" or "without leaving" leave the task unmapped until the area
-  unlocks exist, even for a boss with one home), a quest only when `plugins/quests/quests`
-  registers that name, and a level only for a known skill; its report lists the kill tasks it
-  could not map. To map more: add a kind (a trigger kind is a few lines in Triggers.LeagueTasks),
+  `quest { name }` on `quest:completed` and at login (`quest:is-complete`). A kill is credited
+  from an NPC's death (`onNpcDeath`, to its killer) and from the shared credited-kill event
+  `combat-achievements:kill { player, monster, amount? }` that scripted encounters emit for each
+  rewarded player when no NPC dies (the Nightmare's ending transforms her) and some bosses emit
+  beside the death, a singles boss under its main boss's name (Artio as Callisto); within one
+  tick a task takes the larger of the two counts, so one kill reported both ways counts once and
+  several kills in a tick all count. The generator derives a kill only when every NPC the task
+  accepts is a cache NPC of that exact name and the description adds no place or condition
+  ("Defeat a Goblin", "Defeat Cerberus 50 times", "Kill 5 Sand Crabs"; the alternatives its
+  description lists join it: "Defeat Callisto or Artio 50 times", "Defeat The Nightmare or
+  Phosani's Nightmare 50 times combined"; "in the Fremennik Province", "on Ungael", "without
+  leaving" or Raging Echoes' "must be of one difficulty" leave the task unmapped, the places
+  until the area unlocks exist, even for a boss with one home), a quest only when
+  `plugins/quests/quests` registers that name, and a level only for a known skill; its report
+  lists the kill tasks it could not map. To map more: add a kind (a trigger kind is a few lines in Triggers.LeagueTasks),
   a rule in the generator, or an entry in the overlay; or have the plugin that knows the deed emit
   `league:complete-task`. Everything else in the catalog is visible and counts once mapped.
 - **Not mapped yet:** kills with a place or a condition, equipment, skilling counts, clue

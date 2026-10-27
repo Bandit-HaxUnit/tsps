@@ -237,6 +237,27 @@ const singulars = (name: string) => {
   return forms;
 };
 
+/** The cache NPC a task names ("Moss Giant" -> "Moss giant", "Giant Mole" -> "The Giant Mole"... as the cache spells it), or null. */
+function npcNamed(text: string, npcs: Map<string, string>): string | null {
+  const candidates = singulars(text.replace(/,/g, "").replace(/ Boss$/i, "").trim());
+  for (const form of [...candidates, ...candidates.map((form) => `The ${form}`)]) {
+    const npc = npcs.get(form.toLowerCase());
+    if (npc) return npc;
+  }
+  return null;
+}
+
+/**
+ * The alternatives a kill task's description accepts, when it lists more than one: its first
+ * sentence "Defeat A or B N times (combined)" / "Defeat A, B or C". Empty for a single target.
+ */
+function alternativesOf(description: string): string[] {
+  const sentence = description.replace(/\([^)]*\)/g, "").split(/\.(?:\s|$)/)[0].trim();
+  const match = /^(?:Defeat|Kill) (?:\d+ )?(?:a |an |the |some )?(.+?)(?: \d+ times)?(?: combined)?$/i.exec(sentence);
+  if (!match || !/,| or /.test(match[1])) return [];
+  return match[1].split(/,\s*|\s+or\s+/).map((part) => part.replace(/^(?:a |an |the )/i, "").trim()).filter(Boolean);
+}
+
 function deriveTrigger(name: string, description: string, npcs: Map<string, string>, quests: Map<string, string>): { trigger?: Trigger; unmapped?: string } {
   let match: RegExpExecArray | null;
   if ((match = /^Reach Level (\d+) ([A-Za-z]+)$/.exec(name)) && SKILLS[match[2].toLowerCase()]) {
@@ -260,16 +281,18 @@ function deriveTrigger(name: string, description: string, npcs: Map<string, stri
     const [subject, count] = /^\d+$/.test(first) ? [second, Number(first)] : [first, second ? Number(second) : 1];
     // A condition in the description (where, how, how fast) is not a plain kill count: a place
     // ("in the Fremennik Province", "on Ungael") needs the area unlocks, which do not exist yet.
-    const condition = /\b(without|while|using|within|in under|with only|solo|duo|trio|wearing|wielding|less than|fewer than)\b/i;
+    // "(must be of one difficulty, normal and awakened together do not count)" is one too.
+    const condition = /\b(without|while|using|within|in under|with only|solo|duo|trio|wearing|wielding|less than|fewer than|must be|do not count)\b/i;
     const place = /\b(in|on|at|inside|near|from|outside|under|beneath)\b (?:the |an? )?[A-Z]/;
-    if (!condition.test(description) && !place.test(description.replace(subject, ""))) {
-      const candidates = singulars(subject.replace(/,/g, "").replace(/ Boss$/i, ""));
-      for (const form of [...candidates, ...candidates.map((form) => `The ${form}`)]) {
-        const npc = npcs.get(form.toLowerCase());
-        if (npc) return { trigger: { kind: "kill", npc, count } };
-      }
-    }
-    return { unmapped: name };
+    if (condition.test(description) || place.test(description.replace(subject, ""))) return { unmapped: name };
+    const primary = npcNamed(subject, npcs);
+    // The description may accept others for the same count: "Defeat Callisto or Artio 50 times",
+    // "Defeat The Nightmare or Phosani's Nightmare 50 times combined". Every one must be a cache NPC.
+    const accepted = alternativesOf(description).map((part) => npcNamed(part, npcs));
+    if (accepted.some((npc) => npc === null)) return { unmapped: name };
+    const names = [...new Set([primary, ...accepted].filter((npc): npc is string => npc !== null))];
+    if (!names.length) return { unmapped: name };
+    return { trigger: { kind: "kill", npcs: names, count } };
   }
   if ((match = /^Complete (?:the )?(.+)$/.exec(name))) {
     // "Complete the Observatory Quest" is the quest "Observatory Quest"; "Complete Gertrude's Cat quest" is "Gertrude's Cat".

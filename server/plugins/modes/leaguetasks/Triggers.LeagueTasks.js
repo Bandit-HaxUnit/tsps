@@ -1,9 +1,16 @@
 /**
  * Awarding tasks from the game, driven by each task's `trigger` (the generator's, or the overlay's;
- * docs/leagues.md lists the kinds): kills by NPC name on `onNpcDeath` with counts kept per name,
- * level kinds on `onPlayerLevelUp`, quests on `quest:completed` by name. Level and quest kinds are
- * also checked at login, so a character who already qualifies is not kept waiting for the next
- * event; kills are not (nothing was counted before). No task is named here: a new mapping is data.
+ * docs/leagues.md lists the kinds): kills of any NPC a task accepts, counted per task, level kinds
+ * on `onPlayerLevelUp`, quests on `quest:completed` by name. Level and quest kinds are also checked
+ * at login, so a character who already qualifies is not kept waiting for the next event; kills are
+ * not (nothing was counted before). No task is named here: a new mapping is data.
+ *
+ * A kill is credited from two sources: an NPC's death (`onNpcDeath`, to its killer) and the shared
+ * credited-kill event `combat-achievements:kill` { player, monster, amount? } that scripted
+ * encounters emit for each rewarded player when no NPC dies (the Nightmare's ending transforms
+ * her instead) and that some bosses emit beside a death, under the main boss's name for a singles
+ * boss (Artio counts as Callisto). Within one tick, a task takes the larger of the two counts, so
+ * a kill reported both ways counts once and several kills in one tick all count.
  */
 const Common = require("./Common.LeagueTasks");
 const Complete = require("./Complete.LeagueTasks");
@@ -11,6 +18,8 @@ const Complete = require("./Complete.LeagueTasks");
 const LEVEL_KINDS = new Set(["level", "any-level", "total-level", "base-level", "combat-level"]);
 /** League type -> { kills: Map(lower-cased npc name -> tasks), levels: tasks, quests: Map(plain quest name -> tasks) }. */
 const index = new Map();
+/** Player -> task id -> this tick's kill credit { tick, deaths, events, credited }. */
+const tickCredit = new WeakMap();
 let skillsByName = null;
 
 const plainName = (name) => String(name ?? "").toLowerCase().replace(/^the /, "").replace(/[^a-z0-9]+/g, " ").trim();
@@ -22,8 +31,11 @@ function indexOf(type) {
     const trigger = task.trigger;
     if (!trigger) continue;
     if (trigger.kind === "kill") {
-      const key = String(trigger.npc).toLowerCase();
-      entry.kills.set(key, (entry.kills.get(key) ?? []).concat(task));
+      // Every NPC the task accepts ("Callisto or Artio"); an overlay may still give one `npc`.
+      for (const npc of trigger.npcs ?? [trigger.npc]) {
+        const key = String(npc).toLowerCase();
+        entry.kills.set(key, (entry.kills.get(key) ?? []).concat(task));
+      }
     } else if (LEVEL_KINDS.has(trigger.kind)) {
       entry.levels.push(task);
     } else if (trigger.kind === "level-up") {
@@ -91,20 +103,49 @@ function npcName(npc) {
   return npc?.getCurrentDefinition?.()?.getName?.() ?? npc?.getDefinition?.()?.getName?.() ?? null;
 }
 
+/**
+ * `amount` kills of the NPC `name` from `source` ("deaths" or "events") for the character's open
+ * kill tasks that accept it: each task's progress takes this tick's larger count, then any task
+ * that reached its count completes.
+ */
+function credit(player, type, name, source, amount) {
+  const tasks = indexOf(type).kills.get(String(name ?? "").toLowerCase());
+  if (!tasks || !(amount > 0)) return;
+  const done = new Set(Common.completedIds(player));
+  const open = tasks.filter((task) => !done.has(task.id));
+  if (!open.length) return;
+  const tick = Common.core.World.getProcessCycle?.() ?? 0;
+  let perTask = tickCredit.get(player);
+  if (!perTask) tickCredit.set(player, (perTask = new Map()));
+  const progress = { ...killsOf(player) };
+  for (const task of open) {
+    let entry = perTask.get(task.id);
+    if (!entry || entry.tick !== tick) perTask.set(task.id, (entry = { tick, deaths: 0, events: 0, credited: 0 }));
+    entry[source] += amount;
+    const due = Math.max(entry.deaths, entry.events) - entry.credited;
+    if (due <= 0) continue;
+    entry.credited += due;
+    progress[task.id] = (Number(progress[task.id]) || 0) + due;
+  }
+  player.setAttribute(Common.KILLS_ATTRIBUTE, progress);
+  for (const task of open) {
+    if ((Number(progress[task.id]) || 0) >= (Number(task.trigger.count) || 1)) Complete.complete(player, task.id, type);
+  }
+}
+
 function npcDeath(event) {
   const player = event?.killer;
   if (!player?.isPlayer?.() && !player?.getPacketSender) return;
   const type = Common.leagueOf(player);
-  if (type === null) return;
-  const name = String(npcName(event.npc) ?? "").toLowerCase();
-  const tasks = indexOf(type).kills.get(name);
-  if (!tasks) return;
-  const kills = killsOf(player);
-  const count = (Number(kills[name]) || 0) + 1;
-  player.setAttribute(Common.KILLS_ATTRIBUTE, { ...kills, [name]: count });
-  for (const task of tasks) {
-    if (count >= (Number(task.trigger.count) || 1)) Complete.complete(player, task.id);
-  }
+  if (type !== null) credit(player, type, npcName(event.npc), "deaths", 1);
+}
+
+/** `combat-achievements:kill` { player, monster, amount? }: a credited kill, from a death or a scripted ending. */
+function creditedKill(request) {
+  const player = request?.player;
+  if (!player) return;
+  const type = Common.leagueOf(player);
+  if (type !== null) credit(player, type, request.monster, "events", Number(request.amount ?? 1));
 }
 
 function questCompleted({ player, quest }) {
@@ -132,6 +173,7 @@ function login({ player, league }) {
 module.exports = function attach(api) {
   api.persistAttribute(Common.KILLS_ATTRIBUTE, {});
   api.onNpcDeath(npcDeath);
+  api.onCustomEvent("combat-achievements:kill", creditedKill);
   api.onPlayerLevelUp(levelUp);
   api.onCustomEvent("quest:completed", questCompleted);
   api.onCustomEvent("league:login", login);

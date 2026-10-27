@@ -35,6 +35,7 @@ function completionVarps() {
 }
 
 let core;
+let api;
 const hooks = {};
 const custom = {};
 const emitted = [];
@@ -57,7 +58,7 @@ before(async () => {
       return result;
     };
   };
-  const api = new Proxy({
+  api = new Proxy({
     core,
     persistAttribute() {},
     getSkillManager: () => SkillManager,
@@ -148,7 +149,10 @@ test("the catalog is sound: the Wiki's counts and points, unique ids, verified t
       if (cached) assert.equal(task.category, cached.columns.get(35)?.[0], `${task.id}: the cache's category`);
       if (task.trigger) {
         assert.ok(kinds.has(task.trigger.kind), `${task.id}: ${task.trigger.kind}`);
-        if (task.trigger.kind === "kill") npcNames.add(task.trigger.npc);
+        if (task.trigger.kind === "kill") {
+          assert.ok(Array.isArray(task.trigger.npcs) && task.trigger.npcs.length > 0, task.id);
+          for (const npc of task.trigger.npcs) npcNames.add(npc);
+        }
         if (task.trigger.kind === "level") assert.ok(Skill[task.trigger.skill] instanceof Skill, task.id);
       }
     }
@@ -236,18 +240,81 @@ test("a kill awards its task once: the completion bit first, then the points, th
   assert.deepEqual(completed(league), ["defeat-a-goblin"], "once");
   assert.equal(points(league), 10);
 
-  // A kill-count task and its longer sibling for the same NPC (Cerberus 50 and 150 times, say).
-  const fifty = TRL.find((task) => task.trigger?.kind === "kill" && task.trigger.count === 50 && TRL.some((other) => other.trigger?.kind === "kill" && other.trigger.npc === task.trigger.npc && other.trigger.count === 150));
-  const hundredFifty = TRL.find((task) => task.trigger?.kind === "kill" && task.trigger.npc === fifty.trigger.npc && task.trigger.count === 150);
-  for (let i = 0; i < 49; i++) kill(league, fifty.trigger.npc);
-  assert.equal(league.getAttribute("league:kill-counts")[fifty.trigger.npc.toLowerCase()], 49);
+  // A kill-count task and its longer sibling for the same single NPC (Cerberus 50 and 150 times, say).
+  const single = (task) => task.trigger?.kind === "kill" && task.trigger.npcs.length === 1;
+  const fifty = TRL.find((task) => single(task) && task.trigger.count === 50 && TRL.some((other) => single(other) && other.trigger.npcs[0] === task.trigger.npcs[0] && other.trigger.count === 150));
+  const hundredFifty = TRL.find((task) => single(task) && task.trigger.npcs[0] === fifty.trigger.npcs[0] && task.trigger.count === 150);
+  const [boss] = fifty.trigger.npcs;
+  for (let i = 0; i < 49; i++) kill(league, boss);
+  assert.equal(league.getAttribute("league:task-kills")[fifty.id], 49, "progress kept per task");
   assert.ok(!completed(league).includes(fifty.id));
-  kill(league, fifty.trigger.npc);
+  kill(league, boss);
   assert.ok(completed(league).includes(fifty.id), "the 50th kill");
   assert.ok(!completed(league).includes(hundredFifty.id));
+  assert.equal(league.getAttribute("league:task-kills")[hundredFifty.id], 50, "the longer task kept counting");
   assert.equal(league.sent.messages.at(-1), `Congratulations, you've completed a ${catalog.tiers[fifty.tier - 1].toLowerCase()} task: <col=FF7700>${fifty.name}</col>.`);
+  const before = { ...league.getAttribute("league:task-kills") };
   kill(league, "Unicorn");
-  assert.equal(league.getAttribute("league:kill-counts").unicorn, undefined, "only names a task needs are counted");
+  assert.deepEqual(league.getAttribute("league:task-kills"), before, "a kill no task accepts counts for nothing");
+});
+
+/** A real cache NPC dying to `player` through the death hook. */
+function killReal(player, npcId) {
+  const npc = new core.NPC(npcId, new core.Location(3300, 3900, 0));
+  hooks.onNpcDeath({ killer: player, npc, npcId, location: { x: 3300, y: 3900, z: 0 } });
+}
+
+const creditedKill = (player, monster) => {
+  for (const handler of custom["combat-achievements:kill"]) handler({ player, monster });
+};
+
+test("a kill task counts every boss its description accepts: Callisto or Artio, combined", () => {
+  const task = TRL.find((entry) => entry.id === "defeat-callisto-50-times");
+  assert.equal(task.description, "Defeat Callisto or Artio 50 times.", "Wiki");
+  assert.deepEqual(task.trigger, { kind: "kill", npcs: ["Callisto", "Artio"], count: 50 }, "both, from the description");
+  assert.deepEqual(TRL.find((entry) => entry.id === "defeat-vet-ion-50-times").trigger.npcs, ["Vet'ion", "Calvar'ion"]);
+  assert.deepEqual(TRL.find((entry) => entry.id === "defeat-venenatis-50-times").trigger.npcs, ["Venenatis", "Spindel"]);
+  const league = character("wildyboss");
+  for (let i = 0; i < 25; i++) killReal(league, core.NpcIdentifiers.ARTIO);
+  for (let i = 0; i < 24; i++) killReal(league, core.NpcIdentifiers.CALLISTO);
+  assert.equal(league.getAttribute("league:task-kills")[task.id], 49);
+  assert.ok(!completed(league).includes(task.id));
+  killReal(league, core.NpcIdentifiers.CALLISTO);
+  assert.ok(completed(league).includes(task.id), "25 Artio and 25 Callisto make 50");
+});
+
+test("a kill reported both by the death and by the credited-kill event counts once", () => {
+  // Artio dies as an NPC and its plugin credits the kill to its main boss, Callisto.
+  const league = character("doublereport");
+  for (let i = 0; i < 25; i++) {
+    killReal(league, core.NpcIdentifiers.ARTIO);
+    creditedKill(league, "Callisto");
+  }
+  assert.equal(league.getAttribute("league:task-kills")["defeat-callisto-50-times"], 25, "25 kills, not 50");
+  assert.ok(!completed(league).includes("defeat-callisto-50-times"));
+});
+
+test("the Nightmare's real ending, which kills no NPC, credits her kill tasks for each rewarded player", () => {
+  const NightmareCommon = require("../plugins/bosses/nightmare/Common.Nightmare");
+  NightmareCommon.init(api);
+  const { Fight } = require("../plugins/bosses/nightmare/Fight.Nightmare");
+  const league = character("dreamer");
+  const friend = character("dreamfriend");
+  // won() rewards every player present and calls count() for each: the production credit producer
+  // (its own kill count, varp, messages and the credited-kill event), here without the arena.
+  const nightmare = { phosani: false };
+  const phosani = { phosani: true };
+  const count = (fight, player, team) => Fight.prototype.count.call(fight, player, 300, team);
+  const task = TRL.find((entry) => entry.id === "defeat-the-nightmare-50-times");
+  assert.deepEqual(task.trigger.npcs, ["The Nightmare", "Phosani's Nightmare"], "Wiki: 50 times combined");
+  for (let i = 0; i < 25; i++) for (const player of [league, friend]) count(nightmare, player, 2);
+  for (let i = 0; i < 24; i++) count(phosani, league, 1);
+  assert.equal(league.getAttribute("nightmare:kills"), 25, "the encounter's own count");
+  assert.equal(league.getAttribute("league:task-kills")[task.id], 49);
+  assert.ok(!completed(league).includes(task.id));
+  count(phosani, league, 1);
+  assert.ok(completed(league).includes(task.id), "25 Nightmare and 25 Phosani's Nightmare make 50");
+  assert.equal(friend.getAttribute("league:task-kills")[task.id], 25, "each rewarded player is credited");
 });
 
 test("level triggers fire on a level-up and are caught up at login", () => {

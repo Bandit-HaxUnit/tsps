@@ -10,8 +10,8 @@ const path = require("path");
 
 /** The list's saved dropdown filters: filter key -> value (0 = All). */
 const FILTERS_ATTRIBUTE = "league:task-filters";
-/** Kills counted for kill tasks: lower-cased NPC name -> kills. */
-const KILLS_ATTRIBUTE = "league:kill-counts";
+/** Kills credited to open kill tasks: task id -> kills of any NPC the task accepts. */
+const KILLS_ATTRIBUTE = "league:task-kills";
 
 let api = null;
 let core = null;
