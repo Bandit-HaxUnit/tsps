@@ -66,7 +66,11 @@ before(async () => {
     registerIncomingDamageModifier() {},
     registerWeaponProfile() {},
     registerRangedAmmoHandler() {},
-    spawnNpc: () => ({ getCombat: () => ({ attack() {} }) }),
+    spawnNpc: (spawn) => {
+      const definition = core.NpcDefinition.forId(spawn.id);
+      const at = new Location(spawn.x, spawn.y, spawn.z ?? 0);
+      return { getCombat: () => ({ attack() {} }), getId: () => spawn.id, getDefinition: () => definition, getCurrentDefinition: () => definition, getLocation: () => at, isPlayer: () => false };
+    },
     onItemAction() {},
     onInterfaceActionButton() {},
     onCustomEvent: (name, handler) => (custom[name] = (custom[name] ?? []).concat(handler)),
@@ -260,9 +264,11 @@ test("Treasure Arbiter: the shared clue perks, and emote, Falo and Charlie steps
 
 test("Bloodthirsty: superiors 1 in 25, a quarter bloodthirsty; points and six (nine) more rolls; a sure clue; the bracelet and remote tasks", () => {
   const who = cases(BLOODTHIRSTY, 4);
-  const chance = (player) => emit("slayer:superior-chance", { player, oneIn: 200 }).oneIn;
+  const chance = (player) => emit("slayer:superior-spawn", { player, npc: null, unlocked: true, chance: 200 }).chance;
   assert.equal(chance(who.relic), 25);
-  for (const player of others(who)) assert.equal(chance(player), 200, player.getUsername());
+  // The others keep what the league's tier passive gives (Raging Echoes tier 3: 1 in 50), else 200.
+  const { passive } = require("../plugins/modes/league/Passives.LeagueMode");
+  for (const player of others(who)) assert.equal(chance(player), passive(player, "slayer")?.superiorChance ?? 200, player.getUsername());
 
   const nechryarch = npcOf("Nechryarch");
   // The extra rolls Superiors asks of the drop table, recorded.
@@ -309,6 +315,27 @@ test("Bloodthirsty: superiors 1 in 25, a quarter bloodthirsty; points and six (n
   custom["treasure-trails:can-receive"] = [refuseElite, ...(custom["treasure-trails:can-receive"] ?? [])];
   assert.deepEqual(twoTiers(who.relic), [HARD_CLUE.item_id], "an elite clue already held: the hard one");
   custom["treasure-trails:can-receive"] = custom["treasure-trails:can-receive"].filter((handler) => handler !== refuseElite);
+  // A hard clue already held: the natural hard drop (later taken out by the clue capacity) does not
+  // count as the guarantee, so the elite one still comes.
+  const refuseHard = (request) => { if (request.tier === "hard") request.allowed = false; };
+  custom["treasure-trails:can-receive"] = [refuseHard, ...(custom["treasure-trails:can-receive"] ?? [])];
+  Math.random = () => 0.05; // under the hard 10/128, over the elite 1/120
+  assert.ok(twoTiers(who.relic).includes(12073), "the elite clue, as the guarantee");
+  custom["treasure-trails:can-receive"] = custom["treasure-trails:can-receive"].filter((handler) => handler !== refuseHard);
+  Math.random = () => 0.9;
+  custom["treasure-trails:can-receive"] = custom["treasure-trails:can-receive"].filter((handler) => handler !== refuseElite);
+
+  // A Turoth's superior rolls the Turoth's own table: the id it spawned from (427, whose drops the data has).
+  require("../plugins/skills/slayer/Rewards.Slayer").setUnlockBit(who.relic, require("../plugins/skills/data/slayer-superiors.json").unlockBit, true); // Bigger and Badder
+  const turothDefinition = core.NpcDefinition.forId(427);
+  const turoth = { getId: () => 427, getDefinition: () => turothDefinition, getCurrentDefinition: () => turothDefinition, getLocation: () => new Location(2800, 10000, 0), isPlayer: () => false };
+  assert.equal(turothDefinition.getName(), "Turoth");
+  Math.random = () => 0;
+  const spiked = Superiors.taskKill({ player: who.relic, npc: turoth }, () => 0);
+  assert.ok(spiked, "a superior spawns");
+  const turothRolls = rewards(who.relic, spiked);
+  assert.equal(turothRolls.npcId, 427, "the Turoth it came from, not the first Turoth in the cache");
+  assert.ok(turothRolls.rolls >= 6);
 
   // The bracelet of slaughter: 35% and no charge.
   const braced = (player, roll) => {

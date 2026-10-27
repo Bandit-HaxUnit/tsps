@@ -281,6 +281,17 @@ test("Banker's Note (both leagues): an item used on it is noted or unnoted; Acti
     assert.equal(inventory.getAmount(notedLogs), 2, "two at a time");
   }
 
+  // Noting a full inventory: 27 logs and the note, no noted logs yet; the logs' slots make room.
+  const gatherer = character("notegather", "league", BANKERS_NOTE_TR, 4);
+  const pack = gatherer.getInventory();
+  pack.add(new Item(I.BANKERS_NOTE, 1), false);
+  while (pack.getFreeSlots() > 0) pack.add(new Item(I.LOGS, 1), false);
+  assert.equal(pack.getAmount(I.LOGS), 27);
+  const [packNote, packLogs] = [I.BANKERS_NOTE, I.LOGS].map((id) => pack.getItems().find((item) => item?.getId() === id));
+  hooks.onItemOnItem({ player: gatherer, usedItem: packLogs, usedWithItem: packNote, handled: false });
+  assert.equal(pack.getAmount(core.ItemDefinition.forId(I.LOGS).getNoteId()), 27, "all 27 noted");
+  assert.equal(pack.getAmount(I.LOGS), 0);
+
   // Unnoting into a full inventory loses nothing: only what fits comes out.
   const full = character("notefull", "league", BANKERS_NOTE_TR, 4);
   const bag = full.getInventory();

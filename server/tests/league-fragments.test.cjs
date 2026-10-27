@@ -439,7 +439,7 @@ test("the extra rolls re-roll the hit with its spell, never chain, and go throug
     getTotalDamage: () => 5, isAccurate: () => true, getCombatType: () => core.CombatType.MAGIC,
     getCombatMethod: () => ({ type: () => core.CombatType.MAGIC }), getSpell: () => spell, getSpellContext: () => context,
   };
-  const target = { isPlayer: () => false, isNpc: () => true };
+  const target = { isPlayer: () => false, isNpc: () => true, getHitpoints: () => 50 };
   Math.random = () => 0;
   try {
     stubbing(core.CombatFactory, { addPendingHit: (extra) => queued.push(extra), poisonEntity() {} }, () => {
@@ -456,6 +456,48 @@ test("the extra rolls re-roll the hit with its spell, never chain, and go throug
   assert.equal(queued[0].getSpell(), spell);
   assert.equal(combat.getCastSpell(), null, "the cast spell is put back");
   assert.equal(player.isSpecialActivated(), true, "and the special bar");
+});
+
+test("an extra roll takes no more than the hitpoints left after the queued damage, and none after a killing blow", () => {
+  const { NPC } = require("../dist/game/entity/impl/npc/NPC");
+  const { HitDamage } = require("../dist/game/content/combat/hit/HitDamage");
+  const { HitMask } = require("../dist/game/content/combat/hit/HitMask");
+  const { CombatFactory } = require("../dist/game/content/combat/CombatFactory");
+  const player = warrior("twin", 300);
+  equip(player, 2, 12);
+  assert.equal(Fragments.setTier(player, 14), 1, "Twin Strikes from Tactical Duelist and Special Discount");
+  const goblin = new NPC(3029, new core.Location(3250, 3235, 0));
+  const queue = goblin.getCombat().getHitQueue();
+  const original = (damage) => {
+    const part = new HitDamage(damage, HitMask.RED);
+    queue.addPendingDamage([part]);
+    return {
+      getTotalDamage: () => damage, isAccurate: () => true, getCombatType: () => core.CombatType.MELEE,
+      getCombatMethod: () => CombatFactory.MELEE_COMBAT, getSpell: () => null, getSpellContext: () => null,
+    };
+  };
+  const xp = () => player.getSkillManager().getTotalExp?.() ?? player.getSkillManager().getExperience(core.Skill.HITPOINTS);
+  Math.random = () => 0;
+  goblin.setHitpoints(10);
+  const before = xp();
+  Effects.hitResolved({ attacker: player, target: goblin, hit: original(10) });
+  assert.equal(queue.hasPendingHitFrom(player), false, "a killing blow leaves nothing for an extra roll");
+  assert.equal(xp(), before, "and pays no XP for one");
+  queue.clear();
+  goblin.setHitpoints(15);
+  const queued = [];
+  const prepareHits = core.PendingHit.prototype.prepareHits;
+  core.PendingHit.prototype.prepareHits = () => [new HitDamage(9, HitMask.RED)];
+  try {
+    stubbing(core.CombatFactory, { addPendingHit: (extra) => queued.push(extra) }, () => {
+      Effects.hitResolved({ attacker: player, target: goblin, hit: original(10) });
+    });
+  } finally {
+    core.PendingHit.prototype.prepareHits = prepareHits;
+  }
+  assert.equal(queued.length, 1);
+  queued[0].capDamageToBudget();
+  assert.equal(queued[0].getTotalDamage(), 5, "a 9 rolled against the 5 hitpoints left takes 5, before addPendingHit pays its XP");
 });
 
 test("Bottomless Quiver saves before plugin-owned ammunition, and never chinchompas", () => {

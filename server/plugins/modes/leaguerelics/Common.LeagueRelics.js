@@ -260,8 +260,10 @@ function message(key, values = {}) {
 }
 
 module.exports = {
-  init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, reloadedPick, RELOADED_ATTRIBUTE, ids, structIds, message, maxHitFor, restoreSpecial,
-  bankHasRoom, bank, noted, multipliable, multipliedLoot, isPotion, hasStackableSecondary, batchActions, derivedHit, isBuildingDerivedHit, RELICS_ATTRIBUTE,
+  init, leagueOf, catalog, league, relic, chosen, points, highestTier, hasRelic, effectActive, reloadedPick,
+  RELOADED_ATTRIBUTE, ids, message, maxHitFor, restoreSpecial, bankHasRoom, bank, noted, multipliable,
+  multipliedLoot, isPotion, hasStackableSecondary, batchActions, derivedHit, isBuildingDerivedHit,
+  RELICS_ATTRIBUTE, structIds,
   get data() { return data; },
   get api() { return api; },
   get core() { return core; },

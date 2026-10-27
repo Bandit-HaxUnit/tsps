@@ -432,7 +432,8 @@ function useBait(player, bait) {
 
 /** Whether an open container (the fish barrel, "storage:room") would take this fish. */
 function storageRoom(player, itemId) {
-  const request = { player, itemId, room: false };
+  // `skill`: the skill gathering it, so content storing one skill's resources answers only for those.
+  const request = { player, itemId, skill: pluginApi?.core?.Skill?.FISHING, room: false };
   pluginApi?.emitCustomEvent("storage:room", request);
   return request.room;
 }
