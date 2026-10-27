@@ -259,6 +259,7 @@ import { MusicSystem } from "./audio/MusicSystem";
 import { AmbientSoundCollector } from "./audio/AmbientSoundCollector";
 import { type SequenceSoundContext, SoundEffectSystem } from "./audio/SoundEffectSystem";
 import { ChatTextMetrics } from "./chat/ChatTextMetrics";
+import { INVENTORY } from "../runelite/api/gameval/InterfaceID";
 import { MobileChatKeyboard } from "./chat/MobileChatKeyboard";
 import { KeyboardButtonProbe } from "./chat/keyboardButtonProbe";
 import { collectInputWidgetsAtPoint } from "./widgets/interaction/widgetClickProbe";
@@ -2261,10 +2262,20 @@ export class OsrsClient {
             this.mobileChatKeyboard.show(hint, keyboardType);
         };
         this.cs2Vm.context.hideMobileKeyboard = () => this.mobileChatKeyboard.hide();
-        // That script runs in the frame loop, after the tap, where iOS will not open the
-        // keyboard: focus it from the touch itself when the tapped widget's script would.
+        // iOS permits keyboard focus in touchend, before the frame loop runs the script.
         const keyboardButtons = new KeyboardButtonProbe((id) => this.cs2Vm.context.loadScript(id));
         this.inputManager.onCanvasTouchStart = (x, y) => {
+            if (!this.isLoggedIn() || this.menuOpen || (this.renderer.canvas as any)?.__ui?.menu?.open) return false;
+            const hits = collectInputWidgetsAtPoint(this.widgetManager, x, y);
+            for (let i = hits.length - 1; i >= 0; i--) {
+                const widget = hits[i];
+                if (this.widgetManager.isEffectivelyHidden(widget.uid)) continue;
+                if ((widget.uid >>> 16) === INVENTORY && widget.itemId >= 0 && this.widgetInteraction.isWidgetDraggable(widget)) return true;
+            }
+            return false;
+        };
+        this.inputManager.onCanvasTouchCancel = () => this.widgetInteraction.clearWidgetInteractionState();
+        this.inputManager.onCanvasTouchTap = (x, y) => {
             const widgetManager = this.widgetManager;
             if (!this.isLoggedIn() || !widgetManager) return;
             const hits = collectInputWidgetsAtPoint(widgetManager, x, y);
