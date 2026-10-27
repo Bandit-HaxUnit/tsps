@@ -1,8 +1,9 @@
 /**
  * A league character on login (every login on a league world): joins the world's league the
  * first time (starting levels from the Wiki), gets the league varbits the client's journal and
- * panels read, its XP rate, and answers `league:profile` ({ player } -> { league }) for every
- * other plugin. A main character (a plain world) gets nothing.
+ * panels read, its XP rate, the league content every plugin contributes (Content.LeagueMode), and
+ * answers `league:profile` ({ player } -> { league }) for every other plugin. A main character
+ * (a plain world) gets nothing.
  */
 const Common = require("./Common.LeagueMode");
 
