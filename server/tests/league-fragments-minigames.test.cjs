@@ -30,6 +30,7 @@ const realRandom = Math.random;
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
   core = PluginManager.getCoreApi();
+  core.RegionManager.init();
   GameConstants.setWorldProfile("league");
   const lists = {};
   const on = (name) => (handler) => {
@@ -107,10 +108,13 @@ function own(player, ...ids) {
 }
 
 function equip(player, ...ids) {
+  const previousLocation = player.getLocation();
+  player.setLocation(new core.Location(2809, 3440, 0)); // Catherby's bank, as fragment swapping requires.
   own(player, ...ids);
   player.setInterfaceId(FRAGMENTS);
   for (const id of ids) hooks[`button:${uid(FRAGMENTS, 18)}`]({ player, buttonId: uid(FRAGMENTS, 18), slot: 9 * (id - 1), opId: 2 });
   player.setInterfaceId(-1);
+  player.setLocation(previousLocation);
 }
 
 /** Level 2 (2,000 fragment XP) or 3 (8,000), script 5789. */
