@@ -11,10 +11,10 @@
     "unlocks": 35
   },
 
-  "_renown": "Sage's Renown (Wiki /Unlocks): earned by tasks, spent on unlocks. Varp 3276 holds it for the side panel and the unlocks screen. `perTaskTier` is the Wiki's renown per task tier, kept for the task catalog to pay it (not wired yet).",
+  "_renown": "Sage's Renown (Wiki /Unlocks): earned by tasks, spent on unlocks. Varp 3276 holds it for the side panel and the unlocks screen. `byTaskPoints`: a task's League Points -> the renown it pays (Wiki /Tasks: Beginner and Easy 5 points and 1 renown, Medium 25 and 2, Hard 50 and 3, Elite 125 and 4, Master 250 and 5), so any award of a task's points pays its tier's renown; other amounts pay none.",
   "renown": {
     "varp": 3276,
-    "perTaskTier": { "beginner": 1, "easy": 1, "medium": 2, "hard": 3, "elite": 4, "master": 5 }
+    "byTaskPoints": { "5": 1, "25": 2, "50": 3, "125": 4, "250": 5 }
   },
 
   "_classChoice": "league_3_class (737), from its own text: Select (737:6 / 11 / 16) sets varp 3345 to the class (script 5805 shows its confirm panel 737:20), Decline (737:23) sets it back to 0, Accept (737:26) applies it. `skill` is the skill id (Attack 0, Ranged 4, Magic 6) whose unlock varbit script 5830 reads; `fragment` is enum 4136's fragment id. 737 names the items but not their amounts; the amounts here are this server's choice (the Wiki: 'a few starter items').",
@@ -80,6 +80,43 @@
       "npcParam": 1436,
       "entryChildren": 4,
       "selectChild": 0,
+      "_names": "The NPCs a locked boss stops a character attacking (Wiki /Unlocks: locked bosses can't be fought; the Wilderness's are not in the list, the Mimic is free), by the cache's NPC names: the unlock's own NPC (param 1436) and the rest of a group (Barrows' brothers, the Dagannoth Kings, Dusk and Dawn, both Hunllefs, Phosani's Nightmare). Raids are locked by their final boss (Great Olm and its claws, Verzik Vitur). Wintertodt and Tempoross are skilling bosses no one attacks, so their locks aren't enforced. `messageCooldownMs` keeps the refusal to one message per boss that long: a cannon, a multi-target attack and the boss's own hits (auto-retaliate) all ask again and again.",
+      "messageCooldownMs": 6000,
+      "names": {
+        "5888": ["Abyssal Sire"],
+        "8615": ["Alchemical Hydra"],
+        "1673": ["Ahrim the Blighted", "Dharok the Wretched", "Guthan the Infested", "Karil the Tainted", "Torag the Corrupted", "Verac the Defiled"],
+        "8195": ["Bryophyta"],
+        "5863": ["Cerberus"],
+        "7554": ["Great Olm", "Great Olm (Left claw)", "Great Olm (Right claw)"],
+        "2205": ["Commander Zilyana"],
+        "319": ["Corporeal Beast"],
+        "2265": ["Dagannoth Prime", "Dagannoth Rex", "Dagannoth Supreme"],
+        "9021": ["Crystalline Hunllef", "Corrupted Hunllef"],
+        "2215": ["General Graardor"],
+        "5779": ["Giant Mole"],
+        "7849": ["Dusk", "Dawn"],
+        "8583": ["Hespori"],
+        "963": ["Kalphite Queen"],
+        "239": ["King Black Dragon"],
+        "494": ["Kraken"],
+        "3162": ["Kree'arra"],
+        "3129": ["K'ril Tsutsaroth"],
+        "11278": ["Nex"],
+        "9460": ["The Nightmare", "Phosani's Nightmare"],
+        "7416": ["Obor"],
+        "8713": ["Sarachnis"],
+        "7286": ["Skotizo"],
+        "10572": [],
+        "8369": ["Verzik Vitur"],
+        "499": ["Thermonuclear smoke devil"],
+        "8061": ["Vorkath"],
+        "7371": [],
+        "9049": ["Zalcano"],
+        "2042": ["Zulrah"]
+      },
+      "_requires": "Wiki /Unlocks footnote: Nex requires every God Wars boss to be unlocked first (General Graardor, Commander Zilyana, Kree'arra, K'ril Tsutsaroth).",
+      "requires": { "11278": { "bosses": [2215, 2205, 3162, 3129], "message": "needsGodWars" } },
       "_varbits": "Script 5831: the boss's NPC id -> its unlock varbit.",
       "varbits": { "239": 13364, "5779": 13365, "963": 13366, "7416": 13367, "8195": 13368, "7849": 13369, "1673": 13370, "2265": 13371, "8583": 13372, "8713": 13373, "7286": 13374, "9049": 13375, "494": 13376, "9021": 13377, "499": 13378, "2042": 13379, "8061": 13380, "5863": 13381, "3162": 13382, "2215": 13383, "2205": 13384, "3129": 13385, "9460": 13386, "8615": 13387, "7554": 13388, "8369": 13389, "10572": 13390, "7371": 13391, "319": 13392, "5888": 13393, "11278": 13394 }
     },
@@ -133,6 +170,10 @@
   },
 
   "messages": {
+    "_lockedBoss": "The Wiki gives no message for a locked boss; this wording is this server's.",
+    "lockedBoss": "You need to unlock {name} with Sage's Renown before you can fight it.",
+    "_needsGodWars": "The Wiki footnotes Nex as requiring every God Wars boss; this wording is this server's.",
+    "needsGodWars": "You need to unlock every God Wars Dungeon general before you can unlock Nex.",
     "_classNoRoom": "No message is recorded for this; it is this server's.",
     "classNoRoom": "You need more space in your inventory or bank to accept this class.",
     "renownGranted": "Granted {amount} Sage's Renown to {name} ({renown} now).",

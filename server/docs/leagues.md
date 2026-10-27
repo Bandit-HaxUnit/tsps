@@ -399,8 +399,9 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   (`journal.sidePanelByLeague`). It draws points, tasks and Sage's Renown from varps. Its Info
   button opens the Info panel, Tasks emits `league:open-tasks` for the task list, and Fragments and
   Unlocks open their screens.
-- **Sage's Renown:** `league:renown`, sent as varp 3276. `::renown <amount> [player]` grants it.
-  The Wiki's renown per task tier is in the data for the task catalog to pay later.
+- **Sage's Renown:** `league:renown`, sent as varp 3276. A task award pays its tier's renown, read
+  from its points (Wiki /Tasks: 5 points pay 1, 25 pay 2, 50 pay 3, 125 pay 4, 250 pay 5). Other
+  amounts pay none. `::renown <amount> [player]` grants it too.
 - **Class choice (737):** at the first login, and every login until chosen. Select sets varp 3345
   so the client shows that class's confirm panel. Accept unlocks its combat skill (script 5830's
   varbit), gives its fragment at level 1 and its items. 737 names the items; their amounts are this
@@ -414,9 +415,15 @@ rule from the Wiki's Shattered Relics pages. They draw only for league type 3 (v
   skills and bosses. Quest packs have no price in the cache: each pack's varbit holds its price
   now, from the Wiki's Initial Cost less the prerequisite packs already unlocked, and 0 once
   unlocked. Buying a pack unlocks its prerequisites. Defence, Fishing and Thieving start unlocked.
+  Nex can be bought only once every God Wars general is unlocked.
+- **Locks:** a locked skill gives no XP, and a locked boss can't be attacked, by the player or its
+  thrall (its NPC names are in the data, raids by their final boss). Kraken's Disturb and Vorkath's
+  Poke ask `league:boss-locked` before waking them. Wintertodt and Tempoross aren't attacked, so
+  their locks aren't enforced, and instance entries (Zulrah, the Gauntlet, raids) aren't refused,
+  only the fights inside. The Wiki gives no message for either lock; the boss one is this
+  server's, said once per boss every few seconds.
 
-Stored and drawn, not yet enforced: locked skills still give XP and locked bosses can be fought;
-fragments don't drop, gain XP or take effect (the 53 fragments and 15 set effects); quest packs
+Stored and drawn, not yet enforced: fragments don't drop, gain XP or take effect (the 53 fragments and 15 set effects); quest packs
 complete no quests; fragments can be swapped anywhere, not only at a bank or the Sage, and only
 through Equip (dragging one into a slot isn't handled); the
 Display Fragments toggle (varbit 12383) is the client's own; the intro cutscene (734) has no

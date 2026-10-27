@@ -1,13 +1,14 @@
 /**
  * Shattered Relics' unlocks screen (league_3_unlocks 733, data/league-shattered.json `unlocks`):
  * skills, bosses and quest packs bought with Sage's Renown (Wiki /Unlocks). What a character has
- * unlocked is saved and sent as the varbits the screen draws from. The unlocks are recorded only:
- * locked skills still give XP, locked bosses can be fought and quest packs complete no quests yet
- * (follow-ups in docs/leagues.md).
+ * unlocked is saved and sent as the varbits the screen draws from. A locked skill gives no XP and
+ * a locked boss can't be attacked (Wiki: "Locked skills can be trained, but no experience will be
+ * granted"); quest packs complete no quests yet (a follow-up in docs/leagues.md).
  *
  *   "league:unlock-skill" { player, skill }   unlocks a skill for free (the starting class)
  *   "league:open-unlocks" { player }          opens the screen
  *   "league:unlocks" { player } -> { skills, bosses, quests }
+ *   "league:boss-locked" { player, name, notify? } -> locked   (a boss fight started without Attack: Disturb, Poke)
  */
 const Common = require("./Common.LeagueMode");
 const { FLAG_OP1 } = require("../../interface/widgetGroup");
@@ -165,16 +166,26 @@ function pickEntry({ player, slot }) {
   return true;
 }
 
-/** The price of the entry shown, or null when it can't be bought (already unlocked, always unlocked). */
+/**
+ * The entry shown: { cost } to buy it, { cost: null } when there is nothing to buy (already or
+ * always unlocked), or { cost: null, refusal } when a requirement is missing (Nex's generals).
+ */
 function price(player, tab, entry) {
   const state = unlocked(player);
   if (TABS[tab] === "skills") {
-    if (config().skills.alwaysUnlocked.includes(entry.skill) || state.skills.includes(entry.skill)) return null;
-    return entry.cost;
+    if (config().skills.alwaysUnlocked.includes(entry.skill) || state.skills.includes(entry.skill)) return { cost: null };
+    return { cost: entry.cost };
   }
-  if (TABS[tab] === "bosses") return state.bosses.includes(entry.npc) ? null : entry.cost;
+  if (TABS[tab] === "bosses") {
+    if (state.bosses.includes(entry.npc)) return { cost: null };
+    const requirement = config().bosses.requires[entry.npc];
+    if (requirement && requirement.bosses.some((npc) => !state.bosses.includes(npc))) {
+      return { cost: null, refusal: data.messages[requirement.message] };
+    }
+    return { cost: entry.cost };
+  }
   const cost = questPrice(entry.name, new Set(state.quests));
-  return cost > 0 ? cost : null;
+  return { cost: cost > 0 ? cost : null };
 }
 
 function unlock(player, tab, entry) {
@@ -190,7 +201,8 @@ function accept({ player }) {
   if (!isShattered(player) || !isOpen(player)) return false;
   const { tab, entry: index } = viewOf(player);
   const entry = entries(TABS[tab])[index];
-  const cost = entry ? price(player, tab, entry) : null;
+  const { cost, refusal } = entry ? price(player, tab, entry) : { cost: null };
+  if (refusal) player.sendMessage(refusal);
   if (cost !== null) {
     const spend = { player, amount: cost };
     Common.api.emitCustomEvent("league:spend-renown", spend);
@@ -223,6 +235,83 @@ function unlockSkill({ player, skill }) {
   sendUnlocks(player);
 }
 
+// ---- The locks ----
+
+/** A skill (its stat id) the character can't gain XP in yet; a skill outside the unlock list never is. */
+function skillLocked(player, statId) {
+  const { skills } = config();
+  if (skills.varbits[statId] === undefined || skills.alwaysUnlocked.includes(statId)) return false;
+  return !unlocked(player).skills.includes(statId);
+}
+
+/** onCanGainExperience: no XP in a locked skill (Wiki /Unlocks). */
+function lockedSkillExperience(event) {
+  const { player, skill } = event;
+  if (!isShattered(player)) return;
+  if (skillLocked(player, Number(skill?.getClientId?.()))) event.allow = false;
+}
+
+/** NPC name -> the boss unlock (its NPC id) that covers it, read once from the data. */
+let bossByName = null;
+
+function bossOf(name) {
+  if (!bossByName) {
+    bossByName = new Map();
+    for (const [npc, names] of Object.entries(config().bosses.names)) {
+      for (const each of names) bossByName.set(each.toLowerCase(), Number(npc));
+    }
+  }
+  return bossByName.get(String(name ?? "").toLowerCase()) ?? null;
+}
+
+/** Per player: the boss last refused and when, so the refusal is said once a while, not every check. */
+const lastRefused = new WeakMap();
+
+/** The locked boss unlock covering this NPC name for the player, or null. */
+function lockedBoss(player, name) {
+  const boss = bossOf(name);
+  return boss === null || unlocked(player).bosses.includes(boss) ? null : boss;
+}
+
+function refuse(player, boss, key) {
+  const now = Date.now();
+  const last = lastRefused.get(player);
+  if (last && last.key === key && now - last.at < config().bosses.messageCooldownMs) return;
+  lastRefused.set(player, { key, at: now });
+  const name = entries("bosses").find((entry) => entry.npc === boss)?.name ?? "";
+  player.sendMessage(data.messages.lockedBoss.replace("{name}", name));
+}
+
+/** A player, or the player whose thrall it is. */
+function controller(mobile) {
+  if (mobile?.isPlayer?.()) return mobile;
+  const owner = mobile?.isNpc?.() ? mobile.getOwner?.() : null;
+  return owner?.isPlayer?.() ? owner : null;
+}
+
+/**
+ * onCanAttack: a locked boss can't be fought (Wiki /Unlocks), by the player or its thrall. Only a
+ * real attack (one with a combat method) says why; a cannon's or a multi-target attack's check
+ * asks with none and is refused quietly.
+ */
+function lockedBossAttack(event) {
+  const { attacker, target } = event;
+  const player = controller(attacker);
+  if (!player || !target?.isNpc?.() || !isShattered(player)) return;
+  const boss = lockedBoss(player, target.getCurrentDefinition?.(player)?.getName?.() ?? target.getDefinition?.()?.getName?.());
+  if (boss === null) return;
+  event.allow = false;
+  if (event.method && attacker === player) refuse(player, boss, target);
+}
+
+/** `league:boss-locked` { player, name, notify }: a fight started some other way (Disturb, Poke). */
+function bossLockedQuery(request) {
+  if (!request?.player) return;
+  const boss = isShattered(request.player) ? lockedBoss(request.player, request.name) : null;
+  request.locked = boss !== null;
+  if (request.locked && request.notify) refuse(request.player, boss, request.name);
+}
+
 function query(request) {
   if (!request) return;
   Object.assign(request, isShattered(request.player) ? unlocked(request.player) : { skills: [], bosses: [], quests: [] });
@@ -244,10 +333,13 @@ module.exports = function attach(api) {
   api.onCustomEvent("league:open-unlocks", open);
   api.onCustomEvent("league:unlocks", query);
   api.onCustomEvent("league:login", login);
+  api.onCanGainExperience(lockedSkillExperience);
+  api.onCanAttack(lockedBossAttack);
+  api.onCustomEvent("league:boss-locked", bossLockedQuery);
   api.onInterfaceActionButton(buttonIds.tabs, pickTab);
   api.onInterfaceActionButton(buttonIds.list, pickEntry);
   api.onInterfaceActionButton(buttonIds.accept, accept);
   api.onInterfaceActionButton(buttonIds.close, close);
 };
 
-module.exports._test = { questPrice, entries, unlocked, UNLOCKS_ATTRIBUTE };
+module.exports._test = { questPrice, entries, unlocked, skillLocked, bossOf, UNLOCKS_ATTRIBUTE };

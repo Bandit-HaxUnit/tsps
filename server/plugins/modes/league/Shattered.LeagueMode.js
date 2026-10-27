@@ -6,6 +6,7 @@
  *   api.emitCustomEvent("league:award-renown", { player, amount, reason })  -> awarded
  *   api.emitCustomEvent("league:spend-renown", { player, amount })          -> spent (all or nothing)
  *   api.emitCustomEvent("league:renown", { player })                        -> renown
+ *   "league:points-changed" (LeaguePoints)   a task's award pays its tier's renown (data.renown.byTaskPoints)
  *   "league:open-fragments" / "league:open-unlocks" / "league:open-tasks" { player }   from the panel
  *   "league:grant-fragment" { player, id } / "league:unlock-skill" { player, skill }  from the class
  *
@@ -63,6 +64,13 @@ function spendRenown(request) {
   request.player.setAttribute(RENOWN_ATTRIBUTE, renownOf(request.player) - amount);
   sendRenown(request.player);
   request.spent = true;
+}
+
+/** A task award pays the renown of its tier, read from its points (Wiki /Tasks). */
+function taskRenown({ player, points, previous }) {
+  if (!isShattered(player)) return;
+  const renown = Number(data.renown.byTaskPoints[Number(points) - Number(previous)]) || 0;
+  if (renown > 0) awardRenown({ player, amount: renown, reason: "task" });
 }
 
 function renownQuery(request) {
@@ -281,6 +289,7 @@ module.exports = function attach(api) {
   api.onCustomEvent("league:award-renown", awardRenown);
   api.onCustomEvent("league:spend-renown", spendRenown);
   api.onCustomEvent("league:renown", renownQuery);
+  api.onCustomEvent("league:points-changed", taskRenown);
   api.onCustomEvent("league:login", login);
   api.onCustomEvent("welcome-screen:shown", welcomeScreenShown);
   api.onCustomEvent("interface:closed", interfaceClosed);

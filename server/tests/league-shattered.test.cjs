@@ -510,3 +510,142 @@ test("another league's character sees none of it", () => {
     worldLeague = 3;
   }
 });
+
+// ---- The locks and renown from tasks ----
+
+function gainXp(player, skill) {
+  const event = { player, skill: core.Skill[skill], experience: 100, allow: null, multiplier: 1 };
+  hooks.onCanGainExperience(event);
+  return event.allow !== false;
+}
+
+/** A stand-in NPC with the cache's real definition for `id`. */
+function npc(id) {
+  const definition = core.NpcDefinition.forId(id);
+  return { isNpc: () => true, isPlayer: () => false, getCurrentDefinition: () => definition, getDefinition: () => definition };
+}
+
+/** An attack check: `method` set as a real attack sends it, none as a cannon's or a multi-target attack's. */
+function attack(attacker, target, method = { real: true }) {
+  const event = { attacker, target, method, allow: null };
+  hooks.onCanAttack(event);
+  return event.allow !== false;
+}
+
+function messagesMatching(player, pattern) {
+  return player.sent.messages.filter((text) => pattern.test(text)).length;
+}
+
+/** The unlock entry for a boss name, as the client lists it. */
+function bossEntry(name) {
+  return [...CacheDefinitions.getEnumValues(4130).entries()].sort(([a], [b]) => a - b)
+    .findIndex(([, struct]) => CacheDefinitions.getStructParams(Number(struct)).get(1437) === name);
+}
+
+function buyBoss(player, name, renown) {
+  emit("league:award-renown", { player, amount: renown });
+  click(player, SIDE_PANEL, 35);
+  click(player, UNLOCKS, 9, { slot: 9 });
+  click(player, UNLOCKS, 18, { slot: 4 * bossEntry(name) });
+  click(player, UNLOCKS, 47);
+  player.getPacketSender().sendInterfaceRemoval();
+}
+
+test("a locked skill gives no XP until it is unlocked; the starting skills and the class's always do", () => {
+  const player = settled("trainer");
+  assert.equal(gainXp(player, "WOODCUTTING"), false, "Woodcutting is locked (Wiki: trained, but no experience)");
+  assert.equal(gainXp(player, "HUNTER"), false, "Hunter (client stat 21, server index 22) is locked");
+  assert.equal(gainXp(player, "CONSTRUCTION"), false, "and Construction (client stat 22)");
+  for (const skill of ["DEFENCE", "FISHING", "THIEVING", "ATTACK"]) assert.equal(gainXp(player, skill), true, `${skill} is unlocked`);
+  assert.equal(gainXp(player, "SAILING"), true, "a skill outside the unlock list is untouched");
+  const skills = [...CacheDefinitions.getEnumValues(4129).entries()].sort(([a], [b]) => a - b)
+    .map(([, struct]) => CacheDefinitions.getStructParams(Number(struct)));
+  const woodcutting = skills.findIndex((params) => params.get(1437) === "Woodcutting");
+  emit("league:award-renown", { player, amount: 5 });
+  click(player, SIDE_PANEL, 35);
+  click(player, UNLOCKS, 18, { slot: 12 * woodcutting });
+  click(player, UNLOCKS, 47);
+  assert.equal(gainXp(player, "WOODCUTTING"), true, "unlocked, it gives XP");
+  const hunter = skills.findIndex((params) => params.get(1437) === "Hunter");
+  emit("league:award-renown", { player, amount: 5 });
+  click(player, UNLOCKS, 18, { slot: 12 * hunter });
+  click(player, UNLOCKS, 47);
+  assert.equal(gainXp(player, "HUNTER"), true, "Hunter unlocked by its client stat id");
+  assert.equal(gainXp(player, "CONSTRUCTION"), false, "Construction still locked");
+  const echoes = character("trainer-5", { league: 5 });
+  worldLeague = 5;
+  try {
+    assert.equal(gainXp(echoes, "WOODCUTTING"), true, "other leagues have no locks");
+  } finally {
+    worldLeague = 3;
+  }
+});
+
+test("a locked boss can't be attacked by any of its NPCs until it is unlocked", () => {
+  const player = settled("slayer");
+  for (const id of [1672, 1673, 1674, 1675, 1676, 1677]) {
+    assert.equal(attack(player, npc(id)), false, `${core.NpcDefinition.forId(id).getName()} is part of Barrows`);
+  }
+  assert.match(player.sent.messages.at(-1), /unlock Barrows with Sage's Renown/);
+  for (const id of [7550, 7552, 7554]) assert.equal(attack(player, npc(id)), false, "the Great Olm and its claws");
+  assert.equal(attack(player, npc(9049)), false, "Zalcano is attacked like any NPC");
+  assert.equal(attack(player, npc(2215)), false, "General Graardor");
+  assert.equal(attack(player, npc(3029)), true, "a goblin isn't a boss");
+  buyBoss(player, "Barrows", 15);
+  assert.equal(attack(player, npc(1676)), true, "unlocked, the brothers can be fought");
+  assert.equal(attack(player, npc(2215)), false, "the other bosses stay locked");
+});
+
+test("the refusal is said once per boss a while, never for a cannon's or a multi-target check", () => {
+  const player = settled("spammed");
+  const queen = npc(963);
+  for (let tick = 0; tick < 10; tick++) attack(player, queen);
+  assert.equal(messagesMatching(player, /Kalphite Queen/), 1, "repeated attacks (auto-retaliate) say it once");
+  const mole = npc(5779);
+  for (let tick = 0; tick < 10; tick++) assert.equal(attack(player, mole, null), false);
+  assert.equal(messagesMatching(player, /Giant Mole/), 0, "a check with no attack method is refused quietly");
+  const thrall = { isPlayer: () => false, isNpc: () => true, getOwner: () => player };
+  assert.equal(attack(thrall, npc(239)), false, "a thrall can't fight its owner's locked boss");
+  const query = emit("league:boss-locked", { player, name: "Kraken", notify: true });
+  assert.equal(query.locked, true, "Disturb and Poke ask before waking the boss");
+  assert.match(player.sent.messages.at(-1), /unlock Kraken/);
+  assert.equal(emit("league:boss-locked", { player, name: "Goblin" }).locked, false);
+});
+
+test("Nex can only be bought once every God Wars general is unlocked", () => {
+  const player = settled("godwars");
+  buyBoss(player, "Nex", 15);
+  assert.deepEqual(emit("league:unlocks", { player }).bosses, [], "refused");
+  assert.match(player.sent.messages.at(-1), /every God Wars Dungeon general/);
+  assert.equal(emit("league:renown", { player }).renown, 15, "nothing spent");
+  for (const general of ["General Graardor", "Commander Zilyana", "Kree'arra"]) buyBoss(player, general, 30);
+  buyBoss(player, "Nex", 0);
+  assert.equal(emit("league:unlocks", { player }).bosses.includes(11278), false, "three of the four isn't enough");
+  buyBoss(player, "K'ril Tsutsaroth", 30);
+  buyBoss(player, "Nex", 0);
+  assert.equal(emit("league:unlocks", { player }).bosses.includes(11278), true, "then Nex can be bought");
+});
+
+test("a task's award pays its tier's renown, read from its points", () => {
+  const player = settled("tasker");
+  for (const [points, renown] of [[5, 1], [25, 2], [50, 3], [125, 4], [250, 5]]) {
+    const before = emit("league:renown", { player }).renown;
+    hooks["command:leaguetask"]({ player, parts: ["leaguetask", `tier-${points}`, String(points)] });
+    assert.equal(emit("league:renown", { player }).renown - before, renown, `${points} points pay ${renown}`);
+  }
+  const before = emit("league:renown", { player }).renown;
+  hooks["command:leaguetask"]({ player, parts: ["leaguetask", "odd", "7"] });
+  hooks["command:leaguetask"]({ player, parts: ["leaguetask", "tutorial-like", "10"] });
+  assert.equal(emit("league:renown", { player }).renown, before, "amounts no tier pays (7, a tutorial's 10) pay nothing");
+  hooks["command:leaguetask"]({ player, parts: ["leaguetask", "tier-50", "50"] });
+  assert.equal(emit("league:renown", { player }).renown, before, "a task already done pays nothing again");
+  assert.equal(player.sent.varps.get(RENOWN), before);
+  const echoes = character("tasker-5", { league: 5 });
+  worldLeague = 5;
+  try {
+    hooks["command:leaguetask"]({ player: echoes, parts: ["leaguetask", "five", "50"] });
+    assert.equal(emit("league:renown", { player: echoes }).renown, 0, "other leagues have no renown");
+  } finally {
+    worldLeague = 3;
+  }
+});
