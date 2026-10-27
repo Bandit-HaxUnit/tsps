@@ -54,6 +54,8 @@ function createPlayer({ pickaxe = ItemIds.RUNE_PICKAXE, level = 99, full = false
       contains: (id) => id === pickaxe,
       isFull: () => full,
       adds: (id, amount) => added.push([id, amount]),
+      getAddableAmount: (item) => item.getAmount(),
+      add: (item) => added.push([item.getId(), item.getAmount()]),
       getItems: () => [],
     }),
     getEquipment: () => ({ getItems: () => (amulet > 0 ? [null, null, { getId: () => amulet }] : []) }),

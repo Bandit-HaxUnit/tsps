@@ -598,11 +598,12 @@ class MiningTask extends Task {
       const { outcome } = landed;
       const oreId = outcome?.itemId ?? state.rock.oreId;
       const amount = outcome?.min !== undefined ? outcomeAmount(outcome) : oreAmount(player, state.rock);
+      let pendingOre = null;
       if (InfernalPickaxe.tryCombustOre(player, state.pickaxe.id, oreId)) {
         player.performGraphic(new pluginApi.core.Graphic(SMOKEPUFF_GRAPHIC, 0, SMOKEPUFF_HEIGHT));
         player.getPacketSender().sendSoundEffect(SMELT_SOUND, 1, 0, 1);
       } else {
-        giveOre(player, oreId, amount, outcome?.xp ?? state.rock.xp);
+        pendingOre = prepareOre(player, oreId, amount, outcome?.xp ?? state.rock.xp);
         countOre(player, state.rock);
       }
       if (!state.rock.infinite) {
@@ -611,8 +612,13 @@ class MiningTask extends Task {
       player.sendMessage(outcome?.message ?? state.rock.oreMessage ?? oreMessage(state.rock));
       CrystalPickaxe.tryUseCharge(player);
       player.getSkillManager().addExperiences(Skill.MINING, outcome?.xp ?? state.rock.xp);
+      // OSRS gives a winning pet the last backpack slot before the resource.
+      // Storage and XP retain their order; ordinary success consumers run after delivery.
+      const petRoll = { player, skill: Skill.MINING, petBase: state.rock.petBase, handled: false };
+      pluginApi.emitCustomEvent("pets:skilling-roll", petRoll);
+      deliverOre(player, pendingOre);
       if (!outcome) mineExtraOre(player, state.rock);
-      pluginApi.emitCustomEvent("mining:success", { player, skill: Skill.MINING, petBase: state.rock.petBase, itemId: oreId });
+      pluginApi.emitCustomEvent("mining:success", { player, skill: Skill.MINING, petBase: state.rock.petBase, itemId: oreId, petRolled: petRoll.handled });
       if (state.rock.infinite) {
         if (inventoryBlocks(player, state.rock.oreId)) {
           inventoryFull(player, state.rock.oreId);
@@ -662,6 +668,21 @@ function giveOre(player, oreId, amount, xp = 0) {
   if (amount > request.stored) {
     player.getInventory().adds(oreId, amount - request.stored);
   }
+}
+
+/** Storage resolves first; a winning pet can take room reserved for the remaining ore. */
+function prepareOre(player, oreId, amount, xp) {
+  const request = { player, itemId: oreId, amount, stored: 0, skill: Skill.MINING, xp };
+  pluginApi.emitCustomEvent("storage:gather", request);
+  return amount > request.stored ? new pluginApi.core.Item(oreId, amount - request.stored) : null;
+}
+
+function deliverOre(player, ore) {
+  if (!ore) return;
+  const amount = ore.getAmount();
+  const accepted = player.getInventory().getAddableAmount(ore);
+  if (accepted > 0) player.getInventory().add(ore.clone().setAmount(accepted), true);
+  if (accepted < amount) pluginApi.getItemOnGroundManager().registers(player, ore.clone().setAmount(amount - accepted));
 }
 
 /**
