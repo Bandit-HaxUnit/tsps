@@ -7,6 +7,7 @@ const Geomancy = require("./Geomancy.Farming");
 const Tithe = require("./Tithe.Farming");
 const Rewards = require("./Rewards.Farming");
 const Guild = require("./Guild.Farming");
+const Vault = require("./Vault.Farming");
 const Hespori = require("./Hespori.Farming");
 const Redwood = require("./Redwood.Farming");
 const Tools = require("./Tools.Farming");
@@ -18,8 +19,12 @@ const FALADOR_FARM_PATCHES = new Set(Data.CACHE.patches.filter(p => p.z === 0
     && ["ALLOTMENT", "FLOWER", "HERB"].includes(p.type)
     && p.x >= 3050 && p.x <= 3058 && p.y >= 3303 && p.y <= 3311).map(Data.patchKey));
 const ANIM = { RAKE: 2273, PLANT: 2291, SAPLING: 2272, FILL_POT: 2287, WATER: 2293, DIG: 830, HARVEST: 2282, COMPOST: 2283, CURE: 2288, PRUNE: 2275 };
-// Player -> queued rake/harvest, stepped every tick by the farming task.
+// Rev 241 gameval human_pickuptable; rsprox recording 1858 pairs it with sound 2441.
+const FILL_BIN_ANIMATION = 832;
+const FILL_BIN_SOUND = 2441;
+// Player -> queued rake/harvest/bin filling, stepped every tick by the farming task.
 const WORK = new Map();
+let workTick = 0;
 const RENDERED = new WeakMap();
 const LLETYA_FRUIT_PATCH = Data.CACHE.patches.find(p => p.type === "FRUIT_TREE" && p.x === 2346 && p.y === 3161 && p.z === 0);
 // A patch can be visible from its own 64-tile region or one of its neighbours.
@@ -171,12 +176,44 @@ function startWork(player, patch, action) {
     WORK.set(player, work);
     workStep(player, work);
 }
+function startBinWork(player, patch, input) {
+    WORK.set(player, { patch, action: "fill-bin", input, nextTick: workTick + 2,
+        position: player.getLocation().clone(), depositing: false });
+}
+function fillBinStep(player, work) {
+    const { patch, input } = work;
+    const inventory = player.getInventory();
+    const bin = stateFor(player, patch).bin;
+    const capacity = patch.type === "BIG_COMPOST" ? 30 : 15;
+    if (bin !== input.bin || bin.closedAt || bin.open || bin.count >= capacity || !inventory.contains(input.id)) return false;
+    // Captures: animate at +2, deposit at +3, then repeat both phases every two ticks.
+    if (!work.depositing) {
+        animate(player, FILL_BIN_ANIMATION);
+        player.getPacketSender().sendSound(FILL_BIN_SOUND, 1, 0);
+    } else {
+        inventory.deleteNumber(input.id, 1);
+        bin.count++;
+        if (input.superItem) bin.super++;
+        if (input.tomato) bin.tomatoes++;
+        bin.tier = bin.super === bin.count ? 2 : bin.tomatoes === bin.count ? 4 : 1;
+        syncPatch(player, patch);
+        if (bin.count >= capacity || !inventory.contains(input.id)) return false;
+    }
+    work.depositing = !work.depositing;
+    work.nextTick = workTick + 1;
+    return true;
+}
 function workStep(player, work) {
     if (player.getHitpoints() <= 0 || player.busy() || !player.getLocation().equals(work.position) || player.getMovementQueue().isMovings()) {
         WORK.delete(player);
         return;
     }
     if (work.levelUpPaused) return;
+    if (work.action === "fill-bin") {
+        if (workTick < work.nextTick) return;
+        if (!fillBinStep(player, work)) WORK.delete(player);
+        return;
+    }
     if (Date.now() < work.nextAt) return;
     const again = work.action === "rake" ? rake(player, work.patch) : harvest(player, work.patch);
     work.nextAt = Date.now() + 1800;
@@ -682,6 +719,7 @@ function refresh(player) {
     else redwoodRegrowth.delete(player);
 }
 function farmingTick() {
+    workTick++;
     Geomancy.tick();
     for (const [player, due] of redwoodRegrowth) if (due <= Date.now()) refresh(player);
     for (const [player, work] of WORK) workStep(player, work);
@@ -773,6 +811,9 @@ function attach(api) {
     api.onCanShop(Rewards.canShop);
     api.onPlayerMapSquareChange(mapSquareChanged);
     api.onPlayerLogout(logout);
+    api.onPlayerLogout(Vault.logout);
+    api.onInterfaceActionClick(Vault.click);
+    api.onCustomEvent("player:widget-action", Vault.drag);
     api.onPlayerLogout(Geomancy.logout);
     api.onPlayerLogout(Tithe.titheLogout);
     api.onPlayerLogout(Rewards.logout);
@@ -823,4 +864,4 @@ function attach(api) {
     api.registerNpcCombatMethodProvider(core.NpcIdentifiers.HESPORI_2, Hespori.HesporiCombat, { singleton: false });
 }
 
-Object.assign(module.exports, { FARM_ATTRIBUTE, farmFor, stateFor, hasTool, requireTool, award, give, choose, clearPatch, syncPatch, nearPatch, water, fertilize, cure, noteSeedling, advanceTime, attach, tick: farmingTick, retrievalItems });
+Object.assign(module.exports, { FARM_ATTRIBUTE, farmFor, stateFor, hasTool, requireTool, award, give, choose, clearPatch, syncPatch, nearPatch, water, fertilize, cure, noteSeedling, advanceTime, attach, tick: farmingTick, retrievalItems, startBinWork });

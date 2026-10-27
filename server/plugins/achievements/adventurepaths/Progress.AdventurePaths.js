@@ -47,6 +47,10 @@ function update({ player }) {
     const s = Common.state(player);
     if (s.disabled) return sync(player);
     let changed = false;
+    if (s.journal === undefined) {
+        s.journal = true;
+        changed = true;
+    }
     // Keep enrollment when Tutorial Island is later disabled and its attributes are not registered.
     const experience = player.getAttribute("tutorial-island:experience");
     if (s.tutorialComplete !== true || (experience && s.experience !== experience)) {

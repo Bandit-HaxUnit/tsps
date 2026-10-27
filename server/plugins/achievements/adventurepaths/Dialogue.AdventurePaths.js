@@ -1,3 +1,4 @@
+const Journal = require("./Journal.AdventurePaths");
 const Common = require("./Common.AdventurePaths");
 const Progress = require("./Progress.AdventurePaths");
 const Rewards = require("./Rewards.AdventurePaths");
@@ -67,17 +68,13 @@ function action(event) {
         return;
     } // Canonical explanatory marker, followed by the real confirmation choice.
     if (event.stepId === "9XrrAG") {
-        Common.state(player).disabled = false;
-        Progress.update({ player });
-        Common.save(player);
+        Journal.setEnabled(player, true);
         player.sendMessage("You have opted back into Adventure Paths.");
         event.handled = true;
         return;
     }
     if (event.stepId === "h9kLyj") {
-        Common.state(player).disabled = true;
-        Progress.sync(player);
-        Common.save(player);
+        Journal.setEnabled(player, false);
         return;
     }
     if (
