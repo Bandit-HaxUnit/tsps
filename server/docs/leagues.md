@@ -1105,6 +1105,7 @@ progress tracker.
 Of the relics, the item and teleport ones follow in their own PR (the plan in the relic effects
 PR); Overgrown's automatic harvest and replanting and Pocket Kingdom's hourly cycle are their own
 items.
+
 The records have no POH league hall to stand in: its trophy case, pedestals and scroll need
 the house's league hall, which this server doesn't build yet, so the scroll's options answer
 only where the loc exists.
