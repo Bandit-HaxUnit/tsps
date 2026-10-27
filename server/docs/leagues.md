@@ -199,8 +199,9 @@ These relics have their effects (`leaguerelics/*.LeagueRelics.js`, numbers in th
   below 3 rounded up, so 3, 4 and 5 all become 2 as the Wiki's notes say), ranged accuracy x2,
   on a landed ranged hit a 10% chance of an extra `PendingHit` at the same target with a roll of
   its own (no ammunition spent and no projectile shown for it, a second hitsplat: ours; the extra
-  never fires another, and is an ordinary shot: a special armed after the original shot stays
-  armed, `PendingHitConfig.ordinary`), 90% of each volley's
+  never fires another, and is an ordinary shot: it is rolled as if no special were armed, its
+  accuracy and damage included, and a special armed after the original shot stays armed with its
+  energy, `PendingHitConfig.ordinary`), 90% of each volley's
   shots kept (`ranged:ammo-saving`, so an Ava's device recovers its share of the rest, the
   Wiki's 98%), the same 90% for a ranged weapon's charge (`combat:consume-charge` while the
   player's combat method is ranged: the crystal bow, venator bow, blowpipe scales and
