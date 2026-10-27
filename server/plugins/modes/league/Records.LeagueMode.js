@@ -95,6 +95,13 @@ function logout({ player }) {
   savedPoints.delete(player);
 }
 
+/** `league:account-points { player } -> { leagues: { [type]: points }, total }`: what a main character earned in the leagues. */
+function accountPoints(request) {
+  const leagues = request?.player ? { ...(savedPoints.get(request.player) ?? {}) } : {};
+  request.leagues = leagues;
+  request.total = Object.values(leagues).reduce((sum, points) => sum + points, 0);
+}
+
 /** A bank placeholder keeps the id at amount 0: only a real item counts. */
 function banked(bank, item) {
   return (bank?.getItems?.() ?? []).some((entry) => entry?.getId?.() === item && entry.getAmount() > 0);
@@ -259,6 +266,7 @@ module.exports = function attach(api) {
   const { trophyItems, firstsDropdown } = buttons();
   api.onPlayerLogin(login);
   api.onPlayerLogout(logout);
+  api.onCustomEvent("league:account-points", accountPoints);
   api.onNpcInteraction(TUTOR, { "Claim-trophies": claimTrophies });
   api.onCustomEvent("npc-dialogue:action", dialogueAction);
   api.onObjectInteraction(SCROLL, { "League-statistics": scrollStatistics, "League-rankings": scrollRankings, "League-firsts": scrollFirsts });

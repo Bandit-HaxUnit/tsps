@@ -1,7 +1,8 @@
 // Run after `yarn build`: node --test tests/league-records.test.cjs
-// The main game's league records (docs/leagues.md "Records"): a main character's points come from
-// its league character's save, the Leagues Tutor's trophies open and hand out as captured, and the
-// accomplishment scroll's statistics, rankings and firsts open with the captured packets.
+// The main game's league records and shop (docs/leagues.md "Records", "Reward shop"): a main
+// character's points come from its league character's save, the Leagues Tutor's trophies open and
+// hand out as captured, the accomplishment scroll's statistics, rankings and firsts open with the
+// captured packets, and the Leagues Reward Shop sells the cache's rewards for the points left.
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { test, before } = require("node:test");
@@ -112,6 +113,7 @@ function character(name, { profile = "main", league = 0 } = {}) {
         case "sendInterface": return (group) => (player.setInterfaceId(group), sent.subs.push(["main", group]), sender);
         case "sendInterfaceRemoval": return () => (player.setInterfaceId(-1), sender);
         case "sendInterfaceFlagsRange": return (...args) => (sent.flags.push(args), sender);
+        case "sendInterfaceDisplayState": return (target, hide) => ((sent.hidden ??= []).push([target, hide]), sender);
         default: return () => sender;
       }
     },
@@ -353,4 +355,204 @@ test("::leaguerecords opens each screen", () => {
   }
   hooks["command:leaguerecords"]({ player: main, parts: ["leaguerecords"] });
   assert.match(main.sent.messages.at(-1), /::leaguerecords <trophies\|statistics\|rankings\|firsts>/);
+});
+
+// ---- The Leagues Reward Shop ----
+
+const REWARDS = 658;
+const REWARD_POINTS = 2613;
+const SELECTION = 10110;
+
+/** Every league's reward structs from the cache, in league order, as script 503 lists them. */
+function cacheRewards() {
+  const rows = [];
+  for (const [, league] of [...CacheDefinitions.getEnumValues(2670).entries()].sort(([a], [b]) => a - b)) {
+    const list = CacheDefinitions.getStructParams(Number(league)).get(87);
+    if (list === undefined) continue;
+    for (const [, struct] of [...CacheDefinitions.getEnumValues(Number(list)).entries()].sort(([a], [b]) => a - b)) {
+      const params = CacheDefinitions.getStructParams(Number(struct));
+      rows.push({ name: params.get(363), item: Number(params.get(150)), cost: Number(params.get(151)) });
+    }
+  }
+  return rows;
+}
+
+function rowWhere(predicate) {
+  const row = cacheRewards().findIndex(predicate);
+  assert.ok(row >= 0, "the cache has the reward");
+  return row;
+}
+
+function trade(player, option = "Trade") {
+  return npcOptions["Leagues Tutor"][option]({ player });
+}
+
+function pick(player, slot) {
+  return hooks[`button:${uid(REWARDS, 9)}`]({ player, slot });
+}
+
+function confirm(player) {
+  return hooks[`button:${uid(REWARDS, 22)}`]({ player });
+}
+
+test("the shop opens as captured, with the points left and one row per reward", () => {
+  const main = veteran("shopper", 5000);
+  assert.equal(main.sent.varps.get(REWARD_POINTS), 5000, "the points left go out at login");
+  assert.equal(trade(main), true);
+  const rows = cacheRewards();
+  assert.equal(rows.length, 65, "this cache lists 65 rewards, as rev 237 did");
+  assert.deepEqual(main.sent.scripts.at(-1), [MODAL_SIZE, [-1, -1]]);
+  assert.deepEqual(main.sent.subs.at(-1), ["main", REWARDS]);
+  assert.deepEqual(main.sent.flags.at(-1), [uid(REWARDS, 9), 0, 64, OP1], "captured 0-64 over 65 rewards (237/01098)");
+  assert.equal(main.sent.varps.get(REWARD_POINTS), 5000);
+  const stock = require("../plugins/modes/league/Rewards.LeagueMode")._test.stock();
+  assert.deepEqual(stock.map(({ name, item, cost }) => ({ name, item, cost })), rows, "the server's rows are the client's");
+});
+
+test("a row click selects it; Confirm buys it for its points", () => {
+  const banner = rowWhere((row) => row.name === "Twisted Banner");
+  const { item, cost } = cacheRewards()[banner];
+  const main = veteran("buyer", 5000);
+  trade(main);
+  pick(main, banner);
+  assert.equal(main.sent.varbits.get(SELECTION), banner, "captured: league_rewards_shopselection follows the click (227/02120)");
+  tasks.length = 0;
+  confirm(main);
+  assert.equal(main.getInterfaceId(), -1, "the shop closes at once");
+  runTasks();
+  assert.equal(main.getInventory().contains(item), true);
+  assert.equal(main.sent.varps.get(REWARD_POINTS), 5000 - cost, "the points left drop by its cost");
+  assert.deepEqual(main.getAttribute("league:reward-points-spent"), { 5: cost }, "spent from the league that earned it");
+  assert.deepEqual(main.sent.subs.at(-1), ["main", REWARDS], "and opens afresh a tick later: its loading layer has no other way out");
+  assert.deepEqual(main.sent.flags.at(-1), [uid(REWARDS, 9), 0, 64, OP1]);
+  assert.deepEqual(main.sent.hidden.slice(-2), [[uid(REWARDS, 5), true], [uid(REWARDS, 24), true]], "the dialog and loading layer are hidden again");
+  confirm(main);
+  assert.equal(main.getInventory().getAmount(item), 1, "Confirm needs a new selection");
+  // A relog through a real save keeps what was spent.
+  saves.set("buyer/main", PlayerSave.fromPlayer(main));
+  const again = character("buyer");
+  PlayerSave.fromPlayer(main).applyToPlayer(again);
+  hooks.onPlayerLogin({ player: again, username: "buyer", isNewAccount: false, profile: "main" });
+  assert.deepEqual(again.getAttribute("league:reward-points-spent"), { 5: cost });
+  assert.equal(again.sent.varps.get(REWARD_POINTS), 5000 - cost);
+});
+
+test("too few points, a full inventory, a bad row or a closed shop buy nothing", () => {
+  const rows = cacheRewards();
+  const dear = rowWhere((row) => row.cost > 5000);
+  const cheap = rowWhere((row) => row.cost <= 5000 && row.item >= 0);
+  const main = veteran("frugal", 5000);
+  trade(main);
+  pick(main, dear);
+  confirm(main);
+  runTasks();
+  assert.equal(main.getInventory().contains(rows[dear].item), false, "too few points");
+  pick(main, 999);
+  assert.equal(main.sent.varbits.get(SELECTION), dear, "a row past the stock is ignored");
+  for (let slot = 0; slot < 28; slot++) main.getInventory().adds(1511, 1);
+  pick(main, cheap);
+  confirm(main);
+  assert.equal(main.getInventory().contains(rows[cheap].item), false);
+  assert.equal(main.sent.messages.at(-1), "You don't have enough inventory space.");
+  assert.deepEqual(main.getAttribute("league:reward-points-spent") ?? {}, {}, "nothing was spent");
+
+  const closed = veteran("closed", 5000);
+  trade(closed);
+  pick(closed, cheap);
+  closed.getPacketSender().sendInterfaceRemoval();
+  confirm(closed);
+  assert.equal(closed.getInventory().contains(rows[cheap].item), false, "no purchase with the shop closed");
+});
+
+test("a set gives every piece and needs a slot for each; a quantity reward gives them all", () => {
+  const setRow = rowWhere((row) => row.name === "Leagues V Relic Hunter (T1)");
+  const set = [...CacheDefinitions.getEnumValues(Number(CacheDefinitions.getStructParams(
+    Number(require("../plugins/modes/league/Rewards.LeagueMode")._test.stock()[setRow].struct)).get(915))).values()].map(Number);
+  assert.equal(set.length, 4, "boots, hat, robeskirt and top");
+  const cost = cacheRewards()[setRow].cost;
+
+  const tight = veteran("tight", cost);
+  for (let slot = 0; slot < 25; slot++) tight.getInventory().adds(1511, 1);
+  trade(tight);
+  pick(tight, setRow);
+  confirm(tight);
+  runTasks();
+  assert.equal(tight.sent.messages.at(-1), "You don't have enough inventory space.", "three free slots can't take four pieces");
+  assert.equal(set.some((item) => tight.getInventory().contains(item)), false);
+
+  const dressed = veteran("dressed", cost);
+  trade(dressed);
+  pick(dressed, setRow);
+  confirm(dressed);
+  runTasks();
+  for (const item of set) assert.equal(dressed.getInventory().contains(item), true, `piece ${item}`);
+  assert.equal(dressed.sent.varps.get(REWARD_POINTS), 0);
+
+  const kits = rowWhere((row) => row.name === "Echo Ahrim's Pieces Orn Kit");
+  const kit = cacheRewards()[kits];
+  const tailor = veteran("tailor", kit.cost);
+  trade(tailor);
+  pick(tailor, kits);
+  confirm(tailor);
+  runTasks();
+  assert.equal(tailor.getInventory().getAmount(kit.item), 4, "param 2068: four kits");
+});
+
+test("closing the shop forgets the selection", () => {
+  const cheap = rowWhere((row) => row.cost <= 5000 && row.item >= 0);
+  const main = veteran("forgetful", 5000);
+  trade(main);
+  pick(main, cheap);
+  main.getPacketSender().sendInterfaceRemoval();
+  for (const handler of custom["interface:closed"] ?? []) handler({ player: main, interfaceId: REWARDS });
+  trade(main);
+  confirm(main);
+  assert.equal(main.getInventory().contains(cacheRewards()[cheap].item), false, "a Confirm after closing buys nothing");
+});
+
+test("on a league world the shop opens to browse and sells nothing", () => {
+  const cheap = rowWhere((row) => row.cost <= 5000 && row.item >= 0);
+  const league = character("browser", { profile: "league", league: 5 });
+  hooks["command:leaguetask"]({ player: league, parts: ["leaguetask", "task-browser", "5000"] });
+  worldLeague = 5;
+  try {
+    assert.equal(trade(league, "Rewards"), true, "the league world's tutor has Rewards");
+    assert.deepEqual(league.sent.subs.at(-1), ["main", REWARDS]);
+    assert.equal(league.sent.varps.has(REWARD_POINTS), false, "live sends no reward points on a league world");
+    pick(league, cheap);
+    confirm(league);
+    assert.equal(league.getInventory().contains(cacheRewards()[cheap].item), false);
+    assert.equal(league.sent.messages.at(-1), "You can purchase these rewards on a Non-Leagues world.", "the client's own line (script 503)");
+  } finally {
+    worldLeague = 0;
+  }
+});
+
+test("the Tutor's open_shop opens the shop a tick later, behind the Bank PIN", () => {
+  const main = veteran("pinned", 0);
+  tasks.length = 0;
+  const action = { player: main, action: "open_shop", target: "Leagues Reward Shop" };
+  for (const handler of custom["npc-dialogue:action"]) handler(action);
+  assert.equal(action.handled, true);
+  assert.equal(action.end, true);
+  runTasks();
+  assert.deepEqual(main.sent.subs.at(-1), ["main", REWARDS]);
+
+  let resume = null;
+  const lock = (request) => {
+    if (request.feature !== "leagues-shop") return;
+    request.locked = true;
+    resume = request.resume;
+  };
+  custom["bank-pin:guard"] = (custom["bank-pin:guard"] ?? []).concat(lock);
+  try {
+    const locked = veteran("locked", 0);
+    trade(locked);
+    assert.equal(locked.sent.subs.some(([, group]) => group === REWARDS), false, "a locked PIN keeps the shop shut");
+    custom["bank-pin:guard"] = custom["bank-pin:guard"].filter((handler) => handler !== lock);
+    resume();
+    assert.deepEqual(locked.sent.subs.at(-1), ["main", REWARDS], "the right PIN opens it");
+  } finally {
+    custom["bank-pin:guard"] = (custom["bank-pin:guard"] ?? []).filter((handler) => handler !== lock);
+  }
 });

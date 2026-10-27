@@ -106,6 +106,26 @@
     "rankings": { "group": 445 },
     "firsts": { "group": 676, "script": 3698, "components": [1, 9, 10, 11, 16, 17, 18, 12, 7], "dropdown": 22 }
   },
+  "rewards": {
+    "_comment": "The Leagues Reward Shop (league_rewards 658), as captured (osrs-captures 227/00100, 02120, 237/01098; league worlds only). It opens as the main modal after script 2524 (-1, -1) with if_setevents 658:9 OP1 over one slot per reward (0-40 with rev 227's 41, 0-64 with rev 237's 65; this cache also lists 65). A row click sets league_rewards_shopselection (10110) to the row. The client draws the stock from the cache (script 503): each league struct's param 87 lists its reward structs, whose params are the name (363), the item (150) and the cost (151), and a set's items in the enum param 915 names; rows run across the leagues in order. It shows the points left from varp 2613 (script 3290) and redraws when it changes. Confirm (658:22) buys the selected row. On a league world whose struct sets param 2053 the client hides Confirm ('You can purchase these rewards on a Non-Leagues world.'). The Wiki (Leagues) pools the points of every league and sells every league's rewards. The Bank PIN guards the shop (bank-pin.json guardShops 1450 'leagues-shop').",
+    "modalSize": [-1, -1],
+    "group": 658,
+    "rows": 9,
+    "confirm": 22,
+    "_hiddenLayers": "The confirm dialog (5) and the loading layer Confirm shows (24), hidden in the cache; hidden again when the shop reopens after a Confirm.",
+    "hiddenLayers": [5, 24],
+    "selectionVarbit": 10110,
+    "pointsVarp": 2613,
+    "_params": "A reward struct's name, item and cost, as script 503 reads them. A set (Relic Hunter outfits, six ornament kits) lists every item it gives in the enum param 915 names; param 2068 is how many of the item a set-less reward gives (4 Echo Ahrim's kits, 3 Echo Virtus kits).",
+    "params": { "rewards": 87, "name": 363, "item": 150, "cost": 151, "set": 915, "quantity": 2068 },
+    "messages": {
+      "leagueWorld": "You can purchase these rewards on a Non-Leagues world.",
+      "noSpace": "You don't have enough inventory space."
+    },
+    "shopTarget": "Leagues Reward Shop",
+    "pinFeature": "leagues-shop",
+    "npcOptions": ["Trade", "Rewards"]
+  },
   "leagues": {
     "1": {
       "key": "twisted",

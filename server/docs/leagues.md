@@ -79,6 +79,7 @@ colours and screens here but no relic, area or task catalogs yet.
 | `league:award-task` | `{ player, id, points, name } -> { awarded }` | LeaguePoints (once per id) |
 | `league:points` | `{ player } -> { points, tasks }` | LeaguePoints |
 | `league:saved-points` | `{ save } -> { points, tasks }` (an offline league character's save) | LeaguePoints |
+| `league:account-points` | `{ player } -> { leagues, total }` (a main character's league points, by type) | LeagueMode (Records) |
 | `league:completed-tasks` | `{ player } -> { ids }` | LeaguePoints |
 | `league:complete-task` | `{ player, id } -> { found, completed }` (a catalog task, by id) | LeagueTasks |
 | `league:points-changed` | `{ player, points, previous, tasks, previousTasks }` | LeagueMode (journal), LeagueTasks, LeagueRelics, LeagueAreaUnlocks listen |
@@ -301,6 +302,34 @@ in this League.` WelcomeScreen emits `welcome-screen:shown`.
 
 On a league world none of this applies: the Tutor's Claim-trophies and the scroll's options fall
 through to their defaults. Bots and agent players never read a league save.
+
+## Reward shop
+
+`league/Rewards.LeagueMode.js`: the Leagues Reward Shop (`league_rewards`, 658), as captured on
+league worlds (osrs-captures 227/00100, 02120, 237/01098).
+
+- **Stock:** the cache's. Each league struct lists its reward structs in param 87, with the name
+  (363), item (150) and cost (151). A set (the Relic Hunter outfits, six ornament kits) lists every
+  item it gives in the enum param 915 names; param 2068 is how many of the item a set-less reward
+  gives. The client draws every league's rewards, rows running across the leagues in order; this
+  cache has 65, as rev 237 did.
+- **Opening:** the Leagues Tutor's Trade (main game) and Rewards (league world) options, the
+  conversations' open_shop "Leagues Reward Shop", and `::leagueshop`. It sends script 2524 (-1, -1),
+  the modal, and OP1 on 658:9 over one slot per reward. The Bank PIN guards it first.
+- **Buying:** a row click sets `league_rewards_shopselection` (10110) to the row. Confirm (658:22)
+  sells the selected reward in the main game, if the points left cover it and the inventory has a
+  slot for each piece. The points left are each league's points (Records) less what the character
+  spent of them (`league:reward-points-spent`, by league type), sent as varp 2613. Confirm's click
+  shows a loading layer (658:24) no script hides, so the shop closes and opens afresh a tick later.
+  Closing the shop forgets the selection.
+- **League worlds:** the shop opens to browse. Live sends no points there, and the client hides
+  Confirm where the league struct's param 2053 says so. A Confirm that reaches the server gets the
+  client's own line, "You can purchase these rewards on a Non-Leagues world."
+
+The Wiki pools every league's points. This server knows one league per account, the one its league
+character played. On this server's NPC spawns only `::leagueshop` reaches the shop: the one Leagues
+Tutor spawned (315, Lumbridge) has neither Trade nor Rewards, and `npc-interactions.json` binds its
+Talk-to to a custom shop, so its conversation never runs.
 
 ## Relics
 
@@ -734,6 +763,7 @@ of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's
 - `::leaguetasks <search>` - find a league's tasks by name or id, with tier, points and whether done.
 - `::relic [tier 1-8] [slot 1-3]` - list your relics, or choose one through the usual checks.
 - `::leaguerecords <trophies|statistics|rankings|firsts>` - open a main-game record screen.
+- `::leagueshop` - open the Leagues Reward Shop.
 - `::mastery` - your combat masteries, points and challenges; `::mastery <melee|ranged|magic>
   <tier 1-6>` unlocks one through the usual checks; `::mastery point <1-10>` awards a challenge's
   point through the real path (the only way to the Echo boss challenges here).
@@ -744,10 +774,14 @@ of LeaguePoints' `league:tasks` (id -> points); the task's points are its tier's
 
 Most task triggers (see Tasks), the Echo bosses (and so three of the mastery points), the tier passives left out
 above (clue-step progress and farming ticks), the boosted sources their own plugins have yet to
-ask about, reward shops, and Shattered
+ask about, Shattered
 Relics' own panels. Each is its own item on the
 progress tracker.
 
 The records have no POH league hall to stand in: its trophy case, pedestals and scroll need
 the house's league hall, which this server doesn't build yet, so the scroll's options answer
 only where the loc exists.
+
+The cache's "League Skill Cape Shop" (652) is not a shop: its only script (3201) creates 22 tiny
+cape items and prints "Loading: <cape>" for each, a model preloader. Nothing sells through it, and
+the Wiki names no such shop.
