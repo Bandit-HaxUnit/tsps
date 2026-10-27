@@ -26,6 +26,7 @@ const registered = { profiles: [], ammoHandlers: [] };
 const realRandom = Math.random;
 let realCycle;
 let cycle = 1000;
+let pluginApi;
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
@@ -63,6 +64,7 @@ before(async () => {
     registerMagicDefenseModifier: modifier("magicDefence"),
     registerWeaponProfile: (profile) => registered.profiles.push(profile),
     registerRangedAmmoHandler: (handler) => registered.ammoHandlers.push(handler),
+    registerCombatSpecial: (definition) => core.CombatSpecial.register(definition),
     onInterfaceActionButton: (ids, handler) => {
       for (const id of [].concat(ids)) on(`button:${id}`)(handler);
     },
@@ -74,6 +76,7 @@ before(async () => {
   require("../plugins/modes/LeagueMode.plugin").register(api);
   require("../plugins/modes/LeaguePoints.plugin").register(api);
   require("../plugins/modes/LeagueRelics.plugin").register(api);
+  pluginApi = api;
 });
 
 afterEach(() => {
@@ -249,6 +252,51 @@ test("Archer's Embrace: ranged speed halved, accuracy doubled, an extra projecti
     hooks.onCombatHitResolved({ attacker: player, target: who.main, hit });
     assert.equal(queued.length, 1, `${player.getUsername()} fires no extra`);
   }
+});
+
+test("Archer's Embrace: the extra projectile is an ordinary shot: a special armed before its impact changes neither its accuracy nor its damage", () => {
+  // The real specials: the toxic blowpipe's (more damage) and the Webweaver bow's (four weaker hits).
+  require("../plugins/items/ToxicBlowpipe.plugin").register(pluginApi);
+  require("../plugins/combat/specials/ToxicBlowpipe.SpecialAttack")(pluginApi);
+  require("../plugins/combat/specials/WebweaverBow.SpecialAttack")(pluginApi);
+  const who = cases(ARCHERS);
+  const archer = who.relic;
+  const target = who.main;
+  const queued = [];
+  target.getCombat().getHitQueue().addPendingHit = (hit) => queued.push(hit);
+  const shot = (hit) => [hit.isAccurate(), hit.getHits().length, hit.getTotalDamage(), hit.getHitDelays()];
+  archer.getSkillManager().setMaxLevels(Skill.RANGED, 99, false).setCurrentLevels(Skill.RANGED, 99, false);
+  for (const weapon of [core.ItemIdentifiers.TOXIC_BLOWPIPE, core.ItemIdentifiers.WEBWEAVER_BOW]) {
+    wield(archer, weapon);
+    // A loaded blowpipe: rune darts and scales (its own item state).
+    if (weapon === core.ItemIdentifiers.TOXIC_BLOWPIPE) {
+      archer.getEquipment().get(core.Equipment.WEAPON_SLOT).setMetaValue("toxic-blowpipe", { scales: 1000, dartId: core.ItemIdentifiers.RUNE_DART, dartAmount: 1000 });
+    }
+    archer.setSpecialActivated(false);
+    const method = core.CombatFactory.getMethod(archer);
+    const special = core.CombatSpecial.getForWeaponId(weapon);
+    assert.ok(special, `the ${weapon} special is registered`);
+    for (const roll of [0.02, 0.35, 0.7, 0.999]) {
+      // The control: an ordinary shot with nothing armed.
+      archer.setSpecialActivated(false);
+      Math.random = () => roll;
+      const control = new core.PendingHit(archer, target, method, { delay: 0 });
+      // The special is armed after the original shot left; the bonus procs (a 5) and rolls the same.
+      archer.setCombatSpecial(special);
+      archer.setSpecialActivated(true);
+      archer.setSpecialPercentage(100);
+      let first = true;
+      Math.random = () => (first ? ((first = false), 0.05) : roll);
+      queued.length = 0;
+      hooks.onCombatHitResolved({ attacker: archer, target, hit: fakeHit({ getCombatType: () => core.CombatType.RANGED, getCombatMethod: () => method }) });
+      assert.equal(queued.length, 1, `the bonus fires (${weapon}, roll ${roll})`);
+      assert.deepEqual(shot(queued[0]), shot(control), `the bonus is the ordinary shot (${weapon}, roll ${roll})`);
+      if (roll === 0.999) assert.ok(control.getTotalDamage() > 0 || !control.isAccurate(), "a real hit to compare");
+      assert.equal(archer.isSpecialActivated(), true, "the special stays armed for the next attack");
+      assert.equal(archer.getSpecialPercentage(), 100, "with its energy");
+    }
+  }
+  archer.setSpecialActivated(false);
 });
 
 test("Brawler's Resolve: melee speed halved, +50% accuracy and defences, double damage, charges saved, status immunity", () => {
