@@ -1,8 +1,9 @@
 /**
  * The relic catalog the client draws. The cache's relic interface reads its league struct's tier
  * enum, tier structs and relic structs, but the cache only carries the current league's, so this
- * sends a league's own as structOverrides / enumOverrides (GamemodeContentStore) at login and
- * before the interface opens. Icons are the cache's current relics', per tier and slot.
+ * answers LeagueMode's `league:content-rows` with a league's own structs and enums (sent as
+ * structOverrides / enumOverrides at login and before the interface opens). A league the cache
+ * carries (data `fromCache`) needs none. Icons are the cache's current relics', per tier and slot.
  */
 const Common = require("./Common.LeagueRelics");
 
@@ -59,8 +60,18 @@ function datasets(type) {
   ];
 }
 
-function send(player, type) {
-  player.getPacketSender().sendContentData("server", datasets(type));
+/** `league:content-rows` { league, structs, enums }: this league's rows, unless the cache already has them. */
+function content(query) {
+  const type = query?.league;
+  if (!Common.catalog(type) || Common.catalog(type).fromCache) return;
+  query.structs.push(...structRows(type));
+  query.enums.push(...enumRows(type));
 }
 
-module.exports = { datasets, structRows, enumRows, send };
+module.exports = function attach(api) {
+  api.onCustomEvent("league:content-rows", content);
+};
+
+module.exports.datasets = datasets;
+module.exports.structRows = structRows;
+module.exports.enumRows = enumRows;

@@ -117,7 +117,7 @@ test("an award credits once, raises the captured varbits and varps, and shows th
 test("the total is the sum of the saved tasks, whatever a counter might have said", () => {
   const league = character("reloaded", "league");
   league.setAttribute("league:tasks", { a: 10, b: 40, c: 80 });
-  custom["league:login"][0]({ player: league, league: 4 });
+  for (const login of custom["league:login"]) login({ player: league, league: 4 });
   assert.deepEqual([league.varps.get(2614), league.varbits.get(10046)], [130, 3]);
   assert.deepEqual(points(league), { player: league, points: 130, tasks: 3 });
 });

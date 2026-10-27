@@ -22,6 +22,8 @@ let normalIds = null;
 /** Superiors whose XP the task's kill gave (Tasks.Slayer.js runs before npcKilled). */
 const onTaskKills = new WeakSet();
 const UNIQUE_TABLE_SIZE = 16;
+/** The source the unique rolls name on "drops:chance" { player, source, rules }. */
+const UNIQUES_SOURCE = "superior-slayer-monster";
 const superiorNames = new Set(Object.values(DATA.superiors).map((name) => name.toLowerCase()));
 
 function init(pluginApi) {
@@ -84,8 +86,33 @@ function isSuperior(npc) {
   return superiorNames.has(npcName(npc).toLowerCase());
 }
 
-function enabled(player) {
-  return Tasks.hasUnlockBit(player, DATA.unlockBit) && State.varbit(player, "slayer_toggleoff_superiormobs") !== 1;
+/**
+ * Whether and how often a task kill brings its superior: Bigger and Badder's bit and the data's
+ * 1 in 200, which plugins change on "slayer:superior-spawn" { player, npc, unlocked, chance }
+ * (a league's tier passive unlocks it and makes them 1 in 50); the toggle-off always holds.
+ */
+function spawnRule(player, npc) {
+  const rule = { player, npc, unlocked: Tasks.hasUnlockBit(player, DATA.unlockBit), chance: DATA.chance };
+  api.emitCustomEvent("slayer:superior-spawn", rule);
+  if (State.varbit(player, "slayer_toggleoff_superiormobs") === 1) rule.unlocked = false;
+  return rule;
+}
+
+/** Unique table -> its item names, for the chance rules. */
+const tableItemNames = new WeakMap();
+
+function tableItems(table) {
+  if (!tableItemNames.has(table)) {
+    tableItemNames.set(table, Object.keys(table).filter((name) => name !== "NOTHING")
+      .map((name) => core.ItemDefinition.forId(core.ItemIdentifiers[name])?.getName() ?? name));
+  }
+  return tableItemNames.get(table);
+}
+
+/** How many times likelier a unique table is: the product of the rules matching any of its items. */
+function tableBoost(table, rules) {
+  const names = tableItems(table);
+  return rules.reduce((boost, rule) => (names.some((name) => rule.pattern.test(name)) ? boost * rule.multiplier : boost), 1);
 }
 
 /**
@@ -102,9 +129,11 @@ function taskKillEvent(event) {
 }
 
 function taskKill({ player, npc }, random = Math.random) {
-  if (isSuperior(npc) || !enabled(player)) return null;
+  if (isSuperior(npc)) return null;
+  const rule = spawnRule(player, npc);
+  if (!rule.unlocked) return null;
   const id = resolve().get(npcName(npc).toLowerCase());
-  if (id == null || Math.floor(random() * DATA.chance) !== 0) return null;
+  if (id == null || Math.floor(random() * rule.chance) !== 0) return null;
   const at = npc.getLocation();
   const superior = api.spawnNpc({ id, x: at.getX(), y: at.getY(), z: at.getZ(), owner: player });
   if (!superior) return null;
@@ -128,12 +157,13 @@ function uniqueChance(npc) {
 
 /**
  * The superior unique tables, each rolled once; `boost` multiplies their chance (Mortimer's
- * superior unique modifier). Returns the item ids won.
+ * superior unique modifier), as do the chance `rules` matching a table's items ("drops:chance",
+ * a league's boosted drops). Returns the item ids won.
  */
-function rollUniques(npc, boost = 1, random = Math.random) {
+function rollUniques(npc, boost = 1, random = Math.random, rules = []) {
   const won = [];
-  const chance = boost / uniqueChance(npc);
   for (const table of DATA.uniques) {
+    const chance = (boost * tableBoost(table, rules)) / uniqueChance(npc);
     if (random() >= chance) continue;
     let roll = Math.floor(random() * UNIQUE_TABLE_SIZE);
     for (const [name, weight] of Object.entries(table)) {
@@ -150,7 +180,9 @@ function rollUniques(npc, boost = 1, random = Math.random) {
 function addUniques({ player, npc, drops }) {
   if (!player || !npc || !Array.isArray(drops) || !isSuperior(npc)) return;
   const boost = Tasks.killBoost(player, npc, Data.MODIFIER.SUPERIOR_UNIQUES);
-  for (const itemId of rollUniques(npc, boost)) drops.push({ itemId, amount: 1, noted: false });
+  const rules = [];
+  api.emitCustomEvent("drops:chance", { player, source: UNIQUES_SOURCE, rules });
+  for (const itemId of rollUniques(npc, boost, Math.random, rules)) drops.push({ itemId, amount: 1, noted: false });
 }
 
 /** "slayer:is-superior" { npc, superior }: whether an NPC is a superior Slayer monster. */

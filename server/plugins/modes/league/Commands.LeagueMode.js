@@ -1,7 +1,8 @@
 /**
  * Developer commands. `::league [player]` shows a character's league and points.
- * `::leaguetask <id> <points> [name]` awards a named task through the real award path
- * (LeaguePoints), the only source of points until the task catalog (LeagueTasks) exists.
+ * `::leaguetask <id> [points] [name]` completes a catalog task by its id (LeagueTasks answers
+ * `league:complete-task`), or awards an ad-hoc task with the points given, through the real award
+ * path (LeaguePoints).
  */
 const Common = require("./Common.LeagueMode");
 
@@ -30,16 +31,26 @@ function leagueCommand({ player, parts }) {
 
 function leagueTaskCommand({ player, parts }) {
   const id = String(parts[1] ?? "").trim();
-  const points = Number(parts[2]);
-  if (!id || !Number.isInteger(points) || points < 0) {
+  if (!id) {
     player.sendMessage(Common.message("taskUsage"));
     return true;
   }
-  const name = parts.slice(3).join(" ").trim() || id;
   if (Common.leagueOf(player) === null) {
     player.sendMessage(Common.message("notLeague", { name: player.getUsername() }));
     return true;
   }
+  const catalogTask = { player, id, found: false, completed: false };
+  Common.api.emitCustomEvent("league:complete-task", catalogTask);
+  if (catalogTask.found) {
+    player.sendMessage(Common.message(catalogTask.completed ? "taskCompleted" : "taskRepeat", { id, name: player.getUsername() }));
+    return true;
+  }
+  const points = Number(parts[2]);
+  if (!Number.isInteger(points) || points < 0) {
+    player.sendMessage(Common.message("taskUsage"));
+    return true;
+  }
+  const name = parts.slice(3).join(" ").trim() || id;
   const award = { player, id, points, name, awarded: false };
   Common.api.emitCustomEvent("league:award-task", award);
   player.sendMessage(Common.message(award.awarded ? "taskAwarded" : "taskRepeat", { id, points, name: player.getUsername() }));
@@ -49,5 +60,5 @@ function leagueTaskCommand({ player, parts }) {
 module.exports = function attach(api) {
   const { PlayerRights } = api.core;
   api.registerCommand("league", leagueCommand, PlayerRights.DEVELOPER, "Show a character's league and League Points: ::league [player]");
-  api.registerCommand("leaguetask", leagueTaskCommand, PlayerRights.DEVELOPER, "Award yourself a league task: ::leaguetask <id> <points> [name]");
+  api.registerCommand("leaguetask", leagueTaskCommand, PlayerRights.DEVELOPER, "Complete a league task by id, or award an ad-hoc one: ::leaguetask <id> [points] [name]");
 };
