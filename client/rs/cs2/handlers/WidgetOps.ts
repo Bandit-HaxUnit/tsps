@@ -1779,6 +1779,26 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         }
     });
 
+    // Opcode 2124: CC_SETTRANSBOT on a component by uid (the LMS fog: script 1346).
+    handlers.set(Opcodes.IF_SETTRANSBOT, (ctx) => {
+        const w = getWidgetFromStack(ctx);
+        const transBot = ctx.intStack[--ctx.intStackSize];
+        if (w && w.transparencyBot !== transBot) {
+            w.transparencyBot = transBot;
+            invalidateWidgetRender(ctx, w);
+        }
+    });
+
+    // Opcode 2125: CC_SETFILLMODE on a component by uid (the LMS fog: script 386).
+    handlers.set(Opcodes.IF_SETFILLMODE, (ctx) => {
+        const w = getWidgetFromStack(ctx);
+        const mode = ctx.intStack[--ctx.intStackSize];
+        if (w && (mode === 0 || mode === 1 || mode === 2) && w.fillMode !== mode) {
+            w.fillMode = mode;
+            invalidateWidgetRender(ctx, w);
+        }
+    });
+
     // === Transparency ===
     handlers.set(Opcodes.CC_SETTRANS, (ctx, intOp) => {
         const trans = ctx.intStack[--ctx.intStackSize];
