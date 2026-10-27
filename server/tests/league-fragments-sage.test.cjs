@@ -38,6 +38,7 @@ const completedQuests = new Set();
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
   core = PluginManager.getCoreApi();
+  core.RegionManager.init();
   GameConstants.setWorldProfile("league");
   const lists = {};
   const on = (name) => (handler) => {
@@ -114,16 +115,23 @@ function shattered(name) {
 }
 
 function equip(player, ...ids) {
+  const previousLocation = player.getLocation();
+  player.setLocation(new core.Location(2809, 3440, 0)); // Catherby's bank, as fragment swapping requires.
   for (const id of ids) emit("league:grant-fragment", { player, id });
   player.setInterfaceId(FRAGMENTS);
   for (const id of ids) hooks[`button:${uid(FRAGMENTS, 18)}`]({ player, buttonId: uid(FRAGMENTS, 18), slot: 9 * (id - 1), opId: 2 });
   player.setInterfaceId(-1);
+  player.setLocation(previousLocation);
 }
 
 function unequipAll(player) {
+  const previousLocation = player.getLocation();
+  player.setLocation(new core.Location(2809, 3440, 0));
   player.setInterfaceId(FRAGMENTS);
   hooks[`button:${uid(FRAGMENTS, 16)}`]({ player, buttonId: uid(FRAGMENTS, 16) });
   player.setInterfaceId(-1);
+  player.setLocation(previousLocation);
+  assert.ok(player.getAttribute("league:fragment-slots").every((id) => id === 0), "native Unequip all cleared the loadout");
 }
 
 /** Clicks an item option through the item-action handlers the units registered (by cache name); false when none took it. */
