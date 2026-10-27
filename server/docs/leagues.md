@@ -1,11 +1,12 @@
 # Leagues
 
 The Leagues game mode (https://oldschool.runescape.wiki/w/Leagues) on this server: a league
-character per account, League Points, relic tiers and relics, area unlocks. Plugins:
-`plugins/modes/LeagueMode.plugin.js` (the profile, its league, XP rate, the tiers' passives, journal tab, the league
-content the client reads), `LeaguePoints.plugin.js` (points), `LeagueRelics.plugin.js` (tiers and
-relics) and `LeagueAreaUnlocks.plugin.js` (areas); data in `plugins/modes/data/leagues.json`,
-`league-relics.json`, `league-areas.json` and `league-boosted-drops.json`.
+character per account, League Points, relic tiers and relics, area unlocks and combat masteries.
+Plugins: `plugins/modes/LeagueMode.plugin.js` (the profile, its league, XP rate, the tiers' passives, journal tab,
+the league content the client reads), `LeaguePoints.plugin.js` (points), `LeagueRelics.plugin.js`
+(tiers and relics), `LeagueAreaUnlocks.plugin.js` (areas) and `LeagueCombatMasteries.plugin.js`
+(Raging Echoes' combat masteries); data in `plugins/modes/data/leagues.json`, `league-relics.json`,
+`league-areas.json`, `league-boosted-drops.json` and `league-combat-masteries.json`.
 
 ## The league character
 
@@ -71,6 +72,12 @@ Agility 10 (Wiki). A main character never has a league, whatever its attributes 
 | `league:points` | `{ player } -> { points, tasks }` | LeaguePoints |
 | `league:points-changed` | `{ player, points, previous, tasks, previousTasks }` | LeagueMode (journal), LeagueRelics, LeagueAreaUnlocks listen |
 | `league:has-relic` | `{ player, relic } -> { active }` | LeagueRelics |
+| `league:masteries` | `{ player } -> { league, masteries: { melee, ranged, magic }, passiveTier, points: { earned, spent, available }, challenges }` | LeagueCombatMasteries |
+| `league:mastery-point` | `{ player, challenge, earned }` after a Combat Mastery point | - |
+| `league:mastery-unlocked` | `{ player, style, tier, key, passiveUnlocked }` after an unlock | - |
+| `stats:heal` | `{ player, previous, amount, hitpoints }` before any heal (core); `amount` may change | LeagueCombatMasteries |
+| `skills:restore` | `{ player, skill, amount, max }` before a stat restore or boost (core); `amount` may change | LeagueCombatMasteries |
+| `combat:hit-rolled` | `{ attacker, target, combatType, damage, minimum, maximum }` after a hit's damage roll, before defences (core); `damage` may change | LeagueCombatMasteries |
 | `league:relics` | `{ player } -> { league, chosen }` (tier index -> slot) | LeagueRelics |
 | `league:send-content` | `{ player }`: send every plugin's struct/enum overrides again | LeagueMode |
 | `league:content-rows` | `{ player, league, structs: [], enums: [] }`: plugins push their rows | LeagueRelics, LeagueAreaUnlocks answer |
@@ -293,6 +300,83 @@ sent `league_tutorial_completed` 10037 = 12 (finished) at login until it exists.
   new league character also skips Tutorial Island on live; this server sends every new account
   there.
 
+## Combat masteries (Raging Echoes)
+
+`LeagueCombatMasteries.plugin.js`, data `plugins/modes/data/league-combat-masteries.json`
+(https://oldschool.runescape.wiki/w/Raging_Echoes_League/Combat_Masteries): three styles of six
+tiers, each needing the previous tier of its style (`requires` in the data), paid with Combat
+Mastery points; the first time any style reaches a tier, a passive for every style comes with it.
+Only a Raging Echoes character (league type 5) has any of it; a Trailblazer Reloaded or main
+character sees nothing and earns nothing. Tiers live in `league:masteries` ({ melee, ranged,
+magic }), points in `league:mastery-points` (challenge key -> 1) and the counted challenges'
+progress in `league:mastery-progress`.
+
+- **Points.** The Wiki's ten challenges, a point each in any order: a giant (the Giant page's
+  race, `giants` in the data), ten monsters of combat level 100+, Scurrius with no other
+  damager, a monster with a Slayer requirement of 55+, TzTok-Jad, combat level 100 (checked on
+  every level-up and at login), one, two and three distinct Echo bosses, and TzKal-Zuk. Kills are
+  judged on `onNpcDeath` by the NPC's name, combat level or Slayer level. As captured
+  (227/00075) a point flips its `league_combat_mastery_point_unlock_N` varbit (11585-11594),
+  raises `points_earned` (11584) and `points_to_spend` (11583) and shows the green game message.
+  **No Echo boss exists in this cache**, so those three points come only from `::mastery point`;
+  the data marks them `_missing`.
+- **The interface, as captured.** The league side panel's mastery button (656:32) opens
+  `league_combat_mastery` (311) as the main modal with `if_setevents` on its clickzones (311:36,
+  0-18), menu frame (311:78, 10-18) and style tabs (311:73, 0-26), then runs 3186 on the panel's
+  highlight (656:31). A tab click sets `league_combat_mastery_tab` (11596, the slot / 9); a
+  clickzone click sets `league_combat_mastery_last_viewed` (11595) to its slot (Melee 0-5, Ranged
+  6-11, Magic 12-17; 18 is nothing) and runs 7674 with 17 components, the node's struct (the
+  cache's: Melee 1165-1170, Ranged 1171-1176, Magic 1159-1164) and its tier's passive struct
+  (1153, 1154, 1156, 1155, 1157, 1158, the order the captured views used). Confirm (311:71)
+  unlocks the viewed node: the style's progress varbit (11580-11582), `points_to_spend`,
+  animation 8524, `league_5_mastery_unlock_spot` (3045) at height 92, the modal closed, sounds
+  4215/4211/4213/4212 at 8/44/80/104. Close (311:76) closes it. Clicks count only after the button
+  opened it. Login also sends `league_combat_mastery_tutorial` (17553) = 5 as both recordings
+  did. The cache carries this league's masteries, so nothing is sent as struct overrides; script
+  2524 before the open is not sent, as for the relic interface.
+- **The checks.** A Raging Echoes character, a real tier, not yet unlocked, the previous tier of
+  the style, a point to spend. Refusals are game messages of ours. Unlocks are permanent.
+- **The masteries** (the Wiki's numbers in the data; `leaguemasteries/Melee|Ranged|Magic|AttackRate.LeagueCombatMasteries.js`):
+  - The roll effects (Melee I, an echo's roll, Ranged I, Magic I and IV) act on the core's new
+    `combat:hit-rolled`: the undefended roll and the range it came from, before protection
+    prayers, shields and incoming-damage modifiers reduce it, which then apply to the result.
+  - Melee I: a quarter of landed hits roll again and keep the higher. Melee II: a tenth of melee
+    attacks on an NPC queue an echo a tick later, an ordinary melee hit of its own accuracy
+    rolled from half the max hit (a special armed since the swing neither shapes it nor is spent
+    on it, and stays armed), queued as any hit (its guards and XP), with the captured echo
+    projectile (3186/3187, alternating). Melee IV:
+    a twentieth of landed hits heal 40% of their damage. Melee VI: echoes on a fifth, and an
+    echo may echo in turn, up to eight in a row.
+  - Ranged I: a landed roll below 30% of the max hit (with Ranged II's bonus on it) becomes 30%.
+    Ranged II: each attack after the first raises the max hit another 5%, back to nothing after
+    +20% (counted on the attack's first accuracy roll of a cycle, which comes before the max hit
+    is asked for a normal attack and for a special alike). Ranged IV:
+    every fifth landed hit heals 5 a hitsplat. Ranged VI: a ranged roll against an NPC is forced
+    accurate (an immune target still takes nothing).
+  - Magic I: a landed roll above 90% of its max hit (the target's own: a barrage's secondary
+    targets have theirs) deals 50% more. Magic II: +5% max hit for
+    every idle tick between two magic attacks, up to +40% (our reading: the gap less the attack's
+    own tick, noted on the cast's first accuracy roll; the first cast since login takes the cap;
+    the Wiki does not say). Magic IV: a roll above 90% heals 10% of the damage when it
+    lands. Magic VI: +1% max hit for every 100 hitpoints the target has, up to +10%, added to
+    Magic II's, and a target with fewer hitpoints than the max hit (before Magic I, Wiki) takes
+    the max hit. The max-hit changes ride the core's `combat:magic-max-hit` request.
+  - Tiers III and V: the style's attack rate x0.8 rounded down, or x0.5 rounded down from five
+    ticks and up below (`onAttackSpeed`, after the weapon's or spell's own speed, never under a tick).
+- **The passives** (`Passives.LeagueCombatMasteries.js`), live once any style reached the tier:
+  1 a 95% roll keeps the runes (`magic:rune-saving`), the staff's charge (`combat:consume-charge`)
+  and the ammunition (the ranged ammo handler claims the decrement, so nothing is used or
+  dropped); 2 every heal +20% (the core's new `stats:heal`, emitted by `Player.setHitpoints`
+  whenever hitpoints rise: a raised heal reaches full hitpoints at most, an overheal keeps its own
+  target); 3 the three attack rolls x2 (the accuracy modifiers); 4 damage taken x0.85 (the
+  incoming-damage modifier); 5 Prayer restores x1.25 (the core's new `skills:restore`, emitted by
+  `SkillManager.increaseCurrentLevel`, whose cap stays the caller's: prayer and restore potions,
+  the Prayer plugin's bone restores, Doom's holy water and the Theatre's entry go
+  through it; enchanted bolts, a few specials and the Falador shield set the level directly and
+  are not raised); 6 60% Prayer penetration:
+  the roll bypasses the target's protection prayer and the damage then takes 40% of the usual
+  reduction (0.6 + 0.4 x the core's constant).
+
 ## Areas
 
 `LeagueAreaUnlocks.plugin.js` (units in `leagueareas/`), data `plugins/modes/data/league-areas.json`.
@@ -369,11 +453,15 @@ locked for good.
 - `::leaguetask <id> <points> [name]` - award yourself a task through the real award path (the
   task catalog, LeagueTasks, does not exist yet).
 - `::relic [tier 1-8] [slot 1-3]` - list your relics, or choose one through the usual checks.
+- `::mastery` - your combat masteries, points and challenges; `::mastery <melee|ranged|magic>
+  <tier 1-6>` unlocks one through the usual checks; `::mastery point <1-10>` awards a challenge's
+  point through the real path (the only way to the Echo boss challenges here).
 - `::areas [id or name]` - list your areas, the next unlock and the area you stand in, or unlock
   one through the usual checks (`::area` is AdminCommands' Area-class debug).
 
 ## Not yet
 
-League tasks, combat masteries, the tier passives left out above (clue-step progress and
-farming ticks), the boosted sources their own plugins have yet to ask about, the league tutorial
-(see above), trophies and rewards. Each is its own item on the progress tracker.
+League tasks, the Echo bosses (and so three of the mastery points), the tier passives left out
+above (clue-step progress and farming ticks), the boosted sources their own plugins have yet to
+ask about, the league tutorial (see above), trophies and rewards. Each is its own item on the
+progress tracker.
