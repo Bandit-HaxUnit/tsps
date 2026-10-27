@@ -283,7 +283,8 @@ const PETS = [
   },
   {
     enumName: "GIANT_SQUIRREL",
-    petId: 7334,
+    petId: NpcIdentifiers.GIANT_SQUIRREL_2,
+    houseNpcId: NpcIdentifiers.GIANT_SQUIRREL,
     morphId: 0,
     itemId: 20659,
     dialogue: -1,
