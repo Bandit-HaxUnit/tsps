@@ -291,6 +291,81 @@ test("a kit that needs more bank slots than are free is refused as a whole", () 
   assert.equal(player.getBanks().some((bank) => bank?.contains?.(845) || bank?.contains?.(884)), false, "nothing half-given");
 });
 
+/** Fill through the real Bank API, leaving physical room in multiple tabs but one shared budget. */
+function fillSharedBank(player, free) {
+  const { Bank, Item } = core;
+  for (let id = 2000; Bank.freeSlots(player) > free; id++) {
+    player.getBank(0).add(new Item(id, 1), false);
+  }
+  assert.equal(Bank.freeSlots(player), free);
+}
+
+test("the Ranger kit reserves shared bank slots across tabs, refuses atomically and retries after space is freed", () => {
+  const { Bank } = core;
+  const player = character("ranger-budget");
+  runTasks();
+  for (let slot = 0; slot < 28; slot++) player.getInventory().adds(1511, 1);
+  fillSharedBank(player, 1);
+  assert.equal(player.getBank(0).getFreeSlots(), 1);
+  assert.equal(player.getBank(1).getFreeSlots(), 1, "another tab exposes the same last global slot");
+  click(player, CLASS, 11);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    click(player, CLASS, 26);
+    assert.equal(player.getAttribute("league:class") ?? 0, 0, "no permanent class on refusal");
+    assert.equal(emit("league:unlocks", { player }).skills.includes(4), false, "Ranged remains locked");
+    assert.equal(Number(player.getAttribute("league:fragments")?.[4]) || 0, 0, "no Ranger fragment");
+    assert.equal(player.getBanks().some((bank) => bank?.contains?.(845) || bank?.contains?.(884)), false, "no partial kit in any tab");
+    assert.equal(player.getInventory().getAmount(1511), 28, "carried items unchanged");
+    assert.equal(Bank.freeSlots(player), 1);
+    assert.equal(player.getInterfaceId(), CLASS, "choice remains available");
+    assert.match(player.sent.messages.at(-1), /more space/);
+  }
+  const refused = character("ranger-budget", { restore: PlayerSave.fromPlayer(player) });
+  runTasks();
+  assert.equal(refused.getAttribute("league:class") ?? 0, 0);
+  assert.equal(refused.getInterfaceId(), CLASS, "refusal stays unchosen after reload");
+  assert.equal(Bank.usedSlots(refused), Bank.usedSlots(player));
+  assert.equal(player.getBank(0).getAmount(2000), 1);
+  player.getBank(0).delete(2000, 1);
+  assert.equal(Bank.freeSlots(player), 2);
+  click(player, CLASS, 26);
+  assert.equal(player.getAttribute("league:class"), 2);
+  assert.equal(emit("league:unlocks", { player }).skills.includes(4), true);
+  assert.equal(player.sent.varbits.get(fragmentVarbit(4)), 1);
+  const amount = (target, id) => target.getBanks().reduce((sum, bank, tab) => sum + (tab === Bank.BANK_SEARCH_TAB_INDEX ? 0 : bank.getAmount(id)), 0);
+  assert.equal(amount(player, 845), 1);
+  assert.equal(amount(player, 884), 150);
+  assert.equal(Bank.freeSlots(player), 0);
+  assert.equal(player.getInterfaceId(), -1);
+  player.setInterfaceId(CLASS);
+  click(player, CLASS, 26);
+  assert.equal(amount(player, 845), 1, "repeated Accept cannot duplicate the kit");
+  assert.equal(amount(player, 884), 150);
+  const restored = character("ranger-budget", { restore: PlayerSave.fromPlayer(player) });
+  runTasks();
+  assert.equal(restored.getAttribute("league:class"), 2);
+  assert.equal(emit("league:unlocks", { player: restored }).skills.includes(4), true);
+  assert.equal(restored.sent.varbits.get(fragmentVarbit(4)), 1);
+  assert.equal(amount(restored, 845), 1);
+  assert.equal(amount(restored, 884), 150);
+  assert.equal(restored.sent.subs.some(([, group]) => group === CLASS), false, "chosen class stays closed after reload");
+});
+
+test("one shared bank slot still delivers the Ranger kit when its arrows already have a stack in another tab", () => {
+  const { Bank, Item } = core;
+  const player = character("ranger-stack");
+  runTasks();
+  for (let slot = 0; slot < 28; slot++) player.getInventory().adds(1511, 1);
+  player.getBank(1).add(new Item(884, 7), false);
+  fillSharedBank(player, 1);
+  click(player, CLASS, 11);
+  click(player, CLASS, 26);
+  assert.equal(player.getAttribute("league:class"), 2);
+  assert.equal(player.getBank(0).getAmount(845), 1);
+  assert.equal(player.getBank(1).getAmount(884), 157, "existing arrows use no second bank slot");
+  assert.equal(Bank.freeSlots(player), 0);
+});
+
 test("the other classes' items, skills and fragments", () => {
   for (const [select, skillVarbit, fragment, items] of [[11, 13346, 4, [845, 884]], [16, 13347, 6, [1379, 556, 558]]]) {
     const player = character(`class-${select}`);
