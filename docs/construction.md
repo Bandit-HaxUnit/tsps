@@ -32,6 +32,11 @@ Walls, windows and scenery collide as the cache's template chunks place them (ea
 with its rotation), with the chunks' blocked tiles; doors and furniture add their own collision.
 Before this every wall could be walked through.
 
+Empty slots take each floor's filler chunk: the basement and ground floor templates, and upstairs
+the blank chunk, whose tiles all block, one slot past the grid too. Live sends the blank chunk
+upstairs whether or not building mode is on (rsprox captures: 1,463 of 1,470 house rebuilds), so
+an upstairs doorway into nothing can't be walked through.
+
 The house runs as an `Area`: per-tick work (chairs, servants, burners, the owner's Kick option,
 combat dummies, dungeon traps and guards) happens in `PlayerHouseInstance.process` for
 occupants only. Its `canAttack` lets players fight only inside a ring, and `canCastOnNpc`

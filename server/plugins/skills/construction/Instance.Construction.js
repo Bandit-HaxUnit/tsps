@@ -131,33 +131,42 @@ class PlayerHouseInstance extends PrivateArea {
     }
   }
 
-  buildPalette(buildingMode) {
+  /**
+   * The house's template chunks. Empty slots take the floor's filler: the basement and ground
+   * floor templates, and above them the blank chunk, whose tiles all block. rsprox captures (1,463
+   * of 1,470 house rebuilds, rev 224-239) send the blank chunk upstairs whether or not building
+   * mode is on, one slot past the grid too, so an upstairs doorway into nothing can't be walked
+   * through (the client has no floor there, so the player would seem to fall).
+   */
+  buildPalette() {
     const palette = Palette.emptyHousePalette();
     const gridOffset = Math.floor((Palette.HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+    const style = Estate.houseStyleIndex(this.save);
     for (let plane = 0; plane < Palette.HOUSE_PLANES; plane++) {
-      for (let x = 0; x < 8; x++) {
-        for (let y = 0; y < 8; y++) {
-          const room = plane < this.save.rooms.length ? this.save.rooms[plane]?.[x]?.[y] : null;
-          const withinGrid = x < this.gridSize && y < this.gridSize;
+      for (let x = -1; x <= 8; x++) {
+        for (let y = -1; y <= 8; y++) {
+          const sceneX = x + gridOffset, sceneY = y + gridOffset;
+          if (sceneX < 0 || sceneY < 0 || sceneX >= Palette.HOUSE_SCENE_CHUNKS || sceneY >= Palette.HOUSE_SCENE_CHUNKS) continue;
+          const withinGrid = x >= 0 && y >= 0 && x < this.gridSize && y < this.gridSize;
+          const ring = x >= -1 && y >= -1 && x <= this.gridSize && y <= this.gridSize;
+          const room = withinGrid && plane < this.save.rooms.length ? this.save.rooms[plane]?.[x]?.[y] : null;
           const template = room
             ? Data.ROOM_BY_KEY.get(room.roomKey)
-            : !withinGrid
-              ? null
-              : plane === 0
-              ? Data.HOUSE_TEMPLATE_CHUNKS.basementFloor
-              : plane === 1
-                ? Data.HOUSE_TEMPLATE_CHUNKS.groundFloor
-                : buildingMode
-                  ? Data.HOUSE_TEMPLATE_CHUNKS.blank
-                  : null;
+            : plane >= 2
+              ? (ring ? Data.HOUSE_TEMPLATE_CHUNKS.blank : null)
+              : !withinGrid
+                ? null
+                : plane === 0
+                  ? Data.HOUSE_TEMPLATE_CHUNKS.basementFloor
+                  : Data.HOUSE_TEMPLATE_CHUNKS.groundFloor;
           if (room && !template) {
             throw new Error(`Unknown Construction room template: ${room.roomKey}`);
           }
           if (!template) continue;
-          palette[plane][x + gridOffset][y + gridOffset] = Palette.packTemplateChunk({
-            sourceChunkX: template.sourceChunkX + Math.floor(Estate.houseStyleIndex(this.save) / 4) * 8,
+          palette[plane][sceneX][sceneY] = Palette.packTemplateChunk({
+            sourceChunkX: template.sourceChunkX + Math.floor(style / 4) * 8,
             sourceChunkY: template.sourceChunkY,
-            sourcePlane: Estate.houseStyleIndex(this.save) % 4,
+            sourcePlane: style % 4,
             rotation: room?.rotation ?? 0,
           });
         }
@@ -453,7 +462,7 @@ class PlayerHouseInstance extends PrivateArea {
     this.clearFurniture();
     player.getPacketSender().sendVarbit(HOUSE_BUILDING_MODE_VARBIT, buildingMode ? 1 : 0);
     const center = this.getSceneCenter();
-    const palette = this.buildPalette(buildingMode);
+    const palette = this.buildPalette();
     this.applyTemplateCollision(palette);
     const seenRegions = new Set();
     const xteas = [];
