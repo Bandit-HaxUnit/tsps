@@ -125,9 +125,10 @@ function tick(count = 1) {
   }
 }
 
-/** On a skiff at the helm, out at the Tempor Tantrum's start. */
-function atTheHelm(player) {
+/** On a skiff at the helm, out at the Tempor Tantrum's start; `parts` sets its built tiers. */
+function atTheHelm(player, parts = {}) {
   Sailing.giveBoat(player, "skiff", "the_pandemonium");
+  Object.assign(Sailing.activeBoat(player).parts, parts);
   assert.equal(Sailing.board(player, "the_pandemonium"), null);
   const boat = Sailing.instanceAboard(player);
   boat.helmPlayerId = player.getIndex();
@@ -568,7 +569,9 @@ test("Gwenith Glide: a three-crystal rank's last portal goes to the start (rspro
 
 test("Gwenith Glide: the crystallised helm hurts its holder, up to 5, and takes three strikes (rsprox)", () => {
   const player = captain();
-  const boat = atTheHelm(player);
+  const boat = atTheHelm(player, { helm: 1 });
+  const builtHelm = 59579;
+  assert.ok(BoatManager.getSpec(boat).locs.some((loc) => loc.id === builtHelm), "an upgraded helm");
   BoatManager.teleport(boat, GWENITH().start);
   try {
     resonance.crystallise(player, boat);
@@ -591,6 +594,8 @@ test("Gwenith Glide: the crystallised helm hurts its holder, up to 5, and takes 
     const sounds = player.sent.filter(([key]) => key === "sendSoundEffect").map(([, id]) => id);
     assert.deepEqual(sounds, [4156, 4156, 10733], "4156 on the first two, 10733 on the third");
     assert.ok(!BoatManager.getSpec(boat).locs.some((loc) => loc.id === 59597), "the helm back");
+    assert.ok(BoatManager.getSpec(boat).locs.some((loc) => loc.id === builtHelm), "the built helm, not the default");
+    assert.equal(Sailing.activeBoat(player).parts.helm, 1);
   } finally {
     leave(player);
   }

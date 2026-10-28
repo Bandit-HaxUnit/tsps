@@ -20,7 +20,7 @@
 // 0.5-4.5 tiles off), who sees a wave (players whose boat is within 40 tiles of the crystal), and
 // the burst's size.
 const common = require("./Common.BarracudaTrials");
-const { boatType, isHelm } = require("../SailingContent.Sailing");
+const { isHelm } = require("../SailingContent.Sailing");
 
 const CRYSTAL = 15112;
 const HEADBAR_NPC = 15113;
@@ -125,9 +125,9 @@ function pulse(field, on) {
   }
 }
 
+/** The helm installed on this boat (its built tier), from the boat's live spec. */
 function helmLocOf(boat) {
-  const spec = common.core().BoatManager.getSpec(boat);
-  return boatType(spec?.type)?.locs.find(isHelm);
+  return common.core().BoatManager.getSpec(boat)?.locs.find(isHelm);
 }
 
 function deckTile(boat, loc) {
