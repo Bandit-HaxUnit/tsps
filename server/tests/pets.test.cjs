@@ -42,7 +42,10 @@ Pets.register({
   getRegionManager: () => ({ blocked: () => true }),
   getItemOnGroundManager: () => ({ registerNonGlobal() {}, registerLocation() {} }),
   persistAttribute() {},
-  onCustomEvent: (name, handler) => events.set(name, handler),
+  onCustomEvent: (name, handler) => {
+    const previous = events.get(name);
+    events.set(name, previous ? event => { previous(event); handler(event); } : handler);
+  },
   emitCustomEvent: (name, request) => {
     if (name === "collection-log:obtain") collectionLogObtains.push(request);
     // Stub the public diary query here; real service coverage is in chompy-pet-acquisition.
