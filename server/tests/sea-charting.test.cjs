@@ -530,3 +530,78 @@ test("every current's route runs from its release to its end a tile at a time", 
     assert.ok(Math.max(Math.abs(spot.route[0][0] - spot.location[0]), Math.abs(spot.route[0][1] - spot.location[1])) <= 8, spot.key);
   }
 });
+
+const weather = require("../plugins/skills/sailing/charting/Weather.Charting");
+const ITEM_STATION = 31809;
+const ITEM_STATION_FULL = 31810;
+
+function dialogueTexts(player) {
+  return player.chain ? [...player.chain.getDialogues().values()].map((step) => JSON.stringify(step)) : [];
+}
+
+test("the winds circle each weather spot as the captured readings do", () => {
+  const rimmington = common.spotByKey("weather_troll_rimmington_strait");
+  const [x, y] = rimmington.location2;
+  // rsprox 3465: 7 tiles north east of the spot, the station read "south".
+  assert.equal(weather.windAt(rimmington, x + 7, y + 7), "south");
+  const khazard = common.spotByKey("weather_troll_strait_of_khazard");
+  // rsprox 2836: 8 west and 10 north of it, "south west".
+  assert.equal(weather.windAt(khazard, khazard.location2[0] - 8, khazard.location2[1] + 10), "south west");
+  for (const spot of common.spotsOfType("weather_troll")) {
+    assert.ok(spot.location && spot.location2, spot.key);
+    assert.equal(weather.taskAt(spot.location[0], spot.location[1]), spot, spot.key);
+  }
+});
+
+test("a weather troll's station, a reading at the spot and the hand-in chart the task (rsprox 944)", () => {
+  const player = captain();
+  atTheHelm(player);
+  const spot = common.spotByKey("weather_troll_rimmington_strait");
+  const troll = { getLocation: () => new Location(spot.location[0], spot.location[1], 0) };
+  try {
+    player.levels.set(SAILING, 50);
+    weather.collectData({ player, npc: troll });
+    assert.match(dialogueTexts(player).join(), /You no good sail her/);
+    assert.equal(player.getInventory().getAmount(ITEM_STATION), 0);
+
+    player.levels.set(SAILING, 99);
+    weather.collectData({ player, npc: troll });
+    assert.equal(player.getInventory().getAmount(ITEM_STATION), 1);
+    assert.match(dialogueTexts(player)[0], /The troll hands you a portable weather station/);
+    weather.collectData({ player, npc: troll });
+    assert.match(dialogueTexts(player).join(), /You already have number getter/);
+
+    const boat = Sailing.instanceAboard(player);
+    BoatManager.teleport(boat, { fineX: (spot.location2[0] + 7) * 128 + 64, fineY: (spot.location2[1] + 7) * 128 + 64 });
+    weather.takeReading({ player });
+    assert.equal(player.messages().at(-1), "The weather station reads that the wind is blowing toward the <col=3366ff>south</col>.");
+
+    BoatManager.teleport(boat, { fineX: spot.location2[0] * 128 + 64, fineY: spot.location2[1] * 128 + 64 });
+    weather.takeReading({ player });
+    assert.equal(player.getInventory().getAmount(ITEM_STATION_FULL), 1);
+    assert.equal(player.getInventory().getAmount(ITEM_STATION), 0);
+    tick();
+    assert.deepEqual(player.animations.slice(-1), [13303]);
+    assert.match(dialogueTexts(player)[0], /You find a spot where the winds have dropped/);
+
+    // Another troll's station isn't hers.
+    const other = common.spotByKey("weather_troll_strait_of_khazard");
+    weather.collectData({ player, npc: { getLocation: () => new Location(other.location[0], other.location[1], 0) } });
+    assert.match(dialogueTexts(player).join(), /You already have number getter|Number getter not for here/);
+
+    weather.collectData({ player, npc: troll });
+    assert.equal(player.getInventory().getAmount(ITEM_STATION_FULL), 0);
+    assert.equal(spotBit(player, spot), 1);
+    assert.deepEqual(player.xp, [250]);
+    assert.match(dialogueTexts(player).join(), /You hand over the troll's weather station.*Numbers so tasty/);
+  } finally {
+    leave(player);
+  }
+});
+
+test("every weather task has its troll spawned", () => {
+  const spawns = require("../data/definitions/npc-spawns.json").filter((entry) => entry.id === 15154);
+  for (const spot of common.spotsOfType("weather_troll")) {
+    assert.ok(spawns.some((entry) => Math.max(Math.abs(entry.x - spot.location[0]), Math.abs(entry.y - spot.location[1])) <= 4), spot.key);
+  }
+});

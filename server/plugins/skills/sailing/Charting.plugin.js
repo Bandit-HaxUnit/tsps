@@ -13,6 +13,7 @@ module.exports = {
     require("./charting/Generic.Charting")(api);
     require("./charting/Spyglass.Charting")(api);
     require("./charting/CurrentDuck.Charting")(api);
+    require("./charting/Weather.Charting")(api);
     require("./charting/Dev.Charting")(api);
   },
 };

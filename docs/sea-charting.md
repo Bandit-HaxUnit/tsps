@@ -15,7 +15,8 @@ data in `data/charting.json`. Tests: `server/tests/sea-charting.test.cjs`.
   Spyglass views: 907, 938-948, 3455, 3461, 3467 and 3837 (all 57 views, each with its camera
   shots; `view.rec` in the data names the recording each view's shots come from). Hint markers:
   every recording that sails past one. Current ducks: 938, 939, 940, 944, 948 and 3467 (all 54
-  currents; `routeRec` in the data names each route's recording).
+  currents; `routeRec` in the data names each route's recording). Weather trolls: 939, 940, 941,
+  944, 948 and 3467 (all 31 tasks, 695 station readings).
   XP: recordings from 2025-11-26 on (907, 938-948, 1009, 3461, 3837, 4290); the launch-day ones
   (3450, 3455, 3467, 2025-11-19) paid less for every kind of spot.
 - The cache:
@@ -42,6 +43,7 @@ data in `data/charting.json`. Tests: `server/tests/sea-charting.test.cjs`.
 | `Markers` | The spyglass and current duck hint markers, placed as world locs at startup. |
 | `Spyglass` | Look-through: the nearest uncharted view in reach, its captured camera shots, then the charting. |
 | `CurrentDuck` | Track-current, the duck's swim along its captured route, its stop, Collect from the deck. |
+| `Weather` | Meaty Aura Logist's Collect-data (station, hand-in, refusals), Take-reading's wind and the filled station. |
 | `Generic` | The 92 Chart locs, the Port Sarim task board and salvaging station, the crab statue's Medallion fragment. |
 | `Dev` | `::chart go <task>`, `::chart done <task>`, `::chart reset [task]`, `::chart find <text>` (developers). |
 
@@ -133,6 +135,27 @@ From the helm, the click lets go of it and the rest starts a tick later.
 - Current Affairs charts the Catherby current with this duck: its Arhein lines play over the
   release and the collection (`charting:duck-released`, `charting:duck-collected`).
 
+**Weather trolls** (rsprox 944 and others): Meaty Aura Logist (15154) stands on each task's
+island (the Wiki's tile; 29 were missing from `npc-spawns.json` and are added there at their
+captured tiles). Collect-data is used from the deck.
+- No station: the helm let go of, the object box `The troll hands you a portable weather
+  station.` with the station, then her `You take my number getter! Find where windy no do the
+  blowing, and it get numbers. Bring numbers back to me! I try myself, but I just follow wind
+  round in circles. Make sure you no do that!`
+- Holding one: `You already have number getter. Go find where windys stop!`; another troll's:
+  `Number getter not for here. Dis one go over there.`; under 57 Sailing: `You no good sail her.
+  Windys topple you.`
+- Take-reading away from the spot: `The weather station reads that the wind is blowing toward the
+  <col=3366ff>{direction}</col>.`, the same tick, from the helm. The winds circle the spot (the
+  Wiki; the captured readings fit a circle, each task clockwise or not).
+- At the spot: the helm let go of and the filled station in the same slot; +1 the troll
+  animation (13303) and the box `You find a spot where the winds have dropped. You fill the
+  station's log and your charts with interesting data. You should now return to Meaty Aura
+  Logist where she gave you the weather station.`
+- Hand-in (Collect-data with the filled station): the charting (250 XP), `You hand over the
+  troll's weather station and she promptly consumes the log book full of data.`, then `Numbers so
+  tasty. Weather here must be really good!`
+
 **Hint markers**: locs 59281 (spyglass) and 59282 (current duck), shape 10, rotation 0, added
 with the zone whether the task is charted or not, at the spots the Wiki lists (the Wiki's
 Fremennik Strait view, 2366,3890, is a typo for the marker's 2366,3777).
@@ -155,6 +178,11 @@ Fremennik Strait view, 2366,3890, is a typo for the marker's 2366,3777).
   (`sailing_charting_current_duck_reset`, "wait # seconds to collect another") isn't modelled.
 - Routes seen in pieces (12 of 54: the duck left the player's view) are joined with straight
   steps; one (Sapphire Sea) runs on to the Wiki's end tile.
+- The wind: the tangent of the circle turned 25 degrees towards the spot, to the nearest of 8
+  directions (the captured readings agree best between 15 and 30 degrees; boat-centre lag and the
+  Wiki's spot tiles blur the rest). Nine tasks have no captured readings and circle clockwise.
+- A reading fills the station within 5 tiles of the spot (the captures: 0-8 from the boat's
+  centre). Trolls are used from the deck within 12 tiles.
 - The player doesn't turn towards the spot (live sends a face angle; the deck's frame would need
   the boat's heading worked in).
 
