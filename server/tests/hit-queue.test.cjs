@@ -168,3 +168,71 @@ test('a failing applied observer cannot suppress later observers or reactive hea
         .onApplied(()=>{throw new Error('observer fixture');}).onApplied(amount=>seen.push(amount))]);
     queue.process(1);assert.deepEqual(seen,[2,'healing']);
 });
+
+// Wiki: Animation stall. "Hits are usually queued up on the player, and received only after the
+// action is complete." The window is decided by the animation the target is playing *when the hit
+// comes due*, not by whether a stall happened to be armed when the attacker loosed it - a ranged
+// shot is in the air across cycles, and content can stop a swing partway through.
+test('a stall that begins after a hit is queued still holds that hit', () => {
+    const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
+    const target = buildTarget(100);
+    target.isPlayer = () => true;
+    target.isUntargetable = () => false;
+    let hold = -1; // nothing holds the player the moment the shot is loosed
+    target.getCombat = () => ({ getIncomingHitCycle: () => hold });
+
+    const landed = [];
+    const executeHit = CombatFactory.executeHit;
+    CombatFactory.executeHit = (hit) => landed.push(hit);
+    try {
+        const swing = (damage) => ({
+            getTarget: () => target,
+            getAttacker: () => ({ isRegistered: () => true, getHitpoints: () => 50 }),
+            getTotalDamage: () => damage,
+        });
+        const queue = new HitQueue(target);
+        queue.addPendingHit(swing(7), 5); // the arrow is already in flight, due on cycle 5
+        hold = 7; // on cycle 4 the target starts an animation that holds them until 7
+
+        queue.process(5);
+        queue.process(6);
+        assert.deepEqual(landed, [], 'a hit already on its way waits for the stall');
+        queue.process(7);
+        assert.deepEqual(landed.map((hit) => hit.getTotalDamage()), [7],
+            'it lands as the animation releases');
+    } finally {
+        CombatFactory.executeHit = executeHit;
+    }
+});
+
+test('stopping the animation early releases the hits it was holding', () => {
+    const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
+    const target = buildTarget(100);
+    target.isPlayer = () => true;
+    target.isUntargetable = () => false;
+    let hold = 12; // a full stall through cycle 12 at the moment the hit is queued
+    target.getCombat = () => ({ getIncomingHitCycle: () => hold });
+
+    const landed = [];
+    const executeHit = CombatFactory.executeHit;
+    CombatFactory.executeHit = (hit) => landed.push(hit);
+    try {
+        const swing = (damage) => ({
+            getTarget: () => target,
+            getAttacker: () => ({ isRegistered: () => true, getHitpoints: () => 50 }),
+            getTotalDamage: () => damage,
+        });
+        const queue = new HitQueue(target);
+        queue.addPendingHit(swing(4), 10); // due on 10, held behind the stall
+
+        queue.process(10);
+        assert.deepEqual(landed, [], 'held while the animation plays');
+        hold = -1; // content stops the animation (a teleport, a death): Player.performAnimation
+                   // passes the reset marker, which clears the stall it was measured from.
+        queue.process(11);
+        assert.deepEqual(landed.map((hit) => hit.getTotalDamage()), [4],
+            'the held hit lands when the player is free, not on the deadline the stall once had');
+    } finally {
+        CombatFactory.executeHit = executeHit;
+    }
+});

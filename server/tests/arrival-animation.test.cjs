@@ -154,6 +154,93 @@ test('a swing through Combat arms the measurement and holds the player where the
   assert.equal(queue.getMobility().canMove(), true, 'released once the animation has played out');
 });
 
+/**
+ * The real special attack plugin, handed the same core api the server hands it, so the swing under
+ * test plays the two animations the real one does: the normal attack through super.start(), then
+ * the special performed over it.
+ */
+function dragon2hSpecialMethod() {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const captured = { definition: null };
+  // A special module exports its register function directly, not a { name, register } plugin.
+  require('../plugins/combat/specials/Dragon2hSword.SpecialAttack')({
+    core: PluginManager.getCoreApi(),
+    registerCombatSpecial: (special) => { captured.definition = special; },
+  });
+  assert.ok(captured.definition?.combatMethod, 'the plugin registered its combat method');
+  return captured.definition.combatMethod;
+}
+
+// Dragon2hSword.SpecialAttack.start calls super.start() and then replaces that animation with its
+// own, as most specials do. Measuring the first one holds the player for a swing the client no
+// longer shows and lets the next click cut the special off mid-play (Wiki: Animation stall).
+test('a special that replaces its own swing is measured from the animation that ends up on screen', async (t) => {
+  const { CombatFactory, CanAttackResponse } = require('../dist/game/content/combat/CombatFactory');
+  const { CombatRange } = require('../dist/game/content/combat/CombatRange');
+  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  World.processCycle = 200;
+  const { player, combat, sent } = buildFighter(false);
+
+  const NORMAL = 407; // the swing MeleeCombatMethod.start performs
+  const SPECIAL = 3157; // the animation the special plays over it
+  const normalTicks = getSequenceStall(NORMAL).ticks;
+  const specialTicks = getSequenceStall(SPECIAL).ticks;
+  assert.ok(specialTicks > normalTicks,
+      `the special must outlast the swing it replaces (${normalTicks} then ${specialTicks})`);
+
+  player.getAttackAnim = () => NORMAL;
+  player.getAttackSound = () => null; // nothing to send
+  player.getBaseAttackSpeed = () => 4;
+  player.getCombatSpecial = () => null;
+  player.getSpecialPercentage = () => 100; // so CombatSpecial.drain schedules no restore task
+  player.decrementSpecialPercentage = () => {};
+  player.isSpecialActivated = () => false;
+  player.getWeapon = () => null;
+  player.performGraphic = () => {};
+  // CombatSpecial.drain redraws the special-attack orb, which the plain swing fixture never needs.
+  const sender = {
+    sendConfig: () => {},
+    sendDestination: () => {},
+    sendAttackTimer: () => {},
+    sendRunStatus: () => {},
+    updateSpecialAttackOrb: () => {},
+    sendSpecialAttackState: () => {},
+  };
+  player.getPacketSender = () => sender;
+
+  t.mock.method(CombatFactory, 'validTarget', () => true);
+  t.mock.method(CombatFactory, 'canAttackPermission', () => CanAttackResponse.CAN_ATTACK);
+  t.mock.method(CombatFactory, 'canAttack', () => CanAttackResponse.CAN_ATTACK);
+  // start() is what is under test and stays the real one; only the hit list is stubbed, because
+  // building a PendingHit needs a target wired all the way down to its defence roll (the ranged
+  // swing fixture above stubs hits for the same reason).
+  const special = Object.create(dragon2hSpecialMethod());
+  special.hits = () => [];
+  t.mock.method(CombatFactory, 'getMethod', () => special);
+  t.mock.method(CombatFactory, 'addPendingHit', () => {}); // this test is about the animation
+  t.mock.method(CombatRange, 'canReach', () => true);
+
+  combat.attack(swingTarget());
+  assert.equal(combat.performNewAttack(false), true, 'the special went off');
+  assert.deepEqual(sent, [NORMAL, SPECIAL], 'the special replaced its own swing on screen');
+
+  // The tick the *replaced* swing would have been over. Measuring it instead of the special is what
+  // made clearInteraction answer with 65535 here and cut the powerstab short.
+  World.processCycle = 200 + normalTicks;
+  combat.clearInteraction();
+  assert.deepEqual(sent, [NORMAL, SPECIAL],
+      'a click cannot cut the special off while it still plays');
+
+  World.processCycle = 200 + specialTicks;
+  assert.equal(combat.getIncomingHitCycle(), -1, 'the hold ends when the special has played out');
+  // An ordinary reset needs an interaction to drop (clearInteraction above already took the
+  // first one away), so re-attack without swinging: that is how the click that ends a stall works.
+  combat.attack(swingTarget());
+  combat.clearInteraction();
+  assert.equal(sent.at(-1), 65535,
+      'once the special has played out an ordinary reset goes out again');
+});
+
 test('a swing is measured from its own animation, and a click does not cut it away', async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
   World.processCycle = 100;

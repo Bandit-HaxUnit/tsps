@@ -44,7 +44,20 @@ export class HitQueue {
             return;
         }
 
-        while (this.pendingHits.length > 0 && this.pendingHits[0].revealCycle <= currentCycle) {
+        // Wiki: Animation stall. A full stall queues hits up on the player and delivers them only
+        // once the action completes. The hold is read here, at impact, rather than when the hit was
+        // queued: a shot already in the air when the swing starts must still wait for it, and
+        // content that stops the animation early has to release the hits it was holding on that
+        // tick rather than on the deadline the stall once had. Only players stall, so an NPC's hits
+        // keep landing on the dot - and an NPC's Combat has nothing to ask.
+        const hold = this.character.isPlayer()
+            ? this.character.getCombat().getIncomingHitCycle()
+            : -1;
+        while (
+            hold <= currentCycle &&
+            this.pendingHits.length > 0 &&
+            this.pendingHits[0].revealCycle <= currentCycle
+        ) {
             const { hit } = this.pendingHits.shift()!;
             if (
                 hit.getTarget() === character &&
@@ -79,19 +92,12 @@ export class HitQueue {
         return this.lastAppliedHit;
     }
 
+    /** Queues a hit for the cycle it comes due on; process() is what decides whether it waits. */
     addPendingHit(hit: PendingHit, revealCycle: number): void {
-        // Wiki: Animation stall. A full stall queues hits up on the player and delivers them
-        // once the action completes, so a hit due inside the window moves to the cycle it
-        // releases on - and one already due later keeps its own tick. Only players are stalled,
-        // so an NPC's hits keep landing on the dot.
-        let scheduled = Math.max(0, revealCycle | 0);
-        if (this.character.isPlayer()) {
-            scheduled = Math.max(scheduled, this.character.getCombat().getIncomingHitCycle());
-        }
-        const entry = { hit, revealCycle: scheduled };
+        const scheduled = { hit, revealCycle: Math.max(0, revealCycle | 0) };
         let index = this.pendingHits.length;
-        while (index > 0 && this.pendingHits[index - 1].revealCycle > scheduled) index--;
-        this.pendingHits.splice(index, 0, entry);
+        while (index > 0 && this.pendingHits[index - 1].revealCycle > scheduled.revealCycle) index--;
+        this.pendingHits.splice(index, 0, scheduled);
         HitQueue.active.add(this);
     }
 

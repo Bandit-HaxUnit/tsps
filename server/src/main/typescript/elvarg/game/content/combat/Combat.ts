@@ -146,9 +146,9 @@ export class Combat {
         holdsHits: boolean;
     } | null = null;
     /**
-     * The cycle a swing was armed on, or -1. Armed so only the animation of an actual attack is
-     * measured; bounded by cycle so a throw between arming and disarming cannot leak the arm
-     * into some later animation.
+     * The cycle a swing was armed on, or -1. Armed so only the animations of an actual attack are
+     * measured; bounded by cycle so a throw between arming and disarming cannot leak the arm into
+     * some later animation.
      */
     private measureAnimationCycle = -1;
 
@@ -158,8 +158,10 @@ export class Combat {
 
     /**
      * Measures the animation a character just started, from Player.performAnimation — the one
-     * place every source of one (styles, specials, spells) arrives. Only the animation an armed
-     * swing performed is measured, so a block flinch or a hit effect never stalls anybody.
+     * place every source of one (styles, specials, spells) arrives. Only an animation an armed
+     * swing performed is measured, so a block flinch or a hit effect never stalls anybody, and only
+     * one that actually took the place of the previous seq: Player.performAnimation asks here, and
+     * not at all for a seq the cache's interrupt priority turned away.
      */
     public onAnimationStarted(animationId: number): void {
         if (animationId === Animation.DEFAULT_RESET_ANIMATION.getId()) {
@@ -168,7 +170,11 @@ export class Combat {
             return;
         }
         if (this.measureAnimationCycle !== World.getProcessCycle()) return;
-        this.measureAnimationCycle = -1;
+        // The arm is deliberately not spent here. A special plays its swing through super.start()
+        // and then replaces it (Dragon2hSword.SpecialAttack.start), so measuring the first seq held
+        // the player for an animation the client had already covered, and the next click cut the
+        // special off mid-play. Every seq accepted inside the armed window re-measures, the last
+        // one wins, and the caller that armed it disarms as soon as start() returns.
         if (!this.character.isPlayer()) return;
 
         const sequence = getSequenceStall(animationId);
@@ -202,8 +208,10 @@ export class Combat {
     }
 
     /**
-     * The cycle a hit on this character waits for, or -1 when nothing holds it. A hit due inside
-     * a full stall moves to the stall's last cycle; one already due later keeps its own tick.
+     * The last cycle a hit on this character is held to, or -1 when nothing holds it. HitQueue
+     * consults it as each hit comes due rather than when the hit is queued, so a shot already in
+     * the air when the swing starts waits with the ones loosed after it - and a stall stopped short
+     * stops holding anything from that tick.
      */
     public getIncomingHitCycle(): number {
         const stall = this.animationStall;
@@ -772,8 +780,9 @@ export class Combat {
         }
         this.lastAttackTarget = target;
 
-        // The swing's own animation is what may stall the character; specials override start()
-        // and perform it themselves, so the measurement is taken wherever it actually lands.
+        // The swing's own animation is what may stall the character; specials override start() and
+        // perform it themselves - many through super.start() first - so the arm stays open across
+        // the whole call, and the seq left standing when it returns is the one that is measured.
         this.expectAttackAnimation();
         method.start(this.character, target);
         this.measureAnimationCycle = -1;
