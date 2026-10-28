@@ -22,6 +22,8 @@ const RESPAWN_TIMER_SCRIPT = 5474; // add_overlaytimer_loc: coord, loc, shape, t
 const RESPAWN_TIMER_ID = 1;
 const RESPAWN_TIMER_COLOUR = 16765184;
 const NO_ORE_MESSAGE = "There is currently no ore available in this rock.";
+// rsprox captures 3139 (rev 232): Mine on a mined-out rock stops the swing and plays this sound.
+const NO_ORE_SOUND = 2661;
 // The rocks without their own mined-out loc that still offer Mine (amethyst's wall).
 const EMPTY_ROCK_NAMES = ["Empty wall"];
 const SWING_MESSAGE = "You swing your pick at the rock.";
@@ -32,9 +34,10 @@ const SMOKEPUFF_GRAPHIC = 86;
 const SMOKEPUFF_HEIGHT = 150;
 const ORE_MINED_VARP = "tracking_ore_mined";
 const ORE_MINED_ATTRIBUTE = "mining:ores-mined";
-const MINING_ANIMATION_INTERVAL_TICKS = 4;
 // rsprox recordings 3139 and 3182: with the skilling timer clear, the first roll lands the tick
 // after the swing (+2 after arrival; 33 of 34 iron attempts); later rolls follow the pickaxe.
+// Each roll replays the swing (rsprox captures 1636, 3162, 3165, 468: the sequence is resent on
+// every roll tick, at the pickaxe's interval), and the ore that empties the rock resets it.
 const FIRST_ROLL_DELAY_TICKS = 2;
 // Wiki "Skilling success rate": (1 + floor(low * (99 - L) / 98 + high * (L - 1) / 98 + 0.5)) / 256,
 // with the visible level capped at 99 and invisible boosts added on top.
@@ -84,12 +87,15 @@ const ROCKS = [
   { objectName: "Blurite rocks", objectIds: [ObjectIds.BLURITE_ROCKS, ObjectIds.BLURITE_ROCKS_2], level: 10, xp: 17.5, oreId: ItemIds.BLURITE_ORE, chance: [90, 350], gems: true, respawnTicks: 42 },
   { objectName: "Iron rocks", objectIds: [7455, 7488], level: 15, xp: 35, oreId: ItemIds.IRON_ORE, petBase: 741600, chance: [96, 350], gems: true, respawnTicks: 9 },
   // Wiki Barronite rocks: level 14, 1-minute respawn; each success is 76% shards (4-6, 16xp)
-  // or 24% deposit (1, 32xp).
+  // or 24% deposit (1, 32xp). The rock depletes 20 seconds after it starts being mined, not on an
+  // ore. rsprox capture 1636 (rev 226): wall swings, three ores off one rock that stays standing,
+  // and a vein that runs out goes to its "_empty" loc with area sound 2661 (delay 10, range 1).
   {
     objectName: "Barronite rocks",
     objectIds: [41547, 41548, 41549, 41550],
     level: 14, xp: 32, oreId: ItemIds.BARRONITE_DEPOSIT,
-    chance: [80, 100], gems: true, respawnTicks: 100,
+    chance: [80, 100], gems: true, respawnTicks: 100, swing: "wall",
+    depletionTicks: 33, depletionSound: { id: 2661, delay: 10, radius: 1 },
     outcomes: [
       { itemId: ItemIds.BARRONITE_SHARDS, min: 4, max: 6, weight: 76, xp: 16, message: "You manage to mine some barronite shards." },
       { itemId: ItemIds.BARRONITE_DEPOSIT, min: 1, max: 1, weight: 24, xp: 32, message: "You manage to mine a barronite deposit." },
@@ -180,7 +186,7 @@ const ROCKS = [
   {
     objectName: "Daeyalt rocks",
     level: 20, xp: 17.5, oreId: ItemIdentifiers.DAEYALT_ORE,
-    chance: [96, 350], respawnTicks: 47, swing: "sang", sound: 2998, oreMessage: "You manage to mine some ore.",
+    chance: [96, 350], respawnTicks: 47, swing: "sang", sound: 2998, oreMessage: "You manage to mine some ore.", gameMessage: true,
     stages: ["area_sanguine_mine_minerocks_01", "area_sanguine_mine_minerocks_02", "area_sanguine_mine_minerocks_03"],
     depletedRock: "area_sanguine_mine_minerocks_04", emptyMessage: "This rock face is now empty.",
   },
@@ -188,9 +194,11 @@ const ROCKS = [
 
 // The essence mine rocks are infinite and have no level requirement. Every roll succeeds (Wiki
 // Pure essence, Mod Ash: "it's like everyone gets a 100% chance at any level"), so no `chance`.
+// rsprox captures 70 (rev 227) and 3027 (rev 231): each essence plays sound 3600 and counts in
+// tracking_ore_mined, with no chat line.
 const ESSENCE_ROCKS = [
-  { objectName: "Rune Essence", objectIds: [ObjectIds.RUNE_ESSENCE_3], level: 1, xp: 5, oreId: ItemIds.PURE_ESSENCE, respawnTicks: 0, infinite: true, oreMessage: "You get some essence." },
-  { objectName: "Rune essence", objectIds: [ObjectIds.RUNE_ESSENCE, ObjectIds.RUNE_ESSENCE_2], level: 1, xp: 5, oreId: ItemIds.PURE_ESSENCE, respawnTicks: 0, infinite: true, oreMessage: "You get some essence." },
+  { objectName: "Rune Essence", objectIds: [ObjectIds.RUNE_ESSENCE_3], level: 1, xp: 5, oreId: ItemIds.PURE_ESSENCE, respawnTicks: 0, infinite: true, silent: true },
+  { objectName: "Rune essence", objectIds: [ObjectIds.RUNE_ESSENCE, ObjectIds.RUNE_ESSENCE_2], level: 1, xp: 5, oreId: ItemIds.PURE_ESSENCE, respawnTicks: 0, infinite: true, silent: true },
 ];
 
 const ALL_ROCKS = [...ROCKS, ...ESSENCE_ROCKS];
@@ -202,6 +210,9 @@ const ACTIVE_MINERS = new Set();
 const ROLL_READY_TICKS = new Map();
 // Ore taken so far from rocks that give several before going (`yield`), by the standing rock.
 const ROCK_YIELDS = new WeakMap();
+// Ticks left on a rock that runs out on a timer (`depletionTicks`), by the standing rock; it counts
+// down on the ticks someone mines it.
+const ROCK_TIMERS = new WeakMap();
 const SWING_SEQUENCES = { wall: (key) => `human_mining_${key}_pickaxe_wall`, sang: (key) => `sang_mining_wall_${key}_pickaxe` };
 const swingAnimations = new Map();
 
@@ -412,6 +423,11 @@ function depleteRock(player, rockObject, rock) {
     rockObject.getPrivateArea()
   ) : rockObject;
   const depleted = replaceRock(rockObject, depletedRockId(rockObject.getId(), rock));
+  if (rock.depletionSound) {
+    const at = depleted.getLocation();
+    const { id, delay, radius } = rock.depletionSound;
+    pluginApi.core.Sounds.playAreaSound({ soundId: id, delay, radius, x: at.getX(), y: at.getY(), level: at.getZ() });
+  }
   TaskManager.submit(new RockRespawnTask(rock.respawnTicks, whole, depleted));
   sendRespawnTimer(player, depleted, rock.respawnTicks);
   if (rock.emptyMessage) player.sendMessage(rock.emptyMessage);
@@ -459,7 +475,6 @@ function startMining(player, rockObject, rock, activeSessions) {
     location: rockObject.getLocation().clone(),
     privateArea: rockObject.getPrivateArea(),
     swingTick: miningTick + 1,
-    nextAnimationTick: miningTick + 1 + MINING_ANIMATION_INTERVAL_TICKS,
     // The skilling timer carries over between rocks: a roll waits for the last one's interval.
     nextRollTick: Math.max(miningTick + FIRST_ROLL_DELAY_TICKS, ROLL_READY_TICKS.get(player) ?? 0),
   });
@@ -467,11 +482,37 @@ function startMining(player, rockObject, rock, activeSessions) {
   return true;
 }
 
+/** Mining's chat lines are spam (rsprox captures), except where a rock was recorded otherwise. */
+function spam(player, text) {
+  player.getPacketSender().sendTypedMessage(pluginApi.core.ChatType.SPAM, text);
+}
+
 /** The first swing lands the tick after the click (rsprox recordings: message and animation at +1). */
 function swing(player, state) {
   state.swingTick = undefined;
-  player.sendMessage(SWING_MESSAGE);
+  spam(player, SWING_MESSAGE);
   player.performAnimation(swingAnimation(state.pickaxe, state.rock));
+}
+
+/**
+ * A rock on a depletion timer (barronite) loses a tick on each tick someone mines it; true once it
+ * has run out.
+ */
+function rockTimerRanOut(rockObject, rock) {
+  if (!rock.depletionTicks) return false;
+  const timer = ROCK_TIMERS.get(rockObject) ?? { left: rock.depletionTicks, tick: -1 };
+  if (timer.tick !== miningTick) {
+    timer.tick = miningTick;
+    timer.left--;
+  }
+  ROCK_TIMERS.set(rockObject, timer);
+  return timer.left <= 0;
+}
+
+/** The line for an ore, with " and give it to <taker>" when someone takes it off the player. */
+function successLine(rock, outcome, taker) {
+  const line = outcome?.message ?? rock.oreMessage ?? oreMessage(rock);
+  return taker ? line.replace(/\.$/, `, and give it to ${taker}.`) : line;
 }
 
 /** Which of a successful roll's weighted outcomes (barronite shards or a deposit) the player gets. */
@@ -573,9 +614,14 @@ class MiningTask extends Task {
       if (state.swingTick !== undefined && this.cycle >= state.swingTick) {
         swing(player, state);
       }
-      if (this.cycle >= state.nextAnimationTick) {
-        player.performAnimation(swingAnimation(state.pickaxe, state.rock));
-        state.nextAnimationTick = this.cycle + MINING_ANIMATION_INTERVAL_TICKS;
+      if (rockTimerRanOut(rockObject, state.rock)) {
+        // The countdown ends with this depletion: the rock that respawns, or one content keeps
+        // standing ("mining:deplete-rock"), starts a fresh one.
+        ROCK_TIMERS.delete(rockObject);
+        if (depleteRock(player, rockObject, state.rock)) {
+          stopMining(this.activeSessions, player);
+          continue;
+        }
       }
 
       if (this.cycle < state.nextRollTick) {
@@ -583,6 +629,7 @@ class MiningTask extends Task {
       }
       state.nextRollTick = this.cycle + rollInterval(pickaxe);
       ROLL_READY_TICKS.set(player, state.nextRollTick);
+      player.performAnimation(swingAnimation(state.pickaxe, state.rock));
 
       const result = rollAttempt(player, state.rock);
       // Content may turn a miss into a hit ("mining:attempt", a league relic's second chance); a gem roll is never a miss.
@@ -598,18 +645,28 @@ class MiningTask extends Task {
       const { outcome } = landed;
       const oreId = outcome?.itemId ?? state.rock.oreId;
       const amount = outcome?.min !== undefined ? outcomeAmount(outcome) : oreAmount(player, state.rock);
+      // Content may take the ore off the player as it is mined ("mining:hand-over", Miscellania's
+      // coal goes to Miner Magnus): no ore, no count and no sound, only the line naming who took it.
+      const handOver = { player, object: rockObject, itemId: oreId, amount, taker: null };
+      pluginApi.emitCustomEvent("mining:hand-over", handOver);
       let pendingOre = null;
-      if (InfernalPickaxe.tryCombustOre(player, state.pickaxe.id, oreId)) {
-        player.performGraphic(new pluginApi.core.Graphic(SMOKEPUFF_GRAPHIC, 0, SMOKEPUFF_HEIGHT));
-        player.getPacketSender().sendSoundEffect(SMELT_SOUND, 1, 0, 1);
-      } else {
-        pendingOre = prepareOre(player, oreId, amount, outcome?.xp ?? state.rock.xp);
-        countOre(player, state.rock);
-      }
-      if (!state.rock.infinite) {
+      let kept = false;
+      if (!handOver.taker) {
+        if (InfernalPickaxe.tryCombustOre(player, state.pickaxe.id, oreId)) {
+          player.performGraphic(new pluginApi.core.Graphic(SMOKEPUFF_GRAPHIC, 0, SMOKEPUFF_HEIGHT));
+          player.getPacketSender().sendSoundEffect(SMELT_SOUND, 1, 0, 1);
+        } else {
+          pendingOre = prepareOre(player, oreId, amount, outcome?.xp ?? state.rock.xp);
+          countOre(player);
+          kept = true;
+        }
         player.getPacketSender().sendSoundEffect(state.rock.sound ?? MINING_SUCCESS_SOUND, 1, 0, 1);
       }
-      player.sendMessage(outcome?.message ?? state.rock.oreMessage ?? oreMessage(state.rock));
+      if (!state.rock.silent) {
+        const line = successLine(state.rock, outcome, handOver.taker);
+        if (state.rock.gameMessage) player.sendMessage(line);
+        else spam(player, line);
+      }
       CrystalPickaxe.tryUseCharge(player);
       player.getSkillManager().addExperiences(Skill.MINING, outcome?.xp ?? state.rock.xp);
       // OSRS gives a winning pet the last backpack slot before the resource.
@@ -617,9 +674,9 @@ class MiningTask extends Task {
       const petRoll = { player, skill: Skill.MINING, petBase: state.rock.petBase, handled: false };
       pluginApi.emitCustomEvent("pets:skilling-roll", petRoll);
       deliverOre(player, pendingOre);
-      if (!outcome) mineExtraOre(player, state.rock);
+      if (kept && !state.rock.outcomes) mineExtraOre(player, state.rock, outcome);
       pluginApi.emitCustomEvent("mining:success", { player, skill: Skill.MINING, petBase: state.rock.petBase, itemId: oreId, petRolled: petRoll.handled });
-      if (state.rock.infinite) {
+      if (state.rock.infinite || state.rock.depletionTicks) {
         if (inventoryBlocks(player, state.rock.oreId)) {
           inventoryFull(player, state.rock.oreId);
           stopMining(this.activeSessions, player);
@@ -687,26 +744,29 @@ function deliverOre(player, ore) {
 
 /**
  * "mining:extra-ore": a mining enhancer (the charged celestial ring) may grant a second ore with
- * its experience. Without room for it, neither is given (Wiki, Mod Ash).
+ * its experience, and its own `message`. Without room for it, neither is given (Wiki, Mod Ash).
+ * A sandstone or granite piece is doubled at its own size (Wiki Sandstone rocks; rsprox capture
+ * 3165: "Your cape allows you to mine an additional ore.", two 1kg pieces, two counts).
  */
-function mineExtraOre(player, rock) {
+function mineExtraOre(player, rock, outcome) {
   if (rock.infinite || rock.noExtraOre) {
     return;
   }
-  const request = { player, oreId: rock.oreId, rockLevel: rock.level, extra: false };
+  const oreId = outcome?.itemId ?? rock.oreId;
+  const xp = outcome?.xp ?? rock.xp;
+  const request = { player, oreId, rockLevel: rock.level, extra: false, message: null };
   pluginApi.emitCustomEvent("mining:extra-ore", request);
-  if (!request.extra || inventoryBlocks(player, rock.oreId)) {
+  if (!request.extra || inventoryBlocks(player, oreId)) {
     return;
   }
-  giveOre(player, rock.oreId, 1, rock.xp);
-  player.getSkillManager().addExperiences(Skill.MINING, rock.xp);
+  if (request.message) spam(player, request.message);
+  giveOre(player, oreId, 1, xp);
+  countOre(player);
+  player.getSkillManager().addExperiences(Skill.MINING, xp);
 }
 
-/** tracking_ore_mined counts every ore a rock gives (not essence); the client reads it for the Mining tab. */
-function countOre(player, rock) {
-  if (rock.infinite) {
-    return;
-  }
+/** tracking_ore_mined counts every ore kept, essence too (rsprox captures 70, 3027); the client reads it for the Mining tab. */
+function countOre(player) {
   const mined = (player.getAttribute(ORE_MINED_ATTRIBUTE) ?? 0) + 1;
   player.setAttribute(ORE_MINED_ATTRIBUTE, mined);
   player.getPacketSender().sendConfig(pluginApi.core.CacheDefinitions.getVarpId(ORE_MINED_VARP), mined);
@@ -728,6 +788,9 @@ function mineDepletedRock(event) {
   if (!depleted) {
     return;
   }
+  stopMining(activeSessions, event.player, false);
+  event.player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
+  event.player.getPacketSender().sendSoundEffect(NO_ORE_SOUND, 1, 0, 1);
   event.player.sendMessage(NO_ORE_MESSAGE);
   event.handled = true;
 }
