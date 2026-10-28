@@ -52,12 +52,21 @@ function obstacleXp(kind) {
   return Shared.OBSTACLE_XP[kind] ?? 0;
 }
 
-/** `past` steps beyond the clicked tile, away from where the player stood. */
-function crossingTarget(player, object, past = 1) {
+/**
+ * `past` steps beyond the clicked tile, away from where the player stood. With `alongFace`, the
+ * crossing runs across the loc's facing (the rope swings: rotation 0/2 swing north-south, 1/3
+ * east-west in the cache), so a diagonal click still picks the swing's own axis.
+ */
+function crossingTarget(player, object, past = 1, alongFace = false) {
   const at = object.getLocation();
   const pos = player.getLocation();
   let dx = at.getX() - pos.getX();
   let dy = at.getY() - pos.getY();
+  if (alongFace) {
+    const [ax, ay] = ROTATION_VECTORS[((object.getFace?.() ?? 0) + 1) & 3];
+    const side = Math.sign(dx * ax + dy * ay) || 1;
+    return { x: at.getX() + ax * side * past, y: at.getY() + ay * side * past, z: at.getZ() };
+  }
   if (dx === 0 && dy === 0) {
     const [fx, fy] = ROTATION_VECTORS[(object.getFace?.() ?? 0) & 3];
     return { x: at.getX() + fx * past, y: at.getY() + fy * past, z: at.getZ() };
@@ -90,7 +99,9 @@ function useObstacle(event) {
   const object = event.object;
   const at = object.getLocation();
   const spec = SPECS[kind];
-  const target = crossingTarget(player, object, kind === "ROPE_SWING" ? ROPE_SWING.PAST : 1);
+  const target = kind === "ROPE_SWING"
+    ? crossingTarget(player, object, ROPE_SWING.PAST, true)
+    : crossingTarget(player, object);
   const context = {
     player,
     object,
@@ -128,7 +139,7 @@ function routeToObstacle(event) {
   if (event.clickType !== 1 || !familyAt(event.objectId)) return;
   const at = event.object.getLocation();
   if (familyAt(event.objectId) === "ROPE_SWING") {
-    event.destination = crossingTarget(event.player, event.object, -ROPE_SWING.BEFORE);
+    event.destination = crossingTarget(event.player, event.object, -ROPE_SWING.BEFORE, true);
     return;
   }
   event.destination = { x: at.getX(), y: at.getY(), z: at.getZ() };

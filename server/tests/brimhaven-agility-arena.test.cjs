@@ -310,7 +310,7 @@ test("the rope swing lands three tiles past the rope in one 5-tile swing, as cap
   // rsprox capture 1102: from 2806,9587 over the rope at 2806,9585 to 2806,9582.
   const p = player({ x: 2806, y: 9587, z: 3 });
   const rope = { getLocation: () => new Location(2806, 9585, 3), getFace: () => 0 };
-  const target = crossingTarget(p, rope, 3);
+  const target = crossingTarget(p, rope, 3, true);
   assert.deepEqual(target, { x: 2806, y: 9582, z: 3 });
   assert.deepEqual(ropeSwingSteps(target), [
     { anim: 751, delay: 5 },
@@ -322,10 +322,19 @@ test("the rope swing lands three tiles past the rope in one 5-tile swing, as cap
 
 test("a rope swing is walked to two tiles before the rope, not onto the gap under it", () => {
   // rsprox capture 1863: from 2774,9568 the player stops on 2769,9567 for the rope at 2767,9567.
-  const rope = { getLocation: () => new Location(2767, 9567, 3), getFace: () => 0 };
+  const rope = { getLocation: () => new Location(2767, 9567, 3), getFace: () => 1 };
   const event = { player: player({ x: 2774, y: 9567, z: 3 }), object: rope, objectId: 3566, clickType: 1, destination: null };
   routeToObstacle(event);
   assert.deepEqual(event.destination, { x: 2769, y: 9567, z: 3 });
+});
+
+test("a diagonal rope swing click picks the rope's axis, not the longer offset", () => {
+  // The rope at 2806,9585 is cache rotation 0 and swings north-south; from the platform corner
+  // 2804,9587 the X offset ties the Y one and used to route onto the blocked 2804,9585.
+  const rope = { getLocation: () => new Location(2806, 9585, 3), getFace: () => 0 };
+  const event = { player: player({ x: 2804, y: 9587, z: 3 }), object: rope, objectId: 3566, clickType: 1, destination: null };
+  routeToObstacle(event);
+  assert.deepEqual(event.destination, { x: 2806, y: 9587, z: 3 });
 });
 
 test("the trap tiles are the cache's, and the blades catch the tiles beside them", () => {

@@ -202,7 +202,7 @@ Locs of other kinds that are a plain move are taken by name, under `include` in 
 
 - **Chasm of Fire gaps** (`agility-shortcuts.json`): two gaps, not one shortcut. The west gap jumps 1440,10098 to 1446; the east one hops 1448 to 1453 to 1456, a tick apart.
 - **Prifddinas Agility Course:** from the first dark hole on, the course is played in the copy of its rooftops south-west of the city (2269,3389 onward), and the last dark hole climbs back up. tsps ran it in the other copy. Every captured tile there (the dark holes, the tree ladder, portal 6, the last tightrope) is tsps's old tile moved 1024 west and 2752 south. The only recording is from an event world.
-- **Brimhaven Agility Arena rope swing:** one 5-tile swing to three tiles past the rope (751, rope animation 497, sound 2494), not a single step. A click also walks the player to two tiles before the rope, as captured; before, it routed onto the gap under the rope and never arrived, so the swing did nothing.
+- **Brimhaven Agility Arena rope swing:** one 5-tile swing to three tiles past the rope (751, rope animation 497, sound 2494), not a single step. A click also walks the player to two tiles before the rope on its own axis (cache rotation 0/2 north-south, 1/3 east-west), as captured, even from a diagonal corner; before, it routed onto the gap under the rope and never arrived, so the swing did nothing.
 - **Gauntlet Portal:** down from Prifddinas lands on 3032,6125. Runs still end on 3032,6127 (136 captured exits).
 - **Sorceress's Garden:**
   - a picked fruit lands on 2911,5470;
