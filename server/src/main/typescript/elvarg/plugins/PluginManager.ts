@@ -100,6 +100,7 @@ import {
   PluginCombatHitRollEvent,
   PluginCombatHitDamageEvent,
   PluginAttackTimingEvent,
+  PluginAnimationStallEvent,
   PluginAttackSpeedEvent,
   PluginCombatHitResolvedEvent,
   PluginCombatAttackDistanceEvent,
@@ -328,6 +329,7 @@ export class PluginManager {
   private static combatHitRollHooks: PluginHook<PluginCombatHitRollEvent>[] = [];
   private static combatHitDamageHooks: PluginHook<PluginCombatHitDamageEvent>[] = [];
   private static attackTimingHooks: PluginHook<PluginAttackTimingEvent>[] = [];
+  private static animationStallHooks: PluginHook<PluginAnimationStallEvent>[] = [];
   private static attackSpeedHooks: PluginHook<PluginAttackSpeedEvent>[] = [];
   private static combatHitResolvedHooks: PluginHook<PluginCombatHitResolvedEvent>[] = [];
   private static combatAttackDistanceHooks: PluginHook<PluginCombatAttackDistanceEvent>[] = [];
@@ -1659,6 +1661,14 @@ export class PluginManager {
     if (!event?.attacker || !event?.target) return;
     for (const hook of PluginManager.attackTimingHooks) {
       PluginManager.executeHook(hook, event, "attack_timing", "attack_timing");
+    }
+  }
+
+  public static emitAnimationStall(event: PluginAnimationStallEvent): void {
+    if (PluginManager.animationStallHooks.length === 0) return;
+    if (!event?.player) return;
+    for (const hook of PluginManager.animationStallHooks) {
+      PluginManager.executeHook(hook, event, "animation_stall", "animation_stall");
     }
   }
 
@@ -3620,6 +3630,10 @@ export class PluginManager {
       onAttackSpeed: (handler) => {
         if (typeof handler !== "function") return;
         PluginManager.attackSpeedHooks.push({ ...hookProfile(handler), handler });
+      },
+      onAnimationStall: (handler) => {
+        if (typeof handler !== "function") return;
+        PluginManager.animationStallHooks.push({ pluginName, handler });
       },
       onCombatHitResolved: (handler) => {
         if (typeof handler !== "function") return;
