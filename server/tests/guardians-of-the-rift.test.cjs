@@ -597,6 +597,30 @@ test('pouches hold one kind of essence, shown on their varbits; Fill empties a f
   assert.equal(player.varbit('colossal_essence_pouch'), 0, 'guardian essence never leaves the game');
 });
 
+test('emptying into a full inventory is a message box with synth 2277; the colossal pouch names its essence (rsprox 1840)', () => {
+  const statement = (player) => player.statements.at(-1).getDialogues().get(0).getText();
+  const player = fakePlayer('Full', { runecraft: 85 });
+  const colossal = Shared.core().CacheDefinitions.getObjId('rcu_pouch_colossal');
+  player.inventory.adds(colossal, 1);
+  player.inventory.adds(Shared.obj(Shared.ITEM.ESSENCE), 10);
+  pouch(player, 'Fill');
+  player.inventory.adds(995, 1);
+  while (player.inventory.getFreeSlots() > 0) player.inventory.adds(1511, 1);
+  const before = player.messages.length;
+  pouch(player, 'Empty');
+  assert.equal(statement(player), 'Your inventory is too full to hold any more guardian essence.');
+  assert.ok(player.sounds.includes(2277));
+  assert.equal(player.messages.length, before, 'no chat line');
+
+  const small = fakePlayer('Small', { runecraft: 85 });
+  small.inventory.adds(Shared.core().CacheDefinitions.getObjId('rcu_pouch_small'), 1);
+  small.inventory.adds(Shared.obj(Shared.ITEM.ESSENCE), 3);
+  pouch(small, 'Fill', 'Small pouch');
+  while (small.inventory.getFreeSlots() > 0) small.inventory.adds(1511, 1);
+  pouch(small, 'Empty', 'Small pouch');
+  assert.equal(statement(small), 'Your inventory is too full to hold any more essence.');
+});
+
 test('the colossal pouch holds 8/16/27/40 by Runecraft level, and pouches decay with use', () => {
   const capacity = (level) => Pouches._test.capacity(fakePlayer('L', { runecraft: level }), Pouches._test.pouchFor(Shared.core().CacheDefinitions.getObjId('rcu_pouch_colossal')));
   assert.deepEqual([24, 25, 50, 75, 85, 99].map(capacity), [0, 8, 16, 27, 40, 40]);

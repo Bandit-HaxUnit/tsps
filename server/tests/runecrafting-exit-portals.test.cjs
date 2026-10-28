@@ -45,18 +45,18 @@ function visitor() {
     log,
     moveTo: (location) => log.push(`move ${location.getX()},${location.getY()},${location.getZ()}`),
     sendMessage: (text) => log.push(`message ${text}`),
-    getPacketSender: () => ({ sendSound: (id) => log.push(`sound ${id}`) }),
+    getPacketSender: () => ({ sendSound: (id) => log.push(`sound ${id}`), sendTypedMessage: (_type, text) => log.push(`spam ${text}`) }),
   };
 }
 
 test("each altar's exit portal leads outside its ruins, with the portal's sound and message", () => {
-  // Captured: earth, fire, water, nature and cosmic; the rest from the ruins' tiles.
-  const exits = { 34751: [3302, 3477], 34752: [3310, 3252], 34750: [3182, 3162], 34756: [2865, 3022], 34754: [2405, 4381],
+  // Captured: earth, fire, water, nature, cosmic and blood; the rest from the ruins' tiles.
+  const exits = { 43478: [3559, 9780], 34751: [3302, 3477], 34752: [3310, 3252], 34750: [3182, 3162], 34756: [2865, 3022], 34754: [2405, 4381],
     34748: [2983, 3288], 34749: [2980, 3511], 34753: [3050, 3442], 34755: [2858, 3378], 34757: [3060, 3585], 34758: [1863, 4639] };
   for (const [objectId, [x, y]] of Object.entries(exits)) {
     const player = visitor();
     assert.equal(handlers["Portal:Use"]({ player, objectId: Number(objectId) }), true);
-    assert.deepEqual(player.log, [`move ${x},${y},0`, "sound 200", "message You step through the portal..."], objectId);
+    assert.deepEqual(player.log, [`move ${x},${y},0`, "sound 200", "spam You step through the portal..."], objectId);
   }
   assert.equal(handlers["Portal:Use"]({ player: visitor(), objectId: 12345 }), false, "other portals fall through");
 });
@@ -65,32 +65,51 @@ function miner({ x = 2889, y = 4814, attributes = {} } = {}) {
   const log = [];
   const attrs = new Map(Object.entries(attributes));
   const { Location } = PluginManager.getCoreApi();
+  const sender = {
+    sendSound: (id) => log.push(`sound ${id}`),
+    sendAreaSound: (id) => { log.push(`area sound ${id}`); return sender; },
+    sendProjectile: (_from, _to, _offset, _speed, id) => log.push(`projectile ${id}`),
+    sendTypedMessage: (_type, text) => log.push(`spam ${text}`),
+    sendInterfaceRemoval() {},
+  };
   return {
     log,
     getAttribute: (key) => attrs.get(key),
     setAttribute: (key, value) => attrs.set(key, value),
     getLocation: () => new Location(x, y, 0),
-    getMovementQueue: () => ({ reset() {} }),
+    getMovementQueue: () => ({ reset() {}, setBlockMovement() {}, isMovementBlocked: () => false }),
+    busy: () => false,
+    getCombat: () => ({ getTeleblockTimer: () => ({ finished: () => true }) }),
+    getArea: () => null,
+    getWildernessLevel: () => 0,
     moveTo: (location) => log.push(`move ${location.getX()},${location.getY()},${location.getZ()}`),
     sendMessage: (text) => log.push(`message ${text}`),
     performGraphic: (graphic) => log.push(`graphic ${graphic.getId()}`),
-    getPacketSender: () => ({
-      sendSound: (id) => log.push(`sound ${id}`),
-      sendProjectile: (_from, _to, _offset, _speed, id) => log.push(`projectile ${id}`),
-    }),
+    getPacketSender: () => sender,
   };
 }
 
 test("the Rune Essence mine's portals send the player back to the wizard who sent them", () => {
   // Aubury's Teleport records where the player stood (Rune Mysteries complete).
   const visitor = miner({ x: 3253, y: 3402, attributes: { "quest.rune_mysteries.stage": 6 } });
-  assert.equal(handlers["Aubury:Teleport"]({ player: visitor }), true);
+  const { Location } = PluginManager.getCoreApi();
+  const said = [];
+  const aubury = {
+    getLocation: () => new Location(3253, 3401, 0),
+    forceChat: (text) => said.push(text),
+    setPositionToFace() {},
+    performGraphic: (graphic) => said.push(`graphic ${graphic.getId()}`),
+  };
+  assert.equal(handlers["Aubury:Teleport"]({ player: visitor, npc: aubury }), true);
   assert.deepEqual(visitor.getAttribute("runecrafting:essence-mine-return"), [3253, 3402, 0]);
+  assert.deepEqual(said, ["Senventior Disthine Molenko!", "graphic 108"], "the wizard says the line overhead and casts Curse");
+  assert.deepEqual(visitor.log, ["projectile 109", "graphic 110", "area sound 127", "area sound 126", "move 2913,4832,0"],
+    "as captured (1628, 2280): the Curse on the click, the landing four ticks later, no spellbook teleport");
 
   const player = miner({ attributes: { "runecrafting:essence-mine-return": [2591, 3086, 0] } });
   assert.equal(handlers["Portal:Use"]({ player, objectId: 34825, location: { x: 2889, y: 4813, z: 0 } }), true);
   assert.deepEqual(player.log, [
-    "message You step through the portal...", "projectile 109", "graphic 110", "move 2591,3086,0", "sound 200",
+    "spam You step through the portal...", "projectile 109", "graphic 110", "move 2591,3086,0", "sound 200",
   ], "as captured: message and the portal's Curse, then the teleport and sound");
 
   const unknown = miner();
@@ -106,10 +125,16 @@ function runecrafter(headId = -1) {
   const equipment = new Equipment(player);
   equipment.setItem(Equipment.HEAD_SLOT, new Item(headId, headId === -1 ? 0 : 1));
   player.getEquipment = () => equipment;
+  const attrs = new Map();
+  player.getAttribute = (key) => attrs.get(key);
+  player.setAttribute = (key, value) => attrs.set(key, value);
+  player.getMovementQueue = () => ({ reset() {}, setBlockMovement() {} });
+  player.performAnimation = (animation) => player.log.push(`animation ${animation.getId()}`);
   player.getPacketSender = () => ({
     getVarbit: (id) => bits.get(id) ?? 0,
     sendVarbit: (id, value) => { bits.set(id, value); player.log.push(`varbit ${id} ${value}`); },
     sendSound: (id) => player.log.push(`sound ${id}`),
+    sendTypedMessage: (_type, text) => player.log.push(`spam ${text}`),
     sendItemContainer() {},
   });
   return player;
@@ -123,8 +148,9 @@ function useOnRuins(player, objectId, itemId) {
 }
 
 const entrances = {
-  Air: [2841, 4829, 0], Mind: [2793, 4828, 0], Water: [2720, 4831, 0],
-  Earth: [2655, 4830, 0], Fire: [2576, 4846, 0], Body: [2522, 4833, 0],
+  // Water, earth and fire land where rsprox captures do (90, 91, 1549, 1757, 1858).
+  Air: [2841, 4829, 0], Mind: [2793, 4828, 0], Water: [2725, 4832, 0],
+  Earth: [2657, 4830, 0], Fire: [2576, 4848, 0], Body: [2522, 4833, 0],
   Cosmic: [2162, 4833, 0], Law: [2464, 4818, 0], Nature: [2400, 4835, 0],
   Chaos: [2281, 4837, 0], Death: [2208, 4830, 0], Blood: [3239, 4832, 0], Wrath: [2335, 4826, 0],
 };
@@ -138,7 +164,13 @@ test("all altar entrances use matching talismans on base and transformed cache l
     for (const id of [ruins.ruinsId, ...definition.transforms.filter((id) => id !== -1)]) {
       const player = runecrafter();
       assert.equal(useOnRuins(player, id, ruins.talismanId), true, `${ruins.name} ${id}`);
-      assert.deepEqual(player.log, [`move ${entrances[ruins.name].join(",")}`, "sound 200", "message You feel a powerful force take hold of you..."]);
+      // As captured: a tick after the click the hold (human_pickupfloor, sound, line, busy), two later the teleport.
+      const held = ruins.name === "Blood" ? "Blood Talisman" : `${ruins.name} talisman`;
+      assert.deepEqual(player.log, [
+        "animation 827", "sound 200",
+        `spam You hold the ${held} towards the mysterious ruins.<br>You feel a powerful force take hold of you...`,
+        "varbit 12393 1", "varbit 12393 0", `move ${entrances[ruins.name].join(",")}`,
+      ]);
     }
     const player = runecrafter();
     const wrong = ruins.name === "Air" ? 1448 : 1438;
@@ -310,4 +342,25 @@ test("Kourend's Blood Altar binds dark essence fragments, not pure essence (Wiki
   const low = crafter(76, [[ItemIdentifiers.DARK_ESSENCE_FRAGMENTS, 1]]);
   craft(low, ObjectIdentifiers.BLOOD_ALTAR, "Bind");
   assert.deepEqual(low.log, ["message You need a Runecrafting level of at least 77 to craft this."]);
+});
+
+test("a talisman or the tiara used on its altar binds the tiara (Wiki: Tiara; rsprox capture 1636)", () => {
+  const use = (player, objectId, itemId) => PluginManager.emitItemOnObject({
+    player, objectId, itemId, handled: false, object: { getDefinition: () => ObjectDefinition.forId(objectId) },
+  });
+  const player = crafter(1, [[ItemIdentifiers.TIARA, 1], [ItemIdentifiers.BLOOD_TALISMAN, 1]]);
+  player.getPacketSender = () => new Proxy({}, { get: (_target, key) => key === "sendTypedMessage" ? (_type, text) => player.log.push(`spam ${text}`) : () => {} });
+  assert.equal(use(player, ObjectIdentifiers.ALTAR_83, ItemIdentifiers.TIARA), true);
+  assert.equal(amount(player, ItemIdentifiers.BLOOD_TIARA), 1);
+  assert.equal(amount(player, ItemIdentifiers.TIARA), 0);
+  assert.equal(amount(player, ItemIdentifiers.BLOOD_TALISMAN), 0);
+  assert.deepEqual(player.xp, [52.5], "the Wiki's 52.5 XP");
+  assert.deepEqual(player.log, ["spam You bind the power of the talisman into your Tiara."]);
+
+  const air = crafter(1, [[ItemIdentifiers.TIARA, 1], [ItemIdentifiers.AIR_TALISMAN, 1]]);
+  assert.equal(use(air, ObjectIdentifiers.ALTAR_35, ItemIdentifiers.AIR_TALISMAN), false, "another altar's talisman");
+  assert.equal(use(air, ObjectIdentifiers.ALTAR_33, ItemIdentifiers.AIR_TALISMAN), true);
+  assert.equal(amount(air, ItemIdentifiers.AIR_TIARA), 1);
+  assert.deepEqual(air.xp, [25]);
+  assert.equal(use(crafter(1, [[ItemIdentifiers.AIR_TALISMAN, 1]]), ObjectIdentifiers.ALTAR_33, ItemIdentifiers.AIR_TALISMAN), false, "no tiara");
 });
