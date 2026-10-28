@@ -40,7 +40,7 @@ interface or running out of materials stops it.
 | Method | Menu (mode, title) | Start | First item | Every | Animation, sound | Message |
 | --- | --- | --- | --- | --- | --- | --- |
 | Leather | 0, "How many do you wish to make?" | 0 | 2 | 3 | human_leather_crafting | "You make a leather body." |
-| Gems | 12, "How many gems would you like to cut?" | - | 1 | 2 | human_*cutting, 2586 | "You cut the diamond." |
+| Gems | 12, "How many gems would you like to cut?" | - | 1 | 2 | human_*cutting, 2586 | "You cut the diamond." (spam) |
 | Glassblowing | 0, "How many do you wish to make?" | 0 | 2 | 3 | human_glassblowing, 2724 (delay 10) | "You make a beer glass." |
 | Spinning wheel | 16, "What would you like to spin?" ("How many would you like to spin?" with one product) | 0 | 2 | 2 | human_spinningwheel_60, 2590, wheel loc anim spinningwheel | none |
 | Loom | 35, "How many would you like to weave?" | 0 | 3 | 3 | farming_useloom, 2587 (delay 2) | none |
@@ -53,8 +53,10 @@ interface or running out of materials stops it.
 Recording ids refer to the capture database at https://rsprox.net/database.
 
 - **Gems** (recordings 1875, 2246, 4211): the menu offers only the gem used, up to the number carried.
-  A semi-precious gem can fail: "You mis-hit the chisel and smash the jade to pieces!", the
-  item crushed_gemstone (1633), and sound 2589 as well as 2586.
+  A semi-precious gem can fail: "You mis-hit the chisel and smash the jade to pieces!" (spam), the
+  item crushed_gemstone (1633), and sound 2589 as well as 2586. Below the level (recordings 1102,
+  1723), the tick after the click brings an item box with the uncut gem, "You need a Crafting
+  level of 20 to cut sapphires." ("to cut jade."); the plural is `plural` in `crafting.json`.
 - **Glassblowing** (recording 1842): all eight items are always listed, labelled Beer glass, Candle lantern,
   Oil lamp, Vial, Fishbowl, Unpowered staff orb, Lantern lens, Light orb. Picking one above the
   player's level answers "You need level 87 Crafting to make a light orb." and makes nothing.
@@ -70,11 +72,17 @@ Recording ids refer to the capture database at https://rsprox.net/database.
   A `spinningwheel` loc animation two tiles away in 2 windows is a nearby wheel, not the loom. Building the Fossil Island loom (recording 73: oak plank, "You build the loom.",
   varbit fossil_loom 0→1) is not implemented.
 - **Gold jewellery** (recordings 1102, 1104, 1105): human_furnace and 2725 play on the click, and the item
-  comes 2 ticks later. The client also sets varbit crafting_gold_item_lasttype, which the server
-  does not yet send.
+  comes 2 ticks later. The click also sets varbit crafting_gold_item_lasttype (recording 1851) to
+  the button's value in enum 4318, which the menu's script (`crafting_gold_checkgem`) reads to
+  highlight the last item.
 - **Silver jewellery** (recording 102): a silver bar on a furnace opens silver_crafting in the main modal.
   Choosing the tiara made one 2 ticks later. Products, levels and moulds are cache script
-  1596's, and the quantity is varp 2224 (scripts 3599, 2928), the same as gold.
+  1596's, and the quantity is varp 2224 (scripts 3599, 2928), the same as gold. The click sets
+  crafting_silver_item_lasttype to the button's value in enum 4319 (tiara 18).
+- **Stringing amulets** (recordings 91, 1105, 1135, 1843, 1854, 1858): a ball of wool on an
+  unstrung amulet strings it the tick after the click, with "You put some string on your amulet."
+  (spam) and no animation. With several carried, rev 238 opens a "How many would you like to
+  string?" menu (recording 4211); no capture shows that loop, so one is strung per use.
 
 ## Wiki-only (no capture)
 
