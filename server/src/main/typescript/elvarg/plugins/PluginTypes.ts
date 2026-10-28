@@ -613,6 +613,11 @@ export interface PluginPlayerDefeatedEvent {
 export interface PluginItemUseFilter {
   /** Omit to accept both noted and unnoted items. */
   noted?: boolean;
+  /**
+   * Item on object only: run after every other handler, and only when none handled the use. For an
+   * object's own refusal in place of "Nothing interesting happens." ("You can't cook that.").
+   */
+  fallback?: boolean;
 }
 
 export interface PluginItemOnObjectEvent {

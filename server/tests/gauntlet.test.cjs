@@ -300,6 +300,8 @@ function fakePlayer(name = 'Tester') {
         sendCreationMenu: (menu) => { p.menu = menu; return sender; },
         sendInterface: (id) => { p.interfaces.push(id); return sender; },
         sendString: (text, uid) => { (p.strings ??= new Map()).set(uid, text); return sender; },
+        sendSound: (id) => { (p.sounds ??= []).push(id); return sender; },
+        sendTypedMessage: (type, text) => { p.messages.push(text); return sender; },
       };
       return sender;
     },
@@ -984,6 +986,9 @@ test('points come from kills, crafting and cooking', () => {
     assert.equal(run.points, 17 + 2, 'a basic item');
     player.inventory.adds(items.rawPaddlefish);
     interact('Range', 'Cook', player, null);
+    ticks(1);
+    assert.equal(run.points, 19, 'the fish is two ticks after reaching the range');
+    ticks(1);
     assert.equal(run.points, 19 + 1, 'cooking a paddlefish');
   } finally {
     run.end('exit', { fade: false });
