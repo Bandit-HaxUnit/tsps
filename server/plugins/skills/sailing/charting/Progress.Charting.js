@@ -12,11 +12,18 @@ function onMark({ player, spot }) {
   if (task) common.mark(player, task);
 }
 
+/** `charting:chart` { player, spot }: a task charted by another plugin's own action (a quest's), with the usual messages. */
+function onChart({ player, spot }) {
+  const task = common.spotByKey(spot);
+  if (task) common.complete(player, task, { lines: [] });
+}
+
 function attach(api) {
   common.init(api);
   api.persistAttribute(common.PROGRESS_ATTRIBUTE, {});
   api.onPlayerLogin(onLogin);
   api.onCustomEvent("charting:mark", onMark);
+  api.onCustomEvent("charting:chart", onChart);
 }
 
 module.exports = attach;

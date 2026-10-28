@@ -16,7 +16,8 @@ data in `data/charting.json`. Tests: `server/tests/sea-charting.test.cjs`.
   shots; `view.rec` in the data names the recording each view's shots come from). Hint markers:
   every recording that sails past one. Current ducks: 938, 939, 940, 944, 948 and 3467 (all 54
   currents; `routeRec` in the data names each route's recording). Weather trolls: 939, 940, 941,
-  944, 948 and 3467 (all 31 tasks, 695 station readings).
+  944, 948 and 3467 (all 31 tasks, 695 station readings). Drink crates: 24 recordings (907,
+  936, 938-948, 3455, 3461, 3467 and others; 64 of the 65 drinks drunk; `drink.rec` names each).
   XP: recordings from 2025-11-26 on (907, 938-948, 1009, 3461, 3837, 4290); the launch-day ones
   (3450, 3455, 3467, 2025-11-19) paid less for every kind of spot.
 - The cache:
@@ -44,6 +45,7 @@ data in `data/charting.json`. Tests: `server/tests/sea-charting.test.cjs`.
 | `Spyglass` | Look-through: the nearest uncharted view in reach, its captured camera shots, then the charting. |
 | `CurrentDuck` | Track-current, the duck's swim along its captured route, its stop, Collect from the deck. |
 | `Weather` | Meaty Aura Logist's Collect-data (station, hand-in, refusals), Take-reading's wind and the filled station. |
+| `DrinkCrate` | The 65 sealed crates (Pry-open from the deck), the drinks, the drinking warning. |
 | `Generic` | The 92 Chart locs, the Port Sarim task board and salvaging station, the crab statue's Medallion fragment. |
 | `Dev` | `::chart go <task>`, `::chart done <task>`, `::chart reset [task]`, `::chart find <text>` (developers). |
 
@@ -156,6 +158,20 @@ captured tiles). Collect-data is used from the deck.
   troll's weather station and she promptly consumes the log book full of data.`, then `Numbers so
   tasty. Weather here must be really good!`
 
+**Drink crates** (rsprox, 24 recordings): a sealed crate (59283, sent with the zone, shape 10,
+rotation 0) on each drink task's tile, Pry-open from the deck.
+- The helm let go of; no crowbar: the box `You require a crowbar to do that.`
+- Sound 67 and the drink, with the object box `You pry open the crate and take a bottle of
+  {drink} to sample.`; holding that drink already: `The crate contains a bottle of {drink}, but
+  you don't take it as you already have one.`
+- Drink: the box `This drink has been sealed in a crate for an unknown amount of time. It could
+  do anything to you, good or bad. Are you sure you want to drink it?`, then `Are you sure you
+  want to drink this?` with `Yes.`, `Yes, and don't ask again.` (varbit 19609, saved) and `No.`
+- Drinking: `You drink the bottle of {drink}.` and the drink's own lines, animation 11288,
+  graphic 2871 (height 92), sound 2401, the bottle gone, the charting (75 XP).
+- Prying Times charts its grog (drink_crate_prying_times) with its own crate (58405) and
+  transcript, through `charting:chart`; after the quest the stout is an ordinary drink.
+
 **Hint markers**: locs 59281 (spyglass) and 59282 (current duck), shape 10, rotation 0, added
 with the zone whether the task is charted or not, at the spots the Wiki lists (the Wiki's
 Fremennik Strait view, 2366,3890, is a typo for the marker's 2366,3777).
@@ -183,10 +199,15 @@ Fremennik Strait view, 2366,3890, is a typo for the marker's 2366,3777).
   Wiki's spot tiles blur the rest). Nine tasks have no captured readings and circle clockwise.
 - A reading fills the station within 5 tiles of the spot (the captures: 0-8 from the boat's
   centre). Trolls are used from the deck within 12 tiles.
+- A crate needs Prying Times and 12 Sailing (the skill guide); no refusal was captured, so the
+  crowbar line stands in. The Prying Times grog's tile keeps the quest's own crate.
 - The player doesn't turn towards the spot (live sends a face angle; the deck's frame would need
   the boat's heading worked in).
 
 ## Not done (captured)
 
-- Drink crate, weather troll and mermaid guide tasks, and Chartin'
-  Charles's ocean bonuses (later phases of this PR).
+- The drinks' side effects: the NPCs some bring to the deck (a defending troll, the fish
+  stoutier's, the monkfish stout's waves, the Sailing cat, a squirrel, a snakeling, a dwarf and
+  others: 10 drinks), the fishier stout's blackout with its three trolls and their drinks (varp
+  5035 bits 2-4), and the puzzler's poteen reward.
+- Mermaid guide tasks and Chartin' Charles's ocean bonuses (later phases of this PR).

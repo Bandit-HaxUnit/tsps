@@ -91,6 +91,7 @@ function captain({ level = 99 } = {}) {
     getRights: () => 0,
     sendMessage: (message) => sent.push(["sendMessage", message]),
     performAnimation: (animation) => animations.push(animation.getId?.() ?? animation.id ?? animation),
+    performGraphic() {},
     setPositionToFace() { return player; },
     getLocation: () => location,
     setLocation: (next) => { location = next; return player; },
@@ -434,6 +435,7 @@ function duckCaptain({ questDone = true, at = [2835, 3414] } = {}) {
 before(() => {
   PluginManager.createApi("SeaChartingQuests").onCustomEvent("quest:is-complete", (request) => {
     if (request.key === "current_affairs" && request.player?.questDone !== undefined) request.complete = request.player.questDone;
+    if (request.player?.questsDone) request.complete = request.player.questsDone.has(request.key);
   });
 });
 
@@ -604,4 +606,80 @@ test("every weather task has its troll spawned", () => {
   for (const spot of common.spotsOfType("weather_troll")) {
     assert.ok(spawns.some((entry) => Math.max(Math.abs(entry.x - spot.location[0]), Math.abs(entry.y - spot.location[1])) <= 4), spot.key);
   }
+});
+
+const drinkCrate = require("../plugins/skills/sailing/charting/DrinkCrate.Charting");
+const ITEM_CROWBAR = 31807;
+
+function crateClick(player, key) {
+  const [x, y] = common.spotByKey(key).location;
+  const event = { player, objectId: 59283, clickType: 1, option: "Pry-open", location: { x, y, z: 0 }, handled: false };
+  drinkCrate.pryOpen(event);
+  return event;
+}
+
+test("every drink task has its crate tile and drink, and most their captured lines", () => {
+  const byItem = drinkCrate.drinks();
+  assert.equal(byItem.size, 65);
+  const tasks = common.spotsOfType("drink_crate");
+  assert.equal(tasks.filter((spot) => spot.location).length, 65);
+  assert.ok(tasks.filter((spot) => spot.drink?.lines?.length).length >= 60);
+});
+
+test("a drink crate: no crowbar, the drink, already holding one (rsprox 907, 948)", () => {
+  const player = captain();
+  player.questsDone = new Set(["prying_times"]);
+  atTheHelm(player);
+  try {
+    const event = crateClick(player, "drink_crate_mango_gin");
+    assert.equal(event.handled, true);
+    assert.match(JSON.stringify([...player.chain?.getDialogues?.().values?.() ?? []]) + JSON.stringify(player.sent.slice(-6)), /You require a crowbar to do that/);
+
+    player.getInventory().add(new (require("../dist/game/model/Item").Item)(ITEM_CROWBAR, 1), true);
+    crateClick(player, "drink_crate_mango_gin");
+    const spot = common.spotByKey("drink_crate_mango_gin");
+    assert.equal(player.getInventory().getAmount(spot.item), 1);
+    assert.match(dialogueTexts(player)[0], /You pry open the crate and take a bottle of captain clop's mango gin to sample/);
+    assert.ok(player.sent.some(([key, id]) => key === "sendSoundEffect" && id === 67));
+
+    crateClick(player, "drink_crate_mango_gin");
+    assert.equal(player.getInventory().getAmount(spot.item), 1);
+    assert.match(dialogueTexts(player)[0], /The crate contains a bottle of captain clop's mango gin, but you don't take it as you already have one/);
+  } finally {
+    leave(player);
+  }
+});
+
+test("drinking a crate's drink charts it, with its own lines (rsprox 907)", () => {
+  const player = captain();
+  player.questsDone = new Set(["prying_times"]);
+  const spot = common.spotByKey("drink_crate_mango_gin");
+  drinkCrate.drinks();
+  player.getInventory().add(new (require("../dist/game/model/Item").Item)(spot.item, 1), true);
+  const event = { player, itemId: spot.item, option: "Drink", handled: false };
+  drinkCrate.drink(event);
+  assert.equal(event.handled, true);
+  assert.match(dialogueTexts(player)[0], /This drink has been sealed in a crate/);
+  assert.equal(spotBit(player, spot), 0);
+
+  player.attributes.set(drinkCrate.NO_WARNING_ATTRIBUTE, true);
+  drinkCrate.drink({ player, itemId: spot.item, option: "Drink", handled: false });
+  assert.equal(player.getInventory().getAmount(spot.item), 0);
+  assert.deepEqual(player.messages().slice(0, 3), [
+    "You drink the bottle of captain clop's mango gin.",
+    "You can't feel your legs.",
+    `Charting complete: ${blue(spot.hint)}`,
+  ]);
+  assert.deepEqual(player.animations.slice(-1), [11288]);
+  assert.deepEqual(player.xp, [75]);
+});
+
+test("Prying Times keeps its stout until the quest is done", () => {
+  const player = captain();
+  player.questsDone = new Set();
+  const spot = common.spotByKey("drink_crate_prying_times");
+  drinkCrate.drinks();
+  const event = { player, itemId: spot.item, option: "Drink", handled: false };
+  drinkCrate.drink(event);
+  assert.equal(event.handled, false);
 });
