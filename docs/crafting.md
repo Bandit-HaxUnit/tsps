@@ -42,10 +42,10 @@ interface or running out of materials stops it.
 | Leather | 0, "How many do you wish to make?" | 0 | 2 | 3 | human_leather_crafting | "You make a leather body." |
 | Gems | 12, "How many gems would you like to cut?" | - | 1 | 2 | human_*cutting, 2586 | "You cut the diamond." |
 | Glassblowing | 0, "How many do you wish to make?" | 0 | 2 | 3 | human_glassblowing, 2724 (delay 10) | "You make a beer glass." |
-| Spinning wheel | 16, "What would you like to spin?" | 1 | 3 | 2 | human_spinningwheel_60, 2590, wheel loc anim spinningwheel | none |
-| Loom | 35, "How many would you like to weave?" | 1 | 4 | 3 | farming_useloom, 2587 (delay 2) | none |
-| Potter's wheel | 0, "How many do you wish to make?" | 0 | 2 | 3 | human_potterywheel, 2588 | bowl/set-of-cups shaping message |
-| Pottery oven | 9, "What would you like to fire in the oven?" | 0 | 6 | 7 | potteryoven_quick, 2725 | bowl/cup put and remove messages |
+| Spinning wheel | 16, "What would you like to spin?" ("How many would you like to spin?" with one product) | 0 | 2 | 2 | human_spinningwheel_60, 2590, wheel loc anim spinningwheel | none |
+| Loom | 35, "How many would you like to weave?" | 0 | 3 | 3 | farming_useloom, 2587 (delay 2) | none |
+| Potter's wheel | 0, "How many do you wish to make?" | 0 | 2 | 3 | human_potterywheel, 2588 | bowl/set-of-cups shaping message (spam) |
+| Pottery oven | 9, "What would you like to fire in the oven?" | 0 | 6 | 7 | potteryoven_quick, 2725 | bowl/cup put and remove messages (spam) |
 | Gold/silver furnace | interface 446 / 6 | 0 | 2 | 3 | human_furnace, 2725 | none |
 
 ## Captured facts (rsprox captures)
@@ -59,10 +59,15 @@ Recording ids refer to the capture database at https://rsprox.net/database.
   Oil lamp, Vial, Fishbowl, Unpowered staff orb, Lantern lens, Light orb. Picking one above the
   player's level answers "You need level 87 Crafting to make a light orb." and makes nothing.
 - **Spinning wheel** (recording 3467, rev 235): the menu lists what the carried materials make. With flax
-  that is Linen yarn and Bow string. Older recordings (69, 89, 1718; Leagues) used a different label
-  set.
+  that is Linen yarn, then Bow string. With one product (wool only, recording 1105, Leagues) the
+  title is "How many would you like to spin?". The animation, sound and wheel animation start on
+  the choice tick in 4 of 7 windows (the other 3 a tick later, as the click landed late) and the
+  first item comes 2 ticks after them. Older recordings (69, 89, 1718; Leagues) used a different
+  label set. Linen yarn is 16 Crafting XP and a bolt of linen 20 (Wiki); the recording's stat
+  packets don't give per-item XP.
 - **Loom** (recording 3467, `fossil_loom`): with linen yarn the menu offers only Bolt of linen; each bolt uses
-  2 yarn. Building the Fossil Island loom (recording 73: oak plank, "You build the loom.",
+  2 yarn. Weaving starts on the choice tick (6 of 7 windows) and the first bolt is 3 ticks later.
+  A `spinningwheel` loc animation two tiles away in 2 windows is a nearby wheel, not the loom. Building the Fossil Island loom (recording 73: oak plank, "You build the loom.",
   varbit fossil_loom 0→1) is not implemented.
 - **Gold jewellery** (recordings 1102, 1104, 1105): human_furnace and 2725 play on the click, and the item
   comes 2 ticks later. The client also sets varbit crafting_gold_item_lasttype, which the server
@@ -124,12 +129,17 @@ Evidence checked for this interaction:
 - **Recordings 1757 and 1858**, Leagues, rev 227: shaping starts with `human_potterywheel`
   and sound 2588, consumes clay and produces a bowl two ticks after starting, then repeats
   at three-tick intervals, restarting the next shaping animation on the preceding result tick. A set of cups produces four separate unfired cups from one clay.
-  Bowl/set-of-cups shaping messages are reproduced. The oven offers mode 9, the title
+  Bowl/set-of-cups shaping messages are reproduced, on the spam channel as recorded. The oven offers mode 9, the title
   "What would you like to fire in the oven?", and the full ordered recipe list. Cup firing
   starts at ticks 0 and 7, with results six ticks after each start; bowl firing has the same
   six-tick result delay. `potteryoven_quick`, sound 2725 and the recorded bowl/cup put/remove
   messages accompany firing. **Recording 1098**, Leagues, rev 237, confirms the bowl delay,
   messages and oven animation. Leagues XP values are not used as normal-world XP evidence.
+  Choosing pottery the player doesn't carry answers with a message box, "You don't have any
+  bowls which need firing." (recordings 1757, 1098; pots in 1098). In recording 1098 neither the
+  wheel nor the oven offers a pot lid before One Small Favour teaches it.
+- **Soft clay** (recordings 1692, 73, 86, 1098): water on clay sends "You mix the clay and
+  water.<br>You now have some soft workable clay." on the spam channel.
 - The [unfired bowl creation table](https://oldschool.runescape.wiki/w/Unfired_bowl) gives
   three ticks for shaping. The [pot](https://oldschool.runescape.wiki/w/Pot) and
   [empty cup](https://oldschool.runescape.wiki/w/Empty_cup) creation tables give seven ticks

@@ -79,6 +79,8 @@ function describeBoat(type, owned) {
   for (const [stat, varbits] of Object.entries(STAT_VARBITS)) {
     for (const varbit of varbits) values[varbit] = stats[stat] ?? 0;
   }
+  // The bar shows what's left of the hitpoints after the damage taken.
+  values[VARBIT.SIDEPANEL_BOAT_HP] = Math.max(0, (stats.hitpoints ?? 0) - (owned.damage ?? 0));
   return values;
 }
 

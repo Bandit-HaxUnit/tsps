@@ -13,7 +13,12 @@ import {
     INTERFACE_QUEST_LIST_ID,
     SIDE_JOURNAL_GROUP_ID,
 } from "../common/ui/sideJournal";
-import { isMobileMode, isTouchDevice, tooltipsEnabledByDefault } from "../common/utils/DeviceUtil";
+import {
+    isMobileChatKeyboardFocused,
+    isMobileMode,
+    isTouchDevice,
+    tooltipsEnabledByDefault,
+} from "../common/utils/DeviceUtil";
 import { clamp } from "../common/utils/MathUtil";
 import {
     TRANSMIT_VARPS,
@@ -259,6 +264,7 @@ import { MusicSystem } from "./audio/MusicSystem";
 import { AmbientSoundCollector } from "./audio/AmbientSoundCollector";
 import { type SequenceSoundContext, SoundEffectSystem } from "./audio/SoundEffectSystem";
 import { ChatTextMetrics } from "./chat/ChatTextMetrics";
+import { INVENTORY } from "../runelite/api/gameval/InterfaceID";
 import { MobileChatKeyboard } from "./chat/MobileChatKeyboard";
 import { KeyboardButtonProbe } from "./chat/keyboardButtonProbe";
 import { collectInputWidgetsAtPoint } from "./widgets/interaction/widgetClickProbe";
@@ -288,7 +294,7 @@ import { ContinuousMovement } from "./movement/ContinuousMovement";
 import { PlayerMovementSync } from "./movement/PlayerMovementSync";
 import { NpcInstanceFlushController } from "./npc/NpcInstanceFlushController";
 import { ClientPluginManager } from "./plugins/ClientPluginManager";
-import { createHelmSteeringDeps, handleTileClick } from "./sailing/HelmSteering";
+import { createHelmSteeringDeps, handleTileClick, isHeadingTile } from "./sailing/HelmSteering";
 import { headingIndicator } from "./sailing/HeadingIndicator";
 import { retryOnMissingGroup } from "../rs/cache/js5/retryOnMissingGroup";
 import type { GraphicsDefaults } from "../rs/config/defaults/GraphicsDefaults";
@@ -859,12 +865,19 @@ export class OsrsClient {
     // Movement is always server-authoritative (OSRS-like)
     // Server-assigned ID of the player we control
     controlledPlayerServerId: number = -1;
+    /** Whether a tile click steers the boat (heading interaction mode at a helm). */
+    isHeadingTile: (tileX: number, tileY: number) => boolean = () => false;
     /**
      * OSRS's cam_target: what the follow camera, the scene's centre and the sound listener follow
      * instead of the local player (a spectator's view of a tile or of another player), until
      * cam_reset. A player out of view falls back to the local player.
      */
-    cameraTarget: { x: number; y: number; level: number } | { playerServerId: number } | undefined;
+    cameraTarget:
+        | { x: number; y: number; level: number; glide?: { fromX: number; fromY: number; start: number; cycles: number } }
+        | { playerServerId: number }
+        | { npcServerId: number }
+        | { worldEntityIndex: number }
+        | undefined;
 
     /** The camera target's position in 1/128 tiles (tile centres), or undefined to follow the local player. */
     getCameraTargetPosition(): { x: number; y: number; level: number } | undefined {
@@ -873,9 +886,44 @@ export class OsrsClient {
         if ("playerServerId" in target) {
             const index = this.playerEcs.getIndexForServerId(target.playerServerId);
             if (index === undefined) return undefined;
-            return { x: this.playerEcs.getX(index) | 0, y: this.playerEcs.getY(index) | 0, level: this.playerEcs.getLevel(index) | 0 };
+            const x = this.playerEcs.getX(index) | 0;
+            const y = this.playerEcs.getY(index) | 0;
+            // A player on a boat stands in deck coordinates: where the deck is drawn.
+            const worldViewId = this.playerEcs.getWorldViewId?.(index) ?? -1;
+            const drawn = worldViewId >= 0
+                ? (this.renderer as { projectDeckToWorld?: (entity: number, fineX: number, fineY: number) => { x: number; y: number } | undefined } | undefined)
+                    ?.projectDeckToWorld?.(worldViewId, x, y)
+                : undefined;
+            return { x: Math.round(drawn?.x ?? x), y: Math.round(drawn?.y ?? y), level: this.playerEcs.getLevel(index) | 0 };
         }
-        return { x: target.x * 128 + 64, y: target.y * 128 + 64, level: target.level };
+        // An NPC (a cutscene's roaming camera NPC), where it's drawn.
+        if ("npcServerId" in target) {
+            const ecsId = this.npcEcs.getEcsIdForServer?.(target.npcServerId);
+            if (ecsId === undefined || ecsId < 0) return undefined;
+            const mapId = this.npcEcs.getMapId(ecsId) | 0;
+            return {
+                x: ((mapId >> 8) << 13) + (this.npcEcs.getX(ecsId) | 0),
+                y: ((mapId & 0xff) << 13) + (this.npcEcs.getY(ecsId) | 0),
+                level: this.npcEcs.getLevel(ecsId) | 0,
+            };
+        }
+        // A world entity (a boat), where it's drawn.
+        if ("worldEntityIndex" in target) {
+            const entity = this.worldViewManager.getWorldEntity(target.worldEntityIndex);
+            if (!entity) return undefined;
+            // The boat the player is aboard (live's camera at the helm): on the player's own floor,
+            // so the deck isn't taken for an upper floor.
+            const index = this.playerEcs.getIndexForServerId(this.controlledPlayerServerId);
+            const aboard = index !== undefined && (this.playerEcs.getWorldViewId?.(index) ?? -1) === target.worldEntityIndex;
+            const level = aboard ? this.playerEcs.getLevel(index!) | 0 : 0;
+            return { x: entity.position.x | 0, y: entity.position.z | 0, level };
+        }
+        const x = target.x * 128 + 64;
+        const y = target.y * 128 + 64;
+        const glide = target.glide;
+        if (!glide || glide.cycles <= 0) return { x, y, level: target.level };
+        const t = Math.min(1, Math.max(0, (getClientCycle() - glide.start) / glide.cycles));
+        return { x: Math.round(glide.fromX + (x - glide.fromX) * t), y: Math.round(glide.fromY + (y - glide.fromY) * t), level: target.level };
     }
     /** Per-tick active world entity IDs — maintained by WORLDENTITY_INFO packets. */
     private activeWorldEntityIds: number[] = [];
@@ -1153,6 +1201,7 @@ export class OsrsClient {
             headingIndicator.onHeadingSet(heading, performance.now());
         });
         setHelmSteeringHandler((worldX, worldY) => handleTileClick(helmSteering, worldX, worldY));
+        this.isHeadingTile = (tileX, tileY) => isHeadingTile(helmSteering, tileX, tileY);
         const globalState = globalThis as typeof globalThis & {
             DEBUG_PROJECTILES?: boolean;
             DEBUG_PROJECTILES_VERBOSE?: boolean;
@@ -2261,10 +2310,20 @@ export class OsrsClient {
             this.mobileChatKeyboard.show(hint, keyboardType);
         };
         this.cs2Vm.context.hideMobileKeyboard = () => this.mobileChatKeyboard.hide();
-        // That script runs in the frame loop, after the tap, where iOS will not open the
-        // keyboard: focus it from the touch itself when the tapped widget's script would.
+        // iOS permits keyboard focus in touchend, before the frame loop runs the script.
         const keyboardButtons = new KeyboardButtonProbe((id) => this.cs2Vm.context.loadScript(id));
         this.inputManager.onCanvasTouchStart = (x, y) => {
+            if (!this.isLoggedIn() || this.menuOpen || (this.renderer.canvas as any)?.__ui?.menu?.open) return false;
+            const hits = collectInputWidgetsAtPoint(this.widgetManager, x, y);
+            for (let i = hits.length - 1; i >= 0; i--) {
+                const widget = hits[i];
+                if (this.widgetManager.isEffectivelyHidden(widget.uid)) continue;
+                if ((widget.uid >>> 16) === INVENTORY && widget.itemId >= 0 && this.widgetInteraction.isWidgetDraggable(widget)) return true;
+            }
+            return false;
+        };
+        this.inputManager.onCanvasTouchCancel = () => this.widgetInteraction.clearWidgetInteractionState();
+        this.inputManager.onCanvasTouchTap = (x, y) => {
             const widgetManager = this.widgetManager;
             if (!this.isLoggedIn() || !widgetManager) return;
             const hits = collectInputWidgetsAtPoint(widgetManager, x, y);
@@ -8060,7 +8119,8 @@ export class OsrsClient {
         this.menuFrozenSimpleEntriesVersion = 0;
         this.menuActiveSimpleEntries = [];
         this.menuState.reset();
-        this.renderer.canvas.focus();
+        // Menu cleanup also runs after the touch that focuses the mobile chat input.
+        if (!isMobileChatKeyboardFocused()) this.renderer.canvas.focus();
         this.widgetManager?.invalidateAll?.();
     };
 

@@ -52,3 +52,37 @@ test('real PIN withdrawal resumes exactly once and retains Flying Vespina',async
 test('closed native211 actions cannot withdraw the stored form',async t=>{const f=await store(t,'tektonenragedpet');await view(f);f.p.getPacketSender().sendInterfaceRemoval();await withdraw(f);assert.equal(f.p.getInventory().getAmount(f.itemId),0);assert.deepEqual(f.p.getAttribute('construction:menagerie'),[olmSlot()])});
 test('real PIN delayed withdrawal cannot resume after leaving the house',async t=>{const f=await store(t,'tektonenragedpet');await view(f);const pin=require(root+'/plugins/interface/bankpin/Common.BankPin');f.p.setAttribute(pin.ATTRIBUTES.hash,pin.hash(f.p,'1234'));await withdraw(f);assert.equal(f.p.getInventory().getAmount(f.itemId),0);await f.c.dispatch([{type:'dialogue_amount',amount:1234}]);f.c.processTurnPackets();assert.equal(pin.isUnlocked(f.p),true);House.releaseHouse(f.p,true);for(let i=0;i<3;i++)core.TaskManager.process();assert.equal(f.p.getInventory().getAmount(f.itemId),0);assert.deepEqual(f.p.getAttribute('construction:menagerie'),[olmSlot()])});
 test('real PIN delayed storage preserves an item legitimately banked after unlock',async t=>{const f=await store(t,'vespulaflyingpet',false,true),pin=require(root+'/plugins/interface/bankpin/Common.BankPin');await f.c.dispatch([{type:'dialogue_amount',amount:1234}]);f.c.processTurnPackets();assert.equal(pin.isUnlocked(f.p),true);f.p.getBank(0).open();core.Bank.deposit(f.p,f.itemId,f.p.getInventory().getSlotForItemId(f.itemId),1,false);f.p.getPacketSender().sendInterfaceRemoval();for(let i=0;i<3;i++)core.TaskManager.process();assert.equal(f.p.getBank(0).getAmount(f.itemId),1);assert.deepEqual(f.p.getAttribute('construction:menagerie')??[],[])});
+
+for (const obj of ['smokepet','smokepet_old']) test('native menagerie storage/Take retains '+obj,async t=>{
+  const f=await store(t,obj),base=core.CacheDefinitions.getObjId('smokepet');
+  const slot=[...core.CacheDefinitions.getEnumValues(985)].find(([,id])=>id===base)[0];
+  assert.equal(f.p.getInventory().getAmount(f.itemId),0);
+  assert.deepEqual(f.p.getAttribute('construction:menagerie'),[slot]);
+  await send(f,{type:'object_option',id:f.object.getId(),x:f.object.getLocation().getX(),y:f.object.getLocation().getY(),action:'View'});
+  assert.equal(f.p.getInterfaceId(),211);
+  await send(f,{type:'widget_action',widgetId:(211<<16)|7,groupId:211,childId:7,slot,buttonNum:1});
+  assert.equal(f.p.getInventory().getAmount(f.itemId),1);assert.deepEqual(f.p.getAttribute('construction:menagerie'),[]);
+});
+
+for (const obj of ['snakepet','snakepet_orange','snakepet_blue']) test('native menagerie storage/Take retains '+obj,async t=>{
+  const f=await store(t,obj),base=core.CacheDefinitions.getObjId('snakepet');
+  const slot=[...core.CacheDefinitions.getEnumValues(985)].find(([,id])=>id===base)[0];
+  assert.equal(f.p.getInventory().getAmount(f.itemId),0);
+  assert.deepEqual(f.p.getAttribute('construction:menagerie'),[slot]);
+  await send(f,{type:'object_option',id:f.object.getId(),x:f.object.getLocation().getX(),y:f.object.getLocation().getY(),action:'View'});
+  assert.equal(f.p.getInterfaceId(),211);
+  await send(f,{type:'widget_action',widgetId:(211<<16)|7,groupId:211,childId:7,slot,buttonNum:1});
+  assert.equal(f.p.getInventory().getAmount(f.itemId),1);assert.deepEqual(f.p.getAttribute('construction:menagerie'),[]);
+});
+
+const followerHouseCases=[["WISP","whisperer_pet","poh_whisperer_pet"],["BUTCH","vardorvis_pet","poh_vardorvis_pet"],["BARON","duke_sucellus_pet","poh_duke_sucellus_pet"],["LILVIATHAN","leviathan_pet","poh_leviathan_pet"],["SCURRY","scurrius_pet","poh_scurrius_pet"],["NEXLING","nex_pet","poh_nex_pet"],["VORKI","vorkath_pet","poh_vorkath_pet"],["HERBI","herbiboar_pet","poh_herbiboar_pet"],["HELLPUPPY","hellpet","poh_hellpet"],["SKOTOS","skotizo_pet","poh_skotizo_pet"],["QUETZIN","quetzal_pet","poh_quetzal_pet"],["PET_PENANCE_QUEEN","penance_pet","poh_penance_pet"]];
+
+for(const [key,world,house]of followerHouseCases)test('native '+key+' menagerie uses its house definition and Take keeps its item',async t=>{
+ const id=core.ItemIdentifiers[key],f=await store(t,core.CacheDefinitions.getObjNames().get(id));assert.equal(f.p.getInventory().getAmount(id),0);const slot=[...core.CacheDefinitions.getEnumValues(985)].find(([,itemId])=>itemId===id)[0];assert.ok(f.h.getNpcs().some(n=>n.getId()===core.CacheDefinitions.getNpcId(house)));await send(f,{type:'object_option',id:f.object.getId(),x:f.object.getLocation().getX(),y:f.object.getLocation().getY(),action:'View'});assert.equal(f.p.getInterfaceId(),211);await send(f,{type:'widget_action',widgetId:(211<<16)|7,groupId:211,childId:7,slot,buttonNum:1});assert.equal(f.p.getInventory().getAmount(id),1);
+});
+
+test('base Rock Golem house storage uses the normal POH definition and native Take preserves base item',async t=>{const f=await store(t,'skillpetmining');assert.ok(f.h.getNpcs().some(n=>n.getId()===core.CacheDefinitions.getNpcId('poh_skillpet_mining_default')));assert.equal(f.h.getNpcs().some(n=>n.getId()===core.CacheDefinitions.getNpcId('skillpet_mining_default')),false);await view(f);const slot=[...core.CacheDefinitions.getEnumValues(985)].find(([,id])=>id===f.itemId)[0];await send(f,{type:'widget_action',widgetId:(211<<16)|7,groupId:211,childId:7,slot,buttonNum:1});assert.equal(f.p.getInventory().getAmount(f.itemId),1);});
+
+test('base Giant squirrel house storage uses the normal POH definition and native Take preserves base item',async t=>{const f=await store(t,'skillpetagility');assert.ok(f.h.getNpcs().some(n=>n.getId()===core.CacheDefinitions.getNpcId('poh_skillpet_agility')));assert.equal(f.h.getNpcs().some(n=>n.getId()===core.CacheDefinitions.getNpcId('skillpet_agility')),false);await view(f);const slot=[...core.CacheDefinitions.getEnumValues(985)].find(([,id])=>id===f.itemId)[0];await send(f,{type:'widget_action',widgetId:(211<<16)|7,groupId:211,childId:7,slot,buttonNum:1});assert.equal(f.p.getInventory().getAmount(f.itemId),1);});
+
+test('base Tangleroot house storage uses the normal POH definition and native Take preserves base item',async t=>{const f=await store(t,'skillpetfarming');assert.ok(f.h.getNpcs().some(n=>n.getId()===core.CacheDefinitions.getNpcId('poh_skillpet_farming')));assert.equal(f.h.getNpcs().some(n=>n.getId()===core.CacheDefinitions.getNpcId('skillpet_farming')),false);await view(f);const slot=[...core.CacheDefinitions.getEnumValues(985)].find(([,id])=>id===f.itemId)[0];await send(f,{type:'widget_action',widgetId:(211<<16)|7,groupId:211,childId:7,slot,buttonNum:1});assert.equal(f.p.getInventory().getAmount(f.itemId),1);});

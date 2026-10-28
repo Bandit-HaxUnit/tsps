@@ -2561,6 +2561,13 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                             const [subX, subY] = hintArrowTileOffset(hintArrow.position);
                             targetFineX = (hintArrow.x << 7) + subX;
                             targetFineY = (hintArrow.y << 7) + subY;
+                        } else if (hintArrow.type === 4) {
+                            // World entity hint: the boat's drawn (interpolated) position.
+                            const entity = osrsClient.worldViewManager?.getWorldEntity?.(hintArrow.worldEntityIndex);
+                            if (entity?.position) {
+                                targetFineX = entity.position.x | 0;
+                                targetFineY = entity.position.z | 0;
+                            }
                         } else if (hintArrow.type === 3) {
                             // Player hint: playerEcs coordinates are already world-fine.
                             const pe = osrsClient.playerEcs;
@@ -3299,8 +3306,10 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                         sequenceFrame,
                         depthTest: true,
                     },
-                    width,
-                    height,
+                    // The model is drawn in logical pixels: a model bigger than its widget is cut
+                    // to the larger of the logical and drawn sizes.
+                    Math.max(width, logicalWidth | 0),
+                    Math.max(height, logicalHeight | 0),
                 );
                 if (res) {
                     const can = res.canvas;

@@ -218,7 +218,8 @@ function takeTool(player, slot) {
   }
   tools.splice(tools.indexOf(tool.slot), 1);
   for (const id of tool.give) inventory.add(new Item(id, 1), true);
-  const what = { 0: "your captain's log", 1: "a spyglass", 4: "some diving gear" }[tool.slot]
+  // rsprox: "You collect your current duck from the tools compartment."
+  const what = { 0: "your captain's log", 1: "a spyglass", 2: "your current duck", 4: "some diving gear" }[tool.slot]
     ?? `a ${ItemDefinition.forId(tool.give[0])?.getName?.()?.toLowerCase?.() ?? "tool"}`;
   player.sendMessage(`You collect ${what} from the tools compartment.`);
   playSound(player, SOUND_TOOL);
@@ -305,6 +306,12 @@ function depositAllFromLoc({ player }) {
   depositAll(player, null);
 }
 
+/** Something else put cargo in the hold (a crewmate's salvage): an open hold shows it. */
+function cargoChanged({ player }) {
+  const boat = heldBoat(player);
+  if (boat && isOpen(player)) refresh(player, boat);
+}
+
 const HOLD_ACTIONS = { Open: openHold, "Deposit-all": depositAllFromLoc, "Deposit-held": depositHeld };
 
 module.exports = {
@@ -317,5 +324,6 @@ module.exports = {
     api.persistAttribute(WARNING_ATTRIBUTE);
     for (const name of HOLD_NAMES) api.onObjectInteraction(name, HOLD_ACTIONS);
     api.onInterfaceActionClick(clickHold);
+    api.onCustomEvent("sailing:cargo-changed", cargoChanged);
   },
 };

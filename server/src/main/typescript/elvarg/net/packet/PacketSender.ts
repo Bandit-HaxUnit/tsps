@@ -618,6 +618,12 @@ export class PacketSender {
     return this;
   }
 
+  /** An arrow over a world entity (a boat) by its index, `height` as a tile hint's (type 4, ours). */
+  public sendWorldEntityHint(entityIndex: number, height = 0): this {
+    this.player.getSession().sendClientPacket(encodeHintArrow(4, entityIndex, 0, height));
+    return this;
+  }
+
   /** Clears any active hint arrow. */
   public clearHintArrow(): this {
     this.player.getSession().sendClientPacket(encodeHintArrow(0, 0, 0, 0));
@@ -972,8 +978,13 @@ export class PacketSender {
     return this;
   }
 
-  /** cam_target: the camera follows a tile or another player (by index) until sendCameraReset. */
-  sendCameraTarget(target: { x: number; y: number; level: number } | { player: number }): this {
+  /**
+   * cam_target: the camera follows a tile, or a player, an NPC or a world entity (a boat) by its
+   * index, until sendCameraReset.
+   */
+  sendCameraTarget(
+    target: { x: number; y: number; level: number; cycles?: number } | { player: number } | { npc: number } | { worldEntity: number },
+  ): this {
     this.player.getSession().sendClientPacket(encodeCameraTarget(target));
     return this;
   }

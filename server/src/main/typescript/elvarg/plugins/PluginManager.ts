@@ -266,6 +266,10 @@ export class PluginManager {
   private static npcInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
   private static beforeNpcInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
   private static beforeObjectInteractionHooks: PluginHook<PluginObjectInteractionEvent>[] = [];
+  /** Main-world locs used from a boat deck from further than usual, by id (setDeckReach). */
+  public static readonly deckReach = new Map<number, number>();
+  /** Main-world loc names usable from a boat deck (setUsableFromDeck). */
+  public static readonly usableFromDeck = new Set<string | number>();
   private static worldEntityInteractionHooks: PluginHook<PluginWorldEntityInteractionEvent>[] = [];
   /**
    * `onAnyNpcInteraction` hooks. Kept apart from the id/name hooks so a generic
@@ -2386,6 +2390,7 @@ export class PluginManager {
       CountdownTask: require("../game/task/impl/CountdownTask").CountdownTask,
       ForceMovement: require(`${model}/ForceMovement`).ForceMovement,
       ForceMovementTask: require("../game/task/impl/ForceMovementTask").ForceMovementTask,
+      TimedObjectReplacementTask: require("../game/task/impl/TimedObjectReplacementTask").TimedObjectReplacementTask,
       TaskManager: require("../game/task/TaskManager").TaskManager,
       NPCRespawnTask: require("../game/task/impl/NPCRespawnTask").NPCRespawnTask,
       ItemIdentifiers: require("../util/ItemIdentifiers").ItemIdentifiers,
@@ -2400,6 +2405,7 @@ export class PluginManager {
       Location: require(`${model}/Location`).Location,
       Mobile: require("../game/entity/impl/Mobile").Mobile,
       encodePluginMessage: require("../net/protocol/ClientProtocol").encodePluginMessage,
+      MOBILE_CLIENT_ATTRIBUTE: require("../net/protocol/ClientProtocol").MOBILE_CLIENT_ATTRIBUTE,
       encodeFinePosition: require("../net/protocol/ClientProtocol").encodeFinePosition,
       Boundary: require(`${model}/Boundary`).Boundary,
       PolygonalBoundary: require(`${model}/PolygonalBoundary`).PolygonalBoundary,
@@ -3120,6 +3126,12 @@ export class PluginManager {
           return;
         }
         PluginManager.objectRouteHooks.push({ ...hookProfile(handler), handler });
+      },
+      setDeckReach: (objectIds, tiles) => {
+        for (const id of objectIds ?? []) PluginManager.deckReach.set(id, tiles);
+      },
+      setUsableFromDeck: (namesOrIds) => {
+        for (const entry of namesOrIds ?? []) PluginManager.usableFromDeck.add(entry);
       },
       onWalkRoute: (handler) => {
         if (typeof handler === "function") {

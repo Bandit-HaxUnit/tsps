@@ -951,6 +951,18 @@ export interface PluginApi {
   onPathBlocked(handler: (event: PluginPathBlockedEvent) => void): void;
   onPlayerPathBlocked(handler: (event: PluginPlayerPathBlockedEvent) => void): void;
   onObjectRoute(handler: (event: PluginObjectRouteEvent) => void): void;
+  /**
+   * How far from the player's boat (in tiles) these main-world locs can be used from its deck,
+   * instead of the usual reach; clicks from further away get no answer (a Barracuda Trial's
+   * outcrops, thrown at from 18 tiles off).
+   */
+  setDeckReach(objectIds: number[], tiles: number): void;
+  /**
+   * Main-world locs (by name, or by id) a player on a boat deck can use, within the deck's usual
+   * reach (a dock's gangplank, a buoy, a charting spot). Any other land loc clicked from a deck:
+   * "I can't do that from here!"; one too far off: "I can't reach that!", and the helm is kept.
+   */
+  setUsableFromDeck(namesOrIds: Array<string | number>): void;
   onWalkRoute(handler: (event: PluginWalkRouteEvent) => void): void;
   onObjectInteraction(handler: (event: PluginObjectInteractionEvent) => void): void;
   /** Exact, case-sensitive object name and option matching. Return false to fall through. */
@@ -1454,6 +1466,7 @@ export interface PluginCoreApi {
   CountdownTask: any;
   ForceMovement: any;
   ForceMovementTask: any;
+  TimedObjectReplacementTask: any;
   TaskManager: any;
   NPCRespawnTask: any;
   ItemIdentifiers: any;
@@ -1468,6 +1481,7 @@ export interface PluginCoreApi {
   Location: any;
   Mobile: any;
   encodePluginMessage: typeof import("../net/protocol/ClientProtocol").encodePluginMessage;
+  MOBILE_CLIENT_ATTRIBUTE: typeof import("../net/protocol/ClientProtocol").MOBILE_CLIENT_ATTRIBUTE;
   encodeFinePosition: typeof import("../net/protocol/ClientProtocol").encodeFinePosition;
   Boundary: any;
   PolygonalBoundary: any;
