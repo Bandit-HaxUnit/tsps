@@ -7,6 +7,7 @@ const common = require("./Common.Charting");
 
 const SEQ_WRITING = 13302; // human_sailing_charting_writing01
 const ALREADY_CHARTED = "You have already charted this and can get no further information from it.";
+const NO_ROOM = "You don't have enough inventory space.";
 /** Locs whose gameval name differs from their task's row name. */
 const LOC_NAMES = Object.freeze({ generic_rowboat_port_khazard: "sailing_charting_generic_rowboat_strait_of_khazard" });
 /** The two tasks charted by using a Port Sarim loc (the Wiki: the board at 3030,3198, the station at 3029,3207). */
@@ -44,17 +45,31 @@ function chart(player, spot) {
     player.sendMessage(ALREADY_CHARTED);
     return;
   }
+  if (!roomForReward(player, spot)) return;
   common.afterHelm(player, () => {
-    if (common.isCharted(player, spot)) return;
+    if (common.isCharted(player, spot) || !roomForReward(player, spot)) return;
     player.performAnimation(new (common.core().Animation)(SEQ_WRITING));
     if (common.complete(player, spot) && spot.key === CRAB_STATUE.key) crabFragment(player);
   });
 }
 
+/**
+ * The crab statue's fragment needs a free slot; with none the statue stays uncharted, so charting
+ * it again later still hands the fragment over (ours: the full-inventory case isn't captured).
+ */
+function roomForReward(player, spot) {
+  if (spot.key !== CRAB_STATUE.key || player.getInventory().getFreeSlots() > 0) return true;
+  player.sendMessage(NO_ROOM);
+  return false;
+}
+
 function crabFragment(player) {
   const { Item, DialogueChainBuilder, ItemStatementDialogue } = common.core();
+  const inventory = player.getInventory();
+  const before = inventory.getAmount(CRAB_STATUE.item);
+  inventory.addItem(new Item(CRAB_STATUE.item, 1));
+  if (inventory.getAmount(CRAB_STATUE.item) <= before) return;
   common.api().emitCustomEvent("collection-log:obtain", { player, itemId: CRAB_STATUE.item });
-  player.getInventory().addItem(new Item(CRAB_STATUE.item, 1));
   player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new ItemStatementDialogue(0, CRAB_STATUE.item, CRAB_STATUE.text)));
 }
 

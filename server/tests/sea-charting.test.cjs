@@ -757,3 +757,30 @@ test("Chartin' Charles pays the owed ocean bonuses at once (rsprox 948)", () => 
   tutor.pay(player);
   assert.deepEqual(player.xp, [2000]);
 });
+
+test("a full inventory leaves the crab statue uncharted until its fragment fits (review #1472)", () => {
+  const { Item } = require("../dist/game/model/Item");
+  const player = captain();
+  const boat = atTheHelm(player);
+  boat.helmPlayerId = undefined;
+  player.varbits.set(19105, 0);
+  const spot = common.spotByKey("generic_crab_statue");
+  try {
+    for (let i = 0; i < 28; i++) player.getInventory().add(new Item(1511, 1), false);
+    assert.equal(player.getInventory().getFreeSlots(), 0);
+    chart(player, "generic_crab_statue");
+    tick();
+    assert.equal(spotBit(player, spot), 0, "not charted");
+    assert.equal(player.getInventory().getAmount(32395), 0);
+    assert.equal(player.messages().at(-1), "You don't have enough inventory space.");
+    assert.deepEqual(player.xp, []);
+
+    player.getInventory().delete(1511, 1);
+    chart(player, "generic_crab_statue");
+    tick();
+    assert.equal(spotBit(player, spot), 1);
+    assert.equal(player.getInventory().getAmount(32395), 1, "the fragment, once there's room");
+  } finally {
+    leave(player);
+  }
+});

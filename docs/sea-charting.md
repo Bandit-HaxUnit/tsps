@@ -243,6 +243,8 @@ Fremennik Strait view, 2366,3890, is a typo for the marker's 2366,3777).
   charted (live sets it as you meet him).
 - Charles's spawn (`npc-spawns.json`) was his Talk-to-only form (288), which never shows
   Get-training: now his multinpc (15151) at his captured tile.
+- The crab statue with a full inventory: `You don't have enough inventory space.` and the statue
+  stays uncharted, so it hands the fragment over once there's room (not captured).
 - The player doesn't turn towards the spot (live sends a face angle; the deck's frame would need
   the boat's heading worked in).
 
