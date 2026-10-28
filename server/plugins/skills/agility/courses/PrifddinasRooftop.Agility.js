@@ -93,6 +93,7 @@ function darkHole(destination) {
 module.exports = {
   key: "prifddinas",
   name: "Prifddinas Agility",
+  helper: 18, // the Agility helper's course (enum 3507: "Prifddinas Agility Course")
   lapXp: 1337,
   petBase: 25146, // Giant squirrel base chance (Wiki)
   obstacles: [
