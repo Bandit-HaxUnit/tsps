@@ -336,6 +336,8 @@ export class PluginManager {
   private static npcAggressionToleranceHooks: PluginHook<PluginNpcAggressionToleranceEvent>[] = [];
   private static playerDefeatedHooks: PluginHook<PluginPlayerDefeatedEvent>[] = [];
   private static itemOnObjectHooks: PluginHook<PluginItemOnObjectEvent>[] = [];
+  /** Item-on-object handlers registered with `fallback`: run when no other handler took the use. */
+  private static itemOnObjectFallbackHooks: PluginHook<PluginItemOnObjectEvent>[] = [];
   private static itemOnItemHooks: PluginHook<PluginItemOnItemEvent>[] = [];
   private static itemOnNpcHooks: PluginHook<PluginItemOnNpcEvent>[] = [];
   private static itemOnPlayerHooks: PluginHook<PluginItemOnPlayerEvent>[] = [];
@@ -1791,6 +1793,9 @@ export class PluginManager {
 
   public static emitItemOnObject(event: PluginItemOnObjectEvent): boolean {
     for (const hook of PluginManager.itemOnObjectHooks) {
+      PluginManager.executeHook(hook, event, "item_on_object", "item_on_object");
+    }
+    for (const hook of PluginManager.itemOnObjectFallbackHooks) {
       PluginManager.executeHook(hook, event, "item_on_object", "item_on_object");
     }
     return event.handled === true;
@@ -3736,7 +3741,7 @@ export class PluginManager {
         if (typeof handler !== "function") {
           return;
         }
-        PluginManager.itemOnObjectHooks.push({
+        (filter?.fallback ? PluginManager.itemOnObjectFallbackHooks : PluginManager.itemOnObjectHooks).push({
           ...hookProfile(handler),
           handler: (event) => {
             if (!event || event.handled || !event.player || !event.object) {
