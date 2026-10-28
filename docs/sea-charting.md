@@ -14,7 +14,8 @@ data in `data/charting.json`. Tests: `server/tests/sea-charting.test.cjs`.
   1009, 3455 and 3467 (every one of the 94 generic tasks is charted in at least one recording).
   Spyglass views: 907, 938-948, 3455, 3461, 3467 and 3837 (all 57 views, each with its camera
   shots; `view.rec` in the data names the recording each view's shots come from). Hint markers:
-  every recording that sails past one.
+  every recording that sails past one. Current ducks: 938, 939, 940, 944, 948 and 3467 (all 54
+  currents; `routeRec` in the data names each route's recording).
   XP: recordings from 2025-11-26 on (907, 938-948, 1009, 3461, 3837, 4290); the launch-day ones
   (3450, 3455, 3467, 2025-11-19) paid less for every kind of spot.
 - The cache:
@@ -40,6 +41,7 @@ data in `data/charting.json`. Tests: `server/tests/sea-charting.test.cjs`.
 | `Progress` | The charts sent to the client at login. |
 | `Markers` | The spyglass and current duck hint markers, placed as world locs at startup. |
 | `Spyglass` | Look-through: the nearest uncharted view in reach, its captured camera shots, then the charting. |
+| `CurrentDuck` | Track-current, the duck's swim along its captured route, its stop, Collect from the deck. |
 | `Generic` | The 92 Chart locs, the Port Sarim task board and salvaging station, the crab statue's Medallion fragment. |
 | `Dev` | `::chart go <task>`, `::chart done <task>`, `::chart reset [task]`, `::chart find <text>` (developers). |
 
@@ -48,6 +50,10 @@ data in `data/charting.json`. Tests: `server/tests/sea-charting.test.cjs`.
 - `api.setUsableFromDeck` takes loc ids as well as names. A loc used from a deck but out of
   reach no longer lets go of the helm: live answers "I can't reach that!" and nothing else
   (rsprox 3455).
+- `World` refreshes the active regions when an owned boat sails (or is teleported) into another
+  map square. A player on a deck keeps the sea under their boat awake, but their own tile never
+  changes there, so the sea a boat sailed into stayed asleep and its NPCs (a released duck) never
+  moved.
 - `Helm.plugin.js` listens to `sailing:leave-helm` (`{ player }`, answered with `left`) so
   other plugins can let go of the helm the way the helm's own option does.
 
@@ -110,6 +116,23 @@ From the helm, the click lets go of it and the rest starts a tick later.
 - No view in reach: `There isn't anything nearby worth looking at.`. A charted view counts as
   none (captured: "nothing nearby" 2-5 tiles from views charted earlier).
 
+**Current ducks** (rsprox 3467 and others): Track-current within reach of a duck marker.
+- +0: the helm let go of. +1: the placing animation (13305).
+- +2: `<col=3366ff>You release your current duck and he begins tracking the currents...</col>`,
+  `sailing_charting_current_duck_reset` set, `current_hint_arrow` 5, the duck (15152) spawned at
+  the current's start with a hint arrow, the item gone.
+- +3: the duck says "Quack!" (area sound 413), then swims its route a tile a tick (`walk`, every
+  step captured; routes of 17 to 214 tiles).
+- At the end it turns into 15153: `<col=3366ff>Your current duck comes to a stop.</col>`,
+  "Quack! Quack! Quack!", area sound 413 twice.
+- Collect: +1 the helm let go of and the pick-up animation (13304); +2 the charting, the duck
+  back in the inventory, the object box `The duck recognises your boat and climbs aboard. He
+  shares the secrets of the currents he travelled on with you.`, the variables back to 0.
+- No current near: `You don't spot any currents worth tracking.`
+- Every run pays its XP again (the tasks' `give_repeat_xp`).
+- Current Affairs charts the Catherby current with this duck: its Arhein lines play over the
+  release and the collection (`charting:duck-released`, `charting:duck-collected`).
+
 **Hint markers**: locs 59281 (spyglass) and 59282 (current duck), shape 10, rotation 0, added
 with the zone whether the task is charted or not, at the spots the Wiki lists (the Wiki's
 Fremennik Strait view, 2366,3890, is a typo for the marker's 2366,3777).
@@ -123,10 +146,19 @@ Fremennik Strait view, 2366,3890, is a typo for the marker's 2366,3777).
   0-7 tiles from the boat's centre, counting views charted earlier as nothing).
 - The spyglass view doesn't close and reopen the side tabs, hide the menu options (no tsps
   packet for hiding ops yet) or hide the HP bar, as live does: our toplevel's tab slots differ.
+- A duck is released within 8 tiles of its marker (the captures: up to 8 from the boat's
+  centre), always at the current's captured start; Collect reaches 12 tiles from the deck.
+- Other currents need Current Affairs and 22 Sailing; no refusal was captured, so it's the
+  "nothing worth tracking" line. Off the boat: `You need to be on your boat to release the duck.`
+  (the quest's own line).
+- A duck still out when its player logs out goes back to their inventory; live's timer
+  (`sailing_charting_current_duck_reset`, "wait # seconds to collect another") isn't modelled.
+- Routes seen in pieces (12 of 54: the duck left the player's view) are joined with straight
+  steps; one (Sapphire Sea) runs on to the Wiki's end tile.
 - The player doesn't turn towards the spot (live sends a face angle; the deck's frame would need
   the boat's heading worked in).
 
 ## Not done (captured)
 
-- Current duck, drink crate, weather troll and mermaid guide tasks, and Chartin'
+- Drink crate, weather troll and mermaid guide tasks, and Chartin'
   Charles's ocean bonuses (later phases of this PR).

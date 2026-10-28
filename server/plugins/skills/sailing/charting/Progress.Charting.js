@@ -6,10 +6,17 @@ function onLogin({ player }) {
   common.sendProgress(player);
 }
 
+/** `charting:mark` { player, spot }: a task charted elsewhere (a quest's own flag), silently. */
+function onMark({ player, spot }) {
+  const task = common.spotByKey(spot);
+  if (task) common.mark(player, task);
+}
+
 function attach(api) {
   common.init(api);
   api.persistAttribute(common.PROGRESS_ATTRIBUTE, {});
   api.onPlayerLogin(onLogin);
+  api.onCustomEvent("charting:mark", onMark);
 }
 
 module.exports = attach;

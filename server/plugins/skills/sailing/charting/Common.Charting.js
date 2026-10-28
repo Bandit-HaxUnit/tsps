@@ -295,6 +295,17 @@ function complete(player, spot, { lines = spot.flavour ?? [], xp = xpFor(spot) }
 }
 
 /**
+ * Marks a task charted without its messages or XP: one charted before these charts were kept (a
+ * quest's own flag), sent to the client as it is.
+ */
+function mark(player, spot) {
+  if (isCharted(player, spot)) return;
+  updateProgress(player, (saved) => { saved.charted = [...saved.charted, spot.uid].sort((a, b) => a - b); });
+  setSpotBit(player, spot);
+  player.getPacketSender().sendConfig(VARP_TOTAL_ENTRIES, chartedSet(player).size);
+}
+
+/**
  * Releases the helm for a charting action. True when the player was at it: live then answers a
  * tick later (rsprox 1009: the helm on the click, the charting the next tick).
  */
@@ -329,6 +340,7 @@ module.exports = {
   isCharted,
   sendProgress,
   complete,
+  mark,
   seaBonusXp,
   xpFor,
   addXp,

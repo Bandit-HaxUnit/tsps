@@ -131,6 +131,8 @@ function tick(count = 1) {
     World.processCycle = (World.processCycle | 0) + 1;
     TaskManager.process();
     BoatManager.tick();
+    // The ducks out at sea walk as the world would move them.
+    for (const duck of require("../plugins/skills/sailing/charting/CurrentDuck.Charting").ducks.values()) duck.npc.getMovementQueue().process();
   }
 }
 
@@ -414,4 +416,117 @@ test("all 57 views have their captured shots and spot; ducks and views their hin
   assert.equal(views.filter((spot) => spot.view?.shots?.length >= 2 && spot.view.fadeOut > 0).length, 57);
   assert.equal(views.filter((spot) => spot.marker).length, 56, "every view but Chartin' Charles's, seen on foot in the cave");
   assert.equal(common.spotsOfType("current_duck").filter((spot) => spot.marker).length, 54);
+});
+
+const currentDuck = require("../plugins/skills/sailing/charting/CurrentDuck.Charting");
+const ITEM_DUCK = 31805;
+
+/** A captain with the duck, Current Affairs done or not, on a boat at a tile. */
+function duckCaptain({ questDone = true, at = [2835, 3414] } = {}) {
+  const player = captain();
+  const boat = atTheHelm(player);
+  BoatManager.teleport(boat, { fineX: at[0] * 128 + 64, fineY: at[1] * 128 + 64 });
+  player.getInventory().add(new (require("../dist/game/model/Item").Item)(ITEM_DUCK, 1), true);
+  player.questDone = questDone;
+  return player;
+}
+
+before(() => {
+  PluginManager.createApi("SeaChartingQuests").onCustomEvent("quest:is-complete", (request) => {
+    if (request.key === "current_affairs" && request.player?.questDone !== undefined) request.complete = request.player.questDone;
+  });
+});
+
+function releaseAndFollow(player) {
+  currentDuck.trackCurrent({ player });
+  tick(2);
+  const duck = currentDuck.ducks.get(player);
+  assert.ok(duck, "the duck is out");
+  return duck;
+}
+
+test("a duck released away from any current: nothing to track (rsprox, 55 times)", () => {
+  const player = duckCaptain({ at: [3000, 3300] });
+  try {
+    currentDuck.trackCurrent({ player });
+    assert.equal(player.messages().at(-1), "You don't spot any currents worth tracking.");
+    assert.equal(player.getInventory().getAmount(ITEM_DUCK), 1);
+  } finally {
+    leave(player);
+  }
+});
+
+test("other currents wait for Current Affairs; its own Catherby current doesn't", () => {
+  const player = duckCaptain({ questDone: false, at: [3082, 3203] });
+  try {
+    currentDuck.trackCurrent({ player });
+    assert.equal(player.messages().at(-1), "You don't spot any currents worth tracking.");
+  } finally {
+    leave(player);
+  }
+  const quester = duckCaptain({ questDone: false });
+  try {
+    releaseAndFollow(quester);
+  } finally {
+    currentDuck.ducks.delete(quester);
+    leave(quester);
+  }
+});
+
+test("the Catherby duck follows its captured route, stops and is collected from the deck (rsprox 3467)", () => {
+  const player = duckCaptain();
+  try {
+    const spot = common.spotByKey("current_duck_catherby_bay");
+    currentDuck.trackCurrent({ player });
+    assert.equal(player.varbits.get(19105), 0, "the helm is let go of");
+    tick();
+    assert.deepEqual(player.animations.slice(-1), [13305]);
+    tick();
+    const duck = currentDuck.ducks.get(player);
+    assert.equal(player.messages().at(-1), "<col=3366ff>You release your current duck and he begins tracking the currents...</col>");
+    assert.equal(player.getInventory().getAmount(ITEM_DUCK), 0);
+    assert.equal(duck.npc.getId(), 15152);
+    assert.deepEqual([duck.npc.getLocation().getX(), duck.npc.getLocation().getY()], [2837, 3414]);
+    assert.equal(player.varbits.get(14192), 5, "current_hint_arrow");
+
+    const moving = { player, npc: duck.npc, npcId: 15152, clickType: 1, range: 1 };
+    currentDuck.collect(moving);
+    assert.equal(duck.stopped, false);
+
+    tick(duck.steps.length + 3);
+    assert.equal(duck.stopped, true);
+    assert.deepEqual([duck.npc.getLocation().getX(), duck.npc.getLocation().getY()], [2802, 3322]);
+    assert.equal(player.messages().at(-1), "<col=3366ff>Your current duck comes to a stop.</col>");
+
+    const route = { player, npc: duck.npc, npcId: 15153, clickType: 1, range: 1 };
+    for (const handler of PluginManager.npcRouteHooks ?? []) handler.handler(route);
+    currentDuck.collect({ player, npc: duck.npc });
+    tick(2);
+    assert.deepEqual(player.animations.slice(-1), [13304]);
+    assert.equal(spotBit(player, spot), 1);
+    assert.equal(player.getInventory().getAmount(ITEM_DUCK), 1);
+    assert.equal(currentDuck.ducks.has(player), false);
+    assert.equal(duck.npc.isRegistered(), false);
+    assert.deepEqual(player.xp, [common.xpFor(spot)]);
+    assert.equal(player.messages().at(-3), `Charting complete: ${blue("Test the currents south west of the Obelisk of Water.")}`);
+
+    // Every later run pays again (give_repeat_xp).
+    BoatManager.teleport(Sailing.instanceAboard(player), { fineX: 2835 * 128 + 64, fineY: 3414 * 128 + 64 });
+    const again = releaseAndFollow(player);
+    tick(again.steps.length + 3);
+    currentDuck.collect({ player, npc: again.npc });
+    tick(2);
+    assert.deepEqual(player.xp, [125, 125]);
+  } finally {
+    leave(player);
+  }
+});
+
+test("every current's route runs from its release to its end a tile at a time", () => {
+  for (const spot of common.spotsOfType("current_duck")) {
+    assert.ok(spot.route?.length >= 2, spot.key);
+    const steps = currentDuck.routeSteps(spot.route);
+    assert.deepEqual(steps.at(-1), spot.location2 ? spot.route.at(-1) : steps.at(-1), spot.key);
+    assert.ok(Math.max(Math.abs(spot.route[0][0] - spot.location[0]), Math.abs(spot.route[0][1] - spot.location[1])) <= 8, spot.key);
+  }
 });

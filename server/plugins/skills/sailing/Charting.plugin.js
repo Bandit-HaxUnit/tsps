@@ -12,6 +12,7 @@ module.exports = {
     require("./charting/Markers.Charting")(api);
     require("./charting/Generic.Charting")(api);
     require("./charting/Spyglass.Charting")(api);
+    require("./charting/CurrentDuck.Charting")(api);
     require("./charting/Dev.Charting")(api);
   },
 };
