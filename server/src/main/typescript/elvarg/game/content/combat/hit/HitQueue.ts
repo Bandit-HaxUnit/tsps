@@ -53,8 +53,9 @@ export class HitQueue {
         const hold = this.character.isPlayer()
             ? this.character.getCombat().getIncomingHitCycle()
             : -1;
+        const stalled = hold > currentCycle;
         while (
-            hold <= currentCycle &&
+            !stalled &&
             this.pendingHits.length > 0 &&
             this.pendingHits[0].revealCycle <= currentCycle
         ) {
@@ -71,10 +72,26 @@ export class HitQueue {
 
         // Every hit due this tick lands this tick. Once the owner is dead the rest
         // still show, as 0s - decrementHealth never takes hitpoints below zero.
+        //
+        // A multi-hit special's later splats never reach pendingHits at all: CombatFactory
+        // .applyResolvedHitDamage schedules each one past its hit's own delay straight into this
+        // list (dragon claws' Slice and Dice lands two, then two more a tick later), so the stall
+        // holds them too - Wiki: Animation stall queues the hits coming in to the player. Stopping
+        // at the first held splat keeps the chain in the order the client shows it, and leaves
+        // damage the owner took on itself (a recoil ring, a bolt's cost) landing on its own tick.
         while (this.pendingDamage.length > 0) {
+            if (stalled && HitQueue.incomingFromOther(this.pendingDamage[0], character)) {
+                break;
+            }
             character.addTickHit(this.applyDamage(this.pendingDamage.shift()!));
         }
         if (!this.hasPendingWork()) HitQueue.active.delete(this);
+    }
+
+    /** Damage another combatant landed on the owner, not damage the owner took on itself. */
+    private static incomingFromOther(damage: HitDamage, owner: Mobile): boolean {
+        const source = damage.getSource();
+        return source != null && source !== owner;
     }
 
     /** Takes a hit off the owner's hitpoints, then runs effects that react to the result. */

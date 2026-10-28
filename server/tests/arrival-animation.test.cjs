@@ -241,6 +241,144 @@ test('a special that replaces its own swing is measured from the animation that 
       'once the special has played out an ordinary reset goes out again');
 });
 
+/** The Slice and Dice special, registered from the plugin that ships it. */
+function dragonClawsSpecial() {
+  const { CombatSpecial } = require('../dist/game/content/combat/CombatSpecial');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  let definition = null;
+  require('../plugins/combat/specials/DragonClaw.SpecialAttack')({
+    core: PluginManager.getCoreApi(),
+    registerCombatSpecial: (special) => { definition = special; },
+  });
+  CombatSpecial.register(definition);
+  const registered = CombatSpecial.getById('dragon_claws');
+  assert.ok(registered, 'the claws special registered');
+  return registered;
+}
+
+/** An attacker with the claws special active; enough for the real traits lookup. */
+function clawsAttacker(special) {
+  const attacker = {
+    isPlayer: () => true,
+    isNpc: () => false,
+    isRegistered: () => true,
+    getHitpoints: () => 99,
+    isSpecialActivated: () => true,
+    getCombatSpecial: () => special,
+  };
+  attacker.getAsPlayer = () => attacker;
+  return attacker;
+}
+
+/**
+ * A real claws swing: the real PendingHit resolving the real registered traits. Only the roll is
+ * scripted - the same seam melee-special-weapons.test.cjs uses - because this fixture has no world
+ * to roll accuracy or strength in.
+ */
+function clawsSwing(attacker, target, baseDamage) {
+  const { PendingHit } = require('../dist/game/content/combat/hit/PendingHit');
+  const { HitDamage } = require('../dist/game/content/combat/hit/HitDamage');
+  const { CombatType } = require('../dist/game/content/combat/CombatType');
+  const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
+  const { AccuracyFormulasDpsCalc } =
+      require('../dist/game/content/combat/formula/AccuracyFormulasDpsCalc');
+  const realAccuracy = AccuracyFormulasDpsCalc.rollAccuracy;
+  const realDamage = CombatFactory.getHitDamage;
+  AccuracyFormulasDpsCalc.rollAccuracy = () => true;
+  CombatFactory.getHitDamage = () => new HitDamage(baseDamage, 1);
+  try {
+    return new PendingHit(attacker, target, {
+      type: () => CombatType.MELEE,
+      accuracyDefenceType: () => undefined,
+    });
+  } finally {
+    AccuracyFormulasDpsCalc.rollAccuracy = realAccuracy;
+    CombatFactory.getHitDamage = realDamage;
+  }
+}
+
+/** The swing fixture, with hitpoints that go down as the queue applies damage. */
+function buildDamageTarget() {
+  const fighter = buildFighter(false);
+  let hp = 100;
+  const taken = [];
+  fighter.player.getHitpoints = () => hp;
+  fighter.player.decrementHealth = (hit) => {
+    hit.setDamage(Math.min(hit.getDamage(), hp));
+    hp -= hit.getDamage();
+    taken.push(hit.getDamage());
+    return hit;
+  };
+  fighter.player.addTickHit = () => {};
+  return { ...fighter, taken };
+}
+
+// A multi-hit special's tail never rides in pendingHits: CombatFactory.applyResolvedHitDamage
+// schedules each splat past its own delay straight into the target's pendingDamage list - dragon
+// claws' Slice and Dice lands its front pair, then a tick later its back pair (Wiki: Animation
+// stall queues the hits coming in to the player, so a stalled target must not take the tail early).
+test('a stalled player takes a delayed special hit only when the animation releases', async () => {
+  const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
+  const { TaskManager } = require('../dist/game/task/TaskManager');
+  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  World.processCycle = 301;
+  const { player, combat, taken } = buildDamageTarget();
+  const queue = combat.getHitQueue();
+
+  const swing = clawsSwing(clawsAttacker(dragonClawsSpecial()), player, 35);
+  assert.deepEqual(swing.getHits().map((hit) => hit.getDamage()), [35, 17, 8, 9], 'the real chain');
+  assert.deepEqual([...swing.getHitDelays()], [0, 0, 1, 1],
+      'and the back pair arrives a tick later');
+
+  // applyResolvedHitDamage is what executeHit calls to spread the splats across the two ticks;
+  // the rest of executeHit needs a live world (sounds, prayers, retaliation) and is not here.
+  CombatFactory.applyResolvedHitDamage(player, swing);
+  queue.process(301);
+  assert.deepEqual(taken, [35, 17], 'the front pair lands on the swing tick');
+
+  player.getCombat().expectAttackAnimation();
+  player.performAnimation(new Animation(4230)); // a hunters' crossbow swing: a full 3-tick stall
+  assert.equal(combat.getIncomingHitCycle(), 304, 'held through cycle 304');
+
+  World.processCycle = 302;
+  TaskManager.process(); // the delayed splats are scheduled into the queue
+  queue.process(302);
+  assert.deepEqual(taken, [35, 17], 'the tail waits behind the animation');
+
+  World.processCycle = 304;
+  queue.process(304);
+  assert.deepEqual(taken, [35, 17, 8, 9], 'the whole chain lands as the animation releases');
+});
+
+test('stopping the animation early releases the delayed special hit with it', async () => {
+  const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
+  const { TaskManager } = require('../dist/game/task/TaskManager');
+  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  World.processCycle = 301;
+  const { player, combat, taken } = buildDamageTarget();
+  const queue = combat.getHitQueue();
+
+  const swing = clawsSwing(clawsAttacker(dragonClawsSpecial()), player, 35);
+  CombatFactory.applyResolvedHitDamage(player, swing);
+  queue.process(301);
+  assert.deepEqual(taken, [35, 17], 'the front pair landed');
+
+  player.getCombat().expectAttackAnimation();
+  player.performAnimation(new Animation(4230));
+  assert.equal(combat.getIncomingHitCycle(), 304, 'held through cycle 304');
+
+  World.processCycle = 302;
+  TaskManager.process();
+  queue.process(302);
+  assert.deepEqual(taken, [35, 17], 'the tail is held');
+
+  World.processCycle = 303;
+  player.performAnimation(Animation.DEFAULT_RESET_ANIMATION); // content ends the swing on purpose
+  queue.process(303);
+  assert.deepEqual(taken, [35, 17, 8, 9],
+      'the tail lands on the tick the player is free, not on the deadline the stall once had');
+});
+
 test('a swing is measured from its own animation, and a click does not cut it away', async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
   World.processCycle = 100;
