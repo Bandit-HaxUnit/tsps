@@ -13,6 +13,7 @@ const Trophies = require("./Trophies.Construction");
 const CombatRings = require("./CombatRings.Construction");
 const Data = require("./Data.Construction");
 const Palette = require("./Palette.Construction");
+const { messageBox } = require("./Menu.Construction");
 const HOUSE_SIZE = 104;
 const HOUSE_STRIDE = 112;
 const HOUSE_ALLOCATION_COLUMNS = 16;
@@ -261,7 +262,7 @@ class PlayerHouseInstance extends PrivateArea {
     if (!furniture) return "There is no constructed furniture there.";
     if (Object.values(furniture.storage ?? {}).some(amount => amount > 0)) return "Empty this storage before removing it.";
     if (furniture.buildableKey === "EXIT_PORTAL" && this.getExitPortalCount() === 1) {
-      return "Your house must have at least one exit portal.";
+      return messageBox("Your house must have at least one exit portal.");
     }
     return null;
   }
@@ -305,24 +306,29 @@ class PlayerHouseInstance extends PrivateArea {
     return hotspot;
   }
 
+  // rsprox captures (poh_add_room:list, door hotspots, rev 229-235): these refusals are message boxes.
   canPlaceRoom(room, position, constructionLevel) {
     if (!this.isRoomPosition(position)) return "That room location is outside your house.";
     if (this.getRoom(position)) return "There is already a room there.";
-    if (!this.fitsHouseDimensions(position, constructionLevel)) return "That exceeds the house dimensions for your Construction level.";
+    if (!this.fitsHouseDimensions(position, constructionLevel)) return messageBox("Your house is already the maximum length.");
     if (constructionLevel < room.level) return `You need Construction level ${room.level} to build a ${room.name}.`;
-    if (this.getRoomCount() >= this.getMaxRooms(constructionLevel)) return "You already have the maximum number of rooms for your Construction level.";
-    if (room.basement && position.plane !== 0) return "This room can only be created in the basement.";
-    if (room.outdoors && position.plane !== 1) return "You can only add that room on surface level.";
+    const maxRooms = this.getMaxRooms(constructionLevel);
+    if (this.getRoomCount() >= maxRooms) return messageBox(`You can only build ${maxRooms} rooms with your Construction level.`);
+    if (room.basement && position.plane !== 0) return messageBox("That room can only be built underground.");
+    if (room.outdoors && position.plane !== 1) return messageBox("That room can only be built on ground level.");
     if (position.plane > 1) {
       const below = this.getRoom({ ...position, plane: position.plane - 1 });
-      if (!below || Data.ROOM_BY_KEY.get(below.roomKey)?.outdoors) return "You can't add a room with nothing below to support it.";
+      if (!below || Data.ROOM_BY_KEY.get(below.roomKey)?.outdoors) return messageBox("You can't build a room that would have no room to support it.");
     }
-    if (room.key === "COSTUME_ROOM" && this.hasRoom("COSTUME_ROOM")) return "You may only have one costume room.";
-    if (room.key === "PORTAL_NEXUS" && this.hasRoom("PORTAL_NEXUS")) return "You may only have one portal nexus room.";
-    if ((room.key === "MENAGERIE_INDOORS" || room.key === "MENAGERIE_OUTDOORS") && (this.hasRoom("MENAGERIE_INDOORS") || this.hasRoom("MENAGERIE_OUTDOORS"))) {
-      return "You may only have one menagerie.";
-    }
+    if (this.getOnlyCopy(room)) return messageBox("You can only build one of those rooms.");
     return null;
+  }
+
+  /** Where the house already has a room that it may only have one of (the menageries count as one). */
+  getOnlyCopy(room) {
+    const keys = room.key === "MENAGERIE_INDOORS" || room.key === "MENAGERIE_OUTDOORS" ? ["MENAGERIE_INDOORS", "MENAGERIE_OUTDOORS"]
+      : room.key === "COSTUME_ROOM" || room.key === "PORTAL_NEXUS" ? [room.key] : [];
+    return keys.length ? this.findRoom(position => keys.includes(this.getRoom(position).roomKey)) : null;
   }
 
   placeRoom(position, room, rotation = 0) {
@@ -369,20 +375,22 @@ class PlayerHouseInstance extends PrivateArea {
     }, 0);
   }
 
+  // rsprox captures (poh_viewer:done and :map, rev 229): message boxes, in live wording.
   canMoveRoom(from, to) {
     const room = this.getRoom(from);
     if (!room) return "There is no room there.";
     if (!this.isRoomPosition(to)) return "That room location is outside your house.";
     if (this.getRoom(to)) return "There is already a room there.";
-    if (!this.fitsHouseDimensions(to, this.owner?.getSkillManager().getMaxLevel(Skill.CONSTRUCTION) ?? 99, from)) return "That exceeds the house dimensions for your Construction level.";
-    if (from.plane === 1 && this.getRoom({ ...from, plane: 2 })) return "That room supports a room above it.";
+    if (!this.fitsHouseDimensions(to, this.owner?.getSkillManager().getMaxLevel(Skill.CONSTRUCTION) ?? 99, from)) return messageBox("Your house is already the maximum length.");
+    if (from.plane === 1 && this.getRoom({ ...from, plane: 2 })) return messageBox("That room is supporting something else, so it can't be moved.");
     const definition = Data.ROOM_BY_KEY.get(room.roomKey);
-    if (definition.basement && to.plane !== 0) return "This room belongs in the basement.";
-    if (definition.outdoors && to.plane !== 1) return "This room belongs on the surface.";
+    if (definition.basement && to.plane !== 0) return messageBox("That room can only go underground.");
+    if (definition.outdoors && to.plane !== 1) return messageBox("That room can only go on ground level.");
     if (to.plane === 2) {
+      if (from.plane === 1 && from.x === to.x && from.y === to.y) return messageBox("You can't move it above itself. It would fall down.");
       const below = this.getRoom({ ...to, plane: 1 });
-      if (!below || Data.ROOM_BY_KEY.get(below.roomKey)?.outdoors
-        || (from.plane === 1 && from.x === to.x && from.y === to.y)) return "This room needs a room below to support it.";
+      if (!below) return messageBox("You can't build a room that would have no room to support it.");
+      if (Data.ROOM_BY_KEY.get(below.roomKey)?.outdoors) return messageBox("You can't put it above that room.");
     }
     return null;
   }
@@ -399,9 +407,9 @@ class PlayerHouseInstance extends PrivateArea {
     const room = this.getRoom(position);
     if (!room) return "There is no room there.";
     if (Object.values(room.furnitureByLocation ?? {}).some(furniture => Object.values(furniture.storage ?? {}).some(amount => amount > 0))) return "Empty the storage in this room before removing it.";
-    if (position.plane === 1 && this.getRoom({ ...position, plane: 2 })) return "You can't remove that room because it supports a room above it.";
+    if (position.plane === 1 && this.getRoom({ ...position, plane: 2 })) return messageBox("You can't remove a room that is supporting another room.");
     if ((room.roomKey === "GARDEN" || room.roomKey === "FORMAL_GARDEN") && this.hasExitPortal(room) && this.getExitPortalCount() === 1) {
-      return "Your house must have at least one exit portal.";
+      return messageBox("Your house must have at least one exit portal.");
     }
     return null;
   }
@@ -845,6 +853,15 @@ class PlayerHouseInstance extends PrivateArea {
 
   hasRoom(key) {
     return this.save.rooms.flat(2).some((room) => room?.roomKey === key);
+  }
+
+  /** The position of the first built room that `matches(position)`, or null. */
+  findRoom(matches) {
+    for (let plane = 0; plane < this.save.rooms.length; plane++) for (let x = 0; x < this.gridSize; x++) for (let y = 0; y < this.gridSize; y++) {
+      const position = { x, y, plane };
+      if (this.getRoom(position) && matches(position)) return position;
+    }
+    return null;
   }
 
   hasExitPortal(room) {
