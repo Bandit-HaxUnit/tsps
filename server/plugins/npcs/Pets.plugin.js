@@ -22,6 +22,7 @@ const Dust = require("./pets/Dust.Pets");
 const Call = require("./pets/Call.Pets");
 const CatchUp = require("./pets/CatchUp.Pets");
 const Dialogue = require("./pets/Dialogue.Pets");
+const RiftGuardian = require("./pets/RiftGuardian.Pets");
 
 const CURRENT_PET_ATTRIBUTE = "pets:current";
 /** The item of the follower the player logged out with; re-summoned on login. */
@@ -1726,7 +1727,7 @@ function handlePetClick(event) {
   if (lower === "pick-up") return pickup(event.player, event.npc);
   if (lower === "pet") return interact(event.player, event.npc, "Pet");
   if (lower === "metamorphosis" || lower === "metamorph") return morph(event.player, event.npc);
-  if (lower === "talk-to" || lower === "interact" || lower === "stroke") {
+  if (lower === "talk-to" || lower === "interact" || lower === "stroke" || lower === "locking") {
     return interact(event.player, event.npc, action);
   }
   if (lower === "chase") {
@@ -1959,6 +1960,8 @@ module.exports = {
     api.onPlayerDisconnect(onPetPlayerDisconnect);
     api.onPlayerLogin(onPetPlayerLogin);
     api.onPlayerDeath(onCatOwnerDeath);
+    RiftGuardian.attach(api, {pets: PETS, skill: Skill.RUNECRAFTING, world: World, currentAttribute: CURRENT_PET_ATTRIBUTE,
+      activeAttribute: ACTIVE_PET_ATTRIBUTE, lastAttribute: LAST_PET_ATTRIBUTE, getPetByNpcId, setStoredVariant, recordOwnership, syncFollowerIndex});
 
     api.log("registered", {
       pets: PETS.length,
