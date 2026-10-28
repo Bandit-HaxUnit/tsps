@@ -152,13 +152,13 @@ test("a fast boat stops at a one-tile strip of land instead of hopping it", () =
   }
 });
 
-test("reverse keeps the bow on the heading and backs up at half speed", () => {
+test("reverse keeps the bow on the heading and backs up half a tile a tick, whatever the hull (rsprox)", () => {
   const boat = makeRaft(NORTH);
   boat.moveMode = BoatMoveMode.Reverse;
-  assert.deepEqual(steps(boat, 3), [-64, -96, -96]);
+  assert.deepEqual(steps(boat, 3), [-64, -64, -64], "half a tile a tick whatever the hull");
   assert.equal(boat.angle, NORTH);
   boat.moveMode = BoatMoveMode.Full;
-  assert.deepEqual(steps(boat, 4), [-32, 32, 96, 160], "and gathers way forward again through a stop");
+  assert.deepEqual(steps(boat, 4), [0, 64, 128, 192], "and gathers way forward again through a stop");
 });
 
 test("a quarter turn takes 4 ticks at 128 units a tick", () => {
@@ -792,9 +792,9 @@ test("saved sailing state drops anything malformed", () => {
     tools: [0, 4, 4, "log"],
   }), {
     boats: [
-      { slot: 0, type: "raft", name: [0, 32, 57], hitpoints: 0, facilities: [], location: { kind: "docked", dock: "port_sarim" },
+      { slot: 0, type: "raft", name: [0, 32, 57], hitpoints: 0, damage: 0, facilities: [], location: { kind: "docked", dock: "port_sarim" },
         cargo: [{ id: 31964, amount: 2 }, null, null, null], parts: { hull: 4, keel: 0, sails: 0, helm: 0 } },
-      { slot: 1, type: "raft", name: [0, 0, 0], hitpoints: 0, facilities: [], location: { kind: "sunk" }, cargo: [],
+      { slot: 1, type: "raft", name: [0, 0, 0], hitpoints: 0, damage: 0, facilities: [], location: { kind: "sunk" }, cargo: [],
         parts: { hull: 0, keel: 0, sails: 0, helm: 0 } },
     ],
     activeBoatSlot: null,
@@ -853,7 +853,7 @@ test("the sailing plugins register their hooks and load the boat and dock data",
   assert.equal(gangplank["Mooring point"].Disembark, gangplank.Gangplank.Disembark);
   const helm = registerPlugin("Helm.plugin");
   assert.deepEqual(Object.keys(helm.objects.Helm), ["Navigate", "Stop-navigating", "Escape"]);
-  assert.equal(helm.interfaceClicks.length, 1);
+  assert.equal(helm.interfaceClicks.length, 2, "the sail buttons and the wind catcher's release");
   assert.deepEqual(Object.keys(registerPlugin("Sailing.plugin").events).sort(), ["sailing:boarded", "sailing:left"]);
   assert.deepEqual(Object.keys(registerPlugin("Shipwright.plugin").npcs), ["Junior Jim"]);
   assert.ok(Sailing.getDock("the_pandemonium"));
@@ -2239,7 +2239,7 @@ test("gusts and trimming follow live's timing (rsprox): a gust, Trim, the boost 
     assert.deepEqual(trimmed.filter((line) => !line.startsWith("graphic")), [
       "message You trim the sails, catching the wind for a burst of speed!", "seq 13353", "cloth 10000", "sound 10842", "sound 10841",
     ]);
-    assert.equal(boat.boostSpeed, 384, "the hull's speed cap");
+    assert.equal(boat.boostSpeed, 64, "half a tile a tick more (rsprox 856, 908)");
     assert.equal(trim.trimSails(player, boat), false, "nothing left to catch");
     tick(4);
     assert.ok(take().includes("seq 13354"), "the trim loop 4 ticks in");
@@ -2292,9 +2292,11 @@ test("navigating plays each boat size's helm animations, looping every 10 ticks 
     let facing;
     player.setPositionToFace = (location) => { facing = location; return player; };
     player.getPositionToFace = () => facing;
+    const cameras = [];
     const sender = new Proxy({}, {
       get: (_t, key, proxy) => (...args) => {
         if (key === "sendObjectAnimation") locs.push(args[1].getId());
+        if (key === "sendCameraTarget") cameras.push(args[0]);
         return proxy;
       },
     });
@@ -2304,6 +2306,8 @@ test("navigating plays each boat size's helm animations, looping every 10 ticks 
     Sailing.board(player, DOCK.id);
     try {
       helm.objects.Helm.Navigate({ player });
+      assert.deepEqual(cameras.splice(0), [{ worldEntity: Sailing.instanceAboard(player).entityIndex }],
+        `${type}: the camera on the boat at the helm (live cam_target_v4)`);
       const helmLocs = (list) => list.filter((id) => ids.loc.includes(id));
       assert.deepEqual([seqs, helmLocs(locs)], [[ids.player[0]], [ids.loc[0]]], `${type}: taking the helm`);
       const at = player.getLocation();
@@ -2317,6 +2321,7 @@ test("navigating plays each boat size's helm animations, looping every 10 ticks 
       locs.length = 0;
       helm.objects.Helm["Stop-navigating"]({ player });
       assert.ok(locs.includes(ids.loc[2]), `${type}: the helm's inactive on leaving`);
+      assert.deepEqual(cameras.splice(0), [{ player: player.getIndex() }], `${type}: and back on the player`);
       seqs.length = 0;
       for (let tick = 0; tick < 10; tick++) TaskManager.process();
       assert.deepEqual(seqs, [], `${type}: the loop stops`);
@@ -2491,4 +2496,57 @@ test("the Sailing cape teleports a boat to the Pandemonium and renames it from t
     [0, words[1].indexOf("Golden") + 1, words[2].indexOf("Hind") + 1]);
   assert.equal(BoatTeleport._test.parseBoatName("Golden"), null);
   assert.equal(BoatTeleport._test.parseBoatName("Notaword Hind"), null);
+});
+
+test("a teleported boat is sent once as a jump (update type 3), then moves as before", () => {
+  const boat = BoatManager.spawn(1, RAFT, AT_SEA);
+  try {
+    const watcher = viewer(boat.tileX + 10, boat.tileY);
+    WorldEntitySync.flush(watcher);
+    const from = { x: boat.fineX, z: boat.fineY, orientation: boat.angle };
+    BoatManager.teleport(boat, { fineX: boat.fineX + 640, fineY: boat.fineY - 256, angle: 1536 });
+    assert.equal(boat.heading, 1536, "it sails on from its new facing");
+    const jump = decodeWorldEntityInfo(WorldEntitySync.flush(watcher)[0]);
+    assert.deepEqual(jump.updates, [{ updateType: 3, delta: { x: 640, y: 0, z: -256, orientation: 1536 - from.orientation } }]);
+    assert.deepEqual(WorldEntitySync.flush(watcher), [], "only once");
+    boat.fineX += 64;
+    assert.equal(decodeWorldEntityInfo(WorldEntitySync.flush(watcher)[0]).updates[0].updateType, 2, "an ordinary move after it");
+  } finally {
+    BoatManager.dispose(boat);
+  }
+});
+
+test("rapids push the speed to the hull's cap, a burst a step past it, a limit holds it back (rsprox)", () => {
+  const boat = makeRaft(NORTH);
+  boat.moveMode = BoatMoveMode.Full;
+  boat.velocity = 192;
+  boat.speedCap = 384;
+  const move = () => {
+    const y = boat.fineY;
+    tickBoat(boat, openSea);
+    return boat.fineY - y;
+  };
+  boat.speedBonuses.set("rapids", 64 * 5);
+  assert.deepEqual([move(), move(), move()], [256, 320, 384], "up to the raft's cap (384), a step a tick");
+  boat.boostSpeed = 64;
+  assert.equal(move(), 448, "a trim: a step past the cap, no more");
+  boat.boostSpeed = undefined;
+  boat.speedBonuses.delete("rapids");
+  boat.speedBonuses.set("lightning", -64);
+  assert.deepEqual([move(), move(), move(), move(), move()], [384, 320, 256, 192, 128],
+    "the rapids gone, back down a step a tick; a strike a step under the sails");
+  boat.speedBonuses.delete("lightning");
+  boat.speedLimits.set("fetid", 64);
+  assert.deepEqual([move(), move()], [64, 64], "a fetid pool holds it to half a tile");
+});
+
+
+test("a player on a boat deck keeps the sea under the boat active, as well as the deck", () => {
+  const { ActiveRegionIndex } = require("../dist/game/ActiveRegionIndex");
+  const { Location } = require("../dist/game/model/Location");
+  const index = new ActiveRegionIndex(1);
+  const player = { getLocation: () => new Location(10244, 9605, 1) };
+  index.update([player], () => true, 1, Date.now(), () => new Location(3035, 2920, 0));
+  assert.equal(index.isLocationActive(10244, 9605, 1), true, "the deck");
+  assert.equal(index.isLocationActive(3035, 2920, 0), true, "the sea under the boat (storm clouds walk)");
 });

@@ -2,7 +2,7 @@
  * Gusts of wind and trimming the sails, as live (rsprox captures; docs/sailing.md):
  * - while the sails are set (half or full), a gust comes when the boat's gust timer runs out:
  *   "You feel a gust of wind.", the sound and the gust's wind on the sail cloth, which shows Trim;
- * - Trim within 14 ticks catches it: the hull's speed cap for the sails' boost duration, the
+ * - Trim within 14 ticks catches it: half a tile a tick more for the sails' boost duration, the
  *   helm's trim animations, and the next gust 50 ticks after the trim;
  * - left alone, the gust dies down after 14 ticks and the next comes 49 ticks later;
  * - either way the end is "The wind dies down and your sails with it."
@@ -14,6 +14,7 @@
  */
 const { BoatManager } = require("../../../src/main/typescript/elvarg/game/content/sailing/BoatManager");
 const { BoatMoveMode } = require("../../../src/main/typescript/elvarg/game/content/sailing/Boat");
+const { BURST_STEP } = require("../../../src/main/typescript/elvarg/game/content/sailing/BoatMovement");
 const { Animation } = require("../../../src/main/typescript/elvarg/game/model/Animation");
 const { Graphic } = require("../../../src/main/typescript/elvarg/game/model/Graphic");
 const { Location } = require("../../../src/main/typescript/elvarg/game/model/Location");
@@ -45,6 +46,11 @@ const TRIM_LOOP_TICKS = 4;
 const DEFAULT_BOOST_TICKS = 20;
 const SOUND_GUST = 10839;
 const SOUNDS_TRIM = [10842, 10841];
+/** A trim that stores a wind mote; a mote's release (rsprox 908 252, 907 11637). */
+const SOUNDS_STORE = [10842, 10895];
+const SOUND_RELEASE = 10841;
+/** A stored trim pays three quarters of a trim's XP (rsprox: 36 for 48, about 94 for 125). */
+const STORED_TRIM_XP = 0.75;
 /** A crewmate's trim: the second of the player's sounds, and an area sound at the sail cloth (rsprox: range 5). */
 const SOUND_CREW_TRIM = 10841;
 const SOUND_CREW_TRIM_AREA = 10807;
@@ -125,7 +131,7 @@ function lull({ player, actor }, boat, wind) {
   boat.boostSpeed = undefined;
   if (!trimmed) wind.nextGust = wind.clock + GUST_DELAY_AFTER_LULL;
   player.sendMessage(LULL_MESSAGE);
-  if (trimmed && trim) {
+  if (trimmed && trim && !wind.released) {
     actor.performAnimation(new Animation(trim.player.end));
     animateDeckLocs(player, boat, isHelm, trim.helm.end);
   }
@@ -143,13 +149,20 @@ function lull({ player, actor }, boat, wind) {
 function trimSails(player, boat, { actor = player, crew = false } = {}) {
   const wind = winds.get(boat);
   if (!wind || !canTrim(boat)) return false;
+  // A wind or gale catcher switched on, with room, keeps the gust as a wind mote instead.
+  if (require("./WindCatcher.Helm").storeFromTrim(player, boat, { actor, crew })) {
+    storedTrim(player, boat, wind, { actor, crew });
+    return true;
+  }
   const trim = boatAnim(boat, "trim");
   const spec = BoatManager.getSpec(boat);
   wind.gustEnds = undefined;
   wind.trimmedAt = wind.clock;
   wind.boostEnds = wind.clock + (spec?.stats?.speedBoostDuration ?? DEFAULT_BOOST_TICKS);
   wind.nextGust = wind.clock + GUST_DELAY_AFTER_TRIM;
-  boat.boostSpeed = spec?.stats?.speedCap ?? Math.round(boat.baseSpeed * 1.2);
+  wind.released = false;
+  // A trim adds a half-tile step to the sails, never past the cap and a step (rsprox 856, 908).
+  boat.boostSpeed = BURST_STEP;
   if (!crew) player.sendMessage(TRIM_MESSAGE);
   if (trim) {
     actor.performAnimation(new Animation(trim.player.trim));
@@ -174,6 +187,51 @@ function trimSails(player, boat, { actor = player, crew = false } = {}) {
   return true;
 }
 
+/**
+ * A trim whose gust went into the wind catcher (rsprox 908 252): the trim's animations and the
+ * gust's wind on the sails, sounds 10842 and 10895, no burst of speed, the next gust 50 ticks on.
+ */
+function storedTrim(player, boat, wind, { actor, crew }) {
+  const trim = boatAnim(boat, "trim");
+  wind.gustEnds = undefined;
+  wind.nextGust = wind.clock + GUST_DELAY_AFTER_TRIM;
+  if (trim) {
+    actor.performAnimation(new Animation(trim.player.trim));
+    animateDeckLocs(player, boat, isHelm, trim.helm.trim);
+  }
+  setSailClothOps(player, boat, true);
+  animateSails(player, boat, sailState(boat), sailState(boat));
+  if (trim) windOnSails(player, boat, trim.gust);
+  for (const sound of SOUNDS_STORE) playSound(player, sound);
+  const xp = Math.round(trimXp(player, boat) * STORED_TRIM_XP);
+  if (crew) {
+    PluginManager.emitCustomEvent("sailing:crew-trim", { player, boat, npc: actor, xp });
+  } else if (xp > 0) {
+    player.getSkillManager().addExperiences(Skill.SAILING, xp);
+  }
+}
+
+/**
+ * A wind mote released from the catcher (rsprox 907 11637, 908 281): the same burst of speed as
+ * a trim for the sails' boost duration, started over if one is up, the gust's place taken, the
+ * next gust 49 ticks on; the cloth shows Un-set and the burst's wind.
+ */
+function releaseBurst(player, boat) {
+  const wind = windFor(boat);
+  const trim = boatAnim(boat, "trim");
+  const spec = BoatManager.getSpec(boat);
+  wind.gustEnds = undefined;
+  wind.released = true;
+  wind.trimmedAt = wind.clock;
+  wind.boostEnds = wind.clock + (spec?.stats?.speedBoostDuration ?? DEFAULT_BOOST_TICKS);
+  wind.nextGust = wind.clock + GUST_DELAY_AFTER_LULL;
+  boat.boostSpeed = BURST_STEP;
+  setSailClothOps(player, boat, true);
+  animateSails(player, boat, sailState(boat), sailState(boat));
+  if (trim) windOnSails(player, boat, trim.boost);
+  playSound(player, SOUND_RELEASE);
+}
+
 function tickWind(boat, wind) {
   wind.clock++;
   const operator = helmOperator(boat);
@@ -196,7 +254,7 @@ function tickWind(boat, wind) {
     if (trim) {
       // The wind shows on set sails only (rsprox: lowering them stops it at once).
       if (sailsUp(boat)) windOnSails(player, boat, trim.boost);
-      if ((wind.clock - wind.trimmedAt) % TRIM_LOOP_TICKS === 0) {
+      if (!wind.released && (wind.clock - wind.trimmedAt) % TRIM_LOOP_TICKS === 0) {
         operator.actor.performAnimation(new Animation(trim.player.loop));
         animateDeckLocs(player, boat, isHelm, trim.helm.loop);
       }
@@ -241,6 +299,7 @@ function isTrimmed(boat) {
 }
 
 module.exports = {
+  releaseBurst,
   windFor,
   canTrim,
   trimSails,

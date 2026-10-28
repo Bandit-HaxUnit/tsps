@@ -87,6 +87,7 @@ export class BoatManager {
             deckCentreX: spec.deckCentreX,
             deckCentreY: spec.deckCentreY,
             baseSpeed: spec.stats?.baseSpeed,
+            speedCap: spec.stats?.speedCap,
             acceleration: spec.stats?.acceleration,
             ...placement,
         });
@@ -113,6 +114,18 @@ export class BoatManager {
         active.spec = { ...active.spec, locs: [...active.spec.locs.filter((other) => !replaced(other)), loc] };
         active.deck.setLoc(loc);
         active.locChanges.push(loc);
+    }
+
+    /** Takes a deck loc (its tile and shape) off the boat, for everyone who sees it. */
+    public static removeDeckLoc(boat: Boat, loc: BoatDeckLoc): void {
+        const active = BoatManager.boats.get(boat.entityIndex);
+        if (!active || active.boat !== boat) return;
+        const same = (other: BoatDeckLoc) =>
+            other.x === loc.x && other.y === loc.y && other.level === loc.level && other.shape === loc.shape;
+        if (!active.spec.locs.some(same)) return;
+        active.spec = { ...active.spec, locs: active.spec.locs.filter((other) => !same(other)) };
+        active.deck.removeLoc(loc);
+        active.locChanges.push({ ...loc, removed: true });
     }
 
     /**
@@ -236,6 +249,22 @@ export class BoatManager {
         return (RegionManager.getClipping(x, y, 0, null) & SOLID_OBJECT) === 0;
     }
 
+    /**
+     * Moves a boat at once to another position (and facing, if given): a Barracuda Trial's start,
+     * a portal. Viewers see it jump there (WorldEntitySync), and it sails on from the new facing.
+     */
+    public static teleport(boat: Boat, to: { fineX: number; fineY: number; angle?: number }): void {
+        boat.fineX = to.fineX;
+        boat.fineY = to.fineY;
+        boat.prevFineX = to.fineX;
+        boat.prevFineY = to.fineY;
+        if (to.angle !== undefined) {
+            boat.angle = to.angle;
+            boat.heading = to.angle;
+        }
+        boat.teleportCount++;
+    }
+
     /** Runs after every boat has moved each tick. */
     public static onAfterTick(listener: () => void): void {
         BoatManager.afterTickListeners.push(listener);
@@ -243,7 +272,9 @@ export class BoatManager {
 
     public static tick(): void {
         for (const { boat } of BoatManager.boats.values()) {
-            tickBoat(boat, BoatManager.isSailable);
+            boat.prevFineX = boat.fineX;
+            boat.prevFineY = boat.fineY;
+            boat.lastStep = tickBoat(boat, BoatManager.isSailable);
         }
         for (const listener of BoatManager.afterTickListeners) listener();
     }

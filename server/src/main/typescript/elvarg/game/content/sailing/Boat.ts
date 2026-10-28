@@ -46,6 +46,8 @@ export interface BoatInit {
     deckCentreY: number;
     /** Full sail speed in fine units a tick. */
     baseSpeed?: number;
+    /** The hull's speed cap: what rapids can push the sails to (bursts go a step past it). */
+    speedCap?: number;
     /** Speed gained or lost a tick, in fine units. */
     acceleration?: number;
     /** World position of the boat's centre in fine units. */
@@ -97,8 +99,25 @@ export class Boat {
     /** A crewmate holding the helm for the owner, whose world clicks then set the heading. */
     helmCrew: Mobile | undefined;
     speedMultiplier = 1;
-    /** While the sails are trimmed: the speed that replaces the base speed (the hull's cap). */
+    /** The hull's speed cap in fine units a tick: rapids push the sails up to it (see BoatMovement). */
+    readonly speedCap: number;
+    /** While a burst of speed is up (a trim, a released wind mote): what it adds (BURST_STEP). */
     boostSpeed: number | undefined;
+    /**
+     * Speed added under the hull's cap by source (a Barracuda Trial's rapids), or taken off (a
+     * lightning strike), in fine units a tick.
+     */
+    readonly speedBonuses = new Map<string, number>();
+    /** Speed added past the cap by source (a portal's burst), at most a step over it in all. */
+    readonly burstBonuses = new Map<string, number>();
+    /** The most the boat may go by source (a fetid pool), in fine units a tick. */
+    readonly speedLimits = new Map<string, number>();
+    /** Bumped by BoatManager.teleport: viewers jump the boat there rather than sail it there. */
+    teleportCount = 0;
+    /** Where the boat was before this tick's move, and what the move did (BoatManager.tick). */
+    prevFineX: number;
+    prevFineY: number;
+    lastStep: { moved: boolean; turned: boolean; blocked: boolean } | undefined;
 
     constructor(init: BoatInit) {
         this.entityIndex = init.entityIndex;
@@ -114,8 +133,11 @@ export class Boat {
         this.deckCentreY = init.deckCentreY;
         this.baseSpeed = init.baseSpeed ?? WOODEN_HULL_SPEED;
         this.acceleration = init.acceleration ?? BASE_ACCELERATION;
+        this.speedCap = Math.max(this.baseSpeed, init.speedCap ?? this.baseSpeed);
         this.fineX = init.fineX;
         this.fineY = init.fineY;
+        this.prevFineX = init.fineX;
+        this.prevFineY = init.fineY;
         this.level = init.level;
         this.angle = init.angle;
         this.heading = init.angle;

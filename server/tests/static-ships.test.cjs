@@ -587,7 +587,10 @@ test("hostile ships return fire with the captured bronze projectile and damage t
     assert.equal(player.projectiles.length, 1);
     assert.equal(player.projectiles[0].rest[2], 3487, "bronze return-fire projectile");
     for (let tick = 0; tick < 3; tick++) TaskManager.process();
-    assert.equal(owned.hitpoints, 100 - ShipCombat._test.ENEMY_DAMAGE);
+    // Hitpoints are the parts' maximum less the damage taken.
+    const max = require("../plugins/skills/sailing/BoatParts.Sailing").boatStats(owned).hitpoints;
+    assert.equal(owned.damage, ShipCombat._test.ENEMY_DAMAGE);
+    assert.equal(owned.hitpoints, max - ShipCombat._test.ENEMY_DAMAGE);
     assert.deepEqual(events.map((entry) => entry.name), ["sailing:ship-attacked"]);
   } finally {
     PluginManager.emitCustomEvent = previousEmit;

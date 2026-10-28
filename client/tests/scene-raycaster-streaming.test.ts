@@ -272,3 +272,61 @@ console.log("House camera heights and interaction scene bounds regression passed
     assert.deepEqual([hits[0].tileX, hits[0].tileY], [9604, 9603], "its own deck tile");
     console.log("Scene raycaster deck NPC regression passed");
 }
+
+// A player on their own boat right-clicks an NPC on another ship's deck (a Barracuda Trial's
+// master): the fog cutoff measures that hit where the other deck is drawn, not by its deck tile.
+{
+    const OWN = 3000;
+    const SHIP = 4000;
+    const view = (id: number, x0: number, y0: number) => ({
+        id,
+        overlayMapId: 822400 + id,
+        isTopLevel: () => false,
+        containsTile: (x: number, y: number) => x >= x0 && x < x0 + 8 && y >= y0 && y < y0 + 8,
+    });
+    const views = new Map([[OWN, view(OWN, 9600, 9600)], [SHIP, view(SHIP, 10240, 9600)]]);
+    const picker = new SceneRaycaster(
+        { visibleMapCount: 0, visibleMaps: [], getMapForWorldTile: () => undefined },
+        {
+            renderDistance: 25,
+            clientPlugins: { gpuSettings: () => undefined },
+            controlledPlayerServerId: 1,
+            playerEcs: {
+                size: () => 0,
+                getIndexForServerId: () => 0,
+                getX: () => 9603 * 128 + 64,
+                getY: () => 9604 * 128 + 64,
+                getWorldViewId: () => OWN,
+            },
+            npcEcs: {
+                forEachActive: (fn: (id: number) => void) => fn(1),
+                getWorldViewId: () => SHIP,
+                isLinked: () => true,
+                getLevel: () => 0,
+                getNpcTypeId: () => 15095,
+                getWorldX: () => 10243 * 128 + 64,
+                getWorldY: () => 9604 * 128 + 64,
+                getSize: () => 1,
+                getServerId: () => 123,
+            },
+            npcTypeLoader: { load: (id: number) => ({ id, modelIds: [1] }) },
+            varManager: {},
+            worldViewManager: {
+                getWorldView: (id: number) => views.get(id),
+                isWorldEntityTile: (x: number, y: number) => [...views.values()].some((v) => v.containsTile(x, y)),
+                findWorldViewAt: (x: number, y: number) => [...views.values()].find((v) => v.containsTile(x, y)),
+            },
+        },
+    );
+    picker.sampleHeightAt = () => 0;
+    // Own boat drawn at (3035, 2920); the ship 6 tiles north of it.
+    picker.deckToWorldProvider = (entity: number, fineX: number, fineY: number) =>
+        entity === OWN
+            ? { x: fineX - (9603 - 3035) * 128, y: fineY - (9604 - 2920) * 128 }
+            : entity === SHIP
+              ? { x: fineX - (10243 - 3035) * 128, y: fineY - (9604 - 2926) * 128 }
+              : undefined;
+    const hits = picker.raycast({ origin: [3035.5, -10, 2926.5], direction: [0, 1, 0] });
+    assert.equal(hits.filter((hit: any) => hit.npcServerId === 123).length, 1, "the master on the other ship can be right-clicked");
+    console.log("Scene raycaster other-ship NPC regression passed");
+}

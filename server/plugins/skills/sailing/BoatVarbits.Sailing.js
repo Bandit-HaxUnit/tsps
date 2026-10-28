@@ -79,7 +79,7 @@ function slotVarbits(slot, boat) {
   const facilities = boat && type ? facilitiesOf(boat) : [];
   for (let hotspot = 0; hotspot < MAX_HOTSPOTS; hotspot++) values.set(hotspotVarbit(slot, hotspot), facilities[hotspot] ?? 0);
   const hitpoints = boat ? boatStats(boat).hitpoints : 0;
-  values.set(STORED_HP + slot, hitpoints);
+  values.set(STORED_HP + slot, Math.max(0, hitpoints - (boat?.damage ?? 0)));
   values.set(STORED_MAX_HP + slot, hitpoints);
   return values;
 }

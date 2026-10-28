@@ -368,6 +368,7 @@ export class SceneRaycaster {
         ) {
             // Same rounded-square SDF as fogFactorOSRS in the shaders.
             const rounding = Math.min(FOG_CORNER_ROUNDING, fogCutoff);
+            const worldViews = this.osrsClient.worldViewManager;
             let write = 0;
             for (let i = 0; i < hits.length; i++) {
                 const h = hits[i];
@@ -377,9 +378,20 @@ export class SceneRaycaster {
                     hits[write++] = h;
                     continue;
                 }
-                const cx = tx + 0.5;
-                const cz = ty + 0.5;
-                const fromRoot = rootWorldX !== undefined && !deckView?.containsTile(tx, ty);
+                let cx = tx + 0.5;
+                let cz = ty + 0.5;
+                const onOwnDeck = deckView?.containsTile(tx, ty) === true;
+                if (!onOwnDeck) {
+                    // Another boat's deck (an NPC ship's crew or locs): measured where that deck
+                    // is drawn, not by its deck coordinates.
+                    const view = worldViews?.isWorldEntityTile(tx, ty) ? worldViews.findWorldViewAt(tx, ty) : undefined;
+                    const drawn = view && !view.isTopLevel() ? this.deckToWorldProvider?.(view.id, cx * 128, cz * 128) : undefined;
+                    if (drawn) {
+                        cx = drawn.x / 128;
+                        cz = drawn.y / 128;
+                    }
+                }
+                const fromRoot = rootWorldX !== undefined && !onOwnDeck;
                 const refX = fromRoot ? (rootWorldX as number) : playerWorldX;
                 const refZ = fromRoot ? (rootWorldZ as number) : playerWorldZ;
                 const qx = Math.abs(cx - refX) - fogCutoff + rounding;
