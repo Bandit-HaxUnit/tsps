@@ -274,13 +274,13 @@ test("the legacy base-item ownership re-applies its stored variant to a freshly 
 
 test("a cross-item morph keeps one ownership record and ticks the base log item", () => {
   const player = createPlayer();
-  const npc = createPetNpc(player, 7337);
+  const npc = createPetNpc(player, NpcIdentifiers.RIFT_GUARDIAN_15);
   player.setAttribute("pets:current", npc);
   player.setAttribute("pets.owned", [20665]);
   player.inventory.push(ItemIdentifiers.AIR_TALISMAN);
   assert.equal(Pets.__internals.morph(player, npc), true);
-  assert.equal(npc.transformed, 7338);
-  assert.deepEqual(player.getAttribute("pets:variant"), { "skill:runecrafting": 7338 });
+  assert.equal(npc.transformed, NpcIdentifiers.RIFT_GUARDIAN_16);
+  assert.deepEqual(player.getAttribute("pets:variant"), { "skill:runecrafting": NpcIdentifiers.RIFT_GUARDIAN_16 });
   assert.equal(Pets.__internals.pickup(player, npc), true);
   assert.deepEqual(player.inventory, [ItemIdentifiers.AIR_TALISMAN, 20667]);
   assert.deepEqual(player.getAttribute("pets.owned"), [20667]);
@@ -451,9 +451,9 @@ test("the Baby mole-rat needs both mole parts", () => {
   assert.deepEqual(player.inventory, []);
 });
 
-test("the Rift guardian needs its talisman, which is not consumed", () => {
+test("the existing Rift talisman policy is preserved during identity repair", () => {
   const player = createPlayer();
-  const npc = createPetNpc(player, 7337);
+  const npc = createPetNpc(player, NpcIdentifiers.RIFT_GUARDIAN_15);
   player.setAttribute("pets:current", npc);
   assert.equal(Pets.__internals.morph(player, npc), true);
   assert.equal(npc.transformed, undefined);
@@ -461,7 +461,7 @@ test("the Rift guardian needs its talisman, which is not consumed", () => {
 
   player.inventory.push(ItemIdentifiers.AIR_TALISMAN);
   assert.equal(Pets.__internals.morph(player, npc), true);
-  assert.equal(npc.transformed, 7338);
+  assert.equal(npc.transformed, NpcIdentifiers.RIFT_GUARDIAN_16);
   assert.deepEqual(player.inventory, [ItemIdentifiers.AIR_TALISMAN]);
 });
 
