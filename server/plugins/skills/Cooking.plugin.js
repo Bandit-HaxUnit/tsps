@@ -335,8 +335,12 @@ function offerCook(player, object, cookables, activeSessions) {
     });
     return;
   }
+  // Keyed by what this player gets (a karambwan is poison until Tinsay's training), valued by the recipe.
   const byProduct = new Map();
-  for (const cookable of cookables) if (!byProduct.has(cookable.cooked)) byProduct.set(cookable.cooked, cookable);
+  for (const cookable of cookables) {
+    const product = cookedResult(player, cookable).cooked;
+    if (!byProduct.has(product)) byProduct.set(product, cookable);
+  }
   const most = Math.max(...cookables.map((cookable) => inventory.getAmount(cookable.raw)));
   openCookMenu(player, MANY_TYPES_TITLE, [...byProduct.keys()], most, (id, amount) => {
     const cookable = byProduct.get(id);

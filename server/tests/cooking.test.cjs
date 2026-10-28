@@ -113,6 +113,19 @@ test("one raw food opens the how-many menu on the raw item; several open the wha
   assert.equal(many.sent.menu.getOptions().maxAmount, 5);
 });
 
+test("the what menu shows the karambwan the player will get: poison until Tinsay's training", () => {
+  const untaught = player(50, [[ItemIds.RAW_KARAMBWAN, 2], [ItemIds.RAW_TROUT, 2]]);
+  hooks.object.Range.Cook({ player: untaught, object: cooker("Range") });
+  assert.deepEqual(untaught.sent.menu.getItems(), [ItemIds.POISON_KARAMBWAN, ItemIds.TROUT]);
+  untaught.sent.menu.execute(ItemIds.POISON_KARAMBWAN, 2);
+  assert.equal(Cooking.isCookingActive(untaught), true, "the poison karambwan entry starts the raw karambwan recipe");
+
+  const taught = player(50, [[ItemIds.RAW_KARAMBWAN, 2], [ItemIds.RAW_TROUT, 2]]);
+  taught.setAttribute("quest.tai_bwo_wannai_trio.tinsay", 8);
+  hooks.object.Range.Cook({ player: taught, object: cooker("Range") });
+  assert.deepEqual(taught.sent.menu.getItems(), [ItemIds.COOKED_KARAMBWAN, ItemIds.TROUT]);
+});
+
 test("a single raw item cooks without a menu", () => {
   const p = player(50, [[ItemIds.RAW_TROUT, 1]]);
   const event = { player: p, object: cooker("Fire"), itemId: ItemIds.RAW_TROUT, handled: false };
