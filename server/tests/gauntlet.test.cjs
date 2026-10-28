@@ -326,6 +326,15 @@ function interact(name, option, player, object) {
   return hooks.objects[name][option]({ player, object, objectId: object?.getId?.(), definition: object?.getDefinition?.() });
 }
 
+test('the Gauntlet Portal in Prifddinas lands two tiles south of where runs end, as captured', () => {
+  bindHooks();
+  const player = fakePlayer('Visitor');
+  player.location = new Location(3228, 6116, 0);
+  interact('Gauntlet Portal', 'Enter', player, null);
+  ticks(3);
+  assert.deepEqual([player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ()], [3032, 6125, 1]);
+});
+
 test('the entrance turns players away until they have spoken to Bryn, and with items on them', () => {
   bindHooks();
   const player = fakePlayer('Entrant');
