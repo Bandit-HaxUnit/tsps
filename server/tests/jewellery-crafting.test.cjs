@@ -51,6 +51,7 @@ function playerWith(entries = []) {
     sendSubInterface(uid, group) { log.push(['open', group]); return sender; },
     closeSubInterface() { log.push(['close']); return sender; },
     sendEnterAmountPrompt() { log.push(['quantity']); return sender; },
+    sendClientScript(id, ...args) { log.push(['script', id, ...args]); return sender; },
   };
   const player = {
     amounts, log, pouch: new Map(), level: 99, book: core.MagicSpellbook.NORMAL,
@@ -62,7 +63,7 @@ function playerWith(entries = []) {
     getAttribute: key => attrs.get(key), setAttribute: (key,value) => attrs.set(key,value),
     getPacketSender: () => sender, sendMessage: text => log.push(['message',text]),
     performAnimation: anim => log.push(['animation',anim.getId()]),
-    performGraphic: gfx => log.push(['graphic',gfx.getId()]),
+    performGraphic: gfx => log.push(['graphic',gfx.getId(),gfx.getHeight()]),
     getInterfaceId: () => player.interfaceId, setInterfaceId: id => { player.interfaceId = id; },
     setEnteredAmountAction: action => { player.amountAction = action; },
     getUsername: () => 'JewelleryTest', getIndex: () => 1, isPlayerBot: () => false,
@@ -101,9 +102,11 @@ const RING_CAST = [931,238];
 const enchantRecipes = [
   ['Lvl-1 Enchant', [[1694,1727]], [[21108,21160]], [[1637,2550],[1656,3853],[11072,11074],[21081,21126],[21090,21143],[21117,21177]],
     [[564,1],[555,1]],17.5,719,114,136,147],
-  ['Lvl-2 Enchant', [[1696,1729]], [[21111,21163]], [[1639,2552],[1658,5521],[11076,11079],[21084,21129],[21093,21146],[21120,21180]],
-    [[564,1],[556,3]],37,720,115,141,141],
-  ['Lvl-3 Enchant', [[1698,1725]], [[21114,21166]], [[1641,2568],[1660,11194],[11085,11088],[21087,21140],[21096,21157],[21123,21183]],
+  // The jade bracelet: the spell's sequence, enchant_ring and sound 142 (rsprox 1846).
+  ['Lvl-2 Enchant', [[1696,1729]], [[21111,21163]], [[1639,2552],[1658,5521],[11076,11079],[21084,21129],[21093,21146]],
+    [[564,1],[556,3]],37,720,115,141,142,[[21120,21180]]],
+  // The ruby necklace plays the amulet cast (rsprox 1757).
+  ['Lvl-3 Enchant', [[1698,1725],[1660,11194]], [[21114,21166]], [[1641,2568],[11085,11088],[21087,21140],[21096,21157],[21123,21183]],
     [[564,1],[554,5]],59,721,116,145,145],
   ['Lvl-4 Enchant', [[1700,1731]], [], [[1643,2570],[1662,11090],[11092,11095]], [[564,1],[557,10]],67,719,153,137,137],
   ['Lvl-5 Enchant', [[1702,1704]], [], [[1645,2572],[1664,11113],[11115,11126]], [[564,1],[555,15],[557,15]],78,720,154,139,140],
@@ -112,8 +115,8 @@ const enchantRecipes = [
 ];
 test('all 40 enchant recipes use wearable cache jewellery, consume their runes and play their cast', () => {
   let count = 0;
-  for (const [spell,amulets,silver,jewellery,runes,xp,anim,gfx,sound,jewellerySound] of enchantRecipes) {
-    const looks = [[amulets,[anim,gfx,sound]],[silver,[anim,238,sound]],[jewellery,[...RING_CAST,jewellerySound]]];
+  for (const [spell,amulets,silver,jewellery,runes,xp,anim,gfx,sound,jewellerySound,silverJewellery = []] of enchantRecipes) {
+    const looks = [[amulets,[anim,gfx,sound]],[silver,[anim,238,sound]],[jewellery,[...RING_CAST,jewellerySound]],[silverJewellery,[anim,238,jewellerySound]]];
     for (const [recipes,[animation,graphic,sfx]] of looks) for (const [input,output] of recipes) {
       count++;
       const def = core.CacheDefinitions.getItem(input);
@@ -126,7 +129,10 @@ test('all 40 enchant recipes use wearable cache jewellery, consume their runes a
       assert.equal(player.amounts.get(input),0);
       for (const [id] of runes) assert.equal(player.amounts.get(id),0);
       for (const [kind,value] of [['xp',xp],['animation',animation],['graphic',graphic],['sound',sfx]])
-        assert.ok(player.log.some(row => row[0] === kind && row.at(-1) === value), `${spell} on ${input}: ${kind} ${value}`);
+        assert.ok(player.log.some(row => row[0] === kind && row[row[0] === 'graphic' ? 1 : row.length - 1] === value), `${spell} on ${input}: ${kind} ${value}`);
+      // rsprox: every enchant graphic at height 92, and toplevel_sidebutton_switch [6] on the cast.
+      assert.ok(player.log.some(row => row[0] === 'graphic' && row[2] === 92), `${spell} on ${input}: graphic height 92`);
+      assert.ok(player.log.some(row => row[0] === 'script' && row[1] === 915 && row[2] === 6), `${spell} on ${input}: magic tab`);
     }
   }
   assert.equal(count,40);
@@ -197,6 +203,8 @@ test('an enchant clicked during the 3-tick delay waits for it, then repeats (Wik
   task.execute(); assert.deepEqual(player.ids().slice(2,4),[1637,1637],'still in the delay');
   tickEnchant(player,task); assert.deepEqual(player.ids().slice(2,4),[2550,1637],'cast when the delay ends');
   tickEnchant(player,task,7); assert.deepEqual(player.ids().slice(2,4),[2550,2550],'then repeats');
+  const switches = player.log.filter(row => row[0] === 'script' && row[1] === 915 && row[2] === 6).length;
+  assert.equal(switches,1,'the queued click returns to the spellbook once; the repeats do not');
 }));
 test('a new enchant replaces the running one, and running out of runes stops it', () => withTasks(started => {
   const player = slotPlayer([[564,2],[555,2],1637,1637,11072,11072]);
