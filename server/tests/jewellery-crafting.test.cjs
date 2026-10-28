@@ -201,6 +201,8 @@ test('an enchant clicked during the 3-tick delay waits for it, then repeats (Wik
   task.execute(); assert.deepEqual(player.ids().slice(2,4),[1637,1637],'still in the delay');
   tickEnchant(player,task); assert.deepEqual(player.ids().slice(2,4),[2550,1637],'cast when the delay ends');
   tickEnchant(player,task,7); assert.deepEqual(player.ids().slice(2,4),[2550,2550],'then repeats');
+  const switches = player.log.filter(row => row[0] === 'script' && row[1] === 915 && row[2] === 6).length;
+  assert.equal(switches,1,'the queued click returns to the spellbook once; the repeats do not');
 }));
 test('a new enchant replaces the running one, and running out of runes stops it', () => withTasks(started => {
   const player = slotPlayer([[564,2],[555,2],1637,1637,11072,11072]);

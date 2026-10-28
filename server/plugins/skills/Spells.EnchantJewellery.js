@@ -122,7 +122,9 @@ function handleSpellOnItem(event) {
   // Wiki: enchant spells "queue up one spell if you cast them too quickly".
   const wait = ticksUntilCast(player);
   if (wait > 0) {
-    if (spell.canCast(player, false)) keepEnchanting(player, spell, itemId, wait);
+    if (!spell.canCast(player, false)) return;
+    keepEnchanting(player, spell, itemId, wait);
+    returnToSpellbook(player);
     return;
   }
   // Register the loop before the cast so its first XP drop can pause it too.
@@ -131,6 +133,11 @@ function handleSpellOnItem(event) {
     stopEnchanting(player);
     return;
   }
+  returnToSpellbook(player);
+}
+
+/** Once per accepted click, cast now or queued; the automatic repeats don't send it (rsprox 4119). */
+function returnToSpellbook(player) {
   player.getPacketSender().sendClientScript(SIDE_BUTTON_SWITCH_SCRIPT, MAGIC_TAB);
 }
 
