@@ -24,6 +24,36 @@ Clicks don't stop it: in recording 703 the player clicks on tick 5, the phial re
 they move on the next. So movement is held until the refill. Using an empty phial on the Ectofuntus
 refills it too (Wiki). The teleport takes the usual checks (level 20 Wilderness).
 
+### Refill protection and feedback
+
+The [Ectophial Wiki page](https://oldschool.runescape.wiki/w/Ectophial) states that automatic
+refilling cannot be interrupted by the player and grants damage immunity; successful PvP
+attacks still award experience. Protection starts on arrival and ends when the phial is full.
+The plugin zeroes incoming combat hits at impact, after launch-time experience is awarded,
+and direct damage at the final health-decrement boundary. The latter uses the generic
+`combat:damage-apply` event (`{ target, hit }`, with a mutable `HitDamage`) so existing
+poison/venom pulses also cannot reduce health during refill. Damage before arrival and after
+completion is unaffected. Manual filling does not start this automatic-refill protection.
+
+Recordings 361, 703 and 3929 show the liquid area sound (2401, one loop, range 5) when the
+phial is emptied. Their automatic-refill kneeling sequence has a 10-cycle delay and sound
+1132 has a 30-cycle delay. Recording 3929 also sends `busy` = 1 with the pouring action and
+`busy` = 0 with the completed refill. These delays do not change the tick 3 arrival or
+tick 5 inventory refill in the table above (relative to the pouring action).
+
+Regression coverage in `server/tests/ectophial.test.cjs` exercises the registered handlers,
+both damage paths, the captured feedback, item swaps, requirements rejection, removal cleanup
+and manual filling. Combat immunity, busy state, animation/sound delays, the pouring sound
+and direct-damage immunity each failed before their fixes. The cache supplies the sequence,
+graphic and busy-varbit identifiers. This validation does not constitute a Ghosts Ahoy quest
+playthrough or a visual review of the animation.
+
+A live poisoned-player check kept health at 99 while the poison severity advanced from 30
+to 29 during refill; the next pulse after completion reduced health to 93. A separate live
+check confirmed the busy bit, full/empty/full inventory sequence, arrival, refill messages and
+the unchanged level-20 Wilderness restriction. PvP attacker experience was checked by tracing
+the launch/impact execution path, rather than a live two-player combat test.
+
 ## Pool of slime
 
 Recording 377. A bucket used on the pool fills every bucket carried (Wiki). It plays
@@ -76,7 +106,32 @@ put any more in." shows in a message box (not captured). Superior dragon bonemea
 below 70 Prayer. The count is saved in `ectofuntus:tokens` and shown in `ahoy_ectotokens_base`
 (4769) and `ahoy_ectotokens_more` (5671), which only hold 255.
 
-The captures' experience values are scrubbed, so the Wiki's are used.
+The experience rates above use the Wiki's table rather than the recordings' XP drops.
+
+### Worship experience and Zealot's robes
+
+The [Ectofuntus Wiki page](https://oldschool.runescape.wiki/w/Ectofuntus) lists bat bones at
+21.2 Prayer XP per offering. Worship passes that fractional amount to the skill manager;
+rounding each offering up to 22 incorrectly added 4 XP per five offerings. A live check of
+five bat-bonemeal offerings now gives 106 XP, consumes five bonemeal and five slime buckets,
+and adds 25 unclaimed ecto-tokens.
+
+The [Zealot's robes Wiki page](https://oldschool.runescape.wiki/w/Zealot%27s_robes) and the
+Ectofuntus page specify a 1.25% chance per worn piece, up to 5%, to preserve both bonemeal
+and slime. One saving roll covers the pair. Saved offerings still give their normal Prayer
+experience and five ecto-tokens; they leave both filled containers in their original slots.
+Carrying the robes gives no bonus. Requirements and the 1,000-token limit are checked before
+rolling, so saved supplies cannot bypass them.
+A live full-set offering preserved both filled containers while granting Prayer XP and
+increasing the unclaimed token count from 45 to 50.
+
+Regression coverage exercises the registered Worship and item-use handlers with real
+inventory, equipment and skill containers. It checks fractional XP accumulation, each
+robe-count probability boundary, saved and consumed pairs, ordinary captured feedback,
+missing supplies, the superior-dragon level requirement and the token limit. The inventory
+swaps, worship message, animation, sound and five-token increment are supported by rsprox
+recording 377; the fractional XP and robe probabilities use the Wiki pages above. The
+recordings inspected do not establish any extra message when the robes save supplies.
 
 ## Ghost disciples
 

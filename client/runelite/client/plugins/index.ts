@@ -1,4 +1,5 @@
 import { AnimationSmoothingConfig } from "../../../game/plugins/animationsmoothing/AnimationSmoothingConfig";
+import { BugReportPlugin } from "../../../game/plugins/bugreport/BugReportPlugin";
 import { VoiceChatPlugin } from "../../../game/plugins/voice/VoiceChatPlugin";
 import { AnimationSmoothingPlugin } from "../../../game/plugins/animationsmoothing/AnimationSmoothingPlugin";
 import { AttackTimerPlugin } from "../../../game/plugins/attacktimer/AttackTimerPlugin";
@@ -25,6 +26,7 @@ import { StatusBarsPlugin } from "../../../game/plugins/statusbars/StatusBarsPlu
 import { StretchedModePlugin } from "../../../game/plugins/stretchedmode/StretchedModePlugin";
 import { OpponentInfoPlugin } from "../../../game/plugins/opponentinfo/OpponentInfoPlugin";
 import { PrayerPlugin } from "../../../game/plugins/tabreorder/PrayerPlugin";
+import { PestControlPlugin } from "../../../game/plugins/pestcontrol/PestControlPlugin";
 import { SpellbookPlugin } from "../../../game/plugins/tabreorder/SpellbookPlugin";
 import {
     FreezeTimerPlugin,
@@ -74,6 +76,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     OpponentInfoPlugin,
     SpellbookPlugin,
     PrayerPlugin,
+    PestControlPlugin,
     StretchedModePlugin,
     GpuPlugin,
     CameraPlugin,
@@ -82,6 +85,8 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     XpGlobesPlugin,
     GuidePlugin,
     ShortestPathPlugin,
+    // After VoiceChatPlugin: while voice chat holds the chatbox Report button, its clicks are voice's.
+    BugReportPlugin,
 ];
 
 /** Legacy `osrs.plugin.*.v1` localStorage blobs to fold into rl.config. */

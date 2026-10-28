@@ -451,8 +451,11 @@ module.exports = function registerFremennikTrialsQuest(api) {
   }
 
   const inRellekka = (player) => inBox(player, 2590, 2760, 3610, 3710);
-  const inLonghall = (player) => inBox(player, 2648, 2676, 3660, 3682);
+  const onLonghallStage = (player) =>
+    player.getLocation().getZ() === 0 && inBox(player, 2655, 2662, 3683, 3685);
   const inPeerHouse = (player) => inBox(player, 2624, 2648, 3658, 3680);
+  const carryingAnything = (player) =>
+    player.getInventory().getValidItems().length > 0 || player.getEquipment().getValidItems().length > 0;
   const inTrollCave = (player) => inBox(player, 2755, 2790, 3605, 3640);
 
   function hasLevel99(player) {
@@ -518,16 +521,12 @@ module.exports = function registerFremennikTrialsQuest(api) {
   function brundtVariant(player, stage) {
     if (stage >= STAGE_COMPLETE) return V.brundtPost;
     if (stage <= 0) return V.brundtStart;
-    if (votesFor(player) >= VOTES_REQUIRED) return V.brundtProgress;
+    if (votesFor(player) >= VOTES_REQUIRED || trialState(player, MERCHANT) === 2) return V.brundtProgress;
     const step = merchantStep(player);
     if (step >= M_TRACKING && held(player, TRACKING_MAP)) return V.brundtMap;
-    if (held(player, FISCAL_STATEMENT)) return V.brundtMapAgain;
-    if (step === M_YRSA) {
-      setMerchantStep(player, M_CHIEF);
-      return V.brundtSailor;
-    }
-    if (step >= M_CHIEF && step < M_NOTE) return V.brundtProgress;
-    if (step >= M_NOTE) return V.brundtSailor;
+    if (held(player, FISCAL_STATEMENT) || step >= M_FISCAL) return V.brundtMapAgain;
+    if (step === M_YRSA) setMerchantStep(player, M_CHIEF);
+    if (step >= M_YRSA) return V.brundtSailor;
     if (step >= M_STARTED) return V.brundtFlower;
     return V.brundtProgress;
   }
@@ -536,11 +535,12 @@ module.exports = function registerFremennikTrialsQuest(api) {
     const merchantActive = trialState(player, MERCHANT) !== 2;
     const step = merchantStep(player);
     if (merchantActive && held(player, STURDY_BOOTS)) return swensenGiving("the-boots-to-olaf");
-    if (merchantActive && step === M_SAILOR) {
-      setMerchantStep(player, M_OLAF);
-      return `${SAILOR_FAVOR}-talking-to-olaf-the-bard`;
-    }
+    if (merchantActive && step === M_SAILOR) setMerchantStep(player, M_OLAF);
+    if (merchantActive && step >= M_BALLAD) return swensenTalk("olaf-again");
     if (merchantActive && step >= M_BOWSTRING) return bowAsk("olaf");
+    // He keeps asking for boots until he has them. The step moves when this variant is
+    // picked, so a closed menu or "Ask about becoming a Fremennik" must not lose it.
+    if (merchantActive && step >= M_SAILOR) return `${SAILOR_FAVOR}-talking-to-olaf-the-bard`;
     if (merchantActive && step >= M_STARTED) return flowerAsk("olaf");
     if (trialState(player, BARD) === 2) return V.olafDone;
     if (stage >= STAGE_STARTED) return trialState(player, BARD) >= 1 ? V.olafAgain : V.olafOffer;
@@ -559,10 +559,13 @@ module.exports = function registerFremennikTrialsQuest(api) {
     if (merchantActive && step === M_THORA) return swensenTalk("askeladden");
     if (merchantActive && step >= M_BOWSTRING) return bowAsk("askeladden");
     if (merchantActive && step >= M_STARTED) return flowerAsk("askeladden");
-    if (trialState(player, BARD) >= 1) {
-      return held(player, PET_ROCK) ? V.askeladdenOlafAgain : V.askeladdenOlaf;
-    }
-    return V.askeladdenBase;
+    return askeladdenTrialVariant(player);
+  }
+
+  /** Askeladden's own talk: the pet rock once Olaf's trial is under way. */
+  function askeladdenTrialVariant(player) {
+    if (trialState(player, BARD) < 1) return V.askeladdenBase;
+    return held(player, PET_ROCK) ? V.askeladdenOlafAgain : V.askeladdenOlaf;
   }
 
   function manniVariant(player, stage) {
@@ -599,11 +602,9 @@ module.exports = function registerFremennikTrialsQuest(api) {
     const merchantActive = trialState(player, MERCHANT) !== 2;
     const step = merchantStep(player);
     if (merchantActive && held(player, CUSTOM_BOW_STRING)) return swensenGiving("the-bowstring-to-sigli");
-    if (merchantActive && step === M_CHIEF) {
-      setMerchantStep(player, M_SIGLI);
-      return V.sigliBow;
-    }
-    if (merchantActive && step >= M_SIGLI) return swensenTalk("sigli-again");
+    if (merchantActive && step === M_CHIEF) setMerchantStep(player, M_SIGLI);
+    if (merchantActive && step >= M_TRACKING) return swensenTalk("sigli-again");
+    if (merchantActive && step >= M_CHIEF) return V.sigliBow;
     if (merchantActive && step >= M_STARTED) return flowerAsk("sigli");
     if (trialState(player, HUNTER) === 2) return V.sigliDone;
     if (trialState(player, HUNTER) === 1) return flag(player, FLAG_DRAUGEN) ? V.sigliHuntDone : V.sigliAgain;
@@ -857,8 +858,8 @@ module.exports = function registerFremennikTrialsQuest(api) {
     if (value.includes("another player's koschei")) return false;
     if (value.includes("prayer potion") || value.includes("nearly dead") || value.includes("phase")) return false;
 
-    if (value.includes("has items in their inventory")) return false;
-    if (value.includes("does not have any items in their inventory")) return true;
+    if (value.includes("does not have any items in their inventory")) return !carryingAnything(player);
+    if (value.includes("has items in their inventory")) return carryingAnything(player);
     if (value.includes("peer the seer's house on the east side")) return false;
     if (value.includes("peer the seer's house on the west side")) return false;
     if (value.includes("fails to solve the puzzle")) return false;
@@ -929,6 +930,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
     if (THORVALD_IDS.has(npcId)) return V.thorvaldOffer;
     if (SIGLI_IDS.has(npcId)) return V.sigliOffer;
     if (MANNI_IDS.has(npcId)) return V.revellerOffer;
+    if (ASKELADDEN_IDS.has(npcId)) return askeladdenTrialVariant(player);
     return null;
   }
 
@@ -990,6 +992,29 @@ module.exports = function registerFremennikTrialsQuest(api) {
         give(player, HUNTERS_TALISMAN_2, 1);
       }
     }
+  }
+
+  /** The first-talk menu holding Peer's bank spell (its "Yes" runs deposit step -sJh9n). */
+  function peerBankMenu(steps) {
+    for (const step of steps ?? []) {
+      if (step.options?.some((option) => option.steps?.some((entry) => entry.id === "-sJh9n"))) return [step];
+      for (const option of step.options ?? []) {
+        const found = peerBankMenu(option.steps);
+        if (found) return found;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Talking to Peer again while carrying items: the dump lost the targets of the offer's
+   * Yes/No ({{tact|above}}, Peer's first-talk bank menu), so they fell back to Brundt's
+   * unrelated "Yes"/"No" and never banked anything. Replay that menu after the offer line.
+   */
+  function offerPeerBankAgain(event) {
+    if (!PEER_IDS.has(event.npcId) || !/perform this small spell upon you/i.test(String(event.text ?? ""))) return;
+    const { player, npcId } = event;
+    event.after = () => startTranscript(api, player, npcId, PAGE, V.peerTrial, peerBankMenu);
   }
 
   function handleDialogueLine(event) {
@@ -1728,8 +1753,8 @@ module.exports = function registerFremennikTrialsQuest(api) {
   }
 
   function performAtLonghall(player) {
-    if (!inLonghall(player)) {
-      player.sendMessage("You can only perform in the Rellekka longhall.");
+    if (!onLonghallStage(player)) {
+      player.sendMessage("You can only perform on the Rellekka longhall stage.");
       return;
     }
     if (trialState(player, BARD) !== 1) {
@@ -1888,7 +1913,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
         player.sendMessage("This door is locked tightly shut.");
         return;
       }
-      if (player.getInventory().getValidItems().length || player.getEquipment().getValidItems().length) {
+      if (carryingAnything(player)) {
         player.sendMessage("You must bank all your items and equipment before entering Peer's house.");
         return;
       }
@@ -1902,7 +1927,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
           player.sendMessage("You have failed to solve the riddle.");
           return;
         }
-        if (player.getInventory().getValidItems().length || player.getEquipment().getValidItems().length) return;
+        if (carryingAnything(player)) return;
         setFlag(player, FLAG_SEER_RIDDLE);
         player.sendMessage("You have solved the riddle!");
         player.moveTo(new Location(2631, 3666, 0));
@@ -1951,6 +1976,20 @@ module.exports = function registerFremennikTrialsQuest(api) {
         "The fishmonger is staring at you suspiciously. You cannot steal from his stall while he distrusts you."
       );
     }
+  }
+
+  function handleLonghallDoor(event) {
+    const { player, location } = event;
+    if (event.objectId !== ObjectIdentifiers.DOOR_118 || event.clickType !== 1 ||
+        location.x !== 2667 || location.y !== 3683 || location.z !== 0) return;
+    event.handled = true;
+    const entering = player.getLocation().getX() >= 2667;
+    if (entering && !held(player, ENCHANTED_LYRE) && trialState(player, BARD) !== 2 && !quest.isComplete(player)) {
+      player.sendMessage("The bouncer won't let you backstage without an enchanted lyre.");
+      return;
+    }
+    // This cache door has no open variant; cross its west-facing wall after the bouncer's check.
+    player.moveTo(new Location(entering ? 2666 : 2667, 3683, 0));
   }
 
   function handlePeerDoor(event) {
@@ -2021,6 +2060,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
   api.onCustomEvent("npc-dialogue:condition", handleConditionStep);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
+  api.onCustomEvent("npc-dialogue:line", offerPeerBankAgain);
   api.onNpcInteraction(handleNpcInteraction);
   api.onNpcDeath(handleNpcDeath);
   api.onItemOnItem(handleItemOnItem);
@@ -2067,6 +2107,7 @@ module.exports = function registerFremennikTrialsQuest(api) {
   api.onItemOnObject("Red disk", "Abstract mural", addSeerDisk);
   api.onItemOnObject("Seer's key", "Door", unlockSeerDoor);
   api.onObjectInteraction(handleObjectInteraction);
+  api.onBeforeObjectInteraction(handleLonghallDoor);
   api.onBeforeObjectInteraction(handlePeerDoor);
   api.onObjectInteraction("Chest", { Open: searchSeerChest, Search: searchSeerChest });
   api.onObjectInteraction("Cupboard", { Open: searchSeerCupboard, Search: searchSeerCupboard });

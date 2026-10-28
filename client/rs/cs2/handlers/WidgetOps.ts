@@ -14,60 +14,11 @@ import { applyNpcRowIcon } from "../spawnSearch";
 import { Opcodes } from "../Opcodes";
 import type { HandlerContext, HandlerMap } from "./HandlerTypes";
 
-// PERF: Widget lookup cache - stores recently looked up widgets to avoid repeated Map lookups
-// Cache is attached to the handler context so it's cleared between script executions
-const WIDGET_CACHE_KEY = Symbol("__widgetLookupCache");
-const WIDGET_CACHE_MAX_SIZE = 64;
-
-interface WidgetLookupCache {
-    map: Map<number, WidgetNode | null>;
-    accessOrder: number[];
-}
-
-function getWidgetLookupCache(ctx: HandlerContext): WidgetLookupCache {
-    let cache = (ctx as any)[WIDGET_CACHE_KEY] as WidgetLookupCache | undefined;
-    if (!cache) {
-        cache = { map: new Map(), accessOrder: [] };
-        (ctx as any)[WIDGET_CACHE_KEY] = cache;
-    }
-    return cache;
-}
-
-function getCachedWidget(ctx: HandlerContext, uid: number): WidgetNode | null {
-    // Skip caching for invalid UIDs
-    if (uid <= 0) {
-        return ctx.widgetManager.getWidgetByUid(uid) ?? null;
-    }
-
-    const cache = getWidgetLookupCache(ctx);
-
-    // Check cache first
-    if (cache.map.has(uid)) {
-        return cache.map.get(uid) ?? null;
-    }
-
-    // Cache miss - look up and cache
-    const widget = ctx.widgetManager.getWidgetByUid(uid) ?? null;
-
-    // Evict oldest entry if cache is full
-    if (cache.map.size >= WIDGET_CACHE_MAX_SIZE) {
-        const oldestUid = cache.accessOrder.shift();
-        if (oldestUid !== undefined) {
-            cache.map.delete(oldestUid);
-        }
-    }
-
-    cache.map.set(uid, widget);
-    cache.accessOrder.push(uid);
-
-    return widget;
-}
-
-// Helper to get widget by UID from stack
+// Helper to get widget by UID from stack. Looked up every time, never cached: a closed
+// interface is unloaded, and its next open has new widgets under the same uids.
 function getWidgetFromStack(ctx: HandlerContext): WidgetNode | null {
     const uid = ctx.intStack[--ctx.intStackSize];
-    // PERF: Use cached lookup
-    return getCachedWidget(ctx, uid);
+    return ctx.widgetManager.getWidgetByUid(uid) ?? null;
 }
 
 /**
@@ -1828,6 +1779,26 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         }
     });
 
+    // Opcode 2124: CC_SETTRANSBOT on a component by uid (the LMS fog: script 1346).
+    handlers.set(Opcodes.IF_SETTRANSBOT, (ctx) => {
+        const w = getWidgetFromStack(ctx);
+        const transBot = ctx.intStack[--ctx.intStackSize];
+        if (w && w.transparencyBot !== transBot) {
+            w.transparencyBot = transBot;
+            invalidateWidgetRender(ctx, w);
+        }
+    });
+
+    // Opcode 2125: CC_SETFILLMODE on a component by uid (the LMS fog: script 386).
+    handlers.set(Opcodes.IF_SETFILLMODE, (ctx) => {
+        const w = getWidgetFromStack(ctx);
+        const mode = ctx.intStack[--ctx.intStackSize];
+        if (w && (mode === 0 || mode === 1 || mode === 2) && w.fillMode !== mode) {
+            w.fillMode = mode;
+            invalidateWidgetRender(ctx, w);
+        }
+    });
+
     // === Transparency ===
     handlers.set(Opcodes.CC_SETTRANS, (ctx, intOp) => {
         const trans = ctx.intStack[--ctx.intStackSize];
@@ -2074,12 +2045,27 @@ export function registerWidgetOps(handlers: HandlerMap): void {
 
     // === Model ===
     // Model ops call invalidateWidget()
+
+    // The widget renderer draws an NPC's chathead only for widgets flagged as one (as the server's
+    // set_npc_head does); otherwise modelId 2 is read as a model id and draws an unrelated model.
+    const setNpcHead = (w: any, npcId: number) => {
+        w.modelType = 2;
+        w.modelId = npcId;
+        w.isNpcChathead = npcId >= 0;
+        w.npcTypeId = npcId >= 0 ? npcId : undefined;
+        w.isPlayerChathead = false;
+    };
+    const clearNpcHead = (w: any) => {
+        w.isNpcChathead = false;
+        w.npcTypeId = undefined;
+    };
     handlers.set(Opcodes.CC_SETMODEL, (ctx, intOp) => {
         const modelId = ctx.intStack[--ctx.intStackSize];
         const w = getTargetWidget(ctx, intOp);
         if (w) {
             w.modelType = 1;
             w.modelId = modelId;
+            clearNpcHead(w);
             // invalidate on model change
             invalidateWidgetRender(ctx, w);
         }
@@ -2092,6 +2078,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         if (w) {
             w.modelType = 1;
             w.modelId = modelId;
+            clearNpcHead(w);
             // invalidate on model change
             invalidateWidgetRender(ctx, w);
         }
@@ -2287,8 +2274,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         const npcId = ctx.intStack[--ctx.intStackSize];
         const w = getTargetWidget(ctx, intOp);
         if (w) {
-            w.modelType = 2;
-            w.modelId = npcId;
+            setNpcHead(w, npcId);
             // invalidate on model change
             invalidateWidgetRender(ctx, w);
         }
@@ -2311,8 +2297,7 @@ export function registerWidgetOps(handlers: HandlerMap): void {
         const w = getWidgetFromStack(ctx);
         const npcId = ctx.intStack[--ctx.intStackSize];
         if (w) {
-            w.modelType = 2;
-            w.modelId = npcId;
+            setNpcHead(w, npcId);
             // invalidate on model change
             invalidateWidgetRender(ctx, w);
         }

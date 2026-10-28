@@ -44,19 +44,19 @@ and say what is still a guess in `unverified`.
 | Strange floor (Fremennik Slayer Dungeon) | a 2-tile run-up (1995) with sound 2464, the 2-tile hurdle (1603) a tick later, both cycles 8-50 |
 | Stepping stones (Karamja) | a stone a click: 769 with delay 20, cycles 48-60, sound 2461; "You attempt to balance on the stepping stone." and "You manage to make the jump." |
 | Stepping stone (Pollnivneach) | onto the stone and a diagonal jump to the far bank, a jump every 2 ticks (741), sound 2461 |
+| Obstacles, tunnel, plant door and holes (Fossil Island sea floor) | a face, then a 60-cycle exact move past it the tick after with 7702 (`human_swim_cavewall`) or 7704 (`human_swim_shipwall`), no message; holes: a step onto the hole, 7705 (`human_swim_hole_enter`), and two ticks later a teleport to its paired hole with 7706 (`human_swim_hole_leave`). The `loc_merge` the obstacles send is not done |
 | Rocks (Shilo Village) | rock tile to rock tile, 1148 over 90 cycles facing south |
 | Rock slide (Cairn Isle) | 740 over 120 cycles, delay 15, facing west (only eastward recorded) |
 | Climbing rocks (Yanille, Taverley), log balance (Fremennik) | only the sound and messages: walks and their animations are not in the recordings, so the movement stays a guess |
 | Grapple walls (Falador, Yanille) | rev 237 (the newest): fire and climb in one animation (1779) with its graphic (3575) and sound 2928, a screen fade, the teleport onto the wall 7 ticks in (rev 230 took 10, with 4455/760). The fade isn't sent yet |
 | Pillar (Ruins of Mokhaiotl) | a 3-tile jump (12196) in 27 cycles, sound 2461; a tick later varbit 16716 (`moki_agil_shortcut_side`) flips, so only the far pillar shows "Jump-to" (the runner's `varbit` step) |
+| Gaps (Chasm of Fire) | two gaps (event-world recordings): the west one a 6-tile jump (12196, sound 2461) from 1440,10098 to 1446,10097; the east one two hops a tick apart, onto 1453 then 1456. The exact moves are drawn a tile or two short of the server position; the entries land where the server puts the player. The way back mirrors it |
 
 ## Still unverified, with what the captures show
 
 - **Broken Raft, Crossbow Tree:** grapple, the rope added as scenery, the side panels hidden, a
   swim along the rope (their own swimming animations) and a chance the grapple breaks. Needs its
   own script.
-- **Gap (Chasm of Fire):** only event-world recordings, and the recorded moves and the server
-  position disagree by a tile or two.
 - **Mysterious pipe (Mount Karuulm):** its messages are chatbox message boxes and the minimap is
   hidden, which the step format can't express yet.
 - **Wall (Darkmeyer):** recorded climbing up (39173, `human_reachforladder`, then a teleport to

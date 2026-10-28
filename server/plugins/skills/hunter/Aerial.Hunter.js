@@ -38,7 +38,9 @@ function borrow({ player }) {
 function fish({ player, npc, npcId }) {
   if (npcId !== H.core.NpcIdentifiers.FISHING_SPOT_12) return false;
   if (!borrowed.has(player)) { player.sendMessage("Ask Alry for a cormorant first."); return true; }
-  if (!nearby(player, npc, 9) || !requireLevel(player, 35) || !requireLevel(player, 43, H.core.Skill.FISHING)) return true;
+  // The level gate is borrowing the bird; expired boosts still allow bluegill catches.
+  // Wiki: Aerial_fishing (see docs/aerial-fishing.md).
+  if (!nearby(player, npc, 9)) return true;
   const I = H.core.ItemIdentifiers;
   const bait = [I.FISH_OFFCUTS, I.FINE_FISH_OFFCUTS, I.KING_WORM,
     ...(player.getAttribute(ATTRIBUTE) ? H.data.aerialFish.map(f => f.item) : [])].find(id => player.getInventory().contains(id));
@@ -46,8 +48,7 @@ function fish({ player, npc, npcId }) {
   const range = require("./Context.Hunter").distance(player.getLocation(), npc.getLocation());
   const duration = Math.max(1, Math.ceil(range / 2));
   const started = begin(player, duration, require("./Context.Hunter").ANIM.FALCON, () => {
-    if (!borrowed.has(player) || !player.getInventory().contains(bait) || !nearby(player, npc, 9)
-      || !requireLevel(player, 35) || !requireLevel(player, 43, H.core.Skill.FISHING)) return;
+    if (!borrowed.has(player) || !player.getInventory().contains(bait) || !nearby(player, npc, 9)) return;
     player.getPacketSender().sendGraphic(new H.core.Graphic(1633), npc.getLocation());
     const combined = Math.floor((level(player, H.core.Skill.FISHING) * 2 + level(player)) / 3);
     const sample = roll(0, Math.max(0, combined - 1));
@@ -69,7 +70,10 @@ function fish({ player, npc, npcId }) {
     if (Math.random() < 1.5 / denominator && !exchange(player, [], [[I.MOLCH_PEARL, 1]])) require("./Context.Hunter").drop(player, [[I.MOLCH_PEARL, 1]], player.getLocation());
     for (const [tier, modifier] of [["BEGINNER",0.2],["EASY",1.7],["MEDIUM",2],["HARD",3.3],["ELITE",10]]) {
       if (require("./Context.Hunter").ownsClue(player,tier)) continue;
-      const denominator = Math.floor(636833 / (100 + level(player,H.core.Skill.FISHING)) * modifier);
+      // Content may make clue bottles commoner ("treasure-trails:vessel-chance", a league relic).
+      const boost = { player, vessel: "bottle", tier: tier.toLowerCase(), multiplier: 1 };
+      H.api.emitCustomEvent("treasure-trails:vessel-chance", boost);
+      const denominator = Math.max(1, Math.floor(636833 / (100 + level(player,H.core.Skill.FISHING)) * modifier / (boost.multiplier > 1 ? boost.multiplier : 1)));
       if (roll(1,denominator) !== 1) continue;
       const id = I[`${require("./Context.Hunter").questComplete(player,"x_marks_the_spot") ? "SCROLL_BOX" : "CLUE_BOTTLE"}_${tier}_`];
       if (!exchange(player,[],[[id,1]])) require("./Context.Hunter").drop(player,[[id,1]],player.getLocation());

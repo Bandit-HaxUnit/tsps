@@ -117,7 +117,10 @@ function specFor(boat, base) {
     ...base,
     templateChunkX: base.templateChunkX + hull,
     locs,
-    stats: { ...base.stats, baseSpeed, speedCap: stats.speedCap || undefined, speedBoostDuration: stats.speedBoostDuration || undefined },
+    stats: {
+      ...base.stats, baseSpeed, speedCap: stats.speedCap || undefined, speedBoostDuration: stats.speedBoostDuration || undefined,
+      acceleration: stats.acceleration,
+    },
   };
 }
 

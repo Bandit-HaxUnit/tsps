@@ -23,9 +23,28 @@ const NEW_TAB_MESSAGE = "To create a new tab, drag items from your bank onto thi
 
 export class Bank extends ItemContainer {
     full(): ItemContainer {
-        this.getPlayer().sendMessage("Not enough space in bank.");
+        const event = { player: this.getPlayer(), message: "Not enough space in bank." };
+        getPluginManager().emitCustomEvent(Bank.FULL_EVENT, event);
+        this.getPlayer().sendMessage(event.message);
         return this;
     }
+    /** The client's bank holds 1410 items (bankmain:items slots 0-1409), the most any account can unlock. */
+    public static readonly MAX_SLOTS = 1410;
+    /** Slots a tab starts with; it grows, up to MAX_SLOTS, as items are added. */
+    private static readonly INITIAL_TAB_SLOTS = 352;
+    /** bank_locked_slots: the client's slots past the player's capacity. */
+    private static readonly LOCKED_SLOTS_VARP = 4611;
+    /**
+     * `{ player, capacity }`, asked whenever the bank checks its room: a plugin sets `capacity`
+     * to the player's bank space. Left alone, every slot is open (MAX_SLOTS).
+     */
+    public static readonly CAPACITY_EVENT = "bank:capacity";
+    /** `{ player, message }` when an item doesn't fit; a plugin can change the `message` sent. */
+    public static readonly FULL_EVENT = "bank:full";
+    /** `{ player }` once the bank interface has opened (not on a tab change). */
+    public static readonly OPENED_EVENT = "bank:opened";
+    /** Players whose items move between tabs, or load, without the capacity applying. */
+    private static readonly unlimited = new Set<Player>();
     public static readonly TOTAL_BANK_TABS = 11;
     public static readonly CONTAINER_START = 50300;
     public static readonly BANK_SEARCH_TAB_INDEX = Bank.TOTAL_BANK_TABS - 1;
@@ -76,6 +95,10 @@ export class Bank extends ItemContainer {
     public static readonly NOTE_CHILD = 25; // bankmain:note
     /** bankmain:quantity1, quantity5, quantity10, quantityx, quantityall. */
     public static readonly QUANTITY_CHILDREN = [29, 31, 33, 35, 37];
+    /** bank_quantity_type (varbit 6590) for X, the index of bankmain:quantityx above. */
+    public static readonly QUANTITY_X_MODE = 3;
+    /** bank_requestedquantity: the remembered X amount. */
+    public static readonly REQUESTED_QUANTITY_VARBIT = 3960;
     public static readonly PLACEHOLDER_CHILD = 40; // bankmain:placeholder
     public static readonly DEPOSIT_INVENTORY_CHILD = 47; // bankmain:depositinv
     public static readonly DEPOSIT_WORN_CHILD = 49; // bankmain:depositworn
@@ -91,7 +114,92 @@ export class Bank extends ItemContainer {
     public static readonly EXAMINE_OP = 11;
 
     constructor(public player: Player) {
-        super(player);
+        super(player, Bank.INITIAL_TAB_SLOTS);
+    }
+
+    /** The player's bank space, in slots; placeholders take a slot as items do. */
+    public static getCapacity(player: Player): number {
+        const event = { player, capacity: Bank.MAX_SLOTS };
+        getPluginManager().emitCustomEvent(Bank.CAPACITY_EVENT, event);
+        const capacity = Math.floor(Number(event.capacity));
+        return Number.isFinite(capacity) ? Math.max(0, Math.min(Bank.MAX_SLOTS, capacity)) : Bank.MAX_SLOTS;
+    }
+
+    /** Slots in use across the tabs, placeholders included (not the search results). */
+    public static usedSlots(player: Player): number {
+        let used = 0;
+        for (let tab = 0; tab < Bank.TOTAL_BANK_TABS; tab++) {
+            if (tab === Bank.BANK_SEARCH_TAB_INDEX) continue;
+            for (const item of player.getBank(tab).getItems()) if (item != null && item.getId() >= 0) used++;
+        }
+        return used;
+    }
+
+    /** Slots the player's bank space has left. */
+    public static freeSlots(player: Player): number {
+        return Math.max(0, Bank.getCapacity(player) - Bank.usedSlots(player));
+    }
+
+    /**
+     * Runs `action` with the capacity lifted: items that move between tabs already have a slot,
+     * and a saved bank loads whole even if it holds more than the player's space.
+     */
+    public static withoutLimit<T>(player: Player, action: () => T): T {
+        const nested = Bank.unlimited.has(player);
+        Bank.unlimited.add(player);
+        try {
+            return action();
+        } finally {
+            if (!nested) Bank.unlimited.delete(player);
+        }
+    }
+
+    /** Slots the player's space still allows, or Infinity where the capacity doesn't apply. */
+    private roomLeft(): number {
+        const player = this.getPlayer();
+        if (player == null || Bank.unlimited.has(player) || player.getBank(Bank.BANK_SEARCH_TAB_INDEX) === this) {
+            return Infinity;
+        }
+        return Bank.freeSlots(player);
+    }
+
+    /** An empty slot in this tab, growing it if every slot is taken; -1 once it is MAX_SLOTS long. */
+    public freeSlot(): number {
+        const slot = super.getEmptySlot();
+        if (slot >= 0 || this.items.length >= Bank.MAX_SLOTS) return slot;
+        this.items.push(new Item(-1, 0));
+        return this.items.length - 1;
+    }
+
+    public getEmptySlot(): number {
+        return this.roomLeft() > 0 ? this.freeSlot() : -1;
+    }
+
+    public getFreeSlots(): number {
+        return Math.min(super.getFreeSlots() + Bank.MAX_SLOTS - this.items.length, this.roomLeft());
+    }
+
+    /** Banked items always stack: a full bank still takes more of an item it holds (same metadata). */
+    public canTake(item: Item): boolean {
+        if (this.getFreeSlots() > 0) return true;
+        const id = ItemDefinition.forId(item.getId()).unNote();
+        const meta = JSON.stringify(item.getMeta() ?? null);
+        return this.items.some((held) => held != null && held.getId() === id
+            && JSON.stringify(held.getMeta() ?? null) === meta);
+    }
+
+    public isEmpty(): boolean {
+        return this.items.every((item) => item == null || item.getId() < 0);
+    }
+
+    /** Moves the empty slots to the end, keeping the items' order (placeholders stay). */
+    public sortItems(): Bank {
+        const filled = this.items.filter((item) => item != null && item.getId() >= 0);
+        const empty = this.items.filter((item) => item != null && item.getId() < 0);
+        const sorted = [...filled, ...empty];
+        // In place, as callers may hold this tab's item array.
+        for (let slot = 0; slot < this.items.length; slot++) this.items[slot] = sorted[slot] ?? new Item(-1, 0);
+        return this;
     }
 
     public static isOpen(player: Player): boolean {
@@ -373,13 +481,15 @@ export class Bank extends ItemContainer {
     public static collapseTab(player: Player, tab: number): void {
         if (tab <= 0 || tab > Bank.getTabCount(player)) return;
         const items = player.getBank(tab).getValidItems();
-        if (player.getBank(0).getFreeSlots() < items.length) {
+        if (Bank.withoutLimit(player, () => player.getBank(0).getFreeSlots()) < items.length) {
             player.sendMessage("You don't have enough free slots in your main tab to do that.");
             return;
         }
-        for (const item of items) {
-            player.getBank(0).add(item.clone(), false);
-        }
+        Bank.withoutLimit(player, () => {
+            for (const item of items) {
+                player.getBank(0).add(item.clone(), false);
+            }
+        });
         player.getBank(tab).resetItems();
         if (player.getCurrentBankTab() === tab) {
             player.setCurrentBankTab(0);
@@ -447,7 +557,7 @@ export class Bank extends ItemContainer {
         items.forEach((item, slot) => {
             if (item != null && item.getId() >= 0) last = slot;
         });
-        return last + 1 < bank.capacity() ? last + 1 : bank.getEmptySlot();
+        return last + 1 < bank.capacity() ? last + 1 : bank.freeSlot();
     }
 
     /** The tab a drop onto `tab` goes to: an existing tab, or one new tab after the last. */
@@ -561,6 +671,39 @@ export class Bank extends ItemContainer {
         return Math.min(total, ({ 1: 1, 3: 1, 4: 5, 5: 10, 6: custom, 7: custom, 8: total } as Record<number, number>)[button] ?? 0);
     }
 
+    /**
+     * Whether an item op asks for the amount first: Withdraw-X (op 6) and Deposit-X (op 7), as
+     * captured, or the default click in X mode before any amount was entered.
+     */
+    public static asksAmount(
+        kind: "withdraw" | "deposit",
+        button: number,
+        option: string | undefined,
+        custom = 0,
+        defaultMode = 0,
+    ): boolean {
+        const named = option?.trim().toLowerCase();
+        const xOp = named ? named.endsWith("-x") : button === (kind === "withdraw" ? 6 : 7);
+        const defaultOp = button === (kind === "withdraw" ? 1 : 2);
+        return xOp || (defaultOp && defaultMode === Bank.QUANTITY_X_MODE && custom <= 0);
+    }
+
+    /**
+     * Capture: the "Enter amount:" chatbox prompt (meslayer_mode7). The answer becomes the
+     * remembered X (bank_requestedquantity), then `then` runs with it in the same tick.
+     */
+    public static promptAmount(player: Player, then?: (amount: number) => void): void {
+        player.setEnteredAmountAction({
+            execute: (amount: number) => {
+                if (!Bank.isOpen(player)) return;
+                player.setBankCustomQuantity(amount);
+                player.getPacketSender().sendVarbit(Bank.REQUESTED_QUANTITY_VARBIT, player.getBankCustomQuantity());
+                then?.(player.getBankCustomQuantity());
+            },
+        });
+        player.getPacketSender().sendEnterAmountPrompt("Enter amount:");
+    }
+
     public static handleWidgetAction(player: Player, packet: {
         groupId: number;
         childId: number;
@@ -596,6 +739,15 @@ export class Bank extends ItemContainer {
             const event = { player, item: entry.item, tab: entry.tab, slot: entry.slot, op: packet.buttonNum, option: packet.option, handled: false };
             getPluginManager().emitCustomEvent(Bank.ITEM_OP_EVENT, event);
             if (event.handled) return true;
+            if (Bank.asksAmount("withdraw", packet.buttonNum, packet.option, player.getBankCustomQuantity(), player.getBankQuantityMode())) {
+                const itemId = entry.item.getId();
+                Bank.promptAmount(player, (amount) => {
+                    // The bank may have changed while the prompt was open.
+                    const item = player.getBank(entry.tab).getItems()[entry.slot];
+                    if (item?.getId() === itemId && item.getAmount() > 0) Bank.withdraw(player, itemId, entry.slot, amount, entry.tab);
+                });
+                return true;
+            }
             const amount = Bank.actionAmount(
                 "withdraw", packet.buttonNum, packet.option, entry.item.getAmount(),
                 player.getBankCustomQuantity(), player.getBankQuantityMode(),
@@ -611,6 +763,14 @@ export class Bank extends ItemContainer {
             const event = { player, item, slot: packet.slot, op: packet.buttonNum, option: packet.option, handled: false };
             getPluginManager().emitCustomEvent(Bank.INVENTORY_OP_EVENT, event);
             if (event.handled) return true;
+            if (Bank.asksAmount("deposit", packet.buttonNum, packet.option, player.getBankCustomQuantity(), player.getBankQuantityMode())) {
+                const itemId = item.getId();
+                const slot = packet.slot;
+                Bank.promptAmount(player, (amount) => {
+                    if (player.getInventory().getItems()[slot]?.getId() === itemId) Bank.deposits(player, itemId, slot, amount);
+                });
+                return true;
+            }
             const amount = Bank.actionAmount(
                 "deposit", packet.buttonNum, packet.option, player.getInventory().getAmount(item.getId()),
                 player.getBankCustomQuantity(), player.getBankQuantityMode(),
@@ -647,6 +807,9 @@ export class Bank extends ItemContainer {
         } else if (packet.childId === Bank.NOTE_CHILD) {
             player.setNoteWithdrawal(!player.withdrawAsNote());
             sender.sendVarbit(3958, player.withdrawAsNote() ? 1 : 0);
+        } else if (packet.childId === Bank.QUANTITY_CHILDREN[Bank.QUANTITY_X_MODE] && packet.buttonNum === 2) {
+            // Capture: Set custom quantity only asks for the amount; nothing moves.
+            Bank.promptAmount(player);
         } else if (Bank.QUANTITY_CHILDREN.includes(packet.childId)) {
             player.setBankQuantityMode(Bank.QUANTITY_CHILDREN.indexOf(packet.childId));
             sender.sendVarbit(6590, player.getBankQuantityMode());
@@ -947,8 +1110,9 @@ export class Bank extends ItemContainer {
         return player.getBank(tab).getAmount(item.getId()) >= item.getAmount();
     }
 
+    /** This tab's slots so far (it grows); the player's space is getCapacity. */
     public capacity(): number {
-        return 352;
+        return this.items?.length ?? 0;
     }
 
     public stackType(): StackType {
@@ -972,13 +1136,13 @@ export class Bank extends ItemContainer {
         const sender = player.getPacketSender();
         const varps = {
             548: 1,
-            4611: Math.max(0, 1410 - this.capacity()),
+            [Bank.LOCKED_SLOTS_VARP]: Bank.MAX_SLOTS - Bank.getCapacity(player),
         };
         const varbits: Record<number, number> = {
             3755: player.isPlaceholders() ? 1 : 0,
             3958: player.withdrawAsNote() ? 1 : 0,
             3959: player.insertModeReturn() ? 1 : 0,
-            3960: player.getBankCustomQuantity(),
+            [Bank.REQUESTED_QUANTITY_VARBIT]: player.getBankCustomQuantity(),
             4150: player.getCurrentBankTab(),
             4170: 0,
             5450: 1,
@@ -1003,7 +1167,10 @@ export class Bank extends ItemContainer {
             sender.sendVarbit(Bank.VIEW_CONTAINER_VARBIT, 0).sendConfig(Bank.VIEW_CONTAINER_OBJ_VARP, -1);
         }
         this.refreshItems();
-        if (opening) Sounds.sendSound(this.getPlayer(), Sound.CONTAINER_OPEN);
+        if (opening) {
+            Sounds.sendSound(this.getPlayer(), Sound.CONTAINER_OPEN);
+            getPluginManager().emitCustomEvent(Bank.OPENED_EVENT, { player });
+        }
 
         return this;
     }

@@ -754,12 +754,17 @@
     ]
   },
   "pottery": {
-    "$comment": "One soft clay shapes `shaped` unfired items (default 1).",
+    "$comment": "One soft clay shapes `shaped` unfired items (default 1). `plural` names the item in the oven's \"You don't have any ... which need firing.\" (captured for pots and bowls).",
     "seq": 883,
     "seqName": "human_potterywheel",
+    "ovenSeq": 1317,
+    "ovenSeqName": "potteryoven_quick",
+    "sound": 2588,
+    "ovenSound": 2725,
     "recipes": [
       {
         "name": "pot",
+        "plural": "pots",
         "unfired": "UNFIRED_POT",
         "fired": "POT",
         "level": 1,
@@ -767,17 +772,8 @@
         "firingXp": 6.3
       },
       {
-        "name": "cup",
-        "unfired": "UNFIRED_CUP",
-        "fired": "EMPTY_CUP",
-        "level": 3,
-        "shapingXp": 8.5,
-        "firingXp": 8.5,
-        "members": true,
-        "shaped": 4
-      },
-      {
         "name": "pie dish",
+        "plural": "pie dishes",
         "unfired": "UNFIRED_PIE_DISH",
         "fired": "PIE_DISH",
         "level": 7,
@@ -786,20 +782,52 @@
       },
       {
         "name": "bowl",
+        "plural": "bowls",
         "unfired": "UNFIRED_BOWL",
         "fired": "BOWL",
         "level": 8,
         "shapingXp": 18,
-        "firingXp": 15
+        "firingXp": 15,
+        "shapeMessage": "You make the clay into a bowl.",
+        "putMessage": "You put a bowl in the oven.",
+        "removeMessage": "You remove the bowl from the oven."
       },
       {
         "name": "plant pot",
+        "plural": "plant pots",
         "unfired": "UNFIRED_PLANT_POT",
         "fired": "EMPTY_PLANT_POT",
         "level": 19,
         "shapingXp": 20,
         "firingXp": 17.5,
         "members": true
+      },
+      {
+        "name": "cup",
+        "plural": "cups",
+        "unfired": "UNFIRED_CUP",
+        "fired": "EMPTY_CUP",
+        "level": 3,
+        "shapingXp": 8.5,
+        "firingXp": 8.5,
+        "members": true,
+        "shaped": 4,
+        "shapeLabel": "Set of cups",
+        "shapeMessage": "You make the clay into a set of cups.",
+        "putMessage": "You put an item in the oven.",
+        "removeMessage": "You remove the item from the oven.",
+        "cracks": false
+      },
+      {
+        "name": "pot lid",
+        "plural": "pot lids",
+        "unfired": "UNFIRED_POT_LID",
+        "fired": "POT_LID",
+        "level": 25,
+        "shapingXp": 20,
+        "firingXp": 20,
+        "members": true,
+        "unlock": { "quest": "one_small_favour", "stage": 34 }
       }
     ],
     "waterContainers": [
@@ -822,7 +850,7 @@
     ]
   },
   "spinning": {
-    "$comment": "`materials`: any one of them makes the product, in order of preference; `amount` of it per item.",
+    "$comment": "`materials`: any one of them makes the product, in order of preference; `amount` of it per item. Recipes are in menu order (linen yarn before bow string, recording 3467).",
     "seq": 13139,
     "seqName": "human_spinningwheel_60",
     "wheelSeq": 466,
@@ -837,6 +865,16 @@
         "amount": 1,
         "level": 1,
         "xp": 2.5
+      },
+      {
+        "item": "LINEN_YARN",
+        "materials": [
+          "FLAX"
+        ],
+        "amount": 1,
+        "level": 12,
+        "xp": 16,
+        "members": true
       },
       {
         "item": "BOW_STRING",
@@ -860,16 +898,6 @@
         "amount": 1,
         "level": 10,
         "xp": 15,
-        "members": true
-      },
-      {
-        "item": "LINEN_YARN",
-        "materials": [
-          "FLAX"
-        ],
-        "amount": 1,
-        "level": 12,
-        "xp": 16,
         "members": true
       },
       {

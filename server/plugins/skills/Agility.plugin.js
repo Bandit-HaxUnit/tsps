@@ -13,13 +13,37 @@ const LAPS_ATTRIBUTE = "agility.laps";
 const LAP_COUNTER_OFF_ATTRIBUTE = "agility.lap-counter-off";
 
 /**
- * Marks of grace appear on rooftop courses while a lap is in progress. One roll per
- * lap, at the first obstacle (a course's `marks.chance`, else this); players 20+ levels
- * over the course get a lower rate.
+ * Marks of grace (Wiki: Mark of Grace, "Spawning mechanics"). Completing a lap rolls for a mark
+ * once the player's cooldown since their last mark has run out: 3 minutes, counted in whole
+ * clock minutes and kept across logouts. The roll is a course's `marks.chance`, else 2/6, cut to
+ * a fifth when the player's unboosted Agility is 20+ over the course (unless the course sets
+ * `overlevelPenalty: false`). A failed roll can be rerolled at `marks.rerolls`' chance, and
+ * `marks.shortCooldown` can make the next cooldown 2 minutes, each for a completed diary tier.
+ * A mark is the player's own and lasts 10 minutes on the floor, not counting time logged out.
  */
-const MARK_LAP_CHANCE = 1 / 4;
-const MARK_OVERLEVELLED_MULTIPLIER = 0.75;
+const MARK_COOLDOWN_ATTRIBUTE = "agility:mark-cooldown-minute";
+const MARK_LAP_CHANCE = 2 / 6;
+const MARK_OVERLEVELLED_MULTIPLIER = 0.2;
 const MARK_OVERLEVEL_THRESHOLD = 20;
+const MARK_COOLDOWN_MINUTES = 3;
+const MARK_SHORT_COOLDOWN_MINUTES = 2;
+const MARK_DESPAWN_TICKS = 1000;
+const MINUTE_MS = 60_000;
+
+/**
+ * The Agility course helper (rsprox captures). A lap's first obstacle sets
+ * `helper_agility_highlighted_course` to the course's `helper` id (enum 3507) as it starts, which
+ * highlights the course, and runs `helper_agility_start_lap` with the clock when it ends. Every
+ * course obstacle runs `helper_agility_add_xp` with the XP it gave, in tenths. The last one clears
+ * the varbit and runs `helper_agility_end_lap` with the clock and the extra laps counted.
+ */
+const HIGHLIGHTED_COURSE_VARBIT = 13140;
+const START_LAP_SCRIPT = 5173;
+const END_LAP_SCRIPT = 5174;
+const ADD_XP_SCRIPT = 5175;
+/** The lap clock counts game ticks; the client only reads differences. From 2024 so it fits an int. */
+const LAP_CLOCK_EPOCH_MS = Date.UTC(2024, 0, 1);
+const TICK_MS = 600;
 
 /** objectId -> obstacle entries; entries with `at` only match that object tile. */
 const OBSTACLES_BY_OBJECT = new Map();
@@ -154,20 +178,64 @@ function rollSuccess(player, obstacle, requirement) {
   return Math.random() * 100 < chance;
 }
 
+function lapClock() {
+  return Math.floor((Date.now() - LAP_CLOCK_EPOCH_MS) / TICK_MS);
+}
+
+/** Agility XP; on a course, the helper is told what was actually gained (in tenths, after rates). */
+function addAgilityXp(player, xp, course = null) {
+  const skills = player.getSkillManager();
+  const before = skills.getExperience(core.Skill.AGILITY);
+  skills.addExperiences(core.Skill.AGILITY, xp);
+  const gained = Math.round((skills.getExperience(core.Skill.AGILITY) - before) * 10);
+  if (course?.helper != null && gained > 0) {
+    player.getPacketSender().sendClientScript(ADD_XP_SCRIPT, gained);
+  }
+}
+
+/** Whether `obstacle` begins a lap: obstacle 1, unless the course says otherwise (`startsLap`). */
+function startsLap(obstacle, context) {
+  if (!obstacle.course) return false;
+  return obstacle.startsLap !== undefined ? resolve(obstacle.startsLap, context) === true : obstacle.index === 1;
+}
+
+/** The course highlight goes on with the obstacle's first visible step, after any wait or turn. */
+function withHighlight(steps, helper) {
+  const highlight = { varbit: [HIGHLIGHTED_COURSE_VARBIT, helper] };
+  const at = steps.findIndex((step) => step && step.wait == null && !step.face && !step.faceDir);
+  return at < 0 ? [...steps, highlight] : [...steps.slice(0, at), highlight, ...steps.slice(at)];
+}
+
+/** A course's own progress varbit (Shayzien's), set to the obstacle the lap has reached. */
+function setProgressVarbit(player, course, index) {
+  if (course.progressVarbit != null) {
+    player.getPacketSender().sendVarbit(course.progressVarbit, index);
+  }
+}
+
 function getLaps(player) {
   const laps = player.getAttribute(LAPS_ATTRIBUTE);
   return laps && typeof laps === "object" ? laps : {};
 }
 
 function completeLap(player, course) {
+  // Content may change what a lap counts for and pays ("agility:lap-reward", a league relic's double laps and bonus XP).
+  const reward = { player, course: course.key, count: 1, xp: course.lapBonus };
+  pluginApi.emitCustomEvent("agility:lap-reward", reward);
   const laps = { ...getLaps(player) };
-  laps[course.key] = (laps[course.key] ?? 0) + 1;
+  laps[course.key] = (laps[course.key] ?? 0) + Math.max(1, reward.count | 0);
   player.setAttribute(LAPS_ATTRIBUTE, laps);
-  if (course.lapBonus > 0) {
-    player.getSkillManager().addExperiences(core.Skill.AGILITY, course.lapBonus);
+  rollMarkOfGrace(player, course);
+  if (reward.xp > 0) {
+    addAgilityXp(player, reward.xp, course);
   }
   if (!player.getAttribute(LAP_COUNTER_OFF_ATTRIBUTE)) {
     player.sendMessage(`Your ${course.name} lap count is: <col=ff0000>${laps[course.key]}</col>.`);
+  }
+  setProgressVarbit(player, course, 0);
+  if (course.helper != null) {
+    player.getPacketSender().sendVarbit(HIGHLIGHTED_COURSE_VARBIT, 0);
+    player.getPacketSender().sendClientScript(END_LAP_SCRIPT, lapClock(), Math.max(1, reward.count | 0) - 1);
   }
   pluginApi.emitCustomEvent("agility:lap", { player, course: course.key, laps: laps[course.key] });
   if (course.diaryTask) {
@@ -196,7 +264,6 @@ function advanceCourse(player, obstacle) {
   let next = null;
   if (obstacle.index === 1) {
     next = { course: course.key, index: 1 };
-    rollMarkOfGrace(player, course);
   } else if (continuesLap(progress, obstacle)) {
     next = { course: course.key, index: obstacle.index };
   }
@@ -206,33 +273,80 @@ function advanceCourse(player, obstacle) {
     return;
   }
   player.setAttribute(PROGRESS_ATTRIBUTE, next);
+  setProgressVarbit(player, course, next?.index ?? 0);
+}
+
+function clockMinute() {
+  return Math.floor(Date.now() / MINUTE_MS);
+}
+
+function diaryTierComplete(player, { diary, tier }) {
+  const request = { player, diary, tier, complete: false };
+  pluginApi.emitCustomEvent("diary:is-complete", request);
+  return request.complete === true;
+}
+
+/** The chance of the first of `bonuses` ({ diary, tier, chance }) whose diary tier is done, else 0. */
+function diaryBonusChance(player, bonuses) {
+  const bonus = (bonuses ?? []).find((entry) => diaryTierComplete(player, entry));
+  return bonus ? bonus.chance : 0;
 }
 
 function rollMarkOfGrace(player, course) {
   const marks = course.marks;
   if (!marks || marks.tiles.length === 0) return;
+  const minute = clockMinute();
+  if (minute < (player.getAttribute(MARK_COOLDOWN_ATTRIBUTE) ?? 0)) return;
   let chance = marks.chance ?? MARK_LAP_CHANCE;
-  if (agilityLevel(player) >= marks.level + MARK_OVERLEVEL_THRESHOLD) {
+  const unboosted = player.getSkillManager().getMaxLevel(core.Skill.AGILITY);
+  if (marks.overlevelPenalty !== false && unboosted >= marks.level + MARK_OVERLEVEL_THRESHOLD) {
     chance *= MARK_OVERLEVELLED_MULTIPLIER;
   }
-  if (Math.random() >= chance) return;
+  if (Math.random() >= chance && Math.random() >= diaryBonusChance(player, marks.rerolls)) return;
+  const short = Math.random() < diaryBonusChance(player, marks.shortCooldown);
+  player.setAttribute(MARK_COOLDOWN_ATTRIBUTE, minute + (short ? MARK_SHORT_COOLDOWN_MINUTES : MARK_COOLDOWN_MINUTES));
   const tile = marks.tiles[Math.floor(Math.random() * marks.tiles.length)];
   const position = new core.Location(tile[0], tile[1], tile[2]);
-  ItemOnGroundManager.registerNonGlobals(player, new core.Item(core.ItemIds.MARK_OF_GRACE, 1), position);
+  const award = { player, minigame: "rooftop-agility", points: 1 };
+  pluginApi.emitCustomEvent("minigame:points", award);
+  // Content may add to what spawns with the mark ("agility:mark", a league relic's coins).
+  const spawn = { player, location: position, items: [[core.ItemIds.MARK_OF_GRACE, award.points]] };
+  pluginApi.emitCustomEvent("agility:mark", spawn);
+  for (const [itemId, amount] of spawn.items) {
+    ItemOnGroundManager.registerLocation(player, new core.Item(itemId, amount), position,
+      player.getPrivateArea(), { goesGlobal: false, despawnDelay: MARK_DESPAWN_TICKS });
+  }
 }
 
-function finishObstacle(player, obstacle, success, completed, fail = obstacle.fail) {
+/** The player's course marks on the floor; dropped marks go public and age as usual. */
+function spawnedMarks(username) {
+  return ItemOnGroundManager.ownedBy(username).filter((item) => item.getItem().getId() === core.ItemIds.MARK_OF_GRACE
+    && !item.getgoesGlobal() && item.getDespawnDelay() === MARK_DESPAWN_TICKS);
+}
+
+function pauseMarksOnLogout({ player }) {
+  spawnedMarks(player.getUsername()).forEach((item) => item.setAgingPaused(true));
+}
+
+function resumeMarksOnLogin({ player }) {
+  spawnedMarks(player.getUsername()).forEach((item) => item.setAgingPaused(false));
+}
+
+function finishObstacle(player, obstacle, success, completed, fail = obstacle.fail, lapStart = false) {
   if (!completed) {
     return;
+  }
+  if (success && lapStart && obstacle.course.helper != null) {
+    player.getPacketSender().sendClientScript(START_LAP_SCRIPT, lapClock());
   }
   const reward = success ? obstacle.xp : fail?.xp;
   const xp = typeof reward === "function" ? reward(player) : reward;
   if (xp > 0) {
-    player.getSkillManager().addExperiences(core.Skill.AGILITY, xp);
+    addAgilityXp(player, xp, obstacle.course);
   }
   const endMessage = success ? obstacle.end : fail?.end;
   if (endMessage) {
-    player.sendMessage(endMessage);
+    ObstacleRunner.sendMessage(player, endMessage);
   }
   if (!success) {
     return;
@@ -335,18 +449,23 @@ function attemptObstacle(player, object, entry) {
   // `forceFail` gives the failure the player gets whatever they roll (Ape Atoll without a greegree).
   const forced = obstacle.forceFail?.(context) ?? null;
   const fail = forced ?? obstacle.fail;
-  const success = !forced && rollSuccess(player, obstacle, level);
-  const steps = resolve(success ? obstacle.steps : fail.steps, context);
-  if (!steps) return;
+  // Content may make the roll succeed ("agility:roll", a league relic); a forced failure stays one.
+  const roll = { player, objectId: object.getId(), success: !forced && rollSuccess(player, obstacle, level) };
+  if (!forced) pluginApi.emitCustomEvent("agility:roll", roll);
+  const success = roll.success;
+  const resolved = resolve(success ? obstacle.steps : fail.steps, context);
+  if (!resolved) return;
+  const lapStart = success && startsLap(obstacle, context);
+  const steps = lapStart && obstacle.course.helper != null ? withHighlight(resolved, obstacle.course.helper) : resolved;
   pluginApi.emitCustomEvent("agility:obstacle-start", { player, objectId: object.getId(), location: context.obj, success });
   const startMessage = success ? obstacle.start : fail?.start ?? obstacle.start;
   if (startMessage) {
-    player.sendMessage(startMessage);
+    ObstacleRunner.sendMessage(player, startMessage);
   }
   ObstacleRunner.run(context, steps, {
     render: success ? obstacle.render : fail?.render ?? obstacle.render,
     onFinish: (completed) => {
-      finishObstacle(player, obstacle, success, completed, fail);
+      finishObstacle(player, obstacle, success, completed, fail, lapStart);
       if (completed && success) {
         pluginApi.emitCustomEvent("agility:obstacle", { player, objectId: object.getId(), location: context.obj });
       }
@@ -436,6 +555,7 @@ module.exports = {
     api.persistAttribute(PROGRESS_ATTRIBUTE);
     api.persistAttribute(LAPS_ATTRIBUTE);
     api.persistAttribute(LAP_COUNTER_OFF_ATTRIBUTE);
+    api.persistAttribute(MARK_COOLDOWN_ATTRIBUTE, 0);
     api.onNpcInteraction("Grace", { "Toggle Counter": toggleLapCounter });
     api.onObjectRoute(routeToObstacle);
     api.onObjectFirstClick([...OBSTACLES_BY_OBJECT.keys()], operateObstacle);
@@ -443,6 +563,8 @@ module.exports = {
     api.onNpcInteraction("Agility Trainer", { "Give-Stick": operateNpcObstacle });
     api.onCanTeleport(blockTeleportMidObstacle);
     api.onPlayerLogout(finishObstacleOnLogout);
+    api.onPlayerLogout(pauseMarksOnLogout);
+    api.onPlayerLogin(resumeMarksOnLogin);
 
     api.log("registered", {
       courses: COURSES.length,

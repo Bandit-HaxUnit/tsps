@@ -1,8 +1,14 @@
 // Run after `yarn build`: node --test tests/bot-brain.test.cjs
 const assert = require('node:assert/strict');
-const { test } = require('node:test');
+const { before, test } = require('node:test');
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
+before(async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize();
+  require('../plugins/items/ItemDefinitionLoader.plugin').register({
+    log() {}, onPlayerLogin() {}, registerContentEndpoint() {},
+  });
+});
 const { BotBrain } = require('../plugins/bots/brain/Brain.PlayerBots');
 const {
   buildPvpSeekIndex,
@@ -935,6 +941,30 @@ const { __testing: loadoutTesting } = require('../plugins/bots/behaviours/polici
 const { getWildernessHotspot, listWildernessHotspots } = require('../plugins/bots/behaviours/pvp/WildernessHotspotRegistry.PlayerBots');
 const { SkillManager } = require('../dist/game/content/skill/SkillManager');
 
+test('a requested PvP profile and archetype reach the first kit before the bot joins the world', () => {
+  const { createBotRegistry } = require('../plugins/bots/runtime/Registry.PlayerBots');
+  const { assignPvpMetadata } = require('../plugins/bots/behaviours/pvp/PvpAssignment.PlayerBots');
+  let equipped, joined = false;
+  const metadata = { profileId: 'elite', loadoutId: 'deep_wild_nh', generatedArchetypeId: 'elite_nh_ags',
+    combatLevelRange: { min: 121, max: 126 } };
+  const registry = createBotRegistry({
+    botApi: { getRegionManager: () => ({}) }, botCount: 0, spawn: new Location(3423, 4120),
+    behaviorMode: { PVP: 'pvp' }, worldGetPlayerByName: () => null,
+    createBotPlayer: (name, location) => ({ ...fakePlayer(name), getLocation: () => location }),
+    createInitialState: () => ({ pvp: {} }), assignPvpMetadata,
+    buildRoamingPvpMetadata: () => { throw new Error('an explicit kit must not be replaced by a random one'); },
+    applyInitialPvpLoadout: (_, state) => { assert.equal(joined, false); equipped = state.pvp; return true; },
+    emitPlayerLogin: () => { joined = true; }, ensureBehaviorTaskStarted() {},
+  });
+  assert.ok(registry.spawnPvpBot(new Location(3423, 4120), { username: 'BhProfile', pvpMetadata: metadata }));
+  for (const key of ['profileId', 'loadoutId', 'generatedArchetypeId', 'combatLevelRange']) {
+    assert.deepEqual(equipped[key], metadata[key], key);
+  }
+  assert.equal(joined, true);
+  assignPvpMetadata({ pvp: equipped }, { metadata: { profileId: 'elite', loadoutId: 'deep_wild_nh' } });
+  assert.equal(equipped.generatedArchetypeId, 'elite_nh_ags', 'ordinary reassignment preserves its chosen archetype');
+});
+
 test('regional PvP bots use varied catalogue gear and favour towns over the levelled Wilderness', (t) => {
   const { Wilderness } = require('../dist/game/content/wilderness/Wilderness');
   const { createBotRegistry } = require('../plugins/bots/runtime/Registry.PlayerBots');
@@ -1159,7 +1189,7 @@ test('hotspot clusters fill their band from their loadout catalogue; the ditch s
 });
 
 test('every catalogue archetype builds a full loadout, including optional empty inventory slots', () => {
-  const { PVP_LOADOUTS } = require('../plugins/bots/behaviours/pvp/PvpLoadoutRegistry.PlayerBots');
+  const { PVP_LOADOUTS, PVP_LOADOUT_DEFINITIONS } = require('../plugins/bots/behaviours/pvp/PvpLoadoutRegistry.PlayerBots');
   for (const loadout of Object.values(PVP_LOADOUTS)) {
     for (const archetypeId of loadout.archetypes) {
       const generated = loadoutTesting.buildGeneratedPreset(null, {
@@ -1168,6 +1198,14 @@ test('every catalogue archetype builds a full loadout, including optional empty 
       assert.equal(generated?.archetypeId, archetypeId, `${loadout.id}/${archetypeId}`);
       assert.equal(generated.preset.getInventory().length, 28);
       assert.ok(generated.preset.getEquipment().length > 0);
+      const slots = generated.preset.getEquipment().map((item) => item.getDefinition().getEquipmentType().getSlot());
+      assert.ok(slots.includes(Equipment.WEAPON_SLOT), `${archetypeId} has a usable weapon`);
+      const definition = PVP_LOADOUT_DEFINITIONS.archetypes.find((entry) => entry.id === archetypeId);
+      for (const [key, slot] of [['body', Equipment.BODY_SLOT], ['legs', Equipment.LEG_SLOT]]) {
+        if (!Array.isArray(definition.equipment[key]) || !definition.equipment[key].includes(null)) {
+          assert.ok(slots.includes(slot), `${archetypeId} has wearable ${key} armour`);
+        }
+      }
     }
   }
 });
@@ -2439,4 +2477,32 @@ test('the packaged bot object index matches the current cache and tracked resour
       assert.equal(index.ids, ids, 'regenerate the bot object index when resource IDs change');
     })().catch(error => { console.error(error); process.exitCode = 1; });
   `], { cwd: require('node:path').resolve(__dirname, '..'), stdio: 'pipe' });
+});
+
+
+test('the shared PvP world population has more one-defence pures without protection prayers', t => {
+  const fs = require('node:fs');
+  const vm = require('node:vm');
+  const { createRequire } = require('node:module');
+  const path = require('node:path');
+  const filename = path.resolve(__dirname, '../plugins/bots/PlayerBots.plugin.js');
+  const context = { require: createRequire(filename), module: { exports: {} }, process, console,
+    __dirname: path.dirname(filename) };
+  vm.runInNewContext(fs.readFileSync(filename, 'utf8') + '\nmodule.exports.config = BOT_CONFIG;', context, { filename });
+  const { buildRoamingPvpMetadata } = require('../plugins/bots/behaviours/pvp/PvpAssignment.PlayerBots');
+  let seed = 1385;
+  t.mock.method(Math, 'random', () => ((seed = Math.imul(seed, 1664525) + 1013904223 >>> 0) / 2 ** 32));
+  let noProtectionPures = 0;
+  const types = new Set();
+  for (let index = 0; index < 1000; index++) {
+    const metadata = buildRoamingPvpMetadata({ config: context.module.exports.config });
+    const generated = loadoutTesting.buildGeneratedPreset(null, { pvp: metadata });
+    assert.ok(generated);
+    const stats = generated.preset.getStats();
+    if (stats[1] === 1 && stats[5] < 37) noProtectionPures++;
+    types.add(generated.archetypeId);
+  }
+  t.diagnostic(`${noProtectionPures}/1000 one-defence pures without protection prayers`);
+  assert.ok(noProtectionPures >= 250 && noProtectionPures <= 400, `${noProtectionPures}/1000 no-protection pures`);
+  assert.ok(types.size > 25, 'the rest of the catalogue remains represented');
 });

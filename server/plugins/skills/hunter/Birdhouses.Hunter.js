@@ -107,9 +107,15 @@ function seed(player, object, itemId) {
   if (!amount || !exchange(player, [[itemId, amount]], [])) return;
   state.seeds = Math.min(SEEDS, state.seeds + amount * value);
   if (state.seeds === SEEDS) state.filled = Date.now();
+  // rsprox captures (545-572, 1835-1851): seeding is a pick-up with its sound; a full house sends the
+  // line as spam and in a message box.
+  pickup(player);
   sync({ player });
-  if (state.seeds === SEEDS) statement(player, "Your birdhouse trap is now full of seed and will start to catch birds.");
-  else player.sendMessage("You add some seeds to the birdhouse.");
+  if (state.seeds === SEEDS) {
+    const full = "Your birdhouse trap is now full of seed and will start to catch birds.";
+    player.getPacketSender().sendTypedMessage(H.core.ChatType.SPAM, full);
+    statement(player, full);
+  } else player.sendMessage("You add some seeds to the birdhouse.");
 }
 
 function use(event) {
@@ -209,7 +215,10 @@ function loot(player, state) {
     if (!clueGiven) {
       let clue = null;
       for (const [tier, numerator] of [["ELITE",1],["HARD",2],["MEDIUM",3],["EASY",4],["BEGINNER",30]]) {
-        if (!require("./Context.Hunter").ownsClue(player,tier) && roll(1,1500) <= numerator) { clue = tier; break; }
+        // Content may make clue nests commoner ("treasure-trails:vessel-chance", a league relic).
+        const boost = { player, vessel: "nest", tier: tier.toLowerCase(), multiplier: 1 };
+        H.api.emitCustomEvent("treasure-trails:vessel-chance", boost);
+        if (!require("./Context.Hunter").ownsClue(player,tier) && roll(1,1500) <= numerator * (boost.multiplier > 1 ? boost.multiplier : 1)) { clue = tier; break; }
       }
       if (clue) {
         const boxes = require("./Context.Hunter").questComplete(player,"x_marks_the_spot");

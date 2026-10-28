@@ -17,6 +17,13 @@ const JAR_MESSAGE = "You manage to catch the impling and squeeze it into a jar."
 const LOOT_MESSAGE = "You manage to catch the impling and acquire some loot.";
 const NO_JAR_MESSAGE = "You don't have an empty impling jar in which to keep an impling.";
 const NO_SPACE_MESSAGE = "You'll need to clear some space in your pack to catch this impling without a jar.";
+// A barehanded butterfly or moth (rsprox captures 95, 1634, 3279, 4051): the grab, the creature's
+// out-of-hands graphic and sound 7870 (45 cycles late) and the spam line on the tick the player
+// reaches it; it is gone a tick later.
+const RELEASE_SOUND = 7870;
+const RELEASE_DELAY = 45;
+const RELEASE_HEIGHT = 190;
+const RELEASED_TICKS = 1;
 
 function gloves(player, id) {
   if (id > 0) gloved.add(player);
@@ -109,28 +116,63 @@ function catchNpc({ player, npc, npcId }) {
   const weapon = player.getEquipment().get(H.core.Equipment.WEAPON_SLOT).getId();
   const net = [I.BUTTERFLY_NET, I.MAGIC_BUTTERFLY_NET].includes(weapon);
   const def = butterfly;
+  const name = creatureName(def);
+  const required = net ? def.level : def.hands;
+  if (level(player) < required) {
+    player.sendMessage(`You need a Hunter level of at least ${required} to catch this ${name.endsWith(" moth") ? "moth" : "butterfly"}${net ? "" : " barehanded"}.`);
+    return true;
+  }
+  if (!net) { catchBarehanded(player, npc, npcId, def, name); return true; }
   const jar = I.BUTTERFLY_JAR;
   const jarred = player.getInventory().contains(jar);
-  const required = net ? def.level : def.hands;
-  if (!requireLevel(player, required)) return true;
   const inputs = jarred ? [[jar, 1]] : [];
   const outputs = jarred ? [[def.jar, 1]] : [];
   if (!exchange(player, inputs, outputs, false)) { player.getInventory().full(); return true; }
-  begin(player, 2, net ? weapon === I.MAGIC_BUTTERFLY_NET ? ANIM.NET : ANIM.BUTTERFLY : ANIM.HANDS, () => {
+  begin(player, 2, weapon === I.MAGIC_BUTTERFLY_NET ? ANIM.NET : ANIM.BUTTERFLY, () => {
     if (!available(npc) || !nearby(player, npc) || !requireLevel(player, required)
       || player.getEquipment().get(H.core.Equipment.WEAPON_SLOT).getId() !== weapon) return;
-    const improved = !net || weapon === I.MAGIC_BUTTERFLY_NET;
+    const improved = weapon === I.MAGIC_BUTTERFLY_NET;
     const curve = improved && def.handsLow !== undefined ? { ...def, low: def.handsLow, high: def.handsHigh } : def;
-    const catchBonus = improved && def.handsLow === undefined || net && weapon === I.MAGIC_BUTTERFLY_NET && def.boost === "restore" ? 20 / 256 : 0;
+    const catchBonus = improved && (def.handsLow === undefined || def.boost === "restore") ? 20 / 256 : 0;
     if (!chance(player, curve, catchBonus, required)) {
       player.sendMessage("The creature slips away."); return;
     }
     if (!exchange(player, inputs, outputs)) return;
-    xp(player, net ? def.xp : def.handsXp, "butterfly", npcId);
-    if (!jarred) { bonus(player, def); if (def.boost === "restore") player.setRunEnergy(Math.min(100, player.getRunEnergy() + 5)); }
+    xp(player, def.xp, "butterfly", npcId);
+    if (!jarred) freed(player, def);
     player.sendMessage(jarred ? "You catch the creature in a jar." : "You catch the creature barehanded and release it.");
   });
   return true;
+}
+
+/** "snowy knight butterfly", "moonlight moth": the creature as catch lines name it. */
+function creatureName(def) {
+  const name = String(H.core.CacheDefinitions.getNpc(def.npc)?.name ?? "").toLowerCase();
+  return name.endsWith(" moth") ? name : `${name} butterfly`;
+}
+
+function catchBarehanded(player, npc, npcId, def, name) {
+  if (!active(player) || player.busy()) return;
+  C.cancel(player);
+  player.getSkillManager().stopSkillable();
+  player.performAnimation(new H.core.Animation(ANIM.IMPLING_HANDS));
+  const curve = def.handsLow !== undefined ? { ...def, low: def.handsLow, high: def.handsHigh } : def;
+  if (!chance(player, curve, def.handsLow === undefined ? 20 / 256 : 0, def.hands)) {
+    player.sendMessage("The creature slips away."); return;
+  }
+  const graphic = H.core.CacheDefinitions.getSpotanimId(def.release);
+  if (graphic != null) player.performGraphic(new H.core.Graphic(graphic, RELEASE_DELAY, RELEASE_HEIGHT));
+  player.getPacketSender().sendSound(RELEASE_SOUND, 1, RELEASE_DELAY);
+  player.getPacketSender().sendTypedMessage(H.core.ChatType.SPAM, `You catch and release the ${name}.`);
+  xp(player, def.handsXp, "butterfly", npcId);
+  freed(player, def);
+  hide(npc, RELEASED_TICKS + 10, RELEASED_TICKS);
+}
+
+/** A butterfly let go straight from the hands or net gives its boost (sunlight moths also restore run energy). */
+function freed(player, def) {
+  bonus(player, def);
+  if (def.boost === "restore") player.setRunEnergy(Math.min(100, player.getRunEnergy() + 5));
 }
 
 /**
@@ -174,7 +216,10 @@ function catchImpling(player, npc, npcId, def) {
   player.sendMessage(jarred ? JAR_MESSAGE : LOOT_MESSAGE);
   xp(player, puro ? def.puroXp : def.xp, "impling", npcId);
   npc.performAnimation(new H.core.Animation(ANIM.IMPLING_CAUGHT));
-  hide(npc, CAUGHT_TICKS + (puro ? def.puroRespawn : OUTSIDE_RESPAWN_TICKS), CAUGHT_TICKS);
+  // Roaming spawns (Puro-Puro's and the overworld's) manage their own removal and respawn.
+  const event = { npc, handled: false };
+  H.api.emitCustomEvent("hunter:impling-caught", event);
+  if (!event.handled) hide(npc, CAUGHT_TICKS + (puro ? def.puroRespawn : OUTSIDE_RESPAWN_TICKS), CAUGHT_TICKS);
 }
 
 function inPuroPuro(player) {
@@ -246,7 +291,11 @@ function rewards(player, def) {
     MAGPIE: [["HARD", 50]], NINJA: [["HARD", 25]], DRAGON: [["ELITE", 50]], CRYSTAL: [["ELITE", 50]] };
   for (const [tier, denominator] of clues[def.key] ?? []) {
     const id = I[`${C.questComplete(player, "x_marks_the_spot") ? "SCROLL_BOX" : "CLUE_SCROLL"}_${tier}_`];
-    if (roll(1, denominator) === 1 && !C.ownsClue(player, tier)) result.push([id, 1]);
+    // Content may make the jar's clue likelier ("hunter:impling-clue-chance", a league relic): 1 in `oneIn`.
+    const chance = { player, impling: def.key, tier: tier.toLowerCase(), oneIn: denominator };
+    H.api.emitCustomEvent("hunter:impling-clue-chance", chance);
+    const oneIn = Number.isInteger(chance.oneIn) && chance.oneIn > 0 ? chance.oneIn : denominator;
+    if (roll(1, oneIn) === 1 && !C.ownsClue(player, tier)) result.push([id, 1]);
   }
   return result;
 }
@@ -260,7 +309,10 @@ function loot(event) {
   if (!pending.has(event.itemId)) {
     const result = rewards(event.player, def);
     if (!result) return true;
-    if (roll(1, 10) !== 1) result.push([H.core.ItemIdentifiers.IMPLING_JAR, 1]);
+    // Content may keep the jar whole ("hunter:jar-kept", a league relic); one in ten breaks otherwise.
+    const jar = { player: event.player, kept: roll(1, 10) !== 1 };
+    H.api.emitCustomEvent("hunter:jar-kept", jar);
+    if (jar.kept) result.push([H.core.ItemIdentifiers.IMPLING_JAR, 1]);
     pending.set(event.itemId, result);
   }
   if (exchange(event.player, [[event.itemId, 1]], pending.get(event.itemId))) pending.delete(event.itemId);

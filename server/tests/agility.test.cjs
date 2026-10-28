@@ -30,18 +30,24 @@ function tick() {
   }
 }
 
-const hooks = { route: [], click: new Map(), logout: [], teleport: [], events: [], npcs: {}, answers: {}, listeners: {} };
+const hooks = { persisted: {}, route: [], click: new Map(), logout: [], login: [], teleport: [], events: [], npcs: {}, answers: {}, listeners: {} };
 const groundItems = [];
+/** Answers ItemOnGroundManager.ownedBy: the stacks a test has put on the floor. */
+const floorStacks = [];
 const Agility = require("../plugins/skills/Agility.plugin");
 Agility.register({
   core: PluginManager.getCoreApi(),
   getTaskManager: () => taskManager,
-  getItemOnGroundManager: () => ({ registerNonGlobals: (player, item, position) => groundItems.push({ item, position }) }),
-  persistAttribute() {},
+  getItemOnGroundManager: () => ({
+    registerLocation: (player, item, position, privateArea, options) => groundItems.push({ item, position, options }),
+    ownedBy: () => floorStacks,
+  }),
+  persistAttribute: (key, value) => { hooks.persisted[key] = value; },
   onObjectRoute: (handler) => hooks.route.push(handler),
   onObjectFirstClick: (ids, handler) => ids.forEach((id) => hooks.click.set(id, handler)),
   onCanTeleport: (handler) => hooks.teleport.push(handler),
   onPlayerLogout: (handler) => hooks.logout.push(handler),
+  onPlayerLogin: (handler) => hooks.login.push(handler),
   onNpcInteraction: (name, actions) => { hooks.npcs[name] = actions; },
   onCustomEvent: (name, handler) => { hooks.listeners[name] = handler; },
   emitCustomEvent: (name, payload) => {
@@ -52,15 +58,16 @@ Agility.register({
 });
 
 const { COURSES } = require("../plugins/skills/agility/courses/Courses.Agility");
+const { Anim } = require("../plugins/skills/agility/Constants.Agility");
 const { SHORTCUTS } = require("../plugins/skills/agility/shortcuts/Shortcuts.Agility");
 const { build } = require("../plugins/skills/agility/shortcuts/ShortcutData.Agility");
 const SHORTCUT_DATA = require("../plugins/skills/data/agility-shortcuts.json");
 
-function createPlayer(x, y, z, level = 99, { skills = {}, worn = [], held = [] } = {}) {
+function createPlayer(x, y, z, level = 99, { skills = {}, worn = [], held = [], boostedTo = level } = {}) {
   let location = new Location(x, y, z);
   let forceMovement = null;
   const attributes = new Map();
-  const state = { xp: 0, messages: [], varbits: new Map(), animations: [], hits: 0, blocked: false, walked: 0 };
+  const state = { xp: 0, messages: [], spam: [], varbits: new Map(), varbitLog: [], scripts: [], sounds: [], animations: [], hits: 0, blocked: false, walked: 0 };
   const player = {
     state,
     getRunEnergy: () => state.energy ?? 50,
@@ -87,15 +94,18 @@ function createPlayer(x, y, z, level = 99, { skills = {}, worn = [], held = [] }
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getSkillManager: () => ({
-      getCurrentLevel: (skill) => (skill === Skill.AGILITY ? level : skills[skill.getName?.().toLowerCase?.()] ?? 99),
+      getCurrentLevel: (skill) => (skill === Skill.AGILITY ? boostedTo : skills[skill.getName?.().toLowerCase?.()] ?? 99),
       getMaxLevel: () => level,
       addExperiences: (skill, amount) => { assert.equal(skill, Skill.AGILITY); state.xp += amount; },
+      getExperience: () => state.xp,
     }),
     getPacketSender: () => ({
-      sendVarbit: (id, value) => state.varbits.set(id, value),
+      sendVarbit: (id, value) => { state.varbits.set(id, value); state.varbitLog.push([id, value]); },
       sendRunEnergy: () => { state.energyUpdates = (state.energyUpdates ?? 0) + 1; },
+      sendClientScript: (id, ...args) => state.scripts.push([id, ...args]),
+      sendTypedMessage: (type, message) => { state.spam.push(message); state.messages.push(message); },
       sendSound() {},
-      sendSoundEffect() {},
+      sendSoundEffect: (id, loops, delay) => state.sounds.push(id),
       sendObjectAnimation() {},
     }),
     getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: () => { state.hits++; } }) }),
@@ -111,6 +121,8 @@ function createPlayer(x, y, z, level = 99, { skills = {}, worn = [], held = [] }
     getEquipment: () => ({ getItems: () => worn }),
     isRegistered: () => true,
     getHitpoints: () => 99,
+    getUsername: () => "agility tester",
+    getPrivateArea: () => null,
   };
   return player;
 }
@@ -149,8 +161,11 @@ function operate(player, objectId, objectTile) {
   return handled;
 }
 
-/** One lap in index order, using each index's first obstacle; the object sits beside the player. */
-function runLap(course, player) {
+/**
+ * One lap in index order, using each index's first obstacle; the object sits beside the player.
+ * `beforeLast` runs just before the final obstacle is clicked.
+ */
+function runLap(course, player, { beforeLast } = {}) {
   const byIndex = new Map();
   // A course that shares its first obstacles runs those from the course they belong to.
   const shared = course.sharesWith ? COURSES.find((other) => other.key === course.sharesWith.course) : null;
@@ -160,8 +175,10 @@ function runLap(course, player) {
   for (const obstacle of course.obstacles) {
     if (obstacle.index != null && !byIndex.has(obstacle.index)) byIndex.set(obstacle.index, obstacle);
   }
-  for (const index of [...byIndex.keys()].sort((a, b) => a - b)) {
+  const indices = [...byIndex.keys()].sort((a, b) => a - b);
+  for (const index of indices) {
     const obstacle = byIndex.get(index);
+    if (index === indices.at(-1)) beforeLast?.();
     if (obstacle.npc != null) {
       hooks.npcs["Agility Trainer"]["Give-Stick"]({ player, npc: { getId: () => obstacle.npc }, npcId: obstacle.npc });
       continue;
@@ -258,7 +275,8 @@ for (const course of COURSES) {
       assert.deepEqual(tileOf(player), LAP_ENDS[course.key]);
     }
     assert.equal(player.state.blocked, false, "movement unblocked after the lap");
-    assert.equal(player.state.animations.at(-1), 65535, "transient obstacle animation cleared");
+    // Cleared, unless the last tick started a landing, which plays out.
+    assert.ok([65535, Anim.LAND].includes(player.state.animations.at(-1)), "transient obstacle animation cleared");
     if (course.name.includes("Rooftop")) {
       assert.equal(player.state.energyUpdates, course.finalIndex, "energy updated after every successful rooftop obstacle");
       assert.equal(player.state.energy, 50 + course.finalIndex);
@@ -534,7 +552,8 @@ test("logging out mid-obstacle lands the player on the far side", () => {
   hooks.click.get(rope.object)({ player, object, objectId: rope.object, clickType: 1, location: { x: 3098, y: 3277, z: 3 }, handled: false });
   tick();
   hooks.logout.forEach((handler) => handler({ player }));
-  assert.deepEqual(tileOf(player), [3090, 3277, 3]);
+  // The rope's last tile, a step down off it (rsprox 1723).
+  assert.deepEqual(tileOf(player), [3090, 3276, 3]);
   assert.equal(player.getAttribute("agility.obstacle"), null);
   assert.equal(player.state.xp, 8);
 });
@@ -559,6 +578,35 @@ test("the Mokhaiotl pillars swap sides: each jump sets varbit 16716 so the far p
   operate(player, 56609, [1311, 9506, 1]);
   assert.deepEqual(tileOf(player), [1311, 9506, 1]);
   assert.equal(player.state.varbits.get(16716), 0);
+});
+
+test("the Chasm of Fire gaps land where the captures do: one long jump, then two hops", () => {
+  // rsprox captures 817, 819: 1440,10098 -> 1446; 1448 -> 1453 -> 1456 a tick apart.
+  const player = createPlayer(1440, 10098, 1);
+  operate(player, 56372, [1443, 10097, 1]);
+  assert.deepEqual(tileOf(player), [1446, 10097, 1]);
+  operate(player, 56372, [1450, 10097, 1]);
+  assert.deepEqual(tileOf(player), [1456, 10097, 1]);
+  operate(player, 56372, [1450, 10097, 1]);
+  assert.deepEqual(tileOf(player), [1448, 10097, 1], "the way back mirrors it");
+  operate(player, 56372, [1443, 10097, 1]);
+  assert.deepEqual(tileOf(player), [1440, 10098, 1]);
+});
+
+test("the Prifddinas course's second half is played south-west of the city, as captured", () => {
+  // rsprox capture 1149: the first dark hole drops to 2269,3389, the last climbs back to the city.
+  const course = COURSES.find((entry) => entry.key === "prifddinas");
+  const darkHole = course.obstacles.find((entry) => entry.index === 5);
+  const player = createPlayer(3269, 6117, 0);
+  operate(player, darkHole.object, [3269, 6118, 0]);
+  assert.deepEqual(tileOf(player), [2269, 3389, 0]);
+  const ladder = course.obstacles.find((entry) => entry.index === 6);
+  operate(player, ladder.object, [2270, 3393, 0]);
+  assert.deepEqual(tileOf(player), [2269, 3393, 2]);
+  const lastRope = course.obstacles.find((entry) => entry.index === 11);
+  const roper = createPlayer(2253, 3418, 2);
+  operate(roper, lastRope.object, [2253, 3418, 2]);
+  assert.deepEqual(tileOf(roper), [2260, 3425, 0]);
 });
 
 test("teleports are refused while crossing an obstacle", () => {
@@ -607,6 +655,146 @@ test("Falador's rough wall is climbed facing it (north, across its edge)", () =>
   const first = falador.obstacles.find((obstacle) => obstacle.index === 1);
   const steps = first.steps({ player: null, obj: wall, pos: { x: 3036, y: 3341, z: 0 } });
   assert.deepEqual(steps[0], { face: [3036, 3342] });
+});
+
+const MARK_OF_GRACE = 11849;
+const MARK_COOLDOWN_ATTRIBUTE = "agility:mark-cooldown-minute";
+
+/**
+ * A lap of `key` with every obstacle roll passing, then `rolls` (Math.random values, 0 once they
+ * run out) for the lap's end, at `minute` on the clock with the `diaries` tiers done. Returns the
+ * marks spawned and how many were on the floor before the last obstacle.
+ */
+function lapWithMarkRolls(key, player, rolls, { minute = 1000, diaries = [] } = {}) {
+  const course = COURSES.find((entry) => entry.key === key);
+  const { random } = Math;
+  const { now } = Date;
+  const queue = [...rolls];
+  let beforeLast = null;
+  groundItems.length = 0;
+  hooks.answers["diary:is-complete"] = (request) => { request.complete = diaries.includes(`${request.diary}:${request.tier}`); };
+  Math.random = () => 0;
+  Date.now = () => minute * 60_000 + 30_000;
+  try {
+    runLap(course, player, {
+      beforeLast: () => {
+        beforeLast = groundItems.length;
+        Math.random = () => queue.shift() ?? 0;
+      },
+    });
+  } finally {
+    Math.random = random;
+    Date.now = now;
+    delete hooks.answers["diary:is-complete"];
+  }
+  return { marks: groundItems.filter((entry) => entry.item.getId() === MARK_OF_GRACE), beforeLast };
+}
+
+function markCount(key, level, rolls, options = {}) {
+  const course = COURSES.find((entry) => entry.key === key);
+  return lapWithMarkRolls(key, createPlayer(3200, 3200, 0, level ?? course.marks.level, options), rolls, options).marks.length;
+}
+
+test("a mark of grace is rolled when a lap is completed, and lasts 10 minutes for its player only (Wiki: Mark of Grace)", () => {
+  const draynor = COURSES.find((course) => course.key === "draynor");
+  const { marks, beforeLast } = lapWithMarkRolls("draynor", createPlayer(3103, 3279, 0, 10), [0]);
+  assert.equal(beforeLast, 0, "nothing spawns while the lap is under way");
+  assert.equal(marks.length, 1);
+  assert.deepEqual(marks[0].options, { goesGlobal: false, despawnDelay: 1000 });
+  const { x, y, z } = { x: marks[0].position.getX(), y: marks[0].position.getY(), z: marks[0].position.getZ() };
+  assert.ok(draynor.marks.tiles.some((tile) => tile[0] === x && tile[1] === y && tile[2] === z), "on one of the course's mark tiles");
+});
+
+test("after a mark, laps can't roll another until the third clock minute on; the cooldown is saved (Wiki: Mark of Grace)", () => {
+  assert.equal(hooks.persisted[MARK_COOLDOWN_ATTRIBUTE], 0, "saved, starting at 0");
+  const player = createPlayer(3103, 3279, 0, 10);
+  assert.equal(lapWithMarkRolls("draynor", player, [0], { minute: 1000 }).marks.length, 1);
+  assert.equal(player.getAttribute(MARK_COOLDOWN_ATTRIBUTE), 1003);
+  assert.equal(lapWithMarkRolls("draynor", player, [0], { minute: 1002 }).marks.length, 0, "still cooling down");
+  assert.equal(player.getAttribute(MARK_COOLDOWN_ATTRIBUTE), 1003, "a lap in the cooldown doesn't restart it");
+  assert.equal(lapWithMarkRolls("draynor", player, [0], { minute: 1003 }).marks.length, 1);
+});
+
+test("a lap's mark chance is 2/6, 2/5 at Rellekka and 2/3 at Canifis and Ardougne (Wiki: Mark of Grace)", () => {
+  assert.equal(markCount("draynor", 10, [0.333]), 1);
+  assert.equal(markCount("draynor", 10, [0.334]), 0);
+  assert.equal(markCount("falador", null, [0.333]), 1);
+  assert.equal(markCount("rellekka", null, [0.399]), 1);
+  assert.equal(markCount("rellekka", null, [0.401]), 0);
+  assert.equal(markCount("canifis", null, [0.666]), 1);
+  assert.equal(markCount("canifis", null, [0.667]), 0);
+  assert.equal(markCount("ardougne", null, [0.666]), 1);
+  assert.equal(markCount("ardougne", null, [0.667]), 0);
+});
+
+test("20+ unboosted levels over a course cut its mark chance to a fifth, except at Canifis (Wiki: Mark of Grace)", () => {
+  assert.equal(markCount("draynor", 21, [0.066]), 1);
+  assert.equal(markCount("draynor", 21, [0.067]), 0);
+  assert.equal(markCount("draynor", 20, [0.333], { boostedTo: 30 }), 1, "a boost doesn't count");
+  assert.equal(markCount("seers", 80, [0.066]), 1);
+  assert.equal(markCount("seers", 80, [0.067]), 0);
+  assert.equal(markCount("canifis", 99, [0.666]), 1);
+});
+
+test("diaries reroll missed marks at Seers' and Ardougne and shorten cooldowns at Ardougne, Pollnivneach and Rellekka (Wiki: Mark of Grace)", () => {
+  assert.equal(markCount("seers", null, [0.5, 0.04]), 0, "no reroll without the Kandarin diary");
+  assert.equal(markCount("seers", null, [0.5, 0.04], { diaries: ["kandarin:easy"] }), 1);
+  assert.equal(markCount("seers", null, [0.5, 0.06], { diaries: ["kandarin:easy"] }), 0);
+  assert.equal(markCount("seers", null, [0.5, 0.09], { diaries: ["kandarin:easy", "kandarin:medium"] }), 1);
+  assert.equal(markCount("seers", null, [0.5, 0.14], { diaries: ["kandarin:easy", "kandarin:medium", "kandarin:hard"] }), 1);
+  assert.equal(markCount("seers", null, [0.5, 0.16], { diaries: ["kandarin:easy", "kandarin:medium", "kandarin:hard"] }), 0);
+  assert.equal(markCount("ardougne", null, [0.9, 0.24], { diaries: ["ardougne:elite"] }), 1);
+  assert.equal(markCount("ardougne", null, [0.9, 0.26], { diaries: ["ardougne:elite"] }), 0);
+
+  const cooldown = (key, rolls, diaries) => {
+    const course = COURSES.find((entry) => entry.key === key);
+    const player = createPlayer(3200, 3200, 0, course.marks.level);
+    assert.equal(lapWithMarkRolls(key, player, rolls, { diaries }).marks.length, 1);
+    return player.getAttribute(MARK_COOLDOWN_ATTRIBUTE) - 1000;
+  };
+  assert.equal(cooldown("ardougne", [0, 0.49], ["ardougne:elite"]), 2);
+  assert.equal(cooldown("ardougne", [0, 0.51], ["ardougne:elite"]), 3);
+  assert.equal(cooldown("ardougne", [0, 0], []), 3);
+  assert.equal(cooldown("pollnivneach", [0, 0.33], ["desert:hard"]), 2);
+  assert.equal(cooldown("pollnivneach", [0, 0.34], ["desert:hard"]), 3);
+  assert.equal(cooldown("rellekka", [0, 0.33], ["fremennik:hard"]), 2);
+  assert.equal(cooldown("rellekka", [0, 0], ["fremennik:medium"]), 3);
+  assert.equal(cooldown("seers", [0, 0], ["kandarin:hard"]), 3, "Kandarin rerolls only");
+});
+
+test("a player's course marks stop ageing while they're logged out; dropped marks don't (Wiki: Mark of Grace)", () => {
+  const stack = (id, goesGlobal, despawnDelay) => ({
+    paused: null,
+    getItem: () => ({ getId: () => id }),
+    getgoesGlobal: () => goesGlobal,
+    getDespawnDelay: () => despawnDelay,
+    setAgingPaused(paused) { this.paused = paused; },
+  });
+  const courseMark = stack(MARK_OF_GRACE, false, 1000);
+  const droppedMark = stack(MARK_OF_GRACE, true, 300);
+  const coins = stack(995, false, 1000);
+  floorStacks.push(courseMark, droppedMark, coins);
+  const player = createPlayer(3200, 3200, 0);
+  try {
+    hooks.logout.forEach((handler) => handler({ player }));
+    assert.deepEqual([courseMark.paused, droppedMark.paused, coins.paused], [true, null, null]);
+    hooks.login.forEach((handler) => handler({ player }));
+    assert.equal(courseMark.paused, false);
+  } finally {
+    floorStacks.length = 0;
+  }
+});
+
+test("a floor stack with ageing paused neither ages nor despawns", () => {
+  const { ItemOnGround, State } = require("../dist/game/entity/impl/grounditem/ItemOnGround");
+  const { Item } = require("../dist/game/model/Item");
+  const stack = new ItemOnGround(State.SEEN_BY_PLAYER, "agility tester", new Location(3200, 3200, 0), new Item(MARK_OF_GRACE, 1), false, -1, null);
+  stack.setDespawnDelay(1000).setAgingPaused(true);
+  for (let i = 0; i < 1500; i++) stack.process();
+  assert.equal(stack.getTick(), 0);
+  stack.setAgingPaused(false);
+  for (let i = 0; i < 10; i++) stack.process();
+  assert.equal(stack.getTick(), 10);
 });
 
 test("Grace's Toggle Counter hides the lap count message, and laps still count", () => {
@@ -797,4 +985,125 @@ test("the Waterbirth crevice goes one way, from the crab room down; from below i
 
 test("a refuse entry is a message or a mesbox, and nothing else", () => {
   assert.throws(() => build({ name: "x", object: 1, level: 1, refuse: { text: "no" } }, 0), /refuse needs a message or a mesbox/);
+});
+
+/**
+ * Clicks like `operate` and records what each tick sent: tick 0 is the click's handler, the tick
+ * after the player arrives, so a capture's tick N from arrival is tick N - 1 here.
+ */
+function timeline(player, objectId, objectTile) {
+  const { state } = player;
+  const mark = () => ({ animations: state.animations.length, sounds: state.sounds.length, xp: state.xp, messages: state.messages.length, tile: tileOf(player) });
+  const since = (from) => ({
+    animations: state.animations.slice(from.animations),
+    sounds: state.sounds.slice(from.sounds),
+    xp: Math.round((state.xp - from.xp) * 10) / 10,
+    messages: state.messages.slice(from.messages),
+    moved: String(tileOf(player)) !== String(from.tile),
+  });
+  const ticks = [];
+  let from = mark();
+  const object = gameObject(objectId, ...objectTile);
+  const route = { player, object, objectId, clickType: 1, destination: null };
+  hooks.route.forEach((handler) => handler(route));
+  if (route.destination) player.setLocation(new Location(route.destination.x, route.destination.y, route.destination.z));
+  from = mark();
+  hooks.click.get(objectId)({ player, object, objectId, clickType: 1, location: { x: objectTile[0], y: objectTile[1], z: objectTile[2] } });
+  ticks.push(since(from));
+  while (player.getAttribute("agility.obstacle") != null) {
+    assert.ok(ticks.length < 100, `obstacle ${objectId} never finished`);
+    from = mark();
+    tick();
+    ticks.push(since(from));
+  }
+  return ticks;
+}
+
+const course = (key) => COURSES.find((entry) => entry.key === key);
+const HIGHLIGHT_VARBIT = 13140;
+const [START_LAP, END_LAP, ADD_XP] = [5173, 5174, 5175];
+
+test("Varrock: the course helper is highlighted for the lap and told each obstacle's XP in tenths (rsprox 339, 3154)", () => {
+  const player = createPlayer(3221, 3414, 0);
+  runLap(course("varrock"), player);
+  const scripts = player.state.scripts;
+  assert.equal(scripts[0][0], START_LAP, "the lap starts as the rough wall ends");
+  assert.deepEqual(scripts.filter(([id]) => id === ADD_XP).map(([, xp]) => xp), [135, 230, 190, 280, 100, 245, 45, 35, 1437]);
+  assert.deepEqual(scripts.at(-1).slice(0, 1).concat(scripts.at(-1).slice(2)), [END_LAP, 0]);
+  assert.ok(scripts.at(-1)[1] >= scripts[0][1], "the end clock is the start's or later");
+  assert.deepEqual(player.state.varbitLog.filter(([id]) => id === HIGHLIGHT_VARBIT).map(([, value]) => value), [7, 0]);
+  assert.equal(course("varrock").lapBonus, 0, "the Wiki's obstacle XP adds up to the lap");
+  assert.equal(course("canifis").lapBonus, 0);
+});
+
+test("rooftop gaps: the jump two ticks after arriving, the landing (2588) a tick later, the XP the tick after (rsprox captures)", () => {
+  const gaps = [
+    ["varrock", ObjectIds.GAP_5, [3201, 3416, 3], [3197, 3416, 1]],
+    ["canifis", ObjectIds.GAP_11, [3478, 3493, 3], [3478, 3486, 2]],
+    ["draynor", ObjectIds.GAP_3, [3094, 3255, 3], [3096, 3256, 3]],
+  ];
+  for (const [key, object, from, landing] of gaps) {
+    const player = createPlayer(...from);
+    const ticks = timeline(player, object, [from[0], from[1] - 1, from[2]]);
+    assert.deepEqual(ticks[2].animations, [Anim.LEAP], `${key}: jump`);
+    assert.deepEqual(ticks[2].sounds, [2462], `${key}: sound`);
+    assert.deepEqual(ticks[3].animations, [Anim.LAND], `${key}: landing`);
+    assert.deepEqual(tileOf(player), landing, `${key}: landing tile`);
+    assert.equal(ticks.findIndex((entry) => entry.xp > 0), 4, `${key}: XP tick`);
+  }
+});
+
+test("Varrock's edge: a hop (741, sound 2461), the jump down and the landing with the lap on the next ticks (rsprox 339, 3154)", () => {
+  const player = createPlayer(3236, 3415, 3);
+  player.setAttribute("agility.progress", { course: "varrock", index: 8 });
+  const ticks = timeline(player, ObjectIds.EDGE, [3236, 3416, 3]);
+  assert.deepEqual(ticks[1].animations, [Anim.JUMP]);
+  assert.deepEqual(ticks[1].sounds, [2461]);
+  assert.deepEqual(ticks[2].animations, [Anim.LEAP]);
+  assert.deepEqual(ticks[2].sounds, [2462]);
+  assert.deepEqual(ticks[3].animations, [Anim.LAND], "the landing isn't cut off");
+  assert.ok(ticks[3].messages.some((message) => message.startsWith("Your Varrock Rooftop lap count is:")));
+  assert.equal(ticks[3].xp, 143.7);
+  assert.deepEqual(tileOf(player), [3236, 3417, 0]);
+});
+
+test("Draynor's first tightrope: a tile a tick from the tick after arriving, creaking every four, paid on the last tile (rsprox 1723)", () => {
+  const player = createPlayer(3100, 3278, 3);
+  player.setAttribute("agility.progress", { course: "draynor", index: 1 });
+  const ticks = timeline(player, ObjectIds.TIGHTROPE, [3098, 3277, 3]);
+  assert.deepEqual(ticks.map((entry, index) => (entry.sounds.length ? index : null)).filter((index) => index != null), [2, 6]);
+  assert.equal(ticks.length - 1, 10, "done ten ticks in");
+  assert.equal(ticks[10].xp, 8);
+  assert.ok(ticks[10].moved, "the XP comes on the last step");
+  assert.deepEqual(tileOf(player), [3090, 3276, 3]);
+});
+
+test("Shayzien basic: shayzien_agility_low_progress follows the lap and resets when it's done (rsprox 1632)", () => {
+  const player = createPlayer(1554, 3629, 0);
+  runLap(course("shayzien-basic"), player);
+  const progress = player.state.varbitLog.filter(([id]) => id === 12334).map(([, value]) => value);
+  assert.deepEqual(progress.slice(0, 3), [1, 2, 3]);
+  assert.equal(progress.at(-1), 0);
+  assert.deepEqual(player.state.varbitLog.filter(([id]) => id === HIGHLIGHT_VARBIT).map(([, value]) => value), [21, 0]);
+});
+
+test("Agility Pyramid: the stairs set the floor and start the lap; its lines are spam, the doorway a message box (rsprox 2932, 1757)", () => {
+  const pyramid = course("pyramid");
+  const player = createPlayer(3354, 2830, 0);
+  operate(player, ObjectIds.STAIRS_50, [3354, 2831, 0]);
+  assert.equal(player.state.varbits.get(1550), 1, "agility_pyramid_level");
+  assert.equal(player.state.varbits.get(HIGHLIGHT_VARBIT), 6);
+  assert.equal(player.state.scripts[0][0], START_LAP);
+  const wall = pyramid.obstacles.find((obstacle) => obstacle.object === ObjectIds.LOW_WALL_3);
+  const ticks = timeline(player, wall.object, [3355, 2834, 1]);
+  assert.deepEqual(ticks[1].messages, ["You climb the low wall..."]);
+  assert.deepEqual(ticks[4].messages, ["... and make it over."]);
+  assert.equal(ticks[4].xp, 8);
+  assert.deepEqual(player.state.spam, ["You climb the low wall...", "... and make it over."]);
+  player.setAttribute("agility.progress", { course: "pyramid", index: 6 });
+  const mesboxes = player.state.mesboxes ?? 0;
+  operate(player, ObjectIds.DOORWAY_15, [3365, 2830, 0]);
+  assert.equal(player.state.mesboxes, mesboxes + 1, "You climb down the steep passage... is a message box");
+  assert.equal(player.state.varbits.get(1550), 0);
+  assert.equal(player.state.varbits.get(HIGHLIGHT_VARBIT), 0);
 });

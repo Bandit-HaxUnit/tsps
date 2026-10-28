@@ -1,7 +1,7 @@
 "use strict";
 
-const { api, World, Animation, ChatType, CountdownTask, Equipment, Flag, Location, Skill, PrivateChatStatus, ItemIdentifiers, ItemDefinition,
-  PlayerRights, Task, TaskManager } = require("./Core.Construction");
+const { api, World, Animation, ChatType, CountdownTask, EffectSpells, Equipment, Flag, Location, Skill, PrivateChatStatus, ItemIdentifiers,
+  ItemDefinition, PlayerRights, Task, TaskManager } = require("./Core.Construction");
 const Ids = require("./Ids.Construction");
 const EstateAgent = require("./EstateAgent.Construction");
 const Servants = require("./Servants.Construction");
@@ -894,6 +894,20 @@ function useMaterial(player, itemId, amount) {
   if (amount > held) api.emitCustomEvent("storage:take", { player, itemId, amount: amount - held, taken: 0 });
 }
 
+/**
+ * Uses a build's materials (getBuildMaterials' map), as content may keep some of them
+ * ("construction:materials" `{ player, buildable, materials }` as [id, amount] pairs, a league
+ * fragment's planks kept): a listener may lower an amount, never raise it.
+ */
+function useMaterials(player, buildable, materials) {
+  const request = { player, buildable, materials: [...materials].map(([itemId, amount]) => [itemId, amount]) };
+  api.emitCustomEvent("construction:materials", request);
+  for (const [itemId, amount] of request.materials) {
+    const used = Math.min(Number(amount) || 0, materials.get(itemId) ?? 0);
+    if (used > 0) useMaterial(player, itemId, used);
+  }
+}
+
 /** The hammer: the piece's build animation with synth 938 (rsprox captures, every build). */
 function hammer(player, animationId = BUILD_ANIMATION) {
   if (animationId >= 0) player.performAnimation(new Animation(animationId));
@@ -940,7 +954,7 @@ function buildFurniture(player, house, target, buildable) {
 }
 
 function completeFurniture(player, house, target, buildable, materials) {
-  for (const [itemId, amount] of materials) useMaterial(player, itemId, amount);
+  useMaterials(player, buildable, materials);
   player.getSkillManager().addExperiences(Skill.CONSTRUCTION, buildable.experience);
   house.setFurniture(target, buildable);
   // Keyed to the house, so a click straight after the build doesn't cancel the redraw.
@@ -1271,6 +1285,13 @@ function recordRegionVisit({ player, location }) {
   }
 }
 
+// Vengeance can't be cast in a house (rsprox capture 1074, Wiki: Vengeance).
+function refuseHouseVengeance(event) {
+  if (event.spell !== EffectSpells.VENGEANCE || !houseFor(event.player)) return;
+  event.player.sendMessage("You can't use this spell inside a player-owned house.");
+  event.disabled = true;
+}
+
 const hotspotIds = [...Data.HOTSPOT_BY_OBJECT_ID.keys()].filter(id => id >= 0);
 const furnitureObjectIds = [...new Set(Data.CONSTRUCTION_BUILDABLES.flatMap(buildable => buildable.objectIds.filter(id => id >= 0)))];
 
@@ -1335,10 +1356,11 @@ function attach(api) {
   api.onCustomEvent("spell:teleport-arrival", houseTeleportArrival);
   api.onCustomEvent("construction:house-tablet", houseTablet);
   api.onCustomEvent("construction:owns-house", ownsHouse);
+  api.onSpellDisabled(refuseHouseVengeance);
   api.onPlayerLogin(loginHouse);
   api.onPlayerMapSquareChange(recordRegionVisit);
   api.onPlayerDisconnect(logoutHouse);
   api.onPlayerLogout(logoutHouse);
 }
 
-Object.assign(module.exports, { enterHouse, visitHouse, storedAmount, houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, rebuildHouse, isBuildingMode, constructionLevel, getBuildMaterials, useMaterial, hammer, hotspotChoices, furnitureCreationText, processOccupant, leftHouse, attach });
+Object.assign(module.exports, { enterHouse, visitHouse, storedAmount, houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, rebuildHouse, isBuildingMode, constructionLevel, getBuildMaterials, useMaterial, useMaterials, hammer, hotspotChoices, furnitureCreationText, processOccupant, leftHouse, attach });

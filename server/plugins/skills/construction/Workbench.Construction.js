@@ -1,6 +1,6 @@
 "use strict";
 
-const { api, Animation, ItemIdentifiers, Skill } = require("./Core.Construction");
+const { api, Animation, Item, ItemIdentifiers, Skill } = require("./Core.Construction");
 const Ids = require("./Ids.Construction");
 const Data = require("./Data.Construction");
 const House = require("./House.Construction");
@@ -58,9 +58,10 @@ function makeFlatpack(player, bench, buildable) {
   if (buildable.level > bench.limit) return player.sendMessage(`This workbench can only make furniture up to level ${bench.limit}.`);
   const materials = House.getBuildMaterials(player, bench.house, null, buildable);
   if (!(materials instanceof Map)) return Menu.refuse(player, materials);
-  for (const [itemId, amount] of materials) House.useMaterial(player, itemId, amount);
+  House.useMaterials(player, buildable, materials);
   player.performAnimation(new Animation(BUILD_ANIMATION));
-  player.getInventory().adds(FLATPACK_OF.get(buildable.key), 1);
+  // Kept materials (a league fragment's planks) may leave no slot free: the flatpack then falls to the floor.
+  player.getInventory().forceAdd(player, new Item(FLATPACK_OF.get(buildable.key), 1));
   player.getSkillManager().addExperiences(Skill.CONSTRUCTION, buildable.experience);
 }
 
@@ -117,4 +118,4 @@ function attachWorkbench(api) {
   api.onItemOnObject(installFlatpack, { noted: false });
 }
 
-Object.assign(module.exports, { attachWorkbench });
+Object.assign(module.exports, { attachWorkbench, _test: { makeFlatpack, FLATPACK_OF } });

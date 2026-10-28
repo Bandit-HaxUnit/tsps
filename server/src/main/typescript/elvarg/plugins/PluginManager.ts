@@ -67,6 +67,7 @@ import {
   PluginPathBlockedEvent,
   PluginPlayerProcessEvent,
   PluginPlayerLevelUpEvent,
+  PluginExperienceGainedEvent,
   PluginCustomEventName,
   PluginPlayerPathBlockedEvent,
   PluginCommandEvent,
@@ -99,6 +100,7 @@ import {
   PluginCombatHitRollEvent,
   PluginCombatHitDamageEvent,
   PluginAttackTimingEvent,
+  PluginAttackSpeedEvent,
   PluginCombatHitResolvedEvent,
   PluginCombatAttackDistanceEvent,
   PluginCanUnequipEvent,
@@ -245,6 +247,7 @@ export class PluginManager {
   private static friendRemoveHooks: PluginHook<PluginFriendEvent>[] = [];
   private static playerProcessHooks: PluginHook<PluginPlayerProcessEvent>[] = [];
   private static playerLevelUpHooks: PluginHook<PluginPlayerLevelUpEvent>[] = [];
+  private static experienceGainedHooks: PluginHook<PluginExperienceGainedEvent>[] = [];
   private static customEventHooks = new Map<
     PluginCustomEventName,
     PluginHook<any>[]
@@ -262,6 +265,10 @@ export class PluginManager {
   private static npcInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
   private static beforeNpcInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
   private static beforeObjectInteractionHooks: PluginHook<PluginObjectInteractionEvent>[] = [];
+  /** Main-world locs used from a boat deck from further than usual, by id (setDeckReach). */
+  public static readonly deckReach = new Map<number, number>();
+  /** Main-world loc names usable from a boat deck (setUsableFromDeck). */
+  public static readonly usableFromDeck = new Set<string | number>();
   private static worldEntityInteractionHooks: PluginHook<PluginWorldEntityInteractionEvent>[] = [];
   /**
    * `onAnyNpcInteraction` hooks. Kept apart from the id/name hooks so a generic
@@ -321,6 +328,7 @@ export class PluginManager {
   private static combatHitRollHooks: PluginHook<PluginCombatHitRollEvent>[] = [];
   private static combatHitDamageHooks: PluginHook<PluginCombatHitDamageEvent>[] = [];
   private static attackTimingHooks: PluginHook<PluginAttackTimingEvent>[] = [];
+  private static attackSpeedHooks: PluginHook<PluginAttackSpeedEvent>[] = [];
   private static combatHitResolvedHooks: PluginHook<PluginCombatHitResolvedEvent>[] = [];
   private static combatAttackDistanceHooks: PluginHook<PluginCombatAttackDistanceEvent>[] = [];
   private static spellDisabledHooks: PluginHook<PluginSpellDisabledEvent>[] = [];
@@ -328,6 +336,8 @@ export class PluginManager {
   private static npcAggressionToleranceHooks: PluginHook<PluginNpcAggressionToleranceEvent>[] = [];
   private static playerDefeatedHooks: PluginHook<PluginPlayerDefeatedEvent>[] = [];
   private static itemOnObjectHooks: PluginHook<PluginItemOnObjectEvent>[] = [];
+  /** Item-on-object handlers registered with `fallback`: run when no other handler took the use. */
+  private static itemOnObjectFallbackHooks: PluginHook<PluginItemOnObjectEvent>[] = [];
   private static itemOnItemHooks: PluginHook<PluginItemOnItemEvent>[] = [];
   private static itemOnNpcHooks: PluginHook<PluginItemOnNpcEvent>[] = [];
   private static itemOnPlayerHooks: PluginHook<PluginItemOnPlayerEvent>[] = [];
@@ -994,6 +1004,13 @@ export class PluginManager {
     }
   }
 
+  public static emitExperienceGained(event: PluginExperienceGainedEvent): void {
+    if (PluginManager.experienceGainedHooks.length === 0) return;
+    for (const hook of PluginManager.experienceGainedHooks) {
+      PluginManager.executeHook(hook, event, "experience_gained", "experience_gained");
+    }
+  }
+
   public static emitPlayerLevelUp(event: PluginPlayerLevelUpEvent): void {
     if (PluginManager.playerLevelUpHooks.length === 0) {
       return;
@@ -1534,10 +1551,20 @@ export class PluginManager {
       { player, itemId, action, option, allow: null }, "can_use_item", "allow");
   }
 
-  public static emitCanGainExperience(player: any, skill: any, experience: number): boolean | null {
-    if (PluginManager.canGainExperienceHooks.length === 0) return null;
-    return PluginManager.firstAnswer(PluginManager.canGainExperienceHooks,
-      { player, skill, experience, allow: null }, "can_gain_experience", "allow");
+  /**
+   * Whether the gain may happen (`allow` null when no hook answered) and the hooks' combined
+   * `multiplier` (1 when none set one). Every hook runs, so a rate set by one and a refusal by
+   * another are both seen; a refusal wins.
+   */
+  public static emitCanGainExperience(player: any, skill: any, experience: number): { allow: boolean | null; multiplier: number } {
+    if (PluginManager.canGainExperienceHooks.length === 0) return { allow: null, multiplier: 1 };
+    const event: PluginCanGainExperienceEvent = { player, skill, experience, allow: null, multiplier: 1 };
+    for (const hook of PluginManager.canGainExperienceHooks) {
+      PluginManager.executeHook(hook, event, "can_gain_experience", "can_gain_experience");
+      if (event.allow === false) return { allow: false, multiplier: 1 };
+    }
+    const multiplier = Number.isFinite(event.multiplier) && event.multiplier > 0 ? event.multiplier : 1;
+    return { allow: event.allow, multiplier };
   }
 
   public static emitCanSpawnNpc(npcId: number, location: any): boolean | null {
@@ -1552,12 +1579,12 @@ export class PluginManager {
       { shopId, itemId, allow: null }, "can_stock_item", "allow");
   }
 
-  /** The plugin's refusal message when a prayer is disabled, or null when it is usable. */
-  public static emitPrayerDisabled(player: any, prayer: any): string | null {
+  /** The plugin's refusal when a prayer is disabled (its message, and how to show it), or null when it is usable. */
+  public static emitPrayerDisabled(player: any, prayer: any): { message: string; messageBox: boolean } | null {
     if (PluginManager.prayerDisabledHooks.length === 0) return null;
     const event: PluginPrayerDisabledEvent = { player, prayer, disabled: null };
     return PluginManager.firstAnswer(PluginManager.prayerDisabledHooks, event, "prayer_disabled", "disabled") === true
-      ? event.message ?? "You cannot use that prayer here."
+      ? { message: event.message ?? "You cannot use that prayer here.", messageBox: event.messageBox === true }
       : null;
   }
 
@@ -1633,6 +1660,16 @@ export class PluginManager {
     for (const hook of PluginManager.attackTimingHooks) {
       PluginManager.executeHook(hook, event, "attack_timing", "attack_timing");
     }
+  }
+
+  /** The ticks until the attacker's next attack after the hooks had their say (at least 1). */
+  public static emitAttackSpeed(attacker: any, target: any, combatType: any, speed: number): number {
+    if (PluginManager.attackSpeedHooks.length === 0 || !attacker) return speed;
+    const event: PluginAttackSpeedEvent = { attacker, target, combatType, speed };
+    for (const hook of PluginManager.attackSpeedHooks) {
+      PluginManager.executeHook(hook, event, "attack_speed", "attack_speed");
+    }
+    return Number.isFinite(event.speed) ? Math.max(1, event.speed | 0) : speed;
   }
 
   public static emitCombatHitRoll(event: PluginCombatHitRollEvent): void {
@@ -1756,6 +1793,9 @@ export class PluginManager {
 
   public static emitItemOnObject(event: PluginItemOnObjectEvent): boolean {
     for (const hook of PluginManager.itemOnObjectHooks) {
+      PluginManager.executeHook(hook, event, "item_on_object", "item_on_object");
+    }
+    for (const hook of PluginManager.itemOnObjectFallbackHooks) {
       PluginManager.executeHook(hook, event, "item_on_object", "item_on_object");
     }
     return event.handled === true;
@@ -2320,6 +2360,11 @@ export class PluginManager {
       PrayerHandler: require("../game/content/PrayerHandler").PrayerHandler,
       PrayerData: require("../game/content/PrayerHandler").PrayerData,
       ItemActionPacketListener: require("../net/packet/impl/ItemActionPacketListener").ItemActionPacketListener,
+      castAlchemy: (player, spellId, itemId, slot, source) => {
+        const { MagicOnItemPacketListener } = require("../net/packet/impl/MagicOnItemPacketListener");
+        const listener = new MagicOnItemPacketListener();
+        return listener.castOnItem(player, typeof spellId === "string" ? listener.resolveSpellId(spellId) : spellId, itemId, slot, source);
+      },
       ChatType: require("../net/protocol/ClientProtocol").ChatType,
       DuelRule: require("../game/content/Duelling").DuelRule,
       RegionManager: require("../game/collision/RegionManager").RegionManager,
@@ -2340,6 +2385,7 @@ export class PluginManager {
       CountdownTask: require("../game/task/impl/CountdownTask").CountdownTask,
       ForceMovement: require(`${model}/ForceMovement`).ForceMovement,
       ForceMovementTask: require("../game/task/impl/ForceMovementTask").ForceMovementTask,
+      TimedObjectReplacementTask: require("../game/task/impl/TimedObjectReplacementTask").TimedObjectReplacementTask,
       TaskManager: require("../game/task/TaskManager").TaskManager,
       NPCRespawnTask: require("../game/task/impl/NPCRespawnTask").NPCRespawnTask,
       ItemIdentifiers: require("../util/ItemIdentifiers").ItemIdentifiers,
@@ -2354,6 +2400,7 @@ export class PluginManager {
       Location: require(`${model}/Location`).Location,
       Mobile: require("../game/entity/impl/Mobile").Mobile,
       encodePluginMessage: require("../net/protocol/ClientProtocol").encodePluginMessage,
+      MOBILE_CLIENT_ATTRIBUTE: require("../net/protocol/ClientProtocol").MOBILE_CLIENT_ATTRIBUTE,
       encodeFinePosition: require("../net/protocol/ClientProtocol").encodeFinePosition,
       Boundary: require(`${model}/Boundary`).Boundary,
       PolygonalBoundary: require(`${model}/PolygonalBoundary`).PolygonalBoundary,
@@ -2393,6 +2440,7 @@ export class PluginManager {
       NpcSpawnDefinition: require("../game/definition/NpcSpawnDefinition").NpcSpawnDefinition,
       ObjectDefinition: require("../game/definition/ObjectDefinition").ObjectDefinition,
       MagicSpellbook: require(`${model}/MagicSpellbook`).MagicSpellbook,
+      ItemAliases: require(`${model}/ItemAliases`).ItemAliases,
       Spell: require(`${combat}/magic/Spell`).Spell,
       CombatNormalSpell: require(`${combat}/magic/CombatNormalSpell`).CombatNormalSpell,
       CombatSpells: require(`${combat}/magic/CombatSpells`).CombatSpells,
@@ -2436,6 +2484,7 @@ export class PluginManager {
       PrivateChatStatus: require(`${model}/PlayerRelations`).PrivateChatStatus,
       SpellTeleports: require(`${combat}/magic/SpellTeleports`).SpellTeleports,
       LunarSpells: require(`${combat}/magic/LunarSpells`).LunarSpells,
+      EffectSpells: require(`${combat}/magic/EffectSpells`).EffectSpells,
       ArceuusSpells: require(`${combat}/magic/ArceuusSpells`).ArceuusSpells,
       ArceuusOfferings: require(`${combat}/magic/ArceuusOfferings`),
     });
@@ -2940,6 +2989,9 @@ export class PluginManager {
       },
       spawnNpc: (definition) => PluginManager.spawnNpc(definition, pluginName),
       removeNpc: (npc) => PluginManager.removeNpc(npc),
+      onExperienceGained: (handler) => {
+        if (typeof handler === "function") PluginManager.experienceGainedHooks.push({ ...hookProfile(handler), handler });
+      },
       onPlayerLevelUp: (handler) => {
         if (typeof handler !== "function") {
           return;
@@ -3069,6 +3121,12 @@ export class PluginManager {
           return;
         }
         PluginManager.objectRouteHooks.push({ ...hookProfile(handler), handler });
+      },
+      setDeckReach: (objectIds, tiles) => {
+        for (const id of objectIds ?? []) PluginManager.deckReach.set(id, tiles);
+      },
+      setUsableFromDeck: (namesOrIds) => {
+        for (const entry of namesOrIds ?? []) PluginManager.usableFromDeck.add(entry);
       },
       onWalkRoute: (handler) => {
         if (typeof handler === "function") {
@@ -3559,6 +3617,10 @@ export class PluginManager {
         if (typeof handler !== "function") return;
         PluginManager.attackTimingHooks.push({ ...hookProfile(handler), handler });
       },
+      onAttackSpeed: (handler) => {
+        if (typeof handler !== "function") return;
+        PluginManager.attackSpeedHooks.push({ ...hookProfile(handler), handler });
+      },
       onCombatHitResolved: (handler) => {
         if (typeof handler !== "function") return;
         PluginManager.combatHitResolvedHooks.push({ ...hookProfile(handler), handler });
@@ -3679,7 +3741,7 @@ export class PluginManager {
         if (typeof handler !== "function") {
           return;
         }
-        PluginManager.itemOnObjectHooks.push({
+        (filter?.fallback ? PluginManager.itemOnObjectFallbackHooks : PluginManager.itemOnObjectHooks).push({
           ...hookProfile(handler),
           handler: (event) => {
             if (!event || event.handled || !event.player || !event.object) {
@@ -4164,6 +4226,7 @@ export class PluginManager {
           `[plugins] player persistence set by ${pluginName}: ${previousName} -> ${nextName}`;
       },
       setExperienceRate: (rate) => GameConstants.setExperienceRate(rate),
+      setWorldProfile: (profile) => GameConstants.setWorldProfile(profile),
       getActiveRegionSnapshot: () => {
         try {
           const worldModule = require("../game/World");
@@ -4234,6 +4297,8 @@ export class PluginManager {
         PluginManager.isPluginPerformanceProfilingEnabled(),
       registerCombatEffectiveLevelModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerCombatEffectiveLevelModifier(modifier),
+      registerMeleeStrengthPercentModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerMeleeStrengthPercentModifier(modifier),
       registerMeleeHitModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerMeleeHitModifier(
           modifier
@@ -4286,12 +4351,20 @@ export class PluginManager {
         require("../game/content/combat/EquipmentEffects").registerSpecialEnergyRestoreModifier(
           modifier
         ),
+      registerSpecialEnergyCostModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerSpecialEnergyCostModifier(
+          modifier
+        ),
       registerIncomingDamageModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerIncomingDamageModifier(
           modifier
         ),
       registerPrayerDrainModifier: (modifier) =>
         require("../game/content/combat/EquipmentEffects").registerPrayerDrainModifier(
+          modifier
+        ),
+      registerPrayerDrainRateModifier: (modifier) =>
+        require("../game/content/combat/EquipmentEffects").registerPrayerDrainRateModifier(
           modifier
         ),
       setCombatEngine: (engine) => {

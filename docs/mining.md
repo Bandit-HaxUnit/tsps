@@ -1,6 +1,8 @@
 # Mining rocks
 
-`plugins/skills/Mining.plugin.js` mines the ore rocks (clay to runite, blurite, barronite, the essence mines).
+`plugins/skills/Mining.plugin.js` mines the ore rocks (clay to runite, blurite, barronite, the essence mines) and the
+skilling rocks below them: soft clay, lead, lovakite, nickel, rubium, sunstone, infernal shale, gem rocks, amethyst
+and Daeyalt.
 Pickaxe-specific rules are in `plugins/skills/mining/`.
 
 ## What live OSRS does
@@ -47,9 +49,140 @@ OSRS Wiki rock pages (https://oldschool.runescape.wiki/w/Iron_rocks, `/w/Copper_
 
 Recording 3280's live message agrees with mithril's level 55.
 
+## Other rocks
+
+OSRS Wiki rock pages (https://oldschool.runescape.wiki/w/Soft_clay_rocks, `/w/Lead_rocks`, `/w/Lovakite_rocks`,
+`/w/Nickel_rocks`, `/w/Rubium_rocks`, `/w/Sunstone_rocks`, `/w/Infernal_shale_rocks`, `/w/Gem_rocks`,
+`/w/Amethyst_crystals`, `/w/Daeyalt_rocks`; pet base rates from `/w/Rock_golem`):
+
+| Rock | Level | XP | Respawn | Before it goes |
+| --- | ---: | ---: | --- | --- |
+| Soft clay | 70 | 5 | 1.2 s (2 ticks) | 1 |
+| Lead | 25 | 40.5 | 6 s (10 ticks) | 1 |
+| Lovakite | 65 | 60 | 35 s (58 ticks) | 1 |
+| Nickel | 74 | 80.5 | 2 min (200 ticks) | 2-16 ores |
+| Rubium | 48 | 30 | 35.4 s (59 ticks) | at least 2 successes, then a 1/6 chance each |
+| Sunstone | 53 | 23 | 5.4 s (9 ticks) | 1 |
+| Infernal shale | 78 | 13.2-100 (one of ten values) | 9 ticks | 1 |
+| Gem rocks | 40 | 65 | 99 ticks | 1 |
+| Amethyst | 92 | 240 | 75 s (125 ticks) | 2-3 |
+| Daeyalt | 20 | 17.5 | 28 s (47 ticks) | 3 (one stage each) |
+
+- **Mined-out locs:** the Sailing rocks have their own `<gameval>_empty` loc (`leadrock1_empty`, `nickelrock1_empty`,
+  `rubiumrock1_empty`, all named "Rocks"); clicking Mine on one says there is no ore, like `rocks1`/`rocks2`. Amethyst
+  becomes `amethystrock_empty` ("Empty wall"), and its respawn timer uses the wall's shape 0 (recorded, rev 233-234,
+  a Leagues world). The timer always sends the depleted loc's own shape.
+- **Rubium:** splinters stack, so a full inventory that already holds some keeps mining. Two splinters a
+  success from Mining 72 (visible level).
+- **Nickel:** only Varrock armour 4 adds ore (Wiki), so no `mining:extra-ore` (celestial ring, Mining cape). Gem rocks
+  and infernal shale take no mining enhancers either: their ore comes from `outcomes`, which never asks for one.
+- **Gem rocks** (recordings 1846 and 1858, rev 227, a Leagues world, Shilo Village): `You just mined an Opal!` /
+  `a piece of Jade!` / `a Red Topaz!` / `a Sapphire!` / `an Emerald!` / `a Diamond!` (the ruby line follows the same
+  pattern), sound 2655 instead of 3600, `tracking_ore_mined` counts the gem, and `gemrock` becomes `rocks2`,
+  `gemrock1` `rocks1`. The Wiki table: opal 60, jade 30, red topaz 15, sapphire 9, emerald 5, ruby 5, diamond 4 of
+  128. A charged glory changes the success chart itself (below). The recorded respawn timer was 19 ticks, a
+  Leagues world; the Wiki's 99 is used.
+- **Amethyst** (recordings, rev 233-234, a Leagues world): wall swings (`human_mining_<pickaxe>_pickaxe_wall`) and
+  `You manage to mine some amethyst.`.
+- **Daeyalt** (recordings, rev 226-231, Meiyerditch mine): sang wall swings (`sang_mining_wall_<pickaxe>_pickaxe`),
+  sound 2998, `You manage to mine some ore.`, and the rock face steps down a stage with each ore,
+  `area_sanguine_mine_minerocks_01` -> `_02` -> `_03` while the player mines on, then `_04` with
+  `This rock face is now empty.`. It grows back as `_01`.
+
+## Rolls and success chance
+
+The pickaxe decides how often the game rolls, the Mining level decides the chance of each roll
+(Wiki https://oldschool.runescape.wiki/w/Pickaxe and https://oldschool.runescape.wiki/w/Mining, quoting Mod Ash:
+"Your level affects the chance of getting ore each time the game rolls; your pickaxe affects how often that happens.").
+
+- **First roll:** with the skilling timer clear, the tick after the swing message, so +2 after arrival
+  (recordings 3139 and 3182, iron, where a high level succeeds on every roll: the ore came the tick after the
+  swing message in 33 of 34 attempts with infernal pickaxes; the one dragon pickaxe attempt, in 3182, two ticks after).
+- **Ticks between rolls** (Wiki Pickaxe): bronze 8, iron 7, steel 6, black and mithril 5, adamant 4, rune 3,
+  dragon and infernal 3 with a 1/6 chance of 2, crystal 3 with a 1/4 chance of 2. The early roll is members-only
+  (Wiki Pickaxe changes, 4 May 2022).
+- **The timer carries over:** a roll on the next rock waits for the previous roll's interval to run out
+  (Wiki https://oldschool.runescape.wiki/w/Tick_manipulation, skilling timer).
+- **Chance per roll** (Wiki https://oldschool.runescape.wiki/w/Skilling_success_rate):
+  `(1 + floor(low × (99 − L) / 98 + high × (L − 1) / 98 + 0.5)) / 256`, capped to 0-1. The visible level counts
+  up to 99; invisible boosts (the celestial ring's +4) add on top and count past 99 (Wiki Skilling success rate,
+  Boosts over 99; https://oldschool.runescape.wiki/w/Mining_Guild).
+
+Low and high values from each rock's Wiki skilling success chart (the rock pages above, plus
+https://oldschool.runescape.wiki/w/Blurite_rocks and https://oldschool.runescape.wiki/w/Barronite_rocks):
+
+| Rock | Low | High |
+| --- | ---: | ---: |
+| Clay | 128 | 400 |
+| Copper, tin | 100 | 350 |
+| Blurite | 90 | 350 |
+| Iron | 96 | 350 |
+| Barronite | 80 | 100 |
+| Silver | 25 | 200 |
+| Coal | 16 | 100 |
+| Gold | 7 | 75 |
+| Mithril | 4 | 50 |
+| Adamantite | 2 | 25 |
+| Runite | 1 | 18 |
+| Lead | 112 | 278 |
+| Gem rocks | 28 | 70 |
+| Gem rocks, charged glory | 84 | 210 |
+| Amethyst | -18 | 10 |
+
+The Wiki has no chart for the rocks below; these are estimates, to replace once there is one:
+
+| Rock | Low | High | Estimated from |
+| --- | ---: | ---: | --- |
+| Soft clay | 128 | 400 | clay's chart; the Wiki says success is certain well before 70 |
+| Lovakite | 16 | 100 | coal's chart |
+| Nickel | 4 | 50 | mithril's chart |
+| Rubium | 107 | 230 | the Wiki's splinters per hour at 48 and 99 |
+| Sunstone | 69 | 301 | the Wiki's momentum rate (75% at 53, 100% at 80) |
+| Infernal shale | 60 | 180 | the Wiki: "between iron and coal" to mine |
+| Daeyalt | 96 | 350 | iron's chart; recordings got ore on every roll |
+
+The Runite rocks page checks the formula: 17/256 at level 85 and 19/256 from 97.
+
+Sandstone and granite charts cascade (Wiki https://oldschool.runescape.wiki/w/Sandstone_rocks,
+https://oldschool.runescape.wiki/w/Granite_rocks): the biggest piece is rolled first and each failed roll falls
+through to the next size; failing them all gives nothing. Sandstone 10kg 4/50, 5kg 8/75, 2kg 16/100, 1kg 25/200;
+granite 5kg 6/64, 2kg 8/75, 500g 16/100.
+
+Rune essence rocks succeed on every roll (Wiki https://oldschool.runescape.wiki/w/Pure_essence, Mod Ash).
+
+## Gems while mining
+
+Before each ore roll on the ore rocks above (not sandstone, granite, essence, gem rocks, sunstone or Daeyalt,
+whose Wiki pages have no pre-roll), a 1/256 gem roll; a charged
+amulet of glory (glory(1)-(6), (t1)-(t6), eternal) adds a 3/256 roll when it misses
+(Wiki https://oldschool.runescape.wiki/w/Template:MiningPreGemDropTable). A hit gives nothing (70/128), an uncut
+sapphire (32), emerald (16), ruby (8) or diamond (2), never the ore, no XP, and the rock stays.
+
+Recording 403 (rev 231): the roll after `You swing your pick at the rock.` gave `You just found a Sapphire!`
+and `+uncut_sapphire`, with no mining sound or experience and the mining animation carrying on. Recording 90 (a
+Leagues world) has `You just found a Sapphire!` while mining coal rocks, and the Leagues recordings have
+`You just found an Emerald!`, `a Ruby!` and `a Diamond!` too.
+
 ## Not done
 
-- The Mining Guild halves the respawn of iron, adamantite and runite (Wiki rock pages), which needs the guild's area.
-- Rock and ore success rates are unchanged.
+- The Mining Guild halves the respawn of iron, adamantite and runite (Wiki rock pages) and gives an invisible +7
+  Mining (Wiki Mining Guild), which needs the guild's members area.
+- The skilling timer is Mining's own: other skills' actions (herb tar, food) don't delay it, so tick
+  manipulation is not modelled.
 - Rune and pure essence rocks keep their own messages; they were not recorded on main-game worlds.
 - Other plugins that mine rocks of their own (quests, minigames, stars, Motherlode) keep their wording.
+- No recordings of a successful Mine on lead, nickel, rubium, soft clay, lovakite, sunstone or infernal shale: the
+  messages follow the recorded pattern (`You manage to mine some lead.`, `... soft clay.`, `... rubium splinters.`,
+  `... infernal shale.`) and are unverified.
+- Sunstone momentum (better odds, 28 XP and a 20% extra chunk for 5 ticks after a success) is not modelled.
+- Infernal shale's Wiki lists ten XP values at 1/11 each; one value must be twice as likely, so all ten are
+  equally weighted for now.
+- Mining gloves, Varrock armour and the expert gloves' extra amethyst/sunstone are not modelled.
+- Access isn't checked: Shilo Village for the Shilo gem rocks, the Mining Guild for amethyst, the Yama contract for
+  infernal shale, Sailing islands for lead, nickel and rubium.
+- A Daeyalt face only grows back once it is empty; a face left part-mined stays at its stage.
+- Not mineable yet, each needing its own area or mechanic: limestone (stages with their own respawns), rubium and
+  infernal shale deposits (one of two active, timed), calcified rocks (timed depletion, water), Daeyalt Essence,
+  Tai Bwo Wannai gem rocks, the Lovatt Mine ore veins, the Fossil Island boulders, ash piles and volcanic
+  sulphur, the Keldagrim gold vein, the salt rocks, and the Easter egg rock. `tests/mining-parity.test.cjs` lists
+  every loc with a Mine option, so a new one without a handler fails the test.

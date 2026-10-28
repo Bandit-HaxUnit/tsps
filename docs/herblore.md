@@ -88,6 +88,38 @@ The Wiki's recipes, one row per dose where the dose count matters:
   the divine potions need Song of the Elves; the sanfew steps need Zogre Flesh Eaters started, the
   last one finished. Those other refusals have no capture and say "Nothing interesting happens."
 
+### Sanfew serum manual production
+
+The [Sanfew serum Creation section](https://oldschool.runescape.wiki/w/Sanfew_serum%283%29)
+specifies manual, one-at-a-time mixing for every step, with no Make-X menu. All four dose
+counts use that path, even with enough ingredients for several mixtures. Each click consumes
+one base and one secondary, retains the base's dose count, and awards only that step's XP.
+The recipe data marks these steps `manual`; ordinary potions retain their Make-X loop.
+
+| Doses | Horn dust → step 1 XP | Snake weed → step 2 XP | Nails → serum XP | Total XP |
+| --- | --- | --- | --- | --- |
+| 1 | 28.5 | 31.5 | 36 | 96 |
+| 2 | 38 | 42 | 48 | 128 |
+| 3 | 47.5 | 52.5 | 60 | 160 |
+| 4 | 57 | 63 | 72 | 192 |
+
+Rsprox recordings **1148 and 1875** show the three mixing messages, animation
+`human_herbing_vial` and sound 2608. Both are Leagues recordings: they corroborate presentation,
+while the Wiki establishes normal-world manual production, ingredients and XP. Their saved
+secondaries and accelerated production are not evidence for normal-world consumption or speed.
+
+Recording **1875** also shows horn dust used on Mixture - step 1(4) being refused with
+“I've already used this item in the mixture. I don't need to use it again.” This refusal applies
+to the step-1 dose variants in either item-use direction, without consuming anything, granting XP,
+or playing the mixing animation or sound. `repeatMessage` on a recipe describes its secondary
+used again on its product. No other repeat-ingredient refusals are inferred from this recording.
+
+Regression coverage exercises all three steps and all dose counts in both directions, including
+spare ingredients, no automatic continuation, XP, animation, sound, repeat-horn refusal and the
+existing level/quest gates. In-game verification covers the three four-dose steps, one result per
+click with spare ingredients, the repeat-horn refusal, XP totals, and ordinary potion Make-X.
+There is no normal-world Sanfew mixing recording in the indexed captures consulted here.
+
 ## Grinding
 
 A pestle and mortar on a secondary; no Herblore level or XP. Recordings 70 and 1875 (unicorn
@@ -103,8 +135,29 @@ archive's message log.
   into 5 shards.", "You crush your crystal shards down to a powdery form."
 - **Lava scale (Wiki):** 3 to 6 shards, and half as many again, rounded down, with the hard
   Wilderness Diary. The Wiki says higher levels average more; with no formula, tsps rolls evenly.
-- **Crystal shards (Wiki):** 10 crystal dust each; a stack is crushed at once. Live also says
-  "You crush some of your crystal shards down to a powdery form."; when is not known.
+- **Crystal shards:** recording 1618 opens "How many shards would you like to crush? (0 - 5)"
+  without changing inventory. Entering 5 produces 50 dust, the grind animation and sound,
+  and "You crush your crystal shards down to a powdery form." Recordings 3274 and 1107
+  show "You crush some of your crystal shards down to a powdery form." when shards remain.
+  Only the selected quantity is converted, in one batch; there is no auto-repeat. The
+  [Crystal dust Wiki page](https://oldschool.runescape.wiki/w/Crystal_dust) confirms ten
+  dust per selected shard. Zero cancels, and the callback rechecks both supplies. Capacity
+  is checked before spending shards, including a full inventory with existing dust or a
+  slot freed by consuming all shards.
+- **Nihil shards:** the [Nihil dust Wiki page](https://oldschool.runescape.wiki/w/Nihil_dust)
+  specifies one dust per shard and auto-crushing at 0, then 2, then every 3 ticks. Stackability
+  does not make this a bulk conversion. Walking or another action interrupts the loop.
+
+Regression coverage exercises the registered item-on-item handler for quantity selection,
+partial/all messages, zero/invalid input, supply removal, capacity/stack limits and nihil
+cadence/cancellation. Live checks cover selected/all/zero quantities, full-inventory
+preservation and nihil interruption. Grinding grants no XP.
+
+The lava scale level-dependent distribution remains unverified: the
+[Lava scale Wiki page](https://oldschool.runescape.wiki/w/Lava_scale) establishes the level
+advantage, but the exact outcome probabilities have not been established. The existing
+uniform roll predates these fixes; its introduction and tests document the approximation.
+No replacement probability formula is inferred from the expected-yield chart.
 
 ## Doses
 
@@ -159,10 +212,10 @@ These messages follow the captured pattern but have no recording of their own:
   once as "the aldarium"; which is which is a guess.
 
 Grinding: "You grind the kebbit teeth to dust." and "You grind the nihil shard into dust." have no
-capture, and nihil shards, a stack like crystal shards, are ground all at once.
+capture. Nihil shard cadence is established by the Wiki above; its exact message remains
+unchecked against live captures.
 
 ## Experience
 
-tsps stores whole XP: `SkillManager` floors the stored value on the next gain, so a potion's half
-XP point (antipoison's 37.5) is lost. The data keeps the Wiki's values for when tsps stores tenths
-as live does.
+tsps stores XP in tenths; the skill display reports whole XP. Fractional step XP is retained
+when subsequent Sanfew ingredients are added, so a complete three-dose serum awards 160 XP.

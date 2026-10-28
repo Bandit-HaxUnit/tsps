@@ -4,8 +4,9 @@
  *
  * Other plugins bury through custom events:
  *   api.emitCustomEvent("prayer:bury", { player, itemId, scale, crushed })
- *     -> sets `handled` when `itemId` is a bone: its experience (times `scale`, default 1) and
- *        its Prayer restore are given. `crushed` (the bonecrusher) leaves out bones it can't crush.
+ *     -> sets `handled` when `itemId` is a bone, or demonic ashes: its experience (times `scale`,
+ *        default 1) and a bone's Prayer restore are given. `crushed` (the bonecrusher) leaves out
+ *        bones it can't crush, and all ashes.
  *   api.emitCustomEvent("prayer:bone", { itemId, bone: null })
  *     -> sets `bone` to the bone's row ({ xp, level, ... }) when `itemId` is a bone, for content
  *        that gives its own experience (altars).
@@ -62,8 +63,8 @@ function ashFor(itemId) {
   return ashes.get(itemId) ?? null;
 }
 
-/** Experience is whole in tsps; a bone's tenths round up, as the old table did (bones 4.5 -> 5). */
-const experience = (xp, scale) => Math.ceil(xp * scale);
+/** SkillManager preserves tenths; do not round up bone or bonecrusher rewards here. */
+const experience = (xp, scale) => xp * scale;
 
 function restorePrayer(player, itemId, bone) {
   if (!bone.restore) return;
@@ -82,9 +83,9 @@ function award(player, itemId, bone, scale) {
   restorePrayer(player, itemId, bone);
 }
 
-/** "prayer:bury": a bone buried without the spade (the bonecrusher). */
+/** "prayer:bury": a bone buried without the spade (the bonecrusher), or ashes scattered (a league fragment). */
 function buryRequest(request) {
-  const bone = boneFor(request?.itemId);
+  const bone = boneFor(request?.itemId) ?? (request?.crushed ? null : ashFor(request?.itemId));
   if (!bone || !request.player) return;
   if (request.crushed && bone.crush === false) return;
   award(request.player, request.itemId, bone, request.scale ?? 1);

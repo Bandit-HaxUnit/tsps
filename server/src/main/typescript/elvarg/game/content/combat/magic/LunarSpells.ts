@@ -6,7 +6,6 @@ import { GraphicHeight } from "../../../model/GraphicHeight";
 import { Item } from "../../../model/Item";
 import { Location } from "../../../model/Location";
 import { MagicSpellbook } from "../../../model/MagicSpellbook";
-import { EffectTimer } from "../../../model/EffectTimer";
 import { Skill } from "../../../model/Skill";
 import { TeleportHandler } from "../../../model/teleportation/TeleportHandler";
 import { TeleportType } from "../../../model/teleportation/TeleportType";
@@ -24,7 +23,7 @@ type CastVisuals = { animation: number; graphic?: number };
  * TeleportType animates it. Spells no capture shows yet keep the summon animation (4413) with the
  * Lunar teleport graphic (747).
  */
-type SpellData = { level: number; experience: number; runes: Item[]; cast?: CastVisuals | null };
+type SpellData = { level: number; experience: number; runes: Item[]; cast?: CastVisuals | null; spellId?: number };
 type TeleportData = SpellData & { destination: Location };
 
 const rune = (id: number, amount = 1) => new Item(id, amount);
@@ -51,7 +50,7 @@ const castOf = (spell: keyof typeof CASTS): CastVisuals => CASTS[spell];
 
 class LunarSpell extends Spell {
     constructor(readonly data: SpellData) { super(); }
-    spellId(): number { return 0; }
+    spellId(): number { return this.data.spellId ?? 0; }
     levelRequired(): number { return this.data.level; }
     baseExperience(): number { return this.data.experience; }
     itemsRequired(): Item[] { return this.data.runes; }
@@ -241,7 +240,7 @@ export class LunarSpells {
         const definitions: Record<string, SpellData> = {
             "energy transfer": { level: 91, experience: 100, runes: [rune(9075, 3), rune(557, 2), rune(563)] },
             "heal other": { level: 92, experience: 101, runes: [rune(9075, 3), rune(557), rune(565, 3)] },
-            "vengeance other": { level: 93, experience: 108, runes: [rune(9075, 3), rune(557, 10), rune(560, 2)], cast: castOf("vengeance other") },
+            "vengeance other": { level: 93, experience: 108, runes: [rune(9075, 3), rune(557, 10), rune(560, 2)], cast: castOf("vengeance other"), spellId: EffectSpells.VENGEANCE_OTHER.spellId() },
             "stat spy": { level: 75, experience: 76, runes: [rune(9075, 2), rune(557, 5), rune(563)] },
             "stat restore pot share": { level: 81, experience: 84, runes: [rune(9075, 2), rune(555, 10), rune(561, 2)] },
             "boost potion share": { level: 84, experience: 88, runes: [rune(9075, 3), rune(555, 12), rune(557, 10)] },
@@ -278,16 +277,17 @@ export class LunarSpells {
                 player.sendMessage("Drink a matching potion within 30 seconds to share its effect.");
             });
         }
-        if (target.hasVengeanceReturn() || !target.getVengeanceTimer().finished()) {
+        // The cooldown is the caster's, shared with Vengeance; the target's own doesn't matter (Wiki: Vengeance_Other).
+        if (EffectSpells.vengeanceOnCooldown(player)) return true;
+        if (target.hasVengeanceReturn()) {
             player.sendMessage("That player cannot receive Vengeance right now.");
             return true;
         }
         return spell.cast(player, () => {
             target.setHasVengeance(true);
-            target.getVengeanceTimer().start(30);
+            EffectSpells.startVengeanceCooldown(player);
             target.performGraphic(new Graphic(725, GraphicHeight.HIGH));
-            target.getPacketSender().sendEffectTimer(30, EffectTimer.VENGEANCE)
-                .sendMessage("You now have Vengeance's effect.");
+            target.sendMessage("You have the power of vengeance!");
         });
     }
 

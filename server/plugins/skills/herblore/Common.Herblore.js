@@ -83,6 +83,18 @@ function recipesWith(firstId, secondId) {
       || recipe.ingredients.find(({ id }) => id === firstId).count >= 2));
 }
 
+/** A recipe can refuse its last (secondary) ingredient used again on its product. */
+function repeatMessage(firstId, secondId) {
+  index();
+  for (const [ingredientId, productId] of [[firstId, secondId], [secondId, firstId]]) {
+    const recipe = (recipesByIngredient.get(ingredientId) ?? []).find((candidate) =>
+      candidate.productId === productId && candidate.repeatMessage
+      && candidate.ingredients[candidate.ingredients.length - 1].id === ingredientId);
+    if (recipe) return recipe.repeatMessage;
+  }
+  return null;
+}
+
 /** "herblore:clean" `{ grimyId, clean, level }`: clean herb and its required Herblore level. */
 function answerClean(request) {
   const herb = herbFor(request?.grimyId);
@@ -96,7 +108,19 @@ function answerUnfinished(request) {
   if (recipe) request.potion = recipe.productId;
 }
 
-const level = (player) => player.getSkillManager().getCurrentLevel(core.Skill.HERBLORE);
+/** The Herblore level the skill checks: the current level, raised by content ("skills:level-boost", a league relic's invisible +12). */
+function level(player) {
+  const request = { player, skill: core.Skill.HERBLORE, boost: 0 };
+  api.emitCustomEvent("skills:level-boost", request);
+  return player.getSkillManager().getCurrentLevel(core.Skill.HERBLORE) + Math.max(0, request.boost | 0);
+}
+
+/** How many potions (or herbs) one cycle makes ("skills:actions-per-cycle", a league relic's all at once); 1 unless content says more. */
+function actionsPerCycle(player, kind, recipe = null) {
+  const request = { player, skill: core.Skill.HERBLORE, kind, recipe, actions: 1 };
+  api.emitCustomEvent("skills:actions-per-cycle", request);
+  return Math.max(1, request.actions | 0);
+}
 
 /**
  * Whether a quest is done, or started for a "key:started" requirement. A world without the
@@ -160,9 +184,16 @@ function run(player, step) {
   })());
 }
 
+/** "herblore:herbs": every herb Herblore knows ({ grimyId, cleanId, level, xp }), for content that finds herbs (a league relic). */
+function answerHerbs(request) {
+  if (!request) return;
+  index();
+  request.herbs = [...herbsByGrimy.values()].map(({ grimyId, cleanId, level, xp }) => ({ grimyId, cleanId, level, xp }));
+}
+
 module.exports = {
   MIX_ANIMATION, MIX_SOUND,
-  init, gameval, herbFor, grindFor, recipesWith, answerClean, answerUnfinished, level, questDone, canUseHerblore,
+  init, gameval, herbFor, grindFor, recipesWith, repeatMessage, answerClean, answerUnfinished, answerHerbs, level, actionsPerCycle, questDone, canUseHerblore,
   wearsHerbloreCape, spam, mesbox, animate, sound, addXp, run,
   get api() { return api; },
   get core() { return core; },

@@ -422,15 +422,29 @@ test('Chat timestamps: choosing an option sets varbit 12384 to it and runs the r
   assert.equal(varbit(CHAT_TIMESTAMPS_VARBIT), 0);
 });
 
-test('Chat timestamps: login sends the live default (server time) until the player chooses', () => {
+test('Chat timestamps: off for a fresh account, and a chosen option is restored at login', () => {
   const { player, logins } = allSettings(CHAT);
   const restore = logins.find((login) => login.name === 'restoreSettings');
   player.sent.length = 0;
   restore({ player });
-  assert.ok(player.sent.includes(`varbit ${CHAT_TIMESTAMPS_VARBIT}=1`), 'fresh account: On (Server time)');
-  player.setAttribute('settings:values', { [`varbit:${CHAT_TIMESTAMPS_VARBIT}`]: 0 });
+  assert.ok(!player.sent.includes(`varbit ${CHAT_TIMESTAMPS_VARBIT}=1`), 'fresh account: Off');
+  player.setAttribute('settings:values', { [`varbit:${CHAT_TIMESTAMPS_VARBIT}`]: 2 });
   player.sent.length = 0;
   restore({ player });
-  assert.ok(player.sent.includes(`varbit ${CHAT_TIMESTAMPS_VARBIT}=0`), 'a chosen Off is restored');
-  assert.ok(!player.sent.includes(`varbit ${CHAT_TIMESTAMPS_VARBIT}=1`), 'the default does not override a choice');
+  assert.ok(player.sent.includes(`varbit ${CHAT_TIMESTAMPS_VARBIT}=2`), 'a chosen On (Local time) is restored');
+});
+
+// https://oldschool.runescape.wiki/w/Fletching_training (retrieved 2026-10-27):
+// Make-X for darts and bolts defaults to enabled since Easter 2023.
+test('dart and bolt Make-X defaults on and restores either saved choice', () => {
+  const { player, logins } = allSettings(0);
+  const restore = logins.find((login) => login.name === 'restoreSettings');
+  const id = CacheDefinitions.getVarbitId('option_fletch_dart_or_bolt_makex');
+  restore({ player });
+  assert.equal(player.getPacketSender().getVarbit(id), 1);
+  for (const choice of [0, 1]) {
+    player.setAttribute('settings:values', { [`varbit:${id}`]: choice });
+    restore({ player });
+    assert.equal(player.getPacketSender().getVarbit(id), choice);
+  }
 });

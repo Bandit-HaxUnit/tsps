@@ -592,6 +592,22 @@ test("the Hunter Guild stairs fade as captured and land where live OSRS does, bo
   assert.deepEqual([at.getX(), at.getY(), at.getZ()], [1558, 3047, 0]);
 });
 
+test("the Wilderness Slayer Cave's exits lead out beside their surface stairs, and the north stairs lead in (#1350)", () => {
+  const walk = (id, x, y, from, hook) => {
+    const object = locAt(id, x, y, 0);
+    const visit = explorer(from);
+    const request = { player: visit.player, object, objectId: id, clickType: 1, handled: false };
+    hooks[hook](request);
+    assert.equal(request.handled, true, `loc ${id} is taken`);
+    runTicks(visit, 3);
+    const at = visit.player.getLocation();
+    return [at.getX(), at.getY(), at.getZ()];
+  };
+  assert.deepEqual(walk(40389, 3384, 10050, [3385, 10052, 0], "object"), [3259, 3663, 0], "south exit");
+  assert.deepEqual(walk(40391, 3405, 10146, [3406, 10145, 0], "object"), [3293, 3749, 0], "north exit");
+  assert.deepEqual(walk(40390, 3293, 3746, [3293, 3749, 0], "ladders:climb"), [3406, 10145, 0], "north entrance");
+});
+
 test("another tile or option isn't claimed: the click falls through to whoever handles it", () => {
   const object = locAt(57591, 1288, 3133, 0);
   const visit = explorer([1289, 3136, 0]);
@@ -844,4 +860,46 @@ test("Araxyte cave reverse tunnels return to the quest nest", () => {
   assert.deepEqual(destinationFor(east, new core.Location(3696, 9839, 0)), [3689, 9837, 0]);
   assert.deepEqual(destinationFor(south, new core.Location(3684, 9822, 0)), [3677, 9822, 0]);
   assert.deepEqual(destinationFor(north, new core.Location(3680, 9849, 0)), [3680, 9842, 0]);
+});
+
+test("the Pandemonium cave's Opening exits as captured: crawl, sound and fade, then out on tick 5", () => {
+  // Captured (235, 237): the same crawl and sound as the way in, the move back beside the entrance.
+  const object = locAt(58093, 3041, 9397, 0);
+  const visit = explorer([3042, 9399, 0]);
+  const event = { player: visit.player, object, objectId: object.getId(), clickType: 1, handled: false };
+  hooks.object(event);
+  assert.equal(event.handled, true);
+  runTicks(visit, 7);
+  const flat = visit.ticks.flat();
+  assert.ok(flat.includes("anim 11580") && flat.includes("sound 2454") && flat.includes("open 174"));
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], [3046, 2996, 0]);
+});
+
+test("the plain exits and entrances taken by name land where live OSRS does", () => {
+  const cases = [
+    ["wyvern_snow_cave_entrance", 10596, [3055, 9561, 0], [3056, 9562, 0]],
+    ["wyvern_snow_cave_exit", 10595, [3055, 9556, 0], [3057, 9555, 0]],
+    ["molch_temple_lizard_dwelling", 34402, [1292, 3657, 0], [1292, 3659, 0]],
+    ["zeah_cata_exit_giants_den", 42350, [1639, 10047, 0], [1640, 10047, 0]],
+    ["fossil_flora_swamp_bellshroom_return", 30671, [3655, 3751, 0], [3656, 3751, 0]],
+    ["rc_zmi_dungeon_wall_crack_entrance", 29626, [3053, 5587, 0], [3052, 5587, 0]],
+  ];
+  for (const [name, id, at, from] of cases) {
+    assert.ok(decisions.include[name], `${name} is taken by name`);
+    const entry = data.locs.find((loc) => loc.name === name);
+    const visit = explorer(from);
+    const object = locAt(id, ...at);
+    const event = { player: visit.player, object, objectId: object.getId(), clickType: 1, handled: false };
+    hooks.object(event);
+    assert.equal(event.handled, true, name);
+    runTicks(visit, entry.tick + 3);
+    assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], entry.to, name);
+  }
+});
+
+test("hand-added gates are decisions, so a sync keeps them", () => {
+  for (const entry of data.locs.filter((loc) => loc.requires || loc.mesbox)) {
+    const gate = requirementFor(entry, decisions);
+    assert.deepEqual(entry.requires, gate?.requires, `${entry.name} ${entry.x},${entry.y}`);
+  }
 });

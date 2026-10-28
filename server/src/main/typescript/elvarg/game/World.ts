@@ -502,6 +502,12 @@ export class World {
                 for (const npc of bucket) activeNpcs.add(npc);
             }
         }
+        // A boat's deck lies away from the main world: its crew (a ship's NPCs, a Barracuda Trial's
+        // master) is active, and seen, wherever the boat is active at sea.
+        for (const boat of BoatManager.all()) {
+            if (!World.activeRegionIndex.isLocationActive(boat.tileX, boat.tileY, boat.level)) continue;
+            for (const npc of BoatManager.getDeck(boat)?.getNpcs() ?? []) activeNpcs.add(npc);
+        }
         // Finish mechanics that began while the NPC's region was active.
         for (const npc of World.activeNpcsForUpdate) {
             const definition = npc.getDefinition?.();
@@ -793,13 +799,41 @@ export class World {
         }
     }
 
+    /** The map square each owned boat was in last tick, by entity index. */
+    private static boatSquares = new Map<number, number>();
+
+    /**
+     * A player on a deck keeps the sea under their boat awake (refreshActiveRegions' root), but
+     * their own tile on the deck never changes: a boat sailing (or teleported) into another map
+     * square wakes the regions around its new spot, so the NPCs there (a charting duck) move.
+     */
+    private static refreshRegionsUnderBoats(): void {
+        let changed = false;
+        const seen = new Set<number>();
+        for (const boat of BoatManager.all()) {
+            if (boat.static) continue;
+            seen.add(boat.entityIndex);
+            const square = ((boat.tileX >> 6) << 16) | (boat.tileY >> 6);
+            if (World.boatSquares.get(boat.entityIndex) !== square) {
+                World.boatSquares.set(boat.entityIndex, square);
+                changed = true;
+            }
+        }
+        for (const index of [...World.boatSquares.keys()]) if (!seen.has(index)) World.boatSquares.delete(index);
+        if (changed) {
+            World.refreshActiveRegions();
+            World.activeNpcsForUpdate = World.collectActiveNpcsForUpdate();
+        }
+    }
+
     public static refreshActiveRegions(): void {
         const snapshot = World.activeRegionIndex.update(
             World.players,
             // A player held in the world after a disconnect still keeps their region awake.
             (player) => World.shouldRunNetworkUpdates(player) || World.removePlayerQueue.includes(player),
             World.processCycle,
-            Date.now()
+            Date.now(),
+            (player) => (BoatManager.getBoatAboard(player) ? BoatManager.rootLocation(player) : undefined)
         );
         PluginManager.emitActiveRegionsUpdated(snapshot);
     }
@@ -1275,7 +1309,10 @@ export class World {
         });
 
         // Boats move after their passengers, before sync sees anyone's position.
-        timed("move_boats", () => BoatManager.tick());
+        timed("move_boats", () => {
+            BoatManager.tick();
+            World.refreshRegionsUnderBoats();
+        });
 
         // Owners that did not take a turn this cycle (bot stride) still need their
         // walk-to interactions ticked, or the interaction hangs until they do.
