@@ -123,7 +123,7 @@ export class Combat {
     private lastPreMovementCycle = -1;
     private lastPostMovementCycle = -1;
     private manualMovementUntilCycle = -1;
-    /** Cycles spent out of reach of the current target without getting any closer to it. */
+    /** Cycles spent out of reach with no distance closed and no step taken. */
     private unreachableCycles = 0;
     /** The gap last cycle, or -1 before the first cycle measured against a new target. */
     private unreachableDistance = -1;
@@ -653,15 +653,18 @@ export class Combat {
     }
 
     /**
-     * Ends combat with a target the actor has stopped getting any closer to. Both give-up paths
-     * in postMovementProcess are skipped by an actor that cannot move (a stun, a placement, a
+     * Ends combat with a target the actor has stopped trying to get to. Both give-up paths in
+     * postMovementProcess are skipped by an actor that cannot move (a stun, a placement, a
      * teleport in transit - `setBlockMovement`) and by a route whose step the mover rejects,
      * which keeps its checkpoint (`MovementQueue.process`), so the queue never empties; without
      * this deadline either side stays in combat with an unreachable target indefinitely.
      *
-     * Progress is the gap closing - whoever is closing it - so a fighter walking its target down,
-     * or being walked down, keeps its interaction; shuffling on the spot without getting nearer
-     * does not, which is how an engagement stuck behind a wall or a crowd finally ends.
+     * Progress is the gap closing - whoever is closing it - or a step the mover actually accepted
+     * last cycle, which out of reach is the pursuit itself. A step counts because the mover is the
+     * only one that knows whether the pursuit is still going: a target walked away at the same
+     * speed holds the gap open forever on an open route, and live keeps chasing. What spends the
+     * budget is the actor getting nowhere - frozen in place, or its step refused - which is how an
+     * engagement stuck behind a wall or a crowd finally ends.
      *
      * @return true when the interaction was dropped, so this cycle does nothing else.
      */
@@ -669,8 +672,11 @@ export class Combat {
         const distance = this.character.getLocation().getDistance(target.getLocation());
         // The first cycle measured only records the starting gap; it is not progress.
         const closing = this.unreachableDistance >= 0 && distance < this.unreachableDistance;
+        // Read before this cycle's movement: preMovementProcess runs after beginCycle() has
+        // cleared didMoveThisCycle(), so the last cycle's step is the one in question.
+        const stepping = this.character.getMovementQueue().didMovePreviousCycle();
         this.unreachableDistance = distance;
-        this.unreachableCycles = closing ? 0 : this.unreachableCycles + 1;
+        this.unreachableCycles = closing || stepping ? 0 : this.unreachableCycles + 1;
         if (this.unreachableCycles < Combat.UNREACHABLE_GIVE_UP_CYCLES) {
             return false;
         }

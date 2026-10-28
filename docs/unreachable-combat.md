@@ -35,14 +35,28 @@ releases either, so it never sleeps (`DormantNpcs`) and stays in the active-regi
 ## The rule
 
 `Combat.giveUpUnreachableTarget` runs in `preMovementProcess` on every cycle spent out of reach and
-counts the cycles in which **the gap did not close**. Closing it is progress whoever does it, so a
-fighter walking its target down, or being walked down, keeps its interaction; moving without
-getting nearer - walking into a wall, shuffling against a crowd - does not. At 20 cycles (10 s) the
-engagement is dropped: a player is told `I can't reach that!` and both sides `reset()` as any other
-give-up does. Player bots are not messaged, matching the existing release.
+counts the cycles in which the actor **got nowhere**: it closed no distance *and* took no step.
+Either one is progress. Closing the gap counts whoever closes it, so a fighter walking its target
+down, or being walked down, keeps its interaction; so does a step the mover actually accepted,
+which is the only thing that tells a chase from a stall - a target walked away at the same speed
+holds the gap open forever on an open route, and live keeps following. What spends the budget is
+being frozen in place, or having the step refused: how an engagement stuck behind a wall or a crowd
+finally ends.
+
+The step is read with `MovementQueue.didMovePreviousCycle()`, not `didMoveThisCycle()`:
+`preMovementProcess` runs after `beginCycle()` has already cleared this cycle's flag (`NPC.process`,
+`Player.process`), so the step in question is the last cycle's.
+
+At 20 cycles (10 s) the engagement is dropped: a player is told `I can't reach that!` and both
+sides `reset()` as any other give-up does. Player bots are not messaged, matching the existing
+release.
 
 The two pre-existing releases are untouched and still fire first, so a normal "attack something
-behind a fence" click is refused on the spot rather than after the deadline.
+behind a fence" click is refused on the spot rather than after the deadline. Between them they cover
+what the route finder can see: an NPC whose step the *map* refuses is released by the
+`routeRequested` path in its first cycle, and a player with no route likewise. The deadline is what
+bounds the case that path deliberately exempts - a pursuit blocked by another *entity*, invisible to
+the pathfinder, which keeps its checkpoint so the queue never empties.
 
 ## Sources
 
@@ -56,19 +70,28 @@ the existing releases could not run; it introduces no new message.
 
 ## Validation
 
-- `node --test server/tests/unreachable-combat.test.cjs` (after `yarn build`): seven tests. Three
-  fail without the deadline, on the reproductions: a `setBlockMovement` player and a
-  `setBlockMovement` npc, each 18 tiles from a target neither can approach, keep their target (and
-  `CombatFactory.inCombat`) indefinitely; and an npc stepped back onto the same tile every cycle -
-  taking a step and getting no nearer, which is what a wall or a crowd looks like to the pursuit -
-  hunts forever. The other four pin down what must *not* change: a fighter still closing the gap
-  keeps its target, an immobile actor keeps a target that comes to them, a fight in reach is never
-  dropped, and a player with no route is refused on the first cycle.
-- Own-worktree agent MCP (`AGENT_MCP=1 yarn dev`, port 49700): fought a grizzly bear at the Gnome
-  Stronghold pen and walked 25 tiles away - combat and `busy` clear, logout accepted; aggroed a
-  white wolf at Edgeville and stood inside its footprint - both sides land hits, the fight ends
-  normally; teleported 25 tiles from a bear mid-chase - the bear walks back to its post and drops
-  the target, the player is not left in combat.
+- `node --test server/tests/unreachable-combat.test.cjs` (after `yarn build`): eight tests on a
+  real cache NPC and player, ticked in World order, with reach, routing and the mover all live -
+  nothing is mocked but the cycle clock, and no actor is teleported to make a point. Three fail
+  without the deadline: a `setBlockMovement` player and a `setBlockMovement` npc, each 18 tiles
+  from a target neither can approach, keep their target (and `CombatFactory.inCombat`)
+  indefinitely; and an npc with a real actor registered in World on the tile it must step onto -
+  the mover refuses the step and keeps its checkpoint, which is what a crowd actually looks like
+  to a pursuit - hunts forever. One fails if progress is measured by distance alone: mugger 8
+  tiles behind a player that walks south a tile every cycle, so the gap never closes; the npc
+  steps on all 25 cycles and keeps the fight. The rest pin down what must *not* change: a fighter
+  still closing the gap keeps its target, an immobile actor keeps a target that comes to them, a
+  fight in reach is never dropped, and a player with no route is refused on the first cycle.
+  The harness unregisters each scene's actors afterwards: a `isRegistered` npc that moved leaves a
+  tile occupant behind, and to the next scene's pursuer that is a wall.
+- Own-worktree agent MCP (`AGENT_MCP=1 yarn dev`, port 49700), run against the distance-only
+  version of the rule: aggroed a white wolf at Edgeville and stood inside its footprint - both
+  sides land hits, the fight ends normally; teleported 25 tiles from a grizzly bear mid-chase - the
+  bear walks back to its post and drops the target and the player is not left in combat. Its third
+  note - fighting a bear at the Gnome Stronghold pen, then walking 25 tiles away until combat and
+  `busy` cleared and logout was accepted - was the bug, not the expected result: a target walking
+  away at the same speed now keeps the chase, bounded by `combat:retreat`/the follow distance, so
+  that check wants re-running against the step-aware rule before it is quoted again.
 - `yarn build` clean, and the full server suite: 9,835 tests, 9,834 pass. The single failure is
   pre-existing and unrelated: `tests/league-combat-masteries.test.cjs:15` requires
   `../dist/game/entity/impl/npc/Npc` while tsc emits `NPC.js`, so the file cannot load on a
@@ -85,6 +108,14 @@ the existing releases could not run; it introduces no new message.
   projectile line in the clipping) although the NPC cannot walk there, which is a map/clipping
   question with its own fix, not this one.
 - `combat:close-in` NPCs still walk in while attacking from range, and `processNpcUnderTarget`
-  still shuffles an overlapped NPC aside; the deadline only fires if neither makes progress.
+  still shuffles an overlapped NPC aside.
+- **What a step now buys.** An actor that keeps taking steps it was allowed to take, yet never
+  closes the gap, is no longer released at 20 cycles - that is the correction, and it is what a
+  chase looks like to the mover. The pursuit still ends by itself: an NPC at its follow distance
+  from its spawn retreats (`Combat.shouldRetreat`, `combat:retreat`), an overlapped NPC whose
+  target is walking away does not shuffle at all (`processNpcUnderTarget` returns on `targetBusy`,
+  so no step is taken and the budget runs out), and a player who stops walking is released by the
+  pre-existing paths the moment the queue empties. What the deadline is left to end is an actor
+  that gets nowhere: frozen, stunned, in transit, or wedged.
 - The 20-cycle budget is a safety net for the states above. The ordinary unreachable-target release
   happens in one or two cycles, as before.

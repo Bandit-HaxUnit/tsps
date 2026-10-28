@@ -6,6 +6,10 @@
 // Combat.giveUpUnreachableTarget, such an actor held its target (and so
 // CombatFactory.inCombat, the teleport and busy gates) indefinitely.
 //
+// The deadline measures a pursuit that got nowhere: no distance closed and no step taken. A step
+// the mover accepted is the chase still going, so a target walked away at the same speed does not
+// spend the budget - the tests below hold both halves up, and say which one a case is for.
+//
 // Run after `yarn build`: node --test tests/unreachable-combat.test.cjs
 const assert = require("node:assert/strict");
 const { before, test } = require("node:test");
@@ -30,8 +34,11 @@ before(async () => {
 
 /**
  * A real player and NPC on the live map, ticked in World order (NPCs first, then players) with
- * a cycle counter, so Combat's own reach, routing and give-up code is what runs. Neither actor
- * is in World, so nothing wanders or respawns; the fight is driven only through Combat.
+ * a cycle counter, so Combat's own reach, routing and give-up code is what runs. Nothing wanders
+ * or respawns: the fight is driven only through Combat. `blockAgent` is the only actor put on the
+ * World grid on purpose - but both fighters are `isRegistered`, so `Mobile.setLocation` keeps a
+ * tile occupant for wherever they end up, and `t.after` takes it back out. A left-behind occupant
+ * is a wall to the next scene's pursuer, which tests entity blocks by accident.
  */
 function scene(t, { gap = 18, playerImmobile = false, npcImmobile = false } = {}) {
   let cycle = 1000;
@@ -78,7 +85,29 @@ function scene(t, { gap = 18, playerImmobile = false, npcImmobile = false } = {}
   }
   const ticks = (count) => { for (let i = 0; i < count; i++) tick(); };
   const moveNpcTo = (x, y) => npc.setLocation(new core.Location(x, y, 0));
-  return { player, npc, messages, tick, ticks, moveNpcTo };
+  /** Queues one walking step for the player, as a client click would; the mover consumes it. */
+  const walkPlayer = (dx, dy) => {
+    const queue = player.getMovementQueue();
+    if (queue.size() === 0) queue.addSteps(player.getLocation().transform(dx, dy));
+  };
+  /**
+   * Puts a real npc on the World grid, which is all `MovementQueue.canWalkTo` consults for
+   * entity occupancy. It is never processed, so it simply stands its ground.
+   */
+  const blockers = [];
+  const blockAgent = (x, y) => {
+    const blocker = core.NPC.create(MUGGER, new core.Location(x, y, 0));
+    blocker.isRegistered = () => true;
+    core.World.registerNpcPosition(blocker);
+    blockers.push(blocker);
+    return blocker;
+  };
+  t.after(() => {
+    core.World.unregisterNpcPosition(npc);
+    core.World.unregisterPlayerPosition(player);
+    for (const blocker of blockers) core.World.unregisterNpcPosition(blocker);
+  });
+  return { player, npc, messages, tick, ticks, moveNpcTo, walkPlayer, blockAgent };
 }
 
 test("a player that cannot move, chasing a target that never comes, gives up", (t) => {
@@ -125,17 +154,45 @@ test("an immobile actor keeps a target that is closing on it", (t) => {
   assert.deepEqual(s.messages, []);
 });
 
-test("an npc walking into an obstacle gives up instead of hunting forever", (t) => {
-  // The player's own report: the npc takes a step every cycle and never gets any nearer.
+test("an npc whose pursuit step another actor rejects gives up", (t) => {
+  // The engagement stuck behind a crowd, which only the deadline can end: a real npc registered
+  // in World stands on the tile the mugger must step onto, so `validatedStep` refuses it and the
+  // checkpoint is retained - postMovementProcess exempts an entity block by design, and the queue
+  // never empties. Nothing is pinned or teleported here: the npc simply never gets a step in.
   const s = scene(t, { gap: 8 });
+  s.blockAgent(FIELD.x, FIELD.y + 7);
   s.npc.getCombat().attack(s.player);
+  const stuck = s.npc.getLocation();
+  let refused = false;
   for (let i = 0; i < GIVE_UP_CYCLES - 1; i++) {
     s.tick();
-    s.moveNpcTo(FIELD.x, FIELD.y + 8); // pinned back: its step is rejected by the obstacle
+    refused = refused || s.npc.getMovementQueue().wasBlockedByDynamicOccupancy();
   }
+  assert.equal(refused, true, "the mover refused the step as an entity block");
   assert.ok(s.npc.getCombat().getTarget(), "still patient one cycle short of the deadline");
   s.tick();
   assert.equal(s.npc.getCombat().getTarget(), null);
+  assert.equal(s.npc.getLocation().equals(stuck), true, "the npc never took a step");
+});
+
+test("an npc chasing a target that walks away at its own speed keeps it", (t) => {
+  // A held gap is not a failed pursuit. Both actors step south every cycle, so the distance never
+  // closes; only the mover knows the chase is still going, and live walks on.
+  const s = scene(t, { gap: 8 });
+  s.npc.getCombat().attack(s.player);
+  const chase = GIVE_UP_CYCLES + 5;
+  let steps = 0;
+  let previous = s.npc.getLocation();
+  for (let i = 0; i < chase; i++) {
+    s.walkPlayer(0, -1);
+    s.tick();
+    if (!s.npc.getLocation().equals(previous)) steps++;
+    previous = s.npc.getLocation();
+  }
+  assert.equal(s.npc.getCombat().getTarget(), s.player, `${chase} cycles of held gap is no give-up`);
+  assert.equal(steps, chase, "the npc stepped on every cycle of the chase");
+  assert.equal(s.player.getLocation().getY(), FIELD.y - chase, "the player walked off the whole way");
+  assert.equal(s.npc.getLocation().getDistance(s.player.getLocation()), 8, "the gap never closed or gaped");
 });
 
 test("a fight in reach is never given up", (t) => {
