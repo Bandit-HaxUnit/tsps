@@ -754,7 +754,7 @@
     ]
   },
   "pottery": {
-    "$comment": "One soft clay shapes `shaped` unfired items (default 1).",
+    "$comment": "One soft clay shapes `shaped` unfired items (default 1). `plural` names the item in the oven's \"You don't have any ... which need firing.\" (captured for pots and bowls).",
     "seq": 883,
     "seqName": "human_potterywheel",
     "ovenSeq": 1317,
@@ -764,6 +764,7 @@
     "recipes": [
       {
         "name": "pot",
+        "plural": "pots",
         "unfired": "UNFIRED_POT",
         "fired": "POT",
         "level": 1,
@@ -772,6 +773,7 @@
       },
       {
         "name": "pie dish",
+        "plural": "pie dishes",
         "unfired": "UNFIRED_PIE_DISH",
         "fired": "PIE_DISH",
         "level": 7,
@@ -780,6 +782,7 @@
       },
       {
         "name": "bowl",
+        "plural": "bowls",
         "unfired": "UNFIRED_BOWL",
         "fired": "BOWL",
         "level": 8,
@@ -791,6 +794,7 @@
       },
       {
         "name": "plant pot",
+        "plural": "plant pots",
         "unfired": "UNFIRED_PLANT_POT",
         "fired": "EMPTY_PLANT_POT",
         "level": 19,
@@ -800,6 +804,7 @@
       },
       {
         "name": "cup",
+        "plural": "cups",
         "unfired": "UNFIRED_CUP",
         "fired": "EMPTY_CUP",
         "level": 3,
@@ -815,6 +820,7 @@
       },
       {
         "name": "pot lid",
+        "plural": "pot lids",
         "unfired": "UNFIRED_POT_LID",
         "fired": "POT_LID",
         "level": 25,
@@ -844,7 +850,7 @@
     ]
   },
   "spinning": {
-    "$comment": "`materials`: any one of them makes the product, in order of preference; `amount` of it per item.",
+    "$comment": "`materials`: any one of them makes the product, in order of preference; `amount` of it per item. Recipes are in menu order (linen yarn before bow string, recording 3467).",
     "seq": 13139,
     "seqName": "human_spinningwheel_60",
     "wheelSeq": 466,
@@ -859,6 +865,16 @@
         "amount": 1,
         "level": 1,
         "xp": 2.5
+      },
+      {
+        "item": "LINEN_YARN",
+        "materials": [
+          "FLAX"
+        ],
+        "amount": 1,
+        "level": 12,
+        "xp": 16,
+        "members": true
       },
       {
         "item": "BOW_STRING",
@@ -882,16 +898,6 @@
         "amount": 1,
         "level": 10,
         "xp": 15,
-        "members": true
-      },
-      {
-        "item": "LINEN_YARN",
-        "materials": [
-          "FLAX"
-        ],
-        "amount": 1,
-        "level": 12,
-        "xp": 16,
         "members": true
       },
       {
