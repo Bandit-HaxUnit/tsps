@@ -654,6 +654,54 @@ test("barronite (1636; Wiki): wall swings, the rock stays through its ores, then
   }
 });
 
+test("a respawned barronite rock gets a fresh 20 seconds, and so does one content keeps standing", () => {
+  const { Sounds } = core;
+  const original = Sounds.playAreaSound;
+  Sounds.playAreaSound = noop;
+  const restoreRandom = scriptRandom([], 0.99);
+  try {
+    // Two full cycles on one rock: run out at 33, respawn after 100, run out again 33 mining ticks later.
+    const h = harness();
+    const player = createPlayer();
+    const { rock, restore } = mineRock(h, player, "Barronite rocks", loc("camdozaalrock1"));
+    try {
+      h.tick(33);
+      assert.equal(h.registered.length, 1, "first cycle runs out at 33");
+      h.tick(100);
+      assert.equal(h.registered.at(-1), rock, "the same rock respawns");
+      h.interactions.get("Barronite rocks").Mine({ player, object: rock, definition: { getName: () => "Barronite rocks" } });
+      h.tick(32);
+      assert.equal(h.registered.length, 2, "standing through the second cycle's tick 32");
+      assert.equal(Mining.isMiningActive(player), true);
+      h.tick(1);
+      assert.equal(h.registered.at(-1).getId(), loc("camdozaalrock1_empty"), "second cycle runs out at 33");
+    } finally {
+      restore();
+    }
+
+    // "mining:deplete-rock" keeps it standing: mining goes on, and the next try is 33 ticks later.
+    const kept = [];
+    const keeper = harness({ emit: (key, event) => { if (key === "mining:deplete-rock") { kept.push(event); event.handled = true; } } });
+    const miner = createPlayer();
+    const mined = mineRock(keeper, miner, "Barronite rocks", loc("camdozaalrock1"));
+    try {
+      keeper.tick(33);
+      assert.equal(kept.length, 1);
+      assert.equal(Mining.isMiningActive(miner), true, "a kept rock is mined on");
+      keeper.tick(32);
+      assert.equal(kept.length, 1, "no depletion every tick after the first");
+      keeper.tick(1);
+      assert.equal(kept.length, 2);
+      assert.deepEqual(keeper.registered, []);
+    } finally {
+      mined.restore();
+    }
+  } finally {
+    Sounds.playAreaSound = original;
+    restoreRandom();
+  }
+});
+
 test("a Mining cape's extra sandstone is the same size, with its line, XP and count (3165)", () => {
   const cape = "Your cape allows you to mine an additional ore.";
   const h = harness({ emit: (key, request) => { if (key === "mining:extra-ore") Object.assign(request, { extra: true, message: cape }); } });

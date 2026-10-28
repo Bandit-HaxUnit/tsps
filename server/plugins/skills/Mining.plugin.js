@@ -615,9 +615,13 @@ class MiningTask extends Task {
         swing(player, state);
       }
       if (rockTimerRanOut(rockObject, state.rock)) {
-        depleteRock(player, rockObject, state.rock);
-        stopMining(this.activeSessions, player);
-        continue;
+        // The countdown ends with this depletion: the rock that respawns, or one content keeps
+        // standing ("mining:deplete-rock"), starts a fresh one.
+        ROCK_TIMERS.delete(rockObject);
+        if (depleteRock(player, rockObject, state.rock)) {
+          stopMining(this.activeSessions, player);
+          continue;
+        }
       }
 
       if (this.cycle < state.nextRollTick) {
