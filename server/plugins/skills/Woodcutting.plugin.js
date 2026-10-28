@@ -44,10 +44,26 @@ const NORMAL_TREE_STUMP_BY_MODEL = new Map([
   [16293, ObjectIds.TREE_STUMP_49],
   [33650, ObjectIds.DEAD_TREE_STUMP],
   [33625, ObjectIds.DEAD_TREE_STUMP_2],
+  // willow_tree2/3/4 fall to willow_tree2or3or4_stump (rsprox recording 293).
+  [5528, ObjectIds.TREE_STUMP_33],
+  [5530, ObjectIds.TREE_STUMP_33],
 ]);
 const stumpIdByTreeId = new Map();
+// rsprox captures (oak 1297, willow 293, maple/yew 1850): the swing animates, the first roll and
+// animation follow 2 ticks later, then both repeat every 4 ticks.
 const WOODCUTTING_ACTION_INTERVAL_TICKS = 4;
 const CHOP_ANIMATION_INTERVAL_TICKS = 4;
+const FIRST_ROLL_DELAY_TICKS = 2;
+const SWING_MESSAGE = "You swing your axe at the tree.";
+const NO_AXE_MESSAGE = "You need an axe to chop down this tree.<br>You do not have an axe which you have the woodcutting level to use.";
+const INVENTORY_FULL_SOUND = 2277;
+// The client draws a depleted tree's respawn countdown over its stump (cache script add_overlaytimer_loc).
+const RESPAWN_TIMER_SCRIPT = 5474; // coord, loc, shape, timer id, ticks, colour, 0
+const RESPAWN_TIMER_ID = 2;
+const RESPAWN_TIMER_COLOUR = 16765184;
+// Every log gained counts towards the client's logs-chopped tracker.
+const LOGS_CHOPPED_VARP = "tracking_logs_chopped";
+const LOGS_CHOPPED_ATTRIBUTE = "woodcutting:logs-chopped";
 // Fallback for multi-log trees without a known Forestry despawn timer: 1/8 per log.
 const MULTI_TREE_DEPLETION_ROLL_MAX = 15;
 const MULTI_TREE_DEPLETION_THRESHOLD = 2;
@@ -534,7 +550,10 @@ const TREES = [
     multi: true,
     depleteChance: 10,
     // OSRS: a spider jumps out instead of the tree falling; the player just has to click again.
+    // rsprox recording 1637: the player steps back with sound 3604 on the log's tick.
     interruptMessage: "A small spider jumps at you from the log you just cut.",
+    interruptAnimation: "tbw_cleanup_player_surprise_stepback",
+    interruptSound: 3604,
   },
   {
     name: "burnt tree",
@@ -692,6 +711,41 @@ function logMessage(tree) {
   }
   const name = pluginApi.core.ItemDefinition.forId(tree.logId).getName().toLowerCase();
   return `You get some ${name}.`;
+}
+
+function sendSpam(player, text) {
+  player.getPacketSender().sendTypedMessage(pluginApi.core.ChatType.SPAM, text);
+}
+
+/** Live names what didn't fit, with the full-inventory sound (rsprox recordings 293, 1302, 1850). */
+function sendInventoryFull(player, logId) {
+  const name = pluginApi.core.ItemDefinition.forId(logId).getName().toLowerCase();
+  player.getPacketSender().sendSoundEffect(INVENTORY_FULL_SOUND, 1, 0, 1);
+  player.sendMessage(`Your inventory is too full to hold any more ${name}.`);
+}
+
+function countLog(player) {
+  const chopped = (player.getAttribute(LOGS_CHOPPED_ATTRIBUTE) ?? 0) + 1;
+  player.setAttribute(LOGS_CHOPPED_ATTRIBUTE, chopped);
+  player.getPacketSender().sendConfig(pluginApi.core.CacheDefinitions.getVarpId(LOGS_CHOPPED_VARP), chopped);
+}
+
+function sendLogsChopped({ player }) {
+  const chopped = player.getAttribute(LOGS_CHOPPED_ATTRIBUTE);
+  if (chopped > 0) {
+    player.getPacketSender().sendConfig(pluginApi.core.CacheDefinitions.getVarpId(LOGS_CHOPPED_VARP), chopped);
+  }
+}
+
+/** The stump's countdown goes to everyone who can see it, not only the chopper (recording 293). */
+function sendRespawnTimer(player, stump, ticks) {
+  const location = stump.getLocation();
+  const coordinate = (location.getZ() << 28) | (location.getX() << 14) | location.getY();
+  for (const viewer of [player, ...player.getLocalPlayers()]) {
+    viewer
+      .getPacketSender()
+      .sendClientScript(RESPAWN_TIMER_SCRIPT, coordinate, stump.getId(), stump.getType(), RESPAWN_TIMER_ID, ticks, RESPAWN_TIMER_COLOUR, 0);
+  }
 }
 
 function treeTimerKey(objectId, location) {
@@ -939,6 +993,7 @@ function depleteTree(player, treeObject, tree) {
   );
   ObjectManager.deregister(treeObject, true);
   ObjectManager.register(stump, true);
+  sendRespawnTimer(player, stump, respawnTicks);
   TaskManager.submit(new TreeRespawnTask(respawnTicks, treeObject, stump));
 }
 
@@ -948,20 +1003,18 @@ function startWoodcutting(player, treeObject, tree, activeSessions) {
   if (!request.allow) return false;
   const axe = findBestUsableAxe(player);
   if (!axe) {
-    player.sendMessage("You don't have an axe which you can use.");
+    player.sendMessage(NO_AXE_MESSAGE);
     return false;
   }
 
   const woodcuttingLevel = getWoodcuttingLevel(player);
   if (woodcuttingLevel < tree.requiredLevel) {
-    player.sendMessage(
-      `You need a Woodcutting level of at least ${tree.requiredLevel} to cut this tree.`
-    );
+    player.sendMessage(`You need a Woodcutting level of ${tree.requiredLevel} to chop down this tree.`);
     return false;
   }
 
   if (tree.logId >= 0 && inventoryBlocks(player, tree.logId)) {
-    player.getInventory().full();
+    sendInventoryFull(player, tree.logId);
     return false;
   }
 
@@ -993,11 +1046,11 @@ function startWoodcutting(player, treeObject, tree, activeSessions) {
     objectId: treeObject.getId(),
     location,
     privateArea: treeObject.getPrivateArea(),
-    nextActionTick: woodcuttingTick + WOODCUTTING_ACTION_INTERVAL_TICKS,
-    nextAnimationTick: woodcuttingTick + CHOP_ANIMATION_INTERVAL_TICKS,
+    nextActionTick: woodcuttingTick + FIRST_ROLL_DELAY_TICKS,
+    nextAnimationTick: woodcuttingTick + FIRST_ROLL_DELAY_TICKS,
   });
 
-  player.sendMessage("You swing your axe at the tree..");
+  sendSpam(player, SWING_MESSAGE);
   player.performAnimation(new Animation(axe.animationId));
   return true;
 }
@@ -1044,24 +1097,20 @@ function processWoodcuttingTick(activeSessions, currentTick) {
 
     const axe = findBestUsableAxe(player);
     if (!axe) {
-      player.sendMessage("You don't have an axe which you can use.");
+      player.sendMessage(NO_AXE_MESSAGE);
       stopWoodcutting(activeSessions, player);
       continue;
     }
 
     const woodcuttingLevel = getWoodcuttingLevel(player);
     if (woodcuttingLevel < axe.requiredLevel) {
-      player.sendMessage(
-        "You don't have an axe which you have the required Woodcutting level to use."
-      );
+      player.sendMessage(NO_AXE_MESSAGE);
       stopWoodcutting(activeSessions, player);
       continue;
     }
 
     if (woodcuttingLevel < state.tree.requiredLevel) {
-      player.sendMessage(
-        `You need a Woodcutting level of at least ${state.tree.requiredLevel} to cut this tree.`
-      );
+      player.sendMessage(`You need a Woodcutting level of ${state.tree.requiredLevel} to chop down this tree.`);
       stopWoodcutting(activeSessions, player);
       continue;
     }
@@ -1069,8 +1118,9 @@ function processWoodcuttingTick(activeSessions, currentTick) {
     state.axe = axe;
 
     if (state.tree.logId >= 0 && inventoryBlocks(player, state.tree.logId)) {
-      player.getInventory().full();
-      stopWoodcutting(activeSessions, player);
+      // Live keeps the last chop animation running.
+      sendInventoryFull(player, state.tree.logId);
+      stopWoodcutting(activeSessions, player, false);
       continue;
     }
 
@@ -1096,7 +1146,8 @@ function processWoodcuttingTick(activeSessions, currentTick) {
       let pendingLog = null;
       if (!InfernalAxe.tryBurnLog(player, state.axe.id, state.tree.logId)) {
         pendingLog = prepareLog(player, state.tree.logId, state.tree.xpReward * lumberjackXpMultiplier(player));
-        player.sendMessage(logMessage(state.tree));
+        sendSpam(player, logMessage(state.tree));
+        countLog(player);
       }
       CrystalAxe.tryUseCharge(player);
       player
@@ -1121,8 +1172,10 @@ function processWoodcuttingTick(activeSessions, currentTick) {
     if (shouldDepleteTree(state)) {
       treeDespawnTimers.delete(treeTimerKey(state.objectId, state.location));
       if (state.tree.interruptMessage) {
-        player.sendMessage(state.tree.interruptMessage);
-        stopWoodcutting(activeSessions, player);
+        player.performAnimation(new Animation(pluginApi.core.CacheDefinitions.getSeqId(state.tree.interruptAnimation)));
+        player.getPacketSender().sendSoundEffect(state.tree.interruptSound, 1, 0, 1);
+        sendSpam(player, state.tree.interruptMessage);
+        stopWoodcutting(activeSessions, player, false);
         continue;
       }
       Sounds.sendSound(player, Sound.WOODCUTTING_TREE_DOWN);
@@ -1205,6 +1258,8 @@ module.exports = {
       stopWoodcutting(activeSessions, player, false);
     });
     api.onCustomEvent("level-up:popup-opened", pauseWoodcutting);
+    api.persistAttribute(LOGS_CHOPPED_ATTRIBUTE, 0);
+    api.onPlayerLogin(sendLogsChopped);
 
     api.onItemFirstAction((event) => {
       if (searchBirdNest(event.player, event.itemId)) {
