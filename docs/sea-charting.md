@@ -62,6 +62,10 @@ data in `data/charting.json`. Tests: `server/tests/sea-charting.test.cjs`.
   map square. A player on a deck keeps the sea under their boat awake, but their own tile never
   changes there, so the sea a boat sailed into stayed asleep and its NPCs (a released duck) never
   moved.
+- Client: a widget model wider or taller than the 2D model renderer's 1024-pixel cap (the
+  spyglass overlay's frame, 936:2, as wide as the screen) is cut to its widget around the
+  widget's centre, where it is drawn; before, the cap kept its first 1024 pixels from the left
+  and the frame showed only its left half (`client/tests/widget-model-oversize.test.ts`).
 - `Helm.plugin.js` listens to `sailing:leave-helm` (`{ player }`, answered with `left`) so
   other plugins can let go of the helm the way the helm's own option does.
 
