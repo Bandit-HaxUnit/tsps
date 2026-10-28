@@ -77,6 +77,7 @@ function playerWith(entries = [], { level = 99, threadUses } = {}) {
     sendTypedMessage(type, text) { log.push(['message', text, type]); return packetSender; },
     sendObjectAnimation(object, animation) { log.push(['loc-animation', animation.getId()]); return packetSender; },
     sendConfig(id, value) { log.push(['config', id, value]); return packetSender; },
+    sendVarbit(id, value) { log.push(['varbit', id, value]); return packetSender; },
     sendSubInterface(uid, group) { log.push(['open', group]); return packetSender; },
     closeSubInterface() { log.push(['close']); return packetSender; },
   };
@@ -319,7 +320,18 @@ test('chisel on an uncut gem opens the captured menu and cuts one gem the tick a
   assert.ok(byTick[1].some(row => row[0] === 'animation' && row[1] === 886));
   assert.ok(byTick[1].some(row => row[0] === 'sound' && row[1] === 2586));
   assert.deepEqual(xpOn(byTick, 1), [107.5]);
+  assert.ok(byTick[1].some(row => row[0] === 'message' && row[2] === PluginManager.getCoreApi().ChatType.SPAM), 'a spam line');
   assert.equal(player.amounts.get(ItemIds.DIAMOND), 3);
+});
+
+test('below the level, the tick after the click brings an item box naming the gem (rsprox 1102, 1723)', t => {
+  membersWorld(t, true);
+  const { player, getMenu } = playerWith([[ItemIds.CHISEL, 1], [ItemIds.UNCUT_SAPPHIRE, 2]], { level: 19 });
+  assert.equal(use(player, 'cutGem', ItemIds.CHISEL, ItemIds.UNCUT_SAPPHIRE).handled, true);
+  assert.equal(getMenu(), undefined, 'no menu');
+  assert.equal(player.log.length, 0, 'nothing on the click tick');
+  tasks.at(-1).execute();
+  assert.deepEqual(player.log, [['statement', 'You need a Crafting level of 20 to cut sapphires.']]);
 });
 
 test('a failed cut smashes a semi-precious gem into a crushed gem with the captured message', t => {

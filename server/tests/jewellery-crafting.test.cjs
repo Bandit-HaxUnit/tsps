@@ -46,6 +46,8 @@ function playerWith(entries = []) {
     sendSound(id) { log.push(['sound', id]); return sender; },
     sendSoundEffect(id) { log.push(['sound', id]); return sender; },
     sendConfig(id, value) { log.push(['config', id, value]); return sender; },
+    sendVarbit(id, value) { log.push(['varbit', id, value]); return sender; },
+    sendTypedMessage(type, text) { log.push([type === core.ChatType.SPAM ? 'spam' : 'message', text]); return sender; },
     sendSubInterface(uid, group) { log.push(['open', group]); return sender; },
     closeSubInterface() { log.push(['close']); return sender; },
     sendEnterAmountPrompt() { log.push(['quantity']); return sender; },
@@ -252,6 +254,9 @@ test('furnace uses group 446 and make-X, producing 2 ticks after the choice then
   assert.equal(player.getAttribute('crafting:task'),null);
   assert.equal(player.log.filter(row => row[0] === 'message').length,0);
   assert.ok(player.log.some(row => row[0] === 'sound' && row[1] === 2725));
+  // rsprox 1851: the gold ring button stores enum 4318's value for it.
+  const lastType = core.CacheDefinitions.getVarbitId('crafting_gold_item_lasttype');
+  assert.ok(player.log.some(row => row[0] === 'varbit' && row[1] === lastType && row[2] === 1));
 });
 const crafted = [
   [1592,8,[1635,1637,1639,1641,1643,1645,6575,19538]],
@@ -277,12 +282,14 @@ test('moving, lost ingredients and insufficient levels stop furnace production s
     assert.equal(player.amounts.get(2357),1); assert.equal(player.amounts.get(1635),undefined);
   }
 });
-test('all eight amulets string in either order with real identifiers and the live message', () => {
+test('all eight amulets string in either order on the next tick with real identifiers and the live message', () => {
   for (const [input,output] of [[1673,1692],[1675,1694],[1677,1696],[1679,1698],[1681,1700],[1683,1702],[6579,6581],[19501,19541]]) for (const reverse of [false,true]) {
     const player = playerWith([[1759,1],[input,1]]);
     crafting.stringAmulet({player,usedItemId:reverse ? input : 1759,usedWithItemId:reverse ? 1759 : input});
+    assert.equal(player.amounts.get(output),undefined, 'nothing on the click tick');
+    tick(tasks.at(-1),1);
     assert.equal(player.amounts.get(output),1);
-    assert.ok(player.log.some(row => row[0] === 'message' && row[1] === 'You put some string on your amulet.'));
+    assert.ok(player.log.some(row => row[0] === 'spam' && row[1] === 'You put some string on your amulet.'));
     assert.ok(player.log.some(row => row[0] === 'xp' && row[2] === 4));
   }
 });
