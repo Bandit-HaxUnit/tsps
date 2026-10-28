@@ -275,20 +275,8 @@ test("the legacy base-item ownership re-applies its stored variant to a freshly 
   assert.equal(npc.transformed, 2132);
 });
 
-test("a cross-item morph keeps one ownership record and ticks the base log item", () => {
-  const player = createPlayer();
-  const npc = createPetNpc(player, NpcIdentifiers.RIFT_GUARDIAN_15);
-  player.setAttribute("pets:current", npc);
-  player.setAttribute("pets.owned", [20665]);
-  player.inventory.push(ItemIdentifiers.AIR_TALISMAN);
-  assert.equal(Pets.__internals.morph(player, npc), true);
-  assert.equal(npc.transformed, NpcIdentifiers.RIFT_GUARDIAN_16);
-  assert.deepEqual(player.getAttribute("pets:variant"), { "skill:runecrafting": NpcIdentifiers.RIFT_GUARDIAN_16 });
-  assert.equal(Pets.__internals.pickup(player, npc), true);
-  assert.deepEqual(player.inventory, [ItemIdentifiers.AIR_TALISMAN, 20667]);
-  assert.deepEqual(player.getAttribute("pets.owned"), [20667]);
-  assert.deepEqual(collectionLogObtains.at(-1)?.itemId, 20665, "the base log item");
-});
+// Cross-item Rift ownership/variant/base-log assertions now run through the real
+// native unlocked chooser in rift-guardian-menu-native.test.cjs.
 
 test("a cached Metamorphosis option dispatches to morph, Talk-to to interact", () => {
   const player = createPlayer();
@@ -454,19 +442,8 @@ test("the Baby mole-rat needs both mole parts", () => {
   assert.deepEqual(player.inventory, []);
 });
 
-test("the existing Rift talisman policy is preserved during identity repair", () => {
-  const player = createPlayer();
-  const npc = createPetNpc(player, NpcIdentifiers.RIFT_GUARDIAN_15);
-  player.setAttribute("pets:current", npc);
-  assert.equal(Pets.__internals.morph(player, npc), true);
-  assert.equal(npc.transformed, undefined);
-  assert.match(player.messages.at(-1), /air talisman/);
-
-  player.inventory.push(ItemIdentifiers.AIR_TALISMAN);
-  assert.equal(Pets.__internals.morph(player, npc), true);
-  assert.equal(npc.transformed, NpcIdentifiers.RIFT_GUARDIAN_16);
-  assert.deepEqual(player.inventory, [ItemIdentifiers.AIR_TALISMAN]);
-});
+// The obsolete Rift talisman-cycle expectation is superseded by real native
+// unlocked-menu/ownership coverage in rift-guardian-menu-native.test.cjs.
 
 test("the Chompy chick requires a claimed elite reward rather than the old synthetic flag", () => {
   const player = createPlayer();
