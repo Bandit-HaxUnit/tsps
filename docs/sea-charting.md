@@ -12,6 +12,9 @@ data in `data/charting.json`. Tests: `server/tests/sea-charting.test.cjs`.
 
 - rsprox captures from https://rsprox.net/database (rev 235). Generic spots: recordings 944, 948,
   1009, 3455 and 3467 (every one of the 94 generic tasks is charted in at least one recording).
+  Spyglass views: 907, 938-948, 3455, 3461, 3467 and 3837 (all 57 views, each with its camera
+  shots; `view.rec` in the data names the recording each view's shots come from). Hint markers:
+  every recording that sails past one.
   XP: recordings from 2025-11-26 on (907, 938-948, 1009, 3461, 3837, 4290); the launch-day ones
   (3450, 3455, 3467, 2025-11-19) paid less for every kind of spot.
 - The cache:
@@ -35,6 +38,8 @@ data in `data/charting.json`. Tests: `server/tests/sea-charting.test.cjs`.
 |---|---|
 | `Common` | Tasks and seas from the cache joined with `data/charting.json`; the saved `charting:progress` attribute; `complete`, the one way every kind of task is charted; letting go of the helm first. |
 | `Progress` | The charts sent to the client at login. |
+| `Markers` | The spyglass and current duck hint markers, placed as world locs at startup. |
+| `Spyglass` | Look-through: the nearest uncharted view in reach, its captured camera shots, then the charting. |
 | `Generic` | The 92 Chart locs, the Port Sarim task board and salvaging station, the crab statue's Medallion fragment. |
 | `Dev` | `::chart go <task>`, `::chart done <task>`, `::chart reset [task]`, `::chart find <text>` (developers). |
 
@@ -91,15 +96,37 @@ click lets go of it (`facility_lockedin` 3->0, `player_at_helm` 1->0, `helm_stat
 - The crab statue on Wintumber Island also adds a Medallion fragment, with its collection log
   line and an object box.
 
+**Spyglass** (rsprox 3455, 3467 and others): Look-through near an uncharted view's hint marker.
+From the helm, the click lets go of it and the rest starts a tick later.
+- +0: the telescope animation (13301).
+- +1: the screen fades out (174, script 948).
+- +3: `fov_clamp` 3, `cutscene_status` 1, `minimap_state` 2, `gravestone_tli_hide` 1,
+  `draw_distance_max_override` 1, `option_hide_rooftops_override` 1, and the view's first shot
+  (`cam_moveto`/`cam_lookat`, rates 232/100).
+- +5: the spyglass overlay (936) fades in (script 7059 on 936:4); the view's other shots follow,
+  each its own (3-4 shots, 13 to 59 ticks in all).
+- The overlay fades out; 3 ticks later the variables go back to 0, `cam_reset` and the screen
+  fades in; 2 ticks after that the view is charted (50 XP).
+- No view in reach: `There isn't anything nearby worth looking at.`. A charted view counts as
+  none (captured: "nothing nearby" 2-5 tiles from views charted earlier).
+
+**Hint markers**: locs 59281 (spyglass) and 59282 (current duck), shape 10, rotation 0, added
+with the zone whether the task is charted or not, at the spots the Wiki lists (the Wiki's
+Fremennik Strait view, 2366,3890, is a typo for the marker's 2366,3777).
+
 ## Ours (not captured)
 
 - Reach from the deck is the deck's usual 12 tiles from the tile under the player. The captures
   have clicks answered from 2 to 12 tiles and refused from 8.5 on, measured from the boat's
   centre, so the real rule is likely measured from somewhere else on the boat.
+- A spyglass view is in reach within 7 tiles of the tile under the player (the captures answer
+  0-7 tiles from the boat's centre, counting views charted earlier as nothing).
+- The spyglass view doesn't close and reopen the side tabs, hide the menu options (no tsps
+  packet for hiding ops yet) or hide the HP bar, as live does: our toplevel's tab slots differ.
 - The player doesn't turn towards the spot (live sends a face angle; the deck's frame would need
   the boat's heading worked in).
 
 ## Not done (captured)
 
-- Spyglass, current duck, drink crate, weather troll and mermaid guide tasks, and Chartin'
+- Current duck, drink crate, weather troll and mermaid guide tasks, and Chartin'
   Charles's ocean bonuses (later phases of this PR).

@@ -351,3 +351,67 @@ test("the crab statue hands over a Medallion fragment (rsprox 944)", () => {
     leave(player);
   }
 });
+
+const spyglass = require("../plugins/skills/sailing/charting/Spyglass.Charting");
+
+test("the spyglass far from any view: nothing to look at (rsprox 907 and others)", () => {
+  const player = captain();
+  const boat = atTheHelm(player);
+  BoatManager.teleport(boat, { fineX: 3000 * 128, fineY: 3300 * 128 });
+  try {
+    spyglass.lookThrough({ player });
+    assert.equal(player.messages().at(-1), "There isn't anything nearby worth looking at.");
+    assert.equal(player.varbits.get(19105), 3, "the helm is kept");
+  } finally {
+    leave(player);
+  }
+});
+
+test("the spyglass by the Wizards' Tower plays its captured view, then charts it (rsprox 3455)", () => {
+  const player = captain();
+  const boat = atTheHelm(player);
+  const spot = common.spotByKey("spyglass_wizards_tower");
+  BoatManager.teleport(boat, { fineX: 3104 * 128 + 64, fineY: 3183 * 128 + 64 });
+  try {
+    const sentFrom = player.sent.length;
+    spyglass.lookThrough({ player });
+    assert.equal(player.varbits.get(19105), 0, "the helm is let go of on the click");
+    tick();
+    assert.deepEqual(player.animations.slice(-1), [13301]);
+    tick();
+    assert.ok(player.sent.slice(sentFrom).some(([key, , group]) => key === "sendSubInterface" && group === 174), "fade out");
+    tick(2);
+    assert.equal(player.varbits.get(varbit("cutscene_status")), 1);
+    assert.equal(player.varbits.get(varbit("fov_clamp")), 3);
+    const moves = player.sent.slice(sentFrom).filter(([key]) => key === "sendCameraMoveTo" || key === "sendCameraLookAt");
+    assert.deepEqual(moves, [
+      ["sendCameraMoveTo", 3105, 3178, 2000, { rate: 232, rate2: 100 }],
+      ["sendCameraLookAt", 3102, 3161, 100, { rate: 232, rate2: 100 }],
+    ]);
+    tick(2);
+    assert.ok(player.sent.some(([key, , group]) => key === "sendSubInterface" && group === 936), "the spyglass overlay");
+    // The fade out at shot tick 20, the camera back 3 ticks later, the charting 2 after that.
+    tick(21);
+    assert.equal(spotBit(player, spot), 0);
+    assert.ok(player.sent.some(([key]) => key === "sendCameraReset"));
+    assert.equal(player.varbits.get(varbit("cutscene_status")), 0);
+    tick(2);
+    assert.equal(spotBit(player, spot), 1);
+    assert.equal(player.messages().at(-3), `Charting complete: ${blue("Use your spyglass to get a good view of the Wizards' Tower from the north.")}`);
+    assert.deepEqual(player.xp, [50]);
+    assert.equal(player.sent.filter(([key]) => key === "sendCameraMoveTo" || key === "sendCameraLookAt").length, 8);
+
+    // Charted views aren't looked at again.
+    spyglass.lookThrough({ player });
+    assert.equal(player.messages().at(-1), "There isn't anything nearby worth looking at.");
+  } finally {
+    leave(player);
+  }
+});
+
+test("all 57 views have their captured shots and spot; ducks and views their hint markers", () => {
+  const views = common.spotsOfType("spyglass");
+  assert.equal(views.filter((spot) => spot.view?.shots?.length >= 2 && spot.view.fadeOut > 0).length, 57);
+  assert.equal(views.filter((spot) => spot.marker).length, 56, "every view but Chartin' Charles's, seen on foot in the cave");
+  assert.equal(common.spotsOfType("current_duck").filter((spot) => spot.marker).length, 54);
+});

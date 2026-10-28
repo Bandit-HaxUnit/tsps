@@ -9,7 +9,9 @@ module.exports = {
   register(api) {
     common.init(api);
     require("./charting/Progress.Charting")(api);
+    require("./charting/Markers.Charting")(api);
     require("./charting/Generic.Charting")(api);
+    require("./charting/Spyglass.Charting")(api);
     require("./charting/Dev.Charting")(api);
   },
 };
