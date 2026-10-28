@@ -2319,8 +2319,8 @@ export class OsrsClient {
                 const widget = hits[i];
                 if (this.widgetManager.isEffectivelyHidden(widget.uid)) continue;
                 if (!(widget.itemId >= 0) || !this.widgetInteraction.isWidgetDraggable(widget)) continue;
-                // Scrolling lists (the bank) keep swipe scrolling; other item grids drag.
-                return !isInTouchScrollLayer(widget, this.widgetManager);
+                // Scrolling lists (the bank) keep swipe scrolling; their items drag after a short hold.
+                return isInTouchScrollLayer(widget, this.widgetManager) ? "afterHold" : true;
             }
             return false;
         };
