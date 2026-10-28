@@ -1,0 +1,15 @@
+// Each player's charts: saved with the player and sent to the client at login, where the Captain's
+// log (interface 935, script 8706) and the seas' rapids (multilocs on sea completion) read them.
+const common = require("./Common.Charting");
+
+function onLogin({ player }) {
+  common.sendProgress(player);
+}
+
+function attach(api) {
+  common.init(api);
+  api.persistAttribute(common.PROGRESS_ATTRIBUTE, {});
+  api.onPlayerLogin(onLogin);
+}
+
+module.exports = attach;

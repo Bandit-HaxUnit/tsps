@@ -940,10 +940,11 @@ export interface PluginApi {
    */
   setDeckReach(objectIds: number[], tiles: number): void;
   /**
-   * Main-world locs (by name) a player on a boat deck can use, within the deck's usual reach (a
-   * dock's gangplank, a buoy). Any other land loc clicked from a deck: "I can't do that from here!"
+   * Main-world locs (by name, or by id) a player on a boat deck can use, within the deck's usual
+   * reach (a dock's gangplank, a buoy, a charting spot). Any other land loc clicked from a deck:
+   * "I can't do that from here!"; one too far off: "I can't reach that!", and the helm is kept.
    */
-  setUsableFromDeck(names: string[]): void;
+  setUsableFromDeck(namesOrIds: Array<string | number>): void;
   onWalkRoute(handler: (event: PluginWalkRouteEvent) => void): void;
   onObjectInteraction(handler: (event: PluginObjectInteractionEvent) => void): void;
   /** Exact, case-sensitive object name and option matching. Return false to fall through. */

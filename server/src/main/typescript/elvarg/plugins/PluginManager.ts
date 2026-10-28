@@ -268,7 +268,7 @@ export class PluginManager {
   /** Main-world locs used from a boat deck from further than usual, by id (setDeckReach). */
   public static readonly deckReach = new Map<number, number>();
   /** Main-world loc names usable from a boat deck (setUsableFromDeck). */
-  public static readonly usableFromDeck = new Set<string>();
+  public static readonly usableFromDeck = new Set<string | number>();
   private static worldEntityInteractionHooks: PluginHook<PluginWorldEntityInteractionEvent>[] = [];
   /**
    * `onAnyNpcInteraction` hooks. Kept apart from the id/name hooks so a generic
@@ -3119,8 +3119,8 @@ export class PluginManager {
       setDeckReach: (objectIds, tiles) => {
         for (const id of objectIds ?? []) PluginManager.deckReach.set(id, tiles);
       },
-      setUsableFromDeck: (names) => {
-        for (const name of names ?? []) PluginManager.usableFromDeck.add(name);
+      setUsableFromDeck: (namesOrIds) => {
+        for (const entry of namesOrIds ?? []) PluginManager.usableFromDeck.add(entry);
       },
       onWalkRoute: (handler) => {
         if (typeof handler === "function") {

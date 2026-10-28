@@ -1,0 +1,353 @@
+// Run after `yarn build`: node --test tests/sea-charting.test.cjs
+// Sailing's sea charting against the cache and the rsprox captures (docs/sea-charting.md).
+const assert = require("node:assert/strict");
+const { before, test } = require("node:test");
+
+const { Server } = require("../dist/Server");
+Server.installProductionPathResolver();
+const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+before(() => CachePipeline.initialize());
+
+const { PluginManager } = require("../dist/plugins/PluginManager");
+const { Sailing } = require("../dist/game/content/sailing/Sailing");
+const { BoatManager } = require("../dist/game/content/sailing/BoatManager");
+const { Mobile } = require("../dist/game/entity/impl/Mobile");
+const { Location } = require("../dist/game/model/Location");
+const { Inventory } = require("../dist/game/model/container/impl/Inventory");
+const { emptySailingState } = require("../dist/game/content/sailing/SailingState");
+const { TaskManager } = require("../dist/game/task/TaskManager");
+const { World } = require("../dist/game/World");
+const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
+
+const common = require("../plugins/skills/sailing/charting/Common.Charting");
+const generic = require("../plugins/skills/sailing/charting/Generic.Charting");
+const { content } = require("../plugins/skills/sailing/SailingContent.Sailing");
+
+const SAILING = "Sailing";
+const VARP_SPOTS = 5016;
+const varbit = (name) => CacheDefinitions.getVarbitId(name);
+const blue = (text) => `<col=0090bc>${text}</col>`;
+
+/** The object handlers the charting units registered, run as a click would run them. */
+const objectHandlers = [];
+const beforeObjectHandlers = [];
+before(() => {
+  content();
+  const real = PluginManager.createApi("SeaChartingTest");
+  const api = {
+    ...real,
+    persistAttribute() {},
+    onObjectInteraction: (handler) => { if (typeof handler === "function") objectHandlers.push(handler); },
+    onBeforeObjectInteraction: (handler) => beforeObjectHandlers.push(handler),
+  };
+  require("../plugins/skills/sailing/Sailing.plugin").register(real);
+  require("../plugins/skills/sailing/Helm.plugin").register({ ...real, onObjectInteraction() {}, onObjectRoute() {} });
+  require("../plugins/interface/Notifications.plugin").register(real);
+  require("../plugins/skills/sailing/Charting.plugin").register(api);
+});
+
+let nextIndex = 900;
+/** A player on the real Mobile prototype, with varbits, varps, attributes and what they're sent. */
+function captain({ level = 99 } = {}) {
+  const player = Object.create(Mobile.prototype);
+  const index = nextIndex++;
+  const varbits = new Map();
+  const varps = new Map();
+  const attributes = new Map();
+  const sent = [];
+  const xp = [];
+  const animations = [];
+  const levels = new Map([[SAILING, level]]);
+  let location = new Location(3035, 2920, 0);
+  let sailing = emptySailingState();
+  let current;
+  const sender = new Proxy({}, {
+    get: (_t, key) => (...args) => {
+      if (key === "getVarbit") {
+        const { baseVar, startBit, endBit } = CacheDefinitions.getVarbit(args[0]);
+        return ((varps.get(baseVar) ?? 0) >>> startBit) & ((2 ** (endBit - startBit + 1)) - 1);
+      }
+      if (key === "getVarp") return varps.get(args[0]) ?? 0;
+      if (key === "sendVarbit") {
+        const { baseVar, startBit, endBit } = CacheDefinitions.getVarbit(args[0]);
+        const mask = ((2 ** (endBit - startBit + 1)) - 1) << startBit;
+        varps.set(baseVar, ((varps.get(baseVar) ?? 0) & ~mask) | ((args[1] << startBit) & mask));
+        varbits.set(args[0], args[1]);
+      }
+      if (key === "sendConfig") varps.set(args[0], args[1] | 0);
+      sent.push([key, ...args]);
+      return sender;
+    },
+  });
+  Object.assign(player, {
+    varbits, varps, attributes, sent, xp, levels, animations,
+    messages: () => sent.filter(([key]) => key === "sendMessage" || key === "sendTypedMessage").map((entry) => entry.at(-1)),
+    getIndex: () => index,
+    isPlayer: () => true,
+    isNpc: () => false,
+    isRegistered: () => true,
+    getAsPlayer: () => player,
+    getUsername: () => "captain",
+    getRights: () => 0,
+    sendMessage: (message) => sent.push(["sendMessage", message]),
+    performAnimation: (animation) => animations.push(animation.getId?.() ?? animation.id ?? animation),
+    setPositionToFace() { return player; },
+    getLocation: () => location,
+    setLocation: (next) => { location = next; return player; },
+    getMovementQueue: () => ({ reset() {}, handleRegionChange() {}, size: () => 0 }),
+    setNeedsPlacement() {},
+    setResetMovementQueue() {},
+    setMobileInteraction() {},
+    getLocalPlayers: () => [],
+    getSailing: () => sailing,
+    setSailing: (next) => { sailing = next; },
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getSkillManager: () => ({
+      getCurrentLevel: (skill) => levels.get(skill.getName?.() ?? skill) ?? 1,
+      getMaxLevel: (skill) => levels.get(skill.getName?.() ?? skill) ?? 1,
+      addExperiences: (skill, amount) => xp.push(amount),
+    }),
+    getEquipment: () => ({ get: () => undefined, getItems: () => [], contains: () => false }),
+    getBank: () => ({ contains: () => false }),
+    getDialogueManager: () => ({
+      startDialogues: (chain) => { player.chain = chain; current = [...chain.getDialogues().values()][0]; },
+      getCurrent: () => current,
+      reset() { current = undefined; },
+    }),
+    getPacketSender: () => sender,
+    getInterfaceId: () => player.interfaceId ?? -1,
+    setInterfaceId: (id) => { player.interfaceId = id; },
+  });
+  player.inventory = new Inventory(player);
+  player.inventory.resetItems();
+  player.getInventory = () => player.inventory;
+  World.getPlayers().get = ((get) => (i) => (i === index ? player : get(i)))(World.getPlayers().get.bind(World.getPlayers()));
+  return player;
+}
+
+function tick(count = 1) {
+  for (let i = 0; i < count; i++) {
+    World.processCycle = (World.processCycle | 0) + 1;
+    TaskManager.process();
+    BoatManager.tick();
+  }
+}
+
+/** On a skiff at the helm, by the Bay of Sarim's treacherous rock. */
+function atTheHelm(player) {
+  Sailing.giveBoat(player, "skiff", "the_pandemonium");
+  assert.equal(Sailing.board(player, "the_pandemonium"), null);
+  const boat = Sailing.instanceAboard(player);
+  boat.helmPlayerId = player.getIndex();
+  player.varbits.set(19105, 3); // sailing_boat_facility_lockedin: at the helm
+  BoatManager.teleport(boat, { fineX: 3080 * 128 + 64, fineY: 3228 * 128 + 64 });
+  return boat;
+}
+
+function leave(player) {
+  const boat = Sailing.instanceAboard(player);
+  if (boat) BoatManager.dispose(boat);
+}
+
+/** A Chart click on a generic spot's loc, as the object listener hands it to the plugins. */
+function chart(player, key, clickType = 1) {
+  const spot = common.spotByKey(key);
+  const id = [...generic.spotsByLoc()].find(([, each]) => each === spot)[0];
+  const event = { player, objectId: id, clickType, option: "Chart", location: { x: 0, y: 0, z: 0 }, handled: false };
+  for (const handler of objectHandlers) {
+    handler(event);
+    if (event.handled) break;
+  }
+  return event;
+}
+
+function spotBit(player, spot) {
+  return ((player.varps.get(VARP_SPOTS + (spot.uid >> 5)) ?? 0) >>> (spot.uid & 31)) & 1;
+}
+
+test("the cache's 358 charting tasks, six kinds, each with its completion bit (script 9004)", () => {
+  const spots = [...common.allSpots().values()];
+  assert.equal(spots.length, 358);
+  const kinds = {};
+  for (const spot of spots) kinds[spot.type] = (kinds[spot.type] ?? 0) + 1;
+  assert.deepEqual(kinds, { generic: 94, spyglass: 57, current_duck: 54, drink_crate: 65, weather_troll: 31, mermaid_guide: 57 });
+  assert.deepEqual(spots.map((spot) => spot.uid).sort((a, b) => a - b), Array.from({ length: 358 }, (_, i) => i));
+  let named = 0;
+  for (const spot of spots) {
+    const id = varbit(`sailing_charting_${spot.key}_complete`);
+    if (id === null || id === undefined) continue;
+    named++;
+    const { baseVar, startBit, endBit } = CacheDefinitions.getVarbit(id);
+    assert.deepEqual([baseVar, startBit, endBit], [VARP_SPOTS + (spot.uid >> 5), spot.uid & 31, spot.uid & 31], spot.key);
+  }
+  // Only the Porth Gwenith weather troll's bit has no varbit name.
+  assert.equal(named, 357);
+});
+
+test("every generic task has its Chart loc (or a Port Sarim loc) and its captured line", () => {
+  const byLoc = generic.spotsByLoc();
+  assert.equal(byLoc.size, 92);
+  const withLoc = new Set(byLoc.values());
+  const without = common.spotsOfType("generic").filter((spot) => !withLoc.has(spot)).map((spot) => spot.key).sort();
+  assert.deepEqual(without, ["generic_board_port_sarim", "generic_salvage_station_port_sarim"]);
+  for (const spot of common.spotsOfType("generic")) assert.ok(spot.flavour?.length > 0, spot.key);
+  for (const id of byLoc.keys()) assert.deepEqual(CacheDefinitions.getObject(id).interactions?.[0] ?? CacheDefinitions.getObject(id).actions?.[0], "Chart");
+});
+
+test("seas and oceans count their tasks as the completion messages do (rsprox: Ardent 69, Miscellaneous 33)", () => {
+  const seas = [...common.allSeas().values()];
+  const named = (name) => seas.find((sea) => sea.name === name);
+  assert.equal(named("Bay of Sarim").spots.length, 5);
+  assert.equal(common.oceanSpots(named("Ardent Ocean")).length, 69);
+  assert.equal(common.oceanSpots(named("Shrouded Ocean")).length, 75);
+  assert.equal(common.oceanSpots(named("Miscellaneous")).length, 33);
+  // The bonus by the sea's XP level (the Wiki; rsprox 944: 17,230 for the Southern Expanse).
+  assert.equal(common.seaBonusXp(named("Southern Expanse")), 17230);
+  assert.equal(common.seaBonusXp(named("Bay of Sarim")), 190);
+  assert.equal(common.seaBonusXp(named("Kharidian Sea")), 190);
+  assert.equal(common.seaBonusXp(named("Pilgrims' Passage")), 1710);
+  assert.equal(common.seaBonusXp(named("Sea of Shells")), 2880);
+  assert.equal(common.seaBonusXp(named("Bonus Dives")), 1710);
+});
+
+test("Chart from the helm: the helm goes on the click, the charting a tick later (rsprox 1009)", () => {
+  const player = captain();
+  atTheHelm(player);
+  try {
+    const spot = common.spotByKey("generic_rock_bay_of_sarim");
+    const event = chart(player, "generic_rock_bay_of_sarim");
+    assert.equal(event.handled, true);
+    assert.equal(player.varbits.get(19105), 0, "facility_lockedin 3->0 on the click");
+    assert.equal(player.varbits.get(19205), 0, "player_at_helm 1->0");
+    assert.equal(spotBit(player, spot), 0);
+    assert.deepEqual(player.xp, []);
+    tick();
+    assert.deepEqual(player.animations.slice(-1), [13302]);
+    assert.equal(spotBit(player, spot), 1);
+    assert.deepEqual(player.messages().slice(-4), [
+      "You note the position of the dangerous rocks in your charts.",
+      `Charting complete: ${blue("Find a treacherous rock formation near Draynor Village.")}`,
+      `Bay of Sarim charting completion: ${blue("1/5")}`,
+      `Ardent Ocean charting completion: ${blue("1/69")}`,
+    ]);
+    assert.ok(player.sent.some(([key, script, args]) => key === "sendInterfaceScript" && script === 3343
+      && args[0] === "Charting Complete!" && args[1] === "Find a treacherous rock formation near Draynor Village."));
+    assert.ok(player.sent.some(([key, id]) => key === "sendSoundEffect" && id === 11166));
+    assert.deepEqual(player.xp, [35]);
+    assert.equal(player.varps.get(5037), 1, "sailing_charting_total_entries");
+
+    chart(player, "generic_rock_bay_of_sarim");
+    assert.equal(player.messages().at(-1), "You have already charted this and can get no further information from it.");
+    assert.deepEqual(player.xp, [35]);
+  } finally {
+    leave(player);
+  }
+});
+
+test("Chart off the helm answers on the click (rsprox 3455)", () => {
+  const player = captain();
+  const boat = atTheHelm(player);
+  boat.helmPlayerId = undefined;
+  player.varbits.set(19105, 0);
+  try {
+    chart(player, "generic_rowboat_bay_of_sarim");
+    assert.equal(player.messages().at(-3).startsWith("Charting complete:"), true);
+    assert.deepEqual(player.xp, [35]);
+  } finally {
+    leave(player);
+  }
+});
+
+test("the last task in a sea completes it: the sea's messages, bonus XP and rapids variable (rsprox 944)", () => {
+  const player = captain();
+  try {
+    const sea = common.spotByKey("generic_rock_bay_of_sarim").sea;
+    const [last, ...rest] = sea.spots;
+    for (const spot of rest) common.complete(player, spot);
+    player.xp.length = 0;
+    common.complete(player, last);
+    const messages = player.messages();
+    const at = messages.indexOf(`You have completed charting a sea: ${blue("Bay of Sarim")}`);
+    assert.ok(at > 0, messages.join("\n"));
+    assert.equal(messages[at - 1], `Ardent Ocean charting completion: ${blue("5/69")}`);
+    const rapids = sea.rapids ? [`Fully charting this sea has unlocked the use of some ${blue("rapids")} within it.`] : [];
+    assert.deepEqual(messages.slice(at + 1), [...rapids, `You are awarded an additional ${blue("190")} Sailing XP.`]);
+    assert.deepEqual(player.xp, [common.xpFor(last) + 190]);
+    assert.equal(player.sent.filter(([key, id]) => key === "sendVarbit" && id === varbit("sailing_sea_bay_of_sarim_charting_complete")).length, 0, "sent as its varp word");
+    const seaVarbit = CacheDefinitions.getVarbit(varbit("sailing_sea_bay_of_sarim_charting_complete"));
+    assert.equal((player.varps.get(seaVarbit.baseVar) >>> seaVarbit.startBit) & 1, 1);
+  } finally {
+    leave(player);
+  }
+});
+
+test("an ocean's last task owes its bonus from Chartin' Charles (rsprox: Western Ocean)", () => {
+  const player = captain();
+  try {
+    const ocean = [...common.allSeas().values()].find((sea) => sea.name === "Sunset Ocean");
+    const list = common.oceanSpots(ocean);
+    for (const spot of list) common.complete(player, spot);
+    const messages = player.messages();
+    assert.ok(messages.includes(`You have completed charting an ocean: ${blue("Sunset Ocean")}`));
+    assert.ok(messages.includes("For fully charting this ocean, Chartin' Charles McAtless on the Pandemonium will provide you with some training when you next speak to him."));
+    for (const suffix of ["charting_complete", "charting_ever_complete", "charting_xp_owed"]) {
+      const { baseVar, startBit } = CacheDefinitions.getVarbit(varbit(`sailing_sea_sunset_ocean_${suffix}`));
+      assert.equal((player.varps.get(baseVar) >>> startBit) & 1, 1, suffix);
+    }
+    assert.deepEqual(common.progress(player).owed, [ocean.row]);
+  } finally {
+    leave(player);
+  }
+});
+
+test("the charts are saved and sent again at login", () => {
+  const player = captain();
+  try {
+    const spots = ["generic_rock_bay_of_sarim", "generic_crab_statue", "spyglass_wizards_tower"].map(common.spotByKey);
+    for (const spot of spots) common.complete(player, spot);
+    const saved = common.progress(player);
+    const next = captain();
+    next.attributes.set(common.PROGRESS_ATTRIBUTE, JSON.parse(JSON.stringify(saved)));
+    common.sendProgress(next);
+    for (const spot of spots) assert.equal(spotBit(next, spot), 1, spot.key);
+    assert.equal(next.varps.get(5037), 3);
+    assert.equal(spotBit(next, common.spotByKey("generic_rowboat_bay_of_sarim")), 0);
+  } finally {
+    leave(player);
+  }
+});
+
+test("the Port Sarim salvaging station charts its task as it's used (rsprox 3467)", () => {
+  const player = captain();
+  const spot = common.spotByKey("generic_salvage_station_port_sarim");
+  const event = {
+    player, objectId: 60462, clickType: 1, option: "Sort-salvage",
+    definition: { getName: () => "Salvaging station" }, location: { x: 3029, y: 3207, z: 0 }, handled: false,
+  };
+  for (const handler of beforeObjectHandlers) handler(event);
+  assert.equal(event.handled, false, "the station still sorts");
+  assert.deepEqual(player.messages().slice(0, 2), [
+    "This station is perfect for sorting any salvage you can pull up from shipwrecks. You make a note of it.",
+    `Charting complete: ${blue("Interact with the salvaging station in Port Sarim.")}`,
+  ]);
+  assert.equal(spotBit(player, spot), 1);
+  // Another port's station charts nothing.
+  const other = captain();
+  for (const handler of beforeObjectHandlers) handler({ ...event, player: other, location: { x: 1800, y: 3700, z: 0 } });
+  assert.deepEqual(other.messages(), []);
+});
+
+test("the crab statue hands over a Medallion fragment (rsprox 944)", () => {
+  const player = captain();
+  const boat = atTheHelm(player);
+  boat.helmPlayerId = undefined;
+  player.varbits.set(19105, 0);
+  try {
+    chart(player, "generic_crab_statue");
+    assert.equal(player.getInventory().getAmount(32395), 1);
+    assert.match(player.chain ? JSON.stringify([...player.chain.getDialogues().values()].map((d) => d.text ?? d.lines ?? d)) : "", /mysterious piece of a medallion/);
+  } finally {
+    leave(player);
+  }
+});
