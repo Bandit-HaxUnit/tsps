@@ -12,6 +12,8 @@ export interface BoatDeckLoc {
     blocks?: boolean;
     /** Which ops the client shows (bit 0 is op1), as live's loc_add_change_v2; all when absent. */
     opFlags?: number;
+    /** A change that takes the loc of this shape off its tile (sent as LOC_DEL). */
+    removed?: boolean;
 }
 
 /** Everything needed to build a boat of one type. Offsets are relative to the template zone. */

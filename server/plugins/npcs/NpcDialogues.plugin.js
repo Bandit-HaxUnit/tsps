@@ -865,11 +865,25 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         const animation = request.expression ?? step.expression;
         const expression = Number.isInteger(animation) && animation >= 0 ? animation : undefined;
         const speakerName = request.speakerName ?? (typedLine ? step.speaker : undefined);
+        // `holdTicks` (set by a line handler): the line shows first without "Click here to
+        // continue", which comes that many ticks later (a cutscene's camera moving, as live).
+        const hold = Number.isInteger(request.holdTicks) && request.holdTicks > 0
+          ? new ActionDialogue(index++, { execute: () => {
+            held?.sendHeld?.(player);
+            api.core.TaskManager.submit(new api.core.CountdownTask(player, request.holdTicks, () => {
+              if (manager.getCurrent?.() === hold) manager.advance();
+            }));
+          } })
+          : undefined;
+        if (hold) chain.add(hold);
+        let held;
         for (let start = 0; start < lines.length; start += 4) {
           const text = lines.slice(start, start + 4).join(" ");
-          chain.add(isPlayer
+          const dialogue = isPlayer
             ? new PlayerDialogue(index++, text, expression)
-            : new NpcDialogue(index++, speakerId, text, speakerName, expression, (request.side ?? step.side) === "right" ? 217 : 231));
+            : new NpcDialogue(index++, speakerId, text, speakerName, expression, (request.side ?? step.side) === "right" ? 217 : 231);
+          held ??= dialogue;
+          chain.add(dialogue);
         }
         // `after` (set by a line handler) runs once the player continues past the line,
         // before the conversation carries on: a teleport the wiki only narrates, say.

@@ -265,6 +265,10 @@ export class PluginManager {
   private static npcInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
   private static beforeNpcInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
   private static beforeObjectInteractionHooks: PluginHook<PluginObjectInteractionEvent>[] = [];
+  /** Main-world locs used from a boat deck from further than usual, by id (setDeckReach). */
+  public static readonly deckReach = new Map<number, number>();
+  /** Main-world loc names usable from a boat deck (setUsableFromDeck). */
+  public static readonly usableFromDeck = new Set<string>();
   private static worldEntityInteractionHooks: PluginHook<PluginWorldEntityInteractionEvent>[] = [];
   /**
    * `onAnyNpcInteraction` hooks. Kept apart from the id/name hooks so a generic
@@ -3111,6 +3115,12 @@ export class PluginManager {
           return;
         }
         PluginManager.objectRouteHooks.push({ ...hookProfile(handler), handler });
+      },
+      setDeckReach: (objectIds, tiles) => {
+        for (const id of objectIds ?? []) PluginManager.deckReach.set(id, tiles);
+      },
+      setUsableFromDeck: (names) => {
+        for (const name of names ?? []) PluginManager.usableFromDeck.add(name);
       },
       onWalkRoute: (handler) => {
         if (typeof handler === "function") {

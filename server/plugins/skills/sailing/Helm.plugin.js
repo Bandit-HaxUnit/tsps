@@ -148,22 +148,25 @@ function faceBow(actor) {
 
 /**
  * At the helm a click on the sea steers: live sets heading as the default interaction mode and
- * walk for the boat's own world, on the tick the helm is taken (rsprox, every revision since 235).
+ * walk for the boat's own world, on the tick the helm is taken (rsprox, every revision since 235),
+ * and the camera follows the boat rather than the helmsman (cam_target on the boat's world entity).
  */
 function steerByClicks(player, boat) {
   player.getPacketSender()
     .sendInteractionMode(INTERACTION_WORLD_DEFAULT, TileInteractionMode.Heading, EntityInteractionMode.All)
-    .sendInteractionMode(boat.entityIndex, TileInteractionMode.Walk, EntityInteractionMode.All);
+    .sendInteractionMode(boat.entityIndex, TileInteractionMode.Walk, EntityInteractionMode.All)
+    .sendCameraTarget({ worldEntity: boat.entityIndex });
 }
 
 /**
  * Leaving the helm resets the boat's world and sets walk again, before the helm's varbits (live
- * sends the same set twice in a row; once does the same).
+ * sends the same set twice in a row; once does the same), and the camera goes back to the player.
  */
 function walkByClicks(player, boat) {
   player.getPacketSender()
     .sendResetInteractionMode(boat.entityIndex)
-    .sendInteractionMode(INTERACTION_WORLD_DEFAULT, TileInteractionMode.Walk, EntityInteractionMode.All);
+    .sendInteractionMode(INTERACTION_WORLD_DEFAULT, TileInteractionMode.Walk, EntityInteractionMode.All)
+    .sendCameraTarget({ player: player.getIndex() });
 }
 
 function takeHelm(player, boat) {
@@ -292,6 +295,8 @@ function leaveHelmForOtherLoc(event) {
   if (!boat || boat.helmPlayerId !== player.getIndex()) return;
   const name = event.definition?.getName();
   if (name === "Helm" || name === "Sails") return;
+  // The wind catcher is worked from the helm too (rsprox 907 11533).
+  if (require("./WindCatcher.Helm").isCatcherLoc(event.objectId)) return;
   leaveHelm(player, boat);
 }
 
@@ -433,6 +438,7 @@ module.exports = {
     api.onObjectRoute(routeOnDeck);
     api.onCustomEvent("sailing:left", walkAfterLeaving);
     api.onInterfaceActionClick(clickSailButton);
+    require("./WindCatcher.Helm").attach(api);
     BoatManager.onHeadingSet(raiseSailForHeading);
   },
 };
