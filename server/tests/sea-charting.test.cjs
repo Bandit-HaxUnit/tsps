@@ -683,3 +683,77 @@ test("Prying Times keeps its stout until the quest is done", () => {
   drinkCrate.drink(event);
   assert.equal(event.handled, false);
 });
+
+const mermaid = require("../plugins/skills/sailing/charting/Mermaid.Charting");
+const tutor = require("../plugins/skills/sailing/charting/Tutor.Charting");
+
+function mermaidAt(spot) {
+  return { getId: () => 15154 + spot.mermaid.guide, getLocation: () => new Location(spot.mermaid.at[0], spot.mermaid.at[1], 0), performAnimation() {} };
+}
+
+test("every dive has its mermaid, riddle and answers, and its mermaid spawned", () => {
+  const spawns = require("../data/definitions/npc-spawns.json");
+  for (const spot of common.spotsOfType("mermaid_guide")) {
+    assert.ok(spot.mermaid?.riddle?.length && spot.mermaid.answers?.length, spot.key);
+    assert.equal(mermaid.taskOf(mermaidAt(spot)), spot, spot.key);
+    assert.ok(spawns.some((entry) => entry.id === 15154 + spot.mermaid.guide && entry.x === spot.mermaid.at[0] && entry.y === spot.mermaid.at[1]), spot.key);
+  }
+});
+
+test("a mermaid's dive: the gear, the riddle, a wrong then right answer, the charting (rsprox 939)", () => {
+  const player = captain();
+  const spot = common.spotByKey("mermaid_guide_mudskipper_sound");
+  const npc = mermaidAt(spot);
+  let worn = [];
+  player.getEquipment = () => ({ contains: (id) => worn.includes(id) });
+  let syntax;
+  player.setEnteredSyntaxAction = (action) => { syntax = action; };
+  try {
+    mermaid.dive({ player, npc });
+    assert.match(dialogueTexts(player).join(), /You need to be wearing diving equipment to dive with me!/);
+
+    worn = [7534, 7535];
+    mermaid.dive({ player, npc });
+    assert.match(dialogueTexts(player).join(), /I want something in return.*apple pie.*three answers/);
+    const askedTitles = () => player.sent.filter(([key, id]) => key === "sendInterfaceScript" && id === 750).map(([, , args]) => args[0]);
+    // The chain's last step asks; run it as continuing would.
+    [...player.chain.getDialogues().values()].at(-1).execute?.() ?? [...player.chain.getDialogues().values()].at(-1).action?.execute?.();
+    assert.equal(askedTitles().at(-1), "Submit your first answer to the mermaid's puzzle:");
+    syntax.execute("2313");
+    assert.equal(askedTitles().at(-1), "Submit your second answer to the mermaid's puzzle:");
+    syntax.execute("1933");
+    syntax.execute("1");
+    assert.match(dialogueTexts(player).join(), /I don't think that's right... You should try again./);
+
+    for (const answer of [1955, 1933, 2313]) {
+      if (syntax && answer === 1955) [...player.chain.getDialogues().values()].at(-1).execute?.() ?? [...player.chain.getDialogues().values()].at(-1).action?.execute?.();
+      syntax.execute(String(answer));
+    }
+    assert.match(dialogueTexts(player).join(), /The mermaid, satisfied with your answer/);
+    tick(10);
+    assert.equal(spotBit(player, spot), 1);
+    assert.deepEqual(player.xp, [175]);
+    assert.match(dialogueTexts(player).join(), /There you go. Hope the dive got you everything you needed!/);
+  } finally {
+    leave(player);
+  }
+});
+
+test("Chartin' Charles pays the owed ocean bonuses at once (rsprox 948)", () => {
+  const player = captain();
+  const ocean = [...common.allSeas().values()].find((sea) => sea.name === "Sunset Ocean");
+  for (const spot of common.oceanSpots(ocean)) common.complete(player, spot);
+  assert.equal(tutor.answerCondition({ player, npcId: 15151, stepId: "jBl-4T" }), true);
+  player.levels.set(SAILING, 30);
+  assert.equal(tutor.answerCondition({ player, npcId: 15151, stepId: "CDpkRB" }), true, "under the ocean's level");
+  player.levels.set(SAILING, 99);
+  player.xp.length = 0;
+  tutor.pay(player);
+  assert.deepEqual(player.xp, [2000]);
+  assert.equal(player.messages().at(-1), "You are awarded <col=0090bc>2,000</col> Sailing XP for sharing charting information from the entire ocean!");
+  const { baseVar, startBit } = CacheDefinitions.getVarbit(varbit("sailing_sea_sunset_ocean_charting_xp_owed"));
+  assert.equal((player.varps.get(baseVar) >>> startBit) & 1, 0);
+  assert.equal(tutor.answerCondition({ player, npcId: 15151, stepId: "dx41Cr" }), true, "nothing owed now");
+  tutor.pay(player);
+  assert.deepEqual(player.xp, [2000]);
+});

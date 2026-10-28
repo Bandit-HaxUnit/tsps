@@ -218,7 +218,8 @@ function takeTool(player, slot) {
   }
   tools.splice(tools.indexOf(tool.slot), 1);
   for (const id of tool.give) inventory.add(new Item(id, 1), true);
-  const what = { 0: "your captain's log", 1: "a spyglass", 4: "some diving gear" }[tool.slot]
+  // rsprox: "You collect your current duck from the tools compartment."
+  const what = { 0: "your captain's log", 1: "a spyglass", 2: "your current duck", 4: "some diving gear" }[tool.slot]
     ?? `a ${ItemDefinition.forId(tool.give[0])?.getName?.()?.toLowerCase?.() ?? "tool"}`;
   player.sendMessage(`You collect ${what} from the tools compartment.`);
   playSound(player, SOUND_TOOL);

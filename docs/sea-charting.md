@@ -18,6 +18,8 @@ data in `data/charting.json`. Tests: `server/tests/sea-charting.test.cjs`.
   currents; `routeRec` in the data names each route's recording). Weather trolls: 939, 940, 941,
   944, 948 and 3467 (all 31 tasks, 695 station readings). Drink crates: 24 recordings (907,
   936, 938-948, 3455, 3461, 3467 and others; 64 of the 65 drinks drunk; `drink.rec` names each).
+  Mermaid guides: 939, 940, 944, 948 and others (56 of 57 dives; `mermaid.rec` names each).
+  Chartin' Charles's training: 948.
   XP: recordings from 2025-11-26 on (907, 938-948, 1009, 3461, 3837, 4290); the launch-day ones
   (3450, 3455, 3467, 2025-11-19) paid less for every kind of spot.
 - The cache:
@@ -46,6 +48,8 @@ data in `data/charting.json`. Tests: `server/tests/sea-charting.test.cjs`.
 | `CurrentDuck` | Track-current, the duck's swim along its captured route, its stop, Collect from the deck. |
 | `Weather` | Meaty Aura Logist's Collect-data (station, hand-in, refusals), Take-reading's wind and the filled station. |
 | `DrinkCrate` | The 65 sealed crates (Pry-open from the deck), the drinks, the drinking warning. |
+| `Mermaid` | The five mermaid guides: Talk-to, Dive (gear, level, riddle, item-search answers, the dive). |
+| `Tutor` | Chartin' Charles's training: his transcript's conditions and lectures, Get-training, the owed bonuses paid. |
 | `Generic` | The 92 Chart locs, the Port Sarim task board and salvaging station, the crab statue's Medallion fragment. |
 | `Dev` | `::chart go <task>`, `::chart done <task>`, `::chart reset [task]`, `::chart find <text>` (developers). |
 
@@ -172,6 +176,29 @@ rotation 0) on each drink task's tile, Pry-open from the deck.
 - Prying Times charts its grog (drink_crate_prying_times) with its own crate (58405) and
   transcript, through `charting:chart`; after the quest the stout is an ordinary drink.
 
+**Mermaid guides** (rsprox 939, 944 and others): Victoria, Marina, Selina, Gloria and Christina
+Kebbit-Monkfish (15155-15159), one at each diving task's spot (none were in `npc-spawns.json`;
+57 added at their captured tiles), used from the deck.
+- Dive without the fishbowl helmet and diving apparatus worn: `You need to be wearing diving
+  equipment to dive with me!` (the Wiki says "deep sea diving equipment"; the capture wins).
+- Otherwise `I want something in return if you're going to dive with me...`, her riddle (one to
+  three lines, each dive's own), then the item search (`meslayer_mode14`): `Submit your answer to
+  the mermaid's puzzle:`, or `Submit your first answer ...`, `second`, ... up to `eighth` for a
+  riddle of several answers.
+- Right (any order): the box `The mermaid, satisfied with your answer, escorts you to the bottom
+  of the sea. You take some depth readings from your diving equipment and note down the
+  interesting local flora and fauna.`, her dive animation (13191), sounds 10797 and 10798, the
+  screen fading out; it fades back in 8 ticks later, and 2 after that the charting (175 XP) and
+  `There you go. Hope the dive got you everything you needed!`
+
+**Chartin' Charles McAtless** (rsprox 948): his multinpc (15151) shows Get-training (1554) once
+`sailing_charting_tutor_met` is set. "Can you offer me some training?": `Charles takes your
+charts and shows them to his parrot.`, `Yes, it looks like I can...`, one of seven lectures (`Charles
+deep dives into the known history of mermaids.` ...) over a fade, and `You are awarded
+<col=0090bc>213,000</col> Sailing XP for sharing charting information from the entire ocean!`:
+every owed bonus at once (5,000-35,000 an ocean, 15,000 for the Miscellaneous groups, 100,000 for
+everything; the Wiki), the owed variables back to 0.
+
 **Hint markers**: locs 59281 (spyglass) and 59282 (current duck), shape 10, rotation 0, added
 with the zone whether the task is charted or not, at the spots the Wiki lists (the Wiki's
 Fremennik Strait view, 2366,3890, is a typo for the marker's 2366,3777).
@@ -201,6 +228,17 @@ Fremennik Strait view, 2366,3890, is a typo for the marker's 2366,3777).
   centre). Trolls are used from the deck within 12 tiles.
 - A crate needs Prying Times and 12 Sailing (the skill guide); no refusal was captured, so the
   crowbar line stands in. The Prying Times grog's tile keeps the quest's own crate.
+- A mermaid's wrong answer (the Wiki): `I don't think that's right... You should try again.` and
+  the riddle again. Under 38 Sailing (the Wiki): `I don't think you are practised enough to dive
+  here. I don't want you getting swept away!` and `You need a Sailing level of 38 to dive here.`
+  Talk-to follows the Wiki's transcript. The Medallion of the deep (which also lets you dive) isn't
+  in our cache. Turtle Belt's riddle (no recording) is Selina's clue from the Wiki in the other
+  clues' words. Mermaids are used from the deck within 12 tiles.
+- Charles with nothing owed or under an ocean's level: his transcript's lines. Get-training
+  plays the same lines without the menu. `sailing_charting_tutor_met` is set once anything is
+  charted (live sets it as you meet him).
+- Charles's spawn (`npc-spawns.json`) was his Talk-to-only form (288), which never shows
+  Get-training: now his multinpc (15151) at his captured tile.
 - The player doesn't turn towards the spot (live sends a face angle; the deck's frame would need
   the boat's heading worked in).
 
@@ -210,4 +248,5 @@ Fremennik Strait view, 2366,3890, is a typo for the marker's 2366,3777).
   stoutier's, the monkfish stout's waves, the Sailing cat, a squirrel, a snakeling, a dwarf and
   others: 10 drinks), the fishier stout's blackout with its three trolls and their drinks (varp
   5035 bits 2-4), and the puzzler's poteen reward.
-- Mermaid guide tasks and Chartin' Charles's ocean bonuses (later phases of this PR).
+- A current duck asked for at the tools compartment while one is out at sea: `You have a current
+  duck out at sea. Either find it or wait # seconds to collect another.` (no duck timer here).
