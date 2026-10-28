@@ -300,6 +300,22 @@ function leaveHelmForOtherLoc(event) {
   leaveHelm(player, boat);
 }
 
+/**
+ * Another plugin's action takes the player away from the helm (a charting spot, the spyglass):
+ * the same as letting go of it. `left` tells the caller whether they were at the helm, as live
+ * answers a tick later then (rsprox 1009: the helm released on the click, the charting next tick).
+ *
+ *   api.emitCustomEvent("sailing:leave-helm", { player }) -> { left }
+ */
+function leaveHelmFor(event) {
+  const { player } = event;
+  const boat = Sailing.instanceAboard(player);
+  event.left = false;
+  if (!boat || boat.helmPlayerId !== player.getIndex()) return;
+  leaveHelm(player, boat);
+  event.left = true;
+}
+
 function toggleHelm({ player, object }) {
   const boat = Sailing.instanceAboard(player);
   if (!boat) return;
@@ -437,6 +453,7 @@ module.exports = {
     api.onObjectInteraction("Sails", { Trim: trim, Set: adjustSails("full"), "Un-set": adjustSails("stop") });
     api.onObjectRoute(routeOnDeck);
     api.onCustomEvent("sailing:left", walkAfterLeaving);
+    api.onCustomEvent("sailing:leave-helm", leaveHelmFor);
     api.onInterfaceActionClick(clickSailButton);
     require("./WindCatcher.Helm").attach(api);
     BoatManager.onHeadingSet(raiseSailForHeading);

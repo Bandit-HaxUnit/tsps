@@ -123,6 +123,7 @@ tsps has no world views, but it has `PrivateArea` (used by Construction's house)
 - facility facing: on a side hotspot, facilities that work over the side (cannons, hooks, nets, wind catchers) face out and the rest (a range, a keg) face in; chum stations and spreaders face in although they work over the side (rsprox: all 431 recorded placements). The centre line faces 0.
 - salvaging: shipwrecks rise and sink at every site the cache places them; a boat's salvaging hook reels salvage in from one nearby for Sailing XP, and a salvaging station (on a boat or at a port) sorts it into loot for more. Data in `plugins/skills/sailing/data/sailing-salvage.json`
 - Barracuda Trials (`BarracudaTrials.plugin.js`): the Tempor Tantrum, the Jubbly Jive and the Gwenith Glide, in [barracuda-trials.md](barracuda-trials.md).
+- sea charting (`Charting.plugin.js`): the 358 charting tasks, their sea and ocean bonuses and the Captain's log variables, in [sea-charting.md](sea-charting.md).
 - crewmates (`Crew.plugin.js` and `crew/`; live captures from normal worlds and [rsprox.net](https://rsprox.net/database), the cache and the Wiki):
   - data: the ten crewmates are `data/sailing-crew.json` joined with cache table 173 (`sailing_crew`: the ship NPC, Helmsmanship/Privateering/Deckhandiness). The saved state is the `sailing:crew` attribute: met, recruited, five slots and each slot's job.
   - crew slots open at 40, 55, 70, 85 and 95 Sailing, unboosted (skill guide rows, Wiki). A boat holds table 166's `crew_capacity`: raft 0, skiff 2, sloop 5. The first slots go aboard.
