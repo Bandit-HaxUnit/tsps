@@ -129,6 +129,12 @@ export class Combat {
     private lastPreMovementCycle = -1;
     private lastPostMovementCycle = -1;
     private manualMovementUntilCycle = -1;
+    /** Cycles spent out of reach with no distance closed and no step taken. */
+    private unreachableCycles = 0;
+    /** The gap last cycle, or -1 before the first cycle measured against a new target. */
+    private unreachableDistance = -1;
+    /** 20 cycles (10 s) of no progress: an actor is not held in combat with a target it can never hit. */
+    private static readonly UNREACHABLE_GIVE_UP_CYCLES = 20;
 
     public preserveMovementForTicks(ticks = 1): void {
         this.manualMovementUntilCycle = World.getProcessCycle() + Math.max(0, ticks) - 1;
@@ -239,7 +245,10 @@ export class Combat {
             return;
         }
         const previousTarget = this.target;
-        if (previousTarget !== target) this.manualMovementUntilCycle = -1;
+        if (previousTarget !== target) {
+            this.manualMovementUntilCycle = -1;
+            this.resetUnreachableTracking();
+        }
         if (previousTarget && previousTarget !== target && this.method) {
             this.method.onCombatEnded(this.character, previousTarget);
         }
@@ -337,15 +346,22 @@ export class Combat {
 
         this.faceTarget(target);
 
+        const reachable = CombatRange.canReach(this.character, method, target);
+        if (reachable) {
+            this.resetUnreachableTracking();
+        } else if (this.giveUpUnreachableTarget(target, generation)) {
+            return;
+        }
+
         // An overlapped NPC that can still reach its target (a large NPC fighting
         // underfoot) attacks in place; one that cannot steps aside below.
         if (this.character.isNpc() && CombatRange.overlapsEntities(this.character, target)
-            && !CombatRange.canReach(this.character, method, target)) {
+            && !reachable) {
             this.processNpcUnderTarget(state);
             return;
         }
 
-        if (CombatRange.canReach(this.character, method, target)) {
+        if (reachable) {
             this.trace("inRange", target);
             // An NPC flagged combat:close-in (ToA's Akkha) keeps walking in while it attacks
             // from range, until it stands beside its target.
@@ -573,6 +589,7 @@ export class Combat {
      */
     public clearInteraction(resetAnimation = true): void {
         this.manualMovementUntilCycle = -1;
+        this.resetUnreachableTracking();
         const previousTarget = this.target;
         this.generation++;
         this.target = null;
@@ -738,6 +755,49 @@ export class Combat {
 
         const [offsetX, offsetY] = [[-1, 0], [1, 0], [0, -1], [0, 1]][Misc.getRandom(3)];
         movement.setPursuitCheckpoint(this.character.getLocation().transform(offsetX, offsetY));
+    }
+
+    /**
+     * Ends combat with a target the actor has stopped trying to get to. Both give-up paths in
+     * postMovementProcess are skipped by an actor that cannot move (a stun, a placement, a
+     * teleport in transit - `setBlockMovement`) and by a route whose step the mover rejects,
+     * which keeps its checkpoint (`MovementQueue.process`), so the queue never empties; without
+     * this deadline either side stays in combat with an unreachable target indefinitely.
+     *
+     * Progress is the gap closing - whoever is closing it - or a step the mover actually accepted
+     * last cycle, which out of reach is the pursuit itself. A step counts because the mover is the
+     * only one that knows whether the pursuit is still going: a target walked away at the same
+     * speed holds the gap open forever on an open route, and live keeps chasing. What spends the
+     * budget is the actor getting nowhere - frozen in place, or its step refused - which is how an
+     * engagement stuck behind a wall or a crowd finally ends.
+     *
+     * @return true when the interaction was dropped, so this cycle does nothing else.
+     */
+    private giveUpUnreachableTarget(target: Mobile, generation: number): boolean {
+        const distance = this.character.getLocation().getDistance(target.getLocation());
+        // The first cycle measured only records the starting gap; it is not progress.
+        const closing = this.unreachableDistance >= 0 && distance < this.unreachableDistance;
+        // Read before this cycle's movement: preMovementProcess runs after beginCycle() has
+        // cleared didMoveThisCycle(), so the last cycle's step is the one in question.
+        const stepping = this.character.getMovementQueue().didMovePreviousCycle();
+        this.unreachableDistance = distance;
+        this.unreachableCycles = closing || stepping ? 0 : this.unreachableCycles + 1;
+        if (this.unreachableCycles < Combat.UNREACHABLE_GIVE_UP_CYCLES) {
+            return false;
+        }
+        this.trace("bail=unreachableDeadline", target);
+        if (this.character.isPlayer() && this.character.getAsPlayer().isPlayerBot?.() !== true) {
+            this.character.getAsPlayer().sendMessage("I can't reach that!");
+        }
+        this.resetUnreachableTracking();
+        this.cancelIfCurrent(target, generation);
+        return true;
+    }
+
+    /** Every new engagement, and every actor with no engagement, starts with full patience. */
+    private resetUnreachableTracking(): void {
+        this.unreachableCycles = 0;
+        this.unreachableDistance = -1;
     }
 
     private executeAttack(
