@@ -2380,6 +2380,7 @@ export class PluginManager {
       CountdownTask: require("../game/task/impl/CountdownTask").CountdownTask,
       ForceMovement: require(`${model}/ForceMovement`).ForceMovement,
       ForceMovementTask: require("../game/task/impl/ForceMovementTask").ForceMovementTask,
+      TimedObjectReplacementTask: require("../game/task/impl/TimedObjectReplacementTask").TimedObjectReplacementTask,
       TaskManager: require("../game/task/TaskManager").TaskManager,
       NPCRespawnTask: require("../game/task/impl/NPCRespawnTask").NPCRespawnTask,
       ItemIdentifiers: require("../util/ItemIdentifiers").ItemIdentifiers,

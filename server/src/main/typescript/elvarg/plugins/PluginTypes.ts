@@ -1445,6 +1445,7 @@ export interface PluginCoreApi {
   CountdownTask: any;
   ForceMovement: any;
   ForceMovementTask: any;
+  TimedObjectReplacementTask: any;
   TaskManager: any;
   NPCRespawnTask: any;
   ItemIdentifiers: any;
