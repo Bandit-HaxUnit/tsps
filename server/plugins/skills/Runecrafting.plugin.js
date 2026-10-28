@@ -62,10 +62,11 @@ const CURSE_CASTING = 108;
 const CURSE_SOUND_CAST = 127;
 const CURSE_SOUND_IMPACT = 126;
 const ESSENCE_TELEPORT_TICKS = 4;
-/** Set from the cast until the landing, so a second click waits. */
-const ESSENCE_MINE_ENTERING_ATTRIBUTE = "runecrafting:essence-mine-entering";
-/** Set while a talisman is held to the ruins, until the teleport. */
-const RUINS_HOLD_ATTRIBUTE = "runecrafting:holding-talisman";
+/**
+ * The player's delayed move in progress (a wizard's Curse, a talisman held to the ruins), so a
+ * second click waits and a death can cancel it. Not saved.
+ */
+const TRAVEL_ATTRIBUTE = "runecrafting:travel";
 /** Holding a talisman to the ruins (rsprox captures): human_pickupfloor a tick after the click, the teleport two after that. */
 const HOLD_TALISMAN_ANIMATION = 827;
 const HOLD_TALISMAN_TICKS = 2;
@@ -437,24 +438,20 @@ function handleTalismanOnRuins(event) {
   if (!ruins || !matchesRuins(ruins, event.itemId, false)) return;
   event.handled = true;
   const { player, itemId } = event;
-  if (player.getAttribute(RUINS_HOLD_ATTRIBUTE)) return;
+  if (player.getAttribute(TRAVEL_ATTRIBUTE)) return;
   const name = TALISMANS.get(itemId)?.holdName ?? pluginApi.core.CacheDefinitions.getItem(itemId)?.name ?? "talisman";
   const busy = pluginApi.core.CacheDefinitions.getVarbitId("busy");
-  player.setAttribute(RUINS_HOLD_ATTRIBUTE, true);
-  player.getMovementQueue().reset();
-  player.getMovementQueue().setBlockMovement(true);
-  afterTicks(1, () => {
-    player.performAnimation(new Animation(HOLD_TALISMAN_ANIMATION));
-    player.getPacketSender().sendSound(EXIT_PORTAL_SOUND, 1, 0);
-    spam(player, `You hold the ${name} towards the mysterious ruins.<br>You feel a powerful force take hold of you...`);
-    player.getPacketSender().sendVarbit(busy, 1);
-    afterTicks(HOLD_TALISMAN_TICKS, () => {
-      player.setAttribute(RUINS_HOLD_ATTRIBUTE, null);
-      player.getMovementQueue().setBlockMovement(false);
-      player.getPacketSender().sendVarbit(busy, 0);
-      if (player.isRegistered?.() === false) return;
-      player.moveTo(new Location(...ruins.destination));
-    });
+  let held = false;
+  travel(player, 1 + HOLD_TALISMAN_TICKS, new Location(...ruins.destination), {
+    1: () => {
+      held = true;
+      player.performAnimation(new Animation(HOLD_TALISMAN_ANIMATION));
+      player.getPacketSender().sendSound(EXIT_PORTAL_SOUND, 1, 0);
+      spam(player, `You hold the ${name} towards the mysterious ruins.<br>You feel a powerful force take hold of you...`);
+      player.getPacketSender().sendVarbit(busy, 1);
+    },
+  }, () => {
+    if (held) player.getPacketSender().sendVarbit(busy, 0);
   });
 }
 
@@ -505,14 +502,12 @@ function handleRuneEssenceTeleport(event) {
  * them back.
  */
 function teleportToEssenceMine(player, wizard) {
-  if (player.getAttribute(ESSENCE_MINE_ENTERING_ATTRIBUTE)) return;
+  if (player.getAttribute(TRAVEL_ATTRIBUTE)) return;
   if (!TeleportHandler.checkReqs(player, RUNE_ESSENCE_MINE, Infinity)) return;
   const at = player.getLocation();
   player.setAttribute(ESSENCE_MINE_RETURN_ATTRIBUTE, [at.getX(), at.getY(), at.getZ()]);
-  player.setAttribute(ESSENCE_MINE_ENTERING_ATTRIBUTE, true);
   player.getPacketSender().sendInterfaceRemoval();
-  player.getMovementQueue().reset();
-  player.getMovementQueue().setBlockMovement(true);
+  travel(player, ESSENCE_TELEPORT_TICKS, RUNE_ESSENCE_MINE.clone());
   if (wizard) {
     wizard.forceChat?.(ESSENCE_TELEPORT_LINE);
     wizard.setPositionToFace?.(at);
@@ -523,12 +518,73 @@ function teleportToEssenceMine(player, wizard) {
   player.getPacketSender()
     .sendAreaSound(CURSE_SOUND_CAST, at.getX(), at.getY(), at.getZ())
     .sendAreaSound(CURSE_SOUND_IMPACT, at.getX(), at.getY(), at.getZ());
-  afterTicks(ESSENCE_TELEPORT_TICKS, () => {
-    player.setAttribute(ESSENCE_MINE_ENTERING_ATTRIBUTE, null);
+}
+
+/**
+ * Moves the player to `destination` after `ticks`, running `steps[n]` on tick n first, held as
+ * the core's teleports hold them (TeleportHandler): movement blocked, untargetable and
+ * teleporting until the landing. The landing emits "teleport:landed" with where the travel began,
+ * as the core's teleports do. A death (dying, or the respawn's onPlayerDeath), a logout or a later
+ * travel cancels it; `onRelease` runs whenever the hold ends, landed or not. A death leaves the
+ * movement and targeting holds to the death sequence, which resets them on respawn.
+ */
+function travel(player, ticks, destination, steps = {}, onRelease = undefined) {
+  const { Task } = pluginApi.core;
+  const token = { from: player.getLocation?.()?.clone?.() ?? null, fromInstance: player.getPrivateArea?.() != null, onRelease };
+  player.setAttribute(TRAVEL_ATTRIBUTE, token);
+  player.getMovementQueue().reset();
+  player.getMovementQueue().setBlockMovement(true);
+  player.setUntargetable?.(true);
+  player.setTeleporting?.(true);
+  let tick = 0;
+  pluginApi.getTaskManager().submit(new (class extends Task {
+    constructor() {
+      super(1, player, false);
+    }
+    execute() {
+      if (player.getAttribute(TRAVEL_ATTRIBUTE) !== token || player.isRegistered?.() === false) {
+        this.stop();
+        return;
+      }
+      if (player.isDyingReturn?.() || player.getHitpoints?.() <= 0) {
+        releaseTravel(player, token, false);
+        this.stop();
+        return;
+      }
+      tick++;
+      steps[tick]?.();
+      if (tick < ticks) return;
+      releaseTravel(player, token);
+      player.moveTo(destination);
+      pluginApi.emitCustomEvent("teleport:landed", { player, from: token.from, fromInstance: token.fromInstance, to: destination });
+      this.stop();
+    }
+    stop() {
+      releaseTravel(player, token);
+      super.stop();
+    }
+  })());
+}
+
+/**
+ * Ends a travel's hold, once, and only while it is still the player's current one; `restore`
+ * false (a death) leaves movement and targeting to the death sequence.
+ */
+function releaseTravel(player, token, restore = true) {
+  if (player.getAttribute(TRAVEL_ATTRIBUTE) !== token) return;
+  player.setAttribute(TRAVEL_ATTRIBUTE, null);
+  player.setTeleporting?.(false);
+  if (restore) {
     player.getMovementQueue().setBlockMovement(false);
-    if (player.isRegistered?.() === false) return;
-    player.moveTo(RUNE_ESSENCE_MINE.clone());
-  });
+    player.setUntargetable?.(false);
+  }
+  token.onRelease?.();
+}
+
+/** A death cancels a travel in progress: the respawned player stays where they respawn. */
+function cancelTravelOnDeath({ player }) {
+  const token = player?.getAttribute?.(TRAVEL_ATTRIBUTE);
+  if (token) releaseTravel(player, token, false);
 }
 
 /**
@@ -674,6 +730,7 @@ module.exports = {
     api.persistAttribute(ESSENCE_MINE_RETURN_ATTRIBUTE);
 
     api.onPlayerLogin(syncTiaraOptions);
+    api.onPlayerDeath(cancelTravelOnDeath);
     api.onCustomEvent("equipment:changed", syncTiaraOptions);
     api.onItemOnObject(handleTalismanOnRuins, { noted: false });
     api.onItemOnObject(handleBindTiara, { noted: false });

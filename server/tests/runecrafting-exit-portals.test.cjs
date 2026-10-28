@@ -17,6 +17,15 @@ const { Equipment } = require("../dist/game/model/container/impl/Equipment");
 const { Item } = require("../dist/game/model/Item");
 const ruinsData = require("../plugins/skills/data/runecrafting-ruins.json");
 const handlers = {};
+/** Tasks the plugin submits, run a tick at a time by `ticks`; custom events it emits. */
+const tasks = [];
+const emitted = [];
+function ticks(count = 1) {
+  for (let tick = 0; tick < count; tick++) {
+    for (const task of [...tasks]) task.tick();
+    tasks.splice(0, tasks.length, ...tasks.filter((task) => task.isRunning()));
+  }
+}
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
@@ -32,8 +41,12 @@ before(async () => {
       realApi.onObjectInteraction(name, actions);
     },
     onNpcInteraction: (name, actions) => Object.entries(actions).forEach(([option, handler]) => (handlers[`${name}:${option}`] = handler)),
-    // The mine portal's teleport comes a tick later; here it runs at once.
-    getTaskManager: () => ({ submit: (task) => task.execute() }),
+    getTaskManager: () => ({ submit: (task) => { task.setRunning(true); tasks.push(task); } }),
+    onPlayerDeath: (handler) => (handlers.death = handler),
+    emitCustomEvent: (name, payload) => {
+      emitted.push([name, payload]);
+      return realApi.emitCustomEvent(name, payload);
+    },
   };
   const api = new Proxy(base, { get: (target, key) => (key in target ? target[key] : () => {}) });
   require("../plugins/skills/Runecrafting.plugin").register(api);
@@ -78,6 +91,10 @@ function miner({ x = 2889, y = 4814, attributes = {} } = {}) {
     setAttribute: (key, value) => attrs.set(key, value),
     getLocation: () => new Location(x, y, 0),
     getMovementQueue: () => ({ reset() {}, setBlockMovement() {}, isMovementBlocked: () => false }),
+    setUntargetable(value) { this.untargetable = value; },
+    setTeleporting() {},
+    dying: false,
+    isDyingReturn() { return this.dying; },
     busy: () => false,
     getCombat: () => ({ getTeleblockTimer: () => ({ finished: () => true }) }),
     getArea: () => null,
@@ -100,20 +117,30 @@ test("the Rune Essence mine's portals send the player back to the wizard who sen
     setPositionToFace() {},
     performGraphic: (graphic) => said.push(`graphic ${graphic.getId()}`),
   };
+  emitted.length = 0;
   assert.equal(handlers["Aubury:Teleport"]({ player: visitor, npc: aubury }), true);
   assert.deepEqual(visitor.getAttribute("runecrafting:essence-mine-return"), [3253, 3402, 0]);
   assert.deepEqual(said, ["Senventior Disthine Molenko!", "graphic 108"], "the wizard says the line overhead and casts Curse");
-  assert.deepEqual(visitor.log, ["projectile 109", "graphic 110", "area sound 127", "area sound 126", "move 2913,4832,0"],
-    "as captured (1628, 2280): the Curse on the click, the landing four ticks later, no spellbook teleport");
+  assert.equal(visitor.untargetable, true, "held as the core's teleports hold");
+  ticks(3);
+  assert.deepEqual(visitor.log, ["projectile 109", "graphic 110", "area sound 127", "area sound 126"], "the Curse on the click");
+  ticks(1);
+  assert.deepEqual(visitor.log.slice(4), ["move 2913,4832,0"], "as captured (1628, 2280): the landing four ticks later, no spellbook teleport");
+  assert.equal(visitor.untargetable, false);
+  const landed = emitted.filter(([name]) => name === "teleport:landed").map(([, payload]) => payload);
+  assert.equal(landed.length, 1, "the landing is a teleport:landed, as the core's teleports (Last Recall remembers it)");
+  assert.deepEqual([landed[0].from.getX(), landed[0].from.getY(), landed[0].from.getZ(), landed[0].fromInstance], [3253, 3402, 0, false]);
 
   const player = miner({ attributes: { "runecrafting:essence-mine-return": [2591, 3086, 0] } });
   assert.equal(handlers["Portal:Use"]({ player, objectId: 34825, location: { x: 2889, y: 4813, z: 0 } }), true);
+  ticks(1);
   assert.deepEqual(player.log, [
     "spam You step through the portal...", "projectile 109", "graphic 110", "move 2591,3086,0", "sound 200",
   ], "as captured: message and the portal's Curse, then the teleport and sound");
 
   const unknown = miner();
   handlers["Portal:Use"]({ player: unknown, objectId: 34825, location: { x: 2933, y: 4815, z: 0 } });
+  ticks(1);
   assert.ok(unknown.log.includes("move 3252,3400,0"), "nobody recorded: back beside Aubury");
 });
 
@@ -164,6 +191,7 @@ test("all altar entrances use matching talismans on base and transformed cache l
     for (const id of [ruins.ruinsId, ...definition.transforms.filter((id) => id !== -1)]) {
       const player = runecrafter();
       assert.equal(useOnRuins(player, id, ruins.talismanId), true, `${ruins.name} ${id}`);
+      ticks(3);
       // As captured: a tick after the click the hold (human_pickupfloor, sound, line, busy), two later the teleport.
       const held = ruins.name === "Blood" ? "Blood Talisman" : `${ruins.name} talisman`;
       assert.deepEqual(player.log, [
@@ -217,6 +245,7 @@ test("elemental and catalytic talismans and tiaras only admit their own altar gr
     const talismanId = ruins.elemental ? 5516 : 26798;
     const tiaraId = ruins.elemental ? 26804 : 26801;
     assert.equal(useOnRuins(runecrafter(), ruins.ruinsId, talismanId), true, ruins.name);
+    ticks(3);
     assert.equal(useOnRuins(runecrafter(), ruins.ruinsId, ruins.elemental ? 26798 : 5516), false, ruins.name);
     const player = runecrafter(tiaraId);
     player.getEquipment().refreshItems();
@@ -363,4 +392,33 @@ test("a talisman or the tiara used on its altar binds the tiara (Wiki: Tiara; rs
   assert.equal(amount(air, ItemIdentifiers.AIR_TIARA), 1);
   assert.deepEqual(air.xp, [25]);
   assert.equal(use(crafter(1, [[ItemIdentifiers.AIR_TALISMAN, 1]]), ObjectIdentifiers.ALTAR_33, ItemIdentifiers.AIR_TALISMAN), false, "no tiara");
+});
+
+test("a death cancels a wizard's teleport: neither the dying nor the respawned player is moved to the mine", () => {
+  const { Location } = PluginManager.getCoreApi();
+  const aubury = { getLocation: () => new Location(3253, 3401, 0), forceChat() {}, setPositionToFace() {}, performGraphic() {} };
+  const teleported = (player) => player.log.filter((line) => line.startsWith("move"));
+
+  // Dying during the cast (live: no landing while dying; the death sequence owns the player).
+  const dying = miner({ x: 3253, y: 3402, attributes: { "quest.rune_mysteries.stage": 6 } });
+  handlers["Aubury:Teleport"]({ player: dying, npc: aubury });
+  ticks(2);
+  dying.dying = true;
+  ticks(3);
+  assert.deepEqual(teleported(dying), [], "the dying player stays");
+  assert.equal(dying.getAttribute("runecrafting:travel"), null);
+
+  // Died and respawned before the landing tick: the respawn's death event cancels it.
+  const respawned = miner({ x: 3253, y: 3402, attributes: { "quest.rune_mysteries.stage": 6 } });
+  handlers["Aubury:Teleport"]({ player: respawned, npc: aubury });
+  ticks(3);
+  handlers.death({ player: respawned });
+  ticks(2);
+  assert.deepEqual(teleported(respawned), [], "the respawned player stays where they respawned");
+  assert.equal(respawned.getAttribute("runecrafting:travel"), null);
+
+  // And a fresh teleport after it works.
+  handlers["Aubury:Teleport"]({ player: respawned, npc: aubury });
+  ticks(4);
+  assert.deepEqual(teleported(respawned), ["move 2913,4832,0"]);
 });
