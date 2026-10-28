@@ -313,6 +313,29 @@ function buildDamageTarget() {
   return { ...fighter, taken };
 }
 
+/** The bolt plugin reading the server's own core api, so real item names pick the effect. */
+function realBoltHandlers() {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const EnchantedBolts = require('../plugins/combat/EnchantedBolts.plugin');
+  EnchantedBolts._test.attach({ core: PluginManager.getCoreApi(), emitCustomEvent: () => {} });
+  return EnchantedBolts;
+}
+
+/** A rune crossbow and enchanted ruby bolts, worn through the real equipment container. */
+function equipRubyCrossbow(player, combat) {
+  const { Equipment } = require('../dist/game/model/container/impl/Equipment');
+  const { Item } = require('../dist/game/model/Item');
+  const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
+  const { WeaponInterfaces } = require('../dist/game/content/combat/WeaponInterfaces');
+  const { Ammunition, RangedWeapon } = require('../dist/game/content/combat/ranged/RangedData');
+  const equipment = new Equipment(player);
+  equipment.set(Equipment.WEAPON_SLOT, new Item(ItemIdentifiers.RUNE_CROSSBOW));
+  player.equipment = equipment;
+  player.setWeapon(WeaponInterfaces.CROSSBOW);
+  combat.setRangedWeapon(RangedWeapon.RUNE_CROSSBOW);
+  combat.setAmmunition(Ammunition.ENCHANTED_RUBY_BOLT);
+}
+
 // A multi-hit special's tail never rides in pendingHits: CombatFactory.applyResolvedHitDamage
 // schedules each splat past its own delay straight into the target's pendingDamage list - dragon
 // claws' Slice and Dice lands its front pair, then a tick later its back pair (Wiki: Animation
@@ -377,6 +400,75 @@ test('stopping the animation early releases the delayed special hit with it', as
   queue.process(303);
   assert.deepEqual(taken, [35, 17, 8, 9],
       'the tail lands on the tick the player is free, not on the deadline the stall once had');
+});
+
+// The cost of a ruby bolt (e) is the shooter's own hitpoints, queued with no other combatant as
+// its source, so the stall must not hold it. Breaking the drain at the first held splat let a
+// player who fired one while a delayed special was queued behind their animation dodge the cost
+// until the stall ended - and whether they dodged it depended on which entry was queued first.
+test('a stalled player still pays a bolt effect that costs them their own hitpoints', async () => {
+  const { CombatFactory } = require('../dist/game/content/combat/CombatFactory');
+  const { TaskManager } = require('../dist/game/task/TaskManager');
+  const { CombatType } = require('../dist/game/content/combat/CombatType');
+  const { HitDamage } = require('../dist/game/content/combat/hit/HitDamage');
+  const { HitMask } = require('../dist/game/content/combat/hit/HitMask');
+  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  const EnchantedBolts = realBoltHandlers();
+
+  World.processCycle = 301;
+  const { player, combat, taken } = buildDamageTarget();
+  const queue = combat.getHitQueue();
+  equipRubyCrossbow(player, combat);
+  player.getPacketSender = () => ({
+    sendConfig: () => {},
+    sendDestination: () => {},
+    sendAttackTimer: () => {},
+    sendRunStatus: () => {},
+    sendSoundEffect: () => {},
+  });
+
+  const swing = clawsSwing(clawsAttacker(dragonClawsSpecial()), player, 15);
+  assert.deepEqual(swing.getHits().map((hit) => hit.getDamage()), [15, 7, 3, 4], 'the real chain');
+  CombatFactory.applyResolvedHitDamage(player, swing);
+  queue.process(301);
+  assert.deepEqual(taken, [15, 7], 'the front pair lands on the swing tick');
+  assert.equal(player.getHitpoints(), 78);
+
+  player.getCombat().expectAttackAnimation();
+  player.performAnimation(new Animation(4230)); // a hunters' crossbow swing: a full 3-tick stall
+  assert.equal(combat.getIncomingHitCycle(), 304, 'held through cycle 304');
+
+  World.processCycle = 302;
+  TaskManager.process(); // the delayed tail is queued behind the animation
+  queue.process(302);
+  assert.deepEqual(taken, [15, 7], 'the tail waits');
+
+  // The player's own bolt lands now, with the tail still held: Blood Forfeit takes a tenth of
+  // their 78 hitpoints. Only the force-proc attribute is set, so the roll is not left to chance.
+  const prey = { isPlayer: () => false, getHitpoints: () => 60, performGraphic: () => {} };
+  const bolt = { getDelay: () => 2 };
+  player.setAttribute('enchanted-bolts:force-proc', true);
+  EnchantedBolts._test.rollBoltEffect({
+    attacker: player,
+    target: prey,
+    combatType: CombatType.RANGED,
+    hit: bolt,
+    damage: new HitDamage(12, HitMask.RED),
+    accurate: true,
+  });
+  EnchantedBolts._test.landBoltEffect({ attacker: player, target: prey, hit: bolt });
+  assert.equal(queue.getQueuedDamage(), 14, 'the held tail and the bolt cost are both queued');
+
+  World.processCycle = 303;
+  queue.process(303);
+  assert.deepEqual(taken, [15, 7, 7], 'the bolt cost lands on its own tick, behind the held tail');
+  assert.equal(player.getHitpoints(), 71, 'and the queue order never decided whether it did');
+
+  World.processCycle = 304;
+  queue.process(304);
+  assert.deepEqual(taken, [15, 7, 7, 3, 4],
+      'the held chain still arrives together, in the order the client shows it');
+  assert.equal(player.getHitpoints(), 64);
 });
 
 test('a swing is measured from its own animation, and a click does not cut it away', async () => {

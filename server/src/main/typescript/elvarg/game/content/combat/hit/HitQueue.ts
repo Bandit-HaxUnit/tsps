@@ -76,14 +76,24 @@ export class HitQueue {
         // A multi-hit special's later splats never reach pendingHits at all: CombatFactory
         // .applyResolvedHitDamage schedules each one past its hit's own delay straight into this
         // list (dragon claws' Slice and Dice lands two, then two more a tick later), so the stall
-        // holds them too - Wiki: Animation stall queues the hits coming in to the player. Stopping
-        // at the first held splat keeps the chain in the order the client shows it, and leaves
-        // damage the owner took on itself (a recoil ring, a bolt's cost) landing on its own tick.
+        // holds them too - Wiki: Animation stall queues the hits coming in to the player.
+        //
+        // Only what is coming in waits. Damage the owner took on itself - a recoil ring, a bolt's
+        // cost, its poison - is not an incoming hit, so it still lands on its own tick wherever it
+        // sits in the list; breaking the drain at the first held splat would hand the owner a free
+        // tick of self-damage every time a proc queued up behind a delayed special. The held
+        // entries are put back as a block, so the chain keeps the order the client shows it in.
+        const held: HitDamage[] = [];
         while (this.pendingDamage.length > 0) {
-            if (stalled && HitQueue.incomingFromOther(this.pendingDamage[0], character)) {
-                break;
+            const damage = this.pendingDamage.shift()!;
+            if (stalled && HitQueue.incomingFromOther(damage, character)) {
+                held.push(damage);
+                continue;
             }
-            character.addTickHit(this.applyDamage(this.pendingDamage.shift()!));
+            character.addTickHit(this.applyDamage(damage));
+        }
+        if (held.length > 0) {
+            this.pendingDamage.unshift(...held);
         }
         if (!this.hasPendingWork()) HitQueue.active.delete(this);
     }
