@@ -105,6 +105,7 @@ function playerWith(entries = [], { level = 99, threadUses } = {}) {
     isRegistered: () => true,
     isPlayerBot: () => false,
     getUsername: () => 'CraftingTest',
+    getIndex: () => 7,
     getLocation: () => location,
     getHitpoints: () => 99,
     getMovementQueue: () => ({ size: () => player.moving ? 1 : 0 }),
@@ -332,6 +333,20 @@ test('below the level, the tick after the click brings an item box naming the ge
   assert.equal(player.log.length, 0, 'nothing on the click tick');
   tasks.at(-1).execute();
   assert.deepEqual(player.log, [['statement', 'You need a Crafting level of 20 to cut sapphires.']]);
+});
+
+test('another action cancels the delayed refusal: it is keyed by the player index, as combat cancels', t => {
+  membersWorld(t, true);
+  const { TaskManager } = PluginManager.getCoreApi();
+  const { player } = playerWith([[ItemIds.CHISEL, 1], [ItemIds.UNCUT_SAPPHIRE, 1]], { level: 1 });
+  use(player, 'cutGem', ItemIds.CHISEL, ItemIds.UNCUT_SAPPHIRE);
+  const task = tasks.at(-1);
+  assert.equal(task.key, player.getIndex());
+  TaskManager.submit(task);
+  TaskManager.cancelTasks(player.getIndex());
+  TaskManager.process();
+  assert.equal(task.isRunning(), false);
+  assert.deepEqual(player.log, []);
 });
 
 test('a failed cut smashes a semi-precious gem into a crushed gem with the captured message', t => {

@@ -101,7 +101,8 @@ function spam(player, text) {
 function nextTick(player, fn) {
   class NextTick extends core.Task {
     constructor() {
-      super(1, player, false);
+      // Keyed by index, as combat and other actions cancel a player's tasks by it.
+      super(1, player.getIndex(), false);
     }
     execute() {
       this.stop();
