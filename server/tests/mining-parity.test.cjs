@@ -102,7 +102,7 @@ function harness({ emit = noop } = {}) {
   Mining = require(MINING_PLUGIN);
   Mining.register(api);
   return {
-    interactions, hooks, registered,
+    interactions, hooks, registered, events,
     tick(count = 1) { while (count-- > 0) [...tasks].forEach((task) => task.tick()); },
   };
 }
@@ -423,6 +423,29 @@ test("dragon, infernal and crystal pickaxes sometimes roll a tick early on membe
   // Face 50 (0.197): past the dragon's 1/6, still under the crystal's 1/4.
   assert.deepEqual(rollTicks({ pickaxe: ItemIds.DRAGON_PICKAXE, rest: face(50) }), [2, 5, 8, 11]);
   assert.deepEqual(rollTicks({ pickaxe: ItemIds.CRYSTAL_PICKAXE, rest: face(50) }), [2, 4, 6, 8, 10, 12]);
+});
+
+test("\"mining:roll-interval\" answers other mining content with the pickaxe's interval and its early rolls", () => {
+  const { WorldDefinition } = core;
+  const originalMembers = WorldDefinition.isMembersWorld;
+  const originalRandom = Math.random;
+  WorldDefinition.isMembersWorld = () => true;
+  const h = harness();
+  const ask = (pickaxe) => {
+    const request = { pickaxe, ticks: null };
+    h.events["mining:roll-interval"](request);
+    return request.ticks;
+  };
+  try {
+    Math.random = () => 0.1;
+    assert.equal(ask({ attemptIntervalTicks: 3, fastRollChance: 1 / 6 }), 2, "a dragon pickaxe's early roll");
+    assert.equal(ask({ attemptIntervalTicks: 3 }), 3, "a rune pickaxe never rolls early");
+    Math.random = () => 0.5;
+    assert.equal(ask({ attemptIntervalTicks: 3, fastRollChance: 1 / 6 }), 3);
+  } finally {
+    Math.random = originalRandom;
+    WorldDefinition.isMembersWorld = originalMembers;
+  }
 });
 
 test("the skilling timer carries over to the next rock: no fresh roll before the last interval ends", () => {
