@@ -336,6 +336,13 @@ function answerBestPickaxe(request) {
   }
 }
 
+/** "mining:roll-interval": ticks to the next roll with `pickaxe`, for other mining content (stars, GotR, Volcanic Mine). */
+function answerRollInterval(request) {
+  if (request && request.pickaxe && request.ticks == null) {
+    request.ticks = rollInterval(request.pickaxe);
+  }
+}
+
 function findBestPickaxe(player) {
   const miningLevel = getMiningLevel(player);
   const weapon = player.getEquipment().getItems()[Equipment.WEAPON_SLOT];
@@ -837,6 +844,7 @@ module.exports = {
     api.onPlayerDisconnect(endMiningSession);
     api.onCustomEvent("level-up:popup-opened", pauseMining);
     api.onCustomEvent("mining:best-pickaxe", answerBestPickaxe);
+    api.onCustomEvent("mining:roll-interval", answerRollInterval);
     api.persistAttribute(ORE_MINED_ATTRIBUTE, 0);
     api.onPlayerLogin(sendOresMined);
     api.onObjectInteraction("Rocks", { Mine: mineDepletedRock });

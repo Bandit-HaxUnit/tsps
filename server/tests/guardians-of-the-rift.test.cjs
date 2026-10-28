@@ -487,6 +487,24 @@ test('large remains give 2-4 fragments a success, 5 XP each, and the count stops
   Shared.stopAction(player);
 });
 
+test('the pickaxe interval comes from the Mining plugin, so a dragon pickaxe sometimes mines a tick early', () => {
+  const player = fakePlayer('Miner');
+  player.pickaxe = DRAGON_PICKAXE;
+  openGame(player);
+  const early = (request) => { request.ticks = 2; };
+  (hooks.custom['mining:roll-interval'] ??= []).push(early);
+  try {
+    mine(player, 'gotr_essence_tier_2');
+    ticks(2);
+    assert.equal(player.xpBySkill.Mining, 5);
+    ticks(2);
+    assert.equal(player.xpBySkill.Mining, 10, 'the next success 2 ticks on');
+  } finally {
+    hooks.custom['mining:roll-interval'].splice(hooks.custom['mining:roll-interval'].indexOf(early), 1);
+    Shared.stopAction(player);
+  }
+});
+
 test('huge remains give 4-6 essence until the inventory is full', () => {
   const player = fakePlayer('Miner');
   player.pickaxe = DRAGON_PICKAXE;
