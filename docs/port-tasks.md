@@ -1,10 +1,11 @@
 # Port tasks
 
 Courier tasks: deliver crates of cargo between two ports for Sailing XP and a bag of coins or
-loot. Bounty tasks show on the notice boards but can't be taken yet.
+loot. Bounty tasks: collect a sea creature's parts by harvesting its corpses, then hand them in at
+a port master for Sailing XP and coins.
 
 Code: `server/plugins/skills/sailing/PortTasks.plugin.js` and its units in `porttasks/`
-(`Board`, `Ledger`, `PortMaster`, `Bags`, `Common`); the cargo hold's crate handling is in
+(`Board`, `Ledger`, `PortMaster`, `Bags`, `Bounty`, `Common`); the cargo hold's crate handling is in
 `CargoHold.plugin.js`. Data: `server/plugins/skills/sailing/data/port-tasks.json`. Tests:
 `server/tests/port-tasks.test.cjs`.
 
@@ -83,9 +84,33 @@ Code: `server/plugins/skills/sailing/PortTasks.plugin.js` and its units in `port
   trip gives double.
 - A board only redraws an entry once its task is done; live also changes a board over time.
 
+## Bounty tasks
+
+Sources: the user's rev 241 capture of the Pandemonium tern bounty, the cache (table 197's
+`bounty_target_alive`, `bounty_object`, `bounty_object_amount` and `bounty_object_rarity`) and the
+Wiki (Bounty tasks: the XP per creature, coins equal to it, handing in at any port master, a
+second bounty on the same creature waiting for the first, keeping parts when cancelling).
+
+- Taken at a notice board like a courier task: "You have accepted the <col=0090bc>Pandemonium tern
+  bounty</col> port task.", the slot's id varbit and its `bounty_task_item_counter_n` (14662,
+  14663, 14819, 15370, 15397, one per slot) set to the parts still needed (5 Tern beaks). Parts
+  already held (kept from a cancelled bounty of the kind) count, but not those another held
+  bounty already counts.
+- Harvesting the task's creature (docs/sailing.md, Combat) rolls its part at 1 in its rarity
+  (10 for the five-part beaks, livers and ink sacs; 2 or 3 for the rest) while parts are still
+  needed: "One Signal has harvested 1x Tern beak." (the player's name), "<col=ef1020>Untradeable
+  drop: Tern beak</col>", jingle 6765 (30 cycles in) and the counter down by one; the part goes
+  in with the rest of the loot.
+- A port master's Claim-rewards hands in every finished bounty's parts (from the inventory, then
+  the active boat's hold): the creature's bounty XP (3,465 for a tern) and as many coins (to the
+  bank when the inventory has no room),
+  1/36 shark paint, "You have finished the ... port task." and "Thanks, sailor. Here's your
+  payment.". Parts can be stored in the cargo hold, and a recovery loses them.
+
 ## Not done
 
-- Bounty tasks.
+- Bounty parts' drop rate scaling with damage dealt, and the boosted rates before the count is met
+  (Wiki); the parts' rates here are 1 in the cache's rarity.
 - Confiscating crates on a teleport, or when leaving port with one in hand, and the captain's
   log's task list and cancel.
 - Trim being refused while carrying cargo.

@@ -3,6 +3,7 @@ import type { Mobile } from "../../entity/impl/Mobile";
 import { Location } from "../../model/Location";
 import { PathFinder } from "../../model/movement/path/PathFinder";
 import { PluginManager } from "../../../plugins/PluginManager";
+import { CombatPosition } from "./CombatPosition";
 import { CombatType } from "./CombatType";
 import type { CombatMethod } from "./method/CombatMethod";
 
@@ -11,18 +12,21 @@ type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 /** Footprint-aware combat reach and routing. */
 export class CombatRange {
     static canReach(attacker: Mobile, method: CombatMethod, target: Mobile): boolean {
-        if (!attacker || !target || attacker.getPrivateArea() !== target.getPrivateArea()) {
+        if (!attacker || !target || CombatPosition.area(attacker, target) !== CombatPosition.area(target, attacker)) {
             return false;
         }
 
-        const attackerLocation = attacker.getLocation();
-        const targetLocation = target.getLocation();
+        // Across a boat's deck both are measured from the main-world tiles under them, over the
+        // main world's clipping (CombatPosition).
+        const attackerLocation = CombatPosition.location(attacker, target);
+        const targetLocation = CombatPosition.location(target, attacker);
         if (attackerLocation.getZ() !== targetLocation.getZ()) {
             return false;
         }
+        const area = CombatPosition.area(attacker, target);
 
-        const attackerBounds = this.bounds(attacker);
-        const targetBounds = this.bounds(target);
+        const attackerBounds = this.bounds(attacker, attackerLocation);
+        const targetBounds = this.bounds(target, targetLocation);
         const range = this.attackDistance(attacker, method, target);
         const overlapped = this.overlaps(attackerBounds, targetBounds);
         // A large NPC fights on while its target stands inside its footprint: it cannot
@@ -36,19 +40,19 @@ export class CombatRange {
             // Only large NPC attackers reach here overlapped: distance 0 is in range.
             if (overlapped) return true;
             if (range === 1) {
-                return this.hasOpenSharedEdge(attackerBounds, targetBounds, attackerLocation.getZ(), attacker.getPrivateArea());
+                return this.hasOpenSharedEdge(attackerBounds, targetBounds, attackerLocation.getZ(), area);
             }
             // Extended melee can strike over water and low obstacles (Wiki: Attack range).
             // Use the projectile line below: walking collision would reject those attacks.
         }
 
         if (attacker.isNpc()) {
-            return this.hasProjectileLine(targetBounds, attackerBounds, target, attackerLocation.getZ());
+            return this.hasProjectileLine(targetBounds, attackerBounds, area, attackerLocation.getZ());
         }
 
-        const forward = this.hasProjectileLine(attackerBounds, targetBounds, attacker, attackerLocation.getZ());
+        const forward = this.hasProjectileLine(attackerBounds, targetBounds, area, attackerLocation.getZ());
         return forward && (!target.isPlayer() ||
-            this.hasProjectileLine(targetBounds, attackerBounds, target, attackerLocation.getZ()));
+            this.hasProjectileLine(targetBounds, attackerBounds, area, attackerLocation.getZ()));
     }
 
     /** The method's reach, as plugins adjust it (a minigame shortening every attack, say). */
@@ -98,7 +102,7 @@ export class CombatRange {
         if (this.distance(sourceBounds, destinationBounds) > Math.max(0, range | 0)) {
             return false;
         }
-        return this.hasProjectileLine(sourceBounds, destinationBounds, source, sourceLocation.getZ());
+        return this.hasProjectileLine(sourceBounds, destinationBounds, source.getPrivateArea(), sourceLocation.getZ());
     }
 
     /** Their footprints touch without overlapping. */
@@ -132,8 +136,7 @@ export class CombatRange {
         );
     }
 
-    private static bounds(entity: Mobile): Bounds {
-        const location = entity.getLocation();
+    private static bounds(entity: Mobile, location: Location = entity.getLocation()): Bounds {
         const size = Math.max(1, entity.getSize() | 0);
         return {
             minX: location.getX(),
@@ -183,7 +186,7 @@ export class CombatRange {
             && (RegionManager.getClipping(toX, toY, z, area) & (toMask | invalid)) === 0;
     }
 
-    private static hasProjectileLine(source: Bounds, destination: Bounds, entity: Mobile, z: number): boolean {
+    private static hasProjectileLine(source: Bounds, destination: Bounds, area: any, z: number): boolean {
         return RegionManager.canProjectileAttackBounds(
             new Location(source.minX, source.minY, z),
             new Location(destination.minX, destination.minY, z),
@@ -191,7 +194,7 @@ export class CombatRange {
             source.maxY - source.minY + 1,
             destination.maxX - destination.minX + 1,
             destination.maxY - destination.minY + 1,
-            entity.getPrivateArea(),
+            area,
         );
     }
 }
