@@ -29,6 +29,7 @@ function buildData(core) {
     START_TASK_KEY: "cw.start",
     END_TASK_KEY: "cw.end",
     START_COUNTDOWN_SECONDS: 120,
+    BOT_START_COUNTDOWN_SECONDS: 15,
     GAME_SECONDS: 1200,
     LOBBY_TELEPORT: loc(2440, 3089, 0),
     SPECIAL_RESTORE_DOSES,
