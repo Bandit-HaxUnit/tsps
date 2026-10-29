@@ -2462,6 +2462,12 @@ export class OsrsClient {
             // checked the run against the deck, so only the step between two deck tiles is drawn.
             (plane: number, x: number, y: number) =>
                 ClientState.isWorldEntityTile(x, y) ? 0 : this.renderer.getCollisionFlagAt(plane, x, y),
+            {
+                projectDeckToWorld: (entityIndex, fineX, fineY) =>
+                    (this.renderer as { projectDeckToWorld?: (entityIndex: number, fineX: number, fineY: number) => { x: number; y: number } | undefined } | undefined)
+                        ?.projectDeckToWorld?.(entityIndex, fineX, fineY),
+                orientationOf: (entityIndex) => this.worldViewManager.getWorldEntity(entityIndex)?.position.orientation,
+            },
         );
         this.continuousMovement = new ContinuousMovement(this.playerEcs, () => this.controlledPlayerServerId,
             sendMovementInput, (plane, x, y) => this.renderer.getCollisionFlagAt(plane, x, y), this.resolvePlayerPlane);

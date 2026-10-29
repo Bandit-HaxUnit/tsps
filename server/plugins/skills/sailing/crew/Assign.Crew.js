@@ -8,6 +8,8 @@
 const common = require("./Common.Crew");
 const helmCrew = require("./Helm.Crew");
 const salvageCrew = require("./Salvage.Crew");
+const cannonCrew = require("./Cannon.Crew");
+const repairCrew = require("./Repair.Crew");
 const lines = require("./Lines.Crew");
 const cargo = require("../Cargo.Sailing");
 const facilities = require("../BoatFacilities.Sailing");
@@ -186,6 +188,7 @@ function order(player, boat, owned, member, job) {
     player.sendMessage(`Your crewmate requires ${level} ${STAT_NAMES[stat]} to use that facility.`);
     return;
   }
+  if (job.kind === cannonCrew.CREW_FACILITY_CANNON && cannonCrew.refuseIfManned(player, boat, job.hotspot)) return;
   if (job.position !== POSITION.IDLE) {
     for (const other of common.crewAboard(boat)) {
       if (other !== member && other.position === job.position) setPosition(player, boat, other, POSITION.IDLE);
@@ -305,22 +308,30 @@ function isHelm(position) {
   return position === POSITION.HELM || position === POSITION.HELM_AND_SAILS || position === POSITION.SAILS;
 }
 
-/** The work itself, once there: the helm and salvaging hooks; other facilities are manned only. */
+/** The work itself, once there: the helm, repairs, salvaging hooks and cannons; other facilities are manned only. */
 function beginJob(player, boat, owned, member, resumed) {
   if (isHelm(member.position)) return helmCrew.work(player, boat, member, { setSail: !resumed });
   if (member.position === POSITION.REPAIRS) return checkRepairKits(player, boat, owned, member, resumed);
   const job = jobAt(owned, member.position);
   if (job?.kind === salvageCrew.CREW_FACILITY_HOOK) return salvageCrew.work(player, boat, owned, member, job.hotspot);
+  if (job?.kind === cannonCrew.CREW_FACILITY_CANNON) return cannonCrew.work(player, boat, owned, member, job.hotspot);
   return undefined;
 }
 
 /**
  * Repairs need repair kits in the cargo hold. Without one the crewmate is sent back to idle:
  * "Your crew can only make repairs if the boat has repair kits in its cargo hold." and their own
- * line about it (rsprox). With kits they stand by; repairing the boat isn't done yet.
+ * line about it (rsprox). With kits they repair the boat (Repair.Crew.js) until the kits run out.
  */
 function checkRepairKits(player, boat, owned, member, resumed) {
-  if (cargo.repairKitUses(owned) > 0) return undefined;
+  if (cargo.repairKitUses(owned) > 0) {
+    return repairCrew.work(player, boat, owned, member, () => {
+      if (member.position !== POSITION.REPAIRS || !common.crewAboard(boat).includes(member)) return;
+      player.sendMessage(NO_KITS);
+      setPosition(player, boat, member, POSITION.IDLE);
+      lines.say(member.npc, member.crew, "noRepairKits");
+    });
+  }
   const { CountdownTask, TaskManager } = common.core();
   const task = new CountdownTask(member.npc, resumed ? NO_KITS_RESUMED_TICKS : NO_KITS_TICKS, () => {
     if (member.position !== POSITION.REPAIRS || !common.crewAboard(boat).includes(member)) return;
@@ -377,6 +388,7 @@ function attach(api) {
   api.onInterfaceActionClick(pickCrewmate);
   api.onCustomEvent("sailing:helm-taken", helmTaken);
   api.onCustomEvent("sailing:hook-taken", hookTaken);
+  api.onCustomEvent("sailing:cannon-taken", hookTaken);
 }
 
 module.exports = attach;
