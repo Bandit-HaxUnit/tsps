@@ -5,7 +5,7 @@ Every quest the server registers, with the latest result recorded in its page he
 test a quest is in [server/docs/agents/quest-testing.md](../../server/docs/agents/quest-testing.md);
 how to record the result is in [_template/README.md](_template/README.md).
 
-185 quests · ✅ passed: 32 · ⚠️ passed with issues: 18 · 🔄 in progress: 7 · ❌ failed: 1 · 🔁 needs recheck: 0 · untested: 127
+185 quests · ✅ passed: 32 · ⚠️ passed with issues: 19 · 🔄 in progress: 7 · ❌ failed: 1 · 🔁 needs recheck: 0 · untested: 126
 
 "Needs recheck" means the quest's plugin has changed since the commit its result was proven on.
 
@@ -163,7 +163,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | The Garden of Death | untested |  |  |  |  |
 | The Giant Dwarf | untested |  |  |  |  |
 | The Golem | untested |  |  |  |  |
-| [The Grand Tree](grand-tree/README.md) | untested |  |  |  |  |
+| [The Grand Tree](grand-tree/README.md) | ⚠️ passed with issues | 2026-10-29 | agent | claude-haiku-5-5 | 6 |
 | [The Great Brain Robbery](great-brain-robbery/README.md) | untested |  |  |  |  |
 | [The Hand in the Sand](hand-in-the-sand/README.md) | untested |  |  |  |  |
 | [The Heart of Darkness](the-heart-of-darkness/README.md) | untested |  |  |  |  |

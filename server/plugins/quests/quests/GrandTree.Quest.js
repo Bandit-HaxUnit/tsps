@@ -128,7 +128,8 @@ module.exports = function registerGrandTreeQuest(api) {
   ]);
   const ALL_PILLARS_PLACED = (1 << PILLAR_TWIGS.size) - 1;
 
-  const WATCHTOWER_DESTINATION = { x: 2484, y: 3465, z: 2 };
+  /** Climbing the watchtower tree lands on its east side, beside the twig pillars. */
+  const WATCHTOWER_DESTINATION = { x: 2485, y: 3465, z: 2 };
   const CAVE_DESTINATION = { x: 2491, y: 9861, z: 0 };
   const CELL_DESTINATION = { x: 2464, y: 3495, z: 3 };
   /** The cell's door has no cached Open option, so release moves the player out. */
