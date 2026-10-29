@@ -7,13 +7,16 @@ const FORM_GAMEVALS = { saradomin: "castlewars_rabbit", zamorak: "castlewars_imp
 const FORM_NAMES = { saradomin: "rabbit", zamorak: "imp", guthix: "sheep" };
 const TOPLEVEL = 161;
 // Cache gameframe mounts: chat, music, settings and logout remain available.
-const HIDDEN_TABS = [[76, 593], [77, 320], [78, 629], [79, 149], [80, 387], [81, 541], [82, 218], [83, 7], [84, 109], [85, 429], [88, 216]];
+const HIDDEN_TABS = [[76, 593], [77, 320], [78, 629], [79, 149], [80, 387], [81, 541], [82, 218], [83, 7], [84, 109], [88, 216]];
 const HIDDEN_GROUPS = new Set([...HIDDEN_TABS.map(([, group]) => group), 77]);
 const QUICK_PRAYER_DONE = { group: 77, child: 5 };
+const BLOCKED_ORB_COMPONENTS = ["orbs:prayerbutton", "orbs_osm:prayerbutton", "orbs:worldmap", "orbs_nomap:worldmap", "orbs_osm:worldmap"];
+const COMBAT_VARPS = new Set([43, 172, 301]); // Native combat style, auto-retaliate and special controls.
 const ACTIVITY_MESSAGE = "You can't do that while transformed in the Castle Wars waiting room.";
 
 let core;
 let game;
+let blockedOrbs;
 const pending = new WeakMap();
 const transformed = new WeakSet();
 
@@ -81,6 +84,21 @@ function refuseButton(event) {
   }
 }
 
+/** Native prayer, combat and orb actions run before the ordinary interface hooks. */
+function refuseWidgetAction(event) {
+  if (!transformed.has(event.player)) return;
+  if (HIDDEN_GROUPS.has(event.packet.groupId) || blockedOrbs.has(event.packet.widgetId)) {
+    event.handled = true;
+    event.player.sendMessage(ACTIVITY_MESSAGE);
+  }
+}
+
+function refuseCombatVarp(event) {
+  if (!transformed.has(event.player) || !COMBAT_VARPS.has(event.varpId)) return;
+  event.handled = true;
+  event.player.sendMessage(ACTIVITY_MESSAGE);
+}
+
 function clearOnLogout({ player }) {
   clearWaitingForm(player);
 }
@@ -88,6 +106,7 @@ function clearOnLogout({ player }) {
 module.exports = function attachCastleWarsWaitingRoom(api, castleWars) {
   core = api.core;
   game = castleWars;
+  blockedOrbs = new Set(BLOCKED_ORB_COMPONENTS.map((name) => core.CacheDefinitions.getComponentId(name)).filter(Number.isInteger));
   Object.assign(game, { prepareWaitingForm, applyWaitingForm, clearWaitingForm, isWaitingTransformed: (player) => transformed.has(player) });
   api.onCanEquip(refuseActivity);
   api.onCanUnequip(refuseActivity);
@@ -98,6 +117,8 @@ module.exports = function attachCastleWarsWaitingRoom(api, castleWars) {
   api.onBeforeNpcInteraction(refuseInteraction);
   api.onButtonClick(refuseButton);
   api.onInterfaceActionClick(refuseButton);
+  api.onCustomEvent("player:widget-action", refuseWidgetAction);
+  api.onCustomEvent("player:varp-transmit", refuseCombatVarp);
   api.onPlayerLogout(clearOnLogout);
 };
 

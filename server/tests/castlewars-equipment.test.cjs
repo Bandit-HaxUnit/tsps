@@ -10,11 +10,13 @@ const Areas = require('../plugins/minigames/castlewars/Areas.CastleWars');
 const Lobby = require('../plugins/minigames/castlewars/Lobby.CastleWars');
 const WaitingRoom = require('../plugins/minigames/castlewars/WaitingRoom.CastleWars');
 const { Player } = require('../dist/game/entity/impl/player/Player');
+const { ClientConnection } = require('../dist/net/NetworkBuilder');
 let game, hooks, areas, prompt, lobbyObject;
 
 before(async () => {
   await CachePipeline.initialize(process.cwd());
   hooks = {};
+  const nativeApi = PluginManager.createApi('CastleWarsEquipmentNativeTest');
   const api = {
     core,
     getAreaManager: () => ({ areas: [], inside: (location, area) => area.getBoundaries().some((b) => b.inside(location)) }),
@@ -33,7 +35,8 @@ before(async () => {
     onBeforeNpcInteraction: (handler) => { hooks.npc = handler; },
     onButtonClick: (handler) => { hooks.button = handler; },
     onInterfaceActionClick() {},
-    onCustomEvent() {}, onServerStartup() {}, onPlayerLogin() {}, onPlayerDeath() {}, onShouldDropItemsOnDeath() {},
+    onCustomEvent: (name, handler) => { nativeApi.onCustomEvent(name, handler); },
+    onServerStartup() {}, onPlayerLogin() {}, onPlayerDeath() {}, onShouldDropItemsOnDeath() {},
     registerArea: (area) => areas.push(area),
     onObjectInteraction: (handler) => { lobbyObject = handler; },
     onNpcInteraction() {},
@@ -84,6 +87,7 @@ test('cache god-affiliation flags select the correct opposing portal form', (t) 
     assert.ok(p.hidden.includes((161 << 16) | 79), 'inventory is unavailable');
     assert.ok(!p.hidden.includes((161 << 16) | 89), 'music stays available');
     assert.ok(!p.hidden.includes((161 << 16) | 87), 'settings stay available');
+    assert.ok(!p.hidden.includes((161 << 16) | 85), 'friends stay available for private chat');
     game.clearWaitingForm(p);
     assert.equal(p.getNpcTransformationId(), -1);
     assert.ok(p.restored.some(([tab, group]) => tab === 79 && group === 149), 'inventory is restored');
@@ -171,4 +175,38 @@ test('waiting-area transitions and logout clear only Castle Wars transformations
   p.setNpcTransformationId(core.NpcIdentifiers.GOBLIN);
   game.clearWaitingForm(p);
   assert.equal(p.getNpcTransformationId(), core.NpcIdentifiers.GOBLIN, 'unrelated transformations are not cleared');
+});
+
+test('native widget dispatch blocks prayer, orbs and combat controls before their handlers until the transformation ends', async (t) => {
+  const p = player(t, [core.ItemIdentifiers.ZAMORAK_FULL_HELM]);
+  const channel = { kind: 'test', remoteAddress: '127.0.0.1', isOpen: () => true, send: () => true,
+    close() {}, onData() {}, onError() {}, onClose() {} };
+  const connection = new ClientConnection(channel);
+  connection.player = p;
+  const input = async (packet) => connection.dispatch([packet], true);
+  const widget = (uid, buttonNum = 1) => ({ type: 'widget_action', widgetId: uid, groupId: uid >>> 16, childId: uid & 65535, buttonNum });
+  let quickPrayers = 0, prayers = 0, maps = 0;
+  t.mock.method(p.getQuickPrayers(), 'handleWidgetAction', () => { quickPrayers++; return false; });
+  t.mock.method(core.PrayerHandler, 'togglePrayer', () => { prayers++; return true; });
+  t.mock.method(p.getPacketSender(), 'toggleWorldMap', () => { maps++; });
+  const prayer = widget((541 << 16) | 1);
+  const autoRetaliate = widget((593 << 16) | 32);
+  const orbs = ['orbs:prayerbutton', 'orbs_osm:prayerbutton', 'orbs:worldmap', 'orbs_osm:worldmap']
+    .map((name) => { const id = core.CacheDefinitions.getComponentId(name); assert.ok(Number.isInteger(id), name); return widget(id, 2); });
+  game.prepareWaitingForm(p, 'saradomin');
+  game.applyWaitingForm(p);
+  p.setAutoRetaliate(false);
+  for (const packet of [prayer, autoRetaliate, ...orbs, { type: 'varp_transmit', varpId: 172, value: 0 }]) await input(packet);
+  assert.equal(quickPrayers, 0);
+  assert.equal(prayers, 0);
+  assert.equal(maps, 0);
+  assert.equal(p.autoRetaliateReturn(), false);
+  game.clearWaitingForm(p);
+  quickPrayers = 0;
+  await input(prayer);
+  await input(autoRetaliate);
+  await input(orbs[2]);
+  assert.equal(prayers, 1, 'native prayer actions resume after leaving');
+  assert.equal(p.autoRetaliateReturn(), true, 'native combat controls resume after leaving');
+  assert.equal(maps, 1, 'the world map opens normally after leaving');
 });
