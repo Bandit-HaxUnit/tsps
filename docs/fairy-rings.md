@@ -16,7 +16,7 @@ All 64 dial combinations are rows of **db table 89**:
 | 7 | the name ("Fairy ring (AJR)") |
 | 8 | the travel log text ("<br>Fremennik Province: Fremennik Slayer Cave") |
 
-The dials are varbits 3985/3986/3987 and count **anticlockwise**: by value 0-3 the letters are A D C B, I L K J and P S R Q, so the index is `dial1 * 16 + dial2 * 4 + dial3` (AJR is 0 3 2 = 14). The common ring (`fairyring_minorhub`, 29495) is a multiloc on varbit 5374; each variant's third option reads "Last-destination (XYZ)".
+The dials are varbits 3985/3986/3987 and count **anticlockwise**: by value 0-3 the letters are A D C B, I L K J and P S R Q, so the index is `dial1 * 16 + dial2 * 4 + dial3` (AJR is 0 3 2 = 14). The rings (`fairyring_minorhub` 29495, Zanaris' 29560, the POH ring 29228) are not multilocs: op 3 is a plain "Last-destination" for every code. Varbit 20251 (`fairyring_lastloc_opvis`, 64 + the index) is sent with it; our client does not use it, so the option shows (as "Last-destination", without the code) before a first use too.
 
 ## What OSRS sends
 
@@ -31,7 +31,7 @@ The dials are varbits 3985/3986/3987 and count **anticlockwise**: by value 0-3 t
 | 4 | the teleport; animation 3266 (`human_fairy_appear`) |
 | 5 | `busy` = 0; animation reset |
 
-- **"Last-destination (XYZ)"** (op 3) and **"Zanaris"** (op 1, code BKS) skip the dials. Both were captured from the ring's tile: `busy` and the flowers at once, the teleport 3 ticks later, `busy` 0 a tick after. To the ring the player stands on, the animation plays without moving them.
+- **"Last-destination"** (op 3) and **"Zanaris"** (op 1, code BKS) skip the dials. Both were captured from the ring's tile: `busy` and the flowers at once, the teleport 3 ticks later, `busy` 0 a tick after. To the ring the player stands on, the animation plays without moving them.
 - **Close** (398:27) is client script 29 (`if_close`); the server only clears `busy`.
 - **AJQ** (Dorgesh-Kaan cave), for a player without a light source: at Confirm, varbit 3865 (`cws_warning_15`) = 1, `meslayer_close [28]` and `toplevel_mainmodal_open` (2524) `[-1, -1]` run, and the warning (578) opens: "This fairy ring code leads to a dark area. Are you sure you want to go there without a light source?" with "Yes I am sure." (578:17) and "No, I am not properly equipped." (578:18). No closed it and cleared `busy`.
 
