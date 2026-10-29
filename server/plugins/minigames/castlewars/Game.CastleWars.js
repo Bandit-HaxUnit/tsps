@@ -181,14 +181,11 @@ function restoreObjects() {
   }
 }
 
-/**
- * Castle stairs, ladders and trapdoors use the shared ladder climb (Ladders.plugin.js): it waits
- * out the arrival step (arriveDelay) and plays the climb before moving.
- */
+/** Castle Wars stairs change floor immediately, so another click can follow on the next tick. */
 function climbTo(player, to) {
   const destination = new core.Location(to[0], to[1], to[2]);
-  const direction = to[2] < player.getLocation().getZ() ? "ladders:climbDown" : "ladders:climbUp";
-  api.emitCustomEvent(direction, { player, destination });
+  player.getMovementQueue().reset();
+  player.moveTo(destination);
 }
 
 // --- Equipment and game items ------------------------------------------------------------
@@ -292,6 +289,8 @@ function restoreFlagToBase(flagTeam, cause = "reset") {
 }
 
 function carryFlag(player, flagTeam) {
+  player.getCombat().reset();
+  player.getCombat().setCastSpell(null);
   flagStatus[flagTeam] = 1;
   flagCarriers[flagTeam] = player;
   player.getEquipment().setItem(core.Equipment.WEAPON_SLOT, new core.Item(getTeamData(flagTeam).bannerId, 1));
@@ -306,6 +305,14 @@ function isSteppingStone(tile) {
     (tile.x >= 2418 && tile.x <= 2420 && tile.y >= 3122 && tile.y <= 3125) ||
     (tile.x >= 2377 && tile.x <= 2378 && tile.y >= 3084 && tile.y <= 3088)
   );
+}
+
+function isInsideCastle(player, teamId) {
+  const { x, y, z } = getLocationTile(player);
+  if (z < 0 || z > 3) return false;
+  return teamId === data.TEAM.SARADOMIN
+    ? x >= 2411 && x <= 2432 && y >= 3072 && y <= 3090
+    : x >= 2368 && x <= 2388 && y >= 3117 && y <= 3136;
 }
 
 /** The team this player is recorded as carrying for, banner still equipped or not. */
@@ -323,6 +330,15 @@ function placeDroppedFlag(flagTeam, player) {
   // One standard per team: remove whatever drop a previous life left behind, so repeated
   // deaths in the same spot cannot stack flag objects.
   removeDroppedFlagObject(flagTeam);
+  const otherTeam = opposingTeam(flagTeam);
+  const otherDrop = droppedFlagObjects[otherTeam];
+  // The client has one scenery slot per tile. Returning the dropper's own standard
+  // keeps the enemy standard available instead of hiding one beneath the other.
+  if (otherDrop?.getLocation().equals(player.getLocation())) {
+    const ownTeam = getTeamId(player);
+    restoreFlagToBase(ownTeam, "overlap");
+    if (flagTeam === ownTeam) return;
+  }
   flagStatus[flagTeam] = 2;
   flagCarriers[flagTeam] = null;
   if (process.env.CW_BOT_DEBUG === "1") {
@@ -838,6 +854,7 @@ module.exports = function createCastleWarsGame(registry) {
     hasBraceletEffect,
     clearBraceletEffect,
     getCarriedFlagTeam,
+    isInsideCastle,
     getDroppedFlagObject: (flagTeam) => droppedFlagObjects[flagTeam] ?? null,
     removeDroppedFlagObject,
     updateFlagStand,
