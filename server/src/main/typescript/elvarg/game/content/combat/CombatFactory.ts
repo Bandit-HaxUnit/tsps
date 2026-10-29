@@ -1328,6 +1328,9 @@ export class CombatFactory {
             return;
         }
 
+        const freeze = { target: character, source, ticks, kind };
+        PluginManager.emitCustomEvent("combat:freeze-duration", freeze);
+        ticks = Math.max(1, Math.floor(freeze.ticks));
         character.getTimers().registers(TimerKey.FREEZE, ticks);
         character.getTimers().registers(TimerKey.FREEZE_IMMUNITY, ticks + Misc.getTicks(3));
         character.getMovementQueue().reset();

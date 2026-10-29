@@ -219,7 +219,7 @@ module.exports = function registerGrandTreeQuest(api) {
     if (stage >= STAGE_STARTED) {
       return ["Take the bark sample to <col=800000>Hazelmere</col> east of Yanille."];
     }
-    return ["Speak to <col=800000>King Narnode Shareen</col> with level 25 Agility."];
+    return ["I can start this quest by talking to <col=800000>King Narnode Shareen</col> in the <col=800000>Grand Tree</col>."];
   }
 
   function grantReward(player) {
