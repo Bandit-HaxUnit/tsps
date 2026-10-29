@@ -217,7 +217,8 @@ Bounty tasks, Repair kits).
   hold." over their head, once until they next fire (live repeats it now and then). Orders are the cannon row's first two buttons (row 3 + hotspot: slots 16
   and 17 for a skiff's hotspot 1): the first cycles "Await further orders!", "Fire at will!" and
   "Attack my targets!" (`weapon_n_following_target` 1, 2, 0), the second is "Hold fire!", said by
-  the captain. Following the captain they take the captain's target ("Fire!"); firing at will they
+  the captain. Following the captain they take the captain's target, whether the captain mans a cannon or attacks
+  with their own weapon ("Fire!"); firing at will they
   pick the nearest creature the cannon reaches, for 10 minutes (captured: 1000 ticks), then follow
   the captain again.
 - **Sea creatures** (`data/sea-combat.json`, every spawned kind; their animations, death sounds
@@ -260,6 +261,10 @@ Bounty tasks, Repair kits).
   nearest it (`BoatManager.deckTileToward`), as for any main-world NPC's option from a deck. The loot goes into the inventory, each item
   flying in (script 7192 with the corpse, a loot key counting up, the item and the amount) with
   sound 2581; without room for all of it, it all drops under the player (Wiki).
+- **Loot rules**: a harvest's loot goes through the same hooks as a kill's drops (NpcDrops'
+  `npc-drops:add`, `npc-drops:roll` with everyone who damaged the creature, `npc-drops:generated`,
+  with the creature's own id), so an Ironman's shared kill keeps nothing, members items go on a
+  free world and the collection log counts it; a bounty part only counts if it survives them.
 - **Bounty parts** in a creature's drop table (Wiki tertiaries, "only dropped while on an applicable
   bounty task") come only from an active bounty (porttasks/Bounty.PortTasks.js); harvests drop them
   from the table's roll.

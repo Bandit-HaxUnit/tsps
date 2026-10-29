@@ -90,6 +90,17 @@ function onHarvest(harvest, random = Math.random) {
   if (index < 0) return;
   const bounty = bountyOf(common.taskById(held[index].id));
   if (random() >= 1 / bounty.rarity) return;
+  extra.push({ itemId: bounty.part, amount: 1 });
+  // Counted only if the part survives the loot's rules (an Ironman's shared kill keeps nothing).
+  const commit = () => collect(player, index, bounty);
+  if (Array.isArray(harvest.claims)) harvest.claims.push({ itemId: bounty.part, commit });
+  else commit();
+}
+
+/** A part collected for the bounty in a slot: the counter, the messages and the jingle (rsprox). */
+function collect(player, index, bounty) {
+  const held = common.slots(player);
+  if (!held[index]) return;
   held[index] = { ...held[index], collected: (held[index].collected ?? 0) + 1 };
   player.setAttribute(common.SLOTS_ATTRIBUTE, held);
   player.getPacketSender().sendVarbit(COUNTER_VARBITS[index], remaining(held[index], bounty));
@@ -97,7 +108,6 @@ function onHarvest(harvest, random = Math.random) {
   player.sendMessage(`${player.getUsername()} has harvested 1x ${name}.`);
   player.sendMessage(`<col=ef1020>Untradeable drop: ${name}</col>`);
   player.getPacketSender().sendSoundEffect(JINGLE, 1, JINGLE_DELAY, 10);
-  extra.push({ itemId: bounty.part, amount: 1 });
 }
 
 /** Parts kept from a cancelled bounty of the same kind count towards a new one (Wiki). */

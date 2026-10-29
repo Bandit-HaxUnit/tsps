@@ -846,3 +846,60 @@ test("bounty parts in a creature's drop table only come from an active bounty", 
   assert.deepEqual(harvest.drops.map((drop) => drop.itemId), [526], "the feather and beak go without a task");
   assert.deepEqual(harvest.extra, []);
 });
+
+test("harvest loot goes through the kill's loot rules with everyone who damaged it (an Ironman's shared kill)", () => {
+  const player = captain();
+  const helper = captain();
+  const { boat, owned, loc, hotspot } = aboardWithCannon(player);
+  const osprey = seaNpc(OSPREY, outboard(boat, owned, hotspot.id, loc, 1));
+  const seen = [];
+  let active = true;
+  // As Loot.Ironman.js does for an Ironman whose kill someone helped with: nothing is kept.
+  api.onCustomEvent("npc-drops:roll", (event) => {
+    if (!active || event.npcId !== OSPREY) return;
+    seen.push(event);
+    if ((event.damagers ?? []).some((other) => other !== event.player)) event.drops.splice(0);
+  });
+  const held = portCommon.slots(player);
+  const task = portCommon.DATA.tasks.find((candidate) => Bounty.bountyOf(candidate)?.creature === OSPREY);
+  held[0] = { id: task.id, taken: 0, delivered: 0 };
+  player.setAttribute(portCommon.SLOTS_ATTRIBUTE, held);
+  const random = Math.random;
+  try {
+    PluginManager.emitNpcDeath({ killer: player, damagers: [player, helper], npc: osprey, npcId: OSPREY, location: {}, remains: null });
+    const before = player.inventory.getFreeSlots();
+    Math.random = () => 0;
+    Loot.harvest({ player, npc: osprey, clickType: 1, handled: false });
+    tick(2);
+    assert.equal(seen.length, 1, "npc-drops:roll ran for the harvest");
+    assert.deepEqual(seen[0].damagers, [player, helper], "with the kill's damagers");
+    assert.equal(player.inventory.getFreeSlots(), before, "a shared kill's loot is lost");
+    assert.equal(portCommon.slots(player)[0].collected ?? 0, 0, "and its bounty part isn't counted");
+  } finally {
+    Math.random = random;
+    active = false;
+    World.getNpcs().remove(osprey);
+    leave(player);
+  }
+});
+
+test("crew following the captain take the captain's target when the captain attacks off the cannon", () => {
+  const player = captain({ sailing: 72 });
+  const { boat, owned, loc, hotspot } = aboardWithCannon(player, { type: "skiff", cannon: "adamant cannon", crew: [JITTERY_JIM] });
+  const tern = seaNpc(TERN, outboard(boat, owned, hotspot.id, loc, 4));
+  try {
+    const [jim] = crewCommon.crewAboard(boat);
+    const job = assign.crewFacilities(owned).find((candidate) => candidate.hotspot === hotspot.id);
+    assign.order(player, boat, owned, jim, job);
+    tick(25);
+    assert.equal(Cannon.mannedBy(player), undefined, "the captain isn't on a cannon");
+    const event = { player, npc: tern, npcId: TERN, clickType: 2, handled: false };
+    Cannon._test.attackOption(event);
+    assert.equal(event.handled, false, "the captain's own attack goes on as normal combat");
+    assert.equal(Cannon._test.gunners.get(Cannon._test.keyOf(boat, hotspot.id))?.target, tern, "Jittery Jim takes it");
+    assert.equal(player.said.at(-1), "Fire!");
+  } finally {
+    World.getNpcs().remove(tern);
+    leave(player);
+  }
+});

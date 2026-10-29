@@ -469,8 +469,16 @@ function validTarget(npc) {
 }
 
 /** The captain's Attack while they man a cannon (or command one): the cannon takes the target. */
+/**
+ * The captain's Attack on a creature. Crewmates following the captain's target take it whether
+ * or not the captain mans a cannon (rsprox: crew-combat, "Fire!" off the cannon, then "I can't reach
+ * that!" from the captain's own attack); a captain
+ * on a cannon fires it, otherwise their own attack goes on as normal combat.
+ */
 function attackOption(event) {
   const { player, npc } = event;
+  const boat = common.core().Sailing.instanceAboard(player);
+  if (boat && validTarget(npc)) captainTargets(player, boat, npc);
   const gunner = mannedBy(player);
   if (!gunner) return;
   event.handled = true;
@@ -480,7 +488,6 @@ function attackOption(event) {
     return;
   }
   gunner.target = npc;
-  captainTargets(player, gunner.boat, npc);
 }
 
 /** Crew following the captain's target take it too; the captain calls "Fire!" (rsprox). */

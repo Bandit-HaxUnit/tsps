@@ -9,7 +9,9 @@
 //   loot goes straight into the inventory, each item flying in (script 7192) with sound 2581; it
 //   all drops under the player when there isn't room for all of it (Wiki).
 // - What else a harvest gives (a bounty task's parts, porttasks/Bounty.PortTasks.js) is added
-//   by "sea-combat:harvest" listeners.
+//   by "sea-combat:harvest" listeners. Then the loot goes through the same hooks as a kill's
+//   (NpcDrops' npc-drops:add, :roll with everyone who damaged it, :generated), so an Ironman's
+//   shared kill, members items on a free world and the collection log apply as to any drop.
 const common = require("./Common.SeaCombat");
 const { playSound } = require("../SailingContent.Sailing");
 
@@ -61,7 +63,8 @@ function onDeath(event) {
   npc.getCombat().reset();
   npc.setNpcTransformationId(creature.dead);
   npc.setHitpoints(1);
-  corpses.set(npc, { owner: killer, creature, harvesting: false });
+  // Who damaged it decides the loot rules at the harvest (an Ironman's shared kill).
+  corpses.set(npc, { owner: killer, creature, damagers: event.damagers ?? [killer], harvesting: false });
   later(npc, CORPSE_TICKS, () => corpses.delete(npc));
 }
 
@@ -132,11 +135,23 @@ function loot(player, npc, corpse) {
   corpses.delete(npc);
   const drops = [];
   const api = common.api();
-  api.emitCustomEvent("npc-drops:roll-table", { player, npcId: corpse.creature.npc, drops, npc });
-  const harvest = { player, npc, creature: corpse.creature, drops, extra: [] };
+  const npcId = corpse.creature.npc;
+  api.emitCustomEvent("npc-drops:roll-table", { player, npcId, drops, npc });
+  // `claims`: parts listeners give only if they're still in the loot once its rules have run.
+  const harvest = { player, npc, creature: corpse.creature, drops, extra: [], claims: [] };
   api.emitCustomEvent("sea-combat:harvest", harvest);
-  const all = [...drops, ...harvest.extra].filter((drop) => Number.isInteger(drop.itemId) && drop.amount > 0);
+  const all = [...drops, ...harvest.extra];
+  api.emitCustomEvent("npc-drops:add", { player, npc, npcId, drops: all });
+  api.emitCustomEvent("npc-drops:roll", { player, npc, npcId, drops: all, damagers: corpse.damagers });
+  const generated = { player, npc, npcId, drops: all, handled: false };
+  api.emitCustomEvent("npc-drops:generated", generated);
+  for (const claim of harvest.claims) {
+    if (!generated.handled && all.some((drop) => drop.itemId === claim.itemId)) claim.commit();
+  }
   removeCorpse(npc);
+  if (generated.handled) return;
+  const kept = all.filter((drop) => Number.isInteger(drop.itemId) && drop.amount > 0);
+  all.splice(0, all.length, ...kept);
   if (!all.length) return;
   const { Item, ItemDefinition } = common.core();
   const inventory = player.getInventory();
