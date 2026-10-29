@@ -107,8 +107,9 @@ const PROJECTILE = Object.freeze({ start: 30, end: 120, startHeight: 50, endHeig
 const HAND_ANGLES = Object.freeze({ ranged: (3 * Math.PI) / 4, magic: -(3 * Math.PI) / 4 });
 /**
  * Captured: the hitsplat and impact come 4 ticks after the cast, as the flight ends (live: 47 of
- * 52 casts; the other 5 never landed, as he died first). An NPC's hit on a player lands on the attack's tick plus this delay (melee,
- * delay 0, lands on the swing's tick, as live).
+ * 52 casts; the other 5 never landed, as he died first). Melee lands on the swing's tick, as live.
+ * Wiki: bolts and fur balls "only deal damage on impact" and "can be blocked with late
+ * reactions", so they are rolled as they land, with the protection prayer up then.
  */
 const DISTANT_HIT_DELAY = 4;
 /** Captured on the player: a missed bolt splashes (failedspell_impact) with sound 227. */
@@ -557,7 +558,7 @@ function oneShotRat(event) {
 function defineCombatMethod() {
   const { Animation, CombatMethod, CombatType, Graphic, PendingHit } = core;
 
-  return class ScurriusCombatMethod extends CombatMethod {
+  class ScurriusCombatMethod extends CombatMethod {
     constructor() {
       super();
       this.stance = CombatType.MELEE;
@@ -638,13 +639,41 @@ function defineCombatMethod() {
     }
 
     hits(character, target) {
-      if (this.action !== "melee" && this.action !== "ranged" && this.action !== "magic") return [];
       const maxHits = maxHitsFor(character);
-      const melee = this.stance === CombatType.MELEE;
-      const hit = new PendingHit(character, target, this, melee ? 0 : DISTANT_HIT_DELAY);
-      const maxHit = this.stance === CombatType.RANGED ? maxHits.ranged : this.stance === CombatType.MAGIC ? maxHits.magic : maxHits.melee;
-      core.CombatFactory.applyStyleDamage(hit, maxHit);
-      return [hit];
+      if (this.action === "melee") {
+        const hit = new PendingHit(character, target, this, 0);
+        core.CombatFactory.applyStyleDamage(hit, maxHits.melee);
+        return [hit];
+      }
+      if (this.action !== "ranged" && this.action !== "magic") return [];
+      const kind = this.action;
+      Common.later(DISTANT_HIT_DELAY, () => {
+        if (character.getHitpoints() <= 0 || !character.isRegistered?.()) return;
+        if (target.getHitpoints() <= 0 || target.isRegistered?.() === false) return;
+        const hit = new PendingHit(character, target, DISTANT_STYLES[kind], 0);
+        core.CombatFactory.applyStyleDamage(hit, maxHits[kind]);
+        core.CombatFactory.addPendingHit(hit);
+      }, character);
+      return [];
+    }
+  }
+
+  /**
+   * Carries a landing bolt's or fur ball's style: PendingHit reads its style from its method as
+   * it is built, and by the time one lands his own method may have moved on to the next attack.
+   */
+  class DistantHit extends CombatMethod {
+    constructor(style) {
+      super();
+      this.style = style;
+    }
+
+    type() {
+      return this.style;
+    }
+
+    hits() {
+      return [];
     }
 
     /** Captured on the player, at height 100: the fur ball's impact, or the bolt's (a splash on a miss). */
@@ -662,7 +691,10 @@ function defineCombatMethod() {
         sender.sendSound(landed ? SOUND.magicImpact : SPLASH_SOUND, 1, 0);
       }
     }
-  };
+  }
+
+  const DISTANT_STYLES = { ranged: new DistantHit(CombatType.RANGED), magic: new DistantHit(CombatType.MAGIC) };
+  return ScurriusCombatMethod;
 }
 
 function attach(pluginApi) {
