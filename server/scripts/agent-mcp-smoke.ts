@@ -493,6 +493,12 @@ else process.env.AGENT_MCP = previousMcpFlag;
     assert.deepEqual(travelRoutes.unmetRequirements(canoe, groups, carrying({})), ["items AXE=1|UNLOCK_CANOE_AXE=1"]);
     assert.deepEqual(travelRoutes.unmetRequirements(canoe, groups, carrying({}, ["CANOE_AXE"])), []);
     assert.deepEqual(travelRoutes.unmetRequirements(canoe, groups, carrying({ 1351: 1 })), []);
+    // A doubled separator is not an empty alternative: the Hardwood Grove doors need the elite diary or 100 trading sticks.
+    const grove = travelRoutes.indexTransports(transportData).get(travelRoutes.key(2816, 3083, 0))
+        .find((transport: any) => transport.items === "UNLOCK_KARAMJA_ELITE=1||6306=100");
+    assert.deepEqual(travelRoutes.unmetRequirements(grove, groups, carrying({})), ["items UNLOCK_KARAMJA_ELITE=1||6306=100"]);
+    assert.deepEqual(travelRoutes.unmetRequirements(grove, groups, carrying({ 6306: 100 })), []);
+    assert.deepEqual(travelRoutes.unmetRequirements(grove, groups, carrying({}, ["KARAMJA_ELITE"])), []);
     routeFlags.set("3230,3218", 0x200000);
     const blockedStand = (await call(client, "plan_route", { player: "agent1", x: 3230, y: 3218, exact: true })).value;
     assert.equal(blockedStand.result, "no-route", "an unreachable stand tile cannot succeed on the wrong side of a wall");

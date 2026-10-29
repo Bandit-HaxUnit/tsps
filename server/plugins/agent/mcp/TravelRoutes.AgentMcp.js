@@ -215,7 +215,7 @@ function unmetRequirements(transport, itemGroups, player) {
     else if (current < Number(level)) reasons.push(entry);
   }
   for (const all of String(transport.items ?? "").replace(/\s+/g, "").toUpperCase().split("&").filter(Boolean)) {
-    const met = all.split("|").some((option) => {
+    const met = all.split("|").filter(Boolean).some((option) => {
       const [name, quantity] = option.split("=");
       if (name.startsWith("UNLOCK_")) return player.unlocked(name.slice("UNLOCK_".length)) === true;
       const ids = itemGroups[name] ?? (Number.isInteger(Number(name)) ? [Number(name)] : []);
