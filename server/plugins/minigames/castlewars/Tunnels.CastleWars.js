@@ -13,10 +13,9 @@
  * RSPS-only (Near-Reality): which team owns which patch and the clear/collapse messages.
  */
 
-const Mining = require("../../skills/Mining.plugin");
-
 let game;
 let core;
+let api;
 
 const PATCH_SIZE = 2;
 
@@ -66,7 +65,9 @@ function mineRocks({ player, object }) {
   if (!game.requirePlaying(player)) {
     return true;
   }
-  const pickaxe = Mining.findBestPickaxe(player);
+  const request = { player, pickaxe: null };
+  api.emitCustomEvent("mining:best-pickaxe", request);
+  const pickaxe = request.pickaxe;
   if (!pickaxe) {
     player.sendMessage("You need a pickaxe to mine these rocks.");
     return true;
@@ -128,12 +129,7 @@ function collapseWall({ player, object }) {
   if (!game.requirePlaying(player)) {
     return true;
   }
-  const slot = player.getInventory().getSlotForItemId(core.ItemIdentifiers.EXPLOSIVE_POTION);
-  if (slot < 0) {
-    player.sendMessage("You need an explosive potion to collapse the tunnel.");
-    return true;
-  }
-  collapseTunnel(player, patch, slot);
+  player.sendMessage("Use an explosive potion on the cave wall to collapse the tunnel.");
   return true;
 }
 
@@ -149,7 +145,8 @@ function blastWall({ player, object, itemSlot }) {
   return true;
 }
 
-module.exports = function attachCastleWarsTunnels(api, castleWars) {
+module.exports = function attachCastleWarsTunnels(pluginApi, castleWars) {
+  api = pluginApi;
   game = castleWars;
   core = api.core;
   api.onObjectInteraction("Rocks", { Mine: mineRocks });

@@ -385,10 +385,9 @@ function dropCarriedFlag(player) {
 // --- Barricades --------------------------------------------------------------------------
 
 function trackBarricade(npc, teamId) {
-  const location = npc.getLocation();
   npc.castleWarsTeam = teamId;
+  npc.setFlag(core.NPC.BLOCKS_PLAYERS_FLAG);
   barricades.add(npc);
-  RegionManager.addClipping(location.getX(), location.getY(), location.getZ(), RegionManager.BLOCKED_TILE, npc.getPrivateArea());
 }
 
 function teamBarricadeCount(teamId) {
@@ -403,8 +402,7 @@ function releaseBarricade(npc) {
   if (!barricades.delete(npc)) {
     return;
   }
-  const location = npc.getLocation();
-  RegionManager.removeClipping(location.getX(), location.getY(), location.getZ(), RegionManager.BLOCKED_TILE, npc.getPrivateArea());
+  npc.removeFlag(core.NPC.BLOCKS_PLAYERS_FLAG);
 }
 
 function removeBarricade(npc) {
@@ -818,6 +816,7 @@ module.exports = function createCastleWarsGame(registry) {
     startSecondsLeft,
     gameMinutesLeft,
     getLocationTile,
+    isSteppingStone,
     isAt,
     inGameBounds,
     getTeamId,
