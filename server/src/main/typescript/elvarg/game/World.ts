@@ -456,6 +456,27 @@ export class World {
         return false;
     }
 
+    /** Whether an NPC with the "full" flag (NPC.BLOCKS_PLAYERS_FLAG) covers any tile of the footprint. */
+    public static isPlayerBlockingNpcOnTile(
+        location: Location | null | undefined,
+        size = 1,
+        privateArea?: any
+    ): boolean {
+        if (!location) {
+            return false;
+        }
+        for (let x = 0; x < Math.max(1, size); x++) {
+            for (let y = 0; y < Math.max(1, size); y++) {
+                const key = World.getNpcTileKey(location.getX() + x, location.getY() + y, location.getZ());
+                if (World.npcTileOccupants.get(key)?.some((npc) => npc && npc.hasFlag(NPC.BLOCKS_PLAYERS_FLAG) &&
+                    (privateArea === undefined || npc.getPrivateArea() === privateArea))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private static addToUpdateBucket<T extends Mobile>(
         buckets: Map<string, T[]>,
         entity: T
