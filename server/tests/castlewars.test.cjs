@@ -100,6 +100,7 @@ before(() => {
 });
 
 afterEach(() => {
+  delete game.settings;
   PluginManager.pluginConfigCache = {};
   prompt = null;
   World.getAddPlayerQueue().splice(0);
@@ -260,7 +261,7 @@ test('a real player joining an empty lobby is prompted to pick a bot tier', () =
   enterPortal(player, core.ObjectIdentifiers.GUTHIX_PORTAL);
   assert.ok(prompt, 'the empty-lobby prompt was shown');
   assert.equal(prompt.title, 'The Castle Wars lobby is empty. Which bots should populate the game?');
-  assert.deepEqual(prompt.options.map((option) => option.text), ['Novice', 'Intermediate', 'Veteran', 'None']);
+  assert.deepEqual(prompt.options.map((option) => option.text), ['Novice', 'Intermediate', 'Veteran', 'None', 'Practice settings (Lanthus)']);
   assert.equal(player.moves.length, 0, 'the player is not moved before answering');
 
   const loginsBefore = botLogins;
@@ -309,6 +310,21 @@ test('bots entering an empty lobby are never prompted', () => {
   enterPortal(bot, core.ObjectIdentifiers.GUTHIX_PORTAL);
   assert.equal(prompt, null, 'no prompt for a bot');
   assert.equal(bot.moves.length, 1, 'the bot still joins a waiting room');
+});
+
+test('practice sizes count the human and select the requested opposing bot role', () => {
+  for (const size of [1, 3, 5, 10]) {
+    World.getAddPlayerQueue().splice(0);
+    game.settings = { teamSize: size, opponent: 'scorer' };
+    const player = fakePlayer();
+    enterPortal(player, core.ObjectIdentifiers.SARADOMIN_PORTAL);
+    prompt.options[2].pick();
+    const bots = World.getAddPlayerQueue();
+    assert.equal(bots.filter((bot) => game.getTeamId(bot) === TEAM.SARADOMIN).length, size - 1);
+    const opponents = bots.filter((bot) => game.getTeamId(bot) === TEAM.ZAMORAK);
+    assert.equal(opponents.length, size);
+    assert.ok(opponents.every((bot) => bot.getAttribute(game.BOT_ROLE_KEY) === 'scorer'));
+  }
 });
 
 test('a carrier whose banner was stripped before the drop hook still drops the flag', () => {

@@ -528,6 +528,7 @@ function startGame() {
     for (const player of [...game.waitingAreas[teamId].getPlayers()]) {
       resetIdleTicks(player);
       chargeBracelet(player);
+      api.emitCustomEvent("castlewars:started-player", { player });
       player.setAttribute(TRANSITION_KEY, true);
       closeOverlay(player);
       player.smartMove(getTeamData(teamId).startRoom, 3);
@@ -545,6 +546,7 @@ function startGame() {
     }
     resetIdleTicks(player);
     chargeBracelet(player);
+    api.emitCustomEvent("castlewars:started-player", { player });
     player.setAttribute(TRANSITION_KEY, true);
     closeOverlay(player);
     player.moveTo(getTeamData(teamId).startRoom);

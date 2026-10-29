@@ -75,10 +75,12 @@ function castleWarsBotUsername(teamId, index) {
 
 function populateCastleWarsBots(teamId, tier) {
   const opposingTeam = game.opposingTeam(teamId);
-  for (let index = 0; index < BOTS_PER_TEAM; index++) {
+  const settings = game.settings ?? { teamSize: BOTS_PER_TEAM, opponent: "mixed" };
+  for (let index = 0; index < settings.teamSize; index++) {
     const role = BOT_ROLE_MIX[index % BOT_ROLE_MIX.length];
-    spawnCastleWarsBot(teamId, role, castleWarsBotUsername(teamId, index), tier);
-    spawnCastleWarsBot(opposingTeam, role, castleWarsBotUsername(opposingTeam, index), tier);
+    // The joining human occupies one slot in practice teams.
+    if (settings.teamSize === BOTS_PER_TEAM || index > 0) spawnCastleWarsBot(teamId, role, castleWarsBotUsername(teamId, index), tier);
+    spawnCastleWarsBot(opposingTeam, settings.opponent === "mixed" ? role : settings.opponent, castleWarsBotUsername(opposingTeam, index), tier);
   }
 }
 
@@ -128,6 +130,10 @@ function joinWaitingRoom(player, requestedTeam) {
     player.sendMessage(`The ${team} team is full, try ${other}.`);
     return;
   }
+  if (counts[teamId] >= (game.settings?.teamSize ?? Infinity)) {
+    player.sendMessage("That Castle Wars team is full.");
+    return;
+  }
 
   const isBot = player.isPlayerBot() === true;
   const lobbyEmpty = counts[data.TEAM.SARADOMIN] === 0 && counts[data.TEAM.ZAMORAK] === 0;
@@ -147,7 +153,9 @@ function joinWaitingRoom(player, requestedTeam) {
       "The Castle Wars lobby is empty. Which bots should populate the game?",
       ...options,
       "None",
-      () => moveToWaitingRoom(player, teamId)
+      () => moveToWaitingRoom(player, teamId),
+      "Practice settings (Lanthus)",
+      () => require("./Settings.CastleWars").openSettings({ player })
     );
     return;
   }
