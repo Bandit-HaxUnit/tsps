@@ -126,3 +126,41 @@ test('a scorer extinguishes a burning obstruction before exploding it on its nex
   assert.equal(Practice._test.scorerTools({ player: p, nowMs: 1600 }, state), 'running');
   assert.deepEqual(used, [core.ItemIdentifiers.BUCKET_OF_WATER, core.ItemIdentifiers.EXPLOSIVE_POTION]);
 });
+
+test('practice tools remain available after the initial supplies have been consumed', (t) => {
+  const p = player(t);
+  const npc = new core.NPC(core.NpcIdentifiers.BARRICADE, new core.Location(2427, 3082, 1));
+  npc.cade = true;
+  t.mock.method(core.World, 'getNpcs', () => [npc]);
+  t.mock.method(core.PluginManager, 'emitItemOnNpc', ({ player, itemId }) => {
+    assert.equal(player.getInventory().contains(itemId), true);
+    player.getInventory().delete(itemId, 1);
+    return true;
+  });
+  const state = {};
+  for (let i = 0; i < 12; i++) assert.equal(Practice._test.scorerTools({ player: p, nowMs: i * 600 }, state), 'running');
+});
+
+test('the defender clears its pending barrage before a hasta special and can switch back to magic', (t) => {
+  const p = player(t), target = player(t, 2427);
+  target.getTimers().registers(core.TimerKey.FREEZE, 20);
+  p.setSpecialPercentage(100);
+  const combat = p.getCombat();
+  combat.setCastSpell(core.CombatSpells.ICE_BARRAGE.getSpell());
+  let melees = 0, spells = 0;
+  t.mock.method(combat, 'attack', () => {
+    assert.equal(combat.getCastSpell(), null);
+    assert.equal(combat.getAutocastSpell(), null);
+    assert.equal(p.isSpecialActivated(), true);
+    melees++;
+  });
+  t.mock.method(combat, 'castSpellOn', () => { spells++; });
+  Practice._test.defenderAttack({ player: p }, {}, target);
+  assert.equal(melees, 1);
+  assert.equal(p.getEquipment().getSlot(core.Equipment.WEAPON_SLOT), core.ItemIdentifiers.ZAMORAKIAN_HASTA);
+  target.getTimers().cancel(core.TimerKey.FREEZE);
+  Practice._test.defenderAttack({ player: p }, {}, target);
+  assert.equal(spells, 1);
+  assert.equal(p.isSpecialActivated(), false);
+  assert.equal(p.getEquipment().getSlot(core.Equipment.WEAPON_SLOT), core.ItemIdentifiers.KODAI_WAND);
+});

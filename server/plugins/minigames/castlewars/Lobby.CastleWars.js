@@ -79,7 +79,7 @@ function populateCastleWarsBots(teamId, tier) {
   for (let index = 0; index < settings.teamSize; index++) {
     const role = BOT_ROLE_MIX[index % BOT_ROLE_MIX.length];
     // The joining human occupies one slot in practice teams.
-    if (settings.teamSize === BOTS_PER_TEAM || index > 0) spawnCastleWarsBot(teamId, role, castleWarsBotUsername(teamId, index), tier);
+    if (index > 0) spawnCastleWarsBot(teamId, role, castleWarsBotUsername(teamId, index), tier);
     spawnCastleWarsBot(opposingTeam, settings.opponent === "mixed" ? role : settings.opponent, castleWarsBotUsername(opposingTeam, index), tier);
   }
 }
@@ -106,7 +106,7 @@ function chooseTeam(sizes, requestedTeam) {
   return sizes[requestedTeam] > sizes[other(requestedTeam)] ? null : requestedTeam;
 }
 
-function joinWaitingRoom(player, requestedTeam) {
+function joinWaitingRoom(player, requestedTeam, botTier = undefined) {
   const phase = game.getPhase();
   if (phase === game.PHASE.ACTIVE || phase === game.PHASE.ENDING) {
     player.sendMessage("There's already a Castle Wars game running. Please wait.");
@@ -141,19 +141,21 @@ function joinWaitingRoom(player, requestedTeam) {
   // config seeding below can never double up on bots. The chosen tier sets the spawned
   // bots' combat level band and gear; None leaves the game player-only.
   if (!isBot && lobbyEmpty && !seedsBots()) {
+    if (botTier !== undefined) {
+      if (botTier !== null) populateCastleWarsBots(teamId, botTier);
+      moveToWaitingRoom(player, teamId);
+      return;
+    }
     const options = BOT_TIER_OPTIONS.flatMap(([label, tier]) => [
       label,
-      () => {
-        populateCastleWarsBots(teamId, tier);
-        moveToWaitingRoom(player, teamId);
-      },
+      () => joinWaitingRoom(player, teamId, tier),
     ]);
     api.sendMultiChatboxPrompt(
       player,
       "The Castle Wars lobby is empty. Which bots should populate the game?",
       ...options,
       "None",
-      () => moveToWaitingRoom(player, teamId),
+      () => joinWaitingRoom(player, teamId, null),
       "Practice settings (Lanthus)",
       () => require("./Settings.CastleWars").openSettings({ player })
     );

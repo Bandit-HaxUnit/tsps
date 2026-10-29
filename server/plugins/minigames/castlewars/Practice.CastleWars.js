@@ -59,6 +59,9 @@ function prepare(player, state, teamId) {
 }
 
 function useOnBarricade(player, npc, itemId) {
+  // Practice opponents keep tool supplies available for the full session.
+  if (itemId === core.ItemIdentifiers.BUCKET_OF_WATER && !player.getInventory().contains(itemId)) player.getInventory().delete(core.ItemIdentifiers.BUCKET, 1);
+  supply(player, itemId);
   const slot = player.getInventory().getSlotForItemId(itemId);
   if (slot < 0) return false;
   return core.PluginManager.emitItemOnNpc({ player, target: npc, npcId: npc.getId(), targetIndex: npc.getIndex(), item: player.getInventory().getItems()[slot], itemId, slot, interfaceId: 0, handled: false });
@@ -102,9 +105,10 @@ function defenderTools(ctx, state, target) {
     return "failure";
   }
   if (player.calculateDistance(target) > 4 || ctx.nowMs < (state.nextBarricadeAt ?? 0)) return "failure";
-  const slot = player.getInventory().getSlotForItemId(I.BARRICADE);
-  if (slot < 0) return "failure";
-  core.PluginManager.emitItemAction({ player, itemId: I.BARRICADE, item: player.getInventory().getItems()[slot], slot, interfaceId: 0, clickType: 1, option: "Set-up", handled: false });
+  supply(player, I.BARRICADE);
+  const barricadeSlot = player.getInventory().getSlotForItemId(I.BARRICADE);
+  if (barricadeSlot < 0) return "failure";
+  core.PluginManager.emitItemAction({ player, itemId: I.BARRICADE, item: player.getInventory().getItems()[barricadeSlot], slot: barricadeSlot, interfaceId: 0, clickType: 1, option: "Set-up", handled: false });
   state.nextBarricadeAt = ctx.nowMs + 6000;
   state.nextToolAt = ctx.nowMs + ACTION_INTERVAL_MS;
   return "running";
@@ -116,9 +120,12 @@ function defenderAttack(ctx, state, target) {
   const spear = player.calculateDistance(target) === 1 && target.getTimers().has(core.TimerKey.FREEZE) && player.getSpecialPercentage() >= 25;
   if (gear(player, core.Equipment.WEAPON_SLOT, spear ? core.ItemIdentifiers.ZAMORAKIAN_HASTA : core.ItemIdentifiers.KODAI_WAND)) game.refreshPlayerAppearance(player, true);
   if (spear) {
+    player.getCombat().setCastSpell(null);
+    player.getCombat().setAutocastSpell(null);
     player.setSpecialActivated(true);
     player.getCombat().attack(target);
   } else {
+    player.setSpecialActivated(false);
     const spell = core.CombatSpells.ICE_BARRAGE.getSpell();
     core.Autocasting.setAutocast(player, spell);
     player.getCombat().castSpellOn(target, spell);

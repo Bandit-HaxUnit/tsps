@@ -7,7 +7,7 @@
 
 module.exports = {
   name: "CastleWars",
-  dependsOn: ["Food", "Mining", "Ladders"],
+  dependsOn: ["Food", "Mining", "Ladders", "Potions"],
   register(api) {
     const game = require("./castlewars/Game.CastleWars")(api);
     require("./castlewars/Areas.CastleWars")(api, game);
