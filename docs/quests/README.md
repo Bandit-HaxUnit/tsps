@@ -179,7 +179,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [The Tourist Trap](the-tourist-trap/README.md) | untested |  |  |  |  |
 | Throne of Miscellania | untested |  |  |  |  |
 | [Tower of Life](tower-of-life/README.md) | untested |  |  |  |  |
-| [Tree Gnome Village](tree-gnome-village/README.md) | ✅ passed | 2026-10-23 | agent |  |  |
+| [Tree Gnome Village](tree-gnome-village/README.md) | ✅ passed | 2026-10-29 | agent | grok-4.7 | 1 |
 | [Tribal Totem](tribal-totem/README.md) | ✅ passed | 2026-10-25 | agent |  | 1 |
 | Troll Romance | untested |  |  |  |  |
 | [Troll Stronghold](troll-stronghold/README.md) | untested |  |  |  |  |
