@@ -1,5 +1,5 @@
-// Port tasks (courier tasks; bounty tasks show on the boards but can't be taken yet): notice
-// boards, ledger tables, the cargo hold's crates, port masters and the reward bags. See
+// Port tasks (courier and bounty tasks): notice boards, ledger tables, the cargo hold's crates,
+// port masters, the reward bags and bounties' parts. See
 // docs/port-tasks.md.
 const common = require("./porttasks/Common.PortTasks");
 
@@ -27,5 +27,6 @@ module.exports = {
     require("./porttasks/Ledger.PortTasks")(api);
     require("./porttasks/PortMaster.PortTasks")(api);
     require("./porttasks/Bags.PortTasks")(api);
+    require("./porttasks/Bounty.PortTasks")(api);
   },
 };
