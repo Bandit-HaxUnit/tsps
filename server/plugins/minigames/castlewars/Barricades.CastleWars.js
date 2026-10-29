@@ -64,11 +64,27 @@ function isBurning(npc) {
   return npc.getNpcTransformationId() !== -1;
 }
 
+/** Resolve an overlapping barricade interaction from a free adjacent tile. */
+function stepBesideBarricade(player, npc) {
+  if (!player.getLocation().equals(npc.getLocation())) return true;
+  const movement = player.getMovementQueue();
+  // Match clippedStep's cardinal order; collision decides which side is available.
+  const step = [[-1, 0], [1, 0], [0, -1], [0, 1]].find(([dx, dy]) => movement.canWalk(dx, dy)
+    && !World.isNpcOccupyingTile(player.getLocation().transform(dx, dy), null, 1, player.getPrivateArea()));
+  if (!step) {
+    player.sendMessage("You need room to stand beside the barricade.");
+    return false;
+  }
+  movement.walkStep(step[0], step[1]);
+  return true;
+}
+
 function blowUp(player, npc, slot) {
   if (isBurning(npc)) {
     player.sendMessage("You can't blow up a burning barricade.");
     return;
   }
+  if (!stepBesideBarricade(player, npc)) return;
   player.getInventory().deleteAtSlot(slot, 1);
   const explosion = core.CacheDefinitions.getSpotanimId("regicide_barrelflight_exploding");
   player.getPacketSender().sendGlobalGraphic(new core.Graphic(explosion), npc.getLocation());
@@ -89,16 +105,7 @@ function burnBarricade({ player, npc }) {
   if (!player.getInventory().contains(core.ItemIdentifiers.TINDERBOX)) {
     return false;
   }
-  if (player.getLocation().equals(npc.getLocation())) {
-    const movement = player.getMovementQueue();
-    const dx = [-1, 1].find((step) => movement.canWalk(step, 0)
-      && !World.isNpcOccupyingTile(player.getLocation().transform(step, 0), null, 1, player.getPrivateArea()));
-    if (dx == null) {
-      player.sendMessage("You need room to step beside the barricade before lighting it.");
-      return true;
-    }
-    movement.walkStep(dx, 0);
-  }
+  if (!stepBesideBarricade(player, npc)) return true;
   const burn = {};
   burns.set(npc, burn);
   npc.setNpcTransformationId(npc.getId() + 1);
@@ -123,6 +130,7 @@ function extinguishBarricade({ player, npc }) {
     player.sendMessage("You need a bucket of water to put out the fire.");
     return true;
   }
+  if (!stepBesideBarricade(player, npc)) return true;
   player.getInventory().delete(BUCKET_OF_WATER, 1);
   player.getInventory().adds(BUCKET, 1);
   npc.setNpcTransformationId(-1);

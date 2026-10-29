@@ -158,12 +158,21 @@ test('a joiner cannot enter the bigger team', () => {
   assert.deepEqual(player.messages, ['The Saradomin team is full, try Zamorak.']);
 });
 
-test('headwear and capes block entry before the teleport', () => {
-  const player = fakePlayer({ head: core.ItemIdentifiers.CASTLEWARS_HOOD });
+test('capes block entry before the teleport', () => {
+  const player = fakePlayer({ cape: core.ItemIdentifiers.FIRE_CAPE });
   enterPortal(player, core.ObjectIdentifiers.GUTHIX_PORTAL);
   assert.equal(game.getTeamId(player), null);
   assert.equal(player.moves.length, 0);
-  assert.deepEqual(player.messages, ["You can't wear hats, capes, or helms in Castle Wars."]);
+  assert.deepEqual(player.messages, ["You can't wear capes in Castle Wars."]);
+});
+
+test('modern Castle Wars allows helmets when entering a portal', () => {
+  const player = fakePlayer({ head: core.ItemIdentifiers.RUNE_FULL_HELM });
+  enterPortal(player, core.ObjectIdentifiers.GUTHIX_PORTAL);
+  assert.ok(prompt);
+  prompt.options[3].pick();
+  assert.notEqual(game.getTeamId(player), null);
+  assert.equal(player.moves.length, 1);
 });
 
 test('food carried in the inventory blocks entry', () => {
