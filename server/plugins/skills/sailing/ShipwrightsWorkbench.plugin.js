@@ -191,7 +191,7 @@ function startCrafting(player, category, recipe, amount, anchor) {
 
   class WorkbenchTask extends core.Task {
     constructor() {
-      super(1, player);
+      super(1, player.getIndex());
       this.ticks = 0;
       this.remaining = amount;
     }

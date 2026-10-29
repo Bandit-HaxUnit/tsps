@@ -9,6 +9,7 @@ Server.installProductionPathResolver();
 const { CachePipeline } = require("../dist/game/cache/CachePipeline");
 const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
 const { PluginManager } = require("../dist/plugins/PluginManager");
+const { TaskManager } = require("../dist/game/task/TaskManager");
 const Workbench = require("../plugins/skills/sailing/ShipwrightsWorkbench.plugin");
 const { start, DATA, makeable, hasRoom, openMenu, TASK_ATTRIBUTE } = Workbench._test;
 
@@ -75,6 +76,7 @@ function createPlayer(slots, { construction = 99 } = {}) {
   return {
     said, spam, animations, xp, inventory, attributes,
     menu: () => menu,
+    getIndex: () => 7,
     isRegistered: () => true,
     getHitpoints: () => 10,
     getInterfaceId: () => -1,
@@ -196,4 +198,18 @@ test("ironwood kits need room for three from inventory planks", () => {
   player.menu().execute(id("boat_repair_kit_ironwood"), 1);
   assert.deepEqual(player.said, ["You don't have enough inventory space."]);
   assert.equal(tasks.length, 0);
+});
+
+test("walking cancels it: the task is keyed by the player's index, as walkToReset cancels", () => {
+  const player = createPlayer({ ...tools(), ...planks("plank_oak", 5) });
+  openMenu(player, "hull", ANCHOR);
+  player.menu().execute(id("sailing_boat_hull_part_oak"), 1);
+  const [task] = tasks;
+  TaskManager.submit(task);
+  TaskManager.cancelTasks(player.getIndex());
+  assert.equal(task.isRunning(), false);
+  assert.equal(player.getAttribute(TASK_ATTRIBUTE), null);
+  tasks.length = 0;
+  assert.equal(player.getInventory().getAmount(id("plank_oak")), 5);
+  assert.equal(player.getInventory().getAmount(id("sailing_boat_hull_part_oak")), 0);
 });
