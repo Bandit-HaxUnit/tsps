@@ -136,7 +136,7 @@ test("a notice board shows eight tasks, the same each time, and a click opens on
   assert.ok(player.log.includes(`script 8900 ${JSON.stringify([(941 << 16) | 5, rows[7], 0, 0])}`), "slot 42 is the eighth task");
 });
 
-test("accepting fills a slot and redraws the board; the limits refuse (slots by level, level, bounties)", () => {
+test("accepting fills a slot and redraws the board; the limits refuse (slots by level, level)", () => {
   const player = createPlayer();
   withBoard(player);
   inspect(player);
@@ -151,7 +151,7 @@ test("accepting fills a slot and redraws the board; the limits refuse (slots by 
   novice.setAttribute(common.SLOTS_ATTRIBUTE, [{ id: 1, taken: 0, delivered: 0 }]);
   assert.match(board.refusal(novice, common.taskById(JEWELLERY_TASK)), /any more port tasks/, "one slot at level 1");
   assert.match(board.refusal(createPlayer(1), common.taskById(16)), /Sailing level of 20/);
-  assert.match(board.refusal(createPlayer(), common.taskById(445)), /Bounty/);
+  assert.equal(board.refusal(createPlayer(), common.taskById(445)), null, "bounty tasks can be taken (Bounty.PortTasks.js)");
 });
 
 test('the Prying Times prerequisite can query an available port-task slot', () => {

@@ -441,10 +441,14 @@ function canUseHands(player) {
   return request.allow !== false;
 }
 
-/** rsmod `enableSailIfNeededForHeading`: the first heading while moored raises full sail. */
+/**
+ * The first heading after taking the helm (moored) raises full sail. Once the sails are lowered
+ * at the helm (stopped), a heading only turns the boat (rsprox: crew-combat, the boat turning
+ * twice with the sails down after the Stop button).
+ */
 function raiseSailForHeading(player, boat) {
   const moveMode = getVarbit(player, VARBIT.SIDEPANEL_BOAT_MOVE_MODE);
-  if (moveMode === MOVE_MODE.MOORED || moveMode === MOVE_MODE.STOPPED) setSailMode(player, boat, "full");
+  if (moveMode === MOVE_MODE.MOORED) setSailMode(player, boat, "full");
 }
 
 module.exports = {
