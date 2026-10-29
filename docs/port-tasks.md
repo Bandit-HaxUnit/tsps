@@ -72,6 +72,79 @@ Code: `server/plugins/skills/sailing/PortTasks.plugin.js` and its units in `port
    the pickup box, and takes theirs before the player's crate. Counts in the boxes are spelt out
    ("There are two more crates of this type to collect", rsprox).
 
+## Captain's log
+
+`View-tasks` on either Captain's log opens the native log (935) in the floater overlay;
+`View-charts` on the charting log opens its Sea Charting tab. Its menu switches between
+Sea Charting and Port Tasks. The cache draws five task notices, blank slots and level locks,
+task names, requirements, cargo locations, destinations, quantities and flavour text. Back
+returns to the notices, Close closes the overlay, and reopening clears the selected task.
+The native menu button remains hidden until `sailing_intro >= 46` (script8672); this plugin
+does not force it visible. The rendered QA used the existing QuestRuntime admin command
+to set a controlled account's Pandemonium stage50 when checking that menu.
+
+Sources: [Courier tasks](https://oldschool.runescape.wiki/w/Courier_tasks) (free cancellation,
+slot levels), [Settings](https://oldschool.runescape.wiki/w/Settings) (cancellation warning),
+RSProx 235/00944,00948,03448,03455,03461,03467 (opening, task selection, tabs and closing),
+and the [pinned rev241 scripts](https://github.com/Joshua-F/osrs-dumps/tree/6e5033af6215963581a51b348f452320ff18f0f6/script).
+The active `osrs-241_2026-10-20` widget dump confirms group935: menu7, Close8, task clicks16,
+Back23, cancel25, onloads8658 and8708. Open sends OP1 flags to menu children10..12 and
+task children0..12, then native hide-popup8709. A valid selected slot sends19135=slot+1.
+
+Cancel task uses the existing PortMaster cancellation owner, which removes that task's
+hand, crew and all owned boats' cargo, clears its saved slot and sends the existing message.
+Protected quest task599 is refused by both entry points. The log asks for Yes/No confirmation
+unless the shared Settings varbit18130 disables the warning. The warning wording is chosen
+here: no cancellation click or confirmation text occurs in the available log recordings.
+Back, Close, switching tabs, reopening, replacing the floater or replacing the selected slot
+prevents an old confirmation from cancelling another task. The transient selection is never
+saved. A changed task-slot object (including progress made during confirmation) requires a
+fresh selection before cancellation.
+
+The single added Settings mapping457 →18130 makes the native warning toggle functional
+through the existing Settings owner and `settings:values` save. Active cache struct6325
+names the row, catalog enum422 places it in the Sailing Warnings category, and script6716
+maps457 to18130. Native134:24 selects its category;134:20 selects the cache-derived row.
+The regression toggles that real row, hydrates PlayerSave, runs login hooks, then cancels
+without a warning. There is no separate log warning preference.
+
+The ledger's existing saved `{id,taken,delivered}` slots remain the only progress state.
+Their19574..19588 varbits are resent when opening and logging in, and the completed total
+is read from5207. The native detail displays the task's required quantity, and the log's
+footer displays completed tasks; the pinned client scripts do not display separate
+collected/delivered counters. No additional progress text or widget has been invented.
+Sea Charting's existing persisted progress and client filters remain its state owners.
+
+Production path: inventory item action → PluginManager named `Captain's log` action →
+`Log.PortTasks.viewTasks/viewCharts` → PacketSender floater935 and existing slot varbits.
+Native935:16 → `clickLog` selects the current slot;935:25 → real MultiChatboxPrompt219 →
+`finishCancellation` revalidates selection/slot → `PortMaster.cancel` → Common slots,
+equipment, Crew `port-tasks:cancelled`, and Cargo.take. PlayerSave persists the existing
+slots and two log preference attributes; login resends the values and clears selection.
+Common.setSlots also emits `port-tasks:slots-changed`; an open log clears selection and
+runs native redraw8663 then hide-popup8709. Native8707 only listens to general varp5202,
+while held slots use5197..5201, so a slot-only change otherwise leaves a stale task card.
+The same shared notification covers acceptance and completion without a second state owner.
+
+`tests/port-task-log.test.cjs` uses real Player, Inventory, PacketSender, DialogueManager,
+PlayerSave, all content plugins with startup hooks, native interface dispatch and the
+mapped Pandemonium ledger. Only the network and sent-packet/message observation are
+substituted; unrelated player-bot simulation is disabled for the test process.
+The ledger test reads the actual cache-map objects directly, without the per-player
+Pandemonium quest overlay installed by runtime login. It is a mapped fixture, not proof
+of runtime ledger collection through that overlay. The separate cargo change owns the
+quest ledger registrations; this branch does not duplicate that edit.
+
+Validation on29October2026:73 targeted checks pass (12log,9port tasks,28charting,24Settings).
+The rendered client exercised task cards/details/required quantity, Back, Close, Yes/No,
+Show Menu/Sea Charting and the actual Settings457 checkbox. Native18130=1 survived a
+graceful server restart/relogin; cancelling with that preference removed the card immediately,
+left another task intact and opened no confirmation. A fresh independent review passed75
+checks, including actual bank open/close invalidation of an old native confirmation and a
+SQLite writer flush/new-connection load/login of the Settings preference. No findings in
+those inspected paths. The full combined Sailing batch suite remains an integration check
+owned by the batch coordinator; targeted/native checks do not claim exhaustive parity.
+
 ## Ours, not live
 
 - The recordings predate the bags (they paid coins: "...and been given 59 coins as payment."),
@@ -111,8 +184,7 @@ second bounty on the same creature waiting for the first, keeping parts when can
 - Bounty parts' drop rate scaling with damage dealt, and the boosted rates before the count is met
   (Wiki); the parts' rates here are 1 in the cache's rarity.
 - Opening port reward bags (each port's loot is on the Wiki).
-- Confiscating crates on a teleport, or when leaving port with one in hand, and the captain's
-  log's task list and cancel.
+- Confiscating crates on a teleport, or when leaving port with one in hand.
 - Trim being refused while carrying cargo.
 
 ## Port coin bag safety
