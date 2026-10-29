@@ -118,6 +118,7 @@ function player({ thieving = 99, strength = 99, items = {}, at = { x: 3289, y: 2
       addItem: (item) => inventory.set(item.getId(), (inventory.get(item.getId()) ?? 0) + item.getAmount()),
       deleteNumber: (id, amount) => inventory.set(id, (inventory.get(id) ?? 0) - amount),
       getFreeSlots: () => 28 - [...inventory.values()].filter((amount) => amount > 0).length,
+      getAddableAmount: (item) => Math.min(item.getAmount(), 0x7fffffff - (inventory.get(item.getId()) ?? 0)),
     }),
     getCombat: () => ({ reset: () => {}, getHitQueue: () => ({ addPendingDamage: (hits) => p.hits.push(...hits.map((h) => h.getDamage?.() ?? h.damage ?? h)) }) }),
     performAnimation: (anim) => p.anims.push(anim),
@@ -543,6 +544,26 @@ test("Simon pays 10,000 coins a pyramid top, in a message box (Wiki; rsprox 1757
   T.Simon.onDialogueAction(nothing);
   assert.equal(nothing.end, true, "no tops left: the chat ends");
   assert.equal(p.inventory.get(ids().item.coins), 30000);
+});
+
+test("Simon keeps the tops when the coin stack cannot take the whole payment", () => {
+  const p = player({ items: { [ids().item.pyramidTop]: 1, [ids().item.coins]: 0x7fffffff - 5000 } });
+  const request = { player: p, npcId: 5786, stepId: "xCY7EK", text: "", handled: false };
+  T.Simon.onDialogueAction(request);
+  assert.equal(request.end, true);
+  assert.equal(p.inventory.get(ids().item.pyramidTop), 1);
+  assert.equal(p.inventory.get(ids().item.coins), 0x7fffffff - 5000);
+  assert.deepEqual(p.messages, ["You don't have enough inventory space."]);
+});
+
+test("Simon's payment can take the slot the tops leave in a full inventory", () => {
+  const items = { [ids().item.pyramidTop]: 1 };
+  for (let id = 1; id <= 27; id++) items[id] = 1;
+  const p = player({ items });
+  const request = { player: p, npcId: 5786, stepId: "xCY7EK", text: "", handled: false };
+  T.Simon.onDialogueAction(request);
+  assert.equal(p.inventory.get(ids().item.pyramidTop), 0);
+  assert.equal(p.inventory.get(ids().item.coins), 10000);
 });
 
 test("a pyramid top used on Simon sells them all once he has explained the job (rsprox 1757)", () => {

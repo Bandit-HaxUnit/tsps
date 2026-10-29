@@ -161,7 +161,22 @@ function pay(request) {
   player.sendMessage(`Simon hands you ${coins.toLocaleString("en-GB")} coins.`);
 }
 
-/** Every pyramid top for 10,000 coins each, told in a message box; none left ends the chat. */
+/**
+ * Whether the whole payment fits: an existing coin stack must take all of it, and a new stack
+ * can use the slot the tops leave behind.
+ */
+function paymentFits(inventory, tops, coins) {
+  const coinsId = Common.ids().item.coins;
+  if (inventory.getAmount(coinsId) > 0) {
+    return inventory.getAddableAmount(new (Common.getCore().Item)(coinsId, coins)) === coins;
+  }
+  return tops > 0 || inventory.getFreeSlots() > 0;
+}
+
+/**
+ * Every pyramid top for 10,000 coins each, told in a message box; none left ends the chat, and
+ * so does a payment the inventory cannot hold, leaving the tops untouched.
+ */
 function sellTops(request) {
   const player = request.player;
   const tops = topsCarried(player);
@@ -171,6 +186,11 @@ function sellTops(request) {
     return;
   }
   const coins = tops * PYRAMID_TOP_COINS;
+  if (!paymentFits(player.getInventory(), tops, coins)) {
+    request.end = true;
+    player.sendMessage("You don't have enough inventory space.");
+    return;
+  }
   player.getInventory().deleteNumber(Common.ids().item.pyramidTop, tops);
   player.getInventory().addItem(new (Common.getCore().Item)(Common.ids().item.coins, coins));
   advanceStage(player, STAGE.SOLD);
