@@ -5,7 +5,7 @@ status: passed-with-issues
 tested: 2026-10-30
 tester: agent
 model: grok-4.7
-commit: acf4a8659da5
+commit: 69bc52e8f3ea
 cache: osrs-241_2026-10-20
 start: fresh
 travel: travel_to
@@ -27,7 +27,7 @@ A watched account with the quest unstarted finished the normal route: Duke Horac
 
 ### 2026-10-30 · agent · grok-4.7
 
-- **Start:** fresh account, placed at 3210, 3218, 1 with `::tele` (the only command teleport). Baseline: varp 63 = 0, quest points (varp 101) = 0, talisman varbit 13720 = 0, empty inventory and equipment, every skill 13,034,431 XP. Branched from `acf4a8659da5`. The user watched in their own client.
+- **Start:** fresh account, placed at 3210, 3218, 1 with `::tele` (the only command teleport). Baseline: varp 63 = 0, quest points (varp 101) = 0, talisman varbit 13720 = 0, empty inventory and equipment, every skill 13,034,431 XP. Branched from `acf4a8659da5`. The menu replay is the quest code in `69bc52e8f3ea`. The user watched in their own client.
 - **Route:** Duke Horacio, "Have you any quests for me?" then "Yes." (varp 63 = 1, varbit 13720 = 1, air talisman). Castle door 1543 and staircase 16672 down to the ground floor. The tower approach was a walk where `travel_to` returned `no-route`, including around Door 12348. Tower doors 23972, ladder 2147 down to 3104, 9576, basement door 1535, then Sedridor: "Okay, here you are.", "Go ahead.", "Yes, certainly." (research package, varp 63 = 3). `travel_to` in hops to Aubury. "I've been sent here with a package for you." then "I'd love a cup of tea." (research notes, varp 63 = 5). The return used the stepping stone, then a walk. The notes hand-in followed Sedridor's explanation. A later replay set the stage back to 5, used the essence-mine portal (34825) back to 3104, 9571, and handed the notes in again.
 - **Result:** varp 63 = 6, varp 101 = 1, varbit 13720 = 1, one air talisman, no quest XP. Chat: "Congratulations, you've completed a quest: Rune Mysteries". The first hand-in did not open the follow-up menu. The replay did, and "I'd better get going." closed it without a second quest point or a second talisman. Repeat talk after the first completion teleported to the essence mine at 2913, 4832, 0 (music "Rune Essence") and gave nothing else. Relog kept the stage, the quest point, the talisman, and the Agility XP from the stepping stone (13,034,431 → 13,034,436).
 - **Not checked:** a lost talisman, package or notes, a full inventory, the identity-doubt branch ("No, I'll only give it to Sedridor"), Aubury's tea energy restore and the "Aaah, nothing like a nice cuppa tea!" line, Duke Horacio after completion, the reward-scroll lines, the Quest Helper overlay, kudos at Historian Minas, and the drop trick for extra talismans. Journal text is already known not to match the live packets.
