@@ -347,7 +347,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
 
     /** Start workers from the first real player position, before interface rendering blocks a frame. */
     prepareInitialScene(tileX: number, tileY: number): void {
-        if (ClientState.inInstance || this.mapManager.getGridRevision() !== 0) return;
+        if (!ClientState.scenePositionReady || ClientState.inInstance || this.mapManager.getGridRevision() !== 0) return;
         const client = this.osrsClient;
         const distance = this.resolveEffectiveRenderDistanceTiles(this.stats.frameCount);
         this.mapManager.update(

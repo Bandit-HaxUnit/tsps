@@ -608,7 +608,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         // Server scene rebases at local tile 16/88. Load enough static scenery
         // beyond those edges for the requested view, without changing simulation.
         const sceneryPadding = MapManager.getSceneryPadding(renderDistance);
-        host.mapManager.update(
+        if (scenePreview || ClientState.scenePositionReady) host.mapManager.update(
             host.playerPosUni[0],
             host.playerPosUni[1],
             camera,

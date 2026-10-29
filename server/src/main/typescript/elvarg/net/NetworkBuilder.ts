@@ -1252,7 +1252,11 @@ export class ClientConnection {
     // 548/164/161 - what the "Game client layout" dropdown (Settings.plugin.js)
     // stores; the client maps the standard mounts onto the chosen layout.
     // Mobile clients resolve to the stock mobile toplevel (601) instead.
+    const layoutRoot = resolveGameframeRoot(player);
+    for (const packet of encodeGameframeBootstrap(player.getUsername(), layoutRoot, player.getAttribute(XPDROPS_ENABLED_ATTRIBUTE) === true)) this.send(packet);
     player.getPacketSender()
+      // Publish the saved spellbook before the remaining login state and quest recovery.
+      .sendTabInterface(6, player.getSpellbook().getInterfaceId())
       // Cache script 828 sets varc 103 (account is a member), which the GE, collection box
       // and membership panels read; everyone on a members world is a member.
       .sendInterfaceScript(828, [isMembersWorld() ? 1 : 0])
@@ -1260,16 +1264,9 @@ export class ClientConnection {
       .sendSkillsSnapshot()
       .sendRunEnergy();
     player.getQuickPrayers().sync();
-    const gameframe = { player, handled: false, open: () => {
-      const layoutRoot = resolveGameframeRoot(player);
-      for (const packet of encodeGameframeBootstrap(player.getUsername(), layoutRoot, player.getAttribute(XPDROPS_ENABLED_ATTRIBUTE) === true)) this.send(packet);
-      // Publish the saved spellbook after the bootstrap's standard magic tab.
-      player.getPacketSender().sendTabInterface(6, player.getSpellbook().getInterfaceId());
-      PluginManager.emitCustomEvent("player:bootstrap-complete", { player, username: player.getUsername() });
-    } };
-    // A login screen may defer mounting the gameframe while world data continues to stream.
-    PluginManager.emitCustomEvent("player:gameframe-bootstrap", gameframe);
-    if (!gameframe.handled) gameframe.open();
+    // Spell-unlock varps can share storage with quest transforms. Recover them at login,
+    // even while a plugin's welcome screen is visible.
+    PluginManager.emitCustomEvent("player:bootstrap-complete", { player, username: player.getUsername() });
   }
 
   private walk(x: number, y: number, modifierFlags: number, forceRun = false): void {

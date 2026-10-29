@@ -2,7 +2,7 @@ const WELCOME_SCREEN_GROUP_ID = 378;
 const PLAY_BUTTON_UID = (WELCOME_SCREEN_GROUP_ID << 16) | 72;
 const FIRST_OPTION_FLAG = 1 << 1;
 const pending = new WeakSet();
-const visible = new WeakMap();
+const visible = new WeakSet();
 let api;
 
 function inWilderness(player) {
@@ -14,13 +14,13 @@ function login({ player, isNewAccount }) {
   if (isNewAccount || player.isPlayerBot?.() === true || inWilderness(player)
       || player.getAttribute(api.core.MOBILE_CLIENT_ATTRIBUTE) === true) return;
   pending.add(player);
+  // The synchronous login bootstrap initializes camera, chat and account varcs first.
+  queueMicrotask(() => showWelcomeScreen(player));
 }
 
-function bootstrap(event) {
-  const { player } = event;
+function showWelcomeScreen(player) {
   if (!pending.delete(player) || inWilderness(player)) return;
-  event.handled = true;
-  visible.set(player, event.open);
+  visible.add(player);
   const sender = player.getPacketSender();
   sender.sendRootInterface(WELCOME_SCREEN_GROUP_ID);
   sender.sendInterfaceFlags(PLAY_BUTTON_UID, FIRST_OPTION_FLAG);
@@ -28,10 +28,13 @@ function bootstrap(event) {
 }
 
 function play({ player }) {
-  const open = visible.get(player);
-  if (!open) return false;
-  visible.delete(player);
-  open();
+  if (!visible.delete(player)) return false;
+  const root = api.core.resolveGameframeRoot(player);
+  for (const packet of api.core.encodeGameframeBootstrap(player.getUsername(), root,
+      player.getAttribute(api.core.XPDROPS_ENABLED_ATTRIBUTE) === true)) {
+    player.getSession().sendClientPacket(packet);
+  }
+  // The saved spellbook selector and quest varps were sent at login and survive a root swap.
   api.emitCustomEvent("gameframe:ready", { player });
   return false;
 }
@@ -47,7 +50,6 @@ module.exports = {
   register(pluginApi) {
     api = pluginApi;
     api.onPlayerLogin(login);
-    api.onCustomEvent("player:gameframe-bootstrap", bootstrap);
     api.onInterfaceActionButton(PLAY_BUTTON_UID, play);
     api.onPlayerDisconnect(clear);
     api.onPlayerLogout(clear);

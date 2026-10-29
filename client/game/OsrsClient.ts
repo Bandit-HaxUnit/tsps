@@ -3759,10 +3759,11 @@ export class OsrsClient {
                         if (position.index !== this.controlledPlayerServerId) this.continuousMovement?.receive(position);
                     }
                     this.syncLocalWorldView();
+                    const tile = this.playerSyncManager.getServerTile(this.controlledPlayerServerId);
+                    if (tile) ClientState.scenePositionReady = true;
                     if (this.gameState === GameState.LOADING_GAME) {
                         const localIndex = this.playerEcs.getIndexForServerId(this.controlledPlayerServerId);
                         if (localIndex !== undefined && this.playerEcs.getWorldViewId(localIndex) < 0) {
-                            const tile = this.playerSyncManager.getServerTile(this.controlledPlayerServerId);
                             if (tile) this.renderer.prepareInitialScene(tile.tileX, tile.tileY);
                         }
                     }
@@ -5455,6 +5456,7 @@ export class OsrsClient {
         }
 
         if (newState === GameState.CONNECTING) {
+            ClientState.scenePositionReady = false;
             this.loginState.setResponse("", "Connecting to server...", "", "");
 
             // Set up loading requirements BEFORE server responds

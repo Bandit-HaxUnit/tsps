@@ -31,7 +31,7 @@ test("cache initialization does not queue maps around the login-screen camera", 
 });
 
 test("the first player sync starts the same scene workers before interface rendering", () => {
-    const previous = [ClientState.baseX, ClientState.baseY, ClientState.inInstance] as const;
+    const previous = [ClientState.baseX, ClientState.baseY, ClientState.inInstance, ClientState.scenePositionReady] as const;
     try {
         ClientState.baseX = 3024;
         ClientState.baseY = 3440;
@@ -50,6 +50,18 @@ test("the first player sync starts the same scene workers before interface rende
                 clientPlugins: { gpuSettings: () => undefined, hdEnabled: () => false },
             },
         } as any;
+        // LOADING_GAME counts as logged in, but frames before player_sync must not
+        // consume the initial grid revision using a zero or previous-session base.
+        for (const base of [0, 6000]) {
+            ClientState.scenePositionReady = false;
+            ClientState.baseX = ClientState.baseY = base;
+            updateWebGPUMapStreaming(renderer, 0);
+            assert.equal(maps.getGridRevision(), 0);
+            assert.deepEqual(queued, []);
+        }
+        ClientState.baseX = 3024;
+        ClientState.baseY = 3440;
+        ClientState.scenePositionReady = true;
         GameRenderer.prototype.prepareInitialScene.call(renderer, 3079, 3490);
         assert.equal(queued.length, 4, "queue the four visible squares without waiting for a rendered frame");
         const revision = maps.getGridRevision();
@@ -66,13 +78,14 @@ test("the first player sync starts the same scene workers before interface rende
         GameRenderer.prototype.prepareInitialScene.call(renderer, 3079, 3490);
         assert.deepEqual(queued, [], "instance loading keeps its own scene builder");
     } finally {
-        [ClientState.baseX, ClientState.baseY, ClientState.inInstance] = previous;
+        [ClientState.baseX, ClientState.baseY, ClientState.inInstance, ClientState.scenePositionReady] = previous;
     }
 });
 
 test("WebGPU streams the server scene around the player across camera orbits and scene rebases", () => {
-    const previous = [ClientState.baseX, ClientState.baseY, ClientState.inInstance] as const;
+    const previous = [ClientState.baseX, ClientState.baseY, ClientState.inInstance, ClientState.scenePositionReady] as const;
     try {
+        ClientState.scenePositionReady = true;
         ClientState.baseX = 3040;
         ClientState.baseY = 3464;
         ClientState.inInstance = false;
@@ -117,20 +130,22 @@ test("WebGPU streams the server scene around the player across camera orbits and
         assert.equal(maps.currentMapX, Math.floor(renderer.playerPosUni[0] / 64));
         assert.equal(maps.currentMapY, Math.floor(renderer.playerPosUni[1] / 64), "boats use their projected player position");
         preview = true;
+        ClientState.scenePositionReady = false;
         cameraX = 3300;
         cameraY = 3300;
         updateWebGPUMapStreaming(renderer, 67);
         assert.equal(maps.currentMapX, 51, "editor preview still streams around its camera");
         assert.equal(maps.currentMapY, 51);
     } finally {
-        [ClientState.baseX, ClientState.baseY, ClientState.inInstance] = previous;
+        [ClientState.baseX, ClientState.baseY, ClientState.inInstance, ClientState.scenePositionReady] = previous;
     }
 });
 
 test("non-HD streaming covers the full visible footprint before the server rebases", () => {
-    const previous = [ClientState.baseX, ClientState.baseY, ClientState.inInstance] as const;
+    const previous = [ClientState.baseX, ClientState.baseY, ClientState.inInstance, ClientState.scenePositionReady] as const;
     const previousLowEnd = MapManager.lowEnd;
     try {
+        ClientState.scenePositionReady = true;
         ClientState.inInstance = false;
         MapManager.lowEnd = false;
         for (const distance of [25, 90]) {
@@ -162,7 +177,7 @@ test("non-HD streaming covers the full visible footprint before the server rebas
             }
         }
     } finally {
-        [ClientState.baseX, ClientState.baseY, ClientState.inInstance] = previous;
+        [ClientState.baseX, ClientState.baseY, ClientState.inInstance, ClientState.scenePositionReady] = previous;
         MapManager.lowEnd = previousLowEnd;
     }
 });
