@@ -31,6 +31,7 @@ before(async () => {
     onCanUnequip: (handler) => { (hooks.unequip ??= []).push(handler); },
     onCanUseItem: (handler) => { hooks.item = handler; },
     onCanEat() {}, onCanDrink() {},
+    onSpellDisabled: (handler) => { nativeApi.onSpellDisabled(handler); },
     onBeforeObjectInteraction: (handler) => { hooks.object = handler; },
     onBeforeNpcInteraction: (handler) => { hooks.npc = handler; },
     onButtonClick: (handler) => { hooks.button = handler; },
@@ -52,7 +53,7 @@ before(async () => {
 function player(t, itemIds = []) {
   const p = new Player(null);
   const messages = [], hidden = [], restored = [];
-  t.mock.method(p, 'getSession', () => ({ sendClientPacket: () => true }));
+  t.mock.method(p, 'getSession', () => ({ sendClientPacket: () => true, write() {} }));
   t.mock.method(p, 'sendMessage', (line) => messages.push(line));
   t.mock.method(p.getPacketSender(), 'closeSubInterface', (uid) => { hidden.push(uid); return p.getPacketSender(); });
   t.mock.method(p.getPacketSender(), 'sendTabInterface', (tab, group) => { restored.push([tab, group]); return p.getPacketSender(); });
@@ -209,4 +210,32 @@ test('native widget dispatch blocks prayer, orbs and combat controls before thei
   assert.equal(prayers, 1, 'native prayer actions resume after leaving');
   assert.equal(p.autoRetaliateReturn(), true, 'native combat controls resume after leaving');
   assert.equal(maps, 1, 'the world map opens normally after leaving');
+});
+
+test('targeted Lunar magic cannot consume items or grant XP while transformed and resumes after leaving', async (t) => {
+  const p = player(t, [core.ItemIdentifiers.ZAMORAK_FULL_HELM]);
+  p.setSpellbook(core.MagicSpellbook.LUNAR);
+  p.getSkillManager().setMaxLevels(core.Skill.MAGIC, 99).setCurrentLevels(core.Skill.MAGIC, 99);
+  p.getSkillManager().setMaxLevels(core.Skill.DEFENCE, 99).setCurrentLevels(core.Skill.DEFENCE, 99);
+  for (const [id, amount] of [[1635, 1], [9075, 2], [556, 5], [563, 1]]) p.getInventory().adds(id, amount);
+  const spell = core.CacheDefinitions.getSpellByName('String Jewellery');
+  assert.ok(spell);
+  const channel = { kind: 'test', remoteAddress: '127.0.0.1', isOpen: () => true, send: () => true,
+    close() {}, onData() {}, onError() {}, onClose() {} };
+  const connection = new ClientConnection(channel);
+  connection.player = p;
+  const packet = { type: 'widget_target', sourceWidgetId: spell.widgetId, sourceItemId: spell.itemId,
+    sourceSlot: -1, targetWidgetId: 149 << 16, targetItemId: 1635, targetSlot: 0 };
+  const amounts = () => [1635, 1656, 9075, 556, 563].map((id) => p.getInventory().getAmount(id));
+  const xp = p.getSkillManager().getExperience(core.Skill.MAGIC);
+  game.prepareWaitingForm(p, 'saradomin');
+  game.applyWaitingForm(p);
+  await connection.dispatch([packet], true);
+  assert.deepEqual(amounts(), [1, 0, 2, 5, 1]);
+  assert.equal(p.getSkillManager().getExperience(core.Skill.MAGIC), xp);
+  assert.match(p.messages.at(-1), /transformed/);
+  game.clearWaitingForm(p);
+  await connection.dispatch([packet], true);
+  assert.deepEqual(amounts(), [0, 1, 0, 0, 0]);
+  assert.equal(p.getSkillManager().getExperience(core.Skill.MAGIC), xp + 83);
 });

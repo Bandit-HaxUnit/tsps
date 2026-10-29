@@ -99,6 +99,12 @@ function refuseCombatVarp(event) {
   event.player.sendMessage(ACTIVITY_MESSAGE);
 }
 
+function refuseSpell(event) {
+  if (!transformed.has(event.player)) return;
+  event.disabled = true;
+  event.player.sendMessage(ACTIVITY_MESSAGE);
+}
+
 function clearOnLogout({ player }) {
   clearWaitingForm(player);
 }
@@ -113,6 +119,7 @@ module.exports = function attachCastleWarsWaitingRoom(api, castleWars) {
   api.onCanUseItem(refuseActivity);
   api.onCanEat(refuseActivity);
   api.onCanDrink(refuseActivity);
+  api.onSpellDisabled(refuseSpell);
   api.onBeforeObjectInteraction(refuseInteraction);
   api.onBeforeNpcInteraction(refuseInteraction);
   api.onButtonClick(refuseButton);
