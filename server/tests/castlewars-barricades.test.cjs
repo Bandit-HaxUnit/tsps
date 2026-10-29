@@ -8,6 +8,9 @@ const { RegionManager } = require('../dist/game/collision/RegionManager');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { World } = require('../dist/game/World');
 const { Player } = require('../dist/game/entity/impl/player/Player');
+const { PlayerSession } = require('../dist/net/PlayerSession');
+const { ClientConnection } = require('../dist/net/NetworkBuilder');
+const { GameConstants } = require('../dist/game/GameConstants');
 const { PathFinder } = require('../dist/game/model/movement/path/PathFinder');
 const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
 const core = PluginManager.getCoreApi();
@@ -30,6 +33,7 @@ before(() => {
   RegionManager.init();
   RegionManager.loadMapFiles(2426, 3080);
   RegionManager.loadMapFiles(2391, 9501);
+  const itemActions = PluginManager.createApi('Castle Wars barricade regression');
   const api = {
     core,
     getAreaManager: () => ({}),
@@ -38,7 +42,10 @@ before(() => {
     getRegionManager: () => RegionManager,
     getTaskManager: () => ({ submit() {} }),
     getWorld: () => World,
-    onItemAction(name, actions) { setup = actions['Set-up']; },
+    onItemAction(name, actions) {
+      itemActions.onItemAction(name, actions);
+      setup = actions['Set-up'];
+    },
     onNpcDeath() {},
     onNpcInteraction(name, actions) { burn = actions.Burn; },
     onItemOnNpc(fn) { itemOnNpc = fn; },
@@ -93,6 +100,95 @@ test('the energy-barrier exit and nonblocking map objects allow immediate barric
     assert.equal(inventory.getItems()[2].getId(), core.ItemIdentifiers.BARRICADE, 'the clicked last barricade stays put');
   }
 });
+
+for (const activeRegions of [true, false]) {
+  for (const level of [0, 1]) {
+    test(`a native inventory click sends the barricade in the same tick on level ${level}, active regions ${activeRegions}`, async (t) => {
+      const previousActiveRegions = GameConstants.PROCESS_NPCS_BY_ACTIVE_REGIONS;
+      GameConstants.PROCESS_NPCS_BY_ACTIVE_REGIONS = activeRegions;
+      t.after(() => { GameConstants.PROCESS_NPCS_BY_ACTIVE_REGIONS = previousActiveRegions; });
+      const packets = [];
+      const processedNpcs = [];
+      const processNpc = core.NPC.prototype.process;
+      t.mock.method(core.NPC.prototype, 'process', function () {
+        processedNpcs.push(this);
+        return processNpc.call(this);
+      });
+      const channel = {
+        kind: 'test', remoteAddress: '127.0.0.1', isOpen: () => true,
+        send: () => true, close() {}, onData() {}, onError() {}, onClose() {},
+      };
+      const session = new PlayerSession(channel);
+      const player = new Player(session, new core.Location(2426, 3081, level));
+      player.setUsername('barricadetiming');
+      player.setNeedsPlacement(false);
+      session.setPlayer(player);
+      t.mock.method(player, 'onAdd', () => {});
+      t.mock.method(player, 'onRemove', () => {});
+      t.mock.method(session, 'sendClientPacket', (packet) => { packets.push(packet); return true; });
+      const connection = new ClientConnection(channel);
+      connection.player = player;
+      session.setTurnPacketProcessor(() => connection.processTurnPackets());
+      assert.ok(World.getPlayers().add(player));
+      t.after(() => {
+        for (const npc of [...World.getNpcs()]) {
+          if (!game.isBarricade(npc)) continue;
+          game.releaseBarricade(npc);
+          World.getNpcs().remove(npc);
+        }
+        World.getRemoveNPCQueue().splice(0);
+        World.getPlayers().remove(player);
+        World.refreshActiveRegions();
+      });
+      World.refreshActiveRegions();
+      World.process(); // A warm, already-visible scene, as when playing an ongoing game.
+      packets.length = 0;
+      player.getInventory().add(new core.Item(core.ItemIdentifiers.BARRICADE), false);
+      await connection.dispatch([{
+        type: 'widget_action', widgetId: (149 << 16), groupId: 149, childId: 0,
+        buttonNum: 2, slot: 0, itemId: core.ItemIdentifiers.BARRICADE,
+      }]);
+      assert.equal(player.getInventory().getAmount(core.ItemIdentifiers.BARRICADE), 1, 'input waits for the normal player turn');
+      World.process();
+      assert.equal(player.getInventory().getAmount(core.ItemIdentifiers.BARRICADE), 0, 'the real inventory action ran');
+      const npc = [...World.getNpcs()].find((candidate) => game.isBarricade(candidate));
+      assert.ok(npc, 'the action registered its barricade');
+      assert.equal(processedNpcs.includes(npc), false, 'sync does not give a late spawn an early AI turn');
+      let ticksToVisibility = 1;
+      while (!player.getLocalNpcs().includes(npc) && ticksToVisibility < 3) {
+        World.process();
+        ticksToVisibility++;
+      }
+      assert.equal(ticksToVisibility, 1, 'world ticks from the queued inventory click to NPC visibility');
+      assert.equal(player.getLocalNpcs().filter((entry) => entry === npc).length, 1);
+      const frame = packets.find((packet) => packet[0] === 21); // Native NPC_INFO.
+      assert.ok(frame, 'the regular world flush sent NPC_INFO');
+      const body = frame.subarray(3);
+      assert.equal(body.readInt32BE(0), World.getProcessCycle());
+      assert.equal(body.readUInt16BE(9), body.length - 11);
+      const native = body.subarray(11);
+      let bit = 0;
+      const read = (width) => {
+        let value = 0;
+        for (let i = 0; i < width; i++, bit++) value = value * 2 + ((native[bit >> 3] >> (7 - (bit & 7))) & 1);
+        return value;
+      };
+      assert.equal(read(8), 0, 'no NPC was known before this click');
+      assert.equal(read(16), npc.getIndex(), 'this tick carries the new NPC index');
+      read(1); // Optional update block.
+      assert.equal(read(1), 0, 'main-world NPC');
+      assert.equal(read(1), 0, 'first addition');
+      assert.equal(read(body[4] ? 8 : 5), 0, 'placed on the player tile (y)');
+      assert.equal(read(body[4] ? 8 : 5), 0, 'placed on the player tile (x)');
+      read(3); // Rotation.
+      assert.equal(read(16), data.BARRICADE_NPC[data.TEAM.SARADOMIN], 'correct barricade model');
+      assert.equal(read(16), 0xffff, 'one addition, with a complete NPC_INFO bitstream');
+      World.process();
+      assert.deepEqual(player.getLocalNpcs(), [npc], 'subsequent ticks keep one barricade');
+      assert.equal(processedNpcs.filter((entry) => entry === npc).length, 1, 'its first AI turn runs once on the next tick');
+    });
+  }
+}
 
 test('a barricade stops walking without making the pathfinder walk around it', (t) => {
   const p = playerAt(t, 2405, 3110, 0);
