@@ -86,15 +86,78 @@ function bankTabs(player) {
   return player.getBanks().filter((bank, tab) => bank && tab !== Bank.BANK_SEARCH_TAB_INDEX);
 }
 
-/** Every unfermented jug of this wine, carried and banked, turns into wine or bad wine at once, with all its XP. */
+/** Every banked stack of the item, as { tab, slot }. */
+function bankedStacks(tabs, itemId) {
+  const stacks = [];
+  for (const tab of tabs) {
+    tab.getItems().forEach((item, slot) => {
+      if (item?.getId() === itemId && item.getAmount() > 0) stacks.push({ tab, slot });
+    });
+  }
+  return stacks;
+}
+
+/**
+ * Whether the banked jugs' wine and bad wine fit: each output joins a stack the bank holds, or
+ * takes the unfermented stack's slot or a free one.
+ */
+function bankFits(player, tabs, wine, good, bad) {
+  const holds = (id) => bankedStacks(tabs, id).length > 0;
+  const newStacks = (good > 0 && !holds(wine.wineId) ? 1 : 0) + (bad > 0 && !holds(wine.badId) ? 1 : 0);
+  return newStacks <= bankedStacks(tabs, wine.unfermentedId).length + Common.core.Bank.freeSlots(player);
+}
+
+/**
+ * The banked jugs become `good` wine and `bad` bad wine. A new output stack takes the unfermented
+ * stack's own slot first, so the conversion never needs more room than bankFits allowed.
+ */
+function fermentBanked(player, tabs, wine, good, bad) {
+  const { Bank, Item } = Common.core;
+  const joining = [];
+  const fresh = [];
+  for (const [id, amount] of [[wine.wineId, good], [wine.badId, bad]]) {
+    if (amount <= 0) continue;
+    const [held] = bankedStacks(tabs, id);
+    (held ? joining : fresh).push({ held, item: new Item(id, amount) });
+  }
+  const touched = new Set();
+  for (const { tab, slot } of bankedStacks(tabs, wine.unfermentedId)) {
+    tab.setItem(slot, fresh.shift()?.item ?? new Item(-1, 0));
+    touched.add(tab);
+  }
+  for (const { held, item } of joining) {
+    held.tab.add(item, false);
+    touched.add(held.tab);
+  }
+  for (const { item } of fresh) {
+    const tab = player.getBank(Bank.getTabForItem(player, item.getId()));
+    tab.add(item, false);
+    touched.add(tab);
+  }
+  for (const tab of touched) tab.sortItems();
+  // One refresh sends the whole bank.
+  [...touched][0]?.refreshItems();
+}
+
+/**
+ * Every unfermented jug of this wine, carried and banked, turns into wine or bad wine at once,
+ * with all its XP. A bank without room for the outcome keeps its jugs unfermented, for the next
+ * timer, rather than lose any.
+ */
 function fermentWine(player, wine) {
-  const { Bank, Item, Skill } = Common.core;
+  const { Item, Skill } = Common.core;
   const inventory = player.getInventory();
   const tabs = bankTabs(player);
   const carried = inventory.getAmount(wine.unfermentedId);
-  const banked = tabs.reduce((sum, tab) => sum + tab.getAmount(wine.unfermentedId), 0);
+  let banked = tabs.reduce((sum, tab) => sum + tab.getAmount(wine.unfermentedId), 0);
   if (carried + banked <= 0) return;
-  const good = successes(carried + banked, successChance(player, wine));
+  const chance = successChance(player, wine);
+  let good = successes(carried + banked, chance);
+  const bankedGood = () => good - Math.min(good, carried);
+  if (banked > 0 && !bankFits(player, tabs, wine, bankedGood(), banked - bankedGood())) {
+    banked = 0;
+    good = successes(carried, chance);
+  }
 
   let carriedGood = Math.min(good, carried);
   const items = inventory.getItems();
@@ -105,15 +168,7 @@ function fermentWine(player, wine) {
   }
   if (carried > 0) inventory.refreshItems();
 
-  if (banked > 0) {
-    for (const tab of tabs) {
-      const amount = tab.getAmount(wine.unfermentedId);
-      if (amount > 0) tab.deleteNumber(wine.unfermentedId, amount);
-    }
-    const bankedGood = good - Math.min(good, carried);
-    if (bankedGood > 0) player.getBank(Bank.getTabForItem(player, wine.wineId)).add(new Item(wine.wineId, bankedGood), true);
-    if (banked > bankedGood) player.getBank(Bank.getTabForItem(player, wine.badId)).add(new Item(wine.badId, banked - bankedGood), true);
-  }
+  if (banked > 0) fermentBanked(player, tabs, wine, bankedGood(), banked - bankedGood());
 
   if (good <= 0) return;
   Common.addXp(player, good * wine.xp);

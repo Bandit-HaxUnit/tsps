@@ -102,6 +102,9 @@ gameval. The Gauntlet's range is `server/plugins/minigames/gauntlet/Prep.Gauntle
   garden, fish, admiral, wild and summer part pies' lines (none are sent for the captured
   fillings).
 - What happens to wine still fermenting at logout: it ferments 20 ticks after the next login.
+- A full bank: the banked jugs' wine and bad wine join stacks the bank holds, or take the
+  unfermented stack's slot or a free one. When they would not fit, the banked jugs stay
+  unfermented (the carried ones still ferment) until the next jug made or the next login.
 - The lean and fat snail lines follow the captured thin snail; beef and rat meat follow the
   captured impaler and mystery meat.
 

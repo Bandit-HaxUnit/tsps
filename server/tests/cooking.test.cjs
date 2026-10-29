@@ -205,7 +205,7 @@ test("pies and pizzas bake on a range with the captured lines, never on a fire",
 });
 
 /** A player whose inventory really changes, for the item-on-item recipes. */
-function maker(cooking, carried, banked = []) {
+function maker(cooking, carried) {
   const p = player(cooking, []);
   const slots = new Array(28).fill(null);
   let next = 0;
@@ -222,25 +222,15 @@ function maker(cooking, carried, banked = []) {
     setItem: (slot, added) => { slots[slot] = item(added.getId()); },
     refreshItems: noop,
   };
-  const bank = new Map(banked);
-  const tab = {
-    getAmount: (id) => bank.get(id) ?? 0,
-    contains: (id) => (bank.get(id) ?? 0) > 0,
-    getFreeSlots: () => 800,
-    deleteNumber: (id, count) => bank.set(id, (bank.get(id) ?? 0) - count),
-    add: (added) => bank.set(added.getId(), (bank.get(added.getId()) ?? 0) + added.getAmount()),
-  };
   const xp = [];
   const effects = [];
   return Object.assign(p, {
-    xp, effects, bank,
+    xp, effects,
     getIndex: () => 1,
     isRegistered: () => true,
     getHitpoints: () => 10,
     getInventory: () => inventory,
-    getBanks: () => [tab],
-    getBank: () => tab,
-    getCurrentBankTab: () => 0,
+    getBanks: () => [],
     getSkillManager: () => ({ getCurrentLevel: () => cooking, addExperiences: (_skill, gained) => xp.push(gained) }),
     performAnimation: (animation) => effects.push(["seq", animation.getId()]),
     performGraphic: (graphic) => effects.push(["spotanim", graphic.getId()]),
@@ -338,9 +328,34 @@ test("wine: a jug every 2 ticks with the captured animation, graphic and sound; 
   Wine.fermenting.delete(p);
 });
 
+/** maker()'s player with a real bank (every tab a native Bank), `fill` slots of it taken by other items. */
+function bankedMaker(cooking, carried, banked, fill) {
+  const { Bank } = require("../dist/game/model/container/impl/Bank");
+  const p = maker(cooking, carried);
+  const tabs = Array.from({ length: Bank.TOTAL_BANK_TABS }, () => new Bank(p));
+  Object.assign(p, {
+    getBanks: () => tabs,
+    getBank: (tab) => tabs[tab],
+    setBank: (tab, bank) => { tabs[tab] = bank; return p; },
+    isSearchingBank: () => false,
+    getCurrentBankTab: () => 0,
+    getPacketSender: () => new Proxy({}, { get: (_t, _k) => function sender() { return this; } }),
+  });
+  Bank.withoutLimit(p, () => {
+    for (let id = 0, added = 0; added < fill; id++) {
+      if ([...banked.map(([itemId]) => itemId), obj("jug_wine"), obj("jug_bad_wine")].includes(id)) continue;
+      tabs[0].add(new core.Item(id, 1), false);
+      added++;
+    }
+    for (const [id, amount] of banked) tabs[0].add(new core.Item(id, amount), false);
+  });
+  return { p, tabs, Bank };
+}
+
 test("wine ferments 20 ticks after the last jug, carried and banked at once, with all its XP", () => {
   const Wine = Cooking._test.wine;
-  const p = maker(99, [[obj("grapes"), 1], [obj("jug_water"), 1]], [[obj("jug_unfermented_wine"), 40]]);
+  const { p, tabs } = bankedMaker(99, [[obj("grapes"), 1], [obj("jug_water"), 1]], [[obj("jug_unfermented_wine"), 40]], 0);
+  const amount = (id) => tabs.reduce((sum, tab) => sum + tab.getAmount(id), 0);
   useItems(p, "grapes", "jug_water");
   ticks(2);
   assert.equal(p.getInventory().getAmount(obj("jug_unfermented_wine")), 1);
@@ -348,9 +363,59 @@ test("wine ferments 20 ticks after the last jug, carried and banked at once, wit
   assert.equal(p.getInventory().getAmount(obj("jug_wine")), 0);
   Wine.fermentTick();
   assert.equal(p.getInventory().getAmount(obj("jug_wine")), 1);
-  assert.equal(p.bank.get(obj("jug_unfermented_wine")), 0);
-  assert.equal(p.bank.get(obj("jug_wine")), 40);
+  assert.equal(amount(obj("jug_unfermented_wine")), 0);
+  assert.equal(amount(obj("jug_wine")), 40);
   assert.deepEqual(p.xp, [41 * 200]);
+});
+
+test("a full bank's wine ferments without losing any: the outcome takes the unfermented stack's slot", () => {
+  const Wine = Cooking._test.wine;
+  const { Bank } = require("../dist/game/model/container/impl/Bank");
+  const unfermented = obj("jug_unfermented_wine");
+  // One stack of 2 and nothing else free: room for one new stack only.
+  const { p, tabs } = bankedMaker(35, [], [[unfermented, 2]], Bank.getCapacity({}) - 1);
+  assert.equal(Bank.freeSlots(p), 0);
+  const random = Math.random;
+  let roll = 0;
+  Math.random = () => (roll++ === 0 ? 0 : 0.99); // one jug good, one bad
+  try { Wine.ferment(p); } finally { Math.random = random; }
+  const amount = (id) => tabs.reduce((sum, tab) => sum + tab.getAmount(id), 0);
+  assert.equal(amount(unfermented), 2, "no room for both wine and bad wine: the jugs wait");
+  assert.equal(amount(obj("jug_wine")) + amount(obj("jug_bad_wine")), 0);
+  assert.deepEqual(p.xp, []);
+  assert.equal(Bank.freeSlots(p), 0);
+});
+
+test("a bank with one more free slot ferments a mixed result into two new stacks", () => {
+  const Wine = Cooking._test.wine;
+  const { Bank } = require("../dist/game/model/container/impl/Bank");
+  const unfermented = obj("jug_unfermented_wine");
+  const { p, tabs } = bankedMaker(35, [], [[unfermented, 2]], Bank.getCapacity({}) - 2);
+  const random = Math.random;
+  let roll = 0;
+  Math.random = () => (roll++ === 0 ? 0 : 0.99);
+  try { Wine.ferment(p); } finally { Math.random = random; }
+  const amount = (id) => tabs.reduce((sum, tab) => sum + tab.getAmount(id), 0);
+  assert.equal(amount(unfermented), 0);
+  assert.equal(amount(obj("jug_wine")), 1);
+  assert.equal(amount(obj("jug_bad_wine")), 1);
+  assert.deepEqual(p.xp, [200]);
+});
+
+test("a full bank that already holds wine and bad wine stacks onto them", () => {
+  const Wine = Cooking._test.wine;
+  const { Bank } = require("../dist/game/model/container/impl/Bank");
+  const unfermented = obj("jug_unfermented_wine");
+  const { p, tabs } = bankedMaker(35, [], [[unfermented, 2], [obj("jug_wine"), 5], [obj("jug_bad_wine"), 5]], Bank.getCapacity({}) - 3);
+  assert.equal(Bank.freeSlots(p), 0);
+  const random = Math.random;
+  let roll = 0;
+  Math.random = () => (roll++ === 0 ? 0 : 0.99);
+  try { Wine.ferment(p); } finally { Math.random = random; }
+  const amount = (id) => tabs.reduce((sum, tab) => sum + tab.getAmount(id), 0);
+  assert.equal(amount(unfermented), 0);
+  assert.equal(amount(obj("jug_wine")), 6);
+  assert.equal(amount(obj("jug_bad_wine")), 6);
 });
 
 test("wine's success chance is the Wiki's: about 60% at 35, sure at 68; stacks roll in 15 batches", () => {
