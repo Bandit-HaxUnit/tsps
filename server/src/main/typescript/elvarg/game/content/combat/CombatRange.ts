@@ -35,9 +35,11 @@ export class CombatRange {
         if (method.type() === CombatType.MELEE) {
             // Only large NPC attackers reach here overlapped: distance 0 is in range.
             if (overlapped) return true;
-            return range === 1
-                ? this.hasOpenSharedEdge(attackerBounds, targetBounds, attackerLocation.getZ(), attacker.getPrivateArea())
-                : this.hasMeleeLine(attackerBounds, targetBounds, attackerLocation.getZ(), attacker.getPrivateArea());
+            if (range === 1) {
+                return this.hasOpenSharedEdge(attackerBounds, targetBounds, attackerLocation.getZ(), attacker.getPrivateArea());
+            }
+            // Extended melee can strike over water and low obstacles (Wiki: Attack range).
+            // Use the projectile line below: walking collision would reject those attacks.
         }
 
         if (attacker.isNpc()) {
@@ -181,12 +183,6 @@ export class CombatRange {
             && (RegionManager.getClipping(toX, toY, z, area) & (toMask | invalid)) === 0;
     }
 
-    private static hasMeleeLine(a: Bounds, b: Bounds, z: number, area: any): boolean {
-        const from = this.nearestTile(a, b);
-        const to = this.nearestTile(b, a);
-        return RegionManager.canMove(from.x, from.y, to.x, to.y, z, 1, 1, area);
-    }
-
     private static hasProjectileLine(source: Bounds, destination: Bounds, entity: Mobile, z: number): boolean {
         return RegionManager.canProjectileAttackBounds(
             new Location(source.minX, source.minY, z),
@@ -197,12 +193,5 @@ export class CombatRange {
             destination.maxY - destination.minY + 1,
             entity.getPrivateArea(),
         );
-    }
-
-    private static nearestTile(from: Bounds, to: Bounds): { x: number; y: number } {
-        return {
-            x: Math.max(from.minX, Math.min(from.maxX, to.minX)),
-            y: Math.max(from.minY, Math.min(from.maxY, to.minY)),
-        };
     }
 }
