@@ -410,16 +410,8 @@ const worker = {
                 const varsMatch = !!hit && varReadsMatch(workerState.varManager, hit.reads);
                 if (sdInput.mapProfileEnabled) console.info(`[map-profile] ${sdInput.mapX},${sdInput.mapY} stored square: ${!hit ? "none" : varsMatch ? "hit" : "vars differ"} key=${key.split("|")[1]} npcs=${npcsHash || "-"}`);
                 if (hit && varsMatch) {
-                    const level = sdInput.minimapLevel;
-                    if (level !== undefined && !hit.data.minimapBlobs?.[level]) {
-                        try {
-                            const repaired = await loadMinimapFloor(workerState, sdInput, level, build);
-                            if (repaired?.minimapBlobs[level]) {
-                                hit.data.minimapBlobs ??= new Array(Scene.MAX_LEVELS);
-                                hit.data.minimapBlobs[level] = repaired.minimapBlobs[level];
-                            }
-                        } finally { clearCache(workerState); }
-                    }
+                    // Geometry is shared across planes. Return it immediately; missing
+                    // minimap floors use the renderer's deduplicated on-demand requests.
                     build.check();
                     if (sdInput.loadNpcs) refreshNpcs(hit.data, squareNpcs, sdInput.mapX, sdInput.mapY);
                     dropLoadedTextures(hit.data, sdInput.loadedTextureIds);

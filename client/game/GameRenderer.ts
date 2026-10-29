@@ -9,6 +9,7 @@ import { OsrsRendererType } from "./GameRenderers";
 import { getAxisDeadzone } from "./InputManager";
 import { MapManager, MapSquare } from "./MapManager";
 import { OsrsClient } from "./OsrsClient";
+import { ClientState } from "./ClientState";
 import type { CameraRotation } from "./plugins/ClientPluginManager";
 import { IProjectileManager } from "./interfaces/IProjectileManager";
 import type { PlayerSpotAnimationEvent } from "./sync/PlayerSyncTypes";
@@ -339,6 +340,22 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         this.mapManager.init(
             this.osrsClient.mapFileIndex,
             SceneBuilder.fillEmptyTerrain(this.osrsClient.loadedCache.info),
+        );
+    }
+
+    abstract resolveEffectiveRenderDistanceTiles(frameCount: number): number;
+
+    /** Start workers from the first real player position, before interface rendering blocks a frame. */
+    prepareInitialScene(tileX: number, tileY: number): void {
+        if (!ClientState.scenePositionReady || ClientState.inInstance || this.mapManager.getGridRevision() !== 0) return;
+        const client = this.osrsClient;
+        const distance = this.resolveEffectiveRenderDistanceTiles(this.stats.frameCount);
+        this.mapManager.update(
+            tileX + 0.5, tileY + 0.5, client.camera, this.stats.frameCount,
+            Math.max(client.mapRadius, Math.ceil((distance + 32) / 64)),
+            ClientState.baseX, ClientState.baseY,
+            Math.max(client.expandedMapLoading | 0, MapManager.getSceneryPadding(distance)),
+            distance,
         );
     }
 

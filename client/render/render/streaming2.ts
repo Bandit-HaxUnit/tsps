@@ -94,7 +94,6 @@ import { collectWidgetsAtPoint } from "../../widgets/menu/utils";
 import {
     getCanvasCssSize,
     isIos,
-    isLowEndDevice,
     isMobileMode,
     isTouchDevice,
     isWebGL2Supported,
@@ -234,7 +233,7 @@ export async function queueLoadMap(host: WebGLOsrsRendererHost,
                 : undefined;
         const input: SdMapLoaderInput = snapshotMapInput({
             mapProfileEnabled: isMapProfileEnabled(),
-            persistentCache: isLowEndDevice,
+            persistentCache: true,
             minimapLevel: host.getPlayerRawPlane(),
             mapX,
             mapY,
