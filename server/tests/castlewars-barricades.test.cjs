@@ -192,6 +192,67 @@ test('explicit explosive use sends a tile explosion and removes the barricade', 
   assert.ok(p.graphics[0].location.equals(npc.getLocation()));
 });
 
+test('all barricade tools step out of an overlapping tile, but adjacent use stays in place', (t) => {
+  for (const itemId of [core.ItemIdentifiers.TINDERBOX, core.ItemIdentifiers.EXPLOSIVE_POTION, core.ItemIdentifiers.BUCKET_OF_WATER]) {
+    for (const overlapping of [true, false]) {
+      const p = playerAt(t, 2426, 3078);
+      const npc = deployed(t, p);
+      p.getInventory().add(new core.Item(itemId));
+      if (itemId === core.ItemIdentifiers.BUCKET_OF_WATER) npc.setNpcTransformationId(npc.getId() + 1);
+      if (!overlapping) p.moveTo(p.getLocation().transform(-1, 0));
+      const moves = [];
+      t.mock.method(p.getMovementQueue(), 'walkStep', (dx, dy) => moves.push([dx, dy]));
+      itemOnNpc({ player: p, target: npc, itemId, slot: p.getInventory().getSlotForItemId(itemId) });
+      assert.deepEqual(moves, overlapping ? [[-1, 0]] : [], `tool ${itemId}, overlapping=${overlapping}`);
+      game.releaseBarricade(npc);
+      World.getNpcs().remove(npc);
+    }
+  }
+});
+
+test('a free north or south tile remains usable when the horizontal sides are blocked', (t) => {
+  const p = playerAt(t, 2426, 3078);
+  const npc = deployed(t, p);
+  p.getInventory().add(new core.Item(core.ItemIdentifiers.TINDERBOX));
+  const moves = [];
+  t.mock.method(p.getMovementQueue(), 'canWalk', (dx, dy) => dx === 0 && dy === 1);
+  t.mock.method(p.getMovementQueue(), 'walkStep', (dx, dy) => moves.push([dx, dy]));
+  itemOnNpc({ player: p, target: npc, itemId: core.ItemIdentifiers.TINDERBOX });
+  assert.deepEqual(moves, [[0, 1]]);
+});
+
+test('unavailable or invalid tool interactions neither move nor consume supplies', (t) => {
+  for (const itemId of [core.ItemIdentifiers.TINDERBOX, core.ItemIdentifiers.EXPLOSIVE_POTION, core.ItemIdentifiers.BUCKET_OF_WATER]) {
+    const p = playerAt(t, 2426, 3078);
+    const npc = deployed(t, p);
+    p.getInventory().add(new core.Item(itemId));
+    if (itemId === core.ItemIdentifiers.BUCKET_OF_WATER) npc.setNpcTransformationId(npc.getId() + 1);
+    t.mock.method(p.getMovementQueue(), 'canWalk', () => false);
+    const moves = [];
+    t.mock.method(p.getMovementQueue(), 'walkStep', (dx, dy) => moves.push([dx, dy]));
+    const before = npc.getNpcTransformationId();
+    itemOnNpc({ player: p, target: npc, itemId, slot: p.getInventory().getSlotForItemId(itemId) });
+    assert.deepEqual(moves, []);
+    assert.equal(npc.getNpcTransformationId(), before);
+    assert.equal(game.isBarricade(npc), true);
+    assert.equal(p.getInventory().contains(itemId), true);
+    assert.equal(p.graphics.length, 0);
+    game.releaseBarricade(npc);
+    World.getNpcs().remove(npc);
+  }
+  const p = playerAt(t, 2426, 3078);
+  const npc = deployed(t, p);
+  p.getInventory().add(new core.Item(core.ItemIdentifiers.EXPLOSIVE_POTION));
+  npc.setNpcTransformationId(npc.getId() + 1);
+  const moves = [];
+  t.mock.method(p.getMovementQueue(), 'walkStep', (dx, dy) => moves.push([dx, dy]));
+  itemOnNpc({ player: p, target: npc, itemId: core.ItemIdentifiers.EXPLOSIVE_POTION,
+    slot: p.getInventory().getSlotForItemId(core.ItemIdentifiers.EXPLOSIVE_POTION) });
+  assert.deepEqual(moves, [], 'a burning barricade rejects explosives before an escape step');
+  assert.equal(p.getInventory().contains(core.ItemIdentifiers.EXPLOSIVE_POTION), true);
+  assert.equal(game.isBarricade(npc), true);
+});
+
 test('a level-one player with a bronze pickaxe clears both tunnel rock layers', (t) => {
   const p = playerAt(t, 2390, 9501, 0);
   p.getInventory().add(new core.Item(core.ItemIdentifiers.BRONZE_PICKAXE));
