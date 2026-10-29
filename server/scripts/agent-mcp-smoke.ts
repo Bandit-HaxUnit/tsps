@@ -1,6 +1,9 @@
 import * as assert from "node:assert/strict";
 
 const { buildMcpServer } = require("../plugins/agent/AgentMcp.plugin.js");
+const travelTools = require("../plugins/agent/mcp/Travel.AgentMcp.js");
+const travelRoutes = require("../plugins/agent/mcp/TravelRoutes.AgentMcp.js");
+const transportData = require("../plugins/agent/data/transports.json");
 const { Client } = require("@modelcontextprotocol/sdk/client/index.js");
 const { InMemoryTransport } = require("@modelcontextprotocol/sdk/inMemory.js");
 
@@ -427,7 +430,7 @@ else process.env.AGENT_MCP = previousMcpFlag;
         for (let y = 3150; y <= 3290; y++) if (y !== 3218) routeFlags.set(`${x},${y}`, 0x200000);
     }
     routeFlags.set("3225,3218", 0x80);
-    const gate = { getId: () => 1535, getLocation: () => location(3225, 3218) };
+    const gate = { getId: () => 1535, getType: () => 0, getLocation: () => location(3225, 3218) };
     core.MapObjects.mapObjects.set("3225,3218,0", [gate] as any);
     const originalForPlayer = core.ObjectDefinition.forPlayer;
     core.ObjectDefinition.forPlayer = (id: number) => id === 1535
@@ -447,6 +450,49 @@ else process.env.AGENT_MCP = previousMcpFlag;
         "travel_to only clicks the map: no command, chat or teleport");
     assert.deepEqual(travelPackets[0], { type: "move", worldX: 3224, worldY: 3218, modifierFlags: 0 }, "it walks up to the gate first");
     dispatched.length = beforeTravel;
+    // A ride longer than the call's budget returns progress at the deadline, not a failed transport.
+    travelTools._test.setTransports({
+        columns: transportData.columns, itemGroups: {},
+        transports: { test: [[[3222, 3218, 0], [3300, 3218, 0], "Climb Rope", 99901, null, null, null, null, null, 30]] },
+    });
+    core.MapObjects.mapObjects.set("3223,3218,0", [{ getId: () => 99901, getType: () => 10, getLocation: () => location(3223, 3218) }] as any);
+    const doorForPlayer = core.ObjectDefinition.forPlayer;
+    core.ObjectDefinition.forPlayer = (id: number) => id === 99901
+        ? { id, getName: () => "Rope", getInteractions: () => ["Climb"] }
+        : doorForPlayer(id);
+    const started = Date.now();
+    const ridingCall = await call(client, "travel_to", { player: "agent1", x: 3300, y: 3218, budgetTicks: 10 });
+    assert.equal(ridingCall.error, false, ridingCall.text);
+    const riding = ridingCall.value;
+    assert.equal(riding.result, "in-progress");
+    assert.equal(riding.legs[0].result, "budget");
+    assert.equal(riding.routedAround, undefined, "an unfinished ride is not marked as failed");
+    assert.ok(Date.now() - started < 30, "the ride's wait stops at the budget (one mock tick per millisecond)");
+    assert.deepEqual(dispatched.slice(beforeTravel), [{ type: "object_option", id: 99901, x: 3223, y: 3218, action: "Climb" }]);
+    travelTools._test.setTransports(null);
+    core.ObjectDefinition.forPlayer = doorForPlayer;
+    core.MapObjects.mapObjects.delete("3223,3218,0");
+    dispatched.length = beforeTravel;
+    // Item quantities: a positive amount must be carried, 0 means none carried (the Haunted Mine's
+    // glowing fungus stairs).
+    const mineStairs = travelRoutes.indexTransports(transportData).get(travelRoutes.key(2691, 4437, 0))
+        .find((transport: any) => transport.items === "GLOWING_FUNGUS=0");
+    const carrying = (held: Record<number, number>, unlocks: string[] = []) => ({
+        level: () => 99, questComplete: () => false, varbit: () => 0, varp: () => 0,
+        count: (ids: number[]) => ids.reduce((sum, id) => sum + (held[id] ?? 0), 0),
+        unlocked: (name: string) => unlocks.includes(name),
+    });
+    const groups = transportData.itemGroups;
+    assert.deepEqual(travelRoutes.unmetRequirements(mineStairs, groups, carrying({})), []);
+    assert.deepEqual(travelRoutes.unmetRequirements(mineStairs, groups, carrying({ 4075: 1 })), ["items GLOWING_FUNGUS=0"]);
+    assert.deepEqual(travelRoutes.unmetRequirements({ items: "COINS=30" }, groups, carrying({ 995: 30 })), []);
+    assert.deepEqual(travelRoutes.unmetRequirements({ items: "COINS=30" }, groups, carrying({ 995: 29 })), ["items COINS=30"]);
+    // An account unlock counts only when the player has it: the canoe's stored axe stands in for a carried one.
+    const canoe = travelRoutes.indexTransports(transportData).get(travelRoutes.key(3132, 3510, 0))
+        .find((transport: any) => transport.items === "AXE=1|UNLOCK_CANOE_AXE=1");
+    assert.deepEqual(travelRoutes.unmetRequirements(canoe, groups, carrying({})), ["items AXE=1|UNLOCK_CANOE_AXE=1"]);
+    assert.deepEqual(travelRoutes.unmetRequirements(canoe, groups, carrying({}, ["CANOE_AXE"])), []);
+    assert.deepEqual(travelRoutes.unmetRequirements(canoe, groups, carrying({ 1351: 1 })), []);
     routeFlags.set("3230,3218", 0x200000);
     const blockedStand = (await call(client, "plan_route", { player: "agent1", x: 3230, y: 3218, exact: true })).value;
     assert.equal(blockedStand.result, "no-route", "an unreachable stand tile cannot succeed on the wrong side of a wall");

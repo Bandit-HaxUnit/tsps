@@ -4,7 +4,7 @@
 // scripts/import-shortest-path.cjs); every hop is a normal client click (move, object_option,
 // npc_option), so a door or boat that doesn't work here stops the trip and says where.
 const path = require("node:path");
-const { planTravel, toLegs, indexTransports, key, BLOCKED } = require("./TravelRoutes.AgentMcp");
+const { planTravel, toLegs, indexTransports, unmetRequirements, key, BLOCKED } = require("./TravelRoutes.AgentMcp");
 
 const DATA_FILE = path.join(__dirname, "..", "data", "transports.json");
 // Path tiles walked per click: well inside the route finder's 128-tile window.
@@ -21,6 +21,13 @@ const DEFAULT_BUDGET_TICKS = 100;
 const MAX_BUDGET_TICKS = 300;
 // A call made mid-voyage waits this long for the ride to land.
 const LANDING_TICKS = 30;
+
+// The table's account unlocks the server tracks, and the custom event that answers each.
+// Unlisted ones (MOR_UL_REK, DRAGONTOOTH, ...) count as not unlocked.
+const UNLOCK_QUERIES = {
+  CANOE_AXE: { event: "canoes:stored-axe", request: { stored: false }, answer: "stored" },
+  KARAMJA_ELITE: { event: "diary:is-complete", request: { diary: "karamja", tier: "elite", complete: false }, answer: "complete" },
+};
 
 let transportIndex = null;
 const transports = () => (transportIndex ??= indexTransports(require(DATA_FILE)));
@@ -76,44 +83,29 @@ module.exports = function registerTravelTools(ctx) {
 
   // The requirements of a transport this player doesn't meet, as readable reasons.
   const unmet = (p, transport, itemGroups) => {
-    const reasons = [];
-    for (const entry of String(transport.skills ?? "").split(";").filter(Boolean)) {
-      const [level, ...name] = entry.trim().split(/\s+/);
-      const skill = Skill.values().find((s) => s.getName().toLowerCase() === name.join(" ").toLowerCase());
-      if (!skill) reasons.push(`skill ${entry} (unknown here)`);
-      else if (p.getSkillManager().getCurrentLevel(skill) < Number(level)) reasons.push(`${entry}`);
-    }
-    if (transport.items) {
-      const carried = [...items(p.getInventory()), ...items(p.getEquipment())];
-      const count = (ids) => carried.filter((e) => ids.includes(e.id)).reduce((sum, e) => sum + e.amount, 0);
-      for (const all of transport.items.replace(/\s+/g, "").toUpperCase().split("&").filter(Boolean)) {
-        const met = all.split("|").some((option) => {
-          const [name, quantity] = option.split("=");
-          if (name.startsWith("UNLOCK_")) return true;
-          const ids = itemGroups[name] ?? (Number.isInteger(Number(name)) ? [Number(name)] : []);
-          return count(ids) >= Math.max(1, Number(quantity) || 0);
-        });
-        if (!met) reasons.push(`items ${all}`);
-      }
-    }
-    for (const name of String(transport.quests ?? "").split(";").filter(Boolean)) {
-      const request = { player: p, name, complete: false };
-      PluginManager.emitCustomEvent("quest:is-complete", request);
-      if (request.complete !== true) reasons.push(`quest ${name}`);
-    }
+    const carried = [...items(p.getInventory()), ...items(p.getEquipment())];
     const sender = p.getPacketSender();
-    for (const [field, read] of [["varbits", (id) => sender.getVarbit(id)], ["varps", (id) => sender.getVarp(id)]]) {
-      for (const entry of String(transport[field] ?? "").split(";").filter(Boolean)) {
-        const match = /^(\d+)([=&@<>])(\d+)$/.exec(entry.trim());
-        if (!match || match[2] === "@") continue;
-        const value = Number(read(Number(match[1])) ?? 0);
-        const wanted = Number(match[3]);
-        const met = match[2] === "=" ? value === wanted : match[2] === ">" ? value > wanted
-          : match[2] === "<" ? value < wanted : (value & wanted) !== 0;
-        if (!met) reasons.push(`${field === "varbits" ? "varbit" : "varp"} ${entry} (is ${value})`);
-      }
-    }
-    return reasons;
+    return unmetRequirements(transport, itemGroups, {
+      level: (name) => {
+        const skill = Skill.values().find((s) => s.getName().toLowerCase() === name.toLowerCase());
+        return skill ? p.getSkillManager().getCurrentLevel(skill) : undefined;
+      },
+      count: (ids) => carried.filter((e) => ids.includes(e.id)).reduce((sum, e) => sum + e.amount, 0),
+      unlocked: (name) => {
+        const ask = UNLOCK_QUERIES[name];
+        if (!ask) return false;
+        const request = { player: p, ...ask.request };
+        PluginManager.emitCustomEvent(ask.event, request);
+        return request[ask.answer] === true;
+      },
+      questComplete: (name) => {
+        const request = { player: p, name, complete: false };
+        PluginManager.emitCustomEvent("quest:is-complete", request);
+        return request.complete === true;
+      },
+      varbit: (id) => sender.getVarbit(id),
+      varp: (id) => sender.getVarp(id),
+    });
   };
 
   const plan = (p, goal, { exact, failed, ignoreRequirements }) => {
@@ -174,8 +166,9 @@ module.exports = function registerTravelTools(ctx) {
     : { type: "object_option", id: thing.id, x: thing.x, y: thing.y, action: option };
 
   // Waits after a transport click until the player lands near `arrive`, a dialogue or
-  // interface opens, or they stand still for longer than the transport takes.
-  const ride = async (username, transport, arrive, messages) => {
+  // interface opens, they stand still for longer than the transport takes, or the call's
+  // budget runs out mid-ride (the next call waits for the landing).
+  const ride = async (username, transport, arrive, deadline, messages) => {
     const patience = Math.max(4, (transport.ticks ?? 1) + 4);
     // A door's far side is a step away: only that tile counts. Longer rides land loosely.
     const from = asTile(transport.from);
@@ -184,6 +177,7 @@ module.exports = function registerTravelTools(ctx) {
     let last = tile(find(username).getLocation());
     let idle = 0;
     for (let ticks = 1; ticks <= limit; ticks++) {
+      if (World.getProcessCycle() >= deadline) return { result: "budget", ticks: ticks - 1 };
       await sleepTicks(1);
       const p = find(username);
       messages.push(...takeMessages(p));
@@ -233,7 +227,7 @@ module.exports = function registerTravelTools(ctx) {
     return { result: "budget" };
   };
 
-  const transportLeg = async (username, leg, messages) => {
+  const transportLeg = async (username, leg, deadline, messages) => {
     const p = find(username);
     const { transport, arrive } = leg;
     const click = resolveClick(p, transport);
@@ -245,15 +239,19 @@ module.exports = function registerTravelTools(ctx) {
     ];
     const clicked = { kind: click.kind, name: click.thing.name, id: click.thing.id, option: click.option, x: click.thing.x, y: click.thing.y,
       ...(notes.length ? { note: notes.join("; ") } : {}) };
-    let outcome = await ride(username, transport, arrive, messages);
+    let outcome = await ride(username, transport, arrive, deadline, messages);
+    if (outcome.result === "budget") return { ...outcome, clicked };
     const here = tile(find(username).getLocation());
     const from = asTile(transport.from);
     // A door opens and leaves the player in front of it: step through.
     if (outcome.result === "stopped" && arrive.z === from.z && chebyshev(arrive, from) <= 1
       && here.x === from.x && here.y === from.y && here.z === from.z) {
+      const left = deadline - World.getProcessCycle();
+      if (left < 1) return { result: "budget", ticks: outcome.ticks, clicked };
       send(find(username), { type: "move", worldX: arrive.x, worldY: arrive.y, modifierFlags: 0 });
-      const step = await settle(username, 5, arrive);
+      const step = await settle(username, Math.min(5, left), arrive);
       messages.push(...step.messages);
+      if (step.result === "timeout" && World.getProcessCycle() >= deadline) return { result: "budget", ticks: outcome.ticks + step.ticks, clicked };
       outcome = step.result === "arrived" ? { result: "arrived", ticks: outcome.ticks + step.ticks } : outcome;
     }
     if (outcome.result === "arrived" || outcome.result === "dialogue" || outcome.result === "interface") return { ...outcome, clicked };
@@ -277,11 +275,16 @@ module.exports = function registerTravelTools(ctx) {
       retryFailed: z.boolean().default(false).describe("Forget transports that failed on this trip and try them again"),
     },
     async ({ player: username, x, y, z: level, exact, run, budgetTicks, retryFailed }) => {
+      const deadline = World.getProcessCycle() + budgetTicks;
       let p = find(username);
-      // Still on a boat or in a cutscene from the last call: wait to land.
-      for (let ticks = 0; p.getPrivateArea?.() && ticks < LANDING_TICKS; ticks++) {
+      // Still riding from the last call (a boat, a cutscene, a climb): let it land first.
+      const riding = (q) => !!q.getPrivateArea?.() || movementBlocked(q) || activity(q).length > 0;
+      for (let ticks = 0; riding(p) && ticks < LANDING_TICKS && World.getProcessCycle() < deadline; ticks++) {
         await sleepTicks(1);
         p = find(username);
+      }
+      if (p.getPrivateArea?.() && World.getProcessCycle() >= deadline) {
+        return { result: "in-progress", ...tile(p.getLocation()), area: area(p), reason: "still riding; call again", messages: takeMessages(p) };
       }
       if (p.getPrivateArea?.()) throw new Error("travel_to plans main-world routes; leave the instance first.");
       const goal = { x, y, z: level };
@@ -291,7 +294,6 @@ module.exports = function registerTravelTools(ctx) {
         trip = { goal: goalKey, failed: new Map() };
         trips.set(username.toLowerCase(), trip);
       }
-      const deadline = World.getProcessCycle() + budgetTicks;
       const messages = [...takeMessages(p)];
       const done = { walked: 0, legs: [] };
       const taken = new Set();
@@ -332,7 +334,7 @@ module.exports = function registerTravelTools(ctx) {
         if (leg.kind === "transport") taken.add(transportKey(leg.transport));
         const result = leg.kind === "walk"
           ? await walkLeg(username, leg, run, deadline, messages, done)
-          : await transportLeg(username, leg, messages);
+          : await transportLeg(username, leg, deadline, messages);
         if (leg.kind === "transport") {
           done.legs.push({
             ...describe(leg.transport), result: result.result, clicked: result.clicked,
@@ -349,8 +351,14 @@ module.exports = function registerTravelTools(ctx) {
         }
       }
       const now = find(username);
-      const route = plan(now, goal, { exact, failed: trip.failed });
+      const route = !now.getPrivateArea?.() && plan(now, goal, { exact, failed: trip.failed });
       return report("in-progress", route ? { next: route.legs.slice(0, 5).map(describeLeg) } : {});
     }
   );
+};
+
+// For tests: plan over these transports (the same shape as transports.json) instead of the
+// imported table; null goes back to it.
+module.exports._test = {
+  setTransports: (data) => { transportIndex = data ? indexTransports(data) : null; },
 };

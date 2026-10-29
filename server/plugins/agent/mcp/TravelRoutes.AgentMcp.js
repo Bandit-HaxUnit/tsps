@@ -195,6 +195,53 @@ function planTravel({ from, to, getFlag, transportsAt, doorAt = () => null, usab
   return { steps, cost: g.get(found), expansions };
 }
 
+/**
+ * The requirements of a transport a player doesn't meet, as readable reasons, in the
+ * Shortest Path table's notation: skills "30 Agility;50 Strength"; items "COINS=30",
+ * "AXE=1&MACHETE=1" (all of), "AIR_RUNE=3|DUST_RUNE=3" (any of), a quantity of 0 meaning
+ * none held; quests by name; varbits/varps "538=1", ">", "<", "&" (bits set), "@" (a
+ * cooldown, not checked); an item alternative UNLOCK_<NAME> is an account unlock (a stored
+ * canoe axe, a diary). `player` reads the state: level(skill name) (undefined when unknown),
+ * count(item ids), unlocked(name without UNLOCK_; false when the server doesn't track it),
+ * questComplete(name), varbit(id), varp(id).
+ */
+function unmetRequirements(transport, itemGroups, player) {
+  const reasons = [];
+  const list = (text) => String(text ?? "").split(";").map((entry) => entry.trim()).filter(Boolean);
+  for (const entry of list(transport.skills)) {
+    const [level, ...name] = entry.split(/\s+/);
+    const current = player.level(name.join(" "));
+    if (current === undefined) reasons.push(`skill ${entry} (unknown here)`);
+    else if (current < Number(level)) reasons.push(entry);
+  }
+  for (const all of String(transport.items ?? "").replace(/\s+/g, "").toUpperCase().split("&").filter(Boolean)) {
+    const met = all.split("|").some((option) => {
+      const [name, quantity] = option.split("=");
+      if (name.startsWith("UNLOCK_")) return player.unlocked(name.slice("UNLOCK_".length)) === true;
+      const ids = itemGroups[name] ?? (Number.isInteger(Number(name)) ? [Number(name)] : []);
+      const required = Number(quantity) || 0;
+      const held = player.count(ids);
+      return required === 0 ? held === 0 : held >= required;
+    });
+    if (!met) reasons.push(`items ${all}`);
+  }
+  for (const name of list(transport.quests)) {
+    if (!player.questComplete(name)) reasons.push(`quest ${name}`);
+  }
+  for (const [field, read, label] of [["varbits", player.varbit, "varbit"], ["varps", player.varp, "varp"]]) {
+    for (const entry of list(transport[field])) {
+      const match = /^(\d+)([=&@<>])(\d+)$/.exec(entry);
+      if (!match || match[2] === "@") continue;
+      const value = Number(read(Number(match[1])) ?? 0);
+      const wanted = Number(match[3]);
+      const met = match[2] === "=" ? value === wanted : match[2] === ">" ? value > wanted
+        : match[2] === "<" ? value < wanted : (value & wanted) !== 0;
+      if (!met) reasons.push(`${label} ${entry} (is ${value})`);
+    }
+  }
+  return reasons;
+}
+
 /** The steps split into walks (tile lists) and the transports between them. */
 function toLegs(steps) {
   const legs = [];
@@ -212,4 +259,4 @@ function toLegs(steps) {
   return legs;
 }
 
-module.exports = { planTravel, toLegs, indexTransports, key, BLOCKED };
+module.exports = { planTravel, toLegs, indexTransports, unmetRequirements, key, BLOCKED };
