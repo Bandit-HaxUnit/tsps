@@ -6316,6 +6316,8 @@ export class OsrsClient {
             } catch {}
             this.runeLite?.postPostClientTick();
         }
+        // Input must reach the server while scene rendering is still loading or stalled.
+        flushPackets();
     }
 
     getMinimapImageUrl(mapX: number, mapY: number, level: number = 0): string | undefined {
