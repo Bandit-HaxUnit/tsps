@@ -22,7 +22,7 @@ import type { WidgetManager } from "../../widgets/WidgetManager";
 import type { WidgetNode } from "../../widgets/WidgetNode";
 import type { GameFrameDrawContext, WidgetOverlay } from "../../game/plugins/ClientPluginManager";
 import { Overlay, OverlayInitArgs, OverlayUpdateArgs, RenderPhase } from "./Overlay";
-import { CLIENT_TYPE_ENHANCED, reportedClientType } from "../../rs/cs2/ClientType";
+import { isCurrentClientType, reportedClientType } from "../../rs/cs2/ClientType";
 
 /**
  * The enhanced client's mouseover text setting, mouseover_text_disabled from rev 241 (it was
@@ -646,9 +646,9 @@ export class WidgetsOverlay implements Overlay {
         if (!client?.showMouseOverText || menuOpen || client.menuOpen) {
             return { signature: "hidden" };
         }
-        // As the enhanced client, the game draws the mouseover text itself (script 4726);
-        // drawing ours too showed it twice. Ours is only for other client types.
-        if (reportedClientType(client.widgetManager?.rootInterface) === CLIENT_TYPE_ENHANCED) {
+        // As the current client (desktop or mobile), the game draws the mouseover text itself
+        // (script 4726); drawing ours too showed it twice. Ours is only for older client types.
+        if (isCurrentClientType(reportedClientType(client.widgetManager?.rootInterface))) {
             return { signature: "hidden" };
         }
         if (client.varManager?.getVarbit?.(VARBIT_MOUSEOVER_TEXT_DISABLED) === 1) {
