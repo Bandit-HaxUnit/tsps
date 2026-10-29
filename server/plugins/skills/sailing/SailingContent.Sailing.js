@@ -117,8 +117,13 @@ function boatAnim(boat, name) {
  */
 function dockNear(player, range) {
   const here = player.getLocation();
-  const distance = (tile) => (tile && tile.z === here.getZ()
-    ? Math.max(Math.abs(tile.x - here.getX()), Math.abs(tile.y - here.getY()))
+  return dockNearTile({ x: here.getX(), y: here.getY(), z: here.getZ() }, range);
+}
+
+/** The dock or mooring point nearest a main-world tile within `range` tiles, as dockNear. */
+function dockNearTile(here, range) {
+  const distance = (tile) => (tile && tile.z === here.z
+    ? Math.max(Math.abs(tile.x - here.x), Math.abs(tile.y - here.y))
     : Infinity);
   let best;
   let bestDistance = range + 1;
@@ -278,6 +283,7 @@ function fade(player, out, cycles = FADE_CYCLES, { minimap = true } = {}) {
 
 module.exports = {
   dockNear,
+  dockNearTile,
   VARBIT,
   VARP_SIDEPANEL_BOAT_TYPE,
   VARP_SIDEPANEL_DEFENCE,

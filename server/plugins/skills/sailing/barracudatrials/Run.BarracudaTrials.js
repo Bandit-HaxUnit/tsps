@@ -107,6 +107,8 @@ function placeBoat(player, run) {
   moor(player, boat);
   // The catcher's motes go at the start (rsprox 907 11701).
   require("../WindCatcher.Helm").empty(player);
+  // So does the crystal extractor's charge (Wiki).
+  require("../CrystalExtractor.plugin").reset(player);
   common.core().BoatManager.teleport(boat, run.trial.start);
   common.clearSpeed(boat);
 }

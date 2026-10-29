@@ -302,8 +302,9 @@ function leaveHelmForOtherLoc(event) {
   if (!boat || boat.helmPlayerId !== player.getIndex()) return;
   const name = event.definition?.getName();
   if (name === "Helm" || name === "Sails") return;
-  // The wind catcher is worked from the helm too (rsprox 907 11533).
+  // The wind catcher and crystal extractor are worked from the helm too (rsprox 907 11533, 941).
   if (require("./WindCatcher.Helm").isCatcherLoc(event.objectId)) return;
+  if (require("./CrystalExtractor.plugin").isExtractorLoc(event.objectId)) return;
   leaveHelm(player, boat);
 }
 

@@ -10,7 +10,7 @@
  *   one.", three quarters of the trim's XP, graphic 3535 on the catcher, no burst of speed. The
  *   motes owed full XP go up at once (at most 3), the charges the next tick. A crewmate's trim:
  *   "I've caught a wind mote!" over their head, no full XP owed. A Gwenith Glide crystal mote adds
- *   one too.
+ *   one too, and so does a harvest from the crystal extractor (CrystalExtractor.plugin.js).
  * - Release-mote (op1 switched on, or the side panel's "Release wind mote", 937:25 slot 12): "You
  *   release the wind mote for a burst of speed!", graphic 3536 on the catcher, the trim's burst
  *   (Trim.Helm.js releaseBurst); 40 XP for a mote owed full XP (a gale catcher's 70), else 10.
@@ -45,6 +45,7 @@ const SOUND_ENABLE = 10899;
 const SOUND_DISABLE = 10239;
 const GRAPHIC_STORED = 3535;
 const GRAPHIC_RELEASED = 3536;
+const SOUND_EXTRACTED_MOTE = 10895;
 
 const NO_MOTES = "There are no wind motes in the wind catcher.";
 const RELEASED = "You release the wind mote for a burst of speed!";
@@ -146,6 +147,19 @@ function addCrystalMote(player) {
   if (aboard) addMote(player, aboard);
 }
 
+/**
+ * A mote harvested from the crystal extractor: a charge if the catcher is on and has room, its
+ * graphic on the catcher and sound 10895, with no full XP owed (rsprox 948 3099). True if kept.
+ */
+function storeFromExtractor(player) {
+  const aboard = ownBoat(player);
+  const catcher = aboard && addMote(player, aboard);
+  if (!catcher) return false;
+  player.getPacketSender().sendGraphic(new Graphic(GRAPHIC_STORED), catcherTile(aboard.boat, catcher.loc));
+  playSound(player, SOUND_EXTRACTED_MOTE);
+  return true;
+}
+
 /** Releases a mote for a burst of speed (rsprox 907 11637). */
 function release(player) {
   const aboard = ownBoat(player);
@@ -230,6 +244,7 @@ module.exports = {
   attach,
   storeFromTrim,
   addCrystalMote,
+  storeFromExtractor,
   release,
   empty,
   setEnabled,

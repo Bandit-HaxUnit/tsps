@@ -53,6 +53,9 @@ export interface OwnedBoat {
     windCatcherOn?: boolean;
     windMotes?: number;
     windMotesOwed?: number;
+    /** A built crystal extractor: switched on, and its charge (CrystalExtractor.plugin.js; full holds a mote). */
+    crystalExtractorOn?: boolean;
+    crystalExtractorCharge?: number;
     facilities: number[];
     location: BoatLocation;
     /** The cargo hold, by slot; `null` is an empty slot. */
@@ -132,6 +135,8 @@ export function normalizeSailingState(raw: any): SailingState {
             ...(boat.windCatcherOn === true && { windCatcherOn: true }),
             ...(finite(boat.windMotes) && boat.windMotes > 0 && { windMotes: boat.windMotes }),
             ...(finite(boat.windMotesOwed) && boat.windMotesOwed > 0 && { windMotesOwed: boat.windMotesOwed }),
+            ...(boat.crystalExtractorOn === true && { crystalExtractorOn: true }),
+            ...(finite(boat.crystalExtractorCharge) && boat.crystalExtractorCharge > 0 && { crystalExtractorCharge: boat.crystalExtractorCharge }),
             facilities: Array.isArray(boat.facilities) ? boat.facilities.filter(Number.isInteger) : [],
             location: normalizeLocation(boat.location),
             cargo: normalizeCargo(boat.cargo),

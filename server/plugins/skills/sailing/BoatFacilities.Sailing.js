@@ -137,6 +137,8 @@ function rotationOf(hotspot, facilityRow) {
 
 /** The wind and gale catchers' switched-off locs and their switched-on ones (cache, rsprox 907). */
 const CATCHER_SWITCHED_ON = { 59684: 59683, 59685: 59686 };
+/** The crystal extractor's switched-off loc and its switched-on one (cache, rsprox 940). */
+const EXTRACTOR_SWITCHED_ON = { 59703: 59702 };
 
 /**
  * The deck locs for a boat's hotspots: each facility's loc, blocking its tile when the loc is
@@ -151,8 +153,9 @@ function hotspotLocs(boat, placeholders = false) {
     let id = facility !== undefined
       ? CacheDefinitions.getDbRow(facility)?.column(FACILITY.loc)?.[0]
       : placeholderIds[hotspot.id];
-    // A wind or gale catcher left switched on is built that way.
+    // A wind or gale catcher or crystal extractor left switched on is built that way.
     if (boat.windCatcherOn && CATCHER_SWITCHED_ON[id] !== undefined) id = CATCHER_SWITCHED_ON[id];
+    if (boat.crystalExtractorOn && EXTRACTOR_SWITCHED_ON[id] !== undefined) id = EXTRACTOR_SWITCHED_ON[id];
     if (typeof id !== "number") return [];
     const blocks = (CacheDefinitions.getObject(id)?.clipType ?? 0) !== 0;
     return [{ id, x: hotspot.x, y: hotspot.y, level: hotspot.level, shape: LOC_SHAPE, rotation: rotationOf(hotspot, facility), blocks, hotspot: hotspot.id }];
@@ -171,6 +174,7 @@ function teleportFocusOf(boat) {
 
 module.exports = {
   CATCHER_SWITCHED_ON,
+  EXTRACTOR_SWITCHED_ON,
   teleportFocusOf,
   TYPE_HOTSPOTS,
   HOTSPOT_FACILITIES,
