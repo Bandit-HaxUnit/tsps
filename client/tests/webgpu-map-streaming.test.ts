@@ -15,6 +15,37 @@ const { WebGPURenderer } = require("../render/webgpu/WebGPURenderer");
 const { hasPendingMapStreamingWork: hasPendingWebGLStreaming } = require("../render/render/streaming");
 const { GameRenderer } = require("../game/GameRenderer");
 
+test("client ticks flush interface input before scene rendering is ready", () => {
+    const { OsrsClient } = require("../game/OsrsClient");
+    const { getPacketWriter, createPacket, queuePacket, ClientPacketId } = require("../network/packet");
+    const writer = getPacketWriter();
+    const previousSocket = writer.socket;
+    const sent: Uint8Array[] = [];
+    writer.setSocket({ readyState: WebSocket.OPEN, send: (bytes: Uint8Array) => sent.push(bytes.slice()) });
+    try {
+        const packet = createPacket(ClientPacketId.IF_BUTTON1);
+        packet.packetBuffer.writeInt((378 << 16) | 72);
+        packet.packetBuffer.writeShort(-1);
+        packet.packetBuffer.writeShort(-1);
+        queuePacket(packet);
+        const client = {
+            transmitCycles: { cycleCntr: 0 },
+            updateSoundListener() {}, processWidgetTransmits() {},
+            processWidgetTimers() {}, processScriptEvents() {},
+            get renderer() { assert.fail("sending input must not require a rendered scene"); },
+        };
+        assert.equal(sent.length, 0);
+        OsrsClient.prototype.runClientTicks.call(client, 1);
+        assert.equal(sent.length, 1, "Play is sent on the next client tick");
+        assert.equal(sent[0][0], ClientPacketId.IF_BUTTON1);
+        OsrsClient.prototype.runClientTicks.call(client, 1);
+        assert.equal(sent.length, 1, "a later tick must not send the button twice");
+    } finally {
+        writer.clearBuffer();
+        writer.setSocket(previousSocket);
+    }
+});
+
 test("cache initialization does not queue maps around the login-screen camera", () => {
     const calls: string[] = [];
     const renderer = {
