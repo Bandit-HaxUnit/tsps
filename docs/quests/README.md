@@ -5,7 +5,7 @@ Every quest the server registers, with the latest result recorded in its page he
 test a quest is in [server/docs/agents/quest-testing.md](../../server/docs/agents/quest-testing.md);
 how to record the result is in [_template/README.md](_template/README.md).
 
-185 quests · ✅ passed: 32 · ⚠️ passed with issues: 18 · 🔄 in progress: 6 · ❌ failed: 1 · 🔁 needs recheck: 2 · untested: 126
+185 quests · ✅ passed: 33 · ⚠️ passed with issues: 17 · 🔄 in progress: 6 · ❌ failed: 1 · 🔁 needs recheck: 2 · untested: 126
 
 "Needs recheck" means the quest's plugin has changed since the commit its result was proven on.
 
@@ -95,7 +95,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [Making History](making-history/README.md) | 🔄 in progress |  | agent |  |  |
 | [Meat and Greet](meat-and-greet/README.md) | ✅ passed |  | agent |  |  |
 | [Merlin's Crystal](merlins-crystal/README.md) | untested |  |  |  |  |
-| [Misthalin Mystery](misthalin-mystery/README.md) | ⚠️ passed with issues | 2026-10-25 | community |  | 1 |
+| [Misthalin Mystery](misthalin-mystery/README.md) | ✅ passed | 2026-10-29 | agent | grok-4.7 | 1 |
 | [Monk's Friend](monks-friend/README.md) | ✅ passed |  | agent |  |  |
 | [Monkey Madness I](monkey-madness-i/README.md) | untested |  |  |  |  |
 | [Monkey Madness II](monkey-madness-ii/README.md) | untested |  |  |  |  |
