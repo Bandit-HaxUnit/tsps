@@ -15,7 +15,7 @@ Agree these before touching an account. They stop most time loss.
 - **One account, one actor.** You own a single test account and its one MCP client. Do not run a
   second driver, drain its `messages`, or poll `observe` from another loop.
 - **User-approved community completion exemptions.** Before choosing a new full playthrough,
-  check [the issue #1257 exclusions](../quest-helper-728-community-completions.md). The user
+  check [the quest's page](../../../docs/quests/README.md) for an issue #1257 community report. The user
   accepts these 21 reported completions as sufficient to skip repeat manual runs. Preserve
   their caveats; use bounded checks for known regressions instead of restarting a listed
   quest. Do not treat this as full Quest Helper parity or extend it to unlisted quests.
@@ -367,15 +367,17 @@ in varp 3403, bits 2–5, with completion threshold 9. Sending 399 alone cannot 
 
 ### Preserve evidence between runs
 
-Before starting or resuming a quest, read the committed coverage ledger and
-[verification history](../quest-helper-728-verification.md). Reuse the recorded checkpoint
-and verified route prefix. A new agent session is not a reason to repeat an unchanged test.
+Before starting or resuming a quest, read its page in [docs/quests](../../../docs/quests/README.md).
+Reuse the recorded checkpoint and verified route prefix. A new agent session is not a reason
+to repeat an unchanged test.
 
-Record each reviewed result in the tracked quest ledger before handing off: quest and
-scope, source/test/loaded hashes, Quest Helper revision, cache and relevant shared runtime
-or dialogue dependencies, starting checkpoint, stages reached, rewards/repeat/relog/offline
-checks, recovery checks and remaining gaps. Include a concise, sanitized evidence summary;
-temporary report paths alone are not a durable record. Never commit raw logs or credentials.
+Record each result there before handing off: copy
+[the template](../../../docs/quests/_template/README.md) to `docs/quests/<key>/` (the
+quest's `registerQuest` key, `-` for `_`) or add a run to the existing page, set its status
+block (status, date, tester, model, commit, cache, start, travel), list findings with their
+issues or PRs, and run `yarn docs:quests` to update the index. A run entry covers the start
+state, route, stages reached, rewards, repeat/relog checks and what was not checked. Never
+commit raw logs, local paths or credentials.
 
 Keep previous results when code changes. Mark the affected claim as needing revalidation,
 with the changed dependency and required check; do not erase its history or label it never
@@ -386,7 +388,7 @@ Resume from a preserved, verified checkpoint when valid, then test the affected 
 Report implementation, source review, focused tests and natural playthroughs separately.
 Count original issue quests and supplemental work separately. A partial recovery failure
 does not erase an observed main-route completion, and that completion does not certify the
-unresolved recovery case. Commit and push ledger updates with the reviewed fix batches.
+unresolved recovery case. Commit the quest page updates with the reviewed fix batches.
 
 - Narrow the contract once: quest key, start state, mandatory legs, rewards, recovery cases.
   Write it down; do not re-derive it every turn.
