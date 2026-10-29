@@ -149,6 +149,24 @@ test('lighting steps right if the left tile is blocked and refuses when both sid
   assert.equal(npc.getNpcTransformationId(), -1, 'no fire without a free sideways tile');
 });
 
+test('extinguishing and relighting starts a fresh burn duration', (t) => {
+  const p = playerAt(t, 2425, 3078);
+  const npc = deployed(t, p);
+  p.getInventory().add(new core.Item(core.ItemIdentifiers.TINDERBOX));
+  p.getInventory().add(new core.Item(core.ItemIdentifiers.BUCKET_OF_WATER));
+  const callbacks = [];
+  t.mock.method(game, 'later', (ticks, complete) => callbacks.push(complete));
+  itemOnNpc({ player: p, target: npc, itemId: core.ItemIdentifiers.TINDERBOX });
+  itemOnNpc({ player: p, target: npc, itemId: core.ItemIdentifiers.BUCKET_OF_WATER });
+  callbacks[0]();
+  assert.equal(game.isBarricade(npc), true, 'a doused barricade survives its old burn timer');
+  itemOnNpc({ player: p, target: npc, itemId: core.ItemIdentifiers.TINDERBOX });
+  callbacks[0]();
+  assert.equal(game.isBarricade(npc), true, 'the previous timer cannot end the new fire');
+  callbacks[1]();
+  assert.equal(game.isBarricade(npc), false, 'the new burn timer removes the barricade');
+});
+
 test('the match barricade limit controls placement', (t) => {
   const p = playerAt(t, 2427, 3079);
   t.mock.method(game, 'teamBarricadeCount', () => 10);

@@ -12,6 +12,7 @@
 
 // ponytail: the Wiki says burning barricades "take time to collapse" without a figure.
 const BURN_TICKS = 10;
+const burns = new WeakMap();
 
 let game;
 let core;
@@ -74,8 +75,9 @@ function blowUp(player, npc, slot) {
   game.removeBarricade(npc);
 }
 
-function burnDown(npc) {
-  if (game.isBarricade(npc) && isBurning(npc)) {
+function burnDown(npc, burn) {
+  if (burns.get(npc) === burn && game.isBarricade(npc) && isBurning(npc)) {
+    burns.delete(npc);
     game.removeBarricade(npc);
   }
 }
@@ -97,8 +99,10 @@ function burnBarricade({ player, npc }) {
     }
     movement.walkStep(dx, 0);
   }
+  const burn = {};
+  burns.set(npc, burn);
   npc.setNpcTransformationId(npc.getId() + 1);
-  game.later(BURN_TICKS, () => burnDown(npc));
+  game.later(BURN_TICKS, () => burnDown(npc, burn));
   return true;
 }
 
@@ -122,6 +126,7 @@ function extinguishBarricade({ player, npc }) {
   player.getInventory().delete(BUCKET_OF_WATER, 1);
   player.getInventory().adds(BUCKET, 1);
   npc.setNpcTransformationId(-1);
+  burns.delete(npc);
   return true;
 }
 
