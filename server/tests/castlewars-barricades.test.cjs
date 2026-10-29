@@ -351,7 +351,7 @@ for (const occupiedWest of [false, true]) {
 }
 
 test('an interrupted, blocked or stale explosive approach keeps the potion', (t) => {
-  for (const change of ['swap-item', 'remove-target', 'cancel', 'blocked', 'enclosed']) {
+  for (const change of ['swap-item', 'remove-target', 'deregister-target', 'dead-target', 'target-plane', 'target-instance', 'cancel', 'blocked', 'enclosed']) {
     const p = playerAt(t, 2426, 3078);
     const npc = deployed(t, p);
     const potion = core.ItemIdentifiers.EXPLOSIVE_POTION;
@@ -370,6 +370,13 @@ test('an interrupted, blocked or stale explosive approach keeps the potion', (t)
     itemOnNpc({ player: p, target: npc, itemId: potion, slot });
     if (change === 'swap-item') p.getInventory().setItem(slot, new core.Item(potion));
     if (change === 'remove-target') game.removeBarricade(npc);
+    if (change === 'deregister-target') World.getNpcs().remove(npc);
+    if (change === 'dead-target') npc.setHitpoints(0);
+    if (change === 'target-plane') npc.setLocation(npc.getLocation().transform(0, 0, 1));
+    if (change === 'target-instance') {
+      const otherArea = {};
+      t.mock.method(npc, 'getPrivateArea', () => otherArea);
+    }
     if (change === 'cancel') p.clearPendingAction();
     const movement = p.getMovementQueue();
     for (let tick = 0; tick < 2; tick++) {

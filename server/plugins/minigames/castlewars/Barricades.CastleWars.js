@@ -84,14 +84,15 @@ function stepBesideBarricade(player, npc, onArrival) {
 }
 
 function blowUp(player, npc, slot) {
-  if (!game.isBarricade(npc)) return;
+  if (!game.isBarricade(npc) || !npc.isRegistered() || npc.getHitpoints() <= 0) return;
   if (isBurning(npc)) {
     player.sendMessage("You can't blow up a burning barricade.");
     return;
   }
   const item = player.getInventory().getItems()[slot];
   if (!stepBesideBarricade(player, npc, () => {
-    if (core.PathFinder.reachedEntity(player, npc) && player.getInventory().getItems()[slot] === item
+    if (player.getPrivateArea() === npc.getPrivateArea() && player.getLocation().getZ() === npc.getLocation().getZ()
+        && core.PathFinder.reachedEntity(player, npc) && player.getInventory().getItems()[slot] === item
         && item?.getId() === core.ItemIdentifiers.EXPLOSIVE_POTION && item.getAmount() > 0) blowUp(player, npc, slot);
   })) return;
   player.getInventory().deleteAtSlot(slot, 1);
