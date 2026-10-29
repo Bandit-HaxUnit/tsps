@@ -1522,6 +1522,7 @@ export interface PluginCoreApi {
   CombatPoisonData: any;
   CombatPoisonEffect: any;
   CacheDefinitions: any;
+  encodeContentData: typeof import("../net/protocol/ClientProtocol").encodeContentData;
   CacheMaps: any;
   MapRegionReplacementManager: any;
   readTemplateRegion: typeof import("../game/collision/TemplateRegionData").readTemplateRegion;

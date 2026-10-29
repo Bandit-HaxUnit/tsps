@@ -250,6 +250,24 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         void this.initWorldResources();
     }
 
+    override invalidateDefinitionCaches(): void {
+        this.mapLoadEpoch++;
+        this.cancelObsoleteSceneBuilds();
+        this.instances.invalidate();
+        WebGPUMapSquare.cancelPreparedLoads(this.device);
+        this.mapsToLoad.clear();
+        super.invalidateDefinitionCaches();
+        this.interactionHost.interactLocModelLoader?.clearCache();
+        this.interactionHost.interactNpcModelLoader?.clearCache();
+        this.interactionHost.sceneRaycaster?.clearCache();
+        this.interactionHost.npcDefaultHeightCache.clear();
+        this.interactionHost.cachedNpcIds.clear();
+        this.interactionHost.cachedLocIds.clear();
+        this.interactionHost.cachedObjIds.clear();
+        this.actors?.invalidateNpcDefinitions();
+        if (this.instanceActive) this.scheduleInstanceLocRebuild();
+    }
+
     private async initWorldResources(): Promise<void> {
         if (this.world || !this.device || !this.osrsClient.loadedCache) return;
         try {

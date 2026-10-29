@@ -2443,6 +2443,7 @@ export class PluginManager {
       CombatPoisonData: require("../game/task/impl/CombatPoisonEffect").CombatPoisonData,
       CombatPoisonEffect: require("../game/task/impl/CombatPoisonEffect").CombatPoisonEffect,
       CacheDefinitions: require("../game/cache/CacheDefinitions").CacheDefinitions,
+      encodeContentData: require("../net/protocol/ClientProtocol").encodeContentData,
       CacheMaps: require("../game/cache/CacheMaps").CacheMaps,
       MapRegionReplacementManager: require("../game/collision/MapRegionReplacementManager").MapRegionReplacementManager,
       readTemplateRegion: require("../game/collision/TemplateRegionData").readTemplateRegion,
