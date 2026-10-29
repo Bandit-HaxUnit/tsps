@@ -88,6 +88,13 @@ A further failure class is found without walking anywhere: `targets` reports a s
 not in this cache (`cache: missing`) or whose object is not on the tile it names. `scene: absent`
 alone is only a warning — the step may be across the map.
 
+When the step and the stage disagree, decide which side is wrong before touching a quest. The
+pinned helper is very close to the real game but not identical, so a route that does not finish a
+quest is as likely to be a guide quirk as a server bug. Check the upstream issue tracker for a known
+one first — <https://github.com/Zoinkwiz/quest-helper/issues> — and quote the issue and the pinned
+commit in the note. Triangulate with the cache for ids and the wiki for intent: a helper quirk the
+server already handles correctly is a documented difference, not a regression.
+
 Dialogue is where helper/quest drift concentrates (the helper is one guided route and can route a
 shared NPC to the wrong quest owner — see [quest-testing.md](quest-testing.md)). Compare
 `dialogueChoices` and `choiceRules` with the options the server's dialogue actually offers, at the
@@ -142,6 +149,9 @@ that diff a headless verdict says nothing about what a user sees. The visual pan
 - **Instanced scenes** are implemented (the chunk palette comes from the server's own
   `buildScenePalette`) and unit-tested, but not yet played through live; treat the first instanced
   quest as the check.
+- **Guide quirks are upstream bugs, not ours.** A route that stops short of completing a quest may
+  be a known helper defect: check <https://github.com/Zoinkwiz/quest-helper/issues> before changing
+  quest code, and record the issue id with the pinned commit when it explains the difference.
 - A step can be right and the quest still wrong, or the reverse. Record which, per step; never
   reduce a run to "the quest passed".
 

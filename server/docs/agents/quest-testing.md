@@ -63,6 +63,9 @@ Agree these before touching an account. They stop most time loss.
      step *and* the saved stage with its wire value in one call. See
      [quest-helper-testing.md](quest-helper-testing.md). It follows all step kinds, not just the
      travel leg: talk-to, dialogue choice, item, object, teleport and requirement.
+   - **A route that does not finish a quest may be a guide quirk.** Check the upstream tracker
+     (<https://github.com/Zoinkwiz/quest-helper/issues>) for a known issue before changing quest
+     code, and record the issue with the pinned commit when it explains the difference.
    - A faithful copy of a guide is still a guide. Copy fidelity makes "is the helper integrated
      correctly here?" a real question, and it does not make the helper ground truth about OSRS:
      it covers one curated route and encodes no rewards, XP or exact speech. **It is not a
