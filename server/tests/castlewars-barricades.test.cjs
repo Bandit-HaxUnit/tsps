@@ -11,6 +11,7 @@ const { Player } = require('../dist/game/entity/impl/player/Player');
 const { PlayerSession } = require('../dist/net/PlayerSession');
 const { ClientConnection } = require('../dist/net/NetworkBuilder');
 const { GameConstants } = require('../dist/game/GameConstants');
+const { TaskManager } = require('../dist/game/task/TaskManager');
 const { PathFinder } = require('../dist/game/model/movement/path/PathFinder');
 const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
 const core = PluginManager.getCoreApi();
@@ -48,7 +49,10 @@ before(() => {
     },
     onNpcDeath() {},
     onNpcInteraction(name, actions) { burn = actions.Burn; },
-    onItemOnNpc(fn) { itemOnNpc = fn; },
+    onItemOnNpc(fn) {
+      PluginManager.createApi('Castle Wars explosive regression').onItemOnNpc(fn);
+      itemOnNpc = fn;
+    },
     onObjectInteraction(name, actions) { if (name === 'Rocks') mine = actions.Mine; else collapse = actions.Collapse; },
     onItemOnObject(item, name, fn) { if (name === 'Cave wall') blastWall = fn; },
     emitCustomEvent(name, request) { if (name === 'mining:best-pickaxe') request.pickaxe = Mining.findBestPickaxe(request.player); },
@@ -277,6 +281,7 @@ test('the match barricade limit controls placement', (t) => {
 test('explicit explosive use sends a tile explosion and removes the barricade', (t) => {
   const p = playerAt(t, 2427, 3078);
   const npc = deployed(t, p);
+  p.moveTo(p.getLocation().transform(-1, 0));
   p.getInventory().add(new core.Item(core.ItemIdentifiers.EXPLOSIVE_POTION));
   const event = { player: p, target: npc, itemId: core.ItemIdentifiers.EXPLOSIVE_POTION,
     slot: p.getInventory().getSlotForItemId(core.ItemIdentifiers.EXPLOSIVE_POTION) };
@@ -284,12 +289,107 @@ test('explicit explosive use sends a tile explosion and removes the barricade', 
   assert.equal(event.handled, true);
   assert.equal(p.getInventory().contains(core.ItemIdentifiers.EXPLOSIVE_POTION), false);
   assert.equal(game.isBarricade(npc), false);
-  assert.equal(p.graphics[0].graphic.id, core.CacheDefinitions.getSpotanimId('regicide_barrelflight_exploding'));
+  assert.equal(p.graphics[0].graphic.id, core.CacheDefinitions.getSpotanimId('explodingvial'));
   assert.ok(p.graphics[0].location.equals(npc.getLocation()));
 });
 
-test('all barricade tools step out of an overlapping tile, but adjacent use stays in place', (t) => {
-  for (const itemId of [core.ItemIdentifiers.TINDERBOX, core.ItemIdentifiers.EXPLOSIVE_POTION, core.ItemIdentifiers.BUCKET_OF_WATER]) {
+for (const occupiedWest of [false, true]) {
+  test(`native explosive use steps off before exploding, west occupied ${occupiedWest}`, async (t) => {
+    const channel = {
+      kind: 'test', remoteAddress: '127.0.0.1', isOpen: () => true,
+      send: () => true, close() {}, onData() {}, onError() {}, onClose() {},
+    };
+    const session = new PlayerSession(channel);
+    const p = new Player(session, new core.Location(2405, 3110, 0));
+    p.setUsername('barricadeblast');
+    p.messages = [];
+    p.getInventory().adds(core.ItemIdentifiers.BARRICADE, 1);
+    p.setNeedsPlacement(false);
+    session.setPlayer(p);
+    t.mock.method(p, 'onAdd', () => {});
+    t.mock.method(p, 'onRemove', () => {});
+    t.mock.method(session, 'sendClientPacket', () => true);
+    const connection = new ClientConnection(channel);
+    connection.player = p;
+    session.setTurnPacketProcessor(() => connection.processTurnPackets());
+    assert.ok(World.getPlayers().add(p));
+    const npc = deployed(t, p);
+    t.after(() => {
+      TaskManager.cancelTasks(p.getIndex());
+      World.getPlayers().remove(p);
+      World.refreshActiveRegions();
+    });
+    World.refreshActiveRegions();
+    World.process();
+    if (occupiedWest) deployed(t, playerAt(t, 2404, 3110, 0));
+    const origin = p.getLocation().clone();
+    const potion = core.ItemIdentifiers.EXPLOSIVE_POTION;
+    p.getInventory().adds(potion, 1);
+    const slot = p.getInventory().getSlotForItemId(potion);
+    const effects = [];
+    const send = p.getPacketSender().sendGlobalGraphic;
+    t.mock.method(p.getPacketSender(), 'sendGlobalGraphic', function (graphic, location) {
+      effects.push({ player: p.getLocation().clone(), graphic, location: location.clone() });
+      return send.call(this, graphic, location);
+    });
+    await connection.dispatch([{
+      type: 'item_on_npc', widgetId: (149 << 16), targetIndex: npc.getIndex(), itemId: potion, slot,
+    }]);
+    assert.equal(effects.length, 0, 'the packet waits for the player turn');
+    World.process();
+    assert.equal(effects.length, 0, 'the step completes before the explosion');
+    assert.equal(p.getLocation().equals(origin), false, 'the actor stepped out');
+    World.process();
+    assert.equal(effects.length, 1);
+    assert.equal(effects[0].player.equals(origin), false, 'movement happened before the effect was sent');
+    assert.equal(Math.abs(effects[0].player.getX() - origin.getX()) + Math.abs(effects[0].player.getY() - origin.getY()), 1);
+    assert.equal(effects[0].graphic.getId(), core.CacheDefinitions.getSpotanimId('explodingvial'));
+    assert.ok(effects[0].location.equals(origin), 'the explosion stays on the barricade tile');
+    assert.equal(p.getInventory().contains(potion), false);
+    assert.equal(game.isBarricade(npc), false);
+  });
+}
+
+test('an interrupted, blocked or stale explosive approach keeps the potion', (t) => {
+  for (const change of ['swap-item', 'remove-target', 'cancel', 'blocked', 'enclosed']) {
+    const p = playerAt(t, 2426, 3078);
+    const npc = deployed(t, p);
+    const potion = core.ItemIdentifiers.EXPLOSIVE_POTION;
+    p.getInventory().adds(potion, 1);
+    const slot = p.getInventory().getSlotForItemId(potion);
+    if (change === 'blocked') p.setNeedsPlacement(true);
+    if (change === 'enclosed') {
+      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        const tile = p.getLocation().transform(dx, dy);
+        const { BLOCKED_TILE } = RegionManager;
+        const before = RegionManager.getClipping(tile.getX(), tile.getY(), tile.getZ(), null);
+        RegionManager.addClipping(tile.getX(), tile.getY(), tile.getZ(), BLOCKED_TILE, null);
+        t.after(() => { if (!(before & BLOCKED_TILE)) RegionManager.removeClipping(tile.getX(), tile.getY(), tile.getZ(), BLOCKED_TILE, null); });
+      }
+    }
+    itemOnNpc({ player: p, target: npc, itemId: potion, slot });
+    if (change === 'swap-item') p.getInventory().setItem(slot, new core.Item(potion));
+    if (change === 'remove-target') game.removeBarricade(npc);
+    if (change === 'cancel') p.clearPendingAction();
+    const movement = p.getMovementQueue();
+    for (let tick = 0; tick < 2; tick++) {
+      TaskManager.process();
+      movement.beginCycle();
+      movement.processEntityPursuit();
+      movement.process();
+      TaskManager.processWalkTo(p.getIndex());
+    }
+    assert.equal(p.getInventory().contains(potion), true, change);
+    assert.equal(p.graphics.length, 0, change);
+    if (change === 'enclosed') assert.match(p.messages.at(-1), /need room to stand beside/);
+    TaskManager.cancelTasks(p.getIndex());
+    game.releaseBarricade(npc);
+    World.getNpcs().remove(npc);
+  }
+});
+
+test('fire tools step out of an overlapping tile, but adjacent use stays in place', (t) => {
+  for (const itemId of [core.ItemIdentifiers.TINDERBOX, core.ItemIdentifiers.BUCKET_OF_WATER]) {
     for (const overlapping of [true, false]) {
       const p = playerAt(t, 2426, 3078);
       const npc = deployed(t, p);
@@ -318,7 +418,7 @@ test('a free north or south tile remains usable when the horizontal sides are bl
 });
 
 test('unavailable or invalid tool interactions neither move nor consume supplies', (t) => {
-  for (const itemId of [core.ItemIdentifiers.TINDERBOX, core.ItemIdentifiers.EXPLOSIVE_POTION, core.ItemIdentifiers.BUCKET_OF_WATER]) {
+  for (const itemId of [core.ItemIdentifiers.TINDERBOX, core.ItemIdentifiers.BUCKET_OF_WATER]) {
     const p = playerAt(t, 2426, 3078);
     const npc = deployed(t, p);
     p.getInventory().add(new core.Item(itemId));
