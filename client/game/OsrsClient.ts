@@ -3759,6 +3759,13 @@ export class OsrsClient {
                         if (position.index !== this.controlledPlayerServerId) this.continuousMovement?.receive(position);
                     }
                     this.syncLocalWorldView();
+                    if (this.gameState === GameState.LOADING_GAME) {
+                        const localIndex = this.playerEcs.getIndexForServerId(this.controlledPlayerServerId);
+                        if (localIndex !== undefined && this.playerEcs.getWorldViewId(localIndex) < 0) {
+                            const tile = this.playerSyncManager.getServerTile(this.controlledPlayerServerId);
+                            if (tile) this.renderer.prepareInitialScene(tile.tileX, tile.tileY);
+                        }
+                    }
                 } catch (err) {
                     console.warn("[OsrsClient] player_sync frame error", err);
                 }

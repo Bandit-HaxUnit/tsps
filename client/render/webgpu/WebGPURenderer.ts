@@ -2,7 +2,7 @@ import { LocAnimated, type LocFrameSoundHandler } from "../loc/LocAnimated";
 import Denque from "denque";
 import { mat4, vec3 } from "gl-matrix";
 
-import { isLowEndDevice, isWebGPUSupported } from "../../common/utils/DeviceUtil";
+import { isWebGPUSupported } from "../../common/utils/DeviceUtil";
 import { GameRenderer } from "../../game/GameRenderer";
 import type {
     HitsplatEventPayload,
@@ -308,6 +308,10 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.sceneColorHeight = h;
     }
 
+    override resolveEffectiveRenderDistanceTiles(_frameCount: number): number {
+        return resolveWebGPURenderDistance(this);
+    }
+
     override queueLoadMap(mapX: number, mapY: number, streamGeneration?: number): void {
         // Normal map streaming is suppressed while an instance scene is active.
         if (this.instanceActive) return;
@@ -398,7 +402,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.locUpdates.applyGamemode();
         const locVersion = this.locUpdates.version(mapX, mapY);
         const input: SdMapLoaderInput = snapshotMapInput({
-            persistentCache: isLowEndDevice,
+            persistentCache: true,
             minimapLevel: this.getPlayerRawPlane(),
             mapX,
             mapY,

@@ -1,84 +1,54 @@
-const { Wilderness } = require("../../src/main/typescript/elvarg/game/content/wilderness/Wilderness");
-const {
-  encodeGameframeBootstrap,
-  MOBILE_CLIENT_ATTRIBUTE,
-  XPDROPS_ENABLED_ATTRIBUTE,
-  resolveGameframeRoot,
-} = require("../../src/main/typescript/elvarg/net/protocol/ClientProtocol");
-
 const WELCOME_SCREEN_GROUP_ID = 378;
 const PLAY_BUTTON_UID = (WELCOME_SCREEN_GROUP_ID << 16) | 72;
 const FIRST_OPTION_FLAG = 1 << 1;
+const pending = new WeakSet();
+const visible = new WeakMap();
+let api;
 
 function inWilderness(player) {
-  return Wilderness.isInLocation(player?.getLocation?.());
+  return api.core.Wilderness.isInLocation(player?.getLocation?.());
 }
 
-function showWelcomeScreen(player) {
+function login({ player, isNewAccount }) {
+  // Mobile, new accounts and Wilderness logins enter the world directly.
+  if (isNewAccount || player.isPlayerBot?.() === true || inWilderness(player)
+      || player.getAttribute(api.core.MOBILE_CLIENT_ATTRIBUTE) === true) return;
+  pending.add(player);
+}
+
+function bootstrap(event) {
+  const { player } = event;
+  if (!pending.delete(player) || inWilderness(player)) return;
+  event.handled = true;
+  visible.set(player, event.open);
   const sender = player.getPacketSender();
   sender.sendRootInterface(WELCOME_SCREEN_GROUP_ID);
   sender.sendInterfaceFlags(PLAY_BUTTON_UID, FIRST_OPTION_FLAG);
+  api.emitCustomEvent("welcome-screen:shown", { player });
 }
 
-function showGameframe(player) {
-  // 548/164/161 - the layout the "Game client layout" dropdown saved; the
-  // client maps the standard mounts onto the chosen layout. Mobile clients
-  // are locked to the stock mobile toplevel (601).
-  const layoutRoot = resolveGameframeRoot(player);
-  for (const packet of encodeGameframeBootstrap(player.getUsername(), layoutRoot, player.getAttribute(XPDROPS_ENABLED_ATTRIBUTE) === true)) {
-    player.getSession().sendClientPacket(packet);
-  }
+function play({ player }) {
+  const open = visible.get(player);
+  if (!open) return false;
+  visible.delete(player);
+  open();
+  api.emitCustomEvent("gameframe:ready", { player });
+  return false;
+}
+
+function clear({ player }) {
+  pending.delete(player);
+  visible.delete(player);
 }
 
 module.exports = {
   name: "WelcomeScreen",
   dependsOn: ["Wilderness"],
-  register(api) {
-    const pending = new WeakSet();
-    const visible = new WeakSet();
-
-    const clear = ({ player }) => {
-      pending.delete(player);
-      visible.delete(player);
-    };
-
-    api.onPlayerLogin(({ player, isNewAccount }) => {
-      // OSRS mobile has no welcome screen: handheld clients skip straight from
-      // login into the world (the gameframe bootstrap below is the landing).
-      // A new account doesn't get it either: OSRS takes it straight to the character design.
-      if (
-        isNewAccount ||
-        player.isPlayerBot?.() === true ||
-        inWilderness(player) ||
-        player.getAttribute(MOBILE_CLIENT_ATTRIBUTE) === true
-      ) {
-        return;
-      }
-      pending.add(player);
-      // The login hook runs just before the normal gameframe is sent. Queueing the
-      // root swap keeps packet order correct without delaying the screen for a game tick.
-      queueMicrotask(() => {
-        if (!pending.delete(player) || inWilderness(player)) {
-          return;
-        }
-        visible.add(player);
-        showWelcomeScreen(player);
-        // Content that opens after the welcome screen (a league tutorial) or writes on it waits on this.
-        api.emitCustomEvent("welcome-screen:shown", { player });
-      });
-    });
-
-    api.onInterfaceActionButton(PLAY_BUTTON_UID, ({ player }) => {
-      if (!visible.has(player)) {
-        return false;
-      }
-      visible.delete(player);
-      showGameframe(player);
-      api.emitCustomEvent("gameframe:ready", { player });
-      // Let post-welcome content react after the normal gameframe is restored.
-      return false;
-    });
-
+  register(pluginApi) {
+    api = pluginApi;
+    api.onPlayerLogin(login);
+    api.onCustomEvent("player:gameframe-bootstrap", bootstrap);
+    api.onInterfaceActionButton(PLAY_BUTTON_UID, play);
     api.onPlayerDisconnect(clear);
     api.onPlayerLogout(clear);
     api.log("registered");

@@ -15,7 +15,7 @@ const { WebGPURenderer } = require("../render/webgpu/WebGPURenderer");
 const { hasPendingMapStreamingWork: hasPendingWebGLStreaming } = require("../render/render/streaming");
 const { GameRenderer } = require("../game/GameRenderer");
 
-test("cache initialization leaves map scheduling to the first renderer frame", () => {
+test("cache initialization does not queue maps around the login-screen camera", () => {
     const calls: string[] = [];
     const renderer = {
         mapManager: { init: () => calls.push("init"), update: () => calls.push("eager queue") },
@@ -28,6 +28,46 @@ test("cache initialization leaves map scheduling to the first renderer frame", (
     };
     GameRenderer.prototype.initCache.call(renderer);
     assert.deepEqual(calls, ["init"], "cache readiness must not queue a second camera-centred loading policy");
+});
+
+test("the first player sync starts the same scene workers before interface rendering", () => {
+    const previous = [ClientState.baseX, ClientState.baseY, ClientState.inInstance] as const;
+    try {
+        ClientState.baseX = 3024;
+        ClientState.baseY = 3440;
+        ClientState.inInstance = false;
+        const queued: number[] = [];
+        const maps = new MapManager<any>(4, (x, y) => queued.push(getMapSquareId(x, y)));
+        const renderer = {
+            mapManager: maps, stats: { frameCount: 0 }, playerPosUni: new Float32Array([3079.5, 3490.5]),
+            resolveEffectiveRenderDistanceTiles: () => 25,
+            osrsClient: {
+                mapRadius: 1, expandedMapLoading: 0, renderDistance: 25,
+                camera: { getPosX: () => 3079.5, getPosZ: () => 3490.5 },
+                isLoggedIn: () => true,
+                playerEcs: { getIndexForServerId: () => 0, getWorldViewId: () => -1 },
+                controlledPlayerServerId: 1,
+                clientPlugins: { gpuSettings: () => undefined, hdEnabled: () => false },
+            },
+        } as any;
+        GameRenderer.prototype.prepareInitialScene.call(renderer, 3079, 3490);
+        assert.equal(queued.length, 4, "queue the four visible squares without waiting for a rendered frame");
+        const revision = maps.getGridRevision();
+        const bounds = maps.getGridTileBounds();
+        updateWebGPUMapStreaming(renderer, 1);
+        GameRenderer.prototype.prepareInitialScene.call(renderer, 3079, 3490);
+        assert.equal(maps.getGridRevision(), revision, "the first render must use the same authoritative grid");
+        assert.deepEqual(maps.getGridTileBounds(), bounds);
+        assert.equal(queued.length, 4, "subsequent syncs and rendering must not duplicate the builds");
+
+        maps.cleanUp();
+        queued.length = 0;
+        ClientState.inInstance = true;
+        GameRenderer.prototype.prepareInitialScene.call(renderer, 3079, 3490);
+        assert.deepEqual(queued, [], "instance loading keeps its own scene builder");
+    } finally {
+        [ClientState.baseX, ClientState.baseY, ClientState.inInstance] = previous;
+    }
 });
 
 test("WebGPU streams the server scene around the player across camera orbits and scene rebases", () => {
