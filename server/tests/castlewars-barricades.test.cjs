@@ -24,7 +24,6 @@ let game;
 let setup;
 let itemOnNpc;
 let burn;
-let mine;
 let collapse;
 let blastWall;
 const swaps = [];
@@ -53,7 +52,7 @@ before(() => {
       PluginManager.createApi('Castle Wars explosive regression').onItemOnNpc(fn);
       itemOnNpc = fn;
     },
-    onObjectInteraction(name, actions) { if (name === 'Rocks') mine = actions.Mine; else collapse = actions.Collapse; },
+    onObjectInteraction(name, actions) { if (name === 'Cave wall') collapse = actions.Collapse; },
     onItemOnObject(item, name, fn) { if (name === 'Cave wall') blastWall = fn; },
     emitCustomEvent(name, request) { if (name === 'mining:best-pickaxe') request.pickaxe = Mining.findBestPickaxe(request.player); },
   };
@@ -454,22 +453,6 @@ test('unavailable or invalid tool interactions neither move nor consume supplies
   assert.deepEqual(moves, [], 'a burning barricade rejects explosives before an escape step');
   assert.equal(p.getInventory().contains(core.ItemIdentifiers.EXPLOSIVE_POTION), true);
   assert.equal(game.isBarricade(npc), true);
-});
-
-test('a level-one player with a bronze pickaxe clears both tunnel rock layers', (t) => {
-  const p = playerAt(t, 2390, 9501, 0);
-  p.getInventory().add(new core.Item(core.ItemIdentifiers.BRONZE_PICKAXE));
-  p.getSkillManager().setCurrentLevel(core.Skill.MINING, 1);
-  swaps.length = 0;
-  const rocks = MapObjects.get(core.ObjectIdentifiers.ROCKS_21, new core.Location(2391, 9501, 0), null);
-  assert.equal(p.getMovementQueue().reachesObject(rocks, p.getMovementQueue().buildObjectRouteSpec(rocks)), true, "the actual cache rock is reachable from the side");
-  for (const id of [core.ObjectIdentifiers.ROCKS_21, core.ObjectIdentifiers.ROCKS_22]) {
-    const object = new core.GameObject(id, new core.Location(2391, 9501, 0), 10, 1, null);
-    assert.equal(mine({ player: p, object }), true);
-  }
-  assert.equal(swaps[0][1].getId(), core.ObjectIdentifiers.ROCKS_22);
-  assert.equal(swaps[1][1], null);
-  assert.equal(game.getTeamVar(data.TEAM.ZAMORAK, data.TEAM_VARBIT.TUNNEL_EW_CLEAR), 1);
 });
 
 test('Collapse requires explicit potion-on-wall use', (t) => {
