@@ -107,6 +107,9 @@ function harvest(event) {
   for (let tick = 0; tick < NET_DRAG_TICKS; tick++) {
     later(npc, NET_DRAG_START + tick, () => npc.isRegistered?.() && npc.performGraphic(new Graphic(GRAPHIC.NET_DRAG)));
   }
+  // Dying locked its movement (NPCDeathTask); the net moves it.
+  npc.getMovementQueue().setBlockMovement(false);
+  npc.setScriptedMovement?.(true);
   npc.setFlag?.(IGNORE_CLIPPING_FLAG, true);
   for (let tick = 1; tick <= PULL_TICKS; tick++) later(npc, tick, () => pull(player, npc));
   later(npc, NET_DRAG_START + NET_DRAG_TICKS, () => npc.isRegistered?.() && npc.performGraphic(new Graphic(GRAPHIC.NET_DESPAWN)));
@@ -152,14 +155,16 @@ function loot(player, npc, corpse) {
   const key = lootKey++;
   playSound(player, SOUND_LOOT);
   for (const drop of resolved) {
-    if (drop.stackable) inventory.add(new Item(drop.itemId, drop.amount));
-    else for (let i = 0; i < drop.amount; i++) inventory.add(new Item(drop.itemId, 1));
+    if (drop.stackable) inventory.add(new Item(drop.itemId, drop.amount), false);
+    else for (let i = 0; i < drop.amount; i++) inventory.add(new Item(drop.itemId, 1), false);
     player.getPacketSender().sendClientScript(SCRIPT_LOOT_FLY, corpse.creature.dead, key, drop.itemId, drop.amount);
   }
+  inventory.refreshItems();
 }
 
 /** The corpse goes once harvested; the creature still respawns on the unharvested corpse's time. */
 function removeCorpse(npc) {
+  npc.setScriptedMovement?.(false);
   npc.setFlag?.(IGNORE_CLIPPING_FLAG, false);
   if (npc.isRegistered?.()) common.core().World.getRemoveNPCQueue().push(npc);
 }

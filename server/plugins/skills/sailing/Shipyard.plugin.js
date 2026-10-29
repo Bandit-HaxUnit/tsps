@@ -86,7 +86,10 @@ function showBoat(player, visit) {
   const spec = boat && Sailing.specFor(boat);
   // In the shipyard the empty hotspots show, and only the owner sees the boat.
   const placeholders = spec ? facilities.hotspotLocs(boat, true).filter((loc) => facilities.facilityAt(boat, loc.hotspot) === undefined) : [];
-  visit.shown = spec ? BoatManager.spawn(player.getIndex(), { ...spec, locs: [...spec.locs, ...placeholders] }, SHIPYARD.boat) : undefined;
+  // Its facilities show only Modify here (at sea they show everything else).
+  const locs = spec ? spec.locs.map((loc) => (loc.hotspot !== undefined && loc.opFlags !== undefined
+    ? { ...loc, opFlags: facilities.FACILITY_OPS.SHIPYARD } : loc)) : [];
+  visit.shown = spec ? BoatManager.spawn(player.getIndex(), { ...spec, locs: [...locs, ...placeholders] }, SHIPYARD.boat) : undefined;
   if (visit.shown) visit.shown.ownerOnly = true;
   describeVisit(player, visit);
 }

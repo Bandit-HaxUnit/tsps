@@ -252,6 +252,11 @@ function workTile(boat, owned, position) {
     const hotspot = facilities.hotspotsOf(owned.type)[position - POSITION.HOTSPOT0];
     if (!hotspot) return undefined;
     const outboard = hotspot.side === 1 ? -1 : hotspot.side === 3 ? 1 : 0;
+    // A cannon blocks its own tile: it's manned from the tile inboard of it, facing it (rsprox:
+    // Jittery Jim at 3876 facing a skiff's adamant cannon at 3875 on the starboard side).
+    if (jobAt(owned, position)?.kind === cannonCrew.CREW_FACILITY_CANNON && outboard) {
+      return { x: hotspot.x - outboard, y: hotspot.y, face: { x: hotspot.x, y: hotspot.y } };
+    }
     return { x: hotspot.x, y: hotspot.y, face: outboard ? { x: hotspot.x + outboard, y: hotspot.y } : undefined };
   }
   if (position === POSITION.REPAIRS) return undefined;

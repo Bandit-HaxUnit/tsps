@@ -791,3 +791,58 @@ test("a netted corpse is pulled a tile a tick towards the player, then looted (r
     leave(player);
   }
 });
+
+test("facilities show Modify only in the shipyard; at sea their other ops (rsprox: 0b1111 / 0b10000)", () => {
+  const player = captain();
+  const owned = Sailing.giveBoat(player, "sloop", "the_pandemonium");
+  build(owned, "rune cannon");
+  const atSea = facilities.hotspotLocs(owned).find((loc) => common.cannonAt(loc.id));
+  const inYard = facilities.hotspotLocs(owned, true).find((loc) => common.cannonAt(loc.id));
+  assert.equal(atSea.opFlags, 0b1111);
+  assert.equal(inYard.opFlags, 0b10000);
+});
+
+test("a crewmate mans a cannon from the tile inboard of it, facing it (rsprox)", () => {
+  const player = captain({ sailing: 72 });
+  const { boat, owned, hotspot } = aboardWithCannon(player, { type: "skiff", cannon: "adamant cannon", crew: [JITTERY_JIM] });
+  try {
+    const [jim] = crewCommon.crewAboard(boat);
+    const job = assign.crewFacilities(owned).find((candidate) => candidate.hotspot === hotspot.id);
+    assign.order(player, boat, owned, jim, job);
+    tick(25);
+    const outboard = hotspot.side === 1 ? -1 : 1;
+    assert.deepEqual([jim.npc.getLocation().getX() - boat.deckBaseX, jim.npc.getLocation().getY() - boat.deckBaseY],
+      [hotspot.x - outboard, hotspot.y], "beside the cannon, inboard");
+  } finally {
+    leave(player);
+  }
+});
+
+test("harvesting frees the corpse to be pulled and refreshes the inventory with the loot", () => {
+  const player = captain();
+  const { boat, owned, loc, hotspot } = aboardWithCannon(player);
+  const osprey = seaNpc(OSPREY, outboard(boat, owned, hotspot.id, loc, 9));
+  const refresh = player.inventory.refreshItems.bind(player.inventory);
+  let refreshed = 0;
+  player.inventory.refreshItems = () => { refreshed++; return refresh(); };
+  try {
+    osprey.getMovementQueue().setBlockMovement(true); // as NPCDeathTask leaves it
+    PluginManager.emitNpcDeath({ killer: player, npc: osprey, npcId: OSPREY, location: {}, remains: null });
+    Loot.harvest({ player, npc: osprey, clickType: 1, handled: false });
+    assert.equal(osprey.getMovementQueue().isMovementBlocked(), false, "the net can move it");
+    tick(10);
+    assert.ok(refreshed > 0, "the loot shows at once");
+  } finally {
+    World.getNpcs().remove(osprey);
+    leave(player);
+  }
+});
+
+test("bounty parts in a creature's drop table only come from an active bounty", () => {
+  const player = captain();
+  const creature = common.DATA.creatures.find((candidate) => candidate.npc === OSPREY);
+  const harvest = { player, creature, drops: [{ itemId: 526, amount: 1 }, { itemId: 32824, amount: 1 }, { itemId: 32843, amount: 1 }], extra: [] };
+  Bounty.onHarvest(harvest, () => 0);
+  assert.deepEqual(harvest.drops.map((drop) => drop.itemId), [526], "the feather and beak go without a task");
+  assert.deepEqual(harvest.extra, []);
+});

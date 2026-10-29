@@ -124,6 +124,9 @@ tsps has no world views, but it has `PrivateArea` (used by Construction's house)
 - Teleport to boat tablets (`BoatTeleport.plugin.js`; Wiki, not captured): teleport the player to the dock or mooring point where a moored boat with a greater teleport focus is, without boarding it. The boat is picked in the boat selection's Teleport to Boat mode (8).
 - teleport foci: each boat's `sailing_boat_N_teleport_focus` varbit (block offset 12: 19270 for slot 1) is 1 with a teleport focus and 2 with a greater one (rsprox). The boat selection greys out boats by it: table 149's Summon mode `requires_teleport_focus` (either focus), Teleport to Boat `requires_greater_teleport_focus`
 - shipwright: Junior Jim at The Pandemonium retrieves a sunk raft for 250 gp (PR 1 needs this, or a sunk raft is stuck forever)
+- side panel events (rsprox, every boarding): the crew picker (937:20) over the facility slots, its
+  Back button (937:29, 0-11) and the crew tab's radio buttons (937:38, 0-3), with the panel.
+- facility ops: built facilities are sent with op flags (rsprox, every capture): at sea ops 1-4 (`0b1111`, no Modify), in the shipyard only Modify (`0b10000`).
 - facility facing: on a side hotspot, facilities that work over the side (cannons, hooks, nets, wind catchers) face out and the rest (a range, a keg) face in; chum stations and spreaders face in although they work over the side (rsprox: all 431 recorded placements). The centre line faces 0.
 - salvaging: shipwrecks rise and sink at every site the cache places them; a boat's salvaging hook reels salvage in from one nearby for Sailing XP, and a salvaging station (on a boat or at a port) sorts it into loot for more. Data in `plugins/skills/sailing/data/sailing-salvage.json`
 - Barracuda Trials (`BarracudaTrials.plugin.js`): the Tempor Tantrum, the Jubbly Jive and the Gwenith Glide, in [barracuda-trials.md](barracuda-trials.md).
@@ -205,7 +208,8 @@ Bounty tasks, Repair kits).
   captain gets 0.7 of a crewmate's damage as Sailing XP and no Ranged (captured: 9 -> 7, 13 -> 9,
   17 -> 12, 21 -> 15), with "You gain some experience by watching your crew work." at most every 21
   ticks (captured gaps 21-32).
-- **Crewmates on cannons**: by Command or the row's crew picker, needing the cannon's Privateering
+- **Crewmates on cannons**: they stand on the deck tile inboard of the cannon, facing it (captured:
+  Jittery Jim at 3876 for a cannon at 3875), and drop the cannon's idle pose when they leave it; by Command or the row's crew picker, needing the cannon's Privateering
   ("Your crewmate requires 3 Privateering to use that facility."), and not while the player mans
   it ("A player is already working at that facility."; the player manning it while they walk there
   sends them back to idle). No ammunition in the hold: "Your crewmate
@@ -230,7 +234,7 @@ Bounty tasks, Repair kits).
   behind (ours).
 - **The boat's HP.** `boat_hp_npc_tiny/small/medium` stands on the deck (raft and skiff (3,3), sloop
   (3,8), captured for the skiff and sloop) while the player is aboard; hits on the boat show as
-  hitsplats on it (12 for the owner's block, as captured) with the boat's health bar (headbar 19,
+  hitsplats on it (the client draws a deck NPC's hitsplats and health bars where its deck is drawn) (12 for the owner's block, as captured) with the boat's health bar (headbar 19,
   100 wide, on a skiff; 21, 140 wide, on a sloop; the raft's 17, 60 wide, follows the sizes'
   pattern). The HP goes to `sailing_sidepanel_boat_hp` and the slot's stored HP. At 0 the boat is
   lost: all of its cargo goes when a creature or ship sank it (Wiki; a Barracuda Trial's hazards
@@ -248,12 +252,17 @@ Bounty tasks, Repair kits).
   two minutes (Wiki), then respawns its usual time later. Its drops wait for the harvest: the killer's Harvest picks it up beside the
   hull (`human_pickupfloor`, the loot a tick later) or throws a net further out
   (`sailing_human_loot_net_cast_01` with spotanims 3519 and 3521, projectile 3520: start 30, end
-  90, angle 255, progress 112, heights 128 to 0), pulling it a tile a tick towards the player for six ticks (stopping beside the hull; the net's
+  90, angle 255, progress 112, heights 128 to 0), pulling it a tile a tick towards the player for six ticks (its death left its movement locked; the net
+  frees it, and while it's pulled, as while a creature fights a boat, its walk is scripted: core's
+  NPC movement coordinator doesn't wander it or walk it home) (stopping beside the hull; the net's
   3522 on it from the third tick for four, then 3523) and looting 9 ticks after the throw (captured).
   Out of the net's reach (ours: 10 tiles), the player first walks along the deck to the tile
   nearest it (`BoatManager.deckTileToward`), as for any main-world NPC's option from a deck. The loot goes into the inventory, each item
   flying in (script 7192 with the corpse, a loot key counting up, the item and the amount) with
   sound 2581; without room for all of it, it all drops under the player (Wiki).
+- **Bounty parts** in a creature's drop table (Wiki tertiaries, "only dropped while on an applicable
+  bounty task") come only from an active bounty (porttasks/Bounty.PortTasks.js); harvests drop them
+  from the table's roll.
 - **From the deck** (Wiki): bows and spells reach sea creatures from the deck of the player's own
   boat (the one a creature fights back against), measured from the
   boat's tile on the sea (core `CombatPosition`: across a deck both are measured from the

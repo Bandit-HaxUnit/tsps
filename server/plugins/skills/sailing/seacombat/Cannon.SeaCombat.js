@@ -431,6 +431,8 @@ function manByCrew(player, boat, owned, member, hotspot) {
     stop: () => {
       if (gunners.get(key) !== gunner) return;
       gunners.delete(key);
+      // Off the cannon they stand (and walk) normally again, not in its idle pose.
+      member.npc.performAnimation(common.core().Animation.DEFAULT_RESET_ANIMATION);
       setHasTarget(gunner, false);
       sendAmmo(gunner, { clear: true });
       if (common.core().Sailing.instanceAboard(player) === boat) animateCannon(gunner, LOC_ANIM.DISENGAGED);

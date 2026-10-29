@@ -56,9 +56,32 @@ function itemName(itemId) {
   return common.core().ItemDefinition.forId(itemId)?.getName?.() ?? "item";
 }
 
-/** A harvest of a bounty's creature may give its part (only the first such bounty's). */
+/** Each creature's bounty parts, from every bounty task (cache table 197). */
+let partsByCreature;
+function bountyParts(creatureId) {
+  if (!partsByCreature) {
+    partsByCreature = new Map();
+    for (const task of common.DATA.tasks) {
+      const bounty = bountyOf(task);
+      if (!bounty || bounty.part < 0) continue;
+      if (!partsByCreature.has(bounty.creature)) partsByCreature.set(bounty.creature, new Set());
+      partsByCreature.get(bounty.creature).add(bounty.part);
+    }
+  }
+  return partsByCreature.get(creatureId) ?? new Set();
+}
+
+/**
+ * A harvest of a bounty's creature may give its part (only the first such bounty's). The drop
+ * tables list the parts as tertiary drops (Wiki: only while on a bounty task); they come only
+ * from here, so the table's own rolls of them go.
+ */
 function onHarvest(harvest, random = Math.random) {
   const { player, creature, extra } = harvest;
+  const parts = bountyParts(creature.npc);
+  if (Array.isArray(harvest.drops) && parts.size) {
+    for (let i = harvest.drops.length - 1; i >= 0; i--) if (parts.has(harvest.drops[i].itemId)) harvest.drops.splice(i, 1);
+  }
   const held = common.slots(player);
   const index = held.findIndex((slot) => {
     const bounty = slot && bountyOf(common.taskById(slot.id));
@@ -117,10 +140,10 @@ function payCoins(player, amount) {
   const { Item, Bank } = common.core();
   const inventory = player.getInventory();
   if (inventory.getAmount(COINS) > 0 || inventory.getFreeSlots() > 0) {
-    inventory.add(new Item(COINS, amount));
+    inventory.add(new Item(COINS, amount), true);
     return;
   }
-  player.getBank(Bank.getTabForItem(player, COINS)).add(new Item(COINS, amount));
+  player.getBank(Bank.getTabForItem(player, COINS)).add(new Item(COINS, amount), true);
   player.sendMessage("The coins have been sent to your bank.");
 }
 

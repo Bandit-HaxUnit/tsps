@@ -43,12 +43,15 @@ function engage(npc, player) {
   const fight = fights.get(npc);
   if (fight && fight.boat === boat) return;
   fights.set(npc, { boat, player, nextAttackTick: now() + 1 });
+  // Its walk is this unit's while it fights: over the water, and not back to its spawn.
+  npc.setScriptedMovement?.(true);
   npc.setFlag?.(IGNORE_CLIPPING_FLAG, true);
   npc.getCombat?.().reset?.();
 }
 
 function release(npc) {
   if (!fights.delete(npc)) return;
+  npc.setScriptedMovement?.(false);
   npc.setFlag?.(IGNORE_CLIPPING_FLAG, false);
   npc.getMovementQueue().reset();
 }
@@ -66,10 +69,11 @@ function sailable(x, y, size, level) {
 function step(npc, tx, ty, away = false) {
   const at = npc.getLocation();
   const size = Math.max(1, npc.getSize?.() ?? 1);
-  const cx = at.getX() + (size - 1) / 2;
-  const cy = at.getY() + (size - 1) / 2;
-  const sx = Math.sign(tx - cx) * (away ? -1 : 1);
-  const sy = Math.sign(ty - cy) * (away ? -1 : 1);
+  // Towards a tile only while it's past the footprint on that axis, so a creature lined up with
+  // it goes straight rather than wobbling about its half-tile centre.
+  const towards = (target, low) => (target < low ? -1 : target > low + size - 1 ? 1 : 0);
+  const sx = towards(tx, at.getX()) * (away ? -1 : 1) || (away ? Math.sign(at.getX() - tx) || 1 : 0);
+  const sy = towards(ty, at.getY()) * (away ? -1 : 1) || (away ? Math.sign(at.getY() - ty) || 1 : 0);
   const candidates = [[sx, sy], [sx, 0], [0, sy]].filter(([x, y]) => x !== 0 || y !== 0);
   for (const [x, y] of candidates) {
     if (!sailable(at.getX() + x, at.getY() + y, size, at.getZ())) continue;
