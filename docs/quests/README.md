@@ -5,7 +5,7 @@ Every quest the server registers, with the latest result recorded in its page he
 test a quest is in [server/docs/agents/quest-testing.md](../../server/docs/agents/quest-testing.md);
 how to record the result is in [_template/README.md](_template/README.md).
 
-185 quests · ✅ passed: 32 · ⚠️ passed with issues: 19 · 🔄 in progress: 7 · ❌ failed: 1 · 🔁 needs recheck: 0 · untested: 126
+185 quests · ✅ passed: 32 · ⚠️ passed with issues: 18 · 🔄 in progress: 7 · ❌ failed: 1 · 🔁 needs recheck: 1 · untested: 126
 
 "Needs recheck" means the quest's plugin has changed since the commit its result was proven on.
 
@@ -126,7 +126,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | Royal Trouble | untested |  |  |  |  |
 | [Rum Deal](rum-deal/README.md) | untested |  |  |  |  |
 | [Rune Mysteries](rune-mysteries/README.md) | ✅ passed | 2026-10-25 | community |  |  |
-| [Scorpion Catcher](scorpion-catcher/README.md) | ⚠️ passed with issues | 2026-10-29 | agent | grok-4.7 | 5 |
+| [Scorpion Catcher](scorpion-catcher/README.md) | 🔁 needs recheck | 2026-10-29 | agent | grok-4.7 | 5 |
 | Scrambled! | untested |  |  |  |  |
 | [Sea Slug](sea-slug/README.md) | untested |  |  |  |  |
 | [Secrets of the North](secrets-of-the-north/README.md) | untested |  |  |  |  |
