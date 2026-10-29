@@ -7,10 +7,11 @@
 
 module.exports = {
   name: "CastleWars",
-  dependsOn: ["Food", "Mining", "Ladders"],
+  dependsOn: ["Food", "Mining", "Ladders", "Potions"],
   register(api) {
     const game = require("./castlewars/Game.CastleWars")(api);
     require("./castlewars/Areas.CastleWars")(api, game);
+    require("./castlewars/Settings.CastleWars")(api, game);
     require("./castlewars/Lobby.CastleWars")(api, game);
     require("./castlewars/Flags.CastleWars")(api, game);
     require("./castlewars/Navigation.CastleWars")(api, game);
@@ -22,6 +23,7 @@ module.exports = {
     require("./castlewars/Ropes.CastleWars")(api, game);
     require("./castlewars/Bandages.CastleWars")(api, game);
     require("./castlewars/Bracelet.CastleWars")(api, game);
+    require("./castlewars/Practice.CastleWars")(api, game);
     require("./castlewars/Bots.CastleWars")(api, game);
     require("./castlewars/Scoreboard.CastleWars").attachScoreboard(api);
   },
