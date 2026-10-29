@@ -625,7 +625,8 @@ export class MovementQueue {
      * checked by NPCs only; players pass over it (and clear it in OSRS, which is
      * the entity-stacking mechanic) - osrs-docs: Entity Collision, NPC flag
      * "Checked by: all NPCs but the excluded NPCs". Only the separate "full" flag
-     * (gorillas, Vanstrom) blocks players, and no NPC here sets it yet.
+     * (NPC.BLOCKS_PLAYERS_FLAG: the Agility Pyramid's blocks) blocks players; they keep
+     * their path and step on once it moves.
      *
      * Upstream splits the two opt-outs (walk-through-NPCs and walk-through-players
      * are separate NPC properties). Pets are this server's only walk-through NPC
@@ -642,6 +643,8 @@ export class MovementQueue {
             if (World.isPlayerOccupyingTile(next, null, size, privateArea)) {
                 return true;
             }
+        } else if (this.character.isPlayer() && World.isPlayerBlockingNpcOnTile(next, size, privateArea)) {
+            return true;
         }
         return false;
     }
