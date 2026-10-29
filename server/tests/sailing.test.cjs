@@ -1255,8 +1255,8 @@ test("the combat tab's View button shows the sailing sidepanel aboard, and Comba
   Sailing.board(player, "the_pandemonium");
   click(593, 48);
   assert.deepEqual(mounted, [[161, 76, 937]]);
-  assert.deepEqual(events, [[937, 1, 0, 12, 2], [937, 25, 0, 16, 30]],
-    "View Combat Options and the raft's facility buttons get OSRS's event ranges");
+  assert.deepEqual(events, [[937, 1, 0, 12, 2], [937, 25, 0, 16, 30], [937, 20, 0, 16, 2], [937, 29, 0, 11, 2], [937, 38, 0, 3, 2]],
+    "View Combat Options, the raft's facility buttons, the crew picker, its Back button and the crew tab's radio buttons get OSRS's event ranges");
 
   const assign = WeaponInterfaceManager.assign;
   let restored = 0;
