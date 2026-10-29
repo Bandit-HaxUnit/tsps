@@ -97,8 +97,12 @@ test('insufficient room leaves both hands and the standard unchanged', () => {
 
 test('the own standard returns immediately inside either castle, including a tunnel landing', () => {
   for (const [team, outside, inside] of [
-    [game.TEAM.SARADOMIN, [2426, 3091, 0], [2430, 3081, 0]],
-    [game.TEAM.ZAMORAK, [2372, 3116, 0], [2369, 3126, 0]],
+    [game.TEAM.SARADOMIN, [2426, 3088, 0], [2426, 3087, 0]],
+    [game.TEAM.SARADOMIN, [2414, 3073, 0], [2415, 3073, 0]],
+    [game.TEAM.SARADOMIN, [2430, 9482, 0], [2430, 3081, 0]],
+    [game.TEAM.ZAMORAK, [2372, 3119, 0], [2372, 3120, 0]],
+    [game.TEAM.ZAMORAK, [2385, 3134, 0], [2384, 3134, 0]],
+    [game.TEAM.ZAMORAK, [2369, 9525, 0], [2369, 3126, 0]],
   ]) {
     const p = player(team, outside);
     game.carryFlag(p, team);
@@ -110,6 +114,25 @@ test('the own standard returns immediately inside either castle, including a tun
     assert.equal(game.getCarriedFlagTeam(p), null);
     clickFlag(p, team);
     assert.match(p.messages.at(-1), /wants the other team's standard/);
+  }
+});
+
+test('own standards dropped outside either main or side door can still be carried', () => {
+  for (const [team, outside] of [
+    [game.TEAM.SARADOMIN, [2426, 3088, 0]],
+    [game.TEAM.SARADOMIN, [2414, 3073, 0]],
+    [game.TEAM.ZAMORAK, [2372, 3119, 0]],
+    [game.TEAM.ZAMORAK, [2385, 3134, 0]],
+  ]) {
+    const p = player(team, outside);
+    game.carryFlag(p, team);
+    game.dropCarriedFlag(p);
+    clickFlag(p, team, true);
+    game.inGameProcessors[0](p);
+    assert.equal(game.getCarriedFlagTeam(p), team, `${team} flag remains outside at ${outside}`);
+    assert.equal(game.flagStatus[team], 1);
+    game.clearWeaponSlot(p);
+    game.restoreFlagToBase(team);
   }
 });
 

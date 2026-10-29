@@ -310,9 +310,11 @@ function isSteppingStone(tile) {
 function isInsideCastle(player, teamId) {
   const { x, y, z } = getLocationTile(player);
   if (z < 0 || z > 3) return false;
+  // The large and side doors bound the interior; their outside approach tiles
+  // must still allow defenders to hold their standard.
   return teamId === data.TEAM.SARADOMIN
-    ? x >= 2411 && x <= 2432 && y >= 3072 && y <= 3090
-    : x >= 2368 && x <= 2388 && y >= 3117 && y <= 3136;
+    ? x >= 2415 && x <= 2432 && y >= 3072 && y <= 3087
+    : x >= 2368 && x <= 2384 && y >= 3120 && y <= 3136;
 }
 
 /** The team this player is recorded as carrying for, banner still equipped or not. */
