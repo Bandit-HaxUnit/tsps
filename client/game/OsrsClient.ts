@@ -7739,7 +7739,7 @@ export class OsrsClient {
                     // (raycast/menu/projectiles/overlays) continue to see this NPC after crossing.
                     this.npcEcs.rebaseToMapSquare(ecsId, nextMapX, nextMapY);
                     const typeId = this.npcEcs.getNpcTypeId(ecsId) | 0;
-                    if (typeId > 0) {
+                    if (typeId >= 0) {
                         this.upsertNpcInstanceFromBinary(
                             serverId,
                             typeId,
