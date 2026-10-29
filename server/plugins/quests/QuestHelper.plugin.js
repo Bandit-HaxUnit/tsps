@@ -5,6 +5,7 @@ const {getRegisteredQuests}=require('./QuestRuntime');
 const {createRfdRenderer,completionProjection}=require('./questhelper/RecipeForDisaster.QuestHelper');
 const {createEligibility}=require('./questhelper/Recommendations.QuestHelper');
 const {contractState}=require('./questhelper/Contract.QuestHelper');
+const {fillRequested}=require('./questhelper/Requests.QuestHelper');
 let runtime;
 function receive(event){if(event.channel!=='quest-helper')return;event.handled=true;void runtime.receive(event.player,event.data);}
 function logout({player}){void runtime.closePlayer(player);}
@@ -16,6 +17,11 @@ function register(api){
  runtime=new QuestHelperRuntime({getQuests:getRegisteredQuests,bridge:new QuestHelperHttp(),
   eligibility:createEligibility({cache:api.core.CacheDefinitions,Skill:api.core.Skill,getQuests:getRegisteredQuests}),
   contract:(name,wire,complete)=>contractState(api.core.CacheDefinitions,name,wire,complete),
+  // The bridge's MISSING_STATE requests, answered from the player's own varps and the cache.
+  fillRequests:(player,requests,snapshot)=>fillRequested(snapshot,requests,{
+   varbit:id=>{const value=player.getPacketSender?.()?.getVarbit?.(id);return typeof value==='number'?value:Number.NaN;},
+   definition:id=>api.core.CacheDefinitions.getVarbit(id),
+  }),
   nativeResult:(request,player)=>request.questKey==='recipe_for_disaster'?rfd(request,player):null,
   projectState:player=>({varbits:completionProjection(player)}),
   varbitDefinition:id=>api.core.CacheDefinitions.getVarbit(id),

@@ -210,3 +210,65 @@ test('describe carries the contract and flags a disagreement',async()=>{
   contract:(name,wire,complete)=>contractState(cache,name,wire,complete)});
  assert.equal(lying.describe(f.player,'cooks_assistant').contract.agrees,false,'wire complete but stage 1');
 });
+
+const {classify,fillRequested}=require('../plugins/quests/questhelper/Requests.QuestHelper');
+
+test('requested state is split into what the server can answer and what it cannot',()=>{
+ assert.deepEqual(classify([{kind:'varbit',id:1788},{kind:'varbitDefinition',id:1788},{kind:'geometry',id:0},{kind:'itemDefinitions',id:5}]).varbits,[1788]);
+ assert.deepEqual(classify([{kind:'geometry',id:0},{kind:'objectDefinitions',id:7}]).unsupported,[{kind:'geometry',id:0},{kind:'objectDefinitions',id:7}]);
+ assert.deepEqual(classify([{kind:'varbit',id:-1},{kind:'varbit',id:'x'},null]).varbits,[]);
+ assert.equal(classify(undefined).varbits.length,0);
+});
+
+test('a requested varbit is filled with its cache definition and packs into its varp',()=>{
+ const read={varbit:id=>id===1788?1:Number.NaN,definition:id=>id===1788?{baseVar:33,startBit:1,endBit:1}:null};
+ const filled=fillRequested({varbits:{},varbitDefinitions:{}}, [{kind:'varbit',id:1788},{kind:'geometry',id:0}], read);
+ assert.deepEqual(filled.snapshot.varbits,{1788:1});
+ assert.deepEqual(filled.snapshot.varbitDefinitions,{1788:{varp:33,lsb:1,msb:1}});
+ assert.equal(filled.added,1);
+ assert.deepEqual(filled.unsupported,[{kind:'geometry',id:0}]);
+ assert.equal(fillRequested({varbits:{}}, [{kind:'varbit',id:9999}], {varbit:()=>0,definition:()=>null}),null,'no definition, no guess');
+ assert.equal(fillRequested({varbits:{}}, [{kind:'geometry',id:0}], {varbit:()=>0,definition:()=>null}),null);
+});
+
+test('a headless call answers MISSING_STATE and evaluates again',async()=>{
+ const f=fixture();
+ const asked=[{kind:'varbit',id:1788},{kind:'varbitDefinition',id:1788}];
+ let round=0;
+ f.bridge.evaluate=async request=>{
+  f.calls.push(request);round+=1;
+  if(round===1)return {protocol:1,session:request.session,sequence:request.sequence,status:'unavailable',activeStep:null,diagnostics:[{code:'MISSING_STATE',method:'varbit',message:'Snapshot requires varbit 1788'}],requests:asked};
+  return bridgeResult(request);
+ };
+ const runtime=new QuestHelperRuntime({getQuests:()=>[f.quest],bridge:f.bridge,send:()=>{},
+  varbitDefinition:id=>id===1788?{baseVar:33,startBit:1,endBit:1}:undefined,
+  fillRequests:(_player,requests,snapshot)=>fillRequested(snapshot,requests,{varbit:()=>1,definition:id=>id===1788?{baseVar:33,startBit:1,endBit:1}:null})});
+ const result=await runtime.evaluateHeadless(f.player,{questKey:'cooks_assistant',snapshot:{localPlayer:{},varps:{},varbits:{}}});
+ assert.equal(f.calls.length,2,'asked once, answered, asked again');
+ assert.equal(f.calls[1].sequence,f.calls[0].sequence+1,'the retry is a new sequence');
+ assert.equal(f.calls[0].snapshot.varbits[1788],undefined,'the first request carried no value');
+ assert.equal(f.calls[1].snapshot.varbits[1788],1,'the retry carries the server value');
+ assert.deepEqual(f.calls[1].snapshot.varbitDefinitions[1788],{varp:33,lsb:1,msb:1});
+ assert.equal(f.calls[1].snapshot.varps[33],2,'authoritative() packs the varbit back into varp 33');
+ assert.equal(result.activeStep.id,'step-1');
+ assert.equal(result.requestsFilled,1);
+ assert.equal(result.requestsUnresolved,undefined);
+});
+
+test('unanswerable requests are reported instead of looping',async()=>{
+ const f=fixture();
+ f.bridge.evaluate=async request=>{f.calls.push(request);return {status:'unavailable',activeStep:null,requests:[{kind:'geometry',id:0}]};};
+ const runtime=new QuestHelperRuntime({getQuests:()=>[f.quest],bridge:f.bridge,send:()=>{},
+  fillRequests:(_p,requests,snapshot)=>fillRequested(snapshot,requests,{varbit:()=>0,definition:()=>null})});
+ const result=await runtime.evaluateHeadless(f.player,{questKey:'cooks_assistant',snapshot:{localPlayer:{}}});
+ assert.equal(f.calls.length,1,'nothing to fill, nothing to retry');
+ assert.deepEqual(result.requestsUnresolved,[{kind:'geometry',id:0}]);
+
+ const looping=fixture();
+ looping.bridge.evaluate=async request=>{looping.calls.push(request);return {status:'unavailable',activeStep:null,requests:[{kind:'varbit',id:1788}]};};
+ const bounded=new QuestHelperRuntime({getQuests:()=>[looping.quest],bridge:looping.bridge,send:()=>{},
+  fillRequests:(_p,requests,snapshot)=>fillRequested(snapshot,requests,{varbit:()=>1,definition:()=>({baseVar:33,startBit:1,endBit:1})})});
+ const boundedResult=await bounded.evaluateHeadless(looping.player,{questKey:'cooks_assistant',snapshot:{localPlayer:{}}});
+ assert.equal(looping.calls.length,5,'four fills then stop');
+ assert.equal(boundedResult.requestsFilled,4);
+});

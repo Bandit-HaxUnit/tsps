@@ -10,10 +10,12 @@ function lockSection(value){return record(value)&&Number.isSafeInteger(value.sec
 const status=(q,p)=>q.isComplete(p)?'FINISHED':q.isStarted(p)?'IN_PROGRESS':'NOT_STARTED';
 function items(container){return container.getItems().flatMap((item,slot)=>item&&item.getId()>0&&item.getAmount()>0?[{id:item.getId(),quantity:item.getAmount(),slot}]:[]);}
 const MAX_EVENTS=1024;
+// How many times one headless call answers the bridge's state requests before giving up.
+const MAX_REQUEST_ROUNDS=4;
 const validEvents=events=>Array.isArray(events)&&events.length<=MAX_EVENTS&&events.every(event=>record(event)&&typeof event.type==='string'&&event.type.length<=128);
 
 class QuestHelperRuntime {
- constructor({getQuests,bridge,send,nativeResult,projectState,varbitDefinition,eligibility,contract}){this.getQuests=getQuests;this.bridge=bridge;this.send=send;this.nativeResult=nativeResult;this.projectState=projectState;this.varbitDefinition=varbitDefinition;this.eligibility=eligibility;this.contract=contract;this.players=new Map();this.agents=new Map();this.catalogData=null;}
+ constructor({getQuests,bridge,send,nativeResult,projectState,varbitDefinition,eligibility,contract,fillRequests}){this.getQuests=getQuests;this.bridge=bridge;this.send=send;this.nativeResult=nativeResult;this.projectState=projectState;this.varbitDefinition=varbitDefinition;this.eligibility=eligibility;this.contract=contract;this.fillRequests=fillRequests;this.players=new Map();this.agents=new Map();this.catalogData=null;}
  progress(player){const eligibility=this.eligibility?.(player);return this.getQuests().map(q=>({questKey:q.key,status:status(q,player),stage:q.getStage(player),...(eligibility?{eligibility:eligibility.get(q.key)}:{})}));}
  quests(){return this.getQuests().map(q=>({key:q.key,name:q.name}));}
  describe(player,questKey){const quest=this.getQuests().find(q=>q.key===questKey);if(!quest)return null;const wire=this.wire(player,quest),complete=quest.isComplete(player);return {questKey:quest.key,name:quest.name,status:status(quest,player),stage:quest.getStage(player),complete,wire,contract:this.contract?.(quest.name,wire,complete)??null};}
@@ -63,19 +65,29 @@ class QuestHelperRuntime {
   if(state.busy)throw new Error('Quest Helper is still evaluating the previous headless call');
   state.busy=true;
   try {
-   const data={questKey:quest.key,helperVariant:options.helperVariant,snapshot:options.snapshot,events:options.events??[],config:options.config,lockSection:options.lockSection,bankTab:options.bankTab,sequence:state.sequence+1};
-   state.sequence=data.sequence;
-   // The native routes never touch the bridge, so they must not depend on it having started.
-   let response=this.nativeOf(quest,this.requestFor(player,state,data).request,player);
-   if(response===null){
-    const catalogError=await this.catalog().then(()=>null,error=>error);
-    this.checkVariant(quest.key,data.helperVariant,true);
-    // rebuilt: authoritative() writes the catalogue's numeric quest ids into questStates.
-    const request=this.requestFor(player,state,data).request;
-    response=await this.bridge.evaluate(request).catch(error=>{throw catalogError??error;});
+   let snapshot=options.snapshot,response=null,rounds=0,unresolved=[];
+   for(;;){
+    const data={questKey:quest.key,helperVariant:variant,snapshot,events:options.events??[],config:options.config,lockSection:options.lockSection,bankTab:options.bankTab,sequence:state.sequence+1};
+    state.sequence=data.sequence;
+    // The native routes never touch the bridge, so they must not depend on it having started.
+    response=this.nativeOf(quest,this.requestFor(player,state,data).request,player);
+    if(response===null){
+     const catalogError=await this.catalog().then(()=>null,error=>error);
+     this.checkVariant(quest.key,data.helperVariant,true);
+     // rebuilt: authoritative() writes the catalogue's numeric quest ids into questStates.
+     const request=this.requestFor(player,state,data).request;
+     response=await this.bridge.evaluate(request).catch(error=>{throw catalogError??error;});
+    }
+    if(this.agents.get(player)!==state)throw new Error('Quest Helper session was closed while evaluating');
+    // A step that reads state the snapshot omits asks for it instead of failing. Answer from the
+    // server and ask again, bounded: the browser does the same between two snapshots.
+    const requests=Array.isArray(response.requests)?response.requests:[];
+    const filled=requests.length&&this.fillRequests&&rounds<MAX_REQUEST_ROUNDS?this.fillRequests(player,requests,snapshot):null;
+    if(!filled){unresolved=requests;break;}
+    snapshot=filled.snapshot;unresolved=filled.unsupported;rounds+=1;
    }
    if(this.agents.get(player)!==state)throw new Error('Quest Helper session was closed while evaluating');
-   const result={...response,type:'result',protocol:1,session:state.session,sequence:data.sequence,questKey:quest.key,questProgress:this.progress(player)};
+   const result={...response,type:'result',protocol:1,session:state.session,sequence:state.sequence,questKey:quest.key,questProgress:this.progress(player),...(rounds?{requestsFilled:rounds}:{}),...(unresolved.length?{requestsUnresolved:unresolved}:{})};
    state.lastResult={at:Date.now(),result};
    return result;
   }finally{state.busy=false;}

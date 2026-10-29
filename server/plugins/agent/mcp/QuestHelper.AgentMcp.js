@@ -116,6 +116,10 @@ module.exports = function registerQuestHelperTools(ctx) {
       pluginMessages: result.pluginMessages ?? [],
       diagnostics: result.diagnostics ?? [],
       requests: result.requests ?? [],
+      // How many times the bridge's state requests were answered from the server, and what is
+      // still missing (a cache definition or geometry the server cannot supply).
+      ...(result.requestsFilled ? { requestsFilled: result.requestsFilled } : {}),
+      ...(result.requestsUnresolved?.length ? { requestsUnresolved: result.requestsUnresolved } : {}),
       ...(overlays ? { overlays: step?.overlays ?? [] } : {}),
       ...(verbose ? {
         activeStep: step, panels: result.panels, overview: result.overview,
