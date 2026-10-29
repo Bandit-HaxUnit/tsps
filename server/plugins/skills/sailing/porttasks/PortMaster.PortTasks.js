@@ -1,5 +1,5 @@
-// A port master (rsprox.net recordings): Claim-rewards hands over what a full inventory kept back
-// ("Thanks, sailor. Here's your payment."), Cancel-task drops a held task (Wiki: freely, at any
+// A port master (rsprox.net recordings): Claim-rewards hands in finished bounties (Wiki) and hands
+// over what a full inventory kept back ("Thanks, sailor. Here's your payment."), Cancel-task drops a held task (Wiki: freely, at any
 // port master). Talk-to is the Wiki dialogue in npc-dialogues.json. A cancelled task's crates
 // go too, from the player's hands and their boats' cargo holds.
 const common = require("./Common.PortTasks");
@@ -12,8 +12,16 @@ function say(player, npc, text) {
   player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new NpcDialogue(0, npc.getId(), text)));
 }
 
-function claimRewards({ player, npc }) {
+function claimRewards(event) {
+  const { player, npc } = event;
+  // Finished bounties are handed in here (Bounty.PortTasks.js).
+  const bounties = { player, handedIn: false };
+  require("./Bounty.PortTasks").claim(bounties);
   const unclaimed = player.getAttribute(common.UNCLAIMED_ATTRIBUTE) ?? [];
+  if (unclaimed.length === 0 && bounties.handedIn) {
+    say(player, npc, "Thanks, sailor. Here's your payment.");
+    return;
+  }
   if (unclaimed.length === 0) {
     say(player, npc, "According to my records, you don't have any port task rewards to claim.");
     return;
