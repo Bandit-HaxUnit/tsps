@@ -174,6 +174,7 @@ const core = {
     RegionManager: {
         blocked: () => false,
         getClipping: (x: number, y: number) => routeFlags.get(`${x},${y}`) ?? 0,
+        getRegion: () => ({}),
         loadMapFiles: (x: number, y: number, surroundings: boolean) => loadedMapRegions.push([Math.floor(x / 64), Math.floor(y / 64), surroundings]),
     },
     ServerPerf: {
@@ -436,6 +437,16 @@ else process.env.AGENT_MCP = previousMcpFlag;
     assert.ok(doorPlan.waypoints.some((point: any) => point.door && point.doors.some((door: any) => door.id === 1535)));
     const exactPlan = (await call(client, "plan_route", { player: "agent1", x: 3230, y: 3218, exact: true })).value;
     assert.deepEqual(exactPlan.waypoints.at(-1), { x: 3230, y: 3218, z: 0 }, "a requested stand tile is reached exactly");
+    // travel_to walks the same route with plain clicks; the mock player never moves, so it stops at the first walk.
+    const beforeTravel = dispatched.length;
+    const travelled = (await call(client, "travel_to", { player: "agent1", x: 3230, y: 3218, budgetTicks: 300 })).value;
+    assert.equal(travelled.result, "blocked");
+    assert.match(travelled.reason, /stopped at 3222,3218,0/);
+    const travelPackets = dispatched.slice(beforeTravel);
+    assert.ok(travelPackets.length > 0 && travelPackets.every((packet: any) => packet.type === "move"),
+        "travel_to only clicks the map: no command, chat or teleport");
+    assert.deepEqual(travelPackets[0], { type: "move", worldX: 3224, worldY: 3218, modifierFlags: 0 }, "it walks up to the gate first");
+    dispatched.length = beforeTravel;
     routeFlags.set("3230,3218", 0x200000);
     const blockedStand = (await call(client, "plan_route", { player: "agent1", x: 3230, y: 3218, exact: true })).value;
     assert.equal(blockedStand.result, "no-route", "an unreachable stand tile cannot succeed on the wrong side of a wall");

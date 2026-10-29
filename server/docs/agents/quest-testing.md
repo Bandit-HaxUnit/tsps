@@ -26,6 +26,8 @@ Agree these before touching an account. They stop most time loss.
 - **Natural means normal.** Ordinary travel (teleports, boats/gliders, walking) and ordinary
   supplies, gear, skills and prerequisites are fine when declared. Mandatory ladders, doors,
   dungeons, puzzles, boat boarding/landing and scene handoffs must be played normally.
+  `::tele` only places the actor before the baseline; once quest progress begins, travel with
+  `travel_to` or a real teleport (spell, tablet, jewellery), never the command.
 - **Cheats are a scalpel, not the route.** Use them only after the real encounter/phase has
   started, and never to skip a mandatory threshold, scene, dialogue chain or the final step.
 - **Observe after the action settles.** An interaction packet being sent does not mean its
@@ -182,6 +184,7 @@ the MCP endpoint is stateless and every call names the player.
 | Click object | `object_option { id, x, y, option }` |
 | Inventory | `inventory_option { slot? item? option }`, `use_item { item, targetItem? target? }` |
 | Walk and settle | `walk_to { x, y, run, maxTicks }` |
+| Travel anywhere | `travel_to { x, y, z, exact, run, budgetTicks, retryFailed }` |
 | Let time pass | `wait_ticks { ticks }` |
 | Admin probe | `command { text }` (runs as developer for that call) |
 | Rules only | `can_attack`, `can_teleport` |
@@ -222,7 +225,18 @@ stage and auxiliary flags, then use that step's destination. A later scout or bo
 is not the current destination. Reuse the cached live MCP schema for tool names and
 arguments; do not search for a developer command when the documented tool exists.
 
-For long walks or a failed direct path, use MCP `plan_route` before trying arbitrary
+For travel between quest steps, use `travel_to`. It plans across floors and the live game's
+transports (doors, stairs, ladders, shortcuts, boats; from the Shortest Path plugin's tables,
+`plugins/agent/data/transports.json`) and plays each hop as a normal click. A call returns on
+arrival, on a dialogue to answer (a boat's fare, then call it again), on a failed hop, or when
+`budgetTicks` runs out (call again). Read `legs` for what it clicked: a `blocked` leg names the
+loc or NPC, option and game messages, and a `note` marks where this server differs from the
+live data (an id, a menu entry, a landing tile). A blocked hop is routed around on the next
+call; decide first whether it is a real requirement or a bug, and record it. `needs-requirements`
+lists the skills, items, quests or varbits the only route needs. Destination networks (fairy
+rings, spirit trees, gliders) and teleports are not planned: use them by hand.
+
+For a read-only same-floor plan, use MCP `plan_route` before trying arbitrary
 intermediate tiles. It reuses the bot long-distance collision planner and returns short
 waypoints plus closed door/gate candidates at crossings. Walk each leg and open the
 observed door normally before crossing; the plan does not establish that a locked quest
