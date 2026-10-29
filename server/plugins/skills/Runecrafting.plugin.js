@@ -54,6 +54,8 @@ const OURANIA_DIARY_MESSAGE = "Your medium level knowledge of the local area all
 const OURANIA_NO_ESSENCE = "You do not have any pure or daeyalt essences to bind.";
 const RIFT_GUARDIAN_BASE = 1795758;
 const BLOOD_RIFT_GUARDIAN_BASE = 804984;
+/** The Ourania Altar's rift guardian base, whatever rune is made (Wiki: Rift guardian). */
+const OURANIA_RIFT_GUARDIAN_BASE = 1487213;
 const ABYSS_TELEPORT_STEP = "o8m7y6";
 const ESSENCE_TELEPORT_STEPS = new Set(["ILlRUH", "SvUvek"]);
 /** The Rune Essence mine's exit portals (loc 34825, "Portal", Use). */
@@ -360,12 +362,12 @@ function craftOurania(player) {
   spam(player, OURANIA_CRAFT_MESSAGE);
   if (diary) spam(player, OURANIA_DIARY_MESSAGE);
   player.getSkillManager().addExperiences(Skill.RUNECRAFTING, xp);
-  // The rift guardian rolls per essence, at the crafted rune's base (Wiki).
+  // The rift guardian rolls per essence at the altar's own base; each rune is reported for its colour.
   for (const [rune, essence] of crafted) {
     pluginApi.emitCustomEvent("runecrafting:success", {
       player,
       skill: Skill.RUNECRAFTING,
-      petBase: rune.runeId === ItemIdentifiers.BLOOD_RUNE ? BLOOD_RIFT_GUARDIAN_BASE : RIFT_GUARDIAN_BASE,
+      petBase: OURANIA_RIFT_GUARDIAN_BASE,
       rolls: essence,
       runeId: rune.runeId,
       amountPerEssence: 1,

@@ -382,11 +382,14 @@ test("the Ourania Altar binds pure and daeyalt essence into random runes at 1.7 
   assert.ok(Math.abs(player.xp[0] - (11 * 1.7 + 11 * 1.7 * 1.5)) < 1e-9, "daeyalt's XP is 1.5 times pure's");
   assert.ok(player.log.includes("spam You bind the temple's power into runes."));
   assert.ok(!player.log.some((line) => line.includes("medium level knowledge")));
-  assert.deepEqual(emitted.filter(([name]) => name === "runecrafting:success").map(([, event]) => [event.runeId, event.rolls]), [[ItemIdentifiers.SOUL_RUNE, 2]]);
+  assert.deepEqual(emitted.filter(([name]) => name === "runecrafting:success").map(([, event]) => [event.runeId, event.rolls, event.petBase]), [[ItemIdentifiers.SOUL_RUNE, 2, 1487213]],
+    "the rift guardian rolls at the Ourania Altar's base (Wiki: Rift guardian)");
 
   // The last roll lands on air runes, the most common at level 1.
   const low = crafter(1, [[ItemIdentifiers.PURE_ESSENCE, 1]]);
+  emitted.length = 0;
   withRandom([0.9999], () => craft(low, ObjectIdentifiers.ALTAR_31));
+  assert.equal(emitted.find(([name]) => name === "runecrafting:success")[1].petBase, 1487213, "the same base for any rune");
   assert.equal(amount(low, ItemIdentifiers.AIR_RUNE), 1);
   assert.ok(Math.abs(low.xp[0] - 5 * 1.7) < 1e-9);
 });

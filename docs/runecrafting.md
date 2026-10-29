@@ -43,7 +43,8 @@ The Ourania Altar (loc 29631, `rc_zmi_dungeon_cracked_center_altar`) in the Oura
   runes." Without essence: "You do not have any pure or daeyalt essences to bind." in a message
   box. The craft's animation, graphic and sound are the other altars'. Both recordings are Grid
   Master event worlds, so their rune amounts and un-noting are not used.
-- The rift guardian rolls once per essence, for the rune it made.
+- The rift guardian rolls once per essence at the altar's own base, 1,487,213, whatever the rune
+  ([Wiki: Rift guardian](https://oldschool.runescape.wiki/w/Rift_guardian)); the rune made still sets its colour.
 
 ## The craft
 
