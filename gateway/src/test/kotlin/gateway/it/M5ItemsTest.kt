@@ -35,11 +35,13 @@ class M5ItemsTest {
             val wornAtLogin = game.until(LOGIN_TICKS).filterIsInstance<UpdateInvFull>().lastOrNull { it.inventoryId == WORN }
             val dartsBefore = wornAtLogin?.objs?.firstOrNull { it.id == BRONZE_DART }?.count ?: 0
             game.command("item $BRONZE_DART $DARTS")
-            val dartsSlot = game.inventorySlotOf(BRONZE_DART)
+            // The developer may carry darts already: the whole stack is wielded.
+            val (dartsSlot, carried) = game.inventoryStackOf(BRONZE_DART)
             game.button(INVENTORY_INTERFACE, 0, op = WIELD_OP, sub = dartsSlot, obj = BRONZE_DART)
             val worn = game.expectInventory(WORN) { inv -> inv.objs.any { it.id == BRONZE_DART } }
             // Native sessions get quantities the appearance block can't carry.
-            assertEquals(dartsBefore + DARTS, worn.objs.first { it.id == BRONZE_DART }.count)
+            assertEquals(dartsBefore + carried, worn.objs.first { it.id == BRONZE_DART }.count)
+            assertTrue(carried >= DARTS)
 
             game.command("item $BRONZE_AXE 1")
             val axeSlot = game.inventorySlotOf(BRONZE_AXE)
@@ -54,6 +56,18 @@ class M5ItemsTest {
     }
 
     private fun login(name: String): HeadlessClient.Game = LiveGateway.login(name)
+
+    /** The slot and stack of an item, from the next inventory update that has it. */
+    private fun HeadlessClient.Game.inventoryStackOf(item: Int): Pair<Int, Int> {
+        repeat(PACKETS) {
+            val message = next() ?: error("stream ended")
+            if (message is UpdateInvFull && message.inventoryId == INVENTORY) {
+                val slot = message.objs.indexOfFirst { it.id == item }
+                if (slot >= 0) return slot to message.objs[slot].count
+            }
+        }
+        error("$item never reached the inventory")
+    }
 
     /** The slot an item lands in, from the next inventory update that has it. */
     private fun HeadlessClient.Game.inventorySlotOf(item: Int): Int {
