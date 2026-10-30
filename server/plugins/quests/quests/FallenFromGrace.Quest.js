@@ -191,9 +191,19 @@ module.exports = function registerFallenFromGraceQuest(api) {
   // reappears at 2577.5,8606.5 (the cavern mooring).
   // Keep this a narrow quest gate, not a proximity radius: the boat must actually reach the
   // legal open-sea edge of the captured approach line.
-  const CAVERN_APPROACH = { minX: 2539, maxX: 2557, minY: 2187, maxY: 2189, z: 0 };
+  // The boat's centre passes this box on the captured crossing (rsprox P2, the "You sail through the
+  // cave opening." portal at 2559,2203; the boat moved 2554,2200 -> 2559,2203 before it).
+  const CAVERN_APPROACH = { minX: 2555, maxX: 2561, minY: 2200, maxY: 2205, z: 0 };
   const CAVERN_MOORING = { fineX: 329920, fineY: 1101632, z: 0, angle: 1408 }; // 2577.5,8606.5
   const CAVE_BOAT_TYPES = new Set(["raft", "skiff"]);
+  // The cave opening's portal effect (gotr_overlay, its script, the sound), as captured.
+  const OVERLAY_ATMOSPHERE = (161 << 16) | 1;
+  const GOTR_OVERLAY = 745;
+  const SCRIPT_GOTR_PORTAL = 5984;
+  const SCRIPT_GOTR_REMOVE = 5985;
+  const GOTR_MODEL_NONE = -1;
+  const CAVE_OPENING_COLOUR = 1052688;
+  const CAVE_OPENING_SOUND = 10747;
   const CATHEDRAL_DOOR_OBJECT_IDS = new Set([62368, 62369]);
   const CREVICE_OBJECT_ID = ObjectIdentifiers.CREVICE_57; // 62257 Squeeze-through
   // ffg_corpse_keenan (no identifier: the raw multi-loc is named "null" and resolves to
@@ -1048,9 +1058,19 @@ module.exports = function registerFallenFromGraceQuest(api) {
       && y >= CAVERN_APPROACH.minY && y <= CAVERN_APPROACH.maxY;
   }
 
+  function caveOpeningEffect(player) {
+    const out = player.getPacketSender();
+    out.sendSubInterface(OVERLAY_ATMOSPHERE, GOTR_OVERLAY, 1, {
+      postScripts: [{ scriptId: SCRIPT_GOTR_PORTAL, args: [GOTR_MODEL_NONE, CAVE_OPENING_COLOUR] }],
+    });
+    out.sendSoundEffect(CAVE_OPENING_SOUND, 1, 0);
+    later(player, 2, () => out.sendClientScript(SCRIPT_GOTR_REMOVE));
+  }
+
   /** One captured transition: move the player's boat to the cavern mooring and stay aboard. */
   function enterCavernByBoat(player, boat) {
     stopCavernApproachWatch(player);
+    caveOpeningEffect(player);
     boat.fineX = CAVERN_MOORING.fineX;
     boat.fineY = CAVERN_MOORING.fineY;
     boat.level = CAVERN_MOORING.z;
@@ -1060,18 +1080,24 @@ module.exports = function registerFallenFromGraceQuest(api) {
     boat.velocity = 0;
     Sailing.dock(player, "wyrmscraig_cave");
     setFlag(player, FLAG_WYRMS_ENTRY);
-    quest.setStage(player, STAGE_CAVERN);
+    // Only the first sail moves the quest on; after completion the passage is just a crossing.
+    if (quest.getStage(player) === STAGE_CORMAC_PLAN) quest.setStage(player, STAGE_CAVERN);
     player.sendMessage("You sail through the cave opening.");
   }
 
+  /** The cave passage works during the quest (the first sail, stage 8) and after it. */
+  function cavernWatchActive(player) {
+    return quest.getStage(player) === STAGE_CORMAC_PLAN || quest.isComplete(player);
+  }
+
   function startCavernApproachWatch(player) {
-    if (cavernApproachKeys.has(player) || quest.getStage(player) !== STAGE_CORMAC_PLAN) return;
+    if (cavernApproachKeys.has(player) || !cavernWatchActive(player)) return;
     if (!caveBoat(player)) return;
     const key = {};
     cavernApproachKeys.set(player, key);
     const tick = () => {
       if (cavernApproachKeys.get(player) !== key) return;
-      if (quest.getStage(player) !== STAGE_CORMAC_PLAN) {
+      if (!cavernWatchActive(player)) {
         cavernApproachKeys.delete(player);
         return;
       }

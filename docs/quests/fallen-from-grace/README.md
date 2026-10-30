@@ -16,7 +16,7 @@ travel: travel_to
 One full run from the start with Cormac to completion, plus a relog. Stage, QP, the four
 skill rewards and the repeat talk all checked out. Two issues remain open: the large hat is
 drawn inside the rock, and the broken golem spawn stays visible after the golem is powered.
-Sailing into the cave on the sea wasn't tested, because the cavern entry used a boat teleport.
+The cave passage by boat now works (fixed, see findings), but sailing back out of the cavern isn't implemented.
 
 ## Findings
 
@@ -27,9 +27,13 @@ Newest first. One line each, linked to its issue or PR when there is one.
 - **open** The sync also added a static "Broken golem" (16321, source `wiki`) on 2573,8650
   beside the cache's multi-NPC (16320). It stays visible after the golem is powered (16322).
   Generated data: fix the `sync:npc-spawns` filter, then regenerate.
-- **open** Sailing into the Wyrmscraig cavern on the sea wasn't tested: the account entered the
-  cavern approach box by `::bt tp`. The sea crossing to the Wyrmscraig dock was also skipped
-  (teleport to the dock).
+- **fixed** Sailing into the cave didn't work: the approach box was at y 2187–2189, but the
+  live crossing passes 2555–2561, 2200–2205 (rsprox P2, "You sail through the cave opening." at
+  2559,2203). The box is now the captured crossing, and the passage also works after completion
+  (stage stays 20). It now also shows the captured portal overlay (745) and sound 10747.
+- **open** Sailing back out of the cavern by boat isn't implemented, and no capture of it exists.
+- **open** The sea crossing to the Wyrmscraig dock on the test account was skipped (teleport to
+  the dock); only the cave passage itself was checked by boat.
 - **open** The planner (`travel_to`, `plan_route`) has no route from the cathedral back to the
   island; the way out is the cliff rocks shortcut (62263 mined, 62265 climbed), which the
   planner doesn't use.
@@ -69,6 +73,8 @@ Newest first. A rerun adds an entry; it never rewrites an older one.
   letter was taken on completion. Repeat talk: no extra reward, and Cormac gave a sunstone crystal
   in dialogue (not a reward).
 - **Relog:** stage 20, QP 3 and each reward XP persisted; nothing duplicated.
-- **Not checked:** sailing into the cave on the sea, the golem's post-quest behaviour, the
+- **Cave passage (after the fix):** sailing into the cave from the sea moves the boat to the
+  cavern mooring, with the portal overlay and sound. Stage stays 20. Checked by hand, in the client.
+- **Not checked:** the golem's post-quest behaviour, the
   visual rendering of the hat and golem, the recovery cases (full bag, pending rewards),
   and any offline save check beyond the relog.
