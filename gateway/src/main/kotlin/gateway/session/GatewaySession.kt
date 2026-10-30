@@ -272,7 +272,7 @@ class GatewaySession(
         infos.npcInfo.setZoneSearchRadius(SCENE_RADIUS_ZONES + 1)
         infos.worldEntityInfo.updateRenderDistance(BOAT_RENDER_DISTANCE)
         self = infos
-        mirror = EntityMirror(world, context.objs, context.npcTypes, infos, handshake.index, items::selfAppearance)
+        mirror = EntityMirror(world, context.objs, context.npcTypes, infos, handshake.index, items::selfAppearance) { x, z -> boats.deckAt(x, z) != null }
 
         val ok =
             LoginResponse.Ok(

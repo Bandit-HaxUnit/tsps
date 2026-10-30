@@ -47,6 +47,11 @@ const XPDROPS_SETUP_ATTRIBUTE = "settings:xpdrops-setup";
 // The side panel's volume sliders: the cache's scripts (9232, 9238, 9244, 9250) set the varp in
 // the client, then trigger the slider's op (if_triggeroplocal) with the new volume when it is
 // released or reaches or leaves 0. That is how the server learns it, and it sends it back at login.
+// The client only sends a component's trigger once the server has enabled its ops, as it does
+// for these four on the settings tab; without it the sliders change the volume until relog.
+const SETTINGS_SIDE_GROUP = 116;
+const ALL_OPS = 0x3ff << 1;
+const WELCOME_PLAY_BUTTON = (378 << 16) | 72;
 const VOLUME_SLIDER_VARPS = new Map([
   [(116 << 16) | 95, 3796], // master
   [(116 << 16) | 109, 168], // music
@@ -573,6 +578,20 @@ function readIntArg(argsData) {
   return undefined;
 }
 
+function enableVolumeSliders(player) {
+  for (const slider of VOLUME_SLIDER_VARPS.keys()) player.getPacketSender?.()?.sendInterfaceFlagsRange?.(slider, -1, -1, ALL_OPS);
+}
+
+/** The gameframe (and the settings tab in it) is mounted at login and again on Play. */
+function enableVolumeSlidersLater({ player }) {
+  queueMicrotask(() => enableVolumeSliders(player));
+  return false;
+}
+
+function enableVolumeSlidersOnTab({ player, group }) {
+  if (group === SETTINGS_SIDE_GROUP) queueMicrotask(() => enableVolumeSliders(player));
+}
+
 function releaseVolumeSlider({ player, buttonId, argsData, scriptTrigger }) {
   if (scriptTrigger !== true) return false;
   const volume = readIntArg(argsData);
@@ -666,6 +685,9 @@ module.exports = {
     api.onCustomEvent("player:varp-transmit", transmitXpDropsSetup);
     api.onInterfaceActionButton([...XPDROPS_SETUP_DROPDOWNS.keys()], chooseXpDropsSetupRow);
     api.onInterfaceActionButton([...VOLUME_SLIDER_VARPS.keys()], releaseVolumeSlider);
+    api.onPlayerLogin(enableVolumeSlidersLater);
+    api.onInterfaceActionButton(WELCOME_PLAY_BUTTON, enableVolumeSlidersLater);
+    api.onCustomEvent("gameframe:tab-mounted", enableVolumeSlidersOnTab);
     api.onInterfaceActionButton(xpDropsOrbIds(api), clickXpDrops);
     for (const tab of TAB_VARBIT_MAP) {
       api.persistAttribute(keybindAttribute(tab.varbit), tab.defaultKey);

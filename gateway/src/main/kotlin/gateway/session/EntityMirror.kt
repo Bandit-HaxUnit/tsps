@@ -24,6 +24,8 @@ class EntityMirror(
     private val selfIndex: Int,
     /** The local player's appearance, the only place tsps sends worn equipment to the browser. */
     private val onSelfAppearance: (AppearanceBlock) -> Unit,
+    /** Whether a tile is on a boat's deck, where OSRS has actors on level 1 and tsps on 0. */
+    private val onDeck: (Int, Int) -> Boolean = { _, _ -> false },
 ) {
     private val players = HashMap<Int, Infos>()
     private val npcs = HashMap<Int, NpcAvatar>()
@@ -48,7 +50,7 @@ class EntityMirror(
                 } else {
                     players.getOrPut(index) { world.allocPlayer(index) }
                 }
-            infos.updateRootCoord(tile.level, tile.x, tile.z)
+            infos.updateRootCoord(if (onDeck(tile.x, tile.z)) EntityWorld.DECK_LEVEL else tile.level, tile.x, tile.z)
         }
         for ((index, block) in blocks) {
             val infos = if (index == selfIndex) self else players[index] ?: continue
@@ -77,7 +79,7 @@ class EntityMirror(
                 is NpcSync.Change.Removed -> if (change.index !in readded) npcs.remove(change.index)?.let(world::releaseNpc)?.also { npcTypeIds.remove(change.index) }
                 is NpcSync.Change.Added -> {
                     val npc = change.npc
-                    npc.level = if (npc.onDeck) 0 else level
+                    npc.level = if (npc.onDeck) EntityWorld.DECK_LEVEL else level
                     npcTypeIds[change.index] = npc.type
                     val existing = npcs[change.index]
                     if (existing != null) {

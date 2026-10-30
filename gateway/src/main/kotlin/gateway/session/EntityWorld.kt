@@ -101,7 +101,7 @@ class EntityWorld(allocator: ByteBufAllocator, huffman: HuffmanCodecProvider) {
     /**
      * A boat drawn on [level] at fine [fineX], [fineZ], its deck [sizeX] × [sizeZ] zones from
      * [zoneX], [zoneZ]. tsps sends neither owner nor deck levels: rsprot puts the world the
-     * player is on first whoever owns it, and deck actors stand on level 0.
+     * player is on first whoever owns it, and everyone aboard stands on the deck's level 1.
      */
     fun allocWorldEntity(
         index: Int,
@@ -137,9 +137,10 @@ class EntityWorld(allocator: ByteBufAllocator, huffman: HuffmanCodecProvider) {
     /** Computes this tick's info packets; read them afterwards with [Infos.getPackets]. */
     fun update() = protocols.update()
 
-    private companion object {
-        const val NO_OWNER = 0
-        const val MAX_LEVEL = 3
-        const val DECK_LEVEL = 0
+    companion object {
+        private const val NO_OWNER = 0
+        private const val MAX_LEVEL = 3
+        /** OSRS's deck level (docs/sailing-osrs-reference.md); tsps keeps actors on its level 0. */
+        const val DECK_LEVEL = 1
     }
 }

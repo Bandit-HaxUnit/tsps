@@ -21,8 +21,9 @@ class M9TradeTest {
                 // a design is confirmed (and only once it has opened).
                 first.ticks(SETTLE_TICKS)
                 second.ticks(SETTLE_TICKS)
-                first.updatePlayerModel(DEFAULT_DESIGN)
-                second.updatePlayerModel(DEFAULT_DESIGN)
+                // The official client confirms with the designer's Confirm button.
+                first.button(DESIGNER, CONFIRM)
+                second.button(DESIGNER, CONFIRM)
                 second.ticks(SETTLE_TICKS)
                 first.ticks(SETTLE_TICKS)
 
@@ -104,6 +105,8 @@ class M9TradeTest {
         const val OFFER_INVENTORY = 90
         const val INV_OTHER = 0x8000
         const val PLAYER_MODEL_SIZE = 26
+        const val DESIGNER = 679
+        const val CONFIRM = 74
 
         /** A male design in the layout the gateway tries first: body, 7 × u16 kits, 5 × u16 colours, 1 byte. */
         val DEFAULT_DESIGN =

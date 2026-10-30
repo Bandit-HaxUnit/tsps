@@ -23,10 +23,10 @@ import java.util.logging.Logger
  * The character designer's confirm (UPDATE_PLAYER_MODEL_V2, 26 bytes). rsprot 241 has no
  * decoder for it, and a packet without one disconnects the client, so the gateway adds one.
  *
- * Its layout isn't documented for 241: the body type, seven identkits and five colours are in
- * it, but six bytes more than revision 226's byte-per-field version. The gateway reads the
- * layouts that fit 26 bytes and only passes the design on when one gives valid cache ids;
- * otherwise it logs the bytes so the layout can be pinned down from a real save.
+ * The official client's designer (679) doesn't send it: it sends each click as an IF_BUTTON and
+ * tsps designs on the server. The decoder stays so a client that does send it isn't dropped; its
+ * 26-byte layout isn't documented, so a design is only passed on when one of the layouts that
+ * fit gives valid cache ids, and logged otherwise.
  */
 class UpdatePlayerModel(val bytes: ByteArray) : IncomingGameMessage {
     override val category: ClientProtCategory get() = GameClientProtCategory.USER_EVENT
@@ -66,10 +66,6 @@ class UpdatePlayerModel(val bytes: ByteArray) : IncomingGameMessage {
         }
 
         private val LAYOUTS = listOf(SHORT_FIELDS, BYTE_COLOURS)
-
-        /** TEMPORARY (M11): every save's bytes, to pin the layout from real saves. */
-        fun logCapture(message: UpdatePlayerModel) =
-            log.info("UPDATE_PLAYER_MODEL_V2 capture: ${message.bytes.joinToString(" ") { "%02x".format(it) }}")
 
         fun logUnknown(message: UpdatePlayerModel) =
             log.warning("unrecognised UPDATE_PLAYER_MODEL_V2 layout, dropped: ${message.bytes.joinToString(" ") { "%02x".format(it) }}")

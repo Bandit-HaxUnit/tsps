@@ -523,3 +523,14 @@ test('a volume slider released sets the stored volume from its trigger argument'
   assert.equal(buttons.get(music)({ player, buttonId: music, argsData: Buffer.from([70]), scriptTrigger: false }), false, 'a click is not the trigger');
   assert.equal(applied.length, 0);
 });
+
+test('the volume sliders get their ops at login, so the client sends their triggers', async () => {
+  const { logins } = registered();
+  const flags = [];
+  const sender = new Proxy({ sendInterfaceFlagsRange: (uid, from, to, value) => flags.push([uid >>> 16, uid & 0xffff, from, to, value]) }, { get: (t, k) => (k in t ? t[k] : () => sender) });
+  const player = new Proxy({ getPacketSender: () => sender, getAttribute: () => undefined }, { get: (t, k) => (k in t ? t[k] : () => undefined) });
+  for (const login of logins) { try { login({ player }); } catch {} }
+  await new Promise((resolve) => setImmediate(resolve));
+  const sliders = flags.filter(([group]) => group === 116).map(([, component, from, to, value]) => [component, from, to, value]);
+  assert.deepEqual(sliders.sort((a, b) => a[0] - b[0]), [95, 109, 123, 137].map((component) => [component, -1, -1, 0x3ff << 1]));
+});
