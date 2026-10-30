@@ -7,6 +7,7 @@ import net.rsprox.protocol.game.outgoing.model.info.playerinfo.PlayerUpdateType
 import net.rsprox.protocol.game.outgoing.model.map.RebuildLoginV2
 import net.rsprox.protocol.game.outgoing.model.map.RebuildNormalV2
 import net.rsprox.protocol.game.outgoing.model.map.RebuildRegionV2
+import net.rsprox.protocol.game.outgoing.model.misc.player.MessageGame
 import net.rsprox.protocol.game.outgoing.model.misc.player.SetMapFlagV2
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -32,8 +33,10 @@ class M2MovementTest {
     @Test
     fun `a teleport to another region rebuilds the map around the new tile`() {
         login(developer()).use { game ->
-            game.expect<RebuildLoginV2>()
-            for ((x, z) in listOf(LUMBRIDGE, EDGEVILLE)) {
+            val start = game.expect<RebuildLoginV2>().playerInfoInitBlock.localPlayerCoord
+            // Teleporting onto the tile the player is on wouldn't move it: start with the other one.
+            val stops = if (start.x == LUMBRIDGE.first && start.z == LUMBRIDGE.second) listOf(EDGEVILLE, LUMBRIDGE) else listOf(LUMBRIDGE, EDGEVILLE)
+            for ((x, z) in stops) {
                 game.command("tele $x $z 0")
                 val rebuild = game.expectOrNull<RebuildNormalV2>()
                 val tile = game.localMovementUntil { it.x == x && it.z == z }
@@ -48,7 +51,14 @@ class M2MovementTest {
         login(developer()).use { game ->
             game.expect<RebuildLoginV2>()
             game.command(INSTANCE_COMMAND)
-            val rebuild = game.expect<RebuildRegionV2>(limit = 2_000)
+            val seen = ArrayList<String>()
+            var rebuild: RebuildRegionV2? = null
+            while (rebuild == null) {
+                when (val message = game.next() ?: error("no instance; game messages: $seen")) {
+                    is RebuildRegionV2 -> rebuild = message
+                    is MessageGame -> seen += message.message
+                }
+            }
             val zones = (0 until 4).flatMap { level -> (0 until 13).flatMap { x -> (0 until 13).map { z -> rebuild.buildArea[level, x, z] } } }
             assertTrue(zones.any { !it.invalid }, "instance with no zones")
             game.command("tele ${LUMBRIDGE.first} ${LUMBRIDGE.second} 0")
@@ -83,8 +93,8 @@ class M2MovementTest {
         const val DUPLICATE = 5
         const val WALK_DISTANCE = 3
         const val MOVEMENT_PACKETS = 60
-        // Builds a templated Gauntlet map around an empty-handed developer.
-        const val INSTANCE_COMMAND = "gauntletstart"
+        // Starts a solo Tempoross game, in its templated cove.
+        const val INSTANCE_COMMAND = "tempoross"
         val LUMBRIDGE = 3222 to 3218
         val EDGEVILLE = 3093 to 3493
     }

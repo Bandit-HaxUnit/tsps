@@ -31,14 +31,14 @@ class M5ItemsTest {
         assumeTrue(developer != null, "DEV_USERNAME isn't set; spawning items needs ::item")
         login(developer!!).use { game ->
             val tile = game.expect<RebuildLoginV2>().playerInfoInitBlock.localPlayerCoord
-            game.until(TICKS)
-            game.command("empty")
+            val wornAtLogin = game.until(TICKS).filterIsInstance<UpdateInvFull>().lastOrNull { it.inventoryId == WORN }
+            val dartsBefore = wornAtLogin?.objs?.firstOrNull { it.id == BRONZE_DART }?.count ?: 0
             game.command("item $BRONZE_DART $DARTS")
             val dartsSlot = game.inventorySlotOf(BRONZE_DART)
             game.button(INVENTORY_INTERFACE, 0, op = WIELD_OP, sub = dartsSlot, obj = BRONZE_DART)
             val worn = game.expectInventory(WORN) { inv -> inv.objs.any { it.id == BRONZE_DART } }
             // Native sessions get quantities the appearance block can't carry.
-            assertEquals(DARTS, worn.objs.first { it.id == BRONZE_DART }.count)
+            assertEquals(dartsBefore + DARTS, worn.objs.first { it.id == BRONZE_DART }.count)
 
             game.command("item $BRONZE_AXE 1")
             val axeSlot = game.inventorySlotOf(BRONZE_AXE)
@@ -46,6 +46,9 @@ class M5ItemsTest {
             val dropped = game.expect<ObjAddSpecific>()
             assertEquals(BRONZE_AXE, dropped.id)
             assertEquals(tile.x to tile.z, dropped.coordGrid.x to dropped.coordGrid.z)
+
+            // Take the darts off again, so the developer account isn't left armed.
+            game.button(WORN_INTERFACE, WEAPON_SLOT, op = REMOVE_OP)
         }
     }
 
@@ -90,6 +93,9 @@ class M5ItemsTest {
         const val INVENTORY = 93
         const val WORN = 94
         const val INVENTORY_INTERFACE = 149
+        const val WORN_INTERFACE = 387
+        const val WEAPON_SLOT = 18
+        const val REMOVE_OP = 1
         const val WIELD_OP = 3
         const val DROP_OP = 7
         const val BRONZE_DART = 806

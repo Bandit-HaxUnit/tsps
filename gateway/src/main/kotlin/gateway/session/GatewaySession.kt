@@ -12,6 +12,7 @@ import gateway.down.NpcSync
 import gateway.down.PlayerSync
 import gateway.down.Social
 import gateway.down.TspsChatMessage
+import gateway.down.World
 import gateway.down.TspsHandshake
 import gateway.down.TspsLoginResult
 import gateway.tsps.TspsClientPacket
@@ -38,6 +39,7 @@ import net.rsprot.protocol.message.OutgoingGameMessage
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.logging.Level
 import java.util.logging.Logger
 /**
  * One official client and the tsps session behind it.
@@ -67,6 +69,12 @@ class GatewaySession(
     private val groundItems = GroundItems(::send)
     private val stockMarket = StockMarket(::send)
     private val social = Social(::send)
+    private val worldUpdates = World(::send)
+
+    /** Everything that turns tsps messages into OSRS packets, asked in turn. */
+    private val translators: List<(TspsPacket) -> Boolean> by lazy {
+        listOf(interfaces::handle, items::handle, groundItems::handle, social::handle, worldUpdates::handle)
+    }
     private val interfaces = Interfaces(varps, InterfaceTree(context.enums), stockMarket, items::scriptInventories, ::send)
     private val upstream = Upstream(varps) { tsps.send(it) }
     private val players = PlayerSync()
@@ -89,11 +97,11 @@ class GatewaySession(
         }
         val address = responses.ctx.channel().remoteAddress().toString().substringAfter('/').substringBeforeLast(':')
         TspsSocket.connect(context.config.tspsUrl, address, this).whenComplete { socket, error ->
-            executor.execute {
+            run {
                 if (error != null) {
                     log.warning("${block.username}: ${error.message}")
                     fail(LoginResponse.LoginServerOffline)
-                    return@execute
+                    return@run
                 }
                 tsps = socket
                 state = State.LOGGING_IN
@@ -102,10 +110,10 @@ class GatewaySession(
         }
     }
 
-    override fun onPackets(packets: List<TspsPacket>) = executor.execute { packets.forEach(::onTspsPacket) }
+    override fun onPackets(packets: List<TspsPacket>) = run { packets.forEach(::onTspsPacket) }
 
     override fun onClosed(reason: String) =
-        executor.execute {
+        run {
             log.info("${block.username}: $reason")
             when (state) {
                 State.CLOSED -> Unit
@@ -176,7 +184,7 @@ class GatewaySession(
                 if (ok) send(Logout) else if (reason.isNotEmpty()) send(MessageGame(GAME_MESSAGE, reason))
             }
             TspsServerPacket.TICK -> groundItems.tick(packet.reader().i32())
-            else -> if (!interfaces.handle(packet) && !items.handle(packet) && !groundItems.handle(packet) && !social.handle(packet)) DropCounter.down(packet.opcode)
+            else -> if (translators.none { it(packet) }) DropCounter.down(packet.opcode)
         }
     }
 
@@ -189,6 +197,7 @@ class GatewaySession(
         self.updateRootBuildArea(rebuild.zoneX - SCENE_RADIUS_ZONES, rebuild.zoneZ - SCENE_RADIUS_ZONES)
         send(rebuild.toMessage())
         groundItems.rebuild(rebuild.zoneX, rebuild.zoneZ)
+        worldUpdates.rebuild(rebuild.zoneX, rebuild.zoneZ)
     }
 
     private fun onPlayerSync(frame: PlayerSync.Frame) {
@@ -235,12 +244,13 @@ class GatewaySession(
                 userHash = 0,
             )
         val session = responses.writeSuccessfulResponse(ok, block)
-        session.setDisconnectionHook { executor.execute(::close) }
+        session.setDisconnectionHook { run(::close) }
         this.session = session
         // REBUILD_LOGIN is always a static map; an instance follows as its own rebuild.
         session.queue(RebuildLoginV2(scene.zoneX, scene.zoneZ, MapRebuild.NO_WORLD_AREA, infos.playerInfo))
         if (scene is MapRebuild.Region) session.queue(scene.toMessage())
         groundItems.rebuild(scene.zoneX, scene.zoneZ)
+        worldUpdates.rebuild(scene.zoneX, scene.zoneZ)
         // The browser client adds these itself; tsps handles op 2 as trade and 3 as follow.
         session.queue(SetPlayerOp(TRADE_OP, false, "Trade with"))
         session.queue(SetPlayerOp(FOLLOW_OP, false, "Follow"))
@@ -283,6 +293,22 @@ class GatewaySession(
         if (state == State.CLOSED) return
         responses.writeFailedResponse(response)
         close()
+    }
+
+    /**
+     * Runs [task] on this session's thread. A failure is logged and ends the session: its
+     * mirrors of tsps's state can't be trusted after a message was only half applied.
+     */
+    private fun run(task: () -> Unit) {
+        if (executor.isShutdown) return
+        executor.execute {
+            try {
+                task()
+            } catch (e: Exception) {
+                log.log(Level.SEVERE, "${block.username}: session failed", e)
+                if (state == State.IN_GAME) close() else fail(LoginResponse.UnknownReplyFromLoginServer)
+            }
+        }
     }
 
     private fun close() {

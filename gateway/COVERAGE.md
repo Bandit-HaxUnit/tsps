@@ -28,11 +28,11 @@ sessions, so the browser wire format doesn't change.
 | 54 / 55 GROUND_ITEMS / DELTA | OBJ_ADD / DEL / COUNT _SPECIFIC | mapped | 5 | stack-id state, scene-filtered and re-sent after each rebuild; tick timers become ticks until public/despawn |
 | 70 / 71 SKILLS_SNAPSHOT / DELTA | UPDATE_STAT_V2 per skill | mapped | 4 | the combat level goes to varbit 13027, which the browser sets itself |
 | 81 RUN_ENERGY | UPDATE_RUNENERGY, UPDATE_RUNWEIGHT, varp 173 | mapped | 4–5 | energy in 1% steps; weight is worked out from cache obj weights over inventory and worn items, since tsps never sends it |
-| 83 SPOT_ANIM | MAP_ANIM | todo | 7 | |
+| 83 SPOT_ANIM | MAP_ANIM_SPECIFIC | mapped | 7 | tile spot anims (actor ones are in the sync blocks) |
 | 84 PROJECTILES | PROJANIM_SPECIFIC_V4 | todo | 8 | |
 | 87 DESTINATION | SET_MAP_FLAG_V2 | mapped | 2 | 0,0 clears the flag |
 | 88 PLAYER_OPTION | SET_PLAYER_OP | mapped | 3 | plus Trade with (op 2) and Follow (op 3) at login, which the browser adds itself; Attack in PvP comes from tsps |
-| 89 HINT_ARROW | HINT_ARROW | todo | 7 | tile level scope lost |
+| 89 HINT_ARROW | HINT_ARROW | mapped | 7 | npc, tile, player, world entity, reset; a tile arrow's level scope is lost |
 | 90 ATTACK_TIMER | — | dropped | 8 | tsps HUD |
 | 100 / 101 WIDGET_OPEN / CLOSE | IF_OPENSUB / IF_CLOSESUB | mapped | 4 | modal opens go to the main modal area and are remembered for the close; non-modal ones are dropped (tsps's browser mounts nothing for them either) |
 | 102 WIDGET_SET_ROOT | IF_OPENTOP | mapped | 1 | sets the root the 161 remap uses | |
@@ -46,21 +46,21 @@ sessions, so the browser wire format doesn't change.
 | 121 FRIENDS_CHAT_UPDATE | UPDATE_FRIENDLIST, UPDATE_IGNORELIST, UPDATE_FRIENDCHAT_CHANNEL_FULL_V2, FRIENDLIST_LOADED | mapped | 6 | the channel only goes when it changed; FRIENDLIST_LOADED once |
 | 122 CHAT_FILTER_SETTINGS | CHAT_FILTER_SETTINGS + _PRIVATECHAT | mapped | 6 | |
 | 123 TRIGGER_ONDIALOGABORT | TRIGGER_ONDIALOGABORT | mapped | 4 | |
-| 131 SOUND | SYNTH_SOUND / SOUND_AREA | todo | 7 | |
-| 132 PLAY_JINGLE / 133 PLAY_SONG | MIDI_JINGLE / MIDI_SONG_V2 | todo | 7 | |
-| 134 / 135 / 136 LOC_ADD_CHANGE / DEL / ANIM | LOC_ADD_CHANGE_V2 / LOC_DEL / LOC_ANIM in zone updates | todo | 7 | |
-| 137 CAMERA_CONTROL | CAM_* | todo | 7 | translate and tile glide have no OSRS form |
+| 131 SOUND | SYNTH_SOUND / SOUND_AREA | mapped | 7 | an area sound's delay is clamped to a byte; radius → radius, attenuation → size |
+| 132 PLAY_JINGLE / 133 PLAY_SONG | MIDI_JINGLE / MIDI_SONG_V2 | mapped | 7 | |
+| 134 / 135 / 136 LOC_ADD_CHANGE / DEL / ANIM | LOC_ADD_CHANGE_V2 / LOC_DEL behind UPDATE_ZONE_PARTIAL_FOLLOWS; LOC_ANIM_SPECIFIC | mapped | 7 | tsps replays the scene's loc changes itself after a rebuild |
+| 137 CAMERA_CONTROL | CAM_* | mapped | 7 | easings remapped to OSRS ids; plain instant/animated moves use rates 100/100 and 2/10; translate dropped, a tile glide becomes a tile target, trackTarget dropped |
 | 140 / 141 REBUILD_REGION / NORMAL | REBUILD_REGION_V2 / REBUILD_LOGIN_V2 / REBUILD_NORMAL_V2 | mapped | 1–2 | the scene before login becomes REBUILD_LOGIN (an instance follows as REBUILD_REGION); tsps's template chunks are rsprot ReferenceZones |
 | 142 / 143 REBUILD_WORLDENTITY / WORLDENTITY_INFO | REBUILD_WORLDENTITY_V4 / WORLDENTITY_INFO_V7 | todo | 9 | native: boat level + owner |
 | 144 REGION_REPLACEMENT | — | dropped | 2 | server map data the client can't load |
-| 145 / 146 SET / RESET_INTERACTION_MODE | SET / RESET_INTERACTION_MODE | todo | 7 | |
+| 145 / 146 SET / RESET_INTERACTION_MODE | SET / RESET_INTERACTION_MODE | mapped | 7 | |
 | 150 / 152 SHOP_OPEN / CLOSE | UPDATE_INV_FULL / STOP_TRANSMIT (516) | mapped | 5 | interface and script come separately; tsps's prices and modes are dropped (the client works prices out) |
 | 154 TRADE_REQUEST | — | dropped | 9 | the type-101 game message carries it |
 | 155 / 156 / 157 TRADE_OPEN / UPDATE / CLOSE | UPDATE_INV_FULL (90, 90 \| 0x8000), MESSAGE_GAME | todo | 9 | |
 | 190 COLLECTION_LOG_SNAPSHOT | UPDATE_INV_FULL (620) | mapped | 5 | |
 | 210 GAMEMODE_DATA | — | dropped | 4 | custom items/models, league overrides; custom items fall back to `baseItemId` |
-| 220 SYSTEM_UPDATE | UPDATE_REBOOT_TIMER_V2 | todo | 7 | |
-| (equipment) | UPDATE_INV_FULL (94) | mapped | 5 | native bit: tsps sends inventory 94 on WIDGET_RUN_SCRIPT, with quantities; otherwise built from the local appearance |
+| 220 SYSTEM_UPDATE | UPDATE_REBOOT_TIMER_V2 | mapped | 7 | centiseconds → ticks |
+| (equipment) | UPDATE_INV_FULL (94) | mapped | 5 | native bit: tsps sends inventory 94 on WIDGET_RUN_SCRIPT at login and on every change, with quantities; otherwise built from the local appearance |
 | (GE varps 7900–7955) | UPDATE_STOCKMARKET_SLOT_V2 | mapped | 5 | 8 slots × 7 fields; selling states are buying + 8 |
 
 ## Client → tsps

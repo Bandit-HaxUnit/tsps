@@ -26,6 +26,7 @@ import {
   CREATION_MENU_MAX_QUANTITY,
   CREATION_MENU_LAST_ITEM_ATTRIBUTE,
 } from "./packet/PacketSender";
+import { Equipment } from "../game/model/container/impl/Equipment";
 import { MapRegionReplacementManager } from "../game/collision/MapRegionReplacementManager";
 import {
   decodeClientPackets,
@@ -1271,6 +1272,9 @@ export class ClientConnection {
       // and membership panels read; everyone on a members world is a member.
       .sendInterfaceScript(828, [isMembersWorld() ? 1 : 0])
       .sendItemContainer(player.getInventory(), 3214)
+      // Worn equipment: the browser reads it from appearance; the official client (native
+      // attribute) gets inventory 94 itself, quantities included.
+      .sendItemContainer(player.getEquipment(), Equipment.INVENTORY_INTERFACE_ID)
       .sendSkillsSnapshot()
       .sendRunEnergy();
     player.getQuickPrayers().sync();
