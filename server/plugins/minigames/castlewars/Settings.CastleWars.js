@@ -14,24 +14,36 @@ function editable(player) {
   return true;
 }
 
-function choose(player, title, entries, key) {
+function choose(context, title, entries, key, back = openSettings) {
+  const { player } = context;
   if (!editable(player)) return;
   api.sendMultiChatboxPrompt(player, title, ...entries.flatMap(([label, value]) => [label, () => {
     if (!editable(player)) return;
     game.settings[key] = value;
-    openSettings({ player });
+    back(context);
   }]));
 }
 
-function openSettings({ player }) {
+function openMoreSettings(context) {
+  const { player } = context;
   if (!editable(player)) return;
   const settings = game.settings;
-  api.sendMultiChatboxPrompt(player, "Castle Wars practice settings (join a portal when ready)",
-    `Teams: ${settings.teamSize} vs ${settings.teamSize}`, () => choose(player, "Players per team", [["1 vs 1", 1], ["3 vs 3", 3], ["5 vs 5", 5], ["10 vs 10", 10], ["30 vs 30", 30]], "teamSize"),
-    `Bots: ${settings.opponent}`, () => choose(player, "Practice opponent", [["Mixed team", "mixed"], ["Scorer (magic defence)", "scorer"], ["Defender (magic)", "defender"]], "opponent"),
-    `Ice freeze: ${settings.freezeSeconds || "standard"}${settings.freezeSeconds ? " seconds" : ""}`, () => choose(player, "Maximum ice freeze", [["Standard", 0], ["10 seconds", 10], ["15 seconds", 15]], "freezeSeconds"),
-    `Barricades per team: ${settings.barricades}`, () => choose(player, "Barricades per team", [["10", 10], ["20", 20]], "barricades"),
-    "Reset defaults", () => { if (editable(player)) { Object.assign(settings, DEFAULTS); openSettings({ player }); } });
+  api.sendMultiChatboxPrompt(player, "More Castle Wars practice settings",
+    `Ice freeze: ${settings.freezeSeconds || "standard"}${settings.freezeSeconds ? " seconds" : ""}`, () => choose(context, "Maximum ice freeze", [["Standard", 0], ["10 seconds", 10], ["15 seconds", 15]], "freezeSeconds", openMoreSettings),
+    `Barricades per team: ${settings.barricades}`, () => choose(context, "Barricades per team", [["10", 10], ["20", 20]], "barricades", openMoreSettings),
+    "Back", () => openSettings(context));
+}
+
+function openSettings({ player, requestedTeam = null, portalGod = requestedTeam ?? "guthix" }) {
+  if (!editable(player)) return;
+  const context = { player, requestedTeam, portalGod };
+  const settings = game.settings;
+  api.sendMultiChatboxPrompt(player, "Castle Wars practice settings",
+    "Join practice", () => { if (editable(player)) game.joinFromLobby(player, requestedTeam, undefined, portalGod); },
+    `Teams: ${settings.teamSize} vs ${settings.teamSize}`, () => choose(context, "Players per team", [["1 vs 1", 1], ["3 vs 3", 3], ["5 vs 5", 5], ["10 vs 10", 10], ["30 vs 30", 30]], "teamSize"),
+    `Bots: ${settings.opponent}`, () => choose(context, "Practice opponent", [["Mixed team", "mixed"], ["Scorer (magic defence)", "scorer"], ["Defender (magic)", "defender"]], "opponent"),
+    "More settings", () => openMoreSettings(context),
+    "Reset defaults", () => { if (editable(player)) { Object.assign(settings, DEFAULTS); openSettings(context); } });
 }
 
 function capFreeze(event) {

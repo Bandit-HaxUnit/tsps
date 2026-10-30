@@ -61,6 +61,7 @@ Code: `server/plugins/skills/sailing/PortTasks.plugin.js` and its units in `port
    masters stand where the recordings show them (Mos Le'Harmless, which has no board or dock
    here, isn't spawned).
 8. **Bags**: a port coin bag opens to coins by size (800-1,200 up to 6,400-9,600).
+   Port reward bags open for exactly one shared or destination-specific drop; see below.
 
 - **Carrying**: a crate in both hands uses the cache's human crate-carrying set
    (`dttd_carrying_crate_ready`, `_walk`, `_walk_fast` for running), in each crate's
@@ -71,6 +72,79 @@ Code: `server/plugins/skills/sailing/PortTasks.plugin.js` and its units in `port
    ledger counts the crates they hold as collected, adds "but your crew can help with that." to
    the pickup box, and takes theirs before the player's crate. Counts in the boxes are spelt out
    ("There are two more crates of this type to collect", rsprox).
+
+## Captain's log
+
+`View-tasks` on either Captain's log opens the native log (935) in the floater overlay;
+`View-charts` on the charting log opens its Sea Charting tab. Its menu switches between
+Sea Charting and Port Tasks. The cache draws five task notices, blank slots and level locks,
+task names, requirements, cargo locations, destinations, quantities and flavour text. Back
+returns to the notices, Close closes the overlay, and reopening clears the selected task.
+The native menu button remains hidden until `sailing_intro >= 46` (script8672); this plugin
+does not force it visible. The rendered QA used the existing QuestRuntime admin command
+to set a controlled account's Pandemonium stage50 when checking that menu.
+
+Sources: [Courier tasks](https://oldschool.runescape.wiki/w/Courier_tasks) (free cancellation,
+slot levels), [Settings](https://oldschool.runescape.wiki/w/Settings) (cancellation warning),
+RSProx 235/00944,00948,03448,03455,03461,03467 (opening, task selection, tabs and closing),
+and the [pinned rev241 scripts](https://github.com/Joshua-F/osrs-dumps/tree/6e5033af6215963581a51b348f452320ff18f0f6/script).
+The active `osrs-241_2026-10-20` widget dump confirms group935: menu7, Close8, task clicks16,
+Back23, cancel25, onloads8658 and8708. Open sends OP1 flags to menu children10..12 and
+task children0..12, then native hide-popup8709. A valid selected slot sends19135=slot+1.
+
+Cancel task uses the existing PortMaster cancellation owner, which removes that task's
+hand, crew and all owned boats' cargo, clears its saved slot and sends the existing message.
+Protected quest task599 is refused by both entry points. The log asks for Yes/No confirmation
+unless the shared Settings varbit18130 disables the warning. The warning wording is chosen
+here: no cancellation click or confirmation text occurs in the available log recordings.
+Back, Close, switching tabs, reopening, replacing the floater or replacing the selected slot
+prevents an old confirmation from cancelling another task. The transient selection is never
+saved. A changed task-slot object (including progress made during confirmation) requires a
+fresh selection before cancellation.
+
+The single added Settings mapping457 →18130 makes the native warning toggle functional
+through the existing Settings owner and `settings:values` save. Active cache struct6325
+names the row, catalog enum422 places it in the Sailing Warnings category, and script6716
+maps457 to18130. Native134:24 selects its category;134:20 selects the cache-derived row.
+The regression toggles that real row, hydrates PlayerSave, runs login hooks, then cancels
+without a warning. There is no separate log warning preference.
+
+The ledger's existing saved `{id,taken,delivered}` slots remain the only progress state.
+Their19574..19588 varbits are resent when opening and logging in, and the completed total
+is read from5207. The native detail displays the task's required quantity, and the log's
+footer displays completed tasks; the pinned client scripts do not display separate
+collected/delivered counters. No additional progress text or widget has been invented.
+Sea Charting's existing persisted progress and client filters remain its state owners.
+
+Production path: inventory item action → PluginManager named `Captain's log` action →
+`Log.PortTasks.viewTasks/viewCharts` → PacketSender floater935 and existing slot varbits.
+Native935:16 → `clickLog` selects the current slot;935:25 → real MultiChatboxPrompt219 →
+`finishCancellation` revalidates selection/slot → `PortMaster.cancel` → Common slots,
+equipment, Crew `port-tasks:cancelled`, and Cargo.take. PlayerSave persists the existing
+slots and two log preference attributes; login resends the values and clears selection.
+Common.setSlots also emits `port-tasks:slots-changed`; an open log clears selection and
+runs native redraw8663 then hide-popup8709. Native8707 only listens to general varp5202,
+while held slots use5197..5201, so a slot-only change otherwise leaves a stale task card.
+The same shared notification covers acceptance and completion without a second state owner.
+
+`tests/port-task-log.test.cjs` uses real Player, Inventory, PacketSender, DialogueManager,
+PlayerSave, all content plugins with startup hooks, native interface dispatch and the
+mapped Pandemonium ledger. Only the network and sent-packet/message observation are
+substituted; unrelated player-bot simulation is disabled for the test process.
+The ledger test reads the actual cache-map objects directly, without the per-player
+Pandemonium quest overlay installed by runtime login. It is a mapped fixture, not proof
+of runtime ledger collection through that overlay. The separate cargo change owns the
+quest ledger registrations; this branch does not duplicate that edit.
+
+Validation on29October2026:73 targeted checks pass (12log,9port tasks,28charting,24Settings).
+The rendered client exercised task cards/details/required quantity, Back, Close, Yes/No,
+Show Menu/Sea Charting and the actual Settings457 checkbox. Native18130=1 survived a
+graceful server restart/relogin; cancelling with that preference removed the card immediately,
+left another task intact and opened no confirmation. A fresh independent review passed75
+checks, including actual bank open/close invalidation of an old native confirmation and a
+SQLite writer flush/new-connection load/login of the Settings preference. No findings in
+those inspected paths. The full combined Sailing batch suite remains an integration check
+owned by the batch coordinator; targeted/native checks do not claim exhaustive parity.
 
 ## Ours, not live
 
@@ -110,7 +184,175 @@ second bounty on the same creature waiting for the first, keeping parts when can
 
 - Bounty parts' drop rate scaling with damage dealt, and the boosted rates before the count is met
   (Wiki); the parts' rates here are 1 in the cache's rarity.
-- Opening port reward bags (each port's loot is on the Wiki).
-- Confiscating crates on a teleport, or when leaving port with one in hand, and the captain's
-  log's task list and cancel.
+- Confiscating crates on a teleport, or when leaving port with one in hand.
 - Trim being refused while carrying cargo.
+
+## Port coin bag safety
+
+`Bags.PortTasks.openCoinBag` accepts only the live native inventory source and
+the exact clicked slot/Item. It rejects busy, dead, placement/teleport and stale
+contexts. On a real Inventory copy, it removes one bag and calls the shared
+`getAddableAmount` for the complete coin payout. The last bag may free a slot;
+a remaining stack does not. Compatible coins can merge even at full inventory,
+while metadata-distinct coins stay separate and the integer stack cap is enforced.
+Only after the full payout fits does it consume the clicked bag, add the coins
+and refresh once. Unchanged inventory slots retain their Item identity/metadata.
+
+The [Port coin bag Wiki](https://oldschool.runescape.wiki/w/Port_coin_bag), fetched
+29 October 2026, specifies inclusive payouts Tiny800–1200, Small1600–2400,
+Medium2400–3600, Large3600–5400 and Huge6400–9600. This corrects the older
+Small1613–2714/Medium2486–3595/Large3864–5350 endpoints. The existing uniform
+integer roll is retained; the Wiki's bounds alone do not independently establish
+its distribution. Cache param2647 is a display/reference value, not proof of a
+server payout distribution.
+
+The [pinned rev241 object dump](https://github.com/Joshua-F/osrs-dumps/blob/6e5033af6215963581a51b348f452320ff18f0f6/config/dump.obj)
+names `port_task_lootsack_t0_coins` through `t4_coins`; active
+`osrs-241_2026-10-20` cache checks confirm all five Open actions, size param2645
+and coin param2646. RSProx index searches for `*port_task_lootsack*coins*` and
+`*port_task*coin*` found no matching recordings. No exact opening delay, sound,
+animation or message is claimed from a capture; the existing immediate opening
+and reward wording remain.
+
+A capacity failure preserves the entire bag/coin inventory and records that
+bag ID's roll in registered `port-tasks:pending-coin-bags`. Bank transfer or
+save/reload cannot reroll a blocked payout. Saved amounts are checked against
+the current size range before delivery; success clears the entry and the next
+bag rolls fresh. This bookkeeping is an implementation choice for safe retries,
+not a claimed recorded OSRS attribute. There is no delayed task/session or new
+save schema. Opening accesses no storage, so Bank PIN guarding is not applicable;
+bank transfers continue through their own existing guard.
+
+Production path: native canvas widget → `ClientConnection.inventoryAction` →
+`ItemActionPacketListener.handleAction/handleFirstAction` → named
+`PluginManager.onItemAction` hook → `openCoinBag` → real Inventory /
+ItemContainer capacity, exact-slot deletion and add → inventory packet/message.
+`Item` owns metadata cloning; `ItemContainer` owns merges/caps; PlayerSave and
+the registered persistence plugin own the inventory and pending attribute.
+`tests/port-coin-bags.test.cjs` uses real Player/Inventory/Bank and all enabled
+plugins with startup/shutdown, stubbing only network output and controlling RNG
+for fixtures. It checks all five Wiki endpoints, full/last slot, matching and
+distinct-metadata coin stacks, caps, native widget routing, exact clicked bag,
+stale/busy/dead inputs, repeat/Examine, real Bank transfer and save hydration.
+
+The current-base feature/Sailing run passed117/117. Independent review built the
+fingerprinted source with pinned Yarn4.12, traced the shared/native owners and
+passed22 feature/foundation/adversarial checks with no findings in the inspected
+coin paths. Its additional test flushed an actual SQLite worker, closed/reopened
+the database, hydrated the player and retained a blocked800 payout despite a
+maximum RNG retry; the next bag paid a fresh1200. Invalid saved amounts and
+cross-size pending isolation were also checked.
+
+Full `node --test tests/` on base`acf4a8659` plus this change:10080passed,
+11failed/10091total. All11 reproduced on a separately built clean source snapshot:
+belladonna equipment; three Farming league effects; cannon setup clipping;
+custom-item unused IDs; Blood Moon door routing; Barronite rewards; burying
+feedback; teleport-menu source data; and Whisperer entry. These are disclosed
+baseline failures, not cleared by the coin tests.
+
+Own-port native rendering QA used controlled spawned bags/knives and ordinary
+RNG: the menu exposed Open, and native default Open changed two Tiny bags to
+one and displayed947 coins. A28-slot inventory kept both bags and showed the
+space refusal. Native Drop freed one slot; retry consumed one bag and displayed
+961 coins. Screenshots and resulting server state were retained locally. The
+QA server saved and stopped gracefully; no live-game change was made.
+
+## Opening port reward bags
+
+`porttasks/Bags.PortTasks.js` handles the native inventory Open option. Its
+`Loot.PortTasks.js` unit reads `data/port-reward-bags.json`: five shared tables and
+the 95 obtainable size/destination combinations. Every courier task offered by
+the current boards has a supported reward-bag table. The other 55 cache combinations
+are unobtainable according to the Wiki; developer-created copies are refused intact.
+Bag awarding, coin bags and bounty tasks are unchanged.
+
+### Evidence and limits
+
+- [Port reward bag](https://oldschool.runescape.wiki/w/Port_reward_bag) and the
+  [Tiny](https://oldschool.runescape.wiki/w/Tiny_port_reward_bag),
+  [Small](https://oldschool.runescape.wiki/w/Small_port_reward_bag),
+  [Medium](https://oldschool.runescape.wiki/w/Medium_port_reward_bag),
+  [Large](https://oldschool.runescape.wiki/w/Large_port_reward_bag) and
+  [Huge](https://oldschool.runescape.wiki/w/Huge_port_reward_bag) size pages, fetched
+  29 October 2026, supply the shared/destination items, quantity ranges, noted
+  rewards and weights. One bag gives one drop, including its local-item roll in
+  the main table. Local probabilities are respectively 1/96, 1/84, 1/80, 2/155
+  and 1/75. Multiple local possibilities use the Wiki's conditional weights.
+- The Wiki quotes Mod Ash on 12 October for the local-item probabilities and on
+  13 October for Huge's dragon nails (4/225) and dragon metal sheet (1/225).
+  Shared decimal weights are scaled to integers without rounding; the local-item
+  chance remains part of the main-table roll. Entries the Wiki explicitly marks approximate retain
+  `approximate: true`; observed quantity ranges and other crowdsourced rates
+  remain Wiki evidence, not an independent measurement of OSRS's exact formulas.
+- The [pinned revision 241 object dump](https://github.com/Joshua-F/osrs-dumps/blob/6e5033af6215963581a51b348f452320ff18f0f6/config/dump.obj)
+  supplies item gamevals and cert identities, verified against the shipped
+  `osrs-241_2026-10-20` cache. Bag param 2645 is its size. The Tiny Cairn Isle and
+  Entrana Wiki quantity fields are blank: their bag params 2646/2647 identify
+  noted sapphire ×10 and noted big bones ×15 respectively. These are explicitly
+  marked with `quantitySource` in the data. Those two quantities are cache-backed
+  fallback values, not captured server rewards. Small Summer Shore's Wiki row
+  says Elkhorn frag ×3 '(noted)', but this cache has no noted frag: it is already
+  stackable, so the real `coral_elkhorn_frag` is used.
+- Searching the local RSProx index for `*port_task_lootsack*`, `*port*reward*`
+  and `*port*coin*` found no recordings. Other `*lootsack*` matches are Hunter
+  sacks, not port bags. No port-bag animation, sound, exact message or delay has
+  therefore been established by a recording. Opening is immediate, with a plain
+  reward message and no invented animation/sound. The refusal/message wording
+  and retry bookkeeping below are implementation choices.
+
+### Inventory, retries and persistence
+
+- Validate the live inventory widget, clicked slot, held Item identity and amount;
+  busy/trading, dead, teleporting and stale contexts cannot consume a bag.
+- Plan on a real Inventory copy, remove one bag from that exact slot, and ask
+  `getAddableAmount` whether the complete drop fits. This includes metadata stack
+  equality and the integer stack cap. The last bag can free its own output slot;
+  a remaining bag stack cannot. Refusal preserves all input and output amounts.
+- A refused roll is saved under `port-tasks:pending-bag-rewards`, keyed by bag ID,
+  and validated against the current loot table before use. Bank transfer and
+  logout cannot reroll it; a successful opening consumes one bag, delivers the
+  complete reward, clears that pending entry and refreshes inventory once.
+- There is no delayed task/session to replay or cancel. No item storage is
+  accessed by Open, so a Bank PIN guard is not applicable. Existing bank actions
+  retain their own guards. No generated data, core API or save schema changes.
+
+### Production path and verification
+
+Native canvas inventory Open → `ClientConnection.inventoryAction` →
+`ItemActionPacketListener.handleAction/handleFirstAction` → named
+`PluginManager` item-action hook → `openRewardBag` → real `Inventory` /
+`ItemContainer.getAddableAmount`, exact-slot deletion and add → inventory packet
+and message. `Item` owns metadata cloning; `ItemContainer` owns capacity, merges
+and caps; `PlayerSave` plus the registered persistence plugin owns the saved
+inventory and pending attribute. Unchanged inventory slots keep their Item
+identity; only the consumed bag and awarded/merged reward are mutated.
+
+`tests/port-reward-bags.test.cjs` loads every enabled plugin and actual startup /
+shutdown hooks, with real Player, Inventory and cache data. Network output is the
+only stubbed game boundary; deterministic RNG selects loot fixtures. It covers
+the native packet widget, all supported tables and quantity endpoints, last/full
+inventory, stack cap, metadata, exact-slot consumption, repeated/stale clicks,
+busy/dead states, real bank transfer and actual save-codec hydration. Source
+limits above still apply even when these checks pass.
+
+On base `3aa2ed9d2`, the feature/Sailing targeted run passed 120/120; independent
+feature/Bank/Trading/PlayerSave checks passed 129/129. The full server suite had
+10,038 passes and six failures out of 10,044. All six reproduced on a separately
+built clean `3aa2ed9d2` source snapshot: belladonna safe equipment, three Farming
+league effects, Barronite Mining rewards and bone-burying feedback.
+
+An independent reviewer reconciled all 254 loot rows and ran a further native
+inventory → real bank deposit → SQLite worker commit/disk read → hydration →
+bank withdrawal → blocked retry → deposit knife → retained reward scenario.
+The subsequent bag rolled fresh loot and the cleared pending state persisted;
+the emitted inventory snapshot bytes were checked. No runtime findings in those
+inspected paths. Review corrected the plan's stale persistence description and
+identified the Small Summer Shore noted-label discrepancy documented above.
+
+Own-port native-client QA used controlled spawned bags and knives, with ordinary
+RNG: rendered right-click Open consumed one Tiny Port Sarim bag and showed 49
+Iron cannonballs and the reward message. Left-click with 28 occupied slots kept
+both bags and displayed the inventory-space refusal. Dropping a knife through
+the native packet freed a slot; left-click then delivered 27 Bronze nails and
+consumed exactly one bag. The screenshot checks establish local client rendering
+and input routing, not a comparison with an OSRS port-bag recording.

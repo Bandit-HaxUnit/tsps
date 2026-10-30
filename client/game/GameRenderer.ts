@@ -335,6 +335,14 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         this.mapManager.cleanUp();
     }
 
+    /** Content definitions changed without replacing the cache or renderer. */
+    invalidateDefinitionCaches(): void {
+        // Loaded geometry/minimaps embed decoded types. The normal map loader
+        // rebuilds the current scene after its grid is cleared.
+        this.clearMaps();
+        this.clearMinimapSources();
+    }
+
     initCache(): void {
         if (!this.osrsClient.loadedCache) return;
         this.mapManager.init(
