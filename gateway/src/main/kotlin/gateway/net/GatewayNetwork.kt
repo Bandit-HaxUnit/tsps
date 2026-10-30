@@ -7,6 +7,7 @@ import net.rsprot.crypto.rsa.RsaKeyPair
 import net.rsprot.protocol.api.AbstractNetworkServiceFactory
 import net.rsprot.protocol.api.GameConnectionHandler
 import net.rsprot.protocol.api.js5.Js5GroupProvider
+import net.rsprot.protocol.api.handlers.ExceptionHandlers
 import net.rsprot.protocol.api.handlers.LoginHandlers
 import net.rsprot.protocol.common.client.OldSchoolClientType
 import net.rsprot.protocol.game.incoming.prot.DesktopGameMessageDecoderRepository
@@ -17,6 +18,10 @@ import net.rsprot.protocol.message.codec.MessageDecoder
 import net.rsprot.protocol.message.codec.incoming.GameMessageConsumerRepositoryBuilder
 import net.rsprot.protocol.message.codec.incoming.provider.DefaultGameMessageConsumerRepositoryProvider
 import net.rsprot.protocol.message.codec.incoming.provider.GameMessageConsumerRepositoryProvider
+import java.util.logging.Level
+import java.util.logging.Logger
+
+private val log: Logger = Logger.getLogger(GatewayNetwork::class.java.name)
 
 /** rsprot's network service on GATEWAY_PORT: JS5, login, ISAAC and the revision-241 codecs. */
 class GatewayNetwork(
@@ -38,6 +43,18 @@ class GatewayNetwork(
     override fun getJs5GroupProvider(): Js5GroupProvider = js5
 
     override fun getGameConnectionHandler(): GameConnectionHandler<GatewaySession> = connections
+
+    /** Channel errors close the client's connection; log why rather than let it go quietly. */
+    override fun getExceptionHandlers(): ExceptionHandlers<GatewaySession> =
+        ExceptionHandlers(
+            channelExceptionHandler = { ctx, cause ->
+                log.log(Level.WARNING, "client channel ${ctx.channel().remoteAddress()} failed", cause)
+                ctx.close()
+            },
+            incomingGameMessageConsumerExceptionHandler = { _, message, cause ->
+                log.log(Level.WARNING, "client packet $message failed", cause)
+            },
+        )
 
     /** The gateway only listens on loopback behind RSProx; proof of work would only slow logins. */
     override fun getLoginHandlers(): LoginHandlers = LoginHandlers(proofOfWorkProvider = NopProofOfWorkProvider)

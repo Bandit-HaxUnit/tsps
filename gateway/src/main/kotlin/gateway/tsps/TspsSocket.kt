@@ -52,11 +52,19 @@ class TspsSocket private constructor(
         override fun onBinary(webSocket: WebSocket, data: ByteBuffer, last: Boolean): CompletionStage<*>? {
             val bytes = ByteArray(data.remaining()).also(data::get)
             partial.writeBytes(bytes)
-            if (last) {
-                val message = partial.toByteArray()
-                partial.reset()
-                listener.onPackets(TspsCodec.split(message))
+            try {
+                if (last) {
+                    val message = partial.toByteArray()
+                    partial.reset()
+                    listener.onPackets(TspsCodec.split(message))
+                }
+            } catch (e: RuntimeException) {
+                // A frame the gateway can't split leaves it out of step with tsps for good.
+                listener.onClosed("unreadable tsps frame: ${e.message}")
+                webSocket.abort()
+                return null
             }
+            // Java's WebSocket delivers nothing more until asked.
             webSocket.request(1)
             return null
         }

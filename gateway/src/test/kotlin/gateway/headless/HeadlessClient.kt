@@ -91,6 +91,22 @@ class HeadlessClient(private val host: String, private val port: Int) {
     ) : AutoCloseable {
         private val output = DataOutputStream(socket.getOutputStream())
 
+        /** The real client sends NO_TIMEOUT every few seconds; rsprot drops a silent client. */
+        private val keepAlive =
+            Thread {
+                try {
+                    while (!socket.isClosed) {
+                        Thread.sleep(KEEPALIVE_MS)
+                        sendFixed(NO_TIMEOUT, ByteArray(0))
+                    }
+                } catch (e: Exception) {
+                    // The socket closed.
+                }
+            }.apply {
+                isDaemon = true
+                start()
+            }
+
         /** A var-byte client packet, opcode enciphered as the client does. */
         fun sendVarByte(opcode: Int, payload: ByteArray) =
             synchronized(output) {
@@ -150,6 +166,17 @@ class HeadlessClient(private val host: String, private val port: Int) {
                 Unpooled.buffer().toJagByteBuf().apply {
                     pjstr(name)
                     huffman.encode(this, text)
+                }.buffer.let { it.array().copyOf(it.writerIndex()) },
+            )
+
+        /** OPNPC2 (Attack on most NPCs). */
+        fun npcOp2(index: Int) =
+            sendFixed(
+                OPNPC2,
+                Unpooled.buffer().toJagByteBuf().apply {
+                    p1Alt1(0) // ctrl
+                    p1Alt3(0) // subop
+                    p2Alt3(index)
                 }.buffer.let { it.array().copyOf(it.writerIndex()) },
             )
 
@@ -311,6 +338,9 @@ class HeadlessClient(private val host: String, private val port: Int) {
         const val JS5_BLOCK = 512
         const val LOGIN_OK = 2
         const val MOVE_GAMECLICK = 55
+        const val NO_TIMEOUT = 75
+        const val KEEPALIVE_MS = 5_000L
+        const val OPNPC2 = 44
         const val FRIENDLIST_ADD = 14
         const val MESSAGE_PRIVATE = 50
         const val MESSAGE_PUBLIC = 49

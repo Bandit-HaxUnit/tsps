@@ -22,7 +22,11 @@ import net.rsprot.protocol.game.outgoing.sound.MidiSongV2
 import net.rsprot.protocol.game.outgoing.sound.SynthSound
 import net.rsprot.protocol.game.outgoing.specific.LocAnimSpecific
 import net.rsprot.protocol.game.outgoing.specific.MapAnimSpecific
-import net.rsprot.protocol.game.outgoing.zone.header.UpdateZonePartialFollows
+import net.rsprot.protocol.game.outgoing.specific.ProjAnimSpecificV4
+import net.rsprot.protocol.api.util.ZonePartialEnclosedCacheBuffer
+import net.rsprot.protocol.common.client.OldSchoolClientType
+import net.rsprot.protocol.game.outgoing.zone.header.UpdateZonePartialEnclosed
+import net.rsprot.protocol.message.ZoneProt
 import net.rsprot.protocol.game.outgoing.zone.payload.LocAddChangeV2
 import net.rsprot.protocol.game.outgoing.zone.payload.LocDel
 import net.rsprot.protocol.game.outgoing.zone.payload.SoundArea
@@ -33,13 +37,30 @@ import net.rsprot.protocol.internal.game.outgoing.info.CoordGrid
  * The world around the player: locs, tile effects, sound, music, camera and hints.
  *
  * tsps sends loc changes and area sounds with absolute tiles; OSRS puts them in a zone, so
- * each goes behind an UPDATE_ZONE_PARTIAL_FOLLOWS for its zone in the build area.
+ * they're gathered per zone of the build area and sent enclosed at the end of the tick.
  */
 class World(private val send: (OutgoingGameMessage) -> Unit) {
     private var sceneX = 0
     private var sceneZ = 0
 
+    /** This tick's zone payloads, by zone; revision 241 only takes some of them enclosed. */
+    private val pending = LinkedHashMap<Triple<Int, Int, Int>, MutableList<ZoneProt>>()
+    private val zoneBuffers = ZonePartialEnclosedCacheBuffer(listOf(OldSchoolClientType.DESKTOP))
+
+    /** Sends this tick's zone updates, one UPDATE_ZONE_PARTIAL_ENCLOSED per zone. */
+    fun flushZones() {
+        for ((zone, payloads) in pending) {
+            val (zoneX, zoneZ, level) = zone
+            val payload = zoneBuffers.computeZoneForClient(OldSchoolClientType.DESKTOP, payloads)
+            send(UpdateZonePartialEnclosed(zoneX, zoneZ, level, payload))
+        }
+        pending.clear()
+        zoneBuffers.releaseBuffers()
+    }
+
     fun rebuild(zoneX: Int, zoneZ: Int) {
+        // Updates for the old scene would land on the wrong zones of the new one.
+        pending.clear()
         sceneX = (zoneX - SCENE_RADIUS_ZONES) shl 3
         sceneZ = (zoneZ - SCENE_RADIUS_ZONES) shl 3
     }
@@ -128,6 +149,7 @@ class World(private val send: (OutgoingGameMessage) -> Unit) {
                 send(UpdateRebootTimerV2(centis / CENTIS_PER_TICK, UpdateRebootTimerV2.IgnoreUpdateMessage))
             }
             TspsServerPacket.CAMERA_CONTROL -> camera(packet)
+            TspsServerPacket.PROJECTILES -> repeat(reader.u16()) { projectile(reader) }
             else -> return false
         }
         return true
@@ -200,16 +222,48 @@ class World(private val send: (OutgoingGameMessage) -> Unit) {
         }
     }
 
+    /** One `encodeProjectiles` entry: absolute tiles, heights already ×4, cycles, and the actors it's locked to. */
+    private fun projectile(reader: gateway.tsps.TspsReader) {
+        val id = reader.u16()
+        val startX = reader.u16()
+        val startZ = reader.u16()
+        val startLevel = reader.u8()
+        val startHeight = reader.u16()
+        val endX = reader.u16()
+        val endZ = reader.u16()
+        val endLevel = reader.u8()
+        val endHeight = reader.u16()
+        val slope = reader.u8()
+        val progress = reader.u16()
+        val startCycle = reader.u16()
+        val endCycle = reader.u16()
+        val source = actor(reader.u8(), reader.u16())
+        val target = actor(reader.u8(), reader.u16())
+        send(
+            ProjAnimSpecificV4(
+                id, startHeight, endHeight, startCycle, endCycle, slope, progress,
+                startX, startZ, startLevel, source, endX, endZ, endLevel, target,
+            ),
+        )
+    }
+
+    /** rsprot's actor lock: a player is -(index + 1), an NPC index + 1, nothing 0. */
+    private fun actor(kind: Int, index: Int) =
+        when (kind) {
+            ACTOR_PLAYER -> -(index + 1)
+            ACTOR_NPC -> index + 1
+            else -> 0
+        }
+
     private fun tile(reader: gateway.tsps.TspsReader): CoordGrid {
         val x = reader.u16()
         val z = reader.u16()
         return CoordGrid(reader.u8() and 3, x, z)
     }
 
-    private fun zone(x: Int, z: Int, level: Int, payload: OutgoingGameMessage) {
+    private fun zone(x: Int, z: Int, level: Int, payload: ZoneProt) {
         if (!inScene(x, z)) return
-        send(UpdateZonePartialFollows((x - sceneX) and 7.inv(), (z - sceneZ) and 7.inv(), level))
-        send(payload)
+        pending.getOrPut(Triple((x - sceneX) and 7.inv(), (z - sceneZ) and 7.inv(), level)) { ArrayList() } += payload
     }
 
     private fun inScene(x: Int, z: Int) = x - sceneX in 0 until SCENE_SIZE && z - sceneZ in 0 until SCENE_SIZE
@@ -221,6 +275,9 @@ class World(private val send: (OutgoingGameMessage) -> Unit) {
         const val MAX_BYTE = 255
         const val TILE_TARGET = 2
         const val CENTIS_PER_TICK = 60
+
+        const val ACTOR_PLAYER = 1
+        const val ACTOR_NPC = 2
 
         const val HINT_NPC = 1
         const val HINT_TILE = 2

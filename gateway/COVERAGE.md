@@ -18,7 +18,7 @@ sessions, so the browser wire format doesn't change.
 | 4 LOGOUT_RESPONSE | LOGOUT / MESSAGE_GAME | mapped | 4 | a refusal becomes a game message |
 | 6 PLUGIN_MESSAGE | — | dropped | 1 | plugin features (quest helper, voice, pest control) |
 | 20 PLAYER_SYNC | PLAYER_INFO | mapped | 2–3 | every player tsps shows gets an avatar in the session's world; update blocks become extended info; worn slots hide by the cache's wearpos2/3 |
-| 21 NPC_INFO | NPC_INFO | mapped | 3 | type changes and jumps re-add the NPC (as tsps does); model customisation and NPC tint are todo (need the cache NPC model list / a native-bit field) |
+| 21 NPC_INFO | NPC_INFO | mapped | 3, 8 | tsps's remove-and-re-add (jump, type change) becomes a teleport/setId of the same avatar; rsprot's own range culling is off, tsps decides visibility. Model customisation and NPC tint are todo (cache NPC model list / a native-bit field) |
 | 22 ANIM | — | dropped | 1 | base anims are in appearance |
 | 23 MOVEMENT_POSITION | — | dropped | 2 | sub-tile movement has no OSRS form |
 | 40 / 41 / 44 VARP_SMALL / LARGE / LONG | VARP_SMALL / LARGE / LONG | mapped | 4 | ids ≥ the cache varp count (5996) dropped |
@@ -29,9 +29,9 @@ sessions, so the browser wire format doesn't change.
 | 70 / 71 SKILLS_SNAPSHOT / DELTA | UPDATE_STAT_V2 per skill | mapped | 4 | the combat level goes to varbit 13027, which the browser sets itself |
 | 81 RUN_ENERGY | UPDATE_RUNENERGY, UPDATE_RUNWEIGHT, varp 173 | mapped | 4–5 | energy in 1% steps; weight is worked out from cache obj weights over inventory and worn items, since tsps never sends it |
 | 83 SPOT_ANIM | MAP_ANIM_SPECIFIC | mapped | 7 | tile spot anims (actor ones are in the sync blocks) |
-| 84 PROJECTILES | PROJANIM_SPECIFIC_V4 | todo | 8 | |
+| 84 PROJECTILES | PROJANIM_SPECIFIC_V4 | mapped | 8 | heights pass through (tsps already ×4); actors locked as rsprot expects (player -(i+1), NPC i+1) |
 | 87 DESTINATION | SET_MAP_FLAG_V2 | mapped | 2 | 0,0 clears the flag |
-| 88 PLAYER_OPTION | SET_PLAYER_OP | mapped | 3 | plus Trade with (op 2) and Follow (op 3) at login, which the browser adds itself; Attack in PvP comes from tsps |
+| 88 PLAYER_OPTION | SET_PLAYER_OP | mapped | 3, 8 | plus Trade with (op 2) and Follow (op 3) at login, and Attack (op 1) while the wilderness varbit (5963) is set, which the browser adds itself |
 | 89 HINT_ARROW | HINT_ARROW | mapped | 7 | npc, tile, player, world entity, reset; a tile arrow's level scope is lost |
 | 90 ATTACK_TIMER | — | dropped | 8 | tsps HUD |
 | 100 / 101 WIDGET_OPEN / CLOSE | IF_OPENSUB / IF_CLOSESUB | mapped | 4 | modal opens go to the main modal area and are remembered for the close; non-modal ones are dropped (tsps's browser mounts nothing for them either) |

@@ -12,6 +12,8 @@ dependencies {
     implementation(libs.rsprot.api)
     implementation(libs.rsprot.desktop)
     implementation(libs.commons.compress)
+    // rsprot logs through SLF4J; without a binding its errors (closed channels included) vanish.
+    runtimeOnly(libs.slf4j.simple)
     testImplementation("net.rsprox:osrs-241")
     testImplementation("net.rsprox:protocol")
     testImplementation("net.rsprox:cache-api")

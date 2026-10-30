@@ -7,9 +7,8 @@ import net.rsprot.protocol.game.outgoing.camera.CamMoveToCyclesV3
 import net.rsprot.protocol.game.outgoing.camera.util.CameraEaseFunction
 import net.rsprot.protocol.game.outgoing.misc.client.HintArrow
 import net.rsprot.protocol.game.outgoing.sound.SynthSound
-import net.rsprot.protocol.game.outgoing.zone.header.UpdateZonePartialFollows
-import net.rsprot.protocol.game.outgoing.zone.payload.LocAddChangeV2
-import net.rsprot.protocol.game.outgoing.zone.payload.SoundArea
+import net.rsprot.protocol.game.outgoing.specific.ProjAnimSpecificV4
+import net.rsprot.protocol.game.outgoing.zone.header.UpdateZonePartialEnclosed
 import net.rsprot.protocol.message.OutgoingGameMessage
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -25,24 +24,25 @@ class WorldTest {
         val x = 3222
         val z = 3218
         world.handle(packet(TspsServerPacket.LOC_ADD_CHANGE, TspsWriter().u16(DOOR).u16(x).u16(z).u8(0).u8((0 shl 2) or 1)))
-        val header = sent[0] as UpdateZonePartialFollows
+        // Zone updates wait for the end of the tick, then go one enclosed packet per zone.
+        assertTrue(sent.isEmpty())
+        world.flushZones()
+        val zone = sent.single() as UpdateZonePartialEnclosed
         val sceneX = (LUMBRIDGE_ZONE_X - 6) shl 3
         val sceneZ = (LUMBRIDGE_ZONE_Z - 6) shl 3
-        assertEquals((x - sceneX) and 7.inv(), header.zoneX)
-        assertEquals((z - sceneZ) and 7.inv(), header.zoneZ)
-        val loc = sent[1] as LocAddChangeV2
-        assertEquals(DOOR, loc.id)
-        assertEquals(x and 7, loc.xInZone)
-        assertEquals(z and 7, loc.zInZone)
-        assertEquals(1, loc.rotation)
+        assertEquals((x - sceneX) and 7.inv(), zone.zoneX)
+        assertEquals((z - sceneZ) and 7.inv(), zone.zoneZ)
+        assertTrue(zone.payload.readableBytes() > 0)
     }
 
     @Test
     fun `sounds are area sounds with a tile and synth sounds without one`() {
         world.handle(packet(TspsServerPacket.SOUND, TspsWriter().u16(SOUND).u8(1).u16(3222).u16(3218).u8(0).u8(1).u16(0).u8(5).u8(0)))
         world.handle(packet(TspsServerPacket.SOUND, TspsWriter().u16(SOUND).u8(0).u8(1).u16(0).u8(0).u8(0)))
-        assertTrue(sent[0] is UpdateZonePartialFollows && sent[1] is SoundArea)
-        assertEquals(SOUND, (sent[2] as SynthSound).id)
+        assertEquals(SOUND, (sent.single() as SynthSound).id)
+        // Revision 241 only takes SOUND_AREA inside an enclosed zone update.
+        world.flushZones()
+        assertTrue(sent.last() is UpdateZonePartialEnclosed)
     }
 
     @Test
@@ -55,6 +55,19 @@ class WorldTest {
         assertEquals(NPC_INDEX, ((sent.last() as HintArrow).type as HintArrow.NpcHintArrow).index)
     }
 
+    @Test
+    fun `projectiles lock to their actors with rsprot's index convention`() {
+        val projectile =
+            TspsWriter().u16(1).u16(PROJECTILE).u16(3222).u16(3218).u8(0).u16(172).u16(3225).u16(3218).u8(0).u16(124)
+                .u8(16).u16(64).u16(51).u16(75).u8(1).u16(PLAYER_INDEX).u8(2).u16(NPC_INDEX)
+        world.handle(packet(TspsServerPacket.PROJECTILES, projectile))
+        val sent = sent.single() as ProjAnimSpecificV4
+        assertEquals(PROJECTILE, sent.id)
+        assertEquals(-(PLAYER_INDEX + 1), sent.sourceIndex)
+        assertEquals(NPC_INDEX + 1, sent.targetIndex)
+        assertEquals(172 to 124, sent.startHeight to sent.endHeight)
+    }
+
     /** A tsps packet with [payload]'s bytes, as TspsCodec.split would hand it over. */
     private fun packet(opcode: Int, payload: TspsWriter) = TspsPacket(opcode, payload.body())
 
@@ -64,5 +77,7 @@ class WorldTest {
         const val DOOR = 1543
         const val SOUND = 2739
         const val NPC_INDEX = 42
+        const val PLAYER_INDEX = 7
+        const val PROJECTILE = 91
     }
 }

@@ -184,8 +184,25 @@ class GatewaySession(
                 if (ok) send(Logout) else if (reason.isNotEmpty()) send(MessageGame(GAME_MESSAGE, reason))
             }
             TspsServerPacket.TICK -> groundItems.tick(packet.reader().i32())
-            else -> if (translators.none { it(packet) }) DropCounter.down(packet.opcode)
+            else -> {
+                if (translators.none { it(packet) }) DropCounter.down(packet.opcode)
+                // Varbits also arrive inside interface and script bundles.
+                attackOption()
+            }
         }
+    }
+
+    private var attackShown = false
+
+    /**
+     * The browser offers Attack on players while the wilderness varbit is set; tsps only sends
+     * PLAYER_OPTION for other options, so the gateway follows the varbit itself.
+     */
+    private fun attackOption() {
+        val inWilderness = varps.getVarbit(IN_WILDERNESS_VARBIT) == 1
+        if (inWilderness == attackShown) return
+        attackShown = inWilderness
+        send(SetPlayerOp(ATTACK_OP, true, if (inWilderness) "Attack" else null))
     }
 
     private fun onRebuild(rebuild: MapRebuild) {
@@ -229,6 +246,11 @@ class GatewaySession(
         val scene = loginScene ?: MapRebuild.Normal(tile.x ushr 3, tile.z ushr 3)
         infos.updateRootBuildArea(scene.zoneX - SCENE_RADIUS_ZONES, scene.zoneZ - SCENE_RADIUS_ZONES)
         Appearance.apply(infos.playerInfo.avatar.extendedInfo, handshake)
+        // tsps decides who this player sees; the session's world only holds those avatars, so
+        // rsprot's own distance rules mustn't drop any of them.
+        infos.playerInfo.avatar.forceResizeRange(Int.MAX_VALUE)
+        infos.npcInfo.setRenderDistance(SCENE_RENDER_DISTANCE)
+        infos.npcInfo.setZoneSearchRadius(SCENE_RADIUS_ZONES + 1)
         self = infos
         mirror = EntityMirror(world, context.objs, infos, handshake.index, items::selfAppearance)
 
@@ -244,7 +266,10 @@ class GatewaySession(
                 userHash = 0,
             )
         val session = responses.writeSuccessfulResponse(ok, block)
-        session.setDisconnectionHook { run(::close) }
+        session.setDisconnectionHook {
+            log.info("${handshake.name}: the client disconnected")
+            run(::close)
+        }
         this.session = session
         // REBUILD_LOGIN is always a static map; an instance follows as its own rebuild.
         session.queue(RebuildLoginV2(scene.zoneX, scene.zoneZ, MapRebuild.NO_WORLD_AREA, infos.playerInfo))
@@ -264,13 +289,19 @@ class GatewaySession(
         val session = session ?: return
         val self = self ?: return
         session.processIncomingPackets(this)
+        worldUpdates.flushZones()
         world.update()
         val root = self.getPackets().rootWorldInfoPackets
         session.queue(root.activeWorld)
-        root.worldEntityInfo.getOrNull()?.let(session::queue)
-        root.playerInfo.getOrNull()?.let(session::queue)
+        // A failed info packet leaves the client's entity state behind for good (rsprot says to
+        // kick the player), so it ends the session with the reason.
+        for (result in listOf(root.worldEntityInfo, root.playerInfo, root.npcInfo)) {
+            result.exceptionOrNull()?.let { throw IllegalStateException("info packet failed", it) }
+        }
+        session.queue(root.worldEntityInfo.getOrNull()!!)
+        session.queue(root.playerInfo.getOrNull()!!)
         session.queue(root.npcUpdateOrigin)
-        root.npcInfo.getOrNull()?.let(session::queue)
+        session.queue(root.npcInfo.getOrNull()!!)
         session.queue(ServerTickEnd)
         session.flush()
         keepAlive()
@@ -304,7 +335,7 @@ class GatewaySession(
         executor.execute {
             try {
                 task()
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 log.log(Level.SEVERE, "${block.username}: session failed", e)
                 if (state == State.IN_GAME) close() else fail(LoginResponse.UnknownReplyFromLoginServer)
             }
@@ -330,7 +361,10 @@ class GatewaySession(
         const val STAFF_ADMINISTRATOR = 2
         const val PING_INTERVAL_MS = 5_000L
         const val SCENE_RADIUS_ZONES = 6
+        const val SCENE_RENDER_DISTANCE = 52
         const val TRADE_OP = 2
+        const val ATTACK_OP = 1
+        const val IN_WILDERNESS_VARBIT = 5963
         const val RUN_VARP = 173
         const val RUN_ENERGY_PER_PERCENT = 100
         const val GAME_MESSAGE = 0

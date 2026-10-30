@@ -55,14 +55,22 @@ class EntityMirror(
     }
 
     fun applyNpcs(frame: NpcSync.Frame, level: Int) {
+        // tsps removes and re-adds an NPC in one frame for a jump or a type change; OSRS keeps
+        // the NPC and teleports or transforms it, so those pairs don't touch the avatar list.
+        val readded = frame.changes.filterIsInstance<NpcSync.Change.Added>().map { it.index }.toSet()
         for (change in frame.changes) {
             when (change) {
-                is NpcSync.Change.Removed -> npcs.remove(change.index)?.let(world::releaseNpc)
+                is NpcSync.Change.Removed -> if (change.index !in readded) npcs.remove(change.index)?.let(world::releaseNpc)
                 is NpcSync.Change.Added -> {
-                    npcs.remove(change.index)?.let(world::releaseNpc)
                     val npc = change.npc
                     npc.level = level
-                    npcs[change.index] = world.allocNpc(change.index, npc.type, level, npc.x, npc.z, change.direction)
+                    val existing = npcs[change.index]
+                    if (existing != null) {
+                        existing.setId(npc.type)
+                        existing.teleport(level, npc.x, npc.z, change.jump)
+                    } else {
+                        npcs[change.index] = world.allocNpc(change.index, npc.type, level, npc.x, npc.z, change.direction)
+                    }
                 }
                 is NpcSync.Change.Moved -> {
                     val avatar = npcs[change.index] ?: continue
