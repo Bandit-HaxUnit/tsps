@@ -14,7 +14,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [A Kingdom Divided](a-kingdom-divided/README.md) | untested |  |  |  |  |
 | [A Night at the Theatre](a-night-at-the-theatre/README.md) | untested |  |  |  |  |
 | [A Porcine of Interest](a-porcine-of-interest/README.md) | ✅ passed | 2026-10-23 | agent |  | 1 |
-| [A Ruff Situation](a-ruff-situation/README.md) | ✅ passed | 2026-10-25 | agent |  | 1 |
+| [A Ruff Situation](a-ruff-situation/README.md) | ✅ passed | 2026-10-30 | agent | claude-haiku-5-5 |  |
 | A Soul's Bane | untested |  |  |  |  |
 | [A Tail of Two Cats](a-tail-of-two-cats/README.md) | untested |  |  |  |  |
 | [A Taste of Hope](taste-of-hope/README.md) | untested |  |  |  |  |
