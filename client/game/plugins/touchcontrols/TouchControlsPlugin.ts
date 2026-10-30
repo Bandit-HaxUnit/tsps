@@ -288,9 +288,14 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
         return { focus: this.focus, style: { color: config.hoverColor, alpha: 0.45, width: 2 } };
     }
 
+    /**
+     * Switched off in the hub. Ticks stop with it, but the HUD and outline hooks keep being
+     * called, so publish the hidden state now.
+     */
     protected override async shutDown(): Promise<void> {
         this.release();
         this.focus = undefined;
+        this.publish();
     }
 
     private stopWalking(): void {
@@ -535,7 +540,7 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
         // On/Off beat detection and the ?touch= query override; Default keeps both.
         const padOn =
             this.padMode === PadMode.ON ? true : this.padMode === PadMode.OFF ? false : this.touchDevice;
-        const visible = padOn && this.client.isLoggedIn();
+        const visible = this.isEnabled() && padOn && this.client.isLoggedIn();
         const action = visible && this.focus && this.canMove()
             ? { kind: this.focus.kind, options: this.menuOrder(this.focus) } : undefined;
         const stonesInset = visible ? this.stonesInset() : 0;

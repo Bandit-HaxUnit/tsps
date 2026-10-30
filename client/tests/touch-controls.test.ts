@@ -347,4 +347,22 @@ const refusal = (fromX: number, fromY: number, toX: number, toY: number): Contin
     assert.equal(plugin.getUiState().action, undefined, "stepping off drops the pile");
 }
 
-console.log("touch controls plugin test passed");
+// Switched off in the plugin hub (enabled state, then stop), the joystick and button go and a
+// held stick stops; ticks don't arrive while stopped.
+void (async () => {
+    const { client, stops } = makeClient();
+    const plugin = new TouchControlsPlugin(client);
+    await plugin.start();
+    plugin.steer(1, 0);
+    plugin.onClientTick();
+    assert.equal(plugin.getUiState().visible, true);
+    plugin.setEnabledState(false);
+    await plugin.stop();
+    assert.equal(plugin.getUiState().visible, false, "hidden when disabled");
+    assert.equal(stops.length, 1, "the walk stops");
+    plugin.setEnabledState(true);
+    await plugin.start();
+    plugin.onClientTick();
+    assert.equal(plugin.getUiState().visible, true, "back when enabled again");
+    console.log("touch controls plugin test passed");
+})();
