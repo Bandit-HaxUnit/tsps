@@ -5,7 +5,7 @@ Every quest the server registers, with the latest result recorded in its page he
 test a quest is in [server/docs/agents/quest-testing.md](../../server/docs/agents/quest-testing.md);
 how to record the result is in [_template/README.md](_template/README.md).
 
-185 quests · ✅ passed: 30 · ⚠️ passed with issues: 19 · 🔄 in progress: 6 · ❌ failed: 1 · 🔁 needs recheck: 4 · untested: 125
+185 quests · ✅ passed: 30 · ⚠️ passed with issues: 20 · 🔄 in progress: 6 · ❌ failed: 1 · 🔁 needs recheck: 4 · untested: 124
 
 "Needs recheck" means the quest's plugin has changed since the commit its result was proven on.
 
@@ -29,7 +29,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [Black Knights' Fortress](black-knights-fortress/README.md) | ⚠️ passed with issues | 2026-10-25 | community |  | 1 |
 | [Bone Voyage](bone-voyage/README.md) | ✅ passed |  | agent |  |  |
 | [Cabin Fever](cabin-fever/README.md) | untested |  |  |  |  |
-| Children of the Sun | untested |  |  |  |  |
+| [Children of the Sun](children-of-the-sun/README.md) | ⚠️ passed with issues | 2026-10-30 | agent | grok-4.7 | 6 |
 | [Client of Kourend](client-of-kourend/README.md) | ✅ passed | 2026-10-23 | agent |  | 1 |
 | [Clock Tower](clock-tower/README.md) | ✅ passed | 2026-10-23 | agent |  |  |
 | Cold War | untested |  |  |  |  |
