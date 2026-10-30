@@ -204,6 +204,7 @@ module.exports = function registerFallenFromGraceQuest(api) {
   const GOTR_MODEL_NONE = -1;
   const CAVE_OPENING_COLOUR = 1052688;
   const CAVE_OPENING_SOUND = 10747;
+  const CAVE_OPENING_CLOSE_TICKS = 5;
   const CATHEDRAL_DOOR_OBJECT_IDS = new Set([62368, 62369]);
   const CREVICE_OBJECT_ID = ObjectIdentifiers.CREVICE_57; // 62257 Squeeze-through
   // ffg_corpse_keenan (no identifier: the raw multi-loc is named "null" and resolves to
@@ -1060,11 +1061,14 @@ module.exports = function registerFallenFromGraceQuest(api) {
 
   function caveOpeningEffect(player) {
     const out = player.getPacketSender();
-    out.sendSubInterface(OVERLAY_ATMOSPHERE, GOTR_OVERLAY, 1, {
+    // Script 5985 only clears the effect's children; the mount itself must be closed, or a later
+    // layout change replays 5984 and leaves the rectangle covering the view.
+    const mount = out.mountSubInterface(OVERLAY_ATMOSPHERE, GOTR_OVERLAY, 1, {
       postScripts: [{ scriptId: SCRIPT_GOTR_PORTAL, args: [GOTR_MODEL_NONE, CAVE_OPENING_COLOUR] }],
     });
     out.sendSoundEffect(CAVE_OPENING_SOUND, 1, 0);
     later(player, 2, () => out.sendClientScript(SCRIPT_GOTR_REMOVE));
+    later(player, CAVE_OPENING_CLOSE_TICKS, () => out.closeSubInterfaceMount(mount));
   }
 
   /** One captured transition: move the player's boat to the cavern mooring and stay aboard. */
