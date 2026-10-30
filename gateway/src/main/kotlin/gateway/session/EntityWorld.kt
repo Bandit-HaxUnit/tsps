@@ -20,6 +20,7 @@ import net.rsprot.protocol.game.outgoing.info.playerinfo.PlayerAvatarFactory
 import net.rsprot.protocol.game.outgoing.info.playerinfo.PlayerInfoProtocol
 import net.rsprot.protocol.game.outgoing.info.worker.SingleThreadProtocolWorker
 import net.rsprot.protocol.game.outgoing.info.worldentityinfo.WorldEntityAvatarExceptionHandler
+import net.rsprot.protocol.game.outgoing.info.worldentityinfo.WorldEntityAvatar
 import net.rsprot.protocol.game.outgoing.info.worldentityinfo.WorldEntityAvatarFactory
 import net.rsprot.protocol.game.outgoing.info.worldentityinfo.WorldEntityProtocol
 import net.rsprot.protocol.internal.client.ClientTypeMap
@@ -37,6 +38,7 @@ import net.rsprot.protocol.internal.game.outgoing.info.util.ZoneIndexStorage
  */
 class EntityWorld(allocator: ByteBufAllocator, huffman: HuffmanCodecProvider) {
     val npcAvatars: NpcAvatarFactory
+    private val worldEntityAvatars: WorldEntityAvatarFactory
     private val protocols: InfoProtocols
 
     init {
@@ -44,7 +46,7 @@ class EntityWorld(allocator: ByteBufAllocator, huffman: HuffmanCodecProvider) {
         val desktop = OldSchoolClientType.COUNT
 
         val worldEntityZones = ZoneIndexStorage(ZoneIndexStorage.WORLDENTITY_CAPACITY)
-        val worldEntityAvatars =
+        worldEntityAvatars =
             WorldEntityAvatarFactory(allocator, worldEntityZones, listOf(WorldEntityAvatarExtendedInfoDesktopWriter()), huffman)
         val worldEntities =
             WorldEntityProtocol(
@@ -96,6 +98,48 @@ class EntityWorld(allocator: ByteBufAllocator, huffman: HuffmanCodecProvider) {
 
     fun releaseNpc(avatar: NpcAvatar) = npcAvatars.release(avatar)
 
+    /**
+     * A boat drawn on [level] at fine [fineX], [fineZ], its deck [sizeX] × [sizeZ] zones from
+     * [zoneX], [zoneZ]. tsps sends neither owner nor deck levels: rsprot puts the world the
+     * player is on first whoever owns it, and deck actors stand on level 0.
+     */
+    fun allocWorldEntity(
+        index: Int,
+        configId: Int,
+        sizeX: Int,
+        sizeZ: Int,
+        zoneX: Int,
+        zoneZ: Int,
+        level: Int,
+        fineX: Int,
+        fineZ: Int,
+        angle: Int,
+    ): WorldEntityAvatar =
+        worldEntityAvatars.alloc(
+            index,
+            configId,
+            NO_OWNER,
+            sizeX,
+            sizeZ,
+            zoneX,
+            zoneZ,
+            minLevel = 0,
+            maxLevel = MAX_LEVEL,
+            fineX = fineX,
+            fineZ = fineZ,
+            projectedLevel = level,
+            activeLevel = DECK_LEVEL,
+            angle = angle,
+        )
+
+    fun releaseWorldEntity(avatar: WorldEntityAvatar) = worldEntityAvatars.release(avatar)
+
     /** Computes this tick's info packets; read them afterwards with [Infos.getPackets]. */
     fun update() = protocols.update()
+
+    private companion object {
+        const val NO_OWNER = 0
+        const val MAX_LEVEL = 3
+        const val DECK_LEVEL = 0
+    }
 }

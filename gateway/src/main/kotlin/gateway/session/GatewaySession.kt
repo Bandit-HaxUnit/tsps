@@ -64,13 +64,14 @@ class GatewaySession(
     private var session: Session<GatewaySession>? = null
 
     private val world = EntityWorld(context.allocator, context.huffman)
+    private val boats = WorldEntities(world)
     private var self: Infos? = null
     private val varps = VarpMirror(context.vars)
     private val items = Items(context.objs, ::send)
     private val groundItems = GroundItems(::send)
     private val stockMarket = StockMarket(::send)
     private val social = Social(::send)
-    private val worldUpdates = World(::send)
+    private val worldUpdates = World(::send, boats::deckAt)
     private val trade by lazy { Trade(::send, { tsps.send(it) }, items::carried) }
 
     /** Everything that turns tsps messages into OSRS packets, asked in turn. */
@@ -86,8 +87,9 @@ class GatewaySession(
             interceptCount = { trade.count(it) },
         ) { tsps.send(it) }
     private val players = PlayerSync()
-    private val npcs = NpcSync()
+    private val npcs = NpcSync { index -> boats.deck(index)?.let { it.baseX to it.baseZ } }
     private var mirror: EntityMirror? = null
+    /** The player's level in the main world; on a deck, the one they boarded from. */
     private var level = 0
 
     /** The scene tsps built before the client logged in; REBUILD_LOGIN takes its place. */
@@ -170,6 +172,8 @@ class GatewaySession(
                 mirror?.applyNpcs(frame, level)
                 if (state == State.IN_GAME) endTick()
             }
+            TspsServerPacket.REBUILD_WORLDENTITY -> boats.onRebuild(packet)
+            TspsServerPacket.WORLDENTITY_INFO -> boats.onInfo(packet, level)
             TspsServerPacket.CHAT_MESSAGE -> onChat(TspsChatMessage.decode(packet))
             TspsServerPacket.PLAYER_OPTION -> {
                 val reader = packet.reader()
@@ -233,7 +237,7 @@ class GatewaySession(
 
     private fun onPlayerSync(frame: PlayerSync.Frame) {
         val tile = frame.tiles[frame.localIndex] ?: return
-        level = tile.level
+        if (boats.deckAt(tile.x, tile.z) == null) level = tile.level
         if (self == null) {
             if (state != State.AWAITING_SCENE) return
             enterGame(tile)
@@ -265,6 +269,7 @@ class GatewaySession(
         infos.playerInfo.avatar.forceResizeRange(Int.MAX_VALUE)
         infos.npcInfo.setRenderDistance(SCENE_RENDER_DISTANCE)
         infos.npcInfo.setZoneSearchRadius(SCENE_RADIUS_ZONES + 1)
+        infos.worldEntityInfo.updateRenderDistance(BOAT_RENDER_DISTANCE)
         self = infos
         mirror = EntityMirror(world, context.objs, context.npcTypes, infos, handshake.index, items::selfAppearance)
 
@@ -313,16 +318,28 @@ class GatewaySession(
         val session = session ?: return
         val self = self ?: return
         session.processIncomingPackets(this)
-        worldUpdates.flushZones()
         world.update()
-        val root = self.getPackets().rootWorldInfoPackets
-        session.queue(root.activeWorld)
+        val packets = self.getPackets()
+        val root = packets.rootWorldInfoPackets
         // A failed info packet leaves the client's entity state behind for good (rsprot says to
         // kick the player), so it ends the session with the reason.
-        for (result in listOf(root.worldEntityInfo, root.playerInfo, root.npcInfo)) {
+        for (result in listOf(root.worldEntityInfo, root.playerInfo, root.npcInfo) + packets.activeWorlds.map { it.npcInfo }) {
             result.exceptionOrNull()?.let { throw IllegalStateException("info packet failed", it) }
         }
+        // The boats first, then each boat's world (its deck scene when new, its zones and NPCs),
+        // then the main world's zones, players and NPCs.
+        session.queue(root.activeWorld)
         session.queue(root.worldEntityInfo.getOrNull()!!)
+        for (boat in packets.activeWorlds) {
+            session.queue(boat.activeWorld)
+            if (boat.added) boats.deck(boat.worldId)?.let { session.queue(it.rebuild()) }
+            worldUpdates.flushDeck(boat.worldId)
+            session.queue(boat.npcUpdateOrigin)
+            session.queue(boat.npcInfo.getOrNull()!!)
+        }
+        packets.removedWorldIndices.forEach(worldUpdates::dropDeck)
+        session.queue(root.activeWorld)
+        worldUpdates.flushZones()
         session.queue(root.playerInfo.getOrNull()!!)
         session.queue(root.npcUpdateOrigin)
         session.queue(root.npcInfo.getOrNull()!!)
@@ -374,6 +391,7 @@ class GatewaySession(
         session?.requestClose()
         mirror?.release()
         mirror = null
+        boats.release()
         self?.let(world::releasePlayer)
         self = null
         executor.shutdown()
@@ -383,6 +401,9 @@ class GatewaySession(
     private companion object {
         val log: Logger = Logger.getLogger(GatewaySession::class.java.name)
         const val STAFF_ADMINISTRATOR = 2
+
+        /** Tiles; tsps shows boats within 32 of the player, and rsprot needs a boat wholly inside. */
+        const val BOAT_RENDER_DISTANCE = 40
         const val PING_INTERVAL_MS = 5_000L
         const val SCENE_RADIUS_ZONES = 6
 

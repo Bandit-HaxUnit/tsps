@@ -6,8 +6,12 @@ import gateway.tsps.TspsPacket
  * Follows tsps's `NPC_INFO` (21) (`encodeNpcSync` in ClientProtocol.ts): which NPCs this
  * session sees, where, and their update blocks.
  */
-class NpcSync {
-    class Npc(val index: Int, var type: Int, var x: Int, var z: Int, var level: Int)
+class NpcSync(
+    /** The south-west tile of a boat's deck, by its world entity index. */
+    private val deckBase: (Int) -> Pair<Int, Int>? = { null },
+) {
+    /** [onDeck]: it stands on a boat's deck (level 0 there), not in the main world. */
+    class Npc(val index: Int, var type: Int, var x: Int, var z: Int, var level: Int, val onDeck: Boolean = false)
 
     sealed class Change(val index: Int) {
         /** Came into view (or was re-added after a jump or type change). */
@@ -80,13 +84,15 @@ class NpcSync {
             val index = bits.read(16)
             if (index == END) break
             if (bits.read(1) == 1) updates += index
-            if (bits.read(1) == 1) bits.read(32) // world view; boats come in M9
+            // An NPC on a boat's deck is placed from the deck's corner, not the player's tile.
+            val deck = if (bits.read(1) == 1) deckBase(bits.read(32) and 0xFFFF) else null
             val jump = bits.read(1) == 1
             val dz = signed(bits.read(if (large) 8 else 5), if (large) 8 else 5)
             val dx = signed(bits.read(if (large) 8 else 5), if (large) 8 else 5)
             val direction = bits.read(3)
             val type = bits.read(16)
-            val npc = Npc(index, type, rootX + dx, rootZ + dz, 0)
+            val (baseX, baseZ) = deck ?: (rootX to rootZ)
+            val npc = Npc(index, type, baseX + dx, baseZ + dz, 0, onDeck = deck != null)
             npcs[index] = npc
             next += index
             changes += Change.Added(index, npc, direction, jump)

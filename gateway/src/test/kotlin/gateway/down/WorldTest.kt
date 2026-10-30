@@ -1,5 +1,6 @@
 package gateway.down
 
+import gateway.session.WorldEntities
 import gateway.tsps.TspsPacket
 import gateway.tsps.TspsServerPacket
 import gateway.tsps.TspsWriter
@@ -17,7 +18,7 @@ import org.junit.jupiter.api.Test
 /** tsps world packets, built as ClientProtocol.ts builds them, through [World]. */
 class WorldTest {
     private val sent = ArrayList<OutgoingGameMessage>()
-    private val world = World { sent += it }.apply { rebuild(LUMBRIDGE_ZONE_X, LUMBRIDGE_ZONE_Z) }
+    private val world = World({ sent += it }).apply { rebuild(LUMBRIDGE_ZONE_X, LUMBRIDGE_ZONE_Z) }
 
     @Test
     fun `a loc change goes behind its zone in the build area`() {
@@ -33,6 +34,20 @@ class WorldTest {
         assertEquals((x - sceneX) and 7.inv(), zone.zoneX)
         assertEquals((z - sceneZ) and 7.inv(), zone.zoneZ)
         assertTrue(zone.payload.readableBytes() > 0)
+    }
+
+    @Test
+    fun `a loc on a boat's deck waits for the boat's world, relative to the deck`() {
+        val deck = WorldEntities.Deck(BOAT, 1, 1, 1, DECK_ZONE, DECK_ZONE, arrayOfNulls(4 * 13 * 13))
+        val boats = World({ sent += it }) { x, z -> deck.takeIf { it.contains(x, z) } }.apply { rebuild(LUMBRIDGE_ZONE_X, LUMBRIDGE_ZONE_Z) }
+        val x = (DECK_ZONE shl 3) + 3
+        val z = (DECK_ZONE shl 3) + 5
+        boats.handle(packet(TspsServerPacket.LOC_ADD_CHANGE, TspsWriter().u16(DOOR).u16(x).u16(z).u8(1).u8((10 shl 2) or 0)))
+        boats.flushZones()
+        assertTrue(sent.isEmpty(), "not in the main world's zones")
+        boats.flushDeck(BOAT)
+        val zone = sent.single() as UpdateZonePartialEnclosed
+        assertEquals(Triple(0, 0, 1), Triple(zone.zoneX, zone.zoneZ, zone.level))
     }
 
     @Test
@@ -72,6 +87,8 @@ class WorldTest {
     private fun packet(opcode: Int, payload: TspsWriter) = TspsPacket(opcode, payload.body())
 
     private companion object {
+        const val BOAT = 3000
+        const val DECK_ZONE = 1200
         const val LUMBRIDGE_ZONE_X = 3222 shr 3
         const val LUMBRIDGE_ZONE_Z = 3218 shr 3
         const val DOOR = 1543

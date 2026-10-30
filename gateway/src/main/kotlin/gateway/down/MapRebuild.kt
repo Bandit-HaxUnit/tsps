@@ -24,9 +24,7 @@ sealed class MapRebuild(val zoneX: Int, val zoneZ: Int) {
         MapRebuild(zoneX, zoneZ) {
         override fun toMessage() =
             RebuildRegionV2(zoneX, zoneZ, reload) { x, z, level ->
-                zones[(level * SCENE_ZONES + (x - zoneX + 6)) * SCENE_ZONES + (z - zoneZ + 6)]?.let { packed ->
-                    RebuildRegionZone((packed ushr 14) and 0x3FF, (packed ushr 3) and 0x7FF, (packed ushr 24) and 3, (packed ushr 1) and 3)
-                }
+                zones[(level * SCENE_ZONES + (x - zoneX + 6)) * SCENE_ZONES + (z - zoneZ + 6)]?.let(::zone)
             }
     }
 
@@ -35,6 +33,10 @@ sealed class MapRebuild(val zoneX: Int, val zoneZ: Int) {
         const val NO_WORLD_AREA = -1
         private const val SCENE_ZONES = 13
         private const val LEVELS = 4
+
+        /** A template zone reference, packed as rsprot's ReferenceZone. */
+        fun zone(packed: Int) =
+            RebuildRegionZone((packed ushr 14) and 0x3FF, (packed ushr 3) and 0x7FF, (packed ushr 24) and 3, (packed ushr 1) and 3)
 
         fun normal(packet: TspsPacket): Normal {
             val reader = packet.reader()

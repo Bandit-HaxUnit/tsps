@@ -1,6 +1,7 @@
 package gateway.down
 
 import gateway.coverage.DropCounter
+import gateway.session.WorldEntities
 import gateway.tsps.TspsPacket
 import gateway.tsps.TspsServerPacket
 import net.rsprot.protocol.game.outgoing.camera.CamLookAtCycles
@@ -39,22 +40,43 @@ import net.rsprot.protocol.internal.game.outgoing.info.CoordGrid
  * tsps sends loc changes and area sounds with absolute tiles; OSRS puts them in a zone, so
  * they're gathered per zone of the build area and sent enclosed at the end of the tick.
  */
-class World(private val send: (OutgoingGameMessage) -> Unit) {
+class World(
+    private val send: (OutgoingGameMessage) -> Unit,
+    /** The boat deck a tile is on: its updates go to that boat's world, relative to the deck. */
+    private val deckAt: (Int, Int) -> WorldEntities.Deck? = { _, _ -> null },
+) {
     private var sceneX = 0
     private var sceneZ = 0
 
     /** This tick's zone payloads, by zone; revision 241 only takes some of them enclosed. */
     private val pending = LinkedHashMap<Triple<Int, Int, Int>, MutableList<ZoneProt>>()
+
+    /** Boat decks' zone payloads, by boat, kept until the client has that boat's world. */
+    private val pendingDecks = HashMap<Int, LinkedHashMap<Triple<Int, Int, Int>, MutableList<ZoneProt>>>()
     private val zoneBuffers = ZonePartialEnclosedCacheBuffer(listOf(OldSchoolClientType.DESKTOP))
 
     /** Sends this tick's zone updates, one UPDATE_ZONE_PARTIAL_ENCLOSED per zone. */
     fun flushZones() {
-        for ((zone, payloads) in pending) {
+        flush(pending)
+    }
+
+    /** Sends a boat's deck updates; the boat's world must be the active one. */
+    fun flushDeck(index: Int) {
+        pendingDecks.remove(index)?.let(::flush)
+    }
+
+    /** The client no longer has this boat. */
+    fun dropDeck(index: Int) {
+        pendingDecks.remove(index)
+    }
+
+    private fun flush(zones: MutableMap<Triple<Int, Int, Int>, MutableList<ZoneProt>>) {
+        for ((zone, payloads) in zones) {
             val (zoneX, zoneZ, level) = zone
             val payload = zoneBuffers.computeZoneForClient(OldSchoolClientType.DESKTOP, payloads)
             send(UpdateZonePartialEnclosed(zoneX, zoneZ, level, payload))
         }
-        pending.clear()
+        zones.clear()
         zoneBuffers.releaseBuffers()
     }
 
@@ -262,6 +284,12 @@ class World(private val send: (OutgoingGameMessage) -> Unit) {
     }
 
     private fun zone(x: Int, z: Int, level: Int, payload: ZoneProt) {
+        val deck = deckAt(x, z)
+        if (deck != null) {
+            val zones = pendingDecks.getOrPut(deck.index) { LinkedHashMap() }
+            zones.getOrPut(Triple((x - deck.baseX) and 7.inv(), (z - deck.baseZ) and 7.inv(), level)) { ArrayList() } += payload
+            return
+        }
         if (!inScene(x, z)) return
         pending.getOrPut(Triple((x - sceneX) and 7.inv(), (z - sceneZ) and 7.inv(), level)) { ArrayList() } += payload
     }
