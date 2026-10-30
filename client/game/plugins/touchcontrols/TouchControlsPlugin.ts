@@ -5,6 +5,7 @@ import { ConfigManager } from "@runelite/client/config/ConfigManager";
 import { CLIENT_TOKEN, inject } from "@runelite/client/plugins/PluginInjector";
 import type { Camera } from "../../Camera";
 import { ClientState } from "../../ClientState";
+import { GameState } from "../../login/GameState";
 import type { ContinuousMovementRefusal } from "../../movement/ContinuousMovement";
 import type { SceneGeometry } from "../../scene/SceneGeometry";
 import type { ClientPlugin, LocOutline, NpcOutline } from "../ClientPluginManager";
@@ -58,6 +59,8 @@ export type TouchControlsUiState = {
  */
 export type TouchControlsClient = {
     camera: Camera;
+    /** LOGGED_IN once the scene is up; isLoggedIn() is already true while it loads. */
+    gameState: GameState;
     /** The run orb; the joystick walks or runs as it says. */
     runMode?: boolean;
     isLoggedIn(): boolean;
@@ -285,8 +288,10 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
     private updateFocus(): void {
         const world = this.world();
         const player = this.playerTile();
-        if (!world || !player) {
+        // While the scene loads, actors have no real positions yet: nothing to be at.
+        if (!world || !player || this.client.gameState !== GameState.LOGGED_IN) {
             this.focus = undefined;
+            this.npcUnder = undefined;
             return;
         }
         const scanKey = `${player.x},${player.y},${player.plane},${this.gameTicks}`;
@@ -324,6 +329,7 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
         npcs.forEachActive((ecsId) => {
             const serverId = npcs.getServerId(ecsId);
             if (found || serverId <= 0 || npcs.getLevel(ecsId) !== plane) return;
+            if (npcs.getWorldX(ecsId) <= 0 || npcs.getWorldY(ecsId) <= 0) return; // not placed yet
             // The south-west tile from the centre, as NPC Indicators' world location.
             const size = Math.max(1, npcs.getSize(ecsId));
             const sx = Math.floor((npcs.getWorldX(ecsId) - size * 64) / 128);
@@ -376,7 +382,7 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
     private playerTile(): { x: number; y: number; plane: number } | undefined {
         const players = this.client.playerEcs;
         const index = players?.getIndexForServerId(this.client.controlledPlayerServerId ?? -1);
-        if (!players || index === undefined) return undefined;
+        if (!players || index === undefined || players.getX(index) <= 0 || players.getY(index) <= 0) return undefined;
         return { x: players.getX(index) >> 7, y: players.getY(index) >> 7, plane: players.getLevel(index) | 0 };
     }
 

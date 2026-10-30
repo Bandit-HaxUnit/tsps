@@ -8,6 +8,7 @@ import {
     type TouchControlsClient,
 } from "../game/plugins/touchcontrols/TouchControlsPlugin";
 import { findBlockingTarget, type TouchTargetWorld } from "../game/plugins/touchcontrols/TouchTargets";
+import { GameState } from "../game/login/GameState";
 import { MenuOpcode } from "../ui/menu/MenuState";
 
 type Move = { dx: number; dy: number; running: boolean; rotation: number };
@@ -22,6 +23,7 @@ function makeClient(overrides: Partial<TouchControlsClient> = {}): {
     const client: TouchControlsClient = {
         // Camera yaw 0 looks north; actor rotation is camera yaw + 1024.
         camera: { yaw: 0, getYaw: () => 0 } as unknown as Camera,
+        gameState: GameState.LOGGED_IN,
         runMode: false,
         isLoggedIn: () => true,
         setKeyboardMovement: (dx, dy, running, rotation) => moves.push({ dx, dy, running, rotation }),
@@ -240,6 +242,27 @@ const refusal = (fromX: number, fromY: number, toX: number, toY: number): Contin
     at = { x: 70, y: 70 };
     plugin.onClientTick();
     assert.equal(plugin.getUiState().action, undefined, "an NPC without options, and leaving the giant, show nothing");
+}
+
+// While the scene loads, nothing is focused even where an NPC seems to share the player's tile.
+{
+    const { client } = makeClient({
+        gameState: GameState.LOADING_GAME,
+        playerEcs: { getIndexForServerId: () => 0, getX: () => 64, getY: () => 64, getLevel: () => 0 },
+        sceneGeometry: { locsAtTile: () => [] },
+        locTypeLoader: { load: () => undefined },
+        npcEcs: {
+            forEachActive: (fn) => fn(1), getServerId: () => 5, getNpcTypeId: () => 81, getSize: () => 2,
+            getWorldX: () => 128, getWorldY: () => 128, getLevel: () => 0,
+        },
+        npcTypeLoader: { load: () => ({ id: 81, name: "Cow", actions: [null, "Attack"] }) as never },
+    });
+    const plugin = new TouchControlsPlugin(client);
+    plugin.onClientTick();
+    assert.equal(plugin.getUiState().action, undefined, "no focus before LOGGED_IN");
+    client.gameState = GameState.LOGGED_IN;
+    plugin.onClientTick();
+    assert.equal(plugin.getUiState().action?.target, "Cow", "the same NPC focuses once the scene is up");
 }
 
 console.log("touch controls plugin test passed");
