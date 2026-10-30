@@ -23,6 +23,7 @@ module.exports = {
     api.persistAttribute(common.SLOTS_ATTRIBUTE);
     api.onCustomEvent("sailing:has-port-task-slot", answerOpenSlot);
     api.onPlayerLogin(sendState);
+    require("./porttasks/Cargo.PortTasks")(api);
     require("./porttasks/Board.PortTasks")(api);
     require("./porttasks/Ledger.PortTasks")(api);
     require("./porttasks/PortMaster.PortTasks")(api);

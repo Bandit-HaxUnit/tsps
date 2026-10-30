@@ -389,3 +389,105 @@ both bags and displayed the inventory-space refusal. Dropping a knife through
 the native packet freed a slot; left-click then delivered 27 Bronze nails and
 consumed exactly one bag. The screenshot checks establish local client rendering
 and input routing, not a comparison with an OSRS port-bag recording.
+
+## Hand-carried cargo restrictions
+
+`porttasks/Cargo.PortTasks.js` owns restrictions on the physical crate in the weapon slot.
+It never treats cargo held by the crew or stored in a boat as a crate in the player's hands.
+The existing crew owner still handles its own departure/logout cleanup.
+
+- [Courier tasks](https://oldschool.runescape.wiki/w/Courier_tasks), changes dated
+  10 December and 26 November 2025: teleporting confiscates hand cargo, and Trim is refused
+  while carrying it. [Crate of seeds](https://oldschool.runescape.wiki/w/Crate_of_seeds)
+  and [Crate of potions](https://oldschool.runescape.wiki/w/Crate_of_potions) describe
+  manual unequip restrictions and the 22-tick grace period outside port.
+- Local RSProx 235/03467: tick 18581 attempts Navigate at a helm; tick 18582 sends
+  "You can't do that while you're holding cargo in your hands." The same refusal occurs
+  in 229/02656. Manual weapon Remove in 229/02656 at tick 11402 instead says
+  "You can't remove the cargo. You'll need to find a safe place to put it down first."
+  The removal policy uses that separate refusal. No recording of confiscation, departure warnings or relog timing was found
+  in the local transcripts. Those mechanics come from the Wiki; Trim reuses that refusal.
+- Rev 241 active cache confirms crate 32682 (`cargo_crate_jewellery_port_sarim`),
+  carrying varbit 19134 and last-cargo-slot 19590. The pinned dump's `sailing_dock` table 194
+  declares `inzone_land` and `inzone_sea` as server-only columns; their values are absent
+  from the client rows.
+
+When a shared teleport actually lands (`teleport:landed`), the crate is removed in that
+tick, its owning task's `taken` count decreases by one (never below `delivered`), and it
+can be collected again at the cargo port. A refusal or requirements probe changes nothing.
+No task is cancelled, completed or rewarded by confiscation. Other task slots and the
+boat's hold are unchanged by this handler.
+
+Outside port, the player first receives "You're leaving port with some cargo. If you do
+not return it, it will be confiscated by the shipwright wizard's autonomous tracking unit."
+After 22 more ticks outside, "Your cargo has been confiscated by the S.W.A.T. team." is
+sent and the same crate recovery applies. Returning cancels the countdown; boarding a
+boat is safe. Repeated collection starts a new watcher; putting down/depositing/cancelling
+the crate stops the previous one. The watcher survives walking and ordinary actions.
+
+**Boundary limit:** the current implementation uses the existing `Common.dockAt` 48-tile
+envelope around dock gangplank/landing tiles on plane 0. This is a TSPS approximation,
+not a verified official port boundary. Neither the Wiki nor the accessible client cache
+supplies the official server polygons. There is no claim of exact boundary parity.
+The Courier tasks trivia uses "You are leaving port"; both detailed crate pages instead
+use "You're leaving port". This implementation follows the detailed crate pages. The
+warning is not claimed as captured dialogue.
+
+Logout suspends the watcher. The crate, task counters and owning slot persist through
+the normal equipment/PlayerSave path; login rebuilds carrying/last-slot varbits and starts
+a fresh outside grace period. Resetting that unsaved countdown is a local choice: official
+relog countdown behavior was not recorded. Old saves without an owning slot are associated
+only when exactly one outstanding task matches the physical crate.
+
+Native path map: ledger/hold object or interface action -> `Common.carry` -> equipment,
+persisted `port-tasks:carried-slot`, cargo varbits and `port-tasks:cargo-carried` -> watcher.
+`Common.putDown` clears that state and emits `port-tasks:cargo-released`. Native equipment
+remove/equip -> `EquipPacketListener` -> existing `canUnequip`/`canEquip` policy hooks.
+Helm Navigate/Trim -> `sailing:can-use-hands {player,allow}` -> physical equipment check;
+crew-driven navigation does not invoke the player's hands policy. Teleport spell/tablet ->
+`TeleportHandler` -> committed `teleport:landed` -> confiscation and task/client updates.
+
+After the shared death owner finishes item loss, `onPlayerDeath` clears the saved hand
+owner and carrying varbits only when the equipped crate is actually gone. It does not
+change death-drop ownership or task counters, and it never clears an unrelated weapon
+installed by another death observer. A safe death retaining the physical crate also
+retains its owning slot, hands restrictions and watcher.
+
+Native QA additionally exposed the Pandemonium quest's startup fallback tables replacing
+the two port ledger multilocs with fixed Take/Deposit variants. The fallback objects now
+use cache names `dock_loading_bay_ledger_table_port_sarim` (60322) and
+`dock_loading_bay_ledger_table_pandemonium` (60324). The resolved action variants remain
+60320/60321. Tests inspect the actual `ObjectManager` scene overlays and use the resolved
+client loc ID through `ObjectActionPacketListener`, including the quests' task 599/600
+hand-ins; selecting an invisible base-map object would miss this production problem.
+
+Validation on the acf4a8659 base: pinned Yarn 4.12 build; 205 tests passed across the cargo,
+port-task, sailing, crew, boat-teleport and two Sailing quest suites. The 20 new cargo cases
+load all 397 plugins and startup hooks and use real players, equipment, inventory,
+movement, teleport/death tasks and save hydration; network output is captured. Independent
+review retained failing native removal, death and quest-delivery reproductions, then
+passed 71 checks on the final source with no failed hook logs. Extra independent checks
+include a native tablet against ambiguous legacy task slots, movement cancellation plus
+an unrelated modal, actual Ferox safe death, and both native quest hand-ins.
+
+The isolated rendering-client walkthrough accepted Brimhaven jewellery task 24 on the real
+notice board. Mapped MCP interactions collected its crate from the corrected ledger and
+used the gangplank, Helm Navigate and Sails Trim; the rendered client and server updates
+showed the crate and the correct refusals. Actual canvas input verified worn-weapon
+Remove preserving cargo with its separate message, and inventory Break on a Lumbridge
+tablet. Landing at 3223,3219 removed the crate and cleared 19134/19575/19590 to 0; the same
+task remained accepted and could supply another crate.
+
+For the visible departure warning, administrative placement at 3000,3000 was a controlled
+water-tile fixture: it showed the carrying crate/warning, then confiscation and empty
+equipment with all three indicators 0. Attempts to walk out of the Pandemonium found no
+route, so this is not claimed as a normal native walk across an official boundary. The
+independent movement/cancellation regression verifies the 22-tick watcher flow separately.
+The QA server saved the account and shut down gracefully; its separate static client was
+also stopped. No live server was used.
+
+Bank and deposit-box Deposit worn use Bank.depositItems -> emitCanBankItem, not the equipment
+Remove hook. Cargo attaches the shared banking policy as well, refusing every port-task crate;
+ordinary equipment still deposits. Native regression tests produce the crate from the real
+Pandemonium ledger, click each Deposit worn interface and verify task/owner/varbit consistency
+and subsequent outside-port confiscation.
