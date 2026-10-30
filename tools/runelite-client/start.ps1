@@ -32,7 +32,7 @@ $existing = @(Get-CimInstance Win32_Process -Filter "Name='java.exe' OR Name='ja
     $_.CommandLine -and $_.CommandLine.Contains($homeArgument) -and $_.CommandLine -match '\bStartClient\b'
 })
 if ($existing.Count) { throw "Existing isolated client PID(s) $($existing.ProcessId -join ', '); no patch or launch performed" }
-foreach ($class in @('PatchClient','StartClient','ChatDiagnostics','Branding','Branding$1','BrandingAssets','BrandingAssets$Metadata','BrandingAssets$Loaded')) {
+foreach ($class in @('PatchClient','StartClient','ChatDiagnostics','Branding','Branding$1','BrandingAssets','BrandingAssets$Metadata','BrandingAssets$Loaded','WelcomeBackdrop')) {
     $sourceClass = $class -replace '\$.*$', ''
     if (!(Test-Path "$runtime/classes/$class.class") -or (Get-Item "$PSScriptRoot/$sourceClass.java").LastWriteTimeUtc -gt (Get-Item "$runtime/classes/$class.class").LastWriteTimeUtc) { throw 'Client helper classes are missing or stale; run prepare.ps1' }
 }

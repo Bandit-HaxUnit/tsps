@@ -50,4 +50,6 @@ Focused helper checks (real temporary loopback HTTP server and encoded images; p
 ./tools/runelite-client/test.ps1 -JavaHome $env:JAVA_HOME
 ```
 
-These checks do not replace native rendering/login/logout verification.
+The hidden TSPS Welcome Backdrop helper clears the retained game frame before the native welcome controls draw. It runs independently of branding and only when entering welcome root378, replacing the image or resizing the canvas, so cached controls survive steady frames. Play and pre-login artwork remain visible in their own states.
+
+To run only the eight retained-raster regressions, add `-WelcomeBackdropOnly`. These checks do not replace native rendering/login/logout verification.

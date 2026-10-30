@@ -52,8 +52,8 @@ public final class ChatDiagnostics extends Plugin {
                 lines.append(']');
             }
         }
-        LOG.info("TSPS_CHAT state={} tick={} cycle={} localName={} hidden={} overhead={} overheadCycle={} publicMode={} messageFilter={} varcs199,383,41,1112,65={},{},{},{},{} chatBuffers={}{}",
-            client.getGameState(), client.getTickCount(), client.getGameCycle(), player == null ? "<none>" : clean(player.getName()),
+        LOG.info("TSPS_CHAT state={} root={} tick={} cycle={} localName={} hidden={} overhead={} overheadCycle={} publicMode={} messageFilter={} varcs199,383,41,1112,65={},{},{},{},{} chatBuffers={}{}",
+            client.getGameState(), client.getTopLevelInterfaceId(), client.getTickCount(), client.getGameCycle(), player == null ? "<none>" : clean(player.getName()),
             nativeHidden(player), player == null ? "<none>" : clean(player.getOverheadText()),
             player == null ? -1 : player.getOverheadCycle(), nativeInt(null, "client", "ko", 1774104361), nativeMessageFilter(),
             client.getVarcIntValue(199), client.getVarcIntValue(383), client.getVarcIntValue(41), client.getVarcIntValue(1112), client.getVarcIntValue(65), map == null ? -1 : map.size(), lines);

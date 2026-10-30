@@ -110,7 +110,7 @@ The template uses `null` for all three settings, preserving the stock screen. Fo
 - Restart the gateway and RuneLite after changing config/images; **no rebuild is required**. The gateway serves the selected files to the client over its existing loopback HTTP port, so no separate web host is needed.
 - To keep the config elsewhere, pass `-BrandingFile path/to/branding.json` to the gateway launcher. Resolve image paths relative to that file as usual.
 
-The pictured post-login welcome interface and the pre-login background are separate screens. Branding preserves the native Play button and login flow; it does not patch the game's cache or installed RuneLite profile.
+The pictured post-login welcome interface and the pre-login background are separate screens. The welcome screen has an opaque black backdrop with either stock or custom branding; Play reveals the game normally. Branding preserves the native Play button and login flow; it does not patch the game's cache or installed RuneLite profile.
 
 These native screenshots use diagnostic example artwork, with 117 HD off:
 
@@ -128,6 +128,7 @@ Log out normally and close RuneLite. Stop the gateway terminal, then stop TSPS a
 - These checks used a separate TSPS world and disposable account. Sword/coins and an NPC were controlled QA fixtures, not acquisition tests.
 - Branding QA without117HD: custom login background and welcome banner/footer rendered from config; disabling restored stock artwork/loader/footer, re-enabling and relog reapplied branding, and native Play/logout worked. Six gateway tests and31 client transport/lifecycle checks cover the new paths; no full-suite rerun.
 - Three actual keyboard-submitted public messages rendered once each. Native diagnostics also confirmed the chat entry and overhead text. Optional 117 HD rendered the same TSPS world on an RTX 5090; startup alone was not counted as scene verification.
+- Welcome-backdrop correction: eight focused retained-raster checks passed. Real native QA verified black welcome backgrounds with standard rendering and optional117HD, resize/restore, stock branding disabled, Play into gameplay and normal logout. Only affected client helpers were rebuilt; no server or gateway changes were needed.
 - Focused checks cover observer-filtered snapshots, private-instance visibility/removal, unchanged normal binary packets, fail-closed oversize snapshots, real cache/JS5/Huffman, native inputs, UI/inventory/stat translation, serialized WebSocket writes, chat bursts/index reuse and launcher save isolation. See tool READMEs for commands and pins. No full repository suite was run.
 - Compatibility remains incomplete for shops, trade, custom interfaces, dynamic objects/ground items, instances and Sailing. Actor forced movement/custom models and broader remote-chat scenarios need further work. One native connection is supported; login does not establish all-content or gameplay parity.
 - Native cache bounds omit browser-only overlay varps 7995-7999 and absent legacy 317 widgets. They cannot be forwarded directly to the native client.
