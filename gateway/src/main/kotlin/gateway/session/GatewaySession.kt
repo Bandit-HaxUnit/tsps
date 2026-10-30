@@ -37,7 +37,7 @@ import net.rsprot.protocol.loginprot.outgoing.LoginResponse
 import net.rsprot.protocol.loginprot.outgoing.util.AuthenticatorResponse
 import net.rsprot.protocol.message.IncomingGameMessage
 import net.rsprot.protocol.message.OutgoingGameMessage
-import java.util.concurrent.ExecutorService
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.logging.Level
@@ -56,8 +56,8 @@ class GatewaySession(
 ) : TspsSocket.Listener {
     private enum class State { CONNECTING, LOGGING_IN, ENTERING, AWAITING_SCENE, IN_GAME, CLOSED }
 
-    private val executor: ExecutorService =
-        Executors.newSingleThreadExecutor { Thread(it, "gateway-${block.username}").apply { isDaemon = true } }
+    private val executor: ScheduledExecutorService =
+        Executors.newSingleThreadScheduledExecutor { Thread(it, "gateway-${block.username}").apply { isDaemon = true } }
     private var state = State.CONNECTING
     private lateinit var tsps: TspsSocket
     private lateinit var handshake: TspsHandshake
@@ -290,7 +290,14 @@ class GatewaySession(
         beforeLogin.forEach(session::queue)
         beforeLogin.clear()
         state = State.IN_GAME
+        // Pass the client's packets on as they come, not once per tick: tsps only acts on them at
+        // its next tick, so waiting for ours as well added up to a tick to every click.
+        executor.scheduleWithFixedDelay({ run(::forwardClientPackets) }, CLIENT_POLL_MS, CLIENT_POLL_MS, TimeUnit.MILLISECONDS)
         log.info("${handshake.name} entered at ${tile.x}, ${tile.z}, ${tile.level} (index ${handshake.index})")
+    }
+
+    private fun forwardClientPackets() {
+        if (state == State.IN_GAME) session?.processIncomingPackets(this)
     }
 
     private fun endTick() {
@@ -369,6 +376,9 @@ class GatewaySession(
         const val STAFF_ADMINISTRATOR = 2
         const val PING_INTERVAL_MS = 5_000L
         const val SCENE_RADIUS_ZONES = 6
+
+        /** One client cycle. */
+        const val CLIENT_POLL_MS = 20L
         const val SCENE_RENDER_DISTANCE = 52
         const val TRADE_OP = 2
         const val ATTACK_OP = 1

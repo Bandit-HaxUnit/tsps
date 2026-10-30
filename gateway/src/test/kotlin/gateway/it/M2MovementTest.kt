@@ -31,6 +31,25 @@ class M2MovementTest {
     }
 
     @Test
+    fun `a click reaches tsps within a tick`() {
+        login(LiveGateway.newAccount("gwlag")).use { game ->
+            val start = game.expect<RebuildLoginV2>().playerInfoInitBlock.localPlayerCoord
+            val latencies =
+                (1..CLICKS).map { click ->
+                    val x = start.x + click
+                    val sent = System.nanoTime()
+                    game.walk(x, start.z)
+                    // The flag for this click, not one left from the last.
+                    while (game.expect<SetMapFlagV2>().x != x) continue
+                    (System.nanoTime() - sent) / 1_000_000
+                }
+            // tsps acts on a click at its next tick (0-600 ms away); the gateway must not add
+            // another tick of its own, as it did when it only read client packets at tick end.
+            assertTrue(latencies.average() < MAX_AVERAGE_LATENCY_MS, "click to map flag: $latencies ms")
+        }
+    }
+
+    @Test
     fun `a teleport to another region rebuilds the map around the new tile`() {
         login(developer()).use { game ->
             val start = game.expect<RebuildLoginV2>().playerInfoInitBlock.localPlayerCoord
@@ -92,6 +111,8 @@ class M2MovementTest {
         const val OK = 2
         const val DUPLICATE = 5
         const val WALK_DISTANCE = 3
+        const val CLICKS = 5
+        const val MAX_AVERAGE_LATENCY_MS = 700
         const val MOVEMENT_PACKETS = 60
         // Starts a solo Tempoross game, in its templated cove.
         const val INSTANCE_COMMAND = "tempoross"
