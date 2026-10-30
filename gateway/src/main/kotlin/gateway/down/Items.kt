@@ -69,6 +69,9 @@ class Items(
         return true
     }
 
+    /** How many of [item] the main inventory holds. */
+    fun carried(item: Int): Int = inventories[INVENTORY]?.filterNotNull()?.filter { it.first == item }?.sumOf { it.second } ?: 0
+
     /** The inventories WIDGET_RUN_SCRIPT carries: `u8 count`, then `u16 inv, u16 capacity, u16 n, n slots`. */
     fun scriptInventories(reader: TspsReader) {
         repeat(reader.u8()) {

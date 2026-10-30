@@ -180,6 +180,19 @@ class HeadlessClient(private val host: String, private val port: Int) {
                 }.buffer.let { it.array().copyOf(it.writerIndex()) },
             )
 
+        /** OPPLAYER2 (tsps's Trade with). */
+        fun playerOp2(index: Int) =
+            sendFixed(
+                OPPLAYER2,
+                Unpooled.buffer().toJagByteBuf().apply {
+                    p2Alt1(index)
+                    p1Alt2(0)
+                }.buffer.let { it.array().copyOf(it.writerIndex()) },
+            )
+
+        /** UPDATE_PLAYER_MODEL_V2: 26 raw bytes, as the character designer sends them. */
+        fun updatePlayerModel(bytes: ByteArray) = sendFixed(UPDATE_PLAYER_MODEL_V2, bytes)
+
         /** CLIENT_CHEAT: a `::` command, without the colons. */
         fun command(text: String) =
             sendVarByte(CLIENT_CHEAT, Unpooled.buffer().toJagByteBuf().apply { pjstr(text); p1(0) }.buffer.let { it.array().copyOf(it.writerIndex()) })
@@ -338,6 +351,8 @@ class HeadlessClient(private val host: String, private val port: Int) {
         const val JS5_BLOCK = 512
         const val LOGIN_OK = 2
         const val MOVE_GAMECLICK = 55
+        const val OPPLAYER2 = 35
+        const val UPDATE_PLAYER_MODEL_V2 = 88
         const val NO_TIMEOUT = 75
         const val KEEPALIVE_MS = 5_000L
         const val OPNPC2 = 44

@@ -18,6 +18,7 @@ import net.rsprot.protocol.game.incoming.locs.OpLocT
 import net.rsprot.protocol.game.incoming.locs.OpLocV2
 import net.rsprot.protocol.game.incoming.messaging.MessagePrivate
 import net.rsprot.protocol.game.incoming.messaging.MessagePublic
+import net.rsprot.protocol.game.incoming.misc.user.ClickWorldMap
 import net.rsprot.protocol.game.incoming.misc.user.ClientCheat
 import net.rsprot.protocol.game.incoming.misc.user.CloseModal
 import net.rsprot.protocol.game.incoming.misc.user.MoveGameClick
@@ -25,6 +26,7 @@ import net.rsprot.protocol.game.incoming.misc.user.MoveMinimapClick
 import net.rsprot.protocol.game.incoming.misc.user.SendSnapshot
 import net.rsprot.protocol.game.incoming.misc.user.SetChatFilterSettings
 import net.rsprot.protocol.game.incoming.misc.user.SetHeading
+import net.rsprot.protocol.game.incoming.misc.user.Teleport
 import net.rsprot.protocol.game.incoming.npcs.OpNpc6
 import net.rsprot.protocol.game.incoming.npcs.OpNpcT
 import net.rsprot.protocol.game.incoming.npcs.OpNpcV2
@@ -35,6 +37,7 @@ import net.rsprot.protocol.game.incoming.players.OpPlayer
 import net.rsprot.protocol.game.incoming.players.OpPlayerT
 import net.rsprot.protocol.game.incoming.resumed.ResumePCountDialog
 import net.rsprot.protocol.game.incoming.social.FriendListAdd
+import net.rsprot.protocol.game.incoming.worldentities.OpWorldEntity
 import net.rsprot.protocol.game.incoming.social.FriendListDel
 import net.rsprot.protocol.game.incoming.social.IgnoreListAdd
 import net.rsprot.protocol.game.incoming.social.IgnoreListDel
@@ -51,6 +54,12 @@ import net.rsprot.protocol.message.IncomingGameMessage
  */
 class Upstream(
     private val varps: VarpMirror,
+    /** Identkits in the cache, to check a character design before passing it on. */
+    private val identKitCount: Int,
+    /** Buttons a translator takes over (trade); true when it did. */
+    private val interceptButton: (combinedId: Int, sub: Int, obj: Int, op: Int) -> Boolean = { _, _, _, _ -> false },
+    /** Count-dialog replies a translator asked for itself (trade's Offer-X); true when it did. */
+    private val interceptCount: (Int) -> Boolean = { false },
     private val send: (ByteArray) -> Unit,
 ) {
     fun handle(message: IncomingGameMessage) {
@@ -97,7 +106,7 @@ class Upstream(
                 }
             is IfScriptTrigger -> scriptTrigger(message)
             is ResumePauseButton -> send(TspsWriter().u16AddLE(message.sub).i32(message.combinedId).fixed(RESUME_PAUSEBUTTON))
-            is ResumePCountDialog -> send(TspsWriter().i32(message.count).fixed(RESUME_COUNTDIALOG))
+            is ResumePCountDialog -> if (!interceptCount(message.count)) send(TspsWriter().i32(message.count).fixed(RESUME_COUNTDIALOG))
             is ResumePLongDialog -> send(TspsWriter().i32(message.count.coerceIn(0, Int.MAX_VALUE.toLong()).toInt()).fixed(RESUME_COUNTDIALOG))
             is ResumePNameDialog -> send(TspsWriter().string(message.name).varByte(RESUME_NAMEDIALOG))
             is ResumePStringDialog -> send(TspsWriter().string(message.string).varByte(RESUME_STRINGDIALOG))
@@ -117,6 +126,10 @@ class Upstream(
             is SetChatFilterSettings ->
                 send(TspsWriter().u8(message.publicChatFilter).u8(message.privateChatFilter).u8(message.tradeChatFilter).fixed(CHAT_FILTER))
             is SendSnapshot -> send(TspsWriter().string(message.name).u8(message.ruleId).u8(if (message.mute) 1 else 0).varByte(REPORT_ABUSE))
+            is UpdatePlayerModel -> message.design(identKitCount)?.let { send(message.toTsps(it)) } ?: UpdatePlayerModel.logUnknown(message)
+            is OpWorldEntity -> if (message.op in 1..5) send(WorldOps.worldEntity(message.op, message.index)) else DropCounter.up(message)
+            is ClickWorldMap -> send(WorldOps.worldMapClick(message.level, message.x, message.z))
+            is Teleport -> send(WorldOps.teleport(message.level, message.x, message.z))
             is OpPlayer -> send(TspsClientPacket.playerOp(message.op, message.index))
             is OpNpcV2 -> if (message.op in 1..5) send(TspsClientPacket.npcOp(message.op, message.index)) else DropCounter.up(message)
             is OpNpc6 -> send(TspsClientPacket.examineNpc(message.id))
@@ -166,6 +179,7 @@ class Upstream(
         send(TspsWriter().u8(action).string(name).u8(rank).varByte(FRIENDS_CHAT_ACTION))
 
     private fun button(message: If3Button) {
+        if (interceptButton(message.combinedId, message.sub, message.obj, message.op)) return
         when (message.combinedId) {
             // The browser sets the run varp itself and transmits it; tsps has no orb handler.
             RUN_ORB -> send(TspsWriter().u16(RUN_VARP).i32(1 - varps[RUN_VARP]).fixed(VARP_TRANSMIT))

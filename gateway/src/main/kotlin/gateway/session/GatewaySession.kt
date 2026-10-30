@@ -11,6 +11,7 @@ import gateway.down.MapRebuild
 import gateway.down.NpcSync
 import gateway.down.PlayerSync
 import gateway.down.Social
+import gateway.down.Trade
 import gateway.down.TspsChatMessage
 import gateway.down.World
 import gateway.down.TspsHandshake
@@ -70,13 +71,20 @@ class GatewaySession(
     private val stockMarket = StockMarket(::send)
     private val social = Social(::send)
     private val worldUpdates = World(::send)
+    private val trade by lazy { Trade(::send, { tsps.send(it) }, items::carried) }
 
     /** Everything that turns tsps messages into OSRS packets, asked in turn. */
     private val translators: List<(TspsPacket) -> Boolean> by lazy {
-        listOf(interfaces::handle, items::handle, groundItems::handle, social::handle, worldUpdates::handle)
+        listOf(interfaces::handle, items::handle, groundItems::handle, social::handle, worldUpdates::handle, trade::handle)
     }
     private val interfaces = Interfaces(varps, InterfaceTree(context.enums), stockMarket, items::scriptInventories, ::send)
-    private val upstream = Upstream(varps) { tsps.send(it) }
+    private val upstream =
+        Upstream(
+            varps,
+            context.identKitCount,
+            interceptButton = { id, sub, obj, op -> trade.button(id, sub, obj, op) },
+            interceptCount = { trade.count(it) },
+        ) { tsps.send(it) }
     private val players = PlayerSync()
     private val npcs = NpcSync()
     private var mirror: EntityMirror? = null

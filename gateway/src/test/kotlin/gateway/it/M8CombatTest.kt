@@ -19,41 +19,49 @@ class M8CombatTest {
         LiveGateway.login(developer!!).use { game ->
             game.expect<RebuildLoginV2>()
             game.command("tele $X $Z 0")
-            var target = -1
-            while (target < 0) {
-                // The nearest one: tsps flickers NPCs right at the edge of its 15-tile view.
-                target = game.expect<NpcInfo>().updates.entries
-                    .filter { (_, update) -> update is NpcUpdateType.LowResolutionToHighResolution && update.id in ATTACKABLE }
-                    .minByOrNull { (_, update) ->
-                        update as NpcUpdateType.LowResolutionToHighResolution
-                        maxOf(Math.abs(update.x - X), Math.abs(update.z - Z))
-                    }?.key ?: -1
+            val rats = ArrayList<Int>()
+            while (rats.isEmpty()) {
+                game.expect<NpcInfo>().updates.forEach { (index, update) ->
+                    if (update is NpcUpdateType.LowResolutionToHighResolution && update.id in ATTACKABLE) rats += index
+                }
             }
             // tsps ignores clicks while the teleport still holds the player.
             var ticks = 0
             while (ticks < SETTLE_TICKS) if (game.next() is ServerTickEnd) ticks++
-            game.npcOp2(target)
             val seen = ArrayList<String>()
-            repeat(COMBAT_TICKS) {
-                var npcs: NpcInfo? = null
-                while (npcs == null) {
-                    when (val message = game.next() ?: error("stream ended")) {
-                        is NpcInfo -> npcs = message
-                        is MessageGame -> seen += "message: ${message.message}"
+            // Some rats are behind walls ("I can't reach that!"); try the next one.
+            for (target in rats.take(MAX_TARGETS)) {
+                game.npcOp2(target)
+                if (game.hitWithin(target, seen)) return
+            }
+            error("no rat took a hit; saw: $seen")
+        }
+    }
+
+    /** Whether [target] shows a hitsplat and health bar within the combat ticks; false if it can't be reached. */
+    private fun gateway.headless.HeadlessClient.Game.hitWithin(target: Int, seen: MutableList<String>): Boolean {
+        repeat(COMBAT_TICKS) {
+            var npcs: NpcInfo? = null
+            while (npcs == null) {
+                when (val message = next() ?: error("stream ended")) {
+                    is NpcInfo -> npcs = message
+                    is MessageGame -> {
+                        seen += "message: ${message.message}"
+                        if (message.message.contains("can't reach")) return false
                     }
                 }
-                val update = npcs.updates[target] ?: return@repeat
-                val info = (update as? NpcUpdateType.Active)?.extendedInfo
-                if (info == null) {
-                    seen += update.javaClass.simpleName
-                    return@repeat
-                }
-                seen += info.map { it.javaClass.simpleName }
-                // A hit lands as a hitsplat and the health bar under it.
-                if (info.any { it is HitmarkExtendedInfo } && info.any { it is HeadbarExtendedInfo }) return
             }
-            error("npc $target never took a hit; its updates: $seen")
+            val update = npcs.updates[target] ?: return@repeat
+            val info = (update as? NpcUpdateType.Active)?.extendedInfo
+            if (info == null) {
+                seen += update.javaClass.simpleName
+                return@repeat
+            }
+            seen += info.map { it.javaClass.simpleName }
+            // A hit lands as a hitsplat and the health bar under it.
+            if (info.any { it is HitmarkExtendedInfo } && info.any { it is HeadbarExtendedInfo }) return true
         }
+        return false
     }
 
     private companion object {
@@ -61,6 +69,7 @@ class M8CombatTest {
         const val Z = 3218
         const val COMBAT_TICKS = 60
         const val SETTLE_TICKS = 4
+        const val MAX_TARGETS = 4
 
         /** The rats that spawn by Lumbridge castle (npc-spawns.json); Attack is their op 2. */
         val ATTACKABLE = setOf(2854)

@@ -1,6 +1,7 @@
 package gateway.net
 
 import gateway.session.GatewaySession
+import gateway.up.UpdatePlayerModel
 import io.netty.buffer.ByteBufAllocator
 import net.rsprot.compression.provider.HuffmanCodecProvider
 import net.rsprot.crypto.rsa.RsaKeyPair
@@ -73,6 +74,8 @@ class GatewayNetwork(
             .distinct()
             .filterIsInstance<Class<out IncomingGameMessage>>()
             .forEach { builder.addListener(it) { session, message -> session.onClientMessage(message) } }
+        // The gateway's own decoder for the character designer, which rsprot 241 lacks.
+        builder.addListener(UpdatePlayerModel::class.java) { session, message -> session.onClientMessage(message) }
         return DefaultGameMessageConsumerRepositoryProvider(builder.build())
     }
 }

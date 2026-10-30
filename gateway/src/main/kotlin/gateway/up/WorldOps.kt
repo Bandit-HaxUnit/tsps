@@ -78,6 +78,29 @@ object WorldOps {
     fun itemOnPlayer(index: Int, component: Int, slot: Int, item: Int): ByteArray =
         TspsWriter().u16AddLE(index).u16AddLE(item).u16Add(slot).i32(component).u8Add(0).fixed(OPPLAYER_U)
 
+    private val WORLD_ENTITY_OPCODES = intArrayOf(220, 221, 222, 223, 224)
+    private const val WORLD_MAP_CLICK = 105
+    private const val TELEPORT = 212
+
+    /** OPWORLDENTITY1-5: a boat's ops. */
+    fun worldEntity(op: Int, index: Int): ByteArray {
+        val w = TspsWriter()
+        when (op) {
+            1 -> w.u16le(index).u8Sub(0)
+            2 -> w.u16Add(index).u8Add(0)
+            3 -> w.u16(index).u8Neg(0)
+            4 -> w.u8Sub(0).u16(index)
+            5 -> w.u8Add(0).u16le(index)
+            else -> throw IllegalArgumentException("world entity op $op")
+        }
+        return w.fixed(WORLD_ENTITY_OPCODES[op - 1])
+    }
+
+    /** A world-map click (a developer teleport in tsps): i32 `level << 28 | x << 14 | z` as intIME. */
+    fun worldMapClick(level: Int, x: Int, z: Int): ByteArray = TspsWriter().i32ime((level shl 28) or (x shl 14) or z).fixed(WORLD_MAP_CLICK)
+
+    fun teleport(level: Int, x: Int, z: Int): ByteArray = TspsWriter().u16(x).u16(z).u8(level).fixed(TELEPORT)
+
     /** The browser's own packet for dragging an inventory item onto another slot. */
     fun inventoryMove(from: Int, to: Int): ByteArray = TspsWriter().u16(from).u16(to).fixed(INVENTORY_MOVE)
 

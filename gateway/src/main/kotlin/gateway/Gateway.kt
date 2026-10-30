@@ -7,6 +7,7 @@ import gateway.net.CacheJs5Provider
 import gateway.net.GatewayNetwork
 import gateway.session.GatewayConnections
 import gateway.session.GatewayContext
+import gateway.up.UpdatePlayerModel
 import io.netty.buffer.Unpooled
 import net.rsprot.compression.HuffmanCodec
 import net.rsprot.compression.provider.DefaultHuffmanCodecProvider
@@ -35,6 +36,7 @@ class Gateway private constructor(
             val revision = config.cacheDirectory.fileName.toString().substringAfter("osrs-").substringBefore('_').toInt()
             val context = GatewayContext(config, cache, huffman, revision)
             val network = GatewayNetwork(config.gatewayPort, rsa, huffman, CacheJs5Provider(cache), GatewayConnections(context)).build()
+            UpdatePlayerModel.install(network)
             network.start()
             return Gateway(config, rsa, revision, network)
         }

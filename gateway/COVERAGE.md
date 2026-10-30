@@ -51,12 +51,12 @@ sessions, so the browser wire format doesn't change.
 | 134 / 135 / 136 LOC_ADD_CHANGE / DEL / ANIM | LOC_ADD_CHANGE_V2 / LOC_DEL behind UPDATE_ZONE_PARTIAL_FOLLOWS; LOC_ANIM_SPECIFIC | mapped | 7 | tsps replays the scene's loc changes itself after a rebuild |
 | 137 CAMERA_CONTROL | CAM_* | mapped | 7 | easings remapped to OSRS ids; plain instant/animated moves use rates 100/100 and 2/10; translate dropped, a tile glide becomes a tile target, trackTarget dropped |
 | 140 / 141 REBUILD_REGION / NORMAL | REBUILD_REGION_V2 / REBUILD_LOGIN_V2 / REBUILD_NORMAL_V2 | mapped | 1–2 | the scene before login becomes REBUILD_LOGIN (an instance follows as REBUILD_REGION); tsps's template chunks are rsprot ReferenceZones |
-| 142 / 143 REBUILD_WORLDENTITY / WORLDENTITY_INFO | REBUILD_WORLDENTITY_V4 / WORLDENTITY_INFO_V7 | todo | 9 | native: boat level + owner |
+| 142 / 143 REBUILD_WORLDENTITY / WORLDENTITY_INFO | REBUILD_WORLDENTITY_V4 / WORLDENTITY_INFO_V7 | todo | — | **deferred.** Needs: world-entity avatars from tsps's spawns/updates (fine coords, angle), the deck scene as REBUILD_WORLDENTITY_V4, players and NPCs on a deck in the boat's world view (PLAYER_SYNC/NPC_INFO world-view ids, SET_ACTIVE_WORLD for deck locs), and from tsps (native bit) each boat's owner index and projected/active levels. Boats don't render in the official client until then |
 | 144 REGION_REPLACEMENT | — | dropped | 2 | server map data the client can't load |
 | 145 / 146 SET / RESET_INTERACTION_MODE | SET / RESET_INTERACTION_MODE | mapped | 7 | |
 | 150 / 152 SHOP_OPEN / CLOSE | UPDATE_INV_FULL / STOP_TRANSMIT (516) | mapped | 5 | interface and script come separately; tsps's prices and modes are dropped (the client works prices out) |
 | 154 TRADE_REQUEST | — | dropped | 9 | the type-101 game message carries it |
-| 155 / 156 / 157 TRADE_OPEN / UPDATE / CLOSE | UPDATE_INV_FULL (90, 90 \| 0x8000), MESSAGE_GAME | todo | 9 | |
+| 155 / 156 / 157 TRADE_OPEN / UPDATE / CLOSE | UPDATE_INV_FULL (90, 90 \| 0x8000), MESSAGE_GAME | mapped | 9 | tsps opens 335/334/336 and writes their text itself; only the offers needed translating |
 | 190 COLLECTION_LOG_SNAPSHOT | UPDATE_INV_FULL (620) | mapped | 5 | |
 | 210 GAMEMODE_DATA | — | dropped | 4 | custom items/models, league overrides; custom items fall back to `baseItemId` |
 | 220 SYSTEM_UPDATE | UPDATE_REBOOT_TIMER_V2 | mapped | 7 | centiseconds → ticks |
@@ -84,16 +84,16 @@ sessions, so the browser wire format doesn't change.
 | OPNPC1–5 / OPNPC6 / OPNPCT | 76, 12, 34, 70, 57 / 9 / 75 or 36 | mapped | 3, 5 | subop dropped; `T` split as for players |
 | OPLOC1–5 / OPLOC6 / OPLOCT | 96, 28, 42, 38, 51 / 85 / 2 or 86 | mapped | 5 | subop dropped |
 | OPOBJ1–5 / OPOBJ6 / OPOBJT | 102, 43, 103, 56, 82 / 104 / 94 or 79 | mapped | 5 | |
-| OPWORLDENTITY1–5 | 220–224 | todo | 9 | |
+| OPWORLDENTITY1–5 | 220–224 | mapped | 9 | (boats aren't drawn yet, see 142/143) |
 | OPWORLDENTITY6 | — | dropped | 9 | 241 sends a type id, tsps reads an index |
 | MESSAGE_PUBLIC / CLIENT_CHEAT | 190 CHAT | mapped | 2–3 | public (0), autotyper (1 → autochat) and friends chat (2); colour and effects aren't passed (tsps drops them); clan types dropped. CLIENT_CHEAT: `::cmd`, autocomplete requests dropped |
 | MESSAGE_PRIVATE | 197 | mapped | 6 | |
 | FRIENDLIST / IGNORELIST ADD / DEL, FRIENDCHAT_* | 196 FRIENDS_CHAT_ACTION | mapped | 6 | join, leave, kick, rank and the list edits share one tsps packet |
 | CHAT_SETFILTER | 198 | mapped | 6 | |
 | SEND_SNAPSHOT | 199 REPORT_ABUSE | mapped | 6 | |
-| CLICKWORLDMAP / TELEPORT | 105 / 212 | todo | 7 | admin only |
-| UPDATE_PLAYER_MODEL_V2 | 37 APPEARANCE_SET | todo | 3 | needs a gateway decoder; rsprot 241 has none |
-| trade interface buttons | 180 TRADE_ACTION | todo | 9 | |
+| CLICKWORLDMAP / TELEPORT | 105 / 212 | mapped | 9 | developer teleports in tsps |
+| UPDATE_PLAYER_MODEL_V2 | 37 APPEARANCE_SET | mapped | 9 | the gateway adds the decoder rsprot 241 lacks (without one the client is disconnected). The 26-byte layout isn't documented: the gateway tries body + 7 × u16 kits + 5 × u16 colours, then 5 × u8 colours, and only passes a design whose ids are valid in the cache; anything else is logged with its bytes. Confirm against a real save |
+| trade interface buttons | 180 TRADE_ACTION | mapped | 9 | accept/decline (335:10/13, 334:13/14/32), Offer/Remove ×1/5/10/All on 336:0 and 335:25, and X through the count dialog (script 108) the gateway opens itself |
 | WINDOW_STATUS | — | dropped | 4 | tsps picks the root from the saved layout setting, as for the browser |
 | MAP_BUILD_COMPLETE | — | dropped | 2 | gateway-only signal |
 | EVENT_*, IDLE, REFLECTION_CHECK_REPLY, SEND_PING_REPLY, CONNECTION_TELEMETRY, DETECT_MODIFIED_CLIENT, MEMBERSHIP_PROMOTION_ELIGIBILITY, RSEVEN_STATUS, SOUND_JINGLEEND, BUG_REPORT, HISCORE_REQUEST, IF_CRMVIEW_OP, EXIT_FREECAM, CLAN_* | — | dropped | 1 | no tsps handler; clans don't exist in tsps |

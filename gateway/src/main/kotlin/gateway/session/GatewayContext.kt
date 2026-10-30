@@ -5,6 +5,7 @@ import gateway.cache.EnumTypes
 import gateway.cache.ObjTypes
 import gateway.cache.VarTypes
 import gateway.config.GatewayConfig
+import gateway.up.UpdatePlayerModel
 import io.netty.buffer.ByteBufAllocator
 import net.rsprot.compression.provider.HuffmanCodecProvider
 import net.rsprot.protocol.api.GameConnectionHandler
@@ -26,6 +27,7 @@ class GatewayContext(
     val objs = ObjTypes(cache)
     val vars = VarTypes(cache)
     val enums = EnumTypes(cache)
+    val identKitCount = UpdatePlayerModel.identKitCount(cache)
 }
 
 /** rsprot's login callbacks: each login gets a [GatewaySession]. */
