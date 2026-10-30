@@ -11,6 +11,7 @@
     "start:prod": "yarn --cwd server ensure-cache && yarn concurrently --kill-others --names server,client \"yarn --cwd server start:prod\" \"yarn --cwd client serve\"",
     "server": "yarn --cwd server dev",
     "client": "yarn --cwd client start",
+    "bridge": "node scripts/run-with-env.mjs - scripts/quest-helper-bridge.mjs",
     "docs:quests": "node scripts/quest-docs.mjs"
   },
   "devDependencies": {
