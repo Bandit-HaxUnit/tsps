@@ -120,6 +120,18 @@ class HeadlessClient(private val host: String, private val port: Int) {
                 }.buffer.let { it.array().copyOf(it.writerIndex()) },
             )
 
+        /** MESSAGE_PUBLIC: plain public chat. */
+        fun say(text: String) =
+            sendVarByte(
+                MESSAGE_PUBLIC,
+                Unpooled.buffer().toJagByteBuf().apply {
+                    p1(0) // type: public
+                    p1(0) // colour
+                    p1(0) // effect
+                    huffman.encode(this, text)
+                }.buffer.let { it.array().copyOf(it.writerIndex()) },
+            )
+
         /** CLIENT_CHEAT: a `::` command, without the colons. */
         fun command(text: String) =
             sendVarByte(CLIENT_CHEAT, Unpooled.buffer().toJagByteBuf().apply { pjstr(text); p1(0) }.buffer.let { it.array().copyOf(it.writerIndex()) })
@@ -278,6 +290,7 @@ class HeadlessClient(private val host: String, private val port: Int) {
         const val JS5_BLOCK = 512
         const val LOGIN_OK = 2
         const val MOVE_GAMECLICK = 55
+        const val MESSAGE_PUBLIC = 49
         const val IF_BUTTONX = 38
         const val CLIENT_CHEAT = 84
         const val LOGIN_OK_PAYLOAD = 34

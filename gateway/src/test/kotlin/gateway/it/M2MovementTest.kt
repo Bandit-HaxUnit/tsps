@@ -58,6 +58,7 @@ class M2MovementTest {
 
     private fun login(name: String): HeadlessClient.Game {
         val result = LiveGateway.client().login(name, PASSWORD, modulus)
+        assumeTrue(result.code != DUPLICATE, "$name is already online (someone is playing it)")
         assertEquals(OK, result.code, "login of $name")
         return result.game!!
     }
@@ -84,6 +85,7 @@ class M2MovementTest {
     private companion object {
         const val PASSWORD = "gateway-test"
         const val OK = 2
+        const val DUPLICATE = 5
         const val WALK_DISTANCE = 3
         const val MOVEMENT_PACKETS = 60
         // Builds a templated Gauntlet map around an empty-handed developer.

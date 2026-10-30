@@ -1,6 +1,7 @@
 package gateway.session
 
 import gateway.cache.Cache
+import gateway.cache.ObjTypes
 import gateway.config.GatewayConfig
 import io.netty.buffer.ByteBufAllocator
 import net.rsprot.compression.provider.HuffmanCodecProvider
@@ -19,7 +20,9 @@ class GatewayContext(
     /** The revision tsps checks LOGIN against: the cache's. */
     val revision: Int,
     val allocator: ByteBufAllocator = ByteBufAllocator.DEFAULT,
-)
+) {
+    val objs = ObjTypes(cache)
+}
 
 /** rsprot's login callbacks: each login gets a [GatewaySession]. */
 class GatewayConnections(private val context: GatewayContext) : GameConnectionHandler<GatewaySession> {

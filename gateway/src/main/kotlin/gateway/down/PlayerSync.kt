@@ -97,7 +97,7 @@ class PlayerSync {
             added,
             removed,
             teleported,
-            updates.filter { active[it] },
+            updates,
             packet.payload.copyOfRange(blocksStart, start + length),
         )
     }

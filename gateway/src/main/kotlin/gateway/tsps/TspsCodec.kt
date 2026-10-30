@@ -29,6 +29,13 @@ class TspsReader(private val data: ByteArray, var offset: Int = 0) {
         return String(data, start, offset++ - start, Charsets.ISO_8859_1)
     }
 
+    /** A NUL-terminated UTF-8 string (PLAYER_OPTION's text). */
+    fun utf8(): String {
+        val start = offset
+        while (data[offset] != 0.toByte()) offset++
+        return String(data, start, offset++ - start, Charsets.UTF_8)
+    }
+
     fun bytes(length: Int): ByteArray = data.copyOfRange(offset, offset + length).also { offset += length }
 }
 
@@ -63,6 +70,25 @@ class TspsWriter {
     fun u16(value: Int) = apply { u8(value ushr 8).u8(value) }
 
     fun i32(value: Int) = apply { u16(value ushr 16).u16(value) }
+
+    // tsps's reader names (ClientProtocol.ts), which differ from OSRS's in places.
+
+    /** `byteAdd`: value + 128. */
+    fun u8Add(value: Int) = u8(value + 128)
+
+    /** `byteSub`: 128 - value. */
+    fun u8Sub(value: Int) = u8(128 - value)
+
+    /** `byteNeg`: -value. */
+    fun u8Neg(value: Int) = u8(-value)
+
+    fun u16le(value: Int) = u8(value).u8(value ushr 8)
+
+    /** `shortAdd`: low byte + 128, then the high byte. */
+    fun u16Add(value: Int) = u8(value + 128).u8(value ushr 8)
+
+    /** `shortAddLE`: the high byte, then low byte + 128. */
+    fun u16AddLE(value: Int) = u8(value ushr 8).u8(value + 128)
 
     fun string(value: String) = apply { out.writeBytes(value.toByteArray(Charsets.ISO_8859_1)).also { out.write(0) } }
 
@@ -123,12 +149,50 @@ object TspsClientPacket {
             .u8(128).u8(0) // shortAdd: no target loc
             .fixed(MOVE_GAMECLICK)
 
+    private val PLAYER_OP_OPCODES = intArrayOf(44, 45, 46, 73, 6, 48, 10, 21)
+    private val NPC_OP_OPCODES = intArrayOf(76, 12, 34, 70, 57)
+    const val EXAMINE_NPC = 9
+
+    /** OPPLAYER1-8. tsps reads the ctrl byte and ignores it. */
+    fun playerOp(op: Int, index: Int): ByteArray {
+        val writer = TspsWriter()
+        when (op) {
+            1, 3 -> writer.u8Sub(0).u16(index)
+            2 -> writer.u8(0).u16(index)
+            4, 6 -> writer.u16(index).u8Neg(0)
+            5 -> writer.u16AddLE(index).u8Sub(0)
+            7 -> writer.u16Add(index).u8Sub(0)
+            8 -> writer.u8(0).u16Add(index)
+            else -> throw IllegalArgumentException("player op $op")
+        }
+        return writer.fixed(PLAYER_OP_OPCODES[op - 1])
+    }
+
+    /** OPNPC1-5. */
+    fun npcOp(op: Int, index: Int): ByteArray {
+        val writer = TspsWriter()
+        when (op) {
+            1 -> writer.u8(0).u16AddLE(index)
+            2 -> writer.u16AddLE(index).u8(0)
+            3 -> writer.u16Add(index).u8Neg(0)
+            4 -> writer.u8Neg(0).u16le(index)
+            5 -> writer.u8Add(0).u16le(index)
+            else -> throw IllegalArgumentException("npc op $op")
+        }
+        return writer.fixed(NPC_OP_OPCODES[op - 1])
+    }
+
+    fun examineNpc(type: Int): ByteArray = TspsWriter().u16Add(type).fixed(EXAMINE_NPC)
+
     /** A plain if1 button click. */
     fun ifButton(combinedId: Int): ByteArray = TspsWriter().i32(combinedId).fixed(IF_BUTTON)
 
     /** An if3 button click: component, slot (0xFFFF none), obj (-1 none) and op 1-32. */
     fun ifButtonX(combinedId: Int, slot: Int, obj: Int, op: Int): ByteArray =
         TspsWriter().i32(combinedId).u16(slot).u16(obj).u8(op).fixed(IF_BUTTONX)
+
+    /** Public chat: kind 0 public, 2 friends chat, 3 autochat (`encodeChat` in the browser client). */
+    fun chat(kind: Int, text: String): ByteArray = TspsWriter().u8(kind).string(text).varByte(CHAT)
 
     /** A `::` command; tsps reads commands from public chat. */
     fun command(command: String): ByteArray = TspsWriter().u8(CHAT_KIND_PUBLIC).string("::$command").varByte(CHAT)

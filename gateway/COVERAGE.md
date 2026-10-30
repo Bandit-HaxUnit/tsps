@@ -17,8 +17,8 @@ sessions, so the browser wire format doesn't change.
 | 3 LOGIN_RESPONSE | login response | mapped | 1 | 2 (full) → 7, 27 → 26, others 1:1; token dropped |
 | 4 LOGOUT_RESPONSE | LOGOUT / MESSAGE_GAME | todo | 4 | a refusal becomes a game message |
 | 6 PLUGIN_MESSAGE | — | dropped | 1 | plugin features (quest helper, voice, pest control) |
-| 20 PLAYER_SYNC | PLAYER_INFO | todo | 2–3 | M2: the bit stream is decoded (`PlayerSync`) and drives the local player; other players and update blocks are M3 |
-| 21 NPC_INFO | NPC_INFO | todo | 3 | base anims and models from cache; transform → transmog |
+| 20 PLAYER_SYNC | PLAYER_INFO | mapped | 2–3 | every player tsps shows gets an avatar in the session's world; update blocks become extended info; worn slots hide by the cache's wearpos2/3 |
+| 21 NPC_INFO | NPC_INFO | mapped | 3 | type changes and jumps re-add the NPC (as tsps does); model customisation and NPC tint are todo (need the cache NPC model list / a native-bit field) |
 | 22 ANIM | — | dropped | 1 | base anims are in appearance |
 | 23 MOVEMENT_POSITION | — | dropped | 2 | sub-tile movement has no OSRS form |
 | 40 / 41 / 44 VARP_SMALL / LARGE / LONG | VARP_SMALL / LARGE / LONG | todo | 4 | ids ≥ the cache varp count filtered |
@@ -31,7 +31,7 @@ sessions, so the browser wire format doesn't change.
 | 83 SPOT_ANIM | MAP_ANIM | todo | 7 | |
 | 84 PROJECTILES | PROJANIM_SPECIFIC_V4 | todo | 8 | |
 | 87 DESTINATION | SET_MAP_FLAG_V2 | mapped | 2 | 0,0 clears the flag |
-| 88 PLAYER_OPTION | SET_PLAYER_OP | todo | 3 | plus baseline Trade with / Follow, Attack in PvP |
+| 88 PLAYER_OPTION | SET_PLAYER_OP | mapped | 3 | plus Trade with (op 2) and Follow (op 3) at login, which the browser adds itself; Attack in PvP comes from tsps |
 | 89 HINT_ARROW | HINT_ARROW | todo | 7 | tile level scope lost |
 | 90 ATTACK_TIMER | — | dropped | 8 | tsps HUD |
 | 100 / 101 WIDGET_OPEN / CLOSE | IF_OPENSUB / IF_CLOSESUB | todo | 4 | gateway picks and remembers the target |
@@ -42,7 +42,7 @@ sessions, so the browser wire format doesn't change.
 | 109 / 111 / 112 WIDGET_SET_FLAGS* | IF_SETEVENTS_V2 | todo | 4 | old op bits 1–10 move to events2 |
 | 110 WIDGET_RUN_SCRIPT | VARP_*, UPDATE_INV_FULL, RUNCLIENTSCRIPT | todo | 4 | script -1 = vars/inventories only |
 | 116 WIDGET_SET_QUEST_LIST | — | dropped | 4 | browser-only quest list widget |
-| 120 CHAT_MESSAGE | MESSAGE_GAME, PLAYER_INFO chat, MESSAGE_PRIVATE(_ECHO), MESSAGE_FRIENDCHANNEL | todo | 3, 6 | public chat merged with the overhead text |
+| 120 CHAT_MESSAGE | MESSAGE_GAME, PLAYER_INFO chat, MESSAGE_PRIVATE(_ECHO), MESSAGE_FRIENDCHANNEL | todo | 3, 6 | public chat mapped (M3): one PLAYER_INFO chat block, the overhead copy suppressed, crown from `<img=N>`; colour/effects todo; other types M6 |
 | 121 FRIENDS_CHAT_UPDATE | UPDATE_FRIENDLIST, UPDATE_IGNORELIST, UPDATE_FRIENDCHAT_CHANNEL_FULL_V2, FRIENDLIST_LOADED | todo | 6 | |
 | 122 CHAT_FILTER_SETTINGS | CHAT_FILTER_SETTINGS + _PRIVATECHAT | todo | 6 | |
 | 123 TRIGGER_ONDIALOGABORT | TRIGGER_ONDIALOGABORT | todo | 4 | |
@@ -80,13 +80,13 @@ sessions, so the browser wire format doesn't change.
 | CLOSE_MODAL | 55 IF_CLOSE | todo | 4 | |
 | settings / run orb buttons | 191 VARP_TRANSMIT | todo | 4 | from the varp mirror |
 | logout button | 203 LOGOUT | todo | 4 | |
-| OPPLAYER1–8 / OPPLAYERT | 44… / 32 or 65 | todo | 3, 5 | `T` split by selected component |
-| OPNPC1–5 / OPNPC6 / OPNPCT | 76, 12, 34, 70, 57 / 9 / 75 or 36 | todo | 3, 5 | subop dropped |
+| OPPLAYER1–8 / OPPLAYERT | 44… / 32 or 65 | todo | 3, 5 | OPPLAYER1–8 mapped (M3); `T` split by selected component in M5 |
+| OPNPC1–5 / OPNPC6 / OPNPCT | 76, 12, 34, 70, 57 / 9 / 75 or 36 | todo | 3, 5 | OPNPC1–6 mapped (M3), subop dropped; `T` in M5 |
 | OPLOC1–5 / OPLOC6 / OPLOCT | 96, 28, 42, 38, 51 / 85 / 2 or 86 | todo | 5 | |
 | OPOBJ1–5 / OPOBJ6 / OPOBJT | 102, 43, 103, 56, 82 / 104 / 94 or 79 | todo | 5 | |
 | OPWORLDENTITY1–5 | 220–224 | todo | 9 | |
 | OPWORLDENTITY6 | — | dropped | 9 | 241 sends a type id, tsps reads an index |
-| MESSAGE_PUBLIC / CLIENT_CHEAT | 190 CHAT | todo | 6 | CLIENT_CHEAT mapped early (M2): `::cmd` as public chat; autocomplete requests dropped |
+| MESSAGE_PUBLIC / CLIENT_CHEAT | 190 CHAT | mapped | 2–3 | public (0), autotyper (1 → autochat) and friends chat (2); colour and effects aren't passed (tsps drops them); clan types dropped. CLIENT_CHEAT: `::cmd`, autocomplete requests dropped |
 | MESSAGE_PRIVATE | 197 | todo | 6 | |
 | FRIENDLIST / IGNORELIST ADD / DEL, FRIENDCHAT_* | 196 FRIENDS_CHAT_ACTION | todo | 6 | |
 | CHAT_SETFILTER | 198 | todo | 6 | |

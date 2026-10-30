@@ -1,7 +1,11 @@
 package gateway.session
 
 import gateway.coverage.DropCounter
+import gateway.down.ActorBlocks
+import gateway.down.BlockReader
 import gateway.down.MapRebuild
+import gateway.down.NpcSync
+import gateway.down.TspsChatMessage
 import gateway.down.PlayerSync
 import gateway.down.TspsHandshake
 import gateway.down.TspsLoginResult
@@ -15,12 +19,17 @@ import net.rsprot.protocol.game.outgoing.info.Infos
 import net.rsprot.protocol.game.outgoing.interfaces.IfOpenTop
 import net.rsprot.protocol.game.incoming.buttons.If1Button
 import net.rsprot.protocol.game.incoming.buttons.If3Button
+import net.rsprot.protocol.game.incoming.messaging.MessagePublic
 import net.rsprot.protocol.game.incoming.misc.user.ClientCheat
+import net.rsprot.protocol.game.incoming.npcs.OpNpc6
+import net.rsprot.protocol.game.incoming.npcs.OpNpcV2
+import net.rsprot.protocol.game.incoming.players.OpPlayer
 import net.rsprot.protocol.game.incoming.misc.user.MoveGameClick
 import net.rsprot.protocol.game.incoming.misc.user.MoveMinimapClick
 import net.rsprot.protocol.game.incoming.misc.user.SetHeading
 import net.rsprot.protocol.game.outgoing.map.RebuildLoginV2
 import net.rsprot.protocol.game.outgoing.misc.player.SetMapFlagV2
+import net.rsprot.protocol.game.outgoing.misc.player.SetPlayerOp
 import net.rsprot.protocol.game.outgoing.misc.client.ServerTickEnd
 import net.rsprot.protocol.loginprot.incoming.util.AuthenticationType
 import net.rsprot.protocol.loginprot.incoming.util.LoginBlock
@@ -58,6 +67,9 @@ class GatewaySession(
     private var self: Infos? = null
     private var root = DEFAULT_TOPLEVEL
     private val players = PlayerSync()
+    private val npcs = NpcSync()
+    private var mirror: EntityMirror? = null
+    private var level = 0
 
     /** The scene tsps built before the client logged in; REBUILD_LOGIN takes its place. */
     private var loginScene: MapRebuild? = null
@@ -109,6 +121,10 @@ class GatewaySession(
             is If3Button -> tsps.send(TspsClientPacket.ifButtonX(message.combinedId, message.sub, message.obj, message.op))
             // Autocomplete is the client asking for suggestions as you type; tsps has none.
             is ClientCheat -> if (!message.autocomplete) tsps.send(TspsClientPacket.command(message.command))
+            is MessagePublic -> PUBLIC_CHAT_KINDS[message.type]?.let { tsps.send(TspsClientPacket.chat(it, message.message)) } ?: DropCounter.up(message)
+            is OpPlayer -> tsps.send(TspsClientPacket.playerOp(message.op, message.index))
+            is OpNpcV2 -> if (message.op in 1..5) tsps.send(TspsClientPacket.npcOp(message.op, message.index)) else DropCounter.up(message)
+            is OpNpc6 -> tsps.send(TspsClientPacket.examineNpc(message.id))
             else -> DropCounter.up(message)
         }
     }
@@ -143,7 +159,18 @@ class GatewaySession(
                 send(IfOpenTop(root))
             }
             TspsServerPacket.PLAYER_SYNC -> onPlayerSync(players.decode(packet))
-            TspsServerPacket.NPC_INFO -> if (state == State.IN_GAME) endTick()
+            TspsServerPacket.NPC_INFO -> {
+                val frame = npcs.decode(packet)
+                mirror?.applyNpcs(frame, level)
+                if (state == State.IN_GAME) endTick()
+            }
+            TspsServerPacket.CHAT_MESSAGE -> onChat(TspsChatMessage.decode(packet))
+            TspsServerPacket.PLAYER_OPTION -> {
+                val reader = packet.reader()
+                val slot = reader.u8()
+                val priority = reader.u8() != 0
+                send(SetPlayerOp(slot, priority, reader.utf8().ifEmpty { null }))
+            }
             TspsServerPacket.REBUILD_NORMAL -> onRebuild(MapRebuild.normal(packet))
             TspsServerPacket.REBUILD_REGION -> onRebuild(MapRebuild.region(packet))
             TspsServerPacket.DESTINATION -> {
@@ -169,12 +196,23 @@ class GatewaySession(
 
     private fun onPlayerSync(frame: PlayerSync.Frame) {
         val tile = frame.tiles[frame.localIndex] ?: return
-        val self = self
+        level = tile.level
         if (self == null) {
-            if (state == State.AWAITING_SCENE) enterGame(tile)
+            if (state != State.AWAITING_SCENE) return
+            enterGame(tile)
+        }
+        val reader = BlockReader(frame.updateBlocks)
+        val blocks = frame.updateIndices.associateWith { ActorBlocks.player(reader) }
+        mirror?.applyPlayers(frame, blocks)
+    }
+
+    private fun onChat(chat: TspsChatMessage) {
+        // Public chat goes overhead and to the chatbox through PLAYER_INFO.
+        if (chat.isPublic && chat.playerIndex >= 0) {
+            mirror?.queueChat(chat.playerIndex, chat.text, chat.modIcon)
             return
         }
-        self.updateRootCoord(tile.level, tile.x, tile.z)
+        DropCounter.down(TspsServerPacket.CHAT_MESSAGE)
     }
 
     /** tsps has placed the player: log the client in at that tile. */
@@ -185,6 +223,7 @@ class GatewaySession(
         infos.updateRootBuildArea(scene.zoneX - SCENE_RADIUS_ZONES, scene.zoneZ - SCENE_RADIUS_ZONES)
         Appearance.apply(infos.playerInfo.avatar.extendedInfo, handshake)
         self = infos
+        mirror = EntityMirror(world, context.objs, infos, handshake.index)
 
         val ok =
             LoginResponse.Ok(
@@ -203,11 +242,13 @@ class GatewaySession(
         // REBUILD_LOGIN is always a static map; an instance follows as its own rebuild.
         session.queue(RebuildLoginV2(scene.zoneX, scene.zoneZ, MapRebuild.NO_WORLD_AREA, infos.playerInfo))
         if (scene is MapRebuild.Region) session.queue(scene.toMessage())
+        // The browser client adds these itself; tsps handles op 2 as trade and 3 as follow.
+        session.queue(SetPlayerOp(TRADE_OP, false, "Trade with"))
+        session.queue(SetPlayerOp(FOLLOW_OP, false, "Follow"))
         beforeLogin.forEach(session::queue)
         beforeLogin.clear()
         state = State.IN_GAME
         log.info("${handshake.name} entered at ${tile.x}, ${tile.z}, ${tile.level} (index ${handshake.index})")
-        endTick()
     }
 
     private fun endTick() {
@@ -250,6 +291,8 @@ class GatewaySession(
         state = State.CLOSED
         if (::tsps.isInitialized) tsps.close()
         session?.requestClose()
+        mirror?.release()
+        mirror = null
         self?.let(world::releasePlayer)
         self = null
         executor.shutdown()
@@ -262,5 +305,10 @@ class GatewaySession(
         const val STAFF_ADMINISTRATOR = 2
         const val PING_INTERVAL_MS = 5_000L
         const val SCENE_RADIUS_ZONES = 6
+        const val TRADE_OP = 2
+
+        /** OSRS public-chat types (0 public, 1 autotyper, 2 friends chat) to tsps chat kinds. */
+        val PUBLIC_CHAT_KINDS = mapOf(0 to 0, 1 to 3, 2 to 2)
+        const val FOLLOW_OP = 3
     }
 }
