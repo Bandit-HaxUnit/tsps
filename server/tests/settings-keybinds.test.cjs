@@ -486,7 +486,7 @@ test('XP drops setup: a dropdown row sets its varbit to the row - 1 (script 1036
 
   // Another session of the same account gets it back at login.
   const next = varpPlayer({ native: true });
-  next.setAttribute('xpdrops-setup', player.getAttribute('xpdrops-setup'));
+  next.setAttribute('settings:xpdrops-setup', player.getAttribute('settings:xpdrops-setup'));
   logins.forEach((login) => login({ player: next }));
   assert.equal(next.varps.get(XPDROPS_VARP), varp);
 });
@@ -503,7 +503,7 @@ test('XP drops setup: the browser transmits the whole varp, which is kept and ec
   assert.equal(other.handled, false, 'not an XP drops varp');
 
   const next = varpPlayer();
-  next.setAttribute('xpdrops-setup', player.getAttribute('xpdrops-setup'));
+  next.setAttribute('settings:xpdrops-setup', player.getAttribute('settings:xpdrops-setup'));
   logins.forEach((login) => login({ player: next }));
   assert.equal(next.varps.get(XPDROPS_VARP), 0x1234);
 });

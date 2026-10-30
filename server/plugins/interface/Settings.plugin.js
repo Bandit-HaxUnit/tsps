@@ -42,7 +42,7 @@ const XPDROPS_SETUP_DROPDOWNS = new Map([
 const XPDROPS_SETUP_MAX_ROW = 31;
 // The varps behind them, saved as whole values: the browser transmits them, the official client
 // only reports the row it chose.
-const XPDROPS_SETUP_ATTRIBUTE = "xpdrops-setup";
+const XPDROPS_SETUP_ATTRIBUTE = "settings:xpdrops-setup";
 
 // Settings > Display: "Game client layout" dropdown. The row label is built by
 // cache script 7992 from entry enum 3509 and its option rows are dynamic
