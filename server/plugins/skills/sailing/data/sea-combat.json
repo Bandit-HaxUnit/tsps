@@ -14,6 +14,7 @@
     { "type": 8, "item": 31916, "name": "dragon cannonball", "accuracy": 80, "strength": 270, "projectile": 3494 }
   ],
   "creatures": [
+    { "npc": 15175, "dead": 15176, "name": "Drink troll queen", "reach": 6, "impactHeight": 20 },
     { "npc": 15194, "dead": 15195, "name": "Bull shark", "reach": 1, "impactHeight": 20, "bountyXp": 3465 },
     { "npc": 15196, "dead": 15197, "name": "Hammerhead shark", "reach": 1, "impactHeight": 20, "bountyXp": 8800 },
     { "npc": 15198, "dead": 15199, "name": "Tiger shark", "reach": 1, "impactHeight": 20, "bountyXp": 19910 },
