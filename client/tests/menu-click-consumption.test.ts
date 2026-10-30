@@ -7,6 +7,12 @@ import { ClickMode } from "../game/InputManager";
 import { shouldSkipWidgetClickInput } from "../game/widgets/input/widgetClickGuard";
 import { drawChooseOptionMenu } from "../widgets/gl/choose-option";
 import { UIInputBridge } from "../widgets/gl/ui-input";
+import { InputManager } from "../game/InputManager";
+import { WidgetInteractionController } from "../game/widgets/WidgetInteractionController";
+import { processWidgetClickInput } from "../game/widgets/input/widgetClickInput";
+import { processWidgetReleaseInput } from "../game/widgets/input/widgetReleaseInput";
+import { createPrimaryWidgetActionResolver } from "../game/widgets/input/widgetPrimaryAction";
+import { createCacheVm } from "../scripts/cache/cs2-sweep";
 
 // Inspect on the ToA obelisk must send object option 1, not an examine packet.
 const obeliskMenu = new MenuState();
@@ -182,5 +188,58 @@ drawKeyboardMenu();
 assert.equal(keyboardPicked, 1, "Space also invokes the selected inventory context menu action");
 assert.equal(menuUi.menu, undefined, "widget menu selection closes the native menu");
 assert.equal(consumedMenuClicks, 3, "an inventory keyboard menu selection cannot click through");
+
+// Native eventscroll Close: a press/release can both arrive before the render
+// frame. Its cached onOp closes/unloads the modal before the world input pass.
+// Use actual cache/VM/manager/input; select the decoded hit directly here.
+const { vm: closeVm } = createCacheVm();
+const closeManager = closeVm.context.widgetManager;
+closeManager.setRootInterface(161);
+const modalParent = (161 << 16) | 16;
+closeManager.openSubInterface(modalParent, 807, 0);
+const nativeClose = closeManager.getWidgetByUid((807 << 16) | 1)!;
+const nativeRoot = closeManager.getWidgetByUid(807 << 16)!;
+closeVm.runScriptEvent({ widget: nativeRoot, args: [6903, nativeClose.uid, (807 << 16) | 15] });
+assert.equal(closeVm.lastError, null);
+let nativeCloses = 0;
+closeVm.context.sendIfClose = () => nativeCloses++;
+const nativeInput = new InputManager();
+nativeInput.clickMode1 = ClickMode.LEFT;
+nativeInput.clickMode2 = ClickMode.NONE;
+nativeInput.clickX = nativeInput.mouseX = 100;
+nativeInput.clickY = nativeInput.mouseY = 120;
+nativeInput.onFrameStart();
+const nativeInteraction = new WidgetInteractionController({
+    getWidgetManager: () => closeManager,
+    getInputManager: () => nativeInput,
+    getRendererCanvas: () => undefined,
+    getTradeRequestTargetsByName: () => new Map(),
+});
+const nativeDeps = {
+    getCs2Vm: () => closeVm,
+    getSpellSelection: () => ({ getWidgetTargetMask: () => 0 }),
+    getTransmitCycles: () => ({ cycleCntr: 1 }),
+    getSettings: () => ({}),
+    handleTradeWidgetAction: () => false,
+    buildWidgetActionPayload: () => null,
+    executeScriptListener: (widget: any, args: any[], event: any) => closeVm.runScriptEvent({ widget, args, ...event }),
+} as any;
+const nativeFrame = { input: nativeInput, mx: 100, my: 120,
+    collectFromAllRoots: () => [nativeClose], getWidgetFlags: (widget: any) => closeManager.getWidgetFlags(widget) } as any;
+const nativePrimary = createPrimaryWidgetActionResolver(nativeDeps, nativeInput, closeManager, nativeInteraction);
+processWidgetClickInput(nativeDeps, { cachedHoverHits: null } as any, nativeFrame, closeManager, nativeInteraction, nativePrimary, true);
+assert.equal(nativeCloses, 1, "actual cached Close sends IF_CLOSE once");
+assert.equal(closeManager.interfaceParents.has(modalParent), false, "actual CS2 closes the real modal");
+assert.equal(closeVm.lastError, null);
+processWidgetReleaseInput(nativeDeps, nativeFrame, closeManager, nativeInteraction, nativePrimary, false);
+assert.equal(nativeInteraction.clickedWidget, null, "release clears transient widget custody");
+assert.equal(nativeInput.leftClickX, -1, "Close must not expose the same frame click to the later world input pass");
+assert.equal(nativeInput.clickMode2, ClickMode.NONE, "claiming a widget does not invent a held button");
+nativeInput.onFrameEnd();
+nativeInput.clickMode1 = ClickMode.LEFT;
+nativeInput.clickX = 220;
+nativeInput.clickY = 240;
+nativeInput.onFrameStart();
+assert.equal(nativeInput.leftClickX, 220, "a new independent world click remains usable");
 
 console.log("menu click consumption test passed");
