@@ -67,6 +67,10 @@ class UpdatePlayerModel(val bytes: ByteArray) : IncomingGameMessage {
 
         private val LAYOUTS = listOf(SHORT_FIELDS, BYTE_COLOURS)
 
+        /** TEMPORARY (M11): every save's bytes, to pin the layout from real saves. */
+        fun logCapture(message: UpdatePlayerModel) =
+            log.info("UPDATE_PLAYER_MODEL_V2 capture: ${message.bytes.joinToString(" ") { "%02x".format(it) }}")
+
         fun logUnknown(message: UpdatePlayerModel) =
             log.warning("unrecognised UPDATE_PLAYER_MODEL_V2 layout, dropped: ${message.bytes.joinToString(" ") { "%02x".format(it) }}")
 

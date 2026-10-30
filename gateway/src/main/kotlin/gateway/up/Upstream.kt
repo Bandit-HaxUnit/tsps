@@ -126,7 +126,10 @@ class Upstream(
             is SetChatFilterSettings ->
                 send(TspsWriter().u8(message.publicChatFilter).u8(message.privateChatFilter).u8(message.tradeChatFilter).fixed(CHAT_FILTER))
             is SendSnapshot -> send(TspsWriter().string(message.name).u8(message.ruleId).u8(if (message.mute) 1 else 0).varByte(REPORT_ABUSE))
-            is UpdatePlayerModel -> message.design(identKitCount)?.let { send(message.toTsps(it)) } ?: UpdatePlayerModel.logUnknown(message)
+            is UpdatePlayerModel -> {
+                UpdatePlayerModel.logCapture(message) // TEMPORARY (M11): captures real saves to pin the layout
+                message.design(identKitCount)?.let { send(message.toTsps(it)) } ?: UpdatePlayerModel.logUnknown(message)
+            }
             is OpWorldEntity -> if (message.op in 1..5) send(WorldOps.worldEntity(message.op, message.index)) else DropCounter.up(message)
             is ClickWorldMap -> send(WorldOps.worldMapClick(message.level, message.x, message.z))
             is Teleport -> send(WorldOps.teleport(message.level, message.x, message.z))
