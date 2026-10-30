@@ -978,7 +978,7 @@ export class InputManager {
 
     /**
      * Touch events list every active touch on the page, including fingers
-     * resting on HUD overlays like the movement d-pad. Those must never pinch
+     * resting on HUD overlays like the movement joystick. Those must never pinch
      * or drag the camera, so gestures only count touches on the game surface.
      */
     private gameTouches(event: TouchEvent): Touch[] {
@@ -1058,7 +1058,7 @@ export class InputManager {
             return;
         }
 
-        // A HUD finger (e.g. the movement pad) moves freely without orbiting
+        // A HUD finger (e.g. the movement joystick) moves freely without orbiting
         // the camera; only a lone game-surface finger drives the gesture FSM.
         if (game.length === 1 && !this.isPinching) {
             const [x, y] = getMousePos(this.element, game[0]);
@@ -1093,7 +1093,7 @@ export class InputManager {
         }
 
         // Lift of a game-surface finger ends its gesture; a HUD finger lifting
-        // (movement pad) must not cancel an active camera drag or tap.
+        // (movement joystick) must not cancel an active camera drag or tap.
         const ended = Array.from(event.changedTouches).find((touch) => touch.target === this.element);
         if (ended && this.element) {
             const [x, y] = getMousePos(this.element, ended);

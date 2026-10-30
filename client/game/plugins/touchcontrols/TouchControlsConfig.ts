@@ -1,6 +1,6 @@
 import { ConfigGroup, ConfigItem } from "@runelite/client/config/ConfigItem";
 
-/** When the movement pad shows. Default = whatever the device reports. */
+/** When the joystick shows. Default = whatever the device reports. */
 export const PadMode = {
     DEFAULT: "DEFAULT",
     ON: "ON",
@@ -13,9 +13,9 @@ export const TouchControlsConfig = ConfigGroup(
     "touchcontrols",
     {
         padMode: ConfigItem<PadModeValue>({
-            name: "Show the movement pad",
+            name: "Show the joystick",
             description:
-                "Default shows the pad on touch screens; On forces it on any device; Off hides it.",
+                "Default shows the joystick on touch screens; On forces it on any device; Off hides it.",
             position: 0,
             enum: {
                 Default: PadMode.DEFAULT,

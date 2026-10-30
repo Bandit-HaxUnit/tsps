@@ -9,32 +9,22 @@ import { RS_TO_RADIANS } from "../../../rs/MathConstants";
 import { createElement, lazy, type ReactNode } from "react";
 import { PadMode, type PadModeValue, TouchControlsConfig } from "./TouchControlsConfig";
 
-const TouchDPad = lazy(() =>
-    import("./TouchDPad").then((m) => ({ default: m.TouchDPad })),
+const TouchJoystick = lazy(() =>
+    import("./TouchJoystick").then((m) => ({ default: m.TouchJoystick })),
 );
-
-/** The four d-pad directions; several can be held at once for diagonals. */
-export type TouchDirection = "up" | "down" | "left" | "right";
 
 export type TouchControlsUiState = {
     visible: boolean;
-    running: boolean;
-    pressed: Record<TouchDirection, boolean>;
-};
-
-const NO_PRESSED: Record<TouchDirection, boolean> = {
-    up: false,
-    down: false,
-    left: false,
-    right: false,
 };
 
 /**
- * The slice of OsrsClient the d-pad needs. Kept structural so the plugin stays
+ * The slice of OsrsClient the joystick needs. Kept structural so the plugin stays
  * testable without a full client (same shape as FirstPersonPlugin's client type).
  */
 export type TouchControlsClient = {
     camera: Camera;
+    /** The run orb; the joystick walks or runs as it says. */
+    runMode?: boolean;
     isLoggedIn(): boolean;
     isWidgetTextInputActive?(): boolean;
     cs2Vm?: { inputDialogType?: number };
@@ -44,30 +34,28 @@ export type TouchControlsClient = {
     };
     setKeyboardMovement?(dx: number, dy: number, running: boolean, rotation: number): void;
     stopKeyboardMovement?(deactivate?: boolean): void;
-    setKeyboardRunMode?(running: boolean): void;
 };
 
 function detectTouchDevice(): boolean {
     if (typeof window === "undefined" || typeof navigator === "undefined") return false;
     const params = new URLSearchParams(window.location.search);
-    // ?touch=1 forces the pad on for desktop testing; ?touch=0 hides it on a phone.
+    // ?touch=1 forces the joystick on for desktop testing; ?touch=0 hides it on a phone.
     if (params.get("touch") === "0") return false;
     if (params.get("touch") === "1") return true;
     return (navigator.maxTouchPoints ?? 0) > 0 || "ontouchstart" in window;
 }
 
 /**
- * On-screen movement pad for phones and tablets.
+ * On-screen movement joystick for phones and tablets.
  *
  * Movement itself already exists end to end: `ContinuousMovement` sends
  * MOVEMENT_INPUT (opcode 215) and the server's FreeMovement plugin walks the
- * player, so this plugin is only the touch control that feeds it. The vector
- * maths mirrors FirstPersonPlugin's WASD handling so both feel the same.
+ * player, so this plugin is only the touch control that feeds it.
  */
 export class TouchControlsPlugin extends Plugin implements ClientPlugin {
     static descriptor: PluginDescriptor = {
         name: "Touch Controls",
-        description: "On-screen d-pad and run toggle for walking on touch screens.",
+        description: "On-screen joystick for walking on touch screens.",
         tags: ["input", "mobile"],
         configKey: "touchcontrolsplugin",
     };
@@ -79,12 +67,11 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
     /** Optional: unavailable in standalone builds (tests), where config stays Default. */
     private readonly configManager?: ConfigManager;
     private readonly touchDevice = detectTouchDevice();
-    /** Live touches by pointer id; several can be held at once for diagonals. */
-    private readonly pointers = new Map<number, readonly TouchDirection[]>();
     private readonly listeners = new Set<() => void>();
-    private running = false;
+    /** The held stick, camera-relative: forward is away from the camera. Undefined when released. */
+    private stick?: { forward: number; right: number };
     private padMode: PadModeValue = PadMode.DEFAULT;
-    private uiState: TouchControlsUiState = { visible: false, running: false, pressed: { ...NO_PRESSED } };
+    private uiState: TouchControlsUiState = { visible: false };
 
     constructor(client?: TouchControlsClient) {
         super();
@@ -92,12 +79,12 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
         try {
             this.configManager = inject(ConfigManager);
         } catch {
-            // Built standalone (tests): the pad follows device detection only.
+            // Built standalone (tests): the joystick follows device detection only.
         }
         this.readConfig();
     }
 
-    /** Runtime change from the settings panel flips pad visibility live. */
+    /** Runtime change from the settings panel flips joystick visibility live. */
     onConfigChanged(event: ConfigChanged): void {
         if (event.getGroup() !== TouchControlsConfig.group) return;
         this.readConfig();
@@ -110,7 +97,7 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
     }
 
     renderHud(_osrsClient: OsrsClient): ReactNode {
-        return createElement(TouchDPad, { plugin: this });
+        return createElement(TouchJoystick, { plugin: this });
     }
 
     subscribe(listener: () => void): () => void {
@@ -124,54 +111,30 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
         return this.uiState;
     }
 
-    press(pointerId: number, direction: TouchDirection): void {
+    /** Hold the stick at (forward, right); (0, 0) is centred and stands still. */
+    steer(forward: number, right: number): void {
         if (!this.canMove()) return;
-        this.pointers.set(pointerId, [direction]);
-        this.publish();
+        this.stick = { forward, right };
         this.drive();
     }
 
-    /**
-     * 8-way pad: one pointer holds a set of directions (a slide across the pad
-     * re-aims it); everything else about the pointer is untouched.
-     */
-    aim(pointerId: number, directions: readonly TouchDirection[]): void {
-        if (!this.canMove()) return;
-        this.pointers.set(pointerId, directions);
-        this.publish();
-        this.drive();
+    release(): void {
+        if (!this.stick) return;
+        this.stick = undefined;
+        this.stopWalking();
     }
 
-    release(pointerId: number): void {
-        if (!this.pointers.delete(pointerId)) return;
-        this.publish();
-        this.drive();
-    }
-
-    toggleRun(): void {
-        this.running = !this.running;
-        this.publish();
-        if (this.pointers.size) this.drive();
-    }
-
-    /** RuneLite's ClientTick: keep the pad honest as the camera turns or a menu opens. */
+    /** RuneLite's ClientTick: keep the walk honest as the camera turns or a menu opens. */
     onClientTick(): void {
-        if (this.pointers.size > 0) {
-            if (!this.canMove()) this.releaseAll();
+        if (this.stick) {
+            if (!this.canMove()) this.release();
             else this.drive();
         }
         this.publish();
     }
 
     protected override async shutDown(): Promise<void> {
-        this.releaseAll();
-    }
-
-    private releaseAll(): void {
-        if (this.pointers.size === 0) return;
-        this.pointers.clear();
-        this.stopWalking();
-        this.publish();
+        this.release();
     }
 
     private stopWalking(): void {
@@ -179,33 +142,24 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
     }
 
     private drive(): void {
-        let forward = 0;
-        let right = 0;
-        for (const directions of this.pointers.values()) {
-            for (const direction of directions) {
-                if (direction === "up") forward += 1;
-                else if (direction === "down") forward -= 1;
-                else if (direction === "right") right += 1;
-                else right -= 1;
-            }
-        }
+        const { forward, right } = this.stick!;
         if (!forward && !right) {
             this.stopWalking();
             return;
         }
-        // Camera-relative, like FirstPersonPlugin: "up" walks away from the camera.
+        // Camera-relative, like FirstPersonPlugin: forward walks away from the camera.
         const camera = this.client.camera;
         const yaw = camera.yaw * RS_TO_RADIANS;
-        const length = Math.hypot(forward, right);
-        const dx = (Math.sin(yaw) * forward + Math.cos(yaw) * right) / length;
-        const dy = (Math.cos(yaw) * forward - Math.sin(yaw) * right) / length;
-        this.client.setKeyboardRunMode?.(this.running);
-        this.client.setKeyboardMovement?.(dx, dy, this.running, (camera.getYaw() + 1024) & 2047);
+        const dx = Math.sin(yaw) * forward + Math.cos(yaw) * right;
+        const dy = Math.cos(yaw) * forward - Math.sin(yaw) * right;
+        // Face the way we walk: camera forward (yaw + 1024) turned by the stick's angle.
+        const turn = Math.round(Math.atan2(right, forward) / RS_TO_RADIANS);
+        this.client.setKeyboardMovement?.(dx, dy, !!this.client.runMode, (camera.getYaw() + 1024 + turn) & 2047);
     }
 
     /**
-     * Movement input starts by closing interruptible interfaces server-side, so the pad
-     * must stay inert while a bank or dialogue is open (FirstPersonPlugin's guard).
+     * Movement input starts by closing interruptible interfaces server-side, so the
+     * joystick must stay inert while a bank or dialogue is open (FirstPersonPlugin's guard).
      */
     private canMove(): boolean {
         if (!this.client.isLoggedIn()) return false;
@@ -224,19 +178,12 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
     }
 
     private publish(): void {
-        const pressed = { ...NO_PRESSED };
-        for (const directions of this.pointers.values()) {
-            for (const direction of directions) pressed[direction] = true;
-        }
         // On/Off beat detection and the ?touch= query override; Default keeps both.
         const padOn =
             this.padMode === PadMode.ON ? true : this.padMode === PadMode.OFF ? false : this.touchDevice;
         const visible = padOn && this.client.isLoggedIn();
-        const current = this.uiState;
-        if (current.visible === visible && current.running === this.running &&
-            current.pressed.up === pressed.up && current.pressed.down === pressed.down &&
-            current.pressed.left === pressed.left && current.pressed.right === pressed.right) return;
-        this.uiState = { visible, running: this.running, pressed };
+        if (this.uiState.visible === visible) return;
+        this.uiState = { visible };
         for (const listener of [...this.listeners]) {
             try {
                 listener();

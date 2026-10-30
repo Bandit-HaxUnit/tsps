@@ -1,0 +1,50 @@
+/* On-screen joystick. The wrapper is inert; only the stick base takes touches. */
+.touch-controls {
+    --stick-size: 120px;
+    --knob-size: 52px;
+    --stick-offset: 16px;
+    position: absolute;
+    inset: 0;
+    z-index: 12;
+    pointer-events: none;
+}
+
+.touch-joystick {
+    position: absolute;
+    left: calc(var(--stick-offset) + env(safe-area-inset-left, 0px));
+    bottom: calc(var(--stick-offset) + env(safe-area-inset-bottom, 0px));
+    width: var(--stick-size);
+    height: var(--stick-size);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    background: rgba(0, 0, 0, 0.25);
+    opacity: 0.7;
+    pointer-events: auto;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity 0.15s;
+}
+
+.touch-joystick.is-active {
+    opacity: 1;
+}
+
+.touch-joystick-knob {
+    width: var(--knob-size);
+    height: var(--knob-size);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.45);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+    transition: transform 0.12s ease-out;
+}
+
+/* Follow the finger directly; only the spring back to centre animates. */
+.touch-joystick.is-active .touch-joystick-knob {
+    transition: none;
+}
