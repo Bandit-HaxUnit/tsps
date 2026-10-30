@@ -55,7 +55,7 @@ module.exports = function registerDwarfCannonQuest(api) {
   const CANNON_SPRING_VARBIT = 2239;
   const MUDPILE_OBJECT_ID = 13; // "Mud pile", Climb-over
   const MUDPILE_TILE = { x: 2621, y: 9796, z: 0 };
-  const OUTSIDE_CAVE_TILE = { x: 2622, y: 3395, z: 0 };
+  const OUTSIDE_CAVE_TILE = { x: 2623, y: 3391, z: 0 };
 
   const RAILS_ATTRIBUTE = "dwarf-cannon:rails-fixed";
   const RAILS_MASK_ATTRIBUTE = "dwarf-cannon:rails-fixed-mask";
