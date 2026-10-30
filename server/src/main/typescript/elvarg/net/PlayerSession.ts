@@ -88,8 +88,9 @@ export class PlayerSession {
   private lastMusicRegion = -1;
   private lastMusicTrack = -1;
   private lastMusicMode = -1;
+  private lastResolvedMusicTrack?: number;
 
-  /** The region track last started for this player, or -1: what a jingle is sent with, for the client to resume. */
+  /** The automatic area/region track last started, or -1: what a jingle resumes. */
   public getCurrentMusicTrack(): number {
     return this.lastMusicTrack;
   }
@@ -265,13 +266,20 @@ export class PlayerSession {
           .ItemOnGroundManager.onRegionChange(player);
       }
       const musicMode = player.getAudioSettings?.()?.[18] ?? 0;
-      if (musicRegion !== this.lastMusicRegion || musicMode !== this.lastMusicMode) {
+      const areaTrack = typeof privateArea?.getMusicTrack === "function"
+        ? PluginManager.callArea(privateArea, "getMusicTrack", player)
+        : null;
+      const track = Number.isInteger(areaTrack) && areaTrack >= 0 && areaTrack < 0xffff
+        ? areaTrack as number
+        : musicRegion < 0 ? undefined : Music.forRegion(musicRegion);
+      const selectionChanged = track !== this.lastResolvedMusicTrack;
+      if (musicRegion !== this.lastMusicRegion || musicMode !== this.lastMusicMode || selectionChanged) {
         const regionChanged = musicRegion !== this.lastMusicRegion;
         const previousMusicMode = this.lastMusicMode;
         this.lastMusicRegion = musicRegion;
         this.lastMusicMode = musicMode;
-        const track = musicRegion < 0 ? undefined : Music.forRegion(musicRegion);
-        if (regionChanged && track !== undefined) {
+        this.lastResolvedMusicTrack = track;
+        if ((regionChanged || selectionChanged) && track !== undefined) {
           PluginManager.emitCustomEvent("music:unlock-track", { player, trackId: track });
         }
         if (musicMode === 0 && track !== undefined && (track !== this.lastMusicTrack || previousMusicMode !== 0)) {
