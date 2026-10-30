@@ -12,6 +12,7 @@ const QuestUnlocks = require('../plugins/world/QuestUnlocks.Music');
 const MusicPlugin = require('../plugins/world/Music.plugin');
 
 const handlers = new Map();
+const buttonHandlers = new Map();
 const loginHandlers = [];
 let questAnswer;
 let diaryAnswer;
@@ -27,6 +28,7 @@ const api = new Proxy({
   persistAttribute() {},
   getBonusManager() { return { update() {} }; },
   onPlayerLogin(handler) { loginHandlers.push(handler); },
+  onInterfaceActionButton(ids, handler) { for (const id of [ids].flat()) buttonHandlers.set(id, handler); },
   onCustomEvent(name, handler) { handlers.set(name, [...(handlers.get(name) ?? []), handler]); },
   emitCustomEvent(name, request) {
     if (name === 'quest:is-started' && request.key === 'fremennik_trials') {
@@ -434,6 +436,29 @@ test('a music volume varp from the client announces audio:setting-changed with t
     assert.equal(player.applyAudioSettingFromClient(4242, 5), false, 'not an audio varp');
     assert.deepEqual(events.map((e) => [e.varpId, e.previous, e.value]), [[168, 100, 0], [168, 0, 5]], 'only changes are announced');
     assert.equal(events[0].player, player);
+  } finally {
+    PluginManager.emitCustomEvent = emit;
+  }
+});
+
+test('the music slider trigger (116:109) sets the stored music volume from its zigzag argument', async () => {
+  await setup();
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const events = [];
+  const emit = PluginManager.emitCustomEvent;
+  PluginManager.emitCustomEvent = (name, payload) => { if (name === 'audio:setting-changed') events.push(payload); };
+  try {
+    const trigger = buttonHandlers.get((116 << 16) | 109);
+    assert.ok(trigger, 'registered');
+    const player = new Player(null);
+    // The official client's script 9238 only triggers when the volume reaches or leaves 0.
+    trigger({ player, argsData: Buffer.from([0]), scriptTrigger: true });
+    assert.equal(player.getAudioSettings()[168], 0);
+    trigger({ player, argsData: Buffer.from([70]), scriptTrigger: true }); // zigzag 35
+    assert.equal(player.getAudioSettings()[168], 35);
+    trigger({ player, argsData: Buffer.from([0]), scriptTrigger: false });
+    assert.equal(player.getAudioSettings()[168], 35, 'a click on the component is not the trigger');
+    assert.deepEqual(events.map((e) => [e.previous, e.value]), [[100, 0], [0, 35]]);
   } finally {
     PluginManager.emitCustomEvent = emit;
   }

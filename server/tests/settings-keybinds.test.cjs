@@ -448,3 +448,62 @@ test('dart and bolt Make-X defaults on and restores either saved choice', () => 
     assert.equal(player.getPacketSender().getVarbit(id), choice);
   }
 });
+
+/** A sender that keeps varps the way PacketSender does, varbits packed into their varps. */
+function varpPlayer({ native = false } = {}) {
+  const varps = new Map();
+  const flags = [];
+  const attributes = new Map(native ? [['native-client', true]] : []);
+  const sender = {
+    getVarp: (id) => varps.get(id) ?? 0,
+    sendConfig: (id, value) => { varps.set(id, value | 0); return sender; },
+    sendVarbit: (id, value) => {
+      const { baseVar, startBit, endBit } = CacheDefinitions.getVarbit(id);
+      const mask = ((1 << (endBit - startBit + 1)) - 1) << startBit;
+      varps.set(baseVar, (sender.getVarp(baseVar) & ~mask) | ((value << startBit) & mask));
+      return sender;
+    },
+    sendInterfaceFlagsRange: (uid, from, to, value) => { flags.push([uid, from, to, value]); return sender; },
+    sendSubInterface: () => sender,
+  };
+  return { varps, flags, getPacketSender: () => sender, setAttribute: (k, v) => attributes.set(k, v), getAttribute: (k) => attributes.get(k) };
+}
+
+const XPDROPS_SETUP = 137;
+const XPDROPS_VARP = 1227;
+
+test('XP drops setup: a dropdown row sets its varbit to the row - 1 (script 1036), and the varp is kept', () => {
+  const { buttons, logins } = registered();
+  const player = varpPlayer({ native: true });
+  const position = buttons.get((XPDROPS_SETUP << 16) | 6);
+  assert.ok(position, 'the position dropdown is handled');
+  assert.equal(position({ player, buttonId: (XPDROPS_SETUP << 16) | 6, slot: 3 }), true);
+  assert.equal(buttons.get((XPDROPS_SETUP << 16) | 10)({ player, buttonId: (XPDROPS_SETUP << 16) | 10, slot: 6 }), true);
+  const varp = player.varps.get(XPDROPS_VARP);
+  assert.equal(varp & 0b11, 2, 'varbit 4692 (position, bits 0-1) = row 3 - 1');
+  assert.equal((varp >>> 22) & 0b11111, 5, 'varbit 4697 (counter, bits 22-26) = row 6 - 1');
+  assert.equal(position({ player, buttonId: (XPDROPS_SETUP << 16) | 6, slot: 0 }), false, 'the header itself');
+
+  // Another session of the same account gets it back at login.
+  const next = varpPlayer({ native: true });
+  next.setAttribute('xpdrops-setup', player.getAttribute('xpdrops-setup'));
+  logins.forEach((login) => login({ player: next }));
+  assert.equal(next.varps.get(XPDROPS_VARP), varp);
+});
+
+test('XP drops setup: the browser transmits the whole varp, which is kept and echoed', () => {
+  const { events, logins } = registered();
+  const player = varpPlayer();
+  const transmission = { player, varpId: XPDROPS_VARP, value: 0x1234, handled: false };
+  events.get('player:varp-transmit')(transmission);
+  assert.equal(transmission.handled, true);
+  assert.equal(player.varps.get(XPDROPS_VARP), 0x1234);
+  const other = { player, varpId: 173, value: 1, handled: false };
+  events.get('player:varp-transmit')(other);
+  assert.equal(other.handled, false, 'not an XP drops varp');
+
+  const next = varpPlayer();
+  next.setAttribute('xpdrops-setup', player.getAttribute('xpdrops-setup'));
+  logins.forEach((login) => login({ player: next }));
+  assert.equal(next.varps.get(XPDROPS_VARP), 0x1234);
+});

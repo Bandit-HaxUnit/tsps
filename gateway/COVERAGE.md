@@ -78,7 +78,7 @@ sessions, so the browser wire format doesn't change.
 | IF_SCRIPT_TRIGGER | 30 IF_TRIGGEROPLOCAL | mapped | 4 | the script's crc goes in tsps's op field; the argument bytes pass through |
 | RESUME_PAUSEBUTTON / P_COUNT / P_NAME / P_STRING / P_LONG | 62 / 192 / 193 / 194 / 192 | mapped | 4 | a long count is clamped to an int |
 | CLOSE_MODAL | 55 IF_CLOSE | mapped | 4 | |
-| settings / run orb buttons | 191 VARP_TRANSMIT | todo | 4 | run orb (160:28) mapped: toggles varp 173 from the mirror. Volume sliders, music mode, esc-to-close and XP-drop setup still need per-button translation (the browser sets those varps in its own CS2) |
+| settings / run orb buttons | 191 VARP_TRANSMIT, tsps button handlers | mapped | 10 | run orb (160:28) toggles varp 173 from the mirror. Volumes and music mode are the client's own: its scripts set them and keep them in its game/device options, so tsps no longer resends its stored audio varps to native sessions; the music slider's 0 ↔ on trigger (116:109) updates tsps's stored music volume. Esc-to-close is the keybinds toggle tsps already handles. XP drops setup (137): tsps enables the dropdown rows for native sessions and saves the choice (varp 1227), as it does for the browser's VARP_TRANSMIT |
 | logout button | 203 LOGOUT | mapped | 4 | logout tab 182:8 and world switcher 69:25 |
 | OPPLAYER1–8 / OPPLAYERT | 44… / 32 or 65 | mapped | 3, 5 | `T` from the inventory (149:0) is item use (65), otherwise a spell (32) |
 | OPNPC1–5 / OPNPC6 / OPNPCT | 76, 12, 34, 70, 57 / 9 / 75 or 36 | mapped | 3, 5 | subop dropped; `T` split as for players |

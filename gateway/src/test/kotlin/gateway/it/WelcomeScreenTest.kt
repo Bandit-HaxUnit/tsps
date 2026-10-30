@@ -22,8 +22,9 @@ class WelcomeScreenTest {
                 .first { it.code == OK }
                 .game!!
         game.use {
-            // tsps mounts the gameframe at login, then swaps the welcome screen in the same tick.
-            while (it.expect<IfOpenTop>(limit = 2_000).interfaceId != WELCOME_SCREEN) continue
+            // tsps mounts the gameframe at login, then swaps the welcome screen in the same tick; the
+            // login burst before it carries every plugin's restored state.
+            while (it.expect<IfOpenTop>(limit = LOGIN_PACKETS).interfaceId != WELCOME_SCREEN) continue
             it.button(WELCOME_SCREEN, PLAY_BUTTON)
             assertNotEquals(WELCOME_SCREEN, it.expect<IfOpenTop>(limit = 2_000).interfaceId)
         }
@@ -31,6 +32,7 @@ class WelcomeScreenTest {
 
     private companion object {
         const val PASSWORD = "gateway-test"
+        const val LOGIN_PACKETS = 10_000
         const val OK = 2
         const val WELCOME_SCREEN = 378
         const val PLAY_BUTTON = 72

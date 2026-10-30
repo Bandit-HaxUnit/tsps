@@ -277,6 +277,28 @@ function answerAirGuitarUnlock(request) {
 
 const MUSIC_VOLUME_VARP = 168;
 const MUSIC_MODE_VARP = 18;
+// The music volume slider's script (9238) triggers this component's op when the volume goes to
+// or from 0, with the new volume as its argument: all the official client tells the server.
+const MUSIC_VOLUME_TRIGGER_UID = (116 << 16) | 109;
+
+/** The first script-trigger argument: an int as a zigzag varint. */
+function readIntArg(argsData) {
+  if (!argsData?.length) return undefined;
+  let value = 0;
+  let shift = 0;
+  for (const byte of argsData) {
+    value |= (byte & 0x7f) << shift;
+    if ((byte & 0x80) === 0) return (value >>> 1) ^ -(value & 1);
+    shift += 7;
+  }
+  return undefined;
+}
+
+function onMusicVolumeTrigger({ player, argsData, scriptTrigger }) {
+  if (scriptTrigger !== true) return;
+  const volume = readIntArg(argsData);
+  if (volume !== undefined) player.applyAudioSettingFromClient?.(MUSIC_VOLUME_VARP, volume);
+}
 /** Track 147: silence. */
 const SILENCE_TRACK = 147;
 const NO_FADES = { fadeOutDelay: 0, fadeOutSpeed: 0, fadeInDelay: 0, fadeInSpeed: 0 };
@@ -356,6 +378,7 @@ module.exports = {
     api.persistAttribute(Progress.AIR_GUITAR_UNLOCKED_ATTRIBUTE, false);
     api.onPlayerLogin(onMusicLogin);
     api.onInterfaceActionButton(WELCOME_PLAY_BUTTON_UID, onMusicWelcomeAction);
+    api.onInterfaceActionButton(MUSIC_VOLUME_TRIGGER_UID, onMusicVolumeTrigger);
   // A tab mounted again later (Tutorial Island's unlocks) lost its flags too.
   api.onCustomEvent("gameframe:tab-mounted", ({ player, group }) => {
     if (group === MUSIC_GROUP_ID) queueMicrotask(() => enableMusicActions(player));

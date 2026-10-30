@@ -24,7 +24,9 @@ class M2MovementTest {
             val start = game.expect<RebuildLoginV2>().playerInfoInitBlock.localPlayerCoord
             val target = CoordGrid(start.level, start.x + WALK_DISTANCE, start.z)
             game.walk(target.x, target.z)
-            val flag = game.expect<SetMapFlagV2>()
+            // Login resets the flag (16383, 16383) first.
+            var flag = game.expect<SetMapFlagV2>()
+            while (flag.x == NO_FLAG) flag = game.expect<SetMapFlagV2>()
             assertEquals(target.x to target.z, flag.x to flag.z)
             assertEquals(target, game.localMovementUntil { it == target })
         }
@@ -111,6 +113,7 @@ class M2MovementTest {
         const val OK = 2
         const val DUPLICATE = 5
         const val WALK_DISTANCE = 3
+        const val NO_FLAG = 16383
         const val CLICKS = 5
         const val MAX_AVERAGE_LATENCY_MS = 700
         const val MOVEMENT_PACKETS = 60

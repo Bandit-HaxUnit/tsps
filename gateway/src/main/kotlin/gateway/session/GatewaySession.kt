@@ -133,10 +133,14 @@ class GatewaySession(
     /** A decoded client packet, from [Session.processIncomingPackets] on this session's thread. */
     fun onClientMessage(message: IncomingGameMessage) = upstream.handle(message)
 
+    private val beforeHandshake = ArrayList<TspsPacket>()
+
     private fun onTspsPacket(packet: TspsPacket) {
         when (state) {
             State.LOGGING_IN -> if (packet.opcode == TspsServerPacket.LOGIN_RESPONSE) onLoginResult(TspsLoginResult.decode(packet))
-            State.ENTERING -> if (packet.opcode == TspsServerPacket.HANDSHAKE) onHandshake(TspsHandshake.decode(packet))
+            // tsps runs its plugins' login hooks before it answers the handshake, so their packets
+            // (restored settings, keybinds, ...) arrive first; keep them for after the handshake.
+            State.ENTERING -> if (packet.opcode == TspsServerPacket.HANDSHAKE) onHandshake(TspsHandshake.decode(packet)) else beforeHandshake += packet
             State.AWAITING_SCENE, State.IN_GAME -> onGamePacket(packet)
             State.CONNECTING, State.CLOSED -> Unit
         }
@@ -154,6 +158,8 @@ class GatewaySession(
     private fun onHandshake(handshake: TspsHandshake) {
         this.handshake = handshake
         state = State.AWAITING_SCENE
+        beforeHandshake.forEach(::onGamePacket)
+        beforeHandshake.clear()
     }
 
     private fun onGamePacket(packet: TspsPacket) {

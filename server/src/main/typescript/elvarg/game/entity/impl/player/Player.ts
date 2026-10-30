@@ -59,6 +59,7 @@ import { PluginManager } from "../../../../plugins/PluginManager";
 import { ServerPerf } from "../../../../util/ServerPerf";
 import { getSequencePriority } from "../../../cache/NpcAnimationScanner";
 import { LOGIN_TOKENS_ATTRIBUTE } from "../../../../net/login/LoginTokens";
+import { NATIVE_CLIENT_ATTRIBUTE } from "../../../../net/protocol/ClientProtocol";
 
 const ATTR_SKIP_PERSISTENCE = "bot-skip-persistence";
 const DEFAULT_AUDIO_SETTINGS: Readonly<Record<number, number>> = {
@@ -685,8 +686,12 @@ export class Player extends Mobile {
             Autocasting.setAutocast(this, autocastSpell);
         }
         CombatPoisonEffect.resume(this);
-        for (const [varpId, value] of Object.entries(this.audioSettings)) {
-            this.getPacketSender().sendConfig(Number(varpId), value);
+        // The official client keeps its own audio settings (its game and device options) and
+        // would be reset to these on every login, so only the browser gets them back.
+        if (this.getAttribute(NATIVE_CLIENT_ATTRIBUTE) !== true) {
+            for (const [varpId, value] of Object.entries(this.audioSettings)) {
+                this.getPacketSender().sendConfig(Number(varpId), value);
+            }
         }
     }
 
