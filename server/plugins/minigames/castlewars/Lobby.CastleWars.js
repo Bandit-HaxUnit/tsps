@@ -148,16 +148,16 @@ function joinWaitingRoom(player, requestedTeam, botTier = undefined, portalGod =
     }
     const options = BOT_TIER_OPTIONS.flatMap(([label, tier]) => [
       label,
-      () => joinWaitingRoom(player, teamId, tier, portalGod),
+      () => joinWaitingRoom(player, requestedTeam, tier, portalGod),
     ]);
     api.sendMultiChatboxPrompt(
       player,
       "The Castle Wars lobby is empty. Which bots should populate the game?",
       ...options,
       "None",
-      () => joinWaitingRoom(player, teamId, null, portalGod),
+      () => joinWaitingRoom(player, requestedTeam, null, portalGod),
       "Practice settings (Lanthus)",
-      () => require("./Settings.CastleWars").openSettings({ player })
+      () => require("./Settings.CastleWars").openSettings({ player, requestedTeam, portalGod })
     );
     return;
   }
@@ -213,6 +213,7 @@ module.exports = function attachCastleWarsLobby(registry, castleWars) {
   data = castleWars.data;
   game.BOT_ROLE_KEY = BOT_ROLE_ATTRIBUTE;
   game.BOT_TIER_KEY = BOT_TIER_ATTRIBUTE;
+  game.joinFromLobby = joinWaitingRoom;
   registry.onObjectInteraction(useCastleWarsPortal);
   registry.onNpcInteraction("Lanthus", { Trade: ({ player }) => ShopManager.open(player, CASTLE_WARS_TICKET_EXCHANGE_SHOP) });
 };

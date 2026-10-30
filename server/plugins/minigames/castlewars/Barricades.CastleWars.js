@@ -65,7 +65,7 @@ function isBurning(npc) {
 }
 
 /** Resolve an overlapping barricade interaction from a free adjacent tile. */
-function stepBesideBarricade(player, npc) {
+function stepBesideBarricade(player, npc, onArrival) {
   if (!player.getLocation().equals(npc.getLocation())) return true;
   const movement = player.getMovementQueue();
   // Match clippedStep's cardinal order; collision decides which side is available.
@@ -75,18 +75,28 @@ function stepBesideBarricade(player, npc) {
     player.sendMessage("You need room to stand beside the barricade.");
     return false;
   }
+  if (onArrival) {
+    movement.walkToTile(player.getLocation().transform(step[0], step[1]), onArrival);
+    return false;
+  }
   movement.walkStep(step[0], step[1]);
   return true;
 }
 
 function blowUp(player, npc, slot) {
+  if (!game.isBarricade(npc) || !npc.isRegistered() || npc.getHitpoints() <= 0) return;
   if (isBurning(npc)) {
     player.sendMessage("You can't blow up a burning barricade.");
     return;
   }
-  if (!stepBesideBarricade(player, npc)) return;
+  const item = player.getInventory().getItems()[slot];
+  if (!stepBesideBarricade(player, npc, () => {
+    if (player.getPrivateArea() === npc.getPrivateArea() && player.getLocation().getZ() === npc.getLocation().getZ()
+        && core.PathFinder.reachedEntity(player, npc) && player.getInventory().getItems()[slot] === item
+        && item?.getId() === core.ItemIdentifiers.EXPLOSIVE_POTION && item.getAmount() > 0) blowUp(player, npc, slot);
+  })) return;
   player.getInventory().deleteAtSlot(slot, 1);
-  const explosion = core.CacheDefinitions.getSpotanimId("regicide_barrelflight_exploding");
+  const explosion = core.CacheDefinitions.getSpotanimId("explodingvial");
   player.getPacketSender().sendGlobalGraphic(new core.Graphic(explosion), npc.getLocation());
   game.removeBarricade(npc);
 }
