@@ -180,10 +180,43 @@ second bounty on the same creature waiting for the first, keeping parts when can
   1/36 shark paint, "You have finished the ... port task." and "Thanks, sailor. Here's your
   payment.". Parts can be stored in the cargo hold, and a recovery loses them.
 
+### Damage contribution and on-task uniques
+
+The [Bounty tasks](https://oldschool.runescape.wiki/w/Bounty_tasks) and individual creature
+pages describe the June 2026 reward changes. Narwhals, orcas, great white sharks and armoured,
+veiled and vampyre krakens scale bounty-part and pre-roll chances with damage dealt.
+`Loot.SeaCombat` observes actual HP lost through `HitDamage.onApplied`, including the fatal
+hitsplat after the before-death hook. Queued overkill earns no additional reward chance.
+Crew cannon hits belong to their captain. Contribution is applied damage divided by the
+creature's maximum HP, capped at one; the Wiki does not document a separate healing formula.
+Common loot, quantities, clues and other sea creatures' chances are unchanged.
+
+Before a bounty's required number of parts has first been received:
+
+- Orca echo pearls: 1/70 to 1/35; dragon nails: 4–8 to 7–11 at the same 1/75 chance.
+- Narwhal dragon nails: 3–7 to 5–10 at the same 1/75 chance; horns are not boosted.
+- Great white shark broken dragon hooks: 1/500 to 1/250.
+- Armoured kraken bottled storms: 1/500 to 1/250.
+- Veiled kraken dragon cannon barrels: 1/500 to 1/250.
+- Vampyre kraken bottled storms: 1/350 to 1/175.
+- Those five creatures' dragon metal sheet/keel parts/large keel parts chances double.
+  Inky paint is damage-scaled but receives no on-task boost.
+
+The existing saved slot `collected` value records receipts monotonically, including retained
+parts credited on acceptance. Dropping, destroying or losing parts does not reopen its boost;
+missing parts can still drop as replacements. Armoured and vampyre krakens award tentacles
+before ink sacs, as their individual Wiki pages specify, even if the ink sac task was accepted
+first. Receiving all required tentacles allows ink sacs without handing in at a port.
+Other creatures keep accepted-task order. A receipt commits only for the
+same accepted slot, after the shared Ironman/members/drop hooks, and cannot commit twice.
+
+These rates and the damage rule come from the Wiki, not a recording. The indexed vampyre
+capture 235/00948 predates the rebalance and cannot establish its rates. The rev 241 tern
+messages, jingle and counter remain as above. See
+`docs/superpowers/plans/2026-10-29-sailing-bounty-rewards.md` for the production path and checks.
+
 ## Not done
 
-- Bounty parts' drop rate scaling with damage dealt, and the boosted rates before the count is met
-  (Wiki); the parts' rates here are 1 in the cache's rarity.
 - Confiscating crates on a teleport, or when leaving port with one in hand.
 - Trim being refused while carrying cargo.
 
