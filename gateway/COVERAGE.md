@@ -23,11 +23,11 @@ sessions, so the browser wire format doesn't change.
 | 23 MOVEMENT_POSITION | — | dropped | 2 | sub-tile movement has no OSRS form |
 | 40 / 41 / 44 VARP_SMALL / LARGE / LONG | VARP_SMALL / LARGE / LONG | mapped | 4 | ids ≥ the cache varp count (5996) dropped |
 | 42 VARBIT | VARP_SMALL / LARGE | mapped | 4 | written into the session's varp mirror from the cache varbit definition |
-| 50 / 51 INVENTORY_SNAPSHOT / SLOT | UPDATE_INV_FULL / PARTIAL (93) | todo | 5 | |
-| 52 / 53 BANK_SNAPSHOT / SLOT | UPDATE_INV_FULL / PARTIAL (95) | todo | 5 | tab/placeholder bits dropped (sent as varbits) |
-| 54 / 55 GROUND_ITEMS / DELTA | OBJ_ADD / DEL / COUNT in zone updates | todo | 5 | stack-id state; re-sent after each rebuild |
+| 50 / 51 INVENTORY_SNAPSHOT / SLOT | UPDATE_INV_FULL / PARTIAL (93) | mapped | 5 | |
+| 52 / 53 BANK_SNAPSHOT / SLOT | UPDATE_INV_FULL / PARTIAL (95) | mapped | 5 | tab/placeholder bits dropped (tabs are varbits; placeholders are their own obj ids) |
+| 54 / 55 GROUND_ITEMS / DELTA | OBJ_ADD / DEL / COUNT _SPECIFIC | mapped | 5 | stack-id state, scene-filtered and re-sent after each rebuild; tick timers become ticks until public/despawn |
 | 70 / 71 SKILLS_SNAPSHOT / DELTA | UPDATE_STAT_V2 per skill | mapped | 4 | the combat level goes to varbit 13027, which the browser sets itself |
-| 81 RUN_ENERGY | UPDATE_RUNENERGY, UPDATE_RUNWEIGHT, varp 173 | todo | 4–5 | energy (1% steps) and varp 173 mapped (M4); weight and full energy via the native bit in M5 |
+| 81 RUN_ENERGY | UPDATE_RUNENERGY, UPDATE_RUNWEIGHT, varp 173 | mapped | 4–5 | energy in 1% steps; weight is worked out from cache obj weights over inventory and worn items, since tsps never sends it |
 | 83 SPOT_ANIM | MAP_ANIM | todo | 7 | |
 | 84 PROJECTILES | PROJANIM_SPECIFIC_V4 | todo | 8 | |
 | 87 DESTINATION | SET_MAP_FLAG_V2 | mapped | 2 | 0,0 clears the flag |
@@ -40,7 +40,7 @@ sessions, so the browser wire format doesn't change.
 | 104 WIDGET_CLOSE_SUB | IF_CLOSESUB | mapped | 4 | 161 remap |
 | 105–108, 113–115, 117–119 WIDGET_SET_* | IF_SETTEXT / HIDE / OBJECT / NPCHEAD / ANGLE / ANIM / PLAYERHEAD / MODEL / POSITION / COLOUR | mapped | 4 | colour splits tsps's 15-bit RGB into its channels |
 | 109 / 111 / 112 WIDGET_SET_FLAGS* | IF_SETEVENTS_V2 | mapped | 4 | old op bits 1–10 move to events2 |
-| 110 WIDGET_RUN_SCRIPT | VARP_*, UPDATE_INV_FULL, RUNCLIENTSCRIPT | todo | 4–5 | vars and script mapped (M4; script -1 = vars only); its inventories are M5 |
+| 110 WIDGET_RUN_SCRIPT | VARP_*, UPDATE_INV_FULL, RUNCLIENTSCRIPT | mapped | 4–5 | script -1 = vars and inventories only |
 | 116 WIDGET_SET_QUEST_LIST | — | dropped | 4 | browser-only quest list widget |
 | 120 CHAT_MESSAGE | MESSAGE_GAME, PLAYER_INFO chat, MESSAGE_PRIVATE(_ECHO), MESSAGE_FRIENDCHANNEL | todo | 3–6 | public chat (M3): one PLAYER_INFO chat block, the overhead copy suppressed, crown from `<img=N>`; game and system types → MESSAGE_GAME (M4); private, friends and clan types M6 |
 | 121 FRIENDS_CHAT_UPDATE | UPDATE_FRIENDLIST, UPDATE_IGNORELIST, UPDATE_FRIENDCHAT_CHANNEL_FULL_V2, FRIENDLIST_LOADED | todo | 6 | |
@@ -54,14 +54,14 @@ sessions, so the browser wire format doesn't change.
 | 142 / 143 REBUILD_WORLDENTITY / WORLDENTITY_INFO | REBUILD_WORLDENTITY_V4 / WORLDENTITY_INFO_V7 | todo | 9 | native: boat level + owner |
 | 144 REGION_REPLACEMENT | — | dropped | 2 | server map data the client can't load |
 | 145 / 146 SET / RESET_INTERACTION_MODE | SET / RESET_INTERACTION_MODE | todo | 7 | |
-| 150 / 152 SHOP_OPEN / CLOSE | UPDATE_INV_FULL / STOP_TRANSMIT (516) | todo | 5 | interface + script already sent separately |
+| 150 / 152 SHOP_OPEN / CLOSE | UPDATE_INV_FULL / STOP_TRANSMIT (516) | mapped | 5 | interface and script come separately; tsps's prices and modes are dropped (the client works prices out) |
 | 154 TRADE_REQUEST | — | dropped | 9 | the type-101 game message carries it |
 | 155 / 156 / 157 TRADE_OPEN / UPDATE / CLOSE | UPDATE_INV_FULL (90, 90 \| 0x8000), MESSAGE_GAME | todo | 9 | |
-| 190 COLLECTION_LOG_SNAPSHOT | UPDATE_INV_FULL (620) | todo | 5 | |
+| 190 COLLECTION_LOG_SNAPSHOT | UPDATE_INV_FULL (620) | mapped | 5 | |
 | 210 GAMEMODE_DATA | — | dropped | 4 | custom items/models, league overrides; custom items fall back to `baseItemId` |
 | 220 SYSTEM_UPDATE | UPDATE_REBOOT_TIMER_V2 | todo | 7 | |
-| (equipment, never sent) | UPDATE_INV_FULL (94) | todo | 5 | from appearance; native: quantities |
-| (GE varps 7900–7955) | UPDATE_STOCKMARKET_SLOT | todo | 5 | |
+| (equipment) | UPDATE_INV_FULL (94) | mapped | 5 | native bit: tsps sends inventory 94 on WIDGET_RUN_SCRIPT, with quantities; otherwise built from the local appearance |
+| (GE varps 7900–7955) | UPDATE_STOCKMARKET_SLOT_V2 | mapped | 5 | 8 slots × 7 fields; selling states are buying + 8 |
 
 ## Client → tsps
 
@@ -73,17 +73,17 @@ sessions, so the browser wire format doesn't change.
 | SET_HEADING | 214 | mapped | 2 | |
 | IF_BUTTON (if1) / IF_BUTTONX | 13 / 91 | mapped | 2 | mapped early: returning accounts log in to the welcome screen, whose play button is an IF_BUTTONX |
 | IF_SUBOP | 89 | mapped | 4 | |
-| IF_BUTTOND | 1, or 242 INVENTORY_MOVE for 149:0 | todo | 4–5 | IF_BUTTOND mapped (M4); the inventory drag is M5 |
-| IF_BUTTONT | 90, or 241 INVENTORY_USE_ON for item on item | todo | 4–5 | IF_BUTTONT mapped (M4); item on item is M5 |
+| IF_BUTTOND | 1, or 242 INVENTORY_MOVE for 149:0 | mapped | 4–5 | |
+| IF_BUTTONT | 90, or 241 INVENTORY_USE_ON for item on item | mapped | 4–5 | |
 | IF_SCRIPT_TRIGGER | 30 IF_TRIGGEROPLOCAL | mapped | 4 | the script's crc goes in tsps's op field; the argument bytes pass through |
 | RESUME_PAUSEBUTTON / P_COUNT / P_NAME / P_STRING / P_LONG | 62 / 192 / 193 / 194 / 192 | mapped | 4 | a long count is clamped to an int |
 | CLOSE_MODAL | 55 IF_CLOSE | mapped | 4 | |
 | settings / run orb buttons | 191 VARP_TRANSMIT | todo | 4 | run orb (160:28) mapped: toggles varp 173 from the mirror. Volume sliders, music mode, esc-to-close and XP-drop setup still need per-button translation (the browser sets those varps in its own CS2) |
 | logout button | 203 LOGOUT | mapped | 4 | logout tab 182:8 and world switcher 69:25 |
-| OPPLAYER1–8 / OPPLAYERT | 44… / 32 or 65 | todo | 3, 5 | OPPLAYER1–8 mapped (M3); `T` split by selected component in M5 |
-| OPNPC1–5 / OPNPC6 / OPNPCT | 76, 12, 34, 70, 57 / 9 / 75 or 36 | todo | 3, 5 | OPNPC1–6 mapped (M3), subop dropped; `T` in M5 |
-| OPLOC1–5 / OPLOC6 / OPLOCT | 96, 28, 42, 38, 51 / 85 / 2 or 86 | todo | 5 | |
-| OPOBJ1–5 / OPOBJ6 / OPOBJT | 102, 43, 103, 56, 82 / 104 / 94 or 79 | todo | 5 | |
+| OPPLAYER1–8 / OPPLAYERT | 44… / 32 or 65 | mapped | 3, 5 | `T` from the inventory (149:0) is item use (65), otherwise a spell (32) |
+| OPNPC1–5 / OPNPC6 / OPNPCT | 76, 12, 34, 70, 57 / 9 / 75 or 36 | mapped | 3, 5 | subop dropped; `T` split as for players |
+| OPLOC1–5 / OPLOC6 / OPLOCT | 96, 28, 42, 38, 51 / 85 / 2 or 86 | mapped | 5 | subop dropped |
+| OPOBJ1–5 / OPOBJ6 / OPOBJT | 102, 43, 103, 56, 82 / 104 / 94 or 79 | mapped | 5 | |
 | OPWORLDENTITY1–5 | 220–224 | todo | 9 | |
 | OPWORLDENTITY6 | — | dropped | 9 | 241 sends a type id, tsps reads an index |
 | MESSAGE_PUBLIC / CLIENT_CHEAT | 190 CHAT | mapped | 2–3 | public (0), autotyper (1 → autochat) and friends chat (2); colour and effects aren't passed (tsps drops them); clan types dropped. CLIENT_CHEAT: `::cmd`, autocomplete requests dropped |

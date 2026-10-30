@@ -54,8 +54,10 @@ class AppearanceBlock(
     val name: String,
     val combatLevel: Int,
     val skillLevel: Int,
-    /** Ammo quantity, ammo slot obj and ring obj, after the appearance proper. */
+    /** The ammo slot's quantity and obj, and the ring, which tsps adds after the appearance proper. */
     val ammoQuantity: Int,
+    val ammo: Int,
+    val ring: Int,
 )
 
 object ActorBlocks {
@@ -215,7 +217,9 @@ object ActorBlocks {
         repeat(3) { reader.string() } // name extras
         reader.u8()
         val ammoQuantity = if (reader.remaining >= 4) reader.i32() else 0
-        return AppearanceBlock(gender, skull, prayer, npcId, objs, kits, colours, animations, name, combatLevel, skillLevel, ammoQuantity)
+        val ammo = if (reader.remaining >= 4) reader.i32() else -1
+        val ring = if (reader.remaining >= 4) reader.i32() else -1
+        return AppearanceBlock(gender, skull, prayer, npcId, objs, kits, colours, animations, name, combatLevel, skillLevel, ammoQuantity, ammo, ring)
     }
 
     private fun Int.noneAsMinusOne() = if (this == 0xFFFF) -1 else this

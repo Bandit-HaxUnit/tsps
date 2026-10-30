@@ -10,6 +10,9 @@ import net.rsprot.protocol.game.incoming.buttons.IfButtonD
 import net.rsprot.protocol.game.incoming.buttons.IfButtonT
 import net.rsprot.protocol.game.incoming.buttons.IfScriptTrigger
 import net.rsprot.protocol.game.incoming.buttons.IfSubOp
+import net.rsprot.protocol.game.incoming.locs.OpLoc6
+import net.rsprot.protocol.game.incoming.locs.OpLocT
+import net.rsprot.protocol.game.incoming.locs.OpLocV2
 import net.rsprot.protocol.game.incoming.messaging.MessagePublic
 import net.rsprot.protocol.game.incoming.misc.user.ClientCheat
 import net.rsprot.protocol.game.incoming.misc.user.CloseModal
@@ -17,8 +20,13 @@ import net.rsprot.protocol.game.incoming.misc.user.MoveGameClick
 import net.rsprot.protocol.game.incoming.misc.user.MoveMinimapClick
 import net.rsprot.protocol.game.incoming.misc.user.SetHeading
 import net.rsprot.protocol.game.incoming.npcs.OpNpc6
+import net.rsprot.protocol.game.incoming.npcs.OpNpcT
 import net.rsprot.protocol.game.incoming.npcs.OpNpcV2
+import net.rsprot.protocol.game.incoming.objs.OpObj6
+import net.rsprot.protocol.game.incoming.objs.OpObjT
+import net.rsprot.protocol.game.incoming.objs.OpObjV2
 import net.rsprot.protocol.game.incoming.players.OpPlayer
+import net.rsprot.protocol.game.incoming.players.OpPlayerT
 import net.rsprot.protocol.game.incoming.resumed.ResumePCountDialog
 import net.rsprot.protocol.game.incoming.resumed.ResumePLongDialog
 import net.rsprot.protocol.game.incoming.resumed.ResumePNameDialog
@@ -48,7 +56,10 @@ class Upstream(
                         .fixed(IF_BUTTON_SUB),
                 )
             is IfButtonD ->
-                send(
+                if (message.selectedCombinedId == INVENTORY && message.targetCombinedId == INVENTORY) {
+                    send(WorldOps.inventoryMove(message.selectedSub, message.targetSub))
+                } else {
+                    send(
                     TspsWriter()
                         .u16le(message.targetObj)
                         .i32le(message.targetCombinedId)
@@ -57,9 +68,13 @@ class Upstream(
                         .i32me(message.selectedCombinedId)
                         .u16le(message.targetSub)
                         .fixed(IF_BUTTOND),
-                )
+                    )
+                }
             is IfButtonT ->
-                send(
+                if (message.selectedCombinedId == INVENTORY && message.targetCombinedId == INVENTORY) {
+                    send(WorldOps.itemOnItem(message.selectedSub, message.selectedObj, message.targetSub, message.targetObj))
+                } else {
+                    send(
                     TspsWriter()
                         .i32ime(message.targetCombinedId)
                         .u16AddLE(message.targetSub)
@@ -68,7 +83,8 @@ class Upstream(
                         .u16(message.selectedObj)
                         .u16AddLE(message.targetObj)
                         .fixed(IF_BUTTONT),
-                )
+                    )
+                }
             is IfScriptTrigger -> scriptTrigger(message)
             is ResumePauseButton -> send(TspsWriter().u16AddLE(message.sub).i32(message.combinedId).fixed(RESUME_PAUSEBUTTON))
             is ResumePCountDialog -> send(TspsWriter().i32(message.count).fixed(RESUME_COUNTDIALOG))
@@ -83,6 +99,43 @@ class Upstream(
             is OpPlayer -> send(TspsClientPacket.playerOp(message.op, message.index))
             is OpNpcV2 -> if (message.op in 1..5) send(TspsClientPacket.npcOp(message.op, message.index)) else DropCounter.up(message)
             is OpNpc6 -> send(TspsClientPacket.examineNpc(message.id))
+            is OpLocV2 -> if (message.op in 1..5) send(WorldOps.loc(message.op, message.id, message.x, message.z)) else DropCounter.up(message)
+            is OpLoc6 -> send(WorldOps.examineLoc(message.id))
+            is OpObjV2 -> if (message.op in 1..5) send(WorldOps.obj(message.op, message.id, message.x, message.z)) else DropCounter.up(message)
+            is OpObj6 -> send(WorldOps.examineObj(message.id, message.x, message.z))
+            // OSRS sends item use and spells as one `T` packet; tsps has one for each.
+            is OpLocT ->
+                send(
+                    if (message.selectedCombinedId == INVENTORY) {
+                        WorldOps.itemOnLoc(message.id, message.x, message.z, message.selectedCombinedId, message.selectedSub, message.selectedObj)
+                    } else {
+                        WorldOps.spellOnLoc(message.id, message.x, message.z, message.selectedCombinedId, message.selectedSub, message.selectedObj)
+                    },
+                )
+            is OpObjT ->
+                send(
+                    if (message.selectedCombinedId == INVENTORY) {
+                        WorldOps.itemOnObj(message.id, message.x, message.z, message.selectedCombinedId, message.selectedSub, message.selectedObj)
+                    } else {
+                        WorldOps.spellOnObj(message.id, message.x, message.z, message.selectedCombinedId, message.selectedSub, message.selectedObj)
+                    },
+                )
+            is OpNpcT ->
+                send(
+                    if (message.selectedCombinedId == INVENTORY) {
+                        WorldOps.itemOnNpc(message.index, message.selectedCombinedId, message.selectedSub, message.selectedObj)
+                    } else {
+                        WorldOps.spellOnNpc(message.index, message.selectedCombinedId, message.selectedSub, message.selectedObj)
+                    },
+                )
+            is OpPlayerT ->
+                send(
+                    if (message.selectedCombinedId == INVENTORY) {
+                        WorldOps.itemOnPlayer(message.index, message.selectedCombinedId, message.selectedSub, message.selectedObj)
+                    } else {
+                        WorldOps.spellOnPlayer(message.index, message.selectedCombinedId, message.selectedSub, message.selectedObj)
+                    },
+                )
             else -> DropCounter.up(message)
         }
     }
@@ -124,6 +177,7 @@ class Upstream(
         const val RESUME_STRINGDIALOG = 194
         const val LOGOUT = 203
 
+        const val INVENTORY = 149 shl 16
         const val RUN_ORB = (160 shl 16) or 28
         const val RUN_VARP = 173
         const val LOGOUT_TAB_BUTTON = (182 shl 16) or 8

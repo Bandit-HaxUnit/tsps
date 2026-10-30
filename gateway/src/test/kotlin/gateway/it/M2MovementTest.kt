@@ -56,12 +56,7 @@ class M2MovementTest {
         }
     }
 
-    private fun login(name: String): HeadlessClient.Game {
-        val result = LiveGateway.client().login(name, PASSWORD, modulus)
-        assumeTrue(result.code != DUPLICATE, "$name is already online (someone is playing it)")
-        assertEquals(OK, result.code, "login of $name")
-        return result.game!!
-    }
+    private fun login(name: String): HeadlessClient.Game = LiveGateway.login(name)
 
     /** The account tsps gives developer rights (DEV_USERNAME), which `::tele` needs. */
     private fun developer(): String {

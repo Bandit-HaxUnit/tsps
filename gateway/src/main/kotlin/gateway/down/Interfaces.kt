@@ -36,7 +36,8 @@ import net.rsprot.protocol.message.OutgoingGameMessage
 class Interfaces(
     private val varps: VarpMirror,
     private val tree: InterfaceTree,
-    /** Inventories riding on WIDGET_RUN_SCRIPT, by OSRS inv id (M5). */
+    private val stockMarket: StockMarket,
+    /** Inventories riding on WIDGET_RUN_SCRIPT, by OSRS inv id. */
     private val inventories: (TspsReader) -> Unit,
     private val send: (OutgoingGameMessage) -> Unit,
 ) {
@@ -100,14 +101,21 @@ class Interfaces(
             TspsServerPacket.WIDGET_RUN_SCRIPT -> runScriptBundle(reader)
             TspsServerPacket.RUN_CLIENT_SCRIPT -> script(reader.u16(), reader)
             TspsServerPacket.TRIGGER_ONDIALOGABORT -> send(TriggerOnDialogAbort)
-            TspsServerPacket.VARP_SMALL -> varps.setVarp(reader.u16(), reader.u8())?.let(send) ?: DropCounter.down(packet.opcode)
-            TspsServerPacket.VARP_LARGE -> varps.setVarp(reader.u16(), reader.i32())?.let(send) ?: DropCounter.down(packet.opcode)
+            TspsServerPacket.VARP_SMALL -> varp(reader.u16(), reader.u8())
+            TspsServerPacket.VARP_LARGE -> varp(reader.u16(), reader.i32())
             TspsServerPacket.VARP_LONG -> send(VarpLong(reader.u16(), reader.i64()))
             TspsServerPacket.VARBIT -> varps.setVarbit(reader.u16(), reader.i32())?.let(send) ?: DropCounter.down(packet.opcode)
             TspsServerPacket.SKILLS_SNAPSHOT, TspsServerPacket.SKILLS_DELTA -> stats(reader)
             else -> return false
         }
         return true
+    }
+
+    private fun varp(id: Int, value: Int) {
+        when {
+            stockMarket.isOfferVarp(id) -> stockMarket.setVarp(id, value)
+            else -> varps.setVarp(id, value)?.let(send) ?: DropCounter.down(TspsServerPacket.VARP_LARGE)
+        }
     }
 
     private fun openSub(target: Int, group: Int, type: Int) {
@@ -120,7 +128,7 @@ class Interfaces(
         val target = tree.remap(reader.i32())
         val group = reader.u16()
         val type = reader.u8()
-        repeat(reader.optionalU8()) { varps.setVarp(reader.u16(), reader.i32())?.let(send) }
+        repeat(reader.optionalU8()) { varp(reader.u16(), reader.i32()) }
         repeat(reader.optionalU8()) { varps.setVarbit(reader.u16(), reader.i32())?.let(send) }
         val hidden = List(reader.optionalU8()) { reader.i32() }
         val preScripts = scripts(reader)
@@ -139,7 +147,7 @@ class Interfaces(
     private fun runScriptBundle(reader: TspsReader) {
         val id = reader.i32()
         val args = args(reader)
-        repeat(reader.u16()) { varps.setVarp(reader.i32(), reader.i32())?.let(send) }
+        repeat(reader.u16()) { varp(reader.i32(), reader.i32()) }
         repeat(reader.u16()) { varps.setVarbit(reader.i32(), reader.i32())?.let(send) }
         if (reader.remaining > 0) inventories(reader)
         if (id >= 0) send(RunClientScript(id, args))

@@ -3,7 +3,10 @@ package gateway.session
 import gateway.coverage.DropCounter
 import gateway.down.ActorBlocks
 import gateway.down.BlockReader
+import gateway.down.GroundItems
 import gateway.down.Interfaces
+import gateway.down.Items
+import gateway.down.StockMarket
 import gateway.down.MapRebuild
 import gateway.down.NpcSync
 import gateway.down.PlayerSync
@@ -59,7 +62,10 @@ class GatewaySession(
     private val world = EntityWorld(context.allocator, context.huffman)
     private var self: Infos? = null
     private val varps = VarpMirror(context.vars)
-    private val interfaces = Interfaces(varps, InterfaceTree(context.enums), inventories = { DropCounter.down(TspsServerPacket.WIDGET_RUN_SCRIPT) }, send = ::send)
+    private val items = Items(context.objs, ::send)
+    private val groundItems = GroundItems(::send)
+    private val stockMarket = StockMarket(::send)
+    private val interfaces = Interfaces(varps, InterfaceTree(context.enums), stockMarket, items::scriptInventories, ::send)
     private val upstream = Upstream(varps) { tsps.send(it) }
     private val players = PlayerSync()
     private val npcs = NpcSync()
@@ -167,8 +173,8 @@ class GatewaySession(
                 val reason = reader.string()
                 if (ok) send(Logout) else if (reason.isNotEmpty()) send(MessageGame(GAME_MESSAGE, reason))
             }
-            TspsServerPacket.TICK -> Unit
-            else -> if (!interfaces.handle(packet)) DropCounter.down(packet.opcode)
+            TspsServerPacket.TICK -> groundItems.tick(packet.reader().i32())
+            else -> if (!interfaces.handle(packet) && !items.handle(packet) && !groundItems.handle(packet)) DropCounter.down(packet.opcode)
         }
     }
 
@@ -180,6 +186,7 @@ class GatewaySession(
         }
         self.updateRootBuildArea(rebuild.zoneX - SCENE_RADIUS_ZONES, rebuild.zoneZ - SCENE_RADIUS_ZONES)
         send(rebuild.toMessage())
+        groundItems.rebuild(rebuild.zoneX, rebuild.zoneZ)
     }
 
     private fun onPlayerSync(frame: PlayerSync.Frame) {
@@ -211,7 +218,7 @@ class GatewaySession(
         infos.updateRootBuildArea(scene.zoneX - SCENE_RADIUS_ZONES, scene.zoneZ - SCENE_RADIUS_ZONES)
         Appearance.apply(infos.playerInfo.avatar.extendedInfo, handshake)
         self = infos
-        mirror = EntityMirror(world, context.objs, infos, handshake.index)
+        mirror = EntityMirror(world, context.objs, infos, handshake.index, items::selfAppearance)
 
         val ok =
             LoginResponse.Ok(
@@ -230,6 +237,7 @@ class GatewaySession(
         // REBUILD_LOGIN is always a static map; an instance follows as its own rebuild.
         session.queue(RebuildLoginV2(scene.zoneX, scene.zoneZ, MapRebuild.NO_WORLD_AREA, infos.playerInfo))
         if (scene is MapRebuild.Region) session.queue(scene.toMessage())
+        groundItems.rebuild(scene.zoneX, scene.zoneZ)
         // The browser client adds these itself; tsps handles op 2 as trade and 3 as follow.
         session.queue(SetPlayerOp(TRADE_OP, false, "Trade with"))
         session.queue(SetPlayerOp(FOLLOW_OP, false, "Follow"))

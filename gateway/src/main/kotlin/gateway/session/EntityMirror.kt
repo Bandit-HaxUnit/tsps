@@ -19,6 +19,8 @@ class EntityMirror(
     private val objs: ObjTypes,
     private val self: Infos,
     private val selfIndex: Int,
+    /** The local player's appearance, the only place tsps sends worn equipment to the browser. */
+    private val onSelfAppearance: (AppearanceBlock) -> Unit,
 ) {
     private val players = HashMap<Int, Infos>()
     private val npcs = HashMap<Int, NpcAvatar>()
@@ -82,7 +84,10 @@ class EntityMirror(
     }
 
     private fun applyPlayer(index: Int, info: PlayerAvatarExtendedInfo, block: ActorBlock) {
-        block.appearance?.let { applyAppearance(info, it) }
+        block.appearance?.let {
+            applyAppearance(info, it)
+            if (index == selfIndex) onSelfAppearance(it)
+        }
         // Public chat arrives as CHAT_MESSAGE too; the overhead copy would show it twice.
         block.forcedChat?.takeIf { index !in pendingChat }?.let(info::setSay)
         block.faceDirection?.let { info.setFaceAngle(it) }
