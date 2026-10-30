@@ -313,3 +313,35 @@ boat combat, its defeated form and Harvest.
 - Captures are revision235; identifiers and map objects are checked against pinned revision241
   dump6e5033af6215963581a51b348f452320ff18f0f6 and the active241cache. The Wiki supplies mechanics
   and current stats where the recording predates later boat-combat updates.
+
+## Verification (2026-10-30)
+
+The focused Charting/SeaCombat checks pass91/91. Independent review passes37/37 (seven reviewer
+cases and30 author cases), including actual combat attacks, PendingHit/HitQueue prayer changes,
+native inventory actions, real Trading, targetless combat resolution and automatic duck expiry
+before a replacement query. Retained failing reproductions preceded the reward-slot/trade and
+Rocks-animation fixes. The pinned Yarn production build passes.
+
+The production client rendered the five poteen questions and five mystery boxes after answers
+1,1,4,3,4; the reward flag and boxes survived a graceful save/restart. Fishier stout's real Drink,
+warning/Yes, blackout and private arena rendered all three trolls, including Rocks' ice impact.
+Normal whip combat and auto-retaliation killed them without NPC-hitpoint commands or healing.
+The three reward drinks used normal item packets (first mouse, two MCP inventory actions), set
+18566/18567/18568, and native Arena Exit Open returned2659,3674 in Rellekka Longhall.
+
+Native Track-current followed the full117-step Catherby route and stopped naturally. An early
+tools click refused with139seconds remaining. Natural expiry cleared5038 before any replacement
+query; a native Take then a repeated click left exactly one duck. The existing skiff was verified
+at Port Sarim and boarded using its real gangplank before the Catherby positioning fixture.
+
+Bottles, skills/master99, equipped Abyssal whip, player positioning and chart-go boat positioning
+were disclosed QA fixtures. Later mystery-box openings and a ground-item pickup had no established
+input provenance: they are excluded from native-input verification. Source limitations above,
+including absent corpse revival, Dinky's fallback damage and incomplete Rocks special behavior,
+remain material unfinished work; these checks do not establish complete encounter parity.
+
+The root-coordinated combined run reported10214 tests:10185 passed and29 failed; clean-base
+reported10137 tests:10108 passed and29 failed. Root is comparing individual failing assertions;
+equal failure counts alone do not establish equivalence. The final QA server saved its one online
+player successfully through gameUpdate5s. Its game/MCP listeners and own static server were then
+stopped, and ports3109/43709/49809 were verified free.
