@@ -60,6 +60,9 @@ class WorldEntities(private val world: EntityWorld) {
     /** By this session's world id. */
     fun deckOfWorld(worldId: Int): Deck? = decks.values.firstOrNull { it.worldId == worldId }
 
+    /** This session's world id for a boat tsps names, or null when the client doesn't have it. */
+    fun sessionWorld(index: Int): Int? = worldIds[index]
+
     /** tsps's index for a world id the client names (its world-entity ops). */
     fun tspsIndex(worldId: Int): Int? = worldIds.entries.firstOrNull { it.value == worldId }?.key
 

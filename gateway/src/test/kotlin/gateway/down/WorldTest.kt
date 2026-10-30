@@ -9,6 +9,7 @@ import net.rsprot.protocol.game.outgoing.camera.util.CameraEaseFunction
 import net.rsprot.protocol.game.outgoing.misc.client.HintArrow
 import net.rsprot.protocol.game.outgoing.sound.SynthSound
 import net.rsprot.protocol.game.outgoing.specific.ProjAnimSpecificV4
+import net.rsprot.protocol.game.outgoing.misc.client.SetInteractionMode
 import net.rsprot.protocol.game.outgoing.zone.header.UpdateZonePartialEnclosed
 import net.rsprot.protocol.message.OutgoingGameMessage
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -39,7 +40,7 @@ class WorldTest {
     @Test
     fun `a loc on a boat's deck waits for the boat's world, relative to the deck`() {
         val deck = WorldEntities.Deck(BOAT, WORLD, 1, 1, 1, DECK_ZONE, DECK_ZONE, arrayOfNulls(4 * 13 * 13))
-        val boats = World({ sent += it }) { x, z -> deck.takeIf { it.contains(x, z) } }.apply { rebuild(LUMBRIDGE_ZONE_X, LUMBRIDGE_ZONE_Z) }
+        val boats = World({ sent += it }, deckAt = { x, z -> deck.takeIf { it.contains(x, z) } }).apply { rebuild(LUMBRIDGE_ZONE_X, LUMBRIDGE_ZONE_Z) }
         val x = (DECK_ZONE shl 3) + 3
         val z = (DECK_ZONE shl 3) + 5
         boats.handle(packet(TspsServerPacket.LOC_ADD_CHANGE, TspsWriter().u16(DOOR).u16(x).u16(z).u8(1).u8((10 shl 2) or 0)))
@@ -48,6 +49,16 @@ class WorldTest {
         boats.flushDeck(WORLD)
         val zone = sent.single() as UpdateZonePartialEnclosed
         assertEquals(Triple(0, 0, 1), Triple(zone.zoneX, zone.zoneZ, zone.level))
+    }
+
+    @Test
+    fun `a boat's interaction mode names the session's world for it`() {
+        val boats = World({ sent += it }, boatWorld = { index -> if (index == BOAT) WORLD else null })
+        boats.handle(packet(TspsServerPacket.SET_INTERACTION_MODE, TspsWriter().u16(BOAT).u8(1).u8(1)))
+        boats.handle(packet(TspsServerPacket.SET_INTERACTION_MODE, TspsWriter().u16(0xFFFE).u8(2).u8(1)))
+        boats.handle(packet(TspsServerPacket.SET_INTERACTION_MODE, TspsWriter().u16(3999).u8(1).u8(1)))
+        // tsps's 3000+ would be out of the client's range; -2 is the client's own; an unknown boat is dropped.
+        assertEquals(listOf(WORLD, -2), sent.map { (it as SetInteractionMode).worldId })
     }
 
     @Test

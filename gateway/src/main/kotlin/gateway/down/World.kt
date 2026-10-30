@@ -44,6 +44,8 @@ class World(
     private val send: (OutgoingGameMessage) -> Unit,
     /** The boat deck a tile is on: its updates go to that boat's world, relative to the deck. */
     private val deckAt: (Int, Int) -> WorldEntities.Deck? = { _, _ -> null },
+    /** The session's world id for a boat tsps names by its index (3000+), or null. */
+    private val boatWorld: (Int) -> Int? = { null },
 ) {
     private var sceneX = 0
     private var sceneZ = 0
@@ -158,14 +160,20 @@ class World(
                             HINT_NPC -> HintArrow.NpcHintArrow(a)
                             HINT_TILE -> HintArrow.TileHintArrow(a, b, c, (d ushr 2) and 7)
                             HINT_PLAYER -> HintArrow.PlayerHintArrow(a)
-                            HINT_WORLD_ENTITY -> HintArrow.WorldEntityHintArrow(a, c)
+                            HINT_WORLD_ENTITY -> boatWorld(a)?.let { HintArrow.WorldEntityHintArrow(it, c) } ?: HintArrow.ResetHintArrow
                             else -> HintArrow.ResetHintArrow
                         },
                     ),
                 )
             }
-            TspsServerPacket.SET_INTERACTION_MODE -> send(SetInteractionMode(reader.s16(), reader.u8(), reader.u8()))
-            TspsServerPacket.RESET_INTERACTION_MODE -> send(ResetInteractionMode(reader.s16()))
+            TspsServerPacket.SET_INTERACTION_MODE -> {
+                val world = world(reader.s16())
+                val tiles = reader.u8()
+                val entities = reader.u8()
+                if (world != null) send(SetInteractionMode(world, tiles, entities)) else DropCounter.down(packet.opcode)
+            }
+            TspsServerPacket.RESET_INTERACTION_MODE ->
+                world(reader.s16())?.let { send(ResetInteractionMode(it)) } ?: DropCounter.down(packet.opcode)
             TspsServerPacket.SYSTEM_UPDATE -> {
                 val centis = reader.i32()
                 send(UpdateRebootTimerV2(centis / CENTIS_PER_TICK, UpdateRebootTimerV2.IgnoreUpdateMessage))
@@ -235,7 +243,8 @@ class World(
                     TARGET_TILE -> send(CamTargetV4(CamTargetV4.CoordGridTarget(tile(reader))))
                     TARGET_PLAYER -> send(CamTargetV4(CamTargetV4.PlayerCamTarget(reader.u16())))
                     TARGET_NPC -> send(CamTargetV4(CamTargetV4.NpcCamTarget(reader.u16())))
-                    TARGET_WORLD_ENTITY -> send(CamTargetV4(CamTargetV4.WorldEntityTarget(reader.u16())))
+                    TARGET_WORLD_ENTITY ->
+                        boatWorld(reader.u16())?.let { send(CamTargetV4(CamTargetV4.WorldEntityTarget(it))) } ?: DropCounter.down(packet.opcode)
                     // A tile glide has no OSRS form; the target tile is the nearest thing.
                     else -> send(CamTargetV4(CamTargetV4.CoordGridTarget(tile(reader))))
                 }
@@ -282,6 +291,12 @@ class World(
         val z = reader.u16()
         return CoordGrid(reader.u8() and 3, x, z)
     }
+
+    /**
+     * A world id tsps names: negative ones (the root world, the current one) are the client's
+     * own; a boat is renumbered to the session's world for it, or null when the client hasn't it.
+     */
+    private fun world(id: Int): Int? = if (id < 0) id else boatWorld(id)
 
     private fun zone(x: Int, z: Int, level: Int, payload: ZoneProt) {
         val deck = deckAt(x, z)

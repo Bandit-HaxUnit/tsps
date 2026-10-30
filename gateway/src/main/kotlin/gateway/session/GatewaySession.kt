@@ -71,7 +71,7 @@ class GatewaySession(
     private val groundItems = GroundItems(::send)
     private val stockMarket = StockMarket(::send)
     private val social = Social(::send)
-    private val worldUpdates = World(::send, boats::deckAt)
+    private val worldUpdates = World(::send, boats::deckAt, boats::sessionWorld)
     private val trade by lazy { Trade(::send, { tsps.send(it) }, items::carried) }
 
     /** Everything that turns tsps messages into OSRS packets, asked in turn. */
