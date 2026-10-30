@@ -1,6 +1,8 @@
-// Port coin bags (Wiki): a finished courier task's usual reward, coins by size. Port reward bags
-// (one set per destination port) hold port-specific loot from the Wiki's tables, not done yet.
+// Port coin bags and reward bags. Wiki loot and source limits: docs/port-tasks.md.
 const common = require("./Common.PortTasks");
+const loot = require("./Loot.PortTasks");
+// A blocked opening keeps its roll through bank transfers/logout, rather than rerolling.
+const PENDING_ATTRIBUTE = "port-tasks:pending-bag-rewards";
 
 /** Coins by bag size, tiny to huge (Wiki, Port coin bag). */
 const COINS = [[800, 1200], [1600, 2400], [2400, 3600], [3600, 5400], [6400, 9600]];
@@ -39,13 +41,44 @@ function openCoinBag({ player, itemId, item, slot, interfaceId }) {
   return true;
 }
 
-function openRewardBag({ player }) {
-  player.sendMessage("Port reward bags can't be opened yet.");
+function openRewardBag({ player, itemId, item, slot, interfaceId }) {
+  const { CacheDefinitions, Inventory, Item } = common.core();
+  const inventory = player.getInventory();
+  if (interfaceId !== Inventory.INTERFACE_ID && interfaceId !== CacheDefinitions.getComponentId("inventory:items")) return false;
+  if (inventory.getItems()[slot] !== item || item.getId() !== itemId || item.getAmount() < 1 || player.busy()) return true;
+  const table = loot.tableFor(itemId);
+  if (!table) {
+    // The cache includes size/port combinations that cannot be awarded in OSRS.
+    player.sendMessage("This reward bag has no supported loot table.");
+    return true;
+  }
+  const pending = { ...(player.getAttribute(PENDING_ATTRIBUTE) ?? {}) };
+  const reward = loot.valid(table, pending[itemId]) ? pending[itemId] : loot.roll(table);
+  const rewardId = CacheDefinitions.getObjId(reward.item);
+  if (rewardId == null) return true;
+  const output = new Item(rewardId, reward.amount);
+  // Use the real container's metadata/stack-cap rules with the clicked bag removed.
+  // Do not mutate the live inventory until the entire drop fits.
+  const planned = new Inventory(player).setItems(inventory.getCopiedItems());
+  planned.deleteAtSlot(slot, 1, false);
+  if (planned.getAddableAmount(output) < output.getAmount()) {
+    pending[itemId] = reward;
+    player.setAttribute(PENDING_ATTRIBUTE, pending);
+    inventory.full();
+    return true;
+  }
+  inventory.deleteAtSlot(slot, 1, false);
+  inventory.add(output, false);
+  inventory.refreshItems();
+  delete pending[itemId];
+  player.setAttribute(PENDING_ATTRIBUTE, pending);
+  player.sendMessage(`You open the bag and find ${reward.amount.toLocaleString("en-GB")} x ${CacheDefinitions.getItem(rewardId).name}.`);
   return true;
 }
 
 function attach(api) {
   common.init(api);
+  api.persistAttribute(PENDING_ATTRIBUTE, {});
   api.persistAttribute(PENDING_COIN_ATTRIBUTE, {});
   for (const size of SIZES) {
     api.onItemAction(`${size} port coin bag`, { Open: openCoinBag });
@@ -68,4 +101,5 @@ function rewardBagPorts() {
 
 module.exports = attach;
 module.exports.COINS = COINS;
+module.exports.PENDING_ATTRIBUTE = PENDING_ATTRIBUTE;
 module.exports.PENDING_COIN_ATTRIBUTE = PENDING_COIN_ATTRIBUTE;

@@ -61,6 +61,7 @@ Code: `server/plugins/skills/sailing/PortTasks.plugin.js` and its units in `port
    masters stand where the recordings show them (Mos Le'Harmless, which has no board or dock
    here, isn't spawned).
 8. **Bags**: a port coin bag opens to coins by size (800-1,200 up to 6,400-9,600).
+   Port reward bags open for exactly one shared or destination-specific drop; see below.
 
 - **Carrying**: a crate in both hands uses the cache's human crate-carrying set
    (`dttd_carrying_crate_ready`, `_walk`, `_walk_fast` for running), in each crate's
@@ -183,7 +184,6 @@ second bounty on the same creature waiting for the first, keeping parts when can
 
 - Bounty parts' drop rate scaling with damage dealt, and the boosted rates before the count is met
   (Wiki); the parts' rates here are 1 in the cache's rarity.
-- Opening port reward bags (each port's loot is on the Wiki).
 - Confiscating crates on a teleport, or when leaving port with one in hand.
 - Trim being refused while carrying cargo.
 
@@ -256,3 +256,103 @@ one and displayed947 coins. A28-slot inventory kept both bags and showed the
 space refusal. Native Drop freed one slot; retry consumed one bag and displayed
 961 coins. Screenshots and resulting server state were retained locally. The
 QA server saved and stopped gracefully; no live-game change was made.
+
+## Opening port reward bags
+
+`porttasks/Bags.PortTasks.js` handles the native inventory Open option. Its
+`Loot.PortTasks.js` unit reads `data/port-reward-bags.json`: five shared tables and
+the 95 obtainable size/destination combinations. Every courier task offered by
+the current boards has a supported reward-bag table. The other 55 cache combinations
+are unobtainable according to the Wiki; developer-created copies are refused intact.
+Bag awarding, coin bags and bounty tasks are unchanged.
+
+### Evidence and limits
+
+- [Port reward bag](https://oldschool.runescape.wiki/w/Port_reward_bag) and the
+  [Tiny](https://oldschool.runescape.wiki/w/Tiny_port_reward_bag),
+  [Small](https://oldschool.runescape.wiki/w/Small_port_reward_bag),
+  [Medium](https://oldschool.runescape.wiki/w/Medium_port_reward_bag),
+  [Large](https://oldschool.runescape.wiki/w/Large_port_reward_bag) and
+  [Huge](https://oldschool.runescape.wiki/w/Huge_port_reward_bag) size pages, fetched
+  29 October 2026, supply the shared/destination items, quantity ranges, noted
+  rewards and weights. One bag gives one drop, including its local-item roll in
+  the main table. Local probabilities are respectively 1/96, 1/84, 1/80, 2/155
+  and 1/75. Multiple local possibilities use the Wiki's conditional weights.
+- The Wiki quotes Mod Ash on 12 October for the local-item probabilities and on
+  13 October for Huge's dragon nails (4/225) and dragon metal sheet (1/225).
+  Shared decimal weights are scaled to integers without rounding; the local-item
+  chance remains part of the main-table roll. Entries the Wiki explicitly marks approximate retain
+  `approximate: true`; observed quantity ranges and other crowdsourced rates
+  remain Wiki evidence, not an independent measurement of OSRS's exact formulas.
+- The [pinned revision 241 object dump](https://github.com/Joshua-F/osrs-dumps/blob/6e5033af6215963581a51b348f452320ff18f0f6/config/dump.obj)
+  supplies item gamevals and cert identities, verified against the shipped
+  `osrs-241_2026-10-20` cache. Bag param 2645 is its size. The Tiny Cairn Isle and
+  Entrana Wiki quantity fields are blank: their bag params 2646/2647 identify
+  noted sapphire ×10 and noted big bones ×15 respectively. These are explicitly
+  marked with `quantitySource` in the data. Those two quantities are cache-backed
+  fallback values, not captured server rewards. Small Summer Shore's Wiki row
+  says Elkhorn frag ×3 '(noted)', but this cache has no noted frag: it is already
+  stackable, so the real `coral_elkhorn_frag` is used.
+- Searching the local RSProx index for `*port_task_lootsack*`, `*port*reward*`
+  and `*port*coin*` found no recordings. Other `*lootsack*` matches are Hunter
+  sacks, not port bags. No port-bag animation, sound, exact message or delay has
+  therefore been established by a recording. Opening is immediate, with a plain
+  reward message and no invented animation/sound. The refusal/message wording
+  and retry bookkeeping below are implementation choices.
+
+### Inventory, retries and persistence
+
+- Validate the live inventory widget, clicked slot, held Item identity and amount;
+  busy/trading, dead, teleporting and stale contexts cannot consume a bag.
+- Plan on a real Inventory copy, remove one bag from that exact slot, and ask
+  `getAddableAmount` whether the complete drop fits. This includes metadata stack
+  equality and the integer stack cap. The last bag can free its own output slot;
+  a remaining bag stack cannot. Refusal preserves all input and output amounts.
+- A refused roll is saved under `port-tasks:pending-bag-rewards`, keyed by bag ID,
+  and validated against the current loot table before use. Bank transfer and
+  logout cannot reroll it; a successful opening consumes one bag, delivers the
+  complete reward, clears that pending entry and refreshes inventory once.
+- There is no delayed task/session to replay or cancel. No item storage is
+  accessed by Open, so a Bank PIN guard is not applicable. Existing bank actions
+  retain their own guards. No generated data, core API or save schema changes.
+
+### Production path and verification
+
+Native canvas inventory Open → `ClientConnection.inventoryAction` →
+`ItemActionPacketListener.handleAction/handleFirstAction` → named
+`PluginManager` item-action hook → `openRewardBag` → real `Inventory` /
+`ItemContainer.getAddableAmount`, exact-slot deletion and add → inventory packet
+and message. `Item` owns metadata cloning; `ItemContainer` owns capacity, merges
+and caps; `PlayerSave` plus the registered persistence plugin owns the saved
+inventory and pending attribute. Unchanged inventory slots keep their Item
+identity; only the consumed bag and awarded/merged reward are mutated.
+
+`tests/port-reward-bags.test.cjs` loads every enabled plugin and actual startup /
+shutdown hooks, with real Player, Inventory and cache data. Network output is the
+only stubbed game boundary; deterministic RNG selects loot fixtures. It covers
+the native packet widget, all supported tables and quantity endpoints, last/full
+inventory, stack cap, metadata, exact-slot consumption, repeated/stale clicks,
+busy/dead states, real bank transfer and actual save-codec hydration. Source
+limits above still apply even when these checks pass.
+
+On base `3aa2ed9d2`, the feature/Sailing targeted run passed 120/120; independent
+feature/Bank/Trading/PlayerSave checks passed 129/129. The full server suite had
+10,038 passes and six failures out of 10,044. All six reproduced on a separately
+built clean `3aa2ed9d2` source snapshot: belladonna safe equipment, three Farming
+league effects, Barronite Mining rewards and bone-burying feedback.
+
+An independent reviewer reconciled all 254 loot rows and ran a further native
+inventory → real bank deposit → SQLite worker commit/disk read → hydration →
+bank withdrawal → blocked retry → deposit knife → retained reward scenario.
+The subsequent bag rolled fresh loot and the cleared pending state persisted;
+the emitted inventory snapshot bytes were checked. No runtime findings in those
+inspected paths. Review corrected the plan's stale persistence description and
+identified the Small Summer Shore noted-label discrepancy documented above.
+
+Own-port native-client QA used controlled spawned bags and knives, with ordinary
+RNG: rendered right-click Open consumed one Tiny Port Sarim bag and showed 49
+Iron cannonballs and the reward message. Left-click with 28 occupied slots kept
+both bags and displayed the inventory-space refusal. Dropping a knife through
+the native packet freed a slot; left-click then delivered 27 Bronze nails and
+consumed exactly one bag. The screenshot checks establish local client rendering
+and input routing, not a comparison with an OSRS port-bag recording.
