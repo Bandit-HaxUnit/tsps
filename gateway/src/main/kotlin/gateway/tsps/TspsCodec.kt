@@ -205,7 +205,8 @@ object TspsClientPacket {
         TspsWriter().i32(combinedId).u16(slot).u16(obj).u8(op).fixed(IF_BUTTONX)
 
     /** Public chat: kind 0 public, 2 friends chat, 3 autochat (`encodeChat` in the browser client). */
-    fun chat(kind: Int, text: String): ByteArray = TspsWriter().u8(kind).string(text).varByte(CHAT)
+    fun chat(kind: Int, text: String, style: gateway.down.ChatStyle? = null): ByteArray =
+        TspsWriter().u8(kind).string(text).also { style?.write(it) }.varByte(CHAT)
 
     /** A `::` command; tsps reads commands from public chat. */
     fun command(command: String): ByteArray = TspsWriter().u8(CHAT_KIND_PUBLIC).string("::$command").varByte(CHAT)

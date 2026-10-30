@@ -3,6 +3,7 @@ package gateway.up
 import gateway.coverage.DropCounter
 import gateway.session.VarpMirror
 import gateway.tsps.TspsClientPacket
+import gateway.down.ChatStyle
 import gateway.tsps.TspsWriter
 import net.rsprot.protocol.game.incoming.buttons.If1Button
 import net.rsprot.protocol.game.incoming.buttons.If3Button
@@ -112,7 +113,7 @@ class Upstream(
             is ResumePStringDialog -> send(TspsWriter().string(message.string).varByte(RESUME_STRINGDIALOG))
             is CloseModal -> send(TspsWriter().fixed(IF_CLOSE))
             is MessagePublic ->
-                PUBLIC_CHAT_KINDS[message.type]?.let { send(TspsClientPacket.chat(it, message.message)) } ?: DropCounter.up(message)
+                PUBLIC_CHAT_KINDS[message.type]?.let { send(TspsClientPacket.chat(it, message.message, publicChatStyle(message))) } ?: DropCounter.up(message)
             // Autocomplete is the client asking for suggestions as you type; tsps has none.
             is ClientCheat -> if (!message.autocomplete) send(TspsClientPacket.command(message.command))
             is MessagePrivate -> send(TspsWriter().string(message.name).string(message.message).varByte(PRIVATE_MESSAGE))
@@ -193,6 +194,10 @@ class Upstream(
     }
 
     /** IF_TRIGGEROPLOCAL: u16 length, then little-endian crc, sub, component and obj, then the args. */
+    /** The colour and effect typed with the message, or none. */
+    private fun publicChatStyle(message: MessagePublic): ChatStyle? =
+        if (message.colour == 0 && message.effect == 0) null else ChatStyle(message.colour, message.effect, message.pattern?.asByteArray())
+
     private fun scriptTrigger(message: IfScriptTrigger) {
         val args = ByteArray(message.buffer.readableBytes()).also { message.buffer.getBytes(message.buffer.readerIndex(), it) }
         val body =

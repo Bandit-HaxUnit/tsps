@@ -137,13 +137,13 @@ class HeadlessClient(private val host: String, private val port: Int) {
             )
 
         /** MESSAGE_PUBLIC: plain public chat. */
-        fun say(text: String) =
+        fun say(text: String, colour: Int = 0, effect: Int = 0) =
             sendVarByte(
                 MESSAGE_PUBLIC,
                 Unpooled.buffer().toJagByteBuf().apply {
                     p1(0) // type: public
-                    p1(0) // colour
-                    p1(0) // effect
+                    p1(colour)
+                    p1(effect)
                     huffman.encode(this, text)
                 }.buffer.let { it.array().copyOf(it.writerIndex()) },
             )

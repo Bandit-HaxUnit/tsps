@@ -246,7 +246,7 @@ class GatewaySession(
     private fun onChat(chat: TspsChatMessage) {
         when {
             // Public chat goes overhead and to the chatbox through PLAYER_INFO.
-            chat.isPublic && chat.playerIndex >= 0 -> mirror?.queueChat(chat.playerIndex, chat.text, chat.modIcon)
+            chat.isPublic && chat.playerIndex >= 0 -> mirror?.queueChat(chat.playerIndex, EntityMirror.PublicChat(chat.text, chat.modIcon, chat.isAutotyper, chat.style))
             social.chat(chat) -> Unit
             chat.isGameMessage -> send(MessageGame(chat.type, chat.from.ifEmpty { null }, chat.text))
             else -> DropCounter.down(TspsServerPacket.CHAT_MESSAGE)
@@ -266,7 +266,7 @@ class GatewaySession(
         infos.npcInfo.setRenderDistance(SCENE_RENDER_DISTANCE)
         infos.npcInfo.setZoneSearchRadius(SCENE_RADIUS_ZONES + 1)
         self = infos
-        mirror = EntityMirror(world, context.objs, infos, handshake.index, items::selfAppearance)
+        mirror = EntityMirror(world, context.objs, context.npcTypes, infos, handshake.index, items::selfAppearance)
 
         val ok =
             LoginResponse.Ok(

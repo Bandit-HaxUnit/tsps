@@ -21,6 +21,7 @@ import { Misc } from "../../util/Misc";
 import {
   encodeBankSnapshot,
   encodeChatMessage,
+  type ChatStyle,
   encodeCollectionLogSnapshot,
   encodeContentData,
   encodeDestination,
@@ -718,9 +719,9 @@ export class PacketSender {
   }
 
   /** `chatType` overrides the public type 2: ChatType.AUTOTYPER / MODAUTOTYPER for autochat. */
-  sendPublicChat(message: string, from: string, playerId: number, chatType?: number): this {
+  sendPublicChat(message: string, from: string, playerId: number, chatType?: number, style?: ChatStyle): this {
     this.player.getSession().sendClientPacket(
-      encodeChatMessage("public", message, from, "", playerId, chatType)
+      encodeChatMessage("public", message, from, "", playerId, chatType, style)
     );
     return this;
   }

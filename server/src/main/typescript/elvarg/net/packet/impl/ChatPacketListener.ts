@@ -2,7 +2,7 @@ import { PlayerPunishment } from "../../../util/PlayerPunishment";
 import { Misc } from "../../../util/Misc";
 import { World } from "../../../game/World";
 import { PluginManager } from "../../../plugins/PluginManager";
-import { ChatType } from "../../protocol/ClientProtocol";
+import { ChatType, type ChatStyle } from "../../protocol/ClientProtocol";
 import { CommandPacketListener } from "./CommandPacketListener";
 
 export class ChatPacketListener {
@@ -25,7 +25,8 @@ export class ChatPacketListener {
   }
 
   /** `autoChat`: the client's autochat timer sent it (shown as type 90/91; the "Autochat" public filter shows only these). */
-  public static handleText(player: any, value: string, autoChat = false): void {
+  /** [style] is the colour and effect the speaker typed, sent with each copy of the message. */
+  public static handleText(player: any, value: string, autoChat = false, style?: ChatStyle): void {
     const text = String(value ?? "").replace(/[<>]/g, "").trim().slice(0, 80);
     if (text.startsWith("::")) {
       CommandPacketListener.execute(player, text.slice(2));
@@ -66,7 +67,8 @@ export class ChatPacketListener {
         text,
         `${iconPrefix}${player.getUsername()}`,
         player.getIndex(),
-        autoChat ? (iconPrefix ? ChatType.MODAUTOTYPER : ChatType.AUTOTYPER) : undefined
+        autoChat ? (iconPrefix ? ChatType.MODAUTOTYPER : ChatType.AUTOTYPER) : undefined,
+        style
       );
     }
   }

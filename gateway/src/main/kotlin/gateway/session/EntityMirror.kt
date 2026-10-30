@@ -1,8 +1,10 @@
 package gateway.session
 
+import gateway.cache.NpcTypes
 import gateway.cache.ObjTypes
 import gateway.down.ActorBlock
 import gateway.down.AppearanceBlock
+import gateway.down.ChatStyle
 import gateway.down.NpcSync
 import gateway.down.PlayerSync
 import net.rsprot.protocol.game.outgoing.info.Infos
@@ -17,6 +19,7 @@ import net.rsprot.protocol.game.outgoing.info.playerinfo.PlayerAvatarExtendedInf
 class EntityMirror(
     private val world: EntityWorld,
     private val objs: ObjTypes,
+    private val npcTypes: NpcTypes,
     private val self: Infos,
     private val selfIndex: Int,
     /** The local player's appearance, the only place tsps sends worn equipment to the browser. */
@@ -24,12 +27,16 @@ class EntityMirror(
 ) {
     private val players = HashMap<Int, Infos>()
     private val npcs = HashMap<Int, NpcAvatar>()
+    private val npcTypeIds = HashMap<Int, Int>()
 
     /** Public chat from CHAT_MESSAGE, by speaker, waiting for this tick's player sync. */
-    private val pendingChat = HashMap<Int, Pair<String, Int>>()
+    private val pendingChat = HashMap<Int, PublicChat>()
 
-    fun queueChat(index: Int, text: String, modIcon: Int) {
-        pendingChat[index] = text to modIcon
+    /** One public message for the speaker's chat block. */
+    class PublicChat(val text: String, val modIcon: Int, val autotyper: Boolean, val style: ChatStyle?)
+
+    fun queueChat(index: Int, chat: PublicChat) {
+        pendingChat[index] = chat
     }
 
     fun applyPlayers(frame: PlayerSync.Frame, blocks: Map<Int, ActorBlock>) {
@@ -49,7 +56,14 @@ class EntityMirror(
         }
         for ((index, chat) in pendingChat) {
             val infos = if (index == selfIndex) self else players[index] ?: continue
-            infos.playerInfo.avatar.extendedInfo.setChat(0, 0, chat.second, false, chat.first.take(MAX_CHAT_LENGTH), null)
+            infos.playerInfo.avatar.extendedInfo.setChat(
+                chat.style?.colour ?: 0,
+                chat.style?.effect ?: 0,
+                chat.modIcon,
+                chat.autotyper,
+                chat.text.take(MAX_CHAT_LENGTH),
+                chat.style?.pattern,
+            )
         }
         pendingChat.clear()
     }
@@ -60,10 +74,11 @@ class EntityMirror(
         val readded = frame.changes.filterIsInstance<NpcSync.Change.Added>().map { it.index }.toSet()
         for (change in frame.changes) {
             when (change) {
-                is NpcSync.Change.Removed -> if (change.index !in readded) npcs.remove(change.index)?.let(world::releaseNpc)
+                is NpcSync.Change.Removed -> if (change.index !in readded) npcs.remove(change.index)?.let(world::releaseNpc)?.also { npcTypeIds.remove(change.index) }
                 is NpcSync.Change.Added -> {
                     val npc = change.npc
                     npc.level = level
+                    npcTypeIds[change.index] = npc.type
                     val existing = npcs[change.index]
                     if (existing != null) {
                         existing.setId(npc.type)
@@ -80,8 +95,22 @@ class EntityMirror(
         }
         for ((index, block) in frame.blocks) {
             val avatar = npcs[index] ?: continue
-            applyNpc(avatar.extendedInfo, block)
+            applyNpc(avatar.extendedInfo, block, npcTypeIds[index] ?: -1)
         }
+    }
+
+    /** tsps overrides body-model slots; OSRS replaces the whole list. Empty resets to the type's. */
+    private fun applyModelCustomisation(info: NpcAvatarExtendedInfo, type: Int, overrides: List<Pair<Int, Int>>) {
+        if (overrides.isEmpty()) {
+            info.resetBodyCustomisations()
+            return
+        }
+        val models = npcTypes.models(type).toMutableList()
+        for ((slot, model) in overrides) {
+            while (models.size <= slot) models += -1
+            models[slot] = model
+        }
+        info.setBodyCustomisation(models.filter { it >= 0 }, emptyList(), emptyList())
     }
 
     fun release() {
@@ -89,6 +118,7 @@ class EntityMirror(
         npcs.values.forEach(world::releaseNpc)
         players.clear()
         npcs.clear()
+        npcTypeIds.clear()
     }
 
     private fun applyPlayer(index: Int, info: PlayerAvatarExtendedInfo, block: ActorBlock) {
@@ -119,7 +149,9 @@ class EntityMirror(
         block.tint?.let { info.setTinting(it.start, it.end, it.hue, it.saturation, it.lightness, it.weight) }
     }
 
-    private fun applyNpc(info: NpcAvatarExtendedInfo, block: ActorBlock) {
+    private fun applyNpc(info: NpcAvatarExtendedInfo, block: ActorBlock, type: Int) {
+        block.modelCustomisation?.let { applyModelCustomisation(info, type, it) }
+        block.tint?.let { info.setTinting(it.start, it.end, it.hue, it.saturation, it.lightness, it.weight) }
         block.forcedChat?.let(info::setSay)
         block.faceEntity?.let(info::setFacePathingEntity)
         block.faceTile?.let { (x, z) -> info.setFaceCoordGrid(x, z, instant = false, walkMode = 0) }

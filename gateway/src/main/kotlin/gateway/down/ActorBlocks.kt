@@ -77,6 +77,7 @@ object ActorBlocks {
     private const val NPC_ANIMATION = 0x10
     private const val NPC_HIT = 0x20
     private const val NPC_FORCED_CHAT = 0x40
+    private const val NPC_TINT = 0x100
     private const val NPC_HEAD_ICONS = 0x200
     private const val NPC_EXACT_MOVE = 0x400
     private const val NPC_FACE_TILE = 0x800
@@ -124,6 +125,8 @@ object ActorBlocks {
         return block
     }
 
+    internal fun npcTint(reader: BlockReader) = ActorBlock.Tint(reader.u16a(), reader.u16a(), reader.u8c(), reader.u8s(), reader.u8c(), reader.u8s())
+
     fun npc(reader: BlockReader): ActorBlock {
         val block = ActorBlock()
         val mask = reader.mask()
@@ -134,6 +137,8 @@ object ActorBlocks {
         }
         if (mask and NPC_HIT != 0) hits(reader, block, npc = true)
         if (mask and NPC_FORCED_CHAT != 0) block.forcedChat = reader.string()
+        // The player tint's fields, in the NPC block's own byte order.
+        if (mask and NPC_TINT != 0) block.tint = npcTint(reader)
         if (mask and NPC_SPOT_ANIM != 0) {
             repeat(reader.u8()) {
                 val slot = reader.u8a()

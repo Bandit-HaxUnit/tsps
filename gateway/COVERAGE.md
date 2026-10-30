@@ -18,7 +18,7 @@ sessions, so the browser wire format doesn't change.
 | 4 LOGOUT_RESPONSE | LOGOUT / MESSAGE_GAME | mapped | 4 | a refusal becomes a game message |
 | 6 PLUGIN_MESSAGE | — | dropped | 1 | plugin features (quest helper, voice, pest control) |
 | 20 PLAYER_SYNC | PLAYER_INFO | mapped | 2–3 | every player tsps shows gets an avatar in the session's world; update blocks become extended info; worn slots hide by the cache's wearpos2/3 |
-| 21 NPC_INFO | NPC_INFO | mapped | 3, 8 | tsps's remove-and-re-add (jump, type change) becomes a teleport/setId of the same avatar; rsprot's own range culling is off, tsps decides visibility. Model customisation and NPC tint are todo (cache NPC model list / a native-bit field) |
+| 21 NPC_INFO | NPC_INFO | mapped | 3, 8 | tsps's remove-and-re-add (jump, type change) becomes a teleport/setId of the same avatar; rsprot's own range culling is off, tsps decides visibility. Model customisation: tsps's per-slot overrides are applied to the type's models from the cache (an empty list resets). Tint: tsps sends NPC tint (mask 0x100) as it does for players. Hit delays and exact-move pass through |
 | 22 ANIM | — | dropped | 1 | base anims are in appearance |
 | 23 MOVEMENT_POSITION | — | dropped | 2 | sub-tile movement has no OSRS form |
 | 40 / 41 / 44 VARP_SMALL / LARGE / LONG | VARP_SMALL / LARGE / LONG | mapped | 4 | ids ≥ the cache varp count (5996) dropped |
@@ -42,14 +42,14 @@ sessions, so the browser wire format doesn't change.
 | 109 / 111 / 112 WIDGET_SET_FLAGS* | IF_SETEVENTS_V2 | mapped | 4 | old op bits 1–10 move to events2 |
 | 110 WIDGET_RUN_SCRIPT | VARP_*, UPDATE_INV_FULL, RUNCLIENTSCRIPT | mapped | 4–5 | script -1 = vars and inventories only |
 | 116 WIDGET_SET_QUEST_LIST | — | dropped | 4 | browser-only quest list widget |
-| 120 CHAT_MESSAGE | MESSAGE_GAME, PLAYER_INFO chat, MESSAGE_PRIVATE(_ECHO), MESSAGE_FRIENDCHANNEL | mapped | 3–6 | public: one PLAYER_INFO chat block (overhead copy suppressed, crown from `<img=N>`); game/system types → MESSAGE_GAME; private in/out and friends chat → their packets with a gateway message counter and world 1. Mod private (7) and clan types have no tsps source |
+| 120 CHAT_MESSAGE | MESSAGE_GAME, PLAYER_INFO chat, MESSAGE_PRIVATE(_ECHO), MESSAGE_FRIENDCHANNEL | mapped | 3–6, 12 | public: one PLAYER_INFO chat block (overhead copy suppressed, crown from `<img=N>`) with the colour, effect and pattern tsps appends, and the autotyper flag for autochat; game/system types → MESSAGE_GAME; private in/out and friends chat → their packets with a gateway message counter and world 1. Mod private (7) and clan types have no tsps source |
 | 121 FRIENDS_CHAT_UPDATE | UPDATE_FRIENDLIST, UPDATE_IGNORELIST, UPDATE_FRIENDCHAT_CHANNEL_FULL_V2, FRIENDLIST_LOADED | mapped | 6 | the channel only goes when it changed; FRIENDLIST_LOADED once |
 | 122 CHAT_FILTER_SETTINGS | CHAT_FILTER_SETTINGS + _PRIVATECHAT | mapped | 6 | |
 | 123 TRIGGER_ONDIALOGABORT | TRIGGER_ONDIALOGABORT | mapped | 4 | |
 | 131 SOUND | SYNTH_SOUND / SOUND_AREA | mapped | 7 | an area sound's delay is clamped to a byte; radius → radius, attenuation → size |
 | 132 PLAY_JINGLE / 133 PLAY_SONG | MIDI_JINGLE / MIDI_SONG_V2 | mapped | 7 | |
 | 134 / 135 / 136 LOC_ADD_CHANGE / DEL / ANIM | LOC_ADD_CHANGE_V2 / LOC_DEL behind UPDATE_ZONE_PARTIAL_FOLLOWS; LOC_ANIM_SPECIFIC | mapped | 7 | tsps replays the scene's loc changes itself after a rebuild |
-| 137 CAMERA_CONTROL | CAM_* | mapped | 7 | easings remapped to OSRS ids; plain instant/animated moves use rates 100/100 and 2/10; translate dropped, a tile glide becomes a tile target, trackTarget dropped |
+| 137 CAMERA_CONTROL | CAM_* | mapped | 7 | easings remapped to OSRS ids; plain instant/animated moves use rates 100/100 and 2/10; translate dropped, a tile glide becomes a tile target, trackTarget dropped: rev 241 has no form for them (no target tracking during a timed move, no timed tile glide, no shift of a running shot), and imitating them would need guessed camera state |
 | 140 / 141 REBUILD_REGION / NORMAL | REBUILD_REGION_V2 / REBUILD_LOGIN_V2 / REBUILD_NORMAL_V2 | mapped | 1–2 | the scene before login becomes REBUILD_LOGIN (an instance follows as REBUILD_REGION); tsps's template chunks are rsprot ReferenceZones |
 | 142 / 143 REBUILD_WORLDENTITY / WORLDENTITY_INFO | REBUILD_WORLDENTITY_V4 / WORLDENTITY_INFO_V7 | todo | — | **deferred.** Needs: world-entity avatars from tsps's spawns/updates (fine coords, angle), the deck scene as REBUILD_WORLDENTITY_V4, players and NPCs on a deck in the boat's world view (PLAYER_SYNC/NPC_INFO world-view ids, SET_ACTIVE_WORLD for deck locs), and from tsps (native bit) each boat's owner index and projected/active levels. Boats don't render in the official client until then |
 | 144 REGION_REPLACEMENT | — | dropped | 2 | server map data the client can't load |
@@ -86,7 +86,7 @@ sessions, so the browser wire format doesn't change.
 | OPOBJ1–5 / OPOBJ6 / OPOBJT | 102, 43, 103, 56, 82 / 104 / 94 or 79 | mapped | 5 | |
 | OPWORLDENTITY1–5 | 220–224 | mapped | 9 | (boats aren't drawn yet, see 142/143) |
 | OPWORLDENTITY6 | — | dropped | 9 | 241 sends a type id, tsps reads an index |
-| MESSAGE_PUBLIC / CLIENT_CHEAT | 190 CHAT | mapped | 2–3 | public (0), autotyper (1 → autochat) and friends chat (2); colour and effects aren't passed (tsps drops them); clan types dropped. CLIENT_CHEAT: `::cmd`, autocomplete requests dropped |
+| MESSAGE_PUBLIC / CLIENT_CHEAT | 190 CHAT | mapped | 2–3 | public (0), autotyper (1 → autochat) and friends chat (2); colour, effect and pattern are appended for tsps; clan types dropped. CLIENT_CHEAT: `::cmd`, autocomplete requests dropped |
 | MESSAGE_PRIVATE | 197 | mapped | 6 | |
 | FRIENDLIST / IGNORELIST ADD / DEL, FRIENDCHAT_* | 196 FRIENDS_CHAT_ACTION | mapped | 6 | join, leave, kick, rank and the list edits share one tsps packet |
 | CHAT_SETFILTER | 198 | mapped | 6 | |

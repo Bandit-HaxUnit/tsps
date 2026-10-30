@@ -38,6 +38,23 @@ class M3EntitiesTest {
     }
 
     @Test
+    fun `public chat keeps the colour and effect it was typed with`() {
+        login(LiveGateway.newAccount("gwcol")).use { other ->
+            other.expect<RebuildLoginV2>()
+            login(LiveGateway.newAccount("gwcos")).use { observer ->
+                observer.expect<RebuildLoginV2>()
+                observer.playerUpdate(other.index) { it is PlayerUpdateType.LowResolutionToHighResolution }
+                // "red:wave:" in the chatbox.
+                other.say(CHAT, colour = RED, effect = WAVE)
+                val chat =
+                    observer.playerUpdate(other.index) { update -> update.extendedInfo().any { it is ChatExtendedInfo } }
+                        .extendedInfo().filterIsInstance<ChatExtendedInfo>().single()
+                assertEquals(RED to WAVE, chat.colour to chat.effects)
+            }
+        }
+    }
+
+    @Test
     fun `npcs around the spawn come into view`() {
         login(LiveGateway.newAccount("gwnpc")).use { game ->
             game.expect<RebuildLoginV2>()
@@ -76,6 +93,8 @@ class M3EntitiesTest {
         }
 
     private companion object {
+        const val RED = 1
+        const val WAVE = 1
         const val PASSWORD = "gateway-test"
         const val OK = 2
         const val CHAT = "hello from the gateway"
