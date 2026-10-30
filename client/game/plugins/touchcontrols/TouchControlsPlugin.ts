@@ -135,6 +135,8 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
     /** After an action the held stick stays inert until the thumb lifts, or it would cancel the action. */
     private suspended = false;
     private focus?: TouchTarget;
+    /** Held by the action button while pressed or listing, so the target can't change under the finger. */
+    private pinned = false;
     private seenRefusal?: ContinuousMovementRefusal;
     /** The NPC sharing the player's tile, rescanned when the player's tile or the game tick changes. */
     private npcUnder?: Extract<TouchTarget, { kind: "npc" }>;
@@ -195,6 +197,11 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
         this.stick = undefined;
         this.heading = undefined;
         this.stopWalking();
+    }
+
+    /** Keep the current target while the action button is pressed or its options are open. */
+    pin(pinned: boolean): void {
+        this.pinned = pinned;
     }
 
     /** Use one of the focused object's options, as clicking it would. */
@@ -294,6 +301,8 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
             this.npcUnder = undefined;
             return;
         }
+        // An NPC walking off (or a new collision) must not swap the button under a held finger.
+        if (this.pinned && this.focus) return;
         const scanKey = `${player.x},${player.y},${player.plane},${this.gameTicks}`;
         if (scanKey !== this.npcScanKey) {
             this.npcScanKey = scanKey;

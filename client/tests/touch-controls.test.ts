@@ -236,7 +236,12 @@ const refusal = (fromX: number, fromY: number, toX: number, toY: number): Contin
     assert.deepEqual(plugin.getUiState().action, { kind: "npc", target: "Cow", options: [{ option: "Attack", actionIndex: 1 }] });
     plugin.interact(1);
     assert.deepEqual(sent[0].slice(2), [MenuOpcode.NpcSecondOption, 11, "Attack", "Cow"]);
+    // Held, the cow stays the target after the player steps off it.
+    plugin.pin(true);
     at = { x: 61, y: 61 };
+    plugin.onClientTick();
+    assert.equal(plugin.getUiState().action?.target, "Cow", "a held button keeps its target");
+    plugin.pin(false);
     plugin.onClientTick();
     assert.equal(plugin.getUiState().action?.target, "Giant", "the giant's far tile, with its colour tags stripped");
     at = { x: 70, y: 70 };

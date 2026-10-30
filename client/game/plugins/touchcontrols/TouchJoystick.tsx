@@ -9,7 +9,7 @@ const RADIUS = 44;
 /** Fraction of the travel that still counts as centred. */
 const DEAD_ZONE = 0.2;
 /** Holding the action button this long lists every option instead. */
-const LONG_PRESS_MS = 400;
+const LONG_PRESS_MS = 250;
 
 /** Touch handlers own their touches: no default gesture and nothing reaching the canvas. */
 const own = (event: React.SyntheticEvent) => {
@@ -110,10 +110,18 @@ function ActionButton({ plugin, action, stonesInset }: { plugin: TouchControlsPl
     const key = action.target + action.options.map((o) => o.option).join("|");
     // A different object closes the list.
     useEffect(() => setListing(false), [key]);
-    useEffect(() => () => window.clearTimeout(timer.current), []);
+    useEffect(() => () => {
+        window.clearTimeout(timer.current);
+        plugin.pin(false);
+    }, [plugin]);
+    const close = () => {
+        setListing(false);
+        plugin.pin(false);
+    };
 
     const onDown = (event: React.PointerEvent<HTMLButtonElement>) => {
         own(event);
+        plugin.pin(true);
         window.clearTimeout(timer.current);
         timer.current = window.setTimeout(() => {
             timer.current = undefined;
@@ -125,12 +133,13 @@ function ActionButton({ plugin, action, stonesInset }: { plugin: TouchControlsPl
         if (timer.current === undefined) return; // the long press opened (or a cancel ended) it
         window.clearTimeout(timer.current);
         timer.current = undefined;
-        if (listing) setListing(false);
-        else plugin.interact(action.options[0].actionIndex);
+        if (!listing) plugin.interact(action.options[0].actionIndex);
+        close();
     };
     const onCancel = () => {
         window.clearTimeout(timer.current);
         timer.current = undefined;
+        if (!listing) plugin.pin(false);
     };
 
     return (
@@ -146,8 +155,8 @@ function ActionButton({ plugin, action, stonesInset }: { plugin: TouchControlsPl
                             onPointerDown={own}
                             onPointerUp={(event) => {
                                 own(event);
-                                setListing(false);
                                 plugin.interact(actionIndex);
+                                close();
                             }}
                             onContextMenu={own}
                         >
