@@ -10,6 +10,8 @@ import {
 import { findBlockingTarget, type TouchTargetWorld } from "../game/plugins/touchcontrols/TouchTargets";
 import { GameState } from "../game/login/GameState";
 import { MenuOpcode } from "../ui/menu/MenuState";
+import { setMenuTransform } from "../ui/menu/menuTransforms";
+import { applyMenuSwaps } from "../game/plugins/menuswapper/menuSwaps";
 
 type Move = { dx: number; dy: number; running: boolean; rotation: number };
 
@@ -279,6 +281,28 @@ const refusal = (fromX: number, fromY: number, toX: number, toY: number): Contin
     client.gameState = GameState.LOGGED_IN;
     plugin.onClientTick();
     assert.equal(plugin.getUiState().action?.target, "Cow", "the same NPC focuses once the scene is up");
+}
+
+// The button follows Menu Entry Swapper: a saved left-click swap is the tap, first in the list.
+{
+    const swaps = { "npc:90": { option: "Bank", name: "Banker" } };
+    setMenuTransform((entries, context) => applyMenuSwaps(entries, { ...context, isShiftHeld: false },
+        { enabled: true, presets: { bank: false, trade: false, pickpocket: false, shiftDrop: false }, swaps, shiftSwaps: {} },
+        () => {}));
+    const { client } = makeClient({
+        playerEcs: { getIndexForServerId: () => 0, getX: () => 64, getY: () => 64, getLevel: () => 0 },
+        sceneGeometry: { locsAtTile: () => [] },
+        locTypeLoader: { load: () => undefined },
+        npcEcs: {
+            forEachActive: (fn) => fn(1), getServerId: () => 5, getNpcTypeId: () => 90, getSize: () => 1,
+            getWorldX: () => 64, getWorldY: () => 64, getLevel: () => 0,
+        },
+        npcTypeLoader: { load: () => ({ id: 90, name: "Banker", actions: ["Talk-to", null, "Bank", "Collect", null] }) as never },
+    });
+    const plugin = new TouchControlsPlugin(client);
+    plugin.onClientTick();
+    assert.deepEqual(plugin.getUiState().action?.options.map((o) => o.option), ["Bank", "Talk-to", "Collect"]);
+    setMenuTransform(undefined);
 }
 
 console.log("touch controls plugin test passed");

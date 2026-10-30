@@ -19,6 +19,9 @@ import { RS_TO_RADIANS } from "../../../rs/MathConstants";
 import { MOBILE_ROOT_INTERFACE } from "../../../rs/cs2/ClientType";
 import { menuAction } from "../../../ui/menu/MenuAction";
 import { MenuOpcode } from "../../../ui/menu/MenuState";
+import type { SimpleMenuEntry } from "../../../ui/menu/MenuEngine";
+import { applyMenuTransform } from "../../../ui/menu/menuTransforms";
+import { MenuTargetType } from "../../../rs/MenuEntry";
 import { createElement, lazy, type ReactNode } from "react";
 import { PadMode, type PadModeValue, TouchControlsConfig } from "./TouchControlsConfig";
 import { findBlockingTarget, isStillInReach, targetFor, type TouchTarget, type TouchTargetWorld } from "./TouchTargets";
@@ -360,7 +363,7 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
             const type = this.npcType(baseNpcTypeId(npcs.getNpcTypeId(ecsId)), loader);
             if (!type?.name || type.name === "null") return;
             const options = getNpcMenuOptions(type).map(({ option, actionIndex }) => ({ option, actionIndex }));
-            if (options.length) found = { kind: "npc", ecsId, serverId, name: stripTags(type.name), options };
+            if (options.length) found = { kind: "npc", ecsId, serverId, typeId: type.id, name: stripTags(type.name), options };
         });
         return found;
     }
@@ -449,13 +452,29 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
         return true;
     }
 
+    /**
+     * The options in the order the world menu shows them, after the client plugins' menu
+     * transforms (Menu Entry Swapper's left-click swaps and presets): the first is the tap.
+     */
+    private menuOrder(target: TouchTarget): TouchTarget["options"] {
+        const targetType = target.kind === "loc" ? MenuTargetType.LOC : MenuTargetType.NPC;
+        const targetId = target.kind === "loc" ? target.loc.id : target.typeId;
+        const entries: SimpleMenuEntry[] = target.options.map(({ option, actionIndex }) => ({
+            option, target: target.name, targetType, targetId, actionIndex, onClick: () => {},
+            npcServerId: target.kind === "npc" ? target.serverId : undefined,
+        }));
+        const ordered = applyMenuTransform(entries, { surface: "world", menu: true }).flatMap((entry) =>
+            target.options.find((o) => o.actionIndex === entry.actionIndex && o.option === entry.option) ?? []);
+        return [...new Set(ordered)];
+    }
+
     private publish(): void {
         // On/Off beat detection and the ?touch= query override; Default keeps both.
         const padOn =
             this.padMode === PadMode.ON ? true : this.padMode === PadMode.OFF ? false : this.touchDevice;
         const visible = padOn && this.client.isLoggedIn();
         const action = visible && this.focus && this.canMove()
-            ? { kind: this.focus.kind, target: this.focus.name, options: this.focus.options } : undefined;
+            ? { kind: this.focus.kind, target: this.focus.name, options: this.menuOrder(this.focus) } : undefined;
         const stonesInset = visible ? this.stonesInset() : 0;
         const key = JSON.stringify([visible, action, stonesInset]);
         if (key === this.uiKey) return;

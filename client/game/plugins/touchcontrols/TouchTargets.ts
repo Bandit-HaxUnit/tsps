@@ -5,7 +5,7 @@ import type { SceneLoc } from "../../scene/SceneGeometry";
 export type TouchTarget = {
     name: string;
     options: ReadonlyArray<{ option: string; actionIndex: number }>;
-} & ({ kind: "loc"; loc: SceneLoc } | { kind: "npc"; ecsId: number; serverId: number });
+} & ({ kind: "loc"; loc: SceneLoc } | { kind: "npc"; ecsId: number; serverId: number; typeId: number });
 
 /** A loc the player walked into. */
 export type LocTouchTarget = Extract<TouchTarget, { kind: "loc" }>;

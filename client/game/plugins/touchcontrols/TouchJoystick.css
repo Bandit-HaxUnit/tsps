@@ -69,8 +69,9 @@
     user-select: none;
     -webkit-tap-highlight-color: transparent;
     color: #fff;
-    font-family: Arial, sans-serif;
-    text-shadow: 1px 1px 1px #000;
+    /* The game's own fonts (index.css), with its hard one-pixel shadow. */
+    font-family: "OSRS Bold", sans-serif;
+    text-shadow: 1px 1px 0 #000;
 }
 
 .touch-action-button {
@@ -93,15 +94,15 @@
 }
 
 .touch-action-option-label {
-    font-weight: 700;
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1.1;
 }
 
 /* Names in the game's own menu colours: cyan objects, yellow NPCs. */
 .touch-action-target {
     color: #0ff;
-    font-size: 11px;
+    font-family: "OSRS Small", sans-serif;
+    font-size: 14px;
     line-height: 1.1;
     max-width: 100%;
     overflow: hidden;
@@ -125,11 +126,12 @@
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.3);
     background: rgba(0, 0, 0, 0.7);
-    font-size: 14px;
+    font-size: 16px;
     text-align: left;
     white-space: nowrap;
 }
 
 .touch-action-option .touch-action-target {
-    font-size: 14px;
+    font-family: inherit;
+    font-size: 16px;
 }
