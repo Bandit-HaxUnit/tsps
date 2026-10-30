@@ -46,6 +46,7 @@ import {
 } from "./worldEntity";
 import { environmentAt } from "../render/environment";
 import { getCanvasResolutionScale, syncCameraViewportUnitScale } from "../render/quality";
+import { getCameraViewportRect } from "../render/viewportRect";
 import { GPU_TEXTURE_USAGE, SCENE_DEPTH_FORMAT, SCENE_GROUP, WORLD_TEXTURES_GROUP } from "./bindings";
 import { getControlledPlayerEcsIndex, updateFollowCamera } from "./camera";
 import { resolveWebGPULodDistance, resolveWebGPURenderDistance, updateWebGPUMapStreaming } from "./frameConfig";
@@ -961,12 +962,13 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         });
 
         if (drawScene) {
-            const clipX = Math.max(0, Math.min(width, Math.floor(sceneViewport.x)));
-            const clipY = Math.max(0, Math.min(height, Math.floor(sceneViewport.y)));
+            const sceneClip = this.getSceneViewportClipRect();
+            const clipX = Math.max(0, Math.min(width, Math.floor(sceneClip.x)));
+            const clipY = Math.max(0, Math.min(height, Math.floor(sceneClip.y)));
             pass.setScissorRect(
                 clipX, clipY,
-                Math.max(0, Math.min(width, Math.ceil(sceneViewport.x + sceneViewport.width)) - clipX),
-                Math.max(0, Math.min(height, Math.ceil(sceneViewport.y + sceneViewport.height)) - clipY),
+                Math.max(0, Math.min(width, Math.ceil(sceneClip.x + sceneClip.width)) - clipX),
+                Math.max(0, Math.min(height, Math.ceil(sceneClip.y + sceneClip.height)) - clipY),
             );
             for (let i = 0; i < visible.length; i++) {
                 if (visible[i].canRender(this.stats.frameCount)) {
@@ -1185,6 +1187,11 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
 
     getUiRenderMetrics(bufW: number, bufH: number): UiRenderMetrics {
         return this.ui?.getUiRenderMetrics(bufW, bufH) ?? this.computeUiRenderMetrics(bufW, bufH);
+    }
+
+    /** Current draw bounds; the raw widget rect remains the input to camera.update. */
+    getSceneViewportClipRect(): { x: number; y: number; width: number; height: number } {
+        return getCameraViewportRect(this.osrsClient.camera);
     }
 
     getSceneViewportWidgetRect(): { x: number; y: number; width: number; height: number } {
