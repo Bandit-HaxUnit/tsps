@@ -1,10 +1,14 @@
 import { strict as assert } from "node:assert";
 
 import type { Camera } from "../game/Camera";
+import type { ContinuousMovementRefusal } from "../game/movement/ContinuousMovement";
+import type { SceneLoc } from "../game/scene/SceneGeometry";
 import {
     TouchControlsPlugin,
     type TouchControlsClient,
 } from "../game/plugins/touchcontrols/TouchControlsPlugin";
+import { findBlockingTarget, type TouchTargetWorld } from "../game/plugins/touchcontrols/TouchTargets";
+import { MenuOpcode } from "../ui/menu/MenuState";
 
 type Move = { dx: number; dy: number; running: boolean; rotation: number };
 
@@ -107,6 +111,89 @@ const near = (actual: number, expected: number, message: string) =>
     new TouchControlsPlugin(client).steer(1, 0);
     near(moves[0].dx, 1, "forward follows the camera east");
     near(moves[0].dy, 0, "no northward drift at 90 degrees");
+}
+
+// The controls show only on touch screens; ?touch=1 forces them on, as on a desktop browser.
+(globalThis as any).window = { location: { search: "?touch=1" } };
+
+// A small scene: a door on the north side of (10, 10), a 2x2 tree at (20, 20), a bare fence,
+// and a booth whose second option the server has hidden.
+const LOCS: SceneLoc[] = [
+    { id: 1, tileX: 10, tileY: 10, plane: 0, shape: 0, rotation: 1 },
+    { id: 2, tileX: 20, tileY: 20, plane: 0, shape: 10, rotation: 0 },
+    { id: 3, tileX: 30, tileY: 30, plane: 0, shape: 0, rotation: 1 },
+    { id: 4, tileX: 40, tileY: 41, plane: 0, shape: 10, rotation: 0 },
+];
+const TYPES: Record<number, { name: string; actions: (string | null)[]; sizeX: number; sizeY: number }> = {
+    1: { name: "Door", actions: ["Open", null, null, null, null], sizeX: 1, sizeY: 1 },
+    2: { name: "Oak tree", actions: ["Chop down", null, null, null, null], sizeX: 2, sizeY: 2 },
+    3: { name: "Fence", actions: [null, null, null, null, null], sizeX: 1, sizeY: 1 },
+    4: { name: "Bank booth", actions: [null, "Bank", "Collect", null, null], sizeX: 1, sizeY: 1 },
+};
+const world: TouchTargetWorld = {
+    locsAtTile: (x, y, plane) => LOCS.filter((l) => l.tileX === x && l.tileY === y && l.plane === plane),
+    size: (id) => TYPES[id],
+    current: (id) => TYPES[id],
+    opFlags: (_x, _y, id) => (id === 4 ? 0b100 : undefined),
+};
+const refusal = (fromX: number, fromY: number, toX: number, toY: number): ContinuousMovementRefusal =>
+    ({ fromX, fromY, toX, toY, level: 0, at: performance.now() });
+
+// Walls count on the refused edge only, from either side; locs count over their whole footprint.
+{
+    assert.equal(findBlockingTarget(refusal(10, 10, 10, 11), world)?.name, "Door", "walking north into the door");
+    assert.equal(findBlockingTarget(refusal(10, 11, 10, 10), world)?.name, "Door", "walking south into it from outside");
+    assert.equal(findBlockingTarget(refusal(10, 10, 11, 10), world), undefined, "the door is not on the east edge");
+    assert.equal(findBlockingTarget(refusal(22, 21, 21, 21), world)?.name, "Oak tree", "the tree's far tile is still the tree");
+    assert.equal(findBlockingTarget(refusal(30, 30, 30, 31), world), undefined, "a fence without options is ignored");
+    const booth = findBlockingTarget(refusal(40, 40, 40, 41), world);
+    assert.deepEqual(booth?.options, [{ option: "Collect", actionIndex: 2 }], "options the server hid stay hidden");
+}
+
+// Walking into the tree focuses it; the button sends its option as a click would, and the
+// held stick stays inert until the thumb lifts so it cannot cancel the action.
+{
+    const sent: unknown[][] = [];
+    let blocked: ContinuousMovementRefusal | undefined;
+    const players = { getIndexForServerId: () => 0, getX: () => 21 * 128 + 64, getY: () => 19 * 128 + 64, getLevel: () => 0 };
+    const { client, moves, stops } = makeClient({
+        playerEcs: players,
+        sceneGeometry: { locsAtTile: world.locsAtTile },
+        locTypeLoader: { load: (id: number) => TYPES[id] as never },
+        getKeyboardMovementRefusal: () => blocked,
+        menuAction: (...args) => sent.push(args),
+    });
+    const plugin = new TouchControlsPlugin(client);
+    plugin.steer(1, 0);
+    blocked = refusal(21, 19, 21, 20);
+    plugin.onClientTick();
+    assert.deepEqual(plugin.getUiState().action, { target: "Oak tree", options: [{ option: "Chop down", actionIndex: 0 }] });
+    plugin.interact(0);
+    assert.deepEqual(sent[0].slice(2), [MenuOpcode.GameObjectFirstOption, 2, "Chop down", "Oak tree"]);
+    const walked = moves.length;
+    plugin.steer(1, 0);
+    plugin.onClientTick();
+    assert.equal(moves.length, walked, "the stick waits for the thumb to lift");
+    assert.ok(stops.length > 0, "the walk stops for the action");
+    plugin.release();
+    plugin.steer(1, 0);
+    assert.equal(moves.length, walked + 1, "a fresh press walks again");
+}
+
+// Sliding along a wall is not walking into it.
+{
+    let blocked: ContinuousMovementRefusal | undefined;
+    const { client } = makeClient({
+        playerEcs: { getIndexForServerId: () => 0, getX: () => 10 * 128 + 64, getY: () => 10 * 128 + 64, getLevel: () => 0 },
+        sceneGeometry: { locsAtTile: world.locsAtTile },
+        locTypeLoader: { load: (id: number) => TYPES[id] as never },
+        getKeyboardMovementRefusal: () => blocked,
+    });
+    const plugin = new TouchControlsPlugin(client);
+    plugin.steer(0.5, 0.5); // north-east, along the door's wall
+    blocked = refusal(10, 10, 10, 11);
+    plugin.onClientTick();
+    assert.equal(plugin.getUiState().action, undefined, "a glancing blow focuses nothing");
 }
 
 console.log("touch controls plugin test passed");

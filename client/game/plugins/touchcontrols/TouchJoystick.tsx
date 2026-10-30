@@ -1,13 +1,21 @@
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { isIosLandscapeRotated } from "../../InputManager";
-import { type TouchControlsPlugin } from "./TouchControlsPlugin";
+import { type TouchAction, type TouchControlsPlugin } from "./TouchControlsPlugin";
 import "./TouchJoystick.css";
 
 /** Knob travel from the centre, in px; matches the CSS base/knob sizes. */
 const RADIUS = 44;
 /** Fraction of the travel that still counts as centred. */
 const DEAD_ZONE = 0.2;
+/** Holding the action button this long lists every option instead. */
+const LONG_PRESS_MS = 400;
+
+/** Touch handlers own their touches: no default gesture and nothing reaching the canvas. */
+const own = (event: React.SyntheticEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+};
 
 /**
  * Bottom-left analog joystick. The knob follows the finger inside the base and
@@ -87,6 +95,78 @@ export function TouchJoystick({ plugin }: { plugin: TouchControlsPlugin }): JSX.
                     style={knob ? { transform: `translate(${knob.x}px, ${knob.y}px)` } : undefined}
                 />
             </div>
+            {state.action && <ActionButton plugin={plugin} action={state.action} stonesInset={state.stonesInset} />}
+        </div>
+    );
+}
+
+/**
+ * Bottom-right button for the object the player walked into, left of the tab stones: a tap
+ * uses its first option, a long press lists them all (the object's right-click menu).
+ */
+function ActionButton({ plugin, action, stonesInset }: { plugin: TouchControlsPlugin; action: TouchAction; stonesInset: number }): JSX.Element {
+    const [listing, setListing] = useState(false);
+    const timer = useRef<number | undefined>(undefined);
+    const key = action.target + action.options.map((o) => o.option).join("|");
+    // A different object closes the list.
+    useEffect(() => setListing(false), [key]);
+    useEffect(() => () => window.clearTimeout(timer.current), []);
+
+    const onDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+        own(event);
+        window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(() => {
+            timer.current = undefined;
+            setListing(true);
+        }, LONG_PRESS_MS);
+    };
+    const onUp = (event: React.PointerEvent<HTMLButtonElement>) => {
+        own(event);
+        if (timer.current === undefined) return; // the long press opened (or a cancel ended) it
+        window.clearTimeout(timer.current);
+        timer.current = undefined;
+        if (listing) setListing(false);
+        else plugin.interact(action.options[0].actionIndex);
+    };
+    const onCancel = () => {
+        window.clearTimeout(timer.current);
+        timer.current = undefined;
+    };
+
+    return (
+        <div className="touch-action" style={{ "--stones-inset": `${stonesInset}px` } as React.CSSProperties}>
+            {listing && (
+                <div className="touch-action-list" role="menu">
+                    {action.options.map(({ option, actionIndex }) => (
+                        <button
+                            key={actionIndex}
+                            type="button"
+                            role="menuitem"
+                            className="touch-action-option"
+                            onPointerDown={own}
+                            onPointerUp={(event) => {
+                                own(event);
+                                setListing(false);
+                                plugin.interact(actionIndex);
+                            }}
+                            onContextMenu={own}
+                        >
+                            {option} <span className="touch-action-target">{action.target}</span>
+                        </button>
+                    ))}
+                </div>
+            )}
+            <button
+                type="button"
+                className="touch-action-button"
+                onPointerDown={onDown}
+                onPointerUp={onUp}
+                onPointerCancel={onCancel}
+                onContextMenu={own}
+            >
+                <span className="touch-action-option-label">{action.options[0].option}</span>
+                <span className="touch-action-target">{action.target}</span>
+            </button>
         </div>
     );
 }

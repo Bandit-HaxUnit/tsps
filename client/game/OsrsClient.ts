@@ -290,7 +290,7 @@ import {
     shouldStartScheduledLoginMusic,
 } from "./login";
 import { NpcMovementSync } from "./movement/NpcMovementSync";
-import { ContinuousMovement } from "./movement/ContinuousMovement";
+import { ContinuousMovement, type ContinuousMovementRefusal } from "./movement/ContinuousMovement";
 import { PlayerMovementSync } from "./movement/PlayerMovementSync";
 import { NpcInstanceFlushController } from "./npc/NpcInstanceFlushController";
 import { ClientPluginManager } from "./plugins/ClientPluginManager";
@@ -3932,6 +3932,9 @@ export class OsrsClient {
     }
 
     stopKeyboardMovement(deactivate = false): void { this.continuousMovement?.stop(deactivate); }
+
+    /** The last tile edge collision refused the local player's keyboard/touch walk. */
+    getKeyboardMovementRefusal(): ContinuousMovementRefusal | undefined { return this.continuousMovement?.lastRefusal; }
 
     stopPlayerWalking(): void {
         this.playerMovementSync?.stopKeyboardMovement(this.controlledPlayerServerId);
