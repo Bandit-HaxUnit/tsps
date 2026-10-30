@@ -1,4 +1,6 @@
-# Isolated native RuneLite241 client
+# Isolated native RuneLite241 demo client
+
+Use the [setup and demo walkthrough](../../docs/runelite-gateway.md) to start the isolated TSPS world and gateway first. This is a single-client local demonstration, with standard RuneLite as the default and 117 HD optional. It is not a packaged player launcher.
 
 PowerShell7 and JDK21 are required. Set `JAVA_HOME` to your JDK21 directory, or pass `-JavaHome` to each script. Standard preparation and launch do not download, verify or load117HD. Run from the repository root:
 

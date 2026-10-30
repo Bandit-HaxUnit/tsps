@@ -1,4 +1,6 @@
-# RuneLite revision241 gateway
+# RuneLite revision241 demo gateway
+
+**Single-client local demo.** Start with the [setup and demo walkthrough](../../docs/runelite-gateway.md). This PR demonstrates a limited native-client path; it does not provide general player rollout or remote hosting. 117 HD is optional.
 
 Local JVM sidecar translating the genuine revision241 TCP client to the isolated TSPS WebSocket server. TSPS remains authoritative for authentication, account creation, movement and interactions. The JVM does not open player saves.
 

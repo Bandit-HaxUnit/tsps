@@ -1,8 +1,10 @@
-# Experimental RuneLite gateway
+# RuneLite demo for an isolated TSPS world
 
 Run genuine RuneLite 1.13.3 (native revision 241) against an isolated TSPS world. A local RSProt JVM gateway translates RuneLite's TCP protocol into TSPS's existing WebSocket protocol. TSPS remains authoritative for authentication, gameplay and persistence.
 
-**117 HD is optional.** Normal preparation and launch do not require or download it. This is a developer setup for Windows, with one native connection at a time; it is not a packaged player launcher or complete content compatibility.
+**Scope: a working, single-client local demo.** It demonstrates native login, walking, chat, logout/relog and optional server branding. This guide is for developers reviewing that demo on Windows. It is not a player release or a remote-server connection guide.
+
+**117 HD is optional.** Normal preparation and launch do not require or download it. Run the standard demo first; add HD separately if wanted.
 
 ## Prerequisites
 
@@ -57,6 +59,20 @@ Second terminal, with `JAVA_HOME` and the calculated ports:
 
 `-Build` is needed initially or after gateway source changes. Subsequent unchanged launches can omit it. TCP and HTTP bind loopback only. The gateway reads this worktree's copied cache and creates a disposable local RSA key; it never opens player saves. Default/live ports 43594/3000/49700 are rejected.
 
+## Prepare a disposable demo account
+
+First-time character creation and Tutorial Island are outside the native demo. Use an account already prepared in **this isolated world**, or prepare one through its ordinary browser client before opening RuneLite.
+
+Temporarily use the third terminal for the browser client, from the worktree root:
+
+```powershell
+yarn --cwd client start
+```
+
+Open the worktree client URL (`http://localhost:<3100 + slot>`; slot20 is `http://localhost:3120`). Check the branch/world shown on its login screen. Create a disposable local account, confirm its character appearance and answer the experience prompt. Talk to the Gielinor Guide and choose to skip Tutorial Island; choose **No, thanks** at the Ironman prompt for an ordinary demo character. Finish the welcome dialogue in the ordinary world, then log out normally and close that browser tab. Stop only this browser development process with Ctrl+C; leave the isolated TSPS server running. Reuse the third terminal for RuneLite below.
+
+Do not use a live account/save or start another game server for this step. On subsequent runs, use the same prepared test account; account setup is not part of the native walkthrough.
+
 ## Prepare and open RuneLite
 
 Third terminal, with `JAVA_HOME` and the calculated ports:
@@ -68,7 +84,26 @@ Third terminal, with `JAVA_HOME` and the calculated ports:
 
 Preparation verifies artifact sizes/hashes and the actual injected client revision. Launch patches only these local copies with the gateway's RSA/ports/host and uses a separate client home, cache, configuration and OS environment under `tools/runelite-client/.runtime`. It does not change an installed RuneLite profile. The launcher refuses another client using this private runtime.
 
-Log in with a fresh disposable account. Select **All** or **Public** at the bottom to see public messages; a Game-only chat view can persist between sessions.
+Log in with the prepared disposable account from this isolated world. Select **All** or **Public** at the bottom to see public messages; a Game-only chat view can persist between sessions.
+
+### Walk through the demo
+
+1. In the patched RuneLite window, select **Existing User** and enter the prepared test account's username and password. These are local TSPS credentials. An unused name starts unsupported first-time onboarding instead of this demo flow.
+2. Confirm that the welcome screen has a black backdrop, then click **Click here to play** to reveal the world.
+3. Click the ground, then the minimap, and confirm that the character moves. Keep the demonstration in the ordinary world near the starting area.
+4. Select **All** or **Public**, type three short messages and press Enter after each. Each message should appear once. A moderator crown appears before the name only if the test account has that rank.
+5. Open the game's logout tab and click **Click here to logout**. Log in again with the same test account, click Play and confirm the saved position.
+6. Log out normally and close RuneLite before stopping the demo services as described below.
+
+Inventory/wielding and NPC Talk-to/Continue also have native QA evidence. The sword, coins and NPC in the screenshots were controlled test fixtures; this walkthrough does not provision them or claim item acquisition works. To demonstrate owner branding, configure the three optional fields below before starting the gateway and client, then repeat login/Play/logout.
+
+### Demo boundaries
+
+- Only one native client can connect at a time; a second connection is rejected. Normal logout/relog works; automatic native reconnect is not implemented.
+- First-time character design and tutorial completion require the isolated browser client as described above. The native walkthrough starts with a prepared account in the ordinary world.
+- Ground items, dynamic object changes, shops/trade, targeted item/spell actions, inventory/bank dragging, private/social state, projectiles/audio and instances/Sailing are outside this demo's acceptance scope. Several of these packet paths are absent, not merely untested.
+- Generic bank/inventory packets and widget clicks have mappings, but that does not establish complete banking, shopping, combat or skilling support. Keep the walkthrough to the demonstrated actions above.
+- The listeners and advertised world are local only. The scripts intentionally protect the running installation and use separate worktree data; do not repoint this demo at a live world.
 
 ### Optional 117 HD
 
