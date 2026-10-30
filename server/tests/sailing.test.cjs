@@ -2012,17 +2012,17 @@ test("Sort-salvage sorts every salvage in the inventory, one each 3 ticks", () =
   clearTasks();
 });
 
-test("logging in unlocks every facility and part schematic", () => {
+test("Sailing login leaves schematic unlocks to their earned-state owner", () => {
   const { login } = registerPlugin("Sailing.plugin");
   const player = sailor();
-  const varbits = new Map();
+  const varbits = new Map([[19544, 0], [19553, 1], [20227, 0]]);
   const sender = new Proxy({}, {
     get: (_t, key) => (...args) => { if (key === "sendVarbit") varbits.set(args[0], args[1]); return sender; },
   });
   player.getPacketSender = () => sender;
   login({ player });
   // Script 9078: the salvaging station's schematic is 19544, the ballistic attractor's 20227.
-  assert.deepEqual([19544, 19553, 20227].map((id) => varbits.get(id)), [1, 1, 1]);
+  assert.deepEqual([19544, 19553, 20227].map((id) => varbits.get(id)), [0, 1, 0]);
 });
 
 // --- Ports and docking.
