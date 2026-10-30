@@ -516,7 +516,8 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     cancelled = true;
     const ownsChain = manager.getOwner() === owner;
     const closed = sender.closeChatboxFor(owner);
-    if (ownsChain) manager.reset();
+    // Closing emits synchronous interface hooks which may install a new chain.
+    if (manager.getOwner() === owner) manager.reset();
     return ownsChain || closed;
   }
   const npcId = event.npcId;

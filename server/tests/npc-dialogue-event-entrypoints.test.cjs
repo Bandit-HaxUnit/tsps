@@ -112,6 +112,33 @@ test('a replacement prompt opened inside a source before-action keeps its own ow
   assert.ok(MultiChatboxPrompt.getPending(f.player),'replacement created from the old action is a new UI owner');
   await choose(f,1);assert.equal(selected,true);
 });
+
+test('closing an old owned chatbox preserves a newer real overhead chain and task continuation',async t=>{
+  const f=fixture(t),old=request(f.player,f.npc);await choose(f,1);
+  const data=require('../data/definitions/npc-dialogues.json');
+  const line=data['Desert Treasure II - The Fallen Empire'].variants['the-whisperer-inspecting-the-totem-in-the-cistern'].find(step=>step.type==='line'&&step.speaker==='[player name]');
+  assert.equal(line.presentation,'overhead');
+  const fresh={player:f.player,npc:f.npc,npcId:cookId,variant:{page:'2025 Christmas event',variant:'starting-the-event-talking-to-the-cook'},exact:true,select:()=>[line,{player:'The later transcript continues.'}]};
+  PM.emitCustomEvent('npc-dialogue:start',fresh);assert.equal(fresh.handled,true);
+  const manager=f.player.getDialogueManager(),waiting=manager.getCurrent(),owner=manager.getOwner();assert.ok(waiting instanceof core.ActionDialogue);
+  assert.equal(old.cancel(),true);assert.equal(manager.getCurrent(),waiting);assert.equal(manager.getOwner(),owner);
+  core.TaskManager.process();core.TaskManager.process();
+  assert.equal(manager.getCurrent()?.getText(),'The later transcript continues.');assert.equal(fresh.cancel(),true);
+});
+
+test('an interface-close callback can install a new source without the old cancel resetting it',async t=>{
+  const f=fixture(t),old=request(f.player,f.npc);await choose(f,1);
+  const sender=f.player.getPacketSender(),group=sender.getChatboxGroupId();
+  const hooks=PM.customEventHooks.get('interface:closed'),start=hooks.length;let replacement,entry,once=false;
+  t.after(()=>hooks.splice(start));
+  PM.createApi('CloseReplacementTest').onCustomEvent('interface:closed',event=>{
+    if(event.player!==f.player||event.interfaceId!==group||once)return;once=true;
+    replacement=request(f.player,f.npc);assert.equal(MultiChatboxPrompt.selectOption(f.player,0),true);entry=f.player.getDialogueManager().getCurrent();
+  });
+  assert.equal(old.cancel(),true);assert.ok(once);assert.ok(entry);
+  assert.equal(f.player.getDialogueManager().getCurrent(),entry,'post-close cleanup must recheck ownership after synchronous hooks');
+  assert.equal(replacement.cancel(),true);
+});
 test('a missing explicit activity page or variant cannot replace the current conversation', async t => {
   const f = fixture(t), { player, npc } = f;
   request(player, npc);

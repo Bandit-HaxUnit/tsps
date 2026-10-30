@@ -809,16 +809,16 @@ export class PacketSender {
   /** Close this owner's chatbox without removing an unrelated main modal. */
   public closeChatboxFor(owner: object): boolean {
     if (this.chatboxGroupId < 0 || this.chatboxOwner !== owner) return false;
-    this.closeCurrentChatbox();
+    this.closeCurrentChatbox(this.player.getDialogueManager?.()?.getOwner?.() === owner);
     return true;
   }
 
-  private closeCurrentChatbox(): this {
+  private closeCurrentChatbox(resetDialogue = true): this {
     const group = this.chatboxGroupId;
     if (group < 0) return this;
     this.chatboxGroupId = -1;
     this.chatboxOwner = undefined;
-    this.player.getDialogueManager?.()?.reset?.();
+    if (resetDialogue) this.player.getDialogueManager?.()?.reset?.();
     this.player.getSession().sendClientPacket(encodeWidgetCloseSub(CHATBOX_MODAL_TARGET_UID));
     this.player.getSession().sendClientPacket(encodeWidgetSetHidden(CHATBOX_MODAL_TARGET_UID, true));
     this.emitInterfaceClosed(group);
