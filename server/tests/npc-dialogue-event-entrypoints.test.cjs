@@ -61,6 +61,57 @@ test('ordinary Talk-to does not select an inactive annual activity', t => {
   assert.notEqual(current.getTitle?.(), 'Ask about the Christmas Event?');
   assert.notEqual(current.getText?.(), "Can't you see the huge queue of people? I really don't have time to chat.");
 });
+
+test('trusted playback can cancel only its actual initial prompt',t=>{
+  const f=fixture(t),playback=request(f.player,f.npc);
+  assert.equal(typeof playback.cancel,'function');assert.ok(MultiChatboxPrompt.getPending(f.player));
+  assert.equal(playback.cancel(),true);assert.equal(MultiChatboxPrompt.getPending(f.player),null);
+  assert.equal(f.player.getDialogueManager().getCurrent(),undefined);assert.equal(playback.cancel(),false);
+});
+
+test('a cancelled transcript cannot close an identical replacement prompt',async t=>{
+  const f=fixture(t),playback=request(f.player,f.npc);let selected=false;
+  PM.createApi('Replacement').sendMultiChatboxPrompt(f.player,'Ask about the Christmas Event?','Yes',()=>{selected=true;},'No',()=>{});
+  assert.equal(playback.cancel(),false);assert.ok(MultiChatboxPrompt.getPending(f.player));
+  await choose(f,1);assert.equal(selected,true,'native selection belongs to the replacement callback');
+});
+
+test('old cancellation preserves a new identical native source dialogue and its continuation',async t=>{
+  const f=fixture(t),old=request(f.player,f.npc);await choose(f,1);
+  const first=f.player.getDialogueManager().getCurrent();assert.ok(first);
+  const fresh=request(f.player,f.npc);await choose(f,1);
+  const current=f.player.getDialogueManager().getCurrent();assert.notEqual(current,first);assert.equal(current.getText(),first.getText());
+  assert.equal(old.cancel(),false);assert.equal(f.player.getDialogueManager().getCurrent(),current);
+  assert.equal(fresh.cancel(),true);assert.equal(f.player.getDialogueManager().getCurrent(),undefined);
+});
+
+test('source cancellation preserves an actual later bank and an unscoped same-group chatbox',async t=>{
+  const f=fixture(t),old=request(f.player,f.npc);await choose(f,1);
+  f.player.getBank(0).open();const bank=f.player.getInterfaceId();assert.ok(bank>=0,'real bank opened');
+  old.cancel();assert.equal(f.player.getInterfaceId(),bank,'bank remains mounted even if the old dialogue chain still needed resetting');
+  f.player.getPacketSender().sendInterfaceRemoval();
+  const fresh=request(f.player,f.npc);await choose(f,1);
+  const sender=f.player.getPacketSender(),group=sender.getChatboxGroupId();assert.ok(group>=0);
+  sender.sendChatboxInterface(group).sendString('An unrelated replacement', (group<<16)|6);
+  fresh.cancel();assert.equal(sender.isChatboxInterface(group),true,'same group id does not confer ownership of replacement UI');
+  const last=request(f.player,f.npc);await choose(f,1);
+  const sharedGroup=sender.getChatboxGroupId();sender.sendInterface(sharedGroup);
+  last.cancel();assert.equal(f.player.getInterfaceId(),sharedGroup,'closing an owned chatbox cannot remove a separately mounted main modal with the same group');
+});
+
+test('a replacement prompt opened inside a source before-action keeps its own ownership',async t=>{
+  const f=fixture(t);let selected=false;
+  const hooks=PM.customEventHooks.get('npc-dialogue:line'),start=hooks.length;
+  t.after(()=>hooks.splice(start));
+  PM.createApi('NestedReplacementTest').onCustomEvent('npc-dialogue:line',event=>{
+    if(event.player!==f.player||!String(event.text).startsWith("Can't you see"))return;
+    event.before=()=>PM.createApi('Replacement').sendMultiChatboxPrompt(f.player,'Ask about the Christmas Event?','Yes',()=>{selected=true;},'No',()=>{});
+  });
+  const old=request(f.player,f.npc);await choose(f,1);
+  assert.ok(MultiChatboxPrompt.getPending(f.player));assert.equal(old.cancel(),false);
+  assert.ok(MultiChatboxPrompt.getPending(f.player),'replacement created from the old action is a new UI owner');
+  await choose(f,1);assert.equal(selected,true);
+});
 test('a missing explicit activity page or variant cannot replace the current conversation', async t => {
   const f = fixture(t), { player, npc } = f;
   request(player, npc);
