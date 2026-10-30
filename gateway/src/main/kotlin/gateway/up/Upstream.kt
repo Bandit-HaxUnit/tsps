@@ -61,6 +61,8 @@ class Upstream(
     private val interceptButton: (combinedId: Int, sub: Int, obj: Int, op: Int) -> Boolean = { _, _, _, _ -> false },
     /** Count-dialog replies a translator asked for itself (trade's Offer-X); true when it did. */
     private val interceptCount: (Int) -> Boolean = { false },
+    /** tsps's index for a boat the client names by its world id. */
+    private val worldEntityIndex: (Int) -> Int? = { it },
     private val send: (ByteArray) -> Unit,
 ) {
     fun handle(message: IncomingGameMessage) {
@@ -131,7 +133,10 @@ class Upstream(
                 UpdatePlayerModel.logCapture(message) // TEMPORARY (M11): captures real saves to pin the layout
                 message.design(identKitCount)?.let { send(message.toTsps(it)) } ?: UpdatePlayerModel.logUnknown(message)
             }
-            is OpWorldEntity -> if (message.op in 1..5) send(WorldOps.worldEntity(message.op, message.index)) else DropCounter.up(message)
+            is OpWorldEntity -> {
+                val index = worldEntityIndex(message.index)
+                if (message.op in 1..5 && index != null) send(WorldOps.worldEntity(message.op, index)) else DropCounter.up(message)
+            }
             is ClickWorldMap -> send(WorldOps.worldMapClick(message.level, message.x, message.z))
             is Teleport -> send(WorldOps.teleport(message.level, message.x, message.z))
             is OpPlayer -> send(TspsClientPacket.playerOp(message.op, message.index))

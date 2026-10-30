@@ -13,12 +13,19 @@ import org.junit.jupiter.api.Test
 /** M10: settings the official client keeps itself, and the XP drops setup tsps saves for it. */
 class M10SettingsTest {
     @Test
-    fun `login leaves the client's own audio settings alone`() {
-        LiveGateway.login(LiveGateway.newAccount("gwaud")).use { game ->
+    fun `a released volume slider comes back at the next login`() {
+        val name = LiveGateway.newAccount("gwaud")
+        LiveGateway.login(name).use { game ->
             game.expect<RebuildLoginV2>()
-            // The client keeps its volumes in its own options; tsps's copies would reset them.
-            val audio = game.until(TICKS).varps().filter { (id, _) -> id in AUDIO_VARPS }
-            assertEquals(emptyList<Pair<Int, Int>>(), audio)
+            game.until(TICKS)
+            // The music slider's script (9238) sets the varp in the client and triggers 116:109
+            // with the new volume when the slider is released.
+            game.scriptTrigger(SETTINGS_SIDE, MUSIC_SLIDER, VOLUME)
+            game.until(TICKS)
+        }
+        LiveGateway.login(name).use { game ->
+            val volume = game.until(TICKS).varps().lastOrNull { it.first == MUSIC_VOLUME }?.second
+            assertEquals(VOLUME, volume)
         }
     }
 
@@ -80,11 +87,14 @@ class M10SettingsTest {
     private companion object {
         const val TICKS = 4
         const val PACKETS = 5_000
-        val AUDIO_VARPS = setOf(18, 168, 169, 872, 3796)
+        const val SETTINGS_SIDE = 116
+        const val MUSIC_SLIDER = 109
+        const val MUSIC_VOLUME = 168
+        const val VOLUME = 35
         const val ORBS = 160
         const val XP_DROPS_ORB = 6
         const val XP_DROPS_SETUP = 137
-        const val POSITION_DROPDOWN = 6
+        const val POSITION_DROPDOWN = 51
         const val POSITION_ROW = 3
         const val POSITION_BITS = 0b11
         const val XP_DROPS_VARP = 1227

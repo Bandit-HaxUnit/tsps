@@ -113,6 +113,21 @@ class EntityMirror(
         info.setBodyCustomisation(models.filter { it >= 0 }, emptyList(), emptyList())
     }
 
+    /**
+     * The other players are full rsprot observers too, so each tick computes info packets for
+     * them that only their own sessions would send; release those so rsprot doesn't report them.
+     */
+    fun discardOthersPackets() {
+        for (infos in players.values) {
+            val packets = infos.getPackets()
+            val root = packets.rootWorldInfoPackets
+            root.worldEntityInfo.getOrNull()?.safeRelease()
+            root.playerInfo.getOrNull()?.safeRelease()
+            root.npcInfo.getOrNull()?.safeRelease()
+            packets.activeWorlds.forEach { it.npcInfo.getOrNull()?.safeRelease() }
+        }
+    }
+
     fun release() {
         players.values.forEach(world::releasePlayer)
         npcs.values.forEach(world::releaseNpc)

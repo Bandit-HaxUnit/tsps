@@ -180,6 +180,24 @@ class HeadlessClient(private val host: String, private val port: Int) {
                 }.buffer.let { it.array().copyOf(it.writerIndex()) },
             )
 
+        /** IF_SCRIPT_TRIGGER: a cache script's if_triggeroplocal, with one int argument (a zigzag varint). */
+        fun scriptTrigger(interfaceId: Int, componentId: Int, argument: Int) =
+            sendVarShort(
+                IF_SCRIPT_TRIGGER,
+                Unpooled.buffer().toJagByteBuf().apply {
+                    p4Alt2((interfaceId shl 16) or componentId)
+                    p2Alt1(0xFFFF) // obj
+                    p2Alt1(0xFFFF) // sub
+                    p4Alt2(0) // crc
+                    var zigzag = (argument shl 1) xor (argument shr 31)
+                    while (zigzag and 0x7F.inv() != 0) {
+                        p1((zigzag and 0x7F) or 0x80)
+                        zigzag = zigzag ushr 7
+                    }
+                    p1(zigzag)
+                }.buffer.let { it.array().copyOf(it.writerIndex()) },
+            )
+
         /** OPPLAYER2 (tsps's Trade with). */
         fun playerOp2(index: Int) =
             sendFixed(
@@ -352,6 +370,7 @@ class HeadlessClient(private val host: String, private val port: Int) {
         const val LOGIN_OK = 2
         const val MOVE_GAMECLICK = 55
         const val OPPLAYER2 = 35
+        const val IF_SCRIPT_TRIGGER = 17
         const val UPDATE_PLAYER_MODEL_V2 = 88
         const val NO_TIMEOUT = 75
         const val KEEPALIVE_MS = 5_000L

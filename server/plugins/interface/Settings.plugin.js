@@ -25,24 +25,34 @@ const XPDROPS_OVERLAY_UID = (ROOT_INTERFACE << 16) | 9; // toplevel_osrs_stretch
 const XPDROPS_INTERFACE_ID = 122;
 const XPDROPS_SETUP_INTERFACE_ID = 137;
 const XPDROPS_ENABLED_VARBIT = 4702;
-// XP drops setup: each dropdown's option rows are children of its header component (script 1032),
-// and the cache's script 1036 sets that dropdown's varbit to the row's sub - 1 on op1. Header
-// components and varbits are paired by the interface's onload (script 1010).
+// XP drops setup: each dropdown's option rows are created in a list component paired with its
+// header (scripts 1010, 1030, 1031), and the cache's script 1036 sets that dropdown's varbit to
+// the row's sub - 1 on op1. The lists and their varbits, in script 1010's order:
 const XPDROPS_SETUP_DROPDOWNS = new Map([
-  [6, 4692], // position
-  [7, 4693], // size
-  [9, 4694], // duration
-  [10, 4697], // counter
-  [11, 4698], // progress bar
-  [12, 4695], // colour
-  [13, 4696], // group
-  [8, 4722], // speed
-  [14, 8120], // fake drops
+  [51, 4692], // position
+  [52, 4693], // size
+  [53, 4694], // duration
+  [54, 4697], // counter
+  [55, 4698], // progress bar
+  [56, 4695], // colour
+  [57, 4696], // group
+  [58, 4722], // speed
+  [59, 8120], // fake drops
 ].map(([component, varbit]) => [(XPDROPS_SETUP_INTERFACE_ID << 16) | component, varbit]));
 const XPDROPS_SETUP_MAX_ROW = 31;
 // The varps behind them, saved as whole values: the browser transmits them, the official client
 // only reports the row it chose.
 const XPDROPS_SETUP_ATTRIBUTE = "settings:xpdrops-setup";
+
+// The side panel's volume sliders: the cache's scripts (9232, 9238, 9244, 9250) set the varp in
+// the client, then trigger the slider's op (if_triggeroplocal) with the new volume when it is
+// released or reaches or leaves 0. That is how the server learns it, and it sends it back at login.
+const VOLUME_SLIDER_VARPS = new Map([
+  [(116 << 16) | 95, 3796], // master
+  [(116 << 16) | 109, 168], // music
+  [(116 << 16) | 123, 169], // sound effects
+  [(116 << 16) | 137, 872], // area sounds
+]);
 
 // Settings > Display: "Game client layout" dropdown. The row label is built by
 // cache script 7992 from entry enum 3509 and its option rows are dynamic
@@ -550,6 +560,27 @@ function syncXpDrops({ player }) {
   player.getPacketSender().sendVarbit(XPDROPS_ENABLED_VARBIT, player.getAttribute(XPDROPS_ENABLED_ATTRIBUTE) === true ? 1 : 0);
 }
 
+/** The first script-trigger argument: an int as a zigzag varint. */
+function readIntArg(argsData) {
+  if (!argsData?.length) return undefined;
+  let value = 0;
+  let shift = 0;
+  for (const byte of argsData) {
+    value |= (byte & 0x7f) << shift;
+    if ((byte & 0x80) === 0) return (value >>> 1) ^ -(value & 1);
+    shift += 7;
+  }
+  return undefined;
+}
+
+function releaseVolumeSlider({ player, buttonId, argsData, scriptTrigger }) {
+  if (scriptTrigger !== true) return false;
+  const volume = readIntArg(argsData);
+  if (volume === undefined) return false;
+  player.applyAudioSettingFromClient?.(VOLUME_SLIDER_VARPS.get(buttonId), volume);
+  return true;
+}
+
 function xpDropsSetupVarps() {
   return new Set([...XPDROPS_SETUP_DROPDOWNS.values()].map((varbit) => CacheDefinitions.getVarbit(varbit).baseVar));
 }
@@ -591,8 +622,8 @@ function chooseXpDropsSetupRow({ player, buttonId, slot }) {
 /** The official client transmits a row click only once the server enables it, as live does. */
 function enableXpDropsSetupRows(player) {
   if (player.getAttribute(NATIVE_CLIENT_ATTRIBUTE) !== true) return;
-  for (const header of XPDROPS_SETUP_DROPDOWNS.keys()) {
-    player.getPacketSender().sendInterfaceFlagsRange(header, 1, XPDROPS_SETUP_MAX_ROW, TRANSMIT_OP1);
+  for (const list of XPDROPS_SETUP_DROPDOWNS.keys()) {
+    player.getPacketSender().sendInterfaceFlagsRange(list, 1, XPDROPS_SETUP_MAX_ROW, TRANSMIT_OP1);
   }
 }
 
@@ -634,6 +665,7 @@ module.exports = {
     api.onPlayerLogin(restoreXpDropsSetup);
     api.onCustomEvent("player:varp-transmit", transmitXpDropsSetup);
     api.onInterfaceActionButton([...XPDROPS_SETUP_DROPDOWNS.keys()], chooseXpDropsSetupRow);
+    api.onInterfaceActionButton([...VOLUME_SLIDER_VARPS.keys()], releaseVolumeSlider);
     api.onInterfaceActionButton(xpDropsOrbIds(api), clickXpDrops);
     for (const tab of TAB_VARBIT_MAP) {
       api.persistAttribute(keybindAttribute(tab.varbit), tab.defaultKey);

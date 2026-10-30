@@ -3,6 +3,11 @@ const { NpcDialogue } = require("../../src/main/typescript/elvarg/game/model/dia
 const { EndDialogue } = require("../../src/main/typescript/elvarg/game/model/dialogues/entries/impl/EndDialogue");
 
 const MAKEOVER_INTERFACE_ID = 679;
+// The designer's arrows, A/B and Confirm: cache components with an op ("*") whose script the
+// interface's onload attaches. The official client only runs an op the server has enabled.
+const MAKEOVER_BUTTONS = [15, 16, 19, 20, 23, 24, 27, 28, 31, 32, 35, 36, 39, 40, 46, 47, 50, 51, 54, 55, 58, 59, 62, 63, 68, 69, 74];
+const OP1 = 1 << 1;
+const NO_SLOT = -1;
 const MAIN_MODAL_TARGET_UID = (161 << 16) | 16;
 const MAKEOVER_COMMANDS = ["mm", "makeover", "makeovermage"];
 
@@ -23,6 +28,9 @@ function openMakeoverInterface(player) {
   player.setInterfaceId?.(MAKEOVER_INTERFACE_ID);
   player.getAppearance?.().setCanChangeAppearance?.(true);
   player.getPacketSender().sendSubInterface(MAIN_MODAL_TARGET_UID, MAKEOVER_INTERFACE_ID, 0);
+  for (const component of MAKEOVER_BUTTONS) {
+    player.getPacketSender().sendInterfaceFlagsRange((MAKEOVER_INTERFACE_ID << 16) | component, NO_SLOT, NO_SLOT, OP1);
+  }
   return true;
 }
 

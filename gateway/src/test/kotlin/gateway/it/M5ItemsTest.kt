@@ -31,7 +31,8 @@ class M5ItemsTest {
         assumeTrue(developer != null, "DEV_USERNAME isn't set; spawning items needs ::item")
         login(developer!!).use { game ->
             val tile = game.expect<RebuildLoginV2>().playerInfoInitBlock.localPlayerCoord
-            val wornAtLogin = game.until(TICKS).filterIsInstance<UpdateInvFull>().lastOrNull { it.inventoryId == WORN }
+            // The login burst (plugins' restored state included) can take a few ticks to arrive.
+            val wornAtLogin = game.until(LOGIN_TICKS).filterIsInstance<UpdateInvFull>().lastOrNull { it.inventoryId == WORN }
             val dartsBefore = wornAtLogin?.objs?.firstOrNull { it.id == BRONZE_DART }?.count ?: 0
             game.command("item $BRONZE_DART $DARTS")
             val dartsSlot = game.inventorySlotOf(BRONZE_DART)
@@ -100,6 +101,7 @@ class M5ItemsTest {
         const val DROP_OP = 7
         const val BRONZE_DART = 806
         const val DARTS = 50
+        const val LOGIN_TICKS = 8
         const val BRONZE_AXE = 1351
     }
 }

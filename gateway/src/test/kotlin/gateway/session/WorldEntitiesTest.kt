@@ -36,7 +36,9 @@ class WorldEntitiesTest {
         boats.onInfo(TspsPacket(TspsServerPacket.WORLDENTITY_INFO, spawn()), 0)
 
         val added = tick().activeWorlds.single()
-        assertEquals(BOAT to true, added.worldId to added.added)
+        // rsprot takes world ids below 2048; tsps's 3000+ get one of the session's own.
+        assertEquals(WORLD to true, added.worldId to added.added)
+        assertEquals(BOAT, boats.tspsIndex(WORLD), "the client's world-entity ops name tsps's boat")
 
         val deck = boats.deck(BOAT)!!
         assertTrue(deck.contains(DECK_ZONE shl 3, DECK_ZONE shl 3) && boats.deckAt((DECK_ZONE shl 3) + 7, DECK_ZONE shl 3) == deck)
@@ -48,11 +50,11 @@ class WorldEntitiesTest {
         // Moved along: still the same world, no longer new.
         boats.onInfo(TspsPacket(TspsServerPacket.WORLDENTITY_INFO, TspsWriter().u8(1).u8(MOVED).position(SPEED, 0).u8(0).body()), 0)
         val moved = tick().activeWorlds.single()
-        assertEquals(BOAT to false, moved.worldId to moved.added)
+        assertEquals(WORLD to false, moved.worldId to moved.added)
 
         // Gone.
         boats.onInfo(TspsPacket(TspsServerPacket.WORLDENTITY_INFO, TspsWriter().u8(1).u8(GONE).body()), 0)
-        assertEquals(listOf(BOAT), tick().removedWorldIndices)
+        assertEquals(listOf(WORLD), tick().removedWorldIndices)
         assertNull(boats.deck(BOAT))
     }
 
@@ -60,6 +62,9 @@ class WorldEntitiesTest {
         world.update()
         val packets = self.getPackets()
         assertTrue(packets.rootWorldInfoPackets.worldEntityInfo.isSuccess)
+        // A boat world rsprot can't take fails its NPC info, which ends the session.
+        packets.activeWorlds.forEach { world -> world.npcInfo.exceptionOrNull()?.let { throw it } }
+        packets.rootWorldInfoPackets.npcInfo.exceptionOrNull()?.let { throw it }
         packets.rootWorldInfoPackets.worldEntityInfo.getOrNull()!!.safeRelease()
         packets.rootWorldInfoPackets.playerInfo.getOrNull()?.safeRelease()
         packets.rootWorldInfoPackets.npcInfo.getOrNull()?.safeRelease()
@@ -139,6 +144,7 @@ class WorldEntitiesTest {
     private companion object {
         const val OBSERVER = 1
         const val BOAT = 3000
+        const val WORLD = 1
         const val RAFT = 1
         const val DECK_TILES = 8
         const val DECK_ZONE = 1200

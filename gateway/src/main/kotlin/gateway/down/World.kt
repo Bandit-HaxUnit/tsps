@@ -61,13 +61,13 @@ class World(
     }
 
     /** Sends a boat's deck updates; the boat's world must be the active one. */
-    fun flushDeck(index: Int) {
-        pendingDecks.remove(index)?.let(::flush)
+    fun flushDeck(worldId: Int) {
+        pendingDecks.remove(worldId)?.let(::flush)
     }
 
     /** The client no longer has this boat. */
-    fun dropDeck(index: Int) {
-        pendingDecks.remove(index)
+    fun dropDeck(worldId: Int) {
+        pendingDecks.remove(worldId)
     }
 
     private fun flush(zones: MutableMap<Triple<Int, Int, Int>, MutableList<ZoneProt>>) {
@@ -286,7 +286,7 @@ class World(
     private fun zone(x: Int, z: Int, level: Int, payload: ZoneProt) {
         val deck = deckAt(x, z)
         if (deck != null) {
-            val zones = pendingDecks.getOrPut(deck.index) { LinkedHashMap() }
+            val zones = pendingDecks.getOrPut(deck.worldId) { LinkedHashMap() }
             zones.getOrPut(Triple((x - deck.baseX) and 7.inv(), (z - deck.baseZ) and 7.inv(), level)) { ArrayList() } += payload
             return
         }

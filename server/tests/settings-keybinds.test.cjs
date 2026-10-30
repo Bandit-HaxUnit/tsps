@@ -475,14 +475,14 @@ const XPDROPS_VARP = 1227;
 test('XP drops setup: a dropdown row sets its varbit to the row - 1 (script 1036), and the varp is kept', () => {
   const { buttons, logins } = registered();
   const player = varpPlayer({ native: true });
-  const position = buttons.get((XPDROPS_SETUP << 16) | 6);
+  const position = buttons.get((XPDROPS_SETUP << 16) | 51);
   assert.ok(position, 'the position dropdown is handled');
-  assert.equal(position({ player, buttonId: (XPDROPS_SETUP << 16) | 6, slot: 3 }), true);
-  assert.equal(buttons.get((XPDROPS_SETUP << 16) | 10)({ player, buttonId: (XPDROPS_SETUP << 16) | 10, slot: 6 }), true);
+  assert.equal(position({ player, buttonId: (XPDROPS_SETUP << 16) | 51, slot: 3 }), true);
+  assert.equal(buttons.get((XPDROPS_SETUP << 16) | 54)({ player, buttonId: (XPDROPS_SETUP << 16) | 54, slot: 6 }), true);
   const varp = player.varps.get(XPDROPS_VARP);
   assert.equal(varp & 0b11, 2, 'varbit 4692 (position, bits 0-1) = row 3 - 1');
   assert.equal((varp >>> 22) & 0b11111, 5, 'varbit 4697 (counter, bits 22-26) = row 6 - 1');
-  assert.equal(position({ player, buttonId: (XPDROPS_SETUP << 16) | 6, slot: 0 }), false, 'the header itself');
+  assert.equal(position({ player, buttonId: (XPDROPS_SETUP << 16) | 51, slot: 0 }), false, 'the list itself');
 
   // Another session of the same account gets it back at login.
   const next = varpPlayer({ native: true });
@@ -506,4 +506,20 @@ test('XP drops setup: the browser transmits the whole varp, which is kept and ec
   next.setAttribute('settings:xpdrops-setup', player.getAttribute('settings:xpdrops-setup'));
   logins.forEach((login) => login({ player: next }));
   assert.equal(next.varps.get(XPDROPS_VARP), 0x1234);
+});
+
+test('a volume slider released sets the stored volume from its trigger argument', () => {
+  const { buttons } = registered();
+  const applied = [];
+  const player = { applyAudioSettingFromClient: (varp, value) => applied.push([varp, value]) };
+  const sliders = [[95, 3796], [109, 168], [123, 169], [137, 872]];
+  for (const [component, varp] of sliders) {
+    const buttonId = (116 << 16) | component;
+    // 70 is zigzag 35; the scripts trigger on release and when the volume reaches or leaves 0.
+    assert.equal(buttons.get(buttonId)({ player, buttonId, argsData: Buffer.from([70]), scriptTrigger: true }), true, `slider ${component}`);
+    assert.deepEqual(applied.pop(), [varp, 35]);
+  }
+  const music = (116 << 16) | 109;
+  assert.equal(buttons.get(music)({ player, buttonId: music, argsData: Buffer.from([70]), scriptTrigger: false }), false, 'a click is not the trigger');
+  assert.equal(applied.length, 0);
 });

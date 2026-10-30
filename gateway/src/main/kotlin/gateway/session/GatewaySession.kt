@@ -85,6 +85,7 @@ class GatewaySession(
             context.identKitCount,
             interceptButton = { id, sub, obj, op -> trade.button(id, sub, obj, op) },
             interceptCount = { trade.count(it) },
+            worldEntityIndex = boats::tspsIndex,
         ) { tsps.send(it) }
     private val players = PlayerSync()
     private val npcs = NpcSync { index -> boats.deck(index)?.let { it.baseX to it.baseZ } }
@@ -319,6 +320,7 @@ class GatewaySession(
         val self = self ?: return
         session.processIncomingPackets(this)
         world.update()
+        mirror?.discardOthersPackets()
         val packets = self.getPackets()
         val root = packets.rootWorldInfoPackets
         // A failed info packet leaves the client's entity state behind for good (rsprot says to
@@ -332,7 +334,7 @@ class GatewaySession(
         session.queue(root.worldEntityInfo.getOrNull()!!)
         for (boat in packets.activeWorlds) {
             session.queue(boat.activeWorld)
-            if (boat.added) boats.deck(boat.worldId)?.let { session.queue(it.rebuild()) }
+            if (boat.added) boats.deckOfWorld(boat.worldId)?.let { session.queue(it.rebuild()) }
             worldUpdates.flushDeck(boat.worldId)
             session.queue(boat.npcUpdateOrigin)
             session.queue(boat.npcInfo.getOrNull()!!)

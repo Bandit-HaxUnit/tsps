@@ -23,6 +23,8 @@ class WorldEntities(private val world: EntityWorld) {
      */
     class Deck(
         val index: Int,
+        /** The boat's world in this session: tsps's index is above rsprot's world limit. */
+        val worldId: Int,
         val configId: Int,
         val sizeX: Int,
         val sizeZ: Int,
@@ -46,10 +48,23 @@ class WorldEntities(private val world: EntityWorld) {
     private val decks = HashMap<Int, Deck>()
     private val boats = HashMap<Int, Boat>()
 
+    /** tsps numbers boats 3000-3999; rsprot takes world ids below 2048, so each gets its own. */
+    private val worldIds = HashMap<Int, Int>()
+
     /** The boats as the client has them listed; WORLDENTITY_INFO's updates come in this order. */
     private var order = ArrayList<Int>()
 
+    /** By tsps's index. */
     fun deck(index: Int): Deck? = decks[index]
+
+    /** By this session's world id. */
+    fun deckOfWorld(worldId: Int): Deck? = decks.values.firstOrNull { it.worldId == worldId }
+
+    /** tsps's index for a world id the client names (its world-entity ops). */
+    fun tspsIndex(worldId: Int): Int? = worldIds.entries.firstOrNull { it.value == worldId }?.key
+
+    private fun worldId(index: Int): Int =
+        worldIds.getOrPut(index) { (1 until MAX_WORLDS).first { it !in worldIds.values } }
 
     /** The deck a tile is on, if any. */
     fun deckAt(x: Int, z: Int): Deck? = decks.values.firstOrNull { it.contains(x, z) }
@@ -70,7 +85,7 @@ class WorldEntities(private val world: EntityWorld) {
         reader.offset += 2 + 1 + 2 + 2 + 1
         val bits = BitReader(packet.payload, reader.offset)
         val scene = Array(LEVELS * SCENE_ZONES * SCENE_ZONES) { if (bits.read(1) == 1) bits.read(26) else null }
-        decks[index] = Deck(index, configId, sizeX, sizeZ, zoneX, zoneZ, scene)
+        decks[index] = Deck(index, worldId(index), configId, sizeX, sizeZ, zoneX, zoneZ, scene)
     }
 
     /**
@@ -89,6 +104,7 @@ class WorldEntities(private val world: EntityWorld) {
             if (type == GONE) {
                 boats.remove(index)?.let { world.releaseWorldEntity(it.avatar) }
                 decks.remove(index)
+                worldIds.remove(index)
                 continue
             }
             kept += index
@@ -115,7 +131,7 @@ class WorldEntities(private val world: EntityWorld) {
             val deck = decks[index] ?: continue
             val avatar =
                 world.allocWorldEntity(
-                    index,
+                    deck.worldId,
                     configId,
                     deck.sizeX,
                     deck.sizeZ,
@@ -136,6 +152,7 @@ class WorldEntities(private val world: EntityWorld) {
         boats.values.forEach { world.releaseWorldEntity(it.avatar) }
         boats.clear()
         decks.clear()
+        worldIds.clear()
         order.clear()
     }
 
@@ -158,6 +175,7 @@ class WorldEntities(private val world: EntityWorld) {
 
     private companion object {
         const val GONE = 0
+        const val MAX_WORLDS = 2048
         const val MOVED = 2
         const val PLACED = 3
         const val ANGLE_MASK = 2047
