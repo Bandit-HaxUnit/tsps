@@ -291,30 +291,71 @@ boat combat, its defeated form and Harvest.
   A full inventory while collecting retains the owned duck and leaves its chart uncompleted.
   Tools withdrawal is guarded by an additive `sailing:can-take-tool` query in CargoHold.
 
-## Remaining source limitations
+## Combat and revival completion: evidence and approximations
 
-- The corpse has a chance to regenerate, at most nine times (Wiki A corpse). The only local
-  recording235/948 shows three regenerations and then a final death. No available source
-  establishes the probability, and no probability or fixed revival count is fabricated here;
-  the regeneration mechanic remains unresolved. The normal spawned corpse combat/lifecycle is
-  implemented, but this is not a claim that its complete encounter matches OSRS.
-- Dinky's current Wiki infobox gives max hit51+, and The rocks gives an unknown magic max hit.
-  Their generated max_hit fields are null. Dinky consequently retains the shared maximum1
-  fallback; its full damage behavior remains unfinished. The rocks uses magic normally and
-  switches to melee against Protect from Magic (Wiki), with the known melee maximum23 through
-  the ordinary damage/prayer pipeline. Its magic maximum retains the shared fallback1.
-  The recorded magic impact369 (delay10) interrupts combat; a movement-freeze duration is not
-  invented. Both styles play the captured troll attack animation284. Magic hit delay0 is an
-  implementation choice: adjacent mixed attacks do not establish the cast-to-impact timing.
-  Random adjacent melee, teleport odds and Daddy's special-selection/stun policy
-  remain unresolved; these are material encounter limitations.
+After expanded research failed to establish every hidden rule, Curt authorized the closest
+possible implementation on2026-10-30. The estimates below are implementation choices, **not
+verified OSRS values**. Named constants and comments distinguish them from captured mechanics.
+No generated definitions are changed, and this is not a claim of exact parity.
+
+| Mechanic | Source-backed behavior | Explicit approximation |
+| --- | --- | --- |
+| Corpse revival | Wiki: full90HP, up to9revivals. RSProx235/948: sameNPC, no death animation, unchanged cadence, regeneration message/overhead. | Uniform0..9 revival budget chosen once per encounter. Only final death awards ordinary kill credit/drops; intermediate revivals preserve damage ownership. Distribution/credit policy unverified. |
+| Dinky damage | Wiki51+,4tickattack, full melee protection,140HP. | Per-instance maximum51 uses a lower bound as a provisional ceiling, replacing fallback1. May underestimate real maximum. |
+| Rocks damage/style | Wiki melee23; normally magic, melee against ProtectMagic and sometimes adjacent. Magic maximum unknown. | Magic maximum23; one-in-three melee selection when cardinally adjacent. Diagonal adjacency retains magic unless ProtectMagic. Shared accuracy/prayer remain intact. |
+| Rocks freezing | Captured284attack,369impactdelay10 and attack interruption; release near3ticks is inconclusive. | Magic hit delay1tick, freeze3ticks on accurate magic including accurate0. Misses do not freeze. Shared freeze/immunity rules apply; combat/pending action interrupted on application. |
+| Rocks teleport | Wiki chance to teleport beside distant player, apparently absent when diagonally adjacent. Captured353graphic. | One-in-four per distant attack, valid unoccupied adjacent tile in same arena; none while already adjacent. |
+| Daddy special | Wiki max27,8tickattack, knockback/stun. Captured1158swing,1157flybackdelay20, exactmove20/40cycles,5tile displacement with clipping, cardinal facing towards Dad. | One-in-three selection borrowed from normalDad; stun3ticks; forced move completes after2server ticks. Revalidate path/destination before placement. |
+
+Special effects require the active owner's private arena. Applied-hit observers run after HP
+changes, so lethal hits cannot start post-death freeze/knockback. Forced movement cancels on
+logout and invalidates on teleport, scene replacement, death and late collision/occupancy.
+After its own knockback placement clears, Daddy resumes attacking the same living arena
+owner. The delayed re-engagement is cancelled with the scene and respects another target.
+Corpse state belongs to its existing drink/boat effect and is removed on leave/logout/boat
+teleport/replacement. Dinky's ceiling changes only its spawned instance.
+
+A generic combat correction records actual HP loss before death hooks can heal/transform the
+target. Applied-damage observers retain the damage preceding revival; protected developers,
+lockedHP and already-dead targets still report0.
+
+Combat completion path map and state ownership:
+
+- Native inventory packet enters `NetworkBuilder.inventoryAction` and `PluginManager.emitItemAction`.
+  `DrinkCrate.drink/choose/swallow` owns confirmation/slot validation and consumption;
+  `DrinkEffects.start/actor` owns the exact temporary encounter NPC and boat lifetime.
+- `CorpseRevival.configure/beforeDeath` uses that existing state, exact NPC, owner/deck and
+  remaining lives. `PendingHit`/`CombatFactory`/`HitQueue` resolve damage; `Mobile.decrementHealth`
+  records actual loss before `NPC.appendDeath` emits the before-death hook. Prevented deaths
+  remain the same NPC; the ordinary final `NPCDeathTask` owns killer credit/drop/removal.
+- `FishierStout.scenes` and its real private Area own trolls and scene-keyed tasks. `TrollCombat`
+  providers select a method; shared Combat/PendingHit own cadence, accuracy and protection.
+  Accurate applied hits alone reach the living-owner effect gate; shared timers own freeze/stun.
+- `ForceMovementTask` owns delayed placement. Destination collision/occupancy and scene identity
+  are rechecked; the subsequent scene-keyed CountdownTask resumes only the same live owner,
+  at the destination after placement clears, with no existing NPC target. Scene end cancels
+  its tasks; logout removes the encounter. Real World ordering is covered separately from
+  manual task ticks. Temporary lives are not persisted because logout despawns the encounter.
+- These combat changes do not store/withdraw inventory, merge items, award a separate XP/drop,
+  or introduce a bank/PIN policy. Existing drink/reward handlers retain those responsibilities;
+  queued lethals and actual final-death ownership are covered through their shared owners.
+
+All43 public [RSProx catalogue](https://rsprox.net/database) pages were checked:4283unique IDs
+exactly matched the local archive, highest revision239. NPC search confirmed corpse948/3711/3712
+(latter two overlap), Daddy/Rocks948only and11Dinky recordings. Later985/3836 are bystander
+views without victim damage packets. Fight videos, firsthand reports, RuneLite HP data,
+indexed developer searches and pinned dump yielded no exact missing rules. Wiki mirrors are
+not independent evidence; the apparent51+ Reddit corroboration was a Wiki screenshot. Private
+Discord/unpublished recordings were not accessible.
+
+## Remaining source limitations
 - Exact visitor placement on each hull, queen range, idle chatter/wandering, corpse regeneration
   odds and these encounters' detailed mixed-style special attacks require more evidence.
 - Captures are revision235; identifiers and map objects are checked against pinned revision241
   dump6e5033af6215963581a51b348f452320ff18f0f6 and the active241cache. The Wiki supplies mechanics
   and current stats where the recording predates later boat-combat updates.
 
-## Verification (2026-10-30)
+## Initial draft verification (2026-10-30, before combat completion)
 
 The focused Charting/SeaCombat checks pass91/91. Independent review passes37/37 (seven reviewer
 cases and30 author cases), including actual combat attacks, PendingHit/HitQueue prayer changes,
@@ -336,12 +377,55 @@ at Port Sarim and boarded using its real gangplank before the Catherby positioni
 
 Bottles, skills/master99, equipped Abyssal whip, player positioning and chart-go boat positioning
 were disclosed QA fixtures. Later mystery-box openings and a ground-item pickup had no established
-input provenance: they are excluded from native-input verification. Source limitations above,
-including absent corpse revival, Dinky's fallback damage and incomplete Rocks special behavior,
-remain material unfinished work; these checks do not establish complete encounter parity.
+input provenance: they are excluded from native-input verification. At this initial draft stage,
+corpse revival, Dinky's fallback damage and Rocks special behavior remained unfinished. The
+completion above supersedes those omissions, with its remaining unknown values disclosed.
 
 The root-coordinated combined run reported10214 tests:10185 passed and29 failed; clean-base
-reported10137 tests:10108 passed and29 failed. Root is comparing individual failing assertions;
-equal failure counts alone do not establish equivalence. The final QA server saved its one online
+reported10137 tests:10108 passed and29 failed. This historical run is not validation of the
+later combat completion. The initial QA server saved its one online
 player successfully through gameUpdate5s. Its game/MCP listeners and own static server were then
 stopped, and ports3109/43709/49809 were verified free.
+
+## Combat completion verification (2026-10-30)
+
+Fresh pinned-Yarn `tsc --build` passed. Serial charting checks passed61/61, including the
+reviewer's11 actual-entity cases, which the reviewer also independently reran11/11. The
+28 affected HitQueue/thrall/Vardorvis foundation cases passed. Recovery focused/native runs
+disabled player bots and their dependent BountyHunter plugin; the full suite uses default
+plugin settings. The old Rocks impact case
+now uses99HP and asserts survival: its default10HP fixture could legitimately die to the
+real0..23 damage roll, correctly suppressing post-death effects. Its real hit path and
+interruption/graphic assertions remain intact.
+
+Independent review retained failing reproductions for forced-facing encoding and lost Dad
+engagement after forced placement. The fixes preserve cardinal facing towards the attacker
+and resume only the current live arena owner's NPC combat after placement clears. Actual
+World cycles cover successful resumption and cancellation in the new post-placement window
+after real teleport or scene replacement. Real list cleanup/network fixture errors discovered
+by running World were corrected; they are not hidden by mocked task/scene behavior.
+
+The production rendering client showed two natural corpse revivals on the same NPC and final
+removal, Dinky's fight, the three-troll arena, flyback and exact movement. After crash recovery,
+relogin returned the character to Longhall; native Drink/warning/Yes entered a fresh arena.
+Rocks rendered the ice block and freeze message. Dad's own knockback was followed by eleven
+observed normal attack starts, then natural death/drop, rather than the previous permanent
+stall. Native bottle use also replaced the arena. Read-only client actor snapshots and
+screenshots were retained. These checks do not measure damage caps or odds: master99, whip,
+seeded bottles/positioning and developer damage immunity are disclosed fixtures.
+
+The PC crash interrupted earlier concurrent runs, which logged native Node allocation
+failures. Source and evidence survived; recovery validation runs serially. The final native
+pass used normal input because its optional MCP listener returned EACCES. Native
+`::gameUpdate 5s` saved1player with0failures; own game/static processes were stopped, own tab
+closed and host-level checks confirmed3109/43709/49809 clear. Other processes were preserved.
+
+Curt's necessary-testing instruction superseded blanket full-suite requirements during the
+last run. It was deliberately stopped after9,246 completed top-level cases; it is **not a
+completed full-suite result**. Its nine observed failures match the recorded clean-main
+b57a25f88 names and normalized assertions, with no new failure observed. The later teleport
+and Whisperer cases had not run. Focused clean-base reproductions confirm all nine matching
+assertions; the burying case includes its existing cache-initialisation prerequisite. These
+reproductions do not change or weaken the baseline tests. No additional broad run is required
+for this PR: the actual changed
+behavior and identified damage-observer consumers are covered by the focused checks above.

@@ -1,5 +1,6 @@
 // Spawn offsets/ticks: RSProx 235/940,944,948,3467,3837. Actors belong to the current boat.
 const common = require("./Common.Charting");
+const revival = require("./CorpseRevival.Charting");
 const effects = new Map();
 const IMMEDIATE = new Set(["drink_crate_platinum_rum", "drink_crate_wild_whisky", "drink_crate_sailing_cat"]);
 const PASSIVE = new Set(["drink_crate_platinum_rum", "drink_crate_wild_whisky", "drink_crate_sailing_cat"]);
@@ -18,6 +19,7 @@ function introduction(npc) {
 function alive(state) {
   const { BoatManager } = common.core();
   return effects.get(state.player)?.get(state.key) === state && state.player.isRegistered()
+    && BoatManager.getBoatAboard(state.player) === state.boat
     && BoatManager.getBoat(state.boat.entityIndex) === state.boat && state.boat.teleportCount === state.teleportCount;
 }
 function clear(state) {
@@ -28,6 +30,7 @@ function clear(state) {
     common.api().removeNpc(npc);
   }
   state.npcs.clear();
+  state.corpse = null;
   if (!effects.get(state.player)?.size) effects.delete(state.player);
 }
 function cleanup({ player, boat }) {
@@ -56,6 +59,11 @@ function actor(state, gameval, sea = false) {
   npc.setFlag(NPC.WALK_THROUGH_ENTITIES_FLAG, true);
   if (!sea) deck.enter(npc);
   state.npcs.add(npc);
+  revival.configure(state, npc);
+  if (state.key === "drink_crate_fish_stoutier") {
+    // Wiki Dinky says 51+; 51 is an authorized provisional ceiling, not a verified maximum.
+    npc.setCombatOverride({ maxHit: 51 });
+  }
   introduction(npc);
   if (!PASSIVE.has(state.key)) {
     if (sea) common.api().emitCustomEvent("sea-combat:creature-attacked", { player: state.player, npc });
@@ -115,5 +123,6 @@ function attach(api) {
   common.init(api);
   api.onPlayerLogout(cleanup);
   api.onCustomEvent("sailing:left", cleanup);
+  revival.attach(api);
 }
-module.exports = { attach, start, effects, introduction };
+module.exports = { attach, start, effects, introduction, alive };

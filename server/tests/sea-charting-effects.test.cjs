@@ -335,14 +335,34 @@ test('The rocks changes from magic to melee against real Protect from Magic and 
   t.mock.method(core.Misc, 'randomInclusive', (_min, max) => max); // Controlled maximum damage roll.
   assert.equal(core.CombatFactory.rollHitDamage(npc, f.player, core.CombatType.MELEE).getDamage(), 23);
 });
-test('The rocks magic impact interrupts the target and applies its captured graphic without a guessed freeze timer', t => {
+test('The rocks accurate magic impact interrupts the target and applies its captured graphic with an estimated freeze', t => {
   const f = captain(t);
+  // This case checks a surviving target. The content damage-roll hook rolls up
+  // to23 even when PendingHit requests0; a default10HP player may die first.
+  f.player.getSkillManager().setMaxLevel(core.Skill.HITPOINTS, 99);
+  f.player.getSkillManager().setCurrentLevel(core.Skill.HITPOINTS, 99);
   sip(f.player, 'sailing_charting_drink_crate_fishier_stout'); answer(f.player, 1); ticks(7);
   const npc = f.player.getArea().getNpcs().find(npc => npc.getId() === 15168);
   f.player.getCombat().attack(npc);
+  f.player.setNeedsPlacement(false); npc.setNeedsPlacement(false); // Finish the arena placement, as a World tick does.
   const method = core.CombatFactory.getMethod(npc), hit = new core.PendingHit(npc, f.player, method, { damage: 0, rollAccuracy: false });
-  method.handleAfterHitEffects(hit);
-  assert.equal(f.player.getCombat().getTarget(), null);
+  assert.equal(hit.isAccurate(), true);
+  assert.ok(f.player.getHitpoints() > 0);
+  assert.equal(npc.getArea(), f.player.getArea());
+  assert.equal(method.type(), core.CombatType.MAGIC);
+  assert.equal(npc.getOwner() === f.player, true);
+  assert.equal(npc.isRegistered(), true);
+  assert.equal(f.player.isRegistered(), true);
+  // Exercise the real resolved-hit callback and application, not a direct hook plus a source-less splat.
+  core.CombatFactory.addPendingHit(hit);
+  f.player.getCombat().getHitQueue().process(core.World.processCycle + 2);
+  assert.ok(f.player.getHitpoints() > 0, 'a surviving target is required for the impact effect');
+  assert.equal(f.player.getCombat().getTarget() === null, true, JSON.stringify({
+    hold: f.player.getCombat().getIncomingHitCycle(), cycle: core.World.processCycle,
+    queued: f.player.getCombat().getHitQueue().hasPendingWork(), hp: f.player.getHitpoints(),
+    registered: npc.isRegistered(), dying: npc.isDying, npcHp: npc.getHitpoints(),
+    scene: require('../plugins/skills/sailing/charting/FishierStout.Charting').scenes.has(f.player),
+  }));
   assert.equal(f.player.getGraphic().getId(), 369);
 });
 
