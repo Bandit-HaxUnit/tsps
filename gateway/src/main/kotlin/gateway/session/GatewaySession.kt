@@ -13,6 +13,8 @@ import net.rsprot.protocol.api.Session
 import net.rsprot.protocol.api.login.GameLoginResponseHandler
 import net.rsprot.protocol.game.outgoing.info.Infos
 import net.rsprot.protocol.game.outgoing.interfaces.IfOpenTop
+import net.rsprot.protocol.game.incoming.buttons.If1Button
+import net.rsprot.protocol.game.incoming.buttons.If3Button
 import net.rsprot.protocol.game.incoming.misc.user.ClientCheat
 import net.rsprot.protocol.game.incoming.misc.user.MoveGameClick
 import net.rsprot.protocol.game.incoming.misc.user.MoveMinimapClick
@@ -103,6 +105,8 @@ class GatewaySession(
             is MoveGameClick -> tsps.send(TspsClientPacket.move(message.x, message.z, message.keyCombination))
             is MoveMinimapClick -> tsps.send(TspsClientPacket.move(message.x, message.z, message.keyCombination))
             is SetHeading -> tsps.send(TspsClientPacket.setHeading(message.heading))
+            is If1Button -> tsps.send(TspsClientPacket.ifButton(message.combinedId))
+            is If3Button -> tsps.send(TspsClientPacket.ifButtonX(message.combinedId, message.sub, message.obj, message.op))
             // Autocomplete is the client asking for suggestions as you type; tsps has none.
             is ClientCheat -> if (!message.autocomplete) tsps.send(TspsClientPacket.command(message.command))
             else -> DropCounter.up(message)

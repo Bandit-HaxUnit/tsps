@@ -71,7 +71,7 @@ sessions, so the browser wire format doesn't change.
 | NO_TIMEOUT | 201 PING | mapped | 1 | sent by the gateway every 5 s while ticks arrive |
 | MOVE_GAMECLICK / MOVE_MINIMAPCLICK | 16 MOVE_GAMECLICK | mapped | 2 | key combination passes through (1 ctrl, 2 ctrl+shift) |
 | SET_HEADING | 214 | mapped | 2 | |
-| IF_BUTTON (if1) / IF_BUTTONX | 13 / 91 | todo | 4 | |
+| IF_BUTTON (if1) / IF_BUTTONX | 13 / 91 | mapped | 2 | mapped early: returning accounts log in to the welcome screen, whose play button is an IF_BUTTONX |
 | IF_SUBOP | 89 | todo | 4 | |
 | IF_BUTTOND | 1, or 242 INVENTORY_MOVE for 149:0 | todo | 4–5 | |
 | IF_BUTTONT | 90, or 241 INVENTORY_USE_ON for item on item | todo | 4–5 | |

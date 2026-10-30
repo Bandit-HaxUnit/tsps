@@ -87,7 +87,9 @@ class TspsWriter {
  * know, so nothing else may be sent.
  */
 object TspsClientPacket {
+    const val IF_BUTTON = 13
     const val MOVE_GAMECLICK = 16
+    const val IF_BUTTONX = 91
     const val CHAT = 190
     const val SET_HEADING = 214
     const val PING = 201
@@ -120,6 +122,13 @@ object TspsClientPacket {
             .u8(x ushr 8).u8(x + 128)
             .u8(128).u8(0) // shortAdd: no target loc
             .fixed(MOVE_GAMECLICK)
+
+    /** A plain if1 button click. */
+    fun ifButton(combinedId: Int): ByteArray = TspsWriter().i32(combinedId).fixed(IF_BUTTON)
+
+    /** An if3 button click: component, slot (0xFFFF none), obj (-1 none) and op 1-32. */
+    fun ifButtonX(combinedId: Int, slot: Int, obj: Int, op: Int): ByteArray =
+        TspsWriter().i32(combinedId).u16(slot).u16(obj).u8(op).fixed(IF_BUTTONX)
 
     /** A `::` command; tsps reads commands from public chat. */
     fun command(command: String): ByteArray = TspsWriter().u8(CHAT_KIND_PUBLIC).string("::$command").varByte(CHAT)

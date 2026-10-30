@@ -100,6 +100,26 @@ class HeadlessClient(private val host: String, private val port: Int) {
                 output.flush()
             }
 
+        /** A fixed-size client packet, opcode enciphered as the client does. */
+        fun sendFixed(opcode: Int, payload: ByteArray) =
+            synchronized(output) {
+                output.writeByte(opcode + encoding.nextInt())
+                output.write(payload)
+                output.flush()
+            }
+
+        /** IF_BUTTONX: op [op] on component [interfaceId]:[componentId]. */
+        fun button(interfaceId: Int, componentId: Int, op: Int = 1, sub: Int = 0xFFFF, obj: Int = 0xFFFF) =
+            sendFixed(
+                IF_BUTTONX,
+                Unpooled.buffer().toJagByteBuf().apply {
+                    p4((interfaceId shl 16) or componentId)
+                    p2(sub)
+                    p2(obj)
+                    p1(op)
+                }.buffer.let { it.array().copyOf(it.writerIndex()) },
+            )
+
         /** CLIENT_CHEAT: a `::` command, without the colons. */
         fun command(text: String) =
             sendVarByte(CLIENT_CHEAT, Unpooled.buffer().toJagByteBuf().apply { pjstr(text); p1(0) }.buffer.let { it.array().copyOf(it.writerIndex()) })
@@ -258,6 +278,7 @@ class HeadlessClient(private val host: String, private val port: Int) {
         const val JS5_BLOCK = 512
         const val LOGIN_OK = 2
         const val MOVE_GAMECLICK = 55
+        const val IF_BUTTONX = 38
         const val CLIENT_CHEAT = 84
         const val LOGIN_OK_PAYLOAD = 34
         const val OTP_NONE = 2
