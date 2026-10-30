@@ -268,7 +268,8 @@ export class NPC extends Mobile {
             const movement = this.getMovementQueue();
             const combat = this.getCombat();
             movement.beginCycle();
-            this.movementCoordinator.process();
+            // A plugin driving this NPC's walk owns its movement: no wandering or walking home.
+            if (!this.scriptedMovement) this.movementCoordinator.process();
             const processCombat = combat.hasPendingWork();
             if (processCombat) {
                 combat.preMovementProcess();
@@ -973,7 +974,7 @@ export class NPC extends Mobile {
 
     /**
      * While true, Combat leaves this NPC's movement queue alone (no pursuit route,
-     * no in-range reset) and does not attack. Plugins driving a scripted walk set
+     * no in-range reset) and does not attack, and it neither wanders nor walks home. Plugins driving a scripted walk set
      * this, path the NPC themselves, then clear it on arrival to resume combat.
      */
     public setScriptedMovement(scripted: boolean): void {
