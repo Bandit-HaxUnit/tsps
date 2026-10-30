@@ -1,11 +1,26 @@
 import type { ContinuousMovementRefusal } from "../../movement/ContinuousMovement";
+import type { ClientGroundItemStack } from "../../data/ground/GroundItemStore";
 import type { SceneLoc } from "../../scene/SceneGeometry";
 
-/** What the action button is for, with the options its current form offers. */
-export type TouchTarget = {
+/** One of a loc's or NPC's five cache options. */
+export type CacheOption = { option: string; actionIndex: number };
+
+/** A ground item's option: which stack, under the name the world menu gives it. */
+export type ObjOption = {
+    option: string;
+    actionIndex: number;
+    stack: ClientGroundItemStack;
     name: string;
-    options: ReadonlyArray<{ option: string; actionIndex: number }>;
-} & ({ kind: "loc"; loc: SceneLoc } | { kind: "npc"; ecsId: number; serverId: number; typeId: number });
+    /** Ground Items' hidden items: their Take goes below everything else. */
+    deprioritized: boolean;
+};
+
+/** What the action button is for, with the options its current form offers. */
+export type TouchTarget = { name: string } & (
+    | { kind: "loc"; loc: SceneLoc; options: ReadonlyArray<CacheOption> }
+    | { kind: "npc"; ecsId: number; serverId: number; typeId: number; options: ReadonlyArray<CacheOption> }
+    | { kind: "obj"; options: ReadonlyArray<ObjOption> }
+);
 
 /** A loc the player walked into. */
 export type LocTouchTarget = Extract<TouchTarget, { kind: "loc" }>;

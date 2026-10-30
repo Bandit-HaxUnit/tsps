@@ -101,13 +101,14 @@ export function TouchJoystick({ plugin }: { plugin: TouchControlsPlugin }): JSX.
 }
 
 /**
- * Bottom-right button for the object or NPC the player is at, left of the tab stones: a tap
- * uses its first option, a long press lists them all (the object's right-click menu).
+ * Bottom-right button for the object, NPC or ground items the player is at, left of the tab
+ * stones: a tap uses the first option, a long press lists them all (its right-click menu),
+ * scrolling when a pile of items has more than fit.
  */
 function ActionButton({ plugin, action, stonesInset }: { plugin: TouchControlsPlugin; action: TouchAction; stonesInset: number }): JSX.Element {
     const [listing, setListing] = useState(false);
     const timer = useRef<number | undefined>(undefined);
-    const key = action.target + action.options.map((o) => o.option).join("|");
+    const key = action.options.map((o) => `${o.option} ${o.target}`).join("|");
     // A different object closes the list.
     useEffect(() => setListing(false), [key]);
     useEffect(() => () => {
@@ -133,7 +134,7 @@ function ActionButton({ plugin, action, stonesInset }: { plugin: TouchControlsPl
         if (timer.current === undefined) return; // the long press opened (or a cancel ended) it
         window.clearTimeout(timer.current);
         timer.current = undefined;
-        if (!listing) plugin.interact(action.options[0].actionIndex);
+        if (!listing) plugin.interact(action.options[0].id);
         close();
     };
     const onCancel = () => {
@@ -146,21 +147,22 @@ function ActionButton({ plugin, action, stonesInset }: { plugin: TouchControlsPl
         <div className="touch-action" style={{ "--stones-inset": `${stonesInset}px` } as React.CSSProperties}>
             {listing && (
                 <div className="touch-action-list" role="menu">
-                    {action.options.map(({ option, actionIndex }) => (
+                    {action.options.map(({ option, target, id }) => (
                         <button
-                            key={actionIndex}
+                            key={id}
                             type="button"
                             role="menuitem"
                             className="touch-action-option"
-                            onPointerDown={own}
-                            onPointerUp={(event) => {
+                            // Not owned: a drag here scrolls the list, and the browser then sends no click.
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={(event) => {
                                 own(event);
-                                plugin.interact(actionIndex);
+                                plugin.interact(id);
                                 close();
                             }}
                             onContextMenu={own}
                         >
-                            {option} <span className={`touch-action-target is-${action.kind}`}>{action.target}</span>
+                            {option} <span className={`touch-action-target is-${action.kind}`}>{target}</span>
                         </button>
                     ))}
                 </div>
@@ -174,7 +176,7 @@ function ActionButton({ plugin, action, stonesInset }: { plugin: TouchControlsPl
                 onContextMenu={own}
             >
                 <span className="touch-action-option-label">{action.options[0].option}</span>
-                <span className={`touch-action-target is-${action.kind}`}>{action.target}</span>
+                <span className={`touch-action-target is-${action.kind}`}>{action.options[0].target}</span>
             </button>
         </div>
     );

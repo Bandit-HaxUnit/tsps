@@ -24,7 +24,8 @@ import { applyMenuTransform } from "../../../ui/menu/menuTransforms";
 import { MenuTargetType } from "../../../rs/MenuEntry";
 import { createElement, lazy, type ReactNode } from "react";
 import { PadMode, type PadModeValue, TouchControlsConfig } from "./TouchControlsConfig";
-import { findBlockingTarget, isStillInReach, targetFor, type TouchTarget, type TouchTargetWorld } from "./TouchTargets";
+import { findBlockingTarget, isStillInReach, targetFor, type ObjOption, type TouchTarget, type TouchTargetWorld } from "./TouchTargets";
+import type { ClientGroundItemStack } from "../../data/ground/GroundItemStore";
 
 const TouchJoystick = lazy(() =>
     import("./TouchJoystick").then((m) => ({ default: m.TouchJoystick })),
@@ -46,8 +47,8 @@ const NPC_LINGER_MS = 1500;
 
 export type TouchAction = {
     kind: TouchTarget["kind"];
-    target: string;
-    options: ReadonlyArray<{ option: string; actionIndex: number }>;
+    /** In the world menu's order, the first being the tap; `id` is what interact() takes. */
+    options: ReadonlyArray<{ option: string; target: string; id: number }>;
 };
 
 export type TouchControlsUiState = {
@@ -90,7 +91,15 @@ export type TouchControlsClient = {
     locTypeLoader?: { load(id: number): LocType | undefined };
     varManager?: unknown;
     locOpFlagsAt?(x: number, y: number, locId: number): number | undefined;
-    clientPlugins?: { interactHighlightConfig(): InteractHighlightPluginConfig | undefined };
+    groundItems?: { getStacksAt(x: number, y: number, level: number): ClientGroundItemStack[]; getVersion(): number };
+    objTypeLoader?: { load(id: number): { name: string; groundActions?: ReadonlyArray<string | null | undefined> } | undefined };
+    takeGroundItem?(stack: ClientGroundItemStack): void;
+    groundItemOption?(stack: ClientGroundItemStack, option: string, opNum: number): void;
+    clientPlugins?: {
+        interactHighlightConfig(): InteractHighlightPluginConfig | undefined;
+        groundItemMenuName?(stack: ClientGroundItemStack, name: string): string;
+        deprioritizeGroundItem?(stack: ClientGroundItemStack): boolean;
+    };
     setKeyboardMovement?(dx: number, dy: number, running: boolean, rotation: number): void;
     stopKeyboardMovement?(deactivate?: boolean): void;
     getKeyboardMovementRefusal?(): ContinuousMovementRefusal | undefined;
@@ -114,8 +123,8 @@ function detectTouchDevice(): boolean {
  * MOVEMENT_INPUT (opcode 215) and the server's FreeMovement plugin walks the
  * player, so this plugin is only the touch control that feeds it. Walking into an
  * object with options (a tree, bank booth, door or the Wilderness ditch), or onto an
- * NPC's tile, puts its first option on the action button and outlines it in
- * Interact Highlight's hover colour.
+ * NPC's tile or a pile of ground items, puts its first option on the action button and
+ * outlines it (not ground items) in Interact Highlight's hover colour.
  */
 export class TouchControlsPlugin extends Plugin implements ClientPlugin {
     static descriptor: PluginDescriptor = {
@@ -146,6 +155,9 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
     /** The NPC sharing the player's tile, rescanned when the player's tile or the game tick changes. */
     private npcUnder?: Extract<TouchTarget, { kind: "npc" }>;
     private npcScanKey = "";
+    /** The ground items on the player's tile, rescanned with the NPCs, and which stacks they were. */
+    private itemsUnder?: Extract<TouchTarget, { kind: "obj" }>;
+    private itemsKey = "";
     /** When the focused NPC stopped sharing the player's tile. */
     private npcLeftAt?: number;
     private gameTicks = 0;
@@ -211,16 +223,24 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
         this.pinned = pinned;
     }
 
-    /** Use one of the focused object's options, as clicking it would. */
-    interact(actionIndex: number): void {
+    /** Use one of the focused target's options (a TouchAction option's id), as clicking it would. */
+    interact(id: number): void {
         const focus = this.focus;
-        const option = focus?.options.find((o) => o.actionIndex === actionIndex);
+        const option = focus?.options[id];
         if (!focus || !option || !this.canMove()) return;
         if (this.stick) {
             this.suspended = true;
             this.heading = undefined;
             this.stopWalking();
         }
+        if (focus.kind === "obj") {
+            // As the world menu's ground item entries send them.
+            const { stack, option: name, actionIndex } = focus.options[id];
+            if (name.toLowerCase() === "take") this.client.takeGroundItem?.(stack);
+            else this.client.groundItemOption?.(stack, name, actionIndex + 1);
+            return;
+        }
+        const { actionIndex } = option;
         // The destination tile and identifier a click on it would send: a loc by id, an NPC by index.
         const args = focus.kind === "loc"
             ? [focus.loc.tileX - ClientState.baseX, focus.loc.tileY - ClientState.baseY, LOC_OPCODES[actionIndex],
@@ -306,11 +326,13 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
         if (!world || !player || this.client.gameState !== GameState.LOGGED_IN) {
             this.focus = undefined;
             this.npcUnder = undefined;
+            this.itemsUnder = undefined;
+            this.itemsKey = "";
             return;
         }
         // An NPC walking off (or a new collision) must not swap the button under a held finger.
         if (this.pinned && this.focus) return;
-        const scanKey = `${player.x},${player.y},${player.plane},${this.gameTicks}`;
+        const scanKey = `${player.x},${player.y},${player.plane},${this.gameTicks},${this.client.groundItems?.getVersion()}`;
         if (scanKey !== this.npcScanKey) {
             this.npcScanKey = scanKey;
             const npc = this.npcAt(player.x, player.y, player.plane);
@@ -319,6 +341,12 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
                 this.npcLeftAt = undefined;
             }
             this.npcUnder = npc;
+            // Stepping onto a pile, or something landing on it, focuses the pile.
+            const items = this.itemsAt(player.x, player.y, player.plane);
+            const itemsKey = items?.options.map((o) => o.stack.id).join() ?? "";
+            if (items && itemsKey !== this.itemsKey) this.focus = items;
+            this.itemsUnder = items;
+            this.itemsKey = itemsKey;
         }
         const refusal = this.client.getKeyboardMovementRefusal?.();
         if (refusal && refusal !== this.seenRefusal && this.heading &&
@@ -338,6 +366,8 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
                 this.npcLeftAt ??= performance.now();
                 if (performance.now() - this.npcLeftAt > NPC_LINGER_MS) this.focus = undefined;
             }
+        } else if (this.focus?.kind === "obj") {
+            this.focus = this.itemsUnder;
         } else if (this.focus) {
             const { loc } = this.focus;
             // Options follow the object's current form (an opened gate, a chopped tree).
@@ -366,6 +396,32 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
             if (options.length) found = { kind: "npc", ecsId, serverId, typeId: type.id, name: stripTags(type.name), options };
         });
         return found;
+    }
+
+    /**
+     * The ground items on this tile with their options, in the world menu's order: the last
+     * stack to land first, each with its ground actions and Take in place of a missing third.
+     */
+    private itemsAt(x: number, y: number, plane: number): Extract<TouchTarget, { kind: "obj" }> | undefined {
+        const { groundItems, objTypeLoader: loader, clientPlugins: plugins } = this.client;
+        if (!groundItems || !loader) return undefined;
+        const options: ObjOption[] = [];
+        for (const stack of groundItems.getStacksAt(x, y, plane).reverse()) {
+            let type;
+            try {
+                type = loader.load(stack.itemId);
+            } catch {
+                continue;
+            }
+            if (!type?.name || type.name === "null") continue;
+            const name = stripTags(plugins?.groundItemMenuName?.(stack, type.name) ?? type.name);
+            const hidden = plugins?.deprioritizeGroundItem?.(stack) ?? false;
+            for (let actionIndex = 0; actionIndex < 5; actionIndex++) {
+                const option = type.groundActions?.[actionIndex] ?? (actionIndex === 2 ? "Take" : undefined);
+                if (option) options.push({ option, actionIndex, stack, name, deprioritized: hidden && actionIndex === 2 });
+            }
+        }
+        return options.length ? { kind: "obj", name: options[0].name, options } : undefined;
     }
 
     /** The NPC's current form (RuneLite's getTransformedComposition). */
@@ -456,16 +512,23 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
      * The options in the order the world menu shows them, after the client plugins' menu
      * transforms (Menu Entry Swapper's left-click swaps and presets): the first is the tap.
      */
-    private menuOrder(target: TouchTarget): TouchTarget["options"] {
-        const targetType = target.kind === "loc" ? MenuTargetType.LOC : MenuTargetType.NPC;
-        const targetId = target.kind === "loc" ? target.loc.id : target.typeId;
-        const entries: SimpleMenuEntry[] = target.options.map(({ option, actionIndex }) => ({
-            option, target: target.name, targetType, targetId, actionIndex, onClick: () => {},
-            npcServerId: target.kind === "npc" ? target.serverId : undefined,
-        }));
-        const ordered = applyMenuTransform(entries, { surface: "world", menu: true }).flatMap((entry) =>
-            target.options.find((o) => o.actionIndex === entry.actionIndex && o.option === entry.option) ?? []);
-        return [...new Set(ordered)];
+    private menuOrder(target: TouchTarget): TouchAction["options"] {
+        // `identifier` carries each entry's place in target.options through the transforms.
+        const entries = target.options.map((o, identifier): SimpleMenuEntry => {
+            const entry = { option: o.option, target: target.name, actionIndex: o.actionIndex, identifier, onClick: () => {} };
+            if (target.kind === "loc") return { ...entry, targetType: MenuTargetType.LOC, targetId: target.loc.id };
+            if (target.kind === "npc") {
+                return { ...entry, targetType: MenuTargetType.NPC, targetId: target.typeId, npcServerId: target.serverId };
+            }
+            const { stack, name, deprioritized } = target.options[identifier];
+            return { ...entry, target: name, targetType: MenuTargetType.OBJ, targetId: stack.itemId, deprioritized };
+        });
+        const ordered = applyMenuTransform(entries, { surface: "world", menu: true })
+            .filter((e) => typeof e.identifier === "number" && e.identifier in target.options);
+        // Deprioritized entries sit below the rest, as in the menu.
+        const ids = new Set([...ordered.filter((e) => !e.deprioritized), ...ordered.filter((e) => e.deprioritized)]
+            .map((e) => e.identifier!));
+        return [...ids].map((id) => ({ option: target.options[id].option, target: entries[id].target!, id }));
     }
 
     private publish(): void {
@@ -474,7 +537,7 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
             this.padMode === PadMode.ON ? true : this.padMode === PadMode.OFF ? false : this.touchDevice;
         const visible = padOn && this.client.isLoggedIn();
         const action = visible && this.focus && this.canMove()
-            ? { kind: this.focus.kind, target: this.focus.name, options: this.menuOrder(this.focus) } : undefined;
+            ? { kind: this.focus.kind, options: this.menuOrder(this.focus) } : undefined;
         const stonesInset = visible ? this.stonesInset() : 0;
         const key = JSON.stringify([visible, action, stonesInset]);
         if (key === this.uiKey) return;

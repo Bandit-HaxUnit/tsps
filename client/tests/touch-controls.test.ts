@@ -171,7 +171,7 @@ const refusal = (fromX: number, fromY: number, toX: number, toY: number): Contin
     plugin.steer(1, 0);
     blocked = refusal(21, 19, 21, 20);
     plugin.onClientTick();
-    assert.deepEqual(plugin.getUiState().action, { kind: "loc", target: "Oak tree", options: [{ option: "Chop down", actionIndex: 0 }] });
+    assert.deepEqual(plugin.getUiState().action, { kind: "loc", options: [{ option: "Chop down", target: "Oak tree", id: 0 }] });
     plugin.interact(0);
     assert.deepEqual(sent[0].slice(2), [MenuOpcode.GameObjectFirstOption, 2, "Chop down", "Oak tree"]);
     const walked = moves.length;
@@ -235,17 +235,17 @@ const refusal = (fromX: number, fromY: number, toX: number, toY: number): Contin
     });
     const plugin = new TouchControlsPlugin(client);
     plugin.onClientTick();
-    assert.deepEqual(plugin.getUiState().action, { kind: "npc", target: "Cow", options: [{ option: "Attack", actionIndex: 1 }] });
-    plugin.interact(1);
+    assert.deepEqual(plugin.getUiState().action, { kind: "npc", options: [{ option: "Attack", target: "Cow", id: 0 }] });
+    plugin.interact(0);
     assert.deepEqual(sent[0].slice(2), [MenuOpcode.NpcSecondOption, 11, "Attack", "Cow"]);
     // Held, the cow stays the target after the player steps off it.
     plugin.pin(true);
     at = { x: 61, y: 61 };
     plugin.onClientTick();
-    assert.equal(plugin.getUiState().action?.target, "Cow", "a held button keeps its target");
+    assert.equal(plugin.getUiState().action?.options[0].target, "Cow", "a held button keeps its target");
     plugin.pin(false);
     plugin.onClientTick();
-    assert.equal(plugin.getUiState().action?.target, "Giant", "the giant's far tile, with its colour tags stripped");
+    assert.equal(plugin.getUiState().action?.options[0].target, "Giant", "the giant's far tile, with its colour tags stripped");
     // Stepping off, the giant lingers a moment, then goes; an NPC without options never shows.
     const realNow = performance.now.bind(performance);
     let now = realNow();
@@ -253,7 +253,7 @@ const refusal = (fromX: number, fromY: number, toX: number, toY: number): Contin
     try {
         at = { x: 70, y: 70 };
         plugin.onClientTick();
-        assert.equal(plugin.getUiState().action?.target, "Giant", "a wandering NPC keeps the button a moment");
+        assert.equal(plugin.getUiState().action?.options[0].target, "Giant", "a wandering NPC keeps the button a moment");
         now += 1600;
         plugin.onClientTick();
         assert.equal(plugin.getUiState().action, undefined, "then it goes, and the Guard has no options");
@@ -280,7 +280,7 @@ const refusal = (fromX: number, fromY: number, toX: number, toY: number): Contin
     assert.equal(plugin.getUiState().action, undefined, "no focus before LOGGED_IN");
     client.gameState = GameState.LOGGED_IN;
     plugin.onClientTick();
-    assert.equal(plugin.getUiState().action?.target, "Cow", "the same NPC focuses once the scene is up");
+    assert.equal(plugin.getUiState().action?.options[0].target, "Cow", "the same NPC focuses once the scene is up");
 }
 
 // The button follows Menu Entry Swapper: a saved left-click swap is the tap, first in the list.
@@ -303,6 +303,48 @@ const refusal = (fromX: number, fromY: number, toX: number, toY: number): Contin
     plugin.onClientTick();
     assert.deepEqual(plugin.getUiState().action?.options.map((o) => o.option), ["Bank", "Talk-to", "Collect"]);
     setMenuTransform(undefined);
+}
+
+// Standing on ground items lists every stack's options, the last to land first; Take goes by stack.
+{
+    const stacks = [
+        { id: 1, itemId: 526, quantity: 1, tile: { x: 40, y: 40, level: 0 } },
+        { id: 2, itemId: 995, quantity: 250, tile: { x: 40, y: 40, level: 0 } },
+    ];
+    const objTypes: Record<number, { name: string; groundActions: (string | null)[] }> = {
+        526: { name: "Bones", groundActions: [null, null, "Take", null, null] },
+        995: { name: "Coins", groundActions: [null, null, null, null, null] },
+    };
+    let at = { x: 40, y: 40 };
+    let version = 1;
+    const taken: number[] = [];
+    const { client } = makeClient({
+        playerEcs: { getIndexForServerId: () => 0, getX: () => at.x * 128 + 64, getY: () => at.y * 128 + 64, getLevel: () => 0 },
+        sceneGeometry: { locsAtTile: () => [] },
+        locTypeLoader: { load: () => undefined },
+        groundItems: { getStacksAt: (x, y) => (x === 40 && y === 40 ? stacks.slice() : []) as never, getVersion: () => version },
+        objTypeLoader: { load: (id) => objTypes[id] },
+        takeGroundItem: (stack) => taken.push(stack.id),
+        clientPlugins: {
+            interactHighlightConfig: () => undefined,
+            groundItemMenuName: (stack, name) => (stack.quantity > 1 ? `${name} (${stack.quantity})` : name),
+            deprioritizeGroundItem: (stack) => stack.itemId === 526,
+        },
+    });
+    const plugin = new TouchControlsPlugin(client);
+    plugin.onClientTick();
+    const options = plugin.getUiState().action?.options ?? [];
+    assert.deepEqual(options.map((o) => `${o.option} ${o.target}`), ["Take Coins (250)", "Take Bones"],
+        "the newest stack first, a hidden item's Take last");
+    plugin.interact(options[1].id);
+    assert.deepEqual(taken, [1], "Take sends that stack");
+    stacks.splice(1, 1);
+    version++;
+    plugin.onClientTick();
+    assert.deepEqual(plugin.getUiState().action?.options.map((o) => o.target), ["Bones"], "a taken stack goes from the list");
+    at = { x: 41, y: 40 };
+    plugin.onClientTick();
+    assert.equal(plugin.getUiState().action, undefined, "stepping off drops the pile");
 }
 
 console.log("touch controls plugin test passed");
