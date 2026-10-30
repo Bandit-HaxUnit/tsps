@@ -5,7 +5,7 @@ Every quest the server registers, with the latest result recorded in its page he
 test a quest is in [server/docs/agents/quest-testing.md](../../server/docs/agents/quest-testing.md);
 how to record the result is in [_template/README.md](_template/README.md).
 
-185 quests · ✅ passed: 30 · ⚠️ passed with issues: 20 · 🔄 in progress: 5 · ❌ failed: 1 · 🔁 needs recheck: 5 · untested: 124
+185 quests · ✅ passed: 30 · ⚠️ passed with issues: 21 · 🔄 in progress: 5 · ❌ failed: 1 · 🔁 needs recheck: 5 · untested: 123
 
 "Needs recheck" means the quest's plugin has changed since the commit its result was proven on.
 
@@ -168,7 +168,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [The Hand in the Sand](hand-in-the-sand/README.md) | untested |  |  |  |  |
 | [The Heart of Darkness](the-heart-of-darkness/README.md) | untested |  |  |  |  |
 | [The Ides of Milk](the-ides-of-milk/README.md) | ✅ passed | 2026-10-25 | community |  |  |
-| The Knight's Sword | untested |  |  |  |  |
+| [The Knight's Sword](the-knights-sword/README.md) | ⚠️ passed with issues | 2026-10-30 | agent | claude-haiku-5-5 | 6 |
 | The Lost Tribe | untested |  |  |  |  |
 | [The Path of Glouphrie](the-path-of-glouphrie/README.md) | untested |  |  |  |  |
 | [The Queen of Thieves](the-queen-of-thieves/README.md) | ⚠️ passed with issues | 2026-10-25 | agent |  | 2 |
