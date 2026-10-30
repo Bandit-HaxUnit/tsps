@@ -1181,8 +1181,10 @@ export function encodeBankSlot(slot: BankSlotView): Buffer {
   return encodeServerPacket(ServerPacketId.BANK_SLOT, encodeBankSlotPayload(slot));
 }
 
+export const GROUND_ITEM_BYTES = 33;
+
 function encodeGroundItem(stack: GroundItemView): Buffer {
-  const payload = Buffer.alloc(33);
+  const payload = Buffer.alloc(GROUND_ITEM_BYTES);
   payload.writeInt32BE(stack.id | 0);
   payload.writeUInt16BE(stack.itemId & 0xffff, 4);
   payload.writeInt32BE(stack.quantity | 0, 6);

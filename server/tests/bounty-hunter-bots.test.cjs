@@ -6,7 +6,7 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 
 const Bots = require('../plugins/minigames/bountyhunter/Bots.BountyHunter');
-const { pickTierChoice, TIER_BANDS, archetypeCombatLevel } = require('../plugins/bots/behaviours/pvp/PvpTierLoadouts.PlayerBots');
+const { buildStyle, pickTierChoice, TIER_BANDS, archetypeCombatLevel } = require('../plugins/bots/behaviours/pvp/PvpTierLoadouts.PlayerBots');
 
 const Entry = require('../plugins/minigames/bountyhunter/Entry.BountyHunter');
 const Coffer = require('../plugins/minigames/bountyhunter/Coffer.BountyHunter');
@@ -139,8 +139,17 @@ test('the capped roster fills one per tick across combat bands and restores bots
     assert.equal(spawned.length, index + 1, 'at most one spawn per tick');
   }
   assert.deepEqual(spawned.map((bot) => bot.getUsername()), Array.from({ length: 60 }, (_, i) => `BhBot${i + 1}`));
+  const { PVP_LOADOUT_DEFINITIONS } = require('../plugins/bots/behaviours/pvp/PvpLoadoutRegistry.PlayerBots');
+  const archetypes = new Map(PVP_LOADOUT_DEFINITIONS.archetypes.map((entry) => [entry.id, entry]));
+  const styleOf = (bot) => buildStyle(archetypes.get(runtime.botStatesByName.get(bot.getUsername()).pvp.generatedArchetypeId));
   for (const band of Bots._test.BOT_BANDS) {
-    assert.equal(spawned.filter((bot) => bot.band.min === band.min).length, 12, `${band.min}-${band.max}`);
+    const inBand = spawned.filter((bot) => bot.band.min === band.min);
+    assert.equal(inBand.length, 12, `${band.min}-${band.max}`);
+    // 45/30/25 of 12 is 5.4/3.6/3: each style within one bot of its share.
+    for (const [style, weight] of Object.entries(Bots._test.STYLE_WEIGHTS)) {
+      const count = inBand.filter((bot) => styleOf(bot) === style).length;
+      assert.ok(Math.abs(count - (weight / 100) * 12) <= 1, `${band.min}-${band.max} ${style}: ${count}`);
+    }
   }
   assert.deepEqual([...new Set(spawned.map((bot) => runtime.botStatesByName.get(bot.getUsername()).pvp.profileId))].sort(),
     ['elite', 'novice', 'standard', 'veteran'], 'the high end includes the advanced shared PvP profile');

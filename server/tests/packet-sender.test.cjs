@@ -215,3 +215,23 @@ test('sub-interface mount ownership survives same-ID replacement, relocation and
   await Promise.resolve();
   assert.ok(delivered.length,'the actual session delivers the native mount/close packets');
 });
+
+test('a crater full of ground items goes as a snapshot and deltas, each inside one game message', () => {
+  // A browser-host world drops the connection on a message over 64 KiB; Bounty Hunter bot loot
+  // made one ground-items snapshot pass that, so dying there disconnected the player.
+  const { MAX_GAME_MESSAGE_BYTES } = require('../dist/net/BinaryChannel');
+  const frames = [];
+  const player = { getUsername: () => 'p', getIndex: () => 1, getSession: () => ({ sendClientPacket: (frame) => { frames.push(frame); return true; } }) };
+  const items = Array.from({ length: 5000 }, (_, id) => ({
+    getId: () => id, getItem: () => ({ getId: () => 526, getAmount: () => 1 }),
+    getPosition: () => ({ getX: () => 3423, getY: () => 4061, getZ: () => 0 }),
+  }));
+  new PacketSender(player).sendGroundItems(items);
+  assert.ok(frames.length > 1);
+  assert.ok(frames.every((frame) => frame.length <= MAX_GAME_MESSAGE_BYTES), 'every frame fits one message');
+  assert.deepEqual(frames.map((frame) => frame[0]), [54, ...frames.slice(1).map(() => 55)], 'snapshot, then deltas');
+  // Header: opcode, u16 size, i32 serial, u16 stack count.
+  assert.equal(frames.reduce((total, frame) => total + frame.readUInt16BE(7), 0), items.length);
+  new PacketSender(player).sendGroundItems([]);
+  assert.equal(frames.at(-1)[0], 54, 'an empty view still clears the client');
+});
