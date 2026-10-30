@@ -269,9 +269,15 @@ export function handleInboundUi(msg: any): boolean {
             const g: any = (typeof window !== "undefined" ? window : globalThis) as any;
             const mv = g?.__osrsClient;
             if (msg.payload?.datasets?.some((dataset: any) =>
-                dataset.key === "customItems" || dataset.key === "customModels")) {
+                dataset.key === "customItems" || dataset.key === "customModels" ||
+                dataset.key === "definitionArchives")) {
                 mv?.objTypeLoader?.clearCache();
                 mv?.objModelLoader?.clearCache();
+                if (datasets?.some((dataset: any) => dataset.key === "definitionArchives")) {
+                    mv?.npcTypeLoader?.clearCache();
+                    mv?.locTypeLoader?.clearCache();
+                    mv?.renderer?.invalidateDefinitionCaches();
+                }
                 mv?.workerPool?.runAll((worker: any) => worker.setCustomContent(msg.payload))
                     .catch((error: unknown) => console.error("Custom worker content failed", error));
             }

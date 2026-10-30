@@ -19,6 +19,7 @@
  */
 const fs = require("fs");
 const path = require("path");
+const { isDeepStrictEqual } = require("node:util");
 const { GameConstants } = require("../../src/main/typescript/elvarg/game/GameConstants");
 const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
 const { PluginManager } = require("../../src/main/typescript/elvarg/plugins/PluginManager");
@@ -183,6 +184,7 @@ function formatPlayerText(text, player) {
  * NPC silent. Prefer the standard talk transcript over overhead shouts.
  */
 function pickVariant(npc) {
+  if (npc?.activation === "explicit") return undefined;
   if (Array.isArray(npc?.steps)) return npc.steps;
   const variants = npc?.variants;
   if (!variants) return undefined;
@@ -1030,16 +1032,36 @@ module.exports = {
   register(api) {
     const dialogueFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json");
     const indexFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogue-index.json");
+    const eventFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "event-dialogues.json");
     // Parsed on the first Talk-to rather than at boot: the 17 MiB transcript dump expands
     // to ~35 MiB of objects, and a world where nobody talks never needs it.
     let loaded;
     const load = () => {
       if (loaded) return loaded;
-      const data = JSON.parse(fs.readFileSync(dialogueFile, "utf8"));
+      let data = JSON.parse(fs.readFileSync(dialogueFile, "utf8"));
       if (!data || typeof data !== "object" || Array.isArray(data)) {
         throw new Error(`${dialogueFile}: expected dialogues keyed by transcript name`);
       }
+      let events = {};
+      try {
+        events = JSON.parse(fs.readFileSync(eventFile, "utf8"));
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+      }
+      if (!events || typeof events !== "object" || Array.isArray(events)) {
+        throw new Error(`${eventFile}: expected activity dialogues keyed by transcript name`);
+      }
+      for (const [name, record] of Object.entries(events)) {
+        if (record?.activation !== "explicit") throw new Error(`${eventFile}: ${name} must have an explicit activation`);
+        if (Object.hasOwn(data, name) && !isDeepStrictEqual(data[name], record)) {
+          throw new Error(`${eventFile}: ${name} conflicts with the ordinary dialogue catalogue`);
+        }
+      }
+      data = { ...data, ...events };
       for (const [name, npc] of Object.entries(data)) {
+        if (npc.activation !== undefined && npc.activation !== "explicit") {
+          throw new Error(`${dialogueFile}: ${name} has an unsupported activation`);
+        }
         if (npc.steps !== undefined && !Array.isArray(npc.steps)) {
           throw new Error(`${dialogueFile}: ${name} has non-array steps`);
         }
@@ -1069,6 +1091,12 @@ module.exports = {
       const pages = entries
         .map((entry) => ({ page: String(entry.page ?? "").replace(/^Transcript:/, ""), variants: Array.isArray(entry.variants) ? entry.variants : [] }))
         .filter((entry) => Object.hasOwn(data, entry.page));
+      // Only the trusted custom-event activation may bind an unindexed actor to
+      // a named source page (retired seasonal NPC ids need not exist this year).
+      const requestedPage = event.explicit && typeof event.variant === "object" ? event.variant?.page : undefined;
+      if (requestedPage && Object.hasOwn(data, requestedPage) && !pages.some((entry) => entry.page === requestedPage)) {
+        pages.push({ page: requestedPage, variants: Object.keys(data[requestedPage]?.variants ?? {}) });
+      }
       // A named transform missing from the id index still needs variant selectors.
       // Use the same resolution path as an indexed page rather than silently taking its default.
       if (!pages.length) {
@@ -1114,6 +1142,7 @@ module.exports = {
             const steps = wanted ? (record?.variants ? record.variants[wanted]
               : wanted === "standard-dialogue" ? record?.steps : undefined) : pickVariant(record);
             if (Array.isArray(steps)) return withOptions(page.page, { steps, branches: record?.branches, context, variant: wanted });
+            if (record?.activation === "explicit") return null;
           }
         }
         const first = pages.find((entry) => pickVariant(data[entry.page]));
@@ -1142,7 +1171,7 @@ module.exports = {
     api.onCustomEvent("npc-dialogue:start", (request) => {
       const definition = NpcDefinition.forId(request.npcId);
       if (!request.player || !definition) return;
-      const event = { player: request.player, npc: request.npc, npcId: request.npcId, definition, variant: request.variant };
+      const event = { player: request.player, npc: request.npc, npcId: request.npcId, definition, variant: request.variant, explicit: true };
       const resolved = resolveTranscript(event);
       const wanted = typeof request.variant === "string" ? request.variant : request.variant?.variant;
       const wantedPage = typeof request.variant === "object" ? request.variant?.page : undefined;

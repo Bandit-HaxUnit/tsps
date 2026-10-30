@@ -79,7 +79,7 @@ export function fnv(text: string): string {
 }
 
 /** "<cache identity>|<hash of every input that changes the output>". */
-export function cacheKey(info: CacheInfo, input: SdMapLoaderInput, npcsHash: string): string {
+export function cacheKey(info: CacheInfo, input: SdMapLoaderInput, npcsHash: string, definitionArchiveKey = ""): string {
     const prefix = `${info.game}/${info.environment}/${info.name}/${info.revision}/${info.timestamp}/${info.size}/v${CACHE_FORMAT}`;
     const fields = [
         input.mapX,
@@ -89,6 +89,7 @@ export function cacheKey(info: CacheInfo, input: SdMapLoaderInput, npcsHash: str
         input.smoothTerrain,
         input.minimizeDrawCalls,
         input.loadNpcs ? npcsHash : "",
+        ...(definitionArchiveKey ? [`definitionArchives:${definitionArchiveKey}`] : []),
         // Only when on, so squares cached before this option keep their keys.
         ...(input.smoothLocAnimations ? [`smoothLocAnimations:${input.smoothLocAnimationSteps ?? 4}`] : []),
     ];
