@@ -61,6 +61,10 @@ function binAction(player, patch, action, usedId, usedSlot) {
     if (usedId && core.CacheDefinitions.getItem(usedId).noteTemplate >= 0) {
         player.sendMessage("You cannot use noted items on a compost bin."); return;
     }
+    if (action === "dump") {
+        if (bin.count) confirmDump(player, patch, bin);
+        return;
+    }
     // Captures (recording 1858): the push and its sound with the spam line, the bin changing a tick later.
     if (action === "close") {
         if (bin.count !== capacity) { player.sendMessage(`The bin needs ${capacity} items before you can close it.`); return; }
@@ -117,6 +121,19 @@ function binAction(player, patch, action, usedId, usedSlot) {
         return;
     }
     player.sendMessage(`The compost bin contains ${bin.count}/${capacity} items${bin.closedAt && !bin.open ? ", rotting" : ""}.`);
+}
+// The Wiki permits discarding contents; no indexed capture establishes the Dump prompt or timing.
+function confirmDump(player, patch, bin) {
+    const position = player.getLocation().clone(), area = player.getArea();
+    const contents = JSON.stringify(bin);
+    Patches.choose(player, [["Yes, discard the contents.", () => {
+        if (!player.isRegistered() || player.getHitpoints() <= 0 || player.isNeedsPlacement()
+            || player.getArea() !== area || !player.getLocation().equals(position)
+            || Patches.stateFor(player, patch).bin !== bin || JSON.stringify(bin) !== contents) return;
+        Patches.stateFor(player, patch).bin = undefined;
+        Patches.syncPatch(player, patch);
+        player.sendMessage("You empty the compost bin.");
+    }], ["No, keep them.", () => {}]], 0, "Discard all contents of this compost bin?");
 }
 function pushLid(player, sound, line) {
     player.performAnimation(new core.Animation(BIN_LID_ANIMATION));
