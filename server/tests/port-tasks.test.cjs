@@ -25,6 +25,7 @@ before(async () => {
     onPlayerDeath() {},
     onCanEquip() {},
     onCanUnequip() {},
+    onCanBankItem() {},
     onObjectInteraction: (name, actions) => { hooks.objects[name] = { ...hooks.objects[name], ...actions }; },
     onNpcInteraction: (name, actions) => { hooks.npcs[name] = actions; },
     onItemAction: (name, actions) => { hooks.items[name] = actions; },

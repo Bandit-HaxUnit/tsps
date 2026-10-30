@@ -303,3 +303,32 @@ test('real boat Helm Navigate and Sails Trim reject the clicking player carrying
   ticks(30);
   assert.notEqual(common.heldCrate(p), undefined, 'the boat deck is safe for hand cargo');
 });
+for (const route of ['bank', 'deposit-box']) {
+  test(`native ${route} Deposit worn cannot bank ledger cargo and still deposits ordinary equipment`, async t => {
+    const p = player(t), task = common.taskById(20);
+    common.setSlots(p, [{ id: task.id, taken: 0, delivered: 0 }]);
+    const object = core.ObjectManager.objectsAt(new core.Location(3061, 2985, 0)).find(object => object.getType() === 10);
+    assert.ok(object);objectOption(p, object, 'Take-cargo');
+    assert.equal(common.heldCrate(p), task.crate, 'crate produced by native ledger interaction');
+    const helmet = core.ItemIdentifiers.IRON_FULL_HELM;
+    p.getEquipment().setItem(core.Equipment.HEAD_SLOT, new core.Item(helmet));
+    p.getPacketSender().sendInterfaceRemoval();
+    if (route === 'bank') p.getBank(0).open();
+    else PM.emitCustomEvent('bank:open-deposit-box', { player: p });
+    const widgetId = core.CacheDefinitions.getComponentId(route === 'bank' ? 'bankmain:depositworn' : 'bank_depositbox:deposit_worn');
+    assert.ok(widgetId > 0);
+    const channel = { isOpen: () => true, send: () => true, onData() {}, onError() {}, onClose() {}, close() {} };
+    const connection = new ClientConnection(channel); connection.player = p;
+    await connection.dispatch([{ type: 'widget_action', widgetId, groupId: widgetId >>> 16, childId: widgetId & 65535,
+      buttonNum: 1, slot: -1, itemId: -1 }]);connection.processTurnPackets();
+    assert.equal(p.getBank(0).getAmount(task.crate), 0);
+    assert.equal(common.heldCrate(p), task.crate);assert.equal(common.slots(p)[0].taken, 1);
+    assert.equal(p.getAttribute(common.CARRIED_SLOT_ATTRIBUTE), 0);
+    assert.equal(p.getPacketSender().getVarbit(common.VARBIT.CARRYING_CARGO), 1);
+    assert.equal(p.getBank(0).getAmount(helmet), 1, 'ordinary equipment remains bankable');
+    assert.ok(p.messages.includes("You can't remove the cargo. You'll need to find a safe place to put it down first."));
+    p.getPacketSender().sendInterfaceRemoval();outside(p);ticks(25);
+    assert.equal(common.heldCrate(p), undefined);assert.equal(common.slots(p)[0].taken, 0);
+    assert.equal(p.getBank(0).getAmount(task.crate), 0);
+  });
+}

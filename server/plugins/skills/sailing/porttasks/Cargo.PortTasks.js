@@ -113,6 +113,13 @@ function canUnequip(event) {
   event.player.sendMessage(CANNOT_REMOVE);
 }
 
+// Deposit worn uses the bank policy directly, without the equipment removal hook.
+function canBankCargo(event) {
+  if (!common.isCrate(event.item.getId())) return;
+  event.allow = false;
+  event.player.sendMessage(CANNOT_REMOVE);
+}
+
 function attach(api) {
   common.init(api);
   api.persistAttribute(common.CARRIED_SLOT_ATTRIBUTE, -1);
@@ -122,6 +129,7 @@ function attach(api) {
   api.onCustomEvent("sailing:can-use-hands", canUseHands);
   api.onCanEquip(canEquip);
   api.onCanUnequip(canUnequip);
+  api.onCanBankItem(canBankCargo);
   api.onPlayerLogin(login);
   api.onPlayerLogout(forget);
   api.onPlayerDeath(died);

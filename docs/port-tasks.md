@@ -485,3 +485,9 @@ route, so this is not claimed as a normal native walk across an official boundar
 independent movement/cancellation regression verifies the 22-tick watcher flow separately.
 The QA server saved the account and shut down gracefully; its separate static client was
 also stopped. No live server was used.
+
+Bank and deposit-box Deposit worn use Bank.depositItems -> emitCanBankItem, not the equipment
+Remove hook. Cargo attaches the shared banking policy as well, refusing every port-task crate;
+ordinary equipment still deposits. Native regression tests produce the crate from the real
+Pandemonium ledger, click each Deposit worn interface and verify task/owner/varbit consistency
+and subsequent outside-port confiscation.
