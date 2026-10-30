@@ -225,7 +225,7 @@ test('a requested varbit is filled with its cache definition and packs into its 
  const filled=fillRequested({varbits:{},varbitDefinitions:{}}, [{kind:'varbit',id:1788},{kind:'geometry',id:0}], read);
  assert.deepEqual(filled.snapshot.varbits,{1788:1});
  assert.deepEqual(filled.snapshot.varbitDefinitions,{1788:{varp:33,lsb:1,msb:1}});
- assert.equal(filled.added,1);
+ assert.deepEqual(filled.ids,[1788]);
  assert.deepEqual(filled.unsupported,[{kind:'geometry',id:0}]);
  assert.equal(fillRequested({varbits:{}}, [{kind:'varbit',id:9999}], {varbit:()=>0,definition:()=>null}),null,'no definition, no guess');
  assert.equal(fillRequested({varbits:{}}, [{kind:'geometry',id:0}], {varbit:()=>0,definition:()=>null}),null);
@@ -264,11 +264,38 @@ test('unanswerable requests are reported instead of looping',async()=>{
  assert.equal(f.calls.length,1,'nothing to fill, nothing to retry');
  assert.deepEqual(result.requestsUnresolved,[{kind:'geometry',id:0}]);
 
- const looping=fixture();
- looping.bridge.evaluate=async request=>{looping.calls.push(request);return {status:'unavailable',activeStep:null,requests:[{kind:'varbit',id:1788}]};};
- const bounded=new QuestHelperRuntime({getQuests:()=>[looping.quest],bridge:looping.bridge,send:()=>{},
+ // A bridge that always asks for the same value it was just given learns nothing new and stops
+ // immediately rather than burning the whole budget.
+ const stuck=fixture();
+ stuck.bridge.evaluate=async request=>{stuck.calls.push(request);return {status:'unavailable',activeStep:null,requests:[{kind:'varbit',id:1788}]};};
+ const stuckRuntime=new QuestHelperRuntime({getQuests:()=>[stuck.quest],bridge:stuck.bridge,send:()=>{},
   fillRequests:(_p,requests,snapshot)=>fillRequested(snapshot,requests,{varbit:()=>1,definition:()=>({baseVar:33,startBit:1,endBit:1})})});
- const boundedResult=await bounded.evaluateHeadless(looping.player,{questKey:'cooks_assistant',snapshot:{localPlayer:{}}});
- assert.equal(looping.calls.length,5,'four fills then stop');
- assert.equal(boundedResult.requestsFilled,4);
+ const stuckResult=await stuckRuntime.evaluateHeadless(stuck.player,{questKey:'cooks_assistant',snapshot:{localPlayer:{}}});
+ assert.equal(stuck.calls.length,2,'the repeated ask is reported, not retried');
+ assert.equal(stuckResult.requestsFilled,1);
+ assert.deepEqual(stuckResult.requestsUnresolved,[{kind:'varbit',id:1788}]);
+
+ // The worst case measured across the pinned helpers: 55 distinct varbits in one quest file
+ // (Mourning's End Part II). One round each, all in one call.
+ const chain=fixture();
+ const ids=[...Array(55)].map((_,index)=>3000+index);
+ chain.bridge.evaluate=async request=>{
+  chain.calls.push(request);
+  const missing=ids.find(id=>request.snapshot.varbits[id]===undefined);
+  return missing===undefined
+   ?bridgeResult(request)
+   :{status:'unavailable',activeStep:null,requests:[{kind:'varbit',id:missing}]};
+ };
+ const chainRuntime=new QuestHelperRuntime({getQuests:()=>[chain.quest],bridge:chain.bridge,send:()=>{},
+  varbitDefinition:()=>({baseVar:500,startBit:0,endBit:15}),
+  fillRequests:(_p,requests,snapshot)=>fillRequested(snapshot,requests,{varbit:id=>id-3000,definition:()=>({baseVar:500,startBit:0,endBit:15})})});
+ const chainResult=await chainRuntime.evaluateHeadless(chain.player,{questKey:'cooks_assistant',snapshot:{localPlayer:{}}});
+ assert.equal(chain.calls.length,ids.length+1,'one round per value, one call');
+ assert.equal(chainResult.activeStep.id,'step-1');
+ assert.equal(chainResult.requestsFilled,ids.length);
+
+ // The same chain on a second call costs one evaluation, because the values are remembered.
+ const before=chain.calls.length;
+ await chainRuntime.evaluateHeadless(chain.player,{questKey:'cooks_assistant',snapshot:{localPlayer:{}}});
+ assert.equal(chain.calls.length,before+1,'a later call does not walk the chain again');
 });

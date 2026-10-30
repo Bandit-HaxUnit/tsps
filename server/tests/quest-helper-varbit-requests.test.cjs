@@ -22,6 +22,10 @@ const { fillRequested } = require("../plugins/quests/questhelper/Requests.QuestH
 const VARP_LEVERS = 33;
 const VARBIT_LEVER_A = 1788;
 const LEVER_A_OBJECT = 146;
+// ErnestTheChicken.java checks A/E first, then B/C/D/F/E. Conditions.check() evaluates every child
+// (no short-circuit) and SnapshotClient.varbit() throws on the first missing id, so one evaluation
+// asks for these one at a time, in this order. A single tool call has to walk all six.
+const LEVER_VARBITS = [1788, 1792, 1789, 1790, 1791, 1793];
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
@@ -124,19 +128,21 @@ test("a lever varbit the helper asks for is recovered from the real producer", a
   assert.equal(snapshot.varbits[VARBIT_LEVER_A], undefined, "the plain snapshot omits it");
 
   const calls = [];
-  let round = 0;
   const bridge = {
     catalog: async () => ({ quests: [{ questKey: quest.key, supported: true }] }),
     close: async () => {},
     evaluate: async (request) => {
       calls.push(request);
-      round += 1;
-      // Exactly what the pinned helper does: read the lever varbit, and ask for it if absent.
-      if (round === 1) return {
-        protocol: 1, status: "unavailable", activeStep: null,
-        diagnostics: [{ code: "MISSING_STATE", method: "varbit", message: "Snapshot requires varbit 1788" }],
-        requests: [{ kind: "varbit", id: VARBIT_LEVER_A }, { kind: "varbitDefinition", id: VARBIT_LEVER_A }],
-      };
+      // Exactly what the pinned helper does: read the lever varbits in its own order, and ask for
+      // the first one the snapshot is missing.
+      for (const id of LEVER_VARBITS) {
+        const value = request.snapshot.varbits[id];
+        if (value === undefined) return {
+          protocol: 1, status: "unavailable", activeStep: null,
+          diagnostics: [{ code: "MISSING_STATE", method: "varbit", message: `Snapshot requires varbit ${id}` }],
+          requests: [{ kind: "varbit", id }, { kind: "varbitDefinition", id }],
+        };
+      }
       return bridgeReply(request);
     },
   };
@@ -148,14 +154,27 @@ test("a lever varbit the helper asks for is recovered from the real producer", a
   });
   const result = await runtime.evaluateHeadless(player, { questKey: quest.key, snapshot });
 
-  assert.equal(calls.length, 2, "the bridge is asked again after its request is answered");
-  const retry = calls[1].snapshot;
-  assert.equal(retry.varbits[VARBIT_LEVER_A], 1, "the retry carries the lever value");
-  assert.deepEqual(retry.varbitDefinitions[VARBIT_LEVER_A], { varp: VARP_LEVERS, lsb: 1, msb: 1 });
-  // The bridge reads a varbit as (varp >>> lsb) & mask, so the packed varp must agree.
-  const packed = (retry.varps[VARP_LEVERS] >>> retry.varbitDefinitions[VARBIT_LEVER_A].lsb)
-    & (-1 >>> (31 - (retry.varbitDefinitions[VARBIT_LEVER_A].msb - retry.varbitDefinitions[VARBIT_LEVER_A].lsb)));
-  assert.equal(packed, 1, "the packed varp reads back as lever A pulled");
+  assert.equal(calls.length, LEVER_VARBITS.length + 1, "one round per lever, then the answer");
+  const last = calls.at(-1).snapshot;
+  for (const id of LEVER_VARBITS) {
+    const expected = id === VARBIT_LEVER_A ? 1 : 0;
+    assert.equal(last.varbits[id], expected, `varbit ${id} is present in the final request`);
+    const definition = last.varbitDefinitions[id];
+    assert.ok(definition, `varbit ${id} definition is present`);
+    // The bridge reads a varbit as (varp >>> lsb) & mask, so the packed varp must agree.
+    const packed = (last.varps[definition.varp] >>> definition.lsb) & (-1 >>> (31 - (definition.msb - definition.lsb)));
+    assert.equal(packed, expected, `packed varp ${definition.varp} reads back ${id} as ${expected}`);
+  }
   assert.equal(result.activeStep.id, "getCan", "the step survives instead of coming back unavailable");
-  assert.equal(result.requestsFilled, 1);
+  assert.equal(result.requestsFilled, LEVER_VARBITS.length);
+
+  // A second call starts from an empty snapshot again, but the discovered values are remembered
+  // and refreshed from the server, so the chain is not walked twice.
+  const before = calls.length;
+  const second = await runtime.evaluateHeadless(player, {
+    questKey: quest.key, snapshot: collectQuestHelperSnapshot(sceneDeps, player, { radius: 8 }),
+  });
+  assert.equal(calls.length, before + 1, "the second call evaluates once");
+  assert.equal(calls.at(-1).snapshot.varbits[VARBIT_LEVER_A], 1, "and still carries the lever value");
+  assert.equal(second.requestsFilled, undefined, "nothing left to fill");
 });

@@ -33,7 +33,7 @@ function fillRequested(snapshot, requests, read) {
   const { varbits, unsupported } = classify(requests);
   const values = { ...(snapshot.varbits ?? {}) };
   const definitions = { ...(snapshot.varbitDefinitions ?? {}) };
-  let added = 0;
+  const ids = [];
   for (const id of varbits) {
     const definition = read.definition(id);
     const value = read.varbit(id);
@@ -44,10 +44,10 @@ function fillRequested(snapshot, requests, read) {
     if (!Number.isInteger(varp) || !Number.isInteger(lsb) || !Number.isInteger(msb)) continue;
     definitions[id] = { varp, lsb, msb };
     values[id] = value | 0;
-    added += 1;
+    ids.push(id);
   }
-  if (added === 0) return null;
-  return { snapshot: { ...snapshot, varbits: values, varbitDefinitions: definitions }, added, unsupported };
+  if (ids.length === 0) return null;
+  return { snapshot: { ...snapshot, varbits: values, varbitDefinitions: definitions }, ids, unsupported };
 }
 
 module.exports = { classify, fillRequested, MAX_REQUESTS };

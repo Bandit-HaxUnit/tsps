@@ -10,8 +10,11 @@ function lockSection(value){return record(value)&&Number.isSafeInteger(value.sec
 const status=(q,p)=>q.isComplete(p)?'FINISHED':q.isStarted(p)?'IN_PROGRESS':'NOT_STARTED';
 function items(container){return container.getItems().flatMap((item,slot)=>item&&item.getId()>0&&item.getAmount()>0?[{id:item.getId(),quantity:item.getAmount(),slot}]:[]);}
 const MAX_EVENTS=1024;
-// How many times one headless call answers the bridge's state requests before giving up.
-const MAX_REQUEST_ROUNDS=4;
+// One round per value the helper discovers, because SnapshotClient.varbit() throws on the first
+// missing id: Ernest's six-lever condition tree needs six rounds in a single call. The bound is
+// above the largest number of distinct varbits any single helper file reads (55, Mourning's End
+// Part II), and it exists only so a bridge that keeps asking cannot spin forever.
+const MAX_REQUEST_ROUNDS=64;
 const validEvents=events=>Array.isArray(events)&&events.length<=MAX_EVENTS&&events.every(event=>record(event)&&typeof event.type==='string'&&event.type.length<=128);
 
 class QuestHelperRuntime {
@@ -65,7 +68,14 @@ class QuestHelperRuntime {
   if(state.busy)throw new Error('Quest Helper is still evaluating the previous headless call');
   state.busy=true;
   try {
-   let snapshot=options.snapshot,response=null,rounds=0,unresolved=[];
+   let snapshot=options.snapshot,response=null,rounds=0,unresolved=[],lastRequests='';
+   // Values already discovered for this route, refreshed from the server on every call: the chain
+   // is walked once, not once per tool call.
+   state.requested??=new Set();
+   if(state.requested.size&&this.fillRequests){
+    const seeded=this.fillRequests(player,[...state.requested].map(id=>({kind:'varbit',id})),snapshot);
+    if(seeded)snapshot=seeded.snapshot;
+   }
    for(;;){
     const data={questKey:quest.key,helperVariant:variant,snapshot,events:options.events??[],config:options.config,lockSection:options.lockSection,bankTab:options.bankTab,sequence:state.sequence+1};
     state.sequence=data.sequence;
@@ -82,9 +92,12 @@ class QuestHelperRuntime {
     // A step that reads state the snapshot omits asks for it instead of failing. Answer from the
     // server and ask again, bounded: the browser does the same between two snapshots.
     const requests=Array.isArray(response.requests)?response.requests:[];
+    const signature=JSON.stringify(requests);
     const filled=requests.length&&this.fillRequests&&rounds<MAX_REQUEST_ROUNDS?this.fillRequests(player,requests,snapshot):null;
-    if(!filled){unresolved=requests;break;}
-    snapshot=filled.snapshot;unresolved=filled.unsupported;rounds+=1;
+    // No new value to learn and the same ask again: the chain is stuck, report it rather than spin.
+    if(!filled||(signature===lastRequests&&!filled.ids.some(id=>!state.requested.has(id)))){unresolved=requests;break;}
+    for(const id of filled.ids)state.requested.add(id);
+    snapshot=filled.snapshot;unresolved=filled.unsupported;rounds+=1;lastRequests=signature;
    }
    if(this.agents.get(player)!==state)throw new Error('Quest Helper session was closed while evaluating');
    const result={...response,type:'result',protocol:1,session:state.session,sequence:state.sequence,questKey:quest.key,questProgress:this.progress(player),...(rounds?{requestsFilled:rounds}:{}),...(unresolved.length?{requestsUnresolved:unresolved}:{})};
@@ -157,4 +170,4 @@ class QuestHelperRuntime {
   return snapshot;
  }
 }
-module.exports={QuestHelperRuntime,helperConfig,lockSection};
+module.exports={QuestHelperRuntime,helperConfig,lockSection,MAX_REQUEST_ROUNDS};
