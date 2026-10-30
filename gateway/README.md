@@ -9,6 +9,10 @@ same way the browser client does, translating both ways.
 official client ── RSProx ── TCP ──▶ gateway (GATEWAY_PORT) ── WebSocket ──▶ tsps (WEBSOCKET_PORT)
 ```
 
+It is separate from `tools/runelite-gateway`, a single-client RuneLite demo that reads snapshots
+from a server plugin instead of tsps's protocol; the two don't share code or ports.
+[COVERAGE.md](COVERAGE.md) lists every tsps packet and what it becomes.
+
 ## Running
 
 ```bash
