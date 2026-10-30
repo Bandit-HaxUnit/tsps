@@ -39,6 +39,8 @@ class Interfaces(
     private val stockMarket: StockMarket,
     /** Inventories riding on WIDGET_RUN_SCRIPT, by OSRS inv id. */
     private val inventories: (TspsReader) -> Unit,
+    /** Whether the client has this component; anything aimed at one it hasn't is dropped. */
+    private val exists: (Int) -> Boolean,
     private val send: (OutgoingGameMessage) -> Unit,
 ) {
     /** Returns false for a message this translator doesn't handle. */
@@ -96,7 +98,8 @@ class Interfaces(
                 val start = reader.u16().signed16()
                 val end = reader.u16().signed16()
                 val flags = reader.i32()
-                send(IfSetEventsV2(uid ushr 16, uid and 0xFFFF, start, end, flags, reader.i32()))
+                val ops = reader.i32()
+                if (exists(uid)) send(IfSetEventsV2(uid ushr 16, uid and 0xFFFF, start, end, flags, ops)) else dropped()
             }
             TspsServerPacket.WIDGET_RUN_SCRIPT -> runScriptBundle(reader)
             TspsServerPacket.RUN_CLIENT_SCRIPT -> script(reader.u16(), reader)
@@ -139,7 +142,7 @@ class Interfaces(
             return
         }
         openSub(target, group, type)
-        for (uid in hidden) send(IfSetHide(uid ushr 16, uid and 0xFFFF, true))
+        for (uid in hidden) if (exists(uid)) send(IfSetHide(uid ushr 16, uid and 0xFFFF, true)) else dropped()
         postScripts.forEach(send)
     }
 
@@ -173,6 +176,7 @@ class Interfaces(
     /** Old-format flags carry ops 1-10 in bits 1-10; IF_SETEVENTS_V2 wants them in events2. */
     private fun events(uid: Int, start: Int, end: Int, flags: Int) {
         val ops = (flags ushr 1) and OLD_OP_BITS
+        if (!exists(uid)) return dropped()
         send(IfSetEventsV2(uid ushr 16, uid and 0xFFFF, start.signed16(), end.signed16(), flags and (OLD_OP_BITS shl 1).inv(), ops))
     }
 
@@ -193,14 +197,19 @@ class Interfaces(
 
     private inline fun component(reader: TspsReader, message: (Int, Int) -> OutgoingGameMessage) {
         val uid = tree.remap(reader.i32())
-        send(message(uid ushr 16, uid and 0xFFFF))
+        val built = message(uid ushr 16, uid and 0xFFFF)
+        if (exists(uid)) send(built) else dropped()
     }
+
+    private fun dropped() = DropCounter.down(DROPPED_COMPONENT)
 
     private fun TspsReader.optionalU8() = if (remaining > 0) u8() else 0
 
     private fun Int.signed16() = if (this == 0xFFFF) -1 else this
 
     private companion object {
+        /** Counted as its own "opcode": a widget message for a component the cache doesn't have. */
+        const val DROPPED_COMPONENT = -1
         const val MODAL = 0
         const val CUSTOM_INTERFACE_START = 30_000
         const val ARG_STRING = 0

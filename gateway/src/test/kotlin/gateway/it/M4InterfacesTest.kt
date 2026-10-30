@@ -10,6 +10,7 @@ import net.rsprox.protocol.game.outgoing.model.varp.VarpLarge
 import net.rsprox.protocol.game.outgoing.model.varp.VarpSmall
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import gateway.cache.InterfaceComponents
 import gateway.cache.VarTypes
 import gateway.headless.TestCache
 import org.junit.jupiter.api.Test
@@ -27,6 +28,25 @@ class M4InterfacesTest {
             assertTrue(INVENTORY in mounted && EQUIPMENT in mounted && SKILLS in mounted, "mounted $mounted")
             assertTrue(messages.filterIsInstance<UpdateStatV2>().size >= SKILL_COUNT)
             assertTrue(messages.any { it is VarpSmall || it is VarpLarge })
+        }
+    }
+
+    @Test
+    fun `login only touches components the client has`() {
+        // The official client throws on a widget message for a component it doesn't have (tsps
+        // still sends some 317-style flat ids); the headless client doesn't check, so this does.
+        val components = InterfaceComponents(TestCache.cache)
+        login().use { game ->
+            val missing =
+                game.until(TICKS).mapNotNull { message ->
+                    val ids = message.javaClass.methods.associateBy { it.name }
+                    val group = ids["getInterfaceId"]?.takeIf { message !is IfOpenSub } ?: return@mapNotNull null
+                    val component = ids["getComponentId"] ?: return@mapNotNull null
+                    val at = group.invoke(message) as Int to component.invoke(message) as Int
+                    // -1:-1 is an inventory with no component, which is valid.
+                    if (at.first == -1 || components.exists(at.first, at.second)) null else "${message.javaClass.simpleName} ${at.first}:${at.second}"
+                }
+            assertEquals(emptyList<String>(), missing)
         }
     }
 

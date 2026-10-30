@@ -78,7 +78,7 @@ class GatewaySession(
     private val translators: List<(TspsPacket) -> Boolean> by lazy {
         listOf(interfaces::handle, items::handle, groundItems::handle, social::handle, worldUpdates::handle, trade::handle)
     }
-    private val interfaces = Interfaces(varps, InterfaceTree(context.enums), stockMarket, items::scriptInventories, ::send)
+    private val interfaces = Interfaces(varps, InterfaceTree(context.enums), stockMarket, items::scriptInventories, context.components::exists, ::send)
     private val upstream =
         Upstream(
             varps,

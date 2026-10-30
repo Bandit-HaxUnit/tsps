@@ -2,6 +2,7 @@ package gateway.session
 
 import gateway.cache.Cache
 import gateway.cache.EnumTypes
+import gateway.cache.InterfaceComponents
 import gateway.cache.NpcTypes
 import gateway.cache.ObjTypes
 import gateway.cache.VarTypes
@@ -27,6 +28,7 @@ class GatewayContext(
 ) {
     val objs = ObjTypes(cache)
     val npcTypes = NpcTypes(cache)
+    val components = InterfaceComponents(cache)
     val vars = VarTypes(cache)
     val enums = EnumTypes(cache)
     val identKitCount = UpdatePlayerModel.identKitCount(cache)
