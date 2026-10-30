@@ -62,7 +62,8 @@ created, as in the browser).
 | `net` | rsprot's network service: JS5 from the cache, login, the 241 codecs |
 | `tsps` | the tsps WebSocket and its wire format |
 | `session` | per-player state; `GatewaySession` bridges one client to tsps; `EntityWorld` is its rsprot player/NPC/world-entity world |
-| `down` | tsps → client translation |
+| `down` | tsps → client translation, one file per domain (interfaces, items, world, social, trade, sync) |
+| `up` | client → tsps translation (`Upstream`), with the gateway's own decoder for the character designer |
 | `coverage` | counts of dropped messages, logged every minute |
 
 ## How it maps tsps to OSRS
