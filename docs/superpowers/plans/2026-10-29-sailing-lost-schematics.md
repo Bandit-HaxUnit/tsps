@@ -47,10 +47,10 @@
 
 ## Tasks
 
-- [ ] Source/map: extract exact cache rows/IDs, read captures and Wiki detailed pages/transcripts, verify active cache and actual mapped lockboxes. Document remaining uncertainties before code.
-- [ ] Write meaningful failing real-player/native regressions for locked login/build, key dig, lockbox success/refusal/capacity/repeat/interruption, schematic read/exact slot/duplicate/save and NPC quest gates.
-- [ ] Run RED against existing unconditional unlock/stubs, retaining evidence. Implement minimal plugin-owned state and source-backed handlers; preserve all unrelated hooks.
-- [ ] Run GREEN with real startup/shutdown and affected foundation suites. Validate actual PlayerSave persistence, collection log and legitimate build after reading.
-- [ ] Trace native packet/menu -> dispatcher -> plugin -> real task/container/state owner -> saved/client state. Independent reviewer challenges a material real transition.
-- [ ] Root native UI: dig/open/read, item/directions dialogue controls, locked/unlocked shipyard rows, real build, full/refusal/relog; retain rendered evidence and scoped cleanup.
+- [x] Source/map: extract exact cache rows/IDs, read captures and Wiki detailed pages/transcripts, verify active cache and actual mapped lockboxes. Document remaining uncertainties before code.
+- [x] Write meaningful failing real-player/native regressions for locked login/build, key dig, lockbox success/refusal/capacity/repeat/interruption, schematic read/exact slot/duplicate/save and NPC quest gates.
+- [x] Run RED against existing unconditional unlock/stubs, retaining evidence. Implement minimal plugin-owned state and source-backed handlers; preserve all unrelated hooks.
+- [x] Run GREEN with real startup/shutdown and affected foundation suites. Validate actual PlayerSave persistence, collection log and legitimate build after reading.
+- [x] Trace native packet/menu -> dispatcher -> plugin -> real task/container/state owner -> saved/client state. Independent reviewer challenges a material real transition.
+- [x] Root native UI: dig/open/read, item/directions dialogue controls, locked/unlocked shipyard rows, real build, full/refusal/relog; retain rendered evidence and scoped cleanup.
 - [ ] Final pinned Yarn build, affected checks and coordinated full baseline/integration; local commit and prepared PR with sources, limitations and evidence. Push only when all three ready.
