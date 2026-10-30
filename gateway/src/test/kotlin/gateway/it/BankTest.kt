@@ -26,7 +26,8 @@ class BankTest {
             assumeTrue(opened.size >= 3, "the developer's bank needs three items")
             val (first, second) = opened
 
-            // Slot 0 onto slot 1. RuneLite sends the dropped-on slot's item first.
+            // Slot 0 onto slot 1. Within one component RuneLite has already swapped them on screen,
+            // so the first obj is the dropped-on slot's item (as its recorded drags show).
             game.drag(BANK, ITEMS, 0, second, BANK, ITEMS, 1, first)
             assertEquals(listOf(second, first), game.bankAfter(TICKS).take(2))
             game.drag(BANK, ITEMS, 0, first, BANK, ITEMS, 1, second)
@@ -34,10 +35,11 @@ class BankTest {
 
             // The third item onto tab 1's button: it leads the bank as tab 1's only item.
             val third = opened[2]
-            game.drag(BANK, ITEMS, 2, NO_OBJ, BANK, TABS, TAB_1, third)
+            // Onto another component the client sends the objs as they are: the dragged one first.
+            game.drag(BANK, ITEMS, 2, third, BANK, TABS, TAB_1, NO_OBJ)
             assertEquals(third, game.bankAfter(TICKS).first())
             // And back onto the main tab's button.
-            game.drag(BANK, ITEMS, 0, NO_OBJ, BANK, TABS, MAIN_TAB, third)
+            game.drag(BANK, ITEMS, 0, third, BANK, TABS, MAIN_TAB, NO_OBJ)
             assertEquals(opened.toSet(), game.bankAfter(TICKS).toSet())
         }
     }
