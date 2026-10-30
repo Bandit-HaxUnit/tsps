@@ -14,6 +14,9 @@ import { getDefinitionArchiveKey, getDefinitionArchives, replaceDefinitionArchiv
 import { cacheKey } from "../game/worker/MapSquareCache";
 import type { ArchivedDefinitionBundle } from "../rs/config/ArchivedDefinitionRegistry";
 import { loadFromPayload } from "../common/gamemode/GamemodeContentStore";
+import { ItemIconRenderer } from "../ui/item/ItemIconRenderer";
+import { TextureCache } from "../widgets/gl/texture-cache";
+import { GLRenderer } from "../widgets/gl/renderer";
 
 // Client factory/codecs read the actual shipped cache through its production disk store.
 const serverRoot = resolve(__dirname, "../../server");
@@ -22,6 +25,70 @@ require(serverRoot + "/dist/Server").Server.installProductionPathResolver();
 const { CachePipeline } = require(serverRoot + "/dist/game/cache/CachePipeline");
 const raw = JSON.parse(readFileSync(resolve(serverRoot, "tests/fixtures/archived-seasonal-bundle.json"), "utf8"));
 let factory: Dat2CacheLoaderFactory, bundle: ArchivedDefinitionBundle, counts: Record<string, number>, system: CacheSystem;
+
+test('actual archived item pixels and warm GL icons follow installation and removal', () => {
+    const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
+    // Capture only the Canvas2D presentation boundary; native decoders, models,
+    // software rasterizer and both icon-cache owners are real.
+    const createCanvas = () => {
+        let rgba = new Uint8ClampedArray(36 * 32 * 4);
+        const context = {
+            createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4) }),
+            putImageData: (image: { data: Uint8ClampedArray }) => { rgba = image.data.slice(); },
+            getImageData: () => ({ data: rgba.slice() }),
+        };
+        return { width: 36, height: 32, getContext: () => context } as unknown as HTMLCanvasElement;
+    };
+    Object.defineProperty(globalThis, 'document', { configurable: true, value: { createElement: createCanvas } });
+    const items = factory.getObjTypeLoader();
+    const install = (rows: ArchivedDefinitionBundle[]) => {
+        loadFromPayload({ gamemodeId: 'seasonal', datasets: [{ key: 'definitionArchives', rows }] });
+        items.clearCache(); // The actual inbound owner clears the outer type wrapper.
+    };
+    const makeRenderer = () => new ItemIconRenderer(items, factory.getModelLoader(), factory.getTextureLoader(), system);
+    const pixels = (canvas: HTMLCanvasElement) => canvas.getContext('2d')!.getImageData(0, 0, 36, 32).data;
+    const equalPixels = (a: Int32Array | Uint8ClampedArray, b: Int32Array | Uint8ClampedArray) =>
+        a.length === b.length && a.every((value, index) => value === b[index]);
+    try {
+        install([]);
+        const icons = makeRenderer(), plain = icons.renderToCanvas(32926, 1, { quantityMode: 0 });
+        assert.ok(plain, 'the actual retired current definition has a drawable cached icon');
+        const originalPixels = pixels(plain);
+        const deleted: unknown[] = [];
+        const glr: any = Object.create(GLRenderer.prototype);
+        Object.assign(glr, { textures: new Map(), textureBatchTextures: [], gl: { deleteTexture: (tex: unknown) => deleted.push(tex) } });
+        glr.createTextureFromCanvas = (key: string, canvas: HTMLCanvasElement) => {
+            const texture = { tex: {}, w: canvas.width, h: canvas.height, pixels: pixels(canvas) };
+            glr.textures.set(key, texture); return texture;
+        };
+        glr.textures.set('unrelated-ui', { tex: {} });
+        const textures = new TextureCache(glr, CacheIndexDat2.fromStore(8, CachePipeline.getStore()),
+            (id, qty, outline, shadow, quantityMode) => icons.renderToCanvas(id, qty, { outline, shadow, quantityMode }));
+        const oldTexture = textures.getItemIconById(32926, 1, 0, 0, 0);
+        assert.ok(oldTexture);
+        install([bundle]);
+        const expected = makeRenderer().renderToCanvas(32926, 1, { quantityMode: 0 });assert.ok(expected);
+        assert.equal(equalPixels(pixels(expected), originalPixels), false, 'actual archived platter and retired native item have different pixels');
+        const actual = icons.renderToCanvas(32926, 1, { quantityMode: 0 });assert.ok(actual);
+        assert.equal(equalPixels(pixels(actual), pixels(expected)), true, 'warm software icon must use the installed definition');
+        const newTexture: any = textures.getItemIconById(32926, 1, 0, 0, 0);
+        assert.notEqual(newTexture, oldTexture, 'same-id GL item texture must be replaced');
+        assert.equal(equalPixels(newTexture.pixels, pixels(expected)), true);
+        assert.equal(textures.getItemIconById(32926, 1, 0, 0, 0), newTexture, 'unchanged content reuses its texture');
+        assert.ok(glr.getTexture('unrelated-ui'), 'definition changes preserve unrelated UI textures');
+        install([]);
+        const sprite = icons.createSprite(32926, 1, 0, 0, 0, false, 512);assert.ok(sprite);
+        const reference = makeRenderer().createSprite(32926, 1, 0, 0, 0, false, 512);assert.ok(reference);
+        assert.equal(equalPixels(sprite.pixels, reference.pixels), true, 'plugin sprite path also follows archive removal');
+        const restored: any = textures.getItemIconById(32926, 1, 0, 0, 0);
+        assert.notEqual(restored, newTexture);assert.equal(equalPixels(restored.pixels, originalPixels), true);
+        assert.ok(deleted.length >= 2, 'old item GPU textures are released');
+    } finally {
+        install([]);
+        if (previousDocument) Object.defineProperty(globalThis, 'document', previousDocument);
+        else delete (globalThis as any).document;
+    }
+});
 before(async () => {
     await CachePipeline.initialize(serverRoot);
     const active = CachePipeline.getActive();
