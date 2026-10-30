@@ -40,7 +40,7 @@ function claimRewards(event) {
 function cancel(player, index) {
   const held = common.slots(player);
   const task = held[index] && common.taskById(held[index].id);
-  if (!task) return;
+  if (!task || task.cancellable === false) return false;
   held[index] = null;
   common.setSlots(player, held);
   // The crew carrying its crates put them down too (crew/Courier.Crew.js).
@@ -51,12 +51,13 @@ function cancel(player, index) {
     if (task.crate !== undefined) cargo.take(boat, 0, task.crate, cargo.countIn(boat, task.crate));
   }
   player.sendMessage(`You have cancelled the ${common.blue(task.name)} port task.`);
+  return true;
 }
 
 function cancelTask({ player, npc }) {
   const held = common.slots(player)
     .map((slot, index) => [index, slot && common.taskById(slot.id)])
-    .filter(([, task]) => task);
+    .filter(([, task]) => task && task.cancellable !== false);
   if (held.length === 0) {
     say(player, npc, "I'm afraid you don't have any assigned tasks for me to cancel.");
     return;

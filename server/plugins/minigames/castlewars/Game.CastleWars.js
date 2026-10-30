@@ -489,7 +489,10 @@ function beginStartCountdown() {
     return;
   }
   phase = PHASE.STARTING;
-  startTask = new core.CountdownTask(data.START_TASK_KEY, secondsToTicks(data.START_COUNTDOWN_SECONDS), startGame);
+  const hasBots = Object.values(game.waitingAreas).some((area) =>
+    area.getPlayers().some((player) => player.getAttribute(BOT_KEY) === true));
+  const seconds = hasBots ? data.BOT_START_COUNTDOWN_SECONDS : data.START_COUNTDOWN_SECONDS;
+  startTask = new core.CountdownTask(data.START_TASK_KEY, secondsToTicks(seconds), startGame);
   TaskManager.submit(startTask);
 }
 
