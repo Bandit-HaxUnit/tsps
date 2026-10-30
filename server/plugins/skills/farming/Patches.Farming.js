@@ -843,7 +843,18 @@ function itemOnObject(event) {
     else player.sendMessage("Nothing interesting happens.");
     syncPatch(player, patch);
 }
-function itemOnItem(event) { WORK.delete(event.player); Guild.storagePair(event); if (!event.handled) Services.farmingItemPair(event); }
+function itemOnItem(event) {
+    WORK.delete(event.player);
+    const definitions = [event.usedItemId, event.usedWithItemId].map(id => core.CacheDefinitions.getItem(id));
+    if (definitions.some(definition => definition.noteTemplate >= 0)) {
+        // Notes are accepted only for bottomless filling, never other Farming recipes/storage.
+        if (definitions.some(definition => definition.noteTemplate < 0 && definition.name === "Bottomless compost bucket"))
+            Services.farmingItemPair(event);
+        return;
+    }
+    Guild.storagePair(event);
+    if (!event.handled) Services.farmingItemPair(event);
+}
 function npcInteraction(event) {
     WORK.delete(event.player);
     Hespori.hesporiNpc(event);
@@ -1087,7 +1098,7 @@ function attach(api) {
     api.onObjectInteraction(objectInteraction);
     api.onInterfaceActionClick(farmingOptionClick);
     api.onItemOnObject(itemOnObject, { noted: false });
-    api.onItemOnItem(itemOnItem, { noted: false });
+    api.onItemOnItem(itemOnItem);
     api.onNpcInteraction(npcInteraction);
     api.onItemOnNpc(itemOnNpc);
     api.onItemAction(Services.farmingItemAction);

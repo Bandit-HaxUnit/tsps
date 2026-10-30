@@ -183,16 +183,39 @@ function dose(player, id) {
     player.getInventory().deleteNumber(id, 1);
     player.getInventory().addItem(new core.Item(Data.itemId(count > 1 ? `Compost potion(${count - 1})` : "Vial")));
 }
-function chargeBottomless(player, tier, bucket) {
+function chargeBottomless(player, tier, bucket, amount = 1, refresh = true) {
     if (!bucket) return false;
     const charges = Number(bucket.getMetaValue("farming:charges") ?? 0);
     if (charges > 0 && bucket.getMetaValue("farming:tier") !== tier) { player.sendMessage("Empty the bucket before changing compost type."); return false; }
-    if (charges > 9998) { player.sendMessage("The bucket is full."); return false; }
-    bucket.setMetaValue("farming:charges", charges + 2).setMetaValue("farming:tier", tier);
+    if (charges + amount * 2 > 10000) { player.sendMessage("The bucket is full."); return false; }
+    bucket.setMetaValue("farming:charges", charges + amount * 2).setMetaValue("farming:tier", tier);
     bucket.setId(core.ItemIdentifiers.BOTTOMLESS_COMPOST_BUCKET_4);
-    player.getInventory().refreshItems();
+    if (refresh) player.getInventory().refreshItems();
     return true;
 }
+/** Plan the complete conversion before committing either charges or returned buckets. */
+function fillBottomless(player, event, bucketFirst, tier, noted) {
+    const inventory = player.getInventory();
+    const bucketSlot = bucketFirst ? event.usedItemSlot : event.usedWithItemSlot;
+    const inputSlot = bucketFirst ? event.usedWithItemSlot : event.usedItemSlot;
+    const bucket = inventory.forSlot(bucketSlot), input = inventory.forSlot(inputSlot);
+    if (!bucket || !input || bucketSlot === inputSlot
+        || bucket.getId() !== (bucketFirst ? event.usedItemId : event.usedWithItemId)
+        || input.getId() !== (bucketFirst ? event.usedWithItemId : event.usedItemId)
+        || core.CacheDefinitions.getItem(bucket.getId()).noteTemplate >= 0) return;
+    const charges = Number(bucket.getMetaValue("farming:charges") ?? 0);
+    const amount = noted ? Math.min(input.getAmount(), Math.floor((10000 - charges) / 2)) : 1;
+    if (amount <= 0) { player.sendMessage("The bucket is full."); return; }
+    const planned = new inventory.constructor(player).setItems(inventory.getCopiedItems());
+    planned.deleteAtSlot(inputSlot, amount, false);
+    const emptyId = Data.itemId("Bucket");
+    const output = new core.Item(noted ? core.CacheDefinitions.getItem(emptyId).note : emptyId, amount);
+    if (planned.getAddableAmount(output) < amount) { inventory.full(); return; }
+    if (!chargeBottomless(player, tier, planned.forSlot(bucketSlot), amount, false)) return;
+    planned.add(output, false);
+    inventory.setItems(planned.getItems()).refreshItems();
+}
+
 function useBottomless(player, patch, id, slot) {
     const bucket = player.getInventory().forSlot(slot);
     if (bucket?.getId() !== id) return;
@@ -245,18 +268,20 @@ function farmingItemPair(event) {
         inventory.refreshItems();
         return;
     }
-    const compostTier = COMPOST_NAMES.slice(1, 4).findIndex(name => Data.itemId(name) === a || Data.itemId(name) === b) + 1;
-    if (compostTier && [a, b].some(id => core.CacheDefinitions.getItem(id).name === "Bottomless compost bucket")) {
-        event.handled = true;
-        const bucketFirst = names[0] === "Bottomless compost bucket";
-        const bucket = inventory.forSlot(bucketFirst ? event.usedItemSlot : event.usedWithItemSlot);
-        if (bucket?.getId() !== (bucketFirst ? a : b)) return;
-        if (chargeBottomless(player, compostTier, bucket)) {
-            inventory.deleteNumber(Data.itemId(COMPOST_NAMES[compostTier]), 1);
-            inventory.addItem(new core.Item(Data.itemId("Bucket")));
+    const bucketFirst = names[0] === "Bottomless compost bucket";
+    if (bucketFirst || names[1] === "Bottomless compost bucket") {
+        const inputId = bucketFirst ? b : a;
+        const definition = core.CacheDefinitions.getItem(inputId);
+        const noted = definition.noteTemplate >= 0;
+        const baseId = noted ? definition.note : inputId;
+        const tier = COMPOST_NAMES.slice(1, 4).findIndex(name => Data.itemId(name) === baseId) + 1;
+        if (tier) {
+            event.handled = true;
+            fillBottomless(player, event, bucketFirst, tier, noted);
+            return;
         }
-        return;
     }
+    const compostTier = COMPOST_NAMES.slice(1, 4).findIndex(name => Data.itemId(name) === a || Data.itemId(name) === b) + 1;
     if (compostTier === 2 && (a === Data.itemId("Volcanic ash") || b === Data.itemId("Volcanic ash"))) {
         event.handled = true;
         if (inventory.getAmount(Data.itemId("Volcanic ash")) < 2) { player.sendMessage("You need two volcanic ash."); return; }
