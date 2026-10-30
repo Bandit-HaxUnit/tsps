@@ -15,37 +15,37 @@ sessions, so the browser wire format doesn't change.
 | 1 TICK | SERVER_TICK_END | mapped | 1 | tsps sends it first; the gateway flushes the tick and ends with it |
 | 2 HANDSHAKE | login response OK, first PLAYER_INFO | mapped | 1 | index, admin → staff level, members |
 | 3 LOGIN_RESPONSE | login response | mapped | 1 | 2 (full) → 7, 27 → 26, others 1:1; token dropped |
-| 4 LOGOUT_RESPONSE | LOGOUT / MESSAGE_GAME | todo | 4 | a refusal becomes a game message |
+| 4 LOGOUT_RESPONSE | LOGOUT / MESSAGE_GAME | mapped | 4 | a refusal becomes a game message |
 | 6 PLUGIN_MESSAGE | — | dropped | 1 | plugin features (quest helper, voice, pest control) |
 | 20 PLAYER_SYNC | PLAYER_INFO | mapped | 2–3 | every player tsps shows gets an avatar in the session's world; update blocks become extended info; worn slots hide by the cache's wearpos2/3 |
 | 21 NPC_INFO | NPC_INFO | mapped | 3 | type changes and jumps re-add the NPC (as tsps does); model customisation and NPC tint are todo (need the cache NPC model list / a native-bit field) |
 | 22 ANIM | — | dropped | 1 | base anims are in appearance |
 | 23 MOVEMENT_POSITION | — | dropped | 2 | sub-tile movement has no OSRS form |
-| 40 / 41 / 44 VARP_SMALL / LARGE / LONG | VARP_SMALL / LARGE / LONG | todo | 4 | ids ≥ the cache varp count filtered |
-| 42 VARBIT | VARP_SMALL / LARGE | todo | 4 | varp mirror + cache varbit definitions |
+| 40 / 41 / 44 VARP_SMALL / LARGE / LONG | VARP_SMALL / LARGE / LONG | mapped | 4 | ids ≥ the cache varp count (5996) dropped |
+| 42 VARBIT | VARP_SMALL / LARGE | mapped | 4 | written into the session's varp mirror from the cache varbit definition |
 | 50 / 51 INVENTORY_SNAPSHOT / SLOT | UPDATE_INV_FULL / PARTIAL (93) | todo | 5 | |
 | 52 / 53 BANK_SNAPSHOT / SLOT | UPDATE_INV_FULL / PARTIAL (95) | todo | 5 | tab/placeholder bits dropped (sent as varbits) |
 | 54 / 55 GROUND_ITEMS / DELTA | OBJ_ADD / DEL / COUNT in zone updates | todo | 5 | stack-id state; re-sent after each rebuild |
-| 70 / 71 SKILLS_SNAPSHOT / DELTA | UPDATE_STAT_V2 per skill | todo | 4 | |
-| 81 RUN_ENERGY | UPDATE_RUNENERGY, UPDATE_RUNWEIGHT, varp 173 | todo | 5 | native: full energy + weight |
+| 70 / 71 SKILLS_SNAPSHOT / DELTA | UPDATE_STAT_V2 per skill | mapped | 4 | the combat level goes to varbit 13027, which the browser sets itself |
+| 81 RUN_ENERGY | UPDATE_RUNENERGY, UPDATE_RUNWEIGHT, varp 173 | todo | 4–5 | energy (1% steps) and varp 173 mapped (M4); weight and full energy via the native bit in M5 |
 | 83 SPOT_ANIM | MAP_ANIM | todo | 7 | |
 | 84 PROJECTILES | PROJANIM_SPECIFIC_V4 | todo | 8 | |
 | 87 DESTINATION | SET_MAP_FLAG_V2 | mapped | 2 | 0,0 clears the flag |
 | 88 PLAYER_OPTION | SET_PLAYER_OP | mapped | 3 | plus Trade with (op 2) and Follow (op 3) at login, which the browser adds itself; Attack in PvP comes from tsps |
 | 89 HINT_ARROW | HINT_ARROW | todo | 7 | tile level scope lost |
 | 90 ATTACK_TIMER | — | dropped | 8 | tsps HUD |
-| 100 / 101 WIDGET_OPEN / CLOSE | IF_OPENSUB / IF_CLOSESUB | todo | 4 | gateway picks and remembers the target |
-| 102 WIDGET_SET_ROOT | IF_OPENTOP | mapped | 1 | |
-| 103 WIDGET_OPEN_SUB | VARP_*, RUNCLIENTSCRIPT, IF_OPENSUB, IF_SETHIDE, RUNCLIENTSCRIPT | todo | 4 | split in order; 161 targets remapped; group ≥ 30000 dropped |
-| 104 WIDGET_CLOSE_SUB | IF_CLOSESUB | todo | 4 | 161 remap |
-| 105–108, 113–115, 117–119 WIDGET_SET_* | IF_SETTEXT / HIDE / OBJECT / NPCHEAD / ANGLE / ANIM / PLAYERHEAD / MODEL / POSITION / COLOUR | todo | 4 | |
-| 109 / 111 / 112 WIDGET_SET_FLAGS* | IF_SETEVENTS_V2 | todo | 4 | old op bits 1–10 move to events2 |
-| 110 WIDGET_RUN_SCRIPT | VARP_*, UPDATE_INV_FULL, RUNCLIENTSCRIPT | todo | 4 | script -1 = vars/inventories only |
+| 100 / 101 WIDGET_OPEN / CLOSE | IF_OPENSUB / IF_CLOSESUB | mapped | 4 | modal opens go to the main modal area and are remembered for the close; non-modal ones are dropped (tsps's browser mounts nothing for them either) |
+| 102 WIDGET_SET_ROOT | IF_OPENTOP | mapped | 1 | sets the root the 161 remap uses | |
+| 103 WIDGET_OPEN_SUB | VARP_*, RUNCLIENTSCRIPT, IF_OPENSUB, IF_SETHIDE, RUNCLIENTSCRIPT | mapped | 4 | split in that order; 161 targets remapped through cache enums 1129/1131/1132/1745; groups ≥ 30000 dropped |
+| 104 WIDGET_CLOSE_SUB | IF_CLOSESUB | mapped | 4 | 161 remap |
+| 105–108, 113–115, 117–119 WIDGET_SET_* | IF_SETTEXT / HIDE / OBJECT / NPCHEAD / ANGLE / ANIM / PLAYERHEAD / MODEL / POSITION / COLOUR | mapped | 4 | colour splits tsps's 15-bit RGB into its channels |
+| 109 / 111 / 112 WIDGET_SET_FLAGS* | IF_SETEVENTS_V2 | mapped | 4 | old op bits 1–10 move to events2 |
+| 110 WIDGET_RUN_SCRIPT | VARP_*, UPDATE_INV_FULL, RUNCLIENTSCRIPT | todo | 4–5 | vars and script mapped (M4; script -1 = vars only); its inventories are M5 |
 | 116 WIDGET_SET_QUEST_LIST | — | dropped | 4 | browser-only quest list widget |
-| 120 CHAT_MESSAGE | MESSAGE_GAME, PLAYER_INFO chat, MESSAGE_PRIVATE(_ECHO), MESSAGE_FRIENDCHANNEL | todo | 3, 6 | public chat mapped (M3): one PLAYER_INFO chat block, the overhead copy suppressed, crown from `<img=N>`; colour/effects todo; other types M6 |
+| 120 CHAT_MESSAGE | MESSAGE_GAME, PLAYER_INFO chat, MESSAGE_PRIVATE(_ECHO), MESSAGE_FRIENDCHANNEL | todo | 3–6 | public chat (M3): one PLAYER_INFO chat block, the overhead copy suppressed, crown from `<img=N>`; game and system types → MESSAGE_GAME (M4); private, friends and clan types M6 |
 | 121 FRIENDS_CHAT_UPDATE | UPDATE_FRIENDLIST, UPDATE_IGNORELIST, UPDATE_FRIENDCHAT_CHANNEL_FULL_V2, FRIENDLIST_LOADED | todo | 6 | |
 | 122 CHAT_FILTER_SETTINGS | CHAT_FILTER_SETTINGS + _PRIVATECHAT | todo | 6 | |
-| 123 TRIGGER_ONDIALOGABORT | TRIGGER_ONDIALOGABORT | todo | 4 | |
+| 123 TRIGGER_ONDIALOGABORT | TRIGGER_ONDIALOGABORT | mapped | 4 | |
 | 131 SOUND | SYNTH_SOUND / SOUND_AREA | todo | 7 | |
 | 132 PLAY_JINGLE / 133 PLAY_SONG | MIDI_JINGLE / MIDI_SONG_V2 | todo | 7 | |
 | 134 / 135 / 136 LOC_ADD_CHANGE / DEL / ANIM | LOC_ADD_CHANGE_V2 / LOC_DEL / LOC_ANIM in zone updates | todo | 7 | |
@@ -72,14 +72,14 @@ sessions, so the browser wire format doesn't change.
 | MOVE_GAMECLICK / MOVE_MINIMAPCLICK | 16 MOVE_GAMECLICK | mapped | 2 | key combination passes through (1 ctrl, 2 ctrl+shift) |
 | SET_HEADING | 214 | mapped | 2 | |
 | IF_BUTTON (if1) / IF_BUTTONX | 13 / 91 | mapped | 2 | mapped early: returning accounts log in to the welcome screen, whose play button is an IF_BUTTONX |
-| IF_SUBOP | 89 | todo | 4 | |
-| IF_BUTTOND | 1, or 242 INVENTORY_MOVE for 149:0 | todo | 4–5 | |
-| IF_BUTTONT | 90, or 241 INVENTORY_USE_ON for item on item | todo | 4–5 | |
-| IF_SCRIPT_TRIGGER | 30 IF_TRIGGEROPLOCAL | todo | 4 | |
-| RESUME_PAUSEBUTTON / P_COUNT / P_NAME / P_STRING / P_LONG | 62 / 192 / 193 / 194 / 192 | todo | 4 | |
-| CLOSE_MODAL | 55 IF_CLOSE | todo | 4 | |
-| settings / run orb buttons | 191 VARP_TRANSMIT | todo | 4 | from the varp mirror |
-| logout button | 203 LOGOUT | todo | 4 | |
+| IF_SUBOP | 89 | mapped | 4 | |
+| IF_BUTTOND | 1, or 242 INVENTORY_MOVE for 149:0 | todo | 4–5 | IF_BUTTOND mapped (M4); the inventory drag is M5 |
+| IF_BUTTONT | 90, or 241 INVENTORY_USE_ON for item on item | todo | 4–5 | IF_BUTTONT mapped (M4); item on item is M5 |
+| IF_SCRIPT_TRIGGER | 30 IF_TRIGGEROPLOCAL | mapped | 4 | the script's crc goes in tsps's op field; the argument bytes pass through |
+| RESUME_PAUSEBUTTON / P_COUNT / P_NAME / P_STRING / P_LONG | 62 / 192 / 193 / 194 / 192 | mapped | 4 | a long count is clamped to an int |
+| CLOSE_MODAL | 55 IF_CLOSE | mapped | 4 | |
+| settings / run orb buttons | 191 VARP_TRANSMIT | todo | 4 | run orb (160:28) mapped: toggles varp 173 from the mirror. Volume sliders, music mode, esc-to-close and XP-drop setup still need per-button translation (the browser sets those varps in its own CS2) |
+| logout button | 203 LOGOUT | mapped | 4 | logout tab 182:8 and world switcher 69:25 |
 | OPPLAYER1–8 / OPPLAYERT | 44… / 32 or 65 | todo | 3, 5 | OPPLAYER1–8 mapped (M3); `T` split by selected component in M5 |
 | OPNPC1–5 / OPNPC6 / OPNPCT | 76, 12, 34, 70, 57 / 9 / 75 or 36 | todo | 3, 5 | OPNPC1–6 mapped (M3), subop dropped; `T` in M5 |
 | OPLOC1–5 / OPLOC6 / OPLOCT | 96, 28, 42, 38, 51 / 85 / 2 or 86 | todo | 5 | |
@@ -94,6 +94,6 @@ sessions, so the browser wire format doesn't change.
 | CLICKWORLDMAP / TELEPORT | 105 / 212 | todo | 7 | admin only |
 | UPDATE_PLAYER_MODEL_V2 | 37 APPEARANCE_SET | todo | 3 | needs a gateway decoder; rsprot 241 has none |
 | trade interface buttons | 180 TRADE_ACTION | todo | 9 | |
-| WINDOW_STATUS | — | todo | 4 | picks the toplevel |
+| WINDOW_STATUS | — | dropped | 4 | tsps picks the root from the saved layout setting, as for the browser |
 | MAP_BUILD_COMPLETE | — | dropped | 2 | gateway-only signal |
 | EVENT_*, IDLE, REFLECTION_CHECK_REPLY, SEND_PING_REPLY, CONNECTION_TELEMETRY, DETECT_MODIFIED_CLIENT, MEMBERSHIP_PROMOTION_ELIGIBILITY, RSEVEN_STATUS, SOUND_JINGLEEND, BUG_REPORT, HISCORE_REQUEST, IF_CRMVIEW_OP, EXIT_FREECAM, CLAN_* | — | dropped | 1 | no tsps handler; clans don't exist in tsps |

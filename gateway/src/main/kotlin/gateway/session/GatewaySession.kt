@@ -3,34 +3,28 @@ package gateway.session
 import gateway.coverage.DropCounter
 import gateway.down.ActorBlocks
 import gateway.down.BlockReader
+import gateway.down.Interfaces
 import gateway.down.MapRebuild
 import gateway.down.NpcSync
-import gateway.down.TspsChatMessage
 import gateway.down.PlayerSync
+import gateway.down.TspsChatMessage
 import gateway.down.TspsHandshake
 import gateway.down.TspsLoginResult
 import gateway.tsps.TspsClientPacket
 import gateway.tsps.TspsPacket
 import gateway.tsps.TspsServerPacket
 import gateway.tsps.TspsSocket
+import gateway.up.Upstream
 import net.rsprot.protocol.api.Session
 import net.rsprot.protocol.api.login.GameLoginResponseHandler
 import net.rsprot.protocol.game.outgoing.info.Infos
-import net.rsprot.protocol.game.outgoing.interfaces.IfOpenTop
-import net.rsprot.protocol.game.incoming.buttons.If1Button
-import net.rsprot.protocol.game.incoming.buttons.If3Button
-import net.rsprot.protocol.game.incoming.messaging.MessagePublic
-import net.rsprot.protocol.game.incoming.misc.user.ClientCheat
-import net.rsprot.protocol.game.incoming.npcs.OpNpc6
-import net.rsprot.protocol.game.incoming.npcs.OpNpcV2
-import net.rsprot.protocol.game.incoming.players.OpPlayer
-import net.rsprot.protocol.game.incoming.misc.user.MoveGameClick
-import net.rsprot.protocol.game.incoming.misc.user.MoveMinimapClick
-import net.rsprot.protocol.game.incoming.misc.user.SetHeading
 import net.rsprot.protocol.game.outgoing.map.RebuildLoginV2
-import net.rsprot.protocol.game.outgoing.misc.player.SetMapFlagV2
-import net.rsprot.protocol.game.outgoing.misc.player.SetPlayerOp
 import net.rsprot.protocol.game.outgoing.misc.client.ServerTickEnd
+import net.rsprot.protocol.game.outgoing.logout.Logout
+import net.rsprot.protocol.game.outgoing.misc.player.MessageGame
+import net.rsprot.protocol.game.outgoing.misc.player.SetMapFlagV2
+import net.rsprot.protocol.game.outgoing.misc.player.UpdateRunEnergy
+import net.rsprot.protocol.game.outgoing.misc.player.SetPlayerOp
 import net.rsprot.protocol.loginprot.incoming.util.AuthenticationType
 import net.rsprot.protocol.loginprot.incoming.util.LoginBlock
 import net.rsprot.protocol.loginprot.outgoing.LoginResponse
@@ -41,7 +35,6 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.logging.Logger
-
 /**
  * One official client and the tsps session behind it.
  *
@@ -65,7 +58,9 @@ class GatewaySession(
 
     private val world = EntityWorld(context.allocator, context.huffman)
     private var self: Infos? = null
-    private var root = DEFAULT_TOPLEVEL
+    private val varps = VarpMirror(context.vars)
+    private val interfaces = Interfaces(varps, InterfaceTree(context.enums), inventories = { DropCounter.down(TspsServerPacket.WIDGET_RUN_SCRIPT) }, send = ::send)
+    private val upstream = Upstream(varps) { tsps.send(it) }
     private val players = PlayerSync()
     private val npcs = NpcSync()
     private var mirror: EntityMirror? = null
@@ -112,22 +107,7 @@ class GatewaySession(
         }
 
     /** A decoded client packet, from [Session.processIncomingPackets] on this session's thread. */
-    fun onClientMessage(message: IncomingGameMessage) {
-        when (message) {
-            is MoveGameClick -> tsps.send(TspsClientPacket.move(message.x, message.z, message.keyCombination))
-            is MoveMinimapClick -> tsps.send(TspsClientPacket.move(message.x, message.z, message.keyCombination))
-            is SetHeading -> tsps.send(TspsClientPacket.setHeading(message.heading))
-            is If1Button -> tsps.send(TspsClientPacket.ifButton(message.combinedId))
-            is If3Button -> tsps.send(TspsClientPacket.ifButtonX(message.combinedId, message.sub, message.obj, message.op))
-            // Autocomplete is the client asking for suggestions as you type; tsps has none.
-            is ClientCheat -> if (!message.autocomplete) tsps.send(TspsClientPacket.command(message.command))
-            is MessagePublic -> PUBLIC_CHAT_KINDS[message.type]?.let { tsps.send(TspsClientPacket.chat(it, message.message)) } ?: DropCounter.up(message)
-            is OpPlayer -> tsps.send(TspsClientPacket.playerOp(message.op, message.index))
-            is OpNpcV2 -> if (message.op in 1..5) tsps.send(TspsClientPacket.npcOp(message.op, message.index)) else DropCounter.up(message)
-            is OpNpc6 -> tsps.send(TspsClientPacket.examineNpc(message.id))
-            else -> DropCounter.up(message)
-        }
-    }
+    fun onClientMessage(message: IncomingGameMessage) = upstream.handle(message)
 
     private fun onTspsPacket(packet: TspsPacket) {
         when (state) {
@@ -154,10 +134,6 @@ class GatewaySession(
 
     private fun onGamePacket(packet: TspsPacket) {
         when (packet.opcode) {
-            TspsServerPacket.WIDGET_SET_ROOT -> {
-                root = packet.reader().u16()
-                send(IfOpenTop(root))
-            }
             TspsServerPacket.PLAYER_SYNC -> onPlayerSync(players.decode(packet))
             TspsServerPacket.NPC_INFO -> {
                 val frame = npcs.decode(packet)
@@ -179,8 +155,20 @@ class GatewaySession(
                 val z = reader.u16()
                 send(if (x == 0 && z == 0) SetMapFlagV2() else SetMapFlagV2(x, z))
             }
+            TspsServerPacket.RUN_ENERGY -> {
+                val reader = packet.reader()
+                send(UpdateRunEnergy(reader.u8() * RUN_ENERGY_PER_PERCENT))
+                // The run orb reads varp 173; the browser sets it from this packet itself.
+                varps.setVarp(RUN_VARP, reader.u8())?.let(::send)
+            }
+            TspsServerPacket.LOGOUT_RESPONSE -> {
+                val reader = packet.reader()
+                val ok = reader.u8() != 0
+                val reason = reader.string()
+                if (ok) send(Logout) else if (reason.isNotEmpty()) send(MessageGame(GAME_MESSAGE, reason))
+            }
             TspsServerPacket.TICK -> Unit
-            else -> DropCounter.down(packet.opcode)
+            else -> if (!interfaces.handle(packet)) DropCounter.down(packet.opcode)
         }
     }
 
@@ -207,12 +195,12 @@ class GatewaySession(
     }
 
     private fun onChat(chat: TspsChatMessage) {
-        // Public chat goes overhead and to the chatbox through PLAYER_INFO.
-        if (chat.isPublic && chat.playerIndex >= 0) {
-            mirror?.queueChat(chat.playerIndex, chat.text, chat.modIcon)
-            return
+        when {
+            // Public chat goes overhead and to the chatbox through PLAYER_INFO.
+            chat.isPublic && chat.playerIndex >= 0 -> mirror?.queueChat(chat.playerIndex, chat.text, chat.modIcon)
+            chat.isGameMessage -> send(MessageGame(chat.type, chat.from.ifEmpty { null }, chat.text))
+            else -> DropCounter.down(TspsServerPacket.CHAT_MESSAGE)
         }
-        DropCounter.down(TspsServerPacket.CHAT_MESSAGE)
     }
 
     /** tsps has placed the player: log the client in at that tile. */
@@ -290,6 +278,7 @@ class GatewaySession(
         if (state == State.CLOSED) return
         state = State.CLOSED
         if (::tsps.isInitialized) tsps.close()
+        session?.flush()
         session?.requestClose()
         mirror?.release()
         mirror = null
@@ -301,14 +290,14 @@ class GatewaySession(
 
     private companion object {
         val log: Logger = Logger.getLogger(GatewaySession::class.java.name)
-        const val DEFAULT_TOPLEVEL = 161
         const val STAFF_ADMINISTRATOR = 2
         const val PING_INTERVAL_MS = 5_000L
         const val SCENE_RADIUS_ZONES = 6
         const val TRADE_OP = 2
+        const val RUN_VARP = 173
+        const val RUN_ENERGY_PER_PERCENT = 100
+        const val GAME_MESSAGE = 0
 
-        /** OSRS public-chat types (0 public, 1 autotyper, 2 friends chat) to tsps chat kinds. */
-        val PUBLIC_CHAT_KINDS = mapOf(0 to 0, 1 to 3, 2 to 2)
         const val FOLLOW_OP = 3
     }
 }

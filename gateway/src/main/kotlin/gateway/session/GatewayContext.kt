@@ -1,7 +1,9 @@
 package gateway.session
 
 import gateway.cache.Cache
+import gateway.cache.EnumTypes
 import gateway.cache.ObjTypes
+import gateway.cache.VarTypes
 import gateway.config.GatewayConfig
 import io.netty.buffer.ByteBufAllocator
 import net.rsprot.compression.provider.HuffmanCodecProvider
@@ -22,6 +24,8 @@ class GatewayContext(
     val allocator: ByteBufAllocator = ByteBufAllocator.DEFAULT,
 ) {
     val objs = ObjTypes(cache)
+    val vars = VarTypes(cache)
+    val enums = EnumTypes(cache)
 }
 
 /** rsprot's login callbacks: each login gets a [GatewaySession]. */

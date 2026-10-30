@@ -1,0 +1,135 @@
+package gateway.up
+
+import gateway.coverage.DropCounter
+import gateway.session.VarpMirror
+import gateway.tsps.TspsClientPacket
+import gateway.tsps.TspsWriter
+import net.rsprot.protocol.game.incoming.buttons.If1Button
+import net.rsprot.protocol.game.incoming.buttons.If3Button
+import net.rsprot.protocol.game.incoming.buttons.IfButtonD
+import net.rsprot.protocol.game.incoming.buttons.IfButtonT
+import net.rsprot.protocol.game.incoming.buttons.IfScriptTrigger
+import net.rsprot.protocol.game.incoming.buttons.IfSubOp
+import net.rsprot.protocol.game.incoming.messaging.MessagePublic
+import net.rsprot.protocol.game.incoming.misc.user.ClientCheat
+import net.rsprot.protocol.game.incoming.misc.user.CloseModal
+import net.rsprot.protocol.game.incoming.misc.user.MoveGameClick
+import net.rsprot.protocol.game.incoming.misc.user.MoveMinimapClick
+import net.rsprot.protocol.game.incoming.misc.user.SetHeading
+import net.rsprot.protocol.game.incoming.npcs.OpNpc6
+import net.rsprot.protocol.game.incoming.npcs.OpNpcV2
+import net.rsprot.protocol.game.incoming.players.OpPlayer
+import net.rsprot.protocol.game.incoming.resumed.ResumePCountDialog
+import net.rsprot.protocol.game.incoming.resumed.ResumePLongDialog
+import net.rsprot.protocol.game.incoming.resumed.ResumePNameDialog
+import net.rsprot.protocol.game.incoming.resumed.ResumePStringDialog
+import net.rsprot.protocol.game.incoming.resumed.ResumePauseButton
+import net.rsprot.protocol.message.IncomingGameMessage
+
+/**
+ * The official client's packets as the tsps packets the browser would send for the same
+ * action. tsps closes a session on an opcode it doesn't know, so anything without a
+ * translation is counted and dropped, never passed on.
+ */
+class Upstream(
+    private val varps: VarpMirror,
+    private val send: (ByteArray) -> Unit,
+) {
+    fun handle(message: IncomingGameMessage) {
+        when (message) {
+            is MoveGameClick -> send(TspsClientPacket.move(message.x, message.z, message.keyCombination))
+            is MoveMinimapClick -> send(TspsClientPacket.move(message.x, message.z, message.keyCombination))
+            is SetHeading -> send(TspsClientPacket.setHeading(message.heading))
+            is If1Button -> send(TspsClientPacket.ifButton(message.combinedId))
+            is If3Button -> button(message)
+            is IfSubOp ->
+                send(
+                    TspsWriter().i32(message.combinedId).u16(message.sub).u16(message.obj).u8(message.op).u8(message.subop)
+                        .fixed(IF_BUTTON_SUB),
+                )
+            is IfButtonD ->
+                send(
+                    TspsWriter()
+                        .u16le(message.targetObj)
+                        .i32le(message.targetCombinedId)
+                        .u16(message.selectedObj)
+                        .u16AddLE(message.selectedSub)
+                        .i32me(message.selectedCombinedId)
+                        .u16le(message.targetSub)
+                        .fixed(IF_BUTTOND),
+                )
+            is IfButtonT ->
+                send(
+                    TspsWriter()
+                        .i32ime(message.targetCombinedId)
+                        .u16AddLE(message.targetSub)
+                        .i32le(message.selectedCombinedId)
+                        .u16le(message.selectedSub)
+                        .u16(message.selectedObj)
+                        .u16AddLE(message.targetObj)
+                        .fixed(IF_BUTTONT),
+                )
+            is IfScriptTrigger -> scriptTrigger(message)
+            is ResumePauseButton -> send(TspsWriter().u16AddLE(message.sub).i32(message.combinedId).fixed(RESUME_PAUSEBUTTON))
+            is ResumePCountDialog -> send(TspsWriter().i32(message.count).fixed(RESUME_COUNTDIALOG))
+            is ResumePLongDialog -> send(TspsWriter().i32(message.count.coerceIn(0, Int.MAX_VALUE.toLong()).toInt()).fixed(RESUME_COUNTDIALOG))
+            is ResumePNameDialog -> send(TspsWriter().string(message.name).varByte(RESUME_NAMEDIALOG))
+            is ResumePStringDialog -> send(TspsWriter().string(message.string).varByte(RESUME_STRINGDIALOG))
+            is CloseModal -> send(TspsWriter().fixed(IF_CLOSE))
+            is MessagePublic ->
+                PUBLIC_CHAT_KINDS[message.type]?.let { send(TspsClientPacket.chat(it, message.message)) } ?: DropCounter.up(message)
+            // Autocomplete is the client asking for suggestions as you type; tsps has none.
+            is ClientCheat -> if (!message.autocomplete) send(TspsClientPacket.command(message.command))
+            is OpPlayer -> send(TspsClientPacket.playerOp(message.op, message.index))
+            is OpNpcV2 -> if (message.op in 1..5) send(TspsClientPacket.npcOp(message.op, message.index)) else DropCounter.up(message)
+            is OpNpc6 -> send(TspsClientPacket.examineNpc(message.id))
+            else -> DropCounter.up(message)
+        }
+    }
+
+    private fun button(message: If3Button) {
+        when (message.combinedId) {
+            // The browser sets the run varp itself and transmits it; tsps has no orb handler.
+            RUN_ORB -> send(TspsWriter().u16(RUN_VARP).i32(1 - varps[RUN_VARP]).fixed(VARP_TRANSMIT))
+            // The browser's CS2 LOGOUT op sends LOGOUT; the official client sends the button.
+            LOGOUT_TAB_BUTTON, WORLD_SWITCHER_LOGOUT -> send(TspsWriter().fixed(LOGOUT))
+            else -> send(TspsClientPacket.ifButtonX(message.combinedId, message.sub, message.obj, message.op))
+        }
+    }
+
+    /** IF_TRIGGEROPLOCAL: u16 length, then little-endian crc, sub, component and obj, then the args. */
+    private fun scriptTrigger(message: IfScriptTrigger) {
+        val args = ByteArray(message.buffer.readableBytes()).also { message.buffer.getBytes(message.buffer.readerIndex(), it) }
+        val body =
+            TspsWriter()
+                .i32le(message.crc)
+                .u16le(message.sub)
+                .i32le(message.combinedId)
+                .u16le(message.obj)
+                .bytes(args)
+                .body()
+        send(TspsWriter().u16(body.size).bytes(body).varShort(IF_TRIGGEROPLOCAL))
+    }
+
+    private companion object {
+        const val IF_BUTTOND = 1
+        const val IF_TRIGGEROPLOCAL = 30
+        const val IF_CLOSE = 55
+        const val RESUME_PAUSEBUTTON = 62
+        const val IF_BUTTON_SUB = 89
+        const val IF_BUTTONT = 90
+        const val VARP_TRANSMIT = 191
+        const val RESUME_COUNTDIALOG = 192
+        const val RESUME_NAMEDIALOG = 193
+        const val RESUME_STRINGDIALOG = 194
+        const val LOGOUT = 203
+
+        const val RUN_ORB = (160 shl 16) or 28
+        const val RUN_VARP = 173
+        const val LOGOUT_TAB_BUTTON = (182 shl 16) or 8
+        const val WORLD_SWITCHER_LOGOUT = (69 shl 16) or 25
+
+        /** OSRS public-chat types (0 public, 1 autotyper, 2 friends chat) to tsps chat kinds. */
+        val PUBLIC_CHAT_KINDS = mapOf(0 to 0, 1 to 3, 2 to 2)
+    }
+}

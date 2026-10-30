@@ -1,0 +1,85 @@
+package gateway.it
+
+import gateway.headless.HeadlessClient
+import net.rsprox.protocol.game.outgoing.model.interfaces.IfOpenSub
+import net.rsprox.protocol.game.outgoing.model.logout.Logout
+import net.rsprox.protocol.game.outgoing.model.map.RebuildLoginV2
+import net.rsprox.protocol.game.outgoing.model.misc.client.ServerTickEnd
+import net.rsprox.protocol.game.outgoing.model.misc.player.UpdateStatV2
+import net.rsprox.protocol.game.outgoing.model.varp.VarpLarge
+import net.rsprox.protocol.game.outgoing.model.varp.VarpSmall
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
+
+/** M4: the gameframe, stats and varps after login, the run orb and the logout button. */
+class M4InterfacesTest {
+    private val modulus = LiveGateway.gateway.rsa.modulus
+
+    @Test
+    fun `login mounts the gameframe and sends stats and varps`() {
+        login().use { game ->
+            game.expect<RebuildLoginV2>()
+            val messages = game.until(TICKS)
+            val mounted = messages.filterIsInstance<IfOpenSub>().map { it.interfaceId }.toSet()
+            assertTrue(INVENTORY in mounted && EQUIPMENT in mounted && SKILLS in mounted, "mounted $mounted")
+            assertTrue(messages.filterIsInstance<UpdateStatV2>().size >= SKILL_COUNT)
+            assertTrue(messages.any { it is VarpSmall || it is VarpLarge })
+        }
+    }
+
+    @Test
+    fun `the run orb toggles run`() {
+        login().use { game ->
+            game.expect<RebuildLoginV2>()
+            val before = game.until(TICKS).lastRunVarp() ?: 0
+            game.button(ORBS, RUN_ORB)
+            assertEquals(1 - before, game.until(TICKS).lastRunVarp())
+        }
+    }
+
+    @Test
+    fun `the logout button logs out`() {
+        login().use { game ->
+            game.expect<RebuildLoginV2>()
+            game.until(TICKS)
+            game.button(LOGOUT_TAB, LOGOUT_BUTTON)
+            game.expect<Logout>(limit = 2_000)
+        }
+    }
+
+    private fun login(): HeadlessClient.Game {
+        val result = LiveGateway.client().login(LiveGateway.newAccount("gwui"), PASSWORD, modulus)
+        assertEquals(OK, result.code)
+        return result.game!!
+    }
+
+    /** Every packet up to and including the [ticks]th SERVER_TICK_END. */
+    private fun HeadlessClient.Game.until(ticks: Int): List<Any> {
+        val messages = ArrayList<Any>()
+        var seen = 0
+        while (seen < ticks) {
+            val message = next() ?: error("stream ended")
+            messages += message
+            if (message is ServerTickEnd) seen++
+        }
+        return messages
+    }
+
+    private fun List<Any>.lastRunVarp(): Int? = filterIsInstance<VarpSmall>().lastOrNull { it.id == RUN_VARP }?.value
+
+    private companion object {
+        const val PASSWORD = "gateway-test"
+        const val OK = 2
+        const val TICKS = 4
+        const val INVENTORY = 149
+        const val EQUIPMENT = 387
+        const val SKILLS = 320
+        const val SKILL_COUNT = 23
+        const val ORBS = 160
+        const val RUN_ORB = 28
+        const val RUN_VARP = 173
+        const val LOGOUT_TAB = 182
+        const val LOGOUT_BUTTON = 8
+    }
+}

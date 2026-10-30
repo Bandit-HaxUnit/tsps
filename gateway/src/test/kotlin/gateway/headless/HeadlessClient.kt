@@ -172,7 +172,7 @@ class HeadlessClient(private val host: String, private val port: Int) {
         }
 
         /** Reads packets until one of type [T] arrives, failing after [limit] packets. */
-        inline fun <reified T> expect(limit: Int = 500): T {
+        inline fun <reified T> expect(limit: Int = 5_000): T {
             repeat(limit) {
                 val message = next() ?: error("stream ended waiting for ${T::class.simpleName}")
                 if (message is T) return message

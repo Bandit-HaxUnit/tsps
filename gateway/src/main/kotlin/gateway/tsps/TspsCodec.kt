@@ -84,6 +84,19 @@ class TspsWriter {
 
     fun u16le(value: Int) = u8(value).u8(value ushr 8)
 
+    fun i32le(value: Int) = u16le(value).u16le(value ushr 16)
+
+    /** `intME`: bytes 2, 1, 4, 3 of the big-endian value. */
+    fun i32me(value: Int) = u8(value ushr 8).u8(value).u8(value ushr 24).u8(value ushr 16)
+
+    /** `intIME`: bytes 3, 4, 1, 2 of the big-endian value. */
+    fun i32ime(value: Int) = u8(value ushr 16).u8(value ushr 24).u8(value).u8(value ushr 8)
+
+    fun bytes(data: ByteArray) = apply { out.writeBytes(data) }
+
+    /** The payload written so far, without an opcode. */
+    fun body(): ByteArray = out.toByteArray()
+
     /** `shortAdd`: low byte + 128, then the high byte. */
     fun u16Add(value: Int) = u8(value + 128).u8(value ushr 8)
 
