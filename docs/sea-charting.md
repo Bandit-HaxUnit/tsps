@@ -221,8 +221,12 @@ Fremennik Strait view, 2366,3890, is a typo for the marker's 2366,3777).
 - Other currents need Current Affairs and 22 Sailing; no refusal was captured, so it's the
   "nothing worth tracking" line. Off the boat: `You need to be on your boat to release the duck.`
   (the quest's own line).
-- A duck still out when its player logs out goes back to their inventory; live's timer
-  (`sailing_charting_current_duck_reset`, "wait # seconds to collect another") isn't modelled.
+- A duck returns to the tools compartment on release and expires two minutes after stopping
+  (Wiki Current duck). The exact epoch deadline is persisted; logout removes the session NPC,
+  and relog keeps the replacement cooldown instead of refunding an inventory duck. Remaining
+  seconds are rounded upwards; the capture has the refusal at 60 seconds, but does not establish
+  the countdown rounding policy. The predicted remaining journey is included after a logout
+  before stopping; restoring the moving NPC itself across relog is not captured or implemented.
 - Routes seen in pieces (12 of 54: the duck left the player's view) are joined with straight
   steps; one (Sapphire Sea) runs on to the Wiki's end tile.
 - The wind: the tangent of the circle turned 25 degrees towards the spot, to the nearest of 8
@@ -248,11 +252,64 @@ Fremennik Strait view, 2366,3890, is a typo for the marker's 2366,3777).
 - The player doesn't turn towards the spot (live sends a face angle; the deck's frame would need
   the boat's heading worked in).
 
-## Not done (captured)
+## Bottle encounters, quiz and current-duck expiry
 
-- The drinks' side effects: the NPCs some bring to the deck (a defending troll, the fish
-  stoutier's, the monkfish stout's waves, the Sailing cat, a squirrel, a snakeling, a dwarf and
-  others: 10 drinks), the fishier stout's blackout with its three trolls and their drinks (varp
-  5035 bits 2-4), and the puzzler's poteen reward.
-- A current duck asked for at the tools compartment while one is out at sea: `You have a current
-  duck out at sea. Either find it or wait # seconds to collect another.` (no duck timer here).
+The units `DrinkEffects`, `FishierStout`, `Poteen` and `TrollCombat` extend `DrinkCrate`; all are Charting units.
+No generated NPC, dialogue or drop JSON is edited. Existing NPC definitions and generated drops
+supply the normal combat and loot; the queen is added to the sea-combat creature data so it uses
+boat combat, its defeated form and Harvest.
+
+- RSProx 235/940: platinum rum creates seven dwarves, one immediately and a replacement every
+  two ticks. Each waves (`dwarf_drunkwave`) and gives beer or kebab (equal chances, Wiki Drunken
+  Dwarf (Sea charting)); inventory capacity is checked for every gift. Missing capacity loses
+  that individual gift; overflow placement is not established by a recording.
+- 235/3455,3467,948,3837,940: drink troll, snakeling, blue dagannoth, corpse, tortugan and Dinky
+  appear on the deck one tick after drinking. Whisky creates squirrel/racoon/chinchompa together
+  immediately (3467); the Sailing cat also appears immediately (944). Visitors are owned and
+  scoped to that boat. Teleport, boat disposal and logout remove them; repeated bottles replace
+  that drink's own visitors. NPC combat stats/animations remain the shared definitions'.
+- 235/948: monkfish stout creates its queen in the sea one tick later. The recorded offset is
+  six tiles west and four north of the boat's rounded root tile. Its reach of six and impact
+  height of20 follow the existing sea-combat data conventions; those are implementation choices,
+  not independently recorded queen range measurements.
+- 235/941: puzzler's poteen asks the five recorded questions through normal chatbox menus.
+  A wrong answer deals floor10% of current HP and prints the recorded braincells message. Five
+  correct answers give five mystery boxes once, save the reward and send varbit18569. Capacity
+  is checked atomically; failure leaves the reward unclaimed and another bottle can retry.
+  The reward message continues to the recorded Quiz Master goodbye.
+- 235/948: fishier stout always asks the stronger expiry warning with Yes/No. Ordinary drink
+  warning suppression cannot skip it. At +2 ticks the blackout line appears; +3 moves into a
+  private copy of the troll arena; +6 wakes the player; +7 spawns the three recorded trolls.
+  The real arena exit sends the player to Rellekka Longhall. Ordinary cargo survives and the boat
+  docks at Rellekka only with62Sailing and Fremennik Trials, otherwise Port Sarim (Wiki).
+  Courier cargo is discarded. The existing trolls' death drops are their three special drinks;
+  each awards100SailingXP once and persists/re-sends varp5035 bits2-4. Session instances are
+  cleaned on leave/logout; a restart save in an instance returns to Longhall rather than freed
+  instance tiles. That restart fallback is not captured.
+- Wiki Current duck: expiry is120seconds after stopping. RSProx235/938 shows the tools refusal
+  `You have a current duck out at sea. Either find it or wait 60 seconds to collect another.`
+  A full inventory while collecting retains the owned duck and leaves its chart uncompleted.
+  Tools withdrawal is guarded by an additive `sailing:can-take-tool` query in CargoHold.
+
+## Remaining source limitations
+
+- The corpse has a chance to regenerate, at most nine times (Wiki A corpse). The only local
+  recording235/948 shows three regenerations and then a final death. No available source
+  establishes the probability, and no probability or fixed revival count is fabricated here;
+  the regeneration mechanic remains unresolved. The normal spawned corpse combat/lifecycle is
+  implemented, but this is not a claim that its complete encounter matches OSRS.
+- Dinky's current Wiki infobox gives max hit51+, and The rocks gives an unknown magic max hit.
+  Their generated max_hit fields are null. Dinky consequently retains the shared maximum1
+  fallback; its full damage behavior remains unfinished. The rocks uses magic normally and
+  switches to melee against Protect from Magic (Wiki), with the known melee maximum23 through
+  the ordinary damage/prayer pipeline. Its magic maximum retains the shared fallback1.
+  The recorded magic impact369 (delay10) interrupts combat; a movement-freeze duration is not
+  invented. Both styles play the captured troll attack animation284. Magic hit delay0 is an
+  implementation choice: adjacent mixed attacks do not establish the cast-to-impact timing.
+  Random adjacent melee, teleport odds and Daddy's special-selection/stun policy
+  remain unresolved; these are material encounter limitations.
+- Exact visitor placement on each hull, queen range, idle chatter/wandering, corpse regeneration
+  odds and these encounters' detailed mixed-style special attacks require more evidence.
+- Captures are revision235; identifiers and map objects are checked against pinned revision241
+  dump6e5033af6215963581a51b348f452320ff18f0f6 and the active241cache. The Wiki supplies mechanics
+  and current stats where the recording predates later boat-combat updates.
