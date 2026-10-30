@@ -81,11 +81,13 @@ class Upstream(
                 if (message.selectedCombinedId == INVENTORY && message.targetCombinedId == INVENTORY) {
                     send(WorldOps.inventoryMove(message.selectedSub, message.targetSub))
                 } else {
+                    // rsprot's (and RSProx's) obj fields are each the other end's: RuneLite's recorded
+                    // bank drags carry the dropped-on slot's obj first. tsps checks the dragged item.
                     send(
                     TspsWriter()
-                        .u16le(message.targetObj)
+                        .u16le(message.selectedObj)
                         .i32le(message.targetCombinedId)
-                        .u16(message.selectedObj)
+                        .u16(message.targetObj)
                         .u16AddLE(message.selectedSub)
                         .i32me(message.selectedCombinedId)
                         .u16le(message.targetSub)
