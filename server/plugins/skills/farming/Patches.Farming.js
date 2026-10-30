@@ -1049,11 +1049,11 @@ function login(event) {
     refresh(player);
 }
 function logout({ player }) {
+    Hespori.hesporiLogout({ player });
     runPending(player, true);
     redwoodRegrowth.delete(player);
     WORK.delete(player); RENDERED.delete(player);
     unschedule(player); tracked.delete(player); dirty.delete(player); nearPatches.delete(player); seedlingDue.delete(player);
-    Hespori.hesporiLogout({ player });
 }
 function cancelWork({ player }) { WORK.delete(player); }
 
@@ -1109,6 +1109,8 @@ function attach(api) {
     api.onCustomEvent("magic:humidified", Services.humidified);
     api.onCustomEvent("agent:advance-time", advanceTime);
     api.onCustomEvent("player:world-input", Hespori.hesporiInput);
+    api.onCustomEvent("npc-dialogue:action", Hespori.reentryAction);
+    api.onCustomEvent("interface:changed", Hespori.warningInterfaceChanged);
     api.onCustomEvent("player:world-input", cancelWork);
     api.onCustomEvent("npc-drops:generated", Hespori.hesporiLoot);
     api.onCustomEvent("hespori:quest-challenge", Hespori.challengeHespori);
