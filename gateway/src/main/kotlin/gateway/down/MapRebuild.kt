@@ -28,7 +28,7 @@ sealed class MapRebuild(val zoneX: Int, val zoneZ: Int) {
 
     /** `REBUILD_NORMAL` (141): `u16 zoneX, u16 zoneZ, u8 keep, u16 keyCount, keys`. */
     class Normal(zoneX: Int, zoneZ: Int) : MapRebuild(zoneX, zoneZ) {
-        override fun toMessage() = RebuildNormalV2(zoneX, zoneZ, NO_WORLD_AREA)
+        override fun toMessage() = RebuildNormalV2(zoneX, zoneZ, MAIN_WORLD_AREA)
     }
 
     /**
@@ -68,8 +68,11 @@ sealed class MapRebuild(val zoneX: Int, val zoneZ: Int) {
     }
 
     companion object {
-        /** OSRS's world-area id; tsps has none to give, and -1 is the client's "none". */
-        const val NO_WORLD_AREA = -1
+        /**
+         * OSRS's world-area id: 0 is the main world, which live sends there. tsps has none to give;
+         * -1 went out as 65535 (rsprot packs it unsigned), an area the client can't find.
+         */
+        const val MAIN_WORLD_AREA = 0
 
         /** How far (in zones) a new scene's centre may be from the client's for it to stay. */
         const val KEEP_ZONES = 3

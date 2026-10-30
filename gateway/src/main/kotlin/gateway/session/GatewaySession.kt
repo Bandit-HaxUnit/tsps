@@ -303,7 +303,7 @@ class GatewaySession(
         }
         this.session = session
         // REBUILD_LOGIN is always a static map; an instance follows as its own rebuild.
-        session.queue(RebuildLoginV2(scene.zoneX, scene.zoneZ, MapRebuild.NO_WORLD_AREA, infos.playerInfo))
+        session.queue(RebuildLoginV2(scene.zoneX, scene.zoneZ, MapRebuild.MAIN_WORLD_AREA, infos.playerInfo))
         if (scene is MapRebuild.Region) session.queue(scene.toMessage())
         groundItems.rebuild(scene.zoneX, scene.zoneZ)
         worldUpdates.rebuild(scene.zoneX, scene.zoneZ)
