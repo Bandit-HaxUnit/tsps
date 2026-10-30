@@ -2,6 +2,7 @@ import { hintArrow } from "../../../game/HintArrow";
 import { projectDeckToWorld } from "../worldEntityMotion";
 import { updateSkyColor } from "../environment";
 import { syncCameraViewportUnitScale } from "../quality";
+import { getCameraViewportRect } from "../viewportRect";
 import { resolveSceneFramebuffer } from "../init/framebuffers";
 import { takePreparedQueuedMap } from "../streaming";
 import Denque from "denque";
@@ -552,7 +553,6 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         const camHeight = Math.max(1, host.app.height || host.canvas.height || 1);
         syncCameraViewportUnitScale(host);
         const sceneViewport = host.getSceneViewportWidgetRect();
-        const sceneFramebufferViewport = host.scaleViewportRectToSceneBuffer(sceneViewport);
         camera.update(
             camWidth,
             camHeight,
@@ -561,6 +561,8 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
             sceneViewport.width,
             sceneViewport.height,
         );
+        const effectiveSceneViewport = getCameraViewportRect(camera);
+        const sceneFramebufferViewport = host.scaleViewportRectToSceneBuffer(effectiveSceneViewport);
         updateSkyColor(host);
         host.clearSceneFramebuffer(sceneFramebufferViewport);
         // keep CS2-visible viewport zoom in sync with the viewport widget size
@@ -1400,7 +1402,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                     },
                     helpers: host.getOverlayHelpers(),
                 });
-                host.overlayManager?.draw(RenderPhase.ToFrameTexture, sceneViewport);
+                host.overlayManager?.draw(RenderPhase.ToFrameTexture, effectiveSceneViewport);
             }
         } catch {}
         profiler.endPhase();
@@ -1624,7 +1626,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
             }
             if (!host.uiHidden) {
                 host.overlayManager?.update(args);
-                host.overlayManager?.draw(RenderPhase.PostPresent, sceneViewport);
+                host.overlayManager?.draw(RenderPhase.PostPresent, effectiveSceneViewport);
                 if (host.loginOverlay) {
                     host.loginOverlay.setGameState(host.osrsClient.gameState);
                     host.loginOverlay.update(args);
