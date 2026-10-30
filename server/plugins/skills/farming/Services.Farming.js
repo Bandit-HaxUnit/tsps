@@ -8,6 +8,7 @@ const Tools = require("./Tools.Farming");
 // underwater seaweed) and Cap'n Izzy No-Beard (agility arena, 12) also advertise Pay.
 const GARDENER_RANGE = 10;
 const COMPOST_NAMES = ["", "Compost", "Supercompost", "Ultracompost", "Rotten tomato"];
+const ROTTEN_TOMATO_TIER = 4;
 // Rev 241 gamevals human_push and human_pickuptable, with the sounds captured on the bin (recording 1858).
 const BIN_LID_ANIMATION = 810;
 const BIN_TAKE_ANIMATION = 832;
@@ -101,7 +102,7 @@ function binAction(player, patch, action, usedId, usedSlot) {
             takenFromBin(player, patch, bin);
             return;
         }
-        if (!inventory.contains(Data.itemId("Bucket"))) { player.sendMessage("You need an empty bucket."); return; }
+        if (!canTakeBinProduct(player, bin)) return;
         Patches.startBinWork(player, patch, { bin }, "take-bin");
         return;
     }
@@ -128,22 +129,34 @@ function takenFromBin(player, patch, bin) {
     if (--bin.count === 0) Patches.stateFor(player, patch).bin = undefined;
     Patches.syncPatch(player, patch);
 }
+function canTakeBinProduct(player, bin) {
+    if (bin.tier === ROTTEN_TOMATO_TIER) {
+        // Wiki Rotten tomato: no tools; unlike compost, collecting one does not consume a bucket.
+        if (player.getInventory().getAddableAmount(new core.Item(Data.itemId("Rotten tomato"))) > 0) return true;
+        player.sendMessage("You don't have space to hold a rotten tomato, squishy though it may be.");
+        return false;
+    }
+    if (player.getInventory().contains(Data.itemId("Bucket"))) return true;
+    player.sendMessage("You need an empty bucket.");
+    return false;
+}
 /** Captures: buckets are filled one at a time, the scoop and its sound, the bucket a tick later, every four ticks. */
 function takeBinStep(player, work) {
     const { bin } = work.input;
     const inventory = player.getInventory();
-    if (Patches.stateFor(player, work.patch).bin !== bin || !bin.open || !bin.count || !inventory.contains(Data.itemId("Bucket"))) return false;
+    if (Patches.stateFor(player, work.patch).bin !== bin || !bin.open || !bin.count || !canTakeBinProduct(player, bin)) return false;
     if (!work.depositing) {
         player.performAnimation(new core.Animation(BIN_TAKE_ANIMATION));
         Patches.sound(player, BIN_TAKE_SOUND);
         work.depositing = true;
         return 1;
     }
-    inventory.deleteNumber(Data.itemId("Bucket"), 1);
+    // Capacity is rechecked above on the output tick, before any output, depletion or XP.
+    if (bin.tier !== ROTTEN_TOMATO_TIER) inventory.deleteNumber(Data.itemId("Bucket"), 1);
     inventory.addItem(new core.Item(Data.itemId(COMPOST_NAMES[bin.tier])));
     takenFromBin(player, work.patch, bin);
     work.depositing = false;
-    return bin.count > 0 && inventory.contains(Data.itemId("Bucket")) ? 3 : false;
+    return bin.count > 0 && (bin.tier === ROTTEN_TOMATO_TIER || inventory.contains(Data.itemId("Bucket"))) ? 3 : false;
 }
 function dose(player, id) {
     const name = core.CacheDefinitions.getItem(id).name;
