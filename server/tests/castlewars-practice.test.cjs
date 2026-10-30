@@ -34,18 +34,29 @@ function player(t, x = 2426, y = 3082) {
   return p;
 }
 
+function pick(text) {
+  const index = prompt.pairs.findIndex((value, i) => i % 2 === 0 && value.startsWith(text));
+  assert.notEqual(index, -1, `${text} is available`);
+  prompt.pairs[index + 1]();
+}
+
 test('Lanthus settings choose team sizes, freeze limits and barricade caps, and reject stale callbacks', (t) => {
   const p = player(t);
   const messages = [];
   t.mock.method(p, 'sendMessage', (m) => messages.push(m));
   Settings.openSettings({ player: p });
-  prompt.pairs[1]();
+  pick('Teams:');
   assert.deepEqual(prompt.pairs.filter((_, i) => i % 2 === 0), ['1 vs 1', '3 vs 3', '5 vs 5', '10 vs 10', '30 vs 30']);
-  prompt.pairs[1]();
+  pick('1 vs 1');
   assert.equal(game.settings.teamSize, 1);
-  prompt.pairs[7]();
-  prompt.pairs[3]();
+  pick('More settings');
+  pick('Ice freeze:');
+  pick('10 seconds');
+  assert.equal(game.settings.freezeSeconds, 10);
+  pick('Barricades per team:');
+  pick('20');
   assert.equal(game.getBarricadeLimit(), 20);
+  pick('Back');
   const stale = prompt.pairs[9];
   queued = 1;
   stale();

@@ -16,6 +16,7 @@ const core = PluginManager.getCoreApi();
 const data = require('../plugins/minigames/castlewars/Data.CastleWars')(core);
 const Game = require('../plugins/minigames/castlewars/Game.CastleWars');
 const Lobby = require('../plugins/minigames/castlewars/Lobby.CastleWars');
+const Settings = require('../plugins/minigames/castlewars/Settings.CastleWars');
 const Areas = require('../plugins/minigames/castlewars/Areas.CastleWars');
 const { TEAM } = data;
 
@@ -23,6 +24,7 @@ let game;
 let objectHandler;
 let botLogins = 0;
 let prompt = null;
+const submittedTasks = [];
 
 const registry = {
   core,
@@ -30,12 +32,13 @@ const registry = {
   getBonusManager: () => ({ update: () => {} }),
   getObjectManager: () => ({ register: () => {}, deregister: () => {}, existsLocation: () => false }),
   getRegionManager: () => RegionManager,
-  getTaskManager: () => ({ submit: () => {}, cancelTasks: () => {} }),
+  getTaskManager: () => ({ submit: (task) => { task.setRunning(true); submittedTasks.push(task); }, cancelTasks: () => {} }),
   getWorld: () => World,
   getPluginConfig: (key, fallback) => PluginManager.getPluginConfig(key, fallback),
   emitPlayerLogin: () => { botLogins += 1; },
   onObjectInteraction: (handler) => { objectHandler = handler; },
   onNpcInteraction: () => {},
+  onCustomEvent: () => {},
   sendMultiChatboxPrompt: (player, title, ...pairs) => {
     const options = [];
     for (let i = 0; i < pairs.length; i += 2) options.push({ text: pairs[i], pick: pairs[i + 1] });
@@ -105,6 +108,8 @@ afterEach(() => {
   prompt = null;
   World.getAddPlayerQueue().splice(0);
   for (const area of Object.values(game.waitingAreas)) area.players.length = 0;
+  game.checkStartCountdown();
+  submittedTasks.length = 0;
   game.lobbyArea.players.length = 0;
 });
 
@@ -333,6 +338,111 @@ test('practice sizes count the human and select the requested opposing bot role'
     const opponents = bots.filter((bot) => game.getTeamId(bot) === TEAM.ZAMORAK);
     assert.equal(opponents.length, size);
     assert.ok(opponents.every((bot) => bot.getAttribute(game.BOT_ROLE_KEY) === 'scorer'));
+  }
+});
+
+test('practice menus join from every portal through the real prompt dispatcher without losing settings or team choice', (t) => {
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
+  const { DialogueIdentifiers } = require('../dist/util/DialogueIdentifiers');
+  const realApi = PluginManager.createApi('CastleWarsPracticeEntryTest');
+  t.mock.method(registry, 'sendMultiChatboxPrompt', realApi.sendMultiChatboxPrompt);
+  Settings(registry, game);
+  const forms = [];
+  game.prepareWaitingForm = (_player, god) => forms.push(god);
+  t.after(() => { delete game.prepareWaitingForm; });
+
+  function pick(player, text) {
+    const pending = MultiChatboxPrompt.getPending(player);
+    assert.ok(pending, `a prompt is open for ${text}`);
+    assert.ok(pending.options.length <= 5, 'the native options interface supports every choice');
+    assert.equal(player.getDialogueManager().isActive(), false, 'the prompt retains dialogue ownership');
+    const index = pending.options.findIndex((option) => option.startsWith(text));
+    assert.notEqual(index, -1, `${text} is available in ${pending.title}`);
+    assert.equal(PluginManager.emitInterfaceActionClick({
+      player, buttonId: MultiChatboxPrompt.OPTIONS_WIDGET_ID,
+      groupId: 219, action: 1, slot: index + 1, handled: false,
+    }), true);
+  }
+
+  for (const [portalId, expectedTeam, god] of [
+    [core.ObjectIdentifiers.GUTHIX_PORTAL, TEAM.ZAMORAK, 'guthix'],
+    [core.ObjectIdentifiers.SARADOMIN_PORTAL, TEAM.SARADOMIN, TEAM.SARADOMIN],
+    [core.ObjectIdentifiers.ZAMORAK_PORTAL, TEAM.ZAMORAK, TEAM.ZAMORAK],
+  ]) {
+    World.getAddPlayerQueue().splice(0);
+    const player = new Player(null);
+    const moves = [];
+    t.mock.method(player, 'getSession', () => ({ sendClientPacket: () => true }));
+    t.mock.method(player, 'smartMove', (location) => moves.push(location));
+    assert.equal(player.getDialogueManager().startStaticDialogue(DialogueIdentifiers.TEST), true);
+    assert.equal(player.getDialogueManager().isActive(), true);
+    enterPortal(player, portalId);
+    pick(player, 'Practice settings (Lanthus)');
+    pick(player, 'Teams:');
+    pick(player, '1 vs 1');
+    pick(player, 'Bots:');
+    pick(player, 'Scorer (magic defence)');
+    pick(player, 'More settings');
+    pick(player, 'Ice freeze:');
+    pick(player, '10 seconds');
+    pick(player, 'Barricades per team:');
+    pick(player, '20');
+    pick(player, 'Back');
+    pick(player, 'Join practice');
+    pick(player, 'Veteran');
+
+    assert.equal(MultiChatboxPrompt.getPending(player), null, 'joining closes the last prompt');
+    assert.equal(moves.length, 1, 'the join action reaches the waiting room');
+    assert.equal(game.getTeamId(player), expectedTeam);
+    assert.equal(forms.at(-1), god, 'the original portal determines the waiting-room transformation');
+    assert.deepEqual(game.settings, { teamSize: 1, opponent: 'scorer', freezeSeconds: 10, barricades: 20 });
+    const bots = World.getAddPlayerQueue();
+    assert.equal(bots.length, 1, '1 vs 1 uses the human and one opposing bot');
+    assert.equal(game.getTeamId(bots[0]), game.opposingTeam(expectedTeam));
+    assert.equal(bots[0].getAttribute(game.BOT_ROLE_KEY), 'scorer');
+    assert.equal(bots[0].getAttribute(game.BOT_TIER_KEY), 'veteran');
+  }
+});
+
+test('a Guthix tier choice rechecks team balance if another player joined while the prompt was open', () => {
+  const player = fakePlayer();
+  enterPortal(player, core.ObjectIdentifiers.GUTHIX_PORTAL);
+  const join = prompt.options.find((option) => option.text === 'None').pick;
+  game.waitingAreas[TEAM.ZAMORAK].players.push(fakePlayer());
+  join();
+  assert.equal(game.getTeamId(player), TEAM.SARADOMIN);
+  assert.equal(player.moves.length, 1);
+  assert.equal(World.getAddPlayerQueue().length, 0);
+});
+
+test('Lanthus can join practice directly, and a stale Join callback cannot change a populated lobby', () => {
+  Settings(registry, game);
+  const player = fakePlayer();
+  Settings.openSettings({ player });
+  const join = prompt.options.find((option) => option.text === 'Join practice').pick;
+  join();
+  prompt.options.find((option) => option.text === 'None').pick();
+  assert.equal(player.moves.length, 1, 'Lanthus uses the normal portal entry validation');
+  assert.equal(World.getAddPlayerQueue().length, 0);
+  game.waitingAreas[TEAM.ZAMORAK].players.push(player);
+  join();
+  assert.equal(player.moves.length, 1);
+  assert.match(player.messages.at(-1), /settings are locked/);
+});
+
+test('only Castle Wars bots in the waiting rooms shorten the start countdown to fifteen seconds', (t) => {
+  const unrelatedWorldBot = fakePlayer({ bot: true });
+  t.mock.method(World, 'getPlayers', () => [unrelatedWorldBot]);
+  for (const botInQueue of [false, true]) {
+    game.waitingAreas[TEAM.SARADOMIN].players.push(fakePlayer());
+    game.waitingAreas[TEAM.ZAMORAK].players.push(fakePlayer({ bot: botInQueue }));
+    game.beginStartCountdown();
+    assert.equal(submittedTasks.at(-1).getRemainingTicks(), core.Misc.getTicks(botInQueue ? 15 : 120));
+    assert.equal(game.startSecondsLeft(), botInQueue ? 15 : 120);
+    for (const area of Object.values(game.waitingAreas)) area.players.length = 0;
+    game.checkStartCountdown();
+    assert.equal(game.getPhase(), game.PHASE.IDLE);
   }
 });
 

@@ -18,6 +18,61 @@ const COUNTER_VARBITS = [14662, 14663, 14819, 15370, 15397];
 const COINS = 995;
 const JINGLE = 6765;
 const JINGLE_DELAY = 30;
+/** Wiki, each creature's 17 June 2026 change: only these scale bounty parts and pre-rolls. */
+const SCALED_NAMES = new Set(["Great white shark", "Narwhal", "Orca", "Armoured kraken", "Vampyre kraken", "Veiled kraken"]);
+const SCALED_CREATURES = new Set(seaData.creatures.filter((creature) => SCALED_NAMES.has(creature.name)).map((creature) => creature.npc));
+/** The individual Wiki pages specify tentacles before ink sacs, regardless of acceptance order. */
+const TENTACLE_FIRST = new Set(seaData.creatures.filter((creature) =>
+  creature.name === "Armoured kraken" || creature.name === "Vampyre kraken").map((creature) => creature.npc));
+const PRE_ROLLS = /^(?:Narwhal horn|Dragon nails|Dragon metal sheet|Dragon keel parts|Large dragon keel parts|Echo pearl|Broken dragon hook|Bottled storm|Dragon cannon barrel|Inky paint)$/i;
+const BOOSTED_UNIQUES = /^(?:Dragon metal sheet|Dragon keel parts|Large dragon keel parts|Echo pearl|Broken dragon hook|Bottled storm|Dragon cannon barrel)$/i;
+
+function rewardInfo(player, npc) {
+  const request = { player, npc };
+  common.core().PluginManager.emitCustomEvent("sea-combat:reward-context", request);
+  return request;
+}
+
+/** Receipt, rather than current possession, permanently closes an assignment's unique boost. */
+function unfinished(player, creatureId) {
+  const held = common.slots(player);
+  let first = -1;
+  for (let index = 0; index < held.length; index++) {
+    const slot = held[index];
+    const bounty = slot && bountyOf(common.taskById(slot.id));
+    if (bounty?.creature !== creatureId || remaining(slot, bounty) <= 0) continue;
+    if (first < 0) first = index;
+    if (TENTACLE_FIRST.has(creatureId) && / tentacle$/i.test(itemName(bounty.part))) return index;
+  }
+  return first;
+}
+
+function dropChance({ player, npc, rules }) {
+  const info = rewardInfo(player, npc);
+  if (!SCALED_CREATURES.has(info.creature?.npc)) return;
+  rules.push({ pattern: PRE_ROLLS, multiplier: info.damageShare });
+  if (unfinished(player, info.creature.npc) >= 0) rules.push({ pattern: BOOSTED_UNIQUES, multiplier: 2 });
+}
+
+function dropContext({ player, npc, context }) {
+  const info = rewardInfo(player, npc);
+  if (info.creature && unfinished(player, info.creature.npc) >= 0) context.bountyTask = info.creature.name;
+}
+
+/** Lost parts remain replaceable; physical possession never reopens the unique boost. */
+function replacementSlot(player, creatureId) {
+  const held = common.slots(player);
+  const owned = common.core().Sailing.activeBoat(player);
+  const allocated = new Map();
+  return held.findIndex((slot) => {
+    const bounty = slot && bountyOf(common.taskById(slot.id));
+    if (bounty?.creature !== creatureId) return false;
+    const count = player.getInventory().getAmount(bounty.part) + (owned ? cargo.countIn(owned, bounty.part) : 0);
+    const earlier = allocated.get(bounty.part) ?? 0;
+    allocated.set(bounty.part, earlier + bounty.amount);
+    return count - earlier < bounty.amount;
+  });
+}
 
 /** A bounty task's creature, part, how many and how rare, from its cache row. */
 function bountyOf(task) {
@@ -83,16 +138,22 @@ function onHarvest(harvest, random = Math.random) {
     for (let i = harvest.drops.length - 1; i >= 0; i--) if (parts.has(harvest.drops[i].itemId)) harvest.drops.splice(i, 1);
   }
   const held = common.slots(player);
-  const index = held.findIndex((slot) => {
-    const bounty = slot && bountyOf(common.taskById(slot.id));
-    return bounty?.creature === creature.npc && remaining(slot, bounty) > 0;
-  });
+  const pending = unfinished(player, creature.npc);
+  const index = pending >= 0 ? pending : replacementSlot(player, creature.npc);
   if (index < 0) return;
   const bounty = bountyOf(common.taskById(held[index].id));
-  if (random() >= 1 / bounty.rarity) return;
+  const info = rewardInfo(player, harvest.npc);
+  const share = SCALED_CREATURES.has(creature.npc) ? info.damageShare ?? 1 : 1;
+  if (random() >= share / bounty.rarity) return;
   extra.push({ itemId: bounty.part, amount: 1 });
   // Counted only if the part survives the loot's rules (an Ironman's shared kill keeps nothing).
-  const commit = () => collect(player, index, bounty);
+  const accepted = held[index];
+  let committed = false;
+  const commit = () => {
+    if (committed || common.slots(player)[index] !== accepted) return;
+    committed = true;
+    collect(player, index, bounty);
+  };
   if (Array.isArray(harvest.claims)) harvest.claims.push({ itemId: bounty.part, commit });
   else commit();
 }
@@ -101,7 +162,7 @@ function onHarvest(harvest, random = Math.random) {
 function collect(player, index, bounty) {
   const held = common.slots(player);
   if (!held[index]) return;
-  held[index] = { ...held[index], collected: (held[index].collected ?? 0) + 1 };
+  held[index] = { ...held[index], collected: Math.min(bounty.amount, (held[index].collected ?? 0) + 1) };
   player.setAttribute(common.SLOTS_ATTRIBUTE, held);
   player.getPacketSender().sendVarbit(COUNTER_VARBITS[index], remaining(held[index], bounty));
   const name = itemName(bounty.part);
@@ -196,6 +257,8 @@ function claim(event, random = Math.random) {
 function attach(api) {
   common.init(api);
   api.onCustomEvent("sea-combat:harvest", harvested);
+  api.onCustomEvent("npc-drops:chance", dropChance);
+  api.onCustomEvent("npc-drops:context", dropContext);
   api.onCustomEvent("port-tasks:bounty-accepted", onAccepted);
   api.onCustomEvent("port-tasks:cancelled", onCancelled);
   api.onPlayerLogin(onLogin);
