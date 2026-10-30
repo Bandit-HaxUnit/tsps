@@ -253,7 +253,8 @@ test("crewmates carrying crates: the ledger counts theirs, says they'll help, an
   } };
   try {
     hooks.objects["Ledger table"]["Take-cargo"]({ player, location: PANDEMONIUM_LEDGER });
-    const [name, taken] = events.find(([eventName]) => eventName === "port-tasks:cargo-taken");
+    assert.equal(events[0][0], "port-tasks:slots-changed");
+    const [name, taken] = events.find(([event]) => event === "port-tasks:cargo-taken") ?? [];
     assert.equal(name, "port-tasks:cargo-taken");
     assert.equal(taken.left, 2);
     const box = player.dialogues.at(-1).getDialogues().get(0);

@@ -86,6 +86,7 @@ function slots(player) {
 function setSlots(player, value) {
   player.setAttribute(SLOTS_ATTRIBUTE, value);
   sendSlots(player);
+  core.PluginManager.emitCustomEvent("port-tasks:slots-changed", { player });
 }
 
 /** Every slot's id, cargo taken and cargo delivered varbits, and the unlocked extra slots. */

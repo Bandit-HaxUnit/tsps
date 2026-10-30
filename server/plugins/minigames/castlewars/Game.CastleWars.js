@@ -205,7 +205,6 @@ function refreshPlayerAppearance(player, weaponChanged = false) {
 function equipTeamColours(player, teamId) {
   const team = getTeamData(teamId);
   player.getEquipment().setItem(core.Equipment.CAPE_SLOT, new core.Item(team.capeId, 1));
-  player.getEquipment().setItem(core.Equipment.HEAD_SLOT, new core.Item(team.hoodId, 1));
   refreshPlayerAppearance(player);
 }
 
@@ -218,9 +217,9 @@ function clearWeaponSlot(player) {
 }
 
 function clearCastleWarsItems(player, ids = data.CLEANUP_ITEM_IDS) {
-  const { HEAD_SLOT, CAPE_SLOT, WEAPON_SLOT } = core.Equipment;
+  const { CAPE_SLOT, WEAPON_SLOT } = core.Equipment;
   let weaponChanged = false;
-  for (const slot of [HEAD_SLOT, CAPE_SLOT, WEAPON_SLOT]) {
+  for (const slot of [CAPE_SLOT, WEAPON_SLOT]) {
     if (!ids.has(player.getEquipment().getSlot(slot))) {
       continue;
     }
@@ -490,7 +489,10 @@ function beginStartCountdown() {
     return;
   }
   phase = PHASE.STARTING;
-  startTask = new core.CountdownTask(data.START_TASK_KEY, secondsToTicks(data.START_COUNTDOWN_SECONDS), startGame);
+  const hasBots = Object.values(game.waitingAreas).some((area) =>
+    area.getPlayers().some((player) => player.getAttribute(BOT_KEY) === true));
+  const seconds = hasBots ? data.BOT_START_COUNTDOWN_SECONDS : data.START_COUNTDOWN_SECONDS;
+  startTask = new core.CountdownTask(data.START_TASK_KEY, secondsToTicks(seconds), startGame);
   TaskManager.submit(startTask);
 }
 

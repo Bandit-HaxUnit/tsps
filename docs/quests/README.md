@@ -5,7 +5,7 @@ Every quest the server registers, with the latest result recorded in its page he
 test a quest is in [server/docs/agents/quest-testing.md](../../server/docs/agents/quest-testing.md);
 how to record the result is in [_template/README.md](_template/README.md).
 
-185 quests · ✅ passed: 31 · ⚠️ passed with issues: 18 · 🔄 in progress: 6 · ❌ failed: 1 · 🔁 needs recheck: 3 · untested: 126
+185 quests · ✅ passed: 30 · ⚠️ passed with issues: 21 · 🔄 in progress: 5 · ❌ failed: 1 · 🔁 needs recheck: 5 · untested: 123
 
 "Needs recheck" means the quest's plugin has changed since the commit its result was proven on.
 
@@ -29,7 +29,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [Black Knights' Fortress](black-knights-fortress/README.md) | ⚠️ passed with issues | 2026-10-25 | community |  | 1 |
 | [Bone Voyage](bone-voyage/README.md) | ✅ passed |  | agent |  |  |
 | [Cabin Fever](cabin-fever/README.md) | untested |  |  |  |  |
-| Children of the Sun | untested |  |  |  |  |
+| [Children of the Sun](children-of-the-sun/README.md) | ⚠️ passed with issues | 2026-10-30 | agent | grok-4.7 | 6 |
 | [Client of Kourend](client-of-kourend/README.md) | ✅ passed | 2026-10-23 | agent |  | 1 |
 | [Clock Tower](clock-tower/README.md) | ✅ passed | 2026-10-23 | agent |  |  |
 | Cold War | untested |  |  |  |  |
@@ -52,7 +52,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | Dragon Slayer II | untested |  |  |  |  |
 | Dream Mentor | untested |  |  |  |  |
 | [Druidic Ritual](druidic-ritual/README.md) | ✅ passed | 2026-10-22 | agent |  |  |
-| [Dwarf Cannon](dwarf-cannon/README.md) | 🔄 in progress |  | agent |  |  |
+| [Dwarf Cannon](dwarf-cannon/README.md) | 🔁 needs recheck | 2026-10-30 | agent | claude-haiku-5-5 | 2 |
 | [Eadgar's Ruse](eadgars-ruse/README.md) | untested |  |  |  |  |
 | Eagles' Peak | untested |  |  |  |  |
 | [Elemental Workshop I](elemental-workshop-i/README.md) | ✅ passed | 2026-10-23 | agent |  |  |
@@ -125,8 +125,8 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [Roving Elves](roving-elves/README.md) | untested |  |  |  |  |
 | Royal Trouble | untested |  |  |  |  |
 | [Rum Deal](rum-deal/README.md) | untested |  |  |  |  |
-| [Rune Mysteries](rune-mysteries/README.md) | ✅ passed | 2026-10-25 | community |  |  |
-| [Scorpion Catcher](scorpion-catcher/README.md) | untested |  |  |  | 1 |
+| [Rune Mysteries](rune-mysteries/README.md) | ⚠️ passed with issues | 2026-10-30 | agent | grok-4.7 | 4 |
+| [Scorpion Catcher](scorpion-catcher/README.md) | 🔁 needs recheck | 2026-10-29 | agent | grok-4.7 | 5 |
 | Scrambled! | untested |  |  |  |  |
 | [Sea Slug](sea-slug/README.md) | untested |  |  |  |  |
 | [Secrets of the North](secrets-of-the-north/README.md) | untested |  |  |  |  |
@@ -168,7 +168,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [The Hand in the Sand](hand-in-the-sand/README.md) | untested |  |  |  |  |
 | [The Heart of Darkness](the-heart-of-darkness/README.md) | untested |  |  |  |  |
 | [The Ides of Milk](the-ides-of-milk/README.md) | ✅ passed | 2026-10-25 | community |  |  |
-| The Knight's Sword | untested |  |  |  |  |
+| [The Knight's Sword](the-knights-sword/README.md) | ⚠️ passed with issues | 2026-10-30 | agent | claude-haiku-5-5 | 6 |
 | The Lost Tribe | untested |  |  |  |  |
 | [The Path of Glouphrie](the-path-of-glouphrie/README.md) | untested |  |  |  |  |
 | [The Queen of Thieves](the-queen-of-thieves/README.md) | ⚠️ passed with issues | 2026-10-25 | agent |  | 2 |

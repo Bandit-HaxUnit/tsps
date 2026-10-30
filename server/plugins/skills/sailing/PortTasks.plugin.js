@@ -27,6 +27,7 @@ module.exports = {
     require("./porttasks/Board.PortTasks")(api);
     require("./porttasks/Ledger.PortTasks")(api);
     require("./porttasks/PortMaster.PortTasks")(api);
+    require("./porttasks/Log.PortTasks")(api);
     require("./porttasks/Bags.PortTasks")(api);
     require("./porttasks/Bounty.PortTasks")(api);
   },

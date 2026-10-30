@@ -147,6 +147,25 @@ test('a defender can return their dropped standard while still holding the enemy
   assert.equal(game.getCarriedFlagTeam(scorer), game.TEAM.ZAMORAK);
 });
 
+test('own dropped standards return during the pickup action without a free hand or inventory slot', () => {
+  for (const [team, at] of [[game.TEAM.SARADOMIN, [2426, 3087, 0]], [game.TEAM.ZAMORAK, [2372, 3120, 0]]]) {
+    const owner = player(team, at);
+    game.carryFlag(owner, team);
+    game.dropCarriedFlag(owner);
+    const defender = player(team, at);
+    defender.getEquipment().setItem(core.Equipment.WEAPON_SLOT, new core.Item(core.ItemIdentifiers.RUNE_SCIMITAR));
+    defender.getEquipment().setItem(core.Equipment.SHIELD_SLOT, new core.Item(core.ItemIdentifiers.RUNE_KITESHIELD));
+    for (let slot = 0; slot < 28; slot++) defender.getInventory().setItem(slot, new core.Item(core.ItemIdentifiers.BANDAGES));
+    clickFlag(defender, team, true);
+    assert.equal(game.flagStatus[team], 0, 'the pickup action returns it before any game-area processor runs');
+    assert.equal(game.getDroppedFlagObject(team), null);
+    assert.equal(game.getCarriedFlagTeam(defender), null);
+    assert.equal(defender.getEquipment().getSlot(core.Equipment.WEAPON_SLOT), core.ItemIdentifiers.RUNE_SCIMITAR);
+    assert.equal(defender.getEquipment().getSlot(core.Equipment.SHIELD_SLOT), core.ItemIdentifiers.RUNE_KITESHIELD);
+    assert.equal(defender.getInventory().getFreeSlots(), 0);
+  }
+});
+
 test('dropping both standards on one tile returns the dropper own standard and keeps the enemy drop', () => {
   const sara = player();
   const zam = player(game.TEAM.ZAMORAK);

@@ -106,15 +106,14 @@ function chooseTeam(sizes, requestedTeam) {
   return sizes[requestedTeam] > sizes[other(requestedTeam)] ? null : requestedTeam;
 }
 
-function joinWaitingRoom(player, requestedTeam, botTier = undefined) {
+function joinWaitingRoom(player, requestedTeam, botTier = undefined, portalGod = requestedTeam ?? "guthix") {
   const phase = game.getPhase();
   if (phase === game.PHASE.ACTIVE || phase === game.PHASE.ENDING) {
     player.sendMessage("There's already a Castle Wars game running. Please wait.");
     return;
   }
-  const { HEAD_SLOT, CAPE_SLOT } = core.Equipment;
-  if (player.getEquipment().getSlot(HEAD_SLOT) > 0 || player.getEquipment().getSlot(CAPE_SLOT) > 0) {
-    player.sendMessage("You can't wear hats, capes, or helms in Castle Wars.");
+  if (player.getEquipment().getSlot(core.Equipment.CAPE_SLOT) > 0) {
+    player.sendMessage("You can't wear capes in Castle Wars.");
     return;
   }
   if (player.getInventory().getItems().some((item) => FoodPlugin.isFoodItem(item?.getId?.()))) {
@@ -143,25 +142,27 @@ function joinWaitingRoom(player, requestedTeam, botTier = undefined) {
   if (!isBot && lobbyEmpty && !seedsBots()) {
     if (botTier !== undefined) {
       if (botTier !== null) populateCastleWarsBots(teamId, botTier);
+      game.prepareWaitingForm?.(player, portalGod);
       moveToWaitingRoom(player, teamId);
       return;
     }
     const options = BOT_TIER_OPTIONS.flatMap(([label, tier]) => [
       label,
-      () => joinWaitingRoom(player, teamId, tier),
+      () => joinWaitingRoom(player, requestedTeam, tier, portalGod),
     ]);
     api.sendMultiChatboxPrompt(
       player,
       "The Castle Wars lobby is empty. Which bots should populate the game?",
       ...options,
       "None",
-      () => joinWaitingRoom(player, teamId, null),
+      () => joinWaitingRoom(player, requestedTeam, null, portalGod),
       "Practice settings (Lanthus)",
-      () => require("./Settings.CastleWars").openSettings({ player })
+      () => require("./Settings.CastleWars").openSettings({ player, requestedTeam, portalGod })
     );
     return;
   }
 
+  if (!isBot) game.prepareWaitingForm?.(player, portalGod);
   moveToWaitingRoom(player, teamId);
   if (!isBot && seedsBots()) {
     seedCastleWarsBots(teamId);
@@ -212,6 +213,7 @@ module.exports = function attachCastleWarsLobby(registry, castleWars) {
   data = castleWars.data;
   game.BOT_ROLE_KEY = BOT_ROLE_ATTRIBUTE;
   game.BOT_TIER_KEY = BOT_TIER_ATTRIBUTE;
+  game.joinFromLobby = joinWaitingRoom;
   registry.onObjectInteraction(useCastleWarsPortal);
   registry.onNpcInteraction("Lanthus", { Trade: ({ player }) => ShopManager.open(player, CASTLE_WARS_TICKET_EXCHANGE_SHOP) });
 };

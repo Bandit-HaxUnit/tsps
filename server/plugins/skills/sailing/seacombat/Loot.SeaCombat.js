@@ -40,6 +40,39 @@ const SCRIPT_LOOT_FLY = 7192;
 
 /** corpse npc -> `{ owner, creature, harvesting }`. */
 const corpses = new Map();
+/** Combat clears its damage record during death; keep applied damage, not rolled cannon XP. */
+const damageAtDeath = new WeakMap();
+const landedDamage = new WeakMap();
+
+/** The combat credit total can contain queued overkill. Count actual HP loss per splat. */
+function hitResolved({ attacker, target, hit }) {
+  if (!attacker?.isPlayer?.() || !target?.isNpc?.() || !common.creatureOf(target)) return;
+  let landed = landedDamage.get(target);
+  if (!landed) landedDamage.set(target, landed = new WeakMap());
+  // The shared combat owner decides when this player's earlier fight has expired/reset.
+  if (!target.getCombat().damageMapContains(attacker)) landed.set(attacker, 0);
+  for (const part of hit.getHits()) {
+    part.onApplied((taken) => landed.set(attacker, (landed.get(attacker) ?? 0) + taken));
+  }
+}
+
+function beforeDeath({ npc, preventDeath }) {
+  if (preventDeath || !common.creatureOf(npc)) return;
+  damageAtDeath.set(npc, {
+    hitpoints: npc.getMaxHitpoints(),
+    entries: npc.getCombat().getRecentDamagerEntries(),
+    // Keep the reference: appendDeath runs before the fatal splat's onApplied observer.
+    landed: landedDamage.get(npc),
+  });
+}
+
+/** Reward plugins query the original creature and contribution while its corpse is harvested. */
+function rewardContext(request) {
+  const corpse = corpses.get(request.npc);
+  if (!corpse || corpse.owner !== request.player) return;
+  request.creature = corpse.creature;
+  request.damageShare = corpse.damageShare;
+}
 /** Each harvest's loot key (script 7192), counting up as live's do (185827, 185828). */
 let lootKey = 185827;
 
@@ -64,7 +97,15 @@ function onDeath(event) {
   npc.setNpcTransformationId(creature.dead);
   npc.setHitpoints(1);
   // Who damaged it decides the loot rules at the harvest (an Ironman's shared kill).
-  corpses.set(npc, { owner: killer, creature, damagers: event.damagers ?? [killer], harvesting: false });
+  const damage = damageAtDeath.get(npc);
+  damageAtDeath.delete(npc);
+  const applied = damage?.landed
+    ? damage.landed.get(killer) ?? 0
+    : damage?.entries.find((entry) => entry.player === killer)?.damage ?? 0;
+  landedDamage.delete(npc);
+  // Synthetic/admin deaths without a combat snapshot retain the usual solo reward.
+  const damageShare = damage ? Math.max(0, Math.min(1, applied / Math.max(1, damage.hitpoints))) : 1;
+  corpses.set(npc, { owner: killer, creature, damageShare, damagers: event.damagers ?? [killer], harvesting: false });
   later(npc, CORPSE_TICKS, () => corpses.delete(npc));
 }
 
@@ -132,7 +173,6 @@ function pull(player, npc) {
 /** Rolls the creature's drops (and what listeners add) into the inventory, and the corpse goes. */
 function loot(player, npc, corpse) {
   if (corpses.get(npc) !== corpse) return;
-  corpses.delete(npc);
   const drops = [];
   const api = common.api();
   const npcId = corpse.creature.npc;
@@ -146,8 +186,9 @@ function loot(player, npc, corpse) {
   const generated = { player, npc, npcId, drops: all, handled: false };
   api.emitCustomEvent("npc-drops:generated", generated);
   for (const claim of harvest.claims) {
-    if (!generated.handled && all.some((drop) => drop.itemId === claim.itemId)) claim.commit();
+    if (!generated.handled && all.some((drop) => drop.itemId === claim.itemId && drop.amount > 0)) claim.commit();
   }
+  corpses.delete(npc);
   removeCorpse(npc);
   if (generated.handled) return;
   const kept = all.filter((drop) => Number.isInteger(drop.itemId) && drop.amount > 0);
@@ -186,7 +227,10 @@ function removeCorpse(npc) {
 
 function attach(api) {
   common.init(api);
+  api.onCombatHitResolved(hitResolved);
+  api.onNpcBeforeDeath(beforeDeath);
   api.onNpcDeath(onDeath);
+  api.onCustomEvent("sea-combat:reward-context", rewardContext);
   api.onCustomEvent("npc-drops:claim", claimDrops);
   api.onNpcRoute(route);
   api.onAnyNpcInteraction({ Harvest: harvest });
