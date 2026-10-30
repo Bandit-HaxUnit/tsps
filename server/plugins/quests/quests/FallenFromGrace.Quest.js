@@ -203,6 +203,11 @@ module.exports = function registerFallenFromGraceQuest(api) {
   // The cathedral door uses the captured 5-pin 811 lockpicking UI; the chest uses
   // the shared captured directional 810 lock, [1,3,2,2] (R,L,D,D).
 
+  // The hat and basement items are the quest's own floor items. The default ground despawn (300
+  // ticks) removed the hat while the player stayed in the zone, and it is only re-created on login
+  // or zone entry, so it stayed missing until a relog. Capture: ffg_keenans_hat at 2556,2198 is
+  // taken from 2556,2197 (rsprox P1, opobj3_v2 at that tile).
+  const QUEST_FLOOR_DESPAWN_TICKS = 6000; // one hour, re-created on login or zone entry
   const HAT_TILE = new Location(2556, 2198, 0); // wiki map pin, south-west tip
   const JOURNAL_TILE = new Location(2568, 8660, 0); // table beside the basement chest
   const WARNING_NOTE_TILE = new Location(2575, 8657, 0); // floor by the stairs
@@ -349,7 +354,9 @@ module.exports = function registerFallenFromGraceQuest(api) {
     const manager = api.getItemOnGroundManager();
     if (manager.getGroundItem(player.getUsername(), itemId, tile, player.getPrivateArea())) return;
     if (manager.getGroundItem(null, itemId, tile, null)) return;
-    manager.registerLocation(player, new Item(itemId, 1), tile);
+    manager.registerLocation(player, new Item(itemId, 1), tile, player.getPrivateArea(), {
+      despawnDelay: QUEST_FLOOR_DESPAWN_TICKS,
+    });
   }
 
   function ensureHat(player) {
