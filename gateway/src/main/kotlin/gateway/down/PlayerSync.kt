@@ -38,6 +38,15 @@ class PlayerSync {
     private val regions = IntArray(MAX_PLAYERS)
     private var localIndex = -1
 
+    /**
+     * A forced movement moved [index] to [x], [z]: tsps counts its next deltas from there, as the
+     * browser does once it has read the update block.
+     */
+    fun moveTo(index: Int, x: Int, z: Int) {
+        this.x[index] = x
+        this.z[index] = z
+    }
+
     fun decode(packet: TspsPacket): Frame {
         val reader = packet.reader()
         reader.u16() // scene base x

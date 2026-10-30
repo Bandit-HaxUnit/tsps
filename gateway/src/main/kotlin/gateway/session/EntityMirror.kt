@@ -50,10 +50,19 @@ class EntityMirror(
                 } else {
                     players.getOrPut(index) { world.allocPlayer(index) }
                 }
-            infos.updateRootCoord(if (onDeck(tile.x, tile.z)) EntityWorld.DECK_LEVEL else tile.level, tile.x, tile.z)
+            infos.updateRootCoord(level(tile), tile.x, tile.z)
         }
         for ((index, block) in blocks) {
             val infos = if (index == selfIndex) self else players[index] ?: continue
+            // A forced movement ends on its end tile, where tsps (and the browser) now count the
+            // player from. OSRS has the player on that tile as the move starts, the move drawn from
+            // there: place them on it as a teleport, and the move relative to it.
+            val move = block.exactMove
+            val tile = frame.tiles[index]
+            if (move != null && tile != null) {
+                infos.updateRootCoord(level(tile), tile.x + move.endX, tile.z + move.endZ)
+                infos.playerInfo.avatar.extendedInfo.setTempMoveSpeed(TELEPORT_MOVE_SPEED)
+            }
             applyPlayer(index, infos.playerInfo.avatar.extendedInfo, block)
         }
         for ((index, chat) in pendingChat) {
@@ -161,10 +170,14 @@ class EntityMirror(
         }
         block.movementType?.let(info::setMoveSpeed)
         if (block.resetPath) info.setTempMoveSpeed(TELEPORT_MOVE_SPEED)
-        block.exactMove?.let { info.setExactMove(it.startX, it.startZ, it.startCycle, it.endX, it.endZ, it.endCycle, it.direction) }
+        // Relative to the end tile the player was just placed on (see applyPlayers).
+        block.exactMove?.let { info.setExactMove(it.startX - it.endX, it.startZ - it.endZ, it.startCycle, 0, 0, it.endCycle, it.direction) }
         for (spot in block.spotAnims) info.setSpotAnim(spot.slot, spot.id, spot.delay, spot.height)
         block.tint?.let { info.setTinting(it.start, it.end, it.hue, it.saturation, it.lightness, it.weight) }
     }
+
+    /** A tile's level, the deck's for a boat's deck (OSRS has actors there on 1, tsps on 0). */
+    private fun level(tile: PlayerSync.Tile) = if (onDeck(tile.x, tile.z)) EntityWorld.DECK_LEVEL else tile.level
 
     private fun applyNpc(info: NpcAvatarExtendedInfo, block: ActorBlock, type: Int) {
         block.modelCustomisation?.let { applyModelCustomisation(info, type, it) }

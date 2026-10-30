@@ -93,6 +93,9 @@ class GatewaySession(
     /** The player's level in the main world; on a deck, the one they boarded from. */
     private var level = 0
 
+    /** The scene the client has, built by REBUILD_LOGIN or the last rebuild sent. */
+    private var scene: MapRebuild? = null
+
     /** The scene tsps built before the client logged in; REBUILD_LOGIN takes its place. */
     private var loginScene: MapRebuild? = null
 
@@ -230,6 +233,8 @@ class GatewaySession(
             loginScene = rebuild
             return
         }
+        if (rebuild.canKeep(scene)) return
+        scene = rebuild
         self.updateRootBuildArea(rebuild.zoneX - SCENE_RADIUS_ZONES, rebuild.zoneZ - SCENE_RADIUS_ZONES)
         send(rebuild.toMessage())
         groundItems.rebuild(rebuild.zoneX, rebuild.zoneZ)
@@ -246,6 +251,11 @@ class GatewaySession(
         val reader = BlockReader(frame.updateBlocks)
         val blocks = frame.updateIndices.associateWith { ActorBlocks.player(reader) }
         mirror?.applyPlayers(frame, blocks)
+        for ((index, block) in blocks) {
+            val move = block.exactMove ?: continue
+            val at = frame.tiles[index] ?: continue
+            players.moveTo(index, at.x + move.endX, at.z + move.endZ)
+        }
     }
 
     private fun onChat(chat: TspsChatMessage) {
@@ -263,6 +273,7 @@ class GatewaySession(
         val infos = world.allocPlayer(handshake.index)
         infos.updateRootCoord(tile.level, tile.x, tile.z)
         val scene = loginScene ?: MapRebuild.Normal(tile.x ushr 3, tile.z ushr 3)
+        this.scene = scene
         infos.updateRootBuildArea(scene.zoneX - SCENE_RADIUS_ZONES, scene.zoneZ - SCENE_RADIUS_ZONES)
         Appearance.apply(infos.playerInfo.avatar.extendedInfo, handshake)
         // tsps decides who this player sees; the session's world only holds those avatars, so

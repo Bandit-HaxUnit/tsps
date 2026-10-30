@@ -10,6 +10,22 @@ import net.rsprot.protocol.message.OutgoingGameMessage
 sealed class MapRebuild(val zoneX: Int, val zoneZ: Int) {
     abstract fun toMessage(): OutgoingGameMessage
 
+    /**
+     * Whether the scene the client already has ([current]) can stay instead of this one. tsps
+     * rebuilds an instance's scene every zone or two a player moves; the official client reloads
+     * the whole scene each time (the player seems to jump, or vanishes while it loads), where OSRS
+     * rebuilds only near the scene's edge. A scene centred at most [KEEP_ZONES] zones away still
+     * covers the player by more than that, as long as it shows the same map.
+     */
+    fun canKeep(current: MapRebuild?): Boolean =
+        current != null &&
+            current::class == this::class &&
+            kotlin.math.abs(zoneX - current.zoneX) <= KEEP_ZONES &&
+            kotlin.math.abs(zoneZ - current.zoneZ) <= KEEP_ZONES &&
+            sameMapAs(current)
+
+    protected open fun sameMapAs(current: MapRebuild): Boolean = true
+
     /** `REBUILD_NORMAL` (141): `u16 zoneX, u16 zoneZ, u8 keep, u16 keyCount, keys`. */
     class Normal(zoneX: Int, zoneZ: Int) : MapRebuild(zoneX, zoneZ) {
         override fun toMessage() = RebuildNormalV2(zoneX, zoneZ, NO_WORLD_AREA)
@@ -22,6 +38,29 @@ sealed class MapRebuild(val zoneX: Int, val zoneZ: Int) {
      */
     class Region(zoneX: Int, zoneZ: Int, private val reload: Boolean, private val zones: Array<Int?>) :
         MapRebuild(zoneX, zoneZ) {
+        /** The template zone this scene copies to absolute zone [x], [z] on [level], or null outside it. */
+        private fun zoneAt(level: Int, x: Int, z: Int): Int? {
+            val sx = x - zoneX + 6
+            val sz = z - zoneZ + 6
+            if (sx !in 0 until SCENE_ZONES || sz !in 0 until SCENE_ZONES) return null
+            return zones[(level * SCENE_ZONES + sx) * SCENE_ZONES + sz]
+        }
+
+        private fun inScene(x: Int, z: Int) = x - zoneX + 6 in 0 until SCENE_ZONES && z - zoneZ + 6 in 0 until SCENE_ZONES
+
+        /** The same instance: every zone both scenes have is the same copy, and no reload was asked. */
+        override fun sameMapAs(current: MapRebuild): Boolean {
+            if (reload || current !is Region) return false
+            for (level in 0 until LEVELS) {
+                for (x in zoneX - 6..zoneX + 6) {
+                    for (z in zoneZ - 6..zoneZ + 6) {
+                        if (current.inScene(x, z) && zoneAt(level, x, z) != current.zoneAt(level, x, z)) return false
+                    }
+                }
+            }
+            return true
+        }
+
         override fun toMessage() =
             RebuildRegionV2(zoneX, zoneZ, reload) { x, z, level ->
                 zones[(level * SCENE_ZONES + (x - zoneX + 6)) * SCENE_ZONES + (z - zoneZ + 6)]?.let(::zone)
@@ -31,6 +70,9 @@ sealed class MapRebuild(val zoneX: Int, val zoneZ: Int) {
     companion object {
         /** OSRS's world-area id; tsps has none to give, and -1 is the client's "none". */
         const val NO_WORLD_AREA = -1
+
+        /** How far (in zones) a new scene's centre may be from the client's for it to stay. */
+        const val KEEP_ZONES = 3
         private const val SCENE_ZONES = 13
         private const val LEVELS = 4
 
