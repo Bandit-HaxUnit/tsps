@@ -32,7 +32,7 @@ $env:GRADLE_USER_HOME="$PWD/tools/runelite-gateway/.runtime/gradle-home"
 
 Focused tests exercise real copied cache CRCs, Huffman and config14 varbits, JS5 block continuation, chunk assembly, native action translation and custom UI/stat/inventory translation. Tests read `server/caches/osrs-241_2026-10-20` and never mutate it.
 
-26 current JVM tests passed across focused runs: cache3, snapshots4, translation12, serialized writes2 and public chat5. The final changed queue checks covered burst matching and removal/index reuse. Use `-TraceInput` for opt-in packet/chat-text diagnostics; these logs are disabled by default.
+The26 foundation JVM tests passed in earlier focused runs: cache3, snapshots4, translation12, serialized writes2 and public chat5. The final changed queue checks covered burst matching and removal/index reuse. Use `-TraceInput` for opt-in packet/chat-text diagnostics; these logs are disabled by default.
 
 ## Current boundaries
 
@@ -45,3 +45,9 @@ Native input currently covers walk/minimap, NPC/location options, interface butt
 ## Implementation references
 
 RSProt source inspected at commit `37c4eb46e4731ae6764343d136f3076a50567ec1` (MIT). Upstream source archive used for development is ignored under `vendor/`; the application uses published Maven artifacts rather than a modified protocol library. The Gradle wrapper bootstrap jar is the standard Gradle wrapper copied from the local reference checkout.
+
+## Optional server branding
+
+Copy `branding.example.json` to ignored `branding.local.json`, or pass `-BrandingFile` to the gateway launcher. Set welcomeText and relative PNG/JPEG paths for welcomeBanner/loginBackground independently. Null fields keep the native screen. Images remain inside the config directory; startup rejects unsupported/corrupt/oversized images and unknown fields. Fixed loopback HTTP routes expose only the configured bytes. Restart gateway and RuneLite to apply edits without rebuilding. See [owner setup and screenshots](../../docs/runelite-gateway.md#server-branding-optional).
+
+Six additional focused BrandingTest cases cover real PNG/JPEG loading, independent settings, invalid text/config/files, dimensions/size/traversal and real loopback HTTP GET/HEAD/404/405 plus the existing native config/world routes.

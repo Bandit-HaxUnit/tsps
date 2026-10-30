@@ -23,7 +23,7 @@ $launcherCp = ((Get-Content -Raw "$PSScriptRoot/launcher.lock.json" | ConvertFro
 & "$JavaHome/bin/javac.exe" -proc:none -cp $launcherCp -d "$runtime/classes" "$PSScriptRoot/PatchClient.java"
 if ($LASTEXITCODE) { throw 'Patcher compilation failed' }
 $clientCp = ((Get-Content -Raw "$PSScriptRoot/bootstrap.lock.json" | ConvertFrom-Json).artifacts | ForEach-Object { Join-Path "$runtime/artifacts" $_.name }) -join ';'
-& "$JavaHome/bin/javac.exe" -proc:none -cp $clientCp -d "$runtime/classes" "$PSScriptRoot/ChatDiagnostics.java" "$PSScriptRoot/StartClient.java"
+& "$JavaHome/bin/javac.exe" -proc:none -cp $clientCp -d "$runtime/classes" "$PSScriptRoot/BrandingAssets.java" "$PSScriptRoot/Branding.java" "$PSScriptRoot/ChatDiagnostics.java" "$PSScriptRoot/StartClient.java"
 if ($LASTEXITCODE) { throw 'Client entry point compilation failed' }
 $verification = @($runtime, 'verify')
 if ($HD) { $verification += 'hd' }

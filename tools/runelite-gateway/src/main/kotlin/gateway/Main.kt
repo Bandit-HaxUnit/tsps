@@ -137,6 +137,7 @@ class Bridge(val response:GameLoginResponseHandler<Bridge>,val block:LoginBlock<
 fun main(args:Array<String>) {
  val opts=args.toList().chunked(2).associate{require(it.size==2);it[0].removePrefix("--") to it[1]}
  GatewayDebug.enabled=opts["trace-input"]=="true"
+ val branding=loadBranding(opts["branding"]?.let{Paths.get(it)})
  val port=opts["port"]?.toInt()?:43820;require(port !in listOf(43594,3000,49700))
  ServerSocket().use {it.bind(InetSocketAddress("127.0.0.1",port))}
  val uri=URI(opts["upstream"]?:"ws://127.0.0.1:43720");require(uri.scheme=="ws" && InetAddress.getByName(uri.host).isLoopbackAddress && uri.port !in listOf(43594,3000,49700) && uri.port in 1024..65535) {"Upstream must be an isolated loopback WebSocket port"}
@@ -177,7 +178,7 @@ fun main(args:Array<String>) {
    override fun onReconnect(responseHandler:GameLoginResponseHandler<Bridge>,block:LoginBlock<XteaKey>) {responseHandler.writeFailedResponse(LoginResponse.LoginServerNoReply)}
   }
  }.build()
- http(opts["http-port"]?.toInt()?:43920,Paths.get(opts["jav-config"]?:"../runelite-client/jav_config.lock.ws"))
+ http(opts["http-port"]?.toInt()?:43920,Paths.get(opts["jav-config"]?:"../runelite-client/jav_config.lock.ws"),branding)
  service.start();loop.scheduleAtFixedRate({sessions.toList().forEach{if(!it.response.ctx.channel().isActive)it.close() else it.session?.let{s->s.processIncomingPackets(it);s.flush()}}},100,100,TimeUnit.MILLISECONDS)
  Runtime.getRuntime().addShutdownHook(Thread {service.shutdownNow();loop.shutdownNow()})
  println("Gateway241 listening 127.0.0.1:$port upstream=$uri RSA=$keys")

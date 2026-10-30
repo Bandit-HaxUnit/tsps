@@ -37,3 +37,17 @@ Sources and pins:
 -117HD1.6.0 comes from the RuneLite1.13.3 signed Plugin Hub manifest. `117hd.lock.json` pins the signed manifest and jar. Preparation verifies the manifest signature using the certificate inside the verified RuneLite client, then checks the jar SHA256 against the signed manifest entry. `StartClient` registers that jar with RuneLite's supported builtin external-plugin entry point; assertions are enabled as required by that API. No mutable Plugin Hub install is needed. Registration/availability is separate from actual rendering verification.
 
 Focused checks performed: all locked artifact sizes/hashes; bytecode revision241; manifest signature and signed117HD jar hash; actual public patcher execution on the exact client; post-patch RSA/private-port/loopback assertions; HD registration followed by real RuneLite `--help` (no GUI/network), confirming isolated session path and local config default. The gateway's interactive QA subsequently verified real native login, scene loading, movement, equipment, NPC dialogue and117HD GPU rendering; see [setup and verification](../../docs/runelite-gateway.md).
+
+## Server-owner branding
+
+The built-in TSPS Branding plugin reads the gateway's optional `/branding.json` on the configured HTTP port. The launcher supplies this endpoint automatically. Configure welcome banner, bottom parchment text and pre-login background independently in the gateway; see [the gateway guide](../../docs/runelite-gateway.md). Missing or invalid individual assets preserve stock presentation. Branding does not require117HD. Restart gateway and client after changing branding files.
+
+The client accepts only the fixed loopback metadata and asset routes, caps downloads and validates PNG/JPEG dimensions before decoding. Native welcome text escapes markup; banner artwork fits inside the existing border and keeps the native Play control. Disable TSPS Branding in RuneLite to restore the current native footer/widgets and stock login background.
+
+Focused helper checks (real temporary loopback HTTP server and encoded images; plugin widget lifecycle uses pinned API adapters):
+
+```powershell
+./tools/runelite-client/test.ps1 -JavaHome $env:JAVA_HOME
+```
+
+These checks do not replace native rendering/login/logout verification.

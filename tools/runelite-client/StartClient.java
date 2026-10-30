@@ -12,6 +12,7 @@ public final class StartClient {
             builtins.add(hd);
             System.out.println("Pinned 117HD1.6.0 registered; rendering still requires native QA");
         }
+        builtins.add(Branding.class);
         if (Boolean.getBoolean("tsps.diagnostics")) builtins.add(ChatDiagnostics.class);
         if (!builtins.isEmpty()) ExternalPluginManager.loadBuiltin(builtins.toArray(new Class[0]));
         RuneLite.main(args);

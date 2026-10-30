@@ -32,8 +32,9 @@ $existing = @(Get-CimInstance Win32_Process -Filter "Name='java.exe' OR Name='ja
     $_.CommandLine -and $_.CommandLine.Contains($homeArgument) -and $_.CommandLine -match '\bStartClient\b'
 })
 if ($existing.Count) { throw "Existing isolated client PID(s) $($existing.ProcessId -join ', '); no patch or launch performed" }
-foreach ($class in @('PatchClient','StartClient','ChatDiagnostics')) {
-    if (!(Test-Path "$runtime/classes/$class.class") -or (Get-Item "$PSScriptRoot/$class.java").LastWriteTimeUtc -gt (Get-Item "$runtime/classes/$class.class").LastWriteTimeUtc) { throw 'Client helper classes are missing or stale; run prepare.ps1' }
+foreach ($class in @('PatchClient','StartClient','ChatDiagnostics','Branding','Branding$1','BrandingAssets','BrandingAssets$Metadata','BrandingAssets$Loaded')) {
+    $sourceClass = $class -replace '\$.*$', ''
+    if (!(Test-Path "$runtime/classes/$class.class") -or (Get-Item "$PSScriptRoot/$sourceClass.java").LastWriteTimeUtc -gt (Get-Item "$runtime/classes/$class.class").LastWriteTimeUtc) { throw 'Client helper classes are missing or stale; run prepare.ps1' }
 }
 $launcher = Get-Content -Raw "$PSScriptRoot/launcher.lock.json" | ConvertFrom-Json
 foreach ($pair in @(@('bootstrap.lock.json','artifacts'), @('launcher.lock.json','launcher'))) {
@@ -55,7 +56,7 @@ $clientCp = ($bootstrap.artifacts | Where-Object { !$_.name.Contains('natives-')
     if ($_.name -in @('client-1.13.3.jar','injected-client-1.13.3.jar')) { Join-Path "$runtime/patched" $_.name } else { Join-Path "$runtime/artifacts" $_.name }
 }) -join ';'
 $optionalHdCp = if ($HD) { "$runtime/117hd.jar;" } else { '' }
-$arguments = @('-ea', "-Duser.home=$runtime/home", "-Djava.io.tmpdir=$runtime/tmp", '-Drunelite.launcher.version=2.7.4', "-Dtsps.hd=$($HD.IsPresent.ToString().ToLowerInvariant())") + @($bootstrap.clientJvm17Arguments) + @('-cp', "$runtime/classes;$optionalHdCp$clientCp", 'StartClient', "--jav_config=http://127.0.0.1:$HttpPort/jav_config.ws", '--disable-telemetry')
+$arguments = @("-Dtsps.branding.url=http://127.0.0.1:$HttpPort/branding.json", '-ea', "-Duser.home=$runtime/home", "-Djava.io.tmpdir=$runtime/tmp", '-Drunelite.launcher.version=2.7.4', "-Dtsps.hd=$($HD.IsPresent.ToString().ToLowerInvariant())") + @($bootstrap.clientJvm17Arguments) + @('-cp', "$runtime/classes;$optionalHdCp$clientCp", 'StartClient', "--jav_config=http://127.0.0.1:$HttpPort/jav_config.ws", '--disable-telemetry')
 if ($Diagnostics) { $arguments = @('-Dtsps.diagnostics=true') + $arguments }
 if ($DeveloperMode) { $arguments += '--developer-mode' }
 # ProcessStartInfo.ArgumentList preserves Windows paths containing spaces.

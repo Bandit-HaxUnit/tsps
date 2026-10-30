@@ -81,6 +81,43 @@ Close the client normally, then in the client terminal:
 
 Enable **117 HD** in RuneLite's configuration list on first use. Core GPU and 117 HD are mutually exclusive; RuneLite may require switching from GPU through this toggle. The renderer is pinned to 117 HD 1.6.0, verified against the signed RuneLite 1.13.3 Plugin Hub manifest. Omit `-HD` to use the standard client again.
 
+## Server branding (optional)
+
+Server owners can independently replace the middle welcome-screen banner, the bottom parchment text, and the username/password screen's background. This works with the standard client; 117 HD is not involved.
+
+Copy the template and edit the local copy:
+
+```powershell
+Copy-Item tools/runelite-gateway/branding.example.json tools/runelite-gateway/branding.local.json
+```
+
+The template uses `null` for all three settings, preserving the stock screen. For example, after adding your images:
+
+```json
+{
+  "welcomeText": "Welcome to our server!\nNews and events: discord.gg/example",
+  "welcomeBanner": "branding-assets/welcome-banner.png",
+  "loginBackground": "branding-assets/login-background.jpg"
+}
+```
+
+- Paths are relative to the JSON file. Place the example images under `tools/runelite-gateway/branding-assets/`. The local config and this asset directory are ignored by Git.
+- Use PNG or JPEG, at most 8 MiB per image, with each dimension at most 4096 pixels. Files and links must stay inside the config's directory. The gateway refuses invalid configuration at startup with an error.
+- A banner around **700 x 190** pixels fits the welcome panel. It is fitted inside the existing border without stretching. The loading rune animation is hidden only when a custom banner is available.
+- A background around **765 x 503** pixels matches the native login canvas. Other proportions are scaled and cropped to fill it.
+- Bottom text is plain text, up to 400 characters. Use `\n` for new lines; three or four short lines fit the parchment best. Markup is displayed literally.
+- Leave any setting `null` or omit it to keep that stock element. The client keeps the stock element if its branding fetch fails; branding does not block normal login.
+- Restart the gateway and RuneLite after changing config/images; **no rebuild is required**. The gateway serves the selected files to the client over its existing loopback HTTP port, so no separate web host is needed.
+- To keep the config elsewhere, pass `-BrandingFile path/to/branding.json` to the gateway launcher. Resolve image paths relative to that file as usual.
+
+The pictured post-login welcome interface and the pre-login background are separate screens. Branding preserves the native Play button and login flow; it does not patch the game's cache or installed RuneLite profile.
+
+These native screenshots use diagnostic example artwork, with 117 HD off:
+
+![Configurable login background](images/runelite-branding-login.png)
+
+![Configurable welcome banner and bottom text](images/runelite-branding-welcome.png)
+
 ## Stop
 
 Log out normally and close RuneLite. Stop the gateway terminal, then stop TSPS and wait for `[shutdown] Player persistence completed.` Do not use an installed world's stop script.
@@ -89,6 +126,7 @@ Log out normally and close RuneLite. Stop the gateway terminal, then stop TSPS a
 
 - Native cache/scene loading and normal TSPS account login; ground/minimap movement; inventory/equipment display and wielding; real NPC Talk-to and dialogue continuation; public chat with the crown before the name; normal logout and saved-position relog.
 - These checks used a separate TSPS world and disposable account. Sword/coins and an NPC were controlled QA fixtures, not acquisition tests.
+- Branding QA without117HD: custom login background and welcome banner/footer rendered from config; disabling restored stock artwork/loader/footer, re-enabling and relog reapplied branding, and native Play/logout worked. Six gateway tests and31 client transport/lifecycle checks cover the new paths; no full-suite rerun.
 - Three actual keyboard-submitted public messages rendered once each. Native diagnostics also confirmed the chat entry and overhead text. Optional 117 HD rendered the same TSPS world on an RTX 5090; startup alone was not counted as scene verification.
 - Focused checks cover observer-filtered snapshots, private-instance visibility/removal, unchanged normal binary packets, fail-closed oversize snapshots, real cache/JS5/Huffman, native inputs, UI/inventory/stat translation, serialized WebSocket writes, chat bursts/index reuse and launcher save isolation. See tool READMEs for commands and pins. No full repository suite was run.
 - Compatibility remains incomplete for shops, trade, custom interfaces, dynamic objects/ground items, instances and Sailing. Actor forced movement/custom models and broader remote-chat scenarios need further work. One native connection is supported; login does not establish all-content or gameplay parity.
