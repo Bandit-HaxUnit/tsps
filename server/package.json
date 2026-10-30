@@ -58,6 +58,7 @@
     "import:shortest-path": "node ./scripts/import-shortest-path.cjs",
     "sync:loc-teleports": "node ./scripts/sync-loc-teleports.cjs",
     "sync:npc-spawns": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/sync-npc-spawns.ts",
+    "sync:quest-start-text": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/sync-quest-start-text.ts",
     "sync:weapon-types": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/sync-weapon-types.ts",
     "fetch:prices": "node ./scripts/fetch-prices.mjs",
     "generate:league-tasks": "TS_NODE_COMPILER_OPTIONS='{\"target\":\"es2020\"}' ts-node ./scripts/generate-league-tasks.ts",

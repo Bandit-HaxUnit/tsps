@@ -5,7 +5,7 @@ Every quest the server registers, with the latest result recorded in its page he
 test a quest is in [server/docs/agents/quest-testing.md](../../server/docs/agents/quest-testing.md);
 how to record the result is in [_template/README.md](_template/README.md).
 
-185 quests · ✅ passed: 32 · ⚠️ passed with issues: 18 · 🔄 in progress: 6 · ❌ failed: 1 · 🔁 needs recheck: 2 · untested: 126
+185 quests · ✅ passed: 31 · ⚠️ passed with issues: 18 · 🔄 in progress: 6 · ❌ failed: 1 · 🔁 needs recheck: 3 · untested: 126
 
 "Needs recheck" means the quest's plugin has changed since the commit its result was proven on.
 
@@ -95,7 +95,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [Making History](making-history/README.md) | 🔄 in progress |  | agent |  |  |
 | [Meat and Greet](meat-and-greet/README.md) | ✅ passed |  | agent |  |  |
 | [Merlin's Crystal](merlins-crystal/README.md) | untested |  |  |  |  |
-| [Misthalin Mystery](misthalin-mystery/README.md) | ⚠️ passed with issues | 2026-10-25 | community |  | 1 |
+| [Misthalin Mystery](misthalin-mystery/README.md) | 🔁 needs recheck | 2026-10-29 | agent | grok-4.7 | 1 |
 | [Monk's Friend](monks-friend/README.md) | ✅ passed |  | agent |  |  |
 | [Monkey Madness I](monkey-madness-i/README.md) | untested |  |  |  |  |
 | [Monkey Madness II](monkey-madness-ii/README.md) | untested |  |  |  |  |
@@ -113,7 +113,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [Pirate's Treasure](pirates-treasure/README.md) | ✅ passed | 2026-10-25 | community |  |  |
 | Plague City | untested |  |  |  |  |
 | Priest in Peril | untested |  |  |  |  |
-| [Prince Ali Rescue](prince-ali-rescue/README.md) | ✅ passed | 2026-10-25 | community |  |  |
+| [Prince Ali Rescue](prince-ali-rescue/README.md) | ⚠️ passed with issues | 2026-10-29 | agent | grok-4.7 | 1 |
 | [Prying Times](prying-times/README.md) | untested |  |  |  |  |
 | [Rag and Bone Man I](rag-and-bone-man-i/README.md) | untested |  |  |  |  |
 | [Rag and Bone Man II](rag-and-bone-man-ii/README.md) | untested |  |  |  |  |
@@ -125,7 +125,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [Roving Elves](roving-elves/README.md) | untested |  |  |  |  |
 | Royal Trouble | untested |  |  |  |  |
 | [Rum Deal](rum-deal/README.md) | untested |  |  |  |  |
-| [Rune Mysteries](rune-mysteries/README.md) | ✅ passed | 2026-10-25 | community |  |  |
+| [Rune Mysteries](rune-mysteries/README.md) | ⚠️ passed with issues | 2026-10-30 | agent | grok-4.7 | 4 |
 | [Scorpion Catcher](scorpion-catcher/README.md) | untested |  |  |  | 1 |
 | Scrambled! | untested |  |  |  |  |
 | [Sea Slug](sea-slug/README.md) | untested |  |  |  |  |

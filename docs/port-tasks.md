@@ -1,10 +1,11 @@
 # Port tasks
 
 Courier tasks: deliver crates of cargo between two ports for Sailing XP and a bag of coins or
-loot. Bounty tasks show on the notice boards but can't be taken yet.
+loot. Bounty tasks: collect a sea creature's parts by harvesting its corpses, then hand them in at
+a port master for Sailing XP and coins.
 
 Code: `server/plugins/skills/sailing/PortTasks.plugin.js` and its units in `porttasks/`
-(`Board`, `Ledger`, `PortMaster`, `Bags`, `Common`); the cargo hold's crate handling is in
+(`Board`, `Ledger`, `PortMaster`, `Bags`, `Bounty`, `Common`); the cargo hold's crate handling is in
 `CargoHold.plugin.js`. Data: `server/plugins/skills/sailing/data/port-tasks.json`. Tests:
 `server/tests/port-tasks.test.cjs`.
 
@@ -82,10 +83,104 @@ Code: `server/plugins/skills/sailing/PortTasks.plugin.js` and its units in `port
   trip gives double.
 - A board only redraws an entry once its task is done; live also changes a board over time.
 
+## Bounty tasks
+
+Sources: the user's rev 241 capture of the Pandemonium tern bounty, the cache (table 197's
+`bounty_target_alive`, `bounty_object`, `bounty_object_amount` and `bounty_object_rarity`) and the
+Wiki (Bounty tasks: the XP per creature, coins equal to it, handing in at any port master, a
+second bounty on the same creature waiting for the first, keeping parts when cancelling).
+
+- Taken at a notice board like a courier task: "You have accepted the <col=0090bc>Pandemonium tern
+  bounty</col> port task.", the slot's id varbit and its `bounty_task_item_counter_n` (14662,
+  14663, 14819, 15370, 15397, one per slot) set to the parts still needed (5 Tern beaks). Parts
+  already held (kept from a cancelled bounty of the kind) count, but not those another held
+  bounty already counts.
+- Harvesting the task's creature (docs/sailing.md, Combat) rolls its part at 1 in its rarity
+  (10 for the five-part beaks, livers and ink sacs; 2 or 3 for the rest) while parts are still
+  needed: "One Signal has harvested 1x Tern beak." (the player's name), "<col=ef1020>Untradeable
+  drop: Tern beak</col>", jingle 6765 (30 cycles in) and the counter down by one; the part goes
+  in with the rest of the loot.
+- A port master's Claim-rewards hands in every finished bounty's parts (from the inventory, then
+  the active boat's hold): the creature's bounty XP (3,465 for a tern) and as many coins (to the
+  bank when the inventory has no room),
+  1/36 shark paint, "You have finished the ... port task." and "Thanks, sailor. Here's your
+  payment.". Parts can be stored in the cargo hold, and a recovery loses them.
+
 ## Not done
 
-- Bounty tasks.
+- Bounty parts' drop rate scaling with damage dealt, and the boosted rates before the count is met
+  (Wiki); the parts' rates here are 1 in the cache's rarity.
 - Opening port reward bags (each port's loot is on the Wiki).
 - Confiscating crates on a teleport, or when leaving port with one in hand, and the captain's
   log's task list and cancel.
 - Trim being refused while carrying cargo.
+
+## Port coin bag safety
+
+`Bags.PortTasks.openCoinBag` accepts only the live native inventory source and
+the exact clicked slot/Item. It rejects busy, dead, placement/teleport and stale
+contexts. On a real Inventory copy, it removes one bag and calls the shared
+`getAddableAmount` for the complete coin payout. The last bag may free a slot;
+a remaining stack does not. Compatible coins can merge even at full inventory,
+while metadata-distinct coins stay separate and the integer stack cap is enforced.
+Only after the full payout fits does it consume the clicked bag, add the coins
+and refresh once. Unchanged inventory slots retain their Item identity/metadata.
+
+The [Port coin bag Wiki](https://oldschool.runescape.wiki/w/Port_coin_bag), fetched
+29 October 2026, specifies inclusive payouts Tiny800–1200, Small1600–2400,
+Medium2400–3600, Large3600–5400 and Huge6400–9600. This corrects the older
+Small1613–2714/Medium2486–3595/Large3864–5350 endpoints. The existing uniform
+integer roll is retained; the Wiki's bounds alone do not independently establish
+its distribution. Cache param2647 is a display/reference value, not proof of a
+server payout distribution.
+
+The [pinned rev241 object dump](https://github.com/Joshua-F/osrs-dumps/blob/6e5033af6215963581a51b348f452320ff18f0f6/config/dump.obj)
+names `port_task_lootsack_t0_coins` through `t4_coins`; active
+`osrs-241_2026-10-20` cache checks confirm all five Open actions, size param2645
+and coin param2646. RSProx index searches for `*port_task_lootsack*coins*` and
+`*port_task*coin*` found no matching recordings. No exact opening delay, sound,
+animation or message is claimed from a capture; the existing immediate opening
+and reward wording remain.
+
+A capacity failure preserves the entire bag/coin inventory and records that
+bag ID's roll in registered `port-tasks:pending-coin-bags`. Bank transfer or
+save/reload cannot reroll a blocked payout. Saved amounts are checked against
+the current size range before delivery; success clears the entry and the next
+bag rolls fresh. This bookkeeping is an implementation choice for safe retries,
+not a claimed recorded OSRS attribute. There is no delayed task/session or new
+save schema. Opening accesses no storage, so Bank PIN guarding is not applicable;
+bank transfers continue through their own existing guard.
+
+Production path: native canvas widget → `ClientConnection.inventoryAction` →
+`ItemActionPacketListener.handleAction/handleFirstAction` → named
+`PluginManager.onItemAction` hook → `openCoinBag` → real Inventory /
+ItemContainer capacity, exact-slot deletion and add → inventory packet/message.
+`Item` owns metadata cloning; `ItemContainer` owns merges/caps; PlayerSave and
+the registered persistence plugin own the inventory and pending attribute.
+`tests/port-coin-bags.test.cjs` uses real Player/Inventory/Bank and all enabled
+plugins with startup/shutdown, stubbing only network output and controlling RNG
+for fixtures. It checks all five Wiki endpoints, full/last slot, matching and
+distinct-metadata coin stacks, caps, native widget routing, exact clicked bag,
+stale/busy/dead inputs, repeat/Examine, real Bank transfer and save hydration.
+
+The current-base feature/Sailing run passed117/117. Independent review built the
+fingerprinted source with pinned Yarn4.12, traced the shared/native owners and
+passed22 feature/foundation/adversarial checks with no findings in the inspected
+coin paths. Its additional test flushed an actual SQLite worker, closed/reopened
+the database, hydrated the player and retained a blocked800 payout despite a
+maximum RNG retry; the next bag paid a fresh1200. Invalid saved amounts and
+cross-size pending isolation were also checked.
+
+Full `node --test tests/` on base`acf4a8659` plus this change:10080passed,
+11failed/10091total. All11 reproduced on a separately built clean source snapshot:
+belladonna equipment; three Farming league effects; cannon setup clipping;
+custom-item unused IDs; Blood Moon door routing; Barronite rewards; burying
+feedback; teleport-menu source data; and Whisperer entry. These are disclosed
+baseline failures, not cleared by the coin tests.
+
+Own-port native rendering QA used controlled spawned bags/knives and ordinary
+RNG: the menu exposed Open, and native default Open changed two Tiny bags to
+one and displayed947 coins. A28-slot inventory kept both bags and showed the
+space refusal. Native Drop freed one slot; retry consumed one bag and displayed
+961 coins. Screenshots and resulting server state were retained locally. The
+QA server saved and stopped gracefully; no live-game change was made.

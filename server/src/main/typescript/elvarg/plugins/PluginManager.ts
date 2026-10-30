@@ -53,6 +53,7 @@ import {
   PluginNpcAggressionToleranceEvent,
   PluginNpcInteractionEvent,
   PluginWorldEntityInteractionEvent,
+  PluginNpcAttackOptionEvent,
   PluginNpcInteractionDefinition,
   PluginNpcDialogueContext,
   PluginNpcDialogueConditionEvent,
@@ -271,6 +272,7 @@ export class PluginManager {
   /** Main-world loc names usable from a boat deck (setUsableFromDeck). */
   public static readonly usableFromDeck = new Set<string | number>();
   private static worldEntityInteractionHooks: PluginHook<PluginWorldEntityInteractionEvent>[] = [];
+  private static npcAttackOptionHooks: PluginHook<PluginNpcAttackOptionEvent>[] = [];
   /**
    * `onAnyNpcInteraction` hooks. Kept apart from the id/name hooks so a generic
    * transcript handler (e.g. NpcDialogues) never outruns a specific plugin that
@@ -1177,6 +1179,18 @@ export class PluginManager {
     for (const hook of PluginManager.worldEntityInteractionHooks) {
       if (event.handled) break;
       PluginManager.executeHook(hook, event, "world_entity_interaction", "world_entity_interaction");
+    }
+    return event.handled === true;
+  }
+
+  /** Runs an NPC's combat option through plugins before combat; true when one took it over. */
+  public static emitNpcAttackOption(event: PluginNpcAttackOptionEvent): boolean {
+    if (!event || !event.player || !event.npc) {
+      return false;
+    }
+    for (const hook of PluginManager.npcAttackOptionHooks) {
+      if (event.handled) break;
+      PluginManager.executeHook(hook, event, "npc_attack_option", "npc_attack_option");
     }
     return event.handled === true;
   }
@@ -2353,6 +2367,7 @@ export class PluginManager {
       applyPrayerDrainModifiers: require(`${combat}/EquipmentEffects`).applyPrayerDrainModifiers,
       CombatEquipment: require(`${combat}/CombatEquipment`).CombatEquipment,
       CombatRange: require(`${combat}/CombatRange`).CombatRange,
+      CombatPosition: require(`${combat}/CombatPosition`).CombatPosition,
       CanAttackResponse: require(`${combat}/CombatFactory`).CanAttackResponse,
       CombatType: require(`${combat}/CombatType`).CombatType,
       SkullType: require(`${model}/SkullType`).SkullType,
@@ -3149,6 +3164,11 @@ export class PluginManager {
       },
       onNpcRoute: (handler) => {
         if (typeof handler === "function") PluginManager.npcRouteHooks.push({ ...hookProfile(handler), handler });
+      },
+      onNpcAttackOption: (handler: (event: PluginNpcAttackOptionEvent) => void) => {
+        if (typeof handler === "function") {
+          PluginManager.npcAttackOptionHooks.push({ ...hookProfile(handler), handler });
+        }
       },
       onWorldEntityInteraction: (handler: (event: PluginWorldEntityInteractionEvent) => void) => {
         if (typeof handler === "function") {
@@ -4302,6 +4322,7 @@ export class PluginManager {
       emitObjectInteraction: (event) => PluginManager.emitObjectInteraction(event),
       emitNpcInteraction: (event) => PluginManager.emitNpcInteraction(event),
       emitWorldEntityInteraction: (event) => PluginManager.emitWorldEntityInteraction(event),
+      emitNpcAttackOption: (event) => PluginManager.emitNpcAttackOption(event),
       emitItemOnObject: (event) => PluginManager.emitItemOnObject(event),
       emitPlayerLogin: (event) => PluginManager.emitPlayerLogin(event),
       emitCustomEvent: (eventName, payload) =>
