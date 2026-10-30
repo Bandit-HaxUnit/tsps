@@ -517,3 +517,27 @@ test('Bounty Hunter retreat uses remaining food, commits to a real exit and logs
     assert.equal(f.logouts(), 1);
   });
 });
+
+test('the researched builds wear something in every slot they name, at the level and style they were made for', () => {
+  const { canEquipPresetItem } = require('../plugins/modes/pvp/Presets.PvpMode');
+  const { PVP_LOADOUT_DEFINITIONS } = require('../plugins/bots/behaviours/pvp/PvpLoadoutRegistry.PlayerBots');
+  const pools = PVP_LOADOUT_DEFINITIONS.pools;
+  const names = (spec) => spec == null ? [] : Array.isArray(spec) ? spec.flatMap(names)
+    : typeof spec === 'string' ? (spec.startsWith('@') ? pools[spec.slice(1)] : [spec])
+    : spec.item ? names(spec.item) : spec.magicStaff ? [spec.magicStaff] : [];
+  const builds = {
+    ags_pure: [88, 'melee'], range_pure: [74, 'range'], low_prayer_pure: [67, 'melee'], thirteen_def_pure: [84, 'melee'],
+    proselyte_pure: [89, 'melee'], rigour_zerker: [102, 'range'], granite_fifty_def: [102, 'melee'], defence_pure: [49, 'melee'],
+    f2p_magic_tank: [71, 'hybrid'], f2p_rune_tank: [82, 'melee'], max_melee_main: [126, 'melee'], max_range_tank: [126, 'range'],
+  };
+  for (const [id, [level, style]] of Object.entries(builds)) {
+    const entry = PVP_LOADOUT_DEFINITIONS.archetypes.find((archetype) => archetype.id === id);
+    assert.deepEqual([archetypeCombatLevel(entry.stats), buildStyle(entry)], [level, style], id);
+    const preset = { getStats: () => entry.stats };
+    for (const [slot, spec] of Object.entries(entry.equipment)) {
+      const wearable = names(spec).filter((name) => canEquipPresetItem(preset, new core.Item(core.ItemIdentifiers[name], 1)));
+      assert.ok(wearable.length > 0, `${id} ${slot}`);
+    }
+    assert.ok(PVP_LOADOUT_DEFINITIONS.loadouts.some((loadout) => loadout.archetypes.includes(id)), `${id} is in a loadout`);
+  }
+});
