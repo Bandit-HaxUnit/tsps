@@ -78,7 +78,7 @@ class HeadlessClient(private val host: String, private val port: Int) {
         // authenticator (5), staff level, player mod, index (2), members, account hashes
         val ok = input.readNBytes(LOGIN_OK_PAYLOAD)
         val index = ((ok[7].toInt() and 0xFF) shl 8) or (ok[8].toInt() and 0xFF)
-        return LoginResult(code, Game(socket, input, decoding, index))
+        return LoginResult(code, Game(socket, input, decoding, IsaacRandom(seed.copyOf()), index))
     }
 
     /** The logged-in game stream; [next] decodes one server packet at a time. */
@@ -86,8 +86,34 @@ class HeadlessClient(private val host: String, private val port: Int) {
         private val socket: Socket,
         private val input: DataInputStream,
         private val cipher: IsaacRandom,
+        private val encoding: IsaacRandom,
         val index: Int,
     ) : AutoCloseable {
+        private val output = DataOutputStream(socket.getOutputStream())
+
+        /** A var-byte client packet, opcode enciphered as the client does. */
+        fun sendVarByte(opcode: Int, payload: ByteArray) =
+            synchronized(output) {
+                output.writeByte(opcode + encoding.nextInt())
+                output.writeByte(payload.size)
+                output.write(payload)
+                output.flush()
+            }
+
+        /** CLIENT_CHEAT: a `::` command, without the colons. */
+        fun command(text: String) =
+            sendVarByte(CLIENT_CHEAT, Unpooled.buffer().toJagByteBuf().apply { pjstr(text); p1(0) }.buffer.let { it.array().copyOf(it.writerIndex()) })
+
+        /** MOVE_GAMECLICK: walk to [x], [z] ([keys] 1 = ctrl). */
+        fun walk(x: Int, z: Int, keys: Int = 0) =
+            sendVarByte(
+                MOVE_GAMECLICK,
+                Unpooled.buffer().toJagByteBuf().apply {
+                    p1Alt1(keys)
+                    p2Alt2(z)
+                    p2Alt2(x)
+                }.buffer.let { it.array().copyOf(it.writerIndex()) },
+            )
         private val decoder = ServerPacketDecoderServiceV241(huffman, CacheProvider { NoCache })
         private val session = Session(index, AttributeMap())
 
@@ -231,6 +257,8 @@ class HeadlessClient(private val host: String, private val port: Int) {
         const val JS5_URGENT_REQUEST = 1
         const val JS5_BLOCK = 512
         const val LOGIN_OK = 2
+        const val MOVE_GAMECLICK = 55
+        const val CLIENT_CHEAT = 84
         const val LOGIN_OK_PAYLOAD = 34
         const val OTP_NONE = 2
         const val PASSWORD_AUTHENTICATION = 0

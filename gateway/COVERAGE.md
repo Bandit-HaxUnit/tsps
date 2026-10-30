@@ -17,7 +17,7 @@ sessions, so the browser wire format doesn't change.
 | 3 LOGIN_RESPONSE | login response | mapped | 1 | 2 (full) → 7, 27 → 26, others 1:1; token dropped |
 | 4 LOGOUT_RESPONSE | LOGOUT / MESSAGE_GAME | todo | 4 | a refusal becomes a game message |
 | 6 PLUGIN_MESSAGE | — | dropped | 1 | plugin features (quest helper, voice, pest control) |
-| 20 PLAYER_SYNC | PLAYER_INFO | todo | 2–3 | deltas → absolute; wearpos from cache |
+| 20 PLAYER_SYNC | PLAYER_INFO | todo | 2–3 | M2: the bit stream is decoded (`PlayerSync`) and drives the local player; other players and update blocks are M3 |
 | 21 NPC_INFO | NPC_INFO | todo | 3 | base anims and models from cache; transform → transmog |
 | 22 ANIM | — | dropped | 1 | base anims are in appearance |
 | 23 MOVEMENT_POSITION | — | dropped | 2 | sub-tile movement has no OSRS form |
@@ -30,7 +30,7 @@ sessions, so the browser wire format doesn't change.
 | 81 RUN_ENERGY | UPDATE_RUNENERGY, UPDATE_RUNWEIGHT, varp 173 | todo | 5 | native: full energy + weight |
 | 83 SPOT_ANIM | MAP_ANIM | todo | 7 | |
 | 84 PROJECTILES | PROJANIM_SPECIFIC_V4 | todo | 8 | |
-| 87 DESTINATION | SET_MAP_FLAG_V2 | todo | 2 | |
+| 87 DESTINATION | SET_MAP_FLAG_V2 | mapped | 2 | 0,0 clears the flag |
 | 88 PLAYER_OPTION | SET_PLAYER_OP | todo | 3 | plus baseline Trade with / Follow, Attack in PvP |
 | 89 HINT_ARROW | HINT_ARROW | todo | 7 | tile level scope lost |
 | 90 ATTACK_TIMER | — | dropped | 8 | tsps HUD |
@@ -50,7 +50,7 @@ sessions, so the browser wire format doesn't change.
 | 132 PLAY_JINGLE / 133 PLAY_SONG | MIDI_JINGLE / MIDI_SONG_V2 | todo | 7 | |
 | 134 / 135 / 136 LOC_ADD_CHANGE / DEL / ANIM | LOC_ADD_CHANGE_V2 / LOC_DEL / LOC_ANIM in zone updates | todo | 7 | |
 | 137 CAMERA_CONTROL | CAM_* | todo | 7 | translate and tile glide have no OSRS form |
-| 140 / 141 REBUILD_REGION / NORMAL | REBUILD_REGION_V2 / REBUILD_LOGIN_V2 / REBUILD_NORMAL_V2 | todo | 1–2 | REBUILD_LOGIN mapped (M1): built at the first PLAYER_SYNC's tile |
+| 140 / 141 REBUILD_REGION / NORMAL | REBUILD_REGION_V2 / REBUILD_LOGIN_V2 / REBUILD_NORMAL_V2 | mapped | 1–2 | the scene before login becomes REBUILD_LOGIN (an instance follows as REBUILD_REGION); tsps's template chunks are rsprot ReferenceZones |
 | 142 / 143 REBUILD_WORLDENTITY / WORLDENTITY_INFO | REBUILD_WORLDENTITY_V4 / WORLDENTITY_INFO_V7 | todo | 9 | native: boat level + owner |
 | 144 REGION_REPLACEMENT | — | dropped | 2 | server map data the client can't load |
 | 145 / 146 SET / RESET_INTERACTION_MODE | SET / RESET_INTERACTION_MODE | todo | 7 | |
@@ -69,8 +69,8 @@ sessions, so the browser wire format doesn't change.
 | --- | --- | --- | --- | --- |
 | login block | 204 LOGIN, 202 HANDSHAKE | mapped | 1 | X-Real-IP; native bit; token logins rejected |
 | NO_TIMEOUT | 201 PING | mapped | 1 | sent by the gateway every 5 s while ticks arrive |
-| MOVE_GAMECLICK / MOVE_MINIMAPCLICK | 16 MOVE_GAMECLICK | todo | 2 | |
-| SET_HEADING | 214 | todo | 2 | |
+| MOVE_GAMECLICK / MOVE_MINIMAPCLICK | 16 MOVE_GAMECLICK | mapped | 2 | key combination passes through (1 ctrl, 2 ctrl+shift) |
+| SET_HEADING | 214 | mapped | 2 | |
 | IF_BUTTON (if1) / IF_BUTTONX | 13 / 91 | todo | 4 | |
 | IF_SUBOP | 89 | todo | 4 | |
 | IF_BUTTOND | 1, or 242 INVENTORY_MOVE for 149:0 | todo | 4–5 | |
@@ -86,7 +86,7 @@ sessions, so the browser wire format doesn't change.
 | OPOBJ1–5 / OPOBJ6 / OPOBJT | 102, 43, 103, 56, 82 / 104 / 94 or 79 | todo | 5 | |
 | OPWORLDENTITY1–5 | 220–224 | todo | 9 | |
 | OPWORLDENTITY6 | — | dropped | 9 | 241 sends a type id, tsps reads an index |
-| MESSAGE_PUBLIC / CLIENT_CHEAT | 190 CHAT | todo | 6 | cheat → `::cmd` |
+| MESSAGE_PUBLIC / CLIENT_CHEAT | 190 CHAT | todo | 6 | CLIENT_CHEAT mapped early (M2): `::cmd` as public chat; autocomplete requests dropped |
 | MESSAGE_PRIVATE | 197 | todo | 6 | |
 | FRIENDLIST / IGNORELIST ADD / DEL, FRIENDCHAT_* | 196 FRIENDS_CHAT_ACTION | todo | 6 | |
 | CHAT_SETFILTER | 198 | todo | 6 | |

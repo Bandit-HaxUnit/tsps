@@ -87,6 +87,9 @@ class TspsWriter {
  * know, so nothing else may be sent.
  */
 object TspsClientPacket {
+    const val MOVE_GAMECLICK = 16
+    const val CHAT = 190
+    const val SET_HEADING = 214
     const val PING = 201
     const val HANDSHAKE = 202
     const val LOGIN = 204
@@ -94,6 +97,7 @@ object TspsClientPacket {
     /** `HANDSHAKE_CAPABILITY_NATIVE_CLIENT` in ClientProtocol.ts. */
     const val CAPABILITY_NATIVE_CLIENT = 0x1
     private const val CLIENT_TYPE_DESKTOP = 0
+    private const val CHAT_KIND_PUBLIC = 0
 
     fun login(username: String, password: String, revision: Int): ByteArray =
         TspsWriter().string(username).string(password).i32(revision).u8(0).varShort(LOGIN)
@@ -107,4 +111,18 @@ object TspsClientPacket {
             .varByte(HANDSHAKE)
 
     fun ping(time: Int): ByteArray = TspsWriter().i32(time).fixed(PING)
+
+    /** A walk click; [keys] is OSRS's key combination (1 ctrl, 2 ctrl+shift). */
+    fun move(x: Int, z: Int, keys: Int): ByteArray =
+        TspsWriter()
+            .u8(z ushr 8).u8(z + 128) // shortAddLE
+            .u8(-keys) // byteNeg
+            .u8(x ushr 8).u8(x + 128)
+            .u8(128).u8(0) // shortAdd: no target loc
+            .fixed(MOVE_GAMECLICK)
+
+    /** A `::` command; tsps reads commands from public chat. */
+    fun command(command: String): ByteArray = TspsWriter().u8(CHAT_KIND_PUBLIC).string("::$command").varByte(CHAT)
+
+    fun setHeading(heading: Int): ByteArray = TspsWriter().u8(heading).fixed(SET_HEADING)
 }

@@ -20,6 +20,9 @@ object LiveGateway {
         Gateway.start(config.copy(gatewayPort = port)).also { Runtime.getRuntime().addShutdownHook(Thread(it::stop)) }
     }
 
+    /** tsps's developer account (`DEV_USERNAME`), when one is configured. */
+    val developerName: String? = System.getenv("DEV_USERNAME")?.takeIf { it.isNotBlank() }
+
     fun client() = HeadlessClient("127.0.0.1", gateway.config.gatewayPort)
 
     /** A fresh account name; tsps creates unknown accounts on first login. */

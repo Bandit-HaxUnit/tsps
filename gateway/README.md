@@ -17,6 +17,14 @@ yarn gateway        # the gateway, in a second terminal
 yarn gateway:test   # unit tests; the integration tests (it/) need `yarn start` running in this checkout
 ```
 
+Tests that need `::` commands (teleports, instances) run as tsps's developer account: start tsps
+with `DEV_USERNAME=<name>` and run the tests with the same variable. Without it they're skipped.
+
+```bash
+DEV_USERNAME=gwdev yarn start
+DEV_USERNAME=gwdev yarn gateway:test
+```
+
 The gateway reads its ports from the root `.env`, the same block `scripts/wt` writes
 ([docs/worktrees.md](../docs/worktrees.md)): `GATEWAY_PORT` (43595 in the main checkout, 43900 + N
 in slot N) and `WEBSOCKET_PORT`. It serves JS5 from the cache in `server/target.txt`.
