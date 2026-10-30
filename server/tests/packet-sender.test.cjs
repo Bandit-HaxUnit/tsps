@@ -67,6 +67,8 @@ test("a dialogue box opened again resends its texts: the client turns 'Click her
   const updater = new FrameUpdater();
   const fake = {
     chatboxGroupId: -1,
+    subInterfaceTargets: new Map(),
+    rememberSubInterface: PacketSender.prototype.rememberSubInterface,
     emitInterfaceClosed() {},
     player: {
       getSession: () => ({ sendClientPacket: (frame) => { frames.push(Buffer.from(frame)); return true; } }),
@@ -151,4 +153,65 @@ test('NPC spawn payload preserves current-cache16-bit type IDs and a16-bit index
   assert.equal(body.readUInt16BE(9),21);
   // count8, three spawns(index16, flags3, offsets5+5, rotation3, type16), sentinel16.
   assert.equal(body.subarray(11).toString('hex'),'0000070000003100080000403100090000409affff');
+});
+
+test('sub-interface mount ownership survives same-ID replacement, relocation and another player',async()=>{
+  require('../dist/Server').Server.installProductionPathResolver();
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(process.cwd());
+  const {PluginManager}=require('../dist/plugins/PluginManager');
+  const {Player}=require('../dist/game/entity/impl/player/Player');
+  const {PlayerSession}=require('../dist/net/PlayerSession');
+  const {encodeWidgetCloseSub}=require('../dist/net/protocol/ClientProtocol');
+  const core=PluginManager.getCoreApi();
+  const target=core.CacheDefinitions.getComponentId('toplevel:overlay_atmosphere');
+  const group=core.CacheDefinitions.getInterfaceId('fade_overlay');
+  assert.ok(Number.isInteger(target)&&Number.isInteger(group));
+  const delivered=[];
+  const session=new PlayerSession({isOpen:()=>true,send:frame=>delivered.push(Buffer.from(frame))});
+  const player=new Player(session);session.setPlayer(player);player.setUsername('mountowner');
+  const sender=player.getPacketSender();
+  const first=sender.mountSubInterface(target,group,1);
+  assert.equal(Object.isFrozen(first),true,'a caller cannot mutate the sender-owned mount identity');
+  assert.equal(sender.getSubInterfaceAt(target),first);
+  assert.equal(sender.sendSubInterface(target,group,1),sender,'legacy chaining still returns the sender');
+  const replacement=sender.getSubInterfaceAt(target);
+  assert.notEqual(replacement,first,'same-ID remount has its own lifetime');
+  const before=session.pendingPackets.length;
+  assert.equal(sender.closeSubInterfaceMount(first),false,'delayed cleanup must not close the replacement');
+  assert.equal(session.pendingPackets.length,before,'stale cleanup emits no native close packet');
+  assert.equal(sender.closeSubInterfaceMount(replacement),true);
+  assert.ok(session.pendingPackets.at(-1).equals(encodeWidgetCloseSub(target)));
+  assert.equal(sender.getSubInterfaceAt(target),undefined);
+  assert.equal(sender.closeSubInterfaceMount(replacement),false);
+  const moving=sender.mountSubInterface(target,group,1);
+  sender.sendSubInterface(target+1,group,1);
+  assert.equal(sender.getSubInterfaceAt(target),undefined,'a group moved to another parent no longer occupies its old target');
+  assert.equal(sender.closeSubInterfaceMount(moving),false);
+  const moved=sender.getSubInterfaceAt(target+1);
+  const otherSession=new PlayerSession({isOpen:()=>true,send:()=>{}}),other=new Player(otherSession);otherSession.setPlayer(other);
+  const otherSender=other.getPacketSender(),otherMount=otherSender.mountSubInterface(target+1,group,1);
+  assert.equal(otherSender.closeSubInterfaceMount(moved),false,'a different player cannot supply this sender a valid mount token');
+  assert.equal(otherSender.getSubInterfaceAt(target+1),otherMount);
+  assert.equal(otherSender.closeSubInterfaceMount(otherMount),true);
+  assert.equal(sender.closeSubInterfaceMount(moved),true,'the legitimate current owner can still clean up');
+  const prayerTarget=(161<<16)|81;
+  const prayer=sender.mountSubInterface(prayerTarget,541,1);
+  sender.sendTabInterface(5,17200);
+  const afterPrayer=session.pendingPackets.length;
+  assert.equal(sender.closeSubInterfaceMount(prayer),false,'legacy tab replacement also retires an old token');
+  assert.equal(session.pendingPackets.length,afterPrayer);
+  assert.equal(sender.getSubInterfaceAt(prayerTarget).groupId,77);
+  const chatTarget=(162<<16)|568;
+  const chat=sender.mountSubInterface(chatTarget,231,0);
+  sender.sendChatboxInterface(233);
+  assert.equal(sender.closeSubInterfaceMount(chat),false);
+  const currentChat=sender.getSubInterfaceAt(chatTarget);
+  sender.closeInterface(233);
+  assert.equal(sender.closeSubInterfaceMount(currentChat),false,'native chatbox close retires the mount');
+  sender.sendChatboxInterface(231);
+  const removedChat=sender.getSubInterfaceAt(chatTarget);
+  sender.sendInterfaceRemoval();
+  assert.equal(sender.closeSubInterfaceMount(removedChat),false,'modal removal retires the chatbox mount');
+  await Promise.resolve();
+  assert.ok(delivered.length,'the actual session delivers the native mount/close packets');
 });
