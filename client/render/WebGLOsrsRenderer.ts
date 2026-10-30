@@ -1420,6 +1420,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         if (this.pendingInstanceScene) WebGLMapSquare.cancelPreparedLoad(this.pendingInstanceScene);
         this.pendingInstanceScene = null;
         super.invalidateDefinitionCaches();
+        this.chatheadFactory?.clear();
+        this.widgetsOverlay?.invalidateDefinitionCaches();
         this.interactLocModelLoader?.clearCache();
         this.interactNpcModelLoader?.clearCache();
         this.sceneRaycaster?.clearCache();

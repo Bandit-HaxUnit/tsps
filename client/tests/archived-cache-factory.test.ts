@@ -21,14 +21,14 @@ process.chdir(serverRoot);
 require(serverRoot + "/dist/Server").Server.installProductionPathResolver();
 const { CachePipeline } = require(serverRoot + "/dist/game/cache/CachePipeline");
 const raw = JSON.parse(readFileSync(resolve(serverRoot, "tests/fixtures/archived-seasonal-bundle.json"), "utf8"));
-let factory: Dat2CacheLoaderFactory, bundle: ArchivedDefinitionBundle, counts: Record<string, number>;
+let factory: Dat2CacheLoaderFactory, bundle: ArchivedDefinitionBundle, counts: Record<string, number>, system: CacheSystem;
 before(async () => {
     await CachePipeline.initialize(serverRoot);
     const active = CachePipeline.getActive();
     const info: CacheInfo = { name: active.name, game: "oldschool", environment: "live", revision: active.revision, timestamp: active.timestamp, size: 0 };
     const index = CacheIndexDat2.fromStore(2, CachePipeline.getStore());
-    const indices = []; indices[2] = index;
-    const system = new CacheSystem(indices);
+    const indices = []; for (const id of [0, 1, 2, 3, 7, 8, 9, 22]) indices[id] = CacheIndexDat2.fromStore(id, CachePipeline.getStore());
+    system = new CacheSystem(indices);
     const native = {
         npc: new ArchiveNpcTypeLoader(info, index.getArchive(9)),
         loc: new ArchiveLocTypeLoader(info, index.getArchive(6)),
@@ -87,4 +87,73 @@ test("a stale target snapshot is rejected by the real factory before any archive
     assert.throws(() => factory.getNpcTypeLoader().getCount(), /target|cache/i);
     replaceDefinitionArchives([]);
     assert.equal(factory.getNpcTypeLoader().getCount(), counts.npc);
+});
+
+test("both real renderer invalidators replace cached native chatheads and already baked widget portraits", () => {
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+    const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
+    delete (globalThis as any).window; delete (globalThis as any).document;
+    (globalThis as any).self = globalThis;
+    require.extensions['.glsl'] = (module: any, file: string) => { module.exports = readFileSync(file, 'utf8'); };
+    for (const ext of ['.png', '.jpg', '.webp']) require.extensions[ext] = (module: any, file: string) => { module.exports = file; };
+    const { WebGLOsrsRenderer } = require('../render/WebGLOsrsRenderer');
+    const { WebGPURenderer } = require('../render/webgpu/WebGPURenderer');
+    const { WebGPUUi } = require('../render/webgpu/ui/WebGPUUi');
+    const { ChatheadFactory } = require('../render/ChatheadFactory');
+    const { WidgetsOverlay } = require('../ui/devoverlay/WidgetsOverlay');
+    const { GLRenderer } = require('../widgets/gl/renderer');
+    const { WidgetManager } = require('../widgets/WidgetManager');
+    const { VarManager } = require('../rs/config/vartype/VarManager');
+    const id = counts.npc, types = factory.getNpcTypeLoader();
+    const install = (symbol: string) => {
+        const row = bundle.definitions.find(row => row.symbol === symbol)!;
+        const input = { ...bundle, definitions: [{ ...row, id }] };
+        loadFromPayload({ gamemodeId: 'seasonal', datasets: [{ key: 'definitionArchives', rows: [input] }] });
+        types.clearCache();
+    };
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: { addEventListener() {}, removeEventListener() {} } });
+    Object.defineProperty(globalThis, 'document', { configurable: true, value: {
+        head: { appendChild() {} }, querySelectorAll: () => [],
+        createElement: () => ({ style: {}, dataset: {}, tabIndex: 0, sheet: { cssRules: [], insertRule() { return 0; } }, setAttribute() {}, appendChild() {} }),
+    } });
+    try {
+        for (const Backend of [WebGLOsrsRenderer, WebGPURenderer]) {
+            install('xmas25_sir_prysin');
+            const client: any = { workerPool: { size: 1 }, npcTypeLoader: types, modelLoader: factory.getModelLoader(), textureLoader: factory.getTextureLoader(),
+                seqTypeLoader: factory.getSeqTypeLoader(), seqFrameLoader: factory.getSeqFrameLoader(), skeletalSeqLoader: factory.getSkeletalSeqLoader(),
+                varManager: new VarManager(factory.getVarBitTypeLoader()), widgetManager: new WidgetManager(system) };
+            const renderer: any = new Backend(client);
+            const chatheads = new ChatheadFactory(client.modelLoader, client.textureLoader);
+            const old = chatheads.get(types.load(id)); assert.ok(old);
+            const widgets: any = new WidgetsOverlay(undefined, { getWidgetManager: () => client.widgetManager });
+            const canvas: any = { __modelRenderCache: new Map([['wm:portrait', { tex: {}, offsetX: 0, offsetY: 0, w: 50, h: 50 }]]),
+                __animatedModelMemo: new Map([[42, { key: 'old', tex: {}, offsetX: 0, offsetY: 0, w: 50, h: 50 }]]) };
+            const deleted: unknown[] = [];
+            const glr: any = Object.create(GLRenderer.prototype);
+            Object.assign(glr, { canvas, textures: new Map([['wm:portrait', { tex: {} }], ['wm:dyn:42', { tex: {} }], ['unrelated-ui', { tex: {} }]]),
+                textureBatchTextures: [], gl: { deleteTexture: (texture: unknown) => deleted.push(texture) } });
+            widgets.glRenderer = glr; widgets.hasPresentedFrame = true; client.widgetManager.globalDirty = false;
+            if (Backend === WebGLOsrsRenderer) { renderer.chatheadFactory = chatheads; renderer.widgetsOverlay = widgets; }
+            else {
+                const ui: any = new WebGPUUi(renderer);
+                // Headless presentation context. Cache/model/widget owners and both
+                // renderer methods are real; DOM/GPU presentation init is not exercised.
+                ui.widgetsHost = { osrsClient: client, chatheadFactory: chatheads }; ui.widgetsOverlay = widgets; renderer.ui = ui;
+            }
+            install('xmas25_aggie');
+            const aggie = types.load(id); assert.equal(aggie.name, 'Aggie');
+            assert.equal(chatheads.get(aggie), old, 'real cached model reproduces the same-ID stale portrait before invalidation');
+            renderer.invalidateDefinitionCaches();
+            const actual = chatheads.get(aggie), expected = new ChatheadFactory(client.modelLoader, client.textureLoader).get(aggie);
+            assert.ok(actual && expected); assert.notEqual(actual, old);
+            assert.deepEqual(actual.verticesX, expected.verticesX); assert.deepEqual(actual.verticesY, expected.verticesY);
+            assert.equal(canvas.__modelRenderCache.size, 0); assert.equal(canvas.__animatedModelMemo.size, 0);
+            assert.equal(deleted.length, 2); assert.ok(glr.getTexture('unrelated-ui'));
+            assert.equal(client.widgetManager.globalDirty, true); assert.equal(widgets.hasPresentedFrame, false);
+        }
+    } finally {
+        replaceDefinitionArchives([]); types.clearCache();
+        if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow); else delete (globalThis as any).window;
+        if (previousDocument) Object.defineProperty(globalThis, 'document', previousDocument); else delete (globalThis as any).document;
+    }
 });

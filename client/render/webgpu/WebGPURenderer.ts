@@ -257,6 +257,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         WebGPUMapSquare.cancelPreparedLoads(this.device);
         this.mapsToLoad.clear();
         super.invalidateDefinitionCaches();
+        this.ui?.invalidateDefinitionCaches();
         this.interactionHost.interactLocModelLoader?.clearCache();
         this.interactionHost.interactNpcModelLoader?.clearCache();
         this.interactionHost.sceneRaycaster?.clearCache();

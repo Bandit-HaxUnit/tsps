@@ -147,6 +147,21 @@ export class WidgetsOverlay implements Overlay {
         return this.glRenderer?.canvas as HTMLCanvasElement | undefined;
     }
 
+    /** Rebuild type-dependent widget models, including portraits already baked into textures. */
+    invalidateDefinitionCaches(): void {
+        const canvas = this.getGLCanvas() as (HTMLCanvasElement & {
+            __modelRenderCache?: Map<string, unknown>;
+            __animatedModelMemo?: Map<number, unknown>;
+        }) | undefined;
+        for (const key of canvas?.__modelRenderCache?.keys() ?? []) this.glRenderer?.deleteTexture(key);
+        for (const uid of canvas?.__animatedModelMemo?.keys() ?? []) this.glRenderer?.deleteTexture(`wm:dyn:${uid}`);
+        canvas?.__modelRenderCache?.clear();
+        canvas?.__animatedModelMemo?.clear();
+        this.ctx.getWidgetManager?.()?.invalidateAll();
+        this.hasPresentedFrame = false;
+        this.rootSetChanged = true;
+    }
+
     dispose(): void {
         if (this.glRenderer) {
             try {
