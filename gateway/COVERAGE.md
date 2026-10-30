@@ -42,9 +42,9 @@ sessions, so the browser wire format doesn't change.
 | 109 / 111 / 112 WIDGET_SET_FLAGS* | IF_SETEVENTS_V2 | mapped | 4 | old op bits 1–10 move to events2 |
 | 110 WIDGET_RUN_SCRIPT | VARP_*, UPDATE_INV_FULL, RUNCLIENTSCRIPT | mapped | 4–5 | script -1 = vars and inventories only |
 | 116 WIDGET_SET_QUEST_LIST | — | dropped | 4 | browser-only quest list widget |
-| 120 CHAT_MESSAGE | MESSAGE_GAME, PLAYER_INFO chat, MESSAGE_PRIVATE(_ECHO), MESSAGE_FRIENDCHANNEL | todo | 3–6 | public chat (M3): one PLAYER_INFO chat block, the overhead copy suppressed, crown from `<img=N>`; game and system types → MESSAGE_GAME (M4); private, friends and clan types M6 |
-| 121 FRIENDS_CHAT_UPDATE | UPDATE_FRIENDLIST, UPDATE_IGNORELIST, UPDATE_FRIENDCHAT_CHANNEL_FULL_V2, FRIENDLIST_LOADED | todo | 6 | |
-| 122 CHAT_FILTER_SETTINGS | CHAT_FILTER_SETTINGS + _PRIVATECHAT | todo | 6 | |
+| 120 CHAT_MESSAGE | MESSAGE_GAME, PLAYER_INFO chat, MESSAGE_PRIVATE(_ECHO), MESSAGE_FRIENDCHANNEL | mapped | 3–6 | public: one PLAYER_INFO chat block (overhead copy suppressed, crown from `<img=N>`); game/system types → MESSAGE_GAME; private in/out and friends chat → their packets with a gateway message counter and world 1. Mod private (7) and clan types have no tsps source |
+| 121 FRIENDS_CHAT_UPDATE | UPDATE_FRIENDLIST, UPDATE_IGNORELIST, UPDATE_FRIENDCHAT_CHANNEL_FULL_V2, FRIENDLIST_LOADED | mapped | 6 | the channel only goes when it changed; FRIENDLIST_LOADED once |
+| 122 CHAT_FILTER_SETTINGS | CHAT_FILTER_SETTINGS + _PRIVATECHAT | mapped | 6 | |
 | 123 TRIGGER_ONDIALOGABORT | TRIGGER_ONDIALOGABORT | mapped | 4 | |
 | 131 SOUND | SYNTH_SOUND / SOUND_AREA | todo | 7 | |
 | 132 PLAY_JINGLE / 133 PLAY_SONG | MIDI_JINGLE / MIDI_SONG_V2 | todo | 7 | |
@@ -87,10 +87,10 @@ sessions, so the browser wire format doesn't change.
 | OPWORLDENTITY1–5 | 220–224 | todo | 9 | |
 | OPWORLDENTITY6 | — | dropped | 9 | 241 sends a type id, tsps reads an index |
 | MESSAGE_PUBLIC / CLIENT_CHEAT | 190 CHAT | mapped | 2–3 | public (0), autotyper (1 → autochat) and friends chat (2); colour and effects aren't passed (tsps drops them); clan types dropped. CLIENT_CHEAT: `::cmd`, autocomplete requests dropped |
-| MESSAGE_PRIVATE | 197 | todo | 6 | |
-| FRIENDLIST / IGNORELIST ADD / DEL, FRIENDCHAT_* | 196 FRIENDS_CHAT_ACTION | todo | 6 | |
-| CHAT_SETFILTER | 198 | todo | 6 | |
-| SEND_SNAPSHOT | 199 REPORT_ABUSE | todo | 6 | |
+| MESSAGE_PRIVATE | 197 | mapped | 6 | |
+| FRIENDLIST / IGNORELIST ADD / DEL, FRIENDCHAT_* | 196 FRIENDS_CHAT_ACTION | mapped | 6 | join, leave, kick, rank and the list edits share one tsps packet |
+| CHAT_SETFILTER | 198 | mapped | 6 | |
+| SEND_SNAPSHOT | 199 REPORT_ABUSE | mapped | 6 | |
 | CLICKWORLDMAP / TELEPORT | 105 / 212 | todo | 7 | admin only |
 | UPDATE_PLAYER_MODEL_V2 | 37 APPEARANCE_SET | todo | 3 | needs a gateway decoder; rsprot 241 has none |
 | trade interface buttons | 180 TRADE_ACTION | todo | 9 | |

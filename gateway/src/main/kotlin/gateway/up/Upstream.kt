@@ -10,14 +10,20 @@ import net.rsprot.protocol.game.incoming.buttons.IfButtonD
 import net.rsprot.protocol.game.incoming.buttons.IfButtonT
 import net.rsprot.protocol.game.incoming.buttons.IfScriptTrigger
 import net.rsprot.protocol.game.incoming.buttons.IfSubOp
+import net.rsprot.protocol.game.incoming.friendchat.FriendChatJoinLeave
+import net.rsprot.protocol.game.incoming.friendchat.FriendChatKick
+import net.rsprot.protocol.game.incoming.friendchat.FriendChatSetRank
 import net.rsprot.protocol.game.incoming.locs.OpLoc6
 import net.rsprot.protocol.game.incoming.locs.OpLocT
 import net.rsprot.protocol.game.incoming.locs.OpLocV2
+import net.rsprot.protocol.game.incoming.messaging.MessagePrivate
 import net.rsprot.protocol.game.incoming.messaging.MessagePublic
 import net.rsprot.protocol.game.incoming.misc.user.ClientCheat
 import net.rsprot.protocol.game.incoming.misc.user.CloseModal
 import net.rsprot.protocol.game.incoming.misc.user.MoveGameClick
 import net.rsprot.protocol.game.incoming.misc.user.MoveMinimapClick
+import net.rsprot.protocol.game.incoming.misc.user.SendSnapshot
+import net.rsprot.protocol.game.incoming.misc.user.SetChatFilterSettings
 import net.rsprot.protocol.game.incoming.misc.user.SetHeading
 import net.rsprot.protocol.game.incoming.npcs.OpNpc6
 import net.rsprot.protocol.game.incoming.npcs.OpNpcT
@@ -28,6 +34,10 @@ import net.rsprot.protocol.game.incoming.objs.OpObjV2
 import net.rsprot.protocol.game.incoming.players.OpPlayer
 import net.rsprot.protocol.game.incoming.players.OpPlayerT
 import net.rsprot.protocol.game.incoming.resumed.ResumePCountDialog
+import net.rsprot.protocol.game.incoming.social.FriendListAdd
+import net.rsprot.protocol.game.incoming.social.FriendListDel
+import net.rsprot.protocol.game.incoming.social.IgnoreListAdd
+import net.rsprot.protocol.game.incoming.social.IgnoreListDel
 import net.rsprot.protocol.game.incoming.resumed.ResumePLongDialog
 import net.rsprot.protocol.game.incoming.resumed.ResumePNameDialog
 import net.rsprot.protocol.game.incoming.resumed.ResumePStringDialog
@@ -96,6 +106,17 @@ class Upstream(
                 PUBLIC_CHAT_KINDS[message.type]?.let { send(TspsClientPacket.chat(it, message.message)) } ?: DropCounter.up(message)
             // Autocomplete is the client asking for suggestions as you type; tsps has none.
             is ClientCheat -> if (!message.autocomplete) send(TspsClientPacket.command(message.command))
+            is MessagePrivate -> send(TspsWriter().string(message.name).string(message.message).varByte(PRIVATE_MESSAGE))
+            is FriendListAdd -> social(ADD_FRIEND, message.name)
+            is FriendListDel -> social(REMOVE_FRIEND, message.name)
+            is IgnoreListAdd -> social(ADD_IGNORE, message.name)
+            is IgnoreListDel -> social(REMOVE_IGNORE, message.name)
+            is FriendChatJoinLeave -> message.name?.let { social(JOIN, it) } ?: social(LEAVE, "")
+            is FriendChatKick -> social(KICK, message.name)
+            is FriendChatSetRank -> social(SET_FRIEND_RANK, message.name, message.rank)
+            is SetChatFilterSettings ->
+                send(TspsWriter().u8(message.publicChatFilter).u8(message.privateChatFilter).u8(message.tradeChatFilter).fixed(CHAT_FILTER))
+            is SendSnapshot -> send(TspsWriter().string(message.name).u8(message.ruleId).u8(if (message.mute) 1 else 0).varByte(REPORT_ABUSE))
             is OpPlayer -> send(TspsClientPacket.playerOp(message.op, message.index))
             is OpNpcV2 -> if (message.op in 1..5) send(TspsClientPacket.npcOp(message.op, message.index)) else DropCounter.up(message)
             is OpNpc6 -> send(TspsClientPacket.examineNpc(message.id))
@@ -140,6 +161,10 @@ class Upstream(
         }
     }
 
+    /** FRIENDS_CHAT_ACTION: one packet for the friend, ignore and friends-chat actions. */
+    private fun social(action: Int, name: String, rank: Int = 0) =
+        send(TspsWriter().u8(action).string(name).u8(rank).varByte(FRIENDS_CHAT_ACTION))
+
     private fun button(message: If3Button) {
         when (message.combinedId) {
             // The browser sets the run varp itself and transmits it; tsps has no orb handler.
@@ -172,6 +197,20 @@ class Upstream(
         const val IF_BUTTON_SUB = 89
         const val IF_BUTTONT = 90
         const val VARP_TRANSMIT = 191
+        const val FRIENDS_CHAT_ACTION = 196
+        const val PRIVATE_MESSAGE = 197
+        const val CHAT_FILTER = 198
+        const val REPORT_ABUSE = 199
+
+        // FRIENDS_CHAT_ACTION's action codes.
+        const val JOIN = 0
+        const val LEAVE = 1
+        const val KICK = 2
+        const val ADD_FRIEND = 3
+        const val REMOVE_FRIEND = 4
+        const val SET_FRIEND_RANK = 5
+        const val ADD_IGNORE = 6
+        const val REMOVE_IGNORE = 7
         const val RESUME_COUNTDIALOG = 192
         const val RESUME_NAMEDIALOG = 193
         const val RESUME_STRINGDIALOG = 194

@@ -10,6 +10,7 @@ import gateway.down.StockMarket
 import gateway.down.MapRebuild
 import gateway.down.NpcSync
 import gateway.down.PlayerSync
+import gateway.down.Social
 import gateway.down.TspsChatMessage
 import gateway.down.TspsHandshake
 import gateway.down.TspsLoginResult
@@ -65,6 +66,7 @@ class GatewaySession(
     private val items = Items(context.objs, ::send)
     private val groundItems = GroundItems(::send)
     private val stockMarket = StockMarket(::send)
+    private val social = Social(::send)
     private val interfaces = Interfaces(varps, InterfaceTree(context.enums), stockMarket, items::scriptInventories, ::send)
     private val upstream = Upstream(varps) { tsps.send(it) }
     private val players = PlayerSync()
@@ -174,7 +176,7 @@ class GatewaySession(
                 if (ok) send(Logout) else if (reason.isNotEmpty()) send(MessageGame(GAME_MESSAGE, reason))
             }
             TspsServerPacket.TICK -> groundItems.tick(packet.reader().i32())
-            else -> if (!interfaces.handle(packet) && !items.handle(packet) && !groundItems.handle(packet)) DropCounter.down(packet.opcode)
+            else -> if (!interfaces.handle(packet) && !items.handle(packet) && !groundItems.handle(packet) && !social.handle(packet)) DropCounter.down(packet.opcode)
         }
     }
 
@@ -205,6 +207,7 @@ class GatewaySession(
         when {
             // Public chat goes overhead and to the chatbox through PLAYER_INFO.
             chat.isPublic && chat.playerIndex >= 0 -> mirror?.queueChat(chat.playerIndex, chat.text, chat.modIcon)
+            social.chat(chat) -> Unit
             chat.isGameMessage -> send(MessageGame(chat.type, chat.from.ifEmpty { null }, chat.text))
             else -> DropCounter.down(TspsServerPacket.CHAT_MESSAGE)
         }

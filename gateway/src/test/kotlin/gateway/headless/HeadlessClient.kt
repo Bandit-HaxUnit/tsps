@@ -132,6 +132,27 @@ class HeadlessClient(private val host: String, private val port: Int) {
                 }.buffer.let { it.array().copyOf(it.writerIndex()) },
             )
 
+        /** A var-short client packet, opcode enciphered as the client does. */
+        fun sendVarShort(opcode: Int, payload: ByteArray) =
+            synchronized(output) {
+                output.writeByte(opcode + encoding.nextInt())
+                output.writeShort(payload.size)
+                output.write(payload)
+                output.flush()
+            }
+
+        fun addFriend(name: String) =
+            sendVarByte(FRIENDLIST_ADD, Unpooled.buffer().toJagByteBuf().apply { pjstr(name) }.buffer.let { it.array().copyOf(it.writerIndex()) })
+
+        fun privateMessage(name: String, text: String) =
+            sendVarShort(
+                MESSAGE_PRIVATE,
+                Unpooled.buffer().toJagByteBuf().apply {
+                    pjstr(name)
+                    huffman.encode(this, text)
+                }.buffer.let { it.array().copyOf(it.writerIndex()) },
+            )
+
         /** CLIENT_CHEAT: a `::` command, without the colons. */
         fun command(text: String) =
             sendVarByte(CLIENT_CHEAT, Unpooled.buffer().toJagByteBuf().apply { pjstr(text); p1(0) }.buffer.let { it.array().copyOf(it.writerIndex()) })
@@ -290,6 +311,8 @@ class HeadlessClient(private val host: String, private val port: Int) {
         const val JS5_BLOCK = 512
         const val LOGIN_OK = 2
         const val MOVE_GAMECLICK = 55
+        const val FRIENDLIST_ADD = 14
+        const val MESSAGE_PRIVATE = 50
         const val MESSAGE_PUBLIC = 49
         const val IF_BUTTONX = 38
         const val CLIENT_CHEAT = 84
