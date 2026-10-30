@@ -244,6 +244,9 @@ function build(player, optionRow) {
   const boat = visit && ownedBoat(player, visit.slot);
   const option = boat && parts.optionFor(boat, optionRow);
   if (!option) return;
+  const schematic = { player, row: optionRow, allow: null };
+  pluginApi.emitCustomEvent("sailing:schematic-can-build", schematic);
+  if (schematic.allow === false) return;
   if ((boat.parts?.[option.part] ?? 0) === option.tier) {
     player.sendMessage("Your boat already has that.");
     return;
