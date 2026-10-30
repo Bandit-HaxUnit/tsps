@@ -13,7 +13,8 @@
  * an `after` callback run once the player continues
  * past it. A message step's "npc-dialogue:action" (`kind: "message"`) can set
  * `box: { items }` (one or two item ids) to show it as an item box, as OSRS shows
- * hand-outs, instead of a chat message. "npc-dialogue:start" plays a named variant on demand.
+ * hand-outs, instead of a chat message. "npc-dialogue:start" plays a named variant on demand
+ * and returns an optional request.cancel handle scoped to that playback's chain/chatbox.
  * Speech, choices, random alternatives and named shops run through existing systems; a shop
  * with versions emits "npc-dialogue:shop" ({ player, npcId, target, shops, shop }) to pick one.
  */
@@ -499,6 +500,26 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
   context.jumps = 0;
   const { player } = event;
   const manager = player.getDialogueManager();
+  // Scoped cancellation is an opt-in contract of trusted named playback.
+  // Ordinary/quest callers retain the existing unowned presentation path.
+  const sender = event.explicit === true ? player.getPacketSender() : undefined;
+  const owner = sender ? Object.freeze({}) : undefined;
+  let cancelled = false;
+  function presentOwned(present) {
+    return owner ? sender.withChatboxOwner(owner, present) : present();
+  }
+  function startChain(builder) {
+    if (!cancelled) manager.startDialogues(builder, owner);
+  }
+  function cancel() {
+    if (cancelled || !owner) return false;
+    cancelled = true;
+    const ownsChain = manager.getOwner() === owner;
+    const closed = sender.closeChatboxFor(owner);
+    // Closing emits synchronous interface hooks which may install a new chain.
+    if (manager.getOwner() === owner) manager.reset();
+    return ownsChain || closed;
+  }
   const npcId = event.npcId;
   const definition = event.definition;
   const close = () => player.getPacketSender().sendInterfaceRemoval();
@@ -662,6 +683,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     wrapBranch: (chosen, branch) => [{ type: "condition_chosen", id: chosen.id, text: chosen.text }, ...branch] });
 
   function presentMenu(menu, offset = 0, tail = []) {
+    if (cancelled) return;
     const { step, rest, record } = menu;
     context.currentMenu = menu;
     const notice = { player, npcId, definition, prompt: step.prompt || "Select an Option", warning: null };
@@ -669,7 +691,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     const warned = context.warnedMenus ??= new WeakSet();
     if (notice.warning && !warned.has(step)) {
       warned.add(step);
-      manager.startDialogues(new DialogueChainBuilder()
+      startChain(new DialogueChainBuilder()
         .add(new api.core.StatementDialogue(0, String(notice.warning)))
         .add(new ActionDialogue(1, { execute: () => presentMenu(menu, offset, tail) })));
       return;
@@ -693,6 +715,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         || (option.steps ?? []).find((entry) => typeof entry?.player === "string")?.player
         || "Continue.";
       return [label, () => {
+        if (cancelled) return;
         // Quest-gated choices carry a slug like "quest:cook-s-assistant:start";
         // let the owning quest run its action, then play the branch.
         if (option.hook) {
@@ -710,12 +733,13 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
     if (!pairs.length) return run(rest, record);
     playedAny = true;
     manager.reset();
-    if (!api.sendMultiChatboxPrompt(player, formatPlayerText(step.prompt || "Select an Option", player), ...pairs)) {
+    if (!presentOwned(() => api.sendMultiChatboxPrompt(player, formatPlayerText(step.prompt || "Select an Option", player), ...pairs))) {
       unavailable();
     }
   }
 
   function run(steps, currentRecord) {
+    if (cancelled) return;
     const previous = context.currentRecord;
     context.currentRecord = currentRecord;
     const queue = flatten(steps, flattenOptions());
@@ -732,7 +756,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           if (++context.jumps > MAX_JUMPS) return close();
           run([...step.steps, ...after], currentRecord);
         } }));
-        manager.startDialogues(chain);
+        startChain(chain);
         return;
       }
       if (step.type === "condition_run") {
@@ -756,7 +780,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
             ...after,
           ], currentRecord);
         } }));
-        manager.startDialogues(chain);
+        startChain(chain);
         return;
       }
       if (step.type === "condition_chosen") {
@@ -764,7 +788,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           api.emitCustomEvent("npc-dialogue:condition", { player, npc: event.npc, npcId, definition, text: step.text, stepId: step.id });
           run(rest, currentRecord);
         } }));
-        manager.startDialogues(chain);
+        startChain(chain);
         return;
       }
       // A menu jump abandons this option; the menu already owns its continuation.
@@ -777,7 +801,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           continue;
         }
         chain.add(new ActionDialogue(index++, { execute: () => presentMenu(step.menu) }));
-        manager.startDialogues(chain);
+        startChain(chain);
         return;
       }
       // Typed lines carry a speaker; render any of them (cutscene actors included)
@@ -846,7 +870,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
             }));
           } });
           chain.add(overheadAction);
-          manager.startDialogues(chain);
+          startChain(chain);
           return;
         }
         playedAny = true;
@@ -871,7 +895,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         // continue", which comes that many ticks later (a cutscene's camera moving, as live).
         const hold = Number.isInteger(request.holdTicks) && request.holdTicks > 0
           ? new ActionDialogue(index++, { execute: () => {
-            held?.sendHeld?.(player);
+            presentOwned(() => held?.sendHeld?.(player));
             api.core.TaskManager.submit(new api.core.CountdownTask(player, request.holdTicks, () => {
               if (manager.getCurrent?.() === hold) manager.advance();
             }));
@@ -896,7 +920,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
             if (current && manager.getCurrent() !== current) return;
             run(rest, currentRecord);
           } }));
-          manager.startDialogues(chain);
+          startChain(chain);
           return;
         }
         continue;
@@ -936,7 +960,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
                 ? new ItemStatementDialogue(0, first, text)
                 : new DoubleItemStatementDialogue(0, first, second, text));
             box.add(new ActionDialogue(1, { execute: () => run(rest, currentRecord) }));
-            manager.startDialogues(box);
+            startChain(box);
             return;
           }
           if (!message.handled) player.sendMessage(formatPlayerText(String(step.text ?? ""), player));
@@ -1008,13 +1032,14 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         // shortcut: unknown step type with no executable contract. Stop safely.
         unavailable();
       } }));
-      manager.startDialogues(chain);
+      startChain(chain);
       return;
     }
     chain.add(new ActionDialogue(index, { execute: close }));
-    manager.startDialogues(chain);
+    startChain(chain);
   }
   run(steps, undefined);
+  return cancel;
 }
 
 module.exports = {
@@ -1178,7 +1203,7 @@ module.exports = {
       if (request.exact && (resolved?.variant !== wanted || (wantedPage && resolved?.page !== wantedPage))) return;
       const steps = typeof request.select === "function" && resolved?.steps ? request.select(resolved.steps) : resolved?.steps;
       if (!steps?.length) return;
-      startDialogue(api, event, steps, resolved.branches, resolved.context);
+      request.cancel = startDialogue(api, event, steps, resolved.branches, resolved.context);
       request.handled = true;
     });
 
