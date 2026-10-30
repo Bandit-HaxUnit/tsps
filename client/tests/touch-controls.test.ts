@@ -244,9 +244,20 @@ const refusal = (fromX: number, fromY: number, toX: number, toY: number): Contin
     plugin.pin(false);
     plugin.onClientTick();
     assert.equal(plugin.getUiState().action?.target, "Giant", "the giant's far tile, with its colour tags stripped");
-    at = { x: 70, y: 70 };
-    plugin.onClientTick();
-    assert.equal(plugin.getUiState().action, undefined, "an NPC without options, and leaving the giant, show nothing");
+    // Stepping off, the giant lingers a moment, then goes; an NPC without options never shows.
+    const realNow = performance.now.bind(performance);
+    let now = realNow();
+    Object.defineProperty(performance, "now", { configurable: true, value: () => now });
+    try {
+        at = { x: 70, y: 70 };
+        plugin.onClientTick();
+        assert.equal(plugin.getUiState().action?.target, "Giant", "a wandering NPC keeps the button a moment");
+        now += 1600;
+        plugin.onClientTick();
+        assert.equal(plugin.getUiState().action, undefined, "then it goes, and the Guard has no options");
+    } finally {
+        Object.defineProperty(performance, "now", { configurable: true, value: realNow });
+    }
 }
 
 // While the scene loads, nothing is focused even where an NPC seems to share the player's tile.

@@ -38,6 +38,8 @@ const MOBILE_STONES = (MOBILE_ROOT_INTERFACE << 16) | 50;
 const REFUSAL_MS = 300;
 /** How square-on the walk must hit the edge (cosine), so sliding along a fence targets nothing. */
 const HEAD_ON = 0.8;
+/** An NPC that wanders off the player's tile keeps the button this long, in ms. */
+const NPC_LINGER_MS = 1500;
 
 export type TouchAction = {
     kind: TouchTarget["kind"];
@@ -141,6 +143,8 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
     /** The NPC sharing the player's tile, rescanned when the player's tile or the game tick changes. */
     private npcUnder?: Extract<TouchTarget, { kind: "npc" }>;
     private npcScanKey = "";
+    /** When the focused NPC stopped sharing the player's tile. */
+    private npcLeftAt?: number;
     private gameTicks = 0;
     private padMode: PadModeValue = PadMode.DEFAULT;
     private uiState: TouchControlsUiState = { visible: false, stonesInset: 0 };
@@ -307,7 +311,10 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
         if (scanKey !== this.npcScanKey) {
             this.npcScanKey = scanKey;
             const npc = this.npcAt(player.x, player.y, player.plane);
-            if (npc && npc.serverId !== this.npcUnder?.serverId) this.focus = npc;
+            if (npc && npc.serverId !== this.npcUnder?.serverId) {
+                this.focus = npc;
+                this.npcLeftAt = undefined;
+            }
             this.npcUnder = npc;
         }
         const refusal = this.client.getKeyboardMovementRefusal?.();
@@ -321,7 +328,13 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
             if (target) this.focus = target;
         }
         if (this.focus?.kind === "npc") {
-            this.focus = this.npcUnder?.serverId === this.focus.serverId ? this.npcUnder : undefined;
+            if (this.npcUnder?.serverId === this.focus.serverId) {
+                this.focus = this.npcUnder;
+                this.npcLeftAt = undefined;
+            } else {
+                this.npcLeftAt ??= performance.now();
+                if (performance.now() - this.npcLeftAt > NPC_LINGER_MS) this.focus = undefined;
+            }
         } else if (this.focus) {
             const { loc } = this.focus;
             // Options follow the object's current form (an opened gate, a chopped tree).
