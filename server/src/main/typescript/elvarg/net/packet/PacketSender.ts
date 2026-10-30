@@ -3,6 +3,7 @@ import { encodeGameframeTabSetup, encodePlayerOption, resolveGameframeRoot,
   type SongFades,
 } from "../protocol/ClientProtocol";
 import { BIT_MASKS } from "../../game/cache/codec/rs/MathConstants";
+import { MAX_GAME_MESSAGE_BYTES } from "../BinaryChannel";
 import { PacketBuilder } from "./PacketBuilder";
 import { ValueType } from "./ValueType";
 import { ByteOrder } from "./ByteOrder";
@@ -26,6 +27,7 @@ import {
   encodeHintArrow,
   encodeGroundItems,
   encodeGroundItemsDelta,
+  GROUND_ITEM_BYTES,
   encodeLocAddChange,
   encodeLocAnim,
   encodeTileSpotAnim,
@@ -149,6 +151,10 @@ export const CREATION_MENU_LAST_ITEM_ATTRIBUTE = "creation-menu:last-item";
 // Widget transmit flags: bit (opIndex+1) must be set for that op to reach the server (see
 // WidgetActionRouter.shouldTransmitAction on the client) - ops 1-5 are Make 1/5/10/X/All.
 const CREATION_MENU_OP_FLAGS = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5);
+
+// One packet has to fit one game message: a browser-host world drops the connection over a larger
+// one, and a crater full of bot loot (Bounty Hunter) passes it. The rest of the stacks go as deltas.
+const GROUND_ITEMS_PER_PACKET = Math.floor((MAX_GAME_MESSAGE_BYTES - 16) / GROUND_ITEM_BYTES);
 
 /** Immutable identity of one mount; remounting the same group creates a new identity. */
 export interface SubInterfaceMount {
@@ -1252,9 +1258,12 @@ export class PacketSender {
   }
 
   sendGroundItems(items: any[]): this {
-    this.player.getSession().sendClientPacket(encodeGroundItems(
-      ++this.groundItemSerial, items.map((item) => this.groundItemView(item))
-    ));
+    const stacks = items.map((item) => this.groundItemView(item));
+    const session = this.player.getSession();
+    session.sendClientPacket(encodeGroundItems(++this.groundItemSerial, stacks.slice(0, GROUND_ITEMS_PER_PACKET)));
+    for (let i = GROUND_ITEMS_PER_PACKET; i < stacks.length; i += GROUND_ITEMS_PER_PACKET) {
+      session.sendClientPacket(encodeGroundItemsDelta(++this.groundItemSerial, stacks.slice(i, i + GROUND_ITEMS_PER_PACKET), []));
+    }
     return this;
   }
 
