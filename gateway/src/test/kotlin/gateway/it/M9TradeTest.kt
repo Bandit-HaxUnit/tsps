@@ -37,11 +37,16 @@ class M9TradeTest {
                     { it is UpdateInvFull && it.inventoryId == (OFFER_INVENTORY or INV_OTHER) },
                 )
                 second.expectOpen(OFFER_INTERFACE)
+                first.ticks(BUTTON_DELAY_TICKS)
+                second.ticks(BUTTON_DELAY_TICKS)
 
                 first.button(OFFER_INTERFACE, ACCEPT)
                 second.button(OFFER_INTERFACE, ACCEPT)
                 first.expectOpen(CONFIRM_INTERFACE)
                 second.expectOpen(CONFIRM_INTERFACE)
+                // tsps ignores trade buttons for a second after a screen opens (Trading button_delay).
+                first.ticks(BUTTON_DELAY_TICKS)
+                second.ticks(BUTTON_DELAY_TICKS)
 
                 first.button(CONFIRM_INTERFACE, CONFIRM_ACCEPT)
                 second.button(CONFIRM_INTERFACE, CONFIRM_ACCEPT)
@@ -90,6 +95,7 @@ class M9TradeTest {
 
     private companion object {
         const val SETTLE_TICKS = 4
+        const val BUTTON_DELAY_TICKS = 3
         const val PACKETS = 5_000
         const val OFFER_INTERFACE = 335
         const val CONFIRM_INTERFACE = 334

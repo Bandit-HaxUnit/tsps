@@ -287,6 +287,9 @@ class GatewaySession(
         // The browser client adds these itself; tsps handles op 2 as trade and 3 as follow.
         session.queue(SetPlayerOp(TRADE_OP, false, "Trade with"))
         session.queue(SetPlayerOp(FOLLOW_OP, false, "Follow"))
+        // Every tsps player has their name from login, but the chatbox (script 223) shows it only
+        // once this varbit says a display name is set; otherwise "You must set a name...".
+        varps.setVarbit(NAME_SET_VARBIT, 1)?.let(session::queue)
         beforeLogin.forEach(session::queue)
         beforeLogin.clear()
         state = State.IN_GAME
@@ -383,6 +386,7 @@ class GatewaySession(
         const val TRADE_OP = 2
         const val ATTACK_OP = 1
         const val IN_WILDERNESS_VARBIT = 5963
+        const val NAME_SET_VARBIT = 8119
         const val RUN_VARP = 173
         const val RUN_ENERGY_PER_PERCENT = 100
         const val GAME_MESSAGE = 0

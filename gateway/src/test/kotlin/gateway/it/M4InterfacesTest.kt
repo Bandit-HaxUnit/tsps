@@ -10,6 +10,8 @@ import net.rsprox.protocol.game.outgoing.model.varp.VarpLarge
 import net.rsprox.protocol.game.outgoing.model.varp.VarpSmall
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import gateway.cache.VarTypes
+import gateway.headless.TestCache
 import org.junit.jupiter.api.Test
 
 /** M4: the gameframe, stats and varps after login, the run orb and the logout button. */
@@ -25,6 +27,24 @@ class M4InterfacesTest {
             assertTrue(INVENTORY in mounted && EQUIPMENT in mounted && SKILLS in mounted, "mounted $mounted")
             assertTrue(messages.filterIsInstance<UpdateStatV2>().size >= SKILL_COUNT)
             assertTrue(messages.any { it is VarpSmall || it is VarpLarge })
+        }
+    }
+
+    @Test
+    fun `the chatbox shows the player's name`() {
+        login().use { game ->
+            game.expect<RebuildLoginV2>()
+            // Script 223 writes "You must set a name before you can chat." unless this is 1.
+            val bit = requireNotNull(VarTypes(TestCache.cache).varbit(NAME_SET_VARBIT))
+            val value =
+                game.until(TICKS).mapNotNull {
+                    when (it) {
+                        is VarpSmall -> if (it.id == bit.varp) it.value else null
+                        is VarpLarge -> if (it.id == bit.varp) it.value else null
+                        else -> null
+                    }
+                }.lastOrNull()
+            assertEquals(1, value?.let { (it ushr bit.lsb) and 1 }, "varp ${bit.varp} = $value")
         }
     }
 
@@ -69,6 +89,7 @@ class M4InterfacesTest {
     private fun List<Any>.lastRunVarp(): Int? = filterIsInstance<VarpSmall>().lastOrNull { it.id == RUN_VARP }?.value
 
     private companion object {
+        const val NAME_SET_VARBIT = 8119
         const val PASSWORD = "gateway-test"
         const val OK = 2
         const val TICKS = 4
