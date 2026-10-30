@@ -148,6 +148,15 @@ function takenFromBin(player, patch, bin) {
     if (--bin.count === 0) Patches.stateFor(player, patch).bin = undefined;
     Patches.syncPatch(player, patch);
 }
+function binBottomless(player, bin) {
+    return player.getInventory().getItems().find(item => {
+        if (item.getAmount() !== 1 || ![core.ItemIdentifiers.BOTTOMLESS_COMPOST_BUCKET,
+            core.ItemIdentifiers.BOTTOMLESS_COMPOST_BUCKET_4].includes(item.getId())) return false;
+        const charges = Number(item.getMetaValue("farming:charges") ?? 0);
+        return Number.isInteger(charges) && charges >= 0 && charges <= 9998
+            && (!charges || item.getMetaValue("farming:tier") === bin.tier);
+    });
+}
 function canTakeBinProduct(player, bin) {
     if (bin.tier === ROTTEN_TOMATO_TIER) {
         // Wiki Rotten tomato: no tools; unlike compost, collecting one does not consume a bucket.
@@ -155,8 +164,8 @@ function canTakeBinProduct(player, bin) {
         player.sendMessage("You don't have space to hold a rotten tomato, squishy though it may be.");
         return false;
     }
-    if (player.getInventory().contains(Data.itemId("Bucket"))) return true;
-    player.sendMessage("You need an empty bucket.");
+    if (player.getInventory().contains(Data.itemId("Bucket")) || binBottomless(player, bin)) return true;
+    player.sendMessage("You need an empty bucket or a suitable bottomless compost bucket with room.");
     return false;
 }
 /** Captures: buckets are filled one at a time, the scoop and its sound, the bucket a tick later, every four ticks. */
@@ -171,11 +180,18 @@ function takeBinStep(player, work) {
         return 1;
     }
     // Capacity is rechecked above on the output tick, before any output, depletion or XP.
-    if (bin.tier !== ROTTEN_TOMATO_TIER) inventory.deleteNumber(Data.itemId("Bucket"), 1);
-    inventory.addItem(new core.Item(Data.itemId(COMPOST_NAMES[bin.tier])));
+    if (bin.tier === ROTTEN_TOMATO_TIER || inventory.contains(Data.itemId("Bucket"))) {
+        if (bin.tier !== ROTTEN_TOMATO_TIER) inventory.deleteNumber(Data.itemId("Bucket"), 1);
+        inventory.addItem(new core.Item(Data.itemId(COMPOST_NAMES[bin.tier])));
+    } else {
+        // Choose from the live inventory at output time; ordinary buckets always have priority.
+        const bucket = binBottomless(player, bin);
+        if (!bucket || !chargeBottomless(player, bin.tier, bucket)) return false;
+    }
     takenFromBin(player, work.patch, bin);
     work.depositing = false;
-    return bin.count > 0 && (bin.tier === ROTTEN_TOMATO_TIER || inventory.contains(Data.itemId("Bucket"))) ? 3 : false;
+    return bin.count > 0 && (bin.tier === ROTTEN_TOMATO_TIER || inventory.contains(Data.itemId("Bucket"))
+        || binBottomless(player, bin)) ? 3 : false;
 }
 function dose(player, id) {
     const name = core.CacheDefinitions.getItem(id).name;
