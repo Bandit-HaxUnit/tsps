@@ -15,7 +15,9 @@ import { handleShopPayload } from "../domain/shop";
 import { handleSmithingPayload } from "../domain/smithing";
 import { emitPlayerSync, emitSkills } from "../domain/skills";
 import { handleTradePayload } from "../domain/trade";
-import { markChatTransmit } from "../../../game/TransmitCycles";
+import { markChatTransmit, markItemDefinitionsChanged } from "../../../game/TransmitCycles";
+import { CustomItemRegistry } from "../../../custom/items/CustomItemRegistry";
+import { getDefinitionArchiveKey } from "../../../custom/archives/ArchivedDefinitionStore";
 import { getClientCycle } from "../timing";
 import { cloneRunEnergyState, state } from "../state";
 import {
@@ -265,6 +267,8 @@ export function handleInboundUi(msg: any): boolean {
         }
         try {
             const { loadFromPayload } = require("../../../common/gamemode/GamemodeContentStore");
+            const itemRevision = CustomItemRegistry.revision;
+            const archiveKey = getDefinitionArchiveKey();
             loadFromPayload(msg.payload);
             const g: any = (typeof window !== "undefined" ? window : globalThis) as any;
             const mv = g?.__osrsClient;
@@ -280,6 +284,9 @@ export function handleInboundUi(msg: any): boolean {
                 }
                 mv?.workerPool?.runAll((worker: any) => worker.setCustomContent(msg.payload))
                     .catch((error: unknown) => console.error("Custom worker content failed", error));
+            }
+            if (CustomItemRegistry.revision !== itemRevision || getDefinitionArchiveKey() !== archiveKey) {
+                markItemDefinitionsChanged();
             }
             if (mv && typeof mv.refreshGamemodeWorldLocs === "function") {
                 mv.refreshGamemodeWorldLocs();
