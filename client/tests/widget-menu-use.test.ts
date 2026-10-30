@@ -6,6 +6,7 @@ import { MenuState } from "../ui/menu/MenuState";
 import { chooseDefaultMenuEntry } from "../ui/menu/MenuEngine";
 import { deriveMenuEntriesForWidget } from "../widgets/menu/utils";
 import { buildWidgetActionPayload } from "../game/widgets/widgetActionPayload";
+import { createPrimaryWidgetActionResolver } from "../game/widgets/input/widgetPrimaryAction";
 
 ClientState.clearItemSelection();
 ClientState.isSpellSelected = false;
@@ -135,6 +136,18 @@ for (const widget of [
         assert.equal(packets[0].slot, 2);
         assert.equal(packets[0].itemId, 32926);
     }
+    const manager = {getWidgetFlags:allOpsVisible,getWidgetOpMask:()=>0,getWidgetByUid:noWidgetLookup};
+    const resolvePrimary = createPrimaryWidgetActionResolver({
+        getSpellSelection:()=>({getWidgetTargetMask:()=>0}),getSettings:()=>({shiftClickEnabled:false}),
+    } as any,{isShiftDown:()=>false} as any,manager as any,{} as any);
+    const primary = resolvePrimary(widget);
+    assert.equal(primary.option,'Inspect','the actual primary input owner must not replace Inspect with Use');
+    assert.equal(primary.opIndex,widget.itemId >= 0 ? 2 : 1);
+    const primaryPacket = buildWidgetActionPayload(manager as any,{widget,...primary,source:'primary'});
+    assert.equal(primaryPacket?.opId,widget.itemId >= 0 ? 2 : 1);
+    if (widget.itemId >= 0) {
+        assert.equal(primaryPacket?.slot,2);assert.equal(primaryPacket?.itemId,32926);
+    }
     const [examine] = widgetEntriesToSimple([{option:'Examine',target:'Serving platter'}], context);
     examine.onClick?.();
     assert.equal(details, 1, 'separate Examine retains the details owner');
@@ -145,3 +158,26 @@ for (const widget of [
     assert.equal(packets.length, 1);
 }
 console.log('native widget Inspect operation and separate Examine paths passed');
+
+// A submenu label differs from its parent: Configure -> Inspect must preserve
+// the parent's native op and supply the selected sub-operation, not Examine.
+{
+    const widget = {uid:(123 << 16) | 5, groupId:123, fileId:5, childIndex:-1,
+        itemId:-1, name:'Status', actions:['Configure'], submenuActions:[['Inspect','Other details']]};
+    const packets: any[] = [];
+    let details = 0;
+    const [configure] = widgetEntriesToSimple(
+        deriveMenuEntriesForWidget(widget, false, allOpsVisible, noWidgetLookup), {
+            ui:{onWidgetAction:(event:any)=>packets.push(buildWidgetActionPayload(undefined,event)),
+                onWidgetExamine:()=>details++}, chosenWidget:widget, scheduleRender:()=>undefined,
+        });
+    const subEntries = configure.subEntries!;
+    assert.equal(subEntries.length,2);
+    subEntries[1].onClick?.(0,0,{source:'menu'});
+    subEntries[0].onClick?.(0,0,{source:'menu'});
+    assert.equal(details,0);
+    assert.deepEqual(packets.map(packet=>[packet.option,packet.opId,packet.subOpId]),[
+        ['Other details',1,2],['Inspect',1,1],
+    ]);
+}
+console.log('native Inspect submenu dispatch passed');

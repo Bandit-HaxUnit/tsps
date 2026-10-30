@@ -3,10 +3,10 @@ import { ClientState } from "../../game/ClientState";
 import { MenuAction, inferMenuAction } from "./MenuAction";
 import type { MenuClickContext, SimpleMenuEntry } from "./MenuEngine";
 import { normalizeMenuEntries } from "./MenuEngine";
-import { MenuOpcode, MenuState } from "./MenuState";
+import { MenuState } from "./MenuState";
 import { applyMenuTransform } from "./menuTransforms";
 import { preparePluginMenu } from "./menuEvents";
-import { transformWidgetMenuEntries } from "../../widgets/menu/utils";
+import { hasNativeWidgetOperation, transformWidgetMenuEntries } from "../../widgets/menu/utils";
 
 type WidgetMenuEntryInput = {
     option: string;
@@ -27,12 +27,8 @@ type WidgetMenuEntryInput = {
     subOptions?: string[];
 };
 
-function isWidgetInspectOperation(entry: WidgetMenuEntryInput): boolean {
-    return entry.option.trim().toLowerCase() === "inspect" && (
-        (typeof entry.opIndex === "number" && Number.isInteger(entry.opIndex) && entry.opIndex >= 0) ||
-        entry.opcode === MenuOpcode.CC_OP || entry.opcode === MenuOpcode.CC_OP_LowPriority ||
-        entry.opcode === MenuOpcode.WidgetTarget
-    );
+function isWidgetInspectOperation(entry: WidgetMenuEntryInput, option = entry.option): boolean {
+    return option.trim().toLowerCase() === "inspect" && hasNativeWidgetOperation(entry);
 }
 
 export type TargetLabelOptions = {
@@ -355,7 +351,7 @@ export function widgetEntriesToSimple(
         opSubIndex?: number,
     ): ((gx?: number, gy?: number, ctx?: MenuClickContext) => void) => {
         const lower = String(option || "").toLowerCase();
-        const inspectOperation = isWidgetInspectOperation(e);
+        const inspectOperation = isWidgetInspectOperation(e, option);
         const shouldDispatchWidgetAction =
             !e.suppressWidgetAction &&
             lower !== "cancel" &&
