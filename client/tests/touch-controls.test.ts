@@ -167,7 +167,7 @@ const refusal = (fromX: number, fromY: number, toX: number, toY: number): Contin
     plugin.steer(1, 0);
     blocked = refusal(21, 19, 21, 20);
     plugin.onClientTick();
-    assert.deepEqual(plugin.getUiState().action, { target: "Oak tree", options: [{ option: "Chop down", actionIndex: 0 }] });
+    assert.deepEqual(plugin.getUiState().action, { kind: "loc", target: "Oak tree", options: [{ option: "Chop down", actionIndex: 0 }] });
     plugin.interact(0);
     assert.deepEqual(sent[0].slice(2), [MenuOpcode.GameObjectFirstOption, 2, "Chop down", "Oak tree"]);
     const walked = moves.length;
@@ -194,6 +194,52 @@ const refusal = (fromX: number, fromY: number, toX: number, toY: number): Contin
     blocked = refusal(10, 10, 10, 11);
     plugin.onClientTick();
     assert.equal(plugin.getUiState().action, undefined, "a glancing blow focuses nothing");
+}
+
+// Standing on an NPC's tile focuses it; a 2x2 NPC covers four tiles; its option goes by server index.
+{
+    const sent: unknown[][] = [];
+    let at = { x: 50, y: 50 };
+    // ecs 1: a cow at (50, 50); ecs 2: a 2x2 giant whose south-west tile is (60, 60); ecs 3: no options.
+    const npcs = [
+        { ecsId: 1, serverId: 11, typeId: 81, size: 1, x: 50, y: 50 },
+        { ecsId: 2, serverId: 12, typeId: 82, size: 2, x: 60, y: 60 },
+        { ecsId: 3, serverId: 13, typeId: 83, size: 1, x: 70, y: 70 },
+    ];
+    const npcTypes: Record<number, { id: number; name: string; actions: (string | null)[] }> = {
+        81: { id: 81, name: "Cow", actions: [null, "Attack", null, null, null] },
+        82: { id: 82, name: "<col=ffff00>Giant</col>", actions: ["Talk-to", null, null, null, null] },
+        83: { id: 83, name: "Guard", actions: [null, null, null, null, null] },
+    };
+    const byEcs = (id: number) => npcs.find((n) => n.ecsId === id)!;
+    const { client } = makeClient({
+        playerEcs: { getIndexForServerId: () => 0, getX: () => at.x * 128 + 64, getY: () => at.y * 128 + 64, getLevel: () => 0 },
+        sceneGeometry: { locsAtTile: () => [] },
+        locTypeLoader: { load: () => undefined },
+        npcEcs: {
+            forEachActive: (fn) => npcs.forEach((n) => fn(n.ecsId)),
+            getServerId: (id) => byEcs(id).serverId,
+            getNpcTypeId: (id) => byEcs(id).typeId,
+            getSize: (id) => byEcs(id).size,
+            // Centres: a size-n NPC's centre is n/2 tiles past its south-west corner.
+            getWorldX: (id) => byEcs(id).x * 128 + byEcs(id).size * 64,
+            getWorldY: (id) => byEcs(id).y * 128 + byEcs(id).size * 64,
+            getLevel: () => 0,
+        },
+        npcTypeLoader: { load: (id: number) => npcTypes[id] as never },
+        menuAction: (...args) => sent.push(args),
+    });
+    const plugin = new TouchControlsPlugin(client);
+    plugin.onClientTick();
+    assert.deepEqual(plugin.getUiState().action, { kind: "npc", target: "Cow", options: [{ option: "Attack", actionIndex: 1 }] });
+    plugin.interact(1);
+    assert.deepEqual(sent[0].slice(2), [MenuOpcode.NpcSecondOption, 11, "Attack", "Cow"]);
+    at = { x: 61, y: 61 };
+    plugin.onClientTick();
+    assert.equal(plugin.getUiState().action?.target, "Giant", "the giant's far tile, with its colour tags stripped");
+    at = { x: 70, y: 70 };
+    plugin.onClientTick();
+    assert.equal(plugin.getUiState().action, undefined, "an NPC without options, and leaving the giant, show nothing");
 }
 
 console.log("touch controls plugin test passed");

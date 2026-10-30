@@ -98,7 +98,7 @@
     line-height: 1.1;
 }
 
-/* Object names in the game's own menu colour. */
+/* Names in the game's own menu colours: cyan objects, yellow NPCs. */
 .touch-action-target {
     color: #0ff;
     font-size: 11px;
@@ -107,6 +107,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.touch-action-target.is-npc {
+    color: #ff0;
 }
 
 .touch-action-list {

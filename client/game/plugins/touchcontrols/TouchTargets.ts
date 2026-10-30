@@ -1,12 +1,14 @@
 import type { ContinuousMovementRefusal } from "../../movement/ContinuousMovement";
 import type { SceneLoc } from "../../scene/SceneGeometry";
 
-/** A loc the player walked into, with the options its current form offers. */
+/** What the action button is for, with the options its current form offers. */
 export type TouchTarget = {
-    loc: SceneLoc;
     name: string;
     options: ReadonlyArray<{ option: string; actionIndex: number }>;
-};
+} & ({ kind: "loc"; loc: SceneLoc } | { kind: "npc"; ecsId: number; serverId: number });
+
+/** A loc the player walked into. */
+export type LocTouchTarget = Extract<TouchTarget, { kind: "loc" }>;
 
 /** The scene and cache lookups target finding needs; the plugin builds it from the client. */
 export type TouchTargetWorld = {
@@ -32,7 +34,7 @@ function footprint(loc: SceneLoc, world: TouchTargetWorld): { x0: number; y0: nu
 }
 
 /** The loc with its usable options, or undefined when it has none. */
-export function targetFor(loc: SceneLoc, world: TouchTargetWorld): TouchTarget | undefined {
+export function targetFor(loc: SceneLoc, world: TouchTargetWorld): LocTouchTarget | undefined {
     const type = world.current(loc.id);
     if (!type || !type.name || type.name === "null") return undefined;
     const flags = world.opFlags(loc.tileX, loc.tileY, loc.id);
@@ -40,7 +42,7 @@ export function targetFor(loc: SceneLoc, world: TouchTargetWorld): TouchTarget |
     type.actions.forEach((option, actionIndex) => {
         if (option && actionIndex < 5 && (flags === undefined || flags & (1 << actionIndex))) options.push({ option, actionIndex });
     });
-    return options.length ? { loc, name: type.name, options } : undefined;
+    return options.length ? { kind: "loc", loc, name: type.name, options } : undefined;
 }
 
 /** Wall sides a straight wall or corner covers on its tile: 0 west, 1 north, 2 east, 3 south. */
@@ -54,7 +56,7 @@ function wallSides(loc: SceneLoc): number[] {
  * What stopped the walk: a wall or door on the refused edge, else a loc covering the tile the
  * player tried to enter (a tree, bank booth or rock). Only locs with options count.
  */
-export function findBlockingTarget(refusal: ContinuousMovementRefusal, world: TouchTargetWorld): TouchTarget | undefined {
+export function findBlockingTarget(refusal: ContinuousMovementRefusal, world: TouchTargetWorld): LocTouchTarget | undefined {
     const { fromX, fromY, toX, toY, level } = refusal;
     for (const [x, y, ox, oy] of [[fromX, fromY, toX, toY], [toX, toY, fromX, fromY]]) {
         const sides = [ox < x ? 0 : ox > x ? 2 : -1, oy > y ? 1 : oy < y ? 3 : -1];

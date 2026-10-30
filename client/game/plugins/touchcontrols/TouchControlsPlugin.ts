@@ -7,9 +7,13 @@ import type { Camera } from "../../Camera";
 import { ClientState } from "../../ClientState";
 import type { ContinuousMovementRefusal } from "../../movement/ContinuousMovement";
 import type { SceneGeometry } from "../../scene/SceneGeometry";
-import type { ClientPlugin, LocOutline } from "../ClientPluginManager";
+import type { ClientPlugin, LocOutline, NpcOutline } from "../ClientPluginManager";
 import type { InteractHighlightPluginConfig } from "../interacthighlight/InteractHighlightConfig";
 import type { LocType } from "../../../rs/config/loctype/LocType";
+import type { NpcType } from "../../../rs/config/npctype/NpcType";
+import { baseNpcTypeId } from "../../../custom/npcs/NpcModelOverrideRegistry";
+import { getNpcMenuOptions } from "../../menu/WorldMenuBuilder";
+import { stripTags } from "../npcindicators/npcMatching";
 import { RS_TO_RADIANS } from "../../../rs/MathConstants";
 import { MOBILE_ROOT_INTERFACE } from "../../../rs/cs2/ClientType";
 import { menuAction } from "../../../ui/menu/MenuAction";
@@ -22,9 +26,11 @@ const TouchJoystick = lazy(() =>
     import("./TouchJoystick").then((m) => ({ default: m.TouchJoystick })),
 );
 
-/** The menu opcodes for a loc's five cache options, as a click on them sends. */
+/** The menu opcodes for a loc's or NPC's five cache options, as a click on them sends. */
 const LOC_OPCODES = [MenuOpcode.GameObjectFirstOption, MenuOpcode.GameObjectSecondOption,
     MenuOpcode.GameObjectThirdOption, MenuOpcode.GameObjectFourthOption, MenuOpcode.GameObjectFifthOption];
+const NPC_OPCODES = [MenuOpcode.NpcFirstOption, MenuOpcode.NpcSecondOption,
+    MenuOpcode.NpcThirdOption, MenuOpcode.NpcFourthOption, MenuOpcode.NpcFifthOption];
 /** 601:50, the mobile layout's tab stones, which the action button keeps clear of. */
 const MOBILE_STONES = (MOBILE_ROOT_INTERFACE << 16) | 50;
 /** A collision counts while it is this fresh, in ms. */
@@ -33,6 +39,7 @@ const REFUSAL_MS = 300;
 const HEAD_ON = 0.8;
 
 export type TouchAction = {
+    kind: TouchTarget["kind"];
     target: string;
     options: ReadonlyArray<{ option: string; actionIndex: number }>;
 };
@@ -66,6 +73,12 @@ export type TouchControlsClient = {
     playerEcs?: { getIndexForServerId(serverId: number): number | undefined; getX(i: number): number; getY(i: number): number; getLevel(i: number): number };
     controlledPlayerServerId?: number;
     sceneGeometry?: Pick<SceneGeometry, "locsAtTile">;
+    npcEcs?: {
+        forEachActive(fn: (id: number) => void): void;
+        getServerId(id: number): number; getNpcTypeId(id: number): number; getSize(id: number): number;
+        getWorldX(id: number): number; getWorldY(id: number): number; getLevel(id: number): number;
+    };
+    npcTypeLoader?: { load(id: number): NpcType | undefined };
     locTypeLoader?: { load(id: number): LocType | undefined };
     varManager?: unknown;
     locOpFlagsAt?(x: number, y: number, locId: number): number | undefined;
@@ -92,8 +105,9 @@ function detectTouchDevice(): boolean {
  * Movement itself already exists end to end: `ContinuousMovement` sends
  * MOVEMENT_INPUT (opcode 215) and the server's FreeMovement plugin walks the
  * player, so this plugin is only the touch control that feeds it. Walking into an
- * object with options (a tree, bank booth, door or the Wilderness ditch) puts its
- * first option on the action button and outlines it in Interact Highlight's hover colour.
+ * object with options (a tree, bank booth, door or the Wilderness ditch), or onto an
+ * NPC's tile, puts its first option on the action button and outlines it in
+ * Interact Highlight's hover colour.
  */
 export class TouchControlsPlugin extends Plugin implements ClientPlugin {
     static descriptor: PluginDescriptor = {
@@ -119,6 +133,10 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
     private suspended = false;
     private focus?: TouchTarget;
     private seenRefusal?: ContinuousMovementRefusal;
+    /** The NPC sharing the player's tile, rescanned when the player's tile or the game tick changes. */
+    private npcUnder?: Extract<TouchTarget, { kind: "npc" }>;
+    private npcScanKey = "";
+    private gameTicks = 0;
     private padMode: PadModeValue = PadMode.DEFAULT;
     private uiState: TouchControlsUiState = { visible: false, stonesInset: 0 };
     private uiKey = "";
@@ -186,9 +204,12 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
             this.heading = undefined;
             this.stopWalking();
         }
-        const { loc } = focus;
-        const args = [loc.tileX - ClientState.baseX, loc.tileY - ClientState.baseY, LOC_OPCODES[actionIndex], loc.id,
-            option.option, focus.name] as const;
+        // The destination tile and identifier a click on it would send: a loc by id, an NPC by index.
+        const args = focus.kind === "loc"
+            ? [focus.loc.tileX - ClientState.baseX, focus.loc.tileY - ClientState.baseY, LOC_OPCODES[actionIndex],
+                focus.loc.id, option.option, focus.name] as const
+            : [(this.playerTile()?.x ?? 0) - ClientState.baseX, (this.playerTile()?.y ?? 0) - ClientState.baseY,
+                NPC_OPCODES[actionIndex], focus.serverId, option.option, focus.name] as const;
         if (this.client.menuAction) this.client.menuAction(...args);
         else {
             menuAction(args[0], args[1], args[2], args[3], -1, args[4], args[5], 0, 0);
@@ -207,11 +228,27 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
         this.publish();
     }
 
+    onGameTick(): void {
+        this.gameTicks++;
+    }
+
     /** The focused object, outlined like Interact Highlight's hover. */
     locOutlines(): LocOutline[] {
+        const lit = this.highlighted();
+        return lit?.focus.kind === "loc" ? [{ loc: lit.focus.loc, ...lit.style }] : [];
+    }
+
+    /** The focused NPC, outlined the same way. */
+    npcOutlines(): NpcOutline[] {
+        const lit = this.highlighted();
+        return lit?.focus.kind === "npc" ? [{ ecsId: lit.focus.ecsId, serverId: lit.focus.serverId, ...lit.style }] : [];
+    }
+
+    /** The focus and Interact Highlight's hover style, while its button shows and hovers are drawn. */
+    private highlighted(): { focus: TouchTarget; style: { color: number; alpha: number; width: number } } | undefined {
         const config = this.client.clientPlugins?.interactHighlightConfig();
-        if (!this.focus || !this.uiState.action || !config?.enabled || !config.showHover) return [];
-        return [{ loc: this.focus.loc, color: config.hoverColor, alpha: 0.45, width: 2 }];
+        if (!this.focus || !this.uiState.action || !config?.enabled || !config.showHover) return undefined;
+        return { focus: this.focus, style: { color: config.hoverColor, alpha: 0.45, width: 2 } };
     }
 
     protected override async shutDown(): Promise<void> {
@@ -241,13 +278,23 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
         this.client.setKeyboardMovement?.(dx, dy, !!this.client.runMode, (camera.getYaw() + 1024 + turn) & 2047);
     }
 
-    /** Walking head-on into an object focuses it; walking away (or it going) drops it. */
+    /**
+     * Walking head-on into an object, or onto an NPC's tile, focuses it (the latest wins);
+     * walking away, or it going, drops it.
+     */
     private updateFocus(): void {
         const world = this.world();
         const player = this.playerTile();
         if (!world || !player) {
             this.focus = undefined;
             return;
+        }
+        const scanKey = `${player.x},${player.y},${player.plane},${this.gameTicks}`;
+        if (scanKey !== this.npcScanKey) {
+            this.npcScanKey = scanKey;
+            const npc = this.npcAt(player.x, player.y, player.plane);
+            if (npc && npc.serverId !== this.npcUnder?.serverId) this.focus = npc;
+            this.npcUnder = npc;
         }
         const refusal = this.client.getKeyboardMovementRefusal?.();
         if (refusal && refusal !== this.seenRefusal && this.heading &&
@@ -259,10 +306,45 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
             const target = dot >= HEAD_ON ? findBlockingTarget(refusal, world) : undefined;
             if (target) this.focus = target;
         }
-        if (this.focus) {
+        if (this.focus?.kind === "npc") {
+            this.focus = this.npcUnder?.serverId === this.focus.serverId ? this.npcUnder : undefined;
+        } else if (this.focus) {
             const { loc } = this.focus;
             // Options follow the object's current form (an opened gate, a chopped tree).
             this.focus = isStillInReach(loc, world, player.x, player.y, player.plane) ? targetFor(loc, world) : undefined;
+        }
+    }
+
+    /** An NPC with options covering this tile: one pass over the local NPCs. */
+    private npcAt(x: number, y: number, plane: number): Extract<TouchTarget, { kind: "npc" }> | undefined {
+        const npcs = this.client.npcEcs;
+        const loader = this.client.npcTypeLoader;
+        if (!npcs || !loader) return undefined;
+        let found: Extract<TouchTarget, { kind: "npc" }> | undefined;
+        npcs.forEachActive((ecsId) => {
+            const serverId = npcs.getServerId(ecsId);
+            if (found || serverId <= 0 || npcs.getLevel(ecsId) !== plane) return;
+            // The south-west tile from the centre, as NPC Indicators' world location.
+            const size = Math.max(1, npcs.getSize(ecsId));
+            const sx = Math.floor((npcs.getWorldX(ecsId) - size * 64) / 128);
+            const sy = Math.floor((npcs.getWorldY(ecsId) - size * 64) / 128);
+            if (x < sx || y < sy || x >= sx + size || y >= sy + size) return;
+            const type = this.npcType(baseNpcTypeId(npcs.getNpcTypeId(ecsId)), loader);
+            if (!type?.name || type.name === "null") return;
+            const options = getNpcMenuOptions(type).map(({ option, actionIndex }) => ({ option, actionIndex }));
+            if (options.length) found = { kind: "npc", ecsId, serverId, name: stripTags(type.name), options };
+        });
+        return found;
+    }
+
+    /** The NPC's current form (RuneLite's getTransformedComposition). */
+    private npcType(id: number, loader: { load(id: number): NpcType | undefined }): NpcType | undefined {
+        try {
+            const base = loader.load(id);
+            if (!base?.transforms) return base;
+            return base.transform(this.client.varManager as never, loader as never) ?? undefined;
+        } catch {
+            return undefined;
         }
     }
 
@@ -345,7 +427,7 @@ export class TouchControlsPlugin extends Plugin implements ClientPlugin {
             this.padMode === PadMode.ON ? true : this.padMode === PadMode.OFF ? false : this.touchDevice;
         const visible = padOn && this.client.isLoggedIn();
         const action = visible && this.focus && this.canMove()
-            ? { target: this.focus.name, options: this.focus.options } : undefined;
+            ? { kind: this.focus.kind, target: this.focus.name, options: this.focus.options } : undefined;
         const stonesInset = visible ? this.stonesInset() : 0;
         const key = JSON.stringify([visible, action, stonesInset]);
         if (key === this.uiKey) return;

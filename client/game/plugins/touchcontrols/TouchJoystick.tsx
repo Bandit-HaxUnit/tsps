@@ -101,7 +101,7 @@ export function TouchJoystick({ plugin }: { plugin: TouchControlsPlugin }): JSX.
 }
 
 /**
- * Bottom-right button for the object the player walked into, left of the tab stones: a tap
+ * Bottom-right button for the object or NPC the player is at, left of the tab stones: a tap
  * uses its first option, a long press lists them all (the object's right-click menu).
  */
 function ActionButton({ plugin, action, stonesInset }: { plugin: TouchControlsPlugin; action: TouchAction; stonesInset: number }): JSX.Element {
@@ -151,7 +151,7 @@ function ActionButton({ plugin, action, stonesInset }: { plugin: TouchControlsPl
                             }}
                             onContextMenu={own}
                         >
-                            {option} <span className="touch-action-target">{action.target}</span>
+                            {option} <span className={`touch-action-target is-${action.kind}`}>{action.target}</span>
                         </button>
                     ))}
                 </div>
@@ -165,7 +165,7 @@ function ActionButton({ plugin, action, stonesInset }: { plugin: TouchControlsPl
                 onContextMenu={own}
             >
                 <span className="touch-action-option-label">{action.options[0].option}</span>
-                <span className="touch-action-target">{action.target}</span>
+                <span className={`touch-action-target is-${action.kind}`}>{action.target}</span>
             </button>
         </div>
     );
