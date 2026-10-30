@@ -125,7 +125,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [Roving Elves](roving-elves/README.md) | untested |  |  |  |  |
 | Royal Trouble | untested |  |  |  |  |
 | [Rum Deal](rum-deal/README.md) | untested |  |  |  |  |
-| [Rune Mysteries](rune-mysteries/README.md) | ✅ passed | 2026-10-25 | community |  |  |
+| [Rune Mysteries](rune-mysteries/README.md) | ⚠️ passed with issues | 2026-10-30 | agent | grok-4.7 | 4 |
 | [Scorpion Catcher](scorpion-catcher/README.md) | untested |  |  |  | 1 |
 | Scrambled! | untested |  |  |  |  |
 | [Sea Slug](sea-slug/README.md) | untested |  |  |  |  |
