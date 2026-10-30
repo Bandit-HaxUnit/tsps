@@ -67,6 +67,16 @@ test('generated equipment selects wearable alternatives instead of dropping an i
     assert.ok(preset.getEquipment().every((item) => item.getId() !== core.ItemIdentifiers.OBSIDIAN_PLATEBODY));
     random.mock.restore();
   }
+  // Inventory switches come from the same pools: a 1 Defence pure never carries a 40 Defence top.
+  const pure = { pvp: { profileId: 'veteran', loadoutId: 'budget_pk', generatedArchetypeId: 'budget_pure_tribrid' } };
+  for (const roll of [0, 0.5, 0.99]) {
+    const random = t.mock.method(Math, 'random', () => roll);
+    const { preset } = buildGeneratedPreset(null, pure);
+    const switches = preset.getInventory().filter((item) => item.getDefinition().getEquipmentType().getSlot() >= 0);
+    assert.ok(switches.length > 0);
+    assert.ok(switches.every((item) => canEquipPresetItem(preset, item)), switches.map((item) => item.getDefinition().getName()).join(', '));
+    random.mock.restore();
+  }
 });
 
 test('the capped roster fills one per tick across combat bands and restores bots after death', (t) => {
@@ -518,13 +528,26 @@ test('Bounty Hunter retreat uses remaining food, commits to a real exit and logs
   });
 });
 
-test('the researched builds wear something in every slot they name, at the level and style they were made for', () => {
+test('every PvP build can wear what it names, and the researched builds keep their level and style', () => {
   const { canEquipPresetItem } = require('../plugins/modes/pvp/Presets.PvpMode');
   const { PVP_LOADOUT_DEFINITIONS } = require('../plugins/bots/behaviours/pvp/PvpLoadoutRegistry.PlayerBots');
   const pools = PVP_LOADOUT_DEFINITIONS.pools;
   const names = (spec) => spec == null ? [] : Array.isArray(spec) ? spec.flatMap(names)
     : typeof spec === 'string' ? (spec.startsWith('@') ? pools[spec.slice(1)] : [spec])
     : spec.item ? names(spec.item) : spec.magicStaff ? [spec.magicStaff] : [];
+  const item = (name) => new core.Item(core.ItemIdentifiers[name], 1);
+  for (const entry of PVP_LOADOUT_DEFINITIONS.archetypes) {
+    const preset = { getStats: () => entry.stats };
+    // A slot of only nulls is deliberately empty (no shield beside a two-hander).
+    for (const [slot, spec] of Object.entries(entry.equipment).filter(([, spec]) => names(spec).length > 0)) {
+      assert.ok(names(spec).some((name) => canEquipPresetItem(preset, item(name))), `${entry.id} ${slot}`);
+    }
+    // Switches and spare ammunition are worn mid-fight; a pool offers only what the build can wear.
+    entry.inventory.forEach((spec, index) => {
+      const gear = names(spec).filter((name) => item(name).getDefinition().getEquipmentType().getSlot() >= 0);
+      if (gear.length) assert.ok(gear.some((name) => canEquipPresetItem(preset, item(name))), `${entry.id} inventory ${index}: ${gear}`);
+    });
+  }
   const builds = {
     ags_pure: [88, 'melee'], range_pure: [74, 'range'], low_prayer_pure: [67, 'melee'], thirteen_def_pure: [84, 'melee'],
     proselyte_pure: [89, 'melee'], rigour_zerker: [102, 'range'], granite_fifty_def: [102, 'melee'], defence_pure: [49, 'melee'],
@@ -533,11 +556,6 @@ test('the researched builds wear something in every slot they name, at the level
   for (const [id, [level, style]] of Object.entries(builds)) {
     const entry = PVP_LOADOUT_DEFINITIONS.archetypes.find((archetype) => archetype.id === id);
     assert.deepEqual([archetypeCombatLevel(entry.stats), buildStyle(entry)], [level, style], id);
-    const preset = { getStats: () => entry.stats };
-    for (const [slot, spec] of Object.entries(entry.equipment)) {
-      const wearable = names(spec).filter((name) => canEquipPresetItem(preset, new core.Item(core.ItemIdentifiers[name], 1)));
-      assert.ok(wearable.length > 0, `${id} ${slot}`);
-    }
     assert.ok(PVP_LOADOUT_DEFINITIONS.loadouts.some((loadout) => loadout.archetypes.includes(id)), `${id} is in a loadout`);
   }
 });
