@@ -14,7 +14,7 @@ official client ── RSProx ── TCP ──▶ gateway (GATEWAY_PORT) ──
 ```bash
 yarn start          # tsps, as usual
 yarn gateway        # the gateway, in a second terminal
-yarn gateway:test   # unit tests; integration tests need `yarn start` running in this checkout
+yarn gateway:test   # unit tests; the integration tests (it/) need `yarn start` running in this checkout
 ```
 
 The gateway reads its ports from the root `.env`, the same block `scripts/wt` writes
@@ -24,7 +24,25 @@ in slot N) and `WEBSOCKET_PORT`. It serves JS5 from the cache in `server/target.
 The login key is generated on first start into `gateway/keys/rsa.txt` (not committed). Startup
 prints its modulus for the RSProx target.
 
-Gradle runs on any JDK 11+ and builds with a JDK 17 toolchain.
+Gradle runs on any JDK 11+ and builds with a JDK 17 toolchain. The test client builds RSProx's
+revision-241 protocol module from a pinned commit into `gateway/build/rsprox` on first run.
+
+## Connecting the official client
+
+tsps serves a jav_config and world list for RSProx on its own port. `yarn gateway` prints the
+target; add it in RSProx as a custom target (YAML):
+
+```yaml
+config:
+  - name: tsps
+    jav_config_url: http://127.0.0.1:<WEBSOCKET_PORT>/gateway/jav_config.ws
+    modulus: <printed by yarn gateway>
+    revision: 241
+    game_server_port: <GATEWAY_PORT>
+```
+
+Launch the native client for that target and log in with a tsps account (unknown names are
+created, as in the browser).
 
 ## Layout
 
@@ -33,7 +51,11 @@ Gradle runs on any JDK 11+ and builds with a JDK 17 toolchain.
 | `config` | `.env` and `server/target.txt` |
 | `crypto` | the login RSA key |
 | `cache` | dat2/idx reader, containers, reference tables, the JS5 master index |
-| `session` | per-player state; `EntityWorld` is one rsprot player/NPC/world-entity world per client |
+| `net` | rsprot's network service: JS5 from the cache, login, the 241 codecs |
+| `tsps` | the tsps WebSocket and its wire format |
+| `session` | per-player state; `GatewaySession` bridges one client to tsps; `EntityWorld` is its rsprot player/NPC/world-entity world |
+| `down` | tsps → client translation |
+| `coverage` | counts of dropped messages, logged every minute |
 
 ## How it maps tsps to OSRS
 

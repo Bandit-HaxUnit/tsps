@@ -12,9 +12,9 @@ sessions, so the browser wire format doesn't change.
 | tsps message | 241 packet(s) | State | M | Notes |
 | --- | --- | --- | --- | --- |
 | 0 WELCOME | — | dropped | 1 | browser clock sync |
-| 1 TICK | SERVER_TICK_END | todo | 1 | tsps sends it first; the gateway flushes the tick and ends with it |
-| 2 HANDSHAKE | login response OK, first PLAYER_INFO | todo | 1 | index, admin → staff level, members |
-| 3 LOGIN_RESPONSE | login response | todo | 1 | 2 (full) → 7, 27 → 26, others 1:1; token dropped |
+| 1 TICK | SERVER_TICK_END | mapped | 1 | tsps sends it first; the gateway flushes the tick and ends with it |
+| 2 HANDSHAKE | login response OK, first PLAYER_INFO | mapped | 1 | index, admin → staff level, members |
+| 3 LOGIN_RESPONSE | login response | mapped | 1 | 2 (full) → 7, 27 → 26, others 1:1; token dropped |
 | 4 LOGOUT_RESPONSE | LOGOUT / MESSAGE_GAME | todo | 4 | a refusal becomes a game message |
 | 6 PLUGIN_MESSAGE | — | dropped | 1 | plugin features (quest helper, voice, pest control) |
 | 20 PLAYER_SYNC | PLAYER_INFO | todo | 2–3 | deltas → absolute; wearpos from cache |
@@ -35,7 +35,7 @@ sessions, so the browser wire format doesn't change.
 | 89 HINT_ARROW | HINT_ARROW | todo | 7 | tile level scope lost |
 | 90 ATTACK_TIMER | — | dropped | 8 | tsps HUD |
 | 100 / 101 WIDGET_OPEN / CLOSE | IF_OPENSUB / IF_CLOSESUB | todo | 4 | gateway picks and remembers the target |
-| 102 WIDGET_SET_ROOT | IF_OPENTOP | todo | 1 | |
+| 102 WIDGET_SET_ROOT | IF_OPENTOP | mapped | 1 | |
 | 103 WIDGET_OPEN_SUB | VARP_*, RUNCLIENTSCRIPT, IF_OPENSUB, IF_SETHIDE, RUNCLIENTSCRIPT | todo | 4 | split in order; 161 targets remapped; group ≥ 30000 dropped |
 | 104 WIDGET_CLOSE_SUB | IF_CLOSESUB | todo | 4 | 161 remap |
 | 105–108, 113–115, 117–119 WIDGET_SET_* | IF_SETTEXT / HIDE / OBJECT / NPCHEAD / ANGLE / ANIM / PLAYERHEAD / MODEL / POSITION / COLOUR | todo | 4 | |
@@ -50,7 +50,7 @@ sessions, so the browser wire format doesn't change.
 | 132 PLAY_JINGLE / 133 PLAY_SONG | MIDI_JINGLE / MIDI_SONG_V2 | todo | 7 | |
 | 134 / 135 / 136 LOC_ADD_CHANGE / DEL / ANIM | LOC_ADD_CHANGE_V2 / LOC_DEL / LOC_ANIM in zone updates | todo | 7 | |
 | 137 CAMERA_CONTROL | CAM_* | todo | 7 | translate and tile glide have no OSRS form |
-| 140 / 141 REBUILD_REGION / NORMAL | REBUILD_REGION_V2 / REBUILD_LOGIN_V2 / REBUILD_NORMAL_V2 | todo | 1–2 | |
+| 140 / 141 REBUILD_REGION / NORMAL | REBUILD_REGION_V2 / REBUILD_LOGIN_V2 / REBUILD_NORMAL_V2 | todo | 1–2 | REBUILD_LOGIN mapped (M1): built at the first PLAYER_SYNC's tile |
 | 142 / 143 REBUILD_WORLDENTITY / WORLDENTITY_INFO | REBUILD_WORLDENTITY_V4 / WORLDENTITY_INFO_V7 | todo | 9 | native: boat level + owner |
 | 144 REGION_REPLACEMENT | — | dropped | 2 | server map data the client can't load |
 | 145 / 146 SET / RESET_INTERACTION_MODE | SET / RESET_INTERACTION_MODE | todo | 7 | |
@@ -67,8 +67,8 @@ sessions, so the browser wire format doesn't change.
 
 | 241 packet | tsps opcode | State | M | Notes |
 | --- | --- | --- | --- | --- |
-| login block | 204 LOGIN, 202 HANDSHAKE | todo | 1 | X-Real-IP; native bit; token logins rejected |
-| NO_TIMEOUT | 201 PING | todo | 1 | at most every 5 s |
+| login block | 204 LOGIN, 202 HANDSHAKE | mapped | 1 | X-Real-IP; native bit; token logins rejected |
+| NO_TIMEOUT | 201 PING | mapped | 1 | sent by the gateway every 5 s while ticks arrive |
 | MOVE_GAMECLICK / MOVE_MINIMAPCLICK | 16 MOVE_GAMECLICK | todo | 2 | |
 | SET_HEADING | 214 | todo | 2 | |
 | IF_BUTTON (if1) / IF_BUTTONX | 13 / 91 | todo | 4 | |

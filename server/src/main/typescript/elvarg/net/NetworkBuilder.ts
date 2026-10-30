@@ -18,6 +18,7 @@ import { BrowserHostHttpBridge, BROWSER_HOST_BRIDGE_HTML } from "./BrowserHostHt
 import { PlayerSession } from "./PlayerSession";
 import { CachePipeline } from "../game/cache/CachePipeline";
 import { ContentApi } from "./http/ContentApi";
+import { GatewayTarget } from "./http/GatewayTarget";
 import { CacheDefinitions } from "../game/cache/CacheDefinitions";
 import {
   CREATION_MENU_GROUP_ID,
@@ -30,6 +31,8 @@ import {
   decodeClientPackets,
   MAIN_INVENTORY_GROUP_ID,
   MOBILE_CLIENT_ATTRIBUTE,
+  NATIVE_CLIENT_ATTRIBUTE,
+  HANDSHAKE_CAPABILITY_NATIVE_CLIENT,
   XPDROPS_ENABLED_ATTRIBUTE,
   encodeDefaultAnimations,
   encodeGameframeBootstrap,
@@ -109,7 +112,7 @@ export async function connectHeadlessClient(username: string, password: string):
   const connection = new ClientConnection(new HeadlessBinaryChannel());
   connection.inject([
     { type: "login", username, password, revision: CachePipeline.getActive().revision, flags: 0 },
-    { type: "handshake", name: username, clientType: 0 },
+    { type: "handshake", name: username, clientType: 0, capabilities: 0 },
   ]);
   await connection.idle();
   const player = connection.getPlayer();
@@ -243,6 +246,12 @@ export class NetworkBuilder {
           response.setHeader(header, value);
         }
         response.end(content.body);
+        return;
+      }
+      const gatewayTarget = GatewayTarget.resolve(request.url ?? "", port);
+      if (gatewayTarget) {
+        response.setHeader("Content-Type", gatewayTarget.contentType);
+        response.end(gatewayTarget.body);
         return;
       }
       if (request.url === "/regions") {
@@ -1045,7 +1054,7 @@ export class ClientConnection {
           await forgetLoginToken(packet.username, packet.token);
           continue;
         case "handshake":
-          this.enterWorld(packet.clientType);
+          this.enterWorld(packet.clientType, packet.capabilities);
           continue;
         case "logout":
           // Answered on the next tick (World.answerLogoutRequest), which closes the socket.
@@ -1194,7 +1203,7 @@ export class ClientConnection {
     console.info(`[login] accepted ${username} from ${this.channel.remoteAddress}`);
   }
 
-  private enterWorld(clientType: number = 0): void {
+  private enterWorld(clientType: number = 0, capabilities: number = 0): void {
     if (!this.pending || this.player) return;
     if (this.closed) {
       this.releasePendingName();
@@ -1212,6 +1221,7 @@ export class ClientConnection {
     // Transient (not persisted) so a mobile login never overwrites the layout
     // saved from a desktop session; resolveGameframeRoot reads it at boot.
     if (clientType === 1) player.setAttribute(MOBILE_CLIENT_ATTRIBUTE, true);
+    if (capabilities & HANDSHAKE_CAPABILITY_NATIVE_CLIENT) player.setAttribute(NATIVE_CLIENT_ATTRIBUTE, true);
     if (pending.save) pending.save.applyToPlayer(player);
     if (isConfiguredDeveloperUsername(player.getUsername())) player.setRights(PlayerRights.DEVELOPER);
     player.setPasswordHashWithSalt(pending.passwordHash);

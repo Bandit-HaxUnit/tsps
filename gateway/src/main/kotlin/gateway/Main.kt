@@ -1,14 +1,28 @@
 package gateway
 
-import gateway.cache.Cache
 import gateway.config.GatewayConfig
-import gateway.crypto.RsaKeys
+import gateway.coverage.DropCounter
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+
+private const val DROP_LOG_INTERVAL_MINUTES = 1L
 
 fun main() {
-    val config = GatewayConfig.load()
-    val rsa = RsaKeys.loadOrCreate(config.keyFile)
-    val cache = Cache.open(config.cacheDirectory)
-    println("tsps gateway: port ${config.gatewayPort}, tsps ${config.tspsUrl}, cache ${config.cacheDirectory.fileName}")
-    println("${cache.store.archives.size} archives")
-    println("RSProx modulus: ${rsa.modulus.toString(16)}")
+    val gateway = Gateway.start(GatewayConfig.load())
+
+    Executors.newSingleThreadScheduledExecutor { Thread(it, "gateway-drops").apply { isDaemon = true } }
+        .scheduleAtFixedRate(
+            { DropCounter.summary().takeIf { it.isNotEmpty() }?.let { println("dropped: $it") } },
+            DROP_LOG_INTERVAL_MINUTES,
+            DROP_LOG_INTERVAL_MINUTES,
+            TimeUnit.MINUTES,
+        )
+    Runtime.getRuntime().addShutdownHook(Thread { println("dropped: ${DropCounter.summary()}") })
+
+    val config = gateway.config
+    println("tsps gateway (revision ${gateway.revision}) on port ${config.gatewayPort}, tsps at ${config.tspsUrl}")
+    println(
+        "RSProx target: jav_config_url http://127.0.0.1:${config.websocketPort}/gateway/jav_config.ws, " +
+            "game_server_port ${config.gatewayPort}, revision ${gateway.revision}, modulus ${gateway.rsa.modulus.toString(16)}",
+    )
 }

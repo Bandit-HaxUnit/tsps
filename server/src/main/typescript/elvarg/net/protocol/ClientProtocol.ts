@@ -310,7 +310,7 @@ export type ClientMessage =
   | { type: "logout" }
   | { type: "login"; username: string; password: string; revision: number; flags: number }
   | { type: "login_forget"; username: string; token: string }
-  | { type: "handshake"; name: string; clientType: number };
+  | { type: "handshake"; name: string; clientType: number; capabilities: number };
 
 class Reader {
   private offset = 0;
@@ -942,7 +942,9 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
       }
       // Trailing client mode byte: 1 = mobile, 0 = desktop (absent on old clients).
       const clientType = reader.remaining > 0 ? reader.byte() : 0;
-      return { type: "handshake", name, clientType };
+      // Trailing capability bits (HANDSHAKE_CAPABILITY_*), sent only by the official-client gateway.
+      const capabilities = reader.remaining > 0 ? reader.byte() : 0;
+      return { type: "handshake", name, clientType, capabilities };
     }
     default:
       return { type: "raw", opcode, payload: frame.subarray(frame.length - length) };
@@ -2226,6 +2228,10 @@ export function encodeGameframeTabSetup(group: number, root: number = 161): Buff
 
 // Transient player attribute set from the handshake's clientType byte.
 export const MOBILE_CLIENT_ATTRIBUTE = "mobile-client";
+// The session is an official OSRS client behind the gateway (gateway/): it gets the fields the
+// browser wire leaves out. Transient, set from HANDSHAKE_CAPABILITY_NATIVE_CLIENT.
+export const NATIVE_CLIENT_ATTRIBUTE = "native-client";
+export const HANDSHAKE_CAPABILITY_NATIVE_CLIENT = 0x1;
 export const XPDROPS_ENABLED_ATTRIBUTE = "xp-drops:enabled";
 // Mobile clients boot the Stock mobile toplevel (toplevel_osm); the client maps
 // the standard 161 mounts onto it via cache enum 1745.
