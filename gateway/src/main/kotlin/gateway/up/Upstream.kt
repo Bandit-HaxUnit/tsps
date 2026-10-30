@@ -81,13 +81,14 @@ class Upstream(
                 if (message.selectedCombinedId == INVENTORY && message.targetCombinedId == INVENTORY) {
                     send(WorldOps.inventoryMove(message.selectedSub, message.targetSub))
                 } else {
-                    // Within one component the client swaps the slots on screen before it sends, so the
-                    // objs come from the swapped slots: the dragged item is the target's (RuneLite's
-                    // recorded bank drags). Onto another component (a bank tab) they are as sent.
+                    // Onto another slot of the same component the client swaps the slots on screen
+                    // before it sends, so the objs come from the swapped slots: the dragged item is the
+                    // target's (RuneLite's recorded bank drags). Where nothing is swapped (a bank tab, or
+                    // the empty space after a tab's items) the target has no obj and they are as sent.
                     // tsps checks the dragged item against the slot it came from.
-                    val within = message.selectedCombinedId == message.targetCombinedId
-                    val dragged = if (within) message.targetObj else message.selectedObj
-                    val droppedOn = if (within) message.selectedObj else message.targetObj
+                    val swapped = message.selectedCombinedId == message.targetCombinedId && message.targetObj !in NO_OBJS
+                    val dragged = if (swapped) message.targetObj else message.selectedObj
+                    val droppedOn = if (swapped) message.selectedObj else message.targetObj
                     send(
                     TspsWriter()
                         .u16le(droppedOn)
@@ -222,6 +223,9 @@ class Upstream(
 
     private companion object {
         const val IF_BUTTOND = 1
+
+        /** A drag's obj field with no item. */
+        val NO_OBJS = setOf(-1, 0xFFFF)
         const val IF_TRIGGEROPLOCAL = 30
         const val IF_CLOSE = 55
         const val RESUME_PAUSEBUTTON = 62

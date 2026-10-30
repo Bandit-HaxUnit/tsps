@@ -38,9 +38,11 @@ class BankTest {
             // Onto another component the client sends the objs as they are: the dragged one first.
             game.drag(BANK, ITEMS, 2, third, BANK, TABS, TAB_1, NO_OBJ)
             assertEquals(third, game.bankAfter(TICKS).first())
-            // And back onto the main tab's button.
-            game.drag(BANK, ITEMS, 0, third, BANK, TABS, MAIN_TAB, NO_OBJ)
-            assertEquals(opened.toSet(), game.bankAfter(TICKS).toSet())
+            // And back, dropped into the empty space after the main tab's items (no swap there).
+            game.drag(BANK, ITEMS, 0, third, BANK, ITEMS, MAIN_TAB_DROP, NO_OBJ)
+            val back = game.bankAfter(TICKS)
+            assertEquals(opened.toSet(), back.toSet())
+            assertEquals(third, back.last(), "at the end of the main tab")
         }
     }
 
@@ -72,5 +74,8 @@ class BankTest {
         const val TAB_1 = 11
         const val BANK_INV = 95
         const val NO_OBJ = 0xFFFF
+
+        /** tsps's drop slot for the empty space after the main tab's items: 1410 + 9 × 2 + tab 0. */
+        const val MAIN_TAB_DROP = 1428
     }
 }
