@@ -7,6 +7,8 @@ const Tools = require("./Tools.Farming");
 // Every gardener stands within 7 tiles of its patch; Ceto (drift nets, 20 tiles from the
 // underwater seaweed) and Cap'n Izzy No-Beard (agility arena, 12) also advertise Pay.
 const GARDENER_RANGE = 10;
+// Cache OC_ITEM_OP1; equipment op1 removes, op2 starts the item's worn options.
+const WORN_OPTION_PARAM = 451;
 const COMPOST_NAMES = ["", "Compost", "Supercompost", "Ultracompost", "Rotten tomato"];
 const ROTTEN_TOMATO_TIER = 4;
 // Rev 241 gamevals human_push and human_pickuptable, with the sounds captured on the bin (recording 1858).
@@ -536,7 +538,11 @@ function farmingItemAction(event) {
     const item = container.forSlot(event.slot);
     if (!item || item.getId() !== id) return;
     const name = core.CacheDefinitions.getItem(id).name;
-    const action = (event.option ?? core.CacheDefinitions.getItem(id).inventoryActions?.[event.clickType - 1])?.toLowerCase();
+    const definition = core.CacheDefinitions.getItem(id);
+    const option = container === player.getEquipment()
+        ? event.clickType >= 2 ? definition.params?.get?.(WORN_OPTION_PARAM + event.clickType - 2) : undefined
+        : definition.inventoryActions?.[event.clickType - 1];
+    const action = (event.option ?? option)?.toLowerCase();
     if (name === "Amulet of bounty" && ["check", "break"].includes(action)) {
         event.handled = true;
         if (action === "check") player.sendMessage(`Your amulet of bounty has ${Patches.farmFor(player).bountyCharges ?? 10} charges.`);
@@ -557,6 +563,8 @@ function farmingItemAction(event) {
         const patch = Data.CACHE.patches.find(p => Data.patchKey(p) === bound);
         if (!patch) player.sendMessage("Use the amulet on a farming patch to bind it.");
         else {
+            // A growth boundary can pass after the scheduled refresh but before this input.
+            Model.advanceFarm(Patches.farmFor(player), Date.now());
             const state = Patches.stateFor(player, patch);
             player.sendMessage(`Your bound patch: ${state.crop ? `${Data.CROPS.get(state.crop).name}, ${state.status}` : "empty"}.`);
         }
