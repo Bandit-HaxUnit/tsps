@@ -12,7 +12,10 @@ import { WidgetInteractionController } from "../game/widgets/WidgetInteractionCo
 import { processWidgetClickInput } from "../game/widgets/input/widgetClickInput";
 import { processWidgetReleaseInput } from "../game/widgets/input/widgetReleaseInput";
 import { createPrimaryWidgetActionResolver } from "../game/widgets/input/widgetPrimaryAction";
-import { createCacheVm } from "../scripts/cache/cs2-sweep";
+import { Cs2Vm } from "../rs/cs2/Cs2Vm";
+import { Opcodes } from "../rs/cs2/Opcodes";
+import { Script } from "../rs/cs2/Script";
+import { WidgetManager } from "../widgets/WidgetManager";
 
 // Inspect on the ToA obelisk must send object option 1, not an examine packet.
 const obeliskMenu = new MenuState();
@@ -189,18 +192,41 @@ assert.equal(keyboardPicked, 1, "Space also invokes the selected inventory conte
 assert.equal(menuUi.menu, undefined, "widget menu selection closes the native menu");
 assert.equal(consumedMenuClicks, 3, "an inventory keyboard menu selection cannot click through");
 
-// Native eventscroll Close: a press/release can both arrive before the render
-// frame. Its cached onOp closes/unloads the modal before the world input pass.
-// Use actual cache/VM/manager/input; select the decoded hit directly here.
-const { vm: closeVm } = createCacheVm();
-const closeManager = closeVm.context.widgetManager;
+// A Close press/release can both arrive before the render frame. Its onOp
+// unloads the modal before the world input pass. Keep this CI test cache-free:
+// minimal static widgets and script 29's IF_CLOSE/RETURN, with the real VM,
+// manager and input lifecycle. Cache decoding/rendered hit testing is separate.
+const closeScript = Object.assign(new Script(), {
+    id: 29,
+    instructions: Int32Array.from([Opcodes.IF_CLOSE, Opcodes.RETURN]),
+    intOperands: Int32Array.from([0, 0]),
+    stringOperands: [null, null],
+});
+const unloadedGroups: number[] = [];
+const closeManager = new WidgetManager({} as never, {
+    loadWidgetGroup(groupId: number) {
+        const node = (fileId: number, parentUid = -1): any => ({
+            uid: (groupId << 16) | fileId, groupId, fileId, parentUid,
+            type: 0, rawX: 0, rawY: 0, rawWidth: 200, rawHeight: 200,
+            hidden: false, isHidden: false,
+        });
+        const root = node(0);
+        const child = node(groupId === 161 ? 16 : 1, root.uid);
+        if (groupId === 807) Object.assign(child, {
+            actions: ["Close"], onOp: [closeScript.id],
+        });
+        return { root, widgets: new Map([[root.uid, root], [child.uid, child]]) };
+    },
+    unloadGroup(groupId: number) { unloadedGroups.push(groupId); },
+} as never);
+const closeVm = new Cs2Vm({
+    widgetManager: closeManager,
+    loadScript: (id: number) => id === closeScript.id ? closeScript : null,
+} as any);
 closeManager.setRootInterface(161);
 const modalParent = (161 << 16) | 16;
 closeManager.openSubInterface(modalParent, 807, 0);
 const nativeClose = closeManager.getWidgetByUid((807 << 16) | 1)!;
-const nativeRoot = closeManager.getWidgetByUid(807 << 16)!;
-closeVm.runScriptEvent({ widget: nativeRoot, args: [6903, nativeClose.uid, (807 << 16) | 15] });
-assert.equal(closeVm.lastError, null);
 let nativeCloses = 0;
 closeVm.context.sendIfClose = () => nativeCloses++;
 const nativeInput = new InputManager();
@@ -228,8 +254,10 @@ const nativeFrame = { input: nativeInput, mx: 100, my: 120,
     collectFromAllRoots: () => [nativeClose], getWidgetFlags: (widget: any) => closeManager.getWidgetFlags(widget) } as any;
 const nativePrimary = createPrimaryWidgetActionResolver(nativeDeps, nativeInput, closeManager, nativeInteraction);
 processWidgetClickInput(nativeDeps, { cachedHoverHits: null } as any, nativeFrame, closeManager, nativeInteraction, nativePrimary, true);
-assert.equal(nativeCloses, 1, "actual cached Close sends IF_CLOSE once");
+assert.equal(nativeCloses, 1, "Close's actual VM opcode sends IF_CLOSE once");
 assert.equal(closeManager.interfaceParents.has(modalParent), false, "actual CS2 closes the real modal");
+assert.deepEqual(unloadedGroups, [807], "Close unloads the modal through the real manager");
+assert.equal(closeManager.isGroupLoaded(807), false);
 assert.equal(closeVm.lastError, null);
 processWidgetReleaseInput(nativeDeps, nativeFrame, closeManager, nativeInteraction, nativePrimary, false);
 assert.equal(nativeInteraction.clickedWidget, null, "release clears transient widget custody");
