@@ -120,10 +120,27 @@ function binAction(player, patch, action, usedId, usedSlot) {
         if (!superItem && !COMPOST.has(name) && !herb) {
             player.sendMessage("That cannot be composted."); return;
         }
-        Patches.startBinWork(player, patch, { id: usedId, superItem, tomato: name === "Tomato", bin });
+        const input = { id: usedId, superItem, tomato: name === "Tomato", bin };
+        if (bin.count && (superItem ? bin.super < bin.count : bin.super > 0))
+            confirmBinMix(player, patch, input, usedSlot);
+        else Patches.startBinWork(player, patch, input);
         return;
     }
     player.sendMessage(`The compost bin contains ${bin.count}/${capacity} items${bin.closedAt && !bin.open ? ", rotting" : ""}.`);
+}
+// The Wiki specifies a mixing warning; no indexed capture establishes its exact wording.
+function confirmBinMix(player, patch, input, slot) {
+    const inventory = player.getInventory(), item = inventory.forSlot(slot);
+    if (!item || item.getId() !== input.id || item.getAmount() <= 0) return;
+    const position = player.getLocation().clone(), area = player.getArea();
+    const contents = JSON.stringify(input.bin), stock = JSON.stringify(item);
+    Patches.choose(player, [["Yes, mix the ingredients.", () => {
+        if (!player.isRegistered() || player.getHitpoints() <= 0 || player.isNeedsPlacement()
+            || player.getArea() !== area || !player.getLocation().equals(position)
+            || Patches.stateFor(player, patch).bin !== input.bin || JSON.stringify(input.bin) !== contents
+            || inventory.forSlot(slot) !== item || JSON.stringify(item) !== stock) return;
+        Patches.startBinWork(player, patch, input);
+    }], ["No, keep the ingredients.", () => {}]], 0, "Mixing these ingredients will produce normal compost. Continue?");
 }
 // The Wiki permits discarding contents; no indexed capture establishes the Dump prompt or timing.
 function confirmDump(player, patch, bin) {
