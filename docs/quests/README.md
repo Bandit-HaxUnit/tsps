@@ -5,7 +5,7 @@ Every quest the server registers, with the latest result recorded in its page he
 test a quest is in [server/docs/agents/quest-testing.md](../../server/docs/agents/quest-testing.md);
 how to record the result is in [_template/README.md](_template/README.md).
 
-185 quests · ✅ passed: 30 · ⚠️ passed with issues: 21 · 🔄 in progress: 5 · ❌ failed: 1 · 🔁 needs recheck: 5 · untested: 123
+185 quests · ✅ passed: 30 · ⚠️ passed with issues: 22 · 🔄 in progress: 5 · ❌ failed: 1 · 🔁 needs recheck: 5 · untested: 122
 
 "Needs recheck" means the quest's plugin has changed since the commit its result was proven on.
 
@@ -192,7 +192,7 @@ how to record the result is in [_template/README.md](_template/README.md).
 | [Waterfall Quest](waterfall-quest/README.md) | 🔁 needs recheck | 2026-10-29 | agent | grok-4.7 | 3 |
 | [What Lies Below](what-lies-below/README.md) | untested |  |  |  |  |
 | [While Guthix Sleeps](while-guthix-sleeps/README.md) | untested |  |  |  |  |
-| [Witch's House](witchs-house/README.md) | untested |  |  |  | 1 |
+| [Witch's House](witchs-house/README.md) | ⚠️ passed with issues | 2026-10-30 | agent | claude-haiku-5-5 | 6 |
 | [Witch's Potion](witchs-potion/README.md) | ✅ passed | 2026-10-25 | community |  |  |
 | [X Marks the Spot](x-marks-the-spot/README.md) | ⚠️ passed with issues | 2026-10-25 | community |  | 1 |
 | [Zogre Flesh Eaters](zogre-flesh-eaters/README.md) | ❌ failed |  | agent |  | 1 |
