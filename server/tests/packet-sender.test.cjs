@@ -37,6 +37,28 @@ test('sendSystemUpdate emits the SYSTEM_UPDATE packet (opcode 220, big-endian se
   assert.deepEqual(Buffer.from(frames[0]), Buffer.from([220, 0, 0, 0, 125]));
 });
 
+test('sendTab runs toplevel_sidebutton_switch (script 915) rather than writing a 1-byte opcode 106', () => {
+  // 106 is WIDGET_SET_HIDDEN (uid + hidden, five bytes), so the old one-byte packet was
+  // dropped by the encoder and the tab never switched: quick-prayer setup, alchemy's return
+  // to the spellbook and ring alchemy's inventory tab all silently did nothing.
+  const frames = [];
+  const fake = Object.assign(Object.create(PacketSender.prototype), {
+    player: { getSession: () => ({ sendClientPacket: (frame) => { frames.push(Buffer.from(frame)); return true; } }) },
+  });
+  for (const tab of [3, 5, 6]) {
+    const result = fake.sendTab(tab);
+    assert.equal(result, fake, 'chainable');
+    const frame = frames.at(-1);
+    assert.equal(frame[0], 170, 'RUN_CLIENT_SCRIPT');
+    assert.equal(frame.readUInt16BE(1), 8, 'script id + one integer argument');
+    assert.equal(frame.readUInt16BE(3), 915, 'toplevel_sidebutton_switch');
+    assert.equal(frame[5], 1, 'one argument');
+    assert.equal(frame[6], 1, 'integer argument tag');
+    assert.equal(frame.readInt32BE(7), tab, 'the tab index');
+  }
+  assert.equal(frames.length, 3);
+});
+
 test('sendCollectionLogSnapshot emits opcode 190 with the owned collection_log items', () => {
   let frame;
   const fake = {
