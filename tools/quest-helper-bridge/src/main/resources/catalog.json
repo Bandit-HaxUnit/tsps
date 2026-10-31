@@ -916,6 +916,17 @@
     "native": false
   },
   {
+    "questKey": "his_faithful_servants",
+    "sourceKey": "HisFaithfulServants",
+    "variants": [
+      {
+        "helperVariant": "HIS_FAITHFUL_SERVANTS",
+        "helperClass": "com.questhelper.helpers.miniquests.hisfaithfulservants.HisFaithfulServants"
+      }
+    ],
+    "native": false
+  },
+  {
     "questKey": "holy_grail",
     "sourceKey": "HolyGrail",
     "variants": [
@@ -1658,6 +1669,17 @@
       {
         "helperVariant": "SHILO_VILLAGE",
         "helperClass": "com.questhelper.helpers.quests.shilovillage.ShiloVillage"
+      }
+    ],
+    "native": false
+  },
+  {
+    "questKey": "skippy_and_the_mogres",
+    "sourceKey": "SkippyAndTheMogres",
+    "variants": [
+      {
+        "helperVariant": "SKIPPY_AND_THE_MOGRES",
+        "helperClass": "com.questhelper.helpers.miniquests.skippyandthemogres.SkippyAndTheMogres"
       }
     ],
     "native": false
