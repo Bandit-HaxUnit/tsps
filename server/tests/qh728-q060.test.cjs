@@ -161,7 +161,7 @@ const objectEvent = (player, objectId) => ({
   location: { x: 0, y: 0, z: 0 },
 });
 
-test('Jex owns the defiler and returning-the-jar lines only while the quest needs him', () => {
+test('Jex owns only the defiler line and defers the returning window to his standard transcript', () => {
   const h = harness();
   const talk = h.npcInteractions.get('Jex')['Talk-to'];
   assert.ok(talk, 'Jex Talk-to is registered by name');
@@ -175,8 +175,13 @@ test('Jex owns the defiler and returning-the-jar lines only while the quest need
 
   h.quest.setStage(player, STAGE.FLASHBACK_2);
   const returning = { player, npcId: N.JEX, handled: false };
-  talk(returning);
-  assert.equal(transcriptCalls.at(-1).variant, 'putting-things-right-talking-to-jex-after-being-told-to-return-the-jar');
+  assert.equal(talk(returning), false, 'the returning window defers to the indexed Jex transcript');
+  assert.equal(returning.handled, false);
+  assert.equal(transcriptCalls.length, 1, 'no Icthlarin transcript starts for the returning window');
+
+  h.quest.setStage(player, STAGE.RETURN_JAR);
+  const lastChance = { player, npcId: N.JEX, handled: false };
+  assert.equal(talk(lastChance), false, 'the whole stages 7-13 window falls through');
 
   h.quest.setStage(player, STAGE.JAR_RETURNED);
   const finished = { player, npcId: N.JEX, handled: false };
@@ -330,11 +335,11 @@ test('Empty on the quest buckets returns the reusable bucket', () => {
   assert.equal(player.items.get(I.BUCKET), 1);
   assert.match(player.messages.at(-1), /bucket of sap/i);
 
-  player.items.set(I.BUCKET_OF_SALTWATER, 1);
+  player.items.set(I.BUCKET_OF_SALTWATER, 2);
   const saltwater = h.namedItemActions.get('Bucket of saltwater');
   const emptySalt = { player, itemId: I.BUCKET_OF_SALTWATER, option: 'Empty', handled: false };
   assert.equal(saltwater.Empty(emptySalt), true);
-  assert.equal(player.items.get(I.BUCKET_OF_SALTWATER) ?? 0, 0);
+  assert.equal(player.items.get(I.BUCKET_OF_SALTWATER), 1, 'only the clicked bucket is emptied');
   assert.equal(player.items.get(I.BUCKET), 2);
 
   const wrongOption = { player, itemId: I.BUCKET_OF_SAP, option: 'Check', handled: false };

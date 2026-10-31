@@ -809,9 +809,12 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
 
   function selectJexVariant(player, stage) {
     if (stage < STAGE_SOPHANEM || stage >= STAGE_JAR_RETURNED) return null;
-    return stage >= STAGE_FLASHBACK_2
-      ? "putting-things-right-talking-to-jex-after-being-told-to-return-the-jar"
-      : "city-of-the-dead-talking-to-jex";
+    // Once the jar is stolen, the quest variant's "lesser gods" choice is a
+    // cross-page reference to Transcript:Jex, which this page cannot resolve.
+    // Let the indexed Jex transcript play instead; it has the same greeting and
+    // the working explanation with its follow-up menu.
+    if (stage >= STAGE_FLASHBACK_2) return null;
+    return "city-of-the-dead-talking-to-jex";
   }
 
   // ==========================================================================
@@ -1510,7 +1513,8 @@ module.exports = function registerIcthlarinsLittleHelperQuest(api) {
     if (option !== "Empty") return false;
     if (itemId !== BUCKET_OF_SAP_ITEM_ID && itemId !== BUCKET_OF_SALTWATER_ITEM_ID) return false;
     event.handled = true;
-    removeInventoryItem(player, itemId);
+    // Empty acts on the clicked bucket only; the player may carry several.
+    player.getInventory().deleteNumber(itemId, 1);
     player.getInventory().adds(BUCKET_ITEM_ID, 1);
     player.sendMessage(itemId === BUCKET_OF_SAP_ITEM_ID ? "You empty the bucket of sap." : "You empty the bucket of salt water.");
     return true;
