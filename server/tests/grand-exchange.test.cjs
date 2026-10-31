@@ -145,6 +145,12 @@ const CHOCOLATE_CAKE = 4103;
 define(CHOCOLATE_CAKE, { getName: () => 'Chocolate cake' });
 const TAXED = 4104;
 define(TAXED, { getGrandExchangeValue: () => 100, getGrandExchangeSellValue: () => 90 });
+const LEGACY_WHIP = 4105;
+define(LEGACY_WHIP, {
+  getName: () => 'Abyssal whip',
+  getGrandExchangeValue: () => 733_639,
+  getGrandExchangeSellValue: () => 733_639,
+});
 
 test('the sale tax is 2% per item, rounded down and capped at 5M', () => {
   const sale = (price, quantity = 1) => ({ itemId: TAXED, sell: true, price, quantity, total: price * quantity });
@@ -541,6 +547,29 @@ test('a completed sale collects its total less the tax', t => {
   timers[0].callback();
   click(24);
   assert.equal(inventory.getAmount(995), 9_800);
+});
+
+test('a saved sale without a price is taxed at its historical unit price', t => {
+  const { p, inventory, hooks, click, timers } = exchange(t);
+  // A 10-whip sale at 700,000 each, saved before prices were adjustable; the current
+  // sell guide is 733,639, so using it would charge 146,720 instead of 140,000.
+  const saved = {
+    itemId: LEGACY_WHIP,
+    sell: true,
+    slot: 0,
+    quantity: 10,
+    total: 7_000_000,
+    finished: true,
+    completesAt: null,
+  };
+  assert.equal(tax(saved), 140_000);
+  assert.deepEqual(payout(saved), [{ itemId: 995, amount: 6_860_000 }]);
+  p.setAttribute(OFFERS_ATTRIBUTE, { 0: saved });
+  hooks.onPlayerLogin({ player: p });
+  assert.equal(timers.length, 0);
+  click(7, 0);
+  click(24);
+  assert.equal(inventory.getAmount(995), 6_860_000);
 });
 
 test('an aborted sale returns the items without tax', t => {

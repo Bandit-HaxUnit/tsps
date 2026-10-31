@@ -327,8 +327,15 @@ function taxExempt(itemId) {
  */
 function tax(offer) {
   if (!offer?.sell || offer.aborted || taxExempt(offer.itemId)) return 0;
-  const perItem = Math.min(TAX_CAP, Math.floor(offerPrice(offer) / TAX_DIVISOR));
-  return perItem * Math.max(0, Number(offer.quantity) || 0);
+  const quantity = Math.max(0, Number(offer.quantity) || 0);
+  if (!quantity) return 0;
+  // Saved offers from before adjustable prices have no price. Use the unit price they
+  // actually sold at rather than today's guide, which may have moved since the sale.
+  const unitPrice = Number.isInteger(offer.price) && offer.price > 0
+    ? Math.min(MAX, offer.price)
+    : Math.floor((Number(offer.total) || 0) / quantity);
+  const perItem = Math.min(TAX_CAP, Math.floor(unitPrice / TAX_DIVISOR));
+  return perItem * quantity;
 }
 
 /**
