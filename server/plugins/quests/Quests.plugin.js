@@ -50,7 +50,7 @@ const QUESTS = [
   "RumDeal", "RuneMysteries", "ScorpionCatcher", "Scrambled",
   "SeaSlug", "SecretsOfTheNorth", "ShadesOfMortton", "ShadowOfTheStorm",
   "ShadowsOfCustodia", "SheepHerder", "SheepShearer", "ShieldOfArrav", "SongOfTheElves",
-  "ShiloVillage", "SleepingGiants", "SlugMenace", "SoulsBane",
+  "ShiloVillage", "SkippyAndTheMogres", "SleepingGiants", "SlugMenace", "SoulsBane",
   "SpiritsOfTheElid", "SwanSong", "TaiBwoWannaiTrio", "TailOfTwoCats",
   "TaleOfTheRighteous", "TasteOfHope", "TearsOfGuthix", "TempleOfIkov", "TempleOfTheEye",
   "TheFeud", "TheFinalDawn", "TheFremennikIsles",
