@@ -89,11 +89,27 @@ module.exports = function registerValeTotemsQuest(api) {
     return request.complete === true;
   }
 
+  function state() {
+    return require("../../minigames/valetotems/State.ValeTotems");
+  }
+
   function siteTotem(player) {
     try {
-      return require("../../minigames/valetotems/State.ValeTotems").totem(player, VALE_SITE);
+      return state().totem(player, VALE_SITE);
     } catch {
       return { wood: 0, carvings: [0, 0, 0], carved: false, decorations: 0, decay: 0, points: 0 };
+    }
+  }
+
+  /** The intro broke the old totem; clear any site 1 totem from earlier minigame play. */
+  function clearQuestSite(player) {
+    try {
+      state().set(player, VALE_SITE, {
+        base: 0, base_carved: 0, base_multiloc: 0, low: 0, mid: 0, top: 0,
+        decorations: 0, decay: 0, points: 0,
+      });
+    } catch {
+      // The minigame owns this state; a missing plugin must not block the quest.
     }
   }
 
@@ -168,14 +184,7 @@ module.exports = function registerValeTotemsQuest(api) {
     const stage = quest.getStage(player);
     // The generated Ranulph/Isadora transcripts own the post-quest and clue variants.
     if (stage >= STAGE_COMPLETE) return false;
-    if (stage === 0) {
-      if (!RANULPH_NPC_IDS.has(npcId)) {
-        return play(player, npcId, [
-          ["isadora", "The funny man over there is watching the ents. You should talk to him!"],
-        ]);
-      }
-      return intro(player, npcId);
-    }
+    if (stage === 0) return RANULPH_NPC_IDS.has(npcId) ? intro(player, npcId) : false;
     if (stage === STAGE_STARTED || stage === STAGE_SEEN_ENT) return continueIntro(player, npcId);
     if (stage === STAGE_REPAIR) return repair(player, npcId);
     if (stage === STAGE_DECORATED) return offering(player, npcId);
@@ -210,9 +219,12 @@ module.exports = function registerValeTotemsQuest(api) {
 
   function acceptIntro(player, npcId) {
     if (quest.getStage(player) !== 0) return;
+    clearQuestSite(player);
     quest.setStage(player, STAGE_STARTED);
     setChatFlag(player, BROKEN_CHAT_ATTRIBUTE, BROKEN_CHAT_VARBIT);
     player.sendMessage("You've started a new miniquest: <col=081190>Vale Totems</col>");
+    // ActionDialogue only runs its callback, so the break checkpoint ends the first chain and
+    // starts the rest of the intro from there.
     play(player, npcId, [
       ["player", "Does something have you preoccupied?"],
       ["ranulph", "Yes! It's these ents you see! I'd never seen anything like them until I came here. Look, here comes one now..."],
@@ -225,13 +237,18 @@ module.exports = function registerValeTotemsQuest(api) {
       ["player", "It's a beautiful totem."],
       ["ranulph", "Indeed! Look at this bit!"],
       ["isadora", "Uh oh! The funny man broke the totem!"],
+    ], () => {
       // Quest Helper maps 0, 10 and 20 to the same start step: 10 is accepting, 20 is the
       // moment the totem breaks, and 30 is the build instruction at the end.
-      ["action", () => {
-        if (quest.getStage(player) === STAGE_STARTED) quest.setStage(player, STAGE_SEEN_ENT);
-      }],
+      if (quest.getStage(player) === STAGE_STARTED) quest.setStage(player, STAGE_SEEN_ENT);
+      introAfterBreak(player, npcId);
+    });
+  }
+
+  function introAfterBreak(player, npcId) {
+    play(player, npcId, [
       ["ranulph", "Oh... There's a child."],
-      ["isadora", "Excuse me? I have a name! I'm Isadora, and you're the funny man who gets confused by the ents! I've been watching you."],
+      ["isadora", "Excuse me? I have a name! I'm Isadora, and you're the funny man who gets confused by ents! I've been watching you."],
       ["ranulph", "Well, actually my name is Ranulph, not funny man..."],
       ["isadora", "Funny man Ranulph broke the totem! Ents won't be happy with you!"],
       ["ranulph", "Hmm... I think the child's assessment is correct. The ents probably won't be happy about what we've done."],
@@ -240,7 +257,7 @@ module.exports = function registerValeTotemsQuest(api) {
       ["player", "So we need to fix the totem. How?"],
       ["ranulph", "Let's see... First, we'll need some lumber to rebuild the pole. I reckon one set of logs will do it."],
       ["player", "Any specific type?"],
-      ["ranulph", "It looks like it was made from oak, so presumably oak logs should be enough. However, I do wonder if using better wood would help it survive the elements better..."],
+      ["ranulph", "It looked like it was made from oak, so presumably oak logs should be enough. However, I do wonder if using better wood would help it survive the elements better."],
       ["player", "Or survive interference from... you know... us."],
       ["ranulph", "Hmm... The pole is only going to be the beginning though. We're going to need to carve it... I really should have made more notes on the carvings..."],
       ["isadora", "Notes? Notes are boring! I know how to carve them! Daddy showed me!"],
@@ -306,7 +323,7 @@ module.exports = function registerValeTotemsQuest(api) {
           ["ranulph", "How's the decorating of that totem going?"],
           ["player", "I'm still working on it."],
           ["isadora", "You need to use the wooden things. Bows! Shields!"],
-          ["ranulph", "What Isadora said basically. I reckon four should do. Oh, and be sure to use the same wood you used for the totem itself."],
+          ["ranulph", "What Isadora said basically. I reckon four should do. Oh, and be sure to use the same wood that you used for the totem itself."],
         ]);
       }
       return play(player, npcId, [
@@ -317,8 +334,8 @@ module.exports = function registerValeTotemsQuest(api) {
         ["player", "Cycle?"],
         ["ranulph", "The cycle of life, death and decay, I suppose."],
         ["isadora", "Funny man Ranulph is learning!"],
-        ["player", "Okay then. So wooden items? You mean things like bows and shields?"],
-        ["ranulph", "Exactly! Try decorating the totem with those kinds of items. I reckon four should do. Oh, and be sure to use the same wood you used for the totem itself."],
+        ["player", "Okay then. So, wooden items? You mean things like bows and shields?"],
+        ["ranulph", "Exactly! Try decorating the totem with those kinds of items. I reckon four should do. Oh, and be sure to use the same wood that you used for the totem itself."],
         ["player", "Okay, I'll be back once I've done that."],
       ], () => setChatFlag(player, DECORATE_CHAT_ATTRIBUTE, DECORATE_CHAT_VARBIT));
     }
@@ -327,22 +344,17 @@ module.exports = function registerValeTotemsQuest(api) {
   }
 
   function offering(player, npcId) {
-    const totem = siteTotem(player);
-    if (totem.points <= 0) {
-      return play(player, npcId, [
-        ["ranulph", "Look at that! I think it looks even better than it did before!"],
-        ["isadora", "You did a good job! Now we have to see if you've made the ents happy again!"],
-        ["ranulph", "I couldn't have imagined a better outcome! Not only have the ents accepted our new totem, but they've also left something behind!"],
-        ["isadora", "It's a gift! The ents are happy again! They're saying thank you for helping! Go on, take it!"],
-      ], () => {
-        require("../../minigames/valetotems/State.ValeTotems").set(player, VALE_SITE, { points: SCRIPTED_OFFERINGS });
-        if (quest.getStage(player) < STAGE_OFFERING) quest.setStage(player, STAGE_OFFERING);
-      });
-    }
-    if (quest.getStage(player) < STAGE_OFFERING) quest.setStage(player, STAGE_OFFERING);
+    // Always play the scene and set the scripted pile: an ent visit may already have dropped
+    // its own offerings on site 1 between the fourth decoration and this conversation.
     return play(player, npcId, [
+      ["ranulph", "Look at that! I think it looks even better than it did before!"],
+      ["isadora", "You did a good job! Now we have to see if you've made the ents happy again!"],
+      ["ranulph", "I couldn't have imagined a better outcome! Not only have the ents accepted our new totem, but they've also left something behind!"],
       ["isadora", "It's a gift! The ents are happy again! They're saying thank you for helping! Go on, take it!"],
-    ]);
+    ], () => {
+      state().set(player, VALE_SITE, { points: SCRIPTED_OFFERINGS });
+      if (quest.getStage(player) < STAGE_OFFERING) quest.setStage(player, STAGE_OFFERING);
+    });
   }
 
   function claimReminder(player, npcId) {
@@ -357,14 +369,24 @@ module.exports = function registerValeTotemsQuest(api) {
   }
 
   function finish(player, npcId) {
+    if (player.getInventory().getFreeSlots() < 1) {
+      player.getInventory().full();
+      return true;
+    }
     return play(player, npcId, [
       ["ranulph", "Well, this is definitely the most 'dialogue' I've had with the ents. Isadora here has been a great help as well!"],
       ["isadora", "Thanks, funny man Ranulph. You're not so bad yourself!"],
       ["player", "So what now?"],
       ["ranulph", "It seems the ents are very appreciative of those who maintain their totems. Given you seem to have a knack for it, you might want to keep helping them. They have plenty of other totem sites in the valley."],
       ["isadora", "Yes! The ents like it when you help! They'll give you more gifts!"],
-      ["ranulph", "As for me, I'm going to keep studying them. I've learnt so much today, both from Isadora and from the ents themselves."],
+      ["ranulph", "As for me, I'm going to keep studying them. I've learnt so much today, both from Isadora and from the ents themselves. I've already documented it all, but I'm sure there's more to discover!"],
       ["ranulph", "Speaking of which, here, take a notebook for yourself. I've left a copy of my notes in it, but you can also use it to document your own findings."],
+      ["statement", "Ranulph gives you a notebook."],
+      ["ranulph", "Be sure to check in once in a while to compare findings. I'll happily trade items I find around the valley in exchange for your research assistance!"],
+      ["player", "Sounds great, thanks!"],
+      ["isadora", "Goodbye, other funny person. You did great!"],
+      ["player", "Thanks, Isadora."],
+      ["ranulph", "Until next time, friend."],
     ], () => {
       if (quest.getStage(player) < STAGE_CLAIMED || quest.isComplete(player)) return;
       if (player.getInventory().getFreeSlots() < 1) {
@@ -373,7 +395,6 @@ module.exports = function registerValeTotemsQuest(api) {
       }
       player.getInventory().adds(SACRAMENTS_OF_ENT_FOLK, 1);
       player.getInventory().refreshItems();
-      player.sendMessage("Ranulph gives you a notebook.");
       quest.complete(player);
     });
   }
@@ -388,9 +409,12 @@ module.exports = function registerValeTotemsQuest(api) {
     request.allowed = false;
   }
 
-  function handleDecorated({ player, site, decorations }) {
-    if (!player || site !== VALE_SITE || (decorations ?? 0) < 4) return;
-    if (quest.getStage(player) === STAGE_REPAIR) quest.setStage(player, STAGE_DECORATED);
+  function handleWrongCarve({ player, site }) {
+    if (!player || site !== VALE_SITE || quest.getStage(player) !== STAGE_REPAIR) return;
+    play(player, RANULPH, [
+      ["isadora", "That's not right!"],
+      ["ranulph", "Remember, you need to make carvings of the animal spirits that are currently in this area."],
+    ]);
   }
 
   function handleOfferingsClaimed({ player, site }) {
@@ -465,6 +489,6 @@ module.exports = function registerValeTotemsQuest(api) {
   api.onPlayerLogin(sendChatFlags);
   api.onCustomEvent("player:bootstrap-complete", sendChatFlags);
   api.onCustomEvent("vale-totems:access", handleAccess);
-  api.onCustomEvent("vale-totems:decorated", handleDecorated);
+  api.onCustomEvent("vale-totems:wrong-carve", handleWrongCarve);
   api.onCustomEvent("vale-totems:offerings-claimed", handleOfferingsClaimed);
 };

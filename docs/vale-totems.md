@@ -11,7 +11,7 @@ Status:
   - the spirit NPCs at each site;
   - claiming and inspecting offerings;
   - Rummage, Hasty-rummage and Inspect on Vale offerings, with the loot table, research points and collection log;
-  - the Vale Totems miniquest (Ranulph and Isadora): the intro, the build/carve/decorate lessons, the scripted 100-offering visit and the Sacraments of Ent Folk reward. The minigame's other sites stay closed until it is complete;
+  - the Vale Totems miniquest (Ranulph and Isadora): the intro, the build/carve/decorate lessons, the captured wrong-animal warning, the scripted 100-offering visit and the Sacraments of Ent Folk reward. The minigame's other sites stay closed until it is complete;
   - `::entvisit` for testing.
 - **Not done:**
   - the ents walking their route, ent trails (double offerings and +15% xp for four actions, `ent_totems_trail_*`), and admiring beautiful scenery for run energy;
@@ -61,17 +61,21 @@ The route and stage values come from Quest Helper (`helpers/miniquests/valetotem
 | 0 | Not started. Ranulph offers the miniquest after Children of the Sun and level 20 Fletching. |
 | 10 | Accepted; the intro conversation plays. |
 | 20 | The totem breaks during the intro (a login checkpoint). Talking continues it. |
-| 30 | Rebuild, carve and decorate site 1. |
-| 40 | Decorated; talk to Ranulph or Isadora. |
-| 50 | The ents left 100 offerings; claim them. |
+| 30 | Rebuild, carve and decorate site 1. The fourth decoration does not change the stage. |
+| 40 | Talking after decorating; the offering scene is playing. |
+| 50 | The 100 offerings are on the pile; claim them. |
 | 60 | Offering claimed; talk to Ranulph or Isadora. |
 | 70 | Complete; the Sacraments of Ent Folk (item 31016) and the minigame are rewarded. |
 
 Three chat varbits mirror the lessons: `ent_totems_broken_chat` (17228), `ent_totems_carve_chat` (17229) and `ent_totems_decorate_chat` (17230). Until Isadora teaches carving the Carve option says "You're not quite sure how to carve the totem. Ranulph and Isadora might be able to help."; until Ranulph teaches decorating, Decorate says the same about decorating. Building the quest totem also prints "... It's now ready to be carved. Ranulph and Isadora might be able to tell you how." and does not open the carve menu.
 
-The minigame asks the quest plugin through the custom event `vale-totems:access` which sites are open. During the miniquest only site 1 is; after stage 70 every site is. The reverse direction uses `vale-totems:decorated` (the fourth decoration moves 30 to 40) and `vale-totems:offerings-claimed` (moves 50 to 60). The scripted visit in the stage-40 conversation sets site 1's pile to 100 offerings, matching the transcript.
+The minigame asks the quest plugin through the custom event `vale-totems:access` which sites are open. During the miniquest only site 1 is; after stage 70 every site is. The quest asks the minigame to show Isadora's and Ranulph's wrong-animal warning through `vale-totems:wrong-carve`, and `vale-totems:offerings-claimed` moves 50 to 60. The fourth decoration stays at stage 30: stage 40 is only set by the next conversation with Ranulph or Isadora, and that conversation's scene always resets site 1's pile to 100 offerings. This also covers an ent visit that dropped its own offerings between the decoration and the conversation.
 
-Not represented from the transcript: the ent cutscene (played as dialogue, with no camera or ent walk), and a separate warning branch for carving an animal that is not nearby.
+The gate only covers Build. A player who already built a totem at sites 2-8 before starting the miniquest keeps that totem's Carve, Decorate and Claim options until the quest is complete.
+
+The minigame's `vale-totems:varps` snapshot does not include the shared `ent_totems` varp (4758), so the quest stage and chat bits are left to the Quests plugin rather than restored from a stale snapshot.
+
+Not represented from the transcript: the ent cutscene (played as dialogue, with no camera or ent walk). The wrong-animal warning is implemented.
 
 ## Captured behaviour
 
@@ -80,7 +84,7 @@ Not represented from the transcript: the ent cutscene (played as dialogue, with 
   - Choosing one plays `human_pickuptable_walkmerge` with sound 10384 (delay 15) and says "You carve a buffalo into the totem.".
   - The third carving sets `base_carved`, the carved `base_multiloc` and the durability.
 - **Decorate:** `human_pickuptable_walkmerge` with sound 2739 (delay 20). A tick later the item goes and "You decorate the totem." shows. The next decoration starts the tick after that.
-  - The fourth says "You add the final decoration to the totem.".
+  - The fourth is a mesbox, "You add the final decoration to the totem."; during the quest it is followed by the player line "There we go! I's say that's the totem finished!".
   - A fifth gets the mesbox "You have already added as many decorations as possible to the totem.".
   - With nothing to use: "You don't have anything to decorate the totem with.".
 - **Ent visits:** every 80 ticks every site is visited at once.
@@ -102,7 +106,7 @@ These are not in the captures or the Wiki:
 - **Wrong animals:** one maple totem with one wrong animal got 6 offerings instead of 10, the only sample. Each wrong animal takes 40% off here. The Wiki only says "significantly fewer".
 - **Messages:** "You need a Fletching level of 50 to build a maple totem.", "You need a knife to carve the totem.", "Hasty-rummage twice/three times/five times", and the pile's Inspect above twenty, which shows digits.
 - **Log choice:** with several logs, the best one the player has the level for is used.
-- **Quest refusals:** the requirement refusal ("...you'll need a Fletching level of 20 first.") and the site gate ("You need to complete the Vale Totems miniquest before you can help the ents here.") are not in the transcript. The knife hand-out uses Isadora's transcript lines.
+- **Quest refusals:** the requirement refusal ("...you'll need a Fletching level of 20 first.") and the not-started site gate ("You need to complete the Vale Totems miniquest before you can help the ents here.") are ours. During the quest the captured mesbox "You should probably talk to Ranulph and Isadora before doing that." is used. The knife hand-out uses Isadora's transcript lines.
 
 ## Checking it
 

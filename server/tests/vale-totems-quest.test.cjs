@@ -237,9 +237,54 @@ test("Ranulph starts the miniquest, and the quest reaches the build step", () =>
     chooseYes(player);
     assert.equal(quest.getStage(player), 30, "the intro ends ready to build");
     assert.equal(player.getPacketSender().getVarbit(varbit("ent_totems_broken_chat")), 1);
+    const firstIntro = player.dialogues.find((entries) =>
+      entries.some((entry) => entry.getText?.() === "Uh oh! The funny man broke the totem!"));
+    assert.ok(firstIntro, "the first intro chain");
+    assert.equal(firstIntro.some((entry) => entry.getText?.() === "Oh... There's a child."), false,
+      "the first chain ends at the break action");
+    assert.ok(player.dialogues.some((entries) => entries[0]?.getText?.() === "Oh... There's a child."),
+      "the second chain starts after the break action");
   } finally {
     hooks.custom.get("quest:is-complete").shift();
   }
+});
+
+test("accepting the quest clears a site 1 totem left from earlier minigame play", () => {
+  const player = createPlayer();
+  State.erect(player, SITE, 1);
+  State.set(player, SITE, { points: 5 });
+  const complete = (payload) => { if (payload.key === "children_of_the_sun") payload.complete = true; };
+  hooks.custom.get("quest:is-complete").unshift(complete);
+  try {
+    talk(player);
+    chooseYes(player);
+    assert.equal(State.totem(player, SITE).wood, 0);
+    assert.equal(State.totem(player, SITE).points, 0);
+  } finally {
+    hooks.custom.get("quest:is-complete").shift();
+  }
+});
+
+test("a wrong carving during the quest gets the captured warning", () => {
+  const player = createPlayer({ items: [item("oak_logs"), item("knife")] });
+  quest.setStage(player, 30);
+  State.set(player, SITE, { animal_1: 1, animal_2: 2, animal_3: 3 });
+  State.erect(player, SITE, 1);
+  player.getPacketSender().sendVarbit(varbit("ent_totems_carve_chat"), 1);
+  hooks.objects["Oak totem"].Carve({ player, objectId: SITE_BASE });
+  player.creationMenu.execute(obj("ent_totems_animal_icon_e"));
+  assert.deepEqual(player.dialogues.at(-1).map((entry) => entry.getText()), [
+    "That's not right!",
+    "Remember, you need to make carvings of the animal spirits that are currently in this area.",
+  ]);
+});
+
+test("the minigame snapshot leaves the quest's ent_totems bits alone", () => {
+  const player = createPlayer();
+  State.erect(player, SITE, 1);
+  const snapshot = player.getAttribute("vale-totems:varps");
+  assert.ok(snapshot);
+  assert.equal(Object.hasOwn(snapshot, "ent_totems"), false);
 });
 
 test("the minigame withholds carving and decorating until each lesson, then advances the quest", () => {
@@ -250,13 +295,12 @@ test("the minigame withholds carving and decorating until each lesson, then adva
   hooks.objects["Totem site"].Build({ player, objectId: SITE_BASE });
   tick();
   assert.equal(State.totem(player, SITE).wood, 1);
-  assert.match(player.messages.at(-1), /Ranulph and Isadora might be able to tell you how/);
-  assert.equal(player.messages.at(-1).includes("You erect an oak totem. It's now ready"), true);
+  assert.match(player.dialogues.at(-1)[0].getText(), /Ranulph and Isadora might be able to tell you how/);
+  assert.equal(player.dialogues.at(-1)[0].getText().includes("You erect an oak totem. It's now ready"), true);
 
-  const oak = obj("oak_logs");
   player.inventory[0] = item("oak_logs");
   hooks.objects["Oak totem"].Carve({ player, objectId: SITE_BASE });
-  assert.equal(player.messages.at(-1), "You're not quite sure how to carve the totem. Ranulph and Isadora might be able to help.");
+  assert.equal(player.dialogues.at(-1)[0].getText(), "You're not quite sure how to carve the totem. Ranulph and Isadora might be able to help.");
 
   // Talking to Isadora teaches carving and hands over the knife when it is missing.
   player.inventory[0] = item("oak_logs");
@@ -274,7 +318,7 @@ test("the minigame withholds carving and decorating until each lesson, then adva
     creation.execute(obj(`ent_totems_animal_icon_${animal}`));
   }
   assert.equal(State.totem(player, SITE).carved, true);
-  assert.equal(player.messages.at(-1), "You finish carving the totem, but it still seems to be missing something. Ranulph and Isadora might know what to do next.");
+  assert.equal(player.dialogues.at(-1)[0].getText(), "You finish carving the totem, but it still seems to be missing something. Ranulph and Isadora might know what to do next.");
 
   // Talk again to learn decorating, then add four oak decorations.
   hooks.npcs.Isadora["Talk-to"]({ player, npcId: isadora });
@@ -283,7 +327,15 @@ test("the minigame withholds carving and decorating until each lesson, then adva
   hooks.objects["Oak totem"].Decorate({ player, objectId: SITE_BASE });
   tick(8);
   assert.equal(State.totem(player, SITE).decorations, 4);
-  assert.equal(quest.getStage(player), 40, "the decorated event moves the quest on");
+  const final = player.dialogues.at(-1);
+  assert.equal(final[0].getText(), "You add the final decoration to the totem.");
+  assert.equal(final[1].getText(), "There we go! I's say that's the totem finished!");
+  assert.equal(quest.getStage(player), 30, "the fourth decoration stays at 30");
+
+  // Talking to either NPC is what moves 30 to 40, then the scene sets the 100-offering pile.
+  hooks.npcs.Isadora["Talk-to"]({ player, npcId: isadora });
+  assert.equal(quest.getStage(player), 50);
+  assert.equal(State.totem(player, SITE).points, 100);
 });
 
 test("the offering is 100, claiming it advances the quest, and the final talk completes it", () => {
