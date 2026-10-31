@@ -136,7 +136,7 @@ export class Autocasting {
             return true;
         }
 
-        const fightType = defensive ? FightType.STAFF_FOCUS : FightType.STAFF_POUND;
+        const fightType = this.selectorFightType(player, defensive);
         player.setFightType(fightType);
         player.getPacketSender()
             .sendConfig(fightType.getParentId(), fightType.getChildId())
@@ -145,6 +145,14 @@ export class Autocasting {
             .sendInterfaceFlagsRange((this.AUTOCAST_INTERFACE << 16) | this.AUTOCAST_CONTAINER, 0, 64, 1 << 1)
             .sendMessage("You can set a default autocast spell any time from the magic tab.");
         return true;
+    }
+
+    /** The weapon's own defensive or aggressive style (Focus/Pound on a staff, Fend/Swipe on a bladed staff). */
+    private static selectorFightType(player: Player, defensive: boolean): FightType {
+        const wanted = defensive ? FightStyle.DEFENSIVE : FightStyle.AGGRESSIVE;
+        const styles = player.getEquipment().getWeapon().getDefinition()?.getWeaponInterface?.()?.getFightType?.() ?? [];
+        return styles.find((type) => type.getStyle() === wanted)
+            ?? (defensive ? FightType.STAFF_FOCUS : FightType.STAFF_POUND);
     }
 
     private static openCombatInterface(player: Player): void {
