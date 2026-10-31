@@ -63,7 +63,15 @@ module.exports = function registerValeTotemsQuest(api) {
 
   const RANULPH = NpcIdentifiers.RANULPH; // 14577
   const ISADORA = NpcIdentifiers.ISADORA; // 14580
-  const RANULPH_NPC_IDS = new Set([NpcIdentifiers.RANULPH, NpcIdentifiers.RANULPH_2, NpcIdentifiers.RANULPH_3]);
+  // Quest Helper's start NPC list: 14576, 14577, 14578 and 14582. 14576 has no Talk-to
+  // action (and no gameval name in this cache), but keep the set identical to the helper.
+  const RANULPH_INTRO_NPC_ID = 14576;
+  const RANULPH_NPC_IDS = new Set([
+    RANULPH_INTRO_NPC_ID,
+    NpcIdentifiers.RANULPH,
+    NpcIdentifiers.RANULPH_2,
+    NpcIdentifiers.RANULPH_3,
+  ]);
   const ISADORA_NPC_IDS = new Set([NpcIdentifiers.ISADORA, NpcIdentifiers.ISADORA_2]);
 
   const SACRAMENTS_OF_ENT_FOLK = ItemIdentifiers.SACRAMENTS_OF_ENT_FOLK; // 31016
@@ -131,19 +139,22 @@ module.exports = function registerValeTotemsQuest(api) {
   }
 
   /**
-   * Plays a script of [speaker, text] pairs. Speakers are "ranulph", "isadora", "player" or
-   * "statement"; `after` runs on a final action entry.
+   * Plays a script of [speaker, text] pairs. Speakers are "ranulph", "isadora", "player",
+   * "statement", or "action" (whose second item is a callback); `after` runs on a final
+   * action entry.
    */
   function play(player, npcId, script, after) {
     const { ranulph, isadora } = speakers(npcId);
     const builder = new DialogueChainBuilder();
     let index = 0;
-    for (const [speaker, text] of script) {
-      builder.add(speaker === "player"
-        ? new PlayerDialogue(index, text)
-        : speaker === "statement"
-          ? new StatementDialogue(index, text)
-          : new NpcDialogue(index, speaker === "isadora" ? isadora : ranulph, text));
+    for (const [speaker, value] of script) {
+      builder.add(speaker === "action"
+        ? new ActionDialogue(index, { execute: value })
+        : speaker === "player"
+          ? new PlayerDialogue(index, value)
+          : speaker === "statement"
+            ? new StatementDialogue(index, value)
+            : new NpcDialogue(index, speaker === "isadora" ? isadora : ranulph, value));
       index++;
     }
     if (after) builder.add(new ActionDialogue(index, { execute: after }));
@@ -214,6 +225,11 @@ module.exports = function registerValeTotemsQuest(api) {
       ["player", "It's a beautiful totem."],
       ["ranulph", "Indeed! Look at this bit!"],
       ["isadora", "Uh oh! The funny man broke the totem!"],
+      // Quest Helper maps 0, 10 and 20 to the same start step: 10 is accepting, 20 is the
+      // moment the totem breaks, and 30 is the build instruction at the end.
+      ["action", () => {
+        if (quest.getStage(player) === STAGE_STARTED) quest.setStage(player, STAGE_SEEN_ENT);
+      }],
       ["ranulph", "Oh... There's a child."],
       ["isadora", "Excuse me? I have a name! I'm Isadora, and you're the funny man who gets confused by the ents! I've been watching you."],
       ["ranulph", "Well, actually my name is Ranulph, not funny man..."],
@@ -230,7 +246,7 @@ module.exports = function registerValeTotemsQuest(api) {
       ["isadora", "Notes? Notes are boring! I know how to carve them! Daddy showed me!"],
       ["player", "Well, I guess you can consult with Isadora on how to carve the totem. While you do that, I'll get to work on rebuilding the pole."],
     ], () => {
-      if (quest.getStage(player) === STAGE_STARTED) quest.setStage(player, STAGE_REPAIR);
+      if (quest.getStage(player) < STAGE_REPAIR) quest.setStage(player, STAGE_REPAIR);
     });
   }
 

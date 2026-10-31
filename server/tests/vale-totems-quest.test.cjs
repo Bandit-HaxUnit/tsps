@@ -219,6 +219,15 @@ test("Ranulph refuses the start without Children of the Sun and level 20 Fletchi
   }
 });
 
+test("Quest Helper's stage 10 and 20 checkpoints both continue to the build step", () => {
+  for (const stage of [10, 20]) {
+    const player = createPlayer();
+    quest.setStage(player, stage);
+    talk(player);
+    assert.equal(quest.getStage(player), 30, `stage ${stage} continues the intro`);
+  }
+});
+
 test("Ranulph starts the miniquest, and the quest reaches the build step", () => {
   const player = createPlayer();
   const complete = (payload) => { if (payload.key === "children_of_the_sun") payload.complete = true; };

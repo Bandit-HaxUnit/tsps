@@ -60,7 +60,7 @@ The route and stage values come from Quest Helper (`helpers/miniquests/valetotem
 | --- | --- |
 | 0 | Not started. Ranulph offers the miniquest after Children of the Sun and level 20 Fletching. |
 | 10 | Accepted; the intro conversation plays. |
-| 20 | A login checkpoint while the intro is unfinished. Talking continues it. |
+| 20 | The totem breaks during the intro (a login checkpoint). Talking continues it. |
 | 30 | Rebuild, carve and decorate site 1. |
 | 40 | Decorated; talk to Ranulph or Isadora. |
 | 50 | The ents left 100 offerings; claim them. |
