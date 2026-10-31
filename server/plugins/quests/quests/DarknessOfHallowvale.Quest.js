@@ -1410,9 +1410,13 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
 
   /** The ambush's scripted attacker; killing him still resolves the scene. */
   function handleNpcDeath(event) {
-    const { player, npc } = event;
+    const { killer, npc } = event;
     const npcId = event.npcId ?? npc?.getId?.();
-    if (!player || !VANSTROM_NPC_IDS.has(npcId)) return false;
+    if (!VANSTROM_NPC_IDS.has(npcId)) return false;
+    // NPCDeathTask reports the player as `killer`, not `player`, and the
+    // ambush actor is owner-scoped for the player who drew the sketch.
+    const player = killer?.isPlayer?.() ? killer : null;
+    if (!player || npc?.getOwner?.() !== player) return false;
     if (!inStage(player, STAGE_SKETCH_SOUTH, STAGE_SKETCH_SOUTH)) return false;
     setBit(player, BIT_VANSTROM_FOUGHT);
     despawnKey(player, "vanstrom");
@@ -1744,13 +1748,14 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
         if (hasBit(player, BIT_SAFALAAN_SUPPLIES)) give(player, PAPYRUS_ITEM_ID, 3);
         return;
       case ACTION_RECEIVE_SKETCH_1:
-        if (!inStage(player, STAGE_SKETCH_NORTH, STAGE_SKETCH_WEST)) return;
+        // A lost earlier sketch stays recoverable until the hand-in at 260.
+        if (!inStage(player, STAGE_SKETCH_NORTH, STAGE_SKETCHES_DONE)) return;
         event.handled = true;
         if (!held(player, SKETCH_1_ITEM_ID) && !give(player, SKETCH_1_ITEM_ID, 1)) return;
         advance(player, STAGE_SKETCH_WEST);
         return;
       case ACTION_RECEIVE_SKETCH_2:
-        if (!inStage(player, STAGE_SKETCH_WEST, STAGE_SKETCH_SOUTH)) return;
+        if (!inStage(player, STAGE_SKETCH_WEST, STAGE_SKETCHES_DONE)) return;
         event.handled = true;
         if (!held(player, SKETCH_2_ITEM_ID) && !give(player, SKETCH_2_ITEM_ID, 1)) return;
         advance(player, STAGE_SKETCH_SOUTH);
@@ -1776,12 +1781,12 @@ module.exports = function registerDarknessOfHallowvaleQuest(api) {
         }
         return;
       case ACTION_SKETCH_NORTH_LOSE:
-        if (!inStage(player, STAGE_SKETCH_NORTH, STAGE_SKETCH_WEST)) return;
+        if (!inStage(player, STAGE_SKETCH_NORTH, STAGE_SKETCHES_DONE)) return;
         event.handled = true;
         if (held(player, PAPYRUS_ITEM_ID)) player.getInventory().deleteNumber(PAPYRUS_ITEM_ID, 1);
         return;
       case ACTION_SKETCH_WEST_LOSE:
-        if (!inStage(player, STAGE_SKETCH_WEST, STAGE_SKETCH_SOUTH)) return;
+        if (!inStage(player, STAGE_SKETCH_WEST, STAGE_SKETCHES_DONE)) return;
         event.handled = true;
         if (held(player, PAPYRUS_ITEM_ID)) player.getInventory().deleteNumber(PAPYRUS_ITEM_ID, 1);
         return;

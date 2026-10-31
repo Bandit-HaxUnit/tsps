@@ -78,6 +78,7 @@ function setup({ tasteOfHope = false } = {}) {
       const npc = {
         def,
         getId: () => def.id,
+        getOwner: () => def.owner,
         getLocation: () => new core.Location(def.x, def.y, def.z),
         setPositionToFace() {},
         isRegistered: () => true,
@@ -194,11 +195,19 @@ function setup({ tasteOfHope = false } = {}) {
     for (const hook of itemActionHooks) hook(event);
     return event;
   };
-  const npcDeath = (npcId, npc = null) => {
+  const npcDeath = (npcId, npc = null, killer = player) => {
+    const target = npc ?? spawned.findLast((entry) => entry.getId() === npcId) ?? {
+      getId: () => npcId,
+      getOwner: () => killer,
+    };
+    // NPCDeathTask's real event shape: killer/damagers/npc/npcId/location/remains.
     const event = {
-      player,
+      killer,
+      damagers: [killer],
+      npc: target,
       npcId,
-      npc: npc ?? { getId: () => npcId },
+      location: player.getLocation(),
+      remains: null,
       handled: false,
     };
     for (const hook of npcDeathHooks) hook(event);
@@ -982,6 +991,41 @@ test('Sarius Guile is a real stage-240 Talk-to, split from the imported south sc
   assert.ok(h.removed.some((npc) => npc.getId() === SARIUS_ID), 'Sarius is released after stage 250');
 });
 
+test('a lost northern sketch is recoverable at the stage-250 hand-in step', () => {
+  const h = setup();
+  const I = h.core.ItemIdentifiers;
+  h.setStage(200);
+  h.action('H84BAo'); // Safalaan's charcoal and sketch leg.
+  h.setStage(250);
+  h.items.set(I.PAPYRUS, 1);
+  h.setLocation(3556, 3379, 0);
+  h.itemOnItem(I.CHARCOAL, I.PAPYRUS);
+  assert.match(h.transcripts.at(-1).variant, /sketching-the-north-side$/);
+  h.action('40UwLv'); // Consume the papyrus.
+  h.action('stfs9v'); // Reissue castle sketch 1.
+  assert.equal(h.items.get(I.CASTLE_SKETCH_1), 1);
+  assert.equal(h.items.get(I.PAPYRUS) ?? 0, 0);
+  assert.equal(h.stage(), 250, 'the recovery does not move the stage backwards or forwards');
+});
+
+test('a lost western sketch is recoverable at the stage-250 hand-in step', () => {
+  const h = setup();
+  const I = h.core.ItemIdentifiers;
+  h.setStage(200);
+  h.action('H84BAo'); // Safalaan's charcoal and sketch leg.
+  h.setStage(250);
+  h.items.set(I.CASTLE_SKETCH_1, 1);
+  h.items.set(I.PAPYRUS, 1);
+  h.setLocation(3522, 3357, 0);
+  h.itemOnItem(I.CHARCOAL, I.PAPYRUS);
+  assert.match(h.transcripts.at(-1).variant, /sketching-the-west-side$/);
+  h.action('5hTQYh'); // Consume the papyrus.
+  h.action('9HmeKD'); // Reissue castle sketch 2.
+  assert.equal(h.items.get(I.CASTLE_SKETCH_2), 1);
+  assert.equal(h.items.get(I.PAPYRUS) ?? 0, 0);
+  assert.equal(h.stage(), 250, 'the recovery does not move the stage backwards or forwards');
+});
+
 test('later objectives cannot be replayed out of order', () => {
   const h = setup();
   const I = h.core.ItemIdentifiers;
@@ -1047,10 +1091,21 @@ test('Vanstrom lands five attacks and his death still resolves the ambush', () =
   );
   assert.equal(h.stage(), 220);
 
-  h.npcDeath(h.core.NpcIdentifiers.VANSTROM_KLAUSE_3);
+  const death = h.npcDeath(h.core.NpcIdentifiers.VANSTROM_KLAUSE_3);
+  assert.equal(death.player, undefined, 'the production death event has no player field');
+  assert.equal(death.killer, h.player, 'the killer is the owner of the ambush actor');
   assert.equal(h.stage(), 240, 'the scene still resolves if Vanstrom dies');
   assert.ok(h.spawned.some((npc) => npc.getId() === SARIUS_ID), 'Sarius arrives after the ambush');
   assert.ok(h.removed.some((npc) => npc.getId() === h.core.NpcIdentifiers.VANSTROM_KLAUSE_3));
+});
+
+test('Vanstrom death is ignored for a killer who does not own the ambush actor', () => {
+  const h = setup();
+  h.setStage(220);
+  h.action('LZKiDZ');
+  const otherPlayer = { ...h.player, getUsername: () => 'not-the-owner', isPlayer: () => true };
+  h.npcDeath(h.core.NpcIdentifiers.VANSTROM_KLAUSE_3, null, otherPlayer);
+  assert.equal(h.stage(), 220, 'another player cannot advance the owner\'s ambush');
 });
 
 test('sealed message and sketch hand-ins clean up every copy they consume', () => {
