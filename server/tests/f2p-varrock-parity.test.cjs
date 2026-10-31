@@ -158,7 +158,9 @@ test('Romeo berries handed over in a closed conversation still make one potion a
   h.quest.setStage(p,50);p.items.set(I.CADAVA_BERRIES,1);h.action(p,N.APOTHECARY,'Be9l32');
   assert.equal(p.items.get(I.CADAVA_BERRIES),0);assert.equal(p.attrs.get('romeo-and-juliet:berries-handed-over'),1);
   h.hooks.onPlayerLogout.at(-1)({player:p});assert.equal(cond('With some cadava berries:'),true);
-  h.action(p,N.APOTHECARY,'Be9l32');assert.equal(p.items.get(I.CADAVA_BERRIES),0);
+  p.full=true;h.action(p,N.APOTHECARY,'Be9l32');assert.equal(h.action(p,N.APOTHECARY,'Cw477j').end,true);
+  assert.equal(p.items.get(I.CADAVA_POTION)??0,0);assert.equal(p.attrs.get('romeo-and-juliet:berries-handed-over'),1);
+  p.full=false;h.action(p,N.APOTHECARY,'Be9l32');assert.equal(p.items.get(I.CADAVA_BERRIES),0);
   h.action(p,N.APOTHECARY,'Cw477j');assert.equal(p.items.get(I.CADAVA_POTION),1);assert.equal(p.attrs.get('romeo-and-juliet:berries-handed-over'),0);
   p.items.set(I.CADAVA_POTION,0);assert.equal(cond('Without any cadava berries:'),true);
   h.action(p,N.APOTHECARY,'Cw477j');assert.equal(p.items.get(I.CADAVA_POTION),0);

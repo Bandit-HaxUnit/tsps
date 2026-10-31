@@ -389,6 +389,14 @@ module.exports = function registerRomeoAndJulietQuest(api) {
 
     if (stepId === APOTHECARY_GIVES_POTION || stepId === APOTHECARY_GIVES_POTION_AGAIN) {
       if (!berryHandover.has(player) || !handedOverBerries(player)) {event.handled=true;event.end=true;return;}
+      // The slot the berries freed may have been filled since an interrupted hand-over:
+      // keep the saved hand-over so the player can make space and talk to him again.
+      if (player.getInventory().isFull()) {
+        berryHandover.delete(player);mixed.delete(player);
+        // shortcut: no capture of this case; wording follows Juliet's full-inventory message.
+        player.sendMessage("You need a free inventory space before the Apothecary can give you the potion.");
+        event.handled=true;event.end=true;return;
+      }
       {
         player.setAttribute(BERRIES_ATTRIBUTE,0);berryHandover.delete(player);mixed.delete(player);
         player.getInventory().adds(CADAVA_POTION_ITEM_ID, 1);
