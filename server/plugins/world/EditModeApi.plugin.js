@@ -9,7 +9,8 @@ const { getWorldDefinition } = require("../../src/main/typescript/elvarg/game/de
  * Uses the existing game server HTTP port and content API, including ETag revalidation;
  * /api/world/shops, /api/world/npc-interactions and /api/world/object-spawns supply
  * canonical JSON documents
- * for editing and downloading locally. All endpoints are read-only
+ * for editing and downloading locally. `/api/world/npc-spawns` serves the persisted NPC
+ * spawns the editor renders. All endpoints are read-only
  * and is registered only in development, never in production. Browser-host editors
  * continue receiving world data through host messaging instead of this endpoint.
  */
@@ -22,7 +23,8 @@ module.exports = {
       if (segments.length !== 1) return undefined;
       const file = segments[0] === "shops" ? "shops.json"
         : segments[0] === "npc-interactions" ? "npc-interactions.json"
-        : segments[0] === "object-spawns" ? "object-spawns.json" : undefined;
+        : segments[0] === "object-spawns" ? "object-spawns.json"
+        : segments[0] === "npc-spawns" ? "npc-spawns.json" : undefined;
       if (file) return JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "data/definitions", file), "utf8"));
     });
   },

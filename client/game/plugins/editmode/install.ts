@@ -35,6 +35,8 @@ import { isBrowserHostClient, isMapEditorUrl } from "../../../config/clientEnv";
 import {
     NPC_SPAWN_MESSAGE,
     NPC_SPAWN_REQUEST_MESSAGE,
+    npcSpawnKey,
+    parseNpcSpawns,
     regionIdForTile,
     type BrowserHostNpcSpawn,
     type NpcSpawnMessage,
@@ -593,7 +595,94 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
     const editorRegionReplacements = new Map<number, EditorRegionReplacement>();
     let objectSpawns: ObjectSpawn[] | undefined = browserHostWindow() ? undefined : [];
     let objectSpawnPreviewPending = false;
+    // Persisted NPC spawns are loaded per region in both modes: the browser
+    // host answers over messaging, the standalone editor fetches the file once.
+    type LoadedNpcSpawnEntry = { spawn: BrowserHostNpcSpawn; serverId: number };
+    const loadedNpcSpawnRegions = new Map<number, LoadedNpcSpawnEntry[]>();
+    const pendingNpcSpawnRegions = new Set<number>();
+    const hiddenNpcSpawnKeys = new Set<string>();
+    let gameNpcSpawns: BrowserHostNpcSpawn[] | undefined;
+    let gameNpcSpawnsLoading = false;
+    let gameNpcSpawnsRetryAt = 0;
     const sceneEdits = (edits: readonly EditModeEdit[]) => [...objectSpawnEdits(objectSpawns ?? []), ...edits];
+    const npcRuntimeReady = () => !!(client as unknown as { npcMovementSync?: unknown }).npcMovementSync;
+    const findLoadedNpcSpawn = (serverId: number | undefined): LoadedNpcSpawnEntry | undefined => {
+        if (serverId === undefined) return undefined;
+        for (const entries of loadedNpcSpawnRegions.values()) {
+            const entry = entries.find((candidate) => candidate.serverId === serverId);
+            if (entry) return entry;
+        }
+        return undefined;
+    };
+    const ensureStandaloneNpcSpawns = (): void => {
+        if (gameNpcSpawns || gameNpcSpawnsLoading || Date.now() < gameNpcSpawnsRetryAt) return;
+        gameNpcSpawnsLoading = true;
+        loadLocalEditorData("npc-spawns").then(
+            (contents) => {
+                gameNpcSpawns = parseNpcSpawns(contents);
+                syncNpcSpawnRegions();
+            },
+            (error) => {
+                // The dev server may still be starting; try again shortly.
+                gameNpcSpawnsRetryAt = Date.now() + 5000;
+                console.warn("[edit-mode] failed to load server NPC spawns", error);
+            },
+        ).finally(() => {
+            gameNpcSpawnsLoading = false;
+        });
+    };
+    /** Keeps the three-by-three map square around the camera populated with NPCs. */
+    const syncNpcSpawnRegions = (): void => {
+        // Do not enqueue NPC geometry into the title screen's unrelated map grid.
+        // The scene preview establishes the editor's map grid first.
+        if (!plugin.getState().scenePreview || !npcRuntimeReady()) return;
+        const camera = plugin.getCameraTile();
+        if (!camera) return;
+        const mapX = camera.tileX >> 6;
+        const mapY = camera.tileY >> 6;
+        const wanted = new Set<number>();
+        for (let offsetX = -1; offsetX <= 1; offsetX++) {
+            for (let offsetY = -1; offsetY <= 1; offsetY++) {
+                const nextMapX = mapX + offsetX;
+                const nextMapY = mapY + offsetY;
+                if (nextMapX >= 0 && nextMapX <= 0xff && nextMapY >= 0 && nextMapY <= 0xff) {
+                    wanted.add((nextMapX << 8) | nextMapY);
+                }
+            }
+        }
+        for (const [regionId, entries] of loadedNpcSpawnRegions) {
+            if (wanted.has(regionId)) continue;
+            for (const { serverId } of entries) despawnEditorNpc(client, serverId);
+            loadedNpcSpawnRegions.delete(regionId);
+        }
+        const missing = [...wanted].filter((regionId) =>
+            !loadedNpcSpawnRegions.has(regionId) && !pendingNpcSpawnRegions.has(regionId),
+        );
+        if (missing.length === 0) return;
+        const host = browserHostWindow();
+        if (isBrowserHostClient() && host && !host.closed) {
+            for (const regionId of missing) pendingNpcSpawnRegions.add(regionId);
+            host.postMessage({ type: NPC_SPAWN_REQUEST_MESSAGE, regionIds: missing }, browserHostOrigin());
+            return;
+        }
+        ensureStandaloneNpcSpawns();
+        if (!gameNpcSpawns) return;
+        const byRegion = new Map<number, BrowserHostNpcSpawn[]>();
+        for (const spawn of gameNpcSpawns) {
+            const regionId = regionIdForTile(spawn.tileX, spawn.tileY);
+            const entries = byRegion.get(regionId);
+            if (entries) entries.push(spawn);
+            else byRegion.set(regionId, [spawn]);
+        }
+        for (const regionId of missing) {
+            const entries = (byRegion.get(regionId) ?? []).flatMap((spawn): LoadedNpcSpawnEntry[] => {
+                if (hiddenNpcSpawnKeys.has(npcSpawnKey(spawn))) return [];
+                const serverId = spawnStaticEditorNpc(client, spawn);
+                return serverId === undefined ? [] : [{ spawn, serverId }];
+            });
+            loadedNpcSpawnRegions.set(regionId, entries);
+        }
+    };
     const mapIconSprites = new Map<number, HTMLCanvasElement>();
     const mapIconLocs = new WeakMap<MinimapIcon, { locId: number; rotation?: number } | null>();
     // Edit mode loads no RuneLite plugins, so the editor supplies its own outlines.
@@ -1498,6 +1587,23 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
                     };
                 }
                 const npcTile = renderer.getNpcWorldTile(target.ecsId);
+                const npcServerId = client.npcEcs.getServerId(target.ecsId);
+                const spawnEntry = findLoadedNpcSpawn(npcServerId);
+                const edits = plugin.getConfig().edits;
+                const customEdit = edits.find((edit) =>
+                    edit.kind === "npc" &&
+                    edit.locId === target.npcTypeId &&
+                    edit.tileX === npcTile.x &&
+                    edit.tileY === npcTile.y &&
+                    edit.plane === target.plane,
+                );
+                const wanderEdit = edits.find((edit) =>
+                    edit.kind === "npcWander" &&
+                    edit.locId === target.npcTypeId &&
+                    edit.tileX === npcTile.x &&
+                    edit.tileY === npcTile.y &&
+                    edit.plane === target.plane,
+                );
                 return {
                     kind: "npc" as const,
                     tileX: npcTile.x,
@@ -1506,6 +1612,12 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
                     locId: target.npcTypeId,
                     locName:
                         client.npcTypeLoader.load(target.npcTypeId)?.name ?? "",
+                    ...(npcServerId > 0 ? { npcServerId } : {}),
+                    npcSource: customEdit ? "custom" as const : spawnEntry ? "spawn" as const : undefined,
+                    npcSpawn: spawnEntry?.spawn,
+                    npcWanderRadius: customEdit
+                        ? customEdit.wanderRadius ?? 5
+                        : wanderEdit?.wanderRadius ?? spawnEntry?.spawn.wanderRadius ?? 5,
                 };
             }
 
@@ -1856,6 +1968,27 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
             // the ECS/world-view teardown it performs.
             despawnEditorNpc(client, serverId);
         },
+        hideNpcSpawn: (spawn) => {
+            const key = npcSpawnKey(spawn);
+            hiddenNpcSpawnKeys.add(key);
+            for (const entries of loadedNpcSpawnRegions.values()) {
+                for (const entry of entries) {
+                    if (npcSpawnKey(entry.spawn) !== key) continue;
+                    despawnEditorNpc(client, entry.serverId);
+                }
+            }
+        },
+        showNpcSpawn: (spawn) => {
+            hiddenNpcSpawnKeys.delete(npcSpawnKey(spawn));
+            for (const entries of loadedNpcSpawnRegions.values()) {
+                const entry = entries.find((candidate) => npcSpawnKey(candidate.spawn) === npcSpawnKey(spawn));
+                if (!entry) continue;
+                if (client.npcEcs.getEcsIdForServer(entry.serverId) !== undefined) return;
+                const serverId = spawnStaticEditorNpc(client, entry.spawn, entry.serverId);
+                if (serverId !== undefined) entry.serverId = serverId;
+                return;
+            }
+        },
     });
 
     plugin.subscribe(() => {
@@ -1874,45 +2007,6 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
     const host = browserHostWindow();
     if (isBrowserHostClient() && host) {
         const hostOrigin = browserHostOrigin();
-        const loadedNpcSpawnRegions = new Map<
-            number,
-            Array<{ spawn: BrowserHostNpcSpawn; serverId: number }>
-        >();
-        const pendingNpcSpawnRegions = new Set<number>();
-        const npcRuntimeReady = () => !!(client as unknown as { npcMovementSync?: unknown }).npcMovementSync;
-        const syncNpcSpawnRegions = () => {
-            // Do not enqueue NPC geometry into the title screen's unrelated map grid.
-            // The scene preview establishes the editor's map grid first.
-            if (!plugin.getState().scenePreview || !npcRuntimeReady()) return;
-            const camera = plugin.getCameraTile();
-            if (!camera) return;
-            const mapX = camera.tileX >> 6;
-            const mapY = camera.tileY >> 6;
-            const wanted = new Set<number>();
-            for (let offsetX = -1; offsetX <= 1; offsetX++) {
-                for (let offsetY = -1; offsetY <= 1; offsetY++) {
-                    const nextMapX = mapX + offsetX;
-                    const nextMapY = mapY + offsetY;
-                    if (nextMapX >= 0 && nextMapX <= 0xff && nextMapY >= 0 && nextMapY <= 0xff) {
-                        wanted.add((nextMapX << 8) | nextMapY);
-                    }
-                }
-            }
-            for (const [regionId, entries] of loadedNpcSpawnRegions) {
-                if (wanted.has(regionId)) continue;
-                for (const { serverId } of entries) despawnEditorNpc(client, serverId);
-                loadedNpcSpawnRegions.delete(regionId);
-            }
-            const missing = [...wanted].filter((regionId) =>
-                !loadedNpcSpawnRegions.has(regionId) && !pendingNpcSpawnRegions.has(regionId),
-            );
-            if (missing.length === 0) return;
-            for (const regionId of missing) pendingNpcSpawnRegions.add(regionId);
-            host.postMessage(
-                { type: NPC_SPAWN_REQUEST_MESSAGE, regionIds: missing },
-                hostOrigin,
-            );
-        };
         window.addEventListener("message", (event: MessageEvent) => {
             if (event.origin !== hostOrigin || event.source !== host) return;
             const message = event.data as RegionPackMessage | NpcSpawnMessage | ObjectSpawnsMessage | undefined;
@@ -1947,7 +2041,8 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
                 for (const regionId of regionIds) {
                     pendingNpcSpawnRegions.delete(regionId);
                     if (loadedNpcSpawnRegions.has(regionId)) continue;
-                    const entries = (byRegion.get(regionId) ?? []).flatMap((spawn) => {
+                    const entries = (byRegion.get(regionId) ?? []).flatMap((spawn): LoadedNpcSpawnEntry[] => {
+                        if (hiddenNpcSpawnKeys.has(npcSpawnKey(spawn))) return [];
                         const serverId = spawnStaticEditorNpc(client, spawn);
                         return serverId === undefined ? [] : [{ spawn, serverId }];
                     });
@@ -1966,31 +2061,30 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
                 console.warn("[edit-mode] ignored invalid host region pack", error);
             }
         });
-        const mapManager = client.renderer.mapManager;
-        const onMapAdded = mapManager.onMapAdded;
-        mapManager.onMapAdded = (mapX, mapY) => {
-            onMapAdded?.(mapX, mapY);
-            const regionId = (mapX << 8) | mapY;
-            const replacement = editorRegionReplacements.get(regionId);
-            if (replacement && !terrainHost(client)?.mapRegionReplacements.has(regionId)) {
-                client.onRegionReplacement({ regionId, ...replacement, allowReload: true });
-            }
-            plugin.reapplyNpcsForMap(mapX, mapY);
-            for (const entry of loadedNpcSpawnRegions.get(regionId) ?? []) {
-                if (client.npcEcs.getEcsIdForServer(entry.serverId) === undefined) {
-                    spawnStaticEditorNpc(client, entry.spawn, entry.serverId);
-                }
-            }
-        };
         host.postMessage({ type: REGION_PACK_REQUEST_MESSAGE }, hostOrigin);
         const requestObjectSpawns = () => {
             if (!objectSpawns && !host.closed) host.postMessage({ type: OBJECT_SPAWNS_REQUEST_MESSAGE }, hostOrigin);
         };
         requestObjectSpawns();
         window.setInterval(requestObjectSpawns, 2000);
-        window.setInterval(syncNpcSpawnRegions, 500);
-        syncNpcSpawnRegions();
     }
+    const mapManager = client.renderer.mapManager;
+    const onMapAdded = mapManager.onMapAdded;
+    mapManager.onMapAdded = (mapX, mapY) => {
+        onMapAdded?.(mapX, mapY);
+        const regionId = (mapX << 8) | mapY;
+        const replacement = editorRegionReplacements.get(regionId);
+        if (replacement && !terrainHost(client)?.mapRegionReplacements.has(regionId)) {
+            client.onRegionReplacement({ regionId, ...replacement, allowReload: true });
+        }
+        plugin.reapplyNpcsForMap(mapX, mapY);
+        for (const entry of loadedNpcSpawnRegions.get(regionId) ?? []) {
+            if (hiddenNpcSpawnKeys.has(npcSpawnKey(entry.spawn))) continue;
+            if (client.npcEcs.getEcsIdForServer(entry.serverId) === undefined) {
+                spawnStaticEditorNpc(client, entry.spawn, entry.serverId);
+            }
+        }
+    };
     let teardownEditorUi: (() => void) | undefined;
     let editorUiLoadingTimer: number | undefined;
     const syncEditorUi = () => {
@@ -2028,6 +2122,8 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
             plugin.setScenePreview(true);
         }, 250);
     }
+    window.setInterval(syncNpcSpawnRegions, 500);
+    syncNpcSpawnRegions();
     return plugin;
 }
 

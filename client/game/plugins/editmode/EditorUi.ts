@@ -674,15 +674,16 @@ class EditorChrome {
 
     private npcSpawnsKey(): string {
         return JSON.stringify(this.plugin.getConfig().edits
-            .filter((edit) => edit.kind === "npc")
-            .map((edit) => [edit.locId, edit.tileX, edit.tileY, edit.plane, edit.rotation]));
+            .filter((edit) => edit.kind === "npc" || edit.kind === "npcDelete" || edit.kind === "npcWander")
+            .map((edit) => [edit.kind, edit.locId, edit.tileX, edit.tileY, edit.plane, edit.rotation, edit.wanderRadius]));
     }
 
     /** Cheap check run on every editor update; the save itself builds the exports. */
     private hasUnsavedChanges(): boolean {
         return this.shopsDirty || this.npcInteractionsDirty ||
             this.plugin.getWorldDefinitionForSave() !== undefined ||
-            this.plugin.getConfig().edits.some((edit) => edit.kind !== "npc") ||
+            this.plugin.getConfig().edits.some((edit) =>
+                edit.kind !== "npc" && edit.kind !== "npcDelete" && edit.kind !== "npcWander") ||
             this.npcSpawnsKey() !== this.savedNpcSpawnsKey;
     }
 
@@ -847,7 +848,18 @@ class EditorChrome {
                 ),
                 createActionButton("Move object", createMoveIcon, () => this.plugin.moveSelection(), "M"),
                 createActionButton("Delete object", createTrashIcon, () =>
-                    this.plugin.deleteSelection(),
+                    this.plugin.deleteSelection(), "Del",
+                ),
+            );
+        }
+        if (selection.kind === "npc") {
+            actions.append(
+                createActionButton("Duplicate NPC", createDuplicateIcon, () =>
+                    this.plugin.duplicateSelection(), "C",
+                ),
+                createActionButton("Move NPC", createMoveIcon, () => this.plugin.moveSelection(), "M"),
+                createActionButton("Delete NPC", createTrashIcon, () =>
+                    this.plugin.deleteSelection(), "Del",
                 ),
             );
         }
@@ -924,6 +936,41 @@ class EditorChrome {
             }
         }
         this.selectionDetails.append(title, location, rotation);
+        if (selection.kind === "npc") {
+            const source = document.createElement("div");
+            source.textContent = selection.npcSource === "custom"
+                ? "Editor spawn"
+                : selection.npcSource === "spawn" ? "Game spawn" : "Live NPC";
+            source.style.color = "#94a3b8";
+            const row = document.createElement("label");
+            Object.assign(row.style, {
+                display: "flex", alignItems: "center", gap: "8px", marginTop: "6px", color: "#cbd5e1",
+            });
+            const label = document.createElement("span");
+            label.textContent = "Wander range";
+            const input = document.createElement("input");
+            input.type = "number";
+            input.min = "0";
+            input.max = "255";
+            input.step = "1";
+            input.value = String(selection.npcWanderRadius ?? 5);
+            input.title = "Tiles the NPC may wander from its spawn; 0 anchors it";
+            input.disabled = selection.npcSource === undefined;
+            Object.assign(input.style, {
+                width: "64px", height: "26px", padding: "2px 5px", color: "#fff", background: "#111318",
+                border: "1px solid rgba(255,255,255,0.2)", borderRadius: "4px", font: "12px sans-serif",
+            });
+            const hint = document.createElement("span");
+            hint.textContent = "0 = anchored";
+            hint.style.color = "#94a3b8";
+            const commit = () => {
+                this.plugin.setSelectionWanderRadius(Number(input.value));
+                input.value = String(this.plugin.getState().selection?.npcWanderRadius ?? 5);
+            };
+            input.addEventListener("change", commit);
+            row.append(label, input, hint);
+            this.selectionDetails.append(source, row);
+        }
         if (definition && selection.kind === "npc") {
             const menu = document.createElement("table");
             Object.assign(menu.style, {
@@ -1364,8 +1411,18 @@ class EditorChrome {
             const shopsDirty = this.shopsDirty;
             const npcInteractionsDirty = this.npcInteractionsDirty;
             const customNpcs = this.plugin.getConfig().edits
-                .filter((edit) => edit.kind === "npc")
-                .map((edit) => ({ id: edit.locId, tileX: edit.tileX, tileY: edit.tileY, plane: edit.plane, direction: quarterTurnToDirection(edit.rotation) }));
+                .filter((edit) => edit.kind === "npc" || edit.kind === "npcDelete" || edit.kind === "npcWander")
+                .map((edit) => ({
+                    id: edit.locId,
+                    tileX: edit.tileX,
+                    tileY: edit.tileY,
+                    plane: edit.plane,
+                    ...(edit.kind === "npc"
+                        ? { direction: edit.direction ?? quarterTurnToDirection(edit.rotation) }
+                        : edit.direction === undefined ? {} : { direction: edit.direction }),
+                    ...(edit.wanderRadius === undefined ? {} : { wanderRadius: edit.wanderRadius }),
+                    ...(edit.kind === "npcDelete" ? { remove: true } : {}),
+                }));
             if (objectSpawns === undefined && exported.length === 0 && !world && customNpcs.length === 0 && !shopsDirty && !npcInteractionsDirty) {
                 this.toast("No world or map edits to save");
                 return;
@@ -1408,7 +1465,7 @@ class EditorChrome {
                     objectSpawns !== undefined ? "object additions/deletions" : "",
                     exported.length ? `${exported.length} edited region pack${exported.length === 1 ? "" : "s"}` : "",
                     world ? "world spawn" : "",
-                    customNpcs.length ? `${customNpcs.length} custom NPC spawn${customNpcs.length === 1 ? "" : "s"}` : "",
+                    customNpcs.length ? `${customNpcs.length} NPC spawn edit${customNpcs.length === 1 ? "" : "s"}` : "",
                     shopsDirty ? "shops" : "",
                     npcInteractionsDirty ? "NPC shop actions" : "",
                 ].filter(Boolean).join(" and ");
@@ -1443,7 +1500,15 @@ class EditorChrome {
             }
             if (customNpcs.length) {
                 FileSaver.saveAs(
-                    new Blob([formatCustomNpcSpawns(customNpcs.map(({ id, tileX: x, tileY: y, plane: level, direction }) => ({ id, x, y, level, direction })))], { type: "application/json" }),
+                    new Blob([formatCustomNpcSpawns(customNpcs.map(({ id, tileX: x, tileY: y, plane: level, direction, wanderRadius, remove }) => ({
+                        id,
+                        x,
+                        y,
+                        level,
+                        ...(direction === undefined ? {} : { direction }),
+                        ...(wanderRadius === undefined ? {} : { wanderRadius }),
+                        ...(remove ? { remove: true } : {}),
+                    })))], { type: "application/json" }),
                     "npc-spawns-custom.json",
                 );
             }
