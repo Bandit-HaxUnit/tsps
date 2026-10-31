@@ -169,6 +169,27 @@ class HeadlessClient(private val host: String, private val port: Int) {
                 }.buffer.let { it.array().copyOf(it.writerIndex()) },
             )
 
+        /** OPNPC1 (Talk-to on most NPCs). */
+        fun npcOp1(index: Int) =
+            sendFixed(
+                OPNPC1,
+                Unpooled.buffer().toJagByteBuf().apply {
+                    p1Alt1(0) // subop
+                    p2Alt3(index)
+                    p1Alt2(0) // ctrl
+                }.buffer.let { it.array().copyOf(it.writerIndex()) },
+            )
+
+        /** RESUME_PAUSEBUTTON: "Click here to continue", or option [sub] of a dialogue's list. */
+        fun resume(interfaceId: Int, componentId: Int, sub: Int = 0xFFFF) =
+            sendFixed(
+                RESUME_PAUSEBUTTON,
+                Unpooled.buffer().toJagByteBuf().apply {
+                    p2Alt1(sub)
+                    p4Alt1((interfaceId shl 16) or componentId)
+                }.buffer.let { it.array().copyOf(it.writerIndex()) },
+            )
+
         /** OPNPC2 (Attack on most NPCs). */
         fun npcOp2(index: Int) =
             sendFixed(
@@ -404,6 +425,8 @@ class HeadlessClient(private val host: String, private val port: Int) {
         const val NO_TIMEOUT = 75
         const val KEEPALIVE_MS = 5_000L
         const val OPNPC2 = 44
+        const val OPNPC1 = 92
+        const val RESUME_PAUSEBUTTON = 16
         const val FRIENDLIST_ADD = 14
         const val MESSAGE_PRIVATE = 50
         const val MESSAGE_PUBLIC = 49
