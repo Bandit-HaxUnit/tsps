@@ -1787,17 +1787,17 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function enterVault(p) {
-    // Live arrival is 3929,9631 on plane 1, three tiles west of Asgarnia Smith at 3932,9631 (rsprox capture 1703).
+    // After the intro cutscene live puts the player at 3937,9631 on plane 1, east of Asgarnia Smith at 3932,9631 (rsprox capture 1703).
     const current = p.getAttribute(ATTR_VAULT_AREA);
     if (current instanceof AncientVaultArea && !current.isDestroyed()) {
       current.enter(p);
-      p.moveTo(current.tile(25, 31, 1));
+      p.moveTo(current.tile(33, 31, 1));
       return current;
     }
     const area = new AncientVaultArea(p.getUsername?.());
     area.enter(p);
     p.setAttribute(ATTR_VAULT_AREA, area);
-    p.moveTo(area.tile(25, 31, 1));
+    p.moveTo(area.tile(33, 31, 1));
     const smith = api.core.NPC.create(ASGARNIA_SMITH_VAULT_INITIAL, area.tile(28, 31, 1));
     smith.setOwner?.(p);
     smith.setOwnerOnly?.(true);

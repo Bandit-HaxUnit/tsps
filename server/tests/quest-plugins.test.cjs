@@ -7471,7 +7471,7 @@ test('Desert Treasure II enters the cache Ancient Vault and requires the four st
     const area = attrs.get('desert-treasure-ii:ancient-vault');
     assert.equal(area.width, 8);
     assert.equal(area.height, 8);
-    assert.equal(player.location.x - area.getBaseX() + 3904, 3929, 'live arrival tile');
+    assert.equal(player.location.x - area.getBaseX() + 3904, 3937, 'live post-intro tile (rsprox 1703)');
     assert.equal(player.location.y - area.getBaseY() + 9600, 9631);
     assert.equal(queues.add[0].id, 12291, 'the room receives the cache Asgarnia Smith variant with Talk-to');
     for (const plane of [0, 1, 2]) {
@@ -7685,7 +7685,7 @@ test('Desert Treasure II plays the first-medallion ambush before re-entering the
     customEvents.find(({ name }) => name === 'npc-dialogue:action').handler({ player, stepId: 'NoRYcT' });
     assert.ok(attrs.get('desert-treasure-ii:ancient-vault'), 'the dialogue action resumes the vault scene');
     const vault = attrs.get('desert-treasure-ii:ancient-vault');
-    assert.equal(player.location.x - vault.getBaseX(), 25);
+    assert.equal(player.location.x - vault.getBaseX(), 33);
     assert.equal(player.location.y - vault.getBaseY(), 31);
   } finally {
     runtime.startTranscript = startTranscript;
@@ -8742,7 +8742,7 @@ test('Desert Treasure II handoff creates the four owned wight stages and grants 
     assert.equal(objects.find(h => h.name === 'handleObjectInteraction')({ player: p, objectId: 48890, option: 'Climb', location: area.tile(30, 11, 0) }), true,
       'the cache staircase returns the player to the upper Ancient Vault');
     assert.equal(attrs.get('desert-treasure-ii:final-room'), null);
-    assert.equal(p.location.x - attrs.get('desert-treasure-ii:ancient-vault').getBaseX(), 25, 'the player is back in the private upper vault');
+    assert.equal(p.location.x - attrs.get('desert-treasure-ii:ancient-vault').getBaseX(), 33, 'the player is back in the private upper vault');
   } finally {
     runtime.startTranscript = startTranscript;
   }
