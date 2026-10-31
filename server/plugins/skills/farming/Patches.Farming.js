@@ -457,23 +457,47 @@ function seedNoun(crop) {
     if (HOP_SEEDS.has(crop.key)) return `${crop.name} hop seed`;
     return core.CacheDefinitions.getItem(crop.seed).name.toLowerCase();
 }
-function water(player, id, slot) {
-    const inventory = player.getInventory();
-    const matches = i => i && (!id || i.getId() === id) && (core.CacheDefinitions.getItem(i.getId()).name?.match(/^Watering can\([1-8]\)$/)
-        || i.getId() === Data.itemId("Magic watering can") || i.getId() === Data.itemId("Gricoller's can"));
-    const can = slot === undefined ? inventory.getItems().find(matches) : inventory.forSlot(slot);
-    if (!matches(can)) { player.sendMessage("You need a watering can containing water."); return false; }
+/**
+ * A watering can with water or Gricoller's can (matching `id` when given). By name: the cache has
+ * no "Magic watering can", and looking one up threw for Gricoller's can.
+ */
+function isWateringCan(item, id) {
+    if (!item || (id && item.getId() !== id)) return false;
+    return /^Watering can\([1-8]\)$|^Gricoller's can$/.test(core.CacheDefinitions.getItem(item.getId())?.name ?? "");
+}
+/** Pours one charge from `can`; false when it is Gricoller's can with none left. */
+function pour(player, can) {
     const name = core.CacheDefinitions.getItem(can.getId()).name;
     if (name === "Gricoller's can") {
         const charges = Number(can.getMetaValue("farming:water") ?? 0);
-        if (!charges) { player.sendMessage("Your can is empty."); return false; }
+        if (!charges) return false;
         can.setMetaValue("farming:water", charges - 1);
     }
     const charges = name.match(/^Watering can\(([1-8])\)$/);
     if (charges) can.setId(Data.itemId(+charges[1] === 1 ? "Watering can" : `Watering can(${+charges[1] - 1})`));
-    inventory.refreshItems();
+    player.getInventory().refreshItems();
+    return true;
+}
+function water(player, id, slot) {
+    const inventory = player.getInventory();
+    const can = slot === undefined ? inventory.getItems().find(item => isWateringCan(item, id)) : inventory.forSlot(slot);
+    if (!isWateringCan(can, id)) { player.sendMessage("You need a watering can containing water."); return false; }
+    if (!pour(player, can)) { player.sendMessage("Your can is empty."); return false; }
     animate(player, ANIM.WATER);
     return true;
+}
+/**
+ * "farming:use-water" `{ player, check?, used }`: watering for content outside Farming (a POH
+ * garden plant). Pours one charge from the first carried can that has water and sets `used`;
+ * with `check` it only says whether one would pour. Silent, no animation: the caller owns both.
+ */
+function useWater(event) {
+    if (event.used) return;
+    const cans = event.player.getInventory().getItems().filter(item => isWateringCan(item));
+    const wet = cans.find(can => core.CacheDefinitions.getItem(can.getId()).name !== "Gricoller's can"
+        || Number(can.getMetaValue("farming:water") ?? 0) > 0);
+    if (!wet) return;
+    event.used = event.check ? true : pour(event.player, wet);
 }
 function waterPatch(player, patch, id, slot) {
     const state = stateFor(player, patch);
@@ -1118,6 +1142,7 @@ function attach(api) {
     api.onCustomEvent("farming:open-seed-vault", Guild.openSeedVault);
     api.onCustomEvent("woodcutting:deplete-tree", depleteTree);
     api.onCustomEvent("magic:water-containers", Services.waterContainers);
+    api.onCustomEvent("farming:use-water", useWater);
     api.onCustomEvent("magic:humidified", Services.humidified);
     api.onCustomEvent("agent:advance-time", advanceTime);
     api.onCustomEvent("player:world-input", Hespori.hesporiInput);
