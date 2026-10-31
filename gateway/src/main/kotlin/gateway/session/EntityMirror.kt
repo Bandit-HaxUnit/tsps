@@ -93,9 +93,9 @@ class EntityMirror(
                     val existing = npcs[change.index]
                     if (existing != null) {
                         existing.setId(npc.type)
-                        existing.teleport(level, npc.x, npc.z, change.jump)
+                        existing.teleport(npc.level, npc.x, npc.z, change.jump)
                     } else {
-                        npcs[change.index] = world.allocNpc(change.index, npc.type, level, npc.x, npc.z, change.direction)
+                        npcs[change.index] = world.allocNpc(change.index, npc.type, npc.level, npc.x, npc.z, change.direction)
                     }
                 }
                 is NpcSync.Change.Moved -> {

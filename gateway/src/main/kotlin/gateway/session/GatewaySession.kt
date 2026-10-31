@@ -109,8 +109,21 @@ class GatewaySession(
             fail(LoginResponse.InvalidUsernameOrPassword)
             return
         }
-        val address = responses.ctx.channel().remoteAddress().toString().substringAfter('/').substringBeforeLast(':')
+        val channel = responses.ctx.channel()
+        // rsprot's disconnection hook only exists once the client is in game (enterGame); a client
+        // gone while tsps still logs it in would leave the tsps session and this thread running.
+        channel.closeFuture().addListener {
+            run {
+                if (state != State.IN_GAME) {
+                    log.info("${block.username}: the client disconnected while logging in")
+                    close()
+                }
+            }
+        }
+        val address = channel.remoteAddress().toString().substringAfter('/').substringBeforeLast(':')
         TspsSocket.connect(context.config.tspsUrl, address, this).whenComplete { socket, error ->
+            // The client left while tsps answered.
+            if (executor.isShutdown) socket?.close()
             run {
                 if (error != null) {
                     log.warning("${block.username}: ${error.message}")

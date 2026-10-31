@@ -28,7 +28,7 @@ class TspsChatMessage(
     val isGameMessage: Boolean get() = !isPublic && type !in SOCIAL_TYPES
 
     /** The mod icon tsps puts in front of the name as `<img=N>`, or 0. */
-    val modIcon: Int get() = Regex("""<img=(\\d+)>""").find(from)?.groupValues?.get(1)?.toInt()?.plus(1) ?: 0
+    val modIcon: Int get() = Regex("""<img=(\d+)>""").find(from)?.groupValues?.get(1)?.toInt()?.plus(1) ?: 0
 
     companion object {
         private const val NO_PLAYER = 0xFFFF
@@ -61,11 +61,15 @@ class ChatStyle(val colour: Int, val effect: Int, val pattern: ByteArray?) {
 
     companion object {
         private const val FIRST_PATTERN = 13
+        private const val MAX_COLOUR = 20
+        private const val MAX_EFFECT = 5
 
         fun read(reader: TspsReader): ChatStyle? {
             if (reader.remaining < 2) return null
             val colour = reader.u8()
             val effect = reader.u8()
+            // As tsps's readChatStyle: anything else isn't a style.
+            if (colour > MAX_COLOUR || effect > MAX_EFFECT) return null
             val length = if (colour >= FIRST_PATTERN) colour - FIRST_PATTERN + 1 else 0
             if (reader.remaining < length) return null
             return ChatStyle(colour, effect, if (length > 0) reader.bytes(length) else null)

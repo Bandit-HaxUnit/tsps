@@ -41,6 +41,8 @@ class Trade(
             }
             TspsServerPacket.TRADE_CLOSE -> {
                 ownOffer = emptyList()
+                // An Offer-X/Remove-X amount never given mustn't take the next count dialog's.
+                awaitingCount = false
                 reader.string().takeIf { it.isNotEmpty() }?.let { send(MessageGame(GAME_MESSAGE, it)) }
             }
             // tsps also sends the request as a game message (type 101), which OSRS uses.

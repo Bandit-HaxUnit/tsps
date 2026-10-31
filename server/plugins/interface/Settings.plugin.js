@@ -630,8 +630,12 @@ function toggleMute({ player, buttonId }) {
   return true;
 }
 
+/** The varps holding the XP drops setup; looked up once, as every transmitted varp asks. */
+let xpDropsVarps = null;
+
 function xpDropsSetupVarps() {
-  return new Set([...XPDROPS_SETUP_DROPDOWNS.values()].map((varbit) => CacheDefinitions.getVarbit(varbit).baseVar));
+  xpDropsVarps ??= new Set([...XPDROPS_SETUP_DROPDOWNS.values()].map((varbit) => CacheDefinitions.getVarbit(varbit).baseVar));
+  return xpDropsVarps;
 }
 
 function saveXpDropsSetup(player, varpId, value) {

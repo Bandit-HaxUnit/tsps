@@ -6,6 +6,7 @@ const MAKEOVER_INTERFACE_ID = 679;
 // The designer's arrows, A/B and Confirm: cache components with an op ("*") whose script the
 // interface's onload attaches. The official client only runs an op the server has enabled.
 const MAKEOVER_BUTTONS = [15, 16, 19, 20, 23, 24, 27, 28, 31, 32, 35, 36, 39, 40, 46, 47, 50, 51, 54, 55, 58, 59, 62, 63, 68, 69, 74];
+const MAKEOVER_BUTTON_UIDS = MAKEOVER_BUTTONS.map((component) => (MAKEOVER_INTERFACE_ID << 16) | component);
 const OP1 = 1 << 1;
 const NO_SLOT = -1;
 
@@ -53,11 +54,20 @@ function openMakeoverInterface(player) {
   return true;
 }
 
+/** Selectable identity kit ids by body part (0-13), in id order; the cache's kits don't change. */
+let selectableKitsByPart = null;
+
 /** Selectable identity kits for a body part (0-13), in id order. */
 function selectableKits(bodyPart) {
-  return core.CacheDefinitions.getIdentKits()
-    .filter((kit) => !kit.nonSelectable && kit.bodyPartId === bodyPart)
-    .map((kit) => kit.id);
+  if (!selectableKitsByPart) {
+    selectableKitsByPart = new Map();
+    for (const kit of core.CacheDefinitions.getIdentKits()) {
+      if (kit.nonSelectable) continue;
+      if (!selectableKitsByPart.has(kit.bodyPartId)) selectableKitsByPart.set(kit.bodyPartId, []);
+      selectableKitsByPart.get(kit.bodyPartId).push(kit.id);
+    }
+  }
+  return selectableKitsByPart.get(bodyPart) ?? [];
 }
 
 function step(values, current, direction) {
@@ -136,7 +146,7 @@ module.exports = {
   _test: { canOpenMakeover, clickDesign },
   register(api) {
     core = api.core;
-    api.onInterfaceActionButton(MAKEOVER_BUTTONS.map((component) => (MAKEOVER_INTERFACE_ID << 16) | component), clickDesign);
+    api.onInterfaceActionButton(MAKEOVER_BUTTON_UIDS, clickDesign);
     const CombatFactory = api.getCombatFactory();
     // A new account designs its character first, as in OSRS (there is no welcome screen for it).
     // The login hook runs just before the gameframe is sent: mount the modal after it.

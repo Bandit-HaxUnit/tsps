@@ -33,7 +33,7 @@ class UpdatePlayerModel(val bytes: ByteArray) : IncomingGameMessage {
 
     class Design(val male: Boolean, val kits: IntArray, val colours: IntArray)
 
-    fun design(identKitCount: Int): Design? = LAYOUTS.firstNotNullOfOrNull { it(bytes) }?.takeIf { it.valid(identKitCount) }
+    fun design(identKitCount: Int): Design? = LAYOUTS.firstNotNullOfOrNull { layout -> layout(bytes)?.takeIf { it.valid(identKitCount) } }
 
     /** tsps's APPEARANCE_SET (37): u8 gender, 7 × s16 kits, 5 × u8 colours. */
     fun toTsps(design: Design): ByteArray {
