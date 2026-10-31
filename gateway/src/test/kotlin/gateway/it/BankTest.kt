@@ -17,7 +17,8 @@ import org.junit.jupiter.api.Test
 /**
  * Rearranging the bank as the official client does it: drags within the items, onto the tab bar,
  * and into the empty space after a tab. It works on the developer's real bank, in its main tab
- * (the client lays tabs 1-9 out first, then the main tab), and puts everything back.
+ * (the client lays tabs 1-9 out first, then the main tab), and puts everything back; a fresh
+ * account gets two items deposited first.
  */
 class BankTest {
     private val vars = VarTypes(TestCache.cache)
@@ -32,10 +33,17 @@ class BankTest {
             game.bankAfter(LOGIN_TICKS, allowNone = true)
             game.command("bank")
             var tabBarEnabled = false
-            val opened = game.bankAfter(TICKS) { if (it is IfSetEventsV2 && it.interfaceId == BANK && it.componentId == TABS) tabBarEnabled = true }
+            var opened = game.bankAfter(TICKS) { if (it is IfSetEventsV2 && it.interfaceId == BANK && it.componentId == TABS) tabBarEnabled = true }
             assertTrue(tabBarEnabled, "the tab bar takes drops")
+            if (opened.size - tabSizes().sum() < 2) {
+                // A fresh test account: two items of its own, deposited into the main tab.
+                for (item in SEED_ITEMS) game.command("item $item 1")
+                game.bankAfter(TICKS, allowNone = true)
+                game.button(BANK, DEPOSIT_INVENTORY)
+                opened = game.bankAfter(TICKS)
+            }
             val mainStart = tabSizes().sum()
-            assumeTrue(opened.size - mainStart >= 2, "the developer's main tab needs two items")
+            assertTrue(opened.size - mainStart >= 2, "the main tab has two items")
 
             // The main tab's last two items. Within one component RuneLite has already swapped them
             // on screen when it sends, so the first obj is the dropped-on slot's (as recorded).
@@ -94,6 +102,10 @@ class BankTest {
         const val BANK_INV = 95
         const val NO_OBJ = 0xFFFF
         const val TAB_1_SIZE = 4171
+        const val DEPOSIT_INVENTORY = 47
+
+        /** A bronze axe and dagger. */
+        val SEED_ITEMS = listOf(1351, 1205)
 
         /** tsps's drop slot for the empty space after the main tab's items: 1410 + 9 × 2 + tab 0. */
         const val MAIN_TAB_DROP = 1428
