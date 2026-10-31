@@ -59,7 +59,7 @@ const QUESTS = [
   "TheGolem", "TheHeartOfDarkness", "ThroneOfMiscellania", "TouristTrap",
   "TowerOfLife", "TreeGnomeVillage", "TribalTotem", "TrollRomance",
   "TrollStronghold", "TroubledTortugans", "TwilightPromise", "UndergroundPass",
-  "VampyreSlayer", "Wanted", "Watchtower", "WaterfallQuest",
+  "ValeTotems", "VampyreSlayer", "Wanted", "Watchtower", "WaterfallQuest",
   "WhatLiesBelow", "WitchsHouse", "WitchsPotion", "XMarksTheSpot",
   "ZogreFleshEaters",
   // Enter the Abyss shares the Mage of Zamorak with Temple of the Eye and Wanted.
