@@ -201,7 +201,9 @@ function rescueScrolls(session) {
   const player = session.player;
   const outside = Common.toLocation(Common.DATA.tiles.outside);
   for (const ground of [...World.getItems()]) {
-    if (ground?.getPrivateArea?.() !== session.area) continue;
+    // Native pickup credits the inventory and only marks the ground source pending until the
+    // next ground-item pass; recovering it here would award the same scroll twice.
+    if (ground?.isPendingRemoval?.() || ground?.getPrivateArea?.() !== session.area) continue;
     const item = ground.getItem?.();
     if (!item || !scrollIds.has(item.getId())) continue;
     ItemOnGroundManager.deregister(ground);

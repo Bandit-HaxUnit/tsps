@@ -23,6 +23,8 @@ const PROJECTILE_DELAY = { RANGED: 41, MAGIC: 51 };
 /** The Imp's own teleport, when a hit lands (Wiki: short distances, never outside the arena). */
 const IMP_TELEPORT = { chance: 0.33, cooldownTicks: 4, minDistance: 2, maxDistance: 6, attempts: 64 };
 const BLOCKED_TILE = 0x1280100;
+/** Ordinary poison stores five severity points per starting damage (CombatPoisonEffect). */
+const POISON_SEVERITY_PER_DAMAGE = 5;
 
 const GOBLIN_DRAIN = Common.byKey.get("goblin").prayerDrain;
 
@@ -97,14 +99,17 @@ function processChampion(session, npc) {
   if (teleportImp(session, npc)) npc.__championsChallengeTeleportCooldown = IMP_TELEPORT.cooldownTicks;
 }
 
-/** The Jogre's poison starts at 8 (Wiki) where the generic NPC poison starts at its definition's. */
+/**
+ * The Jogre's poison starts at 8 damage (Wiki). The core event carries ordinary-poison severity,
+ * so convert the configured starting damage: CombatPoisonEffect.damageFromSeverity(8 * 5) is 8.
+ */
 function adjustChampionPoison(event) {
   if (!event || event.handled) return;
   const npc = event.attacker;
   const champion = Common.byNpc.get(npc?.getId?.() ?? npc?.getRealId?.());
-  const severity = Number(champion?.poison);
-  if (!Number.isFinite(severity) || severity <= 0) return;
-  event.severity = severity;
+  const startingDamage = Number(champion?.poison);
+  if (!Number.isFinite(startingDamage) || startingDamage <= 0) return;
+  event.severity = startingDamage * POISON_SEVERITY_PER_DAMAGE;
   event.venomous = false;
 }
 

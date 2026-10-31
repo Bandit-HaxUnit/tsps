@@ -188,11 +188,19 @@ test("the Goblin's spell drains Prayer, and only when it lands", () => {
   assert.equal(drained, 1);
 });
 
-test("the Jogre's poison starts at 8, not the generic NPC severity", () => {
+test("the Jogre's poison starts at 8 damage, not the generic NPC severity", () => {
   const poison = { attacker: { getId: () => champion("jogre").npc }, severity: 30, venomous: false };
   Combat.adjustChampionPoison(poison);
-  assert.equal(poison.severity, 8);
+  // Ordinary poison stores five severity points per starting damage.
+  assert.equal(poison.severity, 40);
   assert.equal(poison.venomous, false);
+  let damageFromSeverity;
+  try {
+    ({ CombatPoisonEffect: { damageFromSeverity } } = require("../dist/game/task/impl/CombatPoisonEffect"));
+  } catch {
+    damageFromSeverity = (severity) => Math.floor((severity + 4) / 5);
+  }
+  assert.equal(damageFromSeverity(poison.severity), 8, "the first poison pulse deals 8");
 });
 
 test("a projectile's hit lands when it arrives", () => {
@@ -243,11 +251,14 @@ test("leaving the basement rescues a champion's scroll left on its floor", (t) =
   const removed = [];
   const added = [];
   const placed = [];
-  const scroll = { getPrivateArea: () => area, getItem: () => ({ getId: () => 6800, getAmount: () => 1 }) };
-  const other = { getPrivateArea: () => area, getItem: () => ({ getId: () => 995, getAmount: () => 10 }) };
+  const scroll = { getPrivateArea: () => area, isPendingRemoval: () => false, getItem: () => ({ getId: () => 6800, getAmount: () => 1 }) };
+  // Native pickup credits the inventory and leaves its ground source pending until the next
+  // ground-item pass. Cleanup must not credit the same scroll again.
+  const pickedUp = { getPrivateArea: () => area, isPendingRemoval: () => true, getItem: () => ({ getId: () => 6801, getAmount: () => 1 }) };
+  const other = { getPrivateArea: () => area, isPendingRemoval: () => false, getItem: () => ({ getId: () => 995, getAmount: () => 10 }) };
   class TestItem { constructor(id, amount) { this.id = id; this.amount = amount; } getId() { return this.id; } getAmount() { return this.amount; } }
   initCore({
-    World: { getItems: () => [scroll, other] },
+    World: { getItems: () => [scroll, pickedUp, other] },
     ItemOnGroundManager: {
       deregister: (item) => removed.push(item),
       registerLocation: (player, item) => placed.push(item),
